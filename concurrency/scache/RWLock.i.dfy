@@ -274,6 +274,10 @@ module RWLockExt refines SimpleExt {
     M(central, map[], zero_map(), ExcNone, ReadNone, WritebackNone)
   }
 
+  function RefCount(t: ThreadId, count: nat) : F {
+    M(CentralNone, map[t := count], zero_map(), ExcNone, ReadNone, WritebackNone)
+  }
+
   function SharedHandle(ss: SharedState) : F {
     M(CentralNone, map[], unit_fn(ss), ExcNone, ReadNone, WritebackNone)
   }
@@ -435,23 +439,34 @@ module RWLockExt refines SimpleExt {
     assert dot(m', p).sharedState == dot(m, p).sharedState;
   }
 
-  /*
-
-  predicate TakeExcLockSharedLockZero(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    rc_rc': R,
-    r: R, r': R,
-    t: int, idx: int, clean: bool)
+  predicate TakeExcLockSharedLockZero(m: M, m': M)
   {
-    && a == multiset{r, rc_rc'}
-    && a' == multiset{r', rc_rc'}
-    && state' == state.(excState := WLSPending(t, idx + 1, clean))
-    && rc_rc' == Internal(SharedLockRefCount(key, idx,
-        if t == idx then 1 else 0))
-    && r == Internal(ExcLockPending(key, t, idx, clean))
-    && r' == Internal(ExcLockPending(key, t, idx + 1, clean))
+    && m.exc.ExcPending?
+    && m.exc.visited in m.refCounts
+    && 0 <= m.exc.visited < NUM_THREADS
+
+    && m == dot(
+      ExcHandle(m.exc),
+      RefCount(m.exc.visited, m.refCounts[m.exc.visited])
+    )
+    && m' == dot(
+      ExcHandle(m.exc.(visited := m.exc.visited + 1)),
+      RefCount(m.exc.visited, m.refCounts[m.exc.visited])
+    )
   }
+
+  lemma TakeExcLockSharedLockZero_Preserves(p: M, m: M, m': M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires TakeExcLockSharedLockZero(m, m')
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+    assert dot(m', p).sharedState == dot(m, p).sharedState;
+  }
+
+  /*
 
   predicate TakeExcLockFinish(
     key: Key, state: RWLockState, state': RWLockState,
