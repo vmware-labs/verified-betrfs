@@ -466,6 +466,27 @@ module RWLockExt refines SimpleExt {
     assert dot(m', p).sharedState == dot(m, p).sharedState;
   }
 
+  predicate Withdraw_TakeExcLockFinish(m: M, m': M, b: Base.M, b': Base.M)
+  {
+    && m.exc.ExcPending?
+    && m == ExcHandle(m.exc)
+    && m' == ExcHandle(ExcObtained(m.exc.t, m.exc.clean))
+    && b == Base.unit()
+    && b' == m.exc.b
+  }
+
+  lemma Withdraw_TakeExcLockFinish_Preserves(p: M, m: M, m': M, b: Base.M, b': Base.M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires Withdraw_TakeExcLockFinish(m, m', b, b')
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == b'
+  ensures Interp(dot(m', p)) == b
+  {
+    assert dot(m', p).sharedState == dot(m, p).sharedState;
+  }
+
   /*
 
   predicate TakeExcLockFinish(
