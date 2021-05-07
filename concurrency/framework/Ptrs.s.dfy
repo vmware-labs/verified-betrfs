@@ -6,8 +6,8 @@ module Ptrs {
 
   type {:extern} Ptr(!new,==)
   {
-    method {:extern} write<V>(inout glinear d: PointsTo<V>, v: V)
-    requires d.ptr == this
+    method {:extern} write<V>(glinear inout d: PointsTo<V>, v: V)
+    requires old_d.ptr == this
     ensures d.ptr == this
     ensures d.v == v
 
@@ -17,9 +17,9 @@ module Ptrs {
     ensures v == d.v
 
     method {:extern} index_write<V>(glinear inout d: PointsToArray, i: int, v: V)
-    requires d.ptr == this
-    requires 0 <= i < |d.s|
-    ensures d == old_d.(s := d.s[i := v]) // ERROR
+    requires old_d.ptr == this
+    requires 0 <= i < |old_d.s|
+    ensures d == old_d.(s := old_d.s[i := v])
 
     method {:extern} index_read<V>(gshared d: PointsToArray<V>, i: int)
     returns (v: V)
