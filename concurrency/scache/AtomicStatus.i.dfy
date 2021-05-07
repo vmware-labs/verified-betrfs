@@ -2,10 +2,12 @@ include "../framework/Atomic.s.dfy"
 include "rwlock/RWLock.i.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "CacheResources.i.dfy"
+include "../../lib/Base/LinearOption.i.dfy"
 
 module AtomicStatusImpl {
   import opened NativeTypes
   import opened Atomics
+  import opened LinearOption
 
   import RW = RWLockExtToken
   import opened RWLockBase
@@ -160,120 +162,91 @@ module AtomicStatusImpl {
 
   method try_acquire_writeback(a: AtomicStatus, ghost key: Key, with_access: bool)
   returns (success: bool,
-      glinear m: lOption<RW.Token>,
-      glinear handle_out: lOption<RW.Token>,
-      glinear disk_write_ticket: lOption<DiskWriteTicket>)
+      glinear m: lOption<RW.WritebackObtainedHandle>,
+      glinear disk_write_ticket: lOption<CacheResources.DiskWriteTicket>)
   requires atomic_status_inv(a, key)
   ensures !success ==> m.lNone?
-  ensures !success ==> handle_out.lNone?
   ensures !success ==> disk_write_ticket.lNone?
   ensures success ==>
-      && m == lSome(RWLock.Internal(RWLock.WritebackObtained(key)))
-  ensures success ==>
-      && handle_out.lSome?
-      && handle_out.value.writeback.WritebackObained?
-      && handle_out.value.writeback.b.is_handle(key)
+      && m.lSome?
+      && m.value.is_handle(key)
 
-      && disk_write_ticket
-        == lSome(DiskWriteTicket(
-            handle_out.value.writeback.b.cache_entry.disk_idx as uint64,
-            handle_out.value.writeback.b.cache_entry.data))
+      && disk_write_ticket.lSome?
+      && disk_write_ticket.value.addr == m.value.b.idx.v as uint64
+      && disk_write_ticket.value.contents == m.value.b.data.s
   {
-    var cur_flag := atomic_read(a);
+    atomic_block var cur_flag := execute_atomic_load(a) { }
+
     if !(cur_flag == flag_zero
         || (with_access && cur_flag == flag_accessed)) {
       m := lNone;
-      handle_out := lNone;
       disk_write_ticket := lNone;
       success := false;
     } else {
-      var did_set := compare_and_set(a, flag_zero, flag_writeback);
+      atomic_block var did_set :=
+          execute_atomic_compare_and_set_strong(a, flag_zero, flag_writeback)
+      {
+        ghost_acquire old_g;
 
-      ///// Begin jank
-      ///// Setup:
-      var v1 := flag_zero;
-      var v2 := flag_writeback;
-      var old_v: uint8;
-      var new_v: uint8;
-      linear var old_g: G := unsafe_obtain();
-      assume old_v == v1 ==> new_v == v2 && did_set;
-      assume old_v != v1 ==> new_v == old_v && !did_set;
-      assume atomic_inv(a, old_v, old_g);
-      linear var new_g;
-      ///// Transfer:
-      if did_set {
-        linear var res, handle, ticket, stat;
-        linear var G(rwlock, status) := old_g;
+        ghost var ghosty := true;
+        if did_set && ghosty {
+          linear var res, handle, ticket, stat;
+          linear var G(rwlock, status) := old_g;
 
-        rwlock, res, handle := RWLockMethods.transform_TakeWriteback(
-            key, rwlock);
+          rwlock, res, handle := RWLockMethods.transform_TakeWriteback(
+              key, rwlock);
 
-        stat, ticket := CacheResources.initiate_writeback(
-            handle.cache_entry, unwrap_value(status));
+          stat, ticket := CacheResources.initiate_writeback(
+              handle.cache_entry, unwrap_value(status));
 
-        new_g := G(rwlock, lSome(stat));
-        handle_out := lSome(handle);
-        m := lSome(res);
-        disk_write_ticket := lSome(ticket);
+          new_g := G(rwlock, lSome(stat));
+          handle_out := lSome(handle);
+          m := lSome(res);
+          disk_write_ticket := lSome(ticket);
+          assert state_inv(new_v, new_g, key);
+        } else {
+          m := lNone;
+          new_g := old_g;
+          handle_out := lNone;
+          disk_write_ticket := lNone;
+          assert state_inv(new_v, new_g, key);
+        }
         assert state_inv(new_v, new_g, key);
-      } else {
-        m := lNone;
-        new_g := old_g;
-        handle_out := lNone;
-        disk_write_ticket := lNone;
-        assert state_inv(new_v, new_g, key);
+
+        ghost_release new_g;
       }
-      assert state_inv(new_v, new_g, key);
-      ///// Teardown:
-      assert atomic_inv(a, new_v, new_g);
-      unsafe_dispose(new_g);
-      ///// End jank
 
       if did_set {
         success := true;
       } else if !with_access {
         success := false;
       } else {
-        var did_set := compare_and_set(a, flag_accessed, flag_writeback_accessed);
+        atomic_block var did_set :=
+            execute_atomic_compare_and_set_strong(a, flag_accessed, flag_writeback_accessed);
+        {
+          dispose_lnone(handle_out);
+          dispose_lnone(m);
+          dispose_lnone(disk_write_ticket);
 
-        ///// Begin jank
-        ///// Setup:
-        var v1 := flag_accessed;
-        var v2 := flag_writeback_accessed;
-        var old_v: uint8;
-        var new_v: uint8;
-        linear var old_g: G := unsafe_obtain();
-        assume old_v == v1 ==> new_v == v2 && did_set;
-        assume old_v != v1 ==> new_v == old_v && !did_set;
-        assume atomic_inv(a, old_v, old_g);
-        linear var new_g;
-        ///// Transfer:
-        dispose_lnone(handle_out);
-        dispose_lnone(m);
-        dispose_lnone(disk_write_ticket);
-
-        if did_set {
-          linear var res, handle, stat, ticket;
-          linear var G(rwlock, status) := old_g;
-          rwlock, res, handle := RWLockMethods.transform_TakeWriteback(
-              key, rwlock);
-          stat, ticket := CacheResources.initiate_writeback(
-              handle.cache_entry, unwrap_value(status));
-          new_g := G(rwlock, lSome(stat));
-          handle_out := lSome(handle);
-          m := lSome(res);
-          disk_write_ticket := lSome(ticket);
-        } else {
-          m := lNone;
-          new_g := old_g;
-          handle_out := lNone;
-          disk_write_ticket := lNone;
+          if did_set {
+            linear var res, handle, stat, ticket;
+            linear var G(rwlock, status) := old_g;
+            rwlock, res, handle := RWLockMethods.transform_TakeWriteback(
+                key, rwlock);
+            stat, ticket := CacheResources.initiate_writeback(
+                handle.cache_entry, unwrap_value(status));
+            new_g := G(rwlock, lSome(stat));
+            handle_out := lSome(handle);
+            m := lSome(res);
+            disk_write_ticket := lSome(ticket);
+          } else {
+            m := lNone;
+            new_g := old_g;
+            handle_out := lNone;
+            disk_write_ticket := lNone;
+          }
+          assert state_inv(new_v, new_g, key);
         }
-        assert state_inv(new_v, new_g, key);
-        ///// Teardown:
-        assert atomic_inv(a, new_v, new_g);
-        unsafe_dispose(new_g);
-        ///// End jank
 
         success := did_set;
       }

@@ -3,7 +3,7 @@ include "../../framework/Ptrs.s.dfy"
 include "../CacheResources.i.dfy"
 include "../Constants.i.dfy"
 
-module RWLockBase refines PCM {
+module RWLockBase refines PCMWrap {
   import opened Ptrs
   import opened Constants
   import CacheResources

@@ -1,7 +1,7 @@
 include "PCM.s.dfy"
 
 abstract module PCMWrap refines PCM {
-  /*abstract*/ type G(==,!new)
+  /*abstract*/ type G(!new)
 
   type {:extern} M(==,!new)
 

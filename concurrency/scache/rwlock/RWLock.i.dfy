@@ -1035,5 +1035,13 @@ module RWLockExtToken refines SimpleExtToken {
   import SEPCM = RWLockSimpleExtPCM
   import opened RWLock
 
-  
+  glinear datatype WritebackObtainedHandle = WritebackObtainedHandle(
+    ghost b: Base.Handle,
+    glinear token: Token)
+  {
+    predicate is_handle(key: Base.Key) {
+      && b.is_handle(key)
+      && token.get() == WritebackHandle(WritebackObtained(Base.one(b)))
+    }
+  }
 }
