@@ -4,7 +4,7 @@ include "../Constants.i.dfy"
 include "FullMap.i.dfy"
 include "../../../lib/Base/Option.s.dfy"
 
-module RWLockExt refines SimpleExt {
+module RWLock refines SimpleExt {
   import opened Constants
   import opened Options
   import opened FullMaps
@@ -1028,12 +1028,12 @@ module RWLockExt refines SimpleExt {
 }*/
 
 module RWLockSimpleExtPCM refines SimpleExtPCM {
-  import SE = RWLockExt
+  import SE = RWLock
 }
 
 module RWLockExtToken refines SimpleExtToken {
   import SEPCM = RWLockSimpleExtPCM
-  import opened RWLockExt
+  import opened RWLock
 
   
 }

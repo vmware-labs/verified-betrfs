@@ -5,7 +5,7 @@ abstract module SimpleExtToken {
 
   type Token = SEPCM.Token
   //import SE = SEPCM.SE
-  import Base = SomeBase
+  import Base = RWLockBase
 
   type F = SEPCM.SE.F
 

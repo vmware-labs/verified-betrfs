@@ -8,6 +8,8 @@ module AtomicStatusImpl {
   import opened Atomics
 
   import RW = RWLockExtToken
+  import opened RWLockBase
+  import RWLock
 
   import CacheResources
 
@@ -40,21 +42,27 @@ module AtomicStatusImpl {
   const flag_exc_reading_clean : uint8 := 50;
   const flag_exc_accessed_reading_clean : uint8 := 54;
 
-  linear datatype G = G(
-    linear rwlock: RW.Token,
-    linear status: CacheResources.Token
+  glinear datatype G = G(
+    glinear rwlock: RW.Token,
+    glinear status: CacheResources.Token
   )
 
   type AtomicStatus = Atomic<uint8, G>
 
-  predicate state_inv(v: uint8, g: G, key: RWLock.Key)
+  predicate state_inv(v: uint8, g: G, key: Key)
   {
-    && g.rwlock.Internal?
-    && flags_field_inv(v, g.rwlock.q, key)
+    && g.rwlock.get().central.CentralState?
+    && g.rwlock.get() == RWLock.CentralHandle(g.rwlock.get().central)
+
+    && var flag := g.rwlock.get().central.flag;
+
+    && flags_field_inv(v, flag, key)
     /*&& (g.rwlock.q.flags == RWLock.Reading_ExcLock ==>
       g.status.lNone?
     )*/
-    && (!g.status.lSome? ==> (
+    && (key.cache_idx !in g.status.get().statuses ==>
+        && g.status.get() == CacheResources.unit()
+        && (
         || v == flag_exc
         || v == flag_exc_accessed
         || v == flag_exc_reading
@@ -66,79 +74,78 @@ module AtomicStatusImpl {
         || v == flag_reading_clean
         || v == flag_accessed_reading_clean
     ))
-    && (g.status.lSome? ==> (
-      && status_inv(v, g.status.value, key)
-    ))
-    && (g.rwlock.q.flags == RWLock.ExcLock_Clean ==> g.status.lNone?)
-    && (g.rwlock.q.flags == RWLock.ExcLock_Dirty ==> g.status.lNone?)
-    && (g.rwlock.q.flags == RWLock.PendingExcLock ==> g.status.lSome?)
+    && (key.cache_idx in g.status.get().statuses ==>
+      && g.status.get() == CacheResources.CacheStatus(
+          key.cache_idx, 
+          g.status.get().statuses[key.cache_idx])
+      && status_inv(v, g.status.get().statuses[key.cache_idx], key)
+    )
+    //&& (flag == RWLock.ExcLock_Clean ==> g.status.lNone?)
+    //&& (flag == RWLock.ExcLock_Dirty ==> g.status.lNone?)
+    && (flag == RWLock.PendingExcLock ==>
+        key.cache_idx in g.status.get().statuses)
   }
 
-  predicate flags_field_inv(v: uint8, f: RWLock.Q, key: RWLock.Key)
+  predicate flags_field_inv(v: uint8, flag: RWLock.Flag, key: Key)
   {
-    && f.FlagsField?
-    && f.key == key
-    && (f.flags == RWLock.Available ==> (
+    && (flag == RWLock.Available ==> (
       || v == flag_zero
       || v == flag_accessed
       || v == flag_clean
       || v == flag_accessed_clean
     ))
-    && (f.flags == RWLock.WriteBack ==> (
+    && (flag == RWLock.Writeback ==> (
       || v == flag_writeback
       || v == flag_writeback_accessed
     ))
-    && (f.flags == RWLock.ExcLock_Clean ==> (
+    && (flag == RWLock.ExcLock_Clean ==> (
       || v == flag_exc_clean
       || v == flag_exc_accessed_clean
     ))
-    && (f.flags == RWLock.ExcLock_Dirty ==> (
+    && (flag == RWLock.ExcLock_Dirty ==> (
       || v == flag_exc
       || v == flag_exc_accessed
     ))
-    && (f.flags == RWLock.PendingExcLock ==> (
+    && (flag == RWLock.PendingExcLock ==> (
       || v == flag_exc
       || v == flag_exc_accessed
       || v == flag_exc_clean
       || v == flag_exc_accessed_clean
     ))
-    && (f.flags == RWLock.WriteBack_PendingExcLock ==> (
+    && (flag == RWLock.Writeback_PendingExcLock ==> (
       || v == flag_writeback_exc
       || v == flag_writeback_exc_accessed
       || v == flag_writeback_exc_clean
       || v == flag_writeback_exc_accessed_clean
     ))
-    && (f.flags == RWLock.Unmapped ==> v == flag_unmapped)
-    && (f.flags == RWLock.Reading ==>
+    && (flag == RWLock.Unmapped ==> v == flag_unmapped)
+    && (flag == RWLock.Reading ==>
       || v == flag_reading
       || v == flag_reading_clean
       || v == flag_accessed_reading_clean
     )
-    && (f.flags == RWLock.Reading_ExcLock ==> v == flag_exc_reading || v == flag_exc_accessed_reading)
+    && (flag == RWLock.Reading_ExcLock ==> v == flag_exc_reading || v == flag_exc_accessed_reading)
   }
   
-  predicate status_inv(v: uint8, f: CacheResources.R,
-      key: RWLock.Key)
+  predicate status_inv(v: uint8, status: CacheResources.Status, key: Key)
   {
-    && f.CacheStatus?
-    && f.cache_idx == key.cache_idx
-    && (f.status == CacheResources.Empty ==> (
+    && (status == CacheResources.Empty ==> (
       v == flag_unmapped
     ))
-    && (f.status == CacheResources.Reading ==> (
+    && (status == CacheResources.Reading ==> (
       false
     ))
-    && (f.status == CacheResources.Clean ==> (
+    && (status == CacheResources.Clean ==> (
       || v == flag_clean
       || v == flag_exc_clean
       || v == flag_accessed_clean
       || v == flag_exc_accessed_clean
     ))
-    && (f.status == CacheResources.Dirty ==> (
+    && (status == CacheResources.Dirty ==> (
       || v == flag_zero
       || v == flag_accessed
     ))
-    && (f.status == CacheResources.WriteBack ==> (
+    && (status == CacheResources.Writeback ==> (
       || v == flag_writeback
       || v == flag_writeback_exc
       || v == flag_writeback_accessed
@@ -146,30 +153,31 @@ module AtomicStatusImpl {
     ))
   }
 
-  predicate atomic_status_inv(a: AtomicStatus, key: RWLock.Key)
+  predicate atomic_status_inv(a: AtomicStatus, key: Key)
   {
     forall v, g :: atomic_inv(a, v, g) <==> state_inv(v, g, key)
   }
 
-  /*
-  method try_acquire_writeback(a: AtomicStatus, key: RWLock.Key, with_access: bool)
+  method try_acquire_writeback(a: AtomicStatus, ghost key: Key, with_access: bool)
   returns (success: bool,
-      linear m: lOption<RW.Token>,
-      /* readonly */ linear handle_out: lOption<RWLock.Handle>,
-      linear disk_write_ticket: lOption<DiskWriteTicket>)
+      glinear m: lOption<RW.Token>,
+      glinear handle_out: lOption<RW.Token>,
+      glinear disk_write_ticket: lOption<DiskWriteTicket>)
   requires atomic_status_inv(a, key)
   ensures !success ==> m.lNone?
   ensures !success ==> handle_out.lNone?
   ensures !success ==> disk_write_ticket.lNone?
   ensures success ==>
-      && m == lSome(RWLock.Internal(RWLock.WriteBackObtained(key)))
+      && m == lSome(RWLock.Internal(RWLock.WritebackObtained(key)))
   ensures success ==>
       && handle_out.lSome?
-      && handle_out.value.is_handle(key)
+      && handle_out.value.writeback.WritebackObained?
+      && handle_out.value.writeback.b.is_handle(key)
+
       && disk_write_ticket
         == lSome(DiskWriteTicket(
-            handle_out.value.cache_entry.disk_idx as uint64,
-            handle_out.value.cache_entry.data))
+            handle_out.value.writeback.b.cache_entry.disk_idx as uint64,
+            handle_out.value.writeback.b.cache_entry.data))
   {
     var cur_flag := atomic_read(a);
     if !(cur_flag == flag_zero
@@ -197,7 +205,7 @@ module AtomicStatusImpl {
         linear var res, handle, ticket, stat;
         linear var G(rwlock, status) := old_g;
 
-        rwlock, res, handle := RWLockMethods.transform_TakeWriteBack(
+        rwlock, res, handle := RWLockMethods.transform_TakeWriteback(
             key, rwlock);
 
         stat, ticket := CacheResources.initiate_writeback(
@@ -247,7 +255,7 @@ module AtomicStatusImpl {
         if did_set {
           linear var res, handle, stat, ticket;
           linear var G(rwlock, status) := old_g;
-          rwlock, res, handle := RWLockMethods.transform_TakeWriteBack(
+          rwlock, res, handle := RWLockMethods.transform_TakeWriteback(
               key, rwlock);
           stat, ticket := CacheResources.initiate_writeback(
               handle.cache_entry, unwrap_value(status));
@@ -272,19 +280,21 @@ module AtomicStatusImpl {
     }
   }
 
-  method release_writeback(a: AtomicStatus, key: RWLock.Key,
+  /*
+
+  method release_writeback(a: AtomicStatus, key: Key,
       linear r: RW.Token,
       /* readonly */ linear handle: RWLock.Handle,
       linear stub: DiskWriteStub)
   requires atomic_status_inv(a, key)
-  requires r == RWLock.Internal(RWLock.WriteBackObtained(key))
+  requires r == RWLock.Internal(RWLock.WritebackObtained(key))
   requires handle.is_handle(key)
   requires 0 <= handle.cache_entry.disk_idx
              < 0x1_0000_0000_0000_0000
   requires stub == DiskWriteStub(
       handle.cache_entry.disk_idx as uint64)
   {
-    // Unset WriteBack; set Clean
+    // Unset Writeback; set Clean
     var orig_value := fetch_xor(a, flag_writeback_clean);
 
     ///// Begin jank
@@ -301,12 +311,12 @@ module AtomicStatusImpl {
     var fl := old_g.rwlock.q.flags;
     linear var G(rwlock, status) := old_g;
 
-    RWLockMethods.pre_ReleaseWriteBack(key, fl, rwlock, r);
+    RWLockMethods.pre_ReleaseWriteback(key, fl, rwlock, r);
 
     linear var stat := CacheResources.finish_writeback(
         handle.cache_entry, unwrap_value(status), stub);
 
-    rwlock := RWLockMethods.transform_ReleaseWriteBack(key, fl, rwlock, r, handle);
+    rwlock := RWLockMethods.transform_ReleaseWriteback(key, fl, rwlock, r, handle);
     new_g := G(rwlock, lSome(stat));
 
     assert state_inv(new_v, new_g, key);
@@ -316,12 +326,12 @@ module AtomicStatusImpl {
     ///// End jank
   }
 
-  /*method try_set_write_lock(a: AtomicStatus, key: RWLock.Key)
+  /*method try_set_write_lock(a: AtomicStatus, key: Key)
   returns (success: bool, linear m: lOption<RW.Token>)
   requires atomic_status_inv(a, key)
   ensures !success ==> m.lNone?
   ensures success ==> has(m)
-      && read(m) == RWLock.Internal(RWLock.ExcLockPendingAwaitWriteBack(key))
+      && read(m) == RWLock.Internal(RWLock.ExcLockPendingAwaitWriteback(key))
   {
     var orig_value := fetch_or(a, flag_exc);
 
@@ -341,9 +351,9 @@ module AtomicStatusImpl {
       linear var r;
       new_g, r := RWLockMethods.transform_TakeExcLock(key, old_g);
       m := lSome(r);
-    } else if fl == RWLock.WriteBack {
+    } else if fl == RWLock.Writeback {
       linear var r;
-      new_g, r := RWLockMethods.transform_TakeExcLockAwaitWriteBack(key, old_g);
+      new_g, r := RWLockMethods.transform_TakeExcLockAwaitWriteback(key, old_g);
       m := lSome(r);
     } else {
       new_g := old_g;
@@ -357,13 +367,13 @@ module AtomicStatusImpl {
     success := bit_and(orig_value, flag_exc) == 0;
   }*/
 
-  method try_check_writeback_isnt_set(a: AtomicStatus, key: RWLock.Key,
+  method try_check_writeback_isnt_set(a: AtomicStatus, key: Key,
       t: int, linear m: RW.Token)
   returns (success: bool, clean: bool, linear m': RW.Token,
       linear status: lOption<CacheResources.R>)
   requires atomic_status_inv(a, key)
   requires m == RWLock.Internal(
-      RWLock.ExcLockPendingAwaitWriteBack(key, t))
+      RWLock.ExcLockPendingAwaitWriteback(key, t))
   ensures !success ==> m' == m
   ensures !success ==> status.lNone?
   ensures success ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, t, 0, clean))
@@ -384,7 +394,7 @@ module AtomicStatusImpl {
     linear var new_g;
     ///// Transfer:
     var fl := old_g.rwlock.q.flags;
-    if fl == RWLock.WriteBack || fl == RWLock.WriteBack_PendingExcLock
+    if fl == RWLock.Writeback || fl == RWLock.Writeback_PendingExcLock
     {
       new_g := old_g;
       m' := m;
@@ -392,7 +402,7 @@ module AtomicStatusImpl {
       assert state_inv(new_v, new_g, key);
     } else {
       linear var G(rwlock, status0) := old_g;
-      rwlock, m' := RWLockMethods.transform_TakeExcLockFinishWriteBack(
+      rwlock, m' := RWLockMethods.transform_TakeExcLockFinishWriteback(
         key, t,fl, bit_and(f, flag_clean) != 0,
         rwlock, m);
       status := status0;
@@ -408,7 +418,7 @@ module AtomicStatusImpl {
     clean := bit_and(f, flag_clean) != 0;
   }
 
-  method try_alloc(a: AtomicStatus, key: RWLock.Key)
+  method try_alloc(a: AtomicStatus, key: Key)
   returns (success: bool,
       linear m: lOption<RW.Token>,
       linear handle_opt: lOption<RWLock.Handle>,
@@ -473,7 +483,7 @@ module AtomicStatusImpl {
     }
   }
 
-  method clear_exc_bit_during_load_phase(a: AtomicStatus, key: RWLock.Key, t:int,
+  method clear_exc_bit_during_load_phase(a: AtomicStatus, key: Key, t:int,
       linear r: RW.Token)
   returns (linear q: RW.Token)
   requires atomic_status_inv(a, key)
@@ -504,7 +514,7 @@ module AtomicStatusImpl {
     ///// End jank
   }
 
-  method load_phase_finish(a: AtomicStatus, key: RWLock.Key, t: int,
+  method load_phase_finish(a: AtomicStatus, key: Key, t: int,
       linear r: RW.Token, linear handle: RWLock.Handle,
       linear status: CacheResources.R)
   returns (linear q: RW.Token, /*readonly*/ linear handle_out: RWLock.Handle)
@@ -552,7 +562,7 @@ module AtomicStatusImpl {
   }
 
   method is_exc_locked_or_free(a: AtomicStatus,
-      key: RWLock.Key, t: int,
+      key: Key, t: int,
       linear r: RW.Token)
   returns (success: bool, is_accessed: bool, linear r': RW.Token)
   requires atomic_status_inv(a, key)
@@ -574,7 +584,7 @@ module AtomicStatusImpl {
     linear var new_g;
     ///// Transfer:
     var fl := old_g.rwlock.q.flags;
-    if fl == RWLock.Available || fl == RWLock.WriteBack
+    if fl == RWLock.Available || fl == RWLock.Writeback
         || fl == RWLock.Reading {
       r' := RWLockMethods.transform_SharedCheckExcFree(
           key, t, old_g.rwlock.q.flags,
@@ -594,7 +604,7 @@ module AtomicStatusImpl {
   }
 
   method mark_accessed(a: AtomicStatus,
-      key: RWLock.Key, t: int,
+      key: Key, t: int,
       shared r: RW.Token)
   requires atomic_status_inv(a, key)
   requires r == RWLock.Internal(RWLock.SharedLockPending2(key, t))
@@ -622,7 +632,7 @@ module AtomicStatusImpl {
     ///// End jank
   }
 
-  method clear_accessed(a: AtomicStatus, key: RWLock.Key)
+  method clear_accessed(a: AtomicStatus, key: Key)
   requires atomic_status_inv(a, key)
   {
     var orig_value := fetch_and(a, 0xff - flag_accessed);
@@ -647,7 +657,7 @@ module AtomicStatusImpl {
   }
 
   method is_reading(a: AtomicStatus,
-      key: RWLock.Key, t: int,
+      key: Key, t: int,
       linear r: RW.Token)
   returns (
     success: bool,
@@ -697,7 +707,7 @@ module AtomicStatusImpl {
   }
 
   method take_exc_if_eq_clean(a: AtomicStatus,
-      key: RWLock.Key)
+      key: Key)
   returns (
     success: bool,
     linear m': lOption<RW.Token>,
@@ -743,7 +753,7 @@ module AtomicStatusImpl {
       //m', rwlock := transform_SharedToExc(
       //    key, t, RWLock.Available, m', rwlock);
 
-      rwlock, m0 := RWLockMethods.transform_TakeExcLockFinishWriteBack(
+      rwlock, m0 := RWLockMethods.transform_TakeExcLockFinishWriteback(
           key, -1, RWLock.PendingExcLock, true, rwlock, m0);
 
       new_g := G(rwlock, lNone);
@@ -766,7 +776,7 @@ module AtomicStatusImpl {
     success := did_set;
   }
 
-  method set_to_free(a: AtomicStatus, key: RWLock.Key,
+  method set_to_free(a: AtomicStatus, key: Key,
       linear handle: RWLock.Handle,
       linear status: CacheResources.R,
       linear r: RW.Token)
@@ -807,7 +817,7 @@ module AtomicStatusImpl {
 
   method abandon_exc(
       a: AtomicStatus,
-      key: RWLock.Key,
+      key: Key,
       linear status: CacheResources.R,
       linear r: RW.Token,
       /*readonly*/ linear handle: RWLock.Handle)
@@ -852,7 +862,7 @@ module AtomicStatusImpl {
 
   method abandon_reading_pending(
       a: AtomicStatus,
-      key: RWLock.Key,
+      key: Key,
       linear status: CacheResources.R,
       linear r: RW.Token,
       /*readonly*/ linear handle: RWLock.Handle)
