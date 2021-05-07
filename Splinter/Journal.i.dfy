@@ -430,7 +430,7 @@ module JournalMachineMod {
     }
   }
 
-  function Alloc(s: Variables) : set<AU> {
+  function Alloc(s: Variables) : set<CU> {
     {} // TODO
   }
 }

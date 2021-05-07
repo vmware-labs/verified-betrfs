@@ -31,6 +31,12 @@ module InterpMod {
       // TODO How is ImapComplete not in Maps.i?
       forall k :: k in mi
     }
+
+    // The effect of a put
+    function Put(key: Key, value: Value) : Interp
+    {
+      Interp(mi[key := value], seqEnd + 1)
+    }
   }
 
   predicate InDomain(k: Key) { true }

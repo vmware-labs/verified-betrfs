@@ -87,15 +87,15 @@ module ProgramMachineMod {
   predicate AllocsDisjoint(v: Variables)
   {
     SetsMutuallyDisjoint([
-      {SUPERBLOCK_ADDRESS().au},
+      {SUPERBLOCK_ADDRESS()},
       JournalMachineMod.Alloc(v.journal),
-      BetreeMachineMod.Alloc(v.betree)
+      BetreeMachineMod.Alloc(v.betree, v.cache, v.stableSuperblock.betree)
       ])
   }
 
-  predicate WritesOkay(cacheOps: CacheIfc.Ops, alloc: set<AU>)
+  predicate WritesOkay(cacheOps: CacheIfc.Ops, alloc: set<CU>)
   {
-    forall op | op in cacheOps :: op.cu.au in alloc
+    forall op | op in cacheOps :: op.cu in alloc
   }
   
   // How do the subsystems negotiate for more alloc?
@@ -273,8 +273,7 @@ module ProgramInterpMod {
   // * that alloc table would invariantly match IReads.
   //
   // IM == Interpret as InterpMod
-  // Oh man we're gonna have a family of IReads predicates that capture the
-  // heapiness of DiskView, aren't we?
+  // TODO NEXT well actually we need a chain of Interps; see DeferredWriteMapSpecMod
   function IM(v: Variables) : (i:Interp)
     ensures i.WF()
   {
@@ -344,48 +343,48 @@ module ProgramInterpMod {
 
   lemma NextRefines(v: Variables, v': Variables)
     //requires Inv(v)
-    // well, no, not if there's a Put!
     requires Inv(v)
     requires Next(v, v')
-    ensures IM(v) == IM(v')
+DeferredWriteMapSpecMod 
+    ensures Next(IM(v), IM(v'))
   {
     var cacheOps,step :| NextStep(v, v', cacheOps, step);
     match step {
       case RecoverStep() => {
-        assert IM(v) == IM(v');
+        assert IM(v') == IM(v);
       }
       case QueryStep(key, val, sk) => {
-        assert IM(v) == IM(v');
+        assert IM(v') == IM(v);
       }
       case PutStep(key, val, sk) => {
         // This step should be difficult. :v)
         // hah yes it's not, because IM is only looking at the cache, not the membuffer
         // (internal state machine state)
-        assert IM(v) == IM(v');
+        assert IM(v') == IM(v).Put(key, val);
       }
       case JournalInternalStep(sk) => {
         assume false;
-        assert IM(v) == IM(v');
+        assert IM(v') == IM(v);
       }
       case BetreeInternalStep(sk) => {
         assume false;
-        assert IM(v) == IM(v');
+        assert IM(v') == IM(v);
       }
       case ReqSyncStep(syncReqId) => {
         assume false;
-        assert IM(v) == IM(v');
+        assert IM(v') == IM(v);
       }
       case CompleteSyncStep(syncReqId) => {
         assume false;
-        assert IM(v) == IM(v');
+        assert IM(v') == IM(v);
       }
       case CommitStartStep(seqBoundary) => {
         assume false;
-        assert IM(v) == IM(v');
+        assert IM(v') == IM(v);
       }
       case CommitCompleteStep() => {
         assume false;
-        assert IM(v) == IM(v');
+        assert IM(v') == IM(v);
       }
     }
   }

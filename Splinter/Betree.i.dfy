@@ -240,7 +240,7 @@ module BetreeMachineMod {
     && var newMessage := MakeValueMessage(value);
     && v' == v.(memBuffer := v.memBuffer[key := newMessage], nextSeq := v.nextSeq + 1)
   }
-
+  
   datatype FlushRec = FlushRec(
     trunkPath: TrunkPath,
     newParent: NodeAssignment,
@@ -435,16 +435,26 @@ module BetreeMachineMod {
   // And then IReads <= ReachableBlocks == alloc.
   // We can prove this because anything in IReads justifies ReachableTrunk (and maybe BranchMember).
 
-  function Alloc(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : set<AU>
+  function AllocationOnDisk(cache: CacheIfc.Variables, sb: Superblock) : Option<AllocationTableMachineMod.Variables>
+  {
+    if exists allocation :: AllocationTableMachineMod.DurableAt(allocation, cache, sb.allocation)
+    then var allocation :| AllocationTableMachineMod.DurableAt(allocation, cache, sb.allocation);
+      Some(allocation)
+    else
+      None
+  }
+
+  function Alloc(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : set<CU>
   {
     if v.Running?
     then AllocationTableMachineMod.Alloc(v.allocation)
-    else 
+    else if AllocationOnDisk(cache, sb).Some?
+    then
       // Module hasn't started; use allocation info it will eventually read from disk
-      if exists allocation :: AllocationTableMachineMod.DurableAt(allocation, cache, sb.allocation)
-      then allocation
-        // disk is borked
-      else {}
+      set s | s in AllocationOnDisk(cache, sb).value.Allocated()
+    else
+      // disk is borked; return nonsense
+      {}
   }
 }
 
@@ -567,5 +577,10 @@ module BetreeInterpMod {
         }
       }
     }
+  }
+
+  lemma PutEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, key: Key, value: Value, sk: Skolem)
+    ensures IM(v', cache', sb) == IM(v, cache, sb).Put(key, value)
+  {
   }
 }
