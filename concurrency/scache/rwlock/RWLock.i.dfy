@@ -1,8 +1,8 @@
 include "Ext.i.dfy"
 include "SimpleExtToken.i.dfy"
-include "Constants.i.dfy"
+include "../Constants.i.dfy"
 include "FullMap.i.dfy"
-include "../../lib/Base/Option.s.dfy"
+include "../../../lib/Base/Option.s.dfy"
 
 module RWLockExt refines SimpleExt {
   import opened Constants

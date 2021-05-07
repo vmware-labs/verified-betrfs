@@ -1,4 +1,4 @@
-include "../framework/PCMExt.s.dfy"
+include "../../framework/PCMExt.s.dfy"
 
 module SomeBase refines PCM {
 }
