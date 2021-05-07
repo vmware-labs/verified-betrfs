@@ -1,10 +1,8 @@
 include "../../framework/PCMExt.s.dfy"
-
-module SomeBase refines PCM {
-}
+include "Base.i.dfy"
 
 abstract module SimpleExt {
-  import Base = SomeBase
+  import Base = RWLockBase
 
   type F(!new,==)
 

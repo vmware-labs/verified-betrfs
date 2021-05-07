@@ -1026,3 +1026,14 @@ module RWLockExt refines SimpleExt {
     && handle == WritebackHandle()
 
 }*/
+
+module RWLockSimpleExtPCM refines SimpleExtPCM {
+  import SE = RWLockExt
+}
+
+module RWLockExtToken refines SimpleExtToken {
+  import SEPCM = RWLockSimpleExtPCM
+  import opened RWLockExt
+
+  
+}
