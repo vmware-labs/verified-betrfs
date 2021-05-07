@@ -536,7 +536,8 @@ module NodeImpl {
       pivots := ComputeTranslatePivots(rightPivots, from, to, toend);
       edges := ComputeTranslateEdges(rightEdges, rightPivots);
       children := rightChildren;
-      buckets := MutBucket.EmptySeq((|pivots|-1) as uint64);
+      var len := |pivots| as uint64;
+      buckets := MutBucket.EmptySeq(len-1);
     }
 
     static method CloneNewRoot(shared node: Node, from: Key, to: Key)
@@ -576,11 +577,13 @@ module NodeImpl {
         toPivots, toEdges, toChildren, toBuckets := RestrictAndTranslateNode(node, from, to, fromend);
         Pivots.ContainsAllKeysImpliesBoundedKey(node.pivotTable, to);
         var cLeft, leftPivots, leftEdges, leftChildren := node.cutoffNodeAndKeepLeftInternal(to);
-
-        var toend := toPivots[|toPivots|-1];
+        
+        var tolen := |toPivots| as uint64;
+        var toend := toPivots[tolen-1];
         if toend.Max_Element? {
           if |leftChildren.value + toChildren.value| as uint64 <= MaxNumChildrenUint64() {
-            var newpivots := leftPivots[..|leftPivots|-1] + toPivots;
+            var leftlen := |leftPivots| as uint64;
+            var newpivots := leftPivots[..leftlen-1] + toPivots;
             var newedges := leftEdges + toEdges;
             var newchildren := Some(leftChildren.value + toChildren.value);
 
@@ -598,7 +601,8 @@ module NodeImpl {
         } else {
           var cRight, rightPivots, rightEdges, rightChildren := node.cutoffNodeAndKeepRightInternal(toend.e);
           if |leftChildren.value + toChildren.value + rightChildren.value| as uint64 <= MaxNumChildrenUint64() {
-            var newpivots := leftPivots[..|leftPivots|-1] + toPivots + rightPivots[1..];
+            var leftlen := |leftPivots| as uint64;
+            var newpivots := leftPivots[..leftlen-1] + toPivots + rightPivots[1..];
             var newedges := leftEdges + toEdges + rightEdges;
             var newchildren := Some(leftChildren.value + toChildren.value + rightChildren.value);
 

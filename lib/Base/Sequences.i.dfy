@@ -129,7 +129,7 @@ module Sequences {
   {
     if n == 0 then [] else Range(n-1) + [n-1]
   }
-  
+
   function Apply<E,R>(f: (E --> R), run: seq<E>) : (result: seq<R>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|
@@ -160,6 +160,7 @@ module Sequences {
     Apply(f, run)
   }
 
+/*
   method DoApply<E,R>(f: E --> R, run: seq<E>) returns (linear result: seq<R>)
     requires |run| < Uint64UpperBound()
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
@@ -183,6 +184,7 @@ module Sequences {
       }
     }
   }
+  */
 
   function Filter<E>(f : (E --> bool), run: seq<E>) : (result: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
@@ -199,6 +201,7 @@ module Sequences {
       Filter(f, DropLast(run))
   }
 
+/*
   method DoFilter<E>(f : (E --> bool), run: seq<E>) returns (linear result: seq<E>)
     requires |run| < Uint64UpperBound()
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
@@ -228,6 +231,7 @@ module Sequences {
       assert run[..i] == run;
     }
   }
+*/
 
   lemma FilterThenApplyStep<E, R>(f: E --> bool, m: E --> R, run: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
@@ -237,7 +241,8 @@ module Sequences {
     ensures Apply(m, Filter(f, run)) == Apply(m, Filter(f, DropLast(run))) + [ m(Last(run)) ]
   {
   }
-  
+
+/*
   method FilterThenApply<E, R>(f: E --> bool, m: E --> R, run: seq<E>) returns (linear result: seq<R>)
     requires |run| < Uint64UpperBound()
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
@@ -271,6 +276,7 @@ module Sequences {
     result := TrustedRuntimeSeqTruncate(result, result_len);
     assert run == run[..i];
   }
+*/
 
   lemma ApplyThenFilterStep<E, R>(m: E --> R, f: R --> bool, run: seq<E>)
     requires forall i :: 0 <= i < |run| ==> m.requires(run[i])
@@ -282,7 +288,8 @@ module Sequences {
     assert run == DropLast(run) + [Last(run)];
     ApplyAdditive(m, DropLast(run), [Last(run)]);
   }
-  
+
+/*
   method ApplyThenFilter<E, R>(m: E --> R, f: R --> bool, run: seq<E>) returns (linear result: seq<R>)
     requires |run| < Uint64UpperBound()
     requires forall i | 0 <= i < |run| :: m.requires(run[i])
@@ -318,6 +325,7 @@ module Sequences {
       assert run == run[..i];
     }
   }
+  */
 
   function FoldLeft<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
   {
