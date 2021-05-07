@@ -19,7 +19,7 @@ set -e
 set -x
 
 # set to betr-concurrent-merge branch
-commit=3d5c73d285475b5671ce4c2f207c86545d474353
+commit=76f6c6f97b091ad4d2db587945fca8d4d828e48d
 if [ $1 ]; then
    commit=$1
 fi

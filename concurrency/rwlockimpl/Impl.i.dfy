@@ -60,8 +60,7 @@ module RWLockImpl {
       {
         atomic_block got_exc := execute_atomic_compare_and_set_strong(this.exc, false, true) {
           ghost_acquire g;
-          ghost var ghostme := true;
-          if ghostme && got_exc {
+          if got_exc {
             RWLockExtToken.SEPCM.dispose(pending_handle);
             g, pending_handle := RWLockExtToken.perform_exc_pending(g);
           }
@@ -169,8 +168,7 @@ module RWLockImpl {
 
           atomic_block var ret_value := execute_atomic_compare_and_set_strong(this.rc, cur_rc, cur_rc + 1) {
             ghost_acquire g;
-            ghost var ghostme := true;
-            if ghostme && ret_value {
+            if ret_value {
               RWLockExtToken.SEPCM.dispose(handle);
               g, handle := RWLockExtToken.perform_shared_pending(g, cur_rc as nat);
             }
@@ -184,8 +182,7 @@ module RWLockImpl {
               ghost_acquire g;
               atomic_block var _ := execute_atomic_noop(this.central) {
                 ghost_acquire central_g;
-                ghost var ghostme := true;
-                if ghostme && !exc_value {
+                if !exc_value {
                   g, central_g, handle := RWLockExtToken.perform_shared_finish(
                         g, central_g, handle, central_g.get().central.value);
                 }
