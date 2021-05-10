@@ -16,27 +16,31 @@ module Impl refines VerificationObligation {
     entry: SSM.Entry,
     glinear resource: SSM.Variables)
 
-  type RowMutex = Mutex<Row>
-  type RowMutexTable = seq<RowMutex>
-
-  datatype Variables = Variables(row_mutexes: RowMutexTable, allocator: CAP.AllocatorMutexTable)
-
   function RowInv(index: nat, row: Row): bool
   {
     && 0 <= index as nat < FixedSize()
     && row.resource == oneRowResource(index as nat, Info(row.entry, Free), 0)
   }
 
-  predicate RowMutexInv(row_mutexes: RowMutexTable)
+  type RowMutex = Mutex<Row>
+
+  type RowMutexTable = seq<RowMutex>
+
+  predicate RowMutexTableInv(row_mutexes: RowMutexTable)
   {
-    (forall i | 0 <= i < |row_mutexes| :: row_mutexes[i].inv == ((row) => RowInv(i, row)))
+    (forall i | 0 <= i < |row_mutexes| 
+      :: row_mutexes[i].inv == ((row) => RowInv(i, row)))
   }
+
+  datatype Variables = Variables(
+    row_mutexes: RowMutexTable,
+    allocator: CAP.AllocatorMutexTable)
 
   predicate Inv(v: Variables)
   {
     && CAP.Inv(v.allocator)
     && |v.row_mutexes| == FixedSize()
-    && RowMutexInv(v.row_mutexes)
+    && RowMutexTableInv(v.row_mutexes)
   }
 
   datatype Splitted = Splitted(r':SSM.Variables, ri:SSM.Variables)
@@ -76,7 +80,7 @@ module Impl refines VerificationObligation {
     while i < FixedSizeImpl()
       invariant i as int == |row_mutexes| <= FixedSize()
       invariant remaining_r == InitResoucePartial(i as nat)
-      invariant RowMutexInv(row_mutexes)
+      invariant RowMutexTableInv(row_mutexes)
     {
       ghost var splitted := Split(remaining_r, i as int);
       
@@ -101,7 +105,8 @@ module Impl refines VerificationObligation {
   }
 
   predicate method shouldHashGoBefore(search_h: uint32, slot_h: uint32, slot_idx: uint32) 
-    ensures shouldHashGoBefore(search_h, slot_h, slot_idx) == ShouldHashGoBefore(search_h as int, slot_h as int, slot_idx as int)
+    ensures shouldHashGoBefore(search_h, slot_h, slot_idx) 
+      == ShouldHashGoBefore(search_h as int, slot_h as int, slot_idx as int)
   {
     || search_h < slot_h <= slot_idx // normal case
     || slot_h <= slot_idx < search_h // search_h wraps around the end of array
@@ -114,13 +119,38 @@ module Impl refines VerificationObligation {
     if slot_idx == FixedSizeImpl() - 1 then 0 else slot_idx + 1
   }
 
-  function DistanceToSlot(src: uint32, dst: uint32) : nat
-    requires src < FixedSizeImpl()
-    requires dst < FixedSizeImpl()
+  method acquireRow(v: Variables, index: uint32, glinear in_sv: SSM.Variables)
+    returns (entry: Entry, glinear handle: MutexHandle<Row>, glinear out_sv: SSM.Variables)
+    requires Inv(v);
+    requires index < FixedSizeImpl();
+    ensures handle.m == v.row_mutexes[index];
+    ensures out_sv == add(in_sv, oneRowResource(index as nat, Info(entry, Free), 0))
   {
-    if src >= dst
-      then (dst as int - src as int + FixedSize() as int)
-      else (dst as int - src as int)
+    linear var row;
+    row, handle := v.row_mutexes[index].acquire();
+    linear var Row(out_entry, row_r) := row;
+    entry := out_entry;
+    out_sv := SSM.join(in_sv, row_r);
+  }
+
+  method releaseRow(v: Variables,
+    index: uint32,
+    entry: Entry,
+    glinear handle: MutexHandle<Row>,
+    glinear in_sv: SSM.Variables,
+    ghost exp_out: SSM.Variables)
+    returns (glinear out_sv: SSM.Variables)
+
+    requires Inv(v);
+    requires index < FixedSizeImpl();
+    requires handle.m == v.row_mutexes[index];
+    requires in_sv == add(exp_out, oneRowResource(index as nat, Info(entry, Free), 0))
+    ensures out_sv == exp_out;
+  {
+    glinear var rmutex;
+    ghost var right := oneRowResource(index as nat, Info(entry, Free), 0);
+    out_sv, rmutex := SSM.split(in_sv, exp_out, right);
+    v.row_mutexes[index].release(Row(entry, rmutex), handle);
   }
 
   method doQuery(v: Variables, input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
@@ -128,7 +158,7 @@ module Impl refines VerificationObligation {
     decreases *
     requires Inv(v)
     requires input.QueryInput?
-    requires isInputResource(in_sv, rid, input)
+    requires IsInputResource(in_sv, rid, input)
     ensures out_sv == SSM.output_stub(rid, output)
   {
     var query_ticket := Ticket(rid, input);
@@ -136,14 +166,10 @@ module Impl refines VerificationObligation {
     var hash_idx := hash(key);
     var slot_idx := hash_idx;
 
-    linear var row; glinear var handle;
-    row, handle := v.row_mutexes[slot_idx].acquire();
-    linear var Row(entry, row_r) := row;
-    glinear var r := SSM.join(in_sv, row_r);
+    var entry; glinear var handle; glinear var r;
+    entry, handle, r := acquireRow(v, hash_idx, in_sv);
 
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Querying(rid, key)), 0);
-    assert ProcessQueryTicket(r, r', query_ticket);
-
     var step := ProcessQueryTicketStep(query_ticket);
     r := easy_transform_step(r, r', step);
 
@@ -184,19 +210,15 @@ module Impl refines VerificationObligation {
         break;
       }
 
-      linear var next_row; glinear var next_handle;
-      next_row, next_handle := v.row_mutexes[slot_idx'].acquire();
-      linear var Row(next_entry, next_row_r) := next_row;
-      r := SSM.join(r, next_row_r);
+      var next_entry; glinear var next_handle;
+      next_entry, next_handle, r := acquireRow(v, slot_idx', r);
 
-      r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)), 0);
+      r' := twoRowsResource(slot_idx as nat, Info(entry, Free),
+        slot_idx' as nat, Info(next_entry, Querying(rid, key)), 0);
       r := easy_transform_step(r, r', step);
 
-      glinear var rmutex;
       ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Querying(rid, key)), 0);
-      ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free), 0);
-      r, rmutex := SSM.split(r, left, right);
-      v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
+      r := releaseRow(v, slot_idx, entry, handle, r, left);
 
       slot_idx := slot_idx';
       entry := next_entry;
@@ -207,13 +229,7 @@ module Impl refines VerificationObligation {
     r' := SSM.Variables(oneRowTable(slot_idx as nat, Info(entry, Free)), Count.Variables(0), multiset{}, multiset{Stub(rid, output)}); 
     r := easy_transform_step(r, r', step);
 
-    glinear var rmutex;
-    r, rmutex := SSM.split(r, 
-      SSM.output_stub(rid, output), 
-      oneRowResource(slot_idx as nat, Info(entry, Free), 0));
-    v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
-
-    out_sv := r;
+    out_sv := releaseRow(v, slot_idx, entry, handle, r, SSM.output_stub(rid, output));
   }
 
   method acquireCapacity(v: Variables, thread_id: uint32)
@@ -255,7 +271,7 @@ module Impl refines VerificationObligation {
   // returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
   //   requires Inv(v)
   //   requires input.InsertInput?
-  //   requires isInputResource(in_sv, rid, input)
+  //   requires IsInputResource(in_sv, rid, input)
   //   ensures out_sv == SSM.output_stub(rid, output)
   //   decreases *
   // {
@@ -501,7 +517,7 @@ module Impl refines VerificationObligation {
 
   //   requires Inv(v)
   //   requires input.RemoveInput?
-  //   requires isInputResource(in_sv, rid, input)
+  //   requires IsInputResource(in_sv, rid, input)
   //   ensures out_sv == SSM.output_stub(rid, output)
   // {
   //   var query_ticket := Ticket(rid, input);

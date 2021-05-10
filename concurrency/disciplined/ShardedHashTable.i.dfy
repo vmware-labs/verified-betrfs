@@ -189,7 +189,7 @@ module ShardedHashTable refines ShardedStateMachine {
     Variables(twoRowsTable(k1, info1, k2, info2), Count.Variables(cap), multiset{}, multiset{})
   }
 
-  predicate isInputResource(in_r: Variables, rid: int, input: Ifc.Input)
+  predicate IsInputResource(in_r: Variables, rid: int, input: Ifc.Input)
   {
     && in_r.Variables?
     && in_r.table == unitTable()
