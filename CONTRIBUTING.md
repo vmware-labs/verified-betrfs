@@ -61,13 +61,13 @@ code evolves, and use them only for leaves of the call graph.
 
 Use dafny's member syntax for types and datatypes, i.e. write
 ```
-datatype Foo == Foo(x: int) {
+datatype Foo = Foo(x: int) {
   function getX() : int { x }
 }
 ```
 instead of
 ```
-datatype Foo == Foo(x: int)
+datatype Foo = Foo(x: int)
 function getX(f: Foo) : int { f.x }
 ```
 
