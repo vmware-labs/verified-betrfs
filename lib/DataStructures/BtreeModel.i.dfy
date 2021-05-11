@@ -772,7 +772,11 @@ abstract module BtreeModel {
           assert key == oldindex.pivots[i-1];
         }
       }
+      assert key in AllKeys(oldindex) + {newindex.pivots[childidx]}
+        by { reveal_OpaquePartOfSplitChildOfIndex(); }
     }
+    assert AllKeys(newindex) == AllKeys(oldindex) + {newindex.pivots[childidx]}
+      by { reveal_OpaquePartOfSplitChildOfIndex(); }
   }
 
   lemma SplitChildOfIndexPreservesInterpretationA(oldindex: Node, newindex: Node, childidx: int)
