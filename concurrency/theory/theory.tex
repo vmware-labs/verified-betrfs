@@ -1,0 +1,493 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{dashbox}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{stackengine}
+\usepackage{stmaryrd}
+\usepackage{wasysym}
+\usepackage[]{stix}
+\usepackage{graphicx}
+
+\usepackage{parskip}
+\usepackage[tmargin=1in,bmargin=1in,lmargin=0.75in,rmargin=0.75in]{geometry}
+
+\usepackage{proof}
+
+%\usepackage[most]{tcolorbox}
+
+%\newtcbox{\dashedbox}[1][]{
+%  math upper,
+%  baseline=0.4\baselineskip,
+%  equal height group=dashedbox,
+%  nobeforeafter,
+%  colback=white,
+%  boxrule=0pt,
+%  enhanced jigsaw,
+%  boxsep=0pt,
+%  top=2pt,
+%  bottom=2pt,
+%  left=2pt,
+%  right=2pt,
+%  borderline horizontal={0.5pt}{0pt}{dashed},
+%  borderline vertical={0.5pt}{0pt}{dashed},
+%  drop lifted shadow,
+%  #1
+%}
+
+
+\newcommand{\einfer}[3]
+        {\infer[(\textsc{#1})]{#3}{#2}}
+\newcommand{\stacktwo}[2]{\stackanchor{\ensuremath{#1}}{\ensuremath{#2}}}
+\newcommand{\stackthree}[3]{\stackanchor{\stacktwo{#1}{#2}}{\ensuremath{#3}}}
+\newcommand{\stackfour}[4]{\stackanchor{\stackthree{#1}{#2}{#3}}{\ensuremath{#4}}}
+\newcommand{\stackfive}[5]{\stackanchor{\stackfour{#1}{#2}{#3}{#4}}{\ensuremath{#5}}}
+\newcommand{\stacksix}[6]{\stackanchor{\stackfive{#1}{#2}{#3}{#4}{#5}}{\ensuremath{#6}}}
+\newcommand{\stackseven}[7]{\stackanchor{\stacksix{#1}{#2}{#3}{#4}{#5}{#6}}{\ensuremath{#7}}}
+
+\newcommand\dboxed[1]{\dbox{\vphantom{t}\ensuremath{#1}}}
+
+\newcommand{\hoare}[3]{\ensuremath{\{ #1 \}~ #2 ~\{ #3 \}}}
+\newcommand{\viewshift}{\Rrightarrow}
+\newcommand{\unit}{\epsilon}
+\newcommand{\true}{\textsf{True}}
+\newcommand{\false}{\textsf{False}}
+\newcommand{\bool}{\textsf{bool}}
+\DeclareMathOperator{\rel}{rel}
+\DeclareMathOperator{\PCM}{PCM}
+\DeclareMathOperator{\MonoidBase}{MonoidBase}
+\DeclareMathOperator{\MonoidExt}{MonoidExt}
+\DeclareMathOperator{\Frac}{Frac}
+\newcommand{\monoid}[1]{\textsf{monoid}~#1}
+\renewcommand{\eqdef}{\triangleq}
+\newcommand{\borrow}[2]{\textsc{\&}^{#1}#2}
+\newcommand{\pointsto}{\hookrightarrow}
+
+%\DeclareFontEncoding{LS1}{}{}
+%\DeclareFontSubstitution{LS1}{stix}{m}{n}
+%\DeclareSymbolFont{arrows2}       {LS1}{stixsf}   {m}{it}
+%\SetSymbolFont{arrows2}     {bold}{LS1}{stixsf}   {b}{it}
+%\DeclareSymbolFontAlphabet{\mathsfit}{arrows2}
+%\DeclareMathSymbol{\rightarrowgtr}{\mathrel}{arrows2}{"5F}
+
+\newcommand{\refines}{\rightarrowgtr}
+
+\newcommand{\ltIntersect}{\sqcup}
+\newcommand{\ltLe}{\sqsubseteq}
+\newcommand{\ltGe}{\sqsupseteq}
+\DeclareMathOperator{\lifetime}{lifetime}
+\DeclareMathOperator{\borrowed}{borrowed}
+
+\let\active\undefined
+\DeclareMathOperator{\active}{active}
+
+
+
+%\newcommand{\shardProduct}{\rtimes}
+%\newcommand{\shardProduct}{\rightmoon}
+%\newcommand{\shardProduct}{\rsub}
+\newcommand{\shardProduct}{\ogreaterthan}
+
+\begin{document}
+
+Here, we describe a PCM-based program logic for reasoning about concurrent programs,
+with a built-in notion of ``PCM refinement'' to provide modularity that is both useful in its own right
+and particularly useful for reasoning about ``read-only'' state.
+
+\textbf{Monoid definitions}
+
+%We write $\widehat{M} = (M, \cdot, \mapsto)$ is a Partial Commuative Monoid (PCM) if,
+%where $\cdot : M \times M \to M^?, \text{~~comm., assoc.}$
+%and $\mapsto : M \times M \to \bool, \text{~~trans., refl., monotonic}$,
+%we have
+%\begin{align*}
+%& a \cdot b = b \cdot a & & \text{(commutativity)}\\
+%& (a \cdot b) \cdot c = a \cdot (b \cdot c) & & \text{(associativity)}\\
+%& (a \mapsto b) \land (b \mapsto c) \implies a \mapsto c && \text{(transitivity)}\\
+%& (a \mapsto a) && \text{(reflexitivity)}\\
+%& (a \mapsto b \land a \cdot c \ne \bot \implies b \cdot c \ne \bot \land a \cdot c \mapsto b %\cdot c) && \text{(monotonic)}
+%\end{align*}
+
+
+%\\
+%Monoid $\mathcal{M} := M ~|~ \mathcal{M}\otimes\mathcal{M} ~|~ E[\mathcal{M}]$\\
+%\\
+%\textbf{Base monoid} $M$ equip with $\cdot$ commutative, associative,
+%unit $\unit \in M$, bot element $\bot \in M$, and
+%$a \mapsto_M b \eqdef (\forall c .~ a\cdot c \ne \bot \implies b\cdot c \ne \bot)$\\
+%\\
+%\textbf{Product monoid} $M \otimes N$ where $(a\otimes b)\cdot(c \otimes d) = (a\cdot c)\otimes(b\cdot d)$
+%and $(a\otimes b) \mapsto (a' \otimes b') \eqdef (a \mapsto a') \land (b \mapsto b')$\\
+%\\
+%\textbf{Extension monoid} $E[M]$. Monoid $E,\cdot$, predicate $\rel : E \times M \to \bool$,
+%and $b \mapsto b' \eqdef
+%(\forall p, q .~ \rel(b \cdot p, q) \implies \exists b' .~ \rel(b' \cdot p, q') \land (q \mapsto q'))$
+%and
+%$\forall b, a, a' .~ \rel(b,a) \land \rel(b,a') \implies a \mapsto a'$\\
+%\\
+%\\
+%Define $\le$ by $a \le b \eqdef \exists b . a \cdot c = b$.\\
+%\\
+
+We start by defining what it means to be a PCM with a transition relation $\mapsto$.
+
+Let $\widehat{M} = (M, \cdot, \mapsto)$ where
+where $\cdot : M \times M \to M^?$
+and $\mapsto : M \times M \to \bool$.
+(We use $M^? \eqdef M \cup \{\bot\}$.)
+
+We say that $\mapsto$ is \emph{monotonic} if
+\[ \forall a, b, c.~ (a \mapsto b) \land (a \cdot c \ne \bot) \implies (b \cdot c \ne \bot) \land (a \cdot c \mapsto b \cdot c) \]
+This allows us to define what it means to be a PCM,
+\[
+  \einfer{PCM}{
+    \stackthree{
+      \widehat{M} = (M, \cdot, \mapsto)
+    }{
+      \cdot : M \times M \to M^?, \text{~~comm., assoc.}
+    }{
+      \mapsto : M \times M \to \bool, \text{~~trans., refl., monotonic}
+    }
+  }{
+    \PCM(\widehat{M})
+  }
+\]
+Note that we can always construct a PCM by picking $\cdot$ to be commutative and associative,
+and then by definition setting $\mapsto$ to be,
+\[
+  a \mapsto b = \forall c .~ a \cdot c \ne \bot \implies b \cdot c \ne \bot
+\]
+However, we can also set $\mapsto$ to be more restrictive, which will be useful later.
+
+\textbf{PCM Example}
+
+Consider a \emph{Sharded State Machine} (SSM). (This is similar to the STS common in the literature but framed a little differently.)
+
+An SSM is given by \textbf{(i)} some PCM state $S, \cdot$, \textbf{(ii)} an invariant $inv : S \to \bool$ and a sharded transition $\rightsquigarrow : S \times S$. For a sharded state
+machine, the invariant inductivity predicate is given by,
+\[
+  inv(a \cdot c) \land (a \rightsquigarrow b) \implies inv(b \cdot c)
+\]
+(Note: $\rightsquigarrow$ is neither transitive nor required to be monotonic here. However, an alternative definition would require $\rightsquigarrow$ to be monotonic, in which case we could
+simplify the inductivity predicate to $inv(a) \land (a \rightsquigarrow b) \implies inv(b)$.)
+
+We can define a PCM to correspond to this SSM by,
+\[M \eqdef \{m \in S : \exists c .~ inv(m \cdot c) \}\]
+\[a \cdot_M b \eqdef 
+  \begin{cases}
+      a \cdot b & \text{if } a \cdot b \in M\\
+      \bot,              & \text{otherwise}
+  \end{cases}\]
+and finally we can define $\mapsto$ as the transitive closure of $\mapsto_\text{pre}$ defined as,
+\[
+a \mapsto_{\text{pre}} b \eqdef
+  \exists a_0, b_0, c .~ (a = a_0 \cdot c) \land (b = b_0 \cdot c) \land a_0 \rightsquigarrow b_0
+\]
+
+\textbf{PCM refinements (motivation)}
+
+There are a handful of reasons to want to modularize PCM definitions:
+\begin{itemize}
+  \item The ``base language'' may provide some ``points to'' assertion $\ell \pointsto v$,
+    and then the user wants to build something else on top of that (like a fractional permission logic or similar) without needing to inject it into the native definition.
+  \item You have some PCM $N$ (custom built for your application), and you want to build a reader-writer lock to manage
+    access to the state of $N$, without encoding the reader-writer lock protocol into $N$.
+  \item You have some PCM $N$, and you want to manage part of it via some hash table implementation. You want to verify the hash table implementation independently (e.g., via some SSM strategy) and then use it modularly to manage some part of the $N$-state.
+  \item You have some PCM $N$ with a counter field, and you want to write the counter-manipulation code as its own independent module.
+\end{itemize}
+These are all things that have come up in VeriBetrKV.
+
+We'll develop the concept of a PCM refinement, denoted $\widehat{M} \refines \widehat{N}$.
+In a modular design, $\widehat{M}$ will be the ``sub-component'', while $\widehat{N}$
+is the client.
+
+For example, a hypothetical cache architecture might have a ``main'' ghost state \textsf{Cache}
+represented as an SSM.
+We might have a sub-component $\textsf{RwLock} \refines \textsf{Cache}$,
+another sub-component $\textsf{HashTable} \refines \textsf{Cache}$,
+and even further a sub-component $\textsf{Counter} \refines \textsf{HashTable}$.
+
+\begin{center}
+\includegraphics[scale=0.3]{hypothetical-cache-architecture.png}
+\end{center}
+
+\textbf{PCM refinements}
+
+We'll use the symbol $\refines$ to denote refinement. Yeah, you can tell I scoured the \LaTeX~ documentation for this thing, but I actually like it: it suggests that the thing on the left is more ``broken up'' (e.g., like in a fractional logic).
+
+We use $\widehat{M} \refines_{\rel} \widehat{N}$ to denote that $\widehat{M}$ \emph{refines} $\widehat{N}$ via a relation $\rel : M \times N \to bool$. Of course, it must satisfy some conditions 
+(and this is why we allow for flexibility in the definition of $\mapsto$ above).
+
+\[
+  \einfer{PCM-Refinement}{
+    \stackfive{
+      \PCM(\widehat{M}) \quad \PCM(\widehat{N})
+    }{
+      \rel : M \times N \to \bool
+    }{
+      \rel(\unit, \unit)
+    }{
+       (\forall b, b', q .~ b \mapsto b' \land \rel(b, q) \implies \exists q' .~ \rel(b', q') \land (q \mapsto q'))
+    }{
+      \forall b, a, a' .~ \rel(b,a) \land \rel(b,a') \implies a \mapsto a'
+    }
+  }{
+    \widehat{M} \refines_{\rel} \widehat{N}
+  }
+\]
+
+\textbf{Using ghost state in programs}
+
+We instantiate instances of monoidal ghost state at \emph{locations}.
+The notation $\dboxed{a}^\gamma$ means that state $a$ is at location $\gamma$.
+Typically, locations are considered arbitrary values; here, we have to do a little
+more to handle the relationships between different ghost states.
+
+For example, suppose we have a refinement $\widehat{M} \refines_{\rel} \widehat{N}$.
+Perhaps $\widehat{M}$ represents a reader-writer protocol or something similar.
+Furthermore, let's say we're tracking ghost state $n \in N$ at location $\gamma$:
+we will use the notation $\dboxed{n}^\gamma$.
+
+Now, we want to use the $\widehat{M}$ protocol to help manage that state.
+We'll need some rules for ``exchanging'' the $\widehat{M}$-state with $\widehat{N}$-state.
+Furthermore, when we manage the $\widehat{M}$-state, we'll need to somehow ``remember''
+that it corresponds to the $\widehat{N}$-state at $\gamma$, via the refinement $\rel$.
+We will track this information in the location value.
+
+Thus, we'll define the location values recursively, reusing the $\refines$ notation:
+
+$\gamma ~~:=~~ \alpha ~~|~~ \alpha \refines_{\rel} \gamma$.
+
+Here, $\alpha$ denotes any ``base location.'' We will define rules that let us
+convert $\dboxed{n}^\gamma$ state to and from $\dboxed{m}^{\alpha \refines_{\rel} \gamma}$
+state.
+
+Here are our rules for manipulating PCM ghost state, which are mostly standard except
+the ones involving $\refines$.
+
+\[
+  \true \implies \dboxed{\unit}^\gamma
+\]
+
+\[
+  \dboxed{\bot}^\gamma \implies \false
+\]
+
+\[
+  \dboxed{t\cdot u}^\gamma\iff\dboxed{t}^\gamma * \dboxed{u}^\gamma
+\]
+
+\[
+  \einfer{Ghost-Alloc}{
+    \PCM(\widehat{M}) \quad a\in M
+  }{
+    \true \viewshift \exists\alpha.~ \dboxed{a}^\alpha
+  }
+\]
+
+\[
+  \einfer{Ghost-Refinement-Alloc}{
+    \stacktwo{
+      \widehat{M} \refines_{\rel} \widehat{N}
+    }{
+      \rel(m, n) \quad b \ne \bot
+    }
+  }{
+    \dboxed{n}^\gamma \viewshift \exists \alpha.~ \dboxed{m}^{\alpha \refines_{\rel} \gamma}
+  }
+\]
+
+\[
+  \einfer{Ghost-ViewShift}{
+    a \mapsto b
+  }{
+    \dboxed{a}^\gamma \viewshift \dboxed{b}^\gamma
+  }
+\]
+
+\[
+  \einfer{Ghost-Refinement-Exchange}{
+    \stacktwo{
+      \widehat{M} \refines_{\rel} \widehat{N}
+    }{
+      \forall p,q.~ \rel(b\cdot p, q) \implies \exists q' .~ \rel(b' \cdot p, q') \land (a \cdot q \mapsto a' \cdot q')
+    }
+  }{
+    \dboxed{b}^{\alpha \refines_{\rel} \gamma} * \dboxed{a}^\gamma
+      \viewshift
+    \dboxed{b'}^{\alpha \refines_{\rel} \gamma} * \dboxed{a'}^\gamma
+  }
+\]
+
+\textbf{Justification.}
+
+To justify these rules, we can roll up all the $\dboxed{m}^\gamma$ values into a mega-monoid (or resource algebra)
+one defined as a mapping from locations to monoid elements.
+Then we show that all those rules above follow from frame-preserving updates.
+
+\textbf{Notes about abstraction.}
+
+When using a refinement
+$\widehat{M} \refines \widehat{N}$
+to abstract out some subcomponent, we observe that $\widehat{M}$ (which corresponds to the subcomponent) needs to be defined with respect to the base state $\widehat{N}$,
+which initially seems a little strange. Shouldn't we define the subcomponent \emph{first}, and then build the larger components out of those?
+
+And yes, if for example $\widehat{M}$ is a reader-writer lock, then $\widehat{M}$ and the refinement $\rel$ will need to be defined in terms of $\widehat{N}$. However, this is not really so different than using a templated type, e.g., writing \texttt{RwLock<T>} to create a mutex storing type \texttt{T}.
+
+\textbf{Borrows and read-only state.}
+
+I think we can use a fairly simple system for representing (shared) borrows. 
+We use $\kappa$ to represent a lifetime variable.
+$\borrow{\kappa}{A}$ represents some borrowed proposition;
+$\active(\kappa)$ indicates that lifetime $\kappa$ is active,
+and $\borrowed(\kappa, A)$ indicates you can get back exclusive access to $A$
+once the lifetime $\kappa$ expires.
+
+We use $\kappa_1 \ltIntersect \kappa_2$ to represent lifetime intersection
+and $\kappa_1 \ltLe \kappa_2$ to represent lifetime inclusion.
+
+Of course, the intent is that the verification framework will use some sort of borrow-checker
+to identify the lifetimes and perform these automatically.
+
+(Note: RustBelt uses a much more complex system - need to understand why; am I missing something or is it for some feature I don't need?)
+
+\[
+  \einfer{Borrow-begin}{
+  }{
+    A \viewshift \exists
+        \kappa .~ \active(\kappa) * \borrowed(\kappa, A) * \borrow{\kappa}{A}
+  }
+\]
+
+\[
+  \einfer{Borrow-end}{
+  }{
+    \active(\kappa) * \borrowed(\kappa, A) \viewshift A
+  }
+\]
+
+\[
+  \einfer{Borrow-dupe}{
+  }{
+    \borrow{\kappa}{A} \viewshift \borrow{\kappa}{A} * \borrow{\kappa}{A}
+  }
+\]
+
+\[
+  \einfer{Reborrow}{
+    \kappa_1 \ltGe \kappa_2
+  }{
+    \borrow{\kappa_1}{A} \viewshift \borrow{\kappa_2}{A}
+  }
+\]
+
+\[
+  \active(\kappa_1 \ltIntersect \kappa_2) \iff \active(\kappa_1) * \active(\kappa_2)
+\]
+
+Next, let's add some rules for making use of borrowed PCM state.
+
+\[
+  \true \implies \borrow{\kappa}{\dboxed{\unit}^\gamma}
+\]
+
+\[
+  \active(\kappa) * \borrow{\kappa}{\dboxed{\bot}^\gamma} \implies \false
+\]
+
+\[
+  \einfer{Borrow-Combine}{
+    \forall r .~ m \le r \land n \le r \implies k \le r
+  }{
+    \borrow{\kappa}{\dboxed{m}^\gamma} * \borrow{\kappa}{\dboxed{n}^\gamma} \viewshift \borrow{\kappa}{\dboxed{k}^\gamma}
+  }
+\]
+
+\[
+  \einfer{Borrow-Ghost-ViewShift}{
+    c \cdot a \mapsto c \cdot b
+  }{
+    \active(\kappa) * \borrow{\kappa}{\dboxed{c}^\gamma} * \dboxed{a}^\gamma
+    \viewshift
+    \active(\kappa) * \dboxed{b}^\gamma
+  }
+\]
+
+Finally, rules to allow borrows to interact with PCM refinements:
+
+\[
+  \einfer{Borrow-Back}{
+    \stacktwo{
+      \widehat{M} \refines_{\rel} \widehat{N}
+    }{
+      \forall p, b .~ \rel(m \cdot p, b) \implies a \le b
+    }
+  }{
+    \borrow{\kappa}{\dboxed{m}^{\delta \refines \gamma}} \viewshift \borrow{\kappa}{\dboxed{a}^\gamma}
+  }
+\]
+
+\[
+  \einfer{Borrow-Ghost-Refinement-Exchange}{
+    \stacktwo{
+      \widehat{M} \refines_{\rel} \widehat{N}
+    }{
+      \forall p,q.~ \rel(c\cdot b\cdot p, q) \implies \exists q' .~ \rel(c \cdot b' \cdot p, q') \land (a \cdot q \mapsto a' \cdot q')
+    }
+  }{
+    \active(\kappa) *
+    \borrow{\kappa}{\dboxed{c}^{\delta\refines\gamma}} *
+    \dboxed{b}^{\delta\refines\gamma} * \dboxed{a}^\gamma
+      \viewshift
+    \active(\kappa) *
+    \dboxed{b'}^{\delta\refines\gamma} * \dboxed{a'}^\gamma
+  }
+\]
+
+
+Note that Borrow-Ghost-Refinement-Exchange allows us to utilize a borrow in the extension world $\delta \refines \gamma$ but \emph{not} a borrow in the base world $\gamma$. This is important as we would have an unsoundness otherwise. In general, we can't have any rule that allows a borrow in the $\gamma$ world to flow back to the $\delta \refines \gamma$ world, as then that borrow could ``interfere''
+
+\textbf{Justification}
+
+As before, our justification will be to roll all the ghost state, the $\borrow{\kappa}{\dboxed{a}^\gamma}$ tokens, the $\active$ tokens, and the $\borrowed$
+tokens into a single mega-monoid, and derive the above rules as frame-preserving updates.
+
+There's one trick worth pointing out. Intuitively, we're going to have some invariant
+that says the following:
+
+Suppose we have $\active(\kappa) * \borrow{\kappa}{\dboxed{a}^\gamma}$ with $a \in M$. Then, consider:
+\begin{itemize}
+  \item All ``reserved'' $\gamma$-state: $\borrowed(\kappa', \dboxed{b}^\gamma)$
+  \item All state in an extension $\delta$ of $\gamma$, both \emph{borrowed and non-borrowed}.
+        By ``extension'' $\delta$, we mean any location $\alpha \refines \gamma$,
+        $\alpha \refines (\beta \refines \gamma)$, and so on, (and \emph{not} including $\gamma$ itself).
+        Project all this state down to $M$ via the refinement relations.
+\end{itemize}
+\emph{Borrow state invariant}: Then the monoidal sum of all this state gives some value $t$ where $a \preceq t$.
+
+Essentially, this says that for active borrow state $\borrow{\kappa}{\dboxed{a}^\gamma}$,
+that state is actually ``backed'' by some state which is either ``borrowed out'' or
+in some ``refinement world.''
+
+Note again in the second bullet that within the ``refinement worlds'' we allow both
+\emph{borrowed and non-borrowed} state. This is the ``trick'' that lets the
+PCM refinement be so effective for dealing with borrowed state.
+
+For example, suppose we derive the fractional logic
+$\Frac(\widehat{N}) \refines \widehat{N}$.
+
+Now, as a user of the fractional logic, we can derive $a \viewshift \Frac(1, a)$,
+and then $\Frac(1, a) \viewshift \Frac(1/2, a) * \Frac(1/2, a)$.
+Then, we could perform a borrow of one of the halves and obtain
+$\borrow{\kappa}{\Frac(1/2, a)}$,
+then obtain $\borrow{\kappa}{a}$.
+
+We are able to do this, even though we have ``only'' borrowed half, e.g.,
+we have $\borrowed(\kappa, \Frac(1/2, a)) * \Frac(1/2, a)$, rather than
+$\borrowed(\kappa, \Frac(1, a))$.
+
+
+
+
+
+\end{document} 
