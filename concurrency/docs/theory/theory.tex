@@ -445,7 +445,7 @@ Finally, rules to allow borrows to interact with PCM refinements:
 \]
 
 
-Note that Borrow-Ghost-Refinement-Exchange allows us to utilize a borrow in the extension world $\delta \refines \gamma$ but \emph{not} a borrow in the base world $\gamma$. This is important as we would have an unsoundness otherwise. In general, we can't have any rule that allows a borrow in the $\gamma$ world to flow back to the $\delta \refines \gamma$ world, as then that borrow could ``interfere'' with the $\delta[\gamma]$-world's state which is being held ``in reserve'' for that borrow.
+Note that Borrow-Ghost-Refinement-Exchange allows us to utilize a borrow in the extension world $\delta \refines \gamma$ but \emph{not} a borrow in the base world $\gamma$. This is important as we would have an unsoundness otherwise. In general, we can't have any rule that allows a borrow in the $\gamma$ world to flow back to the $\delta \refines \gamma$ world, as then that borrow could ``interfere'' with the $\delta\refines\gamma$-world's state which is being held ``in reserve'' for that borrow.
 
 \textbf{Justification}
 
