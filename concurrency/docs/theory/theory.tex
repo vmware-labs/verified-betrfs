@@ -72,7 +72,7 @@
 
 \newcommand{\refines}{\rightarrowgtr}
 
-\newcommand{\ltIntersect}{\sqcup}
+\newcommand{\ltIntersect}{\sqcap}
 \newcommand{\ltLe}{\sqsubseteq}
 \newcommand{\ltGe}{\sqsupseteq}
 \DeclareMathOperator{\lifetime}{lifetime}
@@ -163,7 +163,7 @@ However, we can also set $\mapsto$ to be more restrictive, which will be useful 
 
 Consider a \emph{Sharded State Machine} (SSM). (This is similar to the STS common in the literature but framed a little differently.)
 
-An SSM is given by \textbf{(i)} some PCM state $S, \cdot$, \textbf{(ii)} an invariant $inv : S \to \bool$ and a sharded transition $\rightsquigarrow : S \times S$. For a sharded state
+An SSM is given by \textbf{(i)} some PCM state $S, \cdot$, \textbf{(ii)} an invariant $inv : S \to \bool$ and a sharded transition $\rightsquigarrow : S \times S \to \bool$. For a sharded state
 machine, the invariant inductivity predicate is given by,
 \[
   inv(a \cdot c) \land (a \rightsquigarrow b) \implies inv(b \cdot c)
