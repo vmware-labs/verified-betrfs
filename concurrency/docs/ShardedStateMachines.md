@@ -221,7 +221,12 @@ ensures Inv(s')
 }
 ```
 
-See [code/Bank_ShardedStateMachine.dfy](code/Bank_ShardedStateMachine.dfy) for the full example.
+See [code/ShardedStateMachine.dfy](code/ShardedStateMachine.dfy) for the complete, general form of a Sharded State Machine.
+Essentially, you can think of this as a type (the Shard type) to be filled in, as well as a series of proof obligations
+to prove the monidal structure, specify the invariants, and prove the invariants inductive.
+
+See [code/Bank_ShardedStateMachine.dfy](code/Bank_ShardedStateMachine.dfy) for the full example (based on the above snippets),
+instantiating the SharedStateMachine module with our bank-specific application state.
 
 And that's it, that's a sharded state machine!
 On the next page, we'll learn how this sharded state machine can help us build a verified implementation with mutexes.

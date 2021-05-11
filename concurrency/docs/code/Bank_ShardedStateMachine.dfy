@@ -24,7 +24,7 @@ module MathUtils {
         :: numbers[k] == numbers'[k]
   ensures sum(numbers) == sum(numbers')
   {
-    // excercise: fill in the proof
+    // exercise: fill in the proof
   }
 }
 
@@ -202,5 +202,42 @@ module Bank {
         MapToSeq(s.account_balances),
         MapToSeq(s'.account_balances),
         transfer.source_account, transfer.dest_account);
+  }
+
+  /*
+   * Wrap the above 'Transfer' predicate into a 'Next' predicate
+   * (as required by the general form of a ShardedStateMachine)
+   */
+
+  predicate Next(shard: Shard, shard': Shard)
+  {
+    exists transfer :: Transfer(shard, shard', transfer)
+  }
+
+  lemma NextPreservesValid(s: Shard, s': Shard)
+  requires valid_shard(s)
+  requires Next(s, s')
+  ensures valid_shard(s')
+  {
+    var transfer :| Transfer(s, s', transfer);
+    TransferPreservesValid(s, s', transfer);
+  }
+
+  lemma NextAdditive(s: Shard, s': Shard, t: Shard)
+  requires Next(s, s')
+  requires valid_shard(glue(s, t))
+  requires Next(glue(s, t), glue(s', t))
+  {
+    var transfer :| Transfer(s, s', transfer);
+    TransferAdditive(s, s', transfer, t);
+  }
+
+  lemma NextPreservesInv(s: Shard, s': Shard)
+  requires Inv(s)
+  requires Next(s, s')
+  ensures Inv(s')
+  {
+    var transfer :| Transfer(s, s', transfer);
+    TransferPreservesInv(s, s', transfer);
   }
 }

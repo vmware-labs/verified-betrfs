@@ -1,4 +1,9 @@
-module ShardedStateMachine {
+// General form of a ShardedStateMachine
+// To instantiate one, fill in the 'Shard' type, the 'glue' function
+// provide the 'Next' predicate and the invariant 'Inv',
+// and then meet various proof obligations in the form of lemmas.
+
+abstract module ShardedStateMachine {
   /*
    * A ShardedStateMachine contains a 'Shard' type that represents
    * a shard of the state machine.
@@ -31,7 +36,7 @@ module ShardedStateMachine {
   ensures glue(a, unit()) == a
 
   /*
-   * The invariant is meant to hold on a 'whole' shard,
+   * The invariant is meant to be a predicate over a 'whole' shard,
    * that is, all the pieces glued together at once.
    */
 
@@ -54,20 +59,11 @@ module ShardedStateMachine {
   requires Next(glue(s, t), glue(s', t))
 
   /*
-   * Show that the operation preserves the state machine invariant.
+   * The operation must preserve the state machine invariant.
    */
 
-  lemma TransferPreservesInv(s: Shard, s': Shard, transfer: AccountTransfer)
+  lemma NextPreservesInv(s: Shard, s': Shard)
   requires Inv(s)
-  requires Transfer(s, s', transfer)
+  requires Next(s, s')
   ensures Inv(s')
-  {
-    // Show that the total amount of money is preserved when we subtract some
-    // amount from one balance and add it to another balance.
-
-    MathUtils.sum_is_preserved_on_transfer(
-        MapToSeq(s.account_balances),
-        MapToSeq(s'.account_balances),
-        transfer.source_account, transfer.dest_account);
-  }
 }
