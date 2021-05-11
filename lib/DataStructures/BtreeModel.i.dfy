@@ -638,8 +638,8 @@ abstract module BtreeModel {
       SplitIndexAllKeys(oldnode, leftnode, rightnode, pivot);
     }
   }
-  
-  predicate SplitChildOfIndex(oldindex: Node, newindex: Node, childidx: int)
+
+  predicate TransparentPartOfSplitChildOfIndex(oldindex: Node, newindex: Node, childidx: int)
   {
     && oldindex.Index?
     && newindex.Index?
@@ -649,7 +649,19 @@ abstract module BtreeModel {
     && |oldindex.pivots| == |oldindex.children| - 1
     && SplitNode(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx])
     && newindex.pivots == Seq.insert(oldindex.pivots, newindex.pivots[childidx], childidx)
+  }
+
+  // opaqued this term to kill timeout in SplitChildOfIndexPreservesAllKeys
+  predicate {:opaque} OpaquePartOfSplitChildOfIndex(oldindex: Node, newindex: Node, childidx: int)
+    requires TransparentPartOfSplitChildOfIndex(oldindex, newindex, childidx)
+  {
     && lseqs(newindex.children) == Seq.replace1with2(lseqs(oldindex.children), newindex.children[childidx], newindex.children[childidx+1], childidx)
+  }
+
+  predicate SplitChildOfIndex(oldindex: Node, newindex: Node, childidx: int)
+  {
+    && TransparentPartOfSplitChildOfIndex(oldindex, newindex, childidx)
+    && OpaquePartOfSplitChildOfIndex(oldindex, newindex, childidx)
   }
 
   lemma SplitChildOfIndexPreservesWF(oldindex: Node, newindex: Node, childidx: int)
@@ -657,6 +669,7 @@ abstract module BtreeModel {
     requires SplitChildOfIndex(oldindex, newindex, childidx)
     ensures WF(newindex)
   {
+    reveal_OpaquePartOfSplitChildOfIndex();
     var pivot := newindex.pivots[childidx];
     var oldchild := oldindex.children[childidx];
     var leftchild := newindex.children[childidx];
@@ -711,6 +724,23 @@ abstract module BtreeModel {
     }
   }
 
+  // Had to split this out to reveal_OpaquePartOfSplitChildOfIndex without timeout.
+  lemma SplitChildOfIndexPreservesAllKeys_sublemma1(oldindex: Node, newindex: Node, childidx: int, key: Key, i: int)
+    requires WF(oldindex)
+    requires WF(newindex)
+    requires key in AllKeys(newindex)
+    requires SplitChildOfIndex(oldindex, newindex, childidx)
+    requires 0 <= i < |newindex.children| && key in AllKeys(newindex.children[i])
+    requires childidx + 1 < i
+    ensures key in AllKeys(oldindex) + {newindex.pivots[childidx]}
+  {
+    reveal_AllKeys();
+    SplitChildOfIndexPreservesWF(oldindex, newindex, childidx);
+    SplitNodeAllKeys(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
+    assert newindex.children[i] == oldindex.children[i-1]
+      by { reveal_OpaquePartOfSplitChildOfIndex(); }
+  }
+
   lemma SplitChildOfIndexPreservesAllKeys(oldindex: Node, newindex: Node, childidx: int)
     requires WF(oldindex)
     requires WF(newindex)
@@ -729,7 +759,7 @@ abstract module BtreeModel {
         } else if i == childidx {
         } else if i == childidx + 1 {
         } else {
-          assert newindex.children[i] == oldindex.children[i-1];
+          SplitChildOfIndexPreservesAllKeys_sublemma1(oldindex, newindex, childidx, key, i);
         }
       } else {
         var i :| 0 <= i < |newindex.pivots| && key == newindex.pivots[i];
@@ -751,6 +781,7 @@ abstract module BtreeModel {
     requires SplitChildOfIndex(oldindex, newindex, childidx)
     ensures forall key :: key in Interpretation(oldindex) ==> MapsTo(Interpretation(newindex), key, Interpretation(oldindex)[key])
   {
+    reveal_OpaquePartOfSplitChildOfIndex();
     var newint := Interpretation(newindex);
     var oldint := Interpretation(oldindex);
     
@@ -796,16 +827,16 @@ abstract module BtreeModel {
     ensures forall key :: key in Interpretation(newindex) ==> key in Interpretation(oldindex)
       //ensures Interpretation(newindex) == Interpretation(oldindex)
   {
+    reveal_OpaquePartOfSplitChildOfIndex();
     var newint := Interpretation(newindex);
     var oldint := Interpretation(oldindex);
-    
+
     var oldchild := oldindex.children[childidx];
     var leftchild := newindex.children[childidx];
     var rightchild := newindex.children[childidx+1];
     var pivot := newindex.pivots[childidx];
     SplitNodeInterpretation(oldchild, leftchild, rightchild, pivot);
     SplitChildOfIndexPreservesAllKeys(oldindex, newindex, childidx);
-    
 
     forall key | key in newint
       ensures key in oldint
@@ -834,7 +865,7 @@ abstract module BtreeModel {
     SplitChildOfIndexPreservesInterpretationA(oldindex, newindex, childidx);
     SplitChildOfIndexPreservesInterpretationB(oldindex, newindex, childidx);
   }
-  
+
   function InsertLeaf(leaf: Node, key: Key, value: Value) : (result: Node)
     requires leaf.Leaf?
     requires WF(leaf)
