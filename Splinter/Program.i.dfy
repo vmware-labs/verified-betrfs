@@ -53,30 +53,30 @@ module ProgramMachineMod {
     }
   }
 
-  predicate Init(s: Variables)
+  predicate Init(v: Variables)
   {
     false
   }
 
-  predicate Recover(s: Variables, s': Variables)
+  predicate Recover(v: Variables, v': Variables)
   {
     false
   }
 
-  predicate Query(s: Variables, s': Variables, k: Key, v: Value, sk: BetreeMachineMod.Skolem)
+  predicate Query(v: Variables, v': Variables, key: Key, val: Value, sk: BetreeMachineMod.Skolem)
   {
-    && s.WF()
-    && s'.journal == s.journal
-    && BetreeMachineMod.Query(s.betree, s'.betree, s.cache, k, v, sk)
-    && s'.cache == s.cache  // no cache writes
+    && v.WF()
+    && v'.journal == v.journal
+    && BetreeMachineMod.Query(v.betree, v'.betree, v.cache, key, val, sk)
+    && v'.cache == v.cache  // no cache writes
   }
 
-  predicate Put(s: Variables, s': Variables, k: Key, v: Value, sk: BetreeMachineMod.Skolem)
+  predicate Put(v: Variables, v': Variables, key: Key, val: Value, sk: BetreeMachineMod.Skolem)
   {
-    && s.WF()
-    && JournalMachineMod.Append(s.journal, s'.journal, MessagePut(k, v))
-    && BetreeMachineMod.Put(s.betree, s'.betree, k, v, sk)
-    && s'.cache == s.cache  // no cache writes
+    && v.WF()
+    && JournalMachineMod.Append(v.journal, v'.journal, MessagePut(key, val))
+    && BetreeMachineMod.Put(v.betree, v'.betree, key, val, sk)
+    && v'.cache == v.cache  // no cache writes
   }
 
   // TODO move to Sets.i
@@ -84,12 +84,12 @@ module ProgramMachineMod {
     forall i, j | 0<=i<|sets| && 0<=j<|sets| && i!=j :: sets[i] !! sets[j]
   }
 
-  predicate AllocsDisjoint(s: Variables)
+  predicate AllocsDisjoint(v: Variables)
   {
     SetsMutuallyDisjoint([
       {SUPERBLOCK_ADDRESS().au},
-      JournalMachineMod.Alloc(s.journal),
-      BetreeMachineMod.Alloc(s.betree)
+      JournalMachineMod.Alloc(v.journal),
+      BetreeMachineMod.Alloc(v.betree)
       ])
   }
 
@@ -132,36 +132,36 @@ module ProgramMachineMod {
   // a false economy? I guess not -- we have to coordinate across subsystems, and they share
   // an invariant that makes them reduntant anyway. Hrmm.
 
-  predicate JournalInternal(s: Variables, s': Variables, cacheOps: CacheIfc.Ops, sk: JournalMachineMod.Skolem)
+  predicate JournalInternal(v: Variables, v': Variables, cacheOps: CacheIfc.Ops, sk: JournalMachineMod.Skolem)
   {
-    && s.WF()
-    && JournalMachineMod.Internal(s.journal, s'.journal, s.cache, cacheOps, sk)
-    && s'.betree == s.betree
-    && CacheIfc.ApplyWrites(s.cache, s'.cache, cacheOps)
-    && WritesOkay(cacheOps, JournalMachineMod.Alloc(s'.journal))
-    && AllocsDisjoint(s')
+    && v.WF()
+    && JournalMachineMod.Internal(v.journal, v'.journal, v.cache, cacheOps, sk)
+    && v'.betree == v.betree
+    && CacheIfc.ApplyWrites(v.cache, v'.cache, cacheOps)
+    && WritesOkay(cacheOps, JournalMachineMod.Alloc(v'.journal))
+    && AllocsDisjoint(v')
   }
 
-  predicate BetreeInternal(s: Variables, s': Variables, cacheOps: CacheIfc.Ops, sk: BetreeMachineMod.Skolem)
+  predicate BetreeInternal(v: Variables, v': Variables, cacheOps: CacheIfc.Ops, sk: BetreeMachineMod.Skolem)
   {
-    && s.WF()
-    && s'.journal == s.journal
-    && BetreeMachineMod.Internal(s.betree, s'.betree, s.cache, cacheOps, sk)
-    && CacheIfc.ApplyWrites(s.cache, s'.cache, cacheOps)
+    && v.WF()
+    && v'.journal == v.journal
+    && BetreeMachineMod.Internal(v.betree, v'.betree, v.cache, cacheOps, sk)
+    && CacheIfc.ApplyWrites(v.cache, v'.cache, cacheOps)
   }
 
-  predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
+  predicate ReqSync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
-    && s.WF()
-    && JournalMachineMod.ReqSync(s.journal, s'.journal, syncReqId)
-    && s'.betree == s.betree
+    && v.WF()
+    && JournalMachineMod.ReqSync(v.journal, v'.journal, syncReqId)
+    && v'.betree == v.betree
   }
  
-  predicate CompleteSync(s: Variables, s': Variables, syncReqId: SyncReqId)
+  predicate CompleteSync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
-    && s.WF()
-    && JournalMachineMod.CompleteSync(s.journal, s'.journal, syncReqId)
-    && s'.betree == s.betree
+    && v.WF()
+    && JournalMachineMod.CompleteSync(v.journal, v'.journal, syncReqId)
+    && v'.betree == v.betree
   }
 
   // At some lower layer, where we duplicate the superblock to protect against disk sector
@@ -173,34 +173,34 @@ module ProgramMachineMod {
   //     until sb1 commits, lest sb0 get lost before sb1 is successfully written and the "synced"
   //     data gets lost
   // At this layer, we abbreviate that to "write sb" and "write sb complete".
-  predicate CommitStart(s: Variables, s': Variables, seqBoundary: LSN)
+  predicate CommitStart(v: Variables, v': Variables, seqBoundary: LSN)
   {
-    && s.inFlightSuperblock.None?
-    && s'.inFlightSuperblock.Some?
-    && var sb := s'.inFlightSuperblock.value;
-    && (exists alloc :: JournalMachineMod.CommitStart(s.journal, s'.journal, s.cache, sb.journal, seqBoundary, alloc))
-    && BetreeMachineMod.CommitStart(s.betree, s'.betree, s.cache, sb.betree, seqBoundary)
-//    && sb.serial == s.stableSuperblock.serial + 1 // I think this isn't needed until duplicate-superblock code
-    && CacheIfc.ApplyWrites(s.cache, s'.cache, [CacheIfc.Write(SUPERBLOCK_ADDRESS(), marshalSuperblock(sb))])
+    && v.inFlightSuperblock.None?
+    && v'.inFlightSuperblock.Some?
+    && var sb := v'.inFlightSuperblock.value;
+    && (exists alloc :: JournalMachineMod.CommitStart(v.journal, v'.journal, v.cache, sb.journal, seqBoundary, alloc))
+    && BetreeMachineMod.CommitStart(v.betree, v'.betree, v.cache, sb.betree, seqBoundary)
+//    && sb.serial == v.stableSuperblock.serial + 1 // I think this isn't needed until duplicate-superblock code
+    && CacheIfc.ApplyWrites(v.cache, v'.cache, [CacheIfc.Write(SUPERBLOCK_ADDRESS(), marshalSuperblock(sb))])
   }
 
-  predicate CommitComplete(s: Variables, s': Variables)
+  predicate CommitComplete(v: Variables, v': Variables)
   {
-    && s.inFlightSuperblock.Some?
-    && CacheIfc.IsClean(s.cache, SUPERBLOCK_ADDRESS())
+    && v.inFlightSuperblock.Some?
+    && CacheIfc.IsClean(v.cache, SUPERBLOCK_ADDRESS())
 
-    && var sb := s.inFlightSuperblock.value;
-    && s'.stableSuperblock == sb
-    && JournalMachineMod.CommitComplete(s.journal, s'.journal, s.cache, sb.journal)
-    && BetreeMachineMod.CommitComplete(s.betree, s'.betree, s.cache, sb.betree)
-    && s'.cache == s.cache
-    && s'.inFlightSuperblock.None?  // Yay! Done writing.
+    && var sb := v.inFlightSuperblock.value;
+    && v'.stableSuperblock == sb
+    && JournalMachineMod.CommitComplete(v.journal, v'.journal, v.cache, sb.journal)
+    && BetreeMachineMod.CommitComplete(v.betree, v'.betree, v.cache, sb.betree)
+    && v'.cache == v.cache
+    && v'.inFlightSuperblock.None?  // Yay! Done writing.
   }
 
   datatype Step =
     | RecoverStep()
-    | QueryStep(k: Key, v: Value, bsk: BetreeMachineMod.Skolem)
-    | PutStep(k: Key, v: Value, bsk: BetreeMachineMod.Skolem)
+    | QueryStep(key: Key, val: Value, bsk: BetreeMachineMod.Skolem)
+    | PutStep(key: Key, val: Value, bsk: BetreeMachineMod.Skolem)
     | JournalInternalStep(jsk: JournalMachineMod.Skolem)
     | BetreeInternalStep(BetreeMachineMod.Skolem)
     | ReqSyncStep(syncReqId: SyncReqId)
@@ -208,24 +208,24 @@ module ProgramMachineMod {
     | CommitStartStep(seqBoundary: LSN)
     | CommitCompleteStep()
     
-  predicate NextStep(s: Variables, s': Variables, cacheOps: CacheIfc.Ops, step: Step) {
+  predicate NextStep(v: Variables, v': Variables, cacheOps: CacheIfc.Ops, step: Step) {
     && match step {
-      case RecoverStep() => Recover(s, s')
-      case QueryStep(k, v, sk) => Query(s, s', k, v, sk)
-      case PutStep(k, v, sk) => Put(s, s', k, v, sk)
-      case JournalInternalStep(sk) => JournalInternal(s, s', cacheOps, sk)
-      case BetreeInternalStep(sk) => BetreeInternal(s, s', cacheOps, sk)
-      case ReqSyncStep(syncReqId) => ReqSync(s, s', syncReqId)
-      case CompleteSyncStep(syncReqId) => CompleteSync(s, s', syncReqId)
-      case CommitStartStep(seqBoundary) => CommitStart(s, s', seqBoundary)
-      case CommitCompleteStep() => CommitComplete(s, s')
+      case RecoverStep() => Recover(v, v')
+      case QueryStep(key, val, sk) => Query(v, v', key, val, sk)
+      case PutStep(key, val, sk) => Put(v, v', key, val, sk)
+      case JournalInternalStep(sk) => JournalInternal(v, v', cacheOps, sk)
+      case BetreeInternalStep(sk) => BetreeInternal(v, v', cacheOps, sk)
+      case ReqSyncStep(syncReqId) => ReqSync(v, v', syncReqId)
+      case CompleteSyncStep(syncReqId) => CompleteSync(v, v', syncReqId)
+      case CommitStartStep(seqBoundary) => CommitStart(v, v', seqBoundary)
+      case CommitCompleteStep() => CommitComplete(v, v')
     }
   }
 
-  predicate Next(s: Variables, s': Variables) {
+  predicate Next(v: Variables, v': Variables) {
     exists cacheOps,step ::
-      && NextStep(s, s', cacheOps, step)
-      //&& AllocationTableMachineMod.Disjoint(s'.journal.allocation, s'.betree.allocation)
+      && NextStep(v, v', cacheOps, step)
+      //&& AllocationTableMachineMod.Disjoint(v'.journal.allocation, v'.betree.allocation)
   }
 }
 
@@ -275,14 +275,14 @@ module ProgramInterpMod {
   // IM == Interpret as InterpMod
   // Oh man we're gonna have a family of IReads predicates that capture the
   // heapiness of DiskView, aren't we?
-  function IM(dv: DiskView) : (i:Interp)
+  function IM(v: Variables) : (i:Interp)
     ensures i.WF()
   {
-    var sb := ISuperblock(dv);
+    var sb := ISuperblock(v.cache.dv);
     if sb.Some?
     then
-      var betreeInterp := BetreeInterpMod.IM(dv, sb.value.betree);
-      var journalMsgSeq := JournalInterpMod.IM(dv, sb.value.journal);
+      var betreeInterp := BetreeInterpMod.IM(v.betree, v.cache, sb.value.betree);
+      var journalMsgSeq := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal);
       if journalMsgSeq.Some? && betreeInterp.seqEnd == journalMsgSeq.value.seqStart
       then
         Concat(betreeInterp, journalMsgSeq.value)
@@ -292,29 +292,101 @@ module ProgramInterpMod {
       InterpMod.Empty()
   }
 
-  function IMReads(dv: DiskView) : seq<AU> {
-    var sbreads := ISuperblockReads(dv);
-    var sb := ISuperblock(dv);
+  function IMReads(v: Variables) : seq<AU> {
+    var sbreads := ISuperblockReads(v.cache.dv);
+    var sb := ISuperblock(v.cache.dv);
     if sb.Some?
     then
-      sbreads + JournalInterpMod.IReads(dv, sb.value.journal.core) + BetreeInterpMod.IReads(dv, sb.value.betree)
+      sbreads
+        + JournalInterpMod.IReads(v.journal, v.cache, sb.value.journal.core)
+        + BetreeInterpMod.IReads(v.betree, v.cache, sb.value.betree)
     else
       sbreads
   }
 
-  function IReads(dv: DiskView) : seq<AU> {
-    IMReads(dv)
+  function IReads(v: Variables) : seq<AU> {
+    IMReads(v)
   }
 
-  lemma Framing(dv0: DiskView, dv1: DiskView)
-    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0))
-    ensures IM(dv0) == IM(dv1)
+  lemma Framing(v0: Variables, v1: Variables)
+    requires DiskViewsEquivalentForSet(v0.cache.dv, v1.cache.dv, IReads(v0))
+    requires v0.betree == v1.betree
+    requires v0.journal == v1.journal
+    ensures IM(v0) == IM(v1)
   {
-    assert ISuperblock(dv0) == ISuperblock(dv1);
-    var sb := ISuperblock(dv0);
+    assert ISuperblock(v0.cache.dv) == ISuperblock(v1.cache.dv);
+    var sb := ISuperblock(v0.cache.dv);
     if sb.Some? {
-      BetreeInterpMod.Framing(sb.value.betree, dv0, dv1);
-      JournalInterpMod.Framing(sb.value.journal.core, dv0, dv1);
+      BetreeInterpMod.Framing(v0.betree, v0.cache, v1.cache, sb.value.betree);
+      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, sb.value.journal.core);
+    }
+  }
+
+  // Next step is to write the refinement proof, using obligation placeholders
+  // in Betree & Journal so we can see the outer structure -- including the
+  // framing argument -- early.
+  // Here's a quick and dirty approximation: it ignores crashes, but lets us
+  // get to the framing issue right away.
+
+  predicate Inv(v: Variables)
+  {
+    && AllocsDisjoint(v)
+  }
+
+  // Not gonna think about Init in this fakey little simulation, since we want
+  // mkfs init (behavior start), not program init (crash recovery).
+  lemma InvNext(v: Variables, v': Variables)
+    requires Inv(v)
+    requires Next(v, v')
+    ensures Inv(v')
+  {
+  }
+
+  lemma NextRefines(v: Variables, v': Variables)
+    //requires Inv(v)
+    // well, no, not if there's a Put!
+    requires Inv(v)
+    requires Next(v, v')
+    ensures IM(v) == IM(v')
+  {
+    var cacheOps,step :| NextStep(v, v', cacheOps, step);
+    match step {
+      case RecoverStep() => {
+        assert IM(v) == IM(v');
+      }
+      case QueryStep(key, val, sk) => {
+        assert IM(v) == IM(v');
+      }
+      case PutStep(key, val, sk) => {
+        // This step should be difficult. :v)
+        // hah yes it's not, because IM is only looking at the cache, not the membuffer
+        // (internal state machine state)
+        assert IM(v) == IM(v');
+      }
+      case JournalInternalStep(sk) => {
+        assume false;
+        assert IM(v) == IM(v');
+      }
+      case BetreeInternalStep(sk) => {
+        assume false;
+        assert IM(v) == IM(v');
+      }
+      case ReqSyncStep(syncReqId) => {
+        assume false;
+        assert IM(v) == IM(v');
+      }
+      case CompleteSyncStep(syncReqId) => {
+        assume false;
+        assert IM(v) == IM(v');
+      }
+      case CommitStartStep(seqBoundary) => {
+        assume false;
+        assert IM(v) == IM(v');
+      }
+      case CommitCompleteStep() => {
+        assume false;
+        assert IM(v) == IM(v');
+      }
     }
   }
 }
