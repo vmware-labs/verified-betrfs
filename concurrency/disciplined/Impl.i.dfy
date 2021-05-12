@@ -209,7 +209,7 @@ module Impl refines VerificationObligation {
         // because we are using decreases *
         break;
       }
-
+    
       var next_entry; glinear var next_handle;
       next_entry, next_handle, r := acquireRow(v, slot_idx', r);
 
@@ -267,123 +267,115 @@ module Impl refines VerificationObligation {
     }
   }
 
-  // method doInsert(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_sv: SSM.Variables)
-  // returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
-  //   requires Inv(v)
-  //   requires input.InsertInput?
-  //   requires IsInputResource(in_sv, rid, input)
-  //   ensures out_sv == SSM.output_stub(rid, output)
-  //   decreases *
-  // {
-  //   var allocator := v.allocator;
+  method doInsert(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_sv: SSM.Variables)
+  returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+    requires Inv(v)
+    requires input.InsertInput?
+    requires IsInputResource(in_sv, rid, input)
+    ensures out_sv == SSM.output_stub(rid, output)
+    decreases *
+  {
+    var allocator := v.allocator;
 
-  //   var query_ticket := Ticket(rid, input);
-  //   var key, inital_key := input.key, input.key;
-  //   var kv := KV(key, input.value);
-  //   output := MapIfc.InsertOutput(true);
+    var query_ticket := Ticket(rid, input);
+    var key, inital_key := input.key, input.key;
+    var kv := KV(key, input.value);
+    output := MapIfc.InsertOutput(true);
 
-  //   var hash_idx := hash(key);
-  //   var initial_hash_idx := hash_idx;
-  //   var slot_idx := hash_idx;
+    var hash_idx := hash(key);
+    var initial_hash_idx := hash_idx;
+    var slot_idx := hash_idx;
 
-  //   linear var cap; glinear var cap_handle; var tid;
-  //   cap, cap_handle, tid := acquireCapacity(v, thread_id);
-  //   linear var AllocatorBin(count, cap_r) := cap;
-  //   glinear var r := SSM.join(in_sv, cap_r);
+    linear var cap; glinear var cap_handle; var tid;
+    cap, cap_handle, tid := acquireCapacity(v, thread_id);
+    linear var AllocatorBin(count, cap_r) := cap;
+    glinear var r := enclose(cap_r);
+    r := SSM.join(in_sv, r);
 
-  //   linear var row; glinear var handle;
-  //   row, handle := v.row_mutexes[slot_idx].acquire();
-  //   linear var Row(entry, row_r) := row;
-  //   r := SSM.join(r, row_r);
+    var entry; glinear var handle;
+    entry, handle, r := acquireRow(v, slot_idx, r);
 
-  //   count := count - 1;
+    count := count - 1;
 
-  //   var step := ProcessInsertTicketStep(query_ticket);
-  //   ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, kv, inital_key)), count as nat);
-  //   r := easy_transform_step(r, r', step);
-  //   glinear var rmutex;
+    var step := ProcessInsertTicketStep(query_ticket);
+    ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, kv, inital_key)), count as nat);
+    r := easy_transform_step(r, r', step);
 
-  //   while true 
-  //     invariant Inv(v);
-  //     invariant 0 <= slot_idx < FixedSizeImpl()
-  //     invariant r == oneRowResource(slot_idx as nat, Info(entry, Inserting(rid, kv, inital_key)), count as nat)
-  //     invariant kv.key == key
-  //     invariant hash_idx == hash(key)
-  //     invariant handle.m == v.row_mutexes[slot_idx];
-  //     decreases *
-  //   {
-  //     var slot_idx' := getNextIndex(slot_idx);
-  //     var new_kv;
+    while true 
+      invariant Inv(v);
+      invariant 0 <= slot_idx < FixedSizeImpl()
+      invariant r == oneRowResource(slot_idx as nat, Info(entry, Inserting(rid, kv, inital_key)), count as nat)
+      invariant kv.key == key
+      invariant hash_idx == hash(key)
+      invariant handle.m == v.row_mutexes[slot_idx];
+      decreases *
+    {
+      var slot_idx' := getNextIndex(slot_idx);
+      var new_kv;
 
-  //     match entry {
-  //       case Empty => {
-  //         step := InsertDoneStep(slot_idx as nat);
-  //       }
-  //       case Full(KV(entry_key, value)) => {
-  //         new_kv := KV(entry_key, value);
-  //         if entry_key == key {
-  //           step := InsertUpdateStep(slot_idx as nat);
-  //         } else {
-  //           var should_go_before := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
-  //           if !should_go_before {
-  //             step := InsertSkipStep(slot_idx as nat);
-  //           } else {
-  //             step := InsertSwapStep(slot_idx as nat);
-  //           }
-  //         }
-  //       }
-  //     }
+      match entry {
+        case Empty => {
+          step := InsertDoneStep(slot_idx as nat);
+        }
+        case Full(KV(entry_key, value)) => {
+          new_kv := KV(entry_key, value);
+          if entry_key == key {
+            step := InsertUpdateStep(slot_idx as nat);
+          } else {
+            var should_go_before := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
+            if !should_go_before {
+              step := InsertSkipStep(slot_idx as nat);
+            } else {
+              step := InsertSwapStep(slot_idx as nat);
+            }
+          }
+        }
+      }
 
-  //     if step.InsertDoneStep? || step.InsertUpdateStep? {
-  //       break;
-  //     }
+      if step.InsertDoneStep? || step.InsertUpdateStep? {
+        break;
+      }
 
-  //     linear var next_row; glinear var next_handle;
-  //     next_row, next_handle := v.row_mutexes[slot_idx'].acquire();
-  //     linear var Row(next_entry, next_row_r) := next_row;
-  //     r := SSM.join(r, next_row_r);
+      glinear var next_handle; var next_entry;
+      next_entry, next_handle, r := acquireRow(v, slot_idx', r);
 
-  //     if step.InsertSwapStep? {
-  //       entry := Full(kv);
-  //       kv := new_kv;
-  //       key := new_kv.key;
-  //     }
+      if step.InsertSwapStep? {
+        entry := Full(kv);
+        kv := new_kv;
+        key := new_kv.key;
+      }
   
-  //     r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
-  //     r := easy_transform_step(r, r', step);
+      r' := twoRowsResource(slot_idx as nat, Info(entry, Free),
+        slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
+      r := easy_transform_step(r, r', step);
 
-  //     ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
-  //     ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free), 0);
+      ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
+      r := releaseRow(v, slot_idx, entry, handle, r, left);
 
-  //     r, rmutex := SSM.split(r, left, right);
-  //     v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
+      slot_idx := slot_idx';
+      entry := next_entry;
+      hash_idx := hash(key);
+      handle := next_handle;
+    }
 
-  //     slot_idx := slot_idx';
-  //     entry := next_entry;
-  //     hash_idx := hash(key);
-  //     handle := next_handle;
-  //   }
+    // assert step.InsertDoneStep? || step.InsertUpdateStep?;
+    count := if step.InsertDoneStep? then count else count + 1;
+    r' := SSM.Variables(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), Count.Variables(count as nat), multiset{}, multiset{Stub(rid, output)});
+    r := easy_transform_step(r, r', step);
 
-  //   // assert step.InsertDoneStep? || step.InsertUpdateStep?;
-  //   count := if step.InsertDoneStep? then count else count + 1;
-  //   r' := SSM.Variables(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), count as nat, multiset{}, multiset{Stub(rid, output)});
-  //   r := easy_transform_step(r, r', step);
+    ghost var left := SSM.output_stub(rid, output).(insert_capacity := Count.Variables(count as nat));
+    r := releaseRow(v, slot_idx, Full(kv), handle, r, left);
 
-  //   r, rmutex := SSM.split(r, 
-  //     SSM.output_stub(rid, output).(insert_capacity := count as nat), 
-  //     oneRowResource(slot_idx as nat, Info(Full(kv), Free), 0));
-  //   v.row_mutexes[slot_idx].release(Row(Full(kv), rmutex), handle);
+    glinear var rcap;
+    r, rcap := SSM.split(r,
+      SSM.output_stub(rid, output), 
+      unit().(insert_capacity := Count.Variables(count as nat)));
 
-  //   glinear var rcap;
-  //   r, rcap := SSM.split(r,
-  //     SSM.output_stub(rid, output), 
-  //     unit().(insert_capacity := count as nat));
+    glinear var rcap' := declose(rcap);
+    allocator[tid].release(AllocatorBin(count, rcap'), cap_handle);
 
-  //   assert CAP.BinInv(AllocatorBin(count, rcap)); // ha ha ha
-  //   allocator[tid].release(AllocatorBin(count, rcap), cap_handle);
-
-  //   out_sv := r;
-  // }
+    out_sv := r;
+  }
 
   // method doRemoveFound(v: Variables, rid: int, 
   //   slot_idx: uint32,
