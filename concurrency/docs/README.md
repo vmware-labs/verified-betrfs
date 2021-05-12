@@ -16,8 +16,18 @@ This directory serves as an introduction to those concepts.
 
 [Introduction to sharded state machines](ShardedStateMachines.md)
 
-[Implementing bank](BankImplementation.md)
+[Implementing the bank application](BankImplementation.md)
 
 ## Implementing your own lock from atomic primitives
 
+Implementing a spin-lock
+
 ## Reader-writer locks
+
+An application for Reader-Writer locks
+
+PCM Refinements
+
+An RwLock as a sharded state machine
+
+An RwLock implementation

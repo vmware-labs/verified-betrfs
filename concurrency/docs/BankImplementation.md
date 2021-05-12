@@ -9,7 +9,7 @@ Our system architecture will use the Mutexes from [MutexIntro.md](MutexIntro.md)
 We will store one account and its balance behind each mutex. 
 Furthermore, each mutex will store this balance bost _physically_ and _ghostily_.
 
-This diagram illustrates the architecture:
+This diagram illustrates the architecture (we show only 3 accounts for simplicity):
 
 ![images/bank-mutex-invariants.png](images/bank-mutex-invariants.png)
 
