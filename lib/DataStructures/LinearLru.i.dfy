@@ -89,7 +89,7 @@ module LinearLru
     {
       LruModel.QueueCount(self.Queue());
       LruModel.LruRemove'(self.Queue(), x);
-      Remove(inout self, x);
+      inout self.Remove(x);
       LruModel.QueueCount(self.Queue());
 
       var p := inout self.dlist.InsertBefore(0, x);

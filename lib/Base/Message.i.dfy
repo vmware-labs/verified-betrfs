@@ -4,7 +4,7 @@
 include "KeyType.s.dfy"
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/LinearSequence.s.dfy"
-include "sequences.i.dfy"
+include "Sequences.i.dfy"
 
 //
 // The messages propagated down a B-epsilon tree. Each message either

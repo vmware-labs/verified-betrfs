@@ -4,5 +4,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 
+echo "NOTE: this will use the /noNLarith flag! If you're working on a file where nonlinear arith is allowed use tools/local-dafny-nonlinear.sh"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-$DIR/../.dafny/bin/dafny "$@"
+set -x
+$DIR/../.dafny/bin/dafny "$@" /induction:1 /noNLarith

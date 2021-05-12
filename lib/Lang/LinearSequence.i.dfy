@@ -11,10 +11,10 @@ module LinearSequence_i {
   export
     provides LinearSequence_s
     provides NativeTypes
-    provides seq_alloc_init, lseqs, imagine_lseq, lseq_peek, lseq_free_fun, lseq_take_fun, lseq_swap_inout, lseq_take_inout, lseq_give_inout
+    provides seq_alloc_init, mut_seq_set, SeqCopy, lseqs, imagine_lseq, lseq_peek, lseq_free_fun, lseq_take_fun, lseq_swap_inout, lseq_take_inout, lseq_give_inout
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64, lseq_add
     provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, SeqResizeMut, InsertSeq, InsertLSeq, Replace1With2Lseq, Replace1With2Lseq_inout
-    reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all
+    reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all 
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
   function method seq_alloc_init<A>(length:uint64, a:A) : (linear s:seq<A>)
@@ -231,6 +231,35 @@ module LinearSequence_i {
       && (forall i | 0 <= i < |s| :: i in s)
   }
 
+  method SeqCopy<A>(shared source: seq<A>, linear inout dest: seq<A>, start: uint64, end: uint64, dest_start: uint64)
+  requires 0 <= start as nat <= end as nat <= |source|
+  requires 0 <= dest_start as nat <= dest_start as nat + (end-start) as nat <= |old_dest|
+  requires |old_dest| < Uint64UpperBound()
+  ensures |dest| == |old_dest|
+  ensures source[start..end] == dest[dest_start as nat .. dest_start as nat + (end-start) as nat]
+  ensures forall i | 0 <= i < dest_start :: dest[i] == old_dest[i]
+  ensures forall i | dest_start as nat + (end-start) as nat <= i < |dest| :: dest[i] == old_dest[i]
+  {
+    var i := 0;
+    var len := end - start;
+
+    while i < len
+      invariant 0 <= i <= len
+      invariant |dest| == |old_dest|
+      invariant (i + dest_start) as nat <= (len + dest_start) as nat <= |dest|
+      invariant forall j :: 0 <= j < i ==> dest[j+dest_start] == source[j+start];
+      invariant forall j | 0 <= j < dest_start :: dest[j] == old_dest[j]
+      invariant forall j :: (i+dest_start) as nat <= j < |dest| ==> dest[j] == old_dest[j]
+    {
+      mut_seq_set(inout dest, i+dest_start, seq_get(source, i+start));
+      i := i + 1;
+    }
+
+    assert forall j :: 0<=j<len ==> 
+      dest[j+dest_start] == dest[dest_start..][j] 
+      == dest[dest_start as nat .. dest_start as nat + (end-start) as nat][j];
+  }
+
   // TODO(robj): "probably not as fast as a memcpy"
   method AllocAndCopy<A>(shared source: seq<A>, from: uint64, to: uint64)
     returns (linear dest: seq<A>)
@@ -242,16 +271,7 @@ module LinearSequence_i {
     } else {
       dest := seq_alloc(to - from, seq_get(source, from));
     }
-    var i:uint64 := 0;
-    var count := to - from;
-    while i < count
-      invariant i <= count
-      invariant |dest| == count as nat
-      invariant forall j :: 0<=j<i ==> dest[j] == source[j + from];
-    {
-      dest := seq_set(dest, i, seq_get(source, i+from));
-      i := i + 1;
-    }
+    SeqCopy(source, inout dest, from, to, 0);
   }
 
   method AllocAndMoveLseq<A>(linear source: lseq<A>, from: uint64, to: uint64)
@@ -308,11 +328,9 @@ module LinearSequence_i {
     }
   }
 
-  // TODO(robj): this interface looks broken to me.
-  method {:extern "LinearExtern", "TrustedRuntimeSeqResizeMut"} TrustedRuntimeSeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64)
-    ensures |s| == newlen as nat
-    ensures forall j :: 0 <= j < newlen as nat && j < |old_s| ==> s[j] == old_s[j]
-
+  // method {:extern "LinearExtern", "TrustedRuntimeSeqResizeMut"} TrustedRuntimeSeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64)
+  //   ensures |s| == newlen as nat
+  //   ensures forall j :: 0 <= j < newlen as nat && j < |old_s| ==> s[j] == old_s[j]
 
   method SeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64, a: A)
     ensures |s| == newlen as nat
@@ -320,7 +338,9 @@ module LinearSequence_i {
   {
     shared_seq_length_bound(s);
     var i:uint64 := seq_length(s);
-    TrustedRuntimeSeqResizeMut(inout s, newlen);
+    // TrustedRuntimeSeqResizeMut(inout s, newlen);
+    s := TrustedRuntimeSeqResize(s, newlen);
+
     while (i < newlen)
       invariant |s| == newlen as nat
       invariant |old_s| <= |s| ==> |old_s| <= i as nat <= |s|
@@ -408,5 +428,15 @@ module LinearSequence_i {
     replaced := lseq_swap_inout(inout s, pos, l);
     s := InsertLSeq(s, r, pos+1);
   }
+
+  method mut_seq_set<A>(linear inout s:seq<A>, i:uint64, a:A)
+  requires i as nat < |old_s|
+  ensures s == old_s[i as nat := a]
+  {
+    s := seq_set(s, i, a);
+  }
+
+  //     requires i as nat < |old_s|
+  //     ensures s == old_s[i as nat := a]
 
 } // module LinearSequence_i

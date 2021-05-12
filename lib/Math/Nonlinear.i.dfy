@@ -44,6 +44,11 @@ module NonlinearLemmas {
   {
   }
 
+  lemma distributive_right_sub(a: int, b: int, c: int)
+  ensures (a - b) * c == a*c - b*c
+  {
+  }
+
   lemma div_eq_0(a: int, b: int)
   requires b > 0
   requires 0 <= a < b
@@ -55,6 +60,12 @@ module NonlinearLemmas {
   requires a >= 0
   requires b > 0
   ensures a / b >= 0
+  {
+  }
+
+  lemma div_denom_ge_1(n: nat, b: nat)
+  requires 1 <= b
+  ensures n / b <= n
   {
   }
 

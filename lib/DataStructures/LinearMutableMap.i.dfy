@@ -7,7 +7,7 @@ include "../Lang/LinearSequence.i.dfy"
 
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
-include "../Base/sequences.i.dfy"
+include "../Base/Sequences.i.dfy"
 include "../Base/Sets.i.dfy"
 include "../Base/Maps.i.dfy"
 include "LinearMutableMapBase.i.dfy"
@@ -485,7 +485,7 @@ module LinearMutableMap {
     }
   }
 
-  lemma MapFromStorageProperties<V>(elements: seq<Item<V>>, result: map<uint64, V>)
+  lemma {:induction true} MapFromStorageProperties<V>(elements: seq<Item<V>>, result: map<uint64, V>)
     requires CantEquivocate(elements)
     requires MapFromStorage(elements) == result
     ensures forall slot :: ValidSlot(|elements|, slot) && elements[slot.slot].Entry? ==>

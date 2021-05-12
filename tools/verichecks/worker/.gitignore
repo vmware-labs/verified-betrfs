@@ -1,0 +1,6 @@
+*.pem
+worker-dir/
+venv3/
+.swp
+__pycache__/
+id_rsa_*

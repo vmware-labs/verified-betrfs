@@ -1,144 +1,213 @@
+include "../lib/Base/Sequences.i.dfy"
+include "../lib/Base/Maps.i.dfy"
+include "Spec.s.dfy"
+include "MsgSeq.i.dfy"
 include "Tables.i.dfy"
+
+
+/*
+Okay I think we need to just talk about DiskViews at this layer. Well, no, a cache that
+always has CanRead true. We still need to negotiate disjoint write Ops.
+At this layer, in the IOSystem machine, we'll need a model for how crashes replace the
+cache contents.
+This is all good; it's just an infinitely-big cache that never needs to evict.
+
+At the next layer down, we'll talk about interactions betwixt the Cache and the Disk.
+So the trick there will be showing that transitions obey constraints that require testing
+pages that aren't in the cache. That is, we know some sufficient predicate on those
+pages that lets us ghostily know that the transition is valid despite not being
+able to evaluate it directly at runtime. Let's enumerate the affected transitions.
+*/
 
 // NB the journal needs a smaller-sized-write primitive. If we get asked to sync
 // frequently, we don't want to burn an AU on every journal write. Maybe not even
 // a CU. Hrmm.
 module JournalMachineMod {
-  import AllocationTableMachineMod
-
-  type LSN = nat // Log sequence number
-    
-  datatype Superblock = Superblock(
-    allocation: AllocationTableMod.Superblock,
-    freshestCU: Option<CU>,
-    firstValidLSN : LSN)
-
-  datatype MemJournalRecord = Message(m: Message)
-
-  datatype WriteState =
-    | Idle
-    | WritingJournal(count: nat)  // Writing seqStart .. seqStart + count
-
-  datatype Variables = Variables(
-    firstValidLSN: LSN,
-    syncedLSNBoundary: LSN, // Smaller LSNs are reachable from the superblock, i.e. they are safe in the event of a crash
-    inFlightSyncedLSNBoundary: Option<LSN>, // Also indicates whether a superblock is currently being written to disk
-    durableTailCU: CU, // pointer to the freshest CU that's durable (okay to commit in SB)
-    durableTailLSN: LSN, // last durable log sequence number
-    inFlightTailCU: Option<CU> // pointer to the CU where record.seqEnd == seqStart
-    seqStart: LSN,  // in-memory records start here
-    journal: seq<MemJournalRecord>, // in memory records
-    seqToAU: map<LSN, AU>,  // Which AU each seq number is stored in.
-    syncReqs: map<SyncReqId, LSN>
-  )
-  {
-    predicate seqToAuValid() {
-      && forall seqno :: firstValidSeq <= seqno < seqStart <==> seqno in seqToAu.Keys
-    }
-
-    predicate WF() {
-      && seqToAuValid()
-    }
-  }
-
-  function AllocationForSeqs(s:Variables, seqStart: LSN, seqEndExclusive: LSN) : multiset<AU>
-  {
-    multiset seqNum | seqStart <= seqNum < seqEndExclusive :: s.seqToAU[seqNum]
-  }
-
-  predicate Record(s: Variables, s': Variables, message: Message)
-  {
-    && s' == s.(journal := s.journal + [Message(message)])
-  }
-
-  predicate InitiateJournalWriteNoop(s: Variables, s': Variables)
-  {
-  }
-
-  predicate CompleteJournalWriteNoop(s: Variables, s': Variables)
-  {
-  }
-
-  predicate InitiateSuperblockWriteNoop(s: Variables, s': Variables)
-  {
-  }
-
-  predicate AsyncFlush(s: Variables, s': Variables)
-  {
-    // Complete superblock write
-    // a superblock write hits the disk and commits seqStart .. seqStart + inFlightWriteCount
-  }
-
-  predicate CommitStart(s: Variables, s': Variables, sb: Superblock, startBoundary: nat)
-  {
-    && s.inFlightSyncedLSNBoundary == None
-    && sb.allocation == AllocationForSeqs(s, startBoundary, durableTailLSN)
-    && sb.freshestCU == s.durableTailCU
-    && sb.firstValidSeq == startBoundary
-    && s' == s.(inFlightSyncedLSNBoundary := Some(s.durableTailLSN))
-  }
-
-  predicate CommitComplete(s: Variables, s': Variables, sb: Superblock)
-  {
-    && s.inFlightSyncedLSNBoundary.Some?
-    && s'.firstValidSeq             == sb.firstValidSeq
-    && s'.syncedLSNBoundary         == s.inFlightSyncedLSNBoundary.value
-    && s'.inFlightSyncedLSNBoundary == None
-    && s'.durableTailCU             == s.durableTailCU
-    && s'.durableTailSeq            == s.durableTailSeq
-    && s'.inFlightTailCU            == s.inFlightTailCU
-    && s'.seqStart                  == s.seqStart
-    && s'.journal                   == s.journal
-    && s'.seqToAU                   == map seqno | s'.firstValidSeq <= seqno < s'.seqStart :: s.seqToAU[seqno]
-  }
-
-  predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
-  {
-    && syncReqId !in s.syncReqs.Keys
-    && s' == s.(syncReqs := syncReqs[syncReqs := s.seqStart + |s.journal|])
-  }
-
-  predicate CompleteSync(s: Variables, s': Variables, syncReqId: SyncReqId)
-  {
-    && syncReqId in s.syncReqs.Keys
-    && s.syncReqs[syncReqId] < s.syncedLSNBoundary
-    && s' == s.(syncReqs := MapRemove(s.syncReqs, syncReqId))
-  }
-}
-
-module JournalMod {
   import opened Options
   import opened Sequences
   import opened Maps
+  import opened MessageMod
+  import opened InterpMod
+  import opened DeferredWriteMapSpecMod
   import opened MsgSeqMod
   import opened AllocationMod
+  import AllocationTableMachineMod
+  import CacheIfc
 
-  // Monoid-friendly (quantified-list) definition
+  // The core journal superblock
+  datatype CoreSuperblock = CoreSuperblock(
+    freshestCU: Option<CU>,
+    boundaryLSN : LSN)
+
+  // The entire superblock we need to store: Core data plus allocation data
+  datatype Superblock = Superblock(
+    allocation: AllocationTableMachineMod.Superblock, // TODO This should go down a layer!
+    core: CoreSuperblock)
+
+  // On-disk JournalRecords
   datatype JournalRecord = JournalRecord(
     messageSeq: MsgSeq,
     priorCU: Option<CU>   // linked list pointer
-  ) {
-
-    // Synthesize a superblock that reflects the tail of the chain (cutting
-    // off the first rec), propagating along firstValidSeq.
-    function priorSB(sb: Superblock) : Superblock
+  )
+  {
+    function priorSB(sb: CoreSuperblock) : CoreSuperblock
     {
-      Superblock(priorCU, sb.firstValidSeq)
+      CoreSuperblock(priorCU, sb.boundaryLSN)
     }
   }
-  datatype JournalChain = JournalChain(sb: Superblock, recs:seq<JournalRecord>)
+
+  datatype Variables = Variables(
+    boundaryLSN: LSN,
+      // The (exclusive) upper bound of LSNs reachable from the
+      // last-known-committed superblock; earlier LSNs have already been
+      // garbage-collected. (There may be leftover records with smaller LSNs in
+      // a journal record, but the superblock says to ignore them.)
+      // We need to track this value to disallow the Betree from moving backwards,
+      // which would prevent us from recovering after a crash.
+
+    persistentLSN: LSN,
+      // The (exclusive) upper bound of LSNs known to be persistent on the on-disk journal.
+      // We may need to track this value to ensure commit doesn't go backwards.
+      // (maybe invariant-able)
+
+    cleanLSN: LSN,
+      // The (exclusive) upper bound of LSNs that could be made persistent with
+      // a superblock write. They're covered by marshalled pages that are
+      // "clean" (have been written back to the disk), but aren't yet linked to
+      // the superblock. These pages aren't "durable" or "persistent", because if there
+      // were a crash right now, they'd be unallocated garbage after the crash.
+
+    marshalledLSN: LSN,
+      // The (exclusive) upper bound of LSNs that have been marshalled into cache
+      // blocks.
+
+    unmarshalledTail: seq<Message>,
+      // The rest of the in-memory journal
+
+    syncReqs: map<SyncReqId, LSN>,
+      // The LSN each outstanding SyncRequest was created at. The sync request may be
+      // completed when the corresponding LSN <= persistentLSN.
+
+    lsnToCU: map<LSN, CU>
+      // We imagine that the journal can keep track of the entire mapping from LSN to CUs.
+      // That's not really how the impl will work; it'll maintain some sort of summary, and
+      // we'll refine from the disk state to get this field.
+  )
+  {
+    // The (exclusive) upper bound of LSNs that have been journaled (in this epoch;
+    // after a crash we can lose LSNs that weren't made persistent).
+    function unmarshalledLSN() : LSN
+    {
+      marshalledLSN + |unmarshalledTail|
+    }
+
+    predicate WF() {
+      && boundaryLSN <= persistentLSN <= cleanLSN <= marshalledLSN
+      && (forall lsn :: boundaryLSN <= lsn < marshalledLSN <==> lsn in lsnToCU)
+    }
+  }
+
+  // advances tailLSN forward by adding a message
+  predicate Append(s: Variables, s': Variables, message: Message)
+  {
+    && s' == s.(unmarshalledTail := s.unmarshalledTail + [message])
+  }
+
+  // TODO marshalling
+  function parse(b: UninterpretedDiskPage) : Option<JournalRecord>
+  function marshal(jr: JournalRecord) : UninterpretedDiskPage
+
+  function TailToMsgSeq(s: Variables) : MsgSeq
+  {
+    var start := s.marshalledLSN;
+    var end := s.unmarshalledLSN();
+    MsgSeq(map i:LSN | start <= i < end :: s.unmarshalledTail[i - start], start, end)
+  }
+
+  // advances marshalledLSN forward by marshalling a batch of messages into a dirty cache page
+  predicate AdvanceMarshalled(s: Variables, s': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newCU: CU)
+  {
+    && s.WF()
+
+    // newCU is an unused CU.
+    // That could be because the impl has freshly reserved a chunk of CUs from the outer
+    // program, or because it's using up a CU from a prior reserved chunk. The impl will
+    // batch allocations so it can avoid needing to rewrite the marshaled allocation before
+    // commiting a fresh superblock (on sync). Thus "unused" may be computed as "reserved
+    // but known not to be in use in the current JournalChain".
+
+    // Marshal and write the current record out into the cache. (This doesn't issue
+    // a disk write, it just dirties a page.)
+    && var priorCU := if s.marshalledLSN == s.boundaryLSN then None else Some(s.lsnToCU[s.marshalledLSN-1]);
+    && var jr := JournalRecord(TailToMsgSeq(s), priorCU);
+    && cacheOps == [CacheIfc.Write(newCU, marshal(jr))]
+
+    // Record the changes to the marshalled, unmarshalled regions, and update the allocation.
+    && s' == s.(
+      // Open a new, empty record to absorb future journal Appends
+      marshalledLSN := s.unmarshalledLSN(),
+      unmarshalledTail := [],
+      lsnToCU := s'.lsnToCU  // Tautology to defer this constraint to next predicate
+      )
+    // constructive: (map lsn:LSN | 0 <= lsn < s.unmarshalledLSN() :: if lsn < s.marshalledLSN then s.lsnToCU[lsn] else newCU),
+    // predicate:
+    && CorrectMapping(cache, Some(newCU), s'.lsnToCU)
+  }
+
+  // advances cleanLSN forward by learning that the cache has written back a contiguous
+  // sequence of pages starting at last cleanLSN
+  predicate AdvanceClean(s: Variables, s': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newClean: nat)
+  {
+    && s.WF()
+    && s.cleanLSN < newClean <= s.marshalledLSN
+    && (forall lsn | s.cleanLSN <= lsn < newClean :: && CacheIfc.IsClean(cache, s.lsnToCU[lsn]))
+    && s' == s.(cleanLSN := newClean)
+    && cacheOps == []
+  }
+
+  predicate Reallocate(s: Variables, s': Variables)
+  {
+    // TODO Allocation isn't what we want, yet. It's tight, so we have to write
+    // a new allocation table every time we change the superblock. That's no
+    // good!
+    && false // does something with allocation table?
+  }
+
+  // Agrees to advance persistentLSN (to cleanLSN) and firstLSN (to newBoundary, coordinated
+  // with BeTree) as part of superblock writeback.
+  predicate CommitStart(s: Variables, s': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN, alloc: AllocationTableMachineMod.Variables)
+  {
+    && s.WF()
+    // This is the stuff we'll get to garbage collect when the sb commit completes.
+    && s.boundaryLSN <= newBoundaryLSN // presumably provable from Inv
+
+    // These are the LSNs whose syncs will complete when the sb commit completes.
+    && s.persistentLSN <= s.cleanLSN  // presumably provable from Inv
+
+    // The allocation we actually commit to is a superset of the allocation we're using.
+    && (forall cu | cu in s.lsnToCU.Values :: cu in alloc.table)
+
+    // This is the superblock that's going to become persistent.
+    && AllocationTableMachineMod.DurableAt(alloc, cache, sb.allocation)
+    && var freshestCU := if s.cleanLSN == s.boundaryLSN then None else Some(s.lsnToCU[s.cleanLSN-1]);
+    && sb.core == CoreSuperblock(freshestCU, newBoundaryLSN)
+    && s' == s
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // JournalChain
+
+  // Monoid-friendly (quantified-list) definition
+  datatype JournalChain = JournalChain(sb: CoreSuperblock, recs:seq<JournalRecord>)
   {
     // Synthesize a superblock that reflects the tail of the chain (cutting
-    // off the first rec), propagating along firstValidSeq.
-    function priorSB() : Superblock
+    // off the first rec), propagating along boundaryLSN.
+    function priorSB() : CoreSuperblock
       requires 0<|recs|
     {
       recs[0].priorSB(sb)
     }
   }
-
-  function parse(b: UninterpretedDiskPage) : Option<JournalRecord>
-    // TODO marshalling
 
   predicate IsLastLink(i: nat, chain: JournalChain)
     requires 0<=i<|chain.recs|
@@ -146,7 +215,7 @@ module JournalMod {
     // stop if nothing more available
     || chain.recs[i].priorCU.None?
     // stop if nothing more needed
-    || chain.sb.firstValidSeq >= chain.recs[i].seqStart
+    || chain.sb.boundaryLSN >= chain.recs[i].messageSeq.seqStart
   }
 
   predicate WFChainBasic(chain: JournalChain)
@@ -160,7 +229,7 @@ module JournalMod {
     requires WFChainBasic(chain)
   {
     && (forall i | 0<=i<|chain.recs|-1 ::
-      chain.recs[i].seqStart == chain.recs[i+1].messageSeq.seqEnd)
+      chain.recs[i].messageSeq.seqStart == chain.recs[i+1].messageSeq.seqEnd)
   }
 
   predicate WFChain(chain: JournalChain)
@@ -200,7 +269,7 @@ module JournalMod {
     && ChainMatchesDiskView(dv, chain)
   }
 
-  lemma ValidEmptyChain(dv: DiskView, sb: Superblock)
+  lemma ValidEmptyChain(dv: DiskView, sb: CoreSuperblock)
     requires sb.freshestCU.None?
     ensures ValidJournalChain(dv, JournalChain(sb, []))
   {
@@ -208,12 +277,12 @@ module JournalMod {
     reveal_ChainMatchesDiskView();
   }
 
-  function ExtendChain(sb: Superblock, rec: JournalRecord, innerchain: JournalChain)
+  function ExtendChain(sb: CoreSuperblock, rec: JournalRecord, innerchain: JournalChain)
     : (chain: JournalChain)
     requires sb.freshestCU.Some?
-    requires rec.priorCU.Some? ==> sb.firstValidSeq < rec.seqStart; // proves !IsLastLink(0, chain)
+    requires rec.priorCU.Some? ==> sb.boundaryLSN < rec.messageSeq.seqStart; // proves !IsLastLink(0, chain)
     requires innerchain.sb == rec.priorSB(sb);
-    requires 0<|innerchain.recs| ==> rec.seqStart == innerchain.recs[0].messageSeq.seqEnd;
+    requires 0<|innerchain.recs| ==> rec.messageSeq.seqStart == innerchain.recs[0].messageSeq.seqEnd;
     requires WFChain(innerchain)
     ensures WFChain(chain)
   {
@@ -238,7 +307,7 @@ module JournalMod {
   // results (even when they're broken).
   datatype ChainResult = ChainResult(chain: Option<JournalChain>, readCUs:seq<CU>)
 
-  function ChainFrom(dv: DiskView, sb: Superblock) : (r:ChainResult)
+  function ChainFrom(dv: DiskView, sb: CoreSuperblock) : (r:ChainResult)
     ensures r.chain.Some? ==>
       && ValidJournalChain(dv, r.chain.value)
       && r.chain.value.sb == sb
@@ -256,13 +325,13 @@ module JournalMod {
       if firstRec.None? then
         // !RecordOnDisk: read freshestCU, but it was borked
         ChainResult(None, [sb.freshestCU.value])
-      else if firstRec.value.messageSeq.seqEnd <= sb.firstValidSeq then
+      else if firstRec.value.messageSeq.seqEnd <= sb.boundaryLSN then
         // This isn't an invariant disk state: if we're in the initial call,
         // the superblock shouldn't point to a useless JournalRecord; if we're
         // in a recursive call with correctly-chained records, we should have
         // already ignored this case.
         ChainResult(None, [sb.freshestCU.value])
-      else if firstRec.value.seqStart == sb.firstValidSeq then
+      else if firstRec.value.messageSeq.seqStart == sb.boundaryLSN then
         // Glad we read this record, but we don't need to read anything beyond.
         var r := ChainResult(Some(JournalChain(sb, [firstRec.value])), [sb.freshestCU.value]);
         assert ValidJournalChain(dv, r.chain.value) by {
@@ -275,13 +344,13 @@ module JournalMod {
         if inner.chain.None? // tail didn't decode or
           // tail decoded but head doesn't stitch to it (a cross-crash invariant)
           || (0<|inner.chain.value.recs|
-              && firstRec.value.seqStart != inner.chain.value.recs[0].messageSeq.seqEnd)
+              && firstRec.value.messageSeq.seqStart != inner.chain.value.recs[0].messageSeq.seqEnd)
         then
           // failure in recursive call.
           // We read our cu plus however far the recursive call reached.
           ChainResult(None, [sb.freshestCU.value] + inner.readCUs)
         else
-          assert firstRec.value.priorCU.Some? ==> sb.firstValidSeq < firstRec.value.seqStart;
+          assert firstRec.value.priorCU.Some? ==> sb.boundaryLSN < firstRec.value.messageSeq.seqStart;
           var chain := ExtendChain(sb, firstRec.value, inner.chain.value);
           //var chain := JournalChain(sb, [firstRec.value] + inner.chain.value.recs);
           assert ValidJournalChain(dv, chain) by {
@@ -292,92 +361,73 @@ module JournalMod {
           ChainResult(Some(chain), [sb.freshestCU.value] + inner.readCUs)
   }
 
-  // TODO redo: return a seq of Message, with a prefix of None.
-  function MessageMaps(journalChain: JournalChain) : seq<MsgSeq> {
-    seq(|journalChain.recs|,
-      i requires 0<=i<|journalChain.recs|
-        => var mm := journalChain.recs[i].messageSeq; mm)
+  // JournalChain
+  //////////////////////////////////////////////////////////////////////////////
+
+  // lsnToCU reflects a correct reading of the sb chain, I guess?
+  // TODO It's broken to be demanding that we actually can read this stuff out
+  // of the cache; we really want this to be a ghosty property in the next
+  // layer down. Not sure yet how to make that work.
+  predicate CorrectMapping(cache: CacheIfc.Variables, freshestCU: Option<CU>, lsnToCU: map<LSN, CU>)
+  {
+    //var ChainFrom(dv: DiskView, sb: CoreSuperblock) : (r:ChainResult)
+    // TODO We should build up a JournalChain here and confirm it justifies the mapping.
+    true
   }
 
-  // TODO(jonh): collapse to return MsgSeq
-  function IM(dv: DiskView, sb: Superblock) : seq<MsgSeq>
+  // TODO recovery time action!
+
+  // Learns that coordinated superblock writeback is complete; updates persistentLSN & firstLSN.
+  predicate CommitComplete(s: Variables, s': Variables, cache: CacheIfc.Variables, sb: Superblock)
   {
-    var chain := ChainFrom(dv, sb).chain;
-    if chain.Some?
-    then
-      MessageMaps(chain.value)
-    else
-      []
+    && s.WF()
+
+    && s'.boundaryLSN == sb.core.boundaryLSN
+
+    // Update s'.persistentLSN so that it reflects a persisted LSN (something in the last block,
+    // ideally the last LSN in that block). NB This gives impl freedom to not
+    // record the latest persistent LSN in the freshestCU block, which would be
+    // kind of dumb (it would hold up syncs for no reason), but not unsafe.
+    && (if sb.core.freshestCU.None?
+        then s'.persistentLSN == sb.core.boundaryLSN
+        else 
+          && s'.persistentLSN - 1 in s.lsnToCU
+          && s.lsnToCU[s'.persistentLSN - 1] == sb.core.freshestCU.value
+        )
+    && s'.cleanLSN == s.cleanLSN
+    && s'.marshalledLSN == s.marshalledLSN
+    && s'.unmarshalledTail == s.unmarshalledTail
+    && s'.syncReqs == s.syncReqs
+    && CorrectMapping(cache, sb.core.freshestCU, s'.lsnToCU)
   }
 
-  function ReadAt(cus: seq<CU>, i: nat) : AU
-    requires i<|cus|
+  predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
   {
-    cus[i].au
+    && 0 < s.unmarshalledLSN()
+    && syncReqId !in s.syncReqs.Keys
+    && s' == s.(syncReqs := s.syncReqs[syncReqId := s.unmarshalledLSN()-1])
   }
 
-  // TODO(jonh): Try porting this from recursive style to Travis' suggested
-  // repr-state style (see ReprsAsSets.i.dfy).
-  function IReads(dv: DiskView, sb: Superblock) : seq<AU>
+  predicate CompleteSync(s: Variables, s': Variables, syncReqId: SyncReqId)
   {
-    var cus := ChainFrom(dv, sb).readCUs;
-    // wanted to write:
-    // seq(|cus|, i requires 0<=i<|cus| => cus[i].au)
-    // but Dafny bug, so:
-    seq(|cus|, i requires 0<=i<|cus| => ReadAt(cus, i))
+    && syncReqId in s.syncReqs.Keys
+    && s.syncReqs[syncReqId] < s.persistentLSN
+    && s' == s.(syncReqs := MapRemove1(s.syncReqs, syncReqId))
   }
 
-  predicate SequenceSubset<T>(a:seq<T>, b:seq<T>)
-  {
-    forall i | 0<=i<|a| :: a[i] in b
-  }
+  datatype Skolem =
+    | AdvanceMarshalledStep(newCU: CU)
+    | AdvanceCleanStep(newClean: nat)
 
-  lemma DiskViewsEquivalentAfterRemove(dv0: DiskView, dv1: DiskView, aus: seq<AU>, removedCU: CU, ausr: seq<AU>)
-    requires DiskViewsEquivalentForSet(dv0, dv1, aus)
-    requires SequenceSubset(ausr, aus)
-    ensures DiskViewsEquivalentForSet(MapRemove1(dv0, removedCU), MapRemove1(dv1, removedCU), ausr)
-  {
-  }
-
-  // TODO(jonh): delete chain parameter.
-  lemma FrameOneChain(dv0: DiskView, dv1: DiskView, sb: Superblock, chain: Option<JournalChain>)
-    requires chain == ChainFrom(dv0, sb).chain
-    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb))
-    ensures chain == ChainFrom(dv1, sb).chain
-    // ensures ChainFrom(dv0, sb).chain == ChainFrom(dv1, sb).chain
-  {
-    if sb.freshestCU.Some? {
-      assert IReads(dv0, sb)[0] == sb.freshestCU.value.au; // trigger
-      if sb.freshestCU.value in dv0 {
-        var firstRec := parse(dv0[sb.freshestCU.value]);
-        if firstRec.Some? { // Recurse to follow chain
-          if firstRec.value.messageSeq.seqEnd <= sb.firstValidSeq {
-          } else if firstRec.value.seqStart == sb.firstValidSeq {
-          } else {
-            var dv0r := MapRemove1(dv0, sb.freshestCU.value);
-            var priorCU := firstRec.value.priorCU;
-            var priorSB := firstRec.value.priorSB(sb);
-            var aus := IReads(dv0, sb);
-            var ausr := if priorCU.Some?
-              then IReads(dv0r, priorSB)
-              else [];
-
-            forall i | 0<=i<|ausr| ensures ausr[i] in aus {
-              assert aus[i+1] == ausr[i]; // witness to SequenceSubset(ausr, aus)
-            }
-            DiskViewsEquivalentAfterRemove(dv0, dv1, aus, sb.freshestCU.value, ausr);
-            FrameOneChain(dv0r, MapRemove1(dv1, sb.freshestCU.value),
-              priorSB, ChainFrom(dv0r, priorSB).chain);
-          }
-        }
-      }
+  predicate Internal(s: Variables, s': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem) {
+    match sk {
+      case AdvanceMarshalledStep(newCU) => AdvanceMarshalled(s, s', cache, cacheOps, newCU)
+      case AdvanceCleanStep(newClean) => AdvanceClean(s, s', cache, cacheOps, newClean)
+//      case _ => false
     }
   }
 
-  lemma Framing(sb:Superblock, dv0: DiskView, dv1: DiskView)
-    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb))
-    ensures IM(dv0, sb) == IM(dv1, sb)
-  {
-    FrameOneChain(dv0, dv1, sb, ChainFrom(dv0, sb).chain);
+  function Alloc(s: Variables) : set<AU> {
+    {} // TODO
   }
 }

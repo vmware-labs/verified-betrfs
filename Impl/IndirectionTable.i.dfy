@@ -3,12 +3,13 @@
 
 include "../lib/Base/DebugAccumulator.i.dfy"
 include "../lib/Base/Maps.i.dfy"
-include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/LinearOption.i.dfy"
 include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Lang/LinearMaybe.s.dfy"
 include "../lib/Lang/LinearBox.i.dfy"
+include "../lib/Math/Nonlinear.i.dfy"
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
@@ -44,6 +45,7 @@ module IndirectionTable {
   import USeq
   import SetBijectivity
   import Marshalling
+  import NonlinearLemmas
 
   datatype Entry = Entry(loc: Option<Location>, succs: seq<BT.G.Reference>, predCount: uint64)
   type HashMap = LinearMutableMap.LinearHashMap<Entry>
@@ -241,8 +243,6 @@ module IndirectionTable {
         reveal_PredCounts();
       }
     }
-
-    // TODO useful? var res := IndirectionTableModel.FromHashMap(me.t, MapOption(me.garbageQueue.Option(), x => USeq.I(x)), me.refUpperBound, me.findLoclessIterator);
 
     linear method Free()
     {
@@ -549,7 +549,7 @@ module IndirectionTable {
       // == mutation ==
       inout self.garbageQueue.value.Remove(ref);
       assert self.t.count as int <= MaxSize();
-      UpdatePredCounts(inout self, ref, [], oldEntry.value.succs);
+      inout self.UpdatePredCounts(ref, [], oldEntry.value.succs);
       // ==============
 
       TCountEqGraphSize(self.t);
@@ -733,6 +733,8 @@ module IndirectionTable {
       assert |graph.Keys| <= MaxSize();
       CardinalitySetRange(MaxNumChildren());
       assert |SetRange(MaxNumChildren())| == MaxNumChildren();
+
+      assert |PredecessorSetRestricted(graph, dest, domain)| == |s1| <= |s3| == |graph.Keys| * MaxNumChildren(); // observe
     }
 
     static lemma PredecessorSetSizeBound(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference)
@@ -1592,11 +1594,6 @@ module IndirectionTable {
       SectorType.IndirectionTable(MapLocs(m), MapGraph(m)) // TODO: yizhou7
     }
 
-    // TODO remove static function IHashMapAsIndirectionTable(m: HashMap) : SectorType.IndirectionTable
-    // TODO remove {
-    // TODO remove   SectorType.IndirectionTable(Locs(m), Graph(m))
-    // TODO remove }
-
     static function method IndirectionTableGrammar() : G
     ensures ValidGrammar(IndirectionTableGrammar())
     {
@@ -1618,13 +1615,9 @@ module IndirectionTable {
     ensures ValInGrammar(v, IndirectionTableGrammar())
     ensures ValidVal(v)
     ensures Marshalling.valToIndirectionTable(v).Some?
-    // ensures Marshalling.valToIndirectionTable(v).value.locs == this.I().locs
-    // ensures Marshalling.valToIndirectionTable(v).value.graph == this.I().graph
     ensures Marshalling.valToIndirectionTable(v).value == this.I()
     ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
     ensures SizeOfV(v) == size as int
-    // /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v).Some?
-    // /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v) == Some(this)
     {
       reveal Inv();
       assert this.t.count <= MaxSizeUint64();
@@ -1786,7 +1779,10 @@ module IndirectionTable {
     requires upTo as int <= BitmapModel.Len(old_bm.I())
     ensures bm.Inv()
     ensures BitmapModel.Len(old_bm.I()) == BitmapModel.Len(bm.I())
-    // ensures bm.I() == IndirectionTableModel.BitmapInitUpTo(old(bm.I()), upTo)
+    ensures forall j: nat | j < BitmapModel.Len(old_bm.I()) :: (
+      && (j < upTo as nat ==> BitmapModel.IsSet(bm.I(), j as int))
+      && (j >= upTo as nat ==> BitmapModel.IsSet(bm.I(), j as int) == BitmapModel.IsSet(old_bm.I(), j as int))
+    )
     {
       var i := 0;
       while i < upTo
@@ -1794,10 +1790,27 @@ module IndirectionTable {
       invariant bm.Inv()
       invariant upTo as int <= BitmapModel.Len(bm.I())
       invariant BitmapModel.Len(old_bm.I()) == BitmapModel.Len(bm.I())
+      invariant forall j: nat | j < BitmapModel.Len(old_bm.I()) :: (
+        && (j < i as nat ==> BitmapModel.IsSet(bm.I(), j as int))
+        && (j >= i as nat ==> BitmapModel.IsSet(bm.I(), j as int) == BitmapModel.IsSet(old_bm.I(), j as int))
+      )
       {
         inout bm.Set(i);
         i := i + 1;
+
+        BitmapModel.reveal_BitSet();
+        BitmapModel.reveal_IsSet();
       }
+    }
+
+
+    predicate IsLocAllocIndirectionTablePartial(i: int, s: set<uint64>)
+    {
+      || 0 <= i < MinNodeBlockIndex() // these blocks can't be used
+      || !(
+        forall ref | ref in this.locs && ref in s ::
+          this.locs[ref].addr as int != i * NodeBlockSize() as int
+      )
     }
 
     shared method InitLocBitmap()
@@ -1807,7 +1820,7 @@ module IndirectionTable {
     ensures bm.Inv()
     ensures BitmapModel.Len(bm.I()) == NumBlocks()
     ensures (success ==>
-      && (forall i: int :: I().IsLocAllocIndirectionTable(i) <==> IsLocAllocBitmap(bm.I(), i))
+      && (forall i: nat :: I().IsLocAllocIndirectionTable(i) <==> IsLocAllocBitmap(bm.I(), i))
       && BC.AllLocationsForDifferentRefsDontOverlap(I())
     )
     {
@@ -1815,11 +1828,14 @@ module IndirectionTable {
       bm := BitmapImpl.Bitmap.Constructor(NumBlocksUint64());
       assert BitmapModel.Len(bm.I()) == NumBlocks();
 
+      MinNodeBlockIndex_le_NumBlocks();
       BitmapInitUpTo(inout bm, MinNodeBlockIndexUint64());
       var it := LinearMutableMap.IterStart(this.t);
 
       assert BitmapModel.Len(bm.I()) == NumBlocks();
       assert NumBlocks() == NumBlocksUint64() as int;
+
+      success := true;
 
       while it.next.Next?
       invariant this.t.Inv()
@@ -1827,19 +1843,64 @@ module IndirectionTable {
       invariant bm.Inv()
       invariant LinearMutableMap.WFIter(this.t, it)
       invariant BitmapModel.Len(bm.I()) == NumBlocks()
-      // invariant IndirectionTableModel.InitLocBitmapIterate(I(this), it, bm.I())
-      //        == IndirectionTableModel.InitLocBitmap(I(this))
+      invariant forall i: nat :: IsLocAllocIndirectionTablePartial(i, it.s) <==> IsLocAllocBitmap(bm.I(), i)
       decreases it.decreaser
       {
         assert it.next.key in this.I().locs;
 
         var loc: uint64 := it.next.value.loc.value.addr;
+        assert 0 <= loc as nat / NodeBlockSize() < Uint64UpperBound() by {
+          NonlinearLemmas.div_ge_0(loc as nat, NodeBlockSize());
+          NonlinearLemmas.div_denom_ge_1(loc as nat, NodeBlockSize());
+        }
         var locIndex: uint64 := loc / NodeBlockSizeUint64();
         if locIndex < NumBlocksUint64() {
           var isSet := bm.GetIsSet(locIndex);
           if !isSet {
+            ghost var it0 := it;
+            ghost var bm0 := bm;
+
             it := LinearMutableMap.IterInc(this.t, it);
             inout bm.Set(locIndex);
+            
+            assert forall i: nat :: IsLocAllocIndirectionTablePartial(i, it0.s) <==> IsLocAllocBitmap(bm0.I(), i);
+
+            forall i: nat | IsLocAllocIndirectionTablePartial(i, it.s) 
+            ensures IsLocAllocBitmap(bm.I(), i) {
+              BitmapModel.reveal_BitSet();
+              BitmapModel.reveal_IsSet();
+
+              if IsLocAllocIndirectionTablePartial(i, it0.s) { }
+
+              if i == locIndex as nat {
+                assert IsLocAllocBitmap(bm.I(), i);
+              } else {
+                if !IsLocAllocIndirectionTablePartial(i, it0.s) {
+                  assert IsLocAllocBitmap(bm.I(), i); // TODO(andreal)
+                }
+              }
+            }
+
+            forall i: nat | IsLocAllocBitmap(bm.I(), i)
+            ensures IsLocAllocIndirectionTablePartial(i, it.s)  {
+              BitmapModel.reveal_BitSet();
+              BitmapModel.reveal_IsSet();
+
+              if IsLocAllocBitmap(bm0.I(), i) { }
+              if IsLocAllocIndirectionTablePartial(i, it0.s) { }
+
+              if i == locIndex as int {
+                var ref := it0.next.key;
+                assert this.t.contents[ref].loc.Some?;
+                assert ref in it.s;
+                assert this.t.contents[ref] == it0.next.value;
+                assert this.t.contents[ref].loc.value.addr as int == i * NodeBlockSize() as int;
+
+                assert IsLocAllocIndirectionTablePartial(i, it.s);
+              } else {
+                assert IsLocAllocIndirectionTablePartial(i, it.s);
+              }
+            }
           } else {
             success := false;
             break;
@@ -1850,9 +1911,9 @@ module IndirectionTable {
         }
       }
 
-      success := true;
-      assume && (forall i: int :: I().IsLocAllocIndirectionTable(i) <==> IsLocAllocBitmap(bm.I(), i))
-        && BC.AllLocationsForDifferentRefsDontOverlap(I());
+      if success {
+        assert BC.AllLocationsForDifferentRefsDontOverlap(I()); // TODO(andreal)
+      }
     }
     // 
     // ///// Dealloc stuff

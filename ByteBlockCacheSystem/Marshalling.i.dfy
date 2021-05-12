@@ -121,7 +121,7 @@ module Marshalling {
       pivotTableWeight(DropLast(pivots)) + SizeOfV(VUint64(0)) + Pivots.PivotSize(Last(pivots)) as int
   }
 
-  lemma pivotTableWeightUpperBound(pivots: Pivots.PivotTable)
+  lemma {:induction true} pivotTableWeightUpperBound(pivots: Pivots.PivotTable)
     requires Pivots.ElementsAreKeys(pivots)
     ensures pivotTableWeight(pivots) <= |pivots| * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int)
   {

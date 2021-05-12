@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../Lang/NativeTypes.s.dfy"
-include "../Base/sequences.i.dfy"
+include "../Base/Sequences.i.dfy"
 include "../Base/Option.s.dfy"
 //
 // An LRU-queue.

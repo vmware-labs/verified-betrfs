@@ -1,6 +1,5 @@
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/total_order.i.dfy"
-include "../Math/bases.i.dfy"
 include "Maps.i.dfy"
 include "Seqs.i.dfy"
 include "Util.i.dfy"
@@ -16,13 +15,14 @@ import opened NativeTypes
 import opened Collections__Maps_i
 import opened Collections__Seqs_i 
 import opened Common__Util_i
-import opened Libraries__base_s
 import opened Options
 //import opened Math__power2_i
 import NativeArrays
 import opened Math
 import opened NativePackedInts
 import opened Sequences
+
+function Trigger(i:int):bool { true }
 
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,

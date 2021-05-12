@@ -3,7 +3,7 @@
 
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
-include "../Base/sequences.i.dfy"
+include "../Base/Sequences.i.dfy"
 include "LinearMutableMap.i.dfy"
 include "LinearDList.i.dfy"
 

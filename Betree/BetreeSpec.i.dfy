@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../Betree/BlockInterface.i.dfy"  
-include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "../MapSpec/MapSpec.s.dfy"
 include "../Betree/Graph.i.dfy"
@@ -428,8 +428,9 @@ module BetreeSpec {
     else RedirectChildReads(DropLast(childrefs), children) + [ ReadOp(Last(childrefs), children[Last(childrefs)]) ]
   }
   
-  function RedirectReads(redirect: Redirect) : seq<ReadOp>
+  function {:opaque} RedirectReads(redirect: Redirect) : (res: seq<ReadOp>)
     requires ValidRedirect(redirect)
+    ensures |res| == |redirect.old_childrefs| + 1
   {
     assert (forall ref :: ref in redirect.old_childrefs ==> ref in redirect.old_children) by 
     { reveal_ValidRedirect(); }
@@ -447,7 +448,7 @@ module BetreeSpec {
     else RedirectChildAllocs(DropLast(childrefs), children) + [ AllocOp(Last(childrefs), children[Last(childrefs)]) ]
   }
 
-  function RedirectOps(redirect: Redirect) : seq<Op>
+  function {:opaque} RedirectOps(redirect: Redirect) : seq<Op>
     requires ValidRedirect(redirect)
   {
     assert (forall ref :: ref in redirect.new_childrefs ==> ref in redirect.new_children) by 

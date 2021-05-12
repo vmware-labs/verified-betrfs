@@ -1,16 +1,20 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+include "SequencesLite.s.dfy"
 include "Option.s.dfy"
 include "../Lang/NativeTypes.s.dfy"
 include "mathematics.i.dfy"
 include "../Lang/LinearSequence.s.dfy"
+include "../Lang/LinearSequence.i.dfy"
 
 module Sequences {
+  import opened SequencesLite
   import opened Options
   import opened NativeTypes
   import Math = Mathematics
   import opened LinearSequence_s
+  import opened LinearSequence_i
   
   lemma EqualExtensionality<E>(a: seq<E>, b: seq<E>)
     requires |a| == |b|
@@ -125,7 +129,7 @@ module Sequences {
   {
     if n == 0 then [] else Range(n-1) + [n-1]
   }
-  
+
   function Apply<E,R>(f: (E --> R), run: seq<E>) : (result: seq<R>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|
@@ -156,6 +160,7 @@ module Sequences {
     Apply(f, run)
   }
 
+/*
   method DoApply<E,R>(f: E --> R, run: seq<E>) returns (linear result: seq<R>)
     requires |run| < Uint64UpperBound()
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
@@ -179,6 +184,7 @@ module Sequences {
       }
     }
   }
+  */
 
   function Filter<E>(f : (E --> bool), run: seq<E>) : (result: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
@@ -195,6 +201,7 @@ module Sequences {
       Filter(f, DropLast(run))
   }
 
+/*
   method DoFilter<E>(f : (E --> bool), run: seq<E>) returns (linear result: seq<E>)
     requires |run| < Uint64UpperBound()
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
@@ -224,6 +231,7 @@ module Sequences {
       assert run[..i] == run;
     }
   }
+*/
 
   lemma FilterThenApplyStep<E, R>(f: E --> bool, m: E --> R, run: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
@@ -233,7 +241,8 @@ module Sequences {
     ensures Apply(m, Filter(f, run)) == Apply(m, Filter(f, DropLast(run))) + [ m(Last(run)) ]
   {
   }
-  
+
+/*
   method FilterThenApply<E, R>(f: E --> bool, m: E --> R, run: seq<E>) returns (linear result: seq<R>)
     requires |run| < Uint64UpperBound()
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
@@ -267,6 +276,7 @@ module Sequences {
     result := TrustedRuntimeSeqTruncate(result, result_len);
     assert run == run[..i];
   }
+*/
 
   lemma ApplyThenFilterStep<E, R>(m: E --> R, f: R --> bool, run: seq<E>)
     requires forall i :: 0 <= i < |run| ==> m.requires(run[i])
@@ -278,7 +288,8 @@ module Sequences {
     assert run == DropLast(run) + [Last(run)];
     ApplyAdditive(m, DropLast(run), [Last(run)]);
   }
-  
+
+/*
   method ApplyThenFilter<E, R>(m: E --> R, f: R --> bool, run: seq<E>) returns (linear result: seq<R>)
     requires |run| < Uint64UpperBound()
     requires forall i | 0 <= i < |run| :: m.requires(run[i])
@@ -314,6 +325,7 @@ module Sequences {
       assert run == run[..i];
     }
   }
+  */
 
   function FoldLeft<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
   {
@@ -584,7 +596,7 @@ module Sequences {
   }
 
 
-  lemma FlattenLengthAdditive(shape1: seq<nat>, shape2: seq<nat>)
+  lemma {:induction true} FlattenLengthAdditive(shape1: seq<nat>, shape2: seq<nat>)
     ensures FlattenLength(shape1 + shape2) == FlattenLength(shape1) + FlattenLength(shape2)
   {
     if |shape2| == 0 {
@@ -673,7 +685,7 @@ module Sequences {
     }
   }
   
-  lemma UnflattenIndexInBounds(shape: seq<nat>, i: nat)
+  lemma {:induction true} UnflattenIndexInBounds(shape: seq<nat>, i: nat)
     requires i < FlattenLength(shape)
     ensures UnflattenIndex(shape, i).0 < |shape|
     ensures UnflattenIndex(shape, i).1 < shape[UnflattenIndex(shape, i).0]
@@ -681,7 +693,7 @@ module Sequences {
     var shapeidx := UnflattenIndex(shape, i).0;
   }
 
-  lemma FlattenUnflattenIdentity(shape: seq<nat>, i: nat)
+  lemma {:induction true} FlattenUnflattenIdentity(shape: seq<nat>, i: nat)
     requires i < FlattenLength(shape)
     ensures UnflattenIndex(shape, i).0 < |shape|
     ensures UnflattenIndex(shape, i).1 < shape[UnflattenIndex(shape, i).0]
@@ -710,7 +722,7 @@ module Sequences {
     }
   }
   
-  lemma UnflattenIndexOrdering(shape: seq<nat>, i: nat, j: nat)
+  lemma {:induction true} UnflattenIndexOrdering(shape: seq<nat>, i: nat, j: nat)
     requires i < j < FlattenLength(shape)
     ensures UnflattenIndex(shape, i).0 <= UnflattenIndex(shape, j).0
     ensures UnflattenIndex(shape, i).0 == UnflattenIndex(shape, j).0 ==> UnflattenIndex(shape, i).1 < UnflattenIndex(shape, j).1
@@ -733,7 +745,7 @@ module Sequences {
     }
   }
 
-  lemma UnflattenIndexIsCorrect<A>(seqs: seq<seq<A>>, i: nat)
+  lemma {:induction true} UnflattenIndexIsCorrect<A>(seqs: seq<seq<A>>, i: nat)
     requires i < FlattenLength(FlattenShape(seqs))
     ensures UnflattenIndex(FlattenShape(seqs), i).0 < |seqs|
     ensures UnflattenIndex(FlattenShape(seqs), i).1 < |seqs[UnflattenIndex(FlattenShape(seqs), i).0]|

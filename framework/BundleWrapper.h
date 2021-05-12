@@ -6,12 +6,12 @@
 #include <optional>
 #include "Framework.h"
 
-namespace MainHandlers_Compile {
-  class HeapState;
+namespace FullImpl_Compile {
+  struct Full;
 }
 
 struct Variables {
-  std::shared_ptr<MainHandlers_Compile::HeapState> hs;
+  std::shared_ptr<FullImpl_Compile::Full> full;
 };
 
 namespace UI_Compile {
@@ -21,8 +21,8 @@ namespace UI_Compile {
 
 Variables handle_InitState();
 DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs();
-void handle_EvictEverything(Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io);
-void handle_CountAmassAllocations(Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io);
+void handle_EvictEverything(Variables f, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io);
+void handle_CountAmassAllocations(Variables f, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io);
 uint64 handle_PushSync(Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>);
 std::pair<bool, bool> handle_PopSync(
   Variables,

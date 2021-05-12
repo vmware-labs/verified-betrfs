@@ -538,7 +538,7 @@ module BucketGeneratorModel {
     )
   }
 
-  lemma GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets: seq<Bucket>, start: UI.RangeStart, tt: TranslationTable)
+  lemma{:induction true} GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets: seq<Bucket>, start: UI.RangeStart, tt: TranslationTable)
   requires GenFromBucketStackWithLowerBound.requires(buckets, start, tt)
   requires BucketListWellMarshalled(buckets)
   ensures var g := GenFromBucketStackWithLowerBound(buckets, start, tt);
