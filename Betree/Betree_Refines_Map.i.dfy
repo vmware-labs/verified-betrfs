@@ -97,7 +97,8 @@ module Betree_Refines_Map {
     }
   }
 
-  lemma PreservesLookupsImplInterpsEqual(s: Betree.Variables, s': Betree.Variables)
+  lemma {:fuel IsSatisfyingLookup,0}
+    PreservesLookupsImplInterpsEqual(s: Betree.Variables, s': Betree.Variables)
   requires Inv(s);
   requires Inv(s');
   requires PreservesLookups(s, s', Root());
@@ -145,7 +146,8 @@ module Betree_Refines_Map {
   }
 
 
-  lemma PreservesLookupsPutImplInterpsPut(s: Betree.Variables, s': Betree.Variables, key: Key, value: Value)
+  lemma {:fuel IsSatisfyingLookup,0}
+    PreservesLookupsPutImplInterpsPut(s: Betree.Variables, s': Betree.Variables, key: Key, value: Value)
   requires Inv(s);
   requires Inv(s');
   requires PreservesLookupsPut(s, s', key, value);

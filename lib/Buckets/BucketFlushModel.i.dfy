@@ -287,7 +287,7 @@ module BucketFlushModel {
     }
   }
 
-  lemma mergeToOneOneChild_eq_topBotAccMerge(
+  lemma {:timeLimitMultiplier 4} mergeToOneOneChild_eq_topBotAccMerge(
       top_keys: seq<Key>,
       top_msgs: seq<Message>,
       from: nat,
