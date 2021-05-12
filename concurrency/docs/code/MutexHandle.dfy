@@ -102,7 +102,7 @@ module Example {
     m.release(the_integer, handle);
 
     // If we try to call `release` again, we'll get a linear type error.
-    m.release(the_integer, handle); // ERROR
+    // m.release(the_integer, handle); // ERROR
   }
 
   method Main() {
