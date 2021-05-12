@@ -180,7 +180,7 @@ module Impl refines VerificationObligation {
       invariant handle.m == v.row_mutexes[slot_idx];
       decreases *
     {
-      var slot_idx' := getNextIndex(slot_idx);
+      var next_slot_idx := getNextIndex(slot_idx);
 
       match entry {
         case Empty => {
@@ -211,16 +211,16 @@ module Impl refines VerificationObligation {
       }
     
       var next_entry; glinear var next_handle;
-      next_entry, next_handle, r := acquireRow(v, slot_idx', r);
+      next_entry, next_handle, r := acquireRow(v, next_slot_idx, r);
 
       r' := twoRowsResource(slot_idx as nat, Info(entry, Free),
-        slot_idx' as nat, Info(next_entry, Querying(rid, key)), 0);
+        next_slot_idx as nat, Info(next_entry, Querying(rid, key)), 0);
       r := easy_transform_step(r, r', step);
 
-      ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Querying(rid, key)), 0);
+      ghost var left := oneRowResource(next_slot_idx as nat, Info(next_entry, Querying(rid, key)), 0);
       r := releaseRow(v, slot_idx, entry, handle, r, left);
 
-      slot_idx := slot_idx';
+      slot_idx := next_slot_idx;
       entry := next_entry;
       handle := next_handle;
     }
@@ -232,18 +232,25 @@ module Impl refines VerificationObligation {
     out_sv := releaseRow(v, slot_idx, entry, handle, r, SSM.output_stub(rid, output));
   }
 
-  method acquireCapacity(v: Variables, thread_id: uint32)
-  returns (linear cap: AllocatorBin, glinear cap_handle: MutexHandle<AllocatorBin>, tid: uint32)
+  method acquireCapacity(v: Variables, thread_id: uint32, glinear in_sv: SSM.Variables)
+  returns (tid: uint32,
+    count: uint32,
+    glinear cap_handle: MutexHandle<AllocatorBin>,
+    glinear out_sv: SSM.Variables)
     decreases *
     requires Inv(v)
-    ensures CAP.BinInv(cap)
-    ensures 0 < cap.count
+    requires in_sv.Variables?
+    requires in_sv.insert_capacity.value == 0
     ensures tid < CAP.NumberOfBinsImpl()
     ensures cap_handle.m == v.allocator[tid]
+    ensures out_sv.Variables?
+    ensures out_sv == in_sv.(insert_capacity := Count.Variables(count as nat))
+    ensures count > 0;
   {
     // thread_id is a hint for the bin we're supposed to use. 
     // tid is the actual place we found the capacity (in case we had to steal it from someone else) 
     tid := if thread_id >= CAP.NumberOfBinsImpl() then 0 else thread_id;
+    linear var cap;
     cap, cap_handle := v.allocator[tid].acquire();
 
     while true
@@ -255,8 +262,6 @@ module Impl refines VerificationObligation {
       if 0 < cap.count {
         break;
       }
-
-      // assert exists s' :: TableQuantityInv(add(s, s'))
       assert CAP.BinInv(cap);
       v.allocator[tid].release(cap, cap_handle);
 
@@ -265,6 +270,11 @@ module Impl refines VerificationObligation {
 
       cap, cap_handle := v.allocator[tid].acquire();
     }
+
+    count := cap.count;
+    linear var AllocatorBin(_, cap_r) := cap;
+    out_sv := enclose(cap_r);
+    out_sv := SSM.join(in_sv, out_sv);
   }
 
   method doInsert(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_sv: SSM.Variables)
@@ -283,14 +293,10 @@ module Impl refines VerificationObligation {
     output := MapIfc.InsertOutput(true);
 
     var hash_idx := hash(key);
-    var initial_hash_idx := hash_idx;
     var slot_idx := hash_idx;
 
-    linear var cap; glinear var cap_handle; var tid;
-    cap, cap_handle, tid := acquireCapacity(v, thread_id);
-    linear var AllocatorBin(count, cap_r) := cap;
-    glinear var r := enclose(cap_r);
-    r := SSM.join(in_sv, r);
+    glinear var cap_handle; var tid; var count; glinear var r;
+    tid, count, cap_handle, r := acquireCapacity(v, thread_id, in_sv);
 
     var entry; glinear var handle;
     entry, handle, r := acquireRow(v, slot_idx, r);
@@ -310,7 +316,7 @@ module Impl refines VerificationObligation {
       invariant handle.m == v.row_mutexes[slot_idx];
       decreases *
     {
-      var slot_idx' := getNextIndex(slot_idx);
+      var next_slot_idx := getNextIndex(slot_idx);
       var new_kv;
 
       match entry {
@@ -337,7 +343,7 @@ module Impl refines VerificationObligation {
       }
 
       glinear var next_handle; var next_entry;
-      next_entry, next_handle, r := acquireRow(v, slot_idx', r);
+      next_entry, next_handle, r := acquireRow(v, next_slot_idx, r);
 
       if step.InsertSwapStep? {
         entry := Full(kv);
@@ -346,13 +352,13 @@ module Impl refines VerificationObligation {
       }
   
       r' := twoRowsResource(slot_idx as nat, Info(entry, Free),
-        slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
+        next_slot_idx as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
       r := easy_transform_step(r, r', step);
 
-      ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
+      ghost var left := oneRowResource(next_slot_idx as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
       r := releaseRow(v, slot_idx, entry, handle, r, left);
 
-      slot_idx := slot_idx';
+      slot_idx := next_slot_idx;
       entry := next_entry;
       hash_idx := hash(key);
       handle := next_handle;
@@ -401,20 +407,20 @@ module Impl refines VerificationObligation {
   //   // var allocator := v.allocator;
 
   //   var slot_idx := slot_idx;
-  //   var slot_idx' := getNextIndex(slot_idx);
+  //   var next_slot_idx := getNextIndex(slot_idx);
 
   //   glinear var handle := handle;
   //   glinear var rmutex;
 
   //   linear var next_row; glinear var next_handle;
-  //   next_row, next_handle := v.row_mutexes[slot_idx'].acquire();
+  //   next_row, next_handle := v.row_mutexes[next_slot_idx].acquire();
   //   linear var Row(next_entry, next_row_r) := next_row;
   //   glinear var r := SSM.join(r, next_row_r);
 
   //   var step := RemoveFoundItStep(slot_idx as nat);
   //   var r' := twoRowsResource(
   //       slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)),
-  //       slot_idx' as nat, Info(next_entry, Free),
+  //       next_slot_idx as nat, Info(next_entry, Free),
   //       0);
   //   r := easy_transform_step(r, r', step);
 
@@ -429,30 +435,30 @@ module Impl refines VerificationObligation {
   //     invariant next_handle.m == v.row_mutexes[NextPos(slot_idx as nat)]
   //     decreases *
   //   {
-  //     slot_idx' := getNextIndex(slot_idx);
+  //     next_slot_idx := getNextIndex(slot_idx);
 
-  //     if next_entry.Empty? || (next_entry.Full? && hash(next_entry.kv.key) == slot_idx') {
+  //     if next_entry.Empty? || (next_entry.Full? && hash(next_entry.kv.key) == next_slot_idx) {
   //       assert DoneTidying(r, slot_idx as nat);
   //       break;
   //     }
 
   //     ghost var r' := twoRowsResource(
   //       slot_idx as nat, Info(next_entry, Free),
-  //       slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)),
+  //       next_slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)),
   //       0);
   //     r := easy_transform_step(r, r', RemoveTidyStep(slot_idx as nat));
 
-  //     ghost var left := oneRowResource(slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)), 0);
+  //     ghost var left := oneRowResource(next_slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)), 0);
   //     ghost var right := oneRowResource(slot_idx as nat, Info(next_entry, Free), 0);
 
   //     r, rmutex := SSM.split(r, left, right);
   //     v.row_mutexes[slot_idx].release(Row(next_entry, rmutex), handle);
 
-  //     slot_idx := slot_idx';
-  //     slot_idx' := getNextIndex(slot_idx);
+  //     slot_idx := next_slot_idx;
+  //     next_slot_idx := getNextIndex(slot_idx);
   //     handle := next_handle;
 
-  //     next_row, next_handle := v.row_mutexes[slot_idx'].acquire();
+  //     next_row, next_handle := v.row_mutexes[next_slot_idx].acquire();
   //     linear var Row(next_entry', next_row_r) := next_row;
   //     next_entry := next_entry';
   //     r := SSM.join(r, next_row_r);
@@ -460,7 +466,7 @@ module Impl refines VerificationObligation {
 
   //   assert DoneTidying(r, slot_idx as nat);
 
-  //   slot_idx' := getNextIndex(slot_idx);
+  //   next_slot_idx := getNextIndex(slot_idx);
   //   output := MapIfc.RemoveOutput(true);
 
   //   linear var cap; glinear var cap_handle; var tid;
@@ -469,7 +475,7 @@ module Impl refines VerificationObligation {
   //   r := SSM.join(r, cap_r);
 
   //   r' := SSM.Variables(
-  //     twoRowsTable(slot_idx as nat, Info(Empty, Free), slot_idx' as nat, Info(next_entry, Free)),
+  //     twoRowsTable(slot_idx as nat, Info(Empty, Free), next_slot_idx as nat, Info(next_entry, Free)),
   //     count as nat + 1,
   //     multiset{},
   //     multiset{ Stub(rid, output) }
@@ -479,7 +485,7 @@ module Impl refines VerificationObligation {
   //   r := easy_transform_step(r, r', step);
 
   //   ghost var left := SSM.Variables(
-  //     oneRowTable(slot_idx' as nat, Info(next_entry, Free)),
+  //     oneRowTable(next_slot_idx as nat, Info(next_entry, Free)),
   //     count as nat + 1,
   //     multiset{},
   //     multiset{ Stub(rid, output) });
@@ -490,8 +496,8 @@ module Impl refines VerificationObligation {
 
   //   r, rmutex := SSM.split(r, 
   //     SSM.output_stub(rid, output).(insert_capacity := count as nat + 1), 
-  //     oneRowResource(slot_idx' as nat, Info(next_entry, Free), 0));
-  //   v.row_mutexes[slot_idx'].release(Row(next_entry, rmutex), next_handle);
+  //     oneRowResource(next_slot_idx as nat, Info(next_entry, Free), 0));
+  //   v.row_mutexes[next_slot_idx].release(Row(next_entry, rmutex), next_handle);
 
   //   r, cap_r := SSM.split(r,
   //     SSM.output_stub(rid, output), 
@@ -522,7 +528,7 @@ module Impl refines VerificationObligation {
   //   linear var Row(entry, row_r) := row;
   //   glinear var r := SSM.join(in_sv, row_r);
 
-  //   var slot_idx' :uint32;
+  //   var next_slot_idx :uint32;
   //   glinear var rmutex;
 
   //   glinear var r' := oneRowResource(hash_idx as nat, Info(entry, Removing(rid, key)), 0);
@@ -541,7 +547,7 @@ module Impl refines VerificationObligation {
   //     invariant handle.m == v.row_mutexes[slot_idx]
   //     decreases *
   //   {
-  //     var slot_idx' := getNextIndex(slot_idx);
+  //     var next_slot_idx := getNextIndex(slot_idx);
 
   //     match entry {
   //       case Empty => {
@@ -567,19 +573,19 @@ module Impl refines VerificationObligation {
   //     }
 
   //     linear var next_row; glinear var next_handle;
-  //     next_row, next_handle := v.row_mutexes[slot_idx'].acquire();
+  //     next_row, next_handle := v.row_mutexes[next_slot_idx].acquire();
   //     linear var Row(next_entry, next_row_r) := next_row;
   //     r := SSM.join(r, next_row_r);
 
-  //     r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Removing(rid, key)), 0);
+  //     r' := twoRowsResource(slot_idx as nat, Info(entry, Free), next_slot_idx as nat, Info(next_entry, Removing(rid, key)), 0);
   //     r := easy_transform_step(r, r', step);
 
-  //     ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Removing(rid, key)), 0);
+  //     ghost var left := oneRowResource(next_slot_idx as nat, Info(next_entry, Removing(rid, key)), 0);
   //     ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free), 0);
   //     r, rmutex := SSM.split(r, left, right);
   //     v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
 
-  //     slot_idx := slot_idx';
+  //     slot_idx := next_slot_idx;
   //     entry := next_entry;
   //     handle := next_handle;
   //   }
