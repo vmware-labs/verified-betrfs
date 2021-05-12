@@ -66,8 +66,8 @@ module Impl refines VerificationObligation {
   method init(glinear in_sv: SSM.Variables)
   returns (v: Variables, glinear out_sv: SSM.Variables)
   // requires SSM.Init(in_sv)
-  ensures Inv(v)
-  ensures out_sv == unit()
+    ensures Inv(v)
+    ensures out_sv == unit()
   {
     glinear var remaining_r := in_sv;
     var row_mutexes : RowMutexTable:= [];
@@ -120,7 +120,7 @@ module Impl refines VerificationObligation {
   }
 
   method acquireRow(v: Variables, index: uint32, glinear in_sv: SSM.Variables)
-    returns (entry: Entry, glinear handle: MutexHandle<Row>, glinear out_sv: SSM.Variables)
+  returns (entry: Entry, glinear handle: MutexHandle<Row>, glinear out_sv: SSM.Variables)
     requires Inv(v);
     requires index < FixedSizeImpl();
     ensures handle.m == v.row_mutexes[index];
@@ -162,8 +162,7 @@ module Impl refines VerificationObligation {
     ensures out_sv == SSM.output_stub(rid, output)
   {
     var query_ticket := Ticket(rid, input);
-    var key := input.key;
-    var hash_idx := hash(key);
+    var key, hash_idx := input.key, hash(input.key);
     var slot_idx := hash_idx;
 
     var entry; glinear var handle; glinear var r;
@@ -220,9 +219,7 @@ module Impl refines VerificationObligation {
       ghost var left := oneRowResource(next_slot_idx as nat, Info(next_entry, Querying(rid, key)), 0);
       r := releaseRow(v, slot_idx, entry, handle, r, left);
 
-      slot_idx := next_slot_idx;
-      entry := next_entry;
-      handle := next_handle;
+      slot_idx, entry, handle := next_slot_idx, next_entry, next_handle;
     }
     
     // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
@@ -233,48 +230,67 @@ module Impl refines VerificationObligation {
   }
 
   method acquireCapacity(v: Variables, thread_id: uint32, glinear in_sv: SSM.Variables)
-  returns (tid: uint32,
+  returns (bin_id: uint32,
     count: uint32,
     glinear cap_handle: MutexHandle<AllocatorBin>,
     glinear out_sv: SSM.Variables)
+
     decreases *
     requires Inv(v)
     requires in_sv.Variables?
     requires in_sv.insert_capacity.value == 0
-    ensures tid < CAP.NumberOfBinsImpl()
-    ensures cap_handle.m == v.allocator[tid]
+    ensures bin_id < CAP.NumberOfBinsImpl()
+    ensures cap_handle.m == v.allocator[bin_id]
     ensures out_sv.Variables?
     ensures out_sv == in_sv.(insert_capacity := Count.Variables(count as nat))
     ensures count > 0;
   {
     // thread_id is a hint for the bin we're supposed to use. 
-    // tid is the actual place we found the capacity (in case we had to steal it from someone else) 
-    tid := if thread_id >= CAP.NumberOfBinsImpl() then 0 else thread_id;
+    // bin_id is the actual place we found the capacity (in case we had to steal it from someone else) 
+    bin_id := if thread_id >= CAP.NumberOfBinsImpl() then 0 else thread_id;
     linear var cap;
-    cap, cap_handle := v.allocator[tid].acquire();
+    cap, cap_handle := v.allocator[bin_id].acquire();
 
     while true
-      invariant tid < CAP.NumberOfBinsImpl()
+      invariant bin_id < CAP.NumberOfBinsImpl()
       invariant CAP.BinInv(cap)
-      invariant cap_handle.m == v.allocator[tid]
+      invariant cap_handle.m == v.allocator[bin_id]
       decreases *
     {
       if 0 < cap.count {
         break;
       }
       assert CAP.BinInv(cap);
-      v.allocator[tid].release(cap, cap_handle);
+      v.allocator[bin_id].release(cap, cap_handle);
 
-      tid := tid + 1;
-      tid := if tid >= CAP.NumberOfBinsImpl() then 0 else tid;
+      bin_id := bin_id + 1;
+      bin_id := if bin_id >= CAP.NumberOfBinsImpl() then 0 else bin_id;
 
-      cap, cap_handle := v.allocator[tid].acquire();
+      cap, cap_handle := v.allocator[bin_id].acquire();
     }
 
     count := cap.count;
     linear var AllocatorBin(_, cap_r) := cap;
     out_sv := enclose(cap_r);
     out_sv := SSM.join(in_sv, out_sv);
+  }
+
+  method releaseCapacity(v: Variables, bin_id: uint32, count: uint32, 
+    glinear cap_handle: MutexHandle<AllocatorBin>,
+    glinear in_sv: SSM.Variables, ghost exp_out: SSM.Variables)
+  returns (glinear out_sv: SSM.Variables)
+
+    requires Inv(v);
+    requires bin_id < CAP.NumberOfBinsImpl()
+    requires cap_handle.m == v.allocator[bin_id];
+    requires in_sv == add(exp_out, unit().(insert_capacity := Count.Variables(count as nat)));
+    ensures out_sv == exp_out;
+  {
+    glinear var rcap;
+    out_sv, rcap := SSM.split(in_sv, exp_out, unit().(insert_capacity := Count.Variables(count as nat)));
+
+    glinear var rcap' := declose(rcap);
+    v.allocator[bin_id].release(AllocatorBin(count, rcap'), cap_handle);
   }
 
   method doInsert(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_sv: SSM.Variables)
@@ -285,8 +301,6 @@ module Impl refines VerificationObligation {
     ensures out_sv == SSM.output_stub(rid, output)
     decreases *
   {
-    var allocator := v.allocator;
-
     var query_ticket := Ticket(rid, input);
     var key, inital_key := input.key, input.key;
     var kv := KV(key, input.value);
@@ -295,8 +309,8 @@ module Impl refines VerificationObligation {
     var hash_idx := hash(key);
     var slot_idx := hash_idx;
 
-    glinear var cap_handle; var tid; var count; glinear var r;
-    tid, count, cap_handle, r := acquireCapacity(v, thread_id, in_sv);
+    glinear var cap_handle; var bin_id; var count; glinear var r;
+    bin_id, count, cap_handle, r := acquireCapacity(v, thread_id, in_sv);
 
     var entry; glinear var handle;
     entry, handle, r := acquireRow(v, slot_idx, r);
@@ -355,13 +369,11 @@ module Impl refines VerificationObligation {
         next_slot_idx as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
       r := easy_transform_step(r, r', step);
 
-      ghost var left := oneRowResource(next_slot_idx as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
-      r := releaseRow(v, slot_idx, entry, handle, r, left);
+      ghost var excepted := oneRowResource(next_slot_idx as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
+      r := releaseRow(v, slot_idx, entry, handle, r, excepted);
 
-      slot_idx := next_slot_idx;
-      entry := next_entry;
+      slot_idx, entry, handle := next_slot_idx, next_entry, next_handle;
       hash_idx := hash(key);
-      handle := next_handle;
     }
 
     // assert step.InsertDoneStep? || step.InsertUpdateStep?;
@@ -369,18 +381,11 @@ module Impl refines VerificationObligation {
     r' := SSM.Variables(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), Count.Variables(count as nat), multiset{}, multiset{Stub(rid, output)});
     r := easy_transform_step(r, r', step);
 
-    ghost var left := SSM.output_stub(rid, output).(insert_capacity := Count.Variables(count as nat));
-    r := releaseRow(v, slot_idx, Full(kv), handle, r, left);
+    ghost var excepted := SSM.output_stub(rid, output).(insert_capacity := Count.Variables(count as nat));
+    r := releaseRow(v, slot_idx, Full(kv), handle, r, excepted);
 
-    glinear var rcap;
-    r, rcap := SSM.split(r,
-      SSM.output_stub(rid, output), 
-      unit().(insert_capacity := Count.Variables(count as nat)));
-
-    glinear var rcap' := declose(rcap);
-    allocator[tid].release(AllocatorBin(count, rcap'), cap_handle);
-
-    out_sv := r;
+    excepted := SSM.output_stub(rid, output);
+    out_sv := releaseCapacity(v, bin_id, count, cap_handle, r, excepted);
   }
 
   // method doRemoveFound(v: Variables, rid: int, 
@@ -419,7 +424,7 @@ module Impl refines VerificationObligation {
 
   //   var step := RemoveFoundItStep(slot_idx as nat);
   //   var r' := twoRowsResource(
-  //       slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)),
+  //       slot_idx as nat, Info(Empty, Removebin_idying(rid, inital_key, found_value)),
   //       next_slot_idx as nat, Info(next_entry, Free),
   //       0);
   //   r := easy_transform_step(r, r', step);
@@ -428,7 +433,7 @@ module Impl refines VerificationObligation {
   //     invariant Inv(v);
   //     invariant 0 <= slot_idx < FixedSizeImpl()
   //     invariant r == twoRowsResource(
-  //       slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)),
+  //       slot_idx as nat, Info(Empty, Removebin_idying(rid, inital_key, found_value)),
   //       NextPos(slot_idx as nat), Info(next_entry, Free),
   //       0)
   //     invariant handle.m == v.row_mutexes[slot_idx]
@@ -438,17 +443,17 @@ module Impl refines VerificationObligation {
   //     next_slot_idx := getNextIndex(slot_idx);
 
   //     if next_entry.Empty? || (next_entry.Full? && hash(next_entry.kv.key) == next_slot_idx) {
-  //       assert DoneTidying(r, slot_idx as nat);
+  //       assert Donebin_idying(r, slot_idx as nat);
   //       break;
   //     }
 
   //     ghost var r' := twoRowsResource(
   //       slot_idx as nat, Info(next_entry, Free),
-  //       next_slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)),
+  //       next_slot_idx as nat, Info(Empty, Removebin_idying(rid, inital_key, found_value)),
   //       0);
-  //     r := easy_transform_step(r, r', RemoveTidyStep(slot_idx as nat));
+  //     r := easy_transform_step(r, r', Removebin_idyStep(slot_idx as nat));
 
-  //     ghost var left := oneRowResource(next_slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)), 0);
+  //     ghost var left := oneRowResource(next_slot_idx as nat, Info(Empty, Removebin_idying(rid, inital_key, found_value)), 0);
   //     ghost var right := oneRowResource(slot_idx as nat, Info(next_entry, Free), 0);
 
   //     r, rmutex := SSM.split(r, left, right);
@@ -464,13 +469,13 @@ module Impl refines VerificationObligation {
   //     r := SSM.join(r, next_row_r);
   //   }
 
-  //   assert DoneTidying(r, slot_idx as nat);
+  //   assert Donebin_idying(r, slot_idx as nat);
 
   //   next_slot_idx := getNextIndex(slot_idx);
   //   output := MapIfc.RemoveOutput(true);
 
-  //   linear var cap; glinear var cap_handle; var tid;
-  //   cap, cap_handle, tid := acquireCapacity(v, thread_id);
+  //   linear var cap; glinear var cap_handle; var bin_id;
+  //   cap, cap_handle, bin_id := acquireCapacity(v, thread_id);
   //   linear var AllocatorBin(count, cap_r) := cap;
   //   r := SSM.join(r, cap_r);
 
@@ -504,7 +509,7 @@ module Impl refines VerificationObligation {
   //     unit().(insert_capacity := count as nat + 1));
   
   //   assert CAP.BinInv(AllocatorBin(count as nat +1, cap_r)); // ha ha ha
-  //   v.allocator[tid].release(AllocatorBin(count+1, cap_r), cap_handle);
+  //   v.allocator[bin_id].release(AllocatorBin(count+1, cap_r), cap_handle);
 
   //   out_sv := r;
   // }
@@ -541,8 +546,8 @@ module Impl refines VerificationObligation {
   //     invariant r == oneRowResource(slot_idx as nat, Info(entry, Removing(rid, key)), 0)
   //     invariant step.RemoveNotFoundStep? ==> 
   //       (entry.Full? && shouldHashGoBefore(hash_idx, hash(entry.kv.key), slot_idx))
-  //     invariant step.RemoveTidyStep? ==> (
-  //       && TidyEnabled(r, slot_idx as nat)
+  //     invariant step.Removebin_idyStep? ==> (
+  //       && bin_idyEnabled(r, slot_idx as nat)
   //       && KnowRowIsFree(r, NextPos(slot_idx as nat)))
   //     invariant handle.m == v.row_mutexes[slot_idx]
   //     decreases *
