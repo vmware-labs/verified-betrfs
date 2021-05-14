@@ -42,11 +42,9 @@ module Impl refines VerificationObligation {
     && CAP.Inv(v.allocator)
     && |v.row_mutexes| == FixedSize()
     && RowMutexTableInv(v.row_mutexes)
-  
-    // && SSM.Inv
   }
 
-  datatype Splitted = Splitted(r':SSM.Variables, ri:SSM.Variables)
+  datatype Splitted = Splitted(expected:SSM.Variables, ri:SSM.Variables)
 
   function {:opaque} InitResoucePartial(i: nat): SSM.Variables
     requires i <= FixedSize()
@@ -58,12 +56,12 @@ module Impl refines VerificationObligation {
   function Split(r:SSM.Variables, i:nat) : (splt:Splitted)
     requires i < FixedSize()
     requires r == InitResoucePartial(i)
-    ensures add(splt.r', splt.ri) == r
+    ensures add(splt.expected, splt.ri) == r
   {
-    var r' := InitResoucePartial(i+1);
+    var expected := InitResoucePartial(i+1);
     var ri := oneRowResource(i as nat, Info(Empty, Free), 0);
     reveal InitResoucePartial();
-    Splitted(r', ri)
+    Splitted(expected, ri)
   }
 
   method init(glinear in_sv: SSM.Variables)
@@ -88,7 +86,7 @@ module Impl refines VerificationObligation {
       ghost var splitted := Split(remaining_r, i as int);
       
       glinear var ri;
-      remaining_r, ri := SSM.split(remaining_r, splitted.r', splitted.ri);
+      remaining_r, ri := SSM.split(remaining_r, splitted.expected, splitted.ri);
 
       var m := new_mutex<Row>(Row(Empty, ri), (row) => RowInv(i as nat, row));
       row_mutexes := row_mutexes + [m];
@@ -100,11 +98,10 @@ module Impl refines VerificationObligation {
     glinear var cap := declose(remaining_r);
 
     var allocator; glinear var remaining_cap;
-    assert cap.value == Capacity();
+    // assert cap.value == Capacity();
     allocator, remaining_cap := CAP.init(cap);
     assert Count.Inv(Count.add(remaining_cap, remaining_cap));
     out_sv := enclose(remaining_cap);
-
     v := Variables.Variables(row_mutexes, allocator);
   }
 
@@ -137,7 +134,6 @@ module Impl refines VerificationObligation {
     linear var row;
     row, handle := v.row_mutexes[index].acquire();
     linear var Row(out_entry, row_r) := row;
-
     entry := out_entry;
     out_sv := SSM.join(in_sv, row_r);
   }
@@ -251,9 +247,9 @@ module Impl refines VerificationObligation {
     var entry; glinear var handle; glinear var r;
     entry, handle, r := acquireRow(v, hash_idx, in_sv);
 
-    ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Querying(rid, key)), 0);
+    ghost var expected := oneRowResource(hash_idx as nat, Info(entry, Querying(rid, key)), 0);
     var step := ProcessQueryTicketStep(query_ticket);
-    r := easy_transform_step(r, r', step);
+    r := easy_transform_step(r, expected, step);
 
     while true 
       invariant Inv(v);
@@ -295,19 +291,19 @@ module Impl refines VerificationObligation {
       var next_entry; glinear var next_handle;
       next_entry, next_handle, r := acquireRow(v, next_slot_idx, r);
 
-      r' := twoRowsResource(slot_idx as nat, Info(entry, Free),
+      expected := twoRowsResource(slot_idx as nat, Info(entry, Free),
         next_slot_idx as nat, Info(next_entry, Querying(rid, key)), 0);
-      r := easy_transform_step(r, r', step);
+      r := easy_transform_step(r, expected, step);
 
-      ghost var left := oneRowResource(next_slot_idx as nat, Info(next_entry, Querying(rid, key)), 0);
-      r := releaseRow(v, slot_idx, entry, handle, r, left);
+      expected := oneRowResource(next_slot_idx as nat, Info(next_entry, Querying(rid, key)), 0);
+      r := releaseRow(v, slot_idx, entry, handle, r, expected);
 
       slot_idx, entry, handle := next_slot_idx, next_entry, next_handle;
     }
     
     // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
-    r' := SSM.Variables(oneRowTable(slot_idx as nat, Info(entry, Free)), Count.Variables(0), multiset{}, multiset{Stub(rid, output)}); 
-    r := easy_transform_step(r, r', step);
+    expected := SSM.Variables(oneRowTable(slot_idx as nat, Info(entry, Free)), Count.Variables(0), multiset{}, multiset{Stub(rid, output)}); 
+    r := easy_transform_step(r, expected, step);
 
     out_sv := releaseRow(v, slot_idx, entry, handle, r, SSM.output_stub(rid, output));
   }
@@ -337,8 +333,8 @@ module Impl refines VerificationObligation {
     count := count - 1;
 
     var step := ProcessInsertTicketStep(insert_ticket);
-    ghost var r' := ProcessInsertTicketTransition(r, insert_ticket);
-    r := easy_transform_step(r, r', step);
+    ghost var expected := ProcessInsertTicketTransition(r, insert_ticket);
+    r := easy_transform_step(r, expected, step);
 
     while true 
       invariant Inv(v);
@@ -384,9 +380,9 @@ module Impl refines VerificationObligation {
         key := new_kv.key;
       }
   
-      r' := twoRowsResource(slot_idx as nat, Info(entry, Free),
+      expected := twoRowsResource(slot_idx as nat, Info(entry, Free),
         next_slot_idx as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
-      r := easy_transform_step(r, r', step);
+      r := easy_transform_step(r, expected, step);
 
       ghost var expected := oneRowResource(next_slot_idx as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
       r := releaseRow(v, slot_idx, entry, handle, r, expected);
@@ -397,12 +393,12 @@ module Impl refines VerificationObligation {
 
     // assert step.InsertDoneStep? || step.InsertUpdateStep?;
     count := if step.InsertDoneStep? then count else count + 1;
-    r' := SSM.Variables(oneRowTable(slot_idx as nat, Info(Full(kv), Free)),
+    expected := SSM.Variables(oneRowTable(slot_idx as nat, Info(Full(kv), Free)),
       Count.Variables(count as nat),
       multiset{}, multiset{Stub(rid, output)});
+    r := easy_transform_step(r, expected, step);
 
-    r := easy_transform_step(r, r', step);
-    ghost var expected := SSM.output_stub(rid, output).(insert_capacity := Count.Variables(count as nat));
+    expected := SSM.output_stub(rid, output).(insert_capacity := Count.Variables(count as nat));
     r := releaseRow(v, slot_idx, Full(kv), handle, r, expected);
 
     expected := SSM.output_stub(rid, output);
@@ -439,11 +435,11 @@ module Impl refines VerificationObligation {
     next_entry, next_handle, r := acquireRow(v, next_slot_idx, in_sv);
 
     var step := RemoveFoundItStep(slot_idx as nat);
-    var r' := twoRowsResource(
+    var expected := twoRowsResource(
         slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)),
         next_slot_idx as nat, Info(next_entry, Free),
         0);
-    r := easy_transform_step(r, r', step);
+    r := easy_transform_step(r, expected, step);
 
     while true
       invariant Inv(v);
@@ -463,11 +459,11 @@ module Impl refines VerificationObligation {
         break;
       }
 
-      ghost var r' := twoRowsResource(
+      ghost var expected := twoRowsResource(
         slot_idx as nat, Info(next_entry, Free),
         next_slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)),
         0);
-      r := easy_transform_step(r, r', RemoveTidyStep(slot_idx as nat));
+      r := easy_transform_step(r, expected, RemoveTidyStep(slot_idx as nat));
 
       ghost var left := oneRowResource(next_slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)), 0);
       r :=  releaseRow(v, slot_idx, next_entry, handle, r, left);
@@ -487,7 +483,7 @@ module Impl refines VerificationObligation {
     var count; glinear var cap_handle; var bin_id;
     count, bin_id, cap_handle, r := acquireCapacity(v, thread_id, r);
 
-    r' := SSM.Variables(
+    expected := SSM.Variables(
       twoRowsTable(slot_idx as nat, Info(Empty, Free), next_slot_idx as nat, Info(next_entry, Free)),
       Count.Variables(count as nat + 1),
       multiset{},
@@ -495,9 +491,9 @@ module Impl refines VerificationObligation {
     );
 
     step := RemoveDoneStep(slot_idx as nat);
-    r := easy_transform_step(r, r', step);
+    r := easy_transform_step(r, expected, step);
 
-    ghost var expected := SSM.Variables(
+    expected := SSM.Variables(
       oneRowTable(next_slot_idx as nat, Info(next_entry, Free)),
       Count.Variables(count as nat + 1),
       multiset{},
