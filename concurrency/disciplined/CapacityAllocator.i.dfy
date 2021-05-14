@@ -73,6 +73,7 @@ module CapacityAllocator {
       invariant i as int == |mt| <= NumberOfBins()
       invariant forall j:nat | j < i as int :: mt[j].inv == BinInv
       invariant remaining_r.value == total_amount as nat - allocated_sum
+      invariant remaining_r.value <= Capacity()
     {
       if i > 0 {
         calc >= {
@@ -105,7 +106,7 @@ module CapacityAllocator {
       remaining_r, vi := Count.split(remaining_r, Count.Variables(total_amount as nat - allocated_sum), Count.Variables(amount as nat));
 
       ghost var ab := AllocatorBin(amount, vi);
-
+      assert Count.Inv(Count.add(ab.resource, Count.Variables(0)));
       var m := new_mutex(AllocatorBin(amount, vi), BinInv);
       mt := mt + [m];
 

@@ -416,32 +416,30 @@ module Impl refines VerificationObligation {
     entry: SSM.Entry,
     thread_id: uint32,
     glinear handle: MutexHandle<Row>,
-    glinear r: SSM.Variables)
+    glinear in_sv: SSM.Variables)
   
     returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
     decreases *
     requires Inv(v)
     requires 0 <= slot_idx < FixedSizeImpl()
     requires 0 <= hash_idx < FixedSizeImpl()
-    requires r == oneRowResource(slot_idx as nat, Info(entry, Removing(rid, inital_key)), 0);
+    requires in_sv == oneRowResource(slot_idx as nat, Info(entry, Removing(rid, inital_key)), 0);
     requires entry.Full? && entry.kv.key == inital_key
     requires hash(inital_key) == hash_idx
     requires handle.m == v.row_mutexes[slot_idx]
     ensures out_sv == SSM.output_stub(rid, output)
   {
     var found_value := entry.kv.val;
-    // var allocator := v.allocator;
 
     var slot_idx := slot_idx;
     var next_slot_idx := getNextIndex(slot_idx);
 
     glinear var handle := handle;
-    glinear var rmutex;
+    glinear var next_handle;
+    glinear var r;
 
-    linear var next_row; glinear var next_handle;
-    next_row, next_handle := v.row_mutexes[next_slot_idx].acquire();
-    linear var Row(next_entry, next_row_r) := next_row;
-    glinear var r := SSM.join(r, next_row_r);
+    var next_entry;
+    next_entry, next_handle, r := acquireRow(v, next_slot_idx, in_sv);
 
     var step := RemoveFoundItStep(slot_idx as nat);
     var r' := twoRowsResource(
@@ -475,19 +473,13 @@ module Impl refines VerificationObligation {
       r := easy_transform_step(r, r', RemoveTidyStep(slot_idx as nat));
 
       ghost var left := oneRowResource(next_slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)), 0);
-      ghost var right := oneRowResource(slot_idx as nat, Info(next_entry, Free), 0);
-
-      r, rmutex := SSM.split(r, left, right);
-      v.row_mutexes[slot_idx].release(Row(next_entry, rmutex), handle);
+      r :=  releaseRow(v, slot_idx, next_entry, handle, r, left);
 
       slot_idx := next_slot_idx;
       next_slot_idx := getNextIndex(slot_idx);
       handle := next_handle;
 
-      next_row, next_handle := v.row_mutexes[next_slot_idx].acquire();
-      linear var Row(next_entry', next_row_r) := next_row;
-      next_entry := next_entry';
-      r := SSM.join(r, next_row_r);
+      next_entry, next_handle, r := acquireRow(v, next_slot_idx, r);
     }
 
     assert DoneTidying(r, slot_idx as nat);
@@ -508,22 +500,17 @@ module Impl refines VerificationObligation {
     step := RemoveDoneStep(slot_idx as nat);
     r := easy_transform_step(r, r', step);
 
-    ghost var left := SSM.Variables(
+    ghost var expected := SSM.Variables(
       oneRowTable(next_slot_idx as nat, Info(next_entry, Free)),
       Count.Variables(count as nat + 1),
       multiset{},
       multiset{ Stub(rid, output) });
-    ghost var right := oneRowResource(slot_idx as nat, Info(Empty, Free), 0);
+    r := releaseRow(v, slot_idx, Empty, handle, r, expected);
 
-    r, rmutex := SSM.split(r, left, right);
-    v.row_mutexes[slot_idx].release(Row(Empty, rmutex), handle);
+    expected := SSM.output_stub(rid, output).(insert_capacity := Count.Variables(count as nat + 1));
+    r := releaseRow(v, next_slot_idx, next_entry, next_handle, r, expected);
 
-    r, rmutex := SSM.split(r, 
-      SSM.output_stub(rid, output).(insert_capacity := Count.Variables(count as nat + 1)),
-      oneRowResource(next_slot_idx as nat, Info(next_entry, Free), 0));
-    v.row_mutexes[next_slot_idx].release(Row(next_entry, rmutex), next_handle);
-
-    ghost var expected := SSM.output_stub(rid, output);
+    expected := SSM.output_stub(rid, output);
     out_sv := releaseCapacity(v, count + 1, bin_id, cap_handle, r, expected);
   }
 
