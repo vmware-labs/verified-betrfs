@@ -435,10 +435,7 @@ module Impl refines VerificationObligation {
     var next_slot_idx := getNextIndex(slot_idx);
 
     glinear var handle := handle;
-    glinear var next_handle;
-    glinear var r;
-
-    var next_entry;
+    glinear var next_handle; glinear var r; var next_entry;
     next_entry, next_handle, r := acquireRow(v, next_slot_idx, in_sv);
 
     var step := RemoveFoundItStep(slot_idx as nat);
@@ -525,20 +522,15 @@ module Impl refines VerificationObligation {
   {
     var query_ticket := Ticket(rid, input);
     var key := input.key;
-    var hash_idx := hash(key); var slot_idx := hash_idx;
+    var hash_idx := hash(key);
+    var slot_idx := hash_idx;
 
-    linear var row; glinear var handle;
-    row, handle := v.row_mutexes[slot_idx].acquire();
+    var entry; glinear var handle; glinear var r;
+    entry, handle, r := acquireRow(v, slot_idx, in_sv);
 
-    linear var Row(entry, row_r) := row;
-    glinear var r := SSM.join(in_sv, row_r);
-
-    var next_slot_idx :uint32;
-    glinear var rmutex;
-
-    glinear var r' := oneRowResource(hash_idx as nat, Info(entry, Removing(rid, key)), 0);
+    ghost var expected := oneRowResource(hash_idx as nat, Info(entry, Removing(rid, key)), 0);
     var step : Step := ProcessRemoveTicketStep(query_ticket);
-    r := easy_transform_step(r, r', step);
+    r := easy_transform_step(r, expected, step);
 
     while true 
       invariant Inv(v);
@@ -577,32 +569,25 @@ module Impl refines VerificationObligation {
         break;
       }
 
-      linear var next_row; glinear var next_handle;
-      next_row, next_handle := v.row_mutexes[next_slot_idx].acquire();
-      linear var Row(next_entry, next_row_r) := next_row;
-      r := SSM.join(r, next_row_r);
+      glinear var next_handle; var next_entry;
+      next_entry, next_handle, r := acquireRow(v, next_slot_idx, r);
 
-      r' := twoRowsResource(slot_idx as nat, Info(entry, Free), next_slot_idx as nat, Info(next_entry, Removing(rid, key)), 0);
-      r := easy_transform_step(r, r', step);
+      expected := twoRowsResource(slot_idx as nat, Info(entry, Free), next_slot_idx as nat, Info(next_entry, Removing(rid, key)), 0);
+      r := easy_transform_step(r, expected, step);
 
-      ghost var left := oneRowResource(next_slot_idx as nat, Info(next_entry, Removing(rid, key)), 0);
-      ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free), 0);
-      r, rmutex := SSM.split(r, left, right);
-      v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
+      ghost var expected := oneRowResource(next_slot_idx as nat, Info(next_entry, Removing(rid, key)), 0);
+      r := releaseRow(v, slot_idx, entry, handle, r, expected);
 
-      slot_idx := next_slot_idx;
-      entry := next_entry;
-      handle := next_handle;
+      slot_idx, entry, handle := next_slot_idx, next_entry, next_handle;
     }
 
     if step.RemoveNotFoundStep? {
       output := MapIfc.RemoveOutput(false);
-      r' := SSM.Variables(oneRowTable(slot_idx as nat, Info(entry, Free)), Count.Variables(0), multiset{}, multiset{Stub(rid, output)}); 
-      r := easy_transform_step(r, r', step);
-      ghost var left := SSM.output_stub(rid, output);
-      ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free), 0);
-      r, rmutex := SSM.split(r, left, right);
-      v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
+      expected := SSM.Variables(oneRowTable(slot_idx as nat, Info(entry, Free)), Count.Variables(0), multiset{}, multiset{Stub(rid, output)}); 
+      r := easy_transform_step(r, expected, step);
+
+      expected := SSM.output_stub(rid, output);
+      r := releaseRow(v, slot_idx, entry, handle, r, expected);
     } else {
       output, r := doRemoveFound(v, rid, slot_idx, hash_idx, key, entry, thread_id, handle, r);
     }
