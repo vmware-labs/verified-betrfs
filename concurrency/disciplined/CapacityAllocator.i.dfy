@@ -23,6 +23,7 @@ module CapacityAllocator {
   import opened CapacityAllocatorTypes
   import opened Count
   import opened ShardedHashTable
+  import opened Limits
 
   type AllocatorMutex = Mutex<AllocatorBin>
   type AllocatorMutexTable = seq<AllocatorMutex>
@@ -44,9 +45,6 @@ module CapacityAllocator {
     && |o| == NumberOfBins()
     && (forall i | 0 <= i < NumberOfBins() :: o[i].inv == BinInv)
   }
-
-  function method CapacityImpl(): (s: uint32)
-    ensures s as nat == Capacity()
 
   method {:noNLarith} init(glinear in_r: Count.Variables)
   returns (mt: AllocatorMutexTable, glinear out_r: Count.Variables)

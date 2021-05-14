@@ -62,7 +62,9 @@ abstract module ShardedStateMachine refines PartialCommutativeMonoid {
   ensures Next(add(x, z), add(y, z))
 
   glinear method {:extern} resources_obey_inv(glinear b: Variables)
-  ensures Valid(b)
+  returns (glinear b': Variables)
+  ensures b' == b
+  ensures Valid(b')
 
   glinear method {:extern} do_transform(
       glinear b: Variables,

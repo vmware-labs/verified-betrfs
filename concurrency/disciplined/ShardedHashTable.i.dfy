@@ -3,9 +3,29 @@ include "../../lib/Base/Option.s.dfy"
 include "ConcurrencyModel.s.dfy"
 include "AppSpec.s.dfy"
 
+module Limits {
+  import opened NativeTypes
+
+  function FixedSize() : (n: nat)
+    ensures n > 1
+
+  function Capacity() : (n: nat)
+  {
+    FixedSize() - 1
+  }
+
+  function method FixedSizeImpl() : (n: uint32)
+    ensures n as int == FixedSize()
+
+  function method CapacityImpl(): (s: uint32)
+    ensures s as nat == Capacity()
+}
+
 // Build up the insert_capacity monoid first so we can talk about it separately
 // in the CapacityAllocator impl, and not have to cart around an entire ShardedHashTable.
 module Count refines PartialCommutativeMonoid {
+  import opened Limits
+
   datatype Variables = Variables(value: nat)
 
   function unit() : Variables { Variables(0) }
@@ -29,7 +49,24 @@ module Count refines PartialCommutativeMonoid {
   {
   }
 
-  predicate Valid(s: Variables) { true }
+  predicate Inv(s: Variables)
+  {
+    s.value <= Capacity()
+  }
+
+  predicate Valid(s: Variables)
+  {
+    exists t :: Inv(add(s, t))
+  }
+
+  function {:opaque} GetRemainder(s: Variables): (t: Variables)
+    requires Valid(s)
+    ensures Inv(add(s, t))
+  {
+    // reveal Valid();
+    var t :| Inv(add(s, t));
+    t
+  }
 
   lemma valid_monotonic(x: Variables, y: Variables)
   //requires Valid(add(x, y))
@@ -59,6 +96,7 @@ module MonoidalSM {
 module ShardedHashTable refines ShardedStateMachine {
   import opened NativeTypes
   import opened Options
+  import opened Limits
   import MapIfc
   import Count
 
@@ -73,17 +111,6 @@ module ShardedHashTable refines ShardedStateMachine {
 
   datatype Stub =
     | Stub(rid: int, output: MapIfc.Output)
-
-  function FixedSize() : (n: nat)
-    ensures n > 1
-
-  function Capacity() : (n: nat)
-  {
-    FixedSize() - 1
-  }
-
-  function method FixedSizeImpl() : (n: uint32)
-  ensures n as int == FixedSize()
 
   predicate ValidHashIndex(h:int)
   {
@@ -296,7 +323,7 @@ module ShardedHashTable refines ShardedStateMachine {
     | QueryDoneStep(pos: nat)
     | QueryNotFoundStep(pos: nat)
 
-  predicate ProcessInsertTicket(s: Variables, s': Variables, insert_ticket: Ticket)
+  predicate ProcessInsertTicketEnable(s: Variables, insert_ticket: Ticket)
   {
     && !s.Fail?
     && insert_ticket.input.InsertInput?
@@ -307,13 +334,25 @@ module ShardedHashTable refines ShardedStateMachine {
     && s.table[h].Some?
     && s.table[h].value.state.Free?
     && s.insert_capacity.value >= 1
-    && (s' == s
-      .(tickets := s.tickets - multiset{insert_ticket})
+  }
+
+  function ProcessInsertTicketTransition(s: Variables, insert_ticket: Ticket): (s': Variables)
+    requires ProcessInsertTicketEnable(s, insert_ticket)
+  {
+    var key := insert_ticket.input.key;
+    var h: uint32 := hash(key);
+    s.(tickets := s.tickets - multiset{insert_ticket})
       .(insert_capacity := Count.Variables(s.insert_capacity.value - 1))
       .(table := s.table[h := Some(
           s.table[h].value.(
               state := Inserting(insert_ticket.rid,
-              KV(key, insert_ticket.input.value),key)))]))
+              KV(key, insert_ticket.input.value), key)))])
+  }
+
+  predicate ProcessInsertTicket(s: Variables, s': Variables, insert_ticket: Ticket)
+  {
+    && ProcessInsertTicketEnable(s, insert_ticket)
+    && s' == ProcessInsertTicketTransition(s, insert_ticket)
   }
 
   predicate ProcessInsertTicketFail(s: Variables, s': Variables, insert_ticket: Ticket)
@@ -1684,15 +1723,26 @@ module ShardedHashTable refines ShardedStateMachine {
 // fragment-level validity defined wrt Inv
 //////////////////////////////////////////////////////////////////////////////
   predicate Valid(s: Variables)
+    ensures Valid(s) ==> s.Variables?
   {
     && s.Variables?
     && exists t :: Inv(add(s, t))
+  }
+
+  function {:opaque} GetRemainder(s: Variables): (t: Variables)
+    requires Valid(s)
+    ensures Inv(add(s, t))
+  {
+    // reveal Valid();
+    var t :| Inv(add(s, t));
+    t
   }
 
   lemma InvImpliesValid(s: Variables)
     requires Inv(s)
     ensures Valid(s)
   {
+    // reveal Valid();
     add_unit(s);
   }
 
@@ -1700,6 +1750,7 @@ module ShardedHashTable refines ShardedStateMachine {
   //requires Valid(add(x, y))
   ensures Valid(x)
   {
+    // reveal Valid();
     var xy' :| Inv(add(add(x, y), xy'));
     associative(x, y, xy');
     assert Inv(add(x, add(y, xy')));
@@ -1734,6 +1785,7 @@ module ShardedHashTable refines ShardedStateMachine {
   //requires Valid(s)
   ensures Valid(s')
   {
+    // reveal Valid();
     var t :| Inv(add(s, t));
     InvImpliesValid(add(s, t));
     update_monotonic(s, s', t);
@@ -1750,19 +1802,21 @@ module ShardedHashTable refines ShardedStateMachine {
   ensures c == expected_out
   {
     c := do_transform(b, expected_out);
+    // assert Next(b, c);
+    // NextPreservesValid(b, c);
   }
 
   lemma NewTicketPreservesValid(r: Variables, id: int, input: Ifc.Input)
     //requires Valid(r)
     ensures Valid(add(r, input_ticket(id, input)))
   {
+    // reveal Valid();
     var ticket := input_ticket(id, input);
     var t :| Inv(add(r, t));
 
     assert add(add(r, ticket), t).table == add(r, t).table;
     assert add(add(r, ticket), t).insert_capacity == add(r, t).insert_capacity;
   }
-
 
   // Trusted composition tools. Not sure how to generate them.
   glinear method {:extern} enclose(glinear a: Count.Variables) returns (glinear h: Variables)
