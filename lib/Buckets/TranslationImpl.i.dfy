@@ -251,7 +251,8 @@ module TranslationImpl {
     if i == -1 {
       upper := Keyspace.Max_Element;
     } else {
-      upper := Keyspace.Element(prefix[..i] + [prefix[i] + 1]);
+      var c := prefix[i] + 1;
+      upper := Keyspace.Element(prefix[..i] + [c]);
     }
   }
 
