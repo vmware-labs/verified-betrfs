@@ -1,0 +1,19 @@
+Things we can do:
+
+* Refactor transitions to function style, making impl easier because we don't have to construct new state.
+
+Pedagogical axes:
+
+A shared nothing
+B shared exclusive
+C shared r/w locking
+
+J chained table (no stack frames / no h-o-h locking)
+K linear probing but lock entire range at once (no h-o-h)
+L linear probing (with h-o-h)
+
+* BK -> travis expressed interest (can reference hack-hashtable-wrap)
+* CK -> advancing to r/w
+AK -> interest of teachability
+AJ -> IronSHT
+BL -> what e implemented
