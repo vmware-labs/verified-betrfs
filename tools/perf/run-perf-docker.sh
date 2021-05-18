@@ -10,7 +10,7 @@
 
 echo "==== capturing at frequency $1 ===="
 
-echo "==== making the cs bundle ===="
+echo "==== making the cpp bundle ===="
 make build/Bundle.cpp
 
 echo "==== running docker ===="

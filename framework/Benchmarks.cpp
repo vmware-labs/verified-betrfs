@@ -41,6 +41,7 @@ public:
     }
 
     auto t1 = chrono::high_resolution_clock::now();
+    cerr << "Benchmark " << name() << " starting." << endl;
     go(app);
     auto t2 = chrono::high_resolution_clock::now();
 

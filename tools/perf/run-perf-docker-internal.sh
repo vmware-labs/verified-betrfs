@@ -28,14 +28,15 @@ rm build/framework/*.o
 rm build/Veribetrfs
 set -e
 
-make CC=clang++ CCFLAGS="-g -fpermissive" build/Veribetrfs
+make CC=clang++ CCFLAGS="-g" build/Veribetrfs
 
 echo "==== starting benchmark ===="
 echo "flags: $@"
 
 ./build/Veribetrfs $@ &
 PID=$!
-perf record -p $PID -g -F$frequency &
+read -n 1 -s -r -p "Press any key to start recording"
+perf record -p $PID --call-graph=dwarf,4096 -F$frequency &
 PERF_PID=$!
 sleep 1
 read -n 1 -s -r -p "Press any key to stop recording"

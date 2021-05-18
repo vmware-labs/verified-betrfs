@@ -361,7 +361,7 @@ LDFLAGS += -lrt
 endif
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
-	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS) $(GPROF_FLAGS)
+	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(CCFLAGS) $(LDFLAGS) $(GPROF_FLAGS)
 
 ##############################################################################
 # YCSB
