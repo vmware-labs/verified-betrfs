@@ -8,8 +8,10 @@ module JournalInterpMod {
   import opened Sequences
   import opened Maps
   import opened MsgSeqMod
+  import MapSpecMod
   import opened AllocationMod
   import opened JournalMachineMod
+  import opened InterpMod
 
   // TODO redo: return a seq of Message, with a prefix of None.
   function MessageMaps(journalChain: JournalChain) : seq<MsgSeq> {
@@ -23,20 +25,58 @@ module JournalInterpMod {
     MsgSeq(asMap, v.marshalledLSN, v.marshalledLSN + |v.unmarshalledTail|)
   }
 
-  // TODO(jonh): collapse to return MsgSeq
-  function IMinner(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : seq<MsgSeq>
+//  // TODO(jonh): collapse to return MsgSeq
+//  function IMinner(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : seq<MsgSeq>
+//  {
+//    var chain := ChainFrom(cache.dv, sb).chain;
+//    if chain.Some?
+//    then
+//      MessageMaps(chain.value) + [TailAsMsgSeq(v)]
+//    else
+//      []
+//  }
+
+  function MessageAt(chain: JournalChain, lsn: LSN) : Message
+    requires ValidChain(cache.dv, chain)
+    requires chain.sb == sb
+
+  function MessageAt(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, lsn: LSN) : Message
   {
-    var chain := ChainFrom(cache.dv, sb).chain;
-    if chain.Some?
-    then
-      MessageMaps(chain.value) + [TailAsMsgSeq(v)]
-    else
-      []
+    var chainResult := ChainFrom(cache.dv, sb);
+    var JournalChain 
   }
 
-  function IM(v: Variables, cache:CacheIfc.Variables, sb: Superblock) : Option<MsgSeq>
+  function SyncReqsAt(v: Variables, lsn: LSN) : set<DeferredWriteMapSpecMod.SyncReqId> {
+    set syncReqId | v.syncReqs[syncReqId] == lsn
+  }
+
+  function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : DeferredWriteMapSpecMod.Version
+    requires base.seqEnd == v.persistentLSN
+    requires v.persistentLSN <= lsn < v.unmarshalledLSN()
   {
-    CondenseAll(IMinner(v, cache, sb.core))
+    if lsn == v.persistentLSN
+    then
+      // TODO No accounting for v.syncReqs < persistentLSN; hrmm.
+      DeferredWriteMapSpecMod.Version(MapSpecMod.Variables(base), SyncReqsAt(v, lsn))
+    else
+      var prior := VersionFor(v, cache, sb, base, lsn - 1);
+      DeferredWriteMapSpecMod.Version(  
+        ApplyOneMessage(prior.mapp.interp, MessageAt(v, lsn)),
+        SyncReqsAt(v, lsn))
+  }
+
+  function IM(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp)
+    : DeferredWriteMapSpecMod.Variables
+  requires base.seqEnd == v.persistentLSN
+  {
+    // one version for persistentLSN, plus one for every LSN that we're aware of, because syncReqs
+    // may point to any of those.
+    var numVersions := v.unmarshalledLSN() - v.persistentLSN;
+    var versions := seq(numVersions, i requires i<numVersions =>
+      var lsn := i + v.persistentLSN;
+      VersionFor(v, cache, sb, base, lsn)
+    );
+    DeferredWriteMapSpecMod.Variables(versions, 0)
   }
 
   function ReadAt(cus: seq<CU>, i: nat) : AU
@@ -69,11 +109,9 @@ module JournalInterpMod {
   }
 
   // TODO(jonh): delete chain parameter.
-  lemma FrameOneChain(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb: CoreSuperblock, chain: Option<JournalChain>)
-    requires chain == ChainFrom(cache0.dv, sb).chain
+  lemma FrameOneChain(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb: CoreSuperblock)
     requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
-    ensures chain == ChainFrom(cache1.dv, sb).chain
-    // ensures ChainFrom(cache0, sb).chain == ChainFrom(cache1, sb).chain
+    ensures ChainFrom(cache0.dv, sb).chain == ChainFrom(cache1.dv, sb).chain
     decreases |cache0.dv|
   {
     if sb.freshestCU.Some? {
@@ -98,17 +136,15 @@ module JournalInterpMod {
               assert aus[i+1] == ausr[i]; // witness to SequenceSubset(ausr, aus)
             }
             DiskViewsEquivalentAfterRemove(cache0, cache1, aus, sb.freshestCU.value, ausr);
-            FrameOneChain(v, cache0r, cache1r, priorSB, ChainFrom(cache0r.dv, priorSB).chain);
+            FrameOneChain(v, cache0r, cache1r, priorSB);
           }
         }
       }
     }
   }
 
-  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:CoreSuperblock)
+  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:CoreSuperblock, base: InterpMod.Interp)
     requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
-    ensures IMinner(v, cache0, sb) == IMinner(v, cache1, sb)
+    ensures IM(v, cache0, sb, base) == IM(v, cache1, sb, base)
   {
-    FrameOneChain(v, cache0, cache1, sb, ChainFrom(cache0.dv, sb).chain);
-  }
-}
+    FrameOneChain(v, cache0, cache1, sb)

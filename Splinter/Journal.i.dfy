@@ -201,7 +201,8 @@ module JournalMachineMod {
   // JournalChain
 
   // Monoid-friendly (quantified-list) definition
-  datatype JournalChain = JournalChain(sb: CoreSuperblock, recs:seq<JournalRecord>)
+  datatype JournalChain = JournalChain(sb: CoreSuperblock, recs:seq<JournalRecord>,
+    locate:map<LSN,nat>, interp:map<LSN,Message>)
   {
     // Synthesize a superblock that reflects the tail of the chain (cutting
     // off the first rec), propagating along boundaryLSN.
@@ -221,11 +222,37 @@ module JournalMachineMod {
     || chain.sb.boundaryLSN >= chain.recs[i].messageSeq.seqStart
   }
 
+  predicate LSNinChain(chain: JournalChain, lsn: LSN)
+  {
+    && 0 < |chain.recs|
+    && chain.sb.boundaryLSN < lsn < chain.recs[0].messageSeq.seqEnd
+  }
+
   predicate WFChainBasic(chain: JournalChain)
   {
     && (chain.sb.freshestCU.None? <==> 0 == |chain.recs|)
     && (forall i | 0<=i<|chain.recs| :: i==|chain.recs|-1 <==> IsLastLink(i, chain))
     && (forall i | 0<=i<|chain.recs|-1 :: chain.recs[i].priorCU.Some?)
+  }
+
+  predicate RecordSupportsMessage(rec: JournalRecord, lsn: LSN, message: Message)
+  {
+    && rec.messageSeq.WF()
+    && rec.messageSeq.seqStart <= lsn < rec.messageSeq.seqEnd
+    && rec.messageSeq.msgs[lsn] == message
+  }
+
+  predicate WFChainInterp(chain: JournalChain)
+  {
+    && WFChainBasic(chain)
+    // locate,interp domains match exactly the set of LSNs covered by this chain
+    && (forall lsn :: LSNinChain(chain, lsn) <==> lsn in chain.locate)
+    && (forall lsn :: LSNinChain(chain, lsn) <==> lsn in chain.interp)
+    // locate range points only at valid chain record indices
+    && (forall lsn | LSNinChain(chain, lsn) :: 0 <= chain.locate[lsn] < |chain.recs|)
+    // and then finally the interp Messages are supported by the actual JournalRecords.
+    && (forall lsn | LSNinChain(chain, lsn) ::
+          RecordSupportsMessage(chain.recs[chain.locate[lsn]], lsn, chain.interp[lsn]))
   }
 
   predicate {:opaque} WFChainInner(chain: JournalChain)
@@ -239,6 +266,7 @@ module JournalMachineMod {
   {
     && WFChainBasic(chain)
     && WFChainInner(chain)
+    && WFChainInterp(chain)
   }
 
   function CUsForChain(chain: JournalChain) : (cus: seq<CU>)
@@ -272,9 +300,14 @@ module JournalMachineMod {
     && ChainMatchesDiskView(dv, chain)
   }
 
+  function EmptyChain(sb: CoreSuperblock) : JournalChain
+  {
+    JournalChain(sb, [], map[], map[])
+  }
+
   lemma ValidEmptyChain(dv: DiskView, sb: CoreSuperblock)
     requires sb.freshestCU.None?
-    ensures ValidJournalChain(dv, JournalChain(sb, []))
+    ensures ValidJournalChain(dv, EmptyChain(sb))
   {
     reveal_WFChainInner();
     reveal_ChainMatchesDiskView();
@@ -283,13 +316,20 @@ module JournalMachineMod {
   function ExtendChain(sb: CoreSuperblock, rec: JournalRecord, innerchain: JournalChain)
     : (chain: JournalChain)
     requires sb.freshestCU.Some?
+    requires rec.messageSeq.WF()
     requires rec.priorCU.Some? ==> sb.boundaryLSN < rec.messageSeq.seqStart; // proves !IsLastLink(0, chain)
     requires innerchain.sb == rec.priorSB(sb);
     requires 0<|innerchain.recs| ==> rec.messageSeq.seqStart == innerchain.recs[0].messageSeq.seqEnd;
     requires WFChain(innerchain)
     ensures WFChain(chain)
   {
-    var chain := JournalChain(sb, [rec] + innerchain.recs);
+    var locate0 := map lsn | lsn in rec.messageSeq.LSNSet() :: 0;
+    var locateCdr := map lsn | lsn in innerchain.locate :: innerchain.locate[lsn] + 1;
+    var locate := MapDisjointUnion(locate0, locateCdr);
+    assert rec.messageSeq.WF();
+    var interp0 := map lsn | lsn in rec.messageSeq.LSNSet() :: rec.messageSeq.msgs[lsn];
+    var interp := MapDisjointUnion(interp0, innerchain.interp);
+    var chain := JournalChain(sb, [rec] + innerchain.recs, locate, interp);
     assert WFChainBasic(chain) by {
       forall i | 0<=i<|chain.recs| ensures i==|chain.recs|-1 <==> IsLastLink(i, chain)
       {
@@ -319,7 +359,7 @@ module JournalMachineMod {
     if sb.freshestCU.None? then
       // Superblock told the whole story; nothing to read.
       ValidEmptyChain(dv, sb);
-      ChainResult(Some(JournalChain(sb, [])), [])
+      ChainResult(Some(EmptyChain(sb)), [])
     else if sb.freshestCU.value !in dv then
       // !RecordOnDisk: tried to read freshestCU and failed
       ChainResult(None, [sb.freshestCU.value])
@@ -336,7 +376,10 @@ module JournalMachineMod {
         ChainResult(None, [sb.freshestCU.value])
       else if firstRec.value.messageSeq.seqStart == sb.boundaryLSN then
         // Glad we read this record, but we don't need to read anything beyond.
-        var r := ChainResult(Some(JournalChain(sb, [firstRec.value])), [sb.freshestCU.value]);
+        var rec := firstRec.value;
+        var locate0 := map lsn | lsn in rec.messageSeq.LSNSet() :: 0;
+        var interp0 := map lsn | lsn in rec.messageSeq.LSNSet() :: rec.messageSeq.msgs[lsn];
+        var r := ChainResult(Some(JournalChain(sb, [rec], locate0, interp0)), [sb.freshestCU.value]);
         assert ValidJournalChain(dv, r.chain.value) by {
           reveal_WFChainInner();
           reveal_ChainMatchesDiskView();

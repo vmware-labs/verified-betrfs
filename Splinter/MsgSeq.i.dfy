@@ -16,11 +16,23 @@ module MsgSeqMod {
   datatype MsgSeq = MsgSeq(msgs: map<LSN, Message>, seqStart: LSN, seqEnd: LSN)
     // seqEnd is exclusive
   {
+    predicate Contains(lsn: LSN)
+    {
+      seqStart <= lsn < seqEnd
+    }
+
+    // For use in map comprehensions, where "lsn in msgSeq.Contains()" doesn't
+    // satisfy Dafny's bounded set heuristic.
+    function LSNSet() : set<LSN>
+    {
+      set lsn | seqStart <= lsn < seqEnd
+    }
+
     predicate WF()
     {
       && seqStart <= seqEnd
       && (seqStart==seqEnd ==> seqStart==0) // normalize Empty.
-      && (forall k :: k in msgs <==> seqStart <= k < seqEnd)
+      && (forall k :: k in msgs <==> Contains(k))
     }
 
     // Add a single message to the end of the sequence. It gets LSN 'seqEnd', since

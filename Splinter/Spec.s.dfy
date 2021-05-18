@@ -56,12 +56,13 @@ module DeferredWriteMapSpecMod {
     }
   }
 
+  function Empty() : Variables {
+    Variables([Version(MapSpecMod.Variables(InterpMod.Empty()), {})], 0)
+  }
+
   predicate Init(s: Variables)
   {
-    && |s.versions| == 1
-    && MapSpecMod.Init(s.versions[0].mapp)
-    && s.versions[0].syncReqIds == {}
-    && s.stableIdx == 0
+    s == Empty()
   }
 
   predicate Query(s: Variables, s': Variables, k: Key, v: Value)

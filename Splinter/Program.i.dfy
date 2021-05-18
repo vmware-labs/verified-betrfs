@@ -55,12 +55,12 @@ module ProgramMachineMod {
 
   predicate Init(v: Variables)
   {
-    false
+    true // XXX TODO
   }
 
   predicate Recover(v: Variables, v': Variables)
   {
-    false
+    true // XXX TODO
   }
 
   predicate Query(v: Variables, v': Variables, key: Key, val: Value, sk: BetreeMachineMod.Skolem)
@@ -71,12 +71,20 @@ module ProgramMachineMod {
     && v'.cache == v.cache  // no cache writes
   }
 
+  predicate CacheOp(v: Variables, v': Variables)
+  {
+    && v.WF()
+    && v'.journal == v.journal
+    && v'.betree == v.betree
+    && true // Cache.OrganizeThyself(...)
+  }
+
   predicate Put(v: Variables, v': Variables, key: Key, val: Value, sk: BetreeMachineMod.Skolem)
   {
     && v.WF()
     && JournalMachineMod.Append(v.journal, v'.journal, MessagePut(key, val))
     && BetreeMachineMod.Put(v.betree, v'.betree, key, val, sk)
-    && v'.cache == v.cache  // no cache writes
+    && v'.cache == v.cache  // no cache writes TODO clearly wrong
   }
 
   // TODO move to Sets.i
@@ -274,21 +282,20 @@ module ProgramInterpMod {
   //
   // IM == Interpret as InterpMod
   // TODO NEXT well actually we need a chain of Interps; see DeferredWriteMapSpecMod
-  function IM(v: Variables) : (i:Interp)
-    ensures i.WF()
+  // Journal interprets to a MsgSeq. The not-yet-sb-persistent part of that chain
+  // is the set of versions. Yeah we need to put richer interps down in JournalInterp
+  // before we try to add them here?
+  function IM(v: Variables) : (iv:DeferredWriteMapSpecMod.Variables)
+    ensures iv.WF()
   {
     var sb := ISuperblock(v.cache.dv);
     if sb.Some?
     then
       var betreeInterp := BetreeInterpMod.IM(v.betree, v.cache, sb.value.betree);
-      var journalMsgSeq := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal);
-      if journalMsgSeq.Some? && betreeInterp.seqEnd == journalMsgSeq.value.seqStart
-      then
-        Concat(betreeInterp, journalMsgSeq.value)
-      else
-        InterpMod.Empty()
+      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal, betreeInterp);
+      journalInterp
     else
-      InterpMod.Empty()
+      DeferredWriteMapSpecMod.Empty()
   }
 
   function IMReads(v: Variables) : seq<AU> {
@@ -345,8 +352,7 @@ module ProgramInterpMod {
     //requires Inv(v)
     requires Inv(v)
     requires Next(v, v')
-DeferredWriteMapSpecMod 
-    ensures Next(IM(v), IM(v'))
+    ensures DeferredWriteMapSpecMod.Next(IM(v), IM(v'))
   {
     var cacheOps,step :| NextStep(v, v', cacheOps, step);
     match step {
