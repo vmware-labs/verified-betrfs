@@ -292,7 +292,7 @@ module ProgramInterpMod {
     if sb.Some?
     then
       var betreeInterp := BetreeInterpMod.IM(v.betree, v.cache, sb.value.betree);
-      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal, betreeInterp);
+      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal.core, betreeInterp);
       journalInterp
     else
       DeferredWriteMapSpecMod.Empty()
@@ -324,7 +324,8 @@ module ProgramInterpMod {
     var sb := ISuperblock(v0.cache.dv);
     if sb.Some? {
       BetreeInterpMod.Framing(v0.betree, v0.cache, v1.cache, sb.value.betree);
-      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, sb.value.journal.core);
+      var betreeInterp := BetreeInterpMod.IM(v0.betree, v0.cache, sb.value.betree);
+      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, sb.value.journal.core, betreeInterp);
     }
   }
 
@@ -366,7 +367,7 @@ module ProgramInterpMod {
         // This step should be difficult. :v)
         // hah yes it's not, because IM is only looking at the cache, not the membuffer
         // (internal state machine state)
-        assert IM(v') == IM(v).Put(key, val);
+        //assert IM(v') == IM(v).Put(key, val);
       }
       case JournalInternalStep(sk) => {
         assume false;

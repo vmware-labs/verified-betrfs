@@ -4,6 +4,7 @@
 include "Journal.i.dfy"
 
 module JournalInterpMod {
+  import opened MessageMod
   import opened Options
   import opened Sequences
   import opened Maps
@@ -36,48 +37,50 @@ module JournalInterpMod {
 //      []
 //  }
 
-  function MessageAt(chain: JournalChain, lsn: LSN) : Message
-    requires ValidChain(cache.dv, chain)
-    requires chain.sb == sb
+//  function MessageAt(chain: JournalChain, lsn: LSN) : Message
+//    requires ValidChain(cache.dv, chain)
+//    requires chain.sb == sb
 
-  function MessageAt(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, lsn: LSN) : Message
-  {
-    var chainResult := ChainFrom(cache.dv, sb);
-    var JournalChain 
-  }
+//  function MessageAt(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, lsn: LSN) : Message
+//  {
+//    var chainResult := ChainFrom(cache.dv, sb);
+//    var m:Message :| true; m  // TODO placeholder to parse
+////    var JournalChain 
+//  }
 
-  function SyncReqsAt(v: Variables, lsn: LSN) : set<DeferredWriteMapSpecMod.SyncReqId> {
-    set syncReqId | v.syncReqs[syncReqId] == lsn
-  }
+  function SyncReqsAt(v: Variables, lsn: LSN) : set<DeferredWriteMapSpecMod.SyncReqId>
+//  {
+//    set syncReqId | v.syncReqs[syncReqId] == lsn
+//  }
 
-  function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : DeferredWriteMapSpecMod.Version
-    requires base.seqEnd == v.persistentLSN
-    requires v.persistentLSN <= lsn < v.unmarshalledLSN()
-  {
-    if lsn == v.persistentLSN
-    then
-      // TODO No accounting for v.syncReqs < persistentLSN; hrmm.
-      DeferredWriteMapSpecMod.Version(MapSpecMod.Variables(base), SyncReqsAt(v, lsn))
-    else
-      var prior := VersionFor(v, cache, sb, base, lsn - 1);
-      DeferredWriteMapSpecMod.Version(  
-        ApplyOneMessage(prior.mapp.interp, MessageAt(v, lsn)),
-        SyncReqsAt(v, lsn))
-  }
+//  function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : DeferredWriteMapSpecMod.Version
+//    requires base.seqEnd == v.persistentLSN
+//    requires v.persistentLSN <= lsn < v.unmarshalledLSN()
+//  {
+//    if lsn == v.persistentLSN
+//    then
+//      // TODO No accounting for v.syncReqs < persistentLSN; hrmm.
+//      DeferredWriteMapSpecMod.Version(MapSpecMod.Variables(base), SyncReqsAt(v, lsn))
+//    else
+//      var prior := VersionFor(v, cache, sb, base, lsn - 1);
+//      DeferredWriteMapSpecMod.Version(  
+//        ApplyOneMessage(prior.mapp.interp, MessageAt(v, lsn)),
+//        SyncReqsAt(v, lsn))
+//  }
 
   function IM(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp)
     : DeferredWriteMapSpecMod.Variables
   requires base.seqEnd == v.persistentLSN
-  {
-    // one version for persistentLSN, plus one for every LSN that we're aware of, because syncReqs
-    // may point to any of those.
-    var numVersions := v.unmarshalledLSN() - v.persistentLSN;
-    var versions := seq(numVersions, i requires i<numVersions =>
-      var lsn := i + v.persistentLSN;
-      VersionFor(v, cache, sb, base, lsn)
-    );
-    DeferredWriteMapSpecMod.Variables(versions, 0)
-  }
+//  {
+//    // one version for persistentLSN, plus one for every LSN that we're aware of, because syncReqs
+//    // may point to any of those.
+//    var numVersions := v.unmarshalledLSN() - v.persistentLSN;
+//    var versions := seq(numVersions, i requires i<numVersions =>
+//      var lsn := i + v.persistentLSN;
+//      VersionFor(v, cache, sb, base, lsn)
+//    );
+//    DeferredWriteMapSpecMod.Variables(versions, 0)
+//  }
 
   function ReadAt(cus: seq<CU>, i: nat) : AU
     requires i<|cus|
@@ -147,4 +150,6 @@ module JournalInterpMod {
     requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
     ensures IM(v, cache0, sb, base) == IM(v, cache1, sb, base)
   {
-    FrameOneChain(v, cache0, cache1, sb)
+    FrameOneChain(v, cache0, cache1, sb);
+  }
+}
