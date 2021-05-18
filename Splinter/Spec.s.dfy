@@ -29,7 +29,7 @@ module MapSpecMod {
 
   predicate Put(s: Variables, s': Variables, k: Key, v: Value)
   {
-    && s' == s.(interp := s.interp.(mi := s.interp.mi[k := v], seqEnd := s.interp.seqEnd + 1))
+    && s' == s.(interp := s.interp.Put(k,v))
       // NB mutations advance the sequence number
   }
 }
@@ -120,7 +120,7 @@ module DeferredWriteMapSpecMod {
     && s.WF()
     && requestedAt < |s.versions|
     && syncReqId in s.versions[requestedAt].syncReqIds
-    && s.stableIdx <= requestedAt
+    && requestedAt <= s.stableIdx
     && s' == s
   }
 
@@ -132,6 +132,7 @@ module DeferredWriteMapSpecMod {
     | AsyncFlushStep
     | ReqSyncStep(syncReqId: SyncReqId)
     | CompleteSyncStep(syncReqId: SyncReqId, requestedAt: nat)
+    | NoOpStep
 
   predicate NextStep(s: Variables, s': Variables, step: Step)
   {
@@ -142,6 +143,7 @@ module DeferredWriteMapSpecMod {
       case AsyncFlushStep => AsyncFlush(s, s')
       case ReqSyncStep(syncReqId) => ReqSync(s, s', syncReqId)
       case CompleteSyncStep(syncReqId, requestId) => CompleteSync(s, s', syncReqId, requestId)
+      case NoOpStep => s' == s
     }
   }
 
