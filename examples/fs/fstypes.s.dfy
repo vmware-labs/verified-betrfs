@@ -11,6 +11,7 @@ module FileSysTypes {
   datatype FileType = 
     | File
     | Directory
+    | SymLink(source: Path)
     | CharFile(major: int, minor: int) // device identifier
     | BlockFile(major: int, minor: int) // device identifier
     | FIFOFile 
@@ -18,8 +19,8 @@ module FileSysTypes {
 
   datatype Time = Time(seconds: int, nanoseconds: int)
 
-  // mimic struct stat, user visible
-  datatype Stat = Stat(
+  // metadata tracked by filesys
+  datatype MetaData = MetaData(
     nlink: int,       // number of hard links
     size: int,        // size of file
     ftype: FileType,  // type of file
@@ -31,27 +32,32 @@ module FileSysTypes {
     ctime: Time       // last status change time
   )
 
-  // metadata tracked by filesys
-  datatype MetaData = MetaData(
-    stat: Stat,
-    source: Option<Path> // source of linked file if symlink
-  )
-
-  function EmptyStat(): Stat
-  {
-    Stat(0, 0, File, 0, 0, 0, Time(0,0), Time(0,0), Time(0,0))
-  }
-
   function EmptyMetaData(): MetaData
   {
-    MetaData(EmptyStat(), None)
+    MetaData(0, 0, File, 0, 0, 0, Time(0,0), Time(0,0), Time(0,0))
   }
 
   function EmptyData(): Data
   {
     []
   }
+
+  //  datatype Stat = Stat(
+  //   nlink: int,       // number of hard links
+  //   size: int,        // size of file
+  //   ftype: FileType,  // type of file
+  //   perm: int,        // permission
+  //   uid: int,         // user ID
+  //   gid: int,         // group ID
+  //   atime: Time,      // last accessed time
+  //   mtime: Time,      // last modified tme 
+  //   ctime: Time       // last status change time
+  // )
   
+  // function EmptyStat(): Stat
+  // {
+  //   Stat(0, 0, File, 0, 0, 0, Time(0,0), Time(0,0), Time(0,0))
+  // }
   // xattr? // file within file 
   // Questions: ACL? softlink effects on map?
 
