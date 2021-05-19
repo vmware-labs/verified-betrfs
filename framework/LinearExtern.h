@@ -213,8 +213,7 @@ lseq<A> TrustedRuntimeLSeqResize(lseq<A> s, uint64 newlen) {
 
 template <typename A>
 lseq<A> get_lseq_default() {
-  lseq<A> ret;
-  return ret;
+  return nullptr;
 }
 
 template <typename A>

@@ -3,30 +3,10 @@
 # Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 # SPDX-License-Identifier: BSD-2-Clause
 
+# usage ./tools/perf/run-perf-linux.sh 1000 --benchmark=random-inserts
 
 frequency=$1
 shift
-
-set -x
-set -e
-
-apt-get update
-apt-get install -y tmux locales
-
-echo "LC_ALL=en_US.UTF-8" >> /etc/environment
-echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-echo "LANG=en_US.UTF-8" > /etc/locale.conf
-locale-gen en_US.UTF-8
-
-cd /veribetrfs
-rm -R .veribetrfs-storage || true
-mkdir .veribetrfs-storage
-
-set +e
-rm build/*.o
-rm build/framework/*.o
-rm build/Veribetrfs
-set -e
 
 make CC=clang++ CCFLAGS="-g -fno-omit-frame-pointer" build/Veribetrfs
 
