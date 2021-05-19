@@ -1,0 +1,24 @@
+Unknowns:
+
+The allocation strategy is a pretty thin scaffolding.
+- Could go down a layer and have Journal keep in-memory index invariant info
+  that avoids the need to page the entire journal in to confirm/update/truncate
+  allocation info.
+- Hard to tell about allocation strategy for Betree until we write it.
+
+I want to understand Betree:
+  - trunk nodes
+    - direct links to Branches,
+    - but can duplicate destination: need multiset alloc abstraction
+
+  - indirection
+    - want 'em
+
+  - the B+trees
+  - lookups!
+  - alloction / free strategy
+
+Eventually need to add realistic cache. Presently we pass entire DVs.
+Presently imagining this shown as a refinement layer
+
+Lookups, Jay Normal Form, Receipts are all examples of "Eager Skolemization"
