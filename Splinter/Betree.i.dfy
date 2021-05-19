@@ -133,7 +133,20 @@ module BetreeMachineMod {
     nextSeq: LSN,  // exclusive
     frozen: Frozen
   )
+  {
+    // A "public" method for Program to inquire how many LSNs are in the tree
+    function BetreeEndsLSNExclusive() : LSN { nextSeq }
+  }
 
+  predicate Init(v: Variables, sb: Superblock, cache: CacheIfc.Variables)
+  {
+    && IndirectionTableMod.DurableAt(v.indTbl, cache, sb.indTbl)
+    && v.memBuffer == map[]
+    //&& v.allocation // TODO clean up this mess
+    && v.nextSeq == sb.endSeq
+    && v.frozen.Idle?
+  }
+  
   type TrunkId = nat
   function RootId() : TrunkId { 0 }
 
@@ -142,19 +155,6 @@ module BetreeMachineMod {
     // TODO
   function marshalTrunkNode(node: TrunkNode) : UninterpretedDiskPage
     // TODO
-
-  // TODO replay log!
-  predicate Start(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock)
-  {
-    && v.Starting?
-    // Note predicate-style assignment of some fields of v'
-    && v'.Running?
-    && IndirectionTableMod.DurableAt(v'.indTbl, cache, sb.indTbl) // Parse ind tbl from cache
-    && v'.memBuffer == map[]
-    && AllocationTableMachineMod.DurableAt(v'.allocation, cache, sb.allocation) // Parse ind tbl from cache
-    && v'.nextSeq == sb.endSeq
-    && v'.frozen == Idle
-  }
 
   datatype NodeAssignment = NodeAssignment(id: TrunkId, cu: CU, node: TrunkNode)
   {
@@ -231,6 +231,16 @@ module BetreeMachineMod {
     && trunkPath.k == key
     && trunkPath.Decode() == value
     && v' == v
+  }
+
+  predicate PutMany(v: Variables, v': Variables, puts: MsgSeq)
+  {
+    && v.Running?
+    && puts.seqStart == v.nextSeq
+    && v' == v.(
+      memBuffer := puts.ApplyToKeyMap(v.memBuffer),
+      nextSeq := puts.seqEnd
+      )
   }
 
   predicate Put(v: Variables, v': Variables, key: Key, value: Value, sk: Skolem)

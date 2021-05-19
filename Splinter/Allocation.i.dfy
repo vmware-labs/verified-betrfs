@@ -26,6 +26,10 @@ module AllocationMod {
     forall cu :: cu in dv.Keys <==> ValidCU(cu)
   }
 
+  predicate Empty(dv: DiskView) {
+    dv.Keys == {}
+  }
+
   predicate EqualAt(dv0: DiskView, dv1: DiskView, cu: CU)
   {
     || (cu !in dv0 && cu !in dv1)

@@ -10,10 +10,15 @@ module CacheIfc {
 
   datatype Variables = Variables(dv:DiskView)
 
-  predicate Init(s: Variables, mkfs:DiskView)
+  predicate Mkfs(s: Variables, mkfs:DiskView)
   {
     && FullView(mkfs)
     && s.dv == mkfs
+  }
+
+  predicate Init(s: Variables)
+  {
+    && Empty(s.dv)
   }
 
   function ReadValue(s: Variables, cu: CU) : Option<UninterpretedDiskPage>

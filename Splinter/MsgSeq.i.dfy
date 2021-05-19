@@ -48,6 +48,26 @@ module MsgSeqMod {
     predicate IsEmpty() {
       seqStart == seqEnd
     }
+
+    function ApplyToKeyMapRecursive(orig: map<Key, Message>, count: nat) : (out: map<Key, Message>)
+    {
+      if count==0
+      then orig
+      else
+        var lsn := seqStart + count;
+        var key := msgs[lsn].k;
+        var message := msgs[lsn];
+        ApplyToKeyMapRecursive(orig, count-1)[key := message]
+    }
+
+    function Len() : nat {
+      seqEnd - seqStart
+    }
+
+    function ApplyToKeyMap(orig: map<Key, Message>) : map<Key, Message>
+    {
+      ApplyToKeyMapRecursive(orig, Len())
+    }
   }
 
   function Empty() : MsgSeq

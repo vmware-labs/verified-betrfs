@@ -40,7 +40,10 @@ module ProgramMachineMod {
     CU(0, 0)
   }
 
+  datatype Phase = SuperblockUnknown | RecoveringJournal | Running
+
   datatype Variables = Variables(
+    phase: Phase,
     stableSuperblock: Superblock,
     cache: CacheIfc.Variables,
     journal: JournalMachineMod.Variables,
@@ -53,18 +56,56 @@ module ProgramMachineMod {
     }
   }
 
+  // Initialization of the program, which happens at the beginning but also after a crash.
   predicate Init(v: Variables)
   {
-    true // XXX TODO
+    && v.phase.SuperblockUnknown?
+    && CacheIfc.Init(v.cache)
+    // Journal and Betree get initialized once we know their superblocks
   }
 
-  predicate Recover(v: Variables, v': Variables)
+  predicate LearnSuperblock(v: Variables, v': Variables, rawSuperblock: UninterpretedDiskPage, sk: JournalMachineMod.InitSkolems)
   {
-    true // XXX TODO
+    && CacheIfc.Read(v.cache, SUPERBLOCK_ADDRESS(), rawSuperblock)
+    && var superblock := parseSuperblock(rawSuperblock);
+    && superblock.Some?
+
+    && v'.phase.RecoveringJournal?
+    && v'.stableSuperblock == superblock.value
+    && v'.cache == v.cache  // no cache writes
+    && JournalMachineMod.Init(v'.journal, superblock.value.journal, v.cache, sk)
+    && BetreeMachineMod.Init(v'.betree, superblock.value.betree, v.cache)
+    && v'.inFlightSuperblock.None?
+  }
+
+  predicate Recover(v: Variables, v': Variables, puts:MsgSeq, newbetree: BetreeMachineMod.Variables)
+  {
+    && v.phase.RecoveringJournal?
+    && puts.WF()
+    && v.betree.BetreeEndsLSNExclusive() + |puts.msgs| <= v.journal.JournalBeginsLSNInclusive()
+    && puts.seqStart == v.betree.BetreeEndsLSNExclusive()
+    && JournalMachineMod.MessageSeqMatchesJournalAt(v.journal, puts)
+
+    // NB that Recover can interleave with BetreeInternal steps, which push stuff into the
+    // cache to flush it out of the Betree's membuffer to make room for more recovery.
+
+    && BetreeMachineMod.PutMany(v.betree, newbetree, puts)
+    && v' == v.(betree := newbetree)
+  }
+
+  predicate CompleteRecovery(v: Variables, v': Variables)
+  {
+    && v.phase.RecoveringJournal?
+    // We've brought the tree up-to-date with respect to the journal, so
+    // we can enter normal operations
+    && v.betree.BetreeEndsLSNExclusive() == v.journal.JournalBeginsLSNInclusive()
+    
+    && v' == v.(phase := Running)
   }
 
   predicate Query(v: Variables, v': Variables, key: Key, val: Value, sk: BetreeMachineMod.Skolem)
   {
+    && v.phase.Running?
     && v.WF()
     && v'.journal == v.journal
     && BetreeMachineMod.Query(v.betree, v'.betree, v.cache, key, val, sk)
@@ -81,10 +122,11 @@ module ProgramMachineMod {
 
   predicate Put(v: Variables, v': Variables, key: Key, val: Value, sk: BetreeMachineMod.Skolem)
   {
+    && v.phase.Running?
     && v.WF()
-    && JournalMachineMod.Append(v.journal, v'.journal, MessagePut(key, val))
-    && BetreeMachineMod.Put(v.betree, v'.betree, key, val, sk)
-    && v'.cache == v.cache  // no cache writes TODO clearly wrong
+    && JournalMachineMod.Append(v.journal, v'.journal, MessagePut(key, val))  // only writes to heap
+    && BetreeMachineMod.Put(v.betree, v'.betree, key, val, sk)  // only writes to heap
+    && v'.cache == v.cache  // no cache writes
   }
 
   // TODO move to Sets.i
@@ -143,6 +185,7 @@ module ProgramMachineMod {
   predicate JournalInternal(v: Variables, v': Variables, cacheOps: CacheIfc.Ops, sk: JournalMachineMod.Skolem)
   {
     && v.WF()
+    && !v.phase.SuperblockUnknown?  // Journal not initted until we leave this phase
     && JournalMachineMod.Internal(v.journal, v'.journal, v.cache, cacheOps, sk)
     && v'.betree == v.betree
     && CacheIfc.ApplyWrites(v.cache, v'.cache, cacheOps)
@@ -153,6 +196,7 @@ module ProgramMachineMod {
   predicate BetreeInternal(v: Variables, v': Variables, cacheOps: CacheIfc.Ops, sk: BetreeMachineMod.Skolem)
   {
     && v.WF()
+    && !v.phase.SuperblockUnknown?  // Betree not initted until we leave this phase
     && v'.journal == v.journal
     && BetreeMachineMod.Internal(v.betree, v'.betree, v.cache, cacheOps, sk)
     && CacheIfc.ApplyWrites(v.cache, v'.cache, cacheOps)
@@ -160,6 +204,7 @@ module ProgramMachineMod {
 
   predicate ReqSync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
+    && v.phase.Running?
     && v.WF()
     && JournalMachineMod.ReqSync(v.journal, v'.journal, syncReqId)
     && v'.betree == v.betree
@@ -167,6 +212,7 @@ module ProgramMachineMod {
  
   predicate CompleteSync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
+    && v.phase.Running?
     && v.WF()
     && JournalMachineMod.CompleteSync(v.journal, v'.journal, syncReqId)
     && v'.betree == v.betree
@@ -183,6 +229,7 @@ module ProgramMachineMod {
   // At this layer, we abbreviate that to "write sb" and "write sb complete".
   predicate CommitStart(v: Variables, v': Variables, seqBoundary: LSN)
   {
+    && v.phase.Running?
     && v.inFlightSuperblock.None?
     && v'.inFlightSuperblock.Some?
     && var sb := v'.inFlightSuperblock.value;
@@ -194,6 +241,7 @@ module ProgramMachineMod {
 
   predicate CommitComplete(v: Variables, v': Variables)
   {
+    && v.phase.Running?
     && v.inFlightSuperblock.Some?
     && CacheIfc.IsClean(v.cache, SUPERBLOCK_ADDRESS())
 
@@ -206,7 +254,7 @@ module ProgramMachineMod {
   }
 
   datatype Step =
-    | RecoverStep()
+    | RecoverStep(puts:MsgSeq, newbetree: BetreeMachineMod.Variables)
     | QueryStep(key: Key, val: Value, bsk: BetreeMachineMod.Skolem)
     | PutStep(key: Key, val: Value, bsk: BetreeMachineMod.Skolem)
     | JournalInternalStep(jsk: JournalMachineMod.Skolem)
@@ -218,7 +266,7 @@ module ProgramMachineMod {
     
   predicate NextStep(v: Variables, v': Variables, cacheOps: CacheIfc.Ops, step: Step) {
     && match step {
-      case RecoverStep() => Recover(v, v')
+      case RecoverStep(puts, newbetree) => Recover(v, v', puts, newbetree)
       case QueryStep(key, val, sk) => Query(v, v', key, val, sk)
       case PutStep(key, val, sk) => Put(v, v', key, val, sk)
       case JournalInternalStep(sk) => JournalInternal(v, v', cacheOps, sk)
@@ -357,7 +405,7 @@ module ProgramInterpMod {
   {
     var cacheOps,step :| NextStep(v, v', cacheOps, step);
     match step {
-      case RecoverStep() => {
+      case RecoverStep(_, _) => {
         assert IM(v') == IM(v);
       }
       case QueryStep(key, val, sk) => {

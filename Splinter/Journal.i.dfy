@@ -97,6 +97,9 @@ module JournalMachineMod {
       // we'll refine from the disk state to get this field.
   )
   {
+    // A "public" method for Program to inquire where Journal begins
+    function JournalBeginsLSNInclusive() : LSN { boundaryLSN }
+
     // The (exclusive) upper bound of LSNs that have been journaled (in this epoch;
     // after a crash we can lose LSNs that weren't made persistent).
     function unmarshalledLSN() : LSN
@@ -108,6 +111,37 @@ module JournalMachineMod {
       && boundaryLSN <= persistentLSN <= cleanLSN <= marshalledLSN
       && (forall lsn :: boundaryLSN <= lsn < marshalledLSN <==> lsn in lsnToCU)
     }
+  }
+
+  datatype InitSkolems = InitSkolems(rawJournalRec: UninterpretedDiskPage)
+
+  predicate Init(v: Variables, sb: Superblock, cacheIfc: CacheIfc.Variables, sk: InitSkolems)
+  {
+    // Can't proceed if there's a freshestCU but we can't read or parse it
+    && sb.core.freshestCU.Some? ==> (
+      && CacheIfc.Read(cacheIfc, sb.core.freshestCU.value, sk.rawJournalRec)
+      && parse(sk.rawJournalRec).Some?
+      )
+
+    // Figure out where journal ends
+    && var lastLSN := 
+      if sb.core.freshestCU.None?
+      then
+        sb.core.boundaryLSN
+      else
+        parse(sk.rawJournalRec).value.messageSeq.seqEnd;
+
+    && v.boundaryLSN == sb.core.boundaryLSN
+    && v.persistentLSN == v.cleanLSN == v.marshalledLSN == lastLSN
+    && v.unmarshalledTail == []
+    && v.syncReqs == map[]
+    && v.lsnToCU == map[] // TODO this fails WF! And will require cache to decode
+  }
+  
+  // Recovery coordination
+  predicate MessageSeqMatchesJournalAt(v: Variables, puts: MsgSeq)
+  {
+    true  // TODO THAT'S not likely to prove :)
   }
 
   // advances tailLSN forward by adding a message
