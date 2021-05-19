@@ -15,7 +15,7 @@ The implementation of an exclusive spin lock (unlike more advanced implementatio
 
 ## Atomics
 
-Our `atomic` primitive will be based off the [C++ std::atomic library](https://en.cppreference.com/w/cpp/atomic/atomic) and similar like [Rust's std::sync::atomic](https://doc.rust-lang.org/std/sync/atomic/). For now, *we will only use the ‘sequentially consistent’ guarantee* for now (and in fact the Mutexes we examined earlier need to implemented with sequentially consistent guaranees).
+Our `atomic` primitive will be based off the [C++ std::atomic library](https://en.cppreference.com/w/cpp/atomic/atomic) and similar like [Rust's std::sync::atomic](https://doc.rust-lang.org/std/sync/atomic/). For now, *we will only use the ‘sequentially consistent’ guarantee* (and in fact the Mutexes we examined earlier need to implemented with sequentially consistent guarantees).
 
 (However, the [GPS: Navigating Weak Memory with Ghosts, Protocols, and Separation](http://plv.mpi-sws.org/gps/paper.pdf) paper provides some good reading on logics suitable for Acquire/Release primitives, which we will hopefully make use of in the future.)
 
@@ -58,7 +58,8 @@ ensures (
 )
 ```
 
-The full atomic operations available in [Atomic.s.dfy](code/Atomic.s.dfy)
+The full atomic operations and there ternarny specifications are
+available in [Atomic.s.dfy](code/Atomic.s.dfy)
 and implemented in (trusted) C++ in [ExternAtomic.h](code/ExternAtomic.h)
 (essentially just a thin wrapper around `std::atomic`).
 
@@ -81,7 +82,7 @@ We introduce two types:
 * `Ptr` (which is essentially a `volatile void *`)
 * `PointsTo`, a ghost object to represent the points-to (_p_ `↪` _v_).
 
-```
+```dafny
 datatype PointsTo<V> = PointsTo(ghost ptr: Ptr, ghost v: V)
 ```
 
@@ -156,7 +157,7 @@ There is a lot to take in here, in part because of syntactic kludges.  Furthermo
 First, we're going to have an atomic boolean cell which holds some ghost state: that ghost state will be either a `PointsTo` value (when the boolean state is set to `false`) or “nothing” (when the boolean state is set to `true`). Thus we need a concept of “nothing”, so we will start by introducing an option datatype:
 
 ```dafny
-  glinear datatype glOption<V> = Some(glinear value: V) | None
+glinear datatype glOption<V> = Some(glinear value: V) | None
 ```
 
 Next, our `Mutex` datatype. We'll have three fields: the two fields mentioned previously (an atomic boolean field `exc_bit`, a pointer `store` to the data store, and a third (ghost) field to keep track of the mutex inv:
@@ -178,11 +179,11 @@ Now, one thing to keep track of is that there are _two_ invariants of interest. 
 The mutex _also_ has an invariant, which we call `inv`, which protects the contents of the mutex. Furthermore, the `ainv` will be defined in terms of the `inv`:
 
 ```dafny
-  predicate ainv<V>(store: Ptr, inv: (V) -> bool, v_exc: bool, g: glOption<PointsTo<V>>)
-  {
-    && (!v_exc ==> (g.Some? && g.value.ptr == store && inv(g.value.v)))
-    && (v_exc ==> g.None?)
-  }
+predicate ainv<V>(store: Ptr, inv: (V) -> bool, v_exc: bool, g: glOption<PointsTo<V>>)
+{
+  && (!v_exc ==> (g.Some? && g.value.ptr == store && inv(g.value.v)))
+  && (v_exc ==> g.None?)
+}
 ```
 
 The way to think of the `ainv` is that it is a relation between the boolean value (`v_exc`) and the ghost state (`g`) inside the atomic cell, but this relation is also parameterized by properties of the mutex: the `store` pointer and the mutex invariant `inv`.
@@ -259,9 +260,9 @@ Now, before we build the `acquire` and `release` methods,
 
 We need a concept of `MutexHandle`. Turns out, we can just make that the `PointsTo` object that we're already using:
 
+```dafny
 type MutexHandle<V> = PointsTo<V>
 
-```
 predicate is_handle_for<V(!new)>(handle: MutexHandle<V>, m: Mutex<V>)
 {
   handle.ptr == m.store
