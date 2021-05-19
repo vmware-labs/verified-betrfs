@@ -71,12 +71,15 @@ to the variable `g`. Furthermore, it provides the user with the logical assertio
 
 Before we dig into the use-case of a spin lock, let's introduce one more concept real quick.
 
-## Atomics
+## Pointers and memory
 
 To implement a spin lock, we're going to need some concept of _permission to access a memory location_. In traditional separation logic, this is the “points-to” assertion, usually denoted (_p_ ↪ _v_) for a pointer _p_ and value _v_. The pointer itself can be passed around shared freely. However, (_p_ ↪ _v_) denotes _exclusive_ permission to actually read or write to the location _p_ (and specifically, to read the value _v_).
 
-We use this concept in our [pointers library](code/Ptrs.s.dfy), which a ghost object
-to represent the points-to (_p_ ↪ _v_).
+We use this concept in our [pointers library](code/Ptrs.s.dfy).
+We introduce two types:
+
+* `Ptr` (which is essentially a `volatile void *`)
+* `PointsTo`, a ghost object to represent the points-to (_p_ ↪ _v_).
 
 ```
 datatype PointsTo<V> = PointsTo(ghost ptr: Ptr, ghost v: V)
