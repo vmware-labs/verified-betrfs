@@ -203,18 +203,18 @@ module HTResource refines ApplicationResourceSpec {
     && |table'| == |table|
 
     && (shift.start <= shift.end ==>
-      && (forall i | 0 <= i < shift.start :: table'[i] == table[i])
-      && (forall i | shift.start <= i < shift.end :: table'[i] == table[i+1] && table'[i].Some?)
-      && table'[shift.end] == Some(Empty)
-      && (forall i | shift.end < i < |table'| :: table'[i] == table[i])
+      && (forall i | 0 <= i < shift.start :: table'[i] == table[i]) // untouched things
+      && (forall i | shift.start <= i < shift.end :: table'[i] == table[i+1] && table'[i].Some?) // touched things
+      && table'[shift.end] == Some(Empty) // the end should be empty
+      && (forall i | shift.end < i < |table'| :: table'[i] == table[i]) // untouched things
     )
 
     && (shift.start > shift.end ==>
-      && (forall i | 0 <= i < shift.end :: table'[i] == table[i+1])
-      && table'[shift.end] == Some(Empty)
-      && (forall i | shift.end < i < shift.start :: table'[i] == table[i])
-      && (forall i | shift.start <= i < |table'| - 1 :: table'[i] == table[i+1] && table'[i].Some?)
-      && table'[|table'| - 1] == table[0]
+      && (forall i | 0 <= i < shift.end :: table'[i] == table[i+1]) // shift second half 
+      && table'[shift.end] == Some(Empty) // the end should be empty 
+      && (forall i | shift.end < i < shift.start :: table'[i] == table[i]) // untouched things
+      && (forall i | shift.start <= i < |table'| - 1 :: table'[i] == table[i+1] && table'[i].Some?) // shift first half 
+      && table'[ |table'| - 1 ] == table[0] // shift around the wrap 
     )
   }
 
