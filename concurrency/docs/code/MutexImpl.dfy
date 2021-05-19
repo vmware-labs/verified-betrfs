@@ -27,6 +27,7 @@ module Mutexes {
   method {:extern} new_mutex<V(!new)>(v: V, ghost inv: (V) -> bool)
   returns (m: Mutex)
   requires inv(v)
+  ensures m.well_formed()
   ensures m.inv == inv
   {
     var store;
@@ -70,11 +71,23 @@ module Mutexes {
       atomic_block success := execute_atomic_compare_and_set_strong(m.exc_bit, false, true) {
         ghost_acquire g;
 
+        assert ainv(m.store, m.inv, old_value, g);
+
         if success {
+          assert ainv(m.store, m.inv, false, g);
+
+          // swap g and handle_opt
+          // i.e, this is basically:
+          //    g, handle_opt := handle_opt, g;
+
           glinear var tmp := handle_opt;
           handle_opt := g;
           g := tmp;
+
+          assert ainv(m.store, m.inv, true, g);
         }
+
+        assert ainv(m.store, m.inv, new_value, g);
 
         ghost_release g;
       }
@@ -103,8 +116,14 @@ module Mutexes {
       ghost_acquire g;
 
       glinear match g {
-        case None => { /* we must be in this case */ }
+        case None => {
+          assert ainv(m.store, m.inv, true, g);
+
+          /* we must be in this case */
+        }
         case Some(internal_ptr) => {
+          assert ainv(m.store, m.inv, false, g);
+
           points_to_exclusive(inout handle', inout internal_ptr);
           assert false;
           consume_if_false(internal_ptr);
@@ -112,7 +131,9 @@ module Mutexes {
       }
 
       g := Some(handle');
+
       assert ainv(m.store, m.inv, false, g);
+
       ghost_release g;
     }
   }
