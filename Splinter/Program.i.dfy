@@ -1,6 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+include "StateMachine.s.dfy"
 include "Journal.i.dfy"
 include "JournalInterp.i.dfy"
 include "Betree.i.dfy"
@@ -12,7 +13,7 @@ include "CacheIfc.i.dfy"
 // (Journal, Betree, Cache).
 // It has an interface to a disk, but can't actually see inside the disk (that's for the IOSystem).
 
-module ProgramMachineMod {
+module ProgramMachineMod refines StateMachine {
   import AllocationTableMod
   import AllocationTableMachineMod
   import BetreeMachineMod
