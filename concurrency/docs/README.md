@@ -20,7 +20,7 @@ This directory serves as an introduction to those concepts.
 
 ## Implementing your own lock from atomic primitives
 
-Implementing a spin-lock
+[Implementing a spin-lock](SpinLock.md)
 
 ## Reader-writer locks
 

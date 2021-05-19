@@ -26,7 +26,10 @@ public:
   }
 
 private:
-  std::mutex mtx;
+  // TODO mutex has ACQUIRE/RELEASE semantics, not seq consistent semantics
+  // can't use mutex here
+  //std::mutex mtx;
+
   std::condition_variable cv;
   volatile int count;
 };
