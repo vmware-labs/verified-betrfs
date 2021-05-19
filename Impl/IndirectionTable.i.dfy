@@ -935,7 +935,7 @@ module IndirectionTable {
       }
     }
 
-    linear inout method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
+    linear inout method {:timeLimitMultiplier 2} UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
     returns (oldLoc : Option<Location>)
     requires old_self.Inv()
     requires old_self.TrackingGarbage()
