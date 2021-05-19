@@ -1,4 +1,4 @@
-include "../../lib/Lang/NativeTypes.s.dfy"
+include "../../../lib/Lang/NativeTypes.s.dfy"
 
 // This is the application-specific part of the spec.
 // It first describes the abstract-level interface

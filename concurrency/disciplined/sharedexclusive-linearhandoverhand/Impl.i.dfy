@@ -1,7 +1,7 @@
-include "CapacityAllocator.i.dfy"
-include "ConcurrencyTools.s.dfy"
+include "../common/CapacityAllocator.i.dfy"
+include "../common/ConcurrencyTools.s.dfy"
 include "ShardedHashTable.i.dfy"
-include "VerificationObligation.s.dfy"
+include "../common/VerificationObligation.s.dfy"
 
 module Impl refines VerificationObligation {
   import opened Options

@@ -1,6 +1,6 @@
 include "ConcurrencyTools.s.dfy"
-include "../../lib/Checksums/Nonlinear.i.dfy"
-include "ShardedHashTable.i.dfy"
+include "../../../lib/Checksums/Nonlinear.i.dfy"
+include "CountMonoid.i.dfy"
 //include "VerificationObligation.s.dfy"
 
 // we need to import this open to destructure AllocatorBin: dafny doesn't support qualified names in this context
