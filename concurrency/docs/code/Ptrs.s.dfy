@@ -38,4 +38,13 @@ module Ptrs {
   }
 
   const {:extern} nullptr : Ptr
+
+  glinear method {:extern} points_to_exclusive<V, W>(
+      glinear inout p: PointsTo<V>,
+      glinear inout q: PointsTo<W>)
+  ensures p.ptr != q.ptr
+  ensures p == old_p && q == old_q
+
+  glinear method {:extern} consume_if_false<V>(glinear v: V)
+  requires false
 }
