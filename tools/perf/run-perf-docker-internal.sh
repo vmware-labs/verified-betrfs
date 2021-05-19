@@ -36,7 +36,7 @@ echo "flags: $@"
 ./build/Veribetrfs $@ &
 PID=$!
 read -n 1 -s -r -p "Press any key to start recording"
-perf record -p $PID --call-graph=dwarf,4096 -F$frequency &
+perf record -p $PID -g -F$frequency &
 PERF_PID=$!
 sleep 1
 read -n 1 -s -r -p "Press any key to stop recording"
