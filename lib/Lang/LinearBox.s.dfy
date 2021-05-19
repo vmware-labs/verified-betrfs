@@ -9,7 +9,7 @@ module {:extern "LinearBox_s"} LinearBox_s {
   // only references to heap objects can be duplicated).
   // Warning: does not necessarily ensure that linear value is deallocated properly.
   // (use SwapLinear, below, to guarantee deallocation)
-  class {:extern} SwapAffine<A>
+  class {:extern} SwapAffine<A(00)>
   {
     function {:axiom} Read():A
       reads this
@@ -28,7 +28,7 @@ module {:extern "LinearBox_s"} LinearBox_s {
   }
 
   // Same as SwapAffine, but with a destructor
-  class {:extern} SwapLinear<A>
+  class {:extern} SwapLinear<A(00)>
   {
     function {:axiom} Inv():(A)->bool
       reads this

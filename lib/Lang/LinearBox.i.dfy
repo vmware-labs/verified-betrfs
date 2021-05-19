@@ -12,7 +12,7 @@ module LinearBox {
 
   // Warning: does not automatically deallocate the linear value.
   // (either Take and deallocate manually, or use BoxedLinearOption, below, to guarantee deallocation)
-  class BoxedLinear<A>
+  class BoxedLinear<A(00)>
   {
     var data:SwapAffine<maybe<A>>
     ghost var Repr:set<object>
@@ -100,7 +100,7 @@ module LinearBox {
       case lSome(a) => CallDestructor(d, a)
   }
 
-  class BoxedLinearOption<A(!new)>
+  class BoxedLinearOption<A(!new, 00)>
   {
     var data:SwapLinear<lOption<A>>
     ghost var Repr:set<object>

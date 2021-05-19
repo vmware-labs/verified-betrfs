@@ -24,7 +24,7 @@ module LinearSequence_i {
     seq_alloc(length, a)
   }
 
-  function lseqs<A>(l:lseq<A>):(s:seq<A>)
+  function lseqs<A(00)>(l:lseq<A>):(s:seq<A>)
     ensures rank_is_less_than(s, l)
     ensures |s| == |lseqs_raw(l)|
   {
@@ -33,27 +33,27 @@ module LinearSequence_i {
     s
   }
 
-  function imagine_lseq<A>(s:seq<A>):(l:lseq<A>)
+  function imagine_lseq<A(00)>(s:seq<A>):(l:lseq<A>)
     ensures lseqs(l) == s
     ensures forall i :: 0 <= i < |s| ==> lseq_has(l)[i]
   {
     imagine_lseq_raw(seq(|s|, i requires 0 <= i < |s| => give(s[i])))
   }
 
-  lemma ImagineInverse<A>(l:lseq<A>)
+  lemma ImagineInverse<A(00)>(l:lseq<A>)
     requires forall i :: 0 <= i < |lseqs(l)| ==> lseq_has(l)[i]
     ensures imagine_lseq(lseqs(l)) == l
   {
     lemma_lseqs_extensional(imagine_lseq(lseqs(l)), l);
   }
 
-  function linLast<A>(l:lseq<A>) : A
+  function linLast<A(00)>(l:lseq<A>) : A
     requires 0<|l|
   {
     lseqs(l)[|l| - 1]
   }
 
-  function ldroplast<A>(l: lseq<A>) : (l': lseq<A>)
+  function ldroplast<A(00)>(l: lseq<A>) : (l': lseq<A>)
     requires 0<|l|
     ensures |l| == |l'| + 1
     ensures forall i :: 0 <= i < |l'| ==> l'[i] == l[i]
@@ -61,7 +61,7 @@ module LinearSequence_i {
     imagine_lseq(lseqs(l)[..|l|-1])
   }
 
-  lemma lemma_lseqs_extensional<A>(l1:lseq<A>, l2:lseq<A>)
+  lemma lemma_lseqs_extensional<A(00)>(l1:lseq<A>, l2:lseq<A>)
     requires |lseqs(l1)| == |lseqs(l2)|
     requires forall i :: 0 <= i < |lseqs(l1)| ==> lseqs(l1)[i] == lseqs(l2)[i] && lseq_has(l1)[i] == lseq_has(l2)[i]
     ensures l1 == l2
@@ -76,74 +76,74 @@ module LinearSequence_i {
     axiom_lseqs_extensional(l1, l2);
   }
 
-  predicate lseq_has_all<A>(l:lseq<A>)
+  predicate lseq_has_all<A(00)>(l:lseq<A>)
   {
     forall i :: 0<=i<|l| ==> lseq_has(l)[i]
   }
 
-  function method lseq_length_as_uint64<A>(shared s:lseq<A>) : (n:uint64)
+  function method lseq_length_as_uint64<A(00)>(shared s:lseq<A>) : (n:uint64)
     requires |lseqs(s)| <= 0xffff_ffff_ffff_ffff
     ensures n as nat == |lseqs(s)|
   {
     lseq_length_raw(s)
   }
 
-  method lseq_length_uint64<A>(shared s:lseq<A>) returns(n:uint64)
+  method lseq_length_uint64<A(00)>(shared s:lseq<A>) returns(n:uint64)
     ensures n as nat == |lseqs(s)|
   {
     lseq_length_bound(s);
     n := lseq_length_raw(s);
   }
 
-  function lseq_length<A>(s:lseq<A>):(n:nat)
+  function lseq_length<A(00)>(s:lseq<A>):(n:nat)
   {
     |lseqs(s)|
   }
 
-  function operator(| |)<A>(s:lseq<A>):nat
+  function operator(| |)<A(00)>(s:lseq<A>):nat
   {
     lseq_length(s)
   }
 
-  function{:inline true} operator([])<A>(s:lseq<A>, i:nat):A
+  function{:inline true} operator([])<A(00)>(s:lseq<A>, i:nat):A
       requires i < |s|
   {
       lseqs(s)[i]
   }
 
-  function{:inline true} operator(in)<A>(s:lseq<A>, i:nat):bool
+  function{:inline true} operator(in)<A(00)>(s:lseq<A>, i:nat):bool
       requires i < |s|
   {
       lseq_has(s)[i]
   }
 
-  function lseq_add<A>(l:lseq<A>, r:lseq<A>): (s: lseq<A>)
+  function lseq_add<A(00)>(l:lseq<A>, r:lseq<A>): (s: lseq<A>)
   {
       imagine_lseq(lseqs(l)+lseqs(r))
   }
 
-  function method lseq_peek<A>(shared s:lseq<A>, i:uint64):(shared a:A)
+  function method lseq_peek<A(00)>(shared s:lseq<A>, i:uint64):(shared a:A)
       requires i as nat < |s| && i as nat in s
       ensures a == s[i as nat]
   {
       peek(lseq_share_raw(s, i))
   }
 
-  method lseq_alloc<A>(length:uint64) returns(linear s:lseq<A>)
+  method lseq_alloc<A(00)>(length:uint64) returns(linear s:lseq<A>)
       ensures |s| == length as nat
       ensures forall i:nat | i < length as nat :: i !in s
   {
       s := lseq_alloc_raw(length);
   }
 
-  method lseq_free<A>(linear s:lseq<A>)
+  method lseq_free<A(00)>(linear s:lseq<A>)
       requires forall i:nat | i < |s| :: i !in s
   {
       assert forall i:nat {:trigger lseqs_raw(s)[i]} | i < |lseqs_raw(s)| :: i !in s;
       var _ := lseq_free_raw(s);
   }
 
-  function method lseq_free_fun<A>(linear s:lseq<A>) : ()
+  function method lseq_free_fun<A(00)>(linear s:lseq<A>) : ()
       requires forall i:nat | i < |s| :: i !in s
   {
       assert forall i:nat {:trigger lseqs_raw(s)[i]} | i < |lseqs_raw(s)| :: i !in s;
@@ -151,7 +151,7 @@ module LinearSequence_i {
   }
 
   // can be implemented as in-place swap
-  method lseq_swap<A>(linear s1:lseq<A>, i:uint64, linear a1:A) returns(linear s2:lseq<A>, linear a2:A)
+  method lseq_swap<A(00)>(linear s1:lseq<A>, i:uint64, linear a1:A) returns(linear s2:lseq<A>, linear a2:A)
       requires i as nat < |s1| && i as nat in s1
       ensures a2 == s1[i as nat]
       ensures lseq_has(s2) == lseq_has(s1)
@@ -163,7 +163,7 @@ module LinearSequence_i {
       a2 := unwrap(x2);
   }
   
-  method lseq_swap_inout<A>(linear inout s:lseq<A>, i:uint64, linear a1:A) returns(linear a2:A)
+  method lseq_swap_inout<A(00)>(linear inout s:lseq<A>, i:uint64, linear a1:A) returns(linear a2:A)
       requires i as nat < |old_s| && i as nat in old_s
       ensures a2 == old_s[i as nat]
       ensures lseq_has(s) == lseq_has(old_s)
@@ -172,7 +172,7 @@ module LinearSequence_i {
     s, a2 := lseq_swap(s, i, a1);
   }
 
-  method lseq_take<A>(linear s1:lseq<A>, i:uint64) returns(linear s2:lseq<A>, linear a:A)
+  method lseq_take<A(00)>(linear s1:lseq<A>, i:uint64) returns(linear s2:lseq<A>, linear a:A)
       requires i as nat < |s1| && i as nat in s1
       ensures a == s1[i as nat]
       ensures lseq_has(s2) == lseq_has(s1)[i as nat := false]
@@ -184,7 +184,7 @@ module LinearSequence_i {
       a := unwrap(x2);
   }
 
-  method lseq_take_inout<A>(linear inout s:lseq<A>, i:uint64) returns(linear a:A)
+  method lseq_take_inout<A(00)>(linear inout s:lseq<A>, i:uint64) returns(linear a:A)
       requires i as nat < |old_s| && i as nat in old_s
       ensures a == old_s[i as nat]
       ensures lseq_has(s) == lseq_has(old_s)[i as nat := false]
@@ -193,7 +193,7 @@ module LinearSequence_i {
     s, a := lseq_take(s, i);
   }
 
-  function method lseq_take_fun<A>(linear s1:lseq<A>, i:uint64) : (linear p:(linear lseq<A>, linear A))
+  function method lseq_take_fun<A(00)>(linear s1:lseq<A>, i:uint64) : (linear p:(linear lseq<A>, linear A))
       requires i as nat < |s1| && i as nat in s1
       ensures p.1 == s1[i as nat]
       ensures lseq_has(p.0) == lseq_has(s1)[i as nat := false]
@@ -204,7 +204,7 @@ module LinearSequence_i {
       (linear s2tmp, linear unwrap(x2))
   }
 
-  method lseq_give<A>(linear s1:lseq<A>, i:uint64, linear a:A) returns(linear s2:lseq<A>)
+  method lseq_give<A(00)>(linear s1:lseq<A>, i:uint64, linear a:A) returns(linear s2:lseq<A>)
       requires i as nat < |s1|
       requires i as nat !in s1
       ensures lseq_has(s2) == lseq_has(s1)[i as nat := true]
@@ -216,7 +216,7 @@ module LinearSequence_i {
       var _ := discard(x2);
   }
 
-  method lseq_give_inout<A>(linear inout s1:lseq<A>, i:uint64, linear a:A)
+  method lseq_give_inout<A(00)>(linear inout s1:lseq<A>, i:uint64, linear a:A)
       requires i as nat < |old_s1|
       requires i as nat !in old_s1
       ensures lseq_has(s1) == lseq_has(old_s1)[i as nat := true]
@@ -226,7 +226,7 @@ module LinearSequence_i {
   }
 
 
-  predicate lseq_full<A>(s: lseq<A>)
+  predicate lseq_full<A(00)>(s: lseq<A>)
   {
       && (forall i | 0 <= i < |s| :: i in s)
   }
@@ -274,7 +274,7 @@ module LinearSequence_i {
     SeqCopy(source, inout dest, from, to, 0);
   }
 
-  method AllocAndMoveLseq<A>(linear source: lseq<A>, from: uint64, to: uint64)
+  method AllocAndMoveLseq<A(00)>(linear source: lseq<A>, from: uint64, to: uint64)
     returns (linear looted: lseq<A>, linear loot: lseq<A>)
     requires 0 <= from as nat <= to as nat <= |source|
     requires forall j :: from as nat <= j < to as nat ==> j in source
@@ -328,7 +328,7 @@ module LinearSequence_i {
     }
   }
 
-  // method {:extern "LinearExtern", "TrustedRuntimeSeqResizeMut"} TrustedRuntimeSeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64)
+  // method {:extern "LinearExtern", "TrustedRuntimeSeqResizeMut"} TrustedRuntimeSeqResizeMut<A(00)>(linear inout s: seq<A>, newlen: uint64)
   //   ensures |s| == newlen as nat
   //   ensures forall j :: 0 <= j < newlen as nat && j < |old_s| ==> s[j] == old_s[j]
 
@@ -374,7 +374,7 @@ module LinearSequence_i {
     s2 := seq_set(s2, pos, a);
   }
 
-  method InsertLSeq<A>(linear s: lseq<A>, linear a: A, pos: uint64) returns (linear s2: lseq<A>)
+  method InsertLSeq<A(00)>(linear s: lseq<A>, linear a: A, pos: uint64) returns (linear s2: lseq<A>)
     requires lseq_has_all(s)  // robj points out that you only really need to has all the elements >=pos
     requires |s| < Uint64UpperBound() - 1;
     requires 0 <= pos as int <= |s|;
@@ -405,7 +405,7 @@ module LinearSequence_i {
     s2 := lseq_give(s2, pos, a);
   }
 
-  method Replace1With2Lseq<A>(linear s: lseq<A>, linear l: A, linear r: A, pos: uint64) returns (linear s2: lseq<A>, linear replaced: A)
+  method Replace1With2Lseq<A(00)>(linear s: lseq<A>, linear l: A, linear r: A, pos: uint64) returns (linear s2: lseq<A>, linear replaced: A)
     requires lseq_has_all(s)
     requires |s| < Uint64UpperBound() - 1;
     requires 0 <= pos as int < |s|;
@@ -417,7 +417,7 @@ module LinearSequence_i {
     s2 := InsertLSeq(s2, r, pos+1);
   }
 
-  method Replace1With2Lseq_inout<A>(linear inout s: lseq<A>, linear l: A, linear r: A, pos: uint64) returns (linear replaced: A)
+  method Replace1With2Lseq_inout<A(00)>(linear inout s: lseq<A>, linear l: A, linear r: A, pos: uint64) returns (linear replaced: A)
     requires lseq_has_all(old_s)
     requires |old_s| < Uint64UpperBound() - 1;
     requires 0 <= pos as int < |old_s|;
