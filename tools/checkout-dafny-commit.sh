@@ -23,7 +23,7 @@ set -e
 set -x
 
 # currently set to 'betr' branch
-commit=46714c9d87fdffe1e7050bb3bc4e304c74f696aa
+commit=2c810aa9cfa1ff413a7eb34730e71b722e6443d7
 if [ $1 ]; then
    commit=$1
 fi
