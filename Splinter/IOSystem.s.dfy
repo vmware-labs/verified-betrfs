@@ -4,8 +4,6 @@
 include "Spec.s.dfy"
 include "../lib/Base/MapRemove.s.dfy"
 include "../lib/Checksums/CRC32C.s.dfy"
-include "Allocation.i.dfy"
-include "StateMachine.s.dfy"
 
 //
 // An async disk allows concurrent outstanding I/Os. The disk is a sequence of bytes.
