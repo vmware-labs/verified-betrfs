@@ -522,9 +522,9 @@ First, for any refinement location $\delta \refines_{\rel} \gamma$,
 where $\rel : M \times N \to \bool$,
 we let $Project_\delta : M \to N$ be a ``functionalization'' of $\rel$. In particular,
 \[
-  \forall m .~ domain(\rel, m) \implies \rel(m, Project_\delta(m)).
+  \forall m .~ m \in domain(\rel) \implies \rel(m, Project_\delta(m)).
 \]
-where $domain(\rel, m) \eqdef \exists n .~ \rel(m, n)$.
+where $domain(\rel) \eqdef \{m : \exists n .~ \rel(m, n)\}$.
 
 Now we define $Total_\kappa(\gamma)$ to be the ``total'' state of a location $\gamma$:
 that is, all the live and reserved state (for the active livetime $\kappa$)
@@ -546,7 +546,7 @@ $Total_\kappa(\delta \refines_{\rel} \gamma)$ is in the ``domain'' of $\rel$.
 
 Thus we will have an invariant, only applying to the active lifetime $active$,
 \begin{align}
-  domain(rel, Total_{active}(\delta \refines_{\rel} \gamma)) \label{invTotal}
+  Total_{active}(\delta \refines_{\rel} \gamma) \in domain(\rel) \label{invTotal}
 \end{align}
 
 Next, we define a similar recursive function called $View$, which will be defined
@@ -557,7 +557,7 @@ These views will also be closed \emph{upwards}, i.e., $v(a) \implies v(a \cdot b
 Again, we define a ``projection'' function from a view on a refinement TPCM to a base TPCM.
 \[
   ProjectView_\delta(v) \eqdef \lambda a .~
-      \exists x, y .~ v(x) \land rel(x, y) \land y \le a.
+      \exists x, y .~ v(x) \land y = Project_\delta(x) \land (x \in domain(rel)) \land y \le a.
 \]
 For a given $m$, we define $ViewOver(m)$ to be the view of all elements that are at least $m$:
 \[
