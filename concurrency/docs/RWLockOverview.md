@@ -34,9 +34,9 @@ We'll do exactly the same thing. Our equivalent of `RwLockReadGuard` will be the
 A RwLock spec is in [code/RwLock.dfy](code/RwLock.dfy). It's a lot like the previous `Mutex`. Here are the new bits:
 
 ```dafny
-datatype SharedHandle<V> = MutexHandle(m: Mutex<V>, v: V)
+datatype SharedHandle<V> = SharedHandle(m: RwLock<V>, v: V)
 
-type {:extern} Mutex(==)<V>
+type {:extern} RwLock(==)<V>
 {
   /*
    * `acquire_shared`
