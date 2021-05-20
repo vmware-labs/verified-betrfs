@@ -1,3 +1,4 @@
+// TODO delete vestigial
 abstract module StateMachine {
   type Variables(==,!new)
 

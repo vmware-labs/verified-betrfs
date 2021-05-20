@@ -1,7 +1,6 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "StateMachine.s.dfy"
 include "Journal.i.dfy"
 include "JournalInterp.i.dfy"
 include "Betree.i.dfy"
@@ -13,18 +12,22 @@ include "CacheIfc.i.dfy"
 // (Journal, Betree, Cache).
 // It has an interface to a disk, but can't actually see inside the disk (that's for the IOSystem).
 
-module ProgramMachineMod refines StateMachine {
+module ProgramMachineMod {
   import AllocationTableMod
   import AllocationTableMachineMod
   import BetreeMachineMod
   import JournalMachineMod
   import opened AllocationMod
-  import opened DeferredWriteMapSpecMod
+  import opened CrashTolerantMapSpecMod
   import opened InterpMod
   import opened MessageMod
   import opened MsgSeqMod
   import opened Options
   import CacheIfc
+  import D = AsyncDisk  // Importing for the interface, not the entire disk
+
+  type UIOp = CrashTolerantMapSpecMod.UIOp
+  type DiskOp = D.DiskOp
 
   datatype Superblock = Superblock(
     serial: nat,
@@ -279,7 +282,7 @@ module ProgramMachineMod refines StateMachine {
     }
   }
 
-  predicate Next(v: Variables, v': Variables) {
+  predicate Next(v: Variables, v': Variables, uiop: UIOp, dop: DiskOp) {
     exists cacheOps,step ::
       && NextStep(v, v', cacheOps, step)
       //&& AllocationTableMachineMod.Disjoint(v'.journal.allocation, v'.betree.allocation)
@@ -330,11 +333,11 @@ module ProgramInterpMod {
   // * that alloc table would invariantly match IReads.
   //
   // IM == Interpret as InterpMod
-  // TODO NEXT well actually we need a chain of Interps; see DeferredWriteMapSpecMod
+  // TODO NEXT well actually we need a chain of Interps; see CrashTolerantMapSpecMod
   // Journal interprets to a MsgSeq. The not-yet-sb-persistent part of that chain
   // is the set of versions. Yeah we need to put richer interps down in JournalInterp
   // before we try to add them here?
-  function IM(v: Variables) : (iv:DeferredWriteMapSpecMod.Variables)
+  function IM(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
     ensures iv.WF()
   {
     var sb := ISuperblock(v.cache.dv);
@@ -344,7 +347,7 @@ module ProgramInterpMod {
       var journalInterp := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal.core, betreeInterp);
       journalInterp
     else
-      DeferredWriteMapSpecMod.Empty()
+      CrashTolerantMapSpecMod.Empty()
   }
 
   function IMReads(v: Variables) : seq<AU> {
@@ -391,18 +394,18 @@ module ProgramInterpMod {
 
   // Not gonna think about Init in this fakey little simulation, since we want
   // mkfs init (behavior start), not program init (crash recovery).
-  lemma InvNext(v: Variables, v': Variables)
+  lemma InvNext(v: Variables, v': Variables, uiop: UIOp, dop: DiskOp)
     requires Inv(v)
-    requires Next(v, v')
+    requires Next(v, v', uiop, dop)
     ensures Inv(v')
   {
   }
 
-  lemma NextRefines(v: Variables, v': Variables)
+  lemma NextRefines(v: Variables, v': Variables, uiop: CrashTolerantMapSpecMod.UIOp, dop: DiskOp)
     //requires Inv(v)
     requires Inv(v)
-    requires Next(v, v')
-    ensures DeferredWriteMapSpecMod.Next(IM(v), IM(v'))
+    requires Next(v, v', uiop, dop)
+    ensures CrashTolerantMapSpecMod.Next(IM(v), IM(v'), uiop)
   {
     var cacheOps,step :| NextStep(v, v', cacheOps, step);
     match step {

@@ -8,6 +8,11 @@ module MapSpecMod {
   import opened MessageMod
   import InterpMod
 
+  // UI
+  datatype Input = GetInput(k: Key) | PutInput(k: Key, v: Value) | NoopInput
+  datatype Output = GetOutput(v: Value) | PutOutput | NoopOutput
+
+  // State machine
   datatype Variables = Variables(interp: InterpMod.Interp)
   {
     predicate WF() {
@@ -15,9 +20,13 @@ module MapSpecMod {
     }
   }
 
+  function Empty() : Variables {
+    Variables(InterpMod.Empty())
+  }
+
   predicate Init(s: Variables)
   {
-    && s.interp == InterpMod.Empty()
+    && s == Empty()
   }
 
   predicate Query(s: Variables, s': Variables, k: Key, v: Value)
@@ -32,6 +41,85 @@ module MapSpecMod {
     && s' == s.(interp := s.interp.Put(k,v))
       // NB mutations advance the sequence number
   }
+
+  predicate Next(v: Variables, v': Variables, input: Input, out: Output)
+  {
+  true
+    || (
+        && input.GetInput?
+        && out.GetOutput?
+        && Query(v, v', input.k, out.v)
+       )
+    || (
+        && input.PutInput?
+        && out.PutOutput?
+        && Put(v, v', input.k, input.v)
+       )
+    || (
+        && input.NoopInput?
+        && out.NoopOutput?
+        && v' == v
+       )
+  }
+}
+
+module AsyncMapSpecMod {
+  import MapSpecMod
+
+  type ID(==, !new)
+  datatype Request = Request(input: MapSpecMod.Input, id: ID)
+  datatype Reply = Reply(output: MapSpecMod.Output, id: ID)
+
+  datatype Variables = Variables(mapv: MapSpecMod.Variables, requests: set<Request>, replies: set<Reply>)
+  {
+    predicate WF() {
+      mapv.WF()
+    }
+  }
+
+  function Empty() : Variables {
+    Variables(MapSpecMod.Empty(), {}, {})
+  }
+
+  predicate Init(v: Variables) {
+    && MapSpecMod.Init(v.mapv)
+    && v.requests == {}
+    && v.replies == {}
+  }
+
+  predicate DoRequest(v: Variables, v': Variables, req: Request) {
+    // TODO Probably should disallow ID conflicts
+    && v' == v.(requests := v.requests + {req})
+  }
+
+  // The serialization point for this request
+  predicate DoExecute(v: Variables, v': Variables, req: Request, reply: Reply) {
+    && reply.id == req.id
+    && req in v.requests
+    && MapSpecMod.Next(v.mapv, v'.mapv, req.input, reply.output)
+    && v'.requests == v.requests - {req}
+    && v'.replies == v.replies + {reply}
+  }
+
+  predicate DoReply(v: Variables, v': Variables, reply: Reply) {
+    && v' == v.(replies := v.replies + {reply})
+  }
+
+  datatype UIOp =
+    | RequestOp(req: Request)
+    | ExecuteOp(req: Request, reply: Reply)
+    | ReplyOp(reply: Reply)
+
+  predicate NextStep(v: Variables, v': Variables, op: UIOp) {
+    match op
+      case RequestOp(req) => DoRequest(v, v', req)
+      case ExecuteOp(req, reply) => DoExecute(v, v', req, reply)
+      case ReplyOp(reply) => DoReply(v, v', reply)
+  }
+
+  predicate Next(v: Variables, v': Variables) {
+    exists step :: NextStep(v, v', step)
+  }
 }
 
 // Collect the entire history of possible snapshots, with a pointer to the persistent one.
@@ -39,14 +127,14 @@ module MapSpecMod {
 // Once the persistent pointer reaches that same index, the sync may be acknowledged as complete.
 // We don't do anything with old snapshots (indeed, no implementation could); I just wrote it
 // this way for greatest simplicity.
-module DeferredWriteMapSpecMod {
+module CrashTolerantMapSpecMod {
   import opened SequencesLite // Last, DropLast
   import opened MessageMod
   import InterpMod
-  import MapSpecMod
+  import AsyncMapSpecMod
 
   type SyncReqId = nat
-  datatype Version = Version(mapp: MapSpecMod.Variables, syncReqIds: set<SyncReqId>)
+  datatype Version = Version(mapp: AsyncMapSpecMod.Variables, syncReqIds: set<SyncReqId>)
   datatype Variables = Variables(versions: seq<Version>, stableIdx: nat)
   {
     predicate WF() {
@@ -57,7 +145,7 @@ module DeferredWriteMapSpecMod {
   }
 
   function Empty() : Variables {
-    Variables([Version(MapSpecMod.Variables(InterpMod.Empty()), {})], 0)
+    Variables([Version(AsyncMapSpecMod.Empty(), {})], 0)
   }
 
   predicate Init(s: Variables)
@@ -65,20 +153,13 @@ module DeferredWriteMapSpecMod {
     s == Empty()
   }
 
-  predicate Query(s: Variables, s': Variables, k: Key, v: Value)
-  {
-    && s.WF()
-    && s' == s
-    && MapSpecMod.Query(Last(s.versions).mapp, Last(s'.versions).mapp, k, v)
-  }
-
-  predicate Put(s: Variables, s': Variables, k: Key, v: Value)
+  predicate Operate(s: Variables, s': Variables, op: AsyncMapSpecMod.UIOp)
   {
     && s.WF()
     && s'.WF()
     && DropLast(s'.versions) == s.versions  // Concatenate a single version.
-    && MapSpecMod.Put(Last(s.versions).mapp, Last(s'.versions).mapp, k, v)
-    && Last(s'.versions).syncReqIds == {} // no sync reqs yet
+    && AsyncMapSpecMod.NextStep(Last(s.versions).mapp, Last(s'.versions).mapp, op)
+    && Last(s'.versions).syncReqIds == {} // taking a map step introduces a new version, with no new sync reqs on it yet
     && s'.stableIdx == s.stableIdx
   }
 
@@ -124,31 +205,30 @@ module DeferredWriteMapSpecMod {
     && s' == s
   }
 
-  // JNF
-  datatype Step =
-    | QueryStep(k: Key, v: Value)
-    | PutStep(k: Key, v: Value)
-    | CrashStep
-    | AsyncFlushStep
-    | ReqSyncStep(syncReqId: SyncReqId)
-    | CompleteSyncStep(syncReqId: SyncReqId, requestedAt: nat)
-    | NoOpStep
+  // The Op provides *most* of Jay Normal Form -- except skolem variables, of which we have
+  // exactly one, so I decided to just exists it like a clown.
+  datatype UIOp =
+    | OperateOp(baseOp: AsyncMapSpecMod.UIOp)
+    | CrashOp
+    | AsyncFlushOp
+    | ReqSyncOp(syncReqId: SyncReqId)
+    | CompleteSyncOp(syncReqId: SyncReqId)
+    | NoopOp
 
-  predicate NextStep(s: Variables, s': Variables, step: Step)
+  predicate NextStep(s: Variables, s': Variables, uiop: UIOp)
   {
-    match step {
-      case QueryStep(k: Key, v: Value) => Query(s, s', k, v)
-      case PutStep(k: Key, v: Value) => Put(s, s', k, v)
-      case CrashStep => Crash(s, s')
-      case AsyncFlushStep => AsyncFlush(s, s')
-      case ReqSyncStep(syncReqId) => ReqSync(s, s', syncReqId)
-      case CompleteSyncStep(syncReqId, requestId) => CompleteSync(s, s', syncReqId, requestId)
-      case NoOpStep => s' == s
+    match uiop {
+      case OperateOp(baseOp) => Operate(s, s', baseOp)
+      case CrashOp => Crash(s, s')
+      case AsyncFlushOp => AsyncFlush(s, s')
+      case ReqSyncOp(syncReqId) => ReqSync(s, s', syncReqId)
+      case CompleteSyncOp(syncReqId) => (exists requestedAt :: CompleteSync(s, s', syncReqId, requestedAt))
+      case NoopOp => s' == s
     }
   }
 
-  predicate Next(s: Variables, s': Variables)
+  predicate Next(s: Variables, s': Variables, uiop: UIOp)
   {
-    exists step :: NextStep(s, s', step)
+    exists uiop :: NextStep(s, s', uiop)
   }
 }

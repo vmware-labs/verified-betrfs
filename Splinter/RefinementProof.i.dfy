@@ -2,7 +2,7 @@ include "IOSystem.s.dfy"
 include "Program.i.dfy"
 
 module BetreeIOSystem refines IOSystem {
-  import ProgramParam = ProgramMachineMod
+  import P = ProgramMachineMod
 }
 
 module Proof refines ProofObligations {
@@ -10,10 +10,9 @@ module Proof refines ProofObligations {
   import InterpMod
   import ConcreteSystem = BetreeIOSystem
 
-  function I(v: ConcreteSystem.Variables) : DeferredWriteMapSpecMod.Variables
+  function I(v: ConcreteSystem.Variables) : CrashTolerantMapSpecMod.Variables
   {
-    var version0 := DeferredWriteMapSpecMod.Version(MapSpecMod.Variables(InterpMod.Empty()), /*syncReqs*/ {});
-    DeferredWriteMapSpecMod.Variables([version0], 0)
+    CrashTolerantMapSpecMod.Empty()
   }
 
   predicate Inv(v: ConcreteSystem.Variables)
@@ -22,19 +21,18 @@ module Proof refines ProofObligations {
   }
 
   lemma InitRefines(v: ConcreteSystem.Variables)
-//    ensures DeferredWriteMapSpecMod.Init(ConcreteSystem.I(v))
+//    ensures CrashTolerantMapSpecMod.Init(ConcreteSystem.I(v))
   {}
 
-  lemma InvInductive(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables)
+  lemma InvInductive(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp)
 //    requires ConcreteSystem.Inv(v)
 //    requires ConcreteSystem.Next(v, v')
 //    ensures ConcreteSystem.Inv(v')
   {}
 
-  lemma NextRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables)
+  lemma NextRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp)
 //    requires ConcreteSystem.Inv(v)
 //    requires ConcreteSystem.Next(v, v')
-//    ensures DeferredWriteMapSpecMod.Next(ConcreteSystem.I(v), ConcreteSystem.I(v'))
+//    ensures CrashTolerantMapSpecMod.Next(ConcreteSystem.I(v), ConcreteSystem.I(v'))
   {}
 }
-

@@ -31,7 +31,7 @@ module JournalMachineMod {
   import opened Maps
   import opened MessageMod
   import opened InterpMod
-  import opened DeferredWriteMapSpecMod
+  import opened CrashTolerantMapSpecMod
   import opened MsgSeqMod
   import opened AllocationMod
   import AllocationTableMachineMod
