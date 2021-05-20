@@ -108,8 +108,6 @@ module JournalInterpMod {
     decreases |cache0.dv|
   {
     if sb.freshestCU.Some? {
-      assert IReads(v, cache1, sb)[0] == sb.freshestCU.value; // trigger
-      assert IReads(v, cache0, sb)[0] == sb.freshestCU.value; // trigger
       assert sb.freshestCU.value in IReads(v, cache1, sb); // trigger
       assert sb.freshestCU.value in IReads(v, cache0, sb); // trigger
       assert IReads(v, cache0, sb)[0] == sb.freshestCU.value; // trigger
@@ -119,7 +117,6 @@ module JournalInterpMod {
           if firstRec.value.messageSeq.seqEnd <= sb.boundaryLSN {
           } else if firstRec.value.messageSeq.seqStart <= sb.boundaryLSN  {
           } else {
-            assert !(firstRec.value.messageSeq.seqStart <= sb.boundaryLSN);
             // TODO wrapping these back up in CacheIfcs seems clumsy. (and demands the stupid decreases clause)
             var cache0r := CacheIfc.Variables(MapRemove1(cache0.dv, sb.freshestCU.value));
             var cache1r := CacheIfc.Variables(MapRemove1(cache1.dv, sb.freshestCU.value));
@@ -129,16 +126,6 @@ module JournalInterpMod {
             var cusr := if priorCU.Some?
               then IReads(v, cache0r, priorSB)
               else [];
-
-            assert cache0r.dv == MapRemove1(cache0.dv, sb.freshestCU.value);
-            assert firstRec.value.priorSB(sb) == priorSB;
-
-            calc {
-              ChainFrom(cache0.dv, sb).readCUs;
-              ChainFromRecurse(cache0.dv, sb, firstRec).readCUs;
-              [sb.freshestCU.value] + ChainFrom(cache0r.dv, priorSB).readCUs;
-            }
-            assert ChainFrom(cache0.dv, sb).readCUs == [sb.freshestCU.value] + ChainFrom(cache0r.dv, priorSB).readCUs;
 
             forall i | 0<=i<|cusr| ensures cusr[i] in cus {
               assert cus[i+1] == cusr[i]; // witness to SequenceSubset(ausr, aus)

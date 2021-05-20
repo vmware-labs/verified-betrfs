@@ -391,42 +391,11 @@ module JournalMachineMod {
   // results (even when they're broken).
   datatype ChainResult = ChainResult(chain: Option<JournalChain>, readCUs:seq<CU>)
 
-  function ChainFromRecurse(dv: DiskView, sb: CoreSuperblock, firstRec: Option<JournalRecord>) : (r:ChainResult)
-    requires !sb.freshestCU.None?
-    requires sb.freshestCU.value in dv
-    requires !firstRec.None?
-    requires !(firstRec.value.messageSeq.seqEnd <= sb.boundaryLSN)
-    requires !(firstRec.value.messageSeq.seqStart <= sb.boundaryLSN)
-    ensures |r.readCUs| > 0
-    ensures sb.freshestCU.value == r.readCUs[0]
-    decreases |dv.Keys|, 0 // this is a tuple
-  {
-    var inner := ChainFrom(MapRemove1(dv, sb.freshestCU.value), firstRec.value.priorSB(sb));
-    if inner.chain.None? // tail didn't decode or
-      // tail decoded but head doesn't stitch to it (a cross-crash invariant)
-      || (0<|inner.chain.value.recs|
-          && firstRec.value.messageSeq.seqStart != inner.chain.value.recs[0].messageSeq.seqEnd)
-    then
-      // failure in recursive call.
-      // We read our cu plus however far the recursive call reached.
-      ChainResult(None, [sb.freshestCU.value] + inner.readCUs)
-    else
-      assert firstRec.value.priorCU.Some? ==> sb.boundaryLSN < firstRec.value.messageSeq.seqStart;
-      var chain := ExtendChain(sb, firstRec.value, inner.chain.value);
-      //var chain := JournalChain(sb, [firstRec.value] + inner.chain.value.recs);
-      assert ValidJournalChain(dv, chain) by {
-        reveal_ChainMatchesDiskView();
-        var cus := CUsForChain(chain);
-        assert forall i | 0<=i<|chain.recs| :: RecordOnDisk(dv, cus[i], chain.recs[i]); // trigger
-      }
-      ChainResult(Some(chain), [sb.freshestCU.value] + inner.readCUs)
-  }
-
   function ChainFrom(dv: DiskView, sb: CoreSuperblock) : (r:ChainResult)
     ensures r.chain.Some? ==>
       && ValidJournalChain(dv, r.chain.value)
       && r.chain.value.sb == sb
-      decreases |dv.Keys|, 1
+    decreases |dv.Keys|
   {
     if sb.freshestCU.None? then
       // Superblock told the whole story; nothing to read.
@@ -458,10 +427,26 @@ module JournalMachineMod {
         }
         r
       else
-        ChainFromRecurse(dv, sb, firstRec)
+        var inner := ChainFrom(MapRemove1(dv, sb.freshestCU.value), firstRec.value.priorSB(sb));
+        if inner.chain.None? // tail didn't decode or
+          // tail decoded but head doesn't stitch to it (a cross-crash invariant)
+          || (0<|inner.chain.value.recs|
+              && firstRec.value.messageSeq.seqStart != inner.chain.value.recs[0].messageSeq.seqEnd)
+        then
+          // failure in recursive call.
+          // We read our cu plus however far the recursive call reached.
+          ChainResult(None, [sb.freshestCU.value] + inner.readCUs)
+        else
+          assert firstRec.value.priorCU.Some? ==> sb.boundaryLSN < firstRec.value.messageSeq.seqStart;
+          var chain := ExtendChain(sb, firstRec.value, inner.chain.value);
+          //var chain := JournalChain(sb, [firstRec.value] + inner.chain.value.recs);
+          assert ValidJournalChain(dv, chain) by {
+            reveal_ChainMatchesDiskView();
+            var cus := CUsForChain(chain);
+            assert forall i | 0<=i<|chain.recs| :: RecordOnDisk(dv, cus[i], chain.recs[i]); // trigger
+          }
+          ChainResult(Some(chain), [sb.freshestCU.value] + inner.readCUs)
   }
-
-
 
   // JournalChain
   //////////////////////////////////////////////////////////////////////////////
