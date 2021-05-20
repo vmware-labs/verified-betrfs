@@ -53,6 +53,11 @@ module JournalMachineMod {
     priorCU: Option<CU>   // linked list pointer
   )
   {
+    predicate WF()
+    {
+      messageSeq.WF()
+    }
+
     function priorSB(sb: CoreSuperblock) : CoreSuperblock
     {
       CoreSuperblock(priorCU, sb.boundaryLSN)
@@ -151,7 +156,8 @@ module JournalMachineMod {
   }
 
   // TODO marshalling
-  function parse(b: UninterpretedDiskPage) : Option<JournalRecord>
+  function parse(b: UninterpretedDiskPage) : (jr: Option<JournalRecord>)
+    ensures jr.Some? ==> jr.value.WF()
   function marshal(jr: JournalRecord) : UninterpretedDiskPage
 
   function TailToMsgSeq(s: Variables) : MsgSeq
@@ -259,7 +265,7 @@ module JournalMachineMod {
   predicate LSNinChain(chain: JournalChain, lsn: LSN)
   {
     && 0 < |chain.recs|
-    && chain.sb.boundaryLSN < lsn < chain.recs[0].messageSeq.seqEnd
+    && chain.sb.boundaryLSN <= lsn < chain.recs[0].messageSeq.seqEnd
   }
 
   predicate WFChainBasic(chain: JournalChain)
@@ -288,6 +294,7 @@ module JournalMachineMod {
     && (forall lsn | LSNinChain(chain, lsn) ::
           RecordSupportsMessage(chain.recs[chain.locate[lsn]], lsn, chain.interp[lsn]))
   }
+
 
   predicate {:opaque} WFChainInner(chain: JournalChain)
     requires WFChainBasic(chain)
@@ -408,11 +415,11 @@ module JournalMachineMod {
         // in a recursive call with correctly-chained records, we should have
         // already ignored this case.
         ChainResult(None, [sb.freshestCU.value])
-      else if firstRec.value.messageSeq.seqStart == sb.boundaryLSN then
+      else if firstRec.value.messageSeq.seqStart <= sb.boundaryLSN then
         // Glad we read this record, but we don't need to read anything beyond.
         var rec := firstRec.value;
-        var locate0 := map lsn | lsn in rec.messageSeq.LSNSet() :: 0;
-        var interp0 := map lsn | lsn in rec.messageSeq.LSNSet() :: rec.messageSeq.msgs[lsn];
+        var locate0 := map lsn : nat | sb.boundaryLSN <= lsn < rec.messageSeq.seqEnd :: 0;
+        var interp0 := map lsn : nat | sb.boundaryLSN <= lsn < rec.messageSeq.seqEnd :: rec.messageSeq.msgs[lsn];
         var r := ChainResult(Some(JournalChain(sb, [rec], locate0, interp0)), [sb.freshestCU.value]);
         assert ValidJournalChain(dv, r.chain.value) by {
           reveal_WFChainInner();
