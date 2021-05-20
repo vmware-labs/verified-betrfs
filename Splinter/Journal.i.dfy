@@ -397,6 +397,8 @@ module JournalMachineMod {
     requires !firstRec.None?
     requires !(firstRec.value.messageSeq.seqEnd <= sb.boundaryLSN)
     requires !(firstRec.value.messageSeq.seqStart <= sb.boundaryLSN)
+    ensures |r.readCUs| > 0
+    ensures sb.freshestCU.value == r.readCUs[0]
     decreases |dv.Keys|, 0 // this is a tuple
   {
     var inner := ChainFrom(MapRemove1(dv, sb.freshestCU.value), firstRec.value.priorSB(sb));
