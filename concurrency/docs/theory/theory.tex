@@ -54,7 +54,7 @@
 \newcommand{\false}{\textsf{False}}
 \newcommand{\bool}{\textsf{bool}}
 \DeclareMathOperator{\rel}{rel}
-\DeclareMathOperator{\PCM}{PCM}
+\DeclareMathOperator{\TPCM}{TPCM}
 \DeclareMathOperator{\MonoidBase}{MonoidBase}
 \DeclareMathOperator{\MonoidExt}{MonoidExt}
 \DeclareMathOperator{\Frac}{Frac}
@@ -77,6 +77,9 @@
 \newcommand{\ltGe}{\sqsupseteq}
 \DeclareMathOperator{\lifetime}{lifetime}
 \DeclareMathOperator{\borrowed}{borrowed}
+
+\newcommand\Bigcircle{\raisebox{-0.5mm}{\scalebox{1.7}{$\bigcirc$}}}
+
 
 \let\active\undefined
 \DeclareMathOperator{\active}{active}
@@ -130,6 +133,7 @@ and particularly useful for reasoning about ``read-only'' state.
 %\\
 
 We start by defining what it means to be a PCM with a transition relation $\mapsto$.
+We call this a \emph{Transitional PCM} (TPCM).
 
 Let $\widehat{M} = (M, \cdot, \mapsto)$ where
 where $\cdot : M \times M \to M^?$
@@ -138,9 +142,9 @@ and $\mapsto : M \times M \to \bool$.
 
 We say that $\mapsto$ is \emph{monotonic} if
 \[ \forall a, b, c.~ (a \mapsto b) \land (a \cdot c \ne \bot) \implies (b \cdot c \ne \bot) \land (a \cdot c \mapsto b \cdot c) \]
-This allows us to define what it means to be a PCM,
+This allows us to define what it means to be a TPCM,
 \[
-  \einfer{PCM}{
+  \einfer{TPCM}{
     \stackthree{
       \widehat{M} = (M, \cdot, \mapsto)
     }{
@@ -149,17 +153,17 @@ This allows us to define what it means to be a PCM,
       \mapsto : M \times M \to \bool, \text{~~trans., refl., monotonic}
     }
   }{
-    \PCM(\widehat{M})
+    \TPCM(\widehat{M})
   }
 \]
-Note that we can always construct a PCM by picking $\cdot$ to be commutative and associative,
+Note that we can always construct a TPCM by picking $\cdot$ to be commutative and associative,
 and then by definition setting $\mapsto$ to be,
 \[
   a \mapsto b = \forall c .~ a \cdot c \ne \bot \implies b \cdot c \ne \bot
 \]
 However, we can also set $\mapsto$ to be more restrictive, which will be useful later.
 
-\textbf{PCM Example}
+\textbf{TPCM Example}
 
 Consider a \emph{Sharded State Machine} (SSM). (This is similar to the STS common in the literature but framed a little differently.)
 
@@ -171,7 +175,7 @@ machine, the invariant inductivity predicate is given by,
 (Note: $\rightsquigarrow$ is neither transitive nor required to be monotonic here. However, an alternative definition would require $\rightsquigarrow$ to be monotonic, in which case we could
 simplify the inductivity predicate to $inv(a) \land (a \rightsquigarrow b) \implies inv(b)$.)
 
-We can define a PCM to correspond to this SSM by,
+We can define a TPCM to correspond to this SSM by,
 \[M \eqdef \{m \in S : \exists c .~ inv(m \cdot c) \}\]
 \[a \cdot_M b \eqdef 
   \begin{cases}
@@ -184,7 +188,7 @@ a \mapsto_{\text{pre}} b \eqdef
   \exists a_0, b_0, c .~ (a = a_0 \cdot c) \land (b = b_0 \cdot c) \land a_0 \rightsquigarrow b_0
 \]
 
-\textbf{PCM refinements (motivation)}
+\textbf{TPCM refinements (motivation)}
 
 There are a handful of reasons to want to modularize PCM definitions:
 \begin{itemize}
@@ -197,7 +201,7 @@ There are a handful of reasons to want to modularize PCM definitions:
 \end{itemize}
 These are all things that have come up in VeriBetrKV.
 
-We'll develop the concept of a PCM refinement, denoted $\widehat{M} \refines \widehat{N}$.
+We'll develop the concept of a TPCM refinement, denoted $\widehat{M} \refines \widehat{N}$.
 In a modular design, $\widehat{M}$ will be the ``sub-component'', while $\widehat{N}$
 is the client.
 
@@ -211,7 +215,7 @@ and even further a sub-component $\textsf{Counter} \refines \textsf{HashTable}$.
 \includegraphics[scale=0.3]{hypothetical-cache-architecture.png}
 \end{center}
 
-\textbf{PCM refinements}
+\textbf{TPCM refinements}
 
 We'll use the symbol $\refines$ to denote refinement. Yeah, you can tell I scoured the \LaTeX~ documentation for this thing, but I actually like it: it suggests that the thing on the left is more ``broken up'' (e.g., like in a fractional logic).
 
@@ -219,9 +223,9 @@ We use $\widehat{M} \refines_{\rel} \widehat{N}$ to denote that $\widehat{M}$ \e
 (and this is why we allow for flexibility in the definition of $\mapsto$ above).
 
 \[
-  \einfer{PCM-Refinement}{
+  \einfer{TPCM-Refinement}{
     \stackfive{
-      \PCM(\widehat{M}) \quad \PCM(\widehat{N})
+      \TPCM(\widehat{M}) \quad \TPCM(\widehat{N})
     }{
       \rel : M \times N \to \bool
     }{
@@ -262,7 +266,7 @@ Here, $\alpha$ denotes any ``base location.'' We will define rules that let us
 convert $\dboxed{n}^\gamma$ state to and from $\dboxed{m}^{\alpha \refines_{\rel} \gamma}$
 state.
 
-Here are our rules for manipulating PCM ghost state, which are mostly standard except
+Here are our rules for manipulating TPCM ghost state, which are mostly standard except
 the ones involving $\refines$.
 
 \[
@@ -279,7 +283,7 @@ the ones involving $\refines$.
 
 \[
   \einfer{Ghost-Alloc}{
-    \PCM(\widehat{M}) \quad a\in M
+    \TPCM(\widehat{M}) \quad a\in M
   }{
     \true \viewshift \exists\alpha.~ \dboxed{a}^\alpha
   }
@@ -385,7 +389,7 @@ to identify the lifetimes and perform these automatically.
   \active(\kappa_1 \ltIntersect \kappa_2) \iff \active(\kappa_1) * \active(\kappa_2)
 \]
 
-Next, let's add some rules for making use of borrowed PCM state.
+Next, let's add some rules for making use of borrowed TPCM state.
 
 \[
   \true \implies \borrow{\kappa}{\dboxed{\unit}^\gamma}
@@ -413,7 +417,7 @@ Next, let's add some rules for making use of borrowed PCM state.
   }
 \]
 
-Finally, rules to allow borrows to interact with PCM refinements:
+Finally, rules to allow borrows to interact with TPCM refinements:
 
 \[
   \einfer{Borrow-Back}{
@@ -471,7 +475,7 @@ in some ``refinement world.''
 
 Note again in the second bullet that within the ``refinement worlds'' we allow both
 \emph{borrowed and non-borrowed} state. This is the ``trick'' that lets the
-PCM refinement be so effective for dealing with borrowed state.
+TPCM refinement be so effective for dealing with borrowed state.
 
 For example, suppose we derive the fractional logic
 $\Frac(\widehat{N}) \refines \widehat{N}$.
@@ -486,8 +490,153 @@ We are able to do this, even though we have ``only'' borrowed half, e.g.,
 we have $\borrowed(\kappa, \Frac(1/2, a)) * \Frac(1/2, a)$, rather than
 $\borrowed(\kappa, \Frac(1, a))$.
 
+\textbf{Justification (more formally)}
 
+We can define a resource algebra (RA) as follows. Let $\Gamma$ be the set of locations
+$\gamma$ and $K$ the set of lifetimes $\kappa$.
+\begin{itemize}
+  \item \emph{live} state at each location $\gamma$ given by $live : \Gamma \to m$
+  \item \emph{reserved} state at each location $\gamma$ and lifetime $\kappa$,
+      given by $reserved : K \to \Gamma \to m$.
+  \item A set of \emph{borrows} where $borrows \subseteq K \times \Gamma \times M$.
+  \item An active set of lifetimes, given by $active : K$.
+\end{itemize}
 
+The live state is additive (that is, $live(\gamma \to m) \cdot live(\gamma \to p) \eqdef live(\gamma \to p \cdot q)$.
+Reserved state is similarly additive.
 
+Finally, borrows are freely duplicable, and add \emph{freely} (i.e., take the union
+of the set of borrow objects).
+
+We'll describe the invariants on this resource algebra below, but first, I'll explain how
+all the above concepts are embedded into this resource algebra:
+\begin{align*}
+ \dboxed{m}^\gamma &\eqdef live(\gamma \to m)\\
+ \borrowed(\kappa, \dboxed{m}^\gamma) &\eqdef reserved(\kappa,\gamma \to m)\\
+ \borrow{\kappa}{\dboxed{m}^\gamma} &\eqdef borrow(\kappa, \gamma \to m)\\
+ \active(\kappa) &\eqdef active(\kappa)
+\end{align*}
+
+Now we define some functions on this state, defined recursively.
+First, for any refinement location $\delta \refines_{\rel} \gamma$,
+where $\rel : M \times N \to \bool$,
+we let $Project_\delta : M \to N$ be a ``functionalization'' of $\rel$. In particular,
+\[
+  \forall m .~ domain(\rel, m) \implies \rel(m, Project_\delta(m)).
+\]
+where $domain(\rel, m) \eqdef \exists n .~ \rel(m, n)$.
+
+Now we define $Total_\kappa(\gamma)$ to be the ``total'' state of a location $\gamma$:
+that is, all the live and reserved state (for the active livetime $\kappa$)
+\emph{plus} all the total state of locations which depend on $\gamma$. Thus we use
+this recursive definition,
+
+\[
+  Total_\kappa(\gamma) \eqdef live(\gamma) \cdot
+      \left(
+        \Bigcircle_{\kappa' \ltGe \kappa} reserved(\kappa',\gamma)
+      \right) \cdot
+      \left(
+        \Bigcircle_{\delta} Project_\delta\left(Total_\kappa(\delta \refines_{\rel} \gamma)\right)
+      \right)
+\]
+
+Now, this definition is only sensible when 
+$Total_\kappa(\delta \refines_{\rel} \gamma)$ is in the ``domain'' of $\rel$.
+
+Thus we will have an invariant, only applying to the active lifetime $active$,
+\begin{align}
+  domain(rel, Total_{active}(\delta \refines_{\rel} \gamma)) \label{invTotal}
+\end{align}
+
+Next, we define a similar recursive function called $View$, which will be defined
+only in terms of the $reserved$ state. However, it will be used to explain what the ``possible''
+values of the $Total$ (minus the live state). A view will be a function $v : M \to \bool$.
+These views will also be closed \emph{upwards}, i.e., $v(a) \implies v(a \cdot b)$.
+
+Again, we define a ``projection'' function from a view on a refinement TPCM to a base TPCM.
+\[
+  ProjectView_\delta(v) \eqdef \lambda a .~
+      \exists x, y .~ v(x) \land rel(x, y) \land y \le a.
+\]
+For a given $m$, we define $ViewOver(m)$ to be the view of all elements that are at least $m$:
+\[
+  ViewOver(m) \eqdef \lambda n .~ n \ge m
+\]
+And we can add two views in the natural way:
+\[
+  v \otimes w \eqdef \lambda m .~ \exists x, y .~ v(x) \land w(y) \land x \cdot y = m
+\]
+Finally, we're ready to define the $View_\kappa$ function for a given location, again
+recursively, like the $Total_\kappa$ function:
+\[
+  View_\kappa(\gamma) \eqdef 
+      \left(
+        \bigotimes_{\kappa' \ltGe \kappa} ViewOver(reserved(\kappa,\gamma))
+      \right) \otimes
+      \left(
+        \bigotimes_{\delta} ProjectView_\delta\left(View_\kappa(\delta \refines_{\rel} \gamma)\right)
+      \right)
+\]
+Now the $View_\kappa$ denotes the ``possible'' states that the total unlive state can be in
+for a given $\gamma$, without actually depending on any live state even in the refining locations. The $View_\kappa$ is in some sense used to justify the borrows at $\kappa$, so we will have an invariant,
+\begin{align}
+  & \forall \kappa, \gamma, m .~
+  (\kappa, \gamma, m) \in borrows \implies \forall y .~ View_\kappa(\gamma)(m)(y) \implies m \le y
+  \label{invView}
+\end{align}
+    %\left(
+    %    \Bigcircle_{\kappa' \ltGe \kappa} reserved(\kappa,\gamma)
+    %  \right) \cdot
+    %  \left(
+    %    \Bigcircle_{\delta} Project_\delta\left(Total_\kappa(\delta \refines_{\rel} \gamma)\right)
+    %  \right)
+   %\right)
+%\end{align}
+(We don't need a condition that $\kappa \ltGe active$, although we won't be able to make use
+of the invariant otherwise.)
+
+Now, we define $Inv$ to be both (1) and (2) together, and define an RA with a validity predicate $\mathcal{V}(x) \eqdef \exists y.~ Inv(x \cdot y)$. Then we can derive all the rules
+claimed above, by simply showing that they are frame-preserving within this RA.
+
+First, the borrowing rules: we can check that they preserve (\ref{invView}).
+Also, all of the borrowing rules will preserve $Total_{active}$,
+so they preserve (\ref{invTotal}) trivially.
+
+Now, for the frame update rules (Borrow-Ghost-ViewShift and Borrow-Ghost-Refinement-Exchange).
+First, these don't affect $View_{\kappa}$ at all, so it is easy to show that they preserve
+(\ref{invView}).
+
+We can also check that (\ref{invTotal}) is preserved. There are two key points here.
+First, the rules about TPCM refinements imply that a frame-preserving update on a
+$Total_\kappa(\delta \refines_{\rel} \gamma)$ implies a frame-preserving update
+on the projection,
+$Project_\delta(Total_\kappa(\delta \refines_{\rel} \gamma))$.
+
+Second, we have to show why it is allowed to use borrowed state to justify the transitions.
+Luckily, from (\ref{invTotal}) we can derive this law,
+\[
+  \kappa \ltGe active \implies View_\kappa(\gamma)(y)\left(
+      \left(
+        \Bigcircle_{\kappa' \ltGe active} reserved(\kappa,\gamma)
+      \right) \cdot
+      \left(
+        \Bigcircle_{\delta} Project_\delta\left(Total_{active}(\delta \refines_{\rel} \gamma)\right)
+      \right)
+    \right).
+    \label{invDerived}
+\]
+This large expression inside the $View_\kappa(\gamma)$ is just the part of
+$Total_{active}(\gamma)$ except the part \emph{which is live at $\gamma$}.
+Thus, combined with \ref{invView}, we can see that any borrow will be covered by the reserved 
+state at $\gamma$ plus all state in the refined locations.
+
+Just to reiterate the ``trick'': $View_\kappa(\gamma)$ depends only on reserved state:
+however we are able to show that the value \[\left(
+        \Bigcircle_{\kappa' \ltGe active} reserved(\kappa',\gamma)
+      \right) \cdot
+      \left(
+        \Bigcircle_{\delta} Project_\delta\left(Total_{active}(\delta \refines_{\rel} \gamma)\right)
+      \right)\] is in the active view, even though it includes the \emph{total} state at locations refining $\gamma$.
 
 \end{document} 
