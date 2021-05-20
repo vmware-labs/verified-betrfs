@@ -24,7 +24,7 @@ This directory serves as an introduction to those concepts.
 
 ## Reader-writer locks
 
-An application for Reader-Writer locks
+[An overview of Reader-Writer locks](RWLockOverview.md)
 
 PCM Refinements
 
