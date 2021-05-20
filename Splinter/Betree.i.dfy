@@ -103,6 +103,9 @@ module BetreeMachineMod {
     allocation: AllocationTableMachineMod.Superblock,
     endSeq: LSN)
 
+  // Three states : STatble persistent disk state , ephemeral working state and a frozen ephemeral state
+  // that's being written out
+
   // Is it gross that my Betree knows about the three views?
   // The alternative would be for some outer module to instantiate
   // me three times, and then maintain allocation information on
@@ -122,30 +125,16 @@ module BetreeMachineMod {
     indTbl: IndirectionTableMod.IndirectionTable,
     endSeq: LSN)
 
-  datatype Variables = Starting | Running(
+  datatype Variables = Variables(
     indTbl: IndirectionTableMod.IndirectionTable,
     memBuffer: map<Key, Message>,  // Real Splinter (next layer down? :v) has >1 memBuffers so we can be inserting at the front while flushing at the back.
     allocation: AllocationTableMachineMod.Variables,
-
     // TODO add a membuffer to record LSN; a frozen-like transition to keep one membuffer available
     // for filling while packing the other into a b+tree in the top trunk.
     // OR just have freeze drain the membuffer, introducing a write hiccup every 20GB.
     nextSeq: LSN,  // exclusive
     frozen: Frozen
   )
-  {
-    // A "public" method for Program to inquire how many LSNs are in the tree
-    function BetreeEndsLSNExclusive() : LSN { nextSeq }
-  }
-
-  predicate Init(v: Variables, sb: Superblock, cache: CacheIfc.Variables)
-  {
-    && IndirectionTableMod.DurableAt(v.indTbl, cache, sb.indTbl)
-    && v.memBuffer == map[]
-    //&& v.allocation // TODO clean up this mess
-    && v.nextSeq == sb.endSeq
-    && v.frozen.Idle?
-  }
 
   type TrunkId = nat
   function RootId() : TrunkId { 0 }
@@ -154,18 +143,27 @@ module BetreeMachineMod {
   function parseTrunkNode(b: UninterpretedDiskPage) : Option<TrunkNode>
     // TODO
   function marshalTrunkNode(node: TrunkNode) : UninterpretedDiskPage
-    // TODO
+    // f
+
+  // TODO replay log!
+  predicate Start(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock)
+  {
+    // Note predicate-style assignment of some fields of v'
+    && IndirectionTableMod.DurableAt(v'.indTbl, cache, sb.indTbl) // Parse ind tbl from cache
+    && v'.memBuffer == map[]
+    && AllocationTableMachineMod.DurableAt(v'.allocation, cache, sb.allocation) // Parse ind tbl from cache
+    && v'.nextSeq == sb.endSeq
+    && v'.frozen == Idle
+  }
 
   datatype NodeAssignment = NodeAssignment(id: TrunkId, cu: CU, node: TrunkNode)
   {
     predicate InIndTable(v: Variables)
-      requires v.Running?
     {
       && id in v.indTbl
       && v.indTbl[id] == cu
     }
     predicate Valid(v: Variables, cache: CacheIfc.Variables)
-      requires v.Running?
     {
       && InIndTable(v)
       && var unparsedPage := CacheIfc.ReadValue(cache, cu);
@@ -223,7 +221,6 @@ module BetreeMachineMod {
 
   predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
   {
-    && v.Running?
     && sk.QueryStep?
     // TODO check memtable!
     && var trunkPath := sk.trunkPath;
@@ -233,19 +230,8 @@ module BetreeMachineMod {
     && v' == v
   }
 
-  predicate PutMany(v: Variables, v': Variables, puts: MsgSeq)
-  {
-    && v.Running?
-    && puts.seqStart == v.nextSeq
-    && v' == v.(
-      memBuffer := puts.ApplyToKeyMap(v.memBuffer),
-      nextSeq := puts.seqEnd
-      )
-  }
-
   predicate Put(v: Variables, v': Variables, key: Key, value: Value, sk: Skolem)
   {
-    && v.Running?
     && sk.PutStep?
     && var newMessage := MakeValueMessage(value);
     && v' == v.(memBuffer := v.memBuffer[key := newMessage], nextSeq := v.nextSeq + 1)
@@ -289,7 +275,6 @@ module BetreeMachineMod {
   // Internal operation; noop
   predicate Flush(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
   {
-    && v.Running?
     && sk.FlushStep?
     && var flush := sk.flush;
     && flush.Valid(cache)
@@ -318,7 +303,6 @@ module BetreeMachineMod {
   // drain mem buffer into a B+tree in the root trunk node
   predicate DrainMemBuffer(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk:Skolem)
   {
-    && v.Running?
     && sk.DrainMemBufferStep?
     && var oldRoot := sk.oldRoot;
     && var newRoot := sk.newRoot;
@@ -362,7 +346,6 @@ module BetreeMachineMod {
   // Rearrange mem buffers in some node
   predicate CompactBranch(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
   {
-    && v.Running?
     && sk.CompactBranchStep?
     && var r := sk.receipt;
     && r.Valid(cache)
@@ -375,7 +358,6 @@ module BetreeMachineMod {
 
   predicate Freeze(v: Variables, v': Variables)
   {
-    && v.Running?
     && v.frozen.Idle?
     && v.memBuffer == map[]  // someday we'd like to avoid clogging the memtable during freeze, but...
     && v' == v.(frozen := Frozen(v.indTbl,  v.nextSeq))
@@ -395,7 +377,6 @@ module BetreeMachineMod {
 
   predicate CommitStart(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN)
   {
-    && v.Running?
     && v.frozen.Frozen?
     && KnowFrozenIsClean(v, sb, cache)
     && sb.endSeq == v.frozen.endSeq
@@ -404,7 +385,6 @@ module BetreeMachineMod {
 
   predicate CommitComplete(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock)
   {
-    && v.Running?
     // TODO need to update the persistent table to keep our allocation set correct
     && v' == v.(frozen := Idle)
   }
@@ -456,9 +436,7 @@ module BetreeMachineMod {
 
   function Alloc(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : set<CU>
   {
-    if v.Running?
-    then AllocationTableMachineMod.Alloc(v.allocation)
-    else if AllocationOnDisk(cache, sb).Some?
+    if AllocationOnDisk(cache, sb).Some?
     then
       // Module hasn't started; use allocation info it will eventually read from disk
       set s | s in AllocationOnDisk(cache, sb).value.Allocated()
@@ -492,10 +470,12 @@ module BetreeInterpMod {
 
   // What indirection table would we see if the system were running?
   function ITbl(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : Option<IndirectionTableMod.IndirectionTable> {
-    match v {
-      case Starting => IndirectionTableMod.I(cache.dv /*TODO change ind tbl to expect cache*/, sb.indTbl)
-      case Running => Some(v.indTbl)
-    }
+    // match v {
+    //   case Starting => IndirectionTableMod.I(cache.dv /*TODO change ind tbl to expect cache*/, sb.indTbl)
+    //   case Running => Some(v.indTbl)
+    // }
+    // TODO figure out the interpretation split here
+    Some(v.indTbl)
   }
 
   function IMKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : Value
@@ -592,5 +572,6 @@ module BetreeInterpMod {
   lemma PutEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, key: Key, value: Value, sk: Skolem)
     ensures IM(v', cache', sb) == IM(v, cache, sb).Put(key, value)
   {
+    assume false; // This is hard to prove -- we need to finish a tree
   }
 }
