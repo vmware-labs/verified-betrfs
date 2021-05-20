@@ -50,7 +50,7 @@ type {:extern} RwLock(==)<V>
   ensures handle.m == this
 
   /*
-   * `acquire_release`
+   * `release_shared`
    */
 
   method release_shared(glinear handle: SharedHandle<V>)
@@ -69,3 +69,21 @@ the bank operation above, or if `V` represents access to memory, then you can re
 memory but not write to it.
 
 Finally, to release the shared lock, you return the `SharedHandle<V>` to the RwLock.
+
+## Implementing our own RwLock
+
+How might we implement our own, custom RwLock out of atomic primitives, like we did an exclusive lock?
+
+Our language has borrowing rules—but we can't use those alone to implement a RwLock. After all, Rust's own RwLock is implemented via `unsafe` code, and we run into similar problems.
+
+This gets into some of our innovations regarding PCM logics, which we developed for this purpose.
+
+At a high level here is how it goes:
+
+Suppose we want to store some ghost state `G` into a RwLock. We're going to define _another_ ghost state (a Sharded State Machine, in particular) RwLockG, with some special rules: it is possible to “deposit” ghost state G into the RwLockG and “withdraw” that state G back out.
+Furthermore, it is possible G-state from the RwLockG-state. The methodology requires the programmer to prove (using invariants of the Sharded State Machine) that borrowed state always corresponds to some state that was “deposited.”
+
+So for example, we would be able to implement the above interface by creating a Sharded State Machine RwLockG, with certain shards enabling borrowing. The `SharedHandle` objects could be defined to be that state.
+
+An example can be found in [the rwlockimpl/ directory](../rwlockimpl/).
+The [RWLock.dfy](../rwlockimpl/RWLock.dfy) file in particular is a good place to start.
