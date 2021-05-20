@@ -103,7 +103,7 @@ module ProgramMachineMod {
     // We've brought the tree up-to-date with respect to the journal, so
     // we can enter normal operations
     && v.betree.BetreeEndsLSNExclusive() == v.journal.JournalBeginsLSNInclusive()
-    
+
     && v' == v.(phase := Running)
   }
 
@@ -151,7 +151,7 @@ module ProgramMachineMod {
   {
     forall op | op in cacheOps :: op.cu in alloc
   }
-  
+
   // How do the subsystems negotiate for more alloc?
   // They're always free to write into their existing alloc -- Journal is going to want
   // to do that all the time, maintaining its own internal allocation tracker, to avoid
@@ -213,7 +213,7 @@ module ProgramMachineMod {
     && JournalMachineMod.ReqSync(v.journal, v'.journal, syncReqId)
     && v'.betree == v.betree
   }
- 
+
   predicate CompleteSync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
     && v.phase.Running?
@@ -267,7 +267,7 @@ module ProgramMachineMod {
     | CompleteSyncStep(syncReqId: SyncReqId)
     | CommitStartStep(seqBoundary: LSN)
     | CommitCompleteStep()
-    
+
   predicate NextStep(v: Variables, v': Variables, cacheOps: CacheIfc.Ops, step: Step) {
     && match step {
       case RecoverStep(puts, newbetree) => Recover(v, v', puts, newbetree)
@@ -324,7 +324,7 @@ module ProgramInterpMod {
   {
     [ SUPERBLOCK_ADDRESS().au ]
   }
- 
+
   // Program will have a runtime view of what (ghost) alloc each subsystem thinks it's using,
   // and use that to filter the dvs here.
   // Those ghost views will invariantly match the IReads functions of the actual disk -- that is,

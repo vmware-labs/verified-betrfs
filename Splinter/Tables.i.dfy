@@ -51,7 +51,7 @@ module AllocationTableMachineMod refines MarshalledSnapshot {
   type AllocationTable = multiset<CU>
 
   datatype Variables = Variables(
-    table: AllocationTable 
+    table: AllocationTable
   )
   {
     // Standard interface for coordinating disjointness among allocations of

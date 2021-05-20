@@ -146,7 +146,7 @@ module BetreeMachineMod {
     && v.nextSeq == sb.endSeq
     && v.frozen.Idle?
   }
-  
+
   type TrunkId = nat
   function RootId() : TrunkId { 0 }
 
@@ -250,7 +250,7 @@ module BetreeMachineMod {
     && var newMessage := MakeValueMessage(value);
     && v' == v.(memBuffer := v.memBuffer[key := newMessage], nextSeq := v.nextSeq + 1)
   }
-  
+
   datatype FlushRec = FlushRec(
     trunkPath: TrunkPath,
     newParent: NodeAssignment,
@@ -280,7 +280,7 @@ module BetreeMachineMod {
   predicate FlushesNodes(oldParent: TrunkNode, oldChild: TrunkNode, newParent: TrunkNode, newChild: TrunkNode) {
     true // TODO
   }
-  
+
   predicate CUIsAllocatable(cu: CU)
   {
     && true // TODO cu unallocated across all live views

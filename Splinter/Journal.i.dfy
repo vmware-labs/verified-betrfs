@@ -124,7 +124,7 @@ module JournalMachineMod {
       )
 
     // Figure out where journal ends
-    && var lastLSN := 
+    && var lastLSN :=
       if sb.core.freshestCU.None?
       then
         sb.core.boundaryLSN
@@ -137,7 +137,7 @@ module JournalMachineMod {
     && v.syncReqs == map[]
     && v.lsnToCU == map[] // TODO this fails WF! And will require cache to decode
   }
-  
+
   // Recovery coordination
   predicate MessageSeqMatchesJournalAt(v: Variables, puts: MsgSeq)
   {
@@ -470,7 +470,7 @@ module JournalMachineMod {
     // kind of dumb (it would hold up syncs for no reason), but not unsafe.
     && (if sb.core.freshestCU.None?
         then s'.persistentLSN == sb.core.boundaryLSN
-        else 
+        else
           && s'.persistentLSN - 1 in s.lsnToCU
           && s.lsnToCU[s'.persistentLSN - 1] == sb.core.freshestCU.value
         )

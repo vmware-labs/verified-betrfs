@@ -162,7 +162,7 @@ module AsyncDisk {
     // because it would be reasonable for a disk to fail into a checksum-correct state
     // from a checksum-incorrect one.
 
-    ChecksumChecksOut(realContents[i..j]) && 
+    ChecksumChecksOut(realContents[i..j]) &&
     ChecksumChecksOut(fakeContents[i..j]) ==>
         realContents[i..j] == fakeContents[i..j]
   }
@@ -289,7 +289,7 @@ abstract module IOSystem {
     | MachineStep(dop: DiskOp)
     | DiskInternalStep(step: D.InternalStep)
     | CrashStep
-  
+
   predicate Machine(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
   {
     && P.Next(s.program, s'.program, uiop, dop)

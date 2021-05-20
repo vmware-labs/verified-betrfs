@@ -45,7 +45,7 @@ module JournalInterpMod {
 //  {
 //    var chainResult := ChainFrom(cache.dv, sb);
 //    var m:Message :| true; m  // TODO placeholder to parse
-////    var JournalChain 
+////    var JournalChain
 //  }
 
   function SyncReqsAt(v: Variables, lsn: LSN) : set<CrashTolerantMapSpecMod.SyncReqId>
@@ -63,7 +63,7 @@ module JournalInterpMod {
 //      CrashTolerantMapSpecMod.Version(MapSpecMod.Variables(base), SyncReqsAt(v, lsn))
 //    else
 //      var prior := VersionFor(v, cache, sb, base, lsn - 1);
-//      CrashTolerantMapSpecMod.Version(  
+//      CrashTolerantMapSpecMod.Version(
 //        ApplyOneMessage(prior.mapp.interp, MessageAt(v, lsn)),
 //        SyncReqsAt(v, lsn))
 //  }

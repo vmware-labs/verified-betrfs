@@ -46,6 +46,6 @@ module InterpMod {
   {
     Interp(imap k | InDomain(k) :: DefaultValue(), 0)
   }
-  
+
 }
 
