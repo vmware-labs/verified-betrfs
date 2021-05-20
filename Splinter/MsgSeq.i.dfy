@@ -28,6 +28,12 @@ module MsgSeqMod {
       set lsn | seqStart <= lsn < seqEnd
     }
 
+    function Len() : nat
+      requires WF()
+    {
+      seqEnd - seqStart
+    }
+
     predicate WF()
     {
       && seqStart <= seqEnd
@@ -50,21 +56,20 @@ module MsgSeqMod {
     }
 
     function ApplyToKeyMapRecursive(orig: map<Key, Message>, count: nat) : (out: map<Key, Message>)
+      requires WF()
+      requires count <= Len()
     {
       if count==0
       then orig
       else
-        var lsn := seqStart + count;
+        var lsn := seqStart + count - 1;
         var key := msgs[lsn].k;
         var message := msgs[lsn];
         ApplyToKeyMapRecursive(orig, count-1)[key := message]
     }
 
-    function Len() : nat {
-      seqEnd - seqStart
-    }
-
     function ApplyToKeyMap(orig: map<Key, Message>) : map<Key, Message>
+      requires WF()
     {
       ApplyToKeyMapRecursive(orig, Len())
     }
