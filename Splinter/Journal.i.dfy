@@ -417,6 +417,7 @@ module JournalMachineMod {
         ChainResult(None, [sb.freshestCU.value])
       else if firstRec.value.messageSeq.seqStart <= sb.boundaryLSN then
         // Glad we read this record, but we don't need to read anything beyond.
+        assert firstRec.value.WF(); // trigger. Kinda obvious, tbh.
         var rec := firstRec.value;
         var locate0 := map lsn : nat | sb.boundaryLSN <= lsn < rec.messageSeq.seqEnd :: 0;
         var interp0 := map lsn : nat | sb.boundaryLSN <= lsn < rec.messageSeq.seqEnd :: rec.messageSeq.msgs[lsn];
