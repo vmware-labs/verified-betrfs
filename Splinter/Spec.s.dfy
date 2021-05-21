@@ -134,12 +134,30 @@ module CrashTolerantMapSpecMod {
   import AsyncMapSpecMod
 
   type SyncReqId = nat
-  datatype Version = Version(mapp: AsyncMapSpecMod.Variables, syncReqIds: set<SyncReqId>)
+  datatype Version =
+    | Truncated
+      // jonh apology: The spec exposes the implementation-specific idea
+      // of log truncation to keep the interpretation functions easy to
+      // build. This way, when we truncate in the implementation, we
+      // can just map that to a Truncated version in this spec version
+      // sequence. This is lame, because we're asking the spec inspector
+      // to understand impl details. An alternative would be to add
+      // a "write-only ghost state" mechanism to the bottom bread, into
+      // which Program.i could tuck away old ghost versions going back
+      // to the dawn of time, and then the interpretation function
+      // could peek at those to construct the version seq. This is a way
+      // to add Lamport's history variable while respecting the .s/.i
+      // split. But I'm too lazy to do that now, so please judge away.
+    | Version(mapp: AsyncMapSpecMod.Variables, syncReqIds: set<SyncReqId>)
+
   datatype Variables = Variables(versions: seq<Version>, stableIdx: nat)
   {
     predicate WF() {
       && 0 < |versions|  // always some persistent, ephemeral version
       && (forall i :: 0<=i<|versions| ==> versions[i].mapp.WF())
+      // All versions beginning with the stableIdx aren't truncated,
+      // so that crashing can't take us to a Truncated version.
+      && (forall i :: stableIdx<=i<|versions| ==> versions[i].mapp.Version?)
       && stableIdx < |versions|
     }
   }
@@ -174,10 +192,15 @@ module CrashTolerantMapSpecMod {
 
   // The implementation may push some stuff out to the disk without getting
   // all the way up to date with the ephemeral state.
-  predicate AsyncFlush(s: Variables, s': Variables)
+  predicate AsyncCommit(s: Variables, s': Variables)
   {
     && s.WF()
-    && s'.versions == s.versions
+    && |s'.versions| == |s.versions|
+    // Commit can truncate old versions
+    && (forall i | 0<=i<|s.versions| ::
+      || s'.versions == s.versions
+      || s'.versions.Truncated?)
+    && s'.WF()  // But it can't truncate things after stableIdx
     // stableIdx advances towards, possibly all the way to, ephemeral state.
     && s.stableIdx < s'.stableIdx < |s.versions|
   }
@@ -210,7 +233,7 @@ module CrashTolerantMapSpecMod {
   datatype UIOp =
     | OperateOp(baseOp: AsyncMapSpecMod.UIOp)
     | CrashOp
-    | AsyncFlushOp
+    | AsyncCommitOp
     | ReqSyncOp(syncReqId: SyncReqId)
     | CompleteSyncOp(syncReqId: SyncReqId)
     | NoopOp
@@ -220,7 +243,7 @@ module CrashTolerantMapSpecMod {
     match uiop {
       case OperateOp(baseOp) => Operate(s, s', baseOp)
       case CrashOp => Crash(s, s')
-      case AsyncFlushOp => AsyncFlush(s, s')
+      case AsyncCommitOp => AsyncCommit(s, s')
       case ReqSyncOp(syncReqId) => ReqSync(s, s', syncReqId)
       case CompleteSyncOp(syncReqId) => (exists requestedAt :: CompleteSync(s, s', syncReqId, requestedAt))
       case NoopOp => s' == s

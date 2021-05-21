@@ -1,18 +1,23 @@
 include "IOSystem.s.dfy"
 include "Program.i.dfy"
 
-module BetreeIOSystem refines IOSystem {
+module VeribetrIOSystem refines IOSystem {
   import P = ProgramMachineMod
 }
 
 module Proof refines ProofObligations {
   import MapSpecMod
   import InterpMod
-  import ConcreteSystem = BetreeIOSystem
+  import ConcreteSystem = VeribetrIOSystem
 
   function I(v: ConcreteSystem.Variables) : CrashTolerantMapSpecMod.Variables
   {
-    CrashTolerantMapSpecMod.Empty()
+    if v.Running?
+    then
+      ProgramInterp.IM(v.program, v.disk)
+        // requires v.Running?
+    else
+      ProgramInterp.INotRunning(v.disk)
   }
 
   predicate Inv(v: ConcreteSystem.Variables)
