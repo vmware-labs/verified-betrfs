@@ -321,9 +321,9 @@ module ProgramInterpMod {
       None  // silly expression: DV has holes in it
   }
 
-  function ISuperblockReads(dv: DiskView) : seq<AU>
+  function ISuperblockReads(dv: DiskView) : seq<CU>
   {
-    [ SUPERBLOCK_ADDRESS().au ]
+    [ SUPERBLOCK_ADDRESS() ]
   }
 
   // Program will have a runtime view of what (ghost) alloc each subsystem thinks it's using,
@@ -351,7 +351,7 @@ module ProgramInterpMod {
       CrashTolerantMapSpecMod.Empty()
   }
 
-  function IMReads(v: Variables) : seq<AU> {
+  function IMReads(v: Variables) : seq<CU> {
     var sbreads := ISuperblockReads(v.cache.dv);
     var sb := ISuperblock(v.cache.dv);
     if sb.Some?
@@ -363,7 +363,7 @@ module ProgramInterpMod {
       sbreads
   }
 
-  function IReads(v: Variables) : seq<AU> {
+  function IReads(v: Variables) : seq<CU> {
     IMReads(v)
   }
 

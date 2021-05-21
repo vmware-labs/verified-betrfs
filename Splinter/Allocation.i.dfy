@@ -14,10 +14,8 @@ module AllocationMod {
   function AUSizeInCUs() : (s:nat)
     ensures 2<=s  // TODO(jonh): explain why
 
-  function DiskSizeInCUs() : (s:nat)
-  {
-    DiskSizeInAU() * AUSizeInCUs()
-  }
+  function DiskSizeInCUs() : (s: set<CU>)
+
 
   predicate ValidCU(cu: CU) {
     && 0 <= cu.au < DiskSizeInAU()
