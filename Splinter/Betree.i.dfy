@@ -520,7 +520,7 @@ module BetreeInterpMod {
 
   function IReadsSet(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : set<CU> {
     set cu:CU |
-      && cu in DiskSizeInCUs()
+      && cu in CUsInDisk()
       && exists key :: cu in IReadsKey(v, cache, sb, key)
   }
 
