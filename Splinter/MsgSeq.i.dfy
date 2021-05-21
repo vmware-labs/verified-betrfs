@@ -23,7 +23,8 @@ module MsgSeqMod {
 
     // For use in map comprehensions, where "lsn in msgSeq.Contains()" doesn't
     // satisfy Dafny's bounded set heuristic.
-    function LSNSet() : set<LSN>
+    function {:opaque} LSNSet() : (lsns: set<LSN>)
+      ensures forall lsn :: lsn in lsns <==> seqStart <= lsn < seqEnd
     {
       set lsn | seqStart <= lsn < seqEnd
     }
