@@ -49,6 +49,7 @@
 
 \newcommand{\hoare}[3]{\ensuremath{\{ #1 \}~ #2 ~\{ #3 \}}}
 \newcommand{\viewshift}{\Rrightarrow}
+\newcommand{\viewshiftBack}{\Lleftarrow}
 \newcommand{\unit}{\epsilon}
 \newcommand{\true}{\textsf{True}}
 \newcommand{\false}{\textsf{False}}
@@ -567,12 +568,11 @@ And we can add two views in the natural way:
 \[
   v \otimes w \eqdef \lambda m .~ \exists x, y .~ v(x) \land w(y) \land x \cdot y = m
 \]
-Finally, we're ready to define the $View_\kappa$ function for a given location, again
-recursively, like the $Total_\kappa$ function:
+Finally, we're ready to define the $View_\kappa$ function for a given location, again recursively, like the $Total_\kappa$ function:
 \[
   View_\kappa(\gamma) \eqdef 
       \left(
-        \bigotimes_{\kappa' \ltGe \kappa} ViewOver(reserved(\kappa,\gamma))
+        \bigotimes_{\kappa' \ltGe \kappa} ViewOver(reserved(\kappa',\gamma))
       \right) \otimes
       \left(
         \bigotimes_{\delta} ProjectView_\delta\left(View_\kappa(\delta \refines_{\rel} \gamma)\right)
@@ -639,7 +639,45 @@ however we are able to show that the value \[\left(
         \Bigcircle_{\delta} Project_\delta\left(Total_{active}(\delta \refines_{\rel} \gamma)\right)
       \right)\] is in the active view, even though it includes the \emph{total} state at locations refining $\gamma$.
 
-\textbf{Worked RWLock example}
+\textbf{Fractional logic}
+
+Given a TPCM $M$, we can construct a TPCM $Frac_M$ with the following laws.
+
+\newcommand{\FFrac}{\textsf{Frac}}
+
+\begin{align*}
+  \dboxed{x}^\gamma &\viewshiftBack \viewshift \dboxed{\FFrac(x, 1)}^{\alpha \refines \gamma}\\
+  \dboxed{\FFrac(x, r)}^{\alpha \refines \gamma}
+    *
+  \dboxed{\FFrac(x, q)}^{\alpha \refines \gamma}
+    &\viewshiftBack \viewshift
+  \dboxed{\FFrac(x, r+q)}^{\alpha \refines \gamma}
+\end{align*}
+And,
+\begin{align*}
+  \borrow{\kappa}{\dboxed{\FFrac(x, r)}^{\alpha \refines \gamma}} &\viewshift
+  \borrow{\kappa}{\dboxed{x}^\gamma}
+\end{align*}
+
+\textbf{Counting logic}
+
+\newcommand{\Counter}{\textsf{Counter}}
+\newcommand{\SharedRef}{\textsf{SharedRef}}
+
+\begin{align*}
+  \dboxed{x}^\gamma &\viewshiftBack \viewshift \dboxed{\Counter(x, 0)}^{\alpha \refines \gamma}\\
+  \dboxed{\Counter(x, n)}^{\alpha \refines \gamma}
+    &\viewshiftBack \viewshift
+  \dboxed{\Counter(x, n+1)}^{\alpha \refines \gamma}
+      * \dboxed{\SharedRef(x)}^{\alpha \refines \gamma}
+\end{align*}
+And,
+\begin{align*}
+  \borrow{\kappa}{\dboxed{\SharedRef(x)}^{\alpha \refines \gamma}} &\viewshift
+  \borrow{\kappa}{\dboxed{x}^\gamma}
+\end{align*}
+
+\textbf{RwLock example}
 
 \newcommand{\Central}{\textsf{Central}}
 \newcommand{\ExcPending}{\textsf{ExcPending}}
