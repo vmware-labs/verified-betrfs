@@ -5,6 +5,7 @@ include "Journal.i.dfy"
 include "JournalInterp.i.dfy"
 include "Betree.i.dfy"
 include "CacheIfc.i.dfy"
+include "IOSystem.s.dfy"
 
 // TODO first prove that a Program with a simple-policy cache works?
 
@@ -78,7 +79,7 @@ module ProgramMachineMod {
     && v'.stableSuperblock == superblock.value
     && v'.cache == v.cache  // no cache writes
     && JournalMachineMod.Init(v'.journal, superblock.value.journal, v.cache, sk)
-    && BetreeMachineMod.Init(v'.betree, superblock.value.betree, v.cache)
+    && BetreeMachineMod.Start(v.betree, v'.betree, v.cache, superblock.value.betree)
     && v'.inFlightSuperblock.None?
   }
 
@@ -86,8 +87,8 @@ module ProgramMachineMod {
   {
     && v.phase.RecoveringJournal?
     && puts.WF()
-    && v.betree.BetreeEndsLSNExclusive() + |puts.msgs| <= v.journal.JournalBeginsLSNInclusive()
     && puts.seqStart == v.betree.BetreeEndsLSNExclusive()
+    && puts.seqStart + |puts.msgs| <= v.journal.JournalBeginsLSNInclusive()
     && JournalMachineMod.MessageSeqMatchesJournalAt(v.journal, puts)
 
     // NB that Recover can interleave with BetreeInternal steps, which push stuff into the

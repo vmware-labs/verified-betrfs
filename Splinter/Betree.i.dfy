@@ -135,6 +135,11 @@ module BetreeMachineMod {
     nextSeq: LSN,  // exclusive
     frozen: Frozen
   )
+  {
+      function BetreeEndsLSNExclusive() : LSN {
+        nextSeq
+      }
+  }
 
   type TrunkId = nat
   function RootId() : TrunkId { 0 }
@@ -235,6 +240,10 @@ module BetreeMachineMod {
     && sk.PutStep?
     && var newMessage := MakeValueMessage(value);
     && v' == v.(memBuffer := v.memBuffer[key := newMessage], nextSeq := v.nextSeq + 1)
+  }
+
+  predicate PutMany(v: Variables, v': Variables, puts: MsgSeq) {
+    &&  v' == v.(memBuffer := puts.ApplyToKeyMap(v.memBuffer), nextSeq := v.nextSeq + puts.Len())
   }
 
   datatype FlushRec = FlushRec(
@@ -497,28 +506,30 @@ module BetreeInterpMod {
     Interp(imap key | key in AllKeys() :: IMKey(v, cache, sb, key), sb.endSeq)
   }
 
-  function IReadsKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : set<AU> {
+  function IReadsKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : set<CU> {
     var indTbl := ITbl(v, cache, sb);
     if
       && indTbl.Some?
       && exists lookup :: ValidLookup(v, cache, key, lookup)
     then
       var lookup :| ValidLookup(v, cache, key, lookup);
-      set i | 0<=i<|lookup| :: var lr:LookupRecord := lookup[i]; lr.cu.au
+      set i | 0<=i<|lookup| :: var lr:LookupRecord := lookup[i]; lr.cu
     else
       {}
   }
 
-  function IReadsSet(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : set<AU> {
-    set au:AU |
-      && au < AUSizeInCUs()
-      && exists key :: au in IReadsKey(v, cache, sb, key)
+  function IReadsSet(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : set<CU> {
+    set cu:CU |
+      //&& cu < AUSizeInCUs() // Probably not needed
+      && exists key :: cu in IReadsKey(v, cache, sb, key)
   }
 
-  function IReads(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : seq<AU>
-    ensures forall au :: au in IReads(v, cache, sb) <==> au in IReadsSet(v, cache, sb)
+  function IReads(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : seq<CU>
+    ensures forall cu :: cu in IReads(v, cache, sb) <==> cu in IReadsSet(v, cache, sb)
   {
-    Nat_Order.SortSet(IReadsSet(v, cache, sb))
+    // TODO: CU's or nats it doesn't know how to sort it. We need to fix it
+    // Nat_Order.SortSet(IReadsSet(v, cache, sb))
+    []
   }
 
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock)
