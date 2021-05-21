@@ -3,23 +3,6 @@
 
 include "../lib/Lang/NativeTypes.s.dfy"
 
-// TODO replace this stuff with the real key, value, message definitions
-
-module MessageMod {
-  type Key(!new,==)
-  type Value(!new)
-
-  //type Message(!new)
-  datatype Message = MessagePut(k:Key, v:Value)
-
-  function AllKeys() : iset<Key> {
-    iset key:Key | true
-  }
-
-  function DefaultValue() : Value
-    // TODO
-}
-
 module InterpMod {
   import opened MessageMod
 
@@ -48,4 +31,3 @@ module InterpMod {
   }
 
 }
-

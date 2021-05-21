@@ -4,7 +4,11 @@
 include "Journal.i.dfy"
 include "JournalInterp.i.dfy"
 include "Betree.i.dfy"
+include "BetreeInterp.i.dfy"
 include "CacheIfc.i.dfy"
+
+include "AsyncDisk.s.dfy"
+include "AsyncDiskProgram.s.dfy"
 include "IOSystem.s.dfy"
 
 // TODO first prove that a Program with a simple-policy cache works?
