@@ -639,4 +639,50 @@ however we are able to show that the value \[\left(
         \Bigcircle_{\delta} Project_\delta\left(Total_{active}(\delta \refines_{\rel} \gamma)\right)
       \right)\] is in the active view, even though it includes the \emph{total} state at locations refining $\gamma$.
 
+\textbf{Worked RWLock example}
+
+\newcommand{\Central}{\textsf{Central}}
+\newcommand{\ExcPending}{\textsf{ExcPending}}
+\newcommand{\SharedPending}{\textsf{SharedPending}}
+\newcommand{\ExcGuard}{\textsf{ExcGuard}}
+\newcommand{\SharedGuard}{\textsf{SharedGuard}}
+
+Given a TPCM $M$, we can construct a TPCM $RwLock_M$ with the following laws. (Here, we have $exc : \bool$, $rc \in \mathbb{N}$, and $x \in M$.
+
+These laws are for exclusive locks:
+\begin{align*}
+\dboxed{\Central\left(\false, rc, x\right)}^{\alpha \refines \gamma} &\viewshift \dboxed{\Central\left(\true, rc, x\right)}^{\alpha \refines \gamma} * \dboxed{\ExcPending}^{\alpha \refines \gamma}\\
+%\Central\left(exc, 0, x\right) \cdot \ExcPending &\mapsto \Central\left(exc, 0, \bot\right) \cdot \ExcGuard
+\dboxed{\Central\left(exc, 0, x\right)}^{\alpha \refines \gamma} * \dboxed{\ExcPending}^{\alpha \refines \gamma}
+    &\viewshift
+    \dboxed{\Central\left(exc, 0, x\right)}^{\alpha \refines \gamma} * \dboxed{\ExcGuard}^{\alpha \refines \gamma} * \dboxed{x}^\gamma\\
+\dboxed{\Central\left(exc, rc, y\right)}^{\alpha \refines \gamma} * \dboxed{\ExcGuard}^{\alpha \refines \gamma} * \dboxed{x}^\gamma
+    &\viewshift
+        \dboxed{\Central\left(\false, rc, x\right)}^{\alpha \refines \gamma}\\
+\end{align*}
+The first two are for acquisition, while the third is for release. Meanwhile,
+the first one is derived from Ghost-ViewShift, while the last two are derived from
+Ghost-Refinement-Exchange.
+
+These laws are for shared locks:
+\begin{align*}
+\dboxed{\Central\left(exc, rc, x\right)}^{\alpha \refines \gamma} &\viewshift
+  \dboxed{\Central\left(exc, rc+1, x\right)}^{\alpha \refines \gamma} * \dboxed{\SharedPending}^{\alpha \refines \gamma}\\
+\dboxed{\Central\left(false, rc, x\right)}^{\alpha \refines \gamma} * \dboxed{\SharedPending}^{\alpha \refines \gamma}
+    &\viewshift
+      \dboxed{\Central\left(false, rc, x\right)}^{\alpha \refines \gamma} * \dboxed{\SharedGuard(x)}^{\alpha \refines \gamma}\\
+\dboxed{\Central\left(exc, rc, x\right)}^{\alpha \refines \gamma} * \dboxed{\SharedGuard(x)}^{\alpha \refines \gamma}
+    &\viewshift
+        \dboxed{\Central\left(exc, rc - 1, x\right)}^{\alpha \refines \gamma}
+\end{align*}
+All of these are derived from Ghost-ViewShift.
+
+We don't use Ghost-Refinement-Exchange, because in the `shared' case, our mechanism for getting back $M$-state is to use the Borrow-Back rule. In particular, we use it to derive this:
+\begin{align*}
+\borrow{\kappa}{\dboxed{\SharedGuard(x)}^{\alpha \refines \gamma}}
+  &\viewshift
+    \borrow{\kappa}{\dboxed{x}^{\gamma}}
+\end{align*}
+This logic is all we need to verify a reader-writer lock.
+
 \end{document} 
