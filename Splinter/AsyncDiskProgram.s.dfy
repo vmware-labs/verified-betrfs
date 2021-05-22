@@ -6,7 +6,7 @@ include "AsyncDisk.s.dfy"
 include "../lib/Base/MapRemove.s.dfy"
 include "../lib/Checksums/CRC32C.s.dfy"
 
-// Interface to the implementer-supplied program that is getting verified.
+// Disk API Interface to the implementer-supplied program that is getting verified.
 abstract module AsyncDiskProgram {
   import D = AsyncDisk  // Importing for the interface, not the entire disk
   import CrashTolerantMapSpecMod

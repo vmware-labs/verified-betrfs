@@ -8,6 +8,7 @@ include "Betree.i.dfy"
 include "Message.s.dfy"
 include "Interp.s.dfy"
 
+// interpretation for the Betree Implementation
 module BetreeInterpMod {
   import opened Options
   import opened MessageMod

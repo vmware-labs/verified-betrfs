@@ -4,6 +4,7 @@
 include "../lib/Base/Option.s.dfy"
 include "Allocation.i.dfy"
 
+// Cache Interface that acts as the channel between the Betree/Journal/Program and the disk
 module CacheIfc {
   import opened Options
   import opened AllocationMod

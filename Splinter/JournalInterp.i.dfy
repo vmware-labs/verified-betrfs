@@ -3,6 +3,7 @@
 
 include "Journal.i.dfy"
 
+// The Module that Interprets the Journal.
 module JournalInterpMod {
   import opened MessageMod
   import opened Options

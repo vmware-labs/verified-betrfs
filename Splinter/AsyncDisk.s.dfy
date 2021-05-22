@@ -12,6 +12,7 @@ include "../lib/Checksums/CRC32C.s.dfy"
 // ignoring constraint for now.)
 //
 
+// Specification for an asynchronous Disk.
 module AsyncDisk {
   import opened NativeTypes
   import opened MapRemove_s

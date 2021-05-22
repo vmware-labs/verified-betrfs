@@ -4,31 +4,7 @@
 include "../lib/Base/Option.s.dfy"
 include "Allocation.i.dfy"
 include "CacheIfc.i.dfy"
-
-module MarshalledSnapshot {
-  // A snapshot of a data structure, spread across a linked list of CUs on the disk.
-  // This module almost certainly shares a bunch of DNA with Journal; TODO refactor.
-  import opened AllocationMod
-  import opened NativeTypes
-
-  datatype SnapshotSuperblock = SnapshotSuperblock(firstCU: CU)
-
-  datatype Block = Block()
-  type Snapshot = seq<Block>
-
-  predicate ValidSnapshot(dv: DiskView, snapshot: Snapshot) {
-    false // TODO
-  }
-
-  function IBytes(dv: DiskView, sb: SnapshotSuperblock) : seq<byte> {
-    if (exists snapshot :: ValidSnapshot(dv, snapshot))
-    then
-      // TODO decode all the blocks
-      []
-    else
-      []
-  }
-}
+include "MarshalledSnapshot.i.dfy"
 
 // It's funky that the allocation table is going to reserve its own
 // blocks, but it's actually okay: we reserve them in the in-memory
@@ -139,4 +115,3 @@ module IndirectionTableMod refines MarshalledSnapshot {
     true
   }
 }
-

@@ -155,10 +155,18 @@ module CrashTolerantMapSpecMod {
   {
     predicate WF() {
       && 0 < |versions|  // always some persistent, ephemeral version
-      && (forall i :: 0<=i<|versions| ==> versions[i].mapp.WF())
       // All versions beginning with the stableIdx aren't truncated,
       // so that crashing can't take us to a Truncated version.
-      && (forall i :: stableIdx<=i<|versions| ==> versions[i].mapp.Version?)
+
+      // QUESTION: Sowmya note: mapp doesn't have a Version, but i think we're 
+      // trying to express that there are valid entries for all the records after the stable idx 
+      // So I think I'm right?
+      //&& (forall i :: stableIdx<=i<|versions| ==> versions[i].mapp.Version?)
+      // Sowmya's changes
+      && (forall i :: stableIdx<=i<|versions| ==> versions[i].Version?)
+      // && (forall i :: 0<=i<|versions| ==> versions[i].mapp.WF())
+      && (forall i :: stableIdx<=i<|versions| ==> versions[i].mapp.WF())
+      // end of Sowmya's changes ----
       && stableIdx < |versions|
     }
   }
@@ -200,7 +208,7 @@ module CrashTolerantMapSpecMod {
     // Commit can truncate old versions
     && (forall i | 0<=i<|s.versions| ::
       || s'.versions == s.versions
-      || s'.versions.Truncated?)
+      || s'.versions[i].Truncated?)
     && s'.WF()  // But it can't truncate things after stableIdx
     // stableIdx advances towards, possibly all the way to, ephemeral state.
     && s.stableIdx < s'.stableIdx < |s.versions|
@@ -224,6 +232,7 @@ module CrashTolerantMapSpecMod {
   {
     && s.WF()
     && requestedAt < |s.versions|
+    && s.versions[requestedAt].Version?
     && syncReqId in s.versions[requestedAt].syncReqIds
     && requestedAt <= s.stableIdx
     && s' == s
