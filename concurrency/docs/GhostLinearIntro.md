@@ -3,11 +3,11 @@ In [the previous page](MutexIntro.md) we pointed out that our Mutex API had no w
 
 It turns out that this is easy to fix—and it also provides an opportunity to show one of the simplest uses of `ghost linear`.
 
-Initially, the purpose of `ghost linear` might seem strange to one unfamiliar with separation logic. After all, the ordinary `linear` type is in some sense a compiler optimization: semantically, we imagine all objects are immutable, but the compiler is allowed to emit updates-in-place rather than deep copies, as justified by the linear type system. (Again, see the Dafny linear type system documentation.) So then what’s the point of `ghost linear`? If an object is purely `ghost` (i.e., not compiled, it may seem like there is no point to optimizing out deep copies.
+Initially, the purpose of `ghost linear` might seem strange to one unfamiliar with separation logic. After all, the ordinary `linear` type is in some sense a compiler optimization: semantically, we imagine all objects are immutable, but the compiler is allowed to emit updates-in-place rather than deep copies, as justified by the linear type system. (Again, see the Dafny [linear type system documentation](https://github.com/secure-foundations/dafny/tree/betr/docs/Linear).) So then what’s the point of `ghost linear`? If an object is purely `ghost` (i.e., not compiled, it may seem like there is no point to optimizing out deep copies.
 
 In fact, with `ghost linear`, we will actually be using the linear type system to enforce verification-relevant properties—like the mutex acquire/release property.
 
-Here’s the idea: when a client calls `acquire`, it gets some sort of handle. In order to call `release`, it must supply that handle. This handle requires a few properties:
+Here’s the idea: when a client calls `acquire`, it gets some sort of handle. In order to call `release`, it must supply that handle. This handle ought to satisfy a few properties:
 
 - It should be “zero cost”, that is, it shouldn’t actually appear in compiled code. Its only purpose is in verification.
 - It should be linear—once we return the handle via a mutex `release`, we shouldn’t be able to use it to call `release` again. The handle serves as a ‘right’ to call `release` exactly once, so we should relinquish that right once we make the call.
