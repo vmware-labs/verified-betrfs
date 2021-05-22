@@ -5,6 +5,7 @@ include "../lib/Lang/NativeTypes.s.dfy"
 
 // TODO replace this stuff with the real key, value, message definitions
 
+// Messages are high-level Ops over the Betree  
 module MessageMod {
   type Key(!new,==)
   type Value(!new)

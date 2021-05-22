@@ -1,6 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+// XXX --- QUESTION: Is this a module that just allocates disk blocks?
 module AllocationMod {
   type AU = nat
   datatype CU = CU(au: AU, offset: nat)
@@ -40,6 +41,7 @@ module AllocationMod {
   }
 
   // TODO: this should probably be defined over CUs.
+  // Sowmya: I think this TODO is done?
   predicate DiskViewsEquivalentForSet(dv0: DiskView, dv1: DiskView, cus: seq<CU>)
   {
     forall cu :: cu in cus ==> EqualAt(dv0, dv1, cu)
