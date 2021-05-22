@@ -196,8 +196,6 @@ OTHER_PROVER_FLAGS = /rlimit:$(DEFAULT_RLIMIT)
 ### Adjust defaults for a couple of files
 # (It would be nice if we could do this in the source instead.)
 
-build/lib/DataStructures/LinearDList.i.verchk: OTHER_PROVER_FLAGS=/noNLarith /proverOpt:O:smt.random_seed=1
-
 # enable nonlinear arithmetic for some files
 # Note: Nonlinear.i.dfy and Math.i.dfy are designed to use nonlinear arith.
 # The other files are legacy'ed in, but it's no big deal as long
