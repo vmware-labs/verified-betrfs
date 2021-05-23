@@ -21,7 +21,7 @@ This is essentially the same state machine we saw on the last page, and we can u
 
 In order to construct a sharded state machine for the bank application, we need to first formalize the notion of ‘sharding.’ The main feature of a sharded state machine is the compositional structure, i.e., given two (or more) shards, we should be able to “glue” them together into a bigger shard. This enables the state machine to have a notion both of the small shards and of the complete state.
 
-It turns out the general algebraic structure for a sharded state machine is a Partial Commutative Monoid (PCM). (https://en.wikipedia.org/wiki/Monoid) PCMs have been known to be useful in concurrent verification for a while. Formally, a PCM is:
+It turns out the general algebraic structure for a sharded state machine is a [Partial Commutative Monoid (PCM)](https://en.wikipedia.org/wiki/Monoid). PCMs have been known to be useful in concurrent verification for a while. Formally, a PCM is:
 
 - A set M, with a binary operator x · y (the “gluing operation”)
     - · is commutative (i.e., x · y = y · x)
