@@ -15,7 +15,7 @@ The implementation of an exclusive spin lock (unlike more advanced implementatio
 
 ## Atomics
 
-Our `atomic` primitive will be based off the [C++ std::atomic library](https://en.cppreference.com/w/cpp/atomic/atomic) and similar like [Rust's std::sync::atomic](https://doc.rust-lang.org/std/sync/atomic/). For now, *we will only use the ‘sequentially consistent’ guarantee* (and in fact the Mutexes we examined earlier need to implemented with sequentially consistent guarantees).
+Our `atomic` primitive will be based off the [C++ std::atomic library](https://en.cppreference.com/w/cpp/atomic/atomic) and similar to [Rust's std::sync::atomic](https://doc.rust-lang.org/std/sync/atomic/). For now, *we will only use the ‘sequentially consistent’ guarantee* (and in fact the Mutexes we examined earlier need to implemented with sequentially consistent guarantees).
 
 (However, the [GPS: Navigating Weak Memory with Ghosts, Protocols, and Separation](http://plv.mpi-sws.org/gps/paper.pdf) paper provides some good reading on logics suitable for Acquire/Release primitives, which we will hopefully make use of in the future.)
 
@@ -68,18 +68,18 @@ The ghost state is available by the `ghost_acquire` statement (which must be the
 in the atomic block). The statement `ghost_acquire g;` assigns the atomic cell's ghost state
 to the variable `g`. Furthermore, it provides the user with the logical assertion of
 `inv(old_value, g)` (where `inv` is the user-specified invariant). When the user then calls
-`ghost_release g;` they must make sure that `inv(new_value, g)` is met.
+`ghost_release g;` they must ensure that `inv(new_value, g)` is met.
 
-Before we dig into the use-case of a spin lock, let's introduce one more concept real quick.
+Before we dig into the use-case of a spin lock, let's briefly introduce one more concept.
 
 ## Pointers and memory
 
-To implement a spin lock, we're going to need some concept of _permission to access a memory location_. In traditional separation logic, this is the “points-to” assertion, usually denoted (_p_ `↪` _v_) for a pointer _p_ and value _v_. The pointer itself can be passed around shared freely. However, (_p_ `↪` _v_) denotes _exclusive_ permission to actually read or write to the location _p_ (and specifically, to read the value _v_).
+To implement a spin lock, we're going to need some concept of _permission to access a memory location_. In traditional separation logic, this is the “points-to” assertion, usually denoted (_p_ `↪` _v_) for a pointer _p_ and value _v_. The pointer itself can be passed around and shared freely. However, (_p_ `↪` _v_) denotes _exclusive_ permission to actually read or write to the location _p_ (and specifically, to read the value _v_).
 
 We use this concept in our [pointers library](code/Ptrs.s.dfy).
 We introduce two types:
 
-* `Ptr` (which is essentially a `volatile void *`)
+* `Ptr` (a concrete value which is essentially a `volatile void *`)
 * `PointsTo`, a ghost object to represent the points-to (_p_ `↪` _v_).
 
 ```dafny
@@ -95,7 +95,7 @@ ensures d.ptr == this
 ensures d.v == v
 ```
 
-Note that `inout` just denotes a paramter that is both an in-parameter _and_ an out-parameter. An alternative (without `inout`) would look like this:
+Note that `inout` just denotes a parameter that is both an in-parameter _and_ an out-parameter. An alternative (without `inout`) would look like this:
 
 ```dafny
 method {:extern} write<V>(glinear old_d: PointsTo<V>, v: V)
@@ -176,7 +176,7 @@ from Dafny Classic, and doesn't really apply here at all. The _other_ `!`, the o
 
 Now, one thing to keep track of is that there are _two_ invariants of interest. The boolean atomic cell will have an invariant, which we will call `ainv`, which protects the contents of the atomic cell.
 
-The mutex _also_ has an invariant, which we call `inv`, which protects the contents of the mutex. Furthermore, the `ainv` will be defined in terms of the `inv`:
+The mutex _also_ has an invariant, which we call `inv`, which protects the contents of the mutex. Furthermore, the `ainv` will be defined in terms of `inv`:
 
 ```dafny
 predicate ainv<V>(store: Ptr, inv: (V) -> bool, v_exc: bool, g: glOption<PointsTo<V>>)
@@ -256,9 +256,7 @@ Next, we create the atomic cell with `new_atomic`. We initialize it with the val
 
 Finally, we package all those things into a `Mutex` object and return it via the out-parameter `m`.
 
-Now, before we build the `acquire` and `release` methods, 
-
-We need a concept of `MutexHandle`. Turns out, we can just make that the `PointsTo` object that we're already using:
+Now, before we build the `acquire` and `release` methods, we need a concept of `MutexHandle`. It turns out that we can just make that the `PointsTo` object that we're already using:
 
 ```dafny
 type MutexHandle<V> = PointsTo<V>
@@ -329,7 +327,7 @@ _Physically_, what we do here is:
     until the `compare_and_set` succeeds.
  * We read from the pointer `store` and return that value.
 
-Notice that _phsyically_, there is nothing that actually that ties the spin-loop to the pointer read. That all comes in with the ghost state.
+Notice that _physically_, there is nothing that actually that ties the spin-loop to the pointer read. That all comes in with the ghost state.
 
 So let's talk through the code in the ghost world:
 
