@@ -40,7 +40,7 @@ Here are the above steps, presented graphically (the purple box represents threa
 
 ## Code
 
-By defining a SSM as we did on the previous page, the concurrency framework will create for us a _Token_ object. The Token can be manipulated as `glinear` (again, ‘ghost linear’).
+By defining a SSM as we did on the previous page, the concurrency framework will create for us a _Token_ object. The Token can be manipulated as `glinear` (again, [‘ghost linear’](GhostLinearIntro.md)).
 For now, I'll just show you want the interface looks like, and suffice it to say that the framework lets us obtain this Token type, and several ghost methods for manipulating it:
 
 [code/BankImplementation.md](code/BankImplementation.md)
@@ -111,7 +111,7 @@ Now, let's gone with making use of these tokens.
 
 For our implementation, we'll be maintaining a data structure containing a bunch of mutexes,
 one for each account. Each mutex should have an invariant, and that invariant will be
-dependent on the account id. For example, the first mutex in the sequence (mutex 0) will
+dependent on the account ID. For example, the first mutex in the sequence (mutex 0) will
 have an invariant that it contains a ghost token corresponding to account 0. The invariant
 will also say that the balance stored in the ghost token will match the number _physically_
 stored in the mutex.
