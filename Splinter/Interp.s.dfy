@@ -10,15 +10,17 @@ module InterpMod {
 
   type LSN = nat // Log sequence number
 
-  datatype Interp = Interp(mi:imap<Key, Value>, seqEnd: LSN)
+  datatype Interp = Interp(mi:imap<Key, Message>, seqEnd: LSN)
   {
     predicate WF() {
       // TODO How is ImapComplete not in Maps.i?
-      forall k :: k in mi
+      && (forall k :: k in mi)
+      // && forall k :: mi[k].TerminalMessage?  -- all messages are values
     }
 
     // The effect of a put
-    function Put(key: Key, value: Value) : Interp
+    function Put(key: Key, value: Message) : Interp
+      // requires value.TerminalMessage?  // TODO Interps work with values
     {
       Interp(mi[key := value], seqEnd + 1)
     }

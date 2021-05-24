@@ -66,14 +66,22 @@ module MsgSeqMod {
       else
         var lsn := seqStart + count - 1;
         var key := msgs[lsn].k;
-        var message := msgs[lsn];
-        ApplyToKeyMapRecursive(orig, count-1)[key := message]
+        var oldMessage := orig[key];
+        var newMessage := msgs[lsn];
+        ApplyToKeyMapRecursive(orig, count-1)[key := Combine(oldMessage, newMessage)]
     }
 
     function ApplyToKeyMap(orig: map<Key, Message>) : map<Key, Message>
       requires WF()
     {
       ApplyToKeyMapRecursive(orig, Len())
+    }
+
+    function Truncate(lsn: LSN) : MsgSeq
+      requires seqStart <= lsn < seqEnd
+    {
+      var keepVersions := lsn - seqStart;
+      MsgSeq(msgs[..keepVersions], seqStart, lsn)
     }
   }
 

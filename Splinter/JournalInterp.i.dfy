@@ -29,7 +29,7 @@ module JournalInterpMod {
   }
 
   // TODO(jonh): collapse to return MsgSeq
-  function MesgSeqs(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : seq<MsgSeq>
+  function MsgSeqs(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : seq<MsgSeq>
   {
     var chain := ChainFrom(cache.dv, sb).chain;
     if chain.Some?
@@ -91,6 +91,27 @@ module JournalInterpMod {
   //       ApplyOneMessage(prior.mapp.interp, MessageAt(v, lsn)),
   //       SyncReqsAt(v, lsn))
   // }
+
+  function AsMsgSeq(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : MsgSeq
+  {
+    CondenseAll(MsgSeqs(v, cache, sb))
+  }
+
+  function InterpFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : Interp
+    requires base.seqEnd == v.persistentLSN
+    requires v.persistentLSN <= lsn <= v.unmarshalledLSN()
+  {
+    var newMi := AsMsgSeq(v, cache, sb).Truncate(lsn).ApplyToKeyMap(base.mi);
+    var newInterp := Interp(newMi, lsn);
+  }
+
+  function InterpSeqFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp) : seq<Interp>
+  {
+    seq(numVersions, i requires i < numVersions =>
+      var lsn := i + v.persistentLSN;
+      InterpFor(v, cache, sb, base, lsn)
+    )
+  }
 
    function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
      requires base.seqEnd == v.persistentLSN
