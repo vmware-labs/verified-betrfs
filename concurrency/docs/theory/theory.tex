@@ -10,6 +10,9 @@
 \usepackage{graphicx}
 \usepackage{xcolor}
 
+\newcommand{\BigAsterisk}{\mathop{\scalebox{3}{\raisebox{-0.2ex}{$\ast$}}}}%
+
+
 
 \usepackage{parskip}
 \usepackage[tmargin=1in,bmargin=1in,lmargin=0.75in,rmargin=0.75in]{geometry}
@@ -317,7 +320,7 @@ the ones involving $\refines$.
     \stacktwo{
       \widehat{M} \refines_{\rel} \widehat{N}
     }{
-      \forall p,q.~ \rel(b\cdot p, q) \implies \exists q' .~ \rel(b' \cdot p, q') \land (a \cdot q \mapsto a' \cdot q')
+      \forall p,q.~ \rel(b\cdot p) = Some(q) \implies \exists q' .~ \rel(b' \cdot p) = Some(q') \land (a \cdot q \mapsto a' \cdot q')
     }
   }{
     \dboxed{b}^{\alpha \refines_{\rel} \gamma} * \dboxed{a}^\gamma
@@ -750,20 +753,30 @@ This logic is all we need to verify a reader-writer lock.
 \newcommand{\ReleaseExc}{\text{ReleaseExc}}
 \newcommand{\ReleaseShared}{\text{ReleaseShared}}
 
+\newcommand{\langassign}{\leftarrow}
 \newcommand{\langloop}{\textbf{loop}}
 \newcommand{\until}{\textbf{until}}
 \newcommand{\langif}{\textbf{if}}
 \newcommand{\langthen}{\textbf{then}}
 \newcommand{\langelse}{\textbf{else}}
+\newcommand{\langmatch}{\textbf{match}}
+\newcommand{\langwith}{\textbf{with}}
+\newcommand{\langend}{\textbf{end}}
+\newcommand{\langlet}{\textbf{let}~}
+\newcommand{\langref}{\textbf{ref}}
+\newcommand{\langin}{\textbf{in}}
 
 \newcommand{\CAS}{\textbf{CAS}}
 \newcommand{\AtomicAdd}{\textbf{AtomicAdd}}
 
 \newcommand{\Inv}{Inv}
 \newcommand{\inv}{inv}
+\newcommand{\HTInv}{HTInv}
+\newcommand{\Heap}{Heap}
+\newcommand{\htinv}{htinv}
 \newcommand{\inlinehoare}[1]{{\color{blue}\left\{#1\right\}}}
 
-Let's use a struct $\rwlock := \{\exc: \Pointer, \rc: \Pointer\}$. Our implementation will be straightforward:
+Let's use a struct $\rwlock : \{\exc: \Pointer, \rc: \Pointer\}$. Our implementation will be straightforward:
 
 \begin{align*}
   \AcquireExc(\rwlock) ~\eqdef~
@@ -796,7 +809,7 @@ Let's use a struct $\rwlock := \{\exc: \Pointer, \rc: \Pointer\}$. Our implement
   %    & (!\rwlock.\exc) = \false\\
   %    \\
   \ReleaseExc(\rwlock) ~\eqdef~
-      & \rwlock.\exc := 0\\
+      & \rwlock.\exc \langassign 0\\
       \\
   \ReleaseShared(\rwlock) ~\eqdef~
       & \AtomicAdd(\rwlock.\rc, -1)
@@ -829,7 +842,7 @@ $\ReleaseShared$:
 \end{align*}
 To prove these specifications, we will first define $\Inv$:
 \begin{align*}
-  \Inv(\rwlock) ~\eqdef~
+  \Inv(\rwlock,\alpha,\gamma,\inv) ~\eqdef~
       \exists \iota, \boxed{
         \exists exc,rc,x .~
             \dboxed{\Central(exc,rc,x)}^{\alpha \refines \gamma}
@@ -878,7 +891,7 @@ $\AcquireShared$ will follow from:
 $\ReleaseExc$ will follow from:
 \begin{align*}
 & \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \dboxed{\ExcGuard}^{\alpha \refines \gamma} * \dboxed{x}^\gamma \land \inv(x) }\\
-& \rwlock.\exc := 0\\
+& \rwlock.\exc \langassign 0\\
 & \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) }
 \end{align*}
 And finally, $\ReleaseShared$ will follow from:
@@ -931,6 +944,122 @@ Let's work out (\ref{hoare-atomic-add-shared-pending}) explicitly:
             * (\rwlock.\rc \pointsto rc')
     }\\
 \text{(close Inv)} ~~~~ & \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \SharedPending } \nonumber\\
+\end{align*}
+
+\newpage
+
+\textbf{A hash-table logic}
+
+\newcommand{\hashto}{\stackrel{\text{hash}}{\hookrightarrow}}
+\newcommand{\entryto}{\stackrel{\text{entry}}{\hookrightarrow}}
+\newcommand{\Some}{\text{Some}}
+\newcommand{\None}{\text{None}}
+
+\newcommand{\Query}{\text{Query}}
+\newcommand{\QueryIter}{\text{QueryIter}}
+\newcommand{\Update}{\text{Update}}
+\newcommand{\UpdateIter}{\text{UpdateIter}}
+\newcommand{\Remove}{\text{Remove}}
+\newcommand{\RemoveIter}{\text{RemoveIter}}
+\newcommand{\NotInRange}{\text{NotInRange}}
+
+\newcommand{\hash}{\ensuremath{hash}}
+\newcommand{\rec}{\textbf{rec}}
+
+%We will derive a TPCM (a ``normal'' one, not a refinement) to represent a hash table.
+We'll want to support the following specs for a linear-probing hash table.
+
+\begin{align*}
+\inlinehoare{\HTInv(ht,\gamma) * \dboxed{k \hashto v_0}^\gamma} &~ \Query(ht,k) ~ \inlinehoare{v.~ \HTInv(ht,\gamma) * \dboxed{k \hashto v_0}^\gamma \land v = v_0}\\
+\inlinehoare{\HTInv(ht,\gamma) * \dboxed{k \hashto v_0}^\gamma} &~ \Update(ht,k, v) ~ \inlinehoare{\HTInv(ht,\gamma) * \dboxed{k \hashto \Some~v}^\gamma}\\
+\inlinehoare{\HTInv(ht,\gamma) * \dboxed{k \hashto v_0}^\gamma} &~ \Remove(ht,k) ~ \inlinehoare{\HTInv(ht,\gamma) * \dboxed{k \hashto \None}^\gamma}
+\end{align*}
+
+We assume a function $\hash : Keys \to \mathbb{N}$. We'll let $ht : \{rwlocks: rwlock~list, table: ((Key,Value)~option)~list\}$.
+
+\begin{align*}
+  \Query(ht,k) ~\eqdef~ & \QueryIter(ht,k,\hash(k))\\
+  \QueryIter(ht,k,i) ~\eqdef~ & 
+      \AcquireShared(ht.rwlocks[i]);\\
+      &\langlet r = (\langmatch~ !ht.table[i] ~\langwith\\
+      &~~~~ |~ \None \Rightarrow \None\\
+      &~~~~ |~ \Some~(k_0,v_0) \Rightarrow
+          \langif~ k = k_0 ~\langthen~ Some(v_0) ~\langelse~ \QueryIter(ht,k,i+1)\\
+      &\langend) ~\langin\\
+      &\ReleaseShared(ht.rwlocks[i]);\\
+      &r\\
+      \\
+  \Update(ht,k,v) ~\eqdef~ & \UpdateIter(ht,k,v,\hash(k))\\
+  \UpdateIter(ht,k,v,i) ~\eqdef~ & 
+      \AcquireExc(ht.rwlocks[i]);\\
+      &\langlet r = (\langmatch~ !ht.table[i] ~\langwith\\
+      &~~~~ |~ \None \Rightarrow ht.table[i] \langassign (k,v)\\
+      &~~~~ |~ \Some~(k_0,v_0) \Rightarrow
+          \langif~ k = k_0 ~\langthen~ ht.table[i] \langassign (k,v) ~\langelse~ \UpdateIter(ht,k,v,i+1)\\
+      &\langend) ~\langin\\
+      &\ReleaseExc(ht.rwlocks[i]);\\
+      &r
+\end{align*}
+
+\newpage
+
+We'll define a TPCM resource for our hash table (that is, a ``normal'' TPCM, not a refinement). It will have two kinds of elements, $k \hashto v$ (where $v : Value~option$)
+and $i \entryto c$, where $c : (Key,Value)~option$.
+
+Allowable operations will be encoded into this logic. For example, we will have all the following:
+
+\emph{Update}.
+
+\begin{align*}
+  &\hash(k) \le u ~\land~ \left(\forall i.~ \hash(k) \le i < u \implies i \in entries \land \exists k_1,v_1 .~ entries[i] = \Some (k_1,v_1) \land k_1 \ne k\right)\\
+  &~~~~\land~ \left(entries[u] = \None ~\lor~ \exists v_1 .~ entries[u] = \Some (k, v) \right)\\
+  &~~~~\implies entries \cdot (k \hashto v_0) ~\mapsto~ entries[u \langassign \Some~(k,v)]  \cdot (k \hashto v)
+\end{align*}
+
+\emph{Query (found)}.
+
+The found case is easy: a single entry $(k,v)$ proves that the hash table maps $k$ to $v$.
+
+\[
+  \left((i \entryto (k,v_0)) \cdot (k \hashto v)\right) \ne \bot \implies v = \Some(v_0)
+\]
+
+The not-found case requires another quantifed predicate:
+
+\begin{align*}
+&\left(\forall i.~ \hash(k) \le i < u \implies i \in entries \land \exists k_1,v_1 .~ entries[i] = \Some (k_1,v_1) \land k_1 \ne k\right)\\
+  &~~~~\land~ \left(entries[u] = \None\right)\\
+  &~~~~\implies entries \cdot (k \hashto v) \ne \bot \implies v = \None
+\end{align*}
+
+We'll define $\HTInv$ as follows:
+\begin{align*}
+\HTInv(ht, \gamma) ~\eqdef~& \exists\alpha.~ \BigAsterisk_i \Inv\left(ht.rwlocks[i], \alpha, \gamma\times\Heap, \htinv(i, ht.entries[i])\right)\\
+\htinv(i, \ell) ~\eqdef~& \lambda x .~ \exists c .~ x = (i \entryto c, \ell \pointsto c)
+\end{align*}
+In other words, the RwLocks will be arranged so that we can use the lock at index $i$ to obtain
+some ghost state $(i \entryto c, ht.entries[i] \pointsto c)$.
+
+\newpage
+
+Now, we prove $\QueryIter$. (To avoid clutter, we silently skolemize existential
+variables as they are introduced.)
+
+\begin{align*}
+  &\inlinehoare{\active(\kappa) * \borrow{\kappa}{\dboxed{ht.entries}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land KeyNotInRange(ht.entries, k, i)}\\
+  &\AcquireShared(ht.rwlocks[i]);\\
+  &\inlinehoare{\active(\kappa) * \borrow{\kappa}{\dboxed{ht.entries}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land KeyNotInRange(ht.entries, k, i)
+      * \SharedGuard\left( (i \entryto c, ht.entries[i] \pointsto c) \right) }\\
+  &\langlet r = (\langmatch~ !ht.table[i] ~\langwith\\
+  &~~~~ |~ \None \Rightarrow \None\\
+  &~~~~ |~ \Some~(k_0,v_0) \Rightarrow
+      \langif~ k = k_0 ~\langthen~ Some(v_0) ~\langelse~ \QueryIter(ht,k,i+1)\\
+  &\langend) ~\langin\\
+  &\ReleaseShared(ht.rwlocks[i]);\\
+  &r\\
+  &\inlinehoare{\active(\kappa) * (k \hashto v_0) \land v = v_0}
 \end{align*}
 
 \end{document} 
