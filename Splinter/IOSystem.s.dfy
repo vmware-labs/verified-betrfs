@@ -7,7 +7,7 @@ include "../lib/Checksums/CRC32C.s.dfy"
 include "AsyncDisk.s.dfy"
 include "AsyncDiskProgram.s.dfy"
 
-// The Specification for the entire IOSystem
+// The Specification for the entire IOSystem (Disk + Program)
 abstract module IOSystem {
   import D = AsyncDisk
   import P : AsyncDiskProgram

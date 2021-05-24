@@ -6,6 +6,7 @@ include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "Allocation.i.dfy"
 
+// QUESTION: Helper module that contains what exactly?
 module MsgSeqMod {
   import opened Sequences
   import opened Maps

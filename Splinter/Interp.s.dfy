@@ -4,8 +4,7 @@
 include "../lib/Lang/NativeTypes.s.dfy"
 include "Message.s.dfy"
 
-// Basic template for defining Interpretations
-// XXX --- QUESITON: Why don't JournalInterp and BetreeInterp not use this module?
+// Basic template for defining map Interpretations
 module InterpMod {
   import opened MessageMod
 
