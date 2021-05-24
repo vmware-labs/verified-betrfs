@@ -8,6 +8,8 @@
 \usepackage{wasysym}
 \usepackage[]{stix}
 \usepackage{graphicx}
+\usepackage{xcolor}
+
 
 \usepackage{parskip}
 \usepackage[tmargin=1in,bmargin=1in,lmargin=0.75in,rmargin=0.75in]{geometry}
@@ -677,7 +679,7 @@ And,
   \borrow{\kappa}{\dboxed{x}^\gamma}
 \end{align*}
 
-\textbf{RwLock example}
+\textbf{RwLock Logic}
 
 \newcommand{\Central}{\textsf{Central}}
 \newcommand{\ExcPending}{\textsf{ExcPending}}
@@ -722,5 +724,118 @@ We don't use Ghost-Refinement-Exchange, because in the `shared' case, our mechan
     \borrow{\kappa}{\dboxed{x}^{\gamma}}
 \end{align*}
 This logic is all we need to verify a reader-writer lock.
+
+\textbf{RwLock Verified Example}
+
+\newcommand{\rwlock}{rwlock}
+\newcommand{\exc}{exc}
+\newcommand{\rc}{rc}
+\newcommand{\Pointer}{Pointer}
+
+\newcommand{\AcquireExc}{\text{AcquireExc}}
+\newcommand{\AcquireShared}{\text{AcquireShared}}
+\newcommand{\AcquireExcSetBit}{\text{AcquireExcSetBit}}
+\newcommand{\AcquireExcCheckRc}{\text{AcquireExcCheckRc}}
+\newcommand{\AcquireSharedIncRc}{\text{AcquireSharedIncRc}}
+\newcommand{\AcquireSharedCheckExc}{\text{AcquireSharedCheckExc}}
+\newcommand{\AcquireSharedAbort}{\text{AcquireSharedAbort}}
+\newcommand{\ReleaseExc}{\text{ReleaseExc}}
+\newcommand{\ReleaseShared}{\text{ReleaseShared}}
+
+\newcommand{\langloop}{\textbf{loop}}
+\newcommand{\until}{\textbf{until}}
+\newcommand{\langif}{\textbf{if}}
+\newcommand{\langthen}{\textbf{then}}
+\newcommand{\langelse}{\textbf{else}}
+
+\newcommand{\CAS}{\textbf{CAS}}
+\newcommand{\AtomicAdd}{\textbf{AtomicAdd}}
+
+\newcommand{\Inv}{Inv}
+\newcommand{\inv}{inv}
+\newcommand{\inlinehoare}[1]{{\color{blue}\left\{#1\right\}}}
+
+Let's use a struct $\rwlock := \{\exc: \Pointer, \rc: \Pointer\}$. Our implementation will be straightforward:
+
+\begin{align*}
+  \AcquireExc(\rwlock) ~\eqdef~
+      & \langloop~\until~\AcquireExcSetBit(\rwlock);\\
+      & \langloop~\until~\AcquireExcCheckRc(\rwlock)\\
+      \\
+  \AcquireShared(\rwlock) ~\eqdef~
+      & \langloop~\until~(\\
+        & ~~~~ (\langloop~\until~!\rwlock.\exc);\\
+        & ~~~~ \AcquireSharedIncRc(\rwlock);\\ %\AtomicAdd(\rwlock.\rc, 1);
+        & ~~~~ \langif~ \AcquireSharedCheckExc(\rwlock) ~\langthen\\
+        & ~~~~~~~~ \true\\
+        & ~~~~ \langelse\\
+        & ~~~~~~~~ \AcquireSharedAbort(\rwlock); \false\\ %\AtomicAdd(\rwlock.\rc, -1); \false
+      )\\
+      \\
+  \AcquireExcSetBit(\rwlock) ~\eqdef~
+      & \CAS(\rwlock.\exc,\false,\true)\\
+      \\
+  \AcquireExcCheckRc(\rwlock) ~\eqdef~
+      & (!\rwlock.\rc) = 0\\
+      \\
+  \AcquireSharedIncRc(\rwlock) ~\eqdef~
+      & \AtomicAdd(\rwlock.\rc, 1)\\
+      \\
+  \AcquireSharedAbort(\rwlock) ~\eqdef~
+      & \AtomicAdd(\rwlock.\rc, -1)\\
+      \\
+  \AcquireSharedCheckExc(\rwlock) ~\eqdef~
+      & (!\rwlock.\exc) = \false\\
+      \\
+  \ReleaseExc(\rwlock) ~\eqdef~
+      & \rwlock.\exc := \false\\
+      \\
+  \ReleaseShared(\rwlock) ~\eqdef~
+      & AtomicAdd(\rwlock.\rc, -1)
+\end{align*}
+We would like to prove the following specifications, for some predicate $\Inv(\rwlock,\alpha,\gamma,\inv)$. (Here, $\inv$ is the user-defined predicate on the ghost state stored by the $\rwlock$.)
+
+$\AcquireExc$:
+\begin{align*}
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) }\\
+& \AcquireExc(\rwlock) \\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \dboxed{\ExcGuard}^{\alpha \refines \gamma} * \exists x.~ \dboxed{x}^\gamma \land \inv(x) }
+\end{align*}
+$\ReleaseExc$:
+\begin{align*}
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \dboxed{\ExcGuard}^{\alpha \refines \gamma} * \dboxed{x}^\gamma \land \inv(x) }\\
+& \ReleaseExc(\rwlock) \\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) }
+\end{align*}
+$\AcquireShared$:
+\begin{align*}
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) }\\
+& \AcquireShared(\rwlock) \\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \exists x.~ \dboxed{\SharedGuard(x)}^{\alpha \refines \gamma} \land \inv(x) }
+\end{align*}
+$\ReleaseShared$:
+\begin{align*}
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \dboxed{\SharedGuard(x)}^{\alpha \refines \gamma} \land \inv(x) }\\
+& \ReleaseShared(\rwlock) \\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) }
+\end{align*}
+To prove these specifications, we will first define $\Inv$:
+\begin{align*}
+  \Inv(\rwlock) ~\eqdef~
+      \exists \iota, \boxed{
+        \exists exc,rc,x .~
+            \dboxed{\Central(exc,rc,x)}^{\alpha \refines \gamma}
+            * (\rwlock.\exc \pointsto exc)
+            * (\rwlock.\rc \pointsto rc)
+      }^{~\iota}
+\end{align*}
+Now, we can work out how to verify the above programs.
+These will follow from the below:
+\begin{align*}
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) }\\
+& \AcquireExcSetBit(\rwlock)\\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) *
+    \dboxed{\ExcPending}^{\alpha\refines\gamma} }
+\end{align*}
 
 \end{document} 
