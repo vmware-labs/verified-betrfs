@@ -7,11 +7,10 @@ include "../Lang/LinearSequence.s.dfy"
 include "../Lang/LinearSequence.i.dfy"
 
 /*
-In a test of 100 random seeds:
-- this file, as is, succeeded 82 times
-- with the (commented-out) PointerInRange edits, it succeeded 84 times
-- with /proverOpt:O:smt.case_split=1, which had helped with earlier Dafny/Boogie/Z3, only 57 times
-The problem seems to be with Z3 not instantiating quantifiers in some cases.
+In a test of 100 random seeds, this file succeeded 99 times.
+An earlier version of this file, using sequence + and .., only succeeded 80 times.
+The problem seemed to be with Z3 not instantiating quantifiers in some cases;
+it's not clear why sequence + and .. were problematic, though.
 */
 
 module DList {
@@ -41,23 +40,6 @@ module DList {
   ghost const unused:int := -2
   ghost const sentinel:int := -1
 
-//  predicate PointerInRange<A>(nodes:seq<Node<A>>, f:seq<int>, i:nat)
-//  requires i < |f|
-//  {
-//    0 < f[i] < |nodes|
-//  }
-//
-//  lemma RevealPointerInRange<A>(nodes:seq<Node<A>>, f:seq<int>)
-//  requires forall i :: 0 <= i < |f| ==> PointerInRange(nodes, f, i)
-//  ensures forall i :: 0 <= i < |f| ==> 0 < f[i] < |nodes|
-//  {
-//    forall i | 0 <= i < |f|
-//    ensures 0 < f[i] < |nodes|
-//    {
-//      assert PointerInRange(nodes, f, i);
-//    }
-//  }
-
   predicate Invs<A>(nodes:seq<Node<A>>, freeStack:uint64, s:seq<A>, f:seq<int>, g:seq<int>)
   {
     && |f| == |s|
@@ -65,11 +47,8 @@ module DList {
     && |nodes| > 0
     && g[0] == sentinel
     && 0 <= freeStack as int < |nodes|
-    && (forall i {:trigger f[i]} :: 0 <= i < |f| ==> 0 < f[i] < |nodes|) // (forall i :: 0 <= i < |f| ==> PointerInRange(nodes, f, i))
-    && (forall i {:trigger g[f[i]]} :: 0 <= i < |f| ==> (
-//      assert PointerInRange(nodes, f, i);
-      g[f[i]] == i
-    ))
+    && (forall i {:trigger f[i]} :: 0 <= i < |f| ==> 0 < f[i] < |nodes|)
+    && (forall i {:trigger g[f[i]]} :: 0 <= i < |f| ==> g[f[i]] == i)
     && (forall p :: 0 <= p < |g| ==>
       && unused <= g[p] < |s|
       && 0 <= nodes[p].next as int < |g|
@@ -224,15 +203,6 @@ module DList {
       
       inout self.freeStack := len' - 1;
       inout ghost self.g := seq(|self.nodes|, i requires 0 <= i < |self.nodes| => if i < |self.g| then self.g[i] else unused);
-
-//      forall i | 0 <= i < |self.f|
-//      ensures PointerInRange(self.nodes, self.f, i)
-//      {
-//        assert PointerInRange(old_self.nodes, old_self.f, i); // observe
-//      }
-//      
-//      RevealPointerInRange(old_self.nodes, old_self.f);
-//      RevealPointerInRange(self.nodes, self.f);
     }
 
     linear inout method Remove(p:uint64)
@@ -244,8 +214,12 @@ module DList {
         self.ValidPtr(x) && self.Index(x) == old_self.Index(x) - (if old_self.Index(x) < old_self.Index(p) then 0 else 1)
     {
       ghost var index := self.g[p];
-      ghost var s' := self.s[.. index] + self.s[index + 1 ..];
-      ghost var f' := self.f[.. index] + self.f[index + 1 ..];
+
+      // use seq(lambda) rather than + and .. here for better Z3 stability:
+      ghost var s' := seq(|self.s| - 1, x requires 0 <= x < |self.s| - 1 =>
+        if x < index then self.s[x] else self.s[x + 1]);
+      ghost var f' := seq(|self.f| - 1, x requires 0 <= x < |self.f| - 1 =>
+        if x < index then self.f[x] else self.f[x + 1]);
       ghost var g' := seq(|self.g|, x requires 0 <= x < |self.g| =>
         if self.g[x] == index then unused else if self.g[x] > index then self.g[x] - 1 else self.g[x]);
 
@@ -262,20 +236,9 @@ module DList {
       inout ghost self.s := s';
       inout ghost self.f := f';
       inout ghost self.g := g';
-
-//      forall i | 0 <= i < |self.f|
-//      ensures PointerInRange(self.nodes, self.f, i)
-//      ensures 0 < self.f[i] < |self.nodes|
-//      {
-//        if i < index {
-//          assert PointerInRange(old_self.nodes, old_self.f, i); // observe
-//        } else {
-//          assert PointerInRange(old_self.nodes, old_self.f, i + 1); // observe
-//        }
-//      }
     }
 
-    linear inout method InsertAfter(p:uint64, a:A) returns (p':uint64)
+    linear inout method{:timeLimitMultiplier 3} InsertAfter(p:uint64, a:A) returns (p':uint64)
       requires old_self.Inv()
       requires old_self.MaybePtr(p)
       ensures self.Inv()
@@ -294,17 +257,14 @@ module DList {
 
       ghost var selfBefore := self;
 
-//      forall i | 0 <= i < |selfBefore.f|
-//      ensures PointerInRange(selfBefore.nodes, selfBefore.f, i)
-//      {
-//        assert PointerInRange(self.nodes, self.f, i); // observe
-//      }
-
       // linear var DList(nodes, freeStack, s, f, g) := l';
       ghost var index := self.g[p];
       ghost var index' := index + 1;
-      inout ghost self.s := selfBefore.s[.. index'] + [a] + selfBefore.s[index' ..];
-      inout ghost self.f := selfBefore.f[.. index'] + [p' as int] + selfBefore.f[index' ..];
+      // use seq(lambda) rather than + and .. here for better Z3 stability:
+      inout ghost self.s := seq(|selfBefore.s| + 1, x requires 0 <= x <= |selfBefore.s| =>
+        if x == index' then a else if x < index' then selfBefore.s[x] else selfBefore.s[x - 1]);
+      inout ghost self.f := seq(|selfBefore.f| + 1, x requires 0 <= x <= |selfBefore.f| =>
+        if x == index' then p' as int else if x < index' then selfBefore.f[x] else selfBefore.f[x - 1]);
       inout ghost self.g := seq(|self.g|, x requires 0 <= x < |self.g| =>
         if x == p' as int then index' else if self.g[x] > index then self.g[x] + 1 else self.g[x]);
       var node := seq_get(self.nodes, p);
@@ -314,25 +274,9 @@ module DList {
       mut_seq_set(inout self.nodes, node.next, node_next.(prev := p'));
       mut_seq_set(inout self.nodes, p', node');
       inout self.freeStack := freeNode.next;
-
-//      forall i | 0 <= i < |self.f|
-//      ensures PointerInRange(self.nodes, self.f, i)
-//      {
-//        if i < index {
-//          assert PointerInRange(selfBefore.nodes, selfBefore.f, i); // observe
-//        } else if i == index {
-//        } else if (i as int - 1 >= 0) {
-//          assert PointerInRange(selfBefore.nodes, selfBefore.f, i - 1); // observe
-//        }
-//      }
-//
-//      assert self.Inv() by {
-//        RevealPointerInRange(selfBefore.nodes, selfBefore.f);
-//        RevealPointerInRange(self.nodes, self.f);
-//      }
     }
 
-    linear inout method InsertBefore(p:uint64, a:A) returns(p':uint64)
+    linear inout method{:timeLimitMultiplier 3} InsertBefore(p:uint64, a:A) returns(p':uint64)
       requires old_self.Inv()
       requires old_self.MaybePtr(p)
       ensures self.Inv()
@@ -352,16 +296,13 @@ module DList {
 
       ghost var selfBefore := self;
 
-//      forall i | 0 <= i < |selfBefore.f|
-//      ensures PointerInRange(selfBefore.nodes, selfBefore.f, i)
-//      {
-//        assert PointerInRange(self.nodes, self.f, i); // observe
-//      }
-
       //linear var DList(nodes, freeStack, s, f, g) := l';
       ghost var index' := self.IndexHi(p);
-      inout ghost self.s := selfBefore.s[.. index'] + [a] + selfBefore.s[index' ..];
-      inout ghost self.f := self.f[.. index'] + [p' as int] + self.f[index' ..];
+      // use seq(lambda) rather than + and .. here for better Z3 stability:
+      inout ghost self.s := seq(|selfBefore.s| + 1, x requires 0 <= x <= |selfBefore.s| =>
+        if x == index' then a else if x < index' then selfBefore.s[x] else selfBefore.s[x - 1]);
+      inout ghost self.f := seq(|selfBefore.f| + 1, x requires 0 <= x <= |selfBefore.f| =>
+        if x == index' then p' as int else if x < index' then selfBefore.f[x] else selfBefore.f[x - 1]);
       inout ghost self.g := seq(|self.g|, x requires 0 <= x < |self.g| =>
         if x == p' as int then index' else if self.g[x] >= index' then self.g[x] + 1 else self.g[x]);
       var node := seq_get(self.nodes, p);
@@ -371,29 +312,6 @@ module DList {
       mut_seq_set(inout self.nodes, node.prev, node_prev.(next := p'));
       mut_seq_set(inout self.nodes, p', node');
       inout self.freeStack := freeNode.next;
-
-//      forall i | 0 <= i < |self.f|
-//      ensures PointerInRange(self.nodes, self.f, i)
-//      {
-//        if i < index' {
-//          assert PointerInRange(selfBefore.nodes, selfBefore.f, i); // observe
-//        } else if i == index' {
-//        } else {
-//          assert PointerInRange(selfBefore.nodes, selfBefore.f, i - 1); // observe
-//        }
-//      }
-//
-//      assert self.Inv() by {
-//        forall i | 0 <= i < |self.f|
-//        ensures (
-//          assert PointerInRange(self.nodes, self.f, i);
-//          self.g[self.f[i]] == i
-//        )
-//        {
-//          if i == index' {
-//          }
-//        }
-//      }
     }
 
     shared method Clone() returns(linear l':DList<A>)

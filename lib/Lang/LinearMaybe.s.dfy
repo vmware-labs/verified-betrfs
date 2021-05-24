@@ -4,7 +4,7 @@
 
 module {:extern "LinearMaybe"} LinearMaybe {
   // note: cannot test maybe<A> for equality at run-time (because has is ghost)
-  type {:extern "predefined"} maybe(!new)<A>
+  type {:extern "predefined"} maybe(!new, 00)<A>
 
   predicate {:axiom} has<A>(m:maybe<A>)
 
