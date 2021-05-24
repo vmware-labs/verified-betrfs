@@ -775,6 +775,8 @@ This logic is all we need to verify a reader-writer lock.
 \newcommand{\Heap}{Heap}
 \newcommand{\htinv}{htinv}
 \newcommand{\inlinehoare}[1]{{\color{blue}\left\{#1\right\}}}
+\newcommand{\inlinehoarel}[1]{{\color{blue}\left\{#1\right.}}
+\newcommand{\inlinehoarer}[1]{{\color{blue}\left.#1\right\}}}
 
 Let's use a struct $\rwlock : \{\exc: \Pointer, \rc: \Pointer\}$. Our implementation will be straightforward:
 
@@ -1052,6 +1054,11 @@ variables as they are introduced.)
   &\inlinehoare{\active(\kappa) * \borrow{\kappa}{\dboxed{ht.entries}^\gamma}
       * \dboxed{k \hashto v_0}^\gamma \land KeyNotInRange(ht.entries, k, i)
       * \SharedGuard\left( (i \entryto c, ht.entries[i] \pointsto c) \right) }\\
+  &\inlinehoarel{\active(\kappa) * \borrow{\kappa}{\dboxed{ht.entries}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land KeyNotInRange(ht.entries, k, i)}\\
+  &\inlinehoarer{~~~~
+      * \active(\kappa_0) * \borrowed\left(\kappa_0, \SharedGuard\left( (i \entryto c, ht.entries[i] \pointsto c) \right) \right)
+      * \borrow{\kappa_0}{\SharedGuard\left( (i \entryto c, ht.entries[i] \pointsto c) \right) }}\\
   &\langlet r = (\langmatch~ !ht.table[i] ~\langwith\\
   &~~~~ |~ \None \Rightarrow \None\\
   &~~~~ |~ \Some~(k_0,v_0) \Rightarrow
