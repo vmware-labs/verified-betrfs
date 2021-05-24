@@ -35,12 +35,12 @@ module MapSpecMod {
     && s' == s
     && s.interp.WF()
     // TODO: fix this
-    //&& s.interp.mi[k] == v
+    && s.interp.mi[k].v == v
   }
 
   predicate Put(s: Variables, s': Variables, k: Key, v: Value)
   {
-    // TODO: fix this!!
+    // TODO: fix this!! We need to apply the op here
     //&& s' == s.(interp := s.interp.Put(k,v))
       // NB mutations advance the sequence number
       true
