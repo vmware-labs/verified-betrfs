@@ -630,7 +630,7 @@ Luckily, from (\ref{invTotal}) we can derive this law,
 \]
 This large expression inside the $View_\kappa(\gamma)$ is just the part of
 $Total_{active}(\gamma)$ except the part \emph{which is live at $\gamma$}.
-Thus, combined with \ref{invView}, we can see that any borrow will be covered by the reserved 
+Thus, combined with (\ref{invView}), we can see that any borrow will be covered by the reserved 
 state at $\gamma$ plus all state in the refined locations.
 
 Just to reiterate the ``trick'': $View_\kappa(\gamma)$ depends only on reserved state:
@@ -691,14 +691,14 @@ Given a TPCM $M$, we can construct a TPCM $RwLock_M$ with the following laws. (H
 
 These laws are for exclusive locks:
 \begin{align*}
-\dboxed{\Central\left(\false, rc, x\right)}^{\alpha \refines \gamma} &\viewshift \dboxed{\Central\left(\true, rc, x\right)}^{\alpha \refines \gamma} * \dboxed{\ExcPending}^{\alpha \refines \gamma}\\
+\dboxed{\Central\left(\false, rc, x\right)}^{\alpha \refines \gamma} &\viewshift \dboxed{\Central\left(\true, rc, x\right)}^{\alpha \refines \gamma} * \dboxed{\ExcPending}^{\alpha \refines \gamma} && \text{(exc-begin)} \\
 %\Central\left(exc, 0, x\right) \cdot \ExcPending &\mapsto \Central\left(exc, 0, \bot\right) \cdot \ExcGuard
 \dboxed{\Central\left(exc, 0, x\right)}^{\alpha \refines \gamma} * \dboxed{\ExcPending}^{\alpha \refines \gamma}
     &\viewshift
-    \dboxed{\Central\left(exc, 0, x\right)}^{\alpha \refines \gamma} * \dboxed{\ExcGuard}^{\alpha \refines \gamma} * \dboxed{x}^\gamma\\
+    \dboxed{\Central\left(exc, 0, x\right)}^{\alpha \refines \gamma} * \dboxed{\ExcGuard}^{\alpha \refines \gamma} * \dboxed{x}^\gamma && \text{(exc-finish)} \\
 \dboxed{\Central\left(exc, rc, y\right)}^{\alpha \refines \gamma} * \dboxed{\ExcGuard}^{\alpha \refines \gamma} * \dboxed{x}^\gamma
     &\viewshift
-        \dboxed{\Central\left(\false, rc, x\right)}^{\alpha \refines \gamma}\\
+        \dboxed{\Central\left(\false, rc, x\right)}^{\alpha \refines \gamma} && \text{(exc-return)} \\
 \end{align*}
 The first two are for acquisition, while the third is for release. Meanwhile,
 the first one is derived from Ghost-ViewShift, while the last two are derived from
@@ -707,13 +707,15 @@ Ghost-Refinement-Exchange.
 These laws are for shared locks:
 \begin{align*}
 \dboxed{\Central\left(exc, rc, x\right)}^{\alpha \refines \gamma} &\viewshift
-  \dboxed{\Central\left(exc, rc+1, x\right)}^{\alpha \refines \gamma} * \dboxed{\SharedPending}^{\alpha \refines \gamma}\\
+  \dboxed{\Central\left(exc, rc+1, x\right)}^{\alpha \refines \gamma} * \dboxed{\SharedPending}^{\alpha \refines \gamma} && \text{(shared-begin)} \\
+\dboxed{\Central\left(exc, rc, x\right)}^{\alpha \refines \gamma}  * \dboxed{\SharedPending}^{\alpha \refines \gamma} &\viewshift
+  \dboxed{\Central\left(exc, rc-1, x\right)}^{\alpha \refines \gamma} && \text{(shared-abort)} \\
 \dboxed{\Central\left(false, rc, x\right)}^{\alpha \refines \gamma} * \dboxed{\SharedPending}^{\alpha \refines \gamma}
     &\viewshift
-      \dboxed{\Central\left(false, rc, x\right)}^{\alpha \refines \gamma} * \dboxed{\SharedGuard(x)}^{\alpha \refines \gamma}\\
+      \dboxed{\Central\left(false, rc, x\right)}^{\alpha \refines \gamma} * \dboxed{\SharedGuard(x)}^{\alpha \refines \gamma} && \text{(shared-return)}\\
 \dboxed{\Central\left(exc, rc, x\right)}^{\alpha \refines \gamma} * \dboxed{\SharedGuard(x)}^{\alpha \refines \gamma}
     &\viewshift
-        \dboxed{\Central\left(exc, rc - 1, x\right)}^{\alpha \refines \gamma}
+        \dboxed{\Central\left(exc, rc - 1, x\right)}^{\alpha \refines \gamma} && \text{(shared-abort)}
 \end{align*}
 All of these are derived from Ghost-ViewShift.
 
@@ -734,11 +736,11 @@ This logic is all we need to verify a reader-writer lock.
 
 \newcommand{\AcquireExc}{\text{AcquireExc}}
 \newcommand{\AcquireShared}{\text{AcquireShared}}
-\newcommand{\AcquireExcSetBit}{\text{AcquireExcSetBit}}
-\newcommand{\AcquireExcCheckRc}{\text{AcquireExcCheckRc}}
-\newcommand{\AcquireSharedIncRc}{\text{AcquireSharedIncRc}}
-\newcommand{\AcquireSharedCheckExc}{\text{AcquireSharedCheckExc}}
-\newcommand{\AcquireSharedAbort}{\text{AcquireSharedAbort}}
+%\newcommand{\AcquireExcSetBit}{\text{AcquireExcSetBit}}
+%\newcommand{\AcquireExcCheckRc}{\text{AcquireExcCheckRc}}
+%\newcommand{\AcquireSharedIncRc}{\text{AcquireSharedIncRc}}
+%\newcommand{\AcquireSharedCheckExc}{\text{AcquireSharedCheckExc}}
+%\newcommand{\AcquireSharedAbort}{\text{AcquireSharedAbort}}
 \newcommand{\ReleaseExc}{\text{ReleaseExc}}
 \newcommand{\ReleaseShared}{\text{ReleaseShared}}
 
@@ -759,39 +761,39 @@ Let's use a struct $\rwlock := \{\exc: \Pointer, \rc: \Pointer\}$. Our implement
 
 \begin{align*}
   \AcquireExc(\rwlock) ~\eqdef~
-      & \langloop~\until~\AcquireExcSetBit(\rwlock);\\
-      & \langloop~\until~\AcquireExcCheckRc(\rwlock)\\
+      & \langloop~\until~\CAS(\rwlock.\exc,0,1);\\
+      & \langloop~\until~(!\rwlock.\rc) = 0\\
       \\
   \AcquireShared(\rwlock) ~\eqdef~
       & \langloop~\until~(\\
         & ~~~~ (\langloop~\until~!\rwlock.\exc);\\
-        & ~~~~ \AcquireSharedIncRc(\rwlock);\\ %\AtomicAdd(\rwlock.\rc, 1);
-        & ~~~~ \langif~ \AcquireSharedCheckExc(\rwlock) ~\langthen\\
+        & ~~~~ \AtomicAdd(\rwlock.\rc, 1);\\
+        & ~~~~ \langif~ (!\rwlock.\exc) = 0 ~\langthen\\
         & ~~~~~~~~ \true\\
         & ~~~~ \langelse\\
-        & ~~~~~~~~ \AcquireSharedAbort(\rwlock); \false\\ %\AtomicAdd(\rwlock.\rc, -1); \false
+        & ~~~~~~~~ \AtomicAdd(\rwlock.\rc, -1); \false\\
       )\\
       \\
-  \AcquireExcSetBit(\rwlock) ~\eqdef~
-      & \CAS(\rwlock.\exc,\false,\true)\\
-      \\
-  \AcquireExcCheckRc(\rwlock) ~\eqdef~
-      & (!\rwlock.\rc) = 0\\
-      \\
-  \AcquireSharedIncRc(\rwlock) ~\eqdef~
-      & \AtomicAdd(\rwlock.\rc, 1)\\
-      \\
-  \AcquireSharedAbort(\rwlock) ~\eqdef~
-      & \AtomicAdd(\rwlock.\rc, -1)\\
-      \\
-  \AcquireSharedCheckExc(\rwlock) ~\eqdef~
-      & (!\rwlock.\exc) = \false\\
-      \\
+  %\AcquireExcSetBit(\rwlock) ~\eqdef~
+  %    & \CAS(\rwlock.\exc,\false,\true)\\
+  %    \\
+  %\AcquireExcCheckRc(\rwlock) ~\eqdef~
+  %    & (!\rwlock.\rc) = 0\\
+  %    \\
+  %\AcquireSharedIncRc(\rwlock) ~\eqdef~
+  %    & \AtomicAdd(\rwlock.\rc, 1)\\
+  %    \\
+  %\AcquireSharedAbort(\rwlock) ~\eqdef~
+  %    & \AtomicAdd(\rwlock.\rc, -1)\\
+  %    \\
+  %\AcquireSharedCheckExc(\rwlock) ~\eqdef~
+  %    & (!\rwlock.\exc) = \false\\
+  %    \\
   \ReleaseExc(\rwlock) ~\eqdef~
-      & \rwlock.\exc := \false\\
+      & \rwlock.\exc := 0\\
       \\
   \ReleaseShared(\rwlock) ~\eqdef~
-      & AtomicAdd(\rwlock.\rc, -1)
+      & \AtomicAdd(\rwlock.\rc, -1)
 \end{align*}
 We would like to prove the following specifications, for some predicate $\Inv(\rwlock,\alpha,\gamma,\inv)$. (Here, $\inv$ is the user-defined predicate on the ghost state stored by the $\rwlock$.)
 
@@ -830,12 +832,99 @@ To prove these specifications, we will first define $\Inv$:
       }^{~\iota}
 \end{align*}
 Now, we can work out how to verify the above programs.
-These will follow from the below:
+$\AcquireExc$ will follow from the below:
+\begin{align}
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) } \nonumber \\
+& \CAS(\rwlock.\exc,0,1) \nonumber \\ %\label{hoare-cas-exc-pending} \\
+& \inlinehoare{v.~
+  \Inv(\rwlock,\alpha,\gamma,\inv) *
+      \left(v \implies \dboxed{\ExcPending}^{\alpha\refines\gamma}\right) } \nonumber \\
+   \nonumber \\
+& \inlinehoare{
+    \Inv(\rwlock,\alpha,\gamma,\inv) *
+    \dboxed{\ExcPending}^{\alpha\refines\gamma} } \nonumber \\
+& (!\rwlock.\rc) \nonumber \\
+& \inlinehoare{v .~
+    \Inv(\rwlock,\alpha,\gamma,\inv) *
+    \left(v\ne 0 \implies \dboxed{\ExcPending}^{\alpha\refines\gamma}\right) *
+    \left(v=0 \implies \dboxed{\ExcGuard}^{\alpha\refines\gamma} *
+        \exists x.~ \dboxed{x}^{\gamma} \land \inv(x)\right)
+    } \nonumber
+\end{align}
+$\AcquireShared$ will follow from:
+\begin{align}
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) } \nonumber \\
+& \AtomicAdd(\rwlock.\rc, 1) \label{hoare-atomic-add-shared-pending} \\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \SharedPending } \nonumber\\
+ \nonumber\\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \SharedPending }\nonumber\\
+& (!\rwlock.\exc)\nonumber\\
+& \inlinehoare{ v.~
+    \Inv(\rwlock,\alpha,\gamma,\inv) * \left(v \ne 0 \implies \SharedPending\right)
+        * \left(v = 0 \implies \exists x.~
+          \dboxed{\SharedGuard(x)}^{\alpha \refines \gamma} \land \inv(x)\right)
+   }\nonumber\\
+   \nonumber\\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \SharedPending }\nonumber\\
+& \AtomicAdd(\rwlock.\rc, -1)\nonumber\\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) }\nonumber
+\end{align}
+$\ReleaseExc$ will follow from:
 \begin{align*}
-& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) }\\
-& \AcquireExcSetBit(\rwlock)\\
-& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) *
-    \dboxed{\ExcPending}^{\alpha\refines\gamma} }
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \dboxed{\ExcGuard}^{\alpha \refines \gamma} * \dboxed{x}^\gamma \land \inv(x) }\\
+& \rwlock.\exc := 0\\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) }
+\end{align*}
+And finally, $\ReleaseShared$ will follow from:
+\begin{align*}
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \dboxed{\SharedGuard(x)}^{\alpha \refines \gamma} \land \inv(x) }\\
+& \AtomicAdd(\rwlock.\rc, -1)\\
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) }
+\end{align*}
+Let's work out (\ref{hoare-atomic-add-shared-pending}) explicitly:
+%\begin{align*}
+%& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) } \\
+%& \inlinehoare{
+%        \exists exc,rc,x .~
+%            \dboxed{\Central(exc,rc,x)}^{\alpha \refines \gamma}
+%            * (\rwlock.\exc \pointsto exc)
+%            * (\rwlock.\rc \pointsto rc)
+%    }\\
+%& \CAS(\rwlock.\exc,0,1) \\
+%& \inlinehoare{v.~
+%  \Inv(\rwlock,\alpha,\gamma,\inv) *
+%      \left(v \implies \dboxed{\ExcPending}^{\alpha\refines\gamma}\right) }
+%\end{align*}
+\begin{align*}
+& \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) } \\
+\text{(open Inv)} ~~~~ & \inlinehoare{
+        \exists exc,rc,x .~
+            \dboxed{\Central(exc,rc,x)}^{\alpha \refines \gamma}
+            * (\rwlock.\exc \pointsto exc)
+            * (\rwlock.\rc \pointsto rc)
+    }\\
+& \AtomicAdd(\rwlock.\rc, 1) \\
+& \inlinehoare{
+        \exists exc,rc,x .~
+            \dboxed{\Central(exc,rc,x)}^{\alpha \refines \gamma}
+            * (\rwlock.\exc \pointsto exc)
+            * (\rwlock.\rc \pointsto rc + 1)
+    }\\
+\text{(shared-begin)} ~~~~ & \inlinehoare{
+        \exists exc,rc,x .~
+            \dboxed{\Central(exc,rc + 1,x)}^{\alpha \refines \gamma}
+            * \SharedPending
+            * (\rwlock.\exc \pointsto exc)
+            * (\rwlock.\rc \pointsto rc + 1)
+    }\\
+(rc'=rc+1) ~~~~ & \inlinehoare{
+        \exists exc,rc',x .~
+            \dboxed{\Central(exc,rc',x)}^{\alpha \refines \gamma}
+            * \SharedPending
+            * (\rwlock.\exc \pointsto exc)
+            * (\rwlock.\rc \pointsto rc')
+    }\\
+\text{(close Inv)} ~~~~ & \inlinehoare{ \Inv(\rwlock,\alpha,\gamma,\inv) * \SharedPending } \nonumber\\
 \end{align*}
 
 \end{document} 
