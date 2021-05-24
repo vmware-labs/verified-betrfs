@@ -5,6 +5,8 @@ include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "Allocation.i.dfy"
+include "Message.s.dfy"
+include "Interp.s.dfy"
 
 // QUESTION: Helper module that contains what exactly?
 module MsgSeqMod {
@@ -81,7 +83,9 @@ module MsgSeqMod {
       requires seqStart <= lsn < seqEnd
     {
       var keepVersions := lsn - seqStart;
-      MsgSeq(msgs[..keepVersions], seqStart, lsn)
+      // QUESTION: Check right bounds?
+      var trucMap := map k | 0 <= k  <= keepVersions :: msgs[k];
+      MsgSeq(trucMap, seqStart, lsn)
     }
   }
 
@@ -90,7 +94,9 @@ module MsgSeqMod {
     MsgSeq(map[], 0, 0)
   }
 
-  function IKey(key:Key, baseValue:Value, ms: MsgSeq) : Value
+
+  // QUESTION: Is this supposed to return messages, cuz i changed it to
+  function IKey(key:Key, baseValue: Message, ms: MsgSeq) : Message
     requires ms.WF()
     // Gaah look up existing message delta definitions. For
     // replacement/deletion messages, returns the value in the most-recent

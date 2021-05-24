@@ -31,7 +31,7 @@ module InterpMod {
   function Empty() : Interp
     ensures Empty().WF()
   {
-    Interp(imap k | InDomain(k) :: DefaultValue(), 0)
+    Interp(imap k | InDomain(k) :: MessagePut(k, DefaultValue()) , 0)
   }
 
 }

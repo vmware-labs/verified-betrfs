@@ -39,25 +39,6 @@ module JournalInterpMod {
       []
   }
 
-  // Return all set
-  function RequestSet(msgs : seq<Message>) : set<Requests>
-  {
-
-  }
-
-
-  function IMinner(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp) : AsyncMapSpecMod.Variables
-  {
-    if chain.Some? // should be called only when  v.persistentLSN < lsn
-    then
-      var: msgSequences = MesgSeqs(v, cache, sb)
-      var: msgs = CondenseAll(msgSequences)
-      var: pending = RequestSet(msgs.value)
-      AsyncMapSpecMod.Variables(MapSpecMod.Variables(base), pending, {})
-    else
-      AsyncMapSpecMod.Variables(MapSpecMod.Variables(base), {}, {})
-  }
-
 //  function MessageAt(chain: JournalChain, lsn: LSN) : Message
 //    requires ValidChain(cache.dv, chain)
 //    requires chain.sb == sb
@@ -103,8 +84,10 @@ module JournalInterpMod {
   {
     var newMi := AsMsgSeq(v, cache, sb).Truncate(lsn).ApplyToKeyMap(base.mi);
     var newInterp := Interp(newMi, lsn);
+    newInterp
   }
 
+  // Sowmya Note: We probably don't need this anymore
   function InterpSeqFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp) : seq<Interp>
   {
     seq(numVersions, i requires i < numVersions =>
@@ -117,33 +100,10 @@ module JournalInterpMod {
      requires base.seqEnd == v.persistentLSN
      requires v.persistentLSN <= lsn <= v.unmarshalledLSN() // we only need versions for the journal for the unapplied suffix of entries
    {
-     if lsn == v.persistentLSN
-      then
        // TODO No accounting for v.syncReqs < persistentLSN; hrmm.
-       CrashTolerantMapSpecMod.Version(AsyncMapSpecMod.Variables(MapSpecMod.Variables(base), {}, {}), SyncReqsAt(v, lsn))
-    else
-       CrashTolerantMapSpecMod.Version(
-       IMinner(v, cache, sb, base),
-       SyncReqsAt(v, lsn))
+       var mapInterp := AsyncMapSpecMod.Variables(InterpFor(v, cache, sb, base, lsn), {}, {});
+       CrashTolerantMapSpecMod.Version(mapInterp, SyncReqsAt(v, lsn))
    }
-
-  // function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
-  //   requires base.seqEnd == v.persistentLSN
-  //   //requires v.persistentLSN <= lsn < v.unmarshalledLSN()
-  //   requires v.persistentLSN <= lsn
-  //  {
-  //     if lsn == v.persistentLSN
-  //       then
-  //      // TODO No accounting for v.syncReqs < persistentLSN; hrmm.
-  //      CrashTolerantMapSpecMod.Version(AsyncMapSpecMod.Variables(MapSpecMod.Variables(base), {}, {}), SyncReqsAt(v, lsn))
-  //    else
-  //      var prior := VersionFor(v, cache, sb, base, lsn - 1);
-  //      CrashTolerantMapSpecMod.Version(
-  //        AsyncMapSpecMod.Variables(MapSpecMod.Variables(base),
-  //        {} ,
-  //        {}),
-  //        SyncReqsAt(v, lsn))
-  // }
 
   // TODO: Clean up this function ... The curr here is ugly
   function VersionMaps(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, curr : LSN, currseq: seq<CrashTolerantMapSpecMod.Version>) : seq<CrashTolerantMapSpecMod.Version>
@@ -155,6 +115,14 @@ module JournalInterpMod {
       currseq
     else
       VersionMaps(v, cache, sb, base, curr-1, currseq + [VersionFor(v, cache, sb, base, curr+ v.persistentLSN)] )
+  }
+
+  function Versions(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
+  {
+    seq(numVersions, i requires i < numVersions =>
+      var lsn := i + v.persistentLSN;
+      VersionFor(v, cache, sb, base, lsn)
+    )
   }
 
   function IM(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp)
@@ -169,7 +137,7 @@ module JournalInterpMod {
     //  var lsn := i + v.persistentLSN;
     //  VersionFor(v, cache, sb, base, lsn)
     //);
-    var versions := VersionMaps(v, cache, sb, base, numVersions, []);
+    var versions := Versions(v, cache, sb, base, numVersions);
     CrashTolerantMapSpecMod.Variables(versions, 0)
   }
 
