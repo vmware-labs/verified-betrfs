@@ -25,5 +25,5 @@ jobs:
       run: make -j `nproc` syntax-status
     - uses: actions/upload-artifact@v2
       with:
-        name: Bundle.i.syntax-status.pdf
-        path: build/Impl/Bundle.i.syntax-status.pdf
+        name: build
+        path: build
