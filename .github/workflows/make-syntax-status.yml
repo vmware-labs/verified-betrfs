@@ -3,7 +3,7 @@ name: make syntax-status
 on:
   workflow_dispatch:
     inputs:
-      name: branch:
+      branch:
         description: 'Branch to check'
         required: true
         default: 'master'
