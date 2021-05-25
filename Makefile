@@ -123,7 +123,7 @@ endef
 # Verification status page
 
 .PHONY: status
-status: build/deps build/Impl/Bundle.i.status.pdf
+status: build/deps build/Impl/Bundle.i.status.pdf build/Impl/Bundle.i.status.svg build/Impl/Bundle.i.status.txt
 
 # Longer time-limit for CI
 .PHONY: verichecks-status
@@ -133,7 +133,7 @@ verichecks-status: DEFAULT_RLIMIT=$$(( 30 * $(RLIMIT_PER_SECOND) ))
 verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
 
 .PHONY: syntax-status
-syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
+syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf build/Impl/Bundle.i.syntax-status.svg build/Impl/Bundle.i.syntax-status.txt
 
 .PHONY: verify-ordered
 verify-ordered: build/deps build/Impl/Bundle.i.okay
@@ -254,16 +254,37 @@ build/%.syntax: build/%.synchk $(AGGREGATE_TOOL) | $$(@D)/.
 STATUS_TOOL=tools/dep-graph.py
 STATUS_DEPS=tools/lib_aggregate.py
 build/%.status.pdf: %.dfy build/%.verified $(STATUS_TOOL) $(STATUS_DEPS) build/deps | $$(@D)/.
-	@$(eval DOTNAME=$(patsubst %.status.pdf,%.dot,$@))	 #eval trick to assign make var inside rule
+	@$(eval DOTNAME=$(patsubst %.pdf,%.dot,$@))	 #eval trick to assign make var inside rule
 	$(STATUS_TOOL) verchk $< $(DOTNAME)
 	@tred < $(DOTNAME) | dot -Tpdf -o$@
+
+build/%.status.svg: %.dfy build/%.verified $(STATUS_TOOL) $(STATUS_DEPS) build/deps | $$(@D)/.
+	@$(eval DOTNAME=$(patsubst %.svg,%.dot,$@))	 #eval trick to assign make var inside rule
+	$(STATUS_TOOL) verchk $< $(DOTNAME)
+	@tred < $(DOTNAME) | dot -Tsvg -o$@
 
 # A syntax-only version of the tree so I can play around without waiting for
 # a complete verification.
 build/%.syntax-status.pdf: %.dfy build/%.syntax $(STATUS_TOOL) $(STATUS_DEPS) build/deps | $$(@D)/.
-	$(eval DOTNAME=$(patsubst %.status.pdf,%.dot,$@))	 #eval trick to assign make var inside rule
+	$(eval DOTNAME=$(patsubst %.pdf,%.dot,$@))	 #eval trick to assign make var inside rule
 	$(STATUS_TOOL) synchk $< $(DOTNAME)
 	@tred < $(DOTNAME) | dot -Tpdf -o$@
+
+build/%.syntax-status.svg: %.dfy build/%.syntax $(STATUS_TOOL) $(STATUS_DEPS) build/deps | $$(@D)/.
+	$(eval DOTNAME=$(patsubst %.svg,%.dot,$@))	 #eval trick to assign make var inside rule
+	$(STATUS_TOOL) synchk $< $(DOTNAME)
+	@tred < $(DOTNAME) | dot -Tsvg -o$@
+
+##############################################################################
+# .status.txt: a simple text file listing all source files with errors
+#
+REPORT_TOOL=tools/gen-build-report.py
+REPORT_DEPS=tools/lib_deps.py tools/lib_aggregate.py
+build/%.status.txt: %.dfy build/%.verified $(REPORT_TOOL) $(REPORT_DEPS) build/deps | $$(@D)/.
+	$(REPORT_TOOL) verchk $< $@
+
+build/%.syntax-status.txt: %.dfy build/%.syntax $(REPORT_TOOL) $(REPORT_DEPS) build/deps | $$(@D)/.
+	$(REPORT_TOOL) synchk $< $@
 
 ##############################################################################
 # .lcreport: Tabular data on line counts of {spec, impl, proof}
