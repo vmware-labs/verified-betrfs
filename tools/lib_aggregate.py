@@ -66,6 +66,9 @@ class DafnySyntaxOK(DafnyCondition):
     def __init__(self):
         super().__init__(7, True, "syntax ok", "fillcolor=green; shape=ellipse")
 
+allConditions=[DafnyParseError(), DafnyTypeError(), DafnyVerificationError(), DafnyAssumeError(), DafnyTimeoutError(), DafnyRlimitError(), DafnyDynamicFrames(), DafnyVerified(), DafnySyntaxOK()]
+badConditions=[DafnyParseError(), DafnyTypeError(), DafnyVerificationError(), DafnyAssumeError(), DafnyTimeoutError(), DafnyRlimitError()]
+
 def dafnyFromVerchk(verchk):
     return verchk.replace("build/", "./").replace(".verchk", ".dfy").replace(".synchk", ".dfy")
 

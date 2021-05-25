@@ -1,0 +1,29 @@
+name: make status
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to check'
+        required: true
+        default: 'master'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.inputs.branch }}
+    - name: prep-environment
+      run: sudo tools/prep-environment.sh
+    - name: install-dafny
+      run: tools/install-dafny.sh
+    - name: make status
+      run: make -j `nproc` status
+    - uses: actions/upload-artifact@v2
+      with:
+        name: build
+        path: build

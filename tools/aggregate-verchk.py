@@ -10,7 +10,7 @@ from lib_deps import *
 import argparse
 
 def write_summary(reportType, verchks, summary_filename, error_filename):
-    assert(reportType == VERCHK)    # TODO: Do we need syntax summary files?
+    #assert(reportType == VERCHK)    # TODO: Do we need syntax summary files?
 
     # Phase 1: Collect all the failures and write out error details
     fails = {}
