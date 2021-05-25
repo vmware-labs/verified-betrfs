@@ -10,6 +10,7 @@ include "CacheIfc.i.dfy"
 include "AsyncDisk.s.dfy"
 include "AsyncDiskProgram.s.dfy"
 include "IOSystem.s.dfy"
+include "Program.i.dfy"
 
 module ProgramInterpMod {
   import opened Options

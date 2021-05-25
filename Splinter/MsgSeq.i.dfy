@@ -55,36 +55,52 @@ module MsgSeqMod {
         seqEnd+1)
     }
 
+    function Concat(other : MsgSeq) : (result : MsgSeq)
+      requires WF()
+      requires other.WF()
+      requires other.Len() == 0 || Len() == 0 ||  other.seqStart == seqEnd
+    {
+      MsgSeq(
+        MapDisjointUnion(msgs, other.msgs),
+        seqStart,
+        other.seqEnd)
+    }
+
     predicate IsEmpty() {
       seqStart == seqEnd
     }
 
-    function ApplyToKeyMapRecursive(orig: map<Key, Message>, count: nat) : (out: map<Key, Message>)
+    function ApplyToInterpRecursive(orig: Interp, count: nat) : (out: Interp)
       requires WF()
+      requires orig.WF()
       requires count <= Len()
+      ensures out.WF()
     {
       if count==0
       then orig
       else
         var lsn := seqStart + count - 1;
         var key := msgs[lsn].k;
-        var oldMessage := orig[key];
+        var oldMessage := orig.mi[key];
         var newMessage := msgs[lsn];
-        ApplyToKeyMapRecursive(orig, count-1)[key := Combine(oldMessage, newMessage)]
+
+        var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Combine(oldMessage, newMessage)];
+        Interp(mapp, lsn)
     }
 
-    function ApplyToKeyMap(orig: map<Key, Message>) : map<Key, Message>
+    function ApplyToInterp(orig: Interp) : Interp
       requires WF()
+      requires orig.WF()
     {
-      ApplyToKeyMapRecursive(orig, Len())
+      ApplyToInterpRecursive(orig, Len())
     }
 
     function Truncate(lsn: LSN) : MsgSeq
       requires seqStart <= lsn < seqEnd
+      requires WF()
     {
       var keepVersions := lsn - seqStart;
-      // QUESTION: Check right bounds?
-      var trucMap := map k | 0 <= k  <= keepVersions :: msgs[k];
+      var trucMap := map k | seqStart <= k < lsn :: msgs[k];
       MsgSeq(trucMap, seqStart, lsn)
     }
   }
