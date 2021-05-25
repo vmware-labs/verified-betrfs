@@ -12,6 +12,10 @@
 
 \newcommand{\BigAsterisk}{\mathop{\scalebox{3}{\raisebox{-0.2ex}{$\ast$}}}}%
 
+\DeclareMathOperator{\RangeFilledWithOtherKeys}{RangeFilledWithOtherKeys}
+\DeclareMathOperator{\SlotEmpty}{SlotEmpty}
+\DeclareMathOperator{\SlotHasKey}{SlotHasKey}
+
 
 
 \usepackage{parskip}
@@ -320,7 +324,7 @@ the ones involving $\refines$.
     \stacktwo{
       \widehat{M} \refines_{\rel} \widehat{N}
     }{
-      \forall p,q.~ \rel(b\cdot p) = Some(q) \implies \exists q' .~ \rel(b' \cdot p) = Some(q') \land (a \cdot q \mapsto a' \cdot q')
+      \forall p,q.~ \rel(b\cdot p, q) \implies \exists q' .~ \rel(b' \cdot p, q') \land (a \cdot q \mapsto a' \cdot q')
     }
   }{
     \dboxed{b}^{\alpha \refines_{\rel} \gamma} * \dboxed{a}^\gamma
@@ -952,8 +956,8 @@ Let's work out (\ref{hoare-atomic-add-shared-pending}) explicitly:
 
 \textbf{A hash-table logic}
 
-\newcommand{\hashto}{\stackrel{\text{hash}}{\hookrightarrow}}
-\newcommand{\entryto}{\stackrel{\text{entry}}{\hookrightarrow}}
+\newcommand{\hashto}{\stackrel{\text{map}}{\hookrightarrow}}
+\newcommand{\entryto}{\stackrel{\text{linear}}{\hookrightarrow}}
 \newcommand{\Some}{\text{Some}}
 \newcommand{\None}{\text{None}}
 
@@ -967,6 +971,7 @@ Let's work out (\ref{hoare-atomic-add-shared-pending}) explicitly:
 
 \newcommand{\hash}{\ensuremath{hash}}
 \newcommand{\rec}{\textbf{rec}}
+
 
 %We will derive a TPCM (a ``normal'' one, not a refinement) to represent a hash table.
 We'll want to support the following specs for a linear-probing hash table.
@@ -985,8 +990,8 @@ We assume a function $\hash : Keys \to \mathbb{N}$. We'll let $ht : \{rwlocks: r
       \AcquireShared(ht.rwlocks[i]);\\
       &\langlet r = (\langmatch~ !ht.table[i] ~\langwith\\
       &~~~~ |~ \None \Rightarrow \None\\
-      &~~~~ |~ \Some~(k_0,v_0) \Rightarrow
-          \langif~ k = k_0 ~\langthen~ Some(v_0) ~\langelse~ \QueryIter(ht,k,i+1)\\
+      &~~~~ |~ \Some~(k_1,v_1) \Rightarrow
+          \langif~ k = k_1 ~\langthen~ Some(v_1) ~\langelse~ \QueryIter(ht,k,i+1)\\
       &\langend) ~\langin\\
       &\ReleaseShared(ht.rwlocks[i]);\\
       &r\\
@@ -996,8 +1001,8 @@ We assume a function $\hash : Keys \to \mathbb{N}$. We'll let $ht : \{rwlocks: r
       \AcquireExc(ht.rwlocks[i]);\\
       &\langlet r = (\langmatch~ !ht.table[i] ~\langwith\\
       &~~~~ |~ \None \Rightarrow ht.table[i] \langassign (k,v)\\
-      &~~~~ |~ \Some~(k_0,v_0) \Rightarrow
-          \langif~ k = k_0 ~\langthen~ ht.table[i] \langassign (k,v) ~\langelse~ \UpdateIter(ht,k,v,i+1)\\
+      &~~~~ |~ \Some~(k_1,v_1) \Rightarrow
+          \langif~ k = k_1 ~\langthen~ ht.table[i] \langassign (k,v) ~\langelse~ \UpdateIter(ht,k,v,i+1)\\
       &\langend) ~\langin\\
       &\ReleaseExc(ht.rwlocks[i]);\\
       &r
@@ -1008,65 +1013,141 @@ We assume a function $\hash : Keys \to \mathbb{N}$. We'll let $ht : \{rwlocks: r
 We'll define a TPCM resource for our hash table (that is, a ``normal'' TPCM, not a refinement). It will have two kinds of elements, $k \hashto v$ (where $v : Value~option$)
 and $i \entryto c$, where $c : (Key,Value)~option$.
 
-Allowable operations will be encoded into this logic. For example, we will have all the following:
-
-\emph{Update}.
-
+More precisely, we'll let an element of $HT$ be a pair of maps $(map, linear)$ where
 \begin{align*}
-  &\hash(k) \le u ~\land~ \left(\forall i.~ \hash(k) \le i < u \implies i \in entries \land \exists k_1,v_1 .~ entries[i] = \Some (k_1,v_1) \land k_1 \ne k\right)\\
-  &~~~~\land~ \left(entries[u] = \None ~\lor~ \exists v_1 .~ entries[u] = \Some (k, v) \right)\\
-  &~~~~\implies entries \cdot (k \hashto v_0) ~\mapsto~ entries[u \langassign \Some~(k,v)]  \cdot (k \hashto v)
+k \hashto v ~\eqdef~ ([k := v], [])\\
+i \entryto c ~\eqdef~ ([], [i := c])
+\end{align*}
+$a \cdot b$ is given by pairwise map union, and is undefined $(\bot)$ should either map intersect. For example, we always have $(k \hashto v_1) \cdot (k \hashto v_2) = \bot$
+and $(i \entryto c_1) \cdot (i \entryto c_2) = \bot$. (Thus these are very similar to the usual points-to assertions $\pointsto$.
+
+Allowable operations will be encoded into this logic. For example, we will have all the following.
+\begin{align*}
+  \RangeFilledWithOtherKeys(e, k, a, b) &~\eqdef~ \forall i .~ a \le i < b \implies i \in e.linear \land \exists k_1,v_1 .~ entries[i] = \Some (k_1,v_1) \land k_1 \ne k\\
+  %\SlotEmpty(e, a) &~\eqdef~ e.entries[a] = \None\\
+  %\SlotHasKey(e, a, k) &~\eqdef~ \exists v.~ e.entries[a] = \Some(k,v)\\
+\end{align*}
+\emph{Update}.
+\begin{align*}
+  %&\hash(k) \le u ~\land~ \left(\forall i.~ \hash(k) \le i < u \implies i \in entries \land \exists k_1,v_1 .~ entries[i] = \Some (k_1,v_1) \land k_1 \ne k\right)\\
+  %&~~~~\land~ \left(entries[u] = \None ~\lor~ \exists v_1 .~ entries[u] = \Some (k, v) \right)\\
+  %&~~~~\implies entries \cdot (k \hashto v_0) ~\mapsto~ entries[u \langassign \Some~(k,v)]  \cdot (k \hashto v)
+  &\hash(k) \le u ~\land~ \RangeFilledWithOtherKeys(e, k, \hash(k), u)\\
+      %~\land~ \left(\SlotEmpty(e, u) \lor \SlotHasKey(e, a, k)\right)\\
+      &~~~~\implies e \cdot (u \entryto \None) \cdot (k \hashto v_0) ~\mapsto~
+                    e \cdot (u \entryto \Some~(k, v)) \cdot (k \hashto v)\\
+  \\
+  &\hash(k) \le u ~\land~ \RangeFilledWithOtherKeys(e, k, \hash(k), u)\\
+      %~\land~ \left(\SlotEmpty(e, u) \lor \SlotHasKey(e, a, k)\right)\\
+      &~~~~\implies e \cdot (u \entryto \Some~(k, v_1)) \cdot (k \hashto v_0) ~\mapsto~
+                    e \cdot (u \entryto \Some~(k, v)) \cdot (k \hashto v)
 \end{align*}
 
-\emph{Query (found)}.
+\emph{Query}.
 
 The found case is easy: a single entry $(k,v)$ proves that the hash table maps $k$ to $v$.
-
 \[
   \left((i \entryto (k,v_0)) \cdot (k \hashto v)\right) \ne \bot \implies v = \Some(v_0)
 \]
-
-The not-found case requires another quantifed predicate:
-
+The not-found case requires, like the Update case, a check that the key isn't in any of the cells:
 \begin{align*}
-&\left(\forall i.~ \hash(k) \le i < u \implies i \in entries \land \exists k_1,v_1 .~ entries[i] = \Some (k_1,v_1) \land k_1 \ne k\right)\\
-  &~~~~\land~ \left(entries[u] = \None\right)\\
-  &~~~~\implies entries \cdot (k \hashto v) \ne \bot \implies v = \None
+%&\left(\forall i.~ \hash(k) \le i < u \implies i \in entries \land \exists k_1,v_1 .~ entries[i] = \Some (k_1,v_1) \land k_1 \ne k\right)\\
+%  &~~~~\land~ \left(entries[u] = \None\right)\\
+%  &~~~~\implies entries \cdot (k \hashto v) \ne \bot \implies v = \None
+&\hash(k) \le u \land \RangeFilledWithOtherKeys(e, k, \hash(k), u)
+  \implies e \cdot (u \entryto \None) \cdot (k \hashto v) \ne \bot \implies v = \None
 \end{align*}
 
 We'll define $\HTInv$ as follows:
 \begin{align*}
-\HTInv(ht, \gamma) ~\eqdef~& \exists\alpha.~ \BigAsterisk_i \Inv\left(ht.rwlocks[i], \alpha, \gamma\times\Heap, \htinv(i, ht.entries[i])\right)\\
+\HTInv(ht, \gamma) ~\eqdef~& \exists\alpha.~ \BigAsterisk_i \Inv\left(ht.rwlocks[i], \alpha, \gamma\times\Heap, \htinv(i, ht.table[i])\right)\\
 \htinv(i, \ell) ~\eqdef~& \lambda x .~ \exists c .~ x = (i \entryto c, \ell \pointsto c)
 \end{align*}
-In other words, the RwLocks will be arranged so that we can use the lock at index $i$ to obtain
-some ghost state $(i \entryto c, ht.entries[i] \pointsto c)$.
+In other words, the RwLocks will be arranged so that we can use the lock at index $i$ to obtain, possibly in read-only ``shared'' mode,
+some ghost state $(i \entryto c, ht.table[i] \pointsto c)$.
 
 \newpage
 
 Now, we prove $\QueryIter$. (To avoid clutter, we silently skolemize existential
 variables as they are introduced.)
-
+The program begins with an established borrow at lifetime $\kappa$.
+We then acquire a shared lock, obtaining the $\SharedGuard$.
+We then borrow that, and from that, obtain borrowed state for the points-to assertion to read a cell from memory,
+along with the corresponding $\entryto$ state.
+The new borrow has lifetime $\kappa_0$. We intersect them to get $\kappa_1 = \kappa \ltIntersect \kappa_0$. We downgrade
+all the borrows to $\kappa_1$, which we will use for the recursive call. The sketch below shows step-by-step the process
+of introducing the new borrow, expiring it, and returning the lock (we handle the $\langmatch$ statement on the next page).
+We leave $\HTInv(ht,\gamma)$ implicit.
 \begin{align*}
-  &\inlinehoare{\active(\kappa) * \borrow{\kappa}{\dboxed{ht.entries}^\gamma}
-      * \dboxed{k \hashto v_0}^\gamma \land KeyNotInRange(ht.entries, k, i)}\\
+  &\inlinehoare{\active(\kappa) * \borrow{\kappa}{\dboxed{e}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land \RangeFilledWithOtherKeys(e, k, \hash(k), i)}\\
   &\AcquireShared(ht.rwlocks[i]);\\
-  &\inlinehoare{\active(\kappa) * \borrow{\kappa}{\dboxed{ht.entries}^\gamma}
-      * \dboxed{k \hashto v_0}^\gamma \land KeyNotInRange(ht.entries, k, i)
-      * \SharedGuard\left( (i \entryto c, ht.entries[i] \pointsto c) \right) }\\
-  &\inlinehoarel{\active(\kappa) * \borrow{\kappa}{\dboxed{ht.entries}^\gamma}
-      * \dboxed{k \hashto v_0}^\gamma \land KeyNotInRange(ht.entries, k, i)}\\
+  &\inlinehoare{\active(\kappa) * \borrow{\kappa}{\dboxed{e}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land \RangeFilledWithOtherKeys(e, k, \hash(k), i)
+      * \SharedGuard\left( (i \entryto c, ht.table[i] \pointsto c) \right) }\\
+  &\inlinehoarel{\active(\kappa) * \borrow{\kappa}{\dboxed{e}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land \RangeFilledWithOtherKeys(e, k, \hash(k), i)}\\
   &\inlinehoarer{~~~~
-      * \active(\kappa_0) * \borrowed\left(\kappa_0, \SharedGuard\left( (i \entryto c, ht.entries[i] \pointsto c) \right) \right)
-      * \borrow{\kappa_0}{\SharedGuard\left( (i \entryto c, ht.entries[i] \pointsto c) \right) }}\\
+      * \active(\kappa_0) * \borrowed\left(\kappa_0, \SharedGuard\left( (i \entryto c, ht.table[i] \pointsto c) \right) \right)
+      * \borrow{\kappa_0}{\SharedGuard\left( (i \entryto c, ht.table[i] \pointsto c) \right) }}\\
+  &\inlinehoarel{\active(\kappa) * \borrow{\kappa}{\dboxed{e}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land \RangeFilledWithOtherKeys(e, k, \hash(k), i) * \borrow{\kappa_0}{\dboxed{i\entryto c}^\gamma} * \borrow{\kappa_0}{ht.table[i] \pointsto c}}\\
+  &\inlinehoarer{~~~~
+      * \active(\kappa_0) * \borrowed\left(\kappa_0, \SharedGuard\left( (i \entryto c, ht.table[i] \pointsto c) \right) \right) }\\
+  &\inlinehoarel{\active(\kappa_1) * \borrow{\kappa_1}{\dboxed{e}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land \RangeFilledWithOtherKeys(e, k, \hash(k), i) * \borrow{\kappa_1}{\dboxed{i\entryto c}^\gamma} * \borrow{\kappa_1}{ht.table[i] \pointsto c}}\\
+  &\inlinehoarer{~~~~
+      * \borrowed\left(\kappa_0, \SharedGuard\left( (i \entryto c, ht.table[i] \pointsto c) \right) \right) }\\
   &\langlet r = (\langmatch~ !ht.table[i] ~\langwith\\
   &~~~~ |~ \None \Rightarrow \None\\
-  &~~~~ |~ \Some~(k_0,v_0) \Rightarrow
-      \langif~ k = k_0 ~\langthen~ Some(v_0) ~\langelse~ \QueryIter(ht,k,i+1)\\
+  &~~~~ |~ \Some~(k_1,v_1) \Rightarrow
+      \langif~ k = k_1 ~\langthen~ \Some(v_1) ~\langelse~ \QueryIter(ht,k,i+1)\\
   &\langend) ~\langin\\
+  &\inlinehoare{\active(\kappa_1)
+      * \dboxed{k \hashto v_0}^\gamma \land r = v_0
+      * \borrowed\left(\kappa_0, \SharedGuard\left( (i \entryto c, ht.table[i] \pointsto c) \right) \right) }\\
+  &\inlinehoare{\active(\kappa)
+      * \dboxed{k \hashto v_0}^\gamma \land r = v_0
+      * \SharedGuard\left( (i \entryto c, ht.table[i] \pointsto c) \right) }\\
   &\ReleaseShared(ht.rwlocks[i]);\\
+  &\inlinehoare{\active(\kappa) * \dboxed{k \hashto v_0}^\gamma \land r = v_0}\\
   &r\\
-  &\inlinehoare{\active(\kappa) * (k \hashto v_0) \land v = v_0}
+  &\inlinehoare{v.~ \active(\kappa) * \dboxed{k \hashto v_0}^\gamma \land v = v_0}
 \end{align*}
 
+\newpage
+
+The ``interesting'' logic is all in the match statement. Depending on the value of $c$, we either use our borrowed $\dboxed{i \entryto c}^\gamma$ to justify the result,
+or we combine it with $e$ for the recursive call (extending the range in the $\RangeFilledWithOtherKeys$ predicate to $i+1$).
+We let $e' = e \cdot (i \entryto \Some~(k_1,v_1))$.
+
+\begin{align*}
+  &\inlinehoare{\active(\kappa_1) * \borrow{\kappa_1}{\dboxed{e}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land \RangeFilledWithOtherKeys(e, k, \hash(k), i) * \borrow{\kappa_1}{\dboxed{i\entryto c}^\gamma} * \borrow{\kappa_1}{ht.table[i] \pointsto c}}\\
+  &\langlet r = (\langmatch~ !ht.table[i] ~\langwith\\
+  &~~~~ |~ \None \Rightarrow \\
+  &~~~~~~~~\inlinehoare{\active(\kappa_1) * \borrow{\kappa_1}{\dboxed{e}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land \RangeFilledWithOtherKeys(e, k, \hash(k), i) * \borrow{\kappa_1}{\dboxed{i\entryto \None}^\gamma}}\\
+  &~~~~~~~~\inlinehoare{\active(\kappa_1)
+      * \dboxed{k \hashto v_0}^\gamma \land v_0 = \None}\\
+  &~~~~~~~~\None\\
+  &~~~~ |~ \Some~(k_1,v_1) \Rightarrow \\
+  &~~~~~~~~\langif~ k = k_1 ~\langthen~ \\
+  &~~~~~~~~~~~~\inlinehoare{\active(\kappa_1) * \borrow{\kappa_1}{\dboxed{e}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land \RangeFilledWithOtherKeys(e, k, \hash(k), i) * \borrow{\kappa_1}{\dboxed{i\entryto \Some~(k,v_1)}^\gamma}}\\
+  &~~~~~~~~~~~~\inlinehoare{\active(\kappa_1)
+      * \dboxed{k \hashto v_0}^\gamma \land v_0 = \Some(v_1)}\\
+  &~~~~~~~~~~~~\Some(v_1)\\
+  &~~~~~~~~~\langelse~\\
+  &~~~~~~~~~~~~\inlinehoare{\active(\kappa_1) * \borrow{\kappa_1}{\dboxed{e}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land \RangeFilledWithOtherKeys(e, k, \hash(k), i) * \borrow{\kappa_1}{\dboxed{i\entryto \Some~(k_1,v_1)}^\gamma} \land k\ne k_1}\\
+  &~~~~~~~~~~~~\inlinehoare{\active(\kappa_1) * \borrow{\kappa_1}{\dboxed{e'}^\gamma}
+      * \dboxed{k \hashto v_0}^\gamma \land \RangeFilledWithOtherKeys(e', k, \hash(k), i+1)}\\
+  &~~~~~~~~~~~~~~~~~~~~~~~~~~~~\text{\color{blue} (where $e' = e \cdot (i \entryto \Some~(k_1,v_1))$)}\\
+  &~~~~~~~~~~~~\QueryIter(ht,k,i+1)\\
+  &~~~~~~~~~~~~\inlinehoare{v.~ \active(\kappa_1) * \dboxed{k \hashto v_0}^\gamma \land v = v_0}\\
+  &\langend) ~\langin\\
+  &\inlinehoare{\active(\kappa_1)
+      * \dboxed{k \hashto v_0}^\gamma \land r = v_0}
+\end{align*}
 \end{document} 
