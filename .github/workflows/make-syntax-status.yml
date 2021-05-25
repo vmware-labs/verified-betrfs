@@ -1,0 +1,25 @@
+name: make syntax-status
+
+on:
+  workflow_dispatch:
+    inputs:
+      name: branch:
+        description: 'Branch to check'
+        required: true
+        default: 'master'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.inputs.branch }}
+    - name: prep-environment
+      run: tools/prep-environment.sh
+    - name: install-dafny
+      run: tools/install-dafny.sh
+    - name: make syntax-status
+      run: make syntax-status
