@@ -22,4 +22,8 @@ jobs:
     - name: install-dafny
       run: tools/install-dafny.sh
     - name: make syntax-status
-      run: make syntax-status
+      run: make -j `nproc` syntax-status
+    - uses: actions/upload-artifact@v2
+      with:
+        name: Bundle.i.syntax-status.pdf
+        path: build/Impl/Bundle.i.syntax-status.pdf
