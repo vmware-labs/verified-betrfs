@@ -27,9 +27,9 @@ module MsgSeqMod {
     // For use in map comprehensions, where "lsn in msgSeq.Contains()" doesn't
     // satisfy Dafny's bounded set heuristic.
     function {:opaque} LSNSet() : (lsns: set<LSN>)
-      //ensures forall lsn :: lsn in lsns <==> seqStart <= lsn < seqEnd
+      ensures forall lsn :: lsn in lsns <==> seqStart <= lsn < seqEnd
     {
-      {} //set lsn | seqStart <= lsn < seqEnd
+      set lsn | seqStart <= lsn < seqEnd
     }
 
     function Len() : nat
@@ -42,7 +42,7 @@ module MsgSeqMod {
     {
       && seqStart <= seqEnd
       && (seqStart==seqEnd ==> seqStart==0) // normalize Empty.
-      //&& (forall k :: k in msgs <==> Contains(k))
+      && (forall k :: k in msgs <==> Contains(k))
     }
 
     // Add a single message to the end of the sequence. It gets LSN 'seqEnd', since
