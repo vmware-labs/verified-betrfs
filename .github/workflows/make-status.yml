@@ -25,5 +25,5 @@ jobs:
       run: make -j `nproc` status
     - uses: actions/upload-artifact@v2
       with:
-        name: Bundle.i.status.pdf
-        path: build/Impl/Bundle.i.status.pdf
+        name: build
+        path: build
