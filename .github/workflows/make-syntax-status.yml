@@ -18,7 +18,7 @@ jobs:
       with:
         ref: ${{ github.event.inputs.branch }}
     - name: prep-environment
-      run: tools/prep-environment.sh
+      run: sudo tools/prep-environment.sh
     - name: install-dafny
       run: tools/install-dafny.sh
     - name: make syntax-status
