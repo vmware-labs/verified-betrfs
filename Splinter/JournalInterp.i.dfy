@@ -16,71 +16,59 @@ module JournalInterpMod {
   import opened JournalMachineMod
   import opened InterpMod
 
-
-  // function ChainToMsqSeqInner(journalChain: JournalChain, count : nat) : (result : MsgSeq)
-  //   requires 0 <= count < |journalChain.recs|
-  //   requires JournalMachineMod.WFChain(journalChain)
-  //   ensures result.WF()
-  //   ensures 0 < count ==> (result.seqEnd == journalChain.recs[count].messageSeq.seqEnd)
+  // function TailAsMsgSeq(v: Variables) : MsgSeq
   // {
-  //   if count == 0
-  //   then
-  //     MsgSeqMod.Empty()
-  //   else
-  //     JournalMachineMod.reveal_WFChainInner();
-  //
-  //     var prev := ChainToMsqSeqInner(journalChain, count - 1);
-  //     var next := journalChain.recs[count].messageSeq;
-  //
-  //     assert count >=1;
-  //
-  //     assert forall lsn :: next.seqStart <= lsn < next.seqEnd;
-  //     assert next.WF();
-  //
-  //     //assert prev.WF();
-  //     assert 1 < count ==> prev.seqEnd == next.seqStart;
-  //     assert 1 < count ==> journalChain.recs[count-1].messageSeq.seqEnd==journalChain.recs[count].messageSeq.seqStart;
-  //     assert count == 1 ==> prev.Len() == 0;
-  //     assert next.Len() == 0 || prev.Len() == 0 ||  next.seqStart == prev.seqEnd;
-  //     prev.Concat(next)
-  // }
-  //
-  // function ChainToMsqSeq(journalChain: JournalChain) : MsgSeq
-  // {
-  //   ChainToMsqSeqInner(journalChain, |journalChain.recs| - 1)
+  //   var asMap := map |   //[]; // aaargh fine i'll do it later TODO-- Sowmya: What's the TODO?
+  //   MsgSeq(asMap, v.marshalledLSN, v.marshalledLSN + |v.unmarshalledTail|)
   // }
 
-  // function MessageMaps(journalChain: JournalChain) : seq<MsgSeq> {
-  //   seq(|journalChain.recs|,
-  //     i requires 0<=i<|journalChain.recs|
-  //       => var mm := journalChain.recs[i].messageSeq; mm)
-  // }
-
-  function TailAsMsgSeq(v: Variables) : MsgSeq {
-    var asMap := map[]; // aaargh fine i'll do it later TODO
-    MsgSeq(asMap, v.marshalledLSN, v.marshalledLSN + |v.unmarshalledTail|)
+  // Make sure that the suoperblock contains all the marshalled messages
+  predicate ValidSuperBlock(v: Variables, cache: CacheIfc.Variables, sb: CoreSuperblock)
+  {
+    && sb.freshestCU.Some? ==> sb.freshestCU.value in cache.dv
+    && parse(cache.dv[sb.freshestCU.value]).Some? ==> (v.marshalledLSN == parse(cache.dv[sb.freshestCU.value]).value.messageSeq.seqEnd)
+    && v.boundaryLSN == sb.boundaryLSN
   }
 
-  function AsMsgSeq(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : MsgSeq
+  function EntireJournalChain(v: Variables, cache: CacheIfc.Variables, sb: CoreSuperblock) : (result : JournalChain)
+    requires ValidSuperBlock(v, cache, sb)
+    ensures WFChain(result)
+    ensures result.interp.Len() > 0 ==> result.interp.seqEnd == v.marshalledLSN
+    ensures result.interp.Len() > 0 ==> v.boundaryLSN == result.interp.seqStart
   {
     var chain := ChainFrom(cache.dv, sb).chain;
     if chain.Some?
     then
-      chain.interp.Concat(TailAsMsgSeq(v))
+      var result :=  chain.value;
+      result
     else
-      MsgSeqMod.Empty()
+      var result := EmptyChain(sb);
+      result
   }
 
-//  function MessageAt(chain: JournalChain, lsn: LSN) : Message
-//    requires ValidChain(cache.dv, chain)
-//    requires chain.sb == sb
+  function AsMsgSeq(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : (result : MsgSeq)
+    requires ValidSuperBlock(v, cache, sb)
+    ensures result.WF()
+    ensures result.Len() > 0 ==> result.seqEnd == v.unmarshalledLSN()
+    ensures result.Len() > 0 ==> v.boundaryLSN == result.seqStart
+  {
+      var chain := EntireJournalChain(v, cache, sb);
+      //assert v.boundaryLSN <= chain.interp.seqStart || chain.interp.Len() == 0 ;
+      // freshest CU in the super block (end seq of that) === v.marshalledLSN
+      // persistnet in the superblock (make sure we're passing in the right superblock) + unmarshalled
+      //assert chain.interp.seqEnd <= v.marshalledLSN || chain.interp.Len() == 0;
 
-//  function MessageAt(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, lsn: LSN) : Message
-//  {
-//    var chainResult := ChainFrom(cache.dv, sb);
-//    var m:Message :| true; m  // TODO placeholder to parse
-////    var JournalChain
-//  }
+      // believes these bounds
+      assert chain.interp.Len() > 0 ==> chain.interp.seqEnd == v.marshalledLSN;
+      assert chain.interp.Len() > 0 ==> v.boundaryLSN == chain.interp.seqStart;
+
+      var tailMsgs := TailToMsgSeq(v);
+
+      // believes these bounds
+      assert tailMsgs.seqStart == v.marshalledLSN;
+      assert tailMsgs.seqEnd == v.unmarshalledLSN();
+      chain.interp.Concat(tailMsgs)
+  }
 
   function SyncReqsAt(v: Variables, lsn: LSN) : set<CrashTolerantMapSpecMod.SyncReqId>
     //requires v.persistentLSN <= lsn < v.unmarshalledLSN()
@@ -90,30 +78,16 @@ module JournalInterpMod {
     set lsns |  v.persistentLSN <= lsns <= lsn
   }
 
-  // function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
-  //   requires base.seqEnd == v.persistentLSN
-  //   requires v.persistentLSN <= lsn < v.unmarshalledLSN()
-  // {
-  // // if lsn == v.persistentLSN
-  //   then
-  //     // TODO No accounting for v.syncReqs < persistentLSN; hrmm.
-  //     CrashTolerantMapSpecMod.Version(MapSpecMod.Variables(base), SyncReqsAt(v, lsn))
-  //   else
-  //     var prior := VersionFor(v, cache, sb, base, lsn - 1);
-  //     CrashTolerantMapSpecMod.Version(
-  //       ApplyOneMessage(prior.mapp.interp, MessageAt(v, lsn)),
-  //       SyncReqsAt(v, lsn))
-  // }
-
 
   function InterpFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : Interp
     requires base.seqEnd == v.persistentLSN
     requires v.persistentLSN <= lsn < v.unmarshalledLSN()
   {
-    // TODO: could be cleaner, we can directly apply a prefix to the interp like its recursive counterpart
-    var newMi := AsMsgSeq(v, cache, sb).Truncate(lsn).ApplyToInterp(base);
-    //var newInterp := Interp(newMi, lsn);
-    newMi
+
+    var newMsqSeq := AsMsgSeq(v, cache, sb);
+    assert newMsqSeq.seqStart <= lsn < newMsqSeq.seqEnd;
+    var trucatedSeq := newMsqSeq.Truncate(lsn).ApplyToInterp(base);
+    trucatedSeq
   }
 
    function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
@@ -138,6 +112,7 @@ module JournalInterpMod {
   //     VersionMaps(v, cache, sb, base, curr-1, currseq + [VersionFor(v, cache, sb, base, curr+ v.persistentLSN)] )
   // }
   //
+
   function Versions(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
    {
      var numVersions := v.unmarshalledLSN() - v.boundaryLSN;
@@ -155,10 +130,7 @@ module JournalInterpMod {
     // one version for persistentLSN, plus one for every LSN that we're aware of, because syncReqs
     // may point to any of those.
     var numVersions := v.unmarshalledLSN() - v.persistentLSN;
-    //var versions := seq(numVersions, i requires i < numVersions =>
-    //  var lsn := i + v.persistentLSN;
-    //  VersionFor(v, cache, sb, base, lsn)
-    //);
+
     var versions := Versions(v, cache, sb, base);
     CrashTolerantMapSpecMod.Variables(versions, 0)
   }

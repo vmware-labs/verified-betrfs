@@ -58,12 +58,32 @@ module MsgSeqMod {
     function Concat(other : MsgSeq) : (result : MsgSeq)
       requires WF()
       requires other.WF()
+      // Doesn't work for Journal Interp...
       requires other.Len() == 0 || Len() == 0 ||  other.seqStart == seqEnd
+      ensures result.WF()
+      ensures other.Len() > 0 ==> other.seqEnd == result.seqEnd
+      ensures Len() > 0 ==> seqStart == result.seqStart
+      ensures other.Len() > 0 && Len() == 0 ==> other.seqStart == result.seqStart
+      //ensures other.
     {
-      MsgSeq(
-        MapDisjointUnion(msgs, other.msgs),
-        seqStart,
-        other.seqEnd)
+      // if other.Len() == 0 && Len() == 0 then
+      //   // basically empty
+      //   MsgSeq(map[], 0, 0)
+      // else if other.Len() == 0 then
+      //   MsgSeq(
+      //     msgs,
+      //     seqStart,
+      //     seqEnd)
+      // else if Len() == 0 then
+      //   MsgSeq(
+      //     other.msgs,
+      //     other.seqStart,
+      //     other.seqEnd)
+      // else
+        MsgSeq(
+          MapDisjointUnion(msgs, other.msgs),
+          seqStart,
+          other.seqEnd)
     }
 
     predicate IsEmpty() {
@@ -105,7 +125,8 @@ module MsgSeqMod {
     }
   }
 
-  function Empty() : MsgSeq
+  function Empty() : (result: MsgSeq)
+    ensures result.WF()
   {
     MsgSeq(map[], 0, 0)
   }

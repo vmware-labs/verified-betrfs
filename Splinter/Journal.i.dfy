@@ -160,11 +160,13 @@ module JournalMachineMod {
     ensures jr.Some? ==> jr.value.WF()
   function marshal(jr: JournalRecord) : UninterpretedDiskPage
 
-  function TailToMsgSeq(s: Variables) : MsgSeq
+  function TailToMsgSeq(s: Variables) : (result : MsgSeq)
+    ensures result.WF()
   {
     var start := s.marshalledLSN;
     var end := s.unmarshalledLSN();
-    MsgSeq(map i:LSN | start <= i < end :: s.unmarshalledTail[i - start], start, end)
+    assert start < end;
+    MsgSeq(map i: LSN | start <= i < end :: s.unmarshalledTail[i - start], start, end)
   }
 
   // advances marshalledLSN forward by marshalling a batch of messages into a dirty cache page
@@ -259,7 +261,7 @@ module JournalMachineMod {
     // stop if nothing more available
     || chain.recs[i].priorCU.None?
     // stop if nothing more needed
-    || chain.sb.boundaryLSN >= chain.recs[i].messageSeq.seqStart
+    || chain.recs[i].messageSeq.seqStart <= chain.sb.boundaryLSN
   }
 
   predicate LSNinChain(chain: JournalChain, lsn: LSN)
@@ -270,7 +272,9 @@ module JournalMachineMod {
 
   predicate WFChainBasic(chain: JournalChain)
   {
-    && (chain.sb.freshestCU.None? <==> 0 == |chain.recs|)
+    // Sowmya made this change
+    //&& (chain.sb.freshestCU.None? <==> 0 == |chain.recs|)
+    && (chain.sb.freshestCU.None? ==> 0 == |chain.recs|)
     && (forall i | 0<=i<|chain.recs| :: i==|chain.recs|-1 <==> IsLastLink(i, chain))
     && (forall i | 0<=i<|chain.recs|-1 :: chain.recs[i].priorCU.Some?)
   }
@@ -343,7 +347,8 @@ module JournalMachineMod {
     && ChainMatchesDiskView(dv, chain)
   }
 
-  function EmptyChain(sb: CoreSuperblock) : JournalChain
+  function EmptyChain(sb: CoreSuperblock) : ( chain : JournalChain)
+    ensures WFChain(chain)
   {
     JournalChain(sb, [], map[], MsgSeqMod.Empty())
   }
@@ -365,7 +370,12 @@ module JournalMachineMod {
     requires 0<|innerchain.recs| ==> rec.messageSeq.seqStart == innerchain.recs[0].messageSeq.seqEnd;
     requires WFChain(innerchain)
     ensures WFChain(chain)
+
+    // TODO: We need to state something about the chain. Note sure I'm doing it right
+    ensures 0<|innerchain.recs| ==> chain.interp.seqEnd == rec.messageSeq.seqEnd
+    ensures 0<|innerchain.recs| ==> chain.interp.seqStart == innerchain.recs[0].messageSeq.seqStart
   {
+    assume false;
     var locate0 := map lsn | lsn in rec.messageSeq.LSNSet() :: 0;
     var locateCdr := map lsn | lsn in innerchain.locate :: innerchain.locate[lsn] + 1;
     var locate := MapDisjointUnion(locate0, locateCdr);
@@ -392,10 +402,13 @@ module JournalMachineMod {
   // results (even when they're broken).
   datatype ChainResult = ChainResult(chain: Option<JournalChain>, readCUs:seq<CU>)
 
+  // NOTE: Chain from by itself has no bounds on the ending LSN
   function ChainFrom(dv: DiskView, sb: CoreSuperblock) : (r:ChainResult)
     ensures r.chain.Some? ==>
-      && ValidJournalChain(dv, r.chain.value)
+      (&& ValidJournalChain(dv, r.chain.value)
       && r.chain.value.sb == sb
+      // Make sure we're returning blocks starting from the oldest recoverable block
+      && r.chain.value.interp.seqStart == sb.boundaryLSN )
     decreases |dv.Keys|
   {
     if sb.freshestCU.None? then
