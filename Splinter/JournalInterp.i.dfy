@@ -16,21 +16,20 @@ module JournalInterpMod {
   import opened JournalMachineMod
   import opened InterpMod
 
-  // function TailAsMsgSeq(v: Variables) : MsgSeq
-  // {
-  //   var asMap := map |   //[]; // aaargh fine i'll do it later TODO-- Sowmya: What's the TODO?
-  //   MsgSeq(asMap, v.marshalledLSN, v.marshalledLSN + |v.unmarshalledTail|)
-  // }
-
   // Make sure that the suoperblock contains all the marshalled messages
   predicate ValidSuperBlock(v: Variables, cache: CacheIfc.Variables, sb: CoreSuperblock)
     requires v.WF()
   {
-    && sb.freshestCU.Some? ==> sb.freshestCU.value in cache.dv
-    // TODO: var
-    // TODO: superblock's freshest cu must correspond to LSN mapping
-    && parse(cache.dv[sb.freshestCU.value]).Some? ==> (v.marshalledLSN == parse(cache.dv[sb.freshestCU.value]).value.messageSeq.seqEnd)
-    && v.boundaryLSN == sb.boundaryLSN
+    var freshestCU := sb.freshestCU;
+    //assert freshestCU.value in cache.dv ==> lastMsgSeq.Some?;
+    && (freshestCU.Some? ==>
+      && freshestCU.value in cache.dv
+      && var lastMsgSeq := parse(cache.dv[freshestCU.value]);
+      // TODO: superblock's freshest cu must correspond to LSN mapping
+      // scope of the var is these two lines
+      &&  (lastMsgSeq.Some? ==> v.marshalledLSN == lastMsgSeq.value.messageSeq.seqEnd)
+      )
+    &&  v.boundaryLSN == sb.boundaryLSN
   }
 
   function EntireJournalChain(v: Variables, cache: CacheIfc.Variables, sb: CoreSuperblock) : (result : JournalChain)
@@ -57,33 +56,16 @@ module JournalInterpMod {
     ensures result.Len() > 0 ==> result.seqEnd == v.unmarshalledLSN()
     ensures result.Len() > 0 ==> v.boundaryLSN == result.seqStart
   {
+
+      // chain has all the marshalled messages
       var chain := EntireJournalChain(v, cache, sb);
-      //assert v.boundaryLSN <= chain.interp.seqStart || chain.interp.Len() == 0 ;
-      // freshest CU in the super block (end seq of that) === v.marshalledLSN
-      // persistnet in the superblock (make sure we're passing in the right superblock) + unmarshalled
-      //assert chain.interp.seqEnd <= v.marshalledLSN || chain.interp.Len() == 0;
 
-      // believes these bounds
-      // assert chain.interp.Len() > 0 ==> chain.interp.seqEnd == v.marshalledLSN;
-      // assert chain.interp.Len() > 0 ==> v.boundaryLSN == chain.interp.seqStart;
-
+      // tail has all the unmarshalled messages
       var tailMsgs := TailToMsgSeq(v);
 
-      // believes these bounds
-      // assert tailMsgs.Len() > 0 ==> tailMsgs.seqStart == v.marshalledLSN;
-      // assert tailMsgs.Len() > 0 ==> tailMsgs.seqEnd == v.unmarshalledLSN();
-
-      //assert v.boundaryLSN <= v.marshalledLSN; // lolz
-
+      // we need to return all the messages in the journal. So let's join them together
       var result := chain.interp.Concat(tailMsgs);
 
-      //assert  (result.Len() > 0) ==> (chain.interp.Len() > 0);
-      // assert chain.interp.Len() == 0 ==> v.boundaryLSN == v.marshalledLSN;
-      // assert chain.interp.Len() == 0 ==> result.seqStart == tailMsgs.seqStart;
-      //
-      // assert result.Len() > 0 ==> result.seqStart == chain.interp.seqStart;
-      // assert result.Len() > 0 ==> v.boundaryLSN == result.seqStart; // Verfier says this is false, hmm ....
-      // assert result.Len() > 0 ==> result.seqEnd == v.unmarshalledLSN();
       result
   }
 
@@ -123,19 +105,6 @@ module JournalInterpMod {
        CrashTolerantMapSpecMod.Version(asyncmapspec, SyncReqsAt(v, lsn))
    }
 
-  // TODO: Clean up this function ... The curr here is ugly
-  // function VersionMaps(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, curr : LSN, currseq: seq<CrashTolerantMapSpecMod.Version>) : seq<CrashTolerantMapSpecMod.Version>
-  // requires base.seqEnd == v.persistentLSN
-  // requires v.persistentLSN <= curr+ v.persistentLSN <= v.unmarshalledLSN()
-  // {
-  //   if curr <= 0
-  //     then
-  //     currseq
-  //   else
-  //     VersionMaps(v, cache, sb, base, curr-1, currseq + [VersionFor(v, cache, sb, base, curr+ v.persistentLSN)] )
-  // }
-  //
-
   function Versions(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
     requires v.WF()
     requires base.seqEnd == v.persistentLSN // Can we require this here?
@@ -143,7 +112,6 @@ module JournalInterpMod {
    {
      var numVersions := v.unmarshalledLSN() - v.boundaryLSN;
      seq(numVersions, i requires 0 <= i < numVersions =>
-        // Sowmya QUESTION: this used to be persistentLSN, But i think it has to be boundaryLSN. NO?
         var lsn := i + v.boundaryLSN;
         assert v.boundaryLSN <= lsn;
         assert lsn < v.unmarshalledLSN();
@@ -156,12 +124,8 @@ module JournalInterpMod {
   requires v.WF()
   requires ValidSuperBlock(v, cache, sb)
   requires base.seqEnd == v.persistentLSN
-  requires v.persistentLSN < v.unmarshalledLSN()
+  requires v.boundaryLSN < v.unmarshalledLSN()
   {
-    // one version for persistentLSN, plus one for every LSN that we're aware of, because syncReqs
-    // may point to any of those.
-    var numVersions := v.unmarshalledLSN() - v.persistentLSN;
-
     var versions := Versions(v, cache, sb, base);
     CrashTolerantMapSpecMod.Variables(versions, 0)
   }
@@ -226,7 +190,7 @@ module JournalInterpMod {
     requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
     requires v.WF()
 
-    // QUESTION: We need to require these right?
+    // QUESTION: We need to require these right?, Need to figure this out for later
     requires ValidSuperBlock(v, cache0, sb)
     requires ValidSuperBlock(v, cache1, sb)
     requires base.seqEnd == v.persistentLSN
@@ -234,6 +198,7 @@ module JournalInterpMod {
     ensures IM(v, cache0, sb, base) == IM(v, cache1, sb, base)
   {
     FrameOneChain(v, cache0, cache1, sb);
+    // This works --- I'm suspicious -- Sowmya
     calc {
       IM(v, cache0, sb, base);
       IM(v, cache1, sb, base);
