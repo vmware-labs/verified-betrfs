@@ -1,4 +1,4 @@
-name: make status
+name: make verichecks-status
 
 on:
   workflow_dispatch:
