@@ -130,7 +130,7 @@ status: build/deps build/Impl/Bundle.i.status.pdf build/Impl/Bundle.i.status.svg
 
 verichecks-status: DAFNY_GLOBAL_FLAGS=/vcsCores:4
 verichecks-status: DEFAULT_RLIMIT=$$(( 30 * $(RLIMIT_PER_SECOND) ))
-verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
+verichecks-status: status
 
 .PHONY: syntax-status
 syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf build/Impl/Bundle.i.syntax-status.svg build/Impl/Bundle.i.syntax-status.txt
@@ -249,7 +249,7 @@ build/%.syntax: build/%.synchk $(AGGREGATE_TOOL) | $$(@D)/.
 	$(AGGREGATE_TOOL) --synchk --root $< --summary $@ --error $@.err
 
 ##############################################################################
-# .status.pdf: a dependency graph of .dfy files labeled with verification result status.
+# .status.pdf and .status.svg: a dependency graph of .dfy files labeled with verification result status.
 #
 STATUS_TOOL=tools/dep-graph.py
 STATUS_DEPS=tools/lib_aggregate.py
