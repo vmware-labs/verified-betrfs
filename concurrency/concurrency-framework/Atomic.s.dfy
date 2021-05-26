@@ -1,5 +1,5 @@
 module AtomicSpec {
-  type {:extern} Atomic<V, G>
+  type {:extern} Atomic<!V, !G>
 
   predicate {:extern} atomic_inv<V, G>(atomic: Atomic<V, G>, v: V, g: G)
 
