@@ -9,10 +9,13 @@ on:
         default: 'master'
 
 jobs:
+  start-veri-checks:
+    runs-on: bastion
+    steps:
+    - name: start-veri-checks
+      run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --start veri-checks
   build:
-
     runs-on: veri-checks
-
     steps:
     - uses: actions/checkout@v2
       with:
@@ -22,8 +25,11 @@ jobs:
     - name: install-dafny
       run: tools/install-dafny.sh
     - name: make status
-      run: make -j 7 verichecks-status
+      run: make -j 7 syntax-status
     - uses: actions/upload-artifact@v2
       with:
         name: build
         path: build
+    - name: stop veri-checks
+      if: ${{ awlays() }}
+      run: sudo shutdown --poweroff now
