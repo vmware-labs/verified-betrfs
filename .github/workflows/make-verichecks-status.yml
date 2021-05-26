@@ -31,5 +31,5 @@ jobs:
         name: build
         path: build
     - name: stop veri-checks
-      if: ${{ awlays() }}
+      if: ${{ always() }}
       run: sudo shutdown --poweroff now
