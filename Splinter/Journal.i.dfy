@@ -370,10 +370,6 @@ module JournalMachineMod {
     requires 0<|innerchain.recs| ==> rec.messageSeq.seqStart == innerchain.recs[0].messageSeq.seqEnd;
     requires WFChain(innerchain)
     ensures WFChain(chain)
-
-    // TODO: We need to state something about the chain. Note sure I'm doing it right
-    ensures 0<|innerchain.recs| ==> chain.interp.seqEnd == rec.messageSeq.seqEnd
-    ensures 0<|innerchain.recs| ==> chain.interp.seqStart == innerchain.recs[0].messageSeq.seqStart
   {
     assume false;
     var locate0 := map lsn | lsn in rec.messageSeq.LSNSet() :: 0;

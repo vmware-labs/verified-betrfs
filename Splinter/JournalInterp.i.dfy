@@ -24,13 +24,17 @@ module JournalInterpMod {
 
   // Make sure that the suoperblock contains all the marshalled messages
   predicate ValidSuperBlock(v: Variables, cache: CacheIfc.Variables, sb: CoreSuperblock)
+    requires v.WF()
   {
     && sb.freshestCU.Some? ==> sb.freshestCU.value in cache.dv
+    // TODO: var
+    // TODO: superblock's freshest cu must correspond to LSN mapping
     && parse(cache.dv[sb.freshestCU.value]).Some? ==> (v.marshalledLSN == parse(cache.dv[sb.freshestCU.value]).value.messageSeq.seqEnd)
     && v.boundaryLSN == sb.boundaryLSN
   }
 
   function EntireJournalChain(v: Variables, cache: CacheIfc.Variables, sb: CoreSuperblock) : (result : JournalChain)
+    requires v.WF()
     requires ValidSuperBlock(v, cache, sb)
     ensures WFChain(result)
     ensures result.interp.Len() > 0 ==> result.interp.seqEnd == v.marshalledLSN
@@ -47,6 +51,7 @@ module JournalInterpMod {
   }
 
   function AsMsgSeq(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : (result : MsgSeq)
+    requires v.WF()
     requires ValidSuperBlock(v, cache, sb)
     ensures result.WF()
     ensures result.Len() > 0 ==> result.seqEnd == v.unmarshalledLSN()
@@ -59,15 +64,27 @@ module JournalInterpMod {
       //assert chain.interp.seqEnd <= v.marshalledLSN || chain.interp.Len() == 0;
 
       // believes these bounds
-      assert chain.interp.Len() > 0 ==> chain.interp.seqEnd == v.marshalledLSN;
-      assert chain.interp.Len() > 0 ==> v.boundaryLSN == chain.interp.seqStart;
+      // assert chain.interp.Len() > 0 ==> chain.interp.seqEnd == v.marshalledLSN;
+      // assert chain.interp.Len() > 0 ==> v.boundaryLSN == chain.interp.seqStart;
 
       var tailMsgs := TailToMsgSeq(v);
 
       // believes these bounds
-      assert tailMsgs.seqStart == v.marshalledLSN;
-      assert tailMsgs.seqEnd == v.unmarshalledLSN();
-      chain.interp.Concat(tailMsgs)
+      // assert tailMsgs.Len() > 0 ==> tailMsgs.seqStart == v.marshalledLSN;
+      // assert tailMsgs.Len() > 0 ==> tailMsgs.seqEnd == v.unmarshalledLSN();
+
+      //assert v.boundaryLSN <= v.marshalledLSN; // lolz
+
+      var result := chain.interp.Concat(tailMsgs);
+
+      //assert  (result.Len() > 0) ==> (chain.interp.Len() > 0);
+      // assert chain.interp.Len() == 0 ==> v.boundaryLSN == v.marshalledLSN;
+      // assert chain.interp.Len() == 0 ==> result.seqStart == tailMsgs.seqStart;
+      //
+      // assert result.Len() > 0 ==> result.seqStart == chain.interp.seqStart;
+      // assert result.Len() > 0 ==> v.boundaryLSN == result.seqStart; // Verfier says this is false, hmm ....
+      // assert result.Len() > 0 ==> result.seqEnd == v.unmarshalledLSN();
+      result
   }
 
   function SyncReqsAt(v: Variables, lsn: LSN) : set<CrashTolerantMapSpecMod.SyncReqId>
@@ -80,19 +97,25 @@ module JournalInterpMod {
 
 
   function InterpFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : Interp
+    requires v.WF()
+    requires ValidSuperBlock(v, cache, sb)
     requires base.seqEnd == v.persistentLSN
-    requires v.persistentLSN <= lsn < v.unmarshalledLSN()
+    requires v.boundaryLSN <= lsn < v.unmarshalledLSN()
   {
 
     var newMsqSeq := AsMsgSeq(v, cache, sb);
     assert newMsqSeq.seqStart <= lsn < newMsqSeq.seqEnd;
-    var trucatedSeq := newMsqSeq.Truncate(lsn).ApplyToInterp(base);
-    trucatedSeq
+
+    var trucatedSeq := newMsqSeq.Truncate(lsn);
+    var interp := trucatedSeq.ApplyToInterp(base);
+    interp
   }
 
    function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
+     requires v.WF()
+     requires ValidSuperBlock(v, cache, sb)
      requires base.seqEnd == v.persistentLSN
-     requires v.persistentLSN <= lsn < v.unmarshalledLSN() // we only need versions for the journal for the unapplied suffix of entries
+     requires v.boundaryLSN <= lsn < v.unmarshalledLSN() // we only need versions for the journal for the unapplied suffix of entries
    {
        // TODO No accounting for v.syncReqs < persistentLSN; hrmm.
        var mapspec := MapSpecMod.Variables(InterpFor(v, cache, sb, base, lsn));
@@ -114,16 +137,24 @@ module JournalInterpMod {
   //
 
   function Versions(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
+    requires v.WF()
+    requires base.seqEnd == v.persistentLSN // Can we require this here?
+    requires ValidSuperBlock(v, cache, sb)
    {
      var numVersions := v.unmarshalledLSN() - v.boundaryLSN;
-     seq(numVersions, i requires i < numVersions =>
-        var lsn := i + v.persistentLSN;
+     seq(numVersions, i requires 0 <= i < numVersions =>
+        // Sowmya QUESTION: this used to be persistentLSN, But i think it has to be boundaryLSN. NO?
+        var lsn := i + v.boundaryLSN;
+        assert v.boundaryLSN <= lsn;
+        assert lsn < v.unmarshalledLSN();
         VersionFor(v, cache, sb, base, lsn)
      )
    }
 
   function IM(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp)
     : CrashTolerantMapSpecMod.Variables
+  requires v.WF()
+  requires ValidSuperBlock(v, cache, sb)
   requires base.seqEnd == v.persistentLSN
   requires v.persistentLSN < v.unmarshalledLSN()
   {
@@ -193,6 +224,11 @@ module JournalInterpMod {
 
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:CoreSuperblock, base: InterpMod.Interp)
     requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
+    requires v.WF()
+
+    // QUESTION: We need to require these right?
+    requires ValidSuperBlock(v, cache0, sb)
+    requires ValidSuperBlock(v, cache1, sb)
     requires base.seqEnd == v.persistentLSN
     requires v.persistentLSN < v.unmarshalledLSN()
     ensures IM(v, cache0, sb, base) == IM(v, cache1, sb, base)
