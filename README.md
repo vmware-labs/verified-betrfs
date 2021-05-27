@@ -1,5 +1,7 @@
 # Verified BetrFS
 
+![Verification Status](https://github.com/vmware-labs/verified-betrfs/actions/workflows/make-verichecks-status.yml/badge.svg)
+
 Verified BetrFS (VeriBetrFS) is a verified file system based on the design of [BetrFS](http://betrfs.org).
 
 VeriBetrFS is implemented in [dafny](https://github.com/dafny-lang/dafny), which supports specifying and proving functional correctness.
