@@ -42,6 +42,7 @@ jobs:
         run: grep -l Overall:\ Success build/Impl/Bundle.i.verified
   stop-veri-checks:
     runs-on: bastion
+    needs: build
     steps:
       - name: stop-veri-checks
         if: ${{ always() }}

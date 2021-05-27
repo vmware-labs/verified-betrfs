@@ -40,6 +40,7 @@ jobs:
         run: tools/verichecks-to-wiki.sh
   stop-veri-checks:
     runs-on: bastion
+    needs: build
     steps:
       - name: stop-veri-checks
         if: ${{ always() }}
