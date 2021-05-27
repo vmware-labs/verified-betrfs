@@ -14,7 +14,10 @@ module MsgSeqMod {
   import opened Maps
   import opened Options
   import opened MessageMod
-  import opened InterpMod
+  import InterpMod
+
+  type LSN = InterpMod.LSN
+  type Interp = InterpMod.Interp
 
   datatype MsgSeq = MsgSeq(msgs: map<LSN, Message>, seqStart: LSN, seqEnd: LSN)
     // seqEnd is exclusive
@@ -55,33 +58,24 @@ module MsgSeqMod {
         seqEnd+1)
     }
 
-    function Concat(other : MsgSeq) : (result : MsgSeq)
-      requires WF()
-      requires other.WF()
-      requires other.Len() == 0 || Len() == 0 ||  other.seqStart == seqEnd
-      ensures result.WF()
-      // conditions on msgSeq bounds
-      ensures result.Len() > 0 ==> result.seqStart == seqStart
-      ensures result.Len() > 0 ==> result.seqEnd == other.seqEnd
-      ensures Len() == 0 ==> result.seqStart == other.seqStart
-      ensures other.Len() == 0 ==> result.seqEnd == seqEnd
-    {
-      var result := MsgSeq(
-        MapDisjointUnion(msgs, other.msgs),
-        if Len()>0 then seqStart else other.seqStart,
-        if other.Len()>0 then seqEnd else other.seqEnd);
-      assert Len()>0 && other.Len()>0 ==> result.seqStart <= result.seqEnd;
-      assert Len()>0 && other.Len()==0 ==> result.seqStart == seqStart <= other.seqEnd == result.seqEnd;
-      assert Len()==0 && other.Len()>0 ==> result.seqStart <= result.seqEnd;
-      assert Len()==0 && other.Len()==0 ==> result.seqStart <= result.seqEnd;
-      result
-    }
-
     predicate IsEmpty() {
       seqStart == seqEnd
     }
 
-
+    function Concat(other : MsgSeq) : (result : MsgSeq)
+      requires WF()
+      requires other.WF()
+      requires IsEmpty() || other.IsEmpty() || other.seqStart == seqEnd
+      ensures result.WF()
+      // conditions on msgSeq bounds
+    {
+      if IsEmpty()
+      then other
+      else if other.IsEmpty()
+      then this
+      else
+        MsgSeq( MapDisjointUnion(msgs, other.msgs), seqStart, other.seqEnd)
+    }
 
     function ApplyToInterpRecursive(orig: Interp, count: nat) : (out: Interp)
       requires WF()
@@ -98,7 +92,7 @@ module MsgSeqMod {
         var newMessage := msgs[lsn];
 
         var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Combine(oldMessage, newMessage)];
-        Interp(mapp, lsn)
+        InterpMod.Interp(mapp, lsn)
     }
 
     function ApplyToInterp(orig: Interp) : Interp
@@ -131,11 +125,14 @@ module MsgSeqMod {
       requires seqStart <= lsn < seqEnd
       requires WF()
       ensures r.WF()
-      ensures r.seqEnd < lsn
     {
-      var keepVersions := lsn - seqStart;
-      var trucMap := map k | seqStart <= k < lsn :: msgs[k];
-      MsgSeq(trucMap, seqStart, lsn)
+      if lsn==seqStart
+      then
+        Empty()
+      else
+        var keepVersions := lsn - seqStart;
+        var trucMap := map k | seqStart <= k < lsn :: msgs[k];
+        MsgSeq(trucMap, seqStart, lsn)
     }
   }
 
@@ -186,6 +183,6 @@ module MsgSeqMod {
     requires ms.WF()
     requires interp.seqEnd == ms.seqStart
   {
-    Interp(imap k | InDomain(k) :: IKey(k, interp.mi[k], ms), ms.seqEnd)
+    InterpMod.Interp(imap k | InterpMod.InDomain(k) :: IKey(k, interp.mi[k], ms), ms.seqEnd)
   }
 }
