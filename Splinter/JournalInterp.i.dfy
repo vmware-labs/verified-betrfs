@@ -77,7 +77,6 @@ module JournalInterpMod {
     set lsns |  v.persistentLSN <= lsns <= lsn
   }
 
-
   function InterpFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : Interp
     requires v.WF()
     requires ValidSuperBlock(v, cache, sb)
@@ -110,6 +109,7 @@ module JournalInterpMod {
     requires base.seqEnd == v.persistentLSN // Can we require this here?
     requires ValidSuperBlock(v, cache, sb)
    {
+     // TODO: check
      var numVersions := v.unmarshalledLSN() - v.boundaryLSN;
      seq(numVersions, i requires 0 <= i < numVersions =>
         var lsn := i + v.boundaryLSN;

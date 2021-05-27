@@ -117,16 +117,16 @@ module BetreeInterpMod {
           calc {
             IMKey(v, cache0, sb, key);
               { assume false; } // var|
-            LookupToValue(lookup0);
+            LookupToMessage(lookup0);
               { assume false; } // framing
-            LookupToValue(lookup1);
+            LookupToMessage(lookup1);
               { assume false; } // var|
             IMKey(v, cache1, sb, key);
           }
         } else {
           calc {
             IMKey(v, cache0, sb, key);
-            DefaultValue();
+            MessagePut(key, DefaultValue());
             IMKey(v, cache1, sb, key);
           }
         }

@@ -66,20 +66,17 @@ module MsgSeqMod {
       ensures Len() == 0 ==> result.seqStart == other.seqStart
       ensures other.Len() == 0 ==> result.seqEnd == seqEnd
     {
-      var result := MsgSeq(
-        MapDisjointUnion(msgs, other.msgs),
-        if Len()>0 then seqStart else other.seqStart,
-        if other.Len()>0 then seqEnd else other.seqEnd);
-      assert Len()>0 && other.Len()>0 ==> result.seqStart <= result.seqEnd;
-      assert Len()>0 && other.Len()==0 ==> result.seqStart == seqStart <= other.seqEnd == result.seqEnd;
-      assert Len()==0 && other.Len()>0 ==> result.seqStart <= result.seqEnd;
-      assert Len()==0 && other.Len()==0 ==> result.seqStart <= result.seqEnd;
-      result
+        MsgSeq(
+          MapDisjointUnion(msgs, other.msgs),
+          seqStart,
+          other.seqEnd)
     }
 
     predicate IsEmpty() {
       seqStart == seqEnd
     }
+
+
 
     function ApplyToInterpRecursive(orig: Interp, count: nat) : (out: Interp)
       requires WF()
@@ -104,6 +101,25 @@ module MsgSeqMod {
       requires orig.WF()
     {
       ApplyToInterpRecursive(orig, Len())
+    }
+
+    function ApplyToKeyMapRecursive(orig: map<Key, Message>, count: nat) : (out: map<Key, Message>)
+      requires WF()
+      requires count <= Len()
+    {
+      if count==0
+      then orig
+      else
+        var lsn := seqStart + count - 1;
+        var key := msgs[lsn].k;
+        var message := msgs[lsn];
+        ApplyToKeyMapRecursive(orig, count-1)[key := message]
+    }
+
+    function ApplyToKeyMap(orig: map<Key, Message>) : map<Key, Message>
+      requires WF()
+    {
+      ApplyToKeyMapRecursive(orig, Len())
     }
 
     function Truncate(lsn: LSN) : (r: MsgSeq)
