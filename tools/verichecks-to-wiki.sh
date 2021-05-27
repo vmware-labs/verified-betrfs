@@ -1,0 +1,91 @@
+#!/bin/bash
+
+function debug() {
+    echo "::debug file=${BASH_SOURCE[0]},line=${BASH_LINENO[0]}::$1"
+}
+
+function warning() {
+    echo "::warning file=${BASH_SOURCE[0]},line=${BASH_LINENO[0]}::$1"
+}
+
+function error() {
+    echo "::error file=${BASH_SOURCE[0]},line=${BASH_LINENO[0]}::$1"
+}
+
+
+
+
+if [ -z "$GITHUB_REPOSITORY" ]; then
+    error "GITHUB_REPOSITORY environment variable is not set"
+    exit 1
+fi
+
+if [ -z "$GH_PERSONAL_ACCESS_TOKEN" ]; then
+    error "GH_PERSONAL_ACCESS_TOKEN environment variable is not set"
+    exit 1
+fi
+
+
+if [ -z $GITHUB_REF ]; then
+    COMMITID=$GITHUB_SHA
+else 
+    COMMITID=`basename $GITHUB_REF`
+fi
+
+if [ -z $COMMITID ]; then
+    error "Could not determin commit ID."
+    exit 1
+fi
+
+if [ -z "$GH_PERSONAL_ACCESS_TOKEN" ]; then
+    error "GH_PERSONAL_ACCESS_TOKEN environment variable is not set"
+    exit 1
+fi
+
+GIT_REPOSITORY_URL="https://${GH_PERSONAL_ACCESS_TOKEN}@${GITHUB_SERVER_URL#https://}/$GITHUB_REPOSITORY.wiki.git"
+
+tmp_dir=$(mktemp -d -t ci-XXXXXXXXXX)
+function finish {
+  rm -rf "$tmp_dir"
+}
+trap finish EXIT
+
+debug "Checking out wiki repository"
+(
+    cd "$tmp_dir" || exit 1
+    git init
+    git config user.name "$GITHUB_ACTOR"
+    git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+    git pull "$GIT_REPOSITORY_URL"
+) || exit 1
+
+debug "Removing old results"
+(
+    cd "$tmp_dir" || exit 1
+    git rm -rf --ignore-unmatch verichecks-results/$COMMITID
+) || exit 1
+
+debug "Copying new results"
+(
+    mkdir -p "$tmp_dir"/verichecks-results/$COMMITID &&
+    cp -r build "$tmp_dir"/verichecks-results/$COMMITID
+) || exit 1
+
+debug "Regenerating table of contents"
+(
+    cd "$tmp_dir" &&
+    echo > verichecks-results.md
+    for d in `ls verichecks-results`; do
+        echo - $d \[[Summary]\(verichecks-results/$d/Impl/Bundle.i.verified\)\] \[[Status SVG]\(verichecks-results/$d/Impl/Bundle.i.status.svg\)\] \[[Status PDF]\(verichecks-results/$d/Impl/Bundle.i.status.pdf\)\] >> verichecks-results.md
+    done
+) || exit 1
+
+debug "Committing and pushing"
+(
+    cd "$tmp_dir" &&
+    git add verichecks-results.md &&
+    git add -f "$tmp_dir"/verichecks-results/$COMMITID/\* &&
+    git commit -m "Veri-checks results for $COMMITID"
+    git push --set-upstream "$GIT_REPOSITORY_URL" master
+) || exit 1
+
