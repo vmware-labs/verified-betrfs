@@ -52,16 +52,16 @@ trap finish EXIT
 
 debug "Checking out wiki repository"
 (
-    cd "$tmp_dir" || exit 1
-    git init
-    git config user.name "$GITHUB_ACTOR"
-    git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+    cd "$tmp_dir" &&
+    git init &&
+    git config user.name "$GITHUB_ACTOR" &&
+    git config user.email "$GITHUB_ACTOR@users.noreply.github.com" &&
     git pull "$GIT_REPOSITORY_URL"
 ) || exit 1
 
 debug "Removing old results"
 (
-    cd "$tmp_dir" || exit 1
+    cd "$tmp_dir" &&
     git rm -rf --ignore-unmatch verichecks-results/$COMMITID
 ) || exit 1
 
@@ -74,7 +74,7 @@ debug "Copying new results"
 debug "Regenerating table of contents"
 (
     cd "$tmp_dir" &&
-    echo > verichecks-results.md
+    echo > verichecks-results.md &&
     for d in `ls verichecks-results`; do
         echo - $d \[[Summary]\(verichecks-results/$d/Impl/Bundle.i.verified\)\] \[[Status SVG]\(verichecks-results/$d/Impl/Bundle.i.status.svg\)\] \[[Status PDF]\(verichecks-results/$d/Impl/Bundle.i.status.pdf\)\] >> verichecks-results.md
     done
@@ -84,8 +84,8 @@ debug "Committing and pushing"
 (
     cd "$tmp_dir" &&
     git add verichecks-results.md &&
-    git add -f "$tmp_dir"/verichecks-results/$COMMITID/\* &&
-    git commit -m "Veri-checks results for $COMMITID"
+    git add -f verichecks-results/$COMMITID/* &&
+    git commit -m "Veri-checks results for $COMMITID" &&
     git push --set-upstream "$GIT_REPOSITORY_URL" master
 ) || exit 1
 
