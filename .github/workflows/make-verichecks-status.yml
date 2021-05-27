@@ -1,6 +1,9 @@
 name: make verichecks-status
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       branch:
