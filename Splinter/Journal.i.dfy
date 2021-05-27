@@ -218,24 +218,36 @@ module JournalMachineMod {
     && false // does something with allocation table?
   }
 
+  function FreshestCU(v: Variables) : Option<CU>
+  {
+    if v.cleanLSN == v.boundaryLSN
+    then None
+    else Some(v.lsnToCU[v.cleanLSN-1])
+  }
+
+  // This is the superblock that v represents
+  function CurrentSuperblock(v: Variables) : Superblock
+  {
+    Superblock(FreshestCU(v), v.boundaryLSN)
+  }
+
   // Agrees to advance persistentLSN (to cleanLSN) and firstLSN (to newBoundary, coordinated
   // with BeTree) as part of superblock writeback.
-  predicate CommitStart(s: Variables, s': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN, alloc: AllocationTableMachineMod.Variables)
+  predicate CommitStart(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN, alloc: AllocationTableMachineMod.Variables)
   {
-    && s.WF()
+    && v.WF()
     // This is the stuff we'll get to garbage collect when the sb commit completes.
-    && s.boundaryLSN <= newBoundaryLSN // presumably provable from Inv
+    && v.boundaryLSN <= newBoundaryLSN // presumably provable from Inv
 
     // These are the LSNs whose syncs will complete when the sb commit completes.
-    && s.persistentLSN <= s.cleanLSN  // presumably provable from Inv
+    && v.persistentLSN <= v.cleanLSN  // presumably provable from Inv
 
     // The allocation we actually commit to is a superset of the allocation we're using.
-    && (forall cu | cu in s.lsnToCU.Values :: cu in alloc.table)
+    && (forall cu | cu in v.lsnToCU.Values :: cu in alloc.table)
 
     // This is the superblock that's going to become persistent.
-    && var freshestCU := if s.cleanLSN == s.boundaryLSN then None else Some(s.lsnToCU[s.cleanLSN-1]);
-    && sb == Superblock(freshestCU, newBoundaryLSN)
-    && s' == s
+    && sb == Superblock(FreshestCU(v), newBoundaryLSN)
+    && v' == v
   }
 
   //////////////////////////////////////////////////////////////////////////////

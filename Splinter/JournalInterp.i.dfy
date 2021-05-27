@@ -16,57 +16,67 @@ module JournalInterpMod {
   import opened JournalMachineMod
   import opened InterpMod
 
-  // Make sure that the suoperblock contains all the marshalled messages
-  predicate ValidSuperBlock(v: Variables, cache: CacheIfc.Variables, sb: Superblock)
+
+  predicate Invariant(v: Variables, cache: CacheIfc.Variables)
     requires v.WF()
   {
-    var freshestCU := sb.freshestCU;
-    //assert freshestCU.value in cache.dv ==> lastMsgSeq.Some?;
-    && (freshestCU.Some? ==>
-      && freshestCU.value in cache.dv
-      && var lastMsgSeq := parse(cache.dv[freshestCU.value]);
-      // TODO: superblock's freshest cu must correspond to LSN mapping
-      // scope of the var is these two lines
-      &&  (lastMsgSeq.Some? ==> v.marshalledLSN == lastMsgSeq.value.messageSeq.seqEnd)
+    var sb := CurrentSuperblock(v);
+    var optChain := ChainFrom(cache.dv, sb).chain;
+    && optChain.Some?
+    && ValidJournalChain(cache.dv, optChain.value)
+    // Superblocks says chain ends where variables says it should
+    && v.marshalledLSN == (
+        if |optChain.value.recs|==0
+        then v.boundaryLSN
+        else Last(optChain.value.recs).messageSeq.seqEnd
       )
-    &&  v.boundaryLSN == sb.boundaryLSN
   }
 
-  function EntireJournalChain(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : (result : JournalChain)
+  // Interpret the chain of marshalled LSNs as a MsgSeq
+  function ChainAsMsgSeq(v: Variables, cache:CacheIfc.Variables) : (result : MsgSeq)
     requires v.WF()
-    requires ValidSuperBlock(v, cache, sb)
-    ensures WFChain(result)
-    ensures result.interp.Len() > 0 ==> result.interp.seqEnd == v.marshalledLSN
-    ensures result.interp.Len() > 0 ==> v.boundaryLSN == result.interp.seqStart
-  {
-    var chain := ChainFrom(cache.dv, sb).chain;
-    if chain.Some?
-    then
-      var result :=  chain.value;
-      result
-    else
-      var result := EmptyChain(sb);
-      result
-  }
-
-  function AsMsgSeq(v: Variables, cache:CacheIfc.Variables, sb: Superblock) : (result : MsgSeq)
-    requires v.WF()
-    requires ValidSuperBlock(v, cache, sb)
+    requires Invariant(v, cache)
     ensures result.WF()
-    ensures result.Len() > 0 ==> result.seqEnd == v.unmarshalledLSN()
-    ensures result.Len() > 0 ==> v.boundaryLSN == result.seqStart
+    ensures result.IsEmpty() ==> v.boundaryLSN == v.unmarshalledLSN()
+    ensures !result.IsEmpty() ==> result.seqEnd == v.unmarshalledLSN()
+    ensures !result.IsEmpty() ==> v.boundaryLSN == result.seqStart
   {
+    var sb := CurrentSuperblock(v);
+    // chain has all the marshalled messages
+    var chain := ChainFrom(cache.dv, sb).chain.value;
 
-      // chain has all the marshalled messages
-      var chain := EntireJournalChain(v, cache, sb);
+    // tail has all the unmarshalled messages
+    var tailMsgs := TailToMsgSeq(v);
 
-      // tail has all the unmarshalled messages
-      var tailMsgs := TailToMsgSeq(v);
+    // we need to return all the messages in the journal. So let's join them together
+    assert !chain.interp.IsEmpty() && !tailMsgs.IsEmpty() ==>
+      chain.interp.seqEnd == tailMsgs.seqStart by {
+      if !chain.interp.IsEmpty() && !tailMsgs.IsEmpty() {
+        calc {
+          chain.interp.seqEnd;
+          Last(chain.recs).messageSeq.seqEnd;
+          v.marshalledLSN;
+          tailMsgs.seqStart;
+        }
+      }
+    }
+    var result := chain.interp.Concat(tailMsgs);
+    assert !chain.interp.IsEmpty() ==> v.boundaryLSN == chain.interp.seqStart;
+    assert chain.interp.IsEmpty() && !tailMsgs.IsEmpty()
+      ==> v.boundaryLSN == tailMsgs.seqStart by {
+      if (chain.interp.IsEmpty() && !tailMsgs.IsEmpty()) {
+        calc {
+          v.boundaryLSN;
+          sb.boundaryLSN;
 
-      // we need to return all the messages in the journal. So let's join them together
-      var result := chain.interp.Concat(tailMsgs);
-
-      result
+          tailMsgs.seqStart;
+        }
+      }
+    }
+    assert chain.interp.IsEmpty() && tailMsgs.IsEmpty()
+      ==> v.boundaryLSN == tailMsgs.seqStart;
+    assert !result.IsEmpty() ==> result.seqEnd == v.unmarshalledLSN();
+    result
   }
 
   function SyncReqsAt(v: Variables, lsn: LSN) : set<CrashTolerantMapSpecMod.SyncReqId>
@@ -79,12 +89,11 @@ module JournalInterpMod {
 
   function InterpFor(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp, lsn: LSN) : Interp
     requires v.WF()
-    requires ValidSuperBlock(v, cache, sb)
+    requires Invariant(v, cache)
     requires base.seqEnd == v.persistentLSN
     requires v.boundaryLSN <= lsn < v.unmarshalledLSN()
   {
-
-    var newMsqSeq := AsMsgSeq(v, cache, sb);
+    var newMsqSeq := ChainAsMsgSeq(v, cache);
     assert newMsqSeq.seqStart <= lsn < newMsqSeq.seqEnd;
 
     var trucatedSeq := newMsqSeq.Truncate(lsn);
@@ -94,7 +103,7 @@ module JournalInterpMod {
 
    function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
      requires v.WF()
-     requires ValidSuperBlock(v, cache, sb)
+     requires Invariant(v, cache)
      requires base.seqEnd == v.persistentLSN
      requires v.boundaryLSN <= lsn < v.unmarshalledLSN() // we only need versions for the journal for the unapplied suffix of entries
    {
@@ -107,7 +116,7 @@ module JournalInterpMod {
   function Versions(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
     requires v.WF()
     requires base.seqEnd == v.persistentLSN // Can we require this here?
-    requires ValidSuperBlock(v, cache, sb)
+    requires Invariant(v, cache)
    {
      // TODO: check
      var numVersions := v.unmarshalledLSN() - v.boundaryLSN;
@@ -122,7 +131,7 @@ module JournalInterpMod {
   function IM(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp)
     : CrashTolerantMapSpecMod.Variables
   requires v.WF()
-  requires ValidSuperBlock(v, cache, sb)
+  requires Invariant(v, cache)
   requires base.seqEnd == v.persistentLSN
   requires v.boundaryLSN < v.unmarshalledLSN()
   {
@@ -191,8 +200,8 @@ module JournalInterpMod {
     requires v.WF()
 
     // QUESTION: We need to require these right?, Need to figure this out for later
-    requires ValidSuperBlock(v, cache0, sb)
-    requires ValidSuperBlock(v, cache1, sb)
+    requires Invariant(v, cache0)
+    requires Invariant(v, cache1)
     requires base.seqEnd == v.persistentLSN
     requires v.persistentLSN < v.unmarshalledLSN()
     ensures IM(v, cache0, sb, base) == IM(v, cache1, sb, base)

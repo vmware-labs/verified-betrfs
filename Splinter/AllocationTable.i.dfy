@@ -3,6 +3,7 @@
 
 include "../lib/Base/Option.s.dfy"
 include "Allocation.i.dfy"
+include "AllocationTableMachine.i.dfy"
 include "CacheIfc.i.dfy"
 include "MarshalledSnapshot.i.dfy"
 
