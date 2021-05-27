@@ -42,7 +42,7 @@ jobs:
         GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
       run: tools/verichecks-to-wiki.sh
     - name: detect success
-      run: grep -l \"Overall: Success\" build/Impl/Bundle.i.verified
+      run: grep -l 'Overall: Success' build/Impl/Bundle.i.verified
   stop-veri-checks:
     runs-on: bastion
     steps:
