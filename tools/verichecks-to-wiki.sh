@@ -76,7 +76,7 @@ debug "Regenerating table of contents"
     cd "$tmp_dir" &&
     echo > verichecks-results.md &&
     for d in `ls verichecks-results`; do
-        echo - $d \[[Summary]\(verichecks-results/$d/Impl/Bundle.i.verified\)\] \[[Status SVG]\(verichecks-results/$d/Impl/Bundle.i.status.svg\)\] \[[Status PDF]\(verichecks-results/$d/Impl/Bundle.i.status.pdf\)\] >> verichecks-results.md
+        echo - $d \[[Summary]\(verichecks-results/$d/build/Impl/Bundle.i.verified\)\] \[[Status SVG]\(verichecks-results/$d/build/Impl/Bundle.i.status.svg\)\] \[[Status PDF]\(verichecks-results/$d/build/Impl/Bundle.i.status.pdf\)\] >> verichecks-results.md
     done
 ) || exit 1
 

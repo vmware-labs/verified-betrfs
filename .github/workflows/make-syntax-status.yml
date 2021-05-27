@@ -11,16 +11,18 @@ on:
 jobs:
   build:
 
-    runs-on: [self-hosted, bastion]
+    runs-on: [ubuntu-latest]
 
     steps:
     - uses: actions/checkout@v2
       with:
         ref: ${{ github.event.inputs.branch }}
-    - name: dummy test
-      run: mkdir -p build
-    - name: dummy test
-      run: touch build/foo
+    - name: prep-environment
+      run: sudo tools/prep-environment.sh
+    - name: install-dafny
+      run: tools/install-dafny.sh
+    - name: make syntax-status
+      run: make -j `nproc` syntax-status
     - name: publish to wiki
       env:
         GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
