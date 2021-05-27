@@ -23,7 +23,9 @@ jobs:
       run: tools/install-dafny.sh
     - name: make syntax-status
       run: make -j `nproc` syntax-status
-    - uses: actions/upload-artifact@v2
-      with:
-        name: build
-        path: build
+    - name: publish to wiki
+      env:
+        GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+      run: tools/verichecks-to-wiki.sh
+
+
