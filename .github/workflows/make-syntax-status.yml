@@ -18,7 +18,9 @@ jobs:
       with:
         ref: ${{ github.event.inputs.branch }}
     - name: dummy test
-      run: mkdir -p build/foo
+      run: mkdir -p build
+    - name: dummy test
+      run: touch build/foo
     - name: publish to wiki
       env:
         GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
