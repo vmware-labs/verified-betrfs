@@ -85,6 +85,8 @@ module ProgramInterpMod {
       sbreads
   }
 
+  function INotRunning(dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
+
   function IReads(v: Variables) : seq<CU> {
     IMReads(v)
   }

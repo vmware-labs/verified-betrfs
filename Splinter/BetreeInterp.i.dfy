@@ -25,7 +25,7 @@ module BetreeInterpMod {
   type Lookup = seq<LookupRecord>
 
   // Select the messages that lookup finds.
-  function LookupToValue(lookup: Lookup) : Value
+  function LookupToMessage(lookup: Lookup) : Message
     // TODO body
 
   predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, lookup: Lookup)
@@ -41,7 +41,7 @@ module BetreeInterpMod {
     Some(v.indTbl)
   }
 
-  function IMKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : Value
+  function IMKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : Message
   {
     var indTbl := ITbl(v, cache, sb);
     if
@@ -49,9 +49,9 @@ module BetreeInterpMod {
       && exists lookup :: ValidLookup(v, cache, key, lookup)
     then
       var lookup :| ValidLookup(v, cache, key, lookup);
-      LookupToValue(lookup)
+      LookupToMessage(lookup)
     else
-      DefaultValue()
+      MessagePut(key, DefaultValue())
   }
 
   function IM(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
@@ -135,7 +135,7 @@ module BetreeInterpMod {
   }
 
   lemma PutEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, key: Key, value: Value, sk: Skolem)
-    ensures IM(v', cache', sb) == IM(v, cache, sb).Put(key, value)
+    ensures IM(v', cache', sb) == IM(v, cache, sb).Put(key, MessagePut(key, value))
   {
     assume false; // This is hard to prove -- we need to finish a tree
   }

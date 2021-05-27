@@ -1,23 +1,28 @@
 include "IOSystem.s.dfy"
-include "Program.i.dfy"
+include "ProgramInterp.i.dfy"
 
 module VeribetrIOSystem refines IOSystem {
   import P = ProgramMachineMod
 }
 
 module Proof refines ProofObligations {
+  import AllocationMod
   import MapSpecMod
   import InterpMod
+  import ProgramInterpMod
   import ConcreteSystem = VeribetrIOSystem
 
   function I(v: ConcreteSystem.Variables) : CrashTolerantMapSpecMod.Variables
   {
-    if v.Running?
+    if v.program.phase.Running?
     then
-      ProgramInterp.IM(v.program, v.disk)
-        // requires v.Running?
+      // TODO this is borked because somehow ProgramInterpMod magically has the whole disk
+      ProgramInterpMod.IM(v.program /*, v.disk*/)
+        // requires Running?
     else
-      ProgramInterp.INotRunning(v.disk)
+      var disk:AllocationMod.DiskView :| true;
+      // TODO v.disk is AsyncDisk's seq<byte>, which we need to change to map<CU,...>.
+      ProgramInterpMod.INotRunning(disk)
   }
 
   predicate Inv(v: ConcreteSystem.Variables)

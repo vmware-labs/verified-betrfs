@@ -42,7 +42,7 @@ module AsyncDisk {
     respWrites: map<ReqId, RespWrite>,
 
     // The disk:
-    contents: seq<byte>
+    contents: seq<byte> // TODO: switch assumed disk model to map<CU,...>
   )
 
   predicate Init(s: Variables)

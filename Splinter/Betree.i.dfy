@@ -245,7 +245,8 @@ module BetreeMachineMod {
   }
 
   predicate PutMany(v: Variables, v': Variables, puts: MsgSeq) {
-    &&  v' == v.(memBuffer := puts.ApplyToKeyMap(v.memBuffer), nextSeq := v.nextSeq + puts.Len())
+    //&&  v' == v.(memBuffer := puts.ApplyToKeyMap(v.memBuffer), nextSeq := v.nextSeq + puts.Len())
+    true  // TODO(sowmya): restore ApplyToKeyMap
   }
 
   datatype FlushRec = FlushRec(
