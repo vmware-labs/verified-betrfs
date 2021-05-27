@@ -19,33 +19,30 @@ jobs:
   start-veri-checks:
     runs-on: bastion
     steps:
-    - name: start-veri-checks
-      run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --start veri-checks
+      - name: start-veri-checks
+        run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --start veri-checks
   build:
     runs-on: veri-checks
     steps:
-    - uses: actions/checkout@v2
-      with:
-        ref: ${{ github.event.inputs.branch }}
-    - name: prep-environment
-      run: sudo tools/prep-environment.sh
-    - name: install-dafny
-      run: tools/install-dafny.sh
-    - name: make status
-      run: make -j 7 verichecks-status
-    - uses: actions/upload-artifact@v2
-      with:
-        name: build
-        path: build
-    - name: publish to wiki
-      env:
-        GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-      run: tools/verichecks-to-wiki.sh
-    - name: detect success
-      run: grep -l Success build/Impl/Bundle.i.verified
+      - uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.branch }}
+      - run: sudo tools/prep-environment.sh
+      - run: tools/install-dafny.sh
+      - run: make -j 7 verichecks-status
+      - uses: actions/upload-artifact@v2
+        with:
+          name: build
+          path: build
+      - name: publish to wiki
+        env:
+          GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+        run: tools/verichecks-to-wiki.sh
+      - name: detect success
+        run: grep -l Overall:\ Success build/Impl/Bundle.i.verified
   stop-veri-checks:
     runs-on: bastion
     steps:
-    - name: stop-veri-checks
-      if: ${{ always() }}
-      run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --stop veri-checks
+      - name: stop-veri-checks
+        if: ${{ always() }}
+        run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --stop veri-checks
