@@ -5,8 +5,9 @@ include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "Spec.s.dfy"
 include "MsgSeq.i.dfy"
-include "Tables.i.dfy"
-
+include "IndirectionTable.i.dfy"
+include "AllocationTable.i.dfy"
+include "AllocationTableMachine.i.dfy"
 
 /*
 Okay I think we need to just talk about DiskViews at this layer. Well, no, a cache that
@@ -114,7 +115,7 @@ module JournalMachineMod {
 
   datatype InitSkolems = InitSkolems(rawJournalRec: UninterpretedDiskPage)
 
-  function MkfsSuperblock() : Superblock 
+  function MkfsSuperblock() : Superblock
   {
     Superblock(None, 0)
   }

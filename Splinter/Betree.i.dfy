@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Base/total_order.i.dfy"
-include "Tables.i.dfy"
+include "IndirectionTable.i.dfy"
+include "AllocationTable.i.dfy"
+include "AllocationTableMachine.i.dfy"
 include "MsgSeq.i.dfy"
 include "Message.s.dfy"
 include "Interp.s.dfy"
@@ -104,7 +106,7 @@ module BetreeMachineMod {
     indTbl: IndirectionTableMod.Superblock,
     endSeq: LSN)
 
-  function MkfsSuperblock() : Superblock 
+  function MkfsSuperblock() : Superblock
   {
     Superblock(IndirectionTableMod.EmptySuperblock(), 0)
   }

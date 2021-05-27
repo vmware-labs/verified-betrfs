@@ -79,28 +79,3 @@ abstract module IOSystem {
         && addr1 != addr2 :: !D.overlap(addr1 as int, |contents[addr1]|, addr2 as int, |contents[addr2]|))
   }
 }
-
-abstract module ProofObligations {
-  import CrashTolerantMapSpecMod
-  import ConcreteSystem : IOSystem
-
-  // Your interpretation function
-  function I(v: ConcreteSystem.Variables) : CrashTolerantMapSpecMod.Variables
-
-  // Your system invariant
-  predicate Inv(v: ConcreteSystem.Variables)
-
-  lemma InitRefines(v: ConcreteSystem.Variables)
-    requires ConcreteSystem.Init(v)
-    ensures CrashTolerantMapSpecMod.Init(I(v))
-
-  lemma InvInductive(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp)
-    requires Inv(v)
-    requires ConcreteSystem.Next(v, v', uiop)
-    ensures Inv(v')
-
-  lemma NextRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp)
-    requires Inv(v)
-    requires ConcreteSystem.Next(v, v', uiop)
-    ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
-}

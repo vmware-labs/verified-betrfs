@@ -1,5 +1,6 @@
 include "IOSystem.s.dfy"
 include "ProgramInterp.i.dfy"
+include "ProofObligations.s.dfy"
 
 module VeribetrIOSystem refines IOSystem {
   import P = ProgramMachineMod

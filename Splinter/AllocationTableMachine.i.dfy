@@ -83,38 +83,3 @@ module AllocationTableMachineMod refines MarshalledSnapshot {
     {} // TODO
   }
 }
-
-module AllocationTableMod {
-  import opened Options
-  import opened AllocationTableMachineMod
-
-  function I(dv: AllocationMod.DiskView, sb: Superblock) : Option<AllocationTable> {
-    parse(IBytes(dv, sb.snapshot))
-  }
-}
-
-module IndirectionTableMod refines MarshalledSnapshot {
-  import CacheIfc
-
-  datatype Superblock = Superblock(snapshot: SnapshotSuperblock)
-
-  function EmptySuperblock() : Superblock
-  {
-    Superblock(SnapshotSuperblock(None))
-  }
-
-  type IndirectionTable = map<nat, CU>
-
-  function parse(b: seq<byte>) : Option<IndirectionTable>
-
-  function I(dv: DiskView, sb: Superblock) : Option<IndirectionTable> {
-    parse(IBytes(dv, sb.snapshot))
-  }
-
-  predicate DurableAt(itbl: IndirectionTable, cache: CacheIfc.Variables, sb: Superblock)
-  {
-    // TODO kind of dirty peeking into the entire cache here
-    // ValidSnapshot(cache.dv, sb.snapshot)
-    true
-  }
-}
