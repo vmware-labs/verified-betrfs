@@ -11,6 +11,10 @@ on:
         required: true
         default: 'master'
 
+# Ensure that only one instance runs at a time.
+concurrency:
+  group: veri-checks
+
 jobs:
   start-veri-checks:
     runs-on: bastion
@@ -37,7 +41,11 @@ jobs:
       env:
         GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
       run: tools/verichecks-to-wiki.sh
-    - name: stop veri-checks
+    - name: detect success
+      run: grep -l "Overall: Success" build/Impl/Bundle.i.verified
+  stop-veri-checks:
+    runs-on: bastion
+    steps:
+    - name: stop-veri-checks
       if: ${{ always() }}
-      continue-on-error: true # This step will always fail, since it gets killed when we shutdown
-      run: sudo shutdown --poweroff now
+      run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --stop veri-checks
