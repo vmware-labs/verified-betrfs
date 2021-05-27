@@ -14,15 +14,7 @@ module Proof refines ProofObligations {
 
   function I(v: ConcreteSystem.Variables) : CrashTolerantMapSpecMod.Variables
   {
-    if v.program.phase.Running?
-    then
-      // TODO this is borked because somehow ProgramInterpMod magically has the whole disk
-      ProgramInterpMod.IM(v.program /*, v.disk*/)
-        // requires Running?
-    else
-      var disk:AllocationMod.DiskView :| true;
-      // TODO v.disk is AsyncDisk's seq<byte>, which we need to change to map<CU,...>.
-      ProgramInterpMod.INotRunning(disk)
+    ProgramInterpMod.IM(v.program)
   }
 
   predicate Inv(v: ConcreteSystem.Variables)
@@ -31,8 +23,11 @@ module Proof refines ProofObligations {
   }
 
   lemma InitRefines(v: ConcreteSystem.Variables)
-//    ensures CrashTolerantMapSpecMod.Init(ConcreteSystem.I(v))
-  {}
+//    requires ConcreteSystem.Init(v)
+    ensures CrashTolerantMapSpecMod.Init(I(v))
+  {
+    assert I(v) == CrashTolerantMapSpecMod.Empty();
+  }
 
   lemma InvInductive(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp)
 //    requires ConcreteSystem.Inv(v)

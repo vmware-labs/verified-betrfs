@@ -102,8 +102,12 @@ module BetreeMachineMod {
 
   datatype Superblock = Superblock(
     indTbl: IndirectionTableMod.Superblock,
-    allocation: AllocationTableMachineMod.Superblock,
     endSeq: LSN)
+
+  function MkfsSuperblock() : Superblock 
+  {
+    Superblock(IndirectionTableMod.EmptySuperblock(), 0)
+  }
 
   // Three states : STatble persistent disk state , ephemeral working state and a frozen ephemeral state
   // that's being written out
@@ -130,7 +134,6 @@ module BetreeMachineMod {
   datatype Variables = Variables(
     indTbl: IndirectionTableMod.IndirectionTable,
     memBuffer: map<Key, Message>,  // Real Splinter (next layer down? :v) has >1 memBuffers so we can be inserting at the front while flushing at the back.
-    allocation: AllocationTableMachineMod.Variables,
     // TODO add a membuffer to record LSN; a frozen-like transition to keep one membuffer available
     // for filling while packing the other into a b+tree in the top trunk.
     // OR just have freeze drain the membuffer, introducing a write hiccup every 20GB.
@@ -158,7 +161,6 @@ module BetreeMachineMod {
     // Note predicate-style assignment of some fields of v'
     && IndirectionTableMod.DurableAt(v'.indTbl, cache, sb.indTbl) // Parse ind tbl from cache
     && v'.memBuffer == map[]
-    && AllocationTableMachineMod.DurableAt(v'.allocation, cache, sb.allocation) // Parse ind tbl from cache
     && v'.nextSeq == sb.endSeq
     && v'.frozen == Idle
   }
@@ -437,23 +439,8 @@ module BetreeMachineMod {
   // And then IReads <= ReachableBlocks == alloc.
   // We can prove this because anything in IReads justifies ReachableTrunk (and maybe BranchMember).
 
-  function AllocationOnDisk(cache: CacheIfc.Variables, sb: Superblock) : Option<AllocationTableMachineMod.Variables>
-  {
-    if exists allocation :: AllocationTableMachineMod.DurableAt(allocation, cache, sb.allocation)
-    then var allocation :| AllocationTableMachineMod.DurableAt(allocation, cache, sb.allocation);
-      Some(allocation)
-    else
-      None
-  }
-
   function Alloc(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : set<CU>
   {
-    if AllocationOnDisk(cache, sb).Some?
-    then
-      // Module hasn't started; use allocation info it will eventually read from disk
-      set s | s in AllocationOnDisk(cache, sb).value.Allocated()
-    else
-      // disk is borked; return nonsense
-      {}
+    {}  // TODO: this will make proving framing really hard.
   }
 }

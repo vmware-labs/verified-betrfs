@@ -37,15 +37,9 @@ module JournalMachineMod {
   import AllocationTableMachineMod
   import CacheIfc
 
-  // The core journal superblock
-  datatype CoreSuperblock = CoreSuperblock(
+  datatype Superblock = Superblock(
     freshestCU: Option<CU>,
     boundaryLSN : LSN)
-
-  // The entire superblock we need to store: Core data plus allocation data
-  datatype Superblock = Superblock(
-    allocation: AllocationTableMachineMod.Superblock, // TODO This should go down a layer!
-    core: CoreSuperblock)
 
   // On-disk JournalRecords
   datatype JournalRecord = JournalRecord(
@@ -58,9 +52,9 @@ module JournalMachineMod {
       messageSeq.WF()
     }
 
-    function priorSB(sb: CoreSuperblock) : CoreSuperblock
+    function priorSB(sb: Superblock) : Superblock
     {
-      CoreSuperblock(priorCU, sb.boundaryLSN)
+      Superblock(priorCU, sb.boundaryLSN)
     }
   }
 
@@ -120,23 +114,28 @@ module JournalMachineMod {
 
   datatype InitSkolems = InitSkolems(rawJournalRec: UninterpretedDiskPage)
 
+  function MkfsSuperblock() : Superblock 
+  {
+    Superblock(None, 0)
+  }
+
   predicate Init(v: Variables, sb: Superblock, cacheIfc: CacheIfc.Variables, sk: InitSkolems)
   {
     // Can't proceed if there's a freshestCU but we can't read or parse it
-    && sb.core.freshestCU.Some? ==> (
-      && CacheIfc.Read(cacheIfc, sb.core.freshestCU.value, sk.rawJournalRec)
+    && sb.freshestCU.Some? ==> (
+      && CacheIfc.Read(cacheIfc, sb.freshestCU.value, sk.rawJournalRec)
       && parse(sk.rawJournalRec).Some?
       )
 
     // Figure out where journal ends
     && var lastLSN :=
-      if sb.core.freshestCU.None?
+      if sb.freshestCU.None?
       then
-        sb.core.boundaryLSN
+        sb.boundaryLSN
       else
         parse(sk.rawJournalRec).value.messageSeq.seqEnd;
 
-    && v.boundaryLSN == sb.core.boundaryLSN
+    && v.boundaryLSN == sb.boundaryLSN
     && v.persistentLSN == v.cleanLSN == v.marshalledLSN == lastLSN
     && v.unmarshalledTail == []
     && v.syncReqs == map[]
@@ -233,9 +232,8 @@ module JournalMachineMod {
     && (forall cu | cu in s.lsnToCU.Values :: cu in alloc.table)
 
     // This is the superblock that's going to become persistent.
-    && AllocationTableMachineMod.DurableAt(alloc, cache, sb.allocation)
     && var freshestCU := if s.cleanLSN == s.boundaryLSN then None else Some(s.lsnToCU[s.cleanLSN-1]);
-    && sb.core == CoreSuperblock(freshestCU, newBoundaryLSN)
+    && sb == Superblock(freshestCU, newBoundaryLSN)
     && s' == s
   }
 
@@ -243,12 +241,12 @@ module JournalMachineMod {
   // JournalChain
 
   // Monoid-friendly (quantified-list) definition
-  datatype JournalChain = JournalChain(sb: CoreSuperblock, recs:seq<JournalRecord>,
+  datatype JournalChain = JournalChain(sb: Superblock, recs:seq<JournalRecord>,
     locate:map<LSN,nat>, interp: MsgSeq)
   {
     // Synthesize a superblock that reflects the tail of the chain (cutting
     // off the first rec), propagating along boundaryLSN.
-    function priorSB() : CoreSuperblock
+    function priorSB() : Superblock
       requires 0<|recs|
     {
       recs[0].priorSB(sb)
@@ -347,13 +345,13 @@ module JournalMachineMod {
     && ChainMatchesDiskView(dv, chain)
   }
 
-  function EmptyChain(sb: CoreSuperblock) : ( chain : JournalChain)
+  function EmptyChain(sb: Superblock) : ( chain : JournalChain)
     ensures WFChain(chain)
   {
     JournalChain(sb, [], map[], MsgSeqMod.Empty())
   }
 
-  lemma ValidEmptyChain(dv: DiskView, sb: CoreSuperblock)
+  lemma ValidEmptyChain(dv: DiskView, sb: Superblock)
     requires sb.freshestCU.None?
     ensures ValidJournalChain(dv, EmptyChain(sb))
   {
@@ -361,7 +359,7 @@ module JournalMachineMod {
     reveal_ChainMatchesDiskView();
   }
 
-  function ExtendChain(sb: CoreSuperblock, rec: JournalRecord, innerchain: JournalChain)
+  function ExtendChain(sb: Superblock, rec: JournalRecord, innerchain: JournalChain)
     : (chain: JournalChain)
     requires sb.freshestCU.Some?
     requires rec.messageSeq.WF()
@@ -399,7 +397,7 @@ module JournalMachineMod {
   datatype ChainResult = ChainResult(chain: Option<JournalChain>, readCUs:seq<CU>)
 
   // NOTE: Chain from by itself has no bounds on the ending LSN
-  function ChainFrom(dv: DiskView, sb: CoreSuperblock) : (r:ChainResult)
+  function ChainFrom(dv: DiskView, sb: Superblock) : (r:ChainResult)
     ensures r.chain.Some? ==>
       (&& ValidJournalChain(dv, r.chain.value)
       && r.chain.value.sb == sb
@@ -467,7 +465,7 @@ module JournalMachineMod {
   // layer down. Not sure yet how to make that work.
   predicate CorrectMapping(cache: CacheIfc.Variables, freshestCU: Option<CU>, lsnToCU: map<LSN, CU>)
   {
-    //var ChainFrom(dv: DiskView, sb: CoreSuperblock) : (r:ChainResult)
+    //var ChainFrom(dv: DiskView, sb: Superblock) : (r:ChainResult)
     // TODO We should build up a JournalChain here and confirm it justifies the mapping.
     true
   }
@@ -479,23 +477,23 @@ module JournalMachineMod {
   {
     && s.WF()
 
-    && s'.boundaryLSN == sb.core.boundaryLSN
+    && s'.boundaryLSN == sb.boundaryLSN
 
     // Update s'.persistentLSN so that it reflects a persisted LSN (something in the last block,
     // ideally the last LSN in that block). NB This gives impl freedom to not
     // record the latest persistent LSN in the freshestCU block, which would be
     // kind of dumb (it would hold up syncs for no reason), but not unsafe.
-    && (if sb.core.freshestCU.None?
-        then s'.persistentLSN == sb.core.boundaryLSN
+    && (if sb.freshestCU.None?
+        then s'.persistentLSN == sb.boundaryLSN
         else
           && s'.persistentLSN - 1 in s.lsnToCU
-          && s.lsnToCU[s'.persistentLSN - 1] == sb.core.freshestCU.value
+          && s.lsnToCU[s'.persistentLSN - 1] == sb.freshestCU.value
         )
     && s'.cleanLSN == s.cleanLSN
     && s'.marshalledLSN == s.marshalledLSN
     && s'.unmarshalledTail == s.unmarshalledTail
     && s'.syncReqs == s.syncReqs
-    && CorrectMapping(cache, sb.core.freshestCU, s'.lsnToCU)
+    && CorrectMapping(cache, sb.freshestCU, s'.lsnToCU)
   }
 
   predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)

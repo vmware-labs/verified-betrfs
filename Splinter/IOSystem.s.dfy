@@ -9,6 +9,7 @@ include "AsyncDiskProgram.s.dfy"
 
 // The Specification for the entire IOSystem (Disk + Program)
 abstract module IOSystem {
+  import AllocationMod
   import D = AsyncDisk
   import P : AsyncDiskProgram
   import opened NativeTypes
@@ -51,6 +52,13 @@ abstract module IOSystem {
     }
   }
 
+  predicate Init(v: Variables) {
+    && P.Init(v.program)
+    && var dv:AllocationMod.DiskView :| true; // TODO: AsyncDisk has wrong type!
+    //&& P.Mkfs(v.disk.dv)
+    && P.Mkfs(dv)
+  }
+
   predicate Next(s: Variables, s': Variables, uiop: UIOp) {
     exists step :: NextStep(s, s', uiop, step)
   }
@@ -83,6 +91,7 @@ abstract module ProofObligations {
   predicate Inv(v: ConcreteSystem.Variables)
 
   lemma InitRefines(v: ConcreteSystem.Variables)
+    requires ConcreteSystem.Init(v)
     ensures CrashTolerantMapSpecMod.Init(I(v))
 
   lemma InvInductive(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp)

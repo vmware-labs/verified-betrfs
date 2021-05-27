@@ -60,17 +60,26 @@ module ProgramInterpMod {
   // Journal interprets to a MsgSeq. The not-yet-sb-persistent part of that chain
   // is the set of versions. Yeah we need to put richer interps down in JournalInterp
   // before we try to add them here?
-  function IM(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
+  function IMNotRunning(dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
+
+  function IMRunning(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
     ensures iv.WF()
   {
     var sb := ISuperblock(v.cache.dv);
     if sb.Some?
     then
       var betreeInterp := BetreeInterpMod.IM(v.betree, v.cache, sb.value.betree);
-      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal.core, betreeInterp);
+      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal, betreeInterp);
       journalInterp
     else
       CrashTolerantMapSpecMod.Empty()
+  }
+
+  function IM(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
+  {
+    if v.phase.Running?
+    then IMRunning(v)
+    else IMNotRunning(v.cache.dv) // fresh start or recovered
   }
 
   function IMReads(v: Variables) : seq<CU> {
@@ -79,13 +88,11 @@ module ProgramInterpMod {
     if sb.Some?
     then
       sbreads
-        + JournalInterpMod.IReads(v.journal, v.cache, sb.value.journal.core)
+        + JournalInterpMod.IReads(v.journal, v.cache, sb.value.journal)
         + BetreeInterpMod.IReads(v.betree, v.cache, sb.value.betree)
     else
       sbreads
   }
-
-  function INotRunning(dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
 
   function IReads(v: Variables) : seq<CU> {
     IMReads(v)
@@ -102,7 +109,7 @@ module ProgramInterpMod {
     if sb.Some? {
       BetreeInterpMod.Framing(v0.betree, v0.cache, v1.cache, sb.value.betree);
       var betreeInterp := BetreeInterpMod.IM(v0.betree, v0.cache, sb.value.betree);
-      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, sb.value.journal.core, betreeInterp);
+      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, sb.value.journal, betreeInterp);
     }
   }
 

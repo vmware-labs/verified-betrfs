@@ -14,7 +14,6 @@ include "MarshalledSnapshot.i.dfy"
 // being a little data structure.
 
 module AllocationTableMachineMod refines MarshalledSnapshot {
-  import opened Options
   import CacheIfc
 
   // At this layer we're just going to allocate at CU granularity.
@@ -95,10 +94,14 @@ module AllocationTableMod {
 }
 
 module IndirectionTableMod refines MarshalledSnapshot {
-  import opened Options
   import CacheIfc
 
   datatype Superblock = Superblock(snapshot: SnapshotSuperblock)
+
+  function EmptySuperblock() : Superblock
+  {
+    Superblock(SnapshotSuperblock(None))
+  }
 
   type IndirectionTable = map<nat, CU>
 

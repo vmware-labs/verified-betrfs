@@ -65,6 +65,18 @@ module ProgramMachineMod {
     }
   }
 
+  // How should the disk look on first startup if we want it to act like
+  // an empty K-V store?
+  predicate Mkfs(dv: DiskView)
+  {
+    var initsb := Superblock(
+      0,  // serial
+      JournalMachineMod.MkfsSuperblock(),
+      BetreeMachineMod.MkfsSuperblock());
+    && SUPERBLOCK_ADDRESS() in dv
+    && parseSuperblock(dv[SUPERBLOCK_ADDRESS()]) == Some(initsb)
+  }
+
   // Initialization of the program, which happens at the beginning but also after a crash.
   predicate Init(v: Variables)
   {

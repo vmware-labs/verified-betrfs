@@ -66,10 +66,15 @@ module MsgSeqMod {
       ensures Len() == 0 ==> result.seqStart == other.seqStart
       ensures other.Len() == 0 ==> result.seqEnd == seqEnd
     {
-        MsgSeq(
-          MapDisjointUnion(msgs, other.msgs),
-          seqStart,
-          other.seqEnd)
+      var result := MsgSeq(
+        MapDisjointUnion(msgs, other.msgs),
+        if Len()>0 then seqStart else other.seqStart,
+        if other.Len()>0 then seqEnd else other.seqEnd);
+      assert Len()>0 && other.Len()>0 ==> result.seqStart <= result.seqEnd;
+      assert Len()>0 && other.Len()==0 ==> result.seqStart == seqStart <= other.seqEnd == result.seqEnd;
+      assert Len()==0 && other.Len()>0 ==> result.seqStart <= result.seqEnd;
+      assert Len()==0 && other.Len()==0 ==> result.seqStart <= result.seqEnd;
+      result
     }
 
     predicate IsEmpty() {

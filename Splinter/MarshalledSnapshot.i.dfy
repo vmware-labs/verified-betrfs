@@ -7,12 +7,13 @@ include "Allocation.i.dfy"
 include "CacheIfc.i.dfy"
 
 module MarshalledSnapshot {
+  import opened Options
   // A snapshot of a data structure, spread across a linked list of CUs on the disk.
   // This module almost certainly shares a bunch of DNA with Journal; TODO refactor.
   import opened AllocationMod
   import opened NativeTypes
 
-  datatype SnapshotSuperblock = SnapshotSuperblock(firstCU: CU)
+  datatype SnapshotSuperblock = SnapshotSuperblock(firstCU: Option<CU>)
 
   datatype Block = Block()
   type Snapshot = seq<Block>

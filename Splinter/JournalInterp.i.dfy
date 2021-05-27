@@ -17,7 +17,7 @@ module JournalInterpMod {
   import opened InterpMod
 
   // Make sure that the suoperblock contains all the marshalled messages
-  predicate ValidSuperBlock(v: Variables, cache: CacheIfc.Variables, sb: CoreSuperblock)
+  predicate ValidSuperBlock(v: Variables, cache: CacheIfc.Variables, sb: Superblock)
     requires v.WF()
   {
     var freshestCU := sb.freshestCU;
@@ -32,7 +32,7 @@ module JournalInterpMod {
     &&  v.boundaryLSN == sb.boundaryLSN
   }
 
-  function EntireJournalChain(v: Variables, cache: CacheIfc.Variables, sb: CoreSuperblock) : (result : JournalChain)
+  function EntireJournalChain(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : (result : JournalChain)
     requires v.WF()
     requires ValidSuperBlock(v, cache, sb)
     ensures WFChain(result)
@@ -49,7 +49,7 @@ module JournalInterpMod {
       result
   }
 
-  function AsMsgSeq(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : (result : MsgSeq)
+  function AsMsgSeq(v: Variables, cache:CacheIfc.Variables, sb: Superblock) : (result : MsgSeq)
     requires v.WF()
     requires ValidSuperBlock(v, cache, sb)
     ensures result.WF()
@@ -77,7 +77,7 @@ module JournalInterpMod {
     set lsns |  v.persistentLSN <= lsns <= lsn
   }
 
-  function InterpFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : Interp
+  function InterpFor(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp, lsn: LSN) : Interp
     requires v.WF()
     requires ValidSuperBlock(v, cache, sb)
     requires base.seqEnd == v.persistentLSN
@@ -92,7 +92,7 @@ module JournalInterpMod {
     interp
   }
 
-   function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
+   function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
      requires v.WF()
      requires ValidSuperBlock(v, cache, sb)
      requires base.seqEnd == v.persistentLSN
@@ -104,7 +104,7 @@ module JournalInterpMod {
        CrashTolerantMapSpecMod.Version(asyncmapspec, SyncReqsAt(v, lsn))
    }
 
-  function Versions(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
+  function Versions(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
     requires v.WF()
     requires base.seqEnd == v.persistentLSN // Can we require this here?
     requires ValidSuperBlock(v, cache, sb)
@@ -119,7 +119,7 @@ module JournalInterpMod {
      )
    }
 
-  function IM(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock, base: InterpMod.Interp)
+  function IM(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp)
     : CrashTolerantMapSpecMod.Variables
   requires v.WF()
   requires ValidSuperBlock(v, cache, sb)
@@ -132,7 +132,7 @@ module JournalInterpMod {
 
   // TODO(jonh): Try porting this from recursive style to Travis' suggested
   // repr-state style (see ReprsAsSets.i.dfy).
-  function IReads(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : seq<CU>
+  function IReads(v: Variables, cache:CacheIfc.Variables, sb: Superblock) : seq<CU>
   {
     ChainFrom(cache.dv, sb).readCUs
   }
@@ -150,7 +150,7 @@ module JournalInterpMod {
   }
 
   // TODO(jonh): delete chain parameter.
-  lemma FrameOneChain(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb: CoreSuperblock)
+  lemma FrameOneChain(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb: Superblock)
     requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
     ensures ChainFrom(cache0.dv, sb).chain == ChainFrom(cache1.dv, sb).chain
     decreases |cache0.dv|
@@ -186,7 +186,7 @@ module JournalInterpMod {
     }
   }
 
-  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:CoreSuperblock, base: InterpMod.Interp)
+  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock, base: InterpMod.Interp)
     requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
     requires v.WF()
 
