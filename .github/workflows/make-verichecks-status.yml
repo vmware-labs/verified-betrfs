@@ -43,7 +43,7 @@ jobs:
   stop-veri-checks:
     runs-on: bastion
     needs: build
+    if: ${{ always() }}
     steps:
       - name: stop-veri-checks
-        if: ${{ always() }}
         run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --stop veri-checks
