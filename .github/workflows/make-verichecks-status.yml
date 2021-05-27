@@ -31,11 +31,9 @@ jobs:
         name: build
         path: build
     - name: publish to wiki
-      uses: SwiftDocOrg/github-wiki-publish-action@1.0.0
-      with:
-        path: build
       env:
         GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+      run: tools/verichecks-to-wiki.sh
     - name: stop veri-checks
       if: ${{ always() }}
       continue-on-error: true # This step will always fail, since it gets killed when we shutdown
