@@ -74,10 +74,25 @@ debug "Copying new results"
 debug "Regenerating table of contents"
 (
     cd "$tmp_dir" &&
-    echo > verichecks-results.md &&
     for d in `ls verichecks-results`; do
-        echo - $d \[[Summary]\(verichecks-results/$d/build/Impl/Bundle.i.verified\)\] \[[Status SVG]\(verichecks-results/$d/build/Impl/Bundle.i.status.svg\)\] \[[Status PDF]\(verichecks-results/$d/build/Impl/Bundle.i.status.pdf\)\] >> verichecks-results.md
-    done
+        echo -n - $d
+        if [ -f verichecks-results/$d/build/Impl/Bundle.i.verified ]; then
+            echo -n \[[Verification summary]\(verichecks-results/$d/build/Impl/Bundle.i.verified\)\]
+        fi
+        if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.svg ]; then
+            echo -n \[[Verification status SVG]\(verichecks-results/$d/build/Impl/Bundle.i.status.svg\)\]
+        fi
+        if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.pdf ]; then
+            echo -n \[[Verification status PDF]\(verichecks-results/$d/build/Impl/Bundle.i.status.pdf\)\]
+        fi
+        if [ -f verichecks-results/$d/build/Impl/Bundle.i.syntax-status.svg ]; then
+            echo -n \[[Syntax status SVG]\(verichecks-results/$d/build/Impl/Bundle.i.syntax-status.svg\)\]
+        fi
+        if [ -f verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf ]; then
+            echo -n \[[Syntax status PDF]\(verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf\)\]
+        fi
+        echo
+    done > verichecks-results.md
 ) || exit 1
 
 debug "Committing and pushing"
