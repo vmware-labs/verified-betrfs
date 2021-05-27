@@ -1,6 +1,9 @@
 name: make syntax-status
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       branch:
@@ -8,24 +11,36 @@ on:
         required: true
         default: 'master'
 
+# Ensure that only one instance runs at a time.
+concurrency:
+  group: veri-checks
+
 jobs:
-  build:
-
-    runs-on: [ubuntu-latest]
-
+  start-veri-checks:
+    runs-on: bastion
     steps:
-    - uses: actions/checkout@v2
-      with:
-        ref: ${{ github.event.inputs.branch }}
-    - name: prep-environment
-      run: sudo tools/prep-environment.sh
-    - name: install-dafny
-      run: tools/install-dafny.sh
-    - name: make syntax-status
-      run: make -j `nproc` syntax-status
-    - name: publish to wiki
-      env:
-        GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-      run: tools/verichecks-to-wiki.sh
-
-
+      - name: start-veri-checks
+        run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --start veri-checks
+  build:
+    runs-on: veri-checks
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.branch }}
+      - run: sudo tools/prep-environment.sh
+      - run: tools/install-dafny.sh
+      - run: make -j 7 syntax-status
+      - uses: actions/upload-artifact@v2
+        with:
+          name: build
+          path: build
+      - name: publish to wiki
+        env:
+          GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+        run: tools/verichecks-to-wiki.sh
+  stop-veri-checks:
+    runs-on: bastion
+    steps:
+      - name: stop-veri-checks
+        if: ${{ always() }}
+        run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --stop veri-checks
