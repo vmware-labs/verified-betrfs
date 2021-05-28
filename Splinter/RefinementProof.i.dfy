@@ -27,7 +27,10 @@ module Proof refines ProofObligations {
 //    requires ConcreteSystem.Init(v)
     ensures CrashTolerantMapSpecMod.Init(I(v))
   {
-    assert I(v) == CrashTolerantMapSpecMod.Empty();
+    //assert !v.program.phase.Running?;
+    //var sb := ProgramInterpMod.ISuperblock(v.program.cache.dv);
+    //assert !sb.Some?;
+    //assert I(v) == CrashTolerantMapSpecMod.Empty();
   }
 
   lemma InvInductive(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp)
@@ -40,5 +43,7 @@ module Proof refines ProofObligations {
 //    requires ConcreteSystem.Inv(v)
 //    requires ConcreteSystem.Next(v, v')
 //    ensures CrashTolerantMapSpecMod.Next(ConcreteSystem.I(v), ConcreteSystem.I(v'))
-  {}
+  {
+
+  }
 }

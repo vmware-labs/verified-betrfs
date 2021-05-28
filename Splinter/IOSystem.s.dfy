@@ -56,7 +56,7 @@ abstract module IOSystem {
     && P.Init(v.program)
     && var dv:AllocationMod.DiskView :| true; // TODO: AsyncDisk has wrong type!
     //&& P.Mkfs(v.disk.dv)
-    && P.Mkfs(dv)
+    && P.Mkfs(dv) // this init is only true once
   }
 
   predicate Next(s: Variables, s': Variables, uiop: UIOp) {

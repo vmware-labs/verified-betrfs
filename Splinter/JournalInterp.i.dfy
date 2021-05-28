@@ -130,7 +130,9 @@ module JournalInterpMod {
 
   function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp) : CrashTolerantMapSpecMod.Variables
   {
-    CrashTolerantMapSpecMod.Variables([], 0) // TODO Sowmya pick up here
+    var pretendVariables := Variables(sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, [], map[], map[]);
+    var versions := Versions(pretendVariables, cache, sb, base);
+    CrashTolerantMapSpecMod.Variables(versions, 0) // TODO Sowmya pick up here
   }
 
   function IM(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp)
