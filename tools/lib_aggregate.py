@@ -102,24 +102,23 @@ def extractCondition(reportType, report, content):
         return DafnyParseError()
     if re.compile("resolution/type errors detected in").search(content) != None:
         return DafnyTypeError()
-    mo = re.compile("Dafny program verifier finished with (?P<verified>\d+) verified, (?P<err>\d+) error(.*?(?P<timeout>\d+) time out)?(.*?(?P<rlimit>\d+) inconclusives)?").search(content)
-    if mo != None:
-        rawVerifCount = mo.group('verified')
-        rawErrorCount = mo.group('err')
-        rawTimeoutCount = mo.group('timeout')
-        rawRlimitCount = mo.group('rlimit')
-        verifCount = int(rawVerifCount)
-        errorCount = int(rawErrorCount)
-        #print(f"V: {rawVerifCount}, E: {rawErrorCount}, T: {rawTimeoutCount}, R: {rawRlimitCount}")
-        if errorCount > 0:
-            return DafnyVerificationError()
-        if hasDisallowedAssumptions(report):
-            return DafnyAssumeError()
-        if rawTimeoutCount != None and int(rawTimeoutCount) > 0:
-            return DafnyTimeoutError()
-        if rawRlimitCount != None and int(rawRlimitCount) > 0:
-            return DafnyRlimitError()
+
+    err_types = [(re.compile("Dafny program verifier finished with.*(\d+) error"), DafnyVerificationError()),
+                 (re.compile("Dafny program verifier finished with.*(\d+) time out"), DafnyTimeoutError()),
+                 (re.compile("Dafny program verifier finished with.*(\d+) inconclusive"), DafnyRlimitError()),
+                 (re.compile("Dafny program verifier finished with.*(\d+) out of resource"), DafnyRlimitError())]
+    for (matcher, err) in err_types:
+        match = matcher.search(content)
+        if not match is None and int(match.group(1)) > 0:
+            return err
+
+    if hasDisallowedAssumptions(report):
+        return DafnyAssumeError()
+
+    match = re.compile("Dafny program verifier finished with (?P<verified>\d+) verified").search(content)
+    if not match is None:
         return DafnyVerified()
+
     if reportType==VERCHK:
         raise Exception("build system error: couldn't summarize %s\n" % report)
     elif reportType==SYNCHK:
