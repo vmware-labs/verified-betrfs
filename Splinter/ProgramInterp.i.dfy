@@ -61,6 +61,18 @@ module ProgramInterpMod {
   // is the set of versions. Yeah we need to put richer interps down in JournalInterp
   // before we try to add them here?
   function IMNotRunning(dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
+    ensures iv.WF()
+  {
+    var pretendCache := CacheIfc.Variables(dv);
+    var sb := ISuperblock(dv);
+    if sb.Some?
+    then
+      var betreeInterp := BetreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
+      var journalInterp := JournalInterpMod.IMNotRunning(pretendCache, sb.value.journal, betreeInterp);
+      journalInterp
+    else
+      CrashTolerantMapSpecMod.Empty()
+  }
 
   function IMRunning(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
     ensures iv.WF()

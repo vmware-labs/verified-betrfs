@@ -121,8 +121,22 @@ module MsgSeqMod {
       ApplyToKeyMapRecursive(orig, Len())
     }
 
+    function Behead(lsn: LSN) : (r: MsgSeq)
+      requires seqStart <= lsn <= seqEnd
+      requires WF()
+      ensures r.WF()
+    {
+      if lsn==seqEnd
+      then
+        Empty()
+      else
+        var keepVersions := seqEnd - lsn;
+        var keepMap := map k | lsn <= k < seqEnd :: msgs[k];
+        MsgSeq(keepMap, lsn, seqEnd)
+    }
+
     function Truncate(lsn: LSN) : (r: MsgSeq)
-      requires seqStart <= lsn < seqEnd
+      requires seqStart <= lsn <= seqEnd
       requires WF()
       ensures r.WF()
     {
@@ -131,8 +145,8 @@ module MsgSeqMod {
         Empty()
       else
         var keepVersions := lsn - seqStart;
-        var trucMap := map k | seqStart <= k < lsn :: msgs[k];
-        MsgSeq(trucMap, seqStart, lsn)
+        var keepMap := map k | seqStart <= k < lsn :: msgs[k];
+        MsgSeq(keepMap, seqStart, lsn)
     }
   }
 

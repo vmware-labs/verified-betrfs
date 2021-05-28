@@ -128,6 +128,11 @@ module JournalInterpMod {
      )
    }
 
+  function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp) : CrashTolerantMapSpecMod.Variables
+  {
+    CrashTolerantMapSpecMod.Variables([], 0) // TODO Sowmya pick up here
+  }
+
   function IM(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp)
     : CrashTolerantMapSpecMod.Variables
   requires v.WF()

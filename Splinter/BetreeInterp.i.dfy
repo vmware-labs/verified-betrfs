@@ -33,22 +33,9 @@ module BetreeInterpMod {
   predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, lookup: Lookup)
     // TODO
 
-  // What indirection table would we see if the system were running?
-  function ITbl(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : Option<IndirectionTableMod.IndirectionTable> {
-    // match v {
-    //   case Starting => IndirectionTableMod.I(cache.dv /*TODO change ind tbl to expect cache*/, sb.indTbl)
-    //   case Running => Some(v.indTbl)
-    // }
-    // TODO figure out the interpretation split here
-    Some(v.indTbl)
-  }
-
   function IMKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : Message
   {
-    var indTbl := ITbl(v, cache, sb);
-    if
-      && indTbl.Some?
-      && exists lookup :: ValidLookup(v, cache, key, lookup)
+    if exists lookup :: ValidLookup(v, cache, key, lookup)
     then
       var lookup :| ValidLookup(v, cache, key, lookup);
       LookupToMessage(lookup)
@@ -62,11 +49,21 @@ module BetreeInterpMod {
     Interp(imap key | key in AllKeys() :: IMKey(v, cache, sb, key), sb.endSeq)
   }
 
+  // Imagine what the disk would look like if we were running and haven't
+  // added any stuff to the membuffer.
+  function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
+    ensures i.WF()
+  {
+    var indTbl := IndirectionTableMod.I(cache.dv, sb.indTbl);
+    if indTbl.None?
+    then InterpMod.Empty()
+    else
+      var pretendVariables := Variables(indTbl.value, map[], sb.endSeq, Idle);
+      IM(pretendVariables, cache, sb)
+  }
+
   function IReadsKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : set<CU> {
-    var indTbl := ITbl(v, cache, sb);
-    if
-      && indTbl.Some?
-      && exists lookup :: ValidLookup(v, cache, key, lookup)
+    if exists lookup :: ValidLookup(v, cache, key, lookup)
     then
       var lookup :| ValidLookup(v, cache, key, lookup);
       set i | 0<=i<|lookup| :: var lr:LookupRecord := lookup[i]; lr.cu
@@ -97,40 +94,35 @@ module BetreeInterpMod {
     forall key | key in AllKeys()
       ensures IMKey(v, cache0, sb, key) == IMKey(v, cache1, sb, key)
     {
-      var indTbl0 := ITbl(v, cache0, sb);
-      var indTbl1 := ITbl(v, cache1, sb);
-      if indTbl0.Some? && indTbl1.Some?
-      {
-        var le0 := exists lookup0 :: ValidLookup(v, cache0, key, lookup0);
-        var le1 := exists lookup1 :: ValidLookup(v, cache1, key, lookup1);
-        if le0 {
-          var lookup0 :| ValidLookup(v, cache0, key, lookup0);
-          assume ValidLookup(v, cache1, key, lookup0);
+      var le0 := exists lookup0 :: ValidLookup(v, cache0, key, lookup0);
+      var le1 := exists lookup1 :: ValidLookup(v, cache1, key, lookup1);
+      if le0 {
+        var lookup0 :| ValidLookup(v, cache0, key, lookup0);
+        assume ValidLookup(v, cache1, key, lookup0);
+      }
+      if le1 {
+        var lookup1 :| ValidLookup(v, cache1, key, lookup1);
+        assume ValidLookup(v, cache0, key, lookup1);
+      }
+      assert le0 == le1;
+      if (le0) {
+        // This definitely won't work.
+        var lookup0 :| ValidLookup(v, cache0, key, lookup0);
+        var lookup1 :| ValidLookup(v, cache1, key, lookup1);
+        calc {
+          IMKey(v, cache0, sb, key);
+            { assume false; } // var|
+          LookupToMessage(lookup0);
+            { assume false; } // framing
+          LookupToMessage(lookup1);
+            { assume false; } // var|
+          IMKey(v, cache1, sb, key);
         }
-        if le1 {
-          var lookup1 :| ValidLookup(v, cache1, key, lookup1);
-          assume ValidLookup(v, cache0, key, lookup1);
-        }
-        assert le0 == le1;
-        if (le0) {
-          // This definitely won't work.
-          var lookup0 :| ValidLookup(v, cache0, key, lookup0);
-          var lookup1 :| ValidLookup(v, cache1, key, lookup1);
-          calc {
-            IMKey(v, cache0, sb, key);
-              { assume false; } // var|
-            LookupToMessage(lookup0);
-              { assume false; } // framing
-            LookupToMessage(lookup1);
-              { assume false; } // var|
-            IMKey(v, cache1, sb, key);
-          }
-        } else {
-          calc {
-            IMKey(v, cache0, sb, key);
-            MessagePut(key, DefaultValue());
-            IMKey(v, cache1, sb, key);
-          }
+      } else {
+        calc {
+          IMKey(v, cache0, sb, key);
+          MessagePut(key, DefaultValue());
+          IMKey(v, cache1, sb, key);
         }
       }
     }
