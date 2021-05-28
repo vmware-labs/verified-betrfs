@@ -100,7 +100,7 @@ module FlushPolicyImpl {
     }
   }
 
-  method getActionToFlush(linear inout s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
+  method {:timeLimitMultiplier 2} getActionToFlush(linear inout s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   returns (action : FlushPolicyModel.Action)
   requires |stack| <= 40
   requires old_s.Inv()
@@ -155,7 +155,7 @@ module FlushPolicyImpl {
     }
   }
 
-  method runFlushPolicy(linear inout s: ImplVariables, io: DiskIOHandler)
+  method {:timeLimitMultiplier 2} runFlushPolicy(linear inout s: ImplVariables, io: DiskIOHandler)
   requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires BT.G.Root() in old_s.cache.I()

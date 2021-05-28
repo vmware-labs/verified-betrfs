@@ -170,7 +170,7 @@ module LinearContentMutableMap {
       getEmptyWitness(self, i+1)
   }
 
-  method Probe<V>(shared self: FixedSizeLinearHashMap<V>, key: uint64)
+  method {:timeLimitMultiplier 4} Probe<V>(shared self: FixedSizeLinearHashMap<V>, key: uint64)
   returns (slotIdx: uint64, ghost startSlotIdx: uint64, ghost skips: uint64)
   requires FixedSizeInv(self)
   requires self.count as int < |self.storage|
@@ -588,7 +588,7 @@ module LinearContentMutableMap {
     && Inv(self')
   }
 
-  method Realloc<V>(linear inout self: LinearHashMap<V>)
+  method {:timeLimitMultiplier 16} Realloc<V>(linear inout self: LinearHashMap<V>)
   requires Inv(old_self)
   requires old_self.count as nat < 0x1_0000_0000_0000_0000 / 8
   ensures IsRealloc(old_self, self)

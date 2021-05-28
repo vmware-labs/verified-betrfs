@@ -387,6 +387,9 @@ abstract module LMutableBtree {
     children := lseq_give(children, childidx, left);
     children := InsertLSeq(children, right, childidx + 1);
     splitNode := Model.Index(pivots, children);
+    assert Model.OpaquePartOfSplitChildOfIndex(node, splitNode, childidx as nat) by {
+      Model.reveal_OpaquePartOfSplitChildOfIndex();
+    }
     Model.SplitChildOfIndexPreservesWF(node, splitNode, childidx as int);
 
     // Every new child is shorter than some old child.
