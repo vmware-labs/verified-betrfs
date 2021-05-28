@@ -6,7 +6,7 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 module {:extern "Atomics"} Atomics {
   import opened NativeTypes
 
-  type {:extern} Atomic(==,!new)<V, G>
+  type {:extern} Atomic(==,!new)<!V, !G>
   {
     function {:extern} identifier() : nat
   }

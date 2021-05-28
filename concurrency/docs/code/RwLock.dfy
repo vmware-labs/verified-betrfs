@@ -34,7 +34,7 @@ module RwLockes {
    * RwLock that protects a piece of data with some invariant.
    */
 
-  type {:extern} RwLock(==)<V>
+  type {:extern} RwLock(==)<!V>
   {
     predicate {:extern} inv(v: V)
 
