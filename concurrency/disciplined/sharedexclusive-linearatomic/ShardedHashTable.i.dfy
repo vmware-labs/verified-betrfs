@@ -33,7 +33,7 @@ module ShardedHashTable refines ShardedStateMachine {
 
   // This is the thing that's stored in the hash table at this row.
   datatype Entry =
-    | Full(key: uint64, value: Value)
+    | Full(key: Key, value: Value)
     | Empty
 
   type Table = seq<Option<Entry>>
@@ -276,35 +276,64 @@ module ShardedHashTable refines ShardedStateMachine {
   predicate InsertShouldSkipSubTable(table: FixedTable, stutter: InsertStutter)
   {
     var InsertStutter(insert_key, _, start, end) := stutter;
-    if start <= end then
+    && table[end].Some?
+    && (if start <= end then
       ShouldSkipNonWrapSlots(table, insert_key, start, end)
     else (
       && ShouldSkipNonWrapSlots(table, insert_key, start, FixedSize())
       && ShouldSkipNonWrapSlots(table, insert_key, 0, end)
-    )
+    ))
   }
 
   predicate TableInsertStutterEnable(table: FixedTable, stutter: InsertStutter)
   {
-    && var InsertStutter(insert_key, insert_val, start, end) := stutter;
+    && var InsertStutter(insert_key, _, start, end) := stutter;
     // we should skip these
     && InsertShouldSkipSubTable(table, stutter)
     // we should swap out the entry at end index 
-    && table[end].Some?
     && table[end].value.Full?
     && table[end].value.key != insert_key
     && !ShouldSkipSlot(table, insert_key, end)
   }
 
-  // predicate TableInsertEnd(table: FixedTable, table': FixedTable, stutter: InsertStutter)
-  // {
-  //   && var InsertStutter(k, v, start, end) := stutter;
-  //   && var skip_parts := SubTable(table, start, end)
+  function TableInsertStutterTransition(table: FixedTable, stutter: InsertStutter): (FixedTable, Entry)
+    requires TableInsertStutterEnable(table, stutter)
+  {
+    var InsertStutter(insert_key, insert_val, start, end) := stutter;
+    var old_entry := table[end].value;
+    (table[end := Some(Full(insert_key, insert_val))], old_entry)
+  }
 
-  //   // && var h := hash(k);
-  //   // &&  == SubTable(table', start, end)
-  //   && 
-  // }
+  predicate TableInsertStutterEndEnable(table: FixedTable, stutter: InsertStutter)
+  {
+    && var InsertStutter(insert_key, _, start, end) := stutter;
+    // we should skip these
+    && InsertShouldSkipSubTable(table, stutter)
+    // we should swap out the entry at end index 
+    && table[end].value.Empty?
+  }
+
+  function TableInsertStutterEndTransition(table: FixedTable, stutter: InsertStutter): FixedTable
+    requires TableInsertStutterEndEnable(table, stutter)
+  {
+    var InsertStutter(insert_key, insert_val, start, end) := stutter;
+    table[end := Some(Full(insert_key, insert_val))]
+  }
+
+  predicate TableInsert(table: FixedTable, table'': FixedTable, stutters: seq<InsertStutter>)
+    requires |stutters| >= 1
+    decreases |stutters|
+  {
+    var stutter := stutters[0]; 
+    if |stutters| == 1 then
+      && TableInsertStutterEndEnable(table, stutter)
+      && table'' == TableInsertStutterEndTransition(table, stutter)
+    else
+      && TableInsertStutterEnable(table, stutter)
+      && var (table', old_entry) := TableInsertStutterTransition(table, stutter);
+      && old_entry.key == stutters[1].key
+      && TableInsert(table', table'', stutters[1..])
+  }
 
   // Insert
   predicate Insert(v: Variables, v': Variables, ticket: Ticket, stutter: seq<InsertStutter>)
@@ -312,7 +341,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && v.Variables?
     && ticket in v.tickets
     && ticket.input.InsertInput?
-
+    && TableInsert(v.table, v'.table, stutters)
   }
 
   // predicate Overwrite(v: Variables, v': Variables, ticket: Ticket, i: int)
@@ -329,15 +358,6 @@ module ShardedHashTable refines ShardedStateMachine {
   //     .(tickets := v.tickets - multiset{ticket})
   //     .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
   //     .(table := v.table[i := Some(Full(ticket.input.key, ticket.input.value))])
-  // }
-
-
-  // predicate CorrectInsertIndex(table: Table, insert_key: Key, index: int)
-  //   requires 0 <= index < |table|
-  // {
-  //   && var insert_h := hash(insert_key);
-  //   // && var occupant_h := hash(table[index].value.key);
-  //   && true
   // }
 
   // predicate Insert(v: Variables, v': Variables, ticket: Ticket, i: int, end: int)
