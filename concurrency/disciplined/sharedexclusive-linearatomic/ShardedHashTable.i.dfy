@@ -326,48 +326,79 @@ module ShardedHashTable refines ShardedStateMachine {
     table[end := Some(Full(key, val))]
   }
 
-  predicate TableInsertEnable(table: FixedTable, stutters: seq<InsertStutter>)
+  // predicate TableInsertEnable(table: FixedTable, stutters: seq<InsertStutter>)
+  // {
+  //   && |stutters| >= 1
+  //   // the first one starts at the key hash
+  //   && var first := stutters[0];
+  //     first.start == hash(first.key)
+  //   // the last one should be Done/Update
+  //   && (
+  //       var last := stutters[ |stutters| - 1 ];
+  //       || TableInsertDoneEnable(table, last)
+  //       || TableInsertUpdateEnable(table, last)
+  //     )
+  //   // the intermediate ones are swaps
+  //   && (forall i | 1 <= i < |stutters| ::
+  //       && stutters[i-1].end == stutters[i].start
+  //       && TableInsertSwapEnable(table, stutters[i])
+  //     )
+  // }
+
+  predicate TableInsertEnableRec(table: FixedTable, stutters: seq<InsertStutter>)
+    requires |stutters| >= 1
+    decreases |stutters|
   {
-    && |stutters| >= 1
-    // the first one starts at the key hash
-    && var first := stutters[0];
-      first.start == hash(first.key)
-    // the last one should be Done/Update
-    && (
-        var last := stutters[ |stutters| - 1 ];
-        || TableInsertDoneEnable(table, last)
-        || TableInsertUpdateEnable(table, last)
+    var curr := stutters[0];
+    if |stutters| == 1 then
+      (
+        || TableInsertDoneEnable(table, curr)
+        || TableInsertUpdateEnable(table, curr)
       )
-    // the intermediate ones are swaps
-    && (forall i | 1 <= i < |stutters| ::
-        && stutters[i-1].end == stutters[i].start
-        && TableInsertSwapEnable(table, stutters[i])
+    else
+      (
+        // next starts at current end
+        && curr.end == stutters[1].start
+        && TableInsertSwapEnable(table, curr)
+        && var table' := TableInsertTransition(table, curr);
+        // recurse on the rest of the steps
+        && TableInsertEnableRec(table', stutters[1..])
       )
   }
 
-  // predicate TableInsert(table: FixedTable, table'': FixedTable, stutters: seq<InsertStutter>)
-  //   requires |stutters| >= 1
-  //   decreases |stutters|
-  // {
-  //   var stutter := stutters[0]; 
-  //   // if |stutters| == 1 then
-  //   //   && TableInsertStutterEndEnable(table, stutter)
-  //   //   && table'' == TableInsertStutterEndTransition(table, stutter)
-  //   // else
-  //   //   && TableInsertStutterEnable(table, stutter)
-  //   //   && var (table', old_entry) := TableInsertStutterTransition(table, stutter);
-  //   //   && old_entry.key == stutters[1].key
-  //   //   && TableInsert(table', table'', stutters[1..])
-  // }
+  function TableInsert(table: FixedTable, stutters: seq<InsertStutter>): FixedTable
+    requires |stutters| >= 1
+    requires TableInsertEnableRec(table, stutters)
+    decreases |stutters|
+  {
+    var curr := stutters[0];
+    if |stutters| == 1 then
+      TableInsertTransition(table, curr)
+    else
+      var table' := TableInsertTransition(table, curr);
+      TableInsert(table', stutters[1..])
+  }
 
-  // // Insert
-  // predicate Insert(v: Variables, v': Variables, ticket: Ticket, stutter: seq<InsertStutter>)
-  // {
-  //   && v.Variables?
-  //   && ticket in v.tickets
-  //   && ticket.input.InsertInput?
-  //   && TableInsert(v.table, v'.table, stutters)
-  // }
+  // Insert
+  predicate Insert(v: Variables, v': Variables, ticket: Ticket, stutters: seq<InsertStutter>)
+  {
+    && v.Variables?
+    && ticket in v.tickets
+    && ticket.input.InsertInput?
+
+    && |stutters| >= 1
+    // the first step starts at the insert key hash
+    && var first := stutters[0];
+    && first.start == hash(first.key)
+    && first.key == ticket.input.key
+
+    && TableInsertEnableRec(v.table, stutters)
+
+    && v' == v
+      .(tickets := v.tickets - multiset{ticket})
+      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
+      .(table := TableInsert(v.table, stutters))
+  }
 
   // predicate Overwrite(v: Variables, v': Variables, ticket: Ticket, i: int)
   // {
