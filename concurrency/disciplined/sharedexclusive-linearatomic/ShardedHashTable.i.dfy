@@ -252,7 +252,9 @@ module ShardedHashTable refines ShardedStateMachine {
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.QueryOutput(NotFound))})
   }
 
-  datatype InsertStutter = InsertStutter(key: Key, value: Value, start: Index, end: Index)
+  // insert
+
+  datatype InsertStutter = InsertStutter(key: Key, val: Value, start: Index, end: Index)
 
   predicate ShouldSkipSlot(table: FixedTable, insert_key: Key, slot_index: Index)
   {
@@ -267,82 +269,105 @@ module ShardedHashTable refines ShardedStateMachine {
     )
   }
 
-  predicate ShouldSkipNonWrapSlots(table: FixedTable, insert_key: Key, start: Index, end: int)
+  predicate ShouldSkipSlotsNoWrap(table: FixedTable, insert_key: Key, start: Index, end: int)
     requires start <= end <= FixedSize();
   {
     forall i | start <= i < end :: ShouldSkipSlot(table, insert_key, i)
   }
 
-  predicate InsertShouldSkipSubTable(table: FixedTable, stutter: InsertStutter)
+  predicate ShouldSkipSlots(table: FixedTable, step: InsertStutter)
   {
-    var InsertStutter(insert_key, _, start, end) := stutter;
+    var InsertStutter(insert_key, _, start, end) := step;
     && table[end].Some?
     && (if start <= end then
-      ShouldSkipNonWrapSlots(table, insert_key, start, end)
+      ShouldSkipSlotsNoWrap(table, insert_key, start, end)
     else (
-      && ShouldSkipNonWrapSlots(table, insert_key, start, FixedSize())
-      && ShouldSkipNonWrapSlots(table, insert_key, 0, end)
+      && ShouldSkipSlotsNoWrap(table, insert_key, start, FixedSize())
+      && ShouldSkipSlotsNoWrap(table, insert_key, 0, end)
     ))
   }
 
-  predicate TableInsertStutterEnable(table: FixedTable, stutter: InsertStutter)
+  predicate TableInsertSwapEnable(table: FixedTable, step: InsertStutter)
   {
-    && var InsertStutter(insert_key, _, start, end) := stutter;
+    var InsertStutter(insert_key, _, _, end) := step;
     // we should skip these
-    && InsertShouldSkipSubTable(table, stutter)
-    // we should swap out the entry at end index 
+    && ShouldSkipSlots(table, step)
+    // the entry at end index should be swapped out
     && table[end].value.Full?
     && table[end].value.key != insert_key
     && !ShouldSkipSlot(table, insert_key, end)
   }
 
-  function TableInsertStutterTransition(table: FixedTable, stutter: InsertStutter): (FixedTable, Entry)
-    requires TableInsertStutterEnable(table, stutter)
+  predicate TableInsertDoneEnable(table: FixedTable, step: InsertStutter)
   {
-    var InsertStutter(insert_key, insert_val, start, end) := stutter;
-    var old_entry := table[end].value;
-    (table[end := Some(Full(insert_key, insert_val))], old_entry)
-  }
-
-  predicate TableInsertStutterEndEnable(table: FixedTable, stutter: InsertStutter)
-  {
-    && var InsertStutter(insert_key, _, start, end) := stutter;
     // we should skip these
-    && InsertShouldSkipSubTable(table, stutter)
-    // we should swap out the entry at end index 
-    && table[end].value.Empty?
+    && ShouldSkipSlots(table, step)
+    // the entry at end index is empty
+    && table[step.end].value.Empty?
   }
 
-  function TableInsertStutterEndTransition(table: FixedTable, stutter: InsertStutter): FixedTable
-    requires TableInsertStutterEndEnable(table, stutter)
+  predicate TableInsertUpdateEnable(table: FixedTable, step: InsertStutter)
   {
-    var InsertStutter(insert_key, insert_val, start, end) := stutter;
-    table[end := Some(Full(insert_key, insert_val))]
+    var InsertStutter(insert_key, _, _, end) := step;
+    // we should skip these
+    && ShouldSkipSlots(table, step) // TODO: we might not need this?
+    // the entry at end index has the same key
+    && table[end].value.Full?
+    && table[end].value.key == insert_key
   }
 
-  predicate TableInsert(table: FixedTable, table'': FixedTable, stutters: seq<InsertStutter>)
-    requires |stutters| >= 1
-    decreases |stutters|
+  function TableInsertTransition(table: FixedTable, step: InsertStutter) : FixedTable
+    requires 
+      || TableInsertSwapEnable(table, step)
+      || TableInsertDoneEnable(table, step)
+      || TableInsertUpdateEnable(table, step)
   {
-    var stutter := stutters[0]; 
-    if |stutters| == 1 then
-      && TableInsertStutterEndEnable(table, stutter)
-      && table'' == TableInsertStutterEndTransition(table, stutter)
-    else
-      && TableInsertStutterEnable(table, stutter)
-      && var (table', old_entry) := TableInsertStutterTransition(table, stutter);
-      && old_entry.key == stutters[1].key
-      && TableInsert(table', table'', stutters[1..])
+    var InsertStutter(key, val, _, end) := step;
+    table[end := Some(Full(key, val))]
   }
 
-  // Insert
-  predicate Insert(v: Variables, v': Variables, ticket: Ticket, stutter: seq<InsertStutter>)
+  predicate TableInsertEnable(table: FixedTable, stutters: seq<InsertStutter>)
   {
-    && v.Variables?
-    && ticket in v.tickets
-    && ticket.input.InsertInput?
-    && TableInsert(v.table, v'.table, stutters)
+    && |stutters| >= 1
+    // the first one starts at the key hash
+    && var first := stutters[0];
+      first.start == hash(first.key)
+    // the last one should be Done/Update
+    && (
+        var last := stutters[ |stutters| - 1 ];
+        || TableInsertDoneEnable(table, last)
+        || TableInsertUpdateEnable(table, last)
+      )
+    // the intermediate ones are swaps
+    && (forall i | 1 <= i < |stutters| ::
+        && stutters[i-1].end == stutters[i].start
+        && TableInsertSwapEnable(table, stutters[i])
+      )
   }
+
+  // predicate TableInsert(table: FixedTable, table'': FixedTable, stutters: seq<InsertStutter>)
+  //   requires |stutters| >= 1
+  //   decreases |stutters|
+  // {
+  //   var stutter := stutters[0]; 
+  //   // if |stutters| == 1 then
+  //   //   && TableInsertStutterEndEnable(table, stutter)
+  //   //   && table'' == TableInsertStutterEndTransition(table, stutter)
+  //   // else
+  //   //   && TableInsertStutterEnable(table, stutter)
+  //   //   && var (table', old_entry) := TableInsertStutterTransition(table, stutter);
+  //   //   && old_entry.key == stutters[1].key
+  //   //   && TableInsert(table', table'', stutters[1..])
+  // }
+
+  // // Insert
+  // predicate Insert(v: Variables, v': Variables, ticket: Ticket, stutter: seq<InsertStutter>)
+  // {
+  //   && v.Variables?
+  //   && ticket in v.tickets
+  //   && ticket.input.InsertInput?
+  //   && TableInsert(v.table, v'.table, stutters)
+  // }
 
   // predicate Overwrite(v: Variables, v': Variables, ticket: Ticket, i: int)
   // {
