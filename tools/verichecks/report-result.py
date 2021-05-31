@@ -1,4 +1,5 @@
 import os
+import re
 from github import Github, GithubException
 
 print("Reporting result to Github actions")
@@ -40,7 +41,7 @@ wiki_build_path = "https://raw.githubusercontent.com/wiki/vmware-labs/verified-b
 cr_output = {
     'title': output_title,
     'summary': """
-**Status** -- {}
+**Status** -- [svg]({}), [pdf]({})
 
 **Summary**
 
@@ -48,9 +49,10 @@ cr_output = {
 {}
 ```
 
-**Error messages** -- {}
+[**Error messages**]({})
 """.format(
     wiki_build_path + '/build/Impl/Bundle.i.status.svg',
+    wiki_build_path + '/build/Impl/Bundle.i.status.pdf',
     verified_content,
     wiki_build_path + '/build/Impl/Bundle.i.verified.err')
 }
