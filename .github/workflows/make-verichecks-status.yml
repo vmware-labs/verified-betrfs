@@ -20,7 +20,7 @@ jobs:
     runs-on: bastion
     steps:
       - name: start-veri-checks
-        run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --start veri-checks
+        run: /home/ubuntu/verified-betrfs/tools/aws/start-stop-worker.py --start --retry-start veri-checks
   build:
     runs-on: veri-checks
     steps:

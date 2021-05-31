@@ -3,12 +3,14 @@ import urllib, json, sys
 import argparse
 import boto3
 import pprint
+import time
 from collections import namedtuple
 from botocore.exceptions import ClientError
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--start', action='store_true', help='start instance')
 parser.add_argument('--stop', action='store_true', help='stop instance')
+parser.add_argument('--retry-start', action='store_true', help='retry every 10sec for about 2 minutes')
 parser.add_argument('NAME', help='machine name')
 
 args = parser.parse_args()
@@ -54,11 +56,27 @@ if args.start:
     to_start = instance_ids
     print("starting instances:", to_start)
 
-    try:
-        response = ec2_connection.start_instances(InstanceIds=to_start)
-        pprint.pprint(response, indent=2)
-    except ClientError as e:
-        print(e)
+    if args.retry_start:
+        attempts = 0
+        while attempts < 12:
+            try:
+                response = ec2_connection.start_instances(InstanceIds=to_start)
+                pprint.pprint(response, indent=2)
+                break
+            except ClientError as e:
+                print("start failed, retrying in 10 sec")
+                time.sleep(10)
+                attempts += 1
+        print("start failed for two minutes, giving up")
+        sys.exit(-1)
+
+    else:
+        try:
+            response = ec2_connection.start_instances(InstanceIds=to_start)
+            pprint.pprint(response, indent=2)
+        except ClientError as e:
+            print(e)
+            sys.exit(-1)
 
 elif args.stop:
     to_stop = instance_ids
@@ -69,5 +87,6 @@ elif args.stop:
         pprint.pprint(response, indent=2)
     except ClientError as e:
         print(e)
+        sys.exit(-1)
 
 
