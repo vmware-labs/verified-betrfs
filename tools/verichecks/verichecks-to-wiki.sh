@@ -109,8 +109,8 @@ debug "Committing and pushing"
 (
     cd "$tmp_dir" &&
     git add verichecks-results.md &&
-    git add -f verichecks-results/$COMMITID/* &&
-    git commit -m "Veri-checks results for $COMMITID" &&
+    git add -f verichecks-results/$GITHUB_SHA/* &&
+    git commit -m "Veri-checks results for $GITHUB_SHA" &&
     git push --set-upstream "$GIT_REPOSITORY_URL" master
 ) || exit 1
 
