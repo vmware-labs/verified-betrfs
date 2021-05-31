@@ -43,10 +43,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 tools/verichecks/report-result.py
-      - name: report verification outcome
-        run: |
-          cat build/Impl/Bundle.i.verified
-          grep -l Overall:\ Success build/Impl/Bundle.i.verified
   stop-veri-checks:
     runs-on: bastion
     needs: build

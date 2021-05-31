@@ -35,6 +35,8 @@ try:
 except Exception:
     pass
 
+wiki_build_path = "https://raw.githubusercontent.com/wiki/vmware-labs/verified-betrfs/verichecks-results/{}".format(sha_env)
+
 cr_output = {
     'title': output_title,
     'summary': """
@@ -47,7 +49,10 @@ cr_output = {
 ```
 
 **Error messages** -- {}
-""".format('<placeholder>', verified_content, '<placeholder>')
+""".format(
+    wiki_build_path + '/build/Impl/Bundle.i.status.svg',
+    verified_content,
+    wiki_build_path + '/build/Impl/Bundle.i.verified.err')
 }
 
 repo.create_check_run('status',
