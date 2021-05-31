@@ -99,28 +99,11 @@ module Proof refines ProofObligations {
       case JournalInternalStep(sk) => {
 
         JournalInternalRefined(v.program, v'.program, uiop, cacheOps, pstep, sk);
+
         var sb := ProgramInterpMod.ISuperblock(v.program.cache.dv);
-        if sb.Some?
-        {
-          assert ProgramInterpMod.IM(v.program) == ProgramInterpMod.IM(v'.program);
-          assert I(v) == I(v');
-          // Here the map is no op
-          assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
-          assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop); // believes this i think
-        } else
-        {
-          var sb' := ProgramInterpMod.ISuperblock(v'.program.cache.dv);
-          assert sb'.None?;
-          // Doesn't believe this...
-          calc {
-            I(v);
-            I(v');
-          }
-          assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp); // this is a witness
-          assert CrashTolerantMapSpecMod.Next(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
-          assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
-          assert uiop == CrashTolerantMapSpecMod.NoopOp;
-        }
+        if sb.Some? {} // TRIGGER
+
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp); // WITNESS
 
       }
       case BetreeInternalStep(sk) => {
