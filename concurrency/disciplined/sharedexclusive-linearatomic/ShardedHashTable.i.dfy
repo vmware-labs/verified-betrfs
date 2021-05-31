@@ -182,79 +182,19 @@ module ShardedHashTable refines ShardedStateMachine {
 // Transition definitions
 //////////////////////////////////////////////////////////////////////////////
 
+  datatype InsertStutter = InsertStutter(key: Key, val: Value, start: Index, end: Index)
+
   datatype Step =
+    | InsertStep(ticket: Ticket, stutters: seq<InsertStutter>)
+    | OverwriteStep(ticket: Ticket, stutter: InsertStutter)
+
     | QueryFoundStep(ticket: Ticket, i: Index)
     | QueryNotFoundStep(ticket: Ticket, end: Index)
 
     | RemoveStep(ticket: Ticket, i: Index, end: Index)
     | RemoveNotFoundStep(ticket: Ticket, end: Index)
 
-    // | OverwriteStep(ticket: Ticket, i: int)
-    // | InsertStep(ticket: Ticket, i: int)
-
-  // insert_h: hash of the key we are trying to insert
-  // slot_h : hash of the key at slot_index
-  // returns insert_h should go before slot_h 
-  // predicate ShouldHashGoBefore(insert_h: int, slot_h : int, slot_index: int)
-  // {
-  //   || insert_h < slot_h  <= slot_index // normal case
-  //   || slot_h <= slot_index < insert_h // insert_h wraps around the end of array
-  //   || slot_index < insert_h < slot_h // insert_h, slot_h  wrap around the end of array
-  // }
-
-  // predicate ShouldKeyGoBefore(insert_key: Key, slot_key: Key, slot_index: Index)
-  // {
-  //   && var insert_h := hash(insert_key)
-  //   && var slot_h := hash(slot_key)
-  //   (
-  //     || insert_h < slot_h <= slot_index // normal case
-  //     || slot_h <= slot_index < insert_h // insert_h wraps around the end of array
-  //     || slot_index < insert_h < slot_h // insert_h, slot_h  wrap around the end of array
-  //   )
-  // }
-
-  // Query
-
-  predicate QueryFound(v: Variables, v': Variables, ticket: Ticket, i: Index)
-  {
-    && v.Variables?
-    && v'.Variables?
-    && ticket in v.tickets
-    && ticket.input.QueryInput?
-    && v.table[i].Some?
-    && v.table[i].value.Full?
-    && v.table[i].value.key == ticket.input.key
-    && v' == v
-      .(tickets := v.tickets - multiset{ticket})
-      .(stubs := v.stubs + multiset{Stub(ticket.rid,
-          MapIfc.QueryOutput(Found(v.table[i].value.value)))})
-  }
-
-  predicate KeyNotFound(table: FixedTable, key: Key, end: Index)
-  {
-    && table[end].Some?
-    && table[end].value.Empty?
-    && var h := hash(key) as int;
-    && (h <= end ==> forall j | h <= j < end     :: table[j].Some? && table[j].value.Full? && table[j].value.key != key)
-    && (h > end  ==> forall j | h <= j < |table| :: table[j].Some? && table[j].value.Full? && table[j].value.key != key)
-    && (h > end  ==> forall j | 0 <= j < end     :: table[j].Some? && table[j].value.Full? && table[j].value.key != key)
-  }
-
-  predicate QueryNotFound(v: Variables, v': Variables, ticket: Ticket, end: Index)
-  {
-    && v.Variables?
-    && v'.Variables?
-    && ticket in v.tickets
-    && ticket.input.QueryInput?
-    && KeyNotFound(v.table, ticket.input.key, end)
-    && v' == v
-      .(tickets := v.tickets - multiset{ticket})
-      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.QueryOutput(NotFound))})
-  }
-
-  // insert
-
-  datatype InsertStutter = InsertStutter(key: Key, val: Value, start: Index, end: Index)
+// Insert transition definitions
 
   predicate ShouldSkipSlot(table: FixedTable, insert_key: Key, slot_index: Index)
   {
@@ -268,6 +208,15 @@ module ShardedHashTable refines ShardedStateMachine {
       || slot_index < insert_h < slot_h // insert_h, slot_h  wrap around the end of array
     )
   }
+  // insert_h: hash of the key we are trying to insert
+  // slot_h : hash of the key at slot_index
+  // returns insert_h should go before slot_h 
+  // predicate ShouldHashGoBefore(insert_h: int, slot_h : int, slot_index: int)
+  // {
+  //   || insert_h < slot_h  <= slot_index // normal case
+  //   || slot_h <= slot_index < insert_h // insert_h wraps around the end of array
+  //   || slot_index < insert_h < slot_h // insert_h, slot_h  wrap around the end of array
+  // }
 
   predicate ShouldSkipSlotsNoWrap(table: FixedTable, insert_key: Key, start: Index, end: int)
     requires start <= end <= FixedSize();
@@ -306,11 +255,11 @@ module ShardedHashTable refines ShardedStateMachine {
     && table[step.end].value.Empty?
   }
 
-  predicate TableInsertUpdateEnable(table: FixedTable, step: InsertStutter)
+  predicate TableOverwriteEnable(table: FixedTable, step: InsertStutter)
   {
     var InsertStutter(insert_key, _, _, end) := step;
-    // we should skip these
-    && ShouldSkipSlots(table, step) // TODO: we might not need this?
+    // we should skip these, TODO: we might not need this?
+    && ShouldSkipSlots(table, step) 
     // the entry at end index has the same key
     && table[end].value.Full?
     && table[end].value.key == insert_key
@@ -320,30 +269,11 @@ module ShardedHashTable refines ShardedStateMachine {
     requires 
       || TableInsertSwapEnable(table, step)
       || TableInsertDoneEnable(table, step)
-      || TableInsertUpdateEnable(table, step)
+      || TableOverwriteEnable(table, step)
   {
     var InsertStutter(key, val, _, end) := step;
     table[end := Some(Full(key, val))]
   }
-
-  // predicate TableInsertEnable(table: FixedTable, stutters: seq<InsertStutter>)
-  // {
-  //   && |stutters| >= 1
-  //   // the first one starts at the key hash
-  //   && var first := stutters[0];
-  //     first.start == hash(first.key)
-  //   // the last one should be Done/Update
-  //   && (
-  //       var last := stutters[ |stutters| - 1 ];
-  //       || TableInsertDoneEnable(table, last)
-  //       || TableInsertUpdateEnable(table, last)
-  //     )
-  //   // the intermediate ones are swaps
-  //   && (forall i | 1 <= i < |stutters| ::
-  //       && stutters[i-1].end == stutters[i].start
-  //       && TableInsertSwapEnable(table, stutters[i])
-  //     )
-  // }
 
   predicate TableInsertEnableRec(table: FixedTable, stutters: seq<InsertStutter>)
     requires |stutters| >= 1
@@ -351,10 +281,7 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     var curr := stutters[0];
     if |stutters| == 1 then
-      (
-        || TableInsertDoneEnable(table, curr)
-        || TableInsertUpdateEnable(table, curr)
-      )
+        TableInsertDoneEnable(table, curr)
     else
       (
         // next starts at current end
@@ -379,12 +306,12 @@ module ShardedHashTable refines ShardedStateMachine {
       TableInsert(table', stutters[1..])
   }
 
-  // Insert
   predicate Insert(v: Variables, v': Variables, ticket: Ticket, stutters: seq<InsertStutter>)
   {
     && v.Variables?
     && ticket in v.tickets
     && ticket.input.InsertInput?
+    && v.insert_capacity.value >= 1
 
     && |stutters| >= 1
     // the first step starts at the insert key hash
@@ -397,70 +324,64 @@ module ShardedHashTable refines ShardedStateMachine {
     && v' == v
       .(tickets := v.tickets - multiset{ticket})
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
+      .(insert_capacity := Count.Variables(v.insert_capacity.value - 1))
       .(table := TableInsert(v.table, stutters))
   }
 
-  // predicate Overwrite(v: Variables, v': Variables, ticket: Ticket, i: int)
-  // {
-  //   && v.Variables?
-  //   && v'.Variables?
-  //   && ticket in v.tickets
-  //   && ticket.input.InsertInput?
-  //   && 0 <= i < |v.table|
-  //   && v.table[i].Some?
-  //   && v.table[i].value.Full?
-  //   && v.table[i].value.key == ticket.input.key
-  //   && v' == v
-  //     .(tickets := v.tickets - multiset{ticket})
-  //     .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
-  //     .(table := v.table[i := Some(Full(ticket.input.key, ticket.input.value))])
-  // }
+  predicate Overwrite(v: Variables, v': Variables, ticket: Ticket, step: InsertStutter)
+  {
+    && v.Variables?
+    && ticket in v.tickets
+    && ticket.input.InsertInput?
 
-  // predicate Insert(v: Variables, v': Variables, ticket: Ticket, i: int, end: int)
-  // {
-  //   && v.Variables?
-  //   && v'.Variables?
-  //   && ticket in v.tickets
-  //   && ticket.input.InsertInput?
+    && TableOverwriteEnable(v.table, step)
 
-  //   && 0 <= i < |v.table|
-  //   && 0 <= end < |v.table|
-  //   // && v.table[i].Some?
-  //   // && v.table[i].value.Full?
-  //   // && var insert_h := hash(ticket.input.key) as int;
-  //   // && var slot_h  := hash(v.table[i].value.key) as int;
+    && v' == v
+      .(tickets := v.tickets - multiset{ticket})
+      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
+      .(table := TableInsertTransition(v.table, step))
+  }
 
-  //   // && ShouldHashGoBefore(insert_h, slot_h , i)
-  //   // && LeftShift_PartialState(v.table, v'.table, RobinHood.LeftShift(i, end))
-  //   && v' == v.(table := v'.table)
-  //       .(tickets := v.tickets - multiset{ticket})
-  //       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
-  // }
+// Query transition definitions
 
-  // predicate RightShift_PartialState(table: Table, table': Table, shift: LeftShift)
-  // {
-  //   && 0 <= shift.start < |table|
-  //   && 0 <= shift.end < |table|
-  //   && |table'| == |table|
+  predicate QueryFound(v: Variables, v': Variables, ticket: Ticket, i: Index)
+  {
+    && v.Variables?
+    && v'.Variables?
+    && ticket in v.tickets
+    && ticket.input.QueryInput?
+    && v.table[i].Some?
+    && v.table[i].value.Full?
+    && v.table[i].value.key == ticket.input.key
+    && v' == v
+      .(tickets := v.tickets - multiset{ticket})
+      .(stubs := v.stubs + multiset{Stub(ticket.rid,
+          MapIfc.QueryOutput(Found(v.table[i].value.value)))})
+  }
 
-  //   && (shift.start <= shift.end ==>
-  //     && (forall i | 0 <= i < shift.start :: table'[i] == table[i]) // untouched things
-  //     && (forall i | shift.start <= i < shift.end :: table'[i] == table[i+1] && table'[i].Some?) // touched things
-  //     && table'[shift.end] == Some(Empty) // the end should be empty
-  //     && (forall i | shift.end < i < |table'| :: table'[i] == table[i]) // untouched things
-  //   )
+  predicate KeyNotFound(table: FixedTable, key: Key, end: Index)
+  {
+    && table[end].Some?
+    && table[end].value.Empty?
+    && var h := hash(key) as int;
+    && (h <= end ==> forall j | h <= j < end     :: table[j].Some? && table[j].value.Full? && table[j].value.key != key)
+    && (h > end  ==> forall j | h <= j < |table| :: table[j].Some? && table[j].value.Full? && table[j].value.key != key)
+    && (h > end  ==> forall j | 0 <= j < end     :: table[j].Some? && table[j].value.Full? && table[j].value.key != key)
+  }
 
-  //   && (shift.start > shift.end ==>
-  //     && (forall i | 0 <= i < shift.end :: table'[i] == table[i+1]) // shift second half 
-  //     && table'[shift.end] == Some(Empty) // the end should be empty 
-  //     && (forall i | shift.end < i < shift.start :: table'[i] == table[i]) // untouched things
-  //     && (forall i | shift.start <= i < |table'| - 1 :: table'[i] == table[i+1] && table'[i].Some?) // shift first half 
-  //     && table'[ |table'| - 1 ] == table[0] // shift around the wrap 
-  //   )
-  // }
+  predicate QueryNotFound(v: Variables, v': Variables, ticket: Ticket, end: Index)
+  {
+    && v.Variables?
+    && v'.Variables?
+    && ticket in v.tickets
+    && ticket.input.QueryInput?
+    && KeyNotFound(v.table, ticket.input.key, end)
+    && v' == v
+      .(tickets := v.tickets - multiset{ticket})
+      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.QueryOutput(NotFound))})
+  }
 
-
-  // Remove
+// Remove transition definitions
 
   predicate RemoveNotFound(v: Variables, v': Variables, ticket: Ticket, end: Index)
   {
@@ -512,17 +433,17 @@ module ShardedHashTable refines ShardedStateMachine {
         .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(true))})
   }
 
-/*
-  // All together
+// All transitions
+
   predicate NextStep(v: Variables, v': Variables, step: Step)
   {
     match step {
+      case InsertStep(ticket, stutters) => Insert(v, v', ticket, stutters)
+      case OverwriteStep(ticket, stutter) => Overwrite(v, v', ticket, stutter)
       case QueryFoundStep(ticket, i) => QueryFound(v, v', ticket, i)
       case QueryNotFoundStep(ticket, end) => QueryNotFound(v, v', ticket, end)
-      case OverwriteStep(ticket, i) => Overwrite(v, v', ticket, i)
       case RemoveStep(ticket, i, end) => Remove(v, v', ticket, i, end)
       case RemoveNotFoundStep(ticket, end) => RemoveNotFound(v, v', ticket, end)
-      case InsertStep(ticket, i) => Insert(v, v', ticket, i)
     }
   }
 
@@ -535,41 +456,40 @@ module ShardedHashTable refines ShardedStateMachine {
 // global-level Invariant proof
 //////////////////////////////////////////////////////////////////////////////
 
-  predicate Complete(table: Table)
+  predicate Complete(table: FixedTable)
   {
-    && (forall i | 0 <= i < |table| :: table[i].Some?)
+    && (forall i: Index :: table[i].Some?)
+  }
+
+  // Keys are unique, although we don't count entries being removed
+  predicate KeysUnique(table: FixedTable)
+    requires Complete(table)
+  {
+    forall i: Index, j: Index | 
+        && i != j
+        && table[i].value.Full?
+        && table[j].value.Full?
+      :: table[i].value.key != table[j].value.key
   }
 
   // unwrapped_index
-  function adjust(i: int, root: int) : int
-  requires 0 <= i < FixedSize()
-  requires 0 <= root <= FixedSize()
+  function adjust(i: Index, root: int) : int
+    requires 0 <= root <= FixedSize()
   {
     if i < root then FixedSize() + i else i
   }
 
-  // Keys are unique, although we don't count entries being removed
-  predicate KeysUnique(table: Table)
-  requires Complete(table)
-  {
-    forall i, j | 0 <= i < |table| && 0 <= j < |table| && i != j
-      && table[i].value.Full? && table[j].value.Full?
-        :: table[i].value.key != table[j].value.key
-  }
-
-  predicate ValidHashInIndex(table: Table, e: int, i: int)
-  requires |table| == FixedSize()
-  requires Complete(table)
-  requires 0 <= e < |table|
-  requires 0 <= i < |table|
+  predicate ValidHashInIndex(table: FixedTable, e: Index, i: Index)
+    requires Complete(table)
   {
     // No matter which empty pivot cell 'e' we choose, every entry is 'downstream'
     // of the place that it hashes to.
     // Likewise for insert pointers and others
 
-    table[e].value.Empty? && table[i].value.Full? ==> (
-      var h := hash(table[i].value.key) as int;
-      && adjust(h, e+1) <= adjust(i, e+1)
+    table[e].value.Empty? && table[i].value.Full? ==>
+    (
+      var h := hash(table[i].value.key);
+      adjust(h, e+1) <= adjust(i, e+1)
     )
   }
 
@@ -577,36 +497,43 @@ module ShardedHashTable refines ShardedStateMachine {
   // It's not enough to say that hash(entry[i]) <= hash(entry[i+1])
   // because of wraparound. We do a cyclic comparison 'rooted' at an
   // arbitrary empty element, given by e.
-  predicate ValidHashOrdering(table: Table, e: int, j: int, k: int)
-  requires |table| == FixedSize()
-  requires Complete(table)
-  requires 0 <= e < |table|
-  requires 0 <= j < |table|
-  requires 0 <= k < |table|
+  predicate ValidHashOrdering(table: FixedTable, e: Index, j: Index, k: Index)
+    requires Complete(table)
   {
-    (table[e].value.Empty? && table[j].value.Full? && adjust(j, e + 1) < adjust(k, e + 1) ==> (
-      var hj := hash(table[j].value.key) as int;
-      (table[k].value.Full? ==> (
-        var hk := hash(table[k].value.key) as int;
-        && adjust(hj, e + 1) <= adjust(hk, e + 1)
-      ))
-    ))
+    (
+      && table[e].value.Empty?
+      && table[j].value.Full?
+      && table[k].value.Full?
+      && adjust(j, e + 1) < adjust(k, e + 1) 
+    )
+      ==>
+    (
+      var hj := hash(table[j].value.key);
+      var hk := hash(table[k].value.key);
+      adjust(hj, e + 1) <= adjust(hk, e + 1)
+    )
   }
 
-  predicate InvTable(table: Table)
+  predicate InvTable(table: FixedTable)
   {
-    && |table| == FixedSize()
     && Complete(table)
     //&& ExistsEmptyEntry(table)
     && KeysUnique(table)
-    && (forall e, i | 0 <= e < |table| && 0 <= i < |table|
-        :: ValidHashInIndex(table, e, i))
-    && (forall e, j, k | 0 <= e < |table| && 0 <= j < |table| && 0 <= k < |table|
-        :: ValidHashOrdering(table, e, j, k))
+    && (forall e: Index, i: Index :: ValidHashInIndex(table, e, i))
+    && (forall e: Index, j: Index, k: Index :: ValidHashOrdering(table, e, j, k))
   }
 
-  function {:opaque} TableQuantity(s: Table) : nat {
-    if s == [] then 0 else TableQuantity(s[..|s|-1]) + (if Last(s).value.Full? then 1 else 0)
+  function EntryQuantity(entry: Option<Entry>): nat
+  {
+    if entry.Some? && entry.value.Full? then 1 else 0
+  }
+
+  function {:opaque} TableQuantity(s: Table) : nat
+  {
+    if s == [] then
+      0
+    else
+      (TableQuantity(s[..|s| - 1]) + EntryQuantity(Last(s)))
   }
 
   predicate TableQuantityInv(s: Variables)
@@ -622,18 +549,20 @@ module ShardedHashTable refines ShardedStateMachine {
     && TableQuantityInv(s)
   }
 
-  //////////////////////////////////////////////////////////////////////////////
-  // Proof that Init && []Next maintains Inv
-  //////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+// Proof that Init && Next maintains Inv
+//////////////////////////////////////////////////////////////////////////////
 
-  lemma NextStep_PreservesInv(s: Variables, s': Variables, step: Step)
-  requires Inv(s)
-  requires NextStep(s, s', step)
-  ensures Inv(s')
-  {
-    match step {
-    }
-  }
+  // lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
+  // requires Inv(s)
+  // requires NextStep(s, s', step)
+  // ensures Inv(s')
+  // {
+  //   match step {
+
+  //   }
+  // }
+/*
 
   lemma Next_PreservesInv(s: Variables, s': Variables)
   requires Inv(s)
