@@ -5,12 +5,13 @@ include "../lib/Base/Option.s.dfy"
 include "../lib/Lang/NativeTypes.s.dfy"
 include "Allocation.i.dfy"
 include "CacheIfc.i.dfy"
+include "DiskTypes.s.dfy"
 
 module MarshalledSnapshot {
   import opened Options
   // A snapshot of a data structure, spread across a linked list of CUs on the disk.
   // This module almost certainly shares a bunch of DNA with Journal; TODO refactor.
-  import opened AllocationMod
+  import opened DiskTypesMod
   import opened NativeTypes
 
   datatype SnapshotSuperblock = SnapshotSuperblock(firstCU: Option<CU>)

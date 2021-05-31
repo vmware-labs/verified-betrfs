@@ -10,12 +10,13 @@ include "CacheIfc.i.dfy"
 include "AsyncDisk.s.dfy"
 include "AsyncDiskProgram.s.dfy"
 include "IOSystem.s.dfy"
-include "Program.i.dfy"
+include "ProgramMachine.i.dfy"
 
 module ProgramInterpMod {
   import opened Options
   import opened MessageMod
   import opened InterpMod
+  import opened DiskTypesMod
   import opened AllocationMod
   import opened MsgSeqMod
   import AllocationTableMod
@@ -80,7 +81,7 @@ module ProgramInterpMod {
     var sb := ISuperblock(v.cache.dv);
     if sb.Some?
     then
-      var betreeInterp := BetreeInterpMod.IM(v.betree, v.cache, sb.value.betree);
+      var betreeInterp := BetreeInterpMod.IMStable(v.cache, sb.value.betree);
       var journalInterp := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal, betreeInterp);
       journalInterp
     else
@@ -120,7 +121,7 @@ module ProgramInterpMod {
     var sb := ISuperblock(v0.cache.dv);
     if sb.Some? {
       BetreeInterpMod.Framing(v0.betree, v0.cache, v1.cache, sb.value.betree);
-      var betreeInterp := BetreeInterpMod.IM(v0.betree, v0.cache, sb.value.betree);
+      var betreeInterp := BetreeInterpMod.IMStable(v0.cache, sb.value.betree);
       JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, sb.value.journal, betreeInterp);
     }
   }

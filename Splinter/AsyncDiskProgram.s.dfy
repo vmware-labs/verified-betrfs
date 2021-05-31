@@ -5,10 +5,11 @@ include "Spec.s.dfy"
 include "AsyncDisk.s.dfy"
 include "../lib/Base/MapRemove.s.dfy"
 include "../lib/Checksums/CRC32C.s.dfy"
+include "DiskTypes.s.dfy"
 
 // Disk API Interface to the implementer-supplied program that is getting verified.
 abstract module AsyncDiskProgram {
-  import AllocationMod
+  import DiskTypesMod
   import D = AsyncDisk  // Importing for the interface, not the entire disk
   import CrashTolerantMapSpecMod
 
@@ -21,7 +22,7 @@ abstract module AsyncDiskProgram {
   type RespRead = D.RespRead
   type RespWrite = D.RespWrite
 
-  predicate Mkfs(dv: AllocationMod.DiskView)
+  predicate Mkfs(dv: DiskTypesMod.DiskView)
   predicate Init(s: Variables)
   predicate Next(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
 }

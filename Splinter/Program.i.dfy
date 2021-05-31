@@ -17,12 +17,13 @@ include "IOSystem.s.dfy"
 // (Journal, Betree, Cache).
 // It has an interface to a disk, but can't actually see inside the disk (that's for the IOSystem).
 
-module ProgramMachineMod {
+module ProgramMachineMod1 {
   import AllocationTableMod
   import AllocationTableMachineMod
   import BetreeMachineMod
   import JournalMachineMod
   import opened AllocationMod
+  import opened DiskTypesMod
   import opened CrashTolerantMapSpecMod
   import opened InterpMod
   import opened MessageMod

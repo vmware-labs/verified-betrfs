@@ -105,8 +105,10 @@ module AsyncMapSpecMod {
     && v'.replies == v.replies + {reply}
   }
 
-  predicate DoReply(v: Variables, v': Variables, reply: Reply) {
-    && v' == v.(replies := v.replies + {reply})
+  predicate DoReply(v: Variables, v': Variables, reply: Reply)
+  {
+    && reply in v.replies
+    && v' == v.(replies := v.replies - {reply})
   }
 
   datatype UIOp =

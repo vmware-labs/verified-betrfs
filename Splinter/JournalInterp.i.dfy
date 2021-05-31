@@ -12,6 +12,7 @@ module JournalInterpMod {
   import opened MsgSeqMod
   import MapSpecMod
   import AsyncMapSpecMod
+  import opened DiskTypesMod
   import opened AllocationMod
   import opened JournalMachineMod
   import opened InterpMod
@@ -127,6 +128,8 @@ module JournalInterpMod {
         VersionFor(v, cache, sb, base, lsn)
      )
    }
+
+   // TDODO: may have to lemma for the journal internal step
 
   function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp) : CrashTolerantMapSpecMod.Variables
   {

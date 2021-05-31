@@ -96,6 +96,7 @@ module BetreeMachineMod {
   import opened Maps
   import opened MessageMod
   import opened InterpMod
+  import opened DiskTypesMod
   import opened AllocationMod
   import opened MsgSeqMod
   import AllocationTableMachineMod

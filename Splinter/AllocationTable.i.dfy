@@ -10,8 +10,10 @@ include "MarshalledSnapshot.i.dfy"
 module AllocationTableMod {
   import opened Options
   import opened AllocationTableMachineMod
+  import opened AllocationMod
+  import opened DiskTypesMod
 
-  function I(dv: AllocationMod.DiskView, sb: Superblock) : Option<AllocationTable> {
+  function I(dv: DiskView, sb: Superblock) : Option<AllocationTable> {
     parse(IBytes(dv, sb.snapshot))
   }
 }

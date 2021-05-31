@@ -7,6 +7,7 @@ include "Allocation.i.dfy"
 // Cache Interface that acts as the channel between the Betree/Journal/Program and the disk
 module CacheIfc {
   import opened Options
+  import opened DiskTypesMod
   import opened AllocationMod
 
   datatype Variables = Variables(dv:DiskView)

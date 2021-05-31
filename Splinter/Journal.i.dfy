@@ -34,6 +34,7 @@ module JournalMachineMod {
   import opened InterpMod
   import opened CrashTolerantMapSpecMod
   import opened MsgSeqMod
+  import opened DiskTypesMod
   import opened AllocationMod
   import AllocationTableMachineMod
   import CacheIfc
