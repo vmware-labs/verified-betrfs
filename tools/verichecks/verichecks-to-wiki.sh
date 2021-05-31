@@ -76,7 +76,7 @@ debug "Regenerating table of contents"
 (
     cd "$tmp_dir" &&
     for d in `ls verichecks-results`; do
-        echo -n - "`$d`" " "
+        echo -n "`$d`" " "
         if [ -f verichecks-results/$d/commitid ]; then
             echo -n "\("
             cat verichecks-results/$d/commitid
@@ -100,6 +100,7 @@ debug "Regenerating table of contents"
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf ]; then
             echo -n \[syntax status PDF\]\(verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf\) " "
         fi
+        echo
         echo
     done > verichecks-results.md
 ) || exit 1
