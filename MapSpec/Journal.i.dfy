@@ -12,12 +12,14 @@ module Journal {
   import opened Sequences
   import UI
 
-  datatype JournalEntry = JournalInsert(key: Key, value: Value)
+  datatype JournalEntry = JournalInsert(key: Key, value: Value) | JournalClone(new_to_old: imap<Key, Key>)
 
   function JournalEntriesForUIOp(uiop: UI.Op) : seq<JournalEntry>
   {
     if uiop.PutOp? then
       [JournalInsert(uiop.key, uiop.value)]
+    else if uiop.CloneOp? then
+      [JournalClone(uiop.new_to_old)]
     else
       []
   }

@@ -15,7 +15,10 @@ module TSJMap_Refines_ThreeStateVersionedMap {
 
   function Apply(m: MapSpec.Variables, je: JournalEntry) : MapSpec.Variables
   {
-    MapSpec.Variables(m.view[je.key := je.value])
+    match je {
+      case JournalInsert(key, value) => MapSpec.Variables(m.view[key := value])
+      case JournalClone(new_to_old) => MapSpec.Variables(MapSpec.ApplyCloneView(m.view, new_to_old))
+    }
   }
 
   function ApplySeq(m: MapSpec.Variables, jes: seq<JournalEntry>) : MapSpec.Variables
@@ -28,10 +31,11 @@ module TSJMap_Refines_ThreeStateVersionedMap {
 
   function ApplyUIOp(m: MapSpec.Variables, uiop: UI.Op) : MapSpec.Variables
   {
-    if uiop.PutOp? then
-      MapSpec.Variables(m.view[uiop.key := uiop.value])
-    else
-      m
+    match uiop {
+      case PutOp(key, value) => MapSpec.Variables(m.view[key := value])
+      case CloneOp(new_to_old) => MapSpec.Variables(MapSpec.ApplyCloneView(m.view, new_to_old))
+      case _ => m
+    }
   }
 
   function ApplyUIOpSeq(m: MapSpec.Variables, uiops: seq<UI.Op>) : MapSpec.Variables
@@ -74,7 +78,7 @@ module TSJMap_Refines_ThreeStateVersionedMap {
         ApplyUIOp(ApplyUIOpSeq(m, DropLast(uiops)), Last(uiops));
         ApplyUIOp(ApplySeq(m, JournalEntriesForUIOps(DropLast(uiops))), Last(uiops));
         {
-          if Last(uiops).PutOp? {
+          if Last(uiops).PutOp? || Last(uiops).CloneOp? {
             assert ApplyUIOp(ApplySeq(m, JournalEntriesForUIOps(DropLast(uiops))), Last(uiops))
                 == ApplySeq(m, JournalEntriesForUIOps(uiops));
           } else {
