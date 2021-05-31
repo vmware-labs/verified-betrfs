@@ -62,7 +62,7 @@ if args.start:
             try:
                 response = ec2_connection.start_instances(InstanceIds=to_start)
                 pprint.pprint(response, indent=2)
-                break
+                sys.exit(0)
             except ClientError as e:
                 print("start failed, retrying in 10 sec")
                 time.sleep(10)
