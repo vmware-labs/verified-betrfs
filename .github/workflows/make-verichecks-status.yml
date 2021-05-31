@@ -28,6 +28,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch }}
       - run: sudo tools/prep-environment.sh
+      - run: sudo pip3 install PyGithub
       - run: tools/install-dafny.sh
       - run: make -j 7 verichecks-status
       - uses: actions/upload-artifact@v2
@@ -37,7 +38,11 @@ jobs:
       - name: publish to wiki
         env:
           GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-        run: tools/verichecks-to-wiki.sh
+        run: tools/verichecks/verichecks-to-wiki.sh
+      - name: report result as check-run
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/verichecks/report-result.py
       - name: report verification outcome
         run: |
           cat build/Impl/Bundle.i.verified

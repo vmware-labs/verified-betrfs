@@ -62,14 +62,14 @@ debug "Checking out wiki repository"
 debug "Removing old results"
 (
     cd "$tmp_dir" &&
-    git rm -rf --ignore-unmatch verichecks-results/$GITHUB_SHA
+    git rm -rf --ignore-unmatch verichecks-results/$COMMITID
 ) || exit 1
 
 debug "Copying new results"
 (
-    mkdir -p "$tmp_dir"/verichecks-results/$GITHUB_SHA &&
-    cp -r build "$tmp_dir"/verichecks-results/$GITHUB_SHA &&
-    echo -n $COMMITID > "$tmp_dir"/verichecks-results/$GITHUB_SHA/commitid
+    mkdir -p "$tmp_dir"/verichecks-results/$COMMITID &&
+    cp -r build "$tmp_dir"/verichecks-results/$COMMITID &&
+    echo -n $GITHUB_SHA > "$tmp_dir"/verichecks-results/$COMMITID/ref
 ) || exit 1
 
 debug "Regenerating table of contents"
@@ -77,9 +77,9 @@ debug "Regenerating table of contents"
     cd "$tmp_dir" &&
     for d in `ls verichecks-results`; do
         echo -n - $d " "
-        if [ -f verichecks-results/$d/commitid ]; then
+        if [ -f verichecks-results/$d/ref ]; then
             echo -n "\("
-            cat verichecks-results/$d/commitid
+            cat verichecks-results/$d/ref
             echo -n "\)" " "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.verified ]; then
