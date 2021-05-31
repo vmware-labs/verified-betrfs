@@ -413,7 +413,7 @@ module JournalMachineMod {
           assert |innerchain.recs| == 0;
           assert IsLastLink(i, chain);
         } else {
-          assert !IsLastLink(i, chain);
+          assert IsLastLink(i, chain);
         }
       }
       forall i | 0<=i<|chain.recs| && IsLastLink(i, chain) ensures i==|chain.recs|-1
