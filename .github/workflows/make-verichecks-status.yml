@@ -1,4 +1,4 @@
-name: make verichecks-status
+name: vck-status
 
 on:
   push:

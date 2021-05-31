@@ -62,14 +62,14 @@ debug "Checking out wiki repository"
 debug "Removing old results"
 (
     cd "$tmp_dir" &&
-    git rm -rf --ignore-unmatch verichecks-results/$COMMITID
+    git rm -rf --ignore-unmatch verichecks-results/$GITHUB_SHA
 ) || exit 1
 
 debug "Copying new results"
 (
-    mkdir -p "$tmp_dir"/verichecks-results/$COMMITID &&
-    cp -r build "$tmp_dir"/verichecks-results/$COMMITID &&
-    echo -n $GITHUB_SHA > "$tmp_dir"/verichecks-results/$COMMITID/ref
+    mkdir -p "$tmp_dir"/verichecks-results/$GITHUB_SHA &&
+    cp -r build "$tmp_dir"/verichecks-results/$GITHUB_SHA &&
+    echo -n $COMMITID > "$tmp_dir"/verichecks-results/$GITHUB_SHA/commitid
 ) || exit 1
 
 debug "Regenerating table of contents"
@@ -77,13 +77,16 @@ debug "Regenerating table of contents"
     cd "$tmp_dir" &&
     for d in `ls verichecks-results`; do
         echo -n - $d " "
-        if [ -f verichecks-results/$d/ref ]; then
+        if [ -f verichecks-results/$d/commitid ]; then
             echo -n "\("
-            cat verichecks-results/$d/ref
+            cat verichecks-results/$d/commitid
             echo -n "\)" " "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.verified ]; then
             echo -n \[[Verification summary]\(verichecks-results/$d/build/Impl/Bundle.i.verified\)\] " "
+        fi
+        if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.txt ]; then
+            echo -n \[[Detailed status]\(verichecks-results/$d/build/Impl/Bundle.i.status.txt\)\] " "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.svg ]; then
             echo -n \[[Verification status SVG]\(verichecks-results/$d/build/Impl/Bundle.i.status.svg\)\] " "
