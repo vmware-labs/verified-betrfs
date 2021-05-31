@@ -50,7 +50,7 @@ module Proof refines ProofObligations {
   {}
 
   lemma BetreeInternalRefined(v: ConcreteSystem.P.Variables, v': ConcreteSystem.P.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: BetreeMachineMod.Skolem)
-      requires ConcreteSystem.P.NextStep(v, v', cacheOps, pstep)
+      requires ConcreteSystem.P.NextStep(v, v', uiop, cacheOps, pstep)
       requires pstep == ConcreteSystem.P.BetreeInternalStep(sk)
       // Is this a problem with using imports?
       ensures BetreeInterpMod.IM(v.cache, v.betree) ==
@@ -60,7 +60,7 @@ module Proof refines ProofObligations {
   }
 
   lemma JournalInternalRefined(v: ConcreteSystem.P.Variables, v': ConcreteSystem.P.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: JournalMachineMod.Skolem)
-    requires ConcreteSystem.P.NextStep(v, v', cacheOps, pstep)
+    requires ConcreteSystem.P.NextStep(v, v', uiop, cacheOps, pstep)
     requires pstep == ConcreteSystem.P.JournalInternalStep(sk)
     //requires BetreeInterpMod.IM(v.betree, v.cache, v.stableSuperblock.betree) == BetreeInterpMod.IM(v'.betree, v'.cache, v'.stableSuperblock.betree)
     // eek .... this is ugly. But maybe the intuition is correct here?
@@ -82,7 +82,7 @@ module Proof refines ProofObligations {
     requires step.MachineStep?
     ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
   {
-     var cacheOps, pstep :| ConcreteSystem.P.NextStep(v.program, v'.program, cacheOps, pstep);
+     var cacheOps, pstep :| ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep);
     match pstep {
       case RecoverStep(puts, newbetree) => {
 
@@ -92,7 +92,7 @@ module Proof refines ProofObligations {
 
         assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
-      case PutStep(key, val, sk) => {
+      case PutStep(sk) => {
 
         assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }

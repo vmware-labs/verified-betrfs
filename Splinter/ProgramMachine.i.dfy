@@ -312,11 +312,11 @@ module ProgramMachineMod {
     | CommitStartStep(seqBoundary: LSN)
     | CommitCompleteStep()
 
-  predicate NextStep(v: Variables, v': Variables, cacheOps: CacheIfc.Ops, uiop : UIOp, step: Step) {
+  predicate NextStep(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, step: Step) {
     && match step {
       case RecoverStep(puts, newbetree) => Recover(v, v', uiop, puts, newbetree)
       case QueryStep(key, val, sk) => Query(v, v', uiop, key, val, sk)
-      case PutStep(sk) => Put(v, v', uiop(sk)
+      case PutStep(sk) => Put(v, v', uiop, sk)
       case JournalInternalStep(sk) => JournalInternal(v, v', uiop, cacheOps, sk)
       case BetreeInternalStep(sk) => BetreeInternal(v, v', uiop, cacheOps, sk)
       case ReqSyncStep(syncReqId) => ReqSync(v, v', uiop, syncReqId)
