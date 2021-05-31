@@ -93,7 +93,6 @@ module MapSpec refines UIStateMachine {
   {
     && uiop == UI.SuccOp(start, results, end)
     && WF(s)
-    && s' == s
     && NonEmptyRange(start, end)
     && (forall i | 0 <= i < |results| :: s.view[results[i].key] == results[i].value)
     && (forall i | 0 <= i < |results| :: results[i].value != EmptyValue())
@@ -101,6 +100,7 @@ module MapSpec refines UIStateMachine {
     && (forall i, j | 0 <= i < j < |results| :: SeqComparison.lt(results[i].key, results[j].key))
     && (forall key | InRange(start, key, end) && s.view[key] != EmptyValue() ::
         exists i :: 0 <= i < |results| && results[i].key == key)
+    && s' == s
   }
 
   predicate Write(s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)
@@ -110,6 +110,28 @@ module MapSpec refines UIStateMachine {
     && WF(s)
     && WF(s')
     && s'.view == s.view[key := new_value]
+  }
+
+  function CloneView(view: imap<Key, Value>, new_to_old:imap<Key, Key>): imap<Key, Value>
+  requires ViewComplete(view)
+  {
+    imap k :: if k in new_to_old then view[new_to_old[k]] else view[k]
+  }
+
+  function ApplyCloneView(view: imap<Key, Value>, new_to_old:imap<Key, Key>): imap<Key, Value>
+  {
+    imap k :: if k in new_to_old && new_to_old[k] in view then view[new_to_old[k]] 
+      else (if k in view then view[k] else EmptyValue())
+  }
+
+  // clone(k, k') => k's content is k
+  // old = k, new = k' 
+  predicate Clone(s:Variables, s':Variables, uiop: UIOp, new_to_old:imap<Key, Key>)
+  {
+    && uiop == UI.CloneOp(new_to_old)
+    && WF(s)
+    && WF(s')
+    && s'.view == CloneView(s.view, new_to_old)
   }
 
   predicate Stutter(s:Variables, s':Variables, uiop: UIOp)
@@ -122,6 +144,7 @@ module MapSpec refines UIStateMachine {
   datatype Step =
       | QueryStep(key: Key, result: Value)
       | WriteStep(key: Key, new_value: Value)
+      | CloneStep(new_to_old: imap<Key, Key>) // map from key to key
       | SuccStep(start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
       | StutterStep
 
@@ -130,6 +153,7 @@ module MapSpec refines UIStateMachine {
     match step {
       case QueryStep(key, result) => Query(s, s', uiop, key, result)
       case WriteStep(key, new_value) => Write(s, s', uiop, key, new_value)
+      case CloneStep(new_to_old) => Clone(s, s', uiop, new_to_old)
       case SuccStep(start, results, end) => Succ(s, s', uiop, start, results, end)
       case StutterStep() => Stutter(s, s', uiop)
     }
