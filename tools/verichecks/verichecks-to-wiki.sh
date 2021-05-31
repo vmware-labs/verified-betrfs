@@ -76,7 +76,7 @@ debug "Regenerating table of contents"
 (
     cd "$tmp_dir" &&
     for d in `ls -t verichecks-results`; do
-        echo -n "\[\`${d:0:10}\`\]\(${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/$d\)" " "
+        echo -n "\[\`${d:0:10}\`\]\(${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/$d)" " "
         if [ -f verichecks-results/$d/commitid ]; then
             echo -n "\(\`"
             cat verichecks-results/$d/commitid
@@ -87,7 +87,7 @@ debug "Regenerating table of contents"
             echo -n \[summary\]\(verichecks-results/$d/build/Impl/Bundle.i.verified\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.txt ]; then
-            echo -n \[details\]\(verichecks-results/$d/build/Impl/Bundle.i.status.txt\) " - "
+            echo -n \[details\]\(verichecks-results/$d/build/Impl/Bundle.i.verified.err\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.svg ]; then
             echo -n \[status-SVG\]\(verichecks-results/$d/build/Impl/Bundle.i.status.svg\) " - "

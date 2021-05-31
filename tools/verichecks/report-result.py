@@ -41,7 +41,7 @@ wiki_build_path = "https://raw.githubusercontent.com/wiki/vmware-labs/verified-b
 cr_output = {
     'title': output_title,
     'summary': """
-**Status** -- [svg]({}), [pdf]({})
+**Status** -- [svg]({}), [pdf]({}), [**error messages**]({})
 
 **Summary**
 
@@ -49,12 +49,11 @@ cr_output = {
 {}
 ```
 
-[**Error messages**]({})
 """.format(
     wiki_build_path + '/build/Impl/Bundle.i.status.svg',
     wiki_build_path + '/build/Impl/Bundle.i.status.pdf',
-    verified_content,
-    wiki_build_path + '/build/Impl/Bundle.i.verified.err')
+    wiki_build_path + '/build/Impl/Bundle.i.verified.err',
+    verified_content)
 }
 
 repo.create_check_run('status',
