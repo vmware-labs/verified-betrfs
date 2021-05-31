@@ -273,10 +273,7 @@ module JournalMachineMod {
   predicate IsLastLink(i: nat, chain: JournalChain)
     requires 0<=i<|chain.recs|
   {
-    // stop if nothing more available
-    || chain.recs[i].priorCU.None?
-    // stop if nothing more needed
-    || chain.recs[i].messageSeq.seqStart <= chain.sb.boundaryLSN
+    chain.recs[i].messageSeq.seqStart <= chain.sb.boundaryLSN
   }
 
   predicate LSNinChain(chain: JournalChain, lsn: LSN)
@@ -288,8 +285,10 @@ module JournalMachineMod {
   predicate WFChainBasic(chain: JournalChain)
   {
     // Sowmya made this change
-    //&& (chain.sb.freshestCU.None? <==> 0 == |chain.recs|)
-    && (chain.sb.freshestCU.None? ==> 0 == |chain.recs|)
+    // jonh changed it back -- I think I need <==>, so I'm gonna figure out
+    // why you didn't want <==.
+    && (chain.sb.freshestCU.None? <==> 0 == |chain.recs|)
+    //&& (chain.sb.freshestCU.None? ==> 0 == |chain.recs|)
     && (forall i | 0<=i<|chain.recs| :: i==|chain.recs|-1 <==> IsLastLink(i, chain))
     && (forall i | 0<=i<|chain.recs|-1 :: chain.recs[i].priorCU.Some?)
   }
@@ -385,59 +384,40 @@ module JournalMachineMod {
     requires rec.messageSeq.WF()
     requires rec.priorCU.Some? ==> sb.boundaryLSN < rec.messageSeq.seqStart; // proves !IsLastLink(0, chain)
     requires innerchain.sb == rec.priorSB(sb);
-    requires 0<|innerchain.recs| ==> rec.messageSeq.seqStart == innerchain.recs[0].messageSeq.seqEnd;
+    requires 0<|innerchain.recs|
+    requires rec.messageSeq.seqStart == innerchain.recs[0].messageSeq.seqEnd
     requires WFChain(innerchain)
     ensures WFChain(chain)
   {
     var locate0 := map lsn | lsn in rec.messageSeq.LSNSet() :: 0;
     var locateCdr := map lsn | lsn in innerchain.locate :: innerchain.locate[lsn] + 1;
     var locate := MapDisjointUnion(locate0, locateCdr);
-    assert rec.messageSeq.WF();
-    assert innerchain.interp.IsEmpty() || innerchain.interp.seqEnd == rec.messageSeq.seqStart by {
-      if !innerchain.interp.IsEmpty() {
-        assert 0<|innerchain.recs|;
-        calc {
-          innerchain.interp.seqEnd;
-          innerchain.recs[0].messageSeq.seqEnd;
-          rec.messageSeq.seqStart;
-        }
-      }
-    }
+//    assert rec.messageSeq.WF();
+//    assert innerchain.interp.IsEmpty() || innerchain.interp.seqEnd == rec.messageSeq.seqStart by {
+////      if !innerchain.interp.IsEmpty() {
+////        assert 0<|innerchain.recs|;
+//////        calc {
+//////          innerchain.interp.seqEnd;
+//////          innerchain.recs[0].messageSeq.seqEnd;
+//////          rec.messageSeq.seqStart;
+//////        }
+////      }
+//    }
     var interp := innerchain.interp.Concat(rec.messageSeq);
     var chain := JournalChain(sb, [rec] + innerchain.recs, locate, interp);
     assert WFChainBasic(chain) by {
       forall i | 0<=i<|chain.recs| && i==|chain.recs|-1 ensures IsLastLink(i, chain)
       {
-        if i==0 {
-          assert |chain.recs| == 1;
-          assert |innerchain.recs| == 0;
-          assert IsLastLink(i, chain);
-        } else {
-          assert IsLastLink(i, chain);
-        }
+        assert IsLastLink(i-1, innerchain); //trigger
       }
       forall i | 0<=i<|chain.recs| && IsLastLink(i, chain) ensures i==|chain.recs|-1
       {
-      }
-//      {
-//        if 0<i {
-//          assert IsLastLink(i-1, innerchain) == IsLastLink(i, chain);
-//        }
-//      }
-    }
-    assume false;
-    assert WFChainInner(chain) by { reveal_WFChainInner(); }
-    assert forall lsn | LSNinChain(chain, lsn) :: lsn in chain.locate by {
-      forall lsn | LSNinChain(chain, lsn) ensures lsn in chain.locate {
-        if LSNinChain(innerchain, lsn) {
-          assert lsn in locateCdr;
-          assert lsn in locate;
-        } else {
-          assert lsn in locate0;
+        if 0<i<|chain.recs|-1 {
+          assert !IsLastLink(i-1, innerchain);  // trigger
         }
       }
     }
-    assert forall lsn | lsn in chain.locate :: LSNinChain(chain, lsn) by {}
+    assert WFChainInner(chain) by { reveal_WFChainInner(); }
     chain
   }
 
@@ -495,6 +475,12 @@ module JournalMachineMod {
           // We read our cu plus however far the recursive call reached.
           ChainResult(None, [sb.freshestCU.value] + inner.readCUs)
         else
+          assert 0<|inner.chain.value.recs| by {
+            var innerchain := inner.chain.value;
+            assert WFChainBasic(innerchain);
+            assert innerchain.sb.freshestCU.None? <==> 0 == |innerchain.recs|;
+            assert innerchain.sb.freshestCU.Some?;
+          }
           var chain := ExtendChain(sb, firstRec.value, inner.chain.value);
           assert WFChain(chain);
 //    && WFChainInner(chain)
