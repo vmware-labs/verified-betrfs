@@ -76,7 +76,7 @@ debug "Regenerating table of contents"
 (
     cd "$tmp_dir" &&
     for d in `ls -t verichecks-results`; do
-        echo -n "\[\`${d:0:10}\`\]\(${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/$d)" " "
+        echo -n "[\`${d:0:10}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/$d)" " "
         if [ -f verichecks-results/$d/commitid ]; then
             echo -n "\(\`"
             cat verichecks-results/$d/commitid
