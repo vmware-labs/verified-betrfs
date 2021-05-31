@@ -76,7 +76,7 @@ debug "Regenerating table of contents"
 (
     cd "$tmp_dir" &&
     for d in `ls verichecks-results`; do
-        echo -n "`$d`" " "
+        echo -n "\`$d\`" " "
         if [ -f verichecks-results/$d/commitid ]; then
             echo -n "\("
             cat verichecks-results/$d/commitid
