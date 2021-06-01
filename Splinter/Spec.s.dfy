@@ -32,18 +32,15 @@ module MapSpecMod {
 
   predicate Query(s: Variables, s': Variables, k: Key, v: Value)
   {
-    && s' == s
     && s.interp.WF()
     // TODO: fix this
-    && s.interp.mi[k].v == v
+    && v == s.interp.mi[k].v
+    && s' == s
   }
 
   predicate Put(s: Variables, s': Variables, k: Key, v: Value)
   {
-    // TODO: fix this!! We need to apply the op here
-    //&& s' == s.(interp := s.interp.Put(k,v))
-      // NB mutations advance the sequence number
-      true
+    && s' == s.(interp := s.interp.Put(k, MessagePut(k,v)))
   }
 
   predicate Next(v: Variables, v': Variables, input: Input, out: Output)
