@@ -546,133 +546,134 @@ abstract module Uint32SeqMarshalling refines IntegerSeqMarshalling(NativePackedU
 abstract module Uint64SeqMarshalling refines IntegerSeqMarshalling(NativePackedUint64) {
 }
 
-// //////////////////////////////////////////////////////////////////////
-// // Implementation of marshalling a sequence of items that all have the
-// // same marshalled size.
-// //////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+// Implementation of marshalling a sequence of items that all have the
+// same marshalled size.
+//////////////////////////////////////////////////////////////////////
 
-// abstract module UniformSizedElementSeqMarshalling refines UniformSizedElementSeqMarshallingCommon {
+abstract module UniformSizedElementSeqMarshalling(Element_Marshalling: Marshalling)
+refines UniformSizedElementSeqMarshallingCommon(Element_Marshalling) {
 
-//   method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>) {
-//     var len: uint64 := Length(data);
-//     if len == 0 {
-//       var empty: UnmarshalledType := [];
-//       return Some(empty);
-//     }
+  method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>) {
+    var len: uint64 := Length(data);
+    if len == 0 {
+      var empty: UnmarshalledType := [];
+      return Some(empty);
+    }
 
-//     // We get the first element by itself so we can call
-//     // seq_alloc_init below.
-//     var oelt := ElementMarshalling.TryParse(ElementData(data, 0));
-//     if oelt == None {
-//       return None;
-//     }
-//     linear var lresult := seq_alloc_init(len, oelt.value);
+    // We get the first element by itself so we can call
+    // seq_alloc_init below.
+    var oelt := ElementMarshalling.TryParse(ElementData(data, 0));
+    if oelt == None {
+      return None;
+    }
+    linear var lresult := seq_alloc_init(len, oelt.value);
 
-//     var i: uint64 := 1;
-//     var parsing_failed := false;
-//     while i < len
-//       invariant i <= len
-//       invariant |lresult| == len as nat
-//       invariant forall j: nat | j < i as nat :: ElementMarshalling.parsable(ElementData(data, j as uint64))
-//       invariant forall j: nat | j < i as nat :: lresult[j] == ElementMarshalling.parse(ElementData(data, j as uint64))
-//     {
-//       oelt := ElementMarshalling.TryParse(ElementData(data, i));
-//       if oelt == None {
-//         parsing_failed := true;
-//         break;
-//       }
-//       mut_seq_set(inout lresult, i, oelt.value);
-//       i := i + 1;
-//     }
+    var i: uint64 := 1;
+    var parsing_failed := false;
+    while i < len
+      invariant i <= len
+      invariant |lresult| == len as nat
+      invariant forall j: nat | j < i as nat :: ElementMarshalling.parsable(ElementData(data, j as uint64))
+      invariant forall j: nat | j < i as nat :: lresult[j] == ElementMarshalling.parse(ElementData(data, j as uint64))
+    {
+      oelt := ElementMarshalling.TryParse(ElementData(data, i));
+      if oelt == None {
+        parsing_failed := true;
+        break;
+      }
+      mut_seq_set(inout lresult, i, oelt.value);
+      i := i + 1;
+    }
 
-//     var result: UnmarshalledType := seq_unleash(lresult);
+    var result: UnmarshalledType := seq_unleash(lresult);
 
-//     if parsing_failed {
-//       ovalue := None;
-//     } else {
-//       ovalue := Some(result);
-//     }
-//   }
+    if parsing_failed {
+      ovalue := None;
+    } else {
+      ovalue := Some(result);
+    }
+  }
 
-//   method Parsable(data: mseq<byte>) returns (p: bool)
-//   {
-//     var len: uint64 := Length(data);
-//     if len == 0 {
-//       return true;
-//     }
+  method Parsable(data: mseq<byte>) returns (p: bool)
+  {
+    var len: uint64 := Length(data);
+    if len == 0 {
+      return true;
+    }
 
-//     var i: uint64 := 0;
-//     while i < len
-//       invariant i <= len
-//       invariant forall j: nat | j < i as nat :: ElementMarshalling.parsable(ElementData(data, j as uint64))
-//     {
-//       var p' := ElementMarshalling.Parsable(ElementData(data, i));
-//       if p' == false {
-//         return false;
-//       }
-//       i := i + 1;
-//     }
-//     return true;
-//   }
+    var i: uint64 := 0;
+    while i < len
+      invariant i <= len
+      invariant forall j: nat | j < i as nat :: ElementMarshalling.parsable(ElementData(data, j as uint64))
+    {
+      var p' := ElementMarshalling.Parsable(ElementData(data, i));
+      if p' == false {
+        return false;
+      }
+      i := i + 1;
+    }
+    return true;
+  }
 
-//   method Parse(data: mseq<byte>) returns (value: UnmarshalledType) {
-//     var len: uint64 := Length(data);
-//     if len == 0 {
-//       var empty: UnmarshalledType := [];
-//       return empty;
-//     }
+  method Parse(data: mseq<byte>) returns (value: UnmarshalledType) {
+    var len: uint64 := Length(data);
+    if len == 0 {
+      var empty: UnmarshalledType := [];
+      return empty;
+    }
 
-//     // We get the first element by itself so we can call
-//     // seq_alloc_init below.
-//     var elt := ElementMarshalling.Parse(ElementData(data, 0));
-//     linear var lresult := seq_alloc_init(len, elt);
+    // We get the first element by itself so we can call
+    // seq_alloc_init below.
+    var elt := ElementMarshalling.Parse(ElementData(data, 0));
+    linear var lresult := seq_alloc_init(len, elt);
 
-//     var i: uint64 := 1;
-//     while i < len
-//       invariant i <= len
-//       invariant |lresult| == len as nat
-//       invariant forall j: nat | j < i as nat :: lresult[j] == ElementMarshalling.parse(ElementData(data, j as uint64))
-//     {
-//       elt := ElementMarshalling.Parse(ElementData(data, i));
-//       mut_seq_set(inout lresult, i, elt);
-//       i := i + 1;
-//     }
+    var i: uint64 := 1;
+    while i < len
+      invariant i <= len
+      invariant |lresult| == len as nat
+      invariant forall j: nat | j < i as nat :: lresult[j] == ElementMarshalling.parse(ElementData(data, j as uint64))
+    {
+      elt := ElementMarshalling.Parse(ElementData(data, i));
+      mut_seq_set(inout lresult, i, elt);
+      i := i + 1;
+    }
 
-//     var result: UnmarshalledType := seq_unleash(lresult);
-//     value := result;
-//   }
+    var result: UnmarshalledType := seq_unleash(lresult);
+    value := result;
+  }
 
-//   method Marshall(value: UnmarshalledType, linear data: mseq<byte>, start: uint64)
-//     returns (linear newdata: mseq<byte>, end: uint64)
-//   {
-//     newdata := data;
-//     var i: uint64 := 0;
-//     end := start;
-//     while i < |value| as uint64
-//       invariant i <= |value| as uint64
-//       invariant |newdata| == |data|
-//       invariant end as nat == start as nat + size(value[..i])
-//       invariant forall j | 0 <= j < start :: newdata[j] == data[j]
-//       invariant forall j | end as nat <= j < |data| :: newdata[j] == data[j]
-//       invariant parsable(newdata[start..end])
-//       invariant parse(newdata[start..end]) == value[..i]
-//     {
-//       ghost var oldend := end;
-//       ghost var olddata := newdata[start..end];
-//       assert i as nat + 1 <= |value|;
-//       assert start as nat + (i as nat + 1) * UniformSize() as nat <= start as nat + |value| * UniformSize() as nat;
+  method Marshall(value: UnmarshalledType, linear data: mseq<byte>, start: uint64)
+    returns (linear newdata: mseq<byte>, end: uint64)
+  {
+    newdata := data;
+    var i: uint64 := 0;
+    end := start;
+    while i < |value| as uint64
+      invariant i <= |value| as uint64
+      invariant |newdata| == |data|
+      invariant end as nat == start as nat + size(value[..i])
+      invariant forall j | 0 <= j < start :: newdata[j] == data[j]
+      invariant forall j | end as nat <= j < |data| :: newdata[j] == data[j]
+      invariant parsable(newdata[start..end])
+      invariant parse(newdata[start..end]) == value[..i]
+    {
+      ghost var oldend := end;
+      ghost var olddata := newdata[start..end];
+      assert i as nat + 1 <= |value|;
+      assert start as nat + (i as nat + 1) * UniformSize() as nat <= start as nat + |value| * UniformSize() as nat;
 
-//       newdata, end := ElementMarshalling.Marshall(value[i], newdata, end);
-//       i := i + 1;
+      newdata, end := ElementMarshalling.Marshall(value[i], newdata, end);
+      i := i + 1;
 
-//       assert newdata[start..oldend] == olddata;
-//       parsing_extend(newdata[start..oldend], newdata[oldend..end]);
-//       assert newdata[start..end] == newdata[start..oldend] + newdata[oldend..end];
-//       assert value[..i] == value[..i-1] + [ value[i-1] ];
-//     }
-//     assert value == value[..|value|];
-//   }
-// }
+      assert newdata[start..oldend] == olddata;
+      parsing_extend(newdata[start..oldend], newdata[oldend..end]);
+      assert newdata[start..end] == newdata[start..oldend] + newdata[oldend..end];
+      assert value[..i] == value[..i-1] + [ value[i-1] ];
+    }
+    assert value == value[..|value|];
+  }
+}
 
 // ////////////////////////////////////////////////////////////////////
 // // Marshalling of sequences of uniform-sized elements, with a length
