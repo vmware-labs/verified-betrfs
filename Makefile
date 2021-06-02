@@ -191,7 +191,7 @@ NONLINEAR_FLAGS = /noNLarith
 
 INDUCTION_FLAGS = /induction:1
 
-OTHER_PROVER_FLAGS = /rlimit:$(DEFAULT_RLIMIT)
+OTHER_PROVER_FLAGS =
 
 ### Adjust defaults for a couple of files
 # (It would be nice if we could do this in the source instead.)
