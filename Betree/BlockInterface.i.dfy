@@ -206,7 +206,7 @@ abstract module BlockInterface refines Transactable {
     }
   }
 
-  lemma TransactionPreservesInv(s: Variables, s': Variables, ops: seq<Op>)
+  lemma {:timeLimitMultiplier 2} TransactionPreservesInv(s: Variables, s': Variables, ops: seq<Op>)
     requires Inv(s)
     requires Transaction(s, s', ops)
     ensures Inv(s')

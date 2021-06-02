@@ -247,10 +247,8 @@ module IOImpl {
   method PageInNodeReq(linear inout s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
   requires io.initialized();
   requires old_s.Ready?
-  // requires old_s.WFBCVars()
   requires ref in old_s.ephemeralIndirectionTable.I().locs
 
-  // [yizhou7]: addtional preconditions
   requires old_s.Inv()
   requires ref !in old_s.cache.I()
   requires old_s.TotalCacheSize() as int <= MaxCacheSize() - 1
@@ -336,7 +334,6 @@ module IOImpl {
   requires io.diskOp().RespReadOp?
   requires old_s.Loading?
 
-  // [yizhou7]: addtional preconditions
   requires old_s.Inv()
   requires ValidDiskOp(diskOp(IIO(io)))
   requires ValidIndirectionTableLocation(LocOfRespRead(diskOp(IIO(io)).respRead))
@@ -419,13 +416,11 @@ module IOImpl {
     }
   }
 
-  // [yizhou7][fixme]: this takes a long time to go through
-  method PageInNodeResp(linear inout s: ImplVariables, io: DiskIOHandler)
+  method {:timeLimitMultiplier 2} PageInNodeResp(linear inout s: ImplVariables, io: DiskIOHandler)
   requires old_s.WFBCVars()
   requires io.diskOp().RespReadOp?
   requires old_s.Ready?
 
-  // [yizhou7]: addtional preconditions
   requires old_s.Inv()
   requires ValidDiskOp(diskOp(IIO(io)))
 
@@ -576,7 +571,6 @@ module IOImpl {
   requires old_s.Ready?
   requires old_s.frozenIndirectionTableLoc.Some?
 
-  // [yizhou7]: addtional preconditions
   requires old_s.outstandingIndirectionTableWrite == Some(IIO(io).id)
   requires ValidIndirectionTableLocation(LocOfRespWrite(diskOp(IIO(io)).respWrite))
   ensures && s.WFBCVars()

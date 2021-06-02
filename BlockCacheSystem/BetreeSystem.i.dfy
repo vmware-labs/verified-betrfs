@@ -146,7 +146,7 @@ module BetreeSystem {
     BT.NextPreservesInv(EphemeralBetree(s).value, EphemeralBetree(s').value, vop.uiop);
   }
 
-  lemma BlockCacheMoveStepPreservesInv(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)
+  lemma {:timeLimitMultiplier 2} BlockCacheMoveStepPreservesInv(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)
     requires Inv(s)
     requires !step.TransactionStep?
     requires M.BlockCacheMove(s.machine, s'.machine, dop, vop, step)

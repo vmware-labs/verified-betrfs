@@ -238,7 +238,7 @@ module DList {
       inout ghost self.g := g';
     }
 
-    linear inout method{:timeLimitMultiplier 3} InsertAfter(p:uint64, a:A) returns (p':uint64)
+    linear inout method {:timeLimitMultiplier 3} InsertAfter(p:uint64, a:A) returns (p':uint64)
       requires old_self.Inv()
       requires old_self.MaybePtr(p)
       ensures self.Inv()
@@ -276,7 +276,7 @@ module DList {
       inout self.freeStack := freeNode.next;
     }
 
-    linear inout method{:timeLimitMultiplier 3} InsertBefore(p:uint64, a:A) returns(p':uint64)
+    linear inout method {:timeLimitMultiplier 3} InsertBefore(p:uint64, a:A) returns(p':uint64)
       requires old_self.Inv()
       requires old_self.MaybePtr(p)
       ensures self.Inv()

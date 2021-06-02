@@ -132,7 +132,7 @@ module LinearMutableMap {
       getEmptyWitness(self, i+1)
   }
 
-  method Probe<V>(shared self: FixedSizeLinearHashMap<V>, key: uint64)
+  method {:timeLimitMultiplier 2} Probe<V>(shared self: FixedSizeLinearHashMap<V>, key: uint64)
   returns (slotIdx: uint64, ghost startSlotIdx: uint64, ghost skips: uint64)
   requires FixedSizeInv(self)
   requires self.count as int < |self.storage|

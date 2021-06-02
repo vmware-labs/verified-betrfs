@@ -82,7 +82,7 @@ module BetreeCache refines BlockMachine {
     BC.InitImpliesInv(s);
   }
 
-  lemma BetreeMoveStepPreservesInv(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, betreeStep: BetreeStep)
+  lemma {:timeLimitMultiplier 3} BetreeMoveStepPreservesInv(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, betreeStep: BetreeStep)
   requires Inv(s)
   requires BetreeMove(s, s', dop, vop, betreeStep)
   ensures Inv(s')
