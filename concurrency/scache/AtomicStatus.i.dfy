@@ -170,10 +170,10 @@ module AtomicStatusImpl {
   ensures success ==>
       && m.lSome?
       && m.value.is_handle(key)
-
       && disk_write_ticket.lSome?
-      && disk_write_ticket.value.addr == m.value.b.idx.v as uint64
-      && disk_write_ticket.value.contents == m.value.b.data.s
+      && disk_write_ticket.value.writes(
+          m.value.b.idx.v as uint64,
+          m.value.b.data.s)
   {
     atomic_block var cur_flag := execute_atomic_load(a) { }
 
@@ -193,7 +193,7 @@ module AtomicStatusImpl {
           linear var res, handle, ticket, stat;
           linear var G(rwlock, status) := old_g;
 
-          rwlock, res, handle := RWLockMethods.transform_TakeWriteback(
+          rwlock, res, handle := RW.do_internal_step
               key, rwlock);
 
           stat, ticket := CacheResources.initiate_writeback(
@@ -222,7 +222,7 @@ module AtomicStatusImpl {
         success := false;
       } else {
         atomic_block var did_set :=
-            execute_atomic_compare_and_set_strong(a, flag_accessed, flag_writeback_accessed);
+            execute_atomic_compare_and_set_strong(a, flag_accessed, flag_writeback_accessed)
         {
           dispose_lnone(handle_out);
           dispose_lnone(m);

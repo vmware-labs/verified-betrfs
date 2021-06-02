@@ -30,9 +30,12 @@ module CacheResources {
 
   function CacheStatus(cache_idx: int, status: Status) : M
 
-  glinear datatype DiskWriteTicket = DiskWriteTicket(
+  glinear datatype DiskWriteTicket = DiskWriteTicket /*(
       ghost addr: uint64,
-      ghost contents: seq<byte>)
+      ghost contents: seq<byte>)*/
+  {
+    predicate writes(addr: uint64, contents: seq<byte>)
+  }
 
     /*| DiskReadTicket(addr: uint64)
     | DiskReadStub(addr: uint64, contents: seq<byte>)
