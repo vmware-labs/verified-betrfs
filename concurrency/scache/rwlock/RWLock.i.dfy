@@ -1100,6 +1100,15 @@ module RWLock refines SimpleExt {
     }
     Base.commutative(Interp(dot(f, p)), b);
   }
+
+  /*predicate easy_le(a: F, b: F) {
+    && (a.central.CentralNone? || a.central == b.central)
+    && (forall t :: t in a.refCounts ==> t in b.refCounts && b.refCounts[t] == a.refCounts[t])
+    && (forall ss :: a.sharedState[ss] <= b.sharedState[ss])
+    && (a.exc.ExcNone? || a.exc == b.exc)
+    && (a.read.ReadNone? || a.read == b.read)
+    && (a.writeback.WritebackNone? || a.writeback == b.writeback)
+  }*/
 }
 
 /*module RWLockExtToken refines SimpleExtToken {
@@ -1164,11 +1173,47 @@ module RWLockExtToken refines SimpleExtToken {
         TakeWritebackStep);
   }
 
-  function method borrow_wb(gshared f: Token) : (gshared b: Base.Handle)
+  /*lemma impl_le()
+  ensures forall a: M, b: SEPCM.M {:trigger SEPCM.le(a, b)}
+      :: easy_le(a, b) ==> SEPCM.Valid(a) && SEPCM.le(a, b)
+  {
+    forall a: M, b: SEPCM.M | easy_le(a, b)
+    ensures SEPCM.Valid(a) && SEPCM.le(a, b)
+    {
+      var t := M(
+        if a.central.CentralNone? then b.central else CentralNone,
+        (map t | t in b.refCounts && t !in a.refCounts :: b.refCounts[t]),
+        FullMaps.sub_fns(b.sharedState, a.sharedState),
+        if a.exc.ExcNone? then b.exc else ExcNone,
+        if a.read.ReadNone? then b.read else ReadNone,
+        if a.writeback.WritebackNone? then b.writeback else WritebackNone
+      );
+      assert dot_defined(a, t);
+      assert dot(a, t) == b by {
+        assert dot(a, t).central == b.central;
+        assert dot(a, t).refCounts == b.refCounts;
+        assert dot(a, t).sharedState == b.sharedState;
+        assert dot(a, t).exc == b.exc;
+        assert dot(a, t).read == b.read;
+        assert dot(a, t).writeback == b.writeback;
+      }
+      var a' :| SEPCM.SE.dot_defined(b, a') && SEPCM.SE.Inv(SEPCM.SE.dot(b, a'));
+      commutative(a, t);
+      SEPCM.SE_assoc_general(t, a, a');
+      SEPCM.SE_assoc_general(a, t, a');
+      assert SEPCM.SE.Inv(SEPCM.SE.dot(t, SEPCM.SE.dot(a, a')));
+      assert SEPCM.dot_defined(a, t);
+      assert SEPCM.SE.Inv(SEPCM.SE.dot(a, SEPCM.SE.dot(t, a')));
+    }
+  }*/
+
+  function method {:opaque} borrow_wb(gshared f: Token) : (gshared b: Base.Handle)
   requires f.loc().ExtLoc?
+  requires f.loc().base_loc == Base.singleton_loc()
   requires f.get().writeback.WritebackObtained?
   ensures b == f.get().writeback.b
   {
-    Base.unwrap_borrow( borrow_back(f, Base.one(f.get().writeback.b)) )
+    ghost var b := Base.one(f.get().writeback.b);
+    Base.unwrap_borrow( borrow_back_interp_exact(f, b) )
   }
 }

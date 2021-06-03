@@ -3,9 +3,9 @@ include "MapSum.i.dfy"
 module FullMaps {
   export S provides HasFiniteSupport, SumFilter, SumFilterSimp, UseZeroSum,
               lemma_zero_map_finite_support, lemma_unit_fn_finite_support,
-              lemma_add_fns_finite_support
-           reveals IsFull, FullMap, zero_map, unit_fn, add_fns,
-                  zero_map_internal, unit_fn_internal, add_fns_internal
+              lemma_add_fns_finite_support //, lemma_sub_fns_finite_support
+           reveals IsFull, FullMap, zero_map, unit_fn, add_fns, // sub_fns,
+                  zero_map_internal, unit_fn_internal, add_fns_internal //, sub_fns_internal
   export extends S
 
   import MapSum
@@ -85,6 +85,31 @@ module FullMaps {
     lemma_add_fns_finite_support(f, g);
     add_fns_internal(f, g)
   }
+
+  /*function sub_fns_internal<K(!new)>(f: FullMap<K>, g: FullMap<K>) : imap<K, nat>
+  requires forall i :: f[i] >= g[i]
+  {
+    imap b | true :: f[b] - g[b]
+  }
+
+  lemma lemma_sub_fns_finite_support<K(!new)>(f: FullMap<K>, g: FullMap<K>)
+  requires forall i :: f[i] >= g[i]
+  ensures HasFiniteSupport(sub_fns_internal(f, g))
+  {
+    var a := GetFiniteSupport(f);
+    var b := GetFiniteSupport(g);
+
+    assert IsFiniteSupport(sub_fns_internal(f, g),
+        map k | k in a.Keys + b.Keys :: sub_fns_internal(f, g)[k]);
+  }
+
+  function sub_fns<K(!new)>(f: FullMap<K>, g: FullMap<K>) : FullMap<K>
+  requires forall i :: f[i] >= g[i]
+  ensures add_fns(g, sub_fns(f, g)) == f
+  {
+    lemma_sub_fns_finite_support(f, g);
+    sub_fns_internal(f, g)
+  }*/
 
   function Filter<K(!new)>(fn: (K) -> bool, m: map<K, nat>) : map<K, nat> {
     map k | k in m.Keys && fn(k) :: m[k]
