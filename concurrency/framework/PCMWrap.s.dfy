@@ -3,10 +3,10 @@ include "PCM.s.dfy"
 abstract module PCMWrap refines PCM {
   /*abstract*/ type G(!new)
 
-  type {:extern} M(==,!new)
+  datatype M = M(ghost m: multiset<G>)
 
-  function {:extern} nil() : M
-  function {:extern} one(g: G) : M
+  function nil() : M { M(multiset{}) }
+  function one(g: G) : M { M(multiset{g}) }
 
   function unit() : M { nil() }
 
@@ -27,11 +27,22 @@ abstract module PCMWrap refines PCM {
   function method {:extern} wrap(glinear g: G) : (glinear t: GToken)
   ensures t.get() == one(g)
 
+  predicate is_one(m: M) {
+    exists a :: m == one(a)
+  }
+
+  function get_one(m: M) : G
+  requires is_one(m)
+  {
+    var a :| m == one(a); a
+  }
+
   function method {:extern} unwrap(glinear t: GToken) : (glinear g: G)
-  requires exists a :: t.get() == one(a)
-  ensures t.get() == one(g)
+  requires is_one(t.get())
+  ensures g == get_one(t.get())
 
   function method {:extern} unwrap_borrow(gshared t: GToken) : (gshared g: G)
-  requires exists a :: t.get() == one(a)
-  ensures t.get() == one(g)
+  requires is_one(t.get())
+  ensures g == get_one(t.get())
+
 }

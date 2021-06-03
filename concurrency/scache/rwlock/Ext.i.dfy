@@ -4,7 +4,7 @@ include "Base.i.dfy"
 abstract module SimpleExt {
   import Base = RWLockBase
 
-  type F(!new,==)
+  type F(!new)
 
   function unit() : F
   predicate dot_defined(a: F, b: F)

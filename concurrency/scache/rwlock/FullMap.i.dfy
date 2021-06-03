@@ -26,7 +26,7 @@ module FullMaps {
     exists finite_map :: IsFiniteSupport(m, finite_map)
   }
 
-  type FullMap<K(!new,==)> = m : imap<K, nat> | IsFull(m) && HasFiniteSupport(m)
+  type FullMap<K(!new)> = m : imap<K, nat> | IsFull(m) && HasFiniteSupport(m)
     witness *
 
   function GetFiniteSupport<K(!new)>(m: FullMap<K>) : map<K, nat>
