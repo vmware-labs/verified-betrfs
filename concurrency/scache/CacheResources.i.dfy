@@ -92,12 +92,12 @@ module CacheResources {
   ensures t2 == s2.(data := s3.contents)
   */
 
-  method initiate_writeback(
+  glinear method initiate_writeback(
       gshared cache_entry: CacheEntry,
       glinear status: CacheStatus
   )
   returns (
-      glinear status': CacheEntry,
+      glinear status': CacheStatus,
       glinear ticket: DiskWriteTicket
   )
   requires status.cache_idx == cache_entry.cache_idx
