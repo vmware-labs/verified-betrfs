@@ -46,7 +46,7 @@ module AtomicStatusImpl {
 
   glinear datatype G = G(
     glinear rwlock: RW.Token,
-    glinear status: CacheResources.Token
+    glinear status: lOption<CacheResources.CacheStatus>
   )
 
   type AtomicStatus = Atomic<uint8, G>
@@ -62,8 +62,7 @@ module AtomicStatusImpl {
     /*&& (g.rwlock.q.flags == RWLock.Reading_ExcLock ==>
       g.status.lNone?
     )*/
-    && (key.cache_idx !in g.status.get().statuses ==>
-        && g.status.get() == CacheResources.unit()
+    && (g.status.lNone? ==>
         && (
         || v == flag_exc
         || v == flag_exc_accessed
@@ -76,16 +75,13 @@ module AtomicStatusImpl {
         || v == flag_reading_clean
         || v == flag_accessed_reading_clean
     ))
-    && (key.cache_idx in g.status.get().statuses ==>
-      && g.status.get() == CacheResources.CacheStatus(
-          key.cache_idx, 
-          g.status.get().statuses[key.cache_idx])
-      && status_inv(v, g.status.get().statuses[key.cache_idx], key)
+    && (g.status.lSome? ==>
+      && g.status.value.cache_idx == key.cache_idx
+      && status_inv(v, g.status.value.status, key)
     )
     //&& (flag == RWLock.ExcLock_Clean ==> g.status.lNone?)
     //&& (flag == RWLock.ExcLock_Dirty ==> g.status.lNone?)
-    && (flag == RWLock.PendingExcLock ==>
-        key.cache_idx in g.status.get().statuses)
+    && (flag == RWLock.PendingExcLock ==> g.status.lSome?)
   }
 
   predicate flags_field_inv(v: uint8, flag: RWLock.Flag, key: Key)
@@ -188,30 +184,30 @@ module AtomicStatusImpl {
       {
         ghost_acquire old_g;
 
+        glinear var new_g;
+
         ghost var ghosty := true;
         if did_set && ghosty {
           linear var res, handle, ticket, stat;
           linear var G(rwlock, status) := old_g;
 
-          rwlock, res, handle := RW.do_internal_step
-              key, rwlock);
+          rwlock, handle := RW.perform_TakeWriteback(rwlock);
 
           stat, ticket := CacheResources.initiate_writeback(
-              handle.cache_entry, unwrap_value(status));
+              handle.get().writeback.b.cache_entry, unwrap_value(status));
 
           new_g := G(rwlock, lSome(stat));
-          handle_out := lSome(handle);
-          m := lSome(res);
+          m := lSome(handle);
           disk_write_ticket := lSome(ticket);
-          assert state_inv(new_v, new_g, key);
+          assert state_inv(new_value, new_g, key);
         } else {
           m := lNone;
           new_g := old_g;
-          handle_out := lNone;
+          m := lNone;
           disk_write_ticket := lNone;
-          assert state_inv(new_v, new_g, key);
+          assert state_inv(new_value, new_g, key);
         }
-        assert state_inv(new_v, new_g, key);
+        assert state_inv(new_value, new_g, key);
 
         ghost_release new_g;
       }
@@ -224,28 +220,30 @@ module AtomicStatusImpl {
         atomic_block var did_set :=
             execute_atomic_compare_and_set_strong(a, flag_accessed, flag_writeback_accessed)
         {
-          dispose_lnone(handle_out);
+          ghost_acquire old_g;
+          glinear var new_g;
           dispose_lnone(m);
           dispose_lnone(disk_write_ticket);
 
           if did_set {
             linear var res, handle, stat, ticket;
             linear var G(rwlock, status) := old_g;
-            rwlock, res, handle := RWLockMethods.transform_TakeWriteback(
-                key, rwlock);
+            rwlock, handle := RW.perform_TakeWriteback(rwlock);
             stat, ticket := CacheResources.initiate_writeback(
-                handle.cache_entry, unwrap_value(status));
+                handle.get().writeback.b, unwrap_value(status));
             new_g := G(rwlock, lSome(stat));
-            handle_out := lSome(handle);
+            m := lSome(handle);
             m := lSome(res);
             disk_write_ticket := lSome(ticket);
           } else {
             m := lNone;
             new_g := old_g;
-            handle_out := lNone;
+            m := lNone;
             disk_write_ticket := lNone;
           }
-          assert state_inv(new_v, new_g, key);
+          assert state_inv(new_value, new_g, key);
+
+          ghost_release new_g;
         }
 
         success := did_set;

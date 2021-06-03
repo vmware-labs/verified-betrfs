@@ -1130,7 +1130,39 @@ module RWLockExtToken refines SimpleExtToken {
     }
   }
 
-  /*glinear method do_internal_step_2(glinear f: Token,
-      
-      ghost f': F, ghost g': F,*/
+  glinear method do_internal_step_2(glinear f: Token,
+      ghost f1: F, ghost g1: F,
+      ghost step: InternalStep)
+  returns (glinear f': Token, glinear g': Token)
+  requires dot_defined(f1, g1)
+  requires InternalNextStep(f.get(), dot(f1, g1), step)
+  ensures g'.loc() == f'.loc() == f.loc()
+  ensures f'.get() == f1 && g'.get() == g1
+  {
+    assert InternalNext(f.get(), dot(f1, g1));
+    glinear var f_out := do_internal_step(f, dot(f1, g1));
+    f', g' := split(f_out, f1, g1);
+  }
+
+  glinear method perform_TakeWriteback(glinear c: Token)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.get();
+    && m.central.CentralState?
+    && m.central.flag == Available
+    && m == CentralHandle(m.central)
+  ensures c'.loc() == handle'.loc() == c.loc()
+  ensures c'.get() == CentralHandle(c.get().central.(flag := Writeback))
+  ensures handle'.get() == WritebackHandle(WritebackObtained(c.get().central.stored_value))
+  {
+    c', handle' := do_internal_step_2(c,
+        CentralHandle(c.get().central.(flag := Writeback)),
+        WritebackHandle(WritebackObtained(c.get().central.stored_value)),
+        TakeWritebackStep);
+  }
+
+  function method borrow(gshared f: Token) : (gshared b: Base.Handle)
+  requires 
+  {
+
+  }
 }

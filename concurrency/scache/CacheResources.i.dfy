@@ -23,18 +23,27 @@ module CacheResources {
 
   function DiskPageMap(disk_idx: int, cache_idx_opt: Option<int>) : M
 
-  function CacheEntry(
+  /*function CacheEntry(
         // this field is meaningless if status == Empty
         disk_idx: int,
-        cache_idx: int, data: seq<byte>) : M
+        cache_idx: int, data: seq<byte>) : M*/
 
-  function CacheStatus(cache_idx: int, status: Status) : M
-
-  glinear datatype DiskWriteTicket = DiskWriteTicket /*(
-      ghost addr: uint64,
-      ghost contents: seq<byte>)*/
+  datatype CacheStatus = CacheStatus(ghost cache_idx: int, ghost status: Status)
   {
-    predicate writes(addr: uint64, contents: seq<byte>)
+    predicate is_status(cache_idx: int, status: Status) {
+      this.cache_idx == cache_idx && this.status == status
+    }
+  }
+
+  glinear datatype CacheEntry = CacheEntry(
+      ghost loc: Loc,
+      ghost disk_idx: int, ghost cache_idx: int, ghost data: seq<byte>)
+
+  datatype DiskWriteTicket = DiskWriteTicket(ghost addr: uint64, ghost contents: seq<byte>)
+  {
+    predicate writes(addr: uint64, contents: seq<byte>) {
+      this.addr == addr && this.contents == contents
+    }
   }
 
     /*| DiskReadTicket(addr: uint64)
@@ -46,15 +55,15 @@ module CacheResources {
   /*method initiate_page_in(
       cache_idx: int,
       disk_idx: uint64,
-      linear s1: R,
-      linear s2: R,
-      linear s3: R
+      glinear s1: R,
+      glinear s2: R,
+      glinear s3: R
   )
   returns (
-      linear t1: R,
-      linear t2: R,
-      linear t3: R,
-      linear t4: DiskReadTicket
+      glinear t1: R,
+      glinear t2: R,
+      glinear t3: R,
+      glinear t4: DiskReadTicket
   )
   requires s1 == CacheStatus(cache_idx, Empty)
   requires s2.CacheEntry? && s2.cache_idx == cache_idx
@@ -67,13 +76,13 @@ module CacheResources {
   method finish_page_in(
       cache_idx: int,
       disk_idx: uint64,
-      linear s1: R,
-      linear s2: R,
-      linear s3: DiskReadStub
+      glinear s1: R,
+      glinear s2: R,
+      glinear s3: DiskReadStub
   )
   returns (
-      linear t1: R,
-      linear t2: R
+      glinear t1: R,
+      glinear t2: R
   )
   requires s1 == CacheStatus(cache_idx, Reading)
   requires s2.CacheEntry? && s2.disk_idx == disk_idx as int
@@ -81,30 +90,33 @@ module CacheResources {
   requires s3.addr == disk_idx
   ensures t1 == CacheStatus(cache_idx, Clean)
   ensures t2 == s2.(data := s3.contents)
+  */
 
   method initiate_writeback(
-      shared cache_entry: R,
-      linear status: R
+      gshared cache_entry: CacheEntry,
+      glinear status: CacheStatus
   )
   returns (
-      linear status': R,
-      linear ticket: DiskWriteTicket
+      glinear status': CacheEntry,
+      glinear ticket: DiskWriteTicket
   )
-  requires cache_entry.CacheEntry?
-  requires status == CacheStatus(cache_entry.cache_idx, Dirty)
-  ensures status' == CacheStatus(cache_entry.cache_idx, WriteBack)
+  requires status.cache_idx == cache_entry.cache_idx
+  requires status.status == Dirty
+  ensures status.cache_idx == cache_entry.cache_idx
+  ensures status.status == Writeback
   ensures 0 <= cache_entry.disk_idx < 0x1_0000_0000_0000_0000
   ensures ticket == DiskWriteTicket(
       cache_entry.disk_idx as uint64,
       cache_entry.data)
 
+  /*
   method finish_writeback(
-      shared cache_entry: R,
-      linear status: R,
-      linear stub: DiskWriteStub
+      gshared cache_entry: R,
+      glinear status: R,
+      glinear stub: DiskWriteStub
   )
   returns (
-      linear status': R
+      glinear status': R
   )
   requires cache_entry.CacheEntry?
   requires status == CacheStatus(cache_entry.cache_idx, WriteBack)

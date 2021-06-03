@@ -53,9 +53,10 @@ abstract module PCMExt refines PCM {
   ensures b_out.get() == b'
 
   function method {:extern} borrow_back(gshared f: Token, ghost b: B)
-    : (glinear b_out: Base.Token)
+    : (gshared b_out: Base.Token)
   requires f.loc().ExtLoc?
-  requires rep(f.get(), b)
+  requires forall p, b1 ::
+      dot_defined(f.get(), p) && rep(dot(f.get(), p), b1) ==> Base.le(b, b1)
   ensures b_out.get() == b
   ensures b_out.loc() == f.loc().base_loc
 

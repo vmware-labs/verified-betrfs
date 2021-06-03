@@ -30,4 +30,8 @@ abstract module PCMWrap refines PCM {
   function method {:extern} unwrap(glinear t: GToken) : (glinear g: G)
   requires exists a :: t.get() == one(a)
   ensures t.get() == one(g)
+
+  function method {:extern} unwrap_borrow(gshared t: GToken) : (gshared g: G)
+  requires exists a :: t.get() == one(a)
+  ensures t.get() == one(g)
 }

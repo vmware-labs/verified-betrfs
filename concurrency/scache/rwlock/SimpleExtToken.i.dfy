@@ -118,4 +118,24 @@ abstract module SimpleExtToken {
     a := x;
     complete := SEPCM.SE.dot(t.get(), a);
   }
+
+  function method {:opaque} borrow_back(gshared f: Token, ghost b: Base.M)
+        : (gshared b_out: Base.Token)
+  requires f.loc().ExtLoc?
+  requires forall p ::
+      SEPCM.SE.dot_defined(f.get(), p) && SEPCM.SE.Inv(SEPCM.SE.dot(f.get(), p))
+          ==> Base.le(b, SEPCM.SE.Interp(SEPCM.SE.dot(f.get(), p)))
+  ensures b_out.get() == b
+  ensures b_out.loc() == f.loc().base_loc
+  {
+    assert forall p, b1 ::
+      SEPCM.dot_defined(f.get(), p) && SEPCM.rep(SEPCM.dot(f.get(), p), b1) ==> Base.le(b, b1) by {
+      /*forall p, b1
+        | SEPCM.dot_defined(f.get(), p) && SEPCM.rep(SEPCM.dot(f.get(), p), b1)
+      ensures Base.le(b, b1)
+      {
+      }*/
+    }
+    SEPCM.borrow_back(f, b)
+  }
 }
