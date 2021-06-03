@@ -34,14 +34,15 @@ module BetreeInterpMod {
   predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, lookup: Lookup)
     // TODO
 
+  // Produce a receipt for this key
   function IMKey(v: Variables, cache: CacheIfc.Variables, key: Key) : Message
   {
-    if exists lookup :: ValidLookup(v, cache, key, lookup)
+    if exists lookup :: ValidLookup(v, cache, key, lookup) // Always true by invariant
     then
       var lookup :| ValidLookup(v, cache, key, lookup);
       LookupToMessage(lookup)
     else
-      MessagePut(key, DefaultValue())
+      MessagePut(key, DefaultValue()) // this is not a absence of a key, this case cannot happen by invariant
   }
 
   function IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
@@ -65,15 +66,15 @@ module BetreeInterpMod {
   // Imagine what the disk would look like if we were running and haven't
   // added any stuff to the membuffer.
   function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
-    ensures i.WF()
-  {
-    var indTbl := IndirectionTableMod.I(cache.dv, sb.indTbl);
-    if indTbl.None?
-    then InterpMod.Empty()
+     ensures i.WF()
+   {
+     var indTbl := IndirectionTableMod.I(cache.dv, sb.indTbl);
+     if indTbl.None?
+      then InterpMod.Empty()
     else
-      var pretendVariables := Variables(indTbl.value, map[], sb.endSeq, Idle);
-      IM(cache, pretendVariables)
-  }
+       var pretendVariables := Variables(indTbl.value, map[], sb.endSeq, Idle);
+       IM(cache, pretendVariables)
+   }
 
   function IReadsKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : set<CU> {
     if exists lookup :: ValidLookup(v, cache, key, lookup)
@@ -98,6 +99,14 @@ module BetreeInterpMod {
     []
   }
 
+  // TODO; Might need to change this to table about both IM and IMStable
+  lemma StableFraming(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock)
+    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
+    ensures IMStable(cache0, sb) == IMStable(cache1, sb)
+  {
+  }
+
+  // TODO; Might need to change this to table about both IM and IMStable
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock)
     requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
     ensures IM(cache0, v) == IM(cache1, v)

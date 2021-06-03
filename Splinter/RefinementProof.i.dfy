@@ -27,9 +27,11 @@ module Proof refines ProofObligations {
     ProgramInterpMod.IM(v.program)
   }
 
+  // NOTE: These are all program invariants. Maybe we should change the argument
   predicate Inv(v: ConcreteSystem.Variables)
   {
-    true
+    && BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree).seqEnd == v.program.journal.persistentLSN
+    && JournalInterpMod.Invariant(v.program.journal, v.program.cache)
   }
 
   // Remember that this is the init of a p
@@ -43,74 +45,91 @@ module Proof refines ProofObligations {
     //assert I(v) == CrashTolerantMapSpecMod.Empty();
   }
 
-  lemma InvInductive(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp)
-//    requires ConcreteSystem.Inv(v)
-//    requires ConcreteSystem.Next(v, v')
-//    ensures ConcreteSystem.Inv(v')
-  {}
 
-  lemma BetreeInternalRefined(v: ConcreteSystem.P.Variables, v': ConcreteSystem.P.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: BetreeMachineMod.Skolem)
-      requires ConcreteSystem.P.NextStep(v, v', uiop, cacheOps, pstep)
+  // This is complicated
+  lemma BetreeInternalRefined(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: BetreeMachineMod.Skolem)
+      requires Inv(v)
+      requires Inv(v')
+      requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
       requires pstep == ConcreteSystem.P.BetreeInternalStep(sk)
       // Is this a problem with using imports?
-      ensures BetreeInterpMod.IM(v.cache, v.betree) ==
-       BetreeInterpMod.IM(v'.cache, v'.betree)
+      ensures BetreeInterpMod.IM(v.program.cache, v.program.betree) ==
+       BetreeInterpMod.IM(v'.program.cache, v'.program.betree)
   {
+    BetreeInterpMod.Framing(v.program.betree, v.program.cache, v'.program.cache, v.program.stableSuperblock.betree);
+    assert v.program.betree.nextSeq == v'.program.betree.nextSeq;
+
+    // Need to fix this later
+    assume BetreeInterpMod.IM(v.program.cache, v.program.betree).mi ==
+     BetreeInterpMod.IM(v'.program.cache, v'.program.betree).mi; // doesn't believe this -- Might need to finish ValidLookup for this?
+
+    assert BetreeInterpMod.IM(v.program.cache, v.program.betree) ==
+     BetreeInterpMod.IM(v'.program.cache, v'.program.betree);
+  }
+
+  lemma PutRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: BetreeMachineMod.Skolem)
+    // Requires needed for IM to work
+    requires v.program.WF()
+    requires Inv(v)
+    requires Inv(v')
+
+    // Actual requires
+    requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
+    requires pstep == ConcreteSystem.P.PutStep(sk)
+    requires uiop.OperateOp?
+    requires uiop.baseOp.ExecuteOp?
+    requires uiop.baseOp.req.input.PutInput?
+    ensures  CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp)
+  {
+    // Here we need talk about the journal
+    assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
 
   }
 
-  lemma PutRefines(v: ConcreteSystem.P.Variables, v': ConcreteSystem.P.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: JournalMachineMod.Skolem)
+  lemma JournalInternalRefined(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: JournalMachineMod.Skolem)
     // Requires needed for IM to work
-    requires v.WF()
-    requires JournalInterpMod.Invariant(v.journal, v.cache)
-    requires JournalInterpMod.Invariant(v'.journal, v'.cache)
-    requires BetreeInterpMod.IM(v.cache, v.betree).seqEnd == v.journal.persistentLSN
-    requires BetreeInterpMod.IM(v'.cache, v'.betree).seqEnd == v'.journal.persistentLSN
-    // Actual requires
-    requires ConcreteSystem.P.NextStep(v, v', uiop, cacheOps, pstep)
-    requires pstep == ConcreteSystem.P.JournalInternalStep(sk)
-    ensures JournalInterpMod.IM(v.journal, v.cache, v.stableSuperblock.journal, BetreeInterpMod.IM(v.cache, v.betree)) ==
-      JournalInterpMod.IM(v'.journal, v'.cache, v'.stableSuperblock.journal, BetreeInterpMod.IM(v'.cache, v'.betree))
-  {
-  }
+    requires v.program.WF()
+    requires Inv(v)
+    requires Inv(v')
 
-  lemma JournalInternalRefined(v: ConcreteSystem.P.Variables, v': ConcreteSystem.P.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: JournalMachineMod.Skolem)
-    // Requires needed for IM to work
-    requires v.WF()
-    requires JournalInterpMod.Invariant(v.journal, v.cache)
-    requires JournalInterpMod.Invariant(v'.journal, v'.cache)
-    requires BetreeInterpMod.IM(v.cache, v.betree).seqEnd == v.journal.persistentLSN
-    requires BetreeInterpMod.IM(v'.cache, v'.betree).seqEnd == v'.journal.persistentLSN
     // Actual requires
-    requires ConcreteSystem.P.NextStep(v, v', uiop, cacheOps, pstep)
+    requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
     requires pstep == ConcreteSystem.P.JournalInternalStep(sk)
-    ensures JournalInterpMod.IM(v.journal, v.cache, v.stableSuperblock.journal, BetreeInterpMod.IM(v.cache, v.betree)) ==
-      JournalInterpMod.IM(v'.journal, v'.cache, v'.stableSuperblock.journal, BetreeInterpMod.IM(v'.cache, v'.betree))
+
+    // base should be stable betree in disk.
+    ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+      JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
   {
 
     // needs Some framing argument around DiskViewsEquivalentForSet
-    BetreeInterpMod.Framing(v.betree, v.cache, v'.cache, v.stableSuperblock.betree);
+    // TODO: check this
+    BetreeInterpMod.StableFraming(v.program.betree, v.program.cache, v'.program.cache, v.program.stableSuperblock.betree);
 
     // XXXX=== TODO: var some of these
-
-    assert BetreeInterpMod.IM(v.cache, v.betree) == BetreeInterpMod.IM( v'.cache, v'.betree);
-
     // the superblock is the same
-    assert v'.stableSuperblock == v.stableSuperblock;
+    assert v'.program.stableSuperblock == v.program.stableSuperblock;
+
+    //assert BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) == BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
+
+    // if InterpMod.Empty() == BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)
+    // {
+    //   assert InterpMod.Empty() == BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
+    // }
 
     // Only thing new is the journal -- make a lemma journal on Internal step
-    JournalInterpMod.InternalStepLemma(v.journal, v.cache, v'.journal, v'.cache,  v.stableSuperblock.journal, BetreeInterpMod.IM(v.cache, v.betree));
+    JournalInterpMod.InternalStepLemma(v.program.journal, v.program.cache, v'.program.journal, v'.program.cache,  v.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree));
 
-    assert JournalInterpMod.IM(v.journal, v.cache, v.stableSuperblock.journal, BetreeInterpMod.IM(v.cache, v.betree)) ==
-      JournalInterpMod.IM(v'.journal, v'.cache, v'.stableSuperblock.journal, BetreeInterpMod.IM(v'.cache, v'.betree));
+    assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+      JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
   }
 
-// This is a ghost method
-  lemma MachineStepRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, step : ConcreteSystem.Step)
+  // CrashTolerantMapSpecMod : OP1 OP2 ReqSync NOOP ..            AsyncCommit ... Nop      Nop  ..                 SyncComplete
+  // PROGRAM :                 P1 P2      ....                    write hits Disk   Program discovers commit
+
+  lemma ProgramMachineStepRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, step : ConcreteSystem.Step)
     requires Inv(v)
+    requires Inv(v')
     // TODO: should probably take the invariant out of journalInterp
-    requires JournalInterpMod.Invariant(v.program.journal, v.program.cache)
-    requires JournalInterpMod.Invariant(v'.program.journal, v'.program.cache) // should be an ensures?
     requires ConcreteSystem.Next(v, v', uiop)
     requires ConcreteSystem.NextStep(v, v', uiop, step)
     requires step.MachineStep?
@@ -119,22 +138,23 @@ module Proof refines ProofObligations {
      var cacheOps, pstep :| ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep);
     match pstep {
       case RecoverStep(puts, newbetree) => {
-
+        // Only argue about IMStable == IM of CrashTolerantMapSpecMod
         assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
       case QueryStep(key, val, sk) => {
 
+        // Need to leverage Lookup here
         assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
       case PutStep(sk) => {
-
-        PutRefines(v.program, v'.program, uiop, cacheOps, pstep, sk);
-        assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+        assert uiop.baseOp.req.input.PutInput?;
+        PutRefines(v, v', uiop, cacheOps, pstep, sk);
+        assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
       case JournalInternalStep(sk) => {
 
         assert pstep == ConcreteSystem.P.JournalInternalStep(sk);
-        JournalInternalRefined(v.program, v'.program, uiop, cacheOps, pstep, sk);
+        JournalInternalRefined(v, v', uiop, cacheOps, pstep, sk);
 
         var sb := ProgramInterpMod.ISuperblock(v.program.cache.dv);
         if sb.Some? {} // TRIGGER
@@ -143,27 +163,40 @@ module Proof refines ProofObligations {
 
       }
       case BetreeInternalStep(sk) => {
-          BetreeInternalRefined(v.program, v'.program, uiop, cacheOps, pstep, sk);
+          // TODO: there's lots to do here and we need to finish the betree
+          BetreeInternalRefined(v, v', uiop, cacheOps, pstep, sk);
 
-          //
+          var sb := ProgramInterpMod.ISuperblock(v.program.cache.dv);
+          if sb.Some? {} // TRIGGER
 
-          assume CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
+          assert uiop.NoopOp?;
+          assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
           assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);  // believes this i think
       }
       case ReqSyncStep(syncReqId) => {
 
+          // here uiop is not a NoOp
           assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
       case CompleteSyncStep(syncReqId) => {
+        // Discovery of a stable point in the line of updates
+
+        // here uiop is not a NoOp
         assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
       case CommitStartStep(seqBoundary) => {
-
-          assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+          // Start pushing subperblock to disk
+          assert uiop.NoopOp?;
+          assert I(v) ==  I(v');
+          assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
+          assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
       case CommitCompleteStep() => {
-
-          assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+        // We have a new stable subperblock
+        assert uiop.NoopOp?;
+        assert I(v) ==  I(v');
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
+        assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
     }
 
@@ -182,13 +215,15 @@ module Proof refines ProofObligations {
 
     match step {
       case MachineStep(_) => {
-          MachineStepRefines(v, v', uiop, step);
-          assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
-        }
+        // This is basically shows refinement for all the program steps
+        ProgramMachineStepRefines(v, v', uiop, step);
+        assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+      }
       case DiskInternalStep(step) => {
-          assume  CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+        assume  CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
       case CrashStep => {
+        // here we need to ensure that I(v) == I(v') -- we need to verify that recovery works here?
         assume  CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
     }

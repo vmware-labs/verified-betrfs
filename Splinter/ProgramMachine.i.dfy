@@ -150,6 +150,7 @@ module ProgramMachineMod {
   {
     && uiop.OperateOp?
     && uiop.baseOp.ExecuteOp?
+    && uiop.baseOp.req.input.PutInput? // ensures that the uiop translates to a put op
     && var key := uiop.baseOp.req.input.k;
     && var val := uiop.baseOp.req.input.v;
     && v.phase.Running?

@@ -210,12 +210,14 @@ module CrashTolerantMapSpecMod {
     // Commit can truncate old versions
     && (forall i | 0<=i<|s.versions| ::
       || s'.versions == s.versions
-      || s'.versions[i].Truncated?)
+      || (i < s.stableIdx && s'.versions[i].Truncated?)
+      )
     && s'.WF()  // But it can't truncate things after stableIdx
     // stableIdx advances towards, possibly all the way to, ephemeral state.
     && s.stableIdx < s'.stableIdx < |s.versions|
   }
 
+  // sync api contract to the end user
   predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
   {
     && s.WF()
@@ -243,7 +245,7 @@ module CrashTolerantMapSpecMod {
   // The Op provides *most* of Jay Normal Form -- except skolem variables, of which we have
   // exactly one, so I decided to just exists it like a clown.
   datatype UIOp =
-    | OperateOp(baseOp: AsyncMapSpecMod.UIOp)
+    | OperateOp(baseOp: AsyncMapSpecMod.UIOp) // Put or Query Internally
     | CrashOp
     | AsyncCommitOp
     | ReqSyncOp(syncReqId: SyncReqId)

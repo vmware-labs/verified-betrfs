@@ -20,14 +20,12 @@ abstract module ProofObligations {
   lemma InitRefines(v: ConcreteSystem.Variables)
     requires ConcreteSystem.Init(v)
     ensures CrashTolerantMapSpecMod.Init(I(v))
-
-  lemma InvInductive(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp)
-    requires Inv(v)
-    requires ConcreteSystem.Next(v, v', uiop)
-    ensures Inv(v')
+    ensures Inv(v)
 
   lemma NextRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp)
     requires Inv(v)
     requires ConcreteSystem.Next(v, v', uiop)
+    ensures Inv(v')
     ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
+
 }
