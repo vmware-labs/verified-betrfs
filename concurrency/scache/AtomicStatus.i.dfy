@@ -56,6 +56,11 @@ module AtomicStatusImpl {
     && g.rwlock.get().central.CentralState?
     && g.rwlock.get() == RWLock.CentralHandle(g.rwlock.get().central)
 
+    && g.rwlock.get().central.stored_value.is_handle(key)
+
+    && g.rwlock.loc().ExtLoc?
+    && g.rwlock.loc().base_loc == RWLock.Base.singleton_loc()
+
     && var flag := g.rwlock.get().central.flag;
 
     && flags_field_inv(v, flag, key)
@@ -193,6 +198,8 @@ module AtomicStatusImpl {
 
           rwlock, handle := RW.perform_TakeWriteback(rwlock);
 
+          assert unwrap_value(status).cache_idx == key.cache_idx;
+          assert RW.borrow_wb(handle).cache_entry.cache_idx == key.cache_idx;
           stat, ticket := CacheResources.initiate_writeback(
               RW.borrow_wb(handle).cache_entry, unwrap_value(status));
 
