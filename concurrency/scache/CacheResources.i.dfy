@@ -46,6 +46,13 @@ module CacheResources {
     }
   }
 
+  datatype DiskWriteStub = DiskWriteStub(ghost disk_idx: uint64)
+  {
+    predicate written(disk_idx: uint64) {
+      this.disk_idx == disk_idx
+    }
+  }
+
     /*| DiskReadTicket(addr: uint64)
     | DiskReadStub(addr: uint64, contents: seq<byte>)
 
