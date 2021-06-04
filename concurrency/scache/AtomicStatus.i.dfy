@@ -163,7 +163,7 @@ module AtomicStatusImpl {
 
   method try_acquire_writeback(a: AtomicStatus, ghost key: Key, with_access: bool)
   returns (success: bool,
-      glinear m: glOption<RW.WritebackObtainedHandle>,
+      glinear m: glOption<RW.WritebackObtainedToken>,
       glinear disk_write_ticket: glOption<CacheResources.DiskWriteTicket>)
   requires atomic_status_inv(a, key)
   ensures !success ==> m.glNone?
@@ -204,7 +204,7 @@ module AtomicStatusImpl {
               RW.borrow_wb(handle).cache_entry, unwrap_value(status));
 
           new_g := G(rwlock, glSome(stat));
-          m := glSome(RW.WritebackObtainedHandle(handle.get().writeback.b, handle));
+          m := glSome(RW.WritebackObtainedToken(handle.get().writeback.b, handle));
           disk_write_ticket := glSome(ticket);
           assert state_inv(new_value, new_g, key);
         } else {
@@ -238,7 +238,7 @@ module AtomicStatusImpl {
             stat, ticket := CacheResources.initiate_writeback(
                 RW.borrow_wb(handle).cache_entry, unwrap_value(status));
             new_g := G(rwlock, glSome(stat));
-            m := glSome(RW.WritebackObtainedHandle(handle.get().writeback.b, handle));
+            m := glSome(RW.WritebackObtainedToken(handle.get().writeback.b, handle));
             disk_write_ticket := glSome(ticket);
           } else {
             new_g := old_g;
@@ -256,7 +256,7 @@ module AtomicStatusImpl {
   }
 
   method release_writeback(a: AtomicStatus, ghost key: Key,
-      glinear handle: RW.WritebackObtainedHandle,
+      glinear handle: RW.WritebackObtainedToken,
       glinear disk_write_stub: CacheResources.DiskWriteStub)
   requires atomic_status_inv(a, key)
   requires handle.is_handle(key)
@@ -264,24 +264,28 @@ module AtomicStatusImpl {
              < 0x1_0000_0000_0000_0000
   requires disk_write_stub.disk_idx == handle.b.cache_entry.disk_idx as uint64
   {
+    glinear var wb;
+    glinear match handle { case WritebackObtainedToken(_, t) => { wb := t; } }
+
     // Unset Writeback; set Clean
     atomic_block var _ := execute_atomic_fetch_xor_uint8(a, flag_writeback_clean) {
       ghost_acquire old_g;
+      glinear var new_g;
 
-      var fl := old_g.rwlock.get().central.flag;
+      //var fl := old_g.rwlock.get().central.flag;
       glinear var G(rwlock, status) := old_g;
 
-      RW.pre_ReleaseWriteback(key, fl, rwlock, r);
+      rwlock, wb := RW.pre_ReleaseWriteback(rwlock, wb);
 
       glinear var stat := CacheResources.finish_writeback(
-          handle.cache_entry, unwrap_value(status), stub);
+          RW.borrow_wb(wb).cache_entry, unwrap_value(status), disk_write_stub);
 
-      rwlock := RW.transform_ReleaseWriteback(key, fl, rwlock, r, handle);
+      rwlock := RW.perform_ReleaseWriteback(rwlock, wb);
       new_g := G(rwlock, glSome(stat));
 
-      assert state_inv(new_v, new_g, key);
+      assert state_inv(new_value, new_g, key);
 
-      ghost_release old_g;
+      ghost_release new_g;
     }
   }
 

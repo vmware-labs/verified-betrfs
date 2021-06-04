@@ -1257,6 +1257,23 @@ module RWLockExtToken refines SimpleExtToken {
         TakeWritebackStep);
   }
 
+  glinear method pre_ReleaseWriteback(glinear c: Token, glinear handle: Token)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.get();
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.get();
+    && m.writeback.WritebackObtained?
+    && m == WritebackHandle(m.writeback)
+  requires c.loc() == handle.loc()
+  ensures c.get() == c'.get() && handle'.get() == handle.get()
+  ensures c.get().central.flag == Writeback
+       || c.get().central.flag == Writeback_PendingExcLock
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c', handle' := SEPCM.split(x, c.get(), handle.get());
+  }
+
   glinear method perform_ReleaseWriteback(glinear c: Token, glinear handle: Token)
   returns (glinear c': Token)
   requires var m := c.get();

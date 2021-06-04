@@ -116,18 +116,16 @@ module CacheResources {
       cache_entry.disk_idx as uint64,
       cache_entry.data)
 
-  /*
-  method finish_writeback(
-      gshared cache_entry: R,
-      glinear status: R,
+  glinear method finish_writeback(
+      gshared cache_entry: CacheEntry,
+      glinear status: CacheStatus,
       glinear stub: DiskWriteStub
   )
   returns (
-      glinear status': R
+      glinear status': CacheStatus
   )
-  requires cache_entry.CacheEntry?
-  requires status == CacheStatus(cache_entry.cache_idx, WriteBack)
+  requires status.is_status(cache_entry.cache_idx, Writeback)
   requires 0 <= cache_entry.disk_idx < 0x1_0000_0000_0000_0000
-  requires stub == DiskWriteStub(cache_entry.disk_idx as uint64)
-  ensures status' == CacheStatus(cache_entry.cache_idx, Clean)*/
+  requires stub.written(cache_entry.disk_idx as uint64)
+  ensures status'.is_status(cache_entry.cache_idx, Clean)
 }
