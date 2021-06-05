@@ -482,51 +482,6 @@ module JournalMachineMod {
           ChainResult(Some(chain), [sb.freshestCU.value] + inner.readCUs)
   }
 
-  lemma ChainFromProperties(dv: DiskView, sb: Superblock)
-    ensures var r := ChainFrom(dv, sb); r.chain.Some? ==>
-      && var chain := r.chain.value;
-      && ValidJournalChain(dv, chain)
-      && chain.sb == sb
-      // Make sure we're returning blocks starting from the oldest recoverable block
-      && (!chain.interp.IsEmpty() ==> chain.interp.seqStart == sb.boundaryLSN)
-  {
-    var r := ChainFrom(dv, sb);
-    if r.chain.Some? {
-      var chain := r.chain.value;
-      assert ChainMatchesDiskView(dv, chain);
-      assert ValidJournalChain(dv, chain);
-      assert chain.sb == sb;
-      if sb.freshestCU.None? || sb.freshestCU.value !in dv {
-        assert chain.interp.IsEmpty();
-      } else {
-        var firstRec := parse(dv[sb.freshestCU.value]);
-        if firstRec.None? {
-          assert chain.interp.seqStart == sb.boundaryLSN;
-        }
-        else if firstRec.value.messageSeq.seqEnd <= sb.boundaryLSN {
-          assert chain.interp.seqStart == sb.boundaryLSN;
-        }
-        else if firstRec.value.messageSeq.seqStart <= sb.boundaryLSN {
-          assert chain.interp.seqStart == sb.boundaryLSN;
-        }
-        else {
-          var inner := ChainFrom(MapRemove1(dv, sb.freshestCU.value), firstRec.value.priorSB(sb));
-          ChainFromProperties(MapRemove1(dv, sb.freshestCU.value), firstRec.value.priorSB(sb));
-          if inner.chain.None? {
-            assert chain.interp.IsEmpty();
-          } else {
-            calc {
-              chain.interp.seqStart;
-              inner.chain.value.interp.seqStart;
-              firstRec.value.priorSB(sb).boundaryLSN;
-              sb.boundaryLSN;
-            }
-         }
-        }
-      }
-    }
-  }
-
   // JournalChain
   //////////////////////////////////////////////////////////////////////////////
 
