@@ -90,6 +90,10 @@ So Betree.lookup is a series of trunk nodes, their CUs,
 
 */
 
+// trunk nodes and IndirectionTable (makes trunk nodes behave like they're mutable)
+// immutable b+trees
+// Index/leaf nodes in the b+trees
+
 module BetreeMachineMod {
   import opened Options
   import opened Sequences
@@ -135,6 +139,8 @@ module BetreeMachineMod {
     endSeq: LSN)
 
   datatype Variables = Variables(
+    // Write Opt file systems allows us to leverage immutability to simplfy reasoning about crash safety using cow
+    // Add a layer of indirection over Immutable splinter tree. This indirection table adds mutability over the tree
     indTbl: IndirectionTableMod.IndirectionTable,
     memBuffer: map<Key, Message>,  // Real Splinter (next layer down? :v) has >1 memBuffers so we can be inserting at the front while flushing at the back.
     // TODO add a membuffer to record LSN; a frozen-like transition to keep one membuffer available
@@ -227,7 +233,7 @@ module BetreeMachineMod {
   datatype Skolem =
     | QueryStep(trunkPath: TrunkPath)
     | PutStep()
-    | FlushStep(flush: FlushRec)
+    | FlushStep(flush: FlushRec) // pushdown and compaction
     | DrainMemBufferStep(oldRoot: NodeAssignment, newRoot: NodeAssignment)
     | CompactBranchStep(receipt: CompactReceipt)
 

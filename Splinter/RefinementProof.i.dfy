@@ -2,23 +2,21 @@ include "IOSystem.s.dfy"
 include "ProgramInterp.i.dfy"
 include "ProofObligations.s.dfy"
 include "JournalInterp.i.dfy"
-
-module VeribetrIOSystem refines IOSystem {
-  import P = ProgramMachineMod
-}
+include "BetreeInvariants.i.dfy"
 
 module Proof refines ProofObligations {
   import opened DiskTypesMod
   import MapSpecMod
   import InterpMod
-  import ProgramInterpMod
-  import ConcreteSystem = VeribetrIOSystem
+
+  import ConcreteSystem = VeribetrIOSystem // ProgramMachineMod is imported here
   import JournalMachineMod
   import BetreeMachineMod
+
   import JournalInterpMod
-
-
+  import ProgramInterpMod
   import BetreeInterpMod
+  import BetreeInvariantMod
 
   import CacheIfc
 
@@ -67,6 +65,38 @@ module Proof refines ProofObligations {
      BetreeInterpMod.IM(v'.program.cache, v'.program.betree);
   }
 
+  lemma JournalInternalRefined(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: JournalMachineMod.Skolem)
+    // Requires needed for IM to work
+    requires v.program.WF()
+    requires Inv(v)
+    requires Inv(v')
+
+    // Actual requires
+    requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
+    requires pstep == ConcreteSystem.P.JournalInternalStep(sk)
+
+    // base should be stable betree in disk.
+    ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+    JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
+  {
+
+    // needs Some framing argument around DiskViewsEquivalentForSet
+    // TODO: check this
+    BetreeInvariantMod.StableFraming(v.program.betree, v.program.cache, v'.program.cache, v.program.stableSuperblock.betree);
+
+    // XXXX=== TODO: var some of these
+    // the superblock is the same
+    assert v'.program.stableSuperblock == v.program.stableSuperblock;
+
+    //assert BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) == BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
+
+    // Only thing new is the journal -- make a lemma journal on Internal step
+    JournalInterpMod.InternalStepLemma(v.program.journal, v.program.cache, v'.program.journal, v'.program.cache,  v.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree));
+
+    assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+      JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
+  }
+
   lemma PutRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: BetreeMachineMod.Skolem)
     // Requires needed for IM to work
     requires v.program.WF()
@@ -84,43 +114,6 @@ module Proof refines ProofObligations {
     // Here we need talk about the journal
     assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
 
-  }
-
-  lemma JournalInternalRefined(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: JournalMachineMod.Skolem)
-    // Requires needed for IM to work
-    requires v.program.WF()
-    requires Inv(v)
-    requires Inv(v')
-
-    // Actual requires
-    requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
-    requires pstep == ConcreteSystem.P.JournalInternalStep(sk)
-
-    // base should be stable betree in disk.
-    ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
-      JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
-  {
-
-    // needs Some framing argument around DiskViewsEquivalentForSet
-    // TODO: check this
-    BetreeInterpMod.StableFraming(v.program.betree, v.program.cache, v'.program.cache, v.program.stableSuperblock.betree);
-
-    // XXXX=== TODO: var some of these
-    // the superblock is the same
-    assert v'.program.stableSuperblock == v.program.stableSuperblock;
-
-    //assert BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) == BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
-
-    // if InterpMod.Empty() == BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)
-    // {
-    //   assert InterpMod.Empty() == BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
-    // }
-
-    // Only thing new is the journal -- make a lemma journal on Internal step
-    JournalInterpMod.InternalStepLemma(v.program.journal, v.program.cache, v'.program.journal, v'.program.cache,  v.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree));
-
-    assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
-      JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
   }
 
   // CrashTolerantMapSpecMod : OP1 OP2 ReqSync NOOP ..            AsyncCommit ... Nop      Nop  ..                 SyncComplete
