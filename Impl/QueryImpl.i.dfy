@@ -44,7 +44,7 @@ module QueryImpl {
 
   // == query ==
 
-  method queryIterate(linear inout s: ImplVariables, key: Key, msg: Message, ref: BT.G.Reference, io: DiskIOHandler, counter: uint64, ghost lookup: seq<BT.G.ReadOp>)
+  method {:timeLimitMultiplier 3} queryIterate(linear inout s: ImplVariables, key: Key, msg: Message, ref: BT.G.Reference, io: DiskIOHandler, counter: uint64, ghost lookup: seq<BT.G.ReadOp>)
   returns (res: Option<Value>)
 
   requires old_s.Inv()

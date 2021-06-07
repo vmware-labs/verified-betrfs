@@ -122,7 +122,7 @@ module PackedStringArray {
     4 + 4 * |psa.offsets| as uint64 + |psa.data| as uint64
   }
 
-  method CheckIsSorted(s: seq<uint32>) returns (b: bool)
+  method {:timeLimitMultiplier 3} CheckIsSorted(s: seq<uint32>) returns (b: bool)
   requires |s| < 0x1_0000_0000_0000_0000
   ensures b == Uint32_Order.IsSorted(s)
   {
@@ -520,7 +520,7 @@ module PackedStringArray {
     result := hi - 1;
   }
 
-  method BinarySearchIndexOfFirstKeyGtePivot(psa: Psa, key: UpperLexOrder.Element)
+  method {:timeLimitMultiplier 3} BinarySearchIndexOfFirstKeyGtePivot(psa: Psa, key: UpperLexOrder.Element)
   returns (idx: uint64)
   requires WF(psa)
   ensures idx as int

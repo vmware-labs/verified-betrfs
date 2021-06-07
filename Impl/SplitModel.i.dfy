@@ -266,7 +266,7 @@ module SplitModel {
     )
   }
 
-  lemma doSplitCorrect(s: BBC.Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int, refUpperBound: uint64)
+  lemma {:timeLimitMultiplier 3} doSplitCorrect(s: BBC.Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int, refUpperBound: uint64)
   requires doSplit.requires(s, parentref, childref, slot, refUpperBound)
   requires s.totalCacheSize() <= MaxCacheSize() - 2
   ensures var s' := doSplit(s, parentref, childref, slot, refUpperBound);

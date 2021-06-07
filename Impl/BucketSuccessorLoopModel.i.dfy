@@ -93,7 +93,7 @@ module BucketSuccessorLoopModel {
       None
   }
 
-  lemma ProcessGeneratorResult(
+  lemma {:timeLimitMultiplier 3} ProcessGeneratorResult(
       bucket: BucketMap,
       left: BucketMap,
       right: BucketMap,
@@ -194,7 +194,7 @@ module BucketSuccessorLoopModel {
     assert end.EExclusive? ==> Keyspace.lt(key, end.key);
   }
 
-  lemma GetSuccessorInBucketStackResult(
+  lemma {:timeLimitMultiplier 3} GetSuccessorInBucketStackResult(
       buckets: seq<Bucket>,
       maxToFind: int,
       start: UI.RangeStart,

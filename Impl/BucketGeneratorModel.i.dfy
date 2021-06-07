@@ -247,7 +247,7 @@ module BucketGeneratorModel {
       None
   }
 
-  lemma GenLeftIsMinimum(g: Generator)
+  lemma {:timeLimitMultiplier 3} GenLeftIsMinimum(g: Generator)
   requires WM(g)
   requires WF(g)
   requires Monotonic(g)
@@ -276,7 +276,7 @@ module BucketGeneratorModel {
     }
   }
 
-  lemma GenPopIsRemove(g: Generator)
+  lemma {:timeLimitMultiplier 3} GenPopIsRemove(g: Generator)
   requires WM(g)
   requires WF(g)
   requires Monotonic(g)
@@ -347,7 +347,7 @@ module BucketGeneratorModel {
     }
   }
 
-  lemma GenComposeIsMonotonic(top: Generator, bot: Generator)
+  lemma {:timeLimitMultiplier 3} GenComposeIsMonotonic(top: Generator, bot: Generator)
   requires WF(top)
   requires WF(bot)
   requires WM(top)
@@ -374,7 +374,7 @@ module BucketGeneratorModel {
     }
   }
 
-  lemma GenComposeIsCompose(top: Generator, bot: Generator)
+  lemma {:timeLimitMultiplier 3} GenComposeIsCompose(top: Generator, bot: Generator)
   requires WF(top)
   requires WF(bot)
   requires WM(top)
@@ -426,7 +426,7 @@ module BucketGeneratorModel {
     }*/
   }
 
-  lemma GenFromBucketWithLowerBoundYieldsClampStart(bucket: Bucket, start: UI.RangeStart)
+  lemma {:timeLimitMultiplier 3} GenFromBucketWithLowerBoundYieldsClampStart(bucket: Bucket, start: UI.RangeStart)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
   ensures var g := GenFromBucketWithLowerBound(bucket, start);
@@ -460,7 +460,8 @@ module BucketGeneratorModel {
     }
   }
 
-  lemma {:induction true} GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets: seq<Bucket>, start: UI.RangeStart)
+  lemma {:induction true} {:timeLimitMultiplier 3}
+    GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets: seq<Bucket>, start: UI.RangeStart)
   requires |buckets| >= 1
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   requires BucketListWellMarshalled(buckets)

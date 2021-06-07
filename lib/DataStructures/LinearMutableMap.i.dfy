@@ -132,7 +132,7 @@ module LinearMutableMap {
       getEmptyWitness(self, i+1)
   }
 
-  method {:timeLimitMultiplier 2} Probe<V>(shared self: FixedSizeLinearHashMap<V>, key: uint64)
+  method {:timeLimitMultiplier 3} Probe<V>(shared self: FixedSizeLinearHashMap<V>, key: uint64)
   returns (slotIdx: uint64, ghost startSlotIdx: uint64, ghost skips: uint64)
   requires FixedSizeInv(self)
   requires self.count as int < |self.storage|
@@ -620,7 +620,7 @@ module LinearMutableMap {
     assert EntryInSlotMatchesContents(self.underlying.storage, Slot(i as nat), self.underlying.contents); // trigger
   }
 
-  method Realloc<V>(linear inout self: LinearHashMap<V>)
+  method {:timeLimitMultiplier 3} Realloc<V>(linear inout self: LinearHashMap<V>)
     requires Inv(old_self)
     requires old_self.count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures Inv(self)
