@@ -65,7 +65,7 @@ module Example {
     // The initial value we store in the mutex is 6.
     // (It's a pretty good number.)
 
-    var mutex := new_mutex(6, (x) => x % 2 == 0);
+    var mutex := new_mutex(6, inv);
     return mutex;
   }
 

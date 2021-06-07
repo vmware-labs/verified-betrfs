@@ -17,16 +17,17 @@ module RWLockBase refines PCMWrap {
 
   glinear datatype Handle = CacheEntryHandle(
       ghost key: Key,
-      glinear cache_entry: CacheResources.Token,
+      glinear cache_entry: CacheResources.CacheEntry,
       glinear data: PointsToArray<byte>,
       glinear idx: PointsTo<int>)
   {
     predicate is_handle(key: Key)
     {
       && this.key == key
-      && this.cache_entry.get()
-          == CacheResources.CacheEntry(this.idx.v, key.cache_idx, this.data.s)
-      && this.cache_entry.loc() == key.cr_loc
+      && this.cache_entry.disk_idx == this.idx.v
+      && this.cache_entry.cache_idx == key.cache_idx
+      && this.cache_entry.data == this.data.s
+      && this.cache_entry.loc == key.cr_loc
       && this.data.ptr == key.data_ptr
       && this.idx.ptr == key.idx_ptr
       && |this.data.s| == 4096

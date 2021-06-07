@@ -7,9 +7,9 @@ module GhostLoc {
 abstract module PCM {
   import opened GhostLoc
 
-  type M(==,!new)
+  type M(!new)
 
-  type {:extern} Token(==,!new) {
+  type {:extern} Token(!new) {
     function {:extern} loc() : Loc
     function {:extern} get() : M
   }

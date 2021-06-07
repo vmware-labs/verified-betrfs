@@ -42,23 +42,23 @@ module RWLock refines SimpleExt {
   datatype SharedState =
     | SharedPending(t: ThreadId)              // inc refcount
     | SharedPending2(t: ThreadId)             // !free & !writelocked
-    | SharedObtained(t: ThreadId, b: Base.M)  // !reading
+    | SharedObtained(t: ThreadId, b: Base.G)  // !reading
 
   // Standard flow for obtaining an 'exclusive' lock
 
   datatype ExcState = 
     | ExcNone
       // set ExcLock bit:
-    | ExcPendingAwaitWriteback(t: int, b: Base.M)
+    | ExcPendingAwaitWriteback(t: int, b: Base.G)
       // check Writeback bit unset
       //   and `visited` of the refcounts
-    | ExcPending(t: int, visited: int, clean: bool, b: Base.M)
+    | ExcPending(t: int, visited: int, clean: bool, b: Base.G)
     | ExcObtained(t: int, clean: bool)
 
   datatype WritebackState =
     | WritebackNone
       // set Writeback status bit
-    | WritebackObtained(b: Base.M)
+    | WritebackObtained(b: Base.G)
 
   // Flow for the phase of reading in a page from disk.
   // This is a special-case flow, because it needs to be performed
@@ -74,13 +74,13 @@ module RWLock refines SimpleExt {
 
   datatype CentralState =
     | CentralNone
-    | CentralState(flag: Flag, stored_value: Base.M)
+    | CentralState(flag: Flag, stored_value: Base.G)
 
   datatype M = M(
     central: CentralState,
     refCounts: map<ThreadId, nat>,
 
-    sharedState: FullMap<SharedState>,
+    ghost sharedState: FullMap<SharedState>,
     exc: ExcState,
     read: ReadState,
 
@@ -278,7 +278,7 @@ module RWLock refines SimpleExt {
     if a == unit() || a.exc.ExcObtained? || !a.read.ReadNone? then (
       Base.unit()
     ) else (
-      a.central.stored_value
+      Base.one(a.central.stored_value)
     )
   }
 
@@ -504,7 +504,7 @@ module RWLock refines SimpleExt {
     && m == ExcHandle(m.exc)
     && m' == ExcHandle(ExcObtained(m.exc.t, m.exc.clean))
     && b == Base.unit()
-    && b' == m.exc.b
+    && b' == Base.one(m.exc.b)
   }
 
   lemma Withdraw_TakeExcLockFinish_Preserves(p: M, m: M, m': M, b: Base.M, b': Base.M)
@@ -528,12 +528,13 @@ module RWLock refines SimpleExt {
       CentralHandle(m.central),
       ExcHandle(m.exc)
     )
+    && Base.is_one(b)
     && m' == dot(
       CentralHandle(m.central
         .(flag := Available)
-        .(stored_value := b)
+        .(stored_value := Base.get_one(b))
       ),
-      SharedHandle(SharedObtained(m.exc.t, b))
+      SharedHandle(SharedObtained(m.exc.t, Base.get_one(b)))
     )
     && b' == Base.unit()
   }
@@ -548,7 +549,7 @@ module RWLock refines SimpleExt {
   ensures Interp(dot(m', p)) == b
   {
     SumFilterSimp<SharedState>();
-    var ss := SharedObtained(m.exc.t, b);
+    var ss := SharedObtained(m.exc.t, Base.get_one(b));
     assert forall b | b != ss :: dot(m', p).sharedState[b] == dot(m, p).sharedState[b];
     assert dot(m', p).sharedState[ss] == dot(m, p).sharedState[ss] + 1;
 
@@ -572,7 +573,7 @@ module RWLock refines SimpleExt {
     )
 
     && b == Base.unit()
-    && b' == m.central.stored_value
+    && b' == Base.one(m.central.stored_value)
   }
 
   lemma Withdraw_Alloc_Preserves(p: M, m: M, m': M, b: Base.M, b': Base.M)
@@ -658,9 +659,10 @@ module RWLock refines SimpleExt {
       CentralHandle(m.central),
       ReadHandle(m.read)
     )
+    && Base.is_one(b)
     && m' == dot(
-      CentralHandle(m.central.(flag := Available).(stored_value := b)),
-      SharedHandle(SharedObtained(m.read.t, b))
+      CentralHandle(m.central.(flag := Available).(stored_value := Base.get_one(b))),
+      SharedHandle(SharedObtained(m.read.t, Base.get_one(b)))
     )
     && b' == Base.unit()
   }
@@ -784,7 +786,7 @@ module RWLock refines SimpleExt {
     }
   } 
 
-  predicate SharedDecCountObtained(m: M, m': M, t: int, b: Base.M)
+  predicate SharedDecCountObtained(m: M, m': M, t: int, b: Base.G)
   {
     && 0 <= t < NUM_THREADS
     && t in m.refCounts
@@ -797,7 +799,7 @@ module RWLock refines SimpleExt {
     )
   }
 
-  lemma SharedDecCountObtained_Preserves(p: M, m: M, m': M, t: int, b: Base.M)
+  lemma SharedDecCountObtained_Preserves(p: M, m: M, m': M, t: int, b: Base.G)
   requires dot_defined(m, p)
   requires Inv(dot(m, p))
   requires SharedDecCountObtained(m, m', t, b)
@@ -913,8 +915,9 @@ module RWLock refines SimpleExt {
       CentralHandle(m.central),
       ExcHandle(m.exc)
     )
+    && Base.is_one(b)
     && m' == CentralHandle(
-      m.central.(flag := Unmapped).(stored_value := b)
+      m.central.(flag := Unmapped).(stored_value := Base.get_one(b))
     )
     && b' == Base.unit()
   }
@@ -962,7 +965,8 @@ module RWLock refines SimpleExt {
       CentralHandle(m.central),
       ReadHandle(m.read)
     )
-    && m' == CentralHandle(m.central.(flag := Unmapped).(stored_value := b))
+    && Base.is_one(b)
+    && m' == CentralHandle(m.central.(flag := Unmapped).(stored_value := Base.get_one(b)))
     && b' == Base.unit()
   }
 
@@ -980,12 +984,67 @@ module RWLock refines SimpleExt {
 
   ///// 
 
-  predicate InternalNext(f: F, f': F) /*{
-    forall p | dot_defined(f, p) && Inv(dot(f, p)) ::
-      dot_defined(f', p) && Inv(dot(f', p)) && Interp(dot(f', p)) == Interp(dot(f, p))
-  }*/
+  datatype InternalStep =
+      | TakeWritebackStep
+      | ReleaseWritebackStep
+      | ThreadlessExcStep
+      | SharedToExcStep(ss: SharedState)
+      | TakeExcLockFinishWritebackStep(clean: bool)
+      | TakeExcLockCheckRefCountStep
+      | ReadingIncCountStep(t: int)
+      | ObtainReadingStep
+      | SharedIncCountStep(t: int)
+      | SharedDecCountPendingStep(t: int)
+      | SharedDecCountObtainedStep(t: int, b: Base.G)
+      | SharedCheckExcStep(t: int)
+      | SharedCheckReadingStep(t: int)
+      | AbandonExcPendingStep
 
-  predicate CrossNext(f: F, f': F, b: Base.M, b': Base.M)
+  datatype CrossStep =
+      | Deposit_DowngradeExcLoc_Step
+      | Deposit_ReadingToShared_Step
+      | Deposit_Unmap_Step
+      | Deposit_AbandonReadPending_Step
+      | Withdraw_TakeExcLockFinish_Step
+      | Withdraw_Alloc_Step
+
+  predicate InternalNextStep(f: F, f': F, step: InternalStep) {
+    match step {
+      case TakeWritebackStep => TakeWriteback(f, f')
+      case ReleaseWritebackStep => ReleaseWriteback(f, f')
+      case ThreadlessExcStep => ThreadlessExc(f, f')
+      case SharedToExcStep(ss: SharedState) => SharedToExc(f, f', ss)
+      case TakeExcLockFinishWritebackStep(clean) => TakeExcLockFinishWriteback(f, f', clean)
+      case TakeExcLockCheckRefCountStep => TakeExcLockCheckRefCount(f, f')
+      case ReadingIncCountStep(t) => ReadingIncCount(f, f', t)
+      case ObtainReadingStep => ObtainReading(f, f')
+      case SharedIncCountStep(t) => SharedIncCount(f, f', t)
+      case SharedDecCountPendingStep(t) => SharedDecCountPending(f, f', t)
+      case SharedDecCountObtainedStep(t, b) => SharedDecCountObtained(f, f', t, b)
+      case SharedCheckExcStep(t) => SharedCheckExc(f, f', t)
+      case SharedCheckReadingStep(t) => SharedCheckReading(f, f', t)
+      case AbandonExcPendingStep => AbandonExcPending(f, f')
+    }
+  }
+
+  predicate InternalNext(f: F, f': F) {
+    exists step :: InternalNextStep(f, f', step)
+  }
+
+  predicate CrossNextStep(f: F, f': F, b: Base.M, b': Base.M, step: CrossStep) {
+    match step {
+      case Deposit_DowngradeExcLoc_Step => Deposit_DowngradeExcLoc(f, f', b, b')
+      case Deposit_ReadingToShared_Step => Deposit_ReadingToShared(f, f', b, b')
+      case Deposit_Unmap_Step => Deposit_Unmap(f, f', b, b')
+      case Deposit_AbandonReadPending_Step => Deposit_AbandonReadPending(f, f', b, b')
+      case Withdraw_TakeExcLockFinish_Step => Withdraw_TakeExcLockFinish(f, f', b, b')
+      case Withdraw_Alloc_Step => Withdraw_Alloc(f, f', b, b')
+    }
+  }
+
+  predicate CrossNext(f: F, f': F, b: Base.M, b': Base.M) {
+    exists step :: CrossNextStep(f, f', b, b', step)
+  }
 
   lemma interp_unit()
   ensures Inv(unit()) && Interp(unit()) == Base.unit()
@@ -999,6 +1058,25 @@ module RWLock refines SimpleExt {
   ensures dot_defined(f', p)
   ensures Inv(dot(f', p))
   ensures Interp(dot(f', p)) == Interp(dot(f, p))
+  {
+    var step :| InternalNextStep(f, f', step);
+    match step {
+      case TakeWritebackStep => TakeWriteback_Preserves(p, f,f');
+      case ReleaseWritebackStep => ReleaseWriteback_Preserves(p, f,f');
+      case ThreadlessExcStep => ThreadlessExc_Preserves(p, f,f');
+      case SharedToExcStep(ss: SharedState) => SharedToExc_Preserves(p, f,f', ss);
+      case TakeExcLockFinishWritebackStep(clean) => TakeExcLockFinishWriteback_Preserves(p, f,f', clean);
+      case TakeExcLockCheckRefCountStep => TakeExcLockCheckRefCount_Preserves(p, f,f');
+      case ReadingIncCountStep(t) => ReadingIncCount_Preserves(p, f,f', t);
+      case ObtainReadingStep => ObtainReading_Preserves(p, f,f');
+      case SharedIncCountStep(t) => SharedIncCount_Preserves(p, f,f', t);
+      case SharedDecCountPendingStep(t) => SharedDecCountPending_Preserves(p, f,f', t);
+      case SharedDecCountObtainedStep(t, b) => SharedDecCountObtained_Preserves(p, f,f', t, b);
+      case SharedCheckExcStep(t) => SharedCheckExc_Preserves(p, f,f', t);
+      case SharedCheckReadingStep(t) => SharedCheckReading_Preserves(p, f,f', t);
+      case AbandonExcPendingStep => AbandonExcPending_Preserves(p, f,f');
+    }
+  }
 
   lemma cross_step_preserves_interp(p: F, f: F, f': F, b: Base.M, b': Base.M)
   //requires CrossNext(f, f', b, b')
@@ -1010,7 +1088,27 @@ module RWLock refines SimpleExt {
   ensures Base.dot_defined(Interp(dot(f', p)), b')
   ensures Base.dot(Interp(dot(f', p)), b')
        == Base.dot(Interp(dot(f, p)), b)
+  {
+    var step :| CrossNextStep(f, f', b, b', step);
+    match step {
+      case Deposit_DowngradeExcLoc_Step => Deposit_DowngradeExcLoc_Preserves(p, f, f', b, b');
+      case Deposit_ReadingToShared_Step => Deposit_ReadingToShared_Preserves(p, f, f', b, b');
+      case Deposit_Unmap_Step => Deposit_Unmap_Preserves(p, f, f', b, b');
+      case Deposit_AbandonReadPending_Step => Deposit_AbandonReadPending_Preserves(p, f, f', b, b');
+      case Withdraw_TakeExcLockFinish_Step => Withdraw_TakeExcLockFinish_Preserves(p, f, f', b, b');
+      case Withdraw_Alloc_Step => Withdraw_Alloc_Preserves(p, f, f', b, b');
+    }
+    Base.commutative(Interp(dot(f, p)), b);
+  }
 
+  /*predicate easy_le(a: F, b: F) {
+    && (a.central.CentralNone? || a.central == b.central)
+    && (forall t :: t in a.refCounts ==> t in b.refCounts && b.refCounts[t] == a.refCounts[t])
+    && (forall ss :: a.sharedState[ss] <= b.sharedState[ss])
+    && (a.exc.ExcNone? || a.exc == b.exc)
+    && (a.read.ReadNone? || a.read == b.read)
+    && (a.writeback.WritebackNone? || a.writeback == b.writeback)
+  }*/
 }
 
 /*module RWLockExtToken refines SimpleExtToken {
@@ -1041,7 +1139,81 @@ module RWLockExtToken refines SimpleExtToken {
   {
     predicate is_handle(key: Base.Key) {
       && b.is_handle(key)
-      && token.get() == WritebackHandle(WritebackObtained(Base.one(b)))
+      && token.get() == WritebackHandle(WritebackObtained(b))
     }
+  }
+
+  glinear method do_internal_step_2(glinear f: Token,
+      ghost f1: F, ghost g1: F,
+      ghost step: InternalStep)
+  returns (glinear f': Token, glinear g': Token)
+  requires dot_defined(f1, g1)
+  requires InternalNextStep(f.get(), dot(f1, g1), step)
+  ensures g'.loc() == f'.loc() == f.loc()
+  ensures f'.get() == f1 && g'.get() == g1
+  {
+    assert InternalNext(f.get(), dot(f1, g1));
+    glinear var f_out := do_internal_step(f, dot(f1, g1));
+    f', g' := split(f_out, f1, g1);
+  }
+
+  glinear method perform_TakeWriteback(glinear c: Token)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.get();
+    && m.central.CentralState?
+    && m.central.flag == Available
+    && m == CentralHandle(m.central)
+  ensures c'.loc() == handle'.loc() == c.loc()
+  ensures c'.get() == CentralHandle(c.get().central.(flag := Writeback))
+  ensures handle'.get() == WritebackHandle(WritebackObtained(c.get().central.stored_value))
+  {
+    c', handle' := do_internal_step_2(c,
+        CentralHandle(c.get().central.(flag := Writeback)),
+        WritebackHandle(WritebackObtained(c.get().central.stored_value)),
+        TakeWritebackStep);
+  }
+
+  /*lemma impl_le()
+  ensures forall a: M, b: SEPCM.M {:trigger SEPCM.le(a, b)}
+      :: easy_le(a, b) ==> SEPCM.Valid(a) && SEPCM.le(a, b)
+  {
+    forall a: M, b: SEPCM.M | easy_le(a, b)
+    ensures SEPCM.Valid(a) && SEPCM.le(a, b)
+    {
+      var t := M(
+        if a.central.CentralNone? then b.central else CentralNone,
+        (map t | t in b.refCounts && t !in a.refCounts :: b.refCounts[t]),
+        FullMaps.sub_fns(b.sharedState, a.sharedState),
+        if a.exc.ExcNone? then b.exc else ExcNone,
+        if a.read.ReadNone? then b.read else ReadNone,
+        if a.writeback.WritebackNone? then b.writeback else WritebackNone
+      );
+      assert dot_defined(a, t);
+      assert dot(a, t) == b by {
+        assert dot(a, t).central == b.central;
+        assert dot(a, t).refCounts == b.refCounts;
+        assert dot(a, t).sharedState == b.sharedState;
+        assert dot(a, t).exc == b.exc;
+        assert dot(a, t).read == b.read;
+        assert dot(a, t).writeback == b.writeback;
+      }
+      var a' :| SEPCM.SE.dot_defined(b, a') && SEPCM.SE.Inv(SEPCM.SE.dot(b, a'));
+      commutative(a, t);
+      SEPCM.SE_assoc_general(t, a, a');
+      SEPCM.SE_assoc_general(a, t, a');
+      assert SEPCM.SE.Inv(SEPCM.SE.dot(t, SEPCM.SE.dot(a, a')));
+      assert SEPCM.dot_defined(a, t);
+      assert SEPCM.SE.Inv(SEPCM.SE.dot(a, SEPCM.SE.dot(t, a')));
+    }
+  }*/
+
+  function method {:opaque} borrow_wb(gshared f: Token) : (gshared b: Base.Handle)
+  requires f.loc().ExtLoc?
+  requires f.loc().base_loc == Base.singleton_loc()
+  requires f.get().writeback.WritebackObtained?
+  ensures b == f.get().writeback.b
+  {
+    ghost var b := Base.one(f.get().writeback.b);
+    Base.unwrap_borrow( borrow_back_interp_exact(f, b) )
   }
 }

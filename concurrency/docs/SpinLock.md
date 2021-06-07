@@ -44,12 +44,12 @@ atomic_block var result := ATOMIC_OPERATION {
 The `atomic_block` requires that the operation after the `:=` be a specially designated
 “atomic” operation. It also ensures that the code inside the atomic block is all ghost code.
 
-The standard atomic operations are available (`store`, `load`, `compare_exchange`, `fetch_add`, and so on). Each of these operations is specified by a ternary relation on three values: `old_value`, `new_value`, and `return_value`. For example, here is the ternary specification for `compare_exchange` on an atomic cell storing a value `V`.
+The standard atomic operations are available (`store`, `load`, `compare_exchange`, `fetch_add`, and so on). Each of these operations is specified by a ternary relation on three values: `old_value`, `new_value`, and `return_value`. For example, here is the ternary specification for `compare_exchange` on an atomic cell storing a value `V` (specified with a bit of pseudo-syntax):
 
 ```
-compare_exhange(v1: V, v2: V) 
-atomic operation: old_value -> new_value
+atomic method compare_exchange(v1: V, v2: V) 
 returns (return_value : bool)
+updates the value stored in the atomic: old_value -> new_value
 ensures (
   && (old_value == v1 ==>
     new_value == v2 && return_value == true)
@@ -297,9 +297,14 @@ ensures is_handle_for(handle, m)
       if success {
         assert ainv(m.store, m.inv, false, g); // old_value = false
 
+        // swap g and handle_opt
+        // right now we have handle_opt = None and g = Some(...)
+
         glinear var tmp := handle_opt;
         handle_opt := g;
         g := tmp;
+
+        // now we have handle_opt = Some(...) and g = None
 
         assert ainv(m.store, m.inv, true, g); // new_value = true
       }

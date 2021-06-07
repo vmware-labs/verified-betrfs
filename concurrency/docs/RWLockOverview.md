@@ -80,8 +80,7 @@ This gets into some of our innovations regarding PCM logics, which we developed 
 
 At a high level here is how it goes:
 
-Suppose we want to store some ghost state `G` into a RwLock. We're going to define _another_ ghost state (a Sharded State Machine, in particular) RwLockG, with some special rules: it is possible to “deposit” ghost state G into the RwLockG and “withdraw” that state G back out.
-Furthermore, it is possible G-state from the RwLockG-state. The methodology requires the programmer to prove (using invariants of the Sharded State Machine) that borrowed state always corresponds to some state that was “deposited.”
+Suppose we want to store some ghost state `G` into a RwLock. We're going to define _another_ ghost state (a Sharded State Machine, in particular) RwLockG, with some special rules: it is possible to “deposit” ghost state G into the RwLockG and “withdraw” that state G back out.  Furthermore, it is possible to “borrow” G-state from the RwLockG-state without actually withdrawing it. The methodology requires the programmer to prove (using invariants of the Sharded State Machine) that borrowed state always corresponds to some state that was deposited.
 
 So for example, we would be able to implement the above interface by creating a Sharded State Machine RwLockG, with certain shards enabling borrowing. The `SharedHandle` objects could be defined to be that state.
 
