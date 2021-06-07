@@ -11,9 +11,10 @@ include "../Base/KeyType.s.dfy"
 //
 
 module BoundedPivotsLib {
-  import opened Sequences
+  import opened Seq = Sequences
   import opened NativeTypes
   import opened KeyType
+
   import KeyspaceImpl = Upperbounded_Lexicographic_Byte_Order_Impl
   import Keyspace = KeyspaceImpl.Ord
 
@@ -75,11 +76,91 @@ module BoundedPivotsLib {
     return (b1 == 0) && (b2 == 0);
   }
 
+  lemma ContainsAllKeysImpliesBoundedKey(pt: PivotTable, key: Key)
+  requires ContainsAllKeys(pt)
+  ensures BoundedKey(pt, key)
+  {
+    Keyspace.reveal_IsStrictlySorted();
+    Keyspace.Base_Order.EmptyLte(key);
+    assert BoundedKey(pt, key);
+  }
+
+  predicate ContainsRange(pt: PivotTable, left: Element, right: Element)
+  requires WFPivots(pt)
+  requires ElementIsKey(left)
+  requires Keyspace.lt(left, right)
+  {
+    && Keyspace.lte(pt[0], left)
+    && Keyspace.lte(right, pt[|pt|-1])
+  }
+
+  method ComputeContainsRange(pt: PivotTable, left: Element, right: Element) returns (b: bool)
+  requires WFPivots(pt)
+  requires |pt| < 0x4000_0000_0000_0000
+  requires ElementIsKey(left)
+  requires Keyspace.lt(left, right)
+  ensures b == ContainsRange(pt, left, right)
+  {
+    var len := |pt| as uint64;
+    var b1 := KeyspaceImpl.cmp(pt[0], left);
+    var b2 := KeyspaceImpl.cmp(right, pt[len - 1]);
+    return (b1 <= 0) && (b2 <= 0);
+  }
+
+  lemma ContainsRangeImpliesBoundedKey(pt: PivotTable, left: Element, right: Element)
+  requires WFPivots(pt)
+  requires ElementIsKey(left)
+  requires Keyspace.lt(left, right)
+  requires ContainsRange(pt, left, right)
+  ensures BoundedKey(pt, left.e)
+  {
+    Keyspace.reveal_IsStrictlySorted();
+    
+    Keyspace.transitivity(left, right, pt[|pt|-1]);
+    assert Keyspace.lt(left, pt[|pt|-1]);
+    assert BoundedKey(pt, left.e);
+  }
+
   predicate BoundedKey(pt: PivotTable, key: Key)
   requires WFPivots(pt)
   {
     && Keyspace.lte(pt[0], KeyToElement(key))
     && Keyspace.lt(KeyToElement(key), pt[|pt|-1])
+  }
+
+  predicate BoundedKeySeq(pt: PivotTable, keys: seq<Key>)
+  requires WFPivots(pt)
+  {
+    && forall i | 0 <= i < |keys| :: BoundedKey(pt, keys[i])
+  }
+
+  predicate BoundedSortedKeySeq(pt: PivotTable, keys: seq<Key>)
+  requires WFPivots(pt)
+  requires Keyspace.Base_Order.IsStrictlySorted(keys)
+  {
+    && (|keys| > 0 ==> 
+        && BoundedKey(pt, keys[0])
+        && BoundedKey(pt, keys[|keys|-1]))
+  }
+
+  lemma BoundedSortedKeySeqIsBoundedKeySeq(pt: PivotTable, keys: seq<Key>)
+  requires WFPivots(pt)
+  requires Keyspace.Base_Order.IsStrictlySorted(keys)
+  ensures BoundedSortedKeySeq(pt, keys) == BoundedKeySeq(pt, keys)
+  {
+    Keyspace.reveal_IsStrictlySorted();
+
+    var b := BoundedSortedKeySeq(pt, keys);
+    if b {
+      forall i | 0 <= i < |keys|
+      ensures BoundedKey(pt, keys[i])
+      {
+        if i > 0 && i < |keys|-1 {
+          Keyspace.Base_Order.IsStrictlySortedImpliesLt(keys, 0, i);
+          Keyspace.Base_Order.IsStrictlySortedImpliesLt(keys, i, |keys|-1);
+        }
+      }
+    }
   }
 
   // allows for exclusive upperbound
@@ -112,12 +193,6 @@ module BoundedPivotsLib {
     return c1 < 0 && c2 <= 0;
   }
 
-  predicate BoundedKeySeq(pt: PivotTable, keys: seq<Key>)
-  requires WFPivots(pt)
-  {
-    (forall k | k in keys :: BoundedKey(pt, k))
-  }
-
   function NumBuckets(pt: PivotTable) : int
   {
     |pt| - 1
@@ -130,11 +205,19 @@ module BoundedPivotsLib {
     then |e.e| as uint64
     else 0
   }
- 
+
+  predicate InBetween(left: Element, right: Element, key: Key)
+  requires Keyspace.lt(left, right)
+  {
+    && Keyspace.lte(left, KeyToElement(key))
+    && Keyspace.lt(KeyToElement(key), right)
+  }
+
   function Route(pt: PivotTable, key: Key) : (i: int)
   requires WFPivots(pt)
   requires BoundedKey(pt, key)
-  ensures 0 <= i < NumBuckets(pt)
+  ensures 0 <= i < |pt|-1 && Keyspace.lt(pt[i], pt[i+1])
+  ensures InBetween(pt[i], pt[i+1], key)
   {
     Keyspace.LargestLte(pt, KeyToElement(key))
   }
@@ -290,7 +373,7 @@ module BoundedPivotsLib {
   {
     assert key == KeyToElement(key).e; // observe
     Keyspace.reveal_IsStrictlySorted();
-    Sequences.reveal_insert();
+    Seq.reveal_insert();
   }
 
   lemma WFSlice(pt: PivotTable, i: int, j: int)
@@ -320,30 +403,13 @@ module BoundedPivotsLib {
   ensures WFPivots(concat3(left[..|left|-1], KeyToElement(key), right[1..]))
   {
     Keyspace.reveal_IsStrictlySorted();
-    reveal_concat3();
-    var run := concat3(left[..|left|-1], KeyToElement(key), right[1..]);
+    var left' := left[..|left|-1];
+    var right' := right[1..];
+    var run := concat3(left', KeyToElement(key), right');
 
-    forall i, j | 0 <= i < j < |run|
-    ensures Keyspace.lt(run[i], run[j])
-    {
-      if (i < |left|-1) {
-        if (j < |left|-1) {
-          assert Keyspace.lt(run[i], run[j]);
-        } else if (j == |left|-1) {
-          assert run[j] == KeyToElement(key);
-          assert Keyspace.lt(run[i], run[j]);
-        } else {
-          assert run[i] == left[i];
-          assert run[j] == right[j - |left| + 1];
-          assert Keyspace.lt(run[i], run[j]);
-        }
-      } else if (i == |left|-1) {
-        assert Keyspace.lt(run[i], run[j]);
-      } else {
-        assert j >= |left|;
-        assert Keyspace.lt(run[i], run[j]);
-      }
-    }
+    assert forall i | 0 <= i < |left'| :: run[i] == left'[i];
+    assert run[|left'|] == KeyToElement(key);
+    assert forall i | |left'| < i < |run| :: run[i] == right'[i-|left'|-1];
   }
 
   function {:opaque} CutoffForLeft(pt: PivotTable, pivot: Key) : int
@@ -428,7 +494,7 @@ module BoundedPivotsLib {
   {
     ret := [Keyspace.Element(pivot)] + pt[cRight+1..];
     Keyspace.reveal_IsStrictlySorted();
-  } 
+  }
 
   function PivotTableBucketKeySet(pt: PivotTable, i: int) : iset<Key>
   requires WFPivots(pt)
@@ -438,18 +504,18 @@ module BoundedPivotsLib {
   }
 
   // given a key that maps in the parents pivot table (by parentIdx), shows that the key maps in the child as well
-  lemma GetKeyInChildBucket(parentPivots: PivotTable, childPivots: PivotTable, parentIdx: int, childIdx: int) returns (key: Key)
-  requires WFPivots(parentPivots)
-  requires WFPivots(childPivots)
-  requires 0 <= parentIdx < NumBuckets(parentPivots)
-  requires 0 <= childIdx < NumBuckets(childPivots)
-  requires Keyspace.lte(parentPivots[parentIdx], childPivots[0])
-  requires Keyspace.lte(Last(childPivots), parentPivots[parentIdx+1]) // only true for splitted new child
-  ensures BoundedKey(parentPivots, key) && Route(parentPivots, key) == parentIdx
-  ensures BoundedKey(childPivots, key) && Route(childPivots, key) == childIdx
+  lemma GetKeyInChildBucket(parentpt: PivotTable, childpt: PivotTable, parentIdx: int, childIdx: int) returns (key: Key)
+  requires WFPivots(parentpt)
+  requires WFPivots(childpt)
+  requires 0 <= parentIdx < NumBuckets(parentpt)
+  requires 0 <= childIdx < NumBuckets(childpt)
+  requires Keyspace.lte(parentpt[parentIdx], childpt[0])
+  requires Keyspace.lte(Last(childpt), parentpt[parentIdx+1]) // only true for splitted new child
+  ensures BoundedKey(parentpt, key) && Route(parentpt, key) == parentIdx
+  ensures BoundedKey(childpt, key) && Route(childpt, key) == childIdx
   {
-    key := GetKeyInBucket(childPivots, childIdx);
-    assert Route(childPivots, key) == childIdx;
-    assert Route(parentPivots, key) == parentIdx;
+    key := GetKeyInBucket(childpt, childIdx);
+    assert Route(childpt, key) == childIdx;
+    assert Route(parentpt, key) == parentIdx;
   }
 }

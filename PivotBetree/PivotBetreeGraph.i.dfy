@@ -4,6 +4,7 @@
 include "../Betree/Graph.i.dfy"
 include "../lib/Base/Message.i.dfy"
 include "../lib/Buckets/BoundedPivotsLib.i.dfy"
+include "../lib/Buckets/TranslationLib.i.dfy"
 include "../lib/Buckets/BucketsLib.i.dfy"
 
 module PivotBetreeGraph refines Graph {
@@ -12,12 +13,14 @@ module PivotBetreeGraph refines Graph {
   import opened KeyType
   import opened BucketsLib
   import opened BoundedPivotsLib
+  import opened TranslationLib
 
   import Keyspace = Lexicographic_Byte_Order
   import KeyspaceImpl = Lexicographic_Byte_Order_Impl
 
   datatype Node = Node(
       pivotTable: PivotTable,
+      edgeTable: EdgeTable,
       children: Option<seq<Reference>>,
       buckets: seq<Bucket>)
 

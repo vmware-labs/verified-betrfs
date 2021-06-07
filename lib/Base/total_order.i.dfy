@@ -135,6 +135,56 @@ abstract module Total_Preorder {
     reveal_IsSorted();
   }
 
+  lemma ApplySorted(f: Element ~> Element, run: seq<Element>)
+    requires IsSorted(run)
+    requires forall x, y | f.requires(x) && f.requires(y) && lte(x, y) :: lte(f(x), f(y))
+    requires forall i | 0 <= i < |run| :: f.requires(run[i])
+    ensures IsSorted(Seq.Apply(f, run))
+  {
+    reveal_IsSorted();
+  }
+
+  lemma ApplyStrictlySorted(f: Element ~> Element, run: seq<Element>)
+    requires IsStrictlySorted(run)
+    requires forall x, y | f.requires(x) && f.requires(y) && lt(x, y) :: lt(f(x), f(y))
+    requires forall i | 0 <= i < |run| :: f.requires(run[i])
+    ensures IsStrictlySorted(Seq.Apply(f, run))
+  {
+    reveal_IsStrictlySorted();
+  }
+
+  lemma FilterSorted(f: Element ~> bool, run: seq<Element>)
+    requires IsSorted(run)
+    requires forall i | 0 <= i < |run| :: f.requires(run[i])
+    ensures IsSorted(Seq.Filter(f, run))
+  {
+    if |run| == 0 {
+    } else if f(Seq.Last(run)) {
+      SortedSubsequence(run, 0, |run| - 1);
+      FilterSorted(f, Seq.DropLast(run));
+      reveal_IsSorted();
+    } else {
+      SortedSubsequence(run, 0, |run| - 1);
+      FilterSorted(f, Seq.DropLast(run));
+    }
+  }
+
+  lemma FilterStrictlySorted(f: Element ~> bool, run: seq<Element>)
+    requires IsStrictlySorted(run)
+    requires forall i | 0 <= i < |run| :: f.requires(run[i])
+    ensures IsStrictlySorted(Seq.Filter(f, run))
+  {
+    if |run| == 0 {
+    } else if f(Seq.Last(run)) {
+      StrictlySortedSubsequence(run, 0, |run| - 1);
+      FilterStrictlySorted(f, Seq.DropLast(run));
+      reveal_IsStrictlySorted();
+    } else {
+      StrictlySortedSubsequence(run, 0, |run| - 1);
+      FilterStrictlySorted(f, Seq.DropLast(run));
+    }
+  }
+
   predicate BiggestInSet(e: Element, s: set<Element>)
     requires 0 < |s|
   {
@@ -427,6 +477,7 @@ abstract module Total_Order refines Total_Preorder {
   ensures 0 <= i <= |s|
   ensures i > 0 ==> lt(s[i-1], key)
   ensures i < |s| ==> lte(key, s[i])
+  ensures lo <= i < hi
   decreases hi - lo
   {
     if lo + 1 < hi then (
@@ -440,12 +491,49 @@ abstract module Total_Order refines Total_Preorder {
     )
   }
 
+  lemma binarySearchIndexOfFirstKeyGteIterPreservesLte(s: seq<Element>, key1: Element, key2: Element, lo: int, hi: int)
+  requires 0 <= lo < hi <= |s| + 1
+  requires lo > 0 ==> lt(s[lo-1], key1)
+  requires hi <= |s| ==> lte(key1, s[hi-1])
+  requires hi <= |s| ==> lte(key2, s[hi-1])
+  requires lte(key1, key2)
+  ensures binarySearchIndexOfFirstKeyGteIter(s, key1, lo, hi) <= binarySearchIndexOfFirstKeyGteIter(s, key2, lo, hi)
+  decreases hi - lo
+  {
+    if lo + 1 < hi {
+      var mid := (lo + hi) / 2;
+      if lt(s[mid-1], key1) {
+        binarySearchIndexOfFirstKeyGteIterPreservesLte(s, key1, key2, mid, hi);
+      } else {
+        if lte(key2, s[mid-1]) {
+          binarySearchIndexOfFirstKeyGteIterPreservesLte(s, key1, key2, lo, mid);
+        } else {
+          var i1 := binarySearchIndexOfFirstKeyGteIter(s, key1, lo, mid);
+          var i2 := binarySearchIndexOfFirstKeyGteIter(s, key2, mid, hi);
+
+          assert i1 == binarySearchIndexOfFirstKeyGteIter(s, key1, lo, hi);
+          assert i2 == binarySearchIndexOfFirstKeyGteIter(s, key2, lo, hi);
+        }
+      }
+    }
+  }
+
   function {:opaque} binarySearchIndexOfFirstKeyGte(s: seq<Element>, key: Element) : (i: int)
   ensures 0 <= i <= |s|
   ensures i > 0 ==> lt(s[i-1], key)
   ensures i < |s| ==> lte(key, s[i])
   {
     binarySearchIndexOfFirstKeyGteIter(s, key, 0, |s| + 1)
+  }
+
+  function {:opaque} binarySearchIndexOfFirstKeyGteWithLowerBound(s: seq<Element>, key: Element, lo: int) : (i: int)
+  requires 0 <= lo <= |s|
+  requires lo > 0 ==> lt(s[lo-1], key)
+  ensures lo <= i <= |s|
+  ensures i > 0 ==> lt(s[i-1], key)
+  ensures i < |s| ==> lte(key, s[i])
+  {
+    binarySearchIndexOfFirstKeyGteIter(s, key, lo, |s| + 1)
   }
 
   function IndexOfFirstGt(run: seq<Element>, needle: Element) : (result: nat)
@@ -1023,6 +1111,14 @@ module Upperbounded_Lexicographic_Byte_Order refines Upperbounded_Total_Order {
         assert lte(a, wit);
         assert false;
       }
+    }
+  }
+
+  lemma transitivity(a: Element, b: Element, c: Element)
+  ensures lte(a, b) && lte(b, c) ==> lte(a, c);
+  {
+    if a.Element? && b.Element? && c.Element? {
+      Base_Order.transitivity(a.e, b.e, c.e);
     }
   }
 }
