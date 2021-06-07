@@ -709,7 +709,7 @@ module BetreeInv {
     InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..]);
   }
 
-  lemma {:timeLimitMultiplier 2} FlushMovedKeysSameLookup(s: Variables, s': Variables, start: Reference, 
+  lemma {:timeLimitMultiplier 4} FlushMovedKeysSameLookup(s: Variables, s': Variables, start: Reference, 
     flush:NodeFlush, lookup: Lookup, parentLayer: int, key: Key, value: Value)
   returns (lookup': Lookup)
   requires Inv(s)

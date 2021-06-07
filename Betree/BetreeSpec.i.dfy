@@ -556,7 +556,7 @@ module BetreeSpec {
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?
       case BetreeRedirect(redirect) => uiop.NoOp?
-      case BetreeClone(clone) => uiop == UI.CloneOp(clone.new_to_old)
+      case BetreeClone(clone) => uiop.CloneOp? && clone.new_to_old == MS.CloneMap(uiop.from, uiop.to)
     }
   }
 }
