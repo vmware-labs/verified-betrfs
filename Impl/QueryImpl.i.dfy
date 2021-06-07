@@ -36,24 +36,23 @@ module QueryImpl {
   import opened Bounds
   import opened BucketsLib
   import opened BoundedPivotsLib
+  import opened TranslationImpl
   import opened DiskOpModel
-
-  import PBS = PivotBetreeSpec`Internal
   import opened InterpretationDiskOps
   import opened ViewOp
 
   // == query ==
-
-  method {:timeLimitMultiplier 3} queryIterate(linear inout s: ImplVariables, key: Key, msg: Message, ref: BT.G.Reference, io: DiskIOHandler, counter: uint64, ghost lookup: seq<BT.G.ReadOp>)
+  method  {:timeLimitMultiplier 3}  queryIterate(linear inout s: ImplVariables, querykey: Key, key: Key, msg: Message,
+    ref: BT.G.Reference, io: DiskIOHandler, counter: uint64, ghost lookup: seq<BT.Layer>)
   returns (res: Option<Value>)
 
   requires old_s.Inv()
-  requires queryInv(old_s.I(), key, msg, ref, IIO(io), counter, lookup)
+  requires queryInv(old_s.I(), querykey, key, msg, ref, IIO(io), counter as int, lookup)
   requires !msg.Define?
   requires io.initialized()
 
   modifies io
-  decreases counter
+  decreases counter, 1
   ensures s.WFBCVars()
 
   ensures ValidDiskOp(diskOp(IIO(io)))
@@ -61,7 +60,7 @@ module QueryImpl {
   ensures res.Some? ==>
       BBC.Next(old_s.I(), s.I(),
           IDiskOp(diskOp(IIO(io))).bdop,
-          AdvanceOp(UI.GetOp(key, res.value), false));
+          AdvanceOp(UI.GetOp(querykey, res.value), false));
   ensures res.None? ==>
       IOModel.betree_next_dop(old_s.I(), s.I(),
           IDiskOp(diskOp(IIO(io))).bdop)
@@ -76,10 +75,9 @@ module QueryImpl {
         res := None;
       } else {
         ghost var node := s.cache.I()[ref];
-
         assert s.cache.I() == old(s.cache.I());
-        var pivots, children := s.cache.GetNodeInfo(ref);
 
+        var pivots, edges, children := s.cache.GetNodeInfo(ref);
         var boundedkey := ComputeBoundedKey(pivots, key);
         if !boundedkey {
           res := None;
@@ -88,51 +86,51 @@ module QueryImpl {
           ghost var oldIVars := s.I();
           LruModel.LruUse(s.lru.Queue(), ref);
           inout s.lru.Use(ref);
-          assert oldIVars == s.I();
 
+          ghost var node := s.cache.I()[ref];
+              
           var r := Pivots.ComputeRoute(pivots, key);
           ghost var bucket := node.buckets[r];
-
           var kmtMsg := s.cache.GetMessage(ref, r, key);
           var newmsg := if kmtMsg.Some? then ValueMessage.Merge(msg, kmtMsg.value) else msg;
 
-          ghost var newlookup := new_lookup(lookup, ref, node);
-          AugmentLookup(newlookup, lookup, ref, node, key, s.cache.I(), s.ephemeralIndirectionTable.graph);
+          ghost var newlookup := new_lookup(lookup, ref, node, key);
+          AugmentLookup(newlookup, lookup, querykey, ref, node, key, s.cache.I(), s.ephemeralIndirectionTable.graph);
 
-          assert PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> BucketWellMarshalled(bucket);
-          assert PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> PBS.LookupVisitsWellMarshalledBuckets(lookup, key)
-          by {
-            reveal_new_lookup();
-          }
+          assert BT.LookupVisitsWellMarshalledBuckets(newlookup) ==> 
+            && BucketWellMarshalled(bucket) 
+            && BT.LookupVisitsWellMarshalledBuckets(lookup);
 
           if (newmsg.Define?) {
             res := Some(newmsg.value);
+            assert BT.ValidQuery(BT.LookupQuery(querykey, res.value, newlookup));
 
-            assert BT.ValidQuery(BT.LookupQuery(key, res.value, newlookup));
             assert BBC.BetreeMove(old_s.I(), s.I(),
-              IDiskOp(diskOp(IIO(io))).bdop,
-              AdvanceOp(UI.GetOp(key, res.value), false),
-              BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
+                IDiskOp(diskOp(IIO(io))).bdop,
+                AdvanceOp(UI.GetOp(querykey, res.value), false),
+                BT.BetreeQuery(BT.LookupQuery(querykey, res.value, newlookup)));
+
             assert IOModel.stepsBetree(old_s.I(), s.I(),
-              AdvanceOp(UI.GetOp(key, res.value), false),
-              BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
+                AdvanceOp(UI.GetOp(querykey, res.value), false),
+                BT.BetreeQuery(BT.LookupQuery(querykey, res.value, newlookup)));
           } else {
             if children.Some? {
               BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);
-              res := queryIterate(inout s, key, newmsg, children.value[r], io, counter - 1, newlookup);
+              var newkey := ComputeTranslateKey(pivots, edges, key, r);
+              res := queryIterate(inout s, querykey, newkey, newmsg, children.value[r], io, counter - 1, newlookup);
             } else {
               res := Some(ValueType.DefaultValue());
               assert BC.OpTransaction(old_s.I(), s.I(),
-                PBS.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup))));
+                BT.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(querykey, res.value, newlookup))));
 
               assert BBC.BetreeMove(old_s.I(), s.I(),
                 IDiskOp(diskOp( IIO(io) )).bdop,
-                AdvanceOp(UI.GetOp(key, res.value), false),
-                BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
+                AdvanceOp(UI.GetOp(querykey, res.value), false),
+                BT.BetreeQuery(BT.LookupQuery(querykey, res.value, newlookup)));
 
               assert IOModel.stepsBetree(old_s.I(), s.I(),
-                AdvanceOp(UI.GetOp(key, res.value), false),
-                BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
+                AdvanceOp(UI.GetOp(querykey, res.value), false),
+                BT.BetreeQuery(BT.LookupQuery(querykey, res.value, newlookup)));
             }
           }
         }
@@ -162,6 +160,6 @@ module QueryImpl {
     var msg := ValueMessage.IdentityMessage();
     var counter: uint64 := 40;
 
-    res := queryIterate(inout s, key, msg, ref, io, counter, []);
+    res := queryIterate(inout s, key, key, msg, ref, io, counter, []);
   }
 }

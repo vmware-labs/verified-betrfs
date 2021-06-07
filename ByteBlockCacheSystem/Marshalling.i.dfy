@@ -22,6 +22,7 @@ module Marshalling {
   import opened Sequences
   import opened BucketsLib
   import opened BucketWeights
+  import opened TranslationLib
   import BC = BlockCache
   import JC = JournalCache
   import BT = PivotBetreeSpec`Internal
@@ -35,7 +36,6 @@ module Marshalling {
   import PackedKV
   import opened SectorType
   import PackedKVMarshalling
-
   type Key = KeyType.Key
   type Reference = BC.Reference
   type Node = BT.G.Node
@@ -53,14 +53,28 @@ module Marshalling {
   {
     GArray(GByteArray)
   }
-    
+
+  function method EdgeGrammar() : G
+    ensures ValidGrammar(EdgeGrammar())
+  {
+    GTaggedUnion([GConstant, GByteArray])
+  }
+
+  function method EdgeTableGrammar() : G
+    ensures ValidGrammar(EdgeTableGrammar())
+  {
+    // seq<Option<seq<byte>>>
+    GArray(EdgeGrammar())
+  }
+
   function method PivotNodeGrammar() : G
   ensures ValidGrammar(PivotNodeGrammar())
   {
     GTuple([
         PivotTableGrammar(),
+        EdgeTableGrammar(),
         GUint64Array, // children
-        GArray(BucketGrammar()) 
+        GArray(BucketGrammar())
     ])
   }
 
@@ -199,6 +213,40 @@ module Marshalling {
       None
   }
 
+  function valToEdge(v: V) : (s : Option<Option<Key>>)
+     requires ValidVal(v)
+     requires ValInGrammar(v, EdgeGrammar())
+  {
+    assert v.c == 1 ==> ValInGrammar(v.val, GByteArray);
+    if v.c == 0 then
+      Some(None)
+    else if v.c == 1 && |v.val.b| <= 1024 then
+      Some(Some(v.val.b))
+    else
+      None
+  }
+
+  function valSeqToEdgeTable(v: seq<V>) : (s : Option<EdgeTable>)
+    requires forall i | 0 <= i < |v| :: ValidVal(v[i])
+    requires forall i | 0 <= i < |v| :: ValInGrammar(v[i], EdgeGrammar())
+    ensures s.Some? <==> forall i | 0 <= i < |v| :: valToEdge(v[i]).Some?
+    ensures s.Some? ==> |s.value| == |v|
+  {
+    if |v| == 0 then
+      Some([])
+    else if valSeqToEdgeTable(DropLast(v)).Some? && valToEdge(Last(v)).Some? then
+      Some(valSeqToEdgeTable(DropLast(v)).value + [valToEdge(Last(v)).value])
+    else
+      None
+  }
+
+  function valToEdgeTable(v: V) : (s : Option<EdgeTable>)
+    requires ValidVal(v)
+    requires ValInGrammar(v, EdgeTableGrammar())
+  {
+    valSeqToEdgeTable(v.a)
+  }
+
   function {:fuel ValInGrammar,2} valToBucket(v: V) : (s : Option<Bucket>)
   requires ValidVal(v)
   requires ValInGrammar(v, BucketGrammar())
@@ -243,40 +291,27 @@ module Marshalling {
     assert ValidVal(v.t[0]);
     assert ValidVal(v.t[1]);
     assert ValidVal(v.t[2]);
-    var pivots_len := |v.t[0].a| as uint64;
-    var children_len := |v.t[1].ua| as uint64;
-    var buckets_len := |v.t[2].a| as uint64;
+    assert ValidVal(v.t[3]);
+    var opivots := valToPivots(v.t[0]);
+    var oedges := valToEdgeTable(v.t[1]);
+    var ochildren := valToChildren(v.t[2]);
+    var obuckets := valToBuckets(v.t[3].a);
 
-    if (
-       && 2 <= pivots_len <= MaxNumChildrenUint64() + 1
-       && (children_len == 0 || children_len == pivots_len - 1)
-       && buckets_len == pivots_len - 1
-    ) then (
-      assert ValidVal(v.t[0]);
-      match valToPivots(v.t[0]) {
-        case None => None
-        case Some(pivots) => (
-          match valToChildren(v.t[1]) {
-            case None => None
-            case Some(children) => (
-              assert ValidVal(v.t[2]);
-              var buckets := valToBuckets(v.t[2].a);
-              if buckets.Some? && WeightBucketList(buckets.value) <= MaxTotalBucketWeight() then (
-                var node := BT.G.Node(
-                  pivots,
-                  if |children| == 0 then None else Some(children),
-                  buckets.value);
-                Some(node)
-              ) else (
-                None
-              )
-            )
-          }
-        )
-      }
-    ) else (
+    if
+    && opivots.Some?
+    && oedges.Some?
+    && ochildren.Some?
+    && obuckets.Some?
+    && 2 <= |opivots.value| <= MaxNumChildrenUint64() as nat + 1
+    && (|ochildren.value| == 0 || |ochildren.value| == |opivots.value| - 1)
+    && |oedges.value| == |obuckets.value| == |opivots.value| - 1
+    && WeightBucketList(obuckets.value) <= MaxTotalBucketWeight()
+    && (forall i | 0 <= i < |oedges.value| && oedges.value[i].Some? :: NonEmptyLcp(opivots.value, i))
+    then
+      var node := BT.G.Node(opivots.value, oedges.value, if |ochildren.value| == 0 then None else ochildren, obuckets.value);
+      Some(node)
+    else
       None
-    )
   }
 
   function {:fuel ValInGrammar,3} valToIndirectionTableMaps(a: seq<V>) : (s : Option<IndirectionTable>)

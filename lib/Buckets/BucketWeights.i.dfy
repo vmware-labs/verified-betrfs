@@ -209,6 +209,18 @@ module BucketWeights {
   {
   }
 
+  lemma WeightBucketListEmpty(size: int)
+  requires 0 <= size
+  ensures WeightBucketList(EmptyBucketList(size)) == 0
+  {
+    reveal_WeightBucketList();
+    var buckets := EmptyBucketList(size);
+    if size > 0 {
+      assert DropLast(buckets) == EmptyBucketList(size-1);
+      WeightBucketListEmpty(size-1);
+    }
+  }
+
   lemma WeightKeySingleton(key: Key)
     ensures WeightKeyMultiset(multiset{key}) == WeightKey(key)
   {
@@ -381,7 +393,7 @@ module BucketWeights {
     //requires BucketWellMarshalled(bucket)
     ensures WeightBucket(SplitBucketLeft(bucket, pivot)) <= WeightBucket(bucket)
   {
-    var i := BoundedKeyspace.binarySearchIndexOfFirstKeyGte(bucket.keys, pivot);
+    var i := binarySearchIndexOfFirstKeyGte(bucket.keys, pivot);
     WeightKeyListAdditive(bucket.keys[..i], bucket.keys[i..]);
     WeightMessageListAdditive(bucket.msgs[..i], bucket.msgs[i..]);
     assert bucket.keys[..i] + bucket.keys[i..] == bucket.keys;
@@ -394,7 +406,7 @@ module BucketWeights {
     //requires BucketWellMarshalled(bucket)
     ensures WeightBucket(SplitBucketRight(bucket, pivot)) <= WeightBucket(bucket)
   {
-    var i := BoundedKeyspace.binarySearchIndexOfFirstKeyGte(bucket.keys, pivot);
+    var i := binarySearchIndexOfFirstKeyGte(bucket.keys, pivot);
     WeightKeyListAdditive(bucket.keys[..i], bucket.keys[i..]);
     WeightMessageListAdditive(bucket.msgs[..i], bucket.msgs[i..]);
     assert bucket.keys[..i] + bucket.keys[i..] == bucket.keys;
@@ -478,24 +490,32 @@ module BucketWeights {
     //requires BucketWellMarshalled(blist[cLeft])
     ensures WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key))
             <= WeightBucketList(blist)
+    ensures WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key))
+            <= WeightBucketList(blist[..cLeft+1])
   {
-    // This proof can get away with reveal_WeightBucketList, but maybe for
-    // symmetry with the *Right version it should be rewritten with
-    // WeightBucketListConcat.
     calc {
       WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key));
+      WeightBucketList(blist[.. cLeft] + [SplitBucketLeft(blist[cLeft], key)]) ;
+        { WeightBucketListConcat(blist[..cLeft], [SplitBucketLeft(blist[cLeft], key)]); }
+      WeightBucketList(blist[.. cLeft]) + WeightBucketList([SplitBucketLeft(blist[cLeft], key)]);
         { reveal_WeightBucketList(); }
-      WeightBucketList(blist[.. cLeft]) + WeightBucket(SplitBucketLeft(blist[cLeft], key));
-      <=
+      WeightBucketList(blist[..cLeft]) + WeightBucket(SplitBucketLeft(blist[cLeft], key));
+      <= 
         { WeightSplitBucketLeft(blist[cLeft], key); }
-      WeightBucketList(blist[.. cLeft]) + WeightBucket(blist[cLeft]);
-        {
-          reveal_WeightBucketList();
-          assert DropLast(blist[.. cLeft + 1]) == blist[.. cLeft];
-        }
-      WeightBucketList(blist[.. cLeft + 1]);
+      WeightBucketList(blist[..cLeft]) + WeightBucket(blist[cLeft]);
+        { reveal_WeightBucketList(); }
+      WeightBucketList(blist[..cLeft]) + WeightBucketList([blist[cLeft]]);
+        { WeightBucketListConcat(blist[..cLeft], [blist[cLeft]]); }
+        { assert blist[..cLeft+1] == blist[..cLeft] + [blist[cLeft]]; }
+      WeightBucketList(blist[..cLeft+1]);
+    }
+
+    calc {
+      WeightBucketList(blist[..cLeft+1]);
       <=
-        { WeightBucketListSlice(blist, 0, cLeft + 1); }
+      WeightBucketList(blist[..cLeft+1]) + WeightBucketList(blist[cLeft+1..]);
+        { WeightBucketListConcat(blist[..cLeft+1], blist[cLeft+1..]); }
+        { assert blist == blist[..cLeft+1] + blist[cLeft+1..]; }
       WeightBucketList(blist);
     }
   }
@@ -505,6 +525,8 @@ module BucketWeights {
     //requires BucketWellMarshalled(blist[cRight])
     ensures WeightBucketList(SplitBucketListRight(blist, pivots, cRight, key))
       <= WeightBucketList(blist)
+    ensures WeightBucketList(SplitBucketListRight(blist, pivots, cRight, key))
+      <= WeightBucketList(blist[cRight..])
   {
     calc {
       WeightBucketList(SplitBucketListRight(blist, pivots, cRight, key));
@@ -520,6 +542,10 @@ module BucketWeights {
       WeightBucketList([blist[cRight]]) + WeightBucketList(blist[cRight + 1 ..]);
         { WeightBucketListConcat([blist[cRight]], blist[cRight + 1 ..]); }
         { assert blist[cRight ..] == [blist[cRight]] + blist[cRight + 1 ..]; }
+      WeightBucketList(blist[cRight ..]);
+    }
+
+    calc {
       WeightBucketList(blist[cRight ..]);
       <=
       WeightBucketList(blist[.. cRight]) + WeightBucketList(blist[cRight ..]);
@@ -720,6 +746,88 @@ module BucketWeights {
         { WeightKeyMultisetAdditive(rest, multiset{key}); }
         WeightKeyMultiset(keys);
       }
+    }
+  }
+
+  // used
+  lemma WeightBucketListSubSets(blist: BucketList, pivots: PivotTable,
+      cLeft: int, cRight: int, leftpivot: Key, rightpivot: Key)
+  requires SplitBucketListLeft.requires(blist, pivots, cLeft, leftpivot)
+  requires SplitBucketListRight.requires(blist, pivots, cRight, rightpivot)
+  requires lt(leftpivot, rightpivot)
+  ensures WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, leftpivot) 
+      + SplitBucketListRight(blist, pivots, cRight, rightpivot)) <= WeightBucketList(blist)
+  {
+    var left := SplitBucketListLeft(blist, pivots, cLeft, leftpivot);
+    var right := SplitBucketListRight(blist, pivots, cRight, rightpivot);
+
+    assert cLeft <= cRight by { 
+      reveal_CutoffForLeft();
+      reveal_CutoffForRight();
+    }
+
+    if cLeft == cRight {
+      reveal_WeightBucketList();
+      assert WeightBucketList(left) == WeightBucketList(blist[..cLeft] + [SplitBucketLeft(blist[cLeft], leftpivot)]);
+      assert WeightBucketList(right) == WeightBucketList([SplitBucketRight(blist[cRight], rightpivot)] + blist[cRight+1..]); 
+
+      WeightBucketListConcat(blist[..cLeft], [SplitBucketLeft(blist[cLeft], leftpivot)]);
+      WeightBucketListConcat([SplitBucketRight(blist[cRight], rightpivot)], blist[cRight+1..]);
+
+      assert WeightBucketList(left) == 
+        WeightBucketList(blist[..cLeft]) + WeightBucket(SplitBucketLeft(blist[cLeft], leftpivot));
+      assert WeightBucketList(right) == 
+        WeightBucket(SplitBucketRight(blist[cRight], rightpivot)) + WeightBucketList(blist[cRight+1..]);
+
+      WeightBucketListConcat(blist[..cLeft], blist[cLeft..]);
+      assert blist[..cLeft] + blist[cLeft..] == blist;
+      WeightBucketListConcat([blist[cLeft]], blist[cLeft+1..]);
+      assert [blist[cLeft]] + blist[cLeft+1..] == blist[cLeft..];
+      WeightBucketListConcat(left, right);
+
+      WeightSplitBucketAdditive(blist[cLeft], leftpivot);
+      assert WeightBucket(SplitBucketLeft(blist[cLeft], leftpivot)) + 
+        WeightBucket(SplitBucketRight(blist[cLeft], leftpivot)) == WeightBucket(blist[cLeft]);
+
+      var lefti := binarySearchIndexOfFirstKeyGte(blist[cLeft].keys, leftpivot);
+      var righti := binarySearchIndexOfFirstKeyGte(blist[cLeft].keys, rightpivot);
+      assert lefti <= righti by { 
+        reveal_binarySearchIndexOfFirstKeyGte(); 
+        binarySearchIndexOfFirstKeyGteIterPreservesLte(blist[cLeft].keys, leftpivot, rightpivot, 0, |blist[cLeft].keys|+1);
+      }
+
+      assert WeightBucket(SplitBucketRight(blist[cLeft], leftpivot)) 
+        == WeightKeyList(blist[cLeft].keys[lefti..]) + WeightMessageList(blist[cLeft].msgs[lefti..])
+        by { reveal_SplitBucketRight(); }
+      assert WeightBucket(SplitBucketRight(blist[cLeft], rightpivot)) 
+        == WeightKeyList(blist[cLeft].keys[righti..]) + WeightMessageList(blist[cLeft].msgs[righti..])
+        by { reveal_SplitBucketRight(); }
+
+      WeightKeyListAdditive(blist[cLeft].keys[lefti..righti], blist[cLeft].keys[righti..]);
+      WeightMessageListAdditive(blist[cLeft].msgs[lefti..righti], blist[cLeft].msgs[righti..]);
+      
+      assert blist[cLeft].keys[lefti..righti] + blist[cLeft].keys[righti..] == blist[cLeft].keys[lefti..];
+      assert WeightKeyList(blist[cLeft].keys[lefti..righti]) + WeightKeyList(blist[cLeft].keys[righti..])
+        == WeightKeyList(blist[cLeft].keys[lefti..]);
+      assert WeightKeyList(blist[cLeft].keys[righti..]) <= WeightKeyList(blist[cLeft].keys[lefti..]);
+      
+      assert blist[cLeft].msgs[lefti..righti] + blist[cLeft].msgs[righti..] == blist[cLeft].msgs[lefti..];
+      assert WeightMessageList(blist[cLeft].msgs[lefti..righti]) + WeightMessageList(blist[cLeft].msgs[righti..])
+        == WeightMessageList(blist[cLeft].msgs[lefti..]);
+      assert WeightMessageList(blist[cLeft].msgs[righti..]) <= WeightMessageList(blist[cLeft].msgs[lefti..]);
+
+      assert WeightBucket(SplitBucketRight(blist[cLeft], rightpivot)) <= WeightBucket(SplitBucketRight(blist[cLeft], leftpivot));
+    } else {
+      WeightSplitBucketListLeft(blist, pivots, cLeft, leftpivot);
+      WeightSplitBucketListRight(blist, pivots, cRight, rightpivot);
+      WeightBucketListConcat(blist[cLeft+1..cRight], blist[cRight..]);
+
+      assert blist[cLeft+1..cRight] + blist[cRight..] == blist[cLeft+1..];
+      assert WeightBucketList(blist[cRight..]) <= WeightBucketList(blist[cLeft+1..]);
+      assert blist[..cLeft+1] + blist[cLeft+1..] == blist;
+
+      WeightBucketListConcat(blist[..cLeft+1], blist[cLeft+1..]);
+      WeightBucketListConcat(left, right);
     }
   }
 

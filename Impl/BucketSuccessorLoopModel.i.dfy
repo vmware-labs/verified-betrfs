@@ -10,7 +10,8 @@ module BucketSuccessorLoopModel {
   import opened ValueMessage
   import opened Sequences
   import opened BucketIteratorModel
-  import opened BucketGeneratorModel
+  import opened BGM = BucketGeneratorModel
+  import opened TranslationLib
   import UI
   import opened KeyType
   import opened BucketMaps
@@ -52,14 +53,18 @@ module BucketSuccessorLoopModel {
 
   function {:opaque} GetSuccessorInBucketStack(
       buckets: seq<Bucket>,
+      tt: TranslationTable,
       maxToFind: int,
       start: UI.RangeStart,
       upTo: Option<Key>) : UI.SuccResultList
-  requires |buckets| >= 1
   requires maxToFind >= 1
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  requires |tt| + 1 == |buckets|
+  requires var startkey := if start.NegativeInf? then [] else start.key;
+    && forall i | 0 <= i < |tt| :: 
+      (tt[i].Some? ==> IsPrefix(tt[i].value.newPrefix, startkey))
   {
-    var g := GenFromBucketStackWithLowerBound(buckets, start);
+    var g := GenFromBucketStackWithLowerBound(buckets, start, tt);
     ProcessGenerator(g, maxToFind, upTo, [])
   }
 
@@ -196,38 +201,43 @@ module BucketSuccessorLoopModel {
 
   lemma {:timeLimitMultiplier 3} GetSuccessorInBucketStackResult(
       buckets: seq<Bucket>,
+      tt: TranslationTable,
       maxToFind: int,
       start: UI.RangeStart,
       upTo: Option<Key>)
-  requires |buckets| >= 1
   requires maxToFind >= 1
   requires BucketListWellMarshalled(buckets)
+  requires |tt| + 1 == |buckets|
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  requires var startkey := if start.NegativeInf? then [] else start.key;
+    && forall i | 0 <= i < |tt| :: 
+      (tt[i].Some? ==> IsPrefix(tt[i].value.newPrefix, startkey))
   requires upTo.Some? && (start.SInclusive? || start.SExclusive?) ==>
       Keyspace.lt(start.key, upTo.value)
-  ensures var r := GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
+  ensures var r := GetSuccessorInBucketStack(buckets, tt, maxToFind, start, upTo);
     && r.results ==
         SortedSeqOfKeyValueMap(
           KeyValueMapOfBucket(
-            ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, r.end)))
+            ClampRange(ComposeSeq(MapsOfBucketList(SuccBucketList(buckets, tt))), start, r.end)))
     && (upTo.Some? ==> !MS.UpperBound(upTo.value, r.end))
     && MS.NonEmptyRange(start, r.end)
   {
     reveal_GetSuccessorInBucketStack();
-    var g := GenFromBucketStackWithLowerBound(buckets, start);
-    GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets, start);
+    var g := GenFromBucketStackWithLowerBound(buckets, start, tt);
+    GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets, start, tt);
     var bucket := BucketOf(g);
     reveal_KeyValueMapOfBucket();
     reveal_SortedSeqOfKeyValueMap();
     ProcessGeneratorResult(bucket, map[], bucket, g, maxToFind, upTo, []);
     var r := ProcessGenerator(g, maxToFind, upTo, []);
-    assert r == GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
+    assert r == GetSuccessorInBucketStack(buckets, tt, maxToFind, start, upTo);
 
     reveal_ClampRange();
     reveal_ClampStart();
     reveal_ClampEnd();
-    assert ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, r.end)
-        == ClampEnd(ClampStart(ComposeSeq(MapsOfBucketList(buckets)), start), r.end);
+    var buckets' := SuccBucketList(buckets, tt);
+    assert ClampRange(ComposeSeq(MapsOfBucketList(buckets')), start, r.end)
+        == ClampEnd(ClampStart(ComposeSeq(MapsOfBucketList(buckets')), start), r.end);
 
     /*assert bucket == ClampStart(ComposeSeq(buckets), start);
 
@@ -245,8 +255,8 @@ module BucketSuccessorLoopModel {
     } else {
       // There's at least 1 result, so the range has to be non-empty
       SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(
-               ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, r.end)), 0);
-      assert r.results[0].key in ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, r.end);
+               ClampRange(ComposeSeq(MapsOfBucketList(buckets')), start, r.end)), 0);
+      assert r.results[0].key in ClampRange(ComposeSeq(MapsOfBucketList(buckets')), start, r.end);
       assert MS.InRange(start, r.results[0].key, r.end);
       InRangeImpliesNonEmpty(start, r.results[0].key, r.end);
     }
