@@ -29,8 +29,8 @@ include "BucketMap.i.dfy"
 
 module BucketsLib {
   import opened BoundedPivotsLib
-  import opened Lexicographic_Byte_Order
-  import opened ValueMessage
+  import opened Lexi = Lexicographic_Byte_Order
+  import opened M = ValueMessage
   import opened Maps
   import opened Sequences
   import opened KeyType
@@ -96,6 +96,15 @@ module BucketsLib {
     MapOfEmptySeq();
     Bucket([], [])
   }
+
+  function EmptyBucketList(size: int) : (blist: BucketList)
+    requires 0 <= size
+    ensures |blist| == size
+    ensures BucketListWellMarshalled(blist)
+    ensures forall i | 0 <= i < |blist| :: blist[i] == EmptyBucket()
+  {
+    if size == 0 then [] else [ EmptyBucket() ] + EmptyBucketList(size-1)
+  }
   
   function SingletonBucket(key: Key, msg: Message) : (result: Bucket)
     ensures PreWFBucket(result)
@@ -104,7 +113,7 @@ module BucketsLib {
   {
     Bucket([key], [msg])
   }
-  
+
   function BucketDropLast(bucket: Bucket) : Bucket
     requires PreWFBucket(bucket)
     requires 0 < |bucket.keys|
@@ -176,14 +185,6 @@ module BucketsLib {
   {
     && WFPivots(pivots)
     && (forall key | key in bucket.keys :: BoundedKey(pivots, key))
-  }
-
-  predicate BoundedBucketList(blist: BucketList, pivots: PivotTable)
-  {
-    && WFPivots(pivots)
-    && (forall i | 0 <= i < |blist| ::
-        && PreWFBucket(blist[i])
-        && BoundedBucket(blist[i], pivots))
   }
 
   function {:opaque} B(m: map<Key, Message>) : (b : Bucket)
@@ -615,6 +616,16 @@ module BucketsLib {
   {
   }
 
+  predicate BucketNoKeyWithPrefix(bucket: Bucket, prefix: Key)
+  {
+    && (forall k | k in bucket.keys :: !IsPrefix(prefix, k))
+  }
+
+  predicate BucketListNoKeyWithPrefix(blist: BucketList, prefix: Key)
+  requires forall i | 0 <= i < |blist| :: WFBucket(blist[i])
+  {
+    && (forall i | 0 <= i < |blist| :: BucketNoKeyWithPrefix(blist[i], prefix))
+  }
 
   // This is useful for proving NodeHasWFBuckets(node')
   // for indices over the given interval [a, b],

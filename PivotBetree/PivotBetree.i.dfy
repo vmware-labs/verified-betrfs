@@ -39,7 +39,7 @@ module PivotBetree refines UIStateMachine {
 
   function EmptyNode() : Node
   {
-    Node(InitPivotTable(), None, [BucketsLib.EmptyBucket()])
+    Node(InitPivotTable(), [None], None, [BucketsLib.EmptyBucket()])
   }
 
   predicate Init(s: Variables) {
