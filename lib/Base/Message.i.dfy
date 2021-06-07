@@ -131,7 +131,7 @@ module ValueMessage refines Message {
     msg.value
   }
   
-  function messageSeq_to_bytestringSeq(msgs: seq<Message>) : (result: seq<seq<byte>>)
+  function {:opaque} messageSeq_to_bytestringSeq(msgs: seq<Message>) : (result: seq<seq<byte>>)
     requires EncodableMessageSeq(msgs)
     ensures |result| == |msgs|
     ensures forall i | 0 <= i < |result| :: result[i] == Message_to_bytestring(msgs[i])
@@ -142,7 +142,7 @@ module ValueMessage refines Message {
       messageSeq_to_bytestringSeq(Sequences.DropLast(msgs)) + [ Message_to_bytestring(Last(msgs)) ]
   }
 
-  function bytestringSeq_to_MessageSeq(strings: seq<seq<byte>>) : (result: seq<Message>)
+  function {:opaque} bytestringSeq_to_MessageSeq(strings: seq<seq<byte>>) : (result: seq<Message>)
     requires forall i | 0 <= i < |strings| :: |strings[i]| < 0x1_0000_0000
     ensures |result| == |strings|
     ensures forall i | 0 <= i < |strings| :: result[i] == bytestring_to_Message(strings[i])

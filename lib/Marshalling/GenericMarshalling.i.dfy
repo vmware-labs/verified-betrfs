@@ -34,7 +34,8 @@ export Internal reveals *
 
 export extends S
 
-datatype G = GUint32
+datatype G = GConstant // for things like Option None
+           | GUint32
            | GUint64
            | GArray(elt:G)
            | GTuple(t:seq<G>)
@@ -43,7 +44,8 @@ datatype G = GUint32
            | GUint64Array
            | GTaggedUnion(cases:seq<G>)
 
-datatype V = VUint32(v:uint32)
+datatype V = VConstant
+           | VUint32(v:uint32)
            | VUint64(u:uint64)
            | VArray(a:seq<V>)
            | VTuple(t:seq<V>)
@@ -55,6 +57,7 @@ datatype V = VUint32(v:uint32)
 predicate ValInGrammar(val:V, grammar:G)
 {
     match val
+        case VConstant  => grammar.GConstant?
         case VUint32(_) => grammar.GUint32?
         case VUint64(_) => grammar.GUint64?
         case VArray(a)  => grammar.GArray? && forall v :: v in a ==> ValInGrammar(v, grammar.elt)
@@ -70,6 +73,7 @@ predicate ValInGrammar(val:V, grammar:G)
 predicate ValidGrammar(grammar:G) 
 {
     match grammar
+        case GConstant => true
         case GUint32 => true
         case GUint64 => true
         case GArray(elt) => ValidGrammar(elt)
@@ -84,6 +88,7 @@ predicate ValidGrammar(grammar:G)
 predicate ValidVal(val:V)
 {
     match val
+        case VConstant     => true
         case VUint32(_)    => true
         case VUint64(_)    => true
         case VArray(a)     => |a| < 0x1_0000_0000_0000_0000 && forall v :: v in a ==> ValidVal(v)
@@ -106,6 +111,7 @@ function SizeOfV(val:V) : int
     ensures SizeOfV(val) >= 0;
 {
     match val
+        case VConstant      => 0
         case VUint32(_)     => 4
         case VUint64(_)     => 8
         case VArray(a)      => 8 + SeqSum(a)     // 8 bytes for length
@@ -769,6 +775,7 @@ function {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq<byte>)
              |rest| <= |data| && (!val.None? ==> ValidVal(val.value) && ValInGrammar(val.value, grammar));
 {
     match grammar
+        case GConstant           => (Some(VConstant), data)
         case GUint32             => parse_Uint32(data)
         case GUint64             => parse_Uint64(data)
         case GArray(elt)         => parse_Array(data, elt)
@@ -793,6 +800,7 @@ method ParseVal(data:seq<byte>, index:uint64, grammar:G) returns (success:bool, 
     reveal_parse_Val();
 
     match grammar {
+        case GConstant           => success := true; v := VConstant; rest_index := index;
         case GUint32             => success, v, rest_index := ParseUint32(data, index);
         case GUint64             => success, v, rest_index := ParseUint64(data, index);
         case GArray(elt)         => success, v, rest_index := ParseArray(data, index, elt);
@@ -1375,6 +1383,7 @@ lemma lemma_parse_Val_view(data:seq<byte>, v:V, grammar:G, index:int)
     {
         reveal_parse_Val();
         match grammar
+            case GConstant           => assert true;
             case GUint32             => {
               assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v)) by {
                 assert data[index..bound][..Uint32Size()] == data[index..index+SizeOfV(v)][..Uint32Size()];
@@ -1454,6 +1463,7 @@ method ComputeSizeOf(val:V) returns (size:uint64)
     ensures (size as int) == SizeOfV(val);
 {
   match val {
+    case VConstant      => size := 0;
     case VUint32(_)     => size := 4;
     case VUint64(_)     => size := 8;
     case VArray(a)      => var v := ComputeSeqSum(a);
@@ -2300,6 +2310,7 @@ method MarshallVal(val:V, ghost grammar:G, data:array<byte>, index:uint64) retur
     ensures  (size as int) == SizeOfV(val);
 {
     match val
+        case VConstant     => reveal_parse_Val(); size := 0;
         case VUint32(_)    => size := MarshallVUint32(val, grammar, data, index);
         case VUint64(_)    => size := MarshallVUint64(val, grammar, data, index);
         case VArray(_)     => size := MarshallArray(val, grammar, data, index);
@@ -2455,6 +2466,7 @@ ensures var (v, rest) := parse_Val(data, grammar);
 {
   reveal_parse_Val();
   match grammar {
+    case GConstant           => assert true;
     case GUint32             => lemma_SizeOfV_parse_Val_Uint32(data);
     case GUint64             => lemma_SizeOfV_parse_Val_Uint64(data);
     case GArray(elt)         => lemma_SizeOfV_parse_Val_Array(data, elt);

@@ -2,15 +2,20 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "BucketGeneratorModel.i.dfy"
-include "../lib/Buckets/BucketImpl.i.dfy"
+include "BucketIteratorImpl.i.dfy"
 
 module BucketGeneratorImpl {
   import opened BucketImpl
   import BucketGeneratorModel
   import BucketIteratorModel
+  import opened BucketIteratorImpl
   import opened Lexicographic_Byte_Order_Impl
+  import opened TranslationLib
   import opened ValueMessage
   import opened NativeTypes
+  import opened KeyType
+  import opened Options
+  import opened Sequences
   import opened LinearSequence_s
   import opened LinearSequence_i
   import UI
@@ -173,25 +178,28 @@ module BucketGeneratorImpl {
       BucketGeneratorModel.reveal_GenCompose();
     }
 
-    static method GenFromBucketWithLowerBound(shared bucket: MutBucket, start: UI.RangeStart)
+    static method GenFromBucketWithLowerBound(shared bucket: MutBucket, start: UI.RangeStart, key': Key, pset: Option<PrefixSet>)
     returns (linear g: Generator)
     requires bucket.Inv()
+    requires var startKey := if start.NegativeInf? then [] else start.key;
+        && (pset.Some? ==> IsPrefix(pset.value.prefix, key'))
+        && (ApplyPrefixSet(pset, key') == startKey)
     ensures g.Basic?
     ensures g.biter.bucket == bucket.I()
     ensures g.Inv()
-    ensures g.I() == BucketGeneratorModel.GenFromBucketWithLowerBound(bucket.I(), start)
+    ensures g.I() == BucketGeneratorModel.GenFromBucketWithLowerBound(bucket.I(), start, pset)
     {
       linear var biter;
 
       match start {
         case SExclusive(key) => {
-          biter := BucketIter.IterFindFirstGt(bucket, key);
+          biter := BucketIter.IterFindFirstGt(bucket, pset, key');
         }
         case SInclusive(key) => {
-          biter := BucketIter.IterFindFirstGte(bucket, key);
+          biter := BucketIter.IterFindFirstGte(bucket, pset, key');
         }
         case NegativeInf => {
-          biter := BucketIter.IterStart(bucket);
+          biter := BucketIter.IterStart(bucket, pset);
         }
       }
 

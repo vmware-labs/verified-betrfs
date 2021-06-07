@@ -5,13 +5,17 @@ include "SequencesLite.s.dfy"
 include "Option.s.dfy"
 include "../Lang/NativeTypes.s.dfy"
 include "mathematics.i.dfy"
+include "../Lang/LinearSequence.s.dfy"
+include "../Lang/LinearSequence.i.dfy"
 
 module Sequences {
   import opened SequencesLite
   import opened Options
   import opened NativeTypes
   import Math = Mathematics
-
+  import opened LinearSequence_s
+  import opened LinearSequence_i
+  
   lemma EqualExtensionality<E>(a: seq<E>, b: seq<E>)
     requires |a| == |b|
     requires forall i :: 0 <= i < |a| ==> a[i] == b[i]
@@ -125,37 +129,204 @@ module Sequences {
   {
     if n == 0 then [] else Range(n-1) + [n-1]
   }
-  
-  function Apply<E,R>(f: (E ~> R), run: seq<E>) : (result: seq<R>)
+
+  function Apply<E,R>(f: (E --> R), run: seq<E>) : (result: seq<R>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|
     ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
-    reads set i, o | 0 <= i < |run| && o in f.reads(run[i]) :: o
   {
-    if |run| == 0 then []
-    else  [f(run[0])] + Apply(f, run[1..])
+    seq(|run|,
+      i
+      requires 0 <= i < |run|
+      requires f.requires(run[i])
+      reads set i, o | 0 <= i < |run| && o in f.reads(run[i]) :: o
+      =>
+      f(run[i]))
   }
 
+  lemma ApplyAdditive<E, R>(f: (E --> R), run1: seq<E>, run2: seq<E>)
+    requires forall i :: 0 <= i < |run1| ==> f.requires(run1[i])
+    requires forall i :: 0 <= i < |run2| ==> f.requires(run2[i])
+    ensures Apply(f, run1 + run2) == Apply(f, run1) + Apply(f, run2)
+  {
+  }
+  
   // TODO: can we replace Apply with this?
-  function {:opaque} ApplyOpaque<E,R>(f: (E ~> R), run: seq<E>) : (result: seq<R>)
+  function {:opaque} ApplyOpaque<E,R>(f: (E --> R), run: seq<E>) : (result: seq<R>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|
     ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
-    reads set i, o | 0 <= i < |run| && o in f.reads(run[i]) :: o
   {
     Apply(f, run)
   }
 
-  function Filter<E>(f : (E ~> bool), run: seq<E>) : (result: seq<E>)
+/*
+  method DoApply<E,R>(f: E --> R, run: seq<E>) returns (linear result: seq<R>)
+    requires |run| < Uint64UpperBound()
+    requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
+    ensures result == Apply(f, run)
+  {
+    if |run| as uint64 == 0 {
+      result := seq_empty();
+    } else {
+      var first := f(run[0]);
+      result := seq_alloc(|run| as uint64, first);
+
+      var i := 1;
+      while i < |run| as uint64
+        invariant i <= |run| as uint64
+        invariant |result| == |run|
+        invariant result[..i] == Apply(f, run)[..i]
+      {
+        var elt := f(run[i]);
+        mut_seq_set(inout result, i, elt);
+        i := i + 1;
+      }
+    }
+  }
+  */
+
+  function Filter<E>(f : (E --> bool), run: seq<E>) : (result: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| <= |run|
-    ensures forall i: nat :: i < |result| && f.requires(result[i]) ==> f(result[i])
-    reads f.reads
+    ensures forall i: nat | i < |result| :: result[i] in run
+    ensures forall i: nat | i < |result| :: f(result[i])
+    ensures forall i: nat | i < |run| && f(run[i]) :: run[i] in result
   {
-    if |run| == 0 then []
-    else ((if f(run[0]) then [run[0]] else []) + Filter(f, run[1..]))
+    if |run| == 0 then
+      []
+    else if f(Last(run)) then
+      Filter(f, DropLast(run)) + [Last(run)]
+    else
+      Filter(f, DropLast(run))
   }
-  
+
+/*
+  method DoFilter<E>(f : (E --> bool), run: seq<E>) returns (linear result: seq<E>)
+    requires |run| < Uint64UpperBound()
+    requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
+    ensures result == Filter(f, run)
+  {
+    if |run| as uint64 == 0 {
+      result := seq_empty();
+    } else {
+      linear var tresult := seq_alloc(|run| as uint64, run[0]);
+      var result_len := 0;
+
+      var i := 0;
+      while i < |run| as uint64
+        invariant i <= |run| as uint64
+        invariant |tresult| == |run|
+        invariant result_len <= i;
+        invariant tresult[..result_len] == Filter(f, run[..i])
+      {
+        if f(run[i]) {
+          tresult := seq_set(tresult, result_len, run[i]);
+          result_len := result_len + 1;
+        }
+        i := i + 1;
+        assert run[..i] == run[..i-1] + [ run[i-1] ];
+      }
+      result := TrustedRuntimeSeqTruncate(tresult, result_len);
+      assert run[..i] == run;
+    }
+  }
+*/
+
+  lemma FilterThenApplyStep<E, R>(f: E --> bool, m: E --> R, run: seq<E>)
+    requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
+    requires forall i | 0 <= i < |run| :: f(run[i]) ==> m.requires(run[i])
+    requires 0 < |run|
+    requires f(Last(run))
+    ensures Apply(m, Filter(f, run)) == Apply(m, Filter(f, DropLast(run))) + [ m(Last(run)) ]
+  {
+  }
+
+/*
+  method FilterThenApply<E, R>(f: E --> bool, m: E --> R, run: seq<E>) returns (linear result: seq<R>)
+    requires |run| < Uint64UpperBound()
+    requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
+    requires forall i | 0 <= i < |run| :: f(run[i]) ==> m.requires(run[i])
+    ensures result == Apply(m, Filter(f, run))
+  {
+    result := seq_empty();
+    var result_len := 0;
+
+    var i := 0;
+    while i < |run| as uint64
+      invariant i <= |run| as uint64
+      invariant 0 < result_len ==> |result| == |run|
+      invariant result_len <= i;
+      invariant result[..result_len] == Apply(m, Filter(f, run[..i]))
+    {
+      if f(run[i]) {
+        var tmp := m(run[i]);
+        if result_len == 0 {
+          var unit := seq_free(result);
+          result := seq_alloc(|run| as uint64, tmp);
+        }
+        result := seq_set(result, result_len, tmp);
+        result_len := result_len + 1;
+
+        FilterThenApplyStep(f, m, run[..i+1]);
+      }
+      assert run[..i+1] == run[..i] + [ run[i] ];
+      i := i + 1;
+    }
+    result := TrustedRuntimeSeqTruncate(result, result_len);
+    assert run == run[..i];
+  }
+*/
+
+  lemma ApplyThenFilterStep<E, R>(m: E --> R, f: R --> bool, run: seq<E>)
+    requires forall i :: 0 <= i < |run| ==> m.requires(run[i])
+    requires forall i | 0 <= i < |run| :: f.requires(m(run[i]))
+    requires 0 < |run|
+    ensures f(m(Last(run))) ==> Filter(f, Apply(m, run)) == Filter(f, Apply(m, DropLast(run))) + [ m(Last(run)) ]
+    ensures !f(m(Last(run))) ==> Filter(f, Apply(m, run)) == Filter(f, Apply(m, DropLast(run)))
+  {
+    assert run == DropLast(run) + [Last(run)];
+    ApplyAdditive(m, DropLast(run), [Last(run)]);
+  }
+
+/*
+  method ApplyThenFilter<E, R>(m: E --> R, f: R --> bool, run: seq<E>) returns (linear result: seq<R>)
+    requires |run| < Uint64UpperBound()
+    requires forall i | 0 <= i < |run| :: m.requires(run[i])
+    requires forall i | 0 <= i < |run| :: f.requires(m(run[i]))
+    ensures result == Filter(f, Apply(m, run))
+  {
+    if |run| as uint64 == 0 {
+      result := seq_empty();
+    } else {
+      var first := m(run[0]);
+      result := seq_alloc(|run| as uint64, first);
+      var result_len := if f(first) then 1 else 0;
+
+      var i := result_len;
+      while i < |run| as uint64
+        invariant i <= |run| as uint64
+        invariant |result| == |run|
+        invariant result_len <= i;
+        invariant result[..result_len] == Filter(f, Apply(m, run[..i]))
+      {
+        var tmp := m(run[i]);
+        if f(tmp) {
+          result := seq_set(result, result_len, tmp);
+          result_len := result_len + 1;
+          ApplyThenFilterStep(m, f, run[..i+1]);
+        } else {
+          ApplyThenFilterStep(m, f, run[..i+1]);
+        }
+        i := i + 1;
+        assert run[..i] == run[..i-1] + [ run[i-1] ];
+      }
+      result := TrustedRuntimeSeqTruncate(result, result_len);
+      assert run == run[..i];
+    }
+  }
+  */
+
   function FoldLeft<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
   {
     if |run| == 0 then init

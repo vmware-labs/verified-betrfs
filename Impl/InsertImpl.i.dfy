@@ -111,7 +111,7 @@ module InsertImpl {
     }
 
     if success {
-      var pivots, _ := s.cache.GetNodeInfo(BT.G.Root());
+      var pivots, _, _ := s.cache.GetNodeInfo(BT.G.Root());
       var bounded := ComputeBoundedKey(pivots, key);
       if !bounded {
         success := false;
