@@ -19,10 +19,10 @@ module JournalInterpMod {
 
 
   predicate Invariant(v: Variables, cache: CacheIfc.Variables)
-    requires v.WF()
   {
-    var sb := CurrentSuperblock(v);
-    var optChain := ChainFrom(cache.dv, sb).chain;
+    && v.WF()
+    && var sb := CurrentSuperblock(v);
+    && var optChain := ChainFrom(cache.dv, sb).chain;
     && optChain.Some?
     && ValidJournalChain(cache.dv, optChain.value)
     // Superblocks says chain ends where variables says it should
@@ -203,6 +203,17 @@ module JournalInterpMod {
         }
       }
     }
+  }
+
+  // Add comment about what this supposed to do the TODOS here
+  lemma InternalStepLemma(v: Variables, cache: CacheIfc.Variables, v': Variables, cache': CacheIfc.Variables,  sb:Superblock, base: InterpMod.Interp)
+    requires DiskViewsEquivalentForSet(cache.dv, cache'.dv, IReads(v, cache, sb))
+    requires v.WF()
+    requires Invariant(v, cache)
+    requires Invariant(v', cache')
+    requires base.seqEnd == v.persistentLSN
+    ensures IM(v, cache, sb, base) == IM(v', cache', sb, base)
+  {
   }
 
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock, base: InterpMod.Interp)

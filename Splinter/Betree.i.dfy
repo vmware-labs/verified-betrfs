@@ -311,6 +311,8 @@ module BetreeMachineMod {
       [flush.newChild.id := flush.newChild.cu])  // TODO breaks other dag neighbors
   }
 
+  // the newNode must contain all the messages in the oldNode and memBuffer combined.
+  // merge the two memBuffer has the most uptodate updates
   predicate MergeBuffer(oldNode: TrunkNode, memBuffer: map<Key, Message>, newNode: TrunkNode)
   {
     true // tODO

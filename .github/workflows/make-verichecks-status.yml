@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           ref: ${{ github.event.inputs.branch }}
-      - run: sudo tools/prep-environment.sh
+      - run: i=0; while [ $i -lt 10 ]; do sudo tools/prep-environment.sh && break; sleep $i; i=$[ $i + 1 ]; done
       - run: sudo pip3 install PyGithub
       - run: tools/install-dafny.sh
       - run: make -j 7 verichecks-status

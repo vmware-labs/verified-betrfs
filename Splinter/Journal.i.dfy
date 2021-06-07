@@ -314,7 +314,11 @@ module JournalMachineMod {
     // and then finally the interp Messages are supported by the actual JournalRecords.
     && (forall lsn | LSNinChain(chain, lsn) ::
           RecordSupportsMessage(chain.recs[chain.locate[lsn]], lsn, chain.interp.msgs[lsn]))
-    // Maybe want to say something about the bounds of interp
+    // interp bounds
+    && (0<|chain.recs| ==>
+        && chain.interp.seqEnd == chain.recs[0].messageSeq.seqEnd
+        && chain.interp.seqStart == chain.sb.boundaryLSN
+      )
   }
 
 
@@ -364,6 +368,7 @@ module JournalMachineMod {
   }
 
   function EmptyChain(sb: Superblock) : ( chain : JournalChain)
+    requires sb.freshestCU.None?
     ensures WFChain(chain)
   {
     reveal_WFChainInner();
@@ -382,27 +387,19 @@ module JournalMachineMod {
     : (chain: JournalChain)
     requires sb.freshestCU.Some?
     requires rec.messageSeq.WF()
-    requires rec.priorCU.Some? ==> sb.boundaryLSN < rec.messageSeq.seqStart; // proves !IsLastLink(0, chain)
+    requires sb.boundaryLSN < rec.messageSeq.seqStart; // proves !IsLastLink(0, chain)
     requires innerchain.sb == rec.priorSB(sb);
-    requires 0<|innerchain.recs|
+    requires 0 < |innerchain.recs|
     requires rec.messageSeq.seqStart == innerchain.recs[0].messageSeq.seqEnd
     requires WFChain(innerchain)
     ensures WFChain(chain)
+    ensures 0 < |chain.recs|
+    ensures chain.recs[0] == rec
+    ensures chain.interp.seqEnd == rec.messageSeq.seqEnd
   {
-    var locate0 := map lsn | lsn in rec.messageSeq.LSNSet() :: 0;
+    var locate0 := map lsn | lsn in rec.messageSeq.LSNSet() && sb.boundaryLSN <= lsn :: 0;
     var locateCdr := map lsn | lsn in innerchain.locate :: innerchain.locate[lsn] + 1;
     var locate := MapDisjointUnion(locate0, locateCdr);
-//    assert rec.messageSeq.WF();
-//    assert innerchain.interp.IsEmpty() || innerchain.interp.seqEnd == rec.messageSeq.seqStart by {
-////      if !innerchain.interp.IsEmpty() {
-////        assert 0<|innerchain.recs|;
-//////        calc {
-//////          innerchain.interp.seqEnd;
-//////          innerchain.recs[0].messageSeq.seqEnd;
-//////          rec.messageSeq.seqStart;
-//////        }
-////      }
-//    }
     var interp := innerchain.interp.Concat(rec.messageSeq);
     var chain := JournalChain(sb, [rec] + innerchain.recs, locate, interp);
     assert WFChainBasic(chain) by {
@@ -431,9 +428,10 @@ module JournalMachineMod {
 
   // NOTE: Chain from by itself has no bounds on the ending LSN
   function ChainFrom(dv: DiskView, sb: Superblock) : (r:ChainResult)
-    ensures r.chain.Some? ==> WFChain(r.chain.value)
+    ensures r.chain.Some? ==> ValidJournalChain(dv, r.chain.value)
     decreases |dv.Keys|
   {
+    reveal_ChainMatchesDiskView();
     if sb.freshestCU.None? then
       // Superblock told the whole story; nothing to read.
       ValidEmptyChain(dv, sb);
@@ -464,6 +462,11 @@ module JournalMachineMod {
           forall lsn | chain.interp.Contains(lsn) ensures LSNinChain(chain, lsn) {}
         }
         ChainResult(Some(chain), [sb.freshestCU.value])
+      else if firstRec.value.priorCU.None? then
+        // we need more messages, but the pointer is dead! We can't build a chain that
+        // satisfies IsLastLink.
+        assert sb.boundaryLSN < firstRec.value.messageSeq.seqStart;
+        ChainResult(None, [sb.freshestCU.value])
       else
         var inner := ChainFrom(MapRemove1(dv, sb.freshestCU.value), firstRec.value.priorSB(sb));
         if inner.chain.None? // tail didn't decode or
@@ -475,80 +478,8 @@ module JournalMachineMod {
           // We read our cu plus however far the recursive call reached.
           ChainResult(None, [sb.freshestCU.value] + inner.readCUs)
         else
-          assert 0<|inner.chain.value.recs| by {
-            var innerchain := inner.chain.value;
-            assert WFChainBasic(innerchain);
-            assert innerchain.sb.freshestCU.None? <==> 0 == |innerchain.recs|;
-            assert innerchain.sb.freshestCU.Some?;
-          }
           var chain := ExtendChain(sb, firstRec.value, inner.chain.value);
-          assert WFChain(chain);
-//    && WFChainInner(chain)
- //   && WFChainInterp(chain)
           ChainResult(Some(chain), [sb.freshestCU.value] + inner.readCUs)
-  }
-
-  lemma ChainFromProperties(dv: DiskView, sb: Superblock)
-    ensures var r := ChainFrom(dv, sb); r.chain.Some? ==>
-      && var chain := r.chain.value;
-      && ValidJournalChain(dv, chain)
-      && chain.sb == sb
-      // Make sure we're returning blocks starting from the oldest recoverable block
-      && (!chain.interp.IsEmpty() ==> chain.interp.seqStart == sb.boundaryLSN)
-      && (0<|chain.recs| ==>
-          chain.interp.seqEnd == Last(chain.recs).messageSeq.seqEnd)
-  {
-    var r := ChainFrom(dv, sb);
-    if r.chain.Some? {
-      var chain := r.chain.value;
-      assert ChainMatchesDiskView(dv, chain);
-      assert ValidJournalChain(dv, chain);
-      assert chain.sb == sb;
-      if sb.freshestCU.None? || sb.freshestCU.value !in dv {
-        assert chain.interp.IsEmpty();
-      } else {
-        var firstRec := parse(dv[sb.freshestCU.value]);
-        if firstRec.None? {
-          assert chain.interp.seqStart == sb.boundaryLSN;
-        }
-        else if firstRec.value.messageSeq.seqEnd <= sb.boundaryLSN {
-          assert chain.interp.seqStart == sb.boundaryLSN;
-        }
-        else if firstRec.value.messageSeq.seqStart <= sb.boundaryLSN {
-          assert chain.interp.seqStart == sb.boundaryLSN;
-        }
-        else {
-          var inner := ChainFrom(MapRemove1(dv, sb.freshestCU.value), firstRec.value.priorSB(sb));
-          ChainFromProperties(MapRemove1(dv, sb.freshestCU.value), firstRec.value.priorSB(sb));
-          if inner.chain.None? {
-            assert chain.interp.IsEmpty();
-          } else {
-            calc {
-              chain.interp.seqStart;
-              inner.chain.value.interp.seqStart;
-              firstRec.value.priorSB(sb).boundaryLSN;
-              sb.boundaryLSN;
-            }
-         }
-        }
-      }
-      if 0<|chain.recs| {
-        assert chain.interp.seqEnd == Last(chain.recs).messageSeq.seqEnd;
-      }
-    }
-//          assert firstRec.value.priorCU.Some? ==> sb.boundaryLSN < firstRec.value.messageSeq.seqStart;
-//        assert firstRec.value.WF(); // trigger. Kinda obvious, tbh.
-//        assert ValidJournalChain(dv, r.chain.value) by {
-//          reveal_WFChainInner();
-//          reveal_ChainMatchesDiskView();
-//        }
-//        assert r.chain.value.interp.seqStart == sb.boundaryLSN;
-//        r
-//    assert ValidJournalChain(dv, chain) by {
-//      reveal_ChainMatchesDiskView();
-//      var cus := CUsForChain(chain);
-//      assert forall i | 0<=i<|chain.recs| :: RecordOnDisk(dv, cus[i], chain.recs[i]); // trigger
-//    }
   }
 
   // JournalChain

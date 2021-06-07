@@ -146,52 +146,6 @@ module ProgramInterpMod {
   {
   }
 
-  lemma NextRefines(v: Variables, v': Variables, uiop: CrashTolerantMapSpecMod.UIOp, dop: DiskOp)
-    //requires Inv(v)
-    requires Inv(v)
-    requires Next(v, v', uiop, dop)
-    ensures CrashTolerantMapSpecMod.Next(IM(v), IM(v'), uiop)
-  {
-    var cacheOps,step :| NextStep(v, v', cacheOps, step);
-    match step {
-      case RecoverStep(_, _) => {
-        assert IM(v') == IM(v);
-      }
-      case QueryStep(key, val, sk) => {
-        assert IM(v') == IM(v);
-      }
-      case PutStep(key, val, sk) => {
-        // This step should be difficult. :v)
-        // hah yes it's not, because IM is only looking at the cache, not the membuffer
-        // (internal state machine state)
-        //assert IM(v') == IM(v).Put(key, val);
-      }
-      case JournalInternalStep(sk) => {
-        assume false;
-        assert IM(v') == IM(v);
-      }
-      case BetreeInternalStep(sk) => {
-        assume false;
-        assert IM(v') == IM(v);
-      }
-      case ReqSyncStep(syncReqId) => {
-        assume false;
-        assert IM(v') == IM(v);
-      }
-      case CompleteSyncStep(syncReqId) => {
-        assume false;
-        assert IM(v') == IM(v);
-      }
-      case CommitStartStep(seqBoundary) => {
-        assume false;
-        assert IM(v') == IM(v);
-      }
-      case CommitCompleteStep() => {
-        assume false;
-        assert IM(v') == IM(v);
-      }
-    }
-  }
 }
 
 /*

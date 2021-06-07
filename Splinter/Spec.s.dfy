@@ -32,18 +32,15 @@ module MapSpecMod {
 
   predicate Query(s: Variables, s': Variables, k: Key, v: Value)
   {
-    && s' == s
     && s.interp.WF()
     // TODO: fix this
-    && s.interp.mi[k].v == v
+    && v == s.interp.mi[k].v
+    && s' == s
   }
 
   predicate Put(s: Variables, s': Variables, k: Key, v: Value)
   {
-    // TODO: fix this!! We need to apply the op here
-    //&& s' == s.(interp := s.interp.Put(k,v))
-      // NB mutations advance the sequence number
-      true
+    && s' == s.(interp := s.interp.Put(k, MessagePut(k,v)))
   }
 
   predicate Next(v: Variables, v': Variables, input: Input, out: Output)
@@ -213,12 +210,14 @@ module CrashTolerantMapSpecMod {
     // Commit can truncate old versions
     && (forall i | 0<=i<|s.versions| ::
       || s'.versions == s.versions
-      || s'.versions[i].Truncated?)
+      || (i < s.stableIdx && s'.versions[i].Truncated?)
+      )
     && s'.WF()  // But it can't truncate things after stableIdx
     // stableIdx advances towards, possibly all the way to, ephemeral state.
     && s.stableIdx < s'.stableIdx < |s.versions|
   }
 
+  // sync api contract to the end user
   predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
   {
     && s.WF()
@@ -246,7 +245,7 @@ module CrashTolerantMapSpecMod {
   // The Op provides *most* of Jay Normal Form -- except skolem variables, of which we have
   // exactly one, so I decided to just exists it like a clown.
   datatype UIOp =
-    | OperateOp(baseOp: AsyncMapSpecMod.UIOp)
+    | OperateOp(baseOp: AsyncMapSpecMod.UIOp) // Put or Query Internally
     | CrashOp
     | AsyncCommitOp
     | ReqSyncOp(syncReqId: SyncReqId)
