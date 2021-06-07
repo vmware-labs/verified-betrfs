@@ -238,7 +238,7 @@ module PivotBetreeSpecRefinement {
   function IClone(clone: P.NodeClone) : B.Clone
   requires P.ValidClone(clone)
   {
-    B.Clone(INode(clone.oldroot), INode(clone.newroot), P.CloneMap(clone.from, clone.to))
+    B.Clone(INode(clone.oldroot), INode(clone.newroot), MS.CloneMap(clone.from, clone.to))
   }
 
   function IStep(betreeStep: P.BetreeStep) : B.BetreeStep
@@ -1859,6 +1859,7 @@ module PivotBetreeSpecRefinement {
     ensures IMapsAgreeOnKey(c.newroot.buffer, c.oldroot.buffer, k)
     ensures IMapsAgreeOnKey(c.newroot.children, c.oldroot.children, k)
     {
+      assert !IsPrefix(clone.to, k) by { reveal_IsPrefix(); }
       ContainsAllKeysImpliesBoundedKey(clone.oldroot.pivotTable, k);
       ContainsAllKeysImpliesBoundedKey(clone.newroot.pivotTable, k);
       var r := Route(clone.newroot.pivotTable, k);

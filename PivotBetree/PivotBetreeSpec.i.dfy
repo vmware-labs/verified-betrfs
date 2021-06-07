@@ -915,20 +915,7 @@ module PivotBetreeSpec {
 
   datatype NodeClone = NodeClone(oldroot: Node, newroot: Node, from: Key, to: Key)
 
-  function fromkey(k: Key, to: Key, from: Key) : Key 
-  requires IsPrefix(to, k)
-  {
-    assume |from + k[|to|..]| <= 1024;
-    from + k[|to|..]
-  }
-
-  // from = old, to = new
-  function CloneMap(from: Key, to: Key) : imap<Key, Key>
-  {
-    imap k | IsPrefix(to, k) :: fromkey(k, to, from)
-  }
-
-  // TODO: separate step
+  // TODO: split into separate step
   function RestrictAndTranslateNode(node: Node, from: Key, to: Key) : (node': Node)
   requires WFNode(node)
   requires ContainsAllKeys(node.pivotTable)
@@ -1137,7 +1124,7 @@ module PivotBetreeSpec {
       case BetreeSplit(fusion) => uiop.NoOp?
       case BetreeMerge(fusion) => uiop.NoOp?
       case BetreeRepivot(r) => uiop.NoOp?
-      case BetreeClone(clone) => uiop == MS.UI.CloneOp(CloneMap(clone.from, clone.to))
+      case BetreeClone(clone) => uiop == MS.UI.CloneOp(clone.from, clone.to)
     }
   }
 

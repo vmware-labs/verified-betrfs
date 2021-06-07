@@ -124,11 +124,40 @@ module MapSpec refines UIStateMachine {
       else (if k in view then view[k] else EmptyValue())
   }
 
+  predicate KeyHasPrefix(key: Key, prefix: Key)
+  {
+    && |prefix| <= |key|
+    && key[..|prefix|] == prefix
+  }
+
+  function fromkey(k: Key, to: Key, from: Key) : Key 
+  requires KeyHasPrefix(k, to)
+  {
+    assume |from + k[|to|..]| <= 1024;
+    from + k[|to|..]
+  }
+
+  // from = old, to = new
+  function CloneMap(from: Key, to: Key) : (m: imap<Key, Key>)
+  {
+    imap k | KeyHasPrefix(k, to) :: fromkey(k, to, from)
+  }
+
+  // predicate CloneMapFollowsUIOp(uiop: UIOp, new_to_old:imap<Key, Key>)
+  // {
+  //   && uiop.CloneOp?
+  //   && (forall k | k in new_to_old ::
+  //     && KeyHasPrefix(k, uiop.to)
+  //     && KeyHasPrefix(new_to_old[k], uiop.from)
+  //   )
+  // }
+
   // clone(k, k') => k's content is k
   // old = k, new = k' 
   predicate Clone(s:Variables, s':Variables, uiop: UIOp, new_to_old:imap<Key, Key>)
   {
-    && uiop == UI.CloneOp(new_to_old)
+    && uiop.CloneOp?
+    && new_to_old == CloneMap(uiop.from, uiop.to)
     && WF(s)
     && WF(s')
     && s'.view == CloneView(s.view, new_to_old)

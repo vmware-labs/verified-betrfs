@@ -17,7 +17,7 @@ module TSJMap_Refines_ThreeStateVersionedMap {
   {
     match je {
       case JournalInsert(key, value) => MapSpec.Variables(m.view[key := value])
-      case JournalClone(new_to_old) => MapSpec.Variables(MapSpec.ApplyCloneView(m.view, new_to_old))
+      case JournalClone(from, to) => MapSpec.Variables(MapSpec.ApplyCloneView(m.view, MapSpec.CloneMap(from, to)))
     }
   }
 
@@ -33,7 +33,7 @@ module TSJMap_Refines_ThreeStateVersionedMap {
   {
     match uiop {
       case PutOp(key, value) => MapSpec.Variables(m.view[key := value])
-      case CloneOp(new_to_old) => MapSpec.Variables(MapSpec.ApplyCloneView(m.view, new_to_old))
+      case CloneOp(from, to) => MapSpec.Variables(MapSpec.ApplyCloneView(m.view, MapSpec.CloneMap(from, to)))
       case _ => m
     }
   }
