@@ -32,7 +32,7 @@ module QueryStates {
     ) else (
       && q.query'.InProgress?
       && q.query'.delta == G.M.CombineDeltas(q.query.delta, q.parent.buffer[q.query.key].delta)
-      && IMapsTo(q.parent.children, q.query.key, q.query'.ref)
+      && ChildMapsToRef(q.parent.children, q.query.key, q.query'.ref)
     )
   }
 

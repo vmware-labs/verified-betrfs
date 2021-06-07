@@ -107,7 +107,7 @@ module AsyncBetree_Refines_AsyncMap {
   requires Betree.NextStep(betree, betree', uiop, step)
   requires QueryInv(betree, qs)
   requires qs.InProgress?
-  requires (step.BetreeStep? && step.step.BetreeInsert? ==> qs.ref != Root())
+  requires (step.BetreeStep? && (step.step.BetreeInsert? || step.step.BetreeClone?) ==> qs.ref != Root())
   requires (step.GCStep? ==> qs.ref !in step.refs)
   ensures QueryInv(betree', qs)
   ensures QueryAnswer(betree, qs) == QueryAnswer(betree', qs)
@@ -128,11 +128,13 @@ module AsyncBetree_Refines_AsyncMap {
             BetreeInv.FlushPreservesLookups(betree, betree', qs.ref, flush);
           }
           case BetreeGrow(growth) => {
-            BetreeInv.GrowPreservesLookups(
-                betree, betree', qs.ref, growth.oldroot, growth.newchildref);
+            BetreeInv.GrowPreservesLookups(betree, betree', qs.ref, growth);
           }
           case BetreeRedirect(redirect) => {
             BetreeInv.RedirectPreservesLookups(betree, betree', qs.ref, redirect);
+          }
+          case BetreeClone(clone) => {
+            BetreeInv.ClonePreservesNonrootLookups(betree, betree', qs.ref, clone);
           }
         }
       }

@@ -43,7 +43,7 @@ module AsyncBetree {
   {
     && s'.queries == s.queries
     && Betree.NextStep(s.betree, s'.betree, uiop, betreeStep)
-    && (betreeStep.BetreeStep? && betreeStep.step.BetreeInsert?
+    && (betreeStep.BetreeStep? && (betreeStep.step.BetreeInsert? || betreeStep.step.BetreeClone?)
         ==> AvoidsQueries(Root(), s.queries))
     && (betreeStep.GCStep? ==> forall r | r in betreeStep.refs :: AvoidsQueries(r, s.queries))
   }
@@ -120,7 +120,7 @@ module AsyncBetree {
   requires Betree.NextStep(betree, betree', uiop, step)
   requires QueryInv(betree, qs)
   requires qs.InProgress?
-  requires (step.BetreeStep? && step.step.BetreeInsert? ==> qs.ref != Root())
+  requires (step.BetreeStep? && (step.step.BetreeInsert? || step.step.BetreeClone?) ==> qs.ref != Root())
   requires (step.GCStep? ==> qs.ref !in step.refs)
   ensures QueryInv(betree', qs)
   {
@@ -140,11 +140,13 @@ module AsyncBetree {
             BetreeInv.FlushPreservesLookups(betree, betree', qs.ref, flush);
           }
           case BetreeGrow(growth) => {
-            BetreeInv.GrowPreservesLookups(
-                betree, betree', qs.ref, growth.oldroot, growth.newchildref);
+            BetreeInv.GrowPreservesLookups(betree, betree', qs.ref, growth);
           }
           case BetreeRedirect(redirect) => {
             BetreeInv.RedirectPreservesLookups(betree, betree', qs.ref, redirect);
+          }
+          case BetreeClone(clone) => {
+            BetreeInv.ClonePreservesNonrootLookups(betree, betree', qs.ref, clone);
           }
         }
       }
@@ -163,11 +165,11 @@ module AsyncBetree {
   requires ValidQueryDescent(qd)
   requires BI.Reads(betree.bcv, QueryDescentReads(qd))
   requires |lookup| > 0
-  requires lookup[0].ref == qd.query.ref
+  requires lookup[0].readOp.ref == qd.query.ref
   requires BetreeInv.IsSatisfyingLookup(betree.bcv.view, qd.query.key, value, lookup)
   ensures qd.query'.InProgress? ==>
       && |lookup'| > 0
-      && lookup'[0].ref == qd.query'.ref
+      && lookup'[0].readOp.ref == qd.query'.ref
       && BetreeInv.IsSatisfyingLookup(betree.bcv.view, qd.query'.key, value', lookup')
       && G.M.ApplyDelta(qd.query.delta, value)
           == G.M.ApplyDelta(qd.query'.delta, value')
@@ -178,7 +180,8 @@ module AsyncBetree {
     lookup' := lookup[1..];
     var l0 := [lookup[0]];
     assert l0 + lookup' == lookup; 
-    BetreeInv.InterpretLookupAdditive(l0, lookup', qd.query.key);
+    // BetreeInv.InterpretLookupAdditive(l0, lookup', qd.query.key);
+    BetreeInv.InterpretLookupAdditive(l0, lookup');
 
     if qd.query'.InProgress? {
       if |lookup| == 1 {
@@ -190,16 +193,17 @@ module AsyncBetree {
 
       assert |lookup| >= 2;
 
-      var m' := InterpretLookup(lookup', qd.query.key);
+      // var m' := InterpretLookup(lookup', qd.query.key);
+      var m' := InterpretLookup(lookup');
       assert m'.Define?;
       value' := m'.value;
 
-      assert LookupFollowsChildRefAtLayer(qd.query.key, lookup, 0);
+      assert LookupFollowsChildRefAtLayer(lookup, 0);
 
       forall idx | 0 <= idx < |lookup'| - 1
-      ensures LookupFollowsChildRefAtLayer(qd.query'.key, lookup', idx)
+      ensures LookupFollowsChildRefAtLayer(lookup', idx)
       {
-        assert LookupFollowsChildRefAtLayer(qd.query'.key, lookup, idx+1);
+        assert LookupFollowsChildRefAtLayer(lookup, idx+1);
         assert lookup'[idx] == lookup[idx+1];
         assert lookup'[idx+1] == lookup[idx+2];
       }
@@ -207,6 +211,7 @@ module AsyncBetree {
       G.M.ApplyIsAssociative(qd.query.delta, 
           betree.bcv.view[qd.query.ref].buffer[qd.query.key].delta,
           value');
+      assume false;
     } else {
     }
   }
@@ -220,8 +225,9 @@ module AsyncBetree {
   {
     var lookup: Lookup, value :|
       && BetreeInv.IsSatisfyingLookup(betree.bcv.view, qd.query.key, value, lookup)
-      && lookup[0].ref == qd.query.ref;
+      && lookup[0].readOp.ref == qd.query.ref;
     var lookup', value' := QueryAdvanceChangesLookup(betree, qd, lookup, value);
+    assume false;
   }
  
   lemma NextPreservesInv(s: Variables, s': Variables, uiop: UI.Op)

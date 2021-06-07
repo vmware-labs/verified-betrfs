@@ -27,11 +27,12 @@ module BetreeGraph refines Graph {
 
   type BufferEntry = M.Message
   type Buffer = imap<Key, BufferEntry>
-  datatype Node = Node(children: imap<Key, Reference>, buffer: Buffer)
+  datatype Edge = Edge(edgeKey: Key, ref: Reference)
+  datatype Node = Node(children: imap<Key, Edge>, buffer: Buffer)
 
   function Successors(node: Node) : iset<Reference>
   {
-    iset k | k in node.children :: node.children[k]
+    iset k | k in node.children :: node.children[k].ref
   }
 }
 
@@ -68,7 +69,22 @@ module BetreeSpec {
     && (forall k:Key :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
-  type Layer = G.ReadOp
+  // Now we define the state machine
+
+  //// Edge
+  predicate ChildMapsToRef(m: imap<Key, Edge>, k: Key, result: Reference) {
+    && k in m
+    && m[k].ref == result
+  }
+
+  predicate ChildMapsToEdge(m: imap<Key, Edge>, k: Key, result: Key) {
+    && k in m
+    && m[k].edgeKey == result
+  }
+ 
+  //// Query
+
+  datatype Layer = Layer(readOp: G.ReadOp, currentKey: Key)
   type Lookup = seq<Layer>
 
   //// Query
@@ -80,45 +96,67 @@ module BetreeSpec {
   }
 
   predicate LookupVisitsWFNodes(lookup: Lookup) {
-    forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
+    forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].readOp.node)
   }
 
-  predicate LookupFollowsChildRefAtLayer(key: Key, lookup: Lookup, idx: int)
+  predicate LookupFollowsChildRefAtLayer(lookup: Lookup, idx: int)
     requires 0 <= idx < |lookup| - 1;
   {
-    IMapsTo(lookup[idx].node.children, key, lookup[idx+1].ref)
+    ChildMapsToRef(lookup[idx].readOp.node.children, lookup[idx].currentKey, lookup[idx+1].readOp.ref)
   }
 
-  predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
-    //&& (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> key in lookup[idx].node.children)
-    && (forall idx :: 0 <= idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
+  predicate LookupFollowsChildRefs(lookup: Lookup) {
+    (forall idx :: 0 <= idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(lookup, idx))
+  }
+
+  predicate LookupFollowsEdgeAtLayer(lookup: Lookup, idx: int)
+    requires 0 <= idx < |lookup| - 1;
+  {
+    ChildMapsToEdge(lookup[idx].readOp.node.children, lookup[idx].currentKey, lookup[idx+1].currentKey)
+  }
+
+  predicate LookupFollowsEdges(lookup: Lookup) {
+    (forall idx :: 0 <= idx < |lookup| - 1 ==> LookupFollowsEdgeAtLayer(lookup, idx))
   }
 
   predicate WFLookupForKey(lookup: Lookup, key: Key)
   {
     && |lookup| > 0
-    && lookup[0].ref == Root()
-    && LookupFollowsChildRefs(key, lookup)
+    && lookup[0].readOp.ref == Root()
+    && lookup[0].currentKey == key
+    && LookupFollowsChildRefs(lookup)
+    && LookupFollowsEdges(lookup)
     && LookupVisitsWFNodes(lookup)
   }
 
-  function InterpretLookup(lookup: Lookup, key: Key) : (m : G.M.Message)
+  function InterpretLookup(lookup: Lookup) : G.M.Message
   requires LookupVisitsWFNodes(lookup)
   {
     if |lookup| == 0
     then
         G.M.Update(G.M.NopDelta())
     else
-        G.M.Merge(InterpretLookup(DropLast(lookup), key), Last(lookup).node.buffer[key])
+        G.M.Merge(InterpretLookup(DropLast(lookup)), Last(lookup).readOp.node.buffer[Last(lookup).currentKey])
   }
 
   predicate ValidQuery(q: LookupQuery) {
     && WFLookupForKey(q.lookup, q.key)
-    && BufferDefinesValue(InterpretLookup(q.lookup, q.key), q.value)
+    && BufferDefinesValue(InterpretLookup(q.lookup), q.value)
+  }
+
+  function LayersToReadOps(lookup: seq<Layer>): (result: seq<ReadOp>)
+    ensures |lookup| == |result|
+    ensures forall idx :: 0 <= idx < |lookup| ==> lookup[idx].readOp == result[idx]
+  {
+    if |lookup| == 0
+    then
+        []
+    else
+        LayersToReadOps(DropLast(lookup)) + [Last(lookup).readOp]
   }
 
   function QueryReads(q: LookupQuery): seq<ReadOp> {
-    q.lookup
+    LayersToReadOps(q.lookup)
   }
 
   function QueryOps(q: LookupQuery): seq<Op> {
@@ -135,26 +173,32 @@ module BetreeSpec {
 
   predicate LookupKeyValue(l: Lookup, key: Key, value: Value)
   {
-    && WFLookupForKey(l,key)
-    && BufferDefinesValue(InterpretLookup(l, key), value)
+    && WFLookupForKey(l, key)
+    && BufferDefinesValue(InterpretLookup(l), value)
+  }
+
+  predicate SamePathWithKeyValue(l: Lookup, l': Lookup, key: Key, value: Value)
+  {
+    && |l| == |l'|
+    && (forall i | 0 <= i < |l'| :: l[i].readOp == l'[i].readOp)
+    && LookupKeyValue(l', key, value)
   }
 
   predicate ValidSuccQuery(q: SuccQuery)
   {
     && MS.NonEmptyRange(q.start, q.end)
-    && (forall i | 0 <= i < |q.results| :: LookupKeyValue(q.lookup, q.results[i].key, q.results[i].value))
-    && (forall i | 0 <= i < |q.results| :: q.results[i].value != MS.EmptyValue())
+    && (forall r | r in q.results :: (exists lookup :: SamePathWithKeyValue(q.lookup, lookup, r.key, r.value)))
     && (forall i | 0 <= i < |q.results| :: MS.InRange(q.start, q.results[i].key, q.end))
+    && (forall i | 0 <= i < |q.results| :: q.results[i].value != MS.EmptyValue())
     && (forall i, j | 0 <= i < j < |q.results| :: Keyspace.lt(q.results[i].key, q.results[j].key))
     && (forall key | MS.InRange(q.start, key, q.end) ::
         (forall i | 0 <= i < |q.results| :: q.results[i].key != key) ==>
-        LookupKeyValue(q.lookup, key, MS.EmptyValue())
-      )
+          (exists lookup :: SamePathWithKeyValue(q.lookup, lookup, key, MS.EmptyValue())))
   }
 
   function SuccQueryReads(q: SuccQuery) : seq<ReadOp>
   {
-    q.lookup
+    LayersToReadOps(q.lookup)
   }
 
   function SuccQueryOps(q: SuccQuery) : seq<Op>
@@ -206,21 +250,41 @@ module BetreeSpec {
       child: Node,
       newchildref: Reference,
       newchild: Node,
-      movedKeys: iset<Key>,
-      flushedKeys: iset<Key>)
+      movedkeys: iset<Key>,
+      flushedkeys: iset<Key>)
 
   predicate ValidFlush(flush: NodeFlush)
   {
     && WFNode(flush.parent)
     && WFNode(flush.child)
+    && WFNode(flush.newparent)
+    && WFNode(flush.newchild)
     // TODO(jonh): replace this with "<="
-    && (forall key | key in flush.flushedKeys :: key in flush.movedKeys)
-    && (forall key | key in flush.movedKeys :: IMapsTo(flush.parent.children, key, flush.childref))
-    // new nodes state
-    && flush.newparent.children == (imap k | k in flush.parent.children :: (if k in flush.movedKeys then flush.newchildref else flush.parent.children[k]))
-    && flush.newparent.buffer == (imap k : Key :: (if k in flush.flushedKeys then G.M.IdentityMessage() else flush.parent.buffer[k]))
-    && flush.newchild.children == flush.child.children
-    && flush.newchild.buffer == (imap k : Key :: (if k in flush.flushedKeys then G.M.Merge(flush.parent.buffer[k], flush.child.buffer[k]) else flush.child.buffer[k]))
+    // flushed keys are within moved keys and exist in parent's children
+    && (forall key | key in flush.flushedkeys :: key in flush.movedkeys)
+    && (forall key | key in flush.movedkeys :: key in flush.parent.children && ChildMapsToRef(flush.parent.children, key, flush.childref))
+    && ValidFlushNewParent(flush)
+    && ValidFlushNewChild(flush)
+  }
+
+  predicate ValidFlushNewParent(flush: NodeFlush)
+  requires WFNode(flush.parent)
+  requires (forall key | key in flush.flushedkeys :: key in flush.parent.children)
+  {
+    && (flush.newparent.buffer == (imap k: Key :: if k in flush.flushedkeys then G.M.Update(G.M.NopDelta()) else flush.parent.buffer[k]))
+    && (forall key | key in flush.movedkeys :: IMapsTo(flush.newparent.children, key, Edge(key, flush.newchildref)))
+    && (forall key | key !in flush.movedkeys :: IMapsAgreeOnKey(flush.newparent.children, flush.parent.children, key))
+  }
+
+  predicate ValidFlushNewChild(flush: NodeFlush)
+  requires WFNode(flush.parent)
+  requires WFNode(flush.child)
+  requires (forall key | key in flush.movedkeys :: key in flush.parent.children)
+  {
+    && var tmpbuffer := imap k | k in flush.movedkeys :: flush.child.buffer[flush.parent.children[k].edgeKey];
+    && var newbuffer := imap k | k in flush.movedkeys :: if k in flush.flushedkeys then G.M.Merge(flush.parent.buffer[k], tmpbuffer[k]) else tmpbuffer[k];
+    && (forall key | key in flush.movedkeys :: IMapsAgreeOnKey(flush.newchild.buffer, newbuffer, key))
+    && flush.newchild.children == (imap k | k in flush.movedkeys && flush.parent.children[k].edgeKey in flush.child.children :: flush.child.children[flush.parent.children[k].edgeKey])
   }
 
   function FlushReads(flush: NodeFlush) : seq<ReadOp>
@@ -259,7 +323,7 @@ module BetreeSpec {
   requires ValidGrow(growth)
   {
     var newroot := Node(
-        imap key | MS.InDomain(key) :: growth.newchildref,
+        imap key | MS.InDomain(key) :: Edge(key, growth.newchildref),
         imap key | MS.InDomain(key) :: G.M.Update(G.M.NopDelta()));
     var allocop := G.AllocOp(growth.newchildref, growth.oldroot);
     var writeop := G.WriteOp(Root(), newroot);
@@ -281,74 +345,78 @@ module BetreeSpec {
     keys: iset<Key>
   )
 
-  predicate RedirectRefInOldChildren(redirect: Redirect, ref: Reference)
-  {
-    exists key ::
-      && key in redirect.old_parent.children
-      && key in redirect.keys
-      && redirect.old_parent.children[key] == ref
-  }
-
-  predicate RedirectChildChildInOld(redirect: Redirect, 
-      childref: Reference, ref: Reference)
-  requires childref in redirect.new_children
-  {
-    exists key ::
-      && IMapsTo(redirect.new_parent.children, key, childref)
-      && IMapsTo(redirect.new_children[childref].children, key, ref)
-      && key in redirect.keys
-      && key in redirect.old_parent.children
-  }
-
-  predicate ValidRedirect(redirect: Redirect) {
+  predicate WFRedirect(redirect: Redirect) {
+    var old_parent_children_ref := imap k | k in redirect.old_parent.children :: redirect.old_parent.children[k].ref;
+    var new_parent_children_ref := imap k | k in redirect.new_parent.children :: redirect.new_parent.children[k].ref;
+  
     && WFNode(redirect.old_parent)
-    && (forall node :: node in redirect.old_children.Values ==> WFNode(node))
+    && (forall key | key in redirect.old_children :: WFNode(redirect.old_children[key]))
     && WFNode(redirect.new_parent)
-    && (forall node :: node in redirect.new_children.Values ==> WFNode(node))
+    && (forall key | key in redirect.new_children :: WFNode(redirect.new_children[key]))
+    && (forall key | key in redirect.keys :: key in redirect.old_parent.children && key in redirect.new_parent.children)
 
-    // Consistency of old_parent, old_childrefs, old_children, and keys
-    && (forall key  | key in redirect.old_parent.children && key in redirect.keys :: redirect.old_parent.children[key] in redirect.old_childrefs)
-    && (forall key  | key in redirect.old_parent.children && key in redirect.keys :: redirect.old_parent.children[key] in redirect.old_children)
-    && (forall ref {:trigger RedirectRefInOldChildren(redirect, ref)} | ref in redirect.old_childrefs :: RedirectRefInOldChildren(redirect, ref))
-    && (forall ref {:trigger RedirectRefInOldChildren(redirect, ref)} | ref in redirect.old_children :: RedirectRefInOldChildren(redirect, ref))
-    && (forall ref :: ref in redirect.old_childrefs ==> ref in redirect.old_children)
+    // Consistency of old_parent, old_childrefs, old_children, and keys 
+    && (forall ref :: ref in IMapRestrict(old_parent_children_ref, redirect.keys).Values <==> ref in redirect.old_childrefs)
+    && redirect.old_children.Keys == IMapRestrict(old_parent_children_ref, redirect.keys).Values
 
     // Consistency of new_parent, new_childrefs, new_children, and keys
-    && (forall key  | key in redirect.new_parent.children && key in redirect.keys :: redirect.new_parent.children[key] in redirect.new_childrefs)
-    && (forall ref | ref in redirect.new_children :: ref in redirect.new_childrefs)
-    && (forall ref | ref in redirect.new_childrefs :: ref in redirect.new_children)
+    && (forall ref :: ref in IMapRestrict(new_parent_children_ref, redirect.keys).Values ==> ref in redirect.new_childrefs)
+    && redirect.new_children.Keys == (iset ref | ref in redirect.new_childrefs)
+  }
 
+  predicate ValidRedirectNewParent(redirect: Redirect) 
+    requires WFRedirect(redirect)
+  {
     // Defines new_parent
     && redirect.new_parent.buffer == redirect.old_parent.buffer
-    && (forall key  :: key in redirect.keys ==> key in redirect.new_parent.children)
-    && (forall key  :: key in redirect.keys ==> redirect.new_parent.children[key] in redirect.new_childrefs)
-    && (forall key  :: key !in redirect.keys ==> IMapsAgreeOnKey(redirect.new_parent.children, redirect.old_parent.children, key))
+    && (forall key :: key in redirect.keys ==> redirect.new_parent.children[key].ref in redirect.new_childrefs)
+    && (forall key :: key in redirect.keys ==> redirect.new_parent.children[key].edgeKey == key)
+    && (forall key :: key !in redirect.keys ==> IMapsAgreeOnKey(redirect.new_parent.children, redirect.old_parent.children, key))
+  }
 
-    // The buffer of the new child has to agree with the buffers of the old children on the keys that were routed to them.
-    && (forall key  :: key in redirect.keys && key in redirect.old_parent.children.Keys ==>
-       && redirect.old_parent.children[key] in redirect.old_children
-       && redirect.new_parent.children[key] in redirect.new_children
-       && IMapsAgreeOnKey(
-          redirect.new_children[redirect.new_parent.children[key]].buffer,
-          redirect.old_children[redirect.old_parent.children[key]].buffer,
-          key))
-
+  predicate ValidRedirectNewChildren(redirect: Redirect) 
+    requires WFRedirect(redirect) 
+    requires ValidRedirectNewParent(redirect)
+  {
+    // The buffer of the new child has to agree with the buffers of the old children on the keys that were routed to them
+    // things to agree on, edge translation from parent will be pushed to child, buffer content will reflect that update
     // The children of the new child must agree with the children of the old children on the keys that were routed to them.
-    && (forall key  :: key in redirect.keys && key in redirect.old_parent.children.Keys ==>
-       && redirect.old_parent.children[key] in redirect.old_children
-       && redirect.new_parent.children[key] in redirect.new_children
-       && IMapsAgreeOnKey(
-          redirect.new_children[redirect.new_parent.children[key]].children,
-          redirect.old_children[redirect.old_parent.children[key]].children,
-          key))
+    (forall key :: key in redirect.keys ==>
+      && redirect.old_parent.children[key].ref in redirect.old_children
+      && var newchild := redirect.new_children[redirect.new_parent.children[key].ref];
+      && var oldchild := redirect.old_children[redirect.old_parent.children[key].ref];
+      && var edgekey := redirect.old_parent.children[key].edgeKey; // translated key
+      && newchild.buffer[key] == oldchild.buffer[edgekey] // indexing using parent's key
+      && ((key in newchild.children) <==> (edgekey in oldchild.children))
+      && ((key in newchild.children) ==> newchild.children[key] == oldchild.children[edgekey]))
+  }
 
+  predicate ValidRedirectNewGrandchildrenCheckKey(redirect: Redirect, key: Key, childref: Reference, edgeref: Reference) 
+    requires childref in redirect.new_children
+  {
+    && ChildMapsToRef(redirect.new_parent.children, key, childref)
+    && ChildMapsToRef(redirect.new_children[childref].children, key, edgeref)
+    && key in redirect.keys
+    && key in redirect.old_parent.children
+  }
+
+  predicate {:opaque} ValidRedirectNewGrandchildren(redirect: Redirect)
+    requires WFRedirect(redirect)
+    requires ValidRedirectNewParent(redirect)
+    requires ValidRedirectNewChildren(redirect)
+  {
     // The new child can't have any children other than the ones mentioned above.
     //&& (forall new_child | new_child in redirect.new_children.Values ::
     //  new_child.children.Values == IMapRestrict(new_child.children, redirect.keys * redirect.old_parent.children.Keys).Values)
-    && (forall childref, ref
-        {:trigger RedirectChildChildInOld(redirect, childref, ref)}
-        | childref in redirect.new_children && ref in redirect.new_children[childref].children.Values
-        :: RedirectChildChildInOld(redirect, childref, ref))
+    (forall childref, edge | childref in redirect.new_children && edge in redirect.new_children[childref].children.Values ::
+      exists key :: ValidRedirectNewGrandchildrenCheckKey(redirect, key, childref, edge.ref))
+  }
+
+  predicate {:opaque} ValidRedirect(redirect: Redirect) {
+    && WFRedirect(redirect)
+    && ValidRedirectNewParent(redirect)
+    && ValidRedirectNewChildren(redirect)
+    && ValidRedirectNewGrandchildren(redirect)
   }
 
   function RedirectChildReads(childrefs: seq<Reference>, children: imap<Reference, Node>) : (readops: seq<ReadOp>)
@@ -364,6 +432,9 @@ module BetreeSpec {
     requires ValidRedirect(redirect)
     ensures |res| == |redirect.old_childrefs| + 1
   {
+    assert (forall ref :: ref in redirect.old_childrefs ==> ref in redirect.old_children) by 
+    { reveal_ValidRedirect(); }
+ 
     [ ReadOp(redirect.parentref, redirect.old_parent) ]
       + RedirectChildReads(redirect.old_childrefs, redirect.old_children)
   }
@@ -380,10 +451,50 @@ module BetreeSpec {
   function {:opaque} RedirectOps(redirect: Redirect) : seq<Op>
     requires ValidRedirect(redirect)
   {
+    assert (forall ref :: ref in redirect.new_childrefs ==> ref in redirect.new_children) by 
+    { reveal_ValidRedirect(); }
+
     RedirectChildAllocs(redirect.new_childrefs, redirect.new_children)
     + [ G.WriteOp(redirect.parentref, redirect.new_parent) ]
   }
+
+  /// Clone
+
+  datatype Clone = Clone(
+    oldroot: Node,
+    newroot: Node,
+    new_to_old:imap<Key, Key> 
+  )
   
+  predicate ValidClone(clone: Clone)
+  {
+    && WFNode(clone.oldroot)
+    && WFNode(clone.newroot)
+
+    // new = new keys that will have contents of the old keys
+    // require 1. old buffer entries are flushed 2. old values are oldroot's children
+    && (forall k | k in clone.new_to_old :: IMapsTo(clone.oldroot.buffer, clone.new_to_old[k], G.M.Update(G.M.NopDelta())))
+    && (forall k | k in clone.new_to_old :: clone.new_to_old[k] in clone.oldroot.children)
+
+    // newroot's buffer and children requirments 
+    && (forall k | k in clone.new_to_old :: IMapsTo(clone.newroot.buffer, k, G.M.Update(G.M.NopDelta())))
+    && (forall k | k !in clone.new_to_old :: IMapsAgreeOnKey(clone.newroot.buffer, clone.oldroot.buffer, k))
+    && (forall k | k in clone.new_to_old :: IMapsTo(clone.newroot.children, k, clone.oldroot.children[clone.new_to_old[k]]))
+    && (forall k | k !in clone.new_to_old :: IMapsAgreeOnKey(clone.newroot.children, clone.oldroot.children, k))
+  }
+
+  function CloneReads(clone: Clone) : seq<ReadOp>
+  requires ValidClone(clone)
+  {
+    [G.ReadOp(Root(), clone.oldroot)]
+  }
+
+  function CloneOps(clone: Clone) : seq<Op>
+  requires ValidClone(clone)
+  {
+    [G.WriteOp(Root(), clone.newroot)]
+  }
+
   //// All together
 
   datatype BetreeStep =
@@ -393,6 +504,7 @@ module BetreeSpec {
     | BetreeFlush(flush: NodeFlush)
     | BetreeGrow(growth: RootGrowth)
     | BetreeRedirect(redirect: Redirect)
+    | BetreeClone(clone: Clone)
 
   // jonh: can this be called 'Next' at this layer?
   predicate ValidBetreeStep(step: BetreeStep)
@@ -404,6 +516,7 @@ module BetreeSpec {
       case BetreeFlush(flush) => ValidFlush(flush)
       case BetreeGrow(growth) => ValidGrow(growth)
       case BetreeRedirect(redirect) => ValidRedirect(redirect)
+      case BetreeClone(clone) => ValidClone(clone)
     }
   }
 
@@ -417,6 +530,7 @@ module BetreeSpec {
       case BetreeFlush(flush) => FlushReads(flush)
       case BetreeGrow(growth) => GrowReads(growth)
       case BetreeRedirect(redirect) => RedirectReads(redirect)
+      case BetreeClone(clone) => CloneReads(clone)
     }
   }
 
@@ -430,6 +544,7 @@ module BetreeSpec {
       case BetreeFlush(flush) => FlushOps(flush)
       case BetreeGrow(growth) => GrowOps(growth)
       case BetreeRedirect(redirect) => RedirectOps(redirect)
+      case BetreeClone(clone) => CloneOps(clone)
     }
   }
 
@@ -441,6 +556,7 @@ module BetreeSpec {
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?
       case BetreeRedirect(redirect) => uiop.NoOp?
+      case BetreeClone(clone) => uiop == UI.CloneOp(clone.new_to_old)
     }
   }
 }
