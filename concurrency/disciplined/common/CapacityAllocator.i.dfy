@@ -6,7 +6,7 @@ include "CountMonoid.i.dfy"
 // we need to import this open to destructure AllocatorBin: dafny doesn't support qualified names in this context
 module CapacityAllocatorTypes {
   import opened NativeTypes
-  import opened ShardedHashTable
+  import Count
 
   linear datatype AllocatorBin = AllocatorBin(
     count: uint32,
@@ -22,7 +22,6 @@ module CapacityAllocator {
   import opened NonlinearLemmas
   import opened CapacityAllocatorTypes
   import opened Count
-  import opened ShardedHashTable
   import opened Limits
 
   type AllocatorMutex = Mutex<AllocatorBin>
