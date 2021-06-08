@@ -787,9 +787,9 @@ module ShardedHashTable refines ShardedStateMachine {
   // unwrapped_index
   function adjust(i: int, root: int) : int
   requires 0 <= i < FixedSize()
-  requires 0 <= root <= FixedSize()
+  requires 0 <= root < FixedSize()
   {
-    if i < root then FixedSize() + i else i
+    if i <= root then FixedSize() + i else i
   }
 
   // Keys are unique, although we don't count entries being removed
@@ -815,15 +815,15 @@ module ShardedHashTable refines ShardedStateMachine {
     table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? ==> (
       && (table[i].value.entry.Full? ==> (
         var h := hash(table[i].value.entry.kv.key) as int;
-        && adjust(h, e+1) <= adjust(i, e+1)
+        && adjust(h, e) <= adjust(i, e)
       ))
       && (table[i].value.state.Inserting? ==> (
         var h := hash(table[i].value.state.kv.key) as int;
-        && adjust(h, e+1) <= adjust(i, e+1)
+        && adjust(h, e) <= adjust(i, e)
       ))
       && ((table[i].value.state.Removing? || table[i].value.state.Querying?) ==> (
         var h := hash(table[i].value.state.key) as int;
-        && adjust(h, e+1) <= adjust(i, e+1)
+        && adjust(h, e) <= adjust(i, e)
       ))
     )
   }
@@ -839,24 +839,24 @@ module ShardedHashTable refines ShardedStateMachine {
   requires 0 <= j < |table|
   requires 0 <= k < |table|
   {
-    (table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? && table[j].value.entry.Full? && adjust(j, e + 1) < adjust(k, e + 1) ==> (
+    (table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? && table[j].value.entry.Full? && adjust(j, e) < adjust(k, e) ==> (
       var hj := hash(table[j].value.entry.kv.key) as int;
 
       && (table[k].value.entry.Full? ==> (
         var hk := hash(table[k].value.entry.kv.key) as int;
-        && adjust(hj, e + 1) <= adjust(hk, e + 1)
+        && adjust(hj, e) <= adjust(hk, e)
       ))
 
       // If entry 'k' has an 'Inserting' action on it, then that action must have
       // gotten past entry 'j'.
       && (table[k].value.state.Inserting? ==> (
         var ha := hash(table[k].value.state.kv.key) as int;
-        && adjust(hj, e+1) <= adjust(ha, e+1)
+        && adjust(hj, e) <= adjust(ha, e)
       ))
 
       && ((table[k].value.state.Removing? || table[k].value.state.Querying?) ==> (
         var ha := hash(table[k].value.state.key) as int;
-        && adjust(hj, e+1) <= adjust(ha, e+1)
+        && adjust(hj, e) <= adjust(ha, e)
       ))
     ))
   }
@@ -868,7 +868,7 @@ module ShardedHashTable refines ShardedStateMachine {
   requires 0 <= j < |table|
   requires 0 <= k < |table|
   {
-    (table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? && table[j].value.entry.Full? && adjust(j, e + 1) < adjust(k, e + 1) ==> (
+    (table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? && table[j].value.entry.Full? && adjust(j, e) < adjust(k, e) ==> (
       // If entry 'k' has an 'Inserting' action on it, then that action must not have
       // gotten past entry 'j'.
       && (table[k].value.state.Inserting? ==> (

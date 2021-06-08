@@ -419,13 +419,13 @@ module Interpretation {
   requires |table| == FixedSize()
   requires e != f
   requires a != b ==>
-           adjust(a, e+1)
-        <= adjust(b-1, e+1)
-        <= adjust(f, e+1)
+           adjust(a, e)
+        <= adjust(b-1, e)
+        <= adjust(f, e)
   requires c != d ==>
-           adjust(c, f+1)
-        <= adjust(d-1, f+1)
-        <= adjust(e, f+1)
+           adjust(c, f)
+        <= adjust(d-1, f)
+        <= adjust(e, f)
   ensures S.add(S.concat_map(table[a..b]), S.concat_map(table[c..d]))
       == S.add(S.concat_map(table[c..d]), S.concat_map(table[a..b]))
   {
@@ -690,7 +690,7 @@ module Interpretation {
   requires S.f(table[i]) == S.add(S.f(table'[i]), x)
   requires is_good_root(table, f);
   requires is_good_root(table', f);
-  requires forall k | 0 <= k < FixedSize() && adjust(i, f+1) < adjust(k, f+1)
+  requires forall k | 0 <= k < FixedSize() && adjust(i, f) < adjust(k, f)
       :: S.commutes(x, S.f(table[k]))
   ensures interp(table) == S.add(interp(table'), x)
   {
@@ -734,7 +734,7 @@ module Interpretation {
   requires S.add(x, S.f(table[i])) == S.f(table'[i])
   requires is_good_root(table, f);
   requires is_good_root(table', f);
-  requires forall k | 0 <= k < FixedSize() && adjust(k, f+1) < adjust(i, f+1)
+  requires forall k | 0 <= k < FixedSize() && adjust(k, f) < adjust(i, f)
       :: S.commutes(x, S.f(table[k]))
   ensures S.add(x, interp(table)) == interp(table')
   {
@@ -1022,7 +1022,7 @@ module Interpretation {
         multiset{S.QueryUnknown(
           s.table[pos].value.state.rid, s.table[pos].value.state.key)},
         multiset{});
-    forall k | 0 <= k < FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(pos, e) < adjust(k, e)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, pos);
@@ -1069,7 +1069,7 @@ module Interpretation {
     var x := S.Summary(map[s.table[pos].value.state.key := None],
         multiset{}, multiset{}, multiset{});
 
-    forall k | 0 <= k < FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(pos, e) < adjust(k, e)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, pos);
@@ -1172,7 +1172,7 @@ module Interpretation {
           s.table[pos].value.state.rid, s.table[pos].value.state.initial_key,
           Some(s.table[pos].value.state.found_value))});
 
-    /*forall k | 0 <= k < FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    /*forall k | 0 <= k < FixedSize() && adjust(pos, e) < adjust(k, e)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, pos);
@@ -1225,7 +1225,7 @@ module Interpretation {
     assert m1.queries == m2.queries;
     assert m1.removes == m2.removes;*/
 
-    forall k | 0 <= k < FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(pos, e) < adjust(k, e)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, pos);
@@ -1314,7 +1314,7 @@ module Interpretation {
     assert a.queries == b.queries;
     assert a.removes == b.removes;*/
 
-    forall k | 0 <= k < FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(k, e) < adjust(pos, e)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, k);
@@ -1360,7 +1360,7 @@ module Interpretation {
 
     var pos := HT.hash(ticket.input.key) as int;
 
-    forall k | 0 <= k < FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(k, e) < adjust(pos, e)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, k);
@@ -1450,7 +1450,7 @@ module Interpretation {
 
     var pos := HT.hash(ticket.input.key) as int;
 
-    forall k | 0 <= k < FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(k, e) < adjust(pos, e)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, k);

@@ -196,27 +196,30 @@ module ShardedHashTable refines ShardedStateMachine {
 
 // Insert transition definitions
 
+  // insert_h: hash of the key we are trying to insert
+  // slot_h : hash of the key at slot_index
+  // returns insert_h should go before slot_h 
+  predicate ShouldHashGoBefore(insert_h: int, slot_h : int, slot_index: int)
+  {
+    || insert_h < slot_h  <= slot_index // normal case
+    || slot_h <= slot_index < insert_h // insert_h wraps around the end of array
+    || slot_index < insert_h < slot_h // insert_h, slot_h  wrap around the end of array
+  }
+
   predicate ShouldSkipSlot(table: FixedTable, insert_key: Key, slot_index: Index)
   {
     && table[slot_index].Some?
     && table[slot_index].value.Full?
     && var insert_h := hash(insert_key);
     && var slot_h := hash(table[slot_index].value.key);
-    (
-      || insert_h < slot_h <= slot_index // normal case
-      || slot_h <= slot_index < insert_h // insert_h wraps around the end of array
-      || slot_index < insert_h < slot_h // insert_h, slot_h  wrap around the end of array
-    )
+    ShouldHashGoBefore(insert_h, slot_h, slot_index)
+    // (
+    //   || insert_h < slot_h <= slot_index // normal case
+    //   || slot_h <= slot_index < insert_h // insert_h wraps around the end of array
+    //   || slot_index < insert_h < slot_h // insert_h, slot_h  wrap around the end of array
+    // )
   }
-  // insert_h: hash of the key we are trying to insert
-  // slot_h : hash of the key at slot_index
-  // returns insert_h should go before slot_h 
-  // predicate ShouldHashGoBefore(insert_h: int, slot_h : int, slot_index: int)
-  // {
-  //   || insert_h < slot_h  <= slot_index // normal case
-  //   || slot_h <= slot_index < insert_h // insert_h wraps around the end of array
-  //   || slot_index < insert_h < slot_h // insert_h, slot_h  wrap around the end of array
-  // }
+
 
   predicate ShouldSkipSlotsNoWrap(table: FixedTable, insert_key: Key, start: Index, end: int)
     requires start <= end <= FixedSize();
@@ -472,12 +475,22 @@ module ShardedHashTable refines ShardedStateMachine {
       :: table[i].value.key != table[j].value.key
   }
 
+  // function adjust(i: Index, root: int) : int
+  //   requires 0 <= root <= FixedSize()
+  // {
+  //   if i < root then FixedSize() + i else i
+  // }
+
   // unwrapped_index
-  function adjust(i: Index, root: int) : int
-    requires 0 <= root <= FixedSize()
+  function adjust2(i: Index, root: Index) : int
   {
-    if i < root then FixedSize() + i else i
+    if i <= root then FixedSize() + i else i
   }
+
+  // lemma test(i: Index, e: Index)
+  // {
+  //   assert adjust2(i, e) == adjust(i, e +1);
+  // }
 
   predicate ValidHashInIndex(table: FixedTable, e: Index, i: Index)
     requires Complete(table)
@@ -489,7 +502,7 @@ module ShardedHashTable refines ShardedStateMachine {
     table[e].value.Empty? && table[i].value.Full? ==>
     (
       var h := hash(table[i].value.key);
-      adjust(h, e+1) <= adjust(i, e+1)
+      adjust2(h, e) <= adjust2(i, e)
     )
   }
 
@@ -504,13 +517,13 @@ module ShardedHashTable refines ShardedStateMachine {
       && table[e].value.Empty?
       && table[j].value.Full?
       && table[k].value.Full?
-      && adjust(j, e + 1) < adjust(k, e + 1) 
+      && adjust2(j, e) < adjust2(k, e) 
     )
       ==>
     (
       var hj := hash(table[j].value.key);
       var hk := hash(table[k].value.key);
-      adjust(hj, e + 1) <= adjust(hk, e + 1)
+      adjust2(hj, e) <= adjust2(hk, e)
     )
   }
 
@@ -566,6 +579,71 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
+  lemma TableInsertSwapPreservesInv(s: Variables, s': Variables, stutter: InsertStutter)
+    requires Inv(s);
+    requires s'.Variables?
+    requires TableInsertSwapEnable(s.table, stutter)
+    requires TableInsert(s.table, stutter) == s'.table;
+  {
+    var end := stutter.end;
+
+    var table := s.table;
+    var table' := s'.table;
+
+    assert forall i: Index ::
+      table'[i].value.Full? && i != end ==> 
+      table'[i].value.key == table[i].value.key;
+
+    forall e: Index, i: Index
+      ensures ValidHashInIndex(table', e, i)
+    {
+      if i != end {
+        assert ValidHashInIndex(table, e, i);
+      }
+    }
+
+    // assert ValidHashOrdering(table, e, j, k);
+    // assert ValidHashInIndex(table, e, j);
+    // assert ValidHashInIndex(table, e, k);
+
+    // var k' := if k > 0 then k - 1 else |s.table| - 1;
+
+    // assert ValidHashInIndex(table, e, end);
+    // assert ValidHashOrdering(table, e, j, end);
+    // assert ValidHashOrdering(table, e, end, k);
+
+    forall e: Index, j: Index, k: Index
+      ensures ValidHashOrdering(table', e, j, k)
+    {
+      if j != end && k != end {
+        assert ValidHashOrdering(table, e, j, k);
+        assert ValidHashInIndex(table, e, j);
+        assert ValidHashInIndex(table, e, k);
+      } else if j == end && k != end {
+        if table[e].value.Empty?
+          && table[k].value.Full?
+          && adjust2(j, e) < adjust2(k, e) {
+
+          assert ValidHashOrdering(table, e, j, k);
+          assert ValidHashInIndex(table, e, j);
+          assert ValidHashInIndex(table, e, k);
+          assert ValidHashInIndex(table', e, j);
+
+          var hj := hash(table[j].value.key);
+          var hj' := hash(table'[j].value.key);
+          // var hk := hash(table[k].value.key);
+          // assert adjust2(hj, e) <= adjust2(hk, e);
+
+          assert !ShouldHashGoBefore(hj', hj, end);
+
+          assert adjust2(hj', e) <= adjust2(hj, e);
+        } 
+      } else if j != end && k == end {
+        assume false;
+      }
+    }
+  }
+
   lemma OverwriteStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, stutter: InsertStutter)
     requires Inv(s)
     requires Overwrite(s, s', ticket, stutter)
@@ -591,6 +669,14 @@ module ShardedHashTable refines ShardedStateMachine {
     TableQuantityReplace1(s.table, s'.table, stutter.end);
   }
 
+  lemma RemoveStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, i: Index, end: Index)
+    requires Inv(s)
+    requires Remove(s, s',ticket, i, end)
+    ensures Inv(s')
+  {
+    assume false;
+  }
+
   lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
   requires Inv(s)
   requires NextStep(s, s', step)
@@ -600,11 +686,9 @@ module ShardedHashTable refines ShardedStateMachine {
       case InsertStep(ticket, stutters) => assume false;
       case OverwriteStep(ticket, stutter) => 
         OverwriteStepPreservesInv(s, s', ticket, stutter);
-      case _ => assume false;
-      // case QueryFoundStep(ticket, i) => 
-      // case QueryNotFoundStep(ticket, end) => 
-      // case RemoveStep(ticket, i, end) => 
-      // case RemoveNotFoundStep(ticket, end) => 
+      case RemoveStep(ticket, i, end) =>
+        RemoveStepPreservesInv(s, s', ticket, i, end);
+      case _ => assert Inv(s');
     }
   }
 /*

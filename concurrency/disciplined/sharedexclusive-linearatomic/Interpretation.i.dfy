@@ -1,6 +1,6 @@
 include "ShardedHashTable.i.dfy"
-include "MonoidLib.i.dfy"
-include "MultisetLemmas.i.dfy"
+include "../common/MonoidLib.i.dfy"
+include "../common/MultisetLemmas.i.dfy"
 include "../../lib/Base/Maps.i.dfy"
 include "../../lib/Base/Multisets.i.dfy"
 
