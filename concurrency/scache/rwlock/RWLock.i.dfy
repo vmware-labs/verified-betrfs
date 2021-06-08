@@ -1267,6 +1267,7 @@ module RWLockExtToken refines SimpleExtToken {
     && m == WritebackHandle(m.writeback)
   requires c.loc() == handle.loc()
   ensures c.get() == c'.get() && handle'.get() == handle.get()
+  ensures c.loc() == c'.loc() && handle'.loc() == handle.loc()
   ensures c.get().central.flag == Writeback
        || c.get().central.flag == Writeback_PendingExcLock
   {
