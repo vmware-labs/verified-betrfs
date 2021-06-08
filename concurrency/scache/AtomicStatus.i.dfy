@@ -50,11 +50,6 @@ module AtomicStatusImpl {
     glinear status: glOption<CacheResources.CacheStatus>
   )
 
-  datatype AtomicStatus = AtomicStatus(
-    atomic: Atomic<uint8, G>,
-    ghost rwlock_loc: Loc
-  )
-
   predicate state_inv(v: uint8, g: G, key: Key, rwlock_loc: Loc)
   {
     && g.rwlock.get().central.CentralState?
@@ -160,216 +155,511 @@ module AtomicStatusImpl {
       || v == flag_writeback_exc_accessed
     ))
   }
-
-  predicate atomic_status_inv(a: AtomicStatus, key: Key)
+  
+  datatype AtomicStatus = AtomicStatus(
+    atomic: Atomic<uint8, G>,
+    ghost rwlock_loc: Loc,
+    ghost key: Key
+  )
   {
-    forall v, g :: atomic_inv(a.atomic, v, g) <==> state_inv(v, g, key, a.rwlock_loc)
-  }
+    predicate inv()
+    {
+      forall v, g :: atomic_inv(this.atomic, v, g) <==> state_inv(v, g, key, this.rwlock_loc)
+    }
 
-  method try_acquire_writeback(a: AtomicStatus, ghost key: Key, with_access: bool)
-  returns (success: bool,
-      glinear m: glOption<RW.WritebackObtainedToken>,
-      glinear disk_write_ticket: glOption<CacheResources.DiskWriteTicket>)
-  requires atomic_status_inv(a, key)
-  ensures !success ==> m.glNone?
-  ensures !success ==> disk_write_ticket.glNone?
-  ensures success ==>
-      && m.glSome?
-      && m.value.is_handle(key)
-      && disk_write_ticket.glSome?
-      && disk_write_ticket.value.writes(
-          m.value.b.idx.v as uint64,
-          m.value.b.data.s)
-  {
-    atomic_block var cur_flag := execute_atomic_load(a.atomic) { }
+    method try_acquire_writeback(with_access: bool)
+    returns (success: bool,
+        glinear m: glOption<RW.WritebackObtainedToken>,
+        glinear disk_write_ticket: glOption<CacheResources.DiskWriteTicket>)
+    requires this.inv()
+    ensures !success ==> m.glNone?
+    ensures !success ==> disk_write_ticket.glNone?
+    ensures success ==>
+        && m.glSome?
+        && m.value.is_handle(key)
+        && disk_write_ticket.glSome?
+        && disk_write_ticket.value.writes(
+            m.value.b.idx.v as uint64,
+            m.value.b.data.s)
+    {
+      atomic_block var cur_flag := execute_atomic_load(this.atomic) { }
 
-    if !(cur_flag == flag_zero
-        || (with_access && cur_flag == flag_accessed)) {
-      m := glNone;
-      disk_write_ticket := glNone;
-      success := false;
-    } else {
-      atomic_block var did_set :=
-          execute_atomic_compare_and_set_strong(a.atomic, flag_zero, flag_writeback)
-      {
-        ghost_acquire old_g;
-
-        glinear var new_g;
-
-        ghost var ghosty := true;
-        if did_set && ghosty {
-          glinear var handle, ticket, stat;
-          glinear var G(rwlock, status) := old_g;
-
-          rwlock, handle := RW.perform_TakeWriteback(rwlock);
-
-          assert unwrap_value(status).cache_idx == key.cache_idx;
-          assert RW.borrow_wb(handle).cache_entry.cache_idx == key.cache_idx;
-          stat, ticket := CacheResources.initiate_writeback(
-              RW.borrow_wb(handle).cache_entry, unwrap_value(status));
-
-          new_g := G(rwlock, glSome(stat));
-          m := glSome(RW.WritebackObtainedToken(handle.get().writeback.b, handle));
-          disk_write_ticket := glSome(ticket);
-          assert state_inv(new_value, new_g, key, a.rwlock_loc);
-        } else {
-          m := glNone;
-          new_g := old_g;
-          disk_write_ticket := glNone;
-          assert state_inv(new_value, new_g, key, a.rwlock_loc);
-        }
-        assert state_inv(new_value, new_g, key, a.rwlock_loc);
-
-        ghost_release new_g;
-      }
-
-      if did_set {
-        success := true;
-      } else if !with_access {
+      if !(cur_flag == flag_zero
+          || (with_access && cur_flag == flag_accessed)) {
+        m := glNone;
+        disk_write_ticket := glNone;
         success := false;
       } else {
         atomic_block var did_set :=
-            execute_atomic_compare_and_set_strong(a.atomic, flag_accessed, flag_writeback_accessed)
+            execute_atomic_compare_and_set_strong(this.atomic, flag_zero, flag_writeback)
         {
           ghost_acquire old_g;
-          glinear var new_g;
-          dispose_glnone(m);
-          dispose_glnone(disk_write_ticket);
 
-          if did_set {
-            glinear var handle, stat, ticket;
+          glinear var new_g;
+
+          ghost var ghosty := true;
+          if did_set && ghosty {
+            glinear var handle, ticket, stat;
             glinear var G(rwlock, status) := old_g;
+
             rwlock, handle := RW.perform_TakeWriteback(rwlock);
+
+            assert unwrap_value(status).cache_idx == key.cache_idx;
+            assert RW.borrow_wb(handle).cache_entry.cache_idx == key.cache_idx;
             stat, ticket := CacheResources.initiate_writeback(
                 RW.borrow_wb(handle).cache_entry, unwrap_value(status));
+
             new_g := G(rwlock, glSome(stat));
             m := glSome(RW.WritebackObtainedToken(handle.get().writeback.b, handle));
             disk_write_ticket := glSome(ticket);
+            assert state_inv(new_value, new_g, key, this.rwlock_loc);
           } else {
-            new_g := old_g;
             m := glNone;
+            new_g := old_g;
             disk_write_ticket := glNone;
+            assert state_inv(new_value, new_g, key, this.rwlock_loc);
           }
-          assert state_inv(new_value, new_g, key, a.rwlock_loc);
+          assert state_inv(new_value, new_g, key, this.rwlock_loc);
 
           ghost_release new_g;
         }
 
+        if did_set {
+          success := true;
+        } else if !with_access {
+          success := false;
+        } else {
+          atomic_block var did_set :=
+              execute_atomic_compare_and_set_strong(this.atomic, flag_accessed, flag_writeback_accessed)
+          {
+            ghost_acquire old_g;
+            glinear var new_g;
+            dispose_glnone(m);
+            dispose_glnone(disk_write_ticket);
+
+            if did_set {
+              glinear var handle, stat, ticket;
+              glinear var G(rwlock, status) := old_g;
+              rwlock, handle := RW.perform_TakeWriteback(rwlock);
+              stat, ticket := CacheResources.initiate_writeback(
+                  RW.borrow_wb(handle).cache_entry, unwrap_value(status));
+              new_g := G(rwlock, glSome(stat));
+              m := glSome(RW.WritebackObtainedToken(handle.get().writeback.b, handle));
+              disk_write_ticket := glSome(ticket);
+            } else {
+              new_g := old_g;
+              m := glNone;
+              disk_write_ticket := glNone;
+            }
+            assert state_inv(new_value, new_g, key, this.rwlock_loc);
+
+            ghost_release new_g;
+          }
+
+          success := did_set;
+        }
+      }
+    }
+
+    method release_writeback(
+        glinear handle: RW.WritebackObtainedToken,
+        glinear disk_write_stub: CacheResources.DiskWriteStub)
+    requires this.inv()
+    requires handle.token.loc() == this.rwlock_loc
+    //requires disk_write_stub.loc() == key.cr_loc
+    requires handle.is_handle(key)
+    requires 0 <= handle.b.cache_entry.disk_idx
+               < 0x1_0000_0000_0000_0000
+    requires disk_write_stub.disk_idx == handle.b.cache_entry.disk_idx as uint64
+    {
+      glinear var wb;
+      glinear match handle { case WritebackObtainedToken(_, t) => { wb := t; } }
+
+      // Unset Writeback; set Clean
+      atomic_block var _ := execute_atomic_fetch_xor_uint8(this.atomic, flag_writeback_clean) {
+        ghost_acquire old_g;
+        glinear var new_g;
+
+        //var fl := old_g.rwlock.get().central.flag;
+        glinear var G(rwlock, status) := old_g;
+
+        rwlock, wb := RW.pre_ReleaseWriteback(rwlock, wb);
+
+        glinear var stat := CacheResources.finish_writeback(
+            RW.borrow_wb(wb).cache_entry, unwrap_value(status), disk_write_stub);
+
+        rwlock := RW.perform_ReleaseWriteback(rwlock, wb);
+        new_g := G(rwlock, glSome(stat));
+
+        assert state_inv(new_value, new_g, key, this.rwlock_loc);
+
+        ghost_release new_g;
+      }
+    }
+
+    method try_check_writeback_isnt_set(ghost t: int, glinear m: RW.Token)
+    returns (success: bool, clean: bool, glinear m': RW.Token,
+        glinear status: glOption<CacheResources.CacheStatus>)
+    requires this.inv()
+    requires m.get().exc.ExcPendingAwaitWriteback?
+    requires m.get() == RWLock.ExcHandle(RWLock.ExcPendingAwaitWriteback(t,
+        m.get().exc.b))
+    requires m.loc() == rwlock_loc
+    ensures !success ==> m' == m
+    ensures !success ==> status.glNone?
+    ensures success ==> m'.get() == RWLock.ExcHandle(RWLock.ExcPending(t, 0, clean, m.get().exc.b))
+        && m'.loc() == rwlock_loc
+    ensures success ==> status.glSome? && status.value.is_status(key.cache_idx,
+          (if clean then CacheResources.Clean else CacheResources.Dirty))
+    {
+      atomic_block var f := execute_atomic_load(this.atomic) {
+        ghost_acquire old_g;
+        glinear var new_g;
+
+        var fl := old_g.rwlock.get().central.flag;
+        if fl == RWLock.Writeback || fl == RWLock.Writeback_PendingExcLock
+        {
+          new_g := old_g;
+          m' := m;
+          status := glNone;
+          assert state_inv(new_value, new_g, key, rwlock_loc);
+        } else {
+          glinear var G(rwlock, status0) := old_g;
+          assert m.get().exc == RWLock.ExcPendingAwaitWriteback(t, m.get().exc.b);
+          assert m.get() == RWLock.ExcHandle(m.get().exc);
+          rwlock, m' := RW.perform_TakeExcLockFinishWriteback(
+            rwlock, m, bit_and_uint8(f, flag_clean) != 0);
+          assert status0.glSome?;
+          assert bit_and_uint8(f, flag_clean) != 0 ==>
+              status0.value.status == CacheResources.Clean;
+          assert bit_and_uint8(f, flag_clean) == 0 ==>
+              status0.value.status == CacheResources.Dirty;
+          status := status0;
+          new_g := G(rwlock, glNone);
+          assert state_inv(new_value, new_g, key, rwlock_loc);
+        }
+
+        ghost_release new_g;
+      }
+
+      success := bit_and_uint8(f, flag_writeback) == 0;
+      clean := bit_and_uint8(f, flag_clean) != 0;
+    }
+
+    /*
+
+    method try_alloc(a: AtomicStatus, key: Key)
+    returns (success: bool,
+        glinear m: glOption<RW.Token>,
+        glinear handle_opt: glOption<RWLock.Handle>,
+        glinear status: glOption<CacheResources.R>)
+    requires atomic_status_inv(a, key)
+    ensures !success ==> m.glNone?
+    ensures !success ==> handle_opt.glNone?
+    ensures !success ==> status.glNone?
+    ensures success ==>
+        && m == glSome(RWLock.Internal(RWLock.ReadingPending(key)))
+    ensures success ==> handle_opt.glSome?
+        && handle_opt.value.is_handle(key)
+    ensures success ==>
+      && status == glSome(CacheResources.CacheStatus(
+          key.cache_idx, CacheResources.Empty))
+    {
+      // check first to reduce contention
+      var f := atomic_read(a);
+      if f != flag_unmapped {
+        success := false;
+        m := glNone;
+        handle_opt := glNone;
+        status := glNone;
+      } else {
+        var did_set := compare_and_set(a, flag_unmapped, flag_exc_reading);
+
+        ///// Begin jank
+        ///// Setup:
+        var v1 := flag_unmapped;
+        var v2 := flag_exc_reading;
+        var old_v: uint8;
+        var new_v: uint8;
+        glinear var old_g: G := unsafe_obtain();
+        assume old_v == v1 ==> new_v == v2 && did_set;
+        assume old_v != v1 ==> new_v == old_v && !did_set;
+        assume atomic_inv(a, old_v, old_g);
+        glinear var new_g;
+        ///// Transfer:
+        if did_set {
+          glinear var res, handle;
+          glinear var G(rwlock, status0) := old_g;
+          rwlock, res, handle := RWLockMethods.transform_Alloc(key, rwlock);
+          status := status0;
+          new_g := G(rwlock, glNone);
+          m := glSome(res);
+          handle_opt := glSome(handle);
+          assert status.glSome?;
+          assert status.value.status == CacheResources.Empty;
+        } else {
+          m := glNone;
+          handle_opt := glNone;
+          status := glNone;
+          new_g := old_g;
+        }
+        assert state_inv(new_v, new_g, key);
+        ///// Teardown:
+        assert atomic_inv(a, new_v, new_g);
+        unsafe_dispose(new_g);
+        ///// End jank
+
         success := did_set;
       }
     }
-  }
 
-  method release_writeback(a: AtomicStatus, ghost key: Key,
-      glinear handle: RW.WritebackObtainedToken,
-      glinear disk_write_stub: CacheResources.DiskWriteStub)
-  requires atomic_status_inv(a, key)
-  requires handle.token.loc() == a.rwlock_loc
-  //requires disk_write_stub.loc() == key.cr_loc
-  requires handle.is_handle(key)
-  requires 0 <= handle.b.cache_entry.disk_idx
-             < 0x1_0000_0000_0000_0000
-  requires disk_write_stub.disk_idx == handle.b.cache_entry.disk_idx as uint64
-  {
-    glinear var wb;
-    glinear match handle { case WritebackObtainedToken(_, t) => { wb := t; } }
-
-    // Unset Writeback; set Clean
-    atomic_block var _ := execute_atomic_fetch_xor_uint8(a.atomic, flag_writeback_clean) {
-      ghost_acquire old_g;
-      glinear var new_g;
-
-      //var fl := old_g.rwlock.get().central.flag;
-      glinear var G(rwlock, status) := old_g;
-
-      rwlock, wb := RW.pre_ReleaseWriteback(rwlock, wb);
-
-      glinear var stat := CacheResources.finish_writeback(
-          RW.borrow_wb(wb).cache_entry, unwrap_value(status), disk_write_stub);
-
-      rwlock := RW.perform_ReleaseWriteback(rwlock, wb);
-      new_g := G(rwlock, glSome(stat));
-
-      assert state_inv(new_value, new_g, key, a.rwlock_loc);
-
-      ghost_release new_g;
-    }
-  }
-
-  method try_check_writeback_isnt_set(a: AtomicStatus, ghost key: Key,
-      ghost t: int, glinear m: RW.Token)
-  returns (success: bool, clean: bool, glinear m': RW.Token,
-      glinear status: glOption<CacheResources.CacheStatus>)
-  requires atomic_status_inv(a, key)
-  requires m.get().exc == RWLock.ExcPendingAwaitWriteback(key, t)
-  requires m.get() == RWLock.ExcHandle(m.get().exc)
-  ensures !success ==> m' == m
-  ensures !success ==> status.glNone?
-  ensures success ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, t, 0, clean))
-  ensures success ==> status.glSome? && status.value.is_status(key.cache_idx,
-        (if clean then CacheResources.Clean else CacheResources.Dirty))
-  {
-    atomic_block var f := execute_atomic_read(a) {
-      ghost_acquire old_g;
-      glinear var new_g;
-
-      var fl := old_g.rwlock.q.flags;
-      if fl == RWLock.Writeback || fl == RWLock.Writeback_PendingExcLock
-      {
-        new_g := old_g;
-        m' := m;
-        status := glNone;
-        assert state_inv(new_v, new_g, key);
-      } else {
-        glinear var G(rwlock, status0) := old_g;
-        rwlock, m' := RWLockMethods.transform_TakeExcLockFinishWriteback(
-          key, t,fl, bit_and(f, flag_clean) != 0,
-          rwlock, m);
-        status := status0;
-        new_g := G(rwlock, glNone);
-        assert state_inv(new_v, new_g, key);
-      }
-
-      ghost_release new_g;
-    }
-
-    success := bit_and(f, flag_writeback) == 0;
-    clean := bit_and(f, flag_clean) != 0;
-  }
-
-  /*
-
-  method try_alloc(a: AtomicStatus, key: Key)
-  returns (success: bool,
-      glinear m: glOption<RW.Token>,
-      glinear handle_opt: glOption<RWLock.Handle>,
-      glinear status: glOption<CacheResources.R>)
-  requires atomic_status_inv(a, key)
-  ensures !success ==> m.glNone?
-  ensures !success ==> handle_opt.glNone?
-  ensures !success ==> status.glNone?
-  ensures success ==>
-      && m == glSome(RWLock.Internal(RWLock.ReadingPending(key)))
-  ensures success ==> handle_opt.glSome?
-      && handle_opt.value.is_handle(key)
-  ensures success ==>
-    && status == glSome(CacheResources.CacheStatus(
-        key.cache_idx, CacheResources.Empty))
-  {
-    // check first to reduce contention
-    var f := atomic_read(a);
-    if f != flag_unmapped {
-      success := false;
-      m := glNone;
-      handle_opt := glNone;
-      status := glNone;
-    } else {
-      var did_set := compare_and_set(a, flag_unmapped, flag_exc_reading);
+    method clear_exc_bit_during_load_phase(a: AtomicStatus, key: Key, t:int,
+        glinear r: RW.Token)
+    returns (glinear q: RW.Token)
+    requires atomic_status_inv(a, key)
+    requires r == RWLock.Internal(RWLock.ReadingPendingCounted(key, t))
+    ensures q == RWLock.Internal(RWLock.ReadingObtained(key, t))
+    {
+      atomic_write(a, flag_accessed_reading_clean);
 
       ///// Begin jank
       ///// Setup:
-      var v1 := flag_unmapped;
-      var v2 := flag_exc_reading;
+      var v := flag_accessed_reading_clean;
+      var old_v: uint8;
+      var new_v: uint8;
+      glinear var old_g: G := unsafe_obtain();
+      assume new_v == v;
+      assume atomic_inv(a, old_v, old_g);
+      glinear var new_g;
+      ///// Transfer:
+      var fl := old_g.rwlock.q.flags;
+      glinear var G(rwlock, status) := old_g;
+      rwlock, q := RWLockMethods.transform_ObtainReading(key, t, fl, rwlock, r);
+      new_g := G(rwlock, status);
+      assert status.glNone?;
+      assert state_inv(new_v, new_g, key);
+      ///// Teardown:
+      assert atomic_inv(a, new_v, new_g);
+      unsafe_dispose(new_g);
+      ///// End jank
+    }
+
+    method load_phase_finish(a: AtomicStatus, key: Key, t: int,
+        glinear r: RW.Token, glinear handle: RWLock.Handle,
+        glinear status: CacheResources.R)
+    returns (glinear q: RW.Token, /*readonly*/ glinear handle_out: RWLock.Handle)
+    requires atomic_status_inv(a, key)
+    requires r == RWLock.Internal(RWLock.ReadingObtained(key, t))
+    requires handle.is_handle(key)
+    requires status == CacheResources.CacheStatus(key.cache_idx,
+        CacheResources.Clean)
+    ensures q == RWLock.Internal(RWLock.SharedLockObtained(key, t))
+    ensures handle_out == handle
+    {
+      var orig_value := fetch_and(a, 0xff - flag_reading);
+
+      ///// Begin jank
+      ///// Setup:
+      var v := 0xff - flag_reading;
+      var old_v: uint8;
+      var new_v: uint8;
+      glinear var old_g: G := unsafe_obtain();
+      assume orig_value == old_v;
+      assume new_v == bit_and(old_v, v);
+      assume atomic_inv(a, old_v, old_g);
+      glinear var new_g;
+      ///// Transfer:
+      var fl := old_g.rwlock.q.flags;
+      glinear var G(rwlock, status_empty) := old_g;
+      RWLockMethods.pre_ReadingToShared(key, t, fl, rwlock, r);
+      dispose_glnone(status_empty);
+      rwlock, q, handle_out :=
+          RWLockMethods.transform_ReadingToShared(key, t, fl, rwlock, r, handle);
+      new_g := G(rwlock, glSome(status));
+
+      assert state_inv(new_v, new_g, key);
+      ///// Teardown:
+      assert atomic_inv(a, new_v, new_g);
+      unsafe_dispose(new_g);
+      ///// End jank
+    }
+
+    method quicktest_is_exc_locked(a: AtomicStatus)
+    returns (is_exc_locked: bool)
+    {
+      var v := atomic_read(a);
+      return ((v as bv8) & (flag_exc as bv8)) as uint8 != 0;
+    }
+
+    method is_exc_locked_or_free(a: AtomicStatus,
+        key: Key, t: int,
+        glinear r: RW.Token)
+    returns (success: bool, is_accessed: bool, glinear r': RW.Token)
+    requires atomic_status_inv(a, key)
+    requires r == RWLock.Internal(RWLock.SharedLockPending(key, t))
+    ensures !success ==> r == r'
+    ensures success ==> r' == 
+        RWLock.Internal(RWLock.SharedLockPending2(key, t))
+    {
+      var f := atomic_read(a);
+
+      ///// Begin jank
+      ///// Setup:
+      var old_v: uint8;
+      var new_v: uint8;
+      glinear var old_g: G := unsafe_obtain();
+      assume new_v == old_v;
+      assume f == old_v;
+      assume atomic_inv(a, old_v, old_g);
+      glinear var new_g;
+      ///// Transfer:
+      var fl := old_g.rwlock.q.flags;
+      if fl == RWLock.Available || fl == RWLock.Writeback
+          || fl == RWLock.Reading {
+        r' := RWLockMethods.transform_SharedCheckExcFree(
+            key, t, old_g.rwlock.q.flags,
+            r, old_g.rwlock);
+        new_g := old_g;
+      } else {
+        r' := r;
+        new_g := old_g;
+      }
+      ///// Teardown:
+      assert atomic_inv(a, new_v, new_g);
+      unsafe_dispose(new_g);
+      ///// End jank
+
+      success := bit_and(f, bit_or(flag_exc, flag_unmapped)) == 0;
+      is_accessed := bit_and(f, flag_accessed) != 0;
+    }
+
+    method mark_accessed(a: AtomicStatus,
+        key: Key, t: int,
+        shared r: RW.Token)
+    requires atomic_status_inv(a, key)
+    requires r == RWLock.Internal(RWLock.SharedLockPending2(key, t))
+    {
+      var orig_value := fetch_or(a, flag_accessed);
+
+      ///// Begin jank
+      ///// Setup:
+      var v := flag_accessed;
+      var old_v: uint8;
+      var new_v: uint8;
+      glinear var old_g: G := unsafe_obtain();
+      assume orig_value == old_v;
+      assume new_v == bit_or(old_v, v);
+      assume atomic_inv(a, old_v, old_g);
+      glinear var new_g;
+      ///// Transfer:
+      RWLockMethods.possible_flags_SharedLockPending2(key, t, old_g.rwlock.q.flags,
+          r, old_g.rwlock);
+      new_g := old_g;
+      assert state_inv(new_v, new_g, key);
+      ///// Teardown:
+      assert atomic_inv(a, new_v, new_g);
+      unsafe_dispose(new_g);
+      ///// End jank
+    }
+
+    method clear_accessed(a: AtomicStatus, key: Key)
+    requires atomic_status_inv(a, key)
+    {
+      var orig_value := fetch_and(a, 0xff - flag_accessed);
+
+      ///// Begin jank
+      ///// Setup:
+      var v := 0xff - flag_accessed;
+      var old_v: uint8;
+      var new_v: uint8;
+      glinear var old_g: G := unsafe_obtain();
+      assume orig_value == old_v;
+      assume new_v == bit_and(old_v, v);
+      assume atomic_inv(a, old_v, old_g);
+      glinear var new_g;
+      ///// Transfer:
+      new_g := old_g;
+      assert state_inv(new_v, new_g, key);
+      ///// Teardown:
+      assert atomic_inv(a, new_v, new_g);
+      unsafe_dispose(new_g);
+      ///// End jank
+    }
+
+    method is_reading(a: AtomicStatus,
+        key: Key, t: int,
+        glinear r: RW.Token)
+    returns (
+      success: bool,
+      glinear r': RW.Token,
+      /*readonly*/ glinear handle: glOption<RWLock.Handle>
+    )
+    requires atomic_status_inv(a, key)
+    requires r == RWLock.Internal(RWLock.SharedLockPending2(key, t))
+    ensures !success ==> r == r'
+    ensures !success ==> handle == glNone
+    ensures success ==>
+        && r' == RWLock.Internal(RWLock.SharedLockObtained(key, t))
+        && handle.glSome?
+        && handle.value.is_handle(key)
+    {
+      var f := atomic_read(a);
+
+      ///// Begin jank
+      ///// Setup:
+      var old_v: uint8;
+      var new_v: uint8;
+      glinear var old_g: G := unsafe_obtain();
+      assume new_v == old_v;
+      assume f == old_v;
+      assume atomic_inv(a, old_v, old_g);
+      glinear var new_g;
+      ///// Transfer:
+      var fl := old_g.rwlock.q.flags;
+      if fl != RWLock.Reading && fl != RWLock.Reading_ExcLock {
+        glinear var hand;
+        r', hand := RWLockMethods.transform_SharedCheckReading(
+            key, t, old_g.rwlock.q.flags,
+            r, old_g.rwlock);
+        new_g := old_g;
+        handle := glSome(hand);
+      } else {
+        r' := r;
+        new_g := old_g;
+        handle := glNone;
+      }
+      ///// Teardown:
+      assert atomic_inv(a, new_v, new_g);
+      unsafe_dispose(new_g);
+      ///// End jank
+
+      success := bit_and(f, flag_reading) == 0;
+    }
+
+    method take_exc_if_eq_clean(a: AtomicStatus,
+        key: Key)
+    returns (
+      success: bool,
+      glinear m': glOption<RW.Token>,
+      glinear status: glOption<CacheResources.R>,
+      /*readonly*/ glinear handle: glOption<RWLock.Handle>
+    )
+    requires atomic_status_inv(a, key)
+    //requires m == RWLock.Internal(RWLock.SharedLockPending(key, t))
+    ensures !success ==> m'.glNone? && status.glNone? && handle.glNone?
+    ensures success ==>
+        && m' == glSome(RWLock.Internal(RWLock.ExcLockPending(key, -1, 0, true)))
+        && status == glSome(CacheResources.CacheStatus(
+            key.cache_idx, CacheResources.Clean))
+        && handle.glSome?
+        && handle.value.is_handle(key)
+    {
+      var did_set := compare_and_set(a, flag_clean, flag_exc_clean);
+
+      ///// Begin jank
+      ///// Setup:
+      var v1 := flag_clean;
+      var v2 := flag_exc_clean;
       var old_v: uint8;
       var new_v: uint8;
       glinear var old_g: G := unsafe_obtain();
@@ -379,22 +669,35 @@ module AtomicStatusImpl {
       glinear var new_g;
       ///// Transfer:
       if did_set {
-        glinear var res, handle;
+        //m' := transform_SharedCheckExcFree(
+        //    key, t, RWLock.Available, m, old_g.rwlock);
+        //m' := transform_SharedCheckReading(
+        //    key, t, RWLock.Available, m', old_g.rwlock);
+        
         glinear var G(rwlock, status0) := old_g;
-        rwlock, res, handle := RWLockMethods.transform_Alloc(key, rwlock);
-        status := status0;
+        glinear var m0, handle';
+
+        var fl := rwlock.q.flags;
+        rwlock, m0, handle' := RWLockMethods.transform_ThreadlessExc(key, rwlock, fl);
+
+        //m', rwlock := transform_SharedToExc(
+        //    key, t, RWLock.Available, m', rwlock);
+
+        rwlock, m0 := RWLockMethods.transform_TakeExcLockFinishWriteback(
+            key, -1, RWLock.PendingExcLock, true, rwlock, m0);
+
         new_g := G(rwlock, glNone);
-        m := glSome(res);
-        handle_opt := glSome(handle);
-        assert status.glSome?;
-        assert status.value.status == CacheResources.Empty;
+        status := status0;
+        m' := glSome(m0);
+        handle := glSome(handle');
+        assert state_inv(new_v, new_g, key);
       } else {
-        m := glNone;
-        handle_opt := glNone;
-        status := glNone;
         new_g := old_g;
+        m' := glNone;
+        status := glNone;
+        handle := glNone;
+        assert state_inv(new_v, new_g, key);
       }
-      assert state_inv(new_v, new_g, key);
       ///// Teardown:
       assert atomic_inv(a, new_v, new_g);
       unsafe_dispose(new_g);
@@ -402,425 +705,131 @@ module AtomicStatusImpl {
 
       success := did_set;
     }
-  }
 
-  method clear_exc_bit_during_load_phase(a: AtomicStatus, key: Key, t:int,
-      glinear r: RW.Token)
-  returns (glinear q: RW.Token)
-  requires atomic_status_inv(a, key)
-  requires r == RWLock.Internal(RWLock.ReadingPendingCounted(key, t))
-  ensures q == RWLock.Internal(RWLock.ReadingObtained(key, t))
-  {
-    atomic_write(a, flag_accessed_reading_clean);
+    method set_to_free(a: AtomicStatus, key: Key,
+        glinear handle: RWLock.Handle,
+        glinear status: CacheResources.R,
+        glinear r: RW.Token)
+    requires atomic_status_inv(a, key)
+    requires handle.is_handle(key)
+    requires status == CacheResources.CacheStatus(
+        key.cache_idx,
+        CacheResources.Empty)
+    requires r == RWLock.Internal(RWLock.ExcLockObtained(key, -1, true))
+    {
+      atomic_write(a, flag_unmapped);
 
-    ///// Begin jank
-    ///// Setup:
-    var v := flag_accessed_reading_clean;
-    var old_v: uint8;
-    var new_v: uint8;
-    glinear var old_g: G := unsafe_obtain();
-    assume new_v == v;
-    assume atomic_inv(a, old_v, old_g);
-    glinear var new_g;
-    ///// Transfer:
-    var fl := old_g.rwlock.q.flags;
-    glinear var G(rwlock, status) := old_g;
-    rwlock, q := RWLockMethods.transform_ObtainReading(key, t, fl, rwlock, r);
-    new_g := G(rwlock, status);
-    assert status.glNone?;
-    assert state_inv(new_v, new_g, key);
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
-  }
+      ///// Begin jank
+      ///// Setup:
+      var v := flag_unmapped;
+      var old_v: uint8;
+      var new_v: uint8;
+      glinear var old_g: G := unsafe_obtain();
+      assume new_v == v;
+      assume atomic_inv(a, old_v, old_g);
+      glinear var new_g;
+      ///// Transfer:
 
-  method load_phase_finish(a: AtomicStatus, key: Key, t: int,
-      glinear r: RW.Token, glinear handle: RWLock.Handle,
-      glinear status: CacheResources.R)
-  returns (glinear q: RW.Token, /*readonly*/ glinear handle_out: RWLock.Handle)
-  requires atomic_status_inv(a, key)
-  requires r == RWLock.Internal(RWLock.ReadingObtained(key, t))
-  requires handle.is_handle(key)
-  requires status == CacheResources.CacheStatus(key.cache_idx,
-      CacheResources.Clean)
-  ensures q == RWLock.Internal(RWLock.SharedLockObtained(key, t))
-  ensures handle_out == handle
-  {
-    var orig_value := fetch_and(a, 0xff - flag_reading);
-
-    ///// Begin jank
-    ///// Setup:
-    var v := 0xff - flag_reading;
-    var old_v: uint8;
-    var new_v: uint8;
-    glinear var old_g: G := unsafe_obtain();
-    assume orig_value == old_v;
-    assume new_v == bit_and(old_v, v);
-    assume atomic_inv(a, old_v, old_g);
-    glinear var new_g;
-    ///// Transfer:
-    var fl := old_g.rwlock.q.flags;
-    glinear var G(rwlock, status_empty) := old_g;
-    RWLockMethods.pre_ReadingToShared(key, t, fl, rwlock, r);
-    dispose_glnone(status_empty);
-    rwlock, q, handle_out :=
-        RWLockMethods.transform_ReadingToShared(key, t, fl, rwlock, r, handle);
-    new_g := G(rwlock, glSome(status));
-
-    assert state_inv(new_v, new_g, key);
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
-  }
-
-  method quicktest_is_exc_locked(a: AtomicStatus)
-  returns (is_exc_locked: bool)
-  {
-    var v := atomic_read(a);
-    return ((v as bv8) & (flag_exc as bv8)) as uint8 != 0;
-  }
-
-  method is_exc_locked_or_free(a: AtomicStatus,
-      key: Key, t: int,
-      glinear r: RW.Token)
-  returns (success: bool, is_accessed: bool, glinear r': RW.Token)
-  requires atomic_status_inv(a, key)
-  requires r == RWLock.Internal(RWLock.SharedLockPending(key, t))
-  ensures !success ==> r == r'
-  ensures success ==> r' == 
-      RWLock.Internal(RWLock.SharedLockPending2(key, t))
-  {
-    var f := atomic_read(a);
-
-    ///// Begin jank
-    ///// Setup:
-    var old_v: uint8;
-    var new_v: uint8;
-    glinear var old_g: G := unsafe_obtain();
-    assume new_v == old_v;
-    assume f == old_v;
-    assume atomic_inv(a, old_v, old_g);
-    glinear var new_g;
-    ///// Transfer:
-    var fl := old_g.rwlock.q.flags;
-    if fl == RWLock.Available || fl == RWLock.Writeback
-        || fl == RWLock.Reading {
-      r' := RWLockMethods.transform_SharedCheckExcFree(
-          key, t, old_g.rwlock.q.flags,
-          r, old_g.rwlock);
-      new_g := old_g;
-    } else {
-      r' := r;
-      new_g := old_g;
-    }
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
-
-    success := bit_and(f, bit_or(flag_exc, flag_unmapped)) == 0;
-    is_accessed := bit_and(f, flag_accessed) != 0;
-  }
-
-  method mark_accessed(a: AtomicStatus,
-      key: Key, t: int,
-      shared r: RW.Token)
-  requires atomic_status_inv(a, key)
-  requires r == RWLock.Internal(RWLock.SharedLockPending2(key, t))
-  {
-    var orig_value := fetch_or(a, flag_accessed);
-
-    ///// Begin jank
-    ///// Setup:
-    var v := flag_accessed;
-    var old_v: uint8;
-    var new_v: uint8;
-    glinear var old_g: G := unsafe_obtain();
-    assume orig_value == old_v;
-    assume new_v == bit_or(old_v, v);
-    assume atomic_inv(a, old_v, old_g);
-    glinear var new_g;
-    ///// Transfer:
-    RWLockMethods.possible_flags_SharedLockPending2(key, t, old_g.rwlock.q.flags,
-        r, old_g.rwlock);
-    new_g := old_g;
-    assert state_inv(new_v, new_g, key);
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
-  }
-
-  method clear_accessed(a: AtomicStatus, key: Key)
-  requires atomic_status_inv(a, key)
-  {
-    var orig_value := fetch_and(a, 0xff - flag_accessed);
-
-    ///// Begin jank
-    ///// Setup:
-    var v := 0xff - flag_accessed;
-    var old_v: uint8;
-    var new_v: uint8;
-    glinear var old_g: G := unsafe_obtain();
-    assume orig_value == old_v;
-    assume new_v == bit_and(old_v, v);
-    assume atomic_inv(a, old_v, old_g);
-    glinear var new_g;
-    ///// Transfer:
-    new_g := old_g;
-    assert state_inv(new_v, new_g, key);
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
-  }
-
-  method is_reading(a: AtomicStatus,
-      key: Key, t: int,
-      glinear r: RW.Token)
-  returns (
-    success: bool,
-    glinear r': RW.Token,
-    /*readonly*/ glinear handle: glOption<RWLock.Handle>
-  )
-  requires atomic_status_inv(a, key)
-  requires r == RWLock.Internal(RWLock.SharedLockPending2(key, t))
-  ensures !success ==> r == r'
-  ensures !success ==> handle == glNone
-  ensures success ==>
-      && r' == RWLock.Internal(RWLock.SharedLockObtained(key, t))
-      && handle.glSome?
-      && handle.value.is_handle(key)
-  {
-    var f := atomic_read(a);
-
-    ///// Begin jank
-    ///// Setup:
-    var old_v: uint8;
-    var new_v: uint8;
-    glinear var old_g: G := unsafe_obtain();
-    assume new_v == old_v;
-    assume f == old_v;
-    assume atomic_inv(a, old_v, old_g);
-    glinear var new_g;
-    ///// Transfer:
-    var fl := old_g.rwlock.q.flags;
-    if fl != RWLock.Reading && fl != RWLock.Reading_ExcLock {
-      glinear var hand;
-      r', hand := RWLockMethods.transform_SharedCheckReading(
-          key, t, old_g.rwlock.q.flags,
-          r, old_g.rwlock);
-      new_g := old_g;
-      handle := glSome(hand);
-    } else {
-      r' := r;
-      new_g := old_g;
-      handle := glNone;
-    }
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
-
-    success := bit_and(f, flag_reading) == 0;
-  }
-
-  method take_exc_if_eq_clean(a: AtomicStatus,
-      key: Key)
-  returns (
-    success: bool,
-    glinear m': glOption<RW.Token>,
-    glinear status: glOption<CacheResources.R>,
-    /*readonly*/ glinear handle: glOption<RWLock.Handle>
-  )
-  requires atomic_status_inv(a, key)
-  //requires m == RWLock.Internal(RWLock.SharedLockPending(key, t))
-  ensures !success ==> m'.glNone? && status.glNone? && handle.glNone?
-  ensures success ==>
-      && m' == glSome(RWLock.Internal(RWLock.ExcLockPending(key, -1, 0, true)))
-      && status == glSome(CacheResources.CacheStatus(
-          key.cache_idx, CacheResources.Clean))
-      && handle.glSome?
-      && handle.value.is_handle(key)
-  {
-    var did_set := compare_and_set(a, flag_clean, flag_exc_clean);
-
-    ///// Begin jank
-    ///// Setup:
-    var v1 := flag_clean;
-    var v2 := flag_exc_clean;
-    var old_v: uint8;
-    var new_v: uint8;
-    glinear var old_g: G := unsafe_obtain();
-    assume old_v == v1 ==> new_v == v2 && did_set;
-    assume old_v != v1 ==> new_v == old_v && !did_set;
-    assume atomic_inv(a, old_v, old_g);
-    glinear var new_g;
-    ///// Transfer:
-    if did_set {
-      //m' := transform_SharedCheckExcFree(
-      //    key, t, RWLock.Available, m, old_g.rwlock);
-      //m' := transform_SharedCheckReading(
-      //    key, t, RWLock.Available, m', old_g.rwlock);
-      
-      glinear var G(rwlock, status0) := old_g;
-      glinear var m0, handle';
+      glinear var G(rwlock, empty_status) := old_g;
 
       var fl := rwlock.q.flags;
-      rwlock, m0, handle' := RWLockMethods.transform_ThreadlessExc(key, rwlock, fl);
+      rwlock := RWLockMethods.transform_unmap(key, fl, true, rwlock, handle, r);
 
-      //m', rwlock := transform_SharedToExc(
-      //    key, t, RWLock.Available, m', rwlock);
+      dispose_glnone(empty_status);
+      new_g := G(rwlock, glSome(status));
 
-      rwlock, m0 := RWLockMethods.transform_TakeExcLockFinishWriteback(
-          key, -1, RWLock.PendingExcLock, true, rwlock, m0);
-
-      new_g := G(rwlock, glNone);
-      status := status0;
-      m' := glSome(m0);
-      handle := glSome(handle');
       assert state_inv(new_v, new_g, key);
-    } else {
-      new_g := old_g;
-      m' := glNone;
-      status := glNone;
-      handle := glNone;
-      assert state_inv(new_v, new_g, key);
+      ///// Teardown:
+      assert atomic_inv(a, new_v, new_g);
+      unsafe_dispose(new_g);
+      ///// End jank
     }
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
 
-    success := did_set;
+    method abandon_exc(
+        a: AtomicStatus,
+        key: Key,
+        glinear status: CacheResources.R,
+        glinear r: RW.Token,
+        /*readonly*/ glinear handle: RWLock.Handle)
+    requires atomic_status_inv(a, key)
+    requires status == CacheResources.CacheStatus(
+        key.cache_idx,
+        CacheResources.Clean)
+    requires r.Internal? && r.q.ExcLockPending?
+    requires r == RWLock.Internal(RWLock.ExcLockPending(key, -1,
+        r.q.visited, true))
+    requires handle.is_handle(key)
+    {
+      var orig_value := fetch_and(a, 0xff - flag_exc);
+
+      ///// Begin jank
+      ///// Setup:
+      var v := 0xff - flag_exc;
+      var old_v: uint8;
+      var new_v: uint8;
+      glinear var old_g: G := unsafe_obtain();
+      assume orig_value == old_v;
+      assume new_v == bit_and(old_v, v);
+      assume atomic_inv(a, old_v, old_g);
+      glinear var new_g;
+      ///// Transfer:
+
+      glinear var G(rwlock, empty_status) := old_g;
+
+      var fl := rwlock.q.flags;
+      var visited := r.q.visited;
+      rwlock := RWLockMethods.abandon_ExcLockPending(key, fl, visited, true, r, rwlock, handle);
+
+      dispose_glnone(empty_status);
+      new_g := G(rwlock, glSome(status));
+
+      assert state_inv(new_v, new_g, key);
+      ///// Teardown:
+      assert atomic_inv(a, new_v, new_g);
+      unsafe_dispose(new_g);
+      ///// End jank
+    }
+
+    method abandon_reading_pending(
+        a: AtomicStatus,
+        key: Key,
+        glinear status: CacheResources.R,
+        glinear r: RW.Token,
+        /*readonly*/ glinear handle: RWLock.Handle)
+    requires atomic_status_inv(a, key)
+    requires status == CacheResources.CacheStatus(
+        key.cache_idx,
+        CacheResources.Empty)
+    requires r == RWLock.Internal(RWLock.ReadingPending(key))
+    requires handle.is_handle(key)
+    {
+      atomic_write(a, flag_unmapped);
+
+      ///// Begin jank
+      ///// Setup:
+      var v := flag_unmapped;
+      var old_v: uint8;
+      var new_v: uint8;
+      glinear var old_g: G := unsafe_obtain();
+      assume new_v == v;
+      assume atomic_inv(a, old_v, old_g);
+      glinear var new_g;
+
+      ///// Transfer:
+
+      glinear var G(rwlock, empty_status) := old_g;
+
+      var fl := rwlock.q.flags;
+      rwlock := RWLockMethods.abandon_ReadingPending(key, fl, r, rwlock, handle);
+
+      dispose_glnone(empty_status);
+      new_g := G(rwlock, glSome(status));
+
+      assert state_inv(new_v, new_g, key);
+      ///// Teardown:
+      assert atomic_inv(a, new_v, new_g);
+      unsafe_dispose(new_g);
+      ///// End jank
+    }*/
   }
-
-  method set_to_free(a: AtomicStatus, key: Key,
-      glinear handle: RWLock.Handle,
-      glinear status: CacheResources.R,
-      glinear r: RW.Token)
-  requires atomic_status_inv(a, key)
-  requires handle.is_handle(key)
-  requires status == CacheResources.CacheStatus(
-      key.cache_idx,
-      CacheResources.Empty)
-  requires r == RWLock.Internal(RWLock.ExcLockObtained(key, -1, true))
-  {
-    atomic_write(a, flag_unmapped);
-
-    ///// Begin jank
-    ///// Setup:
-    var v := flag_unmapped;
-    var old_v: uint8;
-    var new_v: uint8;
-    glinear var old_g: G := unsafe_obtain();
-    assume new_v == v;
-    assume atomic_inv(a, old_v, old_g);
-    glinear var new_g;
-    ///// Transfer:
-
-    glinear var G(rwlock, empty_status) := old_g;
-
-    var fl := rwlock.q.flags;
-    rwlock := RWLockMethods.transform_unmap(key, fl, true, rwlock, handle, r);
-
-    dispose_glnone(empty_status);
-    new_g := G(rwlock, glSome(status));
-
-    assert state_inv(new_v, new_g, key);
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
-  }
-
-  method abandon_exc(
-      a: AtomicStatus,
-      key: Key,
-      glinear status: CacheResources.R,
-      glinear r: RW.Token,
-      /*readonly*/ glinear handle: RWLock.Handle)
-  requires atomic_status_inv(a, key)
-  requires status == CacheResources.CacheStatus(
-      key.cache_idx,
-      CacheResources.Clean)
-  requires r.Internal? && r.q.ExcLockPending?
-  requires r == RWLock.Internal(RWLock.ExcLockPending(key, -1,
-      r.q.visited, true))
-  requires handle.is_handle(key)
-  {
-    var orig_value := fetch_and(a, 0xff - flag_exc);
-
-    ///// Begin jank
-    ///// Setup:
-    var v := 0xff - flag_exc;
-    var old_v: uint8;
-    var new_v: uint8;
-    glinear var old_g: G := unsafe_obtain();
-    assume orig_value == old_v;
-    assume new_v == bit_and(old_v, v);
-    assume atomic_inv(a, old_v, old_g);
-    glinear var new_g;
-    ///// Transfer:
-
-    glinear var G(rwlock, empty_status) := old_g;
-
-    var fl := rwlock.q.flags;
-    var visited := r.q.visited;
-    rwlock := RWLockMethods.abandon_ExcLockPending(key, fl, visited, true, r, rwlock, handle);
-
-    dispose_glnone(empty_status);
-    new_g := G(rwlock, glSome(status));
-
-    assert state_inv(new_v, new_g, key);
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
-  }
-
-  method abandon_reading_pending(
-      a: AtomicStatus,
-      key: Key,
-      glinear status: CacheResources.R,
-      glinear r: RW.Token,
-      /*readonly*/ glinear handle: RWLock.Handle)
-  requires atomic_status_inv(a, key)
-  requires status == CacheResources.CacheStatus(
-      key.cache_idx,
-      CacheResources.Empty)
-  requires r == RWLock.Internal(RWLock.ReadingPending(key))
-  requires handle.is_handle(key)
-  {
-    atomic_write(a, flag_unmapped);
-
-    ///// Begin jank
-    ///// Setup:
-    var v := flag_unmapped;
-    var old_v: uint8;
-    var new_v: uint8;
-    glinear var old_g: G := unsafe_obtain();
-    assume new_v == v;
-    assume atomic_inv(a, old_v, old_g);
-    glinear var new_g;
-
-    ///// Transfer:
-
-    glinear var G(rwlock, empty_status) := old_g;
-
-    var fl := rwlock.q.flags;
-    rwlock := RWLockMethods.abandon_ReadingPending(key, fl, r, rwlock, handle);
-
-    dispose_glnone(empty_status);
-    new_g := G(rwlock, glSome(status));
-
-    assert state_inv(new_v, new_g, key);
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
-  }
-  */
 }

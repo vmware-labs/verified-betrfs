@@ -1350,6 +1350,7 @@ module RWLockExtToken refines SimpleExtToken {
     && m.exc.ExcPendingAwaitWriteback?
     && m == ExcHandle(m.exc)
   requires c.loc() == handle.loc()
+  ensures c.get().central.flag == PendingExcLock
   ensures c'.loc() == handle'.loc() == c.loc()
   ensures c'.get() == 
       CentralHandle(c.get().central.(flag :=
