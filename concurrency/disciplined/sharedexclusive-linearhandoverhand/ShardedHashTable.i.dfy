@@ -1059,33 +1059,6 @@ module ShardedHashTable refines ShardedStateMachine {
       assert ValidHashInSlot(s.table, e, pos);
       assert ValidHashOrdering(s.table, e, j, pos);
       assert ValidHashOrdering(s.table, e, pos, k);
-
-      /*if j == pos && (pos == FixedSize() - 1 ==> k == 0) && (pos < FixedSize() - 1 ==> k == j + 1) {
-        assert ValidHashOrdering(s'.table, e, j, k);
-      } else if j == pos {
-        assert ValidHashOrdering(s'.table, e, j, k);
-      } else if (pos == FixedSize() - 1 ==> k == 0) && (pos < FixedSize() - 1 ==> k == pos + 1) {
-        if s'.table[e].value.entry.Empty? && s'.table[j].value.entry.Full? && adjust(j, e) <= adjust(k, e) && s'.table[k].value.state.Inserting? {
-          if j == k {
-            assert ValidHashOrdering(s'.table, e, j, k);
-          } else {
-            assert hash(s.table[j].value.entry.kv.key)
-                == hash(s'.table[j].value.entry.kv.key);
-            assert hash(s.table[pos].value.state.kv.key)
-                == hash(s'.table[k].value.state.kv.key);
-
-            assert s.table[e].value.entry.Empty?;
-            assert s.table[j].value.entry.Full?;
-            assert adjust(j, e) <= adjust(pos, e);
-            assert s.table[pos].value.state.Inserting?;
-
-            assert ValidHashOrdering(s.table, e, j, pos);
-            assert ValidHashOrdering(s'.table, e, j, k);
-          }
-        }
-      } else {
-        assert ValidHashOrdering(s'.table, e, j, k);
-      }*/
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures ActionNotPastKey(s'.table, e, j, k)
@@ -1604,85 +1577,6 @@ module ShardedHashTable refines ShardedStateMachine {
       assert ValidHashInSlot(s.table, e', i);
 
       assert ValidHashInSlot(s.table, i, e');
-
-      //assert ValidHashInSlot(s.table, e', pos');
-      //assert ValidHashInSlot(s.table, pos', e');
-
-      //assert ValidHashInSlot(s.table, i, e);
-      //assert ValidHashOrdering(s.table, e', i, pos');
-      //assert ValidHashInSlot(s.table, pos, i);
-      //assert ValidHashOrdering(s.table, e', pos, i);
-      //assert ValidHashOrdering(s.table, e', i, pos);
-
-      /*var e1 := if e < |s.table| - 1 then e + 1 else 0;
- 
-      assert ValidHashInSlot(s.table, e1, i);
-
-      assert ValidHashInSlot(s.table, pos', i);
-      assert ValidHashOrdering(s.table, e1, pos', i);
-
-      assert ValidHashInSlot(s.table, e1, i);
-
-      assert ValidHashInSlot(s.table, i, e1);
-
-      assert ValidHashInSlot(s.table, e1, pos');
-      assert ValidHashInSlot(s.table, pos', e1);
-
-      assert ValidHashInSlot(s.table, i, e);
-      assert ValidHashOrdering(s.table, e1, i, pos');
-      assert ValidHashInSlot(s.table, pos, i);
-      assert ValidHashOrdering(s.table, e1, pos, i);
-      assert ValidHashOrdering(s.table, e1, i, pos);
-
-      assert ValidHashOrdering(s.table, e1, i, e);
-      assert ValidHashOrdering(s.table, e1, e, i);
-      assert ValidHashInSlot(s.table, e1, i);
-
-      assert ValidHashOrdering(s.table, e', e, e1);
-
-      assert ValidHashOrdering(s.table, e', e1, i);
-      assert ValidHashInSlot(s.table, e', e1);
-
-      assert ValidHashInSlot(s.table, e, e);
-      assert ValidHashInSlot(s.table, e', e');
-      assert ValidHashInSlot(s.table, e1, e1);
-
-      assert ValidHashInSlot(s.table, e', i);
-
-      assert ValidHashOrdering(s.table, e', e, i);*/
-
-
-      /*if e == pos {
-        if i == pos' {
-          assert ValidHashInSlot(s'.table, e, i);
-        } else {
-          if s.table[pos'].value.entry.Full? {
-            if adjust(i, pos) < adjust(e', pos) {
-              assert ValidHashInSlot(s'.table, e, i);
-            } else if i == e' {
-              assert s.table[e1].value.entry.Full?  ==>
-                  hash(s.table[e1].value.entry.kv.key) as int
-                == e1;
-              
-              if s.table[e1].value.entry.Full? {
-                if e == e' {
-                  assert ValidHashInSlot(s'.table, e, i);
-                } else {
-                  assert ValidHashInSlot(s'.table, e, i);
-                }
-              } else {
-                assert ValidHashInSlot(s'.table, e, i);
-              }
-            } else {
-              assert ValidHashInSlot(s'.table, e, i);
-            }
-          } else {
-            assert ValidHashInSlot(s'.table, e, i);
-          }
-        }
-      } else {
-        assert ValidHashInSlot(s'.table, e, i);
-      }*/
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures ValidHashOrdering(s'.table, e, j, k)

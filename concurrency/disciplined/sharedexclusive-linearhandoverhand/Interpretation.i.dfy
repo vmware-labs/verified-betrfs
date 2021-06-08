@@ -458,57 +458,6 @@ module Interpretation {
         //assert ValidHashInSlot(table, e, j1);
         //assert ValidHashInSlot(table, f, i1);
         assert ValidHashInSlot(table, f, j);
-
-        //assert ValidHashOrdering(table, e, i1, j1);
-        //assert ValidHashOrdering(table, e, j1, i1);
-        //assert ValidHashOrdering(table, f, i1, j1);
-        //assert ValidHashOrdering(table, f, j1, i1);
-
-        //assert ActionNotPastKey(table, e, i1, j1);
-        //assert ActionNotPastKey(table, e, j1, i1);
-        //assert ActionNotPastKey(table, f, i1, j1);
-        //assert ActionNotPastKey(table, f, j1, i1);
-
-        /*if table[i1].value.entry.Full? && table[i1].value.entry.kv.key == k {
-          if table[j1].value.entry.Full? && table[j1].value.entry.kv.key == k {
-            if e + 1 == |table| {
-              if f+1 > c {
-                assert adjust(c, f+1) <= adjust(e, f+1);
-                assert adjust(c, f+1) == c + |table|;
-                assert c + |table| <= adjust(e, f+1);
-                assert c <= e;
-                assert e < f+1;
-                assert e == |table| - 1;
-                assert f == |table| - 1;
-                assert false;
-              }
-              assert a < b <= f+1 <= c < d <= |table|;
-              assert false;
-            } else if e + 1 == 1 {
-              /*var e' := (if e < |table| - 1 then e + 1 else 0);
-              var f' := (if f < |table| - 1 then f + 1 else 0);
-              var h := HT.hash(table[i1].value.entry.kv.key) as int;
-              assert adjust(h, f') <= adjust(j1, f');
-
-              assert adjust(j1, f') < adjust(d, f');
-              assert d != f';
-              assert adjust(d, f') <= adjust(e', f');
-              assert adjust(j1, f') < adjust(e', f');
-
-              assert adjust(f', e') <= adjust(h, e');
-              assert adjust(f', e+1) <= adjust(h, e+1);
-              assert adjust(h, e+1) <= adjust(j1, e+1);*/
-
-              assert false;
-            } else {
-              assert false;
-            }
-          } else {
-            assert false;
-          }
-        } else {
-          assert false;
-        }*/
       }
     }
 
