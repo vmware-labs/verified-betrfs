@@ -66,7 +66,7 @@ module Sequences {
     (forall i, j :: 0 <= i < |a| && 0 <= j < |a| && i != j ==> a[i] != a[j])
   }
 
-  lemma DisjointConcatenation<T>(a: seq<T>, b: seq<T>)
+  lemma {:timeLimitMultiplier 3} DisjointConcatenation<T>(a: seq<T>, b: seq<T>)
     requires NoDupes(a);
     requires NoDupes(b);
     requires multiset(a) !! multiset(b);
@@ -574,7 +574,7 @@ module Sequences {
     }
   }
 
-  lemma {:induction true} UnflattenIndexIsCorrect<A>(seqs: seq<seq<A>>, i: nat)
+  lemma {:induction true} {:timeLimitMultiplier 3} UnflattenIndexIsCorrect<A>(seqs: seq<seq<A>>, i: nat)
     requires i < FlattenLength(FlattenShape(seqs))
     ensures UnflattenIndex(FlattenShape(seqs), i).0 < |seqs|
     ensures UnflattenIndex(FlattenShape(seqs), i).1 < |seqs[UnflattenIndex(FlattenShape(seqs), i).0]|

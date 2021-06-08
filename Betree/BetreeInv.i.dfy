@@ -377,7 +377,7 @@ module BetreeInv {
     }
   }
 
-  lemma RedirectPreservesAcyclic(s: Variables, s': Variables, redirect: Redirect)
+  lemma {:timeLimitMultiplier 2} RedirectPreservesAcyclic(s: Variables, s': Variables, redirect: Redirect)
     requires Inv(s);
     requires Redirect(s.bcv, s'.bcv, redirect);
     ensures Acyclic(s');

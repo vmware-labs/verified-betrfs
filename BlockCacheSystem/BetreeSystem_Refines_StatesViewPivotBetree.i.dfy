@@ -72,7 +72,7 @@ module BetreeSystem_Refines_StatesViewPivotBetree {
     assert View.NextStep(I(s), I(s'), vop, View.AdvanceStep);
   }
 
-  lemma BlockCacheMoveStepRefines(s: System.Variables, s': System.Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)
+  lemma {:timeLimitMultiplier 3} BlockCacheMoveStepRefines(s: System.Variables, s': System.Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)
     requires System.Inv(s)
     requires !step.TransactionStep?
     requires M.BlockCacheMove(s.machine, s'.machine, dop, vop, step)

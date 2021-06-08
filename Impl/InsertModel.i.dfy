@@ -61,7 +61,7 @@ module InsertModel {
     )
   }
 
-  lemma InsertKeyValueCorrect(s: BBC.Variables, key: Key, value: Value, replay: bool)
+  lemma {:timeLimitMultiplier 3} InsertKeyValueCorrect(s: BBC.Variables, key: Key, value: Value, replay: bool)
   requires InsertKeyValue.requires(s, key, value)
   requires WeightKey(key) + WeightMessage(Messages.Define(value)) +
       WeightBucketList(s.cache[BT.G.Root()].buckets) 

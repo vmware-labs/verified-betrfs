@@ -60,7 +60,7 @@ module GrowModel {
     )
   }
 
-  lemma growCorrect(s: BBC.Variables, refUpperBound: uint64)
+  lemma {:timeLimitMultiplier 3} growCorrect(s: BBC.Variables, refUpperBound: uint64)
   requires grow.requires(s, refUpperBound)
   requires s.totalCacheSize() <= MaxCacheSize() - 1
   ensures var s' := grow(s, refUpperBound);

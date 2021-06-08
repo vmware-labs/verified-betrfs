@@ -935,7 +935,7 @@ module IndirectionTable {
       }
     }
 
-    linear inout method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
+    linear inout method {:timeLimitMultiplier 2} UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
     returns (oldLoc : Option<Location>)
     requires old_self.Inv()
     requires old_self.TrackingGarbage()
@@ -1307,7 +1307,7 @@ module IndirectionTable {
           == PredecessorSetRestrictedPartial(graph, dest, domain, next, j);
     }
 
-    static method ComputeRefCountsInnerLoop(linear inout tbl': HashMap, shared tbl: HashMap, it: LinearMutableMap.Iterator<Entry>)
+    static method {:timeLimitMultiplier 2} ComputeRefCountsInnerLoop(linear inout tbl': HashMap, shared tbl: HashMap, it: LinearMutableMap.Iterator<Entry>)
     returns (success: bool, it': LinearMutableMap.Iterator<Entry>)
     requires it.next.Next?
     requires ComputeRefCountsOuterLoopInv(old_tbl', tbl, it)
@@ -1610,7 +1610,7 @@ module IndirectionTable {
     // but it's kind of annoying. However, I think that it won't
     // be a big deal as long as most syncs are journaling syncs?
     // So I've moved back to this one which is slower but cleaner.
-    shared method {:timeLimitMultiplier 2} IndirectionTableToVal()  // HashMapToVal
+    shared method {:timeLimitMultiplier 3} IndirectionTableToVal()  // HashMapToVal
     returns (v : V, size: uint64)
     requires this.Inv()
     requires BC.WFCompleteIndirectionTable(this.I())
