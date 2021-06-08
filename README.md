@@ -135,6 +135,10 @@ To run the benchmark, use
 
 where `<data_dir>` should be an empty (or non-existing) directory that will contain the benchmark's files.
 
+# Continuous integration
+
+GitHub _Actions_ run a verification check when new commits are pushed to `master`. To manually request a run (e.g. for another branch), go to _Actions_, select `vck-status`, _Run workflow_, type the commit ref / branch in _Branch to check_, and click _Run_ (you probably want to leave _Use workflow from_ unchanged, unless you have made significant changes to how the Makefile works).
+
 # Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for our contributing guidelines.
