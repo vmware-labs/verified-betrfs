@@ -1,17 +1,18 @@
 include "ShardedHashTable.i.dfy"
-include "MonoidLib.i.dfy"
-include "MultisetLemmas.i.dfy"
-include "../../lib/Base/Maps.i.dfy"
-include "../../lib/Base/Multisets.i.dfy"
+include "../common/MonoidLib.i.dfy"
+include "../common/MultisetLemmas.i.dfy"
+include "../../../lib/Base/Maps.i.dfy"
+include "../../../lib/Base/Multisets.i.dfy"
 
 module SummaryMonoid refines MonoidMap {
   import opened KeyValueType
   import opened Options
   import opened Maps
   import MapIfc
-  import H = ShardedHashTable
+  import HT = ShardedHashTable
   import Multisets
   import MultisetLemmas
+  import opened Limits
 
   datatype QueryRes =
     | QueryFound(rid: int, key: Key, value: Option<Value>)
@@ -229,6 +230,8 @@ module Interpretation {
   import S = SummaryMonoid
   import MultisetLemmas
   import Multisets
+  import HT = ShardedHashTable
+  import opened Limits
 
   function {:opaque} interp_wrt(table: seq<Option<HT.Info>>, e: int) : S.Summary
   requires Complete(table)
@@ -413,7 +416,7 @@ module Interpretation {
   requires is_good_root(table, f)
   requires 0 <= a <= b <= |table|
   requires 0 <= c <= d <= |table|
-  requires |table| == HT.FixedSize()
+  requires |table| == FixedSize()
   requires e != f
   requires a != b ==>
            adjust(a, e+1)
@@ -738,7 +741,7 @@ module Interpretation {
   requires S.f(table[i]) == S.add(S.f(table'[i]), x)
   requires is_good_root(table, f);
   requires is_good_root(table', f);
-  requires forall k | 0 <= k < HT.FixedSize() && adjust(i, f+1) < adjust(k, f+1)
+  requires forall k | 0 <= k < FixedSize() && adjust(i, f+1) < adjust(k, f+1)
       :: S.commutes(x, S.f(table[k]))
   ensures interp(table) == S.add(interp(table'), x)
   {
@@ -782,7 +785,7 @@ module Interpretation {
   requires S.add(x, S.f(table[i])) == S.f(table'[i])
   requires is_good_root(table, f);
   requires is_good_root(table', f);
-  requires forall k | 0 <= k < HT.FixedSize() && adjust(k, f+1) < adjust(i, f+1)
+  requires forall k | 0 <= k < FixedSize() && adjust(k, f+1) < adjust(i, f+1)
       :: S.commutes(x, S.f(table[k]))
   ensures S.add(x, interp(table)) == interp(table')
   {
@@ -1070,7 +1073,7 @@ module Interpretation {
         multiset{S.QueryUnknown(
           s.table[pos].value.state.rid, s.table[pos].value.state.key)},
         multiset{});
-    forall k | 0 <= k < HT.FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, pos);
@@ -1117,7 +1120,7 @@ module Interpretation {
     var x := S.Summary(map[s.table[pos].value.state.key := None],
         multiset{}, multiset{}, multiset{});
 
-    forall k | 0 <= k < HT.FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, pos);
@@ -1220,7 +1223,7 @@ module Interpretation {
           s.table[pos].value.state.rid, s.table[pos].value.state.initial_key,
           Some(s.table[pos].value.state.found_value))});
 
-    /*forall k | 0 <= k < HT.FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    /*forall k | 0 <= k < FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, pos);
@@ -1273,7 +1276,7 @@ module Interpretation {
     assert m1.queries == m2.queries;
     assert m1.removes == m2.removes;*/
 
-    forall k | 0 <= k < HT.FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, pos);
@@ -1362,7 +1365,7 @@ module Interpretation {
     assert a.queries == b.queries;
     assert a.removes == b.removes;*/
 
-    forall k | 0 <= k < HT.FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, k);
@@ -1408,7 +1411,7 @@ module Interpretation {
 
     var pos := HT.hash(ticket.input.key) as int;
 
-    forall k | 0 <= k < HT.FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, k);
@@ -1498,7 +1501,7 @@ module Interpretation {
 
     var pos := HT.hash(ticket.input.key) as int;
 
-    forall k | 0 <= k < HT.FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
+    forall k | 0 <= k < FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
     ensures S.commutes(x, S.f(s.table[k]))
     {
       assert ValidHashInSlot(s.table, e, k);

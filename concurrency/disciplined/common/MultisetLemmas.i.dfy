@@ -1,4 +1,4 @@
-include "../../lib/Base/Multisets.i.dfy"
+include "../../../lib/Base/Multisets.i.dfy"
 
 module MultisetLemmas {
   import opened Multisets

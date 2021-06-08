@@ -291,7 +291,8 @@ module Impl refines VerificationObligation {
       r := easy_transform_step(r, step);
       r := releaseRow(v, slot_idx, entry, handle, r);
 
-      slot_idx, entry, handle := next_slot_idx, next_entry, next_handle;
+      slot_idx, entry := next_slot_idx, next_entry;
+      handle := next_handle;
     }
     
     // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
@@ -373,8 +374,8 @@ module Impl refines VerificationObligation {
       r := easy_transform_step(r, step);
       r := releaseRow(v, slot_idx, entry, handle, r);
 
-      slot_idx, entry, handle := next_slot_idx, next_entry, next_handle;
-      hash_idx := hash(key);
+      slot_idx, entry, hash_idx := next_slot_idx, next_entry, hash(key);
+      handle := next_handle;
     }
 
     // assert step.InsertDoneStep? || step.InsertUpdateStep?;
@@ -524,7 +525,8 @@ module Impl refines VerificationObligation {
       r := easy_transform_step(r, step);
       r := releaseRow(v, slot_idx, entry, handle, r);
 
-      slot_idx, entry, handle := next_slot_idx, next_entry, next_handle;
+      slot_idx, entry := next_slot_idx, next_entry;
+      handle := next_handle;
     }
 
     if step.RemoveNotFoundStep? {

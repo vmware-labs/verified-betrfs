@@ -1,12 +1,13 @@
-include "MapSpec.s.dfy"
-include "ResourceStateMachine.i.dfy"
+include "../common/AppSpec.s.dfy"
+include "../common/AsyncAppSpec.s.dfy"
+include "ShardedHashTable.i.dfy"
 include "Interpretation.i.dfy"
 
 module ResourceStateMachine_Refines_AsyncMapSpec {
-  import A = ResourceStateMachine
+  import A = ShardedHashTable
   import B = AsyncSpec // AsyncMapSpec
 
-  import HT = HTResource
+  import HT = ShardedHashTable
   import opened Interpretation
   import Multisets
   import MapSpec
@@ -54,7 +55,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
     MultisetLemmas.MultisetSimplificationTriggers<HT.Stub, B.Resp>();
     MultisetLemmas.MultisetSimplificationTriggers<S.QueryRes, HT.Stub>();
 
-    var step :| HT.UpdateStep(s, s', step);
+    var step :| HT.NextStep(s, s', step);
     match step {
       case InsertSkipStep(pos) => {
         InsertSkip_PreservesInterp(s, s', pos);
@@ -159,22 +160,22 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
     //assert I(s').s == I(s).s;
   }
 
-  lemma ConsumeStub_RefinesMap(s: A.Variables, s': A.Variables, rid: int, output: MapIfc.Output)
-    requires A.Inv(s)
-    requires A.ConsumeStub(s, s', rid, output)
-    ensures A.Inv(s')
-    ensures B.Next(I(s), I(s'), Ifc.End(rid, output))
-  {
-    assert s'.table == s.table;
-    assert s'.tickets == s.tickets;
-    assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
-    MultisetLemmas.MultisetSimplificationTriggers<HT.Stub, B.Resp>();
-    /*assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
-    assert I(s).resps == I(s').resps + multiset{B.Resp(rid, output)};
-    assert I(s').resps == I(s).resps - multiset{B.Resp(rid, output)};
-    assert I(s').s == I(s).s;
-    assert I(s').reqs == I(s).reqs;
-    assert B.Resp(rid, output) in I(s).resps;*/
-  }
+  // lemma ConsumeStub_RefinesMap(s: A.Variables, s': A.Variables, rid: int, output: MapIfc.Output)
+  //   requires A.Inv(s)
+  //   requires A.ConsumeStub(s, s', rid, output)
+  //   ensures A.Inv(s')
+  //   ensures B.Next(I(s), I(s'), Ifc.End(rid, output))
+  // {
+  //   assert s'.table == s.table;
+  //   assert s'.tickets == s.tickets;
+  //   assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
+  //   MultisetLemmas.MultisetSimplificationTriggers<HT.Stub, B.Resp>();
+  //   /*assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
+  //   assert I(s).resps == I(s').resps + multiset{B.Resp(rid, output)};
+  //   assert I(s').resps == I(s).resps - multiset{B.Resp(rid, output)};
+  //   assert I(s').s == I(s).s;
+  //   assert I(s').reqs == I(s).reqs;
+  //   assert B.Resp(rid, output) in I(s).resps;*/
+  // }
 
 }
