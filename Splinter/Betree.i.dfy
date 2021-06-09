@@ -107,6 +107,7 @@ module BetreeMachineMod {
   import IndirectionTableMod
   import CacheIfc
 
+  // TODO: Rename this module
   datatype Superblock = Superblock(
     indTbl: IndirectionTableMod.Superblock,
     endSeq: LSN)
@@ -295,7 +296,7 @@ module BetreeMachineMod {
     && true // TODO cu unallocated across all live views
   }
 
-  // Internal operation; noop
+  // Internal operation; noop -- atomic
   predicate Flush(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
   {
     && sk.FlushStep?
@@ -345,6 +346,7 @@ module BetreeMachineMod {
       )
   }
 
+  //
   datatype CompactReceipt = CompactReceipt(path: TrunkPath, newna: NodeAssignment)
   {
     predicate WF() {
@@ -381,6 +383,7 @@ module BetreeMachineMod {
     && v' == v.(indTbl := v.indTbl[r.newna.id := r.newna.cu])
   }
 
+  // TODO: Sowmya check when this freeze happens and why
   predicate Freeze(v: Variables, v': Variables)
   {
     && v.frozen.Idle?

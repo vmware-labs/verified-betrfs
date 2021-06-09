@@ -10,7 +10,7 @@ module InterpMod {
 
   type LSN = nat // Log sequence number
 
-  datatype Interp = Interp(mi:imap<Key, Message>, seqEnd: LSN)
+  datatype Interp = Interp(mi: imap<Key, Message>, seqEnd: LSN)
   {
     predicate WF() {
       // TODO How is ImapComplete not in Maps.i?

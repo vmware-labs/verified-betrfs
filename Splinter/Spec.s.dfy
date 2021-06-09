@@ -173,6 +173,7 @@ module CrashTolerantMapSpecMod {
     }
   }
 
+
   function Empty() : Variables {
     Variables([Version(AsyncMapSpecMod.Empty(), {})], 0)
   }

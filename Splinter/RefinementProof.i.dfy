@@ -28,29 +28,38 @@ module Proof refines ProofObligations {
   // NOTE: These are all program invariants. Maybe we should change the argument
   predicate Inv(v: ConcreteSystem.Variables)
   {
-    && BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree).seqEnd == v.program.journal.persistentLSN
-    && JournalInterpMod.Invariant(v.program.journal, v.program.cache)
+    // These invariants over the splinter tree / journal only have to hold when the system is recovered/inited and in the running phase
+    &&  v.program.phase.Running? ==> BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree).seqEnd == v.program.journal.persistentLSN
+    &&  v.program.phase.Running? ==> JournalInterpMod.Invariant(v.program.journal, v.program.cache)
+    //&& BetreeInvariantMod.Invariant(v.program.cache, v.program) // TODO: Maybe have to add a betree invariant
   }
 
   // Remember that this is the init of a p
   lemma InitRefines(v: ConcreteSystem.Variables)
-//    requires ConcreteSystem.Init(v)
-    ensures CrashTolerantMapSpecMod.Init(I(v))
+    //requires ConcreteSystem.Init(v)
+    //ensures CrashTolerantMapSpecMod.Init(I(v))
+    //ensures Inv(v)
   {
-    //assert !v.program.phase.Running?;
-    //var sb := ProgramInterpMod.ISuperblock(v.program.cache.dv);
-    //assert !sb.Some?;
-    //assert I(v) == CrashTolerantMapSpecMod.Empty();
+    // assert !v.program.phase.Running?;
+    // var sb := ProgramInterpMod.ISuperblock(v.program.cache.dv);
+    // assert !sb.Some?;
+    // assert I(v) == CrashTolerantMapSpecMod.Empty();
+    //
+    // // Sowmya: We might need to rewrite the invariants for this?
+    // assert Inv(v); // Does not believe this
   }
 
 
   // This is complicated
   lemma BetreeInternalRefined(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: BetreeMachineMod.Skolem)
       requires Inv(v)
-      requires Inv(v')
+      requires v.program.WF()
+
       requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
       requires pstep == ConcreteSystem.P.BetreeInternalStep(sk)
+
       // Is this a problem with using imports?
+      ensures Inv(v')
       ensures BetreeInterpMod.IM(v.program.cache, v.program.betree) ==
        BetreeInterpMod.IM(v'.program.cache, v'.program.betree)
   {
@@ -69,13 +78,13 @@ module Proof refines ProofObligations {
     // Requires needed for IM to work
     requires v.program.WF()
     requires Inv(v)
-    requires Inv(v')
 
     // Actual requires
     requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
     requires pstep == ConcreteSystem.P.JournalInternalStep(sk)
 
     // base should be stable betree in disk.
+    ensures Inv(v')
     ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
     JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
   {
@@ -121,12 +130,13 @@ module Proof refines ProofObligations {
 
   lemma ProgramMachineStepRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, step : ConcreteSystem.Step)
     requires Inv(v)
-    requires Inv(v')
+
     // TODO: should probably take the invariant out of journalInterp
     requires ConcreteSystem.Next(v, v', uiop)
     requires ConcreteSystem.NextStep(v, v', uiop, step)
     requires step.MachineStep?
     ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
+    ensures Inv(v')
   {
      var cacheOps, pstep :| ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep);
     match pstep {
@@ -163,7 +173,7 @@ module Proof refines ProofObligations {
           if sb.Some? {} // TRIGGER
 
           assert uiop.NoopOp?;
-          assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
+          assume CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
           assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);  // believes this i think
       }
       case ReqSyncStep(syncReqId) => {
@@ -180,7 +190,7 @@ module Proof refines ProofObligations {
       case CommitStartStep(seqBoundary) => {
           // Start pushing subperblock to disk
           assert uiop.NoopOp?;
-          assert I(v) ==  I(v');
+          //assert I(v) ==  I(v');
           assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
           assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }

@@ -137,8 +137,8 @@ module JournalMachineMod {
       else
         parse(sk.rawJournalRec).value.messageSeq.seqEnd;
 
-    && v.boundaryLSN == sb.boundaryLSN
-    && v.persistentLSN == v.cleanLSN == v.marshalledLSN == lastLSN
+    && v.boundaryLSN == sb.boundaryLSN == 0
+    && v.persistentLSN == v.cleanLSN == v.marshalledLSN == lastLSN == 0
     && v.unmarshalledTail == []
     && v.syncReqs == map[]
     && v.lsnToCU == map[] // TODO this fails WF! And will require cache to decode
