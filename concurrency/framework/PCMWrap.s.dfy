@@ -21,11 +21,11 @@ abstract module PCMWrap refines PCM {
 
   function singleton_loc(): Loc
 
-  type GToken = t : Token | t.loc() == singleton_loc()
+  type GToken = t : Token | t.loc == singleton_loc()
     witness *
 
   function method {:extern} wrap(glinear g: G) : (glinear t: GToken)
-  ensures t.get() == one(g)
+  ensures t.val == one(g)
 
   predicate is_one(m: M) {
     exists a :: m == one(a)
@@ -38,11 +38,11 @@ abstract module PCMWrap refines PCM {
   }
 
   function method {:extern} unwrap(glinear t: GToken) : (glinear g: G)
-  requires is_one(t.get())
-  ensures g == get_one(t.get())
+  requires is_one(t.val)
+  ensures g == get_one(t.val)
 
   function method {:extern} unwrap_borrow(gshared t: GToken) : (gshared g: G)
-  requires is_one(t.get())
-  ensures g == get_one(t.get())
+  requires is_one(t.val)
+  ensures g == get_one(t.val)
 
 }

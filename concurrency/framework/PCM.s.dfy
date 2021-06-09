@@ -9,10 +9,7 @@ abstract module PCM {
 
   type M(!new)
 
-  type {:extern} Token(!new) {
-    function {:extern} loc() : Loc
-    function {:extern} get() : M
-  }
+  datatype Token = Token(loc: Loc, val: M)
 
   // Partial Commutative Monoid (PCM) axioms
 
@@ -65,57 +62,57 @@ abstract module PCM {
       glinear b: Token,
       ghost expected_out: M)
     : (glinear c: Token)
-  requires s.loc() == b.loc()
-  requires dot_defined(s.get(), b.get()) ==>
-    dot_defined(s.get(), expected_out)
+  requires s.loc == b.loc
+  requires dot_defined(s.val, b.val) ==>
+    dot_defined(s.val, expected_out)
       && transition(
-        dot(s.get(), b.get()),
-        dot(s.get(), expected_out))
-  ensures c.get() == expected_out
-  ensures c.loc() == s.loc()
+        dot(s.val, b.val),
+        dot(s.val, expected_out))
+  ensures c.val == expected_out
+  ensures c.loc == s.loc
 
   function method {:extern} get_unit(ghost loc: Loc) : (glinear u: Token)
-  ensures u.get() == unit() && u.loc() == loc
+  ensures u.val == unit() && u.loc == loc
 
   glinear method {:extern} dispose(glinear u: Token)
 
   function method {:extern} get_unit_shared(ghost loc: Loc) : (gshared u: Token)
-  ensures u.get() == unit() && u.loc() == loc
+  ensures u.val == unit() && u.loc == loc
 
   // This MUST be 'method', as it wouldn't be safe to call this and
   // obtain the postconditions from only ghost 'a' and 'b'.
   glinear method {:extern} join(glinear a: Token, glinear b: Token)
   returns (glinear sum: Token)
-  requires a.loc() == b.loc()
-  ensures dot_defined(a.get(), b.get()) // yes, this is an 'ensures'
-  ensures sum.get() == dot(a.get(), b.get())
-  ensures sum.loc() == a.loc()
+  requires a.loc == b.loc
+  ensures dot_defined(a.val, b.val) // yes, this is an 'ensures'
+  ensures sum.val == dot(a.val, b.val)
+  ensures sum.loc == a.loc
 
   // Same as above: must be 'method', not 'function method'
   glinear method {:extern} is_valid(gshared a: Token, glinear inout b: Token)
-  requires a.loc() == old_b.loc()
+  requires a.loc == old_b.loc
   ensures b == old_b
-  ensures dot_defined(a.get(), b.get())
+  ensures dot_defined(a.val, b.val)
 
   // The only reason this is a 'method' and not a 'function method'
   // is so it can easily have two return args.
   glinear method {:extern} split(glinear sum: Token, ghost a: M, ghost b: M)
   returns (glinear a': Token, glinear b': Token)
   requires dot_defined(a, b)
-  requires sum.get() == dot(a, b)
-  ensures a'.get() == a && a'.loc() == sum.loc()
-  ensures b'.get() == b && b'.loc() == sum.loc()
+  requires sum.val == dot(a, b)
+  ensures a'.val == a && a'.loc == sum.loc
+  ensures b'.val == b && b'.loc == sum.loc
 
   function method {:extern} join_shared(gshared s: Token, gshared t: Token, ghost expected_q: M)
     : (gshared q: Token)
-  requires forall r :: le(s.get(), r) && le(t.get(), r) ==> le(expected_q, r)
-  requires s.loc() == t.loc()
-  ensures q.get() == expected_q
-  ensures q.loc() == s.loc()
+  requires forall r :: le(s.val, r) && le(t.val, r) ==> le(expected_q, r)
+  requires s.loc == t.loc
+  ensures q.val == expected_q
+  ensures q.loc == s.loc
 
   function method {:extern} sub(gshared s: Token, ghost t: M)
    : (glinear t': Token)
-  requires le(t, s.get())
-  ensures t'.get() == t
-  ensures t'.loc() == s.loc()
+  requires le(t, s.val)
+  ensures t'.val == t
+  ensures t'.loc == s.loc
 }

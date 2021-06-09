@@ -52,16 +52,16 @@ module AtomicStatusImpl {
 
   predicate state_inv(v: uint8, g: G, key: Key, rwlock_loc: Loc)
   {
-    && g.rwlock.get().central.CentralState?
-    && g.rwlock.get() == RWLock.CentralHandle(g.rwlock.get().central)
+    && g.rwlock.val.central.CentralState?
+    && g.rwlock.val == RWLock.CentralHandle(g.rwlock.val.central)
 
-    && g.rwlock.get().central.stored_value.is_handle(key)
+    && g.rwlock.val.central.stored_value.is_handle(key)
 
-    && g.rwlock.loc() == rwlock_loc
+    && g.rwlock.loc == rwlock_loc
     && rwlock_loc.ExtLoc?
     && rwlock_loc.base_loc == RWLock.Base.singleton_loc()
 
-    && var flag := g.rwlock.get().central.flag;
+    && var flag := g.rwlock.val.central.flag;
 
     && flags_field_inv(v, flag, key)
     /*&& (g.rwlock.q.flags == RWLock.Reading_ExcLock ==>
@@ -210,7 +210,7 @@ module AtomicStatusImpl {
                 RW.borrow_wb(handle).cache_entry, unwrap_value(status));
 
             new_g := G(rwlock, glSome(stat));
-            m := glSome(RW.WritebackObtainedToken(handle.get().writeback.b, handle));
+            m := glSome(RW.WritebackObtainedToken(handle.val.writeback.b, handle));
             disk_write_ticket := glSome(ticket);
             assert state_inv(new_value, new_g, key, this.rwlock_loc);
           } else {
@@ -244,7 +244,7 @@ module AtomicStatusImpl {
               stat, ticket := CacheResources.initiate_writeback(
                   RW.borrow_wb(handle).cache_entry, unwrap_value(status));
               new_g := G(rwlock, glSome(stat));
-              m := glSome(RW.WritebackObtainedToken(handle.get().writeback.b, handle));
+              m := glSome(RW.WritebackObtainedToken(handle.val.writeback.b, handle));
               disk_write_ticket := glSome(ticket);
             } else {
               new_g := old_g;
@@ -265,8 +265,8 @@ module AtomicStatusImpl {
         glinear handle: RW.WritebackObtainedToken,
         glinear disk_write_stub: CacheResources.DiskWriteStub)
     requires this.inv()
-    requires handle.token.loc() == this.rwlock_loc
-    //requires disk_write_stub.loc() == key.cr_loc
+    requires handle.token.loc == this.rwlock_loc
+    //requires disk_write_stub.loc == key.cr_loc
     requires handle.is_handle(key)
     requires 0 <= handle.b.cache_entry.disk_idx
                < 0x1_0000_0000_0000_0000
@@ -280,7 +280,7 @@ module AtomicStatusImpl {
         ghost_acquire old_g;
         glinear var new_g;
 
-        //var fl := old_g.rwlock.get().central.flag;
+        //var fl := old_g.rwlock.val.central.flag;
         glinear var G(rwlock, status) := old_g;
 
         rwlock, wb := RW.pre_ReleaseWriteback(rwlock, wb);
@@ -301,14 +301,14 @@ module AtomicStatusImpl {
     returns (success: bool, clean: bool, glinear m': RW.Token,
         glinear status: glOption<CacheResources.CacheStatus>)
     requires this.inv()
-    requires m.get().exc.ExcPendingAwaitWriteback?
-    requires m.get() == RWLock.ExcHandle(RWLock.ExcPendingAwaitWriteback(t,
-        m.get().exc.b))
-    requires m.loc() == rwlock_loc
+    requires m.val.exc.ExcPendingAwaitWriteback?
+    requires m.val == RWLock.ExcHandle(RWLock.ExcPendingAwaitWriteback(t,
+        m.val.exc.b))
+    requires m.loc == rwlock_loc
     ensures !success ==> m' == m
     ensures !success ==> status.glNone?
-    ensures success ==> m'.get() == RWLock.ExcHandle(RWLock.ExcPending(t, 0, clean, m.get().exc.b))
-        && m'.loc() == rwlock_loc
+    ensures success ==> m'.val == RWLock.ExcHandle(RWLock.ExcPending(t, 0, clean, m.val.exc.b))
+        && m'.loc == rwlock_loc
     ensures success ==> status.glSome? && status.value.is_status(key.cache_idx,
           (if clean then CacheResources.Clean else CacheResources.Dirty))
     {
@@ -316,7 +316,7 @@ module AtomicStatusImpl {
         ghost_acquire old_g;
         glinear var new_g;
 
-        var fl := old_g.rwlock.get().central.flag;
+        var fl := old_g.rwlock.val.central.flag;
         if fl == RWLock.Writeback || fl == RWLock.Writeback_PendingExcLock
         {
           new_g := old_g;
@@ -325,8 +325,8 @@ module AtomicStatusImpl {
           assert state_inv(new_value, new_g, key, rwlock_loc);
         } else {
           glinear var G(rwlock, status0) := old_g;
-          assert m.get().exc == RWLock.ExcPendingAwaitWriteback(t, m.get().exc.b);
-          assert m.get() == RWLock.ExcHandle(m.get().exc);
+          assert m.val.exc == RWLock.ExcPendingAwaitWriteback(t, m.val.exc.b);
+          assert m.val == RWLock.ExcHandle(m.val.exc);
           rwlock, m' := RW.perform_TakeExcLockFinishWriteback(
             rwlock, m, bit_and_uint8(f, flag_clean) != 0);
           assert status0.glSome?;
@@ -346,7 +346,7 @@ module AtomicStatusImpl {
       clean := bit_and_uint8(f, flag_clean) != 0;
     }
 
-    method try_alloc(a: AtomicStatus, key: Key)
+    /*method try_alloc(a: AtomicStatus, key: Key)
     returns (success: bool,
         glinear m: glOption<RW.Token>,
         glinear handle_opt: glOption<Handle>,
@@ -356,8 +356,8 @@ module AtomicStatusImpl {
     ensures !success ==> handle_opt.glNone?
     ensures !success ==> status.glNone?
     ensures success ==> m.glSome?
-        && m.value.get() == RWLock.ReadHandle(RWLock.ReadPending)
-        && m.value.loc() == rwlock_loc
+        && m.value.val == RWLock.ReadHandle(RWLock.ReadPending)
+        && m.value.loc == rwlock_loc
         && handle_opt.glSome?
         && handle_opt.value.is_handle(key)
         && status.glSome?
@@ -401,7 +401,7 @@ module AtomicStatusImpl {
 
         success := did_set;
       }
-    }
+    }*/
 
     /*
 
