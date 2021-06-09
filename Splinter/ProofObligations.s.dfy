@@ -6,6 +6,7 @@ include "../lib/Base/MapRemove.s.dfy"
 include "../lib/Checksums/CRC32C.s.dfy"
 include "AsyncDisk.s.dfy"
 include "AsyncDiskProgram.s.dfy"
+include "IOSystem.s.dfy"
 
 abstract module ProofObligations {
   import CrashTolerantMapSpecMod
