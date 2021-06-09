@@ -606,8 +606,6 @@ module ShardedHashTable refines ShardedStateMachine {
     // assert ValidHashInIndex(table, e, j);
     // assert ValidHashInIndex(table, e, k);
 
-    // var k' := if k > 0 then k - 1 else |s.table| - 1;
-
     // assert ValidHashInIndex(table, e, end);
     // assert ValidHashOrdering(table, e, j, end);
     // assert ValidHashOrdering(table, e, end, k);
@@ -631,12 +629,17 @@ module ShardedHashTable refines ShardedStateMachine {
 
           var hj := hash(table[j].value.key);
           var hj' := hash(table'[j].value.key);
-          // var hk := hash(table[k].value.key);
+          var hk := hash(table[k].value.key);
           // assert adjust2(hj, e) <= adjust2(hk, e);
 
-          assert !ShouldHashGoBefore(hj', hj, end);
+          assert !ShouldHashGoBefore(hj', hj, j);
 
-          assert adjust2(hj', e) <= adjust2(hj, e);
+          if adjust2(hj, e) <= adjust2(hk, e) < adjust2(j, e) < adjust2(k, e) {
+
+            assume false;
+          }
+
+
         } 
       } else if j != end && k == end {
         assume false;
