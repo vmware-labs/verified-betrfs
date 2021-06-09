@@ -71,7 +71,8 @@ class Profiler:
         quantifier_pattern = re.compile("\[quantifier_instances\] ([^ ]*) : *(\d+) :")
         prover_error_pattern = re.compile("Prover error:")
         args = [self.args.dafny, "/timeLimit:" + self.args.timelimit, "/proc:" + str(self.args.proc),
-                "/proverOpt:O:smt.qi.profile=true", "/proverOpt:O:smt.qi.profile_freq=" + str(self.args.freq)]
+                #"/proverOpt:O:smt.qi.profile=true", # the presence of this flag now causes qi to return tiny little nonsense numbers. Removing it restores profiler behavior. (jonh)
+                "/proverOpt:O:smt.qi.profile_freq=" + str(self.args.freq)]
         if self.args.arg is not None:
             args.extend(self.args.arg)
         args.append(self.args.filename)
