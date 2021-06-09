@@ -13,8 +13,10 @@ module MessageMod {
   //type Message(!new)
   datatype Message = MessagePut(k:Key, v:Value)
 
+  predicate IsAKey(k: Key) { true }  // a term for Dafny to trigger on, to hide the warning.
+
   function AllKeys() : iset<Key> {
-    iset key:Key | true
+    iset key:Key | IsAKey(key)
   }
 
   function DefaultValue() : Value
