@@ -64,7 +64,7 @@ module AtomicStatusImpl {
     && var flag := g.rwlock.val.central.flag;
 
     && flags_field_inv(v, flag, key)
-    /*&& (g.rwlock.q.flags == RWLock.Reading_ExcLock ==>
+    /*&& (g.rwlock.val.central.flag == RWLock.Reading_ExcLock ==>
       g.status.glNone?
     )*/
     && (g.status.glNone? ==>
@@ -438,8 +438,8 @@ module AtomicStatusImpl {
 
     method load_phase_finish(
         glinear r: RW.Token,
-        glinear handle: RWLock.Handle,
-        glinear status: CacheResources.R)
+        glinear handle: Handle,
+        glinear status: CacheResources.CacheStatus)
     returns (glinear q: RW.Token)
     requires this.inv()
     requires r.loc == rwlock_loc
@@ -448,17 +448,16 @@ module AtomicStatusImpl {
     requires handle.is_handle(key)
     requires status.is_status(key.cache_idx, CacheResources.Clean)
     ensures q.loc == rwlock_loc
-    ensures q.val == RWLock.SharedHandle(RWLock.SharedLockObtained(key, r.val.read.t))
+    ensures q.val == RWLock.SharedHandle(RWLock.SharedObtained(r.val.read.t, handle))
     {
-      atomic_block var _ := fetch_and(atomic, 0xff - flag_reading) {
+      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_reading) {
         ghost_acquire old_g;
         glinear var new_g;
-        var fl := old_g.rwlock.q.flags;
+        var fl := old_g.rwlock.val.central.flag;
         glinear var G(rwlock, status_empty) := old_g;
-        RW.pre_ReadingToShared(key, t, fl, rwlock, r);
+        rwlock, q :=
+            RW.perform_Deposit_ReadingToShared(rwlock, r, handle);
         dispose_glnone(status_empty);
-        rwlock, q, handle_out :=
-            RW.perform_ReadingToShared(rwlock, r, handle);
         new_g := G(rwlock, glSome(status));
 
         assert state_inv(new_value, new_g, key, rwlock_loc);
@@ -466,56 +465,47 @@ module AtomicStatusImpl {
       }
     }
 
-    /*
 
     method quicktest_is_exc_locked()
     returns (is_exc_locked: bool)
     {
-      var v := atomic_read(atomic);
+      atomic_block var v := execute_atomic_load(atomic) { }
       return ((v as bv8) & (flag_exc as bv8)) as uint8 != 0;
     }
 
     method is_exc_locked_or_free(
-        t: int,
+        ghost t: nat,
         glinear r: RW.Token)
     returns (success: bool, is_accessed: bool, glinear r': RW.Token)
     requires this.inv()
-    requires r == RWLock.Internal(RWLock.SharedLockPending(key, t))
+    requires r.loc == rwlock_loc
+    requires r.val == RWLock.SharedHandle(RWLock.SharedPending(t))
     ensures !success ==> r == r'
-    ensures success ==> r' == 
-        RWLock.Internal(RWLock.SharedLockPending2(key, t))
+    ensures success ==>
+        && r'.val == RWLock.SharedHandle(RWLock.SharedPending2(t))
+        && r'.loc == rwlock_loc
     {
-      var f := atomic_read(atomic);
-
-      ///// Begin jank
-      ///// Setup:
-      var old_v: uint8;
-      var new_value: uint8;
-      glinear var old_g: G := unsafe_obtain();
-      assume new_value == old_v;
-      assume f == old_v;
-      assume atomic_inv(a, old_v, old_g);
-      glinear var new_g;
-      ///// Transfer:
-      var fl := old_g.rwlock.q.flags;
-      if fl == RWLock.Available || fl == RWLock.Writeback
-          || fl == RWLock.Reading {
-        r' := RW.perform_SharedCheckExcFree(
-            key, t, old_g.rwlock.q.flags,
-            r, old_g.rwlock);
-        new_g := old_g;
-      } else {
-        r' := r;
-        new_g := old_g;
+      atomic_block var f := execute_atomic_load(atomic) {
+        ghost_acquire old_g;
+        glinear var new_g;
+        var fl := old_g.rwlock.val.central.flag;
+        if fl == RWLock.Available || fl == RWLock.Writeback
+            || fl == RWLock.Reading {
+          glinear var G(rwlock, status) := old_g;
+          rwlock, r' := RW.perform_SharedCheckExc(r, rwlock, t);
+          new_g := G(rwlock, status);
+        } else {
+          r' := r;
+          new_g := old_g;
+        }
+        ghost_release new_g;
       }
-      ///// Teardown:
-      assert atomic_inv(a, new_value, new_g);
-      unsafe_dispose(new_g);
-      ///// End jank
 
-      success := bit_and(f, bit_or(flag_exc, flag_unmapped)) == 0;
-      is_accessed := bit_and(f, flag_accessed) != 0;
+      success := bit_and_uint8(f, bit_or_uint8(flag_exc, flag_unmapped)) == 0;
+      is_accessed := bit_and_uint8(f, flag_accessed) != 0;
     }
+
+    /*
 
     method mark_accessed(
         t: int,
@@ -536,7 +526,7 @@ module AtomicStatusImpl {
       assume atomic_inv(a, old_v, old_g);
       glinear var new_g;
       ///// Transfer:
-      RW.possible_flags_SharedLockPending2(key, t, old_g.rwlock.q.flags,
+      RW.possible_flags_SharedLockPending2(key, t, old_g.rwlock.val.central.flag,
           r, old_g.rwlock);
       new_g := old_g;
       assert state_inv(new_value, new_g, key, rwlock_loc);
@@ -587,7 +577,7 @@ module AtomicStatusImpl {
         && handle.glSome?
         && handle.value.is_handle(key)
     {
-      var f := atomic_read(atomic);
+      var f := execute_atomic_load(atomic);
 
       ///// Begin jank
       ///// Setup:
@@ -599,11 +589,11 @@ module AtomicStatusImpl {
       assume atomic_inv(atomic, old_v, old_g);
       glinear var new_g;
       ///// Transfer:
-      var fl := old_g.rwlock.q.flags;
+      var fl := old_g.rwlock.val.central.flag;
       if fl != RWLock.Reading && fl != RWLock.Reading_ExcLock {
         glinear var hand;
         r', hand := RW.perform_SharedCheckReading(
-            key, t, old_g.rwlock.q.flags,
+            key, t, old_g.rwlock.val.central.flag,
             r, old_g.rwlock);
         new_g := old_g;
         handle := glSome(hand);
@@ -660,7 +650,7 @@ module AtomicStatusImpl {
         glinear var G(rwlock, status0) := old_g;
         glinear var m0, handle';
 
-        var fl := rwlock.q.flags;
+        var fl := rwlock.val.central.flag;
         rwlock, m0, handle' := RW.perform_ThreadlessExc(key, rwlock, fl);
 
         //m', rwlock := perform_SharedToExc(
@@ -715,7 +705,7 @@ module AtomicStatusImpl {
 
       glinear var G(rwlock, empty_status) := old_g;
 
-      var fl := rwlock.q.flags;
+      var fl := rwlock.val.central.flag;
       rwlock := RW.perform_unmap(key, fl, true, rwlock, handle, r);
 
       dispose_glnone(empty_status);
@@ -757,7 +747,7 @@ module AtomicStatusImpl {
 
       glinear var G(rwlock, empty_status) := old_g;
 
-      var fl := rwlock.q.flags;
+      var fl := rwlock.val.central.flag;
       var visited := r.q.visited;
       rwlock := RW.abandon_ExcLockPending(key, fl, visited, true, r, rwlock, handle);
 
@@ -798,7 +788,7 @@ module AtomicStatusImpl {
 
       glinear var G(rwlock, empty_status) := old_g;
 
-      var fl := rwlock.q.flags;
+      var fl := rwlock.val.central.flag;
       rwlock := RW.abandon_ReadingPending(key, fl, r, rwlock, handle);
 
       dispose_glnone(empty_status);
