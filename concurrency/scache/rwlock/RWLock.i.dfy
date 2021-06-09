@@ -841,7 +841,7 @@ module RWLock refines SimpleExt {
 
   predicate SharedCheckExc(m: M, m': M, t: int)
   {
-    && 0 <= t < NUM_THREADS
+    //&& 0 <= t < NUM_THREADS
     && m.central.CentralState?
     && (m.central.flag == Available
         || m.central.flag == Writeback
@@ -1260,7 +1260,38 @@ module RWLockExtToken refines SimpleExtToken {
     b' := Base.unwrap(b_out);
   }
 
+  glinear method do_cross_step_1_deposit(glinear f: Token, glinear b: Base.Handle,
+      ghost f1: F,
+      ghost step: CrossStep)
+  returns (glinear f': Token)
+  requires CrossNextStep(f.val, f1, Base.one(b), Base.unit(), step)
+  requires f.loc.ExtLoc? && f.loc.base_loc == Base.singleton_loc()
+  ensures f'.loc == f.loc
+  ensures f'.val == f1
+  {
+    assert CrossNext(f.val, f1, Base.one(b), Base.unit());
+    glinear var f_out, b_out := do_cross_step(f, f1, Base.wrap(b), Base.unit());
+    f' := f_out;
+    Base.dispose(b_out);
+  }
 
+  glinear method do_cross_step_2_deposit(glinear f: Token, glinear b: Base.Handle,
+      ghost f1: F,
+      ghost f2: F,
+      ghost step: CrossStep)
+  returns (glinear f1': Token, glinear f2': Token)
+  requires dot_defined(f1, f2)
+  requires CrossNextStep(f.val, dot(f1, f2), Base.one(b), Base.unit(), step)
+  requires f.loc.ExtLoc? && f.loc.base_loc == Base.singleton_loc()
+  ensures f1'.loc == f2'.loc == f.loc
+  ensures f1'.val == f1
+  ensures f2'.val == f2
+  {
+    assert CrossNext(f.val, dot(f1, f2), Base.one(b), Base.unit());
+    glinear var f_out, b_out := do_cross_step(f, dot(f1, f2), Base.wrap(b), Base.unit());
+    f1', f2' := split(f_out, f1, f2);
+    Base.dispose(b_out);
+  }
 
   /*glinear method perform_TakeWriteback(glinear c: CentralToken)
   returns (glinear c': CentralToken, glinear handle': WritebackObtainedToken)
@@ -1562,7 +1593,7 @@ module RWLockExtToken refines SimpleExtToken {
 
   glinear method perform_SharedCheckExc(glinear c: Token, glinear handle: Token, ghost t: int)
   returns (glinear c': Token, glinear handle': Token)
-  requires 0 <= t < NUM_THREADS
+  //requires 0 <= t < NUM_THREADS
   requires var m := c.val;
     && m.central.CentralState?
     && (m.central.flag == Available
@@ -1657,7 +1688,108 @@ module RWLockExtToken refines SimpleExtToken {
         Withdraw_Alloc_Step);
   }
 
+  glinear method perform_Deposit_DowngradeExcLoc(
+      glinear c: Token, glinear handle: Token, glinear b: Base.Handle)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.exc.ExcObtained?
+    && 0 <= m.exc.t < NUM_THREADS
+    && m == ExcHandle(m.exc)
+  requires c.loc.ExtLoc? && c.loc.base_loc == Base.singleton_loc()
+  requires c.loc == handle.loc
+  ensures handle'.loc == c'.loc == c.loc
+  ensures c'.val == 
+      CentralHandle(c.val.central
+        .(flag := Available)
+        .(stored_value := b)
+      )
+  ensures handle'.val ==
+      SharedHandle(SharedObtained(handle.val.exc.t, b))
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c', handle' := do_cross_step_2_deposit(x, b,
+      CentralHandle(c.val.central
+        .(flag := Available)
+        .(stored_value := b)
+      ),
+      SharedHandle(SharedObtained(handle.val.exc.t, b)),
+        Deposit_DowngradeExcLoc_Step);
+  }
 
+  glinear method perform_Deposit_ReadingToShared(
+      glinear c: Token, glinear handle: Token, glinear b: Base.Handle)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.read.ReadObtained?
+    && m == ReadHandle(m.read)
+  requires c.loc.ExtLoc? && c.loc.base_loc == Base.singleton_loc()
+  requires c.loc == handle.loc
+  ensures handle'.loc == c'.loc == c.loc
+  ensures c.val.central.flag == Reading
+  ensures c'.val == 
+      CentralHandle(c.val.central.(flag := Available).(stored_value := b))
+  ensures handle'.val ==
+      SharedHandle(SharedObtained(handle.val.read.t, b))
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c', handle' := do_cross_step_2_deposit(x, b,
+      CentralHandle(c.val.central.(flag := Available).(stored_value := b)),
+      SharedHandle(SharedObtained(handle.val.read.t, b)),
+        Deposit_ReadingToShared_Step);
+  }
+
+  glinear method perform_Deposit_Unmap(
+      glinear c: Token, glinear handle: Token, glinear b: Base.Handle)
+  returns (glinear c': Token)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.exc.ExcObtained?
+    && m.exc.t == -1
+    && m == ExcHandle(m.exc)
+  requires c.loc.ExtLoc? && c.loc.base_loc == Base.singleton_loc()
+  requires c.loc == handle.loc
+  ensures c'.loc == c.loc
+  ensures c'.val == 
+    CentralHandle(
+      c.val.central.(flag := Unmapped).(stored_value := b)
+    )
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c' := do_cross_step_1_deposit(x, b,
+      CentralHandle(
+        c.val.central.(flag := Unmapped).(stored_value := b)
+      ),
+        Deposit_Unmap_Step);
+  }
+
+  glinear method perform_Deposit_AbandonReadPending(
+      glinear c: Token, glinear handle: Token, glinear b: Base.Handle)
+  returns (glinear c': Token)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.read.ReadPending?
+    && m == ExcHandle(m.exc)
+  requires c.loc.ExtLoc? && c.loc.base_loc == Base.singleton_loc()
+  requires c.loc == handle.loc
+  ensures c'.loc == c.loc
+  ensures c'.val == 
+    CentralHandle(c.val.central.(flag := Unmapped).(stored_value := b))
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c' := do_cross_step_1_deposit(x, b,
+        CentralHandle(c.val.central.(flag := Unmapped).(stored_value := b)),
+        Deposit_AbandonReadPending_Step);
+  }
 
   /*lemma impl_le()
   ensures forall a: M, b: SEPCM.M {:trigger SEPCM.le(a, b)}
