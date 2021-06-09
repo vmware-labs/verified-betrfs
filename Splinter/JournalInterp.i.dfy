@@ -29,7 +29,7 @@ module JournalInterpMod {
     && v.marshalledLSN == (
         if |optChain.value.recs|==0
         then v.boundaryLSN
-        else Last(optChain.value.recs).messageSeq.seqEnd
+        else optChain.value.recs[0].messageSeq.seqEnd
       )
   }
 
@@ -55,7 +55,7 @@ module JournalInterpMod {
       if !chain.interp.IsEmpty() && !tailMsgs.IsEmpty() {
         calc {
           chain.interp.seqEnd;
-          Last(chain.recs).messageSeq.seqEnd;
+          chain.recs[0].messageSeq.seqEnd;
           v.marshalledLSN;
           tailMsgs.seqStart;
         }
@@ -74,8 +74,8 @@ module JournalInterpMod {
         }
       }
     }
-    assert chain.interp.IsEmpty() && tailMsgs.IsEmpty()
-      ==> v.boundaryLSN == tailMsgs.seqStart;
+//    assert chain.interp.IsEmpty() && tailMsgs.IsEmpty()
+//      ==> v.boundaryLSN == tailMsgs.seqStart;
     assert !result.IsEmpty() ==> result.seqEnd == v.unmarshalledLSN();
     result
   }
