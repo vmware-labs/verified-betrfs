@@ -4,6 +4,7 @@
 include "PackedStringArray.i.dfy"
 include "BucketsLib.i.dfy"
 include "BucketFlushModel.i.dfy"
+include "../Math/Nonlinear.i.dfy"
 
 module PackedKV {
   import PSA = PackedStringArray
@@ -19,6 +20,7 @@ module PackedKV {
   import opened Sequences
   import opened Maps
   import Integer_Order
+  import NonlinearLemmas
   
   datatype Pkv = Pkv(
       keys: PSA.Psa,
@@ -474,10 +476,15 @@ module PackedKV {
   {
     var ipsa := PSA.I(psa);
     if |ipsa| == 0 {
+      assert PSA.psaTotalLength(psa) as nat <= PSA.psaNumStrings(psa) as nat * maxlen;
     } else {
       var prepsa := PSA.psaDropLast(psa);
       psaTotalLengthBound(prepsa, maxlen);
       PSA.psaAppendTotalLength(prepsa, Last(ipsa));
+
+      assert PSA.psaTotalLength(prepsa) as int <= PSA.psaNumStrings(prepsa) as int * maxlen;
+      NonlinearLemmas.distributive_right(PSA.psaNumStrings(prepsa) as int, 1, maxlen);
+      assert PSA.psaTotalLength(prepsa) as int + |Last(ipsa)| <= (PSA.psaNumStrings(prepsa) as int + 1) * maxlen;
     }
   }
 }
@@ -721,7 +728,7 @@ module DynamicPkv {
       }
     }
 
-    method AppendPkv(pkv: PKV.Pkv, start: uint64, end: uint64)
+    method {:timeLimitMultiplier 2} AppendPkv(pkv: PKV.Pkv, start: uint64, end: uint64)
     requires WF()
     requires PKV.WF(pkv)
     requires 0 <= start <= end <= PKV.NumKVPairs(pkv)
@@ -842,7 +849,7 @@ module DynamicPkv {
     }
   }
 
-  method MergeToOneChild(top: PKV.Pkv, from0: uint64, to: uint64, bot: PKV.Pkv, slack0: uint64)
+  method {:timeLimitMultiplier 4} MergeToOneChild(top: PKV.Pkv, from0: uint64, to: uint64, bot: PKV.Pkv, slack0: uint64)
     returns (result: SingleMergeResult)
     requires PKV.WF(top)
     requires PKV.WF(bot)
@@ -865,7 +872,6 @@ module DynamicPkv {
           WeightMessageList(PKV.IMessages(bot.messages)) +
           slack0 as int
   {
-    BucketFlushModel.reveal_mergeToOneChild();
 
     var from: uint64 := from0;
     var slack: uint64 := slack0;
@@ -930,6 +936,14 @@ module DynamicPkv {
 
         dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
         result := MergeCompleted(dresult.toPkv(), slack);
+        assert result.I() == BucketFlushModel.mergeToOneChild(
+            PSA.I(top.keys), PKV.IMessages(top.messages),
+            from0 as nat, to as nat,
+            PSA.I(bot.keys), PKV.IMessages(bot.messages),
+            0, [], [],
+            slack0 as nat) by {
+          BucketFlushModel.reveal_mergeToOneChild();
+        }
         return;
       } else {
         var topkey := PSA.psaElement(top.keys, from);
@@ -962,6 +976,14 @@ module DynamicPkv {
 
               dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
               result := SlackExhausted(dresult.toPkv(), from, slack);
+              assert result.I() == BucketFlushModel.mergeToOneChild(
+                  PSA.I(top.keys), PKV.IMessages(top.messages),
+                  from0 as nat, to as nat,
+                  PSA.I(bot.keys), PKV.IMessages(bot.messages),
+                  0, [], [],
+                  slack0 as nat) by {
+                BucketFlushModel.reveal_mergeToOneChild();
+              }
               return;
             } else {
               PSAPopFrontWeight(top, from, to);
@@ -977,6 +999,9 @@ module DynamicPkv {
         } else if bot_from == PKV.NumKVPairs(bot) || c < 0 {
           var key := topkey;
           var msg := PKV.GetMessage(top, from);
+          assert |key| <= 1024 by {
+            BucketFlushModel.reveal_mergeToOneChild();
+          }
           var delta := WeightKeyUint64(key) + WeightMessageUint64(msg);
           if delta > slack {
             assert PKV.IKeys(bot.keys)[bot_from..]
@@ -986,6 +1011,16 @@ module DynamicPkv {
 
             dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
             result := SlackExhausted(dresult.toPkv(), from, slack);
+            // BucketFlushModel.reveal_mergeToOneChild();
+
+            assert result.I() == BucketFlushModel.mergeToOneChild(
+                PSA.I(top.keys), PKV.IMessages(top.messages),
+                from0 as nat, to as nat,
+                PSA.I(bot.keys), PKV.IMessages(bot.messages),
+                0, [], [],
+                slack0 as nat) by {
+              BucketFlushModel.reveal_mergeToOneChild();
+            }
             return;
           } else {
             PSAPopFrontWeight(top, from, to);
@@ -999,12 +1034,32 @@ module DynamicPkv {
           var key := botkey;
           var msg := PKV.GetMessage(bot, bot_from);
 
+          assert |key| <= 1024 by {
+            BucketFlushModel.reveal_mergeToOneChild();
+          }
           PSAPushBackWeight(dresult.toPkv(), key, msg);
           PSAPopFrontWeightSuffix(bot, bot_from);
 
           dresult.Append(key, msg);
           bot_from := bot_from + 1;
         }
+      }
+
+      assert BucketFlushModel.mergeToOneChild(
+            PSA.I(top.keys), PKV.IMessages(top.messages),
+            from0 as nat, to as nat,
+            PSA.I(bot.keys), PKV.IMessages(bot.messages),
+            0, [], [],
+            slack0 as nat)
+         == BucketFlushModel.mergeToOneChild(
+            PSA.I(top.keys), PKV.IMessages(top.messages),
+            from as nat, to as nat,
+            PSA.I(bot.keys), PKV.IMessages(bot.messages),
+            bot_from as nat,
+            PSA.I(dresult.toPkv().keys),
+            PKV.IMessages(dresult.toPkv().messages),
+            slack as nat) by {
+        BucketFlushModel.reveal_mergeToOneChild();
       }
     }
   }
@@ -1088,7 +1143,7 @@ module DynamicPkv {
     }
   }
 
-  method MergeToChildrenIter(
+  method {:timeLimitMultiplier 2} MergeToChildrenIter(
     top: PKV.Pkv, 
     bots: seq<PKV.Pkv>,
     idxs: seq<uint64>,
