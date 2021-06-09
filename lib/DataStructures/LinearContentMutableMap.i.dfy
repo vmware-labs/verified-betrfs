@@ -660,6 +660,8 @@ module LinearContentMutableMap {
       }
       assert newUnderlying.count as nat < |newUnderlying.storage| - 2;
       i := i + 1;
+
+      assert toItems(self.underlying.storage)[i..] == transfers[i..];
     }
 
     assert transfers[..i] == transfers;
