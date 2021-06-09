@@ -1223,6 +1223,45 @@ module RWLockExtToken refines SimpleExtToken {
     f', g' := split(f_out, f1, g1);
   }
 
+  glinear method do_cross_step_1_withdraw(glinear f: Token,
+      ghost f1: F,
+      ghost b1: Base.Handle,
+      ghost step: CrossStep)
+  returns (glinear f': Token, glinear b': Base.Handle)
+  requires CrossNextStep(f.get(), f1, Base.unit(), Base.one(b1), step)
+  requires f.loc().ExtLoc? && f.loc().base_loc == Base.singleton_loc()
+  ensures f'.loc() == f.loc()
+  ensures f'.get() == f1
+  ensures b' == b1
+  {
+    assert CrossNext(f.get(), f1, Base.unit(), Base.one(b1));
+    glinear var f_out, b_out := do_cross_step(f, f1, Base.get_unit(Base.singleton_loc()), Base.one(b1));
+    f' := f_out;
+    b' := Base.unwrap(b_out);
+  }
+
+  glinear method do_cross_step_2_withdraw(glinear f: Token,
+      ghost f1: F, ghost f2: F,
+      ghost b1: Base.Handle,
+      ghost step: CrossStep)
+  returns (glinear f1': Token, glinear f2': Token, glinear b': Base.Handle)
+  requires dot_defined(f1, f2)
+  requires CrossNextStep(f.get(), dot(f1, f2), Base.unit(), Base.one(b1), step)
+  requires f.loc().ExtLoc? && f.loc().base_loc == Base.singleton_loc()
+  ensures f1'.loc() == f.loc()
+  ensures f1'.get() == f1
+  ensures f2'.loc() == f.loc()
+  ensures f2'.get() == f2
+  ensures b' == b1
+  {
+    assert CrossNext(f.get(), dot(f1, f2), Base.unit(), Base.one(b1));
+    glinear var f_out, b_out := do_cross_step(f, dot(f1, f2), Base.get_unit(Base.singleton_loc()), Base.one(b1));
+    f1', f2' := split(f_out, f1, f2);
+    b' := Base.unwrap(b_out);
+  }
+
+
+
   /*glinear method perform_TakeWriteback(glinear c: CentralToken)
   returns (glinear c': CentralToken, glinear handle': WritebackObtainedToken)
   requires c.has_flag(Available)
@@ -1581,6 +1620,43 @@ module RWLockExtToken refines SimpleExtToken {
         CentralHandle(c.get().central.(flag := Available)),
         AbandonExcPendingStep);
   }
+
+  glinear method perform_Withdraw_TakeExcLockFinish(glinear handle: Token)
+  returns (glinear handle': Token, glinear b': Base.Handle)
+  requires var m := handle.get();
+    && m.exc.ExcPending?
+    && m.exc.visited == NUM_THREADS
+    && m == ExcHandle(m.exc)
+  requires handle.loc().ExtLoc? && handle.loc().base_loc == Base.singleton_loc()
+  ensures handle'.get() == ExcHandle(ExcObtained(handle.get().exc.t, handle.get().exc.clean))
+  ensures b' == handle.get().exc.b
+  {
+    handle', b' := do_cross_step_1_withdraw(handle,
+        ExcHandle(ExcObtained(handle.get().exc.t, handle.get().exc.clean)),
+        handle.get().exc.b,
+        Withdraw_TakeExcLockFinish_Step);
+  }
+
+  glinear method perform_Withdraw_Alloc(glinear c: Token)
+  returns (glinear c': Token, glinear handle': Token, glinear b': Base.Handle)
+  requires var m := c.get();
+    && m.central.CentralState?
+    && m.central.flag == Unmapped
+    && m == CentralHandle(m.central)
+  requires c.loc().ExtLoc? && c.loc().base_loc == Base.singleton_loc()
+  ensures handle'.loc() == c'.loc() == c.loc()
+  ensures c'.get() == CentralHandle(c.get().central.(flag := Reading_ExcLock))
+  ensures handle'.get() == ReadHandle(ReadPending)
+  ensures b' == c.get().central.stored_value
+  {
+    c', handle', b' := do_cross_step_2_withdraw(c,
+        CentralHandle(c.get().central.(flag := Reading_ExcLock)),
+        ReadHandle(ReadPending),
+        c.get().central.stored_value,
+        Withdraw_Alloc_Step);
+  }
+
+
 
   /*lemma impl_le()
   ensures forall a: M, b: SEPCM.M {:trigger SEPCM.le(a, b)}
