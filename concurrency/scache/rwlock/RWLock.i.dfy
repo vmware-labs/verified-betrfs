@@ -1453,6 +1453,7 @@ module RWLockExtToken refines SimpleExtToken {
     && m.read.ReadPendingCounted?
     && m == ReadHandle(m.read)
   requires c.loc == handle.loc
+  ensures c.val.central.flag == Reading_ExcLock
   ensures c'.loc == handle'.loc == c.loc
   ensures c'.val == CentralHandle(c.val.central.(flag := Reading))
   ensures handle'.val == ReadHandle(ReadObtained(handle.val.read.t))
