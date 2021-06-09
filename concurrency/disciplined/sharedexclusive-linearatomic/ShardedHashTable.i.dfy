@@ -199,11 +199,11 @@ module ShardedHashTable refines ShardedStateMachine {
   // insert_h: hash of the key we are trying to insert
   // slot_h : hash of the key at slot_index
   // returns insert_h should go before slot_h 
-  predicate ShouldHashGoBefore(insert_h: int, slot_h : int, slot_index: int)
+  predicate ShouldHashGoBefore(search_h: int, slot_h: int, slot_idx: int)
   {
-    || insert_h < slot_h  <= slot_index // normal case
-    || slot_h <= slot_index < insert_h // insert_h wraps around the end of array
-    || slot_index < insert_h < slot_h // insert_h, slot_h  wrap around the end of array
+    || search_h < slot_h <= slot_idx // normal case
+    || slot_h <= slot_idx < search_h // search_h wraps around the end of array
+    || slot_idx < search_h < slot_h// search_h, slot_h wrap around the end of array
   }
 
   predicate ShouldSkipSlot(table: FixedTable, insert_key: Key, slot_index: Index)
@@ -212,12 +212,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && table[slot_index].value.Full?
     && var insert_h := hash(insert_key);
     && var slot_h := hash(table[slot_index].value.key);
-    ShouldHashGoBefore(insert_h, slot_h, slot_index)
-    // (
-    //   || insert_h < slot_h <= slot_index // normal case
-    //   || slot_h <= slot_index < insert_h // insert_h wraps around the end of array
-    //   || slot_index < insert_h < slot_h // insert_h, slot_h  wrap around the end of array
-    // )
+    !ShouldHashGoBefore(insert_h, slot_h, slot_index)
   }
 
 
@@ -597,18 +592,11 @@ module ShardedHashTable refines ShardedStateMachine {
     forall e: Index, i: Index
       ensures ValidHashInIndex(table', e, i)
     {
-      if i != end {
-        assert ValidHashInIndex(table, e, i);
-      }
+      assert ValidHashInIndex(table, e, i);
+      assume false;
+      // var i' := if i > 0 then i - 1 else |table| - 1;
+      // assert ValidHashInIndex(s.table, e, i');
     }
-
-    // assert ValidHashOrdering(table, e, j, k);
-    // assert ValidHashInIndex(table, e, j);
-    // assert ValidHashInIndex(table, e, k);
-
-    // assert ValidHashInIndex(table, e, end);
-    // assert ValidHashOrdering(table, e, j, end);
-    // assert ValidHashOrdering(table, e, end, k);
 
     forall e: Index, j: Index, k: Index
       ensures ValidHashOrdering(table', e, j, k)
@@ -630,16 +618,12 @@ module ShardedHashTable refines ShardedStateMachine {
           var hj := hash(table[j].value.key);
           var hj' := hash(table'[j].value.key);
           var hk := hash(table[k].value.key);
-          // assert adjust2(hj, e) <= adjust2(hk, e);
 
-          assert !ShouldHashGoBefore(hj', hj, j);
+          assert ShouldHashGoBefore(hj', hj, j);
 
           if adjust2(hj, e) <= adjust2(hk, e) < adjust2(j, e) < adjust2(k, e) {
-
-            assume false;
+            assert adjust2(hj', e) <= adjust2(hj, e);
           }
-
-
         } 
       } else if j != end && k == end {
         assume false;
