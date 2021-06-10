@@ -373,15 +373,31 @@ module JournalistMarshallingModel {
       var start' := if start+1 == |entries| as uint64 then 0 else start+1;
       lemma_cyclicRange_popFront_Sum(entries, start, len);
 
-      var buf0 := writeIntOnto(buf, numBlocks, idx, |entries[start].key| as uint32);
-      var idx1 := idx + 4;
-      var buf1 := writeOnto(buf0, numBlocks, idx1, entries[start].key);
-      var idx2 := idx1 + |entries[start].key| as uint64;
-      var buf2 := writeIntOnto(buf1, numBlocks, idx2, |entries[start].value| as uint32);
-      var idx3 := idx2 + 4;
-      var buf3 := writeOnto(buf2, numBlocks, idx3, entries[start].value);
-      var idx4 := idx3 + |entries[start].value| as uint64;
-      writeJournalEntries(buf3, numBlocks, idx4, entries, start', len - 1)
+      match entries[start] {
+        case JournalInsert(key, value) => (
+          var buf0 := writeIntOnto(buf, numBlocks, idx, |key| as uint32);
+          var idx1 := idx + 4;
+          var buf1 := writeOnto(buf0, numBlocks, idx1, key);
+          var idx2 := idx1 + |key| as uint64;
+          var buf2 := writeIntOnto(buf1, numBlocks, idx2, |value| as uint32);
+          var idx3 := idx2 + 4;
+          var buf3 := writeOnto(buf2, numBlocks, idx3, value);
+          var idx4 := idx3 + |value| as uint64;
+          writeJournalEntries(buf3, numBlocks, idx4, entries, start', len - 1)
+        )
+        case JournalClone(from, to) => (
+          assert |from| <= 1024;
+          var buf0 := writeIntOnto(buf, numBlocks, idx, |from| as uint32 + 4096);
+          var idx1 := idx + 4;
+          var buf1 := writeOnto(buf0, numBlocks, idx1, from);
+          var idx2 := idx1 + |from| as uint64;
+          var buf2 := writeIntOnto(buf1, numBlocks, idx2, |to| as uint32);
+          var idx3 := idx2 + 4;
+          var buf3 := writeOnto(buf2, numBlocks, idx3, to);
+          var idx4 := idx3 + |to| as uint64;
+          writeJournalEntries(buf3, numBlocks, idx4, entries, start', len - 1)
+        )
+      }
     )
   }
 
@@ -409,17 +425,19 @@ module JournalistMarshallingModel {
 
   predicate hasEntryAt(buf: seq<byte>, entry: JournalEntry, start: int)
   {
+    var e1 := if entry.JournalInsert? then entry.key else entry.from;
+    var e2 := if entry.JournalInsert? then entry.value else entry.to;
     var idx0 := start;
     var idx1 := idx0 + 4;
-    var idx2 := idx1 + |entry.key|;
+    var idx2 := idx1 + |e1|;
     var idx3 := idx2 + 4;
-    var idx4 := idx3 + |entry.value|;
+    var idx4 := idx3 + |e2|;
     && 0 <= idx0
     && idx4 <= |buf|
-    && unpack_LittleEndian_Uint32(buf[idx0..idx1]) as int == |entry.key|
-    && unpack_LittleEndian_Uint32(buf[idx2..idx3]) as int == |entry.value|
-    && buf[idx1..idx2] == entry.key
-    && buf[idx3..idx4] == entry.value
+    && unpack_LittleEndian_Uint32(buf[idx0..idx1]) as int == (if entry.JournalInsert? then |e1| else |e1| + 4096)
+    && unpack_LittleEndian_Uint32(buf[idx2..idx3]) as int == |e2|
+    && buf[idx1..idx2] == e1
+    && buf[idx3..idx4] == e2
   }
 
   predicate hasEntry(buf: seq<byte>, entries: seq<JournalEntry>, i: int)
@@ -510,38 +528,42 @@ module JournalistMarshallingModel {
     //var start'' := if start'+1 == |entries| as uint64 then 0 else start'+1;
     lemma_cyclicRange_popFront_Sum(entries, start', len');
 
-    var idx1 := idx + 4;
-    var idx2 := idx1 + |entries[start'].key| as uint64;
-    var idx3 := idx2 + 4;
-    var idx4 := idx3 + |entries[start'].value| as uint64;
+    var e1 := if entries[start'].JournalInsert? then entries[start'].key else entries[start'].from;
+    var e2 := if entries[start'].JournalInsert? then entries[start'].value else entries[start'].to;
 
-    var buf1 := writeIntOnto(buf, numBlocks, idx, |entries[start'].key| as uint32);
-    var buf2 := writeOnto(buf1, numBlocks, idx1, entries[start'].key);
-    var buf3 := writeIntOnto(buf2, numBlocks, idx2, |entries[start'].value| as uint32);
-    var buf4 := writeOnto(buf3, numBlocks, idx3, entries[start'].value);
+    var idx1 := idx + 4;
+    var idx2 := idx1 + |e1| as uint64;
+    var idx3 := idx2 + 4;
+    var idx4 := idx3 + |e2| as uint64;
+
+    var e1_len := if entries[start'].JournalInsert? then |e1| as uint32 else |e1| as uint32 + 4096;
+    var buf1 := writeIntOnto(buf, numBlocks, idx, e1_len);
+    var buf2 := writeOnto(buf1, numBlocks, idx1, e1);
+    var buf3 := writeIntOnto(buf2, numBlocks, idx2, |e2| as uint32);
+    var buf4 := writeOnto(buf3, numBlocks, idx3, e2);
 
     forall i | 0 <= i < idx ensures withoutChecksums(buf, numBlocks)[i] == withoutChecksums(buf4, numBlocks)[i]
     {
       calc {
         withoutChecksums(buf, numBlocks)[i];
         {
-          writeIntOntoPreserves(buf, numBlocks, idx, |entries[start'].key| as uint32);
-          assert writeIntOntoAgrees(buf, numBlocks, idx, |entries[start'].key| as uint32, i as int);
+          writeIntOntoPreserves(buf, numBlocks, idx, e1_len);
+          assert writeIntOntoAgrees(buf, numBlocks, idx, e1_len, i as int);
         }
         withoutChecksums(buf1, numBlocks)[i];
         {
-          writeOntoPreserves(buf1, numBlocks, idx1, entries[start'].key);
-          assert writeOntoAgrees(buf1, numBlocks, idx1, entries[start'].key, i as int);
+          writeOntoPreserves(buf1, numBlocks, idx1, e1);
+          assert writeOntoAgrees(buf1, numBlocks, idx1, e1, i as int);
         }
         withoutChecksums(buf2, numBlocks)[i];
         {
-          writeIntOntoPreserves(buf2, numBlocks, idx2, |entries[start'].value| as uint32);
-          assert writeIntOntoAgrees(buf2, numBlocks, idx2, |entries[start'].value| as uint32, i as int);
+          writeIntOntoPreserves(buf2, numBlocks, idx2, |e2| as uint32);
+          assert writeIntOntoAgrees(buf2, numBlocks, idx2, |e2| as uint32, i as int);
         }
         withoutChecksums(buf3, numBlocks)[i];
         {
-          writeOntoPreserves(buf3, numBlocks, idx3, entries[start'].value);
-          assert writeOntoAgrees(buf3, numBlocks, idx3, entries[start'].value, i as int);
+          writeOntoPreserves(buf3, numBlocks, idx3, e2);
+          assert writeOntoAgrees(buf3, numBlocks, idx3, e2, i as int);
         }
         withoutChecksums(buf4, numBlocks)[i];
       }
@@ -558,15 +580,15 @@ module JournalistMarshallingModel {
     forall i | 0 <= i < len as int - len' as int
     ensures hasEntry(withoutChecksums(buf4, numBlocks), slice, i)
     {
-      //reveal_hasEntryAt();
       assert hasEntry(withoutChecksums(buf, numBlocks),
           cyclicSlice(entries, start, len), i);
       var entry := slice[i];
       var idx0': int := 8 + SumJournalEntries(slice[..i]);
       var idx1': int := idx0' + 4;
-      var idx2': int := idx1' + |entry.key|;
+      var idx2': int := idx1' + if entry.JournalInsert? then |entry.key| else |entry.from|;
       var idx3': int := idx2' + 4;
-      var idx4': int := idx3' + |entry.value|;
+      var idx4': int := idx3' + if entry.JournalInsert? then |entry.value| else |entry.to|;
+
       assert idx4' <= idx as int by {
         assert idx4' == 8 + SumJournalEntries(slice[..i+1]) by {
           assert DropLast(slice[..i+1]) == slice[..i];
@@ -591,28 +613,32 @@ module JournalistMarshallingModel {
       //assert buf4[idx1'..idx2'] == entry.key;
       //assert buf4[idx3'..idx4'] == entry.value;
     }
+
     assert hasEntry(withoutChecksums(buf4, numBlocks), slice, len as int - len' as int) by {
       var entry := slice[len as int - len' as int];
       assert entry == entries[start'] by { reveal_cyclicSlice(); }
       var b := withoutChecksums(buf4, numBlocks);
       assert idx4 as int <= |b|;
-      assert unpack_LittleEndian_Uint32(b[idx..idx1]) as int == |entry.key| by {
-        writeIntOntoMakesSlice(buf, numBlocks, idx, |entry.key| as uint32);
-        writeOntoPreservesSlice(buf1, numBlocks, idx1, entry.key, idx as int, idx1 as int);
-        writeIntOntoPreservesSlice(buf2, numBlocks, idx2, |entry.value| as uint32, idx as int, idx1 as int);
-        writeOntoPreservesSlice(buf3, numBlocks, idx3, entry.value, idx as int, idx1 as int);
+
+      assert unpack_LittleEndian_Uint32(b[idx..idx1]) as int == (if entry.JournalInsert? then |e1| else |e1| + 4096) 
+      by {
+        writeIntOntoMakesSlice(buf, numBlocks, idx, e1_len);
+        writeOntoPreservesSlice(buf1, numBlocks, idx1, e1, idx as int, idx1 as int);
+        writeIntOntoPreservesSlice(buf2, numBlocks, idx2, |e2| as uint32, idx as int, idx1 as int);
+        writeOntoPreservesSlice(buf3, numBlocks, idx3, e2, idx as int, idx1 as int);
       }
-      assert b[idx1..idx2] == entry.key by {
-        writeOntoMakesSlice(buf1, numBlocks, idx1, entry.key);
-        writeIntOntoPreservesSlice(buf2, numBlocks, idx2, |entry.value| as uint32, idx1 as int, idx2 as int);
-        writeOntoPreservesSlice(buf3, numBlocks, idx3, entry.value, idx1 as int, idx2 as int);
+      
+      assert b[idx1..idx2] == e1 by {
+        writeOntoMakesSlice(buf1, numBlocks, idx1, e1);
+        writeIntOntoPreservesSlice(buf2, numBlocks, idx2, |e2| as uint32, idx1 as int, idx2 as int);
+        writeOntoPreservesSlice(buf3, numBlocks, idx3, e2, idx1 as int, idx2 as int);
       }
-      assert unpack_LittleEndian_Uint32(b[idx2..idx3]) as int == |entry.value| by {
-        writeIntOntoMakesSlice(buf2, numBlocks, idx2, |entry.value| as uint32);
-        writeOntoPreservesSlice(buf3, numBlocks, idx3, entry.value, idx2 as int, idx3 as int);
+      assert unpack_LittleEndian_Uint32(b[idx2..idx3]) as int == |e2| by {
+        writeIntOntoMakesSlice(buf2, numBlocks, idx2, |e2| as uint32);
+        writeOntoPreservesSlice(buf3, numBlocks, idx3, e2, idx2 as int, idx3 as int);
       }
-      assert b[idx3..idx4] == entry.value by {
-        writeOntoMakesSlice(buf3, numBlocks, idx3, entry.value);
+      assert b[idx3..idx4] == e2 by {
+        writeOntoMakesSlice(buf3, numBlocks, idx3, e2);
       }
       assert slice[..len - len'] == cyclicSlice(entries, start, len - len') by { reveal_cyclicSlice(); }
       assert 8 + SumJournalEntries(slice[..len - len']) == idx as int;

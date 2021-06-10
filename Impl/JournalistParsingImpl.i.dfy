@@ -210,27 +210,36 @@ module JournalistParsingImpl {
       var idx1 := idx0 + 4;
 
       var keyLen := Unpack_LittleEndian_Uint32(s, idx0);
+      var isClone := keyLen >= 4096;
+      keyLen := if isClone then keyLen - 4096 else keyLen;
+
       if !(4 + keyLen as uint64 + 4 <= |s| as uint64 - idx
               && keyLen as uint64 <= KeyType.MaxLen())
       {
         return None;
       }
+      
       var key: Key := s[idx1..idx1+keyLen as uint64];
       var idx2 := idx1 + keyLen as uint64;
-      var valueLen :=
-          Unpack_LittleEndian_Uint32(s, idx2);
+      var valueLen := Unpack_LittleEndian_Uint32(s, idx2);
       var idx3 := idx2 + 4;
-      if !(valueLen as uint64 <= ValueType.MaxLen()
-              && valueLen as uint64 <= |s| as uint64 - idx3)
+
+      if !(valueLen as uint64 <= |s| as uint64 - idx3) ||
+        !((isClone && valueLen as uint64 <= KeyType.MaxLen()) 
+        || (!isClone && valueLen as uint64 <= ValueType.MaxLen()))
       {
         return None;
       }
-      var value: Value := s[idx3..idx3+valueLen as uint64];
+      
       var idx4 := idx3 + valueLen as uint64;
 
-      var je := JournalInsert(key, value);
-
-      ar[i] := je;
+      if isClone {
+        var to: Key := s[idx3..idx3+valueLen as uint64];
+        ar[i] := JournalClone(key, to);
+      } else {
+        var value: Value := s[idx3..idx3+valueLen as uint64];
+        ar[i] := JournalInsert(key, value);
+      }
 
       i := i + 1;
       idx := idx4;
