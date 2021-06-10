@@ -25,7 +25,6 @@ if [ -z "$GH_PERSONAL_ACCESS_TOKEN" ]; then
     exit 1
 fi
 
-
 if [ -z $GITHUB_REF ]; then
     COMMITID=$GITHUB_SHA
 else 
@@ -41,6 +40,10 @@ if [ -z "$GH_PERSONAL_ACCESS_TOKEN" ]; then
     error "GH_PERSONAL_ACCESS_TOKEN environment variable is not set"
     exit 1
 fi
+
+echo GITHUB_REF $GITHUB_REF
+echo GITHUB_SHA $GITHUB_SHA
+echo COMMITID $COMMITID
 
 GIT_REPOSITORY_URL="https://${GH_PERSONAL_ACCESS_TOKEN}@${GITHUB_SERVER_URL#https://}/$GITHUB_REPOSITORY.wiki.git"
 
