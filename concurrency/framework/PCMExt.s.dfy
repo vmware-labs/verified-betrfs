@@ -27,9 +27,9 @@ abstract module PCMExt refines PCM {
       glinear b: Base.Token,
       ghost f': F)
    : (glinear f_out: Token)
-  requires rep(f', b.get())
-  ensures f_out.loc().ExtLoc? && f_out.loc().base_loc == b.loc()
-  ensures f_out.get() == f'
+  requires rep(f', b.val)
+  ensures f_out.loc.ExtLoc? && f_out.loc.base_loc == b.loc
+  ensures f_out.val == f'
 
   // TODO version that could accept a `gshared f`
   // (Remember there is NO SOUND VERSION that accepts a `gshared b`)
@@ -40,37 +40,37 @@ abstract module PCMExt refines PCM {
       glinear b: Base.Token,
       ghost b': B)
   returns (glinear f_out: Token, glinear b_out: Base.Token)
-  requires f.loc().ExtLoc? && f.loc().base_loc == b.loc()
-  requires forall p, q :: dot_defined(f.get(), p) && rep(dot(f.get(), p), q) && Base.dot_defined(q, b.get()) ==>
+  requires f.loc.ExtLoc? && f.loc.base_loc == b.loc
+  requires forall p, q :: dot_defined(f.val, p) && rep(dot(f.val, p), q) && Base.dot_defined(q, b.val) ==>
     exists q' ::
       dot_defined(f', p) &&
       rep(dot(f', p), q') &&
       Base.dot_defined(q', b') &&
-      Base.reachable(Base.dot(q, b.get()), Base.dot(q', b'))
-  ensures f_out.loc() == f.loc()
-  ensures b_out.loc() == b.loc()
-  ensures f_out.get() == f'
-  ensures b_out.get() == b'
+      Base.reachable(Base.dot(q, b.val), Base.dot(q', b'))
+  ensures f_out.loc == f.loc
+  ensures b_out.loc == b.loc
+  ensures f_out.val == f'
+  ensures b_out.val == b'
 
   function method {:extern} borrow_back(gshared f: Token, ghost b: B)
     : (gshared b_out: Base.Token)
-  requires f.loc().ExtLoc?
+  requires f.loc.ExtLoc?
   requires forall p, b1 ::
-      dot_defined(f.get(), p) && rep(dot(f.get(), p), b1) ==> Base.le(b, b1)
-  ensures b_out.get() == b
-  ensures b_out.loc() == f.loc().base_loc
+      dot_defined(f.val, p) && rep(dot(f.val, p), b1) ==> Base.le(b, b1)
+  ensures b_out.val == b
+  ensures b_out.loc == f.loc.base_loc
 
   glinear method {:extern} exists_whole(
       gshared s: Token,
       glinear inout f: Token,
       glinear inout b: Base.Token)
   returns (ghost res: F, ghost b': Base.M)
-  requires s.loc() == old_f.loc()
-  requires s.loc().ExtLoc? && s.loc().base_loc == old_b.loc()
+  requires s.loc == old_f.loc
+  requires s.loc.ExtLoc? && s.loc.base_loc == old_b.loc
   ensures f == old_f
   ensures b == old_b
-  ensures dot_defined(s.get(), f.get())
-  ensures dot_defined(dot(s.get(), f.get()), res)
-  ensures rep(dot(dot(s.get(), f.get()), res), b')
-  ensures Base.dot_defined(b', b.get())
+  ensures dot_defined(s.val, f.val)
+  ensures dot_defined(dot(s.val, f.val), res)
+  ensures rep(dot(dot(s.val, f.val), res), b')
+  ensures Base.dot_defined(b', b.val)
 }

@@ -1132,15 +1132,81 @@ module RWLockSimpleExtPCM refines SimpleExtPCM {
 module RWLockExtToken refines SimpleExtToken {
   import SEPCM = RWLockSimpleExtPCM
   import opened RWLock
+  import opened Constants
 
-  glinear datatype WritebackObtainedHandle = WritebackObtainedHandle(
+  glinear datatype CentralToken = CentralToken(
+    ghost flag: Flag,
+    ghost stored_value: Base.G,
+    glinear token: Token)
+  {
+    predicate has_flag(flag: Flag) {
+      && this.flag == flag
+      && token.val == CentralHandle(CentralState(flag, stored_value))
+    }
+    predicate is_handle(flag: Flag, stored_value: Base.G) {
+      && this.flag == flag
+      && this.stored_value == stored_value
+      && token.val == CentralHandle(CentralState(flag, stored_value))
+    }
+  }
+
+  glinear datatype WritebackObtainedToken = WritebackObtainedToken(
     ghost b: Base.Handle,
     glinear token: Token)
   {
+    predicate has_state(b: Base.G) {
+      && this.b == b
+      && token.val == WritebackHandle(WritebackObtained(b))
+    }
     predicate is_handle(key: Base.Key) {
       && b.is_handle(key)
-      && token.get() == WritebackHandle(WritebackObtained(b))
+      && token.val == WritebackHandle(WritebackObtained(b))
     }
+  }
+
+  glinear datatype SharedPendingToken = SharedToken(
+    ghost t: ThreadId,
+    glinear token: Token)
+  {
+    predicate is_handle(t: ThreadId) {
+      && this.t == t
+      && token.val == SharedHandle(SharedPending(t))
+    }
+  }
+
+  glinear datatype SharedPending2Token = SharedToken(
+    ghost t: ThreadId,
+    glinear token: Token)
+  {
+    predicate is_handle(t: ThreadId) {
+      && this.t == t
+      && token.val == SharedHandle(SharedPending2(t))
+    }
+  }
+
+  glinear datatype SharedObtainedToken = SharedToken(
+    ghost t: ThreadId,
+    ghost b: Base.G,
+    glinear token: Token)
+  {
+    predicate is_handle(t: ThreadId, b: Base.G) {
+      && this.t == t
+      && this.b == b
+      && token.val == SharedHandle(SharedObtained(t, b))
+    }
+  }
+
+  glinear method do_internal_step_1(glinear f: Token,
+      ghost f1: F,
+      ghost step: InternalStep)
+  returns (glinear f': Token)
+  requires InternalNextStep(f.val, f1, step)
+  ensures f'.loc == f.loc
+  ensures f'.val == f1
+  {
+    assert InternalNext(f.val, f1);
+    glinear var f_out := do_internal_step(f, f1);
+    f' := f_out;
   }
 
   glinear method do_internal_step_2(glinear f: Token,
@@ -1148,30 +1214,450 @@ module RWLockExtToken refines SimpleExtToken {
       ghost step: InternalStep)
   returns (glinear f': Token, glinear g': Token)
   requires dot_defined(f1, g1)
-  requires InternalNextStep(f.get(), dot(f1, g1), step)
-  ensures g'.loc() == f'.loc() == f.loc()
-  ensures f'.get() == f1 && g'.get() == g1
+  requires InternalNextStep(f.val, dot(f1, g1), step)
+  ensures g'.loc == f'.loc == f.loc
+  ensures f'.val == f1 && g'.val == g1
   {
-    assert InternalNext(f.get(), dot(f1, g1));
+    assert InternalNext(f.val, dot(f1, g1));
     glinear var f_out := do_internal_step(f, dot(f1, g1));
     f', g' := split(f_out, f1, g1);
   }
 
+  glinear method do_cross_step_1_withdraw(glinear f: Token,
+      ghost f1: F,
+      ghost b1: Base.Handle,
+      ghost step: CrossStep)
+  returns (glinear f': Token, glinear b': Base.Handle)
+  requires CrossNextStep(f.val, f1, Base.unit(), Base.one(b1), step)
+  requires f.loc.ExtLoc? && f.loc.base_loc == Base.singleton_loc()
+  ensures f'.loc == f.loc
+  ensures f'.val == f1
+  ensures b' == b1
+  {
+    assert CrossNext(f.val, f1, Base.unit(), Base.one(b1));
+    glinear var f_out, b_out := do_cross_step(f, f1, Base.get_unit(Base.singleton_loc()), Base.one(b1));
+    f' := f_out;
+    b' := Base.unwrap(b_out);
+  }
+
+  glinear method do_cross_step_2_withdraw(glinear f: Token,
+      ghost f1: F, ghost f2: F,
+      ghost b1: Base.Handle,
+      ghost step: CrossStep)
+  returns (glinear f1': Token, glinear f2': Token, glinear b': Base.Handle)
+  requires dot_defined(f1, f2)
+  requires CrossNextStep(f.val, dot(f1, f2), Base.unit(), Base.one(b1), step)
+  requires f.loc.ExtLoc? && f.loc.base_loc == Base.singleton_loc()
+  ensures f1'.loc == f.loc
+  ensures f1'.val == f1
+  ensures f2'.loc == f.loc
+  ensures f2'.val == f2
+  ensures b' == b1
+  {
+    assert CrossNext(f.val, dot(f1, f2), Base.unit(), Base.one(b1));
+    glinear var f_out, b_out := do_cross_step(f, dot(f1, f2), Base.get_unit(Base.singleton_loc()), Base.one(b1));
+    f1', f2' := split(f_out, f1, f2);
+    b' := Base.unwrap(b_out);
+  }
+
+
+
+  /*glinear method perform_TakeWriteback(glinear c: CentralToken)
+  returns (glinear c': CentralToken, glinear handle': WritebackObtainedToken)
+  requires c.has_flag(Available)
+  ensures c'.token.loc == handle'.token.loc == c.token.loc
+  ensures c'.is_handle(Writeback, c.stored_value)
+  ensures handle'.has_state(c.stored_value)
+  {
+    glinear var c_token;
+    glinear match c { case CentralToken(_, _, token) => {c_token := token;} }
+    glinear var c'_token, handle'_token := do_internal_step_2(c_token,
+        CentralHandle(c_token.val.central.(flag := Writeback)),
+        WritebackHandle(WritebackObtained(c_token.val.central.stored_value)),
+        TakeWritebackStep);
+    c' := CentralToken(c'_token.val.central.flag,
+        c'_token.val.central.stored_value, c'_token);
+    handle' := WritebackObtainedToken(handle'_token.val.writeback.b, handle'_token);
+  }*/
+
   glinear method perform_TakeWriteback(glinear c: Token)
   returns (glinear c': Token, glinear handle': Token)
-  requires var m := c.get();
+  requires var m := c.val;
     && m.central.CentralState?
     && m.central.flag == Available
     && m == CentralHandle(m.central)
-  ensures c'.loc() == handle'.loc() == c.loc()
-  ensures c'.get() == CentralHandle(c.get().central.(flag := Writeback))
-  ensures handle'.get() == WritebackHandle(WritebackObtained(c.get().central.stored_value))
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == CentralHandle(c.val.central.(flag := Writeback))
+  ensures handle'.val == WritebackHandle(WritebackObtained(c.val.central.stored_value))
   {
     c', handle' := do_internal_step_2(c,
-        CentralHandle(c.get().central.(flag := Writeback)),
-        WritebackHandle(WritebackObtained(c.get().central.stored_value)),
+        CentralHandle(c.val.central.(flag := Writeback)),
+        WritebackHandle(WritebackObtained(c.val.central.stored_value)),
         TakeWritebackStep);
   }
+
+  glinear method pre_ReleaseWriteback(glinear c: Token, glinear handle: Token)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.writeback.WritebackObtained?
+    && m == WritebackHandle(m.writeback)
+  requires c.loc == handle.loc
+  ensures c.val == c'.val && handle'.val == handle.val
+  ensures c.loc == c'.loc && handle'.loc == handle.loc
+  ensures c.val.central.flag == Writeback
+       || c.val.central.flag == Writeback_PendingExcLock
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c', handle' := SEPCM.split(x, c.val, handle.val);
+  }
+
+  glinear method perform_ReleaseWriteback(glinear c: Token, glinear handle: Token)
+  returns (glinear c': Token)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.writeback.WritebackObtained?
+    && m == WritebackHandle(m.writeback)
+  requires c.loc == handle.loc
+  ensures c'.loc == c.loc
+  ensures c.val.central.flag == Writeback
+       || c.val.central.flag == Writeback_PendingExcLock
+  ensures c.val.central.flag == Writeback ==>
+      c'.val == CentralHandle(c.val.central.(flag := Available))
+  ensures c.val.central.flag == Writeback_PendingExcLock ==>
+      c'.val == CentralHandle(c.val.central.(flag := PendingExcLock))
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c' := do_internal_step_1(x,
+        CentralHandle(c.val.central.(flag :=
+            if c.val.central.flag == Writeback then Available else PendingExcLock)),
+        ReleaseWritebackStep);
+  }
+
+  glinear method perform_ThreadlessExc(glinear c: Token)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m.central.flag == Available
+    && m == CentralHandle(m.central)
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == CentralHandle(c.val.central.(flag :=
+      if c.val.central.flag == Available then PendingExcLock else Writeback_PendingExcLock))
+  ensures handle'.val == ExcHandle(ExcPendingAwaitWriteback(-1, c.val.central.stored_value))
+  {
+    c', handle' := do_internal_step_2(c,
+        CentralHandle(c.val.central.(flag :=
+      if c.val.central.flag == Available then PendingExcLock else Writeback_PendingExcLock)),
+      ExcHandle(ExcPendingAwaitWriteback(-1, c.val.central.stored_value)),
+        ThreadlessExcStep);
+  }
+
+  glinear method perform_SharedToExc(glinear c: Token, glinear handle: Token,
+      ghost ss: SharedState)
+  returns (glinear c': Token, glinear handle': Token)
+  requires ss.SharedObtained?
+  requires var m := c.val;
+    && m.central.CentralState?
+    && (m.central.flag == Available || m.central.flag == Writeback)
+    && m == CentralHandle(m.central)
+  requires handle.val == SharedHandle(ss)
+  requires c.loc == handle.loc
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == CentralHandle(c.val.central.(flag := 
+          if c.val.central.flag == Available then PendingExcLock else Writeback_PendingExcLock))
+  ensures handle'.val == ExcHandle(ExcPendingAwaitWriteback(ss.t, ss.b))
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c', handle' := do_internal_step_2(x,
+        CentralHandle(c.val.central.(flag := 
+          if c.val.central.flag == Available then PendingExcLock else Writeback_PendingExcLock)),
+          ExcHandle(ExcPendingAwaitWriteback(ss.t, ss.b)),
+        SharedToExcStep(ss));
+  }
+
+  glinear method perform_TakeExcLockFinishWriteback(glinear c: Token, glinear handle: Token, ghost clean: bool)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m.central.flag != Writeback && m.central.flag != Writeback_PendingExcLock
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.exc.ExcPendingAwaitWriteback?
+    && m == ExcHandle(m.exc)
+  requires c.loc == handle.loc
+  ensures c.val.central.flag == PendingExcLock
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == 
+      CentralHandle(c.val.central.(flag :=
+        if clean then ExcLock_Clean else ExcLock_Dirty))
+  ensures handle'.val == 
+      ExcHandle(ExcPending(handle.val.exc.t, 0, clean, handle.val.exc.b))
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c', handle' := do_internal_step_2(x,
+      CentralHandle(c.val.central.(flag :=
+        if clean then ExcLock_Clean else ExcLock_Dirty)),
+      ExcHandle(ExcPending(handle.val.exc.t, 0, clean, handle.val.exc.b)),
+        TakeExcLockFinishWritebackStep(clean));
+  }
+
+  glinear method perform_TakeExcLockCheckRefCount(glinear handle: Token, glinear rc: Token)
+  returns (glinear handle': Token, glinear rc': Token)
+  requires var m := handle.val;
+    && m.exc.ExcPending?
+    && m == ExcHandle(m.exc)
+    && 0 <= m.exc.visited < NUM_THREADS
+  requires var expected_rc := (if handle.val.exc.visited == handle.val.exc.t then 1 else 0);
+    && rc.val == RefCount(handle.val.exc.visited, expected_rc)
+  requires rc.loc == handle.loc
+  ensures rc'.loc == handle'.loc == rc.loc
+  ensures handle'.val == ExcHandle(handle.val.exc.(visited := handle.val.exc.visited + 1))
+  ensures rc'.val == rc.val
+  {
+    glinear var x := SEPCM.join(handle, rc);
+    handle', rc' := do_internal_step_2(x,
+        ExcHandle(handle.val.exc.(visited := handle.val.exc.visited + 1)),
+        rc.val,
+        TakeExcLockCheckRefCountStep);
+  }
+
+  glinear method perform_ReadingIncCount(glinear handle: Token, glinear rc: Token, ghost t: int)
+  returns (glinear handle': Token, glinear rc': Token)
+  requires handle.val == ReadHandle(ReadPending)
+  requires var m := rc.val;
+      && t in m.refCounts
+      && 0 <= t < NUM_THREADS
+      && m == RefCount(t, m.refCounts[t])
+  requires handle.loc == rc.loc
+  ensures rc'.loc == handle'.loc == rc.loc
+  ensures handle'.val == ReadHandle(ReadPendingCounted(t))
+  ensures rc'.val == RefCount(t, rc.val.refCounts[t] + 1)
+  {
+    glinear var x := SEPCM.join(handle, rc);
+    handle', rc' := do_internal_step_2(x,
+        ReadHandle(ReadPendingCounted(t)),
+        RefCount(t, rc.val.refCounts[t] + 1),
+        ReadingIncCountStep(t));
+  }
+
+  glinear method perform_ObtainReading(glinear c: Token, glinear handle: Token)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.read.ReadPendingCounted?
+    && m == ReadHandle(m.read)
+  requires c.loc == handle.loc
+  ensures c.val.central.flag == Reading_ExcLock
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == CentralHandle(c.val.central.(flag := Reading))
+  ensures handle'.val == ReadHandle(ReadObtained(handle.val.read.t))
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c', handle' := do_internal_step_2(x,
+        CentralHandle(c.val.central.(flag := Reading)),
+        ReadHandle(ReadObtained(handle.val.read.t)),
+        ObtainReadingStep);
+  }
+
+  glinear method perform_SharedIncCount(glinear rc: Token, ghost t: int)
+  returns (glinear rc': Token, glinear handle': Token)
+  requires var m := rc.val;
+    && 0 <= t < NUM_THREADS
+    && t in m.refCounts
+    && m == RefCount(t, m.refCounts[t])
+  ensures rc'.loc == handle'.loc == rc.loc
+  ensures rc'.val == RefCount(t, rc.val.refCounts[t] + 1)
+  ensures handle'.val == SharedHandle(SharedPending(t))
+  {
+    rc', handle' := do_internal_step_2(rc,
+        RefCount(t, rc.val.refCounts[t] + 1),
+        SharedHandle(SharedPending(t)),
+        SharedIncCountStep(t));
+  }
+
+  glinear method pre_SharedDecCountPending(glinear x: Token, ghost t: int)
+  returns (glinear x': Token)
+  requires t in x.val.refCounts
+  requires x.val.sharedState[SharedPending(t)] >= 1
+  ensures x.val.refCounts[t] >= 1
+  ensures x' == x
+  {
+    x' := x;
+    ghost var p, state := get_completion(inout x');
+    var m := x'.val;
+    if CountSharedRefs(state.sharedState, t) == 0 {
+      assert state.sharedState[SharedPending(t)] >= 1;
+      FullMaps.UseZeroSum(IsSharedRefFor(t), state.sharedState);
+      assert false;
+    }
+    assert state.refCounts[t] >= 1;
+    assert m.refCounts[t] == state.refCounts[t];
+  }
+
+  glinear method perform_SharedDecCountPending(glinear rc: Token, glinear handle: Token, ghost t: int)
+  returns (glinear rc': Token)
+  requires var m := rc.val;
+    && 0 <= t < NUM_THREADS
+    && t in m.refCounts
+    && m == RefCount(t, m.refCounts[t])
+  requires var m := handle.val;
+    && m == SharedHandle(SharedPending(t))
+  requires rc.loc == handle.loc
+  ensures rc'.loc == rc.loc
+  ensures rc.val.refCounts[t] >= 1
+  ensures rc'.val == RefCount(t, rc.val.refCounts[t] - 1)
+  {
+    glinear var x := SEPCM.join(rc, handle);
+    x := pre_SharedDecCountPending(x, t);
+    rc' := do_internal_step_1(x,
+        RefCount(t, rc.val.refCounts[t] - 1),
+        SharedDecCountPendingStep(t));
+  }
+
+  glinear method pre_SharedDecCountObtained(glinear x: Token, ghost t: int, ghost b: Base.G)
+  returns (glinear x': Token)
+  requires t in x.val.refCounts
+  requires x.val.sharedState[SharedObtained(t, b)] >= 1
+  ensures x.val.refCounts[t] >= 1
+  ensures x' == x
+  {
+    x' := x;
+    ghost var p, state := get_completion(inout x');
+    var m := x'.val;
+    if CountSharedRefs(state.sharedState, t) == 0 {
+      assert state.sharedState[SharedObtained(t, b)] >= 1;
+      FullMaps.UseZeroSum(IsSharedRefFor(t), state.sharedState);
+      assert false;
+    }
+    assert state.refCounts[t] >= 1;
+    assert m.refCounts[t] == state.refCounts[t];
+  }
+
+  glinear method perform_SharedDecCountObtained(glinear rc: Token, glinear handle: Token,
+      ghost t: int, ghost b: Base.G)
+  returns (glinear rc': Token)
+  requires var m := rc.val;
+    && 0 <= t < NUM_THREADS
+    && t in m.refCounts
+    && m == RefCount(t, m.refCounts[t])
+  requires var m := handle.val;
+    && m == SharedHandle(SharedObtained(t, b))
+  requires rc.loc == handle.loc
+  ensures rc'.loc == rc.loc
+  ensures rc.val.refCounts[t] >= 1
+  ensures rc'.val == RefCount(t, rc.val.refCounts[t] - 1)
+  {
+    glinear var x := SEPCM.join(rc, handle);
+    x := pre_SharedDecCountObtained(x, t, b);
+    rc' := do_internal_step_1(x,
+        RefCount(t, rc.val.refCounts[t] - 1),
+        SharedDecCountObtainedStep(t, b));
+  }
+
+  glinear method perform_SharedCheckExc(glinear c: Token, glinear handle: Token, ghost t: int)
+  returns (glinear c': Token, glinear handle': Token)
+  requires 0 <= t < NUM_THREADS
+  requires var m := c.val;
+    && m.central.CentralState?
+    && (m.central.flag == Available
+        || m.central.flag == Writeback
+        || m.central.flag == Reading)
+    && m == CentralHandle(m.central)
+  requires handle.val == SharedHandle(SharedPending(t))
+  requires c.loc == handle.loc
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == c.val
+  ensures handle'.val == SharedHandle(SharedPending2(t))
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c', handle' := do_internal_step_2(x,
+        c.val,
+        SharedHandle(SharedPending2(t)),
+        SharedCheckExcStep(t));
+  }
+
+  glinear method perform_SharedCheckReading(glinear c: Token, glinear handle: Token, ghost t: int)
+  returns (glinear c': Token, glinear handle': Token)
+  requires 0 <= t < NUM_THREADS
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m.central.flag != Reading
+    && m.central.flag != Reading_ExcLock
+    && m == CentralHandle(m.central)
+  requires handle.val == SharedHandle(SharedPending2(t))
+  requires c.loc == handle.loc
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == c.val
+  ensures handle'.val == SharedHandle(SharedObtained(t, c.val.central.stored_value))
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c', handle' := do_internal_step_2(x,
+        c.val,
+        SharedHandle(SharedObtained(t, c.val.central.stored_value)),
+        SharedCheckReadingStep(t));
+  }
+
+  glinear method perform_AbandonExcPending(glinear c: Token, glinear handle: Token)
+  returns (glinear c': Token)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.exc.ExcPending?
+    && m.exc.t == -1
+    && m == ExcHandle(m.exc)
+  requires c.loc == handle.loc
+  ensures c'.loc == c.loc
+  ensures c'.val == CentralHandle(c.val.central.(flag := Available))
+  {
+    glinear var x := SEPCM.join(c, handle);
+    c' := do_internal_step_1(x,
+        CentralHandle(c.val.central.(flag := Available)),
+        AbandonExcPendingStep);
+  }
+
+  glinear method perform_Withdraw_TakeExcLockFinish(glinear handle: Token)
+  returns (glinear handle': Token, glinear b': Base.Handle)
+  requires var m := handle.val;
+    && m.exc.ExcPending?
+    && m.exc.visited == NUM_THREADS
+    && m == ExcHandle(m.exc)
+  requires handle.loc.ExtLoc? && handle.loc.base_loc == Base.singleton_loc()
+  ensures handle'.val == ExcHandle(ExcObtained(handle.val.exc.t, handle.val.exc.clean))
+  ensures b' == handle.val.exc.b
+  {
+    handle', b' := do_cross_step_1_withdraw(handle,
+        ExcHandle(ExcObtained(handle.val.exc.t, handle.val.exc.clean)),
+        handle.val.exc.b,
+        Withdraw_TakeExcLockFinish_Step);
+  }
+
+  glinear method perform_Withdraw_Alloc(glinear c: Token)
+  returns (glinear c': Token, glinear handle': Token, glinear b': Base.Handle)
+  requires var m := c.val;
+    && m.central.CentralState?
+    && m.central.flag == Unmapped
+    && m == CentralHandle(m.central)
+  requires c.loc.ExtLoc? && c.loc.base_loc == Base.singleton_loc()
+  ensures handle'.loc == c'.loc == c.loc
+  ensures c'.val == CentralHandle(c.val.central.(flag := Reading_ExcLock))
+  ensures handle'.val == ReadHandle(ReadPending)
+  ensures b' == c.val.central.stored_value
+  {
+    c', handle', b' := do_cross_step_2_withdraw(c,
+        CentralHandle(c.val.central.(flag := Reading_ExcLock)),
+        ReadHandle(ReadPending),
+        c.val.central.stored_value,
+        Withdraw_Alloc_Step);
+  }
+
+
 
   /*lemma impl_le()
   ensures forall a: M, b: SEPCM.M {:trigger SEPCM.le(a, b)}
@@ -1208,12 +1694,12 @@ module RWLockExtToken refines SimpleExtToken {
   }*/
 
   function method {:opaque} borrow_wb(gshared f: Token) : (gshared b: Base.Handle)
-  requires f.loc().ExtLoc?
-  requires f.loc().base_loc == Base.singleton_loc()
-  requires f.get().writeback.WritebackObtained?
-  ensures b == f.get().writeback.b
+  requires f.loc.ExtLoc?
+  requires f.loc.base_loc == Base.singleton_loc()
+  requires f.val.writeback.WritebackObtained?
+  ensures b == f.val.writeback.b
   {
-    ghost var b := Base.one(f.get().writeback.b);
+    ghost var b := Base.one(f.val.writeback.b);
     Base.unwrap_borrow( borrow_back_interp_exact(f, b) )
   }
 }
