@@ -68,7 +68,7 @@ module CloneImpl {
     }
   }
 
-  method clone(linear inout s: ImplVariables, io: DiskIOHandler, from: Key, to: Key) returns (success: bool)
+  method clone(linear inout s: ImplVariables, io: DiskIOHandler, from: Key, to: Key, replay: bool) returns (success: bool)
   requires io.initialized()
   requires old_s.Inv() && old_s.Ready?
   modifies io
@@ -76,7 +76,7 @@ module CloneImpl {
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures success ==>
-    BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.CloneOp(from, to), true))
+    BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.CloneOp(from, to), replay))
   ensures !success ==>
     IOModel.betree_next_dop(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop)
   {
@@ -96,7 +96,7 @@ module CloneImpl {
           success := false;
         }
       } else {
-        CloneModel.doCloneCorrect(old_s.I(), from, to);
+        CloneModel.doCloneCorrect(old_s.I(), from, to, replay);
         success := doClone(inout s, from, to);
         assert (s.I(), success) == CloneModel.doClone(old_s.I(), from, to);
       }

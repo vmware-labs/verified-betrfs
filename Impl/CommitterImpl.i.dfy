@@ -255,21 +255,20 @@ module CommitterImpl {
             map[]);
     }
 
-    linear inout method journalAppend(key: Key, value: Value)
+    linear inout method journalAppend(je: JournalEntry)
     requires old_self.Inv()
     requires old_self.status == StatusReady
-    requires old_self.journalist.canAppend(JournalInsert(key, value))
+    requires old_self.journalist.canAppend(je)
 
     // [yizhou7] addtional precondition
     requires old_self.I().replayJournal == []
     ensures self.Inv()
-    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false))
+    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(JournalEntryToUIOp(je), false))
     {
-      var je := JournalInsert(key, value);
       inout self.journalist.append(je);
 
-      assert JC.Advance(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false));
-      assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false), JC.AdvanceStep);
+      assert JC.Advance(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(JournalEntryToUIOp(je), false));
+      assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(JournalEntryToUIOp(je), false), JC.AdvanceStep);
     }
 
     linear inout method journalReplayOne(ghost je: JournalEntry)
@@ -280,11 +279,11 @@ module CommitterImpl {
 
     ensures self.Inv()
     ensures self.status == StatusReady
-    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(je.key, je.value), true))
+    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(JournalEntryToUIOp(je), true))
     {
       inout self.journalist.replayJournalPop();
 
-      ghost var vop := AdvanceOp(UI.PutOp(je.key, je.value), true);
+      ghost var vop := AdvanceOp(JournalEntryToUIOp(je), true);
       assert JC.Replay(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop);
       assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
     }

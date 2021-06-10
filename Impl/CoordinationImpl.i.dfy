@@ -5,6 +5,7 @@ include "FullImpl.i.dfy"
 include "QueryImpl.i.dfy"
 include "InsertImpl.i.dfy"
 include "SuccImpl.i.dfy"
+include "CloneImpl.i.dfy"
 
 module CoordinationImpl {
   import opened StateBCImpl
@@ -14,6 +15,7 @@ module CoordinationImpl {
   import InsertImpl
   import SyncImpl
   import IOImpl
+  import CloneImpl
   import Journal
   import opened InterpretationDiskOps
   import opened ViewOp
@@ -179,7 +181,14 @@ module CoordinationImpl {
       var isEmpty := s.jc.isReplayEmpty();
       if !isEmpty {
         var je := s.jc.journalist.replayJournalTop();
-        var success := InsertImpl.insert(inout s.bc, io, je.key, je.value, true);
+        var success;
+
+        if je.JournalInsert? {
+          success := InsertImpl.insert(inout s.bc, io, je.key, je.value, true);
+        } else {
+          success := CloneImpl.clone(inout s.bc, io, je.from, je.to, true);
+        }
+
         if success {
           inout s.jc.journalReplayOne(je);
         }
@@ -197,7 +206,7 @@ module CoordinationImpl {
           assert BJC.Next(old_s.I(), s.I(), UI.NoOp, IDiskOp(diskOp(IIO(io))));
           assert M.Next(old_s.I(), s.I(), UI.NoOp, diskOp(IIO(io)));        
         } else {
-          ghost var vop := AdvanceOp(UI.PutOp(je.key, je.value), true);
+          ghost var vop := AdvanceOp(Journal.JournalEntryToUIOp(je), true);
           assert BJC.NextStep(old_s.I(), s.I(), UI.NoOp, IDiskOp(diskOp(IIO(io))), vop);
           assert BJC.Next(old_s.I(), s.I(), UI.NoOp, IDiskOp(diskOp(IIO(io))));
           assert M.Next(old_s.I(), s.I(), UI.NoOp, diskOp(IIO(io)));
@@ -474,10 +483,10 @@ module CoordinationImpl {
     }
   }
 
-  function method canJournalistAppend(shared s: Full, key: Key, value: Value) : (b: bool)
+  function method canJournalistAppend(shared s: Full, je: Journal.JournalEntry) : (b: bool)
   requires s.WF()
   {
-    s.jc.journalist.canAppend(Journal.JournalInsert(key, value))
+    s.jc.journalist.canAppend(je)
   }
 
   method insert(
@@ -496,12 +505,66 @@ module CoordinationImpl {
       initialization(inout s, io);
       success := false;
     } else {
-      var can_append := canJournalistAppend(s, key, value);
+      var je := Journal.JournalInsert(key, value);
+      var can_append := canJournalistAppend(s, je);
       if can_append {
         success := InsertImpl.insert(inout s.bc, io, key, value, false);
         if success {
-          inout s.jc.journalAppend(key, value);
+          inout s.jc.journalAppend(je);
           ghost var uiop := UI.PutOp(key, value);
+          ghost var vop := AdvanceOp(uiop, false);
+
+          assert BJC.NextStep(old_s.I(), s.I(), uiop, IDiskOp(diskOp(IIO(io))), vop);
+          assert BJC.Next(old_s.I(), s.I(), uiop, IDiskOp(diskOp(IIO(io))));
+        } else {
+          ghost var uiop := UI.NoOp;
+          if BBC.Next(old_s.bc.I(), s.bc.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp) {
+            ghost var vop := StatesInternalOp;
+            assert JC.NoOp(old_s.jc.I(), s.jc.I(), JournalDisk.NoDiskOp, vop);
+            assert JC.NextStep(old_s.jc.I(), s.jc.I(), JournalDisk.NoDiskOp, vop, JC.NoOpStep);
+            assert JC.Next(old_s.jc.I(), s.jc.I(), JournalDisk.NoDiskOp, vop);
+            assert BJC.NextStep(old_s.I(), s.I(), uiop, IDiskOp(diskOp(IIO(io))), vop);
+            assert BJC.Next(old_s.I(), s.I(), uiop, IDiskOp(diskOp(IIO(io))));
+          } else {
+            ghost var vop := AdvanceOp(uiop, true);
+            // Not a true replay (empty journal entry list).
+            assert JC.Replay(old_s.jc.I(), s.jc.I(), JournalDisk.NoDiskOp, vop);
+            assert JC.NextStep(old_s.jc.I(), s.jc.I(), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
+            assert JC.Next(old_s.jc.I(), s.jc.I(), JournalDisk.NoDiskOp, vop);
+            assert BJC.NextStep(old_s.I(), s.I(), uiop, IDiskOp(diskOp(IIO(io))), vop);
+            assert BJC.Next(old_s.I(), s.I(), uiop, IDiskOp(diskOp(IIO(io))));
+          }
+        }
+      } else {
+        var wait := doSync(inout s, io, true /* graphSync */);
+        success := false;
+      }
+    }
+  }
+
+  method clone(
+      linear inout s: Full, io: DiskIOHandler, from: Key, to: Key)
+  returns (success: bool)
+  requires old_s.Inv() 
+  requires io.initialized()
+  modifies io
+  ensures s.WF()
+  ensures M.Next(old_s.I(), s.I(),
+          if success then UI.CloneOp(from, to) else UI.NoOp,
+          diskOp(IIO(io)))
+  {
+    var is_init := isInitialized(s);
+    if !is_init {
+      initialization(inout s, io);
+      success := false;
+    } else {
+      var je := Journal.JournalClone(from, to);
+      var can_append := canJournalistAppend(s, je);
+      if can_append {
+        success := CloneImpl.clone(inout s.bc, io, from, to, false);
+        if success {
+          inout s.jc.journalAppend(je);
+          ghost var uiop := UI.CloneOp(from, to);
           ghost var vop := AdvanceOp(uiop, false);
 
           assert BJC.NextStep(old_s.I(), s.I(), uiop, IDiskOp(diskOp(IIO(io))), vop);

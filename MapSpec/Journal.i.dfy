@@ -62,4 +62,12 @@ module Journal {
       } 
     }
   }
+
+  function JournalEntryToUIOp(je: JournalEntry) : UI.Op
+  {
+    match je {
+      case JournalInsert(key, value) => UI.PutOp(key, value)
+      case JournalClone(from, to) => UI.CloneOp(from, to)
+    }
+  }
 }
