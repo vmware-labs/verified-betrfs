@@ -8,9 +8,6 @@ include "AsyncDisk.s.dfy"
 include "AsyncDiskProgram.s.dfy"
 include "IOSystem.s.dfy"
 
-module VeribetrIOSystem refines IOSystem {
-  import P = ProgramMachineMod
-}
 
 abstract module ProofObligations {
   import CrashTolerantMapSpecMod

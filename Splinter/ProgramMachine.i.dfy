@@ -3,8 +3,8 @@
 
 include "Journal.i.dfy"
 include "JournalInterp.i.dfy"
-include "Betree.i.dfy"
-include "BetreeInterp.i.dfy"
+include "SplinterTree.i.dfy"
+include "SplinterTreeInterp.i.dfy"
 include "CacheIfc.i.dfy"
 
 include "AsyncDisk.s.dfy"
@@ -20,7 +20,7 @@ include "IOSystem.s.dfy"
 module ProgramMachineMod {
   import AllocationTableMod
   import AllocationTableMachineMod
-  import BetreeMachineMod
+  import SplinterTreeMachineMod
   import JournalMachineMod
   import opened AllocationMod
   import opened DiskTypesMod
@@ -38,7 +38,7 @@ module ProgramMachineMod {
   datatype Superblock = Superblock(
     serial: nat,
     journal: JournalMachineMod.Superblock,
-    betree: BetreeMachineMod.Superblock)
+    betree: SplinterTreeMachineMod.Superblock)
 
   function parseSuperblock(b: UninterpretedDiskPage) : Option<Superblock>
 
@@ -57,7 +57,7 @@ module ProgramMachineMod {
     stableSuperblock: Superblock,
     cache: CacheIfc.Variables,
     journal: JournalMachineMod.Variables,
-    betree: BetreeMachineMod.Variables,
+    betree: SplinterTreeMachineMod.Variables,
     inFlightSuperblock: Option<Superblock>
     )
   {
@@ -73,7 +73,7 @@ module ProgramMachineMod {
     var initsb := Superblock(
       0,  // serial
       JournalMachineMod.MkfsSuperblock(),
-      BetreeMachineMod.MkfsSuperblock());
+      SplinterTreeMachineMod.MkfsSuperblock());
     && SUPERBLOCK_ADDRESS() in dv
     && parseSuperblock(dv[SUPERBLOCK_ADDRESS()]) == Some(initsb)
   }
@@ -96,11 +96,11 @@ module ProgramMachineMod {
     && v'.stableSuperblock == superblock.value
     && v'.cache == v.cache  // no cache writes
     && JournalMachineMod.Init(v'.journal, superblock.value.journal, v.cache, sk)
-    && BetreeMachineMod.Start(v.betree, v'.betree, v.cache, superblock.value.betree)
+    && SplinterTreeMachineMod.Start(v.betree, v'.betree, v.cache, superblock.value.betree)
     && v'.inFlightSuperblock.None?
   }
 
-  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq, newbetree: BetreeMachineMod.Variables)
+  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq, newbetree: SplinterTreeMachineMod.Variables)
   {
     && v.phase.RecoveringJournal?
     && puts.WF()
@@ -111,7 +111,7 @@ module ProgramMachineMod {
     // NB that Recover can interleave with BetreeInternal steps, which push stuff into the
     // cache to flush it out of the Betree's membuffer to make room for more recovery.
 
-    && BetreeMachineMod.PutMany(v.betree, newbetree, puts)
+    && SplinterTreeMachineMod.PutMany(v.betree, newbetree, puts)
     && v' == v.(betree := newbetree)
   }
 
@@ -125,12 +125,12 @@ module ProgramMachineMod {
     && v' == v.(phase := Running)
   }
 
-  predicate Query(v: Variables, v': Variables, uiop : UIOp, key: Key, val: Value, sk: BetreeMachineMod.Skolem)
+  predicate Query(v: Variables, v': Variables, uiop : UIOp, key: Key, val: Value, sk: SplinterTreeMachineMod.Skolem)
   {
     && v.phase.Running?
     && v.WF()
     && v'.journal == v.journal
-    && BetreeMachineMod.Query(v.betree, v'.betree, v.cache, key, val, sk)
+    && SplinterTreeMachineMod.Query(v.betree, v'.betree, v.cache, key, val, sk)
     && v'.cache == v.cache  // no cache writes
     && v'.stableSuperblock == v.stableSuperblock
   }
@@ -146,7 +146,7 @@ module ProgramMachineMod {
   }
 
 
-  predicate Put(v: Variables, v': Variables, uiop : UIOp, sk: BetreeMachineMod.Skolem)
+  predicate Put(v: Variables, v': Variables, uiop : UIOp, sk: SplinterTreeMachineMod.Skolem)
   {
     && uiop.OperateOp?
     && uiop.baseOp.ExecuteOp?
@@ -156,7 +156,7 @@ module ProgramMachineMod {
     && v.phase.Running?
     && v.WF()
     && JournalMachineMod.Append(v.journal, v'.journal, MessagePut(key, val))  // only writes to heap
-    && BetreeMachineMod.Put(v.betree, v'.betree, key, val, sk)  // only writes to heap
+    && SplinterTreeMachineMod.Put(v.betree, v'.betree, key, val, sk)  // only writes to heap
     // Note that Put only adds the write to the journal's unmarshalled tail. So the cache doesn't change
     // The upddates from the unmarshalled tail are pushed into the cache in batches in a later journal internal step.
     && v'.cache == v.cache  // no cache writes
@@ -175,7 +175,7 @@ module ProgramMachineMod {
     SetsMutuallyDisjoint([
       {SUPERBLOCK_ADDRESS()},
       JournalMachineMod.Alloc(v.journal),
-      BetreeMachineMod.Alloc(v.betree, v.cache, v.stableSuperblock.betree)
+      SplinterTreeMachineMod.Alloc(v.betree, v.cache, v.stableSuperblock.betree)
       ])
   }
 
@@ -233,14 +233,14 @@ module ProgramMachineMod {
     && AllocsDisjoint(v')
   }
 
-  predicate BetreeInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: BetreeMachineMod.Skolem)
+  predicate BetreeInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: SplinterTreeMachineMod.Skolem)
   {
     && uiop.NoopOp?
     && v.WF()
     && !v.phase.SuperblockUnknown?  // Betree not initted until we leave this phase
     && v'.journal == v.journal
     && v'.stableSuperblock == v.stableSuperblock
-    && BetreeMachineMod.Internal(v.betree, v'.betree, v.cache, cacheOps, sk)
+    && SplinterTreeMachineMod.Internal(v.betree, v'.betree, v.cache, cacheOps, sk)
     && CacheIfc.ApplyWrites(v.cache, v'.cache, cacheOps)
   }
 
@@ -281,7 +281,7 @@ module ProgramMachineMod {
     && v'.inFlightSuperblock.Some?
     && var sb := v'.inFlightSuperblock.value;
     && (exists alloc :: JournalMachineMod.CommitStart(v.journal, v'.journal, v.cache, sb.journal, seqBoundary, alloc))
-    && BetreeMachineMod.CommitStart(v.betree, v'.betree, v.cache, sb.betree, seqBoundary)
+    && SplinterTreeMachineMod.CommitStart(v.betree, v'.betree, v.cache, sb.betree, seqBoundary)
 //    && sb.serial == v.stableSuperblock.serial + 1 // I think this isn't needed until duplicate-superblock code
     && CacheIfc.ApplyWrites(v.cache, v'.cache, [CacheIfc.Write(SUPERBLOCK_ADDRESS(), marshalSuperblock(sb))])
     && v'.stableSuperblock == v.stableSuperblock // only inFlightSuperblock should change at this step. stable should be well ... stable
@@ -297,17 +297,17 @@ module ProgramMachineMod {
     && var sb := v.inFlightSuperblock.value;
     && v'.stableSuperblock == sb
     && JournalMachineMod.CommitComplete(v.journal, v'.journal, v.cache, sb.journal)
-    && BetreeMachineMod.CommitComplete(v.betree, v'.betree, v.cache, sb.betree)
+    && SplinterTreeMachineMod.CommitComplete(v.betree, v'.betree, v.cache, sb.betree)
     && v'.cache == v.cache
     && v'.inFlightSuperblock.None?  // Yay! Done writing.
   }
 
   datatype Step =
-    | RecoverStep(puts:MsgSeq, newbetree: BetreeMachineMod.Variables)
-    | QueryStep(key: Key, val: Value, bsk: BetreeMachineMod.Skolem)
-    | PutStep(bsk: BetreeMachineMod.Skolem)
+    | RecoverStep(puts:MsgSeq, newbetree: SplinterTreeMachineMod.Variables)
+    | QueryStep(key: Key, val: Value, bsk: SplinterTreeMachineMod.Skolem)
+    | PutStep(bsk: SplinterTreeMachineMod.Skolem)
     | JournalInternalStep(jsk: JournalMachineMod.Skolem)
-    | BetreeInternalStep(BetreeMachineMod.Skolem)
+    | BetreeInternalStep(SplinterTreeMachineMod.Skolem)
     | ReqSyncStep(syncReqId: SyncReqId)
     | CompleteSyncStep(syncReqId: SyncReqId)
     | CommitStartStep(seqBoundary: LSN)

@@ -3,8 +3,8 @@
 
 include "Journal.i.dfy"
 include "JournalInterp.i.dfy"
-include "Betree.i.dfy"
-include "BetreeInterp.i.dfy"
+include "SplinterTree.i.dfy"
+include "SplinterTreeInterp.i.dfy"
 include "CacheIfc.i.dfy"
 
 include "AsyncDisk.s.dfy"
@@ -21,7 +21,7 @@ module ProgramInterpMod {
   import opened MsgSeqMod
   import AllocationTableMod
   //import JournalMod
-  import BetreeInterpMod
+  import SplinterTreeInterpMod
   import JournalInterpMod
   import opened ProgramMachineMod
 
@@ -68,8 +68,8 @@ module ProgramInterpMod {
     var sb := ISuperblock(dv);
     if sb.Some?
     then
-      var betreeInterp := BetreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
-      var journalInterp := JournalInterpMod.IMNotRunning(pretendCache, sb.value.journal, betreeInterp);
+      var splinterTreeInterp := SplinterTreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
+      var journalInterp := JournalInterpMod.IMNotRunning(pretendCache, sb.value.journal, splinterTreeInterp);
       journalInterp
     else
       CrashTolerantMapSpecMod.Empty()
@@ -81,8 +81,8 @@ module ProgramInterpMod {
     var sb := ISuperblock(v.cache.dv);
     if sb.Some?
     then
-      var betreeInterp := BetreeInterpMod.IMStable(v.cache, sb.value.betree);
-      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal, betreeInterp);
+      var splinterTreeInterp := SplinterTreeInterpMod.IMStable(v.cache, sb.value.betree);
+      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal, splinterTreeInterp);
       journalInterp
     else
       CrashTolerantMapSpecMod.Empty()
@@ -102,7 +102,7 @@ module ProgramInterpMod {
     then
       sbreads
         + JournalInterpMod.IReads(v.journal, v.cache, sb.value.journal)
-        + BetreeInterpMod.IReads(v.betree, v.cache, sb.value.betree)
+        + SplinterTreeInterpMod.IReads(v.betree, v.cache, sb.value.betree)
     else
       sbreads
   }
@@ -120,8 +120,8 @@ module ProgramInterpMod {
     assert ISuperblock(v0.cache.dv) == ISuperblock(v1.cache.dv);
     var sb := ISuperblock(v0.cache.dv);
     if sb.Some? {
-      BetreeInterpMod.Framing(v0.betree, v0.cache, v1.cache, sb.value.betree);
-      var betreeInterp := BetreeInterpMod.IMStable(v0.cache, sb.value.betree);
+      SplinterTreeInterpMod.Framing(v0.betree, v0.cache, v1.cache, sb.value.betree);
+      var betreeInterp := SplinterTreeInterpMod.IMStable(v0.cache, sb.value.betree);
       JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, sb.value.journal, betreeInterp);
     }
   }
