@@ -135,55 +135,55 @@ abstract module Total_Preorder {
     reveal_IsSorted();
   }
 
-  lemma ApplySorted(f: Element ~> Element, run: seq<Element>)
-    requires IsSorted(run)
-    requires forall x, y | f.requires(x) && f.requires(y) && lte(x, y) :: lte(f(x), f(y))
-    requires forall i | 0 <= i < |run| :: f.requires(run[i])
-    ensures IsSorted(Seq.Apply(f, run))
-  {
-    reveal_IsSorted();
-  }
+  // lemma ApplySorted(f: Element ~> Element, run: seq<Element>)
+  //   requires IsSorted(run)
+  //   requires forall x, y | f.requires(x) && f.requires(y) && lte(x, y) :: lte(f(x), f(y))
+  //   requires forall i | 0 <= i < |run| :: f.requires(run[i])
+  //   ensures IsSorted(Seq.Apply(f, run))
+  // {
+  //   reveal_IsSorted();
+  // }
 
-  lemma ApplyStrictlySorted(f: Element ~> Element, run: seq<Element>)
-    requires IsStrictlySorted(run)
-    requires forall x, y | f.requires(x) && f.requires(y) && lt(x, y) :: lt(f(x), f(y))
-    requires forall i | 0 <= i < |run| :: f.requires(run[i])
-    ensures IsStrictlySorted(Seq.Apply(f, run))
-  {
-    reveal_IsStrictlySorted();
-  }
+  // lemma ApplyStrictlySorted(f: Element ~> Element, run: seq<Element>)
+  //   requires IsStrictlySorted(run)
+  //   requires forall x, y | f.requires(x) && f.requires(y) && lt(x, y) :: lt(f(x), f(y))
+  //   requires forall i | 0 <= i < |run| :: f.requires(run[i])
+  //   ensures IsStrictlySorted(Seq.Apply(f, run))
+  // {
+  //   reveal_IsStrictlySorted();
+  // }
 
-  lemma FilterSorted(f: Element ~> bool, run: seq<Element>)
-    requires IsSorted(run)
-    requires forall i | 0 <= i < |run| :: f.requires(run[i])
-    ensures IsSorted(Seq.Filter(f, run))
-  {
-    if |run| == 0 {
-    } else if f(Seq.Last(run)) {
-      SortedSubsequence(run, 0, |run| - 1);
-      FilterSorted(f, Seq.DropLast(run));
-      reveal_IsSorted();
-    } else {
-      SortedSubsequence(run, 0, |run| - 1);
-      FilterSorted(f, Seq.DropLast(run));
-    }
-  }
+  // lemma FilterSorted(f: Element ~> bool, run: seq<Element>)
+  //   requires IsSorted(run)
+  //   requires forall i | 0 <= i < |run| :: f.requires(run[i])
+  //   ensures IsSorted(Seq.Filter(f, run))
+  // {
+  //   if |run| == 0 {
+  //   } else if f(Seq.Last(run)) {
+  //     SortedSubsequence(run, 0, |run| - 1);
+  //     FilterSorted(f, Seq.DropLast(run));
+  //     reveal_IsSorted();
+  //   } else {
+  //     SortedSubsequence(run, 0, |run| - 1);
+  //     FilterSorted(f, Seq.DropLast(run));
+  //   }
+  // }
 
-  lemma FilterStrictlySorted(f: Element ~> bool, run: seq<Element>)
-    requires IsStrictlySorted(run)
-    requires forall i | 0 <= i < |run| :: f.requires(run[i])
-    ensures IsStrictlySorted(Seq.Filter(f, run))
-  {
-    if |run| == 0 {
-    } else if f(Seq.Last(run)) {
-      StrictlySortedSubsequence(run, 0, |run| - 1);
-      FilterStrictlySorted(f, Seq.DropLast(run));
-      reveal_IsStrictlySorted();
-    } else {
-      StrictlySortedSubsequence(run, 0, |run| - 1);
-      FilterStrictlySorted(f, Seq.DropLast(run));
-    }
-  }
+  // lemma FilterStrictlySorted(f: Element ~> bool, run: seq<Element>)
+  //   requires IsStrictlySorted(run)
+  //   requires forall i | 0 <= i < |run| :: f.requires(run[i])
+  //   ensures IsStrictlySorted(Seq.Filter(f, run))
+  // {
+  //   if |run| == 0 {
+  //   } else if f(Seq.Last(run)) {
+  //     StrictlySortedSubsequence(run, 0, |run| - 1);
+  //     FilterStrictlySorted(f, Seq.DropLast(run));
+  //     reveal_IsStrictlySorted();
+  //   } else {
+  //     StrictlySortedSubsequence(run, 0, |run| - 1);
+  //     FilterStrictlySorted(f, Seq.DropLast(run));
+  //   }
+  // }
 
   predicate BiggestInSet(e: Element, s: set<Element>)
     requires 0 < |s|

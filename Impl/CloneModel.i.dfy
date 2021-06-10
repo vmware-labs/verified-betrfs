@@ -63,14 +63,14 @@ module CloneModel {
     )
   }
 
-  lemma doCloneCorrect(s: BBC.Variables, from: Key, to: Key)
+  lemma doCloneCorrect(s: BBC.Variables, from: Key, to: Key, replay: bool)
   requires doClone.requires(s, from, to)
   requires s.totalCacheSize() <= MaxCacheSize()
   ensures var (s', success) := doClone(s, from, to);
       && (success ==>
         BBC.Next(s, s',
           BlockDisk.NoDiskOp,
-          AdvanceOp(UI.CloneOp(from, to), true))
+          AdvanceOp(UI.CloneOp(from, to), replay))
       )
       && (!success ==>
         betree_next(s, s')
@@ -122,8 +122,8 @@ module CloneModel {
 
       assert BT.ValidClone(clone);
       BC.MakeTransaction1(s, s', BT.BetreeStepOps(step));
-      assert BBC.BetreeMove(s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.CloneOp(from, to), true), step);
-      assert stepsBetree(s, s', AdvanceOp(UI.CloneOp(from, to), true), step);
+      assert BBC.BetreeMove(s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.CloneOp(from, to), replay), step);
+      assert stepsBetree(s, s', AdvanceOp(UI.CloneOp(from, to), replay), step);
     } else {
       assert noop(s, s);
     }

@@ -333,6 +333,7 @@ module JournalistImpl {
       reveal_WeightJournalEntries();
 
       inout self.len1 := self.len1 + self.len2;
+      assert self.len1 == old_self.len1 + old_self.len2;  // observe
       inout self.len2 := 0;
       inout self.frozenJournalBlocks := self.frozenJournalBlocks
           + (self.inMemoryWeight + 4064 - 1) / 4064;
