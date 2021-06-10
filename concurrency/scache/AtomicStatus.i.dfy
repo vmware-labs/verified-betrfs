@@ -474,7 +474,7 @@ module AtomicStatusImpl {
     }
 
     method is_exc_locked_or_free(
-        ghost t: nat,
+        ghost t: int,
         glinear r: RW.Token)
     returns (success: bool, is_accessed: bool, glinear r': RW.Token)
     requires this.inv()
@@ -492,7 +492,7 @@ module AtomicStatusImpl {
         if fl == RWLock.Available || fl == RWLock.Writeback
             || fl == RWLock.Reading {
           glinear var G(rwlock, status) := old_g;
-          rwlock, r' := RW.perform_SharedCheckExc(r, rwlock, t);
+          rwlock, r' := RW.perform_SharedCheckExc(rwlock, r, t);
           new_g := G(rwlock, status);
         } else {
           r' := r;
@@ -505,36 +505,26 @@ module AtomicStatusImpl {
       is_accessed := bit_and_uint8(f, flag_accessed) != 0;
     }
 
-    /*
-
     method mark_accessed(
         t: int,
-        shared r: RW.Token)
+        gshared r: RW.Token)
     requires this.inv()
     requires r == RWLock.Internal(RWLock.SharedLockPending2(key, t))
     {
-      var orig_value := fetch_or(atomic, flag_accessed);
+      atomic_block var _ := fetch_or(atomic, flag_accessed) {
+        ghost_acquire old_g;
+        glinear var new_g;
 
-      ///// Begin jank
-      ///// Setup:
-      var v := flag_accessed;
-      var old_v: uint8;
-      var new_value: uint8;
-      glinear var old_g: G := unsafe_obtain();
-      assume orig_value == old_v;
-      assume new_value == bit_or(old_v, v);
-      assume atomic_inv(a, old_v, old_g);
-      glinear var new_g;
-      ///// Transfer:
-      RW.possible_flags_SharedLockPending2(key, t, old_g.rwlock.val.central.flag,
-          r, old_g.rwlock);
-      new_g := old_g;
-      assert state_inv(new_value, new_g, key, rwlock_loc);
-      ///// Teardown:
-      assert atomic_inv(a, new_value, new_g);
-      unsafe_dispose(new_g);
-      ///// End jank
+        RW.possible_flags_SharedLockPending2(key, t, old_g.rwlock.val.central.flag,
+            r, old_g.rwlock);
+        new_g := old_g;
+        assert state_inv(new_value, new_g, key, rwlock_loc);
+
+        ghost_release new_g;
+      }
     }
+
+    /*
 
     method clear_accessed()
     requires this.inv()

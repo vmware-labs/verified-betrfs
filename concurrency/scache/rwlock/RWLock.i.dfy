@@ -40,9 +40,9 @@ module RWLock refines SimpleExt {
   // Standard flow for obtaining a 'shared' lock
 
   datatype SharedState =
-    | SharedPending(t: ThreadId)              // inc refcount
-    | SharedPending2(t: ThreadId)             // !free & !writelocked
-    | SharedObtained(t: ThreadId, b: Base.G)  // !reading
+    | SharedPending(t: int)              // inc refcount
+    | SharedPending2(t: int)             // !free & !writelocked
+    | SharedObtained(t: int, b: Base.G)  // !reading
 
   // Standard flow for obtaining an 'exclusive' lock
 
