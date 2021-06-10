@@ -105,16 +105,30 @@ module JournalRanges {
     else (
       if idx + 4 <= |s| then (
         var keyLen := unpack_LittleEndian_Uint32(s[idx..idx+4]) as int;
-        if idx + 4 + keyLen + 4 <= |s| && keyLen <= KeyType.MaxLen() as int then (
-          var key: Key := s[idx+4..idx+4+keyLen];
-          var valueLen := unpack_LittleEndian_Uint32(s[idx+4+keyLen..idx+4+keyLen+4]) as int;
-          if idx + 4 + keyLen + 4 + valueLen <= |s| && valueLen <= ValueType.MaxLen() as int then (
-            var value: Value := s[idx+4+keyLen+4 .. idx+4+keyLen+4+valueLen];
-            var je := JournalInsert(key, value);
+        var isClone := keyLen >= 4096;
+        var keyLen' := if isClone then keyLen - 4096 else keyLen;
 
-            var rest := parseEntries(s, len-1, idx + 4 + keyLen + 4 + valueLen);
-            if rest.Some? then (
-              Some([je] + rest.value)
+        if idx + 4 + keyLen' + 4 <= |s| && keyLen' <= KeyType.MaxLen() as int then (
+          var key: Key := s[idx+4..idx+4+keyLen'];
+          var valueLen := unpack_LittleEndian_Uint32(s[idx+4+keyLen'..idx+4+keyLen'+4]) as int;
+
+          if idx + 4 + keyLen' + 4 + valueLen <= |s| then (
+            if isClone && valueLen <= KeyType.MaxLen() as int then (
+              var rest := parseEntries(s, len-1, idx + 4 + keyLen' + 4 + valueLen);
+              if rest.Some? then (
+                var to: Key := s[idx+4+keyLen'+4 .. idx+4+keyLen'+4+valueLen];
+                Some([JournalClone(key, to)] + rest.value)
+              ) else (
+                None
+              )
+            ) else if !isClone && valueLen <= ValueType.MaxLen() as int then (
+              var rest := parseEntries(s, len-1, idx + 4 + keyLen' + 4 + valueLen);
+              if rest.Some? then (
+                var value: Value := s[idx+4+keyLen'+4 .. idx+4+keyLen'+4+valueLen];
+                Some([JournalInsert(key, value)] + rest.value)
+              ) else (
+                None
+              )
             ) else (
               None
             )
@@ -278,12 +292,13 @@ module JournalRanges {
 
   function method WeightJournalEntryUint64(s: JournalEntry) : uint64
   {
-    8 + |s.key| as uint64 + |s.value| as uint64
+    if s.JournalInsert? then 8 + |s.key| as uint64 + |s.value| as uint64
+      else 8 + |s.from| as uint64 + |s.to| as uint64
   }
 
   function WeightJournalEntry(s: JournalEntry) : int
   {
-    8 + |s.key| + |s.value|
+    if s.JournalInsert? then 8 + |s.key| + |s.value| else 8 + |s.from| + |s.to|
   }
 
   function SumJournalEntries(s: seq<JournalEntry>) : int

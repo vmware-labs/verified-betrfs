@@ -109,17 +109,30 @@ module JournalistMarshallingImpl {
       var start' := if start+1 == seq_length(entries) then 0 else start+1;
       JournalistMarshallingModel.
           lemma_cyclicRange_popFront_Sum(entries[..], start, len);
-     
+
       var entry := seq_get(entries, start);
-      WriteIntOnto(buf, numBlocks, idx, |entry.key| as uint32);
-      var idx1 := idx + 4;
-      WriteOnto(buf, numBlocks, idx1, entry.key);
-      var idx2 := idx1 + |entry.key| as uint64;
-      WriteIntOnto(buf, numBlocks, idx2, |entry.value| as uint32);
-      var idx3 := idx2 + 4;
-      WriteOnto(buf, numBlocks, idx3, entry.value);
-      var idx4 := idx3 + |entry.value| as uint64;
-      WriteJournalEntries(buf, numBlocks, idx4, entries, start', len - 1);
+
+      if entry.JournalInsert? {
+        WriteIntOnto(buf, numBlocks, idx, |entry.key| as uint32);
+        var idx1 := idx + 4;
+        WriteOnto(buf, numBlocks, idx1, entry.key);
+        var idx2 := idx1 + |entry.key| as uint64;
+        WriteIntOnto(buf, numBlocks, idx2, |entry.value| as uint32);
+        var idx3 := idx2 + 4;
+        WriteOnto(buf, numBlocks, idx3, entry.value);
+        var idx4 := idx3 + |entry.value| as uint64;
+        WriteJournalEntries(buf, numBlocks, idx4, entries, start', len - 1);
+      } else {
+        WriteIntOnto(buf, numBlocks, idx, |entry.from| as uint32 + 4096);
+        var idx1 := idx + 4;
+        WriteOnto(buf, numBlocks, idx1, entry.from);
+        var idx2 := idx1 + |entry.from| as uint64;
+        WriteIntOnto(buf, numBlocks, idx2, |entry.to| as uint32);
+        var idx3 := idx2 + 4;
+        WriteOnto(buf, numBlocks, idx3, entry.to);
+        var idx4 := idx3 + |entry.to| as uint64;
+        WriteJournalEntries(buf, numBlocks, idx4, entries, start', len - 1);
+      }
     }
   }
 
