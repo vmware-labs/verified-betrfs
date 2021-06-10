@@ -37,8 +37,7 @@ module JournalInterpMod {
   predicate Invariant(v: Variables, cache: CacheIfc.Variables)
   {
     && v.WF()
-    && var sb := CurrentSuperblock(v);
-    && var optChain := ChainFrom(cache.dv, sb).chain;
+    && var optChain := ChainFrom(cache.dv, CurrentSuperblock(v)).chain;
     && optChain.Some?
     && ValidJournalChain(cache.dv, optChain.value)
     // Superblocks says chain ends where variables says it should
@@ -49,7 +48,7 @@ module JournalInterpMod {
       )
   }
 
-  // Interpret the chain of marshalled LSNs as a MsgSeq
+  // Interpret the chain of marshalled LSNs plus the unmarshalledTail as a MsgSeq
   function ChainAsMsgSeq(v: Variables, cache:CacheIfc.Variables) : (result : MsgSeq)
     requires v.WF()
     requires Invariant(v, cache)
@@ -58,9 +57,8 @@ module JournalInterpMod {
     ensures !result.IsEmpty() ==> result.seqEnd == v.unmarshalledLSN()
     ensures !result.IsEmpty() ==> v.boundaryLSN == result.seqStart
   {
-    var sb := CurrentSuperblock(v);
     // chain has all the marshalled messages
-    var chain := ChainFrom(cache.dv, sb).chain.value;
+    var chain := ChainFrom(cache.dv, CurrentSuperblock(v)).chain.value;
 
     // tail has all the unmarshalled messages
     var tailMsgs := TailToMsgSeq(v);
@@ -84,8 +82,7 @@ module JournalInterpMod {
       if (chain.interp.IsEmpty() && !tailMsgs.IsEmpty()) {
         calc {
           v.boundaryLSN;
-          sb.boundaryLSN;
-
+//          sb.boundaryLSN;
           tailMsgs.seqStart;
         }
       }
@@ -249,6 +246,13 @@ module JournalInterpMod {
     {
       match sk {
         case AdvanceMarshalledStep(newCU) => {
+          assert ChainFrom(cache'.dv, CurrentSuperblock(v')).chain.Some?;
+          calc {
+            ChainAsMsgSeq(v', cache');
+            ChainFrom(cache'.dv, sb).chain.value.interp.Concat(TailToMsgSeq(v'));
+            ChainFrom(cache.dv, sb).chain.value.interp.Concat(TailToMsgSeq(v));
+            ChainAsMsgSeq(v, cache);
+          }
           assume false; // this is the slightly harder case, because the chain actually changes.
           assert ChainAsMsgSeq(v, cache) == ChainAsMsgSeq(v', cache');
         }
@@ -276,7 +280,7 @@ module JournalInterpMod {
     requires v.persistentLSN < v.unmarshalledLSN()
     ensures IM(v, cache0, sb, base) == IM(v, cache1, sb, base)
   {
-    assume false; // there's a timeout here that seems to point at opaque WFChainInner. That's weird.
+//    assume false; // there's a timeout here that seems to point at opaque WFChainInner. That's weird.
     FrameOneChain(v, cache0, cache1, sb);
     // This works --- I'm suspicious -- Sowmya
     calc {
