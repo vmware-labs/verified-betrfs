@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "Journal.i.dfy"
+include "CacheLemmas.i.dfy"
 
 // The Module that Interprets the Journal.
 module JournalInterpMod {
@@ -16,7 +17,22 @@ module JournalInterpMod {
   import opened AllocationMod
   import opened JournalMachineMod
   import opened InterpMod
+  import CacheLemmasMod
 
+  function FreshestMarshalledCU(v: Variables) : Option<CU>
+    requires v.WF()
+  {
+    if v.marshalledLSN == v.boundaryLSN
+    then None
+    else Some(v.lsnToCU[v.marshalledLSN-1])
+  }
+
+  // This is the superblock that v would use if it all the marshalled stuff were clean
+  function CurrentSuperblock(v: Variables) : Superblock
+    requires v.WF()
+  {
+    Superblock(FreshestMarshalledCU(v), v.boundaryLSN)
+  }
 
   predicate Invariant(v: Variables, cache: CacheIfc.Variables)
   {
@@ -221,7 +237,7 @@ module JournalInterpMod {
     requires Invariant(v', cache')
     requires v.boundaryLSN < v.unmarshalledLSN()
     requires Internal(v, v', cache, cacheOps, sk);
-    requires CacheIfc.ApplyWrites(cache, cache, cacheOps)
+    requires CacheIfc.ApplyWrites(cache, cache', cacheOps)
     ensures v.boundaryLSN == v'.boundaryLSN
     ensures v.unmarshalledLSN() == v'.unmarshalledLSN()
     ensures IM(v, cache, sb, base) == IM(v', cache', sb, base)
@@ -231,6 +247,18 @@ module JournalInterpMod {
     forall lsn | v.boundaryLSN <= lsn < v.unmarshalledLSN()
       ensures InterpFor(v, cache, sb, base, lsn) == InterpFor(v', cache', sb, base, lsn)
     {
+      match sk {
+        case AdvanceMarshalledStep(newCU) => {
+          assume false; // this is the slightly harder case, because the chain actually changes.
+          assert ChainAsMsgSeq(v, cache) == ChainAsMsgSeq(v', cache');
+        }
+        case AdvanceCleanStep(newClean) => {
+          assert cacheOps == [];
+          CacheLemmasMod.EquivalentCaches(cache, cache', cacheOps);
+          assert ChainAsMsgSeq(v, cache) == ChainAsMsgSeq(v', cache');
+        }
+      }
+      assert ChainAsMsgSeq(v, cache) == ChainAsMsgSeq(v', cache');
     }
     assert IM(v, cache, sb, base) == IM(v', cache', sb, base);
   }

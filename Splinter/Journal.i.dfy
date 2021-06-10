@@ -220,19 +220,12 @@ module JournalMachineMod {
     && false // does something with allocation table?
   }
 
-  function FreshestCU(v: Variables) : Option<CU>
+  function FreshestCleanCU(v: Variables) : Option<CU>
     requires v.WF()
   {
     if v.cleanLSN == v.boundaryLSN
     then None
     else Some(v.lsnToCU[v.cleanLSN-1])
-  }
-
-  // This is the superblock that v represents
-  function CurrentSuperblock(v: Variables) : Superblock
-    requires v.WF()
-  {
-    Superblock(FreshestCU(v), v.boundaryLSN)
   }
 
   // Agrees to advance persistentLSN (to cleanLSN) and firstLSN (to newBoundary, coordinated
@@ -250,7 +243,7 @@ module JournalMachineMod {
     && (forall cu | cu in v.lsnToCU.Values :: cu in alloc.table)
 
     // This is the superblock that's going to become persistent.
-    && sb == Superblock(FreshestCU(v), newBoundaryLSN)
+    && sb == Superblock(FreshestCleanCU(v), newBoundaryLSN)
     && v' == v
   }
 
