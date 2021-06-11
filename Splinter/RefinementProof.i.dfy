@@ -3,7 +3,7 @@ include "ProgramInterp.i.dfy"
 include "ProofObligations.s.dfy"
 include "JournalInterp.i.dfy"
 include "SplinterTreeInvariants.i.dfy"
-
+include "CacheLemmas.i.dfy"
 
 module VeribetrIOSystem refines IOSystem {
   import P = ProgramMachineMod
@@ -24,6 +24,7 @@ module Proof refines ProofObligations {
   import SplinterTreeInvariantMod
 
   import CacheIfc
+  import CacheLemmasMod
 
   function I(v: ConcreteSystem.Variables) : CrashTolerantMapSpecMod.Variables
   {
@@ -105,11 +106,31 @@ module Proof refines ProofObligations {
     //assert BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) == BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
 
     // Only thing new is the journal -- make a lemma journal on Internal step
-    JournalInterpMod.InternalStepLemma(v.program.journal, v.program.cache, v'.program.journal, v'.program.cache,  v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree));
+    JournalInterpMod.InternalStepLemma(v.program.journal, v.program.cache, v'.program.journal, v'.program.cache,  v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree), cacheOps, sk);
 
     assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
       JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
   }
+
+  // Ensures that commit start of a new superblock does not change the interpretation
+  lemma CommitStartRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, seqBoundary: InterpMod.LSN)
+    requires Inv(v)
+    requires v.program.WF()
+
+    requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
+    requires pstep == ConcreteSystem.P.CommitStartStep(seqBoundary)
+    requires v.program.betree == v'.program.betree
+    requires v.program.journal == v'.program.journal
+
+    ensures Inv(v')
+    ensures SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
+     SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree)
+    ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+     JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
+  {
+
+  }
+
 
   // Ensures that commiting a new superblock does not change the interpretation
   lemma CommitCompleteRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step)
@@ -226,7 +247,8 @@ module Proof refines ProofObligations {
           //assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
           // JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
 
-          // hmm ... maybe we need to show that the cache doesn't change???
+          CommitStartRefines(v, v', uiop, cacheOps, pstep, seqBoundary);
+
           assert Inv(v');
       }
       case CommitCompleteStep() => {
