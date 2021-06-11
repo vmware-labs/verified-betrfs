@@ -51,6 +51,8 @@ module Arrays {
       curelement := tmp;
       i := i + 1;
     }
+
+    assert arr[..length+1] == Seq.insert(old(arr[..length]), element, pos as int) by { Seq.reveal_insert(); }
   }
 
   method replace1with2<T>(arr: array<T>, length: uint64, element1: T, element2: T, pos: uint64)
