@@ -2091,7 +2091,8 @@ method MarshallByteArray(val:V, ghost grammar:G, data:array<byte>, index:uint64)
     //assert len.value.u == (|val.b| as uint64);
     
     assert rest == data[index + 8..(index as int) + SizeOfV(val)] == val.b;
-    assert !len.None? && (len.value.u as int) <= |rest|;
+    assert |data_seq| as uint64 >= Uint64Size(); // observe
+    assert len.Some? && (len.value.u as int) <= |rest|;
     assert rest[0..len.value.u] == val.b;       // OBSERVE
     size := 8 + (|val.b| as uint64);
 }

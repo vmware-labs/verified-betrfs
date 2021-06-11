@@ -275,6 +275,7 @@ module BitLemmas {
         lemma_2toX();
         int_of_bits_split(m[0..8], m[8..16]);
         assert m[0..8] + m[8..16] == m[0..16];
+        assert int_of_bits(m[0..16]) == int_of_bits(m[0..8]) + 0x1_00 * int_of_bits(m[8..16]); // observe
       }
       int_of_bits(m[0..16])
         + int_of_bits(m[16..24]) * 0x1_00_00

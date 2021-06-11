@@ -20,10 +20,10 @@ module Multisets {
     a
   }
 
-  function {:opaque} Apply<A, B>(fn: A ~> B, s: multiset<A>) : (result: multiset<B>)
+  function {:opaque} Apply<A, B>(fn: A --> B, s: multiset<A>) : (result: multiset<B>)
     requires forall x | x in s :: fn.requires(x)
     ensures |result| == |s|
-    reads set x, o | x in s && o in fn.reads(x) :: o
+    // reads set x, o | x in s && o in fn.reads(x) :: o
   {
     if |s| == 0 then
       multiset{}
@@ -32,7 +32,7 @@ module Multisets {
       multiset{fn(x)} + Apply(fn, s - multiset{x})
   }
 
-  lemma ApplyEquivalentFns<A,B>(fn1: A ~> B, fn2: A ~> B, s: multiset<A>)
+  lemma ApplyEquivalentFns<A,B>(fn1: A --> B, fn2: A --> B, s: multiset<A>)
     requires forall x | x in s :: fn1.requires(x)
     requires forall x | x in s :: fn2.requires(x)
     requires forall x | x in s :: fn1(x) == fn2(x)
@@ -46,14 +46,14 @@ module Multisets {
     }
   }
   
-  lemma ApplySingleton<A, B>(fn: A ~> B, x: A)
+  lemma ApplySingleton<A, B>(fn: A --> B, x: A)
     requires fn.requires(x)
     ensures Apply(fn, multiset{x}) == multiset{fn(x)}
   {
     reveal_Apply();
   }
   
-  lemma ApplyAdditive<A,B>(fn: A ~> B, s1: multiset<A>, s2: multiset<A>)
+  lemma ApplyAdditive<A,B>(fn: A --> B, s1: multiset<A>, s2: multiset<A>)
     requires forall x | x in s1 :: fn.requires(x)
     requires forall x | x in s2 :: fn.requires(x)
     ensures Apply(fn, s1+s2) == Apply(fn, s1) + Apply(fn, s2)
@@ -101,7 +101,7 @@ module Multisets {
     }
   }
 
-  lemma ApplyMonotonic<A, B>(fn: A ~> B, s1: multiset<A>, s2: multiset<A>) 
+  lemma ApplyMonotonic<A, B>(fn: A --> B, s1: multiset<A>, s2: multiset<A>) 
     requires s1 <= s2
     requires forall x | x in s2 :: fn.requires(x)
     ensures Apply(fn, s1) <= Apply(fn, s2)
@@ -112,7 +112,7 @@ module Multisets {
     assert s2 == s1 + rest;
   }
   
-  lemma ApplySeq<A, B>(fn: A ~> B, s: seq<A>)
+  lemma ApplySeq<A, B>(fn: A --> B, s: seq<A>)
     requires forall i | 0 <= i < |s| :: fn.requires(s[i])
     ensures Apply(fn, multiset(s)) == multiset(Sequences.ApplyOpaque(fn, s))
     decreases s
