@@ -12,27 +12,21 @@ function error() {
     echo "::error file=${BASH_SOURCE[0]},line=${BASH_LINENO[0]}::$1"
 }
 
+# When a user requests a run manually, we can't use GITHUB_REF or
+# GITHUB_SHA because they point to the branch of the workflow file,
+# not the branch being checked (unless they happen to be the same).
+# So, instead, we get the identity of the branch being checked from
+# the horses mouth.
+COMMIT_SHA=`git rev-parse HEAD`
+BRANCH_NAMES=`git rev-parse --abbrev-ref HEAD`
 
-
+if [ -z $COMMIT_SHA ]; then
+    error "Could not determin commit SHA."
+    exit 1
+fi
 
 if [ -z "$GITHUB_REPOSITORY" ]; then
     error "GITHUB_REPOSITORY environment variable is not set"
-    exit 1
-fi
-
-if [ -z "$GH_PERSONAL_ACCESS_TOKEN" ]; then
-    error "GH_PERSONAL_ACCESS_TOKEN environment variable is not set"
-    exit 1
-fi
-
-if [ -z $GITHUB_REF ]; then
-    COMMITID=$GITHUB_SHA
-else 
-    COMMITID=`basename $GITHUB_REF`
-fi
-
-if [ -z $COMMITID ]; then
-    error "Could not determin commit ID."
     exit 1
 fi
 
@@ -45,7 +39,8 @@ echo GITHUB_HEAD_REF $GITHUB_HEAD_REF
 echo GITHUB_BASE_REF $GITHUB_BASE_REF
 echo GITHUB_REF $GITHUB_REF
 echo GITHUB_SHA $GITHUB_SHA
-echo COMMITID $COMMITID
+echo BRANCH_NAMES $BRANCH_NAMES
+echo COMMIT_SHA $COMMIT_SHA
 
 GIT_REPOSITORY_URL="https://${GH_PERSONAL_ACCESS_TOKEN}@${GITHUB_SERVER_URL#https://}/$GITHUB_REPOSITORY.wiki.git"
 
@@ -67,14 +62,15 @@ debug "Checking out wiki repository"
 debug "Removing old results"
 (
     cd "$tmp_dir" &&
-    git rm -rf --ignore-unmatch verichecks-results/$GITHUB_SHA
+    git rm -rf --ignore-unmatch verichecks-results/$COMMIT_SHA
 ) || exit 1
 
 debug "Copying new results"
 (
-    mkdir -p "$tmp_dir"/verichecks-results/$GITHUB_SHA &&
-    cp -r build "$tmp_dir"/verichecks-results/$GITHUB_SHA &&
-    echo -n $COMMITID > "$tmp_dir"/verichecks-results/$GITHUB_SHA/commitid
+    mkdir -p "$tmp_dir"/verichecks-results/$COMMIT_SHA &&
+    cp -r build "$tmp_dir"/verichecks-results/$COMMIT_SHA &&
+    echo -n $BRANCH_NAMES > "$tmp_dir"/verichecks-results/$COMMIT_SHA/commitid
+    date > "$tmp_dir"/verichecks-results/$COMMIT_SHA/commitid/date
 ) || exit 1
 
 debug "Regenerating table of contents"
@@ -104,7 +100,12 @@ debug "Regenerating table of contents"
             echo -n \[syntax-status-SVG\]\(verichecks-results/$d/build/Impl/Bundle.i.syntax-status.svg\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf ]; then
-            echo -n \[syntax-status-PDF\]\(verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf\) " - "
+            echo -n \[syntax-status-PDF\]\(verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf\) " "
+        fi
+        if [ -f verichecks-results/$d/date ]; then
+            echo -n "\("
+            cat verichecks-results/$d/date
+            echo -n "\)"
         fi
         echo
         echo
@@ -115,8 +116,8 @@ debug "Committing and pushing"
 (
     cd "$tmp_dir" &&
     git add verichecks-results.md &&
-    git add -f verichecks-results/$GITHUB_SHA/* &&
-    git commit -m "Veri-checks results for $GITHUB_SHA" &&
+    git add -f verichecks-results/$COMMIT_SHA/* &&
+    git commit -m "Veri-checks results for $COMMIT_SHA" &&
     git push --set-upstream "$GIT_REPOSITORY_URL" master
 ) || exit 1
 
