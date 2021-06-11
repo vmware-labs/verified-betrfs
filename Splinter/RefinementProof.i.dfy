@@ -111,13 +111,30 @@ module Proof refines ProofObligations {
       JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
   }
 
+  // Ensures that commiting a new superblock does not change the interpretation
+  lemma CommitCompleteRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step)
+    requires Inv(v)
+    requires v.program.WF()
+
+    requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
+    requires pstep == ConcreteSystem.P.CommitCompleteStep
+
+    ensures Inv(v')
+    ensures SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
+     SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree)
+    ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+     JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
+  {
+
+  }
+
   lemma PutRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: SplinterTreeMachineMod.Skolem)
     // Requires needed for IM to work
     requires v.program.WF()
     requires Inv(v)
-    requires Inv(v')
 
     // Actual requires
+    ensures Inv(v')
     requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
     requires pstep == ConcreteSystem.P.PutStep(sk)
     requires uiop.OperateOp?
@@ -185,6 +202,7 @@ module Proof refines ProofObligations {
 
           // here uiop is not a NoOp
           assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop); // NOT DONE!!!!!
+          assume Inv(v');
       }
       case CompleteSyncStep(syncReqId) => {
         // Discovery of a stable point in the line of updates
@@ -196,17 +214,31 @@ module Proof refines ProofObligations {
       case CommitStartStep(seqBoundary) => {
           // Start pushing subperblock to disk
           assert uiop.NoopOp?;
-          assert I(v) ==  I(v');
+          assume I(v) ==  I(v');
           assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
           assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+
+          assert v.program.betree == v'.program.betree;
+          //assert SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
+          // SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree);
+          assert v.program.phase.Running?;
+          assert v.program.journal == v'.program.journal;
+          //assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+          // JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
+
+          // hmm ... maybe we need to show that the cache doesn't change???
           assert Inv(v');
       }
       case CommitCompleteStep() => {
         // We have a new stable subperblock
         assert uiop.NoopOp?;
         assert v.program.phase.Running?; // believes this
-        assert v'.program.phase.Running?;
 
+        var sb := v.program.inFlightSuperblock.value;
+        assert JournalMachineMod.CommitComplete(v.program.journal, v'.program.journal, v.program.cache, sb.journal);
+        assert SplinterTreeMachineMod.CommitComplete(v.program.betree, v'.program.betree, v.program.cache, sb.betree);
+
+        CommitCompleteRefines(v, v', uiop, cacheOps, pstep);
 
         assert I(v) ==  I(v');
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
