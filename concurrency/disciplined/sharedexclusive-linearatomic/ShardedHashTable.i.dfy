@@ -181,27 +181,45 @@ module ShardedHashTable refines ShardedStateMachine {
     || slot_idx < search_h < slot_h// search_h, slot_h wrap around the end of array
   }
 
-  predicate TrueForSubTableNoWrap(table: FixedTable, start: Index, end: int, key: Key, p: (FixedTable, Index, Key) -> bool)
+  type EntryPredicate = (Option<Entry>, Index, Key) -> bool
+
+  predicate TrueForSubTableNoWrap(table: FixedTable, start: Index, end: int, key: Key, p: EntryPredicate)
     requires start <= end <= FixedSize();
   {
-    forall i | start <= i < end :: p(table, i, key)
+    forall i | start <= i < end :: p(table[i], i, key)
   }
 
-  predicate TrueForSubTable(table: FixedTable, start: Index, end: Index, key: Key, p: (FixedTable, Index, Key) -> bool)
+  predicate TrueForSubTable(table: FixedTable, start: Index, end: Index, key: Key, p: EntryPredicate)
   {
-    (if start <= end then
+    if start <= end then
       TrueForSubTableNoWrap(table, start, end, key, p)
     else (
       && TrueForSubTableNoWrap(table, start, FixedSize(), key, p)
       && TrueForSubTableNoWrap(table, 0, end, key, p)
-    ))
+    )
   }
 
-  predicate KeyNotFoundSlot(table: FixedTable, slot_index: Index, key: Key)
+  predicate KeyEquivSubTablesNoWrap(table: FixedTable, table': FixedTable, start: Index, end: int)
+    requires start <= end <= FixedSize();
   {
-    && table[slot_index].Some?
-    && table[slot_index].value.Full?
-    && table[slot_index].value.key != key
+    forall i | start <= i < end :: (table[i] == table'[i])
+  }
+
+  predicate KeyEquivSubTables(table: FixedTable, table': FixedTable, start: Index, end: Index)
+  {
+    if start <= end then
+      KeyEquivSubTablesNoWrap(table, table', start, end)
+    else (
+      && KeyEquivSubTablesNoWrap(table, table', start, FixedSize())
+      && KeyEquivSubTablesNoWrap(table, table', 0, end)
+    )
+  }
+
+  predicate KeyNotFoundSlot(entry: Option<Entry>, slot_index: Index, key: Key)
+  {
+    && entry.Some?
+    && entry.value.Full?
+    && entry.value.key != key
   }
 
   predicate KeyNotFound(table: FixedTable, start: Index, end: Index, key: Key)
@@ -209,23 +227,23 @@ module ShardedHashTable refines ShardedStateMachine {
     TrueForSubTable(table, start, end, key, KeyNotFoundSlot)
   }
 
-  predicate ShouldSkipSlot(table: FixedTable, slot_index: Index, insert_key: Key)
+  predicate ShouldSkipSlot(entry: Option<Entry>, slot_index: Index, insert_key: Key)
   {
-    && KeyNotFoundSlot(table, slot_index, insert_key)
+    && KeyNotFoundSlot(entry, slot_index, insert_key)
     && var insert_h := hash(insert_key);
-    && var slot_h := hash(table[slot_index].value.key);
+    && var slot_h := hash(entry.value.key);
     !ShouldHashGoBefore(insert_h, slot_h, slot_index)
   }
 
-  predicate ShouldSkip(table: FixedTable, start: Index, end: Index, key: Key)
+  predicate ShouldSkip(table: FixedTable, start: Index, end: Index, insert_key: Key)
   {
-    TrueForSubTable(table, start, end, key, ShouldSkipSlot)
+    TrueForSubTable(table, start, end, insert_key, ShouldSkipSlot)
   }
 
-  // lemma SkipImpiesNotFoundSlot(table: FixedTable, slot_index: Index, insert_key: Key)
-  //   requires ShouldSkipSlot(table, slot_index, insert_key)
+  // lemma SkipImpiesNotFoundSlot(table: FixedTable, start: Index, end: Index, insert_key: Key)
+  //   requires ShouldSkip(table, start, end, insert_key)
   // {
-  //   assert KeyNotFoundSlot(table, slot_index, insert_key);
+  //   assert KeyNotFound(table, start, end, insert_key);
   // }
 
   predicate Complete(table: FixedTable)
@@ -275,7 +293,7 @@ module ShardedHashTable refines ShardedStateMachine {
     // skip upto (not including) start
     && ShouldSkip(table, h, start, key)
     // insert at start
-    && !ShouldSkipSlot(table, start, key)
+    && !ShouldSkipSlot(table[start], start, key)
     // end is empty 
     && table[end].Some?
     && table[end].value.Empty?
@@ -412,9 +430,9 @@ module ShardedHashTable refines ShardedStateMachine {
   //   exists step :: NextStep(s, s', step)
   // }
 
-//////////////////////////////////////////////////////////////////////////////
-// global-level Invariant proof
-//////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
+// // global-level Invariant proof
+// //////////////////////////////////////////////////////////////////////////////
 
   // Keys are unique, although we don't count entries being removed
   predicate KeysUnique(table: FixedTable)
@@ -441,8 +459,6 @@ module ShardedHashTable refines ShardedStateMachine {
       adjust2(h, e) <= adjust2(i, e)
     )
   }
-
-
 
   // 'Robin Hood' order
   // It's not enough to say that hash(entry[i]) <= hash(entry[i+1])
@@ -471,7 +487,8 @@ module ShardedHashTable refines ShardedStateMachine {
     && KeysUnique(table)
     && (forall e: Index, i: Index :: ValidHashInSlot(table, e, i))
     && (forall e: Index, j: Index, k: Index :: ValidHashOrdering(table, e, j, k))
-    && (forall i: Index :: table[i].value.Full? ==> ShouldSkip(table, hash(table[i].value.key), i, table[i].value.key))
+    && (forall i: Index :: table[i].value.Full? ==>
+      ShouldSkip(table, hash(table[i].value.key), i, table[i].value.key))
   }
 
   function EntryQuantity(entry: Option<Entry>): nat
@@ -518,177 +535,195 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-  // lemma OverwriteStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), end: Index)
-  //   requires Inv(s)
-  //   requires Overwrite(s, s', ticket, kv, end)
-  //   ensures Inv(s')
-  // {
-  //   assert forall i: Index :: s'.table[i].value.Full? ==> 
-  //     s'.table[i].value.key == s.table[i].value.key;
-    
-  //   forall e: Index, i: Index
-  //     ensures ValidHashInSlot(s'.table, e, i)
-  //   {
-  //     assert ValidHashInSlot(s.table, e, i);
-  //   }
-
-  //   forall e: Index, j: Index, k: Index
-  //     ensures ValidHashOrdering(s'.table, e, j, k)
-  //   {
-  //     assert ValidHashOrdering(s.table, e, j, k);
-  //     assert ValidHashInSlot(s.table, e, j);
-  //     assert ValidHashInSlot(s.table, e, k);
-  //   }
-
-  //   TableQuantityReplace1(s.table, s'.table, end);
-  // }
-
-  lemma InsertStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
+  lemma OverwriteStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), end: Index)
     requires Inv(s)
-    requires Insert(s, s', ticket, kv, start, end)
+    requires Overwrite(s, s', ticket, kv, end)
+    ensures Inv(s')
   {
-    var (key, value) := kv;
-    var h := hash(key);
+    assert forall i: Index :: s'.table[i].value.Full? ==> 
+      s'.table[i].value.key == s.table[i].value.key;
+    
+    forall e: Index, i: Index
+      ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
 
-    var table := s.table;
-    var table' := s'.table;
+    forall e: Index, j: Index, k: Index
+      ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+    }
 
-    assert table' == TableRightShiftTransition(table, Some(Full(key, value)), start, end);
+    forall i: Index | s'.table[i].value.Full? 
+      ensures ShouldSkip(s'.table, hash(s'.table[i].value.key), i, s'.table[i].value.key)
+    {
+      assert ShouldSkip(s.table, hash(s.table[i].value.key), i, s.table[i].value.key);
+    }
 
-    // assert ShouldSkip(table, h, start, key);
-    // assert KeyNotFound(table, h, start, key);
-
-    // forall i: Index, j: Index | 
-    //   i != j && table'[i].value.Full? && table'[j].value.Full?
-    // ensures table'[i].value.key != table'[j].value.key
-    // {
-
-    // }
+    TableQuantityReplace1(s.table, s'.table, end);
   }
 
-//   lemma RemoveStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, i: Index, end: Index)
+//   lemma InsertStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
 //     requires Inv(s)
-//     requires Remove(s, s',ticket, i, end)
-//     ensures Inv(s')
+//     requires Insert(s, s', ticket, kv, start, end)
 //   {
-//     assume false;
+//     var (key, value) := kv;
+//     var h := hash(key);
+
+//     var table := s.table;
+//     var table' := s'.table;
+
+//     assert table' == TableRightShiftTransition(table, Some(Full(key, value)), start, end);
+
+//     // assert ShouldSkip(table, h, start, key);
+//     // assert KeyNotFound(table, h, start, key);
+
+//     // if 
+
+//     // forall i: Index, j: Index | 
+//     //   i != j && table'[i].value.Full? && table'[j].value.Full?
+//     // ensures table'[i].value.key != table'[j].value.key
+//     // {
+//     //   if start == end {
+//     //     if i == end {
+//     //       // assert 
+
+//     //       assume false;
+//     //     } else if j == end {
+//     //       assume false;
+//     //     }
+//     //   } else {
+//     //     assume false;
+//     //   }
+//     // }
 //   }
 
-//   lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
-//   requires Inv(s)
-//   requires NextStep(s, s', step)
-//   ensures Inv(s')
-//   {
-//     match step {
-//       case InsertStep(ticket, stutters) => assume false;
-//       case OverwriteStep(ticket, stutter) => 
-//         OverwriteStepPreservesInv(s, s', ticket, stutter);
-//       case RemoveStep(ticket, i, end) =>
-//         RemoveStepPreservesInv(s, s', ticket, i, end);
-//       case _ => assert Inv(s');
-//     }
-//   }
+// //   lemma RemoveStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, i: Index, end: Index)
+// //     requires Inv(s)
+// //     requires Remove(s, s',ticket, i, end)
+// //     ensures Inv(s')
+// //   {
+// //     assume false;
+// //   }
 
-//   lemma Next_PreservesInv(s: Variables, s': Variables)
-//   requires Inv(s)
-//   requires Next(s, s')
-//   ensures Inv(s')
-//   {
-//     var step :| NextStep(s, s', step);
-//     NextStep_PreservesInv(s, s', step);
-//   }
+// //   lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
+// //   requires Inv(s)
+// //   requires NextStep(s, s', step)
+// //   ensures Inv(s')
+// //   {
+// //     match step {
+// //       case InsertStep(ticket, stutters) => assume false;
+// //       case OverwriteStep(ticket, stutter) => 
+// //         OverwriteStepPreservesInv(s, s', ticket, stutter);
+// //       case RemoveStep(ticket, i, end) =>
+// //         RemoveStepPreservesInv(s, s', ticket, i, end);
+// //       case _ => assert Inv(s');
+// //     }
+// //   }
 
-// //////////////////////////////////////////////////////////////////////////////
-// // fragment-level validity defined wrt Inv
-// //////////////////////////////////////////////////////////////////////////////
-//   predicate Valid(s: Variables)
-//     ensures Valid(s) ==> s.Variables?
-//   {
-//     && s.Variables?
-//     && exists t :: Inv(add(s, t))
-//   }
+// //   lemma Next_PreservesInv(s: Variables, s': Variables)
+// //   requires Inv(s)
+// //   requires Next(s, s')
+// //   ensures Inv(s')
+// //   {
+// //     var step :| NextStep(s, s', step);
+// //     NextStep_PreservesInv(s, s', step);
+// //   }
 
-//   lemma InvImpliesValid(s: Variables)
-//     requires Inv(s)
-//     ensures Valid(s)
-//   {
-//     // reveal Valid();
-//     add_unit(s);
-//   }
+// // //////////////////////////////////////////////////////////////////////////////
+// // // fragment-level validity defined wrt Inv
+// // //////////////////////////////////////////////////////////////////////////////
+// //   predicate Valid(s: Variables)
+// //     ensures Valid(s) ==> s.Variables?
+// //   {
+// //     && s.Variables?
+// //     && exists t :: Inv(add(s, t))
+// //   }
 
-//   lemma EmptyTableQuantityIsZero(infos: Table)
-//     requires (forall i | 0 <= i < |infos| :: infos[i] == Some(Empty))
-//     ensures TableQuantity(infos) == 0
-//   {
-//     reveal_TableQuantity();
-//   }
+// //   lemma InvImpliesValid(s: Variables)
+// //     requires Inv(s)
+// //     ensures Valid(s)
+// //   {
+// //     // reveal Valid();
+// //     add_unit(s);
+// //   }
 
-//   lemma InitImpliesValid(s: Variables)
-//   //requires Init(s)
-//   //ensures Valid(s)
-//   {
-//     EmptyTableQuantityIsZero(s.table);
-//     InvImpliesValid(s);
-//   }
+// //   lemma EmptyTableQuantityIsZero(infos: Table)
+// //     requires (forall i | 0 <= i < |infos| :: infos[i] == Some(Empty))
+// //     ensures TableQuantity(infos) == 0
+// //   {
+// //     reveal_TableQuantity();
+// //   }
 
-//   lemma NextPreservesValid(s: Variables, s': Variables)
-//   //requires Next(s, s')
-//   //requires Valid(s)
-//   ensures Valid(s')
-//   {
-//     // reveal Valid();
-//     var t :| Inv(add(s, t));
-//     InvImpliesValid(add(s, t));
-//     update_monotonic(s, s', t);
-//     Next_PreservesInv(add(s, t), add(s', t));
-//   }
+// //   lemma InitImpliesValid(s: Variables)
+// //   //requires Init(s)
+// //   //ensures Valid(s)
+// //   {
+// //     EmptyTableQuantityIsZero(s.table);
+// //     InvImpliesValid(s);
+// //   }
 
-//   predicate TransitionEnable(s: Variables, step: Step)
-//   {
-//     match step {
-//     }
-//   }
+// //   lemma NextPreservesValid(s: Variables, s': Variables)
+// //   //requires Next(s, s')
+// //   //requires Valid(s)
+// //   ensures Valid(s')
+// //   {
+// //     // reveal Valid();
+// //     var t :| Inv(add(s, t));
+// //     InvImpliesValid(add(s, t));
+// //     update_monotonic(s, s', t);
+// //     Next_PreservesInv(add(s, t), add(s', t));
+// //   }
 
-//   function GetTransition(s: Variables, step: Step): (s': Variables)
-//     requires TransitionEnable(s, step)
-//     ensures NextStep(s, s', step);
-//   {
-//     match step {
-//     }
-//   }
+// //   predicate TransitionEnable(s: Variables, step: Step)
+// //   {
+// //     match step {
+// //     }
+// //   }
 
-//   // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Next()
-//   glinear method easy_transform_step(glinear b: Variables, ghost step: Step)
-//   returns (glinear c: Variables)
-//     requires TransitionEnable(b, step)
-//     ensures c == GetTransition(b, step)
-//   {
-//     var e := GetTransition(b, step);
-//     c := do_transform(b, e);
-//   }
+// //   function GetTransition(s: Variables, step: Step): (s': Variables)
+// //     requires TransitionEnable(s, step)
+// //     ensures NextStep(s, s', step);
+// //   {
+// //     match step {
+// //     }
+// //   }
 
-//   lemma NewTicketPreservesValid(r: Variables, id: int, input: Ifc.Input)
-//     //requires Valid(r)
-//     ensures Valid(add(r, input_ticket(id, input)))
-//   {
-//     // reveal Valid();
-//     var ticket := input_ticket(id, input);
-//     var t :| Inv(add(r, t));
+// //   // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Next()
+// //   glinear method easy_transform_step(glinear b: Variables, ghost step: Step)
+// //   returns (glinear c: Variables)
+// //     requires TransitionEnable(b, step)
+// //     ensures c == GetTransition(b, step)
+// //   {
+// //     var e := GetTransition(b, step);
+// //     c := do_transform(b, e);
+// //   }
 
-//     assert add(add(r, ticket), t).table == add(r, t).table;
-//     assert add(add(r, ticket), t).insert_capacity == add(r, t).insert_capacity;
-//   }
+// //   lemma NewTicketPreservesValid(r: Variables, id: int, input: Ifc.Input)
+// //     //requires Valid(r)
+// //     ensures Valid(add(r, input_ticket(id, input)))
+// //   {
+// //     // reveal Valid();
+// //     var ticket := input_ticket(id, input);
+// //     var t :| Inv(add(r, t));
 
-//   // Trusted composition tools. Not sure how to generate them.
-//   glinear method {:extern} enclose(glinear a: Count.Variables) returns (glinear h: Variables)
-//     requires Count.Valid(a)
-//     ensures h == unit().(insert_capacity := a)
+// //     assert add(add(r, ticket), t).table == add(r, t).table;
+// //     assert add(add(r, ticket), t).insert_capacity == add(r, t).insert_capacity;
+// //   }
 
-//   glinear method {:extern} declose(glinear h: Variables) returns (glinear a: Count.Variables)
-//     requires h.Variables?
-//     requires h.table == unitTable() // h is a unit() except for a
-//     requires h.tickets == multiset{}
-//     requires h.stubs == multiset{}
-//     ensures a == h.insert_capacity
-// */  
+// //   // Trusted composition tools. Not sure how to generate them.
+// //   glinear method {:extern} enclose(glinear a: Count.Variables) returns (glinear h: Variables)
+// //     requires Count.Valid(a)
+// //     ensures h == unit().(insert_capacity := a)
+
+// //   glinear method {:extern} declose(glinear h: Variables) returns (glinear a: Count.Variables)
+// //     requires h.Variables?
+// //     requires h.table == unitTable() // h is a unit() except for a
+// //     requires h.tickets == multiset{}
+// //     requires h.stubs == multiset{}
+// //     ensures a == h.insert_capacity
+// // */  
 }
