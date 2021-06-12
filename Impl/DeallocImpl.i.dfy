@@ -26,7 +26,7 @@ module DeallocImpl {
 
   import opened NativeTypes
 
-  method Dealloc(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  method {:timeLimitMultiplier 6} Dealloc(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
   requires old_s.Inv()
   requires io.initialized()
   requires old_s.Ready?

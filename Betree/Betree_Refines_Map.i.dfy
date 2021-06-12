@@ -269,7 +269,7 @@ module Betree_Refines_Map {
     LookupImpliesMap(s, q.key, q.value, q.lookup);
   }
 
-  lemma SuccQueryStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, q: SuccQuery)
+  lemma {:timeLimitMultiplier 2} SuccQueryStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, q: SuccQuery)
     requires Inv(s)
     requires BetreeStepUI(BetreeSuccQuery(q), uiop)
     requires BetreeInv.SuccQuery(s.bcv, s'.bcv, q)

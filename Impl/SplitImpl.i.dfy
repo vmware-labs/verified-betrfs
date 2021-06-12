@@ -48,7 +48,7 @@ module SplitImpl {
     return succ && weight <= MaxTotalBucketWeightUint64();
   }
 
-  method splitBookkeeping(linear inout s: ImplVariables, left_childref: BT.G.Reference,
+  method {:timeLimitMultiplier 2} splitBookkeeping(linear inout s: ImplVariables, left_childref: BT.G.Reference,
     right_childref: BT.G.Reference, parentref: BT.G.Reference, 
     fparent_children: seq<BT.G.Reference>, shared left_child: Node, 
     shared right_child: Node, slot: uint64)

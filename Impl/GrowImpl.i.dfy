@@ -29,7 +29,7 @@ module GrowImpl {
   import opened NativeTypes
 
   /// The root was found to be too big: grow
-  method doGrow(linear inout s: ImplVariables)
+  method {:timeLimitMultiplier 3} doGrow(linear inout s: ImplVariables)
   requires old_s.Inv()
   requires old_s.Ready?
   requires BT.G.Root() in old_s.I().cache

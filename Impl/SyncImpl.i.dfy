@@ -375,7 +375,7 @@ module SyncImpl {
     }
   }
 
-  method TryToWriteBlock(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  method {:timeLimitMultiplier 4} TryToWriteBlock(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
   requires old_s.Ready? && old_s.Inv()
   requires io.initialized()
   requires ref in old_s.cache.I()

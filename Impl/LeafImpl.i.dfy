@@ -32,7 +32,7 @@ module LeafImpl {
     k2 := [] + k;
   }
 
-  method repivotLeafInternal(linear inout s: ImplVariables, ref: BT.G.Reference)
+  method {:timeLimitMultiplier 2} repivotLeafInternal(linear inout s: ImplVariables, ref: BT.G.Reference)
   requires old_s.Inv()
   requires old_s.Ready?
   requires ref in old_s.ephemeralIndirectionTable.I().graph

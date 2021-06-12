@@ -251,7 +251,7 @@ module PivotBetreeSpecWFNodes {
     }
   }
 
-  lemma ValidSplitWritesWFNodes(f: NodeFusion)
+  lemma {:timeLimitMultiplier 2} ValidSplitWritesWFNodes(f: NodeFusion)
   requires ValidSplit(f)
   requires forall i | 0 <= i < |SplitReads(f)| :: WFNode(SplitReads(f)[i].node)
   ensures WFNode(f.split_parent);
@@ -331,7 +331,7 @@ module PivotBetreeSpecWFNodes {
     assert InvNode(f.right_child);
   }
 
-  lemma ValidMergeWritesWFNodes(f: NodeFusion)
+  lemma {:timeLimitMultiplier 4} ValidMergeWritesWFNodes(f: NodeFusion)
   requires ValidMerge(f)
   requires forall i | 0 <= i < |MergeReads(f)| :: WFNode(MergeReads(f)[i].node)
   ensures WFNode(f.fused_parent);
@@ -376,7 +376,7 @@ module PivotBetreeSpecWFNodes {
     WellMarshalledMergeBucketsInList(f.split_parent.buckets, f.slot_idx, f.split_parent.pivotTable);
   }
 
-  lemma ValidMergeWritesInvNodes(f: NodeFusion)
+  lemma {:timeLimitMultiplier 4} ValidMergeWritesInvNodes(f: NodeFusion)
   requires ValidMerge(f)
   requires forall i | 0 <= i < |MergeReads(f)| :: InvNode(MergeReads(f)[i].node)
   ensures InvNode(f.fused_parent);

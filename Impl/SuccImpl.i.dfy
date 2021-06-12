@@ -86,7 +86,7 @@ module SuccImpl {
     }
   }
 
-  method getPathInternal(
+  method {:timeLimitMultiplier 4} getPathInternal(
       linear inout s: ImplVariables,
       io: DiskIOHandler,
       key: Key,
@@ -213,7 +213,7 @@ module SuccImpl {
     }
   }
 
-  method getPath(
+  method {:timeLimitMultiplier 2} getPath(
       linear inout s: ImplVariables,
       io: DiskIOHandler,
       key: Key,

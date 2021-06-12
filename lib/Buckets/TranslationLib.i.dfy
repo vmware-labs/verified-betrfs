@@ -49,7 +49,7 @@ module TranslationLib {
         && TranslateKey(pt', et', key) == TranslateKey(pt, et, key))
   }
 
-  function SplitLeftEdges(et: EdgeTable, pt: PivotTable, pivot: Key) : (et': EdgeTable)
+  function {:timeLimitMultiplier 4} SplitLeftEdges(et: EdgeTable, pt: PivotTable, pivot: Key) : (et': EdgeTable)
   requires WFPivots(pt)
   requires WFEdges(et, pt)
   requires ValidLeftCutOffKey(pt, pivot)
@@ -87,7 +87,7 @@ module TranslationLib {
     )
   }
 
-  function SplitRightEdges(et: EdgeTable, pt: PivotTable, pivot: Key) : (et': EdgeTable)
+  function  {:timeLimitMultiplier 4} SplitRightEdges(et: EdgeTable, pt: PivotTable, pivot: Key) : (et': EdgeTable)
   requires WFPivots(pt)
   requires WFEdges(et, pt)
   requires BoundedKey(pt, pivot)
@@ -125,7 +125,7 @@ module TranslationLib {
     )
   }
 
-  lemma WFConcatEdges(leftpt: PivotTable, leftet: EdgeTable, rightpt: PivotTable, rightet: EdgeTable, pt: PivotTable)
+  lemma {:timeLimitMultiplier 3} WFConcatEdges(leftpt: PivotTable, leftet: EdgeTable, rightpt: PivotTable, rightet: EdgeTable, pt: PivotTable)
   requires WFPivots(leftpt)
   requires WFPivots(rightpt)
   requires WFPivots(pt)

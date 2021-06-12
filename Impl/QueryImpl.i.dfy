@@ -42,7 +42,7 @@ module QueryImpl {
   import opened ViewOp
 
   // == query ==
-  method  {:timeLimitMultiplier 3}  queryIterate(linear inout s: ImplVariables, querykey: Key, key: Key, msg: Message,
+  method  {:timeLimitMultiplier 6}  queryIterate(linear inout s: ImplVariables, querykey: Key, key: Key, msg: Message,
     ref: BT.G.Reference, io: DiskIOHandler, counter: uint64, ghost lookup: seq<BT.Layer>)
   returns (res: Option<Value>)
 

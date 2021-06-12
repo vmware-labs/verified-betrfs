@@ -20,7 +20,7 @@ module BitsetLemmas {
   {
   }
 
-  lemma {:timeLimitMultiplier 15} bit_comp_ne_expanded(i: uint64, j: uint64)
+  lemma {:timeLimitMultiplier 18} bit_comp_ne_expanded(i: uint64, j: uint64)
   requires i < 64
   requires j < 64
   requires i != j

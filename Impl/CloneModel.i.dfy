@@ -63,7 +63,7 @@ module CloneModel {
     )
   }
 
-  lemma doCloneCorrect(s: BBC.Variables, from: Key, to: Key, replay: bool)
+  lemma {:timeLimitMultiplier 2}doCloneCorrect(s: BBC.Variables, from: Key, to: Key, replay: bool)
   requires doClone.requires(s, from, to)
   requires s.totalCacheSize() <= MaxCacheSize()
   ensures var (s', success) := doClone(s, from, to);

@@ -33,7 +33,7 @@ module SuccModel {
 
   // Awkwardly split up for verification time reasons
 
-  function {:opaque} getPathInternal(
+  function {:opaque} {:timeLimitMultiplier 2} getPathInternal(
       s: BBC.Variables,
       io: IO,
       key: Key,
@@ -106,6 +106,7 @@ module SuccModel {
         assert pset.Some? ==> IsPrefix(pset.value.prefix, key);
 
         var pset' := ComposePrefixSet(pset, translate);
+        assert pset'.Some? ==> IsPrefix(pset'.value.prefix, key');
         ComposePrefixSetCorrect(pset, translate, pset', startKey, key, key');
 
         lemmaChildInGraph(s, ref, node.children.value[r]);
@@ -306,7 +307,7 @@ module SuccModel {
     }
   }
 
-  lemma lemmaGetPathResult(s: BBC.Variables, io: IO, startKey: Key, key: Key, acc: seq<Bucket>, tt: TranslationTable,
+  lemma {:timeLimitMultiplier 8} lemmaGetPathResult(s: BBC.Variables, io: IO, startKey: Key, key: Key, acc: seq<Bucket>, tt: TranslationTable,
     lookup: BT.Lookup, start: UI.RangeStart, upTo: Option<Key>, pset: Option<PrefixSet>, maxToFind: int, ref: BT.G.Reference, counter: uint64)
   requires BBC.Inv(s) && s.Ready?
   requires io.IOInit?
@@ -429,8 +430,12 @@ module SuccModel {
 
             assert translate.Some? ==> IsPrefix(translate.value.prefix, key);
             assert pset.Some? ==> IsPrefix(pset.value.prefix, key);
+            assert pset.Some? && translate.Some? ==> 
+              ( IsPrefix(pset.value.prefix, translate.value.prefix)
+              || IsPrefix(translate.value.prefix, pset.value.prefix));
 
             var pset' := ComposePrefixSet(pset, translate);
+            assert pset'.Some? ==> IsPrefix(pset'.value.prefix, key');
             ComposePrefixSetCorrect(pset, translate, pset', startKey, key, key');
             lemmaGetPathResult(s, io, startKey, key', acc', tt', lookup', start, upTo', pset', maxToFind, node.children.value[r], counter - 1);
           }

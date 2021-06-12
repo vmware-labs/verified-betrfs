@@ -86,7 +86,7 @@ module EvictImpl {
     }
   }
 
-  method EvictOrDealloc(linear inout s: ImplVariables, io: DiskIOHandler)
+  method {:timeLimitMultiplier 10} EvictOrDealloc(linear inout s: ImplVariables, io: DiskIOHandler)
   requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires |old_s.cache.I()| > 0

@@ -886,7 +886,7 @@ module BucketImpl {
       b := true;
     }
 
-    static method BucketListConcat(linear left: lseq<MutBucket>, linear bucket: MutBucket, linear right: lseq<MutBucket>)
+    static method {:timeLimitMultiplier 2} BucketListConcat(linear left: lseq<MutBucket>, linear bucket: MutBucket, linear right: lseq<MutBucket>)
     returns (linear buckets: lseq<MutBucket>)
     requires bucket.Inv()
     requires InvLseq(left)
@@ -951,7 +951,7 @@ module BucketImpl {
       lseq_free(r);
     }
 
-    static method BucketListConcat3(linear left: lseq<MutBucket>, linear leftBucket: MutBucket,
+    static method {:timeLimitMultiplier 2} BucketListConcat3(linear left: lseq<MutBucket>, linear leftBucket: MutBucket,
       linear mid: lseq<MutBucket>, linear rightBucket: MutBucket, linear right: lseq<MutBucket>)
     returns (linear buckets: lseq<MutBucket>)
     requires leftBucket.Inv()

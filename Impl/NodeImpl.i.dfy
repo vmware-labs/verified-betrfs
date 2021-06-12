@@ -349,7 +349,7 @@ module NodeImpl {
       assert self.I().buckets == BT.NodeInsertKeyValue(old_self.I(), key, msg).buckets;
     }
 
-    static method RestrictAndTranslateChildBuckets(shared parent: Node, shared child: Node, slot: uint64, 
+    static method {:timeLimitMultiplier 2} RestrictAndTranslateChildBuckets(shared parent: Node, shared child: Node, slot: uint64, 
       parentprefix: Key, childprefix: Key, lbound: Key, ubound: Pivots.Element, 
       cLeft: uint64, cRight: uint64) returns (linear buckets: lseq<MutBucket>)
     requires parent.Inv()
@@ -544,7 +544,7 @@ module NodeImpl {
       buckets := MutBucket.EmptySeq(len-1);
     }
 
-    static method CloneNewRoot(shared node: Node, from: Key, to: Key)
+    static method {:timeLimitMultiplier 2}  CloneNewRoot(shared node: Node, from: Key, to: Key)
     returns (linear rootopt: lOption<Node>)
     requires to != []
     requires node.Inv()

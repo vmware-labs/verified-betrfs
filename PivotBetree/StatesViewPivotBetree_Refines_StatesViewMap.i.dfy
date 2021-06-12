@@ -57,7 +57,7 @@ module StatesViewPivotBetree_Refines_StatesViewMap {
     Ref.RefinesInit(s.disk[loc]);
   }
 
-  lemma RefinesNextStep(s: A.Variables, s': A.Variables, vop: VOp, step: A.Step)
+  lemma {:timeLimitMultiplier 4} RefinesNextStep(s: A.Variables, s': A.Variables, vop: VOp, step: A.Step)
     requires A.Inv(s)
     requires A.NextStep(s, s', vop, step)
     ensures A.Inv(s')

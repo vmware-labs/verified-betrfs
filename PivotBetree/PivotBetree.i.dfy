@@ -122,7 +122,7 @@ module PivotBetree refines UIStateMachine {
     && BInv.Inv(I(s))
   }
 
-  lemma OpRefines(s: Variables, s': Variables, op: PG.Op)
+  lemma {:timeLimitMultiplier 2} OpRefines(s: Variables, s': Variables, op: PG.Op)
   requires InvNode(op.node)
   requires ViewHasInvNodes(s.bcv.view)
   requires BI.OpStep(s.bcv, s'.bcv, op)
@@ -238,7 +238,7 @@ module PivotBetree refines UIStateMachine {
     }
   }*/
 
-  lemma BetreeStepRefines(s: Variables, s': Variables, uiop: UIOp, betreeStep: BetreeStep)
+  lemma {:timeLimitMultiplier 4} BetreeStepRefines(s: Variables, s': Variables, uiop: UIOp, betreeStep: BetreeStep)
   requires Inv(s)
   requires NextStep(s, s', uiop, BetreeStep(betreeStep))
   ensures Inv(s')

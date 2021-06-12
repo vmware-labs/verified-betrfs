@@ -6,7 +6,7 @@ include "IOModel.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 include "../lib/Buckets/BucketFlushModel.i.dfy"
 
-module FlushModel { 
+module FlushModel {
   import opened IOModel
   import opened BookkeepingModel
   import opened ViewOp
@@ -113,7 +113,7 @@ module FlushModel {
     )
   }
 
-  lemma {:timeLimitMultiplier 3} flushCorrect(s: BBC.Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node, refUpperBound: uint64)
+  lemma {:timeLimitMultiplier 6} flushCorrect(s: BBC.Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node, refUpperBound: uint64)
   requires flush.requires(s, parentref, slot, childref, child, refUpperBound)
   requires s.totalCacheSize() <= MaxCacheSize() - 1
   ensures var s' := flush(s, parentref, slot, childref, child, refUpperBound);

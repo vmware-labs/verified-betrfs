@@ -522,7 +522,7 @@ module PackedStringArray {
     result := hi - 1;
   }
 
-  method {:timeLimitMultiplier 3} BinarySearchIndexOfFirstKeyGtePivot(psa: Psa, key: UpperLexOrder.Element)
+  method {:timeLimitMultiplier 5} BinarySearchIndexOfFirstKeyGtePivot(psa: Psa, key: UpperLexOrder.Element)
   returns (idx: uint64)
   requires WF(psa)
   ensures idx as int
