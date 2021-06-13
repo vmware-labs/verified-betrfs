@@ -273,6 +273,8 @@ module PivotBetreeSpec {
       assert LookupFollowsChildEdgeAtLayer(lookup, idx);
 
       var pset := ComposePrefixSet(prev, curr);
+      assert pset.Some? ==> IsPrefix(pset.value.prefix, lookup[idx+1].currentKey);
+
       var tt := [ pset ] + LookupTranslationTable(lookup, idx + 1, pset);
       tt
     )
