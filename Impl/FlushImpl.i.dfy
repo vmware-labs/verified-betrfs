@@ -44,7 +44,7 @@ module FlushImpl {
 
   requires old_s.cache.I()[parentref].children.Some?
   requires 0 <= slot as int < |old_s.cache.I()[parentref].children.value|
-  requires old_s.cache.I()[parentref].children.value[slot] == childrefs
+  requires old_s.cache.I()[parentref].children.value[slot] == childref
 
   requires childref in old_s.ephemeralIndirectionTable.I().graph
 
