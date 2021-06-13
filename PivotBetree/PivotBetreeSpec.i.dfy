@@ -630,7 +630,7 @@ module PivotBetreeSpec {
     }
   }
 
-  function RestrictAndTranslateChild(parent: Node, child: Node, slot: int): (newchild: Node)
+  function {:timeLimitMultiplier 2} RestrictAndTranslateChild(parent: Node, child: Node, slot: int): (newchild: Node)
   requires WFNode(parent)
   requires WFNode(child)
   requires 0 <= slot < NumBuckets(parent.pivotTable)
@@ -956,7 +956,7 @@ module PivotBetreeSpec {
     Node(topivots, toedges, fromnode.children, tobuckets)
   }
 
-  function CloneNewRoot(node: Node, from: Key, to: Key) : (node': Node)
+  function {:timeLimitMultiplier 2} CloneNewRoot(node: Node, from: Key, to: Key) : (node': Node)
   requires WFNode(node)
   requires ContainsAllKeys(node.pivotTable)
   requires node.children.Some?

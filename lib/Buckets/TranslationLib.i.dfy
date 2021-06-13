@@ -77,8 +77,14 @@ module TranslationLib {
         {
           var i := Route(pt, key);
           if i == cLeft {
-            assert pt[cLeft] == pt'[cLeft];
-            assert TranslateKey(pt', et', key) == TranslateKey(pt, et, key);
+            var tkey := TranslateKey(pt, et, key);
+            var tkey' := TranslateKey(pt', et', key);
+            calc {
+              tkey';
+              et'[cLeft].value + key[|newlcp|..];
+              et[cLeft].value + newlcp[|oldlcp|..] + key[|newlcp|..];
+              tkey;
+            }
           }
         }
       }

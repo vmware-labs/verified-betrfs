@@ -451,8 +451,7 @@ module BetreeInv {
     }
   }
 
-  // TODO: fix this.
-  lemma {:timeLimitMulitplier 2} RedirectNewPathReachableFromOldPath(s: Variables, s': Variables, redirect: Redirect, path: Path, ref: Reference) returns (path': Path)
+  lemma RedirectNewPathReachableFromOldPath(s: Variables, s': Variables, redirect: Redirect, path: Path, ref: Reference) returns (path': Path)
     requires Inv(s)
     requires Redirect(s.bcv, s'.bcv, redirect)
     requires |path| > 2
@@ -463,8 +462,6 @@ module BetreeInv {
     ensures Last(path') == ref
     ensures G.IsPath(s.bcv.view, path')
   {
-    assume false;
-
     RedirectResultingGraph(s, s', redirect);
     assert Last(path) == ref;
 

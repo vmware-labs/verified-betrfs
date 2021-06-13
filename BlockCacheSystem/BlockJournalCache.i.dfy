@@ -57,7 +57,7 @@ module {:extern} BlockJournalCache {
     JournalCache.InitImpliesInv(s.jc);
   }
 
-  lemma NextPreservesInv(s: Variables, s': Variables, uiop: UI.Op, dop: D.DiskOp)
+  lemma {:timeLimitMultiplier 8} NextPreservesInv(s: Variables, s': Variables, uiop: UI.Op, dop: D.DiskOp)
   requires Inv(s)
   requires Next(s, s', uiop, dop)
   ensures Inv(s')
