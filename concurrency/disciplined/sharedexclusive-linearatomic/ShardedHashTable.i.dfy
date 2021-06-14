@@ -582,23 +582,15 @@ module ShardedHashTable refines ShardedStateMachine {
         && table'[j].value.Full?
         && i != j
         && table'[i].value.key == table'[j].value.key;
-
-      if start == end {
-        var index := if i == end then j else i;
-        assert ContiguousToEntry(table, index);
-        assert ValidHashInSlot(table, end, index);
-        assert false;
-      } else if start < end {
-        var index := if i == start then j else i;
-        index := if (index < start || end <= index) then index else index - 1;
-        assert table[index] == table'[index];
-        assert ContiguousToEntry(table, index);
-        assert ValidHashInSlot(table, end, index);
-        assert false;
-      } else {
-        
-      }
+      assert i == start || j == start;
+      var index := if i == start then j else i;
+      assert ContiguousToEntry(table, index);
+      assert ValidHashInSlot(table, end, index);
+      assert false;
     }
+
+    assert KeysUnique(table');
+
   }
 
 //   lemma RemoveStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, i: Index, end: Index)
