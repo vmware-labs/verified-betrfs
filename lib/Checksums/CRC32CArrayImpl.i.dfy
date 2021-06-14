@@ -93,7 +93,7 @@ module CRC32_C_Array_Impl {
     }
   }
 
-  method {:fuel mm_crc32_u64,0}
+  method {:fuel mm_crc32_u64,0} {:timeLimitMultiplier 2}
     compute_crc32_main(data_array: array<byte>, idx0: uint32, len0: uint32, prev: uint32)
   returns (res: uint32)
   requires 0 <= idx0

@@ -629,10 +629,10 @@ module MarshallingImpl {
   //   if s.Some? then
   //     Some(s.value.I())
   //   else
-  //     None
+  //     NonenodeToVal
   // }
 
-  method {:fuel SizeOfV,5} {:timeLimitMultiplier 3} nodeToVal(shared node: Node)
+  method {:fuel SizeOfV,5} {:timeLimitMultiplier 5} nodeToVal(shared node: Node)
   returns (v : V, size: uint64)
   requires node.Inv()
   requires BT.WFNode(node.I())

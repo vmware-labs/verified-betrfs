@@ -477,8 +477,11 @@ module NodeImpl {
           assert cLeft as int == |leftPivots| - 2;
           assert 0 <= cRight <= cLeft;
 
-          assert Pivots.CutoffForRight(child.I().pivotTable, lbound) 
-            == Pivots.CutoffForRight(leftPivots, lbound) by { Pivots.reveal_CutoffForRight(); }
+          assert Pivots.CutoffForRight(child.I().pivotTable, lbound)
+            == Pivots.CutoffForRight(leftPivots, lbound) by { 
+              Pivots.reveal_CutoffForLeft();
+              Pivots.reveal_CutoffForRight();
+          }
 
           Translations.TranslatePivotPairRangeProperty(parent.pivotTable[slot], parent.pivotTable[slot+1], parentprefix, childprefix);
           var newpivots := ComputeTranslatePivots(pivots, childprefix, parentprefix, parent.pivotTable[slot+1]);

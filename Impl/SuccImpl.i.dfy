@@ -86,6 +86,25 @@ module SuccImpl {
     }
   }
 
+  method NextPrefixSet(pivots: PivotTable, edges: EdgeTable, key: Key, pset: Option<PrefixSet>, r: uint64)
+  returns (pset': Option<PrefixSet>, key': Key)
+  requires |pivots| < 0x4000_0000_0000_0000
+  requires WFPivots(pivots)
+  requires WFEdges(edges, pivots)
+  requires BoundedKey(pivots, key)
+  requires Route(pivots, key) == r as int
+  requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
+  ensures key' == TranslateKey(pivots, edges, key)
+  ensures pset' == SuccModel.NextPrefixSet(pivots, edges, key, pset)
+  {
+    var translate := ComputeTranslatePrefixSet(pivots, edges, key, r);
+    assert translate.Some? ==> IsPrefix(translate.value.prefix, key);
+    assert pset.Some? ==> IsPrefix(pset.value.prefix, key);
+
+    key' := ApplyPrefixSet(translate, key);
+    pset' := ComputeComposePrefixSet(pset, translate);
+  }
+
   method {:timeLimitMultiplier 4} getPathInternal(
       linear inout s: ImplVariables,
       io: DiskIOHandler,
@@ -178,18 +197,7 @@ module SuccImpl {
           key' := key;
           pset' := pset;
         } else {
-          var translate := ComputeTranslatePrefixSet(pivots, edges, key, r);
-          assert edges[r].Some? <==> translate.Some?;
-
-          key' := ApplyPrefixSet(translate, key);
-
-          assert translate.Some? ==> IsPrefix(translate.value.prefix, key);
-          assert pset.Some? ==> IsPrefix(pset.value.prefix, key);
-          pset' := ComputeComposePrefixSet(pset, translate);
-          assert pset'.Some? ==> IsPrefix(pset'.value.prefix, key');
-
-          ghost var startKey := if start.NegativeInf? then [] else start.key;
-          ComposePrefixSetCorrect(pset, translate, pset', startKey, key, key');
+          pset', key' := NextPrefixSet(pivots, edges, key, pset, r);
         }
 
         BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);

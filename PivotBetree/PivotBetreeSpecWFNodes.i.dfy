@@ -376,7 +376,7 @@ module PivotBetreeSpecWFNodes {
     WellMarshalledMergeBucketsInList(f.split_parent.buckets, f.slot_idx, f.split_parent.pivotTable);
   }
 
-  lemma {:timeLimitMultiplier 4} ValidMergeWritesInvNodes(f: NodeFusion)
+  lemma {:timeLimitMultiplier 8} ValidMergeWritesInvNodes(f: NodeFusion)
   requires ValidMerge(f)
   requires forall i | 0 <= i < |MergeReads(f)| :: InvNode(MergeReads(f)[i].node)
   ensures InvNode(f.fused_parent);

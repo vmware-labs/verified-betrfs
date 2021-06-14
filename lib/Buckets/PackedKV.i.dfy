@@ -234,7 +234,7 @@ module PackedKV {
       None
   }
 
-  method BinarySearchQuery(pkv: Pkv, key: Key)
+  method {:timeLimitMultiplier 2} BinarySearchQuery(pkv: Pkv, key: Key)
   returns (msg: Option<Message>)
   requires WF(pkv)
   ensures msg == bucketBinarySearchLookup(I(pkv), key)

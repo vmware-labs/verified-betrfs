@@ -33,6 +33,26 @@ module SuccModel {
 
   // Awkwardly split up for verification time reasons
 
+  function NextPrefixSet(pivots: PivotTable, edges: EdgeTable, key: Key, pset: Option<PrefixSet>) : (pset': Option<PrefixSet>)
+  requires WFPivots(pivots)
+  requires WFEdges(edges, pivots)
+  requires BoundedKey(pivots, key)
+  requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
+  ensures pset'.Some? ==> IsPrefix(pset'.value.prefix, TranslateKey(pivots, edges, key))
+  ensures ApplyPrefixSet(pset, key) == ApplyPrefixSet(pset', TranslateKey(pivots, edges, key))
+  {
+    reveal_IsPrefix();
+    var translate := Translate(pivots, edges, key);
+    assert translate.Some? ==> IsPrefix(translate.value.prefix, key);
+    assert pset.Some? ==> IsPrefix(pset.value.prefix, key);
+
+    var pset' := ComposePrefixSet(pset, translate);
+    var key' := TranslateKey(pivots, edges, key);
+    assert pset'.Some? ==> IsPrefix(pset'.value.prefix, key');
+    ComposePrefixSetCorrect(pset, translate, pset', ApplyPrefixSet(pset, key), key, key');
+    pset'
+  }
+
   function {:opaque} {:timeLimitMultiplier 2} getPathInternal(
       s: BBC.Variables,
       io: IO,
@@ -99,15 +119,8 @@ module SuccModel {
       if counter == 0 then (
         (s, io, None)
       ) else (
-        var translate := Translate(node.pivotTable, node.edgeTable, key);
-        var key' := ApplyPrefixSet(translate, key);
-
-        assert translate.Some? ==> IsPrefix(translate.value.prefix, key);
-        assert pset.Some? ==> IsPrefix(pset.value.prefix, key);
-
-        var pset' := ComposePrefixSet(pset, translate);
-        assert pset'.Some? ==> IsPrefix(pset'.value.prefix, key');
-        ComposePrefixSetCorrect(pset, translate, pset', startKey, key, key');
+        var key' := TranslateKey(node.pivotTable, node.edgeTable, key);
+        var pset' := NextPrefixSet(node.pivotTable, node.edgeTable, key, pset);
 
         lemmaChildInGraph(s, ref, node.children.value[r]);
         getPath(s, io, key', acc', tt', start, upTo', pset', maxToFind, node.children.value[r], counter - 1)
@@ -230,7 +243,7 @@ module SuccModel {
       step);
   }
 
-  function NextPrefixSet(lookup: BT.Lookup, tt: TranslationTable): (pset: Option<PrefixSet>)
+  function TT_NextPrefixSet(lookup: BT.Lookup, tt: TranslationTable): (pset: Option<PrefixSet>)
   requires |lookup| > 0
   requires BT.LookupTranslationTable.requires(lookup, 0, None)
   requires tt == BT.LookupTranslationTable(lookup, 0, None)
@@ -257,7 +270,7 @@ module SuccModel {
   requires prev.Some? ==> IsPrefix(prev.value.prefix, lookup[idx].currentKey)
   requires lookup[0].currentKey == ApplyPrefixSet(prev, lookup[idx].currentKey)
   requires tt[..|tt|-1] == BT.LookupTranslationTable(lookup[..|lookup|-1], 0, None)
-  requires tt[|tt|-1] == NextPrefixSet(lookup[..|lookup|-1], tt[..|tt|-1])
+  requires tt[|tt|-1] == TT_NextPrefixSet(lookup[..|lookup|-1], tt[..|tt|-1])
   requires tt[idx..|tt|-1] == BT.LookupTranslationTable(lookup[..|lookup|-1], idx, prev)
   decreases |lookup| - idx
   ensures tt[idx..] == BT.LookupTranslationTable(lookup, idx, prev)
@@ -265,7 +278,7 @@ module SuccModel {
     var tt' := BT.LookupTranslationTable(lookup, idx, prev);
 
     if idx == |lookup|-2 {
-      assert tt' == [ NextPrefixSet(lookup[..|lookup|-1], tt[..|tt|-1]) ] by {
+      assert tt' == [ TT_NextPrefixSet(lookup[..|lookup|-1], tt[..|tt|-1]) ] by {
        BT.reveal_LookupTranslationTable();
       }
     } else {
@@ -297,7 +310,7 @@ module SuccModel {
   requires BT.LookupFollowsChildEdges(lookup)
   requires BT.LookupFollowsChildEdges(lookup[..|lookup|-1])
   requires tt[..|tt|-1] == BT.LookupTranslationTable(lookup[..|lookup|-1], 0, None)
-  requires tt[|tt|-1] == NextPrefixSet(lookup[..|lookup|-1], tt[..|tt|-1])
+  requires tt[|tt|-1] == TT_NextPrefixSet(lookup[..|lookup|-1], tt[..|tt|-1])
   ensures tt == BT.LookupTranslationTable(lookup, 0, None)
   {
     BT.reveal_LookupTranslationTable();
@@ -307,7 +320,7 @@ module SuccModel {
     }
   }
 
-  lemma {:timeLimitMultiplier 8} lemmaGetPathResult(s: BBC.Variables, io: IO, startKey: Key, key: Key, acc: seq<Bucket>, tt: TranslationTable,
+  lemma {:timeLimitMultiplier 4} lemmaGetPathResult(s: BBC.Variables, io: IO, startKey: Key, key: Key, acc: seq<Bucket>, tt: TranslationTable,
     lookup: BT.Lookup, start: UI.RangeStart, upTo: Option<Key>, pset: Option<PrefixSet>, maxToFind: int, ref: BT.G.Reference, counter: uint64)
   requires BBC.Inv(s) && s.Ready?
   requires io.IOInit?
@@ -320,7 +333,7 @@ module SuccModel {
   requires |lookup| > 0 ==> upTo == BT.LookupUpperBound(lookup, tt)
   requires |lookup| > 0 ==> key == TranslateKey(Last(lookup).readOp.node.pivotTable, Last(lookup).readOp.node.edgeTable, Last(lookup).currentKey)
   requires |lookup| > 0 ==> ref == Last(lookup).readOp.node.children.value[Route(Last(lookup).readOp.node.pivotTable, Last(lookup).currentKey)]
-  requires |lookup| > 0 ==> pset == NextPrefixSet(lookup, tt)
+  requires |lookup| > 0 ==> pset == TT_NextPrefixSet(lookup, tt)
 
   requires |lookup| == 0 ==> ref == BT.G.Root()
   requires |lookup| == 0 ==> key == startKey
@@ -425,18 +438,8 @@ module SuccModel {
             assert noop(s, s);
           } else {
             lemmaChildInGraph(s, ref, node.children.value[r]);
-            var translate := Translate(node.pivotTable, node.edgeTable, key);
-            var key' := ApplyPrefixSet(translate, key);
-
-            assert translate.Some? ==> IsPrefix(translate.value.prefix, key);
-            assert pset.Some? ==> IsPrefix(pset.value.prefix, key);
-            assert pset.Some? && translate.Some? ==> 
-              ( IsPrefix(pset.value.prefix, translate.value.prefix)
-              || IsPrefix(translate.value.prefix, pset.value.prefix));
-
-            var pset' := ComposePrefixSet(pset, translate);
-            assert pset'.Some? ==> IsPrefix(pset'.value.prefix, key');
-            ComposePrefixSetCorrect(pset, translate, pset', startKey, key, key');
+            var key' := TranslateKey(node.pivotTable, node.edgeTable, key);
+            var pset' := NextPrefixSet(node.pivotTable, node.edgeTable, key, pset);
             lemmaGetPathResult(s, io, startKey, key', acc', tt', lookup', start, upTo', pset', maxToFind, node.children.value[r], counter - 1);
           }
         } else {

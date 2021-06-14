@@ -499,7 +499,7 @@ module IOImpl {
   }
 
   // == writeResponse ==
-  method {:timeLimitMultiplier 12} writeNodeResponse(linear inout s: ImplVariables, io: DiskIOHandler)
+  method {:timeLimitMultiplier 18} writeNodeResponse(linear inout s: ImplVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
   requires old_s.Inv()
