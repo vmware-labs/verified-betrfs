@@ -591,6 +591,66 @@ module ShardedHashTable refines ShardedStateMachine {
 
     assert KeysUnique(table');
 
+    assert forall e: Index :: (e != end && table[e].value.Empty?) ==> table'[e].value.Empty?;
+
+    // this is a pretty condensed proof, I am not sure whats going on
+    forall e: Index, j: Index
+      ensures ValidHashInSlot(table', e, j)
+    {
+      var j_prev := if j > 0 then j - 1 else |table| - 1;
+      var j_next := if j + 1 < |table| then j + 1 else 0;
+      assert ValidHashInSlot(table, e, j_prev);
+      assert ValidHashInSlot(table, e, j);
+
+      if table'[j].value.Full? && table'[j_next].value.Full? {
+        if j != start && j_next != start && j == end {
+          // Two previously-separate contiguous regions are now joining.
+          assert ContiguousToEntry(table, j_prev);
+          assert ContiguousToEntry(table, j_next);
+        }
+        assert ValidHashInSlot(table', e, j);
+      }
+    }
+
+    // forall e: Index, j: Index, k: Index 
+    //   ensures ValidHashOrdering(table', e, j, k)
+    // {
+    //   // if start == end {
+        
+    //   // } else {
+    //   //   assume false;
+    //   // }
+    // }
+    // ValidHashOrdering(table, e: Index, j: Index, k: Index)
+
+    // forall j | 0 <= j < |table'|
+    // ensures ContiguousToEntry(table', j)
+    // {
+    //   if start == end {
+    //     assert ContiguousToEntry(table, j);
+    //   } else if start < end {
+    //     assert ContiguousToEntry(table, j);
+    //     if start < j <= end {
+    //       var index := j-1;
+    //       assert ContiguousToEntry(table, index);
+    //       // assert ValidHashInSlot(table', e, j)
+
+    //       assert table'[j] == table[index];
+    
+    //       if table[index].value.Full? {
+    //         var key := table[index].value.key;
+    //         var h := hash(table[index].value.key);
+
+    //         assert ShouldSkip(table, h, index, key);
+
+    //       }
+
+    //       assume false;
+    //     }
+    //   } else {
+    //     assume false;
+    //   }
+    // }
   }
 
 //   lemma RemoveStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, i: Index, end: Index)
