@@ -1,6 +1,7 @@
 include "BoundedPivotsLib.i.dfy"
 include "BucketsLib.i.dfy"
 include "MapSeqs.i.dfy"
+include "TranslationApply.s.dfy"
 
 include "../Base/KeyType.s.dfy"
 include "../Lang/System/SeqComparison.s.dfy"
@@ -18,6 +19,7 @@ module TranslationLib {
   import opened Sequences
   import opened Options
   import opened KeyType
+  import opened TranslationApply
 
   import SeqComparison
 
@@ -62,12 +64,11 @@ module TranslationLib {
     ) else (
       var pt' := SplitLeft(pt, pivot);
 
-      var oldlcp : Key := PivotLcp(pt[cLeft], pt[cLeft+1]);
-      var newlcp : Key := PivotLcp(pt'[cLeft], pt'[cLeft+1]);
+      var oldlcp := PivotLcp(pt[cLeft], pt[cLeft+1]);
+      var newlcp := PivotLcp(pt'[cLeft], pt'[cLeft+1]);
       PivotLcpSubRangeLeft(pt[cLeft], pt[cLeft+1], pt'[cLeft+1]);
-  
-      assume |et[cLeft].value + newlcp[|oldlcp|..]| <= 1024;
-      var translation : Key := et[cLeft].value + newlcp[|oldlcp|..];
+
+      var translation := changePrefix(oldlcp, et[cLeft].value, newlcp);
       var et' := et[..cLeft] +  [Some(translation)];
 
       assert TranslationPreserved(pt, et, pt', et') by {
@@ -106,12 +107,11 @@ module TranslationLib {
     ) else (
       var pt' := SplitRight(pt, pivot);
 
-      var oldlcp : Key := PivotLcp(pt[cRight], pt[cRight+1]);
-      var newlcp : Key := PivotLcp(pt'[0], pt'[1]);
+      var oldlcp := PivotLcp(pt[cRight], pt[cRight+1]);
+      var newlcp := PivotLcp(pt'[0], pt'[1]);
       PivotLcpSubRangeRight(pt[cRight], pt'[0], pt'[1]);
 
-      assume |et[cRight].value + newlcp[|oldlcp|..]| <= 1024;
-      var translation : Key := et[cRight].value + newlcp[|oldlcp|..];
+      var translation := changePrefix(oldlcp, et[cRight].value, newlcp);
       var et' := [Some(translation)] + et[cRight+1..];
 
       assert TranslationPreserved(pt, et, pt', et') by {
@@ -121,8 +121,14 @@ module TranslationLib {
         {
           var i := Route(pt, key);
           if i == cRight {
-            assert pt[cRight+1] == pt'[1];
-            assert TranslateKey(pt', et', key) == TranslateKey(pt, et, key);
+            var tkey := TranslateKey(pt, et, key);
+            var tkey' := TranslateKey(pt', et', key);
+            calc {
+              tkey';
+              et'[0].value + key[|newlcp|..];
+              et[cRight].value + newlcp[|oldlcp|..] + key[|newlcp|..];
+              tkey;
+            }
           }
         }
       }
@@ -425,8 +431,7 @@ module TranslationLib {
     if pset.None? then key 
     else (
       reveal_IsPrefix();
-      assume |pset.value.newPrefix + key[|pset.value.prefix|..]| <= 1024;
-      pset.value.newPrefix + key[|pset.value.prefix|..]
+      changePrefix(pset.value.prefix, pset.value.newPrefix, key)
     )
   }
 
@@ -551,10 +556,7 @@ module TranslationLib {
   ensures IsPrefix(newPrefix, e'.e)
   {
     reveal_IsPrefix();
-    var key : Key := e.e;
-    assume |newPrefix + key[|prefix|..]| <= 1024;
-    var translatedKey : Key := newPrefix + key[|prefix|..];
-    KeyToElement(translatedKey)
+    KeyToElement(changePrefix(prefix, newPrefix, e.e))
   }
 
   function TranslatePivotPair(pt: PivotTable, et: EdgeTable, slot: int) : (p: (Element, Element))
@@ -680,8 +682,7 @@ module TranslationLib {
     ensures Keyspace.lt(Keyspace.Element(prefix + k[|newPrefix|..]), right)
     {
       assert IsPrefix(newPrefix, k);
-      assume |prefix + k[|newPrefix|..]| <= 1024;
-      var k' : Key := prefix + k[|newPrefix|..];
+      var k' := changePrefix(newPrefix, prefix, k);
 
       PrefixLteProperties(newPrefix, left'.e, k);
       PrefixLteProperties(prefix, left.e, k');
@@ -708,8 +709,7 @@ module TranslationLib {
     ensures Keyspace.lte(left', Keyspace.Element(newPrefix + k[|prefix|..]))
     ensures Keyspace.lt(Keyspace.Element(newPrefix + k[|prefix|..]), right')
     {
-      assume |newPrefix + k[|prefix|..]| <= 1024;
-      var k' : Key := newPrefix + k[|prefix|..];
+      var k' := changePrefix(prefix, newPrefix, k);
 
       PrefixLteProperties(prefix, left.e, k);
       PrefixLteProperties(newPrefix, left'.e, k');
@@ -897,9 +897,8 @@ module TranslationLib {
     ) else (
       reveal_IsPrefix();
       if IsPrefix(prefix, bucket.keys[idx]) then (
-        var key : Key := bucket.keys[idx];
-        assume |newPrefix + key[|prefix|..]| <= 1024;
-        var key' : Key := newPrefix + key[|prefix|..];
+        var key := bucket.keys[idx];
+        var key' := changePrefix(prefix, newPrefix, key);
 
         var tbucket := TranslateBucketInternal(bucket, prefix, newPrefix, idx + 1);
         var tbucket' := TBucket(Bucket([key'] + tbucket.b.keys, [bucket.msgs[idx]] + tbucket.b.msgs), [idx] + tbucket.idxs);

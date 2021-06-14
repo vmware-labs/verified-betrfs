@@ -15,6 +15,7 @@ module TranslationImpl {
   import opened NativeTypes
   import opened BoundedPivotsLib
   import opened Translations = TranslationLib
+  import opened TranslationApply
   import opened Sequences
   import opened Options
   import opened KeyType
@@ -40,8 +41,7 @@ module TranslationImpl {
       var newlcp : Key := ComputePivotLcp(pt'[cLeft], pt'[cLeft+1]);
       PivotLcpSubRangeLeft(pt[cLeft], pt[cLeft+1], pt'[cLeft+1]);
 
-      assume |et[cLeft].value + newlcp[|oldlcp|..]| <= 1024;
-      var translation : Key := et[cLeft].value + newlcp[|oldlcp|..];
+      var translation := changePrefix(oldlcp, et[cLeft].value, newlcp);
       return et[..cLeft] +  [Some(translation)];
     }
   }
@@ -62,8 +62,7 @@ module TranslationImpl {
       var newlcp : Key := ComputePivotLcp(pt'[0], pt'[1]);
       PivotLcpSubRangeRight(pt[cRight], pt'[0], pt'[1]);
 
-      assume |et[cRight].value + newlcp[|oldlcp|..]| <= 1024;
-      var translation : Key := et[cRight].value + newlcp[|oldlcp|..];
+      var translation := changePrefix(oldlcp, et[cRight].value, newlcp);
       return [Some(translation)] + et[cRight+1..];
     }
   }
@@ -211,8 +210,7 @@ module TranslationImpl {
     if et[r].Some? {
       var prefixlen := ComputePivotLcpLen(pt[r], pt[r+1]);
       PrefixOfLcpIsPrefixOfKey(pt[r], pt[r+1], pt[r].e[..prefixlen], key);
-      assume |et[r].value| + |key| - prefixlen as nat <= 1024;
-      k := et[r].value + key[prefixlen..];
+      k := changePrefix(pt[r].e[..prefixlen], et[r].value, key);
     } else {
       k := key;
     }
@@ -273,12 +271,9 @@ module TranslationImpl {
     && l == KeyToElement(left')
     && r == right'
   {
-    assume |newPrefix + left[|prefix|..]| <= 1024;
-    left' := newPrefix + left[|prefix| as uint64..];
-    // left' := ComputeTranslateElement(left, prefix, newPrefix);
-
-    var isprefix := right.Element? && |prefix| as uint64 <= |right.e| as uint64 && prefix == right.e[..|prefix|];
     reveal_IsPrefix();
+    left' := changePrefix(prefix, newPrefix, left);
+    var isprefix := right.Element? && |prefix| as uint64 <= |right.e| as uint64 && prefix == right.e[..|prefix|];
     if right.Max_Element? || !isprefix {
       right' := ComputeShortestUncommonPrefix(newPrefix);
     } else {
@@ -371,10 +366,10 @@ module TranslationImpl {
     if i == 0 then
       EmptyBucket()
     else if IsPrefix(prefix, bucket.keys[i - 1]) then
+      reveal_IsPrefix();
       var prefixBucket := TranslateBucketSimple(bucket, prefix, newPrefix, i - 1);
-      var oldkey: seq<byte> := bucket.keys[i - 1];
-      assume |newPrefix + oldkey[|prefix|..]| <= 1024;
-      var newKey := newPrefix + oldkey[|prefix|..];
+      var oldkey := bucket.keys[i - 1];
+      var newKey := changePrefix(prefix, newPrefix, oldkey);
       Bucket(prefixBucket.keys + [ newKey ], prefixBucket.msgs + [ bucket.msgs[i - 1] ])
     else
       TranslateBucketSimple(bucket, prefix, newPrefix, i - 1)
@@ -449,7 +444,6 @@ module TranslationImpl {
   requires mbucket.Inv()
   ensures TranslateBucketWillFit(mbucket.I(), prefix, newPrefix) ==> WillFitInPkv(mbucket, prefix, newPrefix)
   {
-    // 
     assume false;
     var b := mbucket.I();
     var tb := TranslateBucket(b, prefix, newPrefix);
@@ -628,8 +622,8 @@ module TranslationImpl {
       var key: seq<byte> := PackedKV.GetKey(pkv, i);
       var msg := PackedKV.PSA.psaElement(pkv.messages, i);
       if |prefix| as uint64 <= |key| as uint64 && prefix == key[..|prefix| as uint64] {
-        assume |newPrefix + key[|prefix| as uint64..]| <= 1024;
-        mut_seq_set(inout result_keys, result_len, newPrefix + key[|prefix| as uint64..]);
+        var k := changePrefix(prefix, newPrefix, key);
+        mut_seq_set(inout result_keys, result_len, k);
         mut_seq_set(inout result_msgs, result_len, msg);
         result_len := result_len + 1;
         calc {
