@@ -34,7 +34,6 @@ module Proof refines ProofObligations {
   // NOTE: These are all program invariants. Maybe we should change the argument
   predicate Inv(v: ConcreteSystem.Variables)
   {
-    //&&  v.program.phase.Running? ==> SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree).seqEnd == v.program.journal.persistentLSN
     && v.program.WF()
     && !v.program.phase.SuperblockUnknown? ==> ( // These invariants over the splinter tree / journal only have to hold when the system is recovered/inited and in the running phase
               && JournalInterpMod.Invariant(v.program.journal, v.program.cache)
@@ -57,13 +56,6 @@ module Proof refines ProofObligations {
     //ensures CrashTolerantMapSpecMod.Init(I(v))
     //ensures Inv(v)
   {
-    // assert !v.program.phase.Running?;
-    // var sb := ProgramInterpMod.ISuperblock(v.program.cache.dv);
-    // assert !sb.Some?;
-    // assert I(v) == CrashTolerantMapSpecMod.Empty();
-    //
-    // // Sowmya: We might need to rewrite the invariants for this?
-    // assert Inv(v); // Does not believe this
   }
 
 
@@ -143,8 +135,6 @@ module Proof refines ProofObligations {
 
     ensures !v'.program.phase.SuperblockUnknown?
     ensures Inv(v')
-    //ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
-    // JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
     ensures ProgramInterpMod.IMRunning(v.program) ==  ProgramInterpMod.IMRunning(v'.program)
   {
     assume !v'.program.phase.SuperblockUnknown?; // QUESTION: Can we just assume this???
@@ -177,9 +167,6 @@ module Proof refines ProofObligations {
     assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
 
   }
-
-  // CrashTolerantMapSpecMod : OP1 OP2 ReqSync NOOP ..            AsyncCommit ... Nop      Nop  ..                 SyncComplete
-  // PROGRAM :                 P1 P2      ....                    write hits Disk   Program discovers commit
 
   lemma ProgramMachineStepRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, step : ConcreteSystem.Step)
     requires Inv(v)
