@@ -240,12 +240,6 @@ module ShardedHashTable refines ShardedStateMachine {
     TrueForSubTable(table, start, end, insert_key, ShouldSkipSlot)
   }
 
-  // lemma SkipImpiesNotFoundSlot(table: FixedTable, start: Index, end: Index, insert_key: Key)
-  //   requires ShouldSkip(table, start, end, insert_key)
-  // {
-  //   assert KeyNotFound(table, start, end, insert_key);
-  // }
-
   predicate Complete(table: FixedTable)
   {
     && (forall i: Index :: table[i].Some?)
@@ -481,14 +475,20 @@ module ShardedHashTable refines ShardedStateMachine {
     )
   }
 
+  predicate ContiguousToEntry(table: FixedTable, i: Index)
+    requires Complete(table)
+  {
+    table[i].value.Full? ==>
+      ShouldSkip(table, hash(table[i].value.key), i, table[i].value.key)
+  }
+
   predicate InvTable(table: FixedTable)
   {
     && Complete(table)
     && KeysUnique(table)
     && (forall e: Index, i: Index :: ValidHashInSlot(table, e, i))
     && (forall e: Index, j: Index, k: Index :: ValidHashOrdering(table, e, j, k))
-    && (forall i: Index :: table[i].value.Full? ==>
-      ShouldSkip(table, hash(table[i].value.key), i, table[i].value.key))
+    && (forall i: Index :: ContiguousToEntry(table, i))
   }
 
   function EntryQuantity(entry: Option<Entry>): nat
@@ -566,63 +566,63 @@ module ShardedHashTable refines ShardedStateMachine {
     TableQuantityReplace1(s.table, s'.table, end);
   }
 
-//   lemma InsertStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
+  lemma InsertStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
+    requires Inv(s)
+    requires Insert(s, s', ticket, kv, start, end)
+  {
+    var (key, value) := kv;
+    var h := hash(key);
+
+    var table, table' := s.table, s'.table;
+    assert table' == TableRightShiftTransition(table, Some(Full(key, value)), start, end);
+
+    if !KeysUnique(table') {
+      var i: Index, j: Index :| 
+        && table'[i].value.Full?
+        && table'[j].value.Full?
+        && i != j
+        && table'[i].value.key == table'[j].value.key;
+
+      if start == end {
+        var index := if i == end then j else i;
+        assert ContiguousToEntry(table, index);
+        assert ValidHashInSlot(table, end, index);
+        assert false;
+      } else if start < end {
+        var index := if i == start then j else i;
+        index := if (index < start || end <= index) then index else index - 1;
+        assert table[index] == table'[index];
+        assert ContiguousToEntry(table, index);
+        assert ValidHashInSlot(table, end, index);
+        assert false;
+      } else {
+        
+      }
+    }
+  }
+
+//   lemma RemoveStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, i: Index, end: Index)
 //     requires Inv(s)
-//     requires Insert(s, s', ticket, kv, start, end)
+//     requires Remove(s, s',ticket, i, end)
+//     ensures Inv(s')
 //   {
-//     var (key, value) := kv;
-//     var h := hash(key);
-
-//     var table := s.table;
-//     var table' := s'.table;
-
-//     assert table' == TableRightShiftTransition(table, Some(Full(key, value)), start, end);
-
-//     // assert ShouldSkip(table, h, start, key);
-//     // assert KeyNotFound(table, h, start, key);
-
-//     // if 
-
-//     // forall i: Index, j: Index | 
-//     //   i != j && table'[i].value.Full? && table'[j].value.Full?
-//     // ensures table'[i].value.key != table'[j].value.key
-//     // {
-//     //   if start == end {
-//     //     if i == end {
-//     //       // assert 
-
-//     //       assume false;
-//     //     } else if j == end {
-//     //       assume false;
-//     //     }
-//     //   } else {
-//     //     assume false;
-//     //   }
-//     // }
+//     assume false;
 //   }
 
-// //   lemma RemoveStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, i: Index, end: Index)
-// //     requires Inv(s)
-// //     requires Remove(s, s',ticket, i, end)
-// //     ensures Inv(s')
-// //   {
-// //     assume false;
-// //   }
-
-// //   lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
-// //   requires Inv(s)
-// //   requires NextStep(s, s', step)
-// //   ensures Inv(s')
-// //   {
-// //     match step {
-// //       case InsertStep(ticket, stutters) => assume false;
-// //       case OverwriteStep(ticket, stutter) => 
-// //         OverwriteStepPreservesInv(s, s', ticket, stutter);
-// //       case RemoveStep(ticket, i, end) =>
-// //         RemoveStepPreservesInv(s, s', ticket, i, end);
-// //       case _ => assert Inv(s');
-// //     }
-// //   }
+//   lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
+//   requires Inv(s)
+//   requires NextStep(s, s', step)
+//   ensures Inv(s')
+//   {
+//     match step {
+//       case InsertStep(ticket, stutters) => assume false;
+//       case OverwriteStep(ticket, stutter) => 
+//         OverwriteStepPreservesInv(s, s', ticket, stutter);
+//       case RemoveStep(ticket, i, end) =>
+//         RemoveStepPreservesInv(s, s', ticket, i, end);
+//       case _ => assert Inv(s');
+//     }
+//   }
 
 // //   lemma Next_PreservesInv(s: Variables, s': Variables)
 // //   requires Inv(s)
