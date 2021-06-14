@@ -34,10 +34,21 @@ module Proof refines ProofObligations {
   // NOTE: These are all program invariants. Maybe we should change the argument
   predicate Inv(v: ConcreteSystem.Variables)
   {
-    // These invariants over the splinter tree / journal only have to hold when the system is recovered/inited and in the running phase
-    &&  v.program.phase.Running? ==> SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree).seqEnd == v.program.journal.persistentLSN
-    &&  v.program.phase.Running? ==> JournalInterpMod.Invariant(v.program.journal, v.program.cache)
-    //&& BetreeInvariantMod.Invariant(v.program.cache, v.program) // TODO: Maybe have to add a betree invariant
+    //&&  v.program.phase.Running? ==> SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree).seqEnd == v.program.journal.persistentLSN
+    && v.program.WF()
+    && !v.program.phase.SuperblockUnknown? ==> ( // These invariants over the splinter tree / journal only have to hold when the system is recovered/inited and in the running phase
+              && JournalInterpMod.Invariant(v.program.journal, v.program.cache)
+
+              // ties together the updates flowing from the journal to the tree
+              && SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree).seqEnd == v.program.journal.boundaryLSN
+            )
+  }
+
+  lemma EnsureInductive(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables)
+    requires Inv(v)
+    ensures Inv(v')
+  {
+    assume false; // TODO
   }
 
   // Remember that this is the init of a p
@@ -78,18 +89,23 @@ module Proof refines ProofObligations {
 
     assert SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
      SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree);
+
+    EnsureInductive(v, v');
   }
 
   lemma JournalInternalRefined(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: JournalMachineMod.Skolem)
+    // The super block has to be known for us to take a valid JournalInternal step
+    requires !v.program.phase.SuperblockUnknown?
     // Requires needed for IM to work
-    requires v.program.WF()
     requires Inv(v)
+
 
     // Actual requires
     requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
     requires pstep == ConcreteSystem.P.JournalInternalStep(sk)
 
     // base should be stable betree in disk.
+    ensures !v'.program.phase.SuperblockUnknown? // QUESTION : Should this be an ensures or requires
     ensures Inv(v')
     ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
     JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
@@ -101,7 +117,9 @@ module Proof refines ProofObligations {
 
     // XXXX=== TODO: var some of these
     // the superblock is the same
+    assume  !v'.program.phase.SuperblockUnknown? ;
     assert v'.program.stableSuperblock == v.program.stableSuperblock;
+    EnsureInductive(v, v');
 
     //assert BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) == BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
 
@@ -110,48 +128,40 @@ module Proof refines ProofObligations {
 
     assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
       JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
-  }
 
-  // Ensures that commit start of a new superblock does not change the interpretation
-  lemma CommitStartRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, seqBoundary: InterpMod.LSN)
-    requires Inv(v)
-    requires v.program.WF()
-
-    requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
-    requires pstep == ConcreteSystem.P.CommitStartStep(seqBoundary)
-    requires v.program.betree == v'.program.betree
-    requires v.program.journal == v'.program.journal
-
-    ensures Inv(v')
-    ensures SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
-     SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree)
-    ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
-     JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
-  {
 
   }
-
 
   // Ensures that commiting a new superblock does not change the interpretation
   lemma CommitCompleteRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step)
+    // The super block has to be known for us to take a valid JournalInternal step
+    requires !v.program.phase.SuperblockUnknown?
     requires Inv(v)
-    requires v.program.WF()
 
     requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
     requires pstep == ConcreteSystem.P.CommitCompleteStep
 
+    ensures !v'.program.phase.SuperblockUnknown?
     ensures Inv(v')
-    ensures SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
-     SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree)
-    ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
-     JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
+    //ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+    // JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
+    ensures ProgramInterpMod.IMRunning(v.program) ==  ProgramInterpMod.IMRunning(v'.program)
   {
+    assume !v'.program.phase.SuperblockUnknown?; // QUESTION: Can we just assume this???
+    EnsureInductive(v, v'); // TODO : prove inductive lemma
 
+    assert SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) ==
+     SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
+
+    assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+     JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
+
+
+     assert ProgramInterpMod.IMRunning(v.program) ==  ProgramInterpMod.IMRunning(v'.program);
   }
 
   lemma PutRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: SplinterTreeMachineMod.Skolem)
     // Requires needed for IM to work
-    requires v.program.WF()
     requires Inv(v)
 
     // Actual requires
@@ -216,7 +226,7 @@ module Proof refines ProofObligations {
           if sb.Some? {} // TRIGGER
 
           assert uiop.NoopOp?;
-          assume CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp); // NOT DONE!!!!!
+          assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp); // NOT DONE!!!!!
           assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);  // believes this i think
       }
       case ReqSyncStep(syncReqId) => {
@@ -235,19 +245,15 @@ module Proof refines ProofObligations {
       case CommitStartStep(seqBoundary) => {
           // Start pushing subperblock to disk
           assert uiop.NoopOp?;
-          assume I(v) ==  I(v');
+
+          assert v.program.journal == v'.program.journal;
+          assert v.program.betree == v'.program.betree;
+          assume I(v) ==  I(v'); // TODO: Here we need to show that the cache's interpretation has not changed
+
           assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp);
           assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
 
-          assert v.program.betree == v'.program.betree;
-          //assert SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
-          // SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree);
-          assert v.program.phase.Running?;
-          assert v.program.journal == v'.program.journal;
-          //assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
-          // JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
-
-          CommitStartRefines(v, v', uiop, cacheOps, pstep, seqBoundary);
+          EnsureInductive(v, v');
 
           assert Inv(v');
       }
@@ -295,6 +301,12 @@ module Proof refines ProofObligations {
       case CrashStep => {
         // here we need to ensure that I(v) == I(v') -- we need to verify that recovery works here?
         assume  CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+      }
+      case AcceptRequestStep => {
+        assume false; // TODO
+      }
+      case DeliverReplyStep => {
+        assume false; // TODO
       }
     }
 
