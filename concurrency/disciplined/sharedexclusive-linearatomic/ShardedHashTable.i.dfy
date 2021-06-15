@@ -284,6 +284,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && ticket.input.InsertInput?
     && v.insert_capacity.value >= 1
 
+    // && ShouldHashGoBefore(h, start, end)
     // skip upto (not including) start
     && ShouldSkip(table, h, start, key)
     // insert at start
@@ -479,8 +480,17 @@ module ShardedHashTable refines ShardedStateMachine {
     requires Complete(table)
   {
     table[i].value.Full? ==>
-      ShouldSkip(table, hash(table[i].value.key), i, table[i].value.key)
-  }
+    (
+      var key := table[i].value.key;
+      var h := hash(key);
+      && (h <= i ==> (forall j | h <= j <= i :: table[j].value.Full? && table[j].value.key != key))
+      && (h > i ==>
+        && h < |table|
+        && (forall j | 0 <= j <= i :: table[j].value.Full? && table[j].value.key != key)
+        && (forall j | h <= j < |table| :: table[j].value.Full? && table[j].value.key != key)
+      )
+    )
+    }
 
   predicate InvTable(table: FixedTable)
   {
@@ -591,9 +601,10 @@ module ShardedHashTable refines ShardedStateMachine {
 
     assert KeysUnique(table');
 
-    assert forall e: Index :: (e != end && table[e].value.Empty?) ==> table'[e].value.Empty?;
+    // the empty slots are preserved, except end is over-written
+    // assert forall e: Index :: (e != end && table[e].value.Empty?) ==> table'[e].value.Empty?;
 
-    // this is a pretty condensed proof, I am not sure whats going on
+    // HELP: after condensing this proof I am not sure whats going on
     forall e: Index, j: Index
       ensures ValidHashInSlot(table', e, j)
     {
@@ -604,53 +615,77 @@ module ShardedHashTable refines ShardedStateMachine {
 
       if table'[j].value.Full? && table'[j_next].value.Full? {
         if j != start && j_next != start && j == end {
-          // Two previously-separate contiguous regions are now joining.
-          assert ContiguousToEntry(table, j_prev);
+          // two previously-separate contiguous regions are now joining.
           assert ContiguousToEntry(table, j_next);
         }
         assert ValidHashInSlot(table', e, j);
       }
     }
 
-    // forall e: Index, j: Index, k: Index 
-    //   ensures ValidHashOrdering(table', e, j, k)
-    // {
-    //   // if start == end {
-        
-    //   // } else {
-    //   //   assume false;
-    //   // }
-    // }
-    // ValidHashOrdering(table, e: Index, j: Index, k: Index)
+    // HELP: no idea whats going on
+    if exists e: Index, j: Index, k: Index
+      :: !ValidHashOrdering(table', e, j, k)
+    {
+      var e: Index, j: Index, k: Index :|
+        && table'[e].value.Empty?
+        && table'[j].value.Full?
+        && table'[k].value.Full?
+        && adjust2(j, e) < adjust2(k, e)
+        && adjust2(hash(table'[j].value.key), e) > adjust2(hash(table'[k].value.key), e);
+      
+      var j_prev := if j > 0 then j - 1 else |table| - 1;
+      var j_next := if j + 1 < |table| then j + 1 else 0;
 
-    // forall j | 0 <= j < |table'|
-    // ensures ContiguousToEntry(table', j)
-    // {
-    //   if start == end {
-    //     assert ContiguousToEntry(table, j);
-    //   } else if start < end {
-    //     assert ContiguousToEntry(table, j);
-    //     if start < j <= end {
-    //       var index := j-1;
-    //       assert ContiguousToEntry(table, index);
-    //       // assert ValidHashInSlot(table', e, j)
+      var k_prev := if k > 0 then k - 1 else |table| - 1;
+      var k_next := if k + 1 < |table| then k + 1 else 0;
 
-    //       assert table'[j] == table[index];
-    
-    //       if table[index].value.Full? {
-    //         var key := table[index].value.key;
-    //         var h := hash(table[index].value.key);
+      assert ValidHashOrdering(table, e, j, k);
+      assert ValidHashOrdering(table, e, j, k_prev);
+      assert ValidHashOrdering(table, e, j, k_next);
+      assert ValidHashOrdering(table, e, j_prev, k);
+      assert ValidHashOrdering(table, e, j_prev, k_prev);
+      assert ValidHashOrdering(table, e, j_prev, k_next);
+      assert ValidHashOrdering(table, e, j_next, k);
+      assert ValidHashOrdering(table, e, j_next, k_prev);
+      assert ValidHashOrdering(table, e, j_next, k_next);
+      assert ValidHashOrdering(table, end, j, k);
+      assert ValidHashOrdering(table, end, j, k_prev);
+      assert ValidHashOrdering(table, end, j, k_next);
+      assert ValidHashOrdering(table, end, j_prev, k);
+      assert ValidHashOrdering(table, end, j_prev, k_prev);
+      assert ValidHashOrdering(table, end, j_prev, k_next);
+      assert ValidHashOrdering(table, end, j_next, k);
+      assert ValidHashOrdering(table, end, j_next, k_prev);
+      assert ValidHashOrdering(table, end, j_next, k_next);
+  
+      assert ValidHashInSlot(table, e, j);
+      assert ValidHashInSlot(table, e, j_prev);
+      assert ValidHashInSlot(table, e, j_next);
+  
+      assert ValidHashInSlot(table, e, k);
+      assert ValidHashInSlot(table, e, k_next);
+      assert ValidHashInSlot(table, e, k_prev);
+  
+      assert ValidHashInSlot(table, end, j);
+      assert ValidHashInSlot(table, end, j_prev);
+      assert ValidHashInSlot(table, end, j_next);
+  
+      assert ValidHashInSlot(table, end, k);
+      assert ValidHashInSlot(table, end, k_next);
+      assert ValidHashInSlot(table, end, k_prev);
 
-    //         assert ShouldSkip(table, h, index, key);
+      assert false;
+    }
 
-    //       }
-
-    //       assume false;
-    //     }
-    //   } else {
-    //     assume false;
-    //   }
-    // }
+    forall j : Index 
+    ensures ContiguousToEntry(table', j)
+    {
+      var j_prev := if j > 0 then j - 1 else |table| - 1;
+      var j_next := if j + 1 < |table| then j + 1 else 0;
+      assert ContiguousToEntry(table, j);
+      assert ContiguousToEntry(table, j_prev);
+      assert ContiguousToEntry(table, j_next);
+    }
   }
 
 //   lemma RemoveStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, i: Index, end: Index)
