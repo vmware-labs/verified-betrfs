@@ -588,22 +588,28 @@ module ShardedHashTable refines ShardedStateMachine {
     var table, table' := s.table, s'.table;
     var key := kv.0;
 
-    assert SubTableFull(table, start, end, key);
-    assume SubTableFullKeyNotFound(table, start, end, key); // TODO
+    if !SubTableFullKeyNotFound(table, start, end, key) {
+      var i: Index, entry: Option<Entry> :|
+        && IndexInRange(i, start, end)
+        && entry == table[i]
+        && !SlotFullKeyNotFound(entry, i, key);
+      assert SlotFull(entry, i, key);
+      assert entry.value.key == key;
+      assert ValidHashOrdering(table, end, start, i);
+      assert false;
+    }
 
-    assert KeysUnique(table') by {
-      if !KeysUnique(table') {
-        var i: Index, j: Index :| 
-          && table'[i].value.Full?
-          && table'[j].value.Full?
-          && i != j
-          && table'[i].value.key == table'[j].value.key;
-        assert i == start || j == start;
-        var index := if i == start then j else i;
-        assert ContiguousToEntry(table, index);
-        assert ValidHashInSlot(table, end, index);
-        assert false;
-      }
+    if !KeysUnique(table') {
+      var i: Index, j: Index :| 
+        && table'[i].value.Full?
+        && table'[j].value.Full?
+        && i != j
+        && table'[i].value.key == table'[j].value.key;
+      assert i == start || j == start;
+      var index := if i == start then j else i;
+      assert ContiguousToEntry(table, index);
+      assert ValidHashInSlot(table, end, index);
+      assert false;
     }
 
     // HELP: after condensing this proof I am not sure whats going on
