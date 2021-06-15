@@ -284,7 +284,6 @@ module ShardedHashTable refines ShardedStateMachine {
     && ticket.input.InsertInput?
     && v.insert_capacity.value >= 1
 
-    // && ShouldHashGoBefore(h, start, end)
     // skip upto (not including) start
     && ShouldSkip(table, h, start, key)
     // insert at start
@@ -540,47 +539,42 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-  // lemma OverwriteStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), end: Index)
-  //   requires Inv(s)
-  //   requires Overwrite(s, s', ticket, kv, end)
-  //   ensures Inv(s')
-  // {
-  //   assert forall i: Index :: s'.table[i].value.Full? ==> 
-  //     s'.table[i].value.key == s.table[i].value.key;
-    
-  //   forall e: Index, i: Index
-  //     ensures ValidHashInSlot(s'.table, e, i)
-  //   {
-  //     assert ValidHashInSlot(s.table, e, i);
-  //   }
+  lemma OverwriteStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), end: Index)
+    requires Inv(s)
+    requires Overwrite(s, s', ticket, kv, end)
+    ensures Inv(s')
+  {
+    var table, table' := s.table, s'.table;
 
-  //   forall e: Index, j: Index, k: Index
-  //     ensures ValidHashOrdering(s'.table, e, j, k)
-  //   {
-  //     assert ValidHashOrdering(s.table, e, j, k);
-  //     assert ValidHashInSlot(s.table, e, j);
-  //     assert ValidHashInSlot(s.table, e, k);
-  //   }
+    forall e: Index, i: Index
+      ensures ValidHashInSlot(table', e, i)
+    {
+      assert ValidHashInSlot(table, e, i);
+    }
 
-  //   forall i: Index | s'.table[i].value.Full? 
-  //     ensures ShouldSkip(s'.table, hash(s'.table[i].value.key), i, s'.table[i].value.key)
-  //   {
-  //     assert ShouldSkip(s.table, hash(s.table[i].value.key), i, s.table[i].value.key);
-  //   }
+    forall e: Index, j: Index, k: Index
+      ensures ValidHashOrdering(table', e, j, k)
+    {
+      assert ValidHashOrdering(table, e, j, k);
+      assert ValidHashInSlot(table, e, j);
+      assert ValidHashInSlot(table, e, k);
+    }
 
-  //   TableQuantityReplace1(s.table, s'.table, end);
-  // }
+    forall j : Index 
+      ensures ContiguousToEntry(table', j)
+    {
+      assert ContiguousToEntry(table, j);
+    }
+
+    TableQuantityReplace1(table, table', end);
+  }
 
   lemma InsertStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
     requires Inv(s)
     requires Insert(s, s', ticket, kv, start, end)
   {
-    var (key, value) := kv;
-    var h := hash(key);
-
     var table, table' := s.table, s'.table;
-    assert table' == TableRightShiftTransition(table, Some(Full(key, value)), start, end);
-
+  
     if !KeysUnique(table') {
       var i: Index, j: Index :| 
         && table'[i].value.Full?
