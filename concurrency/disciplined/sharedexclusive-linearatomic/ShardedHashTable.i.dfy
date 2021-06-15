@@ -482,15 +482,10 @@ module ShardedHashTable refines ShardedStateMachine {
     table[i].value.Full? ==>
     (
       var key := table[i].value.key;
-      var h := hash(key);
-      && (h <= i ==> (forall j | h <= j <= i :: table[j].value.Full? && table[j].value.key != key))
-      && (h > i ==>
-        && h < |table|
-        && (forall j | 0 <= j <= i :: table[j].value.Full? && table[j].value.key != key)
-        && (forall j | h <= j < |table| :: table[j].value.Full? && table[j].value.key != key)
-      )
+      var key_hash := hash(key);
+      KeyNotFound(table, key_hash, i, key)
     )
-    }
+  }
 
   predicate InvTable(table: FixedTable)
   {
@@ -545,36 +540,36 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-  lemma OverwriteStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), end: Index)
-    requires Inv(s)
-    requires Overwrite(s, s', ticket, kv, end)
-    ensures Inv(s')
-  {
-    assert forall i: Index :: s'.table[i].value.Full? ==> 
-      s'.table[i].value.key == s.table[i].value.key;
+  // lemma OverwriteStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), end: Index)
+  //   requires Inv(s)
+  //   requires Overwrite(s, s', ticket, kv, end)
+  //   ensures Inv(s')
+  // {
+  //   assert forall i: Index :: s'.table[i].value.Full? ==> 
+  //     s'.table[i].value.key == s.table[i].value.key;
     
-    forall e: Index, i: Index
-      ensures ValidHashInSlot(s'.table, e, i)
-    {
-      assert ValidHashInSlot(s.table, e, i);
-    }
+  //   forall e: Index, i: Index
+  //     ensures ValidHashInSlot(s'.table, e, i)
+  //   {
+  //     assert ValidHashInSlot(s.table, e, i);
+  //   }
 
-    forall e: Index, j: Index, k: Index
-      ensures ValidHashOrdering(s'.table, e, j, k)
-    {
-      assert ValidHashOrdering(s.table, e, j, k);
-      assert ValidHashInSlot(s.table, e, j);
-      assert ValidHashInSlot(s.table, e, k);
-    }
+  //   forall e: Index, j: Index, k: Index
+  //     ensures ValidHashOrdering(s'.table, e, j, k)
+  //   {
+  //     assert ValidHashOrdering(s.table, e, j, k);
+  //     assert ValidHashInSlot(s.table, e, j);
+  //     assert ValidHashInSlot(s.table, e, k);
+  //   }
 
-    forall i: Index | s'.table[i].value.Full? 
-      ensures ShouldSkip(s'.table, hash(s'.table[i].value.key), i, s'.table[i].value.key)
-    {
-      assert ShouldSkip(s.table, hash(s.table[i].value.key), i, s.table[i].value.key);
-    }
+  //   forall i: Index | s'.table[i].value.Full? 
+  //     ensures ShouldSkip(s'.table, hash(s'.table[i].value.key), i, s'.table[i].value.key)
+  //   {
+  //     assert ShouldSkip(s.table, hash(s.table[i].value.key), i, s.table[i].value.key);
+  //   }
 
-    TableQuantityReplace1(s.table, s'.table, end);
-  }
+  //   TableQuantityReplace1(s.table, s'.table, end);
+  // }
 
   lemma InsertStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
     requires Inv(s)
