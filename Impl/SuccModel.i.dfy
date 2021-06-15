@@ -320,7 +320,7 @@ module SuccModel {
     }
   }
 
-  lemma {:timeLimitMultiplier 4} lemmaGetPathResult(s: BBC.Variables, io: IO, startKey: Key, key: Key, acc: seq<Bucket>, tt: TranslationTable,
+  lemma {:timeLimitMultiplier 8} lemmaGetPathResult(s: BBC.Variables, io: IO, startKey: Key, key: Key, acc: seq<Bucket>, tt: TranslationTable,
     lookup: BT.Lookup, start: UI.RangeStart, upTo: Option<Key>, pset: Option<PrefixSet>, maxToFind: int, ref: BT.G.Reference, counter: uint64)
   requires BBC.Inv(s) && s.Ready?
   requires io.IOInit?

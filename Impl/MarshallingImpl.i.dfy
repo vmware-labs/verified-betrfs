@@ -629,7 +629,7 @@ module MarshallingImpl {
   //   if s.Some? then
   //     Some(s.value.I())
   //   else
-  //     NonenodeToVal
+  //     None
   // }
 
   method {:fuel SizeOfV,5} {:timeLimitMultiplier 5} nodeToVal(shared node: Node)
