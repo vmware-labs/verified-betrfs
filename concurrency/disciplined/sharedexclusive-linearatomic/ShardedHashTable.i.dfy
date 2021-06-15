@@ -288,9 +288,8 @@ module ShardedHashTable refines ShardedStateMachine {
       [table[last_index]] + table[..end] + table[end+1..start] + [inserted] + table[start..last_index]
   }
 
-  predicate InsertEnable(v: Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
+  predicate InsertEnable(v: Variables, ticket: Ticket, key: Key, start: Index, end: Index)
   {
-    var (key, value) := kv;
     && v.Variables?
     && var table := v.table;
     && ticket in v.tickets
@@ -309,7 +308,7 @@ module ShardedHashTable refines ShardedStateMachine {
   }
   
   function Insert(v: Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index) : Variables
-    requires InsertEnable(v, ticket, kv, start, end)
+    requires InsertEnable(v, ticket, kv.0, start, end)
   {
     var table' := TableRightShift(v.table, Some(Full(kv.0, kv.1)), start, end);
     v.(tickets := v.tickets - multiset{ticket})
@@ -320,34 +319,40 @@ module ShardedHashTable refines ShardedStateMachine {
 
   predicate IsInsert(v: Variables, v': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
   {
-    && InsertEnable(v, ticket, kv, start, end)
+    && InsertEnable(v, ticket, kv.0, start, end)
     && v' == Insert(v, ticket, kv, start, end)
   }
 
-//   predicate TableOverwriteEnable(table: FixedTable, key: Key, end: Index)
-//   {
-//     // the entry at end index has the same key
-//     && table[end].Some?
-//     && table[end].value.Full?
-//     && table[end].value.key == key
-//   }
+  predicate OverwriteEnable(v: Variables, ticket: Ticket, key: Key, end: Index)
+  {
+    && v.Variables?
+    && var table := v.table;
 
-//   predicate Overwrite(v: Variables, v': Variables, ticket: Ticket, kv: (Key, Value), end: Index)
-//   {
-//     var (key, value) := kv;
-//     && v.Variables?
-//     && ticket in v.tickets
-//     && ticket.input.InsertInput?
+    && ticket in v.tickets
+    && ticket.input.InsertInput?
 
-//     && TableOverwriteEnable(v.table, key, end)
+    // the entry at end index has the same key
+    && table[end].Some?
+    && table[end].value.Full?
+    && table[end].value.key == key
+  }
 
-//     && v' == v
-//       .(tickets := v.tickets - multiset{ticket})
-//       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
-//       .(table := v.table[end := Some(Full(key, value))])
-//   }
+  function Overwrite(v: Variables, ticket: Ticket, kv: (Key, Value), end: Index): Variables
+    requires OverwriteEnable(v, ticket, kv.0, end)
+  {
+    v.(tickets := v.tickets - multiset{ticket})
+      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
+      .(table := v.table[end := Some(Full(kv.0, kv.1))])
+  }
 
-// // Query transition definitions
+  predicate IsOverwrite(v: Variables, v': Variables, ticket: Ticket, kv: (Key, Value), end: Index)
+  {
+    var (key, value) := kv;
+    && OverwriteEnable(v, ticket, key, end)
+    && v' == Overwrite(v, ticket, kv, end)
+  }
+
+// Query transition definitions
 
 //   predicate QueryFound(v: Variables, v': Variables, ticket: Ticket, i: Index)
 //   {
