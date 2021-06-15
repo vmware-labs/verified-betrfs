@@ -276,7 +276,7 @@ module ShardedHashTable refines ShardedStateMachine {
     )
   }
 
-  function TableRightShiftTransition(table: FixedTable, inserted: Option<Entry>, start: Index, end: Index) : (table': FixedTable)
+  function TableRightShift(table: FixedTable, inserted: Option<Entry>, start: Index, end: Index) : (table': FixedTable)
     ensures IsTableRightShift(table, table', inserted, start, end)
   {
     if start == end then
@@ -287,11 +287,10 @@ module ShardedHashTable refines ShardedStateMachine {
       var last_index := |table| - 1;
       [table[last_index]] + table[..end] + table[end+1..start] + [inserted] + table[start..last_index]
   }
-  
-  predicate Insert(v: Variables, v': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
+
+  predicate InsertEnable(v: Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
   {
     var (key, value) := kv;
-    var h := hash(key);
     && v.Variables?
     && var table := v.table;
     && ticket in v.tickets
@@ -299,7 +298,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && v.insert_capacity.value >= 1
 
     // skip upto (not including) start
-    && SubTableShouldSkip(table, h, start, key)
+    && SubTableShouldSkip(table, hash(key), start, key)
     // insert at start
     && SlotShouldSwap(table[start], start, key)
     // this subtable is full
@@ -307,9 +306,22 @@ module ShardedHashTable refines ShardedStateMachine {
     // but the end is empty 
     && table[end].Some?
     && table[end].value.Empty?
+  }
+  
+  function Insert(v: Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index) : Variables
+    requires InsertEnable(v, ticket, kv, start, end)
+  {
+    var table' := TableRightShift(v.table, Some(Full(kv.0, kv.1)), start, end);
+    v.(tickets := v.tickets - multiset{ticket})
+      .(insert_capacity := Count.Variables(v.insert_capacity.value - 1))
+      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
+      .(table := table')
+  }
 
-    && v'.Variables?
-    && IsTableRightShift(v.table, v'.table, Some(Full(key, value)), start, end)
+  predicate IsInsert(v: Variables, v': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
+  {
+    && InsertEnable(v, ticket, kv, start, end)
+    && v' == Insert(v, ticket, kv, start, end)
   }
 
 //   predicate TableOverwriteEnable(table: FixedTable, key: Key, end: Index)
@@ -583,7 +595,7 @@ module ShardedHashTable refines ShardedStateMachine {
 
   lemma InsertStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
     requires Inv(s)
-    requires Insert(s, s', ticket, kv, start, end)
+    requires IsInsert(s, s', ticket, kv, start, end)
   {
     var table, table' := s.table, s'.table;
     var key := kv.0;
