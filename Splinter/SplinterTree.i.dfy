@@ -8,6 +8,7 @@ include "AllocationTableMachine.i.dfy"
 include "MsgSeq.i.dfy"
 include "Message.s.dfy"
 include "Interp.s.dfy"
+include "BranchTree.i.dfy"
 
 /*
 a Betree consists of:
@@ -106,6 +107,7 @@ module SplinterTreeMachineMod {
   import AllocationTableMachineMod
   import IndirectionTableMod
   import CacheIfc
+  import BranchTreeMod
 
   // TODO: Rename this module
   datatype Superblock = Superblock(
@@ -237,6 +239,7 @@ module SplinterTreeMachineMod {
     | FlushStep(flush: FlushRec) // pushdown and compaction
     | DrainMemBufferStep(oldRoot: NodeAssignment, newRoot: NodeAssignment)
     | CompactBranchStep(receipt: CompactReceipt)
+    | BranchInteralStep(branchSk : BranchTreeMod.Skolem)
 
   predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
   {
@@ -400,6 +403,7 @@ module SplinterTreeMachineMod {
   {
     || Flush(v, v', cache, cacheOps, sk)
     || DrainMemBuffer(v, v', cache, cacheOps, sk)
+    // || BranchInteralStep : TODO
     || CompactBranch(v, v', cache, cacheOps, sk)
   }
 

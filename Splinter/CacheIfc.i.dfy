@@ -33,6 +33,7 @@ module CacheIfc {
     && ReadValue(s, cu) == Some(value)
   }
 
+  // Tells us if the value of this CU matches its value on disk
   predicate IsClean(s: Variables, cu: CU)
   {
     true // TODO

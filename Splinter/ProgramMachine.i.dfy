@@ -242,6 +242,7 @@ module ProgramMachineMod {
     && v'.stableSuperblock == v.stableSuperblock
     && SplinterTreeMachineMod.Internal(v.betree, v'.betree, v.cache, cacheOps, sk)
     && CacheIfc.ApplyWrites(v.cache, v'.cache, cacheOps)
+    && AllocsDisjoint(v')
   }
 
   predicate ReqSync(v: Variables, v': Variables, uiop : UIOp, syncReqId: SyncReqId)
