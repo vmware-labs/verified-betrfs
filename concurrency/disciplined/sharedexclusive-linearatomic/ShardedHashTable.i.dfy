@@ -299,10 +299,10 @@ module ShardedHashTable refines ShardedStateMachine {
     requires InsertEnable(v, ticket, kv.0, start, end)
   {
     var table' := TableRightShift(v.table, Some(Full(kv.0, kv.1)), start, end);
-    v.(tickets := v.tickets - multiset{ticket})
+    v.(table := table')
       .(insert_capacity := Count.Variables(v.insert_capacity.value - 1))
+      .(tickets := v.tickets - multiset{ticket})
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
-      .(table := table')
   }
 
   predicate IsInsert(v: Variables, v': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
@@ -438,26 +438,49 @@ module ShardedHashTable refines ShardedStateMachine {
       table[1..end+1] + [Some(Empty)] + table[end+1..start] + table[start+1..] + [table[0]]
   }
 
-  predicate RemoveEnable(v: Variables, ticket: Ticket, start: Index, end: Index)
+  // NOTE: key does nothing here
+  predicate SlotShouldTidy(entry: Option<Entry>, slot_index: Index, key: Key)
   {
+    && SlotFull(entry, slot_index, key)
+    && hash(entry.value.key) != slot_index
+  }
+
+  predicate SubTableShouldTidy(table: FixedTable, start: Index, end: Index, key: Key)
+  { 
+    TrueInSubTable(table, start, end, key, SlotShouldTidy)
+  }
+
+  predicate RemoveFoundEnable(v: Variables, ticket: Ticket, start: Index, end: Index)
+  {
+    var key := ticket.input.key;
     && v.Variables?
     && ticket in v.tickets
     && ticket.input.RemoveInput?
     && v.table[start].Some?
     && v.table[start].value.Full?
-    && v.table[start].value.key == ticket.input.key
+    && v.table[start].value.key == key
   
-    // this subtable is full
-    // && SubTableFull(table, start, end, key)
+    // should tidy this subtable
+    && SubTableShouldTidy(v.table, start, end, key)
+    // should stop at end
+    && !SlotShouldTidy(v.table[end], end, key)
   }
 
-//   predicate Remove(v: Variables, v': Variables, ticket: Ticket, start: Index, end: Index)
-//   {
-//     && TableLeftShift(v.table, v'.table, start, end)
-//     && v' == v.(table := v'.table)
-//         .(tickets := v.tickets - multiset{ticket})
-//         .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(true))})
-//   }
+  function RemoveFound(v: Variables, ticket: Ticket, start: Index, end: Index): Variables
+    requires RemoveFoundEnable(v, ticket, start, end)
+  {
+    var table' := TableLeftShift(v.table, start, end);
+    v.(table := table')
+      .(insert_capacity := Count.Variables(v.insert_capacity.value + 1))
+      .(tickets := v.tickets - multiset{ticket})
+      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(true))})
+  }
+
+  predicate IsRemove(v: Variables, v': Variables, ticket: Ticket, start: Index, end: Index)
+  {
+    && RemoveFoundEnable(v, ticket, start, end)
+    && v' == RemoveFound(v, ticket, start, end)
+  }
 
 // All transitions
 
