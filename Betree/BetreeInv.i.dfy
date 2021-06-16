@@ -451,7 +451,7 @@ module BetreeInv {
     }
   }
 
-  lemma RedirectNewPathReachableFromOldPath(s: Variables, s': Variables, redirect: Redirect, path: Path, ref: Reference) returns (path': Path)
+  lemma {:timeLimitMultiplier 2} RedirectNewPathReachableFromOldPath(s: Variables, s': Variables, redirect: Redirect, path: Path, ref: Reference) returns (path': Path)
     requires Inv(s)
     requires Redirect(s.bcv, s'.bcv, redirect)
     requires |path| > 2
