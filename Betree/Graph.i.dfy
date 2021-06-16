@@ -25,11 +25,11 @@ module ReferenceType {
   export extends S
   export Internal reveals *
 }
-  
+
 abstract module Graph {
   import opened Sequences
   import ReferenceType
-    
+
   // Abstract features
   type Reference = ReferenceType.Reference
   type Node(!new)
@@ -38,7 +38,7 @@ abstract module Graph {
 
   type Graph = imap<Reference, Node>
   type Path = seq<Reference>
-    
+
   // TODO Transactable is a more natural place for this
   datatype Op =
     | AllocOp(ref: Reference, node: Node)
@@ -54,7 +54,7 @@ abstract module Graph {
   predicate IsClosed(g: Graph) {
     forall ref :: ref in g ==> Successors(g[ref]) <= g.Keys
   }
-  
+
   predicate IsPath(g: Graph, path: Path) {
     forall i :: 0 <= i < |path|-1 ==> path[i] in g && path[i+1] in Successors(g[path[i]])
   }
@@ -66,11 +66,27 @@ abstract module Graph {
     && path[0] in Successors(g[Last(path)])
   }
 
+  lemma CycleRotation(g: Graph, path: Path, i: nat)
+    requires IsCycle(g, path)
+    requires 0 <= i <= |path|
+    ensures IsCycle(g, path[i..] + path[..i]);
+  {
+    var path' := path[i..] + path[..i];
+    forall j | 0 <= j < |path'| - 1
+      ensures path'[j] in g && path'[j+1] in Successors(g[path'[j]])
+    {
+      if j < |path[i..]| - 1 {
+      } else if j == |path[i..]| - 1 {
+      } else {
+      }
+    }
+  }
+
   predicate IsSimple(g: Graph, path: Path) {
     && IsPath(g, path)
     && (forall i, j :: 0 <= i < |path| && 0 <= j < |path| && i != j ==> path[i] != path[j])
   }
-  
+
   predicate IsAcyclic(g: Graph) {
     forall path :: IsPath(g, path) ==> !IsCycle(g, path)
   }
@@ -86,12 +102,12 @@ abstract module Graph {
       assert IsCycle(g, cycle);
     }
   }
-  
+
   predicate IsPathFromTo(g: Graph, path: Path, start: Reference, end: Reference)
   {
     IsPath(g, path) && 1 < |path| && path[0] == start && Last(path) == end
   }
-  
+
   function ReachableReferences(g: Graph, p: Reference) : iset<Reference>
   {
     iset path |
@@ -108,7 +124,7 @@ abstract module Graph {
     && (forall i :: 0 < i < |path| - 1 ==> path[i] in g'.Keys - g.Keys)
     && Last(path) in g
   }
-  
+
   function NewlyReachableReferences(g: Graph, g': Graph, p: Reference) : iset<Reference>
   {
     iset path | NewPath(g, g', p, path) :: Last(path)
@@ -138,7 +154,7 @@ abstract module Graph {
     else 1 + FirstInGraph(path[1..], g)
   }
 
-  function UndoLocalEdit(g: Graph, g': Graph, p: Reference, path: Path) : (result: Path)
+  lemma UndoLocalEdit(g: Graph, g': Graph, p: Reference, path: Path) returns (result: Path)
     requires IsClosed(g)
     requires 1 < |path|
     requires path[0] in g.Keys
@@ -147,18 +163,38 @@ abstract module Graph {
     requires IsPath(g', path)
     ensures IsPathFromTo(g, result, path[0], Last(path))
   {
-    if path[0] == p then
+    if path[0] == p {
       var len := 1 + FirstInGraph(path[1..], g);
       var wit := path[..len+1];
+      assert NewPath(g, g', p, wit);
       assert Last(wit) in NewlyReachableReferences(g, g', p);
       var replacement :| IsPathFromTo(g, replacement, path[0], Last(wit));
-      if len < |path| - 1 then DropLast(replacement) + UndoLocalEdit(g, g', p, path[len..])
-      else replacement
-    else if |path| == 2 then path
-    else path[..1] + UndoLocalEdit(g, g', p, path[1..])
+      if len < |path| - 1 {
+        var sub := UndoLocalEdit(g, g', p, path[len..]);
+        return DropLast(replacement) + sub;
+      } else {
+        return replacement;
+      }
+    } else if |path| == 2 {
+      return path;
+    } else {
+      var sub := UndoLocalEdit(g, g', p, path[1..]);
+      return path[..1] + sub;
+    }
   }
-  
-  lemma LocalEditPreservesAcyclic(g: Graph, g': Graph, p: Reference)
+
+  lemma CycleVisitsG(g: Graph, g': Graph, cycle: Path) returns (i: nat)
+    requires IsClosed(g)
+    requires NewNodesAreCycleFree(g, g')
+    requires IsCycle(g', cycle)
+    ensures 0 <= i < |cycle|
+    ensures cycle[i] in g
+  {
+    var j :| 0 <= j < |cycle| && cycle[j] in g;
+    return j;
+  }
+
+  lemma {:timeLimitMultiplier 2} LocalEditPreservesAcyclic(g: Graph, g': Graph, p: Reference)
     requires IsClosed(g)
     requires IsAcyclic(g)
     requires EditIsLocal(g, g', p)
@@ -166,10 +202,11 @@ abstract module Graph {
     ensures IsAcyclic(g')
   {
     if cycle :| IsCycle(g', cycle) {
-      var i :| 0 <= i < |cycle| && cycle[i] in g;
+      var i := CycleVisitsG(g, g', cycle);
+      CycleRotation(g', cycle, i);
       var rcycle := cycle[i..] + cycle[..i];
-      assert IsCycle(g', rcycle)  && rcycle[0] in g;
       var path := rcycle + [rcycle[0]];
+      assert Last(path) in g.Keys;
       var rpath := UndoLocalEdit(g, g', p, path);
       assert IsCycle(g, DropLast(rpath));
     }
