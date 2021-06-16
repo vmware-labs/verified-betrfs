@@ -70,7 +70,7 @@ debug "Copying new results"
     mkdir -p "$tmp_dir"/verichecks-results/$COMMIT_SHA &&
     cp -r build "$tmp_dir"/verichecks-results/$COMMIT_SHA &&
     echo -n $BRANCH_NAMES > "$tmp_dir"/verichecks-results/$COMMIT_SHA/commitid
-    date > "$tmp_dir"/verichecks-results/$COMMIT_SHA/commitid/date
+    date > "$tmp_dir"/verichecks-results/$COMMIT_SHA/date
 ) || exit 1
 
 debug "Regenerating table of contents"
