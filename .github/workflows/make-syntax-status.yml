@@ -34,7 +34,7 @@ jobs:
       - name: publish to wiki
         env:
           GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-        run: tools/verichecks-to-wiki.sh
+        run: bash tools/verichecks-to-wiki.sh
   stop-veri-checks:
     runs-on: bastion
     needs: build

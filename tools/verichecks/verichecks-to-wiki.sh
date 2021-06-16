@@ -85,22 +85,22 @@ debug "Regenerating table of contents"
         fi
         echo -n "- "
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.verified ]; then
-            echo -n \[summary\]\(verichecks-results/$d/build/Impl/Bundle.i.verified\) " - "
+            echo -n \[summary\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.verified\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.txt ]; then
-            echo -n \[details\]\(verichecks-results/$d/build/Impl/Bundle.i.verified.err\) " - "
+            echo -n \[details\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.verified.err\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.svg ]; then
-            echo -n \[status-SVG\]\(verichecks-results/$d/build/Impl/Bundle.i.status.svg\) " - "
+            echo -n \[status-SVG\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.status.svg\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.pdf ]; then
-            echo -n \[status-PDF\]\(verichecks-results/$d/build/Impl/Bundle.i.status.pdf\) " - "
+            echo -n \[status-PDF\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.status.pdf\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.syntax-status.svg ]; then
-            echo -n \[syntax-status-SVG\]\(verichecks-results/$d/build/Impl/Bundle.i.syntax-status.svg\) " - "
+            echo -n \[syntax-status-SVG\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.syntax-status.svg\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf ]; then
-            echo -n \[syntax-status-PDF\]\(verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf\) " "
+            echo -n \[syntax-status-PDF\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf\) " "
         fi
         if [ -f verichecks-results/$d/date ]; then
             echo -n "\("
