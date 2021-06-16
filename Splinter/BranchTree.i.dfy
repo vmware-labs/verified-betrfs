@@ -3,12 +3,12 @@ include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
 include "MsgSeq.i.dfy"
-include "SplinterTree.i.dfy"
+//include "SplinterTree.i.dfy"
 include "Message.s.dfy"
 include "Interp.s.dfy"
 include "CacheIfc.i.dfy"
-include "../lib/datastructures/BtreeModel.i.dfy"
-inlcude "../lib/Base/Maps.i.dfy"
+include "../lib/DataStructures/BtreeModel.i.dfy"
+include "../lib/Base/Maps.i.dfy"
 
 /*
 
