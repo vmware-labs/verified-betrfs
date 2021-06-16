@@ -27,7 +27,15 @@ module ShardedHashTable refines ShardedStateMachine {
 
   type Index = i: int | 0 <= i < FixedSize()
 
-  datatype LeftShift = LeftShift(start: int, end: int)
+  function NextIndex(i: Index): Index
+  {
+    if i == FixedSize() - 1 then 0 else i + 1
+  }
+
+  function PrevIndex(i: Index): Index
+  {
+    if i == 0 then FixedSize() - 1 else i - 1
+  }
 
   function method hash(key: Key) : Index
 
@@ -261,9 +269,7 @@ module ShardedHashTable refines ShardedStateMachine {
   function TableRightShift(table: FixedTable, inserted: Option<Entry>, start: Index, end: Index) : (table': FixedTable)
     ensures IsTableRightShift(table, table', inserted, start, end)
   {
-    if start == end then
-      table[start := inserted]
-    else if start < end then
+    if start <= end then
       table[..start] + [inserted] + table[start..end] + table[end+1..]
     else
       var last_index := |table| - 1;
@@ -412,36 +418,41 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     && (start <= end ==>
       && (forall i | 0 <= i < start :: table'[i] == table[i]) 
-      && (forall i | start <= i < end :: table'[i] == table[i+1] && table'[i].Some?) 
+      && (forall i | start <= i < end :: table'[i] == table[i+1]) 
       && table'[end] == Some(Empty)
       && (forall i | end < i < |table'| :: table'[i] == table[i]))
     && (start > end ==>
       && (forall i | 0 <= i < end :: table'[i] == table[i+1])
       && table'[end] == Some(Empty)
       && (forall i | end < i < start :: table'[i] == table[i])
-      && (forall i | start <= i < |table'| - 1 :: table'[i] == table[i+1] && table'[i].Some?)
+      && (forall i | start <= i < |table'| - 1 :: table'[i] == table[i+1])
       && table'[ |table'| - 1 ] == table[0])
   }
 
-  // function TableLeftShift(table: FixedTable, start: Index, end: Index): (table': FixedTable)
-  //   ensures IsTableLeftShift(table, table', start, end)
-  // {
-  //   if start < end then
-  //     table[..start] + table[start+1..end] + [Some(Empty)] + table[end..]
-  //   else 
-  //     assume false;
-  //     table
-  // }
+  function TableLeftShift(table: FixedTable, start: Index, end: Index): (table': FixedTable)
+    ensures IsTableLeftShift(table, table', start, end)
+  {
+    if start <= end then
+      table[..start] + table[start+1..end+1] + [Some(Empty)] + table[end+1..]
+    else
+      table[1..end+1] + [Some(Empty)] + table[end+1..start] + table[start+1..] + [table[0]]
+  }
+
+  predicate RemoveEnable(v: Variables, ticket: Ticket, start: Index, end: Index)
+  {
+    && v.Variables?
+    && ticket in v.tickets
+    && ticket.input.RemoveInput?
+    && v.table[start].Some?
+    && v.table[start].value.Full?
+    && v.table[start].value.key == ticket.input.key
+  
+    // this subtable is full
+    // && SubTableFull(table, start, end, key)
+  }
 
 //   predicate Remove(v: Variables, v': Variables, ticket: Ticket, start: Index, end: Index)
 //   {
-//     && v.Variables?
-//     && v'.Variables?
-//     && ticket in v.tickets
-//     && ticket.input.RemoveInput?
-//     && v.table[start].Some?
-//     && v.table[start].value.Full?
-//     && v.table[start].value.key == ticket.input.key
 //     && TableLeftShift(v.table, v'.table, start, end)
 //     && v' == v.(table := v'.table)
 //         .(tickets := v.tickets - multiset{ticket})
@@ -762,8 +773,8 @@ module ShardedHashTable refines ShardedStateMachine {
     forall e: Index, j: Index
       ensures ValidHashInSlot(table', e, j)
     {
-      var j_prev := if j > 0 then j - 1 else |table| - 1;
-      var j_next := if j + 1 < |table| then j + 1 else 0;
+      var j_prev := PrevIndex(j);
+      var j_next := NextIndex(j);
       assert ValidHashInSlot(table, e, j_prev);
       assert ValidHashInSlot(table, e, j);
 
@@ -786,12 +797,12 @@ module ShardedHashTable refines ShardedStateMachine {
         && table'[k].value.Full?
         && adjust(j, e) < adjust(k, e)
         && adjust(hash(table'[j].value.key), e) > adjust(hash(table'[k].value.key), e);
-      
-      var j_prev := if j > 0 then j - 1 else |table| - 1;
-      var j_next := if j + 1 < |table| then j + 1 else 0;
 
-      var k_prev := if k > 0 then k - 1 else |table| - 1;
-      var k_next := if k + 1 < |table| then k + 1 else 0;
+      var j_prev := PrevIndex(j);
+      var j_next := NextIndex(j);
+
+      var k_prev := PrevIndex(k);
+      var k_next := NextIndex(k);
 
       assert ValidHashOrdering(table, e, j, k);
       assert ValidHashOrdering(table, e, j, k_prev);
@@ -834,8 +845,8 @@ module ShardedHashTable refines ShardedStateMachine {
     forall j : Index 
     ensures ContiguousToEntry(table', j)
     {
-      var j_prev := if j > 0 then j - 1 else |table| - 1;
-      var j_next := if j + 1 < |table| then j + 1 else 0;
+      var j_prev := PrevIndex(j);
+      var j_next := NextIndex(j);
       assert ContiguousToEntry(table, j);
       assert ContiguousToEntry(table, j_prev);
       assert ContiguousToEntry(table, j_next);
