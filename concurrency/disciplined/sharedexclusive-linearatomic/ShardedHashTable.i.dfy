@@ -162,13 +162,13 @@ module ShardedHashTable refines ShardedStateMachine {
 //////////////////////////////////////////////////////////////////////////////
 
   datatype Step =
-    | InsertStep(ticket: Ticket, start: Index, end: Index)
-    | OverwriteStep(ticket: Ticket, i: Index)
+    | InsertStep(ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
+    | OverwriteStep(ticket: Ticket, kv: (Key, Value), end: Index)
 
     | QueryFoundStep(ticket: Ticket, i: Index)
     | QueryNotFoundStep(ticket: Ticket, end: Index)
 
-    | RemoveStep(ticket: Ticket, start: Index, end: Index)
+    | RemoveFoundStep(ticket: Ticket, start: Index, end: Index)
     | RemoveNotFoundStep(ticket: Ticket, end: Index)
 
 // Insert transition definitions
@@ -194,7 +194,7 @@ module ShardedHashTable refines ShardedStateMachine {
   predicate IndexInRange(i: Index, start: Index, end: Index)
   {
     if start <= end then
-      start <= i < end
+      (start <= i < end)
     else
       (start <= i < FixedSize() || 0 <= i < end)
   }
@@ -276,8 +276,10 @@ module ShardedHashTable refines ShardedStateMachine {
       [table[last_index]] + table[..end] + table[end+1..start] + [inserted] + table[start..last_index]
   }
 
-  predicate InsertEnable(v: Variables, ticket: Ticket, key: Key, start: Index, end: Index)
+  predicate InsertEnable(v: Variables, step: Step)
   {
+    && step.InsertStep?
+    && var InsertStep(ticket, (key, _), start, end) := step;
     && v.Variables?
     && var table := v.table;
     && ticket in v.tickets
@@ -294,10 +296,11 @@ module ShardedHashTable refines ShardedStateMachine {
     && table[end].Some?
     && table[end].value.Empty?
   }
-  
-  function Insert(v: Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index) : Variables
-    requires InsertEnable(v, ticket, kv.0, start, end)
+
+  function Insert(v: Variables, step: Step): Variables
+    requires InsertEnable(v, step)
   {
+    var InsertStep(ticket, kv, start, end) := step;
     var table' := TableRightShift(v.table, Some(Full(kv.0, kv.1)), start, end);
     v.(table := table')
       .(insert_capacity := Count.Variables(v.insert_capacity.value - 1))
@@ -305,14 +308,10 @@ module ShardedHashTable refines ShardedStateMachine {
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
   }
 
-  predicate IsInsert(v: Variables, v': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
+  predicate OverwriteEnable(v: Variables, step: Step)
   {
-    && InsertEnable(v, ticket, kv.0, start, end)
-    && v' == Insert(v, ticket, kv, start, end)
-  }
-
-  predicate OverwriteEnable(v: Variables, ticket: Ticket, key: Key, end: Index)
-  {
+    && step.OverwriteStep?
+    && var OverwriteStep(ticket, (key, _), end) := step;
     && v.Variables?
     && var table := v.table;
 
@@ -325,25 +324,21 @@ module ShardedHashTable refines ShardedStateMachine {
     && table[end].value.key == key
   }
 
-  function Overwrite(v: Variables, ticket: Ticket, kv: (Key, Value), end: Index): Variables
-    requires OverwriteEnable(v, ticket, kv.0, end)
+  function Overwrite(v: Variables, step: Step): Variables
+    requires OverwriteEnable(v, step)
   {
+    var OverwriteStep(ticket, kv, end) := step;
     v.(tickets := v.tickets - multiset{ticket})
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
       .(table := v.table[end := Some(Full(kv.0, kv.1))])
   }
 
-  predicate IsOverwrite(v: Variables, v': Variables, ticket: Ticket, kv: (Key, Value), end: Index)
-  {
-    var (key, value) := kv;
-    && OverwriteEnable(v, ticket, key, end)
-    && v' == Overwrite(v, ticket, kv, end)
-  }
-
 // Query transition definitions
 
-  predicate QueryFoundEnable(v: Variables, ticket: Ticket, i: Index)
+  predicate QueryFoundEnable(v: Variables, step: Step)
   {
+    && step.QueryFoundStep?
+    && var QueryFoundStep(ticket, i) := step;
     && v.Variables?
     && ticket in v.tickets
     && ticket.input.QueryInput?
@@ -352,22 +347,19 @@ module ShardedHashTable refines ShardedStateMachine {
     && v.table[i].value.key == ticket.input.key
   }
 
-  function QueryFound(v: Variables, ticket: Ticket, i: Index): Variables
-    requires QueryFoundEnable(v, ticket, i)
+  function QueryFound(v: Variables, step: Step): Variables
+    requires QueryFoundEnable(v, step)
   {
+    var QueryFoundStep(ticket, i) := step;
     v.(tickets := v.tickets - multiset{ticket})
       .(stubs := v.stubs + multiset{
         Stub(ticket.rid, MapIfc.QueryOutput(Found(v.table[i].value.value)))})
   }
 
-  predicate IsQueryFound(v: Variables, v': Variables, ticket: Ticket, i: Index)
+  predicate QueryNotFoundEnable(v: Variables, step: Step)
   {
-    && QueryFoundEnable(v, ticket, i)
-    && v' == QueryFound(v, ticket, i)
-  }
-
-  predicate QueryNoutFoundEnable(v: Variables, ticket: Ticket, end: Index)
-  {
+    && step.QueryNotFoundStep?
+    && var QueryNotFoundStep(ticket, end) := step;
     && v.Variables?
     && ticket in v.tickets
     && ticket.input.QueryInput?
@@ -376,43 +368,15 @@ module ShardedHashTable refines ShardedStateMachine {
     && SubTableFullKeyNotFound(v.table, hash(ticket.input.key), end, ticket.input.key)
   }
 
-  function QueryNoutFound(v: Variables, ticket: Ticket, end: Index): Variables
-    requires QueryNoutFoundEnable(v, ticket, end)
+  function QueryNotFound(v: Variables, step: Step): Variables
+    requires QueryNotFoundEnable(v, step)
   {
+    var QueryNotFoundStep(ticket, end) := step;
     v.(tickets := v.tickets - multiset{ticket})
     .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.QueryOutput(NotFound))})
   }
 
-  predicate IsQueryNoutFound(v: Variables, v': Variables, ticket: Ticket, end: Index)
-  {
-    && QueryNoutFoundEnable(v, ticket, end)
-    && v' == QueryNoutFound(v, ticket, end)
-  }
-
 // Remove transition definitions
-
-  predicate RemoveNotFoundEnable(v: Variables, ticket: Ticket, end: Index)
-  {
-    && v.Variables?
-    && ticket in v.tickets
-    && ticket.input.RemoveInput?
-    && v.table[end].Some?
-    && v.table[end].value.Empty?
-    && SubTableFullKeyNotFound(v.table, hash(ticket.input.key), end, ticket.input.key)
-  }
-
-  function RemoveNotFound(v: Variables, ticket: Ticket, end: Index): Variables
-    requires RemoveNotFoundEnable(v, ticket, end)
-  {
-    v.(tickets := v.tickets - multiset{ticket})
-      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(false))})
-  }
-
-  predicate IsRemoveNotFound(v: Variables, v': Variables, ticket: Ticket, end: Index)
-  {
-    && RemoveNotFoundEnable(v, ticket, end )
-    && v' == RemoveNotFound(v, ticket, end)
-  }
 
   predicate IsTableLeftShift(table: FixedTable, table': FixedTable, start: Index, end: Index)
   {
@@ -445,13 +409,16 @@ module ShardedHashTable refines ShardedStateMachine {
     && hash(entry.value.key) != slot_index
   }
 
+  // NOTE: key does nothing here
   predicate SubTableShouldTidy(table: FixedTable, start: Index, end: Index, key: Key)
   { 
     TrueInSubTable(table, start, end, key, SlotShouldTidy)
   }
 
-  predicate RemoveFoundEnable(v: Variables, ticket: Ticket, start: Index, end: Index)
+  predicate RemoveFoundEnable(v: Variables, step: Step)
   {
+    && step.RemoveFoundStep?
+    && var RemoveFoundStep(ticket, start, end) := step;
     var key := ticket.input.key;
     && v.Variables?
     && ticket in v.tickets
@@ -466,9 +433,10 @@ module ShardedHashTable refines ShardedStateMachine {
     && !SlotShouldTidy(v.table[end], end, key)
   }
 
-  function RemoveFound(v: Variables, ticket: Ticket, start: Index, end: Index): Variables
-    requires RemoveFoundEnable(v, ticket, start, end)
+  function RemoveFound(v: Variables, step: Step): Variables
+    requires RemoveFoundEnable(v, step)
   {
+    var RemoveFoundStep(ticket, start, end) := step;
     var table' := TableLeftShift(v.table, start, end);
     v.(table := table')
       .(insert_capacity := Count.Variables(v.insert_capacity.value + 1))
@@ -476,30 +444,61 @@ module ShardedHashTable refines ShardedStateMachine {
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(true))})
   }
 
-  predicate IsRemove(v: Variables, v': Variables, ticket: Ticket, start: Index, end: Index)
+  predicate RemoveNotFoundEnable(v: Variables, step: Step)
   {
-    && RemoveFoundEnable(v, ticket, start, end)
-    && v' == RemoveFound(v, ticket, start, end)
+    && step.RemoveNotFoundStep?
+    && var RemoveNotFoundStep(ticket, end) := step;
+    && v.Variables?
+    && ticket in v.tickets
+    && ticket.input.RemoveInput?
+    && v.table[end].Some?
+    && v.table[end].value.Empty?
+    && SubTableFullKeyNotFound(v.table, hash(ticket.input.key), end, ticket.input.key)
+  }
+
+  function RemoveNotFound(v: Variables, step: Step): Variables
+    requires RemoveNotFoundEnable(v, step)
+  {
+    var RemoveNotFoundStep(ticket, end) := step;
+    v.(tickets := v.tickets - multiset{ticket})
+      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(false))})
   }
 
 // All transitions
 
-  // predicate NextStep(v: Variables, v': Variables, step: Step)
-  // {
-  //   match step {
-  //     case InsertStep(ticket, stutters) => Insert(v, v', ticket, stutters)
-  //     case OverwriteStep(ticket, stutter) => Overwrite(v, v', ticket, stutter)
-  //     case QueryFoundStep(ticket, i) => QueryFound(v, v', ticket, i)
-  //     case QueryNotFoundStep(ticket, end) => QueryNotFound(v, v', ticket, end)
-  //     case RemoveStep(ticket, i, end) => Remove(v, v', ticket, i, end)
-  //     case RemoveNotFoundStep(ticket, end) => RemoveNotFound(v, v', ticket, end)
-  //   }
-  // }
+  predicate NextEnable(v: Variables, step: Step)
+  {
+    if step.InsertStep? then InsertEnable(v, step)
+    else if step.OverwriteStep? then OverwriteEnable(v, step)
+    else if step.QueryFoundStep? then QueryFoundEnable(v, step)
+    else if step.QueryNotFoundStep? then QueryNotFoundEnable(v, step)
+    else if step.RemoveFoundStep? then RemoveFoundEnable(v, step)
+    else if step.RemoveNotFoundStep? then RemoveNotFoundEnable(v, step)
+    else false
+  }
 
-  // predicate Next(s: Variables, s': Variables)
-  // {
-  //   exists step :: NextStep(s, s', step)
-  // }
+  function GetNext(v: Variables, step: Step) : Variables
+    requires NextEnable(v, step)
+  {
+    if step.InsertStep? then Insert(v, step)
+    else if step.OverwriteStep? then Overwrite(v, step)
+    else if step.QueryFoundStep? then QueryFound(v, step)
+    else if step.QueryNotFoundStep? then QueryNotFound(v, step)
+    else if step.RemoveFoundStep? then RemoveFound(v, step)
+    else if step.RemoveNotFoundStep? then RemoveNotFound(v, step)
+    else Fail
+  }
+
+  predicate NextStep(v: Variables, v': Variables, step: Step)
+  {
+    && NextEnable(v, step)
+    && v' == GetNext(v, step)
+  }
+
+  predicate Next(s: Variables, s': Variables)
+  {
+    exists step :: NextStep(s, s', step)
+  }
 
 //////////////////////////////////////////////////////////////////////////////
 // global-level Invariant proof
@@ -652,41 +651,12 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-  lemma OverwriteStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), end: Index)
+  lemma InsertStepPreservesTableQuantityInv(s: Variables, s': Variables, step: Step)
     requires Inv(s)
-    requires IsOverwrite(s, s', ticket, kv, end)
-    ensures Inv(s')
-  {
-    var table, table' := s.table, s'.table;
-
-    forall e: Index, i: Index
-      ensures ValidHashInSlot(table', e, i)
-    {
-      assert ValidHashInSlot(table, e, i);
-    }
-
-    forall e: Index, j: Index, k: Index
-      ensures ValidHashOrdering(table', e, j, k)
-    {
-      assert ValidHashOrdering(table, e, j, k);
-      assert ValidHashInSlot(table, e, j);
-      assert ValidHashInSlot(table, e, k);
-    }
-
-    forall j : Index 
-      ensures ContiguousToEntry(table', j)
-    {
-      assert ContiguousToEntry(table, j);
-    }
-
-    TableQuantityReplace1(table, table', end);
-  }
-
-  lemma InsertStepPreservesTableQuantityInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
-    requires Inv(s)
-    requires IsInsert(s, s', ticket, kv, start, end)
+    requires step.InsertStep? && NextStep(s, s', step)
     ensures  TableQuantityInv(s')
   {
+    var InsertStep(ticket, kv, start, end) := step;
     var table, table' := s.table, s'.table;
     var inserted := Some(Full(kv.0, kv.1));
 
@@ -760,13 +730,13 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-  lemma InsertStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
+  lemma InsertStepPreservesInv(s: Variables, s': Variables, step: Step)
     requires Inv(s)
-    requires IsInsert(s, s', ticket, kv, start, end)
-    ensures Inv(s)
+    requires step.InsertStep? && NextStep(s, s', step)
+    ensures Inv(s')
   {
+    var InsertStep(ticket, (key, _), start, end) := step;
     var table, table' := s.table, s'.table;
-    var key := kv.0;
 
     if !SubTableFullKeyNotFound(table, start, end, key) {
       var i: Index, entry: Option<Entry> :|
@@ -875,31 +845,64 @@ module ShardedHashTable refines ShardedStateMachine {
       assert ContiguousToEntry(table, j_next);
     }
 
-    InsertStepPreservesTableQuantityInv(s, s', ticket, kv, start, end);
+    InsertStepPreservesTableQuantityInv(s, s', step);
   }
 
-  // lemma RemoveStepPreservesInv(s: Variables, s': Variables, ticket: Ticket, i: Index, end: Index)
-  //   requires Inv(s)
-  //   requires Remove(s, s',ticket, i, end)
-  //   ensures Inv(s')
-  // {
-  //   assume false;
-  // }
+  lemma OverwriteStepPreservesInv(s: Variables, s': Variables, step: Step)
+    requires Inv(s)
+    requires step.OverwriteStep? && NextStep(s, s', step)
+    ensures Inv(s')
+  {
+    var OverwriteStep(ticket, kv, end) := step;
+    var table, table' := s.table, s'.table;
 
-  // lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
-  // requires Inv(s)
-  // requires NextStep(s, s', step)
-  // ensures Inv(s')
-  // {
-  //   match step {
-  //     case InsertStep(ticket, stutters) => assume false;
-  //     case OverwriteStep(ticket, stutter) => 
-  //       OverwriteStepPreservesInv(s, s', ticket, stutter);
-  //     case RemoveStep(ticket, i, end) =>
-  //       RemoveStepPreservesInv(s, s', ticket, i, end);
-  //     case _ => assert Inv(s');
-  //   }
-  // }
+    forall e: Index, i: Index
+      ensures ValidHashInSlot(table', e, i)
+    {
+      assert ValidHashInSlot(table, e, i);
+    }
+
+    forall e: Index, j: Index, k: Index
+      ensures ValidHashOrdering(table', e, j, k)
+    {
+      assert ValidHashOrdering(table, e, j, k);
+      assert ValidHashInSlot(table, e, j);
+      assert ValidHashInSlot(table, e, k);
+    }
+
+    forall j : Index 
+      ensures ContiguousToEntry(table', j)
+    {
+      assert ContiguousToEntry(table, j);
+    }
+
+    TableQuantityReplace1(table, table', end);
+  }
+
+  lemma RemoveFoundStepPreservesInv(s: Variables, s': Variables, step: Step)
+    requires Inv(s)
+    requires step.RemoveFoundStep? && NextStep(s, s', step)
+    // ensures Inv(s')
+  {
+
+    assume false;
+  }
+
+  lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
+  requires Inv(s)
+  requires NextStep(s, s', step)
+  ensures Inv(s')
+  {
+    if step.InsertStep? {
+      InsertStepPreservesInv(s, s', step);
+    } else if step.OverwriteStep? {
+      OverwriteStepPreservesInv(s, s', step);
+    } else if step.RemoveFoundStep? {
+      assume false;
+    } else {
+      assert Inv(s');
+    }
+  }
 
 //   lemma Next_PreservesInv(s: Variables, s': Variables)
 //   requires Inv(s)
