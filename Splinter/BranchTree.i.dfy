@@ -31,16 +31,19 @@ include "../lib/Base/Maps.i.dfy"
 abstract module BranchTreeMod {
   import opened CacheIfc
   import BtreeModel
+  import opened Options
   import opened Maps
   import opened DiskTypesMod
   import opened Sequences
+
+  import opened MessageMod // TODO later change the keys value type to be generic
 
   datatype Range = Range(start: Key, end: Key)
   {
     predicate Contains(k : Key)
     {
-       && lte(start, k)
-       && lt(k, end)
+       && Keys.lte(start, k)
+       && Keys.lt(k, end)
     }
   }
 
@@ -52,26 +55,29 @@ abstract module BranchTreeMod {
     }
   }
 
-  datatype Slice = Slice(root: CU, ranges: Ranges)
+  datatype Slice = Slice(root: CU, ranges: Ranges, cache: CacheIfc.Variables)
   {
 
     function Keys() : set<Key>
     {
-        set k | k in root.Keys() && ranges.Contains(k)
+        set k | k in Interpretation(root, cache).Keys && ranges.Contains(k)
     }
 
     function I() :  map<Key, Value>
     {
-      // TODO: Interpretation also needs the cache
-      map k | k in Keys() :: Interpretation(root)[k]
+      map k | k in Keys() :: Interpretation(root, cache)[k]
     }
   }
 
   datatype Stack = Stack(slices : seq<Slice>)
   {
     function I() :  map<Key, Value>
+      decreases |slices|
     {
-        if |slices| == 1
+        if |slices| == 0
+        then
+          map []
+        else if |slices| == 1
         then
           slices[0].I()
         else
@@ -79,68 +85,119 @@ abstract module BranchTreeMod {
     }
   }
 
-  // TODO: Change --
-  datatype BTreePath = BranchPath(k: Key, steps: seq<BranchStep>)
+  datatype BranchNode = Leaf(kvmap: map<Key, Value>) | Index(pivots : seq<Key>, children: seq<CU>)
   {
-    predicate ValidPrefix(cache: CacheIfc.Variables) {
-      true // some path from the root
-    }
-
-    predicate Valid(cache: CacheIfc.Variables) {
-      && ValidPrefix(cache)
-      && true // no nodes below this one for k.
-    }
-
-    function Decode() : Value
+    predicate WF()
     {
-      // filter Messages on k, I guess
-      var unflattenedMsgs := seq(|steps|, i requires 0<=i<|steps| => steps[i].msgs);
-      var flattenedMsgs := FoldLeft(MessageFolder, map[], unflattenedMsgs);
-      if k in flattenedMsgs then EvaluateMessage(flattenedMsgs[k]) else DefaultValue()
+      ( this.Index? ==> ( && |pivots| + 1 == |children|
+                          && 2 <= |children| // otherwise this would just be a leaf
+                          && 1 <= |pivots|
+                        )
+      )
+    }
+
+    function findSubBranch(key: Key) : Option<CU>
+      requires WF()
+    {
+      if !this.Index?
+        then
+        None
+      else if Keys.lt(key, pivots[0]) //TODO Check if pivots are inclusive
+        then
+        assert this.Index?;
+        Some(children[0])
+      else if Keys.lte(pivots[|pivots| - 1], key) // Don't know if gt exists
+        then
+        Some(children[|pivots|])
+      else
+        assert this.Index?;
+        assert Keys.lte(pivots[0], key);
+        assert Keys.lt(key, pivots[|pivots| - 1]);
+        var pivot :| ( && 1 <= pivot < |pivots|
+                       && Keys.lte(pivots[pivot - 1], key)
+                       && Keys.lt(key, pivots[pivot]) ); //TODO Check if pivots are inclusive
+        Some(children[pivot])
     }
   }
 
-  datatype Skolem = // Stuff ....
+
+   // Here Check with Jon about whther we're gonna deal with values or messages
+   datatype BranchStep = BranchStep(root: CU, key: Key, value: Value)
+
+
+  // // TODO: Change --
+   datatype BranchPath = BranchPath(k: Key, steps: seq<BranchStep>)
+   {
+     predicate ValidPrefix(cache: CacheIfc.Variables) {
+       true // some path from the root
+     }
+
+     predicate Valid(cache: CacheIfc.Variables) {
+       && ValidPrefix(cache)
+       && true // no nodes below this one for k.
+     }
+
+     // function Decode() : Value
+     // {
+     //   // filter Messages on k, I guess
+     //   //var unflattenedMsgs := seq(|steps|, i requires 0<=i<|steps| => steps[i].msgs);
+     //   //var flattenedMsgs := FoldLeft(MessageFolder, map[], unflattenedMsgs);
+     //   //if k in flattenedMsgs then EvaluateMessage(flattenedMsgs[k]) else DefaultValue()
+     //   Value()
+     // }
+   }
+
+   function BranchSteps(root: CU, key: Key) : Option<BranchPath>
+   {
+     //BranchPath()
+     None // TODO : Finish
+   }
+
+  datatype Skolem = Skolem()
 
   // TODO: add cache and change the interpretation to deal with messages
-  function Interpretation(root : CU) : map<Key, Value>
+  function Interpretation(root : CU, cache: CacheIfc.Variables) : map<Key, Value>
   {
     // TODO
-    {}
+    map []
   }
 
   /*
     Recipt where we check that the chain of nodes in that lookup from the root checks out
 
   */
-  predicate Query(cache: CacheIfc.Variables, root: CU, k: Key, v: Value)
+  predicate Query(root: CU, cache: CacheIfc.Variables, k: Key, v: Value)
   {
-
+    && var path := BranchSteps(root, k) ;
+    && path.Some?
+    && path.value.Valid(cache)
+    && path.value.k == k
+    //&& trunkPath.Decode() == value // TODO: finish
   }
 
   /*
     Something like check if all the cu's for this tree are reachable on disk??
   */
-  predicate IsClean(root: CU, cache: CacheIfcs.Variables)
+  predicate IsClean(root: CU, cache: CacheIfc.Variables)
   {
-
+    forall cu | cu in  Alloc() :: CacheIfc.IsClean(cache, cu)
   }
 
   // at the we check that the tree is done
-  predicate IsCompaction(stack : Stack, newroot : CU)
+  predicate IsCompaction(stack : Stack, newroot : CU, cache: CacheIfc.Variables)
   {
-      && stack.I() == Interpretation(newroot)
+      stack.I() == Interpretation(newroot, cache)
   }
 
   // TODO:
   predicate Internal(v: Variables, v': Variables)
   {
-
+    false
   }
 
   function Alloc() : set<CU>
   {
-
+    {} // TODO
   }
 
 }

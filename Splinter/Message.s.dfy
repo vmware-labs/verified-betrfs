@@ -2,12 +2,17 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Lang/NativeTypes.s.dfy"
+include "../lib/Base/total_order_impl.i.dfy"
 
 // TODO replace this stuff with the real key, value, message definitions
 
 // Messages are high-level Ops over the Betree
 module MessageMod {
-  type Key(!new,==) // TODO(sowmya): Message shouldn't have key, I think
+
+  import KeysImpl = Lexicographic_Byte_Order_Impl
+  import Keys = KeysImpl.Ord
+
+  type Key = Keys.Element
   type Value(!new)
 
   //type Message(!new)
