@@ -52,9 +52,6 @@ module Proof refines ProofObligations {
 
   // Remember that this is the init of a p
   lemma InitRefines(v: ConcreteSystem.Variables)
-    //requires ConcreteSystem.Init(v)
-    //ensures CrashTolerantMapSpecMod.Init(I(v))
-    //ensures Inv(v)
   {
   }
 
@@ -168,6 +165,25 @@ module Proof refines ProofObligations {
 
   }
 
+  lemma QueryRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: SplinterTreeMachineMod.Skolem)
+    // Requires needed for IM to work
+    requires Inv(v)
+
+    // Actual requires
+    ensures Inv(v')
+    requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
+    requires pstep == ConcreteSystem.P.PutStep(sk)
+    requires uiop.OperateOp?
+    requires uiop.baseOp.ExecuteOp?
+    requires uiop.baseOp.req.input.PutInput?
+    ensures  CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp)
+  {
+    // Here we need talk about the journal
+    assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
+
+  }
+
+
   lemma ProgramMachineStepRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, step : ConcreteSystem.Step)
     requires Inv(v)
 
@@ -182,12 +198,14 @@ module Proof refines ProofObligations {
     match pstep {
       case RecoverStep(puts, newbetree) => {
         // Only argue about IMStable == IM of CrashTolerantMapSpecMod
-        assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop); // NOT DONE!!!!!
+        assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop); // NOT DONE!!!!!
       }
       case QueryStep(key, val, sk) => {
+        assert uiop.baseOp.req.input.QueryInput?;
+        QueryRefines(v, v', uiop, cacheOps, pstep, sk);
 
         // Need to leverage Lookup here
-        assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+        assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
       case PutStep(sk) => {
         assert uiop.baseOp.req.input.PutInput?;
