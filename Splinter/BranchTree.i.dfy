@@ -9,6 +9,7 @@ include "Interp.s.dfy"
 include "CacheIfc.i.dfy"
 include "../lib/DataStructures/BtreeModel.i.dfy"
 include "../lib/Base/Maps.i.dfy"
+include "DiskTypes.s.dfy"
 
 /*
 
@@ -28,6 +29,7 @@ abstract module BranchTreeMod {
   import opened CacheIfc
   import BtreeModel
   import opened Maps
+  import opened DiskTypesMod
   import opened Sequences
 
   datatype Range = Range(start: Key, end: Key)
