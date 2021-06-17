@@ -709,7 +709,89 @@ module BetreeInv {
     InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..]);
   }
 
-  lemma {:timeLimitMultiplier 4} FlushMovedKeysSameLookup(s: Variables, s': Variables, start: Reference, 
+  lemma {:timeLimitMultiplier 2} FlushMovedKeysSameLookupMiddle(s: Variables, s': Variables, start: Reference, 
+    flush:NodeFlush, lookup: Lookup, parentLayer: nat, key: Key, value: Value)
+  returns (lookup': Lookup)
+  requires Inv(s)
+  requires Flush(s.bcv, s'.bcv, flush)
+  requires IsSatisfyingLookupFrom(s.bcv.view, key, value, lookup, start)
+  requires parentLayer < |lookup| - 1
+  requires lookup[parentLayer].readOp.ref == flush.parentref
+  requires lookup[parentLayer].currentKey in flush.movedkeys
+  ensures IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start)
+  {
+    var parentkey := lookup[parentLayer].currentKey;
+
+    var middle := [ lookup[parentLayer] ] + [ lookup[parentLayer+1] ];
+    var middle' := ([ Layer(ReadOp(flush.parentref, flush.newparent), parentkey) ] 
+      + [ Layer(ReadOp(flush.newchildref, flush.newchild), parentkey) ]);
+
+    calc {
+      lookup;
+      lookup[..parentLayer+2] + lookup[parentLayer+2..];
+      lookup[..parentLayer+1] + [lookup[parentLayer+1]] + lookup[parentLayer+2..];
+      lookup[..parentLayer] + [lookup[parentLayer]] + [lookup[parentLayer+1]] + lookup[parentLayer+2..];
+      lookup[..parentLayer] + middle + lookup[parentLayer+2..];
+    }
+    lookup' := lookup[..parentLayer] + middle' + lookup[parentLayer+2..];
+
+    forall j | 0 <= j < |lookup'|
+      ensures IMapsTo(s'.bcv.view, lookup'[j].readOp.ref, lookup'[j].readOp.node) { }
+
+    assert lookup[..parentLayer] == lookup'[..parentLayer];
+    assert lookup[parentLayer+2..] == lookup'[parentLayer+2..];
+    assert LookupFollowsChildRefAtLayer(lookup, parentLayer); // Handles the j==parentLayer+1 case; connects middle[1] to f.child.
+    assert LookupFollowsEdgeAtLayer(lookup, parentLayer);
+
+    forall j | 0 <= j < |lookup'|-1
+      ensures LookupFollowsChildRefAtLayer(lookup', j)
+      ensures LookupFollowsEdgeAtLayer(lookup', j)
+    {
+      assert LookupFollowsChildRefAtLayer(lookup, j);
+      assert LookupFollowsEdgeAtLayer(lookup, j);
+    }
+
+    if (parentkey in flush.flushedkeys) {
+      assert InterpretLookup([lookup'[parentLayer]]) == G.M.Update(G.M.NopDelta());
+      assert InterpretLookup(middle) == InterpretLookup(middle');
+    } else {
+      assert InterpretLookup(middle) == InterpretLookup(middle');
+    }
+    PropagateInterperetation(lookup, lookup', parentLayer, middle, middle', parentkey);
+    assert IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start); // observe
+  }
+  
+  lemma {:timeLimitMultiplier 8} FlushMovedKeysSameLookupEnd(s: Variables, s': Variables, start: Reference, 
+    flush:NodeFlush, lookup: Lookup, key: Key, value: Value)
+  returns (lookup': Lookup)
+  requires Inv(s)
+  requires Flush(s.bcv, s'.bcv, flush)
+  requires IsSatisfyingLookupFrom(s.bcv.view, key, value, lookup, start)
+  requires Last(lookup).readOp.ref == flush.parentref
+  requires Last(lookup).currentKey in flush.movedkeys
+  ensures IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start)
+  {
+    var parentkey := Last(lookup).currentKey;
+    lookup' := DropLast(lookup) + [ Layer(ReadOp(flush.parentref, flush.newparent),parentkey) ]
+      + [ Layer(ReadOp(flush.newchildref, flush.newchild), parentkey) ];
+
+    forall j | 0 <= j < |lookup'|
+      ensures IMapsTo(s'.bcv.view, lookup'[j].readOp.ref, lookup'[j].readOp.node)
+    {
+    }
+
+    forall j | 0 <= j < |lookup'|-1
+      ensures LookupFollowsChildRefAtLayer(lookup', j)
+      ensures LookupFollowsEdgeAtLayer(lookup', j)
+    {
+      if j <= |lookup| - 2 {
+        assert LookupFollowsChildRefAtLayer(lookup, j);
+        assert LookupFollowsEdgeAtLayer(lookup, j);
+      }
+    }
+  }
+  
+  lemma FlushMovedKeysSameLookup(s: Variables, s': Variables, start: Reference, 
     flush:NodeFlush, lookup: Lookup, parentLayer: int, key: Key, value: Value)
   returns (lookup': Lookup)
   requires Inv(s)
@@ -719,59 +801,10 @@ module BetreeInv {
   requires lookup[parentLayer].currentKey in flush.movedkeys
   ensures IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start)
   {
-    assume false;
-    var parentkey := lookup[parentLayer].currentKey;
     if |lookup| - 1 == parentLayer { // we stopped at f.parent
-      lookup' := lookup[..parentLayer] + [ Layer(ReadOp(flush.parentref, flush.newparent),parentkey) ]
-          + [ Layer(ReadOp(flush.newchildref, flush.newchild), parentkey) ];
-
-      forall j | 0 <= j < |lookup'|
-        ensures IMapsTo(s'.bcv.view, lookup'[j].readOp.ref, lookup'[j].readOp.node) {}
-
-      forall j | 0 <= j < |lookup'|-1
-        ensures LookupFollowsChildRefAtLayer(lookup', j)
-        ensures LookupFollowsEdgeAtLayer(lookup', j)
-      {
-        if j <= parentLayer-1 {
-          assert LookupFollowsChildRefAtLayer(lookup, j);
-          assert LookupFollowsEdgeAtLayer(lookup, j);
-        }
-      }
-      assert IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start); // observe
+      lookup' := FlushMovedKeysSameLookupEnd(s, s', start, flush, lookup, key, value);
     } else {
-      reveal_ValidRedirect(); // some redirect property is needed here
-
-      var middle := [ lookup[parentLayer] ] + [ lookup[parentLayer+1] ];
-      var middle' := ([ Layer(ReadOp(flush.parentref, flush.newparent), parentkey) ] 
-          + [ Layer(ReadOp(flush.newchildref, flush.newchild), parentkey) ]);
-
-      assert lookup == lookup[..parentLayer] + middle + lookup[parentLayer+2..];
-      lookup' := lookup[..parentLayer] + middle' + lookup[parentLayer+2..];
-
-      forall j | 0 <= j < |lookup'|
-      ensures IMapsTo(s'.bcv.view, lookup'[j].readOp.ref, lookup'[j].readOp.node) { }
-
-      assert lookup[..parentLayer] == lookup'[..parentLayer];
-      assert lookup[parentLayer+2..] == lookup'[parentLayer+2..];
-      assert LookupFollowsChildRefAtLayer(lookup, parentLayer); // Handles the j==parentLayer+1 case; connects middle[1] to f.child.
-      assert LookupFollowsEdgeAtLayer(lookup, parentLayer);
-
-      forall j | 0 <= j < |lookup'|-1
-        ensures LookupFollowsChildRefAtLayer(lookup', j)
-        ensures LookupFollowsEdgeAtLayer(lookup', j)
-      {
-        assert LookupFollowsChildRefAtLayer(lookup, j);
-        assert LookupFollowsEdgeAtLayer(lookup, j);
-      }            
-
-      if (parentkey in flush.flushedkeys) {
-        assert InterpretLookup([lookup'[parentLayer]]) == G.M.Update(G.M.NopDelta());
-        assert InterpretLookup(middle) == InterpretLookup(middle');
-      } else {
-        assert InterpretLookup(middle) == InterpretLookup(middle');
-      }
-      PropagateInterperetation(lookup, lookup', parentLayer, middle, middle', parentkey);
-      assert IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start); // observe
+      lookup' := FlushMovedKeysSameLookupMiddle(s, s', start, flush, lookup, parentLayer, key, value);
     }
   }
 
