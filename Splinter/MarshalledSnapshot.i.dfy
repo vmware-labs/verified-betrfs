@@ -3,9 +3,11 @@
 
 include "../lib/Base/Option.s.dfy"
 include "../lib/Lang/NativeTypes.s.dfy"
+include "DiskTypes.s.dfy"
+
 include "Allocation.i.dfy"
 include "CacheIfc.i.dfy"
-include "DiskTypes.s.dfy"
+
 
 module MarshalledSnapshot {
   import opened Options

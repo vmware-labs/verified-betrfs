@@ -92,6 +92,7 @@ abstract module BranchTreeMod {
       ( this.Index? ==> ( && |pivots| + 1 == |children|
                           && 2 <= |children| // otherwise this would just be a leaf
                           && 1 <= |pivots|
+                          && forall pivot :: (1 <= pivot < |pivots| && pivots[pivot - 1] < pivots[pivot])
                         )
       )
     }
@@ -111,9 +112,9 @@ abstract module BranchTreeMod {
         Some(children[|pivots|])
       else
         assert this.Index?;
-        assert Keys.lte(pivots[0], key);
+        assert Keys.lt(pivots[0], key);
         assert Keys.lt(key, pivots[|pivots| - 1]);
-        var pivot :| ( && 1 <= pivot < |pivots|
+        var pivot :| ( && 1 < pivot < |pivots|
                        && Keys.lte(pivots[pivot - 1], key)
                        && Keys.lt(key, pivots[pivot]) ); //TODO Check if pivots are inclusive
         Some(children[pivot])
