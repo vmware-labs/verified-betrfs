@@ -101,7 +101,7 @@ module JournalInterpMod {
     set lsns |  v.persistentLSN <= lsns <= lsn
   }
 
-  function InterpFor(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp, lsn: LSN) : Interp
+  function InterpFor(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp, lsn: LSN) : Interp
     requires v.WF()
     requires Invariant(v, cache)
     requires base.WF()
@@ -116,7 +116,7 @@ module JournalInterpMod {
     interp
   }
 
-   function VersionFor(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
+   function VersionFor(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
      requires v.WF()
      requires Invariant(v, cache)
      requires base.WF()
@@ -124,12 +124,12 @@ module JournalInterpMod {
      requires v.boundaryLSN <= lsn < v.unmarshalledLSN() // we only need versions for the journal for the unapplied suffix of entries
    {
      // TODO No accounting for v.syncReqs < boundaryLSN; hrmm.
-     var mapspec := MapSpecMod.Variables(InterpFor(v, cache, sb, base, lsn));
+     var mapspec := MapSpecMod.Variables(InterpFor(v, cache, base, lsn));
      var asyncmapspec := AsyncMapSpecMod.Variables(mapspec, {}, {});
      CrashTolerantMapSpecMod.Version(asyncmapspec, SyncReqsAt(v, lsn))
    }
 
-  function Versions(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
+  function Versions(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
     requires v.WF()
     requires base.WF()
     requires base.seqEnd == v.boundaryLSN // Can we require this here?
@@ -141,7 +141,7 @@ module JournalInterpMod {
         var lsn := i + v.boundaryLSN;
         assert v.boundaryLSN <= lsn;
         assert lsn < v.unmarshalledLSN();
-        VersionFor(v, cache, sb, base, lsn)
+        VersionFor(v, cache, base, lsn)
      )
    }
 
@@ -152,11 +152,11 @@ module JournalInterpMod {
     requires base.seqEnd == sb.boundaryLSN  // This crash-invariant condition should probably not be a requires; just return nonsense if it fails.
   {
     var pretendVariables := Variables(sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, [], map[], map[]);
-    var versions := Versions(pretendVariables, cache, sb, base);
+    var versions := Versions(pretendVariables, cache, base);
     CrashTolerantMapSpecMod.Variables(versions, 0) // TODO Sowmya pick up here
   }
 
-  function IM(v: Variables, cache:CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp)
+  function IM(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp)
     : CrashTolerantMapSpecMod.Variables
     requires v.WF()
     requires Invariant(v, cache)
@@ -164,7 +164,7 @@ module JournalInterpMod {
     requires base.seqEnd == v.boundaryLSN
   {
     assert v.boundaryLSN <= v.unmarshalledLSN(); // Follows from WF & defn unmarshalledLSN
-    var versions := Versions(v, cache, sb, base);
+    var versions := Versions(v, cache, base);
     CrashTolerantMapSpecMod.Variables(versions, 0)
   }
 
@@ -237,19 +237,37 @@ module JournalInterpMod {
     requires CacheIfc.ApplyWrites(cache, cache', cacheOps)
     ensures v.boundaryLSN == v'.boundaryLSN
     ensures v.unmarshalledLSN() == v'.unmarshalledLSN()
-    ensures IM(v, cache, sb, base) == IM(v', cache', sb, base)
+    ensures IM(v, cache, base) == IM(v', cache', base)
   {
     assert v.boundaryLSN == v'.boundaryLSN;
     assert v.unmarshalledLSN() == v'.unmarshalledLSN();
     forall lsn | v.boundaryLSN <= lsn < v.unmarshalledLSN()
-      ensures InterpFor(v, cache, sb, base, lsn) == InterpFor(v', cache', sb, base, lsn)
+      ensures InterpFor(v, cache, base, lsn) == InterpFor(v', cache', base, lsn)
     {
       match sk {
         case AdvanceMarshalledStep(newCU) => {
           assert ChainFrom(cache'.dv, CurrentSuperblock(v')).chain.Some?;
+          var sb := CurrentSuperblock(v);
+          var sb' := CurrentSuperblock(v');
+          var orig_chain_msgseq := ChainFrom(cache.dv, sb).chain.value.interp;
+          var orig_tail_msgseq := TailToMsgSeq(v);
+          var new_chain_msgseq := ChainFrom(cache'.dv, sb').chain.value.interp;
+          var new_tail_msgseq := TailToMsgSeq(v');
+
+          var priorCU := if v.marshalledLSN == v.boundaryLSN then None else Some(v.lsnToCU[v.marshalledLSN-1]);
+          var jr := JournalRecord(TailToMsgSeq(v), priorCU);
+          var sb_old := jr.priorSB(sb');
+          assert sb_old == sb;
+          calc {
+            ChainFrom(cache'.dv, sb').chain.value.recs;
+            [jr] + ChainFrom(cache.dv, sb).chain.value.recs;
+          }
           calc {
             ChainAsMsgSeq(v', cache');
             ChainFrom(cache'.dv, sb).chain.value.interp.Concat(TailToMsgSeq(v'));
+            new_chain_msgseq.Concat(new_tail_msgseq);
+            new_chain_msgseq;
+            orig_chain_msgseq.Concat(orig_tail_msgseq);
             ChainFrom(cache.dv, sb).chain.value.interp.Concat(TailToMsgSeq(v));
             ChainAsMsgSeq(v, cache);
           }
@@ -264,11 +282,11 @@ module JournalInterpMod {
       }
       assert ChainAsMsgSeq(v, cache) == ChainAsMsgSeq(v', cache');
     }
-    assert IM(v, cache, sb, base) == IM(v', cache', sb, base);
+    assert IM(v, cache, base) == IM(v', cache', base);
   }
 
-  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock, base: InterpMod.Interp)
-    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
+  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, base: InterpMod.Interp)
+    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, CurrentSuperblock(v)))
     requires v.WF()
     requires base.WF()
     requires base.seqEnd == v.boundaryLSN
@@ -278,14 +296,14 @@ module JournalInterpMod {
     requires Invariant(v, cache1)
     requires base.seqEnd == v.persistentLSN
     requires v.persistentLSN < v.unmarshalledLSN()
-    ensures IM(v, cache0, sb, base) == IM(v, cache1, sb, base)
+    ensures IM(v, cache0, base) == IM(v, cache1, base)
   {
 //    assume false; // there's a timeout here that seems to point at opaque WFChainInner. That's weird.
-    FrameOneChain(v, cache0, cache1, sb);
+    FrameOneChain(v, cache0, cache1, CurrentSuperblock(v));
     // This works --- I'm suspicious -- Sowmya
     calc {
-      IM(v, cache0, sb, base);
-      IM(v, cache1, sb, base);
+      IM(v, cache0, base);
+      IM(v, cache1, base);
     }
   }
 }
