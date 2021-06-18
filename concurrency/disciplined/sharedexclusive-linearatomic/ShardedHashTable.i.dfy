@@ -427,10 +427,12 @@ module ShardedHashTable refines ShardedStateMachine {
     && v.table[start].value.Full?
     && v.table[start].value.key == key
   
+    && var startNext := NextIndex(start);
+    && var endNext := NextIndex(end);
     // should tidy this subtable
-    && SubTableShouldTidy(v.table, start, end, key)
+    && SubTableShouldTidy(v.table, startNext, endNext, key)
     // should stop at end
-    && !SlotShouldTidy(v.table[end], end, key)
+    && !SlotShouldTidy(v.table[endNext], endNext, key)
   }
 
   function RemoveFound(v: Variables, step: Step): Variables
@@ -884,6 +886,36 @@ module ShardedHashTable refines ShardedStateMachine {
     requires step.RemoveFoundStep? && NextStep(s, s', step)
     // ensures Inv(s')
   {
+    var RemoveFoundStep(ticket, start, end) := step;
+    var key := ticket.input.key;
+    var table, table' := s.table, s'.table;
+
+    assert KeysUnique(table');
+
+    assert table'[end].value.Empty?;
+
+    if exists e: Index, i: Index :: !ValidHashInSlot(table', e, i)
+    {
+      var e: Index, i: Index, h: Index :|
+        && table'[e].value.Empty?
+        && table'[i].value.Full?
+        && h == hash(table'[i].value.key)
+        && adjust(h, e) > adjust(i, e);
+      
+      var i_prev := PrevIndex(i);
+      var i_next := NextIndex(i);
+      assert ValidHashInSlot(table, e, i);
+      assert ValidHashInSlot(table, e, i_prev);
+      assert ValidHashInSlot(table, e, i_next);
+
+      if e != end {
+        assert table[e].value.Empty?;
+        assert false;
+      } else {
+
+        // assert false;
+      }
+    }
 
     assume false;
   }
