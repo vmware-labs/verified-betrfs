@@ -240,7 +240,6 @@ module CrashTolerantMapSpecMod {
     && s.versions[requestedAt].Version?
     && syncReqId in s.versions[requestedAt].syncReqIds
     && requestedAt <= s.stableIdx
-    && s'.stableIdx == requestedAt // TODO: Check with JON
   }
 
   // The Op provides *most* of Jay Normal Form -- except skolem variables, of which we have
@@ -248,7 +247,7 @@ module CrashTolerantMapSpecMod {
   datatype UIOp =
     | OperateOp(baseOp: AsyncMapSpecMod.UIOp) // Put or Query Internally
     | CrashOp
-    | AsyncCommitOp
+    | AsyncCommitOp // Check with Jon
     | ReqSyncOp(syncReqId: SyncReqId)
     | CompleteSyncOp(syncReqId: SyncReqId)
     | NoopOp
