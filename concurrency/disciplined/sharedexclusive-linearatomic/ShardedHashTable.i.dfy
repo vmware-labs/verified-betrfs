@@ -584,6 +584,8 @@ module ShardedHashTable refines ShardedStateMachine {
       (TableQuantity(s[..|s| - 1]) + EntryQuantity(Last(s)))
   }
 
+  // lemma FullTable
+
   predicate TableQuantityInv(s: Variables)
   {
     && s.Variables?
@@ -595,6 +597,30 @@ module ShardedHashTable refines ShardedStateMachine {
     && s.Variables?
     && InvTable(s.table)
     && TableQuantityInv(s)
+  }
+
+  lemma FullTableQuantity(table: Table)
+    requires forall i: int :: 
+      0 <= i < |table| ==> (table[i].Some? && table[i].value.Full?)
+    ensures TableQuantity(table) == |table|
+  {
+    reveal TableQuantity();
+  }
+
+  lemma InvImpliesEmptySlot(s: Variables) returns (e: Index)
+    requires Inv(s)
+    ensures table[e].value.Empty?;
+  {
+    var table := s.table;
+    assert TableQuantity(table) <= Capacity();
+    if forall i: Index :: table[i].value.Full? {
+      FullTableQuantity(table);
+      assert TableQuantity(table) == FixedSize();
+      assert false;
+    }
+
+    assert exists e: Index :: table[e].value.Empty?;
+    e :| table[e].value.Empty?;
   }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -886,6 +912,7 @@ module ShardedHashTable refines ShardedStateMachine {
     requires step.RemoveFoundStep? && NextStep(s, s', step)
     // ensures Inv(s')
   {
+    // assert Capacity() < FixedSize();
     var RemoveFoundStep(ticket, start, end) := step;
     var key := ticket.input.key;
     var table, table' := s.table, s'.table;
@@ -912,8 +939,11 @@ module ShardedHashTable refines ShardedStateMachine {
         assert table[e].value.Empty?;
         assert false;
       } else {
-
-        // assert false;
+        assert table[e].value.Full?;
+        assume exists e': Index :: table[e'].value.Empty?;
+        var e' :Index :| table[e'].value.Empty?;
+        assume table[e'] == table[e];
+        assert false;
       }
     }
 
