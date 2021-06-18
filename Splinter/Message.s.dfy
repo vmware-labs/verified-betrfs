@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Lang/NativeTypes.s.dfy"
-include "../lib/Base/total_order_impl.i.dfy"
+//include "../lib/Base/total_order_impl.i.dfy"
 
 // TODO replace this stuff with the real key, value, message definitions
 
