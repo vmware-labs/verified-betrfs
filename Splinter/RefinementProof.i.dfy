@@ -172,13 +172,12 @@ module Proof refines ProofObligations {
     // Actual requires
     ensures Inv(v')
     requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
-    requires pstep == ConcreteSystem.P.PutStep(sk)
+    //requires pstep == ConcreteSystem.P.QueryStep(sk)
     requires uiop.OperateOp?
     requires uiop.baseOp.ExecuteOp?
-    requires uiop.baseOp.req.input.PutInput?
+    requires uiop.baseOp.req.input.GetInput?
     ensures  CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp)
   {
-    // Here we need talk about the journal
     assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
 
   }
@@ -198,16 +197,18 @@ module Proof refines ProofObligations {
     match pstep {
       case RecoverStep(puts, newbetree) => {
         // Only argue about IMStable == IM of CrashTolerantMapSpecMod
-        assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop); // NOT DONE!!!!!
+        assume CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop); // NOT DONE!!!!!
       }
       case QueryStep(key, val, sk) => {
-        assert uiop.baseOp.req.input.QueryInput?;
+        assert uiop.OperateOp?;
+        assert uiop.baseOp.req.input.GetInput?;
         QueryRefines(v, v', uiop, cacheOps, pstep, sk);
 
         // Need to leverage Lookup here
         assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
       }
       case PutStep(sk) => {
+        assert uiop.OperateOp?;
         assert uiop.baseOp.req.input.PutInput?;
         PutRefines(v, v', uiop, cacheOps, pstep, sk);
         assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);

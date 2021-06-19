@@ -12,7 +12,8 @@ module MessageMod {
   //import KeysImpl = Lexicographic_Byte_Order_Impl
   //import Keys = KeysImpl.Ord
 
-  type Key //= Keys.Element
+  //type Key(!new) //= Keys.Element
+  type Key(!new,==) // TODO(sowmya): Message shouldn't have key, I think
   type Value(!new)
 
   //type Message(!new)

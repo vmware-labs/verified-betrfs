@@ -28,15 +28,21 @@ include "../lib/Base/Maps.i.dfy"
 
   Let's ignore the in memory btree in the memBuffer for now
 */
-abstract module BranchTreeMod {
+module BranchTreeMod {
   import opened CacheIfc
-  import BtreeModel
+  //import BtreeModel -- THIS IS AN ABSTRACT MODULE ... WE CAN'T USE IT!!!!
   import opened Options
   import opened Maps
   import opened DiskTypesMod
   import opened Sequences
 
   import opened MessageMod // TODO later change the keys value type to be generic
+
+  import KeysImpl = Lexicographic_Byte_Order_Impl
+  import Keys = KeysImpl.Ord
+
+  type Key = Keys.Element
+
 
   datatype Range = Range(start: Key, end: Key)
   {

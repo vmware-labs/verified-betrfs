@@ -127,6 +127,9 @@ module ProgramMachineMod {
 
   predicate Query(v: Variables, v': Variables, uiop : UIOp, key: Key, val: Value, sk: SplinterTreeMachineMod.Skolem)
   {
+    && uiop.OperateOp?
+    && uiop.baseOp.ExecuteOp?
+    && uiop.baseOp.req.input.GetInput? // ensures that the uiop translates to a Get op
     && v.phase.Running?
     && v.WF()
     && v'.journal == v.journal
