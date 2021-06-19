@@ -70,12 +70,19 @@ debug "Copying new results"
     mkdir -p "$tmp_dir"/verichecks-results/$COMMIT_SHA &&
     cp -r build "$tmp_dir"/verichecks-results/$COMMIT_SHA &&
     echo -n $BRANCH_NAMES > "$tmp_dir"/verichecks-results/$COMMIT_SHA/commitid
-    date > "$tmp_dir"/verichecks-results/$COMMIT_SHA/date
+    git add -f verichecks-results/$COMMIT_SHA/* &&
+    git commit -m "Veri-checks results for $COMMIT_SHA" &&
 ) || exit 1
 
 debug "Regenerating table of contents"
 (
     cd "$tmp_dir" &&
+    # Timestamp all the directories based on their git history, so
+    # they will be sorted from newest to oldest in the output
+    for d in verichecks-results/*; do
+        DATE=$(git log --pretty=format:%cd -n 1 --date=format-local:%Y%m%d%H%M.%S $d) &&
+        touch -m -t "$DATE" "$d";
+    done &&
     for d in `ls -t verichecks-results`; do
         echo -n "[\`${d:0:10}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/$d)" " "
         if [ -f verichecks-results/$d/commitid ]; then
@@ -85,28 +92,25 @@ debug "Regenerating table of contents"
         fi
         echo -n "- "
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.verified ]; then
-            echo -n \[summary\]\(verichecks-results/$d/build/Impl/Bundle.i.verified\) " - "
+            echo -n \[summary\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.verified\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.txt ]; then
-            echo -n \[details\]\(verichecks-results/$d/build/Impl/Bundle.i.verified.err\) " - "
+            echo -n \[details\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.verified.err\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.svg ]; then
-            echo -n \[status-SVG\]\(verichecks-results/$d/build/Impl/Bundle.i.status.svg\) " - "
+            echo -n \[status-SVG\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.status.svg\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.status.pdf ]; then
-            echo -n \[status-PDF\]\(verichecks-results/$d/build/Impl/Bundle.i.status.pdf\) " - "
+            echo -n \[status-PDF\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.status.pdf\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.syntax-status.svg ]; then
-            echo -n \[syntax-status-SVG\]\(verichecks-results/$d/build/Impl/Bundle.i.syntax-status.svg\) " - "
+            echo -n \[syntax-status-SVG\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.syntax-status.svg\) " - "
         fi
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf ]; then
-            echo -n \[syntax-status-PDF\]\(verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf\) " "
+            echo -n \[syntax-status-PDF\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf\) " "
         fi
-        if [ -f verichecks-results/$d/date ]; then
-            echo -n "\("
-            cat verichecks-results/$d/date
-            echo -n "\)"
-        fi
+        DATE=$(git log --pretty=format:%cd -n 1 $d)
+        echo -n "\($DATE\)"
         echo
         echo
     done > verichecks-results.md
@@ -116,8 +120,7 @@ debug "Committing and pushing"
 (
     cd "$tmp_dir" &&
     git add verichecks-results.md &&
-    git add -f verichecks-results/$COMMIT_SHA/* &&
-    git commit -m "Veri-checks results for $COMMIT_SHA" &&
+    git commit -m "Veri-checks table-of-contents for $COMMIT_SHA" &&
     git push --set-upstream "$GIT_REPOSITORY_URL" master
 ) || exit 1
 
