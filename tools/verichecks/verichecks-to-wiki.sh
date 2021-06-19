@@ -69,7 +69,8 @@ debug "Copying new results"
 (
     mkdir -p "$tmp_dir"/verichecks-results/$COMMIT_SHA &&
     cp -r build "$tmp_dir"/verichecks-results/$COMMIT_SHA &&
-    echo -n $BRANCH_NAMES > "$tmp_dir"/verichecks-results/$COMMIT_SHA/commitid
+    cd $tmp_dir &&
+    echo -n $BRANCH_NAMES > verichecks-results/$COMMIT_SHA/commitid &&
     git add -f verichecks-results/$COMMIT_SHA/* &&
     git commit -m "Veri-checks results for $COMMIT_SHA"
 ) || exit 1
