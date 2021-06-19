@@ -85,6 +85,7 @@ module FlushPolicyModel {
   function {:opaque} getActionToSplit(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) : (action : Action)
   requires 0 <= i as int < |stack|
   requires ValidStackSlots(s, stack, slots)
+  ensures action.ActionGrow? || action.ActionRepivot? || action.ActionSplit? || action.ActionEvict?
   {
     if i == 0 then
       // Can't split root until we grow it.
@@ -110,19 +111,49 @@ module FlushPolicyModel {
     )
   }
 
-  function {:opaque} getActionToFlush(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (BBC.Variables, Action)
+  lemma {:timeLimitMultiplier 6} getActionToSplitValidAction(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64)
+  requires 0 <= i as int < |stack|
+  requires BBC.Inv(s)
+  requires ValidStackSlots(s, stack, slots)
+  requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.graph
+  requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
+  requires s.cache[stack[|stack| - 1]].children.Some? ==> |s.cache[stack[|stack| - 1]].buckets| >= 2
+  requires i as int < |stack| - 1 ==> |s.cache[stack[i]].buckets| >= MaxNumChildren()
+  ensures ValidAction(s, getActionToSplit(s, stack, slots, i))
+  // ensures var action := getActionToSplit(s, stack, slots, i);
+  //     action.ActionGrow? || action.ActionRepivot? || action.ActionSplit? || action.ActionEvict?
+  {
+    reveal_getActionToSplit();
+    var action := getActionToSplit(s, stack, slots, i);
+
+    if i == 0 {
+      assert ValidAction(s, action);
+    } else {
+      if |s.cache[stack[i-1]].children.value| as uint64 < MaxNumChildren() as uint64 {
+        if |s.cache[stack[i]].buckets| as uint64 == 1 {
+          assert ValidAction(s, action);
+        } else {
+          assert ValidAction(s, action);
+        }
+      } else {
+        getActionToSplitValidAction(s, stack, slots, i-1);
+      }
+    }
+  }
+
+  function {:opaque} getActionToFlush(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : Action
   requires |stack| <= 40
   requires ValidStackSlots(s, stack, slots)
   requires BBC.Inv(s)
   decreases 0x1_0000_0000_0000_0000 - |stack|
   {
     if |stack| as uint64 == 40 then (
-      (s, ActionFail)
+      ActionFail
     ) else (
       var ref := stack[|stack| as uint64 - 1];
       var node := s.cache[ref];
       if node.children.None? || |node.buckets| == MaxNumChildren() then (
-        (s, getActionToSplit(s, stack, slots, |stack| as uint64 - 1))
+        getActionToSplit(s, stack, slots, |stack| as uint64 - 1)
       ) else (
         var (slot, slotWeight) := biggestSlot(node.buckets);
         // TODO:
@@ -142,81 +173,51 @@ module FlushPolicyModel {
               // we flush. We flush as much as we can (which will end up being at least
               // FlushTriggerWeight - max key weight - max message weight).
               if s1.totalCacheSize() <= MaxCacheSize() - 1 then (
-                (s1, ActionFlush(ref, slot))
+                ActionFlush(ref, slot)
               ) else (
-                (s1, ActionEvict)
+                ActionEvict
               )
             ) else (
               getActionToFlush(s1, stack + [childref], slots + [slot])
             )
           ) else (
             if s.totalCacheSize() <= MaxCacheSize() - 1 then (
-              (s, ActionPageIn(childref))
+              ActionPageIn(childref)
             ) else (
-              (s, ActionEvict)
+              ActionEvict
             )
           )
         ) else (
-          (s, getActionToSplit(s, stack, slots, |stack| as uint64 - 1))
+          getActionToSplit(s, stack, slots, |stack| as uint64 - 1)
         )
       )
     )
   }
 
-  lemma getActionToSplitValidAction(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64)
-  requires 0 <= i as int < |stack|
-  requires BBC.Inv(s)
-  requires ValidStackSlots(s, stack, slots)
-  requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.graph
-  requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
-  requires s.cache[stack[|stack| - 1]].children.Some? ==> |s.cache[stack[|stack| - 1]].buckets| >= 2
-  requires i as int < |stack| - 1 ==> |s.cache[stack[i]].buckets| >= MaxNumChildren()
-  ensures ValidAction(s, getActionToSplit(s, stack, slots, i))
-  ensures var action := getActionToSplit(s, stack, slots, i);
-      action.ActionGrow? || action.ActionRepivot? || action.ActionSplit? || action.ActionEvict?
-  {
-    reveal_getActionToSplit();
-    var action := getActionToSplit(s, stack, slots, i);
-
-    if i == 0 {
-      //assert ValidAction(s, action);
-    } else {
-      if |s.cache[stack[i-1]].children.value| as uint64 < MaxNumChildren() as uint64 {
-        /*if |s.cache[stack[i]].buckets| as uint64 == 1 {
-          assert ValidAction(s, action);
-        } else {
-          assert ValidAction(s, action);
-        }*/
-      } else {
-        getActionToSplitValidAction(s, stack, slots, i-1);
-      }
-    }
-  }
-
-  lemma getActionToFlushValidAction(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
+  lemma {:timeLimitMultiplier 6} getActionToFlushValidAction(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   requires |stack| <= 40
   requires ValidStackSlots(s, stack, slots)
   requires BBC.Inv(s)
   requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.graph
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
   decreases 0x1_0000_0000_0000_0000 - |stack|
-  ensures var (s', action) := getActionToFlush(s, stack, slots);
-    && ValidAction(s', action)
-    && s == s'
+  ensures ValidAction(s, getActionToFlush(s, stack, slots))
   {
     reveal_getActionToFlush();
-    var action := getActionToFlush(s, stack, slots).1;
+    var action := getActionToFlush(s, stack, slots);
 
-    if |stack| as uint64 == 40 {
-    } else {
+    if |stack| as uint64 != 40 {
       var ref := stack[|stack| as uint64 - 1];
       var node := s.cache[ref];
+
       if node.children.None? || |node.buckets| == MaxNumChildren() {
         getActionToSplitValidAction(s, stack, slots, |stack| as uint64 - 1);
       } else {
         var (slot, slotWeight) := biggestSlot(node.buckets);
         //if slotWeight >= FlushTriggerWeight() as uint64 {
         if |node.buckets| < 8 {
+          assume false;
+
           var childref := node.children.value[slot];
           lemmaChildInGraph(s, ref, childref);
           if childref in s.cache {

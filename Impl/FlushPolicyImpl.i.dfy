@@ -108,7 +108,8 @@ module FlushPolicyImpl {
   decreases 0x1_0000_0000_0000_0000 - |stack|
   ensures s.Inv()
   ensures s.Ready?
-  ensures (s.I(), action) == FlushPolicyModel.getActionToFlush(old_s.I(), stack, slots)
+  ensures action == FlushPolicyModel.getActionToFlush(old_s.I(), stack, slots)
+  ensures s.I() == old_s.I()
   {
     FlushPolicyModel.reveal_getActionToFlush();
 
