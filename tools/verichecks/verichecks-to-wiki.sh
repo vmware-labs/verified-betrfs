@@ -110,9 +110,8 @@ debug "Regenerating table of contents"
         if [ -f verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf ]; then
             echo -n \[syntax-status-PDF\]\(https://raw.githubusercontent.com/wiki/${GITHUB_REPOSITORY}/verichecks-results/$d/build/Impl/Bundle.i.syntax-status.pdf\) " "
         fi
-        DATE=$(git log --pretty=format:%cd -n 1 $d)
-        echo -n "\($DATE\)"
-        echo
+        DATE=$(git log --pretty=format:%cd -n 1 verichecks-results/$d)
+        echo "\($DATE\)"
         echo
     done > verichecks-results.md
 ) || exit 1
