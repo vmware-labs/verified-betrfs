@@ -125,32 +125,28 @@ module FlushPolicyImpl {
       } else {
         var bs:(uint64, uint64) := s.cache.NodeBiggestSlot(ref);
         var (slot, slotWeight) := bs;
-        if bucketslen as uint64 < 8 {
-          var childref := children.value[slot];
-          var childincache := s.cache.InCache(childref);
-          if childincache {
-            inout s.lru.Use(childref);
-            LruModel.LruUse(old_s.lru.Queue(), childref);
+        var childref := children.value[slot];
+        var childincache := s.cache.InCache(childref);
+        if childincache {
+          inout s.lru.Use(childref);
+          LruModel.LruUse(old_s.lru.Queue(), childref);
 
-            var childTotalWeight := s.cache.NodeBucketsWeight(childref);
-            if childTotalWeight + FlushTriggerWeightUint64() <= MaxTotalBucketWeightUint64() {
-              if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
-                action := FlushPolicyModel.ActionFlush(ref, slot);
-              } else {
-                action := FlushPolicyModel.ActionEvict;
-              }
-            } else {
-              action := getActionToFlush(inout s, stack + [childref], slots + [slot]);
-            }
-          } else {
+          var childTotalWeight := s.cache.NodeBucketsWeight(childref);
+          if childTotalWeight + FlushTriggerWeightUint64() <= MaxTotalBucketWeightUint64() {
             if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
-              action := FlushPolicyModel.ActionPageIn(childref);
+              action := FlushPolicyModel.ActionFlush(ref, slot);
             } else {
               action := FlushPolicyModel.ActionEvict;
             }
+          } else {
+            action := getActionToFlush(inout s, stack + [childref], slots + [slot]);
           }
         } else {
-          action := getActionToSplit(s, stack, slots, |stack| as uint64 - 1);
+          if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
+            action := FlushPolicyModel.ActionPageIn(childref);
+          } else {
+            action := FlushPolicyModel.ActionEvict;
+          }
         }
       }
     }
