@@ -954,26 +954,24 @@ module ShardedHashTable refines ShardedStateMachine {
         var l := NextIndex(end);
   
         if k != end {
-          // var j_prev := PrevIndex(j);
-          // var j_next := NextIndex(j);
-          // assert ContiguousToEntry(table, j);
-          // assert ContiguousToEntry(table, j_prev);
-          // assert ContiguousToEntry(table, j_next);
-          // assert false;
-          // proved, just slow
-          assume false;
+          var j_prev := PrevIndex(j);
+          var j_next := NextIndex(j);
+          assert ContiguousToEntry(table, j);
+          assert ContiguousToEntry(table, j_prev);
+          assert ContiguousToEntry(table, j_next);
+          assert false;
         } else {
+          assume exists e0 : Index ::
+            && table[e0].value.Empty?
+            && (end < e0 || e0 < start);
+
+          var e0 : Index :| table[e0].value.Empty?
+            && (end < e0 || e0 < start);
+
           if j < start {
             assert table[j] == table'[j];
             assert ContiguousToEntry(table, j);
             var jh := SlotKeyHash(table, j);
-
-            assume exists e0 : Index ::
-              && table[e0].value.Empty?
-              && (end < e0 || e0 < start);
-
-            var e0 : Index :| table[e0].value.Empty?
-              && (end < e0 || e0 < start);
             
             if e0 > end {
               assert ValidHashInSlot(table, e0, j);
@@ -986,13 +984,20 @@ module ShardedHashTable refines ShardedStateMachine {
             assert table[l].value.Full?;
             assert ValidHashOrdering(table, e0, l, j);
             assert false;
+          } else if j <= end {
+            var j_prev := PrevIndex(j);
+            // assert ContiguousToEntry(table, j);
+            // assert ContiguousToEntry(table, j_prev);
+            // assert table[l].value.Full?;
+            // assert ValidHashOrdering(table, e0, l, j);
+            // assert ValidHashOrdering(table, e0, l, j_prev);
+            // assert false;
           }
           // var e := RemoveFoundStepPreservesEmptySlot(s, s', step);
 
           assume false;
         }
       }
-
     }
 
 
