@@ -19,6 +19,8 @@ module ShardedHashTable refines ShardedStateMachine {
 
   import opened KeyValueType
 
+  function DummyKey() : Key
+
   datatype Ticket =
     | Ticket(rid: int, input: MapIfc.Input)
 
@@ -204,16 +206,15 @@ module ShardedHashTable refines ShardedStateMachine {
     forall i: Index | IndexInRange(i, start, end) :: p(table[i], i, key)
   }
 
-  // NOTE: key does nothing here
-  predicate SlotFull(entry: Option<Entry>, slot_index: Index, key: Key)
+  // NOTE: dummy_key does nothing here
+  predicate SlotFull(entry: Option<Entry>, slot_index: Index, dummy_key: Key)
   {
     entry.Some? && entry.value.Full?
   }
 
-  // NOTE: key does nothing here
-  predicate SubTableFull(table: FixedTable, start: Index, end: Index, key: Key)
+  predicate SubTableFull(table: FixedTable, start: Index, end: Index)
   {
-    TrueInSubTable(table, start, end, key, SlotFull)
+    TrueInSubTable(table, start, end, DummyKey(), SlotFull)
   }
 
   predicate SlotFullKeyNotFound(entry: Option<Entry>, slot_index: Index, key: Key)
@@ -291,7 +292,7 @@ module ShardedHashTable refines ShardedStateMachine {
     // insert at start
     && SlotShouldSwap(table[start], start, key)
     // this subtable is full
-    && SubTableFull(table, start, end, key)
+    && SubTableFull(table, start, end)
     // but the end is empty 
     && table[end].Some?
     && table[end].value.Empty?
@@ -402,17 +403,16 @@ module ShardedHashTable refines ShardedStateMachine {
       table[1..end+1] + [Some(Empty)] + table[end+1..start] + table[start+1..] + [table[0]]
   }
 
-  // NOTE: key does nothing here
-  predicate SlotShouldTidy(entry: Option<Entry>, slot_index: Index, key: Key)
+  // NOTE dummy_key not being used
+  predicate SlotShouldTidy(entry: Option<Entry>, slot_index: Index, dummy_key: Key)
   {
-    && SlotFull(entry, slot_index, key)
+    && SlotFull(entry, slot_index, DummyKey())
     && hash(entry.value.key) != slot_index
   }
 
-  // NOTE: key does nothing here
-  predicate SubTableShouldTidy(table: FixedTable, start: Index, end: Index, key: Key)
+  predicate SubTableShouldTidy(table: FixedTable, start: Index, end: Index)
   { 
-    TrueInSubTable(table, start, end, key, SlotShouldTidy)
+    TrueInSubTable(table, start, end, DummyKey(), SlotShouldTidy)
   }
 
   predicate RemoveFoundEnable(v: Variables, step: Step)
@@ -430,8 +430,8 @@ module ShardedHashTable refines ShardedStateMachine {
     && var startNext := NextIndex(start);
     && var endNext := NextIndex(end);
     // should tidy this subtable
-    && SubTableShouldTidy(v.table, startNext, endNext, key)
-    // should stop at end
+    && SubTableShouldTidy(v.table, startNext, endNext)
+    // should stop at endNext
     && !SlotShouldTidy(v.table[endNext], endNext, key)
   }
 
@@ -950,7 +950,9 @@ module ShardedHashTable refines ShardedStateMachine {
           && table'[j].value.Full?
           && IndexInRange(k, hash(table'[j].value.key), j)
           && table'[k].value.Empty?;
-
+        
+        var l := NextIndex(end);
+  
         if k != end {
           // var j_prev := PrevIndex(j);
           // var j_next := NextIndex(j);
@@ -966,29 +968,24 @@ module ShardedHashTable refines ShardedStateMachine {
             assert ContiguousToEntry(table, j);
             var jh := SlotKeyHash(table, j);
 
-            if jh <= end {
-              assume exists e0 : Index ::
-                && table[e0].value.Empty?
-                && (end < e0 || e0 < start);
+            assume exists e0 : Index ::
+              && table[e0].value.Empty?
+              && (end < e0 || e0 < start);
 
-              var e0 : Index :| table[e0].value.Empty?
-                && (end < e0 || e0 < start);
-              
-              if e0 > end {
-                assert ValidHashInSlot(table, e0, j);
-                assert adjust(jh, e0) <= adjust(j, e0);
-                assert false;
-              } else {
-                assert e0 < start;
-                if e0 < j {
-                  assert false;
-                }
-
-                assert j <= e0 < start; 
-              }
-              assume false;
+            var e0 : Index :| table[e0].value.Empty?
+              && (end < e0 || e0 < start);
+            
+            if e0 > end {
+              assert ValidHashInSlot(table, e0, j);
+              assert adjust(jh, e0) <= adjust(j, e0);
+              assert false;
             }
-
+      
+            assert e0 < jh <= end;
+            assert j < e0 < start; 
+            assert table[l].value.Full?;
+            assert ValidHashOrdering(table, e0, l, j);
+            assert false;
           }
           // var e := RemoveFoundStepPreservesEmptySlot(s, s', step);
 
