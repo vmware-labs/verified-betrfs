@@ -609,7 +609,7 @@ module ShardedHashTable refines ShardedStateMachine {
 
   lemma InvImpliesEmptySlot(s: Variables) returns (e: Index)
     requires Inv(s)
-    ensures table[e].value.Empty?;
+    ensures s.table[e].value.Empty?;
   {
     var table := s.table;
     assert TableQuantity(table) <= Capacity();
@@ -907,12 +907,34 @@ module ShardedHashTable refines ShardedStateMachine {
     TableQuantityReplace1(table, table', end);
   }
 
+  lemma RemoveFoundStepPreservesEmptySlot(s: Variables, s': Variables, step: Step) returns (i: Index)
+    requires Inv(s)
+    requires step.RemoveFoundStep? && NextStep(s, s', step)
+    ensures s.table[i].value.Empty?
+    ensures s'.table[i].value.Empty?
+  {
+    i := InvImpliesEmptySlot(s);
+    var table, table' := s.table, s'.table;
+
+    forall e: Index | table[e].value.Empty?
+      ensures table'[e].value.Empty?
+    {
+    }
+    
+    assert table'[i].value.Empty?;
+  }
+
+  function SlotKeyHash(table: FixedTable, i: Index): Index
+    requires table[i].Some? && table[i].value.Full?
+  {
+    hash(table[i].value.key)
+  }
+
   lemma RemoveFoundStepPreservesInv(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.RemoveFoundStep? && NextStep(s, s', step)
     // ensures Inv(s')
   {
-    // assert Capacity() < FixedSize();
     var RemoveFoundStep(ticket, start, end) := step;
     var key := ticket.input.key;
     var table, table' := s.table, s'.table;
@@ -921,33 +943,87 @@ module ShardedHashTable refines ShardedStateMachine {
 
     assert table'[end].value.Empty?;
 
-    if exists e: Index, i: Index :: !ValidHashInSlot(table', e, i)
-    {
-      var e: Index, i: Index, h: Index :|
-        && table'[e].value.Empty?
-        && table'[i].value.Full?
-        && h == hash(table'[i].value.key)
-        && adjust(h, e) > adjust(i, e);
-      
-      var i_prev := PrevIndex(i);
-      var i_next := NextIndex(i);
-      assert ValidHashInSlot(table, e, i);
-      assert ValidHashInSlot(table, e, i_prev);
-      assert ValidHashInSlot(table, e, i_next);
+    if start <= end {
+      if exists j: Index :: !ContiguousToEntry(table', j)
+      {
+        var j: Index, k: Index :|
+          && table'[j].value.Full?
+          && IndexInRange(k, hash(table'[j].value.key), j)
+          && table'[k].value.Empty?;
 
-      if e != end {
-        assert table[e].value.Empty?;
-        assert false;
-      } else {
-        assert table[e].value.Full?;
-        assume exists e': Index :: table[e'].value.Empty?;
-        var e' :Index :| table[e'].value.Empty?;
-        assume table[e'] == table[e];
-        assert false;
+        if k != end {
+          // var j_prev := PrevIndex(j);
+          // var j_next := NextIndex(j);
+          // assert ContiguousToEntry(table, j);
+          // assert ContiguousToEntry(table, j_prev);
+          // assert ContiguousToEntry(table, j_next);
+          // assert false;
+          // proved, just slow
+          assume false;
+        } else {
+          if j < start {
+            assert table[j] == table'[j];
+            assert ContiguousToEntry(table, j);
+            var jh := SlotKeyHash(table, j);
+
+            if jh <= end {
+              assume exists e0 : Index ::
+                && table[e0].value.Empty?
+                && (end < e0 || e0 < start);
+
+              var e0 : Index :| table[e0].value.Empty?
+                && (end < e0 || e0 < start);
+              
+              if e0 > end {
+                assert ValidHashInSlot(table, e0, j);
+                assert adjust(jh, e0) <= adjust(j, e0);
+                assert false;
+              } else {
+                assert e0 < start;
+                if e0 < j {
+                  assert false;
+                }
+
+                assert j <= e0 < start; 
+              }
+              assume false;
+            }
+
+          }
+          // var e := RemoveFoundStepPreservesEmptySlot(s, s', step);
+
+          assume false;
+        }
       }
+
     }
 
-    assume false;
+
+    // forall j: Index
+    //   ensures true
+    // {
+    //   if start <= end {
+    //     if 0 <= j < start {
+    //       assert ContiguousToEntry(table, j);
+    //       assert ContiguousToEntry(table', j);
+    //     }
+    //   } else {
+    //     assume false;
+    //   }
+    //   // var e := InvImpliesEmptySlot(s);
+
+    // }
+
+    // forall e: Index, i: Index
+    //   ensures ValidHashInSlot(table', e, i)
+    // {
+    //   var i_prev := PrevIndex(i);
+    //   var i_next := NextIndex(i);
+    //   assert ValidHashInSlot(table, e, i);
+    //   assert ValidHashInSlot(table, e, i_prev);
+    //   assert ValidHashInSlot(table, e, i_next);
+    //   assert ContiguousToEntry(table', i);
+    // }
   }
 
   lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
