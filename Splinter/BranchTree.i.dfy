@@ -133,9 +133,8 @@ module BranchTreeMod {
     }
   }
 
-  // TODO: Finish
   // Parses CU units to BranchNodes that we can use
-  function parse(pg : UninterpretedDiskPage) : Option<BranchNode>
+  function parse(pg : UninterpretedDiskPage) : Option<BranchNode> // TODO: Finish
 
   function CUToNode(node : CU, cache: CacheIfc.Variables) : Option<BranchNode>
   {
@@ -168,6 +167,10 @@ module BranchTreeMod {
 
    }
 
+  /*
+    This function is supposed to return a BranchPath corresponding to a particular Key
+    
+   */
   function BranchSteps(key: Key, root: CU, cache: CacheIfc.Variables) : Option<BranchPath>
   {
    //   if CUToNode(root, cache).None?
@@ -209,6 +212,12 @@ module BranchTreeMod {
     && path.value.Valid()
     && path.value.k == k
     && path.value.Decode() == msgs
+  }
+
+  // Bulk Put for Compaction
+  predicate PutMany(root: CU, cache: CacheIfc.Variables, map<Key, Message>)
+  {
+    // TODO
   }
 
   /*
