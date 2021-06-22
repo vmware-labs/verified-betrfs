@@ -17,7 +17,7 @@ module MessageMod {
   type Value(!new)
 
   //type Message(!new)
-  datatype Message = MessagePut(k:Key, v:Value)
+  datatype Message = MessagePut(/*k:Key,*/ v:Value)
 
   predicate IsAKey(k: Key) { true }  // a term for Dafny to trigger on, to hide the warning.
 
@@ -27,6 +27,11 @@ module MessageMod {
 
   function DefaultValue() : Value
     // TODO
+
+  function DefaultMessage() : Message
+  {
+    MessagePut(DefaultValue())
+  }
 
   // QUESTION: We use this to apply the key to map in msgSeq. Does this go here?
   function Combine(oldMsg : Message, newMsg: Message) : Message

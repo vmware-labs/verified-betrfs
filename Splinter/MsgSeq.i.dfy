@@ -20,7 +20,9 @@ module MsgSeqMod {
   type LSN = InterpMod.LSN
   type Interp = InterpMod.Interp
 
-  datatype MsgSeq = MsgSeq(msgs: map<LSN, Message>, seqStart: LSN, seqEnd: LSN)
+  datatype KeyedMessage = KeyedMessage(key: Key, message: Message)
+
+  datatype MsgSeq = MsgSeq(msgs: map<LSN, KeyedMessage>, seqStart: LSN, seqEnd: LSN)
     // seqEnd is exclusive
   {
     predicate Contains(lsn: LSN)
@@ -51,7 +53,7 @@ module MsgSeqMod {
 
     // Add a single message to the end of the sequence. It gets LSN 'seqEnd', since
     // that's exclusive (points at the next empty slot).
-    function Extend(m: Message) : MsgSeq
+    function Extend(m: KeyedMessage) : MsgSeq
     {
       MsgSeq(
         map k | k in msgs.Keys + { seqEnd } :: if k == seqEnd then m else msgs[k],
@@ -88,9 +90,9 @@ module MsgSeqMod {
       then orig
       else
         var lsn := seqStart + count - 1;
-        var key := msgs[lsn].k;
+        var key := msgs[lsn].key;
         var oldMessage := orig.mi[key];
-        var newMessage := msgs[lsn];
+        var newMessage := msgs[lsn].message;
 
         var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Combine(oldMessage, newMessage)];
         InterpMod.Interp(mapp, lsn)
@@ -111,8 +113,8 @@ module MsgSeqMod {
       then orig
       else
         var lsn := seqStart + count - 1;
-        var key := msgs[lsn].k;
-        var message := msgs[lsn];
+        var key := msgs[lsn].key;
+        var message := msgs[lsn].message;
         ApplyToKeyMapRecursive(orig, count-1)[key := message]
     }
 

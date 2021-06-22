@@ -49,7 +49,138 @@ module BranchTreeMod {
   type Key = Keys.Element
 
 
-  // Ranges
+  datatype BranchNode = Leaf(kvmap: map<Key, Message>) | Index(pivots : seq<Key>, children: seq<CU>)
+  {
+    predicate WF()
+    {
+      ( this.Index? ==> ( && |pivots| + 1 == |children|
+                          && 2 <= |children| // otherwise this would just be a leaf
+                          && 1 <= |pivots|
+                          && forall pivot :: (1 <= pivot < |pivots| && pivots[pivot - 1] < pivots[pivot])
+                        )
+      )
+    }
+
+    function findSubBranch(key: Key) : CU
+      requires WF()
+      requires this.Index?
+    {
+      // TODO switch to Rob's pivot-looker-upper
+      if Keys.lt(key, pivots[0]) //TODO Check if pivots are inclusive
+        then
+        assert this.Index?;
+        children[0]
+      else if Keys.lte(pivots[|pivots| - 1], key) // Don't know if gt exists
+        then
+        children[|pivots|]
+      else
+        assert this.Index?;
+        assert Keys.lt(pivots[0], key);
+        assert Keys.lt(key, pivots[|pivots| - 1]);
+        var pivot :| ( && 1 < pivot < |pivots|
+                       && Keys.lte(pivots[pivot - 1], key)
+                       && Keys.lt(key, pivots[pivot]) ); //TODO Check if pivots are inclusive
+        children[pivot]
+    }
+  }
+
+  // Parses CU units to BranchNodes that we can use
+  function parse(pg : UninterpretedDiskPage) : Option<BranchNode> // TODO: Finish
+
+  function CUToNode(cu : CU, cache: CacheIfc.Variables) : Option<BranchNode>
+  {
+      var diskPage := ReadValue(cache, cu);
+      if diskPage == None
+      then
+        None
+      else
+        parse(diskPage.value)
+  }
+
+  // Essentially denotes a path in the branch tree from the root cu to a corresponding leaf
+  // If there are no messages corresponding to this key,
+  // then the final entity in this sequence steps will be None
+  datatype BranchStep = BranchStep(cu: CU, node:BranchNode)
+
+  datatype BranchPath = BranchPath(key: Key, steps: seq<BranchStep>)
+  {
+    predicate WF() {
+      && 0 < |steps|
+      && (forall i | 0 <= i < |steps|-1 :: steps[i].node.Index?)
+      && Last(steps).node.Leaf?
+    }
+
+    predicate {:opaque} Linked() {
+      && (forall i | 0 < i < |steps| :: steps[i].cu == steps[i-1].node.findSubBranch(key))
+    }
+
+    predicate Valid(cache: CacheIfc.Variables) {
+      && WF()
+      && Linked()
+      && (forall i | 0 <= i < |steps| :: Some(steps[i].node) == CUToNode(steps[i].cu, cache))
+    }
+
+    function Root() : CU
+      requires WF()
+    {
+      steps[0].cu
+    }
+
+    function Decode() : Message
+      requires WF()
+    {
+      var kvmap := Last(steps).node.kvmap;
+      if key in kvmap then kvmap[key] else DefaultMessage()
+    }
+  }
+
+   // QUESTION: DO WE EVEN NEED THIS AT THIS LAYER. ALL THE ACTUAL INTERAL STEPS
+   // ARE CALLED AT IN SPLINTERINTERAL STEP????
+   datatype Skolem =
+     | QueryStep(branchPath: BranchPath)
+     | PutManyStep()
+     | CompactBranchStep()
+
+  /*
+    Recipt where we check that the chain of nodes in that lookup from the root checks out
+    TODO: Check if these msgs should be map<Key, Message> or map<Key, MsgSeq> . Splintertree seems to expect map<Key, Message>?
+  */
+  predicate Query(root: CU, cache: CacheIfc.Variables, key: Key, msg: Message, sk: Skolem)
+  {
+    && sk.QueryStep?
+    && var path := sk.branchPath;
+    && path.Valid(cache)
+    && path.key == key
+    && path.Decode() == msg
+  }
+
+  function InterpKey(root: CU, cache: CacheIfc.Variables, key: Key) : Message
+  {
+    if exists msg, sk :: Query(root, cache, key, msg, sk) // always true by invariant
+    then
+      var msg, sk :| Query(root, cache, key, msg, sk); msg
+    else
+      DefaultMessage()
+  }
+
+  // TODO: add cache and change the interpretation to deal with messages
+  function Interpretation(root : CU, cache: CacheIfc.Variables) : imap<Key, Message>
+  {
+    imap k | true :: InterpKey(root, cache, k)
+  }
+
+  /*
+    Something like check if all the cu's for this tree are reachable on disk??
+  */
+  predicate IsClean(root: CU, cache: CacheIfc.Variables)
+  {
+    forall cu | cu in  Alloc() :: CacheIfc.IsClean(cache, cu)
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Define a "Stack" of branches, so we can define what it means to extract
+  // the key-message pairs from a stack and compact it into a new branch tree.
+  //////////////////////////////////////////////////////////////////////////////
   datatype Range = Range(start: Key, end: Key)
   {
     predicate Contains(k : Key)
@@ -75,7 +206,7 @@ module BranchTreeMod {
         iset k | k in Interpretation(root, cache).Keys && ranges.Contains(k)
     }
 
-    function I() :  imap<Key, Value>
+    function I() :  imap<Key, Message>
     {
       imap k | k in Keys() :: Interpretation(root, cache)[k]
     }
@@ -83,7 +214,7 @@ module BranchTreeMod {
 
   datatype Stack = Stack(slices : seq<Slice>)
   {
-    function I() :  imap<Key, Value>
+    function I() :  imap<Key, Message>
       decreases |slices|
     {
         if |slices| == 0
@@ -95,137 +226,6 @@ module BranchTreeMod {
         else
            IMapUnionPreferB(Stack(DropLast(slices)).I(), Last(slices).I())
     }
-  }
-
-  datatype BranchNode = Leaf(kvmap: map<Key, Message>) | Index(pivots : seq<Key>, children: seq<CU>)
-  {
-    predicate WF()
-    {
-      ( this.Index? ==> ( && |pivots| + 1 == |children|
-                          && 2 <= |children| // otherwise this would just be a leaf
-                          && 1 <= |pivots|
-                          && forall pivot :: (1 <= pivot < |pivots| && pivots[pivot - 1] < pivots[pivot])
-                        )
-      )
-    }
-
-    function findSubBranch(key: Key) : Option<CU>
-      requires WF()
-    {
-      if !this.Index?
-        then
-        None
-      else if Keys.lt(key, pivots[0]) //TODO Check if pivots are inclusive
-        then
-        assert this.Index?;
-        Some(children[0])
-      else if Keys.lte(pivots[|pivots| - 1], key) // Don't know if gt exists
-        then
-        Some(children[|pivots|])
-      else
-        assert this.Index?;
-        assert Keys.lt(pivots[0], key);
-        assert Keys.lt(key, pivots[|pivots| - 1]);
-        var pivot :| ( && 1 < pivot < |pivots|
-                       && Keys.lte(pivots[pivot - 1], key)
-                       && Keys.lt(key, pivots[pivot]) ); //TODO Check if pivots are inclusive
-        Some(children[pivot])
-    }
-  }
-
-  // Parses CU units to BranchNodes that we can use
-  function parse(pg : UninterpretedDiskPage) : Option<BranchNode> // TODO: Finish
-
-  function CUToNode(node : CU, cache: CacheIfc.Variables) : Option<BranchNode>
-  {
-      var diskPage := ReadValue(cache, node);
-      if diskPage == None
-      then
-        None
-      else
-        parse(diskPage.value)
-  }
-
-   // Essentially denotes a path in the branch tree from the root cu to a corresponding leaf
-   // If there are no messages corresponding to this key,
-   // then the final entity in this sequence steps will be None
-   datatype BranchPath = BranchPath(k: Key, root: CU, cache: CacheIfc.Variables)
-   {
-     predicate ValidPrefix() {
-       true // some path from the root
-     }
-
-     predicate Valid() {
-       && ValidPrefix()
-     }
-
-     function Decode() : MsgSeq
-     {
-       Empty()
-       //var subBranch := findSubBranch();
-     }
-
-   }
-
-  /*
-    This function is supposed to return a BranchPath corresponding to a particular Key
-    
-   */
-  function BranchSteps(key: Key, root: CU, cache: CacheIfc.Variables) : Option<BranchPath>
-  {
-   //   if CUToNode(root, cache).None?
-   //   then
-   //    [] // TODO : Finish
-   //   else if CUToNode(root, cache).value.Leaf?
-   //   then
-   //    [BranchStep(root, key, root.value.)]
-   //   else
-   //   then
-   //    var childSteps := root.value.findSubBranch(key)
-   //    [root.value] + BranchSteps(key, childNode, cache)
-   None // TODO
-   }
-
-   // QUESTION: DO WE EVEN NEED THIS AT THIS LAYER. ALL THE ACTUAL INTERAL STEPS
-   // ARE CALLED AT IN SPLINTERINTERAL STEP????
-   datatype Skolem =
-     | QueryStep(branchPath: BranchPath)
-     | PutManyStep()
-     | CompactBranchStep()
-
-  // TODO: add cache and change the interpretation to deal with messages
-  // QUESTION : Check if its the right type imap<Key, Message> or imap<Key, MsgSeq> ????
-  function Interpretation(root : CU, cache: CacheIfc.Variables) : imap<Key, Value>
-  {
-    // TODO
-    imap []
-  }
-
-  /*
-    Recipt where we check that the chain of nodes in that lookup from the root checks out
-    TODO: Check if these msgs should be map<Key, Message> or map<Key, MsgSeq> . Splintertree seems to expect map<Key, Message>?
-  */
-  predicate Query(root: CU, cache: CacheIfc.Variables, k: Key, msgs: MsgSeq)
-  {
-    && var path := BranchSteps(k, root, cache) ;
-    && path.Some?
-    && path.value.Valid()
-    && path.value.k == k
-    && path.value.Decode() == msgs
-  }
-
-  // Bulk Put for Compaction
-  predicate PutMany(root: CU, cache: CacheIfc.Variables, map<Key, Message>)
-  {
-    // TODO
-  }
-
-  /*
-    Something like check if all the cu's for this tree are reachable on disk??
-  */
-  predicate IsClean(root: CU, cache: CacheIfc.Variables)
-  {
-    forall cu | cu in  Alloc() :: CacheIfc.IsClean(cache, cu)
   }
 
   // at the we check that the tree is done
