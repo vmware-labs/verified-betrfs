@@ -260,11 +260,28 @@ module JournalInterpMod {
           assert sb_old == sb;
           calc {
             ChainFrom(cache'.dv, sb').chain.value.recs;
+              {
+                assert sb'.freshestCU.Some?;
+                assert sb'.freshestCU.value in cache'.dv;
+                assert parse(cache'.dv[sb'.freshestCU.value]).Some?;
+                assert v'.marshalledLSN == v.unmarshalledLSN();
+                assert v'.lsnToCU[v'.marshalledLSN - 1] == newCU;
+                assert newCU == FreshestMarshalledCU(v').value;
+                assert sb'.freshestCU.value == newCU;
+                assert jr == parse(cache'.dv[sb'.freshestCU.value]).value;
+                assert !(jr.messageSeq.seqEnd <= sb'.boundaryLSN);
+                assert !(jr.messageSeq.seqStart <= sb.boundaryLSN);
+                assert !(jr.priorCU.None?);
+              }
+            [jr] + ChainFrom(MapRemove1(cache'.dv, sb'.freshestCU.value), jr.priorSB(sb')).chain.value.recs;
+            [jr] + ChainFrom(MapRemove1(cache'.dv, sb'.freshestCU.value), sb).chain.value.recs;
+            [jr] + ChainFrom(cache.dv, sb).chain.value.recs;
+              // Framing argument here
             [jr] + ChainFrom(cache.dv, sb).chain.value.recs;
           }
           calc {
             ChainAsMsgSeq(v', cache');
-            ChainFrom(cache'.dv, sb).chain.value.interp.Concat(TailToMsgSeq(v'));
+            ChainFrom(cache'.dv, sb').chain.value.interp.Concat(TailToMsgSeq(v'));
             new_chain_msgseq.Concat(new_tail_msgseq);
             new_chain_msgseq;
             orig_chain_msgseq.Concat(orig_tail_msgseq);
