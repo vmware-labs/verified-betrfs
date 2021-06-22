@@ -11,7 +11,7 @@ include "Interp.s.dfy"
 include "BranchTree.i.dfy"
 
 /*
-a Betree consists of:
+a Splinter tree consists of:
 - Trunk nodes. These have routing information, and link to B+trees that store actual messages.
   Links include filters that select particular keys, neutralize old messages.
 - Immutable B+trees, allocated in big (many-MB?) chunks, store a batch of messages from
@@ -28,7 +28,7 @@ a Betree consists of:
   - Used trunk nodes. (One CU allocated in an entire AU, evidently.)
   - Batches of CUs (AUs) used to build a B+tree.
 
-So Betree.lookup is a series of trunk nodes, their CUs,
+So Splintertree.lookup is a series of trunk nodes, their CUs,
   plus for each a B+tree.lookup, which itself is a series of CUs.
 
   So maybe the thing to do is stub out the B+tree interface that this thing is going to
@@ -161,6 +161,7 @@ module SplinterTreeMachineMod {
   type TrunkId = nat
   function RootId() : TrunkId { 0 }
 
+  // TODO : Add references to branches
   datatype TrunkNode = TrunkNode()
   function parseTrunkNode(b: UninterpretedDiskPage) : Option<TrunkNode>
     // TODO
@@ -236,9 +237,9 @@ module SplinterTreeMachineMod {
   datatype Skolem =
     | QueryStep(trunkPath: TrunkPath)
     | PutStep()
-    | FlushStep(flush: FlushRec) // pushdown and compaction
-    | DrainMemBufferStep(oldRoot: NodeAssignment, newRoot: NodeAssignment)
-    | CompactBranchStep(receipt: CompactReceipt)
+    | FlushStep(flush: FlushRec) // pushdown branch pointers to children
+    | DrainMemBufferStep(oldRoot: NodeAssignment, newRoot: NodeAssignment) // Push the memory only stuff into the persistent root of spliten tree as a branctree
+    | CompactBranchStep(receipt: CompactReceipt) // Rewrite branches into a new branch.
     | BranchInteralStep(branchSk : BranchTreeMod.Skolem)
 
   predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
@@ -261,7 +262,6 @@ module SplinterTreeMachineMod {
 
   predicate PutMany(v: Variables, v': Variables, puts: MsgSeq) {
     &&  v' == v.(memBuffer := puts.ApplyToKeyMap(v.memBuffer), nextSeq := v.nextSeq + puts.Len())
-    //true  // TODO(sowmya): restore ApplyToKeyMap
   }
 
   datatype FlushRec = FlushRec(
@@ -290,6 +290,7 @@ module SplinterTreeMachineMod {
       { ChildStep().na.node }
   }
 
+  // TODO: We need make sure this flush op is flushing entire prefix of local trunk versions
   predicate FlushesNodes(oldParent: TrunkNode, oldChild: TrunkNode, newParent: TrunkNode, newChild: TrunkNode) {
     true // TODO
   }
@@ -403,8 +404,8 @@ module SplinterTreeMachineMod {
   {
     || Flush(v, v', cache, cacheOps, sk)
     || DrainMemBuffer(v, v', cache, cacheOps, sk)
-    // || BranchInteralStep : TODO
-    || CompactBranch(v, v', cache, cacheOps, sk)
+    || BranchInternal(v, v', cache, cacheOps, sk) // memBuffer doesn't change
+    || CompactBranch(v, v', cache, cacheOps, sk) // trunk update 
   }
 
   predicate CommitStart(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN)

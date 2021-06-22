@@ -7,7 +7,6 @@ include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
 include "MsgSeq.i.dfy"
-//include "SplinterTree.i.dfy"
 
 include "CacheIfc.i.dfy"
 include "../lib/DataStructures/BtreeModel.i.dfy"
@@ -20,14 +19,18 @@ include "../lib/Base/Maps.i.dfy"
   The current branch in the membuffer (fully in memory -- but we can asynchronously persist the working
   branch to disk) and the branch trees in the splinter tree on disk
 
-
   Incorporation : Process of updating the splinter tree pointers such that the current branch
   (is persisted on disk) and added to the splinter tree root
 
   WE CAN TREAT AS THOUGH EVERYTHING IS IN THE CACHE
 
   Let's ignore the in memory btree in the memBuffer for now
+
+  TODOS : Garbage collection on flushes
+  TODDS : Figure out how to read a node from the CU -- DONE!!
 */
+
+// Immutable BranchTrees that are part of the SplinterTree on disk
 module BranchTreeMod {
   import opened CacheIfc
   //import BtreeModel -- THIS IS AN ABSTRACT MODULE ... WE CAN'T USE IT!!!!
@@ -36,7 +39,9 @@ module BranchTreeMod {
   import opened DiskTypesMod
   import opened Sequences
 
-  import opened MessageMod // TODO later change the keys value type to be generic
+  // TODO later change the keys value type to be generic
+  import opened MessageMod
+  import opened MsgSeqMod
 
   import KeysImpl = Lexicographic_Byte_Order_Impl
   import Keys = KeysImpl.Ord
@@ -44,6 +49,7 @@ module BranchTreeMod {
   type Key = Keys.Element
 
 
+  // Ranges
   datatype Range = Range(start: Key, end: Key)
   {
     predicate Contains(k : Key)
@@ -64,34 +70,34 @@ module BranchTreeMod {
   datatype Slice = Slice(root: CU, ranges: Ranges, cache: CacheIfc.Variables)
   {
 
-    function Keys() : set<Key>
+    function Keys() : iset<Key>
     {
-        set k | k in Interpretation(root, cache).Keys && ranges.Contains(k)
+        iset k | k in Interpretation(root, cache).Keys && ranges.Contains(k)
     }
 
-    function I() :  map<Key, Value>
+    function I() :  imap<Key, Value>
     {
-      map k | k in Keys() :: Interpretation(root, cache)[k]
+      imap k | k in Keys() :: Interpretation(root, cache)[k]
     }
   }
 
   datatype Stack = Stack(slices : seq<Slice>)
   {
-    function I() :  map<Key, Value>
+    function I() :  imap<Key, Value>
       decreases |slices|
     {
         if |slices| == 0
         then
-          map []
+          imap []
         else if |slices| == 1
         then
           slices[0].I()
         else
-           MapUnionPreferB(Stack(DropLast(slices)).I(), Last(slices).I())
+           IMapUnionPreferB(Stack(DropLast(slices)).I(), Last(slices).I())
     }
   }
 
-  datatype BranchNode = Leaf(kvmap: map<Key, Value>) | Index(pivots : seq<Key>, children: seq<CU>)
+  datatype BranchNode = Leaf(kvmap: map<Key, Message>) | Index(pivots : seq<Key>, children: seq<CU>)
   {
     predicate WF()
     {
@@ -127,59 +133,82 @@ module BranchTreeMod {
     }
   }
 
+  // TODO: Finish
+  // Parses CU units to BranchNodes that we can use
+  function parse(pg : UninterpretedDiskPage) : Option<BranchNode>
 
-   // Here Check with Jon about whther we're gonna deal with values or messages
-   datatype BranchStep = BranchStep(root: CU, key: Key, value: Value)
+  function CUToNode(node : CU, cache: CacheIfc.Variables) : Option<BranchNode>
+  {
+      var diskPage := ReadValue(cache, node);
+      if diskPage == None
+      then
+        None
+      else
+        parse(diskPage.value)
+  }
 
-
-  // // TODO: Change --
-   datatype BranchPath = BranchPath(k: Key, steps: seq<BranchStep>)
+   // Essentially denotes a path in the branch tree from the root cu to a corresponding leaf
+   // If there are no messages corresponding to this key,
+   // then the final entity in this sequence steps will be None
+   datatype BranchPath = BranchPath(k: Key, root: CU, cache: CacheIfc.Variables)
    {
-     predicate ValidPrefix(cache: CacheIfc.Variables) {
+     predicate ValidPrefix() {
        true // some path from the root
      }
 
-     predicate Valid(cache: CacheIfc.Variables) {
-       && ValidPrefix(cache)
-       && true // no nodes below this one for k.
+     predicate Valid() {
+       && ValidPrefix()
      }
 
-     // function Decode() : Value
-     // {
-     //   // filter Messages on k, I guess
-     //   //var unflattenedMsgs := seq(|steps|, i requires 0<=i<|steps| => steps[i].msgs);
-     //   //var flattenedMsgs := FoldLeft(MessageFolder, map[], unflattenedMsgs);
-     //   //if k in flattenedMsgs then EvaluateMessage(flattenedMsgs[k]) else DefaultValue()
-     //   Value()
-     // }
+     function Decode() : MsgSeq
+     {
+       Empty()
+       //var subBranch := findSubBranch();
+     }
+
    }
 
-   function BranchSteps(root: CU, key: Key) : Option<BranchPath>
-   {
-     //BranchPath()
-     None // TODO : Finish
+  function BranchSteps(key: Key, root: CU, cache: CacheIfc.Variables) : Option<BranchPath>
+  {
+   //   if CUToNode(root, cache).None?
+   //   then
+   //    [] // TODO : Finish
+   //   else if CUToNode(root, cache).value.Leaf?
+   //   then
+   //    [BranchStep(root, key, root.value.)]
+   //   else
+   //   then
+   //    var childSteps := root.value.findSubBranch(key)
+   //    [root.value] + BranchSteps(key, childNode, cache)
+   None // TODO
    }
 
-  datatype Skolem = Skolem()
+   // QUESTION: DO WE EVEN NEED THIS AT THIS LAYER. ALL THE ACTUAL INTERAL STEPS
+   // ARE CALLED AT IN SPLINTERINTERAL STEP????
+   datatype Skolem =
+     | QueryStep(branchPath: BranchPath)
+     | PutManyStep()
+     | CompactBranchStep()
 
   // TODO: add cache and change the interpretation to deal with messages
-  function Interpretation(root : CU, cache: CacheIfc.Variables) : map<Key, Value>
+  // QUESTION : Check if its the right type imap<Key, Message> or imap<Key, MsgSeq> ????
+  function Interpretation(root : CU, cache: CacheIfc.Variables) : imap<Key, Value>
   {
     // TODO
-    map []
+    imap []
   }
 
   /*
     Recipt where we check that the chain of nodes in that lookup from the root checks out
-
+    TODO: Check if these msgs should be map<Key, Message> or map<Key, MsgSeq> . Splintertree seems to expect map<Key, Message>?
   */
-  predicate Query(root: CU, cache: CacheIfc.Variables, k: Key, v: Value)
+  predicate Query(root: CU, cache: CacheIfc.Variables, k: Key, msgs: MsgSeq)
   {
-    && var path := BranchSteps(root, k) ;
+    && var path := BranchSteps(k, root, cache) ;
     && path.Some?
-    && path.value.Valid(cache)
+    && path.value.Valid()
     && path.value.k == k
-    //&& trunkPath.Decode() == value // TODO: finish
+    && path.value.Decode() == msgs
   }
 
   /*
@@ -197,7 +226,7 @@ module BranchTreeMod {
   }
 
   // TODO:
-  predicate Internal(v: Variables, v': Variables)
+  predicate BranchInternal(v: Variables, v': Variables)
   {
     false
   }
