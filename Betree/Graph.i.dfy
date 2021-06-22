@@ -194,7 +194,7 @@ abstract module Graph {
     return j;
   }
 
-  lemma {:timeLimitMultiplier 2} LocalEditPreservesAcyclic(g: Graph, g': Graph, p: Reference)
+  lemma {:timeLimitMultiplier 4} {:fuel Successors,0} LocalEditPreservesAcyclic(g: Graph, g': Graph, p: Reference)
     requires IsClosed(g)
     requires IsAcyclic(g)
     requires EditIsLocal(g, g', p)
