@@ -8,6 +8,7 @@ include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
 include "MsgSeq.i.dfy"
 
+
 include "CacheIfc.i.dfy"
 include "../lib/DataStructures/BtreeModel.i.dfy"
 include "../lib/Base/Maps.i.dfy"
@@ -48,6 +49,8 @@ module BranchTreeMod {
 
   type Key = Keys.Element
 
+  // TODO: Finish and maybe we want Routing Filters here, check with Rob and Jon for this
+  datatype QuotientFilter = QuotientFilter()
 
   datatype BranchNode = Leaf(kvmap: map<Key, Message>) | Index(pivots : seq<Key>, children: seq<CU>)
   {
@@ -95,6 +98,21 @@ module BranchTreeMod {
         None
       else
         parse(diskPage.value)
+  }
+
+  datatype BranchTree = BranchTree(root : CU, filter : QuotientFilter)
+  {
+    predicate WF()
+    {
+      true
+      // TODO:
+    }
+
+    function Root() : CU
+      requires WF()
+    {
+      root
+    }
   }
 
   // Essentially denotes a path in the branch tree from the root cu to a corresponding leaf

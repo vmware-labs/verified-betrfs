@@ -161,8 +161,24 @@ module SplinterTreeMachineMod {
   type TrunkId = nat
   function RootId() : TrunkId { 0 }
 
-  // TODO : Add references to branches
-  datatype TrunkNode = TrunkNode()
+  // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
+  // activeBranches tells us the lowest index of an active branch tree for the corresponding child
+  datatype TrunkNode = TrunkNode(branches : seq<BranchTreeMod.BranchTree>,
+                                 children : seq<TrunkNode>,
+                                 pivots : seq<BranchTreeMod.Key>,
+                                 activeBranches : seq<nat>)
+  {
+    predicate WF()
+    {
+      && |children| == |activeBranches|
+      // activeBranches can only point to actual branch trees
+      && forall i :: ( (0 <= i < |activeBranches|) ==> (0 <= activeBranches[i] < |branches|))
+      // WF conditions on the pivots
+      && (|children| > 0) ==> (|children| == |pivots| + 1)
+      && forall pivot :: (1 <= pivot < |pivots| && pivots[pivot - 1] < pivots[pivot])
+    }
+  }
+
   function parseTrunkNode(b: UninterpretedDiskPage) : Option<TrunkNode>
     // TODO
   function marshalTrunkNode(node: TrunkNode) : UninterpretedDiskPage
@@ -185,13 +201,20 @@ module SplinterTreeMachineMod {
       && id in v.indTbl
       && v.indTbl[id] == cu
     }
-    predicate Valid(v: Variables, cache: CacheIfc.Variables)
+
+    predicate ValidCU(cache : CacheIfc.Variables)
     {
-      && InIndTable(v)
       && var unparsedPage := CacheIfc.ReadValue(cache, cu);
       && unparsedPage.Some?
       && Some(node) == parseTrunkNode(unparsedPage.value)
     }
+
+    predicate Valid(v: Variables, cache: CacheIfc.Variables)
+    {
+      && InIndTable(v)
+      && ValidCU(cache)
+    }
+
   }
 
   // TODO find in library
@@ -199,6 +222,7 @@ module SplinterTreeMachineMod {
   function EvaluateMessage(m: Message) : Value
   function MakeValueMessage(value:Value) : Message
 
+  // QUESTION : What does this do???
   function MessageFolder(newer: map<Key,Message>, older: map<Key,Message>) : map<Key,Message>
   {
 		map x : Key | (x in newer.Keys + older.Keys) ::
@@ -210,14 +234,29 @@ module SplinterTreeMachineMod {
   }
 
   datatype TrunkStep = TrunkStep(
+    // current Trunk Node?
     na: NodeAssignment,
+    // map from the branch we actually care about?
     msgs: map<Key, Message>
-    // , branchMsgs: seq<map<Key, Message>>, branchAssigment: BranchAssignment   ...
+
+    // QUESTION: What is this supposed to do? -- Old messages are strictly overwritten by the new ones no?
+    //branchMsgs: seq<map<Key, Message>>,
+    // branchAssigment: BranchAssignment   ...
     )
+  {
+    predicate WF()
+    {
+      // TODO
+      true
+    }
+
+  }
+
   datatype TrunkPath = TrunkPath(k: Key, steps: seq<TrunkStep>)
   {
+    // Need to check the root???
     predicate ValidPrefix(cache: CacheIfc.Variables) {
-      true // some path from the root
+      && forall i :: (0 <= i < |steps|) && steps[i].na.ValidCU(cache)
     }
 
     predicate Valid(cache: CacheIfc.Variables) {
@@ -234,6 +273,29 @@ module SplinterTreeMachineMod {
     }
   }
 
+  //
+  datatype CompactReceipt = CompactReceipt(path: TrunkPath, newna: NodeAssignment)
+  {
+    predicate WF() {
+      && 0 < |path.steps|
+    }
+
+    //
+    function Oldna() : NodeAssignment
+      requires WF()
+    {
+      Last(path.steps).na
+    }
+
+    predicate Valid(cache: CacheIfc.Variables)
+    {
+      && WF()
+      && path.Valid(cache)
+      && Oldna().id == newna.id
+    }
+  }
+
+
   datatype Skolem =
     | QueryStep(trunkPath: TrunkPath)
     | PutStep()
@@ -242,15 +304,31 @@ module SplinterTreeMachineMod {
     | CompactBranchStep(receipt: CompactReceipt) // Rewrite branches into a new branch.
     | BranchInteralStep(branchSk : BranchTreeMod.Skolem)
 
-  predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
+
+  predicate CheckMemtable(v: Variables, v': Variables, key: Key, value: Value)
   {
-    && sk.QueryStep?
-    // TODO check memtable!
+    && key in v.memBuffer
+    && v.memBuffer[key].v == value
+  }
+
+  predicate checkSpinterTree(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
+  {
     && var trunkPath := sk.trunkPath;
     && trunkPath.Valid(cache)
     && trunkPath.k == key
     && trunkPath.Decode() == value
     && v' == v
+  }
+
+  predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
+  {
+    && sk.QueryStep?
+    && var inMemBuffer := CheckMemtable(v, v', key, value);
+    && var splinterTreePred := checkSpinterTree(v, v', cache, key, value, sk);
+    && (|| inMemBuffer
+        // We only return the result of the splinterTree if it cannot be found in the membuf
+        || !inMemBuffer ==> splinterTreePred
+       )
   }
 
   predicate Put(v: Variables, v': Variables, key: Key, value: Value, sk: Skolem)
@@ -350,25 +428,7 @@ module SplinterTreeMachineMod {
       )
   }
 
-  //
-  datatype CompactReceipt = CompactReceipt(path: TrunkPath, newna: NodeAssignment)
-  {
-    predicate WF() {
-      && 0 < |path.steps|
-    }
-    function Oldna() : NodeAssignment
-      requires WF()
-    {
-      Last(path.steps).na
-    }
-    predicate Valid(cache: CacheIfc.Variables)
-    {
-      && WF()
-      && path.Valid(cache)
-      && Oldna().id == newna.id
-    }
-  }
-
+  // QUESTION: What is this supposed to do???
   predicate EquivalentNodes(a: TrunkNode, b: TrunkNode) {
     true // TODO
   }
@@ -404,8 +464,9 @@ module SplinterTreeMachineMod {
   {
     || Flush(v, v', cache, cacheOps, sk)
     || DrainMemBuffer(v, v', cache, cacheOps, sk)
-    || BranchInternal(v, v', cache, cacheOps, sk) // memBuffer doesn't change
-    || CompactBranch(v, v', cache, cacheOps, sk) // trunk update 
+    // Sowmya : BranchTrees are immutable, so I don't think this step is necessary?
+    //|| BranchInternal(v, v', cache, cacheOps, sk) // memBuffer doesn't change
+    || CompactBranch(v, v', cache, cacheOps, sk) // trunk update
   }
 
   predicate CommitStart(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN)
