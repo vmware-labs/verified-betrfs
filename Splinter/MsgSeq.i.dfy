@@ -202,6 +202,6 @@ module MsgSeqMod {
     requires ms.WF()
     requires interp.seqEnd == ms.seqStart
   {
-    InterpMod.Interp(imap k | InterpMod.InDomain(k) :: IKey(k, interp.mi[k], ms), ms.seqEnd)
+    InterpMod.Interp(imap k | InterpMod.AnyKey(k) :: IKey(k, interp.mi[k], ms), ms.seqEnd)
   }
 }

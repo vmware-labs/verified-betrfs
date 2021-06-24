@@ -49,7 +49,7 @@ module SplinterTreeInterpMod {
   function IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
     ensures i.WF()
   {
-    Interp(imap key | InDomain(key) :: IMKey(v, cache, key), v.nextSeq) // check v.nextSeq used to be sb.endSeq
+    Interp(imap key | AnyKey(key) :: IMKey(v, cache, key), v.nextSeq) // check v.nextSeq used to be sb.endSeq
   }
 
   function IMStable(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
@@ -107,7 +107,7 @@ module SplinterTreeInterpMod {
   {
     // TODO I'm surprised this proof passes easily.
     // narrator: It doesn't.
-    forall key | InDomain(key)
+    forall key | AnyKey(key)
       ensures IMKey(v, cache0, key) == IMKey(v, cache1, key)
     {
       var le0 := exists lookup0 :: ValidLookup(v, cache0, key, lookup0);

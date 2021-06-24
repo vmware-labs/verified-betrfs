@@ -14,14 +14,14 @@ module InterpMod {
   type LSN = nat // Log sequence number
 
   // Provide a Triggerable symbol for the quantifier
-  predicate InDomain(k: Key) { true }
+  predicate AnyKey(k: Key) { true }
 
   datatype Interp = Interp(mi: imap<Key, Message>, seqEnd: LSN)
   {
     predicate WF() {
       // TODO How is ImapComplete not in Maps.i?
       // Ensures that all messages are terimal in the interp map (aka not deltas)
-      && (forall k | InDomain(k) :: k in mi && mi[k].Define?)
+      && (forall k | AnyKey(k) :: k in mi && mi[k].Define?)
     }
 
     // The effect of a put
@@ -37,7 +37,7 @@ module InterpMod {
   function Empty() : Interp
     ensures Empty().WF()
   {
-    var out := Interp(imap k | InDomain(k) :: DefaultMessage(), 0);
+    var out := Interp(imap k | AnyKey(k) :: DefaultMessage(), 0);
     out
   }
 
