@@ -13,7 +13,8 @@ include "Interp.s.dfy"
 // interpretation for the SplinterTree Implementation
 module SplinterTreeInterpMod {
   import opened Options
-  import opened MessageMod
+  import opened ValueMessage
+  import opened KeyType
   import opened InterpMod
   import opened DiskTypesMod
   import opened AllocationMod
@@ -42,13 +43,13 @@ module SplinterTreeInterpMod {
       var lookup :| ValidLookup(v, cache, key, lookup);
       LookupToMessage(lookup)
     else
-      MessagePut(DefaultValue()) // this is not a absence of a key, this case cannot happen by invariant
+      DefaultMessage() // this is not a absence of a key, this case cannot happen by invariant
   }
 
   function IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
     ensures i.WF()
   {
-    Interp(imap key | key in AllKeys() :: IMKey(v, cache, key), v.nextSeq) // check v.nextSeq used to be sb.endSeq
+    Interp(imap key | InDomain(key) :: IMKey(v, cache, key), v.nextSeq) // check v.nextSeq used to be sb.endSeq
   }
 
   function IMStable(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
@@ -106,7 +107,7 @@ module SplinterTreeInterpMod {
   {
     // TODO I'm surprised this proof passes easily.
     // narrator: It doesn't.
-    forall key | key in AllKeys()
+    forall key | InDomain(key)
       ensures IMKey(v, cache0, key) == IMKey(v, cache1, key)
     {
       var le0 := exists lookup0 :: ValidLookup(v, cache0, key, lookup0);
@@ -136,7 +137,7 @@ module SplinterTreeInterpMod {
       } else {
         calc {
           IMKey(v, cache0, key);
-          MessagePut(DefaultValue());
+          DefaultMessage();
           IMKey(v, cache1, key);
         }
       }
@@ -144,7 +145,7 @@ module SplinterTreeInterpMod {
   }
 
   lemma PutEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, key: Key, value: Value, sk: Skolem)
-    ensures IM(cache', v') == IM(cache, v).Put(key, MessagePut(value))
+    ensures IM(cache', v') == IM(cache, v).Put(key, Define(value))
   {
     assume false; // This is hard to prove -- we need to finish a tree
   }

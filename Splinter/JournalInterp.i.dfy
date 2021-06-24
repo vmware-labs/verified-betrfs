@@ -6,7 +6,9 @@ include "CacheLemmas.i.dfy"
 
 // The Module that Interprets the Journal.
 module JournalInterpMod {
-  import opened MessageMod
+
+  import opened ValueMessage
+  import opened KeyType
   import opened Options
   import opened Sequences
   import opened Maps

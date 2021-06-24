@@ -1,4 +1,4 @@
-//include "Message.s.dfy"
+include "Message.s.dfy"
 include "Interp.s.dfy"
 include "DiskTypes.s.dfy"
 
@@ -12,7 +12,6 @@ include "MsgSeq.i.dfy"
 include "CacheIfc.i.dfy"
 include "../lib/DataStructures/BtreeModel.i.dfy"
 include "../lib/Base/Maps.i.dfy"
-include "../lib/Base/Message.i.dfy"
 
 
 /*
@@ -42,7 +41,8 @@ module BranchTreeMod {
   import opened Sequences
 
   // TODO later change the keys value type to be generic
-  import opened MessageMod
+  import opened ValueMessage
+  import opened KeyType
   import opened MsgSeqMod
 
   import KeysImpl = Lexicographic_Byte_Order_Impl

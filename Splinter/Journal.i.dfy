@@ -8,6 +8,7 @@ include "MsgSeq.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
+include "../lib/Base/KeyType.s.dfy"
 
 /*
 Okay I think we need to just talk about DiskViews at this layer. Well, no, a cache that
@@ -30,7 +31,8 @@ module JournalMachineMod {
   import opened Options
   import opened Sequences
   import opened Maps
-  import opened MessageMod
+  import opened ValueMessage
+  import opened KeyType
   import opened InterpMod
   import opened CrashTolerantMapSpecMod
   import opened MsgSeqMod

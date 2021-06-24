@@ -7,6 +7,7 @@ include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "Allocation.i.dfy"
+include "../lib/Base/KeyType.s.dfy"
 
 
 // QUESTION: Helper module that contains what exactly?
@@ -14,7 +15,8 @@ module MsgSeqMod {
   import opened Sequences
   import opened Maps
   import opened Options
-  import opened MessageMod
+  import opened ValueMessage
+  import opened KeyType
   import InterpMod
 
   type LSN = InterpMod.LSN
@@ -94,7 +96,7 @@ module MsgSeqMod {
         var oldMessage := orig.mi[key];
         var newMessage := msgs[lsn].message;
 
-        var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Combine(oldMessage, newMessage)];
+        var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Merge(oldMessage, newMessage)];
         InterpMod.Interp(mapp, lsn)
     }
 

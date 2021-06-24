@@ -2,36 +2,43 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Lang/NativeTypes.s.dfy"
+include "../lib/Base/KeyType.s.dfy"
 include "Message.s.dfy"
 
 // Basic template for defining map Interpretations
 module InterpMod {
-  import opened MessageMod
+  import opened ValueMessage
+  import opened KeyType
+
 
   type LSN = nat // Log sequence number
+
+  // Provide a Triggerable symbol for the quantifier
+  predicate InDomain(k: Key) { true }
 
   datatype Interp = Interp(mi: imap<Key, Message>, seqEnd: LSN)
   {
     predicate WF() {
       // TODO How is ImapComplete not in Maps.i?
-      && (forall k :: k in mi)
-      // && forall k :: mi[k].TerminalMessage?  -- all messages are values
+      // Ensures that all messages are terimal in the interp map (aka not deltas)
+      && (forall k | InDomain(k) :: k in mi && mi[k].Define?)
     }
 
     // The effect of a put
-    function Put(key: Key, value: Message) : Interp
-      // requires value.TerminalMessage?  // TODO Interps work with values
+    function Put(key: Key, value: Message) : (outInterp : Interp)
+      requires value.Define?
+      requires WF()
+      ensures outInterp.WF()
     {
       Interp(mi[key := value], seqEnd + 1)
     }
   }
 
-  predicate InDomain(k: Key) { true }
-
   function Empty() : Interp
     ensures Empty().WF()
   {
-    Interp(imap k | InDomain(k) :: MessagePut(DefaultValue()) , 0)
+    var out := Interp(imap k | InDomain(k) :: DefaultMessage(), 0);
+    out
   }
 
 }

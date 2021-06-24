@@ -100,7 +100,8 @@ module SplinterTreeMachineMod {
   import opened Options
   import opened Sequences
   import opened Maps
-  import opened MessageMod
+  import opened ValueMessage
+  import opened KeyType
   import opened InterpMod
   import opened DiskTypesMod
   import opened AllocationMod
@@ -267,7 +268,8 @@ module SplinterTreeMachineMod {
     predicate Valid(cache: CacheIfc.Variables) {
       && forall i :: (0 <= i < |steps|) && steps[i].na.ValidCU(cache)
       && steps[0].na.id == 0 // check for root
-      // everything but the last is empty, TOOD: check if this is how we want messages work, i.e new things override old things
+      // everything but the last is empty, TOOD: check if this is how we want messages work,
+      // i.e new things override old things
       && forall i :: (0 <= i < |steps| - 1) && (steps[i].msgs == map [])
       && ValidPrefix(cache)
     }
@@ -318,7 +320,8 @@ module SplinterTreeMachineMod {
   predicate CheckMemtable(v: Variables, v': Variables, key: Key, value: Value)
   {
     && key in v.memBuffer
-    && v.memBuffer[key].v == value
+    && v.memBuffer[key].Define?
+    && v.memBuffer[key].value == value
   }
 
   predicate checkSpinterTree(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
@@ -474,7 +477,6 @@ module SplinterTreeMachineMod {
     && CUIsAllocatable(r.newna.cu)
     && EquivalentNodes(r.Oldna().node, r.newna.node)  // Buffer replacements
       // TODO need to establish replacement B+tree is correct
-    &&
     // check that we update the trunknode we're compacting in the cache
     && cacheOps == [ CacheIfc.Write(r.newna.cu, marshalTrunkNode(r.newna.node)) ]
     && v' == v.(indTbl := v.indTbl[r.newna.id := r.newna.cu])

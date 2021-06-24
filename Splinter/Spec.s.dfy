@@ -4,9 +4,12 @@
 include "Message.s.dfy"
 include "Interp.s.dfy"
 include "../lib/Base/SequencesLite.s.dfy"
+include "../lib/Base/KeyType.s.dfy"
+
 
 module MapSpecMod {
-  import opened MessageMod
+  import opened ValueMessage
+  import opened KeyType
   import InterpMod
 
   // UI
@@ -33,14 +36,14 @@ module MapSpecMod {
   predicate Query(s: Variables, s': Variables, k: Key, v: Value)
   {
     && s.interp.WF()
-    // TODO: fix this
-    && v == s.interp.mi[k].v
+    && v == s.interp.mi[k].value
     && s' == s
   }
 
   predicate Put(s: Variables, s': Variables, k: Key, v: Value)
   {
-    && s' == s.(interp := s.interp.Put(k, MessagePut(v)))
+    && s.interp.WF()
+    && s' == s.(interp := s.interp.Put(k, Define(v)))
   }
 
   predicate Next(v: Variables, v': Variables, input: Input, out: Output)
@@ -132,7 +135,8 @@ module AsyncMapSpecMod {
 // this way for greatest simplicity.
 module CrashTolerantMapSpecMod {
   import opened SequencesLite // Last, DropLast
-  import opened MessageMod
+  import opened ValueMessage
+  import opened KeyType
   import InterpMod
   import AsyncMapSpecMod
 
