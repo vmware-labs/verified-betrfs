@@ -96,8 +96,8 @@ module Proof refines ProofObligations {
     // base should be stable betree in disk.
     ensures !v'.program.phase.SuperblockUnknown? // QUESTION : Should this be an ensures or requires
     ensures Inv(v')
-    ensures JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
-    JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
+    ensures JournalInterpMod.IM(v.program.journal, v.program.cache, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+    JournalInterpMod.IM(v'.program.journal, v'.program.cache, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
   {
 
     // needs Some framing argument around DiskViewsEquivalentForSet
@@ -115,8 +115,8 @@ module Proof refines ProofObligations {
     // Only thing new is the journal -- make a lemma journal on Internal step
     JournalInterpMod.InternalStepLemma(v.program.journal, v.program.cache, v'.program.journal, v'.program.cache,  v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree), cacheOps, sk);
 
-    assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
-      JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
+    assert JournalInterpMod.IM(v.program.journal, v.program.cache, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+      JournalInterpMod.IM(v'.program.journal, v'.program.cache, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
 
 
   }
@@ -140,8 +140,8 @@ module Proof refines ProofObligations {
     assert SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) ==
      SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
 
-    assert JournalInterpMod.IM(v.program.journal, v.program.cache, v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
-     JournalInterpMod.IM(v'.program.journal, v'.program.cache, v'.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
+    assert JournalInterpMod.IM(v.program.journal, v.program.cache,  SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
+     JournalInterpMod.IM(v'.program.journal, v'.program.cache,  SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
 
 
      assert ProgramInterpMod.IMRunning(v.program) ==  ProgramInterpMod.IMRunning(v'.program);

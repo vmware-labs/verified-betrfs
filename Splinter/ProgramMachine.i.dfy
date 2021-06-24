@@ -158,7 +158,8 @@ module ProgramMachineMod {
     && var val := uiop.baseOp.req.input.v;
     && v.phase.Running?
     && v.WF()
-    && JournalMachineMod.Append(v.journal, v'.journal, MessagePut(key, val))  // only writes to heap
+    // TODO Check: Sowya: I changed MessagePut(key,val) --> KeyedMessage(key, MessagePut(val)) because we changes the interface of MessagePut
+    && JournalMachineMod.Append(v.journal, v'.journal, KeyedMessage(key, MessagePut(val)))  // only writes to heap
     && SplinterTreeMachineMod.Put(v.betree, v'.betree, key, val, sk)  // only writes to heap
     // Note that Put only adds the write to the journal's unmarshalled tail. So the cache doesn't change
     // The upddates from the unmarshalled tail are pushed into the cache in batches in a later journal internal step.

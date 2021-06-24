@@ -82,7 +82,7 @@ module ProgramInterpMod {
     if sb.Some?
     then
       var splinterTreeInterp := SplinterTreeInterpMod.IMStable(v.cache, sb.value.betree);
-      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, sb.value.journal, splinterTreeInterp);
+      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, splinterTreeInterp);
       journalInterp
     else
       CrashTolerantMapSpecMod.Empty()
@@ -122,7 +122,7 @@ module ProgramInterpMod {
     if sb.Some? {
       SplinterTreeInterpMod.Framing(v0.betree, v0.cache, v1.cache, sb.value.betree);
       var betreeInterp := SplinterTreeInterpMod.IMStable(v0.cache, sb.value.betree);
-      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, sb.value.journal, betreeInterp);
+      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, betreeInterp);
     }
   }
 

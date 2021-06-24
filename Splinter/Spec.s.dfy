@@ -40,7 +40,7 @@ module MapSpecMod {
 
   predicate Put(s: Variables, s': Variables, k: Key, v: Value)
   {
-    && s' == s.(interp := s.interp.Put(k, MessagePut(k,v)))
+    && s' == s.(interp := s.interp.Put(k, MessagePut(v)))
   }
 
   predicate Next(v: Variables, v': Variables, input: Input, out: Output)

@@ -10,7 +10,7 @@ include "SplinterTree.i.dfy"
 include "Message.s.dfy"
 include "Interp.s.dfy"
 
-// interpretation for the Betree Implementation
+// interpretation for the SplinterTree Implementation
 module SplinterTreeInterpMod {
   import opened Options
   import opened MessageMod
@@ -42,7 +42,7 @@ module SplinterTreeInterpMod {
       var lookup :| ValidLookup(v, cache, key, lookup);
       LookupToMessage(lookup)
     else
-      MessagePut(key, DefaultValue()) // this is not a absence of a key, this case cannot happen by invariant
+      MessagePut(DefaultValue()) // this is not a absence of a key, this case cannot happen by invariant
   }
 
   function IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
@@ -136,7 +136,7 @@ module SplinterTreeInterpMod {
       } else {
         calc {
           IMKey(v, cache0, key);
-          MessagePut(key, DefaultValue());
+          MessagePut(DefaultValue());
           IMKey(v, cache1, key);
         }
       }
@@ -144,7 +144,7 @@ module SplinterTreeInterpMod {
   }
 
   lemma PutEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, key: Key, value: Value, sk: Skolem)
-    ensures IM(cache', v') == IM(cache, v).Put(key, MessagePut(key, value))
+    ensures IM(cache', v') == IM(cache, v).Put(key, MessagePut(value))
   {
     assume false; // This is hard to prove -- we need to finish a tree
   }

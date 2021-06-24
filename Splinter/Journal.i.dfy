@@ -85,7 +85,7 @@ module JournalMachineMod {
       // The (exclusive) upper bound of LSNs that have been marshalled into cache
       // blocks.
 
-    unmarshalledTail: seq<Message>,
+    unmarshalledTail: seq<KeyedMessage>,
       // The rest of the in-memory journal
 
     syncReqs: map<SyncReqId, LSN>,
@@ -151,7 +151,7 @@ module JournalMachineMod {
   }
 
   // advances tailLSN forward by adding a message
-  predicate Append(s: Variables, s': Variables, message: Message)
+  predicate Append(s: Variables, s': Variables, message: KeyedMessage)
   {
     && s' == s.(unmarshalledTail := s.unmarshalledTail + [message])
   }
@@ -286,7 +286,7 @@ module JournalMachineMod {
     && (forall i | 0<=i<|chain.recs|-1 :: chain.recs[i].priorCU.Some?)
   }
 
-  predicate RecordSupportsMessage(rec: JournalRecord, lsn: LSN, message: Message)
+  predicate RecordSupportsMessage(rec: JournalRecord, lsn: LSN, message: KeyedMessage)
   {
     && rec.messageSeq.WF()
     && rec.messageSeq.seqStart <= lsn < rec.messageSeq.seqEnd
