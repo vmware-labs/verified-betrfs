@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Base/total_order.i.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
@@ -177,6 +178,10 @@ module SplinterTreeMachineMod {
       && (|children| > 0) ==> (|children| == |pivots| + 1)
       && forall pivot :: (1 <= pivot < |pivots| && pivots[pivot - 1] < pivots[pivot])
     }
+
+    // TODO: Collapse all the in all the branch nodes in this level
+    function AllMessages() : map<Key, Message>
+
   }
 
   function parseTrunkNode(b: UninterpretedDiskPage) : Option<TrunkNode>
@@ -239,7 +244,8 @@ module SplinterTreeMachineMod {
     // map from the branch we actually care about?
     msgs: map<Key, Message>
 
-    // QUESTION: What is this supposed to do? -- Old messages are strictly overwritten by the new ones no?
+    // QUESTION: What is this supposed to do?
+    // -- Old messages are strictly overwritten by the new ones, So do we need to hold on to these???
     //branchMsgs: seq<map<Key, Message>>,
     // branchAssigment: BranchAssignment   ...
     )
@@ -254,18 +260,22 @@ module SplinterTreeMachineMod {
 
   datatype TrunkPath = TrunkPath(k: Key, steps: seq<TrunkStep>)
   {
-    // Need to check the root???
-    predicate ValidPrefix(cache: CacheIfc.Variables) {
-      && forall i :: (0 <= i < |steps|) && steps[i].na.ValidCU(cache)
+    predicate {:opaque} ValidPrefix(cache: CacheIfc.Variables) {
+      && forall i :: (0 < i < |steps|) && steps[i].na.node in steps[i-1].na.node.children
     }
 
     predicate Valid(cache: CacheIfc.Variables) {
+      && forall i :: (0 <= i < |steps|) && steps[i].na.ValidCU(cache)
+      && steps[0].na.id == 0 // check for root
+      // everything but the last is empty, TOOD: check if this is how we want messages work, i.e new things override old things
+      && forall i :: (0 <= i < |steps| - 1) && (steps[i].msgs == map [])
       && ValidPrefix(cache)
-      && true // no nodes below this one for k.
     }
 
     function Decode() : Value
     {
+      // Sowmya: I didn't write this -- But I also don't understand it, so I'm gonna leave it here for now
+      // TODO: Jon does the hard stuff around here :)
       // filter Messages on k, I guess
       var unflattenedMsgs := seq(|steps|, i requires 0<=i<|steps| => steps[i].msgs);
       var flattenedMsgs := FoldLeft(MessageFolder, map[], unflattenedMsgs);
@@ -369,8 +379,28 @@ module SplinterTreeMachineMod {
   }
 
   // TODO: We need make sure this flush op is flushing entire prefix of local trunk versions
-  predicate FlushesNodes(oldParent: TrunkNode, oldChild: TrunkNode, newParent: TrunkNode, newChild: TrunkNode) {
-    true // TODO
+  predicate FlushesNodes(oldParent: TrunkNode, oldChild: TrunkNode, newParent: TrunkNode, newChild: TrunkNode)
+    requires oldParent.WF()
+    requires newParent.WF()
+    requires oldChild.WF()
+    requires newChild.WF()
+  {
+    // ensure that they're still children of the parent
+    && newChild in newParent.children
+    && oldChild in oldParent.children
+    && newParent.branches == oldParent.branches
+    && newParent.children == oldParent.children
+    && newChild.children == oldChild.children
+    && newChild.activeBranches == oldChild.activeBranches // Our flush is only one layer, so the activeBranches here shouldn't change
+    // check that newChild got a branch from the oldParent
+    && var oldChildId :| (0 <= oldChildId < |oldParent.children|) && oldParent.children[oldChildId] == oldChild;
+    && var newChildId :| (0 <= newChildId < |newParent.children|) && newParent.children[newChildId] == newChild;
+    && oldChildId == newChildId
+    // for now we're flushing all current branches??
+    && forall i :: (&& oldParent.activeBranches[oldChildId] <= i < |oldParent.branches|
+                    && oldParent.branches[i] in newChild.branches)
+    && newParent.activeBranches[newChildId] == |newParent.branches|
+
   }
 
   predicate CUIsAllocatable(cu: CU)
@@ -402,9 +432,10 @@ module SplinterTreeMachineMod {
 
   // the newNode must contain all the messages in the oldNode and memBuffer combined.
   // merge the two memBuffer has the most uptodate updates
+  // QUESTION : Why do we need this??
   predicate MergeBuffer(oldNode: TrunkNode, memBuffer: map<Key, Message>, newNode: TrunkNode)
   {
-    true // tODO
+    && MapUnionPreferA(memBuffer, oldNode.AllMessages()) == newNode.AllMessages()
   }
 
   // Internal
