@@ -1,4 +1,4 @@
-include "Message.s.dfy"
+//include "Message.s.dfy"
 include "Interp.s.dfy"
 include "DiskTypes.s.dfy"
 
@@ -12,6 +12,7 @@ include "MsgSeq.i.dfy"
 include "CacheIfc.i.dfy"
 include "../lib/DataStructures/BtreeModel.i.dfy"
 include "../lib/Base/Maps.i.dfy"
+include "../lib/Base/Message.i.dfy"
 
 
 /*

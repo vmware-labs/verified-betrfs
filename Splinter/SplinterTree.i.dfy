@@ -474,6 +474,8 @@ module SplinterTreeMachineMod {
     && CUIsAllocatable(r.newna.cu)
     && EquivalentNodes(r.Oldna().node, r.newna.node)  // Buffer replacements
       // TODO need to establish replacement B+tree is correct
+    &&
+    // check that we update the trunknode we're compacting in the cache
     && cacheOps == [ CacheIfc.Write(r.newna.cu, marshalTrunkNode(r.newna.node)) ]
     && v' == v.(indTbl := v.indTbl[r.newna.id := r.newna.cu])
   }

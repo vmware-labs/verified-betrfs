@@ -1,6 +1,7 @@
 
 module DiskTypesMod {
   type AU = nat
+  // QUESTION: Can we add a clean/dirty bit here??
   datatype CU = CU(au: AU, offset: nat)
   type UninterpretedDiskPage
 

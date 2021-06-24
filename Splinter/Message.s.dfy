@@ -17,7 +17,8 @@ module MessageMod {
   type Value(!new)
 
   //type Message(!new)
-  datatype Message = MessagePut(/*k:Key,*/ v:Value)
+  // TODO: Make Messages be more general either terminal updates or
+  datatype Message = MessagePut(v:Value)
 
   predicate IsAKey(k: Key) { true }  // a term for Dafny to trigger on, to hide the warning.
 

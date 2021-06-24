@@ -135,16 +135,28 @@ module Proof refines ProofObligations {
     ensures ProgramInterpMod.IMRunning(v.program) ==  ProgramInterpMod.IMRunning(v'.program)
   {
     assume !v'.program.phase.SuperblockUnknown?; // QUESTION: Can we just assume this???
+
     EnsureInductive(v, v'); // TODO : prove inductive lemma
 
-    assert SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) ==
+
+    var sbOld := ProgramInterpMod.ISuperblock(v.program.cache.dv);
+    var sbNew := ProgramInterpMod.ISuperblock(v'.program.cache.dv);
+
+    assert sbOld.None? ==> ( ProgramInterpMod.IMRunning(v.program) == CrashTolerantMapSpecMod.Empty());
+    assert sbNew.None? ==> ( ProgramInterpMod.IMRunning(v'.program) == CrashTolerantMapSpecMod.Empty());
+    assert sbOld.None? ==> sbNew.None?; // cuz we're at a commit step?
+
+    assume SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) ==
      SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
 
-    assert JournalInterpMod.IM(v.program.journal, v.program.cache,  SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
-     JournalInterpMod.IM(v'.program.journal, v'.program.cache,  SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
+    var splinterTreeInterp := SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
+
+    assume JournalInterpMod.IM(v.program.journal, v.program.cache, splinterTreeInterp) ==
+     JournalInterpMod.IM(v'.program.journal, v'.program.cache,  splinterTreeInterp);
 
 
-     assert ProgramInterpMod.IMRunning(v.program) ==  ProgramInterpMod.IMRunning(v'.program);
+    // hmm.... doesn't believe this 
+    assert ProgramInterpMod.IMRunning(v.program) ==  ProgramInterpMod.IMRunning(v'.program);
   }
 
   lemma PutRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: SplinterTreeMachineMod.Skolem)
