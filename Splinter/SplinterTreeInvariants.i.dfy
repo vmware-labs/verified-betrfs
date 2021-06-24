@@ -1,4 +1,6 @@
 include "SplinterTreeInterp.i.dfy"
+include "../lib/Base/KeyType.s.dfy"
+include "Message.s.dfy"
 
 // Sowmya -- there might be a lot of invariants for this part as opposed to the journal, so I decided to make another module for this
 // If this ends up being sparse, we can just refactor it into BetreeInterpMod or ProgramMachineMod
@@ -6,9 +8,10 @@ include "SplinterTreeInterp.i.dfy"
 module SplinterTreeInvariantMod {
   import opened SplinterTreeInterpMod
   import opened Options
-  import opened MessageMod
   import opened InterpMod
   import opened DiskTypesMod
+  import opened ValueMessage
+  import opened KeyType
   import opened AllocationMod
   import opened MsgSeqMod
   import IndirectionTableMod

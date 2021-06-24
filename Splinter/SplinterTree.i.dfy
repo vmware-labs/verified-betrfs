@@ -229,6 +229,7 @@ module SplinterTreeMachineMod {
   function MakeValueMessage(value:Value) : Message
 
   // QUESTION : What does this do???
+  // TODO: Change this to actually fold the messages
   function MessageFolder(newer: map<Key,Message>, older: map<Key,Message>) : map<Key,Message>
   {
 		map x : Key | (x in newer.Keys + older.Keys) ::
@@ -243,10 +244,8 @@ module SplinterTreeMachineMod {
     // current Trunk Node?
     na: NodeAssignment,
     // map from the branch we actually care about?
-    msgs: map<Key, Message>
+    msgs: map<Key, seq<Message>>
 
-    // QUESTION: What is this supposed to do?
-    // -- Old messages are strictly overwritten by the new ones, So do we need to hold on to these???
     //branchMsgs: seq<map<Key, Message>>,
     // branchAssigment: BranchAssignment   ...
     )

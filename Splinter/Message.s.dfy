@@ -98,4 +98,10 @@ module ValueMessage refines MessageMod {
   {
     && msg.Define?
   }
+
+  function EvaluateMessage(m: Message) : Value
+    requires m.Define?
+  {
+     m.value
+  }
 }

@@ -10,6 +10,8 @@ include "CacheIfc.i.dfy"
 include "AsyncDisk.s.dfy"
 include "AsyncDiskProgram.s.dfy"
 include "IOSystem.s.dfy"
+include "../lib/Base/KeyType.s.dfy"
+
 
 // TODO first prove that a Program with a simple-policy cache works?
 
@@ -26,7 +28,8 @@ module ProgramMachineMod {
   import opened DiskTypesMod
   import opened CrashTolerantMapSpecMod
   import opened InterpMod
-  import opened MessageMod
+  import opened ValueMessage
+  import opened KeyType
   import opened MsgSeqMod
   import opened Options
   import CacheIfc
@@ -159,7 +162,7 @@ module ProgramMachineMod {
     && v.phase.Running?
     && v.WF()
     // TODO Check: Sowya: I changed MessagePut(key,val) --> KeyedMessage(key, MessagePut(val)) because we changes the interface of MessagePut
-    && JournalMachineMod.Append(v.journal, v'.journal, KeyedMessage(key, MessagePut(val)))  // only writes to heap
+    && JournalMachineMod.Append(v.journal, v'.journal, KeyedMessage(key, Define(val)))  // only writes to heap
     && SplinterTreeMachineMod.Put(v.betree, v'.betree, key, val, sk)  // only writes to heap
     // Note that Put only adds the write to the journal's unmarshalled tail. So the cache doesn't change
     // The upddates from the unmarshalled tail are pushed into the cache in batches in a later journal internal step.

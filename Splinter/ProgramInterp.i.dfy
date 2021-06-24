@@ -11,10 +11,13 @@ include "AsyncDisk.s.dfy"
 include "AsyncDiskProgram.s.dfy"
 include "IOSystem.s.dfy"
 include "ProgramMachine.i.dfy"
+include "../lib/Base/KeyType.s.dfy"
+
 
 module ProgramInterpMod {
   import opened Options
-  import opened MessageMod
+  import opened ValueMessage
+  import opened KeyType
   import opened InterpMod
   import opened DiskTypesMod
   import opened AllocationMod
