@@ -6,7 +6,7 @@ include "../lib/Base/Maps.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
-include "MsgSeq.i.dfy"
+include "MsgHistory.i.dfy"
 include "Message.s.dfy"
 include "Interp.s.dfy"
 include "BranchTree.i.dfy"
@@ -105,7 +105,7 @@ module SplinterTreeMachineMod {
   import opened InterpMod
   import opened DiskTypesMod
   import opened AllocationMod
-  import opened MsgSeqMod
+  import opened MsgHistoryMod
   import AllocationTableMachineMod
   import IndirectionTableMod
   import CacheIfc
@@ -244,7 +244,7 @@ module SplinterTreeMachineMod {
     // current Trunk Node?
     na: NodeAssignment,
     // map from the branch we actually care about?
-    msgs: map<Key, seq<Message>>
+    msgs: seq<Message>
 
     //branchMsgs: seq<map<Key, Message>>,
     // branchAssigment: BranchAssignment   ...
@@ -264,12 +264,25 @@ module SplinterTreeMachineMod {
       && forall i :: (0 < i < |steps|) && steps[i].na.node in steps[i-1].na.node.children
     }
 
+    // Collapse all the messages in this trunk path
+    function MsgSeq() : (out : seq<Message>)
+    {
+      []
+    }
+
     predicate Valid(cache: CacheIfc.Variables) {
       && forall i :: (0 <= i < |steps|) && steps[i].na.ValidCU(cache)
       && steps[0].na.id == 0 // check for root
-      // everything but the last is empty, TOOD: check if this is how we want messages work,
+      // everything but the last is empty,
+      // TODO:
+      // TOOD: check if this is how we want messages work,
       // i.e new things override old things
-      && forall i :: (0 <= i < |steps| - 1) && (steps[i].msgs == map [])
+      // && forall i :: (0 <= i < |steps| - 1) && (steps[i].msgs == map [])
+
+      // either the last msg in the whole seq of seqs is a terminal message
+      // or we've reached the end of the tree,  we get to add one for free
+      && 0 < |MsgSeq()|
+      && Last(MsgSeq()).Define?
       && ValidPrefix(cache)
     }
 
@@ -278,9 +291,10 @@ module SplinterTreeMachineMod {
       // Sowmya: I didn't write this -- But I also don't understand it, so I'm gonna leave it here for now
       // TODO: Jon does the hard stuff around here :)
       // filter Messages on k, I guess
-      var unflattenedMsgs := seq(|steps|, i requires 0<=i<|steps| => steps[i].msgs);
-      var flattenedMsgs := FoldLeft(MessageFolder, map[], unflattenedMsgs);
-      if k in flattenedMsgs then EvaluateMessage(flattenedMsgs[k]) else DefaultValue()
+      // var unflattenedMsgs := seq(|steps|, i requires 0<=i<|steps| => steps[i].msgs);
+      // var flattenedMsgs := FoldLeft(MessageFolder, map[], unflattenedMsgs);
+      // if k in flattenedMsgs then EvaluateMessage(flattenedMsgs[k]) else DefaultValue()
+      DefaultValue()
     }
   }
 

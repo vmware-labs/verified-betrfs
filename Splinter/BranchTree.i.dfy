@@ -6,7 +6,7 @@ include "../lib/Base/total_order.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
-include "MsgSeq.i.dfy"
+include "MsgHistory.i.dfy"
 
 
 include "CacheIfc.i.dfy"
@@ -43,7 +43,7 @@ module BranchTreeMod {
   // TODO later change the keys value type to be generic
   import opened ValueMessage
   import opened KeyType
-  import opened MsgSeqMod
+  import opened MsgHistoryMod
 
   import KeysImpl = Lexicographic_Byte_Order_Impl
   import Keys = KeysImpl.Ord
@@ -162,7 +162,6 @@ module BranchTreeMod {
 
   /*
     Recipt where we check that the chain of nodes in that lookup from the root checks out
-    TODO: Check if these msgs should be map<Key, Message> or map<Key, MsgSeq> . Splintertree seems to expect map<Key, Message>?
   */
   predicate Query(root: CU, cache: CacheIfc.Variables, key: Key, msg: Message, sk: Skolem)
   {

@@ -12,7 +12,7 @@ module JournalInterpMod {
   import opened Options
   import opened Sequences
   import opened Maps
-  import opened MsgSeqMod
+  import opened MsgHistoryMod
   import MapSpecMod
   import AsyncMapSpecMod
   import opened DiskTypesMod

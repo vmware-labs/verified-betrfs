@@ -5,7 +5,7 @@ include "../lib/Base/total_order.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
-include "MsgSeq.i.dfy"
+include "MsgHistory.i.dfy"
 include "SplinterTree.i.dfy"
 include "Message.s.dfy"
 include "Interp.s.dfy"
@@ -18,7 +18,7 @@ module SplinterTreeInterpMod {
   import opened InterpMod
   import opened DiskTypesMod
   import opened AllocationMod
-  import opened MsgSeqMod
+  import opened MsgHistoryMod
   import IndirectionTableMod
   import opened SplinterTreeMachineMod
   import Nat_Order

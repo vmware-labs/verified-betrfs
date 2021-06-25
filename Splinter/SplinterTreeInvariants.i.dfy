@@ -13,7 +13,7 @@ module SplinterTreeInvariantMod {
   import opened ValueMessage
   import opened KeyType
   import opened AllocationMod
-  import opened MsgSeqMod
+  import opened MsgHistoryMod
   import IndirectionTableMod
   import opened SplinterTreeMachineMod
   import Nat_Order

@@ -4,7 +4,7 @@
 include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "Spec.s.dfy"
-include "MsgSeq.i.dfy"
+include "MsgHistory.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
@@ -35,7 +35,7 @@ module JournalMachineMod {
   import opened KeyType
   import opened InterpMod
   import opened CrashTolerantMapSpecMod
-  import opened MsgSeqMod
+  import opened MsgHistoryMod
   import opened DiskTypesMod
   import opened AllocationMod
   import AllocationTableMachineMod
@@ -169,7 +169,7 @@ module JournalMachineMod {
     var start := s.marshalledLSN;
     var end := s.unmarshalledLSN();
     if start==end
-    then MsgSeqMod.Empty()
+    then MsgHistoryMod.Empty()
     else MsgSeq(map i: LSN | start <= i < end :: s.unmarshalledTail[i - start], start, end)
   }
 
@@ -367,7 +367,7 @@ module JournalMachineMod {
     ensures WFChain(chain)
   {
     reveal_WFChainInner();
-    JournalChain(sb, [], map[], MsgSeqMod.Empty())
+    JournalChain(sb, [], map[], MsgHistoryMod.Empty())
   }
 
   lemma ValidEmptyChain(dv: DiskView, sb: Superblock)

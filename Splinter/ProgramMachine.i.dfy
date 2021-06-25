@@ -30,7 +30,7 @@ module ProgramMachineMod {
   import opened InterpMod
   import opened ValueMessage
   import opened KeyType
-  import opened MsgSeqMod
+  import opened MsgHistoryMod
   import opened Options
   import CacheIfc
   import D = AsyncDisk  // Importing for the interface, not the entire disk

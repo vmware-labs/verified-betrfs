@@ -21,7 +21,7 @@ module ProgramInterpMod {
   import opened InterpMod
   import opened DiskTypesMod
   import opened AllocationMod
-  import opened MsgSeqMod
+  import opened MsgHistoryMod
   import AllocationTableMod
   //import JournalMod
   import SplinterTreeInterpMod
