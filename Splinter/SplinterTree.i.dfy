@@ -10,6 +10,7 @@ include "MsgHistory.i.dfy"
 include "Message.s.dfy"
 include "Interp.s.dfy"
 include "BranchTree.i.dfy"
+include "MsgSeq.i.dfy"
 
 /*
 a Splinter tree consists of:
@@ -110,6 +111,7 @@ module SplinterTreeMachineMod {
   import IndirectionTableMod
   import CacheIfc
   import BranchTreeMod
+  import MsgSeqMod
 
   // TODO: Rename this module
   datatype Superblock = Superblock(
@@ -165,7 +167,7 @@ module SplinterTreeMachineMod {
 
   // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
   // activeBranches tells us the lowest index of an active branch tree for the corresponding child
-  datatype TrunkNode = TrunkNode(branches : seq<BranchTreeMod.BranchTree>,
+  datatype TrunkNode = TrunkNode(branches : seq<BranchTreeMod.Variables>,
                                  children : seq<TrunkNode>,
                                  pivots : seq<BranchTreeMod.Key>,
                                  activeBranches : seq<nat>)
@@ -223,38 +225,49 @@ module SplinterTreeMachineMod {
 
   }
 
-  // TODO find in library
-  function CombineMessages(newer: Message, older: Message) : Message
-  function EvaluateMessage(m: Message) : Value
-  function MakeValueMessage(value:Value) : Message
+  // TODO find in library: Done look at Message.s.dfy
+  // function CombineMessages(newer: Message, older: Message) : Message
+  // function EvaluateMessage(m: Message) : Value
+  // function MakeValueMessage(value:Value) : Message
 
   // QUESTION : What does this do???
   // TODO: Change this to actually fold the messages
-  function MessageFolder(newer: map<Key,Message>, older: map<Key,Message>) : map<Key,Message>
-  {
-		map x : Key | (x in newer.Keys + older.Keys) ::
-      if x in newer
-      then if x in older
-        then CombineMessages(newer[x], older[x])
-        else newer[x]
-      else older[x]
-  }
+  // function MessageFolder(newer: map<Key,Message>, older: map<Key,Message>) : map<Key,Message>
+  // {
+	// 	map x : Key | (x in newer.Keys + older.Keys) ::
+  //     if x in newer
+  //     then if x in older
+  //       then CombineMessages(newer[x], older[x])
+  //       else newer[x]
+  //     else older[x]
+  // }
 
   datatype TrunkStep = TrunkStep(
-    // current Trunk Node?
+    // The information about the trunk node of this step
     na: NodeAssignment,
-    // map from the branch we actually care about?
-    msgs: seq<Message>
-
-    //branchMsgs: seq<map<Key, Message>>,
-    // branchAssigment: BranchAssignment   ...
-    )
+    // The Branch Receipts of a lookup from all the branches of this trunk node
+    branchReceipts: seq<BranchTreeMod.BranchReceipt>)
   {
     predicate WF()
     {
-      // TODO
-      true
+      && na.node.WF()
+      && ( forall i :: 0 <= i < |branchReceipts| && branchReceipts[i].branchTree.WF() )
+      // We have all the receipts. Does this go in WF() or Valid()??
+      && |branchReceipts| == |na.node.branches|
     }
+
+    predicate Valid(v: Variables, cache: CacheIfc.Variables) {
+      && na.Valid(v, cache)
+      && ( forall i :: 0 <= i < |branchReceipts| && branchReceipts[i].Valid(cache) )
+      // Note: Here we require one to one correspondance between the node's branches and the corresponding look up receipt
+      && (forall i :: 0 <= i < |branchReceipts| && na.node.branches[i] == branchReceipts[i].branchTree)
+    }
+
+    function MsgSeq() : seq<Message> {
+      []
+    }
+
+    function Decode() : (msg : Option<Message>)
 
   }
 
@@ -262,6 +275,13 @@ module SplinterTreeMachineMod {
   {
     predicate {:opaque} ValidPrefix(cache: CacheIfc.Variables) {
       && forall i :: (0 < i < |steps|) && steps[i].na.node in steps[i-1].na.node.children
+    }
+
+    function msgSeqRecurse(currTrunk : TrunkStep) : (out : seq<Message>)
+    {
+      var branchReceipts := currTrunk.branchReceipts;
+      //if
+      []
     }
 
     // Collapse all the messages in this trunk path
@@ -273,14 +293,6 @@ module SplinterTreeMachineMod {
     predicate Valid(cache: CacheIfc.Variables) {
       && forall i :: (0 <= i < |steps|) && steps[i].na.ValidCU(cache)
       && steps[0].na.id == 0 // check for root
-      // everything but the last is empty,
-      // TODO:
-      // TOOD: check if this is how we want messages work,
-      // i.e new things override old things
-      // && forall i :: (0 <= i < |steps| - 1) && (steps[i].msgs == map [])
-
-      // either the last msg in the whole seq of seqs is a terminal message
-      // or we've reached the end of the tree,  we get to add one for free
       && 0 < |MsgSeq()|
       && Last(MsgSeq()).Define?
       && ValidPrefix(cache)
@@ -288,17 +300,17 @@ module SplinterTreeMachineMod {
 
     function Decode() : Value
     {
-      // Sowmya: I didn't write this -- But I also don't understand it, so I'm gonna leave it here for now
-      // TODO: Jon does the hard stuff around here :)
-      // filter Messages on k, I guess
-      // var unflattenedMsgs := seq(|steps|, i requires 0<=i<|steps| => steps[i].msgs);
-      // var flattenedMsgs := FoldLeft(MessageFolder, map[], unflattenedMsgs);
-      // if k in flattenedMsgs then EvaluateMessage(flattenedMsgs[k]) else DefaultValue()
-      DefaultValue()
+      var msg := MsgSeqMod.CombineDeltasWithDefine(MsgSeq());
+      if msg.None?
+      then
+        DefaultValue()
+      else
+        EvaluateMessage(msg.value)
     }
   }
 
-  //
+  // QUESTION: Not everything is compacted all at once, should we have this Recipt
+  // also have what branches we're compacting
   datatype CompactReceipt = CompactReceipt(path: TrunkPath, newna: NodeAssignment)
   {
     predicate WF() {

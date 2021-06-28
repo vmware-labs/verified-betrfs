@@ -86,6 +86,8 @@ module ValueMessage refines MessageMod {
   function method CombineDeltas(newdelta: Delta, olddelta: Delta) : Delta { NoDelta }
   function method ApplyDelta(delta: Delta, value: Value) : Value { value }
 
+  function MakeValueMessage(value:Value) : Message
+
   lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
   {
   }

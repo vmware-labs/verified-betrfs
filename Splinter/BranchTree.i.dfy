@@ -53,6 +53,8 @@ module BranchTreeMod {
   // TODO: Finish and maybe we want Routing Filters here, check with Rob and Jon for this
   datatype QuotientFilter = QuotientFilter()
 
+  // messages that are Inserted into the branch tree are already merged upon insert, that's Why
+  // kvmap has to only store one merged update message per Key
   datatype BranchNode = Leaf(kvmap: map<Key, Message>) | Index(pivots : seq<Key>, children: seq<CU>)
   {
     predicate WF()
@@ -101,12 +103,17 @@ module BranchTreeMod {
         parse(diskPage.value)
   }
 
-  datatype BranchTree = BranchTree(root : CU, filter : QuotientFilter)
+  datatype Variables = Variables(root : CU, filter : QuotientFilter)
   {
     predicate WF()
     {
       true
       // TODO:
+    }
+
+    predicate Valid(cache : CacheIfc.Variables)
+    {
+      true
     }
 
     function Root() : CU
@@ -145,17 +152,34 @@ module BranchTreeMod {
       steps[0].cu
     }
 
-    function Decode() : Message
+    function Decode() : (msg : Option<Message>)
       requires WF()
     {
-      var kvmap := Last(steps).node.kvmap;
-      if key in kvmap then kvmap[key] else DefaultMessage()
+      var msgs := Last(steps).node.kvmap;
+      if key in msgs
+      then
+        Some(msgs[key])
+      else
+        None
     }
   }
 
-   // QUESTION: DO WE EVEN NEED THIS AT THIS LAYER. ALL THE ACTUAL INTERAL STEPS
-   // ARE CALLED AT IN SPLINTERINTERAL STEP????
-   datatype Skolem =
+  datatype BranchReceipt = BranchReceipt(branchPath : BranchPath, branchTree: Variables)
+  {
+    predicate Valid(cache : CacheIfc.Variables)
+    {
+      && branchPath.Valid(cache)
+      && branchTree.Valid(cache)
+      && branchPath.steps[0].cu == branchTree.root
+      // QUESTION : Check if we need another check to compare the children of the branchTree to the branchPath
+    }
+
+  }
+
+
+  // QUESTION: DO WE EVEN NEED THIS AT THIS LAYER. ALL THE ACTUAL INTERAL STEPS
+  // ARE CALLED AT IN SPLINTERINTERAL STEP????
+  datatype Skolem =
      | QueryStep(branchPath: BranchPath)
      | PutManyStep()
      | CompactBranchStep()
@@ -163,21 +187,28 @@ module BranchTreeMod {
   /*
     Recipt where we check that the chain of nodes in that lookup from the root checks out
   */
-  predicate Query(root: CU, cache: CacheIfc.Variables, key: Key, msg: Message, sk: Skolem)
+  predicate Query(root: CU, cache: CacheIfc.Variables, key: Key, msg: Option<Message>, sk: Skolem)
   {
     && sk.QueryStep?
     && var path := sk.branchPath;
     && path.Valid(cache)
     && path.key == key
-    && path.Decode() == msg
+    // TODO: Check if this is what we want to do, i.e use Option
+    && (msg.Some? ==> path.Decode() == msg)
   }
 
   function InterpKey(root: CU, cache: CacheIfc.Variables, key: Key) : Message
   {
     if exists msg, sk :: Query(root, cache, key, msg, sk) // always true by invariant
     then
-      var msg, sk :| Query(root, cache, key, msg, sk); msg
+      var msg, sk :| Query(root, cache, key, msg, sk);
+      if msg.Some?
+      then
+        msg.value
+      else
+        DefaultMessage()
     else
+      // We should never get here
       DefaultMessage()
   }
 
@@ -246,6 +277,7 @@ module BranchTreeMod {
     }
   }
 
+  datatype CompactReceipt = CompactReceipt()
   // at the we check that the tree is done
   predicate IsCompaction(stack : Stack, newroot : CU, cache: CacheIfc.Variables)
   {
