@@ -177,8 +177,6 @@ module BranchTreeMod {
   }
 
 
-  // QUESTION: DO WE EVEN NEED THIS AT THIS LAYER. ALL THE ACTUAL INTERAL STEPS
-  // ARE CALLED AT IN SPLINTERINTERAL STEP????
   datatype Skolem =
      | QueryStep(branchPath: BranchPath)
      | PutManyStep()
@@ -284,11 +282,6 @@ module BranchTreeMod {
       stack.I() == Interpretation(newroot, cache)
   }
 
-  // TODO:
-  predicate BranchInternal(v: Variables, v': Variables)
-  {
-    false
-  }
 
   function Alloc() : set<CU>
   {

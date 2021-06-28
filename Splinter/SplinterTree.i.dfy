@@ -246,7 +246,9 @@ module SplinterTreeMachineMod {
     // The information about the trunk node of this step
     na: NodeAssignment,
     // The Branch Receipts of a lookup from all the branches of this trunk node
-    branchReceipts: seq<BranchTreeMod.BranchReceipt>)
+    branchReceipts: seq<BranchTreeMod.BranchReceipt>,
+    // The messages accumulated in till the previous trunkStep
+    accumulatedMsgs: seq<Message>)
   {
     predicate WF()
     {
@@ -263,12 +265,26 @@ module SplinterTreeMachineMod {
       && (forall i :: 0 <= i < |branchReceipts| && na.node.branches[i] == branchReceipts[i].branchTree)
     }
 
-    function MsgSeq() : seq<Message> {
-      []
+    function MsgSeqRecurse(count : nat) : (out: seq<Message>)
+    {
+      if count == 0
+      then
+        []
+      else
+        var currBranchVal := branchReceipts[count-1].branchPath.Decode();
+        ( if currBranchVal.Some?
+        then
+          [currBranchVal.value]
+        else [] )
+        + MsgSeqRecurse(count - 1)
+
     }
 
-    function Decode() : (msg : Option<Message>)
-
+    // Messages in all the branch receipts at this layer
+    function MsgSeq() : seq<Message>
+    {
+      MsgSeqRecurse(|branchReceipts|)
+    }
   }
 
   datatype TrunkPath = TrunkPath(k: Key, steps: seq<TrunkStep>)
@@ -277,17 +293,19 @@ module SplinterTreeMachineMod {
       && forall i :: (0 < i < |steps|) && steps[i].na.node in steps[i-1].na.node.children
     }
 
-    function msgSeqRecurse(currTrunk : TrunkStep) : (out : seq<Message>)
+    function msgSeqRecurse(count : nat) : (out : seq<Message>)
     {
-      var branchReceipts := currTrunk.branchReceipts;
-      //if
-      []
+      if count == 0
+      then
+          []
+      else
+         msgSeqRecurse(count-1) + steps[count-1].MsgSeq()
     }
 
     // Collapse all the messages in this trunk path
     function MsgSeq() : (out : seq<Message>)
     {
-      []
+      msgSeqRecurse(|steps|)
     }
 
     predicate Valid(cache: CacheIfc.Variables) {

@@ -11,6 +11,7 @@ include "Message.s.dfy"
 include "Interp.s.dfy"
 
 // interpretation for the SplinterTree Implementation
+// Go through this is and replace all placeholders
 module SplinterTreeInterpMod {
   import opened Options
   import opened ValueMessage
