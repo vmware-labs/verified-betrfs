@@ -500,17 +500,18 @@ module ShardedHashTable refines ShardedStateMachine {
     v.(tickets := v.tickets - multiset{ticket})
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(false))})
   }
+*/
 
 // All transitions
 
   predicate NextEnable(v: Variables, step: Step)
   {
     if step.InsertStep? then InsertEnable(v, step)
-    else if step.OverwriteStep? then OverwriteEnable(v, step)
-    else if step.QueryFoundStep? then QueryFoundEnable(v, step)
-    else if step.QueryNotFoundStep? then QueryNotFoundEnable(v, step)
-    else if step.RemoveFoundStep? then RemoveFoundEnable(v, step)
-    else if step.RemoveNotFoundStep? then RemoveNotFoundEnable(v, step)
+    // else if step.OverwriteStep? then OverwriteEnable(v, step)
+    // else if step.QueryFoundStep? then QueryFoundEnable(v, step)
+    // else if step.QueryNotFoundStep? then QueryNotFoundEnable(v, step)
+    // else if step.RemoveFoundStep? then RemoveFoundEnable(v, step)
+    // else if step.RemoveNotFoundStep? then RemoveNotFoundEnable(v, step)
     else false
   }
 
@@ -518,11 +519,11 @@ module ShardedHashTable refines ShardedStateMachine {
     requires NextEnable(v, step)
   {
     if step.InsertStep? then Insert(v, step)
-    else if step.OverwriteStep? then Overwrite(v, step)
-    else if step.QueryFoundStep? then QueryFound(v, step)
-    else if step.QueryNotFoundStep? then QueryNotFound(v, step)
-    else if step.RemoveFoundStep? then RemoveFound(v, step)
-    else if step.RemoveNotFoundStep? then RemoveNotFound(v, step)
+    // else if step.OverwriteStep? then Overwrite(v, step)
+    // else if step.QueryFoundStep? then QueryFound(v, step)
+    // else if step.QueryNotFoundStep? then QueryNotFound(v, step)
+    // else if step.RemoveFoundStep? then RemoveFound(v, step)
+    // else if step.RemoveNotFoundStep? then RemoveNotFound(v, step)
     else Fail
   }
 
@@ -536,7 +537,6 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     exists step :: NextStep(s, s', step)
   }
-*/
 
 //////////////////////////////////////////////////////////////////////////////
 // global-level Invariant proof
@@ -627,14 +627,10 @@ module ShardedHashTable refines ShardedStateMachine {
     var range0 := GetHashSegment(table, h0);
     var range1 := GetHashSegment(table, h1);
 
-    // // there is no overlap between two segments
-    // && Between(s1, e0, s0)
-    // && Between(e1, e0, s0)
     // this part should all be empty (we won't have a segment in between)
     && (forall i : Index | Partial(range0.end, range1.start).Contains(i) ::
       table[i].value.Empty?)
   }
-/*
 
   predicate ValidPSL(table: FixedTable, i: Index)
     requires Complete(table)
@@ -643,7 +639,7 @@ module ShardedHashTable refines ShardedStateMachine {
     (
       var key := table[i].value.key;
       var ih := SlotKeyHash(table, i);
-      forall j: Index :: Between(j, ih, i) ==> 
+      forall j: Index :: Partial(ih, i).Contains(j) ==> 
       (
         && table[j].value.Full?
         && SlotPSL(table, j) >= PSL(key, j)
@@ -672,8 +668,6 @@ module ShardedHashTable refines ShardedStateMachine {
     else
       (TableQuantity(s[..|s| - 1]) + EntryQuantity(Last(s)))
   }
-
-  // lemma FullTable
 
   predicate TableQuantityInv(s: Variables)
   {
@@ -772,7 +766,7 @@ module ShardedHashTable refines ShardedStateMachine {
     requires step.InsertStep? && NextStep(s, s', step)
     ensures  TableQuantityInv(s')
   {
-    var InsertStep(ticket, kv, start, end) := step;
+    var InsertStep(ticket, kv, Partial(start, end)) := step;
     var table, table' := s.table, s'.table;
     var inserted := Some(Full(kv.0, kv.1));
 
@@ -851,12 +845,13 @@ module ShardedHashTable refines ShardedStateMachine {
     requires step.InsertStep? && NextStep(s, s', step)
     // ensures Inv(s')
   {
-    var InsertStep(ticket, (key, _), start, end) := step;
+    var InsertStep(ticket, (key, _), range) := step;
+    var Partial(start, end) := range;
     var table, table' := s.table, s'.table;
 
-    if !RangeFullKeyNotFound(table, start, end, key) {
+    if !RangeFullKeyNotFound(table, range, key) {
       var i: Index :|
-        && Between(i, start, end)
+        && range.Contains(i)
         && !SlotFullKeyNotFound(table[i], i, key);
       var s_key := table[start].value.key;
 
@@ -931,10 +926,9 @@ module ShardedHashTable refines ShardedStateMachine {
     //   }
     // }
 
-
-
     InsertStepPreservesTableQuantityInv(s, s', step);
   }
+/*
 /*
 
   lemma OverwriteStepPreservesInv(s: Variables, s': Variables, step: Step)
