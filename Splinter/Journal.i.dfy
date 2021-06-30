@@ -177,7 +177,7 @@ module JournalMachineMod {
   // TODO It's broken to be demanding that we actually can read this stuff out
   // of the cache; we really want this to be a ghosty property in the next
   // layer down. Not sure yet how to make that work.
-  function MappingFor(cache: CacheIfc.Variables, sb: Superblock) : (lsnToCU: map<LSN, CU>)
+  function {:opaque} MappingFor(cache: CacheIfc.Variables, sb: Superblock) : (lsnToCU: map<LSN, CU>)
   {
     var cr := ChainFrom(cache.dv, sb);
     if cr.chain.None?
