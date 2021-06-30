@@ -3,7 +3,7 @@
 
 include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
-include "Spec.s.dfy"
+include "../Spec/MapSpec.s.dfy"
 include "MsgHistory.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"

@@ -1,5 +1,5 @@
-include "Message.s.dfy"
-include "Interp.s.dfy"
+include "../Spec/Message.s.dfy"
+include "../Spec/Interp.s.dfy"
 include "DiskTypes.s.dfy"
 
 include "../lib/Base/total_order.i.dfy"

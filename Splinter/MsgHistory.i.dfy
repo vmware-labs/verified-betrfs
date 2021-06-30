@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
-include "Message.s.dfy"
-include "Interp.s.dfy"
+include "../Spec/Message.s.dfy"
+include "../Spec/Interp.s.dfy"
 
 include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"

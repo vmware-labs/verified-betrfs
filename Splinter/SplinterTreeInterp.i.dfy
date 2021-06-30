@@ -7,8 +7,8 @@ include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
 include "MsgHistory.i.dfy"
 include "SplinterTree.i.dfy"
-include "Message.s.dfy"
-include "Interp.s.dfy"
+include "../Spec/Message.s.dfy"
+include "../Spec/Interp.s.dfy"
 
 // interpretation for the SplinterTree Implementation
 // Go through this is and replace all placeholders
