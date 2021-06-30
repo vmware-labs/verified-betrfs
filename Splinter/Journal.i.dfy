@@ -378,7 +378,7 @@ module JournalMachineMod {
     reveal_ChainMatchesDiskView();
   }
 
-  function ExtendChain(sb: Superblock, rec: JournalRecord, innerchain: JournalChain)
+  function {:timeLimitMultiplier 4} ExtendChain(sb: Superblock, rec: JournalRecord, innerchain: JournalChain)
     : (chain: JournalChain)
     requires sb.freshestCU.Some?
     requires rec.messageSeq.WF()
