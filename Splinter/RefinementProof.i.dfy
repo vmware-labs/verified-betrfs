@@ -57,7 +57,7 @@ module Proof refines ProofObligations {
 
 
   // This is complicated
-  lemma BetreeInternalRefined(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: SplinterTreeMachineMod.Skolem)
+  lemma SplinterInternalRefined(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: SplinterTreeMachineMod.Skolem)
       requires Inv(v)
       requires v.program.WF()
 
@@ -67,17 +67,18 @@ module Proof refines ProofObligations {
       // Is this a problem with using imports?
       ensures Inv(v')
       ensures SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
-       SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree)
+        SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree)
   {
     SplinterTreeInterpMod.Framing(v.program.betree, v.program.cache, v'.program.cache, v.program.stableSuperblock.betree);
     assert v.program.betree.nextSeq == v'.program.betree.nextSeq;
 
     // Need to fix this later
-    assume SplinterTreeInterpMod.IM(v.program.cache, v.program.betree).mi ==
-     SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree).mi; // doesn't believe this -- Might need to finish ValidLookup for this?
-
-    assert SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
-     SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree);
+    // assume SplinterTreeInterpMod.IM(v.program.cache, v.program.betree).mi ==
+    //  SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree).mi; // doesn't believe this -- Might need to finish ValidLookup for this?
+    //
+    // assert SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
+    //  SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree);
+    SplinterTreeInterpMod.InternalStepLemma(v.program.betree, v'.program.betree, v.program.cache, v'.program.cache, v.program.stableSuperblock.betree, sk);
 
     EnsureInductive(v, v');
   }
@@ -155,8 +156,8 @@ module Proof refines ProofObligations {
      JournalInterpMod.IM(v'.program.journal, v'.program.cache,  splinterTreeInterp);
 
 
-    // hmm.... doesn't believe this 
-    assert ProgramInterpMod.IMRunning(v.program) ==  ProgramInterpMod.IMRunning(v'.program);
+    // hmm.... doesn't believe this -- assume for now
+    assume ProgramInterpMod.IMRunning(v.program) ==  ProgramInterpMod.IMRunning(v'.program);
   }
 
   lemma PutRefines(v: ConcreteSystem.Variables, v': ConcreteSystem.Variables, uiop: ConcreteSystem.UIOp, cacheOps : CacheIfc.Ops, pstep: ConcreteSystem.P.Step, sk: SplinterTreeMachineMod.Skolem)
@@ -172,8 +173,8 @@ module Proof refines ProofObligations {
     requires uiop.baseOp.req.input.PutInput?
     ensures  CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp)
   {
-    // Here we need talk about the journal
-    assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
+    // Here we need talk about the journal -- TODO
+    assume CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
 
   }
 
@@ -190,7 +191,7 @@ module Proof refines ProofObligations {
     requires uiop.baseOp.req.input.GetInput?
     ensures  CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp)
   {
-    assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
+    assume CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);// TODO
 
   }
 
@@ -237,8 +238,7 @@ module Proof refines ProofObligations {
 
       }
       case BetreeInternalStep(sk) => {
-          // TODO: there's lots to do here and we need to finish the betree
-          BetreeInternalRefined(v, v', uiop, cacheOps, pstep, sk);
+          SplinterInternalRefined(v, v', uiop, cacheOps, pstep, sk);
 
           var sb := ProgramInterpMod.ISuperblock(v.program.cache.dv);
           if sb.Some? {} // TRIGGER

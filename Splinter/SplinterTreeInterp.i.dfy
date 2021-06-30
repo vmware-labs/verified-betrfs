@@ -59,7 +59,7 @@ module SplinterTreeInterpMod {
     if exists indTbl :: IndirectionTableMod.DurableAt(indTbl, cache, sb.indTbl)
     then
       var indTbl :| IndirectionTableMod.DurableAt(indTbl, cache, sb.indTbl);
-      var v := Variables(indTbl, map[], sb.endSeq, Frozen.Idle);
+      var v := Variables(indTbl, map[], sb.endSeq, Frozen.Idle, sb.root);
       IM(cache, v)
     else
       InterpMod.Empty()
@@ -74,7 +74,7 @@ module SplinterTreeInterpMod {
      if indTbl.None?
       then InterpMod.Empty()
     else
-       var pretendVariables := Variables(indTbl.value, map[], sb.endSeq, Idle);
+       var pretendVariables := Variables(indTbl.value, map[], sb.endSeq, Idle, sb.root);
        IM(cache, pretendVariables)
    }
 
@@ -150,4 +150,45 @@ module SplinterTreeInterpMod {
   {
     assume false; // This is hard to prove -- we need to finish a tree
   }
+
+  // Show that Flushes across trunk nodes preserve the invariant
+  lemma FlushEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, sk: Skolem)
+    ensures IM(cache', v') == IM(cache, v)
+  {
+    assume false;
+  }
+
+  // Show that compactions preserve the invariant
+  lemma CompactionEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, sk: Skolem)
+    ensures IM(cache', v') == IM(cache, v)
+  {
+    assume false;
+  }
+
+  // Show that draining the memBuffer preserves the invariant
+  lemma DrainMemBufferEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, sk: Skolem)
+    ensures IM(cache', v') == IM(cache, v)
+  {
+    assume false;
+  }
+
+  // All the SplinterTree Internal steps shouldn't affect the interpretation
+  lemma InternalStepLemma(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, sk: Skolem)
+    requires sk.FlushStep? || sk.DrainMemBufferStep? || sk.CompactBranchStep?
+    ensures IM(cache', v') == IM(cache, v)
+  {
+
+    match sk {
+     case FlushStep(flush: FlushRec) => {
+        FlushEffect(v, v', cache, cache', sb, sk);
+     }
+     case DrainMemBufferStep(oldRoot: NodeAssignment, newRoot: NodeAssignment) => {
+        DrainMemBufferEffect(v, v', cache, cache', sb, sk);
+     }
+     case CompactBranchStep(receipt: CompactReceipt) => {
+        CompactionEffect(v, v', cache, cache', sb, sk);
+     }
+    }
+  }
+
 }

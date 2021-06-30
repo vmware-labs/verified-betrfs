@@ -91,16 +91,16 @@ module BranchTreeMod {
   }
 
   // Parses CU units to BranchNodes that we can use
-  function ParseBranchNode(pg : UninterpretedDiskPage) : Option<BranchNode> // TODO: Finish
+  function parse(pg : UninterpretedDiskPage) : Option<BranchNode> // TODO: Finish
 
-  function CUToBranceNode(cu : CU, cache: CacheIfc.Variables) : Option<BranchNode>
+  function CUToNode(cu : CU, cache: CacheIfc.Variables) : Option<BranchNode>
   {
       var diskPage := ReadValue(cache, cu);
       if diskPage == None
       then
         None
       else
-        ParseBranchNode(diskPage.value)
+        parse(diskPage.value)
   }
 
   datatype Variables = Variables(root : CU, filter : QuotientFilter)
@@ -143,7 +143,7 @@ module BranchTreeMod {
     predicate Valid(cache: CacheIfc.Variables) {
       && WF()
       && Linked()
-      && (forall i | 0 <= i < |steps| :: Some(steps[i].node) == CUToBranceNode(steps[i].cu, cache))
+      && (forall i | 0 <= i < |steps| :: Some(steps[i].node) == CUToNode(steps[i].cu, cache))
     }
 
     function Root() : CU

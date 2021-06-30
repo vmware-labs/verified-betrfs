@@ -12,6 +12,7 @@ module MsgSeqMod {
   import opened Maps
   import opened Sequences
 
+  // For now keeping the return values as Option<Message>. Maybe change it to Message later.
   function CombineDeltasNoDefine(msgSeq : seq<Message>) : (out : Option<Message>)
   function CombineDeltasWithDefine(msgSeq : seq<Message>) : (out : Option<Message>)
     ensures out.Some? ==> out.value.Define?
