@@ -1,144 +1,13 @@
-// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
-// SPDX-License-Identifier: BSD-2-Clause
-
-include "Message.s.dfy"
-include "Interp.s.dfy"
-include "../lib/Base/SequencesLite.s.dfy"
-include "../lib/Base/KeyType.s.dfy"
-
-
-module MapSpecMod {
-  import opened ValueMessage
-  import opened KeyType
-  import InterpMod
-
-  // UI
-  datatype Input = GetInput(k: Key) | PutInput(k: Key, v: Value) | NoopInput
-  datatype Output = GetOutput(v: Value) | PutOutput | NoopOutput
-
-  // State machine
-  datatype Variables = Variables(interp: InterpMod.Interp)
-  {
-    predicate WF() {
-      interp.WF()
-    }
-  }
-
-  function Empty() : Variables {
-    Variables(InterpMod.Empty())
-  }
-
-  predicate Init(s: Variables)
-  {
-    && s == Empty()
-  }
-
-  predicate Query(s: Variables, s': Variables, k: Key, v: Value)
-  {
-    && s.interp.WF()
-    && v == s.interp.mi[k].value
-    && s' == s
-  }
-
-  predicate Put(s: Variables, s': Variables, k: Key, v: Value)
-  {
-    && s.interp.WF()
-    && s' == s.(interp := s.interp.Put(k, Define(v)))
-  }
-
-  predicate Next(v: Variables, v': Variables, input: Input, out: Output)
-  {
-  true
-    || (
-        && input.GetInput?
-        && out.GetOutput?
-        && Query(v, v', input.k, out.v)
-       )
-    || (
-        && input.PutInput?
-        && out.PutOutput?
-        && Put(v, v', input.k, input.v)
-       )
-    || (
-        && input.NoopInput?
-        && out.NoopOutput?
-        && v' == v
-       )
-  }
-}
-
-module AsyncMapSpecMod {
-  import MapSpecMod
-
-  type ID(==, !new)
-  datatype Request = Request(input: MapSpecMod.Input, id: ID)
-  datatype Reply = Reply(output: MapSpecMod.Output, id: ID)
-
-  datatype Variables = Variables(mapv: MapSpecMod.Variables, requests: set<Request>, replies: set<Reply>)
-  {
-    predicate WF() {
-      mapv.WF()
-    }
-  }
-
-  function Empty() : Variables {
-    Variables(MapSpecMod.Empty(), {}, {})
-  }
-
-  predicate Init(v: Variables) {
-    && MapSpecMod.Init(v.mapv)
-    && v.requests == {}
-    && v.replies == {}
-  }
-
-  predicate DoRequest(v: Variables, v': Variables, req: Request) {
-    // TODO Probably should disallow ID conflicts
-    && v' == v.(requests := v.requests + {req})
-  }
-
-  // The serialization point for this request
-  predicate DoExecute(v: Variables, v': Variables, req: Request, reply: Reply) {
-    && reply.id == req.id
-    && req in v.requests
-    && MapSpecMod.Next(v.mapv, v'.mapv, req.input, reply.output)
-    && v'.requests == v.requests - {req}
-    && v'.replies == v.replies + {reply}
-  }
-
-  predicate DoReply(v: Variables, v': Variables, reply: Reply)
-  {
-    && reply in v.replies
-    && v' == v.(replies := v.replies - {reply})
-  }
-
-  datatype UIOp =
-    | RequestOp(req: Request)
-    | ExecuteOp(req: Request, reply: Reply)
-    | ReplyOp(reply: Reply)
-
-  predicate NextStep(v: Variables, v': Variables, op: UIOp) {
-    match op
-      case RequestOp(req) => DoRequest(v, v', req)
-      case ExecuteOp(req, reply) => DoExecute(v, v', req, reply)
-      case ReplyOp(reply) => DoReply(v, v', reply)
-  }
-
-  predicate Next(v: Variables, v': Variables) {
-    exists step :: NextStep(v, v', step)
-  }
-}
+include "Async.s.dfy"
 
 // Collect the entire history of possible snapshots, with a pointer to the persistent one.
 // Sync requests begin at the head of the list (the ephemeral state).
 // Once the persistent pointer reaches that same index, the sync may be acknowledged as complete.
 // We don't do anything with old snapshots (indeed, no implementation could); I just wrote it
 // this way for greatest simplicity.
-module CrashTolerantMapSpecMod {
+module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   import opened SequencesLite // Last, DropLast
-  import opened ValueMessage
-  import opened KeyType
-  import InterpMod
-  import AsyncMapSpecMod
+  import async = AsyncMod(atomic) // Crash tolerance adds asynchrony whether you like it or not.
 
   type SyncReqId = nat
   datatype Version =
@@ -155,7 +24,7 @@ module CrashTolerantMapSpecMod {
       // could peek at those to construct the version seq. This is a way
       // to add Lamport's history variable while respecting the .s/.i
       // split. But I'm too lazy to do that now, so please judge away.
-    | Version(mapp: AsyncMapSpecMod.Variables, syncReqIds: set<SyncReqId>)
+    | Version(asyncState: async.Variables, syncReqIds: set<SyncReqId>)
 
   datatype Variables = Variables(versions: seq<Version>, stableIdx: nat)
   {
@@ -164,35 +33,26 @@ module CrashTolerantMapSpecMod {
       // All versions beginning with the stableIdx aren't truncated,
       // so that crashing can't take us to a Truncated version.
 
-      // QUESTION: Sowmya note: mapp doesn't have a Version, but i think we're
+      // QUESTION: Sowmya note: asyncState doesn't have a Version, but i think we're
       // trying to express that there are valid entries for all the records after the stable idx
       // So I think I'm right?
-      //&& (forall i :: stableIdx<=i<|versions| ==> versions[i].mapp.Version?)
-      // Sowmya's changes
+      //&& (forall i :: stableIdx<=i<|versions| ==> versions[i].asyncState.Version?)
       && (forall i :: stableIdx<=i<|versions| ==> versions[i].Version?)
-      // && (forall i :: 0<=i<|versions| ==> versions[i].mapp.WF())
-      && (forall i :: stableIdx<=i<|versions| ==> versions[i].mapp.WF())
-      // end of Sowmya's changes ----
       && stableIdx < |versions|
     }
   }
 
 
-  function Empty() : Variables {
-    Variables([Version(AsyncMapSpecMod.Empty(), {})], 0)
+  function InitState() : Variables {
+    Variables([Version(async.InitState(), {})], 0)
   }
 
-  predicate Init(s: Variables)
-  {
-    s == Empty()
-  }
-
-  predicate Operate(s: Variables, s': Variables, op: AsyncMapSpecMod.UIOp)
+  predicate Operate(s: Variables, s': Variables, op: async.UIOp)
   {
     && s.WF()
     && s'.WF()
     && DropLast(s'.versions) == s.versions  // Concatenate a single version.
-    && AsyncMapSpecMod.NextStep(Last(s.versions).mapp, Last(s'.versions).mapp, op)
+    && async.NextStep(Last(s.versions).asyncState, Last(s'.versions).asyncState, op)
     && Last(s'.versions).syncReqIds == {} // taking a map step introduces a new version, with no new sync reqs on it yet
     && s'.stableIdx == s.stableIdx
   }
@@ -208,7 +68,7 @@ module CrashTolerantMapSpecMod {
 
   // The implementation may push some stuff out to the disk without getting
   // all the way up to date with the ephemeral state.
-  predicate AsyncCommit(s: Variables, s': Variables)
+  predicate SpontaneousCommit(s: Variables, s': Variables)
   {
     && s.WF()
     && |s'.versions| == |s.versions|
@@ -249,9 +109,9 @@ module CrashTolerantMapSpecMod {
   // The Op provides *most* of Jay Normal Form -- except skolem variables, of which we have
   // exactly one, so I decided to just exists it like a clown.
   datatype UIOp =
-    | OperateOp(baseOp: AsyncMapSpecMod.UIOp) // Put or Query Internally
+    | OperateOp(baseOp: async.UIOp) // Put or Query Internally
     | CrashOp
-    | AsyncCommitOp // Check with Jon
+    | SpontaneousCommitOp // Check with Jon
     | ReqSyncOp(syncReqId: SyncReqId)
     | CompleteSyncOp(syncReqId: SyncReqId)
     | NoopOp
@@ -261,7 +121,7 @@ module CrashTolerantMapSpecMod {
     match uiop {
       case OperateOp(baseOp) => Operate(s, s', baseOp)
       case CrashOp => Crash(s, s')
-      case AsyncCommitOp => AsyncCommit(s, s')
+      case SpontaneousCommitOp => SpontaneousCommit(s, s')
       case ReqSyncOp(syncReqId) => ReqSync(s, s', syncReqId)
       case CompleteSyncOp(syncReqId) => (exists requestedAt :: CompleteSync(s, s', syncReqId, requestedAt))
       case NoopOp => s' == s
@@ -273,3 +133,4 @@ module CrashTolerantMapSpecMod {
     exists uiop :: NextStep(s, s', uiop)
   }
 }
+

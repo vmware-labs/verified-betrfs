@@ -10,15 +10,14 @@ module InterpMod {
   import opened ValueMessage
   import opened KeyType
 
-
   type LSN = nat // Log sequence number
 
   // Provide a Triggerable symbol for the quantifier
   predicate AnyKey(k: Key) { true }
 
-  datatype Interp = Interp(mi: imap<Key, Message>, seqEnd: LSN)
+  datatype RawInterp = RawInterp(mi: imap<Key, Message>, seqEnd: LSN)
   {
-    predicate WF() {
+    predicate secretWF() {
       // TODO How is ImapComplete not in Maps.i?
       // Ensures that all messages are terimal in the interp map (aka not deltas)
       && (forall k | AnyKey(k) :: k in mi && mi[k].Define?)
@@ -27,18 +26,29 @@ module InterpMod {
     // The effect of a put
     function Put(key: Key, value: Message) : (outInterp : Interp)
       requires value.Define?
-      requires WF()
-      ensures outInterp.WF()
+      requires secretWF()
+      ensures outInterp.secretWF()
     {
-      Interp(mi[key := value], seqEnd + 1)
+      RawInterp(mi[key := value], seqEnd + 1)
     }
   }
 
-  function Empty() : Interp
-    ensures Empty().WF()
+  function RawEmpty() : RawInterp
   {
-    var out := Interp(imap k | AnyKey(k) :: DefaultMessage(), 0);
-    out
+    RawInterp(imap k | AnyKey(k) :: DefaultMessage(), 0)
+  }
+
+  // Dafny demands a compilable witness for RawInterp, but also doesn't
+  // compile imaps. Lucky we're in a .s file so I can just lie with an
+  // axiom. This makes me feel uncomfortable.
+  function method Witness() : RawInterp
+    ensures Witness() == RawEmpty()
+
+  type Interp = ri:RawInterp | ri.secretWF() witness Witness()
+
+  function Empty() : Interp
+  {
+    RawEmpty()
   }
 
 }
