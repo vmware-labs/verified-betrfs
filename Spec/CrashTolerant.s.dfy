@@ -1,3 +1,4 @@
+include "../lib/Base/SequencesLite.s.dfy"
 include "Async.s.dfy"
 
 // Collect the entire history of possible snapshots, with a pointer to the persistent one.
