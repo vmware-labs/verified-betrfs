@@ -267,10 +267,10 @@ module JournalInterpMod {
                 assert sb'.freshestCU.value in cache'.dv;
                 assert parse(cache'.dv[sb'.freshestCU.value]).Some?;
                 assert v'.marshalledLSN == v.unmarshalledLSN();
-                assert v'.lsnToCU[v'.marshalledLSN - 1] == newCU;
+                assert v'.lsnToCU[v'.marshalledLSN - 1] == newCU; // CorrectMapping isn't defined
                 assert newCU == FreshestMarshalledCU(v').value;
                 assert sb'.freshestCU.value == newCU;
-                assert jr == parse(cache'.dv[sb'.freshestCU.value]).value;
+                assert jr == parse(cache'.dv[sb'.freshestCU.value]).value;  // CorrectMapping isn't defined.
                 assert !(jr.messageSeq.seqEnd <= sb'.boundaryLSN);
                 assert !(jr.messageSeq.seqStart <= sb.boundaryLSN);
                 assert !(jr.priorCU.None?);
