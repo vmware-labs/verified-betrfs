@@ -150,9 +150,9 @@ module SplinterTreeMachineMod {
   // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
   // activeBranches tells us the lowest index of an active branch tree for the corresponding child
   datatype TrunkNode = TrunkNode(branches : seq<BranchTreeMod.Variables>,
-                                     children : seq<TrunkNode>,
-                                     pivots : seq<BranchTreeMod.Key>,
-                                     activeBranches : seq<nat>)
+                                 children : seq<TrunkNode>,
+                                 pivots : seq<BranchTreeMod.Key>,
+                                 activeBranches : seq<nat>)
   {
     predicate WF()
     {
@@ -270,9 +270,9 @@ module SplinterTreeMachineMod {
     // The information about the trunk node of this step
     na: NodeAssignment,
     // The Branch Receipts of a lookup from all the branches of this trunk node
-    branchReceipts: seq<BranchTreeMod.BranchReceipt>,
-    // The messages accumulated in till the previous trunkStep
-    accumulatedMsgs: seq<Message>)
+    branchReceipts: seq<BranchTreeMod.BranchReceipt>)
+    // The messages accumulated in till the previous trunkStep -- don't need this might change later
+    // accumulatedMsgs: seq<Message>)
   {
     predicate WF()
     {
@@ -302,6 +302,20 @@ module SplinterTreeMachineMod {
         else [] )
         + MsgSeqRecurse(count - 1)
 
+    }
+
+    function CUsRecurse(count: nat) : seq<CU>
+    {
+      if count == 0
+      then
+        []
+      else
+        branchReceipts[count].branchPath.CUs() + CUsRecurse(count - 1)
+    }
+
+    function CUs() : seq<CU>
+    {
+      CUsRecurse(|branchReceipts|)
     }
 
     // Messages in all the branch receipts at this layer
@@ -340,14 +354,31 @@ module SplinterTreeMachineMod {
       && ValidPrefix(cache)
     }
 
-    function Decode() : Value
+    // Return the sequence of CUs (aka nodes) this path touches
+    function CUsRecurse(count : nat) : seq<CU>
+    {
+       if count == 0
+       then
+         []
+       else
+         steps[count].CUs() +  CUsRecurse(count - 1)
+    }
+
+    // Return the sequence of CUs (aka nodes) this path touches
+    function CUs() : seq<CU>
+    {
+      CUsRecurse(|steps|)
+    }
+
+    function Decode() : (msg : Message)
+      ensures msg.Define?
     {
       var msg := MsgSeqMod.CombineDeltasWithDefine(MsgSeq());
       if msg.None?
       then
-        DefaultValue()
+        DefaultMessage()
       else
-        EvaluateMessage(msg.value)
+        msg.value
     }
   }
 
@@ -384,31 +415,31 @@ module SplinterTreeMachineMod {
     | BranchInteralStep(branchSk : BranchTreeMod.Skolem)
 
 
-  predicate CheckMemtable(v: Variables, v': Variables, key: Key, value: Value)
+  predicate CheckMemtable(v: Variables, key: Key, value: Value)
   {
     && key in v.memBuffer
     && v.memBuffer[key].Define?
     && v.memBuffer[key].value == value
   }
 
-  predicate checkSpinterTree(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
+  predicate checkSpinterTree(v: Variables, cache: CacheIfc.Variables, key: Key, value: Value, trunkPath : TrunkPath)
   {
-    && var trunkPath := sk.trunkPath;
     && trunkPath.Valid(cache)
     && trunkPath.k == key
-    && trunkPath.Decode() == value
-    && v' == v
+    && EvaluateMessage(trunkPath.Decode()) == value
   }
 
   predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
   {
     && sk.QueryStep?
-    && var inMemBuffer := CheckMemtable(v, v', key, value);
-    && var splinterTreePred := checkSpinterTree(v, v', cache, key, value, sk);
+    && var inMemBuffer := CheckMemtable(v, key, value);
+    && var splinterTreePred := checkSpinterTree(v, cache, key, value, sk.trunkPath);
     && (|| inMemBuffer
         // We only return the result of the splinterTree if it cannot be found in the membuf
         || !inMemBuffer ==> splinterTreePred
        )
+    // No change to the state
+    && v == v'
   }
 
   predicate Put(v: Variables, v': Variables, key: Key, value: Value, sk: Skolem)

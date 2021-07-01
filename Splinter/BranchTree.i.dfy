@@ -152,6 +152,13 @@ module BranchTreeMod {
       steps[0].cu
     }
 
+    function CUs() : seq<CU>
+      requires WF()
+    {
+      seq(|steps|, i requires (0 <= i < |steps|) => steps[i].cu)
+    }
+
+
     function Decode() : (msg : Option<Message>)
       requires WF()
     {

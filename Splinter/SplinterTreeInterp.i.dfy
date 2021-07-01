@@ -25,19 +25,49 @@ module SplinterTreeInterpMod {
   import Nat_Order
 
   datatype LookupRecord = LookupRecord(
-    cu: CU
+    //cu: CU
+    // If we want to use trunk paths, I'm missing a case where the lookup is in the memtable CheckMemtable
+    key : Key,
+    path : Option<TrunkPath>,
+    memBuffer : map<Key, Message>
   )
-  type Lookup = seq<LookupRecord>
+  type Lookup = LookupRecord //seq<LookupRecord>
+
+  // A valid lookup is something that produces a non DefaultMessage from the membuffer or has a valid trunk path
+  // in the splinter tree
+  predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, lookup: Lookup) {
+    exists value :: ( && lookup.key == key
+                      && lookup.memBuffer == v.memBuffer
+                      && var inMemBuffer := CheckMemtable(v, key, value);
+                      && ( || inMemBuffer
+                           || (lookup.path.Some? ==> checkSpinterTree(v, cache, key, value, lookup.path.value))
+                         )
+                    )
+  }
 
   // Select the messages that lookup finds.
-  function LookupToMessage(lookup: Lookup) : Message
-    // TODO body
-
-  predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, lookup: Lookup)
-    // TODO
+  function LookupToMessage(lookup: Lookup) : (outm : Message)
+    ensures outm.Define?
+  {
+    var path := lookup.path;
+    if lookup.key in lookup.memBuffer
+    then
+      var msg := MsgSeqMod.CombineDeltasWithDefine([lookup.memBuffer[lookup.key]]);
+      if msg.Some?
+      then
+        msg.value
+      else
+        DefaultMessage()
+    else if path.Some?
+    then
+       path.value.Decode()
+    else
+       DefaultMessage()
+  }
 
   // Produce a receipt for this key
-  function IMKey(v: Variables, cache: CacheIfc.Variables, key: Key) : Message
+  function IMKey(v: Variables, cache: CacheIfc.Variables, key: Key) : (m: Message)
+    ensures m.Define?
   {
     if exists lookup :: ValidLookup(v, cache, key, lookup) // Always true by invariant
     then
@@ -49,7 +79,7 @@ module SplinterTreeInterpMod {
 
   function IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
   {
-    RawInterp(imap key | AnyKey(key) :: IMKey(v, cache, key), v.nextSeq) // check v.nextSeq used to be sb.endSeq
+    RawInterp((imap key | AnyKey(key) :: IMKey(v, cache, key)), v.nextSeq) // check v.nextSeq used to be sb.endSeq
   }
 
   function IMStable(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
@@ -79,7 +109,8 @@ module SplinterTreeInterpMod {
     if exists lookup :: ValidLookup(v, cache, key, lookup)
     then
       var lookup :| ValidLookup(v, cache, key, lookup);
-      set i | 0<=i<|lookup| :: var lr:LookupRecord := lookup[i]; lr.cu
+      set i | lookup.path.Some? && i in lookup.path.value.CUs()
+      //set i | 0<=i<|lookup| :: var lr:LookupRecord := lookup[i]; lr.cu
     else
       {}
   }
@@ -90,11 +121,16 @@ module SplinterTreeInterpMod {
       && exists key :: cu in IReadsKey(v, cache, sb, key)
   }
 
-  function IReads(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : seq<CU>
-    ensures forall cu :: cu in IReads(v, cache, sb) <==> cu in IReadsSet(v, cache, sb)
+  // What do we need this for -- we already have IReadsSet ??
+  function IReads(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : (result : seq<CU>)
+    // commenting for now
+    //ensures forall cu :: cu in result <==> cu in IReadsSet(v, cache, sb)
   {
     // TODO: CU's or nats it doesn't know how to sort it. We need to fix it
-    // Nat_Order.SortSet(IReadsSet(v, cache, sb))
+    //var iReadSet := IReadsSet(v, cache, sb);
+    //var iReadSeq := Nat_Order.SortSet(IReadsSet(v, cache, sb));
+    //assert (forall cu :: cu in iReadSet ==> cu in iReadSet);
+    //assert (forall cu :: cu in iReadSet ==> cu in iReadSeq);
     []
   }
 
@@ -105,6 +141,9 @@ module SplinterTreeInterpMod {
   {
     // TODO I'm surprised this proof passes easily.
     // narrator: It doesn't.
+    // Sowmya : Plot twist .. Now it times out :)
+    // It doesn't after I changed lookups to account for the memBuffer
+    // TODO: Check the Implementation of lookup
     forall key | AnyKey(key)
       ensures IMKey(v, cache0, key) == IMKey(v, cache1, key)
     {
@@ -174,7 +213,6 @@ module SplinterTreeInterpMod {
     requires sk.FlushStep? || sk.DrainMemBufferStep? || sk.CompactBranchStep?
     ensures IM(cache', v') == IM(cache, v)
   {
-
     match sk {
      case FlushStep(flush: FlushRec) => {
         FlushEffect(v, v', cache, cache', sb, sk);

@@ -36,7 +36,8 @@ abstract module MessageMod {
     Update(NopDelta())
   }
 
-  function method DefaultMessage() : Message {
+  function method DefaultMessage() : (msg : Message)
+ {
     Define(DefaultValue())
   }
 
