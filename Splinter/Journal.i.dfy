@@ -358,7 +358,7 @@ module JournalMachineMod {
     requires WFChain(chain)
     ensures |cus| == |chain.recs|
   {
-    seq(|chain.recs|, i => CUForChainIdx(chain, i))
+    seq(|chain.recs|, i requires 0<=i<|chain.recs| => CUForChainIdx(chain, i))
   }
 
   predicate RecordOnDisk(dv: DiskView, cu: CU, journalRecord: JournalRecord)
