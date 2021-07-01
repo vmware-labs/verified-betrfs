@@ -372,10 +372,10 @@ module BlockCache refines Transactable {
         ref in s.ephemeralIndirectionTable.locs)
     //&& (ref in s.ephemeralIndirectionTable.graph ==>
     //  && ref in s.ephemeralIndirectionTable.locs
+    //  // question: why are we disallowing eviction of outstanding writes?
+    //  // maybe don't want simultaneous reads and writes
     //  && OutstandingWrite(ref, s.ephemeralIndirectionTable.locs[ref]) !in s.outstandingBlockWrites.Values
     //)
-    // question: why are we disallowing eviction of outstanding writes?
-    // maybe don't want simultaneous reads and writes
     // question: condition not needed? Implied by ephemeral condition
     && (s.frozenIndirectionTable.Some? ==>
         ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs)
@@ -449,6 +449,36 @@ predicate IvyEvictInner(s: Variables, s': Variables, r:Reference)
     && s' ==
         s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
          .(frozenIndirectionTableLoc := None)
+  }
+
+  predicate IvyFreeze(s:Variables, s':Variables)
+  {
+  && s.Ready? && s'.Ready?
+  && (forall I :: s.outstandingIndirectionTableWrite != Some(I))
+  && s'.frozenIndirectionTable.Some?
+  && (forall ref :: forall loc : Location ::
+    (ref in s'.frozenIndirectionTable.value.locs &&
+     s'.frozenIndirectionTable.value.locs[ref] == loc)
+     <==>
+     (ref in s.ephemeralIndirectionTable.graph &&
+      s.ephemeralIndirectionTable.locs[ref] == loc))
+   && (forall ref :: forall loc : Location ::
+       ((ref in s'.frozenIndirectionTable.value.graph && !(ref in s'.frozenIndirectionTable.value.locs))
+   <==>
+   (ref in s.ephemeralIndirectionTable.graph && !(ref in s.ephemeralIndirectionTable.locs))))
+  && (s'.frozenIndirectionTableLoc == None)
+  }
+
+  lemma FreezeImpliesIvyFreeze(s:Variables, s':Variables, dop:DiskOp, vop:VOp)
+    requires Freeze(s,s',dop,vop)
+    ensures IvyFreeze(s,s')
+  {
+assert (forall ref :: forall loc : Location ::
+    (ref in s'.frozenIndirectionTable.value.locs &&
+     s'.frozenIndirectionTable.value.locs[ref] == loc)
+     <==>
+     (ref in s.ephemeralIndirectionTable.graph &&
+      s.ephemeralIndirectionTable.locs[ref] == loc));
   }
 
   predicate CleanUp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
