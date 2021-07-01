@@ -143,8 +143,8 @@ module Proof refines ProofObligations {
     var sbOld := ProgramInterpMod.ISuperblock(v.program.cache.dv);
     var sbNew := ProgramInterpMod.ISuperblock(v'.program.cache.dv);
 
-    assert sbOld.None? ==> ( ProgramInterpMod.IMRunning(v.program) == CrashTolerantMapSpecMod.Empty());
-    assert sbNew.None? ==> ( ProgramInterpMod.IMRunning(v'.program) == CrashTolerantMapSpecMod.Empty());
+    assert sbOld.None? ==> ( ProgramInterpMod.IMRunning(v.program) == CrashTolerantMapSpecMod.InitState());
+    assert sbNew.None? ==> ( ProgramInterpMod.IMRunning(v'.program) == CrashTolerantMapSpecMod.InitState());
     assert sbOld.None? ==> sbNew.None?; // cuz we're at a commit step?
 
     assume SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) ==

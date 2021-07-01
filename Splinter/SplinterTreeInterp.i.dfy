@@ -48,13 +48,11 @@ module SplinterTreeInterpMod {
   }
 
   function IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
-    ensures i.WF()
   {
-    Interp(imap key | AnyKey(key) :: IMKey(v, cache, key), v.nextSeq) // check v.nextSeq used to be sb.endSeq
+    RawInterp(imap key | AnyKey(key) :: IMKey(v, cache, key), v.nextSeq) // check v.nextSeq used to be sb.endSeq
   }
 
   function IMStable(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
-    ensures i.WF()
   {
     if exists indTbl :: IndirectionTableMod.DurableAt(indTbl, cache, sb.indTbl)
     then
@@ -68,7 +66,6 @@ module SplinterTreeInterpMod {
   // Imagine what the disk would look like if we were running and haven't
   // added any stuff to the membuffer.
   function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
-     ensures i.WF()
    {
      var indTbl := IndirectionTableMod.I(cache.dv, sb.indTbl);
      if indTbl.None?

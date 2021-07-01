@@ -85,9 +85,7 @@ module MsgHistoryMod {
 
     function ApplyToInterpRecursive(orig: Interp, count: nat) : (out: Interp)
       requires WF()
-      requires orig.WF()
       requires count <= Len()
-      ensures out.WF()
     {
       if count==0
       then orig
@@ -98,12 +96,11 @@ module MsgHistoryMod {
         var newMessage := msgs[lsn].message;
 
         var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Merge(oldMessage, newMessage)];
-        InterpMod.Interp(mapp, lsn)
+        InterpMod.RawInterp(mapp, lsn)
     }
 
     function ApplyToInterp(orig: Interp) : Interp
       requires WF()
-      requires orig.WF()
     {
       ApplyToInterpRecursive(orig, Len())
     }
@@ -164,8 +161,10 @@ module MsgHistoryMod {
 
 
   // QUESTION: Is this supposed to return messages, cuz i changed it to
-  function IKey(key:Key, baseValue: Message, ms: MsgSeq) : Message
+  function IKey(key:Key, baseValue: Message, ms: MsgSeq) : (m: Message)
+    requires baseValue.Define?
     requires ms.WF()
+    ensures m.Define?
     // Gaah look up existing message delta definitions. For
     // replacement/deletion messages, returns the value in the most-recent
     // message matching key else baseValue.
@@ -199,10 +198,11 @@ module MsgHistoryMod {
   }
 
   function Concat(interp: Interp, ms:MsgSeq) : Interp
-    requires interp.WF()
     requires ms.WF()
     requires interp.seqEnd == ms.seqStart
   {
-    InterpMod.Interp(imap k | InterpMod.AnyKey(k) :: IKey(k, interp.mi[k], ms), ms.seqEnd)
+    var ri := InterpMod.RawInterp(imap k | InterpMod.AnyKey(k) :: IKey(k, interp.mi[k], ms), ms.seqEnd);
+    assert ri.secretWF();
+    ri
   }
 }

@@ -14,7 +14,6 @@ module JournalInterpMod {
   import opened Maps
   import opened MsgHistoryMod
   import MapSpecMod
-  import AsyncMapSpecMod
   import opened DiskTypesMod
   import opened AllocationMod
   import opened JournalMachineMod
@@ -106,7 +105,6 @@ module JournalInterpMod {
   function InterpFor(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp, lsn: LSN) : Interp
     requires v.WF()
     requires Invariant(v, cache)
-    requires base.WF()
     requires base.seqEnd == v.boundaryLSN
     requires v.boundaryLSN <= lsn < v.unmarshalledLSN()
   {
@@ -121,19 +119,17 @@ module JournalInterpMod {
    function VersionFor(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
      requires v.WF()
      requires Invariant(v, cache)
-     requires base.WF()
      requires base.seqEnd == v.boundaryLSN
      requires v.boundaryLSN <= lsn < v.unmarshalledLSN() // we only need versions for the journal for the unapplied suffix of entries
    {
      // TODO No accounting for v.syncReqs < boundaryLSN; hrmm.
      var mapspec := MapSpecMod.Variables(InterpFor(v, cache, base, lsn));
-     var asyncmapspec := AsyncMapSpecMod.Variables(mapspec, {}, {});
+     var asyncmapspec := CrashTolerantMapSpecMod.async.Variables(mapspec, {}, {});
      CrashTolerantMapSpecMod.Version(asyncmapspec, SyncReqsAt(v, lsn))
    }
 
   function Versions(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
     requires v.WF()
-    requires base.WF()
     requires base.seqEnd == v.boundaryLSN // Can we require this here?
     requires Invariant(v, cache)
    {
@@ -150,7 +146,6 @@ module JournalInterpMod {
    // TDODO: may have to lemma for the journal internal step
 
   function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp) : CrashTolerantMapSpecMod.Variables
-    requires base.WF()
     requires base.seqEnd == sb.boundaryLSN  // This crash-invariant condition should probably not be a requires; just return nonsense if it fails.
   {
     var pretendVariables := Variables(sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, [], map[], map[]);
@@ -162,7 +157,6 @@ module JournalInterpMod {
     : CrashTolerantMapSpecMod.Variables
     requires v.WF()
     requires Invariant(v, cache)
-    requires base.WF()
     requires base.seqEnd == v.boundaryLSN
   {
     assert v.boundaryLSN <= v.unmarshalledLSN(); // Follows from WF & defn unmarshalledLSN
@@ -230,7 +224,6 @@ module JournalInterpMod {
   lemma InternalStepLemma(v: Variables, cache: CacheIfc.Variables, v': Variables, cache': CacheIfc.Variables,  sb:Superblock, base: InterpMod.Interp, cacheOps: CacheIfc.Ops, sk: Skolem)
     requires DiskViewsEquivalentForSet(cache.dv, cache'.dv, IReads(v, cache, sb))
     requires v.WF()
-    requires base.WF()
     requires base.seqEnd == v.boundaryLSN
     requires Invariant(v, cache)
     requires Invariant(v', cache')
@@ -307,7 +300,6 @@ module JournalInterpMod {
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, base: InterpMod.Interp)
     requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, CurrentSuperblock(v)))
     requires v.WF()
-    requires base.WF()
     requires base.seqEnd == v.boundaryLSN
 
     // QUESTION: We need to require these right?, Need to figure this out for later

@@ -75,7 +75,7 @@ module ProgramInterpMod {
       var journalInterp := JournalInterpMod.IMNotRunning(pretendCache, sb.value.journal, splinterTreeInterp);
       journalInterp
     else
-      CrashTolerantMapSpecMod.Empty()
+      CrashTolerantMapSpecMod.InitState()
   }
 
   function IMRunning(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
@@ -88,7 +88,7 @@ module ProgramInterpMod {
       var journalInterp := JournalInterpMod.IM(v.journal, v.cache, splinterTreeInterp);
       journalInterp
     else
-      CrashTolerantMapSpecMod.Empty()
+      CrashTolerantMapSpecMod.InitState()
   }
 
   function IM(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)

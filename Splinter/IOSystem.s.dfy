@@ -15,7 +15,7 @@ abstract module IOSystem {
   import D = AsyncDisk
   import P : AsyncDiskProgram
   import opened NativeTypes
-  import AsyncMapSpecMod
+  import AsyncMapSpecMod = CrashTolerantMapSpecMod.async
 
   type DiskOp = P.DiskOp
   datatype Variables = Variables(program: P.Variables, disk: D.Variables, requests: set<AsyncMapSpecMod.Request>, replies: set<AsyncMapSpecMod.Reply>)
