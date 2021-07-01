@@ -34,12 +34,12 @@ abstract module TSJ {
   //              gamma                   delta
 
   datatype Variables = Variables(
-      s1: SM.Variables,
+      s1: SM.Variables, //tree
       s2: SM.Variables,
       s3: SM.Variables,
-      j1: seq<JournalEntry>,
+      j1: seq<JournalEntry>, //journal entries in disk, committed to superblock
       j2: seq<JournalEntry>,
-      j3: seq<JournalEntry>,
+      j3: seq<JournalEntry>, // normally empty, nonempty during recovery, in memory <-- maybe
       j_gamma: seq<JournalEntry>,
       j_delta: seq<JournalEntry>,
       ghost outstandingSyncReqs: map<int, SyncReqStatus>
@@ -273,7 +273,7 @@ abstract module TSJ {
 
   predicate advances(
       s: SM.Variables,
-      jes: seq<JournalEntry>, 
+      jes: seq<JournalEntry>,
       s': SM.Variables,
       jes2: seq<JournalEntry>)
   {

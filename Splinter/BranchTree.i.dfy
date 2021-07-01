@@ -91,16 +91,16 @@ module BranchTreeMod {
   }
 
   // Parses CU units to BranchNodes that we can use
-  function parse(pg : UninterpretedDiskPage) : Option<BranchNode> // TODO: Finish
+  function ParseBranchNode(pg : UninterpretedDiskPage) : Option<BranchNode> // TODO: Finish
 
-  function CUToNode(cu : CU, cache: CacheIfc.Variables) : Option<BranchNode>
+  function CUToBranceNode(cu : CU, cache: CacheIfc.Variables) : Option<BranchNode>
   {
       var diskPage := ReadValue(cache, cu);
       if diskPage == None
       then
         None
       else
-        parse(diskPage.value)
+        ParseBranchNode(diskPage.value)
   }
 
   datatype Variables = Variables(root : CU, filter : QuotientFilter)
@@ -143,7 +143,7 @@ module BranchTreeMod {
     predicate Valid(cache: CacheIfc.Variables) {
       && WF()
       && Linked()
-      && (forall i | 0 <= i < |steps| :: Some(steps[i].node) == CUToNode(steps[i].cu, cache))
+      && (forall i | 0 <= i < |steps| :: Some(steps[i].node) == CUToBranceNode(steps[i].cu, cache))
     }
 
     function Root() : CU
@@ -177,8 +177,6 @@ module BranchTreeMod {
   }
 
 
-  // QUESTION: DO WE EVEN NEED THIS AT THIS LAYER. ALL THE ACTUAL INTERAL STEPS
-  // ARE CALLED AT IN SPLINTERINTERAL STEP????
   datatype Skolem =
      | QueryStep(branchPath: BranchPath)
      | PutManyStep()
@@ -284,11 +282,6 @@ module BranchTreeMod {
       stack.I() == Interpretation(newroot, cache)
   }
 
-  // TODO:
-  predicate BranchInternal(v: Variables, v': Variables)
-  {
-    false
-  }
 
   function Alloc() : set<CU>
   {

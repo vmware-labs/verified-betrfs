@@ -173,6 +173,21 @@ module JournalMachineMod {
     else MsgSeq(map i: LSN | start <= i < end :: s.unmarshalledTail[i - start], start, end)
   }
 
+  // lsnToCU reflects a correct reading of the sb chain, I guess?
+  // TODO It's broken to be demanding that we actually can read this stuff out
+  // of the cache; we really want this to be a ghosty property in the next
+  // layer down. Not sure yet how to make that work.
+  function {:opaque} MappingFor(cache: CacheIfc.Variables, sb: Superblock) : (lsnToCU: map<LSN, CU>)
+  {
+    var cr := ChainFrom(cache.dv, sb);
+    if cr.chain.None?
+    then map[]
+    else
+      var chain := cr.chain.value;
+      map lsn:LSN | lsn in chain.locate ::
+        var idx := chain.locate[lsn]; CUForChainIdx(chain, idx)
+  }
+
   // advances marshalledLSN forward by marshalling a batch of messages into a dirty cache page
   predicate AdvanceMarshalled(s: Variables, s': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newCU: CU)
   {
@@ -200,7 +215,7 @@ module JournalMachineMod {
       )
     // constructive: (map lsn:LSN | 0 <= lsn < s.unmarshalledLSN() :: if lsn < s.marshalledLSN then s.lsnToCU[lsn] else newCU),
     // predicate:
-    && CorrectMapping(cache, Some(newCU), s'.lsnToCU)
+    && s'.lsnToCU == MappingFor(cache, Superblock(Some(newCU), s.boundaryLSN))
   }
 
   // advances cleanLSN forward by learning that the cache has written back a contiguous
@@ -316,7 +331,6 @@ module JournalMachineMod {
       )
   }
 
-
   predicate {:opaque} WFChainInner(chain: JournalChain)
     requires WFChainBasic(chain)
   {
@@ -331,14 +345,20 @@ module JournalMachineMod {
     && WFChainInterp(chain)
   }
 
+  function CUForChainIdx(chain: JournalChain, idx: nat) : CU
+    requires WFChain(chain)
+    requires 0 <= idx < |chain.recs|
+  {
+    if idx == 0
+    then chain.sb.freshestCU.value
+    else chain.recs[idx-1].priorCU.value
+  }
+
   function CUsForChain(chain: JournalChain) : (cus: seq<CU>)
     requires WFChain(chain)
     ensures |cus| == |chain.recs|
   {
-    if chain.sb.freshestCU.None? || |chain.recs|==0
-    then []
-    else [chain.sb.freshestCU.value] + seq(|chain.recs|-1,
-        i requires 0<=i<|chain.recs|-1 => chain.recs[i].priorCU.value)
+    seq(|chain.recs|, i => CUForChainIdx(chain, i))
   }
 
   predicate RecordOnDisk(dv: DiskView, cu: CU, journalRecord: JournalRecord)
@@ -378,7 +398,7 @@ module JournalMachineMod {
     reveal_ChainMatchesDiskView();
   }
 
-  function ExtendChain(sb: Superblock, rec: JournalRecord, innerchain: JournalChain)
+  function {:timeLimitMultiplier 4} ExtendChain(sb: Superblock, rec: JournalRecord, innerchain: JournalChain)
     : (chain: JournalChain)
     requires sb.freshestCU.Some?
     requires rec.messageSeq.WF()
@@ -480,17 +500,6 @@ module JournalMachineMod {
   // JournalChain
   //////////////////////////////////////////////////////////////////////////////
 
-  // lsnToCU reflects a correct reading of the sb chain, I guess?
-  // TODO It's broken to be demanding that we actually can read this stuff out
-  // of the cache; we really want this to be a ghosty property in the next
-  // layer down. Not sure yet how to make that work.
-  predicate CorrectMapping(cache: CacheIfc.Variables, freshestCU: Option<CU>, lsnToCU: map<LSN, CU>)
-  {
-    //var ChainFrom(dv: DiskView, sb: Superblock) : (r:ChainResult)
-    // TODO We should build up a JournalChain here and confirm it justifies the mapping.
-    true
-  }
-
   // TODO recovery time action!
 
   // Learns that coordinated superblock writeback is complete; updates persistentLSN & firstLSN.
@@ -514,7 +523,7 @@ module JournalMachineMod {
     && s'.marshalledLSN == s.marshalledLSN
     && s'.unmarshalledTail == s.unmarshalledTail
     && s'.syncReqs == s.syncReqs
-    && CorrectMapping(cache, sb.freshestCU, s'.lsnToCU)
+    && s'.lsnToCU == MappingFor(cache, sb)
   }
 
   predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)

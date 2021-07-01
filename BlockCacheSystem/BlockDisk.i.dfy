@@ -96,6 +96,8 @@ module BlockDisk {
               .(indirectionTables := s'.indirectionTables)
   }
 
+  // scott -- what is dop.reqWriteNode v reqWriteNodes state variable?
+  //  a hint is that dop.reqWriteNode has loc and node
   predicate RecvWriteNode(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqWriteNodeOp?
@@ -122,6 +124,10 @@ module BlockDisk {
     && dop.RespReadNodeOp?
     && dop.id in s.reqReadNodes
     && var loc := s.reqReadNodes[dop.id];
+    // question: seems like the disk can always return none
+    //  because no dop.node.Some constraint
+    // question: what if there is a read during a write?
+    //  currently returning the value that will be written in future
     && (dop.node.Some? ==>
       dop.node == ImapLookupOption(s.nodes, loc))
     && s' == s.(reqReadNodes := MapRemove1(s.reqReadNodes, dop.id))

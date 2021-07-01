@@ -24,6 +24,7 @@ module MsgHistoryMod {
 
   datatype KeyedMessage = KeyedMessage(key: Key, message: Message)
 
+  // TODO: Rename the datatype to MsgHistory here to match the module
   datatype MsgSeq = MsgSeq(msgs: map<LSN, KeyedMessage>, seqStart: LSN, seqEnd: LSN)
     // seqEnd is exclusive
   {

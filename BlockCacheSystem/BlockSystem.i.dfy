@@ -48,7 +48,7 @@ module BlockSystem {
 
   predicate WFIndirectionTableWrtDisk(indirectionTable: IndirectionTable, blocks: imap<Location, Node>)
   {
-    forall ref | ref in indirectionTable.locs :: 
+    forall ref | ref in indirectionTable.locs ::
       indirectionTable.locs[ref] in blocks
   }
 
@@ -175,7 +175,7 @@ module BlockSystem {
   /* protected */
   function PersistentLoc(s: Variables) : Option<Location>
   {
-    if s.machine.Ready? then 
+    if s.machine.Ready? then
       Some(s.machine.persistentIndirectionTableLoc)
     else if s.machine.LoadingIndirectionTable? then
       Some(s.machine.indirectionTableLoc)
@@ -302,7 +302,7 @@ module BlockSystem {
   datatype Step =
     | MachineStep(dop: DiskOp, machineStep: M.Step)
     | CrashStep
-  
+
   predicate Machine(s: Variables, s': Variables, dop: DiskOp, vop: VOp, machineStep: M.Step)
   {
     && M.NextStep(s.machine, s'.machine, dop, vop, machineStep)
@@ -562,7 +562,7 @@ module BlockSystem {
     ensures FrozenGraphOpt(s) == None
   {
   }
-  
+
   lemma InitGraphsValue(s: Variables, loc: Location)
     requires Init(s, loc)
     ensures loc in DiskGraphMap(s)
@@ -1150,7 +1150,9 @@ module BlockSystem {
       if overlap(dop.loc, s'.disk.reqWriteNodes[id2]) {
         overlappingLocsSameType(dop.loc, s'.disk.reqWriteNodes[id2]);
         overlappingNodesSameAddr(dop.loc, s'.disk.reqWriteNodes[id2]);
+        //assert false;
       }
+      //assert dop.loc.len > 0;
     }
   }
 

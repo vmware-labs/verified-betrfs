@@ -116,11 +116,57 @@ module SplinterTreeMachineMod {
   // TODO: Rename this module
   datatype Superblock = Superblock(
     indTbl: IndirectionTableMod.Superblock,
-    endSeq: LSN)
+    endSeq: LSN,
+    // Sowmya -- We need this no??
+    root: Option<CU>)
 
   function MkfsSuperblock() : Superblock
   {
-    Superblock(IndirectionTableMod.EmptySuperblock(), 0)
+    Superblock(IndirectionTableMod.EmptySuperblock(), 0, None)
+  }
+
+
+  function parseTrunkNode(b: UninterpretedDiskPage) : Option<TrunkNode>
+      // TODO
+
+  // Parses CU units to BranchNodes that we can use
+  function CUToTrunkNode(cu : CU, cache: CacheIfc.Variables) : Option<TrunkNode>
+    {
+        var diskPage := CacheIfc.ReadValue(cache, cu);
+        if diskPage == None
+        then
+          None
+        else
+          parseTrunkNode(diskPage.value)
+    }
+
+
+  function marshalTrunkNode(node: TrunkNode) : UninterpretedDiskPage
+      // f
+
+  type TrunkId = nat
+  function RootId() : TrunkId { 0 }
+
+  // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
+  // activeBranches tells us the lowest index of an active branch tree for the corresponding child
+  datatype TrunkNode = TrunkNode(branches : seq<BranchTreeMod.Variables>,
+                                     children : seq<TrunkNode>,
+                                     pivots : seq<BranchTreeMod.Key>,
+                                     activeBranches : seq<nat>)
+  {
+    predicate WF()
+    {
+      && |children| == |activeBranches|
+      // activeBranches can only point to actual branch trees
+      && forall i :: ( (0 <= i < |activeBranches|) ==> (0 <= activeBranches[i] < |branches|))
+      // WF conditions on the pivots
+      && (|children| > 0) ==> (|children| == |pivots| + 1)
+      && forall pivot :: (1 <= pivot < |pivots| && pivots[pivot - 1] < pivots[pivot])
+    }
+
+    // TODO: Collapse all the in all the branch nodes in this level
+    function AllMessages() : map<Key, Message>
+
   }
 
   // Three states : STatble persistent disk state , ephemeral working state and a frozen ephemeral state
@@ -154,43 +200,21 @@ module SplinterTreeMachineMod {
     // for filling while packing the other into a b+tree in the top trunk.
     // OR just have freeze drain the membuffer, introducing a write hiccup every 20GB.
     nextSeq: LSN,  // exclusive
-    frozen: Frozen
+    frozen: Frozen,
+    root : Option<CU> // The CU to the root of the trunk tree
   )
   {
       function BetreeEndsLSNExclusive() : LSN {
         nextSeq
       }
+
+      function getRoot() : Option<CU> {
+        root
+      }
   }
 
-  type TrunkId = nat
-  function RootId() : TrunkId { 0 }
-
-  // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
-  // activeBranches tells us the lowest index of an active branch tree for the corresponding child
-  datatype TrunkNode = TrunkNode(branches : seq<BranchTreeMod.Variables>,
-                                 children : seq<TrunkNode>,
-                                 pivots : seq<BranchTreeMod.Key>,
-                                 activeBranches : seq<nat>)
-  {
-    predicate WF()
-    {
-      && |children| == |activeBranches|
-      // activeBranches can only point to actual branch trees
-      && forall i :: ( (0 <= i < |activeBranches|) ==> (0 <= activeBranches[i] < |branches|))
-      // WF conditions on the pivots
-      && (|children| > 0) ==> (|children| == |pivots| + 1)
-      && forall pivot :: (1 <= pivot < |pivots| && pivots[pivot - 1] < pivots[pivot])
-    }
-
-    // TODO: Collapse all the in all the branch nodes in this level
-    function AllMessages() : map<Key, Message>
-
-  }
-
-  function parseTrunkNode(b: UninterpretedDiskPage) : Option<TrunkNode>
-    // TODO
-  function marshalTrunkNode(node: TrunkNode) : UninterpretedDiskPage
-    // f
+  // We need this for lookup no?
+  function FindCorrectBranch(v : Variables, k: Key) : Option<TrunkPath>
 
   // TODO replay log!
   predicate Start(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock)
@@ -246,7 +270,9 @@ module SplinterTreeMachineMod {
     // The information about the trunk node of this step
     na: NodeAssignment,
     // The Branch Receipts of a lookup from all the branches of this trunk node
-    branchReceipts: seq<BranchTreeMod.BranchReceipt>)
+    branchReceipts: seq<BranchTreeMod.BranchReceipt>,
+    // The messages accumulated in till the previous trunkStep
+    accumulatedMsgs: seq<Message>)
   {
     predicate WF()
     {
@@ -263,12 +289,26 @@ module SplinterTreeMachineMod {
       && (forall i :: 0 <= i < |branchReceipts| && na.node.branches[i] == branchReceipts[i].branchTree)
     }
 
-    function MsgSeq() : seq<Message> {
-      []
+    function MsgSeqRecurse(count : nat) : (out: seq<Message>)
+    {
+      if count == 0
+      then
+        []
+      else
+        var currBranchVal := branchReceipts[count-1].branchPath.Decode();
+        ( if currBranchVal.Some?
+        then
+          [currBranchVal.value]
+        else [] )
+        + MsgSeqRecurse(count - 1)
+
     }
 
-    function Decode() : (msg : Option<Message>)
-
+    // Messages in all the branch receipts at this layer
+    function MsgSeq() : seq<Message>
+    {
+      MsgSeqRecurse(|branchReceipts|)
+    }
   }
 
   datatype TrunkPath = TrunkPath(k: Key, steps: seq<TrunkStep>)
@@ -277,17 +317,19 @@ module SplinterTreeMachineMod {
       && forall i :: (0 < i < |steps|) && steps[i].na.node in steps[i-1].na.node.children
     }
 
-    function msgSeqRecurse(currTrunk : TrunkStep) : (out : seq<Message>)
+    function msgSeqRecurse(count : nat) : (out : seq<Message>)
     {
-      var branchReceipts := currTrunk.branchReceipts;
-      //if
-      []
+      if count == 0
+      then
+          []
+      else
+         msgSeqRecurse(count-1) + steps[count-1].MsgSeq()
     }
 
     // Collapse all the messages in this trunk path
     function MsgSeq() : (out : seq<Message>)
     {
-      []
+      msgSeqRecurse(|steps|)
     }
 
     predicate Valid(cache: CacheIfc.Variables) {
