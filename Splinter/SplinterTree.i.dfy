@@ -249,23 +249,6 @@ module SplinterTreeMachineMod {
 
   }
 
-  // TODO find in library: Done look at Message.s.dfy
-  // function CombineMessages(newer: Message, older: Message) : Message
-  // function EvaluateMessage(m: Message) : Value
-  // function MakeValueMessage(value:Value) : Message
-
-  // QUESTION : What does this do???
-  // TODO: Change this to actually fold the messages
-  // function MessageFolder(newer: map<Key,Message>, older: map<Key,Message>) : map<Key,Message>
-  // {
-	// 	map x : Key | (x in newer.Keys + older.Keys) ::
-  //     if x in newer
-  //     then if x in older
-  //       then CombineMessages(newer[x], older[x])
-  //       else newer[x]
-  //     else older[x]
-  // }
-
   datatype TrunkStep = TrunkStep(
     // The information about the trunk node of this step
     na: NodeAssignment,
@@ -304,6 +287,12 @@ module SplinterTreeMachineMod {
 
     }
 
+    // Messages in all the branch receipts at this layer
+    function MsgSeq() : seq<Message>
+    {
+      MsgSeqRecurse(|branchReceipts|)
+    }
+
     function CUsRecurse(count: nat) : seq<CU>
     {
       if count == 0
@@ -318,14 +307,9 @@ module SplinterTreeMachineMod {
       CUsRecurse(|branchReceipts|)
     }
 
-    // Messages in all the branch receipts at this layer
-    function MsgSeq() : seq<Message>
-    {
-      MsgSeqRecurse(|branchReceipts|)
-    }
   }
 
-  datatype TrunkPath = TrunkPath(k: Key, steps: seq<TrunkStep>)
+  datatype TrunkPath = TrunkPath(k: Key, membufferMsgs: seq<Message>, steps: seq<TrunkStep>)
   {
     predicate {:opaque} ValidPrefix(cache: CacheIfc.Variables) {
       && forall i :: (0 < i < |steps|) && steps[i].na.node in steps[i-1].na.node.children
@@ -335,7 +319,7 @@ module SplinterTreeMachineMod {
     {
       if count == 0
       then
-          []
+          membufferMsgs
       else
          msgSeqRecurse(count-1) + steps[count-1].MsgSeq()
     }
@@ -415,11 +399,13 @@ module SplinterTreeMachineMod {
     | BranchInteralStep(branchSk : BranchTreeMod.Skolem)
 
 
-  predicate CheckMemtable(v: Variables, key: Key, value: Value)
+  function MemtableLookup(v: Variables, key: Key) : seq<Message>
   {
-    && key in v.memBuffer
-    && v.memBuffer[key].Define?
-    && v.memBuffer[key].value == value
+    if key in v.memBuffer
+    then
+      [v.memBuffer[key]]
+    else
+      []
   }
 
   predicate checkSpinterTree(v: Variables, cache: CacheIfc.Variables, key: Key, value: Value, trunkPath : TrunkPath)
@@ -429,15 +415,23 @@ module SplinterTreeMachineMod {
     && EvaluateMessage(trunkPath.Decode()) == value
   }
 
+  // A valid lookup is something that produces a non DefaultMessage from the membuffer or has a valid trunk path
+  // in the splinter tree
+  predicate IsValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, value: Value, trunkPath: TrunkPath)
+  {
+    && checkSpinterTree(v, cache, key, value, trunkPath)
+    && trunkPath.membufferMsgs == MemtableLookup(v, key)
+  }
+
+  predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, trunkPath: TrunkPath)
+  {
+    exists value :: IsValidLookup(v, cache, key, value, trunkPath)
+  }
+
   predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
   {
     && sk.QueryStep?
-    && var inMemBuffer := CheckMemtable(v, key, value);
-    && var splinterTreePred := checkSpinterTree(v, cache, key, value, sk.trunkPath);
-    && (|| inMemBuffer
-        // We only return the result of the splinterTree if it cannot be found in the membuf
-        || !inMemBuffer ==> splinterTreePred
-       )
+    && IsValidLookup(v, cache, key, value, sk.trunkPath)
     // No change to the state
     && v == v'
   }

@@ -24,45 +24,13 @@ module SplinterTreeInterpMod {
   import opened SplinterTreeMachineMod
   import Nat_Order
 
-  datatype LookupRecord = LookupRecord(
-    //cu: CU
-    // If we want to use trunk paths, I'm missing a case where the lookup is in the memtable CheckMemtable
-    key : Key,
-    path : Option<TrunkPath>,
-    memBuffer : map<Key, Message>
-  )
-  type Lookup = LookupRecord //seq<LookupRecord>
-
-  // A valid lookup is something that produces a non DefaultMessage from the membuffer or has a valid trunk path
-  // in the splinter tree
-  predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, lookup: Lookup) {
-    exists value :: ( && lookup.key == key
-                      && lookup.memBuffer == v.memBuffer
-                      && var inMemBuffer := CheckMemtable(v, key, value);
-                      && ( || inMemBuffer
-                           || (lookup.path.Some? ==> checkSpinterTree(v, cache, key, value, lookup.path.value))
-                         )
-                    )
-  }
+  type Lookup = TrunkPath
 
   // Select the messages that lookup finds.
   function LookupToMessage(lookup: Lookup) : (outm : Message)
     ensures outm.Define?
   {
-    var path := lookup.path;
-    if lookup.key in lookup.memBuffer
-    then
-      var msg := MsgSeqMod.CombineDeltasWithDefine([lookup.memBuffer[lookup.key]]);
-      if msg.Some?
-      then
-        msg.value
-      else
-        DefaultMessage()
-    else if path.Some?
-    then
-       path.value.Decode()
-    else
-       DefaultMessage()
+    lookup.Decode()
   }
 
   // Produce a receipt for this key
@@ -109,7 +77,7 @@ module SplinterTreeInterpMod {
     if exists lookup :: ValidLookup(v, cache, key, lookup)
     then
       var lookup :| ValidLookup(v, cache, key, lookup);
-      set i | lookup.path.Some? && i in lookup.path.value.CUs()
+      set i | i in lookup.CUs()
       //set i | 0<=i<|lookup| :: var lr:LookupRecord := lookup[i]; lr.cu
     else
       {}
@@ -164,12 +132,16 @@ module SplinterTreeInterpMod {
         var lookup1 :| ValidLookup(v, cache1, key, lookup1);
         calc {
           IMKey(v, cache0, key);
+            // Lol TODOs???
+          // Nonequivivocation
             { assume false; } // var|
           LookupToMessage(lookup0);
             { assume false; } // framing
           LookupToMessage(lookup1);
+          // Nonequivivocation
             { assume false; } // var|
           IMKey(v, cache1, key);
+
         }
       } else {
         calc {
@@ -191,7 +163,22 @@ module SplinterTreeInterpMod {
   lemma FlushEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, sk: Skolem)
     ensures IM(cache', v') == IM(cache, v)
   {
-    assume false;
+    // Prolly not needed
+    forall key | AnyKey(key)
+      ensures IMKey(v', cache', key) == IMKey(v, cache, key)
+    {
+      var le0 := exists lookup0 :: ValidLookup(v, cache, key, lookup0);
+      var le1 := exists lookup1 :: ValidLookup(v', cache', key, lookup1);
+      assert le0 == le1;
+      // if le0 {
+      //
+      // }
+      // TODO
+      assert IMKey(v', cache', key) == IMKey(v, cache, key);
+    }
+
+
+    assert IM(cache', v') == IM(cache, v);
   }
 
   // Show that compactions preserve the invariant
