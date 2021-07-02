@@ -189,8 +189,6 @@ module ShardedHashTable refines ShardedStateMachine {
     PSL(table[i].value.key, i)
   }
 
-  type EntryPredicate = (Option<Entry>, Index, Key) -> bool
-
   datatype PreRange = 
     | Everything
     | Nothing
@@ -307,13 +305,15 @@ module ShardedHashTable refines ShardedStateMachine {
   //   assert Contains(Partial(start, end), i) || end == i;
   // }
 
+  type EntryPredicate = (Option<Entry>, Index, Key) -> bool
+
   predicate TrueInRange(table: FixedTable, range: Range, key: Key, p: EntryPredicate)
   {
     forall i: Index | Contains(range, i) :: p(table[i], i, key)
   }
 
   datatype Step =
-    | InsertStep(ticket: Ticket, kv: (Key, Value), range: Range)
+    | InsertStep(ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
     | OverwriteStep(ticket: Ticket, kv: (Key, Value), end: Index)
 
     | QueryFoundStep(ticket: Ticket, i: Index)
@@ -324,8 +324,8 @@ module ShardedHashTable refines ShardedStateMachine {
 
 // Insert transition definitions
 
-  // NOTE: dummy_key does nothing here
-  predicate SlotFull(entry: Option<Entry>, slot_index: Index, dummy_key: Key)
+  // NOTE: dummy_index/dummy_key does nothing here
+  predicate SlotFull(entry: Option<Entry>, dummy_index: Index, dummy_key: Key)
   {
     entry.Some? && entry.value.Full?
   }
@@ -344,6 +344,12 @@ module ShardedHashTable refines ShardedStateMachine {
   predicate RangeFullKeyNotFound(table: FixedTable, range: Range, key: Key)
   {
     TrueInRange(table, range, key, SlotFullKeyNotFound)
+  }
+
+  // NOTE: dummy_index/dummy_key does nothing here
+  predicate SlotEmpty(entry: Option<Entry>, dummy_index: Index, dummy_key: Key)
+  {
+    entry.Some? && entry.value.Empty?
   }
 
   predicate SlotShouldSkip(entry: Option<Entry>, slot_index: Index, insert_key: Key)
@@ -394,22 +400,20 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     // && InsertEnableCommon(v, step)
     && step.InsertStep?
-    && var InsertStep(ticket, (key, _), range) := step;
+    && var InsertStep(ticket, (key, _), start, end) := step;
     && v.Variables?
     && var table := v.table;
     && ticket in v.tickets
     && ticket.input.InsertInput?
     && v.insert_capacity.value >= 1
 
-    // TODO: extend where range is empty
-    && range.Partial?
-    && var Partial(start, end) := range;
     // skip upto (not including) start
     && RangeShouldSkip(table, BuildRange(hash(key), start), key)
     // insert at start
-    && SlotShouldSwap(table[start], start, key)
+    && (SlotShouldSwap(table[start], start, key) ||
+      SlotEmpty(table[start], start, key))
     // this part is full
-    && RangeFull(table, range)
+    && RangeFull(table, BuildRange(start, end))
     // but the end is empty 
     && table[end].Some?
     && table[end].value.Empty?
@@ -418,8 +422,8 @@ module ShardedHashTable refines ShardedStateMachine {
   function Insert(v: Variables, step: Step): Variables
     requires InsertEnable(v, step)
   {
-    var InsertStep(ticket, kv, range) := step;
-    var table' := TableRightShift(v.table, Some(Full(kv.0, kv.1)), range.start, range.end);
+    var InsertStep(ticket, kv, start, end) := step;
+    var table' := TableRightShift(v.table, Some(Full(kv.0, kv.1)), start, end);
     v.(table := table')
       .(insert_capacity := Count.Variables(v.insert_capacity.value - 1))
       .(tickets := v.tickets - multiset{ticket})
@@ -639,7 +643,7 @@ module ShardedHashTable refines ShardedStateMachine {
   predicate IsHashSegment(table: FixedTable, hash: Index, range: Range)
   requires Complete(table)
   {
-    // there should not be such segement
+    // the segement can be Nothing or Partial
     && !range.Everything?
     // all the keys in this range hashes to this
     && (forall i: Index | Contains(range, i) ::
@@ -846,7 +850,7 @@ module ShardedHashTable refines ShardedStateMachine {
     requires step.InsertStep? && NextStep(s, s', step)
     ensures  TableQuantityInv(s')
   {
-    var InsertStep(ticket, kv, Partial(start, end)) := step;
+    var InsertStep(ticket, kv, start, end) := step;
     var table, table' := s.table, s'.table;
     var inserted := Some(Full(kv.0, kv.1));
 
@@ -924,8 +928,7 @@ module ShardedHashTable refines ShardedStateMachine {
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
   {
-    var InsertStep(ticket, (key, _), range) := step;
-    var Partial(start, end) := range;
+    var InsertStep(ticket, (key, _), start, end) := step;
     var table, table' := s.table, s'.table;
 
     var h := hash(key);
@@ -935,13 +938,27 @@ module ShardedHashTable refines ShardedStateMachine {
       return;
     }
 
+    assume !(h == start == end);
+
     var Partial(hr_start, hr_end) := h_range;
 
-    if start == h {
+    if start == end {
+      assert h != start;
+      assert ValidPSL(table, hr_start);
+      assert Contains(Partial(h, start), hr_start);
+
+      if hr_start != h && !Contains(Partial(hr_start, NextIndex(start)), hr_end) {
+        assert Contains(h_range, start);
+        assert false;
+      }
+
+      assert Contains(Partial(h, end), hr_end) || hr_end == end;
+
+
       return;
     }
 
-    if !Contains(Partial(h, start), hr_start) {
+    if !Contains(BuildRange(h, start), hr_start) {
       assert PSL(table[start].value.key, start) < PSL(key, start);
 
       assert Contains(Partial(h, hr_start), start);
@@ -954,18 +971,18 @@ module ShardedHashTable refines ShardedStateMachine {
       assert false;
     }
 
-    assert Contains(Partial(h, start), hr_start);
+    assert Contains(BuildRange(h, start), hr_start);
 
-    if !Contains(Partial(h, NextIndex(start)), hr_end) {
+    if !Contains(BuildRange(h, NextIndex(start)), hr_end) {
       assert Contains(h_range, start);
       assert false;
     }
 
-    assert Contains(Partial(h, NextIndex(start)), hr_end);
+    assert Contains(BuildRange(h, NextIndex(start)), hr_end);
 
-    assert Contains(Partial(h, start), hr_end) || hr_end == start;
+    assert Contains(BuildRange(h, start), hr_end) || hr_end == start;
 
-    if Contains(Partial(h, start), hr_end) {
+    if Contains(BuildRange(h, start), hr_end) {
       assert ValidPSL(table, hr_end);
       assert false;
     }
@@ -973,6 +990,7 @@ module ShardedHashTable refines ShardedStateMachine {
     assert hr_end == start;
   }
 
+/*
   lemma InsertStepPreservesInv(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
@@ -1093,6 +1111,7 @@ module ShardedHashTable refines ShardedStateMachine {
 
     // InsertStepPreservesTableQuantityInv(s, s', step);
   }
+*/
 /*
 
   lemma OverwriteStepPreservesInv(s: Variables, s': Variables, step: Step)
