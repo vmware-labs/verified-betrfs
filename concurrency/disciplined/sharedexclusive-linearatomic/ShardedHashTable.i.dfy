@@ -290,6 +290,26 @@ module ShardedHashTable refines ShardedStateMachine {
   { 
   }
 
+  // lemma PartialRangeComplement(i: Index, a: Index, b: Index)
+  //   requires a != b
+  //   requires Contains(Partial(a, b), i);
+  //   ensures !Contains(Partial(b, a), i);
+  // {
+  // }
+
+  lemma RangeTest(a: Index, b: Index, c: Index)
+    requires a != b
+    requires !Contains(Partial(a, b), c);
+    // ensures Contains(Partial(a, c), b) || b == c
+  {
+    if a == b {
+      assert Contains(Partial(a, c), b);
+    // } else {
+      // assert (Contains(Partial(a, c), b) || b == c);
+    }
+    // assert a != b ==> Contains(BuildRange(b, a), c);
+  }
+
   lemma RangeInclusion(a: Index, b: Index, c: Index)
     requires a != b && a != c
     requires Contains(Partial(a, b), c)
@@ -398,7 +418,6 @@ module ShardedHashTable refines ShardedStateMachine {
 
   predicate InsertEnable(v: Variables, step: Step)
   {
-    // && InsertEnableCommon(v, step)
     && step.InsertStep?
     && var InsertStep(ticket, (key, _), start, end) := step;
     && v.Variables?
@@ -410,8 +429,8 @@ module ShardedHashTable refines ShardedStateMachine {
     // skip upto (not including) start
     && RangeShouldSkip(table, BuildRange(hash(key), start), key)
     // insert at start
-    && (SlotShouldSwap(table[start], start, key) ||
-      SlotEmpty(table[start], start, key))
+    && (SlotShouldSwap(table[start], start, key)
+      || SlotEmpty(table[start], start, key))
     // this part is full
     && RangeFull(table, BuildRange(start, end))
     // but the end is empty 
@@ -640,12 +659,15 @@ module ShardedHashTable refines ShardedStateMachine {
       :: table[i].value.key != table[j].value.key
   }
 
-  predicate IsHashSegment(table: FixedTable, hash: Index, range: Range)
+  predicate ValidHashSegment(table: FixedTable, hash: Index, range: Range)
   requires Complete(table)
   {
     // the segement can be Nothing or Partial
     && !range.Everything?
-    // all the keys in this range hashes to this
+    // // if the segment is Partial, the hash cannot be in the middle 
+    // && (range.Partial? ==>
+    //   !Contains(BuildRange(NextIndex(range.start), range.end), hash))
+    // all the keys in the segment share the hash
     && (forall i: Index | Contains(range, i) ::
         && table[i].value.Full?
         && SlotKeyHash(table, i) == hash)
@@ -659,7 +681,7 @@ module ShardedHashTable refines ShardedStateMachine {
   requires Complete(table)
   {
     // there exists a segment of slots that has the matching hash (could be empty)
-    exists range: Range :: IsHashSegment(table, hash, range)
+    exists range: Range :: ValidHashSegment(table, hash, range)
   }
 
   predicate ValidHashSegments(table: FixedTable)
@@ -671,11 +693,11 @@ module ShardedHashTable refines ShardedStateMachine {
   function GetHashSegment(table: FixedTable, hash: Index): (Range)
   requires Complete(table)
   requires ValidHashSegments(table)
-  ensures IsHashSegment(table, hash, GetHashSegment(table, hash))
+  ensures ValidHashSegment(table, hash, GetHashSegment(table, hash))
   {
     assert ExistsHashSegment(table, hash);
     var range: Range :|
-      IsHashSegment(table, hash, range);
+      ValidHashSegment(table, hash, range);
     range
   }
 
@@ -705,16 +727,16 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-  predicate ValidOrdering(table: FixedTable, h0: Index)
-  requires Complete(table)
-  requires ValidHashSegments(table)
-  {
-    var h1 := NextIndex(h0);
-    var range0 := GetHashSegment(table, h0);
-    var range1 := GetHashSegment(table, h1);
-    // this part should all be empty (we won't have a none-empty segment in between)
-    (forall i : Index | Contains(GetBetween(range0, range1), i) :: table[i].value.Empty?)
-  }
+  // predicate ValidOrdering(table: FixedTable, h0: Index)
+  // requires Complete(table)
+  // requires ValidHashSegments(table)
+  // {
+  //   var h1 := NextIndex(h0);
+  //   var range0 := GetHashSegment(table, h0);
+  //   var range1 := GetHashSegment(table, h1);
+  //   // this part should all be empty (we won't have a none-empty segment in between)
+  //   (forall i : Index | Contains(GetBetween(range0, range1), i) :: table[i].value.Empty?)
+  // }
 
   predicate ValidPSL(table: FixedTable, i: Index)
     requires Complete(table)
@@ -722,7 +744,7 @@ module ShardedHashTable refines ShardedStateMachine {
     table[i].value.Full? ==>
     (
       var key := table[i].value.key;
-      var ih := SlotKeyHash(table, i);
+      var ih := hash(key);
       forall j: Index :: Contains(BuildRange(ih, i), j) ==> 
       (
         && table[j].value.Full?
@@ -736,7 +758,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && Complete(table)
     && KeysUnique(table)
     && ValidHashSegments(table)
-    && (forall h: Index :: ValidOrdering(table, h))
+    // && (forall h: Index :: ValidOrdering(table, h))
     && (forall i: Index :: ValidPSL(table, i))
   }
 
@@ -848,7 +870,7 @@ module ShardedHashTable refines ShardedStateMachine {
   lemma InsertStepPreservesTableQuantityInv(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
-    ensures  TableQuantityInv(s')
+    ensures TableQuantityInv(s')
   {
     var InsertStep(ticket, kv, start, end) := step;
     var table, table' := s.table, s'.table;
@@ -924,194 +946,257 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-  lemma InsertSkipRangeSufficient(s: Variables, s': Variables, step: Step)
+  lemma InsertEnableEnsuresEmptySlots(s: Variables, step: Step)
+    returns (e: Index)
+    requires Inv(s)
+    requires InsertEnable(s, step)
+    ensures s.table[e].value.Empty? && e != step.end
+  {
+    calc {
+      TableQuantity(s.table);
+      == 
+      Capacity() - s.insert_capacity.value;
+      <=
+      Capacity() - 1;
+      ==
+      FixedSize() - 2;
+    }
+    assert TableQuantity(s.table) <= FixedSize() - 2;
+    // TODO: this should be "easy"
+    assume false;
+  }
+
+  lemma InsertPreservesKeySegment(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
+    ensures ExistsHashSegment(s'.table, hash(step.kv.0));
   {
-    var InsertStep(ticket, (key, _), start, end) := step;
+    var InsertStep(_, (key, _), start, end) := step;
     var table, table' := s.table, s'.table;
-
     var h := hash(key);
+
+    // the segment that shares the hash
     var h_range := GetHashSegment(table, h);
 
+    // if there is no segment, then the singleton segment is valid
     if h_range.Nothing? {
+      assert ValidHashSegment(table', h, Partial(start, NextIndex(start)));
       return;
     }
-
-    assume !(h == start == end);
 
     var Partial(hr_start, hr_end) := h_range;
 
-    if start == end {
-      assert h != start;
+    // if the shift begins at h, then there should not be a valid h_range
+    if h == start {
       assert ValidPSL(table, hr_start);
-      assert Contains(Partial(h, start), hr_start);
-
-      if hr_start != h && !Contains(Partial(hr_start, NextIndex(start)), hr_end) {
-        assert Contains(h_range, start);
-        assert false;
-      }
-
-      assert Contains(Partial(h, end), hr_end) || hr_end == end;
-
-
-      return;
-    }
-
-    if !Contains(BuildRange(h, start), hr_start) {
-      assert PSL(table[start].value.key, start) < PSL(key, start);
-
-      assert Contains(Partial(h, hr_start), start);
-      assert ValidPSL(table, hr_start);
-
-      assert IsHashSegment(table, h, h_range);
-      assert table[hr_start].value.Full?;
-      assert SlotPSL(table, start) >= PSL(key, start);
-
       assert false;
     }
 
-    assert Contains(BuildRange(h, start), hr_start);
+    // narrow where hr_start is
+    assert Contains(Partial(h, start), hr_start) by {
+      assert ValidPSL(table, hr_start);
+    }
 
-    if !Contains(BuildRange(h, NextIndex(start)), hr_end) {
+    // narrow where hr_end is
+    if !(Contains(Partial(h, start), hr_end) || hr_end == start){
       assert Contains(h_range, start);
       assert false;
     }
 
-    assert Contains(BuildRange(h, NextIndex(start)), hr_end);
-
-    assert Contains(BuildRange(h, start), hr_end) || hr_end == start;
-
+    // fix where hr_end is
     if Contains(BuildRange(h, start), hr_end) {
       assert ValidPSL(table, hr_end);
       assert false;
     }
 
     assert hr_end == start;
+    assert Contains(Partial(h, start), hr_start);
+
+    if hr_start == NextIndex(start) {
+      var e := InsertEnableEnsuresEmptySlots(s, step);
+      assert end == start;
+      assert false;
+    }
+
+    assert ValidHashSegment(table', h, Partial(hr_start, NextIndex(start)));
   }
 
-/*
-  lemma InsertStepPreservesInv(s: Variables, s': Variables, step: Step)
+  lemma InsertPreservesOtherSegments(s: Variables, s': Variables, step: Step, h: Index)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
-    // ensures Inv(s')
+    requires h != hash(step.kv.0)
+    ensures ExistsHashSegment(s'.table, h);
   {
-    var InsertStep(ticket, (key, value), range) := step;
-    var Partial(start, end) := range;
+    var InsertStep(_, (key, value), start, end) := step;
     var table, table' := s.table, s'.table;
 
-    if !RangeFullKeyNotFound(table, range, key) {
-      var i: Index :|
-        && Contains(range, i)
-        && !SlotFullKeyNotFound(table[i], i, key);
-      var s_key := table[start].value.key;
+    var range := BuildRange(start, end);
+    // the segment that shares the hash
+    var h_range := GetHashSegment(table, h);
 
-      var psl_at_s := PSL(s_key, start);
-      var vpsl_at_s := PSL(key, start);
+    // the segment was not toched at all (it could be empty in the first place)  
+    if !OverlapsWith(h_range, range) {
+      assert ValidHashSegment(table', h, h_range);
+      return;
+    }
 
-      assert psl_at_s >= vpsl_at_s by {
-        assert ValidPSL(table, i);
+    var Partial(hr_start, hr_end) := h_range;
+    var h_range' := Partial(NextIndex(hr_start), NextIndex(hr_end));
+
+    // the segment was shifted, but contained in the shift range
+    if IsSubOf(h_range, range) {
+      forall i: Index | Contains(h_range', i)
+        ensures table'[i].value.Full? && SlotKeyHash(table', i) == h
+      {
+        var prev_i := PrevIndex(i);
+        assert table'[i] == table[prev_i];
+        assert Contains(h_range, prev_i);
       }
-      assert false;
-    }
 
-    if !KeysUnique(table') {
-      var i: Index, j: Index :| 
-        && table'[i].value.Full?
-        && table'[j].value.Full?
-        && i != j
-        && table'[i].value.key == table'[j].value.key;
-      assert i == start || j == start;
-      var index := if i == start then j else i;
-      assert ValidPSL(table, index);
-      assert false;
-    }
+      forall i: Index | !Contains(h_range', i)
+        ensures (table'[i].value.Full? ==> SlotKeyHash(table', i) != h);
+      {
+        var prev_i := PrevIndex(i);
+        assert || table'[i] == table[prev_i]
+          || table'[i] == table[i]
+          || table'[i] == Some(Full(key, value));
 
-    forall i : Index | Contains(range, i)
-      ensures table[i] == table'[NextIndex(i)]
-    {
-    }
-
-    var key_hash := hash(key);
-
-    forall h: Index 
-      ensures ExistsHashSegment(table', h)
-    {
-      var h_range := GetHashSegment(table, h);
-      
-      var Partial(hr_start, hr_end) := h_range;
-      var shifted_h_range := Partial(NextIndex(hr_start), NextIndex(hr_end));
-
-      if h != key_hash {
-        if !OverlapsWith(h_range, range) {
-          // the segment was not toched at all      
-          assert IsHashSegment(table', h, h_range);
-        } else if IsSubOf(h_range, range) {
-          // the segment was shifted, but contained in the shift range
-          forall i: Index | Contains(shifted_h_range, i)
-            ensures table'[i].value.Full? && SlotKeyHash(table', i) == h
-          {
-            var prev_i := PrevIndex(i);
-            assert table'[i] == table[prev_i];
-            assert Contains(h_range, prev_i);
-          }
-
-          forall i: Index | !Contains(shifted_h_range, i)
-            ensures (table'[i].value.Full? ==> SlotKeyHash(table', i) != h);
-          {
-            var prev_i := PrevIndex(i);
-            assert || table'[i] == table[prev_i]
-              || table'[i] == table[i]
-              || table'[i] == Some(Full(key, value));
-
-            if table'[i] == table[prev_i] {
-              assert !Contains(h_range, prev_i);
-            } else if table'[i] == table[i] {
-              assert !Contains(h_range, i);
-            }
-          }
-          assert IsHashSegment(table', h, shifted_h_range);
-        } else {
-          assert OverlapsWith(h_range, range);
-          assert !IsSubOf(h_range, range);
-
-          if Contains(range, hr_start) {
-            assert false;
-          }
-          assert Contains(Partial(start, NextIndex(end)), hr_end);
-          assert Contains(h_range, start);
-
-          var pre_start := PrevIndex(start);
-          assert ValidPSL(table, pre_start); 
-          
-          assert hash(table[pre_start].value.key) != 
-            hash(table[start].value.key);
-          assert false;
-        }
-      } else {
-        if hr_start == hr_end {
-          var h_range' := Partial(start, NextIndex(start));
-          assert IsHashSegment(table', h, h_range');
-        } else {
-          // if Partial(start, h).Contains(hr_start) {
-          //   // assume hash(table[start].value.key) != hash(key);
-          //   // assert false;
-
-          // }
-          // forall i: Index | h_range.Contains(i)
-          //   ensures true
-          // {
-
-          // }
-
-          assume false;
+        if table'[i] == table[prev_i] {
+          assert !Contains(h_range, prev_i);
+        } else if table'[i] == table[i] {
+          assert !Contains(h_range, i);
         }
       }
+      assert ValidHashSegment(table', h, h_range');
+      return;
     }
 
-    // InsertStepPreservesTableQuantityInv(s, s', step);
+    // if hr_start is in range, and h_range is not a subset
+    // hr_end would corss the end, which should be empty
+    if Contains(range, hr_start) {
+      assert false;
+      return;
+    }
+
+    assert Contains(Partial(start, NextIndex(end)), hr_end);
+    assert Contains(h_range, start);
+
+    var pre_start := PrevIndex(start);
+    assert ValidPSL(table, pre_start); 
+    
+    assert hash(table[pre_start].value.key) != 
+      hash(table[start].value.key);
+    assert false;
   }
-*/
+
+  lemma InsertPreservesValidPSL(s: Variables, s': Variables, step: Step, i: Index)
+    requires Inv(s)
+    requires step.InsertStep? && NextStep(s, s', step)
+    requires s'.table[i].value.Full?
+  {
+    var InsertStep(_, (key, _), start, end) := step;
+    var table, table' := s.table, s'.table;
+    
+    assert ValidPSL(table, i);
+
+    // no shifting in the table, just an insert
+    if start == end {
+      // surprisingly this doesn't require more proofs
+      assert ValidPSL(table', i);
+      return;
+    }
+
+    // newly inserted
+    if i == start {
+      assert ValidPSL(table', i);
+      return;
+    }
+
+    var h := hash(table'[i].value.key);
+    var h_range := GetHashSegment(table, h);
+
+    // the range is none-empty, otherwise it should be newly inserted
+    assert h_range.Partial?;
+
+    // slot i is not shifted
+    if table[i] == table'[i] {
+      assert Contains(Partial(end, start), i);
+      
+      assert Contains(Partial(end, start), h);
+      assert Contains(BuildRange(end, i), h)
+        || Contains(BuildRange(i, start), h);
+      
+      if Contains(BuildRange(i, start), h) {
+        assert Contains(BuildRange(start, i), end);
+        assert h == i || Contains(BuildRange(h, i), end);
+
+        if h == i {
+          assert ValidPSL(table', i);
+          return;
+        }
+        assert false;
+      }
+
+      assert Contains(BuildRange(end, i), h);
+      assert ValidPSL(table', i);
+      return;
+    }
+
+    // slot i is shifted
+    assert table[PrevIndex(i)] == table'[i];
+  }
+
+  // lemma InsertStepPreservesInv(s: Variables, s': Variables, step: Step)
+  //   requires Inv(s)
+  //   requires step.InsertStep? && NextStep(s, s', step)
+  //   // ensures Inv(s')
+  // {
+  //   var InsertStep(ticket, (key, value), range) := step;
+  //   var Partial(start, end) := range;
+  //   var table, table' := s.table, s'.table;
+
+  //   if !RangeFullKeyNotFound(table, range, key) {
+  //     var i: Index :|
+  //       && Contains(range, i)
+  //       && !SlotFullKeyNotFound(table[i], i, key);
+  //     var s_key := table[start].value.key;
+
+  //     var psl_at_s := PSL(s_key, start);
+  //     var vpsl_at_s := PSL(key, start);
+
+  //     assert psl_at_s >= vpsl_at_s by {
+  //       assert ValidPSL(table, i);
+  //     }
+  //     assert false;
+  //   }
+
+  //   if !KeysUnique(table') {
+  //     var i: Index, j: Index :| 
+  //       && table'[i].value.Full?
+  //       && table'[j].value.Full?
+  //       && i != j
+  //       && table'[i].value.key == table'[j].value.key;
+  //     assert i == start || j == start;
+  //     var index := if i == start then j else i;
+  //     assert ValidPSL(table, index);
+  //     assert false;
+  //   }
+
+  //   // forall i : Index | Contains(range, i)
+  //   //   ensures table[i] == table'[NextIndex(i)]
+  //   // {
+  //   // }
+
+  //   var key_hash := hash(key);
+
+  //   forall h: Index 
+  //     ensures ExistsHashSegment(table', h)
+  //   {
+      
+  //   }
+
+  //   // InsertStepPreservesTableQuantityInv(s, s', step);
+  // }
 /*
 
   lemma OverwriteStepPreservesInv(s: Variables, s': Variables, step: Step)
@@ -1231,7 +1316,6 @@ module ShardedHashTable refines ShardedStateMachine {
         }
       }
     }
-
 
     // forall j: Index
     //   ensures true
