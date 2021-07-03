@@ -454,18 +454,21 @@ predicate IvyEvictInner(s: Variables, s': Variables, r:Reference)
   predicate IvyFreeze(s:Variables, s':Variables)
   {
   && s.Ready? && s'.Ready?
-  && (forall I :: s.outstandingIndirectionTableWrite != Some(I))
+  && (forall I:: s.outstandingIndirectionTableWrite != Some(I))
   && s'.frozenIndirectionTable.Some?
   && (forall ref :: forall loc : Location ::
-    (ref in s'.frozenIndirectionTable.value.locs &&
-     s'.frozenIndirectionTable.value.locs[ref] == loc)
-     <==>
+     (ref in s'.frozenIndirectionTable.value.graph &&
+      ref in s'.frozenIndirectionTable.value.locs &&
+      s'.frozenIndirectionTable.value.locs[ref] == loc)
+      <==>
      (ref in s.ephemeralIndirectionTable.graph &&
+      ref in s.ephemeralIndirectionTable.locs &&
       s.ephemeralIndirectionTable.locs[ref] == loc))
-   && (forall ref :: forall loc : Location ::
+   && (forall ref ::
        ((ref in s'.frozenIndirectionTable.value.graph && !(ref in s'.frozenIndirectionTable.value.locs))
-   <==>
-   (ref in s.ephemeralIndirectionTable.graph && !(ref in s.ephemeralIndirectionTable.locs))))
+        <==>
+        (ref in s.ephemeralIndirectionTable.graph && !(ref in s.ephemeralIndirectionTable.locs))))
+   && s'.frozenIndirectionTable.Some?
   && (s'.frozenIndirectionTableLoc == None)
   }
 
@@ -473,12 +476,6 @@ predicate IvyEvictInner(s: Variables, s': Variables, r:Reference)
     requires Freeze(s,s',dop,vop)
     ensures IvyFreeze(s,s')
   {
-assert (forall ref :: forall loc : Location ::
-    (ref in s'.frozenIndirectionTable.value.locs &&
-     s'.frozenIndirectionTable.value.locs[ref] == loc)
-     <==>
-     (ref in s.ephemeralIndirectionTable.graph &&
-      s.ephemeralIndirectionTable.locs[ref] == loc));
   }
 
   predicate CleanUp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
