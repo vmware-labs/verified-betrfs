@@ -578,7 +578,7 @@ module PivotBetreeSpecRefinement {
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
   }
 
-  lemma {:timeLimitMultiplier 3} WFGenerateLookupIterFollowRefsAndEdges(start: MS.UI.RangeStart, key: Key,
+  lemma {:timeLimitMultiplier 4} WFGenerateLookupIterFollowRefsAndEdges(start: MS.UI.RangeStart, key: Key,
     end: MS.UI.RangeEnd, lookup: P.Lookup, lookup': P.Lookup, tt: TranslationTable, idx: int)
   requires WFGenerateLookupConditions(start, key, end, lookup, lookup', tt)
   requires P.ValidLayerIndex(lookup, idx) && idx < |lookup| - 1

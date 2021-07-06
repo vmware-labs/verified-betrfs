@@ -451,7 +451,7 @@ module BetreeInv {
     }
   }
 
-  lemma {:timeLimitMultiplier 2} RedirectNewPathReachableFromOldPath(s: Variables, s': Variables, redirect: Redirect, path: Path, ref: Reference) returns (path': Path)
+  lemma {:timeLimitMultiplier 4} RedirectNewPathReachableFromOldPath(s: Variables, s': Variables, redirect: Redirect, path: Path, ref: Reference) returns (path': Path)
     requires Inv(s)
     requires Redirect(s.bcv, s'.bcv, redirect)
     requires |path| > 2
@@ -854,7 +854,7 @@ module BetreeInv {
   //////// Redirect
   ////////
 
-  lemma RedirectUnmovedKeysSameLookup(s: Variables, s': Variables, start: Reference, redirect: Redirect, 
+  lemma {:timeLimitMultiplier 2} RedirectUnmovedKeysSameLookup(s: Variables, s': Variables, start: Reference, redirect: Redirect, 
     lookup: Lookup, parentLayer: int, key: Key, value: Value)
   returns (lookup': Lookup)
   requires Inv(s)
@@ -879,12 +879,33 @@ module BetreeInv {
 
     InterpretLookupAdditive3(lookup'[..parentLayer], [lookup'[parentLayer]], lookup'[parentLayer+1..]);
     assert lookup' == lookup'[..parentLayer] + [lookup'[parentLayer]] + lookup'[parentLayer+1..];
-          
+
     InterpretLookupAdditive3(lookup[..parentLayer], [lookup[parentLayer]], lookup[parentLayer+1..]);
     assert lookup == lookup[..parentLayer] + [lookup[parentLayer]] + lookup[parentLayer+1..];
           
     RedirectResultingGraph(s, s', redirect);
     assert IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start);
+  }
+
+  lemma RedirectedKeysSameInterp(lookup: Lookup, lookup': Lookup, i: nat, value: Value)
+    requires 0 <= i < |lookup|-1
+    requires |lookup| == |lookup'|
+    requires lookup[..i] == lookup'[..i]
+    requires lookup[i+2..] == lookup'[i+2..]
+
+    requires LookupVisitsWFNodes(lookup)
+    requires LookupVisitsWFNodes(lookup')
+    requires InterpretLookup(lookup[i..i+2]) == InterpretLookup(lookup'[i..i+2])
+
+    requires BufferDefinesValue(InterpretLookup(lookup), value)
+    ensures BufferDefinesValue(InterpretLookup(lookup'), value)
+  {
+    var parentkey := lookup[i].currentKey;
+    var middle := lookup[i..i+2];
+    var middle' := lookup'[i..i+2];
+    assert InterpretLookup(middle) == InterpretLookup(middle');
+    PropagateInterperetation(lookup, lookup', i, middle, middle', parentkey);
+    assert BufferDefinesValue(InterpretLookup(lookup'), value);
   }
 
   lemma {:timeLimitMultiplier 4} RedirectPreservesLookups(s: Variables, s': Variables, start: Reference, redirect: Redirect)
@@ -899,7 +920,8 @@ module BetreeInv {
     {
       if i :| 0 <= i < |lookup| && lookup[i].readOp.ref == redirect.parentref {
         var parentkey := lookup[i].currentKey;
-        if parentkey in redirect.keys && i < |lookup| - 1 { // parent not leaf for parentkey
+        if parentkey in redirect.keys && i < |lookup| - 1 {
+          var parentkey := lookup[i].currentKey;
           var new_childref := redirect.new_parent.children[parentkey].ref;
           var new_child := redirect.new_children[new_childref];
           var old_childref := redirect.old_parent.children[parentkey].ref;
@@ -907,15 +929,23 @@ module BetreeInv {
 
           RedirectOldChildInView(s, s', redirect, old_childref);
           assert LookupFollowsChildRefAtLayer(lookup, i);
-          assert lookup[i+1].readOp.ref == old_childref;
-          assert lookup[i+1].readOp.node == old_child;
 
-          var lookup' := lookup[i := Layer(G.ReadOp(redirect.parentref, redirect.new_parent), parentkey)]
-            [i+1 := Layer(G.ReadOp(new_childref, new_child), parentkey)];
+          var newparentlayer := Layer(G.ReadOp(redirect.parentref, redirect.new_parent), parentkey);
+          var newchildlayer := Layer(G.ReadOp(new_childref, new_child), parentkey);
+
+          var lookup' := lookup[..i] + [newparentlayer] + [newchildlayer] + lookup[i+2..];
+          assert lookup'[i] == newparentlayer;
+          assert lookup'[i+1] == newchildlayer;
+
+          forall j | 0 <= j < |lookup'|
+          ensures IMapsTo(s'.bcv.view, lookup'[j].readOp.ref, lookup'[j].readOp.node)
+          {
+            RedirectResultingGraph(s, s', redirect);
+          }
 
           forall j | 0 <= j < |lookup'|-1
-            ensures LookupFollowsChildRefAtLayer(lookup', j)
-            ensures LookupFollowsEdgeAtLayer(lookup', j)
+          ensures LookupFollowsChildRefAtLayer(lookup', j)
+          ensures LookupFollowsEdgeAtLayer(lookup', j)
           {
             if j == i {
             } else if j == i + 1 {
@@ -929,19 +959,19 @@ module BetreeInv {
             }
           }
 
-          var middle :=  [lookup[i]]  + [lookup[i+1]];
-          var middle' := [lookup'[i]] + [lookup'[i+1]];
+          var middle := lookup[i..i+2];
+          var middle' := lookup'[i..i+2];
 
-          assert lookup[i].readOp.node.buffer == lookup'[i].readOp.node.buffer;
-          assert LookupFollowsChildRefAtLayer(lookup, i);
-          assert LookupFollowsEdgeAtLayer(lookup, i);
-          assert InterpretLookup(middle') == InterpretLookup(middle);
+          assert InterpretLookup(middle) == InterpretLookup(middle') by {
+            assert lookup[i].readOp.node.buffer == lookup'[i].readOp.node.buffer;
+            assert LookupFollowsChildRefAtLayer(lookup, i);
+            assert LookupFollowsEdgeAtLayer(lookup, i);
+            assert LookupFollowsChildRefAtLayer(lookup', i);
+            assert LookupFollowsEdgeAtLayer(lookup', i);
+          }
 
-          PropagateInterperetation(lookup, lookup', i, middle, middle', parentkey);
-          assert lookup' == lookup'[..i] + middle' + lookup'[i+2..];
-          assert middle == lookup[i..i+2];
-          assert lookup == lookup[..i] + middle + lookup[i+2..];
-          RedirectResultingGraph(s, s', redirect);
+          RedirectedKeysSameInterp(lookup, lookup', i, value);
+          assert BufferDefinesValue(InterpretLookup(lookup'), value);
           assert IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start);
         } else {
           var _ := RedirectUnmovedKeysSameLookup(s, s', start, redirect, lookup, i, key, value);
