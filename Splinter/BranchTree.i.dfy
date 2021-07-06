@@ -217,7 +217,6 @@ module BranchTreeMod {
       DefaultMessage()
   }
 
-  // TODO: add cache and change the interpretation to deal with messages
   function Interpretation(root : CU, cache: CacheIfc.Variables) : imap<Key, Message>
   {
     imap k | true :: InterpKey(root, cache, k)
@@ -282,13 +281,11 @@ module BranchTreeMod {
     }
   }
 
-  datatype CompactReceipt = CompactReceipt()
   // at the we check that the tree is done
   predicate IsCompaction(stack : Stack, newroot : CU, cache: CacheIfc.Variables)
   {
       stack.I() == Interpretation(newroot, cache)
   }
-
 
   function Alloc() : set<CU>
   {

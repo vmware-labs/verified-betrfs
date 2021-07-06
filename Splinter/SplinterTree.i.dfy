@@ -204,6 +204,16 @@ module SplinterTreeMachineMod {
     root : Option<CU> // The CU to the root of the trunk tree
   )
   {
+      predicate WF()
+      {
+        true // TODO
+      }
+
+      predicate Valid(cache : CacheIfc.Variables)
+      {
+        true // TODO
+      }
+
       function BetreeEndsLSNExclusive() : LSN {
         nextSeq
       }
@@ -309,11 +319,16 @@ module SplinterTreeMachineMod {
 
   }
 
-  datatype TrunkPath = TrunkPath(k: Key, membufferMsgs: seq<Message>, steps: seq<TrunkStep>)
+  datatype TrunkPath = TrunkPath(k: Key,
+                                 membufferMsgs: seq<Message>,
+                                 steps: seq<TrunkStep>)
   {
-    predicate {:opaque} ValidPrefix(cache: CacheIfc.Variables) {
+    predicate {:opaque} ValidPrefix() {
+      // TODO: show that the child is also right pivot  // Find from Rob's pivot library
       && forall i :: (0 < i < |steps|) && steps[i].na.node in steps[i-1].na.node.children
     }
+
+
 
     function msgSeqRecurse(count : nat) : (out : seq<Message>)
     {
@@ -330,12 +345,15 @@ module SplinterTreeMachineMod {
       msgSeqRecurse(|steps|)
     }
 
-    predicate Valid(cache: CacheIfc.Variables) {
+    // TODO: reorg into WF
+
+    predicate Valid(v : Variables, cache: CacheIfc.Variables) {
       && forall i :: (0 <= i < |steps|) && steps[i].na.ValidCU(cache)
       && steps[0].na.id == 0 // check for root
       && 0 < |MsgSeq()|
       && Last(MsgSeq()).Define?
-      && ValidPrefix(cache)
+      && ValidPrefix()
+      && membufferMsgs == MemtableLookup(v, k)
     }
 
     // Return the sequence of CUs (aka nodes) this path touches
@@ -368,27 +386,29 @@ module SplinterTreeMachineMod {
 
   // QUESTION: Not everything is compacted all at once, should we have this Recipt
   // also have what branches we're compacting
-  datatype CompactReceipt = CompactReceipt(path: TrunkPath, newna: NodeAssignment)
+  datatype CompactReceipt = CompactReceipt(nodeIdx: nat, path: TrunkPath, newna: NodeAssignment)
   {
     predicate WF() {
       && 0 < |path.steps|
+      && 0 <= nodeIdx < |path.steps|
     }
 
-    //
     function Oldna() : NodeAssignment
       requires WF()
     {
-      Last(path.steps).na
+       Last(path.steps).na
     }
 
-    predicate Valid(cache: CacheIfc.Variables)
+    predicate Valid(v : Variables, cache: CacheIfc.Variables)
     {
       && WF()
-      && path.Valid(cache)
+      && path.Valid(v, cache)
       && Oldna().id == newna.id
+      && var oldna := path.steps[nodeIdx].na;
+      && IsCompaction(oldna, newna)
     }
-  }
 
+  }
 
   datatype Skolem =
     | QueryStep(trunkPath: TrunkPath)
@@ -408,30 +428,19 @@ module SplinterTreeMachineMod {
       []
   }
 
-  predicate checkSpinterTree(v: Variables, cache: CacheIfc.Variables, key: Key, value: Value, trunkPath : TrunkPath)
-  {
-    && trunkPath.Valid(cache)
-    && trunkPath.k == key
-    && EvaluateMessage(trunkPath.Decode()) == value
-  }
-
   // A valid lookup is something that produces a non DefaultMessage from the membuffer or has a valid trunk path
   // in the splinter tree
-  predicate IsValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, value: Value, trunkPath: TrunkPath)
+  predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, value: Value, trunkPath : TrunkPath)
   {
-    && checkSpinterTree(v, cache, key, value, trunkPath)
-    && trunkPath.membufferMsgs == MemtableLookup(v, key)
-  }
-
-  predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, trunkPath: TrunkPath)
-  {
-    exists value :: IsValidLookup(v, cache, key, value, trunkPath)
+    && trunkPath.Valid(v, cache)
+    && trunkPath.k == key
+    && EvaluateMessage(trunkPath.Decode()) == value
   }
 
   predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
   {
     && sk.QueryStep?
-    && IsValidLookup(v, cache, key, value, sk.trunkPath)
+    && ValidLookup(v, cache, key, value, sk.trunkPath)
     // No change to the state
     && v == v'
   }
@@ -449,15 +458,17 @@ module SplinterTreeMachineMod {
 
   datatype FlushRec = FlushRec(
     trunkPath: TrunkPath,
+    oldParentIdx: nat,
     newParent: NodeAssignment,
     newChild: NodeAssignment)
   {
     predicate WF() {
       2<=|trunkPath.steps|
     }
-    predicate Valid(cache: CacheIfc.Variables) {
+    predicate Valid(v: Variables, cache: CacheIfc.Variables) {
       && WF()
-      && trunkPath.ValidPrefix(cache)
+      && trunkPath.Valid(v, cache)
+      && trunkPath.ValidPrefix()
     }
     function ParentStep() : TrunkStep
       requires WF()
@@ -473,7 +484,27 @@ module SplinterTreeMachineMod {
       { ChildStep().na.node }
   }
 
+  predicate IsCompaction(oldna : NodeAssignment, newna : NodeAssignment)
+  {
+   true
+   // TODO: Need to finish the relation between BranchTreeMod and BranchTreeStackMod before then
+  }
+
+  predicate Compaction(v: Variables, v': Variables, cache: CacheIfc.Variables, sk: Skolem)
+    requires v.WF()
+    requires v'.WF()
+  {
+    && v.Valid(cache)
+    && v'.Valid(cache)
+    && sk.CompactBranchStep?
+    && sk.receipt.Valid(v, cache)
+    && var nodeIdx := sk.receipt.nodeIdx;
+    && var oldna := sk.receipt.path.steps[nodeIdx].na;
+    && IsCompaction(oldna, sk.receipt.newna)
+  }
+
   // TODO: We need make sure this flush op is flushing entire prefix of local trunk versions
+  // We could make this a separate Flush receipt ??
   predicate FlushesNodes(oldParent: TrunkNode, oldChild: TrunkNode, newParent: TrunkNode, newChild: TrunkNode)
     requires oldParent.WF()
     requires newParent.WF()
@@ -508,7 +539,7 @@ module SplinterTreeMachineMod {
   {
     && sk.FlushStep?
     && var flush := sk.flush;
-    && flush.Valid(cache)
+    && flush.Valid(v, cache)
     // TODO keep the parent's trunkId, but move the child, so that other nodes' outbound links
     // to existing child don't change.
     && FlushesNodes(flush.ParentNode(), flush.ChildNode(), flush.newParent.node, flush.newChild.node)
@@ -565,7 +596,7 @@ module SplinterTreeMachineMod {
   {
     && sk.CompactBranchStep?
     && var r := sk.receipt;
-    && r.Valid(cache)
+    && r.Valid(v, cache)
     && CUIsAllocatable(r.newna.cu)
     && EquivalentNodes(r.Oldna().node, r.newna.node)  // Buffer replacements
       // TODO need to establish replacement B+tree is correct

@@ -33,14 +33,20 @@ module SplinterTreeInterpMod {
     lookup.Decode()
   }
 
+  function IMLookup(v: Variables, cache: CacheIfc.Variables, key: Key) : Lookup
+    requires (exists lookup, value :: ValidLookup(v, cache, key, value, lookup))
+  {
+     var lookup, value :| ValidLookup(v, cache, key, value, lookup);
+     lookup
+  }
+
   // Produce a receipt for this key
   function IMKey(v: Variables, cache: CacheIfc.Variables, key: Key) : (m: Message)
     ensures m.Define?
   {
-    if exists lookup :: ValidLookup(v, cache, key, lookup) // Always true by invariant
+    if exists lookup, value :: ValidLookup(v, cache, key, value , lookup) // Always true by invariant
     then
-      var lookup :| ValidLookup(v, cache, key, lookup);
-      LookupToMessage(lookup)
+      LookupToMessage(IMLookup(v, cache, key))
     else
       DefaultMessage() // this is not a absence of a key, this case cannot happen by invariant
   }
@@ -74,9 +80,9 @@ module SplinterTreeInterpMod {
    }
 
   function IReadsKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : set<CU> {
-    if exists lookup :: ValidLookup(v, cache, key, lookup)
+    if exists lookup, value :: ValidLookup(v, cache, key, value, lookup)
     then
-      var lookup :| ValidLookup(v, cache, key, lookup);
+      var lookup, value :| ValidLookup(v, cache, key, value, lookup);
       set i | i in lookup.CUs()
       //set i | 0<=i<|lookup| :: var lr:LookupRecord := lookup[i]; lr.cu
     else
@@ -102,6 +108,16 @@ module SplinterTreeInterpMod {
     []
   }
 
+  // May have to make this an invariant later.
+  lemma NonEquivocate(v: Variables, cache: CacheIfc.Variables, lookup0: Lookup, lookup1 : Lookup)
+    requires lookup0.k == lookup1.k
+    requires lookup0.Valid(v, cache)
+    requires lookup1.Valid(v, cache)
+    ensures lookup0 == lookup1
+  {
+
+  }
+
   // TODO; Might need to change this to table about both IM and IMStable
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock)
     requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
@@ -115,42 +131,35 @@ module SplinterTreeInterpMod {
     forall key | AnyKey(key)
       ensures IMKey(v, cache0, key) == IMKey(v, cache1, key)
     {
-      var le0 := exists lookup0 :: ValidLookup(v, cache0, key, lookup0);
-      var le1 := exists lookup1 :: ValidLookup(v, cache1, key, lookup1);
-      if le0 {
-        var lookup0 :| ValidLookup(v, cache0, key, lookup0);
-        assume ValidLookup(v, cache1, key, lookup0);
-      }
-      if le1 {
-        var lookup1 :| ValidLookup(v, cache1, key, lookup1);
-        assume ValidLookup(v, cache0, key, lookup1);
-      }
-      assert le0 == le1;
-      if (le0) {
-        // This definitely won't work.
-        var lookup0 :| ValidLookup(v, cache0, key, lookup0);
-        var lookup1 :| ValidLookup(v, cache1, key, lookup1);
-        calc {
+      // All keys already have lookups This becomes an invariant later so no need to prove
+      // var le0 := exists lookup0 :: ValidLookup(v, cache0, key, lookup0);
+      // var le1 := exists lookup1 :: ValidLookup(v, cache1, key, lookup1);
+      // if le0 {
+      //   var lookup0 :| ValidLookup(v, cache0, key, lookup0);
+      //   assume ValidLookup(v, cache1, key, lookup0);
+      // }
+      // if le1 {
+      //   var lookup1 :| ValidLookup(v, cache1, key, lookup1);
+      //   assume ValidLookup(v, cache0, key, lookup1);
+      // }
+      // assert le0 == le1;
+
+      var lookup0 := IMLookup(v, cache0, key);
+      var lookup1 := IMLookup(v, cache1, key);
+      calc {
           IMKey(v, cache0, key);
-            // Lol TODOs???
-          // Nonequivivocation
-            { assume false; } // var|
+           // Lol TODOs??? - For every key Intep stays the same
+          // Nonequivocation
+            {
+                //NonEquivocate(v, cache0, key, lookup0, lookup1));
+            } // var|
           LookupToMessage(lookup0);
-            { assume false; } // framing
+            { assume false; } // framing IMKey()
           LookupToMessage(lookup1);
-          // Nonequivivocation
-            { assume false; } // var|
           IMKey(v, cache1, key);
 
-        }
-      } else {
-        calc {
-          IMKey(v, cache0, key);
-          DefaultMessage();
-          IMKey(v, cache1, key);
-        }
+       }
       }
-    }
   }
 
   lemma PutEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, key: Key, value: Value, sk: Skolem)
@@ -167,8 +176,8 @@ module SplinterTreeInterpMod {
     forall key | AnyKey(key)
       ensures IMKey(v', cache', key) == IMKey(v, cache, key)
     {
-      var le0 := exists lookup0 :: ValidLookup(v, cache, key, lookup0);
-      var le1 := exists lookup1 :: ValidLookup(v', cache', key, lookup1);
+      var le0 := exists lookup0, value0 :: ValidLookup(v, cache, key, value0, lookup0);
+      var le1 := exists lookup1, value1 :: ValidLookup(v', cache', key, value1, lookup1);
       assert le0 == le1;
       // if le0 {
       //
