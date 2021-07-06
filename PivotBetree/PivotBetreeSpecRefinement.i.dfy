@@ -1331,7 +1331,7 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma MergeRefinesWFRedirect(f: P.NodeFusion)
+  lemma {:timeLimitMultiplier 2} MergeRefinesWFRedirect(f: P.NodeFusion)
   requires P.ValidMerge(f)
   requires P.InvNode(f.split_parent)
   requires P.InvNode(f.left_child)
