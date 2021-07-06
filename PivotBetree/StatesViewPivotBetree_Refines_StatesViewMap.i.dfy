@@ -82,6 +82,7 @@ module StatesViewPivotBetree_Refines_StatesViewMap {
         assert B.NextStep(I(s), I(s'), vop, B.FreezeStep);
       }
       case DiskChangeStep => {
+        assert B.DiskChange(I(s), I(s'), vop); // observe
         assert B.NextStep(I(s), I(s'), vop, B.DiskChangeStep);
       }
       case ProvideFrozenLocStep => {
