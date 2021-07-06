@@ -415,6 +415,21 @@ module ShardedHashTable refines ShardedStateMachine {
       var last_index := |table| - 1;
       [table[last_index]] + table[..end] + table[end+1..start] + [inserted] + table[start..last_index]
   }
+  
+  lemma RightShiftIndex(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
+    requires IsTableRightShift(table, table', inserted, start, end)
+    ensures Contains(BuildRange(NextIndex(start), NextIndex(end)), i) ==> table'[i] == table[PrevIndex(i)];
+    ensures i == start ==> table'[i] == inserted;
+    ensures Contains(BuildRange(NextIndex(end), start), i) ==> table'[i] == table[i];
+  {
+    if Contains(BuildRange(NextIndex(start), NextIndex(end)), i) {
+      assert table'[i] == table[PrevIndex(i)];
+    } else if i == start {
+      assert table'[i] == inserted;
+    } else {
+      assert table'[i] == table[i];
+    }
+  }
 
   predicate InsertEnable(v: Variables, step: Step)
   {
@@ -744,8 +759,8 @@ module ShardedHashTable refines ShardedStateMachine {
     table[i].value.Full? ==>
     (
       var key := table[i].value.key;
-      var ih := hash(key);
-      forall j: Index :: Contains(BuildRange(ih, i), j) ==> 
+      var h_i := hash(key);
+      forall j: Index :: Contains(BuildRange(h_i, i), j) ==> 
       (
         && table[j].value.Full?
         && SlotPSL(table, j) >= PSL(key, j)
@@ -1089,6 +1104,45 @@ module ShardedHashTable refines ShardedStateMachine {
     assert false;
   }
 
+  lemma InsertSegementOrdering(s: Variables, s': Variables, step: Step, i: Index)
+    requires Inv(s)
+    requires step.InsertStep? && NextStep(s, s', step)
+    requires s'.table[i].value.Full?
+    requires hash(s'.table[i].value.key) != hash(step.kv.0)
+    requires hash(step.kv.0) != i
+    requires step.start != step.end
+    requires var prev_i := PrevIndex(i);
+      && Contains(Partial(step.start, step.end), prev_i)
+      && s.table[prev_i] == s'.table[i]
+    {
+      var InsertStep(_, (key, _), start, end) := step;
+      var table, table' := s.table, s'.table;
+
+      var prev_i := PrevIndex(i);
+      var h_i := hash(table[prev_i].value.key);
+      var h_k := hash(step.kv.0);
+
+      // forall j: Index
+      //   // ensures Contains(BuildRange(NextIndex(start), end)
+      // {
+
+      // }
+
+      // if Contains(BuildRange(NextIndex(start), end), h_i) {
+      //   forall j: Index | Contains(BuildRange(h_i, i), j)
+      //   // ensures table'[j].value.Full?
+      //     ensures true
+      //   {
+      //     assert table[PrevIndex(j)] == table'[j];
+
+      //   // if Contains(BuildRange(h_i, start), j) {
+      //   // }
+
+
+      //   }
+
+    }
+
   lemma InsertPreservesValidPSL(s: Variables, s': Variables, step: Step, i: Index)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
@@ -1113,6 +1167,13 @@ module ShardedHashTable refines ShardedStateMachine {
     }
 
     var h := hash(table'[i].value.key);
+
+    // simple case where hash is at i
+    if h == i {
+      assert ValidPSL(table', i);
+      return;
+    }
+
     var h_range := GetHashSegment(table, h);
 
     // the range is none-empty, otherwise it should be newly inserted
@@ -1128,12 +1189,7 @@ module ShardedHashTable refines ShardedStateMachine {
       
       if Contains(BuildRange(i, start), h) {
         assert Contains(BuildRange(start, i), end);
-        assert h == i || Contains(BuildRange(h, i), end);
-
-        if h == i {
-          assert ValidPSL(table', i);
-          return;
-        }
+        assert Contains(BuildRange(h, i), end);
         assert false;
       }
 
@@ -1143,7 +1199,11 @@ module ShardedHashTable refines ShardedStateMachine {
     }
 
     // slot i is shifted
-    assert table[PrevIndex(i)] == table'[i];
+    // var prev_i := PrevIndex(i); 
+    // assert table[prev_i] == table'[i];
+    // assert Contains(Partial(start, end), prev_i);
+
+    InsertSegementOrdering(s, s', step, i);
   }
 
   // lemma InsertStepPreservesInv(s: Variables, s': Variables, step: Step)
