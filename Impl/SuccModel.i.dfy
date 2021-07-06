@@ -371,11 +371,10 @@ module SuccModel {
         && (pr.upTo.Some? ==> lt(startKey, pr.upTo.value))
       ) */
   {
-    reveal_getPath();
     if ref in s.cache {
       var node := s.cache[ref];
       if BoundedKey(node.pivotTable, key) {
-        reveal_getPathInternal();
+        // reveal_getPathInternal();
 
         var r := Route(node.pivotTable, key);
         var bucket := node.buckets[r];
@@ -459,6 +458,7 @@ module SuccModel {
         assert noop(s, s);
       }
     }
+    reveal_getPath();
   }
 
 /*
