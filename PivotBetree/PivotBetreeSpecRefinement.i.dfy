@@ -566,81 +566,103 @@ module PivotBetreeSpecRefinement {
     && P.LookupFollowsChildEdges(lookup)
   }
 
-  // TODO: may need to break this down or something lol
-  lemma {:timeLimitMultiplier 2} WFGenerateLookupIter(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd,
-    lookup: P.Lookup, lookup': P.Lookup, tt: TranslationTable, idx: int)
-  requires MS.InRange(start, key, end)
-  requires P.ValidLayerIndex(lookup, idx)
-  requires
+  predicate WFGenerateLookupConditions(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd, 
+    lookup: P.Lookup, lookup': P.Lookup, tt: TranslationTable)
+  {
     var startKey := if start.NegativeInf? then [] else start.key;
+    && MS.InRange(start, key, end)
     && P.WFLookupForKey(lookup, startKey)
-  requires tt == P.LookupTranslationTable(lookup, 0, None)
-  requires lookup' == GenerateLookup(lookup, key, tt, 0)
-  requires
-    var lookupUpperBound := P.LookupUpperBound(lookup, tt);
+    && tt == P.LookupTranslationTable(lookup, 0, None)
+    && lookup' == GenerateLookup(lookup, key, tt, 0)
+    && var lookupUpperBound := P.LookupUpperBound(lookup, tt);
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
+  }
+
+  lemma {:timeLimitMultiplier 3} WFGenerateLookupIterFollowRefsAndEdges(start: MS.UI.RangeStart, key: Key,
+    end: MS.UI.RangeEnd, lookup: P.Lookup, lookup': P.Lookup, tt: TranslationTable, idx: int)
+  requires WFGenerateLookupConditions(start, key, end, lookup, lookup', tt)
+  requires P.ValidLayerIndex(lookup, idx) && idx < |lookup| - 1
+  requires var pset := if idx == 0 then None else tt[idx-1];
+    && tt[idx..] == P.LookupTranslationTable(lookup, idx, pset)
+  requires P.LookupVisitsWFNodes(lookup'[idx..])
+  requires P.LookupBoundedKey(lookup'[idx..])
+  requires LookupConditions(lookup'[idx+1..])
+  ensures P.LookupFollowsChildRefs(lookup'[idx..])
+  ensures P.LookupFollowsChildEdges(lookup'[idx..])
+  {
+    var pivots := lookup'[idx].readOp.node.pivotTable;
+    var edges := lookup'[idx].readOp.node.edgeTable;
+    InRangeImpliesSameRoute(start, key, end, lookup, tt, lookup', idx);
+    InRangeImpliesSameRoute(start, key, end, lookup, tt, lookup', idx+1);
+
+    assert P.LookupFollowsChildRefs(lookup'[idx+1..]); // observe
+
+    forall i | P.ValidLayerIndex(lookup'[idx..], i) && i < |lookup'[idx..]| - 1 
+    ensures P.LookupFollowsChildRefAtLayer(lookup'[idx..], i)
+    ensures P.LookupFollowsChildEdgeAtLayer(lookup'[idx..], i)
+    {
+      assert lookup'[idx..][i].readOp == lookup[idx..][i].readOp;
+      if i == 0 {
+        assert lookup'[idx..][i] == lookup'[idx];
+        assert P.LookupFollowsChildRefAtLayer(lookup', idx);
+        assert P.LookupFollowsChildRefAtLayer(lookup, idx);
+        assert P.LookupFollowsChildRefAtLayer(lookup'[idx..], i);
+
+        var prefix1 := if idx == 0 then None else tt[idx-1];
+        var prefix2 := Translate(pivots, edges, lookup[idx].currentKey);
+        var prefix3 := Translate(pivots, edges, lookup'[idx].currentKey);
+        assert prefix2 == prefix3;
+
+        assert tt[idx] == ComposePrefixSet(prefix1, prefix2) by {
+          P.reveal_LookupTranslationTable();
+        }
+        assert key == ApplyPrefixSet(prefix1, lookup'[idx].currentKey) by {
+          reveal_IsPrefix();
+        }
+        ComposePrefixSetCorrect(prefix1, prefix2, tt[idx], key, 
+          lookup'[idx].currentKey, lookup'[idx+1].currentKey);
+        assert P.LookupFollowsChildEdgeAtLayer(lookup', idx);
+      } else {
+        assert lookup'[idx..][i] == lookup'[idx+1..][i-1];
+        assert P.LookupFollowsChildRefAtLayer(lookup'[idx+1..], i-1);
+        assert P.LookupFollowsChildRefAtLayer(lookup'[idx..], i); 
+        assert P.LookupFollowsChildEdgeAtLayer(lookup'[idx+1..], i-1);
+        assert P.LookupFollowsChildEdgeAtLayer(lookup'[idx..], i);
+      }
+    }
+  }
+
+  lemma WFGenerateLookupIter(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd,
+    lookup: P.Lookup, lookup': P.Lookup, tt: TranslationTable, idx: int)
+  requires WFGenerateLookupConditions(start, key, end, lookup, lookup', tt)
+  requires P.ValidLayerIndex(lookup, idx)
   requires var pset := if idx == 0 then None else tt[idx-1];
     && tt[idx..] == P.LookupTranslationTable(lookup, idx, pset)
   ensures LookupConditions(lookup'[idx..])
   decreases |lookup'| - idx 
   {
-    var pivots := lookup'[idx].readOp.node.pivotTable;
-    var edges := lookup'[idx].readOp.node.edgeTable;
     InRangeImpliesSameRoute(start, key, end, lookup, tt, lookup', idx);
 
     if idx < |lookup'| - 1 {
-      assume false;
-      // WFGenerateLookupIter(start, key, end, lookup, lookup', tt, idx + 1); 
-      // assert P.LookupFollowsChildRefs(lookup'[idx+1..]);
-
-      // forall i | P.ValidLayerIndex(lookup'[idx..], i) && i < |lookup'[idx..]| - 1 
-      // ensures P.LookupFollowsChildRefAtLayer(lookup'[idx..], i)
-      // ensures P.LookupFollowsChildEdgeAtLayer(lookup'[idx..], i)
-      // {
-      //   if i == 0 {
-      //     assert lookup'[idx..][i] == lookup'[idx];
-      //     assert P.LookupFollowsChildRefAtLayer(lookup', idx);
-      //     assert P.LookupFollowsChildRefAtLayer(lookup, idx);
-      //     assert P.LookupFollowsChildRefAtLayer(lookup'[idx..], i);
-
-      //     var prefix1 := if idx == 0 then None else tt[idx-1];
-      //     var prefix2 := Translate(pivots, edges, lookup[idx].currentKey);
-      //     var prefix3 := Translate(pivots, edges, lookup'[idx].currentKey);
-      //     assert prefix2 == prefix3;
-
-      //     InRangeImpliesSameRoute(start, key, end, lookup, tt, lookup', idx+1);
-      //     assert tt[idx] == ComposePrefixSet(prefix1, prefix2) by {
-      //       P.reveal_LookupTranslationTable();
-      //     }
-      //     assert key == ApplyPrefixSet(prefix1, lookup'[idx].currentKey) by {
-      //       reveal_IsPrefix();
-      //     }
-      //     ComposePrefixSetCorrect(prefix1, prefix2, tt[idx], key, 
-      //         lookup'[idx].currentKey, lookup'[idx+1].currentKey);
-      //     assert P.LookupFollowsChildEdgeAtLayer(lookup', idx);
-      //   } else {
-      //     assert lookup'[idx..][i] == lookup'[idx+1..][i-1];
-      //     assert P.LookupFollowsChildRefAtLayer(lookup'[idx+1..], i-1);
-      //     assert P.LookupFollowsChildRefAtLayer(lookup'[idx..], i);
-      //     assert P.LookupFollowsChildEdgeAtLayer(lookup'[idx+1..], i-1);
-      //     assert P.LookupFollowsChildEdgeAtLayer(lookup'[idx..], i);
-      //   }
-      // }
+      WFGenerateLookupIter(start, key, end, lookup, lookup', tt, idx + 1);
+      forall i | idx <= i < |lookup'|
+      ensures P.WFNode(lookup'[i].readOp.node)
+      ensures BoundedKey(lookup'[i].readOp.node.pivotTable, lookup'[i].currentKey)
+      {
+        assert lookup'[i].readOp.node == lookup[i].readOp.node;
+        assert BoundedKey(lookup'[i].readOp.node.pivotTable, lookup'[i].currentKey) by {
+          InRangeImpliesSameRoute(start, key, end, lookup, tt, lookup', i);
+        }
+      }
+      WFGenerateLookupIterFollowRefsAndEdges(start, key, end, lookup, lookup', tt, idx);
+      assert LookupConditions(lookup'[idx..]);
     }
   }
 
-  lemma {:timeLimitMultiplier 4} GenerateLookupWellMarshalled(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd,
+  lemma GenerateLookupWellMarshalled(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd,
     lookup: P.Lookup, lookup': P.Lookup, tt: TranslationTable, idx: int)
-  requires MS.InRange(start, key, end)
+  requires WFGenerateLookupConditions(start, key, end, lookup, lookup', tt)
   requires P.ValidLayerIndex(lookup, idx)
-  requires P.LookupVisitsWFNodes(lookup)
-  requires P.LookupBoundedKey(lookup)
-  requires lookup[0].currentKey == if start.NegativeInf? then [] else start.key
-  requires P.ValidTranslationTable(lookup, tt, 0)
-  requires lookup' == GenerateLookup(lookup, key, tt, 0)
-  requires
-    var lookupUpperBound := P.LookupUpperBound(lookup, tt);
-    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
   requires P.LookupBoundedKey(lookup')
   ensures P.LookupVisitsWellMarshalledBuckets(lookup) ==> 
       P.LookupVisitsWellMarshalledBuckets(lookup'[idx..])
@@ -654,15 +676,7 @@ module PivotBetreeSpecRefinement {
 
   lemma WFGenerateLookup(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd,
     lookup: P.Lookup, lookup': P.Lookup, tt: TranslationTable)
-  requires MS.InRange(start, key, end)
-  requires
-    var startKey := if start.NegativeInf? then [] else start.key;
-    && P.WFLookupForKey(lookup, startKey)
-  requires tt == P.LookupTranslationTable(lookup, 0, None)
-  requires lookup' == GenerateLookup(lookup, key, tt, 0)
-  requires
-    var lookupUpperBound := P.LookupUpperBound(lookup, tt);
-    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
+  requires WFGenerateLookupConditions(start, key, end, lookup, lookup', tt)
   ensures P.WFLookupForKey(lookup', key)
   ensures P.LookupVisitsWellMarshalledBuckets(lookup) ==> 
       P.LookupVisitsWellMarshalledBuckets(lookup')
@@ -1718,7 +1732,7 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma {:timeLimitMultiplier 2} RestrictAndTranslateNodePreservesChildren(node: PNode, node': PNode, from: Key, to: Key, key: Key, key': Key)
+  lemma {:timeLimitMultiplier 4} RestrictAndTranslateNodePreservesChildren(node: PNode, node': PNode, from: Key, to: Key, key: Key, key': Key)
   requires P.InvNode(node)
   requires ContainsAllKeys(node.pivotTable)
   requires node.children.Some?
@@ -2091,7 +2105,7 @@ module PivotBetreeSpecRefinement {
   // The meaty lemma: If we mutate the nodes of a pivot-y cache according to a
   // (generic-DSL) BetreeStep, under the INode interpretation, the same
   // mutation happens to the imap-y cache.
-  lemma {:fuel IOps,3} {:timeLimitMultiplier 4} RefinesOps(betreeStep: P.BetreeStep)
+  lemma {:fuel IOps,3} {:timeLimitMultiplier 6} RefinesOps(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
   requires !betreeStep.BetreeRepivot?
   requires ReadOpsBucketsWellMarshalled(P.BetreeStepReads(betreeStep))
