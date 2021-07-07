@@ -669,7 +669,7 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     // the segement can be Nothing or Partial
     && !range.Everything?
-    // if the segment is Partial, the hash cannot be in the middle 
+    // // if the segment is Partial, the hash cannot be in the middle 
     // && (range.Partial? ==>
     //   !Contains(BuildRange(NextIndex(range.start), range.end), hash))
     // all the keys in the segment share the hash
@@ -815,20 +815,6 @@ module ShardedHashTable refines ShardedStateMachine {
     assert exists e: Index :: table[e].value.Empty?;
     e :| table[e].value.Empty?;
   }
-
-  // lemma ValidHashSegmentImpliesNotEverything(table: FixedTable, h: Index)
-  //   requires Inv(s)
-  //   requires Complete(table)
-  //   requires ValidPSL(table, PrevIndex(h))
-  //   requires table[PrevIndex(h)].value.Full?
-  //   requires hash(table[PrevIndex(h)].value.key) == h
-  //   ensures false
-  // {
-  //   assume exists e: Index :: table[e].value.Empty?;
-  //   var e : Index :| table[e].value.Empty?;
-  //   assert Contains(BuildRange(h, PrevIndex(h)), e);
-  //   assert false;
-  // }
 
 //////////////////////////////////////////////////////////////////////////////
 // Proof that Init && Next maintains Inv
@@ -988,7 +974,13 @@ module ShardedHashTable refines ShardedStateMachine {
   lemma InsertPreservesKeySegment(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
-    ensures ExistsHashSegment(s'.table, hash(step.kv.0));
+    ensures var h := hash(step.kv.0);
+      && ExistsHashSegment(s'.table, h)
+      && var h_range := GetHashSegment(s.table, h);
+      && (h_range.Partial? ==> (
+          && h_range.end == step.start
+          && Contains(BuildRange(h, step.start), h_range.start))
+      )
   {
     var InsertStep(_, (key, _), start, end) := step;
     var table, table' := s.table, s'.table;
@@ -1173,7 +1165,11 @@ module ShardedHashTable refines ShardedStateMachine {
     var h_i := hash(key_i);
     var prev_i := PrevIndex(i);
 
-    assume h_i != hash(key);
+    if h_i == hash(key) {
+      InsertPreservesKeySegment(s, s', step);
+      assert false;
+      return;
+    }
 
     assert table'[i] == table[prev_i];
     assert ValidPSL(table, prev_i);
@@ -1204,7 +1200,70 @@ module ShardedHashTable refines ShardedStateMachine {
     assert ValidPSL(table', i);
   }
 
+  lemma InsertPreservesKeyUnique(s: Variables, s': Variables, step: Step)
+    requires Inv(s)
+    requires step.InsertStep? && NextStep(s, s', step)
+    ensures KeysUnique(s'.table)
+  {
+    var InsertStep(ticket, (key, value), start, end) := step;
+    var table, table' := s.table, s'.table;
 
+    var range := BuildRange(start, end);
+    if !RangeFullKeyNotFound(table, range, key) {
+      var i: Index :|
+        && Contains(range, i)
+        && !SlotFullKeyNotFound(table[i], i, key);
+      var s_key := table[start].value.key;
+
+      var psl_at_s := PSL(s_key, start);
+      var vpsl_at_s := PSL(key, start);
+
+      assert psl_at_s >= vpsl_at_s by {
+        assert ValidPSL(table, i);
+      }
+      assert false;
+    }
+
+    if !KeysUnique(table') {
+      var i: Index, j: Index :| 
+        && table'[i].value.Full?
+        && table'[j].value.Full?
+        && i != j
+        && table'[i].value.key == table'[j].value.key;
+      assert i == start || j == start;
+      var index := if i == start then j else i;
+      assert ValidPSL(table, index);
+      assert false;
+    }
+  }
+
+  lemma InsertPreservesInv(s: Variables, s': Variables, step: Step)
+    requires Inv(s)
+    requires step.InsertStep? && NextStep(s, s', step)
+    ensures Inv(s')
+  {
+    InsertPreservesKeyUnique(s, s', step);
+
+    forall h: Index
+      ensures ExistsHashSegment(s'.table, h);
+    {
+      if h == hash(step.kv.0) {
+        InsertPreservesKeySegment(s, s', step);
+      } else {
+        InsertPreservesOtherSegments(s, s', step, h);
+      }
+    }
+
+    forall i: Index
+      ensures ValidPSL(s'.table, i)
+    {
+      if s'.table[i].value.Full? {
+        InsertPreservesValidPSL(s, s', step, i);
+      }
+    }
+
+    InsertStepPreservesTableQuantityInv(s, s', step);
+  }
 
 /*
   lemma OverwriteStepPreservesInv(s: Variables, s': Variables, step: Step)
@@ -1260,96 +1319,6 @@ module ShardedHashTable refines ShardedStateMachine {
     requires step.RemoveFoundStep? && NextStep(s, s', step)
     // ensures Inv(s')
   {
-    var RemoveFoundStep(ticket, start, end) := step;
-    var key := ticket.input.key;
-    var table, table' := s.table, s'.table;
-
-    assert KeysUnique(table');
-
-    assert table'[end].value.Empty?;
-
-    if start <= end {
-      if exists j: Index :: !ContiguousToEntry(table', j)
-      {
-        var j: Index, k: Index :|
-          && table'[j].value.Full?
-          && Between(k, hash(table'[j].value.key), j)
-          && table'[k].value.Empty?;
-        
-        var l := NextIndex(end);
-  
-        if k != end {
-          var j_prev := PrevIndex(j);
-          var j_next := NextIndex(j);
-          assert ContiguousToEntry(table, j);
-          assert ContiguousToEntry(table, j_prev);
-          assert ContiguousToEntry(table, j_next);
-          assert false;
-        } else {
-          assume exists e0 : Index ::
-            && table[e0].value.Empty?
-            && (end < e0 || e0 < start);
-
-          var e0 : Index :| table[e0].value.Empty?
-            && (end < e0 || e0 < start);
-
-          if j < start {
-            assert table[j] == table'[j];
-            assert ContiguousToEntry(table, j);
-            var jh := SlotKeyHash(table, j);
-            
-            if e0 > end {
-              assert ValidHashInSlot(table, e0, j);
-              assert adjust(jh, e0) <= adjust(j, e0);
-              assert false;
-            }
-      
-            assert e0 < jh <= end;
-            assert j < e0 < start; 
-            assert table[l].value.Full?;
-            assert ValidOrdering(table, e0, l, j);
-            assert false;
-          } else if j <= end {
-            var j_prev := PrevIndex(j);
-            // assert ContiguousToEntry(table, j);
-            // assert ContiguousToEntry(table, j_prev);
-            // assert table[l].value.Full?;
-            // assert ValidOrdering(table, e0, l, j);
-            // assert ValidOrdering(table, e0, l, j_prev);
-            // assert false;
-          }
-          // var e := RemoveFoundStepPreservesEmptySlot(s, s', step);
-
-          assume false;
-        }
-      }
-    }
-
-    // forall j: Index
-    //   ensures true
-    // {
-    //   if start <= end {
-    //     if 0 <= j < start {
-    //       assert ContiguousToEntry(table, j);
-    //       assert ContiguousToEntry(table', j);
-    //     }
-    //   } else {
-    //     assume false;
-    //   }
-    //   // var e := InvImpliesEmptySlot(s);
-
-    // }
-
-    // forall e: Index, i: Index
-    //   ensures ValidHashInSlot(table', e, i)
-    // {
-    //   var i_prev := PrevIndex(i);
-    //   var i_next := NextIndex(i);
-    //   assert ValidHashInSlot(table, e, i);
-    //   assert ValidHashInSlot(table, e, i_prev);
-    //   assert ValidHashInSlot(table, e, i_next);
-    //   assert ContiguousToEntry(table', i);
-    // }
   }
 
   lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
