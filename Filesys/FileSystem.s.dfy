@@ -27,6 +27,14 @@ module FileSystem {
     && (forall id :: id in fs.meta_map && id in fs.data_map)
   }
 
+  // robj: How about PathExists?
+  predicate ValidPath(fs: FileSys, path: Path)
+  requires WF(fs)
+  {
+    && fs.path_map[path] != DefaultId
+    && fs.meta_map[fs.path_map[path]].MetaData?
+  }
+
   predicate Init(fs: FileSys)
   {
     && fs.path_map == InitPathMap()
@@ -43,6 +51,7 @@ module FileSystem {
     iset path | fs.path_map[path] == id
   }
 
+  // robj: why require both the id and the path?
   predicate NoAlias(fs: FileSys, id: int, path: Path)
   requires WF(fs)
   requires fs.path_map[path] == id
@@ -50,6 +59,7 @@ module FileSystem {
     && AliasPaths(fs, id) == iset{path}
   }
 
+  // robj: How about DirImpliesHasNoAlias?
   predicate DirHasNoAlias(fs: FileSys, path: Path)
   requires WF(fs)
   requires ValidPath(fs, path)
@@ -68,13 +78,9 @@ module FileSystem {
     && fs.meta_map[parent_id].ftype.Directory?
   }
 
-  predicate ValidPath(fs: FileSys, path: Path)
-  requires WF(fs)
-  {
-    && fs.path_map[path] != DefaultId
-    && fs.meta_map[fs.path_map[path]].MetaData?
-  }
-
+  // robj: Can we kill the middle line of this predicate?  It seems
+  // like it's implied by the first line and the last lemma in
+  // PathSpec.s.dfy.
   predicate ValidNewPath(fs: FileSys, path: Path)
   requires WF(fs)
   {
@@ -109,6 +115,8 @@ module FileSystem {
     && link_path == fs.meta_map[fs.path_map[path]].ftype.source
   }
 
+  // robj: Need to update mtime of parent dir (and same for other
+  // directory mutations, e.g. symlink, delete, link, etc)
   predicate Create(fs: FileSys, fs':FileSys, path: Path, id: int, m: MetaData)
   {
     && WF(fs)
@@ -166,6 +174,7 @@ module FileSystem {
     && fs'.data_map == fs.data_map[id := DataDelete(fs, path)]
   }
 
+  // robj: This seems like a special case of Create
   predicate SymLink(fs: FileSys, fs':FileSys, source: Path, dest: Path, id: int, m: MetaData)
   {
     && WF(fs)
@@ -198,6 +207,9 @@ module FileSystem {
       else fs.path_map[path]
   }
 
+  // robj: Can we unify the dir and non-dir cases?  If the only
+  // difference is renaming all the entries below the dir, then for
+  // non-dirs, that should be a no-op.
   predicate RenameDir(fs: FileSys, fs':FileSys, src: Path, dst: Path, ctime: Time)
   requires WF(fs)
   requires WF(fs')
@@ -220,6 +232,7 @@ module FileSystem {
     && fs'.path_map == PathMapRenameDir(fs, src, dst)
     && fs'.meta_map == (
       if ValidPath(fs, dst)
+      // robj: are src and dst reversed here?
       then fs.meta_map[src_id := src_m'][dst_id := EmptyMetaData]
       else fs.meta_map[src_id := src_m'])
     && fs'.data_map == fs.data_map
@@ -265,7 +278,9 @@ module FileSystem {
   {
     && WF(fs)
     && WF(fs')
-    && ValidPath(fs, source)  // NOTE: won't work for hardlink other filesystem files
+    // NOTE: won't work for hardlink other filesystem files
+    // robj: Hard-links can't cross file systems, so not a problem.
+    && ValidPath(fs, source)
     && ValidNewPath(fs, dest)
     && var id := fs.path_map[source];
     && var m := fs.meta_map[id];
@@ -324,7 +339,7 @@ module FileSystem {
     && var id := fs.path_map[path];
     && var m := fs.meta_map[id];
     && m.ftype.File?
-    && size != |fs.data_map[id]|
+    && size != |fs.data_map[id]| // robj: Need this?
     // updated maps
     && fs'.path_map == fs.path_map
     && fs'.meta_map == fs.meta_map[id := MetaDataUpdateTime(m, m.atime, time, time)]

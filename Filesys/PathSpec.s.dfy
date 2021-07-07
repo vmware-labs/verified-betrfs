@@ -8,21 +8,27 @@ module PathSpec {
 
   const RootDir :=  ['/' as byte];
   const RootId := 0;
-  const DefaultId := -1;
-  
+  const DefaultId := -1; // robj: How about NonexistentId or something more concrete about its meaning?
+
+  // robj asks: what about jonh's suggestion to make Path seq<seq<byte>>?
+  // robj says: aren't paths all of length >= 1?  Maybe use a subset type or defin a ValidPath predicate?
   type Path = seq<byte>
   type PathMap = imap<Path, int>
 
+  // robj: How about PathMapComplete?
   predicate PathComplete(path_map: PathMap)
   {
     && (forall path :: path in path_map)
   }
 
+  // robj: Can this be a const?
   function InitPathMap(): (path_map: PathMap)
   {
     imap path :: if path == RootDir then RootId else DefaultId
   }
 
+  // robj: How about "BeneathDir" or something to make it clear that
+  // this doesn't mean "is an entry in dir"?
   predicate InDir(dir: Path, path: Path)
   {
     && path != dir
@@ -65,6 +71,7 @@ module PathSpec {
     else GetParentDirIter(path, |path|-1)
   }
 
+  // robj: Can this be strengthened to IsDirEntry?
   lemma GetParentDirImpliesInDir(path: Path, dir: Path)
   requires |dir| > 0
   requires GetParentDir(path) == dir

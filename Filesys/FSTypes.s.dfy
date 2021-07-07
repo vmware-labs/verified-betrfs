@@ -20,6 +20,7 @@ module FSTypes {
     | FIFOFile
     | SocketFile
 
+  // robj asks: Any reason to break this up at spec level?
   datatype Time = Time(seconds: int, nanoseconds: int)
 
   // metadata tracked by filesys
@@ -51,5 +52,6 @@ module FSTypes {
     []
   }
 
+  // robj asks: is path too general here?  What if path includes slashes?
   datatype DirEntry = DirEntry(id: int, path: Path, ftype: FileType)
 }
