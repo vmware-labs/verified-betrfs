@@ -117,12 +117,15 @@ module SplinterTreeMachineMod {
   datatype Superblock = Superblock(
     indTbl: IndirectionTableMod.Superblock,
     endSeq: LSN,
-    // Sowmya -- We need this no??
-    root: Option<CU>)
+    root: CU)
 
-  function MkfsSuperblock() : Superblock
+  // This has to mkfs the initial root of the trunk tree which is just an
+  // empty trunk node -- TODO: finish
+  function MkfsTrunkRoot() : CU
+
+  function MkfsSuperblock(rootCU : CU) : Superblock
   {
-    Superblock(IndirectionTableMod.EmptySuperblock(), 0, None)
+    Superblock(IndirectionTableMod.EmptySuperblock(), 0, rootCU)
   }
 
 
@@ -201,7 +204,7 @@ module SplinterTreeMachineMod {
     // OR just have freeze drain the membuffer, introducing a write hiccup every 20GB.
     nextSeq: LSN,  // exclusive
     frozen: Frozen,
-    root : Option<CU> // The CU to the root of the trunk tree
+    root : CU // The CU to the root of the trunk tree
   )
   {
       predicate WF()
@@ -218,7 +221,7 @@ module SplinterTreeMachineMod {
         nextSeq
       }
 
-      function getRoot() : Option<CU> {
+      function getRoot() : CU {
         root
       }
   }
@@ -251,11 +254,15 @@ module SplinterTreeMachineMod {
       && Some(node) == parseTrunkNode(unparsedPage.value)
     }
 
+
+
     predicate Valid(v: Variables, cache: CacheIfc.Variables)
     {
       && InIndTable(v)
       && ValidCU(cache)
     }
+
+
 
   }
 
@@ -329,7 +336,6 @@ module SplinterTreeMachineMod {
     }
 
 
-
     function msgSeqRecurse(count : nat) : (out : seq<Message>)
     {
       if count == 0
@@ -348,11 +354,14 @@ module SplinterTreeMachineMod {
     // TODO: reorg into WF
 
     predicate Valid(v : Variables, cache: CacheIfc.Variables) {
-      && forall i :: (0 <= i < |steps|) && steps[i].na.ValidCU(cache)
+      && forall i :: (0 <= i < |steps|) && steps[i].Valid(v, cache)
       && steps[0].na.id == 0 // check for root
       && 0 < |MsgSeq()|
       && Last(MsgSeq()).Define?
       && ValidPrefix()
+      // check that the first step is the root
+      && (0 < |steps| ==> (steps[0].na.cu == v.root))
+      // make sure we have the valid memBuffer lookup for this prefix
       && membufferMsgs == MemtableLookup(v, k)
     }
 
@@ -430,17 +439,18 @@ module SplinterTreeMachineMod {
 
   // A valid lookup is something that produces a non DefaultMessage from the membuffer or has a valid trunk path
   // in the splinter tree
-  predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, value: Value, trunkPath : TrunkPath)
+  predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, trunkPath : TrunkPath)
   {
     && trunkPath.Valid(v, cache)
     && trunkPath.k == key
-    && EvaluateMessage(trunkPath.Decode()) == value
   }
 
   predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
   {
     && sk.QueryStep?
-    && ValidLookup(v, cache, key, value, sk.trunkPath)
+    && var trunkPath := sk.trunkPath;
+    && ValidLookup(v, cache, key, trunkPath)
+    && EvaluateMessage(trunkPath.Decode()) == value
     // No change to the state
     && v == v'
   }

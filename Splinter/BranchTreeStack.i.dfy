@@ -68,25 +68,26 @@ module BranchTreeStackMod {
 
   datatype Stack = StackFrame(slices : seq<Slice>)
   {
+    function IM() :  imap<Key, Message>
+      decreases |slices|
+    {
+        if |slices| == 0
+        then
+          imap []
+        else if |slices| == 1
+        then
+          slices[0].IM()
+        else
+           var stk := StackFrame(DropLast(slices));
+           IMapUnionPreferB(stk.IM(), Last(slices).IM())
+    }
   }
 
-  function IM(stack : Stack) :  imap<Key, Message>
-    decreases |stack.slices|
-  {
-      if |stack.slices| == 0
-      then
-        imap []
-      else if |stack.slices| == 1
-      then
-        stack.slices[0].IM()
-      else
-         var stk := StackFrame(DropLast(stack.slices));
-         IMapUnionPreferB(IM(stk), Last(stk.slices).IM())
-  }
+
 
   // at the we check that the tree is done
   predicate IsCompaction(stack : Stack, newroot : CU, cache: CacheIfc.Variables)
   {
-      IM(stack) == BranchTreeInterpMod.IM(newroot, cache)
+      stack.IM() == BranchTreeInterpMod.IM(newroot, cache)
   }
 }

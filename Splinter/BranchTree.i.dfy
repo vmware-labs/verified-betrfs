@@ -183,7 +183,6 @@ module BranchTreeMod {
 
   }
 
-
   datatype Skolem =
      | QueryStep(branchPath: BranchPath)
      | PutManyStep()
@@ -202,89 +201,12 @@ module BranchTreeMod {
     && (msg.Some? ==> path.Decode() == msg)
   }
 
-  function InterpKey(root: CU, cache: CacheIfc.Variables, key: Key) : Message
-  {
-    if exists msg, sk :: Query(root, cache, key, msg, sk) // always true by invariant
-    then
-      var msg, sk :| Query(root, cache, key, msg, sk);
-      if msg.Some?
-      then
-        msg.value
-      else
-        DefaultMessage()
-    else
-      // We should never get here
-      DefaultMessage()
-  }
-
-  function Interpretation(root : CU, cache: CacheIfc.Variables) : imap<Key, Message>
-  {
-    imap k | true :: InterpKey(root, cache, k)
-  }
-
   /*
     Something like check if all the cu's for this tree are reachable on disk??
   */
   predicate IsClean(root: CU, cache: CacheIfc.Variables)
   {
     forall cu | cu in  Alloc() :: CacheIfc.IsClean(cache, cu)
-  }
-
-  //////////////////////////////////////////////////////////////////////////////
-  // Define a "Stack" of branches, so we can define what it means to extract
-  // the key-message pairs from a stack and compact it into a new branch tree.
-  //////////////////////////////////////////////////////////////////////////////
-  datatype Range = Range(start: Key, end: Key)
-  {
-    predicate Contains(k : Key)
-    {
-       && Keys.lte(start, k)
-       && Keys.lt(k, end)
-    }
-  }
-
-  datatype Ranges = Ranges(rangeSeq : seq<Range>)
-  {
-    predicate Contains(k : Key)
-    {
-      exists i :: 0 <= i < |rangeSeq| && rangeSeq[i].Contains(k)
-    }
-  }
-
-  datatype Slice = Slice(root: CU, ranges: Ranges, cache: CacheIfc.Variables)
-  {
-
-    function Keys() : iset<Key>
-    {
-        iset k | k in Interpretation(root, cache).Keys && ranges.Contains(k)
-    }
-
-    function I() :  imap<Key, Message>
-    {
-      imap k | k in Keys() :: Interpretation(root, cache)[k]
-    }
-  }
-
-  datatype Stack = Stack(slices : seq<Slice>)
-  {
-    function I() :  imap<Key, Message>
-      decreases |slices|
-    {
-        if |slices| == 0
-        then
-          imap []
-        else if |slices| == 1
-        then
-          slices[0].I()
-        else
-           IMapUnionPreferB(Stack(DropLast(slices)).I(), Last(slices).I())
-    }
-  }
-
-  // at the we check that the tree is done
-  predicate IsCompaction(stack : Stack, newroot : CU, cache: CacheIfc.Variables)
-  {
-      stack.I() == Interpretation(newroot, cache)
   }
 
   function Alloc() : set<CU>
