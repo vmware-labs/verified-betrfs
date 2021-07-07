@@ -401,13 +401,15 @@ module FileSystem {
     && de.ftype == fs.meta_map[de.id].ftype
   }
 
+  // robj: What about done?
+  // robj: Should we requires that results are all >= start in sort order?
   predicate ReadDir(fs: FileSys, fs':FileSys, dir: Path, start: Option<Path>, results: seq<DirEntry>, done: bool)
   {
     && WF(fs)
     && fs' == fs
     && ValidPath(fs, dir)
     && fs.meta_map[fs.path_map[dir]].ftype.Directory?
-    && (start.Some? ==> InDir(dir, start.value))
+    && (start.Some? ==> InDir(dir, start.value)) // robj: Should this be IsDirEntry?  I guess InDir would work, but a little odd
     // results consistent with filesys content
     && (forall i | 0 <= i < |results| :: ValidDirEntry(fs, results[i]))
     // results actually belong to this directory
@@ -469,6 +471,8 @@ module FileSystem {
   {
     exists step :: NextStep(fs, fs', step)
   }
+
+  // robj: I think all this stuff from here on down should be moved to a .i.dfy file
 
   predicate Inv(fs: FileSys)
   {
