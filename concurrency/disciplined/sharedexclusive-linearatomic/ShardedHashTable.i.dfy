@@ -10,6 +10,8 @@ module ShardedHashTable refines ShardedStateMachine {
   import opened Options
   import opened Sequences
   import opened Limits
+  import opened KeyValueType
+
   import MapIfc
   import Count
 
@@ -17,15 +19,13 @@ module ShardedHashTable refines ShardedStateMachine {
 // Data structure definitions
 //////////////////////////////////////////////////////////////////////////////
 
-  import opened KeyValueType
-
-  function DummyKey() : Key
-
   datatype Ticket =
     | Ticket(rid: int, input: MapIfc.Input)
 
   datatype Stub =
     | Stub(rid: int, output: MapIfc.Output)
+
+  function DummyKey() : Key
 
   type Index = i: int | 0 <= i < FixedSize()
 
@@ -111,7 +111,8 @@ module ShardedHashTable refines ShardedStateMachine {
     seq(FixedSize(), i requires 0 <= i < |a| => fuse(a[i], b[i]))
   }
 
-  function add(x: Variables, y: Variables) : Variables {
+  function add(x: Variables, y: Variables) : Variables
+  {
     if x.Variables? && y.Variables? && nonoverlapping(x.table, y.table) then (
       Variables(fuse_seq(x.table, y.table),
           Count.add(x.insert_capacity, y.insert_capacity),
@@ -453,7 +454,6 @@ module ShardedHashTable refines ShardedStateMachine {
       .(tickets := v.tickets - multiset{ticket})
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
   }
-/*
 
   predicate OverwriteEnable(v: Variables, step: Step)
   {
@@ -479,6 +479,7 @@ module ShardedHashTable refines ShardedStateMachine {
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
       .(table := v.table[end := Some(Full(kv.0, kv.1))])
   }
+/*
 
 // Query transition definitions
 
