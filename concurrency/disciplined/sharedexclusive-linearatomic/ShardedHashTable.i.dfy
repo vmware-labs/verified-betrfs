@@ -290,26 +290,6 @@ module ShardedHashTable refines ShardedStateMachine {
   { 
   }
 
-  // lemma PartialRangeComplement(i: Index, a: Index, b: Index)
-  //   requires a != b
-  //   requires Contains(Partial(a, b), i);
-  //   ensures !Contains(Partial(b, a), i);
-  // {
-  // }
-
-  lemma RangeTest(a: Index, b: Index, c: Index)
-    requires a != b
-    requires !Contains(Partial(a, b), c);
-    // ensures Contains(Partial(a, c), b) || b == c
-  {
-    if a == b {
-      assert Contains(Partial(a, c), b);
-    // } else {
-      // assert (Contains(Partial(a, c), b) || b == c);
-    }
-    // assert a != b ==> Contains(BuildRange(b, a), c);
-  }
-
   lemma RangeInclusion(a: Index, b: Index, c: Index)
     requires a != b && a != c
     requires Contains(Partial(a, b), c)
@@ -419,8 +399,8 @@ module ShardedHashTable refines ShardedStateMachine {
   lemma RightShiftIndex(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
     requires IsTableRightShift(table, table', inserted, start, end)
     ensures Contains(BuildRange(NextIndex(start), NextIndex(end)), i) ==> table'[i] == table[PrevIndex(i)];
-    ensures i == start ==> table'[i] == inserted;
     ensures Contains(BuildRange(NextIndex(end), start), i) ==> table'[i] == table[i];
+    ensures i == start ==> table'[i] == inserted;
   {
     if Contains(BuildRange(NextIndex(start), NextIndex(end)), i) {
       assert table'[i] == table[PrevIndex(i)];
@@ -429,6 +409,16 @@ module ShardedHashTable refines ShardedStateMachine {
     } else {
       assert table'[i] == table[i];
     }
+  }
+
+  lemma RightShiftedPSL(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
+    requires IsTableRightShift(table, table', inserted, start, end)
+    requires table'[i].Some? && table'[i].value.Full?
+    requires Contains(BuildRange(NextIndex(start), NextIndex(end)), i)
+    requires i != hash(table[PrevIndex(i)].value.key)
+    ensures SlotPSL(table', i) == SlotPSL(table, PrevIndex(i)) + 1
+  {
+    assert table'[i] == table[PrevIndex(i)];
   }
 
   predicate InsertEnable(v: Variables, step: Step)
@@ -679,7 +669,7 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     // the segement can be Nothing or Partial
     && !range.Everything?
-    // // if the segment is Partial, the hash cannot be in the middle 
+    // if the segment is Partial, the hash cannot be in the middle 
     // && (range.Partial? ==>
     //   !Contains(BuildRange(NextIndex(range.start), range.end), hash))
     // all the keys in the segment share the hash
@@ -811,19 +801,33 @@ module ShardedHashTable refines ShardedStateMachine {
     reveal TableQuantity();
   }
 
-  // lemma InvImpliesEmptySlot(s: Variables) returns (e: Index)
+  lemma InvImpliesEmptySlot(s: Variables) returns (e: Index)
+    requires Inv(s)
+    ensures s.table[e].value.Empty?;
+  {
+    var table := s.table;
+    assert TableQuantity(table) <= Capacity();
+    if forall i: Index :: table[i].value.Full? {
+      FullTableQuantity(table);
+      assert TableQuantity(table) == FixedSize();
+      assert false;
+    }
+    assert exists e: Index :: table[e].value.Empty?;
+    e :| table[e].value.Empty?;
+  }
+
+  // lemma ValidHashSegmentImpliesNotEverything(table: FixedTable, h: Index)
   //   requires Inv(s)
-  //   ensures s.table[e].value.Empty?;
+  //   requires Complete(table)
+  //   requires ValidPSL(table, PrevIndex(h))
+  //   requires table[PrevIndex(h)].value.Full?
+  //   requires hash(table[PrevIndex(h)].value.key) == h
+  //   ensures false
   // {
-  //   var table := s.table;
-  //   assert TableQuantity(table) <= Capacity();
-  //   if forall i: Index :: table[i].value.Full? {
-  //     FullTableQuantity(table);
-  //     assert TableQuantity(table) == FixedSize();
-  //     assert false;
-  //   }
-  //   assert exists e: Index :: table[e].value.Empty?;
-  //   e :| table[e].value.Empty?;
+  //   assume exists e: Index :: table[e].value.Empty?;
+  //   var e : Index :| table[e].value.Empty?;
+  //   assert Contains(BuildRange(h, PrevIndex(h)), e);
+  //   assert false;
   // }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1104,51 +1108,13 @@ module ShardedHashTable refines ShardedStateMachine {
     assert false;
   }
 
-  lemma InsertSegementOrdering(s: Variables, s': Variables, step: Step, i: Index)
-    requires Inv(s)
-    requires step.InsertStep? && NextStep(s, s', step)
-    requires s'.table[i].value.Full?
-    requires hash(s'.table[i].value.key) != hash(step.kv.0)
-    requires hash(step.kv.0) != i
-    requires step.start != step.end
-    requires var prev_i := PrevIndex(i);
-      && Contains(Partial(step.start, step.end), prev_i)
-      && s.table[prev_i] == s'.table[i]
-    {
-      var InsertStep(_, (key, _), start, end) := step;
-      var table, table' := s.table, s'.table;
-
-      var prev_i := PrevIndex(i);
-      var h_i := hash(table[prev_i].value.key);
-      var h_k := hash(step.kv.0);
-
-      // forall j: Index
-      //   // ensures Contains(BuildRange(NextIndex(start), end)
-      // {
-
-      // }
-
-      // if Contains(BuildRange(NextIndex(start), end), h_i) {
-      //   forall j: Index | Contains(BuildRange(h_i, i), j)
-      //   // ensures table'[j].value.Full?
-      //     ensures true
-      //   {
-      //     assert table[PrevIndex(j)] == table'[j];
-
-      //   // if Contains(BuildRange(h_i, start), j) {
-      //   // }
-
-
-      //   }
-
-    }
-
   lemma InsertPreservesValidPSL(s: Variables, s': Variables, step: Step, i: Index)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
     requires s'.table[i].value.Full?
+    ensures ValidPSL(s'.table, i); 
   {
-    var InsertStep(_, (key, _), start, end) := step;
+    var InsertStep(_, (key, value), start, end) := step;
     var table, table' := s.table, s'.table;
     
     assert ValidPSL(table, i);
@@ -1199,66 +1165,48 @@ module ShardedHashTable refines ShardedStateMachine {
     }
 
     // slot i is shifted
-    // var prev_i := PrevIndex(i); 
-    // assert table[prev_i] == table'[i];
-    // assert Contains(Partial(start, end), prev_i);
+    if table'[i].value.Empty? {
+      return;
+    }
 
-    InsertSegementOrdering(s, s', step, i);
+    var key_i := table'[i].value.key;
+    var h_i := hash(key_i);
+    var prev_i := PrevIndex(i);
+
+    assume h_i != hash(key);
+
+    assert table'[i] == table[prev_i];
+    assert ValidPSL(table, prev_i);
+    var inserted := Some(Full(key, value));
+
+    forall j: Index | Contains(BuildRange(h_i, i), j)
+    ensures
+      && table'[j].value.Full?
+      && SlotPSL(table', j) >= PSL(key_i, j)
+    {
+      var prev_j := PrevIndex(j);
+      if Contains(BuildRange(NextIndex(start), NextIndex(end)), j) {
+        assert table'[j] == table[prev_j];
+        var h_j := hash(table[prev_j].value.key);
+        if j == h_j {
+          var e := InvImpliesEmptySlot(s);
+          assert ValidPSL(table, PrevIndex(h_j));
+          assert false;
+        }
+        RightShiftedPSL(table, table', inserted, start, end, j);
+      } else if Contains(BuildRange(NextIndex(end), start), j) {
+        assert table'[j] == table[j];
+      } else {
+        assert table'[j] == inserted;
+      }
+    }
+
+    assert ValidPSL(table', i);
   }
 
-  // lemma InsertStepPreservesInv(s: Variables, s': Variables, step: Step)
-  //   requires Inv(s)
-  //   requires step.InsertStep? && NextStep(s, s', step)
-  //   // ensures Inv(s')
-  // {
-  //   var InsertStep(ticket, (key, value), range) := step;
-  //   var Partial(start, end) := range;
-  //   var table, table' := s.table, s'.table;
 
-  //   if !RangeFullKeyNotFound(table, range, key) {
-  //     var i: Index :|
-  //       && Contains(range, i)
-  //       && !SlotFullKeyNotFound(table[i], i, key);
-  //     var s_key := table[start].value.key;
 
-  //     var psl_at_s := PSL(s_key, start);
-  //     var vpsl_at_s := PSL(key, start);
-
-  //     assert psl_at_s >= vpsl_at_s by {
-  //       assert ValidPSL(table, i);
-  //     }
-  //     assert false;
-  //   }
-
-  //   if !KeysUnique(table') {
-  //     var i: Index, j: Index :| 
-  //       && table'[i].value.Full?
-  //       && table'[j].value.Full?
-  //       && i != j
-  //       && table'[i].value.key == table'[j].value.key;
-  //     assert i == start || j == start;
-  //     var index := if i == start then j else i;
-  //     assert ValidPSL(table, index);
-  //     assert false;
-  //   }
-
-  //   // forall i : Index | Contains(range, i)
-  //   //   ensures table[i] == table'[NextIndex(i)]
-  //   // {
-  //   // }
-
-  //   var key_hash := hash(key);
-
-  //   forall h: Index 
-  //     ensures ExistsHashSegment(table', h)
-  //   {
-      
-  //   }
-
-  //   // InsertStepPreservesTableQuantityInv(s, s', step);
-  // }
 /*
-
   lemma OverwriteStepPreservesInv(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.OverwriteStep? && NextStep(s, s', step)
