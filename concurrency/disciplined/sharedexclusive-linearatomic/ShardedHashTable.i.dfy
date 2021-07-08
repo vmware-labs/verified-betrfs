@@ -169,11 +169,6 @@ module ShardedHashTable refines ShardedStateMachine {
     TrueInRange(table, range, key, SlotFullKeyNotFound)
   }
 
-  predicate SlotEmpty(entry: Option<Entry>)
-  {
-    entry.Some? && entry.value.Empty?
-  }
-
   predicate SlotShouldSkip(entry: Option<Entry>, slot_index: Index, insert_key: Key)
   {
     && SlotFullKeyNotFound(entry, slot_index, insert_key)
@@ -207,11 +202,11 @@ module ShardedHashTable refines ShardedStateMachine {
     && RangeShouldSkip(table, Partial(hash(key), start), key)
     // insert at start
     && (SlotShouldSwap(table[start], start, key)
-      || SlotEmpty(table[start]))
+      || SlotEmpty(table, start))
     // this part is full
     && RangeFull(table, Partial(start, end))
     // but the end is empty 
-    && SlotEmpty(table[end])
+    && SlotEmpty(table, end)
   }
 
   function Insert(v: Variables, step: Step): Variables
@@ -224,6 +219,7 @@ module ShardedHashTable refines ShardedStateMachine {
       .(tickets := v.tickets - multiset{ticket})
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
   }
+
 /*
   predicate OverwriteEnable(v: Variables, step: Step)
   {
@@ -400,8 +396,8 @@ module ShardedHashTable refines ShardedStateMachine {
 //////////////////////////////////////////////////////////////////////////////
 
   predicate QuantityInv(s: Variables)
+    requires s.Variables?
   {
-    && s.Variables?
     && TableQuantity(s.table) + s.insert_capacity.value == Capacity()
   }
 
@@ -530,57 +526,16 @@ module ShardedHashTable refines ShardedStateMachine {
     assume false;
   }
 
-  predicate ValidProbeRange(s: Variables, p_range: Range, key: Key)
-  {
-    && Inv(s)
-    && p_range.Partial?
-    && p_range.start == hash(key)
-    && RangeShouldSkip(s.table, p_range, key)
-    && (SlotEmpty(s.table[p_range.end])
-      || SlotShouldSwap(s.table[p_range.end], p_range.end, key))
-  }
+  // predicate ValidProbeRange(s: Variables, p_range: Range, key: Key)
+  // {
+  //   && Inv(s)
+  //   && p_range.Partial?
+  //   && p_range.start == hash(key)
+  //   && RangeShouldSkip(s.table, p_range, key)
+  //   && (SlotEmpty(s.table[p_range.end])
+  //     || SlotShouldSwap(s.table[p_range.end], p_range.end, key))
+  // }
 
-  // a valid probe range would cover key's hash segment 
-  lemma ProbeRangeSufficient(s: Variables, p_range: Range, key: Key)
-    requires ValidProbeRange(s, p_range, key)
-    ensures var h_range := GetHashSegment(s.table, hash(key));
-      h_range.HasSome() ==> (
-        && p_range.Contains(h_range.start)
-        && h_range.end == p_range.end
-      )
-  {
-    var table := s.table;
-    var Partial(h, pr_end) := p_range;
-
-    // the segment that shares the hash
-    var h_range := GetHashSegment(table, h);
-
-    if h_range.HasNone() {
-      return;
-    }
-
-    var Partial(hr_start, hr_end) := h_range;
-
-    // narrow where hr_start is
-    assert p_range.Contains(hr_start) by {
-      assert ValidPSL(table, hr_start);
-    }
-
-    // narrow where hr_end is
-    if !(p_range.Contains(hr_end) || hr_end == pr_end) {
-      assert h_range.Contains(pr_end);
-      assert false;
-    }
-
-    // fix where hr_end is
-    if p_range.Contains(hr_end) {
-      assert ValidPSL(table, hr_end);
-      assert false;
-    }
-
-    assert hr_end == pr_end;
-    assert p_range.Contains(hr_start);
-  }
 
   lemma InsertPreservesKeySegment(s: Variables, s': Variables, step: Step)
     requires Inv(s)
@@ -608,7 +563,7 @@ module ShardedHashTable refines ShardedStateMachine {
       assert false;
     }
 
-    ProbeRangeSufficient(s, Partial(h, start), key);
+    ProbeRangeSufficient(s.table, Partial(h, start), key);
 
     if hr_start == NextIndex(start) {
       var e := InsertEnableEnsuresEmptySlots(s, step);
@@ -753,7 +708,7 @@ module ShardedHashTable refines ShardedStateMachine {
     var prev_i := PrevIndex(i);
 
     if h_i == hash(key) {
-      ProbeRangeSufficient(s, Partial(h, start), key);
+      ProbeRangeSufficient(s.table, Partial(h, start), key);
       assert false;
       return;
     }
