@@ -25,7 +25,6 @@ module ShardedHashTable refines ShardedStateMachine {
   datatype Stub =
     | Stub(rid: int, output: MapIfc.Output)
 
-  function DummyKey() : Key
 
   datatype Variables =
       | Variables(table: FixedTable,
@@ -147,47 +146,6 @@ module ShardedHashTable refines ShardedStateMachine {
 
 // Insert transition definitions
 
-  // NOTE: dummy_index/dummy_key does nothing here
-  predicate SlotFull(entry: Option<Entry>, dummy_index: Index, dummy_key: Key)
-  {
-    entry.Some? && entry.value.Full?
-  }
-
-  predicate RangeFull(table: FixedTable, range: Range)
-  {
-    TrueInRange(table, range, DummyKey(), SlotFull)
-  }
-
-  predicate SlotFullKeyNotFound(entry: Option<Entry>, slot_index: Index, key: Key)
-  {
-    && SlotFull(entry, slot_index, key)
-    && entry.value.key != key
-  }
-
-  predicate RangeFullKeyNotFound(table: FixedTable, range: Range, key: Key)
-  {
-    TrueInRange(table, range, key, SlotFullKeyNotFound)
-  }
-
-  predicate SlotShouldSkip(entry: Option<Entry>, slot_index: Index, insert_key: Key)
-  {
-    && SlotFullKeyNotFound(entry, slot_index, insert_key)
-    // the psl at the slot is geq than the psl of insert
-    && PSL(entry.value.key, slot_index) >= PSL(insert_key, slot_index)
-  }
-
-  predicate RangeShouldSkip(table: FixedTable, range: Range, insert_key: Key)
-  {
-    TrueInRange(table, range, insert_key, SlotShouldSkip)
-  }
-
-  predicate SlotShouldSwap(entry: Option<Entry>, slot_index: Index, insert_key: Key)
-  {
-    && SlotFullKeyNotFound(entry, slot_index, insert_key)
-    // the psl at the slot is less than the psl of the insert
-    && PSL(entry.value.key, slot_index) < PSL(insert_key, slot_index)
-  }
-
   predicate InsertEnable(v: Variables, step: Step)
   {
     && step.InsertStep?
@@ -198,11 +156,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && ticket.input.InsertInput?
     && v.insert_capacity.value >= 1
 
-    // skip upto (not including) start
-    && RangeShouldSkip(table, Partial(hash(key), start), key)
-    // insert at start
-    && (SlotShouldSwap(table[start], start, key)
-      || SlotEmpty(table, start))
+    && ValidProbeRange(table, Partial(hash(key), start), key)
     // this part is full
     && RangeFull(table, Partial(start, end))
     // but the end is empty 

@@ -12,6 +12,8 @@ module CircularTable {
 
   function method hash(key: Key) : Index
 
+  function DummyKey() : Key
+
   datatype Entry =
     | Full(key: Key, value: Value)
     | Empty
@@ -44,47 +46,88 @@ module CircularTable {
       FixedSize() - h + i
   }
 
-  predicate SlotFull(table: FixedTable, i: Index)
+  // NOTE: dummy_index/dummy_key does nothing here
+  predicate SlotFull(entry: Option<Entry>, dummy_index: Index, dummy_key: Key)
   {
-    table[i].Some? && table[i].value.Full?
+    entry.Some? && entry.value.Full?
   }
+
+  predicate RangeFull(table: FixedTable, range: Range)
+  {
+    TrueInRange(table, range, DummyKey(), SlotFull)
+  }
+
+  predicate SlotFullKeyNotFound(entry: Option<Entry>, slot_index: Index, key: Key)
+  {
+    && SlotFull(entry, slot_index, key)
+    && entry.value.key != key
+  }
+
+  predicate RangeFullKeyNotFound(table: FixedTable, range: Range, key: Key)
+  {
+    TrueInRange(table, range, key, SlotFullKeyNotFound)
+  }
+
+  predicate SlotShouldSkip(entry: Option<Entry>, slot_index: Index, insert_key: Key)
+  {
+    && SlotFullKeyNotFound(entry, slot_index, insert_key)
+    // the psl at the slot is geq than the psl of insert
+    && PSL(entry.value.key, slot_index) >= PSL(insert_key, slot_index)
+  }
+
+  predicate RangeShouldSkip(table: FixedTable, range: Range, insert_key: Key)
+  {
+    TrueInRange(table, range, insert_key, SlotShouldSkip)
+  }
+
+  predicate SlotShouldSwap(entry: Option<Entry>, slot_index: Index, insert_key: Key)
+  {
+    && SlotFullKeyNotFound(entry, slot_index, insert_key)
+    // the psl at the slot is less than the psl of the insert
+    && PSL(entry.value.key, slot_index) < PSL(insert_key, slot_index)
+  }
+
+  // predicate SlotFull(table: FixedTable, i: Index)
+  // {
+  //   table[i].Some? && table[i].value.Full?
+  // }
 
   predicate SlotEmpty(table: FixedTable, i: Index)
   {
     table[i].Some? && table[i].value.Empty?
   }
 
-  predicate SlotFullKeyNotFound(table: FixedTable, i: Index, key: Key)
-  {
-    && SlotFull(table, i)
-    && table[i].value.key != key
-  }
+  // predicate SlotFullKeyNotFound(table: FixedTable, i: Index, key: Key)
+  // {
+  //   && SlotFull(table, i)
+  //   && table[i].value.key != key
+  // }
 
   function SlotKeyHash(table: FixedTable, i: Index): Index
-    requires SlotFull(table, i)
+    requires table[i].Some? && table[i].value.Full?
   {
     hash(table[i].value.key)
   }
 
   function SlotPSL(table: FixedTable, i: Index): nat
-    requires SlotFull(table, i)
+    requires table[i].Some? && table[i].value.Full?
   {
     PSL(table[i].value.key, i)
   }
 
-  predicate SlotShouldSkip(table: FixedTable, i: Index, key: Key)
-  {
-    && SlotFullKeyNotFound(table, i, key)
-    // the psl at the slot is geq than the psl of insert
-    && SlotPSL(table, i) >= PSL(key, i)
-  }
+  // predicate SlotShouldSkip(table: FixedTable, i: Index, key: Key)
+  // {
+  //   && SlotFullKeyNotFound(table, i, key)
+  //   // the psl at the slot is geq than the psl of insert
+  //   && SlotPSL(table, i) >= PSL(key, i)
+  // }
 
-  predicate SlotShouldSwap(table: FixedTable, i: Index, key: Key)
-  {
-    && SlotFullKeyNotFound(table, i, key)
-    // the psl at the slot is less than the psl of the insert
-    && SlotPSL(table, i) < PSL(key, i)
-  }
+  // predicate SlotShouldSwap(table: FixedTable, i: Index, key: Key)
+  // {
+  //   && SlotFullKeyNotFound(table, i, key)
+  //   // the psl at the slot is less than the psl of the insert
+  //   && SlotPSL(table, i) < PSL(key, i)
+  // }
 
   type EntryPredicate = (Option<Entry>, Index, Key) -> bool
 
@@ -102,8 +145,11 @@ module CircularTable {
   {
     && p_range.Partial?
     && p_range.start == hash(key)
-    && (forall i: Index | p_range.Contains(i) :: SlotShouldSkip(table, i, key))
-    && (SlotEmpty(table, p_range.end) || SlotShouldSwap(table, p_range.end, key))
+    // skip upto (not including) start
+    && RangeShouldSkip(table, p_range, key)
+    // insert at start
+    && (SlotShouldSwap(table[p_range.end], p_range.end, key)
+      || SlotEmpty(table, p_range.end))
   }
 
   // a valid probe range would cover key's hash segment 
