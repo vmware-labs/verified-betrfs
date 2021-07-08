@@ -103,10 +103,10 @@ def extractCondition(reportType, report, content):
     if re.compile("resolution/type errors detected in").search(content) != None:
         return DafnyTypeError()
 
-    err_types = [(re.compile("Dafny program verifier finished with.*(\d+) error"), DafnyVerificationError()),
-                 (re.compile("Dafny program verifier finished with.*(\d+) time out"), DafnyTimeoutError()),
-                 (re.compile("Dafny program verifier finished with.*(\d+) inconclusive"), DafnyRlimitError()),
-                 (re.compile("Dafny program verifier finished with.*(\d+) out of resource"), DafnyRlimitError())]
+    err_types = [(re.compile("Dafny program verifier finished with.* (\d+) error"), DafnyVerificationError()),
+                 (re.compile("Dafny program verifier finished with.* (\d+) time out"), DafnyTimeoutError()),
+                 (re.compile("Dafny program verifier finished with.* (\d+) inconclusive"), DafnyRlimitError()),
+                 (re.compile("Dafny program verifier finished with.* (\d+) out of resource"), DafnyRlimitError())]
     for (matcher, err) in err_types:
         match = matcher.search(content)
         if not match is None and int(match.group(1)) > 0:

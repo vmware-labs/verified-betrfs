@@ -239,7 +239,8 @@ build/%.okay: %.dfy | $$(@D)/.
 # its dependencies.
 .PRECIOUS: build/%.verchk
 AGGREGATE_TOOL=tools/aggregate-verchk.py
-build/%.verified: build/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
+AGGREGATE_DEPS=tools/lib_aggregate.py
+build/%.verified: build/%.verchk $(AGGREGATE_TOOL) $(AGGREGATE_DEPS) | $$(@D)/.
 	$(AGGREGATE_TOOL) --verchk --root $< --summary $@ --error $@.err
 
 # Syntax is trivial from synchk file, just a marker.
