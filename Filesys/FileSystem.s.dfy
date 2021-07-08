@@ -217,6 +217,7 @@ module FileSystem {
   // robj: Can we unify the dir and non-dir cases?  If the only
   // difference is renaming all the entries below the dir, then for
   // non-dirs, that should be a no-op.
+  // jonh: ditto -- yeah, I think it's worth trying; should be tighter.
   predicate RenameDir(fs: FileSys, fs':FileSys, src: Path, dst: Path, ctime: Time)
   requires WF(fs)
   requires WF(fs')
