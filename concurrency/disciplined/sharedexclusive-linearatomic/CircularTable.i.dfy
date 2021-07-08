@@ -34,7 +34,7 @@ module CircularTable {
   }
 
 //////////////////////////////////////////////////////////////////////////////
-// entry predicates
+// entry/range predicates
 //////////////////////////////////////////////////////////////////////////////
 
   function PSL(key: Key, i: Index): nat
@@ -46,100 +46,62 @@ module CircularTable {
       FixedSize() - h + i
   }
 
-  // NOTE: dummy_index/dummy_key does nothing here
-  predicate SlotFull(entry: Option<Entry>, dummy_index: Index, dummy_key: Key)
+  predicate SlotFull(entry: Option<Entry>)
   {
     entry.Some? && entry.value.Full?
   }
 
   predicate RangeFull(table: FixedTable, range: Range)
   {
-    TrueInRange(table, range, DummyKey(), SlotFull)
+    forall i: Index | range.Contains(i) :: SlotFull(table[i])
   }
 
-  predicate SlotFullKeyNotFound(entry: Option<Entry>, slot_index: Index, key: Key)
+  function SlotKeyHash(entry: Option<Entry>): Index
+    requires SlotFull(entry)
   {
-    && SlotFull(entry, slot_index, key)
+    hash(entry.value.key)
+  }
+
+  function SlotPSL(table: FixedTable, i: Index): nat
+    requires SlotFull(table[i])
+  {
+    PSL(table[i].value.key, i)
+  }
+
+  predicate SlotEmpty(entry: Option<Entry>)
+  {
+    entry.Some? && entry.value.Empty?
+  }
+
+  predicate SlotFullKeyNotFound(entry: Option<Entry>, key: Key)
+  {
+    && SlotFull(entry)
     && entry.value.key != key
   }
 
   predicate RangeFullKeyNotFound(table: FixedTable, range: Range, key: Key)
   {
-    TrueInRange(table, range, key, SlotFullKeyNotFound)
+    forall i: Index | range.Contains(i) :: SlotFullKeyNotFound(table[i], key)
   }
 
-  predicate SlotShouldSkip(entry: Option<Entry>, slot_index: Index, insert_key: Key)
+  predicate SlotShouldSkip(entry: Option<Entry>, i: Index, key: Key)
   {
-    && SlotFullKeyNotFound(entry, slot_index, insert_key)
+    && SlotFullKeyNotFound(entry, key)
     // the psl at the slot is geq than the psl of insert
-    && PSL(entry.value.key, slot_index) >= PSL(insert_key, slot_index)
+    && PSL(entry.value.key, i) >= PSL(key, i)
   }
 
-  predicate RangeShouldSkip(table: FixedTable, range: Range, insert_key: Key)
+  predicate RangeShouldSkip(table: FixedTable, range: Range, key: Key)
   {
-    TrueInRange(table, range, insert_key, SlotShouldSkip)
+    forall i: Index | range.Contains(i) :: SlotShouldSkip(table[i], i, key)
   }
 
-  predicate SlotShouldSwap(entry: Option<Entry>, slot_index: Index, insert_key: Key)
+  predicate SlotShouldSwap(entry: Option<Entry>, i: Index, key: Key)
   {
-    && SlotFullKeyNotFound(entry, slot_index, insert_key)
+    && SlotFullKeyNotFound(entry, key)
     // the psl at the slot is less than the psl of the insert
-    && PSL(entry.value.key, slot_index) < PSL(insert_key, slot_index)
+    && PSL(entry.value.key, i) < PSL(key, i)
   }
-
-  // predicate SlotFull(table: FixedTable, i: Index)
-  // {
-  //   table[i].Some? && table[i].value.Full?
-  // }
-
-  predicate SlotEmpty(table: FixedTable, i: Index)
-  {
-    table[i].Some? && table[i].value.Empty?
-  }
-
-  // predicate SlotFullKeyNotFound(table: FixedTable, i: Index, key: Key)
-  // {
-  //   && SlotFull(table, i)
-  //   && table[i].value.key != key
-  // }
-
-  function SlotKeyHash(table: FixedTable, i: Index): Index
-    requires table[i].Some? && table[i].value.Full?
-  {
-    hash(table[i].value.key)
-  }
-
-  function SlotPSL(table: FixedTable, i: Index): nat
-    requires table[i].Some? && table[i].value.Full?
-  {
-    PSL(table[i].value.key, i)
-  }
-
-  // predicate SlotShouldSkip(table: FixedTable, i: Index, key: Key)
-  // {
-  //   && SlotFullKeyNotFound(table, i, key)
-  //   // the psl at the slot is geq than the psl of insert
-  //   && SlotPSL(table, i) >= PSL(key, i)
-  // }
-
-  // predicate SlotShouldSwap(table: FixedTable, i: Index, key: Key)
-  // {
-  //   && SlotFullKeyNotFound(table, i, key)
-  //   // the psl at the slot is less than the psl of the insert
-  //   && SlotPSL(table, i) < PSL(key, i)
-  // }
-
-  type EntryPredicate = (Option<Entry>, Index, Key) -> bool
-
-  predicate TrueInRange(table: FixedTable, range: Range, key: Key, p: EntryPredicate)
-  {
-    forall i: Index | range.Contains(i) :: p(table[i], i, key)
-  }
-
-//////////////////////////////////////////////////////////////////////////////
-// range predicates
-//////////////////////////////////////////////////////////////////////////////
-
 
   predicate ValidProbeRange(table: FixedTable, p_range: Range, key: Key)
   {
@@ -149,7 +111,7 @@ module CircularTable {
     && RangeShouldSkip(table, p_range, key)
     // insert at start
     && (SlotShouldSwap(table[p_range.end], p_range.end, key)
-      || SlotEmpty(table, p_range.end))
+      || SlotEmpty(table[p_range.end]))
   }
 
   // a valid probe range would cover key's hash segment 
@@ -220,11 +182,11 @@ module CircularTable {
     // all the keys in the segment share the hash
     && (forall i: Index | range.Contains(i) ::
         && table[i].value.Full?
-        && SlotKeyHash(table, i) == hash)
+        && SlotKeyHash(table[i]) == hash)
     // and no where else
     && (forall i: Index | !range.Contains(i) ::
         (table[i].value.Full? ==> 
-        SlotKeyHash(table, i) != hash))
+        SlotKeyHash(table[i]) != hash))
   }
 
   predicate ExistsHashSegment(table: FixedTable, hash: Index)

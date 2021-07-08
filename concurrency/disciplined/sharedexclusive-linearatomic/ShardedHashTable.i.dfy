@@ -160,7 +160,7 @@ module ShardedHashTable refines ShardedStateMachine {
     // this part is full
     && RangeFull(table, Partial(start, end))
     // but the end is empty 
-    && SlotEmpty(table, end)
+    && SlotEmpty(table[end])
   }
 
   function Insert(v: Variables, step: Step): Variables
@@ -480,17 +480,6 @@ module ShardedHashTable refines ShardedStateMachine {
     assume false;
   }
 
-  // predicate ValidProbeRange(s: Variables, p_range: Range, key: Key)
-  // {
-  //   && Inv(s)
-  //   && p_range.Partial?
-  //   && p_range.start == hash(key)
-  //   && RangeShouldSkip(s.table, p_range, key)
-  //   && (SlotEmpty(s.table[p_range.end])
-  //     || SlotShouldSwap(s.table[p_range.end], p_range.end, key))
-  // }
-
-
   lemma InsertPreservesKeySegment(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
@@ -553,7 +542,7 @@ module ShardedHashTable refines ShardedStateMachine {
     // the segment was shifted, but contained in the shift range
     if h_range.IsSubOf(range) {
       forall i: Index | h_range'.Contains(i)
-        ensures table'[i].value.Full? && SlotKeyHash(table', i) == h
+        ensures table'[i].value.Full? && SlotKeyHash(table'[i]) == h
       {
         var prev_i := PrevIndex(i);
         assert table'[i] == table[prev_i];
@@ -561,7 +550,7 @@ module ShardedHashTable refines ShardedStateMachine {
       }
 
       forall i: Index | !h_range'.Contains(i)
-        ensures (table'[i].value.Full? ==> SlotKeyHash(table', i) != h);
+        ensures (table'[i].value.Full? ==> SlotKeyHash(table'[i]) != h);
       {
         var prev_i := PrevIndex(i);
         assert || table'[i] == table[prev_i]
@@ -708,7 +697,7 @@ module ShardedHashTable refines ShardedStateMachine {
     if !RangeFullKeyNotFound(table, range, key) {
       var i: Index :|
         && range.Contains(i)
-        && !SlotFullKeyNotFound(table[i], i, key);
+        && !SlotFullKeyNotFound(table[i], key);
       var s_key := table[start].value.key;
 
       var psl_at_s := PSL(s_key, start);
