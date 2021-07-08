@@ -21,6 +21,7 @@ module FileSystem {
 
   datatype FileSys = FileSys(path_map: PathMap, meta_map: MetaView, data_map: DataView)
 
+  // jonh: This file would get 5.5% shorter if we replace WF with a subset type :)
   predicate WF(fs: FileSys)
   {
     && PathComplete(fs.path_map)
@@ -47,6 +48,10 @@ module FileSystem {
   function AliasPaths(fs: FileSys, id: int) : (aliases: iset<Path>)
   requires WF(fs)
   ensures forall path | path !in aliases :: fs.path_map[path] != id
+ // jonh suggest strethening to:
+  ensures forall path | path in aliases <==> fs.path_map[path] == id
+  // although it's not opaque, so you can delete all the ensures and dafny can just derive
+  // both.
   {
     iset path | fs.path_map[path] == id
   }
@@ -60,6 +65,8 @@ module FileSystem {
   }
 
   // robj: How about DirImpliesHasNoAlias?
+  // jonh: notes how hard you're working to encode hardlinks, which Zeus gave to mortals
+  // for a weekend prank.
   predicate DirHasNoAlias(fs: FileSys, path: Path)
   requires WF(fs)
   requires ValidPath(fs, path)
@@ -314,6 +321,10 @@ module FileSystem {
   {
     MetaData(m.ftype, m.perm, m.uid, m.gid, atime, mtime, ctime)
   }
+
+  // jonh: suggest rewriting this as:
+  function ZeroData(size: nat) : (d: Data) { seq(size, i => 0) }
+  // don't need any requires or ensures!
 
   function ZeroData(size: int) : (d: Data)
   requires size >= 0

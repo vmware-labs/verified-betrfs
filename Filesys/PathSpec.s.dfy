@@ -9,19 +9,30 @@ module PathSpec {
   const RootDir :=  ['/' as byte];
   const RootId := 0;
   const DefaultId := -1; // robj: How about NonexistentId or something more concrete about its meaning?
+    // jonh: better yet, make the type: datatype Inode = NoInode | Inode(inode: nat)
 
   // robj asks: what about jonh's suggestion to make Path seq<seq<byte>>?
+  // jonh: yeah, I really like robj's suggestion to consider jonh's suggestion. Better to represent
+  // the intended structure than to escape away the /'s.
   // robj says: aren't paths all of length >= 1?  Maybe use a subset type or defin a ValidPath predicate?
   type Path = seq<byte>
+  // jonh: Is the int an inode? Suggest you name it. Either:
+  //    type Inode = nat
+  // or perhaps better yet:
+  //    datatype Inode = Inode(inode: nat)
+  // ... the latter creates extra syntax, but prevents automatic casting from other ints, which I think is a win.
   type PathMap = imap<Path, int>
 
   // robj: How about PathMapComplete?
+  // jonh: or make Path a datatype and make this a datatype predicate .Complete! (But then you have the extra
+  // syntax that comes with a datatype. :v/ )
   predicate PathComplete(path_map: PathMap)
   {
     && (forall path :: path in path_map)
   }
 
   // robj: Can this be a const?
+  // jonh: what's a const? Isn't this a const?
   function InitPathMap(): (path_map: PathMap)
   {
     imap path :: if path == RootDir then RootId else DefaultId
@@ -29,6 +40,8 @@ module PathSpec {
 
   // robj: How about "BeneathDir" or something to make it clear that
   // this doesn't mean "is an entry in dir"?
+  // jonh: yeah this thing would be much easier to read if paths were sequences of components,
+  // rather than trying to parse out slashes.
   predicate InDir(dir: Path, path: Path)
   {
     && path != dir
