@@ -1,12 +1,14 @@
+include "../../../lib/Base/sequences.i.dfy"
 include "../../../lib/Base/Option.s.dfy"
 include "CircularRange.i.dfy"
 
 module CircularTable {
-  import opened Options
-  import opened CircularRange
   import opened NativeTypes
+  import opened Options
+  import opened Sequences
   import opened KeyValueType
   import opened Limits
+  import opened CircularRange
 
   function method hash(key: Key) : Index
 
@@ -24,6 +26,15 @@ module CircularTable {
   {
     forall i: Index :: table[i].Some?
   }
+
+  function UnitTable(): Table
+  {
+    seq(FixedSize(), i => None)
+  }
+
+//////////////////////////////////////////////////////////////////////////////
+// robinhood invarints
+//////////////////////////////////////////////////////////////////////////////
 
   // Keys are unique, although we don't count entries being removed
   predicate KeysUnique(table: FixedTable)
@@ -61,16 +72,6 @@ module CircularTable {
     exists range: Range :: ValidHashSegment(table, hash, range)
   }
 
-  function GetHashSegment(table: FixedTable, hash: Index): (r: Range)
-    requires Inv(table)
-    ensures ValidHashSegment(table, hash, r)
-  {
-    assert ExistsHashSegment(table, hash);
-    var range: Range :|
-      ValidHashSegment(table, hash, range);
-    range
-  }
-
   predicate ValidPSL(table: FixedTable, i: Index)
     requires Complete(table)
   {
@@ -86,7 +87,7 @@ module CircularTable {
     )
   }
 
-  predicate Inv(table: FixedTable)
+  predicate TableInv(table: FixedTable)
   {
     && Complete(table)
     && KeysUnique(table)
@@ -96,10 +97,96 @@ module CircularTable {
       && ExistsHashSegment(table, i))
   }
 
-  function UnitTable(): Table
+  function GetHashSegment(table: FixedTable, hash: Index): (r: Range)
+    requires TableInv(table)
+    ensures ValidHashSegment(table, hash, r)
   {
-    seq(FixedSize(), i => None)
+    assert ExistsHashSegment(table, hash);
+    var range: Range :|
+      ValidHashSegment(table, hash, range);
+    range
   }
+
+//////////////////////////////////////////////////////////////////////////////
+// quantity 
+//////////////////////////////////////////////////////////////////////////////
+
+  function EntryQuantity(entry: Option<Entry>): nat
+  {
+    if entry.Some? && entry.value.Full? then 1 else 0
+  }
+
+  function {:opaque} TableQuantity(s: Table) : nat
+  {
+    if s == [] then
+      0
+    else
+      (TableQuantity(s[..|s| - 1]) + EntryQuantity(Last(s)))
+  }
+
+  lemma FullTableQuantity(table: Table)
+    requires forall i: int :: 
+      0 <= i < |table| ==> (table[i].Some? && table[i].value.Full?)
+    ensures TableQuantity(table) == |table|
+  {
+    reveal TableQuantity();
+  }
+
+  lemma TableQuantityReplace1(t: Table, t': Table, i: Index)
+    requires 0 <= i < |t| == |t'|
+    requires forall j | 0 <= j < |t| :: i != j ==> t[j] == t'[j]
+    ensures TableQuantity(t') == TableQuantity(t) + EntryQuantity(t'[i]) - EntryQuantity(t[i])
+  {
+    reveal_TableQuantity();
+    var end := |t| - 1;
+    if i == end {
+      assert t[..end] == t'[..end];
+    } else {
+      TableQuantityReplace1(t[..end], t'[..end], i);
+    }
+  }
+
+  lemma TableQuantityConcat(t1: Table, t2: Table)
+    decreases |t2|
+    ensures TableQuantity(t1) + TableQuantity(t2) == TableQuantity(t1 + t2)
+  {
+    var t := t1 + t2;
+
+    if |t1| == 0 || |t2| == 0 {
+      assert t == if |t1| == 0 then t2 else t1;
+      reveal TableQuantity();
+      return;
+    }
+
+    calc == {
+      TableQuantity(t);
+      {
+        reveal TableQuantity();
+      }
+      TableQuantity(t[..|t| - 1]) + EntryQuantity(Last(t));
+      {
+        assert Last(t) == Last(t2);
+      }
+      TableQuantity(t[..|t| - 1]) + EntryQuantity(Last(t2));
+      TableQuantity((t1 + t2)[..|t| - 1]) + EntryQuantity(Last(t2));
+      {
+        assert (t1 + t2)[..|t| - 1] == t1 + t2[..|t2| - 1];
+      }
+      TableQuantity(t1 + t2[..|t2| - 1]) + EntryQuantity(Last(t2));
+      {
+        TableQuantityConcat(t1, t2[..|t2| - 1]);
+      }
+      TableQuantity(t1) +  TableQuantity(t2[..|t2| - 1]) + EntryQuantity(Last(t2));
+      {
+        reveal TableQuantity();
+      }
+      TableQuantity(t1) +  TableQuantity(t2);
+    }
+  }
+
+//////////////////////////////////////////////////////////////////////////////
+// entry predicates
+//////////////////////////////////////////////////////////////////////////////
 
   function PSL(key: Key, i: Index): nat
   {
@@ -232,5 +319,4 @@ module CircularTable {
   //   // this part should all be empty (we won't have a none-empty segment in between)
   //   (forall i : Index | Contains(GetBetween(range0, range1), i) :: table[i].value.Empty?)
   // }
-
 }

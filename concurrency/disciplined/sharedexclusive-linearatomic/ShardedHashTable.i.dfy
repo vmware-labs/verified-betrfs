@@ -1,4 +1,3 @@
-include "../../../lib/Base/sequences.i.dfy"
 include "../common/ConcurrencyModel.s.dfy"
 include "../common/AppSpec.s.dfy"
 include "../common/CountMonoid.i.dfy"
@@ -8,8 +7,8 @@ module ShardedHashTable refines ShardedStateMachine {
   import opened NativeTypes
   import opened Options
   import opened Sequences
-  import opened Limits
   import opened KeyValueType
+  import opened Limits
   import opened CircularRange
   import opened CircularTable
 
@@ -400,21 +399,7 @@ module ShardedHashTable refines ShardedStateMachine {
 // global-level Invariant proof
 //////////////////////////////////////////////////////////////////////////////
 
-
-  function EntryQuantity(entry: Option<Entry>): nat
-  {
-    if entry.Some? && entry.value.Full? then 1 else 0
-  }
-
-  function {:opaque} TableQuantity(s: Table) : nat
-  {
-    if s == [] then
-      0
-    else
-      (TableQuantity(s[..|s| - 1]) + EntryQuantity(Last(s)))
-  }
-
-  predicate TableQuantityInv(s: Variables)
+  predicate QuantityInv(s: Variables)
   {
     && s.Variables?
     && TableQuantity(s.table) + s.insert_capacity.value == Capacity()
@@ -423,16 +408,8 @@ module ShardedHashTable refines ShardedStateMachine {
   predicate Inv(s: Variables)
   {
     && s.Variables?
-    && InvTable(s.table)
-    && TableQuantityInv(s)
-  }
-
-  lemma FullTableQuantity(table: Table)
-    requires forall i: int :: 
-      0 <= i < |table| ==> (table[i].Some? && table[i].value.Full?)
-    ensures TableQuantity(table) == |table|
-  {
-    reveal TableQuantity();
+    && TableInv(s.table)
+    && QuantityInv(s)
   }
 
   lemma InvImpliesEmptySlot(s: Variables) returns (e: Index)
@@ -454,62 +431,10 @@ module ShardedHashTable refines ShardedStateMachine {
 // Proof that Init && Next maintains Inv
 //////////////////////////////////////////////////////////////////////////////
 
-  lemma TableQuantityReplace1(t: Table, t': Table, i: Index)
-    requires 0 <= i < |t| == |t'|
-    requires forall j | 0 <= j < |t| :: i != j ==> t[j] == t'[j]
-    ensures TableQuantity(t') == TableQuantity(t) + EntryQuantity(t'[i]) - EntryQuantity(t[i])
-  {
-    reveal_TableQuantity();
-    var end := |t| - 1;
-    if i == end {
-      assert t[..end] == t'[..end];
-    } else {
-      TableQuantityReplace1(t[..end], t'[..end], i);
-    }
-  }
-
-  lemma TableQuantityConcat(t1: Table, t2: Table)
-    decreases |t2|
-    ensures TableQuantity(t1) + TableQuantity(t2) == TableQuantity(t1 + t2)
-  {
-    var t := t1 + t2;
-
-    if |t1| == 0 || |t2| == 0 {
-      assert t == if |t1| == 0 then t2 else t1;
-      reveal TableQuantity();
-      return;
-    }
-
-    calc == {
-      TableQuantity(t);
-      {
-        reveal TableQuantity();
-      }
-      TableQuantity(t[..|t| - 1]) + EntryQuantity(Last(t));
-      {
-        assert Last(t) == Last(t2);
-      }
-      TableQuantity(t[..|t| - 1]) + EntryQuantity(Last(t2));
-      TableQuantity((t1 + t2)[..|t| - 1]) + EntryQuantity(Last(t2));
-      {
-        assert (t1 + t2)[..|t| - 1] == t1 + t2[..|t2| - 1];
-      }
-      TableQuantity(t1 + t2[..|t2| - 1]) + EntryQuantity(Last(t2));
-      {
-        TableQuantityConcat(t1, t2[..|t2| - 1]);
-      }
-      TableQuantity(t1) +  TableQuantity(t2[..|t2| - 1]) + EntryQuantity(Last(t2));
-      {
-        reveal TableQuantity();
-      }
-      TableQuantity(t1) +  TableQuantity(t2);
-    }
-  }
-
-  lemma InsertStepPreservesTableQuantityInv(s: Variables, s': Variables, step: Step)
+  lemma InsertPreservesQuantityInv(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
-    ensures TableQuantityInv(s')
+    ensures QuantityInv(s')
   {
     var InsertStep(ticket, kv, start, end) := step;
     var table, table' := s.table, s'.table;
@@ -517,7 +442,7 @@ module ShardedHashTable refines ShardedStateMachine {
 
     if start == end {
       TableQuantityReplace1(table, table', end);
-      assert TableQuantityInv(s');
+      assert QuantityInv(s');
     } else if start < end {
       calc == {
         TableQuantity(table);
@@ -924,7 +849,7 @@ module ShardedHashTable refines ShardedStateMachine {
       }
     }
 
-    InsertStepPreservesTableQuantityInv(s, s', step);
+    InsertPreservesQuantityInv(s, s', step);
   }
 
 /*
