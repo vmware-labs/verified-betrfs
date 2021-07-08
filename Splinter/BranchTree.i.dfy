@@ -93,7 +93,7 @@ module BranchTreeMod {
   // Parses CU units to BranchNodes that we can use
   function ParseBranchNode(pg : UninterpretedDiskPage) : Option<BranchNode> // TODO: Finish
 
-  function CUToBranceNode(cu : CU, cache: CacheIfc.Variables) : Option<BranchNode>
+  function CUToBranchNode(cu : CU, cache: CacheIfc.Variables) : Option<BranchNode>
   {
       var diskPage := ReadValue(cache, cu);
       if diskPage == None
@@ -113,7 +113,7 @@ module BranchTreeMod {
 
     predicate Valid(cache : CacheIfc.Variables)
     {
-      true
+      true 
     }
 
     function Root() : CU
@@ -131,19 +131,21 @@ module BranchTreeMod {
   datatype BranchPath = BranchPath(key: Key, steps: seq<BranchStep>)
   {
     predicate WF() {
-      && 0 < |steps|
+      //&& 0 < |steps|
       && (forall i | 0 <= i < |steps|-1 :: steps[i].node.Index?)
-      && Last(steps).node.Leaf?
+      && 0 < |steps| ==> Last(steps).node.Leaf?
     }
 
-    predicate {:opaque} Linked() {
+    predicate {:opaque} Linked()
+      requires WF()
+    {
       && (forall i | 0 < i < |steps| :: steps[i].cu == steps[i-1].node.findSubBranch(key))
     }
 
     predicate Valid(cache: CacheIfc.Variables) {
       && WF()
       && Linked()
-      && (forall i | 0 <= i < |steps| :: Some(steps[i].node) == CUToBranceNode(steps[i].cu, cache))
+      && (forall i | 0 <= i < |steps| :: Some(steps[i].node) == CUToBranchNode(steps[i].cu, cache))
     }
 
     function Root() : CU
@@ -152,10 +154,29 @@ module BranchTreeMod {
       steps[0].cu
     }
 
+    // function CUs() : seq<CU>
+    //   requires WF()
+    // {
+    //   seq(|steps|, i requires (0 <= i < |steps|) => steps[i].cu)
+    // }
+
+    // Return the sequence of CUs (aka nodes) this path touches
+    function CUsRecurse(count : nat) : seq<CU>
+      requires WF()
+      requires count <= |steps|
+    {
+       if count == 0
+       then
+         []
+       else
+         [steps[count-1].cu] + CUsRecurse(count-1)
+    }
+
+    // Return the sequence of CUs (aka nodes) this path touches
     function CUs() : seq<CU>
       requires WF()
     {
-      seq(|steps|, i requires (0 <= i < |steps|) => steps[i].cu)
+      CUsRecurse(|steps|)
     }
 
 
@@ -173,6 +194,11 @@ module BranchTreeMod {
 
   datatype BranchReceipt = BranchReceipt(branchPath : BranchPath, branchTree: Variables)
   {
+    predicate WF() {
+      && branchPath.WF()
+      && branchTree.WF()
+    }
+
     predicate Valid(cache : CacheIfc.Variables)
     {
       && branchPath.Valid(cache)

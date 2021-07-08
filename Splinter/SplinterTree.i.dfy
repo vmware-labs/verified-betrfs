@@ -159,12 +159,12 @@ module SplinterTreeMachineMod {
   {
     predicate WF()
     {
-      && |children| == |activeBranches|
-      // activeBranches can only point to actual branch trees
-      && forall i :: ( (0 <= i < |activeBranches|) ==> (0 <= activeBranches[i] < |branches|))
-      // WF conditions on the pivots
-      && (|children| > 0) ==> (|children| == |pivots| + 1)
-      && forall pivot :: (1 <= pivot < |pivots| && pivots[pivot - 1] < pivots[pivot])
+       && |children| == |activeBranches|
+       // activeBranches can only point to actual branch trees
+       && 0 < |branches| ==> (forall i |  0 <= i < |activeBranches| :: 0 <= activeBranches[i] < |branches|)
+       // WF conditions on the pivots
+       && (0 < |children|) ==> (|children| == |pivots| + 1)
+       && (forall pivot | 1 <= pivot < |pivots| :: pivots[pivot - 1] < pivots[pivot])
     }
 
     // TODO: Collapse all the in all the branch nodes in this level
@@ -241,6 +241,13 @@ module SplinterTreeMachineMod {
 
   datatype NodeAssignment = NodeAssignment(id: TrunkId, cu: CU, node: TrunkNode)
   {
+
+    predicate WF()
+    {
+       && node.WF()
+       //&& cu in CUsInDisk()
+    }
+
     predicate InIndTable(v: Variables)
     {
       && id in v.indTbl
@@ -276,25 +283,31 @@ module SplinterTreeMachineMod {
   {
     predicate WF()
     {
-      && na.node.WF()
-      && ( forall i :: 0 <= i < |branchReceipts| && branchReceipts[i].branchTree.WF() )
+      && na.WF()
+      && ( forall i | 0 <= i < |branchReceipts| :: branchReceipts[i].WF() )
       // We have all the receipts. Does this go in WF() or Valid()??
       && |branchReceipts| == |na.node.branches|
     }
 
-    predicate Valid(v: Variables, cache: CacheIfc.Variables) {
+    predicate Valid(v: Variables, cache: CacheIfc.Variables)
+       requires WF()
+    {
       && na.Valid(v, cache)
-      && ( forall i :: 0 <= i < |branchReceipts| && branchReceipts[i].Valid(cache) )
+      && ( forall i | 0 <= i < |branchReceipts| :: branchReceipts[i].Valid(cache) )
       // Note: Here we require one to one correspondance between the node's branches and the corresponding look up receipt
-      && (forall i :: 0 <= i < |branchReceipts| && na.node.branches[i] == branchReceipts[i].branchTree)
+      && (forall i | 0 <= i < |branchReceipts| :: na.node.branches[i] == branchReceipts[i].branchTree)
     }
 
     function MsgSeqRecurse(count : nat) : (out: seq<Message>)
+      requires WF()
+      requires count <= |branchReceipts|
     {
       if count == 0
       then
         []
       else
+        assert branchReceipts[count-1].WF();
+        assert branchReceipts[count-1].branchPath.WF();
         var currBranchVal := branchReceipts[count-1].branchPath.Decode();
         ( if currBranchVal.Some?
         then
@@ -306,20 +319,25 @@ module SplinterTreeMachineMod {
 
     // Messages in all the branch receipts at this layer
     function MsgSeq() : seq<Message>
+      requires WF()
     {
       MsgSeqRecurse(|branchReceipts|)
     }
 
     function CUsRecurse(count: nat) : seq<CU>
+      requires WF()
+      requires count <= |branchReceipts|
     {
       if count == 0
       then
-        []
+         // add trunk node
+        [na.cu]
       else
-        branchReceipts[count].branchPath.CUs() + CUsRecurse(count - 1)
+        branchReceipts[count-1].branchPath.CUs() + CUsRecurse(count - 1)
     }
 
     function CUs() : seq<CU>
+      requires WF()
     {
       CUsRecurse(|branchReceipts|)
     }
@@ -330,6 +348,11 @@ module SplinterTreeMachineMod {
                                  membufferMsgs: seq<Message>,
                                  steps: seq<TrunkStep>)
   {
+
+    predicate WF() {
+       (forall i | 0 <= i < |steps| :: steps[i].WF())
+    }
+
     predicate {:opaque} ValidPrefix() {
       // TODO: show that the child is also right pivot  // Find from Rob's pivot library
       && forall i :: (0 < i < |steps|) && steps[i].na.node in steps[i-1].na.node.children
@@ -337,6 +360,8 @@ module SplinterTreeMachineMod {
 
 
     function msgSeqRecurse(count : nat) : (out : seq<Message>)
+      requires WF()
+      requires count <= |steps|
     {
       if count == 0
       then
@@ -347,15 +372,18 @@ module SplinterTreeMachineMod {
 
     // Collapse all the messages in this trunk path
     function MsgSeq() : (out : seq<Message>)
+      requires WF()
     {
       msgSeqRecurse(|steps|)
     }
 
     // TODO: reorg into WF
 
-    predicate Valid(v : Variables, cache: CacheIfc.Variables) {
-      && forall i :: (0 <= i < |steps|) && steps[i].Valid(v, cache)
-      && steps[0].na.id == 0 // check for root
+    predicate Valid(v : Variables, cache: CacheIfc.Variables)
+      requires WF()
+    {
+      && (forall i | (0 <= i < |steps|) :: steps[i].Valid(v, cache))
+      && 0 < |steps| ==> steps[0].na.id == RootId() // check for root
       && 0 < |MsgSeq()|
       && Last(MsgSeq()).Define?
       && ValidPrefix()
@@ -363,20 +391,25 @@ module SplinterTreeMachineMod {
       && (0 < |steps| ==> (steps[0].na.cu == v.root))
       // make sure we have the valid memBuffer lookup for this prefix
       && membufferMsgs == MemtableLookup(v, k)
+      // NOte that cu corresponds to the correct node assignment
+      && (forall i | (0 <= i < |steps|) :: steps[i].Valid(v, cache))
     }
 
     // Return the sequence of CUs (aka nodes) this path touches
     function CUsRecurse(count : nat) : seq<CU>
+      requires WF()
+      requires count <= |steps|
     {
        if count == 0
        then
          []
        else
-         steps[count].CUs() +  CUsRecurse(count - 1)
+         steps[count-1].CUs() +  CUsRecurse(count - 1)
     }
 
     // Return the sequence of CUs (aka nodes) this path touches
-    function CUs() : seq<CU>
+    function  CUs() : seq<CU>
+      requires WF()
     {
       CUsRecurse(|steps|)
     }
@@ -409,8 +442,8 @@ module SplinterTreeMachineMod {
     }
 
     predicate Valid(v : Variables, cache: CacheIfc.Variables)
+      requires WF()
     {
-      && WF()
       && path.Valid(v, cache)
       && Oldna().id == newna.id
       && var oldna := path.steps[nodeIdx].na;

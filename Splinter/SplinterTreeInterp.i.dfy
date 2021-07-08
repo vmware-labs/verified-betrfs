@@ -41,6 +41,7 @@ module SplinterTreeInterpMod {
   function IMLookup(v: Variables, cache: CacheIfc.Variables, key: Key) : (lookup: Lookup)
     requires LookupExists(v, cache, key)
     ensures ValidLookup(v, cache, key, lookup)
+    ensures lookup.WF()
   {
      var lookup :| ValidLookup(v, cache, key, lookup);
      lookup
@@ -86,11 +87,11 @@ module SplinterTreeInterpMod {
        IM(cache, pretendVariables)
    }
 
-  function IReads(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : set<CU> {
+  function IReads(v: Variables, cache: CacheIfc.Variables) : set<CU> {
     set cu:CU |
       && cu in CUsInDisk()
       && (exists lookup:TrunkPath :: (&& lookup.Valid(v, cache)
-                           && cu in lookup.CUs()))
+                                      && cu in lookup.CUs()))
       :: cu
   }
 
@@ -104,9 +105,70 @@ module SplinterTreeInterpMod {
 
   }
 
+  predicate AllLookupsExist(v: Variables, cache: CacheIfc.Variables)
+  {
+    forall key | AnyKey(key) :: LookupExists(v, cache, key)
+  }
+
+  lemma LookupsEquivalent(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, lookup0 : Lookup, lookup1: Lookup, count : nat)
+    requires lookup0.k == lookup1.k
+    requires lookup0.WF()
+    requires lookup1.WF()
+    requires lookup0.Valid(v, cache0)
+    requires lookup1.Valid(v, cache1)
+    requires count <= |lookup0.steps|
+    requires count <= |lookup1.steps|
+    requires DiskViewsEquivalent(cache0.dv, cache1.dv, IReads(v, cache0))
+    ensures forall i :: ((0 <= i < count) ==> (lookup0.steps[i] == lookup1.steps[i]))
+  {
+      if 0 < count
+      {
+        LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, count-1);
+        var step0 := lookup0.steps[count-1];
+        var step1 := lookup1.steps[count-1];
+
+        if (count - 1 == 0) {
+          assert step0.na.id == step1.na.id;
+        } else {
+          //
+          assert step0.na.id == step1.na.id;
+        }
+
+
+        assert step0.na.id == step1.na.id;
+        assert step0.na.cu == step1.na.cu;
+
+
+        //assert false by {
+         assert step0.CUs() == step1.CUs();
+        //}
+        //assert false;
+        //assert step0.na.cu in IReads(v, cache0); // TRIGGER
+
+
+
+        assert step0.na.node == step1.na.node;
+
+        assert step0.na == step1.na;
+
+        var cu0 := step0.branchReceipts[0].branchTree.Root();
+        var cu1 := step1.branchReceipts[0].branchTree.Root();
+
+        assert cu0 == cu1;
+        //assert CacheIfc.ReadValue(cache0, cu0) == CacheIfc.ReadValue(cache1, cu1);
+
+        assert false;
+
+        assert step0.branchReceipts == step1.branchReceipts;
+        assert step0 == step1 ;
+      }
+  }
+
   // TODO; Might need to change this to table about both IM and IMStable
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock)
-    requires DiskViewsEquivalent(cache0.dv, cache1.dv, IReads(v, cache0, sb))
+    requires DiskViewsEquivalent(cache0.dv, cache1.dv, IReads(v, cache0))
+    requires AllLookupsExist(v, cache0)
+    requires AllLookupsExist(v, cache1)
     // TODO: require lookup exist
     ensures IM(cache0, v) == IM(cache1, v)
   {
@@ -118,24 +180,22 @@ module SplinterTreeInterpMod {
     forall key | AnyKey(key) //
       ensures IMKey(v, cache0, key) == IMKey(v, cache1, key)
     {
-          if (LookupExists(v, cache0, key)) {
-            //assert LookupExists(v, cache1, key);
-            //var lookup0 := IMLookup(v, cache0, key);
-            //assert (LookupExists(v, cache0, key) ==> LookupExists(v, cache1, key));
-            //var lookup1 := IMLookup(v, cache1, key);
-            assume false;
-          } else {
-            // Ignore this case -- rule it out by invariant
-            assert !LookupExists(v, cache0, key);
-            assert !LookupExists(v, cache1, key);
-            calc {
-              IMKey(v, cache0, key);
-              DefaultMessage();
+      assert LookupExists(v, cache0, key);
+      assert LookupExists(v, cache1, key);
 
-              //IMKey(v, cache1, key);
-             }
-             assume false;
-          }
+
+      //assert IReads(v, cache0) == IReads(v, cache1);
+      var lookup0 := IMLookup(v, cache0, key);
+      var lookup1 := IMLookup(v, cache1, key);
+
+      LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, |lookup1.steps|);
+
+      calc {
+        lookup0;
+
+        lookup1;
+      }
+
     }
     assume false;
     assert IM(cache0, v) == IM(cache1, v);

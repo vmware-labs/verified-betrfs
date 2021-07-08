@@ -218,7 +218,8 @@ build/PivotBetree/Bounds.i.verchk: NONLINEAR_FLAGS=
 build/Impl/Mkfs.i.verchk: NONLINEAR_FLAGS=
 build/Impl/MkfsModel.i.verchk: NONLINEAR_FLAGS=
 build/Impl/MarshallingImpl.i.verchk: NONLINEAR_FLAGS=
-
+build/Splinter/SplinterTree.i.verchk: NONLINEAR_FLAGS=
+build/Splinter/BranchTree.i.verchk: NONLINEAR_FLAGS=
 
 ### Put all the flags together
 

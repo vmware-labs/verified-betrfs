@@ -22,7 +22,7 @@ module AllocationMod {
     || (cu in dv0 && cu in dv1 && dv0[cu]==dv1[cu])
   }
 
-  // TODO : cleanup this interface
+  // TODO : cleanup this interface -- we can get rid of this
   predicate DiskViewsEquivalent(dv0: DiskView, dv1: DiskView, cus: set<CU>)
   {
     forall cu :: cu in cus ==> EqualAt(dv0, dv1, cu)
