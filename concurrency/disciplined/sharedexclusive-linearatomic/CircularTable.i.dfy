@@ -103,6 +103,17 @@ module CircularTable {
     && PSL(entry.value.key, i) < PSL(key, i)
   }
 
+  predicate SlotShouldTidy(entry: Option<Entry>, i: Index)
+  {
+    && SlotFull(entry)
+    && hash(entry.value.key) != i
+  }
+
+  predicate RangeShouldTidy(table: FixedTable, range: Range)
+  {
+    forall i: Index | range.Contains(i) :: SlotShouldTidy(table[i], i)
+  }
+
   predicate ValidProbeRange(table: FixedTable, p_range: Range, key: Key)
   {
     && p_range.Partial?
@@ -379,6 +390,14 @@ module CircularTable {
       table[1..end+1] + [Some(Empty)] + table[end+1..start] + table[start+1..] + [table[0]]
   }
 
+  lemma LeftShiftIndex(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
+    requires IsTableLeftShift(table, table', start, end)
+    ensures Partial(start, end).Contains(i) ==> table'[i] == table[NextIndex(i)];
+    ensures Partial(NextIndex(end), start).Contains(i) ==> table'[i] == table[i];
+    ensures i == end ==> table'[i] == Some(Empty);
+  {
+  }
+}
   // lemma ValidHashSegmentsImpliesDisjoint(table: FixedTable, h0: Index, h1: Index)
   //   requires h0 != h1
   //   requires Complete(table)
@@ -415,4 +434,3 @@ module CircularTable {
   //   // this part should all be empty (we won't have a none-empty segment in between)
   //   (forall i : Index | Contains(GetBetween(range0, range1), i) :: table[i].value.Empty?)
   // }
-}

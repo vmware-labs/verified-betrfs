@@ -141,7 +141,7 @@ module ShardedHashTable refines ShardedStateMachine {
     | QueryFoundStep(ticket: Ticket, i: Index)
     | QueryNotFoundStep(ticket: Ticket, end: Index)
 
-    | RemoveFoundStep(ticket: Ticket, range: Range)
+    | RemoveFoundStep(ticket: Ticket, start: Index, end: Index)
     | RemoveNotFoundStep(ticket: Ticket, end: Index)
 
 // Insert transition definitions
@@ -174,6 +174,38 @@ module ShardedHashTable refines ShardedStateMachine {
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
   }
 
+// Remove transition definitions
+
+  predicate RemoveFoundEnable(v: Variables, step: Step)
+  {
+    && step.RemoveFoundStep?
+    && var RemoveFoundStep(ticket, start, end) := step;
+    var key := ticket.input.key;
+    && v.Variables?
+    && ticket in v.tickets
+    && ticket.input.RemoveInput?
+    && SlotFull(v.table[start])
+    && v.table[start].value.key == key
+  
+    && var startNext := NextIndex(start);
+    && var endNext := NextIndex(end);
+    // should tidy this Range
+    && RangeShouldTidy(v.table, Partial(startNext, endNext))
+    // should stop at endNext
+    && !SlotShouldTidy(v.table[endNext], endNext)
+  }
+
+  function RemoveFound(v: Variables, step: Step): Variables
+    requires RemoveFoundEnable(v, step)
+  {
+    var RemoveFoundStep(ticket, start, end) := step;
+    var table' := TableLeftShift(v.table, start, end);
+    v.(table := table')
+      .(insert_capacity := Count.Variables(v.insert_capacity.value + 1))
+      .(tickets := v.tickets - multiset{ticket})
+      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(true))})
+  }
+
 /*
   predicate OverwriteEnable(v: Variables, step: Step)
   {
@@ -200,7 +232,6 @@ module ShardedHashTable refines ShardedStateMachine {
       .(table := v.table[end := Some(Full(kv.0, kv.1))])
   }
 
-// Query transition definitions
 
   predicate QueryFoundEnable(v: Variables, step: Step)
   {
@@ -243,51 +274,6 @@ module ShardedHashTable refines ShardedStateMachine {
     .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.QueryOutput(NotFound))})
   }
 
-// Remove transition definitions
-
-  // NOTE dummy_key not being used
-  predicate SlotShouldTidy(entry: Option<Entry>, slot_index: Index, dummy_key: Key)
-  {
-    && SlotFull(entry, slot_index, DummyKey())
-    && hash(entry.value.key) != slot_index
-  }
-
-  predicate RangeShouldTidy(table: FixedTable, start: Index, end: Index)
-  { 
-    TrueInRange(table, start, end, DummyKey(), SlotShouldTidy)
-  }
-
-  predicate RemoveFoundEnable(v: Variables, step: Step)
-  {
-    && step.RemoveFoundStep?
-    && var RemoveFoundStep(ticket, start, end) := step;
-    var key := ticket.input.key;
-    && v.Variables?
-    && ticket in v.tickets
-    && ticket.input.RemoveInput?
-    && v.table[start].Some?
-    && v.table[start].value.Full?
-    && v.table[start].value.key == key
-  
-    && var startNext := NextIndex(start);
-    && var endNext := NextIndex(end);
-    // should tidy this Range
-    && RangeShouldTidy(v.table, startNext, endNext)
-    // should stop at endNext
-    && !SlotShouldTidy(v.table[endNext], endNext, key)
-  }
-
-  function RemoveFound(v: Variables, step: Step): Variables
-    requires RemoveFoundEnable(v, step)
-  {
-    var RemoveFoundStep(ticket, start, end) := step;
-    var table' := TableLeftShift(v.table, start, end);
-    v.(table := table')
-      .(insert_capacity := Count.Variables(v.insert_capacity.value + 1))
-      .(tickets := v.tickets - multiset{ticket})
-      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(true))})
-  }
-
   predicate RemoveNotFoundEnable(v: Variables, step: Step)
   {
     && step.RemoveNotFoundStep?
@@ -295,8 +281,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && v.Variables?
     && ticket in v.tickets
     && ticket.input.RemoveInput?
-    && v.table[end].Some?
-    && v.table[end].value.Empty?
+    && SlotEmpty(v.table[end])
     && RangeFullKeyNotFound(v.table, hash(ticket.input.key), end, ticket.input.key)
   }
 
@@ -381,82 +366,40 @@ module ShardedHashTable refines ShardedStateMachine {
 // Proof that Init && Next maintains Inv
 //////////////////////////////////////////////////////////////////////////////
 
-  lemma InsertPreservesQuantityInv(s: Variables, s': Variables, step: Step)
+  lemma InsertPreservesKeyUnique(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
-    ensures QuantityInv(s')
+    ensures KeysUnique(s'.table)
   {
-    var InsertStep(ticket, kv, start, end) := step;
+    var InsertStep(ticket, (key, value), start, end) := step;
     var table, table' := s.table, s'.table;
-    var inserted := Some(Full(kv.0, kv.1));
 
-    if start == end {
-      TableQuantityReplace1(table, table', end);
-      assert QuantityInv(s');
-    } else if start < end {
-      calc == {
-        TableQuantity(table);
-        {
-          assert table[..start] + table[start..end] + [table[end]] + table[end+1..] == table;
-          TableQuantityConcat(table[..start] + table[start..end] + [table[end]], table[end+1..]);
-          TableQuantityConcat(table[..start] + table[start..end], [table[end]]);
-          TableQuantityConcat(table[..start], table[start..end]);
-        }
-        TableQuantity(table[..start]) + TableQuantity(table[start..end]) + TableQuantity([table[end]]) + TableQuantity(table[end+1..]);
-        {
-          reveal TableQuantity();
-        }
-        TableQuantity(table[..start]) + TableQuantity(table[start..end]) + TableQuantity(table[end+1..]);
+    var range := Partial(start, end);
+    if !RangeFullKeyNotFound(table, range, key) {
+      var i: Index :|
+        && range.Contains(i)
+        && !SlotFullKeyNotFound(table[i], key);
+      var s_key := table[start].value.key;
+
+      var psl_at_s := PSL(s_key, start);
+      var vpsl_at_s := PSL(key, start);
+
+      assert psl_at_s >= vpsl_at_s by {
+        assert ValidPSL(table, i);
       }
+      assert false;
+    }
 
-      calc == {
-        TableQuantity(table');
-        {
-          assert table' == table[..start] + [inserted] + table[start..end] + table[end+1..];
-          TableQuantityConcat(table[..start] + [inserted] + table[start..end], table[end+1..]);
-          TableQuantityConcat(table[..start] + [inserted], table[start..end]);
-          TableQuantityConcat(table[..start], [inserted]);
-        }
-        TableQuantity(table[..start]) + TableQuantity([inserted]) + TableQuantity(table[start..end]) + TableQuantity(table[end+1..]);
-        {
-          reveal TableQuantity();
-        }
-        TableQuantity(table) + 1;
-      }
-    } else {
-      var last_index := |table| - 1;
-
-      calc == {
-        TableQuantity(table);
-        {
-          assert table == table[..end] + [table[end]] + table[end+1..start] + table[start..last_index] + [table[last_index]];
-          TableQuantityConcat(table[..end] + [table[end]] + table[end+1..start] + table[start..last_index], [table[last_index]]);
-          TableQuantityConcat(table[..end] + [table[end]] + table[end+1..start], table[start..last_index]);
-          TableQuantityConcat(table[..end] + [table[end]], table[end+1..start]);
-          TableQuantityConcat(table[..end], [table[end]]);
-        }
-        TableQuantity(table[..end]) + TableQuantity([table[end]]) + TableQuantity(table[end+1..start]) + TableQuantity(table[start..last_index]) + TableQuantity([table[last_index]]);
-        {
-          reveal TableQuantity();
-        }
-        TableQuantity(table[..end]) + TableQuantity(table[end+1..start]) + TableQuantity(table[start..last_index]) + TableQuantity([table[last_index]]);
-      } 
-
-      calc == {
-        TableQuantity(table');
-        {
-          assert table' == [table[last_index]] + table[..end] + table[end+1..start] + [inserted] + table[start..last_index];
-          TableQuantityConcat([table[last_index]] + table[..end] + table[end+1..start] + [inserted], table[start..last_index]);
-          TableQuantityConcat([table[last_index]] + table[..end] + table[end+1..start], [inserted]);
-          TableQuantityConcat([table[last_index]] + table[..end], table[end+1..start]);
-          TableQuantityConcat([table[last_index]], table[..end]);
-        }
-        TableQuantity([table[last_index]]) + TableQuantity(table[..end]) + TableQuantity(table[end+1..start]) + TableQuantity([inserted]) + TableQuantity(table[start..last_index]);
-        {
-          reveal TableQuantity();
-        }
-        TableQuantity(table) + 1;
-      }
+    if !KeysUnique(table') {
+      var i: Index, j: Index :| 
+        && table'[i].value.Full?
+        && table'[j].value.Full?
+        && i != j
+        && table'[i].value.key == table'[j].value.key;
+      assert i == start || j == start;
+      var index := if i == start then j else i;
+      assert ValidPSL(table, index);
+      assert false;
     }
   }
 
@@ -685,40 +628,82 @@ module ShardedHashTable refines ShardedStateMachine {
     assert ValidPSL(table', i);
   }
 
-  lemma InsertPreservesKeyUnique(s: Variables, s': Variables, step: Step)
+  lemma InsertPreservesQuantityInv(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
-    ensures KeysUnique(s'.table)
+    ensures QuantityInv(s')
   {
-    var InsertStep(ticket, (key, value), start, end) := step;
+    var InsertStep(ticket, kv, start, end) := step;
     var table, table' := s.table, s'.table;
+    var inserted := Some(Full(kv.0, kv.1));
 
-    var range := Partial(start, end);
-    if !RangeFullKeyNotFound(table, range, key) {
-      var i: Index :|
-        && range.Contains(i)
-        && !SlotFullKeyNotFound(table[i], key);
-      var s_key := table[start].value.key;
-
-      var psl_at_s := PSL(s_key, start);
-      var vpsl_at_s := PSL(key, start);
-
-      assert psl_at_s >= vpsl_at_s by {
-        assert ValidPSL(table, i);
+    if start == end {
+      TableQuantityReplace1(table, table', end);
+      assert QuantityInv(s');
+    } else if start < end {
+      calc == {
+        TableQuantity(table);
+        {
+          assert table[..start] + table[start..end] + [table[end]] + table[end+1..] == table;
+          TableQuantityConcat(table[..start] + table[start..end] + [table[end]], table[end+1..]);
+          TableQuantityConcat(table[..start] + table[start..end], [table[end]]);
+          TableQuantityConcat(table[..start], table[start..end]);
+        }
+        TableQuantity(table[..start]) + TableQuantity(table[start..end]) + TableQuantity([table[end]]) + TableQuantity(table[end+1..]);
+        {
+          reveal TableQuantity();
+        }
+        TableQuantity(table[..start]) + TableQuantity(table[start..end]) + TableQuantity(table[end+1..]);
       }
-      assert false;
-    }
 
-    if !KeysUnique(table') {
-      var i: Index, j: Index :| 
-        && table'[i].value.Full?
-        && table'[j].value.Full?
-        && i != j
-        && table'[i].value.key == table'[j].value.key;
-      assert i == start || j == start;
-      var index := if i == start then j else i;
-      assert ValidPSL(table, index);
-      assert false;
+      calc == {
+        TableQuantity(table');
+        {
+          assert table' == table[..start] + [inserted] + table[start..end] + table[end+1..];
+          TableQuantityConcat(table[..start] + [inserted] + table[start..end], table[end+1..]);
+          TableQuantityConcat(table[..start] + [inserted], table[start..end]);
+          TableQuantityConcat(table[..start], [inserted]);
+        }
+        TableQuantity(table[..start]) + TableQuantity([inserted]) + TableQuantity(table[start..end]) + TableQuantity(table[end+1..]);
+        {
+          reveal TableQuantity();
+        }
+        TableQuantity(table) + 1;
+      }
+    } else {
+      var last_index := |table| - 1;
+
+      calc == {
+        TableQuantity(table);
+        {
+          assert table == table[..end] + [table[end]] + table[end+1..start] + table[start..last_index] + [table[last_index]];
+          TableQuantityConcat(table[..end] + [table[end]] + table[end+1..start] + table[start..last_index], [table[last_index]]);
+          TableQuantityConcat(table[..end] + [table[end]] + table[end+1..start], table[start..last_index]);
+          TableQuantityConcat(table[..end] + [table[end]], table[end+1..start]);
+          TableQuantityConcat(table[..end], [table[end]]);
+        }
+        TableQuantity(table[..end]) + TableQuantity([table[end]]) + TableQuantity(table[end+1..start]) + TableQuantity(table[start..last_index]) + TableQuantity([table[last_index]]);
+        {
+          reveal TableQuantity();
+        }
+        TableQuantity(table[..end]) + TableQuantity(table[end+1..start]) + TableQuantity(table[start..last_index]) + TableQuantity([table[last_index]]);
+      } 
+
+      calc == {
+        TableQuantity(table');
+        {
+          assert table' == [table[last_index]] + table[..end] + table[end+1..start] + [inserted] + table[start..last_index];
+          TableQuantityConcat([table[last_index]] + table[..end] + table[end+1..start] + [inserted], table[start..last_index]);
+          TableQuantityConcat([table[last_index]] + table[..end] + table[end+1..start], [inserted]);
+          TableQuantityConcat([table[last_index]] + table[..end], table[end+1..start]);
+          TableQuantityConcat([table[last_index]], table[..end]);
+        }
+        TableQuantity([table[last_index]]) + TableQuantity(table[..end]) + TableQuantity(table[end+1..start]) + TableQuantity([inserted]) + TableQuantity(table[start..last_index]);
+        {
+          reveal TableQuantity();
+        }
+        TableQuantity(table) + 1;
+      }
     }
   }
 
@@ -749,6 +734,34 @@ module ShardedHashTable refines ShardedStateMachine {
 
     InsertPreservesQuantityInv(s, s', step);
   }
+
+  // lemma RemoveFoundPreservesKeyUnique(s: Variables, s': Variables, step: Step)
+  //   requires Inv(s)
+  //   requires step.RemoveFoundStep? && NextStep(s, s', step)
+  //   ensures KeysUnique(s'.table)
+  // {
+  // }
+
+  lemma RemoveFoundPreservesKeySegment(s: Variables, s': Variables, step: Step)
+    requires Inv(s)
+    requires step.RemoveFoundStep? && NextStep(s, s', step)
+    // ensures KeysUnique(s'.table)
+  {
+    var table, table' := s.table, s'.table;
+    var RemoveFoundStep(ticket, start, end) := step;
+    var key := ticket.input.key;
+    var h := hash(key);
+
+    // the segment that shares the hash
+    var h_range := GetHashSegment(table, h);
+    var Partial(hr_start, hr_end) := h_range;
+
+    if hr_start == hr_end {
+      assert false;
+    }
+    
+  }
+
 
 /*
   lemma OverwriteStepPreservesInv(s: Variables, s': Variables, step: Step)
