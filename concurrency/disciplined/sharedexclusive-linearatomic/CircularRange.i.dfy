@@ -87,67 +87,65 @@ module CircularRange {
     {
     }
 
+    // lemma DisjointRangesValidBetween(a: Range, b: Range)
+    //   requires !OverlapsWith(a, b)
+    //   requires !a.Nothing? && !b.Nothing?
+    //   ensures a.Partial? && b.Partial?
+    // {
+    //   if a.Everything? {
+    //     if b.Partial? {
+    //       assert Contains(a, b.start);
+    //     } else {
+    //       assert Contains(a, 0);
+    //       assert Contains(b, 0);
+    //     }
+    //     assert false;
+    //   }
+      
+    //   if b.Everything? {
+    //     if a.Partial? {
+    //       assert Contains(b, a.start);
+    //     } else {
+    //       assert Contains(a, 0);
+    //       assert Contains(b, 0);
+    //     }
+    //     assert false;
+    //   }
+
+    //   assert a.Partial? && b.Partial?;
+    // }
+
+    // function GetBetween(a: Range, b: Range): Range
+    //   requires !OverlapsWith(a, b)
+    // {
+    //   if a.Nothing? || b.Nothing? then
+    //     Nothing
+    //   else (
+    //     DisjointRangesValidBetween(a, b);
+    //     if a.end == b.start then Nothing
+    //     else Partial(a.end, b.start)
+    //   )
+    // }
+
+    // // if i is not in range, then i is in the copmlement (vice versa)
+    // lemma RangeComplement(i: Index, range: Range)
+    //   ensures !Contains(range, i) == Contains(GetComplement(range), i);
+    // { 
+    // }
+
+    // lemma RangeInclusion(a: Index, b: Index, c: Index)
+    //   requires a != b && a != c
+    //   requires Contains(Partial(a, b), c)
+    //   ensures Contains(Partial(c, a), b);
+    // {
+    // }
+
+    // lemma RangeNext(start: Index, end: Index, i: Index)
+    //   requires start != end
+    //   requires start != NextIndex(end)
+    //   requires Contains(Partial(start, NextIndex(end)), i);
+    // {
+    //   assert Contains(Partial(start, end), i) || end == i;
+    // }
   }
-
-
-  // lemma DisjointRangesValidBetween(a: Range, b: Range)
-  //   requires !OverlapsWith(a, b)
-  //   requires !a.Nothing? && !b.Nothing?
-  //   ensures a.Partial? && b.Partial?
-  // {
-  //   if a.Everything? {
-  //     if b.Partial? {
-  //       assert Contains(a, b.start);
-  //     } else {
-  //       assert Contains(a, 0);
-  //       assert Contains(b, 0);
-  //     }
-  //     assert false;
-  //   }
-    
-  //   if b.Everything? {
-  //     if a.Partial? {
-  //       assert Contains(b, a.start);
-  //     } else {
-  //       assert Contains(a, 0);
-  //       assert Contains(b, 0);
-  //     }
-  //     assert false;
-  //   }
-
-  //   assert a.Partial? && b.Partial?;
-  // }
-
-  // function GetBetween(a: Range, b: Range): Range
-  //   requires !OverlapsWith(a, b)
-  // {
-  //   if a.Nothing? || b.Nothing? then
-  //     Nothing
-  //   else (
-  //     DisjointRangesValidBetween(a, b);
-  //     if a.end == b.start then Nothing
-  //     else Partial(a.end, b.start)
-  //   )
-  // }
-
-  // // if i is not in range, then i is in the copmlement (vice versa)
-  // lemma RangeComplement(i: Index, range: Range)
-  //   ensures !Contains(range, i) == Contains(GetComplement(range), i);
-  // { 
-  // }
-
-  // lemma RangeInclusion(a: Index, b: Index, c: Index)
-  //   requires a != b && a != c
-  //   requires Contains(Partial(a, b), c)
-  //   ensures Contains(Partial(c, a), b);
-  // {
-  // }
-
-  // // lemma RangeNext(start: Index, end: Index, i: Index)
-  // //   requires start != end
-  // //   requires start != NextIndex(end)
-  // //   requires Contains(Partial(start, NextIndex(end)), i);
-  // // {
-  // //   assert Contains(Partial(start, end), i) || end == i;
-  // // }
 }
