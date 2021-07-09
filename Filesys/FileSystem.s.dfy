@@ -118,8 +118,6 @@ module FileSystem {
     )
   }
 
-  // robj: Need to update mtime of parent dir (and same for other
-  // directory mutations, e.g. delete, link, etc)
   predicate Create(fs: FileSys, fs':FileSys, path: Path, id: ID, m: MetaData)
   {
     && WF(fs)
@@ -128,8 +126,8 @@ module FileSystem {
     && ValidNewMetaData(m, path)
     && ValidNewId(fs, id)
     // Entry Not Present
-    // && fs.meta_map[id].EmptyMetaData?
-    // && fs.data_map[id] == EmptyData() // jialin: might be able to derive these from inv
+    && fs.meta_map[id].EmptyMetaData?
+    && fs.data_map[id] == EmptyData()
     // Updated maps
     && var parent_id := fs.path_map[GetParentDir(path)];
     && fs'.path_map == fs.path_map[path := id]
@@ -267,9 +265,7 @@ module FileSystem {
     MetaData(m.ftype, m.perm, m.uid, m.gid, atime, mtime, ctime)
   }
 
-  // jonh: suggest rewriting this as:
   function ZeroData(size: nat) : (d: Data) { seq(size, i => 0) }
-  // don't need any requires or ensures!
 
   function DataTruncate(d: Data, size: int): (d': Data)
   requires 0 <= size
