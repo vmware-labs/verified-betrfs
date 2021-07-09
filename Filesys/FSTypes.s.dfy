@@ -20,8 +20,7 @@ module FSTypes {
     | FIFOFile
     | SocketFile
 
-  // robj asks: Any reason to break this up at spec level?
-  datatype Time = Time(seconds: int, nanoseconds: int)
+  datatype Time = Time(nanoseconds: int)
 
   // metadata tracked by filesys
   datatype MetaData = 
@@ -44,7 +43,7 @@ module FSTypes {
 
   function InitRootMetaData(): MetaData
   {
-    MetaData(Directory, 755, 0, 0, Time(0,0), Time(0,0), Time(0,0))
+    MetaData(Directory, 755, 0, 0, Time(0), Time(0), Time(0))
   }
 
   function EmptyData(): Data
@@ -53,5 +52,7 @@ module FSTypes {
   }
 
   // robj asks: is path too general here?  What if path includes slashes?
-  datatype DirEntry = DirEntry(id: int, path: Path, ftype: FileType)
+  // jialin: changed path to be seq<seq<byte>>, the path allowed to return
+  //   to users have to be valid, which should eliminate formatting problem
+  datatype DirEntry = DirEntry(id: ID, path: Path, ftype: FileType)
 }

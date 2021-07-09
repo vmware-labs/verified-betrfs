@@ -2,93 +2,85 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Lang/NativeTypes.s.dfy"
+include "../lib/Lang/System/SeqComparison.s.dfy"
+
+/*
+  Path is represented by a sequence of sequence of byte.
+  [] represents rootdir
+  [[a]] = /a
+  [[a],[bc]] = /a/bc
+*/
 
 module PathSpec {
   import opened NativeTypes
+  import SeqComparison
 
-  const RootDir :=  ['/' as byte];
-  const RootId := 0;
-  const DefaultId := -1; // robj: How about NonexistentId or something more concrete about its meaning?
-    // jonh: better yet, make the type: datatype Inode = NoInode | Inode(inode: nat)
+  // equivalent to inode number
+  datatype ID = Nonexistent | ID(id: nat)
 
-  // robj asks: what about jonh's suggestion to make Path seq<seq<byte>>?
-  // jonh: yeah, I really like robj's suggestion to consider jonh's suggestion. Better to represent
-  // the intended structure than to escape away the /'s.
+  type Path = seq<seq<byte>>
+  type PathMap = imap<Path, ID>
+
+  const RootDir : Path := [];
+  const RootID := ID(0);
+
   // robj says: aren't paths all of length >= 1?  Maybe use a subset type or defin a ValidPath predicate?
-  type Path = seq<byte>
-  // jonh: Is the int an inode? Suggest you name it. Either:
-  //    type Inode = nat
-  // or perhaps better yet:
-  //    datatype Inode = Inode(inode: nat)
-  // ... the latter creates extra syntax, but prevents automatic casting from other ints, which I think is a win.
-  type PathMap = imap<Path, int>
+  // jialin: we can represent rootdir as empty path
 
-  // robj: How about PathMapComplete?
   // jonh: or make Path a datatype and make this a datatype predicate .Complete! (But then you have the extra
   // syntax that comes with a datatype. :v/ )
-  predicate PathComplete(path_map: PathMap)
+  // jialin: there isn't many pathmap level operations, wrapping in a datatype might make accessing it 
+  //  in the filesystem longer/messier
+  predicate PathMapComplete(path_map: PathMap)
   {
     && (forall path :: path in path_map)
   }
 
   // robj: Can this be a const?
   // jonh: what's a const? Isn't this a const?
+  // jialin: imap comprehensions can't be used to define a const
+  //   const is considered as a non-ghost contexts and must be compilable
   function InitPathMap(): (path_map: PathMap)
   {
-    imap path :: if path == RootDir then RootId else DefaultId
+    imap path :: if path == RootDir then RootID else Nonexistent
   }
 
-  // robj: How about "BeneathDir" or something to make it clear that
-  // this doesn't mean "is an entry in dir"?
-  // jonh: yeah this thing would be much easier to read if paths were sequences of components,
-  // rather than trying to parse out slashes.
-  predicate InDir(dir: Path, path: Path)
+  predicate BeneathDir(dir: Path, path: Path)
   {
-    && path != dir
-    && |path| > |dir|
+    && |dir| < |path|
     && path[..|dir|] == dir
-    && (|dir| > 1 ==> path[|dir|] as int == '/' as int)
   }
 
   predicate IsEmptyDir(path_map: PathMap, dir: Path)
-  requires PathComplete(path_map)
+  requires PathMapComplete(path_map)
   {
-    && (forall k | InDir(dir, k) :: path_map[k] == DefaultId)
+    && (forall k | BeneathDir(dir, k) :: path_map[k].Nonexistent?)
   }
 
   predicate IsDirEntry(dir: Path, path: Path)
   {
-    && InDir(dir, path)
-    && !(exists p :: InDir(dir, p) && InDir(p, path))
-    // && (forall i | |dir| < i < |path| :: path[i] as int != '/' as int) // equivalent
-  }
-
-  function GetParentDirIter(path: Path, i: int): (dir: Path)
-  requires 0 <= i < |path|
-  requires forall j | i < j < |path| :: path[j] as int != '/' as int
-  ensures |dir| < |path|
-  ensures path[..|dir|] == dir
-  ensures |dir| > 1 ==> path[|dir|] as int == '/' as int 
-  ensures forall j | |dir| < j < |path| :: path[j] as int != '/' as int
-  {
-    if path[i] as int == '/' as int then (
-      if i == 0 && |path| > 1 then path[..i+1] else path[..i]
-    ) else (
-      if i == 0 then [] else GetParentDirIter(path, i-1)
-    )
+    && BeneathDir(dir, path)
+    && |dir| + 1 == |path|
   }
 
   function GetParentDir(path: Path): (dir: Path)
   {
-    if |path| == 0 then path
-    else GetParentDirIter(path, |path|-1)
+    if |path| == 0 then [] else path[..|path|-1]
   }
 
-  // robj: Can this be strengthened to IsDirEntry?
-  lemma GetParentDirImpliesInDir(path: Path, dir: Path)
-  requires |dir| > 0
+  lemma GetParentDirImpliesIsDirEntry(path: Path, dir: Path)
+  requires |path| > 0
   requires GetParentDir(path) == dir
-  ensures InDir(dir, path)
+  ensures IsDirEntry(dir, path)
   {
+  }
+
+  // to compare two dir entries, just compare their last element
+  predicate DirEntryLte(a: Path, b: Path)
+  requires |a| > 0
+  requires |a| == |b|
+  requires a[..|a|-1] == b[..|b|-1]
+  {
+    SeqComparison.lte(a[|a|-1], b[|b|-1])
   }
 }
