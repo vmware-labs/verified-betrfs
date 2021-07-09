@@ -732,11 +732,43 @@ module ShardedHashTable refines ShardedStateMachine {
   // {
   // }
 
-  lemma RemoveFoundPreservesKeySegment(s: Variables, s': Variables, step: Step, h: Index)
+  lemma RemoveFoundPreservesKeySegment(s: Variables, s': Variables, step: Step)
+    requires Inv(s)
+    requires step.RemoveFoundStep? && NextStep(s, s', step)
+    // ensures ExistsHashSegment(s'.table, h)
+  {
+    var table, table' := s.table, s'.table;
+    var RemoveFoundStep(ticket, start, end) := step;
+    var key := ticket.input.key;
+    var h := hash(key);
+
+    // the segment that shares the hash
+    var h_range := GetHashSegment(table, h);
+    var Partial(hr_start, hr_end) := h_range;
+    var s_range := Partial(start, NextIndex(end));
+
+    if s_range.HasNone() {
+      var e := InvImpliesEmptySlot(s);
+      assert false;
+    }
+
+    if h_range.DisjointsWith(s_range) {
+      assert false;
+    }
+
+    var e := InvImpliesEmptySlot(s);
+    TidyRangeSufficient(table, Partial(start, end), key);
+    assert !h_range.Contains(NextIndex(end));
+
+    var h_range' := Partial(hr_start, PrevIndex(hr_end));
+    assert ValidHashSegment(table', h, h_range');
+  }
+
+  lemma RemoveFoundPreservesOtherSegment(s: Variables, s': Variables, step: Step, h: Index)
     requires Inv(s)
     requires step.RemoveFoundStep? && NextStep(s, s', step)
     requires h != hash(step.ticket.input.key)
-    // ensures 
+    ensures ExistsHashSegment(s'.table, h)
   {
     var table, table' := s.table, s'.table;
     var RemoveFoundStep(ticket, start, end) := step;
@@ -747,8 +779,7 @@ module ShardedHashTable refines ShardedStateMachine {
     var Partial(hr_start, hr_end) := h_range;
     var s_range := Partial(start, NextIndex(end));
 
-    if start == NextIndex(end) {
-      // this case is impossible
+    if s_range.HasNone() {
       var e := InvImpliesEmptySlot(s);
       assert false;
     }
@@ -778,6 +809,8 @@ module ShardedHashTable refines ShardedStateMachine {
       assert false;
     }
   }
+
+
 
 /*
   lemma OverwriteStepPreservesInv(s: Variables, s': Variables, step: Step)
