@@ -1677,7 +1677,7 @@ module InterpretationDisk {
     else { assert false; }
   }
 
-  lemma {:timeLimitMultiplier 2} RefinesProcessWrite(disk: D.Variables, disk': D.Variables, id: D.ReqId)
+  lemma {:timeLimitMultiplier 4} RefinesProcessWrite(disk: D.Variables, disk': D.Variables, id: D.ReqId)
   requires Inv(disk)
   requires D.ProcessWrite(disk, disk', id)
   ensures Inv(disk')
