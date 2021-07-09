@@ -71,6 +71,7 @@ module BranchTreeMod {
       requires WF()
       requires this.Index?
     {
+      assume false; // TODO kill this function; replace with pivot lib
       // TODO switch to Rob's pivot-looker-upper
       if Keys.lt(key, pivots[0]) //TODO Check if pivots are inclusive
         then
@@ -127,13 +128,19 @@ module BranchTreeMod {
   // If there are no messages corresponding to this key,
   // then the final entity in this sequence steps will be None
   datatype BranchStep = BranchStep(cu: CU, node:BranchNode)
+  {
+    predicate WF() {
+      && node.WF()
+    }
+  }
 
   datatype BranchPath = BranchPath(key: Key, steps: seq<BranchStep>)
   {
     predicate WF() {
-      //&& 0 < |steps|
+      && 0 < |steps|
+      && (forall i | 0 <= i < |steps| :: steps[i].WF())
       && (forall i | 0 <= i < |steps|-1 :: steps[i].node.Index?)
-      && 0 < |steps| ==> Last(steps).node.Leaf?
+      && Last(steps).node.Leaf?
     }
 
     predicate {:opaque} Linked()
@@ -201,6 +208,7 @@ module BranchTreeMod {
 
     predicate Valid(cache : CacheIfc.Variables)
     {
+      && WF()
       && branchPath.Valid(cache)
       && branchTree.Valid(cache)
       && branchPath.steps[0].cu == branchTree.root

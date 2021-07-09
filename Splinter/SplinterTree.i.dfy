@@ -161,9 +161,9 @@ module SplinterTreeMachineMod {
     {
        && |children| == |activeBranches|
        // activeBranches can only point to actual branch trees
-       && 0 < |branches| ==> (forall i |  0 <= i < |activeBranches| :: 0 <= activeBranches[i] < |branches|)
+       && (0 < |branches| ==> forall i |  0 <= i < |activeBranches| :: 0 <= activeBranches[i] < |branches|)
        // WF conditions on the pivots
-       && (0 < |children|) ==> (|children| == |pivots| + 1)
+       && (0 < |children| ==> |children| == |pivots| + 1)
        && (forall pivot | 1 <= pivot < |pivots| :: pivots[pivot - 1] < pivots[pivot])
     }
 
@@ -380,19 +380,19 @@ module SplinterTreeMachineMod {
     // TODO: reorg into WF
 
     predicate Valid(v : Variables, cache: CacheIfc.Variables)
-      requires WF()
     {
+      && WF()
       && (forall i | (0 <= i < |steps|) :: steps[i].Valid(v, cache))
-      && 0 < |steps| ==> steps[0].na.id == RootId() // check for root
+      && (0 < |steps| ==> steps[0].na.id == RootId()) // check for root
       && 0 < |MsgSeq()|
       && Last(MsgSeq()).Define?
       && ValidPrefix()
       // check that the first step is the root
-      && (0 < |steps| ==> (steps[0].na.cu == v.root))
+      && (0 < |steps| ==> steps[0].na.cu == v.root)
       // make sure we have the valid memBuffer lookup for this prefix
       && membufferMsgs == MemtableLookup(v, k)
       // NOte that cu corresponds to the correct node assignment
-      && (forall i | (0 <= i < |steps|) :: steps[i].Valid(v, cache))
+      && (forall i | 0 <= i < |steps| :: steps[i].Valid(v, cache))
     }
 
     // Return the sequence of CUs (aka nodes) this path touches
@@ -415,6 +415,7 @@ module SplinterTreeMachineMod {
     }
 
     function Decode() : (msg : Message)
+      requires WF()
       ensures msg.Define?
     {
       var msg := MsgSeqMod.CombineDeltasWithDefine(MsgSeq());
@@ -442,8 +443,8 @@ module SplinterTreeMachineMod {
     }
 
     predicate Valid(v : Variables, cache: CacheIfc.Variables)
-      requires WF()
     {
+      && WF()
       && path.Valid(v, cache)
       && Oldna().id == newna.id
       && var oldna := path.steps[nodeIdx].na;
@@ -495,7 +496,9 @@ module SplinterTreeMachineMod {
     && v' == v.(memBuffer := v.memBuffer[key := newMessage], nextSeq := v.nextSeq + 1)
   }
 
-  predicate PutMany(v: Variables, v': Variables, puts: MsgSeq) {
+  predicate PutMany(v: Variables, v': Variables, puts: MsgSeq)
+    requires puts.WF()
+  {
     &&  v' == v.(memBuffer := puts.ApplyToKeyMap(v.memBuffer), nextSeq := v.nextSeq + puts.Len())
   }
 
@@ -506,7 +509,10 @@ module SplinterTreeMachineMod {
     newChild: NodeAssignment)
   {
     predicate WF() {
-      2<=|trunkPath.steps|
+      && trunkPath.WF()
+      && newParent.WF()
+      && newChild.WF()
+      && 0 <= oldParentIdx < |trunkPath.steps|-1
     }
     predicate Valid(v: Variables, cache: CacheIfc.Variables) {
       && WF()
@@ -566,8 +572,11 @@ module SplinterTreeMachineMod {
     && var newChildId :| (0 <= newChildId < |newParent.children|) && newParent.children[newChildId] == newChild;
     && oldChildId == newChildId
     // for now we're flushing all current branches??
-    && forall i :: (&& oldParent.activeBranches[oldChildId] <= i < |oldParent.branches|
+    && (forall i :: && oldParent.activeBranches[oldChildId] <= i < |oldParent.branches|
                     && oldParent.branches[i] in newChild.branches)
+    && assert newParent.WF();
+    && assert |newParent.activeBranches| == |newParent.children|;
+    && assert 0 <= newChildId < |newParent.children|;
     && newParent.activeBranches[newChildId] == |newParent.branches|
 
   }
