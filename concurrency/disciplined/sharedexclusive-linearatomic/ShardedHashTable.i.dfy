@@ -175,24 +175,14 @@ module ShardedHashTable refines ShardedStateMachine {
   }
 
 // Remove transition definitions
-
   predicate RemoveFoundEnable(v: Variables, step: Step)
   {
     && step.RemoveFoundStep?
     && var RemoveFoundStep(ticket, start, end) := step;
-    var key := ticket.input.key;
     && v.Variables?
     && ticket in v.tickets
     && ticket.input.RemoveInput?
-    && SlotFull(v.table[start])
-    && v.table[start].value.key == key
-  
-    && var startNext := NextIndex(start);
-    && var endNext := NextIndex(end);
-    // should tidy this Range
-    && RangeShouldTidy(v.table, Partial(startNext, endNext))
-    // should stop at endNext
-    && !SlotShouldTidy(v.table[endNext], endNext)
+    && ValidTidyRange(v.table, Partial(start, end), ticket.input.key)
   }
 
   function RemoveFound(v: Variables, step: Step): Variables
@@ -302,7 +292,7 @@ module ShardedHashTable refines ShardedStateMachine {
     // else if step.OverwriteStep? then OverwriteEnable(v, step)
     // else if step.QueryFoundStep? then QueryFoundEnable(v, step)
     // else if step.QueryNotFoundStep? then QueryNotFoundEnable(v, step)
-    // else if step.RemoveFoundStep? then RemoveFoundEnable(v, step)
+    else if step.RemoveFoundStep? then RemoveFoundEnable(v, step)
     // else if step.RemoveNotFoundStep? then RemoveNotFoundEnable(v, step)
     else false
   }
@@ -314,7 +304,7 @@ module ShardedHashTable refines ShardedStateMachine {
     // else if step.OverwriteStep? then Overwrite(v, step)
     // else if step.QueryFoundStep? then QueryFound(v, step)
     // else if step.QueryNotFoundStep? then QueryNotFound(v, step)
-    // else if step.RemoveFoundStep? then RemoveFound(v, step)
+    else if step.RemoveFoundStep? then RemoveFound(v, step)
     // else if step.RemoveNotFoundStep? then RemoveNotFound(v, step)
     else Fail
   }
@@ -742,26 +732,57 @@ module ShardedHashTable refines ShardedStateMachine {
   // {
   // }
 
-  lemma RemoveFoundPreservesKeySegment(s: Variables, s': Variables, step: Step)
+  lemma RemoveFoundPreservesKeySegment(s: Variables, s': Variables, step: Step, h: Index)
     requires Inv(s)
     requires step.RemoveFoundStep? && NextStep(s, s', step)
+    requires h != hash(step.ticket.input.key)
     // ensures KeysUnique(s'.table)
   {
     var table, table' := s.table, s'.table;
     var RemoveFoundStep(ticket, start, end) := step;
     var key := ticket.input.key;
-    var h := hash(key);
 
     // the segment that shares the hash
     var h_range := GetHashSegment(table, h);
     var Partial(hr_start, hr_end) := h_range;
+    var s_range := Partial(start, NextIndex(end));
 
-    if hr_start == hr_end {
+    if start == NextIndex(end) {
+      // this case is impossible
+      var e := InvImpliesEmptySlot(s);
       assert false;
     }
-    
-  }
 
+    if h_range.DisjointsWith(s_range) {
+      assert ValidHashSegment(table', h, h_range);
+      return;
+    }
+
+    if h_range.IsSubOf(s_range) {
+      var h_range' := Partial(PrevIndex(hr_start), PrevIndex(hr_end));
+      assert ValidHashSegment(table', h, h_range');
+      return;
+    }
+
+    if h_range.IsSuperOf(s_range) {
+      assert false;
+      return;
+    }
+    
+    // assume Partial(start, end).Contains(hr_end);
+
+    // forall i: Index | Partial(hr_start, PrevIndex(hr_end)).Contains(i)
+    //   ensures SlotKeyHash(table'[i]) == h
+    // {
+    //   if Partial(start, PrevIndex(hr_end)).Contains(i) {
+    //     assert Partial(start, end).Contains(i);
+    //     assert table'[i] == table[NextIndex(i)];
+    //   } else {
+    //     assert table'[i] == table[i];
+    //   }
+    // }
+    // assert false;
+  }
 
 /*
   lemma OverwriteStepPreservesInv(s: Variables, s': Variables, step: Step)

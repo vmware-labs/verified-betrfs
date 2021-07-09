@@ -19,6 +19,7 @@ module CircularRange {
 
   datatype Range = 
     | Everything
+    // end is not inclusive 
     | Partial(start: Index, end: Index)
   {
     predicate HasNone()
@@ -64,6 +65,12 @@ module CircularRange {
     {
       forall i : Index ::
         (Contains(i) ==> other.Contains(i))
+    }
+
+    function RightShift1(): Range
+      requires Partial?
+    {
+      Partial(NextIndex(start), NextIndex(end))
     }
 
     function GetComplement(): Range

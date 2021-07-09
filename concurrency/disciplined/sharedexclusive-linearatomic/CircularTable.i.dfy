@@ -91,11 +91,6 @@ module CircularTable {
     && PSL(entry.value.key, i) >= PSL(key, i)
   }
 
-  predicate RangeShouldSkip(table: FixedTable, range: Range, key: Key)
-  {
-    forall i: Index | range.Contains(i) :: SlotShouldSkip(table[i], i, key)
-  }
-
   predicate SlotShouldSwap(entry: Option<Entry>, i: Index, key: Key)
   {
     && SlotFullKeyNotFound(entry, key)
@@ -109,20 +104,56 @@ module CircularTable {
     && hash(entry.value.key) != i
   }
 
-  predicate RangeShouldTidy(table: FixedTable, range: Range)
+  predicate ValidTidyRange(table: FixedTable, r: Range, key: Key)
   {
-    forall i: Index | range.Contains(i) :: SlotShouldTidy(table[i], i)
+    && r.Partial?
+    // remove at start
+    && SlotFull(table[r.start])
+    && table[r.start].value.key == key
+    // shift in between
+    && (forall i: Index | r.RightShift1().Contains(i)
+      :: SlotShouldTidy(table[i], i))
+    // leave end's next
+    && !SlotShouldTidy(table[NextIndex(r.end)], NextIndex(r.end))
   }
 
-  predicate ValidProbeRange(table: FixedTable, p_range: Range, key: Key)
+  lemma TidyRangeSufficient(table: FixedTable, r: Range, key: Key)
+    requires TableInv(table)
+    requires exists e: Index :: SlotEmpty(table[e])
+    requires ValidTidyRange(table, r, key)
+    ensures
+      var end_next := NextIndex(r.end);
+      table[end_next].value.Full? ==>
+      SlotKeyHash(table[end_next]) != SlotKeyHash(table[r.end])
   {
-    && p_range.Partial?
-    && p_range.start == hash(key)
+    var Partial(start, end) := r;
+    var end_next := NextIndex(end);
+
+    if table[end_next].value.Empty? {
+      return;
+    }
+
+    var h := SlotKeyHash(table[end_next]);
+    // assert h == end;
+
+    if SlotKeyHash(table[end]) == h {
+      var e : Index :| SlotEmpty(table[e]);
+      assert ValidPSL(table, end);
+      var h_range := GetHashSegment(table, h);
+      assert h_range.Contains(e);
+      assert false;
+    }
+  }
+
+  predicate ValidProbeRange(table: FixedTable, r: Range, key: Key)
+  {
+    && r.Partial?
+    && r.start == hash(key)
     // skip upto (not including) start
-    && RangeShouldSkip(table, p_range, key)
+    && (forall i: Index | r.Contains(i) :: SlotShouldSkip(table[i], i, key))
     // insert at start
-    && (SlotShouldSwap(table[p_range.end], p_range.end, key)
-      || SlotEmpty(table[p_range.end]))
+    && (SlotShouldSwap(table[r.end], r.end, key)
+      || SlotEmpty(table[r.end]))
   }
 
   // a valid probe range would cover key's hash segment 
