@@ -67,6 +67,12 @@ module CircularRange {
         (Contains(i) ==> other.Contains(i))
     }
 
+    function LeftShift1(): Range
+      requires Partial?
+    {
+      Partial(PrevIndex(start), PrevIndex(end))
+    }
+
     function RightShift1(): Range
       requires Partial?
     {

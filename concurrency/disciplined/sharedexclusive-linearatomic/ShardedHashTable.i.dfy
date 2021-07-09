@@ -736,7 +736,7 @@ module ShardedHashTable refines ShardedStateMachine {
     requires Inv(s)
     requires step.RemoveFoundStep? && NextStep(s, s', step)
     requires h != hash(step.ticket.input.key)
-    // ensures KeysUnique(s'.table)
+    // ensures 
   {
     var table, table' := s.table, s'.table;
     var RemoveFoundStep(ticket, start, end) := step;
@@ -759,29 +759,24 @@ module ShardedHashTable refines ShardedStateMachine {
     }
 
     if h_range.IsSubOf(s_range) {
-      var h_range' := Partial(PrevIndex(hr_start), PrevIndex(hr_end));
+      var h_range' := h_range.LeftShift1();
       assert ValidHashSegment(table', h, h_range');
       return;
     }
 
     if h_range.IsSuperOf(s_range) {
       assert false;
-      return;
+    }
+
+    if h_range.Contains(start) {
+      assert false;
     }
     
-    // assume Partial(start, end).Contains(hr_end);
-
-    // forall i: Index | Partial(hr_start, PrevIndex(hr_end)).Contains(i)
-    //   ensures SlotKeyHash(table'[i]) == h
-    // {
-    //   if Partial(start, PrevIndex(hr_end)).Contains(i) {
-    //     assert Partial(start, end).Contains(i);
-    //     assert table'[i] == table[NextIndex(i)];
-    //   } else {
-    //     assert table'[i] == table[i];
-    //   }
-    // }
-    // assert false;
+    if h_range.Contains(end) {
+      var e := InvImpliesEmptySlot(s);
+      TidyRangeSufficient(table, Partial(start, end), key);
+      assert false;
+    }
   }
 
 /*
