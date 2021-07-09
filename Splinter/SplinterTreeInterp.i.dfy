@@ -24,10 +24,8 @@ module SplinterTreeInterpMod {
   import opened SplinterTreeMachineMod
   import Nat_Order
 
-  type Lookup = TrunkPath
-
   // Select the messages that lookup finds.
-  function LookupToMessage(lookup: Lookup) : (outm : Message)
+  function LookupToMessage(lookup: TrunkPath) : (outm : Message)
     ensures outm.Define?
   {
     lookup.Decode()
@@ -38,7 +36,7 @@ module SplinterTreeInterpMod {
     exists lookup :: ValidLookup(v, cache, key, lookup)
   }
 
-  function IMLookup(v: Variables, cache: CacheIfc.Variables, key: Key) : (lookup: Lookup)
+  function IMLookup(v: Variables, cache: CacheIfc.Variables, key: Key) : (lookup: TrunkPath)
     requires LookupExists(v, cache, key)
     ensures ValidLookup(v, cache, key, lookup)
     ensures lookup.WF()
@@ -78,25 +76,30 @@ module SplinterTreeInterpMod {
   // Imagine what the disk would look like if we were running and haven't
   // added any stuff to the membuffer.
   function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
-   {
-     var indTbl := IndirectionTableMod.I(cache.dv, sb.indTbl);
-     if indTbl.None?
-      then InterpMod.Empty()
-    else
-       var pretendVariables := Variables(indTbl.value, map[], sb.endSeq, Idle, sb.root);
-       IM(cache, pretendVariables)
-   }
+  {
+    var indTbl := IndirectionTableMod.I(cache.dv, sb.indTbl);
+    if indTbl.None?
+     then InterpMod.Empty()
+   else
+      var pretendVariables := Variables(indTbl.value, map[], sb.endSeq, Idle, sb.root);
+      IM(cache, pretendVariables)
+  }
+
+  predicate ValidLookupHasCU(v: Variables, cache: CacheIfc.Variables, lookup: TrunkPath, cu: CU)
+  {
+    && lookup.Valid(v, cache)
+    && cu in lookup.CUs()
+  }
 
   function IReads(v: Variables, cache: CacheIfc.Variables) : set<CU> {
     set cu:CU |
       && cu in CUsInDisk()
-      && (exists lookup:TrunkPath :: (&& lookup.Valid(v, cache)
-                                      && cu in lookup.CUs()))
+      && (exists lookup :: ValidLookupHasCU(v, cache, lookup, cu))
       :: cu
   }
 
   // May have to make this an invariant later.
-  lemma NonEquivocate(v: Variables, cache: CacheIfc.Variables, lookup0: Lookup, lookup1 : Lookup)
+  lemma NonEquivocate(v: Variables, cache: CacheIfc.Variables, lookup0: TrunkPath, lookup1 : TrunkPath)
     requires lookup0.k == lookup1.k
     requires lookup0.Valid(v, cache)
     requires lookup1.Valid(v, cache)
@@ -110,7 +113,7 @@ module SplinterTreeInterpMod {
     forall key | AnyKey(key) :: LookupExists(v, cache, key)
   }
 
-  lemma LookupsEquivalent(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, lookup0 : Lookup, lookup1: Lookup, count : nat)
+  lemma LookupsEquivalent(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, lookup0 : TrunkPath, lookup1: TrunkPath, count : nat)
     requires lookup0.k == lookup1.k
     requires lookup0.WF()
     requires lookup1.WF()
@@ -128,36 +131,34 @@ module SplinterTreeInterpMod {
         var step1 := lookup1.steps[count-1];
 
         if (count - 1 == 0) {
+          // they share roots
           assert step0.na.id == step1.na.id;
         } else {
-          //
+          // prior steps were the same, and the pivots took us to
+          // the same place.
+          // TODO broken here, probably because pivot lookups not defined right yet.
           assert step0.na.id == step1.na.id;
         }
 
 
         assert step0.na.id == step1.na.id;
         assert step0.na.cu == step1.na.cu;
-
-
-        //assert false by {
-         assert step0.CUs() == step1.CUs();
-        //}
-        //assert false;
-        //assert step0.na.cu in IReads(v, cache0); // TRIGGER
-
-
-
+        assert step0.na.cu in CUsInDisk();  // try to trigger set comprehension
+        assert step0.na.cu in lookup0.CUs();
+        assert ValidLookupHasCU(v, cache0, lookup0, step0.na.cu);
+        assert step0.na.cu in IReads(v, cache0); // TRIGGER
         assert step0.na.node == step1.na.node;
 
         assert step0.na == step1.na;
 
-        var cu0 := step0.branchReceipts[0].branchTree.Root();
-        var cu1 := step1.branchReceipts[0].branchTree.Root();
+        // XXX just playing around here; need to add a branchReceipt lemma?
+        if (0 < |step0.branchReceipts|) {
+          var cu0 := step0.branchReceipts[0].branchTree.Root();
+          var cu1 := step1.branchReceipts[0].branchTree.Root();
 
-        assert cu0 == cu1;
-        //assert CacheIfc.ReadValue(cache0, cu0) == CacheIfc.ReadValue(cache1, cu1);
-
-        assert false;
+          assert cu0 == cu1;
+          assert CacheIfc.ReadValue(cache0, cu0) == CacheIfc.ReadValue(cache1, cu1);
+        }
 
         assert step0.branchReceipts == step1.branchReceipts;
         assert step0 == step1 ;

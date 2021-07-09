@@ -1,6 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+include "SequenceSets.i.dfy"
 include "../lib/Base/total_order.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "IndirectionTable.i.dfy"
@@ -101,6 +102,7 @@ module SplinterTreeMachineMod {
   import opened Options
   import opened Sequences
   import opened Maps
+  import opened SequenceSetsMod
   import opened ValueMessage
   import opened KeyType
   import opened InterpMod
@@ -245,7 +247,7 @@ module SplinterTreeMachineMod {
     predicate WF()
     {
        && node.WF()
-       //&& cu in CUsInDisk()
+       && cu in CUsInDisk()
     }
 
     predicate InIndTable(v: Variables)
@@ -324,9 +326,12 @@ module SplinterTreeMachineMod {
       MsgSeqRecurse(|branchReceipts|)
     }
 
-    function CUsRecurse(count: nat) : seq<CU>
+    function CUsRecurse(count: nat) : (cus: seq<CU>)
       requires WF()
       requires count <= |branchReceipts|
+      ensures na.cu in cus
+      ensures forall i | 0<=i<|branchReceipts|
+        :: SequenceSubset(branchReceipts[i].branchPath.CUs(), cus)
     {
       if count == 0
       then

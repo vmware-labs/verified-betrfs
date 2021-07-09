@@ -1,6 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+include "SequenceSets.i.dfy"
 include "Journal.i.dfy"
 include "CacheLemmas.i.dfy"
 
@@ -18,6 +19,7 @@ module JournalInterpMod {
   import opened AllocationMod
   import opened JournalMachineMod
   import opened InterpMod
+  import opened SequenceSetsMod
   import CacheLemmasMod
 
   function FreshestMarshalledCU(v: Variables) : Option<CU>
@@ -169,11 +171,6 @@ module JournalInterpMod {
   function IReads(v: Variables, cache:CacheIfc.Variables, sb: Superblock) : seq<CU>
   {
     ChainFrom(cache.dv, sb).readCUs
-  }
-
-  predicate SequenceSubset<T>(a:seq<T>, b:seq<T>)
-  {
-    forall i | 0<=i<|a| :: a[i] in b
   }
 
   lemma DiskViewsEquivalentAfterRemove(cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, cus: seq<CU>, removedCU: CU, cusr: seq<CU>)
