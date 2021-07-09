@@ -387,9 +387,9 @@ module CircularTable {
   {
   }
 
-  lemma RightShiftedPSL(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
+  lemma RightShiftPSL(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
     requires IsTableRightShift(table, table', inserted, start, end)
-    requires table'[i].Some? && table'[i].value.Full?
+    requires SlotFull(table'[i])
     requires Partial(NextIndex(start), NextIndex(end)).Contains(i)
     requires i != hash(table[PrevIndex(i)].value.key)
     ensures SlotPSL(table', i) == SlotPSL(table, PrevIndex(i)) + 1
@@ -428,6 +428,17 @@ module CircularTable {
     ensures i == end ==> table'[i] == Some(Empty);
   {
   }
+
+  lemma LeftShiftPSL(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
+    requires IsTableLeftShift(table, table', start, end)
+    requires SlotFull(table'[i])
+    requires Partial(start, end).Contains(i) 
+    requires NextIndex(i) != hash(table[NextIndex(i)].value.key)
+    ensures SlotPSL(table', i) == SlotPSL(table, NextIndex(i)) - 1
+  {
+    assert table'[i] == table[NextIndex(i)];
+  }
+
 }
   // lemma ValidHashSegmentsImpliesDisjoint(table: FixedTable, h0: Index, h1: Index)
   //   requires h0 != h1

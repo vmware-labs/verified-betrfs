@@ -607,7 +607,7 @@ module ShardedHashTable refines ShardedStateMachine {
           assert ValidPSL(table, PrevIndex(h_j));
           assert false;
         }
-        RightShiftedPSL(table, table', inserted, start, end, j);
+        RightShiftPSL(table, table', inserted, start, end, j);
       } else if Partial(NextIndex(end), start).Contains(j) {
         assert table'[j] == table[j];
       } else {
@@ -735,7 +735,7 @@ module ShardedHashTable refines ShardedStateMachine {
   lemma RemoveFoundPreservesKeySegment(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.RemoveFoundStep? && NextStep(s, s', step)
-    // ensures ExistsHashSegment(s'.table, h)
+    ensures ExistsHashSegment(s'.table, hash(ticket.input.key))
   {
     var table, table' := s.table, s'.table;
     var RemoveFoundStep(ticket, start, end) := step;
@@ -810,6 +810,12 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
+  lemma RemoveFoundPreservesValidPSL(s: Variables, s': Variables, step: Step, i: Index)
+    requires Inv(s)
+    requires step.RemoveFoundStep? && NextStep(s, s', step)
+  {
+
+  }
 
 
 /*
