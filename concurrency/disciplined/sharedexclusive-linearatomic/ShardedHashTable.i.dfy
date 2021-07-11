@@ -559,9 +559,6 @@ module ShardedHashTable refines ShardedStateMachine {
 
     var h_range := GetHashSegment(table, h);
 
-    // the range is none-empty, otherwise it should be newly inserted
-    assert h_range.Partial?;
-
     // slot i is not shifted
     if table[i] == table'[i] {
       assert Partial(end, start).Contains(i);

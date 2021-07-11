@@ -106,7 +106,6 @@ module CircularTable {
 
   predicate ValidTidyRange(table: FixedTable, r: Range, key: Key)
   {
-    && r.Partial?
     // remove at start
     && SlotFull(table[r.start])
     && table[r.start].value.key == key
@@ -221,11 +220,8 @@ module CircularTable {
   predicate ValidHashSegment(table: FixedTable, hash: Index, range: Range)
     requires Complete(table)
   {
-    // the segement can only be Partial
-    && range.Partial?
     // // if the segment is Partial, the hash cannot be in the middle 
-    // && (range.Partial? ==>
-    //   !Contains(Partial(NextIndex(range.start), range.end), hash))
+    // && !Contains(Partial(NextIndex(range.start), range.end), hash))
     // all the keys in the segment share the hash
     && (forall i: Index | range.Contains(i) ::
         && table[i].value.Full?
@@ -376,8 +372,6 @@ module CircularTable {
       TableQuantityConcat4(t1, t2, t3, t4);
       TableQuantityConcat(t1 + t2 + t3 + t4, t5);
   }
-
-
 
 //////////////////////////////////////////////////////////////////////////////
 // shifting

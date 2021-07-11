@@ -17,10 +17,9 @@ module CircularRange {
     if i == 0 then FixedSize() - 1 else i - 1
   }
 
-  datatype Range = 
-    | Everything
-    // end is not inclusive 
-    | Partial(start: Index, end: Index)
+  // end is not inclusive, range will never cover the entire table
+
+  datatype Range = Partial(start: Index, end: Index)
   {
     predicate HasNone()
     {
@@ -34,14 +33,11 @@ module CircularRange {
 
     predicate Contains(i: Index)
     {
-      match this {
-        case Everything => true
-        case Partial(start, end) =>
-          if start <= end then
-            (start <= i < end)
-          else
-            (start <= i || i < end)
-      }
+      var Partial(start, end) := this;
+      if start <= end then
+        (start <= i < end)
+      else
+        (start <= i || i < end)
     }
 
     predicate OverlapsWith(other: Range)
