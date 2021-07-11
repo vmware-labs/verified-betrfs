@@ -357,6 +357,29 @@ module CircularTable {
     }
   }
 
+  lemma TableQuantityConcat4(t1: Table, t2: Table, t3: Table, t4: Table)
+    ensures 
+      TableQuantity(t1 + t2 + t3 + t4)
+        == 
+      TableQuantity(t1) + TableQuantity(t2) + TableQuantity(t3) + TableQuantity(t4);
+  {
+      TableQuantityConcat(t1 + t2 + t3, t4);
+      TableQuantityConcat(t1 + t2, t3);
+      TableQuantityConcat(t1, t2);
+  }
+
+  lemma TableQuantityConcat5(t1: Table, t2: Table, t3: Table, t4: Table, t5: Table)
+    ensures 
+      TableQuantity(t1 + t2 + t3 + t4 + t5)
+        == 
+      TableQuantity(t1) + TableQuantity(t2) + TableQuantity(t3) + TableQuantity(t4) + TableQuantity(t5);
+  {
+      TableQuantityConcat4(t1, t2, t3, t4);
+      TableQuantityConcat(t1 + t2 + t3 + t4, t5);
+  }
+
+
+
 //////////////////////////////////////////////////////////////////////////////
 // shifting
 //////////////////////////////////////////////////////////////////////////////
@@ -404,6 +427,29 @@ module CircularTable {
     assert table'[i] == table[PrevIndex(i)];
   }
 
+  lemma RightShiftTableQuantity(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index)
+    requires IsTableRightShift(table, table', inserted, start, end)
+    ensures TableQuantity(table') == TableQuantity(table) + EntryQuantity(inserted) - EntryQuantity(table[end]);
+  {
+    assert TableQuantity([table[end]]) == EntryQuantity(table[end])
+      && TableQuantity([inserted]) == EntryQuantity(inserted) by {
+        reveal TableQuantity();
+    }
+
+    if start <= end {
+      assert table == table[..start] + table[start..end] + [table[end]] + table[end+1..];
+      assert table' == table[..start] + [inserted] + table[start..end] + table[end+1..];
+      TableQuantityConcat4(table[..start], table[start..end], [table[end]], table[end+1..]);
+      TableQuantityConcat4(table[..start], [inserted], table[start..end], table[end+1..]);
+    } else {
+      var last_index := |table| - 1;
+      assert table' == [table[last_index]] + table[..end] + table[end+1..start] + [inserted] + table[start..last_index];
+      assert table == table[..end] + [table[end]] + table[end+1..start] + table[start..last_index] + [table[last_index]];
+      TableQuantityConcat5([table[last_index]], table[..end], table[end+1..start], [inserted], table[start..last_index]);
+      TableQuantityConcat5(table[..end], [table[end]], table[end+1..start], table[start..last_index], [table[last_index]]);
+    }
+  }
+
   predicate IsTableLeftShift(table: FixedTable, table': FixedTable, start: Index, end: Index)
   {
     && (start <= end ==>
@@ -447,6 +493,26 @@ module CircularTable {
     assert table'[i] == table[NextIndex(i)];
   }
 
+  lemma LeftShiftTableQuantity(table: FixedTable, table': FixedTable, start: Index, end: Index)
+    requires IsTableLeftShift(table, table', start, end)
+    ensures TableQuantity(table') == TableQuantity(table) - EntryQuantity(table[start])
+  {
+    assert TableQuantity([Some(Empty)]) == 0
+      && TableQuantity([table[start]]) == EntryQuantity(table[start]) by {
+        reveal TableQuantity();
+    }
+    if start <= end {
+      TableQuantityConcat4(table[..start], [table[start]], table[start+1..end+1], table[end+1..]);
+      TableQuantityConcat4(table[..start], table[start+1..end+1], [Some(Empty)], table[end+1..]);
+      assert table == table[..start] + [table[start]] + table[start+1..end+1] + table[end+1..];
+      assert table' == table[..start] + table[start+1..end+1] + [Some(Empty)] + table[end+1..];
+    } else {
+      TableQuantityConcat5([table[0]], table[1..end+1], table[end+1..start], [table[start]], table[start+1..]);
+      TableQuantityConcat5(table[1..end+1], [Some(Empty)], table[end+1..start], table[start+1..], [table[0]]);
+      assert table == [table[0]] + table[1..end+1] + table[end+1..start] + [table[start]] + table[start+1..];
+      assert table' == table[1..end+1] + [Some(Empty)] + table[end+1..start] + table[start+1..] + [table[0]];
+    }
+  }
 }
   // lemma ValidHashSegmentsImpliesDisjoint(table: FixedTable, h0: Index, h1: Index)
   //   requires h0 != h1
