@@ -145,28 +145,27 @@ module CircularTable {
     }
   }
 
-  predicate ValidProbeRange(table: FixedTable, r: Range, key: Key)
+  predicate ValidProbeRange(table: FixedTable, key: Key, end: Index)
   {
-    && r.Partial?
-    && r.start == hash(key)
     // skip upto (not including) start
-    && (forall i: Index | r.Contains(i) :: SlotShouldSkip(table[i], i, key))
+    && (forall i: Index | Partial(hash(key), end).Contains(i) :: SlotShouldSkip(table[i], i, key))
     // insert at start
-    && (SlotShouldSwap(table[r.end], r.end, key)
-      || SlotEmpty(table[r.end]))
+    && (SlotShouldSwap(table[end], end, key)
+      || SlotEmpty(table[end]))
   }
 
   // a valid probe range would cover key's hash segment 
-  lemma ProbeRangeSufficient(table: FixedTable, p_range: Range, key: Key)
+  lemma ProbeRangeSufficient(table: FixedTable, key: Key, end: Index)
     requires TableInv(table)
-    requires ValidProbeRange(table, p_range, key)
+    requires ValidProbeRange(table, key, end)
     ensures var h_range := GetHashSegment(table, hash(key));
       h_range.HasSome() ==> (
-        && p_range.Contains(h_range.start)
-        && h_range.end == p_range.end
+        && Partial(hash(key), end).Contains(h_range.start)
+        && end == h_range.end
       )
   {
-    var Partial(h, pr_end) := p_range;
+    var h := hash(key);
+    var p_range := Partial(h, end);
 
     // the segment that shares the hash
     var h_range := GetHashSegment(table, h);
@@ -183,8 +182,8 @@ module CircularTable {
     }
 
     // narrow where hr_end is
-    if !(p_range.Contains(hr_end) || hr_end == pr_end) {
-      assert h_range.Contains(pr_end);
+    if !(p_range.Contains(hr_end) || hr_end == end) {
+      assert h_range.Contains(end);
       assert false;
     }
 
@@ -194,7 +193,7 @@ module CircularTable {
       assert false;
     }
 
-    assert hr_end == pr_end;
+    assert hr_end == end;
     assert p_range.Contains(hr_start);
   }
 

@@ -25,7 +25,6 @@ module ShardedHashTable refines ShardedStateMachine {
   datatype Stub =
     | Stub(rid: int, output: MapIfc.Output)
 
-
   datatype Variables =
       | Variables(table: FixedTable,
           insert_capacity: Count.Variables,
@@ -40,19 +39,6 @@ module ShardedHashTable refines ShardedStateMachine {
         // have to show that add is complete, which would entail sucking
         // the definition of update and proof of UpdatePreservesValid all
         // into the definition of add().
-
-  predicate QuantityInv(s: Variables)
-    requires s.Variables?
-  {
-    && TableQuantity(s.table) + s.insert_capacity.value == Capacity()
-  }
-
-  predicate Inv(s: Variables)
-  {
-    && s.Variables?
-    && TableInv(s.table)
-    && QuantityInv(s)
-  }
 
   function unit() : Variables
   {
@@ -168,9 +154,8 @@ module ShardedHashTable refines ShardedStateMachine {
     && ticket.input.InsertInput?
     && v.insert_capacity.value >= 1
 
-    && var key := ticket.input.key;
     && var table := v.table;
-    && ValidProbeRange(table, Partial(hash(key), start), key)
+    && ValidProbeRange(table, ticket.input.key, start)
     // this part is full
     && RangeFull(table, Partial(start, end))
     // but the end is empty 
@@ -189,65 +174,41 @@ module ShardedHashTable refines ShardedStateMachine {
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
   }
 
-// Remove transition definitions
-  predicate RemoveEnable(v: Variables, step: Step)
-  {
-    && step.RemoveStep?
-    && var RemoveStep(ticket, start, end) := step;
-    && v.Variables?
-    && ticket in v.tickets
-    && ticket.input.RemoveInput?
-    && ValidTidyRange(v.table, Partial(start, end), ticket.input.key)
-  }
-
-  function Remove(v: Variables, step: Step): Variables
-    requires RemoveEnable(v, step)
-  {
-    var RemoveStep(ticket, start, end) := step;
-    var table' := TableLeftShift(v.table, start, end);
-    v.(table := table')
-      .(insert_capacity := Count.Variables(v.insert_capacity.value + 1))
-      .(tickets := v.tickets - multiset{ticket})
-      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(true))})
-  }
-
-/*
   predicate OverwriteEnable(v: Variables, step: Step)
   {
-    && step.OverwriteStep?
-    && var OverwriteStep(ticket, (key, _), end) := step;
     && v.Variables?
-    && var table := v.table;
-
+    && step.OverwriteStep?
+    && var OverwriteStep(ticket, end) := step;
     && ticket in v.tickets
     && ticket.input.InsertInput?
-
+    
     // the entry at end index has the same key
-    && table[end].Some?
-    && table[end].value.Full?
-    && table[end].value.key == key
+    && SlotFull(v.table[end])
+    && v.table[end].value.key == ticket.input.key
   }
 
   function Overwrite(v: Variables, step: Step): Variables
     requires OverwriteEnable(v, step)
   {
-    var OverwriteStep(ticket, kv, end) := step;
+    var OverwriteStep(ticket, end) := step;
+    var entry := Some(Full(ticket.input.key, ticket.input.value));
     v.(tickets := v.tickets - multiset{ticket})
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput(true))})
-      .(table := v.table[end := Some(Full(kv.0, kv.1))])
+      .(table := v.table[end := entry])
   }
 
+// Query transition definitions
 
   predicate QueryFoundEnable(v: Variables, step: Step)
   {
-    && step.QueryFoundStep?
-    && var QueryFoundStep(ticket, i) := step;
     && v.Variables?
+    && step.QueryFoundStep?
+    && var QueryFoundStep(ticket, end) := step;
     && ticket in v.tickets
     && ticket.input.QueryInput?
-    && v.table[i].Some?
-    && v.table[i].value.Full?
-    && v.table[i].value.key == ticket.input.key
+ 
+    && SlotFull(v.table[end])
+    && v.table[end].value.key == ticket.input.key
   }
 
   function QueryFound(v: Variables, step: Step): Variables
@@ -266,9 +227,8 @@ module ShardedHashTable refines ShardedStateMachine {
     && v.Variables?
     && ticket in v.tickets
     && ticket.input.QueryInput?
-    && v.table[end].Some?
-    && v.table[end].value.Empty?
-    && RangeFullKeyNotFound(v.table, hash(ticket.input.key), end, ticket.input.key)
+
+    && ValidProbeRange(v.table, ticket.input.key, end)
   }
 
   function QueryNotFound(v: Variables, step: Step): Variables
@@ -279,15 +239,41 @@ module ShardedHashTable refines ShardedStateMachine {
     .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.QueryOutput(NotFound))})
   }
 
-  predicate RemoveNotFoundEnable(v: Variables, step: Step)
+// Remove transition definitions
+  
+  predicate RemoveEnable(v: Variables, step: Step)
   {
-    && step.RemoveNotFoundStep?
-    && var RemoveNotFoundStep(ticket, end) := step;
     && v.Variables?
+    && step.RemoveStep?
+
+    && var RemoveStep(ticket, start, end) := step;
     && ticket in v.tickets
     && ticket.input.RemoveInput?
-    && SlotEmpty(v.table[end])
-    && RangeFullKeyNotFound(v.table, hash(ticket.input.key), end, ticket.input.key)
+
+    && ValidTidyRange(v.table, Partial(start, end), ticket.input.key)
+  }
+
+  function Remove(v: Variables, step: Step): Variables
+    requires RemoveEnable(v, step)
+  {
+    var RemoveStep(ticket, start, end) := step;
+    var table' := TableLeftShift(v.table, start, end);
+    v.(table := table')
+      .(insert_capacity := Count.Variables(v.insert_capacity.value + 1))
+      .(tickets := v.tickets - multiset{ticket})
+      .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(true))})
+  }
+
+  predicate RemoveNotFoundEnable(v: Variables, step: Step)
+  {
+    && v.Variables?
+    && step.RemoveNotFoundStep?
+
+    && var RemoveNotFoundStep(ticket, end) := step;
+    && ticket in v.tickets
+    && ticket.input.RemoveInput?
+
+    && ValidProbeRange(v.table, ticket.input.key, end)
   }
 
   function RemoveNotFound(v: Variables, step: Step): Variables
@@ -297,18 +283,18 @@ module ShardedHashTable refines ShardedStateMachine {
     v.(tickets := v.tickets - multiset{ticket})
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(false))})
   }
-*/
+
 
 // All transitions
 
   predicate NextEnable(v: Variables, step: Step)
   {
     if step.InsertStep? then InsertEnable(v, step)
-    // else if step.OverwriteStep? then OverwriteEnable(v, step)
-    // else if step.QueryFoundStep? then QueryFoundEnable(v, step)
-    // else if step.QueryNotFoundStep? then QueryNotFoundEnable(v, step)
+    else if step.OverwriteStep? then OverwriteEnable(v, step)
+    else if step.QueryFoundStep? then QueryFoundEnable(v, step)
+    else if step.QueryNotFoundStep? then QueryNotFoundEnable(v, step)
     else if step.RemoveStep? then RemoveEnable(v, step)
-    // else if step.RemoveNotFoundStep? then RemoveNotFoundEnable(v, step)
+    else if step.RemoveNotFoundStep? then RemoveNotFoundEnable(v, step)
     else false
   }
 
@@ -316,11 +302,11 @@ module ShardedHashTable refines ShardedStateMachine {
     requires NextEnable(v, step)
   {
     if step.InsertStep? then Insert(v, step)
-    // else if step.OverwriteStep? then Overwrite(v, step)
-    // else if step.QueryFoundStep? then QueryFound(v, step)
-    // else if step.QueryNotFoundStep? then QueryNotFound(v, step)
+    else if step.OverwriteStep? then Overwrite(v, step)
+    else if step.QueryFoundStep? then QueryFound(v, step)
+    else if step.QueryNotFoundStep? then QueryNotFound(v, step)
     else if step.RemoveStep? then Remove(v, step)
-    // else if step.RemoveNotFoundStep? then RemoveNotFound(v, step)
+    else if step.RemoveNotFoundStep? then RemoveNotFound(v, step)
     else Fail
   }
 
@@ -338,6 +324,19 @@ module ShardedHashTable refines ShardedStateMachine {
 //////////////////////////////////////////////////////////////////////////////
 // global-level Invariant proof
 //////////////////////////////////////////////////////////////////////////////
+
+  predicate QuantityInv(s: Variables)
+    requires s.Variables?
+  {
+    && TableQuantity(s.table) + s.insert_capacity.value == Capacity()
+  }
+
+  predicate Inv(s: Variables)
+  {
+    && s.Variables?
+    && TableInv(s.table)
+    && QuantityInv(s)
+  }
 
   lemma InvImpliesEmptySlot(s: Variables) returns (e: Index)
     requires Inv(s)
@@ -444,7 +443,7 @@ module ShardedHashTable refines ShardedStateMachine {
       assert false;
     }
 
-    ProbeRangeSufficient(s.table, Partial(h, start), key);
+    ProbeRangeSufficient(s.table, key, start);
 
     if hr_start == NextIndex(start) {
       var e := InsertEnableEnsuresEmptySlots(s, step);
@@ -591,7 +590,7 @@ module ShardedHashTable refines ShardedStateMachine {
     var prev_i := PrevIndex(i);
 
     if h_i == hash(key) {
-      ProbeRangeSufficient(s.table, Partial(h, start), key);
+      ProbeRangeSufficient(s.table, key, start);
       assert false;
       return;
     }
