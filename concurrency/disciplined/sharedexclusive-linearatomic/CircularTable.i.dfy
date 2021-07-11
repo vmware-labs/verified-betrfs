@@ -263,6 +263,7 @@ module CircularTable {
   {
     && Complete(table)
     && KeysUnique(table)
+    // && (exists e: Index :: SlotEmpty(table[e]))
     // && (forall h: Index :: ValidOrdering(table, h))
     && (forall i: Index ::
       && ValidPSL(table, i)
@@ -427,7 +428,7 @@ module CircularTable {
       table[1..end+1] + [Some(Empty)] + table[end+1..start] + table[start+1..] + [table[0]]
   }
 
-  lemma LeftShiftIndex(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
+  lemma LeftShiftIndex(table: FixedTable, table': FixedTable, start: Index, end: Index, i: Index)
     requires IsTableLeftShift(table, table', start, end)
     ensures Partial(start, end).Contains(i) ==> table'[i] == table[NextIndex(i)];
     ensures Partial(NextIndex(end), start).Contains(i) ==> table'[i] == table[i];
@@ -435,7 +436,8 @@ module CircularTable {
   {
   }
 
-  lemma LeftShiftPSL(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
+  lemma LeftShiftPSL(table: FixedTable, table': FixedTable, start: Index, end: Index, i: Index)
+    requires TableInv(table)
     requires IsTableLeftShift(table, table', start, end)
     requires SlotFull(table'[i])
     requires Partial(start, end).Contains(i) 
