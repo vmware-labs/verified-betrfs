@@ -198,6 +198,12 @@ module CircularTable {
     assert p_range.Contains(hr_start);
   }
 
+  function GetSlotProbeRange(table: FixedTable, i: Index) : Range
+    requires SlotFull(table[i])
+  {
+    Partial(SlotKeyHash(table[i]), i)
+  }
+
 //////////////////////////////////////////////////////////////////////////////
 // robinhood invarints
 //////////////////////////////////////////////////////////////////////////////

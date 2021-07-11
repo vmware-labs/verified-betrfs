@@ -79,26 +79,26 @@ module CircularRange {
       Partial(NextIndex(start), NextIndex(end))
     }
 
-    function GetComplement(): Range
-    {
-      match this {
-        case Everything => Partial(0, 0)
-        case Partial(start, end) =>
-          if start == end then 
-            Everything
-          else
-            Partial(end, start)
-      }
-    }
+    // function GetComplement(): Range
+    // {
+    //   match this {
+    //     case Everything => Partial(0, 0)
+    //     case Partial(start, end) =>
+    //       if start == end then 
+    //         Everything
+    //       else
+    //         Partial(end, start)
+    //   }
+    // }
 
-    lemma ComplementCorrect(range: Range)
-      ensures
-        var range' := range.GetComplement();
-        && range.DisjointsWith(range')
-        && forall i : Index ::
-          (range.Contains(i) || range'.Contains(i))
-    {
-    }
+    // lemma ComplementCorrect(range: Range)
+    //   ensures
+    //     var range' := range.GetComplement();
+    //     && range.DisjointsWith(range')
+    //     && forall i : Index ::
+    //       (range.Contains(i) || range'.Contains(i))
+    // {
+    // }
 
     // lemma DisjointRangesValidBetween(a: Range, b: Range)
     //   requires !OverlapsWith(a, b)
@@ -146,12 +146,7 @@ module CircularRange {
     // { 
     // }
 
-    // lemma RangeInclusion(a: Index, b: Index, c: Index)
-    //   requires a != b && a != c
-    //   requires Contains(Partial(a, b), c)
-    //   ensures Contains(Partial(c, a), b);
-    // {
-    // }
+
 
     // lemma RangeNext(start: Index, end: Index, i: Index)
     //   requires start != end
@@ -161,4 +156,12 @@ module CircularRange {
     //   assert Contains(Partial(start, end), i) || end == i;
     // }
   }
+
+  lemma RangeInclusion(a: Index, b: Index, c: Index)
+    requires a != c
+    requires Partial(a, b).Contains(c)
+    ensures Partial(c, a).Contains(b);
+  {
+  }
+
 }

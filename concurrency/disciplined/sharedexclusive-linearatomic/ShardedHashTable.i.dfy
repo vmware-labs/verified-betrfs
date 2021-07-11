@@ -735,7 +735,7 @@ module ShardedHashTable refines ShardedStateMachine {
   lemma RemoveFoundPreservesKeySegment(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.RemoveFoundStep? && NextStep(s, s', step)
-    ensures ExistsHashSegment(s'.table, hash(ticket.input.key))
+    ensures ExistsHashSegment(s'.table, hash(step.ticket.input.key))
   {
     var table, table' := s.table, s'.table;
     var RemoveFoundStep(ticket, start, end) := step;
@@ -810,11 +810,51 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-  lemma RemoveFoundPreservesValidPSL(s: Variables, s': Variables, step: Step, i: Index)
+  lemma RemoveFoundPreservesKeyValidPSL(s: Variables, s': Variables, step: Step, i: Index)
     requires Inv(s)
     requires step.RemoveFoundStep? && NextStep(s, s', step)
+    requires SlotFull(s'.table[i])
   {
+    var table, table' := s.table, s'.table;
+    var RemoveFoundStep(ticket, start, end) := step;
+    var next_end := NextIndex(end);
+    var s_range := Partial(start, next_end);
 
+    // refactor
+    if s_range.HasNone() {
+      var e := InvImpliesEmptySlot(s);
+      assert false;
+    }
+
+    // if i == next_end {
+    //   assert ValidPSL(table', i);
+    //   return;
+    // }
+
+    var h := hash(table'[i].value.key);
+
+    if Partial(start, end).Contains(i) {
+      var next_i := NextIndex(i);
+      assert table'[i] == table[next_i];
+
+      if i == h {
+        assert ValidPSL(table', i);
+        return;
+      }
+
+      if Partial(i, next_end).Contains(h) {
+        // assert Partial(h, i).Contains(next_end);
+        assert Partial(h, next_i).Contains(next_end);
+        assert ValidPSL(table, next_i);
+        assert false;
+      }
+
+      assert Partial(next_end, i).Contains(h);
+
+
+    } else if Partial(NextIndex(end), start).Contains(i) {
+      assert table'[i] == table[i];
+    }
   }
 
 
