@@ -143,7 +143,7 @@ module ShardedHashTable refines ShardedStateMachine {
     | RemoveStep(ticket: Ticket, start: Index, end: Index)
     | RemoveNotFoundStep(ticket: Ticket, end: Index)
 
-// Insert transition definitions
+// Insert transitions
 
   predicate InsertEnable(v: Variables, step: Step)
   {
@@ -197,12 +197,13 @@ module ShardedHashTable refines ShardedStateMachine {
       .(table := v.table[end := entry])
   }
 
-// Query transition definitions
+// Query transitions
 
   predicate QueryFoundEnable(v: Variables, step: Step)
   {
     && v.Variables?
     && step.QueryFoundStep?
+
     && var QueryFoundStep(ticket, end) := step;
     && ticket in v.tickets
     && ticket.input.QueryInput?
@@ -222,9 +223,10 @@ module ShardedHashTable refines ShardedStateMachine {
 
   predicate QueryNotFoundEnable(v: Variables, step: Step)
   {
-    && step.QueryNotFoundStep?
-    && var QueryNotFoundStep(ticket, end) := step;
     && v.Variables?
+    && step.QueryNotFoundStep?
+
+    && var QueryNotFoundStep(ticket, end) := step;
     && ticket in v.tickets
     && ticket.input.QueryInput?
 
@@ -239,8 +241,8 @@ module ShardedHashTable refines ShardedStateMachine {
     .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.QueryOutput(NotFound))})
   }
 
-// Remove transition definitions
-  
+// Remove transitions
+
   predicate RemoveEnable(v: Variables, step: Step)
   {
     && v.Variables?
@@ -283,7 +285,6 @@ module ShardedHashTable refines ShardedStateMachine {
     v.(tickets := v.tickets - multiset{ticket})
       .(stubs := v.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput(false))})
   }
-
 
 // All transitions
 
@@ -656,6 +657,33 @@ module ShardedHashTable refines ShardedStateMachine {
     RightShiftTableQuantity(table, table', Some(Full(key, value)), start, end);
   }
 
+  lemma OverwritePreservesInv(s: Variables, s': Variables, step: Step)
+    requires Inv(s)
+    requires step.OverwriteStep? && NextStep(s, s', step)
+    ensures Inv(s')
+  {
+    var OverwriteStep(ticket, end) := step;
+    var InsertInput(key, value) := ticket.input;
+    var table, table' := s.table, s'.table;
+
+    assert KeysUnique(table');
+
+    forall h: Index
+      ensures ExistsHashSegment(table', h)
+    {
+      var h_range := GetHashSegment(table, h);
+      assert ValidHashSegment(table', h, h_range);
+    }
+
+    forall i: Index
+      ensures ValidPSL(table', i)
+    {
+      assert ValidPSL(table, i);
+    }
+
+    TableQuantityReplace1(table, table', end);
+  }
+
   lemma RemovePreservesKeySegment(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.RemoveStep? && NextStep(s, s', step)
@@ -789,33 +817,30 @@ module ShardedHashTable refines ShardedStateMachine {
     LeftShiftTableQuantity(s.table, s'.table, step.start, step.end);
   }
 
-
-/*
   lemma NextStepPreservesInv(s: Variables, s': Variables, step: Step)
   requires Inv(s)
   requires NextStep(s, s', step)
   ensures Inv(s')
   {
     if step.InsertStep? {
-      InsertStepPreservesInv(s, s', step);
+      InsertPreservesInv(s, s', step);
     } else if step.OverwriteStep? {
-      OverwriteStepPreservesInv(s, s', step);
+      OverwritePreservesInv(s, s', step);
     } else if step.RemoveStep? {
-      assume false;
+      RemovePreservesInv(s, s', step);
     } else {
       assert Inv(s');
     }
   }
-*/
 
-//   lemma Next_PreservesInv(s: Variables, s': Variables)
-//   requires Inv(s)
-//   requires Next(s, s')
-//   ensures Inv(s')
-//   {
-//     var step :| NextStep(s, s', step);
-//     NextStep_PreservesInv(s, s', step);
-//   }
+  lemma NextPreservesInv(s: Variables, s': Variables)
+  requires Inv(s)
+  requires Next(s, s')
+  ensures Inv(s')
+  {
+    var step :| NextStep(s, s', step);
+    NextStepPreservesInv(s, s', step);
+  }
 
 // //////////////////////////////////////////////////////////////////////////////
 // // fragment-level validity defined wrt Inv
