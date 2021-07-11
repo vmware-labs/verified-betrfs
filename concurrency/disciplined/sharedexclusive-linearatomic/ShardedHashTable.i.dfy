@@ -148,8 +148,8 @@ module ShardedHashTable refines ShardedStateMachine {
 //////////////////////////////////////////////////////////////////////////////
 
   datatype Step =
-    | InsertStep(ticket: Ticket, kv: (Key, Value), start: Index, end: Index)
-    | OverwriteStep(ticket: Ticket, kv: (Key, Value), end: Index)
+    | InsertStep(ticket: Ticket, start: Index, end: Index)
+    | OverwriteStep(ticket: Ticket, end: Index)
 
     | QueryFoundStep(ticket: Ticket, i: Index)
     | QueryNotFoundStep(ticket: Ticket, end: Index)
@@ -161,14 +161,15 @@ module ShardedHashTable refines ShardedStateMachine {
 
   predicate InsertEnable(v: Variables, step: Step)
   {
-    && step.InsertStep?
-    && var InsertStep(ticket, (key, _), start, end) := step;
     && v.Variables?
-    && var table := v.table;
+    && step.InsertStep?
+    && var InsertStep(ticket, start, end) := step;
     && ticket in v.tickets
     && ticket.input.InsertInput?
     && v.insert_capacity.value >= 1
 
+    && var key := ticket.input.key;
+    && var table := v.table;
     && ValidProbeRange(table, Partial(hash(key), start), key)
     // this part is full
     && RangeFull(table, Partial(start, end))
@@ -179,8 +180,9 @@ module ShardedHashTable refines ShardedStateMachine {
   function Insert(v: Variables, step: Step): Variables
     requires InsertEnable(v, step)
   {
-    var InsertStep(ticket, kv, start, end) := step;
-    var table' := TableRightShift(v.table, Some(Full(kv.0, kv.1)), start, end);
+    var InsertStep(ticket, start, end) := step;
+    var entry := Some(Full(ticket.input.key, ticket.input.value));
+    var table' := TableRightShift(v.table, entry, start, end);
     v.(table := table')
       .(insert_capacity := Count.Variables(v.insert_capacity.value - 1))
       .(tickets := v.tickets - multiset{ticket})
@@ -361,7 +363,8 @@ module ShardedHashTable refines ShardedStateMachine {
     requires step.InsertStep? && NextStep(s, s', step)
     ensures KeysUnique(s'.table)
   {
-    var InsertStep(ticket, (key, value), start, end) := step;
+    var InsertStep(ticket, start, end) := step;
+    var InsertInput(key, value) := ticket.input;
     var table, table' := s.table, s'.table;
 
     var range := Partial(start, end);
@@ -416,9 +419,11 @@ module ShardedHashTable refines ShardedStateMachine {
   lemma InsertPreservesKeySegment(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
-    ensures ExistsHashSegment(s'.table, hash(step.kv.0))
+    ensures ExistsHashSegment(s'.table, hash(step.ticket.input.key))
   {
-    var InsertStep(_, (key, _), start, end) := step;
+    var InsertStep(ticket, start, end) := step;
+    var InsertInput(key, value) := ticket.input;
+
     var table, table' := s.table, s'.table;
     var h := hash(key);
 
@@ -453,10 +458,11 @@ module ShardedHashTable refines ShardedStateMachine {
   lemma InsertPreservesOtherSegment(s: Variables, s': Variables, step: Step, h: Index)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
-    requires h != hash(step.kv.0)
+    requires h != hash(step.ticket.input.key)
     ensures ExistsHashSegment(s'.table, h);
   {
-    var InsertStep(_, (key, value), start, end) := step;
+    var InsertStep(ticket, start, end) := step;
+    var InsertInput(key, value) := ticket.input;
     var table, table' := s.table, s'.table;
 
     var range := Partial(start, end);
@@ -524,7 +530,8 @@ module ShardedHashTable refines ShardedStateMachine {
     requires s'.table[i].value.Full?
     ensures ValidPSL(s'.table, i); 
   {
-    var InsertStep(_, (key, value), start, end) := step;
+    var InsertStep(ticket, start, end) := step;
+    var InsertInput(key, value) := ticket.input;
     var table, table' := s.table, s'.table;
     
     assert ValidPSL(table, i);
@@ -618,28 +625,21 @@ module ShardedHashTable refines ShardedStateMachine {
     assert ValidPSL(table', i);
   }
 
-  lemma InsertPreservesQuantityInv(s: Variables, s': Variables, step: Step)
-    requires Inv(s)
-    requires step.InsertStep? && NextStep(s, s', step)
-    ensures QuantityInv(s')
-  {
-    var InsertStep(ticket, kv, start, end) := step;
-    var table, table' := s.table, s'.table;
-    var inserted := Some(Full(kv.0, kv.1));
-    RightShiftTableQuantity(table, table', inserted, start, end);
-  }
-
   lemma InsertPreservesInv(s: Variables, s': Variables, step: Step)
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
     ensures Inv(s')
   {
+    var InsertStep(ticket, start, end) := step;
+    var InsertInput(key, value) := ticket.input;
+    var table, table' := s.table, s'.table;
+
     InsertPreservesKeyUnique(s, s', step);
 
     forall h: Index
       ensures ExistsHashSegment(s'.table, h);
     {
-      if h == hash(step.kv.0) {
+      if h == hash(key) {
         InsertPreservesKeySegment(s, s', step);
       } else {
         InsertPreservesOtherSegment(s, s', step, h);
@@ -654,7 +654,7 @@ module ShardedHashTable refines ShardedStateMachine {
       }
     }
 
-    InsertPreservesQuantityInv(s, s', step);
+    RightShiftTableQuantity(table, table', Some(Full(key, value)), start, end);
   }
 
   lemma RemovePreservesKeySegment(s: Variables, s': Variables, step: Step)
@@ -759,20 +759,6 @@ module ShardedHashTable refines ShardedStateMachine {
     } else {
       assert i == end;
       assert false;
-    }
-  }
-
-  lemma RemovePreservesQuantityInv(s: Variables, s': Variables, step: Step)
-    requires Inv(s)
-    requires step.InsertStep? && NextStep(s, s', step)
-    ensures QuantityInv(s')
-  {
-    var InsertStep(ticket, kv, start, end) := step;
-    var table, table' := s.table, s'.table;
-
-    if start == end {
-      TableQuantityReplace1(table, table', end);
-      assert QuantityInv(s');
     }
   }
 
