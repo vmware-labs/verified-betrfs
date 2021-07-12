@@ -114,7 +114,7 @@ module BranchTreeMod {
 
     predicate Valid(cache : CacheIfc.Variables)
     {
-      true
+      && root in CUsInDisk()
     }
 
     function Root() : CU
@@ -168,6 +168,8 @@ module BranchTreeMod {
     //   seq(|steps|, i requires (0 <= i < |steps|) => steps[i].cu)
     // }
 
+    // TODO: Refactor CUS ensures into another ValidCUs predicate
+
     // Return the sequence of CUs (aka nodes) this path touches
     function {:opaque} CUsRecurse(count : nat) : (cus : seq<CU>)
       requires WF()
@@ -207,12 +209,16 @@ module BranchTreeMod {
     predicate WF() {
       && branchPath.WF()
       && branchTree.WF()
+      && 0 < |branchPath.steps|
+      && (branchTree.Root() == branchPath.steps[0].cu)
     }
 
     predicate ValidCUs()
     {
       && var cus := branchPath.CUs();
       && (forall i | 0<=i<|branchPath.steps| :: branchPath.steps[i].cu in cus)
+      && (forall cu | cu in cus :: cu in CUsInDisk())
+
     }
 
     predicate Valid(cache : CacheIfc.Variables)

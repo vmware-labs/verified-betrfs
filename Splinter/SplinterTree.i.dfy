@@ -317,10 +317,13 @@ module SplinterTreeMachineMod {
       MsgSeqRecurse(|branchReceipts|)
     }
 
+    // TODO: Add another Valid predicate that doesn't use the count
+
     predicate ValidCUs(cus: seq<CU>, count : nat) {
       && na.cu in cus
       && (forall i | 0<=i<count :: branchReceipts[i].ValidCUs())
       && (forall i | 0<=i<count :: SequenceSubset(branchReceipts[i].branchPath.CUs(), cus))
+      && (forall cu | cu in cus :: cu in CUsInDisk())
     }
 
     function CUsRecurse(count: nat) : (cus: seq<CU>)
@@ -392,12 +395,11 @@ module SplinterTreeMachineMod {
 
     predicate ContainsAllStepCUs(cus: seq<CU>, step : TrunkStep)
     {
-      && var stepcus := step.CUs();
-      && SequenceSubset(cus, stepcus)
+      && SequenceSubset(step.CUs(), cus)
     }
 
+
     predicate ValidCUs(cus: seq<CU>, count : nat) {
-      && (forall i | 0<=i<count :: steps[i].ValidCUs(cus, |steps[i].branchReceipts|))
       && (forall i | 0<=i<count :: steps[i].ValidCUs(cus, |steps[i].branchReceipts|))
       && (forall i | 0<=i<count :: ContainsAllStepCUs(cus, steps[i]))
     }
@@ -419,8 +421,7 @@ module SplinterTreeMachineMod {
     // Return the sequence of CUs (aka nodes) this path touches
     function  CUs() : (cus: seq<CU>)
       requires WF()
-      ensures (forall i | 0<=i<|steps|
-        :: ValidCUs(cus, |steps|))
+      ensures ValidCUs(cus, |steps|)
     {
       CUsRecurse(|steps|)
     }
@@ -442,8 +443,6 @@ module SplinterTreeMachineMod {
       && membufferMsgs == MemtableLookup(v, k)
       // NOte that cu corresponds to the correct node assignment
       && (forall i | 0 <= i < |steps| :: steps[i].Valid(v, cache))
-      && var cus := CUs();
-      && ValidCUs(cus, |steps|)
     }
 
     function Decode() : (msg : Message)

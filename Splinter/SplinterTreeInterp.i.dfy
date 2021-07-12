@@ -93,7 +93,7 @@ module SplinterTreeInterpMod {
     && cu in lookup.CUs()
   }
 
-  function IReads(v: Variables, cache: CacheIfc.Variables) : set<CU> {
+  function {:opaque} IReads(v: Variables, cache: CacheIfc.Variables) : set<CU> {
     set cu:CU |
       && cu in CUsInDisk()
       && (exists lookup :: ValidLookupHasCU(v, cache, lookup, cu))
@@ -140,6 +140,7 @@ module SplinterTreeInterpMod {
           // prior steps were the same, and the pivots took us to
           // the same place.
           // TODO broken here, probably because pivot lookups not defined right yet.
+          // This should not pass now!
           assert step0.na.id == step1.na.id;
         }
 
@@ -148,30 +149,58 @@ module SplinterTreeInterpMod {
         assert step0.na.cu in CUsInDisk();  // try to trigger set comprehension
         assert step0.na.cu in lookup0.CUs();
         assert ValidLookupHasCU(v, cache0, lookup0, step0.na.cu);
-        assert step0.na.cu in IReads(v, cache0); // TRIGGER
+        assert step0.na.cu in IReads(v, cache0) by {
+          reveal_IReads();
+        } // TRIGGER
         assert step0.na.node == step1.na.node;
 
         assert step0.na == step1.na;
 
+        //assert forall cu | cu in step0.CUs() :: ValidLookupHasCU(v, cache0, lookup0, cu);
+
+        forall cu | cu in step0.CUs()
+          ensures ValidLookupHasCU(v, cache0, lookup0, cu) {
+            assert cu in CUsInDisk();
+            assert cu in lookup0.CUs();
+            assert ValidLookupHasCU(v, cache0, lookup0, cu);
+        } // believes this now
+
+        assert forall cu | cu in step0.CUs() :: cu in IReads(v, cache0) by {
+            reveal_IReads();
+        }
+
+        forall cu | cu in step1.CUs()
+          ensures ValidLookupHasCU(v, cache1, lookup1, cu) {
+            assert cu in CUsInDisk();
+            assert cu in lookup1.CUs();
+            assert ValidLookupHasCU(v, cache1, lookup1, cu);
+        } // believes this now
+
+        assert forall cu | cu in step1.CUs() :: cu in IReads(v, cache1)  by {
+            reveal_IReads();
+        }
+
         // XXX just playing around here; need to add a branchReceipt lemma?
-        /*if (0 < |step0.branchReceipts|) {
+        if (0 < |step0.branchReceipts|) {
           var cu0 := step0.branchReceipts[0].branchTree.Root();
           var cu1 := step1.branchReceipts[0].branchTree.Root();
 
           assert cu0 == cu1;
           assert cu0 in IReads(v, cache0);
           assert CacheIfc.ReadValue(cache0, cu0) == CacheIfc.ReadValue(cache1, cu1);
-        }*/
+        }
 
-        assert lookup0.ContainsAllStepCUs(lookup0.CUs(), step0);
-        assert forall cu | cu in lookup0.CUs() :: ValidLookupHasCU(v, cache0, lookup0, cu);
+        // Should probably move this to branchtreeinterp
+        forall i | 0 <= i < |step0.branchReceipts|
+          ensures step0.branchReceipts[i].branchPath.CUs() == step1.branchReceipts[i].branchPath.CUs()
+        {
+           assert step0.branchReceipts[i].branchPath.CUs() == step1.branchReceipts[i].branchPath.CUs();
+        }
 
-        assert forall cu | cu in step0.CUs() :: ValidLookupHasCU(v, cache0, lookup0, cu);
-        assert forall cu | cu in lookup0.CUs() :: cu in IReads(v, cache0);
-        assert forall cu | cu in step0.CUs() :: cu in IReads(v, cache0);
+        assert |step0.branchReceipts| == |step1.branchReceipts|;
 
-        //assert step0.branchReceipts == step1.branchReceipts;
-        assert step0 == step1 ;
+        assert step0.branchReceipts == step1.branchReceipts; // need to make it believe this
+        assert step0 == step1;
       }
   }
 
