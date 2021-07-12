@@ -291,15 +291,6 @@ module SplinterTreeMachineMod {
       && |branchReceipts| == |na.node.branches|
     }
 
-    predicate Valid(v: Variables, cache: CacheIfc.Variables)
-       requires WF()
-    {
-      && na.Valid(v, cache)
-      && ( forall i | 0 <= i < |branchReceipts| :: branchReceipts[i].Valid(cache) )
-      // Note: Here we require one to one correspondance between the node's branches and the corresponding look up receipt
-      && (forall i | 0 <= i < |branchReceipts| :: na.node.branches[i] == branchReceipts[i].branchTree)
-    }
-
     function MsgSeqRecurse(count : nat) : (out: seq<Message>)
       requires WF()
       requires count <= |branchReceipts|
@@ -326,12 +317,16 @@ module SplinterTreeMachineMod {
       MsgSeqRecurse(|branchReceipts|)
     }
 
+    predicate ValidCUs(cus: seq<CU>, count : nat) {
+      && na.cu in cus
+      && (forall i | 0<=i<count :: branchReceipts[i].ValidCUs())
+      && (forall i | 0<=i<count :: SequenceSubset(branchReceipts[i].branchPath.CUs(), cus))
+    }
+
     function CUsRecurse(count: nat) : (cus: seq<CU>)
       requires WF()
       requires count <= |branchReceipts|
-      ensures na.cu in cus
-      ensures forall i | 0<=i<|branchReceipts|
-        :: SequenceSubset(branchReceipts[i].branchPath.CUs(), cus)
+      ensures ValidCUs(cus, count)
     {
       if count == 0
       then
@@ -341,10 +336,23 @@ module SplinterTreeMachineMod {
         branchReceipts[count-1].branchPath.CUs() + CUsRecurse(count - 1)
     }
 
-    function CUs() : seq<CU>
+    function {:opaque} CUs() : (cus: seq<CU>)
       requires WF()
+      ensures na.cu in cus
+      ensures ValidCUs(cus, |branchReceipts|)
     {
       CUsRecurse(|branchReceipts|)
+    }
+
+    predicate Valid(v: Variables, cache: CacheIfc.Variables)
+       requires WF()
+    {
+      && na.Valid(v, cache)
+      && ( forall i | 0 <= i < |branchReceipts| :: branchReceipts[i].Valid(cache) )
+      // Note: Here we require one to one correspondance between the node's branches and the corresponding look up receipt
+      && (forall i | 0 <= i < |branchReceipts| :: na.node.branches[i] == branchReceipts[i].branchTree)
+      && var cus := CUs();
+      && ValidCUs(cus, |branchReceipts|)
     }
 
   }
@@ -382,6 +390,42 @@ module SplinterTreeMachineMod {
       msgSeqRecurse(|steps|)
     }
 
+    predicate ContainsAllStepCUs(cus: seq<CU>, step : TrunkStep)
+    {
+      && var stepcus := step.CUs();
+      && SequenceSubset(cus, stepcus)
+    }
+
+    predicate ValidCUs(cus: seq<CU>, count : nat) {
+      && (forall i | 0<=i<count :: steps[i].ValidCUs(cus, |steps[i].branchReceipts|))
+      && (forall i | 0<=i<count :: steps[i].ValidCUs(cus, |steps[i].branchReceipts|))
+      && (forall i | 0<=i<count :: ContainsAllStepCUs(cus, steps[i]))
+    }
+
+    // Return the sequence of CUs (aka nodes) this path touches
+    function CUsRecurse(count : nat) : (cus : seq<CU>)
+      requires WF()
+      requires count <= |steps|
+      ensures (forall i | 0<=i<count
+        :: ValidCUs(cus, count))
+    {
+       if count == 0
+       then
+         []
+       else
+         steps[count-1].CUs() +  CUsRecurse(count - 1)
+    }
+
+    // Return the sequence of CUs (aka nodes) this path touches
+    function  CUs() : (cus: seq<CU>)
+      requires WF()
+      ensures (forall i | 0<=i<|steps|
+        :: ValidCUs(cus, |steps|))
+    {
+      CUsRecurse(|steps|)
+    }
+
+
     // TODO: reorg into WF
 
     predicate Valid(v : Variables, cache: CacheIfc.Variables)
@@ -398,25 +442,8 @@ module SplinterTreeMachineMod {
       && membufferMsgs == MemtableLookup(v, k)
       // NOte that cu corresponds to the correct node assignment
       && (forall i | 0 <= i < |steps| :: steps[i].Valid(v, cache))
-    }
-
-    // Return the sequence of CUs (aka nodes) this path touches
-    function CUsRecurse(count : nat) : seq<CU>
-      requires WF()
-      requires count <= |steps|
-    {
-       if count == 0
-       then
-         []
-       else
-         steps[count-1].CUs() +  CUsRecurse(count - 1)
-    }
-
-    // Return the sequence of CUs (aka nodes) this path touches
-    function  CUs() : seq<CU>
-      requires WF()
-    {
-      CUsRecurse(|steps|)
+      && var cus := CUs();
+      && ValidCUs(cus, |steps|)
     }
 
     function Decode() : (msg : Message)

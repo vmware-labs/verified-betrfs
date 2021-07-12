@@ -114,7 +114,7 @@ module BranchTreeMod {
 
     predicate Valid(cache : CacheIfc.Variables)
     {
-      true 
+      true
     }
 
     function Root() : CU
@@ -155,8 +155,9 @@ module BranchTreeMod {
       && (forall i | 0 <= i < |steps| :: Some(steps[i].node) == CUToBranchNode(steps[i].cu, cache))
     }
 
-    function Root() : CU
+    function Root() : (cu :CU)
       requires WF()
+      ensures cu == steps[0].cu
     {
       steps[0].cu
     }
@@ -168,9 +169,10 @@ module BranchTreeMod {
     // }
 
     // Return the sequence of CUs (aka nodes) this path touches
-    function CUsRecurse(count : nat) : seq<CU>
+    function {:opaque} CUsRecurse(count : nat) : (cus : seq<CU>)
       requires WF()
       requires count <= |steps|
+      ensures (forall i | 0<=i<count :: steps[i].cu in cus)
     {
        if count == 0
        then
@@ -180,8 +182,9 @@ module BranchTreeMod {
     }
 
     // Return the sequence of CUs (aka nodes) this path touches
-    function CUs() : seq<CU>
+    function {:opaque} CUs() : (cus: seq<CU>)
       requires WF()
+      ensures (forall i | 0<=i<|steps| :: steps[i].cu in cus)
     {
       CUsRecurse(|steps|)
     }
@@ -206,6 +209,12 @@ module BranchTreeMod {
       && branchTree.WF()
     }
 
+    predicate ValidCUs()
+    {
+      && var cus := branchPath.CUs();
+      && (forall i | 0<=i<|branchPath.steps| :: branchPath.steps[i].cu in cus)
+    }
+
     predicate Valid(cache : CacheIfc.Variables)
     {
       && WF()
@@ -213,6 +222,7 @@ module BranchTreeMod {
       && branchTree.Valid(cache)
       && branchPath.steps[0].cu == branchTree.root
       // QUESTION : Check if we need another check to compare the children of the branchTree to the branchPath
+      && ValidCUs()
     }
 
   }

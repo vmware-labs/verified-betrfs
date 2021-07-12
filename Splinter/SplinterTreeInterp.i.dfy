@@ -23,6 +23,8 @@ module SplinterTreeInterpMod {
   import IndirectionTableMod
   import opened SplinterTreeMachineMod
   import Nat_Order
+  import opened SequenceSetsMod
+
 
   // Select the messages that lookup finds.
   function LookupToMessage(lookup: TrunkPath) : (outm : Message)
@@ -115,8 +117,9 @@ module SplinterTreeInterpMod {
 
   lemma LookupsEquivalent(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, lookup0 : TrunkPath, lookup1: TrunkPath, count : nat)
     requires lookup0.k == lookup1.k
-    requires lookup0.WF()
-    requires lookup1.WF()
+    // We should get WF() for free from the updated definitions of Valid now
+    //requires lookup0.WF()
+    //requires lookup1.WF()
     requires lookup0.Valid(v, cache0)
     requires lookup1.Valid(v, cache1)
     requires count <= |lookup0.steps|
@@ -140,7 +143,6 @@ module SplinterTreeInterpMod {
           assert step0.na.id == step1.na.id;
         }
 
-
         assert step0.na.id == step1.na.id;
         assert step0.na.cu == step1.na.cu;
         assert step0.na.cu in CUsInDisk();  // try to trigger set comprehension
@@ -152,15 +154,23 @@ module SplinterTreeInterpMod {
         assert step0.na == step1.na;
 
         // XXX just playing around here; need to add a branchReceipt lemma?
-        if (0 < |step0.branchReceipts|) {
+        /*if (0 < |step0.branchReceipts|) {
           var cu0 := step0.branchReceipts[0].branchTree.Root();
           var cu1 := step1.branchReceipts[0].branchTree.Root();
 
           assert cu0 == cu1;
+          assert cu0 in IReads(v, cache0);
           assert CacheIfc.ReadValue(cache0, cu0) == CacheIfc.ReadValue(cache1, cu1);
-        }
+        }*/
 
-        assert step0.branchReceipts == step1.branchReceipts;
+        assert lookup0.ContainsAllStepCUs(lookup0.CUs(), step0);
+        assert forall cu | cu in lookup0.CUs() :: ValidLookupHasCU(v, cache0, lookup0, cu);
+
+        assert forall cu | cu in step0.CUs() :: ValidLookupHasCU(v, cache0, lookup0, cu);
+        assert forall cu | cu in lookup0.CUs() :: cu in IReads(v, cache0);
+        assert forall cu | cu in step0.CUs() :: cu in IReads(v, cache0);
+
+        //assert step0.branchReceipts == step1.branchReceipts;
         assert step0 == step1 ;
       }
   }
