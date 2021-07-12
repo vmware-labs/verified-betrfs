@@ -532,94 +532,32 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     var InsertStep(ticket, start, end) := step;
     var InsertInput(key, value) := ticket.input;
+    var inserted := Some(Full(key, value));
     var table, table' := s.table, s'.table;
     
-    assert ValidPSL(table, i);
+    if Partial(NextIndex(start), NextIndex(end)).Contains(i) {
+      assert table'[i] == table[PrevIndex(i)];
+      assert ValidPSL(table, PrevIndex(i));
 
-    // no shifting in the table, just an insert
-    if start == end {
-      // surprisingly this doesn't require more proofs
-      assert ValidPSL(table', i);
-      return;
-    }
+      var key_i := table'[i].value.key;
+      var h_i := hash(key_i);
 
-    // newly inserted
-    if i == start {
-      assert ValidPSL(table', i);
-      return;
-    }
-
-    var h := hash(table'[i].value.key);
-
-    // simple case where hash is at i
-    if h == i {
-      assert ValidPSL(table', i);
-      return;
-    }
-
-    var h_range := GetHashSegment(table, h);
-
-    // slot i is not shifted
-    if table[i] == table'[i] {
-      assert Partial(end, start).Contains(i);
-      
-      assert Partial(end, start).Contains(h);
-      assert Partial(end, i).Contains(h)
-        || Partial(i, start).Contains(h);
-      
-      if Partial(i, start).Contains(h) {
-        assert Partial(start, i).Contains(end);
-        assert Partial(h, i).Contains(end);
-        assert false;
-      }
-
-      assert Partial(end, i).Contains(h);
-      assert ValidPSL(table', i);
-      return;
-    }
-
-    // slot i is shifted
-    if table'[i].value.Empty? {
-      return;
-    }
-
-    var key_i := table'[i].value.key;
-    var h_i := hash(key_i);
-    var prev_i := PrevIndex(i);
-
-    if h_i == hash(key) {
-      ProbeRangeSufficient(s.table, key, start);
-      assert false;
-      return;
-    }
-
-    assert table'[i] == table[prev_i];
-    assert ValidPSL(table, prev_i);
-    var inserted := Some(Full(key, value));
-
-    forall j: Index | Partial(h_i, i).Contains(j)
-    ensures
-      && table'[j].value.Full?
-      && SlotPSL(table', j) >= PSL(key_i, j)
-    {
-      var prev_j := PrevIndex(j);
-      if Partial(NextIndex(start), NextIndex(end)).Contains(j) {
-        assert table'[j] == table[prev_j];
-        var h_j := hash(table[prev_j].value.key);
-        if j == h_j {
+      forall j: Index | Partial(h_i, i).Contains(j)
+      ensures
+        && table'[j].value.Full?
+        && SlotPSL(table', j) >= PSL(key_i, j)
+      {
+        if Partial(NextIndex(start), NextIndex(end)).Contains(j) {
           var e := InvImpliesEmptySlot(s);
-          assert ValidPSL(table, PrevIndex(h_j));
-          assert false;
+          RightShiftPSL(table, table', inserted, start, end, j);
         }
-        RightShiftPSL(table, table', inserted, start, end, j);
-      } else if Partial(NextIndex(end), start).Contains(j) {
-        assert table'[j] == table[j];
-      } else {
-        assert table'[j] == inserted;
       }
+    }  else if Partial(NextIndex(end), start).Contains(i) {
+      assert table'[i] == table[i];
+      assert ValidPSL(table, i);
+    } else {
+      assert table'[i] == Some(Full(key, value));
     }
-
-    assert ValidPSL(table', i);
   }
 
   lemma InsertPreservesInv(s: Variables, s': Variables, step: Step)

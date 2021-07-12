@@ -411,13 +411,24 @@ module CircularTable {
   }
 
   lemma RightShiftPSL(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
+    requires TableInv(table)
     requires IsTableRightShift(table, table', inserted, start, end)
     requires SlotFull(table'[i])
     requires Partial(NextIndex(start), NextIndex(end)).Contains(i)
-    requires i != hash(table[PrevIndex(i)].value.key)
+    requires exists e : Index :: SlotEmpty(table[e])
+    // requires i != hash(table[PrevIndex(i)].value.key)
     ensures SlotPSL(table', i) == SlotPSL(table, PrevIndex(i)) + 1
   {
-    assert table'[i] == table[PrevIndex(i)];
+    var old_i := PrevIndex(i);
+    assert table'[i] == table[old_i];
+    var h := hash(table[old_i].value.key);
+
+    if i == h {
+      var e : Index :| SlotEmpty(table[e]);
+      assert ValidPSL(table, old_i);
+      assert Partial(h, old_i).Contains(e);
+      assert false;
+    }
   }
 
   lemma RightShiftTableQuantity(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index)
