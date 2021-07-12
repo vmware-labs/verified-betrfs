@@ -7,7 +7,7 @@ For example, in our bank application, we can imagine that the array of accounts 
 
 ![images/bank_sharded_state.png](images/bank_sharded_state.png)
 
-(Note that the “shards” don’t have to be contiguous in the sense of the array structure—the sequential nature of the array is unimportant. For example, one of the shards in the picture above has accounts 4 and 7.)
+Note that the “shards” don’t have to be contiguous in the sense of the array structure—the sequential nature of the array is unimportant. For example, one of the shards in the picture above has accounts 4 and 7.
 
 When we define state transitions on this state machine, we will define the transitions on the shards. For example, consider the ‘transfer’ operation: it only needs access to two of the accounts to perform its operation. Therefore, we can define the operation on a shard with only 2 accounts in it:
 
@@ -78,7 +78,7 @@ function glue(a: Shard, b: Shard) : Shard
 }
 ```
 
-We can prove commutativity and associativity within Dafny. Dafny only need a little help with the proofs.
+We can prove commutativity and associativity within Dafny. Dafny only needs a little help with the proofs.
 
 ```dafny
 lemma glue_commutative(a: Shard, b: Shard)
@@ -109,7 +109,7 @@ ensures glue(glue(a, b), c) == glue(a, glue(b, c))
 Now, we can go ahead and define an invariant on our state. Note that while `valid_shard` is a predicate for _any_ valid shard, the `Inv` is meant
 to be a 'global' property, an invariant over the 'complete' shard, all the shards glued together.
 
-Our invariant is still declared over the Shard type, though,
+Our invariant `Inv` is still declared over the general Shard type, though,
 so one of our invariant properties will actually just be a predicate stating that the shard is whole (contains all the account IDs).
 But again, our main invariant of interest will be the fact that the total amount of money is some fixed amount.
 
