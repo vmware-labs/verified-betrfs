@@ -12,6 +12,7 @@ include "MsgHistory.i.dfy"
 include "CacheIfc.i.dfy"
 include "../lib/DataStructures/BtreeModel.i.dfy"
 include "../lib/Base/Maps.i.dfy"
+include "../lib/Buckets/BoundedPivotsLib.i.dfy"
 
 
 /*
@@ -44,51 +45,53 @@ module BranchTreeMod {
   import opened ValueMessage
   import opened KeyType
   import opened MsgHistoryMod
+  import opened BoundedPivotsLib
 
-  import KeysImpl = Lexicographic_Byte_Order_Impl
-  import Keys = KeysImpl.Ord
 
-  type Key = Keys.Element
 
   // TODO: Finish and maybe we want Routing Filters here, check with Rob and Jon for this
   datatype QuotientFilter = QuotientFilter()
 
   // messages that are Inserted into the branch tree are already merged upon insert, that's Why
   // kvmap has to only store one merged update message per Key
-  datatype BranchNode = Leaf(kvmap: map<Key, Message>) | Index(pivots : seq<Key>, children: seq<CU>)
+  datatype BranchNode = | Leaf(kvmap: map<Key, Message>)
+                        | Index(pivots : PivotTable, children: seq<CU>)
   {
-    predicate WF()
-    {
-      ( this.Index? ==> ( && |pivots| + 1 == |children|
-                          && 2 <= |children| // otherwise this would just be a leaf
-                          && 1 <= |pivots|
-                          && forall pivot :: (1 <= pivot < |pivots| && pivots[pivot - 1] < pivots[pivot])
-                        )
-      )
-    }
 
-    function findSubBranch(key: Key) : CU
-      requires WF()
+    predicate WFIndexNode()
       requires this.Index?
     {
-      assume false; // TODO kill this function; replace with pivot lib
-      // TODO switch to Rob's pivot-looker-upper
-      if Keys.lt(key, pivots[0]) //TODO Check if pivots are inclusive
-        then
-        assert this.Index?;
-        children[0]
-      else if Keys.lte(pivots[|pivots| - 1], key) // Don't know if gt exists
-        then
-        children[|pivots|]
-      else
-        assert this.Index?;
-        assert Keys.lt(pivots[0], key);
-        assert Keys.lt(key, pivots[|pivots| - 1]);
-        var pivot :| ( && 1 < pivot < |pivots|
-                       && Keys.lte(pivots[pivot - 1], key)
-                       && Keys.lt(key, pivots[pivot]) ); //TODO Check if pivots are inclusive
-        children[pivot]
+      && WFPivots(pivots)
+      && |children| == NumBuckets(pivots)
     }
+
+    predicate WF()
+    {
+      this.Index? ==> WFIndexNode()
+    }
+
+    // function findSubBranch(key: Key) : CU
+    //   requires WF()
+    //   requires this.Index?
+    // {
+    //   assume false; // TODO kill this function; replace with pivot lib
+    //   // TODO switch to Rob's pivot-looker-upper
+    //   if Keys.lt(key, pivots[0]) //TODO Check if pivots are inclusive
+    //     then
+    //     assert this.Index?;
+    //     children[0]
+    //   else if Keys.lte(pivots[|pivots| - 1], key) // Don't know if gt exists
+    //     then
+    //     children[|pivots|]
+    //   else
+    //     assert this.Index?;
+    //     assert Keys.lt(pivots[0], key);
+    //     assert Keys.lt(key, pivots[|pivots| - 1]);
+    //     var pivot :| ( && 1 < pivot < |pivots|
+    //                    && Keys.lte(pivots[pivot - 1], key)
+    //                    && Keys.lt(key, pivots[pivot]) ); //TODO Check if pivots are inclusive
+    //     children[pivot]
+    // }
   }
 
   // Parses CU units to BranchNodes that we can use
@@ -104,6 +107,7 @@ module BranchTreeMod {
         ParseBranchNode(diskPage.value)
   }
 
+  // TODO change name of variables BranchTree
   datatype Variables = Variables(root : CU, filter : QuotientFilter)
   {
     predicate WF()
@@ -141,12 +145,28 @@ module BranchTreeMod {
       && (forall i | 0 <= i < |steps| :: steps[i].WF())
       && (forall i | 0 <= i < |steps|-1 :: steps[i].node.Index?)
       && Last(steps).node.Leaf?
+      // BoundedKey is derivable from ContainsRange, but that requires a mutual induction going down
+      // the tree. It's easier to demand forall-i-BoundedKey so that we can call Route to get the slots
+      // for ContainsRange.
+      && (forall i | 0 <= i < |steps|-1 :: BoundedKey(steps[i].node.pivots, key))
+    }
+
+    predicate LinkedAt(childIdx : nat)
+      requires 0 < childIdx < |steps|-1
+      requires WF()
+    {
+      && var parentNode := steps[childIdx-1].node;
+      && var childStep := steps[childIdx];
+      && var slot := Route(parentNode.pivots, key);
+      // When coverting to clone edges use, ParentKeysInChildRange in TranslationLib
+      && ContainsRange(childStep.node.pivots, parentNode.pivots[slot], parentNode.pivots[slot+1])
+      && childStep.cu == parentNode.children[slot]
     }
 
     predicate {:opaque} Linked()
       requires WF()
     {
-      && (forall i | 0 < i < |steps| :: steps[i].cu == steps[i-1].node.findSubBranch(key))
+      && (forall i | 0 < i < |steps|-1 :: LinkedAt(i))
     }
 
     predicate Valid(cache: CacheIfc.Variables) {

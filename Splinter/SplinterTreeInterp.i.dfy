@@ -180,24 +180,31 @@ module SplinterTreeInterpMod {
             reveal_IReads();
         }
 
-        // XXX just playing around here; need to add a branchReceipt lemma?
-        if (0 < |step0.branchReceipts|) {
-          var cu0 := step0.branchReceipts[0].branchTree.Root();
-          var cu1 := step1.branchReceipts[0].branchTree.Root();
+        // Should probably move this to branchtreeinterp -- Main thing left to prove
+        forall i | 0 <= i < |step0.branchReceipts|
+          ensures step0.branchReceipts[i].branchPath == step1.branchReceipts[i].branchPath
+        {
+           var cus0 := step0.branchReceipts[i].branchPath.CUs();
+           var cus1 := step0.branchReceipts[1].branchPath.CUs();
+
+           assert cus0 == cus1;
+
+           assert step0.branchReceipts[i].branchPath == step1.branchReceipts[i].branchPath;
+        }
+
+        forall i | 0 <= i < |step0.branchReceipts|
+          ensures step0.branchReceipts[i].branchTree == step1.branchReceipts[i].branchTree
+        {
+          var cu0 := step0.branchReceipts[i].branchTree.Root();
+          var cu1 := step1.branchReceipts[i].branchTree.Root();
 
           assert cu0 == cu1;
           assert cu0 in IReads(v, cache0);
           assert CacheIfc.ReadValue(cache0, cu0) == CacheIfc.ReadValue(cache1, cu1);
+
         }
 
-        // Should probably move this to branchtreeinterp
-        forall i | 0 <= i < |step0.branchReceipts|
-          ensures step0.branchReceipts[i].branchPath.CUs() == step1.branchReceipts[i].branchPath.CUs()
-        {
-           assert step0.branchReceipts[i].branchPath.CUs() == step1.branchReceipts[i].branchPath.CUs();
-        }
-
-        assert |step0.branchReceipts| == |step1.branchReceipts|;
+        //assert |step0.branchReceipts| == |step1.branchReceipts|;
 
         assert step0.branchReceipts == step1.branchReceipts; // need to make it believe this
         assert step0 == step1;
