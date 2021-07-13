@@ -129,6 +129,16 @@ module ShardedHashTable refines ShardedStateMachine {
     && in_r.stubs == multiset { }
   }
 
+  function OneRowTable(i: Index, entry: Entry) : FixedTable
+  {
+    seq(FixedSize(), j => if i == j then Some(entry) else None)
+  }
+
+  function OneRowResource(i: Index, entry: Entry, cap: nat) : Variables 
+  {
+    Variables(OneRowTable(i, entry), Count.Variables(cap), multiset{}, multiset{})
+  }
+
 //////////////////////////////////////////////////////////////////////////////
 // Transition definitions
 //////////////////////////////////////////////////////////////////////////////
@@ -780,71 +790,60 @@ module ShardedHashTable refines ShardedStateMachine {
 // //////////////////////////////////////////////////////////////////////////////
 // // fragment-level validity defined wrt Inv
 // //////////////////////////////////////////////////////////////////////////////
-//   predicate Valid(s: Variables)
-//     ensures Valid(s) ==> s.Variables?
-//   {
-//     && s.Variables?
-//     && exists t :: Inv(add(s, t))
-//   }
 
-//   lemma InvImpliesValid(s: Variables)
-//     requires Inv(s)
-//     ensures Valid(s)
-//   {
-//     // reveal Valid();
-//     add_unit(s);
-//   }
+  predicate Valid(s: Variables)
+    ensures Valid(s) ==> s.Variables?
+  {
+    && s.Variables?
+    && exists t :: Inv(add(s, t))
+  }
 
-//   lemma EmptyTableQuantityIsZero(infos: Table)
-//     requires (forall i | 0 <= i < |infos| :: infos[i] == Some(Empty))
-//     ensures TableQuantity(infos) == 0
-//   {
-//     reveal_TableQuantity();
-//   }
+  lemma InvImpliesValid(s: Variables)
+    requires Inv(s)
+    ensures Valid(s)
+  {
+    // reveal Valid();
+    add_unit(s);
+  }
 
-//   lemma InitImpliesValid(s: Variables)
-//   //requires Init(s)
-//   //ensures Valid(s)
-//   {
-//     EmptyTableQuantityIsZero(s.table);
-//     InvImpliesValid(s);
-//   }
+  lemma InitImpliesValid(s: Variables)
+    // requires Init(s)
+    // ensures Valid(s)
+  {
+    var table := s.table;
+    EmptyTableQuantity(table);
+    forall i: Index
+      ensures ExistsHashSegment(table, i)
+    {
+      var range := Partial(0, 0);
+      assert ValidHashSegment(table, i, range);
+    }
+    // assert TableInv(table);
+    InvImpliesValid(s);
+  }
 
-//   lemma NextPreservesValid(s: Variables, s': Variables)
-//   //requires Next(s, s')
-//   //requires Valid(s)
-//   ensures Valid(s')
-//   {
-//     // reveal Valid();
-//     var t :| Inv(add(s, t));
-//     InvImpliesValid(add(s, t));
-//     update_monotonic(s, s', t);
-//     Next_PreservesInv(add(s, t), add(s', t));
-//   }
+  lemma NextPreservesValid(s: Variables, s': Variables)
+  //requires Next(s, s')
+  //requires Valid(s)
+  ensures Valid(s')
+  {
+    // reveal Valid();
+    var t :| Inv(add(s, t));
+    InvImpliesValid(add(s, t));
+    update_monotonic(s, s', t);
+    NextPreservesInv(add(s, t), add(s', t));
+  }
 
-//   predicate TransitionEnable(s: Variables, step: Step)
-//   {
-//     match step {
-//     }
-//   }
-
-//   function GetTransition(s: Variables, step: Step): (s': Variables)
-//     requires TransitionEnable(s, step)
-//     ensures NextStep(s, s', step);
-//   {
-//     match step {
-//     }
-//   }
-
-//   // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Next()
-//   glinear method easy_transform_step(glinear b: Variables, ghost step: Step)
-//   returns (glinear c: Variables)
-//     requires TransitionEnable(b, step)
-//     ensures c == GetTransition(b, step)
-//   {
-//     var e := GetTransition(b, step);
-//     c := do_transform(b, e);
-//   }
+  // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Next()
+  glinear method easy_transform_step(glinear b: Variables, ghost step: Step)
+  returns (glinear c: Variables)
+    requires NextEnable(b, step)
+    ensures c == GetNext(b, step)
+  {
+    var e := GetNext(b, step);
+    assert NextStep(b, e, step);
+    c := do_transform(b, e);
+  }
 
 //   lemma NewTicketPreservesValid(r: Variables, id: int, input: Ifc.Input)
 //     //requires Valid(r)

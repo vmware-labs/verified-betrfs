@@ -162,6 +162,8 @@ module CircularTable {
         && Partial(hash(key), end).Contains(h_range.start)
         && end == h_range.end
       )
+    ensures !(exists i: Index ::
+      SlotFull(table[i]) && table[i].value.key == key)
   {
     var h := hash(key);
     var p_range := Partial(h, end);
@@ -194,6 +196,11 @@ module CircularTable {
 
     assert hr_end == end;
     assert p_range.Contains(hr_start);
+
+    if exists i: Index ::
+      SlotFull(table[i]) && table[i].value.key == key {
+      assert false;
+    }
   }
 
   function GetSlotProbeRange(table: FixedTable, i: Index) : Range
@@ -296,6 +303,14 @@ module CircularTable {
     requires forall i: int :: 
       0 <= i < |table| ==> (table[i].Some? && table[i].value.Full?)
     ensures TableQuantity(table) == |table|
+  {
+    reveal TableQuantity();
+  }
+
+  lemma EmptyTableQuantity(table: Table)
+    requires forall i : int ::
+      0 <= i < |table| ==> table[i] == Some(Empty)
+    ensures TableQuantity(table) == 0
   {
     reveal TableQuantity();
   }
