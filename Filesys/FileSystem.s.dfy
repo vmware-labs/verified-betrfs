@@ -182,10 +182,13 @@ module FileSystem {
       :: path_map[p] == fs.path_map[p]
   {
     imap path :: 
-      // remove source paths
-      if path == src || BeneathDir(src, path) then Nonexistent
-      // redirect renamed paths to point to the same ids as source
-      else if path == dst || BeneathDir(dst, path) then fs.path_map[src + path[|dst|..]]
+      if path == src || BeneathDir(src, path)
+        // remove source paths
+        then Nonexistent
+      else if path == dst || BeneathDir(dst, path)
+        // redirect renamed paths to point to the same ids as source
+        then var suffix := path[|dst|..];
+          fs.path_map[src + suffix]
       // everything else remains the same
       else fs.path_map[path]
   }
@@ -217,6 +220,7 @@ module FileSystem {
     //  to show any old content is overwritten   
     && fs'.meta_map == 
           fs.meta_map[src_id := src_m']
+                    // jonh: if dst_id is no longer referenced, shouldn't we remove it from the meta_map?
                      [dst_id := MetaDataDelete(fs, dst, ctime)]
                      [sparent_id := UpdateParentTime(fs, sparent_id, ctime)]
                      [dparent_id := UpdateParentTime(fs, dparent_id, ctime)]

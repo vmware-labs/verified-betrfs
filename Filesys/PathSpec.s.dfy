@@ -3,22 +3,26 @@
 
 include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Lang/System/SeqComparison.s.dfy"
+include "../lib/Base/SequencesLite.s.dfy"
 
 /*
-  Path is represented by a sequence of sequence of byte.
-  [] represents rootdir
+  A PathElement is a sequence of byte.
+  A Path is a sequence of PathElements.
+  [] is the root directory.
   [[a]] = /a
-  [[a],[bc]] = /a/bc
+  [[a],[f,o,o]] = /a/foo
 */
 
 module PathSpec {
   import opened NativeTypes
   import SeqComparison
+  import opened SequencesLite
 
   // equivalent to inode number
   datatype ID = Nonexistent | ID(id: nat)
 
-  type Path = seq<seq<byte>>
+  type PathElement = seq<byte>
+  type Path = seq<PathElement>
   type PathMap = imap<Path, ID>
 
   const RootDir : Path := [];
@@ -65,7 +69,7 @@ module PathSpec {
 
   function GetParentDir(path: Path): (dir: Path)
   {
-    if |path| == 0 then [] else path[..|path|-1]
+    if path == RootDir then RootDir else DropLast(path)
   }
 
   lemma GetParentDirImpliesIsDirEntry(path: Path, dir: Path)
@@ -79,8 +83,8 @@ module PathSpec {
   predicate DirEntryLte(a: Path, b: Path)
   requires |a| > 0
   requires |a| == |b|
-  requires a[..|a|-1] == b[..|b|-1]
+  requires GetParentDir(a) == GetParentDir(b)
   {
-    SeqComparison.lte(a[|a|-1], b[|b|-1])
+    SeqComparison.lte(Last(a), Last(b))
   }
 }

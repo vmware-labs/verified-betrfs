@@ -12,6 +12,7 @@ module SequencesLite {
     run[|run|-1]
   }
 
+  // TODO Eww this duplicates SequencesLite.DropLast.
   function DropLast<E>(run: seq<E>) : seq<E>
     requires |run| > 0;
   {
