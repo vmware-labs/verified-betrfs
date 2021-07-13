@@ -37,6 +37,11 @@ the release.
 Here are the above steps, presented graphically (the purple box represents thread-owned state):
 
 ![images/bank-transaction-step-by-step.png](images/bank-transaction-step-by-step.png)
+Note that the global invariant (blue box) is always maintained, which can
+happen because the update to the global (ghost) state happens atomically (at
+step 4). Other concurrent threads can exploit that global invariant even as
+they ignore the fact that the physical values for the locked accounts don't
+match the ghost values.
 
 ## Code
 

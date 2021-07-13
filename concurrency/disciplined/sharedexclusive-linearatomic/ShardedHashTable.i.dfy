@@ -239,7 +239,6 @@ module ShardedHashTable refines ShardedStateMachine {
     && var QueryNotFoundStep(ticket, end) := step;
     && ticket in v.tickets
     && ticket.input.QueryInput?
-
     && ValidProbeRange(v.table, ticket.input.key, end)
   }
 
@@ -284,7 +283,6 @@ module ShardedHashTable refines ShardedStateMachine {
     && var RemoveNotFoundStep(ticket, end) := step;
     && ticket in v.tickets
     && ticket.input.RemoveInput?
-
     && ValidProbeRange(v.table, ticket.input.key, end)
   }
 
@@ -378,10 +376,10 @@ module ShardedHashTable refines ShardedStateMachine {
     var table, table' := s.table, s'.table;
 
     var range := Partial(start, end);
-    if !RangeFullKeyNotFound(table, range, key) {
+    if !RangeFullWithOtherKeys(table, range, key) {
       var i: Index :|
         && range.Contains(i)
-        && !SlotFullKeyNotFound(table[i], key);
+        && !SlotFullWithOtherKey(table[i], key);
       var s_key := table[start].value.key;
 
       var psl_at_s := PSL(s_key, start);

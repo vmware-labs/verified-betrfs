@@ -37,6 +37,8 @@ module CircularTable {
 // entry/range predicates
 //////////////////////////////////////////////////////////////////////////////
 
+  // PSL == Probe Sequence Length: the probe length from hash(key)
+  // to index i
   function PSL(key: Key, i: Index): nat
   {
     var h := hash(key);
@@ -62,6 +64,7 @@ module CircularTable {
     hash(entry.value.key)
   }
 
+  // What's the Probe Sequence Length for the key at this location?
   function SlotPSL(table: FixedTable, i: Index): nat
     requires SlotFull(table[i])
   {
@@ -73,27 +76,27 @@ module CircularTable {
     entry.Some? && entry.value.Empty?
   }
 
-  predicate SlotFullKeyNotFound(entry: Option<Entry>, key: Key)
+  predicate SlotFullWithOtherKey(entry: Option<Entry>, key: Key)
   {
     && SlotFull(entry)
     && entry.value.key != key
   }
 
-  predicate RangeFullKeyNotFound(table: FixedTable, range: Range, key: Key)
+  predicate RangeFullWithOtherKeys(table: FixedTable, range: Range, key: Key)
   {
-    forall i: Index | range.Contains(i) :: SlotFullKeyNotFound(table[i], key)
+    forall i: Index | range.Contains(i) :: SlotFullWithOtherKey(table[i], key)
   }
 
   predicate SlotShouldSkip(entry: Option<Entry>, i: Index, key: Key)
   {
-    && SlotFullKeyNotFound(entry, key)
+    && SlotFullWithOtherKey(entry, key)
     // the psl at the slot is geq than the psl of insert
     && PSL(entry.value.key, i) >= PSL(key, i)
   }
 
   predicate SlotShouldSwap(entry: Option<Entry>, i: Index, key: Key)
   {
-    && SlotFullKeyNotFound(entry, key)
+    && SlotFullWithOtherKey(entry, key)
     // the psl at the slot is less than the psl of the insert
     && PSL(entry.value.key, i) < PSL(key, i)
   }
@@ -224,6 +227,8 @@ module CircularTable {
       :: table[i].value.key != table[j].value.key
   }
 
+  // A hash segment is a contiguous Range in which all the stored keys share
+  // the same hash.
   predicate ValidHashSegment(table: FixedTable, hash: Index, range: Range)
     requires Complete(table)
   {
@@ -434,6 +439,7 @@ module CircularTable {
     // requires i != hash(table[PrevIndex(i)].value.key)
     ensures SlotPSL(table', i) == SlotPSL(table, PrevIndex(i)) + 1
   {
+//    assert table'[i] == table[PrevIndex(i)];
     var old_i := PrevIndex(i);
     assert table'[i] == table[old_i];
     var h := hash(table[old_i].value.key);
