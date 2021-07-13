@@ -69,29 +69,6 @@ module BranchTreeMod {
     {
       this.Index? ==> WFIndexNode()
     }
-
-    // function findSubBranch(key: Key) : CU
-    //   requires WF()
-    //   requires this.Index?
-    // {
-    //   assume false; // TODO kill this function; replace with pivot lib
-    //   // TODO switch to Rob's pivot-looker-upper
-    //   if Keys.lt(key, pivots[0]) //TODO Check if pivots are inclusive
-    //     then
-    //     assert this.Index?;
-    //     children[0]
-    //   else if Keys.lte(pivots[|pivots| - 1], key) // Don't know if gt exists
-    //     then
-    //     children[|pivots|]
-    //   else
-    //     assert this.Index?;
-    //     assert Keys.lt(pivots[0], key);
-    //     assert Keys.lt(key, pivots[|pivots| - 1]);
-    //     var pivot :| ( && 1 < pivot < |pivots|
-    //                    && Keys.lte(pivots[pivot - 1], key)
-    //                    && Keys.lt(key, pivots[pivot]) ); //TODO Check if pivots are inclusive
-    //     children[pivot]
-    // }
   }
 
   // Parses CU units to BranchNodes that we can use
@@ -135,6 +112,7 @@ module BranchTreeMod {
   {
     predicate WF() {
       && node.WF()
+      && cu in CUsInDisk()
     }
   }
 
@@ -182,19 +160,18 @@ module BranchTreeMod {
       steps[0].cu
     }
 
-    // function CUs() : seq<CU>
-    //   requires WF()
-    // {
-    //   seq(|steps|, i requires (0 <= i < |steps|) => steps[i].cu)
-    // }
-
-    // TODO: Refactor CUS ensures into another ValidCUs predicate
+    predicate ValidCUsInductive(cus: seq<CU>, count : nat)
+      requires WF()
+      requires count <= |steps|
+    {
+      && (forall i | 0<=i<count :: steps[i].cu in cus)
+    }
 
     // Return the sequence of CUs (aka nodes) this path touches
     function {:opaque} CUsRecurse(count : nat) : (cus : seq<CU>)
       requires WF()
       requires count <= |steps|
-      ensures (forall i | 0<=i<count :: steps[i].cu in cus)
+      ensures ValidCUsInductive(cus, count)
     {
        if count == 0
        then
@@ -203,10 +180,16 @@ module BranchTreeMod {
          [steps[count-1].cu] + CUsRecurse(count-1)
     }
 
+    predicate ValidCUs(cus: seq<CU>)
+      requires WF()
+    {
+      ValidCUsInductive(cus, |steps|)
+    }
+
     // Return the sequence of CUs (aka nodes) this path touches
     function {:opaque} CUs() : (cus: seq<CU>)
       requires WF()
-      ensures (forall i | 0<=i<|steps| :: steps[i].cu in cus)
+      ensures ValidCUs(cus)
     {
       CUsRecurse(|steps|)
     }
@@ -236,7 +219,7 @@ module BranchTreeMod {
     predicate ValidCUs()
     {
       && var cus := branchPath.CUs();
-      && (forall i | 0<=i<|branchPath.steps| :: branchPath.steps[i].cu in cus)
+      && branchPath.ValidCUs(cus)
       && (forall cu | cu in cus :: cu in CUsInDisk())
 
     }

@@ -12,6 +12,7 @@ include "../Spec/Message.s.dfy"
 include "../Spec/Interp.s.dfy"
 include "BranchTree.i.dfy"
 include "MsgSeq.i.dfy"
+include "../lib/Buckets/BoundedPivotsLib.i.dfy"
 
 /*
 a Splinter tree consists of:
@@ -114,6 +115,7 @@ module SplinterTreeMachineMod {
   import CacheIfc
   import BranchTreeMod
   import MsgSeqMod
+  import opened BoundedPivotsLib
 
   // TODO: Rename this module
   datatype Superblock = Superblock(
@@ -152,26 +154,67 @@ module SplinterTreeMachineMod {
   type TrunkId = nat
   function RootId() : TrunkId { 0 }
 
-  // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
-  // activeBranches tells us the lowest index of an active branch tree for the corresponding child
-  datatype TrunkNode = TrunkNode(branches : seq<BranchTreeMod.Variables>,
-                                 children : seq<TrunkNode>,
-                                 pivots : seq<BranchTreeMod.Key>,
-                                 activeBranches : seq<nat>)
+  datatype NodeAssignment = NodeAssignment(id: TrunkId, cu: CU, node: TrunkNode)
   {
+
     predicate WF()
     {
-       && |children| == |activeBranches|
-       // activeBranches can only point to actual branch trees
-       && (0 < |branches| ==> forall i |  0 <= i < |activeBranches| :: 0 <= activeBranches[i] < |branches|)
-       // WF conditions on the pivots
-       && (0 < |children| ==> |children| == |pivots| + 1)
-       && (forall pivot | 1 <= pivot < |pivots| :: pivots[pivot - 1] < pivots[pivot])
+       && node.WF()
+       && cu in CUsInDisk()
+       && node.cu == cu
+    }
+
+    predicate InIndTable(v: Variables)
+    {
+      && id in v.indTbl
+      && v.indTbl[id] == cu
+    }
+
+    predicate ValidCU(cache : CacheIfc.Variables)
+    {
+      && var unparsedPage := CacheIfc.ReadValue(cache, cu);
+      && unparsedPage.Some?
+      && Some(node) == parseTrunkNode(unparsedPage.value)
+    }
+
+
+
+    predicate Valid(v: Variables, cache: CacheIfc.Variables)
+    {
+      && InIndTable(v)
+      && ValidCU(cache)
+    }
+  }
+
+  // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
+  // activeBranches tells us the lowest index of an active branch tree for the corresponding child
+  datatype TrunkNode = | Index( cu : CU,
+                                branches : seq<BranchTreeMod.Variables>,
+                                children : seq<CU>,
+                                pivots : PivotTable,
+                                activeBranches : seq<nat>)
+                       | Leaf(  cu : CU,
+                                branches : seq<BranchTreeMod.Variables>)
+  {
+
+    predicate WFIndexNode()
+      requires this.Index?
+    {
+      && WFPivots(pivots)
+      && |children| == NumBuckets(pivots)
+      && |children| == |activeBranches|
+      // activeBranches can only point to actual branch trees
+      && (0 < |branches| ==> forall i |  0 <= i < |activeBranches| :: 0 <= activeBranches[i] < |branches|)
+      && cu in CUsInDisk()
+    }
+
+    predicate WF()
+    {
+       && this.Index? ==> WFIndexNode()
     }
 
     // TODO: Collapse all the in all the branch nodes in this level
     function AllMessages() : map<Key, Message>
-
   }
 
   // Three states : STatble persistent disk state , ephemeral working state and a frozen ephemeral state
@@ -241,40 +284,6 @@ module SplinterTreeMachineMod {
     && v'.frozen == Idle
   }
 
-  datatype NodeAssignment = NodeAssignment(id: TrunkId, cu: CU, node: TrunkNode)
-  {
-
-    predicate WF()
-    {
-       && node.WF()
-       && cu in CUsInDisk()
-    }
-
-    predicate InIndTable(v: Variables)
-    {
-      && id in v.indTbl
-      && v.indTbl[id] == cu
-    }
-
-    predicate ValidCU(cache : CacheIfc.Variables)
-    {
-      && var unparsedPage := CacheIfc.ReadValue(cache, cu);
-      && unparsedPage.Some?
-      && Some(node) == parseTrunkNode(unparsedPage.value)
-    }
-
-
-
-    predicate Valid(v: Variables, cache: CacheIfc.Variables)
-    {
-      && InIndTable(v)
-      && ValidCU(cache)
-    }
-
-
-
-  }
-
   datatype TrunkStep = TrunkStep(
     // The information about the trunk node of this step
     na: NodeAssignment,
@@ -317,32 +326,41 @@ module SplinterTreeMachineMod {
       MsgSeqRecurse(|branchReceipts|)
     }
 
-    // TODO: Add another Valid predicate that doesn't use the count
-
-    predicate ValidCUs(cus: seq<CU>, count : nat) {
+    predicate ValidCUsInductive(cus: seq<CU>, count : nat)
+      requires WF()
+      requires count <= |branchReceipts|
+    {
       && na.cu in cus
-      && (forall i | 0<=i<count :: branchReceipts[i].ValidCUs())
-      && (forall i | 0<=i<count :: SequenceSubset(branchReceipts[i].branchPath.CUs(), cus))
+      && (forall i | 0<=i<count-1 :: branchReceipts[i].ValidCUs())
+      && (forall i | 0<=i<count-1 :: SequenceSubset(branchReceipts[i].branchPath.CUs(), cus))
       && (forall cu | cu in cus :: cu in CUsInDisk())
     }
 
     function CUsRecurse(count: nat) : (cus: seq<CU>)
       requires WF()
       requires count <= |branchReceipts|
-      ensures ValidCUs(cus, count)
+      ensures ValidCUsInductive(cus, count)
     {
       if count == 0
       then
          // add trunk node
+        assert na.cu in CUsInDisk();
         [na.cu]
       else
-        branchReceipts[count-1].branchPath.CUs() + CUsRecurse(count - 1)
+        var branch := branchReceipts[count-1].branchPath;
+        assert branch.ValidCUs(branch.CUs());
+        branch.CUs() + CUsRecurse(count - 1)
+    }
+
+    predicate ValidCUs(cus: seq<CU>)
+    {
+      ValidCUsInductive(cus, |branchReceipts|)
     }
 
     function {:opaque} CUs() : (cus: seq<CU>)
       requires WF()
       ensures na.cu in cus
-      ensures ValidCUs(cus, |branchReceipts|)
+      ensures ValidCUs(cus)
     {
       CUsRecurse(|branchReceipts|)
     }
@@ -355,7 +373,7 @@ module SplinterTreeMachineMod {
       // Note: Here we require one to one correspondance between the node's branches and the corresponding look up receipt
       && (forall i | 0 <= i < |branchReceipts| :: na.node.branches[i] == branchReceipts[i].branchTree)
       && var cus := CUs();
-      && ValidCUs(cus, |branchReceipts|)
+      && ValidCUs(cus)
     }
 
   }
@@ -367,11 +385,27 @@ module SplinterTreeMachineMod {
 
     predicate WF() {
        (forall i | 0 <= i < |steps| :: steps[i].WF())
-    }
+       // BoundedKey is derivable from ContainsRange, but that requires a mutual induction going down
+       // the tree. It's easier to demand forall-i-BoundedKey so that we can call Route to get the slots
+       // for ContainsRange.
+       && (forall i | 0 <= i < |steps|-1 :: BoundedKey(steps[i].na.node.pivots, k))
+     }
+
+     predicate LinkedAt(childIdx : nat)
+       requires 0 < childIdx < |steps|-1
+       requires WF()
+     {
+       && var parentNode := steps[childIdx-1].na.node;
+       && var childStep := steps[childIdx].na;
+       && var slot := Route(parentNode.pivots, k);
+       // When coverting to clone edges use, ParentKeysInChildRange in TranslationLib
+       && ContainsRange(childStep.node.pivots, parentNode.pivots[slot], parentNode.pivots[slot+1])
+       && childStep.cu == parentNode.children[slot]
+     }
 
     predicate {:opaque} ValidPrefix() {
       // TODO: show that the child is also right pivot  // Find from Rob's pivot library
-      && forall i :: (0 < i < |steps|) && steps[i].na.node in steps[i-1].na.node.children
+      && forall i :: (0 < i < |steps|) && steps[i].na.cu in steps[i-1].na.node.children
     }
 
 
@@ -399,8 +433,11 @@ module SplinterTreeMachineMod {
     }
 
 
-    predicate ValidCUs(cus: seq<CU>, count : nat) {
-      && (forall i | 0<=i<count :: steps[i].ValidCUs(cus, |steps[i].branchReceipts|))
+    predicate ValidCUsInductive(cus: seq<CU>, count : nat)
+      requires WF()
+      requires count <= |steps|
+    {
+      && (forall i | 0<=i<count :: steps[i].ValidCUs(cus))
       && (forall i | 0<=i<count :: ContainsAllStepCUs(cus, steps[i]))
     }
 
@@ -409,7 +446,7 @@ module SplinterTreeMachineMod {
       requires WF()
       requires count <= |steps|
       ensures (forall i | 0<=i<count
-        :: ValidCUs(cus, count))
+        :: ValidCUsInductive(cus, count))
     {
        if count == 0
        then
@@ -418,10 +455,16 @@ module SplinterTreeMachineMod {
          steps[count-1].CUs() +  CUsRecurse(count - 1)
     }
 
+    predicate ValidCUs(cus: seq<CU>)
+      requires WF()
+    {
+      ValidCUsInductive(cus, |steps|)
+    }
+
     // Return the sequence of CUs (aka nodes) this path touches
     function  CUs() : (cus: seq<CU>)
       requires WF()
-      ensures ValidCUs(cus, |steps|)
+      ensures ValidCUs(cus)
     {
       CUsRecurse(|steps|)
     }
@@ -592,15 +635,15 @@ module SplinterTreeMachineMod {
     requires newChild.WF()
   {
     // ensure that they're still children of the parent
-    && newChild in newParent.children
-    && oldChild in oldParent.children
+    && newChild.cu in newParent.children
+    && oldChild.cu in oldParent.children
     && newParent.branches == oldParent.branches
     && newParent.children == oldParent.children
     && newChild.children == oldChild.children
     && newChild.activeBranches == oldChild.activeBranches // Our flush is only one layer, so the activeBranches here shouldn't change
     // check that newChild got a branch from the oldParent
-    && var oldChildId :| (0 <= oldChildId < |oldParent.children|) && oldParent.children[oldChildId] == oldChild;
-    && var newChildId :| (0 <= newChildId < |newParent.children|) && newParent.children[newChildId] == newChild;
+    && var oldChildId :| (0 <= oldChildId < |oldParent.children|) && oldParent.children[oldChildId] == oldChild.cu;
+    && var newChildId :| (0 <= newChildId < |newParent.children|) && newParent.children[newChildId] == newChild.cu;
     && oldChildId == newChildId
     // for now we're flushing all current branches??
     && (forall i :: && oldParent.activeBranches[oldChildId] <= i < |oldParent.branches|
