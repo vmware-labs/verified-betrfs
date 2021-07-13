@@ -1,4 +1,4 @@
-module HashTable {
+module HashTableMonoid {
   const L: nat
 
   type Key
@@ -113,6 +113,14 @@ module HashTable {
     && Contiguous(a)
   }
 
+  predicate V(a: M) {
+    exists p :: P(dot(a, p))
+  }
+
+  predicate transitions(a: M, b: M) {
+    forall c :: V(dot(a, c)) ==> V(dot(b, c))
+  }
+
   function s(i: nat, e: KV) : M {
     M(map[i := e], map[])
   }
@@ -130,12 +138,11 @@ module HashTable {
     && a.m == map[]
   }
 
-  lemma QueryFound(j: nat, k: Key, v0: Value, v: Option<Value>, p: M)
-  requires P(dot(
-    dot(s(j, KV(k, v0)), m(k, v)),
-    p))
+  lemma QueryFound(j: nat, k: Key, v0: Value, v: Option<Value>)
+  requires V(dot(s(j, KV(k, v0)), m(k, v)))
   ensures v == Some(v0)
   {
+    var p :| P(dot(dot(s(j, KV(k, v0)), m(k, v)), p));
     var a := dot(dot(s(j, KV(k, v0)), m(k, v)), p);
     assert a.s[j].KV?;
     assert a.m[k].Some?;
@@ -145,14 +152,14 @@ module HashTable {
 
   lemma QueryReachedEnd(k: Key, a: M, v: Option<Value>, p: M)
   requires Full(a, k, Hash(k), L)
-  requires P(dot(
-    dot(a, m(k, v)),
-    p))
+  requires V(dot(a, m(k, v)))
   ensures v == None
   {
-    var a := dot(dot(a, m(k, v)), p);
+    var p :| P(dot(dot(a, m(k, v)), p));
+    var b := dot(dot(a, m(k, v)), p);
     if v.Some? {
-      var i :| i in a.s && a.s[i] == KV(k, a.m[k].value);
+      assert k in b.m;
+      var i :| i in b.s && b.s[i] == KV(k, b.m[k].value);
       assert i >= L;
       assert i < L;
       assert false;
@@ -161,26 +168,25 @@ module HashTable {
 
   lemma QueryNotFound(k: Key, a: M, v: Option<Value>, j: nat, p: M)
   requires Full(a, k, Hash(k), j)
-  requires P(dot(
-      dot(dot(a, s(j, Empty)), m(k, v)),
-      p))
+  requires V(dot(dot(a, s(j, Empty)), m(k, v)))
   ensures v == None
   {
-    var a := dot(dot(dot(a, s(j, Empty)), m(k, v)), p);
+    var p :| P(dot(dot(dot(a, s(j, Empty)), m(k, v)), p));
+    var b := dot(dot(dot(a, s(j, Empty)), m(k, v)), p);
     if v.Some? {
-      var i :| i in a.s && a.s[i] == KV(k, a.m[k].value);
+      var i :| i in b.s && b.s[i] == KV(k, b.m[k].value);
       if i < j {
         if i < Hash(k) {
-          assert a.s[i].KV?;
-          assert Hash(a.s[i].key) <= i;
+          assert b.s[i].KV?;
+          assert Hash(b.s[i].key) <= i;
           assert false;
         } else {
           assert false;
         }
       } else if i >= j {
-        assert RangeFull(a, i);
-        assert Hash(a.s[i].key) <= j <= i;
-        assert a.s[j].KV?;
+        assert RangeFull(b, i);
+        assert Hash(b.s[i].key) <= j <= i;
+        assert b.s[j].KV?;
         assert false;
       }
       assert i == j;
@@ -188,7 +194,7 @@ module HashTable {
     }
   }
 
-  lemma UpdateExisting(j: nat, k: Key, v0: Option<Value>, v1: Value, v: Value, p: M)
+  lemma UpdateExisting_Helper(j: nat, k: Key, v0: Option<Value>, v1: Value, v: Value, p: M)
   requires P(dot(dot(s(j, KV(k, v1)), m(k, v0)), p))
   ensures P(dot(dot(s(j, KV(k, v)), m(k, Some(v))), p))
   {
@@ -232,7 +238,23 @@ module HashTable {
     }
   }
 
-  lemma UpdateNew(j: nat, k: Key, v0: Option<Value>, v: Value, a: M, p: M)
+  lemma UpdateExisting(j: nat, k: Key, v0: Option<Value>, v1: Value, v: Value)
+  ensures transitions(
+    dot(s(j, KV(k, v1)), m(k, v0)),
+    dot(s(j, KV(k, v)), m(k, Some(v)))
+  )
+  {
+    forall c | V(dot(dot(s(j, KV(k, v1)), m(k, v0)), c))
+    ensures V(dot(dot(s(j, KV(k, v)), m(k, Some(v))), c))
+    {
+      var p :| P(dot(dot(dot(s(j, KV(k, v1)), m(k, v0)), c), p));
+      dot_associative(dot(s(j, KV(k, v1)), m(k, v0)), c, p);
+      UpdateExisting_Helper(j, k, v0, v1, v, dot(c, p));
+      dot_associative(dot(s(j, KV(k, v)), m(k, Some(v))), c, p);
+    }
+  }
+
+  lemma UpdateNew_Helper(j: nat, k: Key, v0: Option<Value>, v: Value, a: M, p: M)
   requires Full(a, k, Hash(k), j)
   requires P(dot(dot(dot(a, s(j, Empty)), m(k, v0)), p))
   ensures P(dot(dot(dot(a, s(j, KV(k, v))), m(k, Some(v))), p))
@@ -288,4 +310,22 @@ module HashTable {
       }
     }
   }
+
+  lemma UpdateNew(j: nat, k: Key, v0: Option<Value>, v: Value, a: M)
+  requires Full(a, k, Hash(k), j)
+  ensures transitions(
+    dot(dot(a, s(j, Empty)), m(k, v0)),
+    dot(dot(a, s(j, KV(k, v))), m(k, Some(v)))
+  )
+  {
+    forall c | V(dot(dot(dot(a, s(j, Empty)), m(k, v0)), c))
+    ensures V(dot(dot(dot(a, s(j, KV(k, v))), m(k, Some(v))), c))
+    {
+      var p :| P(dot(dot(dot(dot(a, s(j, Empty)), m(k, v0)), c), p));
+      dot_associative(dot(dot(a, s(j, Empty)), m(k, v0)), c, p);
+      UpdateNew_Helper(j, k, v0, v, a, dot(c, p));
+      dot_associative(dot(dot(a, s(j, KV(k, v))), m(k, Some(v))), c, p);
+    }
+  }
+
 }
