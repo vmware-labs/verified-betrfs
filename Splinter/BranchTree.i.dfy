@@ -214,6 +214,7 @@ module BranchTreeMod {
       && branchTree.WF()
       && 0 < |branchPath.steps|
       && (branchTree.Root() == branchPath.steps[0].cu)
+      && ValidCUs()
     }
 
     predicate ValidCUs()
@@ -221,7 +222,6 @@ module BranchTreeMod {
       && var cus := branchPath.CUs();
       && branchPath.ValidCUs(cus)
       && (forall cu | cu in cus :: cu in CUsInDisk())
-
     }
 
     predicate Valid(cache : CacheIfc.Variables)
@@ -231,7 +231,6 @@ module BranchTreeMod {
       && branchTree.Valid(cache)
       && branchPath.steps[0].cu == branchTree.root
       // QUESTION : Check if we need another check to compare the children of the branchTree to the branchPath
-      && ValidCUs()
     }
 
   }

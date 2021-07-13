@@ -331,8 +331,8 @@ module SplinterTreeMachineMod {
       requires count <= |branchReceipts|
     {
       && na.cu in cus
-      && (forall i | 0<=i<count-1 :: branchReceipts[i].ValidCUs())
-      && (forall i | 0<=i<count-1 :: SequenceSubset(branchReceipts[i].branchPath.CUs(), cus))
+      && (forall i | 0<=i<=count-1 :: branchReceipts[i].ValidCUs())
+      && (forall i | 0<=i<=count-1 :: SequenceSubset(branchReceipts[i].branchPath.CUs(), cus))
       && (forall cu | cu in cus :: cu in CUsInDisk())
     }
 
@@ -347,12 +347,14 @@ module SplinterTreeMachineMod {
         assert na.cu in CUsInDisk();
         [na.cu]
       else
-        var branch := branchReceipts[count-1].branchPath;
-        assert branch.ValidCUs(branch.CUs());
-        branch.CUs() + CUsRecurse(count - 1)
+        var branch := branchReceipts[count-1];
+        assert branch.WF(); // TRIGGER (Seems to have trouble parsing this from the forall)
+        assert branch.ValidCUs();
+        branch.branchPath.CUs() + CUsRecurse(count - 1)
     }
 
     predicate ValidCUs(cus: seq<CU>)
+      requires WF()
     {
       ValidCUsInductive(cus, |branchReceipts|)
     }
@@ -384,7 +386,11 @@ module SplinterTreeMachineMod {
   {
 
     predicate WF() {
-       (forall i | 0 <= i < |steps| :: steps[i].WF())
+       // All the nodes but the last one shound be Index nodes
+       && (forall i | 0 <= i < |steps|-1 :: steps[i].na.node.Index?)
+       //  The last step's node has to be a Leaf
+       && (0 < |steps| ==> steps[|steps| - 1].na.node.Leaf?)
+       && (forall i | 0 <= i < |steps| :: steps[i].WF())
        // BoundedKey is derivable from ContainsRange, but that requires a mutual induction going down
        // the tree. It's easier to demand forall-i-BoundedKey so that we can call Route to get the slots
        // for ContainsRange.
@@ -403,7 +409,9 @@ module SplinterTreeMachineMod {
        && childStep.cu == parentNode.children[slot]
      }
 
-    predicate {:opaque} ValidPrefix() {
+    predicate {:opaque} ValidPrefix()
+      requires WF()
+    {
       // TODO: show that the child is also right pivot  // Find from Rob's pivot library
       && forall i :: (0 < i < |steps|) && steps[i].na.cu in steps[i-1].na.node.children
     }
@@ -428,6 +436,8 @@ module SplinterTreeMachineMod {
     }
 
     predicate ContainsAllStepCUs(cus: seq<CU>, step : TrunkStep)
+      requires WF()
+      requires step.WF()
     {
       && SequenceSubset(step.CUs(), cus)
     }
@@ -468,7 +478,6 @@ module SplinterTreeMachineMod {
     {
       CUsRecurse(|steps|)
     }
-
 
     // TODO: reorg into WF
 
@@ -586,13 +595,16 @@ module SplinterTreeMachineMod {
       && trunkPath.WF()
       && newParent.WF()
       && newChild.WF()
+      && newParent.node.Index?
       && 0 <= oldParentIdx < |trunkPath.steps|-1
+      && trunkPath.steps[oldParentIdx].na.node.Index?
     }
     predicate Valid(v: Variables, cache: CacheIfc.Variables) {
       && WF()
       && trunkPath.Valid(v, cache)
       && trunkPath.ValidPrefix()
     }
+
     function ParentStep() : TrunkStep
       requires WF()
       { trunkPath.steps[|trunkPath.steps|-2] }
@@ -633,14 +645,18 @@ module SplinterTreeMachineMod {
     requires newParent.WF()
     requires oldChild.WF()
     requires newChild.WF()
+    requires oldParent.Index?
+    requires newParent.Index?
   {
     // ensure that they're still children of the parent
     && newChild.cu in newParent.children
     && oldChild.cu in oldParent.children
     && newParent.branches == oldParent.branches
     && newParent.children == oldParent.children
-    && newChild.children == oldChild.children
-    && newChild.activeBranches == oldChild.activeBranches // Our flush is only one layer, so the activeBranches here shouldn't change
+    && (oldChild.Index? ==> && newChild.Index?
+                            && newChild.children == oldChild.children
+                            // Our flush is only one layer, so the activeBranches here shouldn't change
+                            && newChild.activeBranches == oldChild.activeBranches)
     // check that newChild got a branch from the oldParent
     && var oldChildId :| (0 <= oldChildId < |oldParent.children|) && oldParent.children[oldChildId] == oldChild.cu;
     && var newChildId :| (0 <= newChildId < |newParent.children|) && newParent.children[newChildId] == newChild.cu;
