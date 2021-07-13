@@ -5,114 +5,126 @@ module GhostLoc {
 }
 
 abstract module PCM {
-  import opened GhostLoc
-
   type M(!new)
-
-  datatype Token = Token(loc: Loc, val: M)
+  function dot(x: M, y: M) : M
+  predicate valid(x: M) 
+  function unit() : M
 
   // Partial Commutative Monoid (PCM) axioms
 
-  function unit() : M
-
-  predicate dot_defined(x: M, y: M)
-
-  function dot(x: M, y: M) : M
-  requires dot_defined(x, y)
-
   predicate le(x: M, y: M)
   {
-    exists x1 :: dot_defined(x, x1) && dot(x, x1) == y
+    exists x1 :: dot(x, x1) == y
   }
 
   lemma dot_unit(x: M)
-  ensures dot_defined(x, unit())
   ensures dot(x, unit()) == x
 
+  lemma valid_unit(x: M)
+  ensures valid(unit())
+
   lemma commutative(x: M, y: M)
-  requires dot_defined(x, y)
-  ensures dot_defined(y, x)
   ensures dot(x, y) == dot(y, x)
 
   lemma associative(x: M, y: M, z: M)
-  requires dot_defined(y, z)
-  requires dot_defined(x, dot(y, z))
-  ensures dot_defined(x, y)
-  ensures dot_defined(dot(x, y), z)
   ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
+
+  // Transitions
 
   predicate transition(a: M, b: M)
 
-  least predicate reachable(a: M, b: M) {
-    a == b || (exists z :: reachable(a, z) && transition(z, b))
-  }
+  lemma transition_is_refl(a: M)
+  requires transition(a, a)
+
+  lemma transition_is_trans(a: M, b: M, c: M)
+  requires transition(a, b)
+  requires transition(b, c)
+  ensures transition(a, c)
 
   lemma transition_is_monotonic(a: M, b: M, c: M)
   requires transition(a, b)
-  requires dot_defined(a, c)
-  ensures dot_defined(b, c)
   ensures transition(dot(a, c), dot(b, c))
+}
 
-  /*
-   * Actions
-   */
+// TODO doesn't need to be a .s
+abstract module BasicPCM refines PCM {
+  predicate transition(a: M, b: M) {
+    forall c :: valid(dot(a, c)) ==> valid(dot(b, c))
+  }
+  
+  lemma transition_is_refl(a: M)
+  {
+  }
+
+  lemma transition_is_trans(a: M, b: M, c: M)
+  {
+  }
+
+  lemma transition_is_monotonic(a: M, b: M, c: M)
+  {
+    forall d | valid(dot(dot(a, c), d))
+    ensures valid(dot(dot(b, c), d))
+    {
+      associative(a, c, d);
+      associative(b, c, d);
+    }
+  }
+}
+
+module Tokens(pcm: PCM) {
+  import opened GhostLoc
+
+  datatype Token = Token(loc: Loc, val: pcm.M)
 
   function method {:extern} transition_update(
       gshared s: Token,
       glinear b: Token,
-      ghost expected_out: M)
+      ghost expected_out: pcm.M)
     : (glinear c: Token)
   requires s.loc == b.loc
-  requires dot_defined(s.val, b.val) ==>
-    dot_defined(s.val, expected_out)
-      && transition(
-        dot(s.val, b.val),
-        dot(s.val, expected_out))
-  ensures c.val == expected_out
-  ensures c.loc == s.loc
+  requires pcm.transition(
+        pcm.dot(s.val, b.val),
+        pcm.dot(s.val, expected_out))
+  ensures c == Token(s.loc, expected_out)
 
   function method {:extern} get_unit(ghost loc: Loc) : (glinear u: Token)
-  ensures u.val == unit() && u.loc == loc
+  ensures u == Token(loc, pcm.unit())
 
   glinear method {:extern} dispose(glinear u: Token)
 
   function method {:extern} get_unit_shared(ghost loc: Loc) : (gshared u: Token)
-  ensures u.val == unit() && u.loc == loc
+  ensures u == Token(loc, pcm.unit())
 
   // This MUST be 'method', as it wouldn't be safe to call this and
   // obtain the postconditions from only ghost 'a' and 'b'.
   glinear method {:extern} join(glinear a: Token, glinear b: Token)
   returns (glinear sum: Token)
   requires a.loc == b.loc
-  ensures dot_defined(a.val, b.val) // yes, this is an 'ensures'
-  ensures sum.val == dot(a.val, b.val)
-  ensures sum.loc == a.loc
+  ensures pcm.valid(pcm.dot(a.val, b.val)) // yes, this is an 'ensures'
+  ensures sum == Token(a.loc, pcm.dot(a.val, b.val))
 
   // Same as above: must be 'method', not 'function method'
   glinear method {:extern} is_valid(gshared a: Token, glinear inout b: Token)
   requires a.loc == old_b.loc
   ensures b == old_b
-  ensures dot_defined(a.val, b.val)
+  ensures pcm.valid(pcm.dot(a.val, b.val))
 
   // The only reason this is a 'method' and not a 'function method'
   // is so it can easily have two return args.
-  glinear method {:extern} split(glinear sum: Token, ghost a: M, ghost b: M)
+  glinear method {:extern} split(glinear sum: Token, ghost a: pcm.M, ghost b: pcm.M)
   returns (glinear a': Token, glinear b': Token)
-  requires dot_defined(a, b)
-  requires sum.val == dot(a, b)
-  ensures a'.val == a && a'.loc == sum.loc
-  ensures b'.val == b && b'.loc == sum.loc
+  requires sum.val == pcm.dot(a, b)
+  ensures a' == Token(sum.loc, a)
+  ensures b' == Token(sum.loc, a)
 
-  function method {:extern} join_shared(gshared s: Token, gshared t: Token, ghost expected_q: M)
+  function method {:extern} join_shared(gshared s: Token, gshared t: Token, ghost expected_q: pcm.M)
     : (gshared q: Token)
-  requires forall r :: le(s.val, r) && le(t.val, r) ==> le(expected_q, r)
+  requires forall r :: pcm.le(s.val, r) && pcm.le(t.val, r) ==> pcm.le(expected_q, r)
   requires s.loc == t.loc
-  ensures q.val == expected_q
-  ensures q.loc == s.loc
+  ensures q == Token(s.loc, expected_q)
 
-  function method {:extern} sub(gshared s: Token, ghost t: M)
+  function method {:extern} sub(gshared s: Token, ghost t: pcm.M)
    : (glinear t': Token)
-  requires le(t, s.val)
-  ensures t'.val == t
-  ensures t'.loc == s.loc
+  requires pcm.le(t, s.val)
+  ensures t' == Token(s.loc, t)
 }
