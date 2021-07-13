@@ -366,10 +366,10 @@ module ShardedHashTable refines ShardedStateMachine {
     var table, table' := s.table, s'.table;
 
     var range := Partial(start, end);
-    if !RangeFullKeyNotFound(table, range, key) {
+    if !RangeFullWithOtherKeys(table, range, key) {
       var i: Index :|
         && range.Contains(i)
-        && !SlotFullKeyNotFound(table[i], key);
+        && !SlotFullWithOtherKey(table[i], key);
       var s_key := table[start].value.key;
 
       var psl_at_s := PSL(s_key, start);
@@ -430,7 +430,7 @@ module ShardedHashTable refines ShardedStateMachine {
 
     // if there is no segment, then the singleton segment is valid
     if h_range.HasNone() {
-      assert EqualHashesContiguous(table', h, Partial(start, NextIndex(start)));
+      assert ValidHashSegment(table', h, Partial(start, NextIndex(start)));
       return;
     }
 
@@ -450,7 +450,7 @@ module ShardedHashTable refines ShardedStateMachine {
       assert false;
     }
 
-    assert EqualHashesContiguous(table', h, Partial(hr_start, NextIndex(start)));
+    assert ValidHashSegment(table', h, Partial(hr_start, NextIndex(start)));
   }
 
   lemma InsertPreservesOtherSegment(s: Variables, s': Variables, step: Step, h: Index)
@@ -469,7 +469,7 @@ module ShardedHashTable refines ShardedStateMachine {
 
     // the segment was not toched at all (it could be empty in the first place)  
     if !h_range.OverlapsWith(range) {
-      assert EqualHashesContiguous(table', h, h_range);
+      assert ValidHashSegment(table', h, h_range);
       return;
     }
 
@@ -500,7 +500,7 @@ module ShardedHashTable refines ShardedStateMachine {
           assert !h_range.Contains(i);
         }
       }
-      assert EqualHashesContiguous(table', h, h_range');
+      assert ValidHashSegment(table', h, h_range');
       return;
     }
 

@@ -220,7 +220,9 @@ module CircularTable {
       :: table[i].value.key != table[j].value.key
   }
 
-  predicate EqualHashesContiguous(table: FixedTable, hash: Index, range: Range)
+  // A hash segment is a contiguous Range in which all the stored keys share
+  // the same hash.
+  predicate ValidHashSegment(table: FixedTable, hash: Index, range: Range)
     requires Complete(table)
   {
     // // if the segment is Partial, the hash cannot be in the middle 
@@ -239,7 +241,7 @@ module CircularTable {
     requires Complete(table)
   {
     // there exists a segment of slots that has the matching hash (could be empty)
-    exists range: Range :: EqualHashesContiguous(table, hash, range)
+    exists range: Range :: ValidHashSegment(table, hash, range)
   }
 
   predicate ValidPSL(table: FixedTable, i: Index)
@@ -270,11 +272,11 @@ module CircularTable {
 
   function GetHashSegment(table: FixedTable, hash: Index): (r: Range)
     requires TableInv(table)
-    ensures EqualHashesContiguous(table, hash, r)
+    ensures ValidHashSegment(table, hash, r)
   {
     assert ExistsHashSegment(table, hash);
     var range: Range :|
-      EqualHashesContiguous(table, hash, range);
+      ValidHashSegment(table, hash, range);
     range
   }
 
