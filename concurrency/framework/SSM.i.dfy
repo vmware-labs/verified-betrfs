@@ -4,7 +4,7 @@ abstract module SSM {
   type M(!new)
 
   predicate Init(s: M)
-  predicate Next(s: M, s': M)
+  predicate Next(shard: M, shard': M)
   predicate Inv(s: M)
 
   function dot(x: M, y: M) : M
@@ -14,10 +14,10 @@ abstract module SSM {
   requires Init(s)
   ensures Inv(s)
 
-  lemma NextImpliesInv(s: M, s': M)
-  requires Inv(s)
-  requires Next(s, s')
-  ensures Inv(s')
+  lemma NextImpliesInv(shard: M, shard': M, rest: M)
+  requires Inv(dot(shard, rest))
+  requires Next(shard, shard')
+  ensures Inv(dot(shard', rest))
 
   lemma dot_unit(x: M)
   ensures dot(x, unit()) == x
