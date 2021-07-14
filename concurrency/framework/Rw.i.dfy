@@ -18,7 +18,8 @@ abstract module RW {
   function I(x: M) : Option<StoredType> requires Inv(x)
 
   predicate transition(a: M, b: M) {
-    forall p: M :: Inv(dot(a, p)) ==> Inv(dot(b, p)) && I(dot(a, p)) == I(dot(b, p))
+    forall p: M :: Inv(dot(a, p)) ==> Inv(dot(b, p))
+        && I(dot(a, p)) == I(dot(b, p))
   }
 
   predicate deposit(a: M, b: M, x: StoredType)
