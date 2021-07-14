@@ -23,9 +23,9 @@ module CircularTable {
   type FixedTable = t: Table
     | |t| == FixedSize() witness *
     
-  predicate Complete(table: FixedTable)
+  predicate Complete(table: Table)
   {
-    forall i: Index :: table[i].Some?
+    forall i: nat :: (i < |table| ==> table[i].Some?)
   }
 
   function UnitTable(): Table
@@ -217,10 +217,12 @@ module CircularTable {
 //////////////////////////////////////////////////////////////////////////////
 
   // Keys are unique, although we don't count entries being removed
-  predicate KeysUnique(table: FixedTable)
+  predicate KeysUnique(table: Table)
     requires Complete(table)
   {
-    forall i: Index, j: Index | 
+    forall i: nat, j: nat | 
+        && i < |table|
+        && j < |table|
         && i != j
         && table[i].value.Full?
         && table[j].value.Full?
@@ -266,10 +268,15 @@ module CircularTable {
     )
   }
 
-  predicate TableInv(table: FixedTable)
+  predicate TableWF(table: Table)
   {
     && Complete(table)
     && KeysUnique(table)
+  }
+
+  predicate TableInv(table: FixedTable)
+  {
+    && TableWF(table)
     // && (exists e: Index :: SlotEmpty(table[e]))
     // && (forall h: Index :: ValidOrdering(table, h))
     && (forall i: Index ::
@@ -408,77 +415,67 @@ module CircularTable {
   //     if item.Empty? then prev else prev[item.key := item.value]
   // }
 
-  function InnerI(table: Table): map<Key, Value>
-    requires KeysUnique(table)
+  // function I(table: FixedTable): map<Key, Value>
+  //   requires TableWF(table)
+  // {
+  //   InnerI(table)
+  // }
+
+  function I(table: Table): map<Key, Value>
+    requires TableWF(table)
   {
     if |table| == 0 then map[]
     else
       var index := |table| - 1; 
       var item := table[index].value;
-      var rest := InnerI(table[..index]);
+      var rest := I(table[..index]);
       if item.Empty? then rest else rest[item.key := item.value]
   }
 
-  function I(table: FixedTable): map<Key, Value>
-    requires TableInv(table)
+  predicate ContainsEntry(table: Table, key: Key, value: Value)
   {
-    InnerI(table)
+    exists i: nat :: (i < |table| && table[i] == Some(Full(key, value)))
   }
 
-  predicate ContainsEntry(table: FixedTable, key: Key, value: Value)
-  {
-    exists i: Index :: table[i] == Some(Full(key, value))
-  }
-
-  function GetEntryIndex(table: FixedTable, key: Key, value: Value) : (i: Index)
+  function GetEntryIndex(table: Table, key: Key, value: Value) : (i: nat)
     requires ContainsEntry(table, key, value)
-    ensures table[i] == Some(Full(key, value))
+    ensures i < |table| && table[i] == Some(Full(key, value))
   {
-    var i: Index :| table[i] == Some(Full(key, value));
+    var i: nat :| (i < |table| && table[i] == Some(Full(key, value)));
     i
   }
 
-  lemma ContainmentImpliesMappingInner(table: table, i: Index, key: Key, value: Value)
-    requires table[i] == Some(Full(key, value))
-    requires i < count <= FixedSize()
-    ensures key in InnerI(table) && InnerI(table)[key] == value
-  {
-    if i + 1 != count {
-      ContainmentImpliesMappingInner(table, i, count - 1, key, value);
-    }
-  }
-
-  lemma ContainmentImpliesMapping(table: FixedTable, key: Key, value: Value)
-    requires TableInv(table)
+  lemma ContainmentImpliesMappingInner(table: Table, key: Key, value: Value)
+    requires TableWF(table)
     requires ContainsEntry(table, key, value)
     ensures key in I(table) && I(table)[key] == value
   {
     var i := GetEntryIndex(table, key, value);
-    ContainmentImpliesMappingInner(table, i, FixedSize(), key, value);
+    assert |table| != 0;
+    var index := |table| - 1; 
+    if index != i {
+      ContainmentImpliesMappingInner(table[..index], key, value);
+    }
   }
 
-  // lemma MappingImpliesContainmentInner(table: FixedTable, count: nat, key: Key, value: Value)
-  //   requires TableInv(table)
-  //   requires count <= FixedSize()
-  //   requires key in InnerI(table, count) && InnerI(table, count)[key] == value
-  //   ensures ContainsEntry(table, key, value)
-  // {
-  //   if count == 1 {
-  //     assert table[0] == Some(Full(key, value));
-  //   } else {
-
-
-  //   }
-  // }
+  lemma MappingImpliesContainmentInner(table: Table, key: Key, value: Value)
+    requires TableWF(table)
+    requires key in I(table) && I(table)[key] == value
+    ensures ContainsEntry(table, key, value)
+  {
+    assert |table| != 0;
+    var index := |table| - 1; 
+    if table[index] != Some(Full(key, value)) {
+      MappingImpliesContainmentInner(table[..index], key, value);
+    }
+  }
 
   // lemma MappingImpliesContainment(table: FixedTable, key: Key, value: Value)
   //   requires TableInv(table)
   //   requires key in I(table) && I(table)[key] == value
-  //   // ensures ContainsEntry(table, key, value)
+  //   ensures ContainsEntry(table, key, value)
   // {
-  //   if !ContainsEntry(table, key, value) {
-
-  //   }
+  //   MappingImpliesContainmentInner(table: Table, key: Key, value: Value)
   // }
 
   // lemma RightShiftPreservesEntries(table: FixedTable, table': FixedTable, key: Key, value: Value)
@@ -546,8 +543,6 @@ module CircularTable {
       assert false;
     }
   }
-
-
 
   lemma RightShiftTableQuantity(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index)
     requires IsTableRightShift(table, table', inserted, start, end)
