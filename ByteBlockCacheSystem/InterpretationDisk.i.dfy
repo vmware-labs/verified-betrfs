@@ -1900,7 +1900,7 @@ module InterpretationDisk {
     assert DiskNodes(disk) == DiskNodes(disk');
   }
 
-  lemma {:timeLimitMultiplier 32} RefinesProcessWrite_else2(disk: D.Variables, disk': D.Variables, id: D.ReqId)
+  lemma {:timeLimitMultiplier 96} RefinesProcessWrite_else2(disk: D.Variables, disk': D.Variables, id: D.ReqId)
   requires Inv(disk)
   requires D.ProcessWrite(disk, disk', id)
   requires LocOfReqWrite(disk.reqWrites[id]) != Superblock1Location()
