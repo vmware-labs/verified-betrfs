@@ -404,23 +404,6 @@ module CircularTable {
 // interpretation
 //////////////////////////////////////////////////////////////////////////////
 
-  // function InnerI(table: FixedTable, count: nat): map<Key, Value>
-  //   requires count <= FixedSize()
-  //   requires TableInv(table)
-  // {
-  //   if count == 0 then map[]
-  //   else
-  //     var item := table[count-1].value;
-  //     var prev := InnerI(table, count-1); 
-  //     if item.Empty? then prev else prev[item.key := item.value]
-  // }
-
-  // function I(table: FixedTable): map<Key, Value>
-  //   requires TableWF(table)
-  // {
-  //   InnerI(table)
-  // }
-
   function I(table: Table): map<Key, Value>
     requires TableWF(table)
   {
@@ -432,69 +415,95 @@ module CircularTable {
       if item.Empty? then rest else rest[item.key := item.value]
   }
 
-  predicate ContainsEntry(table: Table, key: Key, value: Value)
+  predicate TableContainsEntry(table: Table, key: Key, value: Value)
   {
     exists i: nat :: (i < |table| && table[i] == Some(Full(key, value)))
   }
 
+  predicate TableContainsKey(table: Table, key: Key)
+  {
+    exists i: nat :: (i < |table| && table[i].value.Full? && table[i].value.key == key)
+  }
+
+  predicate MapContainsEntry(m: map<Key, Value>, key: Key, value: Value)
+  {
+    && key in m
+    && m[key] == value
+  }
+
   function GetEntryIndex(table: Table, key: Key, value: Value) : (i: nat)
-    requires ContainsEntry(table, key, value)
+    requires TableContainsEntry(table, key, value)
     ensures i < |table| && table[i] == Some(Full(key, value))
   {
     var i: nat :| (i < |table| && table[i] == Some(Full(key, value)));
     i
   }
 
-  lemma ContainmentImpliesMappingInner(table: Table, key: Key, value: Value)
+  lemma ContainmentNecessary(table: Table, key: Key, value: Value)
     requires TableWF(table)
-    requires ContainsEntry(table, key, value)
-    ensures key in I(table) && I(table)[key] == value
+    requires TableContainsEntry(table, key, value)
+    ensures MapContainsEntry(I(table), key, value)
   {
     var i := GetEntryIndex(table, key, value);
-    assert |table| != 0;
     var index := |table| - 1; 
     if index != i {
-      ContainmentImpliesMappingInner(table[..index], key, value);
+      ContainmentNecessary(table[..index], key, value);
     }
   }
 
-  lemma MappingImpliesContainmentInner(table: Table, key: Key, value: Value)
+  lemma ContainmentSufficient(table: Table, key: Key, value: Value)
     requires TableWF(table)
-    requires key in I(table) && I(table)[key] == value
-    ensures ContainsEntry(table, key, value)
+    requires MapContainsEntry(I(table), key, value)
+    ensures TableContainsEntry(table, key, value)
   {
-    assert |table| != 0;
     var index := |table| - 1; 
     if table[index] != Some(Full(key, value)) {
-      MappingImpliesContainmentInner(table[..index], key, value);
+      ContainmentSufficient(table[..index], key, value);
     }
   }
 
-  // lemma MappingImpliesContainment(table: FixedTable, key: Key, value: Value)
-  //   requires TableInv(table)
-  //   requires key in I(table) && I(table)[key] == value
-  //   ensures ContainsEntry(table, key, value)
-  // {
-  //   MappingImpliesContainmentInner(table: Table, key: Key, value: Value)
-  // }
+  lemma ContainmentEquivalent(table: Table, key: Key, value: Value)
+    requires TableWF(table)
+    ensures MapContainsEntry(I(table), key, value) <==> TableContainsEntry(table, key, value)
+  {
+    if TableContainsEntry(table, key, value) {
+      ContainmentNecessary(table, key, value);
+    }
+    if MapContainsEntry(I(table), key, value) {
+      ContainmentSufficient(table, key, value);
+    }
+  }
 
-  // lemma RightShiftPreservesEntries(table: FixedTable, table': FixedTable, key: Key, value: Value)
+  lemma RightShiftPreservesContainment(table: FixedTable, table': FixedTable, inserted: Entry)
+    requires inserted.Full?
+    requires exists start: Index, end: Index
+      :: IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end])
+  {
+    var start: Index, end: Index
+      :| IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end]);
+
+    forall key : Key, value: Value | key != inserted.key
+      ensures !TableContainsKey(table, key) ==> !TableContainsKey(table', key)
+      ensures TableContainsEntry(table, key, value) ==> TableContainsEntry(table', key, value)
+    {
+      forall i : Index | SlotFull(table[i])
+        ensures table[i] == table'[i] || table[i] == table'[NextIndex(i)]
+      {
+      }
+
+      if TableContainsEntry(table, key, value) {
+        var j := GetEntryIndex(table, key, value);
+        assert table[j] == table'[j] || table[j] == table'[NextIndex(j)];
+      }
+    }
+
+  }
+
+  // lemma RightShiftPreservesNoneContainment(table: FixedTable, table': FixedTable, key: Key)
   //   requires exists inserted: Option<Entry>, start: Index, end: Index
   //     :: IsTableRightShift(table, table', inserted, start, end) && SlotEmpty(table[end])
-  //   requires ContainsEntry(table, key, value)
-  //   ensures ContainsEntry(table', key, value)
-  // {
-  //   var inserted: Option<Entry>, start: Index, end: Index
-  //     :| IsTableRightShift(table, table', inserted, start, end) && SlotEmpty(table[end]);
-
-  //   var j := GetEntryIndex(table, key, value);
-  //   forall i : Index | SlotFull(table[i])
-  //     ensures table[i] == table'[i] || table[i] == table'[NextIndex(i)]
-  //   {
-  //   }
-
-  //   assert table[j] == table'[j] || table[j] == table'[NextIndex(j)];
-  // }
+    // requires !TableContainsEntry(table, key, value)
+    // ensures !TableContainsEntry(table', key, value)
 
 //////////////////////////////////////////////////////////////////////////////
 // shifting
