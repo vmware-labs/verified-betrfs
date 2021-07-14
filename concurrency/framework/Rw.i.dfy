@@ -173,5 +173,21 @@ module RW_PCMExt(rw: RW) refines PCMExt(RW_PCMWrap(rw)) {
 }
 
 module RWTokens(rw: RW) {
+  import Wrap = RW_PCMWrap(rw)
+  import BaseTokens = Tokens(RW_PCMWrap(rw))
+  import PCMWrapTokens = PCMWrapTokens(RW_PCMWrap(rw))
+
+  import T = Tokens(RW_PCMExt(rw))
+  import ET = ExtTokens(Wrap, RW_PCMExt(rw))
+  ghost const base_loc := Wrap.singleton_loc()
+
+  glinear method init(ghost x: rw.M)
+  returns (glinear t: T.Token)
+  ensures t.loc.ExtLoc? && t.loc.base_loc == base_loc
+  ensures t.val == x
+  {
+    t := ET.ext_init(BaseTokens.get_unit(base_loc), x);
+  }
+
   // TODO fill in init, transition, withdraw, deposit methods
 }
