@@ -221,6 +221,7 @@ module FileSystem {
     && fs'.meta_map == 
           fs.meta_map[src_id := src_m']
                     // jonh: if dst_id is no longer referenced, shouldn't we remove it from the meta_map?
+                    // jialin: there might be other paths that are linked to dir_id, delete handles that
                      [dst_id := MetaDataDelete(fs, dst, ctime)]
                      [sparent_id := UpdateParentTime(fs, sparent_id, ctime)]
                      [dparent_id := UpdateParentTime(fs, dparent_id, ctime)]

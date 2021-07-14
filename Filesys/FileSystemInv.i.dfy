@@ -105,7 +105,7 @@ module FileSystemInv {
     }
   }
 
-  lemma RenamePreservesInv(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
+  lemma {:timeLimitMultiplier 2} RenamePreservesInv(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
   requires Inv(fs)
   requires Rename(fs, fs', src, dst, ctime)
   ensures Inv(fs')
