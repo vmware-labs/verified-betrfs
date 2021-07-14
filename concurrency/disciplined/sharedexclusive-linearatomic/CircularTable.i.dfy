@@ -394,26 +394,116 @@ module CircularTable {
   }
 
 //////////////////////////////////////////////////////////////////////////////
+// interpretation
+//////////////////////////////////////////////////////////////////////////////
+
+  // function InnerI(table: FixedTable, count: nat): map<Key, Value>
+  //   requires count <= FixedSize()
+  //   requires TableInv(table)
+  // {
+  //   if count == 0 then map[]
+  //   else
+  //     var item := table[count-1].value;
+  //     var prev := InnerI(table, count-1); 
+  //     if item.Empty? then prev else prev[item.key := item.value]
+  // }
+
+  function InnerI(table: Table): map<Key, Value>
+    requires KeysUnique(table)
+  {
+    if |table| == 0 then map[]
+    else
+      var index := |table| - 1; 
+      var item := table[index].value;
+      var rest := InnerI(table[..index]);
+      if item.Empty? then rest else rest[item.key := item.value]
+  }
+
+  function I(table: FixedTable): map<Key, Value>
+    requires TableInv(table)
+  {
+    InnerI(table)
+  }
+
+  predicate ContainsEntry(table: FixedTable, key: Key, value: Value)
+  {
+    exists i: Index :: table[i] == Some(Full(key, value))
+  }
+
+  function GetEntryIndex(table: FixedTable, key: Key, value: Value) : (i: Index)
+    requires ContainsEntry(table, key, value)
+    ensures table[i] == Some(Full(key, value))
+  {
+    var i: Index :| table[i] == Some(Full(key, value));
+    i
+  }
+
+  lemma ContainmentImpliesMappingInner(table: table, i: Index, key: Key, value: Value)
+    requires table[i] == Some(Full(key, value))
+    requires i < count <= FixedSize()
+    ensures key in InnerI(table) && InnerI(table)[key] == value
+  {
+    if i + 1 != count {
+      ContainmentImpliesMappingInner(table, i, count - 1, key, value);
+    }
+  }
+
+  lemma ContainmentImpliesMapping(table: FixedTable, key: Key, value: Value)
+    requires TableInv(table)
+    requires ContainsEntry(table, key, value)
+    ensures key in I(table) && I(table)[key] == value
+  {
+    var i := GetEntryIndex(table, key, value);
+    ContainmentImpliesMappingInner(table, i, FixedSize(), key, value);
+  }
+
+  // lemma MappingImpliesContainmentInner(table: FixedTable, count: nat, key: Key, value: Value)
+  //   requires TableInv(table)
+  //   requires count <= FixedSize()
+  //   requires key in InnerI(table, count) && InnerI(table, count)[key] == value
+  //   ensures ContainsEntry(table, key, value)
+  // {
+  //   if count == 1 {
+  //     assert table[0] == Some(Full(key, value));
+  //   } else {
+
+
+  //   }
+  // }
+
+  // lemma MappingImpliesContainment(table: FixedTable, key: Key, value: Value)
+  //   requires TableInv(table)
+  //   requires key in I(table) && I(table)[key] == value
+  //   // ensures ContainsEntry(table, key, value)
+  // {
+  //   if !ContainsEntry(table, key, value) {
+
+  //   }
+  // }
+
+  // lemma RightShiftPreservesEntries(table: FixedTable, table': FixedTable, key: Key, value: Value)
+  //   requires exists inserted: Option<Entry>, start: Index, end: Index
+  //     :: IsTableRightShift(table, table', inserted, start, end) && SlotEmpty(table[end])
+  //   requires ContainsEntry(table, key, value)
+  //   ensures ContainsEntry(table', key, value)
+  // {
+  //   var inserted: Option<Entry>, start: Index, end: Index
+  //     :| IsTableRightShift(table, table', inserted, start, end) && SlotEmpty(table[end]);
+
+  //   var j := GetEntryIndex(table, key, value);
+  //   forall i : Index | SlotFull(table[i])
+  //     ensures table[i] == table'[i] || table[i] == table'[NextIndex(i)]
+  //   {
+  //   }
+
+  //   assert table[j] == table'[j] || table[j] == table'[NextIndex(j)];
+  // }
+
+//////////////////////////////////////////////////////////////////////////////
 // shifting
 //////////////////////////////////////////////////////////////////////////////
 
-  predicate IsTableRightShift(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index)
-  {
-    && (start <= end ==>
-      && (forall i | 0 <= i < start :: table'[i] == table[i])
-      && table'[start] == inserted
-      && (forall i | start < i <= end :: table'[i] == table[i-1])
-      && (forall i | end < i < |table'| :: table'[i] == table[i]))
-    && (start > end ==>
-      && table'[0] == table[ |table| - 1]
-      && (forall i | 0 < i <= end :: table'[i] == table[i-1])
-      && (forall i | end < i < start :: table'[i] == table[i])
-      && table'[start] == inserted
-      && (forall i | start < i < |table'| :: table'[i] == table[i-1]))
-  }
-
   function TableRightShift(table: FixedTable, inserted: Option<Entry>, start: Index, end: Index) : (table': FixedTable)
-    ensures IsTableRightShift(table, table', inserted, start, end)
   {
     if start <= end then
       table[..start] + [inserted] + table[start..end] + table[end+1..]
@@ -422,13 +512,18 @@ module CircularTable {
       [table[last_index]] + table[..end] + table[end+1..start] + [inserted] + table[start..last_index]
   }
   
-  lemma RightShiftIndex(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
-    requires IsTableRightShift(table, table', inserted, start, end)
-    ensures Partial(NextIndex(start), NextIndex(end)).Contains(i) ==> table'[i] == table[PrevIndex(i)];
-    ensures Partial(NextIndex(end), start).Contains(i) ==> table'[i] == table[i];
-    ensures i == start ==> table'[i] == inserted;
+  predicate IsTableRightShift(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index)
   {
+    table' == TableRightShift(table, inserted, start, end)
   }
+
+  // lemma RightShiftIndex(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
+  //   requires IsTableRightShift(table, table', inserted, start, end)
+  //   ensures Partial(NextIndex(start), NextIndex(end)).Contains(i) ==> table'[i] == table[PrevIndex(i)];
+  //   ensures Partial(NextIndex(end), start).Contains(i) ==> table'[i] == table[i];
+  //   ensures i == start ==> table'[i] == inserted;
+  // {
+  // }
 
   lemma RightShiftPSL(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
     requires TableInv(table)
@@ -439,7 +534,7 @@ module CircularTable {
     // requires i != hash(table[PrevIndex(i)].value.key)
     ensures SlotPSL(table', i) == SlotPSL(table, PrevIndex(i)) + 1
   {
-//    assert table'[i] == table[PrevIndex(i)];
+  //  assert table'[i] == table[PrevIndex(i)];
     var old_i := PrevIndex(i);
     assert table'[i] == table[old_i];
     var h := hash(table[old_i].value.key);
@@ -451,6 +546,8 @@ module CircularTable {
       assert false;
     }
   }
+
+
 
   lemma RightShiftTableQuantity(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index)
     requires IsTableRightShift(table, table', inserted, start, end)
@@ -475,28 +572,17 @@ module CircularTable {
     }
   }
 
-  predicate IsTableLeftShift(table: FixedTable, table': FixedTable, start: Index, end: Index)
-  {
-    && (start <= end ==>
-      && (forall i | 0 <= i < start :: table'[i] == table[i]) 
-      && (forall i | start <= i < end :: table'[i] == table[i+1]) 
-      && table'[end] == Some(Empty)
-      && (forall i | end < i < |table'| :: table'[i] == table[i]))
-    && (start > end ==>
-      && (forall i | 0 <= i < end :: table'[i] == table[i+1])
-      && table'[end] == Some(Empty)
-      && (forall i | end < i < start :: table'[i] == table[i])
-      && (forall i | start <= i < |table'| - 1 :: table'[i] == table[i+1])
-      && table'[ |table'| - 1 ] == table[0])
-  }
-
   function TableLeftShift(table: FixedTable, start: Index, end: Index): (table': FixedTable)
-    ensures IsTableLeftShift(table, table', start, end)
   {
     if start <= end then
       table[..start] + table[start+1..end+1] + [Some(Empty)] + table[end+1..]
     else
       table[1..end+1] + [Some(Empty)] + table[end+1..start] + table[start+1..] + [table[0]]
+  }
+
+  predicate IsTableLeftShift(table: FixedTable, table': FixedTable, start: Index, end: Index)
+  {
+    table' == TableLeftShift(table, start, end)
   }
 
   lemma LeftShiftIndex(table: FixedTable, table': FixedTable, start: Index, end: Index, i: Index)

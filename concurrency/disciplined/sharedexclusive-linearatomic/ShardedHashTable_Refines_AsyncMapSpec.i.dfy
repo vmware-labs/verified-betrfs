@@ -1,180 +1,140 @@
-include "MapSpec.s.dfy"
-include "ResourceStateMachine.i.dfy"
-include "Interpretation.i.dfy"
+include "../common/AppSpec.s.dfy"
+include "../common/AsyncAppSpec.s.dfy"
+include "ShardedHashTable.i.dfy"
+include "../common/MultisetLemmas.i.dfy"
+// include "Interpretation.i.dfy"
 
 module ResourceStateMachine_Refines_AsyncMapSpec {
-  import A = ResourceStateMachine
+  import A = ShardedHashTable
   import B = AsyncSpec // AsyncMapSpec
+  import CircularTable
 
-  import HT = HTResource
-  import opened Interpretation
+  // import HT = 
+  // import opened Interpretation
   import Multisets
   import MapSpec
   import Ifc = AsyncIfc
   import MapIfc
   import opened KeyValueType
+  import MultisetLemmas
 
-  function req_of_ticket(t: HT.Ticket) : B.Req {
+  function req_of_ticket(t: A.Ticket) : B.Req {
     B.Req(t.rid, t.input)
   }
 
-  function resp_of_stub(t: HT.Stub) : B.Resp {
+  function resp_of_stub(t: A.Stub) : B.Resp {
     B.Resp(t.rid, t.output)
   }
 
-  function reqs_of_tickets(t: multiset<HT.Ticket>) : multiset<B.Req> {
+  function reqs_of_tickets(t: multiset<A.Ticket>) : multiset<B.Req> {
     Multisets.Apply(req_of_ticket, t)
   }
 
-  function resps_of_stubs(t: multiset<HT.Stub>) : multiset<B.Resp> {
+  function resps_of_stubs(t: multiset<A.Stub>) : multiset<B.Resp> {
     Multisets.Apply(resp_of_stub, t)
   }
 
   function I(s: A.Variables) : B.Variables
   requires A.Inv(s)
   {
-    var t := interp(s.table);
+    var t := CircularTable.I(s.table);
     B.Variables(
-      MapSpec.Variables(map_remove_nones(t.ops)),
+      MapSpec.Variables(t),
       reqs_of_tickets(s.tickets),
-      resps_of_stubs(s.stubs)
-          + resps_of_stubs(t.stubs)
-          + resps_of_stubs(apply_to_query_stub(t.queries))
-          + resps_of_stubs(apply_to_remove_stub(t.removes))
-    )
+      resps_of_stubs(s.stubs))
   }
  
+  lemma InsertRefinesMap(s: A.Variables, s': A.Variables, step: A.Step)
+    requires A.Inv(s) && A.Inv(s')
+    requires step.InsertStep? && A.NextStep(s, s', step)
+    // ensures Next(s: Variables, s': Variables, op: Ifc.Op)
+  {
+    var si, si' := I(s), I(s');
+    var m, m' := si.s.m, si'.s.m;
+    var key, value :=  step.ticket.input.key, step.ticket.input.value;
+
+    forall k : Key
+      ensures k != key ==> 
+        (k in m' <==> k in m) && (k in m' ==> m[k] == m'[k])
+      ensures k == step.ticket.input.key ==>
+        (k in m' && m'[k] == value)
+    {
+      if k == key {
+        CircularTable.KeyExists(s'.table, step.start, key, value);
+      } else {
+        if k in m' {
+          assert 
+        }
+        // assume false;
+      }
+    }
+    
+    assert m' == m[key := value];
+  }
+
+
   lemma Internal_RefinesMap(s: A.Variables, s': A.Variables)
     requires A.Inv(s)
     requires A.Internal(s, s')
     ensures A.Inv(s')
     ensures B.Next(I(s), I(s'), Ifc.InternalOp)
   {
-    MultisetLemmas.MultisetSimplificationTriggers<HT.Ticket, B.Req>();
-    MultisetLemmas.MultisetSimplificationTriggers<HT.Stub, B.Resp>();
-    MultisetLemmas.MultisetSimplificationTriggers<S.QueryRes, HT.Stub>();
 
-    var step :| HT.UpdateStep(s, s', step);
-    match step {
-      case InsertSkipStep(pos) => {
-        InsertSkip_PreservesInterp(s, s', pos);
-      }
-      case InsertSwapStep(pos) => {
-        InsertSwap_PreservesInterp(s, s', pos);
-      }
-      case InsertDoneStep(pos) => {
-        InsertDone_PreservesInterp(s, s', pos);
-        //assert I(s).resps == I(s').resps;
-        //assert I(s) == I(s');
-      }
-      case InsertUpdateStep(pos) => {
-        InsertUpdate_PreservesInterp(s, s', pos);
-      }
-      case RemoveSkipStep(pos) => {
-        RemoveSkip_PreservesInterp(s, s', pos);
-      }
-      case RemoveFoundItStep(pos) => {
-        RemoveFoundIt_PreservesInterp(s, s', pos);
-      }
-      case RemoveNotFoundStep(pos) => {
-        RemoveNotFound_PreservesInterp(s, s', pos);
-      }
-      case RemoveTidyStep(pos) => {
-        RemoveTidy_PreservesInterp(s, s', pos);
-      }
-      case RemoveDoneStep(pos) => {
-        RemoveDone_PreservesInterp(s, s', pos);
+    MultisetLemmas.MultisetSimplificationTriggers<A.Ticket, B.Req>();
+    MultisetLemmas.MultisetSimplificationTriggers<A.Stub, B.Resp>();
+    // MultisetLemmas.MultisetSimplificationTriggers<S.QueryRes, A.Stub>();
 
-        /*assert resps_of_stubs(s.stubs) + multiset{B.Resp(s.table[pos].value.state.rid, MapIfc.RemoveOutput(true))}
-            == resps_of_stubs(s'.stubs);
-        assert resps_of_stubs(apply_to_remove_stub(interp(s.table).removes))
-            == resps_of_stubs(apply_to_remove_stub(interp(s'.table).removes)) + multiset{B.Resp(s.table[pos].value.state.rid, MapIfc.RemoveOutput(true))};
-        assert resps_of_stubs(s.stubs)
-                + resps_of_stubs(apply_to_remove_stub(interp(s.table).removes))
-            == resps_of_stubs(s'.stubs)
-                + resps_of_stubs(apply_to_remove_stub(interp(s'.table).removes));
-        assert I(s).resps == I(s').resps;
-        assert I(s) == I(s');*/
-      }
-      case QuerySkipStep(pos) => {
-        QuerySkip_PreservesInterp(s, s', pos);
-      }
-      case QueryDoneStep(pos) => {
-        QueryDone_PreservesInterp(s, s', pos);
-      }
-      case QueryNotFoundStep(pos) => {
-        QueryNotFound_PreservesInterp(s, s', pos);
-      }
+    var step: A.Step :| A.NextStep(s, s', step); 
+    A.NextPreservesInv(s, s');
 
-      case ProcessInsertTicketStep(insert_ticket) => {
-        ProcessInsertTicket_ChangesInterp(s, s', insert_ticket);
-        var I_s := I(s);
-        var I_s' := I(s');
-        var rid := insert_ticket.rid;
-        var input := insert_ticket.input;
-        var output := MapIfc.InsertOutput(true);
+    if step.InsertStep? {
+      var ticket := step.ticket;
 
-        assert s.tickets == s'.tickets + multiset{insert_ticket};
-        /*assert resps_of_stubs(interp(s'.table).stubs)
-            == resps_of_stubs(interp(s.table).stubs) + multiset{B.Resp(rid, output)};
-        assert B.Req(rid, input) in I_s.reqs;
-        assert I_s.reqs == I_s'.reqs + multiset{B.Req(rid, input)};
-        assert I_s'.resps == I_s.resps + multiset{B.Resp(rid, output)};
-        assert MapSpec.Next(I_s.s, I_s'.s, MapIfc.Op(input, output));*/
-        assert B.LinearizationPoint(I_s, I_s', rid, input, output);
-      }
-      case ProcessRemoveTicketStep(remove_ticket) => {
-        ProcessRemoveTicket_ChangesInterp(s, s', remove_ticket);
-        assert s.tickets == s'.tickets + multiset{remove_ticket};
-        assert B.LinearizationPoint(I(s), I(s'), remove_ticket.rid, remove_ticket.input,
-            MapIfc.RemoveOutput(remove_ticket.input.key in I(s).s.m));
-      }
-      case ProcessQueryTicketStep(query_ticket) => {
-        ProcessQueryTicket_ChangesInterp(s, s', query_ticket);
-
-        assert s.tickets == s'.tickets + multiset{query_ticket};
-
-        if query_ticket.input.key in I(s).s.m {
-          assert B.LinearizationPoint(I(s), I(s'), query_ticket.rid, query_ticket.input,
-              MapIfc.QueryOutput(Found(I(s).s.m[query_ticket.input.key])));
-        } else {
-          assert B.LinearizationPoint(I(s), I(s'), query_ticket.rid, query_ticket.input,
-              MapIfc.QueryOutput(NotFound));
-        }
-      }
+      assert B.LinearizationPoint(I(s), I(s'), ticket.rid, ticket.input, MapIfc.InsertOutput(true));
+    } else {
+      assume false;
     }
+    // InsertEnable(v, step)
+
+
+    // else if step.OverwriteStep? then OverwriteEnable(v, step)
+    // else if step.QueryFoundStep? then QueryFoundEnable(v, step)
+    // else if step.QueryNotFoundStep? then QueryNotFoundEnable(v, step)
+    // else if step.RemoveStep? then RemoveEnable(v, step)
+    // else if step.RemoveNotFoundStep? then RemoveNotFoundEnable(v, step)    
+  
   }
 
-  lemma NewTicket_RefinesMap(s: A.Variables, s': A.Variables, rid: int, input: MapIfc.Input)
-    requires A.Inv(s)
-    requires A.NewTicket(s, s', rid, input)
-    ensures A.Inv(s')
-    ensures B.Next(I(s), I(s'), Ifc.Start(rid, input))
-  {
-    assert s'.table == s.table;
-    assert s'.stubs == s.stubs;
-    MultisetLemmas.MultisetSimplificationTriggers<HT.Ticket, B.Req>();
-    //assert s'.tickets == s.tickets + multiset{HT.Ticket(rid, input)};
-    //assert I(s').reqs == I(s).reqs + multiset{B.Req(rid, input)};
-    //assert I(s').s == I(s).s;
-  }
+  // lemma NewTicket_RefinesMap(s: A.Variables, s': A.Variables, rid: int, input: MapIfc.Input)
+  //   requires A.Inv(s)
+  //   requires A.NewTicket(s, s', rid, input)
+  //   ensures A.Inv(s')
+  //   ensures B.Next(I(s), I(s'), Ifc.Start(rid, input))
+  // {
+  //   assert s'.table == s.table;
+  //   assert s'.stubs == s.stubs;
+  //   MultisetLemmas.MultisetSimplificationTriggers<HT.Ticket, B.Req>();
+  //   //assert s'.tickets == s.tickets + multiset{HT.Ticket(rid, input)};
+  //   //assert I(s').reqs == I(s).reqs + multiset{B.Req(rid, input)};
+  //   //assert I(s').s == I(s).s;
+  // }
 
-  lemma ConsumeStub_RefinesMap(s: A.Variables, s': A.Variables, rid: int, output: MapIfc.Output)
-    requires A.Inv(s)
-    requires A.ConsumeStub(s, s', rid, output)
-    ensures A.Inv(s')
-    ensures B.Next(I(s), I(s'), Ifc.End(rid, output))
-  {
-    assert s'.table == s.table;
-    assert s'.tickets == s.tickets;
-    assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
-    MultisetLemmas.MultisetSimplificationTriggers<HT.Stub, B.Resp>();
-    /*assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
-    assert I(s).resps == I(s').resps + multiset{B.Resp(rid, output)};
-    assert I(s').resps == I(s).resps - multiset{B.Resp(rid, output)};
-    assert I(s').s == I(s).s;
-    assert I(s').reqs == I(s).reqs;
-    assert B.Resp(rid, output) in I(s).resps;*/
-  }
+  // lemma ConsumeStub_RefinesMap(s: A.Variables, s': A.Variables, rid: int, output: MapIfc.Output)
+  //   requires A.Inv(s)
+  //   requires A.ConsumeStub(s, s', rid, output)
+  //   ensures A.Inv(s')
+  //   ensures B.Next(I(s), I(s'), Ifc.End(rid, output))
+  // {
+  //   assert s'.table == s.table;
+  //   assert s'.tickets == s.tickets;
+  //   assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
+  //   MultisetLemmas.MultisetSimplificationTriggers<HT.Stub, B.Resp>();
+  //   /*assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
+  //   assert I(s).resps == I(s').resps + multiset{B.Resp(rid, output)};
+  //   assert I(s').resps == I(s).resps - multiset{B.Resp(rid, output)};
+  //   assert I(s').s == I(s).s;
+  //   assert I(s').reqs == I(s).reqs;
+  //   assert B.Resp(rid, output) in I(s).resps;*/
+  // }
 
 }
