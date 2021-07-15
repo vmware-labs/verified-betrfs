@@ -7,7 +7,7 @@ include "../common/MultisetLemmas.i.dfy"
 module ResourceStateMachine_Refines_AsyncMapSpec {
   import A = ShardedHashTable
   import B = AsyncSpec // AsyncMapSpec
-  import CircularTable
+  import opened CircularTable
 
   // import HT = 
   // import opened Interpretation
@@ -17,6 +17,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
   import MapIfc
   import opened KeyValueType
   import MultisetLemmas
+  import opened CircularRange
 
   function req_of_ticket(t: A.Ticket) : B.Req {
     B.Req(t.rid, t.input)
@@ -44,65 +45,186 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
       resps_of_stubs(s.stubs))
   }
  
-  lemma InsertRefinesMap(s: A.Variables, s': A.Variables, step: A.Step)
+  lemma InsertRefinesMap(s: A.Variables, s': A.Variables, step: A.Step) 
+    returns (output: MapIfc.Output)
     requires A.Inv(s) && A.Inv(s')
     requires step.InsertStep? && A.NextStep(s, s', step)
-    // ensures Next(s: Variables, s': Variables, op: Ifc.Op)
+    ensures MapSpec.Next(
+      MapSpec.Variables(I(s).s.m),
+      MapSpec.Variables(I(s').s.m),
+      MapIfc.Op(step.ticket.input, output));
   {
+    var InsertStep(ticket, start, end) := step;
+    var InsertInput(key, value) := ticket.input;
+    var table, table' := s.table, s'.table;
+    var inserted := Full(key, value);
+
+    ProbeRangeSufficient(table, key, start);
+    ContainmentEquivalent(table, key);
+    RightShiftPreservesMapping(table, table', inserted);
+
     var si, si' := I(s), I(s');
     var m, m' := si.s.m, si'.s.m;
-    var key, value :=  step.ticket.input.key, step.ticket.input.value;
 
-    forall k : Key
-      ensures k != key ==> 
-        (k in m' <==> k in m) && (k in m' ==> m[k] == m'[k])
-      ensures k == step.ticket.input.key ==>
-        (k in m' && m'[k] == value)
-    {
-      if k == key {
-        CircularTable.KeyExists(s'.table, step.start, key, value);
-      } else {
-        if k in m' {
-          assert 
-        }
-        // assume false;
-      }
-    }
-    
     assert m' == m[key := value];
+    output := MapIfc.InsertOutput(true);
   }
 
+  lemma OverwriteRefinesMap(s: A.Variables, s': A.Variables, step: A.Step)
+    returns (output: MapIfc.Output)
+    requires A.Inv(s) && A.Inv(s')
+    requires step.OverwriteStep? && A.NextStep(s, s', step)
+    ensures MapSpec.Next(
+      MapSpec.Variables(I(s).s.m),
+      MapSpec.Variables(I(s').s.m),
+      MapIfc.Op(step.ticket.input, output))
+  {
+    var OverwriteStep(ticket, end) := step;
+    var InsertInput(key, value) := ticket.input;
+    var table, table' := s.table, s'.table;
+    var inserted := Full(key, value);
 
-  lemma Internal_RefinesMap(s: A.Variables, s': A.Variables)
+    ContainmentEquivalent(table, key);
+    OverwritePreservesMapping(table, table', end, inserted);
+
+    var si, si' := I(s), I(s');
+    var m, m' := si.s.m, si'.s.m;
+
+    assert m' == m[key := value];
+
+    output := MapIfc.InsertOutput(true);
+  }
+
+  lemma RemoveRefinesMap(s: A.Variables, s': A.Variables, step: A.Step)
+    returns (output: MapIfc.Output)
+    requires A.Inv(s) && A.Inv(s')
+    requires step.RemoveStep? && A.NextStep(s, s', step)
+    ensures MapSpec.Next(
+      MapSpec.Variables(I(s).s.m),
+      MapSpec.Variables(I(s').s.m),
+      MapIfc.Op(step.ticket.input, output))
+  {
+    var RemoveStep(ticket, start, end) := step;
+    var key := ticket.input.key;
+    var table, table' := s.table, s'.table;
+
+    ContainmentEquivalent(table, key);
+    LeftShiftPreservesMapping(table, table', key);
+
+    var si, si' := I(s), I(s');
+    var m, m' := si.s.m, si'.s.m;
+
+    assert m' == m - {key};
+    output := MapIfc.RemoveOutput(true);
+  }
+
+  lemma RemoveNotFoundRefinesMap(s: A.Variables, s': A.Variables, step: A.Step)
+    returns (output: MapIfc.Output)
+    requires A.Inv(s) && A.Inv(s')
+    requires step.RemoveNotFoundStep? && A.NextStep(s, s', step)
+    ensures MapSpec.Next(
+      MapSpec.Variables(I(s).s.m),
+      MapSpec.Variables(I(s').s.m),
+      MapIfc.Op(step.ticket.input, output))
+  {
+    var RemoveNotFoundStep(ticket, end) := step;
+    var key := ticket.input.key;
+    var table, table' := s.table, s'.table;
+    ProbeRangeSufficient(table, key, end);
+
+    ContainmentEquivalent(table, key);
+
+    var si, si' := I(s), I(s');
+    var m, m' := si.s.m, si'.s.m;
+    assert key !in m;
+
+    output := MapIfc.RemoveOutput(false);
+  }
+
+  lemma QueryNotFoundRefinesMap(s: A.Variables, s': A.Variables, step: A.Step)
+    returns (output: MapIfc.Output)
+    requires A.Inv(s) && A.Inv(s')
+    requires step.QueryNotFoundStep? && A.NextStep(s, s', step)
+    ensures MapSpec.Next(
+      MapSpec.Variables(I(s).s.m),
+      MapSpec.Variables(I(s').s.m),
+      MapIfc.Op(step.ticket.input, output))
+  {
+    var QueryNotFoundStep(ticket, end) := step;
+    var key := ticket.input.key;
+    var table, table' := s.table, s'.table;
+    ProbeRangeSufficient(table, key, end);
+
+    ContainmentEquivalent(table, key);
+
+    var si, si' := I(s), I(s');
+    var m, m' := si.s.m, si'.s.m;
+    assert key !in m;
+
+    output := MapIfc.QueryOutput(QueryResult.NotFound);
+  }
+
+  lemma QueryFoundRefinesMap(s: A.Variables, s': A.Variables, step: A.Step)
+    returns (output: MapIfc.Output)
+    requires A.Inv(s) && A.Inv(s')
+    requires step.QueryFoundStep? && A.NextStep(s, s', step)
+    ensures MapSpec.Next(
+      MapSpec.Variables(I(s).s.m),
+      MapSpec.Variables(I(s').s.m),
+      MapIfc.Op(step.ticket.input, output))
+  {
+    var QueryFoundStep(ticket, end) := step;
+    var key := ticket.input.key;
+    var table := s.table;
+
+    ContainmentEquivalent(table, key);
+
+    var si, si' := I(s), I(s');
+    var m := si.s.m;
+
+    assert key in m && m[key] == table[end].value.value;
+    output := MapIfc.QueryOutput(QueryResult.Found(m[key]));
+  }
+
+  lemma InternalRefinesMap(s: A.Variables, s': A.Variables)
     requires A.Inv(s)
     requires A.Internal(s, s')
     ensures A.Inv(s')
     ensures B.Next(I(s), I(s'), Ifc.InternalOp)
   {
-
-    MultisetLemmas.MultisetSimplificationTriggers<A.Ticket, B.Req>();
-    MultisetLemmas.MultisetSimplificationTriggers<A.Stub, B.Resp>();
-    // MultisetLemmas.MultisetSimplificationTriggers<S.QueryRes, A.Stub>();
+    // MultisetLemmas.MultisetSimplificationTriggers<A.Ticket, B.Req>();
+    // MultisetLemmas.MultisetSimplificationTriggers<A.Stub, B.Resp>();
 
     var step: A.Step :| A.NextStep(s, s', step); 
     A.NextPreservesInv(s, s');
 
+    var si, si' := I(s), I(s');
+
+    var ticket := step.ticket;
+    var rid, input := ticket.rid, ticket.input;
+
+    var output;
+
     if step.InsertStep? {
-      var ticket := step.ticket;
-
-      assert B.LinearizationPoint(I(s), I(s'), ticket.rid, ticket.input, MapIfc.InsertOutput(true));
+      output := InsertRefinesMap(s, s', step);
+    } else if step.OverwriteStep? {
+      output := OverwriteRefinesMap(s, s', step);
+    } else if step.QueryFoundStep? {
+      output := QueryFoundRefinesMap(s, s', step);
+    } else if step.QueryNotFoundStep? {
+      output := QueryNotFoundRefinesMap(s, s', step);
+    } else if step.RemoveStep? {
+      output := RemoveRefinesMap(s, s', step);
+    } else if step.RemoveNotFoundStep? {
+      output := RemoveNotFoundRefinesMap(s, s', step);
     } else {
-      assume false;
+      assert false;
     }
-    // InsertEnable(v, step)
 
+    assume si.reqs == si'.reqs + multiset{B.Req(rid, input)};
+    assume si'.resps == si.resps + multiset{B.Resp(rid, output)};
 
-    // else if step.OverwriteStep? then OverwriteEnable(v, step)
-    // else if step.QueryFoundStep? then QueryFoundEnable(v, step)
-    // else if step.QueryNotFoundStep? then QueryNotFoundEnable(v, step)
-    // else if step.RemoveStep? then RemoveEnable(v, step)
-    // else if step.RemoveNotFoundStep? then RemoveNotFoundEnable(v, step)    
-  
+    assert B.LinearizationPoint(si, si', rid, input, output);
   }
 
   // lemma NewTicket_RefinesMap(s: A.Variables, s': A.Variables, rid: int, input: MapIfc.Input)

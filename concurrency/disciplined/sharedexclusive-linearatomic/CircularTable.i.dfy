@@ -123,8 +123,7 @@ module CircularTable {
     requires TableInv(table)
     requires exists e: Index :: SlotEmpty(table[e])
     requires ValidTidyRange(table, r, key)
-    ensures
-      var end_next := NextIndex(r.end);
+    ensures var end_next := NextIndex(r.end);
       table[end_next].value.Full? ==>
       SlotKeyHash(table[end_next]) != SlotKeyHash(table[r.end])
   {

@@ -711,8 +711,8 @@ module ShardedHashTable refines ShardedStateMachine {
     requires SlotFull(s'.table[i])
     ensures ValidPSL(s'.table, i)
   {
-    var table, table' := s.table, s'.table;
     var RemoveStep(ticket, start, end) := step;
+    var table, table' := s.table, s'.table;
     var next_end := NextIndex(end);
     var s_range := Partial(start, next_end);
 
