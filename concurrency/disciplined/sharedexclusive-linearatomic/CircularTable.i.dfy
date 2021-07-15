@@ -515,36 +515,86 @@ module CircularTable {
     }
   }
 
-  // lemma RightShiftPreservesContainment(table: FixedTable, table': FixedTable, inserted: Entry)
-  //   requires inserted.Full?
-  //   requires exists start: Index, end: Index
-  //     :: IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end])
-  // {
-  //   var start: Index, end: Index
-  //     :| IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end]);
+  lemma RightShiftPreservesContainment(table: FixedTable, table': FixedTable, inserted: Entry)
+    requires TableWF(table)
+    requires TableWF(table')
+    requires inserted.Full?
+    requires !TableContainsKey(table, inserted.key)
+    requires exists start: Index, end: Index
+      :: IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end])
+    ensures forall key : Key | TableContainsKey(table, key) ::
+          (&& TableContainsKey(table', key)
+          && (TableGetValue(table, key) == TableGetValue(table', key)))
+    ensures && TableContainsKey(table', inserted.key)
+      && TableGetValue(table', inserted.key) == inserted.value
+  {
+    var start: Index, end: Index
+      :| IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end]);
 
-  //   forall key : Key, value: Value | key != inserted.key
-  //     ensures !TableContainsKey(table, key) ==> !TableContainsKey(table', key)
-  //     ensures TableContainsEntry(table, key, value) ==> TableContainsEntry(table', key, value)
-  //   {
-  //     forall i : Index | SlotFull(table[i])
-  //       ensures table[i] == table'[i] || table[i] == table'[NextIndex(i)]
-  //     {
-  //     }
+    forall key : Key | key != inserted.key
+      ensures TableContainsKey(table, key) ==> (
+        && TableContainsKey(table', key)
+        && (TableGetValue(table, key) == TableGetValue(table', key))
+      )
+    {
+      if TableContainsKey(table, key) {
+        var j := GetKeyIndex(table, key);
+        var value := table[j].value.value;
+        if table[j] == table'[j] {
+          assert TableGetValue(table', key) == value;
+        } else if table[j] == table'[NextIndex(j)] {
+          assert TableGetValue(table', key) == value;
+        } else {
+          assert false;
+        }
+      }
+    }
 
-  //     if TableContainsEntry(table, key, value) {
-  //       var j := GetEntryIndex(table, key, value);
-  //       assert table[j] == table'[j] || table[j] == table'[NextIndex(j)];
-  //     }
-  //   }
+    assert SlotFullWithKey(table'[start], inserted.key);
+    assert TableGetValue(table', inserted.key) == inserted.value;
+  }
 
-  // }
+  lemma RightShiftPreservesMapping(table: FixedTable, table': FixedTable, inserted: Entry)
+    requires TableWF(table)
+    requires TableWF(table')
+    requires inserted.Full?
+    requires !TableContainsKey(table, inserted.key)
+    requires exists start: Index, end: Index
+      :: IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end])
+  {
+    var m, m' := I(table), I(table');
 
-  // lemma RightShiftPreservesNoneContainment(table: FixedTable, table': FixedTable, key: Key)
-  //   requires exists inserted: Option<Entry>, start: Index, end: Index
-  //     :: IsTableRightShift(table, table', inserted, start, end) && SlotEmpty(table[end])
-    // requires !TableContainsEntry(table, key, value)
-    // ensures !TableContainsEntry(table', key, value)
+    RightShiftPreservesContainment(table, table', inserted);
+    forall key : Key | key != inserted.key
+      ensures 
+          && (key in m <==> key in m')
+          && (key in m ==> m[key] == m'[key])
+    {
+      ContainmentEquivalent(table, key);
+      ContainmentEquivalent(table', key);
+    }
+
+    assert inserted.key in m' && m'[inserted.key] == inserted.value by {
+      ContainmentEquivalent(table, inserted.key);
+      ContainmentEquivalent(table', inserted.key);
+    }
+
+    forall key : Key
+      ensures
+        key != inserted.key ==> (
+          && (key in m <==> key in m')
+          && (key in m ==> m[key] == m'[key])
+        )
+      ensures
+        key == inserted.key ==>
+          m'[inserted.key] == inserted.value
+    {
+    }
+
+    assert m' == m[inserted.key := inserted.value];
+  }
+
+
 
 //////////////////////////////////////////////////////////////////////////////
 // shifting
