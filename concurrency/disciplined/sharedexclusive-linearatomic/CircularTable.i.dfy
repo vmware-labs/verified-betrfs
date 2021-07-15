@@ -409,95 +409,136 @@ module CircularTable {
   {
     if |table| == 0 then map[]
     else
-      var index := |table| - 1; 
-      var item := table[index].value;
-      var rest := I(table[..index]);
+      var item := Last(table).value;
+      var rest := I(DropLast(table));
       if item.Empty? then rest else rest[item.key := item.value]
   }
 
-  predicate TableContainsEntry(table: Table, key: Key, value: Value)
+  predicate SlotFullWithKey(entry: Option<Entry>, key: Key)
   {
-    exists i: nat :: (i < |table| && table[i] == Some(Full(key, value)))
+    && SlotFull(entry)
+    && entry.value.key == key
   }
 
   predicate TableContainsKey(table: Table, key: Key)
   {
-    exists i: nat :: (i < |table| && table[i].value.Full? && table[i].value.key == key)
+    exists i: nat :: i < |table| && SlotFullWithKey(table[i], key)
   }
 
-  predicate MapContainsEntry(m: map<Key, Value>, key: Key, value: Value)
+  function GetKeyIndex(table: Table, key: Key) : (i: nat)
+    requires TableContainsKey(table, key)
+    ensures i < |table|
+    ensures SlotFullWithKey(table[i], key)
   {
-    && key in m
-    && m[key] == value
-  }
-
-  function GetEntryIndex(table: Table, key: Key, value: Value) : (i: nat)
-    requires TableContainsEntry(table, key, value)
-    ensures i < |table| && table[i] == Some(Full(key, value))
-  {
-    var i: nat :| (i < |table| && table[i] == Some(Full(key, value)));
+    var i: nat :| i < |table| && SlotFullWithKey(table[i], key);
     i
   }
 
-  lemma ContainmentNecessary(table: Table, key: Key, value: Value)
+  function TableGetValue(table: Table, key: Key) : Value
+    requires TableContainsKey(table, key)
+  {
+    var i := GetKeyIndex(table, key);
+    table[i].value.value
+  }
+
+  lemma SubTableContainment(table: Table, key: Key)
+    requires TableContainsKey(table, key)
+    requires !SlotFullWithKey(Last(table), key)
+    ensures TableContainsKey(DropLast(table), key)
+  {
+    assert |table| >= 2;
+    var rest := DropLast(table);
+
+    if |table| == 2 {
+      assert SlotFullWithKey(rest[0], key);
+      assert TableContainsKey(rest, key);
+      return;
+    }
+
+    if SlotFullWithKey(Last(rest), key) {
+      return;
+    }
+
+    if !TableContainsKey(rest, key) {
+      assert forall i: nat ::
+        i < |table| ==> !SlotFullWithKey(table[i], key);
+      assert false;
+    }
+  }
+
+  lemma ContainmentNecessary(table: Table, key: Key)
     requires TableWF(table)
-    requires TableContainsEntry(table, key, value)
-    ensures MapContainsEntry(I(table), key, value)
+    requires TableContainsKey(table, key)
+    ensures key in I(table)
+    ensures I(table)[key] == TableGetValue(table, key)
   {
-    var i := GetEntryIndex(table, key, value);
-    var index := |table| - 1; 
-    if index != i {
-      ContainmentNecessary(table[..index], key, value);
+    if SlotFullWithKey(Last(table), key) {
+      return;
+    }
+
+    var rest := DropLast(table);
+
+    if TableContainsKey(rest, key) {
+      ContainmentNecessary(rest, key);
+    } else {
+      SubTableContainment(table, key);
     }
   }
 
-  lemma ContainmentSufficient(table: Table, key: Key, value: Value)
+  lemma ContainmentSufficient(table: Table, key: Key)
     requires TableWF(table)
-    requires MapContainsEntry(I(table), key, value)
-    ensures TableContainsEntry(table, key, value)
+    requires key in I(table)
+    requires TableContainsKey(table, key)
+    ensures I(table)[key] == TableGetValue(table, key)
   {
-    var index := |table| - 1; 
-    if table[index] != Some(Full(key, value)) {
-      ContainmentSufficient(table[..index], key, value);
+    if SlotFullWithKey(Last(table), key) {
+      return;
     }
+
+    var rest := DropLast(table);
+
+    SubTableContainment(table, key);
+    ContainmentSufficient(rest, key);
   }
 
-  lemma ContainmentEquivalent(table: Table, key: Key, value: Value)
+  lemma ContainmentEquivalent(table: Table, key: Key)
     requires TableWF(table)
-    ensures MapContainsEntry(I(table), key, value) <==> TableContainsEntry(table, key, value)
+    ensures key in I(table) <==> TableContainsKey(table, key)
+    ensures key in I(table) ==> I(table)[key] == TableGetValue(table, key)
   {
-    if TableContainsEntry(table, key, value) {
-      ContainmentNecessary(table, key, value);
+    if key in I(table) {
+      ContainmentSufficient(table, key);
     }
-    if MapContainsEntry(I(table), key, value) {
-      ContainmentSufficient(table, key, value);
+
+    if TableContainsKey(table, key) {
+      ContainmentNecessary(table, key);
     }
   }
 
-  lemma RightShiftPreservesContainment(table: FixedTable, table': FixedTable, inserted: Entry)
-    requires inserted.Full?
-    requires exists start: Index, end: Index
-      :: IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end])
-  {
-    var start: Index, end: Index
-      :| IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end]);
+  // lemma RightShiftPreservesContainment(table: FixedTable, table': FixedTable, inserted: Entry)
+  //   requires inserted.Full?
+  //   requires exists start: Index, end: Index
+  //     :: IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end])
+  // {
+  //   var start: Index, end: Index
+  //     :| IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end]);
 
-    forall key : Key, value: Value | key != inserted.key
-      ensures !TableContainsKey(table, key) ==> !TableContainsKey(table', key)
-      ensures TableContainsEntry(table, key, value) ==> TableContainsEntry(table', key, value)
-    {
-      forall i : Index | SlotFull(table[i])
-        ensures table[i] == table'[i] || table[i] == table'[NextIndex(i)]
-      {
-      }
+  //   forall key : Key, value: Value | key != inserted.key
+  //     ensures !TableContainsKey(table, key) ==> !TableContainsKey(table', key)
+  //     ensures TableContainsEntry(table, key, value) ==> TableContainsEntry(table', key, value)
+  //   {
+  //     forall i : Index | SlotFull(table[i])
+  //       ensures table[i] == table'[i] || table[i] == table'[NextIndex(i)]
+  //     {
+  //     }
 
-      if TableContainsEntry(table, key, value) {
-        var j := GetEntryIndex(table, key, value);
-        assert table[j] == table'[j] || table[j] == table'[NextIndex(j)];
-      }
-    }
+  //     if TableContainsEntry(table, key, value) {
+  //       var j := GetEntryIndex(table, key, value);
+  //       assert table[j] == table'[j] || table[j] == table'[NextIndex(j)];
+  //     }
+  //   }
 
-  }
+  // }
 
   // lemma RightShiftPreservesNoneContainment(table: FixedTable, table': FixedTable, key: Key)
   //   requires exists inserted: Option<Entry>, start: Index, end: Index
