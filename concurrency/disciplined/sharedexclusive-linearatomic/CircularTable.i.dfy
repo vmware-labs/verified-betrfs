@@ -25,7 +25,7 @@ module CircularTable {
     
   predicate Complete(table: Table)
   {
-    forall i: nat :: (i < |table| ==> table[i].Some?)
+    forall i: nat | i < |table| :: table[i].Some?
   }
 
   function UnitTable(): Table
@@ -294,116 +294,6 @@ module CircularTable {
     range
   }
 
-//////////////////////////////////////////////////////////////////////////////
-// quantity 
-//////////////////////////////////////////////////////////////////////////////
-
-  function EntryQuantity(entry: Option<Entry>): nat
-  {
-    if entry.Some? && entry.value.Full? then 1 else 0
-  }
-
-  function {:opaque} TableQuantity(s: Table) : nat
-  {
-    if s == [] then
-      0
-    else
-      (TableQuantity(s[..|s| - 1]) + EntryQuantity(Last(s)))
-  }
-
-  lemma FullTableQuantity(table: Table)
-    requires forall i: int :: 
-      0 <= i < |table| ==> (table[i].Some? && table[i].value.Full?)
-    ensures TableQuantity(table) == |table|
-  {
-    reveal TableQuantity();
-  }
-
-  lemma EmptyTableQuantity(table: Table)
-    requires forall i : int ::
-      0 <= i < |table| ==> table[i] == Some(Empty)
-    ensures TableQuantity(table) == 0
-  {
-    reveal TableQuantity();
-  }
-
-  lemma TableQuantityReplace1(t: Table, t': Table, i: Index)
-    requires 0 <= i < |t| == |t'|
-    requires forall j | 0 <= j < |t| :: i != j ==> t[j] == t'[j]
-    ensures TableQuantity(t') == TableQuantity(t) + EntryQuantity(t'[i]) - EntryQuantity(t[i])
-  {
-    reveal_TableQuantity();
-    var end := |t| - 1;
-    if i == end {
-      assert t[..end] == t'[..end];
-    } else {
-      TableQuantityReplace1(t[..end], t'[..end], i);
-    }
-  }
-
-  lemma TableQuantityConcat(t1: Table, t2: Table)
-    decreases |t2|
-    ensures TableQuantity(t1) + TableQuantity(t2) == TableQuantity(t1 + t2)
-  {
-    var t := t1 + t2;
-
-    if |t1| == 0 || |t2| == 0 {
-      assert t == if |t1| == 0 then t2 else t1;
-      reveal TableQuantity();
-      return;
-    }
-
-    calc == {
-      TableQuantity(t);
-      {
-        reveal TableQuantity();
-      }
-      TableQuantity(t[..|t| - 1]) + EntryQuantity(Last(t));
-      {
-        assert Last(t) == Last(t2);
-      }
-      TableQuantity(t[..|t| - 1]) + EntryQuantity(Last(t2));
-      TableQuantity((t1 + t2)[..|t| - 1]) + EntryQuantity(Last(t2));
-      {
-        assert (t1 + t2)[..|t| - 1] == t1 + t2[..|t2| - 1];
-      }
-      TableQuantity(t1 + t2[..|t2| - 1]) + EntryQuantity(Last(t2));
-      {
-        TableQuantityConcat(t1, t2[..|t2| - 1]);
-      }
-      TableQuantity(t1) +  TableQuantity(t2[..|t2| - 1]) + EntryQuantity(Last(t2));
-      {
-        reveal TableQuantity();
-      }
-      TableQuantity(t1) +  TableQuantity(t2);
-    }
-  }
-
-  lemma TableQuantityConcat4(t1: Table, t2: Table, t3: Table, t4: Table)
-    ensures 
-      TableQuantity(t1 + t2 + t3 + t4)
-        == 
-      TableQuantity(t1) + TableQuantity(t2) + TableQuantity(t3) + TableQuantity(t4);
-  {
-      TableQuantityConcat(t1 + t2 + t3, t4);
-      TableQuantityConcat(t1 + t2, t3);
-      TableQuantityConcat(t1, t2);
-  }
-
-  lemma TableQuantityConcat5(t1: Table, t2: Table, t3: Table, t4: Table, t5: Table)
-    ensures 
-      TableQuantity(t1 + t2 + t3 + t4 + t5)
-        == 
-      TableQuantity(t1) + TableQuantity(t2) + TableQuantity(t3) + TableQuantity(t4) + TableQuantity(t5);
-  {
-      TableQuantityConcat4(t1, t2, t3, t4);
-      TableQuantityConcat(t1 + t2 + t3 + t4, t5);
-  }
-
-//////////////////////////////////////////////////////////////////////////////
-// interpretation
-//////////////////////////////////////////////////////////////////////////////
-
   function I(table: Table): map<Key, Value>
     requires TableWF(table)
   {
@@ -522,20 +412,18 @@ module CircularTable {
     requires !TableContainsKey(table, inserted.key)
     requires exists start: Index, end: Index
       :: IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end])
-    ensures forall key : Key | TableContainsKey(table, key) ::
-          (&& TableContainsKey(table', key)
-          && (TableGetValue(table, key) == TableGetValue(table', key)))
-    ensures && TableContainsKey(table', inserted.key)
-      && TableGetValue(table', inserted.key) == inserted.value
+   ensures forall key : Key | key != inserted.key :: 
+      && (TableContainsKey(table, key) <==> TableContainsKey(table', key))
+      && (TableContainsKey(table, key) ==> TableGetValue(table, key) == TableGetValue(table', key)) 
+    ensures TableContainsKey(table', inserted.key)
+    ensures TableGetValue(table', inserted.key) == inserted.value
   {
-    var start: Index, end: Index
-      :| IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end]);
+    var start: Index, end: Index :|
+      IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end]);
 
     forall key : Key | key != inserted.key
-      ensures TableContainsKey(table, key) ==> (
-        && TableContainsKey(table', key)
-        && (TableGetValue(table, key) == TableGetValue(table', key))
-      )
+      ensures TableContainsKey(table, key) <==> TableContainsKey(table', key)
+      ensures TableContainsKey(table, key) ==> TableGetValue(table, key) == TableGetValue(table', key)
     {
       if TableContainsKey(table, key) {
         var j := GetKeyIndex(table, key);
@@ -561,6 +449,7 @@ module CircularTable {
     requires !TableContainsKey(table, inserted.key)
     requires exists start: Index, end: Index
       :: IsTableRightShift(table, table', Some(inserted), start, end) && SlotEmpty(table[end])
+    ensures I(table') == I(table)[inserted.key := inserted.value];
   {
     var m, m' := I(table), I(table');
 
@@ -579,28 +468,215 @@ module CircularTable {
       ContainmentEquivalent(table', inserted.key);
     }
 
-    forall key : Key
-      ensures
-        key != inserted.key ==> (
+    assert forall key : Key :: 
+        && (key != inserted.key ==> (
           && (key in m <==> key in m')
-          && (key in m ==> m[key] == m'[key])
-        )
-      ensures
-        key == inserted.key ==>
-          m'[inserted.key] == inserted.value
-    {
-    }
-
+          && (key in m ==> m[key] == m'[key])))
+        && (key == inserted.key ==>
+          m'[inserted.key] == inserted.value);
+    
     assert m' == m[inserted.key := inserted.value];
   }
 
+  lemma LeftShiftPreservesContainment(table: FixedTable, table': FixedTable, removed_key: Key)
+    requires TableWF(table)
+    requires TableWF(table')
+    requires exists start: Index, end: Index
+      :: IsTableLeftShift(table, table', start, end) && SlotFullWithKey(table[start], removed_key)
+    ensures forall key : Key | key != removed_key ::
+      && (TableContainsKey(table, key) <==> TableContainsKey(table', key))
+      && (TableContainsKey(table, key) ==> TableGetValue(table, key) == TableGetValue(table', key)) 
+    ensures !TableContainsKey(table', removed_key)
+  {
+    var start: Index, end: Index :|
+      IsTableLeftShift(table, table', start, end) && SlotFullWithKey(table[start], removed_key);
 
+    forall key : Key | key != removed_key
+      ensures TableContainsKey(table, key) <==> TableContainsKey(table', key)
+      ensures TableContainsKey(table, key) ==> TableGetValue(table, key) == TableGetValue(table', key)
+    {
+      if TableContainsKey(table, key) {
+        var j := GetKeyIndex(table, key);
+        var value := table[j].value.value;
+        if table[j] == table'[j] {
+          assert TableGetValue(table', key) == value;
+        } else if table[j] == table'[PrevIndex(j)] {
+          assert TableGetValue(table', key) == value;
+        } else {
+          assert false;
+        }
+      }
+    }
+    if TableContainsKey(table', removed_key) {
+      var j : Index :| SlotFullWithKey(table'[j], removed_key);
+      assert SlotFullWithKey(table[j], removed_key)
+        || SlotFullWithKey(table[NextIndex(j)], removed_key);
+      assert false; 
+    }
+  }
+
+  lemma LeftShiftPreservesMapping(table: FixedTable, table': FixedTable, removed_key: Key)
+    requires TableWF(table)
+    requires TableWF(table')
+    requires exists start: Index, end: Index
+      :: IsTableLeftShift(table, table', start, end) && SlotFullWithKey(table[start], removed_key)
+    ensures I(table') == I(table) - {removed_key}
+  {
+    var m, m' := I(table), I(table');
+
+    LeftShiftPreservesContainment(table, table', removed_key);
+
+    forall key : Key | key != removed_key
+      ensures 
+        && (key in m <==> key in m')
+        && (key in m ==> m[key] == m'[key])
+    {
+      ContainmentEquivalent(table, key);
+      ContainmentEquivalent(table', key);
+    }
+
+    assert removed_key !in m' by {
+      ContainmentEquivalent(table, removed_key);
+      ContainmentEquivalent(table', removed_key);
+    }
+
+    assert forall key : Key :: 
+        && (key != removed_key ==> (
+          && (key in m <==> key in m')
+          && (key in m ==> m[key] == m'[key])))
+        && (key == removed_key ==>
+          removed_key !in m');
+    
+    assert m' == m - {removed_key};
+  }
+
+//////////////////////////////////////////////////////////////////////////////
+// quantity 
+//////////////////////////////////////////////////////////////////////////////
+
+  function EntryQuantity(entry: Option<Entry>): nat
+  {
+    if entry.Some? && entry.value.Full? then 1 else 0
+  }
+
+  function {:opaque} TableQuantity(s: Table) : nat
+  {
+    if s == [] then
+      0
+    else
+      (TableQuantity(s[..|s| - 1]) + EntryQuantity(Last(s)))
+  }
+
+  lemma FullTableQuantity(table: Table)
+    requires forall i: int :: 
+      0 <= i < |table| ==> (table[i].Some? && table[i].value.Full?)
+    ensures TableQuantity(table) == |table|
+  {
+    reveal TableQuantity();
+  }
+
+  lemma EmptyTableQuantity(table: Table)
+    requires forall i : int ::
+      0 <= i < |table| ==> table[i] == Some(Empty)
+    ensures TableQuantity(table) == 0
+  {
+    reveal TableQuantity();
+  }
+
+  lemma TableQuantityReplace1(t: Table, t': Table, i: Index)
+    requires 0 <= i < |t| == |t'|
+    requires forall j | 0 <= j < |t| :: i != j ==> t[j] == t'[j]
+    ensures TableQuantity(t') == TableQuantity(t) + EntryQuantity(t'[i]) - EntryQuantity(t[i])
+  {
+    reveal_TableQuantity();
+    var end := |t| - 1;
+    if i == end {
+      assert t[..end] == t'[..end];
+    } else {
+      TableQuantityReplace1(t[..end], t'[..end], i);
+    }
+  }
+
+  lemma TableQuantityConcat(t1: Table, t2: Table)
+    decreases |t2|
+    ensures TableQuantity(t1) + TableQuantity(t2) == TableQuantity(t1 + t2)
+  {
+    var t := t1 + t2;
+
+    if |t1| == 0 || |t2| == 0 {
+      assert t == if |t1| == 0 then t2 else t1;
+      reveal TableQuantity();
+      return;
+    }
+
+    calc == {
+      TableQuantity(t);
+      {
+        reveal TableQuantity();
+      }
+      TableQuantity(t[..|t| - 1]) + EntryQuantity(Last(t));
+      {
+        assert Last(t) == Last(t2);
+      }
+      TableQuantity(t[..|t| - 1]) + EntryQuantity(Last(t2));
+      TableQuantity((t1 + t2)[..|t| - 1]) + EntryQuantity(Last(t2));
+      {
+        assert (t1 + t2)[..|t| - 1] == t1 + t2[..|t2| - 1];
+      }
+      TableQuantity(t1 + t2[..|t2| - 1]) + EntryQuantity(Last(t2));
+      {
+        TableQuantityConcat(t1, t2[..|t2| - 1]);
+      }
+      TableQuantity(t1) +  TableQuantity(t2[..|t2| - 1]) + EntryQuantity(Last(t2));
+      {
+        reveal TableQuantity();
+      }
+      TableQuantity(t1) +  TableQuantity(t2);
+    }
+  }
+
+  lemma TableQuantityConcat4(t1: Table, t2: Table, t3: Table, t4: Table)
+    ensures 
+      TableQuantity(t1 + t2 + t3 + t4)
+        == 
+      TableQuantity(t1) + TableQuantity(t2) + TableQuantity(t3) + TableQuantity(t4);
+  {
+      TableQuantityConcat(t1 + t2 + t3, t4);
+      TableQuantityConcat(t1 + t2, t3);
+      TableQuantityConcat(t1, t2);
+  }
+
+  lemma TableQuantityConcat5(t1: Table, t2: Table, t3: Table, t4: Table, t5: Table)
+    ensures 
+      TableQuantity(t1 + t2 + t3 + t4 + t5)
+        == 
+      TableQuantity(t1) + TableQuantity(t2) + TableQuantity(t3) + TableQuantity(t4) + TableQuantity(t5);
+  {
+      TableQuantityConcat4(t1, t2, t3, t4);
+      TableQuantityConcat(t1 + t2 + t3 + t4, t5);
+  }
 
 //////////////////////////////////////////////////////////////////////////////
 // shifting
 //////////////////////////////////////////////////////////////////////////////
 
+  predicate IsTableRightShift(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index)
+  {
+    && (start <= end ==>
+      && (forall i | 0 <= i < start :: table'[i] == table[i])
+      && table'[start] == inserted
+      && (forall i | start < i <= end :: table'[i] == table[i-1])
+      && (forall i | end < i < |table'| :: table'[i] == table[i]))
+    && (start > end ==>
+      && table'[0] == table[ |table| - 1]
+      && (forall i | 0 < i <= end :: table'[i] == table[i-1])
+      && (forall i | end < i < start :: table'[i] == table[i])
+      && table'[start] == inserted
+      && (forall i | start < i < |table'| :: table'[i] == table[i-1]))
+  }
+
   function TableRightShift(table: FixedTable, inserted: Option<Entry>, start: Index, end: Index) : (table': FixedTable)
+    ensures IsTableRightShift(table, table', inserted, start, end)
   {
     if start <= end then
       table[..start] + [inserted] + table[start..end] + table[end+1..]
@@ -609,18 +685,13 @@ module CircularTable {
       [table[last_index]] + table[..end] + table[end+1..start] + [inserted] + table[start..last_index]
   }
   
-  predicate IsTableRightShift(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index)
+  lemma RightShiftIndex(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
+    requires IsTableRightShift(table, table', inserted, start, end)
+    ensures Partial(NextIndex(start), NextIndex(end)).Contains(i) ==> table'[i] == table[PrevIndex(i)];
+    ensures Partial(NextIndex(end), start).Contains(i) ==> table'[i] == table[i];
+    ensures i == start ==> table'[i] == inserted;
   {
-    table' == TableRightShift(table, inserted, start, end)
   }
-
-  // lemma RightShiftIndex(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
-  //   requires IsTableRightShift(table, table', inserted, start, end)
-  //   ensures Partial(NextIndex(start), NextIndex(end)).Contains(i) ==> table'[i] == table[PrevIndex(i)];
-  //   ensures Partial(NextIndex(end), start).Contains(i) ==> table'[i] == table[i];
-  //   ensures i == start ==> table'[i] == inserted;
-  // {
-  // }
 
   lemma RightShiftPSL(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
     requires TableInv(table)
@@ -631,7 +702,7 @@ module CircularTable {
     // requires i != hash(table[PrevIndex(i)].value.key)
     ensures SlotPSL(table', i) == SlotPSL(table, PrevIndex(i)) + 1
   {
-  //  assert table'[i] == table[PrevIndex(i)];
+//    assert table'[i] == table[PrevIndex(i)];
     var old_i := PrevIndex(i);
     assert table'[i] == table[old_i];
     var h := hash(table[old_i].value.key);
@@ -667,17 +738,28 @@ module CircularTable {
     }
   }
 
+  predicate IsTableLeftShift(table: FixedTable, table': FixedTable, start: Index, end: Index)
+  {
+    && (start <= end ==>
+      && (forall i | 0 <= i < start :: table'[i] == table[i]) 
+      && (forall i | start <= i < end :: table'[i] == table[i+1]) 
+      && table'[end] == Some(Empty)
+      && (forall i | end < i < |table'| :: table'[i] == table[i]))
+    && (start > end ==>
+      && (forall i | 0 <= i < end :: table'[i] == table[i+1])
+      && table'[end] == Some(Empty)
+      && (forall i | end < i < start :: table'[i] == table[i])
+      && (forall i | start <= i < |table'| - 1 :: table'[i] == table[i+1])
+      && table'[ |table'| - 1 ] == table[0])
+  }
+
   function TableLeftShift(table: FixedTable, start: Index, end: Index): (table': FixedTable)
+    ensures IsTableLeftShift(table, table', start, end)
   {
     if start <= end then
       table[..start] + table[start+1..end+1] + [Some(Empty)] + table[end+1..]
     else
       table[1..end+1] + [Some(Empty)] + table[end+1..start] + table[start+1..] + [table[0]]
-  }
-
-  predicate IsTableLeftShift(table: FixedTable, table': FixedTable, start: Index, end: Index)
-  {
-    table' == TableLeftShift(table, start, end)
   }
 
   lemma LeftShiftIndex(table: FixedTable, table': FixedTable, start: Index, end: Index, i: Index)
