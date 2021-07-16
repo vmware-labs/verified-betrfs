@@ -114,6 +114,12 @@ module BranchTreeMod {
       && node.WF()
       && cu in CUsInDisk()
     }
+
+    predicate Valid(cache: CacheIfc.Variables) {
+      && WF()
+      // the cu corresponds to this node
+      && CUToBranchNode(cu, cache) == Some(node)
+    }
   }
 
   datatype BranchPath = BranchPath(key: Key, steps: seq<BranchStep>)
@@ -150,7 +156,7 @@ module BranchTreeMod {
     predicate Valid(cache: CacheIfc.Variables) {
       && WF()
       && Linked()
-      && (forall i | 0 <= i < |steps| :: Some(steps[i].node) == CUToBranchNode(steps[i].cu, cache))
+      && (forall i | 0 <= i < |steps| :: steps[i].Valid(cache))
     }
 
     function Root() : (cu :CU)
@@ -218,6 +224,7 @@ module BranchTreeMod {
     }
 
     predicate ValidCUs()
+      requires branchPath.WF()
     {
       && var cus := branchPath.CUs();
       && branchPath.ValidCUs(cus)

@@ -47,7 +47,6 @@ module SplinterTreeInterpMod {
      lookup
   }
 
-
   // Produce a receipt for this key
   function IMKey(v: Variables, cache: CacheIfc.Variables, key: Key) : (m: Message)
     ensures m.Define?
@@ -115,99 +114,98 @@ module SplinterTreeInterpMod {
     forall key | AnyKey(key) :: LookupExists(v, cache, key)
   }
 
+  // predicate StepsLinked(cache: CacheIfc.Variables, lookup: TrunkPath, currStep: nat, currStepCU: CU, nextStepCU : CU)
+  //   requires currStep < |lookup.steps| - 1
+  // {
+  //   // make sure cus match with the ones in the branchpath
+  //   && currStepCU == lookup.steps[currStep].na.cu
+  //   && nextStepCU == lookup.steps[currStep+1].na.cu
+  //   // The lookup has to be valid
+  //   && lookup.Valid(cache)
+  //   // make sure there's a valid link at the lookup -- Might not be needed, we might be getting this from Valid(s)
+  //   && lookup.LinkedAt(currStep+1)
+  //   // Check if these loose steps correspond to parent-child
+  //   && var currNode := CUToBranchNode(currStepCU, cache);
+  //   && var nextNode := CUToBranchNode(nextStepCU, cache);
+  //   && currNode.Some?
+  //   && nextNode.Some?
+  //   && currNode.value == lookup.steps[currStep].node
+  //   && nextNode.value == lookup.steps[currStep+1].node
+  // }
+
+  predicate LookupRootsequivalent(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, lookup0 : TrunkPath, lookup1: TrunkPath)
+  {
+    && lookup0.Valid(v, cache0)
+    && lookup1.Valid(v, cache1)
+    && var root0 := lookup0.steps[0].na;
+    && var root1 := lookup1.steps[0].na;
+    && root0 == root1
+  }
+
   lemma LookupsEquivalent(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, lookup0 : TrunkPath, lookup1: TrunkPath, count : nat)
     requires lookup0.k == lookup1.k
-    // We should get WF() for free from the updated definitions of Valid now
-    //requires lookup0.WF()
-    //requires lookup1.WF()
     requires lookup0.Valid(v, cache0)
     requires lookup1.Valid(v, cache1)
     requires count <= |lookup0.steps|
     requires count <= |lookup1.steps|
+    requires LookupRootsequivalent(v, cache0, cache1, lookup0, lookup1)
     requires DiskViewsEquivalent(cache0.dv, cache1.dv, IReads(v, cache0))
     ensures forall i :: ((0 <= i < count) ==> (lookup0.steps[i] == lookup1.steps[i]))
   {
       if 0 < count
       {
-        LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, count-1);
-        var step0 := lookup0.steps[count-1];
-        var step1 := lookup1.steps[count-1];
-
-        if (count - 1 == 0) {
+        if (count == 1) {
+          var step0 := lookup0.steps[0];
+          var step1 := lookup1.steps[0];
           // they share roots
           assert step0.na.id == step1.na.id;
+          assert step0.na == step1.na;
+          assume step0.branchReceipts == step1.branchReceipts; // need to make it believe this
+          assert step0 == step1;
         } else {
-          // prior steps were the same, and the pivots took us to
-          // the same place.
-          // TODO broken here, probably because pivot lookups not defined right yet.
-          // This should not pass now!
-          assert step0.na.id == step1.na.id;
-        }
+          LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, count-1);
+          var step0 := lookup0.steps[count-2];
+          var step1 := lookup1.steps[count-2];
+          var nextstep0 := lookup0.steps[count-1];
+          var nextstep1 := lookup1.steps[count-1];
+          var key := lookup0.k;
 
-        assert step0.na.id == step1.na.id;
-        assert step0.na.cu == step1.na.cu;
-        assert step0.na.cu in CUsInDisk();  // try to trigger set comprehension
-        assert step0.na.cu in lookup0.CUs();
-        assert ValidLookupHasCU(v, cache0, lookup0, step0.na.cu);
-        assert step0.na.cu in IReads(v, cache0) by {
-          reveal_IReads();
-        } // TRIGGER
-        assert step0.na.node == step1.na.node;
+          assert step0 == step1; // the previous steps are the same by induction
 
-        assert step0.na == step1.na;
+          assert lookup0.LinkedAt(count-1);
+          assert lookup1.LinkedAt(count-1);
 
-        //assert forall cu | cu in step0.CUs() :: ValidLookupHasCU(v, cache0, lookup0, cu);
+          assert step0.na.node.nextStep(key) == nextstep0.na.cu;
+          assert step1.na.node.nextStep(key) == nextstep1.na.cu;
 
-        forall cu | cu in step0.CUs()
-          ensures ValidLookupHasCU(v, cache0, lookup0, cu) {
-            assert cu in CUsInDisk();
-            assert cu in lookup0.CUs();
-            assert ValidLookupHasCU(v, cache0, lookup0, cu);
-        } // believes this now
 
-        assert forall cu | cu in step0.CUs() :: cu in IReads(v, cache0) by {
+          assert nextstep0.na.cu in CUsInDisk();  // try to trigger set comprehension
+          assert nextstep1.na.cu in lookup0.CUs();
+          assert ValidLookupHasCU(v, cache0, lookup0, nextstep0.na.cu);
+          assert nextstep0.na.cu in IReads(v, cache0) by {
             reveal_IReads();
-        }
+          }
 
-        forall cu | cu in step1.CUs()
-          ensures ValidLookupHasCU(v, cache1, lookup1, cu) {
-            assert cu in CUsInDisk();
-            assert cu in lookup1.CUs();
-            assert ValidLookupHasCU(v, cache1, lookup1, cu);
-        } // believes this now
-
-        assert forall cu | cu in step1.CUs() :: cu in IReads(v, cache1)  by {
+          assert nextstep1.na.cu in CUsInDisk();  // try to trigger set comprehension
+          assert nextstep1.na.cu in lookup1.CUs();
+          assert ValidLookupHasCU(v, cache1, lookup1, nextstep1.na.cu);
+          assert nextstep1.na.cu in IReads(v, cache1) by {
             reveal_IReads();
+          }
+
+          assert nextstep0.na.cu == nextstep1.na.cu;
+          assert nextstep0.na.node == nextstep1.na.node;
+
+          assert nextstep0.na.node.InIndTable(v);
+          assert nextstep1.na.node.InIndTable(v);
+          assert v.indTbl[nextstep0.na.id] == nextstep0.na.cu;
+          assert v.indTbl[nextstep1.na.id] == nextstep1.na.cu;
+          assert nextstep0.na.id == nextstep1.na.id;
+
+          assert nextstep0.na == nextstep1.na;
+          assume nextstep0.branchReceipts == nextstep1.branchReceipts; // need to make it believe this
+          assert nextstep0 == nextstep1;
         }
-
-        // Should probably move this to branchtreeinterp -- Main thing left to prove
-        forall i | 0 <= i < |step0.branchReceipts|
-          ensures step0.branchReceipts[i].branchPath == step1.branchReceipts[i].branchPath
-        {
-           var cus0 := step0.branchReceipts[i].branchPath.CUs();
-           var cus1 := step0.branchReceipts[1].branchPath.CUs();
-
-           assert cus0 == cus1;
-
-           assert step0.branchReceipts[i].branchPath == step1.branchReceipts[i].branchPath;
-        }
-
-        forall i | 0 <= i < |step0.branchReceipts|
-          ensures step0.branchReceipts[i].branchTree == step1.branchReceipts[i].branchTree
-        {
-          var cu0 := step0.branchReceipts[i].branchTree.Root();
-          var cu1 := step1.branchReceipts[i].branchTree.Root();
-
-          assert cu0 == cu1;
-          assert cu0 in IReads(v, cache0);
-          assert CacheIfc.ReadValue(cache0, cu0) == CacheIfc.ReadValue(cache1, cu1);
-
-        }
-
-        //assert |step0.branchReceipts| == |step1.branchReceipts|;
-
-        assert step0.branchReceipts == step1.branchReceipts; // need to make it believe this
-        assert step0 == step1;
       }
   }
 

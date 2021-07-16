@@ -137,7 +137,7 @@ module SplinterTreeMachineMod {
       // TODO
 
   // Parses CU units to BranchNodes that we can use
-  function CUToTrunkNode(cu : CU, cache: CacheIfc.Variables) : Option<TrunkNode>
+  function CUToTrunkNode(cache: CacheIfc.Variables, cu : CU) : Option<TrunkNode>
     {
         var diskPage := CacheIfc.ReadValue(cache, cu);
         if diskPage == None
@@ -162,27 +162,12 @@ module SplinterTreeMachineMod {
        && node.WF()
        && cu in CUsInDisk()
        && node.cu == cu
+       && node.id == id
     }
-
-    predicate InIndTable(v: Variables)
-    {
-      && id in v.indTbl
-      && v.indTbl[id] == cu
-    }
-
-    predicate ValidCU(cache : CacheIfc.Variables)
-    {
-      && var unparsedPage := CacheIfc.ReadValue(cache, cu);
-      && unparsedPage.Some?
-      && Some(node) == parseTrunkNode(unparsedPage.value)
-    }
-
-
 
     predicate Valid(v: Variables, cache: CacheIfc.Variables)
     {
-      && InIndTable(v)
-      && ValidCU(cache)
+      && node.Valid(v, cache)
     }
   }
 
@@ -192,9 +177,11 @@ module SplinterTreeMachineMod {
                                 branches : seq<BranchTreeMod.Variables>,
                                 children : seq<CU>,
                                 pivots : PivotTable,
-                                activeBranches : seq<nat>)
+                                activeBranches : seq<nat>,
+                                id: nat)
                        | Leaf(  cu : CU,
-                                branches : seq<BranchTreeMod.Variables>)
+                                branches : seq<BranchTreeMod.Variables>,
+                                id: nat)
   {
 
     predicate WFIndexNode()
@@ -211,6 +198,36 @@ module SplinterTreeMachineMod {
     predicate WF()
     {
        && this.Index? ==> WFIndexNode()
+    }
+
+    predicate InIndTable(v: Variables)
+    {
+      && id in v.indTbl
+      && v.indTbl[id] == cu
+    }
+
+    predicate ValidCU(cache : CacheIfc.Variables)
+    {
+      && var unparsedPage := CacheIfc.ReadValue(cache, cu);
+      && unparsedPage.Some?
+      && var node := parseTrunkNode(unparsedPage.value);
+      && node.Some?
+      && this == node.value
+    }
+
+    predicate Valid(v: Variables, cache: CacheIfc.Variables)
+    {
+      && InIndTable(v)
+      && ValidCU(cache)
+    }
+
+    function nextStep(k : Key) : CU
+      requires this.Index?
+      requires WFIndexNode()
+      requires BoundedKey(pivots, k)
+    {
+      var slot := Route(pivots, k);
+      children[slot]
     }
 
     // TODO: Collapse all the in all the branch nodes in this level
@@ -386,6 +403,8 @@ module SplinterTreeMachineMod {
   {
 
     predicate WF() {
+       // Every path should at least have a root
+       && 0 < |steps|
        // All the nodes but the last one shound be Index nodes
        && (forall i | 0 <= i < |steps|-1 :: steps[i].na.node.Index?)
        //  The last step's node has to be a Leaf
@@ -398,15 +417,21 @@ module SplinterTreeMachineMod {
      }
 
      predicate LinkedAt(childIdx : nat)
-       requires 0 < childIdx < |steps|-1
+       requires 0 < childIdx < |steps|
        requires WF()
      {
        && var parentNode := steps[childIdx-1].na.node;
        && var childStep := steps[childIdx].na;
        && var slot := Route(parentNode.pivots, k);
        // When coverting to clone edges use, ParentKeysInChildRange in TranslationLib
-       && ContainsRange(childStep.node.pivots, parentNode.pivots[slot], parentNode.pivots[slot+1])
+       && (childIdx < |steps|-1 ==> ContainsRange(childStep.node.pivots, parentNode.pivots[slot], parentNode.pivots[slot+1]))
        && childStep.cu == parentNode.children[slot]
+     }
+
+     predicate Linked()
+       requires WF()
+     {
+       && (forall i | 0 < i < |steps| :: LinkedAt(i))
      }
 
     predicate {:opaque} ValidPrefix()
@@ -495,6 +520,7 @@ module SplinterTreeMachineMod {
       && membufferMsgs == MemtableLookup(v, k)
       // NOte that cu corresponds to the correct node assignment
       && (forall i | 0 <= i < |steps| :: steps[i].Valid(v, cache))
+      && Linked()
     }
 
     function Decode() : (msg : Message)
