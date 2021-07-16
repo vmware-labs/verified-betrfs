@@ -1,16 +1,16 @@
-include "../framework/SSM.i.dfy"
+include "../framework/MultiRw.i.dfy"
 include "../../lib/Base/Option.s.dfy"
 
 // queue:
-//                 tail                  head
-//                  |                      |
-//                  v                      v
-// [         ,      F     ,     F    ,           ,          ,            ]
+//                 tail                     head
+//                  |                         |
+//                  v                         v
+// [         ,     0: F     ,    1: F    ,           ,          ,            ]
 
-module QueueSSM refines SSM {
+module QueueSSM refines MultiRw {
   import opened Options
- 
-  type V(!new)
+
+  type Key = nat
 
   function size(): nat {
     32
@@ -18,7 +18,7 @@ module QueueSSM refines SSM {
 
   datatype Producer = ProducerUnknown | ProducerIdle(head: nat) | ProducerInProgress(head: nat)
   datatype Consumer = ConsumerUnknown | ConsumerIdle(tail: nat) | ConsumerInProgress(tail: nat)
-  datatype Cell = Empty | Full(v: V)
+  datatype Cell = Empty | Full(v: StoredType)
 
   datatype M = MInvalid | M(
     head: Option<nat>,
@@ -27,6 +27,11 @@ module QueueSSM refines SSM {
     producer: Producer,
     consumer: Consumer
   )
+
+  function I(x: M) : map<Key, StoredType> {
+    if x == unit() then map [] else
+    map i: nat | i < size() && x.cells[i].Full? :: x.cells[i].v
+  }
 
   predicate Init(s: M) {
     && s.M?
@@ -47,7 +52,13 @@ module QueueSSM refines SSM {
     && m' == m.(producer := ProducerInProgress(m.producer.head))
   }
 
-  predicate producer_end(m: M, m': M, v: V)
+  lemma producer_begin_is_transition(m: M, m': M)
+  requires producer_begin(m, m')
+  ensures transition(m, m')
+  {
+  }
+
+  predicate producer_end(m: M, m': M, v: StoredType)
   {
     && m.M?
     && m.head.Some?
@@ -65,6 +76,26 @@ module QueueSSM refines SSM {
       cells := m.cells[head := Full(v)])
   }
 
+  lemma producer_end_is_deposit(a: M, b: M, x: StoredType)
+  requires producer_end(a, b, x)
+  ensures exists key :: deposit(a, b, key, x)
+  {
+    var key := a.head.value;
+    // assert deposit(m, m', key, v);
+    forall p: M | Inv(dot(a, p))
+    ensures Inv(dot(b, p))
+        && key !in I(dot(a, p))
+        && I(dot(b, p)) == I(dot(a, p))[key := x] {
+
+      assert Inv(dot(b, p)) by {
+        assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
+      }
+      assert key !in I(dot(a, p));
+      assert I(dot(b, p)) == I(dot(a, p))[key := x];
+    }
+    assert deposit(a, b, key, x);
+  }
+
   predicate consumer_begin(m: M, m': M)
   {
     && m.M?
@@ -75,7 +106,34 @@ module QueueSSM refines SSM {
     && m' == m.(consumer := ConsumerInProgress(m.consumer.tail))
   }
 
-  predicate consumer_end(m: M, m': M, v: V)
+  lemma consumer_begin_is_transition(a: M, b: M)
+  requires consumer_begin(a, b)
+  ensures transition(a, b)
+  {
+  }
+
+  lemma consumer_end_is_withdraw(a: M, b: M, x: StoredType)
+  requires consumer_end(a, b, x)
+  ensures exists key :: withdraw(a, b, key, x)
+  {
+    var key := a.tail.value;
+
+    forall p: M | Inv(dot(a, p))
+    ensures Inv(dot(b, p))
+        && I(dot(a, p)) == I(dot(b, p))[key := x]
+        && key !in I(dot(b, p)) {
+
+      assert Inv(dot(b, p)) by {
+        assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
+      }
+      assert I(dot(a, p)) == I(dot(b, p))[key := x];
+      assert key !in I(dot(b, p));
+    }
+    assert withdraw(a, b, key, x);
+  }
+
+
+  predicate consumer_end(m: M, m': M, v: StoredType)
   {
     && m.M?
     && m.tail.Some?
@@ -93,44 +151,39 @@ module QueueSSM refines SSM {
       cells := m.cells[tail := Empty])
   }
 
-  predicate Next(shard: M, shard': M)
+  predicate Inv(x: M)
   {
-    || producer_begin(shard, shard')
-    || (exists v :: producer_end(shard, shard', v))
-    || consumer_begin(shard, shard')
-    || (exists v :: consumer_end(shard, shard', v))
-  }
+    x.M? && (
+    || (
+      && x.head.Some?
+      && x.tail.Some?
+      && (forall i: nat :: i < size() <==> i in x.cells.Keys)
+      && (!x.producer.ProducerUnknown?)
+      && (!x.consumer.ConsumerUnknown?)
 
-  predicate Inv(s: M)
-  {
-    && s.M?
-    && s.head.Some?
-    && s.tail.Some?
-    && (forall i: nat :: i < size() <==> i in s.cells.Keys)
-    && (!s.producer.ProducerUnknown?)
-    && (!s.consumer.ConsumerUnknown?)
+      && x.head.value < size()
+      && x.tail.value < size()
 
-    && s.head.value < size()
-    && s.tail.value < size()
+      && x.producer.head == x.head.value
+      && x.consumer.tail == x.tail.value
 
-    && s.producer.head == s.head.value
-    && s.consumer.tail == s.tail.value
+      && (x.producer.ProducerInProgress? ==> 
+        ((x.producer.head + 1) % size()) != x.tail.value)
+      && (x.consumer.ConsumerInProgress? ==> 
+        x.consumer.tail != x.head.value)
 
-    && (s.producer.ProducerInProgress? ==> 
-      ((s.producer.head + 1) % size()) != s.tail.value)
-    && (s.consumer.ConsumerInProgress? ==> 
-      s.consumer.tail != s.head.value)
-
-    && (
-      var head := s.head.value;
-      var tail := s.tail.value;
-      forall i: nat | i < size() :: (
-        var i_2 := if i < tail then i + size() else i;
-        var head_2 := if head < tail then head + size() else head;
-        if i_2 < head_2
-          then s.cells[i].Full?
-          else s.cells[i].Empty?
-    ))
+      && (
+        var head := x.head.value;
+        var tail := x.tail.value;
+        forall i: nat | i < size() :: (
+          var i_2 := if i < tail then i + size() else i;
+          var head_2 := if head < tail then head + size() else head;
+          if i_2 < head_2
+            then x.cells[i].Full?
+            else x.cells[i].Empty?
+      ))
+    )
+    || x == unit())
   }
 
   function dot(x: M, y: M) : M
@@ -164,36 +217,9 @@ module QueueSSM refines SSM {
       ConsumerUnknown)
   }
 
-  lemma InitImpliesInv(s: M)
-  ensures Inv(s)
+  lemma InitImpliesInv(x: M)
+  ensures Inv(x)
   {
-  }
-
-  lemma NextImpliesInv(shard: M, shard': M, rest: M)
-  // requires Inv(dot(shard, rest))
-  // requires Next(shard, shard')
-  // ensures Inv(dot(shard', rest))
-  {
-    if producer_begin(shard, shard') {
-      assert Inv(dot(shard', rest));
-    } else if (exists v :: producer_end(shard, shard', v)) {
-      assert Inv(dot(shard', rest)) by {
-        assert dot(shard, rest).cells.Keys == shard.cells.Keys + rest.cells.Keys;
-        assert forall i: nat | i < size() :: i in dot(shard', rest).cells.Keys;
-      }
-    } else if consumer_begin(shard, shard') {
-      assert Inv(dot(shard', rest));
-    } else if (exists v :: consumer_end(shard, shard', v)) {
-      assert Inv(dot(shard', rest)) by {
-        assert dot(shard, rest).cells.Keys == shard.cells.Keys + rest.cells.Keys;
-        assert forall i: nat :: i < size() <==> i in dot(shard', rest).cells.Keys;
-
-        assert (dot(shard', rest).producer.ProducerInProgress? ==> 
-          ((dot(shard', rest).producer.head + 1) % size()) != dot(shard', rest).tail.value);
-      }
-    } else {
-      assert false;
-    }
   }
 
   lemma dot_unit(x: M)
@@ -211,15 +237,10 @@ module QueueSSM refines SSM {
     assert dot(x, dot(y, z)) == dot(dot(x, y), z);
   }
 
-  lemma exists_inv_state()
-  returns (s: M)
-  ensures Inv(s)
+  lemma inv_unit()
+  ensures Inv(unit())
+  ensures I(unit()) == map[]
   {
-    s := M(
-      Some(0),
-      Some(0),
-      map i: nat | i < size() :: Empty,
-      ProducerIdle(0),
-      ConsumerIdle(0));
+
   }
 }
