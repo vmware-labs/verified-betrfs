@@ -9,8 +9,6 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
   import B = AsyncSpec // AsyncMapSpec
   import opened CircularTable
 
-  // import HT = 
-  // import opened Interpretation
   import Multisets
   import MapSpec
   import Ifc = AsyncIfc
@@ -53,6 +51,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
       MapSpec.Variables(I(s).s.m),
       MapSpec.Variables(I(s').s.m),
       MapIfc.Op(step.ticket.input, output));
+    ensures s'.stubs == s.stubs + multiset{A.Stub(step.ticket.rid, output)};
   {
     var InsertStep(ticket, start, end) := step;
     var InsertInput(key, value) := ticket.input;
@@ -78,6 +77,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
       MapSpec.Variables(I(s).s.m),
       MapSpec.Variables(I(s').s.m),
       MapIfc.Op(step.ticket.input, output))
+    ensures s'.stubs == s.stubs + multiset{A.Stub(step.ticket.rid, output)};
   {
     var OverwriteStep(ticket, end) := step;
     var InsertInput(key, value) := ticket.input;
@@ -103,6 +103,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
       MapSpec.Variables(I(s).s.m),
       MapSpec.Variables(I(s').s.m),
       MapIfc.Op(step.ticket.input, output))
+    ensures s'.stubs == s.stubs + multiset{A.Stub(step.ticket.rid, output)};
   {
     var RemoveStep(ticket, start, end) := step;
     var key := ticket.input.key;
@@ -126,6 +127,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
       MapSpec.Variables(I(s).s.m),
       MapSpec.Variables(I(s').s.m),
       MapIfc.Op(step.ticket.input, output))
+    ensures s'.stubs == s.stubs + multiset{A.Stub(step.ticket.rid, output)};
   {
     var RemoveNotFoundStep(ticket, end) := step;
     var key := ticket.input.key;
@@ -149,6 +151,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
       MapSpec.Variables(I(s).s.m),
       MapSpec.Variables(I(s').s.m),
       MapIfc.Op(step.ticket.input, output))
+    ensures s'.stubs == s.stubs + multiset{A.Stub(step.ticket.rid, output)};
   {
     var QueryNotFoundStep(ticket, end) := step;
     var key := ticket.input.key;
@@ -172,6 +175,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
       MapSpec.Variables(I(s).s.m),
       MapSpec.Variables(I(s').s.m),
       MapIfc.Op(step.ticket.input, output))
+    ensures s'.stubs == s.stubs + multiset{A.Stub(step.ticket.rid, output)};
   {
     var QueryFoundStep(ticket, end) := step;
     var key := ticket.input.key;
@@ -192,9 +196,6 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
     ensures A.Inv(s')
     ensures B.Next(I(s), I(s'), Ifc.InternalOp)
   {
-    // MultisetLemmas.MultisetSimplificationTriggers<A.Ticket, B.Req>();
-    // MultisetLemmas.MultisetSimplificationTriggers<A.Stub, B.Resp>();
-
     var step: A.Step :| A.NextStep(s, s', step); 
     A.NextPreservesInv(s, s');
 
@@ -221,8 +222,15 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
       assert false;
     }
 
-    assume si.reqs == si'.reqs + multiset{B.Req(rid, input)};
-    assume si'.resps == si.resps + multiset{B.Resp(rid, output)};
+    assert si.reqs == si'.reqs + multiset{B.Req(rid, input)} by {
+      assert s'.tickets + multiset{ticket} == s.tickets;
+      MultisetLemmas.MultisetSimplificationTriggers<A.Ticket, B.Req>();
+    }
+
+    assert si'.resps == si.resps + multiset{B.Resp(rid, output)} by {
+      assert s'.stubs == s.stubs + multiset{A.Stub(ticket.rid, output)};
+      MultisetLemmas.MultisetSimplificationTriggers<A.Stub, B.Resp>();
+    }
 
     assert B.LinearizationPoint(si, si', rid, input, output);
   }
