@@ -408,10 +408,13 @@ module ShardedHashTable refines ShardedStateMachine {
     returns (e: Index)
     requires Inv(s)
     requires InsertEnable(s, step)
-    ensures s.table[e].value.Empty? && e != step.end
+    ensures SlotEmpty(s.table[e]) && e != step.end
   {
+   var table := s.table;
+   var end := step.end;
+
     calc {
-      TableQuantity(s.table);
+      TableQuantity(table);
       == 
       Capacity() - s.insert_capacity.value;
       <=
@@ -420,8 +423,18 @@ module ShardedHashTable refines ShardedStateMachine {
       FixedSize() - 2;
     }
     assert TableQuantity(s.table) <= FixedSize() - 2;
-    // TODO: this should be "easy"
-    assume false;
+    assert SlotEmpty(s.table[end]);
+
+    if forall e : Index :: e != end ==> SlotFull(table[e]) {
+      var input := step.ticket.input;
+      var full := table[end := Some(Full(input.key, input.value))];
+      FullTableQuantity(full);
+      TableQuantityReplace1(full, table, end);
+      assert false;
+    }
+
+    var empt : Index :| empt != end && !SlotFull(table[empt]);
+    return empt;
   }
 
   lemma InsertPreservesKeySegment(s: Variables, s': Variables, step: Step)
