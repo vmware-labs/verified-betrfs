@@ -235,21 +235,18 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
     assert B.LinearizationPoint(si, si', rid, input, output);
   }
 
-  // lemma NewTicket_RefinesMap(s: A.Variables, s': A.Variables, rid: int, input: MapIfc.Input)
-  //   requires A.Inv(s)
-  //   requires A.NewTicket(s, s', rid, input)
-  //   ensures A.Inv(s')
-  //   ensures B.Next(I(s), I(s'), Ifc.Start(rid, input))
-  // {
-  //   assert s'.table == s.table;
-  //   assert s'.stubs == s.stubs;
-  //   MultisetLemmas.MultisetSimplificationTriggers<HT.Ticket, B.Req>();
-  //   //assert s'.tickets == s.tickets + multiset{HT.Ticket(rid, input)};
-  //   //assert I(s').reqs == I(s).reqs + multiset{B.Req(rid, input)};
-  //   //assert I(s').s == I(s).s;
-  // }
+  lemma NewTicketRefinesMap(s: A.Variables, s': A.Variables, rid: int, input: MapIfc.Input)
+    requires A.Inv(s)
+    requires A.NewTicket(s, s', rid, input)
+    ensures A.Inv(s')
+    ensures B.Next(I(s), I(s'), Ifc.Start(rid, input))
+  {
+    assert s'.table == s.table;
+    assert s'.stubs == s.stubs;
+    MultisetLemmas.MultisetSimplificationTriggers<A.Ticket, B.Req>();
+  }
 
-  // lemma ConsumeStub_RefinesMap(s: A.Variables, s': A.Variables, rid: int, output: MapIfc.Output)
+  // lemma ConsumeStubRefinesMap(s: A.Variables, s': A.Variables, rid: int, output: MapIfc.Output)
   //   requires A.Inv(s)
   //   requires A.ConsumeStub(s, s', rid, output)
   //   ensures A.Inv(s')
@@ -257,8 +254,8 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
   // {
   //   assert s'.table == s.table;
   //   assert s'.tickets == s.tickets;
-  //   assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
-  //   MultisetLemmas.MultisetSimplificationTriggers<HT.Stub, B.Resp>();
+  //   assert s.stubs == s'.stubs + multiset{A.Stub(rid, output)};
+  //   MultisetLemmas.MultisetSimplificationTriggers<A.Stub, B.Resp>();
   //   /*assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
   //   assert I(s).resps == I(s').resps + multiset{B.Resp(rid, output)};
   //   assert I(s').resps == I(s).resps - multiset{B.Resp(rid, output)};
