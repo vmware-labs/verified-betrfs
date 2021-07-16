@@ -17,6 +17,43 @@ module CircularTable {
   datatype Entry =
     | Full(key: Key, value: Value)
     | Empty
+  {
+    function method Hash(): Index
+      requires Full?
+    {
+      hash(key)
+    }
+
+    function method EntryPSL(i: Index): nat
+      requires Full?
+    {
+      PSL(key, i)
+    }
+
+    predicate method WithOtherKey(key': Key)
+    {
+      && Full?
+      && key != key'
+    }
+
+    predicate method WithKey(key': Key)
+    {
+      && Full?
+      && key == key'
+    }
+
+    predicate method ShouldSkip(i: Index, key': Key)
+    {
+      && WithOtherKey(key')
+      && EntryPSL(i) >= PSL(key', i)
+    }
+
+    predicate method ShouldSwap(i: Index, key': Key)
+    {
+      && WithOtherKey(key')
+      && EntryPSL(i) < PSL(key', i)
+    }
+  }
 
   type Table = seq<Option<Entry>>
 
@@ -61,14 +98,14 @@ module CircularTable {
   function SlotKeyHash(entry: Option<Entry>): Index
     requires SlotFull(entry)
   {
-    hash(entry.value.key)
+    entry.value.Hash()
   }
 
   // What's the Probe Sequence Length for the key at this location?
   function method SlotPSL(table: FixedTable, i: Index): nat
     requires SlotFull(table[i])
   {
-    PSL(table[i].value.key, i)
+    table[i].value.EntryPSL(i)
   }
 
   predicate SlotEmpty(entry: Option<Entry>)
@@ -79,7 +116,7 @@ module CircularTable {
   predicate SlotFullWithOtherKey(entry: Option<Entry>, key: Key)
   {
     && SlotFull(entry)
-    && entry.value.key != key
+    && entry.value.WithOtherKey(key)
   }
 
   predicate RangeFullWithOtherKeys(table: FixedTable, range: Range, key: Key)
@@ -91,20 +128,20 @@ module CircularTable {
   {
     && SlotFullWithOtherKey(entry, key)
     // the psl at the slot is geq than the psl of insert
-    && PSL(entry.value.key, i) >= PSL(key, i)
+    && entry.value.ShouldSkip(i, key)
   }
 
   predicate SlotShouldSwap(entry: Option<Entry>, i: Index, key: Key)
   {
     && SlotFullWithOtherKey(entry, key)
     // the psl at the slot is less than the psl of the insert
-    && PSL(entry.value.key, i) < PSL(key, i)
+    && entry.value.ShouldSwap(i, key)
   }
 
   predicate SlotShouldTidy(entry: Option<Entry>, i: Index)
   {
     && SlotFull(entry)
-    && hash(entry.value.key) != i
+    && entry.value.Hash() != i
   }
 
   predicate ValidTidyRange(table: FixedTable, r: Range, key: Key)
@@ -566,7 +603,7 @@ module CircularTable {
   predicate SlotFullWithKey(entry: Option<Entry>, key: Key)
   {
     && SlotFull(entry)
-    && entry.value.key == key
+    && entry.value.WithKey(key)
   }
 
   predicate TableContainsKey(table: Table, key: Key)
