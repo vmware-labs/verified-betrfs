@@ -22,7 +22,7 @@ module CircularTable {
 
   type FixedTable = t: Table
     | |t| == FixedSize() witness *
-    
+
   predicate Complete(table: FixedTable)
   {
     forall i: Index :: table[i].Some?
@@ -37,6 +37,7 @@ module CircularTable {
 // entry/range predicates
 //////////////////////////////////////////////////////////////////////////////
 
+  //probe sequence length
   function PSL(key: Key, i: Index): nat
   {
     var h := hash(key);
@@ -153,7 +154,7 @@ module CircularTable {
       || SlotEmpty(table[end]))
   }
 
-  // a valid probe range would cover key's hash segment 
+  // a valid probe range would cover key's hash segment
   lemma ProbeRangeSufficient(table: FixedTable, key: Key, end: Index)
     requires TableInv(table)
     requires ValidProbeRange(table, key, end)
@@ -210,7 +211,7 @@ module CircularTable {
   predicate KeysUnique(table: FixedTable)
     requires Complete(table)
   {
-    forall i: Index, j: Index | 
+    forall i: Index, j: Index |
         && i != j
         && table[i].value.Full?
         && table[j].value.Full?
@@ -220,7 +221,7 @@ module CircularTable {
   predicate ValidHashSegment(table: FixedTable, hash: Index, range: Range)
     requires Complete(table)
   {
-    // // if the segment is Partial, the hash cannot be in the middle 
+    // // if the segment is Partial, the hash cannot be in the middle
     // && !Contains(Partial(NextIndex(range.start), range.end), hash))
     // all the keys in the segment share the hash
     && (forall i: Index | range.Contains(i) ::
@@ -228,7 +229,7 @@ module CircularTable {
         && SlotKeyHash(table[i]) == hash)
     // and no where else
     && (forall i: Index | !range.Contains(i) ::
-        (table[i].value.Full? ==> 
+        (table[i].value.Full? ==>
         SlotKeyHash(table[i]) != hash))
   }
 
@@ -246,7 +247,7 @@ module CircularTable {
     (
       var key := table[i].value.key;
       var h_i := hash(key);
-      forall j: Index :: Partial(h_i, i).Contains(j) ==> 
+      forall j: Index :: Partial(h_i, i).Contains(j) ==>
       (
         && table[j].value.Full?
         && SlotPSL(table, j) >= PSL(key, j)
@@ -276,7 +277,7 @@ module CircularTable {
   }
 
 //////////////////////////////////////////////////////////////////////////////
-// quantity 
+// quantity
 //////////////////////////////////////////////////////////////////////////////
 
   function EntryQuantity(entry: Option<Entry>): nat
@@ -293,7 +294,7 @@ module CircularTable {
   }
 
   lemma FullTableQuantity(table: Table)
-    requires forall i: int :: 
+    requires forall i: int ::
       0 <= i < |table| ==> (table[i].Some? && table[i].value.Full?)
     ensures TableQuantity(table) == |table|
   {
@@ -353,9 +354,9 @@ module CircularTable {
   }
 
   lemma TableQuantityConcat4(t1: Table, t2: Table, t3: Table, t4: Table)
-    ensures 
+    ensures
       TableQuantity(t1 + t2 + t3 + t4)
-        == 
+        ==
       TableQuantity(t1) + TableQuantity(t2) + TableQuantity(t3) + TableQuantity(t4);
   {
       TableQuantityConcat(t1 + t2 + t3, t4);
@@ -364,9 +365,9 @@ module CircularTable {
   }
 
   lemma TableQuantityConcat5(t1: Table, t2: Table, t3: Table, t4: Table, t5: Table)
-    ensures 
+    ensures
       TableQuantity(t1 + t2 + t3 + t4 + t5)
-        == 
+        ==
       TableQuantity(t1) + TableQuantity(t2) + TableQuantity(t3) + TableQuantity(t4) + TableQuantity(t5);
   {
       TableQuantityConcat4(t1, t2, t3, t4);
@@ -401,7 +402,7 @@ module CircularTable {
       var last_index := |table| - 1;
       [table[last_index]] + table[..end] + table[end+1..start] + [inserted] + table[start..last_index]
   }
-  
+
   lemma RightShiftIndex(table: FixedTable, table': FixedTable, inserted: Option<Entry>, start: Index, end: Index, i: Index)
     requires IsTableRightShift(table, table', inserted, start, end)
     ensures Partial(NextIndex(start), NextIndex(end)).Contains(i) ==> table'[i] == table[PrevIndex(i)];
@@ -457,8 +458,8 @@ module CircularTable {
   predicate IsTableLeftShift(table: FixedTable, table': FixedTable, start: Index, end: Index)
   {
     && (start <= end ==>
-      && (forall i | 0 <= i < start :: table'[i] == table[i]) 
-      && (forall i | start <= i < end :: table'[i] == table[i+1]) 
+      && (forall i | 0 <= i < start :: table'[i] == table[i])
+      && (forall i | start <= i < end :: table'[i] == table[i+1])
       && table'[end] == Some(Empty)
       && (forall i | end < i < |table'| :: table'[i] == table[i]))
     && (start > end ==>
@@ -490,7 +491,7 @@ module CircularTable {
     requires TableInv(table)
     requires IsTableLeftShift(table, table', start, end)
     requires SlotFull(table'[i])
-    requires Partial(start, end).Contains(i) 
+    requires Partial(start, end).Contains(i)
     requires NextIndex(i) != hash(table[NextIndex(i)].value.key)
     ensures SlotPSL(table', i) == SlotPSL(table, NextIndex(i)) - 1
   {

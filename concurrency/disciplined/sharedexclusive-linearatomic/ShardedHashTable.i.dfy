@@ -152,13 +152,16 @@ module ShardedHashTable refines ShardedStateMachine {
     && var InsertStep(ticket, start, end) := step;
     && ticket in v.tickets
     && ticket.input.InsertInput?
+    //todo: insert_capacity is unnecessary in the atomic version
+    // because we have the slot empty conjunct which ensures
+    // that we have somewhere to insert things
     && v.insert_capacity.value >= 1
 
     && var table := v.table;
     && ValidProbeRange(table, ticket.input.key, start)
     // this part is full
     && RangeFull(table, Partial(start, end))
-    // but the end is empty 
+    // but the end is empty
     && SlotEmpty(table[end])
   }
 
@@ -181,7 +184,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && var OverwriteStep(ticket, end) := step;
     && ticket in v.tickets
     && ticket.input.InsertInput?
-    
+
     // the entry at end index has the same key
     && SlotFull(v.table[end])
     && v.table[end].value.key == ticket.input.key
@@ -207,7 +210,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && var QueryFoundStep(ticket, end) := step;
     && ticket in v.tickets
     && ticket.input.QueryInput?
- 
+
     && SlotFull(v.table[end])
     && v.table[end].value.key == ticket.input.key
   }
@@ -384,7 +387,7 @@ module ShardedHashTable refines ShardedStateMachine {
     }
 
     if !KeysUnique(table') {
-      var i: Index, j: Index :| 
+      var i: Index, j: Index :|
         && table'[i].value.Full?
         && table'[j].value.Full?
         && i != j
@@ -404,7 +407,7 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     calc {
       TableQuantity(s.table);
-      == 
+      ==
       Capacity() - s.insert_capacity.value;
       <=
       Capacity() - 1;
@@ -469,7 +472,7 @@ module ShardedHashTable refines ShardedStateMachine {
     // the segment that shares the hash
     var h_range := GetHashSegment(table, h);
 
-    // the segment was not toched at all (it could be empty in the first place)  
+    // the segment was not toched at all (it could be empty in the first place)
     if !h_range.OverlapsWith(range) {
       assert ValidHashSegment(table', h, h_range);
       return;
@@ -517,9 +520,9 @@ module ShardedHashTable refines ShardedStateMachine {
     assert h_range.Contains(start);
 
     var pre_start := PrevIndex(start);
-    assert ValidPSL(table, pre_start); 
-    
-    assert hash(table[pre_start].value.key) != 
+    assert ValidPSL(table, pre_start);
+
+    assert hash(table[pre_start].value.key) !=
       hash(table[start].value.key);
     assert false;
   }
@@ -528,13 +531,13 @@ module ShardedHashTable refines ShardedStateMachine {
     requires Inv(s)
     requires step.InsertStep? && NextStep(s, s', step)
     requires s'.table[i].value.Full?
-    ensures ValidPSL(s'.table, i); 
+    ensures ValidPSL(s'.table, i);
   {
     var InsertStep(ticket, start, end) := step;
     var InsertInput(key, value) := ticket.input;
     var inserted := Some(Full(key, value));
     var table, table' := s.table, s'.table;
-    
+
     if Partial(NextIndex(start), NextIndex(end)).Contains(i) {
       assert table'[i] == table[PrevIndex(i)];
       assert ValidPSL(table, PrevIndex(i));
@@ -689,7 +692,7 @@ module ShardedHashTable refines ShardedStateMachine {
     if h_range.Contains(start) {
       assert false;
     }
-    
+
     if h_range.Contains(end) {
       var e := InvImpliesEmptySlot(s);
       TidyRangeSufficient(table, Partial(start, end), key);
@@ -730,7 +733,7 @@ module ShardedHashTable refines ShardedStateMachine {
     ensures Inv(s')
   {
     assert KeysUnique(s'.table);
-    
+
     forall h: Index
       ensures ExistsHashSegment(s'.table, h);
     {
