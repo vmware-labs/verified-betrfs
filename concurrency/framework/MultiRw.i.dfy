@@ -172,4 +172,42 @@ module MultiRw_PCMExt(rw: MultiRw) refines PCMExt(MultiRw_PCMWrap(rw)) {
 
 module MultiRwTokens(rw: MultiRw) {
   // TODO fill in init, transition, withdraw, deposit methods
+
+  import opened GhostLoc
+
+  import Wrap = MultiRw_PCMWrap(rw)
+  import T = Tokens(MultiRw_PCMExt(rw))
+  
+  type Token = t : T.Token | t.loc.ExtLoc? && t.loc.base_loc == Wrap.singleton_loc()
+    witness *
+
+  glinear method initialize(glinear m: rw.M)
+  returns (glinear token: Token)
+  requires rw.Init(m)
+  ensures token.val == m
+
+  glinear method internal_transition(
+      glinear token: Token,
+      ghost expected_value: rw.M)
+  returns (glinear token': Token)
+  requires rw.transition(token.val, expected_value)
+  ensures token' == T.Token(token.loc, expected_value)
+
+  glinear method deposit(
+      glinear token: Token,
+      ghost key: rw.Key,
+      glinear stored_value: rw.StoredType,
+      ghost expected_value: rw.M)
+  returns (glinear token': Token)
+  requires rw.deposit(token.val, expected_value, key, stored_value)
+  ensures token' == T.Token(token.loc, expected_value)
+
+  glinear method withdraw(
+      glinear token: Token,
+      ghost expected_value: rw.M,
+      ghost key: rw.Key,
+      ghost expected_retrieved_value: rw.StoredType)
+  returns (glinear token': Token, glinear retrieved_value: rw.StoredType)
+  requires rw.withdraw(token.val, expected_value, key, expected_retrieved_value)
+  ensures token' == T.Token(token.loc, expected_value)
 }
