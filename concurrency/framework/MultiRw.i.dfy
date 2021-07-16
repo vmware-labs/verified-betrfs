@@ -171,8 +171,6 @@ module MultiRw_PCMExt(rw: MultiRw) refines PCMExt(MultiRw_PCMWrap(rw)) {
 }
 
 module MultiRwTokens(rw: MultiRw) {
-  // TODO fill in init, transition, withdraw, deposit methods
-
   import opened GhostLoc
 
   import Wrap = MultiRw_PCMWrap(rw)
@@ -210,4 +208,64 @@ module MultiRwTokens(rw: MultiRw) {
   returns (glinear token': Token, glinear retrieved_value: rw.StoredType)
   requires rw.withdraw(token.val, expected_value, key, expected_retrieved_value)
   ensures token' == T.Token(token.loc, expected_value)
+  ensures retrieved_value == expected_retrieved_value
+
+  // TODO borrow method
+
+  /*
+   * Helpers
+   */
+
+  glinear method internal_transition_2_2(
+      glinear token1: Token,
+      glinear token2: Token,
+      ghost expected_value1: rw.M,
+      ghost expected_value2: rw.M)
+  returns (glinear token1': Token, glinear token2': Token)
+  requires token1.loc == token2.loc
+  requires rw.transition(
+      rw.dot(token1.val, token2.val),
+      rw.dot(expected_value1, expected_value2))
+  ensures token1' == T.Token(token1.loc, expected_value1)
+  ensures token2' == T.Token(token1.loc, expected_value2)
+
+  glinear method deposit_3_3(
+      glinear token1: Token,
+      glinear token2: Token,
+      glinear token3: Token,
+      ghost key: rw.Key,
+      glinear stored_value: rw.StoredType,
+      ghost expected_value1: rw.M,
+      ghost expected_value2: rw.M,
+      ghost expected_value3: rw.M)
+  returns (glinear token1': Token, glinear token2': Token, glinear token3': Token)
+  requires token1.loc == token2.loc == token3.loc
+  requires rw.deposit(
+    rw.dot(rw.dot(token1.val, token2.val), token3.val),
+    rw.dot(rw.dot(expected_value1, expected_value2), expected_value3),
+    key, stored_value)
+  ensures token1' == T.Token(token1.loc, expected_value1)
+  ensures token2' == T.Token(token1.loc, expected_value2)
+  ensures token3' == T.Token(token1.loc, expected_value3)
+
+  glinear method withdraw_3_3(
+      glinear token1: Token,
+      glinear token2: Token,
+      glinear token3: Token,
+      ghost expected_value1: rw.M,
+      ghost expected_value2: rw.M,
+      ghost expected_value3: rw.M,
+      ghost key: rw.Key,
+      ghost expected_retrieved_value: rw.StoredType)
+  returns (glinear token1': Token, glinear token2': Token, glinear token3': Token,
+      glinear retrieved_value: rw.StoredType)
+  requires token1.loc == token2.loc == token3.loc
+  requires rw.withdraw(
+      rw.dot(rw.dot(token1.val, token2.val), token3.val),
+      rw.dot(rw.dot(expected_value1, expected_value2), expected_value3),
+      key, expected_retrieved_value)
+  ensures token1' == T.Token(token1.loc, expected_value1)
+  ensures token2' == T.Token(token1.loc, expected_value2)
+  ensures token3' == T.Token(token1.loc, expected_value3)
+  ensures retrieved_value == expected_retrieved_value
 }
