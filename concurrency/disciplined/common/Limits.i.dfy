@@ -6,8 +6,8 @@ include "AppSpec.s.dfy"
 module Limits {
   import opened NativeTypes
 
-  function FixedSize() : (n: nat)
-    ensures n > 1
+  function method FixedSize() : (n: nat)
+    ensures 1 < n < 0x100000000
 
   function Capacity() : (n: nat)
   {

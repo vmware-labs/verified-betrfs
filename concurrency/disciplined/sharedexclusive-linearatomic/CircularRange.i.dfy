@@ -7,12 +7,12 @@ module CircularRange {
 
   type Index = i: int | 0 <= i < FixedSize()
 
-  function NextIndex(i: Index): Index
+  function method NextIndex(i: Index): Index
   {
     if i == FixedSize() - 1 then 0 else i + 1
   }
 
-  function PrevIndex(i: Index): Index
+  function method PrevIndex(i: Index): Index
   {
     if i == 0 then FixedSize() - 1 else i - 1
   }

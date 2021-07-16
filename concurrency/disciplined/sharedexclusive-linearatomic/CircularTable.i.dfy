@@ -39,7 +39,7 @@ module CircularTable {
 
   // PSL == Probe Sequence Length: the probe length from hash(key)
   // to index i
-  function PSL(key: Key, i: Index): nat
+  function method PSL(key: Key, i: Index): nat
   {
     var h := hash(key);
     if h <= i then
@@ -65,7 +65,7 @@ module CircularTable {
   }
 
   // What's the Probe Sequence Length for the key at this location?
-  function SlotPSL(table: FixedTable, i: Index): nat
+  function method SlotPSL(table: FixedTable, i: Index): nat
     requires SlotFull(table[i])
   {
     PSL(table[i].value.key, i)
@@ -146,10 +146,16 @@ module CircularTable {
     }
   }
 
+  predicate ValidProbeRangePartial(table: FixedTable, key: Key, cur: Index)
+  {
+    forall i: Index | Partial(hash(key), cur).Contains(i) :: SlotShouldSkip(table[i], i, key)
+  }
+
   predicate ValidProbeRange(table: FixedTable, key: Key, end: Index)
   {
-    // skip upto (not including) start
-    && (forall i: Index | Partial(hash(key), end).Contains(i) :: SlotShouldSkip(table[i], i, key))
+    // skip upto (not including) end
+    && ValidProbeRangePartial(table, key, end)
+    // Partial(hash(key), end).Contains(i) :: SlotShouldSkip(table[i], i, key))
     // insert at start
     && (SlotShouldSwap(table[end], end, key)
       || SlotEmpty(table[end]))

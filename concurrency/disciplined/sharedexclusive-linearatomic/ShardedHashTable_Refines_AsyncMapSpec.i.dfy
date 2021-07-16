@@ -190,7 +190,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
     output := MapIfc.QueryOutput(QueryResult.Found(m[key]));
   }
 
-  lemma InternalRefinesMap(s: A.Variables, s': A.Variables)
+  lemma Internal_RefinesMap(s: A.Variables, s': A.Variables)
     requires A.Inv(s)
     requires A.Internal(s, s')
     ensures A.Inv(s')
@@ -235,7 +235,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
     assert B.LinearizationPoint(si, si', rid, input, output);
   }
 
-  lemma NewTicketRefinesMap(s: A.Variables, s': A.Variables, rid: int, input: MapIfc.Input)
+  lemma NewTicket_RefinesMap(s: A.Variables, s': A.Variables, rid: int, input: MapIfc.Input)
     requires A.Inv(s)
     requires A.NewTicket(s, s', rid, input)
     ensures A.Inv(s')
@@ -246,22 +246,16 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
     MultisetLemmas.MultisetSimplificationTriggers<A.Ticket, B.Req>();
   }
 
-  // lemma ConsumeStubRefinesMap(s: A.Variables, s': A.Variables, rid: int, output: MapIfc.Output)
-  //   requires A.Inv(s)
-  //   requires A.ConsumeStub(s, s', rid, output)
-  //   ensures A.Inv(s')
-  //   ensures B.Next(I(s), I(s'), Ifc.End(rid, output))
-  // {
-  //   assert s'.table == s.table;
-  //   assert s'.tickets == s.tickets;
-  //   assert s.stubs == s'.stubs + multiset{A.Stub(rid, output)};
-  //   MultisetLemmas.MultisetSimplificationTriggers<A.Stub, B.Resp>();
-  //   /*assert s.stubs == s'.stubs + multiset{HT.Stub(rid, output)};
-  //   assert I(s).resps == I(s').resps + multiset{B.Resp(rid, output)};
-  //   assert I(s').resps == I(s).resps - multiset{B.Resp(rid, output)};
-  //   assert I(s').s == I(s).s;
-  //   assert I(s').reqs == I(s).reqs;
-  //   assert B.Resp(rid, output) in I(s).resps;*/
-  // }
+  lemma ReturnStub_RefinesMap(s: A.Variables, s': A.Variables, rid: int, output: MapIfc.Output)
+    requires A.Inv(s)
+    requires A.ReturnStub(s, s', rid, output)
+    ensures A.Inv(s')
+    ensures B.Next(I(s), I(s'), Ifc.End(rid, output))
+  {
+    assert s'.table == s.table;
+    assert s'.tickets == s.tickets;
+    assert s.stubs == s'.stubs + multiset{A.Stub(rid, output)};
+    MultisetLemmas.MultisetSimplificationTriggers<A.Stub, B.Resp>();
+  }
 
 }

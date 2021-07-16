@@ -868,16 +868,16 @@ module ShardedHashTable refines ShardedStateMachine {
 //     assert add(add(r, ticket), t).insert_capacity == add(r, t).insert_capacity;
 //   }
 
-//   // Trusted composition tools. Not sure how to generate them.
-//   glinear method {:extern} enclose(glinear a: Count.Variables) returns (glinear h: Variables)
-//     requires Count.Valid(a)
-//     ensures h == unit().(insert_capacity := a)
+  // Trusted composition tools. Not sure how to generate them.
+  glinear method {:extern} enclose(glinear a: Count.Variables) returns (glinear h: Variables)
+    requires Count.Valid(a)
+    ensures h == unit().(insert_capacity := a)
 
-//   glinear method {:extern} declose(glinear h: Variables) returns (glinear a: Count.Variables)
-//     requires h.Variables?
-//     requires h.table == unitTable() // h is a unit() except for a
-//     requires h.tickets == multiset{}
-//     requires h.stubs == multiset{}
-//     ensures a == h.insert_capacity
+  glinear method {:extern} declose(glinear h: Variables) returns (glinear a: Count.Variables)
+    requires h.Variables?
+    requires h.table == UnitTable() // h is a unit() except for a
+    requires h.tickets == multiset{}
+    requires h.stubs == multiset{}
+    ensures a == h.insert_capacity
 //
 }
