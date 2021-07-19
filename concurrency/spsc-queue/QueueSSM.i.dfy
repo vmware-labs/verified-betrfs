@@ -18,44 +18,116 @@ module QueueSSM refines MultiRw {
 
   datatype Producer = ProducerUnknown | ProducerIdle(head: nat) | ProducerInProgress(head: nat)
   datatype Consumer = ConsumerUnknown | ConsumerIdle(tail: nat) | ConsumerInProgress(tail: nat)
-  datatype Cell = Empty | Full(v: StoredType)
+  datatype Cell = CellUninit | Empty(v: StoredType) | Producing | Full(v: StoredType) | Consuming
 
-  datatype M = MInvalid | M(
-    head: Option<nat>,
-    tail: Option<nat>,
-    cells: map<nat, Cell>,
-    producer: Producer,
-    consumer: Consumer
-  )
+  datatype M =
+    | MInvalid
+    | MUninit(
+      cells: map<nat, Cell>
+    )
+    | M(
+      head: Option<nat>,
+      tail: Option<nat>,
+      cells: map<nat, Cell>,
+      producer: Producer,
+      consumer: Consumer
+    )
 
   function I(x: M) : map<Key, StoredType> {
+    assert Inv(x);
+    assert !x.MInvalid?;
     if x == unit() then map [] else
-    map i: nat | i < size() && x.cells[i].Full? :: x.cells[i].v
+    map i: nat | i in x.cells.Keys && (
+      || x.cells[i].Empty?
+      || x.cells[i].Full?
+    ) :: x.cells[i].v
+  }
+  
+  predicate Init(s: M) {
+    && s.MUninit?
+    && s.cells == map i: nat | i < size() :: CellUninit
   }
 
-  predicate Init(s: M) {
+  predicate Inited(s: M) {
     && s.M?
     && s.head == Some(0)
     && s.tail == Some(0)
-    && (s.cells == map i: nat | i < size() :: Empty)
+    && (forall i: nat :: (i < size() <==> i in s.cells.Keys &&
+         exists v :: s.cells[i] == Empty(v))
+       )
     && s.producer == ProducerIdle(0)
     && s.consumer == ConsumerIdle(0)
   }
 
-  predicate producer_begin(m: M, m': M)
+  predicate init_cell(m: M, m': M, idx: nat, v: StoredType)
+  {
+    && m.MUninit?
+    && idx < size()
+    && forall i :: (
+      if i < idx
+      then i in m.cells && m.cells[i].Empty?
+      else if i < size()
+      then i in m.cells && m.cells[i].CellUninit?
+      else i !in m.cells
+    )
+
+    && m' == m.(cells := m.cells[idx := Empty(v)])
+  }
+
+  lemma init_cell_is_deposit(a: M, b: M, key: nat, x: StoredType)
+  requires init_cell(a, b, key, x)
+  ensures deposit(a, b, key, x)
+  {
+    forall p: M | Inv(dot(a, p))
+    ensures Inv(dot(b, p))
+        && key !in I(dot(a, p))
+        && I(dot(b, p)) == I(dot(a, p))[key := x] {
+
+      assert Inv(dot(b, p)) by {
+        assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
+        assert b == a.(cells := a.cells[key := Empty(x)]);
+      }
+      assert key !in I(dot(a, p));
+      assert I(dot(b, p)) == I(dot(a, p))[key := x];
+    }
+    assert deposit(a, b, key, x);
+  }
+
+  predicate producer_begin(m: M, m': M, v: StoredType)
   {
     && m.M?
     && m.tail.Some?
     && m.producer.ProducerIdle?
     && ((m.producer.head + 1) % size()) != m.tail.value
+    && var head := m.producer.head;
+    && head < size()
+    
+    && head in m.cells
+    && m.cells[head].Empty?
+    && m.cells[head].v == v
 
-    && m' == m.(producer := ProducerInProgress(m.producer.head))
+    && m' == m.(
+      producer := ProducerInProgress(m.producer.head),
+      cells := m.cells[head := Producing])
   }
 
-  lemma producer_begin_is_transition(m: M, m': M)
-  requires producer_begin(m, m')
-  ensures transition(m, m')
+  lemma producer_begin_is_withdraw(a: M, b: M, x: StoredType)
+  requires producer_begin(a, b, x)
+  ensures exists key :: withdraw(a, b, key, x)
   {
+    var key := a.producer.head;
+    forall p: M | Inv(dot(a, p))
+    ensures Inv(dot(b, p))
+      && I(dot(a, p)) == I(dot(b, p))[key := x]
+      && key !in I(dot(b, p)) {
+
+      assert Inv(dot(b, p)) by {
+        assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
+      }
+      assert I(dot(a, p)) == I(dot(b, p))[key := x];
+      assert key !in I(dot(b, p));
+    }
+    assert withdraw(a, b, key, x);
   }
 
   predicate producer_end(m: M, m': M, v: StoredType)
@@ -81,7 +153,6 @@ module QueueSSM refines MultiRw {
   ensures exists key :: deposit(a, b, key, x)
   {
     var key := a.head.value;
-    // assert deposit(m, m', key, v);
     forall p: M | Inv(dot(a, p))
     ensures Inv(dot(b, p))
         && key !in I(dot(a, p))
@@ -96,32 +167,33 @@ module QueueSSM refines MultiRw {
     assert deposit(a, b, key, x);
   }
 
-  predicate consumer_begin(m: M, m': M)
+  predicate consumer_begin(m: M, m': M, v: StoredType)
   {
     && m.M?
     && m.head.Some?
     && m.consumer.ConsumerIdle?
     && m.consumer.tail != m.head.value
+    && var tail := m.consumer.tail;
+    && tail < size()
 
-    && m' == m.(consumer := ConsumerInProgress(m.consumer.tail))
+    && tail in m.cells
+    && m.cells[tail].Full?
+    && m.cells[tail].v == v
+
+    && m' == m.(
+      consumer := ConsumerInProgress(m.consumer.tail),
+      cells := m.cells[tail := Consuming])
   }
 
-  lemma consumer_begin_is_transition(a: M, b: M)
-  requires consumer_begin(a, b)
-  ensures transition(a, b)
-  {
-  }
-
-  lemma consumer_end_is_withdraw(a: M, b: M, x: StoredType)
-  requires consumer_end(a, b, x)
+  lemma consumer_begin_is_withdraw(a: M, b: M, x: StoredType)
+  requires consumer_begin(a, b, x)
   ensures exists key :: withdraw(a, b, key, x)
   {
-    var key := a.tail.value;
-
+    var key := a.consumer.tail;
     forall p: M | Inv(dot(a, p))
     ensures Inv(dot(b, p))
-        && I(dot(a, p)) == I(dot(b, p))[key := x]
-        && key !in I(dot(b, p)) {
+      && I(dot(a, p)) == I(dot(b, p))[key := x]
+      && key !in I(dot(b, p)) {
 
       assert Inv(dot(b, p)) by {
         assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
@@ -148,47 +220,109 @@ module QueueSSM refines MultiRw {
     && m' == m.(
       consumer := ConsumerIdle(newTail),
       tail := Some(newTail),
-      cells := m.cells[tail := Empty])
+      cells := m.cells[tail := Empty(v)])
+  }
+
+  lemma consumer_end_is_deposit(a: M, b: M, x: StoredType)
+  requires consumer_end(a, b, x)
+  ensures exists key :: deposit(a, b, key, x)
+  {
+    var key := a.tail.value;
+
+    forall p: M | Inv(dot(a, p))
+    ensures Inv(dot(b, p))
+        && key !in I(dot(a, p))
+        && I(dot(b, p)) == I(dot(a, p))[key := x] {
+      
+      assert Inv(dot(b, p)) by {
+        assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
+      }
+      assert I(dot(b, p)) == I(dot(a, p))[key := x];
+      assert key !in I(dot(a, p));
+    }
+    assert deposit(a, b, key, x);
+  }
+
+  predicate MUninitInv(x: M)
+  requires x.MUninit?
+  {
+    && (forall i: nat :: i < size() <==> i in x.cells.Keys)
+  }
+
+  predicate MInv(x: M)
+  requires x.M?
+  {
+    && x.head.Some?
+    && x.tail.Some?
+    && (forall i: nat :: i < size() <==> i in x.cells.Keys)
+    && (forall i: nat :: i < size() ==> !x.cells[i].CellUninit?)
+    && (!x.producer.ProducerUnknown?)
+    && (!x.consumer.ConsumerUnknown?)
+
+    && x.head.value < size()
+    && x.tail.value < size()
+
+    && x.producer.head == x.head.value
+    && x.consumer.tail == x.tail.value
+
+    && (x.producer.ProducerInProgress? ==> 
+      ((x.producer.head + 1) % size()) != x.tail.value)
+    && (x.consumer.ConsumerInProgress? ==> 
+      x.consumer.tail != x.head.value)
+
+    && (
+      var head := x.head.value;
+      var tail := x.tail.value;
+      forall i: nat | i < size() :: (
+        var i_2 := if i < tail then i + size() else i;
+        var head_2 := if head < tail then head + size() else head;
+        if i_2 < head_2
+          then (
+            if x.consumer.ConsumerInProgress? && x.consumer.tail == i then
+              x.cells[i].Consuming?
+            else
+              x.cells[i].Full?
+          )
+          else (
+            if x.producer.ProducerInProgress? && x.producer.head == i then
+              x.cells[i].Producing?
+            else
+              x.cells[i].Empty?
+          )
+    ))
   }
 
   predicate Inv(x: M)
   {
-    x.M? && (
-    || (
-      && x.head.Some?
-      && x.tail.Some?
-      && (forall i: nat :: i < size() <==> i in x.cells.Keys)
-      && (!x.producer.ProducerUnknown?)
-      && (!x.consumer.ConsumerUnknown?)
-
-      && x.head.value < size()
-      && x.tail.value < size()
-
-      && x.producer.head == x.head.value
-      && x.consumer.tail == x.tail.value
-
-      && (x.producer.ProducerInProgress? ==> 
-        ((x.producer.head + 1) % size()) != x.tail.value)
-      && (x.consumer.ConsumerInProgress? ==> 
-        x.consumer.tail != x.head.value)
-
-      && (
-        var head := x.head.value;
-        var tail := x.tail.value;
-        forall i: nat | i < size() :: (
-          var i_2 := if i < tail then i + size() else i;
-          var head_2 := if head < tail then head + size() else head;
-          if i_2 < head_2
-            then x.cells[i].Full?
-            else x.cells[i].Empty?
-      ))
-    )
-    || x == unit())
+    if x.MUninit? then
+      MUninitInv(x)
+    else if x.M? then
+      (
+        || MInv(x)
+        || x == unit()
+      )
+    else
+      false
   }
 
   function dot(x: M, y: M) : M
+  ensures (x.M? && y.M?) ==> (dot(x, y).M? || dot(x, y).MInvalid?)
   {
-    if (
+    if x.MUninit? && y.MUninit? then
+      if (exists i: nat :: i in x.cells && i in y.cells)
+      then MInvalid
+      else MUninit(
+        map i: nat | (i in (x.cells.Keys + y.cells.Keys)) ::
+          if i in x.cells then x.cells[i] else y.cells[i])
+    else if x.MUninit? || y.MUninit?
+    then (
+      if (x.MUninit? && y == unit())
+      then x
+      else if (x == unit() && y.MUninit?)
+      then y
+      else MInvalid
+    )
+    else if (
       || (x.MInvalid?)
       || (y.MInvalid?)
       || (x.head.Some? && y.head.Some?)
