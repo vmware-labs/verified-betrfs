@@ -7,10 +7,11 @@ include "../../lib/Base/Option.s.dfy"
 //                  v                         v
 // [         ,     0: F     ,    1: F    ,           ,          ,            ]
 
-module QueueSSM refines MultiRw {
+module QueueMultiRw refines MultiRw {
   import opened Options
 
   type Key = nat
+  datatype StoredType = StoredType()
 
   function size(): nat {
     32

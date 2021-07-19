@@ -35,7 +35,7 @@ module Ptrs {
     returns (shared v: V)
     requires d.PointsToLinear?
     requires d.ptr == this
-    ensures v == old_d.v
+    ensures v == d.v
 
     method {:extern} index_write<V>(glinear inout d: PointsToArray, i: int, v: V)
     requires old_d.ptr == this
