@@ -1209,7 +1209,7 @@ module InterpretationDisk {
     }
   }
 
-  lemma {:timeLimitMultiplier 96} RefinesReqWrite2Op(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma {:timeLimitMultiplier 98} RefinesReqWrite2Op(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqWrite2Op?
   requires ValidDiskOp(dop)

@@ -204,7 +204,7 @@ module LKMBPKVOps {
   }
   
   // TODO(robj): Break this monster up.
-  method {:timeLimitMultiplier 2} IndexFillDpkv(shared node: LKMB.Model.Node, dpkv: DPKV.DynamicPkv)
+  method {:timeLimitMultiplier 4} IndexFillDpkv(shared node: LKMB.Model.Node, dpkv: DPKV.DynamicPkv)
     requires LKMB.WF(node)
     requires node.Index?
     requires dpkv.WF()
