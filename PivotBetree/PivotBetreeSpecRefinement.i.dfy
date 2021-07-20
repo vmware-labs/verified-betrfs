@@ -659,7 +659,7 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma GenerateLookupWellMarshalled(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd,
+  lemma {:timeLimitMultiplier 2} GenerateLookupWellMarshalled(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd,
     lookup: P.Lookup, lookup': P.Lookup, tt: TranslationTable, idx: int)
   requires WFGenerateLookupConditions(start, key, end, lookup, lookup', tt)
   requires P.ValidLayerIndex(lookup, idx)

@@ -647,10 +647,12 @@ module JournalistMarshallingModel {
 
     assert idx4 as int == 8 + SumJournalEntries(cyclicSlice(entries, start, len - len' + 1)) by {
       DropLastCyclicSlice(entries, start, len - len');
-      assert DropLast(cyclicSlice(entries, start, len - len' + 1))
-          == cyclicSlice(entries, start, len - len') by { reveal_cyclicSlice(); }
-      assert Last(cyclicSlice(entries, start, len - len' + 1))
-          == entries[start'] by { reveal_cyclicSlice(); }
+      reveal_cyclicSlice();
+
+      // assert DropLast(cyclicSlice(entries, start, len - len' + 1))
+      //     == cyclicSlice(entries, start, len - len');
+      // assert Last(cyclicSlice(entries, start, len - len' + 1))
+      //     == entries[start'];
     }
 
     lemma_writeJournalEntries(buf4, numBlocks, idx4, entries, start, len, 

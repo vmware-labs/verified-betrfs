@@ -775,7 +775,7 @@ module TranslationImpl {
     }
   }
   
-  method ComputeTranslateBucket(shared mbucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear mbucket': MutBucket)
+  method {:timeLimitMultiplier 2} ComputeTranslateBucket(shared mbucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear mbucket': MutBucket)
   requires mbucket.Inv()
   requires WillFitInPkv(mbucket, prefix, newPrefix);
   ensures mbucket'.Inv()
