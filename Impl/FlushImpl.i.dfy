@@ -34,7 +34,7 @@ module FlushImpl {
 
   import IT = IndirectionTable
 
-  method {:timeLimitMultiplier 4} doFlush(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
+  method {:timeLimitMultiplier 6} doFlush(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
   requires old_s.Inv()
   requires old_s.Ready?
   requires old_s.cache.ptr(childref).Some?
