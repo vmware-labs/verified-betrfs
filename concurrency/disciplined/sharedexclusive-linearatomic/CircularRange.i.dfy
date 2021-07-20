@@ -64,15 +64,19 @@ module CircularRange {
     }
 
     function LeftShift1(): Range
-      requires Partial?
     {
       Partial(PrevIndex(start), PrevIndex(end))
     }
 
     function RightShift1(): Range
-      requires Partial?
     {
       Partial(NextIndex(start), NextIndex(end))
+    }
+
+    function RightExtend1(): Range
+      // requires start != NextIndex(end)
+    {
+      Partial(start, NextIndex(end))
     }
 
     // function GetComplement(): Range

@@ -183,7 +183,7 @@ module CircularTable {
     }
   }
 
-  predicate ValidProbeRangePartial(table: FixedTable, key: Key, cur: Index)
+  predicate ValidPartialProbeRange(table: FixedTable, key: Key, cur: Index)
   {
     forall i: Index | Partial(hash(key), cur).Contains(i) :: SlotShouldSkip(table[i], i, key)
   }
@@ -191,7 +191,7 @@ module CircularTable {
   predicate ValidProbeRange(table: FixedTable, key: Key, end: Index)
   {
     // skip upto (not including) end
-    && ValidProbeRangePartial(table, key, end)
+    && ValidPartialProbeRange(table, key, end)
     // Partial(hash(key), end).Contains(i) :: SlotShouldSkip(table[i], i, key))
     // insert at start
     && (SlotShouldSwap(table[end], end, key)
