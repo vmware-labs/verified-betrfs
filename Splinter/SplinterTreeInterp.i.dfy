@@ -7,6 +7,7 @@ include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
 include "MsgHistory.i.dfy"
 include "SplinterTree.i.dfy"
+include "BranchTreeInterp.i.dfy"
 include "../Spec/Message.s.dfy"
 include "../Spec/Interp.s.dfy"
 
@@ -24,6 +25,7 @@ module SplinterTreeInterpMod {
   import opened SplinterTreeMachineMod
   import Nat_Order
   import opened SequenceSetsMod
+  import BranchTreeInterpMod
 
 
   // Select the messages that lookup finds.
@@ -114,25 +116,6 @@ module SplinterTreeInterpMod {
     forall key | AnyKey(key) :: LookupExists(v, cache, key)
   }
 
-  // predicate StepsLinked(cache: CacheIfc.Variables, lookup: TrunkPath, currStep: nat, currStepCU: CU, nextStepCU : CU)
-  //   requires currStep < |lookup.steps| - 1
-  // {
-  //   // make sure cus match with the ones in the branchpath
-  //   && currStepCU == lookup.steps[currStep].na.cu
-  //   && nextStepCU == lookup.steps[currStep+1].na.cu
-  //   // The lookup has to be valid
-  //   && lookup.Valid(cache)
-  //   // make sure there's a valid link at the lookup -- Might not be needed, we might be getting this from Valid(s)
-  //   && lookup.LinkedAt(currStep+1)
-  //   // Check if these loose steps correspond to parent-child
-  //   && var currNode := CUToBranchNode(currStepCU, cache);
-  //   && var nextNode := CUToBranchNode(nextStepCU, cache);
-  //   && currNode.Some?
-  //   && nextNode.Some?
-  //   && currNode.value == lookup.steps[currStep].node
-  //   && nextNode.value == lookup.steps[currStep+1].node
-  // }
-
   predicate LookupRootsequivalent(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, lookup0 : TrunkPath, lookup1: TrunkPath)
   {
     && lookup0.Valid(v, cache0)
@@ -160,7 +143,9 @@ module SplinterTreeInterpMod {
           // they share roots
           assert step0.na.id == step1.na.id;
           assert step0.na == step1.na;
-          assume step0.branchReceipts == step1.branchReceipts; // need to make it believe this
+          BranchTreeInterpMod.RootEquivalentForBranchReceipts(v, cache0, cache1, step0.branchReceipts, step1.branchReceipts);
+          BranchTreeInterpMod.BranchReceiptsEquivalent(v, cache0, cache1, step0.branchReceipts, step1.branchReceipts);
+          assert step0.branchReceipts == step1.branchReceipts; // need to make it believe this
           assert step0 == step1;
         } else {
           LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, count-1);
@@ -172,13 +157,17 @@ module SplinterTreeInterpMod {
 
           assert step0 == step1; // the previous steps are the same by induction
 
+          // Linking establishes the relationship between nextstep and step
           assert lookup0.LinkedAt(count-1);
           assert lookup1.LinkedAt(count-1);
 
+          // Probably not needed now but check.
+          // we know step0==step1 and the we try to establish that step0 Links nextStep0 and step1 Links nextStep1
           assert step0.na.node.nextStep(key) == nextstep0.na.cu;
           assert step1.na.node.nextStep(key) == nextstep1.na.cu;
 
 
+          // nextstep0.cu is in IReads
           assert nextstep0.na.cu in CUsInDisk();  // try to trigger set comprehension
           assert nextstep1.na.cu in lookup0.CUs();
           assert ValidLookupHasCU(v, cache0, lookup0, nextstep0.na.cu);
@@ -186,6 +175,7 @@ module SplinterTreeInterpMod {
             reveal_IReads();
           }
 
+          // nextstep1.cu is in IReads
           assert nextstep1.na.cu in CUsInDisk();  // try to trigger set comprehension
           assert nextstep1.na.cu in lookup1.CUs();
           assert ValidLookupHasCU(v, cache1, lookup1, nextstep1.na.cu);
@@ -194,6 +184,8 @@ module SplinterTreeInterpMod {
           }
 
           assert nextstep0.na.cu == nextstep1.na.cu;
+
+          // Since they're in the IReadsSet, the nodes are also the same
           assert nextstep0.na.node == nextstep1.na.node;
 
           assert nextstep0.na.node.InIndTable(v);
@@ -203,7 +195,9 @@ module SplinterTreeInterpMod {
           assert nextstep0.na.id == nextstep1.na.id;
 
           assert nextstep0.na == nextstep1.na;
-          assume nextstep0.branchReceipts == nextstep1.branchReceipts; // need to make it believe this
+          BranchTreeInterpMod.RootEquivalentForBranchReceipts(v, cache0, cache1, nextstep0.branchReceipts, nextstep1.branchReceipts);
+          BranchTreeInterpMod.BranchReceiptsEquivalent(v, cache0, cache1, nextstep0.branchReceipts, nextstep1.branchReceipts);
+          assert nextstep0.branchReceipts == nextstep1.branchReceipts; // need to make it believe this
           assert nextstep0 == nextstep1;
         }
       }

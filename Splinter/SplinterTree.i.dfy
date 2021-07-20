@@ -161,6 +161,8 @@ module SplinterTreeMachineMod {
     {
        && node.WF()
        && cu in CUsInDisk()
+       // Note that every piece of information associated with a node must exist in the trunkNode
+       // Since it has to parsable from a cu. We could get rid of this here?
        && node.cu == cu
        && node.id == id
     }
