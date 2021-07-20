@@ -19,7 +19,7 @@ module GhostLinearSequence_s {
     requires forall i :: 0 <= i < |s| ==> s[i] == read(glseqs_raw(l)[i])
     ensures rank_is_less_than(s, l)
 
-  function method glseq_swap_raw<A>(glinear s1:glseq<A>, i:nat, glinear a1:gmaybe<A>):(glinear p:(glinear glseq<A>, glinear gmaybe<A>))
+  function method glseq_swap_raw<A>(glinear s1:glseq<A>, i: nat, glinear a1:gmaybe<A>): (glinear p:(glinear glseq<A>, glinear gmaybe<A>))
     requires i < |glseqs_raw(s1)|
     ensures p.1 == glseqs_raw(s1)[i]
     ensures glseqs_raw(p.0) == glseqs_raw(s1)[i := a1]

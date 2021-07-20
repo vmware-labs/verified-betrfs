@@ -42,14 +42,34 @@ module GhostLinearSequence_i {
   }
 
   function method glseq_give<A>(glinear s1: glseq<A>, i :nat, glinear a:A): (glinear s2: glseq<A>)
-      requires i < |s1|
-      requires i !in s1
-      ensures glseq_has(s2) == glseq_has(s1)[i := true]
-      ensures glseqs(s2) == glseqs(s1)[i := a]
+    requires i < |s1|
+    requires i !in s1
+    ensures glseq_has(s2) == glseq_has(s1)[i := true]
+    ensures glseqs(s2) == glseqs(s1)[i := a]
   {
       glinear var x1:gmaybe<A> := give(a);
       glinear var (s2tmp, x2) := glseq_swap_raw(s1, i, x1);
       var _ := discard(x2);
       s2tmp
+  }
+
+  method lseq_give_inout<A>(glinear inout s1:glseq<A>, i:nat, glinear a:A)
+      requires i < |old_s1|
+      requires i !in old_s1
+      ensures glseq_has(s1) == glseq_has(old_s1)[i := true]
+      ensures glseqs(s1) == glseqs(old_s1)[i := a]
+  {
+    s1 := glseq_give(s1, i, a);
+  }
+
+  method lseq_take_inout<A>(glinear inout s:glseq<A>, i: nat) returns(glinear a:A)
+      requires i < |old_s| && i in old_s
+      ensures a == old_s[i]
+      ensures glseq_has(s) == glseq_has(old_s)[i := false]
+      ensures forall j:nat | j < |s| && j != i :: glseqs(s)[j] == glseqs(old_s)[j]
+  {
+    glinear var (s2tmp, x2) := glseq_take(s, i);
+    s := s2tmp;
+    a := x2;
   }
 }

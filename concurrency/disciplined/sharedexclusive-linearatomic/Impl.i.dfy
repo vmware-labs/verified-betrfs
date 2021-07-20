@@ -2,6 +2,7 @@ include "../common/CapacityAllocator.i.dfy"
 include "../common/ConcurrencyTools.s.dfy"
 include "ShardedHashTable.i.dfy"
 include "../common/VerificationObligation.s.dfy"
+include "GhostLinearSequence.i.dfy"
 
 
 module Impl refines VerificationObligation {
@@ -15,6 +16,8 @@ module Impl refines VerificationObligation {
   import opened Limits
   import opened CircularTable
   import opened CircularRange
+  import opened GhostLinearSequence_s
+  import opened GhostLinearSequence_i
 
   // function method glinear_seq_set<A>(s1: seq<A>, i: nat, glinear a: A): (s2: seq<A>) 
 
@@ -31,6 +34,8 @@ module Impl refines VerificationObligation {
 
   type RowMutexTable = seq<RowMutex>
 
+  type Handle = MutexHandle<Row>
+
   predicate RowMutexTableInv(row_mutexes: RowMutexTable)
     requires |row_mutexes| <= FixedSize()
   {
@@ -40,7 +45,7 @@ module Impl refines VerificationObligation {
 
   linear datatype Variables = Variables(
     row_mutexes: RowMutexTable,
-    handles: ,
+    glinear handles: glseq<Handle>,
     allocator: CAP.AllocatorMutexTable)
   {
     predicate HandlesInv()
@@ -48,8 +53,8 @@ module Impl refines VerificationObligation {
     {
       && |handles| == FixedSize()
       // if I have the handle, it corresponds to the row mutex
-      && (forall i: Index | handles[i].Some?
-        :: handles[i].value.m == row_mutexes[i])
+      && (forall i: Index | i in handles
+        :: handles[i].m == row_mutexes[i])
     }
 
     predicate Inv()
@@ -60,47 +65,53 @@ module Impl refines VerificationObligation {
       && HandlesInv()
     }
 
+    predicate HasHandle(index: Index)
+      requires Inv()
+    {
+      index in handles
+    }
+
     linear inout method acquireRow(index: Index, glinear in_sv: SSM.Variables)
-    returns (entry: Entry,
-      glinear out_sv: SSM.Variables)
+      returns (entry: Entry, glinear out_sv: SSM.Variables)
 
       requires old_self.Inv()
-      // ensures handle.m == row_mutexes[index];
+      requires !old_self.HasHandle(index)
+
+      ensures self.Inv()
+      ensures self.HasHandle(index)
       ensures out_sv == add(in_sv, OneRowResource(index, entry, 0))
-
-      ensures Inv()
     {
-      linear var row;
-      glinear var handle: MutexHandle<Row>;
-      row, handle := row_mutexes[index].acquire();
+      linear var row; glinear var handle: Handle;
+      row, handle := self.row_mutexes[index].acquire();
 
-      inout self.handles := glinear_seq_set(self.handles, index, handle);
-
-      
       linear var Row(out_entry, row_r) := row;
       entry := out_entry;
       out_sv := SSM.join(in_sv, row_r);
+
+      assert handle.m == self.row_mutexes[index];
+      lseq_give_inout(inout self.handles, index, handle);
     }
 
-    // method releaseRow(
-    //   index: Index,
-    //   entry: Entry,
-    //   glinear handle: Handle,
-    //   glinear in_sv: SSM.Variables)
-    // returns (glinear out_sv: SSM.Variables)
-
-    //   requires Inv()
-    //   requires handle.m == row_mutexes[index]
-    //   requires in_sv.Variables?
-    //   requires in_sv.table[index] == Some(entry)
-    //   ensures out_sv == in_sv.(table := in_sv.table[index := None]);
-    // {
-    //   glinear var rmutex;
-    //   ghost var left := in_sv.(table := in_sv.table[index := None]);
-    //   ghost var right := OneRowResource(index, entry, 0);
-    //   out_sv, rmutex := SSM.split(in_sv, left, right);
-    //   row_mutexes[index].release(Row(entry, rmutex), handle);
-    // }
+    linear inout method releaseRow(index: Index, entry: Entry, glinear in_sv: SSM.Variables)
+      returns (glinear out_sv: SSM.Variables)
+  
+      requires old_self.Inv()
+      requires old_self.HasHandle(index)
+      requires in_sv.Variables?
+      requires in_sv.table[index] == Some(entry)
+            
+      ensures self.Inv()
+      ensures !self.HasHandle(index)
+      ensures out_sv == in_sv.(table := in_sv.table[index := None]);
+    {
+      glinear var rmutex;
+      ghost var left := in_sv.(table := in_sv.table[index := None]);
+      ghost var right := OneRowResource(index, entry, 0);
+      out_sv, rmutex := SSM.split(in_sv, left, right);
+      
+      glinear var handle := lseq_take_inout(inout self.handles, index);
+      self.row_mutexes[index].release(Row(entry, rmutex), handle);
+    }
 
     // method acquireCapacity(thread_id: uint32, glinear in_sv: SSM.Variables)
     // returns (
@@ -175,8 +186,6 @@ module Impl refines VerificationObligation {
     //   glinear var rcap' := declose(rcap);
     //   allocator[bin_id].release(AllocatorBin(count, rcap'), cap_handle);
     // }
-
-
 
     // method doQuery(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
     // returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
