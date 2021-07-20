@@ -3,6 +3,7 @@ include "../common/ConcurrencyTools.s.dfy"
 include "ShardedHashTable.i.dfy"
 include "../common/VerificationObligation.s.dfy"
 
+
 module Impl refines VerificationObligation {
   import opened Options
   import SSM = ShardedHashTable
@@ -14,6 +15,8 @@ module Impl refines VerificationObligation {
   import opened Limits
   import opened CircularTable
   import opened CircularRange
+
+  // function method glinear_seq_set<A>(s1: seq<A>, i: nat, glinear a: A): (s2: seq<A>) 
 
   linear datatype Row = Row(
     entry: Entry,
@@ -35,205 +38,200 @@ module Impl refines VerificationObligation {
       :: row_mutexes[i].inv == ((row) => RowInv(i, row)))
   }
 
-  predicate method SlotFullWithOtherKey(entry: Option<Entry>, key: Key)
-  {
-    && SlotFull(entry)
-    && entry.value.key != key
-  }
-
-  // method SlotShouldSkip(entry: Option<Entry>, i: Index, key: Key)
-  // {
-  //   && SlotFullWithOtherKey(entry, key)
-  //   // the psl at the slot is geq than the psl of insert
-  //   && PSL(entry.value.key, i) >= PSL(key, i)
-  // }
-
-  datatype Variables = Variables(
+  linear datatype Variables = Variables(
     row_mutexes: RowMutexTable,
+    handles: ,
     allocator: CAP.AllocatorMutexTable)
   {
+    predicate HandlesInv()
+      requires |row_mutexes| == FixedSize()
+    {
+      && |handles| == FixedSize()
+      // if I have the handle, it corresponds to the row mutex
+      && (forall i: Index | handles[i].Some?
+        :: handles[i].value.m == row_mutexes[i])
+    }
+
     predicate Inv()
     {
       && CAP.Inv(allocator)
       && |row_mutexes| == FixedSize()
       && RowMutexTableInv(row_mutexes)
+      && HandlesInv()
     }
 
-    method acquireRow(index: Index, glinear in_sv: SSM.Variables)
+    linear inout method acquireRow(index: Index, glinear in_sv: SSM.Variables)
     returns (entry: Entry,
-      glinear handle: MutexHandle<Row>,
       glinear out_sv: SSM.Variables)
 
-      requires Inv()
-      ensures handle.m == row_mutexes[index];
+      requires old_self.Inv()
+      // ensures handle.m == row_mutexes[index];
       ensures out_sv == add(in_sv, OneRowResource(index, entry, 0))
+
+      ensures Inv()
     {
       linear var row;
+      glinear var handle: MutexHandle<Row>;
       row, handle := row_mutexes[index].acquire();
+
+      inout self.handles := glinear_seq_set(self.handles, index, handle);
+
+      
       linear var Row(out_entry, row_r) := row;
       entry := out_entry;
       out_sv := SSM.join(in_sv, row_r);
     }
 
-    method releaseRow(
-      index: Index,
-      entry: Entry,
-      glinear handle: MutexHandle<Row>,
-      glinear in_sv: SSM.Variables)
-    returns (glinear out_sv: SSM.Variables)
+    // method releaseRow(
+    //   index: Index,
+    //   entry: Entry,
+    //   glinear handle: Handle,
+    //   glinear in_sv: SSM.Variables)
+    // returns (glinear out_sv: SSM.Variables)
 
-      requires Inv()
-      requires handle.m == row_mutexes[index]
-      requires in_sv.Variables?
-      requires in_sv.table[index] == Some(entry)
-      ensures out_sv == in_sv.(table := in_sv.table[index := None]);
-    {
-      glinear var rmutex;
-      ghost var left := in_sv.(table := in_sv.table[index := None]);
-      ghost var right := OneRowResource(index, entry, 0);
-      out_sv, rmutex := SSM.split(in_sv, left, right);
-      row_mutexes[index].release(Row(entry, rmutex), handle);
-    }
+    //   requires Inv()
+    //   requires handle.m == row_mutexes[index]
+    //   requires in_sv.Variables?
+    //   requires in_sv.table[index] == Some(entry)
+    //   ensures out_sv == in_sv.(table := in_sv.table[index := None]);
+    // {
+    //   glinear var rmutex;
+    //   ghost var left := in_sv.(table := in_sv.table[index := None]);
+    //   ghost var right := OneRowResource(index, entry, 0);
+    //   out_sv, rmutex := SSM.split(in_sv, left, right);
+    //   row_mutexes[index].release(Row(entry, rmutex), handle);
+    // }
 
-    method acquireCapacity(thread_id: uint32, glinear in_sv: SSM.Variables)
-    returns (
-      count: uint32,
-      bin_id: uint32,
-      glinear cap_handle: MutexHandle<AllocatorBin>,
-      glinear out_sv: SSM.Variables)
+    // method acquireCapacity(thread_id: uint32, glinear in_sv: SSM.Variables)
+    // returns (
+    //   count: uint32,
+    //   bin_id: uint32,
+    //   glinear cap_handle: MutexHandle<AllocatorBin>,
+    //   glinear out_sv: SSM.Variables)
 
-      decreases *
-      requires Inv()
-      requires in_sv.Variables?
-      requires in_sv.insert_capacity.value == 0
-      ensures bin_id < CAP.NumberOfBinsImpl()
-      ensures cap_handle.m == allocator[bin_id]
-      ensures out_sv.Variables?
-      ensures out_sv == in_sv.(insert_capacity := Count.Variables(count as nat))
-      ensures 0 < count <= CapacityImpl()
-    {
-      // thread_id is a hint for the bin we're supposed to use. 
-      // bin_id is the actual place we found the capacity (in case we had to steal it from someone else) 
-      bin_id := if thread_id >= CAP.NumberOfBinsImpl() then 0 else thread_id;
-      linear var cap;
-      cap, cap_handle := allocator[bin_id].acquire();
+    //   decreases *
+    //   requires Inv()
+    //   requires in_sv.Variables?
+    //   requires in_sv.insert_capacity.value == 0
+    //   ensures bin_id < CAP.NumberOfBinsImpl()
+    //   ensures cap_handle.m == allocator[bin_id]
+    //   ensures out_sv.Variables?
+    //   ensures out_sv == in_sv.(insert_capacity := Count.Variables(count as nat))
+    //   ensures 0 < count <= CapacityImpl()
+    // {
+    //   // thread_id is a hint for the bin we're supposed to use. 
+    //   // bin_id is the actual place we found the capacity (in case we had to steal it from someone else) 
+    //   bin_id := if thread_id >= CAP.NumberOfBinsImpl() then 0 else thread_id;
+    //   linear var cap;
+    //   cap, cap_handle := allocator[bin_id].acquire();
 
-      while true
-        invariant cap.count as nat == cap.resource.value <= Capacity()
-        invariant Inv()
-        invariant bin_id < CAP.NumberOfBinsImpl()
-        invariant CAP.BinInv(cap)
-        invariant cap_handle.m == allocator[bin_id]
-        decreases *
-      {
-        if 0 < cap.count {
-          break;
-        }
-        assert CAP.BinInv(cap);
-        allocator[bin_id].release(cap, cap_handle);
+    //   while true
+    //     invariant cap.count as nat == cap.resource.value <= Capacity()
+    //     invariant Inv()
+    //     invariant bin_id < CAP.NumberOfBinsImpl()
+    //     invariant CAP.BinInv(cap)
+    //     invariant cap_handle.m == allocator[bin_id]
+    //     decreases *
+    //   {
+    //     if 0 < cap.count {
+    //       break;
+    //     }
+    //     assert CAP.BinInv(cap);
+    //     allocator[bin_id].release(cap, cap_handle);
 
-        bin_id := bin_id + 1;
-        bin_id := if bin_id >= CAP.NumberOfBinsImpl() then 0 else bin_id;
+    //     bin_id := bin_id + 1;
+    //     bin_id := if bin_id >= CAP.NumberOfBinsImpl() then 0 else bin_id;
 
-        cap, cap_handle := allocator[bin_id].acquire();
-      }
+    //     cap, cap_handle := allocator[bin_id].acquire();
+    //   }
 
-      count := cap.count;
-      linear var AllocatorBin(_, cap_r) := cap;
-      out_sv := enclose(cap_r);
-      out_sv := SSM.join(in_sv, out_sv);
-    }
+    //   count := cap.count;
+    //   linear var AllocatorBin(_, cap_r) := cap;
+    //   out_sv := enclose(cap_r);
+    //   out_sv := SSM.join(in_sv, out_sv);
+    // }
 
-    method releaseCapacity(
-      count: uint32,
-      bin_id: uint32,
-      glinear cap_handle: MutexHandle<AllocatorBin>,
-      glinear in_sv: SSM.Variables)
-    returns (glinear out_sv: SSM.Variables)
-      requires Inv();
-      requires bin_id < CAP.NumberOfBinsImpl()
-      requires cap_handle.m == allocator[bin_id];
-      requires in_sv.Variables?;
-      requires in_sv.insert_capacity == Count.Variables(count as nat);
-      ensures out_sv == in_sv.(insert_capacity := Count.Variables(0));
-    {
-      glinear var rcap;
-      assert in_sv.insert_capacity == Count.Variables(count as nat);
-      glinear var mid_sv := resources_obey_inv(in_sv);
+    // method releaseCapacity(
+    //   count: uint32,
+    //   bin_id: uint32,
+    //   glinear cap_handle: MutexHandle<AllocatorBin>,
+    //   glinear in_sv: SSM.Variables)
+    // returns (glinear out_sv: SSM.Variables)
+    //   requires Inv();
+    //   requires bin_id < CAP.NumberOfBinsImpl()
+    //   requires cap_handle.m == allocator[bin_id];
+    //   requires in_sv.Variables?;
+    //   requires in_sv.insert_capacity == Count.Variables(count as nat);
+    //   ensures out_sv == in_sv.(insert_capacity := Count.Variables(0));
+    // {
+    //   glinear var rcap;
+    //   assert in_sv.insert_capacity == Count.Variables(count as nat);
+    //   glinear var mid_sv := resources_obey_inv(in_sv);
 
-      ghost var left := in_sv.(insert_capacity := Count.Variables(0));
-      ghost var right := unit().(insert_capacity := Count.Variables(count as nat));
+    //   ghost var left := in_sv.(insert_capacity := Count.Variables(0));
+    //   ghost var right := unit().(insert_capacity := Count.Variables(count as nat));
 
-      out_sv, rcap := SSM.split(mid_sv, left, right);
-      glinear var rcap' := declose(rcap);
-      allocator[bin_id].release(AllocatorBin(count, rcap'), cap_handle);
-    }
+    //   out_sv, rcap := SSM.split(mid_sv, left, right);
+    //   glinear var rcap' := declose(rcap);
+    //   allocator[bin_id].release(AllocatorBin(count, rcap'), cap_handle);
+    // }
 
-    method doQuery(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
-    returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
-      decreases *
-      requires Inv()
-      requires input.QueryInput?
-      requires IsInputResource(in_sv, rid, input)
-      // ensures out_sv == SSM.output_stub(rid, output)
-    {
-      var query_ticket := Ticket(rid, input);
-      var key, hash_idx := input.key, hash(input.key);
-      var slot_idx := hash_idx;
 
-      var entry; glinear var handle; glinear var r;
-      entry, handle, r := acquireRow(hash_idx, in_sv);
 
-      // while true 
-      //   invariant Inv()
-      //   invariant 0 <= slot_idx < FixedSizeImpl();
-      //   invariant r == OneRowResource(slot_idx as nat, Info(entry, Querying(rid, key)), 0);
-      //   invariant handle.m == v.row_mutexes[slot_idx];
-      //   decreases *
-      // {
-      //   var next_slot_idx := getNextIndex(slot_idx);
+    // method doQuery(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
+    // returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+    //   decreases *
+    //   requires Inv()
+    //   requires input.QueryInput?
+    //   requires IsInputResource(in_sv, rid, input)
+    //   // ensures out_sv == SSM.output_stub(rid, output)
+    // {
+    //   var query_ticket := Ticket(rid, input);
+    //   var query_key, hash_idx := input.key, hash(input.key);
+    //   var slot_idx := hash_idx;
 
-      //   match entry {
-      //     case Empty => {
-      //       output := MapIfc.QueryOutput(NotFound);
-      //       step := QueryNotFoundStep(slot_idx as nat);
-      //     }
-      //     case Full(KV(entry_key, value)) => {
-      //       if entry_key == key {
-      //         step := QueryDoneStep(slot_idx as nat);
-      //         output := MapIfc.QueryOutput(Found(value));
-      //       } else {
-      //         var should_go_before := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
+    //   ghost var probe_range := Partial(hash_idx, hash_idx);
 
-      //         if !should_go_before {
-      //           step := QuerySkipStep(slot_idx as nat);
-      //         } else {
-      //           output := MapIfc.QueryOutput(NotFound);
-      //           step := QueryNotFoundStep(slot_idx as nat);
-      //         }
-      //       }
-      //     }
-      //   }
+    //   var entry; glinear var handle; glinear var r;
+    //   var entries, handles := [], [];
+    //   entry, handle, r := v.acquireRow(hash_idx, in_sv);
 
-      //   if !step.QuerySkipStep? {
-      //     // this test is required for termination, but is not enforced by verification
-      //     // because we are using decreases *
-      //     break;
-      //   }
+    //   while true
+    //     invariant Inv()
+    //   //   invariant r == OneRowResource(slot_idx as nat, Info(entry, Querying(rid, key)), 0);
+    //     invariant handle.m == row_mutexes[slot_idx];
+    //     decreases *
+    //   {
+    //     match entry {
+    //       case Empty => {
+    //         output := MapIfc.QueryOutput(NotFound);
+    //         step := QueryNotFoundStep(slot_idx);
+    //       }
+    //       case Full(entry_key, value) => {
+    //         if entry_key == key {
+    //           step := QueryFoundStep(slot_idx);
+    //           output := MapIfc.QueryOutput(Found(value));
+    //         } else {
+    //           var skip := entry.ShouldSkip(slot_idx, query_key);
+    //           if !skip {
+    //             output := MapIfc.QueryOutput(NotFound);
+    //             step := QueryNotFoundStep(slot_idx);
+    //           }
+    //         }
+    //       }
+    //     }
+
+    //     var next_slot_idx := NextIndex(slot_idx);
+    //     entries := entries + [entry];
+    //     handle := handle + [handle];
+
+    //     entry, handle, r := v.acquireRow(next_slot_idx, r);
+    //   }
       
-      //   var next_entry; glinear var next_handle;
-      //   next_entry, next_handle, r := acquireRow(v, next_slot_idx, r);
-
-      //   r := easy_transform_step(r, step);
-      //   r := releaseRow(v, slot_idx, entry, handle, r);
-
-      //   slot_idx, entry, handle := next_slot_idx, next_entry, next_handle;
-      // }
-      
-      // // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
-      // r := easy_transform_step(r, step);
-      // out_sv := releaseRow(v, slot_idx, entry, handle, r);
-    }
+    //   // // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
+    //   // r := easy_transform_step(r, step);
+    //   // out_sv := releaseRow(v, slot_idx, entry, handle, r);
+    // }
 
 
 
@@ -265,46 +263,46 @@ module Impl refines VerificationObligation {
     Splitted(expected, ri)
   }
 
-  method init(glinear in_sv: SSM.Variables)
-  returns (v: Variables, glinear out_sv: SSM.Variables)
-    // requires SSM.Init(in_sv)
-    // ensures Inv(v)
-    // ensures out_sv == unit()
-  {
-    glinear var remaining_r := in_sv;
-    var row_mutexes : RowMutexTable:= [];
-    var i: uint32 := 0;
+  // method init(glinear in_sv: SSM.Variables)
+  // returns (v: Variables, glinear out_sv: SSM.Variables)
+  //   // requires SSM.Init(in_sv)
+  //   // ensures Inv(v)
+  //   // ensures out_sv == unit()
+  // {
+  //   glinear var remaining_r := in_sv;
+  //   var row_mutexes : RowMutexTable:= [];
+  //   var i: uint32 := 0;
 
-    assert remaining_r == InitResoucePartial(0) by {
-      reveal InitResoucePartial();
-    }
+  //   assert remaining_r == InitResoucePartial(0) by {
+  //     reveal InitResoucePartial();
+  //   }
 
-    while i < FixedSizeImpl()
-      invariant i as int == |row_mutexes| <= FixedSize()
-      invariant remaining_r == InitResoucePartial(i as nat)
-      invariant RowMutexTableInv(row_mutexes)
-    {
-      ghost var splitted := Split(remaining_r, i as int);
+  //   while i < FixedSizeImpl()
+  //     invariant i as int == |row_mutexes| <= FixedSize()
+  //     invariant remaining_r == InitResoucePartial(i as nat)
+  //     invariant RowMutexTableInv(row_mutexes)
+  //   {
+  //     ghost var splitted := Split(remaining_r, i as int);
       
-      glinear var ri;
-      remaining_r, ri := SSM.split(remaining_r, splitted.expected, splitted.ri);
+  //     glinear var ri;
+  //     remaining_r, ri := SSM.split(remaining_r, splitted.expected, splitted.ri);
 
-      var m := new_mutex<Row>(Row(Empty, ri), (row) => RowInv(i as nat, row));
-      row_mutexes := row_mutexes + [m];
-      i := i + 1;
-    }
+  //     var m := new_mutex<Row>(Row(Empty, ri), (row) => RowInv(i as nat, row));
+  //     row_mutexes := row_mutexes + [m];
+  //     i := i + 1;
+  //   }
 
-    reveal InitResoucePartial();
-    assert remaining_r.table == UnitTable();
-    glinear var cap := declose(remaining_r);
+  //   reveal InitResoucePartial();
+  //   assert remaining_r.table == UnitTable();
+  //   glinear var cap := declose(remaining_r);
 
-    var allocator; glinear var remaining_cap;
-    assert cap.value == Capacity();
-    allocator, remaining_cap := CAP.init(cap);
-    assert Count.Inv(Count.add(remaining_cap, remaining_cap));
-    out_sv := enclose(remaining_cap);
-    v := Variables.Variables(row_mutexes, allocator);
-  }
+  //   var allocator; glinear var remaining_cap;
+  //   assert cap.value == Capacity();
+  //   allocator, remaining_cap := CAP.init(cap);
+  //   assert Count.Inv(Count.add(remaining_cap, remaining_cap));
+  //   out_sv := enclose(remaining_cap);
+  //   v := Variables.Variables(row_mutexes, allocator);
+  // }
 
   // predicate method shouldHashGoBefore(search_h: uint32, slot_h: uint32, slot_idx: uint32) 
   //   ensures shouldHashGoBefore(search_h, slot_h, slot_idx) 
@@ -409,7 +407,7 @@ module Impl refines VerificationObligation {
   //   inital_key: Key,
   //   entry: SSM.Entry,
   //   thread_id: uint32,
-  //   glinear handle: MutexHandle<Row>,
+  //   glinear handle: Handle,
   //   glinear in_sv: SSM.Variables)
   
   //   returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
