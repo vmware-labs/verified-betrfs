@@ -19,6 +19,7 @@ module TranslationImpl {
   import opened Sequences
   import opened Options
   import opened KeyType
+  import opened ValueType`Internal
   import opened ValueMessage
   import opened BucketImpl
   import opened BucketsLib
@@ -392,7 +393,8 @@ module TranslationImpl {
   predicate TranslateBucketWillFit(bucket: Bucket, prefix: Key, newPrefix: Key)
   requires PreWFBucket(bucket)
   {
-    (|newPrefix| <= |prefix| || |bucket.keys| * 1024 < 0x1_0000_0000)
+    || (|newPrefix| <= |prefix|)
+    || (BucketWeights.WeightBucket(bucket) + 1024 * |bucket.keys| < Uint32UpperBound())
   }
 
   predicate TranslateBucketsWillFit(buckets: seq<Bucket>, prefix: Key, newPrefix: Key)
@@ -413,7 +415,8 @@ module TranslationImpl {
       // TODO: do different key length calculation based on format of bucket
       var pkv := mbucket.GetPkv();
       var size := PackedKV.NumKVPairs(pkv);
-      b := size * 1024 < 0x1_0000_0000;
+
+      b := (size * 1024 < 0x1_0000_0000) && ((mbucket.weight + size * 1024) < 0x1_0000_0000);
     }
     TranslateBucketWillFitImpliesWillFitInPkv(mbucket, prefix, newPrefix);
   }
@@ -440,58 +443,119 @@ module TranslationImpl {
     }
   }
 
+  function {:opaque} MutBucketToPkv(mbucket: MutBucket) : (pkv: PackedKV.Pkv)
+  requires mbucket.Inv()
+  requires mbucket.format.BFTree?
+  ensures PackedKV.WF(pkv)
+  ensures PackedKV.I(pkv) == mbucket.I()
+  {
+    var b := mbucket.I();
+    var tree := mbucket.format.tree;
+    var treekeys := LKMB.Model.ToSeq(tree).0;
+    var treemsgs := LKMB.Model.ToSeq(tree).1;
+
+    LKMBPKVOps.ToSeqInterpretation(tree);
+    LKMB.Model.ToSeqIsStrictlySorted(tree);
+    assert Bucket(treekeys, treemsgs).as_map() == b.as_map();
+    assert Lexi.IsStrictlySorted(treekeys);
+    assert Lexi.IsStrictlySorted(b.keys);
+
+    MapSeqs.SeqsEqOfMapsEq(treekeys, treemsgs, b.keys, b.msgs);
+    assert b.keys == treekeys;
+    assert b.msgs == treemsgs;
+
+    LKMBPKVOps.WeightImpliesCanAppend(tree);
+    assert EncodableMessageSeq(treemsgs);
+
+    var treePsaKeys := PackedKV.PSA.psaFromSeq(treekeys);
+    var treePsaMsgs := PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(treemsgs));
+    assert PackedKV.IMessages(treePsaMsgs) == treemsgs;
+
+    var pkv := PackedKV.Pkv(treePsaKeys, treePsaMsgs);
+    assert PackedKV.WF(pkv);
+    LKMBPKVOps.ToPkvPreservesInterpretation(tree, pkv);
+
+    pkv
+  }
+
   lemma TranslateBucketWillFitImpliesWillFitInPkv(mbucket: MutBucket, prefix: Key, newPrefix: Key)
   requires mbucket.Inv()
   ensures TranslateBucketWillFit(mbucket.I(), prefix, newPrefix) ==> WillFitInPkv(mbucket, prefix, newPrefix)
   {
-    assume false;
     var b := mbucket.I();
     var tb := TranslateBucket(b, prefix, newPrefix);
     var idxs := TranslateBucketInternal(b, prefix, newPrefix, 0).idxs;
-  
-    if mbucket.format.BFTree? {
-      var tree := mbucket.format.tree;
-      var treekeys := LKMB.Model.ToSeq(tree).0;
-      var treemsgs := LKMB.Model.ToSeq(tree).1;
+    assert |tb.keys| == |tb.msgs|; // observe
 
-      LKMBPKVOps.ToSeqInterpretation(tree);
-      LKMB.Model.ToSeqIsStrictlySorted(tree);
-      assert Bucket(treekeys, treemsgs).as_map() == b.as_map();
-      assert Lexi.IsStrictlySorted(treekeys);
-      assert Lexi.IsStrictlySorted(b.keys);
+    var pkv := if mbucket.format.BFPkv? then mbucket.format.pkv else MutBucketToPkv(mbucket);
+    assert PackedKV.WF(pkv);
+    assert b == PackedKV.I(pkv);
+    assert PackedKV.PSA.I(pkv.keys) == b.keys;
+    assert PackedKV.PSA.I(pkv.messages) == messageSeq_to_bytestringSeq(b.msgs);
 
-      MapSeqs.SeqsEqOfMapsEq(treekeys, treemsgs, b.keys, b.msgs);
-      assert b.keys == treekeys;
-      assert b.msgs == treemsgs;
+    PackedKV.PSA.psaCanAppendI(pkv.keys);
+    PackedKV.PSA.psaCanAppendI(pkv.messages);
 
-      LKMBPKVOps.WeightImpliesCanAppend(tree);
-    } else {
-      var pkv := mbucket.format.pkv;
-      assert PackedKV.WF(pkv);
-      assert b == PackedKV.I(pkv);
-
-      assert PackedKV.PSA.I(pkv.keys) == b.keys;
-      assert PackedKV.PSA.I(pkv.messages) == messageSeq_to_bytestringSeq(b.msgs);
-
-      PackedKV.PSA.psaCanAppendI(pkv.keys);
-      PackedKV.PSA.psaCanAppendI(pkv.messages);
-    }
+    MutBucket.WeightBucketIs(pkv);
+    assert PackedKV.I(pkv) == b;
+    assert BucketWeights.WeightBucket(b) == PackedKV.WeightPkv(pkv) as int;
+    assert PackedKV.WeightPkv(pkv) == mbucket.weight;
+    assert PackedKV.WeightPkv(pkv) as nat < Uint32UpperBound();
 
     assert EncodableMessageSeq(b.msgs);
     assert PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), b.keys);
     assert PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), messageSeq_to_bytestringSeq(b.msgs));
 
-    if |newPrefix| <= |prefix| {
-      TranslateBucketKeyLt(b, tb, idxs, prefix, newPrefix);
-    } else if |b.keys| * 1024 < 0x1_0000_0000 {
-      FlattenLengthUpperBound(FlattenShape(tb.keys));
-      assert PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), tb.keys);
-    }
-
     TranslateBucketMessageLt(b, tb, idxs, prefix, newPrefix);
+    assert EncodableMessageSeq(tb.msgs);
     assert PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), messageSeq_to_bytestringSeq(tb.msgs));
 
-    reveal_WillFitInPkv();
+    // weight of translated bucket message is <= bucket's message
+    var psaMsgs := PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(tb.msgs));
+    assert PackedKV.IMessages(psaMsgs) == tb.msgs;
+    assert ValidMessageBytestrings(PackedKV.PSA.I(psaMsgs));
+    assert IdentityMessage() !in PackedKV.IMessages(psaMsgs);
+
+    assert |psaMsgs.offsets| <= |pkv.messages.offsets|;
+    assert |psaMsgs.data| <= |pkv.messages.data|;
+    
+    if |newPrefix| <= |prefix| {
+      TranslateBucketKeyLt(b, tb, idxs, prefix, newPrefix);
+      assert PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), tb.keys);
+
+      var psaKeys := PackedKV.PSA.psaFromSeq(tb.keys);
+      assert |psaKeys.offsets| <= |pkv.keys.offsets|;
+      assert |psaKeys.data| <= |pkv.keys.data|;
+
+      var pkv' := PackedKV.Pkv(psaKeys, psaMsgs);
+      assert PackedKV.WF(pkv');
+
+      assert PackedKV.WeightPkv(pkv') <= PackedKV.WeightPkv(pkv);
+      assert PackedKV.WeightPkv(pkv') as nat < Uint32UpperBound();
+
+      assert WillFitInPkv(mbucket, prefix, newPrefix) by {
+        reveal_WillFitInPkv();
+      }
+    } else if (BucketWeights.WeightBucket(b) + 1024 * |b.keys|) < Uint32UpperBound() {
+      FlattenLengthUpperBound(FlattenShape(tb.keys));
+      assert PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), tb.keys);
+
+      var psaKeys := PackedKV.PSA.psaFromSeq(tb.keys);
+      assert |psaKeys.offsets| <= |pkv.keys.offsets|;
+      assert |psaKeys.data| <= 1024 * |psaKeys.offsets|;
+
+      var pkv' := PackedKV.Pkv(psaKeys, psaMsgs);
+
+      assert PackedKV.PSA.WF(pkv'.keys);
+      assert PackedKV.PSA.WF(pkv'.messages);
+      assert |pkv'.keys.offsets| == |pkv'.messages.offsets|;
+      assert PackedKV.WF(pkv');
+
+      assert PackedKV.WeightPkv(pkv') as nat < Uint32UpperBound();
+      assert WillFitInPkv(mbucket, prefix, newPrefix) by {
+        reveal_WillFitInPkv();
+      }
+    }
   }
 
   lemma FlattenLengthUpperBound(len: seq<nat>)
@@ -573,13 +637,114 @@ module TranslationImpl {
     }
   }
 
+  lemma TranslateBucketSubSeqLeft(bucket: Bucket, bucket': Bucket, idx: int, end: int, prefix: Key, newPrefix: Key)
+  requires PreWFBucket(bucket)
+  requires PreWFBucket(bucket')
+  requires 0 <= idx <= end <= |bucket.keys|
+  requires bucket.keys[..end] == bucket'.keys
+  requires bucket.msgs[..end] == bucket'.msgs
+  ensures
+    var tb := TranslateBucketInternal(bucket, prefix, newPrefix, idx).b;
+    var tb' := TranslateBucketInternal(bucket', prefix, newPrefix, idx).b;
+    && |tb'.keys| <= |tb.keys|
+    && tb.keys[..|tb'.keys|] == tb'.keys
+    && tb.msgs[..|tb'.msgs|] == tb'.msgs
+  decreases |bucket.keys| - idx
+  {
+    if idx < end {
+      assert bucket.keys[idx] == bucket'.keys[idx];
+      TranslateBucketSubSeqLeft(bucket, bucket', idx + 1, end, prefix, newPrefix);
+    }
+  }
+
+  lemma BucketSubSeqWillFitInPkv(bucket: MutBucket, bucket': MutBucket, 
+    tbucket: Bucket, tbucket': Bucket, prefix: Key, newPrefix: Key)
+  requires bucket.Inv()
+  requires bucket'.Inv()
+  requires WillFitInPkv(bucket, prefix, newPrefix)
+  requires TranslateBucket(bucket.I(), prefix, newPrefix) == tbucket
+  requires TranslateBucket(bucket'.I(), prefix, newPrefix) == tbucket'
+  requires |tbucket'.keys| <= |tbucket.keys|
+  requires tbucket.keys[..|tbucket'.keys|] == tbucket'.keys 
+        || tbucket.keys[|tbucket.keys|-|tbucket'.keys|..] == tbucket'.keys
+  requires tbucket.msgs[..|tbucket'.msgs|] == tbucket'.msgs 
+        || tbucket.msgs[|tbucket.keys|-|tbucket'.keys|..] == tbucket'.msgs
+  requires PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), tbucket'.keys)
+  requires PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), messageSeq_to_bytestringSeq(tbucket'.msgs))
+  requires |Flatten(tbucket'.keys)| <= |Flatten(tbucket.keys)|
+  requires |Flatten(messageSeq_to_bytestringSeq(tbucket'.msgs))| 
+        <= |Flatten(messageSeq_to_bytestringSeq(tbucket.msgs))|
+  ensures WillFitInPkv(bucket', prefix, newPrefix)
+  {
+    var psaKeys := PackedKV.PSA.psaFromSeq(tbucket'.keys);
+    var psaMsgs := PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(tbucket'.msgs));
+    assert PackedKV.IMessages(psaMsgs) == tbucket'.msgs;
+    assert IdentityMessage() !in tbucket'.msgs; // observe
+
+    assert PackedKV.WF(PackedKV.Pkv(psaKeys, psaMsgs)) by { reveal_WillFitInPkv(); }
+    assert WillFitInPkv(bucket', prefix, newPrefix) by { reveal_WillFitInPkv(); }
+  }
+
   lemma SplitLeftWillFitInPkv(bucket: MutBucket, bucket': MutBucket, prefix: Key, newPrefix: Key, pivot: Key)
   requires bucket.Inv()
   requires bucket'.Inv()
   requires bucket'.I() == SplitBucketLeft(bucket.I(), pivot)
   ensures WillFitInPkv(bucket, prefix, newPrefix) ==> WillFitInPkv(bucket', prefix, newPrefix)
   {
-    assume false;
+    var tb := TranslateBucket(bucket.I(), prefix, newPrefix);
+    var tb' := TranslateBucket(bucket'.I(), prefix, newPrefix);
+
+    reveal_SplitBucketLeft();
+    var i := Lexi.binarySearchIndexOfFirstKeyGte(bucket.I().keys, pivot);
+    TranslateBucketSubSeqLeft(bucket.I(), bucket'.I(), 0, i, prefix, newPrefix);
+    assert tb'.keys + tb.keys[|tb'.keys|..] == tb.keys;
+    assert tb'.msgs + tb.msgs[|tb'.msgs|..] == tb.msgs;
+
+    FlattenAdditive(tb'.keys,  tb.keys[|tb'.keys|..]);
+    messageSeq_to_bytestringSeq_Additive(tb'.msgs, tb.msgs[|tb'.msgs|..]);
+    FlattenAdditive(messageSeq_to_bytestringSeq(tb'.msgs), messageSeq_to_bytestringSeq(tb.msgs[|tb'.msgs|..]));
+
+    if WillFitInPkv(bucket, prefix, newPrefix) {
+      reveal_WillFitInPkv();
+      BucketSubSeqWillFitInPkv(bucket, bucket', tb, tb', prefix, newPrefix);
+    }
+  }
+
+  lemma TranslateBucketIndexEquiv(bucket: Bucket, bucket': Bucket, idx: int, start: int, prefix: Key, newPrefix: Key)
+  requires PreWFBucket(bucket)
+  requires PreWFBucket(bucket')
+  requires 0 <= start <= idx <= |bucket.keys|
+  requires bucket.keys[start..] == bucket'.keys
+  requires bucket.msgs[start..] == bucket'.msgs
+  ensures TranslateBucketInternal(bucket, prefix, newPrefix, idx).b
+    == TranslateBucketInternal(bucket', prefix, newPrefix, idx-start).b
+  decreases |bucket.keys| - idx
+  {
+    if idx < |bucket.keys| {
+      assert bucket.keys[idx] == bucket'.keys[idx-start];
+      TranslateBucketIndexEquiv(bucket, bucket', idx + 1, start, prefix, newPrefix);
+    } 
+  }
+
+  lemma TranslateBucketSubSeqRight(bucket: Bucket, bucket': Bucket, idx: int, start: int, prefix: Key, newPrefix: Key)
+  requires PreWFBucket(bucket)
+  requires PreWFBucket(bucket')
+  requires 0 <= idx <= start <= |bucket.keys|
+  requires bucket.keys[start..] == bucket'.keys
+  requires bucket.msgs[start..] == bucket'.msgs
+  ensures
+    var tb := TranslateBucketInternal(bucket, prefix, newPrefix, idx).b;
+    var tb' := TranslateBucketInternal(bucket', prefix, newPrefix, 0).b; 
+    && |tb'.keys| <= |tb.keys|
+    && tb.keys[|tb.keys| - |tb'.keys|..] == tb'.keys
+    && tb.msgs[|tb.msgs| - |tb'.msgs|..] == tb'.msgs
+  decreases |bucket.keys| - idx
+  {
+    if idx < start {
+      TranslateBucketSubSeqRight(bucket, bucket', idx + 1, start, prefix, newPrefix);
+    } else {
+      TranslateBucketIndexEquiv(bucket, bucket', idx, start, prefix, newPrefix);
+    }
   }
 
   lemma SplitRightWillFitInPkv(bucket: MutBucket, bucket': MutBucket, prefix: Key, newPrefix: Key, pivot: Key)
@@ -588,7 +753,26 @@ module TranslationImpl {
   requires bucket'.I() == SplitBucketRight(bucket.I(), pivot)
   ensures WillFitInPkv(bucket, prefix, newPrefix) ==> WillFitInPkv(bucket', prefix, newPrefix)
   {
-    assume false;
+    var tb := TranslateBucket(bucket.I(), prefix, newPrefix);
+    var tb' := TranslateBucket(bucket'.I(), prefix, newPrefix);
+
+    reveal_SplitBucketRight();
+    var i := Lexi.binarySearchIndexOfFirstKeyGte(bucket.I().keys, pivot);
+    TranslateBucketSubSeqRight(bucket.I(), bucket'.I(), 0, i, prefix, newPrefix);
+
+    assert |tb'.keys| <= |tb.keys|;
+    var end := |tb.keys| - |tb'.keys|;
+    assert tb.keys[..end] + tb'.keys == tb.keys;
+    assert tb.msgs[..end] + tb'.msgs == tb.msgs;
+
+    FlattenAdditive(tb.keys[..end], tb'.keys);
+    messageSeq_to_bytestringSeq_Additive(tb.msgs[..end], tb'.msgs);
+    FlattenAdditive(messageSeq_to_bytestringSeq(tb.msgs[..end]), messageSeq_to_bytestringSeq(tb'.msgs));
+
+    if WillFitInPkv(bucket, prefix, newPrefix) {
+      reveal_WillFitInPkv();
+      BucketSubSeqWillFitInPkv(bucket, bucket', tb, tb', prefix, newPrefix);
+    }
   }
   
   method ComputeTranslateBucket(shared mbucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear mbucket': MutBucket)
@@ -600,7 +784,6 @@ module TranslationImpl {
     reveal_WillFitInPkv();
     ghost var bucket := mbucket.I();
     assert EncodableMessageSeq(bucket.msgs);
-    TranslateBucketSimpleEquivalence(bucket, prefix, newPrefix);
     reveal_IsPrefix();
 
     var pkv := mbucket.GetPkv();
@@ -649,32 +832,42 @@ module TranslationImpl {
       }
       i := i + 1;
     }
-
-    assume false;
-
+ 
     var result_keys' := seq_unleash(result_keys);
     var result_msgs' := seq_unleash(result_msgs);
 
-    assert result_keys'[..result_len] == TranslateBucket(mbucket.I(), prefix, newPrefix).keys;
-    //assert result_msgs'[..result_len] == messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs);
+    ghost var tbucket_simple := TranslateBucketSimple(bucket, prefix, newPrefix, i as nat);
+    ghost var tbucket := TranslateBucket(bucket, prefix, newPrefix);
+
+    assert i as nat == |bucket.keys|;
+    TranslateBucketSimpleEquivalence(bucket, prefix, newPrefix);
+    assert tbucket_simple == tbucket;
+    assert result_keys'[..result_len] == tbucket_simple.keys;
+    assert result_keys'[..result_len] == tbucket.keys;
+    assert result_msgs'[..result_len] == messageSeq_to_bytestringSeq(tbucket_simple.msgs);
+    assert result_msgs'[..result_len] == messageSeq_to_bytestringSeq(tbucket.msgs);
+
     var result_keys_psa := PackedKV.PSA.FromSeq(result_keys'[..result_len]);
     var result_msgs_psa := PackedKV.PSA.FromSeq(result_msgs'[..result_len]);
     calc {
       result_keys_psa;
       { PackedKV.PSA.psaCanAppendI(result_keys_psa); }
-    //   PackedKV.PSA.psaFromSeq(result_keys'[..result_len]);
-    //   PackedKV.PSA.psaFromSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).keys);
-    //   PackedKV.PSA.psaFromSeq(TranslateBucket(bucket, prefix, newPrefix).keys);
-      PackedKV.PSA.psaFromSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).keys);
+      PackedKV.PSA.psaFromSeq(result_keys'[..result_len]);
+      PackedKV.PSA.psaFromSeq(tbucket.keys);
     }
     calc {
       result_msgs_psa;
       { PackedKV.PSA.psaCanAppendI(result_msgs_psa); }
-    //   PackedKV.PSA.psaFromSeq(result_msgs'[..result_len]);
-    //   PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs));
-    //   PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(TranslateBucket(bucket, prefix, newPrefix).msgs));
-      PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs));
+      PackedKV.PSA.psaFromSeq(result_msgs'[..result_len]);
+      PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(tbucket.msgs));
     }
+
+    ghost var tpkv := PackedKV.Pkv(result_keys_psa, result_msgs_psa);
+    assert PackedKV.PSA.psaFromSeq(tbucket.keys) == result_keys_psa;
+    assert PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(tbucket.msgs)) == result_msgs_psa;
+    assert PackedKV.WF(tpkv);
+    assert PackedKV.I(tpkv) == tbucket;
+
     mbucket' := MutBucket.AllocPkv(PackedKV.Pkv(result_keys_psa, result_msgs_psa), mbucket.sorted);
   }
 

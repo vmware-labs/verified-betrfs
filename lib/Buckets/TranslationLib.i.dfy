@@ -886,7 +886,8 @@ module TranslationLib {
   function TranslateBucketInternal(bucket: Bucket, prefix: Key, newPrefix: Key, idx: int) : (tbucket: TBucket)
   requires PreWFBucket(bucket)
   requires 0 <= idx <= |bucket.keys|
-  ensures WFTBucket(bucket, tbucket, prefix, newPrefix, idx) // not ensured
+  ensures WFTBucket(bucket, tbucket, prefix, newPrefix, idx)
+  ensures WFBucket(bucket) ==> WFBucket(tbucket.b)
   ensures BucketWellMarshalled(bucket) ==> BucketWellMarshalled(tbucket.b)
   decreases |bucket.keys| - idx
   {
