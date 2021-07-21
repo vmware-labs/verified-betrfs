@@ -89,7 +89,7 @@ module BranchTreeInterpMod {
     && nextNode.value == lookup.steps[currStep+1].node
   }
 
-  lemma BranchLookupsEquivalentInductive(v: Variables,
+  lemma BranchLookupsEquivalentInductive(v: SplinterTreeMachineMod.Variables,
                                 cache0: CacheIfc.Variables,
                                 cache1: CacheIfc.Variables,
                                 lookup0: BranchPath,
@@ -209,7 +209,8 @@ module BranchTreeInterpMod {
       ensures |receipts0| == |receipts1|
     {
       if (0 < count) {
-        BranchReceiptsEquivalentInductive(v, cache0, cahe1, receipts0, receipts1, count-1);
+        BranchReceiptsEquivalentInductive(v, cache0, cache1, receipts0, receipts1, count-1);
+        RootEquivalentForBranchReceipt(cache0, cache1, receipts0[count-1], receipts1[count-1])
         BranchLookupsEquivalent(v, cache0, cache1, receipts0[count-1], receipts1[count-1]);
       }
     }

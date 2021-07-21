@@ -523,6 +523,7 @@ module SplinterTreeMachineMod {
       // NOte that cu corresponds to the correct node assignment
       && (forall i | 0 <= i < |steps| :: steps[i].Valid(v, cache))
       && Linked()
+      // ensure that the path belongs to the tree in Variables
     }
 
     function Decode() : (msg : Message)

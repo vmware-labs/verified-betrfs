@@ -10,6 +10,7 @@ include "SplinterTree.i.dfy"
 include "BranchTreeInterp.i.dfy"
 include "../Spec/Message.s.dfy"
 include "../Spec/Interp.s.dfy"
+include "../lib/Base/mathematics.i.dfy"
 
 // interpretation for the SplinterTree Implementation
 // Go through this is and replace all placeholders
@@ -26,6 +27,7 @@ module SplinterTreeInterpMod {
   import Nat_Order
   import opened SequenceSetsMod
   import BranchTreeInterpMod
+  import opened Mathematics
 
 
   // Select the messages that lookup finds.
@@ -227,7 +229,8 @@ module SplinterTreeInterpMod {
       var lookup0 := IMLookup(v, cache0, key);
       var lookup1 := IMLookup(v, cache1, key);
 
-      LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, |lookup1.steps|);
+      var count := min(|lookup0.steps|, |lookup1.steps|);
+      LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, count);
 
       calc {
         lookup0;
