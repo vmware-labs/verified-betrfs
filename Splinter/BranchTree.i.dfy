@@ -69,6 +69,15 @@ module BranchTreeMod {
     {
       this.Index? ==> WFIndexNode()
     }
+
+    function nextStep(k : Key) : CU
+      requires this.Index?
+      requires WFIndexNode()
+      requires BoundedKey(pivots, k)
+    {
+      var slot := Route(pivots, k);
+      children[slot]
+    }
   }
 
   // Parses CU units to BranchNodes that we can use
@@ -120,6 +129,8 @@ module BranchTreeMod {
       // the cu corresponds to this node
       && CUToBranchNode(cu, cache) == Some(node)
     }
+
+
   }
 
   datatype BranchPath = BranchPath(key: Key, steps: seq<BranchStep>)
@@ -136,7 +147,7 @@ module BranchTreeMod {
     }
 
     predicate LinkedAt(childIdx : nat)
-      requires 0 < childIdx < |steps|-1
+      requires 0 < childIdx <= |steps|-1
       requires WF()
     {
       && var parentNode := steps[childIdx-1].node;

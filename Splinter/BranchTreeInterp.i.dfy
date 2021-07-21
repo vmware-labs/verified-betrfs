@@ -63,30 +63,10 @@ module BranchTreeInterpMod {
 
   predicate StepsEquivalent(cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, step0: BranchStep, step1: BranchStep)
   {
-    //&& step0.cu == step1.cu
     && step0.Valid(cache0)
     && step1.Valid(cache1)
     && step0.cu == step1.cu
     && CUToBranchNode(step0.cu, cache0) == CUToBranchNode(step1.cu, cache1)
-  }
-
-  predicate StepsLinked(cache: CacheIfc.Variables, lookup: BranchPath, currStep: nat, currStepCU: CU, nextStepCU : CU)
-    requires currStep < |lookup.steps| - 1
-  {
-    // make sure cus match with the ones in the branchpath
-    && currStepCU == lookup.steps[currStep].cu
-    && nextStepCU == lookup.steps[currStep+1].cu
-    // The lookup has to be valid
-    && lookup.Valid(cache)
-    // make sure there's a valid link at the lookup -- Might not be needed, we might be getting this from Valid(s)
-    && lookup.LinkedAt(currStep+1)
-    // Check if these loose steps correspond to parent-child
-    && var currNode := CUToBranchNode(currStepCU, cache);
-    && var nextNode := CUToBranchNode(nextStepCU, cache);
-    && currNode.Some?
-    && nextNode.Some?
-    && currNode.value == lookup.steps[currStep].node
-    && nextNode.value == lookup.steps[currStep+1].node
   }
 
   lemma BranchLookupsEquivalentInductive(v: SplinterTreeMachineMod.Variables,
@@ -101,37 +81,36 @@ module BranchTreeInterpMod {
     requires 0 < count
     requires count <= |lookup0.steps|
     requires count <= |lookup1.steps|
-    //requires lookup0.steps[0].cu == lookup1.steps[0].cu
+
     requires DiskViewsEquivalent(cache0.dv, cache1.dv, IReadsLookup(cache0, lookup0))
     requires DiskViewsEquivalent(cache1.dv, cache1.dv, IReadsLookup(cache1, lookup1))
-    ensures forall i :: ((0 < i < count-1) ==>  && StepsLinked(cache0, lookup0, i, lookup0.steps[i].cu, lookup0.steps[i+1].cu)
-                                                && StepsLinked(cache1, lookup1, i, lookup1.steps[i].cu, lookup1.steps[i+1].cu))
     ensures forall i :: ((0 <= i < count) ==> StepsEquivalent(cache0, cache1, lookup0.steps[i], lookup1.steps[i]))
     {
-      if 1 < count {
-        BranchLookupsEquivalentInductive(v, cache0, cache1, lookup0, lookup1, count - 1);
-        var step0 :=  lookup0.steps[count-2];
-        var step1 :=  lookup1.steps[count-2];
-
-        //assert step0.cu in IReadsLookup(cache0, lookup0);
-        //assert step1.cu in IReadsLookup(cache0, lookup0);
-
-        assert step0.cu == step1.cu; // All we need to show is that the CUs are the same
-        assert CUToBranchNode(step0.cu, cache0) == CUToBranchNode(step1.cu, cache1);
-
+      var key := lookup0.key;
+      if 0 < count {
         // route to next node
         var nextStep0 := lookup0.steps[count-1];
         var nextStep1 := lookup1.steps[count-1];
+        if 1 < count {
+          BranchLookupsEquivalentInductive(v, cache0, cache1, lookup0, lookup1, count - 1);
+          var step0 :=  lookup0.steps[count-2];
+          var step1 :=  lookup1.steps[count-2];
 
-        assert StepsEquivalent(cache0, cache1, step0, step1);
-        assert StepsEquivalent(cache0, cache1, nextStep0, nextStep1);
-        assert StepsLinked(cache0, lookup0, count-1, step0.cu, nextStep0.cu);
-        assert StepsLinked(cache1, lookup1, count-1, step1.cu, nextStep1.cu);
+          // This is equal from the induction
+          assert step0.cu == step1.cu; // All we need to show is that the CUs are the same
+          assert CUToBranchNode(step0.cu, cache0) == CUToBranchNode(step1.cu, cache1);
 
-      } else {
-        assert count == 1;
+          assert lookup0.LinkedAt(count-1);
+          assert lookup1.LinkedAt(count-1);
+
+          assert step0.node.nextStep(key) == nextStep0.cu;
+          assert step1.node.nextStep(key) == nextStep1.cu;
       }
-    }
+
+        // route to next node
+        assert StepsEquivalent(cache0, cache1, nextStep0, nextStep1);
+      }
+  }
 
     lemma BranchLookupsEquivalent(v: SplinterTreeMachineMod.Variables,
                                   cache0: CacheIfc.Variables,
