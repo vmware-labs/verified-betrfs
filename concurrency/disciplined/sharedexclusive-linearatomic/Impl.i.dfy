@@ -197,7 +197,15 @@ module Impl refines VerificationObligation {
     //   allocator[bin_id].release(AllocatorBin(count, rcap'), cap_handle);
     // }
 
-    predicate ProbePartialInv(entries: seq<Entry>,
+    // predicate EntriesMapped(entries: seq<Entry>, range: Range, sv: SSM.Variables)
+    //   requires sv.Variables?
+    // {
+    //   forall i: Index :: range.Contains(i)
+    //     ==> (sv.table[i].Some? && 
+    // }
+
+    predicate ProbePartialInv(
+      entries: seq<Entry>,
       probe_key: Key,
       cur: Index,
       sv: SSM.Variables)
@@ -210,19 +218,22 @@ module Impl refines VerificationObligation {
         (p_range.Contains(i) <==> sv.table[i].Some?))
       && (forall i: Index ::
         p_range.Contains(i) <==> HasHandle(i))
+      // && GetKnownSubTable(sv.table, p_range) == entries
     }
 
     linear inout method doProbe(probe_key: Key, glinear in_sv: SSM.Variables)
-      returns (glinear out_sv: SSM.Variables)
+      returns (found: bool, glinear out_sv: SSM.Variables)
       decreases *
 
       requires old_self.Inv()
       requires forall i: Index :: !old_self.HasHandle(i)
       requires in_sv.Variables? && in_sv.table == UnitTable()
+
+      // ensures 
     {
       var slot_idx := hash(probe_key);
+      found := false;
 
-      var done, found := false, false;
       var entries := [];
       out_sv := in_sv;
 
@@ -230,7 +241,7 @@ module Impl refines VerificationObligation {
         invariant
           self.ProbePartialInv(entries, probe_key, slot_idx, out_sv)
         // invariant
-        //   found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key) 
+        //   found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key)
         decreases *
       {
         var entry;
@@ -261,7 +272,7 @@ module Impl refines VerificationObligation {
       }
 
       assert found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key);
-      assert !found ==> ValidProbeRange(out_sv.table, probe_key, slot_idx);
+      // assert !found ==> ValidProbeRange(out_sv.table, probe_key, slot_idx);
     }
 
 

@@ -17,6 +17,12 @@ module CircularRange {
     if i == 0 then FixedSize() - 1 else i - 1
   }
 
+  function method WrappedDistance(s: Index, e: Index): nat
+  {
+    if s <= e then e - s
+    else FixedSize() - s + e
+  }
+
   // end is not inclusive, range will never cover the entire table
 
   datatype Range = Partial(start: Index, end: Index)
@@ -77,6 +83,16 @@ module CircularRange {
       // requires start != NextIndex(end)
     {
       Partial(start, NextIndex(end))
+    }
+
+    function LeftShrink1(): Range
+    {
+      Partial(NextIndex(start), end)
+    }
+
+    function RightShrink1(): Range
+    {
+      Partial(start, PrevIndex(end))
     }
 
     // function GetComplement(): Range
@@ -146,8 +162,6 @@ module CircularRange {
     // { 
     // }
 
-
-
     // lemma RangeNext(start: Index, end: Index, i: Index)
     //   requires start != end
     //   requires start != NextIndex(end)
@@ -157,11 +171,34 @@ module CircularRange {
     // }
   }
 
+  function operator(| |)(r: Range): nat
+  {
+    if r.start <= r.end then
+      r.end - r.start
+    else
+      r.start + FixedSize() - r.end
+  }
+
   lemma RangeInclusion(a: Index, b: Index, c: Index)
     requires a != c
     requires Partial(a, b).Contains(c)
     ensures Partial(c, a).Contains(b);
   {
   }
+
+  // lemma RangeSize(r: Range)
+  //   ensures |r| == |(set i | r.Contains(i) :: i)|
+  // {
+  //   var indices := (set i | r.Contains(i) :: i);
+  //   var Partial(start, end) := r;
+
+  //   if start == end {
+  //     assert |indices| == |r|;
+  //   } else if start < end {
+      
+  //   } else {
+
+  //   }
+  // }
 
 }

@@ -79,10 +79,7 @@ module CircularTable {
   function method PSL(key: Key, i: Index): nat
   {
     var h := hash(key);
-    if h <= i then
-      i - h
-    else
-      FixedSize() - h + i
+    WrappedDistance(h, i)
   }
 
   predicate SlotFull(entry: Option<Entry>)
@@ -185,14 +182,14 @@ module CircularTable {
 
   predicate ValidPartialProbeRange(table: FixedTable, key: Key, cur: Index)
   {
-    forall i: Index | Partial(hash(key), cur).Contains(i) :: SlotShouldSkip(table[i], i, key)
+    forall i: Index | Partial(hash(key), cur).Contains(i)
+      :: SlotShouldSkip(table[i], i, key)
   }
 
   predicate ValidProbeRange(table: FixedTable, key: Key, end: Index)
   {
     // skip upto (not including) end
     && ValidPartialProbeRange(table, key, end)
-    // Partial(hash(key), end).Contains(i) :: SlotShouldSkip(table[i], i, key))
     // insert at start
     && (SlotShouldSwap(table[end], end, key)
       || SlotEmpty(table[end]))
@@ -205,8 +202,7 @@ module CircularTable {
     ensures var h_range := GetHashSegment(table, hash(key));
       h_range.HasSome() ==> (
         && Partial(hash(key), end).Contains(h_range.start)
-        && end == h_range.end
-      )
+        && end == h_range.end)
     ensures !TableContainsKey(table, key)
   {
     var h := hash(key);
@@ -252,6 +248,38 @@ module CircularTable {
   {
     Partial(SlotKeyHash(table[i]), i)
   }
+
+  // function GetSubTable(table: FixedTable, range: Range): Table
+  //   decreases WrappedDistance(range.start, range.end)
+  // {
+  //   var Partial(start, end) := range;
+  //   if start == end then
+  //     []
+  //   else
+  //     GetSubTable(table, range.RightShrink1()) + [table[end]]
+  // }
+
+  function GetKnownSubTable(table: FixedTable, range: Range): seq<Entry>
+    requires forall i: Index :: range.Contains(i) ==> table[i].Some?
+    decreases WrappedDistance(range.start, range.end)
+  {
+    var Partial(start, end) := range;
+    if start == end then
+      []
+    else
+      GetKnownSubTable(table, range.RightShrink1()) + [table[PrevIndex(end)].value]
+  }
+
+  // function GetKnownSubTable(table: FixedTable, range: Range): seq<Entry>
+  //   requires forall i: Index :: range.Contains(i) ==> table[i].Some?
+  //   decreases WrappedDistance(range.start, range.end)
+  // {
+  //   var Partial(start, end) := range;
+  //   if start == end then
+  //     []
+  //   else
+  //     [table[start].value] + GetKnownSubTable(table, range.LeftShrink1())
+  // }
 
 //////////////////////////////////////////////////////////////////////////////
 // robinhood invarints
