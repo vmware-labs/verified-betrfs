@@ -159,15 +159,15 @@ module JournalInterpMod {
   }
 
   lemma DiskViewsEquivalentAfterRemove(cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, cus: seq<CU>, removedCU: CU, cusr: seq<CU>)
-    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, cus)
+    requires DiskViewsEquivalentForSeq(cache0.dv, cache1.dv, cus)
     requires SequenceSubset(cusr, cus)
-    ensures DiskViewsEquivalentForSet(MapRemove1(cache0.dv, removedCU), MapRemove1(cache1.dv, removedCU), cusr)
+    ensures DiskViewsEquivalentForSeq(MapRemove1(cache0.dv, removedCU), MapRemove1(cache1.dv, removedCU), cusr)
   {
   }
 
   // TODO(jonh): delete chain parameter.
   lemma FrameOneChain(cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb: Superblock)
-    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(cache0, sb))
+    requires DiskViewsEquivalentForSeq(cache0.dv, cache1.dv, IReads(cache0, sb))
     ensures ChainFrom(cache0.dv, sb) == ChainFrom(cache1.dv, sb)
     decreases |cache0.dv|
   {
@@ -204,7 +204,7 @@ module JournalInterpMod {
 
   // Add comment about what this supposed to do the TODOS here
   lemma InternalStepLemma(v: Variables, cache: CacheIfc.Variables, v': Variables, cache': CacheIfc.Variables,  sb:Superblock, base: InterpMod.Interp, cacheOps: CacheIfc.Ops, sk: Skolem)
-    requires DiskViewsEquivalentForSet(cache.dv, cache'.dv, IReads(cache, sb))
+    requires DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb))
     requires v.WF()
     requires base.seqEnd == v.boundaryLSN
     requires Invariant(v, cache)
@@ -237,7 +237,7 @@ module JournalInterpMod {
           assert sb_old == sb;
 
           assert newCU !in IReads(cache, sb);
-          assert DiskViewsEquivalentForSet(cache.dv, cache'.dv, IReads(cache, sb));
+          assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb));
           FrameOneChain(cache, cache', sb);
 //          assert ChainFrom(cache.dv, sb).chain == ChainFrom(cache'.dv, sb).chain; // ensures
           assert ChainFrom(cache'.dv, sb) == ChainFrom(cache.dv, sb);
@@ -308,7 +308,7 @@ module JournalInterpMod {
   }
 
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, base: InterpMod.Interp)
-    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(cache0, v.CurrentSuperblock()))
+    requires DiskViewsEquivalentForSeq(cache0.dv, cache1.dv, IReads(cache0, v.CurrentSuperblock()))
     requires v.WF()
     requires base.seqEnd == v.boundaryLSN
 

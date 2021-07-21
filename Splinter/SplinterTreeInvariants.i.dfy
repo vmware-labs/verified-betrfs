@@ -20,7 +20,7 @@ module SplinterTreeInvariantMod {
 
   // TODO; Might need to change this to table about both IM and IMStable
   lemma StableFraming(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock)
-    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
+    requires DiskViewsEquivalentForSeq(cache0.dv, cache1.dv, IReads(v, cache0, sb))
     ensures IMStable(cache0, sb) == IMStable(cache1, sb)
   {
   }
