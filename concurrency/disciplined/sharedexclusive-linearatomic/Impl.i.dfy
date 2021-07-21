@@ -76,20 +76,28 @@ module Impl refines VerificationObligation {
 
       requires old_self.Inv()
       requires !old_self.HasHandle(index)
+      requires in_sv.Variables?
+      requires in_sv.table[index] == None
 
       ensures self.Inv()
       ensures self.HasHandle(index)
-      ensures out_sv == add(in_sv, OneRowResource(index, entry, 0))
+      ensures forall i: Index | i != index ::
+        old_self.HasHandle(i) <==> self.HasHandle(i)
+      ensures out_sv == in_sv.(table := in_sv.table[index := Some(entry)]);
     {
       linear var row; glinear var handle: Handle;
       row, handle := self.row_mutexes[index].acquire();
 
       linear var Row(out_entry, row_r) := row;
       entry := out_entry;
+
       out_sv := SSM.join(in_sv, row_r);
+      assert out_sv.Variables?;
 
       assert handle.m == self.row_mutexes[index];
       lseq_give_inout(inout self.handles, index, handle);
+
+      assert glseq_has(self.handles) == glseq_has(old_self.handles)[index := true];
     }
 
     linear inout method releaseRow(index: Index, entry: Entry, glinear in_sv: SSM.Variables)
@@ -102,6 +110,8 @@ module Impl refines VerificationObligation {
             
       ensures self.Inv()
       ensures !self.HasHandle(index)
+      ensures forall i: Index | i != index ::
+        old_self.HasHandle(i) <==> self.HasHandle(i)
       ensures out_sv == in_sv.(table := in_sv.table[index := None]);
     {
       glinear var rmutex;
@@ -187,10 +197,80 @@ module Impl refines VerificationObligation {
     //   allocator[bin_id].release(AllocatorBin(count, rcap'), cap_handle);
     // }
 
-    // method doQuery(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
-    // returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+    predicate ProbePartialInv(entries: seq<Entry>,
+      probe_key: Key,
+      cur: Index,
+      sv: SSM.Variables)
+    {
+      && Inv()
+      && sv.Variables?
+      && ValidPartialProbeRange(sv.table, probe_key, cur)
+      && var p_range := Partial(hash(probe_key), cur);
+      && (forall i: Index ::
+        (p_range.Contains(i) <==> sv.table[i].Some?))
+      && (forall i: Index ::
+        p_range.Contains(i) <==> HasHandle(i))
+    }
+
+    linear inout method doProbe(probe_key: Key, glinear in_sv: SSM.Variables)
+      returns (glinear out_sv: SSM.Variables)
+      decreases *
+
+      requires old_self.Inv()
+      requires forall i: Index :: !old_self.HasHandle(i)
+      requires in_sv.Variables? && in_sv.table == UnitTable()
+    {
+      var slot_idx := hash(probe_key);
+
+      var done, found := false, false;
+      var entries := [];
+      out_sv := in_sv;
+
+      while true
+        invariant
+          self.ProbePartialInv(entries, probe_key, slot_idx, out_sv)
+        // invariant
+        //   found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key) 
+        decreases *
+      {
+        var entry;
+
+        entry, out_sv := inout self.acquireRow(slot_idx, out_sv);
+        entries := entries + [entry];
+
+        match entry {
+          case Empty => {
+            break;
+          }
+          case Full(entry_key, value) => {
+            if entry_key == probe_key {
+              found := true;
+              break;
+            }
+            if !entry.ShouldSkip(slot_idx, probe_key) {
+              break;
+            }
+
+            slot_idx := NextIndex(slot_idx);
+
+            if slot_idx == hash(probe_key) {
+              assume false;
+            }
+          }
+        }
+      }
+
+      assert found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key);
+      assert !found ==> ValidProbeRange(out_sv.table, probe_key, slot_idx);
+    }
+
+
+    // linear inout method doQuery(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
+    //   returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+
     //   decreases *
-    //   requires Inv()
+
+    //   requires old_self.Inv()
     //   requires input.QueryInput?
     //   requires IsInputResource(in_sv, rid, input)
     //   // ensures out_sv == SSM.output_stub(rid, output)
@@ -198,17 +278,15 @@ module Impl refines VerificationObligation {
     //   var query_ticket := Ticket(rid, input);
     //   var query_key, hash_idx := input.key, hash(input.key);
     //   var slot_idx := hash_idx;
-
     //   ghost var probe_range := Partial(hash_idx, hash_idx);
 
-    //   var entry; glinear var handle; glinear var r;
-    //   var entries, handles := [], [];
-    //   entry, handle, r := v.acquireRow(hash_idx, in_sv);
+    //   var entry; glinear var r;
+    //   entry, r := inout self.acquireRow(hash_idx, in_sv);
+
+    //   var entries := [entry];
 
     //   while true
     //     invariant Inv()
-    //   //   invariant r == OneRowResource(slot_idx as nat, Info(entry, Querying(rid, key)), 0);
-    //     invariant handle.m == row_mutexes[slot_idx];
     //     decreases *
     //   {
     //     match entry {
@@ -232,17 +310,14 @@ module Impl refines VerificationObligation {
 
     //     var next_slot_idx := NextIndex(slot_idx);
     //     entries := entries + [entry];
-    //     handle := handle + [handle];
 
-    //     entry, handle, r := v.acquireRow(next_slot_idx, r);
+    //     entry, r := inout self.acquireRow(next_slot_idx, r);
     //   }
       
     //   // // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
     //   // r := easy_transform_step(r, step);
     //   // out_sv := releaseRow(v, slot_idx, entry, handle, r);
     // }
-
-
 
   }
 
@@ -321,8 +396,6 @@ module Impl refines VerificationObligation {
   //   || slot_h <= slot_idx < search_h // search_h wraps around the end of array
   //   || slot_idx < search_h < slot_h// search_h, slot_h wrap around the end of array
   // }
-
-  
 
   // method doInsert(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_sv: SSM.Variables)
   // returns (output: Ifc.Output, glinear out_sv: SSM.Variables)

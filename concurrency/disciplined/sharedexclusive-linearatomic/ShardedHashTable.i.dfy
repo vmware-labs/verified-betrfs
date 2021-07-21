@@ -131,7 +131,8 @@ module ShardedHashTable refines ShardedStateMachine {
 
   function OneRowTable(i: Index, entry: Entry) : FixedTable
   {
-    seq(FixedSize(), j => if i == j then Some(entry) else None)
+    UnitTable()[i := Some(entry)]
+    // seq(FixedSize(), j => if i == j then Some(entry) else None)
   }
 
   function OneRowResource(i: Index, entry: Entry, cap: nat) : Variables 
