@@ -139,8 +139,7 @@ module BranchTreeInterpMod {
                                   receipt0: BranchReceipt,
                                   receipt1: BranchReceipt)
 
-        requires ValidLookupForBranchEquivalent(cache0, cache1, receipt0, receipt1)
-        requires RootEquivalentForBranchReceipt(cache0, cache1, receipt0, receipt1)
+        //requires ValidLookupForBranchEquivalent(cache0, cache1, receipt0, receipt1)
         requires DiskViewsEquivalent(cache0.dv, cache1.dv, IReadsLookup(cache0, receipt0.branchPath))
         ensures  receipt0 == receipt1
      {
@@ -150,86 +149,63 @@ module BranchTreeInterpMod {
         BranchLookupsEquivalentInductive(v, cache0, cache1, lookup0, lookup1, minLookup);
       }
 
-
+    /*
+     * Lemmas about sequences of branch Receipts
+     *
+     *
+     */
    predicate BranchLookupEquivalentRequirements(v: SplinterTreeMachineMod.Variables,
+                                    key: Key,
                                     cache0: CacheIfc.Variables,
                                     cache1: CacheIfc.Variables,
                                     receipts0: seq<BranchReceipt>,
                                     receipts1: seq<BranchReceipt>)
    {
-     && forall i | 0 <= i < min(|receipts0|, |receipts1|) :: ValidLookupForBranchEquivalent(cache0, cache1, receipts0[i], receipts1[i])
-     && forall i | 0 <= i < min(|receipts0|, |receipts1|) :: DiskViewsEquivalent(cache0.dv, cache1.dv, IReadsLookup(cache0, receipts0[i].branchPath))
+
+     && |receipts0| == |receipts1|
+     && (forall i | 0 <= i < |receipts0| :: receipts0[i].Valid(cache0))
+     && (forall i | 0 <= i < |receipts0| :: receipts0[i].branchPath.key == key)
+     && (forall i | 0 <= i < |receipts1| :: receipts1[i].Valid(cache1))
+     && (forall i | 0 <= i < |receipts1| :: receipts1[i].branchPath.key == key)
+     && (forall i | 0 <= i < |receipts0| :: receipts0[i].branchTree.Root() == receipts1[i].branchTree.Root() )
+     && (forall i | 0 <= i < |receipts0| :: DiskViewsEquivalent(cache0.dv, cache1.dv, IReadsLookup(cache0, receipts0[i].branchPath)))
    }
 
-   predicate ValidLookupForBranchEquivalent(cache0: CacheIfc.Variables,
-                                            cache1: CacheIfc.Variables,
-                                            receipt0: BranchReceipt,
-                                            receipt1: BranchReceipt)
-   {
-     && var lookup0 := receipt0.branchPath;
-     && var lookup1 := receipt1.branchPath;
-     && lookup0.key == lookup1.key
-     && lookup0.Valid(cache0)
-     && lookup1.Valid(cache1)
-   }
-
-   predicate RootEquivalentForBranchReceipt(cache0: CacheIfc.Variables,
-                                             cache1: CacheIfc.Variables,
-                                             receipt0: BranchReceipt,
-                                             receipt1: BranchReceipt)
-   {
-     && receipt0.Valid(cache0)
-     && receipt1.Valid(cache1)
-     && var cu0 := receipt0.branchTree.Root();
-     && var cu1 := receipt1.branchTree.Root();
-     && cu0 == cu1
-     && CacheIfc.ReadValue(cache0, cu0) == CacheIfc.ReadValue(cache1, cu1)
-   }
-
-   lemma RootEquivalentForBranchReceipts(v: SplinterTreeMachineMod.Variables,
-                                    cache0: CacheIfc.Variables,
-                                    cache1: CacheIfc.Variables,
-                                    receipts0: seq<BranchReceipt>,
-                                    receipts1: seq<BranchReceipt>)
-      requires BranchLookupEquivalentRequirements(v, cache0, cache1, receipts0, receipts1)
-      ensures forall i | 0 <= i < min(|receipts0|,|receipts1|) :: RootEquivalentForBranchReceipt(cache0, cache1, receipts0[i], receipts1[i])
-      ensures |receipts0| == |receipts1|
-   {
-
-   }
 
    lemma BranchReceiptsEquivalentInductive(v: SplinterTreeMachineMod.Variables,
+                                    key: Key,
                                     cache0: CacheIfc.Variables,
                                     cache1: CacheIfc.Variables,
                                     receipts0: seq<BranchReceipt>,
                                     receipts1: seq<BranchReceipt>,
                                     count: nat)
-      requires BranchLookupEquivalentRequirements(v, cache0, cache1, receipts0, receipts1)
+      requires BranchLookupEquivalentRequirements(v, key, cache0, cache1, receipts0, receipts1)
+      requires count <= |receipts0|
       ensures forall i | 0 <= i < count :: receipts0[i] == receipts1[i]
-      ensures |receipts0| == |receipts1|
     {
       if (0 < count) {
-        BranchReceiptsEquivalentInductive(v, cache0, cache1, receipts0, receipts1, count-1);
-        RootEquivalentForBranchReceipt(cache0, cache1, receipts0[count-1], receipts1[count-1])
+        BranchReceiptsEquivalentInductive(v, key, cache0, cache1, receipts0, receipts1, count-1);
+        //RootEquivalentForBranchReceipt(cache0, cache1, receipts0[count-1], receipts1[count-1]);
         BranchLookupsEquivalent(v, cache0, cache1, receipts0[count-1], receipts1[count-1]);
       }
     }
 
     lemma BranchReceiptsEquivalent(v: SplinterTreeMachineMod.Variables,
+                                  key: Key,
                                   cache0: CacheIfc.Variables,
                                   cache1: CacheIfc.Variables,
                                   receipts0: seq<BranchReceipt>,
                                   receipts1: seq<BranchReceipt>)
 
 
-      requires BranchLookupEquivalentRequirements(v, cache0, cache1, receipts0, receipts1)
-      requires forall i | 0 <= i < min(|receipts0|, |receipts1|) :: RootEquivalentForBranchReceipt(cache0, cache1, receipts0[i], receipts1[i])
+      requires BranchLookupEquivalentRequirements(v, key, cache0, cache1, receipts0, receipts1)
+      //ensures forall i | 0 <= i < min(|receipts0|, |receipts1|) :: RootEquivalentForBranchReceipt(cache0, cache1, receipts0[i], receipts1[i])
       ensures forall i | 0 <= i < min(|receipts0|, |receipts1|) :: receipts0[i] == receipts1[i]
       ensures |receipts0| == |receipts1|
     {
 
       var count := min(|receipts0|, |receipts1|);
-      BranchReceiptsEquivalentInductive(v, cache0, cache1, receipts0, receipts1, count);
+      BranchReceiptsEquivalentInductive(v, key, cache0, cache1, receipts0, receipts1, count);
     }
 
 }

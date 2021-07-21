@@ -223,6 +223,11 @@ module BranchTreeMod {
       && ValidCUs()
     }
 
+    function Key() : Key
+    {
+      branchPath.key
+    }
+
     predicate ValidCUs()
       requires branchPath.WF()
     {

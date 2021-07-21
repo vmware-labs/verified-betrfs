@@ -127,6 +127,26 @@ module SplinterTreeInterpMod {
     && root0 == root1
   }
 
+  lemma RecieptCUsSubsetOfIReads(v: Variables, cache: CacheIfc.Variables, lookup: TrunkPath, step: TrunkStep, idx: nat)
+    requires lookup.Valid(v, cache)
+    requires step in lookup.steps
+    requires 0 <= idx < |step.branchReceipts|
+    ensures  BranchTreeInterpMod.IReadsLookup(cache, step.branchReceipts[idx].branchPath) <= IReads(v, cache)
+  {
+    assert forall cu | cu in step.CUs() :: cu in lookup.CUs();
+    forall cu | cu in BranchTreeInterpMod.IReadsLookup(cache, step.branchReceipts[idx].branchPath)
+       ensures cu in IReads(v, cache) {
+         BranchTreeInterpMod.reveal_IReadsLookup();
+         reveal_IReads();
+         assert cu in CUsInDisk();
+
+         assert ValidLookupHasCU(v, cache, lookup, cu); // Witness
+
+    }
+    BranchTreeInterpMod.reveal_IReadsLookup();
+    reveal_IReads();
+  }
+
   lemma LookupsEquivalent(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, lookup0 : TrunkPath, lookup1: TrunkPath, count : nat)
     requires lookup0.k == lookup1.k
     requires lookup0.Valid(v, cache0)
@@ -139,22 +159,18 @@ module SplinterTreeInterpMod {
   {
       if 0 < count
       {
+        var nextstep0 := lookup0.steps[count-1];
+        var nextstep1 := lookup1.steps[count-1];
         if (count == 1) {
-          var step0 := lookup0.steps[0];
-          var step1 := lookup1.steps[0];
           // they share roots
-          assert step0.na.id == step1.na.id;
-          assert step0.na == step1.na;
-          BranchTreeInterpMod.RootEquivalentForBranchReceipts(v, cache0, cache1, step0.branchReceipts, step1.branchReceipts);
-          BranchTreeInterpMod.BranchReceiptsEquivalent(v, cache0, cache1, step0.branchReceipts, step1.branchReceipts);
-          assert step0.branchReceipts == step1.branchReceipts; // need to make it believe this
-          assert step0 == step1;
+          assert nextstep0.na.id == nextstep0.na.id;
+          assert nextstep0.na == nextstep0.na;
+
         } else {
           LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, count-1);
           var step0 := lookup0.steps[count-2];
           var step1 := lookup1.steps[count-2];
-          var nextstep0 := lookup0.steps[count-1];
-          var nextstep1 := lookup1.steps[count-1];
+
           var key := lookup0.k;
 
           assert step0 == step1; // the previous steps are the same by induction
@@ -184,6 +200,7 @@ module SplinterTreeInterpMod {
           assert nextstep1.na.cu in IReads(v, cache1) by {
             reveal_IReads();
           }
+        }
 
           assert nextstep0.na.cu == nextstep1.na.cu;
 
@@ -197,11 +214,18 @@ module SplinterTreeInterpMod {
           assert nextstep0.na.id == nextstep1.na.id;
 
           assert nextstep0.na == nextstep1.na;
-          BranchTreeInterpMod.RootEquivalentForBranchReceipts(v, cache0, cache1, nextstep0.branchReceipts, nextstep1.branchReceipts);
-          BranchTreeInterpMod.BranchReceiptsEquivalent(v, cache0, cache1, nextstep0.branchReceipts, nextstep1.branchReceipts);
+          forall i | 0 <= i < |nextstep0.branchReceipts| ensures
+                  DiskViewsEquivalent(cache0.dv, cache1.dv, BranchTreeInterpMod.IReadsLookup(cache0, nextstep0.branchReceipts[i].branchPath))
+          {
+
+             RecieptCUsSubsetOfIReads(v, cache0, lookup0, nextstep0, i);
+             assert BranchTreeInterpMod.IReadsLookup(cache0, nextstep0.branchReceipts[i].branchPath) <= IReads(v, cache0);
+          }
+
+          BranchTreeInterpMod.BranchReceiptsEquivalent(v, lookup0.k, cache0, cache1, nextstep0.branchReceipts, nextstep1.branchReceipts);
           assert nextstep0.branchReceipts == nextstep1.branchReceipts; // need to make it believe this
           assert nextstep0 == nextstep1;
-        }
+
       }
   }
 

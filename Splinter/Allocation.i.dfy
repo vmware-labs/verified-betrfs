@@ -28,7 +28,7 @@ module AllocationMod {
     forall cu :: cu in cus ==> EqualAt(dv0, dv1, cu)
   }
 
-  predicate DiskViewsEquivalentForSet(dv0: DiskView, dv1: DiskView, cus: seq<CU>)
+  predicate DiskViewsEquivalentForSeq(dv0: DiskView, dv1: DiskView, cus: seq<CU>)
   {
     forall cu :: cu in cus ==> EqualAt(dv0, dv1, cu)
   }

@@ -319,6 +319,10 @@ module SplinterTreeMachineMod {
       && |branchReceipts| == |na.node.branches|
     }
 
+    predicate hasSameKey(key : Key) {
+      ( forall i | 0 <= i < |branchReceipts| :: branchReceipts[i].Key() == key )
+    }
+
     function MsgSeqRecurse(count : nat) : (out: seq<Message>)
       requires WF()
       requires count <= |branchReceipts|
@@ -416,6 +420,7 @@ module SplinterTreeMachineMod {
        // the tree. It's easier to demand forall-i-BoundedKey so that we can call Route to get the slots
        // for ContainsRange.
        && (forall i | 0 <= i < |steps|-1 :: BoundedKey(steps[i].na.node.pivots, k))
+       && (forall i | 0 <= i < |steps| :: steps[i].hasSameKey(k))
      }
 
      predicate LinkedAt(childIdx : nat)
