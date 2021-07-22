@@ -259,7 +259,12 @@ module CircularTable {
   //     GetSubTable(table, range.RightShrink1()) + [table[end]]
   // }
 
-  function GetKnownSubTable(table: FixedTable, range: Range): seq<Entry>
+  predicate RangeEquivalent(t1: FixedTable, t2: FixedTable, range: Range)
+  {
+    forall i: Index :: range.Contains(i) ==> t1[i] == t2[i]
+  }
+
+  function UnwrapKnownRange(table: FixedTable, range: Range): seq<Entry>
     requires forall i: Index :: range.Contains(i) ==> table[i].Some?
     decreases WrappedDistance(range.start, range.end)
   {
@@ -267,10 +272,24 @@ module CircularTable {
     if start == end then
       []
     else
-      GetKnownSubTable(table, range.RightShrink1()) + [table[PrevIndex(end)].value]
+      UnwrapKnownRange(table, range.RightShrink1()) + [table[PrevIndex(end)].value]
   }
 
-  // function GetKnownSubTable(table: FixedTable, range: Range): seq<Entry>
+  lemma RangeEquivalentUnwrap(t1: FixedTable, t2: FixedTable, range: Range)
+    requires RangeEquivalent(t1, t2, range)
+    requires forall i: Index :: range.Contains(i) ==> t1[i].Some?
+    ensures UnwrapKnownRange(t1, range) == UnwrapKnownRange(t2, range)
+    decreases WrappedDistance(range.start, range.end)
+  {
+    var Partial(start, end) := range;
+    if start != end {
+      assert t1[PrevIndex(end)] == t2[PrevIndex(end)];
+      var range' := range.RightShrink1();
+      RangeEquivalentUnwrap(t1, t2, range');
+    } 
+  }
+
+  // function UnwrapSubTable(table: FixedTable, range: Range): seq<Entry>
   //   requires forall i: Index :: range.Contains(i) ==> table[i].Some?
   //   decreases WrappedDistance(range.start, range.end)
   // {
@@ -278,7 +297,7 @@ module CircularTable {
   //   if start == end then
   //     []
   //   else
-  //     [table[start].value] + GetKnownSubTable(table, range.LeftShrink1())
+  //     [table[start].value] + UnwrapSubTable(table, range.LeftShrink1())
   // }
 
 //////////////////////////////////////////////////////////////////////////////

@@ -204,50 +204,62 @@ module Impl refines VerificationObligation {
     //     ==> (sv.table[i].Some? && 
     // }
 
-    predicate ProbePartialInv(
-      entries: seq<Entry>,
-      probe_key: Key,
-      cur: Index,
-      sv: SSM.Variables)
-    {
-      && Inv()
-      && sv.Variables?
-      && ValidPartialProbeRange(sv.table, probe_key, cur)
-      && var p_range := Partial(hash(probe_key), cur);
-      && (forall i: Index ::
-        (p_range.Contains(i) <==> sv.table[i].Some?))
-      && (forall i: Index ::
-        p_range.Contains(i) <==> HasHandle(i))
-      // && GetKnownSubTable(sv.table, p_range) == entries
-    }
-
     linear inout method doProbe(probe_key: Key, glinear in_sv: SSM.Variables)
-      returns (found: bool, glinear out_sv: SSM.Variables)
+      returns (
+        entries: seq<Entry>,
+        found: bool,
+        ghost p_range: Range,
+        glinear out_sv: SSM.Variables)
+  
       decreases *
 
       requires old_self.Inv()
       requires forall i: Index :: !old_self.HasHandle(i)
       requires in_sv.Variables? && in_sv.table == UnitTable()
 
-      // ensures 
+      ensures self.Inv()
+      ensures out_sv.Variables?
+      ensures forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?)
+      ensures forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i))
+      ensures UnwrapKnownRange(out_sv.table, p_range) == entries
+      ensures var actual_end := PrevIndex(p_range.end);
+        && found ==> SlotFullWithKey(out_sv.table[actual_end], probe_key)
+        && !found ==> ValidProbeRange(out_sv.table, probe_key, actual_end)
     {
-      var slot_idx := hash(probe_key);
-      found := false;
+      var probe_hash := hash(probe_key);
+      var slot_idx := probe_hash;
 
-      var entries := [];
+      entries := [];
+      found := false;
+      p_range := Partial(probe_hash, slot_idx);
       out_sv := in_sv;
 
       while true
-        invariant
-          self.ProbePartialInv(entries, probe_key, slot_idx, out_sv)
-        // invariant
-        //   found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key)
+        invariant self.Inv()
+        invariant out_sv.Variables?
+        invariant ValidPartialProbeRange(out_sv.table, probe_key, slot_idx)
+        invariant p_range == Partial(probe_hash, slot_idx)
+        invariant (forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?))
+        invariant (forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i)))
+        invariant UnwrapKnownRange(out_sv.table, p_range) == entries
         decreases *
       {
         var entry;
+        var curr_idx := slot_idx;
 
+        ghost var prev_table := out_sv.table;
         entry, out_sv := inout self.acquireRow(slot_idx, out_sv);
+    
         entries := entries + [entry];
+        slot_idx := NextIndex(slot_idx);
+
+        RangeEquivalentUnwrap(prev_table, out_sv.table, p_range);
+        p_range := Partial(probe_hash, slot_idx);
+
+        if slot_idx == probe_hash {
+          // might be tricky but should be provable?
+          assume false;
+        }
 
         match entry {
           case Empty => {
@@ -258,21 +270,12 @@ module Impl refines VerificationObligation {
               found := true;
               break;
             }
-            if !entry.ShouldSkip(slot_idx, probe_key) {
+            if !entry.ShouldSkip(curr_idx, probe_key) {
               break;
-            }
-
-            slot_idx := NextIndex(slot_idx);
-
-            if slot_idx == hash(probe_key) {
-              assume false;
             }
           }
         }
       }
-
-      assert found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key);
-      // assert !found ==> ValidProbeRange(out_sv.table, probe_key, slot_idx);
     }
 
 
