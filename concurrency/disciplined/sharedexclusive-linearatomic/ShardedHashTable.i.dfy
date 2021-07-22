@@ -219,8 +219,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && ticket in v.tickets
     && ticket.input.QueryInput?
  
-    && SlotFull(v.table[end])
-    && v.table[end].value.key == ticket.input.key
+    && SlotFullWithKey(v.table[end], ticket.input.key)
   }
 
   function QueryFound(v: Variables, step: Step): Variables

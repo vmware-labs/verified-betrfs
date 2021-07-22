@@ -69,28 +69,28 @@ module CircularRange {
         (Contains(i) ==> other.Contains(i))
     }
 
-    function LeftShift1(): Range
+    function method LeftShift1(): Range
     {
       Partial(PrevIndex(start), PrevIndex(end))
     }
 
-    function RightShift1(): Range
+    function method RightShift1(): Range
     {
       Partial(NextIndex(start), NextIndex(end))
     }
 
-    function RightExtend1(): Range
+    function method RightExtend1(): Range
       // requires start != NextIndex(end)
     {
       Partial(start, NextIndex(end))
     }
 
-    function LeftShrink1(): Range
+    function method LeftShrink1(): Range
     {
       Partial(NextIndex(start), end)
     }
 
-    function RightShrink1(): Range
+    function method RightShrink1(): Range
     {
       Partial(start, PrevIndex(end))
     }

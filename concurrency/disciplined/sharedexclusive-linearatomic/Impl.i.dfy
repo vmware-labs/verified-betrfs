@@ -18,6 +18,7 @@ module Impl refines VerificationObligation {
   import opened CircularRange
   import opened GhostLinearSequence_s
   import opened GhostLinearSequence_i
+  import opened Sequences
 
   // function method glinear_seq_set<A>(s1: seq<A>, i: nat, glinear a: A): (s2: seq<A>) 
 
@@ -69,6 +70,12 @@ module Impl refines VerificationObligation {
       requires Inv()
     {
       index in handles
+    }
+
+    predicate HasNoHandle()
+      requires Inv()
+    {
+      forall i: Index :: !HasHandle(i)
     }
 
     linear inout method acquireRow(index: Index, glinear in_sv: SSM.Variables)
@@ -208,7 +215,7 @@ module Impl refines VerificationObligation {
       returns (
         entries: seq<Entry>,
         found: bool,
-        ghost p_range: Range,
+        p_range: Range,
         glinear out_sv: SSM.Variables)
   
       decreases *
@@ -218,13 +225,17 @@ module Impl refines VerificationObligation {
       requires in_sv.Variables? && in_sv.table == UnitTable()
 
       ensures self.Inv()
+      ensures forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i))
+
       ensures out_sv.Variables?
       ensures forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?)
-      ensures forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i))
       ensures UnwrapKnownRange(out_sv.table, p_range) == entries
       ensures var actual_end := PrevIndex(p_range.end);
-        && found ==> SlotFullWithKey(out_sv.table[actual_end], probe_key)
-        && !found ==> ValidProbeRange(out_sv.table, probe_key, actual_end)
+        && (found ==> SlotFullWithKey(out_sv.table[actual_end], probe_key))
+        && (!found ==> ValidProbeRange(out_sv.table, probe_key, actual_end))
+      ensures out_sv.insert_capacity == in_sv.insert_capacity
+      ensures out_sv.tickets == in_sv.tickets
+      ensures out_sv.stubs == in_sv.stubs
     {
       var probe_hash := hash(probe_key);
       var slot_idx := probe_hash;
@@ -236,12 +247,16 @@ module Impl refines VerificationObligation {
 
       while true
         invariant self.Inv()
+        invariant (forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i)))
         invariant out_sv.Variables?
         invariant ValidPartialProbeRange(out_sv.table, probe_key, slot_idx)
         invariant p_range == Partial(probe_hash, slot_idx)
         invariant (forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?))
-        invariant (forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i)))
         invariant UnwrapKnownRange(out_sv.table, p_range) == entries
+        invariant out_sv.insert_capacity == in_sv.insert_capacity
+        invariant out_sv.tickets == in_sv.tickets
+        invariant out_sv.stubs == in_sv.stubs
+
         decreases *
       {
         var entry;
@@ -278,61 +293,88 @@ module Impl refines VerificationObligation {
       }
     }
 
+    linear inout method releaseRows(entries: seq<Entry>, range: Range, glinear in_sv: SSM.Variables)
+      returns (glinear out_sv: SSM.Variables)
 
-    // linear inout method doQuery(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
-    //   returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+      requires old_self.Inv()
+      requires in_sv.Variables?
+      requires (forall i: Index :: (range.Contains(i) <==> old_self.HasHandle(i)))
+      requires forall i: Index :: (range.Contains(i) <==> in_sv.table[i].Some?)
+      requires UnwrapKnownRange(in_sv.table, range) == entries
 
-    //   decreases *
+      ensures self.Inv()
+      ensures self.HasNoHandle();
 
-    //   requires old_self.Inv()
-    //   requires input.QueryInput?
-    //   requires IsInputResource(in_sv, rid, input)
-    //   // ensures out_sv == SSM.output_stub(rid, output)
-    // {
-    //   var query_ticket := Ticket(rid, input);
-    //   var query_key, hash_idx := input.key, hash(input.key);
-    //   var slot_idx := hash_idx;
-    //   ghost var probe_range := Partial(hash_idx, hash_idx);
+      ensures out_sv.Variables?
+      ensures out_sv.table == UnitTable();
+      ensures out_sv.insert_capacity == in_sv.insert_capacity
+      ensures out_sv.tickets == in_sv.tickets
+      ensures out_sv.stubs == in_sv.stubs
+    {
+      var range := range;
+      var entries := entries;
+      var index := |entries|;
+      out_sv := in_sv;
 
-    //   var entry; glinear var r;
-    //   entry, r := inout self.acquireRow(hash_idx, in_sv);
+      while range.start != range.end
+        invariant self.Inv()
+        invariant (forall i: Index :: (range.Contains(i) <==> self.HasHandle(i)))
+        invariant out_sv.Variables?
+        invariant (forall i: Index :: (range.Contains(i) <==> out_sv.table[i].Some?))
+        invariant 0 <= index <= |entries| 
+        invariant UnwrapKnownRange(out_sv.table, range) == entries[..index]
+        invariant out_sv.insert_capacity == in_sv.insert_capacity
+        invariant out_sv.tickets == in_sv.tickets
+        invariant out_sv.stubs == in_sv.stubs
+        decreases WrappedDistance(range.start, range.end)
+      {
+        var slot_idx := PrevIndex(range.end);
+        ghost var prev_table := out_sv.table;
 
-    //   var entries := [entry];
+        out_sv := inout self.releaseRow(slot_idx, entries[index-1], out_sv);
+        range := range.RightShrink1();
+        index := index - 1;
 
-    //   while true
-    //     invariant Inv()
-    //     decreases *
-    //   {
-    //     match entry {
-    //       case Empty => {
-    //         output := MapIfc.QueryOutput(NotFound);
-    //         step := QueryNotFoundStep(slot_idx);
-    //       }
-    //       case Full(entry_key, value) => {
-    //         if entry_key == key {
-    //           step := QueryFoundStep(slot_idx);
-    //           output := MapIfc.QueryOutput(Found(value));
-    //         } else {
-    //           var skip := entry.ShouldSkip(slot_idx, query_key);
-    //           if !skip {
-    //             output := MapIfc.QueryOutput(NotFound);
-    //             step := QueryNotFoundStep(slot_idx);
-    //           }
-    //         }
-    //       }
-    //     }
+        RangeEquivalentUnwrap(prev_table, out_sv.table, range);
+      }
 
-    //     var next_slot_idx := NextIndex(slot_idx);
-    //     entries := entries + [entry];
+      assert self.HasNoHandle();
+      assert out_sv.table == UnitTable();
+    }
 
-    //     entry, r := inout self.acquireRow(next_slot_idx, r);
-    //   }
-      
-    //   // // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
-    //   // r := easy_transform_step(r, step);
-    //   // out_sv := releaseRow(v, slot_idx, entry, handle, r);
-    // }
+    linear inout method doQuery(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
+      returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
 
+      decreases *
+      requires old_self.Inv()
+      requires old_self.HasNoHandle()
+      requires input.QueryInput?
+      requires IsInputResource(in_sv, rid, input)
+      ensures out_sv == SSM.output_stub(rid, output)
+    {
+      var query_ticket := Ticket(rid, input);
+      var query_key := input.key;
+
+      var entries, found, p_range;
+
+      entries, found, p_range, out_sv := inout self.doProbe(query_key, in_sv);
+      var actual_end := PrevIndex(p_range.end);
+
+      if found {
+        var step := QueryFoundStep(query_ticket, actual_end);
+        assert QueryFoundEnable(out_sv, step);
+        out_sv := easy_transform_step(out_sv, step);
+        output := MapIfc.QueryOutput(Found(entries[ |entries| - 1 ].value));
+      } else {
+        var step := QueryNotFoundStep(query_ticket, actual_end);
+        assert QueryNotFoundEnable(out_sv, step);
+        out_sv := easy_transform_step(out_sv, step);
+        output := MapIfc.QueryOutput(NotFound);
+      }
+
+      out_sv := inout self.releaseRows(entries, p_range, out_sv);
+      assert out_sv.stubs == multiset { Stub(rid, output) };
+    }
   }
 
   predicate Inv(v: Variables)
