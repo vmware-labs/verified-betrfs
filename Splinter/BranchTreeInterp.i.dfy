@@ -17,7 +17,7 @@ module BranchTreeInterpMod {
   import opened AllocationMod
   import opened MsgHistoryMod
   import IndirectionTableMod
-  import opened BranchTreeMod
+  import opened BranchTreeMod`Internal
   import Nat_Order
   import opened Mathematics
 
