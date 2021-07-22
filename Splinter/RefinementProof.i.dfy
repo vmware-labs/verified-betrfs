@@ -101,7 +101,7 @@ module Proof refines ProofObligations {
     JournalInterpMod.IM(v'.program.journal, v'.program.cache, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree))
   {
 
-    // needs Some framing argument around DiskViewsEquivalentForSet
+    // needs Some framing argument around DiskViewsEquivalentForSeq
     // TODO: check this
     SplinterTreeInvariantMod.StableFraming(v.program.betree, v.program.cache, v'.program.cache, v.program.stableSuperblock.betree);
 

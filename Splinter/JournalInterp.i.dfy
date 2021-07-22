@@ -22,25 +22,10 @@ module JournalInterpMod {
   import opened SequenceSetsMod
   import CacheLemmasMod
 
-  function FreshestMarshalledCU(v: Variables) : Option<CU>
-    requires v.WF()
-  {
-    if v.marshalledLSN == v.boundaryLSN
-    then None
-    else Some(v.lsnToCU[v.marshalledLSN-1])
-  }
-
-  // This is the superblock that v would use if it all the marshalled stuff were clean
-  function CurrentSuperblock(v: Variables) : Superblock
-    requires v.WF()
-  {
-    Superblock(FreshestMarshalledCU(v), v.boundaryLSN)
-  }
-
   predicate Invariant(v: Variables, cache: CacheIfc.Variables)
   {
     && v.WF()
-    && var optChain := ChainFrom(cache.dv, CurrentSuperblock(v)).chain;
+    && var optChain := ChainFrom(cache.dv, v.CurrentSuperblock()).chain;
     && optChain.Some?
     && ValidJournalChain(cache.dv, optChain.value)
     // Superblocks says chain ends where variables says it should
@@ -61,7 +46,7 @@ module JournalInterpMod {
     ensures !result.IsEmpty() ==> v.boundaryLSN == result.seqStart
   {
     // chain has all the marshalled messages
-    var chain := ChainFrom(cache.dv, CurrentSuperblock(v)).chain.value;
+    var chain := ChainFrom(cache.dv, v.CurrentSuperblock()).chain.value;
 
     // tail has all the unmarshalled messages
     var tailMsgs := TailToMsgSeq(v);
@@ -168,28 +153,28 @@ module JournalInterpMod {
 
   // TODO(jonh): Try porting this from recursive style to Travis' suggested
   // repr-state style (see ReprsAsSets.i.dfy).
-  function IReads(v: Variables, cache:CacheIfc.Variables, sb: Superblock) : seq<CU>
+  function IReads(cache:CacheIfc.Variables, sb: Superblock) : seq<CU>
   {
     ChainFrom(cache.dv, sb).readCUs
   }
 
   lemma DiskViewsEquivalentAfterRemove(cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, cus: seq<CU>, removedCU: CU, cusr: seq<CU>)
-    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, cus)
+    requires DiskViewsEquivalentForSeq(cache0.dv, cache1.dv, cus)
     requires SequenceSubset(cusr, cus)
-    ensures DiskViewsEquivalentForSet(MapRemove1(cache0.dv, removedCU), MapRemove1(cache1.dv, removedCU), cusr)
+    ensures DiskViewsEquivalentForSeq(MapRemove1(cache0.dv, removedCU), MapRemove1(cache1.dv, removedCU), cusr)
   {
   }
 
   // TODO(jonh): delete chain parameter.
-  lemma FrameOneChain(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb: Superblock)
-    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
-    ensures ChainFrom(cache0.dv, sb).chain == ChainFrom(cache1.dv, sb).chain
+  lemma FrameOneChain(cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb: Superblock)
+    requires DiskViewsEquivalentForSeq(cache0.dv, cache1.dv, IReads(cache0, sb))
+    ensures ChainFrom(cache0.dv, sb) == ChainFrom(cache1.dv, sb)
     decreases |cache0.dv|
   {
     if sb.freshestCU.Some? {
-      assert sb.freshestCU.value in IReads(v, cache1, sb); // trigger
-      assert sb.freshestCU.value in IReads(v, cache0, sb); // trigger
-      assert IReads(v, cache0, sb)[0] == sb.freshestCU.value; // trigger
+      assert sb.freshestCU.value in IReads(cache1, sb); // trigger
+      assert sb.freshestCU.value in IReads(cache0, sb); // trigger
+      assert IReads(cache0, sb)[0] == sb.freshestCU.value; // trigger
       if sb.freshestCU.value in cache0.dv {
         var firstRec := parse(cache0.dv[sb.freshestCU.value]);
         if firstRec.Some? { // Recurse to follow chain
@@ -201,16 +186,16 @@ module JournalInterpMod {
             var cache1r := CacheIfc.Variables(MapRemove1(cache1.dv, sb.freshestCU.value));
             var priorCU := firstRec.value.priorCU;
             var priorSB := firstRec.value.priorSB(sb);
-            var cus := IReads(v, cache0, sb);
+            var cus := IReads(cache0, sb);
             var cusr := if priorCU.Some?
-              then IReads(v, cache0r, priorSB)
+              then IReads(cache0r, priorSB)
               else [];
 
             forall i | 0<=i<|cusr| ensures cusr[i] in cus {
               assert cus[i+1] == cusr[i]; // witness to SequenceSubset(ausr, aus)
             }
             DiskViewsEquivalentAfterRemove(cache0, cache1, cus, sb.freshestCU.value, cusr);
-            FrameOneChain(v, cache0r, cache1r, priorSB);
+            FrameOneChain(cache0r, cache1r, priorSB);
           }
         }
       }
@@ -219,7 +204,7 @@ module JournalInterpMod {
 
   // Add comment about what this supposed to do the TODOS here
   lemma InternalStepLemma(v: Variables, cache: CacheIfc.Variables, v': Variables, cache': CacheIfc.Variables,  sb:Superblock, base: InterpMod.Interp, cacheOps: CacheIfc.Ops, sk: Skolem)
-    requires DiskViewsEquivalentForSet(cache.dv, cache'.dv, IReads(v, cache, sb))
+    requires DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb))
     requires v.WF()
     requires base.seqEnd == v.boundaryLSN
     requires Invariant(v, cache)
@@ -238,9 +223,9 @@ module JournalInterpMod {
     {
       match sk {
         case AdvanceMarshalledStep(newCU) => {
-          assert ChainFrom(cache'.dv, CurrentSuperblock(v')).chain.Some?;
-          var sb := CurrentSuperblock(v);
-          var sb' := CurrentSuperblock(v');
+          assert ChainFrom(cache'.dv, v'.CurrentSuperblock()).chain.Some?;
+          var sb := v.CurrentSuperblock();
+          var sb' := v'.CurrentSuperblock();
           var orig_chain_msgseq := ChainFrom(cache.dv, sb).chain.value.interp;
           var orig_tail_msgseq := TailToMsgSeq(v);
           var new_chain_msgseq := ChainFrom(cache'.dv, sb').chain.value.interp;
@@ -250,38 +235,66 @@ module JournalInterpMod {
           var jr := JournalRecord(TailToMsgSeq(v), priorCU);
           var sb_old := jr.priorSB(sb');
           assert sb_old == sb;
-          calc {
-            ChainFrom(cache'.dv, sb').chain.value.recs;
-              {
-                assert sb'.freshestCU.Some?;
-                assert sb'.freshestCU.value in cache'.dv;
-                assert parse(cache'.dv[sb'.freshestCU.value]).Some?;
-                assert v'.marshalledLSN == v.unmarshalledLSN();
-                assert v'.lsnToCU[v'.marshalledLSN - 1] == newCU; // CorrectMapping isn't defined
-                assert newCU == FreshestMarshalledCU(v').value;
-                assert sb'.freshestCU.value == newCU;
-                assert jr == parse(cache'.dv[sb'.freshestCU.value]).value;  // CorrectMapping isn't defined.
-                assert !(jr.messageSeq.seqEnd <= sb'.boundaryLSN);
-                assert !(jr.messageSeq.seqStart <= sb.boundaryLSN);
-                assert !(jr.priorCU.None?);
-              }
-            [jr] + ChainFrom(MapRemove1(cache'.dv, sb'.freshestCU.value), jr.priorSB(sb')).chain.value.recs;
-            [jr] + ChainFrom(MapRemove1(cache'.dv, sb'.freshestCU.value), sb).chain.value.recs;
-            [jr] + ChainFrom(cache.dv, sb).chain.value.recs;
-              // Framing argument here
-            [jr] + ChainFrom(cache.dv, sb).chain.value.recs;
+
+          assert newCU !in IReads(cache, sb);
+          assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb));
+          FrameOneChain(cache, cache', sb);
+//          assert ChainFrom(cache.dv, sb).chain == ChainFrom(cache'.dv, sb).chain; // ensures
+          assert ChainFrom(cache'.dv, sb) == ChainFrom(cache.dv, sb);
+          if ChainFrom(cache'.dv, sb).chain.None? {
+            assert ChainFrom(cache'.dv, sb').chain.None?;
+          } else {
+	          calc {
+	            ChainFrom(cache'.dv, sb').chain.value.recs;
+	              {
+	                assert sb'.freshestCU.Some?;
+	                assert sb'.freshestCU.value in cache'.dv;
+	                assert parse(cache'.dv[sb'.freshestCU.value]).Some?;
+	                assert v'.marshalledLSN == v.unmarshalledLSN();
+	
+	                var cr := ChainFrom(cache'.dv, sb');
+	                assert cr.chain.Some?;
+	                var marshalledLsn := v'.marshalledLSN - 1;
+	                var idx := cr.chain.value.locate[marshalledLsn];
+	
+	                calc {
+	                  v'.FreshestMarshalledCU();
+	                  Some(v'.lsnToCU[v'.marshalledLSN-1]);
+	                  Some(CUForChainIdx(cr.chain.value, idx));
+	                  Some(newCU);
+	                }
+	                assert sb'.freshestCU == Some(newCU);
+	                assert sb'.boundaryLSN == v.boundaryLSN;
+	                assert sb' == Superblock(Some(newCU), v.boundaryLSN);
+	                assert MappingFor(cache, sb') == v'.lsnToCU;
+	                assert v'.lsnToCU[marshalledLsn] == CUForChainIdx(cr.chain.value, idx);
+	                assert v'.lsnToCU[marshalledLsn] == newCU;
+	                assert v'.lsnToCU[v'.marshalledLSN - 1] == newCU; // CorrectMapping isn't defined
+	                assert newCU == v'.FreshestMarshalledCU().value;
+	                assert sb'.freshestCU.value == newCU;
+	                assert jr == parse(cache'.dv[sb'.freshestCU.value]).value;  // CorrectMapping isn't defined.
+	                assert !(jr.messageSeq.seqEnd <= sb'.boundaryLSN);
+	                assert !(jr.messageSeq.seqStart <= sb.boundaryLSN);
+	                assert !(jr.priorCU.None?);
+	              }
+	            [jr] + ChainFrom(MapRemove1(cache'.dv, sb'.freshestCU.value), jr.priorSB(sb')).chain.value.recs;
+	            [jr] + ChainFrom(MapRemove1(cache'.dv, sb'.freshestCU.value), sb).chain.value.recs;
+	            [jr] + ChainFrom(cache.dv, sb).chain.value.recs;
+	              // Framing argument here
+	            [jr] + ChainFrom(cache.dv, sb).chain.value.recs;
+	          }
+	          calc {
+	            ChainAsMsgSeq(v', cache');
+	            ChainFrom(cache'.dv, sb').chain.value.interp.Concat(TailToMsgSeq(v'));
+	            new_chain_msgseq.Concat(new_tail_msgseq);
+	            new_chain_msgseq;
+	            orig_chain_msgseq.Concat(orig_tail_msgseq);
+	            ChainFrom(cache.dv, sb).chain.value.interp.Concat(TailToMsgSeq(v));
+	            ChainAsMsgSeq(v, cache);
+	          }
+	          assume false; // this is the slightly harder case, because the chain actually changes.
+	          assert ChainAsMsgSeq(v, cache) == ChainAsMsgSeq(v', cache');
           }
-          calc {
-            ChainAsMsgSeq(v', cache');
-            ChainFrom(cache'.dv, sb').chain.value.interp.Concat(TailToMsgSeq(v'));
-            new_chain_msgseq.Concat(new_tail_msgseq);
-            new_chain_msgseq;
-            orig_chain_msgseq.Concat(orig_tail_msgseq);
-            ChainFrom(cache.dv, sb).chain.value.interp.Concat(TailToMsgSeq(v));
-            ChainAsMsgSeq(v, cache);
-          }
-          assume false; // this is the slightly harder case, because the chain actually changes.
-          assert ChainAsMsgSeq(v, cache) == ChainAsMsgSeq(v', cache');
         }
         case AdvanceCleanStep(newClean) => {
           assert cacheOps == [];
@@ -295,7 +308,7 @@ module JournalInterpMod {
   }
 
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, base: InterpMod.Interp)
-    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, CurrentSuperblock(v)))
+    requires DiskViewsEquivalentForSeq(cache0.dv, cache1.dv, IReads(cache0, v.CurrentSuperblock()))
     requires v.WF()
     requires base.seqEnd == v.boundaryLSN
 
@@ -307,7 +320,7 @@ module JournalInterpMod {
     ensures IM(v, cache0, base) == IM(v, cache1, base)
   {
 //    assume false; // there's a timeout here that seems to point at opaque WFChainInner. That's weird.
-    FrameOneChain(v, cache0, cache1, CurrentSuperblock(v));
+    FrameOneChain(cache0, cache1, v.CurrentSuperblock());
     // This works --- I'm suspicious -- Sowmya
     calc {
       IM(v, cache0, base);

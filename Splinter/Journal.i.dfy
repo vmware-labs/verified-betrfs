@@ -114,6 +114,21 @@ module JournalMachineMod {
       && boundaryLSN <= persistentLSN <= cleanLSN <= marshalledLSN
       && (forall lsn :: boundaryLSN <= lsn < marshalledLSN <==> lsn in lsnToCU)
     }
+
+    function FreshestMarshalledCU() : Option<CU>
+      requires WF()
+    {
+      if marshalledLSN == boundaryLSN
+      then None
+      else Some(lsnToCU[marshalledLSN-1])
+    }
+
+    // This is the superblock that v would use if it all the marshalled stuff were clean
+    function CurrentSuperblock() : Superblock
+      requires WF()
+    {
+      Superblock(FreshestMarshalledCU(), boundaryLSN)
+    }
   }
 
   datatype InitSkolems = InitSkolems(rawJournalRec: UninterpretedDiskPage)
@@ -199,6 +214,7 @@ module JournalMachineMod {
     // batch allocations so it can avoid needing to rewrite the marshaled allocation before
     // commiting a fresh superblock (on sync). Thus "unused" may be computed as "reserved
     // but known not to be in use in the current JournalChain".
+    && newCU !in ChainFrom(cache.dv, s.CurrentSuperblock()).readCUs
 
     // Marshal and write the current record out into the cache. (This doesn't issue
     // a disk write, it just dirties a page.)

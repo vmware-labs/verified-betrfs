@@ -115,7 +115,7 @@ module ProgramInterpMod {
   }
 
   lemma Framing(v0: Variables, v1: Variables)
-    requires DiskViewsEquivalentForSet(v0.cache.dv, v1.cache.dv, IReads(v0))
+    requires DiskViewsEquivalentForSeq(v0.cache.dv, v1.cache.dv, IReads(v0))
     requires v0.betree == v1.betree
     requires v0.journal == v1.journal
     ensures IM(v0) == IM(v1)
