@@ -155,7 +155,8 @@ module SplinterTreeInterpMod {
         if (count == 1) {
           // they share roots
           assert nextstep0.na.cu == nextstep1.na.cu;
-          //assert nextstep0.na == nextstep1.na;
+          //
+assert nextstep0.na == nextstep1.na;
 
         } else {
           LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, count-1);
@@ -253,7 +254,6 @@ module SplinterTreeInterpMod {
       }
 
     }
-    assume false;
     assert IM(cache0, v) == IM(cache1, v);
   }
 
