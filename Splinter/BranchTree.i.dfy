@@ -54,8 +54,11 @@ module BranchTreeMod {
 
   // messages that are Inserted into the branch tree are already merged upon insert, that's Why
   // kvmap has to only store one merged update message per Key
-  datatype BranchNode = | Leaf(kvmap: map<Key, Message>)
-                        | Index(pivots : PivotTable, children: seq<CU>)
+  datatype BranchNode = | Leaf(cu: CU,
+                               kvmap: map<Key, Message>)
+                        | Index(cu: CU,
+                                pivots : PivotTable,
+                                children: seq<CU>)
   {
 
     predicate WFIndexNode()
@@ -68,6 +71,15 @@ module BranchTreeMod {
     predicate WF()
     {
       this.Index? ==> WFIndexNode()
+    }
+
+    predicate Valid(cache : CacheIfc.Variables)
+    {
+      && var unparsedPage := CacheIfc.ReadValue(cache, cu);
+      && unparsedPage.Some?
+      && var node := ParseBranchNode(unparsedPage.value);
+      && node.Some?
+      && this == node.value
     }
 
     function nextStep(k : Key) : CU
@@ -121,13 +133,14 @@ module BranchTreeMod {
   {
     predicate WF() {
       && node.WF()
+      && node.cu == cu
       && cu in CUsInDisk()
     }
 
     predicate Valid(cache: CacheIfc.Variables) {
       && WF()
       // the cu corresponds to this node
-      && CUToBranchNode(cu, cache) == Some(node)
+      && node.Valid(cache)
     }
 
 
@@ -147,21 +160,21 @@ module BranchTreeMod {
     }
 
     predicate LinkedAt(childIdx : nat)
-      requires 0 < childIdx <= |steps|-1
+      requires 0 < childIdx < |steps|
       requires WF()
     {
       && var parentNode := steps[childIdx-1].node;
       && var childStep := steps[childIdx];
       && var slot := Route(parentNode.pivots, key);
       // When coverting to clone edges use, ParentKeysInChildRange in TranslationLib
-      && ContainsRange(childStep.node.pivots, parentNode.pivots[slot], parentNode.pivots[slot+1])
+      && (childStep.node.Index? ==> ContainsRange(childStep.node.pivots, parentNode.pivots[slot], parentNode.pivots[slot+1]))
       && childStep.cu == parentNode.children[slot]
     }
 
     predicate {:opaque} Linked()
       requires WF()
     {
-      && (forall i | 0 < i < |steps|-1 :: LinkedAt(i))
+      && (forall i | 0 < i < |steps| :: LinkedAt(i))
     }
 
     predicate Valid(cache: CacheIfc.Variables) {
@@ -232,6 +245,11 @@ module BranchTreeMod {
       && 0 < |branchPath.steps|
       && (branchTree.Root() == branchPath.steps[0].cu)
       && ValidCUs()
+    }
+
+    function Root() : CU
+    {
+      branchTree.Root()
     }
 
     function Key() : Key

@@ -67,22 +67,22 @@ module BranchTreeInterpMod {
     && CUToBranchNode(step0.cu, cache0) == CUToBranchNode(step1.cu, cache1)
   }
 
-  lemma BranchLookupsEquivalentInductive(v: SplinterTreeMachineMod.Variables,
-                                cache0: CacheIfc.Variables,
+  lemma BranchLookupsEquivalentInductive(cache0: CacheIfc.Variables,
                                 cache1: CacheIfc.Variables,
                                 lookup0: BranchPath,
                                 lookup1: BranchPath,
                                 count : nat)
-    requires lookup0.key == lookup1.key
     requires lookup0.Valid(cache0)
     requires lookup1.Valid(cache1)
+    requires lookup0.key == lookup1.key
+    requires lookup0.Root() == lookup1.Root()
     requires 0 < count
     requires count <= |lookup0.steps|
     requires count <= |lookup1.steps|
 
     requires DiskViewsEquivalent(cache0.dv, cache1.dv, IReadsLookup(cache0, lookup0))
     requires DiskViewsEquivalent(cache1.dv, cache1.dv, IReadsLookup(cache1, lookup1))
-    ensures forall i :: ((0 <= i < count) ==> StepsEquivalent(cache0, cache1, lookup0.steps[i], lookup1.steps[i]))
+    ensures forall i :: ((0 <= i < count) ==>  lookup0.steps[i] == lookup1.steps[i])
     {
       var key := lookup0.key;
       if 0 < count {
@@ -90,7 +90,7 @@ module BranchTreeInterpMod {
         var nextStep0 := lookup0.steps[count-1];
         var nextStep1 := lookup1.steps[count-1];
         if 1 < count {
-          BranchLookupsEquivalentInductive(v, cache0, cache1, lookup0, lookup1, count - 1);
+          BranchLookupsEquivalentInductive(cache0, cache1, lookup0, lookup1, count - 1);
           var step0 :=  lookup0.steps[count-2];
           var step1 :=  lookup1.steps[count-2];
 
@@ -98,15 +98,33 @@ module BranchTreeInterpMod {
           assert step0.cu == step1.cu; // All we need to show is that the CUs are the same
           assert CUToBranchNode(step0.cu, cache0) == CUToBranchNode(step1.cu, cache1);
 
-          assert lookup0.LinkedAt(count-1);
-          assert lookup1.LinkedAt(count-1);
+          assert lookup0.LinkedAt(count-1) by {
+            lookup0.reveal_Linked();
+          }
+
+          assert lookup1.LinkedAt(count-1) by {
+            lookup1.reveal_Linked();
+          }
 
           assert step0.node.nextStep(key) == nextStep0.cu;
           assert step1.node.nextStep(key) == nextStep1.cu;
+
+          assert nextStep0.cu == nextStep1.cu;
       }
+        // we need to show that nextStep cu is in IReads
+        reveal_IReadsLookup();
+        assert nextStep0.cu in CUsInDisk();  // try to trigger set comprehension
+        assert nextStep0.cu in lookup0.CUs();
+        assert nextStep0.cu in IReadsLookup(cache0, lookup0);
+        assert nextStep1.cu in IReadsLookup(cache1, lookup1);
+
+        assert nextStep0.cu == nextStep1.cu;
+        assert nextStep0.node.Valid(cache0);
+        assert CUToBranchNode(nextStep0.cu, cache0) == CUToBranchNode(nextStep1.cu, cache1);
+        assert nextStep0.node == nextStep1.node;
 
         // route to next node
-        assert StepsEquivalent(cache0, cache1, nextStep0, nextStep1);
+        assert nextStep0 == nextStep1;
       }
   }
 
@@ -117,6 +135,10 @@ module BranchTreeInterpMod {
 
         //requires ValidLookupForBranchEquivalent(cache0, cache1, receipt0, receipt1)
         requires DiskViewsEquivalent(cache0.dv, cache1.dv, IReadsLookup(cache0, receipt0.branchPath))
+        requires receipt0.Key() == receipt1.Key()
+        requires receipt0.Valid(cache0)
+        requires receipt1.Valid(cache1)
+        requires receipt0.branchTree == receipt1.branchTree
         ensures  receipt0 == receipt1
      {
         var lookup0 := receipt0.branchPath;
@@ -142,7 +164,7 @@ module BranchTreeInterpMod {
      && (forall i | 0 <= i < |receipts0| :: receipts0[i].branchPath.key == key)
      && (forall i | 0 <= i < |receipts1| :: receipts1[i].Valid(cache1))
      && (forall i | 0 <= i < |receipts1| :: receipts1[i].branchPath.key == key)
-     && (forall i | 0 <= i < |receipts0| :: receipts0[i].branchTree.Root() == receipts1[i].branchTree.Root() )
+     && (forall i | 0 <= i < |receipts0| :: receipts0[i].branchTree == receipts1[i].branchTree)
      && (forall i | 0 <= i < |receipts0| :: DiskViewsEquivalent(cache0.dv, cache1.dv, IReadsLookup(cache0, receipts0[i].branchPath)))
    }
 
@@ -153,6 +175,7 @@ module BranchTreeInterpMod {
                                     receipts0: seq<BranchReceipt>,
                                     receipts1: seq<BranchReceipt>,
                                     count: nat)
+
       requires BranchLookupEquivalentRequirements(key, cache0, cache1, receipts0, receipts1)
       requires count <= |receipts0|
       ensures forall i | 0 <= i < count :: receipts0[i] == receipts1[i]
@@ -160,6 +183,7 @@ module BranchTreeInterpMod {
       if (0 < count) {
         BranchReceiptsEquivalentInductive(key, cache0, cache1, receipts0, receipts1, count-1);
         //RootEquivalentForBranchReceipt(cache0, cache1, receipts0[count-1], receipts1[count-1]);
+        assert receipts0[count-1].Root() == receipts1[count-1].Root();
         BranchLookupsEquivalent(cache0, cache1, receipts0[count-1], receipts1[count-1]);
       }
     }
