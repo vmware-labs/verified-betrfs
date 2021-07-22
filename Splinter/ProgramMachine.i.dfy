@@ -111,7 +111,7 @@ module ProgramMachineMod {
     && puts.seqStart + |puts.msgs| <= v.journal.JournalBeginsLSNInclusive()
     && JournalMachineMod.MessageSeqMatchesJournalAt(v.journal, puts)
 
-    // NB that Recover can interleave with BetreeInternal steps, which push stuff into the
+    // NB that Recover can interleave with SplinterTreeInternal steps, which push stuff into the
     // cache to flush it out of the Betree's membuffer to make room for more recovery.
 
     && SplinterTreeMachineMod.PutMany(v.betree, newbetree, puts)
@@ -240,7 +240,7 @@ module ProgramMachineMod {
     && AllocsDisjoint(v')
   }
 
-  predicate BetreeInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: SplinterTreeMachineMod.Skolem)
+  predicate SplinterTreeInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: SplinterTreeMachineMod.Skolem)
   {
     && uiop.NoopOp?
     && v.WF()
@@ -315,7 +315,7 @@ module ProgramMachineMod {
     | QueryStep(key: Key, val: Value, bsk: SplinterTreeMachineMod.Skolem)
     | PutStep(bsk: SplinterTreeMachineMod.Skolem)
     | JournalInternalStep(jsk: JournalMachineMod.Skolem)
-    | BetreeInternalStep(SplinterTreeMachineMod.Skolem)
+    | SplinterTreeInternalStep(SplinterTreeMachineMod.Skolem)
     | ReqSyncStep(syncReqId: SyncReqId)
     | CompleteSyncStep(syncReqId: SyncReqId)
     | CommitStartStep(seqBoundary: LSN)
@@ -327,7 +327,7 @@ module ProgramMachineMod {
       case QueryStep(key, val, sk) => Query(v, v', uiop, key, val, sk)
       case PutStep(sk) => Put(v, v', uiop, sk)
       case JournalInternalStep(sk) => JournalInternal(v, v', uiop, cacheOps, sk)
-      case BetreeInternalStep(sk) => BetreeInternal(v, v', uiop, cacheOps, sk)
+      case SplinterTreeInternalStep(sk) => SplinterTreeInternal(v, v', uiop, cacheOps, sk)
       case ReqSyncStep(syncReqId) => ReqSync(v, v', uiop, syncReqId)
       case CompleteSyncStep(syncReqId) => CompleteSync(v, v', uiop, syncReqId)
       case CommitStartStep(seqBoundary) => CommitStart(v, v', uiop, seqBoundary)

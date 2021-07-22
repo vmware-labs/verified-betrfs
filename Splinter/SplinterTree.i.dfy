@@ -709,8 +709,7 @@ module SplinterTreeMachineMod {
     && var newChildId :| (0 <= newChildId < |newParent.children|) && newParent.children[newChildId] == newChild.cu;
     && oldChildId == newChildId
     // for now we're flushing all current branches??
-    && (forall i :: && oldParent.activeBranches[oldChildId] <= i < |oldParent.branches|
-                    && oldParent.branches[i] in newChild.branches)
+    && (forall i | oldParent.activeBranches[oldChildId] <= i < |oldParent.branches| :: oldParent.branches[i] in newChild.branches)
     && assert newParent.WF();
     && assert |newParent.activeBranches| == |newParent.children|;
     && assert 0 <= newChildId < |newParent.children|;
@@ -718,9 +717,27 @@ module SplinterTreeMachineMod {
 
   }
 
-  predicate CUIsAllocatable(cu: CU)
+  predicate ValidLookupHasCU(v: Variables, cache: CacheIfc.Variables, lookup: TrunkPath, cu: CU)
   {
-    && true // TODO cu unallocated across all live views
+    && lookup.Valid(v, cache)
+    && cu in lookup.CUs()
+  }
+
+
+ function {:opaque} IReads(v: Variables, cache: CacheIfc.Variables) : set<CU> {
+    set cu:CU |
+      && cu in CUsInDisk()
+      && (exists lookup :: ValidLookupHasCU(v, cache, lookup, cu))
+     :: cu
+ }
+
+
+  predicate CUIsAllocatable(v: Variables, cache: CacheIfc.Variables, cu: CU)
+  {
+    && cu in CUsInDisk()
+    // TODO : we have to make sure the cu is not in the frozen/persistent copies of the tree nor in the journal
+    && cu !in IReads(v, cache)
+
   }
 
   // Internal operation; noop -- atomic
@@ -734,8 +751,8 @@ module SplinterTreeMachineMod {
     && FlushesNodes(flush.ParentNode(), flush.ChildNode(), flush.newParent.node, flush.newChild.node)
     && flush.newParent.id == flush.ParentStep().na.id  // parent keeps its id
     && true // UnusedId(flush.newChild.id) child gets id unallocated in eph ind tbl
-    && CUIsAllocatable(flush.newParent.cu)
-    && CUIsAllocatable(flush.newChild.cu)
+    && CUIsAllocatable(v, cache, flush.newParent.cu)
+    && CUIsAllocatable(v, cache, flush.newChild.cu)
     && cacheOps == [
       CacheIfc.Write(flush.newParent.cu, marshalTrunkNode(flush.newParent.node)),
       CacheIfc.Write(flush.newChild.cu, marshalTrunkNode(flush.newChild.node))
@@ -765,7 +782,7 @@ module SplinterTreeMachineMod {
     && newRoot.id == RootId()
     // when we're done, newRoot.Valid(v', cache')
 
-    && CUIsAllocatable(newRoot.cu)
+    && CUIsAllocatable(v, cache, newRoot.cu)
     && MergeBuffer(oldRoot.node, v.memBuffer, newRoot.node)
     && cacheOps == [ CacheIfc.Write(newRoot.cu, marshalTrunkNode(newRoot.node)) ]
     && v' == v.(
@@ -786,7 +803,7 @@ module SplinterTreeMachineMod {
     && sk.CompactBranchStep?
     && var r := sk.receipt;
     && r.Valid(v, cache)
-    && CUIsAllocatable(r.newna.cu)
+    && CUIsAllocatable(v, cache, r.newna.cu)
     && EquivalentNodes(r.Oldna().node, r.newna.node)  // Buffer replacements
       // TODO need to establish replacement B+tree is correct
     // check that we update the trunknode we're compacting in the cache

@@ -92,19 +92,6 @@ module SplinterTreeInterpMod {
       IM(cache, pretendVariables)
   }
 
-  predicate ValidLookupHasCU(v: Variables, cache: CacheIfc.Variables, lookup: TrunkPath, cu: CU)
-  {
-    && lookup.Valid(v, cache)
-    && cu in lookup.CUs()
-  }
-
-  function {:opaque} IReads(v: Variables, cache: CacheIfc.Variables) : set<CU> {
-    set cu:CU |
-      && cu in CUsInDisk()
-      && (exists lookup :: ValidLookupHasCU(v, cache, lookup, cu))
-      :: cu
-  }
-
   predicate AllLookupsExist(v: Variables, cache: CacheIfc.Variables)
   {
     forall key | AnyKey(key) :: LookupExists(v, cache, key)
@@ -258,62 +245,95 @@ module SplinterTreeInterpMod {
     IMExtensionality(v, cache0, cache1);
   }
 
-  lemma PutEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, key: Key, value: Value, sk: Skolem)
+  lemma PutEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
     ensures IM(cache', v') == IM(cache, v).Put(key, Define(value))
   {
     assume false; // This is hard to prove -- we need to finish a tree
   }
 
+  /*
+   * NonEquivocate: Ensure if IMLookup returns a valid lookup, that its the only valid lookup that can ever be
+   * returned by IMLookup
+   */
+  lemma NonEquivocateForLookup(v: Variables, cache : CacheIfc.Variables, key: Key, lookup: TrunkPath)
+    requires ValidLookup(v, cache, key, lookup)
+    ensures IMLookup(v, cache, key) == lookup
+  {
+
+  }
+
   // Show that Flushes across trunk nodes preserve the invariant
-  lemma FlushEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, sk: Skolem)
+  lemma FlushEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
+    requires sk.FlushStep?
+    requires AllLookupsExist(v, cache)
+    requires AllLookupsExist(v, cache')
+    requires Flush(v, v', cache, cacheOps, sk)
     ensures IM(cache', v') == IM(cache, v)
   {
-    // Prolly not needed
     forall key | AnyKey(key)
       ensures IMKey(v', cache', key) == IMKey(v, cache, key)
     {
-      //var le0 := exists lookup0, value0 :: ValidLookup(v, cache, key, value0, lookup0);
-      //var le1 := exists lookup1, value1 :: ValidLookup(v', cache', key, value1, lookup1);
-      //assert le0 == le1;
-      // if le0 {
-      //
-      // }
+      var rec := sk.flush;
+      assert LookupExists(v, cache, key);
+      assert LookupExists(v, cache', key);
+
+      //assert IReads(v, cache0) == IReads(v, cache1);
+      //var lookup := IMLookup(v, cache, key);
+      var lookup' := IMLookup(v, cache', key);
+      var lookup;
+
+      // If  newParent and newChild are in lookup'
+      if (rec.newParent.cu in lookup'.CUs() && rec.newChild.cu in lookup'.CUs())
+      {
+        assume false;
+      } else if (rec.newParent.cu in lookup'.CUs()) {
+          // If  [newParent is in lookup'] -- idx | lookup'.steps[idx] == newParent
+          assume false;
+      } else {
+          // else lookup == lookup'
+          assume false;
+          lookup := lookup';
+      }
       // TODO
       assert IMKey(v', cache', key) == IMKey(v, cache, key);
     }
-
     assume false;
     assert IM(cache', v') == IM(cache, v);
   }
 
   // Show that compactions preserve the invariant
-  lemma CompactionEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, sk: Skolem)
+  lemma CompactionEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
+    requires sk.CompactBranchStep?
+    requires CompactBranch(v, v', cache, cacheOps, sk)
     ensures IM(cache', v') == IM(cache, v)
   {
     assume false;
   }
 
   // Show that draining the memBuffer preserves the invariant
-  lemma DrainMemBufferEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, sk: Skolem)
+  lemma DrainMemBufferEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
+    requires sk.DrainMemBufferStep?
+    requires DrainMemBuffer(v, v', cache, cacheOps, sk)
     ensures IM(cache', v') == IM(cache, v)
   {
     assume false;
   }
 
   // All the SplinterTree Internal steps shouldn't affect the interpretation
-  lemma InternalStepLemma(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, sk: Skolem)
+  lemma InternalStepLemma(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
     requires sk.FlushStep? || sk.DrainMemBufferStep? || sk.CompactBranchStep?
+    requires Internal(v, v', cache, cacheOps, sk)
     ensures IM(cache', v') == IM(cache, v)
   {
     match sk {
      case FlushStep(flush: FlushRec) => {
-        FlushEffect(v, v', cache, cache', sb, sk);
+        FlushEffect(v, v', cache, cache', cacheOps, sk);
      }
      case DrainMemBufferStep(oldRoot: NodeAssignment, newRoot: NodeAssignment) => {
-        DrainMemBufferEffect(v, v', cache, cache', sb, sk);
+        DrainMemBufferEffect(v, v', cache, cache', cacheOps, sk);
      }
      case CompactBranchStep(receipt: CompactReceipt) => {
-        CompactionEffect(v, v', cache, cache', sb, sk);
+        CompactionEffect(v, v', cache, cache', cacheOps, sk);
      }
     }
   }
