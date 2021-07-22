@@ -156,9 +156,7 @@ module SplinterTreeInterpMod {
         if (count == 1) {
           // they share roots
           assert nextstep0.na.cu == nextstep1.na.cu;
-          //
-assert nextstep0.na == nextstep1.na;
-
+          // assert nextstep0.na == nextstep1.na;
         } else {
           LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, count-1);
           var step0 := lookup0.steps[count-2];
@@ -225,7 +223,7 @@ assert nextstep0.na == nextstep1.na;
     requires forall key | AnyKey(key) :: IMKey(v, cache0, key) == IMKey(v, cache1, key)
     ensures IM(cache0, v) == IM(cache1, v)
   {
-
+    reveal_IM();
   }
 
   // TODO; Might need to change this to table about both IM and IMStable
