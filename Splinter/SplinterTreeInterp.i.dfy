@@ -38,7 +38,7 @@ module SplinterTreeInterpMod {
     lookup.Decode()
   }
 
-  predicate LookupExists(v: Variables, cache: CacheIfc.Variables, key: Key)
+  predicate {:opaque} LookupExists(v: Variables, cache: CacheIfc.Variables, key: Key)
   {
     exists lookup :: ValidLookup(v, cache, key, lookup)
   }
@@ -48,8 +48,9 @@ module SplinterTreeInterpMod {
     ensures ValidLookup(v, cache, key, lookup)
     ensures lookup.WF()
   {
-     var lookup :| ValidLookup(v, cache, key, lookup);
-     lookup
+    reveal_LookupExists();
+    var lookup :| ValidLookup(v, cache, key, lookup);
+    lookup
   }
 
   // Produce a receipt for this key
@@ -63,7 +64,7 @@ module SplinterTreeInterpMod {
       DefaultMessage() // this is not a absence of a key, this case cannot happen by invariant
   }
 
-  function IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
+  function {:opaque} IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
   {
     RawInterp((imap key | AnyKey(key) :: IMKey(v, cache, key)), v.nextSeq) // check v.nextSeq used to be sb.endSeq
   }
@@ -220,12 +221,18 @@ assert nextstep0.na == nextstep1.na;
       }
   }
 
+  lemma IMExtensionality(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables)
+    requires forall key | AnyKey(key) :: IMKey(v, cache0, key) == IMKey(v, cache1, key)
+    ensures IM(cache0, v) == IM(cache1, v)
+  {
+
+  }
+
   // TODO; Might need to change this to table about both IM and IMStable
-  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock)
+  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables)
     requires DiskViewsEquivalent(cache0.dv, cache1.dv, IReads(v, cache0))
     requires AllLookupsExist(v, cache0)
     requires AllLookupsExist(v, cache1)
-    // TODO: require lookup exist
     ensures IM(cache0, v) == IM(cache1, v)
   {
     // TODO I'm surprised this proof passes easily.
@@ -239,22 +246,18 @@ assert nextstep0.na == nextstep1.na;
       assert LookupExists(v, cache0, key);
       assert LookupExists(v, cache1, key);
 
-
       //assert IReads(v, cache0) == IReads(v, cache1);
       var lookup0 := IMLookup(v, cache0, key);
       var lookup1 := IMLookup(v, cache1, key);
 
       var count := min(|lookup0.steps|, |lookup1.steps|);
       LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, count);
-
-      calc {
-        lookup0;
-
-        lookup1;
-      }
-
+      assert lookup0 == lookup1;
     }
-    assert IM(cache0, v) == IM(cache1, v);
+    // TODO there's still a timeout lurking here. Jon kicked it down
+    // the road by factoring out IMExtensionality, but the underlying
+    // cause is still here and we haven't found it.
+    IMExtensionality(v, cache0, cache1);
   }
 
   lemma PutEffect(v: Variables, v': Variables, cache: CacheIfc.Variables, cache': CacheIfc.Variables, sb: Superblock, key: Key, value: Value, sk: Skolem)
