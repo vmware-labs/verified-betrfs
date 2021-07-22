@@ -23,28 +23,6 @@ module BranchTreeInterpMod {
 
   type Lookup = BranchPath
 
-
-  // NOtE: These might not be needed.
-  function IMKey(root: CU, cache: CacheIfc.Variables, key: Key) : Message
-  {
-    if exists msg, sk :: Query(root, cache, key, msg, sk) // always true by invariant
-    then
-      var msg, sk :| Query(root, cache, key, msg, sk);
-      if msg.Some?
-      then
-        msg.value
-      else
-        DefaultMessage()
-    else
-      // We should never get here
-      DefaultMessage()
-  }
-
-  function IM(root : CU, cache: CacheIfc.Variables) : imap<Key, Message>
-  {
-    imap k | true :: IMKey(root, cache, k)
-  }
-
   predicate ValidLookupHasCU(cache: CacheIfc.Variables, lookup: BranchPath, cu: CU)
   {
     && lookup.Valid(cache)
@@ -57,14 +35,6 @@ module BranchTreeInterpMod {
        && cu in CUsInDisk()
        && ValidLookupHasCU(cache, lookup, cu)
       :: cu
-  }
-
-  predicate StepsEquivalent(cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, step0: BranchStep, step1: BranchStep)
-  {
-    && step0.Valid(cache0)
-    && step1.Valid(cache1)
-    && step0.cu == step1.cu
-    && CUToBranchNode(step0.cu, cache0) == CUToBranchNode(step1.cu, cache1)
   }
 
   lemma BranchLookupsEquivalentInductive(cache0: CacheIfc.Variables,

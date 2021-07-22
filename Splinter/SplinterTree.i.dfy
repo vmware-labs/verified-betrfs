@@ -169,6 +169,7 @@ module SplinterTreeMachineMod {
 
     predicate Valid(v: Variables, cache: CacheIfc.Variables)
     {
+      && WF()
       && node.Valid(v, cache)
     }
   }
@@ -202,12 +203,6 @@ module SplinterTreeMachineMod {
        && this.Index? ==> WFIndexNode()
     }
 
-    predicate InIndTable(v: Variables)
-    {
-      && id in v.indTbl
-      && v.indTbl[id] == cu
-    }
-
     predicate ValidCU(cache : CacheIfc.Variables)
     {
       && var unparsedPage := CacheIfc.ReadValue(cache, cu);
@@ -217,8 +212,15 @@ module SplinterTreeMachineMod {
       && this == node.value
     }
 
+    predicate InIndTable(v: Variables)
+    {
+      && id in v.indTbl
+      && v.indTbl[id] == cu
+    }
+
     predicate Valid(v: Variables, cache: CacheIfc.Variables)
     {
+      && WF()
       && InIndTable(v)
       && ValidCU(cache)
     }
@@ -269,16 +271,27 @@ module SplinterTreeMachineMod {
     nextSeq: LSN,  // exclusive
     frozen: Frozen,
     root : CU // The CU to the root of the trunk tree
+    // we need this because we need ro
+    //rootNode : TrunkNode
   )
   {
       predicate WF()
       {
-        true // TODO
+        root in CUsInDisk()
       }
 
       predicate Valid(cache : CacheIfc.Variables)
       {
-        true // TODO
+        && WF()
+        && var diskPage := CacheIfc.ReadValue(cache, root);
+        && diskPage.Some?
+        && parseTrunkNode(diskPage.value).Some?
+      }
+
+      function rootNode(cache : CacheIfc.Variables) : TrunkNode
+        requires Valid(cache)
+      {
+        CUToTrunkNode(cache, root).value
       }
 
       function BetreeEndsLSNExclusive() : LSN {

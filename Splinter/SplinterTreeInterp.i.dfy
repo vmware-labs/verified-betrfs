@@ -31,7 +31,8 @@ module SplinterTreeInterpMod {
 
 
   // Select the messages that lookup finds.
-  function LookupToMessage(lookup: TrunkPath) : (outm : Message)
+  function LookupToMessage(lookup: TrunkPath, v : Variables, cache: CacheIfc.Variables) : (outm : Message)
+    requires lookup.Valid(v, cache)
     ensures outm.Define?
   {
     lookup.Decode()
@@ -57,7 +58,7 @@ module SplinterTreeInterpMod {
   {
     if LookupExists(v, cache, key) // Always true by invariant
     then
-      LookupToMessage(IMLookup(v, cache, key))
+      LookupToMessage(IMLookup(v, cache, key), v, cache)
     else
       DefaultMessage() // this is not a absence of a key, this case cannot happen by invariant
   }
@@ -103,16 +104,6 @@ module SplinterTreeInterpMod {
       :: cu
   }
 
-  // May have to make this an invariant later.
-  lemma NonEquivocate(v: Variables, cache: CacheIfc.Variables, lookup0: TrunkPath, lookup1 : TrunkPath)
-    requires lookup0.k == lookup1.k
-    requires lookup0.Valid(v, cache)
-    requires lookup1.Valid(v, cache)
-    ensures lookup0 == lookup1
-  {
-
-  }
-
   predicate AllLookupsExist(v: Variables, cache: CacheIfc.Variables)
   {
     forall key | AnyKey(key) :: LookupExists(v, cache, key)
@@ -124,7 +115,7 @@ module SplinterTreeInterpMod {
     && lookup1.Valid(v, cache1)
     && var root0 := lookup0.steps[0].na;
     && var root1 := lookup1.steps[0].na;
-    && root0 == root1
+    && root0.cu == root1.cu
   }
 
   lemma RecieptCUsSubsetOfIReads(v: Variables, cache: CacheIfc.Variables, lookup: TrunkPath, step: TrunkStep, idx: nat)
@@ -163,8 +154,8 @@ module SplinterTreeInterpMod {
         var nextstep1 := lookup1.steps[count-1];
         if (count == 1) {
           // they share roots
-          assert nextstep0.na.id == nextstep0.na.id;
-          assert nextstep0.na == nextstep0.na;
+          assert nextstep0.na.cu == nextstep1.na.cu;
+          //assert nextstep0.na == nextstep1.na;
 
         } else {
           LookupsEquivalent(v, cache0, cache1, lookup0, lookup1, count-1);
@@ -183,28 +174,27 @@ module SplinterTreeInterpMod {
           // we know step0==step1 and the we try to establish that step0 Links nextStep0 and step1 Links nextStep1
           assert step0.na.node.nextStep(key) == nextstep0.na.cu;
           assert step1.na.node.nextStep(key) == nextstep1.na.cu;
-
-
-          // nextstep0.cu is in IReads
-          assert nextstep0.na.cu in CUsInDisk();  // try to trigger set comprehension
-          assert nextstep1.na.cu in lookup0.CUs();
-          assert ValidLookupHasCU(v, cache0, lookup0, nextstep0.na.cu);
-          assert nextstep0.na.cu in IReads(v, cache0) by {
-            reveal_IReads();
-          }
-
-          // nextstep1.cu is in IReads
-          assert nextstep1.na.cu in CUsInDisk();  // try to trigger set comprehension
-          assert nextstep1.na.cu in lookup1.CUs();
-          assert ValidLookupHasCU(v, cache1, lookup1, nextstep1.na.cu);
-          assert nextstep1.na.cu in IReads(v, cache1) by {
-            reveal_IReads();
-          }
         }
 
         assert nextstep0.na.cu == nextstep1.na.cu;
 
-        // Since they're in the IReadsSet, the nodes are also the same
+        // nextstep0.cu is in IReads
+        assert nextstep0.na.cu in CUsInDisk();  // try to trigger set comprehension
+        assert nextstep1.na.cu in lookup0.CUs();
+        assert ValidLookupHasCU(v, cache0, lookup0, nextstep0.na.cu);
+        assert nextstep0.na.cu in IReads(v, cache0) by {
+          reveal_IReads();
+        }
+
+        // nextstep1.cu is in IReads
+        assert nextstep1.na.cu in CUsInDisk();  // try to trigger set comprehension
+        assert nextstep1.na.cu in lookup1.CUs();
+        assert ValidLookupHasCU(v, cache1, lookup1, nextstep1.na.cu);
+        assert nextstep1.na.cu in IReads(v, cache1) by {
+          reveal_IReads();
+        }
+
+         // Since they're in the IReadsSet, the nodes are also the same
           assert nextstep0.na.node == nextstep1.na.node;
 
           assert nextstep0.na.node.InIndTable(v);
@@ -222,7 +212,7 @@ module SplinterTreeInterpMod {
              assert BranchTreeInterpMod.IReadsLookup(cache0, nextstep0.branchReceipts[i].branchPath) <= IReads(v, cache0);
           }
 
-          BranchTreeInterpMod.BranchReceiptsEquivalent(v, lookup0.k, cache0, cache1, nextstep0.branchReceipts, nextstep1.branchReceipts);
+          BranchTreeInterpMod.BranchReceiptsEquivalent(lookup0.k, cache0, cache1, nextstep0.branchReceipts, nextstep1.branchReceipts);
           assert nextstep0.branchReceipts == nextstep1.branchReceipts; // need to make it believe this
           assert nextstep0 == nextstep1;
 
