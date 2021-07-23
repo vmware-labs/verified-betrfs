@@ -34,15 +34,6 @@ include "../lib/Buckets/BoundedPivotsLib.i.dfy"
 
 // Immutable BranchTrees that are part of the SplinterTree on disk
 module BranchTreeMod {
-  export S provides
-    // modules we use
-    ValueMessage, Options, CacheIfc, DiskTypesMod,
-    // our interface
-    Variables, BranchNode, BranchReceipt, BranchReceipt.WF, BranchReceipt.Key, BranchReceipt.Decode, BranchReceipt.Valid, BranchReceipt.Tree, BranchReceipt.CUs, Skolem, KeyType
-    // Stuff in the modules so clients can match them to originals
-    reveals Key, Message, Option
-  export Internal reveals *
-
   import opened CacheIfc
   //import BtreeModel -- THIS IS AN ABSTRACT MODULE ... WE CAN'T USE IT!!!!
   import opened Options
@@ -52,14 +43,11 @@ module BranchTreeMod {
 
   // TODO later change the keys value type to be generic
   import opened ValueMessage
-  import KeyType
+  import opened KeyType
   import opened MsgHistoryMod
   import opened BoundedPivotsLib
 
-  // synonym these names into this module so we can export them.
-  type Key = KeyType.Key
-  type Message = ValueMessage.Message
-  type Option<T> = Options.Option<T>
+
 
   // TODO: Finish and maybe we want Routing Filters here, check with Rob and Jon for this
   datatype QuotientFilter = QuotientFilter()
@@ -277,11 +265,6 @@ module BranchTreeMod {
       && (forall cu | cu in cus :: cu in CUsInDisk())
     }
 
-    function {:opaque} CUs() : (cus: seq<CU>)
-    {
-      branchPath.CUs()
-    }
-
     predicate Valid(cache : CacheIfc.Variables)
     {
       && WF()
@@ -291,16 +274,6 @@ module BranchTreeMod {
       // QUESTION : Check if we need another check to compare the children of the branchTree to the branchPath
     }
 
-    function Decode() : (msg : Option<Message>)
-      requires WF()
-    {
-      branchPath.Decode()
-    }
-
-    // Returns the Variables data structure that defines the root of the tree
-    function Tree() : Variables {
-      branchTree
-    }
   }
 
   datatype Skolem =

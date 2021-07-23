@@ -285,15 +285,19 @@ module SplinterTreeInterpMod {
       // If  newParent and newChild are in lookup'
       if (rec.newParent.cu in lookup'.CUs() && rec.newChild.cu in lookup'.CUs())
       {
+        assume false;
       } else if (rec.newParent.cu in lookup'.CUs()) {
           // If  [newParent is in lookup'] -- idx | lookup'.steps[idx] == newParent
+          assume false;
       } else {
           // else lookup == lookup'
+          assume false;
           lookup := lookup';
       }
       // TODO
       assert IMKey(v', cache', key) == IMKey(v, cache, key);
     }
+    assume false;
     assert IM(cache', v') == IM(cache, v);
   }
 
