@@ -273,7 +273,6 @@ module BranchTreeMod {
       && branchPath.steps[0].cu == branchTree.root
       // QUESTION : Check if we need another check to compare the children of the branchTree to the branchPath
     }
-
   }
 
   datatype Skolem =

@@ -26,7 +26,6 @@ module SplinterTreeInterpMod {
   import opened SplinterTreeMachineMod
   import Nat_Order
   import opened SequenceSetsMod
-  import BranchTreeInterpMod
   import opened Mathematics
 
 
@@ -110,19 +109,19 @@ module SplinterTreeInterpMod {
     requires lookup.Valid(v, cache)
     requires step in lookup.steps
     requires 0 <= idx < |step.branchReceipts|
-    ensures  BranchTreeInterpMod.IReadsLookup(cache, step.branchReceipts[idx].branchPath) <= IReads(v, cache)
+    ensures step.branchReceipts[idx].IReads(cache) <= IReads(v, cache)
   {
     assert forall cu | cu in step.CUs() :: cu in lookup.CUs();
-    forall cu | cu in BranchTreeInterpMod.IReadsLookup(cache, step.branchReceipts[idx].branchPath)
+    forall cu | cu in step.branchReceipts[idx].IReads(cache)
        ensures cu in IReads(v, cache) {
-         BranchTreeInterpMod.reveal_IReadsLookup();
+         //BranchTreeInterpMod.reveal_IReadsLookup();
          reveal_IReads();
          assert cu in CUsInDisk();
 
          assert ValidLookupHasCU(v, cache, lookup, cu); // Witness
 
     }
-    BranchTreeInterpMod.reveal_IReadsLookup();
+    //BranchTreeInterpMod.reveal_IReadsLookup();
     reveal_IReads();
   }
 
@@ -192,14 +191,14 @@ module SplinterTreeInterpMod {
 
           assert nextstep0.na == nextstep1.na;
           forall i | 0 <= i < |nextstep0.branchReceipts| ensures
-                  DiskViewsEquivalent(cache0.dv, cache1.dv, BranchTreeInterpMod.IReadsLookup(cache0, nextstep0.branchReceipts[i].branchPath))
+                  DiskViewsEquivalent(cache0.dv, cache1.dv, nextstep0.branchReceipts[i].IReads(cache0))
           {
 
              RecieptCUsSubsetOfIReads(v, cache0, lookup0, nextstep0, i);
-             assert BranchTreeInterpMod.IReadsLookup(cache0, nextstep0.branchReceipts[i].branchPath) <= IReads(v, cache0);
+             assert nextstep0.branchReceipts[i].IReads(cache0) <= IReads(v, cache0);
           }
 
-          BranchTreeInterpMod.BranchReceiptsEquivalent(lookup0.k, cache0, cache1, nextstep0.branchReceipts, nextstep1.branchReceipts);
+          BranchTreeInterpIfc.BranchReceiptsEquivalent(lookup0.k, cache0, cache1, nextstep0.branchReceipts, nextstep1.branchReceipts);
           assert nextstep0.branchReceipts == nextstep1.branchReceipts; // need to make it believe this
           assert nextstep0 == nextstep1;
 

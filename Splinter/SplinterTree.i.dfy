@@ -113,9 +113,12 @@ module SplinterTreeMachineMod {
   import AllocationTableMachineMod
   import IndirectionTableMod
   import CacheIfc
-  import BranchTreeMod
   import MsgSeqMod
   import opened BoundedPivotsLib
+
+  // I'd rather not have to pull the whole interp library in here,
+  // but export sets really blow.
+  import BranchTreeInterpIfc
 
   // TODO: Rename this module
   datatype Superblock = Superblock(
@@ -177,13 +180,13 @@ module SplinterTreeMachineMod {
   // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
   // activeBranches tells us the lowest index of an active branch tree for the corresponding child
   datatype TrunkNode = | Index( cu : CU,
-                                branches : seq<BranchTreeMod.Variables>,
+                                branches : seq<BranchTreeInterpIfc.BranchTop>,
                                 children : seq<CU>,
                                 pivots : PivotTable,
                                 activeBranches : seq<nat>,
                                 id: nat)
                        | Leaf(  cu : CU,
-                                branches : seq<BranchTreeMod.Variables>,
+                                branches : seq<BranchTreeInterpIfc.BranchTop>,
                                 id: nat)
   {
 
@@ -320,7 +323,7 @@ module SplinterTreeMachineMod {
     // The information about the trunk node of this step
     na: NodeAssignment,
     // The Branch Receipts of a lookup from all the branches of this trunk node
-    branchReceipts: seq<BranchTreeMod.BranchReceipt>)
+    branchReceipts: seq<BranchTreeInterpIfc.BranchReceipt>)
     // The messages accumulated in till the previous trunkStep -- don't need this might change later
     // accumulatedMsgs: seq<Message>)
   {
@@ -345,8 +348,8 @@ module SplinterTreeMachineMod {
         []
       else
         assert branchReceipts[count-1].WF();
-        assert branchReceipts[count-1].branchPath.WF();
-        var currBranchVal := branchReceipts[count-1].branchPath.Decode();
+        //assert branchReceipts[count-1].branchPath.WF();
+        var currBranchVal := branchReceipts[count-1].Decode();
         ( if currBranchVal.Some?
         then
           [currBranchVal.value]
@@ -368,7 +371,7 @@ module SplinterTreeMachineMod {
     {
       && na.cu in cus
       && (forall i | 0<=i<=count-1 :: branchReceipts[i].ValidCUs())
-      && (forall i | 0<=i<=count-1 :: SequenceSubset(branchReceipts[i].branchPath.CUs(), cus))
+      && (forall i | 0<=i<=count-1 :: SequenceSubset(branchReceipts[i].CUs(), cus))
       && (forall cu | cu in cus :: cu in CUsInDisk())
     }
 
@@ -386,7 +389,7 @@ module SplinterTreeMachineMod {
         var branch := branchReceipts[count-1];
         assert branch.WF(); // TRIGGER (Seems to have trouble parsing this from the forall)
         assert branch.ValidCUs();
-        branch.branchPath.CUs() + CUsRecurse(count - 1)
+        branch.CUs() + CUsRecurse(count - 1)
     }
 
     predicate ValidCUs(cus: seq<CU>)
@@ -409,7 +412,7 @@ module SplinterTreeMachineMod {
       && na.Valid(v, cache)
       && ( forall i | 0 <= i < |branchReceipts| :: branchReceipts[i].Valid(cache) )
       // Note: Here we require one to one correspondance between the node's branches and the corresponding look up receipt
-      && (forall i | 0 <= i < |branchReceipts| :: na.node.branches[i] == branchReceipts[i].branchTree)
+      && (forall i | 0 <= i < |branchReceipts| :: na.node.branches[i] == branchReceipts[i].Top())
       && var cus := CUs();
       && ValidCUs(cus)
     }
@@ -589,7 +592,7 @@ module SplinterTreeMachineMod {
     | FlushStep(flush: FlushRec) // pushdown branch pointers to children
     | DrainMemBufferStep(oldRoot: NodeAssignment, newRoot: NodeAssignment) // Push the memory only stuff into the persistent root of spliten tree as a branctree
     | CompactBranchStep(receipt: CompactReceipt) // Rewrite branches into a new branch.
-    | BranchInteralStep(branchSk : BranchTreeMod.Skolem)
+    | BranchInteralStep(branchSk : BranchTreeInterpIfc.Skolem)
 
 
   function MemtableLookup(v: Variables, key: Key) : seq<Message>

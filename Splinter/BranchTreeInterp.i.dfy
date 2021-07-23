@@ -176,3 +176,81 @@ module BranchTreeInterpMod {
     }
 
 }
+
+module BranchTreeInterpIfc {
+  export
+    provides
+      BranchTreeInterpMod,
+      BranchTop,
+      BranchReceipt,
+      BranchReceipt.WF,
+      BranchReceipt.Key,
+      BranchReceipt.Decode,
+      BranchReceipt.Valid,
+      BranchReceipt.ValidCUs,
+      BranchReceipt.CUs,
+      BranchReceipt.Top,
+      BranchReceipt.IReads,
+      Skolem,
+      BranchLookupEquivalentRequirements,
+      BranchReceiptsEquivalent
+    reveals
+      BranchLookupEquivalentRequirements
+
+  import BranchTreeInterpMod
+
+  datatype BranchTop = BranchTop(base: BranchTreeInterpMod.BranchTreeMod.Variables)
+  datatype BranchReceipt = BranchReceipt(base: BranchTreeInterpMod.BranchTreeMod.BranchReceipt)
+  {
+    predicate WF() { base.WF() }
+    function Key() : BranchTreeInterpMod.BranchTreeMod.KeyType.Key { base.Key() }
+    function Decode() : BranchTreeInterpMod.BranchTreeMod.Options.Option<BranchTreeInterpMod.BranchTreeMod.ValueMessage.Message> { base.branchPath.Decode() }
+    //predicate ValidCUs(cus:seq<BranchTreeInterpMod.BranchTreeMod.DiskTypesMod.CU>) { base.ValidCUs(cus) }
+    predicate Valid(cache: BranchTreeInterpMod.BranchTreeMod.CacheIfc.Variables) { base.Valid(cache) }
+    predicate ValidCUs() { base.ValidCUs() }
+    function CUs() : seq<BranchTreeInterpMod.BranchTreeMod.DiskTypesMod.CU> { base.branchPath.CUs() }
+    function Top() : BranchTop { BranchTop(base.branchTree) }
+    function IReads(cache: BranchTreeInterpMod.BranchTreeMod.CacheIfc.Variables) : set<BranchTreeInterpMod.BranchTreeMod.DiskTypesMod.CU> { BranchTreeInterpMod.IReadsLookup(cache, base.branchPath) }
+  }
+  datatype Skolem = Skolem(base: BranchTreeInterpMod.BranchTreeMod.Skolem)
+
+   // Need to expose this body so caller can satisfy it.
+   predicate BranchLookupEquivalentRequirements(
+    key: BranchTreeInterpMod.BranchTreeMod.KeyType.Key,
+    cache0: BranchTreeInterpMod.BranchTreeMod.CacheIfc.Variables,
+    cache1: BranchTreeInterpMod.BranchTreeMod.CacheIfc.Variables,
+    receipts0: seq<BranchReceipt>,
+    receipts1: seq<BranchReceipt>)
+   {
+     && |receipts0| == |receipts1|
+     && (forall i | 0 <= i < |receipts0| :: receipts0[i].Valid(cache0))
+     && (forall i | 0 <= i < |receipts0| :: receipts0[i].Key() == key)
+     && (forall i | 0 <= i < |receipts1| :: receipts1[i].Valid(cache1))
+     && (forall i | 0 <= i < |receipts1| :: receipts1[i].Key() == key)
+     && (forall i | 0 <= i < |receipts0| :: receipts0[i].Top() == receipts1[i].Top())
+     && (forall i | 0 <= i < |receipts0| :: BranchTreeInterpMod.AllocationMod.DiskViewsEquivalent(cache0.dv, cache1.dv, receipts0[i].IReads(cache0)))
+   }
+//  predicate BranchLookupEquivalentRequirements(
+//    key: BranchTreeInterpMod.BranchTreeMod.KeyType.Key,
+//    cache0: BranchTreeInterpMod.BranchTreeMod.CacheIfc.Variables,
+//    cache1: BranchTreeInterpMod.BranchTreeMod.CacheIfc.Variables,
+//    receipts0: seq<BranchReceipt>,
+//    receipts1: seq<BranchReceipt>)
+//  {
+//    var rr0 := seq(|receipts0|, i=>receipts0[i].base);
+//    var rr1 := seq(|receipts1|, i=>receipts1[i].base);
+//    BranchTreeInterpMod.BranchLookupEquivalentRequirements(key, cache0, cache1, rr0, rr1)
+//  }
+
+  lemma BranchReceiptsEquivalent(
+    key: BranchTreeInterpMod.BranchTreeMod.KeyType.Key,
+    cache0: BranchTreeInterpMod.BranchTreeMod.CacheIfc.Variables,
+    cache1: BranchTreeInterpMod.BranchTreeMod.CacheIfc.Variables,
+    receipts0: seq<BranchReceipt>,
+    receipts1: seq<BranchReceipt>)
+    requires BranchLookupEquivalentRequirements(key, cache0, cache1, receipts0, receipts1)
+    ensures receipts0 == receipts1
+  {
+    BranchTreeInterpMod.BranchReceiptsEquivalent(key, cache0, cache1, receipts0, receipts1);
+  }
+}
