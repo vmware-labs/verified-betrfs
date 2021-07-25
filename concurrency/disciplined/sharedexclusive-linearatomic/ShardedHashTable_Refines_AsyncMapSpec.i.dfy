@@ -58,7 +58,8 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
     var table, table' := s.table, s'.table;
     var inserted := Full(key, value);
 
-    ProbeRangeSufficient(table, key, start);
+    var p_range := Partial(hash(key), start);
+    ProbeRangeSufficient(table, key, p_range);
     ContainmentEquivalent(table, key);
     RightShiftPreservesMapping(table, table', inserted);
 
@@ -132,7 +133,8 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
     var RemoveNotFoundStep(ticket, end) := step;
     var key := ticket.input.key;
     var table, table' := s.table, s'.table;
-    ProbeRangeSufficient(table, key, end);
+    var p_range := Partial(hash(key), end);
+    ProbeRangeSufficient(table, key, p_range);
 
     ContainmentEquivalent(table, key);
 
@@ -156,7 +158,8 @@ module ResourceStateMachine_Refines_AsyncMapSpec {
     var QueryNotFoundStep(ticket, end) := step;
     var key := ticket.input.key;
     var table, table' := s.table, s'.table;
-    ProbeRangeSufficient(table, key, end);
+    var p_range := Partial(hash(key), end);
+    ProbeRangeSufficient(table, key, p_range);
 
     ContainmentEquivalent(table, key);
 

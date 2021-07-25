@@ -204,18 +204,12 @@ module Impl refines VerificationObligation {
     //   allocator[bin_id].release(AllocatorBin(count, rcap'), cap_handle);
     // }
 
-    // predicate EntriesMapped(entries: seq<Entry>, range: Range, sv: SSM.Variables)
-    //   requires sv.Variables?
-    // {
-    //   forall i: Index :: range.Contains(i)
-    //     ==> (sv.table[i].Some? && 
-    // }
-
     linear inout method doProbe(probe_key: Key, glinear in_sv: SSM.Variables)
       returns (
         entries: seq<Entry>,
         found: bool,
         p_range: Range,
+        slot_idx: Index,
         glinear out_sv: SSM.Variables)
   
       decreases *
@@ -224,73 +218,81 @@ module Impl refines VerificationObligation {
       requires forall i: Index :: !old_self.HasHandle(i)
       requires in_sv.Variables? && in_sv.table == UnitTable()
 
-      ensures self.Inv()
-      ensures forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i))
-
-      ensures out_sv.Variables?
-      ensures forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?)
-      ensures UnwrapKnownRange(out_sv.table, p_range) == entries
-      ensures var actual_end := PrevIndex(p_range.end);
-        && (found ==> SlotFullWithKey(out_sv.table[actual_end], probe_key))
-        && (!found ==> ValidProbeRange(out_sv.table, probe_key, actual_end))
-      ensures out_sv.insert_capacity == in_sv.insert_capacity
-      ensures out_sv.tickets == in_sv.tickets
-      ensures out_sv.stubs == in_sv.stubs
+      // ensures p_range.HasSome()
+      // ensures self.Inv()
+      // ensures forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i))
+      // ensures out_sv.Variables?
+      // ensures forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?)
+      // ensures UnwrapKnownRange(out_sv.table, p_range) == entries
+      // ensures (found ==> SlotFullWithKey(out_sv.table[index], probe_key))
+      // ensures (!found ==> ValidProbeRange(out_sv.table, probe_key, index))
+      // ensures out_sv.insert_capacity == in_sv.insert_capacity
+      // ensures out_sv.tickets == in_sv.tickets
+      // ensures out_sv.stubs == in_sv.stubs
     {
-      var probe_hash := hash(probe_key);
-      var slot_idx := probe_hash;
+      var p_hash := hash(probe_key);
+      var done := false;
 
-      entries := [];
       found := false;
-      p_range := Partial(probe_hash, slot_idx);
+      entries := [];
+      slot_idx := PrevIndex(p_hash);
+      p_range := Partial(p_hash, p_hash);
       out_sv := in_sv;
 
-      while true
+      while !done
+        invariant !done ==> p_range.Partial?
+        invariant p_range.Partial? ==> p_range == Partial(p_hash, NextIndex(slot_idx))
+        invariant p_range.Complete? ==> p_range.pivot == p_hash
+
         invariant self.Inv()
         invariant (forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i)))
+
         invariant out_sv.Variables?
-        invariant ValidPartialProbeRange(out_sv.table, probe_key, slot_idx)
-        invariant p_range == Partial(probe_hash, slot_idx)
         invariant (forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?))
+        invariant !done ==> ValidPartialProbeRange(out_sv.table, probe_key, slot_idx)
         invariant UnwrapKnownRange(out_sv.table, p_range) == entries
-        invariant out_sv.insert_capacity == in_sv.insert_capacity
-        invariant out_sv.tickets == in_sv.tickets
-        invariant out_sv.stubs == in_sv.stubs
+        // invariant out_sv.insert_capacity == in_sv.insert_capacity
+        // invariant out_sv.tickets == in_sv.tickets
+        // invariant out_sv.stubs == in_sv.stubs
 
         decreases *
       {
-        var entry;
-        var curr_idx := slot_idx;
-
-        ghost var prev_table := out_sv.table;
+        var entry; ghost var prev_sv := out_sv;
         entry, out_sv := inout self.acquireRow(slot_idx, out_sv);
-    
-        entries := entries + [entry];
-        slot_idx := NextIndex(slot_idx);
-
-        RangeEquivalentUnwrap(prev_table, out_sv.table, p_range);
-        p_range := Partial(probe_hash, slot_idx);
-
-        if slot_idx == probe_hash {
-          // might be tricky but should be provable?
-          assume false;
-        }
+        RangeEquivalentUnwrap(prev_sv.table, out_sv.table, p_range);
 
         match entry {
           case Empty => {
-            break;
+            done := true;
           }
           case Full(entry_key, value) => {
             if entry_key == probe_key {
+              done := true;
               found := true;
-              break;
             }
-            if !entry.ShouldSkip(curr_idx, probe_key) {
-              break;
+            if !entry.ShouldSkip(slot_idx, probe_key) {
+              done := true;
             }
           }
         }
+
+        entries := entries + [entry];
+        p_range := p_range.RightExtend1();
+
+        if p_range.Complete? {
+          // out_sv := resources_obey_inv(out_sv);
+          assume entry.Empty?;
+        } else {
+          slot_idx := p_range.end;
+        }
       }
+
+      assert out_sv.Variables?;
+      assert forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?);
+      assert UnwrapKnownRange(out_sv.table, p_range) == entries;
+      // var actual := PrevIndex(slot_idx);
+      // assert (found ==> SlotFullWithKey(out_sv.table[actual], probe_key));
+      // assert (!found ==> ValidProbeRange(out_sv.table, probe_key, index));
     }
 
     linear inout method releaseRows(entries: seq<Entry>, range: Range, glinear in_sv: SSM.Variables)
@@ -355,9 +357,9 @@ module Impl refines VerificationObligation {
       var query_ticket := Ticket(rid, input);
       var query_key := input.key;
 
-      var entries, found, p_range;
+      var entries, found, p_range, index;
 
-      entries, found, p_range, out_sv := inout self.doProbe(query_key, in_sv);
+      entries, found, p_range, index, out_sv := inout self.doProbe(query_key, in_sv);
       var actual_end := PrevIndex(p_range.end);
 
       if found {
@@ -444,275 +446,34 @@ module Impl refines VerificationObligation {
   //   v := Variables.Variables(row_mutexes, allocator);
   // }
 
-  // predicate method shouldHashGoBefore(search_h: uint32, slot_h: uint32, slot_idx: uint32) 
-  //   ensures shouldHashGoBefore(search_h, slot_h, slot_idx) 
-  //     == ShouldHashGoBefore(search_h as int, slot_h as int, slot_idx as int)
-  // {
-  //   || search_h < slot_h <= slot_idx // normal case
-  //   || slot_h <= slot_idx < search_h // search_h wraps around the end of array
-  //   || slot_idx < search_h < slot_h// search_h, slot_h wrap around the end of array
-  // }
+  method call(v: Variables, input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables, thread_id: uint32)
+    returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+    decreases *
+  // requires Inv(in_sv)
+  // requires ticket == SSM.input_ticket(rid, key)
+    ensures out_sv == SSM.output_stub(rid, output)
+  {
+    // assert SSM.Inv();
+    NewTicketValid(rid, input);
+    assert Valid(input_ticket(rid, input));
 
-  // method doInsert(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_sv: SSM.Variables)
-  // returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
-  //   requires Inv(v)
-  //   requires input.InsertInput?
-  //   requires IsInputResource(in_sv, rid, input)
-  //   ensures out_sv == SSM.output_stub(rid, output)
-  //   decreases *
-  // {
-  //   var insert_ticket := Ticket(rid, input);
-  //   var key, inital_key := input.key, input.key;
-  //   var kv := KV(key, input.value);
-  //   output := MapIfc.InsertOutput(true);
+    out_sv := in_sv;
+    assume false;
 
-  //   var hash_idx := hash(key);
-  //   var slot_idx := hash_idx;
+    // assert |in_sv.tickets| == 1;
+    // var the_ticket :| the_ticket in in_sv.tickets;
 
-  //   glinear var cap_handle; var bin_id; var count; glinear var r;
-  //   count, bin_id, cap_handle, r := acquireCapacity(v, thread_id, in_sv);
-
-  //   var entry; glinear var handle;
-  //   entry, handle, r := acquireRow(v, slot_idx, r);
-
-  //   count := count - 1;
-
-  //   var step := ProcessInsertTicketStep(insert_ticket);
-  //   r := easy_transform_step(r, step);
-
-  //   while true 
-  //     invariant Inv(v);
-  //     invariant 0 <= slot_idx < FixedSizeImpl()
-  //     invariant r == OneRowResource(slot_idx as nat, Info(entry, Inserting(rid, kv, inital_key)), count as nat)
-  //     invariant kv.key == key
-  //     invariant hash_idx == hash(key)
-  //     invariant handle.m == v.row_mutexes[slot_idx];
-  //     decreases *
-  //   {
-  //     var next_slot_idx := getNextIndex(slot_idx);
-  //     var new_kv;
-
-  //     match entry {
-  //       case Empty => {
-  //         step := InsertDoneStep(slot_idx as nat);
-  //       }
-  //       case Full(KV(entry_key, value)) => {
-  //         new_kv := KV(entry_key, value);
-  //         if entry_key == key {
-  //           step := InsertUpdateStep(slot_idx as nat);
-  //         } else {
-  //           var should_go_before := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
-  //           if !should_go_before {
-  //             step := InsertSkipStep(slot_idx as nat);
-  //           } else {
-  //             step := InsertSwapStep(slot_idx as nat);
-  //           }
-  //         }
-  //       }
-  //     }
-
-  //     if step.InsertDoneStep? || step.InsertUpdateStep? {
-  //       break;
-  //     }
-
-  //     glinear var next_handle; var next_entry;
-  //     next_entry, next_handle, r := acquireRow(v, next_slot_idx, r);
-
-  //     if step.InsertSwapStep? {
-  //       entry := Full(kv);
-  //       kv := new_kv;
-  //       key := new_kv.key;
-  //     }
-  
-  //     r := easy_transform_step(r, step);
-  //     r := releaseRow(v, slot_idx, entry, handle, r);
-
-  //     slot_idx, entry, handle := next_slot_idx, next_entry, next_handle;
-  //     hash_idx := hash(key);
-  //   }
-
-  //   // assert step.InsertDoneStep? || step.InsertUpdateStep?;
-  //   count := if step.InsertDoneStep? then count else count + 1;
-  //   r := easy_transform_step(r, step);
-
-  //   r := releaseRow(v, slot_idx, Full(kv), handle, r);
-  //   out_sv := releaseCapacity(v, count, bin_id, cap_handle, r);
-  // }
-
-  // method doRemoveFound(v: Variables, rid: int, 
-  //   slot_idx: uint32,
-  //   hash_idx: uint32,
-  //   inital_key: Key,
-  //   entry: SSM.Entry,
-  //   thread_id: uint32,
-  //   glinear handle: Handle,
-  //   glinear in_sv: SSM.Variables)
-  
-  //   returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
-  //   decreases *
-  //   requires Inv(v)
-  //   requires 0 <= slot_idx < FixedSizeImpl()
-  //   requires 0 <= hash_idx < FixedSizeImpl()
-  //   requires in_sv == OneRowResource(slot_idx as nat, Info(entry, Removing(rid, inital_key)), 0);
-  //   requires entry.Full? && entry.kv.key == inital_key
-  //   requires hash(inital_key) == hash_idx
-  //   requires handle.m == v.row_mutexes[slot_idx]
-  //   ensures out_sv == SSM.output_stub(rid, output)
-  // {
-  //   var found_value := entry.kv.val;
-
-  //   var slot_idx := slot_idx;
-  //   var next_slot_idx := getNextIndex(slot_idx);
-
-  //   glinear var handle := handle;
-  //   glinear var next_handle; glinear var r; var next_entry;
-  //   next_entry, next_handle, r := acquireRow(v, next_slot_idx, in_sv);
-
-  //   var step := RemoveFoundItStep(slot_idx as nat);
-  //   r := easy_transform_step(r, step);
-
-  //   while true
-  //     invariant Inv(v);
-  //     invariant 0 <= slot_idx < FixedSizeImpl()
-  //     invariant r == twoRowsResource(
-  //       slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)),
-  //       NextPos(slot_idx as nat), Info(next_entry, Free),
-  //       0)
-  //     invariant handle.m == v.row_mutexes[slot_idx]
-  //     invariant next_handle.m == v.row_mutexes[NextPos(slot_idx as nat)]
-  //     decreases *
-  //   {
-  //     next_slot_idx := getNextIndex(slot_idx);
-
-  //     if next_entry.Empty? || (next_entry.Full? && hash(next_entry.kv.key) == next_slot_idx) {
-  //       assert DoneTidying(r, slot_idx as nat);
-  //       break;
-  //     }
-
-  //     r := easy_transform_step(r, RemoveTidyStep(slot_idx as nat));
-  //     r :=  releaseRow(v, slot_idx, next_entry, handle, r);
-
-  //     slot_idx := next_slot_idx;
-  //     next_slot_idx := getNextIndex(slot_idx);
-  //     handle := next_handle;
-
-  //     next_entry, next_handle, r := acquireRow(v, next_slot_idx, r);
-  //   }
-
-  //   assert DoneTidying(r, slot_idx as nat);
-
-  //   next_slot_idx := getNextIndex(slot_idx);
-  //   output := MapIfc.RemoveOutput(true);
-
-  //   var count; glinear var cap_handle; var bin_id;
-  //   count, bin_id, cap_handle, r := acquireCapacity(v, thread_id, r);
-
-  //   step := RemoveDoneStep(slot_idx as nat);
-  //   r := easy_transform_step(r, step);
-
-  //   r := releaseRow(v, slot_idx, Empty, handle, r);
-  //   r := releaseRow(v, next_slot_idx, next_entry, next_handle, r);
-  //   out_sv := releaseCapacity(v, count + 1, bin_id, cap_handle, r);
-  // }
-
-  // method doRemove(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_sv: SSM.Variables)
-  //   returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
-  //   decreases *
-
-  //   requires Inv(v)
-  //   requires input.RemoveInput?
-  //   requires IsInputResource(in_sv, rid, input)
-  //   ensures out_sv == SSM.output_stub(rid, output)
-  // {
-  //   var query_ticket := Ticket(rid, input);
-  //   var key := input.key;
-  //   var hash_idx := hash(key);
-  //   var slot_idx := hash_idx;
-
-  //   var entry; glinear var handle; glinear var r;
-  //   entry, handle, r := acquireRow(v, slot_idx, in_sv);
-
-  //   var step : Step := ProcessRemoveTicketStep(query_ticket);
-  //   r := easy_transform_step(r, step);
-
-  //   while true 
-  //     invariant Inv(v);
-  //     invariant 0 <= slot_idx < FixedSizeImpl();
-  //     invariant r == OneRowResource(slot_idx as nat, Info(entry, Removing(rid, key)), 0)
-  //     invariant step.RemoveNotFoundStep? ==> 
-  //       (entry.Full? && shouldHashGoBefore(hash_idx, hash(entry.kv.key), slot_idx))
-  //     invariant step.RemoveTidyStep? ==> (
-  //       && TidyEnable(r, slot_idx as nat)
-  //       && KnowRowIsFree(r, NextPos(slot_idx as nat)))
-  //     invariant handle.m == v.row_mutexes[slot_idx]
-  //     decreases *
-  //   {
-  //     var next_slot_idx := getNextIndex(slot_idx);
-
-  //     match entry {
-  //       case Empty => {
-  //         step := RemoveNotFoundStep(slot_idx as nat);
-  //       }
-  //       case Full(KV(entry_key, value)) => {
-  //         if entry_key == key {
-  //           step := RemoveFoundItStep(slot_idx as nat);
-  //         } else {
-  //           var should_go_before := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
-
-  //           if !should_go_before {
-  //             step := RemoveSkipStep(slot_idx as nat);
-  //           } else {
-  //             step := RemoveNotFoundStep(slot_idx as nat);
-  //           }
-  //         }
-  //       }
-  //     }
-
-  //     if step.RemoveNotFoundStep? || step.RemoveFoundItStep? {
-  //       break;
-  //     }
-
-  //     glinear var next_handle; var next_entry;
-  //     next_entry, next_handle, r := acquireRow(v, next_slot_idx, r);
-
-  //     r := easy_transform_step(r, step);
-  //     r := releaseRow(v, slot_idx, entry, handle, r);
-
-  //     slot_idx, entry, handle := next_slot_idx, next_entry, next_handle;
-  //   }
-
-  //   if step.RemoveNotFoundStep? {
-  //     output := MapIfc.RemoveOutput(false);
-  //     r := easy_transform_step(r, step);
-  //     r := releaseRow(v, slot_idx, entry, handle, r);
-  //   } else {
-  //     output, r := doRemoveFound(v, rid, slot_idx, hash_idx, key, entry, thread_id, handle, r);
-  //   }
-  //   out_sv := r;
-  // }
-
-  // method call(v: Variables, input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables, thread_id: uint32)
-  //   returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
-  //   decreases *
-  // // requires Inv(o)
-  // // requires ticket == SSM.input_ticket(rid, key)
-  //   ensures out_sv == SSM.output_stub(rid, output)
-  // {
-  //   // Find the ticket.
-  //   assert |in_sv.tickets| == 1;
-  //   var the_ticket :| the_ticket in in_sv.tickets;
-
-  //   if the_ticket.input.QueryInput? {
-  //     output, out_sv := doQuery(v, input, rid, in_sv);
-  //   } else if the_ticket.input.InsertInput? {
-  //     output, out_sv := doInsert(v, input, rid, thread_id, in_sv);
-  //   } else if the_ticket.input.RemoveInput? {
-  //     output, out_sv := doRemove(v, input, rid, thread_id, in_sv);
-  //   } else {
-  //     out_sv := in_sv;
-  //     assert false;
-  //   }
-  // }
+    // if the_ticket.input.QueryInput? {
+    //   output, out_sv := doQuery(v, input, rid, in_sv);
+    // } else if the_ticket.input.InsertInput? {
+    //   output, out_sv := doInsert(v, input, rid, thread_id, in_sv);
+    // } else if the_ticket.input.RemoveInput? {
+    //   output, out_sv := doRemove(v, input, rid, thread_id, in_sv);
+    // } else {
+    //   out_sv := in_sv;
+    //   assert false;
+    // }
+  }
 
   // lemma NewTicket_RefinesMap(s: SSM.Variables, s': SSM.Variables, rid: int, input: Ifc.Input)
   // {
@@ -721,5 +482,4 @@ module Impl refines VerificationObligation {
   // lemma ReturnStub_RefinesMap(s: SSM.Variables, s': SSM.Variables, rid: int, output: Ifc.Output)
   // {
   // }
-  
 }

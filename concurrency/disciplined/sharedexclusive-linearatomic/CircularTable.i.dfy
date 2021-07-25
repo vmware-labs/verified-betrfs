@@ -70,6 +70,11 @@ module CircularTable {
     seq(FixedSize(), i => None)
   }
 
+  function EmptyTable(): Table
+  {
+    seq(FixedSize(), i => Some(Empty))
+  }
+
 //////////////////////////////////////////////////////////////////////////////
 // entry/range predicates
 //////////////////////////////////////////////////////////////////////////////
@@ -143,6 +148,7 @@ module CircularTable {
 
   predicate ValidTidyRange(table: FixedTable, r: Range, key: Key)
   {
+    && r.Partial?
     // remove at start
     && SlotFull(table[r.start])
     && table[r.start].value.key == key
@@ -180,33 +186,36 @@ module CircularTable {
     }
   }
 
-  predicate ValidPartialProbeRange(table: FixedTable, key: Key, cur: Index)
+  predicate ValidPartialProbeRange(table: FixedTable, key: Key, range: Range)
   {
-    forall i: Index | Partial(hash(key), cur).Contains(i)
-      :: SlotShouldSkip(table[i], i, key)
+    && range.Partial?
+    && range.start == hash(key)
+    && (forall i: Index | range.Contains(i)
+      :: SlotShouldSkip(table[i], i, key))
   }
 
-  predicate ValidProbeRange(table: FixedTable, key: Key, end: Index)
+  predicate ValidProbeRange(table: FixedTable, key: Key, range: Range)
   {
     // skip upto (not including) end
-    && ValidPartialProbeRange(table, key, end)
+    && ValidPartialProbeRange(table, key, range)
     // insert at start
+    && var end := range.end;
     && (SlotShouldSwap(table[end], end, key)
       || SlotEmpty(table[end]))
   }
 
   // a valid probe range would cover key's hash segment 
-  lemma ProbeRangeSufficient(table: FixedTable, key: Key, end: Index)
+  lemma ProbeRangeSufficient(table: FixedTable, key: Key, p_range: Range)
     requires TableInv(table)
-    requires ValidProbeRange(table, key, end)
+    requires ValidProbeRange(table, key, p_range)
     ensures var h_range := GetHashSegment(table, hash(key));
       h_range.HasSome() ==> (
-        && Partial(hash(key), end).Contains(h_range.start)
-        && end == h_range.end)
+        && p_range.Contains(h_range.start)
+        && p_range.end == h_range.end)
     ensures !TableContainsKey(table, key)
   {
     var h := hash(key);
-    var p_range := Partial(h, end);
+    var end := p_range.end;
 
     // the segment that shares the hash
     var h_range := GetHashSegment(table, h);
@@ -266,24 +275,26 @@ module CircularTable {
 
   function UnwrapKnownRange(table: FixedTable, range: Range): seq<Entry>
     requires forall i: Index :: range.Contains(i) ==> table[i].Some?
-    decreases WrappedDistance(range.start, range.end)
+    decreases |range|
   {
-    var Partial(start, end) := range;
-    if start == end then
+    if range.HasNone() then
+      assert |range| == 0;
       []
     else
-      UnwrapKnownRange(table, range.RightShrink1()) + [table[PrevIndex(end)].value]
+      var last := range.GetLast();
+      UnwrapKnownRange(table, range.RightShrink1()) + [table[last].value]
   }
 
   lemma RangeEquivalentUnwrap(t1: FixedTable, t2: FixedTable, range: Range)
     requires RangeEquivalent(t1, t2, range)
     requires forall i: Index :: range.Contains(i) ==> t1[i].Some?
     ensures UnwrapKnownRange(t1, range) == UnwrapKnownRange(t2, range)
-    decreases WrappedDistance(range.start, range.end)
+    decreases |range|
   {
-    var Partial(start, end) := range;
-    if start != end {
-      assert t1[PrevIndex(end)] == t2[PrevIndex(end)];
+    // var Partial(start, end) := range;
+    if range.HasSome() {
+      var last := range.GetLast();
+      assert t1[last] == t2[last];
       var range' := range.RightShrink1();
       RangeEquivalentUnwrap(t1, t2, range');
     } 
@@ -322,6 +333,7 @@ module CircularTable {
   predicate ValidHashSegment(table: FixedTable, hash: Index, range: Range)
     requires Complete(table)
   {
+    && range.Partial?
     // // if the segment is Partial, the hash cannot be in the middle 
     // && !Contains(Partial(NextIndex(range.start), range.end), hash))
     // all the keys in the segment share the hash

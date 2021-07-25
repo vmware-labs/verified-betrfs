@@ -166,7 +166,8 @@ module ShardedHashTable refines ShardedStateMachine {
     && v.insert_capacity.value >= 1
 
     && var table := v.table;
-    && ValidProbeRange(table, ticket.input.key, start)
+    && var p_range := Partial(hash(ticket.input.key), start);
+    && ValidProbeRange(table, ticket.input.key, p_range)
     // this part is full
     && RangeFull(table, Partial(start, end))
     // but the end is empty 
@@ -239,7 +240,8 @@ module ShardedHashTable refines ShardedStateMachine {
     && var QueryNotFoundStep(ticket, end) := step;
     && ticket in v.tickets
     && ticket.input.QueryInput?
-    && ValidProbeRange(v.table, ticket.input.key, end)
+    && var p_range := Partial(hash(ticket.input.key), end);
+    && ValidProbeRange(v.table, ticket.input.key, p_range)
   }
 
   function QueryNotFound(v: Variables, step: Step): Variables
@@ -283,7 +285,8 @@ module ShardedHashTable refines ShardedStateMachine {
     && var RemoveNotFoundStep(ticket, end) := step;
     && ticket in v.tickets
     && ticket.input.RemoveInput?
-    && ValidProbeRange(v.table, ticket.input.key, end)
+    && var p_range := Partial(hash(ticket.input.key), end);
+    && ValidProbeRange(v.table, ticket.input.key, p_range)
   }
 
   function RemoveNotFound(v: Variables, step: Step): Variables
@@ -464,8 +467,9 @@ module ShardedHashTable refines ShardedStateMachine {
       assert ValidPSL(table, hr_start);
       assert false;
     }
-
-    ProbeRangeSufficient(s.table, key, start);
+    
+    var p_range := Partial(hash(key), start);
+    ProbeRangeSufficient(s.table, key, p_range);
 
     if hr_start == NextIndex(start) {
       var e := InsertEnableEnsuresEmptySlots(s, step);
@@ -809,6 +813,13 @@ module ShardedHashTable refines ShardedStateMachine {
     && exists t :: Inv(add(s, t))
   }
 
+  // lemma FullTableValidImpossible(s: Variables)
+  //   requires Valid(s)
+  // {
+
+  // }
+
+
   lemma InvImpliesValid(s: Variables)
     requires Inv(s)
     ensures Valid(s)
@@ -856,17 +867,42 @@ module ShardedHashTable refines ShardedStateMachine {
     c := do_transform(b, e);
   }
 
-//   lemma NewTicketPreservesValid(r: Variables, id: int, input: Ifc.Input)
-//     //requires Valid(r)
-//     ensures Valid(add(r, input_ticket(id, input)))
-//   {
-//     // reveal Valid();
-//     var ticket := input_ticket(id, input);
-//     var t :| Inv(add(r, t));
+  // lemma NewTicketPreservesValid(r: Variables, id: int, input: Ifc.Input)
+  //   //requires Valid(r)
+  //   ensures Valid(add(r, input_ticket(id, input)))
+  // {
+  //   // reveal Valid();
+  //   var ticket := input_ticket(id, input);
+  //   var t :| Inv(add(r, t));
 
-//     assert add(add(r, ticket), t).table == add(r, t).table;
-//     assert add(add(r, ticket), t).insert_capacity == add(r, t).insert_capacity;
-//   }
+  //   assert add(add(r, ticket), t).table == add(r, t).table;
+  //   assert add(add(r, ticket), t).insert_capacity == add(r, t).insert_capacity;
+  // }
+
+  lemma NewTicketValid(id: int, input: Ifc.Input)
+    ensures Valid(input_ticket(id, input))
+  {
+    var v := input_ticket(id, input);
+    var v' := unit()
+      .(table := EmptyTable())
+      .(insert_capacity := Count.Variables(Capacity()));
+    var s := add(v, v');
+
+    var table := s.table;
+    assert table == EmptyTable();
+    EmptyTableQuantity(table);
+
+    forall i: Index
+      ensures && ValidPSL(table, i)
+        && ExistsHashSegment(table, i)
+    {
+      var range := Partial(0, 0);
+      assert ValidHashSegment(table, i, range);
+      assert SlotEmpty(table[i]);
+    }
+
+    assert Inv(s);
+  }
 
   // Trusted composition tools. Not sure how to generate them.
   glinear method {:extern} enclose(glinear a: Count.Variables) returns (glinear h: Variables)

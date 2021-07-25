@@ -25,7 +25,9 @@ module CircularRange {
 
   // end is not inclusive, range will never cover the entire table
 
-  datatype Range = Partial(start: Index, end: Index)
+  datatype Range =
+    | Complete(pivot: Index)
+    | Partial(start: Index, end: Index)
   {
     predicate HasNone()
     {
@@ -39,11 +41,14 @@ module CircularRange {
 
     predicate Contains(i: Index)
     {
-      var Partial(start, end) := this;
-      if start <= end then
-        (start <= i < end)
+      if Complete? then
+        true
       else
-        (start <= i || i < end)
+        var Partial(start, end) := this;
+        if start <= end then
+          (start <= i < end)
+        else
+          (start <= i || i < end)
     }
 
     predicate OverlapsWith(other: Range)
@@ -70,29 +75,55 @@ module CircularRange {
     }
 
     function method LeftShift1(): Range
+      requires Partial?
     {
       Partial(PrevIndex(start), PrevIndex(end))
     }
 
     function method RightShift1(): Range
+      requires Partial?
     {
       Partial(NextIndex(start), NextIndex(end))
     }
 
     function method RightExtend1(): Range
-      // requires start != NextIndex(end)
+      requires Partial?
     {
-      Partial(start, NextIndex(end))
+      if start == NextIndex(end) then 
+        Complete(start)
+      else
+        Partial(start, NextIndex(end))
     }
 
     function method LeftShrink1(): Range
+      requires Partial?
     {
       Partial(NextIndex(start), end)
     }
 
-    function method RightShrink1(): Range
+    function method RightShrink1(): (r: Range)
+      requires HasSome()
+      ensures |r| < |this|
     {
-      Partial(start, PrevIndex(end))
+      if Complete? then 
+        Partial(pivot, PrevIndex(pivot))
+      else
+        Partial(start, PrevIndex(end))
+    }
+
+    // function method GetRightNext(): Index
+    //   requires Partial?
+    // {
+    //   NextIndex(end)
+    // }
+
+    function method GetLast(): Index
+      requires HasSome()
+    {
+      if Complete? then
+        PrevIndex(pivot)
+      else
+        PrevIndex(end)
     }
 
     // function GetComplement(): Range
@@ -173,10 +204,10 @@ module CircularRange {
 
   function operator(| |)(r: Range): nat
   {
-    if r.start <= r.end then
-      r.end - r.start
-    else
-      r.start + FixedSize() - r.end
+    if r.Complete? then
+      FixedSize()
+    else 
+      WrappedDistance(r.start, r.end)
   }
 
   lemma RangeInclusion(a: Index, b: Index, c: Index)
