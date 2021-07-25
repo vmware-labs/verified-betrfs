@@ -209,7 +209,6 @@ module Impl refines VerificationObligation {
         entries: seq<Entry>,
         found: bool,
         p_range: Range,
-        slot_idx: Index,
         glinear out_sv: SSM.Variables)
   
       decreases *
@@ -223,8 +222,10 @@ module Impl refines VerificationObligation {
       ensures out_sv.Variables?
       ensures forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?)
       ensures UnwrapKnownRange(out_sv.table, p_range) == entries
-      ensures (found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key))
-      ensures (!found ==> ValidProbeRange(out_sv.table, probe_key, Partial(hash(probe_key), slot_idx)))
+      ensures p_range.HasSome()
+      ensures var slot_idx := p_range.GetLast();
+        && (found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key))
+        && (!found ==> ValidProbeRange(out_sv.table, probe_key, Partial(hash(probe_key), slot_idx)))
       ensures out_sv.insert_capacity == in_sv.insert_capacity
       ensures out_sv.tickets == in_sv.tickets
       ensures out_sv.stubs == in_sv.stubs
@@ -234,7 +235,6 @@ module Impl refines VerificationObligation {
 
       found := false;
       entries := [];
-      slot_idx := p_hash;
       p_range := Partial(p_hash, p_hash);
       out_sv := in_sv;
 
@@ -255,7 +255,7 @@ module Impl refines VerificationObligation {
         decreases *
       {
         var entry; ghost var prev_sv := out_sv;
-        slot_idx := p_range.end;
+        var slot_idx := p_range.end;
         entry, out_sv := inout self.acquireRow(slot_idx, out_sv);
         RangeEquivalentUnwrap(prev_sv.table, out_sv.table, p_range);
 
@@ -266,6 +266,8 @@ module Impl refines VerificationObligation {
           // out_sv := resources_obey_inv(out_sv);
           assume entry.Empty?;
         }
+
+        assert slot_idx == p_range.GetLast();
 
         match entry {
           case Empty => {
@@ -285,12 +287,6 @@ module Impl refines VerificationObligation {
           }
         }
       }
-
-      // assert out_sv.Variables?;
-      // assert forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?);
-      // assert UnwrapKnownRange(out_sv.table, p_range) == entries;
-      // assert (found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key));
-      // assert ValidPartialProbeRange(out_sv.table, probe_key, Partial(p_hash, slot_idx));
     }
 
     linear inout method releaseRows(entries: seq<Entry>, range: Range, glinear in_sv: SSM.Variables)
@@ -316,7 +312,7 @@ module Impl refines VerificationObligation {
       var index := |entries|;
       out_sv := in_sv;
 
-      while range.start != range.end
+      while range.HasSome()
         invariant self.Inv()
         invariant (forall i: Index :: (range.Contains(i) <==> self.HasHandle(i)))
         invariant out_sv.Variables?
@@ -326,9 +322,9 @@ module Impl refines VerificationObligation {
         invariant out_sv.insert_capacity == in_sv.insert_capacity
         invariant out_sv.tickets == in_sv.tickets
         invariant out_sv.stubs == in_sv.stubs
-        decreases WrappedDistance(range.start, range.end)
+        decreases |range|
       {
-        var slot_idx := PrevIndex(range.end);
+        var slot_idx := range.GetLast();
         ghost var prev_table := out_sv.table;
 
         out_sv := inout self.releaseRow(slot_idx, entries[index-1], out_sv);
@@ -355,18 +351,19 @@ module Impl refines VerificationObligation {
       var query_ticket := Ticket(rid, input);
       var query_key := input.key;
 
-      var entries, found, p_range, index;
+      var entries, found, p_range;
 
-      entries, found, p_range, index, out_sv := inout self.doProbe(query_key, in_sv);
-      var actual_end := PrevIndex(p_range.end);
+      entries, found, p_range, out_sv := inout self.doProbe(query_key, in_sv);
+
+      var slot_idx := p_range.GetLast();
 
       if found {
-        var step := QueryFoundStep(query_ticket, actual_end);
+        var step := QueryFoundStep(query_ticket, slot_idx);
         assert QueryFoundEnable(out_sv, step);
         out_sv := easy_transform_step(out_sv, step);
         output := MapIfc.QueryOutput(Found(entries[ |entries| - 1 ].value));
       } else {
-        var step := QueryNotFoundStep(query_ticket, actual_end);
+        var step := QueryNotFoundStep(query_ticket, slot_idx);
         assert QueryNotFoundEnable(out_sv, step);
         out_sv := easy_transform_step(out_sv, step);
         output := MapIfc.QueryOutput(NotFound);

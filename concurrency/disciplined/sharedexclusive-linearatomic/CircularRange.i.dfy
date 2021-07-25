@@ -29,12 +29,12 @@ module CircularRange {
     | Complete(pivot: Index)
     | Partial(start: Index, end: Index)
   {
-    predicate HasNone()
+    predicate method HasNone()
     {
       Partial? && start == end
     }
 
-    predicate HasSome()
+    predicate method HasSome()
     {
       !HasNone()
     }
