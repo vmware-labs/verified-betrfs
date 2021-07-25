@@ -218,63 +218,46 @@ module Impl refines VerificationObligation {
       requires forall i: Index :: !old_self.HasHandle(i)
       requires in_sv.Variables? && in_sv.table == UnitTable()
 
-      // ensures p_range.HasSome()
-      // ensures self.Inv()
-      // ensures forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i))
-      // ensures out_sv.Variables?
-      // ensures forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?)
-      // ensures UnwrapKnownRange(out_sv.table, p_range) == entries
-      // ensures (found ==> SlotFullWithKey(out_sv.table[index], probe_key))
-      // ensures (!found ==> ValidProbeRange(out_sv.table, probe_key, index))
-      // ensures out_sv.insert_capacity == in_sv.insert_capacity
-      // ensures out_sv.tickets == in_sv.tickets
-      // ensures out_sv.stubs == in_sv.stubs
+      ensures self.Inv()
+      ensures forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i))
+      ensures out_sv.Variables?
+      ensures forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?)
+      ensures UnwrapKnownRange(out_sv.table, p_range) == entries
+      ensures (found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key))
+      ensures (!found ==> ValidProbeRange(out_sv.table, probe_key, Partial(hash(probe_key), slot_idx)))
+      ensures out_sv.insert_capacity == in_sv.insert_capacity
+      ensures out_sv.tickets == in_sv.tickets
+      ensures out_sv.stubs == in_sv.stubs
     {
       var p_hash := hash(probe_key);
       var done := false;
 
       found := false;
       entries := [];
-      slot_idx := PrevIndex(p_hash);
+      slot_idx := p_hash;
       p_range := Partial(p_hash, p_hash);
       out_sv := in_sv;
 
-      while !done
-        invariant !done ==> p_range.Partial?
-        invariant p_range.Partial? ==> p_range == Partial(p_hash, NextIndex(slot_idx))
-        invariant p_range.Complete? ==> p_range.pivot == p_hash
+      while true
+        invariant p_range.Partial? && p_range.start == p_hash
 
         invariant self.Inv()
         invariant (forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i)))
 
         invariant out_sv.Variables?
         invariant (forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?))
-        invariant !done ==> ValidPartialProbeRange(out_sv.table, probe_key, slot_idx)
+        invariant !done ==> ValidPartialProbeRange(out_sv.table, probe_key, p_range)
         invariant UnwrapKnownRange(out_sv.table, p_range) == entries
-        // invariant out_sv.insert_capacity == in_sv.insert_capacity
-        // invariant out_sv.tickets == in_sv.tickets
-        // invariant out_sv.stubs == in_sv.stubs
+        invariant out_sv.insert_capacity == in_sv.insert_capacity
+        invariant out_sv.tickets == in_sv.tickets
+        invariant out_sv.stubs == in_sv.stubs
 
         decreases *
       {
         var entry; ghost var prev_sv := out_sv;
+        slot_idx := p_range.end;
         entry, out_sv := inout self.acquireRow(slot_idx, out_sv);
         RangeEquivalentUnwrap(prev_sv.table, out_sv.table, p_range);
-
-        match entry {
-          case Empty => {
-            done := true;
-          }
-          case Full(entry_key, value) => {
-            if entry_key == probe_key {
-              done := true;
-              found := true;
-            }
-            if !entry.ShouldSkip(slot_idx, probe_key) {
-              done := true;
-            }
-          }
-        }
 
         entries := entries + [entry];
         p_range := p_range.RightExtend1();
@@ -282,17 +265,32 @@ module Impl refines VerificationObligation {
         if p_range.Complete? {
           // out_sv := resources_obey_inv(out_sv);
           assume entry.Empty?;
-        } else {
-          slot_idx := p_range.end;
+        }
+
+        match entry {
+          case Empty => {
+            done := true;
+            break;
+          }
+          case Full(entry_key, value) => {
+            if entry_key == probe_key {
+              done := true;
+              found := true;
+              break;
+            }
+            if !entry.ShouldSkip(slot_idx, probe_key) {
+              done := true;
+              break;
+            }
+          }
         }
       }
 
-      assert out_sv.Variables?;
-      assert forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?);
-      assert UnwrapKnownRange(out_sv.table, p_range) == entries;
-      // var actual := PrevIndex(slot_idx);
-      // assert (found ==> SlotFullWithKey(out_sv.table[actual], probe_key));
-      // assert (!found ==> ValidProbeRange(out_sv.table, probe_key, index));
+      // assert out_sv.Variables?;
+      // assert forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?);
+      // assert UnwrapKnownRange(out_sv.table, p_range) == entries;
+      // assert (found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key));
+      // assert ValidPartialProbeRange(out_sv.table, probe_key, Partial(p_hash, slot_idx));
     }
 
     linear inout method releaseRows(entries: seq<Entry>, range: Range, glinear in_sv: SSM.Variables)
