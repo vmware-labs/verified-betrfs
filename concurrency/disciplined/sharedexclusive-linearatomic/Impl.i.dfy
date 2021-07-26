@@ -204,25 +204,29 @@ module Impl refines VerificationObligation {
     //   allocator[bin_id].release(AllocatorBin(count, rcap'), cap_handle);
     // }
 
-    linear inout method doProbe(probe_key: Key, glinear in_sv: SSM.Variables)
+    predicate RangeOwnershipInv(entries: seq<Entry>, range: Range, sv: SSM.Variables)
+    {
+      && Inv()
+      && sv.Variables?
+      && (forall i: Index :: (range.Contains(i) <==> HasHandle(i)))
+      && (forall i: Index :: (range.Contains(i) <==> sv.table[i].Some?))
+      && UnwrapKnownRange(sv.table, range) == entries
+    }
+
+    linear inout method probe(probe_key: Key, glinear in_sv: SSM.Variables)
       returns (
         entries: seq<Entry>,
         found: bool,
         p_range: Range,
         glinear out_sv: SSM.Variables)
-  
       decreases *
 
       requires old_self.Inv()
       requires forall i: Index :: !old_self.HasHandle(i)
       requires in_sv.Variables? && in_sv.table == UnitTable()
 
-      ensures self.Inv()
-      ensures forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i))
-      ensures out_sv.Variables?
-      ensures forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?)
-      ensures UnwrapKnownRange(out_sv.table, p_range) == entries
       ensures p_range.HasSome()
+      ensures self.RangeOwnershipInv(entries, p_range, out_sv)
       ensures var slot_idx := p_range.GetLast();
         && (found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key))
         && (!found ==> ValidProbeRange(out_sv.table, probe_key, Partial(hash(probe_key), slot_idx)))
@@ -240,14 +244,8 @@ module Impl refines VerificationObligation {
 
       while true
         invariant p_range.Partial? && p_range.start == p_hash
-
-        invariant self.Inv()
-        invariant (forall i: Index :: (p_range.Contains(i) <==> self.HasHandle(i)))
-
-        invariant out_sv.Variables?
-        invariant (forall i: Index :: (p_range.Contains(i) <==> out_sv.table[i].Some?))
+        invariant self.RangeOwnershipInv(entries, p_range, out_sv)
         invariant !done ==> ValidPartialProbeRange(out_sv.table, probe_key, p_range)
-        invariant UnwrapKnownRange(out_sv.table, p_range) == entries
         invariant out_sv.insert_capacity == in_sv.insert_capacity
         invariant out_sv.tickets == in_sv.tickets
         invariant out_sv.stubs == in_sv.stubs
@@ -293,15 +291,10 @@ module Impl refines VerificationObligation {
     linear inout method releaseRows(entries: seq<Entry>, range: Range, glinear in_sv: SSM.Variables)
       returns (glinear out_sv: SSM.Variables)
 
-      requires old_self.Inv()
-      requires in_sv.Variables?
-      requires (forall i: Index :: (range.Contains(i) <==> old_self.HasHandle(i)))
-      requires forall i: Index :: (range.Contains(i) <==> in_sv.table[i].Some?)
-      requires UnwrapKnownRange(in_sv.table, range) == entries
+      requires old_self.RangeOwnershipInv(entries, range, in_sv)
 
       ensures self.Inv()
       ensures self.HasNoHandle();
-
       ensures out_sv.Variables?
       ensures out_sv.table == UnitTable();
       ensures out_sv.insert_capacity == in_sv.insert_capacity
@@ -314,12 +307,8 @@ module Impl refines VerificationObligation {
       out_sv := in_sv;
 
       while range.HasSome()
-        invariant self.Inv()
-        invariant (forall i: Index :: (range.Contains(i) <==> self.HasHandle(i)))
-        invariant out_sv.Variables?
-        invariant (forall i: Index :: (range.Contains(i) <==> out_sv.table[i].Some?))
         invariant 0 <= index <= |entries| 
-        invariant UnwrapKnownRange(out_sv.table, range) == entries[..index]
+        invariant self.RangeOwnershipInv(entries[..index], range, out_sv)
         invariant out_sv.insert_capacity == in_sv.insert_capacity
         invariant out_sv.tickets == in_sv.tickets
         invariant out_sv.stubs == in_sv.stubs
@@ -339,7 +328,7 @@ module Impl refines VerificationObligation {
       assert out_sv.table == UnitTable();
     }
 
-    linear inout method doQuery(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
+    linear inout method query(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
       returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
 
       decreases *
@@ -353,8 +342,7 @@ module Impl refines VerificationObligation {
       var query_key := input.key;
 
       var entries, found, p_range;
-
-      entries, found, p_range, out_sv := inout self.doProbe(query_key, in_sv);
+      entries, found, p_range, out_sv := inout self.probe(query_key, in_sv);
 
       var slot_idx := p_range.GetLast();
 
@@ -373,6 +361,84 @@ module Impl refines VerificationObligation {
       out_sv := inout self.releaseRows(entries, p_range, out_sv);
       assert out_sv.stubs == multiset { Stub(rid, output) };
     }
+
+    linear inout method insertNotFound(ticket: Ticket, p_range: Range, entries: seq<Entry>, glinear in_sv: SSM.Variables)
+      returns (glinear out_sv: SSM.Variables)
+
+      requires old_self.RangeOwnershipInv(entries, p_range, in_sv)
+      requires p_range.HasSome()
+      requires p_range.Complete? ==> entries[ |entries| - 1 ].Empty?
+
+      requires ticket in in_sv.tickets
+      requires ticket.input.InsertInput?
+      requires in_sv.insert_capacity.value >= 1
+
+    {
+      out_sv := in_sv;
+      var entries := entries;
+      var range := p_range;
+      var start := range.GetLast();
+      var end := start;
+      var entry := entries[ |entries| - 1 ];
+
+      if entry.Full? {
+        while true
+          invariant range.Partial?
+          invariant self.RangeOwnershipInv(entries, range, out_sv)
+          invariant RangeFull(out_sv.table, Partial(start, range.end))
+          decreases FixedSize() - |range|
+        {
+          var entry; ghost var prev_sv := out_sv;
+          end := range.end;
+          entry, out_sv := inout self.acquireRow(end, out_sv);
+          RangeEquivalentUnwrap(prev_sv.table, out_sv.table, range);
+
+          entries := entries + [entry];
+          range := range.RightExtend1();
+
+          if range.Complete? {
+            assume entry.Empty?;
+          }
+
+          if entry.Empty? {
+            break;
+          }
+        }
+      }
+
+      assert RangeFull(out_sv.table, Partial(start, end));
+    }
+
+    // linear inout method insert(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
+    //   returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+
+    //   decreases *
+    //   requires old_self.Inv()
+    //   requires old_self.HasNoHandle()
+    //   requires input.InsertInput?
+    //   requires IsInputResource(in_sv, rid, input)
+    
+    // {
+    //   var insert_ticket := Ticket(rid, input);
+    //   var insert_key, insert_value := input.key, input.value;
+
+    //   var entries, found, p_range;
+    //   entries, found, p_range, out_sv := inout self.probe(insert_key, in_sv);
+
+    //   var slot_idx := p_range.GetLast();
+
+    //   if found {
+    //     var step := OverwriteStep(insert_ticket, slot_idx);
+    //     assert OverwriteEnable(out_sv, step);
+    //     out_sv := easy_transform_step(out_sv, step);
+    //   } else {
+    //     var step := InsertStep(insert_ticket, slot_idx);
+    //     assert InsertEnable(out_sv, step);
+    //     out_sv := easy_transform_step(out_sv, step);
+    //   }
+
+    //   output := MapIfc.InsertOutput(true);
+    // }
   }
 
   predicate Inv(v: Variables)
