@@ -263,8 +263,9 @@ module Impl refines VerificationObligation {
         p_range := p_range.RightExtend1();
 
         if p_range.Complete? {
-          // out_sv := resources_obey_inv(out_sv);
-          assume entry.Empty?;
+          out_sv := resources_obey_inv(out_sv);
+          CompleteProbeRangeImpossible(out_sv, probe_key);
+          assert entry.Empty?;
         }
 
         assert slot_idx == p_range.GetLast();

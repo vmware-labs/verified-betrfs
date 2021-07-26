@@ -915,5 +915,27 @@ module ShardedHashTable refines ShardedStateMachine {
     requires h.tickets == multiset{}
     requires h.stubs == multiset{}
     ensures a == h.insert_capacity
-//
+
+  lemma CompleteProbeRangeImpossible(v: Variables, key: Key)
+    requires Valid(v)
+    requires 
+      var key_hash := hash(key);
+      && v.table[PrevIndex(key_hash)].Some?
+      && ValidPartialProbeRange(v.table, key, Partial(key_hash, PrevIndex(key_hash)))
+    ensures SlotEmpty(v.table[PrevIndex(hash(key))])
+  {
+    var t :| Inv(add(v, t));
+
+    var table1, table2 := v.table, t.table;
+    var table3 := fuse_seq(table1, table2);
+    assert TableInv(table3);
+    assert table1 == table3;
+
+    var last := PrevIndex(hash(key));
+
+    if table1[last].value.Full? {
+      var e := InvImpliesEmptySlot(add(v, t));
+      assert false;
+    }
+  }
 }
