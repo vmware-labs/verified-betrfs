@@ -92,3 +92,15 @@ module TicketStubStateMachine(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc))
     }
   }
 }
+
+module Obligations(
+    IOIfc: InputOutputIfc,
+    ssm: TicketStubSSM(IOIfc),
+    spec: StateMachine(IOIfc),
+    ref: Refinement(
+          AsyncIfc(IOIfc),
+          TicketStubStateMachine(IOIfc, ssm),
+          AsyncStateMachine(IOIfc, spec)
+       )
+  )
+{ }
