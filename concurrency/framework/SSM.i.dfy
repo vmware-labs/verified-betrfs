@@ -14,7 +14,7 @@ abstract module SSM {
   requires Init(s)
   ensures Inv(s)
 
-  lemma NextImpliesInv(shard: M, shard': M, rest: M)
+  lemma NextPreservesInv(shard: M, shard': M, rest: M)
   requires Inv(dot(shard, rest))
   requires Next(shard, shard')
   ensures Inv(dot(shard', rest))
