@@ -77,6 +77,8 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   method get_finished_req_blocking()
   returns (
     aiocb_ptr: Ptr,
+    aiocb: Deref<Aiocb>,
+
     old_v: PendingTaskSet,
     new_v: PendingTaskSet,
     linear old_g: G,

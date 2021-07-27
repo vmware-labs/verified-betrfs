@@ -20,7 +20,7 @@ abstract module InputOutputIfc refines Ifc {
 }
 
 module RequestIds {
-  type RequestId = nat
+  newtype RequestId = nat
 }
 
 module AsyncIfc(ifc: InputOutputIfc) refines Ifc {
