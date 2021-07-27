@@ -229,7 +229,7 @@ module Impl refines VerificationObligation {
       ensures self.RangeOwnershipInv(entries, p_range, out_sv)
       ensures var slot_idx := p_range.GetLast();
         && (found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key))
-        && (!found ==> ValidProbeRange(out_sv.table, probe_key, Partial(hash(probe_key), slot_idx)))
+        && (!found ==> ValidProbeRange(out_sv.table, probe_key, p_range.RightShrink1()))
       ensures out_sv.insert_capacity == in_sv.insert_capacity
       ensures out_sv.tickets == in_sv.tickets
       ensures out_sv.stubs == in_sv.stubs
@@ -262,11 +262,9 @@ module Impl refines VerificationObligation {
 
         if p_range.Complete? {
           out_sv := resources_obey_inv(out_sv);
-          CompleteProbeRangeImpossible(out_sv, probe_key);
+          CompleteFullRangeImpossible(out_sv, p_hash);
           assert entry.Empty?;
         }
-
-        assert slot_idx == p_range.GetLast();
 
         match entry {
           case Empty => {
@@ -369,44 +367,61 @@ module Impl refines VerificationObligation {
       requires p_range.HasSome()
       requires p_range.Complete? ==> entries[ |entries| - 1 ].Empty?
 
+      requires var probe_key := ticket.input.key;
+        ValidProbeRange(in_sv.table, probe_key, p_range.RightShrink1())
+
       requires ticket in in_sv.tickets
       requires ticket.input.InsertInput?
       requires in_sv.insert_capacity.value >= 1
 
     {
       out_sv := in_sv;
+      var probe_key := ticket.input.key;
       var entries := entries;
       var range := p_range;
       var start := range.GetLast();
-      var end := start;
+
       var entry := entries[ |entries| - 1 ];
+      var done := entry.Empty?;
+      var end: Index := p_range.GetLast();
 
       if entry.Full? {
-        while true
-          invariant range.Partial?
+        assert range.Partial?;
+        end := range.end;
+        var h := hash(probe_key);
+
+        while entry.Full?
+          invariant range == Partial(h, end)
           invariant self.RangeOwnershipInv(entries, range, out_sv)
-          invariant RangeFull(out_sv.table, Partial(start, range.end))
+          invariant ValidProbeRange(out_sv.table, probe_key, Partial(hash(probe_key), start))
+          invariant RangeFull(out_sv.table, Partial(start, end))
           decreases FixedSize() - |range|
         {
           var entry; ghost var prev_sv := out_sv;
-          end := range.end;
-          entry, out_sv := inout self.acquireRow(end, out_sv);
+
+          var last := range.end;
+          entry, out_sv := inout self.acquireRow(range.end, out_sv);
           RangeEquivalentUnwrap(prev_sv.table, out_sv.table, range);
 
           entries := entries + [entry];
           range := range.RightExtend1();
+          end := if range.Complete? then PrevIndex(h) else range.end;
 
           if range.Complete? {
-            assume entry.Empty?;
+            out_sv := resources_obey_inv(out_sv);
+            CompleteFullRangeImpossible(out_sv, range.pivot);
+            assert entry.Empty?;
           }
 
           if entry.Empty? {
+            end := last;
             break;
           }
         }
       }
 
       assert RangeFull(out_sv.table, Partial(start, end));
+      assert SlotEmpty(out_sv.table[end]);
     }
 
     // linear inout method insert(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
