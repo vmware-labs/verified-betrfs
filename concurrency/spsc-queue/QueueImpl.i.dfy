@@ -5,7 +5,7 @@ include "../framework/Atomic.s.dfy"
 include "../framework/MultiRw.i.dfy"
 include "QueueMultiRw.i.dfy"
 
-abstract module QueueImpl {
+module QueueImpl {
   import opened GhostLoc
   import opened Ptrs
   import opened NativeTypes
