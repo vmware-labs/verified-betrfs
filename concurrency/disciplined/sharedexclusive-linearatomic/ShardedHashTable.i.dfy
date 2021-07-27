@@ -365,6 +365,29 @@ module ShardedHashTable refines ShardedStateMachine {
     e :| table[e].value.Empty?;
   }
 
+  lemma InvImpliesEmptySlots(s: Variables) returns (e1: Index, e2: Index)
+    requires Inv(s)
+    ensures s.table[e1].value.Empty?
+    ensures s.table[e2].value.Empty?
+    ensures e1 != e2
+
+ lemma AlmostCompleteFullRangeImpossible(v: Variables, i: Index)
+    requires Valid(v)
+    requires v.table[PrevIndex(i)].Some?
+    requires RangeFull(v.table, Partial(i, PrevIndex(i)))
+    ensures false;
+  {
+    var t :| Inv(add(v, t));
+
+    var table1, table2 := v.table, t.table;
+    var table3 := fuse_seq(table1, table2);
+    assert TableInv(table3);
+    assert table1 == table3;
+
+    var e1, e2 := InvImpliesEmptySlots(add(v, t));
+    assert false;
+  }
+
 //////////////////////////////////////////////////////////////////////////////
 // Proof that Init && Next maintains Inv
 //////////////////////////////////////////////////////////////////////////////
@@ -423,7 +446,7 @@ module ShardedHashTable refines ShardedStateMachine {
       <=
       Capacity() - 1;
       ==
-      FixedSize() - 2;
+      FixedSize() - 3;
     }
     assert TableQuantity(s.table) <= FixedSize() - 2;
     assert SlotEmpty(s.table[end]);

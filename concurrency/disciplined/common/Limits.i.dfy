@@ -11,7 +11,7 @@ module Limits {
 
   function Capacity() : (n: nat)
   {
-    FixedSize() - 1
+    FixedSize() - 2
   }
 
   function method FixedSizeImpl() : (n: uint32)

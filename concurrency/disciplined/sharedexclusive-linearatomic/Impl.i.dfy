@@ -373,7 +373,6 @@ module Impl refines VerificationObligation {
       requires ticket in in_sv.tickets
       requires ticket.input.InsertInput?
       requires in_sv.insert_capacity.value >= 1
-
     {
       out_sv := in_sv;
       var probe_key := ticket.input.key;
@@ -381,31 +380,33 @@ module Impl refines VerificationObligation {
       var range := p_range;
       var start := range.GetLast();
 
-      var entry := entries[ |entries| - 1 ];
+      var e_index := |entries| - 1;
+      var entry := entries[e_index];
       var done := entry.Empty?;
       var end: Index := p_range.GetLast();
 
       if entry.Full? {
         assert range.Partial?;
-        end := range.end;
         var h := hash(probe_key);
 
         while entry.Full?
-          invariant range == Partial(h, end)
+          invariant range.Partial? && range.start == h
           invariant self.RangeOwnershipInv(entries, range, out_sv)
           invariant ValidProbeRange(out_sv.table, probe_key, Partial(hash(probe_key), start))
-          invariant RangeFull(out_sv.table, Partial(start, end))
+          invariant RangeFull(out_sv.table, Partial(start, range.end))
+          invariant out_sv.insert_capacity == in_sv.insert_capacity
+          invariant out_sv.tickets == in_sv.tickets
+          invariant out_sv.stubs == in_sv.stubs
           decreases FixedSize() - |range|
         {
           var entry; ghost var prev_sv := out_sv;
 
-          var last := range.end;
+          end := range.end;
           entry, out_sv := inout self.acquireRow(range.end, out_sv);
           RangeEquivalentUnwrap(prev_sv.table, out_sv.table, range);
 
           entries := entries + [entry];
           range := range.RightExtend1();
-          end := if range.Complete? then PrevIndex(h) else range.end;
 
           if range.Complete? {
             out_sv := resources_obey_inv(out_sv);
@@ -414,14 +415,27 @@ module Impl refines VerificationObligation {
           }
 
           if entry.Empty? {
-            end := last;
             break;
           }
         }
       }
 
-      assert RangeFull(out_sv.table, Partial(start, end));
-      assert SlotEmpty(out_sv.table[end]);
+      // assert RangeFull(out_sv.table, Partial(start, end));
+      // assert SlotEmpty(out_sv.table[end]);
+      // assert self.RangeOwnershipInv(entries, range, out_sv);
+
+      var step := InsertStep(ticket, start, end);
+      // assert InsertEnable(out_sv, step);
+
+      ghost var prev_table := out_sv.table;
+      out_sv := easy_transform_step(out_sv, step);
+      var table := out_sv.table;
+
+      var new_entry := Full(ticket.input.key, ticket.input.value);
+      assert table == TableRightShift(prev_table, Some(new_entry), start, end);
+
+      // entries := entries[..e_index] + [new_entry] + entries[e_index..|entries|-1];
+      // assert UnwrapKnownRange(table, range) == entries;
     }
 
     // linear inout method insert(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
@@ -455,6 +469,16 @@ module Impl refines VerificationObligation {
     //   output := MapIfc.InsertOutput(true);
     // }
   }
+
+  // method rightShiftEntries(entries: seq<Entry>,
+  //   new_entry: Entry,
+  //   prev_table: FixedTable,
+  //   range: Range, 
+  //   table: FixedTable)
+  //   requires UnwrapKnownRange(prev_table, range) == entries
+  //   requires table == TableRightShift(prev_table, Some(new_entry), start, end);
+  // {
+  // }
 
   predicate Inv(v: Variables)
   {
