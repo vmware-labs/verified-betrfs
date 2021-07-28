@@ -281,6 +281,7 @@ module CircularTable {
   function {:fuel 1} UnwrapKnownRange(table: FixedTable, range: Range): (s: seq<Entry>)
     requires RangeKnown(table, range)
     ensures |range| == |s|
+    // ensures range.HasSome() ==> table[range.GetLast()] == Some(Last(s))
     decreases |range|
   {
     if range.HasNone() then
@@ -289,6 +290,23 @@ module CircularTable {
     else
       var last := range.GetLast();
       UnwrapKnownRange(table, range.RightShrink1()) + [table[last].value]
+  }
+
+  lemma UnwrapKnownRangeIndex(table: FixedTable, r1: Range, entries: seq<Entry>)
+    requires r1.Partial?
+    requires RangeKnown(table, r1) 
+    requires UnwrapKnownRange(table, r1) == entries
+    ensures forall i: Index :: r1.Contains(i) ==>  
+      table[i].value == entries[LeftShift(i, r1.start)]
+    decreases |r1|
+  {
+    if r1.HasNone() {
+      assert true;
+    } else {
+      var last := r1.GetLast();
+      UnwrapKnownRangeIndex(table, r1.RightShrink1(), DropLast(entries));
+      // UnwrapKnownRange(table, range.RightShrink1()) + [table[last].value]
+    }
   }
 
   lemma UnwrapKnownPrefixRange(table: FixedTable, r1: Range, r2: Range, entries: seq<Entry>)
@@ -301,27 +319,32 @@ module CircularTable {
     requires |entries| > 0
     requires UnwrapKnownRange(table, r1) == entries
     ensures |r2| <= |entries|
-    ensures UnwrapKnownRange(table, r2) == entries[ ..|r2| ]
+    // ensures UnwrapKnownRange(table, r2) == entries[ ..|r2| ]
+    ensures table[r2.end].value == entries[ |r2| ]
   {
     if |r2| != 0 {
-      var last := r2.GetLast();
-      var r3 := r2.RightShrink1();
+      assume false;
+      // var last := r2.GetLast();
+      // var r3 := r2.RightShrink1();
     
-      assert |r3| == |r2| - 1;
-      assert 0 <= |r3| < |entries|;
+      // assert |r3| == |r2| - 1;
+      // assert 0 <= |r3| < |entries|;
 
-      calc {
-        UnwrapKnownRange(table, r2);
-        UnwrapKnownRange(table, r3) + [table[last].value];
-        {
-          UnwrapKnownPrefixRange(table, r1, r3, entries);
-        }
-        entries[ ..|r3| ] + [table[last].value];
-        {
-          assume table[last].value == entries[ |r3| ];
-        }
-        entries[ ..|r2| ];
-      }
+      // calc {
+      //   UnwrapKnownRange(table, r2);
+      //   UnwrapKnownRange(table, r3) + [table[last].value];
+      //   {
+      //     UnwrapKnownPrefixRange(table, r1, r3, entries);
+      //   }
+      //   entries[ ..|r3| ] + [table[last].value];
+      //   {
+      //     // UnwrapKnownPrefixRange(table, r1, r3, entries);
+      //     assume table[r3.end].value == entries[ |r3| ];
+      //   }
+      //   entries[ ..|r2| ];
+      // }
+    } else {
+      assert r2.end == r2.start;
     }
   }
 

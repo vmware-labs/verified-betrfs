@@ -23,6 +23,24 @@ module CircularRange {
     else FixedSize() - s + e
   }
 
+  function method RightShift(i: Index, n: Index) : Index
+  {
+    var e: int := i + n;
+    if e >= FixedSize() then 
+      e - FixedSize()
+    else
+      e
+  }
+
+  function method LeftShift(i: Index, n: Index) : Index
+  {
+    var e: int := i - n;
+    if e < 0 then
+      e + FixedSize()
+    else
+      e
+  }
+
   // end is not inclusive, range will never cover the entire table
 
   datatype Range =
