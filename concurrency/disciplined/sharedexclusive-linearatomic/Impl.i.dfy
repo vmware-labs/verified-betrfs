@@ -357,6 +357,7 @@ module Impl refines VerificationObligation {
         }
       }
 
+      assert end == PrevIndex(range.end);
       var shift_range := Partial(start, end);
       // assert RangeFull(out_sv.table, range.RightShrink1());
       // assert SlotEmpty(out_sv.table[end]);
@@ -367,6 +368,8 @@ module Impl refines VerificationObligation {
       var t2 := out_sv.table;
 
       var new_entry := Full(ticket.input.key, ticket.input.value);
+
+      assert UnwrapKnownRange(t1, range) == entries;
 
       assert UnwrapKnownRange(t1, probe_range) == UnwrapKnownRange(t2, probe_range) by {
         assert RangeEquivalent(t1, t2, probe_range);
