@@ -133,11 +133,12 @@ module Impl refines VerificationObligation {
     ensures self.RangeOwnershipInv(entries', range', out_sv);
     ensures range'.Partial?
     ensures |entries'| != 0
-    ensures Last(entries').Full? ==> RangeFull(out_sv.table, range')
+      ensures Last(entries').Full? ==> RangeFull(out_sv.table, range')
     // ensures entry.Empty? ==> RangeFull(out_sv.table, range)
     ensures range' == range.RightExtend1()
-    ensures out_sv == in_sv.(table := in_sv.table[range.end := Some(Last(entries'))])
-    ensures out_sv.table[range.end] == Some(Last(entries'))
+    ensures var entry := Last(entries');
+      && out_sv == in_sv.(table := in_sv.table[range.end := Some(entry)])
+      && out_sv.table[range.end] == Some(entry)
     {
       out_sv := in_sv;
       ghost var prev_sv := out_sv;
@@ -327,6 +328,7 @@ module Impl refines VerificationObligation {
       var entries := entries;
       var range := p_range;
       var start := range.GetLast();
+      var end := start;
       var entry := entries[ |entries| - 1 ];
 
       var h := hash(probe_key);
@@ -343,19 +345,20 @@ module Impl refines VerificationObligation {
           decreases FixedSize() - |range|
         {
           ghost var prev_sv := out_sv;
+          end := range.end;
           entries, range, out_sv := inout self.acquireRow(entries, range, out_sv);
           entry := entries[ |entries| - 1 ];
 
           if entry.Empty? {
+            assert SlotEmpty(out_sv.table[end]);
             break;
           }
         }
       }
 
       assert RangeFull(out_sv.table, range.RightShrink1());
-      assert SlotEmpty(out_sv.table[range.end]);
-
-      var step := InsertStep(ticket, start, range.end);
+      assert SlotEmpty(out_sv.table[end]);
+      var step := InsertStep(ticket, start, end);
       assert InsertEnable(out_sv, step);
 
     //   ghost var prev_table := out_sv.table;
