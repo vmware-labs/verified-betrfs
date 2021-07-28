@@ -55,7 +55,8 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && op == ifc.InternalOp
     && rid in s.reqs
     && (s.reqs[rid].WriteInput? ==>
-      s' ==
+      && s.reqs[rid].key in s.store
+      && s' ==
         s.(store := s.store[s.reqs[rid].key :=
             VersionedObject(
               s.store[s.reqs[rid].key].versions + [s.reqs[rid].data],
@@ -64,7 +65,9 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
          .(resps := s.resps[rid := CacheIfc.WriteOutput])
     )
     && (s.reqs[rid].ReadInput? ==>
-      s' ==
+      && s.reqs[rid].key in s.store
+      && |s.store[s.reqs[rid].key].versions| > 0
+      && s' ==
         s.(reqs := s.reqs - {rid})
          .(resps := s.resps[rid := CacheIfc.ReadOutput(
             s.store[s.reqs[rid].key].versions[
@@ -110,7 +113,7 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
         && VersionedObjectPersist(s.store[key], s'.store[key]))
   }
 
-  predicate VersionedObjectCrash(v: VersionedObject, v': VersionedObject, op: ifc.Op) {
+  predicate VersionedObjectCrash(v: VersionedObject, v': VersionedObject) {
     && |v'.versions| <= |v.versions|
     && v'.versions == v.versions[0 .. |v'.versions|]
     && |v'.versions| >= v.persistent
