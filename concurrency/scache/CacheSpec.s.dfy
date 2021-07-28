@@ -40,6 +40,7 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     syncs: map<RequestId, map<int, int>>
   )
 
+  // Put a new request (either a 'read' or a 'write') into the requests
   predicate PushInput(s: Variables, s': Variables, op: ifc.Op,
         rid: RequestId, input: CacheIfc.Input)
   {
@@ -49,12 +50,15 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && s' == s.(reqs := s.reqs[rid := input])
   }
 
+  // Process a read or a write.
+  // Put the result in the 'resps' map.
   predicate Process(s: Variables, s': Variables, op: ifc.Op,
         rid: RequestId)
   {
     && op == ifc.InternalOp
     && rid in s.reqs
     && (s.reqs[rid].WriteInput? ==>
+      // For a write: append this value to the versions list
       && s.reqs[rid].key in s.store
       && s' ==
         s.(store := s.store[s.reqs[rid].key :=
@@ -65,6 +69,7 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
          .(resps := s.resps[rid := CacheIfc.WriteOutput])
     )
     && (s.reqs[rid].ReadInput? ==>
+      // For a read: determine the latest version.
       && s.reqs[rid].key in s.store
       && |s.store[s.reqs[rid].key].versions| > 0
       && s' ==
@@ -75,6 +80,7 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     )
   }
 
+  // Pull a return value out of the 'resps' map
   predicate PopOutput(s: Variables, s': Variables, op: ifc.Op, rid: RequestId)
   {
     && rid in s.resps
@@ -82,6 +88,9 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && s' == s.(resps := s.resps - {rid})
   }
 
+  // Add a 'sync' request.
+  // Save a copy of the latest version numbers for each cache entry; in order to finish
+  // this sync request, we need to ensure that all those versions get written.
   predicate PushSync(s: Variables, s': Variables, op: ifc.Op, rid: RequestId)
   {
     && op == ifc.Start(rid, CacheIfc.SyncInput)
@@ -90,6 +99,9 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
         (map key | key in s.store :: |s.store[key].versions| - 1)])
   }
 
+  // Finish a 'sync' request. To do this, requires checking that each entry is persisted
+  // up to the point where the 'sync' request began.
+
   predicate PopSync(s: Variables, s': Variables, op: ifc.Op, rid: RequestId) {
     && op == ifc.End(rid, CacheIfc.SyncOutput)
     && rid in s.syncs
@@ -97,6 +109,10 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && (forall key | key in s.syncs[rid]
             :: key in s.store && s.store[key].persistent >= s.syncs[rid][key])
   }
+
+  // 'Persist' can happen at any time, up to the implementation. (Only requirement
+  // is that stuff has to be persisted before a sync completes.)
+  // A 'persist' is represented by monotonically increasing the persist counters.
 
   predicate VersionedObjectPersist(v: VersionedObject, v': VersionedObject) {
     && v'.versions == v.versions
@@ -112,6 +128,8 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && (forall key :: key in s.store ==> key in s'.store
         && VersionedObjectPersist(s.store[key], s'.store[key]))
   }
+
+  // Crash: can lose some versions, can't go back behind the latest 'persist'.
 
   predicate VersionedObjectCrash(v: VersionedObject, v': VersionedObject) {
     && |v'.versions| <= |v.versions|
