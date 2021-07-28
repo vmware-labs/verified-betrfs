@@ -133,7 +133,7 @@ module Impl refines VerificationObligation {
     ensures self.RangeOwnershipInv(entries', range', out_sv);
     ensures range'.Partial?
     ensures |entries'| != 0
-      ensures Last(entries').Full? ==> RangeFull(out_sv.table, range')
+    ensures Last(entries').Full? ==> RangeFull(out_sv.table, range')
     // ensures entry.Empty? ==> RangeFull(out_sv.table, range)
     ensures range' == range.RightExtend1()
     ensures var entry := Last(entries');
@@ -332,12 +332,13 @@ module Impl refines VerificationObligation {
       var entry := entries[ |entries| - 1 ];
 
       var h := hash(probe_key);
+      var probe_range := Partial(h, start);
 
       if entry.Full? {
         while true
           invariant range.Partial? && range.start == h
           invariant self.RangeOwnershipInv(entries, range, out_sv)
-          invariant ValidProbeRange(out_sv.table, probe_key, Partial(h, start))
+          invariant ValidProbeRange(out_sv.table, probe_key, probe_range)
           invariant RangeFull(out_sv.table, range)
           invariant out_sv.insert_capacity == in_sv.insert_capacity
           invariant out_sv.tickets == in_sv.tickets
@@ -356,20 +357,25 @@ module Impl refines VerificationObligation {
         }
       }
 
-      assert RangeFull(out_sv.table, range.RightShrink1());
-      assert SlotEmpty(out_sv.table[end]);
+      var shift_range := Partial(start, end);
+      // assert RangeFull(out_sv.table, range.RightShrink1());
+      // assert SlotEmpty(out_sv.table[end]);
       var step := InsertStep(ticket, start, end);
-      assert InsertEnable(out_sv, step);
+      // assert InsertEnable(out_sv, step);
+      ghost var t1 := out_sv.table;
+      out_sv := easy_transform_step(out_sv, step);
+      var t2 := out_sv.table;
 
-    //   ghost var prev_table := out_sv.table;
-    //   out_sv := easy_transform_step(out_sv, step);
-    //   var table := out_sv.table;
+      var new_entry := Full(ticket.input.key, ticket.input.value);
 
-    //   var new_entry := Full(ticket.input.key, ticket.input.value);
-    //   assert table == TableRightShift(prev_table, Some(new_entry), start, end);
-
-    //   // entries := entries[..e_index] + [new_entry] + entries[e_index..|entries|-1];
-    //   // assert UnwrapKnownRange(table, range) == entries;
+      assert UnwrapKnownRange(t1, probe_range) == UnwrapKnownRange(t2, probe_range) by {
+        assert RangeEquivalent(t1, t2, probe_range);
+        RangeEquivalentUnwrap(t1, t2, probe_range);
+      }
+  
+      assert UnwrapKnownRange(t1, shift_range) == UnwrapKnownRange(t2, shift_range.RightShift1()) by {
+        RangeShiftEquivalentUnwrap(t1, t2, shift_range);
+      }
     }
 
     // linear inout method insert(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)

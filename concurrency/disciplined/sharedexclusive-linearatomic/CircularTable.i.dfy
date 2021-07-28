@@ -300,6 +300,34 @@ module CircularTable {
     } 
   }
 
+  predicate RangeRightShift1Equivalent(t1: FixedTable, t2: FixedTable, r: Range)
+  {
+    forall i: Index :: r.Contains(i) ==> t1[i] == t2[NextIndex(i)]
+  }
+
+  lemma RangeShiftEquivalentUnwrap(t1: FixedTable, t2: FixedTable, r1: Range)
+    requires r1.Partial?
+    requires RangeRightShift1Equivalent(t1, t2, r1)
+    requires forall i: Index :: r1.Contains(i) ==> t1[i].Some?
+    ensures forall i: Index :: r1.RightShift1().Contains(i) ==> t2[i].Some?
+    ensures UnwrapKnownRange(t1, r1) == UnwrapKnownRange(t2, r1.RightShift1())
+    decreases |r1|
+  {
+    var r2 := r1.RightShift1();
+    if r1.HasSome() {
+      forall i: Index | r2.Contains(i)
+        ensures t2[i] == t1[PrevIndex(i)]
+      {
+        assert r1.Contains(PrevIndex(i));
+      }
+
+      var last := r1.GetLast();
+      assert t1[last] == t2[NextIndex(last)];
+      var r1' := r1.RightShrink1();
+      RangeShiftEquivalentUnwrap(t1, t2, r1');
+    }
+  }
+
   // function UnwrapSubTable(table: FixedTable, range: Range): seq<Entry>
   //   requires forall i: Index :: range.Contains(i) ==> table[i].Some?
   //   decreases WrappedDistance(range.start, range.end)
