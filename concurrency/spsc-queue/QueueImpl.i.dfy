@@ -36,6 +36,12 @@ module QueueImpl(item: ItemModule) {
     }
   }
 
+  function method sizeUint32(): uint32
+  ensures sizeUint32() as nat == size()
+  {
+    32
+  }
+
   datatype Queue = Queue(
     cells: seq<Ptrs.Ptr>,
     head: Atomic<uint32, Tokens.Token>,
@@ -57,18 +63,23 @@ module QueueImpl(item: ItemModule) {
       && t.val == M(None, Some(tail_v as nat), map[], ProducerUnknown, ConsumerUnknown)
     }
 
+    predicate CellInvCell(cells_v: map<nat, Cell>, i: nat)
+    requires |this.cells| == size()
+    requires i < size()
+    {
+      && i in cells_v.Keys
+      && ((cells_v[i].Full? || cells_v[i].Empty?) ==> cells_v[i].v.ptr == this.cells[i])
+      && (cells_v[i].Full? ==> cells_v[i].v.PointsToLinear?)
+      && (cells_v[i].Empty? ==> cells_v[i].v.PointsToEmpty?)
+    }
+
     predicate CellInv(t: Tokens.Token, loc: Loc)
     requires |this.cells| == size()
     {
       && t.loc == loc
       && exists cells_v :: (
         && t.val == M(None, None, cells_v, ProducerUnknown, ConsumerUnknown)
-        && (forall i: nat | i < size() :: 
-          && i in cells_v.Keys
-          && ((cells_v[i].Full? || cells_v[i].Empty?) ==> cells_v[i].v.ptr == this.cells[i])
-          && (cells_v[i].Full? ==> cells_v[i].v.PointsToLinear?)
-          && (cells_v[i].Empty? ==> cells_v[i].v.PointsToEmpty?)
-        )
+        && (forall i: nat | i < size() :: CellInvCell(cells_v, i))
       )
     }
 
@@ -113,8 +124,11 @@ module QueueImpl(item: ItemModule) {
           ghost var m := dot(dot(consumer_g.val, head_g.val), cellToken_g.val);
           assert MInv(dot(m, rest));
 
+          ghost var cellToken_g0 := cellToken_g;
+
           if head_value != tail {
             assert dot(m, rest).cells[tail as nat].Full?;
+            assert CellInvCell(cellToken_g.val.cells, tail as nat); // trigger
             assert cellToken_g.val.cells[tail as nat].Full?;
 
             ghost var m' := m.(
@@ -152,6 +166,12 @@ module QueueImpl(item: ItemModule) {
             pointsToCell := glNone;
           }
 
+          forall i: nat | i < size()
+          ensures CellInvCell(cellToken_g.val.cells, i) {
+            if i != tail as nat {
+              assert CellInvCell(cellToken_g0.val.cells, i); // trigger
+            }
+          }
           ghost_release cellToken_g;
         }
         ghost_release head_g;
@@ -161,7 +181,7 @@ module QueueImpl(item: ItemModule) {
         linear var item_v := this.cells[tail].read_linear(inout pointsToCell.value);
         item := lSome(item_v);
 
-        var newTail := tail + 1;
+        var newTail: uint32 := (tail + 1) % sizeUint32();
 
         atomic_block var _ := execute_atomic_store(this.tail, newTail) {
           ghost_acquire tail_g;
@@ -169,12 +189,15 @@ module QueueImpl(item: ItemModule) {
           atomic_block var _ := execute_atomic_noop(this.cellToken) {
             ghost_acquire cellToken_g;
 
+            ghost var cellToken_g0 := cellToken_g;
+
             ghost var m := dot(dot(consumer_g.val, tail_g.val), cellToken_g.val);
 
             ghost var rest := Tokens.obtain_invariant_3(
               inout consumer_g, inout tail_g, inout cellToken_g);
             
             assert dot(m, rest).cells[tail as nat].Consuming?;
+            assert CellInvCell(cellToken_g.val.cells, tail as nat); // trigger
             assert cellToken_g.val.cells[tail as nat].Consuming?;
 
             glinear var depositing_v := GlinearOption.unwrap_value(pointsToCell);
@@ -190,6 +213,7 @@ module QueueImpl(item: ItemModule) {
 
             assert m' == dot(dot(consumer_g_val', tail_g_val'), cellToken_g_val');
 
+            assert consumer_end(m, m', depositing_v);
             consumer_end_is_deposit(m, m', depositing_v);
 
             consumer_g, tail_g, cellToken_g :=
@@ -205,18 +229,25 @@ module QueueImpl(item: ItemModule) {
                 tail_g_val',
                 cellToken_g_val');
 
+            forall i: nat | i < size()
+            ensures CellInvCell(cellToken_g.val.cells, i) {
+              if i != tail as nat {
+                assert CellInvCell(cellToken_g0.val.cells, i); // trigger
+              }
+            }
             ghost_release cellToken_g;
           }
 
           ghost_release tail_g;
         }
 
+        consumerToken := ConsumerToken(consumer_g, newTail);
       } else {
+        consumerToken := ConsumerToken(consumer_g, tail);
         item := lNone;
         GlinearOption.dispose_glnone(pointsToCell);
       }
 
-      consumerToken := ConsumerToken(consumer_g, tail);
       assert consumerToken.Valid(this.loc);
     }
 

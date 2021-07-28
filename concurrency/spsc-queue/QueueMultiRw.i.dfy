@@ -144,7 +144,7 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
     && head < size()
 
     && head in m.cells
-    && m.cells[head].Empty?
+    && m.cells[head].Producing?
 
     && var newHead := (head + 1) % size();
     && m' == m.(
@@ -218,8 +218,7 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
     && var tail := m.consumer.tail;
     && tail < size()
     && tail in m.cells
-    && m.cells[tail].Full?
-    && m.cells[tail].v == v
+    && m.cells[tail].Consuming?
 
     && var newTail := (tail + 1) % size();
     && m' == m.(
