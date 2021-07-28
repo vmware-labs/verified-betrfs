@@ -88,6 +88,7 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
         && key !in I(dot(a, p))
         && I(dot(b, p)) == I(dot(a, p))[key := x] {
 
+      reveal_dot_XY_Cells();
       assert Inv(dot(b, p)) by {
         assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
         assert b == a.(cells := a.cells[key := Empty(x)]);
@@ -126,8 +127,14 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
       && I(dot(a, p)) == I(dot(b, p))[key := x]
       && key !in I(dot(b, p)) {
 
+      reveal_dot_XY_Cells();
       assert Inv(dot(b, p)) by {
         assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
+        forall i: nat | i < size()
+        ensures MInvCell(dot(b, p), i)
+        {
+          assert MInvCell(dot(a, p), i);
+        }
       }
       assert I(dot(a, p)) == I(dot(b, p))[key := x];
       assert key !in I(dot(b, p));
@@ -163,8 +170,14 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
         && key !in I(dot(a, p))
         && I(dot(b, p)) == I(dot(a, p))[key := x] {
 
+      reveal_dot_XY_Cells();
       assert Inv(dot(b, p)) by {
         assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
+        forall i: nat | i < size()
+        ensures MInvCell(dot(b, p), i)
+        {
+          assert MInvCell(dot(a, p), i);
+        }
       }
       assert key !in I(dot(a, p));
       assert I(dot(b, p)) == I(dot(a, p))[key := x];
@@ -200,8 +213,14 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
       && I(dot(a, p)) == I(dot(b, p))[key := x]
       && key !in I(dot(b, p)) {
 
+      reveal_dot_XY_Cells();
       assert Inv(dot(b, p)) by {
         assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
+        forall i: nat | i < size()
+        ensures MInvCell(dot(b, p), i)
+        {
+          assert MInvCell(dot(a, p), i);
+        }
       }
       assert I(dot(a, p)) == I(dot(b, p))[key := x];
       assert key !in I(dot(b, p));
@@ -238,8 +257,14 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
         && key !in I(dot(a, p))
         && I(dot(b, p)) == I(dot(a, p))[key := x] {
       
+      reveal_dot_XY_Cells();
       assert Inv(dot(b, p)) by {
         assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
+        forall i: nat | i < size()
+        ensures MInvCell(dot(b, p), i)
+        {
+          assert MInvCell(dot(a, p), i);
+        }
       }
       assert I(dot(b, p)) == I(dot(a, p))[key := x];
       assert key !in I(dot(a, p));
@@ -251,6 +276,34 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
   requires x.MUninit?
   {
     && (forall i: nat :: i < size() <==> i in x.cells.Keys)
+  }
+
+  predicate MInvCell(x: M, i: nat)
+  requires x.M?
+  requires x.head.Some?
+  requires x.tail.Some?
+  requires i < size()
+  requires forall i: nat :: i < size() <==> i in x.cells.Keys
+  requires forall i: nat :: i < size() ==> !x.cells[i].CellUninit?
+  {
+    var head := x.head.value;
+    var tail := x.tail.value;
+
+    var i_2 := if i < tail then i + size() else i;
+    var head_2 := if head < tail then head + size() else head;
+    if i_2 < head_2
+      then (
+        if x.consumer.ConsumerInProgress? && x.consumer.tail == i then
+          x.cells[i].Consuming?
+        else
+          x.cells[i].Full?
+      )
+      else (
+        if x.producer.ProducerInProgress? && x.producer.head == i then
+          x.cells[i].Producing?
+        else
+          x.cells[i].Empty?
+      )
   }
 
   predicate MInv(x: M)
@@ -274,26 +327,7 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
     && (x.consumer.ConsumerInProgress? ==> 
       x.consumer.tail != x.head.value)
 
-    && (
-      var head := x.head.value;
-      var tail := x.tail.value;
-      forall i: nat | i < size() :: (
-        var i_2 := if i < tail then i + size() else i;
-        var head_2 := if head < tail then head + size() else head;
-        if i_2 < head_2
-          then (
-            if x.consumer.ConsumerInProgress? && x.consumer.tail == i then
-              x.cells[i].Consuming?
-            else
-              x.cells[i].Full?
-          )
-          else (
-            if x.producer.ProducerInProgress? && x.producer.head == i then
-              x.cells[i].Producing?
-            else
-              x.cells[i].Empty?
-          )
-    ))
+    && (forall i: nat | i < size() :: MInvCell(x, i))
   }
 
   predicate Inv(x: M)
@@ -309,15 +343,19 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
       false
   }
 
+  // TODO opaquing this function doens't actually seem to help
+  function {:opaque} dot_XY_Cells(x_cells: map<nat, Cell>, y_cells: map<nat, Cell>): map<nat, Cell>
+  {
+    map i: nat | (i in (x_cells.Keys + y_cells.Keys)) :: if i in x_cells then x_cells[i] else y_cells[i]
+  }
+
   function dot(x: M, y: M) : M
   ensures (x.M? && y.M?) ==> (dot(x, y).M? || dot(x, y).MInvalid?)
   {
     if x.MUninit? && y.MUninit? then
       if (exists i: nat :: i in x.cells && i in y.cells)
       then MInvalid
-      else MUninit(
-        map i: nat | (i in (x.cells.Keys + y.cells.Keys)) ::
-          if i in x.cells then x.cells[i] else y.cells[i])
+      else MUninit(dot_XY_Cells(x.cells, y.cells))
     else if x.MUninit? || y.MUninit?
     then (
       if (x.MUninit? && y == unit())
@@ -338,8 +376,7 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
       M(
         if x.head.Some? then x.head else y.head,
         if x.tail.Some? then x.tail else y.tail,
-        map i: nat | (i in (x.cells.Keys + y.cells.Keys)) ::
-          if i in x.cells then x.cells[i] else y.cells[i],
+        dot_XY_Cells(x.cells, y.cells),
         if !x.producer.ProducerUnknown? then x.producer else y.producer,
         if !x.consumer.ConsumerUnknown? then x.consumer else y.consumer
       )
@@ -362,16 +399,19 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
 
   lemma dot_unit(x: M)
   {
+    reveal_dot_XY_Cells();
     assert dot(x, unit()) == x;
   }
 
   lemma commutative(x: M, y: M)
   {
+    reveal_dot_XY_Cells();
     assert dot(x, y) == dot(y, x);
   }
 
   lemma associative(x: M, y: M, z: M)
   {
+    reveal_dot_XY_Cells();
     assert dot(x, dot(y, z)) == dot(dot(x, y), z);
   }
 

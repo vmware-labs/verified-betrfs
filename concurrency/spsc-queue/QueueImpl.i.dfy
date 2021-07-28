@@ -114,7 +114,6 @@ module QueueImpl(item: ItemModule) {
         atomic_block var _ := execute_atomic_noop(this.cellToken) {
           ghost_acquire cellToken_g;
 
-          assert head_g.loc == cellToken_g.loc == consumer_g.loc;
           assert head_g.val == M(Some(head_value as nat), None, map[], ProducerUnknown, ConsumerUnknown);
           assert consumer_g.val == M(None, None, map[], ProducerUnknown, ConsumerIdle(tail as nat));
 
@@ -127,6 +126,7 @@ module QueueImpl(item: ItemModule) {
           ghost var cellToken_g0 := cellToken_g;
 
           if head_value != tail {
+            assert MInvCell(dot(m, rest), tail as nat); // trigger
             assert dot(m, rest).cells[tail as nat].Full?;
             assert CellInvCell(cellToken_g.val.cells, tail as nat); // trigger
             assert cellToken_g.val.cells[tail as nat].Full?;
@@ -196,6 +196,7 @@ module QueueImpl(item: ItemModule) {
             ghost var rest := Tokens.obtain_invariant_3(
               inout consumer_g, inout tail_g, inout cellToken_g);
             
+            assert MInvCell(dot(m, rest), tail as nat); // trigger
             assert dot(m, rest).cells[tail as nat].Consuming?;
             assert CellInvCell(cellToken_g.val.cells, tail as nat); // trigger
             assert cellToken_g.val.cells[tail as nat].Consuming?;
@@ -249,6 +250,158 @@ module QueueImpl(item: ItemModule) {
       }
 
       assert consumerToken.Valid(this.loc);
+    }
+
+    method produce(linear inout producerToken: ProducerToken, linear item: item.Item)
+    returns (linear item': lOption<item.Item>)
+    requires this.Inv()
+    requires old_producerToken.Valid(this.loc)
+    ensures producerToken.Valid(this.loc)
+    {
+      linear var ProducerToken(producer_g, head) := producerToken;
+
+      glinear var pointsToCell;
+
+      atomic_block var tail_value := execute_atomic_load(this.tail) {
+        ghost_acquire tail_g;
+        atomic_block var _ := execute_atomic_noop(this.cellToken) {
+          ghost_acquire cellToken_g;
+
+          assert tail_g.val == M(None, Some(tail_value as nat), map[], ProducerUnknown, ConsumerUnknown);
+          assert producer_g.val == M(None, None, map[], ProducerIdle(head as nat), ConsumerUnknown);
+
+          ghost var rest := Tokens.obtain_invariant_3(
+            inout producer_g, inout tail_g, inout cellToken_g);
+
+          ghost var m := dot(dot(producer_g.val, tail_g.val), cellToken_g.val);
+          assert MInv(dot(m, rest));
+
+          ghost var cellToken_g0 := cellToken_g;
+
+          if ((head + 1) % sizeUint32()) != tail_value {
+            assert MInvCell(dot(m, rest), head as nat); // trigger
+            assert dot(m, rest).cells[head as nat].Empty?;
+            assert CellInvCell(cellToken_g.val.cells, head as nat); // trigger
+            assert cellToken_g.val.cells[head as nat].Empty?;
+
+            ghost var m' := m.(
+              producer := ProducerInProgress(head as nat),
+              cells := m.cells[head as nat := Producing]);
+
+            ghost var producer_g_val' := M(None, None, map[], ProducerInProgress(head as nat), ConsumerUnknown);
+            ghost var cellToken_g_val' := cellToken_g.val.(cells := cellToken_g.val.cells[head as nat := Producing]);
+
+            assert m' == dot(dot(producer_g_val', tail_g.val), cellToken_g_val');
+
+            ghost var expected_v := cellToken_g.val.cells[head as nat].v;
+            assert producer_begin(m, m', expected_v);
+
+            producer_begin_is_withdraw(m, m', expected_v);
+
+            assert withdraw(m, m', head as nat, expected_v);
+
+            glinear var pointsToCell_v;
+            producer_g, tail_g, cellToken_g, pointsToCell_v :=
+              Tokens.withdraw_3_3(
+                producer_g,
+                tail_g,
+                cellToken_g, 
+
+                producer_g_val',
+                tail_g.val,
+                cellToken_g_val',
+
+                head as nat,
+                expected_v);
+
+            pointsToCell := glSome(pointsToCell_v);
+          } else {
+            pointsToCell := glNone;
+          }
+
+          forall i: nat | i < size()
+          ensures CellInvCell(cellToken_g.val.cells, i) {
+            if i != head as nat {
+              assert CellInvCell(cellToken_g0.val.cells, i); // trigger
+            }
+          }
+
+          ghost_release cellToken_g;
+        }
+        ghost_release tail_g;
+      }
+
+      if ((head + 1) % sizeUint32()) != tail_value {
+        this.cells[head].write_linear(inout pointsToCell.value, item);
+        item' := lNone;
+
+        var newHead: uint32 := (head + 1) % sizeUint32();
+
+        atomic_block var _ := execute_atomic_store(this.head, newHead) {
+          ghost_acquire head_g;
+
+          atomic_block var _ := execute_atomic_noop(this.cellToken) {
+            ghost_acquire cellToken_g;
+
+            ghost var cellToken_g0 := cellToken_g;
+
+            ghost var m := dot(dot(producer_g.val, head_g.val), cellToken_g.val);
+
+            ghost var rest := Tokens.obtain_invariant_3(
+              inout producer_g, inout head_g, inout cellToken_g);
+            
+            assert MInvCell(dot(m, rest), head as nat); // trigger
+            assert dot(m, rest).cells[head as nat].Producing?;
+            assert CellInvCell(cellToken_g.val.cells, head as nat); // trigger
+            assert cellToken_g.val.cells[head as nat].Producing?;
+
+            glinear var depositing_v := GlinearOption.unwrap_value(pointsToCell);
+
+            ghost var m' := m.(
+              producer := ProducerIdle(newHead as nat),
+              head := Some(newHead as nat),
+              cells := m.cells[head as nat := Full(depositing_v)]);
+
+            ghost var producer_g_val' := producer_g.val.(producer := ProducerIdle(newHead as nat));
+            ghost var head_g_val' := head_g.val.(head := Some(newHead as nat));
+            ghost var cellToken_g_val' := cellToken_g.val.(cells := cellToken_g.val.cells[head as nat := Full(depositing_v)]);
+
+            assert m' == dot(dot(producer_g_val', head_g_val'), cellToken_g_val');
+
+            assert producer_end(m, m', depositing_v);
+            producer_end_is_deposit(m, m', depositing_v);
+
+            producer_g, head_g, cellToken_g :=
+              Tokens.deposit_3_3(
+                producer_g,
+                head_g,
+                cellToken_g, 
+
+                head as nat,
+                depositing_v,
+
+                producer_g_val',
+                head_g_val',
+                cellToken_g_val');
+
+            forall i: nat | i < size()
+            ensures CellInvCell(cellToken_g.val.cells, i) {
+              if i != head as nat {
+                assert CellInvCell(cellToken_g0.val.cells, i); // trigger
+              }
+            }
+            ghost_release cellToken_g;
+          }
+
+          ghost_release head_g;
+        }
+        
+        producerToken := ProducerToken(producer_g, newHead);
+      } else {
+        producerToken := ProducerToken(producer_g, head);
+        item' := lSome(item);
+        GlinearOption.dispose_glnone(pointsToCell);
+      }
     }
 
   }
