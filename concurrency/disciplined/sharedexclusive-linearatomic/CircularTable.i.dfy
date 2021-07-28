@@ -273,7 +273,7 @@ module CircularTable {
     forall i: Index :: range.Contains(i) ==> t1[i] == t2[i]
   }
 
-  function UnwrapKnownRange(table: FixedTable, range: Range): seq<Entry>
+  function {:fuel 1} UnwrapKnownRange(table: FixedTable, range: Range): seq<Entry>
     requires forall i: Index :: range.Contains(i) ==> table[i].Some?
     decreases |range|
   {
@@ -291,7 +291,6 @@ module CircularTable {
     ensures UnwrapKnownRange(t1, range) == UnwrapKnownRange(t2, range)
     decreases |range|
   {
-    // var Partial(start, end) := range;
     if range.HasSome() {
       var last := range.GetLast();
       assert t1[last] == t2[last];
@@ -327,17 +326,6 @@ module CircularTable {
       RangeShiftEquivalentUnwrap(t1, t2, r1');
     }
   }
-
-  // function UnwrapSubTable(table: FixedTable, range: Range): seq<Entry>
-  //   requires forall i: Index :: range.Contains(i) ==> table[i].Some?
-  //   decreases WrappedDistance(range.start, range.end)
-  // {
-  //   var Partial(start, end) := range;
-  //   if start == end then
-  //     []
-  //   else
-  //     [table[start].value] + UnwrapSubTable(table, range.LeftShrink1())
-  // }
 
 //////////////////////////////////////////////////////////////////////////////
 // robinhood invarints
