@@ -1,7 +1,8 @@
 include "RwLock.i.dfy"
+include "../framework/GlinearOption.i.dfy"
 include "../framework/Atomic.s.dfy"
 
-module RwLockImpl(stm: StoredTypeModule) {
+abstract module RwLockImpl(stm: StoredTypeModule) {
   import RwLock = RwLock(stm)
   import RwLockTokens = RwLockTokens(stm)
 
@@ -9,75 +10,73 @@ module RwLockImpl(stm: StoredTypeModule) {
   import opened Atomics
   import opened GhostLoc
   import opened Options
+  import opened GlinearOption
 
-  predicate exc_inv(b: bool, t: Token, loc: Loc) {
-    && t.get() == PhysExcHandle(b)
-    && t.loc() == loc
+  predicate exc_inv(b: bool, t: RwLockTokens.Token, loc: Loc) {
+    && t.val == RwLock.PhysExcHandle(b)
+    && t.loc == loc
   }
 
-  predicate rc_inv(rc: uint32, t: Token, loc: Loc) {
-    && t.get() == PhysRcHandle(rc as nat)
-    && t.loc() == loc
+  predicate rc_inv(rc: uint32, t: RwLockTokens.Token, loc: Loc) {
+    && t.val == RwLock.PhysRcHandle(rc as nat)
+    && t.loc == loc
   }
 
-  predicate central_inv(t: Token, loc: Loc) {
-    && t.get().central.Some?
-    && t.get() == CentralHandle(t.get().central.value)
-    && t.loc() == loc
+  predicate central_inv(t: RwLockTokens.Token, loc: Loc) {
+    && t.val.central.CentralState?
+    && t.val == RwLock.CentralHandle(t.val.central)
+    && t.loc == loc
   }
 
   datatype RWLock = RWLock(
-    exc: Atomic<bool, Token>,
-    rc: Atomic<uint32, Token>,
+    exc: Atomic<bool, RwLockTokens.Token>,
+    rc: Atomic<uint32, RwLockTokens.Token>,
 
-    ghost central: GhostAtomic<Token>,
+    ghost central: GhostAtomic<RwLockTokens.Token>,
     ghost loc: Loc
   )
   {
     predicate Inv() {
-      && this.loc.ExtLoc?
       && (forall v, g :: atomic_inv(this.exc, v, g) <==> exc_inv(v, g, this.loc))
       && (forall v, g :: atomic_inv(this.rc, v, g) <==> rc_inv(v, g, this.loc))
       && (forall v, g :: atomic_inv(this.central, v, g) <==> central_inv(g, this.loc))
-      //&& (this.exc.identifier() != this.rc.identifier()) // strictly speaking we don't need this one
-      && (this.exc.identifier() != this.central.identifier())
-      && (this.rc.identifier() != this.central.identifier())
+      && (this.central.namespace() == 1)
+      && (this.exc.namespace() == 2)
+      && (this.rc.namespace() == 3)
     }
 
     method acquire_exc()
-    returns (glinear base_token: Base.Token, glinear handle: RWLockExtToken.Token)
+    returns (glinear base_token: stm.StoredType, glinear handle: RwLockTokens.Token)
     decreases *
     requires Inv()
-    ensures handle.get() == RWLockExt.ExcTakenHandle()
-    ensures handle.loc().ExtLoc? && handle.loc().base_loc == base_token.loc()
+    ensures handle.val == RwLock.ExcTakenHandle()
     {
       var got_exc := false;
-      glinear var pending_handle := RWLockExtToken.SEPCM.get_unit(this.loc);
+      glinear var pending_handle := RwLockTokens.T.get_unit(this.loc);
 
       while !got_exc
-      invariant got_exc ==> pending_handle.get() == RWLockExt.ExcPendingHandle()
-      invariant got_exc ==> pending_handle.loc() == this.loc
+      invariant got_exc ==> pending_handle.val == RwLock.ExcPendingHandle()
+      invariant got_exc ==> pending_handle.loc == this.loc
       decreases *
       {
         atomic_block got_exc := execute_atomic_compare_and_set_strong(this.exc, false, true) {
           ghost_acquire g;
           if got_exc {
-            RWLockExtToken.SEPCM.dispose(pending_handle);
-            g, pending_handle := RWLockExtToken.perform_exc_pending(g);
+            RwLockTokens.T.dispose(pending_handle);
+            g, pending_handle := RwLockTokens.perform_exc_pending(g);
           }
           ghost_release g;
         }
       }
 
-      base_token := Base.get_unit(this.loc.base_loc);
+      glinear var baseTokenOpt := glNone;
 
       var is_rc_zero := false;
 
       while !is_rc_zero
-      invariant !is_rc_zero ==> pending_handle.get() == RWLockExt.ExcPendingHandle()
-      invariant is_rc_zero ==> pending_handle.get() == RWLockExt.ExcTakenHandle()
-      invariant pending_handle.loc().ExtLoc? && pending_handle.loc().base_loc == base_token.loc()
-      invariant pending_handle.loc() == this.loc
+      invariant !is_rc_zero ==> pending_handle.val == RwLock.ExcPendingHandle()
+      invariant is_rc_zero ==> pending_handle.val == RwLock.ExcTakenHandle()
+      invariant pending_handle.loc == this.loc
       invariant this.Inv()
       decreases *
       {
@@ -87,9 +86,11 @@ module RwLockImpl(stm: StoredTypeModule) {
             ghost_acquire central_g;
 
             if old_value == 0 {
-              Base.dispose(base_token);
-              rc_g, central_g, pending_handle, base_token :=
-                perform_exc_finish(rc_g, central_g, pending_handle, central_g.get().central.value);
+              dispose_glnone(baseTokenOpt);
+              glinear var bt;
+              rc_g, central_g, pending_handle, bt :=
+                RwLockTokens.perform_exc_finish(rc_g, central_g, pending_handle, central_g.val.central.held_value);
+              baseTokenOpt := glSome(bt);
             }
 
             ghost_release central_g;
@@ -105,11 +106,10 @@ module RwLockImpl(stm: StoredTypeModule) {
       handle := pending_handle;
     }
 
-    method release_exc(glinear base_token: Base.Token, glinear handle: RWLockExtToken.Token)
+    method release_exc(glinear base_token: stm.StoredType, glinear handle: RwLockTokens.Token)
     requires Inv()
-    requires handle.get() == RWLockExt.ExcTakenHandle()
-    requires handle.loc().ExtLoc? && handle.loc().base_loc == base_token.loc()
-    requires handle.loc() == this.loc
+    requires handle.val == RwLock.ExcTakenHandle()
+    requires handle.loc == this.loc
     {
       atomic_block var _ := execute_atomic_store(this.exc, false) {
         ghost_acquire g;
@@ -117,8 +117,8 @@ module RwLockImpl(stm: StoredTypeModule) {
           ghost_acquire central_g;
 
           g, central_g :=
-            RWLockExtToken.perform_exc_release(g, central_g, handle, base_token,
-                central_g.get().central.value, g.get().phys_exc.value);
+            RwLockTokens.perform_exc_release(g, central_g, handle, base_token,
+                central_g.val.central.held_value, g.val.phys_exc.value);
 
           ghost_release central_g;
         }
@@ -146,19 +146,19 @@ module RwLockImpl(stm: StoredTypeModule) {
     }
 
     method acquire_shared()
-    returns (glinear handle: RWLockExtToken.Token)
+    returns (glinear handle: RwLockTokens.Token)
     requires Inv()
-    ensures exists a :: handle.get() == RWLockExt.SharedTakenHandle(a)
-    ensures handle.loc() == this.loc
+    ensures exists a :: handle.val == RwLock.SharedTakenHandle(a)
+    ensures handle.loc == this.loc
     decreases *
     {
-      handle := RWLockExtToken.SEPCM.get_unit(this.loc);
+      handle := RwLockTokens.T.get_unit(this.loc);
 
       var done := false;
 
       while !done
-      invariant done ==> exists a :: handle.get() == RWLockExt.SharedTakenHandle(a)
-      invariant done ==> handle.loc() == this.loc
+      invariant done ==> exists a :: handle.val == RwLock.SharedTakenHandle(a)
+      invariant done ==> handle.loc == this.loc
       decreases *
       {
         this.wait_for_exc_false();
@@ -170,8 +170,8 @@ module RwLockImpl(stm: StoredTypeModule) {
           atomic_block var ret_value := execute_atomic_compare_and_set_strong(this.rc, cur_rc, cur_rc + 1) {
             ghost_acquire g;
             if ret_value {
-              RWLockExtToken.SEPCM.dispose(handle);
-              g, handle := RWLockExtToken.perform_shared_pending(g, cur_rc as nat);
+              RwLockTokens.T.dispose(handle);
+              g, handle := RwLockTokens.perform_shared_pending(g, cur_rc as nat);
             }
             ghost_release g;
           }
@@ -184,8 +184,8 @@ module RwLockImpl(stm: StoredTypeModule) {
               atomic_block var _ := execute_atomic_noop(this.central) {
                 ghost_acquire central_g;
                 if !exc_value {
-                  g, central_g, handle := RWLockExtToken.perform_shared_finish(
-                        g, central_g, handle, central_g.get().central.value);
+                  g, central_g, handle := RwLockTokens.perform_shared_finish(
+                        g, central_g, handle, central_g.val.central.held_value);
                 }
                 ghost_release central_g;
               }
@@ -199,8 +199,8 @@ module RwLockImpl(stm: StoredTypeModule) {
 
               atomic_block var _ := execute_atomic_fetch_sub_uint32(this.rc, 1) {
                 ghost_acquire g;
-                g := perform_abort_shared(g, handle, old_value as nat);
-                handle := RWLockExtToken.SEPCM.get_unit(handle.loc());
+                g := RwLockTokens.perform_abort_shared(g, handle, old_value as nat);
+                handle := RwLockTokens.T.get_unit(handle.loc);
                 ghost_release g;
               }
             }
@@ -209,19 +209,19 @@ module RwLockImpl(stm: StoredTypeModule) {
       }
     }
 
-    method release_shared(glinear handle: RWLockExtToken.Token)
+    method release_shared(glinear handle: RwLockTokens.Token)
     requires Inv()
-    requires exists a :: handle.get() == RWLockExt.SharedTakenHandle(a)
-    requires handle.loc() == this.loc
+    requires exists a :: handle.val == RwLock.SharedTakenHandle(a)
+    requires handle.loc == this.loc
     {
       atomic_block var _ := execute_atomic_fetch_sub_uint32(this.rc, 1) {
         ghost_acquire g;
         atomic_block var _ := execute_atomic_noop(this.central) {
           ghost_acquire central_g;
-          ghost var a :| handle.get() == RWLockExt.SharedTakenHandle(a);
+          ghost var a :| handle.val == RwLock.SharedTakenHandle(a);
           g, central_g :=
-            RWLockExtToken.perform_release_shared(g, central_g, handle,
-                central_g.get().central.value, a, g.get().phys_rc.value);
+            RwLockTokens.perform_release_shared(g, central_g, handle,
+                central_g.val.central.held_value, a, g.val.phys_rc.value);
           ghost_release central_g;
         }
         ghost_release g;
@@ -229,28 +229,27 @@ module RwLockImpl(stm: StoredTypeModule) {
     }
   }
 
-  method rwlock_new(glinear init_value: Base.Token)
+  method rwlock_new(glinear init_value: stm.StoredType)
   returns (rwlock: RWLock)
   ensures rwlock.Inv()
   {
-    glinear var big_token := RWLockExtToken.init(init_value, 
-        RWLockExt.M(Some(false), Some(0),
-            Some(CentralState(false, 0, Some(init_value.get()))),
-            false, false, 0, zero_map()));
-    glinear var pe, rest := RWLockExtToken.split(big_token,
-        PhysExcHandle(false),
-        RWLockExt.M(None, Some(0),
-            Some(CentralState(false, 0, Some(init_value.get()))),
-            false, false, 0, zero_map()));
-    glinear var rc, central := RWLockExtToken.split(rest,
-        PhysRcHandle(0),
-        CentralHandle(CentralState(false, 0, Some(init_value.get()))));
+    glinear var big_token := RwLockTokens.initialize(init_value, 
+        RwLock.M(Some(false), Some(0),
+            RwLock.CentralState(init_value),
+            false, false, 0, RwLock.zero_map()));
+    glinear var pe, rest := RwLockTokens.split(big_token,
+        RwLock.PhysExcHandle(false),
+        RwLock.M(None, Some(0),
+            RwLock.CentralState(init_value),
+            false, false, 0, RwLock.zero_map()));
+    glinear var rc, central := RwLockTokens.split(rest,
+        RwLock.PhysRcHandle(0),
+        RwLock.CentralHandle(RwLock.CentralState(Some(init_value.val))));
 
-    ghost var loc := big_token.loc(); 
-    var exc_atomic := new_atomic(false, pe, (v, g) => exc_inv(v, g, loc), {});
-    var rc_atomic := new_atomic(0 as uint32, rc, (v, g) => rc_inv(v, g, loc), {});
-    ghost var central_atomic := new_ghost_atomic(central, (g) => central_inv(g, loc),
-        {exc_atomic.identifier(), rc_atomic.identifier()});
+    ghost var loc := big_token.loc; 
+    var exc_atomic := new_atomic(false, pe, (v, g) => exc_inv(v, g, loc), 2);
+    var rc_atomic := new_atomic(0 as uint32, rc, (v, g) => rc_inv(v, g, loc), 3);
+    ghost var central_atomic := new_ghost_atomic(central, (g) => central_inv(g, loc), 1);
 
     rwlock := RWLock(exc_atomic, rc_atomic, central_atomic, loc);
   }

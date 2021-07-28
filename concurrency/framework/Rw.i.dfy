@@ -354,4 +354,11 @@ module RwTokens(rw: Rw) {
   ensures token2' == T.Token(token1.loc, expected_value2)
   ensures token3' == T.Token(token1.loc, expected_value3)
   ensures retrieved_value == expected_retrieved_value
+
+  glinear method get_unit(ghost loc: Loc)
+  returns (glinear t: Token)
+  requires loc.ExtLoc? && loc.base_loc == Wrap.singleton_loc()
+  ensures t.loc == loc
+
+  glinear method dispose(glinear t: Token)
 }
