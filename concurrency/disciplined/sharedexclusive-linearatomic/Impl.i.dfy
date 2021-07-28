@@ -78,7 +78,7 @@ module Impl refines VerificationObligation {
       forall i: Index :: !HasHandle(i)
     }
 
-    linear inout method acquireRow(index: Index, glinear in_sv: SSM.Variables)
+    linear inout method acquireRowInner(index: Index, glinear in_sv: SSM.Variables)
       returns (entry: Entry, glinear out_sv: SSM.Variables)
 
       requires old_self.Inv()
@@ -107,6 +107,54 @@ module Impl refines VerificationObligation {
       assert glseq_has(self.handles) == glseq_has(old_self.handles)[index := true];
     }
 
+    predicate RangeOwnershipInv(entries: seq<Entry>, range: Range, sv: SSM.Variables)
+    {
+      && Inv()
+      && sv.Variables?
+      && (forall i: Index :: (range.Contains(i) <==> HasHandle(i)))
+      && (forall i: Index :: (range.Contains(i) <==> sv.table[i].Some?))
+      && UnwrapKnownRange(sv.table, range) == entries
+    }
+
+    linear inout method acquireRow(
+      entries: seq<Entry>,
+      range: Range,
+      glinear in_sv: SSM.Variables)
+    returns (
+      entries': seq<Entry>,
+      range': Range,
+      glinear out_sv: SSM.Variables
+    )
+
+    requires old_self.RangeOwnershipInv(entries, range, in_sv)
+    requires range.Partial?
+    requires RangeFull(in_sv.table, range)
+
+    ensures self.RangeOwnershipInv(entries', range', out_sv);
+    ensures range'.Partial?
+    ensures |entries'| != 0
+    ensures Last(entries').Full? ==> RangeFull(out_sv.table, range')
+    // ensures entry.Empty? ==> RangeFull(out_sv.table, range)
+    ensures range' == range.RightExtend1()
+    ensures out_sv == in_sv.(table := in_sv.table[range.end := Some(Last(entries'))])
+    ensures out_sv.table[range.end] == Some(Last(entries'))
+    {
+      out_sv := in_sv;
+      ghost var prev_sv := out_sv;
+
+      var slot_idx := range.end; var entry;
+      entry, out_sv := inout self.acquireRowInner(slot_idx, out_sv);
+      RangeEquivalentUnwrap(prev_sv.table, out_sv.table, range);
+
+      if range.AlmostComplete() {
+        out_sv := resources_obey_inv(out_sv);
+        AlmostCompleteFullRangeImpossible(out_sv, range);
+      }
+
+      entries' := entries + [entry];
+      range' := range.RightExtend1();
+    }
+
     linear inout method releaseRow(index: Index, entry: Entry, glinear in_sv: SSM.Variables)
       returns (glinear out_sv: SSM.Variables)
   
@@ -130,94 +178,11 @@ module Impl refines VerificationObligation {
       self.row_mutexes[index].release(Row(entry, rmutex), handle);
     }
 
-    // method acquireCapacity(thread_id: uint32, glinear in_sv: SSM.Variables)
-    // returns (
-    //   count: uint32,
-    //   bin_id: uint32,
-    //   glinear cap_handle: MutexHandle<AllocatorBin>,
-    //   glinear out_sv: SSM.Variables)
-
-    //   decreases *
-    //   requires Inv()
-    //   requires in_sv.Variables?
-    //   requires in_sv.insert_capacity.value == 0
-    //   ensures bin_id < CAP.NumberOfBinsImpl()
-    //   ensures cap_handle.m == allocator[bin_id]
-    //   ensures out_sv.Variables?
-    //   ensures out_sv == in_sv.(insert_capacity := Count.Variables(count as nat))
-    //   ensures 0 < count <= CapacityImpl()
-    // {
-    //   // thread_id is a hint for the bin we're supposed to use. 
-    //   // bin_id is the actual place we found the capacity (in case we had to steal it from someone else) 
-    //   bin_id := if thread_id >= CAP.NumberOfBinsImpl() then 0 else thread_id;
-    //   linear var cap;
-    //   cap, cap_handle := allocator[bin_id].acquire();
-
-    //   while true
-    //     invariant cap.count as nat == cap.resource.value <= Capacity()
-    //     invariant Inv()
-    //     invariant bin_id < CAP.NumberOfBinsImpl()
-    //     invariant CAP.BinInv(cap)
-    //     invariant cap_handle.m == allocator[bin_id]
-    //     decreases *
-    //   {
-    //     if 0 < cap.count {
-    //       break;
-    //     }
-    //     assert CAP.BinInv(cap);
-    //     allocator[bin_id].release(cap, cap_handle);
-
-    //     bin_id := bin_id + 1;
-    //     bin_id := if bin_id >= CAP.NumberOfBinsImpl() then 0 else bin_id;
-
-    //     cap, cap_handle := allocator[bin_id].acquire();
-    //   }
-
-    //   count := cap.count;
-    //   linear var AllocatorBin(_, cap_r) := cap;
-    //   out_sv := enclose(cap_r);
-    //   out_sv := SSM.join(in_sv, out_sv);
-    // }
-
-    // method releaseCapacity(
-    //   count: uint32,
-    //   bin_id: uint32,
-    //   glinear cap_handle: MutexHandle<AllocatorBin>,
-    //   glinear in_sv: SSM.Variables)
-    // returns (glinear out_sv: SSM.Variables)
-    //   requires Inv();
-    //   requires bin_id < CAP.NumberOfBinsImpl()
-    //   requires cap_handle.m == allocator[bin_id];
-    //   requires in_sv.Variables?;
-    //   requires in_sv.insert_capacity == Count.Variables(count as nat);
-    //   ensures out_sv == in_sv.(insert_capacity := Count.Variables(0));
-    // {
-    //   glinear var rcap;
-    //   assert in_sv.insert_capacity == Count.Variables(count as nat);
-    //   glinear var mid_sv := resources_obey_inv(in_sv);
-
-    //   ghost var left := in_sv.(insert_capacity := Count.Variables(0));
-    //   ghost var right := unit().(insert_capacity := Count.Variables(count as nat));
-
-    //   out_sv, rcap := SSM.split(mid_sv, left, right);
-    //   glinear var rcap' := declose(rcap);
-    //   allocator[bin_id].release(AllocatorBin(count, rcap'), cap_handle);
-    // }
-
-    predicate RangeOwnershipInv(entries: seq<Entry>, range: Range, sv: SSM.Variables)
-    {
-      && Inv()
-      && sv.Variables?
-      && (forall i: Index :: (range.Contains(i) <==> HasHandle(i)))
-      && (forall i: Index :: (range.Contains(i) <==> sv.table[i].Some?))
-      && UnwrapKnownRange(sv.table, range) == entries
-    }
-
     linear inout method probe(probe_key: Key, glinear in_sv: SSM.Variables)
       returns (
         entries: seq<Entry>,
         found: bool,
-        p_range: Range,
+        range: Range,
         glinear out_sv: SSM.Variables)
       decreases *
 
@@ -225,60 +190,43 @@ module Impl refines VerificationObligation {
       requires forall i: Index :: !old_self.HasHandle(i)
       requires in_sv.Variables? && in_sv.table == UnitTable()
 
-      ensures p_range.HasSome()
-      ensures self.RangeOwnershipInv(entries, p_range, out_sv)
-      ensures var slot_idx := p_range.GetLast();
-        && (found ==> SlotFullWithKey(out_sv.table[slot_idx], probe_key))
-        && (!found ==> ValidProbeRange(out_sv.table, probe_key, p_range.RightShrink1()))
+      ensures range.HasSome()
+      ensures self.RangeOwnershipInv(entries, range, out_sv)
+      ensures found ==> SlotFullWithKey(out_sv.table[range.GetLast()], probe_key)
+      ensures !found ==> ValidProbeRange(out_sv.table, probe_key, range.RightShrink1())
       ensures out_sv.insert_capacity == in_sv.insert_capacity
       ensures out_sv.tickets == in_sv.tickets
       ensures out_sv.stubs == in_sv.stubs
     {
       var p_hash := hash(probe_key);
-      var done := false;
 
-      found := false;
-      entries := [];
-      p_range := Partial(p_hash, p_hash);
+      found := false; entries := [];
+      range := Partial(p_hash, p_hash);
       out_sv := in_sv;
 
       while true
-        invariant p_range.Partial? && p_range.start == p_hash
-        invariant self.RangeOwnershipInv(entries, p_range, out_sv)
-        invariant !done ==> ValidPartialProbeRange(out_sv.table, probe_key, p_range)
+        invariant range.Partial? && range.start == p_hash
+        invariant self.RangeOwnershipInv(entries, range, out_sv)
+        invariant ValidPartialProbeRange(out_sv.table, probe_key, range)
         invariant out_sv.insert_capacity == in_sv.insert_capacity
         invariant out_sv.tickets == in_sv.tickets
         invariant out_sv.stubs == in_sv.stubs
-
         decreases *
       {
-        var entry; ghost var prev_sv := out_sv;
-        var slot_idx := p_range.end;
-        entry, out_sv := inout self.acquireRow(slot_idx, out_sv);
-        RangeEquivalentUnwrap(prev_sv.table, out_sv.table, p_range);
-
-        entries := entries + [entry];
-        p_range := p_range.RightExtend1();
-
-        if p_range.Complete? {
-          out_sv := resources_obey_inv(out_sv);
-          CompleteFullRangeImpossible(out_sv, p_hash);
-          assert entry.Empty?;
-        }
-
+        var slot_idx := range.end;
+        entries, range, out_sv := inout self.acquireRow(entries, range, out_sv);
+        var entry: Entry := entries[ |entries| - 1 ];
+   
         match entry {
           case Empty => {
-            done := true;
             break;
           }
           case Full(entry_key, value) => {
             if entry_key == probe_key {
-              done := true;
               found := true;
               break;
             }
             if !entry.ShouldSkip(slot_idx, probe_key) {
-              done := true;
               break;
             }
           }
@@ -365,7 +313,7 @@ module Impl refines VerificationObligation {
 
       requires old_self.RangeOwnershipInv(entries, p_range, in_sv)
       requires p_range.HasSome()
-      requires p_range.Complete? ==> entries[ |entries| - 1 ].Empty?
+      requires p_range.Partial?
 
       requires var probe_key := ticket.input.key;
         ValidProbeRange(in_sv.table, probe_key, p_range.RightShrink1())
@@ -379,40 +327,24 @@ module Impl refines VerificationObligation {
       var entries := entries;
       var range := p_range;
       var start := range.GetLast();
+      var entry := entries[ |entries| - 1 ];
 
-      var e_index := |entries| - 1;
-      var entry := entries[e_index];
-      var done := entry.Empty?;
-      var end: Index := p_range.GetLast();
+      var h := hash(probe_key);
 
       if entry.Full? {
-        assert range.Partial?;
-        var h := hash(probe_key);
-
-        while entry.Full?
+        while true
           invariant range.Partial? && range.start == h
           invariant self.RangeOwnershipInv(entries, range, out_sv)
-          invariant ValidProbeRange(out_sv.table, probe_key, Partial(hash(probe_key), start))
-          invariant RangeFull(out_sv.table, Partial(start, range.end))
+          invariant ValidProbeRange(out_sv.table, probe_key, Partial(h, start))
+          invariant RangeFull(out_sv.table, range)
           invariant out_sv.insert_capacity == in_sv.insert_capacity
           invariant out_sv.tickets == in_sv.tickets
           invariant out_sv.stubs == in_sv.stubs
           decreases FixedSize() - |range|
         {
-          var entry; ghost var prev_sv := out_sv;
-
-          end := range.end;
-          entry, out_sv := inout self.acquireRow(range.end, out_sv);
-          RangeEquivalentUnwrap(prev_sv.table, out_sv.table, range);
-
-          entries := entries + [entry];
-          range := range.RightExtend1();
-
-          if range.Complete? {
-            out_sv := resources_obey_inv(out_sv);
-            CompleteFullRangeImpossible(out_sv, range.pivot);
-            assert entry.Empty?;
-          }
+          ghost var prev_sv := out_sv;
+          entries, range, out_sv := inout self.acquireRow(entries, range, out_sv);
+          entry := entries[ |entries| - 1 ];
 
           if entry.Empty? {
             break;
@@ -420,22 +352,21 @@ module Impl refines VerificationObligation {
         }
       }
 
-      // assert RangeFull(out_sv.table, Partial(start, end));
-      // assert SlotEmpty(out_sv.table[end]);
-      // assert self.RangeOwnershipInv(entries, range, out_sv);
+      assert RangeFull(out_sv.table, range.RightShrink1());
+      assert SlotEmpty(out_sv.table[range.end]);
 
-      var step := InsertStep(ticket, start, end);
-      // assert InsertEnable(out_sv, step);
+      var step := InsertStep(ticket, start, range.end);
+      assert InsertEnable(out_sv, step);
 
-      ghost var prev_table := out_sv.table;
-      out_sv := easy_transform_step(out_sv, step);
-      var table := out_sv.table;
+    //   ghost var prev_table := out_sv.table;
+    //   out_sv := easy_transform_step(out_sv, step);
+    //   var table := out_sv.table;
 
-      var new_entry := Full(ticket.input.key, ticket.input.value);
-      assert table == TableRightShift(prev_table, Some(new_entry), start, end);
+    //   var new_entry := Full(ticket.input.key, ticket.input.value);
+    //   assert table == TableRightShift(prev_table, Some(new_entry), start, end);
 
-      // entries := entries[..e_index] + [new_entry] + entries[e_index..|entries|-1];
-      // assert UnwrapKnownRange(table, range) == entries;
+    //   // entries := entries[..e_index] + [new_entry] + entries[e_index..|entries|-1];
+    //   // assert UnwrapKnownRange(table, range) == entries;
     }
 
     // linear inout method insert(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
@@ -584,3 +515,80 @@ module Impl refines VerificationObligation {
   // {
   // }
 }
+
+
+
+
+    // method acquireCapacity(thread_id: uint32, glinear in_sv: SSM.Variables)
+    // returns (
+    //   count: uint32,
+    //   bin_id: uint32,
+    //   glinear cap_handle: MutexHandle<AllocatorBin>,
+    //   glinear out_sv: SSM.Variables)
+
+    //   decreases *
+    //   requires Inv()
+    //   requires in_sv.Variables?
+    //   requires in_sv.insert_capacity.value == 0
+    //   ensures bin_id < CAP.NumberOfBinsImpl()
+    //   ensures cap_handle.m == allocator[bin_id]
+    //   ensures out_sv.Variables?
+    //   ensures out_sv == in_sv.(insert_capacity := Count.Variables(count as nat))
+    //   ensures 0 < count <= CapacityImpl()
+    // {
+    //   // thread_id is a hint for the bin we're supposed to use. 
+    //   // bin_id is the actual place we found the capacity (in case we had to steal it from someone else) 
+    //   bin_id := if thread_id >= CAP.NumberOfBinsImpl() then 0 else thread_id;
+    //   linear var cap;
+    //   cap, cap_handle := allocator[bin_id].acquire();
+
+    //   while true
+    //     invariant cap.count as nat == cap.resource.value <= Capacity()
+    //     invariant Inv()
+    //     invariant bin_id < CAP.NumberOfBinsImpl()
+    //     invariant CAP.BinInv(cap)
+    //     invariant cap_handle.m == allocator[bin_id]
+    //     decreases *
+    //   {
+    //     if 0 < cap.count {
+    //       break;
+    //     }
+    //     assert CAP.BinInv(cap);
+    //     allocator[bin_id].release(cap, cap_handle);
+
+    //     bin_id := bin_id + 1;
+    //     bin_id := if bin_id >= CAP.NumberOfBinsImpl() then 0 else bin_id;
+
+    //     cap, cap_handle := allocator[bin_id].acquire();
+    //   }
+
+    //   count := cap.count;
+    //   linear var AllocatorBin(_, cap_r) := cap;
+    //   out_sv := enclose(cap_r);
+    //   out_sv := SSM.join(in_sv, out_sv);
+    // }
+
+    // method releaseCapacity(
+    //   count: uint32,
+    //   bin_id: uint32,
+    //   glinear cap_handle: MutexHandle<AllocatorBin>,
+    //   glinear in_sv: SSM.Variables)
+    // returns (glinear out_sv: SSM.Variables)
+    //   requires Inv();
+    //   requires bin_id < CAP.NumberOfBinsImpl()
+    //   requires cap_handle.m == allocator[bin_id];
+    //   requires in_sv.Variables?;
+    //   requires in_sv.insert_capacity == Count.Variables(count as nat);
+    //   ensures out_sv == in_sv.(insert_capacity := Count.Variables(0));
+    // {
+    //   glinear var rcap;
+    //   assert in_sv.insert_capacity == Count.Variables(count as nat);
+    //   glinear var mid_sv := resources_obey_inv(in_sv);
+
+    //   ghost var left := in_sv.(insert_capacity := Count.Variables(0));
+    //   ghost var right := unit().(insert_capacity := Count.Variables(count as nat));
+
+    //   out_sv, rcap := SSM.split(mid_sv, left, right);
+    //   glinear var rcap' := declose(rcap);
+    //   allocator[bin_id].release(AllocatorBin(count, rcap'), cap_handle);
+    // }

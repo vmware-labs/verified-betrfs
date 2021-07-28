@@ -86,6 +86,12 @@ module CircularRange {
       Partial(NextIndex(start), NextIndex(end))
     }
 
+    predicate method AlmostComplete()
+      requires Partial?
+    {
+      start == NextIndex(end)
+    }
+
     function method RightExtend1(): Range
       requires Partial?
     {

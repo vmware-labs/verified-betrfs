@@ -371,10 +371,33 @@ module ShardedHashTable refines ShardedStateMachine {
     ensures s.table[e2].value.Empty?
     ensures e1 != e2
 
- lemma AlmostCompleteFullRangeImpossible(v: Variables, i: Index)
+  lemma CompleteFullRangeImpossible(v: Variables, i: Index)
     requires Valid(v)
     requires v.table[PrevIndex(i)].Some?
     requires RangeFull(v.table, Partial(i, PrevIndex(i)))
+    ensures SlotEmpty(v.table[PrevIndex(i)])
+  {
+    var t :| Inv(add(v, t));
+
+    var table1, table2 := v.table, t.table;
+    var table3 := fuse_seq(table1, table2);
+    assert TableInv(table3);
+    assert table1 == table3;
+
+    var last := PrevIndex(i);
+
+    if table1[last].value.Full? {
+      var e := InvImpliesEmptySlot(add(v, t));
+      assert false;
+    }
+  }
+
+ lemma AlmostCompleteFullRangeImpossible(v: Variables, range: Range)
+    requires Valid(v)
+    requires v.table[range.end].Some?
+    requires range.Partial?
+    requires range.AlmostComplete()
+    requires RangeFull(v.table, range)
     ensures false;
   {
     var t :| Inv(add(v, t));
@@ -938,25 +961,4 @@ module ShardedHashTable refines ShardedStateMachine {
     requires h.tickets == multiset{}
     requires h.stubs == multiset{}
     ensures a == h.insert_capacity
-
-  lemma CompleteFullRangeImpossible(v: Variables, i: Index)
-    requires Valid(v)
-    requires v.table[PrevIndex(i)].Some?
-    requires RangeFull(v.table, Partial(i, PrevIndex(i)))
-    ensures SlotEmpty(v.table[PrevIndex(i)])
-  {
-    var t :| Inv(add(v, t));
-
-    var table1, table2 := v.table, t.table;
-    var table3 := fuse_seq(table1, table2);
-    assert TableInv(table3);
-    assert table1 == table3;
-
-    var last := PrevIndex(i);
-
-    if table1[last].value.Full? {
-      var e := InvImpliesEmptySlot(add(v, t));
-      assert false;
-    }
-  }
 }
