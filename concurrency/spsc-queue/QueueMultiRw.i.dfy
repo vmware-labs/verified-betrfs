@@ -1,3 +1,4 @@
+include "../framework/Ptrs.s.dfy"
 include "../framework/MultiRw.i.dfy"
 include "../../lib/Base/Option.s.dfy"
 
@@ -7,11 +8,14 @@ include "../../lib/Base/Option.s.dfy"
 //                  v                         v
 // [         ,     0: F     ,    1: F    ,           ,          ,            ]
 
-module QueueMultiRw refines MultiRw {
+abstract module ItemModule { type Item }
+
+module QueueMultiRw(item: ItemModule) refines MultiRw {
   import opened Options
+  import Ptrs
 
   type Key = nat
-  datatype StoredType = StoredType()
+  type StoredType = Ptrs.PointsToLinear<item.Item>
 
   function size(): nat {
     32
