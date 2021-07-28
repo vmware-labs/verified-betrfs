@@ -186,6 +186,26 @@ module RwTokens(rw: Rw) {
   requires rw.Init(m)
   ensures token.val == m
 
+  glinear method obtain_invariant_2(
+      glinear inout token1: Token,
+      glinear inout token2: Token)
+  returns (ghost rest: rw.M)
+  requires old_token1.loc == old_token2.loc
+  ensures token1 == old_token1
+  ensures token2 == old_token2
+  ensures rw.Inv(rw.dot(rw.dot(token1.val, token2.val), rest))
+
+  glinear method obtain_invariant_3(
+      glinear inout token1: Token,
+      glinear inout token2: Token,
+      glinear inout token3: Token)
+  returns (ghost rest: rw.M)
+  requires old_token1.loc == old_token2.loc == old_token3.loc
+  ensures token1 == old_token1
+  ensures token2 == old_token2
+  ensures token3 == old_token3
+  ensures rw.Inv(rw.dot(rw.dot(rw.dot(token1.val, token2.val), token3.val), rest))
+
   glinear method internal_transition(
       glinear token: Token,
       ghost expected_value: rw.M)
@@ -209,14 +229,6 @@ module RwTokens(rw: Rw) {
   requires rw.withdraw(token.val, expected_value, expected_retrieved_value)
   ensures token' == T.Token(token.loc, expected_value)
   ensures retrieved_value == expected_retrieved_value
-
-  glinear method obtain_invariant_3(
-      glinear token1: Token,
-      glinear token2: Token,
-      glinear token3: Token)
-  returns (ghost rest: rw.M)
-  requires token1.loc == token2.loc == token3.loc
-  ensures rw.Inv(rw.dot(rw.dot(rw.dot(token1.val, token2.val), token3.val), rest))
 
   // TODO borrow method
 
@@ -255,6 +267,20 @@ module RwTokens(rw: Rw) {
   requires token1.loc == token2.loc
   requires rw.transition(
       rw.dot(token1.val, token2.val),
+      rw.dot(expected_value1, expected_value2))
+  ensures token1' == T.Token(token1.loc, expected_value1)
+  ensures token2' == T.Token(token1.loc, expected_value2)
+
+  glinear method internal_transition_3_2(
+      glinear token1: Token,
+      glinear token2: Token,
+      glinear token3: Token,
+      ghost expected_value1: rw.M,
+      ghost expected_value2: rw.M)
+  returns (glinear token1': Token, glinear token2': Token)
+  requires token1.loc == token2.loc == token3.loc
+  requires rw.transition(
+      rw.dot(rw.dot(token1.val, token2.val), token3.val),
       rw.dot(expected_value1, expected_value2))
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)

@@ -576,34 +576,37 @@ module RwLockTokens(rwlock: RwLock) {
   ensures pe'.val == rwlock.PhysRcHandle(rc - 1)
   ensures pe'.loc == pe.loc
   {
+    glinear var pe1 := pe;
+    glinear var handle1 := handle;
+    ghost var z := T.obtain_invariant_2(inout pe1, inout handle1);
     ghost var a := rwlock.PhysRcHandle(rc - 1);
 
     rwlock.abort_shared_step_preserves(rc);
-    pe' := T.internal_transition_2_1(pe, handle, a);
+    pe' := T.internal_transition_2_1(pe1, handle1, a);
   }
 
   glinear method perform_shared_finish(
     glinear pe: Token,
     glinear ct: Token,
     glinear handle: Token,
-    ghost central: rwlock.CentralState)
+    ghost held_value: rwlock.StoredType)
   returns (glinear pe': Token, glinear ct': Token, glinear handle': Token)
 
   requires pe.val == rwlock.PhysExcHandle(false)
-  requires ct.val == rwlock.CentralHandle(central)
+  requires ct.val == rwlock.CentralHandle(rwlock.CentralState(held_value))
   requires handle.val == rwlock.SharedPendingHandle()
   requires pe.loc == ct.loc == handle.loc
 
   ensures pe'.val == rwlock.PhysExcHandle(false)
-  ensures ct'.val == rwlock.CentralHandle(central)
-  ensures handle'.val == rwlock.SharedTakenHandle(central.held_value)
+  ensures ct'.val == rwlock.CentralHandle(rwlock.CentralState(held_value))
+  ensures handle'.val == rwlock.SharedTakenHandle(held_value)
   ensures pe'.loc == ct'.loc == handle'.loc == pe.loc
   {
     ghost var a := rwlock.PhysExcHandle(false);
-    ghost var b := rwlock.CentralHandle(central);
-    ghost var c := rwlock.SharedTakenHandle(central.held_value);
+    ghost var b := rwlock.CentralHandle(rwlock.CentralState(held_value));
+    ghost var c := rwlock.SharedTakenHandle(held_value);
 
-    rwlock.acquire_shared_finish_step_preserves(central.held_value);
+    rwlock.acquire_shared_finish_step_preserves(held_value);
     pe', ct', handle' := T.internal_transition_3_3(pe, ct, handle, a, b, c);
   }
 
@@ -626,17 +629,22 @@ module RwLockTokens(rwlock: RwLock) {
   ensures ct'.val == rwlock.CentralHandle(rwlock.CentralState(b0))
   ensures pe'.loc == ct'.loc == pe.loc
   {
-    ghost var z, complete := get_completion(inout x);
+    glinear var pe1 := pe;
+    glinear var ct1 := ct;
+    glinear var handle1 := handle;
+    ghost var z := T.obtain_invariant_3(inout pe1, inout ct1, inout handle1);
+    var complete :=
+        rwlock.dot(rwlock.dot(rwlock.dot(pe.val, ct.val), handle.val), z);
 
     assert complete.shared_taken_handles[b] >= 1;
-    assert central.held_value.Some? && central.held_value.value == b;
-    assert complete.shared_taken_handles[central.held_value.value] >= 1;
+    assert b0 == b;
+    assert complete.shared_taken_handles[b0] >= 1;
     assert rc >= 1;
 
     ghost var a := rwlock.PhysRcHandle(rc - 1);
     ghost var b1 := rwlock.CentralHandle(rwlock.CentralState(b0));
 
     rwlock.release_shared_step_preserves(b0, b, rc);
-    pe', ct' := do_internal_step(pe, ct, handle, a, b1);
+    pe', ct' := T.internal_transition_3_2(pe1, ct1, handle1, a, b1);
   }
 }
