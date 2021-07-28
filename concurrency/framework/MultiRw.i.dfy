@@ -210,6 +210,14 @@ module MultiRwTokens(rw: MultiRw) {
   ensures token' == T.Token(token.loc, expected_value)
   ensures retrieved_value == expected_retrieved_value
 
+  glinear method obtain_invariant_3(
+      glinear token1: Token,
+      glinear token2: Token,
+      glinear token3: Token)
+  returns (ghost rest: rw.M)
+  requires token1.loc == token2.loc == token3.loc
+  ensures rw.Inv(rw.dot(rw.dot(rw.dot(token1.val, token2.val), token3.val), rest))
+
   // TODO borrow method
 
   /*
