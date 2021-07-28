@@ -1,9 +1,10 @@
-include "RWLock.dfy"
+include "RwLock.i.dfy"
 include "../framework/Atomic.s.dfy"
 
-module RWLockImpl {
-  import opened RWLockExt
-  import opened RWLockExtToken
+module RwLockImpl(stm: StoredTypeModule) {
+  import RwLock = RwLock(stm)
+  import RwLockTokens = RwLockTokens(stm)
+
   import opened NativeTypes
   import opened Atomics
   import opened GhostLoc
@@ -253,4 +254,13 @@ module RWLockImpl {
 
     rwlock := RWLock(exc_atomic, rc_atomic, central_atomic, loc);
   }
+}
+
+module TrivialSTM refines StoredTypeModule {
+  glinear datatype Trivial = Trivial
+  type StoredType = Trivial
+}
+
+module ConcreteRwLockImpl {
+  import Impl = RwLockImpl(TrivialSTM)  
 }

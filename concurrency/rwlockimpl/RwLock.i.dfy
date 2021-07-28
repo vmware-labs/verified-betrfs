@@ -2,7 +2,11 @@ include "../../lib/Base/Option.s.dfy"
 include "../framework/Rw.i.dfy"
 include "FullMap.i.dfy"
 
-abstract module RwLock refines Rw {
+abstract module StoredTypeModule {
+  type StoredType(!new)
+}
+
+module RwLock(stm: StoredTypeModule) refines Rw {
   import opened FullMaps
 
   /*
@@ -27,10 +31,9 @@ abstract module RwLock refines Rw {
 
   /*
     The RWLock is designed to manage a resource of type `StoredType`
-    (inherited from abstract Rw module)
   */
 
-  // type StoredType
+  type StoredType = stm.StoredType
 
   /*
      Now we define our 'extension state' M.
@@ -480,8 +483,9 @@ abstract module RwLock refines Rw {
   }
 }
 
-module RwLockTokens(rwlock: RwLock) {
-  import T = RwTokens(rwlock)
+module RwLockTokens(stm: StoredTypeModule) {
+  import rwlock = RwLock(stm)
+  import T = RwTokens(RwLock(stm))
 
   import opened Options
 
@@ -549,10 +553,6 @@ module RwLockTokens(rwlock: RwLock) {
     rwlock.release_exc_step_deposit(held_value, resource, phys_exc);
     pe', ct' := T.deposit_3_2(pe, ct, handle, resource, a, b);
   }
-
-
-
-
 
   glinear method perform_shared_pending(glinear pe: Token, ghost rc: nat)
   returns (glinear pe': Token, glinear handle: Token)
