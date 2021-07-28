@@ -104,3 +104,12 @@ abstract module Refinement(ifc: Ifc, A: StateMachine(ifc), B: StateMachine(ifc))
   requires A.Next(s, s', op)
   ensures B.Next(I(s), I(s'), op)
 }
+
+/*abstract module IfcRefinement(ifc: Ifc, A: StateMachine(ifc), B: StateMachine(ifc)) {
+  // Can be either a finite or infinite sequence
+  codatatype Behavior<S, L> =
+    | BState(s: S, l: L, b: Behavior<S, L>)
+    | BEnd(s: S)
+
+
+}*/
