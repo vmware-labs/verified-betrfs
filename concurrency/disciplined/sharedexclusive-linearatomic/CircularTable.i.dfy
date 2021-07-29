@@ -278,7 +278,7 @@ module CircularTable {
     forall i: Index | range.Contains(i) :: table[i].Some?
   }
 
-  function {:fuel 1} UnwrapKnownRange(table: FixedTable, range: Range): (s: seq<Entry>)
+  function {:fuel 1} UnwrapRange(table: FixedTable, range: Range): (s: seq<Entry>)
     requires RangeKnown(table, range)
     ensures |range| == |s|
     decreases |range|
@@ -288,13 +288,13 @@ module CircularTable {
       []
     else
       var last := range.GetLast();
-      UnwrapKnownRange(table, range.RightShrink1()) + [table[last].value]
+      UnwrapRange(table, range.RightShrink1()) + [table[last].value]
   }
 
-  lemma UnwrapKnownRangeIndex(table: FixedTable, r1: Range, entries: seq<Entry>)
+  lemma UnwrapRangeIndex(table: FixedTable, r1: Range, entries: seq<Entry>)
     requires r1.Partial?
     requires RangeKnown(table, r1) 
-    requires UnwrapKnownRange(table, r1) == entries
+    requires UnwrapRange(table, r1) == entries
     ensures forall i: Index :: r1.Contains(i) ==>  
       table[i].value == entries[LeftShift(i, r1.start)]
     ensures forall j: Index :: 0 <= j < |entries| ==> 
@@ -302,40 +302,87 @@ module CircularTable {
     decreases |r1|
   {
     if r1.HasSome() {
-      UnwrapKnownRangeIndex(table, r1.RightShrink1(), DropLast(entries));
+      UnwrapRangeIndex(table, r1.RightShrink1(), DropLast(entries));
     }
   }
 
-  lemma UnwrapKnownPrefixRange(table: FixedTable, r1: Range, r2: Range, entries: seq<Entry>)
+  // lemma UnwrapRangeSingleton(table: FixedTable, r1: Range, i: Index)
+  //   requires r1.Partial?
+  //   requires RangeKnown(table, r1) 
+  //   requires r1.Contains(i)
+  // {
+  //   var entries := UnwrapRange(table, r1);
+  //   UnwrapRangeIndex(table, r1, entries);
+  //   assert UnwrapRange(table, Partial(i, NextIndex(i))) == [table[i].value];
+  // }
+
+  lemma UnwrapSplitRange(table: FixedTable, r1: Range, i: Index)
+    requires r1.Partial?
+    requires r1.Contains(i) || i == r1.end
+    requires RangeKnown(table, r1)
+    ensures UnwrapRange(table, r1) == 
+        UnwrapRange(table, Partial(r1.start, i)) +
+        UnwrapRange(table, Partial(i, r1.end))
+    decreases if i == r1.end then 0 else 
+      WrappedDistance(i, r1.end), |r1|
+  {
+    if |r1| == 1 {
+      return;
+    }
+
+    if i == r1.end || i == r1.start {
+      return;
+    }
+
+    var t := UnwrapRange(table, r1);
+    var j := NextIndex(i);
+    var tj1 := UnwrapRange(table, Partial(r1.start, j));
+    var tj2 := UnwrapRange(table, Partial(j, r1.end));
+    var ti1 := UnwrapRange(table, Partial(r1.start, i));
+    var ti2 := UnwrapRange(table, Partial(i, r1.end));
+
+    assert t == tj1 + tj2 by {
+      UnwrapSplitRange(table, r1, j);
+    }
+
+    assert ti1 + [table[i].value] == tj1;
+
+    assert ti2 == UnwrapRange(table, Partial(i, j)) + tj2 by {
+      UnwrapSplitRange(table, Partial(i, r1.end), j);
+    }
+
+    assert UnwrapRange(table, Partial(i, j)) == [table[i].value];
+    // UnwrapRangeSingleton(table, r1, i);
+  }
+
+  lemma UnwrapPrefixRange(table: FixedTable, r1: Range, r2: Range, entries: seq<Entry>)
     requires r1.Partial? && r2.Partial?
     requires r1.start == r2.start
     requires r1.Contains(r2.end)
     requires RangeKnown(table, r1) 
-    requires |entries| > 0
-    requires UnwrapKnownRange(table, r1) == entries
-    ensures |r2| <= |entries|
-    ensures UnwrapKnownRange(table, r2) == entries[ ..|r2| ]
+    requires UnwrapRange(table, r1) == entries
+    ensures UnwrapRange(table, r2) == entries[ ..|r2| ]
     decreases |r2|
   {
     if |r2| == 0 {
       return;
     }
 
-    var entries2 := UnwrapKnownRange(table, r2);
+    var entries2 := UnwrapRange(table, r2);
     var last := r2.GetLast();
     var r3 := r2.RightShrink1();
     var l2, l3 := |r2|, |r3|;
 
     calc {
-      UnwrapKnownRange(table, r2);
-      UnwrapKnownRange(table, r3) + [table[last].value];
+      UnwrapRange(table, r2);
+      UnwrapRange(table, r3) + [table[last].value];
       {
-        UnwrapKnownPrefixRange(table, r1, r3, entries);
+        UnwrapPrefixRange(table, r1, r3, entries);
       }
       entries[..l3] + [table[last].value];
       {
         assert entries[l3] == table[last].value by {
-          UnwrapKnownRangeIndex(table, r1, entries);
+          UnwrapRangeIndex(table, r1, entries);
           assert last == RightShift(r1.start, l3); 
         }
       }
@@ -347,10 +394,77 @@ module CircularTable {
     }
   }
 
+  lemma UnwrapSuffixRange(table: FixedTable, r1: Range, r2: Range, entries: seq<Entry>)
+    requires r1.Partial? && r2.Partial?
+    requires r1.end == r2.end
+    requires r1.Contains(r2.start) || r2.start == r1.end
+    requires RangeKnown(table, r1) 
+    requires UnwrapRange(table, r1) == entries
+    ensures UnwrapRange(table, r2) == entries[ |entries| - |r2| .. ]
+  {
+    if r2.start == r1.end {
+      return;
+    }
+
+    var entries2 := UnwrapRange(table, r2);
+    var split := r2.start;
+    var r3 := Partial(r1.start, split);
+
+    assert UnwrapRange(table, r1) == 
+      UnwrapRange(table, r3) +
+      UnwrapRange(table, r2) by {
+      UnwrapSplitRange(table, r1, split);
+    }
+
+    assert UnwrapRange(table, r3) == entries[ ..|r3| ] by {
+      UnwrapPrefixRange(table, r1, r3, entries);
+    }
+
+    assert UnwrapRange(table, r2) == entries[ |entries| - |r2| .. ];
+  }
+
+  lemma UnwrapSubRange(table: FixedTable, r1: Range, r2: Range, entries: seq<Entry>)
+    requires r1.Partial? && r2.Partial?
+    requires r1.Contains(r2.start)
+    requires r1.Contains(r2.end) || r2.end == r1.end
+    requires Partial(r1.start, r2.end).Contains(r2.start) || r2.start == r2.end
+
+    requires RangeKnown(table, r1) 
+    requires UnwrapRange(table, r1) == entries
+    ensures UnwrapRange(table, r2) ==
+      entries[WrappedDistance(r1.start, r2.start) ..
+        |entries| - WrappedDistance(r2.end, r1.end)];
+  {
+    var Partial(s1, e1) := r1;
+    var Partial(s2, e2) := r2;
+
+    var t2 := UnwrapRange(table, Partial(s1, s2));
+    var t3 := UnwrapRange(table, r2);
+    var t4 := UnwrapRange(table, Partial(e2, e1));
+
+    assert entries == t2 + t3 + t4 by {
+      UnwrapSplitRange(table, Partial(s1, e2), s2);
+      UnwrapSplitRange(table, r1, e2);
+    }
+
+    assert t2 == entries[..|t2| ] by {
+      UnwrapPrefixRange(table, r1, Partial(s1, s2), entries);
+    }
+
+    assert t4 == entries[ |entries| - |t4| .. ] by {
+      UnwrapSuffixRange(table, r1, Partial(e2, e1), entries);
+    }
+
+    assert t3 == entries[ |t2| .. |entries| - |t4| ];
+
+    assert |t2| == WrappedDistance(r1.start, r2.start);
+    assert |t4| == WrappedDistance(r2.end, r1.end);
+  }
+
   lemma RangeEquivalentUnwrap(t1: FixedTable, t2: FixedTable, range: Range)
     requires RangeEquivalent(t1, t2, range)
     requires forall i: Index :: range.Contains(i) ==> t1[i].Some?
-    ensures UnwrapKnownRange(t1, range) == UnwrapKnownRange(t2, range)
+    ensures UnwrapRange(t1, range) == UnwrapRange(t2, range)
     decreases |range|
   {
     if range.HasSome() {
@@ -371,7 +485,7 @@ module CircularTable {
     requires RangeRightShift1Equivalent(t1, t2, r1)
     requires forall i: Index :: r1.Contains(i) ==> t1[i].Some?
     ensures forall i: Index :: r1.RightShift1().Contains(i) ==> t2[i].Some?
-    ensures UnwrapKnownRange(t1, r1) == UnwrapKnownRange(t2, r1.RightShift1())
+    ensures UnwrapRange(t1, r1) == UnwrapRange(t2, r1.RightShift1())
     decreases |r1|
   {
     var r2 := r1.RightShift1();
@@ -665,26 +779,47 @@ module CircularTable {
     requires range.Partial?
     requires range.Contains(start)
     requires RangeKnown(t1, range)
-    requires UnwrapKnownRange(t1, range) == entries
+    requires UnwrapRange(t1, range) == entries
     requires IsTableRightShift(t1, t2, Some(inserted), start, PrevIndex(range.end))
+    ensures var probe_len := WrappedDistance(range.start, start);
+      UnwrapRange(t2, range) == entries[..probe_len] + [inserted] + entries[probe_len..|entries| - 1];
   {
     var end := PrevIndex(range.end);
     var probe_range := Partial(range.start, start);
+    var probe_len := |probe_range|;
     var shift_range := Partial(start, end);
+    var len := |range|;
 
-    assert UnwrapKnownRange(t1, range) == entries;
+    assert UnwrapRange(t1, range) == entries;
 
-    assert UnwrapKnownRange(t1, probe_range) == UnwrapKnownRange(t2, probe_range) by {
+    assert UnwrapRange(t2, probe_range) == entries[..probe_len] by {
       assert RangeEquivalent(t1, t2, probe_range);
       RangeEquivalentUnwrap(t1, t2, probe_range);
+      UnwrapPrefixRange(t1, range, probe_range, entries);
+      // assert UnwrapRange(t1, probe_range) == UnwrapRange(t2, probe_range);
     }
 
-    assert UnwrapKnownRange(t1, shift_range) == UnwrapKnownRange(t2, shift_range.RightShift1()) by {
+    assert UnwrapRange(t2, shift_range.RightShift1()) == entries[probe_len..len - 1] by {
       RangeShiftEquivalentUnwrap(t1, t2, shift_range);
+      UnwrapSubRange(t1, range, shift_range, entries);
+      // assert UnwrapRange(t1, shift_range) == UnwrapRange(t2, shift_range.RightShift1());
     }
 
-  }
+    var start_next := NextIndex(start);
+    
+    assert UnwrapRange(t2, range) == UnwrapRange(t2, probe_range)
+      + UnwrapRange(t2, Partial(start, start_next))
+      + UnwrapRange(t2, shift_range.RightShift1()) by {
+      UnwrapSplitRange(t2, range, start_next);
+      UnwrapSplitRange(t2, Partial(range.start, start_next), start);
+    }
 
+    assert UnwrapRange(t2, Partial(start, start_next)) == [inserted] by {
+      assert t2[start] == Some(inserted);
+    }
+
+    assert UnwrapRange(t2, range) == entries[..probe_len] + [inserted] + entries[probe_len..len - 1];
+  }
 
   predicate IsTableLeftShift(table: FixedTable, table': FixedTable, start: Index, end: Index)
   {
