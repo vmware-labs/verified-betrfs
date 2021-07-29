@@ -240,20 +240,4 @@ module CircularRange {
     ensures Partial(c, a).Contains(b);
   {
   }
-
-  // lemma RangeSize(r: Range)
-  //   ensures |r| == |(set i | r.Contains(i) :: i)|
-  // {
-  //   var indices := (set i | r.Contains(i) :: i);
-  //   var Partial(start, end) := r;
-
-  //   if start == end {
-  //     assert |indices| == |r|;
-  //   } else if start < end {
-      
-  //   } else {
-
-  //   }
-  // }
-
 }
