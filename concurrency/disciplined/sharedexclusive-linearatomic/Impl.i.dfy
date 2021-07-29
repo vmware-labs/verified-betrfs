@@ -113,7 +113,7 @@ module Impl refines VerificationObligation {
       && sv.Variables?
       && (forall i: Index :: (range.Contains(i) <==> HasHandle(i)))
       && (forall i: Index :: (range.Contains(i) <==> sv.table[i].Some?))
-      && UnwrapKnownRange(sv.table, range) == entries
+      && UnwrapRange(sv.table, range) == entries
     }
 
     linear inout method acquireRow(
@@ -310,7 +310,7 @@ module Impl refines VerificationObligation {
     }
 
     linear inout method insertNotFound(ticket: Ticket, p_range: Range, entries: seq<Entry>, glinear in_sv: SSM.Variables)
-      returns (glinear out_sv: SSM.Variables)
+      returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
 
       requires old_self.RangeOwnershipInv(entries, p_range, in_sv)
       requires p_range.HasSome()
@@ -322,6 +322,9 @@ module Impl refines VerificationObligation {
       requires ticket in in_sv.tickets
       requires ticket.input.InsertInput?
       requires in_sv.insert_capacity.value >= 1
+      requires in_sv.stubs == multiset{}
+  
+      // ensures out_sv == SSM.output_stub(ticket.rid, output)
     {
       out_sv := in_sv;
       var probe_key := ticket.input.key;
@@ -356,29 +359,24 @@ module Impl refines VerificationObligation {
           }
         }
       }
+      output := MapIfc.InsertOutput(true);
 
-      assert end == PrevIndex(range.end);
       var shift_range := Partial(start, end);
-      // assert RangeFull(out_sv.table, range.RightShrink1());
-      // assert SlotEmpty(out_sv.table[end]);
       var step := InsertStep(ticket, start, end);
-      // assert InsertEnable(out_sv, step);
+      assert InsertEnable(out_sv, step);
       ghost var t1 := out_sv.table;
       out_sv := easy_transform_step(out_sv, step);
       var t2 := out_sv.table;
+      assert out_sv.stubs == multiset { Stub(ticket.rid, output) };
 
-      var new_entry := Full(ticket.input.key, ticket.input.value);
+      var inserted := Full(ticket.input.key, ticket.input.value);
+      RightShiftUnwrap(t1, t2, inserted, entries, range, start);
 
-      assert UnwrapKnownRange(t1, range) == entries;
+      var probe_len := WrappedDistance(p_range.start, start);
+      var new_entries := entries[..probe_len] + [inserted] + entries[probe_len..|entries| - 1];
 
-      assert UnwrapKnownRange(t1, probe_range) == UnwrapKnownRange(t2, probe_range) by {
-        assert RangeEquivalent(t1, t2, probe_range);
-        RangeEquivalentUnwrap(t1, t2, probe_range);
-      }
-  
-      assert UnwrapKnownRange(t1, shift_range) == UnwrapKnownRange(t2, shift_range.RightShift1()) by {
-        RangeShiftEquivalentUnwrap(t1, t2, shift_range);
-      }
+      assert UnwrapRange(t2, range) == new_entries;
+      out_sv := inout self.releaseRows(new_entries, range, out_sv);
     }
 
     // linear inout method insert(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
@@ -418,7 +416,7 @@ module Impl refines VerificationObligation {
   //   prev_table: FixedTable,
   //   range: Range, 
   //   table: FixedTable)
-  //   requires UnwrapKnownRange(prev_table, range) == entries
+  //   requires UnwrapRange(prev_table, range) == entries
   //   requires table == TableRightShift(prev_table, Some(new_entry), start, end);
   // {
   // }
