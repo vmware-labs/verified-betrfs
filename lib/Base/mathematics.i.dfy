@@ -55,7 +55,7 @@ module Mathematics {
       }
     }
   }
-  
+
   lemma MulDivCancel(x: nat, d: nat)
     requires 0 < d
     ensures (x * d) / d == x
@@ -69,7 +69,14 @@ module Mathematics {
     ensures 0 < x * y
   {
   }
-  
+
+  lemma NatMulNatIsNat(x: int, y: int)
+    requires 0 <= x
+    requires 0 <= y
+    ensures 0 <= x * y
+  {
+  }
+
   lemma DivCeilLT(x: int, d: int)
     requires 1 < d
     requires 1 < x
@@ -83,6 +90,12 @@ module Mathematics {
   }
 
   lemma PosMulPreservesOrder(x: nat, y: nat, m: nat)
+    requires x < y
+    ensures x * m < y * m
+  {
+  }
+
+  lemma PosMulPreservesLe(x: nat, y: nat, m: nat)
     requires x <= y
     ensures x * m <= y * m
   {

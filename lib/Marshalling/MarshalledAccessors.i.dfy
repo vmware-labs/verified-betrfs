@@ -5,6 +5,7 @@ include "../Base/Option.s.dfy"
 include "../Base/mathematics.i.dfy"
 include "../Base/sequences.i.dfy"
 include "Math.i.dfy"
+include "NLarith.i.dfy"
 
 /////////////////////////////////////////
 // The most general marshalling interface
@@ -196,12 +197,14 @@ abstract module SeqMarshalling(ElementMarshalling: Marshalling) refines Marshall
 // we can use the optimized integer packing code.
 //////////////////////////////////////////////////////////////////////
 
-abstract module UniformSizedElementSeqMarshallingCommon(elementMarshalling: Marshalling) refines SeqMarshalling(elementMarshalling) {
+abstract module UniformSizedElementSeqMarshallingCommon(elementMarshalling: Marshalling)
+refines SeqMarshalling(elementMarshalling) {
   import opened Mathematics
   import opened LinearSequence_i
   import opened LinearSequence_s
   import Seq = Sequences
   import opened Math
+  import NLarith
 
   function method UniformSize() : uint64
     ensures 0 < UniformSize()
@@ -212,12 +215,21 @@ abstract module UniformSizedElementSeqMarshallingCommon(elementMarshalling: Mars
   }
 
   function length(data: mseq<byte>) : nat
+    ensures length(data) <=  length(data) * UniformSize() as nat <= |data|
   {
-    |data| / UniformSize() as nat
+    NLarith.DivLe(|data|, UniformSize() as nat);
+    DivMulOrder(|data|, UniformSize() as nat);
+    assert (|data| / UniformSize() as nat) * 1 == |data| / UniformSize() as nat;
+    if 1 < UniformSize() then
+      PosMulPreservesOrder(1, UniformSize() as nat, |data| / UniformSize() as nat);
+      |data| / UniformSize() as nat
+    else 
+      |data| / UniformSize() as nat
   }
 
   method TryLength(data: mseq<byte>) returns (olen: Option<uint64>)
   {
+    NLarith.DivLe(|data|, UniformSize() as nat);
     olen := Some(|data| as uint64 / UniformSize());
   }
 
@@ -229,18 +241,25 @@ abstract module UniformSizedElementSeqMarshallingCommon(elementMarshalling: Mars
   method Length(data: mseq<byte>) returns (len: uint64)
     ensures len as nat == length(data)
   {
+    NLarith.DivLe(|data|, UniformSize() as nat);
     len := |data| as uint64 / UniformSize();
   }
 
   lemma index_bounds_facts(data: mseq<byte>, idx: nat)
     requires idx < length(data)
-    ensures 0 <= idx * UniformSize() as nat < (idx + 1) * UniformSize() as nat == idx * UniformSize() as nat + UniformSize() as nat <= |data|
+    ensures 0 <= idx * UniformSize() as nat < idx * UniformSize() as nat + UniformSize() as nat == (idx + 1) * UniformSize() as nat <= |data|
   {
-    DivMulOrder(|data|, UniformSize() as nat);
+    NatMulNatIsNat(idx, UniformSize() as nat);
+    PosMulPreservesOrder(idx, idx + 1, UniformSize() as nat);
+    NLarith.DistributeLeft(idx, 1, UniformSize() as nat);
+    if idx + 1 < length(data) {
+      PosMulPreservesOrder(idx + 1, length(data), UniformSize() as nat);
+    }
   }
 
   function method ElementData(data: mseq<byte>, idx: uint64) : mseq<byte>
     requires idx as nat < length(data)
+    ensures |ElementData(data, idx)| == UniformSize() as nat
   {
     index_bounds_facts(data, idx as nat);
     data[idx * UniformSize()..idx * UniformSize() + UniformSize()]
@@ -312,6 +331,7 @@ abstract module UniformSizedElementSeqMarshallingCommon(elementMarshalling: Mars
 
   function size(value: UnmarshalledType) : nat
   {
+    NatMulNatIsNat(|value|, UniformSize() as nat);
     |value| * UniformSize() as nat
   }
 
@@ -338,6 +358,7 @@ abstract module UniformSizedElementSeqMarshallingCommon(elementMarshalling: Mars
       Seq.lemma_seq_slice_slice(extension, 0, |data|, idx * UniformSize() as nat, idx * UniformSize() as nat + UniformSize() as nat);
     }
     assert ElementData(extension, length(data) as uint64) == edata;
+    assert parse(extension)[..length(data)] == parse(data);
   }
 
   predicate settable(data: mseq<byte>, idx: nat, value: Element) {
@@ -405,12 +426,21 @@ abstract module UniformSizedElementSeqMarshallingCommon(elementMarshalling: Mars
           ensures newdata[j] == data[j]
           {
             if i < idx as nat {
+              assert i + 1 <= idx;
+              if i + 1 < idx {
+                PosMulPreservesOrder(i + 1, idx, UniformSize() as nat);
+              }
             } else {
+              assert idx + 1 <= i;
+              if idx + 1 < i {
+                PosMulPreservesOrder(idx + 1, i, UniformSize() as nat);
+              }
             }
           }
           Seq.lemma_seq_extensionality_slice(data, newdata, i * UniformSize() as nat, (i+1) * UniformSize() as nat);
       }
     }
+    assert forall i | 0 <= i < length(newdata) :: parse(newdata)[i] == elementMarshalling.parse(ElementData(newdata, i as uint64));
   }
 
   method Set(linear data: mseq<byte>, start: uint64, end: uint64, idx: uint64, value: Element)
@@ -454,7 +484,8 @@ abstract module UniformSizedElementSeqMarshallingCommon(elementMarshalling: Mars
 // (presumably) be slower.
 /////////////////////////////////////////////////////////////////
 
-abstract module IntegerSeqMarshalling(Int: NativePackedInt) refines UniformSizedElementSeqMarshallingCommon(IntegerMarshalling(Int)) {
+abstract module IntegerSeqMarshalling(Int: NativePackedInt)
+refines UniformSizedElementSeqMarshallingCommon(IntegerMarshalling(Int)) {
   function method UniformSize() : uint64 {
     Int.Size()
   }
@@ -468,6 +499,11 @@ abstract module IntegerSeqMarshalling(Int: NativePackedInt) refines UniformSized
     {
       DivMulOrder(length(data), UniformSize() as nat);
       assert i + 1 <= length(data);
+      if i + 1 < length(data) {
+        PosMulPreservesOrder(i + 1, length(data), UniformSize() as nat);
+      }
+      assert (i + 1) * UniformSize() as nat <=  length(data) * UniformSize() as nat;
+      assert length(data) * UniformSize() as nat <= |data|;
       assert (i + 1) * UniformSize() as nat <= |data|;
     }
   }
@@ -481,9 +517,10 @@ abstract module IntegerSeqMarshalling(Int: NativePackedInt) refines UniformSized
     forall i | 0 <= i < |value|
       ensures value[i] == parse(data)[i]
     {
-      DivMulOrder(length(data), UniformSize() as nat);
-      assert i + 1 <= length(data);
-      assert (i + 1) * UniformSize() as nat <= |data|;
+      index_bounds_facts(data, i);
+      if i + 1 < len {
+        PosMulPreservesOrder(i + 1, len, Int.Size() as nat);
+      }
       Seq.lemma_seq_slice_slice(data, 0, Int.Size() as nat * len as nat, i * Int.Size() as nat, (i+1) * Int.Size() as nat);
       Seq.lemma_seq_slice_slice(data, i * UniformSize() as nat, (i + 1) * UniformSize() as nat, 0, Int.Size() as nat);
     }
@@ -517,10 +554,8 @@ abstract module IntegerSeqMarshalling(Int: NativePackedInt) refines UniformSized
     ensures parsable(data);
     ensures element == parse(data)[idx]
   {
+    index_bounds_facts(data, idx as nat);
     always_parsable(data);
-    assert idx as nat + 1 <= length(data);
-    assert (idx as nat + 1) * Int.Size() as nat <= length(data) * Int.Size() as nat;
-    DivMulOrder(|data|, Int.Size() as nat);
     element := Int.Cast(data, idx * Int.Size());
     assert data[idx * Int.Size()..idx * Int.Size() + Int.Size()] == data[idx * Int.Size()..idx * Int.Size() + Int.Size()][..Int.Size()];
   }
@@ -652,7 +687,7 @@ refines UniformSizedElementSeqMarshallingCommon(Element_Marshalling) {
     while i < |value| as uint64
       invariant i <= |value| as uint64
       invariant |newdata| == |data|
-      invariant end as nat == start as nat + size(value[..i])
+      invariant end as nat == start as nat + size(value[..i]) <= |newdata|
       invariant forall j | 0 <= j < start :: newdata[j] == data[j]
       invariant forall j | end as nat <= j < |data| :: newdata[j] == data[j]
       invariant parsable(newdata[start..end])
@@ -660,9 +695,11 @@ refines UniformSizedElementSeqMarshallingCommon(Element_Marshalling) {
     {
       ghost var oldend := end;
       ghost var olddata := newdata[start..end];
-      assert i as nat + 1 <= |value|;
-      assert start as nat + (i as nat + 1) * UniformSize() as nat <= start as nat + |value| * UniformSize() as nat;
+      if i as nat + 1 < |value| {
+        PosMulPreservesOrder(i as nat + 1, |value|, UniformSize() as nat);
+      }
 
+      NLarith.DistributeLeft(i as nat, 1, UniformSize() as nat);
       newdata, end := ElementMarshalling.Marshall(value[i], newdata, end);
       i := i + 1;
 
@@ -675,285 +712,442 @@ refines UniformSizedElementSeqMarshallingCommon(Element_Marshalling) {
   }
 }
 
-// ////////////////////////////////////////////////////////////////////
-// // Marshalling of sequences of uniform-sized elements, with a length
-// // field up front so we can resize it.
-// ////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////
+// Marshalling of sequences of uniform-sized elements, with a length
+// field up front so we can resize it.
+////////////////////////////////////////////////////////////////////
 
-// abstract module ResizableUniformSizedElementSeqMarshalling refines SeqMarshalling {
-//   import LengthMarshalling : IntegerMarshalling
-//   import USESM = UniformSizedElementSeqMarshallingCommon
-//   import opened Mathematics
-//   import opened LinearSequence_s
-//   import opened LinearSequence_i
-//   import Seq = Sequences
+abstract module
+ResizableUniformSizedElementSeqMarshalling(LengthInt: NativePackedInt,
+                                           elementMarshalling: Marshalling)
+refines SeqMarshalling(elementMarshalling) {
+  import LengthMarshalling = IntegerMarshalling(LengthInt)
+  import USESM = UniformSizedElementSeqMarshallingCommon(elementMarshalling)
+  import opened Mathematics
+  import opened LinearSequence_s
+  import opened LinearSequence_i
+  import Seq = Sequences
+  import NLarith
 
-//   import LengthInt = LengthMarshalling.Int
-//   type Length = LengthMarshalling.Int.Integer
+  function method sizeOfLengthField() : uint64 {
+    LengthInt.Size()
+  }
 
-//   function method sizeOfLengthField() : uint64 {
-//     LengthInt.Size()
-//   }
+  function maxLength(data: mseq<byte>) : nat
+    requires sizeOfLengthField() as nat <= |data|
+  {
+    USESM.length(data[sizeOfLengthField()..])
+  }
+  
+  predicate lengthable'(data: mseq<byte>) {
+    && sizeOfLengthField() as nat <= |data|
+    && var ilen := LengthMarshalling.parse(data[..sizeOfLengthField()]);
+    && LengthInt.fitsInUint64(ilen)
+    && var len := LengthInt.toInt(ilen);
+    && len <= maxLength(data)
+  }
 
-//   predicate lengthable'(data: mseq<byte>) {
-//     && sizeOfLengthField() as nat <= |data|
-//     && var ilen := LengthMarshalling.parse(data[..sizeOfLengthField()]);
-//     && LengthInt.fitsInUint64(ilen)
-//     && var len := LengthInt.toInt(ilen);
-//     && len <= USESM.length(data[sizeOfLengthField()..])
-//   }
+  function length(data: mseq<byte>) : nat
+    requires lengthable'(data)
+    ensures length(data) <=  length(data) * USESM.UniformSize() as nat <= |data| - sizeOfLengthField() as nat
+  {
+    var len := LengthInt.toInt(LengthMarshalling.parse(data[..sizeOfLengthField()]));
+    PosMulPreservesLe(len, (|data| - sizeOfLengthField() as nat) / USESM.UniformSize() as nat, USESM.UniformSize() as nat);
+    PosMulPreservesLe(1, USESM.UniformSize() as nat, len);
+    len
+  }
 
-//   function length(data: mseq<byte>) : nat
-//     requires lengthable'(data)
-//   {
-//     LengthInt.toInt(LengthMarshalling.parse(data[..sizeOfLengthField()]))
-//   }
+  predicate lengthable(data: mseq<byte>) {
+    lengthable'(data)
+  }
 
-//   predicate lengthable(data: mseq<byte>) {
-//     lengthable'(data)
-//   }
+  lemma index_bounds_facts(data: mseq<byte>, idx: nat)
+    requires sizeOfLengthField() as nat <= |data|
+    requires idx < maxLength(data)
+    ensures
+    0 <=  sizeOfLengthField() as nat + idx * USESM.UniformSize() as nat
+      <  sizeOfLengthField() as nat + idx * USESM.UniformSize() as nat + USESM.UniformSize() as nat
+      == sizeOfLengthField() as nat + (idx + 1) * USESM.UniformSize() as nat
+      <=  sizeOfLengthField() as nat + maxLength(data) * USESM.UniformSize() as nat
+      <=  |data|
+  {
+    NatMulNatIsNat(idx, USESM.UniformSize() as nat);
+    NLarith.DistributeLeft(idx, 1, USESM.UniformSize() as nat);
+    if idx + 1 < maxLength(data) {
+      PosMulPreservesOrder(idx + 1, maxLength(data), USESM.UniformSize() as nat);
+    }
+  }
 
-//   method TryLength(data: mseq<byte>) returns (olen: Option<uint64>)
-//     ensures olen.Some? ==> olen.value as nat == length(data)
-//   {
-//     if LengthInt.Size() <= |data| as uint64 {
-//       var l' := LengthMarshalling.Parse(data[..sizeOfLengthField()]);
-//       if LengthInt.fitsInUint64(l') {
-//         var l: uint64 := LengthInt.toUint64(l');
-//         var maxl := USESM.Length(data[sizeOfLengthField()..]);
-//         if l <= maxl {
-//           MulDivCancel(l as nat, USESM.UniformSize() as nat);
-//           // if parsable(data) {
-//           //   calc {
-//           //     l as nat;
-//           //     { MulDivCancel(l as nat, USESM.UniformSize() as nat); }
-//           //     l as nat * USESM.UniformSize() as nat / USESM.UniformSize() as nat;
-//           //     |USESM.parse(data[sizeOfLengthField()..sizeOfLengthField() as nat + l as nat * USESM.UniformSize() as nat])|;
-//           //     |USESM.parse(data[sizeOfLengthField()..sizeOfLengthField() as nat + length(data) * USESM.UniformSize() as nat])|;
-//           //     |parse(data)|;
-//           //   }
-//           // }
-//           olen := Some(l);
-//         } else {
-//           olen := None;
-//         }
-//       } else {
-//         olen := None;
-//       }
-//     } else {
-//       olen := None;
-//     }
-//   }
+  method TryLength(data: mseq<byte>) returns (olen: Option<uint64>)
+    ensures olen.Some? ==> olen.value as nat == length(data)
+  {
+    if LengthInt.Size() <= |data| as uint64 {
+      var l' := LengthMarshalling.Parse(data[..sizeOfLengthField()]);
+      if LengthInt.fitsInUint64(l') {
+        var l: uint64 := LengthInt.toUint64(l');
+        var maxl := USESM.Length(data[sizeOfLengthField()..]);
+        if l <= maxl {
+          if l < maxl {
+            index_bounds_facts(data, l as nat);
+          }
+          MulDivCancel(l as nat, USESM.UniformSize() as nat);
+          NatMulNatIsNat(l as nat, USESM.UniformSize() as nat);
+          olen := Some(l);
+        } else {
+          olen := None;
+        }
+      } else {
+        olen := None;
+      }
+    } else {
+      olen := None;
+    }
+  }
 
-//   method Lengthable(data: mseq<byte>) returns (l: bool) {
-//     var olen := TryLength(data);
-//     return olen.Some?;
-//   }
+  method Lengthable(data: mseq<byte>) returns (l: bool) {
+    var olen := TryLength(data);
+    return olen.Some?;
+  }
 
-//   method Length(data: mseq<byte>) returns (len: uint64)
-//     ensures len as nat == length(data)
-//   {
-//     var l := LengthMarshalling.Parse(data[..sizeOfLengthField()]);
-//     len := LengthInt.toUint64(l);
-//     MulDivCancel(len as nat, USESM.UniformSize() as nat);
-//   }
+  method Length(data: mseq<byte>) returns (len: uint64)
+    ensures len as nat == length(data)
+  {
+    var l := LengthMarshalling.Parse(data[..sizeOfLengthField()]);
+    len := LengthInt.toUint64(l);
+    if len as nat < maxLength(data) {
+      index_bounds_facts(data, len as nat);
+    }
+    MulDivCancel(len as nat, USESM.UniformSize() as nat);
+    NatMulNatIsNat(len as nat, USESM.UniformSize() as nat);
+  }
 
-//   predicate gettable(data: mseq<byte>, idx: nat) {
-//     && lengthable(data)
-//     && var len := length(data);
-//     && USESM.gettable(data[sizeOfLengthField() as nat..sizeOfLengthField() as nat + len * USESM.UniformSize() as nat], idx)
-//   }
+  function method ElementData(data: mseq<byte>, idx: uint64) : mseq<byte>
+    requires sizeOfLengthField() as nat <= |data|
+    requires idx as nat < maxLength(data)
+  {
+    USESM.ElementData(data[sizeOfLengthField()..], idx)
+  }
 
-//   method TryGet(data: mseq<byte>, idx: uint64) returns (oedata: Option<mseq<byte>>) {
-//     var olen := TryLength(data);
-//     if olen == None {
-//       return None;
-//     }
-//     var len := olen.value;
-//     oedata := USESM.TryGet(data[sizeOfLengthField()..sizeOfLengthField() + len * USESM.UniformSize()], idx);
-//     if parsable(data) {
-//       parse_length(data);
-//     }
-//   }
+  predicate gettable(data: mseq<byte>, idx: nat) {
+    && lengthable(data)
+    && var len := length(data);
+    && USESM.gettable(data[sizeOfLengthField() as nat..sizeOfLengthField() as nat + len * USESM.UniformSize() as nat], idx)
+  }
 
-//   method Gettable(data: mseq<byte>, idx: uint64) returns (g: bool) {
-//     var olen := TryLength(data);
-//     if olen == None {
-//       return false;
-//     }
-//     var len := olen.value;
-//     g := USESM.Gettable(data[sizeOfLengthField()..sizeOfLengthField() + len * USESM.UniformSize()], idx);
-//   }
+  method TryGet(data: mseq<byte>, idx: uint64) returns (oedata: Option<mseq<byte>>) {
+    var olen := TryLength(data);
+    if olen == None {
+      return None;
+    }
+    var len := olen.value;
+    assert sizeOfLengthField() as nat + (len as nat) * (USESM.UniformSize() as nat) < Uint64UpperBound();
+    oedata := USESM.TryGet(data[sizeOfLengthField()..sizeOfLengthField() + len * USESM.UniformSize()], idx);
+    if parsable(data) {
+      parse_length(data);
+    }
+  }
 
-//   method Get(data: mseq<byte>, idx: uint64) returns (edata: mseq<byte>) {
-//     var len := Length(data);
-//     edata := USESM.Get(data[sizeOfLengthField()..sizeOfLengthField() + len * USESM.UniformSize()], idx);
-//   }
+  method Gettable(data: mseq<byte>, idx: uint64) returns (g: bool) {
+    var olen := TryLength(data);
+    if olen == None {
+      return false;
+    }
+    var len := olen.value;
+    g := USESM.Gettable(data[sizeOfLengthField()..sizeOfLengthField() + len * USESM.UniformSize()], idx);
+  }
 
-//   predicate settable(data: mseq<byte>, idx: nat, value: Element) {
-//     && lengthable(data)
-//     && idx < length(data)
-//     && ElementMarshalling.marshallable(value)
-//     && ElementMarshalling.size(value) == USESM.UniformSize() as nat
-//   }
+  method Get(data: mseq<byte>, idx: uint64) returns (edata: mseq<byte>) {
+    var len := Length(data);
+    edata := USESM.Get(data[sizeOfLengthField()..sizeOfLengthField() + len * USESM.UniformSize()], idx);
+  }
 
-//   method Settable(data: mseq<byte>, idx: uint64, value: Element) returns (s: bool)
-//     requires ElementMarshalling.marshallable(value)
-//     requires ElementMarshalling.size(value) < Uint64UpperBound()
-//     ensures s == settable(data, idx as nat, value)
-//   {
-//     var olen := TryLength(data);
-//     if olen == None {
-//       return false;
-//     }
-//     var len := olen.value;
-//     var sz := ElementMarshalling.Size(value);
-//     return idx < len && sz == USESM.UniformSize();
-//   }
+  predicate settable(data: mseq<byte>, idx: nat, value: Element) {
+    && lengthable(data)
+    && idx < length(data)
+    && ElementMarshalling.marshallable(value)
+    && ElementMarshalling.size(value) == USESM.UniformSize() as nat
+  }
 
-//   method Set(linear data: mseq<byte>, start: uint64, end: uint64, idx: uint64, value: Element)
-//     returns (linear newdata: mseq<byte>)
-//     requires start as nat <= end as nat <= |data|
-//     requires settable(data[start..end], idx as nat, value)
-//     ensures |newdata| == |data|
-//     ensures forall i | 0 <= i < start :: newdata[i] == data[i]
-//     ensures forall i | end as nat <= i < |newdata| :: newdata[i] == data[i]
-//     ensures lengthable(newdata[start..end])
-//     ensures length(newdata[start..end]) == length(data[start..end])
-//     ensures parsable(data[start..end]) ==> parsable(newdata[start..end])
-//     ensures parsable(data[start..end]) ==> |parse(newdata[start..end])| == |parse(data[start..end])|
-//     ensures parsable(data[start..end]) ==> idx as nat < |parse(data[start..end])|
-//     ensures parsable(data[start..end]) ==> parse(newdata[start..end]) == parse(data[start..end])[idx as nat := value]
-//   {
-//     var substart := start + sizeOfLengthField();
-//     USESM.index_bounds_facts(data[substart..end], idx as nat);
+  method Settable(data: mseq<byte>, idx: uint64, value: Element) returns (s: bool)
+    requires ElementMarshalling.marshallable(value)
+    requires ElementMarshalling.size(value) < Uint64UpperBound()
+    ensures s == settable(data, idx as nat, value)
+  {
+    var olen := TryLength(data);
+    if olen == None {
+      return false;
+    }
+    var len := olen.value;
+    var sz := ElementMarshalling.Size(value);
+    return idx < len && sz == USESM.UniformSize();
+  }
 
-//     var newend;
-//     newdata, newend := ElementMarshalling.Marshall(value, data, substart + idx * USESM.UniformSize());
+  method Set(linear data: mseq<byte>, start: uint64, end: uint64, idx: uint64, value: Element)
+    returns (linear newdata: mseq<byte>)
+    requires start as nat <= end as nat <= |data|
+    requires settable(data[start..end], idx as nat, value)
+    ensures |newdata| == |data|
+    ensures forall i | 0 <= i < start :: newdata[i] == data[i]
+    ensures forall i | end as nat <= i < |newdata| :: newdata[i] == data[i]
+    ensures lengthable(newdata[start..end])
+    ensures length(newdata[start..end]) == length(data[start..end])
+    ensures parsable(data[start..end]) ==> parsable(newdata[start..end])
+    ensures parsable(data[start..end]) ==> |parse(newdata[start..end])| == |parse(data[start..end])|
+    ensures parsable(data[start..end]) ==> idx as nat < |parse(data[start..end])|
+    ensures parsable(data[start..end]) ==> parse(newdata[start..end]) == parse(data[start..end])[idx as nat := value]
+  {
+    var substart := start + sizeOfLengthField();
+    USESM.index_bounds_facts(data[substart..end], idx as nat);
 
-//     // robj: FIXME: I don't think we can complete this proof until we
-//     // have Jon's module system.  (Or we could copy a bunch of code
-//     // from the USESM module into here.)
-//     assume false;
+    var newend;
+    newdata, newend := ElementMarshalling.Marshall(value, data, substart + idx * USESM.UniformSize());
 
-//     // calc {
-//     //   newdata[substart..end][idx as nat * USESM.UniformSize() as nat..(idx as nat + 1) * USESM.UniformSize() as nat];
-//     //   { Seq.lemma_seq_slice_slice(newdata, substart as nat, end as nat, idx as nat * USESM.UniformSize() as nat, (idx as nat + 1) * USESM.UniformSize() as nat); }
-//     //   newdata[substart as nat + idx as nat * USESM.UniformSize() as nat..substart as nat + (idx as nat + 1) * USESM.UniformSize() as nat];
-//     // }
-//     // assert USESM.setted(data[substart..end], idx as nat, value, newdata[substart..end]);
-//     // if parsable(data[start..end]) {
-//     //   USESM.setted_parsing(data[substart..end], idx as nat, value, newdata[substart..end]);
-//     // }
-//   }
+    assert newdata[start..end][..sizeOfLengthField()] == data[start..end][..sizeOfLengthField()];
 
-//   predicate resizable(data: mseq<byte>, newlen: nat) {
-//     && lengthable(data)
-//     && var maxlen := USESM.length(data[LengthInt.Size()..]);
-//     && newlen <= maxlen
-//     && LengthInt.fitsInInteger(newlen as uint64)
-//   }
+    if parsable(data[start..end]) {
+      var len := length(data[start..end]);
+      MulDivCancel(len, USESM.UniformSize() as nat);
+      Seq.lemma_seq_slice_slice(newdata,
+        start as nat,
+        end as nat,
+        sizeOfLengthField() as nat,
+        sizeOfLengthField() as nat + len * USESM.UniformSize() as nat);
+      Seq.lemma_seq_slice_slice(data,
+        start as nat,
+        end as nat,
+        sizeOfLengthField() as nat,
+        sizeOfLengthField() as nat + len * USESM.UniformSize() as nat);
+      var subdata := data[start + sizeOfLengthField()..start as nat + sizeOfLengthField() as nat + len * USESM.UniformSize() as nat];
+      USESM.index_bounds_facts(subdata, idx as nat);
+      Seq.lemma_seq_slice_slice(newdata, 
+        start as nat + sizeOfLengthField() as nat,
+        start as nat + sizeOfLengthField() as nat + len * USESM.UniformSize() as nat,
+        idx as nat * USESM.UniformSize() as nat,
+        (idx as nat + 1) * USESM.UniformSize() as nat);
+      USESM.setted_parsing(
+        data[start..end][sizeOfLengthField()..sizeOfLengthField() as nat + len * USESM.UniformSize() as nat],
+        idx as nat, value,
+        newdata[start..end][sizeOfLengthField()..sizeOfLengthField() as nat + len * USESM.UniformSize() as nat]);
+    }
+  }
 
-//   method Resizable(data: mseq<byte>, newlen: uint64)
-//     returns (r: bool)
-//     ensures r == resizable(data, newlen as nat)
-//   {
-//     var l := Lengthable(data);
-//     if l {
-//       var maxlen := USESM.Length(data[LengthInt.Size()..]);
-//       r := newlen <= maxlen && LengthInt.fitsInInteger(newlen);
-//     } else {
-//       r := false;
-//     }
-//   }
+  lemma ElementDataSimplification(data: mseq<byte>, start: nat, end: nat, idx: nat)
+    requires start <= end <= |data|
+    requires sizeOfLengthField() as nat <= end - start
+    requires idx < maxLength(data[start..end])
+    ensures 0
+            <= start + sizeOfLengthField() as nat + idx * USESM.UniformSize() as nat
+            <= start + sizeOfLengthField() as nat + idx * USESM.UniformSize() as nat + USESM.UniformSize() as nat
+            <= |data|
+    ensures
+    ElementData(data[start..end], idx as uint64)
+    ==
+    data
+      [start + sizeOfLengthField() as nat + idx * USESM.UniformSize() as nat
+       ..start + sizeOfLengthField() as nat + idx * USESM.UniformSize() as nat + USESM.UniformSize() as nat]
+  {
+    PosMulPreservesOrder(idx, idx + 1, USESM.UniformSize() as nat);
+    NatMulNatIsNat(idx, USESM.UniformSize() as nat);
+    NLarith.DistributeLeft(idx, 1, USESM.UniformSize() as nat);
+    PosMulPreservesLe(idx + 1, maxLength(data[start..end]), USESM.UniformSize() as nat);
 
-//   method Resize(linear data: mseq<byte>, start: uint64, end: uint64, newlen: uint64)
-//     returns (linear newdata: mseq<byte>)
-//     requires start as nat <= end as nat <= |data|
-//     requires resizable(data[start..end], newlen as nat)
-//     requires newlen as nat <= length(data[start..end]) || forall x | |x| == USESM.UniformSize() as nat :: parsable(x)
-//     ensures |newdata| == |data|
-//     ensures forall i | 0 <= i < start :: newdata[i] == data[i]
-//     ensures forall i | end as nat <= i < |newdata| :: newdata[i] == data[i]
-//     ensures lengthable(newdata[start..end])
-//     ensures length(newdata[start..end]) == newlen as nat
-//     // ensures parsable(data[start..end]) ==> parsable(newdata[start..end])
-//     // ensures parsable(data[start..end]) ==> |parse(newdata[start..end])| == newlen as nat
-//     // ensures parsable(data[start..end]) ==> Seq.agree(parse(newdata[start..end]), parse(data[start..end]))
-//   {
-//     var newend;
-//     newdata, newend := LengthMarshalling.Marshall(LengthInt.fromUint64(newlen), data, start);
-//     assert newdata[start..end][..LengthInt.Size()] == newdata[start..start + LengthInt.Size()];
-//     LengthInt.fromtoInverses();
-//     //parse_length(newdata[start..end]);
+    Seq.lemma_seq_slice_slice(
+      data,
+      start, end,
+      sizeOfLengthField() as nat, end - start);
+    Seq.lemma_seq_slice_slice(
+      data,
+      start + sizeOfLengthField() as nat,
+      end,
+      idx * USESM.UniformSize() as nat,
+      (idx + 1) * USESM.UniformSize() as nat);
 
-//     // This is all ghosty.
-//     // This proof is brittle AF (at least, in terms of verification time).
-//     if parsable(data[start..end]) {
-//     //   var op: seq<Element> := parse(data[start..end]);
-//     //   var np: seq<Element> := parse(newdata[start..end]);
+    Seq.lemma_seq_slice_slice(
+      data,
+      start, end,
+      sizeOfLengthField() as nat, sizeOfLengthField() as nat + maxLength(data[start..end]) * USESM.UniformSize() as nat);
+    Seq.lemma_seq_slice_slice(
+      data,
+      start + sizeOfLengthField() as nat,
+      start + sizeOfLengthField() as nat + maxLength(data[start..end]) * USESM.UniformSize() as nat,
+      idx * USESM.UniformSize() as nat,
+      (idx + 1) * USESM.UniformSize() as nat);
+  }
 
-//     //   MulDivCancel(|op|, USESM.UniformSize() as nat);
+  predicate resizable(data: mseq<byte>, newlen: nat) {
+    && lengthable(data)
+    && newlen <= maxLength(data)
+    && LengthInt.fitsInInteger(newlen as uint64)
+  }
 
-//     //   forall i | 0 <= i < |op| && i < |np|
-//     //     ensures op[i] == np[i]
-//     //   {
-//     //     assert i + 1 <= |op|;
-//     //     assert (i + 1) * USESM.UniformSize() as nat <= |op| * USESM.UniformSize() as nat;
+  method Resizable(data: mseq<byte>, newlen: uint64)
+    returns (r: bool)
+    ensures r == resizable(data, newlen as nat)
+  {
+    var l := Lengthable(data);
+    if l {
+      var maxlen := USESM.Length(data[LengthInt.Size()..]);
+      r := newlen <= maxlen && LengthInt.fitsInInteger(newlen);
+    } else {
+      r := false;
+    }
+  }
 
-//     //     // ElementData(data, start as nat, end as nat, i);
-//     //     // ElementData(newdata, start as nat, end as nat, i);
+  method Resize(linear data: mseq<byte>, start: uint64, end: uint64, newlen: uint64)
+    returns (linear newdata: mseq<byte>)
+    requires start as nat <= end as nat <= |data|
+    requires resizable(data[start..end], newlen as nat)
+    requires forall i | 0 <= i < newlen :: ElementMarshalling.parsable(ElementData(data[start..end], i))
+    ensures |newdata| == |data|
+    ensures forall i | 0 <= i < start :: newdata[i] == data[i]
+    ensures forall i | end as nat <= i < |newdata| :: newdata[i] == data[i]
+    ensures lengthable(newdata[start..end])
+    ensures length(newdata[start..end]) == newlen as nat
+    ensures parsable(data[start..end]) ==> parsable(newdata[start..end])
+    ensures parsable(data[start..end]) ==> |parse(newdata[start..end])| == newlen as nat
+    ensures parsable(data[start..end]) ==> Seq.agree(parse(newdata[start..end]), parse(data[start..end]))
+  {
+    var newend;
+    newdata, newend := LengthMarshalling.Marshall(LengthInt.fromUint64(newlen), data, start);
 
-//     //     forall j | start as nat + LengthInt.Size() as nat + i * USESM.UniformSize() as nat <= j < start as nat + LengthInt.Size() as nat + (i+1) * USESM.UniformSize() as nat
-//     //       ensures newdata[j] == data[j]
-//     //     {
-//     //       assert j < |newdata|;
-//     //     }
-//     //     Seq.lemma_seq_extensionality_slice(data, newdata, start as nat + LengthInt.Size() as nat + i * USESM.UniformSize() as nat, start as nat + LengthInt.Size() as nat + (i+1) * USESM.UniformSize() as nat);
-//     //   }
-//     }
-//   }
+    assert newdata[start..end][..LengthInt.Size()] == newdata[start..start + LengthInt.Size()];
+    LengthInt.fromtoInverses();
 
-//   predicate parsable(data: mseq<byte>) {
-//     && lengthable'(data)
-//     && var len := length(data);
-//     && USESM.parsable(data[sizeOfLengthField()..sizeOfLengthField() as nat + len * USESM.UniformSize() as nat])
-//   }
+    if parsable(data[start..end]) {
+      var len := length(data[start..end]);
+      NatMulNatIsNat(newlen as nat, USESM.UniformSize() as nat);
+      PosMulPreservesLe(newlen as nat, maxLength(data[start..end]), USESM.UniformSize() as nat);
+      Seq.lemma_seq_slice_slice(newdata,
+        start as nat,
+        end as nat,
+        sizeOfLengthField() as nat,
+        sizeOfLengthField() as nat + newlen as nat * USESM.UniformSize() as nat);
+      MulDivCancel(newlen as nat, USESM.UniformSize() as nat);
+      forall i | 0 <= i < newlen as nat
+        ensures ElementData(newdata[start..end], i as uint64) == ElementData(data[start..end], i as uint64);
+      {
+        MulDivCancel(newlen as nat, USESM.UniformSize() as nat);
+        ElementDataSimplification(data, start as nat, end as nat, i);
+        ElementDataSimplification(newdata, start as nat, end as nat, i);
+        NatMulNatIsNat(i as nat, USESM.UniformSize() as nat);
+        assert ElementData(newdata[start..end], i as uint64) == ElementData(data[start..end], i as uint64);
+      }
 
-//   function parse(data: mseq<byte>) : UnmarshalledType {
-//     var len := length(data);
-//     USESM.parse(data[sizeOfLengthField()..sizeOfLengthField() as nat + len * USESM.UniformSize() as nat])
-//   }
+      parsable_simplification(data[start..end]);
+      parsable_simplification(newdata[start..end]);
 
-//   lemma parse_length(data: mseq<byte>)
-//     requires parsable(data)
-//     ensures |parse(data)| == length(data)
-//   {
-//     MulDivCancel(length(data), USESM.UniformSize() as nat);
-//   }
+      parse_simplification(data[start..end]);
+      parse_simplification(newdata[start..end]);
+    }
+  }
 
-//   method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>) {
-//     var olen := TryLength(data);
-//     if olen == None {
-//       return None;
-//     }
-//     ovalue := USESM.TryParse(data[sizeOfLengthField()..sizeOfLengthField() + olen.value * USESM.UniformSize()]);
-//   }
+  function USESMData(data: mseq<byte>) : mseq<byte>
+    requires lengthable'(data)
+  {
+    data[sizeOfLengthField()..sizeOfLengthField() as nat + length(data) * USESM.UniformSize() as nat]
+  }
+  
+  lemma ElementDataIsUSESMElementData(data: mseq<byte>, i: nat)
+    requires lengthable'(data)
+    requires i < length(data)
+    ensures USESM.length(USESMData(data)) == length(data)
+    ensures ElementData(data, i as uint64) == USESM.ElementData(USESMData(data), i as uint64)
+  {
+    var len := length(data);
+    MulDivCancel(len, USESM.UniformSize() as nat);
+    ElementDataSimplification(data, 0, |data|, i);
+    NatMulNatIsNat(i, USESM.UniformSize() as nat);
+    NLarith.DistributeLeft(i, 1, USESM.UniformSize() as nat);
+    PosMulPreservesLe(i + 1, len, USESM.UniformSize() as nat);
+    Seq.lemma_seq_slice_slice(data,
+      sizeOfLengthField() as nat, sizeOfLengthField() as nat + len * USESM.UniformSize() as nat,
+      i * USESM.UniformSize() as nat, i * USESM.UniformSize() as nat + USESM.UniformSize() as nat);
+  }
+  
+  predicate parsable(data: mseq<byte>) {
+    && lengthable'(data)
+    && var len := length(data);
+    && USESM.parsable(USESMData(data))
+  }
 
-//   method Parsable(data: mseq<byte>) returns (p: bool) {
-//     var olen := TryLength(data);
-//     if olen == None {
-//       return false;
-//     }
-//     p := USESM.Parsable(data[sizeOfLengthField()..sizeOfLengthField() + olen.value * USESM.UniformSize()]);
-//   }
+  predicate parsable'(data: mseq<byte>) {
+    && lengthable'(data)
+    && var len := length(data);
+    && forall i | 0 <= i < len :: ElementMarshalling.parsable(ElementData(data, i as uint64))
+  }
 
-//   method Parse(data: mseq<byte>) returns (value: UnmarshalledType) {
-//     var len := Length(data);
-//     value := USESM.Parse(data[sizeOfLengthField()..sizeOfLengthField() + len * USESM.UniformSize()]);
-//   }
+  lemma parsable_simplification(data: mseq<byte>)
+    ensures parsable(data) <==> parsable'(data)
+  {
+    if lengthable'(data) {
+      var len := length(data);
+      MulDivCancel(len, USESM.UniformSize() as nat);
+      forall i | 0 <= i < length(data)
+        ensures ElementData(data, i as uint64) == USESM.ElementData(USESMData(data), i as uint64)
+      {
+        ElementDataIsUSESMElementData(data, i);
+      }
+    }
+  }
+  
+  function parse(data: mseq<byte>) : UnmarshalledType {
+    var len := length(data);
+    USESM.parse(USESMData(data))
+  }
 
-// }
+  function parse'(data: mseq<byte>) : UnmarshalledType
+    requires parse.requires(data)
+  {
+    var len := length(data);
+    parsable_simplification(data);
+    var result: seq<Element> := seq(len, i requires 0 <= i < len => ElementMarshalling.parse(ElementData(data, i as uint64)));
+    assert |result| < Uint64UpperBound();
+    result
+  }
+
+  lemma parse_simplification(data: mseq<byte>)
+    requires parsable(data) || parsable'(data)
+    ensures parsable(data) && parsable'(data)
+    ensures parse(data) == parse'(data)
+  {
+    parsable_simplification(data);
+    parse_length(data);
+    forall i | 0 <= i < length(data)
+      ensures ElementData(data, i as uint64) == USESM.ElementData(USESMData(data), i as uint64)
+    {
+      ElementDataIsUSESMElementData(data, i);
+    }
+    assert forall i | 0 <= i < |parse(data)| :: parse(data)[i] == parse'(data)[i];
+  }
+
+  lemma parse_length(data: mseq<byte>)
+    requires parsable(data)
+    ensures |parse(data)| == length(data)
+  {
+    MulDivCancel(length(data), USESM.UniformSize() as nat);
+  }
+
+  method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>) {
+    var olen := TryLength(data);
+    if olen == None {
+      return None;
+    }
+    ovalue := USESM.TryParse(data[sizeOfLengthField()..sizeOfLengthField() + olen.value * USESM.UniformSize()]);
+  }
+
+  method Parsable(data: mseq<byte>) returns (p: bool) {
+    var olen := TryLength(data);
+    if olen == None {
+      return false;
+    }
+    p := USESM.Parsable(data[sizeOfLengthField()..sizeOfLengthField() + olen.value * USESM.UniformSize()]);
+  }
+
+  method Parse(data: mseq<byte>) returns (value: UnmarshalledType) {
+    var len := Length(data);
+    value := USESM.Parse(data[sizeOfLengthField()..sizeOfLengthField() + len * USESM.UniformSize()]);
+  }
+}
 
 // ////////////////////////////////////////////////////////
 // // Interface for appending items to marshalled sequences
