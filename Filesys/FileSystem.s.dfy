@@ -13,10 +13,21 @@ module FileSystem {
   import opened PathSpec
   import opened Options
 
+  type PathMap = imap<Path, ID>
   type MetaView = imap<ID, MetaData>
   type DataView = imap<ID, Data> 
 
   datatype FileSys = FileSys(path_map: PathMap, meta_map: MetaView, data_map: DataView)
+
+  predicate PathMapComplete(path_map: PathMap)
+  {
+    && (forall path :: path in path_map)
+  }
+
+  function InitPathMap(): (path_map: PathMap)
+  {
+    imap path :: if path == RootDir then RootID else Nonexistent
+  }
 
   // jonh: This file would get 5.5% shorter if we replace WF with a subset type :)
   // jialin: we don't have an easy function method to initialize these imaps for the witness
@@ -88,6 +99,12 @@ module FileSystem {
     && AliasPaths(fs, id) == iset{}
   }
 
+  predicate IsEmptyDir(path_map: PathMap, dir: Path)
+  requires PathMapComplete(path_map)
+  {
+    && (forall k | BeneathDir(dir, k) :: path_map[k].Nonexistent?)
+  }
+
   /// FileSys Ops
 
   predicate GetAttr(fs: FileSys, fs':FileSys, path: Path, attr: MetaData)
@@ -118,34 +135,34 @@ module FileSystem {
     )
   }
 
-  predicate Create(fs: FileSys, fs':FileSys, path: Path, id: ID, m: MetaData)
+  predicate Create(fs: FileSys, fs':FileSys, path: Path, m: MetaData)
   {
     && WF(fs)
     && WF(fs')
     && ValidNewPath(fs, path)
     && ValidNewMetaData(m, path)
-    && ValidNewId(fs, id)
+    && ValidNewId(fs, m.id)
     // Entry Not Present
-    && fs.meta_map[id].EmptyMetaData?
-    && fs.data_map[id] == EmptyData()
+    && fs.meta_map[m.id].EmptyMetaData?
+    && fs.data_map[m.id] == EmptyData()
     // Updated maps
     && var parent_id := fs.path_map[GetParentDir(path)];
-    && fs'.path_map == fs.path_map[path := id]
-    && fs'.meta_map == fs.meta_map[id := m][parent_id := UpdateParentTime(fs, parent_id, m.mtime)]
+    && fs'.path_map == fs.path_map[path := m.id]
+    && fs'.meta_map == fs.meta_map[m.id := m][parent_id := UpdateParentTime(fs, parent_id, m.mtime)]
     && fs'.data_map == fs.data_map
   }
 
   function MetaDataUpdateCTime(m: MetaData, ctime: Time): MetaData
   requires m.MetaData?
   {
-    MetaData(m.ftype, m.perm, m.uid, m.gid, m.atime, m.mtime, ctime)
+    MetaData(m.id, m.ftype, m.perm, m.uid, m.gid, m.atime, m.mtime, ctime)
   }
 
   function MetaDataDelete(fs: FileSys, path: Path, ctime: Time): MetaData
   requires WF(fs)
   {
     var id := fs.path_map[path];
-    if id.Nonexistent? || fs.meta_map[id].EmptyMetaData? || NoAlias(fs, path)
+    if id.Nonexistent? || !fs.meta_map[id].MetaData? || NoAlias(fs, path)
     then EmptyMetaData
     else MetaDataUpdateCTime(fs.meta_map[id], ctime)
   }
@@ -249,7 +266,7 @@ module FileSystem {
   function MetaDataChangeAttr(m: MetaData, perm: int, uid:int, gid: int, ctime: Time): MetaData
   requires m.MetaData?
   {
-    MetaData(m.ftype, perm, uid, gid, m.atime, m.mtime, ctime)
+    MetaData(m.id, m.ftype, perm, uid, gid, m.atime, m.mtime, ctime)
   }
 
   // chown + chmod
@@ -267,7 +284,7 @@ module FileSystem {
   function MetaDataUpdateTime(m: MetaData, atime: Time, mtime: Time, ctime: Time): MetaData
   requires m.MetaData?
   {
-    MetaData(m.ftype, m.perm, m.uid, m.gid, atime, mtime, ctime)
+    MetaData(m.id, m.ftype, m.perm, m.uid, m.gid, atime, mtime, ctime)
   }
 
   function ZeroData(size: nat) : (d: Data) { seq(size, i => 0) }
@@ -351,7 +368,7 @@ module FileSystem {
 
   // robj: What about done?
   // robj: Should we requires that results are all >= start in sort order?
-  // jialin: just updated line 404-406
+  // jialin: just updated line 372-278
   predicate ReadDir(fs: FileSys, fs':FileSys, dir: Path, start: Option<Path>, results: seq<DirEntry>, done: bool)
   {
     && WF(fs)
@@ -387,7 +404,7 @@ module FileSystem {
   datatype Step =
     | GetAttrStep(path: Path, attr: MetaData)
     | ReadLinkStep(path: Path, link_path: Path)
-    | CreateStep(path: Path, id: ID, m: MetaData) // mknod, mkdir, symlink
+    | CreateStep(path: Path, m: MetaData) // mknod, mkdir, symlink
     | DeleteStep(path: Path, ctime: Time) // unlink and rmdir
     | RenameStep(source: Path, dest: Path, ctime: Time)
     | LinkStep(source: Path, dest: Path, ctime: Time)
@@ -404,7 +421,7 @@ module FileSystem {
     match step {
       case GetAttrStep(path, attr) => GetAttr(fs, fs', path, attr)
       case ReadLinkStep(path, link_path) => ReadLink(fs, fs', path, link_path)
-      case CreateStep(path, id, m) => Create(fs, fs', path, id, m)
+      case CreateStep(path, m) => Create(fs, fs', path, m)
       case DeleteStep(path, ctime) => Delete(fs, fs', path, ctime)
       case RenameStep(source, dest, ctime) => Rename(fs, fs', source, dest, ctime)
       case LinkStep(source, dest, ctime) => Link(fs, fs', source, dest, ctime)

@@ -14,8 +14,10 @@ module FileSystemInv {
     // Nonexistent ids is never occupied
     && fs.meta_map[Nonexistent].EmptyMetaData?
     && fs.data_map[Nonexistent] == EmptyData()
-    // Metadata map internal consistency: nlink consitency and directory has no hardlinks
+    // Directory has no hardlinks
     && (forall path | PathExists(fs, path) :: DirImpliesHasNoAlias(fs, path))
+    // ID consistent
+    && (forall path | PathExists(fs, path) :: fs.path_map[path] == fs.meta_map[fs.path_map[path]].id)
     // Path and meta map consistency: directory structure is connected
     && (forall path | PathExists(fs, path) && path != RootDir :: ParentDirIsDir(fs, path))
   }

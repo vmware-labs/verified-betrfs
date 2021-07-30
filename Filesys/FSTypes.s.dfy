@@ -9,6 +9,9 @@ module FSTypes {
   import opened Options
   import opened PathSpec
 
+  // equivalent to inode number
+  datatype ID = Nonexistent | ID(id: nat)
+  const RootID := ID(0);
   type Data = seq<byte>
 
   datatype FileType = 
@@ -26,6 +29,7 @@ module FSTypes {
   datatype MetaData = 
     | EmptyMetaData
     | MetaData(
+        id: ID,           // file identifier
         ftype: FileType,  // type of file
         perm: int,        // permission
         uid: int,         // user ID
@@ -41,9 +45,9 @@ module FSTypes {
     && m.atime == m.ctime == m.mtime
   }
 
-  function InitRootMetaData(): MetaData
+  function method InitRootMetaData(): MetaData
   {
-    MetaData(Directory, 755, 0, 0, Time(0), Time(0), Time(0))
+    MetaData(RootID, Directory, 755, 0, 0, Time(0), Time(0), Time(0))
   }
 
   function EmptyData(): Data
