@@ -167,7 +167,7 @@ module ShardedHashTable refines ShardedStateMachine {
 
     && var table := v.table;
     && var p_range := Partial(hash(ticket.input.key), start);
-    && ValidProbeRange(table, ticket.input.key, p_range)
+    && KeyAbsentProbeRange(table, ticket.input.key, p_range)
     // this part is full
     && RangeFull(table, Partial(start, end))
     // but the end is empty 
@@ -241,7 +241,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && ticket in v.tickets
     && ticket.input.QueryInput?
     && var p_range := Partial(hash(ticket.input.key), end);
-    && ValidProbeRange(v.table, ticket.input.key, p_range)
+    && KeyAbsentProbeRange(v.table, ticket.input.key, p_range)
   }
 
   function QueryNotFound(v: Variables, step: Step): Variables
@@ -286,7 +286,7 @@ module ShardedHashTable refines ShardedStateMachine {
     && ticket in v.tickets
     && ticket.input.RemoveInput?
     && var p_range := Partial(hash(ticket.input.key), end);
-    && ValidProbeRange(v.table, ticket.input.key, p_range)
+    && KeyAbsentProbeRange(v.table, ticket.input.key, p_range)
   }
 
   function RemoveNotFound(v: Variables, step: Step): Variables
@@ -394,9 +394,8 @@ module ShardedHashTable refines ShardedStateMachine {
 
  lemma AlmostCompleteFullRangeImpossible(v: Variables, range: Range)
     requires Valid(v)
-    requires v.table[range.end].Some?
-    requires range.Partial?
     requires range.AlmostComplete()
+    requires v.table[range.end].Some?
     requires RangeFull(v.table, range)
     ensures false;
   {
