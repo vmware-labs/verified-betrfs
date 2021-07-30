@@ -51,12 +51,14 @@ module Impl refines VerificationObligation {
     allocator: CAP.AllocatorMutexTable)
   {
     predicate HasCapHandle()
+      requires |cap_handle| == 1
     {
       0 in cap_handle
     }
 
     predicate CapHandleInv()
     {
+      && CAP.Inv(allocator)
       && |cap_handle| == 1
       && bin_id < CAP.NumberOfBinsImpl()
       && (HasCapHandle() ==> 
@@ -75,7 +77,6 @@ module Impl refines VerificationObligation {
 
     predicate Inv()
     {
-      && CAP.Inv(allocator)
       && |row_mutexes| == FixedSize()
       && RowMutexTableInv(row_mutexes)
       && HandlesInv()
@@ -215,9 +216,8 @@ module Impl refines VerificationObligation {
       while range.HasSome()
         invariant 0 <= index <= |entries| 
         invariant self.RangeOwnershipInv(entries[..index], range, out_sv)
-        invariant out_sv.insert_capacity == in_sv.insert_capacity
-        invariant out_sv.tickets == in_sv.tickets
-        invariant out_sv.stubs == in_sv.stubs
+        invariant self == old_self.(handles := self.handles)
+        invariant out_sv == in_sv.(table := out_sv.table)
         decreases |range|
       {
         var slot_idx := range.GetLast();
@@ -298,8 +298,7 @@ module Impl refines VerificationObligation {
       requires in_sv.insert_capacity == Count.Variables(count as nat);
 
       ensures self.Inv()
-      ensures self == old_self
-        .(cap_handle := self.cap_handle)
+      ensures self == old_self.(cap_handle := self.cap_handle)
       ensures !self.HasCapHandle()
       ensures out_sv == in_sv.(insert_capacity := Count.Variables(0));
     {
@@ -329,13 +328,14 @@ module Impl refines VerificationObligation {
       requires forall i: Index :: !old_self.HasRowHandle(i)
       requires in_sv.Variables? && in_sv.table == UnitTable()
 
+      ensures range.Partial?
       ensures range.HasSome()
+
       ensures self.RangeOwnershipInv(entries, range, out_sv)
+      ensures self == old_self.(handles := self.handles)
       ensures found ==> KeyPresentProbeRange(out_sv.table, probe_key, range.RightShrink1())
       ensures !found ==> KeyAbsentProbeRange(out_sv.table, probe_key, range.RightShrink1())
-      ensures out_sv.insert_capacity == in_sv.insert_capacity
-      ensures out_sv.tickets == in_sv.tickets
-      ensures out_sv.stubs == in_sv.stubs
+      ensures out_sv == in_sv.(table := out_sv.table)
     {
       var p_hash := hash(probe_key);
 
@@ -345,6 +345,7 @@ module Impl refines VerificationObligation {
 
       while true
         invariant range.Partial? && range.start == p_hash
+        invariant self == old_self.(handles := self.handles)
         invariant self.RangeOwnershipInv(entries, range, out_sv)
         invariant ValidPartialProbeRange(out_sv.table, probe_key, range)
         invariant out_sv.insert_capacity == in_sv.insert_capacity
@@ -490,8 +491,8 @@ module Impl refines VerificationObligation {
       if entry.Full? {
         while true
           invariant range.Partial? && range.start == h
-          invariant !self.HasCapHandle()
           invariant self.RangeOwnershipInv(entries, range, out_sv)
+          invariant !self.HasCapHandle()
           invariant KeyAbsentProbeRange(out_sv.table, probe_key, probe_range)
           invariant RangeFull(out_sv.table, range)
           invariant self == old_self.(handles := self.handles) 
@@ -529,47 +530,32 @@ module Impl refines VerificationObligation {
       output := MapIfc.InsertOutput(true);
     }
 
-    // linear inout method insert(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
-    //   returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+    linear inout method insert(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
+      returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
 
-    //   decreases *
-    //   requires old_self.Inv()
-    //   requires old_self.HasNoRowHandle()
-    //   requires input.InsertInput?
-    //   requires IsInputResource(in_sv, rid, input)
-    
-    // {
-    //   var insert_ticket := Ticket(rid, input);
-    //   var insert_key, insert_value := input.key, input.value;
+      decreases *
+      requires old_self.Inv()
+      requires old_self.HasNoRowHandle()
+      requires !old_self.HasCapHandle()
+      requires input.InsertInput?
+      requires IsInputResource(in_sv, rid, input)
 
-    //   var entries, found, p_range;
-    //   entries, found, p_range, out_sv := inout self.probe(insert_key, in_sv);
+      ensures out_sv == SSM.output_stub(rid, output)
+    {
+      var insert_ticket := Ticket(rid, input);
+      var insert_key, insert_value := input.key, input.value;
 
-    //   var slot_idx := p_range.GetLast();
+      var entries, found, p_range;
+      entries, found, p_range, out_sv := inout self.probe(insert_key, in_sv);
 
-    //   if found {
-    //     var step := OverwriteStep(insert_ticket, slot_idx);
-    //     assert OverwriteEnable(out_sv, step);
-    //     out_sv := easy_transform_step(out_sv, step);
-    //   } else {
-    //     var step := InsertStep(insert_ticket, slot_idx);
-    //     assert InsertEnable(out_sv, step);
-    //     out_sv := easy_transform_step(out_sv, step);
-    //   }
-
-    //   output := MapIfc.InsertOutput(true);
-    // }
+      if found {
+        output, out_sv := inout self.insertOverwrite(insert_ticket, p_range, entries, out_sv);
+      } else {
+        assert !self.HasCapHandle();
+        output, out_sv := inout self.insertNotFound(insert_ticket, p_range, entries, out_sv);
+      }
+    }
   }
-
-  // method rightShiftEntries(entries: seq<Entry>,
-  //   new_entry: Entry,
-  //   prev_table: FixedTable,
-  //   range: Range, 
-  //   table: FixedTable)
-  //   requires UnwrapRange(prev_table, range) == entries
-  //   requires table == TableRightShift(prev_table, Some(new_entry), start, end);
-  // {
-  // }
 
   predicate Inv(v: Variables)
   {
