@@ -53,6 +53,11 @@ module CircularTable {
       && WithOtherKey(key')
       && EntryPSL(i) < PSL(key', i)
     }
+
+    predicate method ShouldTidy(i: Index)
+    {
+      Hash() != i
+    }
   }
 
   type Table = seq<Option<Entry>>
@@ -150,8 +155,7 @@ module CircularTable {
   {
     && r.Partial?
     // remove at start
-    && SlotFull(table[r.start])
-    && table[r.start].value.key == key
+    && SlotFullWithKey(table[r.start], key)
     // shift in between
     && (forall i: Index | r.RightShift1().Contains(i)
       :: SlotShouldTidy(table[i], i))
@@ -1022,10 +1026,9 @@ module CircularTable {
 
   lemma UnwrapSubRange(table: FixedTable, r1: Range, r2: Range, entries: seq<Entry>)
     requires r1.Partial? && r2.Partial?
-    requires r1.Contains(r2.start)
+    requires r1.Contains(r2.start) 
     requires r1.Contains(r2.end) || r2.end == r1.end
     requires Partial(r1.start, r2.end).Contains(r2.start) || r2.start == r2.end
-
     requires RangeKnown(table, r1) 
     requires UnwrapRange(table, r1) == entries
     ensures UnwrapRange(table, r2) ==
@@ -1120,10 +1123,8 @@ module CircularTable {
     assert UnwrapRange(t1, range) == entries;
 
     assert UnwrapRange(t2, probe_range) == entries[..probe_len] by {
-      assert RangeEquivalent(t1, t2, probe_range);
       RangeEquivalentUnwrap(t1, t2, probe_range);
       UnwrapPrefixRange(t1, range, probe_range, entries);
-      // assert UnwrapRange(t1, probe_range) == UnwrapRange(t2, probe_range);
     }
 
     assert UnwrapRange(t2, shift_range.RightShift1()) == entries[probe_len..len - 1] by {
@@ -1148,25 +1149,53 @@ module CircularTable {
     assert UnwrapRange(t2, range) == entries[..probe_len] + [inserted] + entries[probe_len..len - 1];
   }
 
-  // lemma OverwriteUnwrap(t1: FixedTable, t2: FixedTable,
-  //   inserted: Entry, entries: seq<Entry>,
-  //   range: Range, start: Index)
-  //   requires range.Partial?
-  //   requires range.Contains(start)
-  //   requires RangeKnown(t1, range)
-  //   requires UnwrapRange(t1, range) == entries
-  //   requires t2 == t1[start := Some(inserted)]
-  // {
-  //   var probe_range := Partial(range.start, start);
-  //   var probe_len := |probe_range|;
+  lemma LeftShiftUnwrap(t1: FixedTable, t2: FixedTable,
+    entries: seq<Entry>,
+    range: Range, start: Index)
+    requires range.Partial?
+    requires range.Contains(start)
+    requires RangeKnown(t1, range)
+    requires UnwrapRange(t1, range) == entries
+    requires var end := PrevIndex(PrevIndex(range.end));
+      && Partial(start, range.end).Contains(end)
+      && IsTableLeftShift(t1, t2, start, end)
+    ensures var probe_len := WrappedDistance(range.start, start);
+      var len := WrappedDistance(range.start, range.end);
+      UnwrapRange(t2, range) == entries[..probe_len] + entries[probe_len+1..len - 1] + [Empty] + [entries[len - 1]];
+  {
+    var end_next := PrevIndex(range.end);
+    var end := PrevIndex(end_next);
+    var probe_range := Partial(range.start, start);
+    var shift_range := Partial(start, end);
+    var probe_len := |probe_range|;
+    var len := |range|;
 
-  //   assert UnwrapRange(t2, probe_range) == entries[..probe_len] by {
-  //     assert RangeEquivalent(t1, t2, probe_range);
-  //     RangeEquivalentUnwrap(t1, t2, probe_range);
-  //     UnwrapPrefixRange(t1, range, probe_range, entries);
-  //   }
-  // }
+    assert UnwrapRange(t1, range) == entries;
+    
+    assert UnwrapRange(t2, probe_range) == entries[..probe_len] by {
+      RangeEquivalentUnwrap(t1, t2, probe_range);
+      UnwrapPrefixRange(t1, range, probe_range, entries);
+    }
 
+    assert UnwrapRange(t2, shift_range) == entries[probe_len + 1..len - 1] by {
+      RangeShiftEquivalentUnwrap(t2, t1, shift_range);
+      assert UnwrapRange(t2, shift_range) == UnwrapRange(t1, shift_range.RightShift1());
+      if start != end {
+        UnwrapSubRange(t1, range, shift_range.RightShift1(), entries);
+      }
+    }
+
+    assert UnwrapRange(t2, range) == UnwrapRange(t2, probe_range)
+      + UnwrapRange(t2, shift_range)
+      + UnwrapRange(t2, Partial(end, end_next))
+      + UnwrapRange(t2, Partial(end_next, range.end)) by {
+      UnwrapSplitRange(t2, range, end_next);
+      UnwrapSplitRange(t2, Partial(range.start, end_next), end);
+      UnwrapSplitRange(t2, Partial(range.start, end), start);
+    }
+
+    assert UnwrapRange(t2, range) == entries[..probe_len] + entries[probe_len+1..len - 1] + [Empty] + [entries[len - 1]];
+  }
 }
   // lemma ValidHashSegmentsImpliesDisjoint(table: FixedTable, h0: Index, h1: Index)
   //   requires h0 != h1
