@@ -555,6 +555,88 @@ module Impl refines VerificationObligation {
         output, out_sv := inout self.insertNotFound(insert_ticket, p_range, entries, out_sv);
       }
     }
+
+    linear inout method removeFound(
+      ticket: Ticket,
+      range: Range,
+      entries: seq<Entry>,
+      glinear in_sv: SSM.Variables)
+      returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+
+      decreases *
+
+      requires old_self.RangeOwnershipInv(entries, range, in_sv)
+      requires !old_self.HasCapHandle()
+
+      requires ticket.input.RemoveInput?
+
+      requires range.HasSome()
+      requires range.Partial?
+      requires var probe_key := ticket.input.key;
+        KeyPresentProbeRange(in_sv.table, probe_key, range.RightShrink1())
+
+      requires in_sv.tickets == multiset{ticket}
+      requires in_sv.insert_capacity.value == 0
+      requires in_sv.stubs == multiset{}
+    
+      ensures out_sv == SSM.output_stub(ticket.rid, output)
+    {
+      out_sv := in_sv;
+
+      var probe_key := ticket.input.key;
+      var h := hash(probe_key);
+      var start, end := range.GetLast(), range.end;
+
+      var entries, range := entries, range;
+      var probe_range := Partial(h, start);
+      var entry := entries[ |entries| - 1 ];
+
+      assert entry.key == probe_key;
+      assert SlotFullWithKey(out_sv.table[start], probe_key);
+
+      while true
+        invariant range.Partial? && range.start == h
+        invariant self.RangeOwnershipInv(entries, range, out_sv)
+        invariant !self.HasCapHandle()
+        invariant KeyPresentProbeRange(out_sv.table, probe_key, probe_range)
+        invariant RangeFull(out_sv.table, range)
+        invariant forall i: Index | Partial(NextIndex(start), range.end).Contains(i) :: SlotShouldTidy(out_sv.table[i], i);
+        invariant self == old_self.(handles := self.handles) 
+        invariant out_sv == in_sv.(table := out_sv.table)
+        decreases FixedSize() - |range|
+      {
+        ghost var prev_sv := out_sv;
+        end := range.end;
+        entries, range, out_sv := inout self.acquireRow(entries, range, out_sv);
+        entry := entries[ |entries| - 1 ];
+
+        if entry.Empty? || !entry.ShouldTidy(end) {
+          break;
+        }
+      }
+
+      end := PrevIndex(end);
+
+      // assert ValidTidyRange(out_sv.table, Partial(start, end), probe_key);
+      var count;
+      count, out_sv := inout self.acquireCapacity(out_sv);
+
+      ghost var t1 := out_sv.table;
+      out_sv := easy_transform_step(out_sv, RemoveStep(ticket, start, end));
+      var t2 := out_sv.table;
+
+      // assert IsTableLeftShift(t1, t2, start, end);
+      LeftShiftUnwrap(t1, t2, entries, range, start);
+
+      var len := WrappedDistance(range.start, range.end);
+      var probe_len := WrappedDistance(range.start, start);
+      var new_entries := entries[..probe_len] + entries[probe_len+1..len - 1] + [Empty] + [entries[len - 1]];
+  
+      assert UnwrapRange(t2, range) == new_entries;
+      out_sv := inout self.releaseRows(new_entries, range, out_sv);
+      out_sv := inout self.releaseCapacity(count + 1, out_sv);
+      output := MapIfc.RemoveOutput(true);
+    }
   }
 
   predicate Inv(v: Variables)
