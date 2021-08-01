@@ -55,6 +55,7 @@ module CircularTable {
     }
 
     predicate method ShouldTidy(i: Index)
+      requires Full?
     {
       Hash() != i
     }

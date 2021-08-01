@@ -637,6 +637,60 @@ module Impl refines VerificationObligation {
       out_sv := inout self.releaseCapacity(count + 1, out_sv);
       output := MapIfc.RemoveOutput(true);
     }
+
+    linear inout method remove(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
+      returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+
+      decreases *
+      requires old_self.Inv()
+      requires old_self.HasNoRowHandle()
+      requires !old_self.HasCapHandle()
+      requires input.RemoveInput?
+      requires IsInputResource(in_sv, rid, input)
+
+      ensures out_sv == SSM.output_stub(rid, output)
+    {
+      var ticket := Ticket(rid, input);
+      var remove_key := input.key;
+
+      var entries, found, p_range;
+      entries, found, p_range, out_sv := inout self.probe(remove_key, in_sv);
+
+      if found {
+        output, out_sv := inout self.removeFound(ticket, p_range, entries, out_sv);
+      } else {
+        var slot_idx := p_range.GetLast();
+        var step := RemoveNotFoundStep(ticket, slot_idx);
+        assert RemoveNotFoundEnable(out_sv, step);
+        out_sv := easy_transform_step(out_sv, step);
+        output := MapIfc.RemoveOutput(false);
+        out_sv := inout self.releaseRows(entries, p_range, out_sv);
+      }
+    }
+
+    linear inout method call(input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
+      returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+      decreases *
+    requires old_self.Inv()
+    requires old_self.HasNoRowHandle()
+    requires !old_self.HasCapHandle()
+    requires in_sv == SSM.input_ticket(rid, input)
+    ensures out_sv == SSM.output_stub(rid, output)
+    {
+      assert |in_sv.tickets| == 1;
+      var the_ticket :| the_ticket in in_sv.tickets;
+      
+      if the_ticket.input.QueryInput? {
+        output, out_sv := inout self.query(input, rid, in_sv);
+      } else if the_ticket.input.InsertInput? {
+        output, out_sv := inout self.insert(input, rid, in_sv);
+      } else if the_ticket.input.RemoveInput? {
+        output, out_sv := inout self.remove(input, rid, in_sv);
+      } else {
+        out_sv := in_sv;
+        assert false;
+      }
+    }
   }
 
   predicate Inv(v: Variables)
@@ -706,34 +760,32 @@ module Impl refines VerificationObligation {
   //   v := Variables.Variables(row_mutexes, allocator);
   // }
 
-  method call(v: Variables, input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables, thread_id: uint32)
-    returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
-    decreases *
-  // requires Inv(in_sv)
-  // requires ticket == SSM.input_ticket(rid, key)
-    ensures out_sv == SSM.output_stub(rid, output)
-  {
-    // assert SSM.Inv();
-    NewTicketValid(rid, input);
-    assert Valid(input_ticket(rid, input));
+  // method call(v: Variables, input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables, thread_id: uint32)
+  //   returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
+  //   decreases *
+  // // requires Inv(in_sv)
+  // // requires ticket == SSM.input_ticket(rid, key)
+  //   ensures out_sv == SSM.output_stub(rid, output)
+  // {
+  //   NewTicketValid(rid, input);
+  //   assert Valid(input_ticket(rid, input));
 
-    out_sv := in_sv;
-    assume false;
+  //   out_sv := in_sv;
+  //   assert |in_sv.tickets| == 1;
+  //   var the_ticket :| the_ticket in out_sv.tickets;
 
-    // assert |in_sv.tickets| == 1;
-    // var the_ticket :| the_ticket in in_sv.tickets;
-
-    // if the_ticket.input.QueryInput? {
-    //   output, out_sv := doQuery(v, input, rid, in_sv);
-    // } else if the_ticket.input.InsertInput? {
-    //   output, out_sv := doInsert(v, input, rid, thread_id, in_sv);
-    // } else if the_ticket.input.RemoveInput? {
-    //   output, out_sv := doRemove(v, input, rid, thread_id, in_sv);
-    // } else {
-    //   out_sv := in_sv;
-    //   assert false;
-    // }
-  }
+    
+  //   if the_ticket.input.QueryInput? {
+  //     output, out_sv := inout v.query(input, rid, out_sv);
+  //   // } else if the_ticket.input.InsertInput? {
+  //   //   output, out_sv := inout v.doInsert(input, rid, thread_id, in_sv);
+  //   // } else if the_ticket.input.RemoveInput? {
+  //   //   output, out_sv := inout v.doRemove(input, rid, thread_id, in_sv);
+  //   } else {
+  //     out_sv := in_sv;
+  //     assert false;
+  //   }
+  // }
 
   // lemma NewTicket_RefinesMap(s: SSM.Variables, s': SSM.Variables, rid: int, input: Ifc.Input)
   // {
@@ -743,7 +795,3 @@ module Impl refines VerificationObligation {
   // {
   // }
 }
-
-
-
-
