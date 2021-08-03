@@ -20,8 +20,6 @@ module PathBasedFS {
 
   datatype FileSys = FileSys(meta_map: MetaView, data_map: DataView)
 
-  // TODO: needs a refinement file to prove equivalence
-
   predicate WF(fs: FileSys)
   {
     && (forall p :: p in fs.meta_map && p in fs.data_map)
@@ -51,16 +49,16 @@ module PathBasedFS {
     if m.RedirectMeta? then fs.meta_map[m.source] else m
   }
 
-  // basically if it's not 
-  // the last entry is for 
-
   // I want to write this based on the source stuff
   function AliasPaths(fs: FileSys, path: Path) : (aliases: iset<Path>)
   requires WF(fs)
   requires fs.meta_map[path].RedirectMeta?
+  ensures forall p :: p in aliases <==> (
+    && fs.meta_map[p].RedirectMeta? 
+    && fs.meta_map[p].source == fs.meta_map[path].source)
   {
     var src := fs.meta_map[path].source;
-    iset path | fs.meta_map[path].RedirectMeta? && fs.meta_map[path].source == src
+    iset p | fs.meta_map[p].RedirectMeta? && fs.meta_map[p].source == src
   }
 
   predicate NoAlias(fs: FileSys, path: Path)
@@ -90,6 +88,7 @@ module PathBasedFS {
   requires WF(fs)
   {
     && ParentDirIsDir(fs, path)
+    && fs.meta_map[path].Empty?
   }
 
   predicate ValidNewId(fs: FileSys, id: ID)
@@ -184,9 +183,9 @@ module PathBasedFS {
     // maps after delete
     && var parent_dir := GetParentDir(path);
     && var parent_m' := UpdatePathCtime(fs, parent_dir, ctime);
-    && var m' := MetaDataDelete(fs, path, ctime);
-    && (m.PathMeta? ==> fs'.meta_map == fs.meta_map[path := m'][parent_dir := parent_m'])
-    && (m.RedirectMeta? ==> fs'.meta_map == fs.meta_map[path := Empty][m.source := m'][parent_dir := parent_m'])
+    && (m.PathMeta? ==> fs'.meta_map == fs.meta_map[path := Empty][parent_dir := parent_m'])
+    && (m.RedirectMeta? ==> fs'.meta_map == fs.meta_map[path := Empty]
+          [m.source := MetaDataDelete(fs, path, ctime)][parent_dir := parent_m'])
     && fs'.data_map == fs.data_map[path := DataDelete(fs, path)]
   }
 
@@ -195,7 +194,7 @@ module PathBasedFS {
   {
     imap path ::
       if path == src || BeneathDir(src, path) then Empty
-      else if path == dst then UpdatePathCtime(fs, path, ctime)
+      else if path == dst then UpdatePathCtime(fs, src, ctime)
       else if BeneathDir(dst, path) then (
         var suffix := path[|dst|..];
         fs.meta_map[src + suffix]
@@ -243,6 +242,15 @@ module PathBasedFS {
     && fs'.data_map == DataMapRename(fs, src, dst, ctime)
   }
 
+  function LinkMeta(fs: FileSys, path: Path, time: Time) : PathMeta
+  requires WF(fs)
+  {
+    var m := GetMeta(fs, path);
+    if m.PathMeta? 
+    then PathMeta(MetaDataUpdateTime(m.m, m.m.atime, m.m.mtime, time), true)
+    else m
+  }
+
   predicate Link(fs: FileSys, fs':FileSys, source: Path, dest: Path, ctime: Time, hiddenName: Option<Path>)
   {
     && WF(fs)
@@ -254,17 +262,16 @@ module PathBasedFS {
     && var m := fs.meta_map[source];
     && (m.PathMeta? ==> !m.m.ftype.Directory?)
     && (m.PathMeta? <==> hiddenName.Some?) // generating an alias for the first time
-    && (hiddenName.Some? ==> fs.meta_map[hiddenName.value].Empty?) // just have to be a newpath doesn't need to be connected
+    && (hiddenName.Some? ==> fs.meta_map[hiddenName.value].Empty? && hiddenName.value != dest)
     // updated maps
     && var parent_dir := GetParentDir(dest);
     && var parent_m' := UpdatePathTime(fs, parent_dir, ctime);
-    && var m' := UpdatePathCtime(fs, source, ctime);
-    && (m.RedirectMeta? ==>
-      && fs'.meta_map == fs.meta_map[parent_dir := parent_m'][m.source := m']
-      && fs'.data_map == fs.data_map)
-    && (m.PathMeta? ==>
-      && fs'.meta_map == fs.meta_map[parent_dir := parent_m'][source := RedirectMeta(hiddenName.value)][hiddenName.value := m']
-      && fs'.data_map == fs.data_map)
+    && var p := if m.RedirectMeta? then m.source else hiddenName.value;
+    && fs'.meta_map == fs.meta_map[parent_dir := parent_m']
+                        [p := LinkMeta(fs, source, ctime)]
+                        [source := RedirectMeta(p)]
+                        [dest := RedirectMeta(p)]
+    && fs'.data_map == fs.data_map
   }
 
   function MetaDataChangeAttr(fs: FileSys, path: Path, perm: int, uid:int, gid: int, ctime: Time): PathMeta
