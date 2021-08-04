@@ -491,6 +491,13 @@ abstract module RwLockTokens(stm: StoredTypeModule) {
 
   type Token = T.Token
 
+  glinear method initialize(glinear init_value: rwlock.StoredType)
+  returns (glinear pe': Token, glinear pr': Token, glinear ce': Token)
+  ensures pe'.loc == pr'.loc == ce'.loc
+  ensures pe'.val == rwlock.PhysExcHandle(false)
+  ensures pr'.val == rwlock.PhysRcHandle(0)
+  ensures ce'.val == rwlock.CentralHandle(rwlock.CentralState(init_value))
+
   glinear method perform_exc_pending(glinear pe: Token)
   returns (glinear pe': Token, glinear handle: Token)
   requires pe.val == rwlock.PhysExcHandle(false)

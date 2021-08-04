@@ -5,6 +5,7 @@ include "../framework/Atomic.s.dfy"
 abstract module RwLockImpl(stm: StoredTypeModule) {
   import RwLock = RwLock(stm)
   import RwLockTokens = RwLockTokens(stm)
+  import Wrap = RwLockTokens.T.Wrap
 
   import opened NativeTypes
   import opened Atomics
@@ -23,6 +24,7 @@ abstract module RwLockImpl(stm: StoredTypeModule) {
   }
 
   predicate central_inv(t: RwLockTokens.Token, loc: Loc) {
+    && t.val.M?
     && t.val.central.CentralState?
     && t.val == RwLock.CentralHandle(t.val.central)
     && t.loc == loc
@@ -43,6 +45,7 @@ abstract module RwLockImpl(stm: StoredTypeModule) {
       && (this.central.namespace() == 1)
       && (this.exc.namespace() == 2)
       && (this.rc.namespace() == 3)
+      && (loc.ExtLoc? && loc.base_loc == Wrap.singleton_loc())
     }
 
     method acquire_exc()
@@ -76,6 +79,8 @@ abstract module RwLockImpl(stm: StoredTypeModule) {
       while !is_rc_zero
       invariant !is_rc_zero ==> pending_handle.val == RwLock.ExcPendingHandle()
       invariant is_rc_zero ==> pending_handle.val == RwLock.ExcTakenHandle()
+      invariant !is_rc_zero ==> baseTokenOpt.glNone?
+      invariant is_rc_zero ==> baseTokenOpt.glSome?
       invariant pending_handle.loc == this.loc
       invariant this.Inv()
       decreases *
@@ -103,6 +108,7 @@ abstract module RwLockImpl(stm: StoredTypeModule) {
         }
       }
 
+      base_token := unwrap_value(baseTokenOpt);
       handle := pending_handle;
     }
 
@@ -233,20 +239,9 @@ abstract module RwLockImpl(stm: StoredTypeModule) {
   returns (rwlock: RWLock)
   ensures rwlock.Inv()
   {
-    glinear var big_token := RwLockTokens.initialize(init_value, 
-        RwLock.M(Some(false), Some(0),
-            RwLock.CentralState(init_value),
-            false, false, 0, RwLock.zero_map()));
-    glinear var pe, rest := RwLockTokens.split(big_token,
-        RwLock.PhysExcHandle(false),
-        RwLock.M(None, Some(0),
-            RwLock.CentralState(init_value),
-            false, false, 0, RwLock.zero_map()));
-    glinear var rc, central := RwLockTokens.split(rest,
-        RwLock.PhysRcHandle(0),
-        RwLock.CentralHandle(RwLock.CentralState(Some(init_value.val))));
+    glinear var pe, rc, central := RwLockTokens.initialize(init_value);
 
-    ghost var loc := big_token.loc; 
+    ghost var loc := pe.loc; 
     var exc_atomic := new_atomic(false, pe, (v, g) => exc_inv(v, g, loc), 2);
     var rc_atomic := new_atomic(0 as uint32, rc, (v, g) => rc_inv(v, g, loc), 3);
     ghost var central_atomic := new_ghost_atomic(central, (g) => central_inv(g, loc), 1);
