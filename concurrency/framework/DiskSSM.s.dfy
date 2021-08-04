@@ -20,11 +20,11 @@ abstract module DiskSSM(IOIfc: InputOutputIfc) {
   // a free one).
   function request_ids_in_use(m: M) : set<RequestId>
 
-  function DiskWriteReq(disk_addr: int, data: seq<byte>) : M
-  function DiskWriteResp(disk_addr: int, len: int) : M
+  function DiskWriteReq(disk_addr: nat, data: seq<byte>) : M
+  function DiskWriteResp(disk_addr: nat, len: nat) : M
 
-  function DiskReadReq(disk_addr: int, len: int) : M
-  function DiskReadResp(disk_addr: int, data: seq<byte>) : M
+  function DiskReadReq(disk_addr: nat, len: nat) : M
+  function DiskReadResp(disk_addr: nat, data: seq<byte>) : M
 
   predicate Init(s: M)
   predicate Internal(shard: M, shard': M)
@@ -59,11 +59,11 @@ abstract module DiskSSM(IOIfc: InputOutputIfc) {
   requires ConsumeStub(whole, whole', rid, output)
   ensures Inv(whole')
 
-  lemma ProcessReadPreservesInv(disk_addr: int, data: seq<byte>, rest: M)
+  lemma ProcessReadPreservesInv(disk_addr: nat, data: seq<byte>, rest: M)
   requires Inv(dot(DiskReadReq(disk_addr, |data|), rest))
   ensures Inv(dot(DiskReadResp(disk_addr, data), rest))
 
-  lemma ProcessWritePreservesInv(disk_addr: int, data: seq<byte>, rest: M)
+  lemma ProcessWritePreservesInv(disk_addr: nat, data: seq<byte>, rest: M)
   requires Inv(dot(DiskWriteReq(disk_addr, data), rest))
   ensures Inv(dot(DiskWriteResp(disk_addr, |data|), rest))
 
