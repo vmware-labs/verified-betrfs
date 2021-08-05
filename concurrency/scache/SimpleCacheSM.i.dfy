@@ -79,6 +79,7 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && cache_idx in s.entries
     && s.entries[cache_idx].Writeback?
     && s.entries[cache_idx].disk_idx == disk_idx
+    && disk_idx in s.write_resps
     && s' == s
         .(entries := s.entries[cache_idx := Clean(s.entries[cache_idx].disk_idx, s.entries[cache_idx].data)])
         .(write_resps := s.write_resps - {disk_idx})

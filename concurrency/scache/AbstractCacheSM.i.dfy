@@ -2,7 +2,7 @@ include "../framework/DiskSSM.s.dfy"
 include "CacheTypes.i.dfy"
 include "CacheSpec.s.dfy"
 
-module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
+module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
   import opened NativeTypes
   import opened RequestIds
   import CacheIfc
