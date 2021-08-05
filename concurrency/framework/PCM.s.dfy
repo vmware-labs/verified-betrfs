@@ -74,7 +74,7 @@ abstract module BasicPCM refines PCM {
 module Tokens(pcm: PCM) {
   import opened GhostLoc
 
-  datatype Token = Token(loc: Loc, val: pcm.M)
+  datatype Token = Token(ghost loc: Loc, ghost val: pcm.M)
 
   function method {:extern} transition_update(
       gshared s: Token,

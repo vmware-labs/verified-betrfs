@@ -93,7 +93,7 @@ module RwLock(stm: StoredTypeModule) refines Rw {
 
   datatype M = M(
     phys_exc: Option<bool>,
-    phys_rc: Option<nat>,
+    ghost phys_rc: Option<nat>,
     central: CentralState,
 
     // We represent these handles with bools, because
@@ -109,7 +109,7 @@ module RwLock(stm: StoredTypeModule) refines Rw {
     // We represent shared pending handles by a single nat,
     // the number of (fungible) handles.
 
-    shared_pending_handles: nat,
+    ghost shared_pending_handles: nat,
 
     // We represent shared handles by functions `Base -> nat`.
     // For a given element b of Base, we represent a handler
