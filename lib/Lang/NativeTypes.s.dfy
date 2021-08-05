@@ -24,4 +24,7 @@ module NativeTypes {
 
   newtype/*{:nativeType "__m128i"}*/ uint128 = i:int |
       0 <= i < 0x1_0000_0000_0000_0000_0000_0000_0000_0000
+
+  // "mseq" == "machine seq"
+  type mseq<T> = s : seq<T> | |s| < Uint64UpperBound()
 }

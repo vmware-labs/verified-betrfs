@@ -91,6 +91,7 @@ module Mathematics {
 
   lemma PosMulPreservesOrder(x: nat, y: nat, m: nat)
     requires x < y
+    requires 0 < m
     ensures x * m < y * m
   {
   }
