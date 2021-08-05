@@ -18,8 +18,8 @@
 set -e
 set -x
 
-# set to betr-concurrent-merge branch
-commit=900595ac05b5b6d88ee791681698cacbf6ea0910
+# set to betr-concurrent-mod branch
+commit=cb8075cb2bc2c15be95804d8417af80baca295c8
 if [ $1 ]; then
    commit=$1
 fi

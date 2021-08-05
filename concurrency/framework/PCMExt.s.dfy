@@ -1,76 +1,81 @@
 include "PCM.s.dfy"
+include "../../lib/Base/Option.s.dfy"
 
-abstract module PCMExt refines PCM {
-  import Base : PCM
+abstract module PCMExt(base: PCM) refines PCM {
+  import opened Options
 
-  type B = Base.M
+  type B = base.M
   type F = M
 
-  predicate rep(f: F, b: B)
+  function I(f: F) : Option<B>
 
-  lemma rep_unit()
-  ensures rep(unit(), Base.unit())
+  lemma I_unit()
+  ensures I(unit()) == Some(base.unit())
 
-  lemma rep_equiv(f: F, b: B, b': B)
-  requires rep(f, b)
-  requires rep(f, b')
-  ensures Base.reachable(b, b')
-
-  lemma rep_trans(f: F, f': F, p: F, b: B)
-  returns (b': B)
-  requires dot_defined(f, p) && rep(dot(f, p), b)
+  lemma I_respects_transitions(f: F, f': F)
   requires transition(f, f')
-  ensures Base.reachable(b, b')
-  ensures dot_defined(f', p) && rep(dot(f', p), b')
+  requires I(f).Some?
+  ensures I(f').Some?
+  ensures base.transition(I(f).value, I(f').value)
+
+  lemma I_valid(f: F)
+  requires I(f).Some?
+  ensures valid(f)
+}
+
+module ExtTokens(base: PCM, ext: PCMExt(base)) {
+  import opened Options
+
+  import ExtTokens = Tokens(ext)
+  import BaseTokens = Tokens(base)
+
+  // TODO version that could accept `gshared f`
+  // (Remember there is NO SOUND VERSION that accepts `gshared b`)
 
   function method {:extern} ext_init(
-      glinear b: Base.Token,
-      ghost f': F)
-   : (glinear f_out: Token)
-  requires rep(f', b.val)
+      glinear b: BaseTokens.Token,
+      ghost f': ext.F)
+   : (glinear f_out: ExtTokens.Token)
+  requires ext.I(f') == Some(b.val)
   ensures f_out.loc.ExtLoc? && f_out.loc.base_loc == b.loc
   ensures f_out.val == f'
 
-  // TODO version that could accept a `gshared f`
-  // (Remember there is NO SOUND VERSION that accepts a `gshared b`)
-
   glinear method {:extern} ext_transfer(
-      glinear f: Token,
-      ghost f': F,
-      glinear b: Base.Token,
-      ghost b': B)
-  returns (glinear f_out: Token, glinear b_out: Base.Token)
-  requires f.loc.ExtLoc? && f.loc.base_loc == b.loc
-  requires forall p, q :: dot_defined(f.val, p) && rep(dot(f.val, p), q) && Base.dot_defined(q, b.val) ==>
-    exists q' ::
-      dot_defined(f', p) &&
-      rep(dot(f', p), q') &&
-      Base.dot_defined(q', b') &&
-      Base.reachable(Base.dot(q, b.val), Base.dot(q', b'))
-  ensures f_out.loc == f.loc
-  ensures b_out.loc == b.loc
-  ensures f_out.val == f'
-  ensures b_out.val == b'
+      glinear f: ExtTokens.Token,
+      ghost f': ext.F,
+      glinear m: BaseTokens.Token,
+      ghost m': base.M)
+  returns (glinear f_out: ExtTokens.Token, glinear m_out: BaseTokens.Token)
+  requires f.loc.ExtLoc? && f.loc.base_loc == m.loc
+  requires forall p ::
+          ext.I(ext.dot(f.val, p)).Some?
+            && base.valid(base.dot(m.val, ext.I(ext.dot(f.val, p)).value))
+      ==> ext.I(ext.dot(f', p)).Some?
+          && base.transition(
+              base.dot(m.val, ext.I(ext.dot(f.val, p)).value),
+              base.dot(m', ext.I(ext.dot(f', p)).value))
+  ensures f_out == ExtTokens.Token(f.loc, f')
+  ensures m_out == BaseTokens.Token(m.loc, m')
 
-  function method {:extern} borrow_back(gshared f: Token, ghost b: B)
-    : (gshared b_out: Base.Token)
+  function method {:extern} borrow_back(gshared f: ExtTokens.Token, ghost b: base.M)
+    : (gshared b_out: BaseTokens.Token)
   requires f.loc.ExtLoc?
-  requires forall p, b1 ::
-      dot_defined(f.val, p) && rep(dot(f.val, p), b1) ==> Base.le(b, b1)
-  ensures b_out.val == b
-  ensures b_out.loc == f.loc.base_loc
+  requires forall p ::
+      ext.I(ext.dot(f.val, p)).Some? ==> base.le(b, ext.I(ext.dot(f.val, p)).value)
+
+  ensures b_out == BaseTokens.Token(f.loc.base_loc, b)
 
   glinear method {:extern} exists_whole(
-      gshared s: Token,
-      glinear inout f: Token,
-      glinear inout b: Base.Token)
-  returns (ghost res: F, ghost b': Base.M)
+      gshared s: ExtTokens.Token,
+      glinear inout f: ExtTokens.Token,
+      glinear inout b: BaseTokens.Token)
+  returns (ghost res: ext.M, ghost b': ext.M)
   requires s.loc == old_f.loc
   requires s.loc.ExtLoc? && s.loc.base_loc == old_b.loc
   ensures f == old_f
   ensures b == old_b
-  ensures dot_defined(s.val, f.val)
-  ensures dot_defined(dot(s.val, f.val), res)
-  ensures rep(dot(dot(s.val, f.val), res), b')
-  ensures Base.dot_defined(b', b.val)
+  ensures ext.I(ext.dot(ext.dot(s.val, f.val), res)).Some?
+  ensures base.valid(base.dot(
+    ext.I(ext.dot(ext.dot(s.val, f.val), res)).value,
+    b.val))
 }

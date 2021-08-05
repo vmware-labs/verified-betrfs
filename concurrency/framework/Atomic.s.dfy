@@ -8,7 +8,7 @@ module {:extern "Atomics"} Atomics {
 
   type {:extern} Atomic(==,!new)<!V, !G>
   {
-    function {:extern} identifier() : nat
+    function {:extern} namespace() : nat
   }
 
   type GhostAtomic<G> = Atomic<(), G>
@@ -19,20 +19,20 @@ module {:extern "Atomics"} Atomics {
       v: V,
       glinear g: G,
       ghost inv: (V, G) -> bool,
-      ghost identifiers_to_avoid: set<nat>)
+      ghost namespace: nat)
   returns (a: Atomic<V, G>)
   requires inv(v, g)
   ensures forall v1, g1 :: atomic_inv(a, v1, g1) <==> inv(v1, g1)
-  ensures a.identifier() !in identifiers_to_avoid
+  ensures a.namespace() == namespace
 
   method {:extern} new_ghost_atomic<G>(
       glinear g: G,
       ghost inv: (G) -> bool,
-      ghost identifiers_to_avoid: set<nat>)
+      ghost namespace: nat)
   returns (ghost a: GhostAtomic<G>)
   requires inv(g)
   ensures forall v, g1 :: atomic_inv(a, v, g1) <==> inv(g1)
-  ensures a.identifier() !in identifiers_to_avoid
+  ensures a.namespace() == namespace
 
   glinear method {:extern} finish_atomic<V, G>(
       ghost a: Atomic<V, G>,
