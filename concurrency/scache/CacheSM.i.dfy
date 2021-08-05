@@ -1,9 +1,16 @@
 include "../framework/DiskSSM.s.dfy"
 include "CacheSpec.s.dfy"
 include "../../lib/Base/Option.s.dfy"
+include "CacheTypes.i.dfy"
 
 module CacheSSM refines DiskSSM(CacheIfc) {
   import opened Options
+  import opened CacheTypes
+
+  datatype Entry = Entry(
+    disk_idx: nat, // meaningless if Status == Empty
+    data: seq<byte> // meaningless if Status in {Empty, Reading}
+  )
 
   datatype Status = Empty | Reading | Clean | Dirty | Writeback
 
@@ -11,6 +18,23 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     disk_idx: nat, // meaningless if Status == Empty
     data: seq<byte> // meaningless if Status in {Empty, Reading}
   )
+
+  // Notes:
+  //
+  //  - Entry is separate from Status because there are some cases
+  //    where we need to have shared access to the Entry while modifying
+  //    the Status.
+  //
+  //  - The `disk_idx_to_cache_idx` map is an inverse map from the
+  //    cache_idx -> disk_idx map implicit in the `entries`.
+  //    Having this map serves two purposes:
+  //
+  //    * One, it lets the implementation find the corresponding cache_idx
+  //      given a disk_idx, although in some sense this is just an implementation
+  //      detail, not very relevant to the state machine.
+  //
+  //    * Two, it lets us enforce an invariant that, for any single disk_idx,
+  //      there is only one cache_idx that maps to it.
 
   datatype M = M(
     disk_idx_to_cache_idx: map<nat, Option<nat>>,
@@ -145,10 +169,9 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   }
 
   predicate FinishRead(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, junk_data: seq<byte>, data: seq<byte>,
-      status: Status) {
+      cache_idx: nat, disk_idx: nat, junk_data: seq<byte>, data: seq<byte>) {
     && shard == dot3(
-        CacheStatus(cache_idx, status),
+        CacheStatus(cache_idx, Reading),
         CacheEntry(cache_idx, disk_idx, junk_data),
         ReadResp(disk_idx, data)
        )
@@ -166,19 +189,22 @@ module CacheSSM refines DiskSSM(CacheIfc) {
        )
     && shard' == dot3(
         CacheStatus(cache_idx, Writeback),
-        CacheEntry(cache_idx, disk_idx, data),
+        CacheEntry(cache_idx, disk_idx, data), // unchanged
         WriteReq(disk_idx, data)
        )
   }
 
   predicate FinishWriteback(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, data: seq<byte>, status: Status) {
+      cache_idx: nat, disk_idx: nat, data: seq<byte>) {
     && shard == dot(
-        CacheStatus(cache_idx, status),
+        CacheEntry(cache_idx, disk_idx, data),
+        CacheStatus(cache_idx, Writeback),
         WriteResp(disk_idx)
        )
-    && shard' == 
+    && shard' == dot(
+        CacheEntry(cache_idx, disk_idx, data), // unchanged
         CacheStatus(cache_idx, Clean)
+      )
   }
 
   predicate Evict(shard: M, shard': M,

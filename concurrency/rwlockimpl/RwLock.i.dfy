@@ -6,7 +6,7 @@ abstract module StoredTypeModule {
   type StoredType(!new)
 }
 
-abstract module RwLock(stm: StoredTypeModule) refines Rw {
+module RwLock(stm: StoredTypeModule) refines Rw {
   import opened FullMaps
 
   /*
@@ -483,7 +483,7 @@ abstract module RwLock(stm: StoredTypeModule) refines Rw {
   }
 }
 
-abstract module RwLockTokens(stm: StoredTypeModule) {
+module RwLockTokens(stm: StoredTypeModule) {
   import rwlock = RwLock(stm)
   import T = RwTokens(RwLock(stm))
 

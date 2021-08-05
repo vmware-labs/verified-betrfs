@@ -2,7 +2,7 @@ include "RwLock.i.dfy"
 include "../framework/GlinearOption.i.dfy"
 include "../framework/Atomic.s.dfy"
 
-abstract module RwLockImpl(stm: StoredTypeModule) {
+module RwLockImpl(stm: StoredTypeModule) {
   import RwLock = RwLock(stm)
   import RwLockTokens = RwLockTokens(stm)
   import Wrap = RwLockTokens.T.Wrap
