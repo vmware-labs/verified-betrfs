@@ -105,6 +105,7 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
   predicate ProcessWrite(s: Variables, s': Variables, op: ifc.Op, disk_idx: nat) {
     && op.InternalOp?
     && disk_idx in s.write_reqs
+    && disk_idx in s.disk
     && s' == s
         .(write_reqs := s.write_reqs - {disk_idx})
         .(write_resps := s.write_resps + {disk_idx})

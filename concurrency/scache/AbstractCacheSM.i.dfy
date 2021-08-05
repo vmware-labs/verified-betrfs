@@ -20,6 +20,11 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     stubs: map<RequestId, CacheIfc.Output>
   )
 
+  predicate Init(s: Variables) {
+    && s.tickets == map[]
+    && s.stubs == map[]
+  }
+
   predicate Stutter(s: Variables, s': Variables, op: ifc.Op) {
     && op.InternalOp?
     && s' == s
@@ -107,5 +112,9 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
       case ApplyRead_Step(rid) => ApplyRead(s, s', op, rid)
       case ApplyWrite_Step(rid) => ApplyWrite(s, s', op, rid)
     }
+  }
+
+  predicate Next(s: Variables, s': Variables, op: ifc.Op) {
+    exists step :: NextStep(s, s', op, step)
   }
 }

@@ -39,6 +39,7 @@ module SimpleCache_Inv {
         :: s.write_reqs[s.entries[c].disk_idx] == s.entries[c].data)
     && (forall c | c in s.entries && s.entries[c].Writeback? && s.entries[c].disk_idx in s.write_resps
         :: s.entries[c].disk_idx in s.disk && s.disk[s.entries[c].disk_idx] == s.entries[c].data)
+    && (forall c | c in s.entries && (s.entries[c].Writeback? || s.entries[c].Clean? || s.entries[c].Dirty?) :: s.entries[c].disk_idx in s.disk)
   }
 
   lemma StartRead_PreservesInv(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat, disk_idx: nat)
@@ -140,6 +141,8 @@ module SimpleCache_Inv {
   requires NewTicket(s, s', op)
   ensures Inv(s')
   {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
   }
 
   lemma ConsumeStub_PreservesInv(s: Variables, s': Variables, op: ifc.Op)
@@ -147,6 +150,8 @@ module SimpleCache_Inv {
   requires ConsumeStub(s, s', op)
   ensures Inv(s')
   {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
   }
 
   lemma ApplyRead_PreservesInv(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, cache_idx: nat) 
@@ -154,6 +159,8 @@ module SimpleCache_Inv {
   requires ApplyRead(s, s', op, rid, cache_idx)
   ensures Inv(s')
   {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
   }
 
   lemma ApplyWrite_PreservesInv(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, cache_idx: nat) 
@@ -161,7 +168,44 @@ module SimpleCache_Inv {
   requires ApplyWrite(s, s', op, rid, cache_idx)
   ensures Inv(s')
   {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
   }
 
+  lemma Init_Implies_Inv(s: Variables)
+  requires Init(s)
+  ensures Inv(s)
+  {
+  }
 
+  lemma NextStep_PreservesInv(s: Variables, s': Variables, op: ifc.Op, step: Step)
+  requires Inv(s)
+  requires NextStep(s, s', op, step)
+  ensures Inv(s')
+  {
+    match step {
+      case StartRead_Step(cache_idx, disk_idx) => { StartRead_PreservesInv(s, s', op, cache_idx, disk_idx); }
+      case FinishRead_Step(cache_idx, disk_idx) => { FinishRead_PreservesInv(s, s', op, cache_idx, disk_idx); }
+      case MakeDirty_Step(cache_idx) => { MakeDirty_PreservesInv(s, s', op, cache_idx); }
+      case StartWriteback_Step(cache_idx, disk_idx) => { StartWriteback_PreservesInv(s, s', op, cache_idx, disk_idx); }
+      case FinishWriteback_Step(cache_idx, disk_idx) => { FinishWriteback_PreservesInv(s, s', op, cache_idx, disk_idx) ; }
+      case Evict_Step(cache_idx) => { Evict_PreservesInv(s, s', op, cache_idx); }
+      case ProcessRead_Step(disk_idx) => { ProcessRead_PreservesInv(s, s', op, disk_idx); }
+      case ProcessWrite_Step(disk_idx) => { ProcessWrite_PreservesInv(s, s', op, disk_idx); }
+      case Crash_Step => { Crash_PreservesInv(s, s', op); }
+      case NewTicket_Step => { NewTicket_PreservesInv(s, s', op); }
+      case ConsumeStub_Step => { ConsumeStub_PreservesInv(s, s', op); }
+      case ApplyRead_Step(rid, cache_idx) => { ApplyRead_PreservesInv(s, s', op, rid, cache_idx); }
+      case ApplyWrite_Step(rid, cache_idx) => { ApplyWrite_PreservesInv(s, s', op, rid, cache_idx); }
+    }
+  }
+
+  lemma Next_PreservesInv(s: Variables, s': Variables, op: ifc.Op)
+  requires Inv(s)
+  requires Next(s, s', op)
+  ensures Inv(s')
+  {
+    var step :| NextStep(s, s', op, step);
+    NextStep_PreservesInv(s, s', op, step);
+  }
 }
