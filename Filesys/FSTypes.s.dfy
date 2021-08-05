@@ -27,7 +27,7 @@ module FSTypes {
 
   // metadata tracked by filesys
   datatype MetaData = 
-    | EmptyMetaData
+    | EmptyMeta
     | MetaData(
         id: ID,           // file identifier
         ftype: FileType,  // type of file
@@ -38,6 +38,7 @@ module FSTypes {
         mtime: Time,      // last modified tme 
         ctime: Time       // last status change time
       )
+    | RedirectMeta(source: Path) // used by hardlink in PathBasedFS
 
   predicate ValidNewMetaData(m: MetaData, path: Path)
   {

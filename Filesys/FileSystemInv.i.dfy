@@ -12,10 +12,10 @@ module FileSystemInv {
   {
     && WF(fs)
     // Nonexistent ids is never occupied
-    && fs.meta_map[Nonexistent].EmptyMetaData?
+    && fs.meta_map[Nonexistent].EmptyMeta?
     && fs.data_map[Nonexistent] == EmptyData()
     // Directory has no hardlinks
-    && (forall path | PathExists(fs, path) :: DirImpliesHasNoAlias(fs, path))
+    && (forall path | PathExists(fs, path) :: DirImpliesNoAlias(fs, path))
     // ID consistent
     && (forall path | PathExists(fs, path) :: fs.path_map[path] == fs.meta_map[fs.path_map[path]].id)
     // Path and meta map consistency: directory structure is connected
@@ -76,10 +76,10 @@ module FileSystemInv {
   ensures Inv(fs')
   {
     forall p | PathExists(fs', p)
-    ensures DirImpliesHasNoAlias(fs', p)
+    ensures DirImpliesNoAlias(fs', p)
     ensures p != RootDir ==> ParentDirIsDir(fs', p)
     {
-      assert DirImpliesHasNoAlias(fs, p); // observe
+      assert DirImpliesNoAlias(fs, p); // observe
       assert p != RootDir ==> ParentDirIsDir(fs, p); // observe
   
       var id := fs.path_map[path];
@@ -107,34 +107,14 @@ module FileSystemInv {
     }
   }
 
-  lemma {:timeLimitMultiplier 2} RenamePreservesInv(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
+  lemma RenamePreservesDirImpliesNoAlias(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
   requires Inv(fs)
   requires Rename(fs, fs', src, dst, ctime)
-  ensures Inv(fs')
+  ensures forall p | PathExists(fs', p) :: DirImpliesNoAlias(fs', p)
   {
     forall p | PathExists(fs', p)
-    ensures DirImpliesHasNoAlias(fs', p)
-    ensures p != RootDir ==> ParentDirIsDir(fs', p)
+    ensures DirImpliesNoAlias(fs', p)
     {
-      if p != RootDir {
-        var parent_dir := GetParentDir(p);
-        var parent_id := fs.path_map[parent_dir];
-
-        if p == dst {
-        } else if BeneathDir(dst, p) {
-          var srcpath := src + p[|dst|..];
-          var srcparent_dir := GetParentDir(srcpath);
-          assert ParentDirIsDir(fs, srcpath);
-          assert parent_dir == dst || BeneathDir(dst, parent_dir); // observe
-          assert src + parent_dir[|dst|..] == srcparent_dir; // observe
-        } else {
-          assert PathExists(fs, p);
-          assert ParentDirIsDir(fs, p); // observe
-          assert fs.path_map[parent_dir] == fs'.path_map[parent_dir];
-        }
-        assert ParentDirIsDir(fs', p);
-      }
-
       var id := fs'.path_map[p];
       var m := fs'.meta_map[id];
       var aliases := AliasPaths(fs', id);
@@ -148,7 +128,7 @@ module FileSystemInv {
 
           var srcpath := src + path[|dst|..];
           assert id == fs.path_map[srcpath];
-          assert DirImpliesHasNoAlias(fs, srcpath); // observe
+          assert DirImpliesNoAlias(fs, srcpath); // observe
 
           if aliaspath == dst || BeneathDir(dst, aliaspath) {
             var srcalias := src + aliaspath[|dst|..];
@@ -162,10 +142,48 @@ module FileSystemInv {
           }
         }
       } else {
-        assert DirImpliesHasNoAlias(fs, p); // observe
-        assert DirImpliesHasNoAlias(fs', p);
+        assert DirImpliesNoAlias(fs, p); // observe
+        assert DirImpliesNoAlias(fs', p);
       }
     }
+  }
+
+  lemma RenamePreservesInv(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
+  requires Inv(fs)
+  requires Rename(fs, fs', src, dst, ctime)
+  ensures Inv(fs')
+  {
+    forall p | PathExists(fs', p) && p != RootDir
+    ensures ParentDirIsDir(fs', p)
+    {
+      var parent_dir := GetParentDir(p);
+      if p == dst {
+        assert ParentDirIsDir(fs', p);
+      } else if BeneathDir(dst, p) {
+        var srcpath := src + p[|dst|..];
+        assert PathExists(fs, srcpath); // observe
+        assert parent_dir == dst || BeneathDir(dst, parent_dir); // observe
+        assert src + parent_dir[|dst|..] == GetParentDir(srcpath); // observe
+        assert ParentDirIsDir(fs', p);
+      } else {
+        assert PathExists(fs, p); // observe
+      }
+    }
+
+    forall p | PathExists(fs', p)
+    ensures fs'.path_map[p] == fs'.meta_map[fs'.path_map[p]].id
+    {
+      if p == dst {
+        assert src + p[|dst|..] == src;
+        assert fs'.path_map[p] == fs.path_map[src];
+        assert fs'.path_map[p] == fs'.meta_map[fs'.path_map[p]].id;
+      } else if BeneathDir(dst, p) {
+        assert fs'.path_map[p] == fs'.meta_map[fs'.path_map[p]].id;
+      }
+    }
+
+    RenamePreservesDirImpliesNoAlias(fs, fs', src, dst, ctime);
+    assert Inv(fs');
   }
 
   lemma LinkPreservesInv(fs: FileSys, fs': FileSys, source: Path, dest: Path, ctime: Time)
@@ -174,10 +192,10 @@ module FileSystemInv {
   ensures Inv(fs')
   {
     forall p | PathExists(fs', p)
-    ensures DirImpliesHasNoAlias(fs', p)
+    ensures DirImpliesNoAlias(fs', p)
     ensures p != RootDir ==> ParentDirIsDir(fs', p)
     {
-      assert p != dest ==> DirImpliesHasNoAlias(fs, p); // observe
+      assert p != dest ==> DirImpliesNoAlias(fs, p); // observe
       assert p != RootDir ==> ParentDirIsDir(fs, p); // observe
 
       var id := fs.path_map[source];
@@ -199,12 +217,12 @@ module FileSystemInv {
     var path := step.path;
 
     forall p | PathExists(fs', p)
-    ensures DirImpliesHasNoAlias(fs', p)
+    ensures DirImpliesNoAlias(fs', p)
     ensures p != RootDir ==> ParentDirIsDir(fs', p)
     {
       if p != path {
         assert PathExists(fs, p); // observe
-        assert DirImpliesHasNoAlias(fs, p); // observe
+        assert DirImpliesNoAlias(fs, p); // observe
         if step.CreateStep? {
           SameAliases(fs, fs', iset{path}, iset{fs'.path_map[path]});
         }

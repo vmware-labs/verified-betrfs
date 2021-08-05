@@ -49,7 +49,7 @@ module FileSystem {
   predicate Init(fs: FileSys)
   {
     && fs.path_map == InitPathMap()
-    && fs.meta_map == (imap id :: if id == RootID then InitRootMetaData() else EmptyMetaData)
+    && fs.meta_map == (imap id :: if id == RootID then InitRootMetaData() else EmptyMeta)
     && fs.data_map == (imap id :: EmptyData())
   }
 
@@ -68,7 +68,7 @@ module FileSystem {
     && AliasPaths(fs, fs.path_map[path]) == iset{path}
   }
 
-  predicate DirImpliesHasNoAlias(fs: FileSys, path: Path)
+  predicate DirImpliesNoAlias(fs: FileSys, path: Path)
   requires WF(fs)
   requires PathExists(fs, path)
   {
@@ -102,7 +102,8 @@ module FileSystem {
   predicate IsEmptyDir(path_map: PathMap, dir: Path)
   requires PathMapComplete(path_map)
   {
-    && (forall k | BeneathDir(dir, k) :: path_map[k].Nonexistent?)
+    && (forall k | IsDirEntry(dir, k) :: path_map[k].Nonexistent?)
+    // && (forall k | BeneathDir(dir, k) :: path_map[k].Nonexistent?)
   }
 
   /// FileSys Ops
@@ -143,7 +144,7 @@ module FileSystem {
     && ValidNewMetaData(m, path)
     && ValidNewId(fs, m.id)
     // Entry Not Present
-    && fs.meta_map[m.id].EmptyMetaData?
+    && fs.meta_map[m.id].EmptyMeta?
     && fs.data_map[m.id] == EmptyData()
     // Updated maps
     && var parent_id := fs.path_map[GetParentDir(path)];
@@ -163,7 +164,7 @@ module FileSystem {
   {
     var id := fs.path_map[path];
     if id.Nonexistent? || !fs.meta_map[id].MetaData? || NoAlias(fs, path)
-    then EmptyMetaData
+    then EmptyMeta
     else MetaDataUpdateCTime(fs.meta_map[id], ctime)
   }
 
@@ -214,8 +215,10 @@ module FileSystem {
   {
     && WF(fs)
     && WF(fs')
+    && src != dst
+    && src != RootDir
     && PathExists(fs, src)
-    && !BeneathDir(dst, src)
+    && !BeneathDir(src, dst) // cannot rename a directory to be its subdirectory
     && (PathExists(fs, dst) || ValidNewPath(fs, dst))
 
     && var src_id := fs.path_map[src];
