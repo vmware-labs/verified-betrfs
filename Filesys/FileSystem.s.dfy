@@ -85,6 +85,13 @@ module FileSystem {
     && fs.meta_map[parent_id].ftype.Directory?
   }
 
+  predicate ConsistentID(fs: FileSys, path: Path)
+  requires WF(fs)
+  requires PathExists(fs, path)
+  {
+    && fs.path_map[path] == fs.meta_map[fs.path_map[path]].id
+  }
+
   predicate ValidNewPath(fs: FileSys, path: Path)
   requires WF(fs)
   {

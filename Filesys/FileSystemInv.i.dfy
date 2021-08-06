@@ -17,7 +17,7 @@ module FileSystemInv {
     // Directory has no hardlinks
     && (forall path | PathExists(fs, path) :: DirImpliesNoAlias(fs, path))
     // ID consistent
-    && (forall path | PathExists(fs, path) :: fs.path_map[path] == fs.meta_map[fs.path_map[path]].id)
+    && (forall path | PathExists(fs, path) :: ConsistentID(fs, path))
     // Path and meta map consistency: directory structure is connected
     && (forall path | PathExists(fs, path) && path != RootDir :: ParentDirIsDir(fs, path))
   }
@@ -77,9 +77,11 @@ module FileSystemInv {
   {
     forall p | PathExists(fs', p)
     ensures DirImpliesNoAlias(fs', p)
+    ensures ConsistentID(fs', p)
     ensures p != RootDir ==> ParentDirIsDir(fs', p)
     {
       assert DirImpliesNoAlias(fs, p); // observe
+      assert ConsistentID(fs, p); // observe
       assert p != RootDir ==> ParentDirIsDir(fs, p); // observe
   
       var id := fs.path_map[path];
@@ -171,14 +173,14 @@ module FileSystemInv {
     }
 
     forall p | PathExists(fs', p)
-    ensures fs'.path_map[p] == fs'.meta_map[fs'.path_map[p]].id
+    ensures ConsistentID(fs', p)
     {
-      if p == dst {
-        assert src + p[|dst|..] == src;
-        assert fs'.path_map[p] == fs.path_map[src];
-        assert fs'.path_map[p] == fs'.meta_map[fs'.path_map[p]].id;
-      } else if BeneathDir(dst, p) {
-        assert fs'.path_map[p] == fs'.meta_map[fs'.path_map[p]].id;
+      if p == dst || BeneathDir(dst, p) {
+        var srcpath := src + p[|dst|..];
+        assert fs.path_map[srcpath] == fs'.path_map[p];
+        assert ConsistentID(fs, srcpath); // observe
+      } else {
+        assert ConsistentID(fs, p); // observe
       }
     }
 
@@ -193,9 +195,11 @@ module FileSystemInv {
   {
     forall p | PathExists(fs', p)
     ensures DirImpliesNoAlias(fs', p)
+    ensures ConsistentID(fs', p)
     ensures p != RootDir ==> ParentDirIsDir(fs', p)
     {
       assert p != dest ==> DirImpliesNoAlias(fs, p); // observe
+      assert p != dest ==> ConsistentID(fs, p); // observe
       assert p != RootDir ==> ParentDirIsDir(fs, p); // observe
 
       var id := fs.path_map[source];
@@ -218,11 +222,14 @@ module FileSystemInv {
 
     forall p | PathExists(fs', p)
     ensures DirImpliesNoAlias(fs', p)
+    ensures ConsistentID(fs', p)
     ensures p != RootDir ==> ParentDirIsDir(fs', p)
     {
       if p != path {
         assert PathExists(fs, p); // observe
         assert DirImpliesNoAlias(fs, p); // observe
+        assert ConsistentID(fs, p); // observe
+
         if step.CreateStep? {
           SameAliases(fs, fs', iset{path}, iset{fs'.path_map[path]});
         }
