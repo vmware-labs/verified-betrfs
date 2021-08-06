@@ -1,22 +1,15 @@
 include "../framework/DiskSSM.s.dfy"
 include "CacheSpec.s.dfy"
 include "../../lib/Base/Option.s.dfy"
-include "CacheTypes.i.dfy"
 
 module CacheSSM refines DiskSSM(CacheIfc) {
   import opened Options
-  import opened CacheTypes
-
-  datatype Entry = Entry(
-    disk_idx: nat, // meaningless if Status == Empty
-    data: seq<byte> // meaningless if Status in {Empty, Reading}
-  )
 
   datatype Status = Empty | Reading | Clean | Dirty | Writeback
 
   datatype Entry = Entry(
     disk_idx: nat, // meaningless if Status == Empty
-    data: seq<byte> // meaningless if Status in {Empty, Reading}
+    data: DiskIfc.Block // meaningless if Status in {Empty, Reading}
   )
 
   // Notes:
@@ -40,12 +33,13 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     disk_idx_to_cache_idx: map<nat, Option<nat>>,
     entries: map<nat, Entry>,
     statuses: map<nat, Status>,
-    write_reqs: map<nat, seq<byte>>,
+    write_reqs: map<nat, DiskIfc.Block>,
     write_resps: set<nat>,
     read_reqs: set<nat>,
-    read_resps: map<nat, seq<byte>>,
+    read_resps: map<nat, DiskIfc.Block>,
     tickets: map<RequestId, IOIfc.Input>,
-    stubs: map<RequestId, IOIfc.Output>
+    stubs: map<RequestId, IOIfc.Output>,
+    sync_reqs: map<RequestId, set<nat>>
   ) | Fail
 
   function union_map<K, V>(m1: map<K, V>, m2: map<K, V>) : map<K, V> {
@@ -63,6 +57,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
         && x.read_resps.Keys !! y.read_resps.Keys
         && x.tickets.Keys !! y.tickets.Keys
         && x.stubs.Keys !! y.stubs.Keys
+        && x.sync_reqs.Keys !! y.sync_reqs.Keys
     then
       M(
         union_map(x.disk_idx_to_cache_idx, y.disk_idx_to_cache_idx),
@@ -73,7 +68,8 @@ module CacheSSM refines DiskSSM(CacheIfc) {
         x.read_reqs + y.read_reqs,
         union_map(x.read_resps, y.read_resps),
         union_map(x.tickets, y.tickets),
-        union_map(x.stubs, y.stubs)
+        union_map(x.stubs, y.stubs),
+        union_map(x.sync_reqs, y.sync_reqs)
       )
     else
       Fail
@@ -81,67 +77,95 @@ module CacheSSM refines DiskSSM(CacheIfc) {
 
   function DiskIdxToCacheIdx(disk_idx: nat, cache_idx: Option<nat>) : M {
     M(map[disk_idx := cache_idx],
-      map[], map[], map[], {}, {}, map[], map[], map[])
+      map[], map[], map[], {}, {}, map[], map[], map[], map[])
   }
 
-  function CacheEntry(cache_idx: nat, disk_idx: nat, data: seq<byte>) : M {
+  function CacheEntry(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block) : M {
     M(map[],
       map[cache_idx := Entry(disk_idx, data)],
-      map[], map[], {}, {}, map[], map[], map[])
+      map[], map[], {}, {}, map[], map[], map[], map[])
   }
 
   function CacheStatus(cache_idx: nat, status: Status) : M {
     M(map[], map[],
       map[cache_idx := status],
-      map[], {}, {}, map[], map[], map[])
+      map[], {}, {}, map[], map[], map[], map[])
   }
 
-  function WriteReq(disk_idx: nat, data: seq<byte>) : M {
+  function WriteReq(disk_idx: nat, data: DiskIfc.Block) : M {
     M(map[], map[], map[],
       map[disk_idx := data],
-      {}, {}, map[], map[], map[])
+      {}, {}, map[], map[], map[], map[])
   }
 
   function WriteResp(disk_idx: nat) : M {
     M(map[], map[], map[], map[],
       {disk_idx},
-      {}, map[], map[], map[])
+      {}, map[], map[], map[], map[])
   }
 
   function ReadReq(disk_idx: nat) : M {
     M(map[], map[], map[], map[], {},
       {disk_idx},
+      map[], map[], map[], map[])
+  }
+
+  function ReadResp(disk_idx: nat, data: DiskIfc.Block) : M {
+    M(map[], map[], map[], map[], {}, {},
+      map[disk_idx := data],
       map[], map[], map[])
   }
 
-  function ReadResp(disk_idx: nat, data: seq<byte>) : M {
-    M(map[], map[], map[], map[], {}, {},
-      map[disk_idx := data],
+  function NormalTicket(rid: RequestId, input: IOIfc.Input) : M {
+    M(map[], map[], map[], map[], {}, {}, map[],
+      map[rid := input],
       map[], map[])
   }
 
-  function unit() : M {
-    M(map[], map[], map[], map[], {}, {}, map[], map[], map[])
+  function NormalStub(rid: RequestId, output: IOIfc.Output) : M {
+    M(map[], map[], map[], map[], {}, {}, map[], map[],
+      map[rid := output],
+      map[])
   }
 
-  function Ticket(rid: RequestId, input: IOIfc.Input) : M
-  function Stub(rid: RequestId, output: IOIfc.Output) : M
+  function SyncReq(rid: RequestId, disk_indices: set<nat>) : M {
+    M(map[], map[], map[], map[], {}, {}, map[], map[], map[],
+      map[rid := disk_indices])
+  }
+
+  function unit() : M {
+    M(map[], map[], map[], map[], {}, {}, map[], map[], map[], map[])
+  }
+
+  function Ticket(rid: RequestId, input: IOIfc.Input) : M {
+    if input.SyncInput? then
+      SyncReq(rid, input.keys)
+    else
+      NormalTicket(rid, input)
+  }
+
+  function Stub(rid: RequestId, output: IOIfc.Output) : M {
+    if output.SyncOutput? then
+      SyncReq(rid, {})
+    else
+      NormalStub(rid, output)
+  }
 
   // By returning a set of request ids "in use", we enforce that
   // there are only a finite number of them (i.e., it is always possible to find
   // a free one).
   function request_ids_in_use(m: M) : set<RequestId> {
     if m.M? then
-      m.tickets.Keys + m.stubs.Keys
+      m.tickets.Keys + m.stubs.Keys + m.sync_reqs.Keys
     else
       {}
   }
 
-  function DiskWriteReq(disk_addr: nat, data: seq<byte>) : M
-  function DiskWriteResp(disk_addr: nat, len: nat) : M
+  function DiskWriteReq(disk_addr: nat, data: DiskIfc.Block) : M
+  function DiskWriteResp(disk_addr: nat) : M
 
-  function DiskReadReq(disk_addr: nat, len: nat) : M
-  function DiskReadResp(disk_addr: nat, data: seq<byte>) : M
+  function DiskReadReq(disk_addr: nat) : M
+  function DiskReadResp(disk_addr: nat, data: DiskIfc.Block) : M
 
   predicate Init(s: M)
 
@@ -154,7 +178,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   }
 
   predicate StartRead(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, junk_data: seq<byte>, junk_disk_idx: nat) {
+      cache_idx: nat, disk_idx: nat, junk_data: DiskIfc.Block, junk_disk_idx: nat) {
     && shard == dot3(
         CacheStatus(cache_idx, Empty),
         CacheEntry(cache_idx, junk_disk_idx, junk_data),
@@ -169,7 +193,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   }
 
   predicate FinishRead(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, junk_data: seq<byte>, data: seq<byte>) {
+      cache_idx: nat, disk_idx: nat, junk_data: DiskIfc.Block, data: DiskIfc.Block) {
     && shard == dot3(
         CacheStatus(cache_idx, Reading),
         CacheEntry(cache_idx, disk_idx, junk_data),
@@ -182,7 +206,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   }
 
   predicate StartWriteback(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, data: seq<byte>) {
+      cache_idx: nat, disk_idx: nat, data: DiskIfc.Block) {
     && shard == dot(
         CacheStatus(cache_idx, Dirty),
         CacheEntry(cache_idx, disk_idx, data)
@@ -195,8 +219,8 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   }
 
   predicate FinishWriteback(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, data: seq<byte>) {
-    && shard == dot(
+      cache_idx: nat, disk_idx: nat, data: DiskIfc.Block) {
+    && shard == dot3(
         CacheEntry(cache_idx, disk_idx, data),
         CacheStatus(cache_idx, Writeback),
         WriteResp(disk_idx)
@@ -208,7 +232,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   }
 
   predicate Evict(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, data: seq<byte>, cache_idx2: Option<nat>) {
+      cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, cache_idx2: Option<nat>) {
     && shard == dot3(
         CacheStatus(cache_idx, Clean),
         CacheEntry(cache_idx, disk_idx, data),
@@ -247,11 +271,11 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   requires ConsumeStub(whole, whole', rid, output)
   ensures Inv(whole')
 
-  lemma ProcessReadPreservesInv(disk_addr: nat, data: seq<byte>, rest: M)
+  lemma ProcessReadPreservesInv(disk_addr: nat, data: DiskIfc.Block, rest: M)
   requires Inv(dot(DiskReadReq(disk_addr, |data|), rest))
   ensures Inv(dot(DiskReadResp(disk_addr, data), rest))
 
-  lemma ProcessWritePreservesInv(disk_addr: nat, data: seq<byte>, rest: M)
+  lemma ProcessWritePreservesInv(disk_addr: nat, data: DiskIfc.Block, rest: M)
   requires Inv(dot(DiskWriteReq(disk_addr, data), rest))
   ensures Inv(dot(DiskWriteResp(disk_addr, |data|), rest))
 

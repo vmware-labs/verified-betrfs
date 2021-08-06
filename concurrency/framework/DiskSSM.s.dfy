@@ -6,6 +6,7 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 abstract module DiskSSM(IOIfc: InputOutputIfc) {
   import opened RequestIds
   import opened NativeTypes
+  import DiskIfc
 
   type M(!new)
 
@@ -20,11 +21,11 @@ abstract module DiskSSM(IOIfc: InputOutputIfc) {
   // a free one).
   function request_ids_in_use(m: M) : set<RequestId>
 
-  function DiskWriteReq(disk_addr: nat, data: seq<byte>) : M
-  function DiskWriteResp(disk_addr: nat, len: nat) : M
+  function DiskWriteReq(disk_addr: nat, data: DiskIfc.Block) : M
+  function DiskWriteResp(disk_addr: nat) : M
 
-  function DiskReadReq(disk_addr: nat, len: nat) : M
-  function DiskReadResp(disk_addr: nat, data: seq<byte>) : M
+  function DiskReadReq(disk_addr: nat) : M
+  function DiskReadResp(disk_addr: nat, data: DiskIfc.Block) : M
 
   predicate Init(s: M)
   predicate Internal(shard: M, shard': M)
@@ -59,13 +60,13 @@ abstract module DiskSSM(IOIfc: InputOutputIfc) {
   requires ConsumeStub(whole, whole', rid, output)
   ensures Inv(whole')
 
-  lemma ProcessReadPreservesInv(disk_addr: nat, data: seq<byte>, rest: M)
-  requires Inv(dot(DiskReadReq(disk_addr, |data|), rest))
+  lemma ProcessReadPreservesInv(disk_addr: nat, data: DiskIfc.Block, rest: M)
+  requires Inv(dot(DiskReadReq(disk_addr), rest))
   ensures Inv(dot(DiskReadResp(disk_addr, data), rest))
 
-  lemma ProcessWritePreservesInv(disk_addr: nat, data: seq<byte>, rest: M)
+  lemma ProcessWritePreservesInv(disk_addr: nat, data: DiskIfc.Block, rest: M)
   requires Inv(dot(DiskWriteReq(disk_addr, data), rest))
-  ensures Inv(dot(DiskWriteResp(disk_addr, |data|), rest))
+  ensures Inv(dot(DiskWriteResp(disk_addr), rest))
 
   lemma dot_unit(x: M)
   ensures dot(x, unit()) == x
@@ -142,16 +143,16 @@ module AsyncDiskSystemStateMachine(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc))
   predicate MachineInteraction(s: ssm.M, s': ssm.M, dop: DiskOp) {
     match dop {
       case ReqReadOp(id, reqRead) =>
-        s == ssm.dot(s', ssm.DiskReadReq(reqRead.addr, reqRead.len))
+        s == ssm.dot(s', ssm.DiskReadReq(reqRead.addr))
 
       case ReqWriteOp(id, reqWrite) =>
-        s == ssm.dot(s', ssm.DiskWriteReq(reqWrite.addr, reqWrite.bytes))
+        s == ssm.dot(s', ssm.DiskWriteReq(reqWrite.addr, reqWrite.data))
 
       case RespReadOp(id, respRead) =>
-        s' == ssm.dot(s, ssm.DiskReadResp(respRead.addr, respRead.bytes))
+        s' == ssm.dot(s, ssm.DiskReadResp(respRead.addr, respRead.data))
 
       case RespWriteOp(id, respWrite) =>
-        s' == ssm.dot(s, ssm.DiskWriteResp(respWrite.addr, respWrite.len))
+        s' == ssm.dot(s, ssm.DiskWriteResp(respWrite.addr))
     }
   }
 

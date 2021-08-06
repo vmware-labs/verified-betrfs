@@ -5,10 +5,13 @@ module DiskIfc refines Ifc {
   import opened NativeTypes
   import opened RequestIds
 
-  datatype ReqRead = ReqRead(addr: int, len: int)
-  datatype ReqWrite = ReqWrite(addr: int, bytes: seq<byte>)
-  datatype RespRead = RespRead(addr: int, bytes: seq<byte>)
-  datatype RespWrite = RespWrite(addr: int, len: int)
+  type Block = s : seq<byte> | |s| == 4096
+    witness seq(4096, (i) => 0)
+
+  datatype ReqRead = ReqRead(addr: nat)
+  datatype ReqWrite = ReqWrite(addr: nat, data: Block)
+  datatype RespRead = RespRead(addr: nat, data: Block)
+  datatype RespWrite = RespWrite(addr: nat)
 
   datatype DiskOp =
     | ReqReadOp(id: RequestId, reqRead: ReqRead)
@@ -32,7 +35,7 @@ module AsyncDisk refines StateMachine(DiskIfc) {
     respWrites: map<RequestId, RespWrite>,
 
     // The disk:
-    contents: seq<byte>
+    contents: map<nat, Block>
   )
 
   predicate Init(s: Variables)
@@ -104,56 +107,36 @@ module AsyncDisk refines StateMachine(DiskIfc) {
   {
     && id in s.reqReads
     && var req := s.reqReads[id];
-    && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
+    && req.addr in s.contents
     && s' == s.(reqReads := s.reqReads - {id})
-              .(respReads := s.respReads[id := RespRead(req.addr, s.contents[req.addr .. req.addr as int + req.len as int])])
-  }
-
-  function {:opaque} splice(bytes: seq<byte>, start: int, ins: seq<byte>) : seq<byte>
-  requires 0 <= start
-  requires start + |ins| <= |bytes|
-  {
-    bytes[.. start] + ins + bytes[start + |ins| ..]
+              .(respReads := s.respReads[id := RespRead(req.addr, s.contents[req.addr])])
   }
 
   predicate ProcessWrite(s: Variables, s': Variables, id: RequestId)
   {
     && id in s.reqWrites
     && var req := s.reqWrites[id];
-    && 0 <= req.addr
-    && |req.bytes| < 0x1_0000_0000_0000_0000
-    && req.addr as int + |req.bytes| <= |s.contents|
     && s' == s.(reqWrites := s.reqWrites - {id})
-              .(respWrites := s.respWrites[id := RespWrite(req.addr, |req.bytes| as int)])
-              .(contents := splice(s.contents, req.addr as int, req.bytes))
+              .(respWrites := s.respWrites[id := RespWrite(req.addr)])
+              .(contents := s.contents[req.addr := req.data])
   }
 
   // We assume the disk makes ABSOLUTELY NO GUARANTEES about what happens
   // when there are conflicting reads or writes.
-
-  predicate overlap(start: int, len: int, start': int, len': int)
-  {
-    && start + len > start'
-    && start' + len' > start
-  }
 
   predicate HavocConflictingWrites(s: Variables, s': Variables, id: RequestId, id': RequestId)
   {
     && id != id'
     && id in s.reqWrites
     && id' in s.reqWrites
-    && overlap(
-        s.reqWrites[id].addr as int, |s.reqWrites[id].bytes|,
-        s.reqWrites[id'].addr as int, |s.reqWrites[id'].bytes|)
+    && s.reqWrites[id].addr == s.reqWrites[id'].addr
   }
 
   predicate HavocConflictingWriteRead(s: Variables, s': Variables, id: RequestId, id': RequestId)
   {
     && id in s.reqWrites
     && id' in s.reqReads
-    && overlap(
-        s.reqWrites[id].addr as int, |s.reqWrites[id].bytes|,
-        s.reqReads[id'].addr as int, s.reqReads[id'].len as int)
+    && s.reqWrites[id].addr == s.reqReads[id'].addr
   }
 
   predicate NextInternalStep(s: Variables, s': Variables, step: InternalStep)
