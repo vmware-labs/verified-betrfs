@@ -17,7 +17,8 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
   datatype Variables = Variables(
     store: imap<nat, Elem>,
     tickets: map<RequestId, CacheIfc.Input>,
-    stubs: map<RequestId, CacheIfc.Output>
+    stubs: map<RequestId, CacheIfc.Output>,
+    sync_reqs: map<RequestId, set<nat>>
   )
 
   predicate Init(s: Variables) {
@@ -34,10 +35,18 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     Elem(elem.ephemeral, elem.ephemeral)
   }
 
+  /*function Persist_UpdateSyncReqs(sync_reqs: map<RequestId, set<nat>>, key: nat)
+      : map<RequestId, set<nat>>
+  {
+    map rid | rid in sync_reqs :: sync_reqs[rid] - {key}
+  }*/
+
   predicate Persist(s: Variables, s': Variables, op: ifc.Op, key: nat) {
     && op.InternalOp?
     && key in s.store
-    && s' == s.(store := s.store[key := PersistElem(s.store[key])])
+    && s' == s
+      .(store := s.store[key := PersistElem(s.store[key])])
+      //.(sync_reqs := Persist_UpdateSyncReqs(s.sync_reqs, key))
   }
 
   function CrashElem(elem: Elem) : Elem {
@@ -57,6 +66,7 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
 
   predicate NewTicket(s: Variables, s': Variables, op: ifc.Op) {
     && op.Start?
+    && (op.input.WriteInput? || op.input.ReadInput?)
     && op.rid !in s.tickets
     && s' == s.(tickets := s.tickets[op.rid := op.input])
   }
@@ -65,6 +75,29 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && op.End?
     && op.rid in s.stubs && s.stubs[op.rid] == op.output
     && s' == s.(stubs := s.stubs - {op.rid})
+  }
+
+  predicate NewSyncTicket(s: Variables, s': Variables, op: ifc.Op) {
+    && op.Start?
+    && op.input.SyncInput?
+    && op.rid !in s.sync_reqs
+    && s' == s.(sync_reqs := s.sync_reqs[op.rid := op.input.keys])
+  }
+
+  predicate ConsumeSyncStub(s: Variables, s': Variables, op: ifc.Op) {
+    && op.End?
+    && op.output.SyncOutput?
+    && op.rid in s.sync_reqs
+    && s.sync_reqs[op.rid] == {}
+    && s' == s.(stubs := s.stubs - {op.rid})
+  }
+
+  predicate ObserveCleanForSync(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, key: nat) {
+    && op.InternalOp?
+    && rid in s.sync_reqs
+    && key in s.store
+    && s.store[key].persistent == s.store[key].ephemeral
+    && s' == s.(sync_reqs := s.sync_reqs[rid := s.sync_reqs[rid] - {key}])
   }
 
   predicate ApplyRead(s: Variables, s': Variables, op: ifc.Op, rid: RequestId) {
@@ -99,6 +132,9 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
      | Crash_Step
      | NewTicket_Step
      | ConsumeStub_Step
+     | NewSyncTicket_Step
+     | ConsumeSyncStub_Step
+     | ObserveCleanForSync_Step(rid: RequestId, key: nat)
      | ApplyRead_Step(rid: RequestId)
      | ApplyWrite_Step(rid: RequestId) 
 
@@ -109,6 +145,9 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
       case Crash_Step => Crash(s, s', op)
       case NewTicket_Step => NewTicket(s, s', op)
       case ConsumeStub_Step => ConsumeStub(s, s', op)
+      case NewSyncTicket_Step => NewSyncTicket(s, s', op)
+      case ConsumeSyncStub_Step => ConsumeSyncStub(s, s', op)
+      case ObserveCleanForSync_Step(rid, key) => ObserveCleanForSync(s, s', op, rid, key)
       case ApplyRead_Step(rid) => ApplyRead(s, s', op, rid)
       case ApplyWrite_Step(rid) => ApplyWrite(s, s', op, rid)
     }

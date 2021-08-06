@@ -154,6 +154,33 @@ module SimpleCache_Inv {
     assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
   }
 
+  lemma NewSyncTicket_PreservesInv(s: Variables, s': Variables, op: ifc.Op)
+  requires Inv(s)
+  requires NewSyncTicket(s, s', op)
+  ensures Inv(s')
+  {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
+  }
+
+  lemma ConsumeSyncStub_PreservesInv(s: Variables, s': Variables, op: ifc.Op)
+  requires Inv(s)
+  requires ConsumeSyncStub(s, s', op)
+  ensures Inv(s')
+  {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
+  }
+
+  lemma ObserveCleanForSync_PreservesInv(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, cache_idx: nat)
+  requires Inv(s)
+  requires ObserveCleanForSync(s, s', op, rid, cache_idx)
+  ensures Inv(s')
+  {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
+  }
+
   lemma ApplyRead_PreservesInv(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, cache_idx: nat) 
   requires Inv(s)
   requires ApplyRead(s, s', op, rid, cache_idx)
@@ -195,6 +222,9 @@ module SimpleCache_Inv {
       case Crash_Step => { Crash_PreservesInv(s, s', op); }
       case NewTicket_Step => { NewTicket_PreservesInv(s, s', op); }
       case ConsumeStub_Step => { ConsumeStub_PreservesInv(s, s', op); }
+      case NewSyncTicket_Step => { NewSyncTicket_PreservesInv(s, s', op); }
+      case ConsumeSyncStub_Step => { ConsumeSyncStub_PreservesInv(s, s', op); }
+      case ObserveCleanForSync_Step(rid, cache_idx) => { ObserveCleanForSync_PreservesInv(s, s', op, rid, cache_idx); }
       case ApplyRead_Step(rid, cache_idx) => { ApplyRead_PreservesInv(s, s', op, rid, cache_idx); }
       case ApplyWrite_Step(rid, cache_idx) => { ApplyWrite_PreservesInv(s, s', op, rid, cache_idx); }
     }

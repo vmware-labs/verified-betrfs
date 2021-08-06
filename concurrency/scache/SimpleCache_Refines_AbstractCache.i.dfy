@@ -67,7 +67,8 @@ module SimpleCache_Refines_AbstractCache refines
     B.Variables(
       InterpStore(s),
       s.tickets,
-      s.stubs
+      s.stubs,
+      s.sync_reqs
     )
   }
 
@@ -223,6 +224,7 @@ module SimpleCache_Refines_AbstractCache refines
   ensures B.Next(I(s), I(s'), op)
   {
     assert forall d, c :: IsInMem(s, c, d) <==> IsInMem(s', c, d);
+    assert B.NewTicket(I(s), I(s'), op);
     assert B.NextStep(I(s), I(s'), op, B.NewTicket_Step);
   }
 
@@ -234,6 +236,37 @@ module SimpleCache_Refines_AbstractCache refines
   {
     assert forall d, c :: IsInMem(s, c, d) <==> IsInMem(s', c, d);
     assert B.NextStep(I(s), I(s'), op, B.ConsumeStub_Step);
+  }
+
+  lemma NewSyncTicket_Refines(s: Variables, s': Variables, op: ifc.Op)
+  requires Inv(s)
+  requires NewSyncTicket(s, s', op)
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), op)
+  {
+    assert forall d, c :: IsInMem(s, c, d) <==> IsInMem(s', c, d);
+    assert B.NextStep(I(s), I(s'), op, B.NewSyncTicket_Step);
+  }
+
+  lemma ConsumeSyncStub_Refines(s: Variables, s': Variables, op: ifc.Op)
+  requires Inv(s)
+  requires ConsumeSyncStub(s, s', op)
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), op)
+  {
+    assert forall d, c :: IsInMem(s, c, d) <==> IsInMem(s', c, d);
+    assert B.NextStep(I(s), I(s'), op, B.ConsumeSyncStub_Step);
+  }
+
+  lemma ObserveCleanForSync_Refines(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, cache_idx: nat)
+  requires Inv(s)
+  requires ObserveCleanForSync(s, s', op, rid, cache_idx)
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), op)
+  {
+    assert forall d, c :: IsInMem(s, c, d) <==> IsInMem(s', c, d);
+    assert B.NextStep(I(s), I(s'), op,
+        B.ObserveCleanForSync_Step(rid, s.entries[cache_idx].disk_idx));
   }
 
   lemma ApplyRead_Refines(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, cache_idx: nat) 
@@ -277,6 +310,9 @@ module SimpleCache_Refines_AbstractCache refines
       case Crash_Step => { Crash_Refines(s, s', op); }
       case NewTicket_Step => { NewTicket_Refines(s, s', op); }
       case ConsumeStub_Step => { ConsumeStub_Refines(s, s', op); }
+      case NewSyncTicket_Step => { NewSyncTicket_Refines(s, s', op); }
+      case ConsumeSyncStub_Step => { ConsumeSyncStub_Refines(s, s', op); }
+      case ObserveCleanForSync_Step(rid, cache_idx) => { ObserveCleanForSync_Refines(s, s', op, rid, cache_idx); }
       case ApplyRead_Step(rid, cache_idx) => { ApplyRead_Refines(s, s', op, rid, cache_idx); }
       case ApplyWrite_Step(rid, cache_idx) => { ApplyWrite_Refines(s, s', op, rid, cache_idx); }
     }

@@ -22,7 +22,8 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     read_resps: map<nat, seq<byte>>,
     tickets: map<RequestId, CacheIfc.Input>,
     stubs: map<RequestId, CacheIfc.Output>,
-    disk: imap<nat, seq<byte>>
+    disk: imap<nat, seq<byte>>,
+    sync_reqs: map<RequestId, set<nat>>
   )
 
   predicate Init(s: Variables) {
@@ -126,6 +127,7 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
 
   predicate NewTicket(s: Variables, s': Variables, op: ifc.Op) {
     && op.Start?
+    && (op.input.WriteInput? || op.input.ReadInput?)
     && op.rid !in s.tickets
     && s' == s.(tickets := s.tickets[op.rid := op.input])
   }
@@ -134,6 +136,30 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && op.End?
     && op.rid in s.stubs && s.stubs[op.rid] == op.output
     && s' == s.(stubs := s.stubs - {op.rid})
+  }
+
+  predicate NewSyncTicket(s: Variables, s': Variables, op: ifc.Op) {
+    && op.Start?
+    && op.input.SyncInput?
+    && op.rid !in s.sync_reqs
+    && s' == s.(sync_reqs := s.sync_reqs[op.rid := op.input.keys])
+  }
+
+  predicate ConsumeSyncStub(s: Variables, s': Variables, op: ifc.Op) {
+    && op.End?
+    && op.output.SyncOutput?
+    && op.rid in s.sync_reqs
+    && s.sync_reqs[op.rid] == {}
+    && s' == s.(stubs := s.stubs - {op.rid})
+  }
+
+  predicate ObserveCleanForSync(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, cache_idx: nat) {
+    && op.InternalOp?
+    && rid in s.sync_reqs
+    && cache_idx in s.entries
+    && s.entries[cache_idx].Clean?
+    && s' == s.(sync_reqs := s.sync_reqs[
+        rid := s.sync_reqs[rid] - {s.entries[cache_idx].disk_idx}])
   }
 
   predicate ApplyRead(s: Variables, s': Variables, op: ifc.Op,
@@ -177,6 +203,9 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
      | Crash_Step
      | NewTicket_Step
      | ConsumeStub_Step
+     | NewSyncTicket_Step
+     | ConsumeSyncStub_Step
+     | ObserveCleanForSync_Step(rid: RequestId, cache_idx: nat)
      | ApplyRead_Step(rid: RequestId, cache_idx: nat) 
      | ApplyWrite_Step(rid: RequestId, cache_idx: nat) 
 
@@ -185,14 +214,20 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
        case StartRead_Step(cache_idx, disk_idx) => StartRead(s, s', op, cache_idx, disk_idx)
        case FinishRead_Step(cache_idx, disk_idx) => FinishRead(s, s', op, cache_idx, disk_idx)
        case MakeDirty_Step(cache_idx) => MakeDirty(s, s', op, cache_idx)
-       case StartWriteback_Step(cache_idx, disk_idx) => StartWriteback(s, s', op, cache_idx, disk_idx)
-       case FinishWriteback_Step(cache_idx, disk_idx) => FinishWriteback(s, s', op, cache_idx, disk_idx) 
+       case StartWriteback_Step(cache_idx, disk_idx) => StartWriteback(
+          s, s', op, cache_idx, disk_idx)
+       case FinishWriteback_Step(cache_idx, disk_idx) => FinishWriteback(
+          s, s', op, cache_idx, disk_idx) 
        case Evict_Step(cache_idx) => Evict(s, s', op, cache_idx)
        case ProcessRead_Step(disk_idx) => ProcessRead(s, s', op, disk_idx)
        case ProcessWrite_Step(disk_idx) => ProcessWrite(s, s', op, disk_idx)
        case Crash_Step => Crash(s, s', op)
        case NewTicket_Step => NewTicket(s, s', op)
        case ConsumeStub_Step => ConsumeStub(s, s', op)
+       case NewSyncTicket_Step => NewSyncTicket(s, s', op)
+       case ConsumeSyncStub_Step => ConsumeSyncStub(s, s', op)
+       case ObserveCleanForSync_Step(rid, cache_idx) =>
+          ObserveCleanForSync(s, s', op, rid, cache_idx)
        case ApplyRead_Step(rid, cache_idx) => ApplyRead(s, s', op, rid, cache_idx)
        case ApplyWrite_Step(rid, cache_idx) => ApplyWrite(s, s', op, rid, cache_idx)
     }

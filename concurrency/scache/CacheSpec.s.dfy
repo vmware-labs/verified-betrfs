@@ -6,9 +6,9 @@ module CacheIfc refines InputOutputIfc {
   import opened NativeTypes
 
   datatype Input =
-    | WriteInput(key: int, data: seq<byte>)
-    | ReadInput(key: int)
-    | SyncInput
+    | WriteInput(key: nat, data: seq<byte>)
+    | ReadInput(key: nat)
+    | SyncInput(keys: set<nat>)
 
   datatype Output =
     | WriteOutput
@@ -29,7 +29,7 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
       )
 
   datatype Variables = Variables(
-    store: map<int, VersionedObject>,
+    store: map<nat, VersionedObject>,
 
     reqs: map<RequestId, CacheIfc.Input>,
     resps: map<RequestId, CacheIfc.Output>,
@@ -37,7 +37,7 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     // RequestId -> key -> version
     // means that for the RequestId to complete, the 'persistence'
     // at key 'key' must be >= version
-    syncs: map<RequestId, map<int, int>>
+    syncs: map<RequestId, map<nat, int>>
   )
 
   // Put a new request (either a 'read' or a 'write') into the requests
@@ -93,10 +93,12 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
   // this sync request, we need to ensure that all those versions get written.
   predicate PushSync(s: Variables, s': Variables, op: ifc.Op, rid: RequestId)
   {
-    && op == ifc.Start(rid, CacheIfc.SyncInput)
-    && rid !in s.syncs
-    && s' == s.(syncs := s.syncs[rid :=
-        (map key | key in s.store :: |s.store[key].versions| - 1)])
+    && op.Start?
+    && op.input.SyncInput?
+    && op.rid !in s.syncs
+    && (forall k | k in op.input.keys :: k in s.store)
+    && s' == s.(syncs := s.syncs[op.rid :=
+        (map key | key in op.input.keys :: |s.store[key].versions| - 1)])
   }
 
   // Finish a 'sync' request. To do this, requires checking that each entry is persisted
