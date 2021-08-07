@@ -646,6 +646,7 @@ refines SeqMarshalling(elementMarshalling) {
       } else {
         NLarith.MulPreservesLe(idx as nat + 1, i, UniformSize(cfg) as nat);
       }
+      assert getData(cfg, slice.I(data), i) == getData(cfg, slice.I(old_data), i);
     }
 
     Seq.lemma_seq_slice_slice(data,
