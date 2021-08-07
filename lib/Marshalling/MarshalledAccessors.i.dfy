@@ -296,6 +296,14 @@ abstract module SeqMarshalling(Elt: Marshalling) refines Marshalling {
        (Elt.parsable(EltCfg(cfg), getData(cfg, newdata, i)) && getElt(cfg, newdata, i) == getElt(cfg, data, i)))
   }
 
+  lemma preservesEntryTransitive(cfg: Config, data: mseq<byte>, i: nat, middle: mseq<byte>, newdata: mseq<byte>)
+    requires validConfig(cfg)
+    requires preservesEntry(cfg, data, i, middle)
+    requires preservesEntry(cfg, middle, i, newdata)
+    ensures preservesEntry(cfg, data, i, newdata)
+  {
+  }
+  
   predicate sets(cfg: Config, data: mseq<byte>, idx: nat, value: Element, newdata: mseq<byte>)
     requires validConfig(cfg)
     requires Elt.marshallable(EltCfg(cfg), value)
@@ -1074,6 +1082,42 @@ refines SeqMarshalling(elementMarshalling) {
     }
   }
 
+  predicate wellFormed(cfg: Config, data: mseq<byte>) {
+    lengthable(cfg, data)
+  }
+
+  predicate appendable(cfg: Config, data: mseq<byte>, value: Element) {
+    && length(cfg, data) < maxLength(cfg) as nat
+    && Elt.size(EltCfg(cfg), value) == UniformSize(cfg)
+    && LengthInt.fitsInInteger(length(cfg, data) as uint64 + 1)
+  }
+
+  method WellFormed(cfg: Config, data: mseq<byte>) returns (w: bool) {
+    w := Lengthable(cfg, data);
+  }
+
+  method Appendable(cfg: Config, data: mseq<byte>, value: Element) returns (r: bool) {
+    var len := Length(cfg, data);
+    var sz := Elt.Size(EltCfg(cfg), value);
+    r := len < maxLength(cfg) && sz == UniformSize(cfg) && LengthInt.fitsInInteger(len + 1);
+  }
+
+  method Append(cfg: Config, slice: Slice, linear inout data: mseq<byte>, value: Element) {
+    var len := LLength(cfg, slice, data);
+    Set(cfg, slice, inout data, len, value);
+    ghost var middle := slice.I(data);
+    Resize(cfg, slice, inout data, len + 1);
+
+    forall i | i != len
+      ensures preservesEntry(cfg, slice.I(old_data), i as nat, slice.I(data))
+    {
+      var iold_data := slice.I(old_data);
+      var idata := slice.I(data);
+      preservesEntryTransitive(cfg, iold_data, i as nat, middle, idata);
+    }
+    assert preservesEntry(cfg, middle, len as nat, slice.I(data));
+  }
+
   predicate marshallable(cfg: Config, value: UnmarshalledType) {
     && (forall i | 0 <= i < |value| :: Elt.marshallable(EltCfg(cfg), value[i]))
     && (forall i | 0 <= i < |value| :: Elt.size(EltCfg(cfg), value[i]) == UniformSize(cfg))
@@ -1555,6 +1599,7 @@ refines SeqMarshalling(elt) {
       ub := BoundaryInt.toUint64(iub);
     }
     var start := ub - sz;
+    assert BoundaryInt.fitsInInteger(start);
     var dummy := Elt.Marshall(EltCfg(cfg), value, inout data, slice.start + start);
     var istart := BoundaryInt.fromUint64(start);
     BoundarySeqMarshalling.Append(BSMCfg(cfg), slice, inout data, istart);
