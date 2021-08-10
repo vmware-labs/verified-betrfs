@@ -42,7 +42,7 @@ module PathBasedFS {
     && fs.hidden.data_map == empty_data
   }
 
-  /// Inv conditions
+  /// helper functions and predicates
 
   function GetMeta(fs: FileSys, path: Path) : MetaData
   requires WF(fs)
@@ -68,12 +68,18 @@ module PathBasedFS {
     && (fs.content.meta_map[path].RedirectMeta? ==> AliasPaths(fs, path) == iset{path})
   }
 
-  // predicate DirImpliesNoAlias(fs: FileSys, path: Path)
-  // requires WF(fs)
-  // requires PathExists(fs, path)
-  // {
-  //   && (fs.meta_map[id].ftype.Directory? ==> NoAlias(fs, path))
-  // }
+  predicate HasReference(fs: FileSys, hidden: Path)
+  requires WF(fs)
+  {
+    && (exists path :: fs.content.meta_map[path] == RedirectMeta(hidden))
+  }
+
+  predicate ValidHiddenEntry(fs: FileSys, path: Path)
+  requires WF(fs)
+  requires fs.content.meta_map[path].RedirectMeta?
+  {
+    && fs.hidden.meta_map[fs.content.meta_map[path].source].MetaData?
+  }
 
   predicate ParentDirIsDir(fs: FileSys, path: Path)
   requires WF(fs)
@@ -201,7 +207,7 @@ module PathBasedFS {
     && fs'.content.data_map == fs.content.data_map[path := EmptyData()]
     && (m.MetaData? ==> fs'.hidden == fs.hidden)
     && (m.RedirectMeta? ==>
-      // need to clean up hidden file if this 
+      // need to clean up hidden file if no more  
       && fs'.hidden.meta_map == fs.hidden.meta_map[m.source := HiddenMetaDataDelete(fs, path, ctime)]
       && fs'.hidden.data_map == fs.hidden.data_map[m.source := HiddenDataDelete(fs, path)])
   }
@@ -209,10 +215,12 @@ module PathBasedFS {
   function MetaMapRename(v: View, src: Path, dst: Path, ctime: Time): (meta_map: MetaView)
   requires ViewComplete(v)
   {
+    // NOTE(Jialin): ordering matters here, we need to guarantee dst is defined before overwriting
+    // all src entries. it is possible for dst entries to cover src entries
     imap path ::
-      if path == src || BeneathDir(src, path) then EmptyMeta // clear all valid source entries
-      else if path == dst then UpdatePathCtime(v, src, ctime) // update src ctime if not hidden
+      if path == dst then UpdatePathCtime(v, src, ctime) // update src ctime if not hidden
       else if BeneathDir(dst, path) then v.meta_map[src + path[|dst|..]] // redirect dst to src prefix
+      else if path == src || BeneathDir(src, path) then EmptyMeta // clear all valid source entries
       else if path == GetParentDir(src) || path == GetParentDir(dst) then UpdatePathTime(v, path, ctime) // update parentdir
       else v.meta_map[path]
   }
@@ -221,8 +229,8 @@ module PathBasedFS {
   requires ViewComplete(v)
   {
     imap path ::
-      if path == src || BeneathDir(src, path) then EmptyData()
-      else if path == dst || BeneathDir(dst, path) then v.data_map[src + path[|dst|..]]
+      if path == dst || BeneathDir(dst, path) then v.data_map[src + path[|dst|..]]
+      else if path == src || BeneathDir(src, path) then EmptyData()
       else v.data_map[path]
   }
 
@@ -235,6 +243,7 @@ module PathBasedFS {
     && PathExists(fs, src)
     && !BeneathDir(src, dst)
     && (PathExists(fs, dst) || ValidNewPath(fs, dst))
+    && (PathExists(fs, dst) ==> fs.content.meta_map[dst] != fs.content.meta_map[src])
     // if dst exists and is a directory 
     // dst needs to be empty and src has to be a directory too
     && var src_m := fs.content.meta_map[src];
@@ -246,7 +255,7 @@ module PathBasedFS {
     && fs'.content.meta_map == MetaMapRename(fs.content, src, dst, ctime)
     && fs'.content.data_map == DataMapRename(fs.content, src, dst, ctime)
     && (!dst_m.RedirectMeta? ==> fs'.hidden == fs.hidden)
-    && (dst_m.RedirectMeta? ==> 
+    && (dst_m.RedirectMeta? ==>
       && fs'.hidden.meta_map == fs.hidden.meta_map[dst_m.source := HiddenMetaDataDelete(fs, dst, ctime)]
       && fs'.hidden.data_map == fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)])
   }
