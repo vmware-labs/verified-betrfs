@@ -370,6 +370,28 @@ module ShardedHashTable refines ShardedStateMachine {
     ensures s.table[e1].value.Empty?
     ensures s.table[e2].value.Empty?
     ensures e1 != e2
+  {
+    var table := s.table;
+
+    calc {
+      TableQuantity(table);
+      == 
+      Capacity() - s.insert_capacity.value;
+      <=
+      Capacity();
+      <=
+      FixedSize() - 2;
+    }
+
+    e1 := InvImpliesEmptySlot(s);
+
+    if forall e2: Index :: e2 != e1 ==> table[e2].value.Full? {
+      SingleEmptyTableQuantity(table, e1);
+      assert false;
+    }
+    assert exists e2: Index :: e2 != e1 && table[e2].value.Empty?;
+    e2 :| e2 != e1 && table[e2].value.Empty?;
+  }
 
   lemma CompleteFullRangeImpossible(v: Variables, i: Index)
     requires Valid(v)

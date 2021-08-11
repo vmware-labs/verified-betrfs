@@ -1,14 +1,15 @@
 include "../../../lib/Base/sequences.i.dfy"
 include "../../../lib/Base/Option.s.dfy"
+include "../common/AppSpec.s.dfy"
 include "CircularRange.i.dfy"
 
 module CircularTable {
   import opened NativeTypes
   import opened Options
   import opened Sequences
-  import opened KeyValueType
   import opened Limits
   import opened CircularRange
+  import opened KeyValueType
 
   function method hash(key: Key) : Index
 
@@ -391,7 +392,7 @@ module CircularTable {
 
   lemma FullTableQuantity(table: Table)
     requires forall i: int :: 
-      0 <= i < |table| ==> (table[i].Some? && table[i].value.Full?)
+      0 <= i < |table| ==> SlotFull(table[i])
     ensures TableQuantity(table) == |table|
   {
     reveal TableQuantity();
@@ -399,7 +400,7 @@ module CircularTable {
 
   lemma EmptyTableQuantity(table: Table)
     requires forall i : int ::
-      0 <= i < |table| ==> table[i] == Some(Empty)
+      0 <= i < |table| ==> SlotEmpty(table[i])
     ensures TableQuantity(table) == 0
   {
     reveal TableQuantity();
@@ -417,6 +418,18 @@ module CircularTable {
     } else {
       TableQuantityReplace1(t[..end], t'[..end], i);
     }
+  }
+
+  lemma SingleEmptyTableQuantity(table: FixedTable, j: Index)
+    requires SlotEmpty(table[j])
+    requires forall i: Index :: (i != j) ==> SlotFull(table[i])
+    ensures TableQuantity(table) == |table| - 1
+  {
+    var len := |table|;
+    var value := if j != 0 then table[0] else table[1];
+    var table' := table[j := value];
+    TableQuantityReplace1(table, table', j);
+    FullTableQuantity(table');
   }
 
   lemma TableQuantityConcat(t1: Table, t2: Table)

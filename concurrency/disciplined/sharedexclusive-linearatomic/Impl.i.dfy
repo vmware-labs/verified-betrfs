@@ -43,10 +43,14 @@ module Impl refines VerificationObligation {
       :: row_mutexes[i].inv == ((row) => RowInv(i, row)))
   }
 
-  linear datatype Variables = Variables(
-    row_mutexes: RowMutexTable,
+  linear datatype Big = Big(
     glinear handles: glseq<MutexHandle<Row>>,
     glinear cap_handle: glseq<MutexHandle<AllocatorBin>>,
+    shared varible: Variables
+  }
+
+  linear datatype Variables = Variables(
+    row_mutexes: RowMutexTable,
     bin_id: uint32,
     allocator: CAP.AllocatorMutexTable)
   {
