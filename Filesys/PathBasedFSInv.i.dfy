@@ -8,6 +8,18 @@ module PathBasedFSInv {
   import opened FSTypes
   import opened PathSpec
 
+  predicate AliasConsistentWithID(fs: FileSys, path: Path)
+  requires WF(fs)
+  requires PathExists(fs, path)
+  requires forall p | PathExists(fs, p) :: GetMeta(fs, p).MetaData?
+  {
+    var id := GetMeta(fs, path).id;
+    var m := fs.content.meta_map[path];
+    && (forall alias | PathExists(fs, alias) && GetMeta(fs, alias).id == id ::
+      && (m.MetaData? ==> path == alias)
+      && (m.RedirectMeta? ==> m == fs.content.meta_map[alias]))
+  }
+
   // redirect meta should have no corresponding data entry ==> emptydata  
   predicate Inv(fs: FileSys)
   {
@@ -22,6 +34,13 @@ module PathBasedFSInv {
     && (forall path | fs.content.meta_map[path].RedirectMeta? :: ValidHiddenEntry(fs, path))
     // Content view and hidden view consistency: no dangly hidden view entries
     && (forall hidden | fs.hidden.meta_map[hidden].MetaData? :: HasReference(fs, hidden))
+    // Refinement inv: all valid paths have valid IDs
+    && (forall path | PathExists(fs, path) :: GetMeta(fs, path).id.ID?)
+    // Refinement inv: alias path and id relationship
+    && (forall path | PathExists(fs, path) :: AliasConsistentWithID(fs, path))
+    //   && var m := GetMeta(fs, path);
+    //   && (fs.content.meta_map[path].MetaData? ==> NoAliasPathWithID(fs, path, m.id)) 
+    //   && (fs.content.meta_map[path].RedirectMeta? ==>  ValidAliasPathWithID(fs, path, m.id)))
   }
 
   lemma InitImpliesInv(fs: FileSys)
@@ -61,10 +80,15 @@ module PathBasedFSInv {
   requires Delete(fs, fs', path, ctime)
   ensures Inv(fs')
   {
-    forall p | PathExists(fs', p) && p != RootDir
-    ensures ParentDirIsDir(fs', p)
+    forall p | PathExists(fs', p)
+    ensures GetMeta(fs', p).id.ID?
+    ensures p != RootDir ==> ParentDirIsDir(fs', p)
+    ensures AliasConsistentWithID(fs', p)
     {
-      assert PathExists(fs, p); // observe
+      assert AliasConsistentWithID(fs, p); // observe
+      if p != RootDir {
+        assert PathExists(fs, p); // observe
+      }
     }
 
     forall hidden | fs'.hidden.meta_map[hidden].MetaData?
@@ -90,36 +114,11 @@ module PathBasedFSInv {
     }
   }
 
-  lemma RenamePreservesInv(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
+  lemma RenamePreservesReferences(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
   requires Inv(fs)
   requires Rename(fs, fs', src, dst, ctime)
-  ensures Inv(fs')
+  ensures forall hidden | fs'.hidden.meta_map[hidden].MetaData? :: HasReference(fs', hidden)
   {
-    forall p | PathExists(fs', p) && p != RootDir
-    ensures ParentDirIsDir(fs', p)
-    {
-      if p == dst {
-        assert ParentDirIsDir(fs', dst);
-      } else if BeneathDir(dst, p) {
-        var parent_dir := GetParentDir(p);
-        var srcpath := src + p[|dst|..];
-        assert ParentDirIsDir(fs, srcpath); // observe
-        assert src + parent_dir[|dst|..] == GetParentDir(srcpath); // observe
-        assert ParentDirIsDir(fs', p);
-      } else {
-        assert PathExists(fs, p); // observe
-      }
-    }
-
-    forall p | fs'.content.meta_map[p].RedirectMeta?
-    ensures ValidHiddenEntry(fs', p)
-    {
-      if fs.content.meta_map[dst].RedirectMeta? && BeneathDir(dst, p) {
-        var srcpath := src + p[|dst|..];
-        assert fs'.content.meta_map[p] == fs.content.meta_map[srcpath];
-      }
-    }
-
     forall hidden | fs'.hidden.meta_map[hidden].MetaData?
     ensures HasReference(fs', hidden)
     {
@@ -148,6 +147,55 @@ module PathBasedFSInv {
         assert HasReference(fs', hidden);
       }
     }
+  }
+
+  lemma lime(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
+  requires Inv(fs)
+  requires Rename(fs, fs', src, dst, ctime)
+  ensures 
+  // ensures forall p | PathExists(fs', p) ::
+    // && (fs'.content.meta_map[p].MetaData? ==> NoAliasPathWithID(fs', p, GetMeta(fs', p).id))
+    // && (fs'.content.meta_map[p].RedirectMeta? ==> ValidAliasPathWithID(fs', p, GetMeta(fs', p).id))
+  {
+    assume false;
+    // TODO need to prove
+  }
+
+  lemma RenamePreservesInv(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
+  requires Inv(fs)
+  requires Rename(fs, fs', src, dst, ctime)
+  ensures Inv(fs')
+  {
+    forall p | fs'.content.meta_map[p].RedirectMeta?
+    ensures ValidHiddenEntry(fs', p)
+    {
+      if fs.content.meta_map[dst].RedirectMeta? && BeneathDir(dst, p) {
+        var srcpath := src + p[|dst|..];
+        assert fs'.content.meta_map[p] == fs.content.meta_map[srcpath];
+      }
+    }
+
+    forall p | PathExists(fs', p)
+    ensures GetMeta(fs', p).id.ID?
+    ensures p != RootDir ==> ParentDirIsDir(fs', p)
+    {
+      if p != RootDir {
+        if p == dst {
+          assert ParentDirIsDir(fs', dst);
+        } else if BeneathDir(dst, p) {
+          var parent_dir := GetParentDir(p);
+          var srcpath := src + p[|dst|..];
+          assert ParentDirIsDir(fs, srcpath); // observe
+          assert src + parent_dir[|dst|..] == GetParentDir(srcpath); // observe
+          assert ParentDirIsDir(fs', p);
+        } else {
+          assert PathExists(fs, p); // observe
+        }
+      }
+    }
+
+    RenamePreservesReferences(fs, fs', src, dst, ctime);
+    lime(fs, fs', src, dst, ctime);
 
     assert Inv(fs');
   }
@@ -157,10 +205,13 @@ module PathBasedFSInv {
   requires Link(fs, fs', source, dest, ctime, hiddenName)
   ensures Inv(fs')
   {
-    forall p | PathExists(fs', p) && p != RootDir
-    ensures ParentDirIsDir(fs', p)
+    forall p | PathExists(fs', p)
+    ensures GetMeta(fs', p).id.ID?
+    ensures p != RootDir ==> ParentDirIsDir(fs', p)
+    ensures AliasConsistentWithID(fs', p)
     {
       if p != dest {
+        assert AliasConsistentWithID(fs, p); // observe
         assert PathExists(fs, p); // observe
       }
     }
@@ -185,10 +236,13 @@ module PathBasedFSInv {
   requires step.CreateStep? || step.ChangeAttrStep? || step.TruncateStep? || step.WriteStep? || step.UpdateTimeStep?
   ensures Inv(fs')
   {
-    forall p | PathExists(fs', p) && p != RootDir 
-    ensures ParentDirIsDir(fs', p)
+    forall p | PathExists(fs', p)
+    ensures GetMeta(fs', p).id.ID?
+    ensures p != RootDir ==> ParentDirIsDir(fs', p)
+    ensures AliasConsistentWithID(fs', p)
     {
       if p != step.path {
+        assert AliasConsistentWithID(fs, p); // observe
         assert PathExists(fs, p); // observe
       }
     }

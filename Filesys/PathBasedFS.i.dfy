@@ -51,6 +51,13 @@ module PathBasedFS {
     if m.RedirectMeta? then fs.hidden.meta_map[m.source] else m
   }
 
+  function GetData(fs: FileSys, path: Path) : Data
+  requires WF(fs)
+  {
+    var m := fs.content.meta_map[path];
+    if m.RedirectMeta? then fs.hidden.data_map[m.source] else fs.content.data_map[path]
+  }
+
   function AliasPaths(fs: FileSys, path: Path) : (aliases: iset<Path>)
   requires WF(fs)
   requires fs.content.meta_map[path].RedirectMeta?
@@ -67,6 +74,20 @@ module PathBasedFS {
   {
     && (fs.content.meta_map[path].RedirectMeta? ==> AliasPaths(fs, path) == iset{path})
   }
+
+  // predicate NoAliasPathWithID(fs: FileSys, path: Path, id: ID)
+  // requires WF(fs)
+  // {
+  //   && (forall alias | PathExists(fs, alias) && GetMeta(fs, alias).id == id 
+  //     :: path == alias)
+  // }
+
+  // predicate ValidAliasPathWithID(fs: FileSys, path: Path, id: ID)
+  // requires WF(fs)
+  // {
+  //   && (forall alias | PathExists(fs, alias) && GetMeta(fs, alias).id == id
+  //     :: fs.content.meta_map[path] == fs.content.meta_map[alias])
+  // }
 
   predicate HasReference(fs: FileSys, hidden: Path)
   requires WF(fs)

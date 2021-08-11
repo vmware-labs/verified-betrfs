@@ -42,7 +42,6 @@ module FileSystem {
   predicate PathExists(fs: FileSys, path: Path)
   requires WF(fs)
   {
-    && fs.path_map[path].ID?
     && fs.meta_map[fs.path_map[path]].MetaData?
   }
 
