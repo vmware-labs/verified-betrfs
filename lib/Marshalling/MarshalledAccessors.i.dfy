@@ -1777,6 +1777,7 @@ refines SeqMarshalling(elt) {
     NLarith.DistributeLeft(|t|, 1, BoundaryInt.Size() as nat);
     elementsIdentity(cfg, middle, slice.I(data));
 
+    assert ElementDataEnd(cfg, data, len) <= totalSize(cfg) as nat;
     assert gettable(cfg, slice.I(data), len as nat);
     assert eltParsable(cfg, slice.I(data), len as nat);
     assert getElt(cfg, slice.I(data), len as nat) == value;
