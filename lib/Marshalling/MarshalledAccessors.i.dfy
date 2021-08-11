@@ -1789,7 +1789,7 @@ refines SeqMarshalling(elt) {
     }
   }
 
-  function {:opaque} eltsSize(ecfg: Elt.Config, elements: UnmarshalledType) : nat
+  function {:opaque} eltsSize(ecfg: Elt.Config, elements: seq<Element>) : nat
     requires Elt.validConfig(ecfg)
     requires forall i | 0 <= i < |elements| :: Elt.marshallable(ecfg, elements[i])
     ensures elements[..|elements|] == elements
@@ -1804,34 +1804,25 @@ refines SeqMarshalling(elt) {
       eltsSize(ecfg, DropLast(elements)) + Elt.size(ecfg, Last(elements)) as nat
   }
 
-  lemma eltsSizeAdditive(ecfg: Elt.Config, elts1: UnmarshalledType, elts2: UnmarshalledType)
+  lemma eltsSizeAdditive(ecfg: Elt.Config, elts1: seq<Element>, elts2: seq<Element>)
     requires Elt.validConfig(ecfg)
     requires forall i | 0 <= i < |elts1| :: Elt.marshallable(ecfg, elts1[i])
     requires forall i | 0 <= i < |elts2| :: Elt.marshallable(ecfg, elts2[i])
     ensures eltsSize(ecfg, elts1 + elts2) == eltsSize(ecfg, elts1) + eltsSize(ecfg, elts2)
+    decreases |elts2|
   {
+    if |elts2| == 0 {
+      reveal_eltsSize();
+    } else if |elts2| == 1 {
+      reveal_eltsSize();
+    } else {
+      assert elts2 == DropLast(elts2) + [ Last(elts2) ];
+      eltsSizeAdditive(ecfg, DropLast(elts2), [ Last(elts2) ]);
+      eltsSizeAdditive(ecfg, elts1, DropLast(elts2));
+      eltsSizeAdditive(ecfg, elts1 + DropLast(elts2), [ Last(elts2) ]);
+      assert elts1 + (DropLast(elts2) + [ Last(elts2) ]) == (elts1 + DropLast(elts2)) + [ Last(elts2) ];
+    }
   }
-  
-  // method EltsSize(ecfg: Elt.Config, elements: UnmarshalledType) returns (sum: uint64)
-  //   requires Elt.validConfig(ecfg)
-  //   requires forall i | 0 <= i < |elements| :: Elt.marshallable(ecfg, elements[i])
-  //   requires eltsSize(ecfg, elements) < Uint64UpperBound()
-  //   ensures sum as nat == eltsSize(ecfg, elements)
-  // {
-  //   assert elements[..|elements|] == elements;
-  //   sum := 0;
-  //   var i: uint64 := 0;
-  //   while i < |elements| as uint64
-  //     invariant i as nat <= |elements|
-  //     invariant sum as nat == eltsSize(ecfg, elements[..i])
-  //   {
-  //     assert elements[..i+1] == elements[..i] + [ elements[i] ];
-  //     var esz := Elt.Size(ecfg, elements[i]);
-  //     sum := sum + esz;
-  //     i := i + 1;
-  //   }
-  //   assert elements == elements[..i];
-  // }
 
   predicate marshallable(cfg: Config, value: UnmarshalledType) {
     && (forall i | 0 <= i < |value| :: Elt.marshallable(EltCfg(cfg), value[i]))
