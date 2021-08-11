@@ -1735,7 +1735,10 @@ refines SeqMarshalling(elt) {
     }
   }
 
-  method Append(cfg: Config, slice: Slice, linear inout data: mseq<byte>, value: Element) {
+  method Append(cfg: Config, slice: Slice, linear inout data: mseq<byte>, value: Element)
+    ensures freeSpace(cfg, slice.I(data)) ==
+      freeSpace(cfg, slice.I(old_data)) - BoundaryInt.Size() as nat - Elt.size(EltCfg(cfg), value) as nat
+  {
     appendableImpliesBSMappendable(cfg, slice.I(data), value);
     var len := LLength(cfg, slice, data);
     var sz := Elt.Size(EltCfg(cfg), value);
@@ -1784,5 +1787,104 @@ refines SeqMarshalling(elt) {
       data[slice.start as nat + start as nat..slice.start + start + sz];
       middle[start..dummy-slice.start];
     }
+  }
+
+  function {:opaque} eltsSize(ecfg: Elt.Config, elements: UnmarshalledType) : nat
+    requires Elt.validConfig(ecfg)
+    requires forall i | 0 <= i < |elements| :: Elt.marshallable(ecfg, elements[i])
+    ensures elements[..|elements|] == elements
+    ensures forall i | 0 <= i <= |elements| :: eltsSize(ecfg, elements[..i]) <= eltsSize(ecfg, elements)
+    ensures |elements| == 0 ==> eltsSize(ecfg, elements) == 0
+    ensures |elements| == 1 ==> eltsSize(ecfg, elements) == Elt.size(ecfg, elements[0]) as nat
+  {
+    if |elements| == 0 then
+      0
+    else
+      assert forall i | 0 <= i < |elements| :: elements[..i] == DropLast(elements)[..i];
+      eltsSize(ecfg, DropLast(elements)) + Elt.size(ecfg, Last(elements)) as nat
+  }
+
+  lemma eltsSizeAdditive(ecfg: Elt.Config, elts1: UnmarshalledType, elts2: UnmarshalledType)
+    requires Elt.validConfig(ecfg)
+    requires forall i | 0 <= i < |elts1| :: Elt.marshallable(ecfg, elts1[i])
+    requires forall i | 0 <= i < |elts2| :: Elt.marshallable(ecfg, elts2[i])
+    ensures eltsSize(ecfg, elts1 + elts2) == eltsSize(ecfg, elts1) + eltsSize(ecfg, elts2)
+  {
+  }
+  
+  // method EltsSize(ecfg: Elt.Config, elements: UnmarshalledType) returns (sum: uint64)
+  //   requires Elt.validConfig(ecfg)
+  //   requires forall i | 0 <= i < |elements| :: Elt.marshallable(ecfg, elements[i])
+  //   requires eltsSize(ecfg, elements) < Uint64UpperBound()
+  //   ensures sum as nat == eltsSize(ecfg, elements)
+  // {
+  //   assert elements[..|elements|] == elements;
+  //   sum := 0;
+  //   var i: uint64 := 0;
+  //   while i < |elements| as uint64
+  //     invariant i as nat <= |elements|
+  //     invariant sum as nat == eltsSize(ecfg, elements[..i])
+  //   {
+  //     assert elements[..i+1] == elements[..i] + [ elements[i] ];
+  //     var esz := Elt.Size(ecfg, elements[i]);
+  //     sum := sum + esz;
+  //     i := i + 1;
+  //   }
+  //   assert elements == elements[..i];
+  // }
+
+  predicate marshallable(cfg: Config, value: UnmarshalledType) {
+    && (forall i | 0 <= i < |value| :: Elt.marshallable(EltCfg(cfg), value[i]))
+    && sizeOfTable(cfg, |value|) as nat + eltsSize(EltCfg(cfg), value) <= totalSize(cfg) as nat
+  }
+
+  function size(cfg: Config, value: UnmarshalledType) : uint64 {
+    totalSize(cfg)
+  }
+
+  method Size(cfg: Config, value: UnmarshalledType) returns (sz: uint64) {
+    sz := totalSize(cfg);
+  }
+
+  method Marshall(cfg: Config, value: UnmarshalledType, linear inout data: mseq<byte>, start: uint64)
+    returns (end: uint64)
+  {
+    end := start + totalSize(cfg);
+    var slice := Slice(start, end);
+    var dummy := BoundarySeqMarshalling.Marshall(BSMCfg(cfg), [], inout data, start);
+
+    var i := 0;
+    while i < |value| as uint64
+      invariant 0 <= i as nat <= |value|
+      invariant |data| == |old_data|
+      invariant forall j | 0 <= j < start :: data[j] == old_data[j]
+      invariant forall j | end <= j < |data| as uint64 :: data[j] == old_data[j]
+      invariant parsable(cfg, slice.I(data))
+      invariant parse(cfg, slice.I(data)) == value[..i]
+      invariant wellFormed(cfg, slice.I(data))
+      invariant (|value| - i as nat) * BoundaryInt.Size() as nat + eltsSize(EltCfg(cfg), value[i..]) as nat <= freeSpace(cfg, slice.I(data))
+    {
+      ghost var prevdata := data;
+      eltsSizeAdditive(EltCfg(cfg), [value[i]], value[i+1..]);
+      assert value[i..] == [value[i]] + value[i+1..];
+      NLarith.MulPreservesLe(1, (|value| - i as nat), BoundaryInt.Size() as nat);
+      assert 1 * BoundaryInt.Size() as nat == BoundaryInt.Size() as nat;
+
+      Append(cfg, slice, inout data, value[i]);
+      i := i + 1;
+
+      assert value[..i] == value[..i-1] + [ value[i-1] ];
+      NLarith.DistributeLeft(|value| - i as nat, 1, BoundaryInt.Size() as nat);
+      assert forall j | 0 <= j < i - 1 :: preservesEntry(cfg, slice.I(prevdata), j as nat, slice.I(data));
+      forall j | 0 <= j < i
+        ensures parse(cfg, slice.I(data))[j] == value[..i][j]
+      {
+        if j < i - 1 {
+          assert value[..i][j] == value[..i-1][j];
+        }
+      }
+    }
+
+    assert value[..i] == value;
   }
 }
