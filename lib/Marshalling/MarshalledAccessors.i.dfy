@@ -1439,7 +1439,7 @@ refines SeqMarshalling(elt) {
     requires 0 < i ==> BoundaryElementGettable(cfg, data, i-1)
   {
     if i == 0 then
-      |data|
+      totalSize(cfg) as nat
     else
       BoundaryInt.toInt(BoundarySeqMarshalling.getElt(BSMCfg(cfg), data, i - 1))
   }
@@ -1467,7 +1467,7 @@ refines SeqMarshalling(elt) {
         return None;
       }
       var start := BoundaryInt.toUint64(istart);
-      var end := |slice|;
+      var end := totalSize(cfg);
       if 0 < idx {
         var iend := BoundarySeqMarshalling.GetElt(BSMCfg(cfg), slice.I(data), idx - 1);
         if !BoundaryInt.fitsInUint64(iend) {
@@ -1475,7 +1475,7 @@ refines SeqMarshalling(elt) {
         }
         end := BoundaryInt.toUint64(iend);
       }
-      if start <= end <= totalSize(cfg) {
+      if start <= end <= totalSize(cfg) <= |data| as uint64 {
         return Some(slice.sub(start, end));
       } else {
         return None;
@@ -1489,7 +1489,7 @@ refines SeqMarshalling(elt) {
     var len := Length(cfg, slice.I(data));
     var istart := BoundarySeqMarshalling.GetElt(BSMCfg(cfg), slice.I(data), idx);
     var start := BoundaryInt.toUint64(istart);
-    var end := |slice|;
+    var end := totalSize(cfg);
     if 0 < idx {
       var iend := BoundarySeqMarshalling.GetElt(BSMCfg(cfg), slice.I(data), idx - 1);
       end := BoundaryInt.toUint64(iend);
@@ -1748,9 +1748,10 @@ refines SeqMarshalling(elt) {
     }
     var start := ub - sz;
     var dummy := Elt.Marshall(EltCfg(cfg), value, inout data, slice.start + start);
-
+    assert Elt.parsable(EltCfg(cfg), data[slice.start + start..dummy]);
 
     ghost var middle := slice.I(data);
+    Seq.lemma_seq_slice_slice(data, slice.start as nat, slice.end as nat, start as nat, dummy as nat - slice.start as nat);
     Seq.lemma_seq_slice_slice(data, slice.start as nat, slice.end as nat, 0, sizeOfTable(cfg, len as nat));
     Seq.lemma_seq_slice_slice(old_data, slice.start as nat, slice.end as nat, 0, sizeOfTable(cfg, len as nat));
     tableIdentity(cfg, slice.I(old_data), middle);
@@ -1777,9 +1778,11 @@ refines SeqMarshalling(elt) {
     NLarith.DistributeLeft(|t|, 1, BoundaryInt.Size() as nat);
     elementsIdentity(cfg, middle, slice.I(data));
 
-    assert ElementDataEnd(cfg, data, len) <= totalSize(cfg) as nat;
-    assert gettable(cfg, slice.I(data), len as nat);
-    assert eltParsable(cfg, slice.I(data), len as nat);
-    assert getElt(cfg, slice.I(data), len as nat) == value;
+    Seq.lemma_seq_slice_slice(data, slice.start as nat, slice.end as nat, start as nat, start as nat + sz as nat);
+    calc {
+      data[slice.start..slice.end][start..start + sz];
+      data[slice.start as nat + start as nat..slice.start + start + sz];
+      middle[start..dummy-slice.start];
+    }
   }
 }
