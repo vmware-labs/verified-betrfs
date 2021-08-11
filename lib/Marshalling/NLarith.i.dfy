@@ -26,5 +26,10 @@ module NLarith {
   {
     c := a * b;
   }
+
+  lemma MulCommutes(a: int, b: int)
+    ensures a * b == b * a
+  {
+  }
 }
-  
+

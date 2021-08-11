@@ -221,10 +221,17 @@ abstract module SeqMarshalling(Elt: Marshalling) refines Marshalling {
     get(cfg, all(data), data, idx).I(data)
   }
 
+  predicate eltParsable(cfg: Config, data: mseq<byte>, i: nat)
+    requires validConfig(cfg)
+    requires gettable(cfg, data, i)
+  {
+    Elt.parsable(EltCfg(cfg), getData(cfg, data, i))
+  }
+
   function getElt(cfg: Config, data: mseq<byte>, idx: nat) : (elt: Element)
     requires validConfig(cfg)
     requires gettable(cfg, data, idx)
-    requires Elt.parsable(EltCfg(cfg), getData(cfg, data, idx))
+    requires eltParsable(cfg, data, idx)
   {
     Elt.parse(EltCfg(cfg), getData(cfg, data, idx))
   }
@@ -256,7 +263,7 @@ abstract module SeqMarshalling(Elt: Marshalling) refines Marshalling {
 
   method TryGetElt(cfg: Config, data: mseq<byte>, idx: uint64) returns (oelt: Option<Element>)
     requires validConfig(cfg)
-    ensures oelt.Some? <==> gettable(cfg, data, idx as nat) && Elt.parsable(EltCfg(cfg), getData(cfg, data, idx as nat))
+    ensures oelt.Some? <==> gettable(cfg, data, idx as nat) && eltParsable(cfg, data, idx as nat)
     ensures oelt.Some? ==> oelt.value == getElt(cfg, data, idx as nat)
   {
     var oeslice := TryGet(cfg, all(data), data, idx);
@@ -269,7 +276,7 @@ abstract module SeqMarshalling(Elt: Marshalling) refines Marshalling {
   method GetElt(cfg: Config, data: mseq<byte>, idx: uint64) returns (elt: Element)
     requires validConfig(cfg)
     requires gettable(cfg, data, idx as nat)
-    requires Elt.parsable(EltCfg(cfg), getData(cfg, data, idx as nat))
+    requires eltParsable(cfg, data, idx as nat)
     ensures elt == getElt(cfg, data, idx as nat)
   {
     var eslice := Get(cfg, all(data), data, idx);
@@ -280,7 +287,7 @@ abstract module SeqMarshalling(Elt: Marshalling) refines Marshalling {
     requires validConfig(cfg)
     requires slice.WF'(data)
     requires gettable(cfg, slice.I(data), idx as nat)
-    requires Elt.parsable(EltCfg(cfg), getData(cfg, slice.I(data), idx as nat))
+    requires eltParsable(cfg, slice.I(data), idx as nat)
     ensures elt == getElt(cfg, slice.I(data), idx as nat)
 
     // setting individual elements
@@ -292,8 +299,8 @@ abstract module SeqMarshalling(Elt: Marshalling) refines Marshalling {
     requires validConfig(cfg)
   {
     && (gettable(cfg, data, i) ==> gettable(cfg, newdata, i))
-    && ((gettable(cfg, data, i) && Elt.parsable(EltCfg(cfg), getData(cfg, data, i))) ==>
-       (Elt.parsable(EltCfg(cfg), getData(cfg, newdata, i)) && getElt(cfg, newdata, i) == getElt(cfg, data, i)))
+    && ((gettable(cfg, data, i) && eltParsable(cfg, data, i)) ==>
+       (eltParsable(cfg, newdata, i) && getElt(cfg, newdata, i) == getElt(cfg, data, i)))
   }
 
   lemma preservesEntryTransitive(cfg: Config, data: mseq<byte>, i: nat, middle: mseq<byte>, newdata: mseq<byte>)
@@ -313,7 +320,7 @@ abstract module SeqMarshalling(Elt: Marshalling) refines Marshalling {
     && (lengthable(cfg, data) ==> lengthable(cfg, newdata) && length(cfg, newdata) == length(cfg, data))
     && (forall i | i != idx :: preservesEntry(cfg, data, i, newdata))
     && gettable(cfg, newdata, idx)
-    && Elt.parsable(EltCfg(cfg), getData(cfg, newdata, idx))
+    && eltParsable(cfg, newdata, idx)
     && getElt(cfg, newdata, idx) == value
   }
 
@@ -383,7 +390,7 @@ abstract module SeqMarshalling(Elt: Marshalling) refines Marshalling {
     && length(cfg, newdata) == oldlen + 1
     && (forall i | i != oldlen :: preservesEntry(cfg, data, i, newdata))
     && gettable(cfg, newdata, oldlen)
-    && Elt.parsable(EltCfg(cfg), getData(cfg, newdata, oldlen))
+    && eltParsable(cfg, newdata, oldlen)
     && getElt(cfg, newdata, oldlen) == value
     && wellFormed(cfg, newdata)
   }
@@ -410,11 +417,24 @@ abstract module SeqMarshalling(Elt: Marshalling) refines Marshalling {
     ensures appends(cfg, slice.I(old_data), value, slice.I(data))
 
 
+  predicate gettableToLen(cfg: Config, data: mseq<byte>, len: nat)
+    requires validConfig(cfg)
+  {
+    && (forall i | 0 <= i < len :: gettable(cfg, data, i))
+  }
+
+  predicate eltParsableToLen(cfg: Config, data: mseq<byte>, len: nat)
+    requires validConfig(cfg)
+    requires gettableToLen(cfg, data, len)
+  {
+    && (forall i | 0 <= i < len :: eltParsable(cfg, data, i))
+  }
+  
   predicate parsableToLen(cfg: Config, data: mseq<byte>, len: uint64)
     requires validConfig(cfg)
   {
-    && (forall i | 0 <= i < len :: gettable(cfg, data, i as nat))
-    && (forall i | 0 <= i < len :: Elt.parsable(EltCfg(cfg), getData(cfg, data, i as nat)))
+    && gettableToLen(cfg, data, len as nat)
+    && eltParsableToLen(cfg, data, len as nat)
   }
 
   predicate parsable(cfg: Config, data: mseq<byte>)
@@ -464,7 +484,7 @@ abstract module SeqMarshalling(Elt: Marshalling) refines Marshalling {
       invariant i <= len
       invariant |lresult| == len as nat
       invariant forall j: nat | j < i as nat :: gettable(cfg, data, j)
-      invariant forall j: nat | j < i as nat :: Elt.parsable(EltCfg(cfg), getData(cfg, data, j))
+      invariant forall j: nat | j < i as nat :: eltParsable(cfg, data, j)
       invariant forall j: nat | j < i as nat :: lresult[j] == getElt(cfg, data, j)
     {
       oelt := TryGetElt(cfg, data, i);
@@ -716,7 +736,9 @@ refines SeqMarshalling(elementMarshalling) {
     lemma_div_ind(|data|, UniformSize(cfg) as nat);
     forall idx | 0 <= idx < length(cfg, data)
       ensures getData(cfg, extension, idx) == getData(cfg, data, idx);
+      ensures eltParsable(cfg, extension, idx)
     {
+      assert eltParsable(cfg, data, idx);
       index_bounds_facts(cfg, all(data), idx);
       Seq.lemma_seq_slice_slice(extension, 0, |data|, idx * UniformSize(cfg) as nat, idx * UniformSize(cfg) as nat + UniformSize(cfg) as nat);
     }
@@ -966,6 +988,19 @@ refines SeqMarshalling(elementMarshalling) {
     return slice.sub(sizeOfLengthField() + idx * UniformSize(cfg), sizeOfLengthField() + idx * UniformSize(cfg) + UniformSize(cfg));
   }
 
+  lemma parsableLengthBounds(cfg: Config, data: mseq<byte>)
+    requires validConfig(cfg)
+    requires parsable(cfg, data)
+    ensures length(cfg, data) <= maxLength(cfg) as nat
+    ensures length(cfg, data) * UniformSize(cfg) as nat <= cfg.totalSize as nat - sizeOfLengthField() as nat
+  {
+    var len := length(cfg, data);
+    if 0 < len {
+      assert gettable(cfg, data, len - 1);
+      index_bounds_facts(cfg, len-1);
+    }
+  }
+
   predicate settable(cfg: Config, data: mseq<byte>, idx: nat, value: Element) {
     && lengthable(cfg, data)
     && idx < maxLength(cfg) as nat
@@ -983,6 +1018,8 @@ refines SeqMarshalling(elementMarshalling) {
   }
 
   method Set(cfg: Config, slice: Slice, linear inout data: mseq<byte>, idx: uint64, value: Element)
+    ensures forall i | 0 <= i < slice.start as nat + sizeOfLengthField() as nat + idx as nat * UniformSize(cfg) as nat :: data[i] == old_data[i]
+    ensures forall i | slice.start as nat + sizeOfLengthField() as nat + idx as nat * UniformSize(cfg) as nat + UniformSize(cfg) as nat <= i < |data| :: data[i] == old_data[i]
   {
     var newend;
     index_bounds_facts(cfg, idx as nat);
@@ -1047,6 +1084,7 @@ refines SeqMarshalling(elementMarshalling) {
   }
 
   method Resize(cfg: Config, slice: Slice, linear inout data: mseq<byte>, newlen: uint64)
+    ensures forall i | slice.start + sizeOfLengthField() <= i < |data| as uint64 :: data[i] == old_data[i]
   {
     var newend := LengthMarshalling.Marshall(cfg.lengthCfg, LengthInt.fromUint64(newlen), inout data, slice.start);
 
@@ -1102,7 +1140,9 @@ refines SeqMarshalling(elementMarshalling) {
     r := len < maxLength(cfg) && sz == UniformSize(cfg) && LengthInt.fitsInInteger(len + 1);
   }
 
-  method Append(cfg: Config, slice: Slice, linear inout data: mseq<byte>, value: Element) {
+  method Append(cfg: Config, slice: Slice, linear inout data: mseq<byte>, value: Element)
+    ensures forall i | slice.start as nat + sizeOfLengthField() as nat + length(cfg, slice.I(data)) * UniformSize(cfg) as nat <= i < |data| :: data[i] == old_data[i]
+  {
     var len := LLength(cfg, slice, data);
     Set(cfg, slice, inout data, len, value);
     ghost var middle := slice.I(data);
@@ -1116,6 +1156,7 @@ refines SeqMarshalling(elementMarshalling) {
       preservesEntryTransitive(cfg, iold_data, i as nat, middle, idata);
     }
     assert preservesEntry(cfg, middle, len as nat, slice.I(data));
+    NLarith.DistributeLeft(length(cfg, slice.I(old_data)), 1, UniformSize(cfg) as nat);
   }
 
   predicate marshallable(cfg: Config, value: UnmarshalledType) {
@@ -1161,7 +1202,7 @@ refines SeqMarshalling(elementMarshalling) {
       invariant lengthable(cfg, data[start..end])
       invariant length(cfg, data[start..end]) == |value|
       invariant forall j | 0 <= j < i :: gettable(cfg, data[start..end], j as nat)
-      invariant forall j | 0 <= j < i :: Elt.parsable(EltCfg(cfg), getData(cfg, data[start..end], j as nat))
+      invariant forall j | 0 <= j < i :: eltParsable(cfg, data[start..end], j as nat)
       invariant forall j | 0 <= j < i :: getElt(cfg, data[start..end], j as nat) == value[j]
       invariant forall j | 0 <= j < |value| :: settable(cfg, data[start..end], j, value[j])
     {
@@ -1198,6 +1239,7 @@ refines ResizableUniformSizedElementSeqMarshalling(lengthInt, IntegerMarshalling
   {
     var len := length(cfg, data);
     if 0 < len {
+      assert gettable(cfg, data, len - 1);
       index_bounds_facts(cfg, len - 1);
     }
     var value := Int.unpack_Seq(data[sizeOfLengthField()..sizeOfLengthField() as nat + len * Int.Size() as nat], len);
@@ -1232,6 +1274,10 @@ refines ResizableUniformSizedElementSeqMarshalling(lengthInt, IntegerMarshalling
       ovalue := Some(value);
       parse_is_unpack_Seq(cfg, data);
     } else {
+      ghost var ghosty := true;
+      if ghosty && olen.Some? {
+        assert !gettable(cfg, data, olen.value as nat - 1);
+      }
       ovalue := None;
     }
   }
@@ -1239,6 +1285,10 @@ refines ResizableUniformSizedElementSeqMarshalling(lengthInt, IntegerMarshalling
   method Parsable(cfg: Config, data: mseq<byte>) returns (p: bool)
   {
     var olen := TryLength(cfg, data);
+    ghost var ghosty := true;
+    if ghosty && olen.Some? && olen.value > maxLength(cfg) {
+      assert !gettable(cfg, data, olen.value as nat - 1);
+    }
     return olen.Some? && olen.value <= maxLength(cfg);
   }
 
@@ -1246,6 +1296,7 @@ refines ResizableUniformSizedElementSeqMarshalling(lengthInt, IntegerMarshalling
   {
     var len := Length(cfg, data);
     if 0 < len {
+      assert gettable(cfg, data, len as nat - 1);
       index_bounds_facts(cfg, len as nat - 1);
     }
     value := Int.Cast_Seq(data, sizeOfLengthField(), len);
@@ -1301,6 +1352,7 @@ refines SeqMarshalling(elt) {
   predicate validConfig(cfg: Config) {
     && BoundarySeqMarshalling.validConfig(cfg.bsmCfg)
     && Elt.validConfig(cfg.eltCfg)
+    && LengthInt.fitsInInteger(cfg.bsmCfg.totalSize)
   }
 
   function method EltCfg(cfg: Config) : Elt.Config
@@ -1394,6 +1446,8 @@ refines SeqMarshalling(elt) {
 
   predicate gettable(cfg: Config, data: mseq<byte>, idx: nat)
   {
+    && lengthable(cfg, data)
+    && idx < length(cfg, data)
     && BoundaryElementGettable(cfg, data, idx)
     && (0 < idx ==> BoundaryElementGettable(cfg, data, idx-1))
     && 0 <= ElementDataBegin(cfg, data, idx) <= ElementDataEnd(cfg, data, idx) <= totalSize(cfg) as nat <= |data|
@@ -1407,7 +1461,7 @@ refines SeqMarshalling(elt) {
   method TryGet(cfg: Config, slice: Slice, data: mseq<byte>, idx: uint64) returns (oeslice: Option<Slice>)
   {
     var olen := TryLength(cfg, slice.I(data));
-    if olen.Some? && idx < maxLength(cfg) {
+    if olen.Some? && idx < maxLength(cfg) && idx < olen.value {
       var istart := BoundarySeqMarshalling.GetElt(BSMCfg(cfg), slice.I(data), idx);
       if !BoundaryInt.fitsInUint64(istart) {
         return None;
@@ -1467,10 +1521,23 @@ refines SeqMarshalling(elt) {
     // Cannot be called
   }
 
-  predicate tableable(cfg: Config, data: mseq<byte>)
+  function sizeOfTable(cfg: Config, len: nat) : nat
     requires validConfig(cfg)
   {
-    BoundarySeqMarshalling.parsable(BSMCfg(cfg), data)
+    NatMulNatIsNat(len, sizeOfBoundaryEntry(cfg) as nat);
+    sizeOfLengthField(cfg) as nat + len * sizeOfBoundaryEntry(cfg) as nat
+  }
+
+  predicate tableable(cfg: Config, data: mseq<byte>)
+    requires validConfig(cfg)
+    ensures tableable(cfg, data) ==> lengthable(cfg, data)
+    ensures tableable(cfg, data) ==> sizeOfTable(cfg, length(cfg, data)) <= totalSize(cfg) as nat
+  {
+    if BoundarySeqMarshalling.parsable(BSMCfg(cfg), data) then
+      BoundarySeqMarshalling.parsableLengthBounds(BSMCfg(cfg), data);
+      true
+    else
+      false
   }
 
   function btable(cfg: Config, data: mseq<byte>) : mseq<BoundaryInt.Integer>
@@ -1488,13 +1555,6 @@ refines SeqMarshalling(elt) {
     seq(|bt|, i requires 0 <= i < |bt| => BoundaryInt.toInt(bt[i]))
   }
 
-  function sizeOfTable(cfg: Config, len: nat) : nat
-    requires validConfig(cfg)
-  {
-    NatMulNatIsNat(len, sizeOfBoundaryEntry(cfg) as nat);
-    sizeOfLengthField(cfg) as nat + len * sizeOfBoundaryEntry(cfg) as nat
-  }
-
   predicate validTable(cfg: Config, data: mseq<byte>)
     requires validConfig(cfg)
     requires tableable(cfg, data)
@@ -1510,20 +1570,60 @@ refines SeqMarshalling(elt) {
     && validTable(cfg, data)
   }
 
-  function freeSpace(cfg: Config, data: mseq<byte>) : nat
+  function elementsStart(cfg: Config, data: mseq<byte>) : nat
     requires validConfig(cfg)
     requires tableable(cfg, data)
     requires validTable(cfg, data)
   {
     var t := table(cfg, data);
     if |t| == 0 then
-      totalSize(cfg) as nat - sizeOfTable(cfg, |t|)
+      totalSize(cfg) as nat
     else
-      Last(t) - sizeOfTable(cfg, |t|)
+      Last(t)
+  }
+  function freeSpace(cfg: Config, data: mseq<byte>) : nat
+    requires validConfig(cfg)
+    requires tableable(cfg, data)
+    requires validTable(cfg, data)
+  {
+    elementsStart(cfg, data) - sizeOfTable(cfg, length(cfg, data))
   }
 
   predicate appendable(cfg: Config, data: mseq<byte>, value: Element) {
-    BoundaryInt.Size() as nat + Elt.size(EltCfg(cfg), value) as nat <= freeSpace(cfg, data)
+    && BoundaryInt.Size() as nat + Elt.size(EltCfg(cfg), value) as nat <= freeSpace(cfg, data)
+  }
+
+  function appendOffset(cfg: Config, data: mseq<byte>, value: Element) : uint64
+    requires validConfig(cfg)
+    requires lengthable(cfg, data)
+    requires wellFormed(cfg, data)
+    requires Elt.marshallable(EltCfg(cfg), value)
+    requires appendable(cfg, data, value)
+  {
+    var len := length(cfg, data);
+    var sz := Elt.size(EltCfg(cfg), value);
+    var ub :=
+    if len == 0 then
+      totalSize(cfg)
+    else
+      var iub := BoundarySeqMarshalling.getElt(BSMCfg(cfg), data, len - 1);
+      BoundaryInt.toUint64(iub);
+    ub - sz
+  }
+
+  lemma appendableImpliesBSMappendable(cfg: Config, data: mseq<byte>, value: Element)
+    requires validConfig(cfg)
+    requires wellFormed(cfg, data)
+    requires Elt.marshallable(EltCfg(cfg), value)
+    requires appendable(cfg, data, value)
+    ensures length(cfg, data) + 1 < Uint64UpperBound()
+    ensures BoundaryInt.fitsInInteger(length(cfg, data) as uint64 + 1)
+    ensures BoundarySeqMarshalling.appendable(BSMCfg(cfg), data, BoundaryInt.fromUint64(appendOffset(cfg, data, value)))
+  {
+    var len := length(cfg, data);
+    NLarith.DistributeLeft(len, 1, BoundaryInt.Size() as nat);
+    NLarith.MulPreservesLe(1, BoundaryInt.Size() as nat, len);
+    InequalityMoveDivisor(len + 1, totalSize(cfg) as nat - sizeOfLengthField(cfg) as nat, BoundaryInt.Size() as nat);
   }
 
   method WellFormed(cfg: Config, data: mseq<byte>) returns (w: bool) {
@@ -1538,6 +1638,7 @@ refines SeqMarshalling(elt) {
       return true;
     }
 
+    BoundarySeqMarshalling.parsableLengthBounds(BSMCfg(cfg), data);
     BoundarySeqMarshalling.index_bounds_facts(BSMCfg(cfg), len as nat - 1);
     var tbsz := sizeOfLengthField(cfg) + len * sizeOfBoundaryEntry(cfg);
 
@@ -1571,10 +1672,9 @@ refines SeqMarshalling(elt) {
 
   method Appendable(cfg: Config, data: mseq<byte>, value: Element) returns (r: bool) {
     var len := Length(cfg, data);
-    ghost var ghosty := true;
-    if ghosty && 0 < len {
-      BoundarySeqMarshalling.index_bounds_facts(BSMCfg(cfg), len as nat - 1);
-    }
+
+    BoundarySeqMarshalling.parsableLengthBounds(BSMCfg(cfg), data);
+
     var tblsz := sizeOfLengthField(cfg) + len * sizeOfBoundaryEntry(cfg);
     var ub;
     if len == 0 {
@@ -1588,7 +1688,55 @@ refines SeqMarshalling(elt) {
     return BoundaryInt.Size() <= fs && esz <= fs - BoundaryInt.Size();
   }
 
+  lemma tableIdentity(cfg: Config, data: mseq<byte>, newdata: mseq<byte>)
+    requires validConfig(cfg)
+    requires tableable(cfg, data)
+    requires totalSize(cfg) as nat <= |newdata|
+    requires newdata[..sizeOfTable(cfg, length(cfg, data))] == data[..sizeOfTable(cfg, length(cfg, data))]
+    ensures tableable(cfg, newdata)
+    ensures table(cfg, newdata) == table(cfg, data)
+  {
+    assert newdata[..sizeOfLengthField(cfg)] == data[..sizeOfLengthField(cfg)];
+    var len := length(cfg, newdata);
+    forall i | 0 <= i < len
+      ensures BoundarySeqMarshalling.gettable(BSMCfg(cfg), newdata, i)
+      ensures BoundarySeqMarshalling.getData(BSMCfg(cfg), newdata, i) == BoundarySeqMarshalling.getData(BSMCfg(cfg), data, i)
+    {
+      BoundarySeqMarshalling.parsableLengthBounds(BSMCfg(cfg), data);
+      BoundarySeqMarshalling.index_bounds_facts(BSMCfg(cfg), i);
+      PosMulPreservesLe(i+1, len, BoundaryInt.Size() as nat);
+    }
+  }
+
+  lemma elementsIdentity(cfg: Config, data: mseq<byte>, newdata: mseq<byte>)
+    requires validConfig(cfg)
+    requires tableable(cfg, data)
+    requires tableable(cfg, newdata)
+    requires validTable(cfg, data)
+    requires validTable(cfg, newdata)
+    requires IsPrefix(table(cfg, data), table(cfg, newdata))
+    requires newdata[elementsStart(cfg, data)..] == data[elementsStart(cfg, data)..];
+    ensures forall i :: gettable(cfg, data, i) ==> gettable(cfg, newdata, i)
+    ensures forall i | gettable(cfg, data, i) :: getData(cfg, newdata, i) == getData(cfg, data, i)
+  {
+    var dt := table(cfg, data);
+    var nt := table(cfg, newdata);
+    forall i: nat | gettable(cfg, data, i)
+      ensures gettable(cfg, newdata, i)
+      ensures getData(cfg, newdata, i) == getData(cfg, data, i)
+    {
+      var start := ElementDataBegin(cfg, data, i);
+      var end := ElementDataEnd(cfg, data, i);
+      reveal_IsPrefix();
+      assert nt[..|dt|][i] == nt[i];
+      if 0 < i {
+        assert nt[..|dt|][i-1] == nt[i-1];
+      }
+    }
+  }
+
   method Append(cfg: Config, slice: Slice, linear inout data: mseq<byte>, value: Element) {
+    appendableImpliesBSMappendable(cfg, slice.I(data), value);
     var len := LLength(cfg, slice, data);
     var sz := Elt.Size(EltCfg(cfg), value);
     var ub;
@@ -1599,9 +1747,38 @@ refines SeqMarshalling(elt) {
       ub := BoundaryInt.toUint64(iub);
     }
     var start := ub - sz;
-    assert BoundaryInt.fitsInInteger(start);
     var dummy := Elt.Marshall(EltCfg(cfg), value, inout data, slice.start + start);
+
+
+    ghost var middle := slice.I(data);
+    Seq.lemma_seq_slice_slice(data, slice.start as nat, slice.end as nat, 0, sizeOfTable(cfg, len as nat));
+    Seq.lemma_seq_slice_slice(old_data, slice.start as nat, slice.end as nat, 0, sizeOfTable(cfg, len as nat));
+    tableIdentity(cfg, slice.I(old_data), middle);
+    assert IsPrefix(table(cfg, slice.I(old_data)), table(cfg, middle)) by {
+      reveal_IsPrefix();
+    }
+    elementsIdentity(cfg, slice.I(old_data), middle);
+
+
     var istart := BoundaryInt.fromUint64(start);
     BoundarySeqMarshalling.Append(BSMCfg(cfg), slice, inout data, istart);
+
+    ghost var t := table(cfg, middle);
+    ghost var t' := table(cfg, slice.I(data));
+    BoundaryInt.fromtoInverses();
+    forall i | 0 <= i < |t|
+      ensures t'[i] == t[i]
+    {
+      assert BoundarySeqMarshalling.preservesEntry(BSMCfg(cfg), middle, i, slice.I(data));
+    }
+    assert IsPrefix(table(cfg, middle), table(cfg, slice.I(data))) by {
+      reveal_IsPrefix();
+    }
+    NLarith.DistributeLeft(|t|, 1, BoundaryInt.Size() as nat);
+    elementsIdentity(cfg, middle, slice.I(data));
+
+    assert gettable(cfg, slice.I(data), len as nat);
+    assert eltParsable(cfg, slice.I(data), len as nat);
+    assert getElt(cfg, slice.I(data), len as nat) == value;
   }
 }
