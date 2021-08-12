@@ -1,5 +1,6 @@
-include "../../../lib/Base/sequences.i.dfy"
-include "../../../lib/Base/Option.s.dfy"
+include "../../lib/Base/sequences.i.dfy"
+include "../../lib/Base/Option.s.dfy"
+include "MapSpec.s.dfy"
 include "CircularRange.i.dfy"
 
 module CircularTable {
@@ -7,7 +8,6 @@ module CircularTable {
   import opened Options
   import opened Sequences
   import opened Limits
-  import opened MapIfc
   import opened CircularRange
   import opened KeyValueType
 

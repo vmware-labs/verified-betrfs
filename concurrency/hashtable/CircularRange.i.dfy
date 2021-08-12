@@ -1,5 +1,5 @@
-include "../../../lib/Lang/NativeTypes.s.dfy"
-include "../../disciplined/common/Limits.i.dfy"
+include "../../lib/Lang/NativeTypes.s.dfy"
+include "../disciplined/common/Limits.i.dfy"
 
 module CircularRange {
   import opened NativeTypes
