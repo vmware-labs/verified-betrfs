@@ -141,7 +141,7 @@ module IntegerMarshalling(Int: NativePackedInt) refines Marshalling {
   method Marshall(cfg: Config, value: UnmarshalledType, linear inout data: mseq<byte>, start: uint64)
     returns (end: uint64)
   {
-      Int.Pack_into_ByteSeq(value, inout data, start);
+      Int.Pack(value, inout data, start);
       end := start + Int.Size();
       assert data[start..end][..Int.Size()] == data[start..start + Int.Size()];
   }
@@ -572,14 +572,14 @@ refines SeqMarshalling(elementMarshalling) {
 
   method Lengthable(cfg: Config, data: mseq<byte>) returns (l: bool)
   {
-    l := true;
+    return true;
   }
 
   method Length(cfg: Config, data: mseq<byte>) returns (len: uint64)
     ensures len as nat == length(cfg, data)
   {
     NLarith.DivLe(|data| as nat, UniformSize(cfg) as nat);
-    len := |data| as uint64 / UniformSize(cfg);
+    return |data| as uint64 / UniformSize(cfg);
   }
 
   lemma index_bounds_facts(cfg: Config, slice: Slice, idx: nat)
@@ -625,13 +625,13 @@ refines SeqMarshalling(elementMarshalling) {
   method Gettable(cfg: Config, data: mseq<byte>, idx: uint64) returns (g: bool)
   {
     var len := Length(cfg, data);
-    g := idx < len;
+    return idx < len;
   }
 
   method Get(cfg: Config, slice: Slice, data: mseq<byte>, idx: uint64) returns (eslice: Slice)
   {
     index_bounds_facts(cfg, slice, idx as nat);
-    eslice := slice.sub(idx * UniformSize(cfg), idx * UniformSize(cfg) + UniformSize(cfg));
+    return slice.sub(idx * UniformSize(cfg), idx * UniformSize(cfg) + UniformSize(cfg));
   }
 
   predicate settable(cfg: Config, data: mseq<byte>, idx: nat, value: Element) {
@@ -704,12 +704,6 @@ refines SeqMarshalling(elementMarshalling) {
     && (forall i | 0 <= i < |value| :: Elt.size(EltCfg(cfg), value[i]) == UniformSize(cfg))
     && |value| * UniformSize(cfg) as nat < Uint64UpperBound()
   }
-
-  lemma marshallable_prefix(cfg: Config, value: UnmarshalledType, len: nat)
-    requires validConfig(cfg)
-    requires marshallable(cfg, value)
-    requires len <= |value|
-    ensures marshallable(cfg, value[..len])
 
   function size(cfg: Config, value: UnmarshalledType) : uint64
   {
@@ -822,8 +816,8 @@ refines UniformSizedElementSeqMarshalling(IntegerMarshalling(Int)) {
 
   method TryParse(cfg: Config, data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
   {
-    var len := Length(cfg, data);
-    var value: mseq<Int.Integer> := Int.Cast_Seq(data, 0, len);
+    var len' := Length(cfg, data);
+    var value: mseq<Int.Integer> := Int.Cast_Seq(data, 0, len');
     ovalue := Some(value);
     assert parsable(cfg, data);
     parse_is_unpack_Seq(cfg, data);
@@ -844,7 +838,7 @@ refines UniformSizedElementSeqMarshalling(IntegerMarshalling(Int)) {
   method Marshall(cfg: Config, value: UnmarshalledType, linear inout data: mseq<byte>, start: uint64)
     returns (end: uint64)
   {
-    Int.Pack_Seq_into_ByteSeq(value, inout data, start);
+    Int.Pack_Seq(value, inout data, start);
     var sz := Size(cfg, value);
     end := start + sz;
 
@@ -1179,8 +1173,8 @@ refines SeqMarshalling(elementMarshalling) {
   {
     end := start + cfg.totalSize;
     var slice := Slice(start, end);
-    var ilen := LengthInt.fromUint64(|value| as uint64);
-    var dummy := LengthMarshalling.Marshall(cfg.lengthCfg, ilen, inout data, start);
+    var ilen' := LengthInt.fromUint64(|value| as uint64);
+    var dummy' := LengthMarshalling.Marshall(cfg.lengthCfg, ilen', inout data, start);
 
     LengthInt.fromtoInverses();
     Seq.lemma_seq_slice_slice(data,
@@ -1265,18 +1259,18 @@ refines ResizableUniformSizedElementSeqMarshalling(lengthInt, IntegerMarshalling
 
   method TryParse(cfg: Config, data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
   {
-    var olen := TryLength(cfg, data);
-    if olen.Some? && olen.value <= maxLength(cfg) {
-      if 0 < olen.value {
-        index_bounds_facts(cfg, olen.value as nat - 1);
+    var olen' := TryLength(cfg, data);
+    if olen'.Some? && olen'.value <= maxLength(cfg) {
+      if 0 < olen'.value {
+        index_bounds_facts(cfg, olen'.value as nat - 1);
       }
-      var value: mseq<Int.Integer> := Int.Cast_Seq(data, sizeOfLengthField(), olen.value);
+      var value: mseq<Int.Integer> := Int.Cast_Seq(data, sizeOfLengthField(), olen'.value);
       ovalue := Some(value);
       parse_is_unpack_Seq(cfg, data);
     } else {
       ghost var ghosty := true;
-      if ghosty && olen.Some? {
-        assert !gettable(cfg, data, olen.value as nat - 1);
+      if ghosty && olen'.Some? {
+        assert !gettable(cfg, data, olen'.value as nat - 1);
       }
       ovalue := None;
     }
@@ -1309,7 +1303,7 @@ refines ResizableUniformSizedElementSeqMarshalling(lengthInt, IntegerMarshalling
     var ilen := LengthInt.fromUint64(|value| as uint64);
     var dummy := LengthMarshalling.Marshall(cfg.lengthCfg, ilen, inout data, start);
     ghost var tmp := data[start..dummy];
-    Int.Pack_Seq_into_ByteSeq(value, inout data, start + sizeOfLengthField());
+    Int.Pack_Seq(value, inout data, start + sizeOfLengthField());
     var sz := Size(cfg, value);
     end := start + sz;
 
