@@ -23,6 +23,10 @@ module InfiniteLogSSM refines TicketStubSSM(NRIfc) {
 
   // `ReadonlyState` and `UpdateState` tokens can appear at any point time
   // (corresponding to a client beginning a read or an update, respectively).
+  //
+  // Note that an `UpdateState` may start on one thread (the thread making the
+  // update request), and then transfer to another thread on the same node
+  // (the combining thread), and then transfer back once it is done.
 
   datatype ReadonlyState =
     | ReadonlyInit(op: nrifc.ReadonlyOp)
