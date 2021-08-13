@@ -5,8 +5,9 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 
 module {:extern "Atomics"} Atomics {
   import opened NativeTypes
+  import opened BitOps
 
-  type {:extern "dafny_concurrency"} Atomic(==,!new)<!V, !G>
+  type {:extern "predefined"} Atomic(==,!new)<!V, !G>
   {
     function {:extern} namespace() : nat
   }
@@ -104,18 +105,6 @@ module {:extern "Atomics"} Atomics {
    * uint8 arithmetic and bit operations
    */
 
-  function method bit_or_uint8(a: uint8, b: uint8): uint8 {
-    ((a as bv8) | (b as bv8)) as uint8
-  }
-
-  function method bit_and_uint8(a: uint8, b: uint8): uint8 {
-    ((a as bv8) & (b as bv8)) as uint8
-  }
-
-  function method bit_xor_uint8(a: uint8, b: uint8): uint8 {
-    ((a as bv8) ^ (b as bv8)) as uint8
-  }
-
   function wrapped_add_uint8(a: uint8, b: uint8): uint8 {
     if a as int + b as int < 0x1_00 then
       a + b
@@ -193,18 +182,6 @@ module {:extern "Atomics"} Atomics {
   /*
    * uint16 arithmetic and bit operations
    */
-
-  function method bit_or_uint16(a: uint16, b: uint16): uint16 {
-    ((a as bv16) | (b as bv16)) as uint16
-  }
-
-  function method bit_and_uint16(a: uint16, b: uint16): uint16 {
-    ((a as bv16) & (b as bv16)) as uint16
-  }
-
-  function method bit_xor_uint16(a: uint16, b: uint16): uint16 {
-    ((a as bv16) ^ (b as bv16)) as uint16
-  }
 
   function wrapped_add_uint16(a: uint16, b: uint16): uint16 {
     if a as int + b as int < 0x1_0000 then
@@ -284,18 +261,6 @@ module {:extern "Atomics"} Atomics {
    * uint32 arithmetic and bit operations
    */
 
-  function method bit_or_uint32(a: uint32, b: uint32): uint32 {
-    ((a as bv32) | (b as bv32)) as uint32
-  }
-
-  function method bit_and_uint32(a: uint32, b: uint32): uint32 {
-    ((a as bv32) & (b as bv32)) as uint32
-  }
-
-  function method bit_xor_uint32(a: uint32, b: uint32): uint32 {
-    ((a as bv32) ^ (b as bv32)) as uint32
-  }
-
   function wrapped_add_uint32(a: uint32, b: uint32): uint32 {
     if a as int + b as int < 0x1_0000_0000 then
       a + b
@@ -373,18 +338,6 @@ module {:extern "Atomics"} Atomics {
   /*
    * uint64 arithmetic and bit operations
    */
-
-  function method bit_or_uint64(a: uint64, b: uint64): uint64 {
-    ((a as bv64) | (b as bv64)) as uint64
-  }
-
-  function method bit_and_uint64(a: uint64, b: uint64): uint64 {
-    ((a as bv64) & (b as bv64)) as uint64
-  }
-
-  function method bit_xor_uint64(a: uint64, b: uint64): uint64 {
-    ((a as bv64) ^ (b as bv64)) as uint64
-  }
 
   function wrapped_add_uint64(a: uint64, b: uint64): uint64 {
     if a as int + b as int < 0x1_0000_0000_0000_0000 then
@@ -475,4 +428,56 @@ module {:extern "Atomics"} Atomics {
       glinear g: G)
   ensures orig_value == new_value
   ensures atomic_inv(a, orig_value, g)
+}
+
+module BitOps {
+  import opened NativeTypes
+
+  function method bit_or_uint8(a: uint8, b: uint8): uint8 {
+    ((a as bv8) | (b as bv8)) as uint8
+  }
+
+  function method bit_and_uint8(a: uint8, b: uint8): uint8 {
+    ((a as bv8) & (b as bv8)) as uint8
+  }
+
+  function method bit_xor_uint8(a: uint8, b: uint8): uint8 {
+    ((a as bv8) ^ (b as bv8)) as uint8
+  }
+
+  function method bit_or_uint16(a: uint16, b: uint16): uint16 {
+    ((a as bv16) | (b as bv16)) as uint16
+  }
+
+  function method bit_and_uint16(a: uint16, b: uint16): uint16 {
+    ((a as bv16) & (b as bv16)) as uint16
+  }
+
+  function method bit_xor_uint16(a: uint16, b: uint16): uint16 {
+    ((a as bv16) ^ (b as bv16)) as uint16
+  }
+
+  function method bit_or_uint32(a: uint32, b: uint32): uint32 {
+    ((a as bv32) | (b as bv32)) as uint32
+  }
+
+  function method bit_and_uint32(a: uint32, b: uint32): uint32 {
+    ((a as bv32) & (b as bv32)) as uint32
+  }
+
+  function method bit_xor_uint32(a: uint32, b: uint32): uint32 {
+    ((a as bv32) ^ (b as bv32)) as uint32
+  }
+
+  function method bit_or_uint64(a: uint64, b: uint64): uint64 {
+    ((a as bv64) | (b as bv64)) as uint64
+  }
+
+  function method bit_and_uint64(a: uint64, b: uint64): uint64 {
+    ((a as bv64) & (b as bv64)) as uint64
+  }
+
+  function method bit_xor_uint64(a: uint64, b: uint64): uint64 {
+    ((a as bv64) ^ (b as bv64)) as uint64
+  }
 }
