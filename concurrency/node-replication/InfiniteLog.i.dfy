@@ -2,8 +2,7 @@ include "../framework/AsyncSSM.s.dfy"
 include "NRSpec.s.dfy"
 include "../../lib/Base/Option.s.dfy"
 
-module InfiniteLogSSM refines TicketStubSSM(NRIfc) {
-  import nrifc = NRIfc
+module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   import opened Options
 
   // Read (node i):

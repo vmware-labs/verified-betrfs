@@ -6,7 +6,10 @@ abstract module NRIfc refines InputOutputIfc {
   type ReadonlyOp
   type ReturnType
 
-  function update(s: NRState, op: UpdateOp) : (NRState, ReturnType)
+  datatype UpdateResult = UpdateResult(new_state: NRState, return_value: ReturnType)
+
+  function init_state() : NRState
+  function update(s: NRState, op: UpdateOp) : UpdateResult
   function read(s: NRState, op: ReadonlyOp) : ReturnType
 
   /*
