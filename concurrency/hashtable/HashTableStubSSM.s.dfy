@@ -205,7 +205,6 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
       else if step.RemoveNotFoundStep? then RemoveNotFound(step)
       else Fail
     }
-
   }
 
   predicate nonoverlapping<A>(a: seq<Option<A>>, b: seq<Option<A>>)

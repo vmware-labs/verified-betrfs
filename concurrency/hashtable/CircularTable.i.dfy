@@ -650,6 +650,12 @@ module CircularTable {
       if item.Empty? then rest else rest[item.key := item.value]
   }
 
+  lemma EmptyTableEmptyMap(table: Table)
+    requires table == seq(|table|, i => Some(Empty))
+    ensures I(table) == map[]
+  {
+  }
+
   predicate SlotFullWithKey(entry: Option<Entry>, key: Key)
   {
     && SlotFull(entry)

@@ -20,7 +20,7 @@ abstract module InputOutputIfc refines Ifc {
 }
 
 module RequestIds {
-  newtype RequestId = nat
+  type RequestId = nat
 }
 
 module AsyncIfc(ifc: InputOutputIfc) refines Ifc {
@@ -49,6 +49,15 @@ module AsyncStateMachine(IOIfc: InputOutputIfc, SM: StateMachine(IOIfc))
     && s.resps == map[]
   }
 
+  predicate InteralNext(rid: RequestId, input: IOIfc.Input, output: IOIfc.Output, s: Variables, s': Variables)
+  {
+    && rid in s.reqs
+    && s.reqs[rid] == input
+    && s'.reqs == s.reqs - {rid}
+    && s'.resps == s.resps[rid := output]
+    && SM.Next(s.s, s'.s, IOIfc.Op(input, output))
+  }
+
   predicate Next(s: Variables, s': Variables, op: ifc.Op)
   {
     match op {
@@ -62,13 +71,7 @@ module AsyncStateMachine(IOIfc: InputOutputIfc, SM: StateMachine(IOIfc))
         // resolve request step
         // serialization point: remove 'input' from 'reqs',
         // add 'output' to 'resps'
-        || (exists rid, input, output ::
-          && rid in s.reqs
-          && s.reqs[rid] == input
-          && s'.reqs == s.reqs - {rid}
-          && s'.resps == s.resps[rid := output]
-          && SM.Next(s.s, s'.s, IOIfc.Op(input, output))
-        )
+        || exists rid, input, output :: InteralNext(rid, input, output, s, s')
       )
       case End(rid, output) =>
         // remove from 'resps'
