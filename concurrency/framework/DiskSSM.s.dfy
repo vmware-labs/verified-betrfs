@@ -197,6 +197,50 @@ module AsyncDiskSystemStateMachine(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc))
   }
 }
 
+module DiskSSMTokens(ioifc: InputOutputIfc, ssm: DiskSSM(ioifc)) {
+  //import pcm = SSM_PCM(ssm)
+  //import Tokens = Tokens(pcm)
+
+  //type Token = Tokens.Token
+  datatype Token = Token(m: ssm.M)
+
+  /*lemma transition_of_next(a: ssm.M, b: ssm.M)
+  requires ssm.Next(a, b)
+  ensures pcm.transition(a, b)
+  {
+    ssm.dot_unit(a);
+    ssm.dot_unit(b);
+    var a' := a;
+    var b' := b;
+    var c := ssm.unit();
+    assert a == ssm.dot(a', c) && b == ssm.dot(b', c) && ssm.Next(a', b');
+    assert pcm.single_step_helper(a, b, a', b', c);
+    assert pcm.single_step(a, b);
+  }
+
+  lemma transition_of_next_with_unit(a: ssm.M, b: ssm.M)
+  requires ssm.Next(a, b)
+  ensures pcm.transition(pcm.dot(ssm.unit(), a), pcm.dot(ssm.unit(), b))
+  {
+    ssm.dot_unit(a);
+    ssm.dot_unit(b);
+    ssm.commutative(a, ssm.unit());
+    ssm.commutative(b, ssm.unit());
+    transition_of_next(a, b);
+  }*/
+
+  /*function method {:opaque} update_next(glinear a: Token, ghost expect_b: ssm.M)
+      : (glinear b: Token)
+  requires ssm.Next(a.val, expect_b)
+  ensures b == Tokens.Token(a.loc, expect_b)
+  {
+    transition_of_next_with_unit(a.val, expect_b);
+    Tokens.transition_update(Tokens.get_unit_shared(a.loc), a, expect_b)
+  }*/
+
+  // TODO more stuff here ...
+}
+
 /*
 module Obligations(
     IOIfc: InputOutputIfc,

@@ -1,103 +1,133 @@
 include "../../lib/Lang/NativeTypes.s.dfy"
-include "ArrayPtr.s.dfy"
+include "Ptrs.s.dfy"
+include "DiskSSM.s.dfy"
+
+module IocbStruct {
+  import opened Ptrs
+  import opened NativeTypes
+
+  /*
+   * iocb type
+   *
+   * implemented externally by iocb struct from linux iocb struct
+   */
+
+  datatype Iocb =
+    | IocbUninitialized(ptr: Ptr)
+    | IocbRead(ptr: Ptr, offset: nat, nbytes: nat, buf: Ptr)
+    | IocbWrite(ptr: Ptr, offset: nat, nbytes: nat, buf: Ptr)
+
+  method {:extern} new_iocb()
+  returns (ptr: Ptr, glinear iocb: Iocb)
+  ensures iocb.IocbUninitialized?
+
+  method {:extern} iocb_prepare_read(ptr: Ptr, glinear inout iocb: Iocb,
+      offset: uint64, nbytes: uint64, buf: Ptr)
+  requires old_iocb.ptr == ptr
+  ensures iocb == IocbRead(ptr, offset as nat, nbytes as nat, buf)
+
+  method {:extern} iocb_prepare_write(ptr: Ptr, glinear inout iocb: Iocb,
+      offset: uint64, nbytes: uint64, buf: Ptr)
+  requires old_iocb.ptr == ptr
+  ensures iocb == IocbWrite(ptr, offset as nat, nbytes as nat, buf)
+}
 
 abstract module AIOParams {
   import opened Ptrs
-  type ReadPermission(!new)
+  import opened IocbStruct
+  import opened NativeTypes
+  type ReadG(!new)
+  type WriteG(!new)
 
-  predicate is_read_perm(rp: ReadPermission, ptr: Ptr, data: seq<byte>)
+  predicate async_write_inv(
+      iocb_ptr: Ptr,
+      iocb: Iocb,
+      data: seq<byte>,
+      g: WriteG)
 
   glinear method get_read_perm(
-      gshared rp: ReadPermission, ghost ptr: Ptr, ghost data: seq<byte>)
+      ghost iocb_ptr: Ptr,
+      gshared iocb: Iocb,
+      ghost data: seq<byte>,
+      gshared g: WriteG)
   returns (gshared ad: PointsToArray<byte>)
-  requires is_read_perm(rp, ptr, data)
-  ensures ad == PointsToArray(ptr, data)
+  requires iocb.IocbWrite?
+  requires async_write_inv(iocb_ptr, iocb, data, g)
+  ensures ad == PointsToArray(iocb.buf, data)
+
+  predicate async_read_inv(
+      iocb_ptr: Ptr,
+      iocb: Iocb,
+      wp: PointsToArray<byte>,
+      g: ReadG)
 }
 
 abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(ioifc)) {
   import opened NativeTypes
+  import opened IocbStruct
   import opened Ptrs
+  import T = DiskSSMTokens(ioifc, ssm)
 
   const PageSize := 4096
-
-  /*
-   * aiocb type
-   *
-   * implemented externally by aiocb struct from libaio
-   *
-   * addr: disk address, page-aligned
-   * len: length of data, page-multiple
-   * ptr: memory location to write data from or read data into
-   */
-
-  type Aiocb
-  {
-    function method addr() : uint64
-    function method len() : uint64
-    function method ptr() : Ptr
-  }
-
-  function method {:extern} new_aiocb(addr: uint64, ptr: Ptr, len: uint64)
-    : (aiocb: Aiocb)
-  ensures aiocb.addr() == addr
-  ensures aiocb.ptr() == ptr
-  ensures aiocb.len() == len
 
   /*
    * DiskInterface
    */
 
-  method async_write<G>(
-      aiocb_ptr: Ptr,
-      glinear aiocb: Deref<Aiocb>,
-      ptr: Ptr,
+  method {:extern} async_write<G>(
+      iocb_ptr: Ptr,
+      glinear iocb: Iocb,
       ghost data: seq<byte>,
-      glinear rp: aioparams.ReadPermission,
-      glinear ticket: ssm.M)
-  requires aiocb.ptr == aiocb_ptr
-  requires aiocb.v.addr() as int % PageSize() == 0
-  requires aiocb.v.len() as int % PageSize() == 0
-  requires aiocb.v.len() > 0
-  requires aioparams.is_read_perm(rp, ptr, data)
-  requires ticket == DiskWriteTicket(aiocb.v.addr(), data)
+      glinear g: aioparams.WriteG,
+      glinear ticket: T.Token)
+  requires iocb.IocbWrite?
+  requires iocb.ptr == iocb_ptr
+  requires iocb.offset % PageSize == 0
+  requires iocb.nbytes == PageSize
+  requires |data| == iocb.nbytes
+  requires iocb.nbytes > 0
+  requires aioparams.async_write_inv(iocb_ptr, iocb, data, g)
+  requires ticket == T.Token(ssm.DiskWriteReq(iocb.offset / PageSize, data))
 
-  method async_read(
-      aiocb_ptr: Ptr,
-      glinear aiocb: Deref<Aiocb>,
-      ptr: Ptr,
-      glinear wp: ArrayDeref<byte>,
-      glinear ticket: ssm.M)
-  requires aiocb.ptr == aiocb_ptr
-  requires aiocb.v.addr() as int % PageSize() == 0
-  requires aiocb.v.len() as int % PageSize() == 0
-  requires aiocb.v.len() > 0
-  requires wp.ptr == aiocb.v.ptr()
-  requires ticket == DiskReadTicket(aiocb.v.addr())
+  method {:extern} async_read(
+      iocb_ptr: Ptr,
+      glinear iocb: Iocb,
+      glinear wp: PointsToArray<byte>,
+      glinear g: aioparams.ReadG,
+      glinear ticket: T.Token)
+  requires iocb.IocbRead?
+  requires iocb.ptr == iocb_ptr
+  requires iocb.offset % PageSize == 0
+  requires iocb.nbytes == PageSize
+  requires aioparams.async_read_inv(iocb_ptr, iocb, wp, g)
+  requires ticket == T.Token(ssm.DiskReadReq(iocb.offset / PageSize))
 
-  method get_finished_req_blocking()
+  glinear datatype FinishedReq =
+    | FRNone
+    | FRWrite(
+      glinear iocb: Iocb,
+      ghost data: seq<byte>,
+      glinear wg: aioparams.WriteG,
+      glinear stub: T.Token
+    )
+    | FRRead(
+      glinear iocb: Iocb,
+      glinear wp: PointsToArray<byte>,
+      glinear rg: aioparams.ReadG,
+      glinear stub: T.Token
+    )
+
+  method {:extern} get_event()
   returns (
-    aiocb_ptr: Ptr,
-    aiocb: Deref<Aiocb>,
-
-    old_v: PendingTaskSet,
-    new_v: PendingTaskSet,
-    linear old_g: G,
-    linear aiocb: lOption<Deref<Aiocb>>
-    linear read_stub: lOption<DiskReadStub>,
-    linear write_stub: lOption<DiskWriteStub>
+    iocb_ptr: Ptr,
+    glinear fr: FinishedReq
   )
-  ensures disk_interface_inv(disk_interface, old_v, old_g)
-  ensures aiocb_ptr == nullptr() ==>
-    && new_v == old_v
-    && read_stub.lNone?
-    && write_stub.lNone?
-    && aiocb.lNone?
-  ensures aiocb_ptr != nullptr() ==>
-    aiocb_ptr in old_v.writeTasks || aiocb_ptr in old_v.readTasks
-  ensures aiocb_ptr != nullptr() && aiocb_ptr in old_v.writeTasks ==>
-    && aiocb_ptr !in old_v.readTasks
-    && new_v == old_v.(writeTasks := MapRemove1(old_v.writeTasks, aiocb_ptr))
-    && read_stub.lNone?
-    && write_stub == lSome(DiskWriteStub(old_v.writeTasks[aiocb_ptr].addr))
-    && aiocb == lSome(Deref(aiocb_ptr, aiocb_constructor(
+  ensures iocb_ptr == nullptr ==> fr.FRNone?
+  ensures iocb_ptr != nullptr ==> (fr.FRWrite? || fr.FRRead?)
+  ensures fr.FRWrite? ==>
+    && fr.iocb.IocbRead?
+    && aioparams.async_write_inv(iocb_ptr, fr.iocb, fr.data, fr.wg)
+  ensures fr.FRRead? ==>
+    && fr.iocb.IocbRead?
+    && aioparams.async_read_inv(iocb_ptr, fr.iocb, fr.wp, fr.rg)
 }
