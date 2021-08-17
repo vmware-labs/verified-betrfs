@@ -1,11 +1,11 @@
-include "../../framework/PCMWrap.s.dfy"
 include "../../framework/Ptrs.s.dfy"
 include "../CacheResources.i.dfy"
 include "../Constants.i.dfy"
 
-module RWLockBase refines PCMWrap {
+module CacheHandle {
   import opened Ptrs
   import opened Constants
+  import opened GhostLoc
   import CacheResources
   import opened NativeTypes
 
@@ -34,6 +34,4 @@ module RWLockBase refines PCMWrap {
       && 0 <= this.idx.v < NUM_DISK_PAGES
     }
   }
-
-  type G = Handle
 }

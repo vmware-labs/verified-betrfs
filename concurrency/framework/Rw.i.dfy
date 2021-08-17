@@ -18,20 +18,23 @@ abstract module Rw {
   function I(x: M) : Option<StoredType> requires Inv(x)
 
   predicate transition(a: M, b: M) {
-    forall p: M :: Inv(dot(a, p)) ==> Inv(dot(b, p))
+    forall p: M :: Inv(dot(a, p)) ==>
+        && Inv(dot(b, p))
         && I(dot(a, p)) == I(dot(b, p))
   }
 
   predicate deposit(a: M, b: M, x: StoredType)
   {
-    forall p: M :: Inv(dot(a, p)) ==> Inv(dot(b, p))
+    forall p: M :: Inv(dot(a, p)) ==>
+        && Inv(dot(b, p))
         && I(dot(a, p)) == None
         && I(dot(b, p)) == Some(x)
   }
 
   predicate withdraw(a: M, b: M, x: StoredType)
   {
-    forall p: M :: Inv(dot(a, p)) ==> Inv(dot(b, p))
+    forall p: M :: Inv(dot(a, p)) ==>
+        && Inv(dot(b, p))
         && I(dot(a, p)) == Some(x)
         && I(dot(b, p)) == None
   }
@@ -301,6 +304,34 @@ module RwTokens(rw: Rw) {
   ensures token2' == T.Token(token1.loc, expected_value2)
   ensures token3' == T.Token(token1.loc, expected_value3)
 
+  glinear method deposit_2_1(
+      glinear token1: Token,
+      glinear token2: Token,
+      glinear stored_value: rw.StoredType,
+      ghost expected_value1: rw.M)
+  returns (glinear token1': Token)
+  requires token1.loc == token2.loc
+  requires rw.deposit(
+    rw.dot(token1.val, token2.val),
+    expected_value1,
+    stored_value)
+  ensures token1' == T.Token(token1.loc, expected_value1)
+
+  glinear method deposit_2_2(
+      glinear token1: Token,
+      glinear token2: Token,
+      glinear stored_value: rw.StoredType,
+      ghost expected_value1: rw.M,
+      ghost expected_value2: rw.M)
+  returns (glinear token1': Token, glinear token2': Token)
+  requires token1.loc == token2.loc
+  requires rw.deposit(
+    rw.dot(token1.val, token2.val),
+    rw.dot(expected_value1, expected_value2),
+    stored_value)
+  ensures token1' == T.Token(token1.loc, expected_value1)
+  ensures token2' == T.Token(token1.loc, expected_value2)
+
   glinear method deposit_3_2(
       glinear token1: Token,
       glinear token2: Token,
@@ -334,6 +365,34 @@ module RwTokens(rw: Rw) {
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
   ensures token3' == T.Token(token1.loc, expected_value3)
+
+  glinear method withdraw_1_1(
+      glinear token1: Token,
+      ghost expected_value1: rw.M,
+      ghost expected_retrieved_value: rw.StoredType)
+  returns (glinear token1': Token,
+      glinear retrieved_value: rw.StoredType)
+  requires rw.withdraw(
+      token1.val,
+      expected_value1,
+      expected_retrieved_value)
+  ensures token1' == T.Token(token1.loc, expected_value1)
+  ensures retrieved_value == expected_retrieved_value
+
+  glinear method withdraw_1_2(
+      glinear token1: Token,
+      ghost expected_value1: rw.M,
+      ghost expected_value2: rw.M,
+      ghost expected_retrieved_value: rw.StoredType)
+  returns (glinear token1': Token, glinear token2': Token,
+      glinear retrieved_value: rw.StoredType)
+  requires rw.withdraw(
+      token1.val,
+      rw.dot(expected_value1, expected_value2),
+      expected_retrieved_value)
+  ensures token1' == T.Token(token1.loc, expected_value1)
+  ensures token2' == T.Token(token1.loc, expected_value2)
+  ensures retrieved_value == expected_retrieved_value
 
   glinear method withdraw_3_3(
       glinear token1: Token,
