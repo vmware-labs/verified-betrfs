@@ -158,7 +158,6 @@ module PathBasedFSRefinement {
   {
   }
 
-  // TODO: revisit for timeout problem
   lemma RefinesCreate(fs: P.FileSys, fs': P.FileSys, path: Path, m: MetaData)
   requires PInv.Inv(fs)
   requires PInv.Inv(fs')
@@ -234,7 +233,8 @@ module PathBasedFSRefinement {
       }
     }
 
-    assert i_fs'.data_map == i_fs.data_map;
+    Maps.IMapEquivalent(i_fs'.meta_map, i_fs.meta_map[m.id := m][parent_id := parent_m']);
+    Maps.IMapEquivalent(i_fs'.data_map, i_fs.data_map);
     assert F.Create(i_fs, i_fs', path, m);
   }
 
@@ -332,13 +332,89 @@ module PathBasedFSRefinement {
     assume false;
   }
 
-  lemma RefinesLink(fs: P.FileSys, fs': P.FileSys, source: Path, dest: Path, ctime: Time, hiddenName: Option<Path>)
+  lemma {:timeLimitMultiplier 3} RefinesLink(fs: P.FileSys, fs': P.FileSys, source: Path, dest: Path, ctime: Time, hiddenName: Option<Path>)
   requires PInv.Inv(fs)
   requires PInv.Inv(fs')
   requires P.Link(fs, fs', source, dest, ctime, hiddenName)
   ensures F.Link(I(fs), I(fs'), source, dest, ctime)
   {
-    assume false;
+    var i_fs := I(fs);
+    var i_fs' := I(fs');
+
+    var src_id := P.GetMeta(fs, source).id;
+    var m := fs.content.meta_map[source];
+    var m' := P.LinkMeta(fs, source, ctime);
+
+    var dparent_dir := GetParentDir(dest);
+    var dparent_id := P.GetMeta(fs, dparent_dir).id;
+    var dparent_m' := P.UpdatePathTime(fs.content, dparent_dir, ctime);
+
+    forall p
+    ensures i_fs'.path_map[p] == i_fs.path_map[dest := src_id][p]
+    {
+      if p != dest && p != dparent_dir && p != source {
+        assert fs'.content.meta_map[p] == fs.content.meta_map[p];
+      }
+    }
+    Maps.IMapEquivalent(i_fs'.path_map, i_fs.path_map[dest := src_id]);
+    assert i_fs'.path_map == i_fs.path_map[dest := src_id];
+
+    forall id 
+    ensures i_fs'.meta_map[id] == i_fs.meta_map[src_id := m'][dparent_id := dparent_m'][id]
+    ensures i_fs'.data_map[id] == i_fs.data_map[id]
+    {
+      if id == Nonexistent {
+        InvImpliesInv(fs);
+        InvImpliesInv(fs');
+      } else if id in i_fs.path_map.Values {
+        if id == src_id {
+          if m.MetaData? {
+            assert fs'.content.meta_map[source] == RedirectMeta(hiddenName.value);
+            assert fs'.hidden.meta_map[hiddenName.value] == m';
+          } else {
+            assert fs'.content.meta_map[source] == fs.content.meta_map[source];
+          }
+          assert P.GetMeta(fs', source) == m';
+          assert i_fs'.meta_map[id] == m';
+          assert i_fs.meta_map[src_id := m'][dparent_id := dparent_m'][id] == m';
+          assert P.GetData(fs', source) == P.GetData(fs, source);
+          assert i_fs'.data_map[id] == i_fs.data_map[id];
+        } else if id == dparent_id {
+          calc {
+            i_fs.meta_map[src_id := m'][dparent_id := dparent_m'][id];
+            dparent_m';
+            P.GetMeta(fs', dparent_dir);
+            i_fs'.meta_map[id];
+          }
+          calc {
+            i_fs'.data_map[id];
+            P.GetData(fs', dparent_dir);
+            P.GetData(fs, dparent_dir);
+            i_fs.data_map[id];
+          }
+        } else {
+          var p :| P.PathExists(fs, p) && P.GetMeta(fs, p).id == id;
+          assert P.PathExists(fs', p);
+          calc {
+            i_fs'.meta_map[id];
+            P.GetMeta(fs', p);
+            P.GetMeta(fs, p);
+            i_fs.meta_map[id];
+            i_fs.meta_map[src_id := m'][dparent_id := dparent_m'][id];
+          }
+          calc {
+            i_fs'.data_map[id];
+            P.GetData(fs', p);
+            P.GetData(fs, p);
+            i_fs.data_map[id];
+          }
+        }
+      }
+    }
+    Maps.IMapEquivalent(i_fs'.meta_map, i_fs.meta_map[src_id := m'][dparent_id := dparent_m']);
+    Maps.IMapEquivalent(i_fs'.data_map, i_fs.data_map);
+    assert i_fs'.data_map == i_fs.data_map;
+    assert F.Link(i_fs, i_fs', source, dest, ctime);
   }
 
   lemma RefinesChangeAttr(fs: P.FileSys, fs': P.FileSys, path: Path, perm: int, uid: int, gid: int, ctime: Time)
@@ -371,6 +447,7 @@ module PathBasedFSRefinement {
   requires P.Write(fs, fs', path, offset, size, data, time)
   ensures F.Write(I(fs), I(fs'), path, offset, size, data, time)
   {
+    // TODO: fill in proof here
   }
 
   lemma RefinesUpdateTime(fs: P.FileSys, fs': P.FileSys, path: Path, atime: Time, mtime: Time, ctime: Time)

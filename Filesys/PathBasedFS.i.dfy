@@ -281,10 +281,10 @@ module PathBasedFS {
       && fs'.hidden.data_map == fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)])
   }
 
-  function LinkMeta(v: View, path: Path, time: Time) : MetaData
-  requires ViewComplete(v)
+  function LinkMeta(fs: FileSys, path: Path, time: Time) : MetaData
+  requires WF(fs)
   {
-    var m := v.meta_map[path];
+    var m := GetMeta(fs, path);
     if m.MetaData? then MetaDataUpdateTime(m, m.atime, m.mtime, time)
     else m
   }
@@ -301,13 +301,17 @@ module PathBasedFS {
     // updated maps
     && var parent_dir := GetParentDir(dest);
     && var parent_m' := UpdatePathTime(fs.content, parent_dir, ctime);
+    && var m' := LinkMeta(fs, source, ctime);
     && var p := if m.MetaData? then hiddenName.value else m.source;
     && fs'.content.meta_map == fs.content.meta_map[parent_dir := parent_m'][source := RedirectMeta(p)][dest := RedirectMeta(p)]
-    && fs'.content.data_map == fs.content.data_map[p := EmptyData()]
-    && (m.MetaData? ==> 
-      && fs'.hidden.meta_map == fs.hidden.meta_map[hiddenName.value := LinkMeta(fs.content, source, ctime)]
+    && (m.MetaData? ==>
+      && fs'.content.data_map == fs.content.data_map[source := EmptyData()]
+      && fs'.hidden.meta_map == fs.hidden.meta_map[hiddenName.value := m']
       && fs'.hidden.data_map == fs.hidden.data_map[hiddenName.value := fs.content.data_map[source]])
-    && (m.RedirectMeta? ==> fs'.hidden == fs.hidden)
+    && (m.RedirectMeta? ==> 
+      && fs'.content.data_map == fs.content.data_map
+      && fs'.hidden.meta_map == fs.hidden.meta_map[m.source := m']
+      && fs'.hidden.data_map == fs.hidden.data_map)
   }
 
   function MetaDataChangeAttr(v: View, path: Path, perm: int, uid:int, gid: int, ctime: Time): MetaData
