@@ -38,23 +38,29 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   datatype UpdateState =
     | UpdateInit(op: nrifc.UpdateOp)
-    | UpdatePlaced(nodeId: NodeId, idx: nat)
+    | UpdatePlaced(nodeId: NodeId) //, idx: nat)
     | UpdateDone(ret: nrifc.ReturnType)
 
   // There is only one 'combiner' for a given node.
   // You can't enter the combining phase whenever you want. You must
   // start from the 'CombinerReady' state.
 
+  // TODOs: CombinerState should have transitions for:
+  //    * reading the global tail during exec
+  //    * updating the ctail at the end of exec
+  // global tail should be reflected in the M state
+
   datatype CombinerState =
     | CombinerReady(queued_ops: seq<RequestId>)
     | CombinerInProgress(localTail: nat, queued_ops: seq<RequestId>, queue_index: nat)
 
   datatype ReplicaState = ReplicaState(state: nrifc.NRState)
+  datatype LogEntry = LogEntry(op: nrifc.Op, node_id: NodeId)
 
   datatype M = M(
     // the 'log' entries are shared via the circular buffer
     // (out of scope for this file)
-    log: map<nat, nrifc.Op>,
+    log: map<nat, LogEntry>,
 
     replicas: map<NodeId, nrifc.NRState>, // replicas protected by rwlock
     localTails: map<NodeId, nat>,         // localTail (atomic ints)
@@ -85,6 +91,19 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
           m.ctail.value)
          ]
        )
+  }
+
+  predicate AdvanceTail(m: M, m': M, request_ids: seq<RequestId>)
+  {
+    request_ids <= m.localUpdates.Keys
+
+    map rid | rid in localUpdates ::
+          if rid in request_ids then ... else ...
+
+    m' == m.log[global_tail := operation 1]
+               [global_tail + 1 := operation 2]
+               ...
+    m'.global_tail == m.global_tail + (number of operations)
   }
 
   function dot(x: M, y: M) : M
