@@ -1574,15 +1574,11 @@ module RwLockToken {
     c' := T.deposit_2_1(c, handle, b, a);
   }
 
-/*
   function method {:opaque} borrow_wb(gshared f: Token) : (gshared b: Handle)
-  requires f.loc.ExtLoc?
-  requires f.loc.base_loc == Base.singleton_loc()
   requires f.val.writeback.WritebackObtained?
   ensures b == f.val.writeback.b
-  {
+  /*{
     ghost var b := Base.one(f.val.writeback.b);
     Base.unwrap_borrow( borrow_back_interp_exact(f, b) )
-  }
-  */
+  }*/
 }

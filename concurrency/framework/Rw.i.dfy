@@ -233,6 +233,8 @@ module RwTokens(rw: Rw) {
   ensures token' == T.Token(token.loc, expected_value)
   ensures retrieved_value == expected_retrieved_value
 
+  //method borrow(glinear token: Token)
+
   // TODO borrow method
 
   /*
