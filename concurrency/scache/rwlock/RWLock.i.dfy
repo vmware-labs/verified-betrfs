@@ -1,5 +1,4 @@
-include "Ext.i.dfy"
-include "SimpleExtToken.i.dfy"
+include "../../framework/Rw.i.dfy"
 include "../Constants.i.dfy"
 include "FullMap.i.dfy"
 include "../../../lib/Base/Option.s.dfy"

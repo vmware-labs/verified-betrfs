@@ -9,7 +9,7 @@ module IocbStruct {
   /*
    * iocb type
    *
-   * implemented externally by iocb struct from linux iocb struct
+   * implemented externally by iocb struct
    */
 
   datatype Iocb =
@@ -22,13 +22,17 @@ module IocbStruct {
   ensures iocb.IocbUninitialized?
 
   method {:extern} iocb_prepare_read(ptr: Ptr, glinear inout iocb: Iocb,
-      offset: uint64, nbytes: uint64, buf: Ptr)
+      offset: int64, nbytes: uint64, buf: Ptr)
+  requires offset >= 0
+  requires PageSize * offset as int < 0x1000_0000_0000_0000
   requires old_iocb.ptr == ptr
   ensures iocb == IocbRead(ptr, offset as nat, nbytes as nat, buf)
 
   method {:extern} iocb_prepare_write(ptr: Ptr, glinear inout iocb: Iocb,
-      offset: uint64, nbytes: uint64, buf: Ptr)
+      offset: int64, nbytes: uint64, buf: Ptr)
+  requires offset >= 0
   requires old_iocb.ptr == ptr
+  requires PageSize * offset as int < 0x1000_0000_0000_0000
   ensures iocb == IocbWrite(ptr, offset as nat, nbytes as nat, buf)
 }
 
