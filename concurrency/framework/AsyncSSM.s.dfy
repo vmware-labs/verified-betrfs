@@ -215,8 +215,7 @@ module TicketStubPCM(IOIfc: InputOutputIfc,
   }
 }
 
-module TicketStubToken(IOIfc: InputOutputIfc,
-  ssm: TicketStubSSM(IOIfc)) {
+module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
   import pcm = TicketStubPCM(IOIfc, ssm)
   import Tokens = Tokens(pcm)
 
