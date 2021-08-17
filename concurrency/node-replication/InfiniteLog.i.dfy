@@ -46,8 +46,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // start from the 'CombinerReady' state.
 
   datatype CombinerState =
-    | CombinerReady
-    | CombinerInProgress(localTail: nat)
+    | CombinerReady(queued_ops: seq<RequestId>)
+    | CombinerInProgress(localTail: nat, queued_ops: seq<RequestId>, queue_index: nat)
 
   datatype ReplicaState = ReplicaState(state: nrifc.NRState)
 
