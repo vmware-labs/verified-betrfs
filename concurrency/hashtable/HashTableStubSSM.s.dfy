@@ -12,17 +12,6 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
   import opened CircularRange
   import opened CircularTable
 
-  // datatype ReqTicket =
-  //   | ReqTicket(rid: RequestId, input: MapIfc.Input)
-
-  // datatype ReqStub =
-  //   | ReqStub(rid: RequestId, output: MapIfc.Output)
-
-  // function req_to_map(tickest: set<ReqTicket>):
-  //   map<rid: RequestId, output: MapIfc.Output>
-  // {
-  // }
-
   datatype M =
     | Variables(table: FixedTable,
         insert_capacity: nat,
@@ -256,6 +245,16 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
   function Stub(rid: RequestId, output: IOIfc.Output) : M
   {
     unit().(resps := map[rid := output])
+  }
+
+  function OneRowTable(i: Index, entry: Entry) : FixedTable
+  {
+    UnitTable()[i := Some(entry)]
+  }
+
+  function OneRowResource(i: Index, entry: Entry, cap: nat) : M 
+  {
+    Variables(OneRowTable(i, entry), cap, map[], map[])
   }
 
   function request_ids_in_use(m: M) : set<RequestId>

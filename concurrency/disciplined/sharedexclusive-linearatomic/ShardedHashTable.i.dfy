@@ -129,17 +129,6 @@ module ShardedHashTable refines ShardedStateMachine {
     && in_r.stubs == multiset { }
   }
 
-  function OneRowTable(i: Index, entry: Entry) : FixedTable
-  {
-    UnitTable()[i := Some(entry)]
-    // seq(FixedSize(), j => if i == j then Some(entry) else None)
-  }
-
-  function OneRowResource(i: Index, entry: Entry, cap: nat) : Variables 
-  {
-    Variables(OneRowTable(i, entry), Count.Variables(cap), multiset{}, multiset{})
-  }
-
 //////////////////////////////////////////////////////////////////////////////
 // Transition definitions
 //////////////////////////////////////////////////////////////////////////////
