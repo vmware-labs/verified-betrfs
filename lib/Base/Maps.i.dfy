@@ -119,6 +119,14 @@ module Maps {
   function IMapRestrict<K,V>(m:imap<K,V>, ks: iset<K>) : (m':imap<K,V>) {
     imap k | k in ks && k in m :: m[k]
   }
+
+  lemma IMapEquivalent<K,V> (a: imap<K,V>, b: imap<K,V>)
+  requires forall k :: k in a <==> k in b
+  requires forall k | k in a :: a[k] == b[k]
+  ensures a == b
+  {
+
+  }
   
 	// Requires disjoint domains and delivers predictable result.
 	function {:opaque} MapDisjointUnion<U,T>(mapa: map<U,T>, mapb: map<U,T>) : (mapc: map<U,T>)

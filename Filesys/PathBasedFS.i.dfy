@@ -223,7 +223,7 @@ module PathBasedFS {
     && (m.MetaData? && m.ftype.Directory? ==> IsEmptyDir(fs, path))
     // maps after delete
     && var parent_dir := GetParentDir(path);
-    && var parent_m' := UpdatePathCtime(fs.content, parent_dir, ctime);
+    && var parent_m' := UpdatePathTime(fs.content, parent_dir, ctime);
     && fs'.content.meta_map == fs.content.meta_map[path := EmptyMeta][parent_dir := parent_m']
     && fs'.content.data_map == fs.content.data_map[path := EmptyData()]
     && (m.MetaData? ==> fs'.hidden == fs.hidden)
