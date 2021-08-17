@@ -8,23 +8,10 @@ module PathBasedFSInv {
   import opened FSTypes
   import opened PathSpec
 
-  predicate AliasConsistentWithID(fs: FileSys, path: Path)
-  requires WF(fs)
-  requires PathExists(fs, path)
-  requires forall p | PathExists(fs, p) :: GetMeta(fs, p).MetaData?
-  {
-    var id := GetMeta(fs, path).id;
-    var m := fs.content.meta_map[path];
-    && (forall alias | PathExists(fs, alias) && GetMeta(fs, alias).id == id ::
-      && (m.MetaData? ==> path == alias)
-      && (m.RedirectMeta? ==> m == fs.content.meta_map[alias]))
-  }
-
-  // redirect meta should have no corresponding data entry ==> emptydata  
   predicate Inv(fs: FileSys)
   {
     && WF(fs)
-    // Note(Jialin): why need this one here again?
+    // path is connected
     && (forall path | PathExists(fs, path) && path != RootDir :: ParentDirIsDir(fs, path))
     // Hidden view consistency: no redirect in the hidden map
     && (forall path :: !fs.hidden.meta_map[path].RedirectMeta?)
@@ -38,9 +25,20 @@ module PathBasedFSInv {
     && (forall path | PathExists(fs, path) :: GetMeta(fs, path).id.ID?)
     // Refinement inv: alias path and id relationship
     && (forall path | PathExists(fs, path) :: AliasConsistentWithID(fs, path))
-    //   && var m := GetMeta(fs, path);
-    //   && (fs.content.meta_map[path].MetaData? ==> NoAliasPathWithID(fs, path, m.id)) 
-    //   && (fs.content.meta_map[path].RedirectMeta? ==>  ValidAliasPathWithID(fs, path, m.id)))
+    // Refinement inv: nonexistent paths have empty data
+    && (forall path | !PathExists(fs, path) :: GetData(fs, path) == EmptyData())
+  }
+
+  predicate AliasConsistentWithID(fs: FileSys, path: Path)
+  requires WF(fs)
+  requires PathExists(fs, path)
+  requires forall p | PathExists(fs, p) :: GetMeta(fs, p).MetaData?
+  {
+    var id := GetMeta(fs, path).id;
+    var m := fs.content.meta_map[path];
+    && (forall alias | PathExists(fs, alias) && GetMeta(fs, alias).id == id ::
+      && (m.MetaData? ==> path == alias)
+      && (m.RedirectMeta? ==> m == fs.content.meta_map[alias]))
   }
 
   lemma InitImpliesInv(fs: FileSys)
@@ -91,6 +89,16 @@ module PathBasedFSInv {
       }
     }
 
+    forall p | !PathExists(fs', p)
+    ensures GetData(fs', p) == EmptyData()
+    {
+      if p != path {
+        assert !PathExists(fs, p);
+      } else {
+        assert !PathExists(fs', p);
+      }
+    }
+
     forall hidden | fs'.hidden.meta_map[hidden].MetaData?
     ensures HasReference(fs', hidden)
     {
@@ -114,7 +122,7 @@ module PathBasedFSInv {
     }
   }
 
-  lemma RenamePreservesReferences(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
+  lemma {:timeLimitMultiplier 2} RenamePreservesReferences(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
   requires Inv(fs)
   requires Rename(fs, fs', src, dst, ctime)
   ensures forall hidden | fs'.hidden.meta_map[hidden].MetaData? :: HasReference(fs', hidden)
@@ -149,16 +157,39 @@ module PathBasedFSInv {
     }
   }
 
-  lemma lime(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
+  lemma {:timeLimitMultiplier 2} RenamePreservesAliases(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
   requires Inv(fs)
   requires Rename(fs, fs', src, dst, ctime)
-  ensures 
-  // ensures forall p | PathExists(fs', p) ::
-    // && (fs'.content.meta_map[p].MetaData? ==> NoAliasPathWithID(fs', p, GetMeta(fs', p).id))
-    // && (fs'.content.meta_map[p].RedirectMeta? ==> ValidAliasPathWithID(fs', p, GetMeta(fs', p).id))
+  requires forall p | PathExists(fs', p) :: GetMeta(fs', p).MetaData?
+  ensures forall p | PathExists(fs', p) :: AliasConsistentWithID(fs', p)
   {
-    assume false;
-    // TODO need to prove
+    forall p | PathExists(fs', p)
+    ensures AliasConsistentWithID(fs', p)
+    {
+      var id := GetMeta(fs', p).id;
+      var m := fs'.content.meta_map[p];
+
+      forall alias | PathExists(fs', alias) && GetMeta(fs', alias).id == id
+      ensures m.MetaData? ==> alias == p
+      ensures m.RedirectMeta? ==> fs'.content.meta_map[alias] == m
+      {
+        if p == dst {
+          assert AliasConsistentWithID(fs, src); // observe
+        } else if BeneathDir(dst, p) {
+          var srcpath := src + p[|dst|..];
+          assert fs'.content.meta_map[p] == fs.content.meta_map[srcpath];
+          assert AliasConsistentWithID(fs, srcpath); // observe
+
+          assert srcpath != dst;
+          if BeneathDir(dst, srcpath) {
+            NoValidBeneathDir(fs, dst, srcpath);
+          }
+        } else {
+          assert id == GetMeta(fs, p).id;
+          assert AliasConsistentWithID(fs, p); // observe
+        }
+      }
+    }
   }
 
   lemma RenamePreservesInv(fs: FileSys, fs': FileSys, src: Path, dst: Path, ctime: Time)
@@ -166,6 +197,19 @@ module PathBasedFSInv {
   requires Rename(fs, fs', src, dst, ctime)
   ensures Inv(fs')
   {
+    forall p | !PathExists(fs', p)
+    ensures GetData(fs', p) == EmptyData()
+    {
+      if BeneathDir(dst, p) {
+        NoValidBeneathDir(fs, dst, p);
+        assert !PathExists(fs, p);
+      } else if p == src || BeneathDir(src, p) {
+        assert !PathExists(fs', p);
+      } else {
+        assert !PathExists(fs, p);
+      }
+    }
+
     forall p | fs'.content.meta_map[p].RedirectMeta?
     ensures ValidHiddenEntry(fs', p)
     {
@@ -195,7 +239,7 @@ module PathBasedFSInv {
     }
 
     RenamePreservesReferences(fs, fs', src, dst, ctime);
-    lime(fs, fs', src, dst, ctime);
+    RenamePreservesAliases(fs, fs', src, dst, ctime);
 
     assert Inv(fs');
   }

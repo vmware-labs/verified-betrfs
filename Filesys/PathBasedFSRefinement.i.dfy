@@ -1,12 +1,14 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "FileSystem.s.dfy"
+// include "FileSystem.s.dfy"
+include "FileSystemInv.i.dfy"
 include "PathBasedFSInv.i.dfy"
 
 module PathBasedFSRefinement {
   import F = FileSystem
   import P = PathBasedFS
+  import FInv = FileSystemInv
   import PInv = PathBasedFSInv
   import opened Options
   import opened FSTypes
@@ -14,25 +16,33 @@ module PathBasedFSRefinement {
 
   /// Interpretation Functions
 
-  function IPathMap(fs: P.FileSys) : (F.PathMap)
+  function {:opaque} IPathMap(fs: P.FileSys) : (path_map: F.PathMap)
   requires PInv.Inv(fs)
+  ensures F.PathMapComplete(path_map)
+  ensures forall p :: path_map[p] == if P.PathExists(fs, p) then P.GetMeta(fs, p).id else Nonexistent
   {
     imap path :: if P.PathExists(fs, path) then P.GetMeta(fs, path).id else Nonexistent
   }
 
-  function IMetaMap(fs: P.FileSys) : (F.MetaView)
+  function {:opaque} IMetaMap(fs: P.FileSys) : (meta_map: F.MetaView)
   requires PInv.Inv(fs)
+  ensures forall id :: id in meta_map
+  ensures forall id | id !in IPathMap(fs).Values :: meta_map[id] == EmptyMeta
+  ensures forall p :: meta_map[IPathMap(fs)[p]] == P.GetMeta(fs, p)
   {
     var path_map := IPathMap(fs);
 
     imap id : ID :: 
-      if id in path_map.Values 
+      if id in path_map.Values
       then var p :| p in path_map && path_map[p] == id; P.GetMeta(fs, p)
       else EmptyMeta
   }
 
-  function IDataMap(fs: P.FileSys) : (F.DataView)
+  function {:opaque} IDataMap(fs: P.FileSys) : (data_map: F.DataView)
   requires PInv.Inv(fs)
+  ensures forall id :: id in data_map
+  ensures forall id | id !in IPathMap(fs).Values :: data_map[id] == EmptyData()
+  ensures forall p :: data_map[IPathMap(fs)[p]] == P.GetData(fs, p)
   {
     var path_map := IPathMap(fs);
 
@@ -69,18 +79,29 @@ module PathBasedFSRefinement {
 
   /// Refinement Proofs
 
-  lemma PathExistsEquiv(fs: P.FileSys, path: Path)
+  lemma InvImpliesInv(fs: P.FileSys)
   requires PInv.Inv(fs)
-  requires P.PathExists(fs, path)
-  ensures F.PathExists(I(fs), path)
+  ensures FInv.Inv(I(fs))
   {
   }
 
-  lemma GetMetaEquiv(fs: P.FileSys, path: Path)
-  requires PInv.Inv(fs)
-  ensures P.GetMeta(fs, path) == I(fs).meta_map[I(fs).path_map[path]]
-  {
-  }
+  // lemma PathExistsEquiv(fs: P.FileSys, path: Path)
+  // requires PInv.Inv(fs)
+  // ensures P.PathExists(fs, path) ==> F.PathExists(I(fs), path)
+  // {
+  // }
+
+  // lemma GetMetaEquiv(fs: P.FileSys, path: Path)
+  // requires PInv.Inv(fs)
+  // ensures P.GetMeta(fs, path) == I(fs).meta_map[I(fs).path_map[path]]
+  // {
+  // }
+
+  // lemma GetDataEquiv(fs: P.FileSys, path: Path)
+  // requires PInv.Inv(fs)
+  // ensures P.GetData(fs, path) == I(fs).data_map[I(fs).path_map[path]]
+  // {
+  // }
 
   lemma NoAliasEquiv(fs: P.FileSys, path: Path)
   requires PInv.Inv(fs)
@@ -104,13 +125,14 @@ module PathBasedFSRefinement {
   ensures F.Next(I(fs), I(fs'))
   {
     var step :| P.NextStep(fs, fs', step);
-    NextStepPreservesInv(fs, fs', step);
+    PInv.NextStepPreservesInv(fs, fs', step);
+    NextStepRefines(fs, fs', step);
   }
 
-  lemma NextStepPreservesInv(fs: P.FileSys, fs': P.FileSys, step: P.Step)
+  lemma NextStepRefines(fs: P.FileSys, fs': P.FileSys, step: P.Step)
   requires PInv.Inv(fs)
   requires P.NextStep(fs, fs', step)
-  ensures PInv.Inv(fs')
+  requires PInv.Inv(fs')
   ensures F.NextStep(I(fs), I(fs'), IStep(step))
   {
     var i_step := IStep(step);
@@ -121,15 +143,15 @@ module PathBasedFSRefinement {
       case CreateStep(path, m) => RefinesCreate(fs, fs', path, m);
 
       // ===== TBD =====
-      case DeleteStep(path, ctime) => RefinesDelete(fs, fs', path, ctime);
-      case RenameStep(source, dest, ctime) => {
-        assert i_step == F.RenameStep(source, dest, ctime); // observe
-        RefinesRename(fs, fs', source, dest, ctime);
-      } 
-      case LinkStep(source, dest, ctime, hiddenName) => {
-        assert i_step == F.LinkStep(source, dest, ctime); // observe
-        RefinesLink(fs, fs', source, dest, ctime, hiddenName);
-      }
+      // case DeleteStep(path, ctime) => RefinesDelete(fs, fs', path, ctime);
+      // case RenameStep(source, dest, ctime) => {
+      //   assert i_step == F.RenameStep(source, dest, ctime); // observe
+      //   RefinesRename(fs, fs', source, dest, ctime);
+      // } 
+      // case LinkStep(source, dest, ctime, hiddenName) => {
+      //   assert i_step == F.LinkStep(source, dest, ctime); // observe
+      //   RefinesLink(fs, fs', source, dest, ctime, hiddenName);
+      // }
       case _ => {
         assume false;
       }
@@ -152,24 +174,89 @@ module PathBasedFSRefinement {
 
   lemma RefinesCreate(fs: P.FileSys, fs': P.FileSys, path: Path, m: MetaData)
   requires PInv.Inv(fs)
+  requires PInv.Inv(fs')
   requires P.Create(fs, fs', path, m)
-  ensures PInv.Inv(fs')
   ensures F.Create(I(fs), I(fs'), path, m)
   {
+    var i_fs := I(fs);
+    var i_fs' := I(fs');
+    var parent_dir := GetParentDir(path);
+    var parent_id := P.GetMeta(fs, parent_dir).id;
+    var parent_m' := P.UpdatePathTime(fs.content, parent_dir, m.mtime);
 
-    // how to refine create
+    assert !P.PathExists(fs, path);
+    assert i_fs.meta_map[m.id].EmptyMeta?;
+    assert i_fs.data_map[m.id] == P.GetData(fs, path) == EmptyData();
+    assert i_fs'.path_map == i_fs.path_map[path := m.id];
 
+    forall id 
+    ensures i_fs'.meta_map[id] == i_fs.meta_map[m.id := m][parent_id := parent_m'][id]
+    ensures i_fs'.data_map[id] == i_fs.data_map[id]
+    {
+      if id in i_fs.path_map.Values {
+        assert id != m.id;
+        if id == parent_id {
+          calc {
+            i_fs.meta_map[m.id := m][parent_id := parent_m'][id];
+            P.GetMeta(fs', parent_dir);
+            i_fs'.meta_map[parent_id];
+          }
+          calc {
+            i_fs'.data_map[parent_id];
+            P.GetData(fs', parent_dir);
+            P.GetData(fs, parent_dir);
+            i_fs.data_map[parent_id];
+          }
+        } else {
+          if exists p :: P.PathExists(fs, p) && P.GetMeta(fs, p).id == id {
+            var p :|  P.PathExists(fs, p) && P.GetMeta(fs, p).id == id;
+            calc {
+              i_fs.meta_map[id];
+              P.GetMeta(fs, p);
+              P.GetMeta(fs', p);
+              i_fs.meta_map[id];
+              i_fs.meta_map[m.id := m][parent_id := parent_m'][id];
+            }
+            calc {
+              i_fs'.data_map[id];
+              P.GetData(fs', p);
+              P.GetData(fs, p);
+              i_fs.data_map[id];
+            }
+          } else {
+            assert id.Nonexistent?;
+            InvImpliesInv(fs);
+            InvImpliesInv(fs');
+          }
+        }
+      } else {
+        if id == m.id {
+          calc {
+            i_fs'.meta_map[m.id];
+            P.GetMeta(fs', path);
+            { assert m.id == id; }
+            i_fs.meta_map[m.id := m][parent_id := parent_m'][id];
+          }
+        } else {
+          calc {
+            i_fs'.meta_map[id];
+            i_fs.meta_map[id];
+            i_fs.meta_map[m.id := m][parent_id := parent_m'][id];
+          }
+        }
+        assert i_fs.data_map[id] == EmptyData();
+        assert i_fs'.data_map[id] == EmptyData();
+      }
+    }
 
-    // PathExistsEquiv(fs, path);
-    // GetMetaEquiv(fs, path);
-
-    assume false;
+    assert i_fs'.data_map == i_fs.data_map;
+    assert F.Create(i_fs, i_fs', path, m);
   }
 
   lemma RefinesDelete(fs: P.FileSys, fs': P.FileSys, path: Path, ctime: Time)
   requires PInv.Inv(fs)
+  requires PInv.Inv(fs')
   requires P.Delete(fs, fs', path, ctime)
-  ensures PInv.Inv(fs')
   ensures F.Delete(I(fs), I(fs'), path, ctime)
   {
     assume false;
@@ -177,8 +264,8 @@ module PathBasedFSRefinement {
 
   lemma RefinesRename(fs: P.FileSys, fs': P.FileSys, source: Path, dest: Path, ctime: Time)
   requires PInv.Inv(fs)
+  requires PInv.Inv(fs')
   requires P.Rename(fs, fs', source, dest, ctime)
-  ensures PInv.Inv(fs')
   ensures F.Rename(I(fs), I(fs'), source, dest, ctime)
   {
     assume false;
@@ -186,8 +273,8 @@ module PathBasedFSRefinement {
 
   lemma RefinesLink(fs: P.FileSys, fs': P.FileSys, source: Path, dest: Path, ctime: Time, hiddenName: Option<Path>)
   requires PInv.Inv(fs)
+  requires PInv.Inv(fs')
   requires P.Link(fs, fs', source, dest, ctime, hiddenName)
-  ensures PInv.Inv(fs')
   ensures F.Link(I(fs), I(fs'), source, dest, ctime)
   {
     assume false;
@@ -203,6 +290,5 @@ module PathBasedFSRefinement {
   //   assume false;
   // }
 
-  // maybe for simple ones
 
 }
