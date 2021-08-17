@@ -24,9 +24,6 @@ module AtomicRefcountImpl {
     forall v, g :: atomic_inv(a, v, g) <==> state_inv(v, g, t, rwlock_loc)
   }
 
-  method unsafe_obtain<R>() returns (glinear r: R)
-  method unsafe_dispose<R>(glinear r: R)
-
   method is_refcount_eq(a: AtomicRefcount, val: uint8,
       ghost user_t: nat, ghost t: nat,
       glinear m: T.Token, ghost rwlock_loc: Loc)

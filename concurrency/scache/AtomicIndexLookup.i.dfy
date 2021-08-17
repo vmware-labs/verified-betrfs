@@ -30,9 +30,6 @@ module AtomicIndexLookupImpl {
     forall v, g :: atomic_inv(a, v, g) <==> state_inv(v, g, disk_idx)
   }
 
-  method unsafe_obtain<Q>() returns (linear r: Q)
-  method unsafe_dispose<Q>(linear r: Q)
-
   method atomic_index_lookup_read(
       a: AtomicIndexLookup,
       disk_idx: int)
