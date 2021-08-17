@@ -88,24 +88,6 @@ module PathBasedFSRefinement {
   {
   }
 
-  // lemma PathExistsEquiv(fs: P.FileSys, path: Path)
-  // requires PInv.Inv(fs)
-  // ensures P.PathExists(fs, path) ==> F.PathExists(I(fs), path)
-  // {
-  // }
-
-  // lemma GetMetaEquiv(fs: P.FileSys, path: Path)
-  // requires PInv.Inv(fs)
-  // ensures P.GetMeta(fs, path) == I(fs).meta_map[I(fs).path_map[path]]
-  // {
-  // }
-
-  // lemma GetDataEquiv(fs: P.FileSys, path: Path)
-  // requires PInv.Inv(fs)
-  // ensures P.GetData(fs, path) == I(fs).data_map[I(fs).path_map[path]]
-  // {
-  // }
-
   lemma NoAliasEquiv(fs: P.FileSys, path: Path)
   requires PInv.Inv(fs)
   requires P.PathExists(fs, path)
@@ -139,23 +121,26 @@ module PathBasedFSRefinement {
   ensures F.NextStep(I(fs), I(fs'), IStep(step))
   {
     var i_step := IStep(step);
-
     match step {
       case GetAttrStep(path, ctime) => RefinesGetAttr(fs, fs', path, ctime);
       case ReadLinkStep(path, link_path) => RefinesReadLink(fs, fs', path, link_path);
       case CreateStep(path, m) => RefinesCreate(fs, fs', path, m);
       case DeleteStep(path, ctime) => RefinesDelete(fs, fs', path, ctime);
-      // case RenameStep(source, dest, ctime) => {
-      //   assert i_step == F.RenameStep(source, dest, ctime); // observe
-      //   RefinesRename(fs, fs', source, dest, ctime);
-      // } 
-      // case LinkStep(source, dest, ctime, hiddenName) => {
-      //   assert i_step == F.LinkStep(source, dest, ctime); // observe
-      //   RefinesLink(fs, fs', source, dest, ctime, hiddenName);
-      // }
-      case _ => {
-        assume false;
+      case RenameStep(source, dest, ctime) => {
+        assert i_step == F.RenameStep(source, dest, ctime); // observe
+        RefinesRename(fs, fs', source, dest, ctime);
+      } 
+      case LinkStep(source, dest, ctime, hiddenName) => {
+        assert i_step == F.LinkStep(source, dest, ctime); // observe
+        RefinesLink(fs, fs', source, dest, ctime, hiddenName);
       }
+      case ChangeAttrStep(path, perm, uid, gid, ctime) => RefinesChangeAttr(fs, fs', path, perm, uid, gid, ctime);
+      case TruncateStep(path, size, time) => RefinesTruncate(fs, fs', path, size, time);
+      case ReadStep(path, offset, size, data) => RefinesRead(fs, fs', path, offset, size, data);
+      case WriteStep(path, offset, size, data, time) => RefinesWrite(fs, fs', path, offset, size, data, time);
+      case UpdateTimeStep(path, atime, mtime, ctime) => RefinesUpdateTime(fs, fs', path, atime, mtime, ctime);
+      case ReadDirStep(dir, start, results, done) => RefinesReadDir(fs, fs', dir, start, results, done);
+      case _ => {}
     }
   }
 
@@ -173,6 +158,7 @@ module PathBasedFSRefinement {
   {
   }
 
+  // TODO: revisit for timeout problem
   lemma RefinesCreate(fs: P.FileSys, fs': P.FileSys, path: Path, m: MetaData)
   requires PInv.Inv(fs)
   requires PInv.Inv(fs')
@@ -194,7 +180,6 @@ module PathBasedFSRefinement {
     ensures i_fs'.meta_map[id] == i_fs.meta_map[m.id := m][parent_id := parent_m'][id]
     ensures i_fs'.data_map[id] == i_fs.data_map[id]
     {
-      // maybe I can make the unchanging ones into a separate formula
       if id in i_fs.path_map.Values {
         if id == parent_id {
           calc {
@@ -356,15 +341,52 @@ module PathBasedFSRefinement {
     assume false;
   }
 
-  // lemma RefinesSimpleStep(fs: P.FileSys, fs': P.FileSys, step: P.Step)
-  // requires PInv.Inv(fs)
-  // requires P.NextStep(fs, fs', step)
-  // requires step.CreateStep? || step.ChangeAttrStep? || step.TruncateStep? || step.WriteStep? || step.UpdateTimeStep?
-  // ensures PInv.Inv(fs')
-  // ensures F.NextStep(I(fs), I(fs'), IStep(step))
-  // {
-  //   assume false;
-  // }
+  lemma RefinesChangeAttr(fs: P.FileSys, fs': P.FileSys, path: Path, perm: int, uid: int, gid: int, ctime: Time)
+  requires PInv.Inv(fs)
+  requires PInv.Inv(fs')
+  requires P.ChangeAttr(fs, fs', path, perm, uid, gid, ctime)
+  ensures F.ChangeAttr(I(fs), I(fs'), path, perm, uid, gid, ctime)
+  {
+  }
 
+  lemma RefinesTruncate(fs: P.FileSys, fs': P.FileSys, path: Path, size: int, time: Time)
+  requires PInv.Inv(fs)
+  requires PInv.Inv(fs')
+  requires P.Truncate(fs, fs', path, size, time)
+  ensures F.Truncate(I(fs), I(fs'),  path, size, time)
+  {
+  }
+
+  lemma RefinesRead(fs: P.FileSys, fs': P.FileSys, path: Path, offset: int, size: int, data: Data)
+  requires PInv.Inv(fs)
+  requires PInv.Inv(fs')
+  requires P.Read(fs, fs', path, offset, size, data)
+  ensures F.Read(I(fs), I(fs'), path, offset, size, data)
+  {
+  }
+
+  lemma RefinesWrite(fs: P.FileSys, fs': P.FileSys, path: Path, offset: int, size: int, data: Data, time: Time)
+  requires PInv.Inv(fs)
+  requires PInv.Inv(fs')
+  requires P.Write(fs, fs', path, offset, size, data, time)
+  ensures F.Write(I(fs), I(fs'), path, offset, size, data, time)
+  {
+  }
+
+  lemma RefinesUpdateTime(fs: P.FileSys, fs': P.FileSys, path: Path, atime: Time, mtime: Time, ctime: Time)
+  requires PInv.Inv(fs)
+  requires PInv.Inv(fs')
+  requires P.UpdateTime(fs, fs', path, atime, mtime, ctime)
+  ensures F.UpdateTime(I(fs), I(fs'), path, atime, mtime, ctime)
+  {
+  }
+
+  lemma RefinesReadDir(fs: P.FileSys, fs': P.FileSys, dir: Path, start: Option<Path>, results: seq<DirEntry>, done: bool)
+  requires PInv.Inv(fs)
+  requires PInv.Inv(fs')
+  requires P.ReadDir(fs, fs', dir, start, results, done)
+  ensures F.ReadDir(I(fs), I(fs'), dir, start, results, done)
+  {
+  }
 
 }
