@@ -55,12 +55,13 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     | CombinerInProgress(localTail: nat, queued_ops: seq<RequestId>, queue_index: nat)
 
   datatype ReplicaState = ReplicaState(state: nrifc.NRState)
-  datatype LogEntry = LogEntry(op: nrifc.Op, node_id: NodeId)
+  datatype LogEntry = LogEntry(op: nrifc.UpdateOp, node_id: NodeId)
 
   datatype M = M(
     // the 'log' entries are shared via the circular buffer
     // (out of scope for this file)
     log: map<nat, LogEntry>,
+    global_tail: Option<nat>,
 
     replicas: map<NodeId, nrifc.NRState>, // replicas protected by rwlock
     localTails: map<NodeId, nat>,         // localTail (atomic ints)
@@ -135,18 +136,28 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
        )
   }
 
-  /*predicate AdvanceTail(m: M, m': M, request_ids: seq<RequestId>)
+  predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
   {
-    request_ids <= m.localUpdates.Keys
+    && m.M?
+    && m.global_tail.Some?
+    && var global_tail_var := m.global_tail.value;
+    && (set x:RequestId | x in request_ids :: x)  <= m.localUpdates.Keys
+    // Convert Updates to UpdatePlaced
+    && m' == m.(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then 
+      UpdatePlaced(nodeId) else m.localUpdates[rid])
+    )
+    && m'.global_tail.value == m.global_tail.value + |request_ids|
 
-    map rid | rid in localUpdates ::
-          if rid in request_ids then ... else ...
 
-    m' == m.log[global_tail := operation 1]
-               [global_tail + 1 := operation 2]
-               ...
-    m'.global_tail == m.global_tail + (number of operations)
-  }*/
+    // Add Log(tail-3, op1) ; Log(tail-2, op2) ; Log(tail-1, op1) ...
+    && m' == m.(log := (map idx | idx in m.log :: if idx >= global_tail_var && idx < (global_tail_var+|request_ids|) then 
+      LogEntry(UpdatePlaced(nodeId), nodeId) else m.localUpdates[idx])
+    )
+
+
+    //&& |request_ids| > 0
+    //&& m' == m.(log := m.log[global_tail_var := LogEntry(m.localUpdates[request_ids[0]].op, nodeId)])
+  }
 
   function dot(x: M, y: M) : M
   function unit() : M
