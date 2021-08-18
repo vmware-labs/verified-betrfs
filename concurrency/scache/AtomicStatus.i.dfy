@@ -2,7 +2,7 @@ include "../framework/Atomic.s.dfy"
 include "rwlock/RwLock.i.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "CacheResources.i.dfy"
-include "GlinearOption.i.dfy"
+include "../framework/GlinearOption.i.dfy"
 
 module AtomicStatusImpl {
   import opened NativeTypes
