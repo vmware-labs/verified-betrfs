@@ -1,6 +1,6 @@
-include "../framework/StateMachines.s.dfy"
-include "../../lib/Lang/NativeTypes.s.dfy"
-include "../framework/DiskSSM.s.dfy"
+include "../../framework/StateMachines.s.dfy"
+include "../../../lib/Lang/NativeTypes.s.dfy"
+include "../../framework/DiskSSM.s.dfy"
 
 module CacheIfc refines InputOutputIfc {
   import opened NativeTypes

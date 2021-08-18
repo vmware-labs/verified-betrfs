@@ -12,7 +12,7 @@ module {:extern "Atomics"} Atomics {
     function {:extern} namespace() : nat
   }
 
-  type GhostAtomic<G> = Atomic<(), G>
+  type GhostAtomic<!G> = Atomic<(), G>
 
   predicate {:extern} atomic_inv<V, G>(atomic: Atomic<V, G>, v: V, g: G)
 

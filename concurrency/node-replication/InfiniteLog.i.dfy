@@ -38,23 +38,30 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   datatype UpdateState =
     | UpdateInit(op: nrifc.UpdateOp)
-    | UpdatePlaced(nodeId: NodeId, idx: nat)
+    | UpdatePlaced(nodeId: NodeId) //, idx: nat)
     | UpdateDone(ret: nrifc.ReturnType)
 
   // There is only one 'combiner' for a given node.
   // You can't enter the combining phase whenever you want. You must
   // start from the 'CombinerReady' state.
 
+  // TODOs: CombinerState should have transitions for:
+  //    * reading the global tail during exec
+  //    * updating the ctail at the end of exec
+  // global tail should be reflected in the M state
+
   datatype CombinerState =
-    | CombinerReady
-    | CombinerInProgress(localTail: nat)
+    | CombinerReady(queued_ops: seq<RequestId>)
+    | CombinerInProgress(localTail: nat, queued_ops: seq<RequestId>, queue_index: nat)
 
   datatype ReplicaState = ReplicaState(state: nrifc.NRState)
+  datatype LogEntry = LogEntry(op: nrifc.UpdateOp, node_id: NodeId)
 
   datatype M = M(
     // the 'log' entries are shared via the circular buffer
     // (out of scope for this file)
-    log: map<nat, nrifc.Op>,
+    log: map<nat, LogEntry>,
+    global_tail: Option<nat>,
 
     replicas: map<NodeId, nrifc.NRState>, // replicas protected by rwlock
     localTails: map<NodeId, nat>,         // localTail (atomic ints)
@@ -85,6 +92,71 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
           m.ctail.value)
          ]
        )
+  }
+
+  predicate TransitionReadonlyReadyToRead(m: M, m': M, rid: RequestId) {
+    && m.M?
+    && rid in m.localReads
+    && var readRequest := m.localReads[rid];
+    && readRequest.ReadonlyCtail?
+    && readRequest.nodeId in m.localTails
+    && var localTail := m.localTails[readRequest.nodeId];
+    && readRequest.ctail >= localTail
+    && m' == m.(localReads := m.localReads[rid :=
+        ReadonlyReadyToRead(
+          m.localReads[rid].op,
+          m.localReads[rid].nodeId)
+         ]
+       )
+  }
+
+  predicate TransitionReadonlyDone(m: M, m': M, rid: RequestId) {
+    && m.M?
+    && rid in m.localReads
+    && var readRequest := m.localReads[rid];
+    && readRequest.ReadonlyReadyToRead?
+    && readRequest.nodeId in m.replicas
+    && var ret := nrifc.read(m.replicas[readRequest.nodeId], readRequest.op);
+    && m' == m.(localReads := m.localReads[rid :=
+        ReadonlyDone(ret)]
+       )
+  }
+
+  predicate TransitionCombine(m: M, m': M, nodeId: NodeId, rid: RequestId, op: nrifc.UpdateOp) {
+    && m.M?
+    && nodeId in m.combiner
+    && m.combiner[nodeId].CombinerReady?
+
+    //&& forall rid in rids ==> !m.localUpdates[rid]
+    && !(rid in m.localUpdates)
+
+    // TODO(gz): Don't conserve client
+    && m' == m.(localUpdates := m.localUpdates[rid :=
+        UpdateInit(op)]
+       )
+  }
+
+  predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
+  {
+    && m.M?
+    && m.global_tail.Some?
+    && var global_tail_var := m.global_tail.value;
+    && (set x:RequestId | x in request_ids :: x)  <= m.localUpdates.Keys
+    // Convert Updates to UpdatePlaced
+    && m' == m.(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then 
+      UpdatePlaced(nodeId) else m.localUpdates[rid])
+    )
+    && m'.global_tail.value == m.global_tail.value + |request_ids|
+
+
+    // Add Log(tail-3, op1) ; Log(tail-2, op2) ; Log(tail-1, op1) ...
+    && m' == m.(log := (map idx | idx in m.log :: if idx >= global_tail_var && idx < (global_tail_var+|request_ids|) then 
+      LogEntry(UpdatePlaced(nodeId), nodeId) else m.localUpdates[idx])
+    )
+
+
+    //&& |request_ids| > 0
+    //&& m' == m.(log := m.log[global_tail_var := LogEntry(m.localUpdates[request_ids[0]].op, nodeId)])
   }
 
   function dot(x: M, y: M) : M

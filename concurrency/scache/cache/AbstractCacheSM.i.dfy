@@ -1,5 +1,4 @@
-include "../framework/DiskSSM.s.dfy"
-include "CacheTypes.i.dfy"
+include "../../framework/DiskSSM.s.dfy"
 include "CacheSpec.s.dfy"
 
 module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
