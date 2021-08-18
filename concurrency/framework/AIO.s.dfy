@@ -6,6 +6,8 @@ module IocbStruct {
   import opened Ptrs
   import opened NativeTypes
 
+  const PageSize := 4096
+
   /*
    * iocb type
    *
@@ -71,8 +73,6 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   import opened IocbStruct
   import opened Ptrs
   import T = DiskSSMTokens(ioifc, ssm)
-
-  const PageSize := 4096
 
   /*
    * DiskInterface

@@ -3,6 +3,7 @@ include "AtomicStatus.i.dfy"
 include "AtomicIndexLookup.i.dfy"
 include "../framework/Ptrs.s.dfy"
 include "BasicLock.i.dfy"
+include "../framework/AIO.s.dfy"
 
 module CacheImpl {
   import opened Ptrs
@@ -13,6 +14,8 @@ module CacheImpl {
   import opened Constants
   import opened NativeTypes
   import opened BasicLockImpl
+  import opened CacheHandle
+  import opened IocbStruct
 
   linear datatype NullGhostType = NullGhostType
 
@@ -28,11 +31,11 @@ module CacheImpl {
     global_clockpointer: Atomic<uint32, NullGhostType>
   )
   {
-    function method key(i: int) : RWLock.Key
+    function method key(i: int) : Key
     requires 0 <= i < |this.data|
     requires 0 <= i < |this.disk_idx_of_entry|
     {
-      RWLock.Key(this.data[i], this.disk_idx_of_entry[i], i)
+      Key(this.data[i], this.disk_idx_of_entry[i], i)
     }
 
     predicate Inv()
@@ -73,9 +76,9 @@ module CacheImpl {
     | IOSlotWrite(cache_idx: uint64)
     | IOSlotRead(cache_idx: uint64)
 
-  linear datatype IOSlotAccess = IOSlotAccess(
-    linear aiocb: Deref<Aiocb>,
-    linear info: Deref<IOSlotInfo>)
+  glinear datatype IOSlotAccess = IOSlotAccess(
+    glinear iocb: Iocb,
+    glinear info: PointsTo<IOSlotInfo>)
 
   datatype IOSlot = IOSlot(
     aiocb_ptr: Ptr,
@@ -97,8 +100,8 @@ module CacheImpl {
     && io_slot.info_ptr == io_slot_access.info.ptr
   }
 
-  linear datatype WritebackGhostState = WritebackGhostState(
-      linear q: RWLock.R,
+  glinear datatype WritebackGhostState = WritebackGhostState(
+      glinear q: RWLock.R,
       /*readonly*/ linear cache_entry: CacheResources.R,
       /*readonly*/ linear idx: Deref<int>)
   {

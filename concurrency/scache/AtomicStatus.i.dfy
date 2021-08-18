@@ -174,7 +174,7 @@ module AtomicStatusImpl {
         && m.value.is_handle(key)
         && disk_write_ticket.glSome?
         && disk_write_ticket.value.writes(
-            m.value.b.idx.v as uint64,
+            m.value.b.idx.v,
             m.value.b.data.s)
     {
       atomic_block var cur_flag := execute_atomic_load(this.atomic) { }
