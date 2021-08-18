@@ -1,7 +1,7 @@
 include "../framework/Atomic.s.dfy"
 include "rwlock/RwLock.i.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
-include "CacheResources.i.dfy"
+include "cache/CacheResources.i.dfy"
 include "../framework/GlinearOption.i.dfy"
 
 module AtomicStatusImpl {
@@ -16,6 +16,7 @@ module AtomicStatusImpl {
   import Rw = RwLockToken
 
   import CacheResources
+  import opened CacheStatusType
 
   const flag_zero : uint8 := 0;
 
@@ -68,6 +69,7 @@ module AtomicStatusImpl {
     )*/
     && (g.status.glNone? ==>
         && (
+        || v == flag_unmapped
         || v == flag_exc
         || v == flag_exc_accessed
         || v == flag_exc_reading
@@ -129,25 +131,19 @@ module AtomicStatusImpl {
     && (flag == RwLock.Reading_ExcLock ==> v == flag_exc_reading || v == flag_exc_accessed_reading)
   }
   
-  predicate status_inv(v: uint8, status: CacheResources.Status, key: Key)
+  predicate status_inv(v: uint8, status: Status, key: Key)
   {
-    && (status == CacheResources.Empty ==> (
-      v == flag_unmapped
-    ))
-    && (status == CacheResources.Reading ==> (
-      false
-    ))
-    && (status == CacheResources.Clean ==> (
+    && (status == Clean ==> (
       || v == flag_clean
       || v == flag_exc_clean
       || v == flag_accessed_clean
       || v == flag_exc_accessed_clean
     ))
-    && (status == CacheResources.Dirty ==> (
+    && (status == Dirty ==> (
       || v == flag_zero
       || v == flag_accessed
     ))
-    && (status == CacheResources.Writeback ==> (
+    && (status == Writeback ==> (
       || v == flag_writeback
       || v == flag_writeback_exc
       || v == flag_writeback_accessed
@@ -310,7 +306,7 @@ module AtomicStatusImpl {
     ensures success ==> m'.val == RwLock.ExcHandle(RwLock.ExcPending(t, 0, clean, m.val.exc.b))
         && m'.loc == rwlock_loc
     ensures success ==> status.glSome? && status.value.is_status(key.cache_idx,
-          (if clean then CacheResources.Clean else CacheResources.Dirty))
+          (if clean then Clean else Dirty))
     {
       atomic_block var f := execute_atomic_load(this.atomic) {
         ghost_acquire old_g;
@@ -331,9 +327,9 @@ module AtomicStatusImpl {
             rwlock, m, bit_and_uint8(f, flag_clean) != 0);
           assert status0.glSome?;
           assert bit_and_uint8(f, flag_clean) != 0 ==>
-              status0.value.status == CacheResources.Clean;
+              status0.value.status == Clean;
           assert bit_and_uint8(f, flag_clean) == 0 ==>
-              status0.value.status == CacheResources.Dirty;
+              status0.value.status == Dirty;
           status := status0;
           new_g := G(rwlock, glNone);
           assert state_inv(new_value, new_g, key, rwlock_loc);
@@ -349,19 +345,16 @@ module AtomicStatusImpl {
     method try_alloc()
     returns (success: bool,
         glinear m: glOption<Rw.Token>,
-        glinear handle_opt: glOption<Handle>,
-        glinear status: glOption<CacheResources.CacheStatus>)
+        glinear handle_opt: glOption<Handle>)
     requires this.inv()
     ensures !success ==> m.glNone?
     ensures !success ==> handle_opt.glNone?
-    ensures !success ==> status.glNone?
     ensures success ==> m.glSome?
         && m.value.val == RwLock.ReadHandle(RwLock.ReadPending)
         && m.value.loc == rwlock_loc
         && handle_opt.glSome?
         && handle_opt.value.is_handle(key)
-        && status.glSome?
-        && status.value.is_status(key.cache_idx, CacheResources.Empty)
+        && handle_opt.value.CacheEmptyHandle?
     {
       // check first to reduce contention
       atomic_block var f := execute_atomic_load(atomic) { }
@@ -370,7 +363,6 @@ module AtomicStatusImpl {
         success := false;
         m := glNone;
         handle_opt := glNone;
-        status := glNone;
       } else {
         atomic_block var did_set := execute_atomic_compare_and_set_strong(
             atomic, flag_unmapped, flag_exc_reading)
@@ -385,12 +377,9 @@ module AtomicStatusImpl {
             glinear var exc_handle, h;
             glinear var G(rwlock, status0) := old_g;
             rwlock, exc_handle, h := Rw.perform_Withdraw_Alloc(rwlock);
-            status := status0;
-            new_g := G(rwlock, glNone);
+            new_g := G(rwlock, status0);
             m := glSome(exc_handle);
             handle_opt := glSome(h);
-            assert status.glSome?;
-            assert status.value.status == CacheResources.Empty;
             assert new_g.rwlock.val.central.stored_value
                 == old_g.rwlock.val.central.stored_value;
             assert old_g.rwlock.val.central.stored_value.is_handle(key);
@@ -399,7 +388,6 @@ module AtomicStatusImpl {
           } else {
             m := glNone;
             handle_opt := glNone;
-            status := glNone;
             new_g := old_g;
             assert state_inv(new_value, new_g, key, rwlock_loc);
           }
@@ -447,7 +435,7 @@ module AtomicStatusImpl {
     requires r.val.read.ReadObtained?
     requires r.val == RwLock.ReadHandle(RwLock.ReadObtained(r.val.read.t))
     requires handle.is_handle(key)
-    requires status.is_status(key.cache_idx, CacheResources.Clean)
+    requires status.is_status(key.cache_idx, Clean)
     ensures q.loc == rwlock_loc
     ensures q.val == RwLock.SharedHandle(RwLock.SharedObtained(r.val.read.t, handle))
     {

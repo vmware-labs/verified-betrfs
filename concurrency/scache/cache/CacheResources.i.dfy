@@ -1,32 +1,22 @@
-include "../../lib/Base/Option.s.dfy"
-include "../../lib/Lang/NativeTypes.s.dfy"
-include "../framework/PCM.s.dfy"
+include "../../../lib/Base/Option.s.dfy"
+include "../../../lib/Lang/NativeTypes.s.dfy"
+include "CacheSM.i.dfy"
 
 module CacheResources {
   import opened Options
   import opened NativeTypes
   import opened GhostLoc
-
-  datatype Status = Empty | Reading | Clean | Dirty | Writeback
-
-  datatype M = M(
-    statuses: map<int, Status>
-  )
+  import opened CacheStatusType
+  import DiskIfc
 
   type Token
-  {
-    function get() : M
-    function loc() : Loc
-  }
 
-  function unit() : M
-
-  function DiskPageMap(disk_idx: int, cache_idx_opt: Option<int>) : M
+  datatype DiskPageMap = DiskPageMap(ghost disk_idx: int, ghost cache_idx_opt: Option<int>)
 
   /*function CacheEntry(
         // this field is meaningless if status == Empty
         disk_idx: int,
-        cache_idx: int, data: seq<byte>) : M*/
+        cache_idx: int, data: DiskIfc.Block) : M*/
 
   datatype CacheStatus = CacheStatus(ghost cache_idx: int, ghost status: Status)
   {
@@ -35,13 +25,18 @@ module CacheResources {
     }
   }
 
-  glinear datatype CacheEntry = CacheEntry(
-      ghost loc: Loc,
-      ghost disk_idx: int, ghost cache_idx: int, ghost data: seq<byte>)
+  datatype CacheEmpty = CacheEntry(
+      ghost cache_idx: int)
 
-  datatype DiskWriteTicket = DiskWriteTicket(ghost addr: uint64, ghost contents: seq<byte>)
+  datatype CacheReading = CacheEntry(
+      ghost cache_idx: int, ghost disk_idx: int)
+
+  datatype CacheEntry = CacheEntry(
+      ghost cache_idx: int, ghost disk_idx: int, ghost data: DiskIfc.Block)
+
+  datatype DiskWriteTicket = DiskWriteTicket(ghost addr: uint64, ghost contents: DiskIfc.Block)
   {
-    predicate writes(addr: uint64, contents: seq<byte>) {
+    predicate writes(addr: uint64, contents: DiskIfc.Block) {
       this.addr == addr && this.contents == contents
     }
   }
@@ -54,9 +49,9 @@ module CacheResources {
   }
 
     /*| DiskReadTicket(addr: uint64)
-    | DiskReadStub(addr: uint64, contents: seq<byte>)
+    | DiskReadStub(addr: uint64, contents: DiskIfc.Block)
 
-    | DiskWriteTicket(addr: uint64, contents: seq<byte>)
+    | DiskWriteTicket(addr: uint64, contents: DiskIfc.Block)
     | DiskWriteStub(addr: uint64)*/
 
   /*method initiate_page_in(

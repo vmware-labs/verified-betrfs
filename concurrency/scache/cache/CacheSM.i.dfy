@@ -2,12 +2,15 @@ include "../../framework/DiskSSM.s.dfy"
 include "CacheSpec.s.dfy"
 include "../../../lib/Base/Option.s.dfy"
 
+module CacheStatusType {
+  datatype Status = //Empty | Reading |
+        Clean | Dirty | Writeback
+}
+
 module CacheSSM refines DiskSSM(CacheIfc) {
   import opened Options
   import CacheIfc
-
-  datatype Status = //Empty | Reading |
-        Clean | Dirty | Writeback
+  import opened CacheStatusType
 
   datatype Entry =
     | Empty
