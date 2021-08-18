@@ -4,8 +4,10 @@ include "AtomicIndexLookup.i.dfy"
 include "../framework/Ptrs.s.dfy"
 include "BasicLock.i.dfy"
 include "../framework/AIO.s.dfy"
+include "cache/CacheSM.i.dfy"
+include "CacheAIOParams.i.dfy"
 
-module CacheImpl {
+module CacheTypes {
   import opened Ptrs
   import opened AtomicRefcountImpl
   import opened AtomicIndexLookupImpl
@@ -44,12 +46,15 @@ module CacheImpl {
       && |this.disk_idx_of_entry| == CACHE_SIZE
       && |this.status| == CACHE_SIZE
       && (forall i | 0 <= i < CACHE_SIZE ::
-         atomic_status_inv(this.status[i], this.key(i)))
+         && this.status[i].key == this.key(i)
+         && this.status[i].inv()
+        )
       && |this.read_refcounts| == NUM_THREADS
       && (forall j | 0 <= j < NUM_THREADS ::
           |this.read_refcounts[j]| == CACHE_SIZE)
       && (forall j, i | 0 <= j < NUM_THREADS && 0 <= i < CACHE_SIZE ::
-          atomic_refcount_inv(this.read_refcounts[j][i], this.key(i), j))
+          && this.read_refcounts[j][i].inv(j)
+          && this.read_refcounts[j][i].rwlock_loc == this.status[i].rwlock_loc)
       && |this.cache_idx_of_page| == NUM_DISK_PAGES
       && (forall d | 0 <= d < NUM_DISK_PAGES ::
           atomic_index_lookup_inv(this.cache_idx_of_page[d], d))
@@ -81,19 +86,20 @@ module CacheImpl {
     glinear info: PointsTo<IOSlotInfo>)
 
   datatype IOSlot = IOSlot(
-    aiocb_ptr: Ptr,
+    iocb_ptr: Ptr,
     info_ptr: Ptr,
     lock: BasicLock<IOSlotAccess>)
   {
     predicate WF()
     {
-      && this.lock.inv((slot_access: IOSlotAccess) =>
-        && slot_access.aiocb.ptr == this.aiocb_ptr
+      && (forall slot_access: IOSlotAccess :: this.lock.inv(slot_access) <==>
+        && slot_access.iocb.ptr == this.iocb_ptr
         && slot_access.info.ptr == this.info_ptr
       )
     }
   }
 
+  /*
   predicate is_slot_access(io_slot: IOSlot, io_slot_access: IOSlotAccess)
   {
     && io_slot.aiocb_ptr == io_slot_access.aiocb.ptr
@@ -194,4 +200,5 @@ module CacheImpl {
       && DIInv(this.disk_interface, c)
     }
   }
+  */
 }
