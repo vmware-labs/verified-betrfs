@@ -25,18 +25,19 @@ module CacheResources {
     }
   }
 
-  datatype CacheEmpty = CacheEntry(
-      ghost cache_idx: int)
+  datatype CacheEmpty = CacheEmpty(
+      ghost cache_idx: nat)
 
-  datatype CacheReading = CacheEntry(
-      ghost cache_idx: int, ghost disk_idx: int)
+  datatype CacheReading = CacheReading(
+      ghost cache_idx: nat, ghost disk_idx: nat)
 
   datatype CacheEntry = CacheEntry(
-      ghost cache_idx: int, ghost disk_idx: int, ghost data: DiskIfc.Block)
+      ghost cache_idx: nat, ghost disk_idx: nat, ghost data: DiskIfc.Block)
 
-  datatype DiskWriteTicket = DiskWriteTicket(ghost addr: uint64, ghost contents: DiskIfc.Block)
+  datatype DiskWriteTicket = DiskWriteTicket(
+      ghost addr: nat, ghost contents: DiskIfc.Block)
   {
-    predicate writes(addr: uint64, contents: DiskIfc.Block) {
+    predicate writes(addr: nat, contents: DiskIfc.Block) {
       this.addr == addr && this.contents == contents
     }
   }
@@ -48,36 +49,38 @@ module CacheResources {
     }
   }
 
+  datatype DiskReadTicket = DiskReadTicket(ghost addr: nat)
+
+  datatype DiskReadStub = DiskReadStub(ghost addr: nat, ghost data: DiskIfc.Block)
+
     /*| DiskReadTicket(addr: uint64)
     | DiskReadStub(addr: uint64, contents: DiskIfc.Block)
 
     | DiskWriteTicket(addr: uint64, contents: DiskIfc.Block)
     | DiskWriteStub(addr: uint64)*/
 
-  /*method initiate_page_in(
-      cache_idx: int,
-      disk_idx: uint64,
-      glinear s1: R,
-      glinear s2: R,
-      glinear s3: R
+  glinear method initiate_page_in(
+      ghost cache_idx: nat,
+      ghost disk_idx: nat,
+      glinear s2: CacheEmpty,
+      glinear s3: DiskPageMap
   )
   returns (
-      glinear t1: R,
-      glinear t2: R,
-      glinear t3: R,
+      glinear t2: CacheReading,
+      glinear t3: DiskPageMap,
       glinear t4: DiskReadTicket
   )
-  requires s1 == CacheStatus(cache_idx, Empty)
-  requires s2.CacheEntry? && s2.cache_idx == cache_idx
-  requires s3 == DiskPageMap(disk_idx as int, None)
-  ensures t1 == CacheStatus(cache_idx, Reading)
-  ensures t2 == s2.(disk_idx := disk_idx as int)
-  ensures t3 == DiskPageMap(disk_idx as int, Some(cache_idx))
+  requires s2.cache_idx == cache_idx
+  requires s3 == DiskPageMap(disk_idx, None)
+  ensures t2.cache_idx == cache_idx
+  ensures t2.disk_idx == disk_idx
+  ensures t3 == DiskPageMap(disk_idx, Some(cache_idx))
   ensures t4 == DiskReadTicket(disk_idx)
 
-  method finish_page_in(
-      cache_idx: int,
-      disk_idx: uint64,
+/*
+  glinear method finish_page_in(
+      ghost cache_idx: nat,
+      ghost disk_idx: uint64,
       glinear s1: R,
       glinear s2: R,
       glinear s3: DiskReadStub
@@ -108,7 +111,7 @@ module CacheResources {
   ensures status.status == Writeback
   ensures 0 <= cache_entry.disk_idx < 0x1_0000_0000_0000_0000
   ensures ticket == DiskWriteTicket(
-      cache_entry.disk_idx as uint64,
+      cache_entry.disk_idx,
       cache_entry.data)
 
   glinear method finish_writeback(
