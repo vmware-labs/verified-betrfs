@@ -54,6 +54,7 @@ module AtomicStatusImpl {
 
   predicate state_inv(v: uint8, g: G, key: Key, rwlock_loc: Loc)
   {
+    && g.rwlock.val.M?
     && g.rwlock.val.central.CentralState?
     && g.rwlock.val == RwLock.CentralHandle(g.rwlock.val.central)
 
@@ -80,10 +81,15 @@ module AtomicStatusImpl {
         || v == flag_exc_accessed_reading_clean
         || v == flag_reading_clean
         || v == flag_accessed_reading_clean
-    ))
+        )
+        && (v == flag_unmapped ==>
+          && g.rwlock.val.central.stored_value.CacheEmptyHandle?
+        )
+    )
     && (g.status.glSome? ==>
       && g.status.value.cache_idx == key.cache_idx
       && status_inv(v, g.status.value.status, key)
+      && g.rwlock.val.central.stored_value.CacheEntryHandle?
     )
     && (flag == RwLock.ExcLock_Clean ==> g.status.glNone?)
     && (flag == RwLock.ExcLock_Dirty ==> g.status.glNone?)
@@ -130,7 +136,7 @@ module AtomicStatusImpl {
     )
     && (flag == RwLock.Reading_ExcLock ==> v == flag_exc_reading || v == flag_exc_accessed_reading)
   }
-  
+
   predicate status_inv(v: uint8, status: Status, key: Key)
   {
     && (status == Clean ==> (
@@ -263,6 +269,7 @@ module AtomicStatusImpl {
     requires handle.token.loc == this.rwlock_loc
     //requires disk_write_stub.loc == key.cr_loc
     requires handle.is_handle(key)
+    requires handle.b.CacheEntryHandle?
     requires 0 <= handle.b.cache_entry.disk_idx
                < 0x1_0000_0000_0000_0000
     requires disk_write_stub.disk_idx == handle.b.cache_entry.disk_idx as uint64
@@ -432,9 +439,11 @@ module AtomicStatusImpl {
     returns (glinear q: Rw.Token)
     requires this.inv()
     requires r.loc == rwlock_loc
+    requires r.val.M?
     requires r.val.read.ReadObtained?
     requires r.val == RwLock.ReadHandle(RwLock.ReadObtained(r.val.read.t))
     requires handle.is_handle(key)
+    requires handle.CacheEntryHandle?
     requires status.is_status(key.cache_idx, Clean)
     ensures q.loc == rwlock_loc
     ensures q.val == RwLock.SharedHandle(RwLock.SharedObtained(r.val.read.t, handle))
