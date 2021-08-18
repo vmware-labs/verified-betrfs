@@ -8,6 +8,7 @@ module AtomicRefcountImpl {
   import opened Atomics
   import opened CacheHandle
   import opened GhostLoc
+  import opened Constants
   import RwLock
   import T = RwLockToken
 
@@ -17,6 +18,7 @@ module AtomicRefcountImpl {
   {
     && g.loc == rwlock_loc
     && g.val == RwLock.RefCount(t, v as nat)
+    && 0 <= t < NUM_THREADS
   }
 
   predicate atomic_refcount_inv(a: AtomicRefcount, t: nat, rwlock_loc: Loc)
@@ -47,6 +49,7 @@ module AtomicRefcountImpl {
         m' := m;
         new_g := old_g;
       }
+      assert atomic_inv(a, new_value, new_g);
       ghost_release new_g;
     }
 
@@ -68,7 +71,14 @@ module AtomicRefcountImpl {
     atomic_block var orig_value := execute_atomic_fetch_add_uint8(a, 1) {
       ghost_acquire old_g;
       glinear var new_g;
-      new_g, m' := T.perform_ReadingIncCount(m, old_g, t);
+      m', new_g := T.perform_ReadingIncCount(m, old_g, t);
+      assume old_value < 255; // TODO
+      //assert new_value == old_value + 1;
+      //assert old_g.val == RwLock.RefCount(t, old_value as int);
+      //assert old_g.val.refCounts[t] == old_value as int;
+      //assert new_g.val == RwLock.RefCount(t, new_value as int);
+      //assert state_inv(new_value, new_g, t, rwlock_loc);
+      assert atomic_inv(a, new_value, new_g);
       ghost_release new_g;
     }
   }
@@ -86,6 +96,8 @@ module AtomicRefcountImpl {
       ghost_acquire old_g;
       glinear var new_g;
       new_g, m' := T.perform_SharedIncCount(old_g, t);
+      assume old_value < 255; // TODO
+      assert atomic_inv(a, new_value, new_g);
       ghost_release new_g;
     }
   }
@@ -103,6 +115,7 @@ module AtomicRefcountImpl {
       ghost_acquire old_g;
       glinear var new_g;
       new_g := T.perform_SharedDecCountPending(old_g, m, t);
+      assert atomic_inv(a, new_value, new_g);
       ghost_release new_g;
     }
   }
@@ -120,6 +133,7 @@ module AtomicRefcountImpl {
       ghost_acquire old_g;
       glinear var new_g;
       new_g := T.perform_SharedDecCountObtained(old_g, m, t, b);
+      assert atomic_inv(a, new_value, new_g);
       ghost_release new_g;
     }
   }
