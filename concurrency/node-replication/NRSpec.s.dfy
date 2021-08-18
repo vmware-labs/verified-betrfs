@@ -18,11 +18,13 @@ abstract module NRIfc refines InputOutputIfc {
 
   type Output = ReturnType
 
-  /*
   method do_update(linear s: NRState, op: UpdateOp)
-  returns (s' linear NRstate)
-  ensures s' == update(s, op)
-  */
+  returns (linear s': NRState, ret: ReturnType)
+  ensures UpdateResult(s', ret) == update(s, op)
+
+  method do_readonly(shared s: NRState, op: ReadonlyOp)
+  returns (ret: ReturnType)
+  ensures ret == read(s, op)
 }
 
 module NR(nrifc: NRIfc) refines StateMachine(nrifc)
