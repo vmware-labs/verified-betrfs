@@ -1,22 +1,18 @@
 include "AtomicRefcount.i.dfy"
 include "AtomicStatus.i.dfy"
 include "AtomicIndexLookup.i.dfy"
-include "ArrayPtr.s.dfy"
-include "DiskInterface.s.dfy"
+include "../framework/Ptrs.s.dfy"
 include "BasicLock.i.dfy"
-include "LinearMap.s.dfy"
 
 module CacheImpl {
   import opened Ptrs
   import opened AtomicRefcountImpl
   import opened AtomicIndexLookupImpl
   import opened AtomicStatusImpl
-  import opened AtomicSpec
+  import opened Atomics
   import opened Constants
   import opened NativeTypes
-  import opened DiskInterfaceSpec
   import opened BasicLockImpl
-  import opened LinearMaps
 
   linear datatype NullGhostType = NullGhostType
 
