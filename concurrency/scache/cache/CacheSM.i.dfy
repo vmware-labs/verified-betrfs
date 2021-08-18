@@ -1,6 +1,6 @@
-include "../framework/DiskSSM.s.dfy"
+include "../../framework/DiskSSM.s.dfy"
 include "CacheSpec.s.dfy"
-include "../../lib/Base/Option.s.dfy"
+include "../../../lib/Base/Option.s.dfy"
 
 module CacheSSM refines DiskSSM(CacheIfc) {
   import opened Options
