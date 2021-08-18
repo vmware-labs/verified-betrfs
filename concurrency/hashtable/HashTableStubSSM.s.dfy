@@ -252,9 +252,9 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
     UnitTable()[i := Some(entry)]
   }
 
-  function OneRowResource(i: Index, entry: Entry, cap: nat) : M 
+  function OneRowResource(i: Index, entry: Entry) : M 
   {
-    Variables(OneRowTable(i, entry), cap, map[], map[])
+    Variables(OneRowTable(i, entry), 0, map[], map[])
   }
 
   function request_ids_in_use(m: M) : set<RequestId>

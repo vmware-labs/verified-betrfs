@@ -17,87 +17,109 @@ module Impl {
   import opened CircularTable
   import opened CircularRange
 
-  import Token = TicketStubToken(MapIfc, SSM) 
+  import T = Tokens(TicketStubPCM(MapIfc, SSM))
+  import TST = TicketStubToken(MapIfc, SSM) 
+  import opened GhostLoc
+
+  type Token = T.Token
 
   linear datatype Row = Row(
     entry: Entry,
-    glinear resource: SSM.M)
+    glinear resource: Token)
+  {
+    predicate Inv(loc: Loc, i: Index)
+    {
+      resource == OneRowToken(loc, i, entry) 
+    }
+  }
 
-  // function RowInv(i: Index, row: Row): bool
-  // {
-  //   && row.resource == SSM.OneRowResource(i, row.entry, 0) 
-  // }
+  function OneRowToken(loc: Loc, i: Index, entry: Entry): Token
+  {
+    T.Token(loc, SSM.OneRowResource(i, entry))
+  }
 
   type RowMutex = Mutex<Row>
 
   type RowMutexTable = seq<RowMutex>
 
-  // predicate RowMutexTableInv(row_mutexes: RowMutexTable)
-  //   requires |row_mutexes| <= FixedSize()
-  // {
-  //   (forall i | 0 <= i < |row_mutexes|
-  //     :: row_mutexes[i].inv == ((row) => RowInv(i, row)))
-  // }
+  predicate RowMutexTableInv(row_mutexes: RowMutexTable, loc: Loc)
+    requires |row_mutexes| <= FixedSize()
+  {
+    (forall i | 0 <= i < |row_mutexes|
+      :: row_mutexes[i].inv == ((row: Row) => row.Inv(loc, i)))
+  }
 
-  // linear datatype 
+  datatype Variables = Variables(
+    row_mutexes: RowMutexTable,
+    capacity: uint32)
 
-  // linear datatype Variables = Variables(
-  //   glinear handles: glseq<MutexHandle<Row>>,
-  //   row_mutexes: RowMutexTable,
-  //   capacity: uint32)
-  // {
-  //   predicate Inv()
-  //   {
-  //     && |row_mutexes| == FixedSize()
-  //     && RowMutexTableInv(row_mutexes)
-
-  //     && |handles| == FixedSize()
-  //     // if I have the handle, it corresponds to the row mutex
-  //     && (forall i: Index | i in handles
-  //       :: handles[i].m == row_mutexes[i])
-  //   }
-
-  //   predicate HasRowHandle(index: Index)
-  //     requires Inv()
-  //   {
-  //     index in handles
-  //   }
+  linear datatype GVariables = GVariables(
+    glinear token: Token,
+    glinear handles: glseq<MutexHandle<Row>>,
+    iv: Variables)
+  {
+    predicate HasRowHandle(index: Index)
+      requires |handles| == FixedSize()
+    {
+      index in handles
+    }
 
   //   predicate HasNoRowHandle()
-  //     requires Inv()
+  //     requires |handles| == FixedSize()
   //   {
   //     forall i: Index :: !HasRowHandle(i)
   //   }
 
-  //   // linear inout method acquireRowInner(index: Index, glinear in_sv: SSM.M)
-  //   //   returns (entry: Entry, glinear out_sv: SSM.M)
+    predicate Inv()
+    {
+      && token.val.Variables?
 
-  //   //   requires old_self.Inv()
-  //   //   requires !old_self.HasRowHandle(index)
-  //   //   requires in_sv.Variables?
-  //   //   requires in_sv.table[index] == None
+      && |iv.row_mutexes| == FixedSize()
+      && RowMutexTableInv(iv.row_mutexes, token.loc)
 
-  //   //   ensures self.Inv()
-  //   //   ensures self == old_self.(handles := self.handles)
-  //   //   ensures self.HasRowHandle(index)
-  //   //   ensures forall i: Index | i != index ::
-  //   //     old_self.HasRowHandle(i) <==> self.HasRowHandle(i)
-  //   //   ensures out_sv == in_sv.(table := in_sv.table[index := Some(entry)])
-  //   // {
-  //   //   linear var row; glinear var handle: MutexHandle<Row>;
-  //   //   row, handle := self.row_mutexes[index].acquire();
+      && |handles| == FixedSize()
 
-  //   //   linear var Row(out_entry, row_r) := row;
-  //   //   entry := out_entry;
+      // have the handle ==> corresponds to the row mutex
+      && (forall i: Index :: HasRowHandle(i) ==> 
+        handles[i].m == iv.row_mutexes[i])
+      // have the handle <==> have the row in token
+      && (forall i: Index ::HasRowHandle(i) <==> token.val.table[i].Some?)
+    }
 
-  //   //   out_sv := SSM.join(in_sv, row_r);
-  //   //   assert out_sv.Variables?;
+    // lemma HandleCheck(index: Index)
+    //   requires Inv()
+    //   requires !HasRowHandle(index)
+    // {
+    //   assert token.val.table[index].None?;
+    // }
 
-  //   //   assert handle.m == self.row_mutexes[index];
-  //   //   lseq_give_inout(inout self.handles, index, handle);
+    // linear inout method acquireRowInner(index: Index)
+    //   returns (entry: Entry)
 
-  //   //   assert glseq_has(self.handles) == glseq_has(old_self.handles)[index := true];
-  //   // }
+    //   requires old_self.Inv()
+    //   requires !old_self.HasRowHandle(index)
+
+    // //   ensures self.Inv()
+    // //   ensures self == old_self.(handles := self.handles)
+    // //   ensures self.HasRowHandle(index)
+    // //   ensures forall i: Index | i != index ::
+    // //     old_self.HasRowHandle(i) <==> self.HasRowHandle(i)
+    // //   ensures out_sv == in_sv.(table := in_sv.table[index := Some(entry)])
+    // {
+    //   linear var row; glinear var handle: MutexHandle<Row>;
+    //   row, handle := self.row_mutexes[index].acquire();
+
+    //   linear var Row(out_entry, row_r) := row;
+    //   entry := out_entry;
+
+    //    := T.join(in_sv, row_r);
+    //   assert out_sv.Variables?;
+
+    //   assert handle.m == self.row_mutexes[index];
+    //   lseq_give_inout(inout self.handles, index, handle);
+
+    //   assert glseq_has(self.handles) == glseq_has(old_self.handles)[index := true];
+    // }
 
 
   // }
@@ -717,7 +739,7 @@ module Impl {
 //     assert add(expected, ri).table ==
 //       seq(FixedSize(), j => if j >= i then Some(Empty) else None);
 //     Splitted(expected, ri)
-//   }
+  }
 
   // method init(glinear in_sv: SSM.M)
   // returns (v: Variables, glinear out_sv: SSM.M)
