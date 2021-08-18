@@ -5,7 +5,7 @@ module BasicLockImpl {
   import opened GlinearOption
   import opened Atomics
 
-  type AtomicLock<!G(!new,==)> = Atomic<bool, glOption<G>>
+  type AtomicLock<!G(!new)> = Atomic<bool, glOption<G>>
 
   predicate lock_inv<G>(v: bool, g: glOption<G>, fn: G -> bool)
   {

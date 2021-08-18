@@ -5,14 +5,27 @@ module CacheAIOParams refines AIOParams {
   import T = RwLockToken
   import opened CacheHandle
 
+  datatype IOSlotInfo =
+    | IOSlotUnused
+    | IOSlotWrite(cache_idx: uint64)
+    | IOSlotRead(cache_idx: uint64)
+
+  glinear datatype IOSlotAccess = IOSlotAccess(
+    glinear iocb: Iocb,
+    glinear io_slot_info: PointsTo<IOSlotInfo>)
+
   glinear datatype ReadG = ReadG(
     ghost key: Key,
-    glinear reading: Handle
+    glinear reading: Handle,
+    ghost slot_idx: nat,
+    ghost slot_access: IOSlotAccess
   )
 
   glinear datatype WriteG = WriteG(
     ghost key: Key,
-    glinear wbo: T.WritebackObtainedToken
+    glinear wbo: T.WritebackObtainedToken,
+    ghost slot_idx: nat,
+    ghost slot_access: IOSlotAccess
   )
 
   predicate is_read_perm(
