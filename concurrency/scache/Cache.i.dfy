@@ -33,6 +33,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     global_clockpointer: Atomic<uint32, NullGhostType>,
 
+    io_slots: seq<IOSlot>,
     ioctx: aio.IOCtx
   )
   {
@@ -61,6 +62,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && |this.cache_idx_of_page| == NUM_DISK_PAGES
       && (forall d | 0 <= d < NUM_DISK_PAGES ::
           atomic_index_lookup_inv(this.cache_idx_of_page[d], d))
+      && |io_slots| == NUM_IO_SLOTS
     }
   }
 
@@ -99,8 +101,24 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && io_slot.io_slot_info_ptr == io_slot_access.io_slot_info.ptr
   }
 
-  /*
+  predicate ReadGInv(
+      cache: Cache,
+      iocb_ptr: Ptr,
+      iocb: Iocb,
+      data: seq<byte>,
+      g: WriteG)
+  {
+    && is_read_perm(iocb_ptr, iocb, data, g)
+    && g.slot_idx < NUM_IO_SLOTS
+    && |cache.io_slots| == NUM_IO_SLOTS
+    && g.slot_access.iocb.ptr == cache.io_slots[g.slot_idx].iocb_ptr
+    && g.slot_access.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && g.slot_access.iocb == iocb
+    && g.slot_access.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && g.slot_access.io_slot_info.v == IOSlotRead(g.wbo.b.key.cache_idx as uint64)
+  }
 
+  /*
   predicate WriteTaskInv(task: PendingWriteTask, g: WritebackGhostStateWithSlot, c: Cache)
   requires c.Inv()
   {
