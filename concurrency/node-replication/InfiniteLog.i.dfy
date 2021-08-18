@@ -93,7 +93,49 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
        )
   }
 
-  predicate AdvanceTail(m: M, m': M, request_ids: seq<RequestId>)
+  predicate TransitionReadonlyReadyToRead(m: M, m': M, rid: RequestId) {
+    && m.M?
+    && rid in m.localReads
+    && var readRequest := m.localReads[rid];
+    && readRequest.ReadonlyCtail?
+    && readRequest.nodeId in m.localTails
+    && var localTail := m.localTails[readRequest.nodeId];
+    && readRequest.ctail >= localTail
+    && m' == m.(localReads := m.localReads[rid :=
+        ReadonlyReadyToRead(
+          m.localReads[rid].op,
+          m.localReads[rid].nodeId)
+         ]
+       )
+  }
+
+  predicate TransitionReadonlyDone(m: M, m': M, rid: RequestId) {
+    && m.M?
+    && rid in m.localReads
+    && var readRequest := m.localReads[rid];
+    && readRequest.ReadonlyReadyToRead?
+    && readRequest.nodeId in m.replicas
+    && var ret := nrifc.read(m.replicas[readRequest.nodeId], readRequest.op);
+    && m' == m.(localReads := m.localReads[rid :=
+        ReadonlyDone(ret)]
+       )
+  }
+
+  predicate TransitionCombine(m: M, m': M, nodeId: NodeId, rid: RequestId, op: nrifc.UpdateOp) {
+    && m.M?
+    && nodeId in m.combiner
+    && m.combiner[nodeId].CombinerReady?
+
+    //&& forall rid in rids ==> !m.localUpdates[rid]
+    && !(rid in m.localUpdates)
+
+    // TODO(gz): Don't conserve client
+    && m' == m.(localUpdates := m.localUpdates[rid :=
+        UpdateInit(op)]
+       )
+  }
+
+  /*predicate AdvanceTail(m: M, m': M, request_ids: seq<RequestId>)
   {
     request_ids <= m.localUpdates.Keys
 
@@ -104,7 +146,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
                [global_tail + 1 := operation 2]
                ...
     m'.global_tail == m.global_tail + (number of operations)
-  }
+  }*/
 
   function dot(x: M, y: M) : M
   function unit() : M
