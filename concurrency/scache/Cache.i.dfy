@@ -7,7 +7,7 @@ include "../framework/AIO.s.dfy"
 include "cache/CacheSM.i.dfy"
 include "CacheAIOParams.i.dfy"
 
-module CacheTypes {
+module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Ptrs
   import opened AtomicRefcountImpl
   import opened AtomicIndexLookupImpl
@@ -18,6 +18,7 @@ module CacheTypes {
   import opened BasicLockImpl
   import opened CacheHandle
   import opened IocbStruct
+  import opened CacheAIOParams
 
   linear datatype NullGhostType = NullGhostType
 
@@ -30,7 +31,9 @@ module CacheTypes {
 
     cache_idx_of_page: seq<AtomicIndexLookup>,
 
-    global_clockpointer: Atomic<uint32, NullGhostType>
+    global_clockpointer: Atomic<uint32, NullGhostType>,
+
+    ioctx: aio.IOCtx
   )
   {
     function method key(i: int) : Key
@@ -76,66 +79,27 @@ module CacheTypes {
   ////////////////////////////////////////
   //// IO stuff
 
-  datatype IOSlotInfo =
-    | IOSlotUnused
-    | IOSlotWrite(cache_idx: uint64)
-    | IOSlotRead(cache_idx: uint64)
-
-  glinear datatype IOSlotAccess = IOSlotAccess(
-    glinear iocb: Iocb,
-    glinear info: PointsTo<IOSlotInfo>)
-
   datatype IOSlot = IOSlot(
     iocb_ptr: Ptr,
-    info_ptr: Ptr,
+    io_slot_info_ptr: Ptr,
     lock: BasicLock<IOSlotAccess>)
   {
     predicate WF()
     {
       && (forall slot_access: IOSlotAccess :: this.lock.inv(slot_access) <==>
         && slot_access.iocb.ptr == this.iocb_ptr
-        && slot_access.info.ptr == this.info_ptr
+        && slot_access.io_slot_info.ptr == this.io_slot_info_ptr
       )
     }
   }
 
-  /*
   predicate is_slot_access(io_slot: IOSlot, io_slot_access: IOSlotAccess)
   {
-    && io_slot.aiocb_ptr == io_slot_access.aiocb.ptr
-    && io_slot.info_ptr == io_slot_access.info.ptr
+    && io_slot.iocb_ptr == io_slot_access.iocb.ptr
+    && io_slot.io_slot_info_ptr == io_slot_access.io_slot_info.ptr
   }
 
-  glinear datatype WritebackGhostState = WritebackGhostState(
-      glinear q: RWLock.R,
-      /*readonly*/ linear cache_entry: CacheResources.R,
-      /*readonly*/ linear idx: Deref<int>)
-  {
-    predicate WF(c: Cache, cache_idx: int)
-    requires c.Inv()
-    {
-      && 0 <= cache_idx < CACHE_SIZE
-      && this.q == RWLock.Internal(RWLock.WriteBackObtained(c.key(cache_idx)))
-      && this.cache_entry.CacheEntry?
-      && this.cache_entry.cache_idx == cache_idx
-      && this.idx.ptr == c.disk_idx_of_entry[cache_idx]
-    }
-  }
-
-  linear datatype LoadGhostState = LoadGhostState
-
-  linear datatype WritebackGhostStateWithSlot = WritebackGhostStateWithSlot(
-        linear info: Deref<IOSlotInfo>,
-        linear g: WritebackGhostState)
-
-  linear datatype LoadGhostStateWithSlot = LoadGhostStateWithSlot(
-        linear info: Deref<IOSlotInfo>,
-        linear g: LoadGhostState)
-
-  linear datatype DIGhost = DIGhost(
-    linear write: LinearMap<Ptr, WritebackGhostStateWithSlot>,
-    linear read: LinearMap<Ptr, LoadGhostStateWithSlot>
-  )
+  /*
 
   predicate WriteTaskInv(task: PendingWriteTask, g: WritebackGhostStateWithSlot, c: Cache)
   requires c.Inv()
