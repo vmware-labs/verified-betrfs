@@ -15,7 +15,7 @@ module CacheAIOParams refines AIOParams {
     glinear wbo: T.WritebackObtainedToken
   )
 
-  predicate async_write_inv(
+  predicate is_read_perm(
       iocb_ptr: Ptr,
       iocb: Iocb,
       data: seq<byte>,
@@ -41,7 +41,7 @@ module CacheAIOParams refines AIOParams {
     ad := T.borrow_wb(g.wbo.token).data;
   }
 
-  predicate async_read_inv(
+  /*predicate async_read_inv(
       iocb_ptr: Ptr,
       iocb: Iocb,
       wp: PointsToArray<byte>,
@@ -49,5 +49,5 @@ module CacheAIOParams refines AIOParams {
   {
     && g.reading.CacheReadingHandle?
     && g.reading.is_handle(g.key)
-  }
+  }*/
 }

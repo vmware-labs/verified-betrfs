@@ -45,7 +45,7 @@ abstract module AIOParams {
   type ReadG(!new)
   type WriteG(!new)
 
-  predicate async_write_inv(
+  predicate is_read_perm(
       iocb_ptr: Ptr,
       iocb: Iocb,
       data: seq<byte>,
@@ -58,14 +58,8 @@ abstract module AIOParams {
       gshared g: WriteG)
   returns (gshared ad: PointsToArray<byte>)
   requires iocb.IocbWrite?
-  requires async_write_inv(iocb_ptr, iocb, data, g)
+  requires is_read_perm(iocb_ptr, iocb, data, g)
   ensures ad == PointsToArray(iocb.buf, data)
-
-  predicate async_read_inv(
-      iocb_ptr: Ptr,
-      iocb: Iocb,
-      wp: PointsToArray<byte>,
-      g: ReadG)
 }
 
 abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(ioifc)) {
@@ -78,7 +72,23 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
    * DiskInterface
    */
 
+  type {:extern} IOCtx
+  {
+    predicate async_read_inv(
+      iocb_ptr: Ptr,
+      iocb: Iocb,
+      wp: PointsToArray<byte>,
+      g: aioparams.ReadG)
+
+    predicate async_write_inv(
+      iocb_ptr: Ptr,
+      iocb: Iocb,
+      data: seq<byte>,
+      g: aioparams.WriteG)
+  }
+
   method {:extern} async_write<G>(
+      shared ctx: IOCtx,
       iocb_ptr: Ptr,
       glinear iocb: Iocb,
       ghost data: seq<byte>,
@@ -90,10 +100,12 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   requires iocb.nbytes == PageSize
   requires |data| == iocb.nbytes
   requires iocb.nbytes > 0
-  requires aioparams.async_write_inv(iocb_ptr, iocb, data, g)
+  requires aioparams.is_read_perm(iocb_ptr, iocb, data, g)
+  requires ctx.async_write_inv(iocb_ptr, iocb, data, g)
   requires ticket == T.Token(ssm.DiskWriteReq(iocb.offset / PageSize, data))
 
   method {:extern} async_read(
+      shared ctx: IOCtx,
       iocb_ptr: Ptr,
       glinear iocb: Iocb,
       glinear wp: PointsToArray<byte>,
@@ -103,7 +115,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   requires iocb.ptr == iocb_ptr
   requires iocb.offset % PageSize == 0
   requires iocb.nbytes == PageSize
-  requires aioparams.async_read_inv(iocb_ptr, iocb, wp, g)
+  requires ctx.async_read_inv(iocb_ptr, iocb, wp, g)
   requires ticket == T.Token(ssm.DiskReadReq(iocb.offset / PageSize))
 
   glinear datatype FinishedReq =
@@ -121,7 +133,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       glinear stub: T.Token
     )
 
-  method {:extern} get_event()
+  method {:extern} get_event(shared ctx: IOCtx)
   returns (
     iocb_ptr: Ptr,
     glinear fr: FinishedReq
@@ -130,8 +142,8 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   ensures iocb_ptr != nullptr ==> (fr.FRWrite? || fr.FRRead?)
   ensures fr.FRWrite? ==>
     && fr.iocb.IocbRead?
-    && aioparams.async_write_inv(iocb_ptr, fr.iocb, fr.data, fr.wg)
+    && ctx.async_write_inv(iocb_ptr, fr.iocb, fr.data, fr.wg)
   ensures fr.FRRead? ==>
     && fr.iocb.IocbRead?
-    && aioparams.async_read_inv(iocb_ptr, fr.iocb, fr.wp, fr.rg)
+    && ctx.async_read_inv(iocb_ptr, fr.iocb, fr.wp, fr.rg)
 }
