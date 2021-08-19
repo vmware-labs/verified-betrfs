@@ -17,6 +17,7 @@
 
 static_assert(sizeof(long long) == 8);
 static_assert(sizeof(size_t) == 8);
+static_assert(sizeof(off_t) == 8);
 
 io_context_t ctx;
 int fd = 0;
@@ -44,6 +45,11 @@ void async__submit(volatile void* i) {
 
 #define async__read async__submit
 #define async__write async__submit
+
+void sync__read(volatile void* buf, nbytes: uint64, offset: int64_t)
+{
+  pread(fd, (void*)buf, nbytes, offset);
+}
 
 volatile void* get__event() {
   struct io_event event;

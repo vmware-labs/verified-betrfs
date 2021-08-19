@@ -88,18 +88,20 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     stub := CacheResources.DiskReadStub_fold(disk_idx as nat, contents.s, s);
   }
 
-  /*
   method disk_writeback_callback(
-      cache: Cache,
-      addr: uint64,
-      /*readonly*/ linear contents: Ptrs.ArrayDeref<byte>,
-      linear g: CacheIOImpl.WritebackGhostState,
-      linear stub: CacheResources.R)
+      shared cache: Cache,
+      disk_addr: uint64,
+      cache_idx: uint64,
+      glinear wbo: T.WritebackObtainedToken,
+      glinear stub: CacheResources.DiskWriteStub)
   requires cache.Inv()
-  requires stub == CacheResources.DiskWriteStub(addr)
-  requires g.WF(addr)
+  requires 0 <= cache_idx as int < CACHE_SIZE
+  requires stub == CacheResources.DiskWriteStub(disk_addr as nat)
+  requires wbo.is_handle(cache.key(cache_idx as int))
+  requires wbo.token.loc == cache.status[cache_idx].rwlock_loc
+  requires wbo.b.CacheEntryHandle?
+  requires wbo.b.cache_entry.disk_idx == disk_addr as nat
   {
-    
+    cache.status[cache_idx].release_writeback(wbo, stub);
   }
-  */
 }
