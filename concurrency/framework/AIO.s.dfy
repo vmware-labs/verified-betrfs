@@ -144,4 +144,20 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   ensures fr.FRRead? ==>
     && fr.iocb.IocbRead?
     && ctx.async_read_inv(iocb_ptr, fr.iocb, fr.wp, fr.rg)
+
+  method {:extern} sync_read(
+      buf: Ptr,
+      nbytes: uint64,
+      offset: uint64,
+      glinear inout wp: PointsToArray<byte>,
+      glinear ticket: T.Token)
+  returns (glinear stub: T.Token)
+  requires old_wp.ptr == buf
+  requires |old_wp.s| == nbytes as int
+  requires nbytes as int == PageSize
+  requires PageSize * offset as int < 0x1_0000_0000_0000_0000
+  requires ticket == T.Token(ssm.DiskReadReq(offset as int))
+  ensures wp.ptr == buf
+  ensures |wp.s| == nbytes as int
+  ensures stub == T.Token(ssm.DiskReadResp(offset as int, wp.s))
 }

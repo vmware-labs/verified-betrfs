@@ -50,16 +50,40 @@ module CacheResources {
       : (glinear t: T.Token)
   ensures t == disk_write_ticket.defn()
 
-  datatype DiskWriteStub = DiskWriteStub(ghost disk_idx: uint64)
+  datatype DiskWriteStub = DiskWriteStub(ghost disk_idx: nat)
   {
     predicate written(disk_idx: uint64) {
-      this.disk_idx == disk_idx
+      this.disk_idx == disk_idx as nat
+    }
+
+    function defn() : T.Token {
+      T.Token(CacheSSM.DiskWriteResp(disk_idx))
     }
   }
 
   datatype DiskReadTicket = DiskReadTicket(ghost addr: nat)
+  {
+    function defn() : T.Token {
+      T.Token(CacheSSM.DiskReadReq(addr))
+    }
+  }
+
+  function method DiskReadTicket_unfold(glinear disk_read_ticket: DiskReadTicket)
+      : (glinear t: T.Token)
+  ensures t == disk_read_ticket.defn()
 
   datatype DiskReadStub = DiskReadStub(ghost addr: nat, ghost data: DiskIfc.Block)
+  {
+    function defn() : T.Token {
+      T.Token(CacheSSM.DiskReadResp(addr, data))
+    }
+  }
+
+  function method DiskReadStub_fold(ghost addr: nat, ghost data: DiskIfc.Block,
+          glinear t: T.Token)
+      : (glinear disk_read_stub: DiskReadStub)
+  requires DiskReadStub(addr, data).defn() == t
+  ensures disk_read_stub == DiskReadStub(addr, data)
 
     /*| DiskReadTicket(addr: uint64)
     | DiskReadStub(addr: uint64, contents: DiskIfc.Block)

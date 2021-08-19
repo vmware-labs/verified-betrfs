@@ -65,21 +65,30 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         CacheResources.DiskWriteTicket_unfold(ticket));
   }
 
-  /*
   method disk_read_sync(
-      addr: uint64,
+      disk_idx: uint64,
       ptr: Ptr,
-      inout linear contents: ArrayDeref<byte>,
-      linear ticket: DiskReadTicket)
-  returns (linear stub: DiskReadStub)
-  requires |old_contents.s| == 4096
-  requires ticket == DiskReadTicket(addr)
+      glinear inout contents: PointsToArray<byte>,
+      glinear ticket: CacheResources.DiskReadTicket)
+  returns (glinear stub: CacheResources.DiskReadStub)
+  requires |old_contents.s| == PageSize
+  requires ticket == CacheResources.DiskReadTicket(disk_idx as nat)
   requires old_contents.ptr == ptr
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES
   ensures contents.ptr == ptr
-  ensures |contents.s| == 4096
-  ensures stub == DiskReadStub(addr, contents.s)
+  ensures |contents.s| == PageSize
+  ensures stub == CacheResources.DiskReadStub(disk_idx as nat, contents.s)
+  {
+    glinear var s := aio.sync_read(
+        ptr,
+        4096,
+        disk_idx,
+        inout contents,
+        CacheResources.DiskReadTicket_unfold(ticket));
+    stub := CacheResources.DiskReadStub_fold(disk_idx as nat, contents.s, s);
+  }
 
-
+  /*
   method disk_writeback_callback(
       cache: Cache,
       addr: uint64,

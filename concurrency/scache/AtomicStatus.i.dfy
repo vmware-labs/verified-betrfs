@@ -272,7 +272,7 @@ module AtomicStatusImpl {
     requires handle.b.CacheEntryHandle?
     requires 0 <= handle.b.cache_entry.disk_idx
                < 0x1_0000_0000_0000_0000
-    requires disk_write_stub.disk_idx == handle.b.cache_entry.disk_idx as uint64
+    requires disk_write_stub.disk_idx == handle.b.cache_entry.disk_idx
     {
       glinear var wb;
       glinear match handle { case WritebackObtainedToken(_, t) => { wb := t; } }
