@@ -58,4 +58,6 @@ module Ptrs {
   method {:extern} alloc_linear<V>(linear v: V)
   returns (ptr: Ptr, glinear d: PointsToLinear<V>)
   ensures d == PointsToLinear(ptr, v)
+
+  glinear method {:extern} dispose_anything<V>(glinear v: V) // TODO better file for this
 }

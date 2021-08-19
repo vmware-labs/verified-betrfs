@@ -29,9 +29,9 @@ module BasicLockImpl {
    */
 
   method try_acquire<G(!new)>(l: BasicLock<G>)
-  returns (linear g: glOption<G>)
+  returns (glinear g: glOption<G>)
   ensures g.glSome? ==> l.inv(g.value)
 
-  method release<G(!new)>(l: BasicLock<G>, g: G)
+  method release<G(!new)>(l: BasicLock<G>, glinear g: G)
   requires l.inv(g)
 }

@@ -141,9 +141,11 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   ensures fr.FRWrite? ==>
     && fr.iocb.IocbRead?
     && ctx.async_write_inv(iocb_ptr, fr.iocb, fr.data, fr.wg)
+    && fr.stub == T.Token(ssm.DiskWriteResp(fr.iocb.offset))
   ensures fr.FRRead? ==>
     && fr.iocb.IocbRead?
     && ctx.async_read_inv(iocb_ptr, fr.iocb, fr.wp, fr.rg)
+    && fr.stub == T.Token(ssm.DiskReadResp(fr.iocb.offset, fr.wp.s))
 
   method {:extern} sync_read(
       buf: Ptr,

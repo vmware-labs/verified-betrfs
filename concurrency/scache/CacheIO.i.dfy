@@ -9,6 +9,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import CacheResources
   import opened CacheAIOParams
   import opened IocbStruct
+  import BasicLockImpl
 
   method get_free_io_slot(shared cache: Cache, inout linear local: LocalState)
   returns (idx: uint64, glinear access: IOSlotAccess)
@@ -90,18 +91,67 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method disk_writeback_callback(
       shared cache: Cache,
-      disk_addr: uint64,
       cache_idx: uint64,
+      ghost disk_addr: nat,
       glinear wbo: T.WritebackObtainedToken,
       glinear stub: CacheResources.DiskWriteStub)
   requires cache.Inv()
   requires 0 <= cache_idx as int < CACHE_SIZE
-  requires stub == CacheResources.DiskWriteStub(disk_addr as nat)
+  requires stub == CacheResources.DiskWriteStub(disk_addr)
   requires wbo.is_handle(cache.key(cache_idx as int))
   requires wbo.token.loc == cache.status[cache_idx].rwlock_loc
   requires wbo.b.CacheEntryHandle?
-  requires wbo.b.cache_entry.disk_idx == disk_addr as nat
+  requires wbo.b.cache_entry.disk_idx == disk_addr
   {
     cache.status[cache_idx].release_writeback(wbo, stub);
+  }
+
+  method io_cleanup(shared cache: Cache, max_io_events: uint64)
+  requires cache.Inv()
+  {
+    var counter: uint64 := 0;
+    var done := false;
+    while counter < max_io_events && !done
+    invariant 0 <= counter <= max_io_events
+    {
+      counter := counter + 1;
+      
+      var iocb_ptr;
+      glinear var fr;
+      iocb_ptr, fr := aio.get_event(cache.ioctx);
+
+      if iocb_ptr == nullptr {
+        done := true;
+        dispose_anything(fr);
+      } else {
+        assert fr.FRWrite?;
+
+        glinear var FRWrite(iocb, data, wg, stub) := fr;
+        glinear var WriteG(key, wbo, g_slot_idx, io_slot_info) := wg;
+
+        var slot_idx;
+        assume slot_idx == g_slot_idx; // TODO
+
+        var io_slot_info_value :=
+            cache.io_slots[slot_idx].io_slot_info_ptr.read(io_slot_info);
+
+        match io_slot_info_value {
+          case IOSlotWrite(cache_idx) => {
+            glinear var ustub := CacheResources.DiskWriteStub_fold(iocb.offset, stub);
+            ghost var disk_idx := ustub.disk_idx;
+            disk_writeback_callback(cache, cache_idx, disk_idx, wbo, ustub);
+          }
+          case IOSlotRead(cache_idx) => {
+            assert false;
+            dispose_anything(wbo);
+            dispose_anything(stub);
+          }
+        }
+
+        BasicLockImpl.release(
+            cache.io_slots[slot_idx].lock,
+            IOSlotAccess(iocb, io_slot_info));
+      }
+    }
   }
 }

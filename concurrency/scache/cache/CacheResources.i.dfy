@@ -61,6 +61,11 @@ module CacheResources {
     }
   }
 
+  function method DiskWriteStub_fold(ghost addr: nat, glinear t: T.Token)
+      : (glinear disk_write_stub: DiskWriteStub)
+  requires DiskWriteStub(addr).defn() == t
+  ensures disk_write_stub == DiskWriteStub(addr)
+
   datatype DiskReadTicket = DiskReadTicket(ghost addr: nat)
   {
     function defn() : T.Token {

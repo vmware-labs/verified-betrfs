@@ -114,6 +114,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       data: PointsToArray<byte>,
       g: ReadG)
   {
+    /*
     && g.slot_idx < NUM_IO_SLOTS
     && |cache.io_slots| == NUM_IO_SLOTS
     && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
@@ -121,6 +122,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && g.reading.CacheReadingHandle?
     && g.key.cache_idx < 0x1_0000_0000_0000_0000
     && g.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
+    */
+    false // currently not doing any async reads
   }
 
   predicate WriteGInv(

@@ -6,7 +6,6 @@ module CacheAIOParams refines AIOParams {
   import opened CacheHandle
 
   datatype IOSlotInfo =
-    | IOSlotUnused
     | IOSlotWrite(cache_idx: uint64)
     | IOSlotRead(cache_idx: uint64)
 
