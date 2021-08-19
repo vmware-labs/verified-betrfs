@@ -63,6 +63,10 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && (forall d | 0 <= d < NUM_DISK_PAGES ::
           atomic_index_lookup_inv(this.cache_idx_of_page[d], d))
       && |io_slots| == NUM_IO_SLOTS
+      && (forall iocb_ptr, iocb, wp, g :: ioctx.async_read_inv(iocb_ptr, iocb, wp, g)
+        <==> ReadGInv(this, iocb_ptr, iocb, wp, g))
+      && (forall iocb_ptr, iocb, wp, g :: ioctx.async_write_inv(iocb_ptr, iocb, wp, g)
+        <==> WriteGInv(this, iocb_ptr, iocb, wp, g))
     }
   }
 
@@ -105,6 +109,24 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       cache: Cache,
       iocb_ptr: Ptr,
       iocb: Iocb,
+      data: PointsToArray<byte>,
+      g: ReadG)
+  {
+    && g.slot_idx < NUM_IO_SLOTS
+    && |cache.io_slots| == NUM_IO_SLOTS
+    && g.slot_access.iocb.ptr == cache.io_slots[g.slot_idx].iocb_ptr
+    && g.slot_access.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && g.slot_access.iocb == iocb
+    && g.slot_access.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && g.reading.CacheReadingHandle?
+    && g.key.cache_idx < 0x1_0000_0000_0000_0000
+    && g.slot_access.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
+  }
+
+  predicate WriteGInv(
+      cache: Cache,
+      iocb_ptr: Ptr,
+      iocb: Iocb,
       data: seq<byte>,
       g: WriteG)
   {
@@ -115,72 +137,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && g.slot_access.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
     && g.slot_access.iocb == iocb
     && g.slot_access.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
-    && g.slot_access.io_slot_info.v == IOSlotRead(g.wbo.b.key.cache_idx as uint64)
+    && g.wbo.b.CacheEntryHandle?
+    && g.wbo.b.key.cache_idx < 0x1_0000_0000_0000_0000
+    && g.slot_access.io_slot_info.v == IOSlotWrite(g.wbo.b.key.cache_idx as uint64)
   }
-
-  /*
-  predicate WriteTaskInv(task: PendingWriteTask, g: WritebackGhostStateWithSlot, c: Cache)
-  requires c.Inv()
-  {
-    && g.info.v.IOSlotWrite?
-    && var cache_idx := g.info.v.cache_idx as int;
-    && g.g.WF(c, cache_idx)
-    && task.ptr == c.data[cache_idx]
-  }
-
-  predicate ReadTaskInv(task: PendingReadTask, g: LoadGhostStateWithSlot, c: Cache)
-  requires c.Inv()
-  {
-    true
-  }
-
-  predicate WriteMapInv(
-    writeTasks: map<Ptr, PendingWriteTask>,
-    writes: map<Ptr, WritebackGhostStateWithSlot>,
-    c: Cache)
-  requires c.Inv()
-  {
-    && (forall ptr | ptr in writeTasks :: ptr in writes
-        && WriteTaskInv(writeTasks[ptr], writes[ptr], c))
-    && (forall ptr | ptr in writes :: ptr in writeTasks)
-  }
-
-  predicate ReadMapInv(
-    readTasks: map<Ptr, PendingReadTask>,
-    read: map<Ptr, LoadGhostStateWithSlot>,
-    c: Cache)
-  requires c.Inv()
-  {
-    && (forall ptr | ptr in readTasks :: ptr in read
-        && ReadTaskInv(readTasks[ptr], read[ptr], c))
-    && (forall ptr | ptr in read :: ptr in readTasks)
-  }
-
-  predicate DIInvGhost(v: PendingTaskSet, g: DIGhost, c: Cache)
-  requires c.Inv()
-  {
-    && WriteMapInv(v.writeTasks, map_of(g.write), c)
-    && ReadMapInv(v.readTasks, map_of(g.read), c)
-  }
-
-  predicate DIInv(di: DiskInterface<DIGhost>, c: Cache)
-  requires c.Inv()
-  {
-    forall v, g ::
-      disk_interface_inv(di, v, g) <==> DIInvGhost(v, g, c)
-  }
-
-  datatype IOHandle = IOHandle(
-    io_slots: seq<IOSlot>,
-    disk_interface: DiskInterface<DIGhost>)
-  {
-    predicate Inv(c: Cache)
-    {
-      && c.Inv()
-      && |this.io_slots| == NUM_IO_SLOTS
-      && (forall i | 0 <= i < |this.io_slots| :: this.io_slots[i].WF())
-      && DIInv(this.disk_interface, c)
-    }
-  }
-  */
 }
