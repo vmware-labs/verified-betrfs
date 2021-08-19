@@ -22,7 +22,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   linear datatype NullGhostType = NullGhostType
 
-  datatype Cache = Cache(
+  linear datatype Cache = Cache(
     data: seq<Ptr>,
     disk_idx_of_entry: seq<Ptr>,
 
@@ -34,7 +34,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     global_clockpointer: Atomic<uint32, NullGhostType>,
 
     io_slots: seq<IOSlot>,
-    ioctx: aio.IOCtx
+    linear ioctx: aio.IOCtx
   )
   {
     function method key(i: int) : Key
@@ -71,14 +71,16 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   }
 
   datatype LocalState = LocalState(
-    t: int,
-    chunk_idx: uint64
+    t: uint64,
+    chunk_idx: uint64,
+    io_slot_hand: uint64
   )
   {
     predicate WF()
     {
       && 0 <= this.chunk_idx as int < NUM_CHUNKS
-      && 0 <= t < NUM_THREADS
+      && 0 <= t as int < NUM_THREADS
+      && 0 <= io_slot_hand as int < NUM_IO_SLOTS
     }
   }
 
@@ -114,13 +116,11 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   {
     && g.slot_idx < NUM_IO_SLOTS
     && |cache.io_slots| == NUM_IO_SLOTS
-    && g.slot_access.iocb.ptr == cache.io_slots[g.slot_idx].iocb_ptr
-    && g.slot_access.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
-    && g.slot_access.iocb == iocb
-    && g.slot_access.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
     && g.reading.CacheReadingHandle?
     && g.key.cache_idx < 0x1_0000_0000_0000_0000
-    && g.slot_access.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
+    && g.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
   }
 
   predicate WriteGInv(
@@ -133,12 +133,10 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && is_read_perm(iocb_ptr, iocb, data, g)
     && g.slot_idx < NUM_IO_SLOTS
     && |cache.io_slots| == NUM_IO_SLOTS
-    && g.slot_access.iocb.ptr == cache.io_slots[g.slot_idx].iocb_ptr
-    && g.slot_access.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
-    && g.slot_access.iocb == iocb
-    && g.slot_access.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
     && g.wbo.b.CacheEntryHandle?
     && g.wbo.b.key.cache_idx < 0x1_0000_0000_0000_0000
-    && g.slot_access.io_slot_info.v == IOSlotWrite(g.wbo.b.key.cache_idx as uint64)
+    && g.io_slot_info.v == IOSlotWrite(g.wbo.b.key.cache_idx as uint64)
   }
 }

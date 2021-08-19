@@ -87,7 +87,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       g: aioparams.WriteG)
   }
 
-  method {:extern} async_write<G>(
+  method {:extern} async_write(
       shared ctx: IOCtx,
       iocb_ptr: Ptr,
       glinear iocb: Iocb,
@@ -96,13 +96,12 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       glinear ticket: T.Token)
   requires iocb.IocbWrite?
   requires iocb.ptr == iocb_ptr
-  requires iocb.offset % PageSize == 0
   requires iocb.nbytes == PageSize
   requires |data| == iocb.nbytes
   requires iocb.nbytes > 0
   requires aioparams.is_read_perm(iocb_ptr, iocb, data, g)
   requires ctx.async_write_inv(iocb_ptr, iocb, data, g)
-  requires ticket == T.Token(ssm.DiskWriteReq(iocb.offset / PageSize, data))
+  requires ticket == T.Token(ssm.DiskWriteReq(iocb.offset, data))
 
   method {:extern} async_read(
       shared ctx: IOCtx,
@@ -113,10 +112,9 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       glinear ticket: T.Token)
   requires iocb.IocbRead?
   requires iocb.ptr == iocb_ptr
-  requires iocb.offset % PageSize == 0
   requires iocb.nbytes == PageSize
   requires ctx.async_read_inv(iocb_ptr, iocb, wp, g)
-  requires ticket == T.Token(ssm.DiskReadReq(iocb.offset / PageSize))
+  requires ticket == T.Token(ssm.DiskReadReq(iocb.offset))
 
   glinear datatype FinishedReq =
     | FRNone

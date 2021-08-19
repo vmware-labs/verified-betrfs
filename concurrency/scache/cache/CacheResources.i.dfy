@@ -8,8 +8,8 @@ module CacheResources {
   import opened GhostLoc
   import opened CacheStatusType
   import DiskIfc
-
-  type Token
+  import T = DiskSSMTokens(CacheIfc, CacheSSM)
+  import CacheSSM
 
   datatype DiskPageMap = DiskPageMap(ghost disk_idx: int, ghost cache_idx_opt: Option<int>)
 
@@ -40,7 +40,15 @@ module CacheResources {
     predicate writes(addr: nat, contents: DiskIfc.Block) {
       this.addr == addr && this.contents == contents
     }
+
+    function defn() : T.Token {
+      T.Token(CacheSSM.DiskWriteReq(addr, contents))
+    }
   }
+
+  function method DiskWriteTicket_unfold(glinear disk_write_ticket: DiskWriteTicket)
+      : (glinear t: T.Token)
+  ensures t == disk_write_ticket.defn()
 
   datatype DiskWriteStub = DiskWriteStub(ghost disk_idx: uint64)
   {

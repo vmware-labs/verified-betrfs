@@ -18,14 +18,14 @@ module CacheAIOParams refines AIOParams {
     ghost key: Key,
     glinear reading: Handle,
     ghost slot_idx: nat,
-    ghost slot_access: IOSlotAccess
+    glinear io_slot_info: PointsTo<IOSlotInfo>
   )
 
   glinear datatype WriteG = WriteG(
     ghost key: Key,
     glinear wbo: T.WritebackObtainedToken,
     ghost slot_idx: nat,
-    ghost slot_access: IOSlotAccess
+    glinear io_slot_info: PointsTo<IOSlotInfo>
   )
 
   predicate is_read_perm(

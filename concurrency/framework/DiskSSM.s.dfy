@@ -202,7 +202,7 @@ module DiskSSMTokens(ioifc: InputOutputIfc, ssm: DiskSSM(ioifc)) {
   //import Tokens = Tokens(pcm)
 
   //type Token = Tokens.Token
-  datatype Token = Token(m: ssm.M)
+  datatype Token = Token(val: ssm.M)
 
   /*lemma transition_of_next(a: ssm.M, b: ssm.M)
   requires ssm.Next(a, b)
