@@ -87,6 +87,10 @@ module AtomicStatusImpl {
         && (v == flag_unmapped ==>
           && g.rwlock.val.central.stored_value.CacheEmptyHandle?
         )
+        && (v == flag_exc || v == flag_exc_accessed || v == flag_exc_clean
+            || v == flag_exc_accessed_clean ==>
+          && g.rwlock.val.central.stored_value.CacheEntryHandle?
+        )
     )
     && (g.status.glSome? ==>
       && g.status.value.cache_idx == key.cache_idx
@@ -662,13 +666,14 @@ module AtomicStatusImpl {
       }
     }
 
-    method abandon_exc(glinear r: Rw.Token)
+    method abandon_exc(glinear r: Rw.Token, glinear status: CacheResources.CacheStatus)
     requires this.inv()
     requires r.loc == rwlock_loc
     requires r.val.M?
     requires r.val.exc.ExcPending?
     requires r.val == RwLock.ExcHandle(RwLock.ExcPending(
         -1, r.val.exc.visited, true, r.val.exc.b))
+    requires status == CacheResources.CacheStatus(key.cache_idx, Clean)
     {
       atomic_block var orig_value := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_exc) {
         ghost_acquire old_g;
@@ -679,7 +684,7 @@ module AtomicStatusImpl {
         rwlock := Rw.perform_AbandonExcPending(rwlock, r);
 
         dispose_anything(empty_status);
-        new_g := G(rwlock, glNone);
+        new_g := G(rwlock, glSome(status));
 
         assert state_inv(new_value, new_g, key, rwlock_loc);
         ghost_release new_g;

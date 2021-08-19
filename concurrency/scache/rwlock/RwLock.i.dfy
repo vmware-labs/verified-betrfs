@@ -1426,7 +1426,8 @@ module RwLockToken {
     && m.exc.t == -1
     && m == ExcHandle(m.exc)
   requires c.loc == handle.loc
-  ensures c.val.central.flag == PendingExcLock
+  ensures handle.val.exc.clean ==> c.val.central.flag == ExcLock_Clean
+  ensures !handle.val.exc.clean ==> c.val.central.flag == ExcLock_Dirty
   ensures c'.loc == c.loc
   ensures c'.val == CentralHandle(c.val.central.(flag := Available))
   {
