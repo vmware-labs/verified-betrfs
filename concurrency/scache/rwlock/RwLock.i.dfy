@@ -977,7 +977,7 @@ module RwLock refines Rw {
 
   lemma Deposit_AbandonReadPending_Preserves(m: M, m': M, b: StoredType)
   requires Deposit_AbandonReadPending(m, m', b)
-  requires deposit(m, m', b)
+  ensures deposit(m, m', b)
   {
     forall p: M | Inv(dot(m, p))
     ensures Inv(dot(m', p))
@@ -1047,14 +1047,13 @@ module RwLockToken {
     }
   }
 
-  glinear datatype SharedObtainedToken = SharedToken(
+  glinear datatype SharedObtainedToken = SharedObtainedToken(
     ghost t: ThreadId,
     ghost b: StoredType,
     glinear token: Token)
   {
-    predicate is_handle(t: ThreadId, b: StoredType) {
-      && this.t == t
-      && this.b == b
+    predicate is_handle(key: Key) {
+      && b.is_handle(key)
       && token.val == SharedHandle(SharedObtained(t, b))
     }
   }
@@ -1427,12 +1426,16 @@ module RwLockToken {
     && m.exc.t == -1
     && m == ExcHandle(m.exc)
   requires c.loc == handle.loc
+  ensures c.val.central.flag == PendingExcLock
   ensures c'.loc == c.loc
   ensures c'.val == CentralHandle(c.val.central.(flag := Available))
   {
     var a := CentralHandle(c.val.central.(flag := Available));
     AbandonExcPending_Preserves(dot(c.val, handle.val), a);
-    c' := T.internal_transition_2_1(c, handle, a);
+    c' := c;
+    glinear var handle' := handle;
+    var rest := T.obtain_invariant_2(inout c', inout handle');
+    c' := T.internal_transition_2_1(c', handle', a);
   }
 
   glinear method perform_Withdraw_TakeExcLockFinish(glinear handle: Token)
@@ -1563,7 +1566,7 @@ module RwLockToken {
   requires var m := handle.val;
     && m.M?
     && m.read.ReadPending?
-    && m == ExcHandle(m.exc)
+    && m == ReadHandle(m.read)
   requires c.loc == handle.loc
   ensures c'.loc == c.loc
   ensures c'.val == 
