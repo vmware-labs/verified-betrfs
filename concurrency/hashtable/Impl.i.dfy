@@ -96,10 +96,14 @@ module Impl {
       && UnwrapRange(token.val.table, range) == entries
     }
 
-    predicate UpdateGhosty(old_var: Variables)
+    predicate RowOnlyUpdate(old_var: Variables)
+      requires token.val.Variables?
+      requires old_var.token.val.Variables?
     {
-      && token.loc == old_var.token.loc
-      && iv == old_var.iv
+      var table := token.val.table;
+      var val := old_var.token.val.(table := table);
+      var token := old_var.token.(val := val);
+      && this == old_var.(token := token).(handles := handles)
     }
 
     linear inout method acquireRow(old_entries: seq<Entry>, old_range: Range)
@@ -110,10 +114,12 @@ module Impl {
       ensures entries == old_entries + [entry]
       ensures range == old_range.RightExtend1()
       ensures self.RangeOwnershipInv(entries, range)
-
       ensures self.token.val.table ==
         old_self.token.val.table[old_range.end := Some(entry)] 
       ensures self.token.loc == old_self.token.loc
+      ensures RangeFull(old_self.token.val.table, old_range)
+        && entry.Full? ==> RangeFull(self.token.val.table, range)
+      ensures self.RowOnlyUpdate(old_self)
     {
       var index := old_range.end;
       assert !old_range.Contains(index);
@@ -148,6 +154,7 @@ module Impl {
 
       ensures range == old_range.RightShrink1()
       ensures self.RangeOwnershipInv(entries[..|entries| -1 ], range)
+      ensures self.RowOnlyUpdate(old_self)
     {
       var index := old_range.GetLast();
       var len := |entries|;
@@ -172,6 +179,7 @@ module Impl {
 
       ensures self.Inv()
       ensures self.HasNoRowHandle();
+      ensures self.RowOnlyUpdate(old_self)
     {
       var range := range;
       var entries := entries;
@@ -180,7 +188,7 @@ module Impl {
       while range.HasSome()
         invariant 0 <= index <= |entries| 
         invariant self.RangeOwnershipInv(entries[..index], range)
-        // invariant self == old_self.(handles := self.handles)
+        invariant self.RowOnlyUpdate(old_self)
         decreases |range|
       {
         var slot_idx := range.GetLast();
@@ -199,14 +207,12 @@ module Impl {
       requires old_self.Inv()
       requires old_self.HasNoRowHandle()
 
-//       ensures range.Partial?
-//       ensures range.HasSome()
+      ensures range.Partial?
+      ensures range.HasSome()
 
-//       ensures self.RangeOwnershipInv(entries, range, out_sv)
-//       ensures self == old_self.(handles := self.handles)
-//       ensures found ==> KeyPresentProbeRange(out_sv.table, probe_key, range.RightShrink1())
-//       ensures !found ==> KeyAbsentProbeRange(out_sv.table, probe_key, range.RightShrink1())
-//       ensures out_sv == in_sv.(table := out_sv.table)
+      ensures self.RangeOwnershipInv(entries, range)
+      ensures found ==> KeyPresentProbeRange(self.token.val.table, probe_key, range.RightShrink1())
+      ensures !found ==> KeyAbsentProbeRange(self.token.val.table, probe_key, range.RightShrink1())
     {
       var p_hash := hash(probe_key);
 
@@ -215,12 +221,9 @@ module Impl {
 
       while true
         invariant range.Partial? && range.start == p_hash
-        // invariant self == old_self.(handles := self.handles)
         invariant self.RangeOwnershipInv(entries, range)
-        // invariant ValidPartialProbeRange(self.token.table, probe_key, range)
-        // invariant out_sv.insert_capacity == in_sv.insert_capacity
-        // invariant out_sv.tickets == in_sv.tickets
-        // invariant out_sv.stubs == in_sv.stubs
+        invariant ValidPartialProbeRange(self.token.val.table, probe_key, range)
+        invariant self.RowOnlyUpdate(old_self)
         decreases *
       {
         var slot_idx := range.end;
@@ -243,8 +246,6 @@ module Impl {
         }
       }
     }
-
-
 
 //     linear inout method acquireCapacity(glinear in_sv: SSM.M)
 //     returns (
