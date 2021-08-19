@@ -23,19 +23,19 @@ module Impl {
 
   type Token = T.Token
 
+  function OneRowToken(loc: Loc, i: Index, entry: Entry): Token
+  {
+    T.Token(loc, SSM.OneRowResource(i, entry))
+  }
+
   linear datatype Row = Row(
     entry: Entry,
     glinear resource: Token)
   {
     predicate Inv(loc: Loc, i: Index)
     {
-      resource == OneRowToken(loc, i, entry) 
+      resource == OneRowToken(loc, i, entry)
     }
-  }
-
-  function OneRowToken(loc: Loc, i: Index, entry: Entry): Token
-  {
-    T.Token(loc, SSM.OneRowResource(i, entry))
   }
 
   type RowMutex = Mutex<Row>
@@ -49,14 +49,14 @@ module Impl {
       :: row_mutexes[i].inv == ((row: Row) => row.Inv(loc, i)))
   }
 
-  datatype Variables = Variables(
+  datatype IVariables = IVariables(
     row_mutexes: RowMutexTable,
     capacity: uint32)
 
-  linear datatype GVariables = GVariables(
+  linear datatype Variables = Variables(
     glinear token: Token,
     glinear handles: glseq<MutexHandle<Row>>,
-    iv: Variables)
+    iv: IVariables)
   {
     predicate HasRowHandle(index: Index)
       requires |handles| == FixedSize()
@@ -64,11 +64,11 @@ module Impl {
       index in handles
     }
 
-  //   predicate HasNoRowHandle()
-  //     requires |handles| == FixedSize()
-  //   {
-  //     forall i: Index :: !HasRowHandle(i)
-  //   }
+    predicate HasNoRowHandle()
+      requires |handles| == FixedSize()
+    {
+      forall i: Index :: !HasRowHandle(i)
+    }
 
     predicate Inv()
     {
@@ -84,177 +84,167 @@ module Impl {
         handles[i].m == iv.row_mutexes[i])
       // have the handle <==> have the row in token
       && (forall i: Index ::HasRowHandle(i) <==> token.val.table[i].Some?)
+
+      && iv.capacity as nat == token.val.insert_capacity
     }
 
-    // lemma HandleCheck(index: Index)
-    //   requires Inv()
-    //   requires !HasRowHandle(index)
-    // {
-    //   assert token.val.table[index].None?;
-    // }
+    predicate RangeOwnershipInv(entries: seq<Entry>, range: Range)
+    {
+      && Inv()
+      && range.Partial?
+      && (forall i: Index :: (range.Contains(i) <==> HasRowHandle(i)))
+      && UnwrapRange(token.val.table, range) == entries
+    }
 
-    // linear inout method acquireRowInner(index: Index)
-    //   returns (entry: Entry)
+    predicate UpdateGhosty(old_var: Variables)
+    {
+      && token.loc == old_var.token.loc
+      && iv == old_var.iv
+    }
 
-    //   requires old_self.Inv()
-    //   requires !old_self.HasRowHandle(index)
+    linear inout method acquireRow(old_entries: seq<Entry>, old_range: Range)
+      returns (entries: seq<Entry>, entry: Entry, range: Range)
 
-    // //   ensures self.Inv()
-    // //   ensures self == old_self.(handles := self.handles)
-    // //   ensures self.HasRowHandle(index)
-    // //   ensures forall i: Index | i != index ::
-    // //     old_self.HasRowHandle(i) <==> self.HasRowHandle(i)
-    // //   ensures out_sv == in_sv.(table := in_sv.table[index := Some(entry)])
-    // {
-    //   linear var row; glinear var handle: MutexHandle<Row>;
-    //   row, handle := self.row_mutexes[index].acquire();
+      requires old_self.RangeOwnershipInv(old_entries, old_range)
 
-    //   linear var Row(out_entry, row_r) := row;
-    //   entry := out_entry;
+      ensures entries == old_entries + [entry]
+      ensures range == old_range.RightExtend1()
+      ensures self.RangeOwnershipInv(entries, range)
 
-    //    := T.join(in_sv, row_r);
-    //   assert out_sv.Variables?;
-
-    //   assert handle.m == self.row_mutexes[index];
-    //   lseq_give_inout(inout self.handles, index, handle);
-
-    //   assert glseq_has(self.handles) == glseq_has(old_self.handles)[index := true];
-    // }
-
-
-  // }
+      ensures self.token.val.table ==
+        old_self.token.val.table[old_range.end := Some(entry)] 
+      ensures self.token.loc == old_self.token.loc
+    {
+      var index := old_range.end;
+      assert !old_range.Contains(index);
   
-//   linear datatype Variables = Variables(
-//     row_mutexes: RowMutexTable,
-//     bin_id: uint32,
-//     allocator: CAP.AllocatorMutexTable)
-//   {
-//     predicate HasCapHandle()
-//       requires |cap_handle| == 1
-//     {
-//       0 in cap_handle
-//     }
-
-//     predicate CapHandleInv()
-//     {
-//       && CAP.Inv(allocator)
-//       && |cap_handle| == 1
-//       && bin_id < CAP.NumberOfBinsImpl()
-//       && (HasCapHandle() ==> 
-//         cap_handle[0].m == allocator[bin_id])
-//     }
-
-
-
-//     predicate RangeOwnershipInv(entries: seq<Entry>, range: Range, sv: SSM.M)
-//     {
-//       && Inv()
-//       && sv.Variables?
-//       && (forall i: Index :: (range.Contains(i) <==> HasRowHandle(i)))
-//       && (forall i: Index :: (range.Contains(i) <==> sv.table[i].Some?))
-//       && UnwrapRange(sv.table, range) == entries
-//     }
-
-//     linear inout method acquireRow(
-//       entries: seq<Entry>,
-//       range: Range,
-//       glinear in_sv: SSM.M)
-//     returns (
-//       entries': seq<Entry>,
-//       range': Range,
-//       glinear out_sv: SSM.M
-//     )
-
-//     requires old_self.RangeOwnershipInv(entries, range, in_sv)
-//     requires range.Partial?
-//     requires RangeFull(in_sv.table, range)
-
-//     ensures self.RangeOwnershipInv(entries', range', out_sv);
-//     ensures self == old_self.(handles := self.handles)
-//     ensures range'.Partial?
-//     ensures |entries'| != 0
-//     ensures Last(entries').Full? ==> RangeFull(out_sv.table, range')
-//     // ensures entry.Empty? ==> RangeFull(out_sv.table, range)
-//     ensures range' == range.RightExtend1()
-//     ensures var entry := Last(entries');
-//       && out_sv == in_sv.(table := in_sv.table[range.end := Some(entry)])
-//       && out_sv.table[range.end] == Some(entry)
-//     {
-//       out_sv := in_sv;
-//       ghost var prev_sv := out_sv;
-
-//       var slot_idx := range.end; var entry;
-//       entry, out_sv := inout self.acquireRowInner(slot_idx, out_sv);
-//       RangeEquivalentUnwrap(prev_sv.table, out_sv.table, range);
-
-//       if range.AlmostComplete() {
-//         out_sv := resources_obey_inv(out_sv);
-//         AlmostCompleteFullRangeImpossible(out_sv, range);
-//       }
-
-//       entries' := entries + [entry];
-//       range' := range.RightExtend1();
-//     }
-
-//     linear inout method releaseRow(index: Index, entry: Entry, glinear in_sv: SSM.M)
-//       returns (glinear out_sv: SSM.M)
+      linear var row; glinear var handle: MutexHandle<Row>;
+      row, handle := self.iv.row_mutexes[index].acquire();
   
-//       requires old_self.Inv()
-//       requires old_self.HasRowHandle(index)
-//       requires in_sv.Variables?
-//       requires in_sv.table[index] == Some(entry)
-            
-//       ensures self.Inv()
+      linear var Row(out_entry, row_token) := row;
+      entry := out_entry;
+
+      T.inout_join(inout self.token, row_token);
+      lseq_give_inout(inout self.handles, index, handle);
+
+      if old_range.AlmostComplete() {
+        // out_sv := resources_obey_inv(out_sv);
+        // AlmostCompleteFullRangeImpossible(out_sv, range);
+        assume false;
+      }
+
+      RangeEquivalentUnwrap(old_self.token.val.table,
+        self.token.val.table, old_range);
+
+      entries := old_entries + [entry];
+      range := old_range.RightExtend1();
+    }
+
+    linear inout method releaseRow(entries: seq<Entry>, old_range: Range)
+      returns (range: Range)
+
+      requires old_self.RangeOwnershipInv(entries, old_range)
+      requires old_range.HasSome()
+
+      ensures range == old_range.RightShrink1()
+      ensures self.RangeOwnershipInv(entries[..|entries| -1 ], range)
+    {
+      var index := old_range.GetLast();
+      var len := |entries|;
+      var entry := entries[len-1];
+
+      glinear var rmutex;
+      ghost var table := self.token.val.table[index := None];
+      ghost var left := self.token.val.(table := table);
+      ghost var right := SSM.OneRowResource(index, entry);
+      rmutex := T.inout_split(inout self.token, left, right);
+
+      glinear var handle := lseq_take_inout(inout self.handles, index);
+      self.iv.row_mutexes[index].release(Row(entry, rmutex), handle);
+      range := old_range.RightShrink1();
+
+      RangeEquivalentUnwrap(old_self.token.val.table,
+        self.token.val.table, range);
+    }
+
+    linear inout method releaseRows(entries: seq<Entry>, range: Range)
+      requires old_self.RangeOwnershipInv(entries, range)
+
+      ensures self.Inv()
+      ensures self.HasNoRowHandle();
+    {
+      var range := range;
+      var entries := entries;
+      var index := |entries|;
+
+      while range.HasSome()
+        invariant 0 <= index <= |entries| 
+        invariant self.RangeOwnershipInv(entries[..index], range)
+        // invariant self == old_self.(handles := self.handles)
+        decreases |range|
+      {
+        var slot_idx := range.GetLast();
+
+        range := inout self.releaseRow(entries[..index], range);
+        index := index - 1;
+      }
+    }
+
+    linear inout method probe(probe_key: Key)
+      returns (found: bool,
+        entries: seq<Entry>,
+        range: Range)
+      decreases *
+
+      requires old_self.Inv()
+      requires old_self.HasNoRowHandle()
+
+//       ensures range.Partial?
+//       ensures range.HasSome()
+
+//       ensures self.RangeOwnershipInv(entries, range, out_sv)
 //       ensures self == old_self.(handles := self.handles)
-//       ensures !self.HasRowHandle(index)
-//       ensures forall i: Index | i != index ::
-//         old_self.HasRowHandle(i) <==> self.HasRowHandle(i)
-//       ensures out_sv == in_sv.(table := in_sv.table[index := None]);
-//     {
-//       glinear var rmutex;
-//       ghost var left := in_sv.(table := in_sv.table[index := None]);
-//       ghost var right := OneRowResource(index, entry, 0);
-//       out_sv, rmutex := SSM.split(in_sv, left, right);
-      
-//       glinear var handle := lseq_take_inout(inout self.handles, index);
-//       self.row_mutexes[index].release(Row(entry, rmutex), handle);
-//     }
+//       ensures found ==> KeyPresentProbeRange(out_sv.table, probe_key, range.RightShrink1())
+//       ensures !found ==> KeyAbsentProbeRange(out_sv.table, probe_key, range.RightShrink1())
+//       ensures out_sv == in_sv.(table := out_sv.table)
+    {
+      var p_hash := hash(probe_key);
 
-//     linear inout method releaseRows(entries: seq<Entry>, range: Range, glinear in_sv: SSM.M)
-//       returns (glinear out_sv: SSM.M)
+      found := false; entries := [];
+      range := Partial(p_hash, p_hash);
 
-//       requires old_self.RangeOwnershipInv(entries, range, in_sv)
+      while true
+        invariant range.Partial? && range.start == p_hash
+        // invariant self == old_self.(handles := self.handles)
+        invariant self.RangeOwnershipInv(entries, range)
+        // invariant ValidPartialProbeRange(self.token.table, probe_key, range)
+        // invariant out_sv.insert_capacity == in_sv.insert_capacity
+        // invariant out_sv.tickets == in_sv.tickets
+        // invariant out_sv.stubs == in_sv.stubs
+        decreases *
+      {
+        var slot_idx := range.end;
+        var entry;
+        entries, entry, range := inout self.acquireRow(entries, range);
+   
+        match entry {
+          case Empty => {
+            break;
+          }
+          case Full(entry_key, value) => {
+            if entry_key == probe_key {
+              found := true;
+              break;
+            }
+            if !entry.ShouldSkip(slot_idx, probe_key) {
+              break;
+            }
+          }
+        }
+      }
+    }
 
-//       ensures self.Inv()
-//       ensures self == old_self.(handles := self.handles)
-//       ensures self.HasNoRowHandle();
-//       ensures out_sv == in_sv.(table := UnitTable())
-//     {
-//       var range := range;
-//       var entries := entries;
-//       var index := |entries|;
-//       out_sv := in_sv;
 
-//       while range.HasSome()
-//         invariant 0 <= index <= |entries| 
-//         invariant self.RangeOwnershipInv(entries[..index], range, out_sv)
-//         invariant self == old_self.(handles := self.handles)
-//         invariant out_sv == in_sv.(table := out_sv.table)
-//         decreases |range|
-//       {
-//         var slot_idx := range.GetLast();
-//         ghost var prev_table := out_sv.table;
-
-//         out_sv := inout self.releaseRow(slot_idx, entries[index-1], out_sv);
-//         range := range.RightShrink1();
-//         index := index - 1;
-
-//         RangeEquivalentUnwrap(prev_table, out_sv.table, range);
-//       }
-
-//       assert self.HasNoRowHandle();
-//       assert out_sv.table == UnitTable();
-//     }
 
 //     linear inout method acquireCapacity(glinear in_sv: SSM.M)
 //     returns (
@@ -338,63 +328,7 @@ module Impl {
 //       self.allocator[self.bin_id].release(AllocatorBin(count, rcap'), cap_handle);
 //     }
 
-//     linear inout method probe(probe_key: Key, glinear in_sv: SSM.M)
-//       returns (
-//         entries: seq<Entry>,
-//         found: bool,
-//         range: Range,
-//         glinear out_sv: SSM.M)
-//       decreases *
 
-//       requires old_self.Inv()
-//       requires forall i: Index :: !old_self.HasRowHandle(i)
-//       requires in_sv.Variables? && in_sv.table == UnitTable()
-
-//       ensures range.Partial?
-//       ensures range.HasSome()
-
-//       ensures self.RangeOwnershipInv(entries, range, out_sv)
-//       ensures self == old_self.(handles := self.handles)
-//       ensures found ==> KeyPresentProbeRange(out_sv.table, probe_key, range.RightShrink1())
-//       ensures !found ==> KeyAbsentProbeRange(out_sv.table, probe_key, range.RightShrink1())
-//       ensures out_sv == in_sv.(table := out_sv.table)
-//     {
-//       var p_hash := hash(probe_key);
-
-//       found := false; entries := [];
-//       range := Partial(p_hash, p_hash);
-//       out_sv := in_sv;
-
-//       while true
-//         invariant range.Partial? && range.start == p_hash
-//         invariant self == old_self.(handles := self.handles)
-//         invariant self.RangeOwnershipInv(entries, range, out_sv)
-//         invariant ValidPartialProbeRange(out_sv.table, probe_key, range)
-//         invariant out_sv.insert_capacity == in_sv.insert_capacity
-//         invariant out_sv.tickets == in_sv.tickets
-//         invariant out_sv.stubs == in_sv.stubs
-//         decreases *
-//       {
-//         var slot_idx := range.end;
-//         entries, range, out_sv := inout self.acquireRow(entries, range, out_sv);
-//         var entry: Entry := entries[ |entries| - 1 ];
-   
-//         match entry {
-//           case Empty => {
-//             break;
-//           }
-//           case Full(entry_key, value) => {
-//             if entry_key == probe_key {
-//               found := true;
-//               break;
-//             }
-//             if !entry.ShouldSkip(slot_idx, probe_key) {
-//               break;
-//             }
-//           }
-//         }
-//       }
-//     }
 
 //     linear inout method query(input: Ifc.Input, rid: int, glinear in_sv: SSM.M)
 //       returns (output: Ifc.Output, glinear out_sv: SSM.M)

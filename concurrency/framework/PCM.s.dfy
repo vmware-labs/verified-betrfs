@@ -103,6 +103,11 @@ module Tokens(pcm: PCM) {
   ensures pcm.valid(pcm.dot(a.val, b.val)) // yes, this is an 'ensures'
   ensures sum == Token(a.loc, pcm.dot(a.val, b.val))
 
+  glinear method {:extern} inout_join(glinear inout a: Token, glinear b: Token)
+  requires old_a.loc == b.loc
+  ensures pcm.valid(pcm.dot(old_a.val, b.val)) // yes, this is an 'ensures'
+  ensures a == Token(old_a.loc, pcm.dot(old_a.val, b.val))
+
   // Same as above: must be 'method', not 'function method'
   glinear method {:extern} is_valid(gshared a: Token, glinear inout b: Token)
   requires a.loc == old_b.loc
@@ -115,7 +120,13 @@ module Tokens(pcm: PCM) {
   returns (glinear a': Token, glinear b': Token)
   requires sum.val == pcm.dot(a, b)
   ensures a' == Token(sum.loc, a)
-  ensures b' == Token(sum.loc, a)
+  ensures b' == Token(sum.loc, b)
+
+  glinear method {:extern} inout_split(glinear inout sum: Token, ghost a: pcm.M, ghost b: pcm.M)
+  returns (glinear b': Token)
+  requires old_sum.val == pcm.dot(a, b)
+  ensures sum == Token(old_sum.loc, a)
+  ensures b' == Token(old_sum.loc, b)
 
   function method {:extern} join_shared(gshared s: Token, gshared t: Token, ghost expected_q: pcm.M)
     : (gshared q: Token)
