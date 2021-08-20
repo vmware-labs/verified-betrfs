@@ -51,8 +51,17 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // global tail should be reflected in the M state
 
   datatype CombinerState =
-    | CombinerReady(queued_ops: seq<RequestId>)
-    | CombinerInProgress(localTail: nat, queued_ops: seq<RequestId>, queue_index: nat)
+    | CombinerReady
+      // Increment global tail with compare_and_exchange
+    | CombinerPlaced(queued_ops: seq<RequestId>)
+      // Read ltail
+    | CombinerLtail(queued_ops: seq<RequestId>, localTail: nat)
+      // Read global tail
+    | Combiner(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat, queueIndex: nat)
+      // increment localTail one at a time until localTail == globalTail
+      // when localTail == globalTail, we can advance to the next step by updating the ctail
+    | CombinerUpdatedCtail(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat, queueIndex: nat)
+      // Finally we write to the localTail atomic and return to CombinerReady state
 
   datatype ReplicaState = ReplicaState(state: nrifc.NRState)
   datatype LogEntry = LogEntry(op: nrifc.UpdateOp, node_id: NodeId)
@@ -143,16 +152,17 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var global_tail_var := m.global_tail.value;
     && (set x:RequestId | x in request_ids :: x)  <= m.localUpdates.Keys
     // Convert Updates to UpdatePlaced
-    && m' == m.(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then 
-      UpdatePlaced(nodeId) else m.localUpdates[rid])
-    )
-    && m'.global_tail.value == m.global_tail.value + |request_ids|
-
 
     // Add Log(tail-3, op1) ; Log(tail-2, op2) ; Log(tail-1, op1) ...
+    // TODO fix 'idx in m.log'
+    // TODO update the combiner state
     && m' == m.(log := (map idx | idx in m.log :: if idx >= global_tail_var && idx < (global_tail_var+|request_ids|) then 
-      LogEntry(UpdatePlaced(nodeId), nodeId) else m.localUpdates[idx])
+      LogEntry(UpdatePlaced(nodeId), nodeId) else m.log[idx])
     )
+    .(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then 
+      UpdatePlaced(nodeId) else m.localUpdates[rid])
+    )
+    .(global_tail := Some(m.global_tail.value + |request_ids|))
 
 
     //&& |request_ids| > 0
