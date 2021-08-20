@@ -14,45 +14,61 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import CacheResources
   import T = RwLockToken
   import opened CT = CacheTypes(aio)
+  import opened CacheHandle
+  import opened CacheStatusType
 
-  /*
-  predicate is_disk_page_handle(handle: RWLock.Handle, c: Cache, disk_idx: int)
-  requires Inv(c)
+  linear datatype WriteablePageHandle = WriteablePageHandle(
+    cache_idx: uint64,
+    ptr: Ptr,
+    glinear handle: Handle,
+    glinear status: CacheResources.CacheStatus,
+    glinear eo: T.Token
+  )
   {
-    && handle.cache_entry.CacheEntry?
-    && handle.cache_entry.disk_idx == disk_idx
-    && 0 <= handle.cache_entry.cache_idx < CACHE_SIZE
-    && handle.is_handle(c.key(handle.cache_entry.cache_idx))
-  }
-
-  /*linear datatype PageHandle = PageHandle(
-      linear w: RWLock.R,
-      linear handle: RWLock.Handle)
-  {
-    predicate is_page_handle(c: Cache, disk_idx: int)
-    requires Inv(c)
+    predicate is_disk_page_handle(cache: Cache, t: int, disk_idx: int)
+    requires cache.Inv()
     {
-      && is_disk_page_handle(this.handle, c, disk_idx)
-      && w == RWLock.Internal(RWLock.ExcLockObtained(
-          c.key(this.handle.cache_entry.cache_idx)))
+      && handle.CacheEntryHandle?
+      && handle.cache_entry.disk_idx == disk_idx
+      && 0 <= status.cache_idx < CACHE_SIZE
+      && handle.is_handle(cache.key(status.cache_idx))
+      && status.cache_idx == cache_idx as int
+      && handle.data.ptr == ptr
+      && eo.loc == cache.status[status.cache_idx].rwlock_loc
+      && eo.val.M?
+      && eo.val.exc.ExcObtained?
+      && eo.val.exc.t == t
+      && (eo.val.exc.clean ==> status.status == Clean)
+      && (!eo.val.exc.clean ==> status.status == Dirty)
     }
-  }*/
+
+    predicate is_clean()
+    {
+      status.status == Clean
+    }
+  }
 
   linear datatype ReadonlyPageHandle = ReadonlyPageHandle(
-      linear w: RWLock.R,
-      /*readonly*/ linear handle: RWLock.Handle)
+    cache_idx: uint64,
+    ptr: Ptr,
+    glinear so: T.SharedObtainedToken
+  )
   {
-    predicate is_page_handle(c: Cache, disk_idx: int, t: int)
-    requires Inv(c)
+    predicate is_disk_page_handle(cache: Cache, t: int, disk_idx: int)
+    requires cache.Inv()
     {
-      && is_disk_page_handle(this.handle, c, disk_idx)
-      && w == RWLock.Internal(RWLock.SharedLockObtained(
-          c.key(this.handle.cache_entry.cache_idx), t))
+      && so.b.CacheEntryHandle?
+      && so.b.cache_entry.disk_idx == disk_idx
+      && 0 <= cache_idx as int < CACHE_SIZE
+      && so.is_handle(cache.key(cache_idx as int))
+      && so.t == t
     }
   }
 
+  /*
+
   method try_take_read_lock_on_cache_entry(
-      c: Cache, cache_idx: int,
+      cache: Cache, cache_idx: int,
       expected_disk_idx: int,
       shared localState: LocalState,
       linear client: RWLock.R)
@@ -61,7 +77,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     linear handle_out: lOption<ReadonlyPageHandle>,
     linear client_out: lOption<RWLock.R>
   )
-  requires Inv(c)
+  requires Inv(cache)
   requires localState.WF()
   requires 0 <= cache_idx < CACHE_SIZE
   requires client == RWLock.Internal(RWLock.Client(localState.t))
@@ -70,13 +86,13 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures success ==>
       && handle_out.lSome?
       && handle_out.value.is_page_handle(
-          c, expected_disk_idx, localState.t)
+          cache, expected_disk_idx, localState.t)
       && client_out.lNone?
   decreases *
   {
     // 1. check if writelocked
 
-    var is_exc_locked := quicktest_is_exc_locked(c.status[cache_idx]);
+    var is_exc_locked := quicktest_is_exc_locked(cache.status[cache_idx]);
     if is_exc_locked {
       success := false;
       handle_out := lNone;
@@ -85,8 +101,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       // 2. inc ref
 
       linear var r := inc_refcount_for_shared(
-          c.read_refcounts[localState.t][cache_idx],
-          c.key(cache_idx), localState.t,
+          cache.read_refcounts[localState.t][cache_idx],
+          cache.key(cache_idx), localState.t,
           client);
 
       // 3. check not writelocked, not free
@@ -94,14 +110,14 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       var is_accessed: bool;
       success, is_accessed, r := is_exc_locked_or_free(
-          c.status[cache_idx],
-          c.key(cache_idx), localState.t,
+          cache.status[cache_idx],
+          cache.key(cache_idx), localState.t,
           r);
 
       if !success {
         linear var client' := dec_refcount_for_shared_pending(
-            c.read_refcounts[localState.t][cache_idx],
-            c.key(cache_idx), localState.t,
+            cache.read_refcounts[localState.t][cache_idx],
+            cache.key(cache_idx), localState.t,
             r);
 
         handle_out := lNone;
@@ -109,8 +125,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       } else {
         // 4. if !access, then mark accessed
         if !is_accessed {
-          mark_accessed(c.status[cache_idx],
-            c.key(cache_idx), localState.t, r);
+          mark_accessed(cache.status[cache_idx],
+            cache.key(cache_idx), localState.t, r);
         }
 
         // This is the ideal order:
@@ -132,18 +148,18 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         invariant !is_done_reading ==>
           && handle_opt.lNone?
           && r == RWLock.Internal(RWLock.SharedLockPending2(
-              c.key(cache_idx), localState.t))
+              cache.key(cache_idx), localState.t))
         invariant is_done_reading ==>
           && handle_opt.lSome?
-          && handle_opt.value.is_handle(c.key(cache_idx))
+          && handle_opt.value.is_handle(cache.key(cache_idx))
           && r == RWLock.Internal(RWLock.SharedLockObtained(
-              c.key(cache_idx), localState.t))
+              cache.key(cache_idx), localState.t))
         decreases *
         {
           dispose_lnone(handle_opt);
           is_done_reading, r, handle_opt := is_reading(
-              c.status[cache_idx],
-              c.key(cache_idx),
+              cache.status[cache_idx],
+              cache.key(cache_idx),
               localState.t,
               r);
 
@@ -155,13 +171,13 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         // Check the disk_idx
 
         var actual_disk_idx := ptr_read(
-            c.disk_idx_of_entry[cache_idx],
+            cache.disk_idx_of_entry[cache_idx],
             handle_opt.value.idx);
 
         if actual_disk_idx != expected_disk_idx {
           linear var client' := dec_refcount_for_shared_obtained(
-              c.read_refcounts[localState.t][cache_idx],
-              c.key(cache_idx), localState.t,
+              cache.read_refcounts[localState.t][cache_idx],
+              cache.key(cache_idx), localState.t,
               r, unwrap_value(handle_opt));
 
           success := false;
@@ -177,12 +193,12 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  /*method take_write_lock_on_cache_entry(c: Cache, cache_idx: int)
+  /*method take_write_lock_on_cache_entry(cache: Cache, cache_idx: int)
   returns (linear r: RWLock.R, linear handle: RWLock.Handle)
-  requires Inv(c)
+  requires Inv(cache)
   requires 0 <= cache_idx < CACHE_SIZE
-  ensures r == RWLock.Internal(RWLock.ExcLockObtained(c.key(cache_idx)))
-  ensures handle.is_handle(c.key(cache_idx))
+  ensures r == RWLock.Internal(RWLock.ExcLockObtained(cache.key(cache_idx)))
+  ensures handle.is_handle(cache.key(cache_idx))
   decreases *
   {
     linear var w_opt := lNone;
@@ -190,13 +206,13 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     while !success 
     invariant success ==> w_opt == lSome(
-        RWLock.Internal(RWLock.ExcLockPendingAwaitWriteBack(c.key(cache_idx))))
+        RWLock.Internal(RWLock.ExcLockPendingAwaitWriteBack(cache.key(cache_idx))))
     invariant !success ==> !has(w_opt)
     decreases *
     {
       dispose_lnone(w_opt);
       success, w_opt := try_set_write_lock(
-          c.status[cache_idx], c.key(cache_idx));
+          cache.status[cache_idx], cache.key(cache_idx));
     }
 
     linear var w;
@@ -206,60 +222,60 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     while !success 
     invariant !success ==> w ==
-        RWLock.Internal(RWLock.ExcLockPendingAwaitWriteBack(c.key(cache_idx)))
+        RWLock.Internal(RWLock.ExcLockPendingAwaitWriteBack(cache.key(cache_idx)))
     invariant success ==> w ==
-        RWLock.Internal(RWLock.ExcLockPending(c.key(cache_idx), 0))
+        RWLock.Internal(RWLock.ExcLockPending(cache.key(cache_idx), 0))
     decreases *
     {
       success, w := try_check_writeback_isnt_set(
-          c.status[cache_idx], c.key(cache_idx), w);
+          cache.status[cache_idx], cache.key(cache_idx), w);
     }
 
     var j := 0;
     while j < NUM_THREADS
     invariant 0 <= j <= NUM_THREADS
     invariant w == 
-        RWLock.Internal(RWLock.ExcLockPending(c.key(cache_idx), j))
+        RWLock.Internal(RWLock.ExcLockPending(cache.key(cache_idx), j))
     {
       success := false;
 
       while !success 
       invariant !success ==> w ==
-          RWLock.Internal(RWLock.ExcLockPending(c.key(cache_idx), j))
+          RWLock.Internal(RWLock.ExcLockPending(cache.key(cache_idx), j))
       invariant success ==> w ==
-          RWLock.Internal(RWLock.ExcLockPending(c.key(cache_idx), j+1))
+          RWLock.Internal(RWLock.ExcLockPending(cache.key(cache_idx), j+1))
       decreases *
       {
-        success, w := is_refcount_zero(c.read_refcounts[j][cache_idx],
-            c.key(cache_idx), j, w);
+        success, w := is_refcount_zero(cache.read_refcounts[j][cache_idx],
+            cache.key(cache_idx), j, w);
       }
 
       j := j + 1;
     }
 
-    r, handle := RWLock.transform_TakeWriteFinish(c.key(cache_idx), w);
+    r, handle := RWLock.transform_TakeWriteFinish(cache.key(cache_idx), w);
   }*/
 
-  /*method release_write_lock_on_cache_entry(c: Cache, cache_idx: int,
+  /*method release_write_lock_on_cache_entry(cache: Cache, cache_idx: int,
       linear r: RWLock.R,
       linear handle: RWLock.Handle)
-  requires Inv(c)
+  requires Inv(cache)
   requires 0 <= cache_idx < CACHE_SIZE
-  requires handle.is_handle(c.key(cache_idx))
-  requires r == RWLock.Internal(RWLock.ExcLockObtained(c.key(cache_idx)))*/
+  requires handle.is_handle(cache.key(cache_idx))
+  requires r == RWLock.Internal(RWLock.ExcLockObtained(cache.key(cache_idx)))*/
 
-  /*method take_write_lock_on_disk_entry(c: Cache, disk_idx: int)
+  /*method take_write_lock_on_disk_entry(cache: Cache, disk_idx: int)
   requires 0 
   {
     
   }*/
 
-  method get_next_chunk(c: Cache)
+  method get_next_chunk(cache: Cache)
   returns (new_chunk: uint64)
-  requires Inv(c)
+  requires Inv(cache)
   ensures 0 <= new_chunk as int < NUM_CHUNKS
   {
-    var l: uint32 := fetch_add_uint32(c.global_clockpointer, 1);
+    var l: uint32 := fetch_add_uint32(cache.global_clockpointer, 1);
     l := l % (NUM_CHUNKS as uint32);
     var ci: uint32 := (l + CLEAN_AHEAD as uint32) % (NUM_CHUNKS as uint32);
 
@@ -273,8 +289,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       var do_write_back;
       do_write_back, write_back_r, readonly_handle_opt, ticket :=
           try_acquire_writeback(
-              c.status[cache_idx],
-              c.key(cache_idx as int),
+              cache.status[cache_idx],
+              cache.key(cache_idx as int),
               false);
 
       if do_write_back {
@@ -282,7 +298,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         /*readonly*/ linear var CacheEntryHandle(
             _, cache_entry, data, idx) := readonly_handle;
 
-        var disk_idx := ptr_read(c.disk_idx_of_entry[cache_idx], idx);
+        var disk_idx := ptr_read(cache.disk_idx_of_entry[cache_idx], idx);
         assert disk_idx != -1;
 
         linear var wgs := CacheIOImpl.WritebackGhostState(
@@ -290,12 +306,12 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
         CacheIOImpl.disk_writeback_async(
             disk_idx as uint64,
-            c.data[cache_idx],
+            cache.data[cache_idx],
             data, wgs, unwrap_value(ticket));
 
         /*} else {
           readonly_handle := RWLock.CacheEntryHandle(cache_entry, data, idx);
-          release_writeback(c.status[cache_idx], c.key(cache_idx as int),
+          release_writeback(cache.status[cache_idx], cache.key(cache_idx as int),
               unwrap_value(write_back_r), readonly_handle);
         }*/
       } else {
@@ -310,35 +326,35 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     new_chunk := l as uint64;
   }
 
-  method check_all_refcounts_dont_wait(c: Cache,
+  method check_all_refcounts_dont_wait(cache: Cache,
       cache_idx: uint64,
       linear r: RWLock.R)
   returns (success: bool, linear r': RWLock.R)
-  requires Inv(c)
+  requires Inv(cache)
   requires 0 <= cache_idx as int < CACHE_SIZE
   requires r.Internal? && r.q.ExcLockPending?
   requires r == RWLock.Internal(RWLock.ExcLockPending(
-      c.key(cache_idx as int), -1, 0, r.q.clean))
+      cache.key(cache_idx as int), -1, 0, r.q.clean))
   ensures r'.Internal?
   ensures r'.q.ExcLockPending?
-  ensures r'.q.key == c.key(cache_idx as int)
+  ensures r'.q.key == cache.key(cache_idx as int)
   ensures r'.q.t == -1
   ensures r'.q.clean == r.q.clean
   ensures success ==> r'.q.visited == NUM_THREADS
 
-  method try_evict_page(c: Cache, cache_idx: uint64)
-  requires Inv(c)
+  method try_evict_page(cache: Cache, cache_idx: uint64)
+  requires Inv(cache)
   requires 0 <= cache_idx as int < CACHE_SIZE
   requires 0 <= cache_idx as int < CACHE_SIZE
   {
     // 1. get status
 
-    var status := atomic_read(c.status[cache_idx]);
+    var status := atomic_read(cache.status[cache_idx]);
 
     // 2. if accessed, then clear 'access'
 
     if bit_or(status, flag_accessed) != 0 {
-      clear_accessed(c.status[cache_idx], c.key(cache_idx as int));
+      clear_accessed(cache.status[cache_idx], cache.key(cache_idx as int));
     }
 
     // 3. if status != CLEAN, abort
@@ -350,16 +366,16 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       // skipping this step, we don't need it
       //
       //linear var r := inc_refcount_for_shared(
-      //    c.read_refcounts[localState.t][cache_idx],
-      //    c.key(cache_idx), localState.t);
+      //    cache.read_refcounts[localState.t][cache_idx],
+      //    cache.key(cache_idx), localState.t);
 
       // 5. get the exc lock (Clean -> Clean | Exc) (or bail)
 
       var success;
       linear var status, r, r_opt, status_opt, handle_opt;
       success, r_opt, status_opt, handle_opt := take_exc_if_eq_clean(
-            c.status[cache_idx], 
-            c.key(cache_idx as int));
+            cache.status[cache_idx], 
+            cache.key(cache_idx as int));
 
       if !success {
         dispose_lnone(status_opt);
@@ -372,29 +388,29 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         r := unwrap_value(r_opt);
 
         success, r := check_all_refcounts_dont_wait(
-            c, cache_idx, r);
+            cache, cache_idx, r);
 
         if !success {
           abandon_exc(
-              c.status[cache_idx],
-              c.key(cache_idx as int),
+              cache.status[cache_idx],
+              cache.key(cache_idx as int),
               status, r, unwrap_value(handle_opt));
         } else {
           linear var handle;
           var clean := r.q.clean;
           r, handle := RWLockMethods.transform_TakeExcLockFinish(
-              c.key(cache_idx as int), -1, clean, r, unwrap_value(handle_opt));
+              cache.key(cache_idx as int), -1, clean, r, unwrap_value(handle_opt));
 
           // 7. clear cache_idx_of_page lookup
 
           var disk_idx := ptr_read(
-              c.disk_idx_of_entry[cache_idx],
+              cache.disk_idx_of_entry[cache_idx],
               handle.idx);
 
           linear var CacheEntryHandle(key, cache_entry, data, idx) := handle;
 
           cache_entry, status := atomic_index_lookup_clear_mapping(
-                c.cache_idx_of_page[disk_idx],
+                cache.cache_idx_of_page[disk_idx],
                 disk_idx,
                 cache_entry,
                 status);
@@ -402,8 +418,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           // 8. set to FREE
 
           set_to_free(
-              c.status[cache_idx],
-              c.key(cache_idx as int),
+              cache.status[cache_idx],
+              cache.key(cache_idx as int),
               RWLock.CacheEntryHandle(key, cache_entry, data, idx),
               status,
               r);
@@ -414,27 +430,27 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method evict_chunk(c: Cache, chunk: uint64)
-  requires Inv(c)
+  method evict_chunk(cache: Cache, chunk: uint64)
+  requires Inv(cache)
   requires 0 <= chunk as int < NUM_CHUNKS
   {
     var i: uint64 := 0;
     while i as int < CHUNK_SIZE
     {
       var j: uint64 := chunk * CHUNK_SIZE as uint64 + i;
-      try_evict_page(c, j);
+      try_evict_page(cache, j);
       i := i + 1;
     }
   }
 
-  method get_free_page(c: Cache, linear inout localState: LocalState)
+  method get_free_page(cache: Cache, linear inout localState: LocalState)
   returns (
     cache_idx: uint64,
     linear m: lOption<RWLock.R>,
     linear handle_opt: lOption<RWLock.Handle>,
     linear status_opt: lOption<CacheResources.R>
   )
-  requires Inv(c)
+  requires Inv(cache)
   requires old_localState.WF()
   ensures localState.WF()
   ensures cache_idx == 0xffff_ffff ==>
@@ -443,9 +459,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && status_opt.lNone?
   ensures cache_idx != 0xffff_ffff ==>
       && 0 <= cache_idx as int < CACHE_SIZE
-      && m == lSome(RWLock.Internal(RWLock.ReadingPending(c.key(cache_idx as int))))
+      && m == lSome(RWLock.Internal(RWLock.ReadingPending(cache.key(cache_idx as int))))
       && handle_opt.lSome?
-      && handle_opt.value.is_handle(c.key(cache_idx as int))
+      && handle_opt.value.is_handle(cache.key(cache_idx as int))
       && status_opt == lSome(CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty))
   ensures localState.t == old_localState.t
   decreases *
@@ -467,9 +483,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && status_opt.lNone?
     invariant success ==>
         && 0 <= cache_idx as int < CACHE_SIZE
-        && m == lSome(RWLock.Internal(RWLock.ReadingPending(c.key(cache_idx as int))))
+        && m == lSome(RWLock.Internal(RWLock.ReadingPending(cache.key(cache_idx as int))))
         && handle_opt.lSome?
-        && handle_opt.value.is_handle(c.key(cache_idx as int))
+        && handle_opt.value.is_handle(cache.key(cache_idx as int))
         && status_opt == lSome(CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty))
     {
       var i: uint64 := 0;
@@ -483,9 +499,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           && status_opt.lNone?
       invariant success ==>
           && 0 <= cache_idx as int < CACHE_SIZE
-          && m == lSome(RWLock.Internal(RWLock.ReadingPending(c.key(cache_idx as int))))
+          && m == lSome(RWLock.Internal(RWLock.ReadingPending(cache.key(cache_idx as int))))
           && handle_opt.lSome?
-          && handle_opt.value.is_handle(c.key(cache_idx as int))
+          && handle_opt.value.is_handle(cache.key(cache_idx as int))
           && status_opt == lSome(CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty))
       {
         cache_idx := chunk * CHUNK_SIZE as uint64 + i;
@@ -494,16 +510,16 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         dispose_lnone(handle_opt);
         dispose_lnone(status_opt);
         success, m, handle_opt, status_opt := try_alloc(
-            c.status[cache_idx],
-            c.key(cache_idx as int));
+            cache.status[cache_idx],
+            cache.key(cache_idx as int));
 
         i := i + 1;
       }
 
       if !success {
         // TODO mark stuff as 'not accessed'
-        chunk := get_next_chunk(c);
-        evict_chunk(c, chunk);
+        chunk := get_next_chunk(cache);
+        evict_chunk(cache, chunk);
       }
     }
 
@@ -512,14 +528,14 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   // Top level method
 
-  method try_take_read_lock_disk_page(c: Cache, disk_idx: int,
+  method try_take_read_lock_disk_page(cache: Cache, disk_idx: int,
       linear client: RWLock.R,
       linear inout localState: LocalState)
   returns (
     success: bool,
     linear handle_out: lOption<ReadonlyPageHandle>,
     linear client_out: lOption<RWLock.R>)
-  requires Inv(c)
+  requires Inv(cache)
   requires 0 <= disk_idx < NUM_DISK_PAGES
   requires old_localState.WF()
   requires client == RWLock.Internal(RWLock.Client(old_localState.t))
@@ -527,16 +543,16 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && client_out == lSome(client)
   ensures success ==>
       && handle_out.lSome?
-      && handle_out.value.is_page_handle(c, disk_idx, localState.t)
+      && handle_out.value.is_page_handle(cache, disk_idx, localState.t)
       && client_out.lNone?
   ensures old_localState.WF()
   decreases *
   {
-    var cache_idx := atomic_index_lookup_read(c.cache_idx_of_page[disk_idx], disk_idx);
+    var cache_idx := atomic_index_lookup_read(cache.cache_idx_of_page[disk_idx], disk_idx);
 
     if cache_idx == NOT_MAPPED {
       linear var m, handle_opt, status_opt;
-      cache_idx, m, handle_opt, status_opt := get_free_page(c, inout localState);
+      cache_idx, m, handle_opt, status_opt := get_free_page(cache, inout localState);
 
       if cache_idx == 0xffff_ffff {
         dispose_lnone(m);
@@ -556,7 +572,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
         success, cache_entry, status, read_ticket_opt := 
             atomic_index_lookup_add_mapping(
-              c.cache_idx_of_page[disk_idx],
+              cache.cache_idx_of_page[disk_idx],
               disk_idx as uint64,
               cache_idx as uint64,
               cache_entry,
@@ -568,38 +584,38 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           dispose_lnone(read_ticket_opt);
           client_out := lSome(client);
           abandon_reading_pending(
-              c.status[cache_idx],
-              c.key(cache_idx as int),
+              cache.status[cache_idx],
+              cache.key(cache_idx as int),
               status,
               r,
               RWLock.CacheEntryHandle(
-                  c.key(cache_idx as int),
+                  cache.key(cache_idx as int),
                   cache_entry, data, idx));
         } else {
           r := inc_refcount_for_reading(
-              c.read_refcounts[localState.t][cache_idx],
-              c.key(cache_idx as int), localState.t, client, r);
+              cache.read_refcounts[localState.t][cache_idx],
+              cache.key(cache_idx as int), localState.t, client, r);
 
           r := clear_exc_bit_during_load_phase(
-              c.status[cache_idx],
-              c.key(cache_idx as int), localState.t, r);
+              cache.status[cache_idx],
+              cache.key(cache_idx as int), localState.t, r);
 
           read_stub := CacheIOImpl.disk_read_sync(
-              disk_idx as uint64, c.data[cache_idx], inout data, 
+              disk_idx as uint64, cache.data[cache_idx], inout data, 
               unwrap_value(read_ticket_opt));
 
           status, cache_entry := CacheResources.finish_page_in(
               cache_idx as int, disk_idx as uint64,
               status, cache_entry, read_stub);
 
-          ptr_write(c.disk_idx_of_entry[cache_idx],
+          ptr_write(cache.disk_idx_of_entry[cache_idx],
               inout idx, disk_idx);
 
           /*readonly*/ linear var readonly_handle;
           r, readonly_handle := load_phase_finish(
-              c.status[cache_idx],
-              c.key(cache_idx as int), localState.t, r,
-              RWLock.CacheEntryHandle(c.key(cache_idx as int), cache_entry, data, idx),
+              cache.status[cache_idx],
+              cache.key(cache_idx as int), localState.t, r,
+              RWLock.CacheEntryHandle(cache.key(cache_idx as int), cache_entry, data, idx),
               status);
 
           success := true;
@@ -609,7 +625,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       }
     } else {
       success, handle_out, client_out := try_take_read_lock_on_cache_entry(
-          c, cache_idx as int, disk_idx as int, localState, client);
+          cache, cache_idx as int, disk_idx as int, localState, client);
     }
   }
   */
