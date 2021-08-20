@@ -211,7 +211,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     while !success 
     invariant success ==> w_opt == glSome(
-        RwLock.Internal(RwLock.ExcLockPendingAwaitWriteBack(cache.key(cache_idx))))
+        RwLock.Internal(RwLock.ExcPendingAwaitWriteBack(cache.key(cache_idx))))
     invariant !success ==> !has(w_opt)
     decreases *
     {
@@ -227,9 +227,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     while !success 
     invariant !success ==> w ==
-        RwLock.Internal(RwLock.ExcLockPendingAwaitWriteBack(cache.key(cache_idx)))
+        RwLock.Internal(RwLock.ExcPendingAwaitWriteBack(cache.key(cache_idx)))
     invariant success ==> w ==
-        RwLock.Internal(RwLock.ExcLockPending(cache.key(cache_idx), 0))
+        RwLock.Internal(RwLock.ExcPending(cache.key(cache_idx), 0))
     decreases *
     {
       success, w := cache.status[cache_idx].try_check_writeback_isnt_set(
@@ -240,15 +240,15 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     while j < NUM_THREADS
     invariant 0 <= j <= NUM_THREADS
     invariant w == 
-        RwLock.Internal(RwLock.ExcLockPending(cache.key(cache_idx), j))
+        RwLock.Internal(RwLock.ExcPending(cache.key(cache_idx), j))
     {
       success := false;
 
       while !success 
       invariant !success ==> w ==
-          RwLock.Internal(RwLock.ExcLockPending(cache.key(cache_idx), j))
+          RwLock.Internal(RwLock.ExcPending(cache.key(cache_idx), j))
       invariant success ==> w ==
-          RwLock.Internal(RwLock.ExcLockPending(cache.key(cache_idx), j+1))
+          RwLock.Internal(RwLock.ExcPending(cache.key(cache_idx), j+1))
       decreases *
       {
         success, w := is_refcount_zero(cache.read_refcounts[j][cache_idx],
@@ -321,23 +321,48 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     new_chunk := l as uint64;
   }
 
-  /*
-
   method check_all_refcounts_dont_wait(shared cache: Cache,
       cache_idx: uint64,
       glinear r: T.Token)
   returns (success: bool, glinear r': T.Token)
   requires cache.Inv()
   requires 0 <= cache_idx as int < CACHE_SIZE
-  requires r.Internal? && r.q.ExcLockPending?
-  requires r == RwLock.Internal(RwLock.ExcLockPending(
-      cache.key(cache_idx as int), -1, 0, r.q.clean))
-  ensures r'.Internal?
-  ensures r'.q.ExcLockPending?
-  ensures r'.q.key == cache.key(cache_idx as int)
-  ensures r'.q.t == -1
-  ensures r'.q.clean == r.q.clean
-  ensures success ==> r'.q.visited == NUM_THREADS
+  requires r.loc == cache.status[cache_idx].rwlock_loc
+  requires r.val.M?
+  requires r.val.exc.ExcPending?
+  requires r.val == RwLock.ExcHandle(RwLock.ExcPending(
+      -1, 0, r.val.exc.clean, r.val.exc.b))
+  ensures r'.loc == cache.status[cache_idx].rwlock_loc
+  ensures r'.val.M?
+  ensures r'.val.exc.ExcPending?
+  ensures success ==> r'.val.exc.visited == NUM_THREADS
+  ensures r'.val == RwLock.ExcHandle(RwLock.ExcPending(
+      -1, r'.val.exc.visited, r.val.exc.clean, r.val.exc.b))
+  {
+    var i: uint64 := 0;
+    success := true;
+    r' := r;
+
+    while i < (NUM_THREADS as uint64) && success
+    invariant 0 <= i as int <= NUM_THREADS
+    invariant r'.loc == cache.status[cache_idx].rwlock_loc
+    invariant r'.val.M?
+    invariant r'.val.exc.ExcPending?
+    invariant success ==> r'.val.exc.visited == i as int
+    invariant r'.val == RwLock.ExcHandle(RwLock.ExcPending(
+        -1, r'.val.exc.visited, r.val.exc.clean, r.val.exc.b))
+
+    {
+      success, r' := is_refcount_eq(
+          cache.read_refcounts[i][cache_idx],
+          0, -1, i as nat, r');
+
+      i := i + 1;
+    }
+    assert success ==> i as nat == NUM_THREADS;
+  }
+
+  /*
 
   method try_evict_page(shared cache: Cache, cache_idx: uint64)
   requires cache.Inv()

@@ -33,7 +33,7 @@ module AtomicRefcountImpl {
   }
 
   method is_refcount_eq(a: AtomicRefcount, val: uint8,
-      ghost user_t: nat, ghost t: nat,
+      ghost user_t: int, ghost t: nat,
       glinear m: T.Token)
   returns (is_zero: bool, glinear m': T.Token)
   requires t == user_t ==> val == 1
