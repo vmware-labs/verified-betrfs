@@ -184,6 +184,7 @@ module AtomicStatusImpl {
     ensures success ==>
         && m.glSome?
         && m.value.is_handle(key)
+        && m.value.b.CacheEntryHandle?
         && disk_write_ticket.glSome?
         && disk_write_ticket.value.writes(
             m.value.b.idx.v as int,

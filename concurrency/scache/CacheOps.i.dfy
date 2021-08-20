@@ -198,11 +198,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  /*
-
   /*method take_write_lock_on_cache_entry(cache: Cache, cache_idx: int)
   returns (glinear r: T.Token, glinear handle: Handle)
-  requires Inv(cache)
+  requires cache.Inv()
   requires 0 <= cache_idx < CACHE_SIZE
   ensures r == RwLock.Internal(RwLock.ExcLockObtained(cache.key(cache_idx)))
   ensures handle.is_handle(cache.key(cache_idx))
@@ -266,7 +264,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   /*method release_write_lock_on_cache_entry(cache: Cache, cache_idx: int,
       glinear r: T.Token,
       glinear handle: Handle)
-  requires Inv(cache)
+  requires cache.Inv()
   requires 0 <= cache_idx < CACHE_SIZE
   requires handle.is_handle(cache.key(cache_idx))
   requires r == RwLock.Internal(RwLock.ExcLockObtained(cache.key(cache_idx)))*/
@@ -277,51 +275,42 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     
   }*/
 
-  method get_next_chunk(cache: Cache)
+  method get_next_chunk(shared cache: Cache, inout linear local: LocalState)
   returns (new_chunk: uint64)
-  requires Inv(cache)
+  requires cache.Inv()
+  requires old_local.WF()
   ensures 0 <= new_chunk as int < NUM_CHUNKS
+  ensures local.WF()
   {
-    var l: uint32 := fetch_add_uint32(cache.global_clockpointer, 1);
+    atomic_block var l :=
+        execute_atomic_fetch_add_uint32(cache.global_clockpointer, 1) { }
+
     l := l % (NUM_CHUNKS as uint32);
     var ci: uint32 := (l + CLEAN_AHEAD as uint32) % (NUM_CHUNKS as uint32);
 
     var i: uint32 := 0;
     while i < CHUNK_SIZE as uint32
+    invariant local.WF()
     {
       var cache_idx := ci * (CHUNK_SIZE as uint32) + i;   
 
       glinear var write_back_r, ticket;
-      /*readonly*/ glinear var readonly_handle_opt: glOption<Handle>;
       var do_write_back;
-      do_write_back, write_back_r, readonly_handle_opt, ticket :=
-          cache.status[cache_idx].try_acquire_writeback(
-              cache.key(cache_idx as int),
-              false);
+      do_write_back, write_back_r, ticket :=
+          cache.status[cache_idx].try_acquire_writeback(false);
 
       if do_write_back {
-        glinear var readonly_handle: Handle := unwrap_value(readonly_handle_opt);
-        /*readonly*/ glinear var CacheEntryHandle(
-            _, cache_entry, data, idx) := readonly_handle;
-
-        var disk_idx := cache.disk_idx_of_entry[cache_idx].read(idx);
+        var disk_idx := cache.disk_idx_of_entry[cache_idx].read(
+            T.borrow_wb(write_back_r.value.token).idx);
         assert disk_idx != -1;
 
-        glinear var wgs := CacheIOImpl.WritebackGhostState(
-            unwrap_value(write_back_r), cache_entry, idx);
-
-        CacheIOImpl.disk_writeback_async(
+        disk_writeback_async(
+            cache, inout local,
             disk_idx as uint64,
-            cache.data[cache_idx],
-            data, wgs, unwrap_value(ticket));
-
-        /*} else {
-          readonly_handle := RwLock.CacheEntryHandle(cache_entry, data, idx);
-          cache.status[cache_idx].release_writeback(cache.key(cache_idx as int),
-              unwrap_value(write_back_r), readonly_handle);
-        }*/
+            cache_idx as uint64,
+            unwrap_value(write_back_r),
+            unwrap_value(ticket));
       } else {
-        dispose_glnone(readonly_handle_opt);
         dispose_glnone(write_back_r);
         dispose_glnone(ticket);
       }
@@ -332,11 +321,13 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     new_chunk := l as uint64;
   }
 
-  method check_all_refcounts_dont_wait(cache: Cache,
+  /*
+
+  method check_all_refcounts_dont_wait(shared cache: Cache,
       cache_idx: uint64,
       glinear r: T.Token)
   returns (success: bool, glinear r': T.Token)
-  requires Inv(cache)
+  requires cache.Inv()
   requires 0 <= cache_idx as int < CACHE_SIZE
   requires r.Internal? && r.q.ExcLockPending?
   requires r == RwLock.Internal(RwLock.ExcLockPending(
@@ -348,8 +339,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures r'.q.clean == r.q.clean
   ensures success ==> r'.q.visited == NUM_THREADS
 
-  method try_evict_page(cache: Cache, cache_idx: uint64)
-  requires Inv(cache)
+  method try_evict_page(shared cache: Cache, cache_idx: uint64)
+  requires cache.Inv()
   requires 0 <= cache_idx as int < CACHE_SIZE
   requires 0 <= cache_idx as int < CACHE_SIZE
   {
@@ -432,8 +423,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method evict_chunk(cache: Cache, chunk: uint64)
-  requires Inv(cache)
+  method evict_chunk(shared cache: Cache, chunk: uint64)
+  requires cache.Inv()
   requires 0 <= chunk as int < NUM_CHUNKS
   {
     var i: uint64 := 0;
@@ -445,14 +436,14 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method get_free_page(cache: Cache, linear inout localState: LocalState)
+  method get_free_page(shared cache: Cache, linear inout localState: LocalState)
   returns (
     cache_idx: uint64,
     glinear m: glOption<T.Token>,
     glinear handle_opt: glOption<Handle>,
     glinear status_opt: glOption<CacheResources.R>
   )
-  requires Inv(cache)
+  requires cache.Inv()
   requires old_localState.WF()
   ensures localState.WF()
   ensures cache_idx == 0xffff_ffff ==>
@@ -529,14 +520,14 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   // Top level method
 
-  method try_take_read_lock_disk_page(cache: Cache, disk_idx: int,
+  method try_take_read_lock_disk_page(shared cache: Cache, disk_idx: int,
       glinear client: T.Token,
       linear inout localState: LocalState)
   returns (
     success: bool,
     glinear handle_out: glOption<ReadonlyPageHandle>,
     glinear client_out: glOption<T.Token>)
-  requires Inv(cache)
+  requires cache.Inv()
   requires 0 <= disk_idx < NUM_DISK_PAGES
   requires old_localState.WF()
   requires client == RwLock.Internal(RwLock.Client(old_localState.t))
@@ -599,7 +590,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           r := cache.status[cache_idx].clear_exc_bit_during_load_phase(
               cache.key(cache_idx as int), localState.t, r);
 
-          read_stub := CacheIOImpl.disk_read_sync(
+          read_stub := disk_read_sync(
               disk_idx as uint64, cache.data[cache_idx], inout data, 
               unwrap_value(read_ticket_opt));
 

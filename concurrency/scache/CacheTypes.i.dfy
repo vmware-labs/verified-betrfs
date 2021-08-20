@@ -67,6 +67,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         <==> ReadGInv(this, iocb_ptr, iocb, wp, g))
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_write_inv(iocb_ptr, iocb, wp, g)
         <==> WriteGInv(this, iocb_ptr, iocb, wp, g))
+
+      && (forall v, g :: atomic_inv(global_clockpointer, v, g) <==> true)
     }
   }
 
