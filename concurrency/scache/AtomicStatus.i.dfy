@@ -510,7 +510,7 @@ module AtomicStatusImpl {
     }
 
     method mark_accessed(
-        t: int,
+        ghost t: int,
         glinear r: Rw.Token)
     returns (glinear r': Rw.Token)
     requires this.inv()
@@ -545,7 +545,7 @@ module AtomicStatusImpl {
     }
 
     method is_reading(
-        t: int,
+        ghost t: int,
         glinear r: Rw.Token)
     returns (
       success: bool,

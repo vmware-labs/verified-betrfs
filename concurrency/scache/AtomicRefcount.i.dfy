@@ -2,6 +2,7 @@ include "../framework/Atomic.s.dfy"
 include "rwlock/RwLock.i.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Lang/LinearMaybe.s.dfy"
+include "ClientCounter.i.dfy"
 
 module AtomicRefcountImpl {
   import opened NativeTypes
@@ -9,6 +10,8 @@ module AtomicRefcountImpl {
   import opened CacheHandle
   import opened GhostLoc
   import opened Constants
+  import opened ClientCounter
+  import opened Ptrs
   import RwLock
   import T = RwLockToken
 
@@ -61,7 +64,7 @@ module AtomicRefcountImpl {
 
   method inc_refcount_for_reading(a: AtomicRefcount,
       ghost t: nat,
-      //glinear client: T.Token,
+      glinear client: Client,
       glinear m: T.Token)
   returns (glinear m': T.Token)
   requires a.inv(t)
@@ -71,6 +74,7 @@ module AtomicRefcountImpl {
   ensures m'.loc == m.loc
   ensures m'.val == RwLock.ReadHandle(RwLock.ReadPendingCounted(t))
   {
+    dispose_anything(client);
     atomic_block var orig_value := execute_atomic_fetch_add_uint8(a.a, 1) {
       ghost_acquire old_g;
       glinear var new_g;
@@ -87,14 +91,15 @@ module AtomicRefcountImpl {
   }
 
   method inc_refcount_for_shared(a: AtomicRefcount,
-      ghost t: nat)
-      //glinear client: T.Token)
+      ghost t: nat,
+      glinear client: Client)
   returns (glinear m': T.Token)
   requires a.inv(t)
   //requires client == RwLock.Internal(RwLock.Client(t))
   ensures m'.val == RwLock.SharedHandle(RwLock.SharedPending(t))
   ensures m'.loc == a.rwlock_loc
   {
+    dispose_anything(client);
     atomic_block var orig_value := execute_atomic_fetch_add_uint8(a.a, 1) {
       ghost_acquire old_g;
       glinear var new_g;
@@ -108,12 +113,13 @@ module AtomicRefcountImpl {
   method dec_refcount_for_shared_pending(a: AtomicRefcount,
       ghost t: nat,
       glinear m: T.Token)
-  //returns (glinear client: T.Token)
+  returns (glinear client: Client)
   requires a.inv(t)
   requires m.loc == a.rwlock_loc
   requires m.val == RwLock.SharedHandle(RwLock.SharedPending(t))
   //ensures client == RwLock.Internal(RwLock.Client(t))
   {
+    client := hack_new_client();
     atomic_block var orig_value := execute_atomic_fetch_sub_uint8(a.a, 1) {
       ghost_acquire old_g;
       glinear var new_g;
@@ -126,12 +132,13 @@ module AtomicRefcountImpl {
   method dec_refcount_for_shared_obtained(a: AtomicRefcount,
       ghost t: nat, ghost b: Handle,
       glinear m: T.Token)
-  //returns (glinear client: T.Token)
+  returns (glinear client: Client)
   requires a.inv(t)
   requires m.loc == a.rwlock_loc
   requires m.val == RwLock.SharedHandle(RwLock.SharedObtained(t, b))
   //ensures client == RwLock.Internal(RwLock.Client(t))
   {
+    client := hack_new_client();
     atomic_block var orig_value := execute_atomic_fetch_sub_uint8(a.a, 1) {
       ghost_acquire old_g;
       glinear var new_g;

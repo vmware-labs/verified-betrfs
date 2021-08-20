@@ -1078,9 +1078,13 @@ module RwLockToken {
     ghost b: StoredType,
     glinear token: Token)
   {
+    predicate is_valid() {
+      && token.val == SharedHandle(SharedObtained(t, b))
+    }
+
     predicate is_handle(key: Key) {
       && b.is_handle(key)
-      && token.val == SharedHandle(SharedObtained(t, b))
+      && is_valid()
     }
   }
 
@@ -1658,4 +1662,8 @@ module RwLockToken {
     ghost var b := Base.one(f.val.writeback.b);
     Base.unwrap_borrow( borrow_back_interp_exact(f, b) )
   }*/
+
+  function method {:opaque} borrow_sot(gshared sot: SharedObtainedToken) : (gshared b: Handle)
+  requires sot.is_valid()
+  ensures b == sot.b
 }
