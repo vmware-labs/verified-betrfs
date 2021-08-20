@@ -721,5 +721,21 @@ module AtomicStatusImpl {
         ghost_release new_g;
       }
     }
+
+    /*method mark_dirty(
+        glinear r: Rw.Token,
+        glinear status: CacheResources.Status)
+    returns (glinear r': Rw.Token, glinear status': CacheResources.Status)
+    requires this.inv()
+    requires r.loc == rwlock_loc
+    requires r.val.M?
+    requires r.val.exc.ExcObtained?
+    requires r.val == RwLock.ExcHandle(r.val.exc)
+    requires handle.is_handle(key)
+    requires handle.CacheEntryHandle?
+    ensures 
+    {
+      
+    }*/
   }
 }
