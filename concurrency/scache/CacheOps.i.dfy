@@ -282,6 +282,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires old_local.WF()
   ensures 0 <= new_chunk as int < NUM_CHUNKS
   ensures local.WF()
+  ensures local.t == old_local.t
   {
     atomic_block var l :=
         execute_atomic_fetch_add_uint32(cache.global_clockpointer, 1) { }
@@ -289,9 +290,12 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     l := l % (NUM_CHUNKS as uint32);
     var ci: uint32 := (l + CLEAN_AHEAD as uint32) % (NUM_CHUNKS as uint32);
 
+    ghost var t := local.t;
+
     var i: uint32 := 0;
     while i < CHUNK_SIZE as uint32
     invariant local.WF()
+    invariant t == local.t
     {
       var cache_idx := ci * (CHUNK_SIZE as uint32) + i;   
 
@@ -452,14 +456,11 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  /*
-
   method get_free_page(shared cache: Cache, linear inout localState: LocalState)
   returns (
     cache_idx: uint64,
     glinear m: glOption<T.Token>,
-    glinear handle_opt: glOption<Handle>,
-    glinear status_opt: glOption<CacheResources.R>
+    glinear handle_opt: glOption<Handle>
   )
   requires cache.Inv()
   requires old_localState.WF()
@@ -467,13 +468,14 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures cache_idx == 0xffff_ffff ==>
       && m.glNone?
       && handle_opt.glNone?
-      && status_opt.glNone?
   ensures cache_idx != 0xffff_ffff ==>
       && 0 <= cache_idx as int < CACHE_SIZE
-      && m == glSome(RwLock.Internal(T.TokeneadingPending))
+      && m.glSome?
+      && m.value.loc == cache.status[cache_idx].rwlock_loc
+      && m.value.val == RwLock.ReadHandle(RwLock.ReadPending)
       && handle_opt.glSome?
       && handle_opt.value.is_handle(cache.key(cache_idx as int))
-      && status_opt == glSome(CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty))
+      && handle_opt.value.CacheEmptyHandle?
   ensures localState.t == old_localState.t
   decreases *
   {
@@ -482,22 +484,25 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var success := false;
     m := glNone;
     handle_opt := glNone;
-    status_opt := glNone;
+
+    ghost var t := localState.t;
 
     while !success
     decreases *
     invariant localState.WF()
+    invariant localState.t == t
     invariant 0 <= chunk as int < NUM_CHUNKS
     invariant !success ==>
         && m.glNone?
         && handle_opt.glNone?
-        && status_opt.glNone?
     invariant success ==>
         && 0 <= cache_idx as int < CACHE_SIZE
-        && m == glSome(RwLock.Internal(T.TokeneadingPending()))
+        && m.glSome?
+        && m.value.loc == cache.status[cache_idx].rwlock_loc
+        && m.value.val == RwLock.ReadHandle(RwLock.ReadPending)
         && handle_opt.glSome?
         && handle_opt.value.is_handle(cache.key(cache_idx as int))
-        && status_opt == glSome(CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty))
+        && handle_opt.value.CacheEmptyHandle?
     {
       var i: uint64 := 0;
 
@@ -507,33 +512,35 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       invariant !success ==>
           && m.glNone?
           && handle_opt.glNone?
-          && status_opt.glNone?
       invariant success ==>
           && 0 <= cache_idx as int < CACHE_SIZE
-          && m == glSome(RwLock.Internal(T.TokeneadingPending()))
+          && m.glSome?
+          && m.value.loc == cache.status[cache_idx].rwlock_loc
+          && m.value.val == RwLock.ReadHandle(RwLock.ReadPending)
           && handle_opt.glSome?
           && handle_opt.value.is_handle(cache.key(cache_idx as int))
-          && status_opt == glSome(CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty))
+          && handle_opt.value.CacheEmptyHandle?
       {
         cache_idx := chunk * CHUNK_SIZE as uint64 + i;
 
         dispose_glnone(m);
         dispose_glnone(handle_opt);
-        dispose_glnone(status_opt);
-        success, m, handle_opt, status_opt := cache.status[cache_idx].try_alloc();
+        success, m, handle_opt := cache.status[cache_idx].try_alloc();
 
         i := i + 1;
       }
 
       if !success {
         // TODO mark stuff as 'not accessed'
-        chunk := get_next_chunk(cache);
+        chunk := get_next_chunk(cache, inout localState);
         evict_chunk(cache, chunk);
       }
     }
 
     inout localState.chunk_idx := chunk;
   }
+
+  /*
 
   // Top level method
 

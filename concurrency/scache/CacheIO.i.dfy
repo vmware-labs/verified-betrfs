@@ -18,6 +18,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures local.WF()
   ensures 0 <= idx as int < NUM_IO_SLOTS
   ensures is_slot_access(cache.io_slots[idx], access)
+  ensures local.t == old_local.t
 
   method disk_writeback_async(
       shared cache: Cache,
@@ -36,6 +37,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires ticket == CacheResources.DiskWriteTicket(disk_idx as int, wbo.b.data.s)
 
   ensures local.WF()
+  ensures local.t == old_local.t
   {
     var idx: uint64;
     glinear var access;
