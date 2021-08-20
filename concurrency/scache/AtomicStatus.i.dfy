@@ -509,24 +509,29 @@ module AtomicStatusImpl {
       is_accessed := bit_and_uint8(f, flag_accessed) != 0;
     }
 
-    /*method mark_accessed(
+    method mark_accessed(
         t: int,
-        gshared r: Rw.Token)
+        glinear r: Rw.Token)
+    returns (glinear r': Rw.Token)
     requires this.inv()
-    requires r == RwLock.Internal(RwLock.SharedPending2(t))
+    requires r.loc == rwlock_loc
+    requires r.val == RwLock.SharedHandle(RwLock.SharedPending2(t))
+    requires 0 <= t < NUM_THREADS
+    ensures r' == r
     {
-      atomic_block var _ := fetch_or(atomic, flag_accessed) {
+      atomic_block var _ := execute_atomic_fetch_or_uint8(atomic, flag_accessed) {
         ghost_acquire old_g;
         glinear var new_g;
 
-        Rw.possible_flags_SharedPending2(t, old_g.rwlock.val.central.flag,
-            r, old_g.rwlock);
-        new_g := old_g;
+        glinear var G(rwlock, status) := old_g;
+        rwlock, r' := Rw.possible_flags_SharedPending2(rwlock, r, t);
+
+        new_g := G(rwlock, status);
         assert state_inv(new_value, new_g, key, rwlock_loc);
 
         ghost_release new_g;
       }
-    }*/
+    }
 
     method clear_accessed()
     requires this.inv()

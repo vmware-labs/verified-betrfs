@@ -1393,6 +1393,26 @@ module RwLockToken {
     c', handle' := T.internal_transition_2_2(c, handle, a, b);
   }
 
+  glinear method possible_flags_SharedPending2(
+      glinear c: Token, glinear handle: Token, ghost t: int)
+  returns (glinear c': Token, glinear handle': Token)
+  requires 0 <= t < NUM_THREADS
+  requires var m := c.val;
+    && m.M?
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires handle.val == SharedHandle(SharedPending2(t))
+  requires c.loc == handle.loc
+  ensures c' == c
+  ensures handle' == handle
+  ensures c.val.central.flag != Unmapped
+  {
+    c' := c;
+    handle' := handle;
+    var rest := T.obtain_invariant_2(inout c', inout handle');
+  }
+
+
   glinear method perform_SharedCheckReading(glinear c: Token, glinear handle: Token, ghost t: int)
   returns (glinear c': Token, glinear handle': Token)
   requires 0 <= t < NUM_THREADS
