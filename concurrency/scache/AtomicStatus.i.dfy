@@ -605,6 +605,8 @@ module AtomicStatusImpl {
         && m'.value.val == RwLock.ExcHandle(RwLock.ExcPending(-1, 0, true, b))
         && status == glSome(CacheResources.CacheStatus(
             key.cache_idx, Clean))
+        && b.CacheEntryHandle?
+        && b.is_handle(key)
     {
       atomic_block var did_set :=
           execute_atomic_compare_and_set_strong(atomic, flag_clean, flag_exc_clean)

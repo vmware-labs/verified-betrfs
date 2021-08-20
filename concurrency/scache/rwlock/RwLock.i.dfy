@@ -1527,6 +1527,7 @@ module RwLockToken {
     && m.exc.ExcPending?
     && m.exc.visited == NUM_THREADS
     && m == ExcHandle(m.exc)
+  ensures handle'.loc == handle.loc
   ensures handle'.val == ExcHandle(ExcObtained(handle.val.exc.t, handle.val.exc.clean))
   ensures b' == handle.val.exc.b
   {

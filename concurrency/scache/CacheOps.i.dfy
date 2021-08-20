@@ -18,6 +18,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CacheHandle
   import opened CacheStatusType
   import opened ClientCounter
+  import opened BitOps
 
   glinear datatype WriteablePageHandle = WriteablePageHandle(
     ghost cache_idx: uint64,
@@ -362,21 +363,18 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     assert success ==> i as nat == NUM_THREADS;
   }
 
-  /*
-
   method try_evict_page(shared cache: Cache, cache_idx: uint64)
   requires cache.Inv()
-  requires 0 <= cache_idx as int < CACHE_SIZE
   requires 0 <= cache_idx as int < CACHE_SIZE
   {
     // 1. get status
 
-    var status := atomic_read(cache.status[cache_idx]);
+    atomic_block var status := execute_atomic_load(cache.status[cache_idx].atomic) { }
 
     // 2. if accessed, then clear 'access'
 
-    if bit_or(status, flag_accessed) != 0 {
-      cache.status[cache_idx].clear_accessed(cache.key(cache_idx as int));
+    if bit_or_uint8(status, flag_accessed) != 0 {
+      cache.status[cache_idx].clear_accessed();
     }
 
     // 3. if status != CLEAN, abort
@@ -394,14 +392,13 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       // 5. get the exc lock (Clean -> Clean | Exc) (or bail)
 
       var success;
-      glinear var status, r, r_opt, status_opt, handle_opt;
-      success, r_opt, status_opt, handle_opt := cache.status[cache_idx].take_exc_if_eq_clean(
-            cache.key(cache_idx as int));
+      glinear var status, r, r_opt, status_opt;
+      ghost var b;
+      success, r_opt, b, status_opt := cache.status[cache_idx].take_exc_if_eq_clean();
 
       if !success {
         dispose_glnone(status_opt);
         dispose_glnone(r_opt);
-        dispose_glnone(handle_opt);
       } else {
         // 6. try the rest of the read refcounts (or bail)
 
@@ -412,41 +409,37 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             cache, cache_idx, r);
 
         if !success {
-          cache.status[cache_idx].abandon_exc(
-              cache.key(cache_idx as int),
-              status, r, unwrap_value(handle_opt));
+          cache.status[cache_idx].abandon_exc(r, status);
         } else {
           glinear var handle;
-          var clean := r.q.clean;
-          r, handle := RwLockMethods.transform_TakeExcLockFinish(
-              cache.key(cache_idx as int), -1, clean, r, unwrap_value(handle_opt));
+          var clean := r.val.exc.clean;
+          r, handle := T.perform_Withdraw_TakeExcLockFinish(r);
 
           // 7. clear cache_idx_of_page lookup
 
-          var disk_idx := cache.disk_idx_of_entry[cache_idx].read(
-              handle.idx);
+          var disk_idx := cache.disk_idx_of_entry[cache_idx].read(handle.idx);
 
           glinear var CacheEntryHandle(key, cache_entry, data, idx) := handle;
 
-          cache_entry, status := atomic_index_lookup_clear_mapping(
+          glinear var cache_empty := atomic_index_lookup_clear_mapping(
                 cache.cache_idx_of_page[disk_idx],
-                disk_idx,
+                disk_idx as nat,
                 cache_entry,
                 status);
 
+          handle := CacheEmptyHandle(key, cache_empty, data, idx);
+
           // 8. set to FREE
 
-          cache.status[cache_idx].set_to_free(
-              cache.key(cache_idx as int),
-              RwLock.CacheEntryHandle(key, cache_entry, data, idx),
-              status,
-              r);
+          cache.status[cache_idx].set_to_free(handle, r);
 
           // no need to decrement a refcount
         }
       }
     }
   }
+
+  /*
 
   method evict_chunk(shared cache: Cache, chunk: uint64)
   requires cache.Inv()
@@ -477,7 +470,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && status_opt.glNone?
   ensures cache_idx != 0xffff_ffff ==>
       && 0 <= cache_idx as int < CACHE_SIZE
-      && m == glSome(RwLock.Internal(T.TokeneadingPending(cache.key(cache_idx as int))))
+      && m == glSome(RwLock.Internal(T.TokeneadingPending))
       && handle_opt.glSome?
       && handle_opt.value.is_handle(cache.key(cache_idx as int))
       && status_opt == glSome(CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty))
@@ -501,7 +494,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && status_opt.glNone?
     invariant success ==>
         && 0 <= cache_idx as int < CACHE_SIZE
-        && m == glSome(RwLock.Internal(T.TokeneadingPending(cache.key(cache_idx as int))))
+        && m == glSome(RwLock.Internal(T.TokeneadingPending()))
         && handle_opt.glSome?
         && handle_opt.value.is_handle(cache.key(cache_idx as int))
         && status_opt == glSome(CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty))
@@ -517,7 +510,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           && status_opt.glNone?
       invariant success ==>
           && 0 <= cache_idx as int < CACHE_SIZE
-          && m == glSome(RwLock.Internal(T.TokeneadingPending(cache.key(cache_idx as int))))
+          && m == glSome(RwLock.Internal(T.TokeneadingPending()))
           && handle_opt.glSome?
           && handle_opt.value.is_handle(cache.key(cache_idx as int))
           && status_opt == glSome(CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty))
@@ -527,8 +520,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         dispose_glnone(m);
         dispose_glnone(handle_opt);
         dispose_glnone(status_opt);
-        success, m, handle_opt, status_opt := cache.status[cache_idx].try_alloc(
-            cache.key(cache_idx as int));
+        success, m, handle_opt, status_opt := cache.status[cache_idx].try_alloc();
 
         i := i + 1;
       }
@@ -601,19 +593,17 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           dispose_glnone(read_ticket_opt);
           client_out := glSome(client);
           cache.status[cache_idx].abandon_reading_pending(
-              cache.key(cache_idx as int),
               status,
               r,
               RwLock.CacheEntryHandle(
-                  cache.key(cache_idx as int),
                   cache_entry, data, idx));
         } else {
           r := inc_refcount_for_reading(
               cache.read_refcounts[localState.t][cache_idx],
-              cache.key(cache_idx as int), localState.t, client, r);
+              localState.t, client, r);
 
           r := cache.status[cache_idx].clear_exc_bit_during_load_phase(
-              cache.key(cache_idx as int), localState.t, r);
+              localState.t, r);
 
           read_stub := disk_read_sync(
               disk_idx as uint64, cache.data[cache_idx], inout data, 
@@ -628,8 +618,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
           /*readonly*/ glinear var readonly_handle;
           r, readonly_handle := cache.status[cache_idx].load_phase_finish(
-              cache.key(cache_idx as int), localState.t, r,
-              RwLock.CacheEntryHandle(cache.key(cache_idx as int), cache_entry, data, idx),
+              localState.t, r,
+              RwLock.CacheEntryHandle(cache_entry, data, idx),
               status);
 
           success := true;
