@@ -163,4 +163,9 @@ module CacheResources {
   requires 0 <= cache_entry.disk_idx < 0x1_0000_0000_0000_0000
   requires stub.written(cache_entry.disk_idx as uint64)
   ensures status'.is_status(cache_entry.cache_idx, Clean)
+
+  glinear method status_mark_dirty(glinear status: CacheStatus)
+  returns (glinear status': CacheStatus)
+  requires status.status == Clean
+  ensures status' == status.(status := Dirty)
 }

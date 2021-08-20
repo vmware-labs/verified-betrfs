@@ -987,6 +987,32 @@ module RwLock refines Rw {
       assert dot(m', p).sharedState == dot(m, p).sharedState;
     }
   }
+
+  predicate MarkDirty(m: M, m': M)
+  {
+    && m.M?
+    && m.exc.ExcObtained?
+    && m.central.CentralState?
+    && m == dot(
+      CentralHandle(m.central),
+      ExcHandle(m.exc)
+    )
+    && m' == dot(
+      CentralHandle(m.central.(flag := ExcLock_Dirty)),
+      ExcHandle(m.exc.(clean := false))
+    )
+  }
+
+  lemma MarkDirty_Preserves(m: M, m': M)
+  requires MarkDirty(m, m')
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
+    {
+      assert dot(m', p).sharedState == dot(m, p).sharedState;
+    }
+  }
 }
 
 module RwLockToken {
@@ -1458,6 +1484,33 @@ module RwLockToken {
     var rest := T.obtain_invariant_2(inout c', inout handle');
     c' := T.internal_transition_2_1(c', handle', a);
   }
+
+  glinear method perform_MarkDirty(glinear c: Token, glinear handle: Token)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.M?
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.M?
+    && m.exc.ExcObtained?
+    && m == ExcHandle(m.exc)
+  requires c.loc == handle.loc
+  ensures c'.loc == c.loc
+  ensures c.val.central.flag == ExcLock_Dirty || c.val.central.flag == ExcLock_Clean
+  ensures c'.val == CentralHandle(c.val.central.(flag := ExcLock_Dirty))
+  ensures handle'.loc == handle.loc
+  ensures handle'.val == ExcHandle(handle.val.exc.(clean := false))
+  {
+    var a := CentralHandle(c.val.central.(flag := ExcLock_Dirty));
+    var b := ExcHandle(handle.val.exc.(clean := false));
+    MarkDirty_Preserves(dot(c.val, handle.val), dot(a, b));
+    c' := c;
+    handle' := handle;
+    var rest := T.obtain_invariant_2(inout c', inout handle');
+    c', handle' := T.internal_transition_2_2(c', handle', a, b);
+  }
+
 
   glinear method perform_Withdraw_TakeExcLockFinish(glinear handle: Token)
   returns (glinear handle': Token, glinear b': Handle)

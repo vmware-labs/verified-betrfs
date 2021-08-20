@@ -294,6 +294,12 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     )
   }
 
+  predicate MarkDirty(shard: M, shard': M, cache_idx: nat)
+  {
+    && shard == CacheStatus(cache_idx, Clean)
+    && shard' == CacheStatus(cache_idx, Dirty)
+  }
+
   predicate Internal(shard: M, shard': M)
 
   predicate Inv(s: M) {

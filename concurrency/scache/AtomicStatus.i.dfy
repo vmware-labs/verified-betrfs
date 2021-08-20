@@ -722,20 +722,39 @@ module AtomicStatusImpl {
       }
     }
 
-    /*method mark_dirty(
+    method mark_dirty(
         glinear r: Rw.Token,
-        glinear status: CacheResources.Status)
-    returns (glinear r': Rw.Token, glinear status': CacheResources.Status)
+        glinear status: CacheResources.CacheStatus)
+    returns (glinear r': Rw.Token, glinear status': CacheResources.CacheStatus)
     requires this.inv()
     requires r.loc == rwlock_loc
     requires r.val.M?
     requires r.val.exc.ExcObtained?
     requires r.val == RwLock.ExcHandle(r.val.exc)
-    requires handle.is_handle(key)
-    requires handle.CacheEntryHandle?
-    ensures 
+    requires status.cache_idx == key.cache_idx
+    requires status.status == Clean || status.status == Dirty
+    ensures r'.loc == rwlock_loc
+    ensures r'.val == RwLock.ExcHandle(r.val.exc.(clean := false))
+    ensures status' == CacheResources.CacheStatus(key.cache_idx, Dirty)
     {
-      
-    }*/
+      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_clean) {
+       ghost_acquire old_g;
+        glinear var new_g;
+        glinear var G(rwlock, empty_status) := old_g;
+
+        rwlock, r' := Rw.perform_MarkDirty(rwlock, r);
+
+        new_g := G(rwlock, empty_status);
+
+        if (status.status == Clean) {
+          status' := CacheResources.status_mark_dirty(status);
+        } else {
+          status' := status;
+        }
+
+        assert state_inv(new_value, new_g, key, rwlock_loc);
+        ghost_release new_g;
+      }
+    }
   }
 }
