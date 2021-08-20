@@ -1454,6 +1454,7 @@ module RwLockToken {
     && m == CentralHandle(m.central)
   requires handle.val == SharedHandle(SharedPending2(t))
   requires c.loc == handle.loc
+  ensures c.val.central.flag != Unmapped
   ensures c'.loc == handle'.loc == c.loc
   ensures c'.val == c.val
   ensures handle'.val == SharedHandle(SharedObtained(t, c.val.central.stored_value))
@@ -1461,7 +1462,10 @@ module RwLockToken {
     var a := c.val;
     var b := SharedHandle(SharedObtained(t, c.val.central.stored_value));
     SharedCheckReading_Preserves(dot(c.val, handle.val), dot(a, b), t);
-    c', handle' := T.internal_transition_2_2(c, handle, a, b);
+    c' := c;
+    handle' := handle;
+    var rest := T.obtain_invariant_2(inout c', inout handle');
+    c', handle' := T.internal_transition_2_2(c', handle', a, b);
   }
 
   glinear method perform_AbandonExcPending(glinear c: Token, glinear handle: Token)

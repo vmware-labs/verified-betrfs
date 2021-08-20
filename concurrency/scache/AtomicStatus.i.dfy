@@ -186,7 +186,7 @@ module AtomicStatusImpl {
         && m.value.is_handle(key)
         && disk_write_ticket.glSome?
         && disk_write_ticket.value.writes(
-            m.value.b.idx.v,
+            m.value.b.idx.v as int,
             m.value.b.data.s)
     {
       atomic_block var cur_flag := execute_atomic_load(this.atomic) { }
@@ -562,6 +562,9 @@ module AtomicStatusImpl {
         && r' == glNone
         && handle.glSome?
         && handle.value.is_handle(key)
+        && handle.value.token.loc == rwlock_loc
+        && handle.value.b.CacheEntryHandle?
+        && handle.value.t == t
     {
       atomic_block var f := execute_atomic_load(atomic) {
         ghost_acquire old_g;

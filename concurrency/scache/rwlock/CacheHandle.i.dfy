@@ -18,17 +18,17 @@ module CacheHandle {
     | CacheEmptyHandle(
         ghost key: Key,
         glinear cache_empty: CacheResources.CacheEmpty,
-        glinear idx: PointsTo<int>,
+        glinear idx: PointsTo<int64>,
         glinear data: PointsToArray<byte>)
     | CacheReadingHandle(
         ghost key: Key,
         glinear cache_reading: CacheResources.CacheReading,
-        glinear idx: PointsTo<int>,
+        glinear idx: PointsTo<int64>,
         glinear data: PointsToArray<byte>)
     | CacheEntryHandle(
         ghost key: Key,
         glinear cache_entry: CacheResources.CacheEntry,
-        glinear idx: PointsTo<int>,
+        glinear idx: PointsTo<int64>,
         glinear data: PointsToArray<byte>)
   {
     predicate is_handle(key: Key)
@@ -37,18 +37,18 @@ module CacheHandle {
       && this.idx.ptr == key.idx_ptr
       && this.data.ptr == key.data_ptr
       && |this.data.s| == 4096
-      && 0 <= this.idx.v < NUM_DISK_PAGES
+      && 0 <= this.idx.v as int < NUM_DISK_PAGES
 
       && (this.CacheEmptyHandle? ==>
         && this.cache_empty.cache_idx == key.cache_idx
       )
       && (this.CacheReadingHandle? ==>
         && this.cache_reading.cache_idx == key.cache_idx
-        && this.cache_reading.disk_idx == this.idx.v
+        && this.cache_reading.disk_idx == this.idx.v as int
       )
       && (this.CacheEntryHandle? ==>
         && this.cache_entry.cache_idx == key.cache_idx
-        && this.cache_entry.disk_idx == this.idx.v
+        && this.cache_entry.disk_idx == this.idx.v as int
         && this.cache_entry.data == this.data.s
       )
     }
