@@ -439,8 +439,6 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  /*
-
   method evict_chunk(shared cache: Cache, chunk: uint64)
   requires cache.Inv()
   requires 0 <= chunk as int < NUM_CHUNKS
@@ -453,6 +451,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       i := i + 1;
     }
   }
+
+  /*
 
   method get_free_page(shared cache: Cache, linear inout localState: LocalState)
   returns (
