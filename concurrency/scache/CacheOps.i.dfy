@@ -167,9 +167,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
               localState.t as nat,
               r);
 
-          // TODO
-          // if !is_done_reading, then spend the time to handle
-          // some IO responses
+          if !is_done_reading {
+            io_cleanup(cache, DEFAULT_MAX_IO_EVENTS);
+          }
         }
 
         dispose_glnone(r_opt);
