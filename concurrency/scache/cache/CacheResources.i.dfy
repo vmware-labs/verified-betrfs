@@ -13,11 +13,6 @@ module CacheResources {
 
   datatype DiskPageMap = DiskPageMap(ghost disk_idx: int, ghost cache_idx_opt: Option<int>)
 
-  /*function CacheEntry(
-        // this field is meaningless if status == Empty
-        disk_idx: int,
-        cache_idx: int, data: DiskIfc.Block) : M*/
-
   datatype CacheStatus = CacheStatus(ghost cache_idx: int, ghost status: Status)
   {
     predicate is_status(cache_idx: int, status: Status) {
@@ -114,25 +109,21 @@ module CacheResources {
   ensures t3 == DiskPageMap(disk_idx, Some(cache_idx))
   ensures t4 == DiskReadTicket(disk_idx)
 
-/*
   glinear method finish_page_in(
       ghost cache_idx: nat,
-      ghost disk_idx: uint64,
-      glinear s1: R,
-      glinear s2: R,
+      ghost disk_idx: nat,
+      glinear s2: CacheReading,
       glinear s3: DiskReadStub
   )
   returns (
-      glinear t1: R,
-      glinear t2: R
+      glinear t1: CacheStatus,
+      glinear t2: CacheEntry
   )
-  requires s1 == CacheStatus(cache_idx, Reading)
-  requires s2.CacheEntry? && s2.disk_idx == disk_idx as int
+  requires s2.CacheReading? && s2.disk_idx == disk_idx as int
       && s2.cache_idx == cache_idx
   requires s3.addr == disk_idx
   ensures t1 == CacheStatus(cache_idx, Clean)
-  ensures t2 == s2.(data := s3.contents)
-  */
+  ensures t2 == CacheEntry(s2.cache_idx, s2.disk_idx, s3.data)
 
   glinear method initiate_writeback(
       gshared cache_entry: CacheEntry,

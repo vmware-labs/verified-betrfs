@@ -89,7 +89,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && handle_out.glSome?
       && handle_out.value.is_disk_page_handle(
           cache, localState.t as int, expected_disk_idx as int)
-      //&& client_out.glNone?
+      && client_out.glNone?
   decreases *
   {
     // 1. check if writelocked
@@ -540,104 +540,104 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     inout localState.chunk_idx := chunk;
   }
 
-  /*
-
   // Top level method
 
-  method try_take_read_lock_disk_page(shared cache: Cache, disk_idx: int,
-      glinear client: T.Token,
+  method try_take_read_lock_disk_page(shared cache: Cache, disk_idx: uint64,
+      glinear client: Client,
       linear inout localState: LocalState)
   returns (
     success: bool,
     glinear handle_out: glOption<ReadonlyPageHandle>,
-    glinear client_out: glOption<T.Token>)
+    glinear client_out: glOption<Client>)
   requires cache.Inv()
-  requires 0 <= disk_idx < NUM_DISK_PAGES
+  requires 0 <= disk_idx as nat < NUM_DISK_PAGES
   requires old_localState.WF()
-  requires client == RwLock.Internal(RwLock.Client(old_localState.t))
   ensures !success ==> handle_out.glNone?
-      && client_out == glSome(client)
+      && client_out.glSome?
   ensures success ==>
       && handle_out.glSome?
-      && handle_out.value.is_disk_page_handle(cache, localState.t, disk_idx)
+      && handle_out.value.is_disk_page_handle(cache, localState.t as nat, disk_idx as nat)
       && client_out.glNone?
   ensures old_localState.WF()
   decreases *
   {
-    var cache_idx := atomic_index_lookup_read(cache.cache_idx_of_page[disk_idx], disk_idx);
+    var cache_idx := atomic_index_lookup_read(
+        cache.cache_idx_of_page[disk_idx], disk_idx as nat);
 
     if cache_idx == NOT_MAPPED {
-      glinear var m, handle_opt, status_opt;
-      cache_idx, m, handle_opt, status_opt := get_free_page(cache, inout localState);
+      glinear var m, handle_opt;
+      cache_idx, m, handle_opt := get_free_page(cache, inout localState);
 
       if cache_idx == 0xffff_ffff {
         dispose_glnone(m);
         dispose_glnone(handle_opt);
-        dispose_glnone(status_opt);
         success := false;
         handle_out := glNone;
         client_out := glSome(client);
       } else {
         glinear var r := unwrap_value(m);
         glinear var handle: Handle := unwrap_value(handle_opt);
-        glinear var status := unwrap_value(status_opt);
         glinear var read_stub;
         glinear var read_ticket_opt;
 
-        glinear var CacheEntryHandle(_, cache_entry, data, idx) := handle;
+        glinear var CacheEmptyHandle(_, cache_empty, idx, data) := handle;
 
-        success, cache_entry, status, read_ticket_opt := 
+        glinear var cache_empty_opt, cache_reading_opt;
+        success, cache_empty_opt, cache_reading_opt, read_ticket_opt := 
             atomic_index_lookup_add_mapping(
               cache.cache_idx_of_page[disk_idx],
-              disk_idx as uint64,
-              cache_idx as uint64,
-              cache_entry,
-              status);
+              disk_idx,
+              cache_idx,
+              cache_empty);
 
         if !success {
           success := false;
           handle_out := glNone;
           dispose_glnone(read_ticket_opt);
+          dispose_glnone(cache_reading_opt);
           client_out := glSome(client);
           cache.status[cache_idx].abandon_reading_pending(
-              status,
               r,
-              RwLock.CacheEntryHandle(
-                  cache_entry, data, idx));
+              CacheEmptyHandle(
+                  cache.key(cache_idx as int),
+                  unwrap_value(cache_empty_opt),
+                  idx,
+                  data));
         } else {
+          dispose_glnone(cache_empty_opt);
+
           r := inc_refcount_for_reading(
               cache.read_refcounts[localState.t][cache_idx],
-              localState.t, client, r);
+              localState.t as nat, client, r);
 
-          r := cache.status[cache_idx].clear_exc_bit_during_load_phase(
-              localState.t, r);
+          r := cache.status[cache_idx].clear_exc_bit_during_load_phase(r);
 
           read_stub := disk_read_sync(
               disk_idx as uint64, cache.data[cache_idx], inout data, 
               unwrap_value(read_ticket_opt));
 
+          glinear var cache_entry, status;
+
           status, cache_entry := CacheResources.finish_page_in(
-              cache_idx as int, disk_idx as uint64,
-              status, cache_entry, read_stub);
+              cache_idx as int, disk_idx as nat,
+              unwrap_value(cache_reading_opt), read_stub);
 
-          ptr_write(cache.disk_idx_of_entry[cache_idx],
-              inout idx, disk_idx);
+          cache.disk_idx_of_entry[cache_idx].write(inout idx, disk_idx as int64);
 
-          /*readonly*/ glinear var readonly_handle;
-          r, readonly_handle := cache.status[cache_idx].load_phase_finish(
-              localState.t, r,
-              RwLock.CacheEntryHandle(cache_entry, data, idx),
-              status);
+          glinear var ceh := CacheEntryHandle(
+              cache.key(cache_idx as int), cache_entry, idx, data);
+          r := cache.status[cache_idx].load_phase_finish(
+              r, ceh, status);
 
           success := true;
-          handle_out := glSome(ReadonlyPageHandle(r, readonly_handle));
+          handle_out := glSome(ReadonlyPageHandle(cache_idx,
+              T.SharedObtainedToken(localState.t as int, ceh, r)));
           client_out := glNone;
         }
       }
     } else {
       success, handle_out, client_out := try_take_read_lock_on_cache_entry(
-          cache, cache_idx as int, disk_idx as int, localState, client);
+          cache, cache_idx, disk_idx as int64, localState, client);
     }
   }
-  */
 }
