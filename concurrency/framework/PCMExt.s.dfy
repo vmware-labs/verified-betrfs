@@ -29,9 +29,6 @@ module ExtTokens(base: PCM, ext: PCMExt(base)) {
   import ExtTokens = Tokens(ext)
   import BaseTokens = Tokens(base)
 
-  // TODO version that could accept `gshared f`
-  // (Remember there is NO SOUND VERSION that accepts `gshared b`)
-
   function method {:extern} ext_init(
       glinear b: BaseTokens.Token,
       ghost f': ext.F)
@@ -39,6 +36,9 @@ module ExtTokens(base: PCM, ext: PCMExt(base)) {
   requires ext.I(f') == Some(b.val)
   ensures f_out.loc.ExtLoc? && f_out.loc.base_loc == b.loc
   ensures f_out.val == f'
+
+  // TODO version that could accept `gshared f`
+  // (Remember there is NO SOUND VERSION that accepts `gshared b`)
 
   glinear method {:extern} ext_transfer(
       glinear f: ExtTokens.Token,

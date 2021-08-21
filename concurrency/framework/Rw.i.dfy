@@ -179,7 +179,11 @@ module RwTokens(rw: Rw) {
   import opened GhostLoc
 
   import Wrap = Rw_PCMWrap(rw)
+  import WrapT = PCMWrapTokens(Rw_PCMWrap(rw))
+  import WrapPT = Tokens(Rw_PCMWrap(rw))
   import T = Tokens(Rw_PCMExt(rw))
+  import ET = ExtTokens(Rw_PCMWrap(rw), Rw_PCMExt(rw))
+  import pcm = Rw_PCMExt(rw)
   
   type Token = t : T.Token | t.loc.ExtLoc? && t.loc.base_loc == Wrap.singleton_loc()
     witness *
@@ -197,6 +201,10 @@ module RwTokens(rw: Rw) {
   ensures token1 == old_token1
   ensures token2 == old_token2
   ensures rw.Inv(rw.dot(rw.dot(token1.val, token2.val), rest))
+  {
+    T.is_valid(token1, inout token2);
+    rest :| rw.Inv(rw.dot(rw.dot(token1.val, token2.val), rest));
+  }
 
   glinear method obtain_invariant_3(
       glinear inout token1: Token,
@@ -208,6 +216,39 @@ module RwTokens(rw: Rw) {
   ensures token2 == old_token2
   ensures token3 == old_token3
   ensures rw.Inv(rw.dot(rw.dot(rw.dot(token1.val, token2.val), token3.val), rest))
+  {
+    glinear var x := T.join(token1, token2);
+    T.is_valid(x, inout token3);
+    token1, token2 := T.split(x, token1.val, token2.val);
+    rest :| rw.Inv(rw.dot(rw.dot(rw.dot(token1.val, token2.val), token3.val), rest));
+  }
+
+  glinear method {:extern} split3(glinear sum: Token,
+      ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M)
+  returns (glinear a': Token, glinear b': Token, glinear c': Token)
+  requires sum.val == rw.dot(rw.dot(a, b), c)
+  ensures a' == T.Token(sum.loc, a)
+  ensures b' == T.Token(sum.loc, b)
+  ensures c' == T.Token(sum.loc, c)
+  {
+    glinear var x;
+    x, c' := T.split(sum, rw.dot(a, b), c);
+    a', b' := T.split(x, a, b);
+  }
+
+  function method {:opaque} update(
+      glinear b: Token,
+      ghost expected_out: rw.M)
+    : (glinear c: Token)
+  requires pcm.transition(b.val, expected_out)
+  ensures c == T.Token(b.loc, expected_out)
+  {
+    rw.dot_unit(b.val);
+    rw.dot_unit(expected_out);
+    rw.commutative(b.val, rw.unit());
+    rw.commutative(expected_out, rw.unit());
+    T.transition_update(T.get_unit_shared(b.loc), b, expected_out)
+  }
 
   glinear method internal_transition(
       glinear token: Token,
@@ -215,6 +256,9 @@ module RwTokens(rw: Rw) {
   returns (glinear token': Token)
   requires rw.transition(token.val, expected_value)
   ensures token' == T.Token(token.loc, expected_value)
+  {
+    token' := update(token, expected_value);
+  }
 
   glinear method deposit(
       glinear token: Token,
@@ -223,6 +267,12 @@ module RwTokens(rw: Rw) {
   returns (glinear token': Token)
   requires rw.deposit(token.val, expected_value, stored_value)
   ensures token' == T.Token(token.loc, expected_value)
+  {
+    glinear var f, b := ET.ext_transfer(
+        token, expected_value, WrapT.wrap(stored_value), Wrap.unit());
+    WrapPT.dispose(b);
+    token' := f;
+  }
 
   glinear method withdraw(
       glinear token: Token,
@@ -232,6 +282,13 @@ module RwTokens(rw: Rw) {
   requires rw.withdraw(token.val, expected_value, expected_retrieved_value)
   ensures token' == T.Token(token.loc, expected_value)
   ensures retrieved_value == expected_retrieved_value
+  {
+    glinear var f, b := ET.ext_transfer(
+        token, expected_value,
+        WrapPT.get_unit(Wrap.singleton_loc()), Wrap.one(expected_retrieved_value));
+    token' := f;
+    retrieved_value := WrapT.unwrap(b);
+  }
 
   //method borrow(glinear token: Token)
 
@@ -251,6 +308,11 @@ module RwTokens(rw: Rw) {
       rw.dot(expected_value1, expected_value2))
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
+  {
+    glinear var y := internal_transition(token1,
+        rw.dot(expected_value1, expected_value2));
+    token1', token2' := T.split(y, expected_value1, expected_value2);
+  }
 
   glinear method internal_transition_2_1(
       glinear token1: Token,
@@ -262,6 +324,11 @@ module RwTokens(rw: Rw) {
       rw.dot(token1.val, token2.val),
       expected_value1)
   ensures token1' == T.Token(token1.loc, expected_value1)
+  {
+    glinear var x := T.join(token1, token2);
+    glinear var y := internal_transition(x, expected_value1);
+    token1' := y;
+  }
 
   glinear method internal_transition_2_2(
       glinear token1: Token,
@@ -275,6 +342,12 @@ module RwTokens(rw: Rw) {
       rw.dot(expected_value1, expected_value2))
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
+  {
+    glinear var x := T.join(token1, token2);
+    glinear var y := internal_transition(x,
+        rw.dot(expected_value1, expected_value2));
+    token1', token2' := T.split(y, expected_value1, expected_value2);
+  }
 
   glinear method internal_transition_3_2(
       glinear token1: Token,
@@ -289,6 +362,13 @@ module RwTokens(rw: Rw) {
       rw.dot(expected_value1, expected_value2))
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
+  {
+    glinear var x := T.join(token1, token2);
+    x := T.join(x, token3);
+    glinear var y := internal_transition(x,
+        rw.dot(expected_value1, expected_value2));
+    token1', token2' := T.split(y, expected_value1, expected_value2);
+  }
 
   glinear method internal_transition_3_3(
       glinear token1: Token,
@@ -305,6 +385,14 @@ module RwTokens(rw: Rw) {
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
   ensures token3' == T.Token(token1.loc, expected_value3)
+  {
+    glinear var x := T.join(token1, token2);
+    x := T.join(x, token3);
+    glinear var y := internal_transition(x,
+        rw.dot(rw.dot(expected_value1, expected_value2), expected_value3));
+    token1', token2', token3' := split3(y,
+        expected_value1, expected_value2, expected_value3);
+  }
 
   glinear method deposit_2_1(
       glinear token1: Token,
@@ -318,6 +406,11 @@ module RwTokens(rw: Rw) {
     expected_value1,
     stored_value)
   ensures token1' == T.Token(token1.loc, expected_value1)
+  {
+    glinear var x := T.join(token1, token2);
+    glinear var y := deposit(x, stored_value, expected_value1);
+    token1' := y;
+  }
 
   glinear method deposit_2_2(
       glinear token1: Token,
@@ -333,6 +426,12 @@ module RwTokens(rw: Rw) {
     stored_value)
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
+  {
+    glinear var x := T.join(token1, token2);
+    glinear var y := deposit(x, stored_value,
+        rw.dot(expected_value1, expected_value2));
+    token1', token2' := T.split(y, expected_value1, expected_value2);
+  }
 
   glinear method deposit_3_2(
       glinear token1: Token,
@@ -349,6 +448,13 @@ module RwTokens(rw: Rw) {
     stored_value)
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
+  {
+    glinear var x := T.join(token1, token2);
+    x := T.join(x, token3);
+    glinear var y := deposit(x, stored_value,
+        rw.dot(expected_value1, expected_value2));
+    token1', token2' := T.split(y, expected_value1, expected_value2);
+  }
 
   glinear method deposit_3_3(
       glinear token1: Token,
@@ -367,6 +473,14 @@ module RwTokens(rw: Rw) {
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
   ensures token3' == T.Token(token1.loc, expected_value3)
+  {
+    glinear var x := T.join(token1, token2);
+    x := T.join(x, token3);
+    glinear var y := deposit(x, stored_value,
+        rw.dot(rw.dot(expected_value1, expected_value2), expected_value3));
+    token1', token2', token3' := split3(y,
+        expected_value1, expected_value2, expected_value3);
+  }
 
   glinear method withdraw_1_1(
       glinear token1: Token,
