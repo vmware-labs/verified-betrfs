@@ -253,4 +253,11 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
     transition_of_next_with_unit(a.val, expect_b);
     Tokens.transition_update(Tokens.get_unit_shared(a.loc), a, expect_b)
   }
+
+  method {:opaque} inout_update_next(glinear inout a: Token, ghost expect_b: ssm.M)
+  requires ssm.Internal(old_a.val, expect_b)
+  ensures a == Tokens.Token(old_a.loc, expect_b)
+  {
+    a := update_next(a, expect_b);
+  }
 }

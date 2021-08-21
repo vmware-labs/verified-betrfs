@@ -11,22 +11,19 @@ module Impl {
   import opened GhostLinearSequence_i
   import opened Mutexes
 
-  import opened KeyValueType
   import opened Limits
+  import opened KeyValueType
+  import MapIfc
   import SSM = HashTableStubSSM
   import opened CircularTable
   import opened CircularRange
 
-  import T = Tokens(TicketStubPCM(MapIfc, SSM))
+  import PCM = TicketStubPCM(MapIfc, SSM)
+  import T = Tokens(PCM)
   import TST = TicketStubToken(MapIfc, SSM) 
   import opened GhostLoc
 
   type Token = T.Token
-
-  function OneRowToken(loc: Loc, i: Index, entry: Entry): Token
-  {
-    T.Token(loc, SSM.OneRowResource(i, entry))
-  }
 
   linear datatype Row = Row(
     entry: Entry,
@@ -34,7 +31,19 @@ module Impl {
   {
     predicate Inv(loc: Loc, i: Index)
     {
-      resource == OneRowToken(loc, i, entry)
+      resource == T.Token(loc, SSM.OneRowResource(i, entry))
+    }
+  }
+
+  linear datatype Cap = Cap(
+    remaining: nat,
+    glinear resource: Token)
+  {
+    predicate Inv(loc: Loc)
+    {
+      && remaining <= Capacity()
+      && resource == T.Token(loc, SSM.unit()
+        .(insert_capacity := remaining))
     }
   }
 
@@ -51,7 +60,12 @@ module Impl {
 
   datatype IVariables = IVariables(
     row_mutexes: RowMutexTable,
-    capacity: uint32)
+    cap_mutex: Mutex<Cap>)
+
+  datatype CapUpdate =
+    | Increment
+    | Decrement
+    | Unchanged
 
   linear datatype Variables = Variables(
     glinear token: Token,
@@ -85,7 +99,7 @@ module Impl {
       // have the handle <==> have the row in token
       && (forall i: Index ::HasRowHandle(i) <==> token.val.table[i].Some?)
 
-      && iv.capacity as nat == token.val.insert_capacity
+      && (iv.cap_mutex.inv == ((cap: Cap) => cap.Inv(token.loc)))
     }
 
     predicate RangeOwnershipInv(entries: seq<Entry>, range: Range)
@@ -110,6 +124,7 @@ module Impl {
       returns (entries: seq<Entry>, entry: Entry, range: Range)
 
       requires old_self.RangeOwnershipInv(old_entries, old_range)
+      requires RangeFull(old_self.token.val.table, old_range)
 
       ensures entries == old_entries + [entry]
       ensures range == old_range.RightExtend1()
@@ -117,8 +132,7 @@ module Impl {
       ensures self.token.val.table ==
         old_self.token.val.table[old_range.end := Some(entry)] 
       ensures self.token.loc == old_self.token.loc
-      ensures RangeFull(old_self.token.val.table, old_range)
-        && entry.Full? ==> RangeFull(self.token.val.table, range)
+      ensures entry.Full? ==> RangeFull(self.token.val.table, range)
       ensures self.RowOnlyUpdate(old_self)
     {
       var index := old_range.end;
@@ -131,12 +145,27 @@ module Impl {
       entry := out_entry;
 
       T.inout_join(inout self.token, row_token);
-      lseq_give_inout(inout self.handles, index, handle);
+      glseq_give_inout(inout self.handles, index, handle);
 
       if old_range.AlmostComplete() {
-        // out_sv := resources_obey_inv(out_sv);
-        // AlmostCompleteFullRangeImpossible(out_sv, range);
-        assume false;
+        gshared var temp := T.get_unit_shared(self.token.loc);
+        T.is_valid(temp, inout self.token);
+
+        calc ==> {
+          PCM.valid(SSM.dot(SSM.unit(), self.token.val));
+          {
+            SSM.commutative(SSM.unit(), self.token.val);
+          }
+          PCM.valid(SSM.dot(self.token.val, SSM.unit()));
+          {
+            SSM.dot_unit(self.token.val);
+          }
+          PCM.valid(self.token.val);
+          {
+            SSM.AlmostCompleteFullRangeImpossible(self.token.val, old_range);
+          }
+          false;
+        }
       }
 
       RangeEquivalentUnwrap(old_self.token.val.table,
@@ -160,18 +189,84 @@ module Impl {
       var len := |entries|;
       var entry := entries[len-1];
 
-      glinear var rmutex;
+      glinear var mutex_token;
       ghost var table := self.token.val.table[index := None];
       ghost var left := self.token.val.(table := table);
       ghost var right := SSM.OneRowResource(index, entry);
-      rmutex := T.inout_split(inout self.token, left, right);
+      mutex_token := T.inout_split(inout self.token, left, right);
 
       glinear var handle := lseq_take_inout(inout self.handles, index);
-      self.iv.row_mutexes[index].release(Row(entry, rmutex), handle);
+      self.iv.row_mutexes[index].release(Row(entry, mutex_token), handle);
       range := old_range.RightShrink1();
 
       RangeEquivalentUnwrap(old_self.token.val.table,
         self.token.val.table, range);
+    }
+
+    predicate CapOnlyUpdate(old_var: Variables, udpate: CapUpdate)
+      requires token.val.Variables?
+      requires old_var.token.val.Variables?
+      requires udpate.Decrement? ==> old_var.token.val.insert_capacity > 0
+    {
+      var cap := old_var.token.val.insert_capacity +
+        (match udpate 
+          case Increment => 1
+          case Decrement => -1
+          case Unchanged => 0);
+      var val := old_var.token.val.(insert_capacity := cap);
+      var token := old_var.token.(val := val);
+      && this == old_var.(token := token)
+    }
+
+    linear inout method acquireCapacity()
+      returns (success: bool)
+
+      requires old_self.Inv()
+
+      ensures self.Inv()
+      ensures success ==> self.CapOnlyUpdate(old_self, Increment)
+      ensures !success ==> self.CapOnlyUpdate(old_self, Unchanged)
+    {
+      linear var cap; glinear var handle: MutexHandle<Cap>;
+      cap, handle := self.iv.cap_mutex.acquire();
+
+      linear var Cap(count, cap_token) := cap;
+
+      success := false;
+
+      if count >= 1 {
+        count := count - 1;
+        ghost var left := SSM.unit().(insert_capacity := count);
+        ghost var right := SSM.unit().(insert_capacity := 1);
+        assert SSM.dot(left, right) == cap_token.val; 
+        glinear var temp_token := T.inout_split(inout cap_token, left, right);
+        T.inout_join(inout self.token, temp_token);
+        success := true;
+      }
+
+      self.iv.cap_mutex.release(Cap(count, cap_token), handle);
+    }
+
+    linear inout method releaseCapacity()
+      requires old_self.Inv()
+      requires old_self.token.val.insert_capacity == 1
+
+      ensures self.Inv()
+      ensures self.CapOnlyUpdate(old_self, Decrement)
+    {
+      linear var cap; glinear var handle: MutexHandle<Cap>;
+      cap, handle := self.iv.cap_mutex.acquire();
+
+      linear var Cap(count, cap_token) := cap;
+
+      count := count + 1;
+      ghost var left := self.token.val.(insert_capacity := 0);
+      ghost var right := SSM.unit().(insert_capacity := 1);
+      assert SSM.dot(left, right) == self.token.val; 
+      glinear var temp_token := T.inout_split(inout self.token, left, right);
+      T.inout_join(inout cap_token, temp_token);
+
+      self.iv.cap_mutex.release(Cap(count, cap_token), handle);
     }
 
     linear inout method releaseRows(entries: seq<Entry>, range: Range)
@@ -202,8 +297,6 @@ module Impl {
       returns (found: bool,
         entries: seq<Entry>,
         range: Range)
-      decreases *
-
       requires old_self.Inv()
       requires old_self.HasNoRowHandle()
 
@@ -213,6 +306,7 @@ module Impl {
       ensures self.RangeOwnershipInv(entries, range)
       ensures found ==> KeyPresentProbeRange(self.token.val.table, probe_key, range.RightShrink1())
       ensures !found ==> KeyAbsentProbeRange(self.token.val.table, probe_key, range.RightShrink1())
+      ensures self.RowOnlyUpdate(old_self)
     {
       var p_hash := hash(probe_key);
 
@@ -224,7 +318,7 @@ module Impl {
         invariant self.RangeOwnershipInv(entries, range)
         invariant ValidPartialProbeRange(self.token.val.table, probe_key, range)
         invariant self.RowOnlyUpdate(old_self)
-        decreases *
+        decreases FixedSize() - |range|
       {
         var slot_idx := range.end;
         var entry;
@@ -247,508 +341,355 @@ module Impl {
       }
     }
 
-//     linear inout method acquireCapacity(glinear in_sv: SSM.M)
-//     returns (
-//       count: uint32,
-//       glinear out_sv: SSM.M)
+    linear inout method query(rid: nat, input: MapIfc.Input)
+      returns (output: MapIfc.Output)
 
-//       decreases *
-//       requires old_self.Inv()
-//       requires !old_self.HasCapHandle()
-//       requires in_sv.Variables?
-//       requires in_sv.insert_capacity.value == 0
+      requires old_self.Inv()
+      requires old_self.HasNoRowHandle()
+      requires input.QueryInput?
+      requires old_self.token.val == SSM.Ticket(rid, input)
 
-//       ensures self.Inv()
-//       ensures self.HasCapHandle()
-//       ensures self == old_self.(cap_handle := self.cap_handle)
-//         .(bin_id := self.bin_id)
-//       ensures 0 < count <= CapacityImpl()
-//       ensures out_sv == in_sv
-//         .(insert_capacity := Count.Variables(count as nat))
-//     {
-//       // bin_id is the actual place we found the capacity (in case we had to steal it from someone else) 
-//       var bid := 0;
-//       linear var cap; glinear var cap_handle;
-//       cap, cap_handle := self.allocator[bid].acquire();
+      ensures self.Inv()
+      ensures self.token.val == SSM.Stub(rid, output)
+    {
+      var query_key := input.key;
 
-//       while true
-//         invariant cap.count as nat == cap.resource.value <= Capacity()
-//         invariant self.Inv()
-//         invariant bid < CAP.NumberOfBinsImpl()
-//         invariant CAP.BinInv(cap)
-//         invariant cap_handle.m == self.allocator[bid]
-//         decreases *
-//       {
-//         if cap.count > 0 {
-//           break;
-//         }
-//         assert CAP.BinInv(cap);
-//         self.allocator[bid].release(cap, cap_handle);
+      var entries, found, p_range;
+      found, entries, p_range := inout self.probe(query_key);
 
-//         bid := bid + 1;
-//         bid := if bid >= CAP.NumberOfBinsImpl() then 0 else bid;
+      var slot_idx := p_range.GetLast();
 
-//         cap, cap_handle := self.allocator[bid].acquire();
-//       }
+      if found {
+        var step := SSM.QueryFoundStep(rid, input, slot_idx);
+        var expected := self.token.val.QueryFound(step);
+        assert SSM.NextStep(self.token.val, expected, step);
+        TST.inout_update_next(inout self.token, expected);
+        output := MapIfc.QueryOutput(Found(entries[ |entries| - 1 ].value));
+      } else {
+        var step := SSM.QueryNotFoundStep(rid, input, slot_idx);
+        var expected := self.token.val.QueryNotFound(step);
+        assert SSM.NextStep(self.token.val, expected, step);
+        TST.inout_update_next(inout self.token, expected);
+        output := MapIfc.QueryOutput(NotFound);
+      }
+
+      inout self.releaseRows(entries, p_range);
+    }
+
+    linear inout method insertOverwrite(
+      rid: nat, input: MapIfc.Input,
+      entries: seq<Entry>, range: Range)
+      returns (output: MapIfc.Output)
+
+      requires old_self.RangeOwnershipInv(entries, range)
+
+      requires input.InsertInput?
+      requires old_self.token.val == SSM.Ticket(rid, input).(table := old_self.token.val.table)
+
+      requires range.HasSome()
+      requires range.Partial?
+      requires KeyPresentProbeRange(old_self.token.val.table, input.key, range.RightShrink1())
+
+      ensures self.Inv()
+      ensures self.token.val == SSM.Stub(rid, output)
+    {
+      var probe_key := input.key;
+      var h := hash(probe_key);
+      var end := range.GetLast();
+      var probe_range := Partial(h, end);
+
+      var inserted := Full(probe_key, input.value);
+
+      var step := SSM.OverwriteStep(rid, input, end);
+      var expected := self.token.val.Overwrite(step);
+      assert SSM.NextStep(self.token.val, expected, step);
+
+      ghost var t1 := self.token.val.table;
+      TST.inout_update_next(inout self.token, expected);
+      ghost var t2 := self.token.val.table;
+
+      var new_entries := entries[ |entries| - 1 := inserted ];
+
+      assert UnwrapRange(t2, range) == new_entries by {
+        assert RangeEquivalent(t1, t2, probe_range);
+        RangeEquivalentUnwrap(t1, t2, probe_range);
+      }
+
+      output := MapIfc.InsertOutput(true);
+      inout self.releaseRows(new_entries, range);
+    }
+
+    linear inout method insertNotFound(
+      rid: nat, input: MapIfc.Input,
+      entries: seq<Entry>, range: Range)
+      returns (output: MapIfc.Output)
+
+      requires old_self.RangeOwnershipInv(entries, range)
+
+      requires input.InsertInput?
+      requires old_self.token.val == SSM.Ticket(rid, input).(table := old_self.token.val.table).(insert_capacity := 1)
+
+      requires range.HasSome()
+      requires range.Partial?
+      requires KeyAbsentProbeRange(old_self.token.val.table, input.key, range.RightShrink1())
+
+      ensures self.Inv()
+      ensures self.token.val == SSM.Stub(rid, output)
+    {
+      var probe_key := input.key;
+      var h := hash(probe_key);
+      var start, end := range.GetLast(), range.GetLast();
+
+      var entries, range := entries, range;
+      var probe_range := Partial(h, start);
+      var entry := entries[ |entries| - 1 ];
+      var inserted := Full(probe_key, input.value);
+
+      if entry.Full? {
+        while true
+          invariant range.Partial? && range.start == h
+          invariant self.RangeOwnershipInv(entries, range)
+          invariant KeyAbsentProbeRange(self.token.val.table, probe_key, probe_range)
+          invariant RangeFull(self.token.val.table, range)
+          invariant self.RowOnlyUpdate(old_self)
+          decreases FixedSize() - |range|
+        {
+          end := range.end;
+          entries, entry, range := inout self.acquireRow(entries, range);
+
+          if entry.Empty? {
+            // assert SlotEmpty(out_sv.table[end]);
+            break;
+          }
+        }
+      }
+
+      var step := SSM.InsertStep(rid, input, start, end); 
       
-//       inout self.bin_id := bid;
-//       lseq_give_inout(inout self.cap_handle, 0, cap_handle);
+      var expected := self.token.val.Insert(step);
+      assert SSM.NextStep(self.token.val, expected, step);
 
-//       count := cap.count;
-//       linear var AllocatorBin(_, cap_r) := cap;
-//       out_sv := enclose(cap_r);
-//       out_sv := SSM.join(in_sv, out_sv);
-//       assert out_sv.Variables?;
-//     }
+      ghost var t1 := self.token.val.table;
+      TST.inout_update_next(inout self.token, expected);
+      ghost var t2 := self.token.val.table;
 
-//     linear inout method releaseCapacity(
-//       count: uint32,
-//       glinear in_sv: SSM.M)
-//     returns (glinear out_sv: SSM.M)
-//       requires old_self.Inv();
-//       requires old_self.HasCapHandle()
-//       requires in_sv.Variables?;
-//       requires in_sv.insert_capacity == Count.Variables(count as nat);
+      assert forall i: Index :: t1[i].Some? <==> t2[i].Some?;
 
-//       ensures self.Inv()
-//       ensures self == old_self.(cap_handle := self.cap_handle)
-//       ensures !self.HasCapHandle()
-//       ensures out_sv == in_sv.(insert_capacity := Count.Variables(0));
-//     {
-//       glinear var rcap;
-//       assert in_sv.insert_capacity == Count.Variables(count as nat);
-//       glinear var mid_sv := resources_obey_inv(in_sv);
+      RightShiftUnwrap(t1, t2, inserted, entries, range, start);
 
-//       ghost var left := in_sv.(insert_capacity := Count.Variables(0));
-//       ghost var right := unit().(insert_capacity := Count.Variables(count as nat));
+      var probe_len := WrappedDistance(range.start, start);
+      var new_entries := entries[..probe_len] + [inserted] + entries[probe_len..|entries| - 1];
 
-//       glinear var cap_handle := lseq_take_inout(inout self.cap_handle, 0);
+      assert UnwrapRange(t2, range) == new_entries;
+      inout self.releaseRows(new_entries, range);
+      output := MapIfc.InsertOutput(true);
+    }
 
-//       out_sv, rcap := SSM.split(mid_sv, left, right);
-//       glinear var rcap' := declose(rcap);
-//       self.allocator[self.bin_id].release(AllocatorBin(count, rcap'), cap_handle);
-//     }
+    linear inout method insert(rid: nat, input: MapIfc.Input)
+      returns (output: MapIfc.Output)
 
+      requires old_self.Inv()
+      requires old_self.HasNoRowHandle()
+      requires input.InsertInput?
+      requires old_self.token.val == SSM.Ticket(rid, input)
 
+      ensures self.Inv()
+      ensures self.token.val == SSM.Stub(rid, output)
+    {
+      var insert_key, insert_value := input.key, input.value;
 
-//     linear inout method query(input: Ifc.Input, rid: int, glinear in_sv: SSM.M)
-//       returns (output: Ifc.Output, glinear out_sv: SSM.M)
+      var entries, found, p_range;
+      found, entries, p_range := inout self.probe(insert_key);
 
-//       decreases *
-//       requires old_self.Inv()
-//       requires old_self.HasNoRowHandle()
-//       requires input.QueryInput?
-//       requires IsInputResource(in_sv, rid, input)
-//       ensures out_sv == SSM.output_stub(rid, output)
-//     {
-//       var query_ticket := Ticket(rid, input);
-//       var query_key := input.key;
+      if found {
+        output := inout self.insertOverwrite(rid, input, entries, p_range);
+      } else {
+        var success := inout self.acquireCapacity();
+        if !success {
+          assume false;
+        }
+        output := inout self.insertNotFound(rid, input, entries, p_range);
+      }
+    }
 
-//       var entries, found, p_range;
-//       entries, found, p_range, out_sv := inout self.probe(query_key, in_sv);
+    linear inout method removeFound(
+      rid: nat, input: MapIfc.Input,
+      entries: seq<Entry>, range: Range)
+      returns (output: MapIfc.Output)
 
-//       var slot_idx := p_range.GetLast();
+      requires old_self.RangeOwnershipInv(entries, range)
 
-//       if found {
-//         var step := QueryFoundStep(query_ticket, slot_idx);
-//         assert QueryFoundEnable(out_sv, step);
-//         out_sv := easy_transform_step(out_sv, step);
-//         output := MapIfc.QueryOutput(Found(entries[ |entries| - 1 ].value));
-//       } else {
-//         var step := QueryNotFoundStep(query_ticket, slot_idx);
-//         assert QueryNotFoundEnable(out_sv, step);
-//         out_sv := easy_transform_step(out_sv, step);
-//         output := MapIfc.QueryOutput(NotFound);
-//       }
+      requires input.RemoveInput?
+      requires old_self.token.val == SSM.Ticket(rid, input).(table := old_self.token.val.table)
 
-//       out_sv := inout self.releaseRows(entries, p_range, out_sv);
-//       assert out_sv.stubs == multiset { Stub(rid, output) };
-//     }
+      requires range.HasSome()
+      requires range.Partial?
+      requires KeyPresentProbeRange(old_self.token.val.table, input.key, range.RightShrink1())
 
-//     linear inout method insertOverwrite(
-//       ticket: Ticket,
-//       range: Range,
-//       entries: seq<Entry>,
-//       glinear in_sv: SSM.M)
+      ensures self.Inv()
+      ensures self.token.val == SSM.Stub(rid, output)
+    {
+      var probe_key := input.key;
+      var h := hash(probe_key);
+      var start, end := range.GetLast(), range.GetLast();
 
-//       returns (output: Ifc.Output, glinear out_sv: SSM.M)
+      var entries, range := entries, range;
+      var probe_range := Partial(h, start);
+      var entry := entries[ |entries| - 1 ];
 
-//       requires old_self.RangeOwnershipInv(entries, range, in_sv)
-//       requires range.HasSome()
-//       requires range.Partial?
-//       requires var probe_key := ticket.input.key;
-//         KeyPresentProbeRange(in_sv.table, probe_key, range.RightShrink1())
-//       requires in_sv.tickets == multiset{ticket}
-//       requires in_sv.insert_capacity.value == 0
-//       requires ticket.input.InsertInput?
-//       requires in_sv.stubs == multiset{}
+      while true
+        invariant range.Partial? && range.start == h
+        invariant self.RangeOwnershipInv(entries, range)
+        invariant KeyPresentProbeRange(self.token.val.table, probe_key, probe_range)
+        invariant RangeFull(self.token.val.table, range)
+        invariant forall i: Index | Partial(NextIndex(start), range.end).Contains(i) :: SlotShouldTidy(self.token.val.table[i], i);
+        invariant self.RowOnlyUpdate(old_self)
+        decreases FixedSize() - |range|
+      {
+        end := range.end;
+        entries, entry, range := inout self.acquireRow(entries, range);
 
-//       ensures out_sv == SSM.output_stub(ticket.rid, output)
-//     {
-//       out_sv := in_sv;
+        if entry.Empty? || !entry.ShouldTidy(end) {
+          break;
+        }
+      }
+
+      end := PrevIndex(end);
+
+      var step := SSM.RemoveStep(rid, input, start, end); 
       
-//       var probe_key := ticket.input.key;
-//       var h := hash(probe_key);
-//       var end := range.GetLast();
-//       var probe_range := Partial(h, end);
+      var expected := self.token.val.Remove(step);
+      assert SSM.NextStep(self.token.val, expected, step);
 
-//       var inserted := Full(probe_key, ticket.input.value);
-//       ghost var t1 := out_sv.table;
-//       out_sv := easy_transform_step(out_sv, OverwriteStep(ticket, end));
-//       ghost var t2 := out_sv.table;
-      
-//       var new_entries := entries[ |entries| - 1 := inserted ];
+      ghost var t1 := self.token.val.table;
+      TST.inout_update_next(inout self.token, expected);
+      ghost var t2 := self.token.val.table;
 
-//       assert UnwrapRange(t2, range) == new_entries by {
-//         assert RangeEquivalent(t1, t2, probe_range);
-//         RangeEquivalentUnwrap(t1, t2, probe_range);
-//       }
+      assert forall i: Index :: t1[i].Some? <==> t2[i].Some?;
 
-//       output := MapIfc.InsertOutput(true);
-//       out_sv := inout self.releaseRows(new_entries, range, out_sv);
-//     }
+      LeftShiftUnwrap(t1, t2, entries, range, start);
 
-//     linear inout method insertNotFound(
-//       ticket: Ticket,
-//       range: Range,
-//       entries: seq<Entry>,
-//       glinear in_sv: SSM.M)
-      
-//       returns (output: Ifc.Output, glinear out_sv: SSM.M)
-
-//       decreases *
-
-//       requires old_self.RangeOwnershipInv(entries, range, in_sv)
-//       requires !old_self.HasCapHandle()
-
-//       requires ticket.input.InsertInput?
-
-//       requires range.HasSome()
-//       requires range.Partial?
-//       requires var probe_key := ticket.input.key;
-//         KeyAbsentProbeRange(in_sv.table, probe_key, range.RightShrink1())
-
-//       requires in_sv.tickets == multiset{ticket}
-//       requires in_sv.insert_capacity.value == 0
-//       requires in_sv.stubs == multiset{}
+      var len := WrappedDistance(range.start, range.end);
+      var probe_len := WrappedDistance(range.start, start);
+      var new_entries := entries[..probe_len] + entries[probe_len+1..len - 1] + [Empty] + [entries[len - 1]];
   
-//       ensures out_sv == SSM.output_stub(ticket.rid, output)
-//     {
-//       out_sv := in_sv;
+      inout self.releaseRows(new_entries, range);
+      inout self.releaseCapacity();
+      output := MapIfc.RemoveOutput(true);
+    }
 
-//       var probe_key := ticket.input.key;
-//       var h := hash(probe_key);
-//       var start, end := range.GetLast(), range.GetLast();
+    linear inout method remove(rid: nat, input: MapIfc.Input)
+      returns (output: MapIfc.Output)
 
-//       var entries, range := entries, range;
-//       var probe_range := Partial(h, start);
-//       var entry := entries[ |entries| - 1 ];
-//       var inserted := Full(probe_key, ticket.input.value);
+      requires old_self.Inv()
+      requires old_self.HasNoRowHandle()
+      requires input.RemoveInput?
+      requires old_self.token.val == SSM.Ticket(rid, input)
 
-//       if entry.Full? {
-//         while true
-//           invariant range.Partial? && range.start == h
-//           invariant self.RangeOwnershipInv(entries, range, out_sv)
-//           invariant !self.HasCapHandle()
-//           invariant KeyAbsentProbeRange(out_sv.table, probe_key, probe_range)
-//           invariant RangeFull(out_sv.table, range)
-//           invariant self == old_self.(handles := self.handles) 
-//           invariant out_sv == in_sv.(table := out_sv.table)
-//           decreases FixedSize() - |range|
-//         {
-//           ghost var prev_sv := out_sv;
-//           end := range.end;
-//           entries, range, out_sv := inout self.acquireRow(entries, range, out_sv);
-//           entry := entries[ |entries| - 1 ];
+      ensures self.Inv()
+      ensures self.token.val == SSM.Stub(rid, output)
+    {
+      var remove_key := input.key;
 
-//           if entry.Empty? {
-//             assert SlotEmpty(out_sv.table[end]);
-//             break;
-//           }
-//         }
-//       }
-  
-//       var count;
-//       count, out_sv := inout self.acquireCapacity(out_sv);
-//       var shift_range := Partial(start, end);
+      var entries, found, p_range;
+      found, entries, p_range := inout self.probe(remove_key);
 
-//       ghost var t1 := out_sv.table;
-//       out_sv := easy_transform_step(out_sv, InsertStep(ticket, start, end));
-//       var t2 := out_sv.table;
+      if found {
+        output := inout self.removeFound(rid, input, entries, p_range);
+      } else {
+        var slot_idx := p_range.GetLast();
+        var step := SSM.RemoveNotFoundStep(rid, input, slot_idx);
+        var expected := self.token.val.RemoveNotFound(step);
+        assert SSM.NextStep(self.token.val, expected, step);
+        TST.inout_update_next(inout self.token, expected);
+        inout self.releaseRows(entries, p_range);
+        output := MapIfc.RemoveOutput(false);
+      }
+    }
 
-//       RightShiftUnwrap(t1, t2, inserted, entries, range, start);
-
-//       var probe_len := WrappedDistance(range.start, start);
-//       var new_entries := entries[..probe_len] + [inserted] + entries[probe_len..|entries| - 1];
-
-//       assert UnwrapRange(t2, range) == new_entries;
-//       out_sv := inout self.releaseRows(new_entries, range, out_sv);
-//       out_sv := inout self.releaseCapacity(count - 1, out_sv);
-//       output := MapIfc.InsertOutput(true);
-//     }
-
-//     linear inout method insert(input: Ifc.Input, rid: int, glinear in_sv: SSM.M)
-//       returns (output: Ifc.Output, glinear out_sv: SSM.M)
-
-//       decreases *
-//       requires old_self.Inv()
-//       requires old_self.HasNoRowHandle()
-//       requires !old_self.HasCapHandle()
-//       requires input.InsertInput?
-//       requires IsInputResource(in_sv, rid, input)
-
-//       ensures out_sv == SSM.output_stub(rid, output)
-//     {
-//       var insert_ticket := Ticket(rid, input);
-//       var insert_key, insert_value := input.key, input.value;
-
-//       var entries, found, p_range;
-//       entries, found, p_range, out_sv := inout self.probe(insert_key, in_sv);
-
-//       if found {
-//         output, out_sv := inout self.insertOverwrite(insert_ticket, p_range, entries, out_sv);
-//       } else {
-//         assert !self.HasCapHandle();
-//         output, out_sv := inout self.insertNotFound(insert_ticket, p_range, entries, out_sv);
-//       }
-//     }
-
-//     linear inout method removeFound(
-//       ticket: Ticket,
-//       range: Range,
-//       entries: seq<Entry>,
-//       glinear in_sv: SSM.M)
-//       returns (output: Ifc.Output, glinear out_sv: SSM.M)
-
-//       decreases *
-
-//       requires old_self.RangeOwnershipInv(entries, range, in_sv)
-//       requires !old_self.HasCapHandle()
-
-//       requires ticket.input.RemoveInput?
-
-//       requires range.HasSome()
-//       requires range.Partial?
-//       requires var probe_key := ticket.input.key;
-//         KeyPresentProbeRange(in_sv.table, probe_key, range.RightShrink1())
-
-//       requires in_sv.tickets == multiset{ticket}
-//       requires in_sv.insert_capacity.value == 0
-//       requires in_sv.stubs == multiset{}
-    
-//       ensures out_sv == SSM.output_stub(ticket.rid, output)
-//     {
-//       out_sv := in_sv;
-
-//       var probe_key := ticket.input.key;
-//       var h := hash(probe_key);
-//       var start, end := range.GetLast(), range.end;
-
-//       var entries, range := entries, range;
-//       var probe_range := Partial(h, start);
-//       var entry := entries[ |entries| - 1 ];
-
-//       assert entry.key == probe_key;
-//       assert SlotFullWithKey(out_sv.table[start], probe_key);
-
-//       while true
-//         invariant range.Partial? && range.start == h
-//         invariant self.RangeOwnershipInv(entries, range, out_sv)
-//         invariant !self.HasCapHandle()
-//         invariant KeyPresentProbeRange(out_sv.table, probe_key, probe_range)
-//         invariant RangeFull(out_sv.table, range)
-//         invariant forall i: Index | Partial(NextIndex(start), range.end).Contains(i) :: SlotShouldTidy(out_sv.table[i], i);
-//         invariant self == old_self.(handles := self.handles) 
-//         invariant out_sv == in_sv.(table := out_sv.table)
-//         decreases FixedSize() - |range|
-//       {
-//         ghost var prev_sv := out_sv;
-//         end := range.end;
-//         entries, range, out_sv := inout self.acquireRow(entries, range, out_sv);
-//         entry := entries[ |entries| - 1 ];
-
-//         if entry.Empty? || !entry.ShouldTidy(end) {
-//           break;
-//         }
-//       }
-
-//       end := PrevIndex(end);
-
-//       // assert ValidTidyRange(out_sv.table, Partial(start, end), probe_key);
-//       var count;
-//       count, out_sv := inout self.acquireCapacity(out_sv);
-
-//       ghost var t1 := out_sv.table;
-//       out_sv := easy_transform_step(out_sv, RemoveStep(ticket, start, end));
-//       var t2 := out_sv.table;
-
-//       // assert IsTableLeftShift(t1, t2, start, end);
-//       LeftShiftUnwrap(t1, t2, entries, range, start);
-
-//       var len := WrappedDistance(range.start, range.end);
-//       var probe_len := WrappedDistance(range.start, start);
-//       var new_entries := entries[..probe_len] + entries[probe_len+1..len - 1] + [Empty] + [entries[len - 1]];
-  
-//       assert UnwrapRange(t2, range) == new_entries;
-//       out_sv := inout self.releaseRows(new_entries, range, out_sv);
-//       out_sv := inout self.releaseCapacity(count + 1, out_sv);
-//       output := MapIfc.RemoveOutput(true);
-//     }
-
-//     linear inout method remove(input: Ifc.Input, rid: int, glinear in_sv: SSM.M)
-//       returns (output: Ifc.Output, glinear out_sv: SSM.M)
-
-//       decreases *
-//       requires old_self.Inv()
-//       requires old_self.HasNoRowHandle()
-//       requires !old_self.HasCapHandle()
-//       requires input.RemoveInput?
-//       requires IsInputResource(in_sv, rid, input)
-
-//       ensures out_sv == SSM.output_stub(rid, output)
-//     {
-//       var ticket := Ticket(rid, input);
-//       var remove_key := input.key;
-
-//       var entries, found, p_range;
-//       entries, found, p_range, out_sv := inout self.probe(remove_key, in_sv);
-
-//       if found {
-//         output, out_sv := inout self.removeFound(ticket, p_range, entries, out_sv);
-//       } else {
-//         var slot_idx := p_range.GetLast();
-//         var step := RemoveNotFoundStep(ticket, slot_idx);
-//         assert RemoveNotFoundEnable(out_sv, step);
-//         out_sv := easy_transform_step(out_sv, step);
-//         output := MapIfc.RemoveOutput(false);
-//         out_sv := inout self.releaseRows(entries, p_range, out_sv);
-//       }
-//     }
-
-//     linear inout method call(input: Ifc.Input, rid: int, glinear in_sv: SSM.M)
-//       returns (output: Ifc.Output, glinear out_sv: SSM.M)
-//       decreases *
-//     requires old_self.Inv()
-//     requires old_self.HasNoRowHandle()
-//     requires !old_self.HasCapHandle()
-//     requires in_sv == SSM.input_ticket(rid, input)
-//     ensures out_sv == SSM.output_stub(rid, output)
-//     {
-//       assert |in_sv.tickets| == 1;
-//       var the_ticket :| the_ticket in in_sv.tickets;
-      
-//       if the_ticket.input.QueryInput? {
-//         output, out_sv := inout self.query(input, rid, in_sv);
-//       } else if the_ticket.input.InsertInput? {
-//         output, out_sv := inout self.insert(input, rid, in_sv);
-//       } else if the_ticket.input.RemoveInput? {
-//         output, out_sv := inout self.remove(input, rid, in_sv);
-//       } else {
-//         out_sv := in_sv;
-//         assert false;
-//       }
-//     }
-//   }
-
-//   predicate Inv(v: Variables)
-//   {
-//     v.Inv()
-//   }
-
-//   datatype Splitted = Splitted(expected: SSM.M, ri: SSM.M)
-
-//   function {:opaque} InitResoucePartial(i: nat): SSM.M
-//     requires i <= FixedSize()
-//   {
-//     var table := seq(FixedSize(), j => if j >= i then Some(Empty) else None);
-//     SSM.M(table, Count.Variables(Capacity()), multiset{}, multiset{})
-//   }
-
-//   function Split(r: SSM.M, i: Index) : (splt: Splitted)
-//     requires r == InitResoucePartial(i)
-//     ensures add(splt.expected, splt.ri) == r
-//   {
-//     var expected := InitResoucePartial(i+1);
-//     var ri := OneRowResource(i, Empty, 0);
-//     reveal InitResoucePartial();
-//     assert add(expected, ri).table ==
-//       seq(FixedSize(), j => if j >= i then Some(Empty) else None);
-//     Splitted(expected, ri)
+    linear inout method call(rid: nat, input: MapIfc.Input)
+      returns (output: MapIfc.Output)
+    requires old_self.Inv()
+    requires old_self.HasNoRowHandle()
+    requires old_self.token.val == SSM.Ticket(rid, input)
+    ensures self.Inv()
+    ensures self.token.val == SSM.Stub(rid, output)
+    {
+      if input.QueryInput? {
+        output := inout self.query(rid, input);
+      } else if input.InsertInput? {
+        output := inout self.insert(rid, input);
+      } else if input.RemoveInput? {
+        output := inout self.remove(rid, input);
+      }
+    }
   }
 
-  // method init(glinear in_sv: SSM.M)
-  // returns (v: Variables, glinear out_sv: SSM.M)
-  //   // requires SSM.Init(in_sv)
-  //   // ensures Inv(v)
-  //   // ensures out_sv == unit()
-  // {
-  //   glinear var remaining_r := in_sv;
-  //   var row_mutexes : RowMutexTable:= [];
-  //   var i: uint32 := 0;
+  datatype Splitted = Splitted(expected: SSM.M, ri: SSM.M)
 
-  //   assert remaining_r == InitResoucePartial(0) by {
-  //     reveal InitResoucePartial();
-  //   }
+  function {:opaque} InitResoucePartial(i: nat): SSM.M
+    requires i <= FixedSize()
+  {
+    var table := seq(FixedSize(), j => if j >= i then Some(Empty) else None);
+    SSM.unit().(table := table).(insert_capacity := Capacity())
+  }
 
-  //   while i < FixedSizeImpl()
-  //     invariant i as int == |row_mutexes| <= FixedSize()
-  //     invariant remaining_r == InitResoucePartial(i as nat)
-  //     invariant RowMutexTableInv(row_mutexes)
-  //   {
-  //     ghost var splitted := Split(remaining_r, i as int);
-      
-  //     glinear var ri;
-  //     remaining_r, ri := SSM.split(remaining_r, splitted.expected, splitted.ri);
+  function Split(r: SSM.M, i: Index) : (splt: Splitted)
+    requires r == InitResoucePartial(i)
+    ensures SSM.dot(splt.expected, splt.ri) == r
+  {
+    var expected := InitResoucePartial(i+1);
+    var ri := SSM.OneRowResource(i, Empty);
+    reveal InitResoucePartial();
+    assert SSM.dot(expected, ri).table ==
+      seq(FixedSize(), j => if j >= i then Some(Empty) else None);
+    Splitted(expected, ri)
+  }
 
-  //     var m := new_mutex<Row>(Row(Empty, ri), (row) => RowInv(i as nat, row));
-  //     row_mutexes := row_mutexes + [m];
-  //     i := i + 1;
-  //   }
+  method init(glinear in_token: Token)
+  returns (linear v: Variables)
+    requires in_token.val.Variables?
+    requires SSM.Init(in_token.val)
+    ensures v.Inv()
+    ensures v.HasNoRowHandle()
+    ensures v.token.val == SSM.unit()
+  {
+    var loc := in_token.loc;
+    glinear var token := in_token;
+    var row_mutexes : RowMutexTable:= [];
+    var i: uint32 := 0;
 
-  //   reveal InitResoucePartial();
-  //   assert remaining_r.table == UnitTable();
-  //   glinear var cap := declose(remaining_r);
+    assert token.val == InitResoucePartial(0) by {
+      reveal InitResoucePartial();
+    }
 
-  //   var allocator; glinear var remaining_cap;
-  //   assert cap.value == Capacity();
-  //   allocator, remaining_cap := CAP.init(cap);
-  //   assert Count.Inv(Count.add(remaining_cap, remaining_cap));
-  //   out_sv := enclose(remaining_cap);
-  //   v := Variables.Variables(row_mutexes, allocator);
-  // }
+    while i < FixedSizeImpl()
+      invariant token.loc == loc
+      invariant i as int == |row_mutexes| <= FixedSize()
+      invariant token.val == InitResoucePartial(i as nat)
+      invariant RowMutexTableInv(row_mutexes, loc)
+    {
+      ghost var splitted := Split(token.val, i as int);
+      glinear var mutex_token := T.inout_split(inout token, splitted.expected, splitted.ri);
+      var m := new_mutex<Row>(Row(Empty, mutex_token),
+        (row: Row) => row.Inv(loc, i as nat));
+      row_mutexes := row_mutexes + [m];
+      i := i + 1;
+    }
 
-  // method call(v: Variables, input: Ifc.Input, rid: int, glinear in_sv: SSM.M, thread_id: uint32)
-  //   returns (output: Ifc.Output, glinear out_sv: SSM.M)
-  //   decreases *
-  // // requires Inv(in_sv)
-  // // requires ticket == SSM.input_ticket(rid, key)
-  //   ensures out_sv == SSM.output_stub(rid, output)
-  // {
-  //   NewTicketValid(rid, input);
-  //   assert Valid(input_ticket(rid, input));
+    assert token.val == SSM.unit().(insert_capacity := Capacity()) by {
+      reveal InitResoucePartial();
+    }
 
-  //   out_sv := in_sv;
-  //   assert |in_sv.tickets| == 1;
-  //   var the_ticket :| the_ticket in out_sv.tickets;
+    glinear var mutex_token := T.inout_split(inout token, SSM.unit(), SSM.unit().(insert_capacity := Capacity()));
 
-    
-  //   if the_ticket.input.QueryInput? {
-  //     output, out_sv := inout v.query(input, rid, out_sv);
-  //   // } else if the_ticket.input.InsertInput? {
-  //   //   output, out_sv := inout v.doInsert(input, rid, thread_id, in_sv);
-  //   // } else if the_ticket.input.RemoveInput? {
-  //   //   output, out_sv := inout v.doRemove(input, rid, thread_id, in_sv);
-  //   } else {
-  //     out_sv := in_sv;
-  //     assert false;
-  //   }
-  // }
+    var cap_mutex := new_mutex<Cap>(Cap(CapacityImpl() as nat, mutex_token),
+      (cap: Cap) => cap.Inv(loc));
 
-  // lemma NewTicket_RefinesMap(s: SSM.M, s': SSM.M, rid: int, input: Ifc.Input)
-  // {
-  // }
-  
-  // lemma ReturnStub_RefinesMap(s: SSM.M, s': SSM.M, rid: int, output: Ifc.Output)
-  // {
-  // }
+    v := Variables.Variables(
+      token,
+      lseq_alloc<MutexHandle<Row>>(FixedSize()),
+      IVariables(row_mutexes, cap_mutex)
+    );
+  }
 }

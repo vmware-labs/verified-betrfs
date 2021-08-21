@@ -827,23 +827,23 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
   //   }
   // }
 
-  // lemma AlmostCompleteFullRangeImpossible(v: M, range: Range)
-  //   requires Valid(v)
-  //   requires range.AlmostComplete()
-  //   requires v.table[range.end].Some?
-  //   requires RangeFull(v.table, range)
-  //   ensures false;
-  // {
-  //   var t :| Inv(add(v, t));
+  lemma AlmostCompleteFullRangeImpossible(v: M, range: Range)
+    requires exists t:M :: Inv(dot(v,t))
+    requires range.AlmostComplete()
+    requires v.table[range.end].Some?
+    requires RangeFull(v.table, range)
+    ensures false;
+  {
+    var t :| Inv(dot(v, t));
 
-  //   var table1, table2 := v.table, t.table;
-  //   var table3 := fuse_seq(table1, table2);
-  //   assert TableInv(table3);
-  //   assert table1 == table3;
+    var table1, table2 := v.table, t.table;
+    var table3 := fuse_seq(table1, table2);
+    assert TableInv(table3);
+    assert table1 == table3;
 
-  //   var e1, e2 := InvImpliesEmptySlots(add(v, t));
-  //   assert false;
-  // }
+    var e1, e2 := InvImpliesEmptySlots(dot(v, t));
+    assert false;
+  }
 
   lemma NewTicketPreservesInv(whole: M, whole': M, rid: RequestId, input: IOIfc.Input)
   {
