@@ -33,26 +33,41 @@ module AtomicIndexLookupImpl {
 
   method atomic_index_lookup_read(
       a: AtomicIndexLookup,
-      disk_idx: nat)
+      ghost disk_idx: nat)
   returns (cache_idx: uint64)
   requires atomic_index_lookup_inv(a, disk_idx)
   ensures 0 <= cache_idx as int < CACHE_SIZE || cache_idx == NOT_MAPPED
+  {
+    atomic_block cache_idx := execute_atomic_load(a) { }
+  }
 
   method atomic_index_lookup_clear_mapping(
       a: AtomicIndexLookup,
-      disk_idx: nat,
+      ghost disk_idx: nat,
       glinear cache_entry: CacheResources.CacheEntry,
       glinear status: CacheResources.CacheStatus
   )
   returns (
-      glinear cache_entry': CacheResources.CacheEmpty
+      glinear cache_empty': CacheResources.CacheEmpty
   )
   requires atomic_index_lookup_inv(a, disk_idx)
   requires status.CacheStatus?
   requires status.status == Clean
   requires cache_entry.CacheEntry?
   requires cache_entry.cache_idx == status.cache_idx
-  ensures cache_entry' == CacheEmpty(cache_entry.cache_idx)
+  requires cache_entry.disk_idx == disk_idx
+  ensures cache_empty' == CacheEmpty(cache_entry.cache_idx)
+  {
+    atomic_block var _ := execute_atomic_store(a, NOT_MAPPED) {
+      ghost_acquire g;
+
+      cache_empty', g := CacheResources.unassign_page(
+          status.cache_idx, disk_idx,
+          status, cache_entry, g);
+
+      ghost_release g;
+    }
+  }
 
   method atomic_index_lookup_add_mapping(
       a: AtomicIndexLookup,

@@ -109,6 +109,23 @@ module CacheResources {
   ensures t3 == DiskPageMap(disk_idx, Some(cache_idx))
   ensures t4 == DiskReadTicket(disk_idx)
 
+  glinear method unassign_page(
+      ghost cache_idx: nat,
+      ghost disk_idx: nat,
+      glinear status: CacheStatus,
+      glinear cache_entry: CacheEntry,
+      glinear dpm: DiskPageMap
+  )
+  returns (
+      glinear cache_empty: CacheEmpty,
+      glinear dpm': DiskPageMap
+  )
+  requires status == CacheStatus(cache_idx, Clean)
+  requires cache_entry == CacheEntry(cache_idx, disk_idx, cache_entry.data)
+  requires dpm == DiskPageMap(disk_idx, dpm.cache_idx_opt)
+  ensures cache_empty == CacheEmpty(cache_idx)
+  ensures dpm' == DiskPageMap(disk_idx, None)
+
   glinear method finish_page_in(
       ghost cache_idx: nat,
       ghost disk_idx: nat,
