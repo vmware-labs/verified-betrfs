@@ -20,8 +20,12 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened ClientCounter
   import opened BitOps
 
+  datatype PageHandle = PageHandle(
+    ptr: Ptr,
+    cache_idx: uint64)
+
   glinear datatype WriteablePageHandle = WriteablePageHandle(
-    ghost cache_idx: uint64,
+    ghost cache_idx: int,
     //ptr: Ptr,
     glinear handle: Handle,
     glinear status: CacheResources.CacheStatus,
@@ -49,10 +53,16 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     {
       status.status == Clean
     }
+
+    predicate for_page_handle(ph: PageHandle)
+    {
+      && handle.data.ptr == ph.ptr
+      && cache_idx == ph.cache_idx as int
+    }
   }
 
   glinear datatype ReadonlyPageHandle = ReadonlyPageHandle(
-    ghost cache_idx: uint64,
+    ghost cache_idx: int,
     //ptr: Ptr,
     glinear so: T.SharedObtainedToken
   )
@@ -65,6 +75,12 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && 0 <= cache_idx as int < CACHE_SIZE
       && so.is_handle(cache.key(cache_idx as int))
       && so.t == t
+    }
+
+    predicate for_page_handle(ph: PageHandle)
+    {
+      && so.b.data.ptr == ph.ptr
+      && cache_idx == ph.cache_idx as int
     }
   }
 
@@ -89,6 +105,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && handle_out.glSome?
       && handle_out.value.is_disk_page_handle(
           cache, localState.t as int, expected_disk_idx as int)
+      && handle_out.value.cache_idx == cache_idx as int
       && client_out.glNone?
   decreases *
   {
@@ -192,7 +209,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         } else {
           success := true;
           handle_out := glSome(
-              ReadonlyPageHandle(cache_idx, unwrap_value(handle_opt)));
+              ReadonlyPageHandle(cache_idx as int, unwrap_value(handle_opt)));
           client_out := glNone;
         }
       }
@@ -546,19 +563,20 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear client: Client,
       linear inout localState: LocalState)
   returns (
-    success: bool,
+    ret_cache_idx: int64,
     glinear handle_out: glOption<ReadonlyPageHandle>,
     glinear client_out: glOption<Client>)
   requires cache.Inv()
   requires 0 <= disk_idx as nat < NUM_DISK_PAGES
   requires old_localState.WF()
-  ensures !success ==> handle_out.glNone?
+  ensures ret_cache_idx == -1 ==> handle_out.glNone?
       && client_out.glSome?
-  ensures success ==>
+  ensures ret_cache_idx != -1 ==>
       && handle_out.glSome?
       && handle_out.value.is_disk_page_handle(cache, localState.t as nat, disk_idx as nat)
       && client_out.glNone?
-  ensures old_localState.WF()
+      && handle_out.value.cache_idx == ret_cache_idx as int
+  ensures localState.WF()
   decreases *
   {
     var cache_idx := atomic_index_lookup_read(
@@ -571,7 +589,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       if cache_idx == 0xffff_ffff {
         dispose_glnone(m);
         dispose_glnone(handle_opt);
-        success := false;
+        ret_cache_idx := -1;
         handle_out := glNone;
         client_out := glSome(client);
       } else {
@@ -583,6 +601,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         glinear var CacheEmptyHandle(_, cache_empty, idx, data) := handle;
 
         glinear var cache_empty_opt, cache_reading_opt;
+        var success;
         success, cache_empty_opt, cache_reading_opt, read_ticket_opt := 
             atomic_index_lookup_add_mapping(
               cache.cache_idx_of_page[disk_idx],
@@ -591,7 +610,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
               cache_empty);
 
         if !success {
-          success := false;
+          ret_cache_idx := -1;
           handle_out := glNone;
           dispose_glnone(read_ticket_opt);
           dispose_glnone(cache_reading_opt);
@@ -629,15 +648,65 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           r := cache.status[cache_idx].load_phase_finish(
               r, ceh, status);
 
-          success := true;
-          handle_out := glSome(ReadonlyPageHandle(cache_idx,
+          ret_cache_idx := cache_idx as int64;
+          handle_out := glSome(ReadonlyPageHandle(cache_idx as int,
               T.SharedObtainedToken(localState.t as int, ceh, r)));
           client_out := glNone;
         }
       }
     } else {
+      var success;
       success, handle_out, client_out := try_take_read_lock_on_cache_entry(
           cache, cache_idx, disk_idx as int64, localState, client);
+      if success {
+        ret_cache_idx := cache_idx as int64;
+      } else {
+        ret_cache_idx := -1;
+      }
     }
+  }
+
+  method take_read_lock_disk_page(
+      shared cache: Cache,
+      disk_idx: uint64,
+      glinear client: Client,
+      linear inout localState: LocalState)
+  returns (
+    ph: PageHandle,
+    glinear handle_out: ReadonlyPageHandle
+  )
+  requires cache.Inv()
+  requires 0 <= disk_idx as nat < NUM_DISK_PAGES
+  requires old_localState.WF()
+  ensures localState.WF()
+  ensures handle_out.is_disk_page_handle(
+      cache, localState.t as nat, disk_idx as nat)
+  ensures handle_out.for_page_handle(ph)
+  decreases *
+  {
+    var cache_idx: int64 := -1;
+
+    glinear var handle_opt: glOption<ReadonlyPageHandle> := glNone;
+    glinear var client_opt := glSome(client);
+
+    while cache_idx == -1
+    decreases *
+    invariant cache_idx == -1 ==> client_opt.glSome?
+    invariant localState.WF()
+    invariant cache_idx != -1 ==>
+      && handle_opt.glSome?
+      && handle_opt.value.is_disk_page_handle(
+            cache, localState.t as nat, disk_idx as nat)
+      && handle_opt.value.cache_idx == cache_idx as int
+    {
+      dispose_anything(handle_opt);
+      cache_idx, handle_opt, client_opt := try_take_read_lock_disk_page(
+          cache, disk_idx, unwrap_value(client_opt), inout localState);
+    }
+
+    dispose_anything(client_opt);
+    handle_out := unwrap_value(handle_opt);
+
+    ph := PageHandle(cache.data[cache_idx], cache_idx as uint64);
   }
 }
