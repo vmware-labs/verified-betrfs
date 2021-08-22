@@ -201,20 +201,26 @@ module FileSystem {
   function PathMapRename(fs: FileSys, src: Path, dst: Path): (path_map: PathMap)
   requires WF(fs)
   ensures PathMapComplete(path_map)
-  ensures 
-    forall p | p != src && !BeneathDir(src, p) && p != dst && !BeneathDir(dst, p)
-      :: path_map[p] == fs.path_map[p]
   {
     imap path :: 
-      if path == src || BeneathDir(src, path)
-        // remove source paths
-        then Nonexistent
-      else if path == dst || BeneathDir(dst, path)
-        // redirect renamed paths to point to the same ids as source
-        then var suffix := path[|dst|..];
-          fs.path_map[src + suffix]
-      // everything else remains the same
+      if path == dst || BeneathDir(dst, path)
+      then var suffix := path[|dst|..]; fs.path_map[src + suffix]
+      else if path == src || BeneathDir(src, path) then Nonexistent
       else fs.path_map[path]
+  }
+
+  function MetaMapRename(fs: FileSys, src: Path, dst: Path, ctime: Time) : (meta_map: MetaView)
+  requires WF(fs)
+  {
+    var src_id := fs.path_map[src];
+    var dst_id := fs.path_map[dst];
+    var sparent_id := fs.path_map[GetParentDir(src)];
+    var dparent_id := fs.path_map[GetParentDir(dst)];
+    var src_m' := if PathExists(fs, src) then MetaDataUpdateCTime(fs.meta_map[src_id], ctime) else EmptyMeta;
+
+    fs.meta_map[src_id := src_m'][dst_id := MetaDataDelete(fs, dst, ctime)]
+               [sparent_id := UpdateParentTime(fs, sparent_id, ctime)]
+               [dparent_id := UpdateParentTime(fs, dparent_id, ctime)]
   }
 
   predicate Rename(fs: FileSys, fs':FileSys, src: Path, dst: Path, ctime: Time)
@@ -233,24 +239,10 @@ module FileSystem {
     && (PathExists(fs, dst) ==> 
       && var dst_m := fs.meta_map[dst_id];
       && (src_m.ftype.Directory? <==> dst_m.ftype.Directory?)
-      && (dst_m.ftype.Directory? ==> IsEmptyDir(fs.path_map, dst))
-    )
+      && (dst_m.ftype.Directory? ==> IsEmptyDir(fs.path_map, dst)))
 
-    && var sparent_id := fs.path_map[GetParentDir(src)];
-    && var dparent_id := fs.path_map[GetParentDir(dst)];
-    && var src_m' := MetaDataUpdateCTime(src_m, ctime);
     && fs'.path_map == PathMapRename(fs, src, dst)
-    // robj: are src and dst reversed here?
-    // jialin: src changes to dst in fs', but dst still points to the src_id
-    //  so we update src_id to src_m', and delete anything that might be pointed to dst
-    //  to show any old content is overwritten   
-    && fs'.meta_map == 
-          fs.meta_map[src_id := src_m']
-                    // jonh: if dst_id is no longer referenced, shouldn't we remove it from the meta_map?
-                    // jialin: there might be other paths that are linked to dir_id, delete handles that
-                     [dst_id := MetaDataDelete(fs, dst, ctime)]
-                     [sparent_id := UpdateParentTime(fs, sparent_id, ctime)]
-                     [dparent_id := UpdateParentTime(fs, dparent_id, ctime)]
+    && fs'.meta_map == MetaMapRename(fs, src, dst, ctime)
     && fs'.data_map == fs.data_map[dst_id := DataDelete(fs, dst)]
   }
 

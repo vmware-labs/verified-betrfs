@@ -275,10 +275,36 @@ module PathBasedFS {
     // updated maps
     && fs'.content.meta_map == MetaMapRename(fs.content, src, dst, ctime)
     && fs'.content.data_map == DataMapRename(fs.content, src, dst, ctime)
-    && (!dst_m.RedirectMeta? ==> fs'.hidden == fs.hidden)
-    && (dst_m.RedirectMeta? ==>
-      && fs'.hidden.meta_map == fs.hidden.meta_map[dst_m.source := HiddenMetaDataDelete(fs, dst, ctime)]
-      && fs'.hidden.data_map == fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)])
+    && fs'.hidden.meta_map == (
+      if src_m.MetaData? && !dst_m.RedirectMeta?
+      then fs.hidden.meta_map
+      else if src_m.MetaData? && dst_m.RedirectMeta?
+      then fs.hidden.meta_map[dst_m.source := HiddenMetaDataDelete(fs, dst, ctime)]
+      else if src_m.RedirectMeta? && !dst_m.RedirectMeta?
+      then fs.hidden.meta_map[src_m.source := UpdatePathCtime(fs.hidden, src_m.source, ctime)]
+      else fs.hidden.meta_map[dst_m.source := HiddenMetaDataDelete(fs, dst, ctime)][src_m.source := UpdatePathCtime(fs.hidden, src_m.source, ctime)])
+    && fs'.hidden.data_map == (
+      if !dst_m.RedirectMeta? then fs.hidden.data_map
+      else fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)])
+    // hidden map changes
+    // && (src_m.MetaData? ==> 
+    //   && (!dst_m.RedirectMeta? ==> fs'.hidden == fs.hidden)
+    //   && (dst_m.RedirectMeta? ==> 
+    //     && fs'.hidden.meta_map == fs.hidden.meta_map[dst_m.source := HiddenMetaDataDelete(fs, dst, ctime)]
+    //     && fs'.hidden.data_map == fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)]))
+    // && (src_m.RedirectMeta? ==> 
+    //   && (!dst_m.RedirectMeta? ==> 
+    //     && fs'.hidden.meta_map == fs.hidden.meta_map[src_m.source := UpdatePathCtime(fs.hidden, src_m.source, ctime)]
+    //     && fs.hidden.data_map == fs.hidden.data_map)
+    //   && (dst_m.RedirectMeta? ==> 
+    //     && fs'.hidden.meta_map == fs.hidden.meta_map[dst_m.source := HiddenMetaDataDelete(fs, dst, ctime)]
+    //                               [src_m.source := UpdatePathCtime(fs.hidden, src_m.source, ctime)]
+    //     && fs'.hidden.data_map == fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)]))
+
+    // && (!dst_m.RedirectMeta? ==> fs'.hidden == fs.hidden)
+    // && (dst_m.RedirectMeta? ==>
+    //   && fs'.hidden.meta_map == fs.hidden.meta_map[dst_m.source := HiddenMetaDataDelete(fs, dst, ctime)]
+    //   && fs'.hidden.data_map == fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)])
   }
 
   function LinkMeta(fs: FileSys, path: Path, time: Time) : MetaData
@@ -389,6 +415,14 @@ module PathBasedFS {
     && data == d[offset..offset+size]
   }
 
+  function MetaWrite(fs: FileSys, path: Path, time: Time) : MetaData
+  requires WF(fs)
+  {
+    var m := GetMeta(fs, path);
+    if m.MetaData? then MetaDataUpdateTime(m, time, time, time)
+    else m
+  }
+
   function DataWrite(d: Data, data: Data, offset: int, size: int): (d': Data)
   requires 0 <= offset <= |d|
   requires size == |data|
@@ -396,14 +430,6 @@ module PathBasedFS {
   ensures d'[offset..offset+size] == data
   {
     if offset+size > |d| then d[..offset] + data else d[..offset] + data + d[offset+size..]
-  }
-
-  function UpdatePathWriteTime(v: View, path: Path, time: Time) : MetaData
-  requires ViewComplete(v)
-  {
-    var m := v.meta_map[path];
-    if m.MetaData? then MetaDataUpdateTime(m, time, time, time)
-    else m
   }
 
   predicate Write(fs: FileSys, fs':FileSys, path: Path, offset: int, size: int, data: Data, time: Time)
@@ -414,20 +440,17 @@ module PathBasedFS {
     && |data| == size
     && (GetMeta(fs, path).MetaData? ==> GetMeta(fs, path).ftype.File?)
     && var m := fs.content.meta_map[path];
-    && var v := if m.MetaData? then fs.content else fs.hidden;
-    && var p := if m.MetaData? then path else m.source;
-    && var d := if m.MetaData? then fs.content.data_map[p] else fs.hidden.data_map[p];
-    && 0 <= offset <= |d|
-    && var m' := UpdatePathWriteTime(v, p, time);
-    && var d' := DataWrite(d, data, offset, size);
+    && var m' := MetaWrite(fs, path, time);
+    && 0 <= offset <= |GetData(fs, path)|
+    // updated maps
     && (m.MetaData? ==> 
-      && fs'.content.meta_map == fs.content.meta_map[p := m']
-      && fs'.content.data_map == fs.content.data_map[p := d']
+      && fs'.content.meta_map == fs.content.meta_map[path := m']
+      && fs'.content.data_map == fs.content.data_map[path := DataWrite(GetData(fs, path), data, offset, size)]
       && fs'.hidden == fs.hidden)
     && (m.RedirectMeta? ==>
       && fs'.content == fs.content
-      && fs'.hidden.meta_map == fs.hidden.meta_map[p := m']
-      && fs'.hidden.data_map == fs.hidden.data_map[p := d'])
+      && fs'.hidden.meta_map == fs.hidden.meta_map[m.source := m']
+      && fs'.hidden.data_map == fs.hidden.data_map[m.source := DataWrite(GetData(fs, path), data, offset, size)])
   }
 
   function UpdatePathUpdateTime(v: View, path: Path, atime: Time, mtime: Time, ctime: Time) : MetaData
