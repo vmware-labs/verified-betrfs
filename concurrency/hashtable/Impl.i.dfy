@@ -219,32 +219,38 @@ module Impl {
     }
 
     linear inout method acquireCapacity()
-      returns (success: bool)
+      decreases *
 
       requires old_self.Inv()
 
       ensures self.Inv()
-      ensures success ==> self.CapOnlyUpdate(old_self, Increment)
-      ensures !success ==> self.CapOnlyUpdate(old_self, Unchanged)
+      ensures self.CapOnlyUpdate(old_self, Increment)
     {
-      linear var cap; glinear var handle: MutexHandle<Cap>;
-      cap, handle := self.iv.cap_mutex.acquire();
+      var continue := true;
 
-      linear var Cap(count, cap_token) := cap;
+      while continue
+        invariant self.Inv()
+        invariant continue ==> self.CapOnlyUpdate(old_self, Unchanged)
+        invariant !continue ==> self.CapOnlyUpdate(old_self, Increment)
+        decreases *
+      {
+        linear var cap; glinear var handle: MutexHandle<Cap>;
+        cap, handle := self.iv.cap_mutex.acquire();
 
-      success := false;
+        linear var Cap(count, cap_token) := cap;
 
-      if count >= 1 {
-        count := count - 1;
-        ghost var left := SSM.unit().(insert_capacity := count);
-        ghost var right := SSM.unit().(insert_capacity := 1);
-        assert SSM.dot(left, right) == cap_token.val; 
-        glinear var temp_token := T.inout_split(inout cap_token, left, right);
-        T.inout_join(inout self.token, temp_token);
-        success := true;
+        if count >= 1 {
+          count := count - 1;
+          ghost var left := SSM.unit().(insert_capacity := count);
+          ghost var right := SSM.unit().(insert_capacity := 1);
+          assert SSM.dot(left, right) == cap_token.val; 
+          glinear var temp_token := T.inout_split(inout cap_token, left, right);
+          T.inout_join(inout self.token, temp_token);
+          continue := false;
+        }
+
+        self.iv.cap_mutex.release(Cap(count, cap_token), handle);
       }
-
-      self.iv.cap_mutex.release(Cap(count, cap_token), handle);
     }
 
     linear inout method releaseCapacity()
@@ -487,6 +493,7 @@ module Impl {
 
     linear inout method insert(rid: nat, input: MapIfc.Input)
       returns (output: MapIfc.Output)
+      decreases *
 
       requires old_self.Inv()
       requires old_self.HasNoRowHandle()
@@ -504,10 +511,7 @@ module Impl {
       if found {
         output := inout self.insertOverwrite(rid, input, entries, p_range);
       } else {
-        var success := inout self.acquireCapacity();
-        if !success {
-          assume false;
-        }
+        inout self.acquireCapacity();
         output := inout self.insertNotFound(rid, input, entries, p_range);
       }
     }
@@ -609,11 +613,13 @@ module Impl {
 
     linear inout method call(rid: nat, input: MapIfc.Input)
       returns (output: MapIfc.Output)
-    requires old_self.Inv()
-    requires old_self.HasNoRowHandle()
-    requires old_self.token.val == SSM.Ticket(rid, input)
-    ensures self.Inv()
-    ensures self.token.val == SSM.Stub(rid, output)
+      decreases *
+
+      requires old_self.Inv()
+      requires old_self.HasNoRowHandle()
+      requires old_self.token.val == SSM.Ticket(rid, input)
+      ensures self.Inv()
+      ensures self.token.val == SSM.Stub(rid, output)
     {
       if input.QueryInput? {
         output := inout self.query(rid, input);
