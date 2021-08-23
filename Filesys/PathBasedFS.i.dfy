@@ -286,25 +286,6 @@ module PathBasedFS {
     && fs'.hidden.data_map == (
       if !dst_m.RedirectMeta? then fs.hidden.data_map
       else fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)])
-    // hidden map changes
-    // && (src_m.MetaData? ==> 
-    //   && (!dst_m.RedirectMeta? ==> fs'.hidden == fs.hidden)
-    //   && (dst_m.RedirectMeta? ==> 
-    //     && fs'.hidden.meta_map == fs.hidden.meta_map[dst_m.source := HiddenMetaDataDelete(fs, dst, ctime)]
-    //     && fs'.hidden.data_map == fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)]))
-    // && (src_m.RedirectMeta? ==> 
-    //   && (!dst_m.RedirectMeta? ==> 
-    //     && fs'.hidden.meta_map == fs.hidden.meta_map[src_m.source := UpdatePathCtime(fs.hidden, src_m.source, ctime)]
-    //     && fs.hidden.data_map == fs.hidden.data_map)
-    //   && (dst_m.RedirectMeta? ==> 
-    //     && fs'.hidden.meta_map == fs.hidden.meta_map[dst_m.source := HiddenMetaDataDelete(fs, dst, ctime)]
-    //                               [src_m.source := UpdatePathCtime(fs.hidden, src_m.source, ctime)]
-    //     && fs'.hidden.data_map == fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)]))
-
-    // && (!dst_m.RedirectMeta? ==> fs'.hidden == fs.hidden)
-    // && (dst_m.RedirectMeta? ==>
-    //   && fs'.hidden.meta_map == fs.hidden.meta_map[dst_m.source := HiddenMetaDataDelete(fs, dst, ctime)]
-    //   && fs'.hidden.data_map == fs.hidden.data_map[dst_m.source := HiddenDataDelete(fs, dst)])
   }
 
   function LinkMeta(fs: FileSys, path: Path, time: Time) : MetaData
@@ -340,11 +321,10 @@ module PathBasedFS {
       && fs'.hidden.data_map == fs.hidden.data_map)
   }
 
-  function MetaDataChangeAttr(v: View, path: Path, perm: int, uid:int, gid: int, ctime: Time): MetaData
-  requires ViewComplete(v)
+  function MetaDataChangeAttr(m: MetaData, path: Path, perm: int, uid:int, gid: int, ctime: Time): MetaData
   {
-    var m := v.meta_map[path];
-    if m.MetaData? then MetaData(m.id, m.ftype, perm, uid, gid, m.atime, m.mtime, ctime)
+    if m.MetaData? 
+    then MetaData(m.id, m.ftype, perm, uid, gid, m.atime, m.mtime, ctime)
     else m
   }
 
@@ -356,16 +336,14 @@ module PathBasedFS {
     && PathExists(fs, path)
     // updated maps
     && var m := fs.content.meta_map[path];
-    && var p := if m.MetaData? then path else m.source;
-    && var v := if m.MetaData? then fs.content else fs.hidden;
-    && var m' := MetaDataChangeAttr(v, p, perm, uid, gid, ctime);
+    && var m' := MetaDataChangeAttr(GetMeta(fs, path), path, perm, uid, gid, ctime);
     && (m.MetaData? ==> 
-      && fs'.content.meta_map == fs.content.meta_map[p := m']
+      && fs'.content.meta_map == fs.content.meta_map[path := m']
       && fs'.content.data_map == fs.content.data_map
       && fs'.hidden == fs.hidden)
     && (m.RedirectMeta? ==> 
       && fs'.content == fs.content
-      && fs'.hidden.meta_map == fs.hidden.meta_map[p := m']
+      && fs'.hidden.meta_map == fs.hidden.meta_map[m.source := m']
       && fs'.hidden.data_map == fs.hidden.data_map)
   }
 

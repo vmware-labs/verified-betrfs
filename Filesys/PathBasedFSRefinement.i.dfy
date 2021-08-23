@@ -99,6 +99,30 @@ module PathBasedFSRefinement {
     reveal_IDataMap();
   }
 
+  lemma ValidNewPathEquiv(fs: P.FileSys, path: Path)
+  requires PInv.Inv(fs)
+  ensures P.ValidNewPath(fs, path) == F.ValidNewPath(I(fs), path)
+  {
+    reveal_IPathMap();
+    reveal_IMetaMap();
+  }
+
+  lemma PathExistsEquiv(fs: P.FileSys, path: Path)
+  requires PInv.Inv(fs)
+  ensures P.PathExists(fs, path) == F.PathExists(I(fs), path)
+  {
+    reveal_IPathMap();
+    reveal_IMetaMap();
+  }
+
+  lemma IsEmptyDirEquiv(fs: P.FileSys, path: Path)
+  requires PInv.Inv(fs)
+  ensures P.IsEmptyDir(fs, path) == F.IsEmptyDir(I(fs).path_map, path)
+  {
+    reveal_IPathMap();
+    reveal_IMetaMap();
+  }
+
   lemma NoAliasEquiv(fs: P.FileSys, path: Path)
   requires PInv.Inv(fs)
   requires P.PathExists(fs, path)
@@ -176,93 +200,64 @@ module PathBasedFSRefinement {
     GetMetaEquiv(fs, path);
   }
 
-  // maybe before fixing all of these proof we should check if rename does work like this.
+  lemma GetPathFromID(fs: P.FileSys, id: ID) returns (path: Path)
+  requires PInv.Inv(fs)
+  requires id.ID? && id in I(fs).path_map.Values
+  ensures P.PathExists(fs, path)
+  ensures P.GetMeta(fs, path).id == id
+  ensures I(fs).path_map[path] == id
+  {
+    reveal_IPathMap();
+    path :| P.PathExists(fs, path) && P.GetMeta(fs, path).id == id;
+    GetMetaEquiv(fs, path);
+  }
+
   lemma RefinesCreate(fs: P.FileSys, fs': P.FileSys, path: Path, m: MetaData)
   requires PInv.Inv(fs)
   requires PInv.Inv(fs')
   requires P.Create(fs, fs', path, m)
   ensures F.Create(I(fs), I(fs'), path, m)
   {
-    assume false;
-
     var i_fs := I(fs);
     var i_fs' := I(fs');
     var parent_dir := GetParentDir(path);
     var parent_id := P.GetMeta(fs, parent_dir).id;
-    var parent_m' := P.UpdatePathTime(fs.content, parent_dir, m.mtime);
-
-    reveal_IPathMap();
+    var parent_m' := F.UpdateParentTime(i_fs, parent_id, m.mtime);
 
     assert !P.PathExists(fs, path);
-    assert i_fs'.path_map == i_fs.path_map[path := m.id];
+    assert i_fs'.path_map == i_fs.path_map[path := m.id] by { reveal_IPathMap(); }
+    assert m.id !in i_fs.path_map.Values by { reveal_IPathMap(); }
+    assert parent_id == i_fs.path_map[parent_dir] by { reveal_IPathMap(); }
 
-    reveal_IMetaMap();
-    reveal_IDataMap();
-
-    assert i_fs.meta_map[m.id].EmptyMeta?;
-    assert i_fs.data_map[m.id] == P.GetData(fs, path) == EmptyData();
+    assert i_fs.meta_map[m.id].EmptyMeta? by { reveal_IMetaMap(); }
+    assert i_fs.data_map[m.id] == P.GetData(fs, path) == EmptyData() by { reveal_IDataMap(); }
 
     forall id 
     ensures i_fs'.meta_map[id] == i_fs.meta_map[m.id := m][parent_id := parent_m'][id]
     ensures i_fs'.data_map[id] == i_fs.data_map[id]
     {
-
-      if id in i_fs.path_map.Values {
-        if id == parent_id {
-          calc {
-            i_fs.meta_map[m.id := m][parent_id := parent_m'][id];
-            P.GetMeta(fs', parent_dir);
-            i_fs'.meta_map[parent_id];
-          }
-          calc {
-            i_fs'.data_map[parent_id];
-            P.GetData(fs', parent_dir);
-            P.GetData(fs, parent_dir);
-            i_fs.data_map[parent_id];
-          }
-        } else {
-          if exists p :: P.PathExists(fs, p) && P.GetMeta(fs, p).id == id {
-            var p :| P.PathExists(fs, p) && P.GetMeta(fs, p).id == id;
-            calc {
-              i_fs.meta_map[id];
-              P.GetMeta(fs, p);
-              P.GetMeta(fs', p);
-              i_fs.meta_map[id];
-              i_fs.meta_map[m.id := m][parent_id := parent_m'][id];
-            }
-            calc {
-              i_fs'.data_map[id];
-              P.GetData(fs', p);
-              P.GetData(fs, p);
-              i_fs.data_map[id];
-            }
-          }
-          
-          // else {
-          //   assert id.Nonexistent?;
-          // }
-        }
+      if id == Nonexistent {
+      } else if id in i_fs.path_map.Values {
+        var p := GetPathFromID(fs, id);
+        GetMetaEquiv(fs, p);
+        GetMetaEquiv(fs', p);
+        GetDataEquiv(fs, p);
+        GetDataEquiv(fs', p);
       } else {
         if id == m.id {
-          calc {
-            i_fs'.meta_map[id];
-            P.GetMeta(fs', path);
-            i_fs.meta_map[m.id := m][parent_id := parent_m'][id];
-          }
+          GetMetaEquiv(fs', path);
         } else {
-          calc {
-            i_fs'.meta_map[id];
-            i_fs.meta_map[id];
-            i_fs.meta_map[m.id := m][parent_id := parent_m'][id];
-          }
+          assert i_fs'.meta_map[id] == i_fs.meta_map[id] by { reveal_IMetaMap(); }
         }
-        assert i_fs.data_map[id] == EmptyData();
-        assert i_fs'.data_map[id] == EmptyData();
+        assert i_fs.data_map[id] == EmptyData() by { reveal_IDataMap(); }
+        assert i_fs'.data_map[id] == EmptyData() by { reveal_IDataMap(); }
       }
     }
 
     Maps.IMapEquivalent(i_fs'.meta_map, i_fs.meta_map[m.id := m][parent_id := parent_m']);
     Maps.IMapEquivalent(i_fs'.data_map, i_fs.data_map);
+
+    ValidNewPathEquiv(fs, path);
     assert F.Create(i_fs, i_fs', path, m);
   }
 
@@ -281,11 +276,19 @@ module PathBasedFSRefinement {
 
     var parent_dir := GetParentDir(path);
     var parent_id := P.GetMeta(fs, parent_dir).id;
-    var parent_m' := P.UpdatePathTime(fs.content, parent_dir, ctime);
+    var parent_m' := F.UpdateParentTime(i_fs, parent_id, ctime);
+
+    assert path_id == i_fs.path_map[path] by { reveal_IPathMap(); }
+    assert parent_id == i_fs.path_map[parent_dir] by { reveal_IPathMap(); }
+
+    PathExistsEquiv(fs, path);
+    GetMetaEquiv(fs, path);
+    IsEmptyDirEquiv(fs, path);
 
     forall p 
     ensures i_fs'.path_map[p] == i_fs.path_map[path := Nonexistent][p]
     {
+      reveal_IPathMap();
       if p != path && p != parent_dir {
         assert fs'.content.meta_map[p] == fs.content.meta_map[p];
         if m.RedirectMeta? && fs.content.meta_map[p] == RedirectMeta(m.source) {
@@ -300,46 +303,24 @@ module PathBasedFSRefinement {
     ensures i_fs'.data_map[id] == i_fs.data_map[path_id := F.DataDelete(i_fs, path)][id]
     {
       if id == Nonexistent {
-        // InvImpliesInv(fs);
-        // InvImpliesInv(fs');
       } else if id in i_fs.path_map.Values {
-        if id == parent_id {
-          assert i_fs.path_map[parent_dir] == i_fs'.path_map[parent_dir];
-          calc {
-            i_fs.meta_map[path_id := m'][parent_id := parent_m'][id];
-            parent_m';
-            P.GetMeta(fs', parent_dir);
-            i_fs'.meta_map[parent_id];
-          }
-          calc {
-            i_fs'.data_map[parent_id];
-            P.GetData(fs', parent_dir);
-            P.GetData(fs, parent_dir);
-            i_fs.data_map[path_id := F.DataDelete(i_fs, path)][id];
-          }
-        } else if id == path_id {
-          if P.NoAlias(fs, path) {
-            assert m' == EmptyMeta;
-          } else {
-            var p :| P.PathExists(fs, p) && P.GetMeta(fs, p).id == id && p != path;
-            assert P.PathExists(fs', p); // observe
-          }
+        NoAliasEquiv(fs, path);
+        if id == path_id && P.NoAlias(fs, path) {
+          assert id !in i_fs'.path_map.Values;
+          assert i_fs'.meta_map[id] == EmptyMeta by { reveal_IMetaMap(); }
+          assert i_fs'.data_map[id] == EmptyData() by { reveal_IDataMap(); }
         } else {
-          var p :| P.PathExists(fs, p) && P.GetMeta(fs, p).id == id;
-          calc {
-            i_fs'.data_map[id];
-            P.GetData(fs', p);
-            P.GetData(fs, p);
-            i_fs.data_map[path_id := F.DataDelete(i_fs, path)][id];
-          }
-          calc {
-            i_fs.meta_map[id];
-            P.GetMeta(fs, p);
-            P.GetMeta(fs', p);
-            i_fs.meta_map[id];
-            i_fs.meta_map[path_id := m'][parent_id := parent_m'][id];
-          }
+          assert exists p :: P.PathExists(fs, p) && P.GetMeta(fs, p).id == id && p != path by { reveal_IPathMap(); }
+          var p :| P.PathExists(fs, p) && P.GetMeta(fs, p).id == id && p != path;
+          assert i_fs'.path_map[p] == id by { reveal_IPathMap(); }
+          GetMetaEquiv(fs, p);
+          GetMetaEquiv(fs', p);
+          GetDataEquiv(fs, p);
+          GetDataEquiv(fs', p);
         }
+      } else {
+        assert i_fs'.meta_map[id] == i_fs.meta_map[id] by { reveal_IMetaMap(); }
+        assert i_fs'.data_map[id] == i_fs.data_map[id] by { reveal_IDataMap(); }
       }
     }
 
@@ -484,8 +465,7 @@ module PathBasedFSRefinement {
           assert i_fs.path_map[p] == i_fs'.path_map[p];
           GetMetaEquiv(fs', p);
         } else {
-          assert exists p :: P.PathExists(fs, p) && P.GetMeta(fs, p).id == id by { reveal_IPathMap(); }
-          var p :| P.PathExists(fs, p) && P.GetMeta(fs, p).id == id;
+          var p := GetPathFromID(fs, id);
           if BeneathDir(dst, p) {
             PInv.NoValidBeneathDir(fs, dst, p);
             assert false;
@@ -496,8 +476,6 @@ module PathBasedFSRefinement {
               assert BeneathDir(dst, newpath);
               assert p == src + newpath[|dst|..];
             }
-            assert i_fs.path_map[p] == id by { reveal_IPathMap(); }
-            // assert i_fs'.path_map[newpath] == i_fs.path_map[p];
             assert P.GetMeta(fs, p) == P.GetMeta(fs', newpath);
             GetMetaEquiv(fs, p);
             GetMetaEquiv(fs', newpath);
@@ -534,10 +512,7 @@ module PathBasedFSRefinement {
         if id == dst_id {
           RefinesRenameDstID(fs, fs', src, dst, ctime);
         } else {
-          assert exists p :: P.PathExists(fs, p) && P.GetMeta(fs, p).id == id by { reveal_IPathMap(); }
-          var p :| P.PathExists(fs, p) && P.GetMeta(fs, p).id == id;
-          assert i_fs.path_map[p] == id by { reveal_IPathMap(); }
-
+          var p := GetPathFromID(fs, id);
           if BeneathDir(dst, p) {
             PInv.NoValidBeneathDir(fs, dst, p);
           } else if p == src || BeneathDir(src, p) {
@@ -570,6 +545,9 @@ module PathBasedFSRefinement {
     var i_fs := I(fs);
     var i_fs' := I(fs');
 
+    var dst_id := if P.PathExists(fs, dst) then P.GetMeta(fs, dst).id else Nonexistent;
+    assert dst_id == i_fs.path_map[dst] by { reveal_IPathMap(); }
+
     if dst == RootDir {
       PInv.NoValidBeneathDir(fs, dst, src);
       assert false;
@@ -579,9 +557,13 @@ module PathBasedFSRefinement {
     RefinesRenameMetaMap(fs, fs', src, dst, ctime);
     RefinesRenameDataMap(fs, fs', src, dst, ctime);
 
-    reveal_IPathMap();
-    reveal_IMetaMap();
-    reveal_IDataMap();
+    PathExistsEquiv(fs, src);   
+    PathExistsEquiv(fs, dst);
+    ValidNewPathEquiv(fs, dst);
+
+    GetMetaEquiv(fs, src);
+    GetMetaEquiv(fs, dst);
+    IsEmptyDirEquiv(fs, dst);
 
     assert F.Rename(i_fs, i_fs', src, dst, ctime);
   }
@@ -595,17 +577,25 @@ module PathBasedFSRefinement {
     var i_fs := I(fs);
     var i_fs' := I(fs');
 
+    GetMetaEquiv(fs, source);
+    PathExistsEquiv(fs, source);
+    ValidNewPathEquiv(fs, dest);
+
     var src_id := P.GetMeta(fs, source).id;
     var m := fs.content.meta_map[source];
-    var m' := P.LinkMeta(fs, source, ctime);
+    var m' := F.MetaDataUpdateCTime(i_fs.meta_map[i_fs.path_map[source]], ctime);
 
     var dparent_dir := GetParentDir(dest);
     var dparent_id := P.GetMeta(fs, dparent_dir).id;
-    var dparent_m' := P.UpdatePathTime(fs.content, dparent_dir, ctime);
+    var dparent_m' := F.UpdateParentTime(i_fs, dparent_id, ctime);
+
+    assert src_id == i_fs.path_map[source] by { reveal_IPathMap(); }
+    assert dparent_id == i_fs.path_map[dparent_dir] by { reveal_IPathMap(); }
 
     forall p
     ensures i_fs'.path_map[p] == i_fs.path_map[dest := src_id][p]
     {
+      reveal_IPathMap();
       if p != dest && p != dparent_dir && p != source {
         assert fs'.content.meta_map[p] == fs.content.meta_map[p];
       }
@@ -618,51 +608,15 @@ module PathBasedFSRefinement {
     ensures i_fs'.data_map[id] == i_fs.data_map[id]
     {
       if id == Nonexistent {
-        // InvImpliesInv(fs);
-        // InvImpliesInv(fs');
       } else if id in i_fs.path_map.Values {
-        if id == src_id {
-          if m.MetaData? {
-            assert fs'.content.meta_map[source] == RedirectMeta(hiddenName.value);
-            assert fs'.hidden.meta_map[hiddenName.value] == m';
-          } else {
-            assert fs'.content.meta_map[source] == fs.content.meta_map[source];
-          }
-          assert P.GetMeta(fs', source) == m';
-          assert i_fs'.meta_map[id] == m';
-          assert i_fs.meta_map[src_id := m'][dparent_id := dparent_m'][id] == m';
-          assert P.GetData(fs', source) == P.GetData(fs, source);
-          assert i_fs'.data_map[id] == i_fs.data_map[id];
-        } else if id == dparent_id {
-          calc {
-            i_fs.meta_map[src_id := m'][dparent_id := dparent_m'][id];
-            dparent_m';
-            P.GetMeta(fs', dparent_dir);
-            i_fs'.meta_map[id];
-          }
-          calc {
-            i_fs'.data_map[id];
-            P.GetData(fs', dparent_dir);
-            P.GetData(fs, dparent_dir);
-            i_fs.data_map[id];
-          }
-        } else {
-          var p :| P.PathExists(fs, p) && P.GetMeta(fs, p).id == id;
-          assert P.PathExists(fs', p);
-          calc {
-            i_fs'.meta_map[id];
-            P.GetMeta(fs', p);
-            P.GetMeta(fs, p);
-            i_fs.meta_map[id];
-            i_fs.meta_map[src_id := m'][dparent_id := dparent_m'][id];
-          }
-          calc {
-            i_fs'.data_map[id];
-            P.GetData(fs', p);
-            P.GetData(fs, p);
-            i_fs.data_map[id];
-          }
-        }
+        var p := GetPathFromID(fs, id);
+        GetMetaEquiv(fs, p);
+        GetMetaEquiv(fs', p);
+        GetDataEquiv(fs, p);
+        GetDataEquiv(fs', p);
+      } else {
+        assert i_fs'.meta_map[id] == i_fs.meta_map[id] by { reveal_IMetaMap(); }
+        assert i_fs'.data_map[id] == i_fs.data_map[id] by { reveal_IDataMap(); }
       }
     }
     Maps.IMapEquivalent(i_fs'.meta_map, i_fs.meta_map[src_id := m'][dparent_id := dparent_m']);
@@ -677,6 +631,29 @@ module PathBasedFSRefinement {
   requires P.ChangeAttr(fs, fs', path, perm, uid, gid, ctime)
   ensures F.ChangeAttr(I(fs), I(fs'), path, perm, uid, gid, ctime)
   {
+    var i_fs := I(fs);
+    var i_fs' := I(fs');
+    var path_id := P.GetMeta(fs, path).id;
+
+    PathExistsEquiv(fs, path);
+    assert i_fs.path_map[path] == path_id by { reveal_IPathMap(); }
+    assert i_fs'.path_map == i_fs.path_map by { reveal_IPathMap(); }
+    assert i_fs'.data_map == i_fs.data_map by { reveal_IDataMap(); }
+
+    var m' :=  F.MetaDataChangeAttr(i_fs.meta_map[path_id], perm, uid, gid, ctime);
+
+    forall id 
+    ensures i_fs'.meta_map[id] == i_fs.meta_map[path_id := m'][id]
+    {
+      if id == Nonexistent {
+      } else if id in i_fs.path_map.Values {
+        var p := GetPathFromID(fs, id);
+        GetMetaEquiv(fs, p);
+        GetMetaEquiv(fs', p);
+      } else {
+        assert i_fs'.meta_map[id] == i_fs.meta_map[id] by { reveal_IMetaMap(); }
+      }
+    }
   }
 
   lemma RefinesTruncate(fs: P.FileSys, fs': P.FileSys, path: Path, size: int, time: Time)
@@ -685,6 +662,35 @@ module PathBasedFSRefinement {
   requires P.Truncate(fs, fs', path, size, time)
   ensures F.Truncate(I(fs), I(fs'),  path, size, time)
   {
+    var i_fs := I(fs);
+    var i_fs' := I(fs');
+    var path_id := P.GetMeta(fs, path).id;
+
+    GetMetaEquiv(fs, path);
+    PathExistsEquiv(fs, path);
+    assert i_fs.path_map[path] == path_id by { reveal_IPathMap(); }
+    assert i_fs'.path_map == i_fs.path_map by { reveal_IPathMap(); }
+
+    var m := P.GetMeta(fs, path);
+    var m' := F.MetaDataUpdateTime(m, m.atime, time, time);
+    var d' := F.DataTruncate(i_fs.data_map[path_id], size);
+
+    forall id 
+    ensures i_fs'.meta_map[id] == i_fs.meta_map[path_id := m'][id]
+    ensures i_fs'.data_map[id] == i_fs.data_map[path_id := d'][id]
+    {
+      if id == Nonexistent {
+      } else if id in i_fs.path_map.Values {
+        var p := GetPathFromID(fs, id);
+        GetMetaEquiv(fs, p);
+        GetMetaEquiv(fs', p);
+        GetDataEquiv(fs, p);
+        GetDataEquiv(fs', p);
+      } else {
+        assert i_fs'.meta_map[id] == i_fs.meta_map[id] by { reveal_IMetaMap(); }
+        assert i_fs'.data_map[id] == i_fs.data_map[id] by { reveal_IDataMap(); }
+      }
+    }
   }
 
   lemma RefinesRead(fs: P.FileSys, fs': P.FileSys, path: Path, offset: int, size: int, data: Data)
@@ -693,6 +699,9 @@ module PathBasedFSRefinement {
   requires P.Read(fs, fs', path, offset, size, data)
   ensures F.Read(I(fs), I(fs'), path, offset, size, data)
   {
+    reveal_IPathMap();
+    reveal_IMetaMap();
+    reveal_IDataMap();
   }
 
   lemma RefinesWrite(fs: P.FileSys, fs': P.FileSys, path: Path, offset: int, size: int, data: Data, time: Time)
@@ -701,6 +710,36 @@ module PathBasedFSRefinement {
   requires P.Write(fs, fs', path, offset, size, data, time)
   ensures F.Write(I(fs), I(fs'), path, offset, size, data, time)
   {
+    var i_fs := I(fs);
+    var i_fs' := I(fs');
+    var path_id := P.GetMeta(fs, path).id;
+
+    GetMetaEquiv(fs, path);
+    GetDataEquiv(fs, path);
+    PathExistsEquiv(fs, path);
+    assert i_fs.path_map[path] == path_id by { reveal_IPathMap(); }
+    assert i_fs'.path_map == i_fs.path_map by { reveal_IPathMap(); }
+
+    var m := P.GetMeta(fs, path);
+    var m' := F.MetaDataUpdateTime(m, time, time, time);
+    var d' := F.DataWrite(i_fs.data_map[path_id], data, offset, size);
+
+    forall id 
+    ensures i_fs'.meta_map[id] == i_fs.meta_map[path_id := m'][id]
+    ensures i_fs'.data_map[id] == i_fs.data_map[path_id := d'][id]
+    {
+      if id == Nonexistent {
+      } else if id in i_fs.path_map.Values {
+        var p := GetPathFromID(fs, id);
+        GetMetaEquiv(fs, p);
+        GetMetaEquiv(fs', p);
+        GetDataEquiv(fs, p);
+        GetDataEquiv(fs', p);
+      } else {
+        assert i_fs'.meta_map[id] == i_fs.meta_map[id] by { reveal_IMetaMap(); }
+        assert i_fs'.data_map[id] == i_fs.data_map[id] by { reveal_IDataMap(); }
+      }
+    }
   }
 
   lemma RefinesUpdateTime(fs: P.FileSys, fs': P.FileSys, path: Path, atime: Time, mtime: Time, ctime: Time)
@@ -709,6 +748,33 @@ module PathBasedFSRefinement {
   requires P.UpdateTime(fs, fs', path, atime, mtime, ctime)
   ensures F.UpdateTime(I(fs), I(fs'), path, atime, mtime, ctime)
   {
+    var i_fs := I(fs);
+    var i_fs' := I(fs');
+    var path_id := P.GetMeta(fs, path).id;
+
+    GetMetaEquiv(fs, path);
+    PathExistsEquiv(fs, path);
+    assert i_fs.path_map[path] == path_id by { reveal_IPathMap(); }
+    assert i_fs'.path_map == i_fs.path_map by { reveal_IPathMap(); }
+    assert i_fs'.data_map == i_fs.data_map by { reveal_IDataMap(); }
+
+    var m' := F.MetaDataUpdateTime(i_fs.meta_map[path_id], atime, mtime, ctime);
+
+    forall id 
+    ensures i_fs'.meta_map[id] == i_fs.meta_map[path_id := m'][id]
+    {
+      if id == Nonexistent {
+      } else if id in i_fs.path_map.Values {
+        var p := GetPathFromID(fs, id);
+        GetMetaEquiv(fs, p);
+        GetMetaEquiv(fs', p);
+        GetDataEquiv(fs, p);
+        GetDataEquiv(fs', p);
+      } else {
+        assert i_fs'.meta_map[id] == i_fs.meta_map[id] by { reveal_IMetaMap(); }
+        assert i_fs'.data_map[id] == i_fs.data_map[id] by { reveal_IDataMap(); }
+      }
+    }
   }
 
   lemma RefinesReadDir(fs: P.FileSys, fs': P.FileSys, dir: Path, start: Option<Path>, results: seq<DirEntry>, done: bool)
@@ -717,6 +783,8 @@ module PathBasedFSRefinement {
   requires P.ReadDir(fs, fs', dir, start, results, done)
   ensures F.ReadDir(I(fs), I(fs'), dir, start, results, done)
   {
+    reveal_IPathMap();
+    reveal_IMetaMap();
   }
 
 }
