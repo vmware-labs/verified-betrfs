@@ -151,23 +151,21 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m.global_tail.Some?
     && var global_tail_var := m.global_tail.value;
     && (set x:RequestId | x in request_ids :: x)  <= m.localUpdates.Keys
-    // Convert Updates to UpdatePlaced
+    && (forall rid | rid in request_ids :: m.localUpdates[rid].UpdateInit?)
 
     // Add Log(tail-3, op1) ; Log(tail-2, op2) ; Log(tail-1, op1) ...
     // TODO fix 'idx in m.log'
-    // TODO update the combiner state
     && m' == m.(log := (map idx | idx in m.log :: if idx >= global_tail_var && idx < (global_tail_var+|request_ids|) then 
-      LogEntry(UpdatePlaced(nodeId), nodeId) else m.log[idx])
+      LogEntry(m.localUpdates[request_ids[idx - global_tail_var]].op, nodeId) else m.log[idx])
     )
     .(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then 
       UpdatePlaced(nodeId) else m.localUpdates[rid])
     )
     .(global_tail := Some(m.global_tail.value + |request_ids|))
-
-
-    //&& |request_ids| > 0
-    //&& m' == m.(log := m.log[global_tail_var := LogEntry(m.localUpdates[request_ids[0]].op, nodeId)])
+    .(combiner := m.combiner[nodeId := CombinerPlaced(request_ids)])
   }
+
+  
 
   function dot(x: M, y: M) : M
   function unit() : M
