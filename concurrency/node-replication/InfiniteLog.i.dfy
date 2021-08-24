@@ -192,9 +192,32 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var Combiner(queued_ops, local_tail, gtail_snapshot, i) := m.combiner[nodeId];
     && (local_tail in m.log.Keys)
     && local_tail+i in m.log
-    && |queued_ops| > 0
+    && i < |queued_ops|
     && var ret := nrifc.update(m.replicas[nodeId], m.log[local_tail+i].op).return_value;
-    && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops[1..], local_tail, gtail_snapshot, i+1)])
+    && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, gtail_snapshot, i+1)])
+  }
+
+  predicate UpdateCompletedTail(m: M, m': M, nodeId: NodeId) {
+    && m.M?
+    && nodeId in m.combiner.Keys
+    && m.combiner[nodeId].Combiner?
+    && var Combiner(queued_ops, local_tail, gtail_snapshot, queue_index) := m.combiner[nodeId];
+    && queue_index == |queued_ops|
+    && m.ctail.Some?
+    && var new_ctail := if m.ctail.value > local_tail then m.ctail.value else local_tail;
+    && m' == m.(combiner := m.combiner[nodeId := CombinerUpdatedCtail(queued_ops, local_tail, gtail_snapshot, queue_index)])
+              .(ctail := Some(new_ctail))
+  }
+
+  predicate GoToCombinerReady(m: M, m': M, nodeId: NodeId) {
+    && m.M?
+    && nodeId in m.combiner.Keys
+    && nodeId in m.localTails.Keys
+    && m.combiner[nodeId].CombinerUpdatedCtail?
+    && var CombinerUpdatedCtail(queued_ops, local_tail, gtail_snapshot, queue_index) := m.combiner[nodeId];
+    && m.ctail.Some?
+    && m' == m.(combiner := m.combiner[nodeId := CombinerReady])
+              .(localTails := m.localTails[nodeId := gtail_snapshot])
   }
 
   function dot(x: M, y: M) : M
