@@ -165,7 +165,37 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     .(combiner := m.combiner[nodeId := CombinerPlaced(request_ids)])
   }
 
+  predicate ExecLoadLtail(m: M, m': M, nodeId: NodeId) {
+    && m.M?
+    && nodeId in m.combiner.Keys
+    && nodeId in m.localTails
+    && m.combiner[nodeId].CombinerPlaced?
+    && var queued_ops := m.combiner[nodeId].queued_ops;
+    && var localTail := m.localTails[nodeId];
+    && m' == m.(combiner := m.combiner[nodeId := CombinerLtail(queued_ops, localTail)])
+  }
   
+  predicate ExecLoadGlobalTail(m: M, m': M, nodeId: NodeId) {
+    && m.M?
+    && nodeId in m.combiner.Keys
+    && m.combiner[nodeId].CombinerLtail?
+    && m.global_tail.Some?
+    && var CombinerLtail(queued_ops, local_tail) := m.combiner[nodeId];
+    && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, m.global_tail.value, 0)])
+  }
+
+  predicate ExecDispatch(m: M, m': M, nodeId: NodeId) {
+    && m.M?
+    && nodeId in m.combiner.Keys
+    && nodeId in m.replicas.Keys
+    && m.combiner[nodeId].Combiner?
+    && var Combiner(queued_ops, local_tail, gtail_snapshot, i) := m.combiner[nodeId];
+    && (local_tail in m.log.Keys)
+    && local_tail+i in m.log
+    && |queued_ops| > 0
+    && var ret := nrifc.update(m.replicas[nodeId], m.log[local_tail+i].op).return_value;
+    && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops[1..], local_tail, gtail_snapshot, i+1)])
+  }
 
   function dot(x: M, y: M) : M
   function unit() : M
