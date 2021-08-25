@@ -142,7 +142,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && (forall rid | rid in request_ids :: m.localUpdates[rid].UpdateInit?)
     && (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
     // Add new entries to the log:
-    // TODO(gz): Warning: /!\ No terms found to trigger on.
     && var updated_log := m.log + (map idx | global_tail_var < idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
 
     && m' == m.(log := updated_log)
@@ -172,7 +171,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, m.global_tail.value, 0)])
   }
 
-  predicate ExecDispatch(m: M, m': M, nodeId: NodeId) {
+  predicate ExecDispatchUpdate(m: M, m': M, nodeId: NodeId) {
     && m.M?
     && nodeId in m.combiner.Keys
     && nodeId in m.replicas.Keys
@@ -181,14 +180,18 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && (local_tail in m.log.Keys)
     && local_tail+i in m.log
     && i < |queued_ops|
-    && var ret := nrifc.update(m.replicas[nodeId], m.log[local_tail+i].op).return_value;
+    && var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[local_tail+i].op);
     && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, gtail_snapshot, i+1)])
-    // travis: need to update m.replicas[nodeId]
-    // need to update UpdatePlaced -> UpdateDone
-    // also: the above seems to use `i` both as an index into the log (m.log[local_tail+i])
+              .(replicas := m.replicas[nodeId := nr_state'])
+              .(localUpdates :=
+                if m.log[local_tail+i].node_id == nodeId
+                  // Op exec'ed at node where request was issued, so return result.
+                  then m.localUpdates[queued_ops[i]:= UpdateDone(ret)]
+                  // Op exec'ed only to update a remote node.
+                  else m.localUpdates)
+    // Travis: the above seems to use `i` both as an index into the log (m.log[local_tail+i])
     // and also as an index into the queue (i < |queues_ops|) but these indices might not correspond
     // because there could be other log entries besides the one for this node
-    // also: we need 2 of these, depending on whether `m.log[...].nodeId == nodeId`
   }
 
 
