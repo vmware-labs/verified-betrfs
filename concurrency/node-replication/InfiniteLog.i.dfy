@@ -152,12 +152,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var global_tail_var := m.global_tail.value;
     && (set x:RequestId | x in request_ids :: x)  <= m.localUpdates.Keys
     && (forall rid | rid in request_ids :: m.localUpdates[rid].UpdateInit?)
-
-    // Add Log(tail-3, op1) ; Log(tail-2, op2) ; Log(tail-1, op1) ...
-    // TODO fix 'idx in m.log'
-    && m' == m.(log := (map idx | idx in m.log :: if idx >= global_tail_var && idx < (global_tail_var+|request_ids|) then 
-      LogEntry(m.localUpdates[request_ids[idx - global_tail_var]].op, nodeId) else m.log[idx])
-    )
+    // Add new entries to the log, maybe we need to also say that both map keys are disjoint?
+    && var updated_log := m.log + (map idx | 0 < idx < |request_ids| :: LogEntry(m.localUpdates[request_ids[idx]].op, nodeId));
+    && m' == m.(log := updated_log)
     .(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then 
       UpdatePlaced(nodeId) else m.localUpdates[rid])
     )
