@@ -131,20 +131,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
        )
   }
 
-  predicate TransitionCombine(m: M, m': M, nodeId: NodeId, rid: RequestId, op: nrifc.UpdateOp) {
-    && m.M?
-    && nodeId in m.combiner
-    && m.combiner[nodeId].CombinerReady?
-
-    //&& forall rid in rids ==> !m.localUpdates[rid]
-    && !(rid in m.localUpdates)
-
-    // TODO(gz): Don't conserve client
-    && m' == m.(localUpdates := m.localUpdates[rid :=
-        UpdateInit(op)]
-       )
-  }
-
   predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
   {
     && m.M?
@@ -195,6 +181,12 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && i < |queued_ops|
     && var ret := nrifc.update(m.replicas[nodeId], m.log[local_tail+i].op).return_value;
     && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, gtail_snapshot, i+1)])
+    // travis: need to update m.replicas[nodeId]
+    // need to update UpdatePlaced -> UpdateDone
+    // also: the above seems to use `i` both as an index into the log (m.log[local_tail+i])
+    // and also as an index into the queue (i < |queues_ops|) but these indices might not correspond
+    // because there could be other log entries besides the one for this node
+    // also: we need 2 of these, depending on whether `m.log[...].nodeId == nodeId`
   }
 
   predicate UpdateCompletedTail(m: M, m': M, nodeId: NodeId) {
@@ -202,7 +194,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && nodeId in m.combiner.Keys
     && m.combiner[nodeId].Combiner?
     && var Combiner(queued_ops, local_tail, gtail_snapshot, queue_index) := m.combiner[nodeId];
-    && queue_index == |queued_ops|
+    && local_tail == gtail_snapshot
+    && queue_index == |queued_ops| // maybe redundant / not necessary
     && m.ctail.Some?
     && var new_ctail := if m.ctail.value > local_tail then m.ctail.value else local_tail;
     && m' == m.(combiner := m.combiner[nodeId := CombinerUpdatedCtail(queued_ops, local_tail, gtail_snapshot, queue_index)])
@@ -220,18 +213,34 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
               .(localTails := m.localTails[nodeId := gtail_snapshot])
   }
 
+  // tips for implementing dot:
+  // you should probably be able to find a map_union function in the codebase you can steal
+  // if two things conflict, get a Fail
   function dot(x: M, y: M) : M
+
+  // empty maps & stuff
   function unit() : M
 
-  function Ticket(rid: RequestId, input: IOIfc.Input) : M
-  function Stub(rid: RequestId, output: IOIfc.Output) : M
+  function Ticket(rid: RequestId, input: IOIfc.Input) : M {
+    // TODO fill this in
+    // should be UpdateInit or ReadonlyInit
+  }
+
+  function Stub(rid: RequestId, output: IOIfc.Output) : M {
+    // TODO fill this in
+    // should be UpdateDone or ReadonlyDone
+  }
 
   // By returning a set of request ids "in use", we enforce that
   // there are only a finite number of them (i.e., it is always possible to find
   // a free one).
-  function request_ids_in_use(m: M) : set<RequestId>
+  function request_ids_in_use(m: M) : set<RequestId> {
+    m.localReads.Keys + m.localUpdates.Keys
+  }
 
   predicate Init(s: M)
+
+  // take a look at scache/cache/SimpleCacheSM.i.dfy for an example
   predicate Internal(shard: M, shard': M)
 
   predicate Inv(s: M)
@@ -260,9 +269,23 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   lemma commutative(x: M, y: M)
   ensures dot(x, y) == dot(y, x)
+  {
+    if dot(x, y) == Fail {
+      assert dot(x, y) == dot(y, x);
+    } else {
+      assert dot(x, y) == dot(y, x);
+    }
+  }
 
   lemma associative(x: M, y: M, z: M)
   ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
+  {
+    if dot(x, dot(y, z)) == Fail {
+      assert dot(x, dot(y, z)) == dot(dot(x, y), z);
+    } else {
+      assert dot(x, dot(y, z)) == dot(dot(x, y), z);
+    }
+  }
 
   lemma exists_inv_state()
   returns (s: M)
