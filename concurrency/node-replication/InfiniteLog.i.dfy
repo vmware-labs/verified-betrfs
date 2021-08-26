@@ -337,12 +337,16 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && s.replicas.Keys == s.localTails.Keys
     && s.replicas.Keys == s.combiner.Keys
 
-    //&& (forall nodeId | nodeId in s.replicas :: s.replicas[nodeId] == state_at_version(s.log, get_local_tail(s, nodeId)))
+
+    // ctail >= logicalLocalTail
+    // && (forall nodeId | nodeId in s.replicas :: if s.ctail.Some? then s.ctail.value >= get_local_tail(s, nodeId) else true)
 
     // replica[nodeId] == fold the operations in the log up to version logicalLocalTail
     //     (initial state + log 0 + log 1 + ... + log k)
     //     (see state_at_version in NRSimple)
-    // ctail >= logicalLocalTail
+    // && (forall nodeId | nodeId in s.replicas :: s.replicas[nodeId] == state_at_version(s.log, get_local_tail(s, nodeId)))
+
+
     //&& forall rid :: rid in localReads :: localReads[rid].ctail <= ctail
     && if s.ctail.Some? then
       forall rid | rid in s.localReads ::
