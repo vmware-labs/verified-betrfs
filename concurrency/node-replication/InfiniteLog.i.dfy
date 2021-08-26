@@ -89,6 +89,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // We have access to the ctail
     && m.ctail.Some?
 
+
+
     // We have some ReadonlyState with request id `rid` in the `ReadonlyInit` state
     && rid in m.localReads
     && m.localReads[rid].ReadonlyInit?
@@ -142,9 +144,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // Add new entries to the log:
     // TODO(gz): Warning: /!\ No terms found to trigger on.
     && var updated_log := m.log + (map idx | global_tail_var < idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
-    
+
     && m' == m.(log := updated_log)
-    .(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then 
+    .(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then
       UpdatePlaced(nodeId) else m.localUpdates[rid])
     )
     .(global_tail := Some(m.global_tail.value + |request_ids|))
@@ -160,7 +162,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var localTail := m.localTails[nodeId];
     && m' == m.(combiner := m.combiner[nodeId := CombinerLtail(queued_ops, localTail)])
   }
-  
+
   predicate ExecLoadGlobalTail(m: M, m': M, nodeId: NodeId) {
     && m.M?
     && nodeId in m.combiner.Keys
@@ -189,6 +191,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // also: we need 2 of these, depending on whether `m.log[...].nodeId == nodeId`
   }
 
+
   predicate UpdateCompletedTail(m: M, m': M, nodeId: NodeId) {
     && m.M?
     && nodeId in m.combiner.Keys
@@ -213,29 +216,84 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
               .(localTails := m.localTails[nodeId := gtail_snapshot])
   }
 
+// update the map
+// Question: precedence between m1 and m2, currently always take m1 first
+function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
+    map k | k in m1.Keys + m2.Keys ::
+        (if k in m1.Keys then m1[k] else m2[k])
+  }
+
   // tips for implementing dot:
   // you should probably be able to find a map_union function in the codebase you can steal
   // if two things conflict, get a Fail
-  function dot(x: M, y: M) : M
+  function dot(x: M, y: M) : M {
+    // if either state is Fale, then fail
+    if x == Fail || y == Fail then
+      Fail
+    // what is exactly the condition here?
+    else if x.log.Keys !! y.log.Keys
+         && x.replicas.Keys !! y.replicas.Keys
+         && x.localTails.Keys !! y.localTails.Keys
+         && x.localReads.Keys !! y.localReads.Keys
+         && x.localUpdates.Keys !! y.localUpdates.Keys
+         && x.combiner.Keys !! y.combiner.Keys
+         && !(x.ctail.Some? && y.ctail.Some?)
+         && !(x.global_tail.Some? && y.global_tail.Some?)
+         then
+      M(
+      map_union(x.log, y.log),
+      if x.global_tail.Some? then x.global_tail else y.global_tail,
+      map_union(x.replicas, y.replicas),
+      map_union(x.localTails, y.localTails),
+      if x.ctail.Some? then x.ctail else y.ctail,
+      map_union(x.localReads, y.localReads),
+      map_union(x.localUpdates, y.localUpdates),
+      map_union(x.combiner, y.combiner)
+    )
+    else
+      Fail
+  }
 
   // empty maps & stuff
-  function unit() : M
+  function unit() : M {
+    M(
+    // log: map<nat, LogEntry>
+    map[],
+    // global_tail: Option<nat>,
+    Some(0),
+    // replicas: map<NodeId, nrifc.NRState>,
+    map[], // Question: initialize for all nodes?
+    // localTails: map<NodeId, nat>
+    map[], // Question: initialize for all nodes?
+    // ctail: Option<nat>,                   // ctail (atomic int)
+    Some(0),
+    // localReads: map<RequestId, ReadonlyState>,
+    map[],
+    // localUpdates: map<RequestId, UpdateState>,
+    map[],
+    // combiner: map<NodeId, CombinerState>
+    map[] // Question: intialize for all nodes?
+    )
+  }
 
-  function Ticket(rid: RequestId, input: IOIfc.Input) : M {
+  function Ticket(rid: RequestId, input: IOIfc.Input) : M
     // TODO fill this in
     // should be UpdateInit or ReadonlyInit
-  }
 
-  function Stub(rid: RequestId, output: IOIfc.Output) : M {
+
+  function Stub(rid: RequestId, output: IOIfc.Output) : M
     // TODO fill this in
     // should be UpdateDone or ReadonlyDone
-  }
+
 
   // By returning a set of request ids "in use", we enforce that
   // there are only a finite number of them (i.e., it is always possible to find
   // a free one).
   function request_ids_in_use(m: M) : set<RequestId> {
-    m.localReads.Keys + m.localUpdates.Keys
+    if m == Fail then
+      {}
+    else
+      m.localReads.Keys + m.localUpdates.Keys
   }
 
   predicate Init(s: M)
@@ -290,4 +348,33 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   lemma exists_inv_state()
   returns (s: M)
   ensures Inv(s)
+
+  datatype Step =
+    | GoToCombinerReady_Step(nodeId: NodeId)
+    | ExecLoadLtail_Step(nodeId: NodeId)
+    | ExecLoadGlobalTail_Step(nodeId: NodeId)
+    | ExecDispatch_Step(nodeId: NodeId)
+    | ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId)
+    | TransitionReadonlyReadyToRead_Step(rid: RequestId)
+    | TransitionReadonlyDone_Step(rid: RequestId)
+    | AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>)
+
+
+  predicate NextStep(m: M, m': M, op: nrifc.Op, step: Step) {
+    match step {
+      case GoToCombinerReady_Step(nodeId: NodeId) => GoToCombinerReady(m, m', nodeId)
+      case ExecLoadLtail_Step(nodeId: NodeId) => ExecLoadLtail(m, m', nodeId)
+      case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail(m, m', nodeId)
+      case ExecDispatch_Step(nodeId: NodeId) => ExecDispatch(m, m',nodeId)
+      case ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) =>  ReadonlyReadCtail(m, m', rid, nodeId)
+      case TransitionReadonlyReadyToRead_Step(rid: RequestId) => TransitionReadonlyReadyToRead(m, m',rid)
+      case TransitionReadonlyDone_Step(rid: RequestId) => TransitionReadonlyDone(m, m',rid)
+      case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail(m, m', nodeId, request_ids)
+    }
+  }
+
+  predicate Next(m: M, m': M, op: nrifc.Op) {
+    exists step :: NextStep(m, m', op, step)
+  }
+
 }
