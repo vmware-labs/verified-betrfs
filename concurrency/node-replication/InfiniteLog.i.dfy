@@ -32,7 +32,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
         // read the ctail
     | ReadonlyCtail(op: nrifc.ReadonlyOp, nodeId: NodeId, ctail: nat)
         // wait until localTail >= (the ctail value we just read)
-    | ReadonlyReadyToRead(op: nrifc.ReadonlyOp, nodeId: NodeId)
+    | ReadonlyReadyToRead(op: nrifc.ReadonlyOp, nodeId: NodeId, ctail: nat)
         // read the op off the replica
     | ReadonlyDone(ret: nrifc.ReturnType)
 
@@ -304,7 +304,15 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   // take a look at scache/cache/SimpleCacheSM.i.dfy for an example
   predicate Internal(shard: M, shard': M)
 
-  predicate Inv(s: M)
+  predicate Inv(s: M) {
+    var logicalLocalTail :=  if nodeId in combiner && combiner[nodeId].Combiner? then
+        combiner[nodeId].localTail else localTails[nodeId];
+    replica[nodeId] == fold the operations in the log up to version logicalLocalTail
+        (initial state + log 0 + log 1 + ... + log k)
+        (see state_at_version in NRSimple)
+    ctail >= logicalLocalTail
+    forall rid :: rid in localReads :: localReads[rid].ctail <= ctail
+  }
 
   lemma InitImpliesInv(s: M)
   //requires Init(s)
