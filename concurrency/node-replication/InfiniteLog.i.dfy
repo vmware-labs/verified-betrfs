@@ -547,4 +547,46 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     NextStep_PreservesInv(m, m', op, step);
   }
 
+
+  // import NRSimple
+  // include "NRSimple.i.dfy"
+
+  // // interpretation function
+  // function I(m: M) : NRSimple.Variables
+  // {
+  //   NRSimple.Variables(
+  //     // log: seq<nrifc.UpdateOp>,
+  //     // ctail: nat,
+  //     // readonly_reqs: map<RequestId, ReadReq>,
+  //     // update_reqs: map<RequestId, nrifc.UpdateOp>,
+  //     // update_resps: map<RequestId, UpdateResp>
+  //   )
+  // }
+
+  // // refinement
+  // lemma InfiniteLog_Refines_NRSimple_NextStep(m: M, m' : M, op: nrifc.Op, step: Step)
+  //   requires Inv(m)
+  //   requires NextStep(m, m', op, step)
+  //   requires Inv(m')
+  //   ensures NRSimple.Next(I(m), I(m'), op)
+  // {
+
+  // }
+
+  // lemma InfiniteLog_Refines_NRSimple_Next(m: M, m' : M,  op: nrifc.Op)
+  //   requires Inv(m)
+  //   requires Inv(m')
+  //   requires Next(m, m', op, step)
+  //   ensures NRSimple.Next(I(m), I(m'), op)
+  // {
+  //   var step :| NextStep(m, m', op, step);
+  //   InfiniteLog_Refines_NRSimple_NextStep(m, m', op, step);
+  // }
+
+  // lemma InfiniteLog_Refines_NRSimple_Init(m: M)
+  //   requires Init(m)
+  //   ensures NRSimple.init(I(m))
+  // {
+
+  // }
 }
