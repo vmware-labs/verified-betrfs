@@ -84,4 +84,117 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(nrifc) {
     && s' == s.(update_resps := s.update_resps - {rid})
     && return_value == s.update_resps[rid].ret
   }
+
+
+  // the stepping throug the state machine
+
+  datatype Step =
+    | StartUpdate_Step(rid: RequestId, uop: nrifc.UpdateOp)
+    | AddUpdateToLog_Step(rid: RequestId)
+    | EndUpdate_Step(rid: RequestId, return_value: nrifc.ReturnType)
+    | IncreaseCtail_Step(new_ctail: nat)
+    | StartReadonly_Step(rid: RequestId, rop: nrifc.ReadonlyOp)
+    | FinishReadonly_Step(rid: RequestId, version: nat, return_value: nrifc.ReturnType)
+
+  predicate NextStep(s: Variables, s': Variables, ops: nrifc.Op, step: Step) {
+    match step {
+      case StartUpdate_Step(rid: RequestId, op: nrifc.UpdateOp) => StartUpdate(s, s', rid, op)
+      case AddUpdateToLog_Step(rid: RequestId) => AddUpdateToLog(s, s', rid)
+      case EndUpdate_Step(rid: RequestId, return_value: nrifc.ReturnType) => EndUpdate(s, s', rid, return_value)
+      case IncreaseCtail_Step(new_ctail: nat) => IncreaseCtail(s, s', new_ctail)
+      case StartReadonly_Step(rid: RequestId, op: nrifc.ReadonlyOp) => StartReadonly(s, s', rid, op)
+      case FinishReadonly_Step(rid: RequestId, version: nat, return_value: nrifc.ReturnType) => FinishReadonly(s, s', rid, version, return_value)
+    }
+  }
+
+  predicate Next(s: Variables, s': Variables, op: ifc.Op) {
+    exists step :: NextStep(s, s', op, step)
+  }
+
+  // invariant
+  predicate Inv(s: Variables) {
+    && s.ctail <= |s.log|
+  }
+
+
+  lemma IncreaseCtail_PreservesInv(s: Variables, s': Variables, new_ctail: nat)
+    requires Inv(s)
+    requires IncreaseCtail(s, s', new_ctail)
+    ensures Inv(s')
+  {
+
+  }
+
+  lemma StartReadonly_PreservesInv(s: Variables, s': Variables, rid: RequestId, op: nrifc.ReadonlyOp)
+    requires Inv(s)
+    requires StartReadonly(s, s', rid, op)
+    ensures Inv(s')
+  {
+
+  }
+
+  lemma FinishReadonly_PreservesInv(s: Variables, s': Variables,
+      rid: RequestId, version: nat, return_value: nrifc.ReturnType)
+    requires Inv(s)
+    requires FinishReadonly(s, s', rid, version, return_value)
+    ensures Inv(s')
+  {
+
+  }
+
+  lemma StartUpdate_PreservesInv(s: Variables, s': Variables, rid: RequestId, op: nrifc.UpdateOp)
+    requires Inv(s)
+    requires StartUpdate(s, s', rid, op)
+    ensures Inv(s')
+  {
+
+  }
+
+  lemma AddUpdateToLog_PreservesInv(s: Variables, s': Variables, rid: RequestId)
+    requires Inv(s)
+    requires AddUpdateToLog(s, s', rid)
+    ensures Inv(s')
+  {
+
+  }
+
+  lemma EndUpdate_PreservesInv(s: Variables, s': Variables, rid: RequestId, return_value: nrifc.ReturnType)
+    requires Inv(s)
+    requires EndUpdate(s, s', rid, return_value)
+    ensures Inv(s')
+  {
+
+  }
+
+  lemma NextStep_PreservesInv(s: Variables, s': Variables, ops: nrifc.Op, step: Step)
+    requires Inv(s)
+    requires NextStep(s, s', ops, step)
+    ensures Inv(s')
+  {
+    match step {
+      case StartUpdate_Step(rid: RequestId, op: nrifc.UpdateOp) => StartUpdate_PreservesInv(s, s', rid, op);
+      case AddUpdateToLog_Step(rid: RequestId) => AddUpdateToLog_PreservesInv(s, s', rid);
+      case EndUpdate_Step(rid: RequestId, return_value: nrifc.ReturnType) => EndUpdate_PreservesInv(s, s', rid, return_value);
+      case IncreaseCtail_Step(new_ctail: nat) => IncreaseCtail_PreservesInv(s, s', new_ctail);
+      case StartReadonly_Step(rid: RequestId, op: nrifc.ReadonlyOp) => StartReadonly_PreservesInv(s, s', rid, op);
+      case FinishReadonly_Step(rid: RequestId, version: nat, return_value: nrifc.ReturnType) => FinishReadonly_PreservesInv(s, s', rid, version, return_value);
+    }
+  }
+
+  lemma Next_Implies_inv(s: Variables, s': Variables, op: ifc.Op)
+    requires Inv(s)
+    requires Next(s, s', op)
+    ensures Inv(s')
+  {
+    var step :| NextStep(s, s', op, step);
+    NextStep_PreservesInv(s, s', op, step);
+  }
+
+  /// invariance proofs
+  lemma Init_Implies_Inv(s: Variables)
+    requires Init(s)
+    ensures Inv(s)
+  {
+
+  }
 }

@@ -337,6 +337,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && s.replicas.Keys == s.localTails.Keys
     && s.replicas.Keys == s.combiner.Keys
 
+    // ctail in the log
+    && (if s.ctail.Some? then (forall i | 0 <= i < s.ctail.value :: i in s.log.Keys) else true)
 
     // ctail >= logicalLocalTail
     // && (forall nodeId | nodeId in s.replicas :: if s.ctail.Some? then s.ctail.value >= get_local_tail(s, nodeId) else true)
