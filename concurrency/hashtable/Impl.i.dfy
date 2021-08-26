@@ -58,9 +58,48 @@ module Impl {
       :: row_mutexes[i].inv == ((row: Row) => row.Inv(loc, i)))
   }
 
-  datatype IVariables = IVariables(
-    row_mutexes: RowMutexTable,
-    cap_mutex: Mutex<Cap>)
+  linear datatype IVariables = IVariables(
+    linear row_mutexes: RowMutexTable,
+    linear cap_mutex: Mutex<Cap>)
+  {
+    shared method query(rid: nat, input: MapIfc.Input)
+      returns (output: MapIfc.Output)
+
+      requires old_self.Inv()
+      requires old_self.HasNoRowHandle()
+      requires input.QueryInput?
+      requires old_self.token.val == SSM.Ticket(rid, input)
+
+      ensures self.Inv()
+      ensures self.token.val == SSM.Stub(rid, output)
+    {
+      var v := Variables(this, create other toeksn);
+
+      var query_key := input.key;
+
+      var entries, found, p_range;
+      found, entries, p_range := inout self.probe(query_key);
+
+      var slot_idx := p_range.GetLast();
+
+      if found {
+        var step := SSM.QueryFoundStep(rid, input, slot_idx);
+        var expected := self.token.val.QueryFound(step);
+        assert SSM.NextStep(self.token.val, expected, step);
+        TST.inout_update_next(inout self.token, expected);
+        output := MapIfc.QueryOutput(Found(entries[ |entries| - 1 ].value));
+      } else {
+        var step := SSM.QueryNotFoundStep(rid, input, slot_idx);
+        var expected := self.token.val.QueryNotFound(step);
+        assert SSM.NextStep(self.token.val, expected, step);
+        TST.inout_update_next(inout self.token, expected);
+        output := MapIfc.QueryOutput(NotFound);
+      }
+
+      inout self.releaseRows(entries, p_range);
+    }
+
+  }
 
   datatype CapUpdate =
     | Increment
@@ -70,7 +109,7 @@ module Impl {
   linear datatype Variables = Variables(
     glinear token: Token,
     glinear handles: glseq<MutexHandle<Row>>,
-    iv: IVariables)
+    shared iv: IVariables)
   {
     predicate HasRowHandle(index: Index)
       requires |handles| == FixedSize()
