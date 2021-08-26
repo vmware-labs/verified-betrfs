@@ -171,7 +171,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, m.global_tail.value, 0)])
   }
 
-  predicate ExecDispatchUpdate(m: M, m': M, nodeId: NodeId) {
+  predicate ExecDispatch(m: M, m': M, nodeId: NodeId) {
     && m.M?
     && nodeId in m.combiner.Keys
     && nodeId in m.replicas.Keys
