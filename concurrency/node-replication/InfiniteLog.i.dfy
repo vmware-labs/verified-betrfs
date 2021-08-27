@@ -116,7 +116,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m' == m.(localReads := m.localReads[rid :=
         ReadonlyReadyToRead(
           m.localReads[rid].op,
-          m.localReads[rid].nodeId)
+          m.localReads[rid].nodeId,
+          readRequest.ctail)
          ]
        )
   }
@@ -143,7 +144,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
     // Add new entries to the log:
     && var updated_log := m.log + (map idx | global_tail_var < idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
-
+    && nodeId in m.combiner
+    && m.combiner[nodeId].CombinerReady?
     && m' == m.(log := updated_log)
     .(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then
       UpdatePlaced(nodeId) else m.localUpdates[rid])
@@ -299,19 +301,65 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       m.localReads.Keys + m.localUpdates.Keys
   }
 
-  predicate Init(s: M)
+  predicate Init(s: M) {
+    // the init state is just the unit
+    s == unit()
+  }
 
   // take a look at scache/cache/SimpleCacheSM.i.dfy for an example
   predicate Internal(shard: M, shard': M)
 
+
+// Given a log of ops and a version number, compute the state at that version
+  function state_at_version(log: map<nat, LogEntry>, version: nat) : nrifc.NRState
+  requires forall i | i <= version :: i in log
+  {
+    if version == 0 then
+      nrifc.init_state()
+    else
+      nrifc.update(state_at_version(log, version - 1), log[version-1].op).new_state
+  }
+
+  function get_local_tail(m: M, nodeId: NodeId) : nat
+    requires m != Fail
+    requires nodeId in m.localTails
+  {
+    if nodeId in m.combiner && m.combiner[nodeId].Combiner? then
+        m.combiner[nodeId].localTail
+    else m.localTails[nodeId]
+  }
+
   predicate Inv(s: M) {
-    var logicalLocalTail :=  if nodeId in combiner && combiner[nodeId].Combiner? then
-        combiner[nodeId].localTail else localTails[nodeId];
-    replica[nodeId] == fold the operations in the log up to version logicalLocalTail
-        (initial state + log 0 + log 1 + ... + log k)
-        (see state_at_version in NRSimple)
-    ctail >= logicalLocalTail
-    forall rid :: rid in localReads :: localReads[rid].ctail <= ctail
+    // var logicalLocalTail :=  if nodeId in combiner && combiner[nodeId].Combiner? then
+    //     combiner[nodeId].localTail else localTails[nodeId];
+    && s != Fail
+    // the datastructure should be there for each node
+    && s.replicas.Keys == s.localTails.Keys
+    && s.replicas.Keys == s.combiner.Keys
+
+    // ctail in the log
+    && (if s.ctail.Some? then (forall i | 0 <= i < s.ctail.value :: i in s.log.Keys) else true)
+
+    // ctail >= logicalLocalTail
+    // && (forall nodeId | nodeId in s.replicas :: if s.ctail.Some? then s.ctail.value >= get_local_tail(s, nodeId) else true)
+
+    // replica[nodeId] == fold the operations in the log up to version logicalLocalTail
+    //     (initial state + log 0 + log 1 + ... + log k)
+    //     (see state_at_version in NRSimple)
+    // && (forall nodeId | nodeId in s.replicas :: s.replicas[nodeId] == state_at_version(s.log, get_local_tail(s, nodeId)))
+
+
+    //&& forall rid :: rid in localReads :: localReads[rid].ctail <= ctail
+    && if s.ctail.Some? then
+      forall rid | rid in s.localReads ::
+        if s.localReads[rid].ReadonlyCtail? then
+          s.localReads[rid].ctail <= s.ctail.value
+        else if s.localReads[rid].ReadonlyReadyToRead? then
+          s.localReads[rid].ctail <= s.ctail.value
+        else
+          true
+      else
+        true
   }
 
   lemma InitImpliesInv(s: M)
@@ -368,6 +416,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     | ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId)
     | TransitionReadonlyReadyToRead_Step(rid: RequestId)
     | TransitionReadonlyDone_Step(rid: RequestId)
+    | UpdateCompletedTail_Step(nodeId: NodeId)
     | AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>)
 
 
@@ -381,6 +430,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       case TransitionReadonlyReadyToRead_Step(rid: RequestId) => TransitionReadonlyReadyToRead(m, m',rid)
       case TransitionReadonlyDone_Step(rid: RequestId) => TransitionReadonlyDone(m, m',rid)
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail(m, m', nodeId, request_ids)
+      case UpdateCompletedTail_Step(nodeId: NodeId) => UpdateCompletedTail(m, m',nodeId)
     }
   }
 
@@ -388,4 +438,155 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     exists step :: NextStep(m, m', op, step)
   }
 
+
+  /// invariance proofs
+  lemma Init_Implies_Inv(m: M)
+  requires Init(m)
+  ensures Inv(m)
+  {
+
+  }
+
+  lemma ReadonlyReadCtail_PreservesInv(m: M, m': M, rid: RequestId, nodeId: NodeId)
+    requires Inv(m)
+    requires ReadonlyReadCtail(m, m', rid, nodeId)
+    ensures Inv(m')
+  {
+
+  }
+
+  lemma TransitionReadonlyReadyToRead_PreservesInv(m: M, m': M, rid: RequestId)
+    requires Inv(m)
+    requires TransitionReadonlyReadyToRead(m, m',rid)
+    ensures Inv(m')
+  {
+
+  }
+
+  lemma TransitionReadonlyDone_PreservesInv(m: M, m': M, rid: RequestId)
+    requires Inv(m)
+    requires TransitionReadonlyDone(m, m',rid)
+    ensures Inv(m')
+  {
+
+  }
+
+  lemma AdvanceTail_PreservesInv(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
+    requires Inv(m)
+    requires AdvanceTail(m, m', nodeId, request_ids)
+    ensures Inv(m')
+  {
+
+  }
+
+  lemma ExecLoadLtail_PreservesInv(m: M, m': M, nodeId: NodeId)
+    requires Inv(m)
+    requires ExecLoadLtail(m, m', nodeId)
+    ensures Inv(m')
+  {
+
+  }
+
+
+  lemma ExecLoadGlobalTail_PreservesInv(m: M, m': M, nodeId: NodeId)
+    requires Inv(m)
+    requires ExecLoadGlobalTail(m, m', nodeId)
+    ensures Inv(m')
+  {
+
+  }
+
+  lemma ExecDispatch_PreservesInv(m: M, m': M, nodeId: NodeId)
+    requires Inv(m)
+    requires ExecDispatch(m, m',nodeId)
+    ensures Inv(m')
+  {
+
+  }
+
+  lemma UpdateCompletedTail_PreservesInv(m: M, m': M, nodeId: NodeId)
+    requires Inv(m)
+    requires UpdateCompletedTail(m, m',nodeId)
+    ensures Inv(m')
+  {
+
+  }
+
+  lemma GoToCombinerReady_PreservesInv(m: M, m': M, nodeId: NodeId)
+    requires Inv(m)
+    requires GoToCombinerReady(m, m', nodeId)
+    ensures Inv(m')
+  {
+
+  }
+
+  lemma NextStep_PreservesInv(m: M, m': M, op: nrifc.Op, step: Step)
+    requires Inv(m)
+    requires NextStep(m, m', op, step)
+    ensures Inv(m')
+  {
+    match step {
+      case GoToCombinerReady_Step(nodeId: NodeId) => GoToCombinerReady_PreservesInv(m, m', nodeId);
+      case ExecLoadLtail_Step(nodeId: NodeId) => ExecLoadLtail_PreservesInv(m, m', nodeId);
+      case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail_PreservesInv(m, m', nodeId);
+      case ExecDispatch_Step(nodeId: NodeId) => ExecDispatch_PreservesInv(m, m',nodeId);
+      case ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) =>  ReadonlyReadCtail_PreservesInv(m, m', rid, nodeId);
+      case TransitionReadonlyReadyToRead_Step(rid: RequestId) => TransitionReadonlyReadyToRead_PreservesInv(m, m',rid);
+      case TransitionReadonlyDone_Step(rid: RequestId) => TransitionReadonlyDone_PreservesInv(m, m',rid);
+      case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail_PreservesInv(m, m', nodeId, request_ids);
+      case UpdateCompletedTail_Step(nodeId: NodeId) =>  UpdateCompletedTail_PreservesInv(m, m', nodeId);
+    }
+  }
+
+  lemma Next_Implies_inv(m: M, m': M, op: nrifc.Op)
+  requires Inv(m)
+  requires Next(m, m', op)
+  ensures Inv(m')
+  {
+    var step :| NextStep(m, m', op, step);
+    NextStep_PreservesInv(m, m', op, step);
+  }
+
+
+  // import NRSimple
+  // include "NRSimple.i.dfy"
+
+  // // interpretation function
+  // function I(m: M) : NRSimple.Variables
+  // {
+  //   NRSimple.Variables(
+  //     // log: seq<nrifc.UpdateOp>,
+  //     // ctail: nat,
+  //     // readonly_reqs: map<RequestId, ReadReq>,
+  //     // update_reqs: map<RequestId, nrifc.UpdateOp>,
+  //     // update_resps: map<RequestId, UpdateResp>
+  //   )
+  // }
+
+  // // refinement
+  // lemma InfiniteLog_Refines_NRSimple_NextStep(m: M, m' : M, op: nrifc.Op, step: Step)
+  //   requires Inv(m)
+  //   requires NextStep(m, m', op, step)
+  //   requires Inv(m')
+  //   ensures NRSimple.Next(I(m), I(m'), op)
+  // {
+
+  // }
+
+  // lemma InfiniteLog_Refines_NRSimple_Next(m: M, m' : M,  op: nrifc.Op)
+  //   requires Inv(m)
+  //   requires Inv(m')
+  //   requires Next(m, m', op, step)
+  //   ensures NRSimple.Next(I(m), I(m'), op)
+  // {
+  //   var step :| NextStep(m, m', op, step);
+  //   InfiniteLog_Refines_NRSimple_NextStep(m, m', op, step);
+  // }
+
+  // lemma InfiniteLog_Refines_NRSimple_Init(m: M)
+  //   requires Init(m)
+  //   ensures NRSimple.init(I(m))
+  // {
+
+  // }
 }
