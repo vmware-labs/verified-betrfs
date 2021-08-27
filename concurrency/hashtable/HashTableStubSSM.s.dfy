@@ -307,6 +307,7 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
     && s.Variables?
     && TableInv(s.table)
     && QuantityInv(s)
+    && s.reqs.Keys !! s.resps.Keys
   }
 
   lemma InitImpliesInv(s: M)
@@ -792,17 +793,45 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
     }
   }
 
-  lemma InternalMonotonic(shard: M, shard': M, rest: M)
-  requires Inv(dot(shard, rest))
-  requires Internal(shard, shard')
-  ensures Internal(dot(shard, rest), dot(shard', rest))
+  lemma TransitionFailEquivalent(a: M, b: M, c: M)
+    requires Internal(a, b)
+    requires Inv(dot(a, c))
+    ensures dot(b, c).Variables?
   {
-    assume false;
+    assert forall i: Index :: a.table[i].Some? <==> b.table[i].Some?;
+    assert nonoverlapping(a.table, c.table) <==> nonoverlapping(b.table, c.table);
+    var step :| NextStep(a, b, step);
+    var rid := step.rid;
+    assert rid !in c.resps;
+  }
+
+  // lemma RemoveMonotonic(a: M, b: M, c: M, step: Step)
+  //   requires NextStep(a, b, step)
+  //   requires step.RemoveStep?
+  //   requires Inv(dot(a, c))
+  //   ensures NextStep(dot(a, c), dot(b, c), step)
+  // {
+  //   var RemoveStep(rid, input, start, end) := step;
+  //   var a' := dot(a, c);
+  //   assert a.RemoveEnable(step);
+  //   var r := Partial(start, end);
+  //   assert ValidTidyRange(a.table, r, input.key);
+  //   assert ValidTidyRange(a'.table, r, input.key);
+  // }
+
+  lemma TransitionMonotonic(a: M, b: M, c: M)
+  requires Internal(a, b)
+  requires Inv(dot(a, c))
+  ensures Internal(dot(a, c), dot(b, c))
+  {
+    TransitionFailEquivalent(a, b, c);
+    var step :| NextStep(a, b, step);
+    assert NextStep(dot(a, c), dot(b, c), step);
   }
 
   lemma InternalPreservesInv(shard: M, shard': M, rest: M)
   {
-    InternalMonotonic(shard, shard', rest);
+    TransitionMonotonic(shard, shard', rest);
     NextStepPreservesInv(dot(shard, rest), dot(shard', rest));
   }
 

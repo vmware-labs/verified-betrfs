@@ -162,6 +162,7 @@ module CircularTable {
     && (forall i: Index | r.RightShift1().Contains(i)
       :: SlotShouldTidy(table[i], i))
     // leave end's next
+    && table[NextIndex(r.end)].Some?
     && !SlotShouldTidy(table[NextIndex(r.end)], NextIndex(r.end))
   }
 

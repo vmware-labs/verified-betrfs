@@ -266,7 +266,7 @@ module HashTableRefiment refines
         assert exists shard, shard', rest :: A.InternalNext(s, s', shard, shard', rest);
         var shard, shard', rest :| A.InternalNext(s, s', shard, shard', rest);
         SSM.InternalPreservesInv(shard, shard', rest);
-        SSM.InternalMonotonic(shard, shard', rest);
+        SSM.TransitionMonotonic(shard, shard', rest);
         InternalRefinesMap(s, s');
       }
   }
