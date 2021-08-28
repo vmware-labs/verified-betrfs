@@ -58,58 +58,18 @@ module Impl {
       :: row_mutexes[i].inv == ((row: Row) => row.Inv(loc, i)))
   }
 
-  linear datatype IVariables = IVariables(
-    linear row_mutexes: RowMutexTable,
-    linear cap_mutex: Mutex<Cap>)
-  {
-    shared method query(rid: nat, input: MapIfc.Input)
-      returns (output: MapIfc.Output)
-
-      requires old_self.Inv()
-      requires old_self.HasNoRowHandle()
-      requires input.QueryInput?
-      requires old_self.token.val == SSM.Ticket(rid, input)
-
-      ensures self.Inv()
-      ensures self.token.val == SSM.Stub(rid, output)
-    {
-      var v := Variables(this, create other toeksn);
-
-      var query_key := input.key;
-
-      var entries, found, p_range;
-      found, entries, p_range := inout self.probe(query_key);
-
-      var slot_idx := p_range.GetLast();
-
-      if found {
-        var step := SSM.QueryFoundStep(rid, input, slot_idx);
-        var expected := self.token.val.QueryFound(step);
-        assert SSM.NextStep(self.token.val, expected, step);
-        TST.inout_update_next(inout self.token, expected);
-        output := MapIfc.QueryOutput(Found(entries[ |entries| - 1 ].value));
-      } else {
-        var step := SSM.QueryNotFoundStep(rid, input, slot_idx);
-        var expected := self.token.val.QueryNotFound(step);
-        assert SSM.NextStep(self.token.val, expected, step);
-        TST.inout_update_next(inout self.token, expected);
-        output := MapIfc.QueryOutput(NotFound);
-      }
-
-      inout self.releaseRows(entries, p_range);
-    }
-
-  }
-
   datatype CapUpdate =
     | Increment
     | Decrement
     | Unchanged
 
+  linear datatype IVariables = IVariables(
+    row_mutexes: RowMutexTable,
+    cap_mutex: Mutex<Cap>)
+
   linear datatype Variables = Variables(
     glinear token: Token,
-    glinear handles: glseq<MutexHandle<Row>>,
-    shared iv: IVariables)
+    glinear handles: glseq<MutexHandle<Row>>)
   {
     predicate HasRowHandle(index: Index)
       requires |handles| == FixedSize()
@@ -123,7 +83,7 @@ module Impl {
       forall i: Index :: !HasRowHandle(i)
     }
 
-    predicate Inv()
+    predicate Inv(iv: IVariables)
     {
       && token.val.Variables?
 
@@ -141,9 +101,9 @@ module Impl {
       && (iv.cap_mutex.inv == ((cap: Cap) => cap.Inv(token.loc)))
     }
 
-    predicate RangeOwnershipInv(entries: seq<Entry>, range: Range)
+    predicate RangeOwnershipInv(iv: IVariables, entries: seq<Entry>, range: Range)
     {
-      && Inv()
+      && Inv(iv)
       && range.Partial?
       && (forall i: Index :: (range.Contains(i) <==> HasRowHandle(i)))
       && UnwrapRange(token.val.table, range) == entries
@@ -159,15 +119,15 @@ module Impl {
       && this == old_var.(token := token).(handles := handles)
     }
 
-    linear inout method acquireRow(old_entries: seq<Entry>, old_range: Range)
+    linear inout method acquireRow(shared iv: IVariables, old_entries: seq<Entry>, old_range: Range)
       returns (entries: seq<Entry>, entry: Entry, range: Range)
 
-      requires old_self.RangeOwnershipInv(old_entries, old_range)
+      requires old_self.RangeOwnershipInv(iv, old_entries, old_range)
       requires RangeFull(old_self.token.val.table, old_range)
 
       ensures entries == old_entries + [entry]
       ensures range == old_range.RightExtend1()
-      ensures self.RangeOwnershipInv(entries, range)
+      ensures self.RangeOwnershipInv(iv, entries, range)
       ensures self.token.val.table ==
         old_self.token.val.table[old_range.end := Some(entry)] 
       ensures self.token.loc == old_self.token.loc
@@ -178,7 +138,7 @@ module Impl {
       assert !old_range.Contains(index);
   
       linear var row; glinear var handle: MutexHandle<Row>;
-      row, handle := self.iv.row_mutexes[index].acquire();
+      row, handle := iv.row_mutexes[index].acquire();
   
       linear var Row(out_entry, row_token) := row;
       entry := out_entry;
@@ -214,14 +174,14 @@ module Impl {
       range := old_range.RightExtend1();
     }
 
-    linear inout method releaseRow(entries: seq<Entry>, old_range: Range)
+    linear inout method releaseRow(shared iv: IVariables, entries: seq<Entry>, old_range: Range)
       returns (range: Range)
 
-      requires old_self.RangeOwnershipInv(entries, old_range)
+      requires old_self.RangeOwnershipInv(iv, entries, old_range)
       requires old_range.HasSome()
 
       ensures range == old_range.RightShrink1()
-      ensures self.RangeOwnershipInv(entries[..|entries| -1 ], range)
+      ensures self.RangeOwnershipInv(iv, entries[..|entries| -1 ], range)
       ensures self.RowOnlyUpdate(old_self)
     {
       var index := old_range.GetLast();
@@ -235,7 +195,7 @@ module Impl {
       mutex_token := T.inout_split(inout self.token, left, right);
 
       glinear var handle := lseq_take_inout(inout self.handles, index);
-      self.iv.row_mutexes[index].release(Row(entry, mutex_token), handle);
+      iv.row_mutexes[index].release(Row(entry, mutex_token), handle);
       range := old_range.RightShrink1();
 
       RangeEquivalentUnwrap(old_self.token.val.table,
@@ -257,24 +217,24 @@ module Impl {
       && this == old_var.(token := token)
     }
 
-    linear inout method acquireCapacity()
+    linear inout method acquireCapacity(shared iv: IVariables)
       decreases *
 
-      requires old_self.Inv()
+      requires old_self.Inv(iv)
 
-      ensures self.Inv()
+      ensures self.Inv(iv)
       ensures self.CapOnlyUpdate(old_self, Increment)
     {
       var continue := true;
 
       while continue
-        invariant self.Inv()
+        invariant self.Inv(iv)
         invariant continue ==> self.CapOnlyUpdate(old_self, Unchanged)
         invariant !continue ==> self.CapOnlyUpdate(old_self, Increment)
         decreases *
       {
         linear var cap; glinear var handle: MutexHandle<Cap>;
-        cap, handle := self.iv.cap_mutex.acquire();
+        cap, handle := iv.cap_mutex.acquire();
 
         linear var Cap(count, cap_token) := cap;
 
@@ -288,19 +248,19 @@ module Impl {
           continue := false;
         }
 
-        self.iv.cap_mutex.release(Cap(count, cap_token), handle);
+        iv.cap_mutex.release(Cap(count, cap_token), handle);
       }
     }
 
-    linear inout method releaseCapacity()
-      requires old_self.Inv()
+    linear inout method releaseCapacity(shared iv: IVariables)
+      requires old_self.Inv(iv)
       requires old_self.token.val.insert_capacity == 1
 
-      ensures self.Inv()
+      ensures self.Inv(iv)
       ensures self.CapOnlyUpdate(old_self, Decrement)
     {
       linear var cap; glinear var handle: MutexHandle<Cap>;
-      cap, handle := self.iv.cap_mutex.acquire();
+      cap, handle := iv.cap_mutex.acquire();
 
       linear var Cap(count, cap_token) := cap;
 
@@ -311,13 +271,13 @@ module Impl {
       glinear var temp_token := T.inout_split(inout self.token, left, right);
       T.inout_join(inout cap_token, temp_token);
 
-      self.iv.cap_mutex.release(Cap(count, cap_token), handle);
+      iv.cap_mutex.release(Cap(count, cap_token), handle);
     }
 
-    linear inout method releaseRows(entries: seq<Entry>, range: Range)
-      requires old_self.RangeOwnershipInv(entries, range)
+    linear inout method releaseRows(shared iv: IVariables, entries: seq<Entry>, range: Range)
+      requires old_self.RangeOwnershipInv(iv, entries, range)
 
-      ensures self.Inv()
+      ensures self.Inv(iv)
       ensures self.HasNoRowHandle();
       ensures self.RowOnlyUpdate(old_self)
     {
@@ -327,28 +287,28 @@ module Impl {
 
       while range.HasSome()
         invariant 0 <= index <= |entries| 
-        invariant self.RangeOwnershipInv(entries[..index], range)
+        invariant self.RangeOwnershipInv(iv, entries[..index], range)
         invariant self.RowOnlyUpdate(old_self)
         decreases |range|
       {
         var slot_idx := range.GetLast();
 
-        range := inout self.releaseRow(entries[..index], range);
+        range := inout self.releaseRow(iv, entries[..index], range);
         index := index - 1;
       }
     }
 
-    linear inout method probe(probe_key: Key)
+    linear inout method probe(shared iv: IVariables, probe_key: Key)
       returns (found: bool,
         entries: seq<Entry>,
         range: Range)
-      requires old_self.Inv()
+      requires old_self.Inv(iv)
       requires old_self.HasNoRowHandle()
 
       ensures range.Partial?
       ensures range.HasSome()
 
-      ensures self.RangeOwnershipInv(entries, range)
+      ensures self.RangeOwnershipInv(iv, entries, range)
       ensures found ==> KeyPresentProbeRange(self.token.val.table, probe_key, range.RightShrink1())
       ensures !found ==> KeyAbsentProbeRange(self.token.val.table, probe_key, range.RightShrink1())
       ensures self.RowOnlyUpdate(old_self)
@@ -360,14 +320,14 @@ module Impl {
 
       while true
         invariant range.Partial? && range.start == p_hash
-        invariant self.RangeOwnershipInv(entries, range)
+        invariant self.RangeOwnershipInv(iv, entries, range)
         invariant ValidPartialProbeRange(self.token.val.table, probe_key, range)
         invariant self.RowOnlyUpdate(old_self)
         decreases FixedSize() - |range|
       {
         var slot_idx := range.end;
         var entry;
-        entries, entry, range := inout self.acquireRow(entries, range);
+        entries, entry, range := inout self.acquireRow(iv, entries, range);
    
         match entry {
           case Empty => {
@@ -386,21 +346,21 @@ module Impl {
       }
     }
 
-    linear inout method query(rid: nat, input: MapIfc.Input)
+    linear inout method query(shared iv: IVariables, rid: nat, input: MapIfc.Input)
       returns (output: MapIfc.Output)
 
-      requires old_self.Inv()
+      requires old_self.Inv(iv)
       requires old_self.HasNoRowHandle()
       requires input.QueryInput?
       requires old_self.token.val == SSM.Ticket(rid, input)
 
-      ensures self.Inv()
+      ensures self.Inv(iv)
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var query_key := input.key;
 
       var entries, found, p_range;
-      found, entries, p_range := inout self.probe(query_key);
+      found, entries, p_range := inout self.probe(iv, query_key);
 
       var slot_idx := p_range.GetLast();
 
@@ -418,15 +378,16 @@ module Impl {
         output := MapIfc.QueryOutput(NotFound);
       }
 
-      inout self.releaseRows(entries, p_range);
+      inout self.releaseRows(iv, entries, p_range);
     }
 
     linear inout method insertOverwrite(
+      shared iv: IVariables,
       rid: nat, input: MapIfc.Input,
       entries: seq<Entry>, range: Range)
       returns (output: MapIfc.Output)
 
-      requires old_self.RangeOwnershipInv(entries, range)
+      requires old_self.RangeOwnershipInv(iv, entries, range)
 
       requires input.InsertInput?
       requires old_self.token.val == SSM.Ticket(rid, input).(table := old_self.token.val.table)
@@ -435,7 +396,7 @@ module Impl {
       requires range.Partial?
       requires KeyPresentProbeRange(old_self.token.val.table, input.key, range.RightShrink1())
 
-      ensures self.Inv()
+      ensures self.Inv(iv)
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var probe_key := input.key;
@@ -461,15 +422,16 @@ module Impl {
       }
 
       output := MapIfc.InsertOutput(true);
-      inout self.releaseRows(new_entries, range);
+      inout self.releaseRows(iv, new_entries, range);
     }
 
     linear inout method insertNotFound(
+      shared iv: IVariables,
       rid: nat, input: MapIfc.Input,
       entries: seq<Entry>, range: Range)
       returns (output: MapIfc.Output)
 
-      requires old_self.RangeOwnershipInv(entries, range)
+      requires old_self.RangeOwnershipInv(iv, entries, range)
 
       requires input.InsertInput?
       requires old_self.token.val == SSM.Ticket(rid, input).(table := old_self.token.val.table).(insert_capacity := 1)
@@ -478,7 +440,7 @@ module Impl {
       requires range.Partial?
       requires KeyAbsentProbeRange(old_self.token.val.table, input.key, range.RightShrink1())
 
-      ensures self.Inv()
+      ensures self.Inv(iv)
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var probe_key := input.key;
@@ -493,14 +455,14 @@ module Impl {
       if entry.Full? {
         while true
           invariant range.Partial? && range.start == h
-          invariant self.RangeOwnershipInv(entries, range)
+          invariant self.RangeOwnershipInv(iv, entries, range)
           invariant KeyAbsentProbeRange(self.token.val.table, probe_key, probe_range)
           invariant RangeFull(self.token.val.table, range)
           invariant self.RowOnlyUpdate(old_self)
           decreases FixedSize() - |range|
         {
           end := range.end;
-          entries, entry, range := inout self.acquireRow(entries, range);
+          entries, entry, range := inout self.acquireRow(iv, entries, range);
 
           if entry.Empty? {
             // assert SlotEmpty(out_sv.table[end]);
@@ -526,41 +488,42 @@ module Impl {
       var new_entries := entries[..probe_len] + [inserted] + entries[probe_len..|entries| - 1];
 
       assert UnwrapRange(t2, range) == new_entries;
-      inout self.releaseRows(new_entries, range);
+      inout self.releaseRows(iv, new_entries, range);
       output := MapIfc.InsertOutput(true);
     }
 
-    linear inout method insert(rid: nat, input: MapIfc.Input)
+    linear inout method insert(shared iv: IVariables, rid: nat, input: MapIfc.Input)
       returns (output: MapIfc.Output)
       decreases *
 
-      requires old_self.Inv()
+      requires old_self.Inv(iv)
       requires old_self.HasNoRowHandle()
       requires input.InsertInput?
       requires old_self.token.val == SSM.Ticket(rid, input)
 
-      ensures self.Inv()
+      ensures self.Inv(iv)
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var insert_key, insert_value := input.key, input.value;
 
       var entries, found, p_range;
-      found, entries, p_range := inout self.probe(insert_key);
+      found, entries, p_range := inout self.probe(iv, insert_key);
 
       if found {
-        output := inout self.insertOverwrite(rid, input, entries, p_range);
+        output := inout self.insertOverwrite(iv, rid, input, entries, p_range);
       } else {
-        inout self.acquireCapacity();
-        output := inout self.insertNotFound(rid, input, entries, p_range);
+        inout self.acquireCapacity(iv);
+        output := inout self.insertNotFound(iv, rid, input, entries, p_range);
       }
     }
 
     linear inout method removeFound(
+      shared iv: IVariables,
       rid: nat, input: MapIfc.Input,
       entries: seq<Entry>, range: Range)
       returns (output: MapIfc.Output)
 
-      requires old_self.RangeOwnershipInv(entries, range)
+      requires old_self.RangeOwnershipInv(iv, entries, range)
 
       requires input.RemoveInput?
       requires old_self.token.val == SSM.Ticket(rid, input).(table := old_self.token.val.table)
@@ -569,7 +532,7 @@ module Impl {
       requires range.Partial?
       requires KeyPresentProbeRange(old_self.token.val.table, input.key, range.RightShrink1())
 
-      ensures self.Inv()
+      ensures self.Inv(iv)
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var probe_key := input.key;
@@ -582,7 +545,7 @@ module Impl {
 
       while true
         invariant range.Partial? && range.start == h
-        invariant self.RangeOwnershipInv(entries, range)
+        invariant self.RangeOwnershipInv(iv, entries, range)
         invariant KeyPresentProbeRange(self.token.val.table, probe_key, probe_range)
         invariant RangeFull(self.token.val.table, range)
         invariant forall i: Index | Partial(NextIndex(start), range.end).Contains(i) :: SlotShouldTidy(self.token.val.table[i], i);
@@ -590,7 +553,7 @@ module Impl {
         decreases FixedSize() - |range|
       {
         end := range.end;
-        entries, entry, range := inout self.acquireRow(entries, range);
+        entries, entry, range := inout self.acquireRow(iv, entries, range);
 
         if entry.Empty? || !entry.ShouldTidy(end) {
           break;
@@ -616,56 +579,56 @@ module Impl {
       var probe_len := WrappedDistance(range.start, start);
       var new_entries := entries[..probe_len] + entries[probe_len+1..len - 1] + [Empty] + [entries[len - 1]];
   
-      inout self.releaseRows(new_entries, range);
-      inout self.releaseCapacity();
+      inout self.releaseRows(iv, new_entries, range);
+      inout self.releaseCapacity(iv);
       output := MapIfc.RemoveOutput(true);
     }
 
-    linear inout method remove(rid: nat, input: MapIfc.Input)
+    linear inout method remove(shared iv: IVariables, rid: nat, input: MapIfc.Input)
       returns (output: MapIfc.Output)
 
-      requires old_self.Inv()
+      requires old_self.Inv(iv)
       requires old_self.HasNoRowHandle()
       requires input.RemoveInput?
       requires old_self.token.val == SSM.Ticket(rid, input)
 
-      ensures self.Inv()
+      ensures self.Inv(iv)
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var remove_key := input.key;
 
       var entries, found, p_range;
-      found, entries, p_range := inout self.probe(remove_key);
+      found, entries, p_range := inout self.probe(iv, remove_key);
 
       if found {
-        output := inout self.removeFound(rid, input, entries, p_range);
+        output := inout self.removeFound(iv, rid, input, entries, p_range);
       } else {
         var slot_idx := p_range.GetLast();
         var step := SSM.RemoveNotFoundStep(rid, input, slot_idx);
         var expected := self.token.val.RemoveNotFound(step);
         assert SSM.NextStep(self.token.val, expected, step);
         TST.inout_update_next(inout self.token, expected);
-        inout self.releaseRows(entries, p_range);
+        inout self.releaseRows(iv, entries, p_range);
         output := MapIfc.RemoveOutput(false);
       }
     }
 
-    linear inout method call(rid: nat, input: MapIfc.Input)
+    linear inout method call(shared iv: IVariables, rid: nat, input: MapIfc.Input)
       returns (output: MapIfc.Output)
       decreases *
 
-      requires old_self.Inv()
+      requires old_self.Inv(iv)
       requires old_self.HasNoRowHandle()
       requires old_self.token.val == SSM.Ticket(rid, input)
-      ensures self.Inv()
+      ensures self.Inv(iv)
       ensures self.token.val == SSM.Stub(rid, output)
     {
       if input.QueryInput? {
-        output := inout self.query(rid, input);
+        output := inout self.query(iv, rid, input);
       } else if input.InsertInput? {
-        output := inout self.insert(rid, input);
+        output := inout self.insert(iv, rid, input);
       } else if input.RemoveInput? {
-        output := inout self.remove(rid, input);
+        output := inout self.remove(iv, rid, input);
       }
     }
   }
@@ -692,10 +655,10 @@ module Impl {
   }
 
   method init(glinear in_token: Token)
-  returns (linear v: Variables)
+  returns (linear v: Variables, linear iv: IVariables)
     requires in_token.val.Variables?
     requires SSM.Init(in_token.val)
-    ensures v.Inv()
+    ensures v.Inv(iv)
     ensures v.HasNoRowHandle()
     ensures v.token.val == SSM.unit()
   {
@@ -733,8 +696,8 @@ module Impl {
 
     v := Variables.Variables(
       token,
-      lseq_alloc<MutexHandle<Row>>(FixedSize()),
-      IVariables(row_mutexes, cap_mutex)
-    );
+      lseq_alloc<MutexHandle<Row>>(FixedSize()));
+
+    iv := IVariables(row_mutexes, cap_mutex);
   }
 }
