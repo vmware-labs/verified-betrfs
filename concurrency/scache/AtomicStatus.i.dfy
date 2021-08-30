@@ -28,6 +28,7 @@ module AtomicStatusImpl {
   const flag_unmapped : uint8 := 8;
   const flag_reading : uint8 := 16;
   const flag_clean : uint8 := 32;
+  const flag_claim : uint8 := 64;
 
   const flag_writeback_clean : uint8 := 33;
   const flag_exc_clean : uint8 := 34;
@@ -48,6 +49,22 @@ module AtomicStatusImpl {
   const flag_accessed_reading_clean : uint8 := 52;
   const flag_exc_reading_clean : uint8 := 50;
   const flag_exc_accessed_reading_clean : uint8 := 54;
+
+  const flag_exc_clean_claim : uint8 := 98;
+  const flag_exc_accessed_clean_claim : uint8 := 102;
+  const flag_exc_claim : uint8 := 66;
+  const flag_exc_accessed_claim : uint8 := 70;
+  const flag_accessed_claim : uint8 := 68;
+  const flag_accessed_clean_claim : uint8 := 100;
+  const flag_clean_claim : uint8 := 96;
+  const flag_writeback_claim : uint8 := 65;
+  const flag_writeback_accessed_claim : uint8 := 69;
+  const flag_writeback_clean_claim : uint8 := 97;
+  const flag_writeback_accessed_clean_claim : uint8 := 101;
+  const flag_writeback_exc_claim : uint8 := 67;
+  const flag_writeback_exc_accessed_claim : uint8 := 71;
+  const flag_writeback_exc_clean_claim : uint8 := 99;
+  const flag_writeback_exc_accessed_clean_claim : uint8 := 103;
 
   glinear datatype G = G(
     glinear rwlock: Rw.Token,
@@ -73,12 +90,12 @@ module AtomicStatusImpl {
     && (g.status.glNone? ==>
         && (
         || v == flag_unmapped
-        || v == flag_exc
-        || v == flag_exc_accessed
+        || v == flag_exc_claim
+        || v == flag_exc_accessed_claim
         || v == flag_exc_reading
         || v == flag_exc_accessed_reading
-        || v == flag_exc_clean
-        || v == flag_exc_accessed_clean
+        || v == flag_exc_clean_claim
+        || v == flag_exc_accessed_clean_claim
         || v == flag_exc_reading_clean
         || v == flag_exc_accessed_reading_clean
         || v == flag_reading_clean
@@ -87,8 +104,8 @@ module AtomicStatusImpl {
         && (v == flag_unmapped ==>
           && g.rwlock.val.central.stored_value.CacheEmptyHandle?
         )
-        && (v == flag_exc || v == flag_exc_accessed || v == flag_exc_clean
-            || v == flag_exc_accessed_clean ==>
+        && (v == flag_exc_claim || v == flag_exc_accessed_claim || v == flag_exc_clean_claim
+            || v == flag_exc_accessed_clean_claim ==>
           && g.rwlock.val.central.stored_value.CacheEntryHandle?
         )
     )
@@ -115,24 +132,36 @@ module AtomicStatusImpl {
       || v == flag_writeback_accessed
     ))
     && (flag == RwLock.ExcLock_Clean ==> (
-      || v == flag_exc_clean
-      || v == flag_exc_accessed_clean
+      || v == flag_exc_clean_claim
+      || v == flag_exc_accessed_clean_claim
     ))
     && (flag == RwLock.ExcLock_Dirty ==> (
-      || v == flag_exc
-      || v == flag_exc_accessed
+      || v == flag_exc_claim
+      || v == flag_exc_accessed_claim
+    ))
+    && (flag == RwLock.Claimed ==> (
+      || v == flag_claim
+      || v == flag_accessed_claim
+      || v == flag_clean_claim
+      || v == flag_accessed_clean_claim
+    ))
+    && (flag == RwLock.Writeback_Claimed ==> (
+      || v == flag_writeback_claim
+      || v == flag_writeback_accessed_claim
+      || v == flag_writeback_clean_claim
+      || v == flag_writeback_accessed_clean_claim
     ))
     && (flag == RwLock.PendingExcLock ==> (
-      || v == flag_exc
-      || v == flag_exc_accessed
-      || v == flag_exc_clean
-      || v == flag_exc_accessed_clean
+      || v == flag_exc_claim
+      || v == flag_exc_accessed_claim
+      || v == flag_exc_clean_claim
+      || v == flag_exc_accessed_clean_claim
     ))
     && (flag == RwLock.Writeback_PendingExcLock ==> (
-      || v == flag_writeback_exc
-      || v == flag_writeback_exc_accessed
-      || v == flag_writeback_exc_clean
-      || v == flag_writeback_exc_accessed_clean
+      || v == flag_writeback_exc_claim
+      || v == flag_writeback_exc_accessed_claim
+      || v == flag_writeback_exc_clean_claim
+      || v == flag_writeback_exc_accessed_clean_claim
     ))
     && (flag == RwLock.Unmapped ==> v == flag_unmapped)
     && (flag == RwLock.Reading ==>
@@ -609,7 +638,7 @@ module AtomicStatusImpl {
         && b.is_handle(key)
     {
       atomic_block var did_set :=
-          execute_atomic_compare_and_set_strong(atomic, flag_clean, flag_exc_clean)
+          execute_atomic_compare_and_set_strong(atomic, flag_clean, flag_exc_clean_claim)
       {
         ghost_acquire old_g;
         glinear var new_g;
@@ -623,7 +652,8 @@ module AtomicStatusImpl {
           glinear var m0;
 
           var fl := rwlock.val.central.flag;
-          rwlock, m0 := Rw.perform_ThreadlessExc(rwlock);
+          rwlock, m0 := Rw.perform_ThreadlessClaim(rwlock);
+          rwlock, m0 := Rw.perform_ClaimToPending(rwlock, m0);
 
           //m', rwlock := perform_SharedToExc(
           //    key, t, RwLock.Available, m', rwlock);
@@ -686,7 +716,7 @@ module AtomicStatusImpl {
         -1, r.val.exc.visited, true, r.val.exc.b))
     requires status == CacheResources.CacheStatus(key.cache_idx, Clean)
     {
-      atomic_block var orig_value := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_exc) {
+      atomic_block var orig_value := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_exc - flag_claim) {
         ghost_acquire old_g;
         glinear var new_g;
         glinear var G(rwlock, empty_status) := old_g;
