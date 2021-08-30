@@ -13,7 +13,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CIO = CacheIO(aio)
   import CacheResources
   import RwLock
-  import T = RwLockToken
+  import opened T = RwLockToken
   import opened CT = CacheTypes(aio)
   import opened CacheHandle
   import opened CacheStatusType
@@ -75,6 +75,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && 0 <= cache_idx as int < CACHE_SIZE
       && so.is_handle(cache.key(cache_idx as int))
       && so.t == t
+      && so.token.loc == cache.status[cache_idx].rwlock_loc
     }
 
     predicate for_page_handle(ph: PageHandle)
@@ -708,5 +709,26 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     handle_out := unwrap_value(handle_opt);
 
     ph := PageHandle(cache.data[cache_idx], cache_idx as uint64);
+  }
+
+  method release_read_lock_disk_page(
+      shared cache: Cache,
+      linear inout localState: LocalState,
+      ph: PageHandle,
+      ghost disk_idx: uint64,
+      glinear handle: ReadonlyPageHandle)
+  returns (glinear client: Client)
+  requires cache.Inv()
+  requires old_localState.WF()
+  requires handle.is_disk_page_handle(cache, old_localState.t as int, disk_idx as int)
+  requires handle.for_page_handle(ph)
+  ensures localState == old_localState
+  {
+    glinear var ReadonlyPageHandle(cache_idx, so) := handle;
+    glinear var SharedObtainedToken(t, b, token) := so;
+    client := dec_refcount_for_shared_obtained(
+          cache.read_refcounts[localState.t][ph.cache_idx],
+          localState.t as nat,
+          b, token);
   }
 }
