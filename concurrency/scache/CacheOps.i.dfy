@@ -774,5 +774,21 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires localState.WF()
   requires handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
   requires handle.for_page_handle(ph)
+  ensures !success ==> claim_handle.glNone?
+  ensures !success ==> unclaim_handle == glSome(handle)
+  {
+    glinear var ReadonlyPageHandle(cache_idx, so) := handle;
+    glinear var SharedObtainedToken(t, b, token) := so;
+    glinear var token';
+    success, token' := cache.status[ph.cache_idx].try_set_claim(token, RwLock.SharedObtained(t, b));
 
+    var ghosty := true;
+    if success {
+      unclaim_handle := glNone;
+      claim_handle := glSome(ClaimPageHandle(cache_idx, token'));
+    } else {
+      claim_handle := glNone;
+      unclaim_handle := glSome(ReadonlyPageHandle(cache_idx, SharedObtainedToken(t, b, token')));
+    }
+  }
 }
