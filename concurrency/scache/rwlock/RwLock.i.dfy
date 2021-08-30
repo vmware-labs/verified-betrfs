@@ -899,6 +899,8 @@ module RwLock refines Rw {
     && m.central.CentralState?
     && (m.central.flag == Available
         || m.central.flag == Writeback
+        || m.central.flag == Claimed
+        || m.central.flag == Writeback_Claimed
         || m.central.flag == Reading)
     && m == dot(
       CentralHandle(m.central),
@@ -1061,6 +1063,42 @@ module RwLock refines Rw {
     ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
     {
       assert dot(m', p).sharedState == dot(m, p).sharedState;
+    }
+  }
+
+  predicate ClaimToShared(m: M, m': M)
+  {
+    && m.M?
+    && m.central.CentralState?
+    && m.exc.ExcClaim?
+    && m.exc.t != -1
+
+    && m == dot(
+      CentralHandle(m.central),
+      ExcHandle(m.exc)
+    )
+
+    && m' == dot(
+      CentralHandle(m.central.(flag := 
+          if m.central.flag == Writeback_Claimed then Writeback else Available)),
+      SharedHandle(SharedObtained(m.exc.t, m.exc.b))
+    )
+  }
+
+  lemma ClaimToShared_Preserves(m: M, m': M)
+  requires ClaimToShared(m, m')
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
+    {
+      SumFilterSimp<SharedState>();
+
+      var ss := SharedObtained(m.exc.t, m.exc.b);
+      assert dot(m', p).refCounts == dot(m, p).refCounts;
+      assert forall b | b != ss :: dot(m', p).sharedState[b] == dot(m, p).sharedState[b];
+      assert dot(m', p).sharedState[ss] == dot(m, p).sharedState[ss] + 1;
+      assert CountAllRefs(dot(m', p), ss.t) == CountAllRefs(dot(m, p), ss.t);
     }
   }
 }
@@ -1236,10 +1274,16 @@ module RwLockToken {
   requires var m := c.val;
     && m.M?
     && m.central.CentralState?
-    && (m.central.flag == Available || m.central.flag == Writeback)
+    && m.central.flag != Claimed
+    && m.central.flag != Writeback_Claimed
+    && m.central.flag != Writeback_PendingExcLock
+    && m.central.flag != PendingExcLock
+    && m.central.flag != ExcLock_Clean
+    && m.central.flag != ExcLock_Dirty
     && m == CentralHandle(m.central)
   requires handle.val == SharedHandle(ss)
   requires c.loc == handle.loc
+  ensures (c.val.central.flag == Available || c.val.central.flag == Writeback)
   ensures c'.loc == handle'.loc == c.loc
   ensures c'.val == CentralHandle(c.val.central.(flag := 
           if c.val.central.flag == Available then Claimed else Writeback_Claimed))
@@ -1248,8 +1292,40 @@ module RwLockToken {
     var a := CentralHandle(c.val.central.(flag := 
           if c.val.central.flag == Available then Claimed else Writeback_Claimed));
     var b := ExcHandle(ExcClaim(ss.t, ss.b));
+    c' := c;
+    handle' := handle;
+    var rest := T.obtain_invariant_2(inout c', inout handle');
     SharedToClaim_Preserves(dot(c.val, handle.val), dot(a, b), ss);
-    c', handle' := T.internal_transition_2_2(c, handle, a, b);
+    c', handle' := T.internal_transition_2_2(c', handle', a, b);
+  }
+
+  glinear method perform_ClaimToShared(glinear c: Token, glinear handle: Token)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.M?
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.M?
+    && m.exc.ExcClaim?
+    && m.exc.t != -1
+    && m == ExcHandle(m.exc)
+  requires c.loc == handle.loc
+  ensures c.val.central.flag == Writeback_Claimed
+       || c.val.central.flag == Claimed
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == CentralHandle(c.val.central.(flag := 
+          if c.val.central.flag == Writeback_Claimed then Writeback else Available))
+  ensures handle'.val == SharedHandle(SharedObtained(handle.val.exc.t, handle.val.exc.b))
+  {
+    var a := CentralHandle(c.val.central.(flag := 
+          if c.val.central.flag == Writeback_Claimed then Writeback else Available));
+    var b := SharedHandle(SharedObtained(handle.val.exc.t, handle.val.exc.b));
+    c' := c;
+    handle' := handle;
+    var rest := T.obtain_invariant_2(inout c', inout handle');
+    ClaimToShared_Preserves(dot(c.val, handle.val), dot(a, b));
+    c', handle' := T.internal_transition_2_2(c', handle', a, b);
   }
 
   glinear method perform_ClaimToPending(glinear c: Token, glinear handle: Token)
@@ -1495,6 +1571,8 @@ module RwLockToken {
     && m.central.CentralState?
     && (m.central.flag == Available
         || m.central.flag == Writeback
+        || m.central.flag == Claimed
+        || m.central.flag == Writeback_Claimed
         || m.central.flag == Reading)
     && m == CentralHandle(m.central)
   requires handle.val == SharedHandle(SharedPending(t))
@@ -1604,7 +1682,6 @@ module RwLockToken {
     var rest := T.obtain_invariant_2(inout c', inout handle');
     c', handle' := T.internal_transition_2_2(c', handle', a, b);
   }
-
 
   glinear method perform_Withdraw_TakeExcLockFinish(glinear handle: Token)
   returns (glinear handle': Token, glinear b': Handle)

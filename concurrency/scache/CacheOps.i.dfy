@@ -85,6 +85,34 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
+  glinear datatype ClaimPageHandle = ClaimPageHandle(
+    ghost cache_idx: int,
+    //ptr: Ptr,
+    glinear eo: T.Token
+  )
+  {
+    predicate is_disk_page_handle(cache: Cache, t: int, disk_idx: int)
+    requires cache.Inv()
+    {
+      && eo.val.M?
+      && eo.val.exc.ExcClaim?
+      && eo.val.exc.b.CacheEntryHandle?
+      && eo.val.exc.b.cache_entry.disk_idx == disk_idx
+      && 0 <= cache_idx as int < CACHE_SIZE
+      && eo.val.exc.b.is_handle(cache.key(cache_idx as int))
+      && eo.val.exc.t == t
+      && eo.loc == cache.status[cache_idx].rwlock_loc
+    }
+
+    predicate for_page_handle(ph: PageHandle)
+    {
+      && eo.val.M?
+      && eo.val.exc.ExcClaim?
+      && eo.val.exc.b.data.ptr == ph.ptr
+      && cache_idx == ph.cache_idx as int
+    }
+  }
+
   method try_take_read_lock_on_cache_entry(
       shared cache: Cache,
       cache_idx: uint64,
@@ -713,16 +741,15 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method release_read_lock_disk_page(
       shared cache: Cache,
-      linear inout localState: LocalState,
+      shared localState: LocalState,
       ph: PageHandle,
       ghost disk_idx: uint64,
       glinear handle: ReadonlyPageHandle)
   returns (glinear client: Client)
   requires cache.Inv()
-  requires old_localState.WF()
-  requires handle.is_disk_page_handle(cache, old_localState.t as int, disk_idx as int)
+  requires localState.WF()
+  requires handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
   requires handle.for_page_handle(ph)
-  ensures localState == old_localState
   {
     glinear var ReadonlyPageHandle(cache_idx, so) := handle;
     glinear var SharedObtainedToken(t, b, token) := so;
@@ -731,4 +758,21 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           localState.t as nat,
           b, token);
   }
+
+  method claim(
+      shared cache: Cache,
+      shared localState: LocalState,
+      ph: PageHandle,
+      ghost disk_idx: uint64,
+      glinear handle: ReadonlyPageHandle)
+  returns (
+    success: bool,
+    glinear unclaim_handle: glOption<ReadonlyPageHandle>,
+    glinear claim_handle: glOption<ClaimPageHandle>
+  )
+  requires cache.Inv()
+  requires localState.WF()
+  requires handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+  requires handle.for_page_handle(ph)
+
 }

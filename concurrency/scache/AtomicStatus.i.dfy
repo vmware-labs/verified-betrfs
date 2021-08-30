@@ -176,19 +176,25 @@ module AtomicStatusImpl {
   {
     && (status == Clean ==> (
       || v == flag_clean
-      || v == flag_exc_clean
+      || v == flag_clean_claim
+      || v == flag_exc_clean_claim
       || v == flag_accessed_clean
-      || v == flag_exc_accessed_clean
+      || v == flag_accessed_clean_claim
+      || v == flag_exc_accessed_clean_claim
     ))
     && (status == Dirty ==> (
       || v == flag_zero
       || v == flag_accessed
+      || v == flag_claim
+      || v == flag_accessed_claim
     ))
     && (status == Writeback ==> (
       || v == flag_writeback
-      || v == flag_writeback_exc
+      || v == flag_writeback_claim
+      || v == flag_writeback_exc_claim
       || v == flag_writeback_accessed
-      || v == flag_writeback_exc_accessed
+      || v == flag_writeback_accessed_claim
+      || v == flag_writeback_exc_accessed_claim
     ))
   }
   
@@ -524,6 +530,7 @@ module AtomicStatusImpl {
         glinear var new_g;
         var fl := old_g.rwlock.val.central.flag;
         if fl == RwLock.Available || fl == RwLock.Writeback
+            || fl == RwLock.Claimed || fl == RwLock.Writeback_Claimed
             || fl == RwLock.Reading {
           glinear var G(rwlock, status) := old_g;
           rwlock, r' := Rw.perform_SharedCheckExc(rwlock, r, t);
@@ -774,7 +781,7 @@ module AtomicStatusImpl {
     ensures status' == CacheResources.CacheStatus(key.cache_idx, Dirty)
     {
       atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_clean) {
-       ghost_acquire old_g;
+        ghost_acquire old_g;
         glinear var new_g;
         glinear var G(rwlock, empty_status) := old_g;
 
@@ -789,6 +796,67 @@ module AtomicStatusImpl {
         }
 
         assert state_inv(new_value, new_g, key, rwlock_loc);
+        ghost_release new_g;
+      }
+    }
+
+    method try_set_claim(glinear r: Rw.Token, ghost ss: RwLock.SharedState)
+    returns (success: bool, glinear r': Rw.Token)
+    requires this.inv()
+    requires r.loc == rwlock_loc
+    requires ss.SharedObtained?
+    requires r.val == RwLock.SharedHandle(ss)
+    ensures !success ==> r' == r
+    ensures success ==> r'.loc == r.loc
+    ensures success ==> r'.val ==
+        RwLock.ExcHandle(RwLock.ExcClaim(ss.t, ss.b))
+    {
+      // set claim bit
+      // return 'true' iff it was not already set
+
+      atomic_block var ret := execute_atomic_fetch_or_uint8(atomic, flag_claim) {
+        ghost_acquire old_g;
+        glinear var new_g;
+
+        if bit_and_uint8(flag_claim, ret) == 0 {
+          glinear var G(rwlock, status) := old_g;
+          rwlock, r' := Rw.perform_SharedToClaim(rwlock, r, ss);
+          new_g := G(rwlock, status);
+          assert state_inv(new_value, new_g, key, rwlock_loc);
+        } else {
+          new_g := old_g;
+          r' := r;
+          assert state_inv(new_value, new_g, key, rwlock_loc);
+        }
+
+        assert state_inv(new_value, new_g, key, rwlock_loc);
+        ghost_release new_g;
+      }
+
+      success := bit_and_uint8(flag_claim, ret) == 0;
+    }
+
+    method unset_claim(glinear r: Rw.Token)
+    returns (glinear r': Rw.Token)
+    requires this.inv()
+    requires r.loc == rwlock_loc
+    requires r.val.M?
+    requires r.val.exc.ExcClaim?
+    requires r.val == RwLock.ExcHandle(r.val.exc)
+    requires r.val.exc.t != -1
+    ensures r'.loc == r.loc
+    ensures r'.val ==
+        RwLock.SharedHandle(RwLock.SharedObtained(r.val.exc.t, r.val.exc.b))
+    {
+      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_claim) {
+        ghost_acquire old_g;
+        glinear var new_g;
+
+        glinear var G(rwlock, status) := old_g;
+        assert rwlock.val.M?;
+        rwlock, r' := Rw.perform_ClaimToShared(rwlock, r);
+        new_g := G(rwlock, status);
+
         ghost_release new_g;
       }
     }
