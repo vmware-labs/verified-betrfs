@@ -96,6 +96,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     {
       && eo.val.M?
       && eo.val.exc.ExcClaim?
+      && eo.val == RwLock.ExcHandle(eo.val.exc)
       && eo.val.exc.b.CacheEntryHandle?
       && eo.val.exc.b.cache_entry.disk_idx == disk_idx
       && 0 <= cache_idx as int < CACHE_SIZE
@@ -761,7 +762,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method claim(
       shared cache: Cache,
-      shared localState: LocalState,
+      ghost localState: LocalState,
       ph: PageHandle,
       ghost disk_idx: uint64,
       glinear handle: ReadonlyPageHandle)
@@ -776,6 +777,10 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires handle.for_page_handle(ph)
   ensures !success ==> claim_handle.glNone?
   ensures !success ==> unclaim_handle == glSome(handle)
+  ensures success ==> unclaim_handle.glNone?
+  ensures success ==> claim_handle.glSome?
+    && claim_handle.value.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+    && claim_handle.value.for_page_handle(ph)
   {
     glinear var ReadonlyPageHandle(cache_idx, so) := handle;
     glinear var SharedObtainedToken(t, b, token) := so;
@@ -790,5 +795,25 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       claim_handle := glNone;
       unclaim_handle := glSome(ReadonlyPageHandle(cache_idx, SharedObtainedToken(t, b, token')));
     }
+  }
+
+  method unclaim(
+      shared cache: Cache,
+      ghost localState: LocalState,
+      ph: PageHandle,
+      ghost disk_idx: uint64,
+      glinear handle: ClaimPageHandle)
+  returns (glinear unclaim_handle: ReadonlyPageHandle)
+  requires cache.Inv()
+  requires localState.WF()
+  requires handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+  requires handle.for_page_handle(ph)
+  ensures unclaim_handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+  ensures unclaim_handle.for_page_handle(ph)
+  {
+    glinear var ClaimPageHandle(cache_idx, token) := handle;
+    glinear var token';
+    token' := cache.status[ph.cache_idx].unset_claim(token);
+    unclaim_handle := ReadonlyPageHandle(cache_idx, SharedObtainedToken(localState.t as int, token.val.exc.b, token'));
   }
 }
