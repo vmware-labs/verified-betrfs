@@ -1,4 +1,5 @@
 include "CacheIO.i.dfy"
+include "../framework/SystemTime.s.dfy"
 
 module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Constants
@@ -19,6 +20,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CacheStatusType
   import opened ClientCounter
   import opened BitOps
+  import opened SystemTime
 
   datatype PageHandle = PageHandle(
     ptr: Ptr,
@@ -246,83 +248,6 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  /*method take_write_lock_on_cache_entry(cache: Cache, cache_idx: int)
-  returns (glinear r: T.Token, glinear handle: Handle)
-  requires cache.Inv()
-  requires 0 <= cache_idx < CACHE_SIZE
-  ensures r == RwLock.Internal(RwLock.ExcLockObtained(cache.key(cache_idx)))
-  ensures handle.is_handle(cache.key(cache_idx))
-  decreases *
-  {
-    glinear var w_opt := glNone;
-    var success := false;
-
-    while !success 
-    invariant success ==> w_opt == glSome(
-        RwLock.Internal(RwLock.ExcPendingAwaitWriteBack(cache.key(cache_idx))))
-    invariant !success ==> !has(w_opt)
-    decreases *
-    {
-      dispose_glnone(w_opt);
-      success, w_opt := cache.status[cache_idx].try_set_write_lock(
-          cache.key(cache_idx));
-    }
-
-    glinear var w;
-    w := unwrap_value(w_opt);
-
-    success := false;
-
-    while !success 
-    invariant !success ==> w ==
-        RwLock.Internal(RwLock.ExcPendingAwaitWriteBack(cache.key(cache_idx)))
-    invariant success ==> w ==
-        RwLock.Internal(RwLock.ExcPending(cache.key(cache_idx), 0))
-    decreases *
-    {
-      success, w := cache.status[cache_idx].try_check_writeback_isnt_set(
-          cache.key(cache_idx), w);
-    }
-
-    var j := 0;
-    while j < NUM_THREADS
-    invariant 0 <= j <= NUM_THREADS
-    invariant w == 
-        RwLock.Internal(RwLock.ExcPending(cache.key(cache_idx), j))
-    {
-      success := false;
-
-      while !success 
-      invariant !success ==> w ==
-          RwLock.Internal(RwLock.ExcPending(cache.key(cache_idx), j))
-      invariant success ==> w ==
-          RwLock.Internal(RwLock.ExcPending(cache.key(cache_idx), j+1))
-      decreases *
-      {
-        success, w := is_refcount_zero(cache.read_refcounts[j][cache_idx],
-            cache.key(cache_idx), j, w);
-      }
-
-      j := j + 1;
-    }
-
-    r, handle := RwLock.transform_TakeWriteFinish(cache.key(cache_idx), w);
-  }*/
-
-  /*method release_write_lock_on_cache_entry(cache: Cache, cache_idx: int,
-      glinear r: T.Token,
-      glinear handle: Handle)
-  requires cache.Inv()
-  requires 0 <= cache_idx < CACHE_SIZE
-  requires handle.is_handle(cache.key(cache_idx))
-  requires r == RwLock.Internal(RwLock.ExcLockObtained(cache.key(cache_idx)))*/
-
-  /*method take_write_lock_on_disk_entry(cache: Cache, disk_idx: int)
-  requires 0 
-  {
-    
-  }*/
-
   method get_next_chunk(shared cache: Cache, inout linear local: LocalState)
   returns (new_chunk: uint64)
   requires cache.Inv()
@@ -432,6 +357,32 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures r'.val.exc.visited == NUM_THREADS
   ensures r'.val == RwLock.ExcHandle(RwLock.ExcPending(
       t as int, r'.val.exc.visited, r.val.exc.clean, r.val.exc.b))
+  decreases *
+  {
+    var i: uint64 := 0;
+    r' := r;
+
+    while i < (NUM_THREADS as uint64)
+    invariant 0 <= i as int <= NUM_THREADS
+    invariant r'.loc == cache.status[cache_idx].rwlock_loc
+    invariant r'.val.M?
+    invariant r'.val.exc.ExcPending?
+    invariant r'.val == RwLock.ExcHandle(RwLock.ExcPending(
+        t as int, i as int, r.val.exc.clean, r.val.exc.b))
+    decreases *
+    {
+      var success;
+      success, r' := is_refcount_eq(
+          cache.read_refcounts[i][cache_idx],
+          (if i == t then 1 else 0), t as int, i as nat, r');
+
+      if success {
+        i := i + 1;
+      } else {
+        sleep(1);
+      }
+    }
+  }
 
   method try_evict_page(shared cache: Cache, cache_idx: uint64)
   requires cache.Inv()
