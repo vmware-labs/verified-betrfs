@@ -669,9 +669,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method get(
       shared cache: Cache,
+      linear inout localState: LocalState,
       disk_idx: uint64,
-      glinear client: Client,
-      linear inout localState: LocalState)
+      glinear client: Client)
   returns (
     ph: PageHandle,
     glinear handle_out: ReadonlyPageHandle
