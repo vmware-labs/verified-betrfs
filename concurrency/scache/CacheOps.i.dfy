@@ -46,6 +46,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && eo.loc == cache.status[status.cache_idx].rwlock_loc
       && eo.val.M?
       && eo.val.exc.ExcObtained?
+      && eo.val == RwLock.ExcHandle(eo.val.exc)
       && eo.val.exc.t == t
       && (eo.val.exc.clean ==> status.status == Clean)
       && (!eo.val.exc.clean ==> status.status == Dirty)
@@ -666,7 +667,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method take_read_lock_disk_page(
+  method get(
       shared cache: Cache,
       disk_idx: uint64,
       glinear client: Client,
@@ -710,7 +711,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     ph := PageHandle(cache.data[cache_idx], cache_idx as uint64);
   }
 
-  method release_read_lock_disk_page(
+  method unget(
       shared cache: Cache,
       shared localState: LocalState,
       ph: PageHandle,
@@ -790,7 +791,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   }
   
   // blocks until write lock is obtained
-  method get_write(
+  method lock(
       shared cache: Cache,
       shared localState: LocalState,
       ph: PageHandle,
@@ -839,5 +840,26 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     token, handle := perform_Withdraw_TakeExcLockFinish(token);
 
     write_handle := WriteablePageHandle(cache_idx, handle, unwrap_value(status_opt), token);
+  }
+
+  method unlock(
+      shared cache: Cache,
+      ghost localState: LocalState,
+      ph: PageHandle,
+      ghost disk_idx: uint64,
+      glinear write_handle: WriteablePageHandle)
+  returns (glinear claim_handle: ClaimPageHandle)
+  requires cache.Inv()
+  requires localState.WF()
+  requires write_handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+  requires write_handle.for_page_handle(ph)
+  ensures claim_handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+  ensures claim_handle.for_page_handle(ph)
+  ensures write_handle.handle == claim_handle.eo.val.exc.b
+  decreases *
+  {
+    glinear var WriteablePageHandle(cache_idx, handle, status, token) := write_handle;
+    token := cache.status[ph.cache_idx].unset_exc(token, handle, status);
+    claim_handle := ClaimPageHandle(cache_idx, token);
   }
 }

@@ -566,7 +566,7 @@ module RwLock refines Rw {
     }
   }
 
-  predicate Deposit_DowngradeExcLoc(m: M, m': M, b: StoredType)
+  predicate Deposit_DowngradeExcLock(m: M, m': M, b: StoredType)
   {
     && m.M?
     && m.exc.ExcObtained?
@@ -585,8 +585,8 @@ module RwLock refines Rw {
     )
   }
 
-  lemma Deposit_DowngradeExcLoc_Preserves(m: M, m': M, b: StoredType)
-  requires Deposit_DowngradeExcLoc(m, m', b)
+  lemma Deposit_DowngradeExcLock_Preserves(m: M, m': M, b: StoredType)
+  requires Deposit_DowngradeExcLock(m, m', b)
   ensures deposit(m, m', b)
   {
     forall p: M | Inv(dot(m, p))
@@ -598,6 +598,46 @@ module RwLock refines Rw {
       var ss := SharedObtained(m.exc.t, b);
       assert forall b | b != ss :: dot(m', p).sharedState[b] == dot(m, p).sharedState[b];
       assert dot(m', p).sharedState[ss] == dot(m, p).sharedState[ss] + 1;
+
+      var state' := dot(m', p);
+      forall ss: SharedState | state'.sharedState[ss] > 0
+      ensures 0 <= ss.t < NUM_THREADS
+      ensures (ss.SharedObtained? ==> ss.b == state'.central.stored_value)
+      {
+      }
+    }
+  }
+
+  predicate Deposit_DowngradeExcLockToClaim(m: M, m': M, b: StoredType)
+  {
+    && m.M?
+    && m.exc.ExcObtained?
+    && m.central.CentralState?
+    && 0 <= m.exc.t < NUM_THREADS
+    && m == dot(
+      CentralHandle(m.central),
+      ExcHandle(m.exc)
+    )
+    && m' == dot(
+      CentralHandle(m.central
+        .(flag := Claimed)
+        .(stored_value := b)
+      ),
+      ExcHandle(ExcClaim(m.exc.t, b))
+    )
+  }
+
+  lemma Deposit_DowngradeExcLockToClaim_Preserves(m: M, m': M, b: StoredType)
+  requires Deposit_DowngradeExcLockToClaim(m, m', b)
+  ensures deposit(m, m', b)
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+    ensures I(dot(m, p)) == None
+    ensures I(dot(m', p)) == Some(b)
+    {
+      SumFilterSimp<SharedState>();
+      assert forall b :: dot(m', p).sharedState[b] == dot(m, p).sharedState[b];
 
       var state' := dot(m', p);
       forall ss: SharedState | state'.sharedState[ss] > 0
@@ -1719,7 +1759,7 @@ module RwLockToken {
     c', handle', b' := T.withdraw_1_2(c, a, d, e);
   }
 
-  glinear method perform_Deposit_DowngradeExcLoc(
+  glinear method perform_Deposit_DowngradeExcLockToClaim(
       glinear c: Token, glinear handle: Token, glinear b: Handle)
   returns (glinear c': Token, glinear handle': Token)
   requires var m := c.val;
@@ -1732,22 +1772,27 @@ module RwLockToken {
     && 0 <= m.exc.t < NUM_THREADS
     && m == ExcHandle(m.exc)
   requires c.loc == handle.loc
+  ensures handle.val.exc.clean ==> c.val.central.flag == ExcLock_Clean
+  ensures !handle.val.exc.clean ==> c.val.central.flag == ExcLock_Dirty
   ensures handle'.loc == c'.loc == c.loc
   ensures c'.val == 
       CentralHandle(c.val.central
-        .(flag := Available)
+        .(flag := Claimed)
         .(stored_value := b)
       )
   ensures handle'.val ==
-      SharedHandle(SharedObtained(handle.val.exc.t, b))
+      ExcHandle(ExcClaim(handle.val.exc.t, b))
   {
     var a := CentralHandle(c.val.central
-        .(flag := Available)
+        .(flag := Claimed)
         .(stored_value := b)
       );
-    var d := SharedHandle(SharedObtained(handle.val.exc.t, b));
-    Deposit_DowngradeExcLoc_Preserves(dot(c.val, handle.val), dot(a, d), b);
-    c', handle' := T.deposit_2_2(c, handle, b, a, d);
+    var d := ExcHandle(ExcClaim(handle.val.exc.t, b));
+    Deposit_DowngradeExcLockToClaim_Preserves(dot(c.val, handle.val), dot(a, d), b);
+    c' := c;
+    handle' := handle;
+    var rest := T.obtain_invariant_2(inout c', inout handle');
+    c', handle' := T.deposit_2_2(c', handle', b, a, d);
   }
 
   glinear method perform_Deposit_ReadingToShared(

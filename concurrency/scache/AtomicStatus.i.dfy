@@ -887,5 +887,40 @@ module AtomicStatusImpl {
         ghost_release new_g;
       }
     }
+
+    method unset_exc(
+        glinear r: Rw.Token,
+        glinear b: Handle,
+        glinear status: CacheResources.CacheStatus)
+    returns (glinear r': Rw.Token)
+    requires this.inv()
+    requires r.loc == rwlock_loc
+    requires r.val.M?
+    requires r.val.exc.ExcObtained?
+    requires r.val == RwLock.ExcHandle(r.val.exc)
+    requires status.cache_idx == key.cache_idx
+    requires r.val.exc.clean ==> status.status == Clean
+    requires !r.val.exc.clean ==> status.status == Dirty
+    requires b.CacheEntryHandle?
+    requires b.is_handle(key)
+    requires 0 <= r.val.exc.t < NUM_THREADS
+    ensures r'.loc == r.loc
+    ensures r'.val == RwLock.ExcHandle(RwLock.ExcClaim(r.val.exc.t, b));
+    {
+      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_exc) {
+        ghost_acquire old_g;
+        glinear var new_g;
+
+        glinear var G(rwlock, status0) := old_g;
+        assert rwlock.val.M?;
+        rwlock, r' := Rw.perform_Deposit_DowngradeExcLockToClaim(rwlock, r, b);
+        dispose_anything(status0);
+        new_g := G(rwlock, glSome(status));
+
+        assert state_inv(new_value, new_g, key, rwlock_loc);
+        ghost_release new_g;
+      }
+    }
+
   }
 }
