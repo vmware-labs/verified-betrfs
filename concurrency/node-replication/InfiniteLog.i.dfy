@@ -81,15 +81,24 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     combiner: map<NodeId, CombinerState>
   ) | Fail
 
+
+  // the well formedness predicate ensures that the state is valid, and the node ids are good
+  predicate WF(m: M, nid: NodeId) {
+    // require that m is not in the fail state
+    && m.M?
+    // requrie that for the supplied node id, there is a replica, localtails and a combiner state
+    && nid in m.replicas
+    && nid in m.localTails
+    && nid in m.combiner
+  }
+
   // read the ctail
 
-  predicate ReadonlyReadCtail(m: M, m': M, rid: RequestId, nodeId: NodeId) {
-    && m.M?
+  predicate ReadonlyReadCtail(m: M, m': M, nodeId: NodeId, rid: RequestId) {
+    && WF(m, nodeId)
 
     // We have access to the ctail
     && m.ctail.Some?
-
-
 
     // We have some ReadonlyState with request id `rid` in the `ReadonlyInit` state
     && rid in m.localReads
@@ -105,8 +114,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
        )
   }
 
-  predicate TransitionReadonlyReadyToRead(m: M, m': M, rid: RequestId) {
-    && m.M?
+  predicate TransitionReadonlyReadyToRead(m: M, m': M, nodeId: NodeId, rid: RequestId) {
+    && WF(m, nodeId)
+
     && rid in m.localReads
     && var readRequest := m.localReads[rid];
     && readRequest.ReadonlyCtail?
@@ -122,8 +132,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
        )
   }
 
-  predicate TransitionReadonlyDone(m: M, m': M, rid: RequestId) {
-    && m.M?
+  predicate TransitionReadonlyDone(m: M, m': M, nodeId: NodeId, rid: RequestId) {
+    && WF(m, nodeId)
+
     && rid in m.localReads
     && var readRequest := m.localReads[rid];
     && readRequest.ReadonlyReadyToRead?
@@ -136,7 +147,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
   {
-    && m.M?
+    && WF(m, nodeId)
+
     && m.global_tail.Some?
     && var global_tail_var := m.global_tail.value;
     && (set x:RequestId | x in request_ids :: x)  <= m.localUpdates.Keys
@@ -144,7 +156,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
     // Add new entries to the log:
     && var updated_log := m.log + (map idx | global_tail_var <= idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
-    && nodeId in m.combiner
     && m.combiner[nodeId].CombinerReady?
     && m' == m.(log := updated_log)
     .(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then
@@ -155,9 +166,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   predicate ExecLoadLtail(m: M, m': M, nodeId: NodeId) {
-    && m.M?
-    && nodeId in m.combiner.Keys
-    && nodeId in m.localTails
+    && WF(m, nodeId)
+
     && m.combiner[nodeId].CombinerPlaced?
     && var queued_ops := m.combiner[nodeId].queued_ops;
     && var localTail := m.localTails[nodeId];
@@ -165,8 +175,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   predicate ExecLoadGlobalTail(m: M, m': M, nodeId: NodeId) {
-    && m.M?
-    && nodeId in m.combiner.Keys
+    && WF(m, nodeId)
+
     && m.combiner[nodeId].CombinerLtail?
     && m.global_tail.Some?
     && var CombinerLtail(queued_ops, local_tail) := m.combiner[nodeId];
@@ -174,9 +184,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   predicate ExecDispatch(m: M, m': M, nodeId: NodeId) {
-    && m.M?
-    && nodeId in m.combiner.Keys
-    && nodeId in m.replicas.Keys
+    && WF(m, nodeId)
+
     && m.combiner[nodeId].Combiner?
     && var Combiner(queued_ops, local_tail, gtail_snapshot) := m.combiner[nodeId];
     && (local_tail in m.log.Keys)
@@ -197,8 +206,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
 
   predicate UpdateCompletedTail(m: M, m': M, nodeId: NodeId) {
-    && m.M?
-    && nodeId in m.combiner.Keys
+    && WF(m, nodeId)
+
     && m.combiner[nodeId].Combiner?
     && var Combiner(queued_ops, local_tail, gtail_snapshot) := m.combiner[nodeId];
     && (forall i | 0 <= i < local_tail :: i in m.log.Keys)
@@ -210,9 +219,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   predicate GoToCombinerReady(m: M, m': M, nodeId: NodeId) {
-    && m.M?
-    && nodeId in m.combiner.Keys
-    && nodeId in m.localTails.Keys
+    && WF(m, nodeId)
+
     && m.combiner[nodeId].CombinerUpdatedCtail?
     && var CombinerUpdatedCtail(queued_ops, local_and_global_tail) := m.combiner[nodeId];
     && m.ctail.Some? && m.ctail.value >= local_and_global_tail
@@ -323,9 +331,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     requires m != Fail
     requires nodeId in m.localTails
   {
-    if nodeId in m.combiner 
-      && m.combiner[nodeId].CombinerLtail? 
-      && m.combiner[nodeId].Combiner? 
+    if nodeId in m.combiner
+      && m.combiner[nodeId].CombinerLtail?
+      && m.combiner[nodeId].Combiner?
       && m.combiner[nodeId].CombinerUpdatedCtail? then
         m.combiner[nodeId].localTail
     else m.localTails[nodeId]
@@ -337,8 +345,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     requires m.global_tail.Some?
   {
     if nodeId in m.combiner && m.combiner[nodeId].Combiner? then
-        m.combiner[nodeId].globalTail 
-    else if nodeId in m.combiner && m.combiner[nodeId].CombinerUpdatedCtail? then 
+        m.combiner[nodeId].globalTail
+    else if nodeId in m.combiner && m.combiner[nodeId].CombinerUpdatedCtail? then
         m.combiner[nodeId].localAndGlobalTail
     else m.global_tail.value
   }
@@ -438,9 +446,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     | ExecLoadLtail_Step(nodeId: NodeId)
     | ExecLoadGlobalTail_Step(nodeId: NodeId)
     | ExecDispatch_Step(nodeId: NodeId)
-    | ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId)
-    | TransitionReadonlyReadyToRead_Step(rid: RequestId)
-    | TransitionReadonlyDone_Step(rid: RequestId)
+    | ReadonlyReadCtail_Step(nodeId: NodeId, rid: RequestId )
+    | TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId)
+    | TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId)
     | UpdateCompletedTail_Step(nodeId: NodeId)
     | AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>)
 
@@ -451,9 +459,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       case ExecLoadLtail_Step(nodeId: NodeId) => ExecLoadLtail(m, m', nodeId)
       case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail(m, m', nodeId)
       case ExecDispatch_Step(nodeId: NodeId) => ExecDispatch(m, m',nodeId)
-      case ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) =>  ReadonlyReadCtail(m, m', rid, nodeId)
-      case TransitionReadonlyReadyToRead_Step(rid: RequestId) => TransitionReadonlyReadyToRead(m, m',rid)
-      case TransitionReadonlyDone_Step(rid: RequestId) => TransitionReadonlyDone(m, m',rid)
+      case ReadonlyReadCtail_Step(nodeId: NodeId, rid: RequestId) =>  ReadonlyReadCtail(m, m', nodeId, rid)
+      case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyReadyToRead(m, m', nodeId, rid)
+      case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone(m, m', nodeId, rid)
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail(m, m', nodeId, request_ids)
       case UpdateCompletedTail_Step(nodeId: NodeId) => UpdateCompletedTail(m, m',nodeId)
     }
@@ -472,25 +480,25 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
 
   }
 
-  lemma ReadonlyReadCtail_PreservesInv(m: M, m': M, rid: RequestId, nodeId: NodeId)
+  lemma ReadonlyReadCtail_PreservesInv(m: M, m': M, nodeId: NodeId, rid: RequestId)
     requires Inv(m)
-    requires ReadonlyReadCtail(m, m', rid, nodeId)
+    requires ReadonlyReadCtail(m, m', nodeId, rid)
     ensures Inv(m')
   {
 
   }
 
-  lemma TransitionReadonlyReadyToRead_PreservesInv(m: M, m': M, rid: RequestId)
+  lemma TransitionReadonlyReadyToRead_PreservesInv(m: M, m': M, nodeId: NodeId, rid: RequestId)
     requires Inv(m)
-    requires TransitionReadonlyReadyToRead(m, m',rid)
+    requires TransitionReadonlyReadyToRead(m, m', nodeId, rid)
     ensures Inv(m')
   {
 
   }
 
-  lemma TransitionReadonlyDone_PreservesInv(m: M, m': M, rid: RequestId)
+  lemma TransitionReadonlyDone_PreservesInv(m: M, m': M, nodeId: NodeId, rid: RequestId)
     requires Inv(m)
-    requires TransitionReadonlyDone(m, m',rid)
+    requires TransitionReadonlyDone(m, m', nodeId, rid)
     ensures Inv(m')
   {
 
@@ -556,8 +564,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail_PreservesInv(m, m', nodeId);
       case ExecDispatch_Step(nodeId: NodeId) => ExecDispatch_PreservesInv(m, m',nodeId);
       case ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) =>  ReadonlyReadCtail_PreservesInv(m, m', rid, nodeId);
-      case TransitionReadonlyReadyToRead_Step(rid: RequestId) => TransitionReadonlyReadyToRead_PreservesInv(m, m',rid);
-      case TransitionReadonlyDone_Step(rid: RequestId) => TransitionReadonlyDone_PreservesInv(m, m',rid);
+      case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyReadyToRead_PreservesInv(m, m', nodeId, rid);
+      case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone_PreservesInv(m, m', nodeId, rid);
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail_PreservesInv(m, m', nodeId, request_ids);
       case UpdateCompletedTail_Step(nodeId: NodeId) =>  UpdateCompletedTail_PreservesInv(m, m', nodeId);
     }
