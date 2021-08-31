@@ -92,58 +92,119 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && nid in m.combiner
   }
 
-  // read the ctail
+  /*
+   * ============================================================================================
+   * READ ONLY OPERATIONS
+   * ============================================================================================
+   */
 
+  // the read request is well formed
+  predicate ReadRequestWF(m: M, nodeId: NodeId, rid: RequestId)
+    requires WF(m, nodeId)
+  {
+    && rid in m.localReads
+    && if  m.localReads[rid].ReadonlyCtail? ||  m.localReads[rid].ReadonlyReadyToRead? then
+          WF(m, m.localReads[rid].nodeId)
+        else true
+  }
+
+  // the read request is in the read only state
+  predicate ReadRequestIsReadOnlyInit(localReads: map<RequestId, ReadonlyState>, rid: RequestId) {
+      && rid in localReads
+      && localReads[rid].ReadonlyInit?
+  }
+
+  // the read request is in the CTail state
+  predicate ReadRequestIsReadonlyCtail(localReads: map<RequestId, ReadonlyState>, rid: RequestId) {
+      && rid in localReads
+      && localReads[rid].ReadonlyCtail?
+  }
+
+  // the read request is in the CTail state
+  predicate ReadRequestIsReadyToRead(localReads: map<RequestId, ReadonlyState>, rid: RequestId) {
+      && rid in localReads
+      && localReads[rid].ReadonlyReadyToRead?
+  }
+
+  // the local tail must have advanced far enough, so we can perform our read
+  predicate WaitForLocalTailAdvance(m: M, nodeId: NodeId,  readTail : nat )
+    requires WF(m, nodeId)
+  {
+      m.localTails[nodeId] >= readTail
+  }
+
+  // STATE TRANSITION
+  //
+  // Start of the read operation, load the ctail and transition to CTail State
+  //
+  // ASSUMPTION: the read operation has already been placed in the `localReads` part of the state
+  //
+  // { ReadonlyInit(r, op) }
+  //   readTail ← sharedLog.completedTail
+  // { ReadonlyCtail(r, op, readTail) }
   predicate ReadonlyReadCtail(m: M, m': M, nodeId: NodeId, rid: RequestId) {
     && WF(m, nodeId)
-
+    && ReadRequestWF(m, nodeId, rid)
+    && ReadRequestIsReadOnlyInit(m.localReads, rid)
     // We have access to the ctail
     && m.ctail.Some?
-
-    // We have some ReadonlyState with request id `rid` in the `ReadonlyInit` state
-    && rid in m.localReads
-    && m.localReads[rid].ReadonlyInit?
-
-    // Update the rid to the `ReadonlyCtail` state
-    && m' == m.(localReads := m.localReads[rid :=
-        ReadonlyCtail(
-          m.localReads[rid].op,
-          nodeId,
-          m.ctail.value)
-         ]
-       )
+    // construct the new state
+    && var newst :=  ReadonlyCtail(m.localReads[rid].op, nodeId, m.ctail.value);
+    // and update the state
+    && m' == m.(localReads := m.localReads[rid := newst])
   }
 
+  // STATE TRANSITION
+  //
+  // If the local ttail has advanced, transition to ReadyToRead state
+  //
+  // { ReadonlyCtail(r, op, readTail) }
+  //   while localTail < readTail {
+  //     // reader might acquire writer lock and update
+  //     WaitOrUpdate(readTail)
+  //   }
+  // { ReadonlyReadyToRead(r, op) }
   predicate TransitionReadonlyReadyToRead(m: M, m': M, nodeId: NodeId, rid: RequestId) {
     && WF(m, nodeId)
-
-    && rid in m.localReads
+    && ReadRequestWF(m, nodeId, rid)
+    && ReadRequestIsReadonlyCtail(m.localReads, rid)
     && var readRequest := m.localReads[rid];
-    && readRequest.ReadonlyCtail?
-    && readRequest.nodeId in m.localTails
-    && var localTail := m.localTails[readRequest.nodeId];
-    && readRequest.ctail >= localTail
-    && m' == m.(localReads := m.localReads[rid :=
-        ReadonlyReadyToRead(
-          m.localReads[rid].op,
-          m.localReads[rid].nodeId,
-          readRequest.ctail)
-         ]
-       )
+    && WaitForLocalTailAdvance(m, readRequest.nodeId, readRequest.ctail)
+    // construct the new state
+    && var newst :=  ReadonlyReadyToRead(readRequest.op, readRequest.nodeId, readRequest.ctail);
+    // and update the state
+    && m' == m.(localReads := m.localReads[rid := newst])
   }
 
+  // STATE TRANSITION
+  //
+  // Perform the read operation and transition to ReadDone state
+  //
+  // { ReadonlyReadyToRead(r, op) }
+  //   rwLock.Acquire-Reader()
+  //   response ← replica.ReadOnly(args)
+  //   rwLock.Release-Reader()
+  // { ReadonlyDone(r, response) }
   predicate TransitionReadonlyDone(m: M, m': M, nodeId: NodeId, rid: RequestId) {
     && WF(m, nodeId)
-
-    && rid in m.localReads
+    && ReadRequestWF(m, nodeId, rid)
+    && ReadRequestIsReadyToRead(m.localReads, rid)
     && var readRequest := m.localReads[rid];
-    && readRequest.ReadonlyReadyToRead?
-    && readRequest.nodeId in m.replicas
+    // perform the read operation
     && var ret := nrifc.read(m.replicas[readRequest.nodeId], readRequest.op);
-    && m' == m.(localReads := m.localReads[rid :=
-        ReadonlyDone(ret)]
-       )
+    // construct the new state
+    && var newst := ReadonlyDone(ret);
+    // and update the state
+    && m' == m.(localReads := m.localReads[rid := newst])
   }
+
+
+  /*
+   * ============================================================================================
+   * UPDATE OPERATIONS
+   * ============================================================================================
+   */
+
 
   predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
   {
