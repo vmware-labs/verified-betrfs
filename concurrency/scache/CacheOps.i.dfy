@@ -414,6 +414,25 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     assert success ==> i as nat == NUM_THREADS;
   }
 
+  method check_all_refcounts_with_t_block(shared cache: Cache,
+      t: uint64,
+      cache_idx: uint64,
+      glinear r: T.Token)
+  returns (glinear r': T.Token)
+  requires cache.Inv()
+  requires 0 <= cache_idx as int < CACHE_SIZE
+  requires r.loc == cache.status[cache_idx].rwlock_loc
+  requires r.val.M?
+  requires r.val.exc.ExcPending?
+  requires r.val == RwLock.ExcHandle(RwLock.ExcPending(
+      t as int, 0, r.val.exc.clean, r.val.exc.b))
+  ensures r'.loc == cache.status[cache_idx].rwlock_loc
+  ensures r'.val.M?
+  ensures r'.val.exc.ExcPending?
+  ensures r'.val.exc.visited == NUM_THREADS
+  ensures r'.val == RwLock.ExcHandle(RwLock.ExcPending(
+      t as int, r'.val.exc.visited, r.val.exc.clean, r.val.exc.b))
+
   method try_evict_page(shared cache: Cache, cache_idx: uint64)
   requires cache.Inv()
   requires 0 <= cache_idx as int < CACHE_SIZE
@@ -760,6 +779,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           b, token);
   }
 
+  // When this fails, the client needs to relinquish the read lock before trying again
+  // (to avoid dead lock)
   method claim(
       shared cache: Cache,
       ghost localState: LocalState,
@@ -815,5 +836,57 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var token';
     token' := cache.status[ph.cache_idx].unset_claim(token);
     unclaim_handle := ReadonlyPageHandle(cache_idx, SharedObtainedToken(localState.t as int, token.val.exc.b, token'));
+  }
+  
+  // blocks until write lock is obtained
+  method get_write(
+      shared cache: Cache,
+      shared localState: LocalState,
+      ph: PageHandle,
+      ghost disk_idx: uint64,
+      glinear claim_handle: ClaimPageHandle)
+  returns (glinear write_handle: WriteablePageHandle)
+  requires cache.Inv()
+  requires localState.WF()
+  requires claim_handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+  requires claim_handle.for_page_handle(ph)
+  ensures write_handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+  ensures write_handle.for_page_handle(ph)
+  ensures write_handle.handle == claim_handle.eo.val.exc.b
+  decreases *
+  {
+    var writeback_done := false;
+    glinear var status_opt: glOption<CacheResources.CacheStatus> := glNone;
+
+    glinear var ClaimPageHandle(cache_idx, token) := claim_handle;
+    ghost var t := localState.t as int;
+    ghost var rwlock_loc := cache.status[cache_idx].rwlock_loc;
+    ghost var clean;
+
+    token := cache.status[ph.cache_idx].set_exc(token);
+
+    ghost var token_copy := token;
+    while !writeback_done
+    invariant !writeback_done ==> status_opt == glNone
+    invariant !writeback_done ==> token == token_copy;
+    invariant writeback_done ==>
+      && token.val == RwLock.ExcHandle(RwLock.ExcPending(t, 0, clean, claim_handle.eo.val.exc.b))
+      && token.loc == rwlock_loc
+      && status_opt.glSome?
+      && status_opt.value.cache_idx == cache_idx
+      && status_opt.value.status == (if clean then Clean else Dirty)
+    decreases *
+    {
+      dispose_glnone(status_opt);
+      writeback_done, clean, token, status_opt :=
+          cache.status[ph.cache_idx].try_check_writeback_isnt_set(t, token);
+    }
+
+    token := check_all_refcounts_with_t_block(cache, localState.t, ph.cache_idx, token);
+
+    glinear var handle;
+    token, handle := perform_Withdraw_TakeExcLockFinish(token);
+
+    write_handle := WriteablePageHandle(cache_idx, handle, unwrap_value(status_opt), token);
   }
 }

@@ -184,9 +184,11 @@ module AtomicStatusImpl {
     ))
     && (status == Dirty ==> (
       || v == flag_zero
-      || v == flag_accessed
       || v == flag_claim
+      || v == flag_exc_claim
+      || v == flag_accessed
       || v == flag_accessed_claim
+      || v == flag_exc_accessed_claim
     ))
     && (status == Writeback ==> (
       || v == flag_writeback
@@ -857,6 +859,31 @@ module AtomicStatusImpl {
         rwlock, r' := Rw.perform_ClaimToShared(rwlock, r);
         new_g := G(rwlock, status);
 
+        ghost_release new_g;
+      }
+    }
+
+    method set_exc(glinear r: Rw.Token)
+    returns (glinear r': Rw.Token)
+    requires this.inv()
+    requires r.loc == rwlock_loc
+    requires r.val.M?
+    requires r.val.exc.ExcClaim?
+    requires r.val == RwLock.ExcHandle(r.val.exc)
+    ensures r'.loc == r.loc
+    ensures r'.val == RwLock.ExcHandle(RwLock.ExcPendingAwaitWriteback(
+        r.val.exc.t, r.val.exc.b));
+    {
+      atomic_block var _ := execute_atomic_fetch_or_uint8(atomic, flag_exc) {
+        ghost_acquire old_g;
+        glinear var new_g;
+
+        glinear var G(rwlock, status) := old_g;
+        assert rwlock.val.M?;
+        rwlock, r' := Rw.perform_ClaimToPending(rwlock, r);
+        new_g := G(rwlock, status);
+
+        assert state_inv(new_value, new_g, key, rwlock_loc);
         ghost_release new_g;
       }
     }
