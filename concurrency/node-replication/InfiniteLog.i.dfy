@@ -143,7 +143,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && (forall rid | rid in request_ids :: m.localUpdates[rid].UpdateInit?)
     && (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
     // Add new entries to the log:
-    && var updated_log := m.log + (map idx | global_tail_var < idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
+    && var updated_log := m.log + (map idx | global_tail_var <= idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
     && nodeId in m.combiner
     && m.combiner[nodeId].CombinerReady?
     && m' == m.(log := updated_log)
@@ -180,7 +180,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m.combiner[nodeId].Combiner?
     && var Combiner(queued_ops, local_tail, gtail_snapshot, i) := m.combiner[nodeId];
     && (local_tail in m.log.Keys)
-    && local_tail+i in m.log
+    && (local_tail+i in m.log.Keys)
     && i < |queued_ops|
     && var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[local_tail+i].op);
     && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, gtail_snapshot, i+1)])
@@ -202,6 +202,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && nodeId in m.combiner.Keys
     && m.combiner[nodeId].Combiner?
     && var Combiner(queued_ops, local_tail, gtail_snapshot, queue_index) := m.combiner[nodeId];
+    && (forall i | 0 <= i < local_tail :: i in m.log.Keys)
     && local_tail == gtail_snapshot
     && queue_index == |queued_ops| // maybe redundant / not necessary
     && m.ctail.Some?
@@ -324,7 +325,10 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     requires m != Fail
     requires nodeId in m.localTails
   {
-    if nodeId in m.combiner && m.combiner[nodeId].Combiner? then
+    if nodeId in m.combiner 
+      && m.combiner[nodeId].CombinerLtail? 
+      && m.combiner[nodeId].Combiner? 
+      && m.combiner[nodeId].CombinerUpdatedCtail? then
         m.combiner[nodeId].localTail
     else m.localTails[nodeId]
   }
@@ -340,8 +344,11 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     // ctail in the log
     && (if s.ctail.Some? then (forall i | 0 <= i < s.ctail.value :: i in s.log.Keys) else true)
 
+    // global_tail in the log
+    && (if s.global_tail.Some? then (forall i | 0 <= i < s.global_tail.value :: i in s.log.Keys) else true)
+
     // ctail >= logicalLocalTail
-    // && (forall nodeId | nodeId in s.replicas :: if s.ctail.Some? then s.ctail.value >= get_local_tail(s, nodeId) else true)
+    && (forall nodeId | nodeId in s.replicas :: if s.ctail.Some? then s.ctail.value >= get_local_tail(s, nodeId) else true)
 
     // replica[nodeId] == fold the operations in the log up to version logicalLocalTail
     //     (initial state + log 0 + log 1 + ... + log k)
