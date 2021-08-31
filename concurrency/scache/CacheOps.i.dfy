@@ -669,9 +669,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method get(
       shared cache: Cache,
+      linear inout localState: LocalState,
       disk_idx: uint64,
-      glinear client: Client,
-      linear inout localState: LocalState)
+      glinear client: Client)
   returns (
     ph: PageHandle,
     glinear handle_out: ReadonlyPageHandle
@@ -861,5 +861,82 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var WriteablePageHandle(cache_idx, handle, status, token) := write_handle;
     token := cache.status[ph.cache_idx].unset_exc(token, handle, status);
     claim_handle := ClaimPageHandle(cache_idx, token);
+  }
+
+  // runs get, claim, lock, retrying when necessary
+  method get_claim_lock(
+      shared cache: Cache,
+      linear inout localState: LocalState,
+      disk_idx: uint64,
+      glinear client: Client)
+  returns (ph: PageHandle, glinear write_handle: WriteablePageHandle)
+  requires cache.Inv()
+  requires old_localState.WF()
+  requires 0 <= disk_idx as nat < NUM_DISK_PAGES
+  ensures localState.WF()
+  ensures write_handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+  ensures write_handle.for_page_handle(ph)
+  decreases *
+  {
+    var success := false;
+    glinear var write_handle_opt: glOption<WriteablePageHandle> := glNone;
+    glinear var client_opt := glSome(client);
+
+    ph := PageHandle(nullptr, 0);
+
+    while !success
+    invariant !success ==> write_handle_opt == glNone
+    invariant !success ==> client_opt.glSome?
+    invariant success ==> client_opt.glNone?
+    invariant success ==> write_handle_opt.glSome?
+    invariant localState.WF()
+    invariant success ==>
+      && write_handle_opt.glSome?
+      && write_handle_opt.value.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+      && write_handle_opt.value.for_page_handle(ph)
+    decreases *
+    {
+      glinear var read_handle, read_handle_opt, claim_handle_opt;
+      ph, read_handle := get(cache, inout localState, disk_idx, unwrap_value(client_opt));
+      success, read_handle_opt, claim_handle_opt := claim(cache, localState, ph, disk_idx, read_handle);
+      if !success {
+        glinear var client';
+        client' := unget(cache, localState, ph, disk_idx, unwrap_value(read_handle_opt));
+        dispose_glnone(claim_handle_opt);
+        client_opt := glSome(client');
+
+        sleep(1); // TODO what's the best way to wait, here?
+      } else {
+        write_handle := lock(cache, localState, ph, disk_idx, unwrap_value(claim_handle_opt));
+        dispose_glnone(write_handle_opt);
+        dispose_glnone(read_handle_opt);
+        write_handle_opt := glSome(write_handle);
+        client_opt := glNone;
+      }
+    }
+
+    write_handle := unwrap_value(write_handle_opt);
+    dispose_glnone(client_opt);
+  }
+
+  method mark_dirty(
+      shared cache: Cache,
+      ghost localState: LocalState,
+      ph: PageHandle,
+      ghost disk_idx: uint64,
+      glinear write_handle: WriteablePageHandle)
+  returns (glinear write_handle': WriteablePageHandle)
+  requires cache.Inv()
+  requires localState.WF()
+  requires write_handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+  requires write_handle.for_page_handle(ph)
+  ensures write_handle'.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+  ensures write_handle'.for_page_handle(ph)
+  ensures write_handle'.handle == write_handle.handle
+  ensures !write_handle'.is_clean()
+  {
+    glinear var WriteablePageHandle(cache_idx, handle, status, eo) := write_handle;
+    glinear var eo', status' := cache.status[ph.cache_idx].mark_dirty(eo, status);
+    write_handle' := WriteablePageHandle(cache_idx, handle, status', eo');
   }
 }

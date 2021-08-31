@@ -921,6 +921,5 @@ module AtomicStatusImpl {
         ghost_release new_g;
       }
     }
-
   }
 }

@@ -6,8 +6,10 @@ module CacheResources {
   import opened Options
   import opened NativeTypes
   import opened GhostLoc
+  import opened RequestIds
   import opened CacheStatusType
   import DiskIfc
+  import CacheIfc
   import T = DiskSSMTokens(CacheIfc, CacheSSM)
   import CacheSSM
 
@@ -176,4 +178,22 @@ module CacheResources {
   returns (glinear status': CacheStatus)
   requires status.status == Clean
   ensures status' == status.(status := Dirty)
+
+  glinear method app_read_block(
+      ghost rid: RequestId,
+      gshared cache_entry: CacheEntry,
+      glinear ticket: T.Token)
+  returns (glinear stub: T.Token)
+  requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.ReadInput(cache_entry.disk_idx))
+  ensures stub.val == CacheSSM.Stub(rid, CacheIfc.ReadOutput(cache_entry.data))
+
+  glinear method app_write_block(
+      ghost rid: RequestId,
+      ghost new_data: DiskIfc.Block,
+      glinear cache_entry: CacheEntry,
+      glinear ticket: T.Token)
+  returns (glinear cache_entry': CacheEntry, glinear stub: T.Token)
+  requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.WriteInput(cache_entry.disk_idx, new_data))
+  ensures stub.val == CacheSSM.Stub(rid, CacheIfc.WriteOutput)
+  ensures cache_entry' == cache_entry.(data := new_data)
 }
