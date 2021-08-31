@@ -57,10 +57,10 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       // Read ltail
     | CombinerLtail(queued_ops: seq<RequestId>, localTail: nat)
       // Read global tail
-    | Combiner(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat, queueIndex: nat)
+    | Combiner(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat)
       // increment localTail one at a time until localTail == globalTail
       // when localTail == globalTail, we can advance to the next step by updating the ctail
-    | CombinerUpdatedCtail(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat, queueIndex: nat)
+    | CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat)
       // Finally we write to the localTail atomic and return to CombinerReady state
 
   datatype ReplicaState = ReplicaState(state: nrifc.NRState)
@@ -170,7 +170,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m.combiner[nodeId].CombinerLtail?
     && m.global_tail.Some?
     && var CombinerLtail(queued_ops, local_tail) := m.combiner[nodeId];
-    && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, m.global_tail.value, 0)])
+    && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, m.global_tail.value)])
   }
 
   predicate ExecDispatch(m: M, m': M, nodeId: NodeId) {
@@ -178,22 +178,21 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && nodeId in m.combiner.Keys
     && nodeId in m.replicas.Keys
     && m.combiner[nodeId].Combiner?
-    && var Combiner(queued_ops, local_tail, gtail_snapshot, i) := m.combiner[nodeId];
+    && var Combiner(queued_ops, local_tail, gtail_snapshot) := m.combiner[nodeId];
     && (local_tail in m.log.Keys)
-    && (local_tail+i in m.log.Keys)
-    && i < |queued_ops|
-    && var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[local_tail+i].op);
-    && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, gtail_snapshot, i+1)])
+    // ensure queue index is not negative (TODO: is this supposed to be here?)
+    && gtail_snapshot > local_tail
+    && var queue_index := |queued_ops| - (gtail_snapshot - local_tail);
+    && 0 <= queue_index < |queued_ops|
+    && var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[local_tail].op);
+    && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail+1, gtail_snapshot)])
               .(replicas := m.replicas[nodeId := nr_state'])
               .(localUpdates :=
-                if m.log[local_tail+i].node_id == nodeId
+                if m.log[local_tail].node_id == nodeId
                   // Op exec'ed at node where request was issued, so return result.
-                  then m.localUpdates[queued_ops[i]:= UpdateDone(ret)]
+                  then m.localUpdates[queued_ops[queue_index]:= UpdateDone(ret)]
                   // Op exec'ed only to update a remote node.
                   else m.localUpdates)
-    // Travis: the above seems to use `i` both as an index into the log (m.log[local_tail+i])
-    // and also as an index into the queue (i < |queues_ops|) but these indices might not correspond
-    // because there could be other log entries besides the one for this node
   }
 
 
@@ -201,13 +200,12 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m.M?
     && nodeId in m.combiner.Keys
     && m.combiner[nodeId].Combiner?
-    && var Combiner(queued_ops, local_tail, gtail_snapshot, queue_index) := m.combiner[nodeId];
+    && var Combiner(queued_ops, local_tail, gtail_snapshot) := m.combiner[nodeId];
     && (forall i | 0 <= i < local_tail :: i in m.log.Keys)
-    && local_tail == gtail_snapshot
-    && queue_index == |queued_ops| // maybe redundant / not necessary
     && m.ctail.Some?
     && var new_ctail := if m.ctail.value > local_tail then m.ctail.value else local_tail;
-    && m' == m.(combiner := m.combiner[nodeId := CombinerUpdatedCtail(queued_ops, local_tail, gtail_snapshot, queue_index)])
+    && local_tail == gtail_snapshot
+    && m' == m.(combiner := m.combiner[nodeId := CombinerUpdatedCtail(queued_ops, local_tail)])
               .(ctail := Some(new_ctail))
   }
 
@@ -216,10 +214,10 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && nodeId in m.combiner.Keys
     && nodeId in m.localTails.Keys
     && m.combiner[nodeId].CombinerUpdatedCtail?
-    && var CombinerUpdatedCtail(queued_ops, local_tail, gtail_snapshot, queue_index) := m.combiner[nodeId];
-    && m.ctail.Some?
+    && var CombinerUpdatedCtail(queued_ops, local_and_global_tail) := m.combiner[nodeId];
+    && m.ctail.Some? && m.ctail.value >= local_and_global_tail
     && m' == m.(combiner := m.combiner[nodeId := CombinerReady])
-              .(localTails := m.localTails[nodeId := gtail_snapshot])
+              .(localTails := m.localTails[nodeId := local_and_global_tail])
   }
 
 // update the map
@@ -333,6 +331,19 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     else m.localTails[nodeId]
   }
 
+
+  function get_global_tail(m: M, nodeId: NodeId) : nat
+    requires m != Fail
+    requires m.global_tail.Some?
+  {
+    if nodeId in m.combiner && m.combiner[nodeId].Combiner? then
+        m.combiner[nodeId].globalTail 
+    else if nodeId in m.combiner && m.combiner[nodeId].CombinerUpdatedCtail? then 
+        m.combiner[nodeId].localAndGlobalTail
+    else m.global_tail.value
+  }
+
+
   predicate Inv(s: M) {
     // var logicalLocalTail :=  if nodeId in combiner && combiner[nodeId].Combiner? then
     //     combiner[nodeId].localTail else localTails[nodeId];
@@ -347,8 +358,15 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     // global_tail in the log
     && (if s.global_tail.Some? then (forall i | 0 <= i < s.global_tail.value :: i in s.log.Keys) else true)
 
-    // ctail >= logicalLocalTail
+    // ctail >= logicalLocalTails
     && (forall nodeId | nodeId in s.replicas :: if s.ctail.Some? then s.ctail.value >= get_local_tail(s, nodeId) else true)
+
+    // gtail >= logicalGlobalTails
+    && (forall nodeId | nodeId in s.replicas :: if s.global_tail.Some? then s.global_tail.value >= get_global_tail(s, nodeId) else true)
+
+    // global_tail always ahead of ctail
+    && (if s.global_tail.Some? && s.ctail.Some? then s.global_tail.value >= s.ctail.value else true)
+
 
     // replica[nodeId] == fold the operations in the log up to version logicalLocalTail
     //     (initial state + log 0 + log 1 + ... + log k)
