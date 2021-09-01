@@ -249,6 +249,18 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
 
+  // https://stackoverflow.com/questions/52610402/updating-a-map-with-another-map-in-dafny
+  function update_map<K(!new), V>(m1: map<K, V>, m2: map<K, V>): map<K, V>
+  ensures
+    (forall k :: k in m1 || k in m2 ==> k in update_map(m1, m2)) &&
+    (forall k :: k in m2 ==> update_map(m1, m2)[k] == m2[k]) &&
+    (forall k :: !(k in m2) && k in m1 ==> update_map(m1, m2)[k] == m1[k]) &&
+    (forall k :: !(k in m2) && !(k in m1) ==> !(k in update_map(m1, m2)))
+  {
+    map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
+  }
+
+
   predicate RequestIdsValidAndUpdateInit(request_ids: seq<RequestId>, localUpdates: map<RequestId, UpdateState>)
   {
     forall rid | rid in request_ids :: (rid in localUpdates &&  localUpdates[rid].UpdateInit?)
@@ -257,6 +269,13 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // reserve entries on the shared log
   // { UpdateInit(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerReady ; GlobalTail(t) }
   //   tail = cmpxchg(tail, tail + ops.len()); // retry on fail
+  //   for (i, op) in ops {
+  //     let m = lmask[tkn]
+  //     flip m on wrap around
+  //     slog[tail+i].operation = Some(op);
+  //     slog[tail+i].replica = tkn;
+  //     slog[tail+i].alive = m; // last, tso here // Log(…) entries managed by slog
+  //   }
   // { UpdatePlaced(r) ; UpdatePlaced(p) ; UpdatePlaced(q) ; CombinerPlaced( [p,q,r] ) ;
   //   Log(t, op1) ; Log(t+1, op2) ; Log(t+2, op1) ; GlobalTail(t + ops.len()) }
   predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
@@ -268,16 +287,26 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
     && var global_tail_var := m.global_tail.value;
 
-    && (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
-    // Add new entries to the log:
-    && var updated_log := m.log + (map idx | global_tail_var <= idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
+    // Question(RA): this one here should be part of the invariant, and not of this predicate
+    // && (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
 
-    && m' == m.(log := updated_log)
-    .(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then
-      UpdatePlaced(nodeId) else m.localUpdates[rid])
-    )
-    .(global_tail := Some(m.global_tail.value + |request_ids|))
-    .(combiner := m.combiner[nodeId := CombinerPlaced(request_ids)])
+    // Add new entries to the log:
+    && var updated_log := (map idx | global_tail_var <= idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
+
+    // the new combiner state
+    && var combiner_state_new := CombinerPlaced(request_ids);
+
+    // calculate the new global tail
+    && var global_tail_new := m.global_tail.value + |request_ids|;
+
+    // construct the new local updates, and record the placed updates
+    && var local_updates_new := (map rid | rid in request_ids :: UpdatePlaced(nodeId));
+
+    // update the state
+    && m' == m.(log := update_map(m.log, updated_log))
+              .(localUpdates := update_map(m.localUpdates, local_updates_new))
+              .(global_tail := Some(global_tail_new))
+              .(combiner := m.combiner[nodeId := combiner_state_new])
   }
 
 
