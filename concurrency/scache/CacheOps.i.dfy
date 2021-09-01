@@ -939,4 +939,18 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var eo', status' := cache.status[ph.cache_idx].mark_dirty(eo, status);
     write_handle' := WriteablePageHandle(cache_idx, handle, status', eo');
   }
+
+  /*method prefetch(
+      shared cache: Cache,
+      inout linear localState: LocalState,
+      disk_idx: uint64)
+  requires cache.Inv()
+  requires old_localState.WF()
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES
+  ensures localState.WF()
+  decreases *
+  {
+    
+  }*/
+
 }

@@ -78,6 +78,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires ticket == CacheResources.DiskReadTicket(disk_idx as nat)
   requires old_contents.ptr == ptr
   requires 0 <= disk_idx as int < NUM_DISK_PAGES
+  requires ptr.aligned(PageSize)
   ensures contents.ptr == ptr
   ensures |contents.s| == PageSize
   ensures stub == CacheResources.DiskReadStub(disk_idx as nat, contents.s)

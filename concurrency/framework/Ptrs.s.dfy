@@ -1,5 +1,13 @@
+include "../../lib/Lang/NativeTypes.s.dfy"
+include "GlinearOption.i.dfy"
+include "GlinearSeq.s.dfy"
+
 module Ptrs {
-  // Non-atomic memory
+  import opened NativeTypes
+  import opened GlinearOption
+  import opened GlinearSeq
+
+  // Non-atomic data-race-free memory
 
   datatype PointsTo<V> = PointsTo(ghost ptr: Ptr, ghost v: V)
   datatype PointsToLinear<V> =
@@ -7,8 +15,44 @@ module Ptrs {
     | PointsToEmpty(ghost ptr: Ptr)
   datatype PointsToArray<V> = PointsToArray(ghost ptr: Ptr, ghost s: seq<V>)
 
-  type {:extern} Ptr(!new,==)
+  type {:extern} Ptr(!new, ==)
   {
+    function {:extern} as_nat() : nat
+
+    predicate aligned(n: nat)
+    {
+      n >= 1 && as_nat() % n == 0
+    }
+
+    /*
+    // allocation ranges from base .. base + size * length
+    // ptr = base + size * idx
+    function {:extern} base() : nat
+    function {:extern} size() : nat
+    function {:extern} length() : nat
+    function {:extern} idx() : nat ensures 0 <= idx() < size()
+
+    function method {:extern} add(k: int64) : (p: Ptr)
+    requires k % size() == 0
+    requires 0 <= idx() + (k / size()) < size()
+    ensures p.base() == base()
+    ensures p.size() == size()
+    ensures p.length() == length()
+    ensures p.idx() == idx() + (k / size())
+
+    function method {:extern} diff(ptr: Ptr) : (d: uint64)
+    requires ptr.base() == base()
+    requires ptr.size() == size()
+    requires idx() >= ptr.idx()
+    ensures d == (idx() - ptr.idx()) * size()
+
+    predicate aligned(n: nat) {
+      (base() + size() * idx()) % n == 0
+    }
+
+    function method {:extern} ptr_eq
+    */
+
     method {:extern} write<V>(glinear inout d: PointsTo<V>, v: V)
     requires old_d.ptr == this
     ensures d.ptr == this
@@ -58,6 +102,26 @@ module Ptrs {
   method {:extern} alloc_linear<V>(linear v: V)
   returns (ptr: Ptr, glinear d: PointsToLinear<V>)
   ensures d == PointsToLinear(ptr, v)
+
+  method {:extern} alloc_array_aligned<V>(len: uint64, init_value: V, alignment: uint64)
+  returns (ptr: Ptr, glinear d: PointsToArray<V>)
+  requires alignment == 4096 // XXX(travis): should probably be "a power of 2" or something
+  ensures ptr.aligned(alignment as nat)
+  ensures d == PointsToArray(ptr, seq(len, (i) => init_value))
+
+  method {:extern} ptr_diff(ptr1: Ptr, ptr2: Ptr) returns (i: uint64)
+  requires ptr1.as_nat() >= ptr2.as_nat()
+  ensures i as nat == ptr1.as_nat() - ptr2.as_nat()
+
+  function method {:extern} sizeof<V>() : uint64
+
+  glinear method {:extern} array_to_individual<V>(glinear pta: PointsToArray<V>)
+  returns (glinear s: glseq<PointsTo<V>>)
+  ensures s.len() == |pta.s|
+  ensures forall i | 0 <= i < |pta.s| ::
+      && s.has(i)
+      && s.get(i).ptr.as_nat() == pta.ptr.as_nat() + i * sizeof<V>() as nat
+      && s.get(i).v == pta.s[i]
 
   glinear method {:extern} dispose_anything<V>(glinear v: V) // TODO better file for this
 }

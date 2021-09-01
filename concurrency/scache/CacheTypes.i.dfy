@@ -69,6 +69,10 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         <==> WriteGInv(this, iocb_ptr, iocb, wp, g))
 
       && (forall v, g :: atomic_inv(global_clockpointer, v, g) <==> true)
+
+      && (forall i | 0 <= i < CACHE_SIZE ::
+        this.data[i].aligned(PageSize))
+          
     }
   }
 

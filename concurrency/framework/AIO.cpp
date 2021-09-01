@@ -18,23 +18,24 @@
 static_assert(sizeof(long long) == 8);
 static_assert(sizeof(size_t) == 8);
 static_assert(sizeof(off_t) == 8);
+static_assert(sizeof(uintptr_t) == 8);
 
 io_context_t ctx;
 int fd = 0;
 
-volatile void* new__iocb() {
-  return new iocb;
+uintptr_t new__iocb() {
+  return (uintptr_t)(new iocb);
 }
 
-void iocb__prepare__read(volatile void* i, int64_t offset, uint64_t nbytes, volatile void* buf) {
+void iocb__prepare__read(uintptr_t i, int64_t offset, uint64_t nbytes, uintptr_t buf) {
   io_prep_pread((iocb *)i, fd, (void*)buf, nbytes, offset);
 }
 
-void iocb__prepare__write(volatile void* i, int64_t offset, uint64_t nbytes, volatile void* buf) {
+void iocb__prepare__write(uintptr_t i, int64_t offset, uint64_t nbytes, uintptr_t buf) {
   io_prep_pwrite((iocb *)i, fd, (void*)buf, nbytes, offset);
 }
 
-void async__submit(volatile void* i) {
+void async__submit(uintptr_t i) {
   iocb* iocb_ptr = (iocb*) i;
   int ret = io_submit(ctx, 1, &iocb_ptr);
   //printf("%d\n", ret);
@@ -46,12 +47,12 @@ void async__submit(volatile void* i) {
 #define async__read async__submit
 #define async__write async__submit
 
-void sync__read(volatile void* buf, nbytes: uint64, offset: int64_t)
+void sync__read(uintptr_t buf, nbytes: uint64, offset: int64_t)
 {
   pread(fd, (void*)buf, nbytes, offset);
 }
 
-volatile void* get__event() {
+uintptr_t get__event() {
   struct io_event event;
   int status = io_getevents(ctx, 0, 1, &event, NULL);
   if (status == 0) return NULL;
@@ -68,7 +69,7 @@ int main() {
 
   char stuff[27] = "abcdefghijklmnopqrstuvwxyz";
 
-  volatile void* a = new__iocb();
+  uintptr_t a = new__iocb();
   iocb__prepare__write(a, 0, 26, stuff);
   async__submit(a);
   get__event();

@@ -28,6 +28,7 @@ module IocbStruct {
   requires offset >= 0
   requires PageSize * offset as int < 0x1000_0000_0000_0000
   requires old_iocb.ptr == ptr
+  requires buf.aligned(PageSize)
   ensures iocb == IocbRead(ptr, offset as nat, nbytes as nat, buf)
 
   method {:extern} iocb_prepare_write(ptr: Ptr, glinear inout iocb: Iocb,
@@ -35,6 +36,7 @@ module IocbStruct {
   requires offset >= 0
   requires old_iocb.ptr == ptr
   requires PageSize * offset as int < 0x1000_0000_0000_0000
+  requires buf.aligned(PageSize)
   ensures iocb == IocbWrite(ptr, offset as nat, nbytes as nat, buf)
 }
 
@@ -159,6 +161,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   requires nbytes as int == PageSize
   requires PageSize * offset as int < 0x1_0000_0000_0000_0000
   requires ticket == T.Token(ssm.DiskReadReq(offset as int))
+  requires buf.aligned(PageSize)
   ensures wp.ptr == buf
   ensures |wp.s| == nbytes as int
   ensures stub == T.Token(ssm.DiskReadResp(offset as int, wp.s))
