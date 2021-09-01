@@ -540,8 +540,28 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   }
 
   predicate Init(s: M) {
-    // the init state is just the unit
-    s == unit()
+    // the state is not fail
+    s.M?
+    // pointers are zero
+    && s.ctail == Some(0)
+    && s.global_tail == Some(0)
+    // there should be at least one replica
+    && |s.replicas| > 0
+    // all node local state is defined for all replica
+    && s.replicas.Keys == s.localTails.Keys
+    && s.replicas.Keys == s.combiner.Keys
+    // all local tails == 0
+    && forall i | i in s.localTails :: s.localTails[i] == 0
+    // all combiners are in ready state
+    && forall i | i in s.combiner :: s.combiner[i] == CombinerReady
+
+    // all replicas should be identical
+    && forall i,j | i in s.replicas && j in s.replicas :: s.replicas[i] == s.replicas[j]
+
+    // the local reads, local updates, and the log should be empty
+    && s.localReads == map[]
+    && s.localUpdates == map[]
+    && s.log == map[]
   }
 
   // take a look at scache/cache/SimpleCacheSM.i.dfy for an example
