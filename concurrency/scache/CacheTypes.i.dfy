@@ -28,12 +28,12 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     ghost data: seq<Ptr>,
     disk_idx_of_entry: seq<Ptr>,
 
-    status: seq<AtomicStatus>,
-    read_refcounts: seq<seq<AtomicRefcount>>,
+    ghost status: seq<AtomicStatus>,
+    ghost read_refcounts: seq<seq<AtomicRefcount>>,
 
-    cache_idx_of_page: seq<AtomicIndexLookup>,
+    ghost cache_idx_of_page: seq<AtomicIndexLookup>,
 
-    global_clockpointer: Atomic<uint32, NullGhostType>,
+    linear global_clockpointer: Atomic<uint32, NullGhostType>,
 
     io_slots: seq<IOSlot>,
     linear ioctx: aio.IOCtx
@@ -80,14 +80,34 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && this.data[i] == ptr_add(this.data_base_ptr, (PageSize * i) as uint64))
     }
 
-  }
+    shared function method data_ptr(i: uint64) : (p: Ptr)
+    requires this.Inv()
+    requires 0 <= i as int < CACHE_SIZE
+    ensures p == this.data[i]
+    {
+      ptr_add(this.data_base_ptr, PageSize as uint64 * i)
+    }
 
-  function method data_ptr(shared cache: Cache, i: uint64) : (p: Ptr)
-  requires cache.Inv()
-  requires 0 <= i as int < CACHE_SIZE
-  ensures p == cache.data[i]
-  {
-    ptr_add(cache.data_base_ptr, PageSize as uint64 * i)
+    shared function method status_atomic(i: uint64) : (shared at: AtomicStatus)
+    requires this.Inv()
+    requires 0 <= i as int < CACHE_SIZE
+    ensures at == this.status[i]
+
+    shared function method disk_idx_of_entry_ptr(i: uint64) : (p: Ptr)
+    requires this.Inv()
+    requires 0 <= i as int < CACHE_SIZE
+    ensures p == this.disk_idx_of_entry[i]
+
+    shared function method read_refcount_atomic(j: uint64, i: uint64) : (shared at: AtomicRefcount)
+    requires this.Inv()
+    requires 0 <= j as int < NUM_THREADS
+    requires 0 <= i as int < CACHE_SIZE
+    ensures at == this.read_refcounts[j][i]
+
+    shared function method cache_idx_of_page_atomic(i: uint64) : (shared at: AtomicIndexLookup)
+    requires this.Inv()
+    requires 0 <= i as int < NUM_DISK_PAGES
+    ensures at == this.cache_idx_of_page[i]
   }
 
   datatype LocalState = LocalState(

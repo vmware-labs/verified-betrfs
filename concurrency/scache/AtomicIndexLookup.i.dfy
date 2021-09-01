@@ -32,7 +32,7 @@ module AtomicIndexLookupImpl {
   }
 
   method atomic_index_lookup_read(
-      a: AtomicIndexLookup,
+      shared a: AtomicIndexLookup,
       ghost disk_idx: nat)
   returns (cache_idx: uint64)
   requires atomic_index_lookup_inv(a, disk_idx)
@@ -42,7 +42,7 @@ module AtomicIndexLookupImpl {
   }
 
   method atomic_index_lookup_clear_mapping(
-      a: AtomicIndexLookup,
+      shared a: AtomicIndexLookup,
       ghost disk_idx: nat,
       glinear cache_entry: CacheResources.CacheEntry,
       glinear status: CacheResources.CacheStatus
@@ -70,7 +70,7 @@ module AtomicIndexLookupImpl {
   }
 
   method atomic_index_lookup_add_mapping(
-      a: AtomicIndexLookup,
+      shared a: AtomicIndexLookup,
       disk_idx: uint64,
       cache_idx: uint64,
       glinear cache_empty: CacheResources.CacheEmpty)

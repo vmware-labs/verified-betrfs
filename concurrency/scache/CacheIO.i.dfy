@@ -49,7 +49,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         inout iocb,
         disk_idx as int64,
         4096,
-        data_ptr(cache, cache_idx));
+        cache.data_ptr(cache_idx));
 
     cache.io_slots[idx].io_slot_info_ptr.write(
         inout io_slot_info,
@@ -102,11 +102,11 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires 0 <= cache_idx as int < CACHE_SIZE
   requires stub == CacheResources.DiskWriteStub(disk_addr)
   requires wbo.is_handle(cache.key(cache_idx as int))
-  requires wbo.token.loc == cache.status[cache_idx].rwlock_loc
+  requires wbo.token.loc == cache.status[cache_idx as nat].rwlock_loc
   requires wbo.b.CacheEntryHandle?
   requires wbo.b.cache_entry.disk_idx == disk_addr
   {
-    cache.status[cache_idx].release_writeback(wbo, stub);
+    cache.status_atomic(cache_idx).release_writeback(wbo, stub);
   }
 
   method io_cleanup(shared cache: Cache, max_io_events: uint64)

@@ -200,8 +200,8 @@ module AtomicStatusImpl {
     ))
   }
   
-  datatype AtomicStatus = AtomicStatus(
-    atomic: Atomic<uint8, G>,
+  linear datatype AtomicStatus = AtomicStatus(
+    linear atomic: Atomic<uint8, G>,
     ghost rwlock_loc: Loc,
     ghost key: Key
   )
@@ -211,7 +211,7 @@ module AtomicStatusImpl {
       forall v, g :: atomic_inv(this.atomic, v, g) <==> state_inv(v, g, key, this.rwlock_loc)
     }
 
-    method try_acquire_writeback(with_access: bool)
+    shared method try_acquire_writeback(with_access: bool)
     returns (success: bool,
         glinear m: glOption<Rw.WritebackObtainedToken>,
         glinear disk_write_ticket: glOption<CacheResources.DiskWriteTicket>)
@@ -306,7 +306,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method release_writeback(
+    shared method release_writeback(
         glinear handle: Rw.WritebackObtainedToken,
         glinear disk_write_stub: CacheResources.DiskWriteStub)
     requires this.inv()
@@ -343,7 +343,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method try_check_writeback_isnt_set(ghost t: int, glinear m: Rw.Token)
+    shared method try_check_writeback_isnt_set(ghost t: int, glinear m: Rw.Token)
     returns (success: bool, clean: bool, glinear m': Rw.Token,
         glinear status: glOption<CacheResources.CacheStatus>)
     requires this.inv()
@@ -393,7 +393,7 @@ module AtomicStatusImpl {
       clean := bit_and_uint8(f, flag_clean) != 0;
     }
 
-    method try_alloc()
+    shared method try_alloc()
     returns (success: bool,
         glinear m: glOption<Rw.Token>,
         glinear handle_opt: glOption<Handle>)
@@ -451,7 +451,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method clear_exc_bit_during_load_phase(
+    shared method clear_exc_bit_during_load_phase(
         //ghost t:int,
         glinear r: Rw.Token)
     returns (glinear q: Rw.Token)
@@ -476,7 +476,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method load_phase_finish(
+    shared method load_phase_finish(
         glinear r: Rw.Token,
         glinear handle: Handle,
         glinear status: CacheResources.CacheStatus)
@@ -508,14 +508,14 @@ module AtomicStatusImpl {
     }
 
 
-    method quicktest_is_exc_locked()
+    shared method quicktest_is_exc_locked()
     returns (is_exc_locked: bool)
     {
       atomic_block var v := execute_atomic_load(atomic) { }
       return ((v as bv8) & (flag_exc as bv8)) as uint8 != 0;
     }
 
-    method is_exc_locked_or_free(
+    shared method is_exc_locked_or_free(
         ghost t: int,
         glinear r: Rw.Token)
     returns (success: bool, is_accessed: bool, glinear r': Rw.Token)
@@ -548,7 +548,7 @@ module AtomicStatusImpl {
       is_accessed := bit_and_uint8(f, flag_accessed) != 0;
     }
 
-    method mark_accessed(
+    shared method mark_accessed(
         ghost t: int,
         glinear r: Rw.Token)
     returns (glinear r': Rw.Token)
@@ -572,7 +572,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method clear_accessed()
+    shared method clear_accessed()
     requires this.inv()
     {
       atomic_block var orig_value := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_accessed)
@@ -583,7 +583,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method is_reading(
+    shared method is_reading(
         ghost t: int,
         glinear r: Rw.Token)
     returns (
@@ -627,7 +627,7 @@ module AtomicStatusImpl {
       success := bit_and_uint8(f, flag_reading) == 0;
     }
 
-    method take_exc_if_eq_clean()
+    shared method take_exc_if_eq_clean()
     returns (
       success: bool,
       glinear m': glOption<Rw.Token>,
@@ -689,7 +689,7 @@ module AtomicStatusImpl {
       success := did_set;
     }
 
-    method set_to_free(
+    shared method set_to_free(
         glinear handle: Handle,
         glinear r: Rw.Token)
     requires this.inv()
@@ -716,7 +716,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method abandon_exc(glinear r: Rw.Token, glinear status: CacheResources.CacheStatus)
+    shared method abandon_exc(glinear r: Rw.Token, glinear status: CacheResources.CacheStatus)
     requires this.inv()
     requires r.loc == rwlock_loc
     requires r.val.M?
@@ -741,7 +741,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method abandon_reading_pending(
+    shared method abandon_reading_pending(
         glinear r: Rw.Token,
         glinear handle: Handle)
     requires this.inv()
@@ -767,7 +767,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method mark_dirty(
+    shared method mark_dirty(
         glinear r: Rw.Token,
         glinear status: CacheResources.CacheStatus)
     returns (glinear r': Rw.Token, glinear status': CacheResources.CacheStatus)
@@ -802,7 +802,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method try_set_claim(glinear r: Rw.Token, ghost ss: RwLock.SharedState)
+    shared method try_set_claim(glinear r: Rw.Token, ghost ss: RwLock.SharedState)
     returns (success: bool, glinear r': Rw.Token)
     requires this.inv()
     requires r.loc == rwlock_loc
@@ -838,7 +838,7 @@ module AtomicStatusImpl {
       success := bit_and_uint8(flag_claim, ret) == 0;
     }
 
-    method unset_claim(glinear r: Rw.Token)
+    shared method unset_claim(glinear r: Rw.Token)
     returns (glinear r': Rw.Token)
     requires this.inv()
     requires r.loc == rwlock_loc
@@ -863,7 +863,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method set_exc(glinear r: Rw.Token)
+    shared method set_exc(glinear r: Rw.Token)
     returns (glinear r': Rw.Token)
     requires this.inv()
     requires r.loc == rwlock_loc
@@ -888,7 +888,7 @@ module AtomicStatusImpl {
       }
     }
 
-    method unset_exc(
+    shared method unset_exc(
         glinear r: Rw.Token,
         glinear b: Handle,
         glinear status: CacheResources.CacheStatus)

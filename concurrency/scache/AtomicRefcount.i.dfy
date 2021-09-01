@@ -22,8 +22,8 @@ module AtomicRefcountImpl {
     && 0 <= t < NUM_THREADS
   }
 
-  datatype AtomicRefcount = AtomicRefcount(
-    a: Atomic<uint8, T.Token>,
+  linear datatype AtomicRefcount = AtomicRefcount(
+    linear a: Atomic<uint8, T.Token>,
     ghost rwlock_loc: Loc
   )
   {
@@ -32,7 +32,7 @@ module AtomicRefcountImpl {
     }
   }
 
-  method is_refcount_eq(a: AtomicRefcount, val: uint8,
+  method is_refcount_eq(shared a: AtomicRefcount, val: uint8,
       ghost user_t: int, ghost t: nat,
       glinear m: T.Token)
   returns (is_zero: bool, glinear m': T.Token)
@@ -62,7 +62,7 @@ module AtomicRefcountImpl {
     is_zero := (c == val);
   }
 
-  method inc_refcount_for_reading(a: AtomicRefcount,
+  method inc_refcount_for_reading(shared a: AtomicRefcount,
       ghost t: nat,
       glinear client: Client,
       glinear m: T.Token)
@@ -90,7 +90,7 @@ module AtomicRefcountImpl {
     }
   }
 
-  method inc_refcount_for_shared(a: AtomicRefcount,
+  method inc_refcount_for_shared(shared a: AtomicRefcount,
       ghost t: nat,
       glinear client: Client)
   returns (glinear m': T.Token)
@@ -110,7 +110,7 @@ module AtomicRefcountImpl {
     }
   }
 
-  method dec_refcount_for_shared_pending(a: AtomicRefcount,
+  method dec_refcount_for_shared_pending(shared a: AtomicRefcount,
       ghost t: nat,
       glinear m: T.Token)
   returns (glinear client: Client)
@@ -129,7 +129,7 @@ module AtomicRefcountImpl {
     }
   }
 
-  method dec_refcount_for_shared_obtained(a: AtomicRefcount,
+  method dec_refcount_for_shared_obtained(shared a: AtomicRefcount,
       ghost t: nat, ghost b: Handle,
       glinear m: T.Token)
   returns (glinear client: Client)

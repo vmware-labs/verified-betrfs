@@ -21,7 +21,7 @@ module {:extern "Atomics"} Atomics {
       glinear g: G,
       ghost inv: (V, G) -> bool,
       ghost namespace: nat)
-  returns (a: Atomic<V, G>)
+  returns (shared a: Atomic<V, G>)
   requires inv(v, g)
   ensures forall v1, g1 :: atomic_inv(a, v1, g1) <==> inv(v1, g1)
   ensures a.namespace() == namespace
@@ -53,7 +53,7 @@ module {:extern "Atomics"} Atomics {
    */
 
   method {:extern} execute_atomic_compare_and_set_strong<V, G>(
-      a: Atomic<V, G>,
+      shared a: Atomic<V, G>,
       v1: V,
       v2: V)
   returns (
@@ -66,7 +66,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_compare_and_set_weak<V, G>(
-      a: Atomic<V, G>,
+      shared a: Atomic<V, G>,
       v1: V,
       v2: V)
   returns (
@@ -82,7 +82,7 @@ module {:extern "Atomics"} Atomics {
    * Load and store
    */
 
-  method {:extern} execute_atomic_load<V, G>(a: Atomic<V, G>)
+  method {:extern} execute_atomic_load<V, G>(shared a: Atomic<V, G>)
   returns (
       ret_value: V,
       ghost orig_value: V,
@@ -92,7 +92,7 @@ module {:extern "Atomics"} Atomics {
   ensures new_value == orig_value
   ensures atomic_inv(a, orig_value, g)
 
-  method {:extern} execute_atomic_store<V, G>(a: Atomic<V, G>, v: V)
+  method {:extern} execute_atomic_store<V, G>(shared a: Atomic<V, G>, v: V)
   returns (
       ghost ret_value: (),
       ghost orig_value: V,
@@ -120,7 +120,7 @@ module {:extern "Atomics"} Atomics {
   }
 
   method {:extern} execute_atomic_fetch_or_uint8<G>(
-      a: Atomic<uint8, G>,
+      shared a: Atomic<uint8, G>,
       operand: uint8) 
   returns (
       ret_value: uint8,
@@ -132,7 +132,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_and_uint8<G>(
-      a: Atomic<uint8, G>,
+      shared a: Atomic<uint8, G>,
       operand: uint8) 
   returns (
       ret_value: uint8,
@@ -144,7 +144,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_xor_uint8<G>(
-      a: Atomic<uint8, G>,
+      shared a: Atomic<uint8, G>,
       operand: uint8) 
   returns (
       ret_value: uint8,
@@ -156,7 +156,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_add_uint8<G>(
-      a: Atomic<uint8, G>,
+      shared a: Atomic<uint8, G>,
       operand: uint8) 
   returns (
       ret_value: uint8,
@@ -168,7 +168,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_sub_uint8<G>(
-      a: Atomic<uint8, G>,
+      shared a: Atomic<uint8, G>,
       operand: uint8) 
   returns (
       ret_value: uint8,
@@ -198,7 +198,7 @@ module {:extern "Atomics"} Atomics {
   }
 
   method {:extern} execute_atomic_fetch_or_uint16<G>(
-      a: Atomic<uint16, G>,
+      shared a: Atomic<uint16, G>,
       operand: uint16) 
   returns (
       ret_value: uint16,
@@ -210,7 +210,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_and_uint16<G>(
-      a: Atomic<uint16, G>,
+      shared a: Atomic<uint16, G>,
       operand: uint16) 
   returns (
       ret_value: uint16,
@@ -222,7 +222,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_xor_uint16<G>(
-      a: Atomic<uint16, G>,
+      shared a: Atomic<uint16, G>,
       operand: uint16) 
   returns (
       ret_value: uint16,
@@ -234,7 +234,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_add_uint16<G>(
-      a: Atomic<uint16, G>,
+      shared a: Atomic<uint16, G>,
       operand: uint16) 
   returns (
       ret_value: uint16,
@@ -246,7 +246,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_sub_uint16<G>(
-      a: Atomic<uint16, G>,
+      shared a: Atomic<uint16, G>,
       operand: uint16) 
   returns (
       ret_value: uint16,
@@ -276,7 +276,7 @@ module {:extern "Atomics"} Atomics {
   }
 
   method {:extern} execute_atomic_fetch_or_uint32<G>(
-      a: Atomic<uint32, G>,
+      shared a: Atomic<uint32, G>,
       operand: uint32) 
   returns (
       ret_value: uint32,
@@ -288,7 +288,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_and_uint32<G>(
-      a: Atomic<uint32, G>,
+      shared a: Atomic<uint32, G>,
       operand: uint32) 
   returns (
       ret_value: uint32,
@@ -300,7 +300,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_xor_uint32<G>(
-      a: Atomic<uint32, G>,
+      shared a: Atomic<uint32, G>,
       operand: uint32) 
   returns (
       ret_value: uint32,
@@ -312,7 +312,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_add_uint32<G>(
-      a: Atomic<uint32, G>,
+      shared a: Atomic<uint32, G>,
       operand: uint32) 
   returns (
       ret_value: uint32,
@@ -324,7 +324,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_sub_uint32<G>(
-      a: Atomic<uint32, G>,
+      shared a: Atomic<uint32, G>,
       operand: uint32) 
   returns (
       ret_value: uint32,
@@ -354,7 +354,7 @@ module {:extern "Atomics"} Atomics {
   }
 
   method {:extern} execute_atomic_fetch_or_uint64<G>(
-      a: Atomic<uint64, G>,
+      shared a: Atomic<uint64, G>,
       operand: uint64) 
   returns (
       ret_value: uint64,
@@ -366,7 +366,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_and_uint64<G>(
-      a: Atomic<uint64, G>,
+      shared a: Atomic<uint64, G>,
       operand: uint64) 
   returns (
       ret_value: uint64,
@@ -378,7 +378,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_xor_uint64<G>(
-      a: Atomic<uint64, G>,
+      shared a: Atomic<uint64, G>,
       operand: uint64) 
   returns (
       ret_value: uint64,
@@ -390,7 +390,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_add_uint64<G>(
-      a: Atomic<uint64, G>,
+      shared a: Atomic<uint64, G>,
       operand: uint64) 
   returns (
       ret_value: uint64,
@@ -402,7 +402,7 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   method {:extern} execute_atomic_fetch_sub_uint64<G>(
-      a: Atomic<uint64, G>,
+      shared a: Atomic<uint64, G>,
       operand: uint64) 
   returns (
       ret_value: uint64,
