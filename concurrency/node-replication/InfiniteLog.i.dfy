@@ -92,6 +92,16 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && nid in m.combiner
   }
 
+  predicate CompleteTailValid(m: M) {
+    && m.M?
+    && m.ctail.Some?
+  }
+
+  predicate GlobalTailValid(m: M) {
+    && m.M?
+    && m.global_tail.Some?
+  }
+
   /*
    * ============================================================================================
    * READ ONLY OPERATIONS
@@ -127,7 +137,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   // the local tail must have advanced far enough, so we can perform our read
-  predicate WaitForLocalTailAdvance(m: M, nodeId: NodeId,  readTail : nat )
+  predicate LocalTailHasAdvanced(m: M, nodeId: NodeId,  readTail : nat )
     requires WF(m, nodeId)
   {
       m.localTails[nodeId] >= readTail
@@ -146,8 +156,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && WF(m, nodeId)
     && ReadRequestWF(m, nodeId, rid)
     && ReadRequestIsReadOnlyInit(m.localReads, rid)
-    // We have access to the ctail
-    && m.ctail.Some?
+    && CompleteTailValid(m)
     // construct the new state
     && var newst :=  ReadonlyCtail(m.localReads[rid].op, nodeId, m.ctail.value);
     // and update the state
@@ -169,7 +178,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && ReadRequestWF(m, nodeId, rid)
     && ReadRequestIsReadonlyCtail(m.localReads, rid)
     && var readRequest := m.localReads[rid];
-    && WaitForLocalTailAdvance(m, readRequest.nodeId, readRequest.ctail)
+    && LocalTailHasAdvanced(m, readRequest.nodeId, readRequest.ctail)
     // construct the new state
     && var newst :=  ReadonlyReadyToRead(readRequest.op, readRequest.nodeId, readRequest.ctail);
     // and update the state
@@ -205,11 +214,45 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
    * ============================================================================================
    */
 
+  predicate CombinerIsReady(m : M, nodeId : NodeId)
+    requires WF(m, nodeId)
+  {
+    m.combiner[nodeId].CombinerReady?
+  }
+  predicate CombinerIsPlaced(m : M, nodeId : NodeId)
+    requires WF(m, nodeId)
+  {
+    m.combiner[nodeId].CombinerPlaced?
+  }
+  predicate CombinerIsLTail(m : M, nodeId : NodeId)
+    requires WF(m, nodeId)
+  {
+    m.combiner[nodeId].CombinerLtail?
+  }
+  predicate CombinerIsCombining(m : M, nodeId : NodeId)
+    requires WF(m, nodeId)
+  {
+    && m.combiner[nodeId].Combiner?
+    && m.combiner[nodeId].localTail < m.combiner[nodeId].globalTail
+  }
+  predicate CombinerIsCombiningDone(m: M, nodeId : NodeId)
+    requires WF(m, nodeId)
+  {
+    && m.combiner[nodeId].Combiner?
+    && m.combiner[nodeId].localTail == m.combiner[nodeId].globalTail
+  }
+
+  predicate CombinerIsUpdateCTail(m : M, nodeId : NodeId)
+    requires WF(m, nodeId)
+  {
+    m.combiner[nodeId].CombinerUpdatedCtail?
+  }
+
 
   predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
   {
     && WF(m, nodeId)
-
+    && CombinerIsReady(m, nodeId)
     && m.global_tail.Some?
     && var global_tail_var := m.global_tail.value;
     && (set x:RequestId | x in request_ids :: x)  <= m.localUpdates.Keys
@@ -217,7 +260,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
     // Add new entries to the log:
     && var updated_log := m.log + (map idx | global_tail_var <= idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
-    && m.combiner[nodeId].CombinerReady?
     && m' == m.(log := updated_log)
     .(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then
       UpdatePlaced(nodeId) else m.localUpdates[rid])
@@ -226,68 +268,155 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     .(combiner := m.combiner[nodeId := CombinerPlaced(request_ids)])
   }
 
+
+  // STATE TRANSITION
+  //
+  // exec():
+  // { CombinerPlaced(queue) ; … }
+  //   ltail = load ltails[tkn] // read our local ltail
+  // { CombinerLtail(queue, ltail) ; … }
   predicate ExecLoadLtail(m: M, m': M, nodeId: NodeId) {
     && WF(m, nodeId)
-
-    && m.combiner[nodeId].CombinerPlaced?
-    && var queued_ops := m.combiner[nodeId].queued_ops;
-    && var localTail := m.localTails[nodeId];
-    && m' == m.(combiner := m.combiner[nodeId := CombinerLtail(queued_ops, localTail)])
+    && CombinerIsPlaced(m, nodeId)
+    // get the combiner state
+    && var c := m.combiner[nodeId];
+    // construct the new combiner state
+    && var newst := CombinerLtail(c.queued_ops, m.localTails[nodeId]);
+    // update the state of the combiner
+    && m' == m.(combiner := m.combiner[nodeId := newst])
   }
 
+  // STATE TRANSITION
+  //
+  // exec():
+  // { CombinerLtail(queue, ltail) ; … }
+  //   gtail = load tail
+  // { Combiner (queue, ltail, gtail, 0) ; … }
   predicate ExecLoadGlobalTail(m: M, m': M, nodeId: NodeId) {
     && WF(m, nodeId)
-
-    && m.combiner[nodeId].CombinerLtail?
-    && m.global_tail.Some?
-    && var CombinerLtail(queued_ops, local_tail) := m.combiner[nodeId];
-    && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail, m.global_tail.value)])
+    && CombinerIsLTail(m, nodeId)
+    && GlobalTailValid(m)
+    // get the combiner state
+    && var c := m.combiner[nodeId];
+    // construct the new combiner state
+    && var newst := Combiner(c.queued_ops, c.localTail, m.global_tail.value);
+    // update the state of the combiner
+    && m' == m.(combiner := m.combiner[nodeId := newst])
   }
 
-  predicate ExecDispatch(m: M, m': M, nodeId: NodeId) {
+  // STATE TRANSITION
+  //
+  //   assert (ltail < gtail && ltail[tkn] >= head);
+  //   for i in ltail..gtail {
+  //     Busy loop until slog[i].alive == lmasks[tkn]
+  //     // case shown here is the one where log node_id = combiner node_id
+  //     { Log(node_id, op); Combiner (queue, ltail, gtail, j) ; UpdatePlaced(queue[j]) ; … }
+  //     d(slog[i].op, slog[i].replica)
+  //     { Log(node_id, op); Combiner (queue, ltail+1, gtail, j+1) ; UpdateDone(return_value) ; … }
+  //     // case 2 is where log node_id != combiner node_id
+  //     if i == size – 1 {
+  //       // Update generation on wrap-around
+  //       lmasks[tkn] = !lmasks[tkn]
+  //     }
+  //   }
+  predicate ExecDispatchLocal(m: M, m': M, nodeId: NodeId) {
     && WF(m, nodeId)
+    && CombinerIsCombining(m, nodeId)
+    // get the combiner state
+    && var c := m.combiner[nodeId];
 
-    && m.combiner[nodeId].Combiner?
-    && var Combiner(queued_ops, local_tail, gtail_snapshot) := m.combiner[nodeId];
-    && (local_tail in m.log.Keys)
-    // ensure queue index is not negative (TODO: is this supposed to be here?)
-    && gtail_snapshot > local_tail
-    && var queue_index := |queued_ops| - (gtail_snapshot - local_tail);
-    && 0 <= queue_index < |queued_ops|
-    && var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[local_tail].op);
-    && m' == m.(combiner := m.combiner[nodeId := Combiner(queued_ops, local_tail+1, gtail_snapshot)])
+    // XXX: shoudl something like this be part of the well-formed predicate?
+    && (c.localTail in m.log.Keys)
+
+    // the applied operation originated on a remote node
+    && m.log[c.localTail].node_id == nodeId
+
+    // update the data structure
+    && var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[c.localTail].op);
+
+    // calculate the new combiner state
+    &&  var c_new := c.(localTail := c.localTail + 1);
+
+    // calcualte the queue index.
+    // Question(RA): could we use a map here instead? and associate it with the log index?
+    && var queue_index := |c.queued_ops| - (c.globalTail - c.localTail);
+    && 0 <= queue_index < |c.queued_ops|
+
+    // update the state
+    && m' == m.(combiner := m.combiner[nodeId := c_new])
               .(replicas := m.replicas[nodeId := nr_state'])
-              .(localUpdates :=
-                if m.log[local_tail].node_id == nodeId
-                  // Op exec'ed at node where request was issued, so return result.
-                  then m.localUpdates[queued_ops[queue_index]:= UpdateDone(ret)]
-                  // Op exec'ed only to update a remote node.
-                  else m.localUpdates)
+              .(localUpdates := m.localUpdates[c.queued_ops[queue_index]:= UpdateDone(ret)])
+  }
+
+  predicate ExecDispatchRemote(m: M, m': M, nodeId: NodeId) {
+    && WF(m, nodeId)
+    && CombinerIsCombining(m, nodeId)
+    // get the combiner state
+    && var c := m.combiner[nodeId];
+
+    // XXX: shoudl something like this be part of the well-formed predicate?
+    && (c.localTail in m.log.Keys)
+
+    // the applied operation originated on a remote node
+    && m.log[c.localTail].node_id != nodeId
+
+    // apply the update to the data structure
+    && var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[c.localTail].op);
+
+    // update the combiner state
+    &&  var c_new := c.(localTail := c.localTail + 1);
+    // update the state
+    && m' == m.(combiner := m.combiner[nodeId := c_new])
+              .(replicas := m.replicas[nodeId := nr_state'])
   }
 
 
+
+  // STATE TRANSITION
+  //
+  // assert (ltail = gtail)
+  // { Combiner(queue, ltail, gtail, j) ; … }
+  //   ctail = max(tail, ctail) // update completed tail
+  // { CombinerUpdatedCtail(gtail, ltail, gtail, j) ; … }
   predicate UpdateCompletedTail(m: M, m': M, nodeId: NodeId) {
     && WF(m, nodeId)
-
-    && m.combiner[nodeId].Combiner?
-    && var Combiner(queued_ops, local_tail, gtail_snapshot) := m.combiner[nodeId];
-    && (forall i | 0 <= i < local_tail :: i in m.log.Keys)
-    && m.ctail.Some?
-    && var new_ctail := if m.ctail.value > local_tail then m.ctail.value else local_tail;
-    && local_tail == gtail_snapshot
-    && m' == m.(combiner := m.combiner[nodeId := CombinerUpdatedCtail(queued_ops, local_tail)])
+    && CombinerIsCombiningDone(m, nodeId)
+    && CompleteTailValid(m)
+    // get the combiner state
+    && var c := m.combiner[nodeId];
+    // the new ctail is the maximum of the current ctail, and the local tail we've loaded
+    && var new_ctail := if m.ctail.value > c.localTail then m.ctail.value else c.localTail;
+    // construct the new combiner state
+    && var newst := CombinerUpdatedCtail(c.queued_ops, c.localTail);
+    // update the ctail and the combiner state
+    && m' == m.(combiner := m.combiner[nodeId := newst])
               .(ctail := Some(new_ctail))
   }
 
+  // STATE TRANSITION
+
+  // { CombinerUpdatedCtail(gtail, ltail, gtail, j) ; … }
+  //   store ltails[tkn] = gtail; // update replica's tail
+  // { CombinerReady ; … }
   predicate GoToCombinerReady(m: M, m': M, nodeId: NodeId) {
     && WF(m, nodeId)
-
-    && m.combiner[nodeId].CombinerUpdatedCtail?
-    && var CombinerUpdatedCtail(queued_ops, local_and_global_tail) := m.combiner[nodeId];
-    && m.ctail.Some? && m.ctail.value >= local_and_global_tail
+    && CombinerIsUpdateCTail(m, nodeId)
+    && CompleteTailValid(m)
+    // get the combiner state
+    && var c := m.combiner[nodeId];
+    // XXX: that one should be part of the invariant
+    //&& m.ctail.value >= c.localAndGlobalTail
+    // update the new state
     && m' == m.(combiner := m.combiner[nodeId := CombinerReady])
-              .(localTails := m.localTails[nodeId := local_and_global_tail])
+              .(localTails := m.localTails[nodeId := c.localAndGlobalTail])
   }
+
+  /*
+   * ============================================================================================
+   * State merging etc.
+   * ============================================================================================
+   */
+
 
 // update the map
 // Question: precedence between m1 and m2, currently always take m1 first
@@ -388,22 +517,48 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       nrifc.update(state_at_version(log, version - 1), log[version-1].op).new_state
   }
 
+  /*
+   * ============================================================================================
+   * Invariant
+   * ============================================================================================
+   */
+
+  // captures the wellformedness of the state
+  predicate Inv_WF(s: M) {
+    && s.M?
+    // Question(RA): can we always assume this here?
+    && s.ctail.Some?
+    && s.global_tail.Some?
+    //
+    && s.replicas.Keys == s.localTails.Keys
+    && s.replicas.Keys == s.combiner.Keys
+    // Question(RA): Do we want to require at least one replica?
+    //&& |s.replicas.Keys| > 0
+  }
+
+  // the log contains entries up to, but not including the value here
+  predicate Inv_LogContainsEntriesUpToHere(log: map<nat, LogEntry>, here: nat) {
+    forall i | 0 <= i < here :: i in log.Keys
+  }
+
+
   function get_local_tail(m: M, nodeId: NodeId) : nat
-    requires m != Fail
+    requires Inv_WF(m)
     requires nodeId in m.localTails
+    requires nodeId in m.combiner
   {
-    if nodeId in m.combiner
-      && m.combiner[nodeId].CombinerLtail?
-      && m.combiner[nodeId].Combiner?
-      && m.combiner[nodeId].CombinerUpdatedCtail? then
-        m.combiner[nodeId].localTail
-    else m.localTails[nodeId]
+    match m.combiner[nodeId] {
+      case CombinerReady => m.localTails[nodeId]
+      case CombinerPlaced(_) => m.localTails[nodeId]
+      case CombinerLtail(_, localTail: nat) => localTail
+      case Combiner(_, localTail: nat, _) => localTail
+      case CombinerUpdatedCtail(_, localAndGlobalTail: nat) => localAndGlobalTail
+    }
   }
 
 
   function get_global_tail(m: M, nodeId: NodeId) : nat
-    requires m != Fail
-    requires m.global_tail.Some?
+    requires Inv_WF(m)
   {
     if nodeId in m.combiner && m.combiner[nodeId].Combiner? then
         m.combiner[nodeId].globalTail
@@ -413,28 +568,61 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   }
 
 
+  // the completed tail must be ahead of, or equal to the local tails
+  predicate Inv_CompletedTailLowerBound(s: M)
+    requires Inv_WF(s)
+  {
+    forall nodeId | nodeId in s.localTails :: s.ctail.value >= s.localTails[nodeId]
+  }
+
+  // the global tail must be ahead of, or equal to the stored global_tail_snapshot
+  predicate Inv_GlobalTailLowerBound(s: M)
+    requires Inv_WF(s)
+  {
+    forall nodeId | nodeId in s.localTails :: s.global_tail.value >= get_global_tail(s, nodeId)
+  }
+
+  // we have that the global tail must always be ahead of, or equal to the completed tail
+  predicate Inv_GLobalTailCompleteTailOrder(s: M)
+    requires Inv_WF(s)
+  {
+    s.global_tail.value >= s.ctail.value
+  }
+
+  predicate Inv_CombinerStateValid(s: M)
+    requires Inv_WF(s)
+  {
+    forall nodeId | nodeId in s.combiner ::
+      match s.combiner[nodeId] {
+        case CombinerReady => true
+        case CombinerPlaced(_) => true
+        case CombinerLtail(_, localTail: nat) => (localTail <= s.ctail.value)
+        case Combiner(_, localTail: nat, globalTail: nat) => (
+          // I don't think this is true, no?
+          // && localTail <= s.ctail.value
+          && localTail <= s.global_tail.value
+          && globalTail <= s.global_tail.value
+          && Inv_LogContainsEntriesUpToHere(s.log, localTail)
+        )
+        case CombinerUpdatedCtail(_, localAndGlobalTail: nat) => (
+          && localAndGlobalTail <= s.ctail.value
+          && localAndGlobalTail <= s.global_tail.value)
+          && Inv_LogContainsEntriesUpToHere(s.log, localAndGlobalTail)
+      }
+  }
+
+  // the invariant
   predicate Inv(s: M) {
     // var logicalLocalTail :=  if nodeId in combiner && combiner[nodeId].Combiner? then
     //     combiner[nodeId].localTail else localTails[nodeId];
-    && s != Fail
-    // the datastructure should be there for each node
-    && s.replicas.Keys == s.localTails.Keys
-    && s.replicas.Keys == s.combiner.Keys
-
-    // ctail in the log
-    && (if s.ctail.Some? then (forall i | 0 <= i < s.ctail.value :: i in s.log.Keys) else true)
-
-    // global_tail in the log
-    && (if s.global_tail.Some? then (forall i | 0 <= i < s.global_tail.value :: i in s.log.Keys) else true)
-
-    // ctail >= logicalLocalTails
-    && (forall nodeId | nodeId in s.replicas :: if s.ctail.Some? then s.ctail.value >= get_local_tail(s, nodeId) else true)
-
-    // gtail >= logicalGlobalTails
-    && (forall nodeId | nodeId in s.replicas :: if s.global_tail.Some? then s.global_tail.value >= get_global_tail(s, nodeId) else true)
-
-    // global_tail always ahead of ctail
-    && (if s.global_tail.Some? && s.ctail.Some? then s.global_tail.value >= s.ctail.value else true)
+    && Inv_WF(s)
+    && Inv_GLobalTailCompleteTailOrder(s)
+    && Inv_CompletedTailLowerBound(s)
+    && Inv_GlobalTailLowerBound(s)
+    && Inv_LogContainsEntriesUpToHere(s.log, s.ctail.value)
+    && Inv_LogContainsEntriesUpToHere(s.log, s.global_tail.value)
+    && Inv_CombinerStateValid(s)
+   // && (forall nodeId | nodeId in s.replicas :: Inv_LogContainsEntriesUpToHere(s.log, get_local_tail(s, nodeId)))
 
 
     // replica[nodeId] == fold the operations in the log up to version logicalLocalTail
@@ -506,7 +694,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     | GoToCombinerReady_Step(nodeId: NodeId)
     | ExecLoadLtail_Step(nodeId: NodeId)
     | ExecLoadGlobalTail_Step(nodeId: NodeId)
-    | ExecDispatch_Step(nodeId: NodeId)
+    | ExecDispatchLocal_Step(nodeId: NodeId)
+    | ExecDispatchRemote_Step(nodeId: NodeId)
     | ReadonlyReadCtail_Step(nodeId: NodeId, rid: RequestId )
     | TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId)
     | TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId)
@@ -519,7 +708,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       case GoToCombinerReady_Step(nodeId: NodeId) => GoToCombinerReady(m, m', nodeId)
       case ExecLoadLtail_Step(nodeId: NodeId) => ExecLoadLtail(m, m', nodeId)
       case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail(m, m', nodeId)
-      case ExecDispatch_Step(nodeId: NodeId) => ExecDispatch(m, m',nodeId)
+      case ExecDispatchLocal_Step(nodeId: NodeId) => ExecDispatchLocal(m, m',nodeId)
+      case ExecDispatchRemote_Step(nodeId: NodeId) => ExecDispatchRemote(m, m',nodeId)
       case ReadonlyReadCtail_Step(nodeId: NodeId, rid: RequestId) =>  ReadonlyReadCtail(m, m', nodeId, rid)
       case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyReadyToRead(m, m', nodeId, rid)
       case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone(m, m', nodeId, rid)
@@ -590,9 +780,17 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
 
   }
 
-  lemma ExecDispatch_PreservesInv(m: M, m': M, nodeId: NodeId)
+  lemma ExecDispatchRemote_PreservesInv(m: M, m': M, nodeId: NodeId)
     requires Inv(m)
-    requires ExecDispatch(m, m',nodeId)
+    requires ExecDispatchRemote(m, m',nodeId)
+    ensures Inv(m')
+  {
+
+  }
+
+  lemma ExecDispatchLocal_PreservesInv(m: M, m': M, nodeId: NodeId)
+    requires Inv(m)
+    requires ExecDispatchLocal(m, m',nodeId)
     ensures Inv(m')
   {
 
@@ -623,7 +821,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       case GoToCombinerReady_Step(nodeId: NodeId) => GoToCombinerReady_PreservesInv(m, m', nodeId);
       case ExecLoadLtail_Step(nodeId: NodeId) => ExecLoadLtail_PreservesInv(m, m', nodeId);
       case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail_PreservesInv(m, m', nodeId);
-      case ExecDispatch_Step(nodeId: NodeId) => ExecDispatch_PreservesInv(m, m',nodeId);
+      case ExecDispatchLocal_Step(nodeId: NodeId) => ExecDispatchLocal_PreservesInv(m, m',nodeId);
+      case ExecDispatchRemote_Step(nodeId: NodeId) => ExecDispatchRemote_PreservesInv(m, m',nodeId);
       case ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) =>  ReadonlyReadCtail_PreservesInv(m, m', rid, nodeId);
       case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyReadyToRead_PreservesInv(m, m', nodeId, rid);
       case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone_PreservesInv(m, m', nodeId, rid);
