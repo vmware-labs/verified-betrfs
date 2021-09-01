@@ -109,9 +109,13 @@ module Ptrs {
   ensures ptr.aligned(alignment as nat)
   ensures d == PointsToArray(ptr, seq(len, (i) => init_value))
 
-  method {:extern} ptr_diff(ptr1: Ptr, ptr2: Ptr) returns (i: uint64)
+  function method {:extern} ptr_diff(ptr1: Ptr, ptr2: Ptr) : (i: uint64)
   requires ptr1.as_nat() >= ptr2.as_nat()
   ensures i as nat == ptr1.as_nat() - ptr2.as_nat()
+
+  function method {:extern} ptr_add(ptr1: Ptr, i: uint64) : (ptr2: Ptr)
+  requires ptr1.as_nat() + i as int < 0x1_0000_0000_0000_0000
+  ensures ptr2.as_nat() == ptr1.as_nat() + i as nat
 
   function method {:extern} sizeof<V>() : uint64
 

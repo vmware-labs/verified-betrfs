@@ -49,7 +49,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         inout iocb,
         disk_idx as int64,
         4096,
-        cache.data[cache_idx]);
+        data_ptr(cache, cache_idx));
 
     cache.io_slots[idx].io_slot_info_ptr.write(
         inout io_slot_info,

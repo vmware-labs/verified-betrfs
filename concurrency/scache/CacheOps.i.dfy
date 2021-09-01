@@ -633,7 +633,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           r := cache.status[cache_idx].clear_exc_bit_during_load_phase(r);
 
           read_stub := disk_read_sync(
-              disk_idx as uint64, cache.data[cache_idx], inout data, 
+              disk_idx as uint64, data_ptr(cache, cache_idx), inout data, 
               unwrap_value(read_ticket_opt));
 
           glinear var cache_entry, status;
@@ -708,7 +708,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     dispose_anything(client_opt);
     handle_out := unwrap_value(handle_opt);
 
-    ph := PageHandle(cache.data[cache_idx], cache_idx as uint64);
+    ph := PageHandle(data_ptr(cache, cache_idx as uint64), cache_idx as uint64);
   }
 
   method unget(

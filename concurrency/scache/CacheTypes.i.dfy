@@ -23,7 +23,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   linear datatype NullGhostType = NullGhostType
 
   linear datatype Cache = Cache(
-    data: seq<Ptr>,
+    data_base_ptr: Ptr,
+
+    ghost data: seq<Ptr>,
     disk_idx_of_entry: seq<Ptr>,
 
     status: seq<AtomicStatus>,
@@ -37,7 +39,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     linear ioctx: aio.IOCtx
   )
   {
-    function method key(i: int) : Key
+    function key(i: int) : Key
     requires 0 <= i < |this.data|
     requires 0 <= i < |this.disk_idx_of_entry|
     {
@@ -72,8 +74,20 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       && (forall i | 0 <= i < CACHE_SIZE ::
         this.data[i].aligned(PageSize))
-          
+
+      && (forall i | 0 <= i < CACHE_SIZE ::
+        && this.data_base_ptr.as_nat() + PageSize * i < 0x1_0000_0000_0000_0000
+        && this.data[i] == ptr_add(this.data_base_ptr, (PageSize * i) as uint64))
     }
+
+  }
+
+  function method data_ptr(shared cache: Cache, i: uint64) : (p: Ptr)
+  requires cache.Inv()
+  requires 0 <= i as int < CACHE_SIZE
+  ensures p == cache.data[i]
+  {
+    ptr_add(cache.data_base_ptr, PageSize as uint64 * i)
   }
 
   datatype LocalState = LocalState(
