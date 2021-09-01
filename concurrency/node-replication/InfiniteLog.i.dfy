@@ -249,17 +249,29 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
 
+  predicate RequestIdsValidAndUpdateInit(request_ids: seq<RequestId>, localUpdates: map<RequestId, UpdateState>)
+  {
+    forall rid | rid in request_ids :: (rid in localUpdates &&  localUpdates[rid].UpdateInit?)
+  }
+
+  // reserve entries on the shared log
+  // { UpdateInit(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerReady ; GlobalTail(t) }
+  //   tail = cmpxchg(tail, tail + ops.len()); // retry on fail
+  // { UpdatePlaced(r) ; UpdatePlaced(p) ; UpdatePlaced(q) ; CombinerPlaced( [p,q,r] ) ;
+  //   Log(t, op1) ; Log(t+1, op2) ; Log(t+2, op1) ; GlobalTail(t + ops.len()) }
   predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
   {
     && WF(m, nodeId)
     && CombinerIsReady(m, nodeId)
-    && m.global_tail.Some?
+    && GlobalTailValid(m)
+    && RequestIdsValidAndUpdateInit(request_ids, m.localUpdates)
+
     && var global_tail_var := m.global_tail.value;
-    && (set x:RequestId | x in request_ids :: x)  <= m.localUpdates.Keys
-    && (forall rid | rid in request_ids :: m.localUpdates[rid].UpdateInit?)
+
     && (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
     // Add new entries to the log:
     && var updated_log := m.log + (map idx | global_tail_var <= idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
+
     && m' == m.(log := updated_log)
     .(localUpdates := (map rid | rid in m.localUpdates :: if rid in request_ids then
       UpdatePlaced(nodeId) else m.localUpdates[rid])
@@ -624,6 +636,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && Inv_CombinerStateValid(s)
    // && (forall nodeId | nodeId in s.replicas :: Inv_LogContainsEntriesUpToHere(s.log, get_local_tail(s, nodeId)))
 
+    // there are no entries placed in the log
+    && (forall idx | idx >= s.global_tail.value :: idx !in s.log.Keys)
 
     // replica[nodeId] == fold the operations in the log up to version logicalLocalTail
     //     (initial state + log 0 + log 1 + ... + log k)
