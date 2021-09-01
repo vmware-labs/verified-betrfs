@@ -3,7 +3,7 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 module Constants {
   import opened NativeTypes
 
-  const NUM_THREADS := 24;
+  const RC_WIDTH := 24;
   const CACHE_SIZE := 1048576;
   const NUM_DISK_PAGES := 536870912;
 

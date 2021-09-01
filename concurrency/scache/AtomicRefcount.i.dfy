@@ -19,7 +19,7 @@ module AtomicRefcountImpl {
   {
     && g.loc == rwlock_loc
     && g.val == RwLock.RefCount(t, v as nat)
-    && 0 <= t < NUM_THREADS
+    && 0 <= t < RC_WIDTH
   }
 
   linear datatype AtomicRefcount = AtomicRefcount(

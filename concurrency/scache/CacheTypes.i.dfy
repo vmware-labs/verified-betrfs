@@ -26,7 +26,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     data_base_ptr: Ptr,
 
     ghost data: seq<Ptr>,
-    disk_idx_of_entry: seq<Ptr>,
+    ghost disk_idx_of_entry: seq<Ptr>,
 
     ghost status: seq<AtomicStatus>,
     ghost read_refcounts: seq<seq<AtomicRefcount>>,
@@ -55,10 +55,10 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
          && this.status[i].key == this.key(i)
          && this.status[i].inv()
         )
-      && |this.read_refcounts| == NUM_THREADS
-      && (forall j | 0 <= j < NUM_THREADS ::
+      && |this.read_refcounts| == RC_WIDTH
+      && (forall j | 0 <= j < RC_WIDTH ::
           |this.read_refcounts[j]| == CACHE_SIZE)
-      && (forall j, i | 0 <= j < NUM_THREADS && 0 <= i < CACHE_SIZE ::
+      && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE ::
           && this.read_refcounts[j][i].inv(j)
           && this.read_refcounts[j][i].rwlock_loc == this.status[i].rwlock_loc)
       && |this.cache_idx_of_page| == NUM_DISK_PAGES
@@ -100,7 +100,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     shared function method read_refcount_atomic(j: uint64, i: uint64) : (shared at: AtomicRefcount)
     requires this.Inv()
-    requires 0 <= j as int < NUM_THREADS
+    requires 0 <= j as int < RC_WIDTH
     requires 0 <= i as int < CACHE_SIZE
     ensures at == this.read_refcounts[j][i]
 
@@ -119,7 +119,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     predicate WF()
     {
       && 0 <= this.chunk_idx as int < NUM_CHUNKS
-      && 0 <= t as int < NUM_THREADS
+      && 0 <= t as int < RC_WIDTH
       && 0 <= io_slot_hand as int < NUM_IO_SLOTS
     }
   }

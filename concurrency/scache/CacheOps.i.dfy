@@ -313,7 +313,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures r'.loc == cache.status[cache_idx].rwlock_loc
   ensures r'.val.M?
   ensures r'.val.exc.ExcPending?
-  ensures success ==> r'.val.exc.visited == NUM_THREADS
+  ensures success ==> r'.val.exc.visited == RC_WIDTH
   ensures r'.val == RwLock.ExcHandle(RwLock.ExcPending(
       -1, r'.val.exc.visited, r.val.exc.clean, r.val.exc.b))
   {
@@ -321,8 +321,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     success := true;
     r' := r;
 
-    while i < (NUM_THREADS as uint64) && success
-    invariant 0 <= i as int <= NUM_THREADS
+    while i < (RC_WIDTH as uint64) && success
+    invariant 0 <= i as int <= RC_WIDTH
     invariant r'.loc == cache.status[cache_idx].rwlock_loc
     invariant r'.val.M?
     invariant r'.val.exc.ExcPending?
@@ -337,7 +337,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       i := i + 1;
     }
-    assert success ==> i as nat == NUM_THREADS;
+    assert success ==> i as nat == RC_WIDTH;
   }
 
   method check_all_refcounts_with_t_block(shared cache: Cache,
@@ -355,7 +355,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures r'.loc == cache.status[cache_idx].rwlock_loc
   ensures r'.val.M?
   ensures r'.val.exc.ExcPending?
-  ensures r'.val.exc.visited == NUM_THREADS
+  ensures r'.val.exc.visited == RC_WIDTH
   ensures r'.val == RwLock.ExcHandle(RwLock.ExcPending(
       t as int, r'.val.exc.visited, r.val.exc.clean, r.val.exc.b))
   decreases *
@@ -363,8 +363,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var i: uint64 := 0;
     r' := r;
 
-    while i < (NUM_THREADS as uint64)
-    invariant 0 <= i as int <= NUM_THREADS
+    while i < (RC_WIDTH as uint64)
+    invariant 0 <= i as int <= RC_WIDTH
     invariant r'.loc == cache.status[cache_idx].rwlock_loc
     invariant r'.val.M?
     invariant r'.val.exc.ExcPending?
