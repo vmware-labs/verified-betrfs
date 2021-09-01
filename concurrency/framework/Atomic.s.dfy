@@ -2,19 +2,34 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../../lib/Lang/NativeTypes.s.dfy"
+include "../../lib/Base/Option.s.dfy"
+include "Ptrs.s.dfy"
 
 module {:extern "Atomics"} Atomics {
   import opened NativeTypes
   import opened BitOps
+  import opened Ptrs
+  import opened Options
 
-  type {:extern "predefined"} Atomic(==,!new)<!V, !G>
+  type {:extern "predefined"} GAtomic(==,!new)<!V, !G>
   {
     function {:extern} namespace() : nat
+    function {:extern} ptr() : Option<Ptr>
   }
 
-  type GhostAtomic<!G> = Atomic<(), G>
+  predicate {:extern} gatomic_inv<V, G>(gatomic: GAtomic<V, G>, v: V, g: G)
 
-  predicate {:extern} atomic_inv<V, G>(atomic: Atomic<V, G>, v: V, g: G)
+  linear datatype pre_Atomic<!V, !G> = Atomic(ptr: Ptr, glinear ga: GAtomic<V, G>)
+  {
+    predicate wf() { Some(ptr) == ga.ptr() }
+    function namespace() : nat { ga.namespace() }
+  }
+  type Atomic<!V, !G> = at: pre_Atomic<V, G> | at.wf()
+    witness *
+
+  type GhostAtomic<!G> = GAtomic<(), G>
+
+  predicate atomic_inv<V, G>(atomic: Atomic<V, G>, v: V, g: G) { gatomic_inv(atomic.ga, v, g) }
 
   method {:extern} new_atomic<V, G>(
       v: V,
@@ -32,7 +47,7 @@ module {:extern "Atomics"} Atomics {
       ghost namespace: nat)
   returns (ghost a: GhostAtomic<G>)
   requires inv(g)
-  ensures forall v, g1 :: atomic_inv(a, v, g1) <==> inv(g1)
+  ensures forall v, g1 :: gatomic_inv(a, v, g1) <==> inv(g1)
   ensures a.namespace() == namespace
 
   glinear method {:extern} finish_atomic<V, G>(
@@ -420,14 +435,14 @@ module {:extern "Atomics"} Atomics {
    */
 
   method {:extern} execute_atomic_noop<V, G>(
-      ghost a: Atomic<V, G>)
+      ghost a: GAtomic<V, G>)
   returns (
       ghost ret_value: (),
       ghost orig_value: V,
       ghost new_value: V,
       glinear g: G)
   ensures orig_value == new_value
-  ensures atomic_inv(a, orig_value, g)
+  ensures gatomic_inv(a, orig_value, g)
 }
 
 module BitOps {
