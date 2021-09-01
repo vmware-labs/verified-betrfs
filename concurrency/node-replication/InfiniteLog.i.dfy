@@ -64,6 +64,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       // Finally we write to the localTail atomic and return to CombinerReady state
 
   datatype ReplicaState = ReplicaState(state: nrifc.NRState)
+  // TODO(for-travis): what about the alive bit?
   datatype LogEntry = LogEntry(op: nrifc.UpdateOp, node_id: NodeId)
 
   datatype M = M(
@@ -72,6 +73,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     log: map<nat, LogEntry>,
     global_tail: Option<nat>,
 
+    // TODO(for-travis): do we need RwLock?
     replicas: map<NodeId, nrifc.NRState>, // replicas protected by rwlock
     localTails: map<NodeId, nat>,         // localTail (atomic ints)
     ctail: Option<nat>,                   // ctail (atomic int)
@@ -288,7 +290,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var global_tail_var := m.global_tail.value;
 
     // Question(RA): this one here should be part of the invariant, and not of this predicate
-    // && (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
+    //&& (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
 
     // Add new entries to the log:
     && var updated_log := (map idx | global_tail_var <= idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
@@ -302,8 +304,10 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // construct the new local updates, and record the placed updates
     && var local_updates_new := (map rid | rid in request_ids :: UpdatePlaced(nodeId));
 
+    && m.log.Keys !! updated_log.Keys
+
     // update the state
-    && m' == m.(log := update_map(m.log, updated_log))
+    && m' == m.(log := m.log + updated_log)
               .(localUpdates := update_map(m.localUpdates, local_updates_new))
               .(global_tail := Some(global_tail_new))
               .(combiner := m.combiner[nodeId := combiner_state_new])
@@ -556,7 +560,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && forall i | i in s.combiner :: s.combiner[i] == CombinerReady
 
     // all replicas should be identical
-    && forall i,j | i in s.replicas && j in s.replicas :: s.replicas[i] == s.replicas[j]
+    && forall i | i in s.replicas :: s.replicas[i] == nrifc.init_state()
 
     // the local reads, local updates, and the log should be empty
     && s.localReads == map[]
@@ -568,9 +572,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   predicate Internal(shard: M, shard': M)
 
 
-// Given a log of ops and a version number, compute the state at that version
+  // Given a log of ops and a version number, compute the state at that version
   function state_at_version(log: map<nat, LogEntry>, version: nat) : nrifc.NRState
-  requires forall i | i <= version :: i in log
+  requires forall i | 0 <= i < version :: i in log
   {
     if version == 0 then
       nrifc.init_state()
@@ -593,8 +597,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     //
     && s.replicas.Keys == s.localTails.Keys
     && s.replicas.Keys == s.combiner.Keys
-    // Question(RA): Do we want to require at least one replica?
-    //&& |s.replicas.Keys| > 0
+    && |s.replicas.Keys| > 0
   }
 
   // the log contains entries up to, but not including the value here
@@ -683,7 +686,6 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && Inv_LogContainsEntriesUpToHere(s.log, s.ctail.value)
     && Inv_LogContainsEntriesUpToHere(s.log, s.global_tail.value)
     && Inv_CombinerStateValid(s)
-   // && (forall nodeId | nodeId in s.replicas :: Inv_LogContainsEntriesUpToHere(s.log, get_local_tail(s, nodeId)))
 
     // there are no entries placed in the log
     && (forall idx | idx >= s.global_tail.value :: idx !in s.log.Keys)
@@ -691,7 +693,10 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     // replica[nodeId] == fold the operations in the log up to version logicalLocalTail
     //     (initial state + log 0 + log 1 + ... + log k)
     //     (see state_at_version in NRSimple)
-    // && (forall nodeId | nodeId in s.replicas :: s.replicas[nodeId] == state_at_version(s.log, get_local_tail(s, nodeId)))
+    
+    && (forall nodeId | nodeId in s.replicas :: (forall i | 0 <= i < get_local_tail(s, nodeId) :: i in s.log.Keys))
+
+    && (forall nodeId | nodeId in s.replicas :: s.replicas[nodeId] == state_at_version(s.log, get_local_tail(s, nodeId)))
 
 
     //&& forall rid :: rid in localReads :: localReads[rid].ctail <= ctail
@@ -823,7 +828,21 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     requires AdvanceTail(m, m', nodeId, request_ids)
     ensures Inv(m')
   {
+      //&& (forall nodeId | nodeId in s.replicas :: s.replicas[nodeId] == state_at_version(s.log, get_local_tail(s, nodeId)))
+      assert m.replicas[nodeId] == m'.replicas[nodeId];
+      assert get_local_tail(m, nodeId) == get_local_tail(m', nodeId);
+      assert forall k | k in m.log.Keys :: m.log[k] == m'.log[k];
 
+      assert forall k | 0 <= k < get_local_tail(m, nodeId) :: k in m.log;
+
+      assert get_local_tail(m', nodeId) <= m'.global_tail.value;
+
+      assert (0 in m.log.Keys && get_local_tail(m, nodeId) > 0) ==> 
+             nrifc.update(state_at_version(m.log, 0), m.log[0].op).new_state 
+               == state_at_version(m'.log, 1);
+      
+      
+      assert m'.replicas[nodeId] == state_at_version(m'.log, get_local_tail(m', nodeId));
   }
 
   lemma ExecLoadLtail_PreservesInv(m: M, m': M, nodeId: NodeId)
