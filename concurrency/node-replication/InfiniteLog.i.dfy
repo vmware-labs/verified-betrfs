@@ -188,8 +188,11 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // QUESTION: Do we need to ensure that the nodeId here is in fact valid?
     //     SEE: Inv_ReadOnlyStateNodeIdExists
 
+    // explicitly read the ctail value
+    && var readTail := m.ctail.value;
+
     // construct the new state for the read request
-    && var newst :=  ReadonlyCtail(m.localReads[rid].op, nodeId, m.ctail.value);
+    && var newst :=  ReadonlyCtail(m.localReads[rid].op, nodeId, readTail);
     // update the state
     && m' == m.(localReads := m.localReads[rid := newst])
   }
@@ -361,8 +364,12 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && LocalTailValid(m, nodeId)
     // get the combiner state
     && var c := m.combiner[nodeId];
+
+    // explicitly load the local tail
+    && var ltail := m.localTails[nodeId];
+
     // construct the new combiner state
-    && var newst := CombinerLtail(c.queued_ops, m.localTails[nodeId]);
+    && var newst := CombinerLtail(c.queued_ops, ltail);
     // update the state of the combiner
     && m' == m.(combiner := m.combiner[nodeId := newst])
   }
@@ -379,8 +386,12 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && GlobalTailValid(m)
     // get the combiner state
     && var c := m.combiner[nodeId];
+
+    // explicitly load the global tail
+    && var gtail := m.global_tail.value;
+
     // construct the new combiner state
-    && var newst := Combiner(c.queued_ops, c.localTail, m.global_tail.value);
+    && var newst := Combiner(c.queued_ops, c.localTail, gtail);
     // update the state of the combiner
     && m' == m.(combiner := m.combiner[nodeId := newst])
   }
