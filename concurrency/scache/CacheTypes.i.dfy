@@ -205,8 +205,13 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && g.slot_idx < NUM_IO_SLOTS
     && |cache.io_slots| == NUM_IO_SLOTS
     && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && iocb_ptr == cache.io_slots[g.slot_idx].iocb_ptr
     && g.wbo.b.CacheEntryHandle?
-    && g.wbo.b.key.cache_idx < 0x1_0000_0000_0000_0000
+    && 0 <= g.wbo.b.key.cache_idx < CACHE_SIZE
     && g.io_slot_info.v == IOSlotWrite(g.wbo.b.key.cache_idx as uint64)
+    && g.wbo.is_handle(g.key)
+    && g.key == cache.key(g.key.cache_idx)
+    && g.wbo.token.loc == cache.status[g.wbo.b.key.cache_idx as nat].rwlock_loc
+    && g.wbo.b.cache_entry.disk_idx == iocb.offset
   }
 }

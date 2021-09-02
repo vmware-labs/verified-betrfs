@@ -226,7 +226,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
         // Check the disk_idx
 
-        var actual_disk_idx: int64 := cache.disk_idx_of_entry[cache_idx].read(
+        var actual_disk_idx: int64 := cache.disk_idx_of_entry_ptr(cache_idx).read(
             T.borrow_sot(handle_opt.value).idx);
 
         if actual_disk_idx != expected_disk_idx {
@@ -278,7 +278,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           cache.status_atomic(cache_idx as uint64).try_acquire_writeback(false);
 
       if do_write_back {
-        var disk_idx := cache.disk_idx_of_entry[cache_idx].read(
+        var disk_idx := cache.disk_idx_of_entry_ptr(cache_idx as uint64).read(
             T.borrow_wb(write_back_r.value.token).idx);
         assert disk_idx != -1;
 
@@ -439,7 +439,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
           // 7. clear cache_idx_of_page lookup
 
-          var disk_idx := cache.disk_idx_of_entry[cache_idx].read(handle.idx);
+          var disk_idx := cache.disk_idx_of_entry_ptr(cache_idx).read(handle.idx);
 
           glinear var CacheEntryHandle(key, cache_entry, data, idx) := handle;
 
@@ -642,7 +642,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
               cache_idx as int, disk_idx as nat,
               unwrap_value(cache_reading_opt), read_stub);
 
-          cache.disk_idx_of_entry[cache_idx].write(inout idx, disk_idx as int64);
+          cache.disk_idx_of_entry_ptr(cache_idx).write(inout idx, disk_idx as int64);
 
           glinear var ceh := CacheEntryHandle(
               cache.key(cache_idx as int), cache_entry, idx, data);

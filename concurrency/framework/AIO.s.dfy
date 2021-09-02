@@ -143,7 +143,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   ensures iocb_ptr == nullptr ==> fr.FRNone?
   ensures iocb_ptr != nullptr ==> (fr.FRWrite? || fr.FRRead?)
   ensures fr.FRWrite? ==>
-    && fr.iocb.IocbRead?
+    && fr.iocb.IocbWrite?
     && ctx.async_write_inv(iocb_ptr, fr.iocb, fr.data, fr.wg)
     && fr.stub == T.Token(ssm.DiskWriteResp(fr.iocb.offset))
   ensures fr.FRRead? ==>

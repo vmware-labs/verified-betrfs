@@ -36,6 +36,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires wbo.is_handle(cache.key(cache_idx as int))
   requires wbo.b.CacheEntryHandle?
   requires ticket == CacheResources.DiskWriteTicket(disk_idx as int, wbo.b.data.s)
+  requires wbo.token.loc == cache.status[cache_idx as nat].rwlock_loc
+  requires wbo.b.cache_entry.disk_idx == disk_idx as nat
 
   ensures local.WF()
   ensures local.t == old_local.t
@@ -60,6 +62,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         cache.key(cache_idx as int),
         wbo, idx as int, io_slot_info);
 
+    assert WriteGInv(cache, cache.io_slots[idx].iocb_ptr,
+        iocb, wbo.b.data.s, writeg);
     aio.async_write(
         cache.ioctx,
         cache.io_slots[idx].iocb_ptr,
@@ -165,7 +169,6 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
             iocb1 := iocb;
             io_slot_info1 := io_slot_info;
-            assert false;
           }
           case IOSlotRead(cache_idx) => {
             glinear var FRRead(iocb, wp, rg, stub) := fr;
