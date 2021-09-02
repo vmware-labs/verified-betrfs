@@ -105,8 +105,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires wp.ptr == cache.data[cache_idx]
   requires |wp.s| == PageSize
   requires stub == CacheResources.DiskReadStub(disk_addr, wp.s)
-  requires h.CacheEntryHandle?
-  requires h.cache_entry.disk_idx == disk_addr
+  requires h.CacheReadingHandle?
+  requires h.cache_reading.disk_idx == disk_addr
 
 
   method disk_writeback_callback(
@@ -165,10 +165,11 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
             iocb1 := iocb;
             io_slot_info1 := io_slot_info;
+            assert false;
           }
           case IOSlotRead(cache_idx) => {
-            glinear var FRRead(iocb, wp, wg, stub) := fr;
-            glinear var ReadG(key, h, g_slot_idx, io_slot_info) := wg;
+            glinear var FRRead(iocb, wp, rg, stub) := fr;
+            glinear var ReadG(key, h, g_slot_idx, io_slot_info) := rg;
 
             glinear var ustub := CacheResources.DiskReadStub_fold(iocb.offset, wp.s, stub);
             ghost var disk_idx := ustub.addr;
@@ -179,9 +180,12 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           }
         }
 
+        glinear var slot_access := IOSlotAccess(iocb1, io_slot_info1);
+        //assert slot_access.iocb.ptr == cache.io_slots[slot_idx].iocb_ptr;
+        //assert slot_access.io_slot_info.ptr == cache.io_slots[slot_idx].io_slot_info_ptr;
         BasicLockImpl.release(
             cache.io_slots[slot_idx].lock,
-            IOSlotAccess(iocb1, io_slot_info1));
+            slot_access);
       }
     }
   }

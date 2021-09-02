@@ -69,6 +69,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && (forall d | 0 <= d < NUM_DISK_PAGES ::
           atomic_index_lookup_inv(this.cache_idx_of_page[d], d))
       && |io_slots| == NUM_IO_SLOTS
+      && (forall i | 0 <= i < |io_slots| :: io_slots[i].WF())
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_read_inv(iocb_ptr, iocb, wp, g)
         <==> ReadGInv(this, iocb_ptr, iocb, wp, g))
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_write_inv(iocb_ptr, iocb, wp, g)
@@ -177,15 +178,19 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       data: PointsToArray<byte>,
       g: ReadG)
   {
+    && iocb.ptr == iocb_ptr
     && g.slot_idx < NUM_IO_SLOTS
     && |cache.io_slots| == NUM_IO_SLOTS
     && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
-    && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && iocb_ptr == cache.io_slots[g.slot_idx].iocb_ptr
     && g.reading.CacheReadingHandle?
     && 0 <= g.key.cache_idx < CACHE_SIZE
     && data.ptr == cache.data[g.key.cache_idx]
     && g.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
     && iocb.nbytes == PageSize
+    && g.reading.is_handle(g.key)
+    && g.reading.CacheReadingHandle?
+    && g.reading.cache_reading.disk_idx == iocb.offset
   }
 
   predicate WriteGInv(
@@ -195,10 +200,10 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       data: seq<byte>,
       g: WriteG)
   {
+    && iocb.ptr == iocb_ptr
     && is_read_perm(iocb_ptr, iocb, data, g)
     && g.slot_idx < NUM_IO_SLOTS
     && |cache.io_slots| == NUM_IO_SLOTS
-    && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
     && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
     && g.wbo.b.CacheEntryHandle?
     && g.wbo.b.key.cache_idx < 0x1_0000_0000_0000_0000
