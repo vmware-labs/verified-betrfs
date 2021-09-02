@@ -349,8 +349,46 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
               .(combiner := m.combiner[nodeId := combiner_state_new])
   }
 
+/*
+  The following is an attempt to split up the advance tail and the log writing into two parts
+  The global tail and the log entries are *shared* and thus any change to them cannot really
+  be made visible atomically at once.  This approach makes the updates non-atomic, note:
+  an update to the entry itself is made atomic!
 
+  predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>) {
+    && StateValid(m)
+    && InCombinerReady(m, nodeId)
+    && GlobalTailValid(m)
 
+    // atomically load the new update
+    && var global_tail_new := m.global_tail.value + |request_ids|;
+
+    // the new combiner state
+    && var cstate_new := CombinerWriteLog(m.global_tail.value, 0, request_ids, nodeId);
+
+    && m' == m.(global_tail := Some(global_tail_new))
+              .(combiner := m.combiner[nodeId := cstate_new])
+  }
+
+  predicate WriteLogEntry(m: M, m': M, nodeId: NodeId) {
+    && StateValid(m)
+    && InCombinerWriteLogEntry(m, nodeId)   // c.request_ids != [] and c.nodeId == nodeId
+
+    && var c := m.combiner[nodeId];
+    // bump the idex
+    && var c_new := c.(idx = c.idx + 1);
+
+    && m' == m.(log := m.log[c.logIdx + c.idx := LogEntry(m.localUpdates[c.request_ids[c.idx]].op, c.nodeId))]))
+              .(localUpdates := m.localUpdate[request_ids[c.idx] := UpdatePlaced(nodeId)]
+              .(combiner := m.combiner[nodeId := combiner_state_new])
+  }
+
+  predicate WriteLogDone(m: M, m': M, nodeId: NodeId) {
+    && StateValid(m)
+    && InCombinerWriteLogDone(m, nodeId)   // c.request_ids == [] and c.nodeId == nodeId
+    && m' == m.(combiner := m.combiner[nodeId := CombinerPlaced(c.request_ids)])
+  }
+  */
 
   // STATE TRANSITION: CombinerPlaced -> CombinerLTail
   //
