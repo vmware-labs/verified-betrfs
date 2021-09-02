@@ -19,11 +19,15 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CacheHandle
   import opened IocbStruct
   import opened CacheAIOParams
+  import opened GlinearSeq
+  import RwLockToken
 
   linear datatype NullGhostType = NullGhostType
 
   linear datatype Cache = Cache(
     data_base_ptr: Ptr,
+    read_refcounts_base_ptr: Ptr,
+    glinear read_refcounts_gshared: glseq<glseq<GAtomic<uint8, RwLockToken.Token>>>,
 
     ghost data: seq<Ptr>,
     ghost disk_idx_of_entry: seq<Ptr>,
@@ -75,9 +79,16 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && (forall i | 0 <= i < CACHE_SIZE ::
         this.data[i].aligned(PageSize))
 
+      && this.data_base_ptr.as_nat() + PageSize * (CACHE_SIZE - 1) < 0x1_0000_0000_0000_0000
       && (forall i | 0 <= i < CACHE_SIZE ::
-        && this.data_base_ptr.as_nat() + PageSize * i < 0x1_0000_0000_0000_0000
         && this.data[i] == ptr_add(this.data_base_ptr, (PageSize * i) as uint64))
+
+      && this.read_refcounts_base_ptr.as_nat() + (RC_WIDTH-1) * CACHE_SIZE * (CACHE_SIZE-1) < 0x1_0000_0000_0000_0000
+      && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE ::
+          && this.read_refcounts[j][i].a.ptr ==
+              ptr_add(this.read_refcounts_base_ptr, (j * CACHE_SIZE + i) as uint64)
+          && this.read_refcounts[j][i].a.ga ==
+              this.read_refcounts_gshared.get(j).get(i))
     }
 
     shared function method data_ptr(i: uint64) : (p: Ptr)
@@ -103,6 +114,13 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     requires 0 <= j as int < RC_WIDTH
     requires 0 <= i as int < CACHE_SIZE
     ensures at == this.read_refcounts[j][i]
+    {
+      gshared var b := this.read_refcounts_gshared.borrow(j as nat).borrow(i as nat);
+      gshared var a2 := Atomic(
+          ptr_add(this.read_refcounts_base_ptr, (j * CACHE_SIZE as uint64 + i)),
+          b);
+      AtomicRefcount(a2, this.read_refcounts[j][i].rwlock_loc)
+    }
 
     shared function method cache_idx_of_page_atomic(i: uint64) : (shared at: AtomicIndexLookup)
     requires this.Inv()

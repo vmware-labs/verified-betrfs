@@ -8,6 +8,11 @@ module GlinearSeq {
 
     function {:extern} get(i: nat) : V
     requires i < len() && has(i)
+
+    gshared function method {:extern} borrow(ghost i: nat) : (gshared v': V)
+    requires i < this.len()
+    requires this.has(i)
+    ensures v' == this.get(i)
   }
 
   glinear method {:extern} glseq_take<V>(glinear g: glseq<V>, ghost i: nat)
@@ -19,4 +24,5 @@ module GlinearSeq {
   ensures forall j | 0 <= j < g.len() :: j != i ==> !g.has(j) ==> !g'.has(j)
   ensures forall j | 0 <= j < g.len() ::
       j != i ==> g.has(j) ==> g'.has(j) && g'.get(j) == g.get(j)
+
 }
