@@ -663,13 +663,13 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     // log: map<nat, LogEntry>
     map[],
     // global_tail: Option<nat>,
-    Some(0), // NOTE(travis): should be None
+    None, // NOTE(travis): should be None
     // replicas: map<NodeId, nrifc.NRState>,
     map[], // Question: initialize for all nodes?
     // localTails: map<NodeId, nat>
     map[], // Question: initialize for all nodes?
     // ctail: Option<nat>,                   // ctail (atomic int)
-    Some(0),
+    None,
     // localReads: map<RequestId, ReadonlyState>,
     map[],
     // localUpdates: map<RequestId, UpdateState>,
@@ -928,6 +928,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   lemma dot_unit(x: M)
   ensures dot(x, unit()) == x
   {
+    assert unit().M?;
+    assert dot(unit(), unit()).M?;
     assert dot(unit(), unit()) == unit();
     assert dot(x, unit()) == x;
   }
