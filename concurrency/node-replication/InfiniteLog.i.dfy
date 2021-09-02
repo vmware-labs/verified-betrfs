@@ -50,6 +50,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //    * updating the ctail at the end of exec
   // global tail should be reflected in the M state
 
+  // TODO rename this to ExecutorState maybe
   datatype CombinerState =
     | CombinerReady
       // Increment global tail with compare_and_exchange
@@ -65,6 +66,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   datatype ReplicaState = ReplicaState(state: nrifc.NRState)
   // TODO(for-travis): what about the alive bit?
+  // NOTE(travis): see the new notes in slide show
   datatype LogEntry = LogEntry(op: nrifc.UpdateOp, node_id: NodeId)
 
   datatype M = M(
@@ -74,6 +76,17 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     global_tail: Option<nat>,
 
     // TODO(for-travis): do we need RwLock?
+    //
+    // NOTE(travis): this depends on how we decide to fix the issue from last week
+    //
+    // * If it is determined that holding the lock for the duration of exec
+    //      (including the ctail update) is essential to the algorithm, then
+    //      we will need to model this lock explicitly.
+    //
+    // * If it is determined that the *only* function of the lock is to protect
+    //      the replica, we do NOT need to model it explicitly.
+
+    lockStates: map<NodeId, LockState>,
     replicas: map<NodeId, nrifc.NRState>, // replicas protected by rwlock
     localTails: map<NodeId, nat>,         // localTail (atomic ints)
     ctail: Option<nat>,                   // ctail (atomic int)
@@ -231,6 +244,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && StateValid(m)
     && InReadyToRead(m, rid)
     && var readRequest := m.localReads[rid];
+    // TODO require us to be in 'CombinerReady' state
     // perform the read operation
     && var ret := nrifc.read(m.replicas[readRequest.nodeId], readRequest.op);
     // construct the new state
@@ -473,6 +487,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var queue_index := |c.queued_ops| - (c.globalTail - c.localTail);
     && 0 <= queue_index < |c.queued_ops|
 
+    && c.queued_ops[queue_index] in m.localUpdates // NOTE(travis): added this
+
     // update the state
     && m' == m.(combiner := m.combiner[nodeId := c_new])
               .(replicas := m.replicas[nodeId := nr_state'])
@@ -594,7 +610,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     // log: map<nat, LogEntry>
     map[],
     // global_tail: Option<nat>,
-    Some(0),
+    Some(0), // NOTE(travis): should be None
     // replicas: map<NodeId, nrifc.NRState>,
     map[], // Question: initialize for all nodes?
     // localTails: map<NodeId, nat>
@@ -637,6 +653,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && s.ctail == Some(0)
     && s.global_tail == Some(0)
     // there should be at least one replica
+    // NOTE(travis) this is probably technically unnecessary even if it's harmless
     && |s.replicas| > 0
     // all node local state is defined for all replica
     && s.replicas.Keys == s.localTails.Keys
@@ -656,8 +673,15 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   }
 
   // take a look at scache/cache/SimpleCacheSM.i.dfy for an example
+  // NOTE(travis): the `Next` predicate defined below should be called `Internal`
+  //    The "full" Next predicate includes:
+  //      * new requests entering the system
+  //      * finished responses leaving the system
+  //      * "internal" steps, like all the ones defined in this file
   predicate Internal(shard: M, shard': M)
-
+  {
+    Next(shard, shard')
+  }
 
   // Given a log of ops and a version number, compute the state at that version
   function state_at_version(log: map<nat, LogEntry>, version: nat) : nrifc.NRState
@@ -679,6 +703,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   predicate Inv_WF(s: M) {
     && s.M?
     // Question(RA): can we always assume this here?
+    // NOTE(travis): yes, this is what I'd expect
     && s.ctail.Some?
     && s.global_tail.Some?
     //
@@ -711,6 +736,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   function get_global_tail(m: M, nodeId: NodeId) : nat
     requires Inv_WF(m)
   {
+    // NOTE(travis): I think we may just always want to use `m.globalTail.value` here?
+    // The `globalTail` stored on the combiner state may be an _out of date_ version of the
+    // `globalTail`.
     if nodeId in m.combiner && m.combiner[nodeId].Combiner? then
         m.combiner[nodeId].globalTail
     else if nodeId in m.combiner && m.combiner[nodeId].CombinerUpdatedCtail? then
@@ -823,6 +851,10 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   //requires Inv(dot(shard, rest))
   //requires Internal(shard, shard')
   ensures Inv(dot(shard', rest))
+  {
+    InternalMonotonic(shard, shard', rest);
+    Next_Implies_inv(dot(shard, rest), dot(shard', rest));
+  }
 
   lemma NewTicketPreservesInv(whole: M, whole': M, rid: RequestId, input: IOIfc.Input)
   //requires Inv(whole)
@@ -836,6 +868,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
 
   lemma dot_unit(x: M)
   ensures dot(x, unit()) == x
+  {
+  }
 
   lemma commutative(x: M, y: M)
   ensures dot(x, y) == dot(y, x)
@@ -874,7 +908,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     | AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>)
 
 
-  predicate NextStep(m: M, m': M, op: nrifc.Op, step: Step) {
+  predicate NextStep(m: M, m': M, step: Step) {
     match step {
       case GoToCombinerReady_Step(nodeId: NodeId) => GoToCombinerReady(m, m', nodeId)
       case ExecLoadLtail_Step(nodeId: NodeId) => ExecLoadLtail(m, m', nodeId)
@@ -889,8 +923,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     }
   }
 
-  predicate Next(m: M, m': M, op: nrifc.Op) {
-    exists step :: NextStep(m, m', op, step)
+  predicate Next(m: M, m': M) {
+    exists step :: NextStep(m, m', step)
   }
 
 
@@ -988,9 +1022,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
 
   }
 
-  lemma NextStep_PreservesInv(m: M, m': M, op: nrifc.Op, step: Step)
+  lemma NextStep_PreservesInv(m: M, m': M, step: Step)
     requires Inv(m)
-    requires NextStep(m, m', op, step)
+    requires NextStep(m, m', step)
     ensures Inv(m')
   {
     match step {
@@ -1007,15 +1041,74 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     }
   }
 
-  lemma Next_Implies_inv(m: M, m': M, op: nrifc.Op)
+  lemma Next_Implies_inv(m: M, m': M)
   requires Inv(m)
-  requires Next(m, m', op)
+  requires Next(m, m')
   ensures Inv(m')
   {
-    var step :| NextStep(m, m', op, step);
-    NextStep_PreservesInv(m, m', op, step);
+    var step :| NextStep(m, m', step);
+    NextStep_PreservesInv(m, m', step);
   }
 
+  lemma InternalMonotonic(m: M, m': M, p: M)
+  requires Internal(m, m')
+  requires dot(m, p) != Fail
+  ensures Internal(dot(m, p), dot(m', p))
+  {
+    var step :| NextStep(m, m', step);
+    match step {
+      case GoToCombinerReady_Step(nodeId: NodeId) => {
+        assert GoToCombinerReady(dot(m, p), dot(m', p), nodeId);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case ExecLoadLtail_Step(nodeId: NodeId) => {
+        assert ExecLoadLtail(dot(m, p), dot(m', p), nodeId);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case ExecLoadGlobalTail_Step(nodeId: NodeId) => {
+        assert ExecLoadGlobalTail(dot(m, p), dot(m', p), nodeId);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case ExecDispatchLocal_Step(nodeId: NodeId) => {
+        /*
+        var c := m.combiner[nodeId];
+        var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[c.localTail].op);
+        var c_new := c.(localTail := c.localTail + 1);
+        var queue_index := |c.queued_ops| - (c.globalTail - c.localTail);
+        assert dot(m', p).combiner == dot(m, p).combiner[nodeId := c_new];
+        assert dot(m', p).replicas == dot(m, p).replicas[nodeId := nr_state'];
+        assert dot(m', p).localUpdates == dot(m, p).localUpdates[c.queued_ops[queue_index]:= UpdateDone(ret)];
+        */
+        assert ExecDispatchLocal(dot(m, p), dot(m', p), nodeId);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case ExecDispatchRemote_Step(nodeId: NodeId) => {
+        assert ExecDispatchRemote(dot(m, p), dot(m', p), nodeId);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) => {
+        assert ReadonlyReadCtail(dot(m, p), dot(m', p), rid, nodeId);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => {
+        assert TransitionReadonlyReadyToRead(dot(m, p), dot(m', p), nodeId, rid);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => {
+        assert TransitionReadonlyDone(dot(m, p), dot(m', p), nodeId, rid);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => {
+        assume false; // TODO
+        assert AdvanceTail(dot(m, p), dot(m', p), nodeId, request_ids);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case UpdateCompletedTail_Step(nodeId: NodeId) => {
+        assert UpdateCompletedTail(dot(m, p), dot(m', p), nodeId);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+    }
+  }
 
   // import NRSimple
   // include "NRSimple.i.dfy"
