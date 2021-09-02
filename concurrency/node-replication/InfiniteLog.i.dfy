@@ -960,11 +960,24 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
 
   }
 
+  lemma state_at_version_preserves(a: map<nat, Op>, b: map<nat, Op>, i: nat)
+  requires forall k | k < i :: i in m.log && i in m'.log && m.log[k] == m'.log[k]
+  ensures state_at_version(a, i) == state_at_version(b, i)
+  decreases i
+  {
+  }
+
   lemma AdvanceTail_PreservesInv(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
     requires Inv(m)
     requires AdvanceTail(m, m', nodeId, request_ids)
     ensures Inv(m')
   {
+      forall nodeId | nodeId in s.replicas
+      ensures s.replicas[nodeId] == state_at_version(s.log, get_local_tail(s, nodeId))
+      {
+        // proof here
+      }
+
     assert m.replicas.Keys == m'.replicas.Keys;
     assert (forall nid | nid in m'.replicas :: get_local_tail(m, nid) == get_local_tail(m', nid));
     assert (forall nid | nid in m'.replicas :: (forall k | 0 <= k < get_local_tail(m, nid) :: k in m.log.Keys));

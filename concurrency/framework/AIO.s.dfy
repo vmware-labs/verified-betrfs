@@ -115,6 +115,8 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   requires iocb.IocbRead?
   requires iocb.ptr == iocb_ptr
   requires iocb.nbytes == PageSize
+  requires wp.ptr == iocb.buf
+  requires |wp.s| == iocb.nbytes
   requires ctx.async_read_inv(iocb_ptr, iocb, wp, g)
   requires ticket == T.Token(ssm.DiskReadReq(iocb.offset))
 
@@ -147,6 +149,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   ensures fr.FRRead? ==>
     && fr.iocb.IocbRead?
     && ctx.async_read_inv(iocb_ptr, fr.iocb, fr.wp, fr.rg)
+    && |fr.wp.s| == fr.iocb.nbytes
     && fr.stub == T.Token(ssm.DiskReadResp(fr.iocb.offset, fr.wp.s))
 
   method {:extern} sync_read(

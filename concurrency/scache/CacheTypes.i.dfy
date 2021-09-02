@@ -84,9 +84,14 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && this.data[i] == ptr_add(this.data_base_ptr, (PageSize * i) as uint64))
 
       && this.read_refcounts_base_ptr.as_nat() + (RC_WIDTH-1) * CACHE_SIZE * (CACHE_SIZE-1) < 0x1_0000_0000_0000_0000
+      && this.read_refcounts_gshared.len() == RC_WIDTH
+      && (forall j | 0 <= j < RC_WIDTH ::
+          && this.read_refcounts_gshared.has(j)
+          && this.read_refcounts_gshared.get(j).len() == CACHE_SIZE)
       && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE ::
           && this.read_refcounts[j][i].a.ptr ==
               ptr_add(this.read_refcounts_base_ptr, (j * CACHE_SIZE + i) as uint64)
+          && this.read_refcounts_gshared.get(j).has(i)
           && this.read_refcounts[j][i].a.ga ==
               this.read_refcounts_gshared.get(j).get(i))
     }
@@ -114,13 +119,13 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     requires 0 <= j as int < RC_WIDTH
     requires 0 <= i as int < CACHE_SIZE
     ensures at == this.read_refcounts[j][i]
-    {
+    /*{
       gshared var b := this.read_refcounts_gshared.borrow(j as nat).borrow(i as nat);
       gshared var a2 := Atomic(
           ptr_add(this.read_refcounts_base_ptr, (j * CACHE_SIZE as uint64 + i)),
           b);
       AtomicRefcount(a2, this.read_refcounts[j][i].rwlock_loc)
-    }
+    }*/
 
     shared function method cache_idx_of_page_atomic(i: uint64) : (shared at: AtomicIndexLookup)
     requires this.Inv()
@@ -172,16 +177,15 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       data: PointsToArray<byte>,
       g: ReadG)
   {
-    /*
     && g.slot_idx < NUM_IO_SLOTS
     && |cache.io_slots| == NUM_IO_SLOTS
     && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
     && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
     && g.reading.CacheReadingHandle?
-    && g.key.cache_idx < 0x1_0000_0000_0000_0000
+    && 0 <= g.key.cache_idx < CACHE_SIZE
+    && data.ptr == cache.data[g.key.cache_idx]
     && g.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
-    */
-    false // currently not doing any async reads
+    && iocb.nbytes == PageSize
   }
 
   predicate WriteGInv(
