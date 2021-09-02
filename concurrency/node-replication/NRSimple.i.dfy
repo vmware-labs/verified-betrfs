@@ -1,6 +1,6 @@
 include "NRSpec.s.dfy"
 
-module NRSimple(nrifc: NRIfc) refines StateMachine(nrifc) {
+module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
   import opened RequestIds
 
   datatype ReadReq = ReadReq(ctail_at_start: nat, op: nrifc.ReadonlyOp)
@@ -96,7 +96,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(nrifc) {
     | StartReadonly_Step(rid: RequestId, rop: nrifc.ReadonlyOp)
     | FinishReadonly_Step(rid: RequestId, version: nat, return_value: nrifc.ReturnType)
 
-  predicate NextStep(s: Variables, s': Variables, ops: nrifc.Op, step: Step) {
+  predicate NextStep(s: Variables, s': Variables, ops: ifc.Op, step: Step) {
     match step {
       case StartUpdate_Step(rid: RequestId, op: nrifc.UpdateOp) => StartUpdate(s, s', rid, op)
       case AddUpdateToLog_Step(rid: RequestId) => AddUpdateToLog(s, s', rid)
@@ -166,9 +166,9 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(nrifc) {
 
   }
 
-  lemma NextStep_PreservesInv(s: Variables, s': Variables, ops: nrifc.Op, step: Step)
+  lemma NextStep_PreservesInv(s: Variables, s': Variables, op: ifc.Op, step: Step)
     requires Inv(s)
-    requires NextStep(s, s', ops, step)
+    requires NextStep(s, s', op, step)
     ensures Inv(s')
   {
     match step {
