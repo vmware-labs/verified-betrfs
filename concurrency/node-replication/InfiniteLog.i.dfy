@@ -1156,10 +1156,42 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     var step :| NextStep(m, m', step);
     match step {
       case GoToCombinerReady_Step(nodeId: NodeId) => {
+        assert m.M?;
+        assert m'.M?;
+        assert p.M?;
+        assert dot(m, p).M?;
+
+        assert  m'.log.Keys !! p.log.Keys;
+        assert  m'.replicas.Keys !! p.replicas.Keys;
+        assert  m'.localTails.Keys !! p.localTails.Keys;   // <-- we update localTails, so that one fails
+        assert  m'.localReads.Keys !! p.localReads.Keys;
+        assert  m'.localUpdates.Keys !! p.localUpdates.Keys;
+        assert  m'.combiner.Keys !! p.combiner.Keys;       // <-- we also write combiner, but that one is OK??
+        assert  !(m'.ctail.Some? && p.ctail.Some?);
+        assert  !(m'.global_tail.Some? && p.global_tail.Some?);
+
+        assert dot(m', p).M?;
+
         assert GoToCombinerReady(dot(m, p), dot(m', p), nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case WriteLogEntry_Step(nodeId: NodeId) => {
+        assert m.M?;
+        assert m'.M?;
+        assert p.M?;
+        assert dot(m, p).M?;
+
+        assert  m'.log.Keys !! p.log.Keys;      // <-- we write a log entry, so that one fails!
+        assert  m'.replicas.Keys !! p.replicas.Keys;
+        assert  m'.localTails.Keys !! p.localTails.Keys;
+        assert  m'.localReads.Keys !! p.localReads.Keys;
+        assert  m'.localUpdates.Keys !! p.localUpdates.Keys;  // <-- we also write localupdates, but that one is OK??
+        assert  m'.combiner.Keys !! p.combiner.Keys;      // <-- we also write combiner, but that one is OK??
+        assert  !(m'.ctail.Some? && p.ctail.Some?);
+        assert  !(m'.global_tail.Some? && p.global_tail.Some?);
+
+        assert dot(m', p).M?;
+
         assert WriteLogEntry(dot(m, p), dot(m', p), nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
@@ -1205,7 +1237,6 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => {
-        assume false; // TODO
         assert AdvanceTail(dot(m, p), dot(m', p), nodeId, request_ids);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
