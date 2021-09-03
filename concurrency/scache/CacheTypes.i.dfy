@@ -28,10 +28,16 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   linear datatype NullGhostType = NullGhostType
 
+  linear datatype StatusIdx = StatusIdx(
+    linear status: AtomicStatus,
+    linear idx: Cell<int64>
+  )
+
   linear datatype Cache = Cache(
     data_base_ptr: Ptr,
     linear read_refcounts_array: lseq<AtomicRefcount>,
     linear cache_idx_of_page_array: lseq<AtomicIndexLookup>,
+    linear status_idx_array: lseq<StatusIdx>,
 
     ghost data: seq<Ptr>,
     ghost disk_idx_of_entry: seq<Cell<int64>>,
@@ -97,6 +103,12 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE ::
           lseq_peek(this.read_refcounts_array, (j * CACHE_SIZE + i) as uint64)
               == this.read_refcounts[j][i])
+
+      && |lseqs_raw(this.status_idx_array)| == CACHE_SIZE
+      && (forall i | 0 <= i < CACHE_SIZE :: lseq_has(this.status_idx_array)[i]
+        && lseq_peek(this.status_idx_array, i as uint64)
+            == StatusIdx(this.status[i], this.disk_idx_of_entry[i])
+      )
       /*
       && this.read_refcounts_base_ptr.as_nat() + (RC_WIDTH-1) * CACHE_SIZE * (CACHE_SIZE-1) < 0x1_0000_0000_0000_0000
       && this.read_refcounts_gshared.len() == RC_WIDTH
@@ -124,11 +136,17 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     requires this.Inv()
     requires 0 <= i as int < CACHE_SIZE
     ensures at == this.status[i]
+    {
+      lseq_peek(this.status_idx_array, i as uint64).status
+    }
 
     shared function method disk_idx_of_entry_ptr(i: uint64) : (shared c: Cell<int64>)
     requires this.Inv()
     requires 0 <= i as int < CACHE_SIZE
     ensures c == this.disk_idx_of_entry[i]
+    {
+      lseq_peek(this.status_idx_array, i as uint64).idx
+    }
 
     shared function method read_refcount_atomic(j: uint64, i: uint64) : (shared at: AtomicRefcount)
     requires this.Inv()
