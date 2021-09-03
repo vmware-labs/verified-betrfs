@@ -1,4 +1,5 @@
 include "CacheTypes.i.dfy"
+include "../Math/Math.i.dfy"
 
 module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CT = CacheTypes(aio)
@@ -13,6 +14,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CacheHandle
   import opened LinearSequence_i
   import opened Cells
+  import Math
 
   method get_free_io_slot(shared cache: Cache, inout linear local: LocalState)
   returns (idx: uint64, glinear access: IOSlotAccess)
@@ -158,6 +160,9 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             ptr_add(cache.iocb_base_ptr, si as uint64 * SizeOfIocb()),
             cache.iocb_base_ptr) as int / SizeOfIocb() as int;
           (si * SizeOfIocb() as int) / SizeOfIocb() as int;
+          {
+            Math.lemma_div_by_multiple(si, SizeOfIocb() as int);
+          }
           si;
         }
 
