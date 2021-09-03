@@ -24,17 +24,19 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened LinearSequence_i
   import opened LinearSequence_s
   import RwLockToken
+  import opened Cells
 
   linear datatype NullGhostType = NullGhostType
 
   linear datatype Cache = Cache(
     data_base_ptr: Ptr,
     linear read_refcounts_array: lseq<AtomicRefcount>,
+    linear cache_idx_of_page_array: lseq<AtomicIndexLookup>,
 
     ghost data: seq<Ptr>,
-    ghost disk_idx_of_entry: seq<Ptr>,
-
+    ghost disk_idx_of_entry: seq<Cell<int64>>,
     ghost status: seq<AtomicStatus>,
+
     ghost read_refcounts: seq<seq<AtomicRefcount>>,
 
     ghost cache_idx_of_page: seq<AtomicIndexLookup>,
@@ -86,6 +88,10 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && (forall i | 0 <= i < CACHE_SIZE ::
         && this.data[i] == ptr_add(this.data_base_ptr, (PageSize * i) as uint64))
 
+      && |lseqs_raw(this.cache_idx_of_page_array)| == NUM_DISK_PAGES
+      && (forall i | 0 <= i < NUM_DISK_PAGES :: lseq_has(this.cache_idx_of_page_array)[i]
+          && lseq_peek(this.cache_idx_of_page_array, i as uint64) == this.cache_idx_of_page[i])
+
       && |lseqs_raw(this.read_refcounts_array)| == RC_WIDTH * CACHE_SIZE
       && (forall i | 0 <= i < RC_WIDTH * CACHE_SIZE :: lseq_has(this.read_refcounts_array)[i])
       && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE ::
@@ -119,10 +125,10 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     requires 0 <= i as int < CACHE_SIZE
     ensures at == this.status[i]
 
-    shared function method disk_idx_of_entry_ptr(i: uint64) : (p: Ptr)
+    shared function method disk_idx_of_entry_ptr(i: uint64) : (shared c: Cell<int64>)
     requires this.Inv()
     requires 0 <= i as int < CACHE_SIZE
-    ensures p == this.disk_idx_of_entry[i]
+    ensures c == this.disk_idx_of_entry[i]
 
     shared function method read_refcount_atomic(j: uint64, i: uint64) : (shared at: AtomicRefcount)
     requires this.Inv()
@@ -137,6 +143,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     requires this.Inv()
     requires 0 <= i as int < NUM_DISK_PAGES
     ensures at == this.cache_idx_of_page[i]
+    {
+      lseq_peek(this.cache_idx_of_page_array, i)
+    }
   }
 
   datatype LocalState = LocalState(
