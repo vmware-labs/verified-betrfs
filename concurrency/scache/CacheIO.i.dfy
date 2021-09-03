@@ -151,9 +151,17 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         done := true;
         dispose_anything(fr);
       } else {
-        var slot_idx: uint64;
-        assume slot_idx as int // TODO
-            == (if fr.FRWrite? then fr.wg.slot_idx else fr.rg.slot_idx);
+        ghost var si := (if fr.FRWrite? then fr.wg.slot_idx else fr.rg.slot_idx);
+        calc {
+          ptr_diff(iocb_ptr, cache.iocb_base_ptr) as int / SizeOfIocb() as int;
+          ptr_diff(
+            ptr_add(cache.iocb_base_ptr, si as uint64 * SizeOfIocb()),
+            cache.iocb_base_ptr) as int / SizeOfIocb() as int;
+          (si * SizeOfIocb() as int) / SizeOfIocb() as int;
+          si;
+        }
+
+        var slot_idx: uint64 := ptr_diff(iocb_ptr, cache.iocb_base_ptr) / SizeOfIocb();
 
         var io_slot_info_value :=
             read_cell(
@@ -188,8 +196,9 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         }
 
         glinear var slot_access := IOSlotAccess(iocb1, io_slot_info1);
-        //assert slot_access.iocb.ptr == cache.io_slots[slot_idx].iocb_ptr;
-        //assert slot_access.io_slot_info.ptr == cache.io_slots[slot_idx].io_slot_info_ptr;
+        assert slot_access.iocb.ptr == cache.io_slots[slot_idx as nat].iocb_ptr;
+        assert slot_access.io_slot_info.cell == cache.io_slots[slot_idx as nat].io_slot_info_cell;
+        assert lseq_peek(cache.io_slots, slot_idx).WF();
         BasicLockImpl.release(
             lseq_peek(cache.io_slots, slot_idx).lock,
             slot_access);

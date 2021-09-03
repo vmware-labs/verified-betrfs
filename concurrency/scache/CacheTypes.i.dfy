@@ -35,6 +35,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   linear datatype Cache = Cache(
     data_base_ptr: Ptr,
+    iocb_base_ptr: Ptr,
     linear read_refcounts_array: lseq<AtomicRefcount>,
     linear cache_idx_of_page_array: lseq<AtomicIndexLookup>,
     linear status_idx_array: lseq<StatusIdx>,
@@ -81,6 +82,11 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && |io_slots| == NUM_IO_SLOTS
       && (forall i | 0 <= i < |io_slots| :: lseq_has(io_slots)[i])
       && (forall i | 0 <= i < |io_slots| :: io_slots[i].WF())
+      && (forall i | 0 <= i < |io_slots| ::
+            this.iocb_base_ptr.as_nat() + i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
+            && 0 <= i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
+            && io_slots[i].iocb_ptr == ptr_add(this.iocb_base_ptr, i as uint64 * SizeOfIocb())
+         )
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_read_inv(iocb_ptr, iocb, wp, g)
         <==> ReadGInv(this, iocb_ptr, iocb, wp, g))
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_write_inv(iocb_ptr, iocb, wp, g)

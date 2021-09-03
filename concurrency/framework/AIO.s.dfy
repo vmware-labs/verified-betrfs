@@ -19,6 +19,9 @@ module IocbStruct {
     | IocbRead(ptr: Ptr, offset: nat, nbytes: nat, buf: Ptr)
     | IocbWrite(ptr: Ptr, offset: nat, nbytes: nat, buf: Ptr)
 
+  function method SizeOfIocb() : uint64
+  ensures SizeOfIocb() != 0
+
   method {:extern} new_iocb()
   returns (ptr: Ptr, glinear iocb: Iocb)
   ensures iocb.IocbUninitialized?
