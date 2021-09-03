@@ -26,7 +26,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import RwLockToken
   import opened Cells
 
-  linear datatype NullGhostType = NullGhostType
+  glinear datatype NullGhostType = NullGhostType
 
   linear datatype StatusIdx = StatusIdx(
     linear status: AtomicStatus,

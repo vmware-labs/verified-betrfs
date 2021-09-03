@@ -18,6 +18,8 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import T = DiskSSMTokens(CacheIfc, CacheSSM)
   import opened CacheResources
   import opened GlinearOption
+  import opened CacheAIOParams
+  import opened BasicLockImpl
 
   method split_into_page_size_chunks(glinear pta: PointsToArray<byte>)
   returns (glinear pta_seq: glseq<PointsToArray<byte>>)
@@ -50,13 +52,17 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     glinear var empty_seq, dis := split_init(init_tok);
 
+    ghost var data := seq(CACHE_SIZE, (i) requires 0 <= i < CACHE_SIZE =>
+        data_pta_seq.get(i).ptr);
+
     var i: uint64 := 0;
     while i < CACHE_SIZE as uint64
     {
       linear var cell_idx;
       glinear var cell_idx_contents;
       cell_idx, cell_idx_contents := new_cell<int64>(0);
-      glinear var data_pta_seq, data_pta := glseq_take(data_pta_seq, i as nat);
+      glinear var data_pta;
+      data_pta_seq, data_pta := glseq_take(data_pta_seq, i as nat);
 
       ghost var key := Key(data_pta.ptr, cell_idx, i as nat);
 
@@ -118,6 +124,62 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     dispose_anything(data_pta_seq);
     dispose_anything(empty_seq);
     dispose_anything(dis);
+
+    linear var global_clockpointer := new_atomic(0, NullGhostType, (v, g) => true, 0);
+    linear var io_slots := lseq_alloc(NUM_IO_SLOTS as uint64);
+    linear var ioctx;
+
+    i := 0;
+    while i < NUM_IO_SLOTS as uint64
+    {
+      linear var io_slot_info_cell;
+      glinear var io_slot_info_contents;
+      io_slot_info_cell, io_slot_info_contents := new_cell(IOSlotRead(0)); // dummy value
+
+      glinear var iocb;
+      iocbs, iocb := glseq_take(iocbs, i as int);
+
+      glinear var io_slot_access := IOSlotAccess(iocb, io_slot_info_contents); 
+
+      var iocb_ptr := ptr_add(iocb_base_ptr, i as uint64 * SizeOfIocb());
+      linear var slot_lock := new_basic_lock(io_slot_access, 
+        (slot_access: IOSlotAccess) =>
+          && slot_access.iocb.ptr == iocb_ptr
+          && slot_access.io_slot_info.cell == io_slot_info_cell
+      );
+      linear var io_slot := IOSlot(
+          iocb_ptr,
+          io_slot_info_cell,
+          slot_lock);
+      lseq_give_inout(inout io_slots, i, io_slot);
+    }
+
+    ghost var disk_idx_of_entry := seq(CACHE_SIZE, (i) requires 0 <= i < CACHE_SIZE =>
+        status_idx_array[i].idx);
+    ghost var status := seq(CACHE_SIZE, (i) requires 0 <= i < CACHE_SIZE =>
+        status_idx_array[i].status);
+    ghost var read_refcounts :=
+        seq(RC_WIDTH, (j) requires 0 <= j < RC_WIDTH =>
+          seq(CACHE_SIZE, (i) requires 0 <= i < CACHE_SIZE =>
+            read_refcounts_array[j * CACHE_SIZE + i]));
+    ghost var cache_idx_of_page :=
+        seq(NUM_DISK_PAGES, (i) requires 0 <= i < NUM_DISK_PAGES =>
+          cache_idx_of_page_array[i]);
+
+    c := Cache(
+        data_base_ptr,
+        iocb_base_ptr,
+        read_refcounts_array,
+        cache_idx_of_page_array,
+        status_idx_array,
+        data,
+        disk_idx_of_entry,
+        status,
+        read_refcounts,
+        cache_idx_of_page,
+        global_clockpointer,
+        io_slots,
+        ioctx);
   }
 
 }

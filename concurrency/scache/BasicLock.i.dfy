@@ -34,4 +34,9 @@ module BasicLockImpl {
 
   method release<G(!new)>(shared l: BasicLock<G>, glinear g: G)
   requires l.inv(g)
+
+  method new_basic_lock<G(!new)>(glinear g: G, ghost inv: G -> bool)
+  returns (linear l: BasicLock<G>)
+  requires inv(g)
+  ensures l.inv == inv
 }
