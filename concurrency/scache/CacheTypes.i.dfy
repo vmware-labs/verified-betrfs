@@ -6,6 +6,7 @@ include "BasicLock.i.dfy"
 include "../framework/AIO.s.dfy"
 include "cache/CacheSM.i.dfy"
 include "CacheAIOParams.i.dfy"
+include "../../lib/Lang/LinearSequence.i.dfy"
 
 module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Ptrs
@@ -20,14 +21,15 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened IocbStruct
   import opened CacheAIOParams
   import opened GlinearSeq
+  import opened LinearSequence_i
+  import opened LinearSequence_s
   import RwLockToken
 
   linear datatype NullGhostType = NullGhostType
 
   linear datatype Cache = Cache(
     data_base_ptr: Ptr,
-    read_refcounts_base_ptr: Ptr,
-    glinear read_refcounts_gshared: glseq<glseq<GAtomic<uint8, RwLockToken.Token>>>,
+    linear read_refcounts_array: lseq<AtomicRefcount>,
 
     ghost data: seq<Ptr>,
     ghost disk_idx_of_entry: seq<Ptr>,
@@ -84,6 +86,12 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && (forall i | 0 <= i < CACHE_SIZE ::
         && this.data[i] == ptr_add(this.data_base_ptr, (PageSize * i) as uint64))
 
+      && |lseqs_raw(this.read_refcounts_array)| == RC_WIDTH * CACHE_SIZE
+      && (forall i | 0 <= i < RC_WIDTH * CACHE_SIZE :: lseq_has(this.read_refcounts_array)[i])
+      && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE ::
+          lseq_peek(this.read_refcounts_array, (j * CACHE_SIZE + i) as uint64)
+              == this.read_refcounts[j][i])
+      /*
       && this.read_refcounts_base_ptr.as_nat() + (RC_WIDTH-1) * CACHE_SIZE * (CACHE_SIZE-1) < 0x1_0000_0000_0000_0000
       && this.read_refcounts_gshared.len() == RC_WIDTH
       && (forall j | 0 <= j < RC_WIDTH ::
@@ -95,6 +103,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           && this.read_refcounts_gshared.get(j).has(i)
           && this.read_refcounts[j][i].a.ga ==
               this.read_refcounts_gshared.get(j).get(i))
+      */
     }
 
     shared function method data_ptr(i: uint64) : (p: Ptr)
@@ -120,13 +129,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     requires 0 <= j as int < RC_WIDTH
     requires 0 <= i as int < CACHE_SIZE
     ensures at == this.read_refcounts[j][i]
-    /*{
-      gshared var b := this.read_refcounts_gshared.borrow(j as nat).borrow(i as nat);
-      gshared var a2 := Atomic(
-          ptr_add(this.read_refcounts_base_ptr, (j * CACHE_SIZE as uint64 + i)),
-          b);
-      AtomicRefcount(a2, this.read_refcounts[j][i].rwlock_loc)
-    }*/
+    {
+      lseq_peek(this.read_refcounts_array, j * (CACHE_SIZE as uint64) + i)
+    }
 
     shared function method cache_idx_of_page_atomic(i: uint64) : (shared at: AtomicIndexLookup)
     requires this.Inv()
@@ -178,6 +183,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       data: PointsToArray<byte>,
       g: ReadG)
   {
+    && iocb.IocbRead?
     && iocb.ptr == iocb_ptr
     && g.slot_idx < NUM_IO_SLOTS
     && |cache.io_slots| == NUM_IO_SLOTS
@@ -185,6 +191,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && iocb_ptr == cache.io_slots[g.slot_idx].iocb_ptr
     && g.reading.CacheReadingHandle?
     && 0 <= g.key.cache_idx < CACHE_SIZE
+    && |cache.data| == CACHE_SIZE
     && data.ptr == cache.data[g.key.cache_idx]
     && g.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
     && iocb.nbytes == PageSize
@@ -200,6 +207,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       data: seq<byte>,
       g: WriteG)
   {
+    && iocb.IocbWrite?
     && iocb.ptr == iocb_ptr
     && is_read_perm(iocb_ptr, iocb, data, g)
     && g.slot_idx < NUM_IO_SLOTS
@@ -210,6 +218,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && 0 <= g.wbo.b.key.cache_idx < CACHE_SIZE
     && g.io_slot_info.v == IOSlotWrite(g.wbo.b.key.cache_idx as uint64)
     && g.wbo.is_handle(g.key)
+    && |cache.data| == CACHE_SIZE
+    && |cache.disk_idx_of_entry| == CACHE_SIZE
+    && |cache.status| == CACHE_SIZE
     && g.key == cache.key(g.key.cache_idx)
     && g.wbo.token.loc == cache.status[g.wbo.b.key.cache_idx as nat].rwlock_loc
     && g.wbo.b.cache_entry.disk_idx == iocb.offset

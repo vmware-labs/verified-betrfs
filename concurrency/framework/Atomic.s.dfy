@@ -11,32 +11,21 @@ module {:extern "Atomics"} Atomics {
   import opened Ptrs
   import opened Options
 
-  type {:extern "predefined"} GAtomic(==,!new)<!V, !G>
+  type {:extern "predefined"} Atomic(==,!new)<!V, !G>
   {
     function {:extern} namespace() : nat
-    function {:extern} ptr() : Option<Ptr>
   }
 
-  predicate {:extern} gatomic_inv<V, G>(gatomic: GAtomic<V, G>, v: V, g: G)
+  predicate {:extern} atomic_inv<V, G>(atomic: Atomic<V, G>, v: V, g: G)
 
-  linear datatype pre_Atomic<!V, !G> = Atomic(ptr: Ptr, glinear ga: GAtomic<V, G>)
-  {
-    predicate wf() { Some(ptr) == ga.ptr() }
-    function namespace() : nat { ga.namespace() }
-  }
-  type Atomic<!V, !G> = at: pre_Atomic<V, G> | at.wf()
-    witness *
-
-  type GhostAtomic<!G> = GAtomic<(), G>
-
-  predicate atomic_inv<V, G>(atomic: Atomic<V, G>, v: V, g: G) { gatomic_inv(atomic.ga, v, g) }
+  type GhostAtomic<!G> = Atomic<(), G>
 
   method {:extern} new_atomic<V, G>(
       v: V,
       glinear g: G,
       ghost inv: (V, G) -> bool,
       ghost namespace: nat)
-  returns (shared a: Atomic<V, G>)
+  returns (linear a: Atomic<V, G>)
   requires inv(v, g)
   ensures forall v1, g1 :: atomic_inv(a, v1, g1) <==> inv(v1, g1)
   ensures a.namespace() == namespace
@@ -45,9 +34,9 @@ module {:extern "Atomics"} Atomics {
       glinear g: G,
       ghost inv: (G) -> bool,
       ghost namespace: nat)
-  returns (ghost a: GhostAtomic<G>)
+  returns (glinear a: GhostAtomic<G>)
   requires inv(g)
-  ensures forall v, g1 :: gatomic_inv(a, v, g1) <==> inv(g1)
+  ensures forall v, g1 :: atomic_inv(a, v, g1) <==> inv(g1)
   ensures a.namespace() == namespace
 
   glinear method {:extern} finish_atomic<V, G>(
@@ -435,14 +424,14 @@ module {:extern "Atomics"} Atomics {
    */
 
   method {:extern} execute_atomic_noop<V, G>(
-      ghost a: GAtomic<V, G>)
+      gshared a: Atomic<V, G>)
   returns (
       ghost ret_value: (),
       ghost orig_value: V,
       ghost new_value: V,
       glinear g: G)
   ensures orig_value == new_value
-  ensures gatomic_inv(a, orig_value, g)
+  ensures atomic_inv(a, orig_value, g)
 }
 
 module BitOps {
