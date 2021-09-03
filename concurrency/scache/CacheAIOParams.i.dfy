@@ -4,6 +4,7 @@ include "rwlock/RwLock.i.dfy"
 module CacheAIOParams refines AIOParams {
   import T = RwLockToken
   import opened CacheHandle
+  import opened Cells
 
   datatype IOSlotInfo =
     | IOSlotWrite(cache_idx: uint64)
@@ -11,20 +12,20 @@ module CacheAIOParams refines AIOParams {
 
   glinear datatype IOSlotAccess = IOSlotAccess(
     glinear iocb: Iocb,
-    glinear io_slot_info: PointsTo<IOSlotInfo>)
+    glinear io_slot_info: CellContents<IOSlotInfo>)
 
   glinear datatype ReadG = ReadG(
     ghost key: Key,
     glinear reading: Handle,
     ghost slot_idx: nat,
-    glinear io_slot_info: PointsTo<IOSlotInfo>
+    glinear io_slot_info: CellContents<IOSlotInfo>
   )
 
   glinear datatype WriteG = WriteG(
     ghost key: Key,
     glinear wbo: T.WritebackObtainedToken,
     ghost slot_idx: nat,
-    glinear io_slot_info: PointsTo<IOSlotInfo>
+    glinear io_slot_info: CellContents<IOSlotInfo>
   )
 
   predicate is_read_perm(

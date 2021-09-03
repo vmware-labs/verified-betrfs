@@ -49,7 +49,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     linear global_clockpointer: Atomic<uint32, NullGhostType>,
 
-    io_slots: seq<IOSlot>,
+    linear io_slots: lseq<IOSlot>,
     linear ioctx: aio.IOCtx
   )
   {
@@ -79,6 +79,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && (forall d | 0 <= d < NUM_DISK_PAGES ::
           atomic_index_lookup_inv(this.cache_idx_of_page[d], d))
       && |io_slots| == NUM_IO_SLOTS
+      && (forall i | 0 <= i < |io_slots| :: lseq_has(io_slots)[i])
       && (forall i | 0 <= i < |io_slots| :: io_slots[i].WF())
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_read_inv(iocb_ptr, iocb, wp, g)
         <==> ReadGInv(this, iocb_ptr, iocb, wp, g))
@@ -183,16 +184,16 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ////////////////////////////////////////
   //// IO stuff
 
-  datatype IOSlot = IOSlot(
+  linear datatype IOSlot = IOSlot(
     iocb_ptr: Ptr,
-    io_slot_info_ptr: Ptr,
-    lock: BasicLock<IOSlotAccess>)
+    linear io_slot_info_cell: Cell<IOSlotInfo>,
+    linear lock: BasicLock<IOSlotAccess>)
   {
     predicate WF()
     {
       && (forall slot_access: IOSlotAccess :: this.lock.inv(slot_access) <==>
         && slot_access.iocb.ptr == this.iocb_ptr
-        && slot_access.io_slot_info.ptr == this.io_slot_info_ptr
+        && slot_access.io_slot_info.cell == this.io_slot_info_cell
       )
     }
   }
@@ -200,7 +201,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   predicate is_slot_access(io_slot: IOSlot, io_slot_access: IOSlotAccess)
   {
     && io_slot.iocb_ptr == io_slot_access.iocb.ptr
-    && io_slot.io_slot_info_ptr == io_slot_access.io_slot_info.ptr
+    && io_slot.io_slot_info_cell == io_slot_access.io_slot_info.cell
   }
 
   predicate ReadGInv(
@@ -214,7 +215,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && iocb.ptr == iocb_ptr
     && g.slot_idx < NUM_IO_SLOTS
     && |cache.io_slots| == NUM_IO_SLOTS
-    && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && g.io_slot_info.cell == cache.io_slots[g.slot_idx].io_slot_info_cell
     && iocb_ptr == cache.io_slots[g.slot_idx].iocb_ptr
     && g.reading.CacheReadingHandle?
     && 0 <= g.key.cache_idx < CACHE_SIZE
@@ -239,7 +240,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && is_read_perm(iocb_ptr, iocb, data, g)
     && g.slot_idx < NUM_IO_SLOTS
     && |cache.io_slots| == NUM_IO_SLOTS
-    && g.io_slot_info.ptr == cache.io_slots[g.slot_idx].io_slot_info_ptr
+    && g.io_slot_info.cell == cache.io_slots[g.slot_idx].io_slot_info_cell
     && iocb_ptr == cache.io_slots[g.slot_idx].iocb_ptr
     && g.wbo.b.CacheEntryHandle?
     && 0 <= g.wbo.b.key.cache_idx < CACHE_SIZE

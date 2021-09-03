@@ -13,7 +13,7 @@ module BasicLockImpl {
     && (v == false ==> g.glSome? && fn(g.value))
   }
 
-  datatype pre_BasicLock<!G(!new)> = BasicLock(a: AtomicLock<G>, ghost inv: G -> bool)
+  linear datatype pre_BasicLock<!G(!new)> = BasicLock(linear a: AtomicLock<G>, ghost inv: G -> bool)
   {
     predicate wf() {
       forall v: bool, g: glOption<G> ::
@@ -28,10 +28,10 @@ module BasicLockImpl {
    * Acquire if possible; don't block.
    */
 
-  method try_acquire<G(!new)>(l: BasicLock<G>)
+  method try_acquire<G(!new)>(shared l: BasicLock<G>)
   returns (glinear g: glOption<G>)
   ensures g.glSome? ==> l.inv(g.value)
 
-  method release<G(!new)>(l: BasicLock<G>, glinear g: G)
+  method release<G(!new)>(shared l: BasicLock<G>, glinear g: G)
   requires l.inv(g)
 }

@@ -11,6 +11,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened IocbStruct
   import BasicLockImpl
   import opened CacheHandle
+  import opened LinearSequence_i
+  import opened Cells
 
   method get_free_io_slot(shared cache: Cache, inout linear local: LocalState)
   returns (idx: uint64, glinear access: IOSlotAccess)
@@ -18,7 +20,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires old_local.WF()
   ensures local.WF()
   ensures 0 <= idx as int < NUM_IO_SLOTS
-  ensures is_slot_access(cache.io_slots[idx], access)
+  ensures is_slot_access(cache.io_slots[idx as nat], access)
   ensures local.t == old_local.t
 
   method disk_writeback_async(
@@ -48,13 +50,14 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var IOSlotAccess(iocb, io_slot_info) := access;
 
     iocb_prepare_write(
-        cache.io_slots[idx].iocb_ptr,
+        lseq_peek(cache.io_slots, idx).iocb_ptr,
         inout iocb,
         disk_idx as int64,
         4096,
         cache.data_ptr(cache_idx));
 
-    cache.io_slots[idx].io_slot_info_ptr.write(
+    write_cell(
+        lseq_peek(cache.io_slots, idx).io_slot_info_cell,
         inout io_slot_info,
         IOSlotWrite(cache_idx));
 
@@ -62,11 +65,11 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         cache.key(cache_idx as int),
         wbo, idx as int, io_slot_info);
 
-    assert WriteGInv(cache, cache.io_slots[idx].iocb_ptr,
+    assert WriteGInv(cache, cache.io_slots[idx as nat].iocb_ptr,
         iocb, wbo.b.data.s, writeg);
     aio.async_write(
         cache.ioctx,
-        cache.io_slots[idx].iocb_ptr,
+        lseq_peek(cache.io_slots, idx).iocb_ptr,
         iocb,
         wbo.b.data.s,
         writeg,
@@ -148,12 +151,13 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         done := true;
         dispose_anything(fr);
       } else {
-        var slot_idx;
-        assume slot_idx // TODO
+        var slot_idx: uint64;
+        assume slot_idx as int // TODO
             == (if fr.FRWrite? then fr.wg.slot_idx else fr.rg.slot_idx);
 
         var io_slot_info_value :=
-            cache.io_slots[slot_idx].io_slot_info_ptr.read(
+            read_cell(
+                lseq_peek(cache.io_slots, slot_idx).io_slot_info_cell,
                 if fr.FRWrite? then fr.wg.io_slot_info else fr.rg.io_slot_info);
 
         glinear var iocb1, io_slot_info1;
@@ -187,7 +191,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         //assert slot_access.iocb.ptr == cache.io_slots[slot_idx].iocb_ptr;
         //assert slot_access.io_slot_info.ptr == cache.io_slots[slot_idx].io_slot_info_ptr;
         BasicLockImpl.release(
-            cache.io_slots[slot_idx].lock,
+            lseq_peek(cache.io_slots, slot_idx).lock,
             slot_access);
       }
     }
