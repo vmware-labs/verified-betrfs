@@ -1141,6 +1141,16 @@ module RwLock refines Rw {
       assert CountAllRefs(dot(m', p), ss.t) == CountAllRefs(dot(m, p), ss.t);
     }
   }
+
+  function Rcs(s: nat, t: nat) : M
+  requires s <= t
+  decreases t - s
+  {
+    if t == s then
+      unit()
+    else
+      dot(RefCount(s, 0), Rcs(s+1, t))
+  }
 }
 
 module RwLockToken {
@@ -1880,4 +1890,18 @@ module RwLockToken {
   function method {:opaque} borrow_sot(gshared sot: SharedObtainedToken) : (gshared b: Handle)
   requires sot.is_valid()
   ensures b == sot.b
+
+  glinear method perform_Init(glinear b: Handle)
+  returns (glinear central: Token, glinear rcs: Token)
+  ensures central.loc == rcs.loc
+  ensures central.val == CentralHandle(CentralState(Unmapped, b))
+  ensures rcs.val == Rcs(0, RC_WIDTH)
+
+  glinear method pop_rcs(glinear t: Token, ghost a: nat, ghost b: nat)
+  returns (glinear x: Token, glinear t': Token)
+  requires a < b
+  requires t.val == Rcs(a, b)
+  ensures t'.val == Rcs(a+1, b)
+  ensures x.val == RefCount(a, 0)
+  ensures x.loc == t'.loc == t.loc
 }

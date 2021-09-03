@@ -1,6 +1,7 @@
 include "../../../lib/Base/Option.s.dfy"
 include "../../../lib/Lang/NativeTypes.s.dfy"
 include "CacheSM.i.dfy"
+include "../Constants.i.dfy"
 
 module CacheResources {
   import opened Options
@@ -8,6 +9,7 @@ module CacheResources {
   import opened GhostLoc
   import opened RequestIds
   import opened CacheStatusType
+  import opened Constants
   import DiskIfc
   import CacheIfc
   import T = DiskSSMTokens(CacheIfc, CacheSSM)
@@ -196,4 +198,30 @@ module CacheResources {
   requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.WriteInput(cache_entry.disk_idx, new_data))
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.WriteOutput)
   ensures cache_entry' == cache_entry.(data := new_data)
+
+  function IdxsSeq(a: nat, b: nat) : T.Token
+  requires a <= b
+
+  function EmptySeq(a: nat, b: nat) : T.Token
+  requires a <= b
+
+  glinear method pop_IdxSeq(glinear t: T.Token, ghost a: nat, ghost b: nat)
+  returns (glinear x: DiskPageMap, glinear t': T.Token)
+  requires a < b
+  requires t == IdxsSeq(a, b)
+  ensures t' == IdxsSeq(a+1, b)
+  ensures x == DiskPageMap(a, None)
+
+  glinear method pop_EmptySeq(glinear t: T.Token, ghost a: nat, ghost b: nat)
+  returns (glinear x: CacheEmpty, glinear t': T.Token)
+  requires a < b
+  requires t == EmptySeq(a, b)
+  ensures t' == EmptySeq(a+1, b)
+  ensures x == CacheEmpty(a)
+
+  glinear method split_init(glinear t: T.Token)
+  returns (glinear idxs: T.Token, glinear empties: T.Token)
+  requires CacheSSM.Init(t.val)
+  ensures idxs == IdxsSeq(0, CACHE_SIZE)
+  ensures empties == EmptySeq(0, CACHE_SIZE)
 }

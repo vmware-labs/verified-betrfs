@@ -199,7 +199,7 @@ module AtomicStatusImpl {
       || v == flag_writeback_exc_accessed_claim
     ))
   }
-  
+
   linear datatype AtomicStatus = AtomicStatus(
     linear atomic: Atomic<uint8, G>,
     ghost rwlock_loc: Loc,

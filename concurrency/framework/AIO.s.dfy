@@ -1,10 +1,12 @@
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "Ptrs.s.dfy"
 include "DiskSSM.s.dfy"
+include "GlinearSeq.s.dfy"
 
 module IocbStruct {
   import opened Ptrs
   import opened NativeTypes
+  import opened GlinearSeq
 
   const PageSize := 4096
 
@@ -19,12 +21,23 @@ module IocbStruct {
     | IocbRead(ptr: Ptr, offset: nat, nbytes: nat, buf: Ptr)
     | IocbWrite(ptr: Ptr, offset: nat, nbytes: nat, buf: Ptr)
 
-  function method SizeOfIocb() : uint64
+  function method {:extern} SizeOfIocb() : uint64
   ensures SizeOfIocb() != 0
 
   method {:extern} new_iocb()
   returns (ptr: Ptr, glinear iocb: Iocb)
   ensures iocb.IocbUninitialized?
+  ensures iocb.ptr == ptr
+
+  method {:extern} new_iocb_array(n: uint64)
+  returns (ptr: Ptr, glinear iocb: glseq<Iocb>)
+  ensures iocb.len() == n as int
+  ensures forall i {:trigger iocb.has(i)} {:trigger iocb.get(i)} | 0 <= i < n as int
+      :: iocb.has(i)
+      && iocb.get(i).IocbUninitialized?
+      && 0 <= i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
+      && 0 <= ptr.as_nat() + i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
+      && iocb.get(i).ptr == ptr_add(ptr, i as uint64 * SizeOfIocb())
 
   method {:extern} iocb_prepare_read(ptr: Ptr, glinear inout iocb: Iocb,
       offset: int64, nbytes: uint64, buf: Ptr)
@@ -153,6 +166,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
     && fr.iocb.IocbRead?
     && ctx.async_read_inv(iocb_ptr, fr.iocb, fr.wp, fr.rg)
     && |fr.wp.s| == fr.iocb.nbytes
+    && fr.iocb.nbytes == 4096
     && fr.stub == T.Token(ssm.DiskReadResp(fr.iocb.offset, fr.wp.s))
 
   method {:extern} sync_read(
