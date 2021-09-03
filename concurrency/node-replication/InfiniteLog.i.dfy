@@ -812,19 +812,27 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
           && globalTail <= s.global_tail.value
           && globalTail + |request_ids| <= s.global_tail.value
           && idx <= |request_ids|
+          && |request_ids| > 0
         )
-        case CombinerPlaced(_) => true
-        case CombinerLtail(_, localTail: nat) => (localTail <= s.ctail.value)
-        case Combiner(_, localTail: nat, globalTail: nat) => (
+        case CombinerPlaced(queued_ops: seq<RequestId>) => (
+          && |queued_ops| > 0
+        )
+        case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => (
+          && |queued_ops| > 0
+          && localTail <= s.ctail.value
+        )
+        case Combiner(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat) => (
           // I don't think this is true, no?
           // && localTail <= s.ctail.value
           && localTail <= s.global_tail.value
           && globalTail <= s.global_tail.value
+          && |queued_ops| > 0
           && Inv_LogContainsEntriesUpToHere(s.log, localTail)
         )
-        case CombinerUpdatedCtail(_, localAndGlobalTail: nat) => (
+        case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => (
           && localAndGlobalTail <= s.ctail.value
           && localAndGlobalTail <= s.global_tail.value)
+          && |queued_ops| > 0
           && Inv_LogContainsEntriesUpToHere(s.log, localAndGlobalTail)
       }
   }
@@ -842,6 +850,29 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     )
   }
 
+
+
+  function CombinerRange(c: CombinerState) : set<nat> {
+    match c {
+      case CombinerReady => {}
+      case CombinerWriteLogEntry(globalTail: nat, _, request_ids: seq<RequestId>) => (
+          (set x | c.globalTail <= x < c.globalTail + |c.request_ids| :: x)
+      )
+      case CombinerPlaced(_) => {}
+      case CombinerLtail(_, _) => {}
+      case Combiner(_, _, _) => {}
+      case CombinerUpdatedCtail(_, _) => {}
+    }
+  }
+
+    // the completed tail must be ahead of, or equal to the local tails
+  predicate Inv_CombinerLogNonOverlap(s: M)
+    requires Inv_WF(s)
+  {
+    forall c1, c2 | c1 in s.combiner &&  c2 in s.combiner ::
+        c1 == c2 || CombinerRange(s.combiner[c1]) !! CombinerRange(s.combiner[c2])
+  }
+
   // the invariant
   predicate Inv(s: M) {
     // var logicalLocalTail :=  if nodeId in combiner && combiner[nodeId].Combiner? then
@@ -855,6 +886,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     //&& Inv_LogContainsEntriesUpToHere(s.log, s.global_tail.value)
     && Inv_CombinerStateValid(s)
     && Inv_ReadOnlyStateNodeIdExists(s)
+    && Inv_CombinerLogNonOverlap(s)
     // there are no entries placed in the log
     && (forall idx | idx >= s.global_tail.value :: idx !in s.log.Keys)
 
@@ -863,7 +895,6 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     //     (see state_at_version in NRSimple)
 
     && (forall nodeId | nodeId in s.replicas :: (forall i | 0 <= i < get_local_tail(s, nodeId) :: i in s.log.Keys))
-
     && (forall nodeId | nodeId in s.replicas :: s.replicas[nodeId] == state_at_version(s.log, get_local_tail(s, nodeId)))
 
 
@@ -1040,7 +1071,6 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
           assert !((m.combiner[nid].globalTail + m.combiner[nid].idx) in m.log);
         }
         */
-
         assert forall k | 0 <= k < get_local_tail(m', nid) :: m.log[k] == m'.log[k];
         // proof here
         state_at_version_preserves(m.log, m'.log, get_local_tail(m', nid));
