@@ -6,6 +6,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Constants
   import opened Ptrs
   import opened NativeTypes
+  import RwLock
   import T = RwLockToken
   import CacheResources
   import opened CacheAIOParams
@@ -107,16 +108,38 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       cache_idx: uint64,
       ghost disk_addr: nat,
       glinear wp: PointsToArray<byte>,
-      glinear h: Handle,
+      glinear ro: T.Token,
+      glinear cache_reading: CacheResources.CacheReading,
+      glinear idx: CellContents<int64>,
       glinear stub: CacheResources.DiskReadStub)
   requires cache.Inv()
   requires 0 <= cache_idx as int < CACHE_SIZE
+  requires 0 <= disk_addr < NUM_DISK_PAGES
   requires wp.ptr == cache.data[cache_idx]
   requires |wp.s| == PageSize
-  requires stub == CacheResources.DiskReadStub(disk_addr, wp.s)
-  requires h.CacheReadingHandle?
-  requires h.cache_reading.disk_idx == disk_addr
+  requires stub == CacheResources.DiskReadStub(disk_addr as nat, wp.s)
+  requires cache_reading.disk_idx == disk_addr as nat
+  requires cache_reading.cache_idx == cache_idx as nat
+  requires ro.loc == cache.status[cache_idx].rwlock_loc
+  requires ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
+  requires idx.cell == cache.disk_idx_of_entry[cache_idx]
+  requires idx.v as int == disk_addr
+  {
+    glinear var status, cache_entry;
+    status, cache_entry := CacheResources.finish_page_in(
+          cache_idx as int, disk_addr as nat,
+          cache_reading, stub);
 
+    /*write_cell(
+            cache.disk_idx_of_entry_ptr(cache_idx),
+            inout idx,
+            disk_addr as int64);*/
+
+    glinear var ceh := CacheEntryHandle(
+        cache.key(cache_idx as int), cache_entry, idx, wp);
+
+    cache.status_atomic(cache_idx).load_phase_finish_threadless(ro, ceh, status);
+  }
 
   method disk_writeback_callback(
       shared cache: Cache,
@@ -189,11 +212,11 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           }
           case IOSlotRead(cache_idx) => {
             glinear var FRRead(iocb, wp, rg, stub) := fr;
-            glinear var ReadG(key, h, g_slot_idx, io_slot_info) := rg;
+            glinear var ReadG(key, cache_reading, idx, ro, g_slot_idx, io_slot_info) := rg;
 
             glinear var ustub := CacheResources.DiskReadStub_fold(iocb.offset, wp.s, stub);
             ghost var disk_idx := ustub.addr;
-            disk_read_callback(cache, cache_idx, disk_idx, wp, h, ustub);
+            disk_read_callback(cache, cache_idx, disk_idx, wp, ro, cache_reading, idx, ustub);
 
             iocb1 := iocb;
             io_slot_info1 := io_slot_info;

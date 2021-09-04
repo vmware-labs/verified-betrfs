@@ -16,7 +16,9 @@ module CacheAIOParams refines AIOParams {
 
   glinear datatype ReadG = ReadG(
     ghost key: Key,
-    glinear reading: Handle,
+    glinear cache_reading: CacheResources.CacheReading,
+    glinear idx: CellContents<int64>,
+    glinear ro: T.Token,
     ghost slot_idx: nat,
     glinear io_slot_info: CellContents<IOSlotInfo>
   )

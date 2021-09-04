@@ -223,15 +223,19 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && |cache.io_slots| == NUM_IO_SLOTS
     && g.io_slot_info.cell == cache.io_slots[g.slot_idx].io_slot_info_cell
     && iocb_ptr == cache.io_slots[g.slot_idx].iocb_ptr
-    && g.reading.CacheReadingHandle?
     && 0 <= g.key.cache_idx < CACHE_SIZE
+    && 0 <= iocb.offset < NUM_DISK_PAGES
     && |cache.data| == CACHE_SIZE
+    && |cache.disk_idx_of_entry| == CACHE_SIZE
+    && |cache.status| == CACHE_SIZE
     && data.ptr == cache.data[g.key.cache_idx]
     && g.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
     && iocb.nbytes == PageSize
-    && g.reading.is_handle(g.key)
-    && g.reading.CacheReadingHandle?
-    && g.reading.cache_reading.disk_idx == iocb.offset
+    && g.idx.cell == cache.disk_idx_of_entry[g.key.cache_idx]
+    && g.idx.v as int == iocb.offset == g.cache_reading.disk_idx
+    && g.cache_reading.cache_idx == g.key.cache_idx
+    && g.ro.loc == cache.status[g.key.cache_idx].rwlock_loc
+    && g.ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
   }
 
   predicate WriteGInv(

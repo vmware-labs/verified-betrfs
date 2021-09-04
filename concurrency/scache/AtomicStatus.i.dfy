@@ -486,6 +486,7 @@ module AtomicStatusImpl {
     requires r.loc == rwlock_loc
     requires r.val.M?
     requires r.val.read.ReadObtained?
+    requires r.val.read.t != -1
     requires r.val == RwLock.ReadHandle(RwLock.ReadObtained(r.val.read.t))
     requires handle.is_handle(key)
     requires handle.CacheEntryHandle?
@@ -508,6 +509,34 @@ module AtomicStatusImpl {
       }
     }
 
+    shared method load_phase_finish_threadless(
+        glinear r: Rw.Token,
+        glinear handle: Handle,
+        glinear status: CacheResources.CacheStatus)
+    requires this.inv()
+    requires r.loc == rwlock_loc
+    requires r.val.M?
+    requires r.val.read.ReadObtained?
+    requires r.val.read.t == -1
+    requires r.val == RwLock.ReadHandle(RwLock.ReadObtained(r.val.read.t))
+    requires handle.is_handle(key)
+    requires handle.CacheEntryHandle?
+    requires status.is_status(key.cache_idx, Clean)
+    {
+      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_reading) {
+        ghost_acquire old_g;
+        glinear var new_g;
+        var fl := old_g.rwlock.val.central.flag;
+        glinear var G(rwlock, status_empty) := old_g;
+        rwlock :=
+            Rw.perform_Deposit_ReadingToDone(rwlock, r, handle);
+        dispose_glnone(status_empty);
+        new_g := G(rwlock, glSome(status));
+
+        assert state_inv(new_value, new_g, key, rwlock_loc);
+        ghost_release new_g;
+      }
+    }
 
     shared method quicktest_is_exc_locked()
     returns (is_exc_locked: bool)

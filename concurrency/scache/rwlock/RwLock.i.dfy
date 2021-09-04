@@ -70,12 +70,14 @@ module RwLock refines Rw {
   // on the way to obtaining a 'shared' lock, but it requires
   // exclusive access to the underlying memory and resources.
   // End-game for this flow is to become an ordinary 'shared' lock
+  // It is also possible to skip the intermediate steps and go straight
+  // to ReadObtained without a refcount to get ReadObtained(-1)
 
   datatype ReadState =
     | ReadNone
     | ReadPending                        // set status bit to ExcLock | Reading
-    | ReadPendingCounted(t: ThreadId)    // inc refcount
-    | ReadObtained(t: ThreadId)          // clear ExcLock bit
+    | ReadPendingCounted(t: int)         // inc refcount
+    | ReadObtained(t: int)               // clear ExcLock bit
 
   datatype CentralState =
     | CentralNone
@@ -210,7 +212,7 @@ module RwLock refines Rw {
         && 0 <= x.read.t < RC_WIDTH
       )
       && (x.read.ReadObtained? ==>
-        && 0 <= x.read.t < RC_WIDTH
+        && -1 <= x.read.t < RC_WIDTH
       )
       //&& (x.stored_value.Some? ==>
       //  x.stored_value.value.is_handle(key)
@@ -676,6 +678,34 @@ module RwLock refines Rw {
     }
   }
 
+  predicate Withdraw_AllocNoRefcount(m: M, m': M, b': StoredType)
+  {
+    && m.M?
+    && m.central.CentralState?
+    && m.central.flag == Unmapped
+    && m == CentralHandle(m.central)
+
+    && m' == dot(
+      CentralHandle(m.central.(flag := Reading)),
+      ReadHandle(ReadObtained(-1))
+    )
+
+    && b' == m.central.stored_value
+  }
+
+  lemma Withdraw_AllocNoRefcount_Preserves(m: M, m': M, b': StoredType)
+  requires Withdraw_AllocNoRefcount(m, m', b')
+  ensures withdraw(m, m', b')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+    ensures I(dot(m, p)) == Some(b')
+    ensures I(dot(m', p)) == None
+    {
+      assert dot(m', p).sharedState == dot(m, p).sharedState;
+    }
+  }
+
   predicate ReadingIncCount(m: M, m': M, t: int)
   {
     && m.M?
@@ -750,6 +780,7 @@ module RwLock refines Rw {
       CentralHandle(m.central),
       ReadHandle(m.read)
     )
+    && m.read.t != -1
     && m' == dot(
       CentralHandle(m.central.(flag := Available).(stored_value := b)),
       SharedHandle(SharedObtained(m.read.t, b))
@@ -783,6 +814,33 @@ module RwLock refines Rw {
       }
     }
   }
+
+  predicate Deposit_ReadingToDone(m: M, m': M, b: StoredType)
+  {
+    && m.M?
+    && m.central.CentralState?
+    && m.read.ReadObtained?
+    && m == dot(
+      CentralHandle(m.central),
+      ReadHandle(m.read)
+    )
+    && m.read.t == -1
+    && m' == CentralHandle(m.central.(flag := Available).(stored_value := b))
+  }
+
+  lemma Deposit_ReadingToDone_Preserves(m: M, m': M, b: StoredType)
+  requires Deposit_ReadingToDone(m, m', b)
+  ensures deposit(m, m', b)
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+    ensures I(dot(m, p)) == None
+    ensures I(dot(m', p)) == Some(b)
+    {
+      SumFilterSimp<SharedState>();
+    }
+  }
+
 
   predicate SharedIncCount(m: M, m': M, t: int)
   {
@@ -1815,6 +1873,7 @@ module RwLockToken {
   requires var m := handle.val;
     && m.M?
     && m.read.ReadObtained?
+    && m.read.t != -1
     && m == ReadHandle(m.read)
   requires c.loc == handle.loc
   ensures handle'.loc == c'.loc == c.loc
@@ -1831,6 +1890,32 @@ module RwLockToken {
     handle' := handle;
     var rest := T.obtain_invariant_2(inout c', inout handle');
     c', handle' := T.deposit_2_2(c', handle', b, a, d);
+  }
+
+  glinear method perform_Deposit_ReadingToDone(
+      glinear c: Token, glinear handle: Token, glinear b: Handle)
+  returns (glinear c': Token)
+  requires var m := c.val;
+    && m.M?
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.M?
+    && m.read.ReadObtained?
+    && m.read.t == -1
+    && m == ReadHandle(m.read)
+  requires c.loc == handle.loc
+  ensures c'.loc == c.loc
+  ensures c.val.central.flag == Reading
+  ensures c'.val == 
+      CentralHandle(c.val.central.(flag := Available).(stored_value := b))
+  {
+    var a := CentralHandle(c.val.central.(flag := Available).(stored_value := b));
+    Deposit_ReadingToDone_Preserves(dot(c.val, handle.val), a, b);
+    c' := c;
+    glinear var handle' := handle;
+    var rest := T.obtain_invariant_2(inout c', inout handle');
+    c' := T.deposit_2_1(c', handle', b, a);
   }
 
   glinear method perform_Deposit_Unmap(
