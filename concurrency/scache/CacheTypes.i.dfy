@@ -87,10 +87,14 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             && 0 <= i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
             && io_slots[i].iocb_ptr == ptr_add(this.iocb_base_ptr, i as uint64 * SizeOfIocb())
          )
+
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_read_inv(iocb_ptr, iocb, wp, g)
-        <==> ReadGInv(this, iocb_ptr, iocb, wp, g))
+        <==> ReadGInv(io_slots, data, disk_idx_of_entry, status,
+                  iocb_ptr, iocb, wp, g))
+
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_write_inv(iocb_ptr, iocb, wp, g)
-        <==> WriteGInv(this, iocb_ptr, iocb, wp, g))
+        <==> WriteGInv(io_slots, data, disk_idx_of_entry, status,
+                  iocb_ptr, iocb, wp, g))
 
       && (forall v, g :: atomic_inv(global_clockpointer, v, g) <==> true)
 
@@ -211,7 +215,11 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   }
 
   predicate ReadGInv(
-      cache: Cache,
+      cache_io_slots: lseq<IOSlot>,
+      cache_data: seq<Ptr>,
+      cache_disk_idx_of_entry: seq<Cell<int64>>,
+      cache_status: seq<AtomicStatus>,
+
       iocb_ptr: Ptr,
       iocb: Iocb,
       data: PointsToArray<byte>,
@@ -220,26 +228,30 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && iocb.IocbRead?
     && iocb.ptr == iocb_ptr
     && g.slot_idx < NUM_IO_SLOTS
-    && |cache.io_slots| == NUM_IO_SLOTS
-    && g.io_slot_info.cell == cache.io_slots[g.slot_idx].io_slot_info_cell
-    && iocb_ptr == cache.io_slots[g.slot_idx].iocb_ptr
+    && |cache_io_slots| == NUM_IO_SLOTS
+    && g.io_slot_info.cell == cache_io_slots[g.slot_idx].io_slot_info_cell
+    && iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
     && 0 <= g.key.cache_idx < CACHE_SIZE
     && 0 <= iocb.offset < NUM_DISK_PAGES
-    && |cache.data| == CACHE_SIZE
-    && |cache.disk_idx_of_entry| == CACHE_SIZE
-    && |cache.status| == CACHE_SIZE
-    && data.ptr == cache.data[g.key.cache_idx]
+    && |cache_data| == CACHE_SIZE
+    && |cache_disk_idx_of_entry| == CACHE_SIZE
+    && |cache_status| == CACHE_SIZE
+    && data.ptr == cache_data[g.key.cache_idx]
     && g.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
     && iocb.nbytes == PageSize
-    && g.idx.cell == cache.disk_idx_of_entry[g.key.cache_idx]
+    && g.idx.cell == cache_disk_idx_of_entry[g.key.cache_idx]
     && g.idx.v as int == iocb.offset == g.cache_reading.disk_idx
     && g.cache_reading.cache_idx == g.key.cache_idx
-    && g.ro.loc == cache.status[g.key.cache_idx].rwlock_loc
+    && g.ro.loc == cache_status[g.key.cache_idx].rwlock_loc
     && g.ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
   }
 
   predicate WriteGInv(
-      cache: Cache,
+      cache_io_slots: lseq<IOSlot>,
+      cache_data: seq<Ptr>,
+      cache_disk_idx_of_entry: seq<Cell<int64>>,
+      cache_status: seq<AtomicStatus>,
+
       iocb_ptr: Ptr,
       iocb: Iocb,
       data: seq<byte>,
@@ -249,18 +261,19 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && iocb.ptr == iocb_ptr
     && is_read_perm(iocb_ptr, iocb, data, g)
     && g.slot_idx < NUM_IO_SLOTS
-    && |cache.io_slots| == NUM_IO_SLOTS
-    && g.io_slot_info.cell == cache.io_slots[g.slot_idx].io_slot_info_cell
-    && iocb_ptr == cache.io_slots[g.slot_idx].iocb_ptr
+    && |cache_io_slots| == NUM_IO_SLOTS
+    && g.io_slot_info.cell == cache_io_slots[g.slot_idx].io_slot_info_cell
+    && iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
     && g.wbo.b.CacheEntryHandle?
     && 0 <= g.wbo.b.key.cache_idx < CACHE_SIZE
     && g.io_slot_info.v == IOSlotWrite(g.wbo.b.key.cache_idx as uint64)
     && g.wbo.is_handle(g.key)
-    && |cache.data| == CACHE_SIZE
-    && |cache.disk_idx_of_entry| == CACHE_SIZE
-    && |cache.status| == CACHE_SIZE
-    && g.key == cache.key(g.key.cache_idx)
-    && g.wbo.token.loc == cache.status[g.wbo.b.key.cache_idx as nat].rwlock_loc
+    && |cache_data| == CACHE_SIZE
+    && |cache_disk_idx_of_entry| == CACHE_SIZE
+    && |cache_status| == CACHE_SIZE
+    && g.key.data_ptr == cache_data[g.key.cache_idx]
+    && g.key.idx_cell == cache_disk_idx_of_entry[g.key.cache_idx]
+    && g.wbo.token.loc == cache_status[g.wbo.b.key.cache_idx as nat].rwlock_loc
     && g.wbo.b.cache_entry.disk_idx == iocb.offset
   }
 }

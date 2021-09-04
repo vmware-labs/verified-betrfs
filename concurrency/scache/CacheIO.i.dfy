@@ -68,7 +68,9 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         cache.key(cache_idx as int),
         wbo, idx as int, io_slot_info);
 
-    assert WriteGInv(cache, cache.io_slots[idx as nat].iocb_ptr,
+    assert WriteGInv(
+        cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+        cache.io_slots[idx as nat].iocb_ptr,
         iocb, wbo.b.data.s, writeg);
     aio.async_write(
         cache.ioctx,

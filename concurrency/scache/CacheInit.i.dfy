@@ -127,7 +127,6 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     linear var global_clockpointer := new_atomic(0, NullGhostType, (v, g) => true, 0);
     linear var io_slots := lseq_alloc(NUM_IO_SLOTS as uint64);
-    linear var ioctx;
 
     i := 0;
     while i < NUM_IO_SLOTS as uint64
@@ -165,6 +164,14 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     ghost var cache_idx_of_page :=
         seq(NUM_DISK_PAGES, (i) requires 0 <= i < NUM_DISK_PAGES =>
           cache_idx_of_page_array[i]);
+
+    linear var ioctx := aio.init_ctx(
+      ((iocb_ptr, iocb, wp, g) =>
+          ReadGInv(io_slots, data, disk_idx_of_entry, status, iocb_ptr, iocb, wp, g)),
+      ((iocb_ptr, iocb, p, g) =>
+          WriteGInv(io_slots, data, disk_idx_of_entry, status, iocb_ptr, iocb, p, g)));
+
+    dispose_anything(iocbs);
 
     c := Cache(
         data_base_ptr,
