@@ -127,6 +127,146 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && nodeId in m.replicas
   }
 
+  predicate LogEntryIsReady(m: M, logentry: nat)
+    requires StateValid(m)
+  {
+    && logentry in m.log.Keys
+  }
+
+  predicate LogEntryIsLocal(m: M, logentry: nat, nodeId: NodeId)
+    requires StateValid(m)
+    requires LogEntryIsReady(m, logentry)
+  {
+    && m.log[logentry].node_id == nodeId
+  }
+
+  /*
+   * ============================================================================================
+   * State Guards for Local Reads
+   * ============================================================================================
+   */
+
+  // GUARD: InReadOnlyInit
+  //
+  // the supplied request ID is valid and the corresponding request is in the ReadonlyInit state
+  predicate InReadOnlyInit(m: M, rid: RequestId)
+    requires StateValid(m)
+  {
+      && rid in m.localReads
+      && m.localReads[rid].ReadonlyInit?
+  }
+
+  // GUARD: InReadOnlyCTail
+  //
+  // the supplied request ID is valid, and the corresponding request is in the ReadonlyCtail state
+  predicate InReadOnlyCTail(m: M, rid: RequestId)
+    requires StateValid(m)
+  {
+      && rid in m.localReads
+      && m.localReads[rid].ReadonlyCtail?
+  }
+
+  // GUARD: InReadyToRead
+  //
+  // the supplied request ID is valid and the corresponding request is in the ReadyToRead state
+  predicate InReadyToRead(m: M, rid: RequestId)
+    requires StateValid(m)
+  {
+      && rid in m.localReads
+      && m.localReads[rid].ReadonlyReadyToRead?
+      && m.localReads[rid].nodeId in m.replicas
+  }
+
+  /*
+   * ============================================================================================
+   * State Guards for Combiners
+   * ============================================================================================
+   */
+
+  // GUARD: InCombinerReady
+  //
+  // the supplied nodeid is valid, and the combiner is in the Ready state.
+  predicate InCombinerReady(m : M, nodeId : NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.combiner
+    && m.combiner[nodeId].CombinerReady?
+  }
+
+  // GUARD: InCombinerWriteLogEntry
+  //
+  // the supplied nodeid is valid, and the combiner is in the WriteLogEntry state
+  predicate InCombinerWriteLogEntry(m : M, nodeId : NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.combiner
+    && m.combiner[nodeId].CombinerWriteLogEntry?
+    && m.combiner[nodeId].idx < |m.combiner[nodeId].request_ids|
+  }
+
+  // GUARD: InCombinerWriteLogEntry
+  //
+  // the supplied nodeid is valid, and the combiner is in the WriteLogEntry state
+  predicate InCombinerWriteLogEntryDone(m : M, nodeId : NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.combiner
+    && m.combiner[nodeId].CombinerWriteLogEntry?
+    && m.combiner[nodeId].idx == |m.combiner[nodeId].request_ids|
+  }
+
+  // GUARD: InCombinerPlaced
+  //
+  // the supplied nodeid is valid, and the combiner is in the CombinerPlaced state
+  predicate InCombinerPlaced(m : M, nodeId : NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.combiner
+    && m.combiner[nodeId].CombinerPlaced?
+  }
+
+  // GUARD: InCombinerPlaced
+  //
+  // the supplied nodeid is valid, and the combiner is in the CombinerLocalTail state
+  predicate InCombinerLocalTail(m : M, nodeId : NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.combiner
+    && m.combiner[nodeId].CombinerLtail?
+  }
+
+  // GUARD: InCombiner
+  //
+  // the supplied nodeid is valid, and the combiner is in the Combiner state with updates to be done
+  predicate InCombiner(m : M, nodeId : NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.combiner
+    && m.combiner[nodeId].Combiner?
+    && m.combiner[nodeId].localTail < m.combiner[nodeId].globalTail
+  }
+
+  // GUARD: InCombinerPlaced
+  //
+  // the supplied nodeid is valid, and the combiner is in the Combiner state with all updates done
+  predicate InCombinerDone(m: M, nodeId : NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.combiner
+    && m.combiner[nodeId].Combiner?
+    && m.combiner[nodeId].localTail == m.combiner[nodeId].globalTail
+  }
+
+  // GUARD: InCombinerPlaced
+  //
+  // the supplied nodeid is valid, and the combiner is in the UpdateCTail state
+  predicate InCombinerUpdateCompleteTail(m : M, nodeId : NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.combiner
+    && m.combiner[nodeId].CombinerUpdatedCtail?
+  }
+
 
   /*
    * ============================================================================================
@@ -150,30 +290,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
    * }
    */
 
-  // the read request is in the read only state
-  predicate InReadOnlyInit(m: M, rid: RequestId)
-    requires StateValid(m)
-  {
-      && rid in m.localReads
-      && m.localReads[rid].ReadonlyInit?
-  }
-
-  // the read request is in the CTail state
-  predicate InReadonlyCtail(m: M, rid: RequestId)
-    requires StateValid(m)
-  {
-      && rid in m.localReads
-      && m.localReads[rid].ReadonlyCtail?
-  }
-
-  // the read request is in the ReadyToRead state
-  predicate InReadyToRead(m: M, rid: RequestId)
-    requires StateValid(m)
-  {
-      && rid in m.localReads
-      && m.localReads[rid].ReadonlyReadyToRead?
-      && m.localReads[rid].nodeId in m.replicas
-  }
 
   // the local tail must have advanced far enough, so we can perform our read
   predicate LocalTailHasAdvanced(m: M, nodeId: NodeId,  readTail : nat)
@@ -193,15 +309,12 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // { ReadonlyInit(r, op) }
   //   readTail ← sharedLog.completedTail
   // { ReadonlyCtail(r, op, readTail) }
-  predicate ReadonlyReadCtail(m: M, m': M, nodeId: NodeId, rid: RequestId) {
+  predicate TransitionReadonlyReadCtail(m: M, m': M, nodeId: NodeId, rid: RequestId) {
     && StateValid(m)
     && InReadOnlyInit(m, rid)
     && CompleteTailValid(m)
 
-    // QUESTION: Do we need to ensure that the nodeId here is in fact valid?
-    //     SEE: Inv_ReadOnlyStateNodeIdExists
-
-    // explicitly read the ctail value
+    // explicitly read the shared ctail value, and store it on the private "stack"
     && var readTail := m.ctail.value;
 
     // construct the new state for the read request
@@ -222,9 +335,14 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // { ReadonlyReadyToRead(r, op) }
   predicate TransitionReadonlyReadyToRead(m: M, m': M, nodeId: NodeId, rid: RequestId) {
     && StateValid(m)
-    && InReadonlyCtail(m, rid)
+    && InReadOnlyCTail(m, rid)
+
+    // store the read request for convenience
     && var readRequest := m.localReads[rid];
+
+    // the local tail at the node must have advanced beyond the previously read ctail
     && LocalTailHasAdvanced(m, nodeId, readRequest.ctail)
+
     // construct the new state for the read request
     && var newst :=  ReadonlyReadyToRead(readRequest.op, nodeId, readRequest.ctail);
     // and update the state
@@ -243,10 +361,16 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   predicate TransitionReadonlyDone(m: M, m': M, nodeId: NodeId, rid: RequestId) {
     && StateValid(m)
     && InReadyToRead(m, rid)
+
+    // store the read request for convenience
     && var readRequest := m.localReads[rid];
+
     // TODO require us to be in 'CombinerReady' state
-    // perform the read operation
+    // && InCombinerReady(m, readRequest.nodeId)
+
+    // perform the read operation from the replica
     && var ret := nrifc.read(m.replicas[readRequest.nodeId], readRequest.op);
+
     // construct the new state
     && var newst := ReadonlyDone(ret);
     // and update the state
@@ -256,59 +380,11 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   /*
    * ============================================================================================
-   * UPDATE OPERATIONS
+   * LOG UPDATE OPERATIONS
    * ============================================================================================
+   *
+   * TODO: ADD THE COMPLETE "pseudocode here"
    */
-
-  predicate InCombinerReady(m : M, nodeId : NodeId)
-    requires StateValid(m)
-  {
-    && nodeId in m.combiner
-    && m.combiner[nodeId].CombinerReady?
-  }
-
-  predicate InCombinerWriteLogEntry(m : M, nodeId : NodeId)
-    requires StateValid(m)
-  {
-    && nodeId in m.combiner
-    && m.combiner[nodeId].CombinerWriteLogEntry?
-    && m.combiner[nodeId].idx < |m.combiner[nodeId].request_ids|
-  }
-
-  predicate InCombinerPlaced(m : M, nodeId : NodeId)
-    requires StateValid(m)
-  {
-    && nodeId in m.combiner
-    && m.combiner[nodeId].CombinerPlaced?
-  }
-  predicate InCombinerLocalTail(m : M, nodeId : NodeId)
-    requires StateValid(m)
-  {
-    && nodeId in m.combiner
-    && m.combiner[nodeId].CombinerLtail?
-  }
-  predicate InCombiner(m : M, nodeId : NodeId)
-    requires StateValid(m)
-  {
-    && nodeId in m.combiner
-    && m.combiner[nodeId].Combiner?
-    && m.combiner[nodeId].localTail < m.combiner[nodeId].globalTail
-  }
-  predicate InCombinerDone(m: M, nodeId : NodeId)
-    requires StateValid(m)
-  {
-    && nodeId in m.combiner
-    && m.combiner[nodeId].Combiner?
-    && m.combiner[nodeId].localTail == m.combiner[nodeId].globalTail
-  }
-
-  predicate InCombinerUpdateCompleteTail(m : M, nodeId : NodeId)
-    requires StateValid(m)
-  {
-    && nodeId in m.combiner
-    && m.combiner[nodeId].CombinerUpdatedCtail?
-  }
-
 
   // https://stackoverflow.com/questions/52610402/updating-a-map-with-another-map-in-dafny
   function update_map<K(!new), V>(m1: map<K, V>, m2: map<K, V>): map<K, V>
@@ -380,35 +456,49 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 */
 
 
-  /*
-   * { UpdateInit(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerReady ; }
-   * tail = cmpxchg(tail, tail + ops.len()); // retry on fail
-   * { UpdateInit(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerWriteLog ; }
-   */
+  // STATE TRANSITION: CombinerReady -> CombinerWriteLog
+  //
+  // Advances the global tail using an atomic instruction
+  //
+  // { UpdateInit(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerReady ; }
+  //   tail = cmpxchg(tail, tail + ops.len()); // retry on fail
+  // { UpdateInit(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerWriteLog ; }
   predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>) {
     && StateValid(m)
     && InCombinerReady(m, nodeId)
     && GlobalTailValid(m)
 
-    // atomically load the new update
+    // atomically load and update the global tail value
+    && var global_tail := m.global_tail.value;
     && var global_tail_new := m.global_tail.value + |request_ids|;
 
-    // the new combiner state
+    // the new combiner state: we update the combiner state only if |request_ids| > 0
+    //
+    // QUESTION(RA): is this the usual way to do this, or would it be better to require
+    //               |request_ids| > 0? or maybe even have a separate transition for empty ones?
+    // QUESTION(RA): is this distinction even required?
     && var cstate_new := if |request_ids| > 0
-                         then CombinerWriteLogEntry(m.global_tail.value, 0, request_ids)
+                         then CombinerWriteLogEntry(global_tail, 0, request_ids)
                          else CombinerReady;
 
     && m' == m.(global_tail := Some(global_tail_new))
               .(combiner := m.combiner[nodeId := cstate_new])
   }
 
+  // STATE TRANSITION: WriteLogEntry(n) -> WriteLogEntry(n-1)
+  //
+  // Writes a single log entry IF there are remaining log entries to be written
+  //
   //   for (i, op) in ops {
-  //     let m = lmask[tkn]
-  //     flip m on wrap around
-  //     slog[tail+i].operation = Some(op);
-  //     slog[tail+i].replica = tkn;
-  //     slog[tail+i].alive = m; // last, tso here // Log(…) entries managed by slog
+  //     { UpdateInit(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerWriteLog(n - 1) ; }
+  //       let m = lmask[tkn]
+  //       flip m on wrap around
+  //       slog[tail+i].operation = Some(op);
+  //       slog[tail+i].replica = tkn;
+  //       slog[tail+i].alive = m; // last, tso here // Log(…) entries managed by slog
+  //     { UpdatePlaced(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerWriteLog(n-i) ; }
   //   }
+  //
   predicate WriteLogEntry(m: M, m': M, nodeId: NodeId) {
     && StateValid(m)
     && InCombinerWriteLogEntry(m, nodeId)
@@ -416,10 +506,14 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
     && RequestIdsValidAndUpdateInit(c.request_ids, m.localUpdates)
 
-    // calculate the log index
+    // calculate the log index this is the stored tail plus the current index
     && var logidx := c.globalTail + c.idx;
 
-    // update the combiner state
+    // update the combiner state: we transition to CombinerPlaced next, if this is the last entry
+    //
+    // QUESTION(RA): is this a the usual way to handle this? the `InCombinerWriteLogEntry` guard already
+    //               requires c.idx < |c.request_ids| and there could be another state transition
+    //               like the unused `WriteLogEntryDone` below that requires `c.idx == |c.request_ids|`
     && var c_new := if c.idx + 1 != |c.request_ids|
                     then c.(idx := c.idx + 1)
                     else CombinerPlaced(c.request_ids);
@@ -427,15 +521,50 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // update the local updates
     && var lupd_new := m.localUpdates[c.request_ids[c.idx] := UpdatePlaced(nodeId)];
 
-    // update the log
+    // update the log at the current entry
     && var log_new := m.log[logidx := LogEntry(m.localUpdates[c.request_ids[c.idx]].op, nodeId)];
-
+    // update the state
     && m' == m.(log := log_new)
               .(localUpdates := lupd_new)
               .(combiner := m.combiner[nodeId := c_new])
   }
 
+  // STATE TRANSITION: WriteLogEntry(0) -> CombinerPlaced
+  //
+  // All log entries have been written, transition to CombinerPlaced
+  //
+  // { UpdatePlaced(r, op1) ; UpdatePlaced(p, op2) ; UpdatePlaced(q, op3) ; CombinerWriteLog ; }
+  //   for (i, op) in ops {
+  //     let m = lmask[tkn]
+  //     flip m on wrap around
+  //     slog[tail+i].operation = Some(op);
+  //     slog[tail+i].replica = tkn;
+  //     slog[tail+i].alive = m; // last, tso here // Log(…) entries managed by slog
+  //   }
+  // assert idx == |ops|
+  // { UpdatePlaced(r, op1) ; UpdatePlaced(p, op2) ; UpdatePlaced(q, op3) ; CombinerPlaced ; }
+  predicate WriteLogEntryDone(m: M, m': M, nodeId: NodeId) {
+    && StateValid(m)
+    && InCombinerWriteLogEntryDone(m, nodeId)
+
+    // construct the new combiner state
+    && var c_new := CombinerPlaced(m.combiner[nodeId].request_ids);
+    // update the state
+    && m' == m.(combiner := m.combiner[nodeId := c_new])
+  }
+
+
+  /*
+   * ============================================================================================
+   * LOG UPDATE OPERATIONS
+   * ============================================================================================
+   *
+   * TODO: ADD THE COMPLETE "pseudocode here"
+   */
+
   // STATE TRANSITION: CombinerPlaced -> CombinerLTail
+  //
+  // This is the beginning of the execute operation. We start with reading our local tail
   //
   // exec():
   // { CombinerPlaced(queue) ; … }
@@ -457,7 +586,10 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m' == m.(combiner := m.combiner[nodeId := newst])
   }
 
-  // STATE TRANSITION
+  // STATE TRANSITION: CombinerLTail -> CombierDispatch
+  //
+  // During the exec phase, we read the global tail to obtain the current entries in the
+  // log. Note: the entries may not have been placed in the log yet.
   //
   // exec():
   // { CombinerLtail(queue, ltail) ; … }
@@ -479,7 +611,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m' == m.(combiner := m.combiner[nodeId := newst])
   }
 
-  // STATE TRANSITION
+  // STATE TRANSITION: Combiner -> Combiner (local case)
   //
   //   assert (ltail < gtail && ltail[tkn] >= head);
   //   for i in ltail..gtail {
@@ -501,17 +633,12 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // get the combiner state
     && var c := m.combiner[nodeId];
 
-    // XXX: shoudl something like this be part of the well-formed predicate?
-    && (c.localTail in m.log.Keys)
+    // the log entry should be ready to be consumed and it should be local
+    && LogEntryIsReady(m, c.localTail)
+    && LogEntryIsLocal(m, c.localTail, nodeId)
 
-    // the applied operation originated on a remote node
-    && m.log[c.localTail].node_id == nodeId
-
-    // update the data structure
+    // apply the update to the local data structure replica
     && var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[c.localTail].op);
-
-    // calculate the new combiner state
-    &&  var c_new := c.(localTail := c.localTail + 1);
 
     // calcualte the queue index.
     // Question(RA): could we use a map here instead? and associate it with the log index?
@@ -520,12 +647,18 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
     && c.queued_ops[queue_index] in m.localUpdates // NOTE(travis): added this
 
+    // update the combiner state by incrementing the current local tail
+    &&  var c_new := c.(localTail := c.localTail + 1);
+
     // update the state
     && m' == m.(combiner := m.combiner[nodeId := c_new])
               .(replicas := m.replicas[nodeId := nr_state'])
               .(localUpdates := m.localUpdates[c.queued_ops[queue_index]:= UpdateDone(ret)])
   }
 
+  // STATE TRANSITION: Combiner -> Combiner (remote case)
+  //
+  //
   predicate ExecDispatchRemote(m: M, m': M, nodeId: NodeId) {
     && StateValid(m)
     && InCombiner(m, nodeId)
@@ -533,25 +666,23 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // get the combiner state
     && var c := m.combiner[nodeId];
 
-    // XXX: shoudl something like this be part of the well-formed predicate?
-    && (c.localTail in m.log.Keys)
+    // the log entry should be ready to be consumed and it should have been originated from another node
+    && LogEntryIsReady(m, c.localTail)
+    && !LogEntryIsLocal(m, c.localTail, nodeId)
 
-    // the applied operation originated on a remote node
-    && m.log[c.localTail].node_id != nodeId
-
-    // apply the update to the data structure
+    // apply the update to the local data structure replica
     && var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[c.localTail].op);
 
-    // update the combiner state
+    // update the combiner state by incrementing the current local tail
     &&  var c_new := c.(localTail := c.localTail + 1);
     // update the state
     && m' == m.(combiner := m.combiner[nodeId := c_new])
               .(replicas := m.replicas[nodeId := nr_state'])
   }
 
-
-
-  // STATE TRANSITION
+  // STATE TRANSITION: Combiner -> CombinerUpdatedCtail
+  //
+  // Update the ctail to the maximum of the current stored global tail, and the current ctail
   //
   // assert (ltail = gtail)
   // { Combiner(queue, ltail, gtail, j) ; … }
@@ -572,8 +703,10 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
               .(ctail := Some(new_ctail))
   }
 
-  // STATE TRANSITION
-
+  // STATE TRANSITION: CombinerUpdatedCtail -> CombinerReady
+  //
+  // Update the local tail pointer of hte replica to the stored global tail
+  //
   // { CombinerUpdatedCtail(gtail, ltail, gtail, j) ; … }
   //   store ltails[tkn] = gtail; // update replica's tail
   // { CombinerReady ; … }
@@ -583,9 +716,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && CompleteTailValid(m)
     // get the combiner state
     && var c := m.combiner[nodeId];
-    // XXX: that one should be part of the invariant
-    //&& m.ctail.value >= c.localAndGlobalTail
-    // update the new state
+    // update the new state, set the combiner into ready state and update local tail
     && m' == m.(combiner := m.combiner[nodeId := CombinerReady])
               .(localTails := m.localTails[nodeId := c.localAndGlobalTail])
   }
@@ -730,17 +861,82 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
    * ============================================================================================
    */
 
-  // captures the wellformedness of the state
+  // INVARIANT: Well-formed State
+  // Overall the state must be well-formed: not failed, with some ctail/gtail values, ndoes exists
   predicate Inv_WF(s: M) {
+    // the state is not failed
     && s.M?
     // Question(RA): can we always assume this here?
     // NOTE(travis): yes, this is what I'd expect
     && s.ctail.Some?
     && s.global_tail.Some?
-    //
+    // the node-related state must exist for all nodes, and there must be at least one node.
     && s.replicas.Keys == s.localTails.Keys
     && s.replicas.Keys == s.combiner.Keys
     && |s.replicas.Keys| > 0
+  }
+
+  // INVARIANT: Ordering of global tail and completed tail
+  // we have that the global tail must always be ahead of, or equal to the completed tail
+  predicate Inv_GlobalTailCompleteTailOrdering(s: M)
+    requires Inv_WF(s)
+  {
+    s.global_tail.value >= s.ctail.value
+  }
+
+  // INVARIANT: Ordering of the ctail and the local tail values
+  // the completed tail must be ahead of, or equal to the local tails
+  predicate Inv_CompletedTailLowerBound(s: M)
+    requires Inv_WF(s)
+  {
+    forall nodeId | nodeId in s.localTails :: s.ctail.value >= s.localTails[nodeId]
+  }
+
+  // INVVARIANT: ordering of the global tail and the local tail values
+  // the global tail must be ahead of, or equal to the stored global_tail_snapshot
+  predicate Inv_GlobalTailLowerBound(s: M)
+    requires Inv_WF(s)
+  {
+    forall nodeId | nodeId in s.localTails :: s.global_tail.value >= s.localTails[nodeId]
+  }
+
+  // INVARIANT: Ordering of Ctail stored in ReadOnly state
+  // The stored ctail values must be smaller or equal the actual ctail value
+  predicate Inv_ReadOnlyCtailsCompleteTailOrdering(s: M)
+    requires Inv_WF(s)
+  {
+    forall rid | rid in s.localReads :: match s.localReads[rid] {
+      case ReadonlyCtail(_, ctail: nat) => ctail <= s.ctail.value
+      case ReadonlyReadyToRead(_, _, ctail: nat) => ctail <= s.ctail.value
+      case _ => true
+    }
+  }
+
+  // INVARIANT: Ordering of the tails in the combiner
+  // all global tail values in the combiners should be less or equal to the global tail
+  predicate Inv_CombinerTailsGlobalTailOrdering(s: M)
+    requires Inv_WF(s)
+  {
+    forall nid | nid in s.combiner :: match s.combiner[nid] {
+      case CombinerWriteLogEntry(globalTail: nat, _, _) => globalTail <= s.global_tail.value
+      case Combiner(_, _, globalTail: nat) => globalTail <= s.global_tail.value
+      case CombinerUpdatedCtail(_, localAndGlobalTail: nat) => localAndGlobalTail <= s.global_tail.value
+      case _ => true
+    }
+  }
+
+  // INVARIANT: Ordering of the tails in the combiner
+  // all global tail values in the combiners should be less or equal to the global tail
+  predicate Inv_CombinerTailsLocalTailOrdering(s: M)
+    requires Inv_WF(s)
+  {
+    forall nid | nid in s.combiner :: match s.combiner[nid] {
+      case CombinerWriteLogEntry(globalTail: nat, _, _) => globalTail >= s.localTails[nid]
+      case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => localTail <= s.localTails[nid]
+      case Combiner(_, localTail: nat, globalTail: nat) => localTail >= s.localTails[nid]
+      case CombinerUpdatedCtail(_, localAndGlobalTail: nat) => localAndGlobalTail >= s.localTails[nid]
+      case _ => true
+    }
   }
 
   // the log contains entries up to, but not including the value here
@@ -781,26 +977,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   }
 
 
-  // the completed tail must be ahead of, or equal to the local tails
-  predicate Inv_CompletedTailLowerBound(s: M)
-    requires Inv_WF(s)
-  {
-    forall nodeId | nodeId in s.localTails :: s.ctail.value >= s.localTails[nodeId]
-  }
 
-  // the global tail must be ahead of, or equal to the stored global_tail_snapshot
-  predicate Inv_GlobalTailLowerBound(s: M)
-    requires Inv_WF(s)
-  {
-    forall nodeId | nodeId in s.localTails :: s.global_tail.value >= get_global_tail(s, nodeId)
-  }
 
-  // we have that the global tail must always be ahead of, or equal to the completed tail
-  predicate Inv_GLobalTailCompleteTailOrder(s: M)
-    requires Inv_WF(s)
-  {
-    s.global_tail.value >= s.ctail.value
-  }
 
   predicate Inv_CombinerStateValid(s: M)
     requires Inv_WF(s)
@@ -813,6 +991,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
           && globalTail + |request_ids| <= s.global_tail.value
           && idx <= |request_ids|
           && |request_ids| > 0
+          && globalTail >= s.ctail.value
         )
         case CombinerPlaced(queued_ops: seq<RequestId>) => (
           && |queued_ops| > 0
@@ -830,7 +1009,6 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
           && Inv_LogContainsEntriesUpToHere(s.log, localTail)
         )
         case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => (
-          && localAndGlobalTail <= s.ctail.value
           && localAndGlobalTail <= s.global_tail.value)
           && |queued_ops| > 0
           && Inv_LogContainsEntriesUpToHere(s.log, localAndGlobalTail)
@@ -878,9 +1056,12 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     // var logicalLocalTail :=  if nodeId in combiner && combiner[nodeId].Combiner? then
     //     combiner[nodeId].localTail else localTails[nodeId];
     && Inv_WF(s)
-    && Inv_GLobalTailCompleteTailOrder(s)
+    && Inv_GlobalTailCompleteTailOrdering(s)
     && Inv_CompletedTailLowerBound(s)
     && Inv_GlobalTailLowerBound(s)
+    && Inv_ReadOnlyCtailsCompleteTailOrdering(s)
+    && Inv_CombinerTailsGlobalTailOrdering(s)
+    && Inv_CombinerTailsLocalTailOrdering(s)
     && Inv_LogContainsEntriesUpToHere(s.log, s.ctail.value)
     // that one here is no longer true...
     //&& Inv_LogContainsEntriesUpToHere(s.log, s.global_tail.value)
@@ -890,25 +1071,14 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     // there are no entries placed in the log
     && (forall idx | idx >= s.global_tail.value :: idx !in s.log.Keys)
 
+    // && (forall nid | nid in s.combiner :: CombinerRange(s.combiner[nid]) !!  (set x | 0 <= x < get_local_tail(s, nid) :: x))
+
     // replica[nodeId] == fold the operations in the log up to version logicalLocalTail
     //     (initial state + log 0 + log 1 + ... + log k)
     //     (see state_at_version in NRSimple)
 
     && (forall nodeId | nodeId in s.replicas :: (forall i | 0 <= i < get_local_tail(s, nodeId) :: i in s.log.Keys))
     && (forall nodeId | nodeId in s.replicas :: s.replicas[nodeId] == state_at_version(s.log, get_local_tail(s, nodeId)))
-
-
-    //&& forall rid :: rid in localReads :: localReads[rid].ctail <= ctail
-    && if s.ctail.Some? then
-      forall rid | rid in s.localReads ::
-        if s.localReads[rid].ReadonlyCtail? then
-          s.localReads[rid].ctail <= s.ctail.value
-        else if s.localReads[rid].ReadonlyReadyToRead? then
-          s.localReads[rid].ctail <= s.ctail.value
-        else
-          true
-      else
-        true
   }
 
   lemma InitImpliesInv(s: M)
@@ -974,7 +1144,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     | ExecDispatchLocal_Step(nodeId: NodeId)
     | WriteLogEntry_Step(nodeId: NodeId)
     | ExecDispatchRemote_Step(nodeId: NodeId)
-    | ReadonlyReadCtail_Step(nodeId: NodeId, rid: RequestId )
+    | TransitionReadonlyReadCtail_Step(nodeId: NodeId, rid: RequestId )
     | TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId)
     | TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId)
     | UpdateCompletedTail_Step(nodeId: NodeId)
@@ -988,7 +1158,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail(m, m', nodeId)
       case ExecDispatchLocal_Step(nodeId: NodeId) => ExecDispatchLocal(m, m',nodeId)
       case ExecDispatchRemote_Step(nodeId: NodeId) => ExecDispatchRemote(m, m',nodeId)
-      case ReadonlyReadCtail_Step(nodeId: NodeId, rid: RequestId) =>  ReadonlyReadCtail(m, m', nodeId, rid)
+      case TransitionReadonlyReadCtail_Step(nodeId: NodeId, rid: RequestId) =>  TransitionReadonlyReadCtail(m, m', nodeId, rid)
       case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyReadyToRead(m, m', nodeId, rid)
       case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone(m, m', nodeId, rid)
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail(m, m', nodeId, request_ids)
@@ -1010,9 +1180,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
 
   }
 
-  lemma ReadonlyReadCtail_PreservesInv(m: M, m': M, nodeId: NodeId, rid: RequestId)
+  lemma TransitionReadonlyReadCtail_PreservesInv(m: M, m': M, nodeId: NodeId, rid: RequestId)
     requires Inv(m)
-    requires ReadonlyReadCtail(m, m', nodeId, rid)
+    requires TransitionReadonlyReadCtail(m, m', nodeId, rid)
     ensures Inv(m')
   {
 
@@ -1062,15 +1232,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
         assert forall k | 0 <= k < get_local_tail(m, nid) :: k in m.log;
         assert forall k | 0 <= k < get_local_tail(m', nid) :: k in m'.log;
 
-        /*
-        forall k | 0 <= k < get_local_tail(m', nid) ensures m.log[k] == m'.log[k] {
-          assert |m.log| <= |m'.log|;
-          //assert m.combiner[nid].globalTail + m.combiner[nid].idx >= |m.log|;
-          // Show that the element we added wasn't already in the log.
-          assert InCombinerWriteLogEntry(m, nid);
-          assert !((m.combiner[nid].globalTail + m.combiner[nid].idx) in m.log);
-        }
-        */
+        assert forall k | 0 <= k < m.ctail.value :: m.log[k] == m'.log[k];
         assert forall k | 0 <= k < get_local_tail(m', nid) :: m.log[k] == m'.log[k];
         // proof here
         state_at_version_preserves(m.log, m'.log, get_local_tail(m', nid));
@@ -1137,7 +1299,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail_PreservesInv(m, m', nodeId);
       case ExecDispatchLocal_Step(nodeId: NodeId) => ExecDispatchLocal_PreservesInv(m, m',nodeId);
       case ExecDispatchRemote_Step(nodeId: NodeId) => ExecDispatchRemote_PreservesInv(m, m',nodeId);
-      case ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) =>  ReadonlyReadCtail_PreservesInv(m, m', rid, nodeId);
+      case TransitionReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) =>  TransitionReadonlyReadCtail_PreservesInv(m, m', rid, nodeId);
       case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyReadyToRead_PreservesInv(m, m', nodeId, rid);
       case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone_PreservesInv(m, m', nodeId, rid);
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail_PreservesInv(m, m', nodeId, request_ids);
@@ -1227,8 +1389,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
         assert ExecDispatchRemote(dot(m, p), dot(m', p), nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case ReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) => {
-        assert ReadonlyReadCtail(dot(m, p), dot(m', p), rid, nodeId);
+      case TransitionReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) => {
+        assert TransitionReadonlyReadCtail(dot(m, p), dot(m', p), rid, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => {
