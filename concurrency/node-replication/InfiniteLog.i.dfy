@@ -556,7 +556,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   /*
    * ============================================================================================
-   * LOG UPDATE OPERATIONS
+   * EXECUTE OPERATIONS
    * ============================================================================================
    *
    * TODO: ADD THE COMPLETE "pseudocode here"
@@ -861,6 +861,16 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
    * ============================================================================================
    */
 
+  // helper predicate to check that range is in the log [start..end]
+  predicate LogContainsEntries(log: map<nat, LogEntry>, start: nat, end: nat) {
+    forall i | start <= i < end :: i in log.Keys
+  }
+
+  // helper predicate to check that range up to here is in the log [0..here]
+  predicate LogContainsEntriesUpToHere(log: map<nat, LogEntry>, here: nat) {
+    LogContainsEntries(log, 0, here)
+  }
+
   // INVARIANT: Well-formed State
   // Overall the state must be well-formed: not failed, with some ctail/gtail values, ndoes exists
   predicate Inv_WF(s: M) {
@@ -894,6 +904,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
 
   // INVVARIANT: ordering of the global tail and the local tail values
   // the global tail must be ahead of, or equal to the stored global_tail_snapshot
+  // XXX: that should follow from the previous two invariants
   predicate Inv_GlobalTailLowerBound(s: M)
     requires Inv_WF(s)
   {
@@ -912,37 +923,22 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     }
   }
 
-  // INVARIANT: Ordering of the tails in the combiner
-  // all global tail values in the combiners should be less or equal to the global tail
-  predicate Inv_CombinerTailsGlobalTailOrdering(s: M)
+  // INVARIANT: the log contains entries yup to the complete tail
+  predicate Inv_LogEntriesUpToCTailExists(s: M)
     requires Inv_WF(s)
   {
-    forall nid | nid in s.combiner :: match s.combiner[nid] {
-      case CombinerWriteLogEntry(globalTail: nat, _, _) => globalTail <= s.global_tail.value
-      case Combiner(_, _, globalTail: nat) => globalTail <= s.global_tail.value
-      case CombinerUpdatedCtail(_, localAndGlobalTail: nat) => localAndGlobalTail <= s.global_tail.value
-      case _ => true
-    }
+    && LogContainsEntriesUpToHere(s.log, s.ctail.value)
   }
 
-  // INVARIANT: Ordering of the tails in the combiner
-  // all global tail values in the combiners should be less or equal to the global tail
-  predicate Inv_CombinerTailsLocalTailOrdering(s: M)
+  // INVARIANT: The log must contain entries up to the local tails
+  // XXX: that one follows from the `Inv_LogEntriesUpToCTailExists` and `Inv_CompletedTailLowerBound`
+  predicate Inv_LogEntriesUpToLocalTailExist(s: M)
     requires Inv_WF(s)
   {
-    forall nid | nid in s.combiner :: match s.combiner[nid] {
-      case CombinerWriteLogEntry(globalTail: nat, _, _) => globalTail >= s.localTails[nid]
-      case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => localTail <= s.localTails[nid]
-      case Combiner(_, localTail: nat, globalTail: nat) => localTail >= s.localTails[nid]
-      case CombinerUpdatedCtail(_, localAndGlobalTail: nat) => localAndGlobalTail >= s.localTails[nid]
-      case _ => true
-    }
+    forall nid | nid in s.localTails :: LogContainsEntriesUpToHere(s.log, s.localTails[nid])
   }
 
-  // the log contains entries up to, but not including the value here
-  predicate Inv_LogContainsEntriesUpToHere(log: map<nat, LogEntry>, here: nat) {
-    forall i | 0 <= i < here :: i in log.Keys
-  }
+
 
 
   function get_local_tail(m: M, nodeId: NodeId) : nat
@@ -976,43 +972,62 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     else m.global_tail.value
   }
 
-
-
-
-
   predicate Inv_CombinerStateValid(s: M)
     requires Inv_WF(s)
   {
-    forall nodeId | nodeId in s.combiner ::
-      match s.combiner[nodeId] {
-        case CombinerReady => true
-        case CombinerWriteLogEntry(globalTail: nat, idx: nat, request_ids: seq<RequestId>) => (
-          && globalTail <= s.global_tail.value
-          && globalTail + |request_ids| <= s.global_tail.value
-          && idx <= |request_ids|
-          && |request_ids| > 0
-          && globalTail >= s.ctail.value
-        )
-        case CombinerPlaced(queued_ops: seq<RequestId>) => (
-          && |queued_ops| > 0
-        )
-        case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => (
-          && |queued_ops| > 0
-          && localTail <= s.ctail.value
-        )
-        case Combiner(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat) => (
-          // I don't think this is true, no?
-          // && localTail <= s.ctail.value
-          && localTail <= s.global_tail.value
-          && globalTail <= s.global_tail.value
-          && |queued_ops| > 0
-          && Inv_LogContainsEntriesUpToHere(s.log, localTail)
-        )
-        case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => (
-          && localAndGlobalTail <= s.global_tail.value)
-          && |queued_ops| > 0
-          && Inv_LogContainsEntriesUpToHere(s.log, localAndGlobalTail)
-      }
+    forall nodeId | nodeId in s.combiner :: match s.combiner[nodeId] {
+      case CombinerReady => true
+      case CombinerWriteLogEntry(globalTail: nat, idx: nat, request_ids: seq<RequestId>) => (
+        // the global tail may have already advanced...
+        && globalTail <= s.global_tail.value
+        // moreover we also have that gtail + |ops| <= global tail
+        && globalTail + |request_ids| <= s.global_tail.value
+        // the index should be always within the requests
+        && idx < |request_ids|
+        // the read global tail should be larger than the ctail value
+        && globalTail >= s.ctail.value
+        // log contains the entries now
+        && LogContainsEntries(s.log, globalTail, globalTail + idx)
+        // there should be at least one queued op
+        && |request_ids| > 0
+      )
+      case CombinerPlaced(queued_ops: seq<RequestId>) => (
+        // there should be at least one queued op
+        && |queued_ops| > 0
+      )
+      case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => (
+        // we've just read the local tail value, and no-one else should modify that
+        && localTail == s.localTails[nodeId]
+        // the local tail should be smaller or equal than the ctail
+        && localTail <= s.ctail.value
+        // there should be at least one queued op
+        && |queued_ops| > 0
+      )
+      case Combiner(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat) => (
+        // the global tail may have already advanced...
+        && globalTail <= s.global_tail.value
+        // we're advancing the local tail here
+        && localTail >= s.localTails[nodeId]
+        // the local tail should always be smaller or equal to the global tail
+        && localTail <= globalTail
+        // the log now contains all entries up to localtail
+        && LogContainsEntriesUpToHere(s.log, localTail)
+        // there should be at least one queued op
+        && |queued_ops| > 0
+      )
+      case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => (
+        // the global tail may have already advanced...
+        && localAndGlobalTail <= s.global_tail.value
+        // update the ctail value
+        && localAndGlobalTail <= s.ctail.value
+        // the local tail should be smaller than this one here
+        && s.localTails[nodeId] < localAndGlobalTail
+        // the log now contains all entries up to localAndGlobalTail
+        && LogContainsEntriesUpToHere(s.log, localAndGlobalTail)
+        // there should be at least one queued op
+        && |queued_ops| > 0
+      )
+    }
   }
 
   // the completed tail must be ahead of, or equal to the local tails
@@ -1060,14 +1075,12 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && Inv_CompletedTailLowerBound(s)
     && Inv_GlobalTailLowerBound(s)
     && Inv_ReadOnlyCtailsCompleteTailOrdering(s)
-    && Inv_CombinerTailsGlobalTailOrdering(s)
-    && Inv_CombinerTailsLocalTailOrdering(s)
-    && Inv_LogContainsEntriesUpToHere(s.log, s.ctail.value)
-    // that one here is no longer true...
-    //&& Inv_LogContainsEntriesUpToHere(s.log, s.global_tail.value)
+    && Inv_LogEntriesUpToCTailExists(s)
+    && Inv_LogEntriesUpToLocalTailExist(s)
     && Inv_CombinerStateValid(s)
-    && Inv_ReadOnlyStateNodeIdExists(s)
     && Inv_CombinerLogNonOverlap(s)
+    && Inv_ReadOnlyStateNodeIdExists(s)
+
     // there are no entries placed in the log
     && (forall idx | idx >= s.global_tail.value :: idx !in s.log.Keys)
 
