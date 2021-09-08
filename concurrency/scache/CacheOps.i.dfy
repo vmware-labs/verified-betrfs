@@ -480,28 +480,26 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   method get_free_page(shared cache: Cache, linear inout localState: LocalState)
   returns (
     cache_idx: uint64,
-    glinear m: glOption<T.Token>,
-    glinear handle_opt: glOption<Handle>
+    glinear m: T.Token,
+    glinear handle: Handle
   )
   requires cache.Inv()
   requires old_localState.WF()
   ensures localState.WF()
   ensures
       && 0 <= cache_idx as int < CACHE_SIZE
-      && m.glSome?
-      && m.value.loc == cache.status[cache_idx].rwlock_loc
-      && m.value.val == RwLock.ReadHandle(RwLock.ReadPending)
-      && handle_opt.glSome?
-      && handle_opt.value.is_handle(cache.key(cache_idx as int))
-      && handle_opt.value.CacheEmptyHandle?
+      && m.loc == cache.status[cache_idx].rwlock_loc
+      && m.val == RwLock.ReadHandle(RwLock.ReadPending)
+      && handle.is_handle(cache.key(cache_idx as int))
+      && handle.CacheEmptyHandle?
   ensures localState.t == old_localState.t
   decreases *
   {
     var chunk: uint64 := localState.chunk_idx;
 
     var success := false;
-    m := glNone;
-    handle_opt := glNone;
+    glinear var m_opt: glOption<T.Token> := glNone;
+    glinear var handle_opt: glOption<Handle> := glNone;
 
     ghost var t := localState.t;
 
@@ -511,13 +509,13 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant localState.t == t
     invariant 0 <= chunk as int < NUM_CHUNKS
     invariant !success ==>
-        && m.glNone?
+        && m_opt.glNone?
         && handle_opt.glNone?
     invariant success ==>
         && 0 <= cache_idx as int < CACHE_SIZE
-        && m.glSome?
-        && m.value.loc == cache.status[cache_idx].rwlock_loc
-        && m.value.val == RwLock.ReadHandle(RwLock.ReadPending)
+        && m_opt.glSome?
+        && m_opt.value.loc == cache.status[cache_idx].rwlock_loc
+        && m_opt.value.val == RwLock.ReadHandle(RwLock.ReadPending)
         && handle_opt.glSome?
         && handle_opt.value.is_handle(cache.key(cache_idx as int))
         && handle_opt.value.CacheEmptyHandle?
@@ -528,22 +526,22 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       invariant 0 <= i as int <= CHUNK_SIZE
       invariant 0 <= chunk as int < NUM_CHUNKS
       invariant !success ==>
-          && m.glNone?
+          && m_opt.glNone?
           && handle_opt.glNone?
       invariant success ==>
           && 0 <= cache_idx as int < CACHE_SIZE
-          && m.glSome?
-          && m.value.loc == cache.status[cache_idx].rwlock_loc
-          && m.value.val == RwLock.ReadHandle(RwLock.ReadPending)
+          && m_opt.glSome?
+          && m_opt.value.loc == cache.status[cache_idx].rwlock_loc
+          && m_opt.value.val == RwLock.ReadHandle(RwLock.ReadPending)
           && handle_opt.glSome?
           && handle_opt.value.is_handle(cache.key(cache_idx as int))
           && handle_opt.value.CacheEmptyHandle?
       {
         cache_idx := chunk * CHUNK_SIZE as uint64 + i;
 
-        dispose_glnone(m);
+        dispose_glnone(m_opt);
         dispose_glnone(handle_opt);
-        success, m, handle_opt := cache.status_atomic(cache_idx).try_alloc();
+        success, m_opt, handle_opt := cache.status_atomic(cache_idx).try_alloc();
 
         i := i + 1;
       }
@@ -556,6 +554,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
 
     inout localState.chunk_idx := chunk;
+
+    m := unwrap_value(m_opt);
+    handle := unwrap_value(handle_opt);
   }
 
   // Top level method
@@ -584,11 +585,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         cache.cache_idx_of_page_atomic(disk_idx), disk_idx as nat);
 
     if cache_idx == NOT_MAPPED {
-      glinear var m, handle_opt;
-      cache_idx, m, handle_opt := get_free_page(cache, inout localState);
+      glinear var r, handle;
+      cache_idx, r, handle := get_free_page(cache, inout localState);
 
-      glinear var r := unwrap_value(m);
-      glinear var handle: Handle := unwrap_value(handle_opt);
       glinear var read_stub;
       glinear var read_ticket_opt;
 
