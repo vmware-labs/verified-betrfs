@@ -33,6 +33,12 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && pta_seq.get(i).ptr == ptr_add(pta.ptr, i as uint64 * PageSize as uint64)
         && |pta_seq.get(i).s| == PageSize
 
+  method init_batch_busy()
+  returns (linear batch_busy: lseq<Atomic<bool, NullGhostType>>)
+  ensures |batch_busy| == NUM_CHUNKS
+  ensures (forall i :: 0 <= i < NUM_CHUNKS ==> lseq_has(batch_busy)[i])
+  ensures (forall i, v, g :: 0 <= i < NUM_CHUNKS ==> atomic_inv(batch_busy[i], v, g) <==> true)
+
   method init_cache(glinear init_tok: T.Token)
   returns (linear c: Cache)
   requires CacheSSM.Init(init_tok.val)
@@ -250,6 +256,8 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     dispose_anything(iocbs);
 
+    linear var batch_busy := init_batch_busy();
+
     c := Cache(
         data_base_ptr,
         iocb_base_ptr,
@@ -262,6 +270,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         read_refcounts,
         cache_idx_of_page,
         global_clockpointer,
+        batch_busy,
         io_slots,
         ioctx);
 
