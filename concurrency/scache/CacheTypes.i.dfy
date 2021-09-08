@@ -49,6 +49,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     ghost cache_idx_of_page: seq<AtomicIndexLookup>,
 
     linear global_clockpointer: Atomic<uint32, NullGhostType>,
+    linear batch_busy: lseq<Atomic<bool, NullGhostType>>,
 
     linear io_slots: lseq<IOSlot>,
     linear ioctx: aio.IOCtx
@@ -133,6 +134,10 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           && this.read_refcounts[j][i].a.ga ==
               this.read_refcounts_gshared.get(j).get(i))
       */
+
+      && |this.batch_busy| == NUM_CHUNKS
+      && (forall i :: 0 <= i < NUM_CHUNKS ==> lseq_has(this.batch_busy)[i])
+      && (forall i, v, g :: 0 <= i < NUM_CHUNKS ==> atomic_inv(this.batch_busy[i], v, g) <==> true)
     }
 
     shared function method data_ptr(i: uint64) : (p: Ptr)
@@ -179,13 +184,13 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   datatype LocalState = LocalState(
     t: uint64,
-    chunk_idx: uint64,
+    free_hand: uint64,
     io_slot_hand: uint64
   )
   {
     predicate WF()
     {
-      && 0 <= this.chunk_idx as int < NUM_CHUNKS
+      && (0 <= this.free_hand as int < NUM_CHUNKS || this.free_hand == 0xffff_ffff_ffff_ffff)
       && 0 <= t as int < RC_WIDTH
       && 0 <= io_slot_hand as int < NUM_IO_SLOTS
     }

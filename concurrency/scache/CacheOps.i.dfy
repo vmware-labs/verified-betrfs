@@ -1,4 +1,5 @@
 include "CacheIO.i.dfy"
+include "../framework/ThreadUtils.s.dfy"
 include "../framework/SystemTime.s.dfy"
 
 module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
@@ -22,6 +23,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened BitOps
   import opened SystemTime
   import opened Cells
+  import opened LinearSequence_i
+  import opened ThreadUtils
 
   datatype PageHandle = PageHandle(
     ptr: Ptr,
@@ -251,33 +254,25 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method get_next_chunk(shared cache: Cache, inout linear local: LocalState)
-  returns (new_chunk: uint64)
+  method batch_start_writeback(shared cache: Cache, inout linear local: LocalState,
+        batch_idx: uint64, is_urgent: bool)
   requires cache.Inv()
   requires old_local.WF()
-  ensures 0 <= new_chunk as int < NUM_CHUNKS
+  requires 0 <= batch_idx as int < NUM_CHUNKS
   ensures local.WF()
   ensures local.t == old_local.t
   {
-    atomic_block var l :=
-        execute_atomic_fetch_add_uint32(cache.global_clockpointer, 1) { }
-
-    l := l % (NUM_CHUNKS as uint32);
-    var ci: uint32 := (l + CLEAN_AHEAD as uint32) % (NUM_CHUNKS as uint32);
-
-    ghost var t := local.t;
-
     var i: uint32 := 0;
     while i < CHUNK_SIZE as uint32
     invariant local.WF()
-    invariant t == local.t
+    invariant local.t == old_local.t
     {
-      var cache_idx := ci * (CHUNK_SIZE as uint32) + i;   
+      var cache_idx := batch_idx * (CHUNK_SIZE as uint64) + i as uint64;
 
       glinear var write_back_r, ticket;
       var do_write_back;
       do_write_back, write_back_r, ticket :=
-          cache.status_atomic(cache_idx as uint64).try_acquire_writeback(false);
+          cache.status_atomic(cache_idx as uint64).try_acquire_writeback(is_urgent);
 
       if do_write_back {
         var disk_idx := read_cell(
@@ -298,8 +293,53 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       i := i + 1;
     }
+  }
 
-    new_chunk := l as uint64;
+  method move_hand(shared cache: Cache, inout linear local: LocalState, is_urgent: bool)
+  requires cache.Inv()
+  requires old_local.WF()
+  ensures local.WF()
+  ensures local.t == old_local.t
+  ensures local.free_hand != 0xffff_ffff_ffff_ffff
+  decreases *
+  {
+    var evict_hand: uint64 := local.free_hand;
+    if evict_hand != 0xffff_ffff_ffff_ffff {
+      //CAS(batch_busy[evict_hand], true, false)
+      atomic_block var _ := execute_atomic_store(
+          lseq_peek(cache.batch_busy, evict_hand),
+          false) { }
+    }
+
+    var done := false;
+    while !done
+    invariant done ==> 0 <= evict_hand as int < NUM_CHUNKS
+    invariant local.WF()
+    invariant local.t == old_local.t
+    decreases *
+    {
+      var l: uint32;
+      atomic_block l :=
+          execute_atomic_fetch_add_uint32(cache.global_clockpointer, 1) { }
+
+      evict_hand := l as uint64 % NUM_CHUNKS as uint64;
+      var cleaner_hand := (evict_hand + CLEAN_AHEAD as uint64) % NUM_CHUNKS as uint64;
+
+      atomic_block var do_clean := execute_atomic_compare_and_set_strong(
+            lseq_peek(cache.batch_busy, cleaner_hand), false, true) { }
+
+      if do_clean {
+        batch_start_writeback(cache, inout local, cleaner_hand, is_urgent);
+        atomic_block var _ := execute_atomic_store(
+            lseq_peek(cache.batch_busy, cleaner_hand), false) { }
+      }
+
+      atomic_block done := execute_atomic_compare_and_set_strong(
+          lseq_peek(cache.batch_busy, evict_hand), false, true) { }
+    }
+
+    evict_batch(cache, evict_hand);
+    inout local.free_hand := evict_hand;
   }
 
   method check_all_refcounts_dont_wait(shared cache: Cache,
@@ -464,7 +504,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method evict_chunk(shared cache: Cache, chunk: uint64)
+  method evict_batch(shared cache: Cache, chunk: uint64)
   requires cache.Inv()
   requires 0 <= chunk as int < NUM_CHUNKS
   {
@@ -495,22 +535,30 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures localState.t == old_localState.t
   decreases *
   {
-    var chunk: uint64 := localState.chunk_idx;
-
     var success := false;
     glinear var m_opt: glOption<T.Token> := glNone;
     glinear var handle_opt: glOption<Handle> := glNone;
 
     ghost var t := localState.t;
 
+    // XXX this logic is copied from splinter, but is it intentional
+    // that we set this *before* the call to move_hand?
+    var max_hand := localState.free_hand;
+
+    if localState.free_hand == 0xffff_ffff_ffff_ffff {
+      move_hand(cache, inout localState, false);
+    }
+
+    var num_passes: uint32 := 0;
+
     while !success
     decreases *
     invariant localState.WF()
     invariant localState.t == t
-    invariant 0 <= chunk as int < NUM_CHUNKS
     invariant !success ==>
         && m_opt.glNone?
         && handle_opt.glNone?
+    invariant localState.free_hand != 0xffff_ffff_ffff_ffff
     invariant success ==>
         && 0 <= cache_idx as int < CACHE_SIZE
         && m_opt.glSome?
@@ -520,6 +568,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && handle_opt.value.is_handle(cache.key(cache_idx as int))
         && handle_opt.value.CacheEmptyHandle?
     {
+      var chunk := localState.free_hand; 
+
       var i: uint64 := 0;
 
       while i < CHUNK_SIZE as uint64 && !success
@@ -547,13 +597,17 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       }
 
       if !success {
-        // TODO mark stuff as 'not accessed'
-        chunk := get_next_chunk(cache, inout localState);
-        evict_chunk(cache, chunk);
+        move_hand(cache, inout localState, num_passes != 0);
+        if localState.free_hand < max_hand {
+          if num_passes < 3 { num_passes := num_passes + 1; }
+          if num_passes != 1 {
+            thread_yield();
+          }
+          io_cleanup(cache, DEFAULT_MAX_IO_EVENTS);
+        }
+        max_hand := localState.free_hand;
       }
     }
-
-    inout localState.chunk_idx := chunk;
 
     m := unwrap_value(m_opt);
     handle := unwrap_value(handle_opt);
