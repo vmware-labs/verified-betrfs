@@ -4,7 +4,7 @@ module FullMaps {
   export S provides HasFiniteSupport, SumFilter, SumFilterSimp, UseZeroSum,
               lemma_zero_map_finite_support, lemma_unit_fn_finite_support,
               lemma_add_fns_finite_support //, lemma_sub_fns_finite_support
-           reveals IsFull, FullMap, zero_map, unit_fn, add_fns, // sub_fns,
+           reveals IsFull, FullMap, pre_FullMap, zero_map, unit_fn, add_fns, // sub_fns,
                   zero_map_internal, unit_fn_internal, add_fns_internal //, sub_fns_internal
   export extends S
 
@@ -26,13 +26,15 @@ module FullMaps {
     exists finite_map :: IsFiniteSupport(m, finite_map)
   }
 
-  type FullMap<K(!new)> = m : imap<K, nat> | IsFull(m) && HasFiniteSupport(m)
+  datatype pre_FullMap<K(!new)> = FullMap(ghost m: imap<K, nat>)
+
+  type FullMap<K(!new)> = m : pre_FullMap<K> | IsFull(m.m) && HasFiniteSupport(m.m)
     witness *
 
   function GetFiniteSupport<K(!new)>(m: FullMap<K>) : map<K, nat>
-  requires HasFiniteSupport(m)
+  requires HasFiniteSupport(m.m)
   {
-    var finite_map :| IsFiniteSupport(m, finite_map); finite_map
+    var finite_map :| IsFiniteSupport(m.m, finite_map); finite_map
   }
 
   function zero_map_internal<K(!new)>() : imap<K, nat> {
@@ -49,7 +51,7 @@ module FullMaps {
 
   function zero_map<K(!new)>() : FullMap<K> {
     lemma_zero_map_finite_support<K>();
-    imap k {:trigger} | true :: 0
+    FullMap(imap k {:trigger} | true :: 0)
   }
 
   function unit_fn_internal<K(!new)>(a: K) : imap<K, nat> {
@@ -64,11 +66,11 @@ module FullMaps {
 
   function unit_fn<K(!new)>(a: K) : FullMap<K> {
     lemma_unit_fn_finite_support(a);
-    unit_fn_internal(a)
+    FullMap(unit_fn_internal(a))
   }
 
   function add_fns_internal<K(!new)>(f: FullMap<K>, g: FullMap<K>) : imap<K, nat> {
-    imap b | true :: f[b] + g[b]
+    imap b | true :: f.m[b] + g.m[b]
   }
 
   lemma lemma_add_fns_finite_support<K(!new)>(f: FullMap<K>, g: FullMap<K>)
@@ -83,7 +85,7 @@ module FullMaps {
 
   function add_fns<K(!new)>(f: FullMap<K>, g: FullMap<K>) : FullMap<K> {
     lemma_add_fns_finite_support(f, g);
-    add_fns_internal(f, g)
+    FullMap(add_fns_internal(f, g))
   }
 
   /*function sub_fns_internal<K(!new)>(f: FullMap<K>, g: FullMap<K>) : imap<K, nat>
@@ -116,7 +118,7 @@ module FullMaps {
   }
 
   function SumFilter<K(!new)>(fn: (K) -> bool, f: FullMap<K>) : nat
-  requires HasFiniteSupport(f)
+  requires HasFiniteSupport(f.m)
   {
     MapSum.Sum(Filter(fn, GetFiniteSupport(f)))
   }
@@ -177,11 +179,11 @@ module FullMaps {
   }
 
   lemma UseZeroSum<K(!new)>(fn: (K) -> bool, f: FullMap<K>)
-  requires HasFiniteSupport(f)
+  requires HasFiniteSupport(f.m)
   requires SumFilter(fn, f) == 0
-  ensures forall x :: fn(x) ==> f[x] == 0
+  ensures forall x :: fn(x) ==> f.m[x] == 0
   {
-    forall x | fn(x) && f[x] != 0 ensures false {
+    forall x | fn(x) && f.m[x] != 0 ensures false {
       var m := Filter(fn, GetFiniteSupport(f));
       var m1 := m - {x};
       assert m1[x := m[x]] == m;

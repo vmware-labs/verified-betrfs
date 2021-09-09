@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
+// SPDX-License-Identifier: BSD-2-Clause
+
 #pragma once
 
 #include "DafnyRuntime.h"
@@ -133,7 +136,7 @@ Tuple0 seq_free(linear_seq<A> s) {
 template <typename A>
 DafnySequence<A> seq_unleash(linear_seq<A> s) {
   DafnySequence<A> ret(*s);  // TODO: Copies contents of s into ret
-  seq_free(*s);
+  seq_free(s);
   return ret;
 }
 
@@ -190,10 +193,10 @@ Tuple0 lseq_free_raw(lseq<A> s) {
 }
 
 template <typename A>
-Tuple2<lseq<A>, LinearMaybe::maybe<A>> lseq_swap_raw_fun(lseq<A> s1, uint64 i, LinearMaybe::maybe<A> a1) {
+Tuple<lseq<A>, LinearMaybe::maybe<A>> lseq_swap_raw_fun(lseq<A> s1, uint64 i, LinearMaybe::maybe<A> a1) {
   LinearMaybe::maybe<A> oldElement = (*s1)[i];
   (*s1)[i] = a1;
-  Tuple2 ret(s1, oldElement);
+  Tuple ret(s1, oldElement);
   return ret;
 }
 
@@ -210,8 +213,7 @@ lseq<A> TrustedRuntimeLSeqResize(lseq<A> s, uint64 newlen) {
 
 template <typename A>
 lseq<A> get_lseq_default() {
-  lseq<A> ret;
-  return ret;
+  return nullptr;
 }
 
 template <typename A>

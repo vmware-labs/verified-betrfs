@@ -271,7 +271,7 @@ module RwLock refines Rw {
         && x.exc.ExcClaim?
         && x.writeback.WritebackNone?
       )
-      && (forall ss: SharedState :: x.sharedState[ss] > 0 ==>
+      && (forall ss: SharedState :: x.sharedState.m[ss] > 0 ==>
         && 0 <= ss.t < RC_WIDTH as int
         && (ss.SharedPending2? ==>
           && !x.exc.ExcObtained?
@@ -447,8 +447,8 @@ module RwLock refines Rw {
       SumFilterSimp<SharedState>();
 
       assert dot(m', p).refCounts == dot(m, p).refCounts;
-      assert forall b | b != ss :: dot(m', p).sharedState[b] == dot(m, p).sharedState[b];
-      assert dot(m', p).sharedState[ss] + 1 == dot(m, p).sharedState[ss];
+      assert forall b | b != ss :: dot(m', p).sharedState.m[b] == dot(m, p).sharedState.m[b];
+      assert dot(m', p).sharedState.m[ss] + 1 == dot(m, p).sharedState.m[ss];
       assert CountAllRefs(dot(m', p), ss.t) == CountAllRefs(dot(m, p), ss.t);
     }
   }
@@ -598,11 +598,11 @@ module RwLock refines Rw {
     {
       SumFilterSimp<SharedState>();
       var ss := SharedObtained(m.exc.t, b);
-      assert forall b | b != ss :: dot(m', p).sharedState[b] == dot(m, p).sharedState[b];
-      assert dot(m', p).sharedState[ss] == dot(m, p).sharedState[ss] + 1;
+      assert forall b | b != ss :: dot(m', p).sharedState.m[b] == dot(m, p).sharedState.m[b];
+      assert dot(m', p).sharedState.m[ss] == dot(m, p).sharedState.m[ss] + 1;
 
       var state' := dot(m', p);
-      forall ss: SharedState | state'.sharedState[ss] > 0
+      forall ss: SharedState | state'.sharedState.m[ss] > 0
       ensures 0 <= ss.t < RC_WIDTH as int
       ensures (ss.SharedObtained? ==> ss.b == state'.central.stored_value)
       {
@@ -639,10 +639,10 @@ module RwLock refines Rw {
     ensures I(dot(m', p)) == Some(b)
     {
       SumFilterSimp<SharedState>();
-      assert forall b :: dot(m', p).sharedState[b] == dot(m, p).sharedState[b];
+      assert forall b :: dot(m', p).sharedState.m[b] == dot(m, p).sharedState.m[b];
 
       var state' := dot(m', p);
-      forall ss: SharedState | state'.sharedState[ss] > 0
+      forall ss: SharedState | state'.sharedState.m[ss] > 0
       ensures 0 <= ss.t < RC_WIDTH as int
       ensures (ss.SharedObtained? ==> ss.b == state'.central.stored_value)
       {
@@ -799,7 +799,7 @@ module RwLock refines Rw {
       SumFilterSimp<SharedState>();
       var state := dot(m, p);
       var state' := dot(m', p);
-      forall ss: SharedState | state'.sharedState[ss] > 0
+      forall ss: SharedState | state'.sharedState.m[ss] > 0
       ensures 0 <= ss.t < RC_WIDTH as int
       ensures ss.SharedObtained? ==>
             && ss.b == state'.central.stored_value
@@ -1194,8 +1194,8 @@ module RwLock refines Rw {
 
       var ss := SharedObtained(m.exc.t, m.exc.b);
       assert dot(m', p).refCounts == dot(m, p).refCounts;
-      assert forall b | b != ss :: dot(m', p).sharedState[b] == dot(m, p).sharedState[b];
-      assert dot(m', p).sharedState[ss] == dot(m, p).sharedState[ss] + 1;
+      assert forall b | b != ss :: dot(m', p).sharedState.m[b] == dot(m, p).sharedState.m[b];
+      assert dot(m', p).sharedState.m[ss] == dot(m, p).sharedState.m[ss] + 1;
       assert CountAllRefs(dot(m', p), ss.t) == CountAllRefs(dot(m, p), ss.t);
     }
   }
@@ -1580,7 +1580,7 @@ module RwLockToken {
   requires handle.val.M?
   requires rc.loc == handle.loc
   requires t in rc.val.refCounts
-  requires handle.val.sharedState[SharedPending(t)] >= 1
+  requires handle.val.sharedState.m[SharedPending(t)] >= 1
   ensures rc.val.refCounts[t] >= 1
   ensures handle' == handle
   ensures rc' == rc
@@ -1591,7 +1591,7 @@ module RwLockToken {
     var m := dot(rc'.val, handle'.val);
     ghost var state := dot(m, rest);
     if CountSharedRefs(state.sharedState, t) == 0 {
-      assert state.sharedState[SharedPending(t)] >= 1;
+      assert state.sharedState.m[SharedPending(t)] >= 1;
       FullMaps.UseZeroSum(IsSharedRefFor(t), state.sharedState);
       assert false;
     }
@@ -1628,7 +1628,7 @@ module RwLockToken {
   requires handle.val.M?
   requires rc.loc == handle.loc
   requires t in rc.val.refCounts
-  requires handle.val.sharedState[SharedObtained(t, b)] >= 1
+  requires handle.val.sharedState.m[SharedObtained(t, b)] >= 1
   ensures rc.val.refCounts[t] >= 1
   ensures handle' == handle
   ensures rc' == rc
@@ -1639,7 +1639,7 @@ module RwLockToken {
     var m := dot(rc'.val, handle'.val);
     ghost var state := dot(m, rest);
     if CountSharedRefs(state.sharedState, t) == 0 {
-      assert state.sharedState[SharedObtained(t, b)] >= 1;
+      assert state.sharedState.m[SharedObtained(t, b)] >= 1;
       FullMaps.UseZeroSum(IsSharedRefFor(t), state.sharedState);
       assert false;
     }
