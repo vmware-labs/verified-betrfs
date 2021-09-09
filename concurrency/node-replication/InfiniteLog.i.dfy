@@ -1246,8 +1246,19 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
         assert forall k | 0 <= k < get_local_tail(m', nid) :: k in m'.log;
 
         assert forall k | 0 <= k < m.ctail.value :: m.log[k] == m'.log[k];
+
+        forall k | 0 <= k < get_local_tail(m', nid) ensures m.log[k] == m'.log[k] {
+          match m.combiner[nid] {
+            case Combiner(queued_ops, localTail, globalTail) =>
+              if localTail > m.ctail.value {
+                // proof here
+              }
+            case _ =>
+              assert true;
+          }
+        }
         assert forall k | 0 <= k < get_local_tail(m', nid) :: m.log[k] == m'.log[k];
-        // proof here
+
         state_at_version_preserves(m.log, m'.log, get_local_tail(m', nid));
       }
   }
