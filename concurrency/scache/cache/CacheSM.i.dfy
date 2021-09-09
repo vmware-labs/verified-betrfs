@@ -14,8 +14,8 @@ module CacheSSM refines DiskSSM(CacheIfc) {
 
   datatype Entry =
     | Empty
-    | Reading(disk_idx: nat)
-    | Entry(disk_idx: nat, data: DiskIfc.Block)
+    | Reading(ghost disk_idx: nat)
+    | Entry(ghost disk_idx: nat, data: DiskIfc.Block)
 
   // Notes:
   //
@@ -35,16 +35,16 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   //      there is only one cache_idx that maps to it.
 
   datatype M = M(
-    disk_idx_to_cache_idx: map<nat, Option<nat>>,
-    entries: map<nat, Entry>,
-    statuses: map<nat, Status>,
-    write_reqs: map<nat, DiskIfc.Block>,
-    write_resps: set<nat>,
-    read_reqs: set<nat>,
-    read_resps: map<nat, DiskIfc.Block>,
-    tickets: map<RequestId, IOIfc.Input>,
-    stubs: map<RequestId, IOIfc.Output>,
-    sync_reqs: map<RequestId, set<nat>>
+    ghost disk_idx_to_cache_idx: map<nat, Option<nat>>,
+    ghost entries: map<nat, Entry>,
+    ghost statuses: map<nat, Status>,
+    ghost write_reqs: map<nat, DiskIfc.Block>,
+    ghost write_resps: set<nat>,
+    ghost read_reqs: set<nat>,
+    ghost read_resps: map<nat, DiskIfc.Block>,
+    ghost tickets: map<RequestId, IOIfc.Input>,
+    ghost stubs: map<RequestId, IOIfc.Output>,
+    ghost sync_reqs: map<RequestId, set<nat>>
   ) | Fail
 
   function union_map<K, V>(m1: map<K, V>, m2: map<K, V>) : map<K, V> {

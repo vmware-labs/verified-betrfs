@@ -8,16 +8,16 @@ module DiskIfc refines Ifc {
   type Block = s : seq<byte> | |s| == 4096
     witness seq(4096, (i) => 0)
 
-  datatype ReqRead = ReqRead(addr: nat)
-  datatype ReqWrite = ReqWrite(addr: nat, data: Block)
-  datatype RespRead = RespRead(addr: nat, data: Block)
-  datatype RespWrite = RespWrite(addr: nat)
+  datatype ReqRead = ReqRead(ghost addr: nat)
+  datatype ReqWrite = ReqWrite(ghost addr: nat, data: Block)
+  datatype RespRead = RespRead(ghost addr: nat, data: Block)
+  datatype RespWrite = RespWrite(ghost addr: nat)
 
   datatype DiskOp =
-    | ReqReadOp(id: RequestId, reqRead: ReqRead)
-    | ReqWriteOp(id: RequestId, reqWrite: ReqWrite)
-    | RespReadOp(id: RequestId, respRead: RespRead)
-    | RespWriteOp(id: RequestId, respWrite: RespWrite)
+    | ReqReadOp(ghost id: RequestId, reqRead: ReqRead)
+    | ReqWriteOp(ghost id: RequestId, reqWrite: ReqWrite)
+    | RespReadOp(ghost id: RequestId, respRead: RespRead)
+    | RespWriteOp(ghost id: RequestId, respWrite: RespWrite)
 
   type Op = DiskOp
 }
@@ -29,13 +29,13 @@ module AsyncDisk refines StateMachine(DiskIfc) {
 
   datatype Variables = Variables(
     // Queue of requests and responses:
-    reqReads: map<RequestId, ReqRead>,
-    reqWrites: map<RequestId, ReqWrite>,
-    respReads: map<RequestId, RespRead>,
-    respWrites: map<RequestId, RespWrite>,
+    ghost reqReads: map<RequestId, ReqRead>,
+    ghost reqWrites: map<RequestId, ReqWrite>,
+    ghost respReads: map<RequestId, RespRead>,
+    ghost respWrites: map<RequestId, RespWrite>,
 
     // The disk:
-    contents: map<nat, Block>
+    ghost contents: map<nat, Block>
   )
 
   predicate Init(s: Variables)
@@ -98,10 +98,10 @@ module AsyncDisk refines StateMachine(DiskIfc) {
   }
 
   datatype InternalStep =
-    | ProcessReadStep(id: RequestId)
-    | ProcessWriteStep(id: RequestId)
-    | HavocConflictingWritesStep(id: RequestId, id': RequestId)
-    | HavocConflictingWriteReadStep(id: RequestId, id': RequestId)
+    | ProcessReadStep(ghost id: RequestId)
+    | ProcessWriteStep(ghost id: RequestId)
+    | HavocConflictingWritesStep(ghost id: RequestId, ghost id': RequestId)
+    | HavocConflictingWriteReadStep(ghost id: RequestId, ghost id': RequestId)
 
   predicate ProcessRead(s: Variables, s': Variables, id: RequestId)
   {

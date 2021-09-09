@@ -87,13 +87,13 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear inout contents: PointsToArray<byte>,
       glinear ticket: CacheResources.DiskReadTicket)
   returns (glinear stub: CacheResources.DiskReadStub)
-  requires |old_contents.s| == PageSize
+  requires |old_contents.s| == PageSize as int
   requires ticket == CacheResources.DiskReadTicket(disk_idx as nat)
   requires old_contents.ptr == ptr
   requires 0 <= disk_idx as int < NUM_DISK_PAGES
-  requires ptr.aligned(PageSize)
+  requires ptr.aligned(PageSize as int)
   ensures contents.ptr == ptr
-  ensures |contents.s| == PageSize
+  ensures |contents.s| == PageSize as int
   ensures stub == CacheResources.DiskReadStub(disk_idx as nat, contents.s)
   {
     glinear var s := aio.sync_read(
@@ -118,7 +118,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires 0 <= cache_idx as int < CACHE_SIZE
   requires 0 <= disk_addr < NUM_DISK_PAGES
   requires wp.ptr == cache.data[cache_idx]
-  requires |wp.s| == PageSize
+  requires |wp.s| == PageSize as int
   requires stub == CacheResources.DiskReadStub(disk_addr as nat, wp.s)
   requires cache_reading.disk_idx == disk_addr as nat
   requires cache_reading.cache_idx == cache_idx as nat

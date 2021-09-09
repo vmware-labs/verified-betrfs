@@ -86,8 +86,8 @@ module CrashAsyncIfc(ifc: InputOutputIfc) refines Ifc {
   import opened RequestIds
 
   datatype Op =
-    | Start(rid: RequestId, input: ifc.Input)
-    | End(rid: RequestId, output: ifc.Output)
+    | Start(ghost rid: RequestId, input: ifc.Input)
+    | End(ghost rid: RequestId, output: ifc.Output)
     | InternalOp
     | CrashOp
 }

@@ -8,7 +8,7 @@ module IocbStruct {
   import opened NativeTypes
   import opened GlinearSeq
 
-  const PageSize := 4096
+  const PageSize: uint64 := 4096
 
   /*
    * iocb type
@@ -18,8 +18,8 @@ module IocbStruct {
 
   datatype Iocb =
     | IocbUninitialized(ptr: Ptr)
-    | IocbRead(ptr: Ptr, offset: nat, nbytes: nat, buf: Ptr)
-    | IocbWrite(ptr: Ptr, offset: nat, nbytes: nat, buf: Ptr)
+    | IocbRead(ptr: Ptr, ghost offset: nat, ghost nbytes: nat, buf: Ptr)
+    | IocbWrite(ptr: Ptr, ghost offset: nat, ghost nbytes: nat, buf: Ptr)
 
   function method {:extern} SizeOfIocb() : uint64
   ensures SizeOfIocb() != 0
@@ -42,17 +42,17 @@ module IocbStruct {
   method {:extern} iocb_prepare_read(ptr: Ptr, glinear inout iocb: Iocb,
       offset: int64, nbytes: uint64, buf: Ptr)
   requires offset >= 0
-  requires PageSize * offset as int < 0x1000_0000_0000_0000
+  requires PageSize as int * offset as int < 0x1000_0000_0000_0000
   requires old_iocb.ptr == ptr
-  requires buf.aligned(PageSize)
+  requires buf.aligned(PageSize as int)
   ensures iocb == IocbRead(ptr, offset as nat, nbytes as nat, buf)
 
   method {:extern} iocb_prepare_write(ptr: Ptr, glinear inout iocb: Iocb,
       offset: int64, nbytes: uint64, buf: Ptr)
   requires offset >= 0
   requires old_iocb.ptr == ptr
-  requires PageSize * offset as int < 0x1000_0000_0000_0000
-  requires buf.aligned(PageSize)
+  requires PageSize as int * offset as int < 0x1000_0000_0000_0000
+  requires buf.aligned(PageSize as int)
   ensures iocb == IocbWrite(ptr, offset as nat, nbytes as nat, buf)
 }
 
@@ -122,7 +122,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       glinear ticket: T.Token)
   requires iocb.IocbWrite?
   requires iocb.ptr == iocb_ptr
-  requires iocb.nbytes == PageSize
+  requires iocb.nbytes == PageSize as int
   requires |data| == iocb.nbytes
   requires iocb.nbytes > 0
   requires aioparams.is_read_perm(iocb_ptr, iocb, data, g)
@@ -138,7 +138,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       glinear ticket: T.Token)
   requires iocb.IocbRead?
   requires iocb.ptr == iocb_ptr
-  requires iocb.nbytes == PageSize
+  requires iocb.nbytes == PageSize as int
   requires wp.ptr == iocb.buf
   requires |wp.s| == iocb.nbytes
   requires ctx.async_read_inv(iocb_ptr, iocb, wp, g)
@@ -186,10 +186,10 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   returns (glinear stub: T.Token)
   requires old_wp.ptr == buf
   requires |old_wp.s| == nbytes as int
-  requires nbytes as int == PageSize
-  requires PageSize * offset as int < 0x1_0000_0000_0000_0000
+  requires nbytes as int == PageSize as int
+  requires PageSize as int * offset as int < 0x1_0000_0000_0000_0000
   requires ticket == T.Token(ssm.DiskReadReq(offset as int))
-  requires buf.aligned(PageSize)
+  requires buf.aligned(PageSize as int)
   ensures wp.ptr == buf
   ensures |wp.s| == nbytes as int
   ensures stub == T.Token(ssm.DiskReadResp(offset as int, wp.s))

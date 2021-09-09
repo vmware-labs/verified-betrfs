@@ -14,7 +14,7 @@ module CacheHandle {
   datatype Key = Key(
       data_ptr: Ptrs.Ptr,
       idx_cell: Cell<int64>,
-      cache_idx: nat)
+      ghost cache_idx: nat)
 
   glinear datatype Handle =
     | CacheEmptyHandle(

@@ -44,21 +44,21 @@ module RwLock refines Rw {
   // Standard flow for obtaining a 'shared' lock
 
   datatype SharedState =
-    | SharedPending(t: int)              // inc refcount
-    | SharedPending2(t: int)             // !free & !writelocked
-    | SharedObtained(t: int, b: StoredType)  // !reading
+    | SharedPending(ghost t: int)              // inc refcount
+    | SharedPending2(ghost t: int)             // !free & !writelocked
+    | SharedObtained(ghost t: int, b: StoredType)  // !reading
 
   // Standard flow for obtaining an 'exclusive' lock
 
   datatype ExcState = 
     | ExcNone
-    | ExcClaim(t: int, b: StoredType) // !
+    | ExcClaim(ghost t: int, b: StoredType) // !
       // set ExcLock bit:
-    | ExcPendingAwaitWriteback(t: int, b: StoredType)
+    | ExcPendingAwaitWriteback(ghost t: int, b: StoredType)
       // check Writeback bit unset
       //   and `visited` of the refcounts
-    | ExcPending(t: int, visited: int, clean: bool, b: StoredType)
-    | ExcObtained(t: int, clean: bool)
+    | ExcPending(ghost t: int, ghost visited: int, clean: bool, b: StoredType)
+    | ExcObtained(ghost t: int, clean: bool)
 
   datatype WritebackState =
     | WritebackNone
@@ -76,8 +76,8 @@ module RwLock refines Rw {
   datatype ReadState =
     | ReadNone
     | ReadPending                        // set status bit to ExcLock | Reading
-    | ReadPendingCounted(t: int)         // inc refcount
-    | ReadObtained(t: int)               // clear ExcLock bit
+    | ReadPendingCounted(ghost t: int)   // inc refcount
+    | ReadObtained(ghost t: int)         // clear ExcLock bit
 
   datatype CentralState =
     | CentralNone
@@ -85,7 +85,7 @@ module RwLock refines Rw {
 
   datatype M = M(
     central: CentralState,
-    refCounts: map<ThreadId, nat>,
+    ghost refCounts: map<ThreadId, nat>,
 
     ghost sharedState: FullMap<SharedState>,
     exc: ExcState,

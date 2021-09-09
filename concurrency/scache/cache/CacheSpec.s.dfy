@@ -6,13 +6,13 @@ module CacheIfc refines InputOutputIfc {
   import opened NativeTypes
 
   datatype Input =
-    | WriteInput(key: nat, data: seq<byte>)
-    | ReadInput(key: nat)
-    | SyncInput(keys: set<nat>)
+    | WriteInput(ghost key: nat, data: seq<byte>)
+    | ReadInput(ghost key: nat)
+    | SyncInput(ghost keys: set<nat>)
 
   datatype Output =
     | WriteOutput
-    | ReadOutput(data: seq<byte>)
+    | ReadOutput(ghost data: seq<byte>)
     | SyncOutput
 }
 
@@ -24,20 +24,20 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
   type Value = seq<byte>
 
   datatype VersionedObject = VersionedObject(
-      versions: seq<Value>,
-      persistent: nat
+      ghost versions: seq<Value>,
+      ghost persistent: nat
       )
 
   datatype Variables = Variables(
-    store: map<nat, VersionedObject>,
+    ghost store: map<nat, VersionedObject>,
 
-    reqs: map<RequestId, CacheIfc.Input>,
-    resps: map<RequestId, CacheIfc.Output>,
+    ghost reqs: map<RequestId, CacheIfc.Input>,
+    ghost resps: map<RequestId, CacheIfc.Output>,
 
     // RequestId -> key -> version
     // means that for the RequestId to complete, the 'persistence'
     // at key 'key' must be >= version
-    syncs: map<RequestId, map<nat, int>>
+    ghost syncs: map<RequestId, map<nat, int>>
   )
 
   // Put a new request (either a 'read' or a 'write') into the requests
@@ -153,11 +153,11 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
   }
 
   datatype Step =
-    | PushInputStep(rid: RequestId, input: CacheIfc.Input)
-    | ProcessStep(rid: RequestId)
-    | PopOutputStep(rid: RequestId)
-    | PushSyncStep(rid: RequestId)
-    | PopSyncStep(rid: RequestId)
+    | PushInputStep(ghost rid: RequestId, input: CacheIfc.Input)
+    | ProcessStep(ghost rid: RequestId)
+    | PopOutputStep(ghost rid: RequestId)
+    | PushSyncStep(ghost rid: RequestId)
+    | PopSyncStep(ghost rid: RequestId)
     | PersistStep
     | CrashStep
 

@@ -27,8 +27,8 @@ module AsyncIfc(ifc: InputOutputIfc) refines Ifc {
   import opened RequestIds
 
   datatype Op =
-    | Start(rid: RequestId, input: ifc.Input)
-    | End(rid: RequestId, output: ifc.Output)
+    | Start(ghost rid: RequestId, input: ifc.Input)
+    | End(ghost rid: RequestId, output: ifc.Output)
     | InternalOp
 }
 
@@ -38,9 +38,9 @@ module AsyncStateMachine(IOIfc: InputOutputIfc, SM: StateMachine(IOIfc))
   import opened RequestIds
 
   datatype Variables = Variables(
-      s: SM.Variables,
-      reqs: map<RequestId, IOIfc.Input>,
-      resps: map<RequestId, IOIfc.Output>)
+      ghost s: SM.Variables,
+      ghost reqs: map<RequestId, IOIfc.Input>,
+      ghost resps: map<RequestId, IOIfc.Output>)
 
   predicate Init(s: Variables)
   {

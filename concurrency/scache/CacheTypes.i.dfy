@@ -100,11 +100,11 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && (forall v, g :: atomic_inv(global_clockpointer, v, g) <==> true)
 
       && (forall i | 0 <= i < CACHE_SIZE ::
-        this.data[i].aligned(PageSize))
+        this.data[i].aligned(PageSize as int))
 
-      && this.data_base_ptr.as_nat() + PageSize * (CACHE_SIZE - 1) < 0x1_0000_0000_0000_0000
+      && this.data_base_ptr.as_nat() + PageSize as int * (CACHE_SIZE - 1) < 0x1_0000_0000_0000_0000
       && (forall i | 0 <= i < CACHE_SIZE ::
-        && this.data[i] == ptr_add(this.data_base_ptr, (PageSize * i) as uint64))
+        && this.data[i] == ptr_add(this.data_base_ptr, (PageSize as int * i) as uint64))
 
       && |lseqs_raw(this.cache_idx_of_page_array)| == NUM_DISK_PAGES
       && (forall i | 0 <= i < NUM_DISK_PAGES :: lseq_has(this.cache_idx_of_page_array)[i]
@@ -145,7 +145,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     requires 0 <= i as int < CACHE_SIZE
     ensures p == this.data[i]
     {
-      ptr_add(this.data_base_ptr, PageSize as uint64 * i)
+      ptr_add(this.data_base_ptr, PageSize * i)
     }
 
     shared function method status_atomic(i: uint64) : (shared at: AtomicStatus)
@@ -243,7 +243,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && |cache_status| == CACHE_SIZE
     && data.ptr == cache_data[g.key.cache_idx]
     && g.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
-    && iocb.nbytes == PageSize
+    && iocb.nbytes == PageSize as int
     && g.idx.cell == cache_disk_idx_of_entry[g.key.cache_idx]
     && g.idx.v as int == iocb.offset == g.cache_reading.disk_idx
     && g.cache_reading.cache_idx == g.key.cache_idx
