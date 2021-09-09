@@ -39,7 +39,7 @@ module CacheHandle {
       && this.idx.cell == key.idx_cell
       && this.data.ptr == key.data_ptr
       && |this.data.s| == 4096
-      && 0 <= this.idx.v as int < NUM_DISK_PAGES
+      && 0 <= this.idx.v as int < NUM_DISK_PAGES as int
 
       && (this.CacheEmptyHandle? ==>
         && this.cache_empty.cache_idx == key.cache_idx

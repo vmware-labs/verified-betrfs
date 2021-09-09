@@ -180,25 +180,25 @@ module RwLock refines Rw {
       && x.central.CentralState?
       && (x.exc.ExcPendingAwaitWriteback? ==>
         && x.read.ReadNone?
-        && -1 <= x.exc.t < RC_WIDTH
+        && -1 <= x.exc.t < RC_WIDTH as int
         && x.exc.b == x.central.stored_value
       )
       && (x.exc.ExcClaim? ==>
         && x.read.ReadNone?
-        && -1 <= x.exc.t < RC_WIDTH
+        && -1 <= x.exc.t < RC_WIDTH as int
         && x.exc.b == x.central.stored_value
       )
       && (x.exc.ExcPending? ==>
         && x.read == ReadNone
         && x.writeback.WritebackNone?
-        && 0 <= x.exc.visited <= RC_WIDTH
-        && -1 <= x.exc.t < RC_WIDTH
+        && 0 <= x.exc.visited <= RC_WIDTH as int
+        && -1 <= x.exc.t < RC_WIDTH as int
         && x.exc.b == x.central.stored_value
       )
       && (x.exc.ExcObtained? ==>
         && x.read == ReadNone
         && x.writeback.WritebackNone?
-        && -1 <= x.exc.t < RC_WIDTH
+        && -1 <= x.exc.t < RC_WIDTH as int
       )
       && (x.writeback.WritebackObtained? ==>
         && x.read == ReadNone
@@ -209,15 +209,15 @@ module RwLock refines Rw {
       )
       && (x.read.ReadPendingCounted? ==>
         && x.writeback.WritebackNone?
-        && 0 <= x.read.t < RC_WIDTH
+        && 0 <= x.read.t < RC_WIDTH as int
       )
       && (x.read.ReadObtained? ==>
-        && -1 <= x.read.t < RC_WIDTH
+        && -1 <= x.read.t < RC_WIDTH as int
       )
       //&& (x.stored_value.Some? ==>
       //  x.stored_value.value.is_handle(key)
       //)
-      && (forall t | 0 <= t < RC_WIDTH
+      && (forall t | 0 <= t < RC_WIDTH as int
         :: t in x.refCounts && x.refCounts[t] == CountAllRefs(x, t))
 
       && (x.central.flag == Unmapped ==>
@@ -272,7 +272,7 @@ module RwLock refines Rw {
         && x.writeback.WritebackNone?
       )
       && (forall ss: SharedState :: x.sharedState[ss] > 0 ==>
-        && 0 <= ss.t < RC_WIDTH
+        && 0 <= ss.t < RC_WIDTH as int
         && (ss.SharedPending2? ==>
           && !x.exc.ExcObtained?
           && !x.read.ReadPending?
@@ -515,7 +515,7 @@ module RwLock refines Rw {
     && m.M?
     && m.exc.ExcPending?
     && m.exc.visited in m.refCounts
-    && 0 <= m.exc.visited < RC_WIDTH
+    && 0 <= m.exc.visited < RC_WIDTH as int
 
     && var expected_rc := (if m.exc.visited == m.exc.t then 1 else 0);
 
@@ -549,7 +549,7 @@ module RwLock refines Rw {
   {
     && m.M?
     && m.exc.ExcPending?
-    && m.exc.visited == RC_WIDTH
+    && m.exc.visited == RC_WIDTH as int
     && m == ExcHandle(m.exc)
     && m' == ExcHandle(ExcObtained(m.exc.t, m.exc.clean))
     && b' == m.exc.b
@@ -573,7 +573,7 @@ module RwLock refines Rw {
     && m.M?
     && m.exc.ExcObtained?
     && m.central.CentralState?
-    && 0 <= m.exc.t < RC_WIDTH
+    && 0 <= m.exc.t < RC_WIDTH as int
     && m == dot(
       CentralHandle(m.central),
       ExcHandle(m.exc)
@@ -603,7 +603,7 @@ module RwLock refines Rw {
 
       var state' := dot(m', p);
       forall ss: SharedState | state'.sharedState[ss] > 0
-      ensures 0 <= ss.t < RC_WIDTH
+      ensures 0 <= ss.t < RC_WIDTH as int
       ensures (ss.SharedObtained? ==> ss.b == state'.central.stored_value)
       {
       }
@@ -615,7 +615,7 @@ module RwLock refines Rw {
     && m.M?
     && m.exc.ExcObtained?
     && m.central.CentralState?
-    && 0 <= m.exc.t < RC_WIDTH
+    && 0 <= m.exc.t < RC_WIDTH as int
     && m == dot(
       CentralHandle(m.central),
       ExcHandle(m.exc)
@@ -643,7 +643,7 @@ module RwLock refines Rw {
 
       var state' := dot(m', p);
       forall ss: SharedState | state'.sharedState[ss] > 0
-      ensures 0 <= ss.t < RC_WIDTH
+      ensures 0 <= ss.t < RC_WIDTH as int
       ensures (ss.SharedObtained? ==> ss.b == state'.central.stored_value)
       {
       }
@@ -710,7 +710,7 @@ module RwLock refines Rw {
   {
     && m.M?
     && t in m.refCounts
-    && 0 <= t < RC_WIDTH
+    && 0 <= t < RC_WIDTH as int
     && m == dot(
       ReadHandle(ReadPending),
       RefCount(t, m.refCounts[t])
@@ -732,7 +732,7 @@ module RwLock refines Rw {
       assert dot(m', p).sharedState == dot(m, p).sharedState;
       var state := dot(m, p);
       var state' := dot(m', p);
-      forall t0 | 0 <= t0 < RC_WIDTH
+      forall t0 | 0 <= t0 < RC_WIDTH as int
       ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
       {
         if t == t0 {
@@ -800,7 +800,7 @@ module RwLock refines Rw {
       var state := dot(m, p);
       var state' := dot(m', p);
       forall ss: SharedState | state'.sharedState[ss] > 0
-      ensures 0 <= ss.t < RC_WIDTH
+      ensures 0 <= ss.t < RC_WIDTH as int
       ensures ss.SharedObtained? ==>
             && ss.b == state'.central.stored_value
             && !state'.exc.ExcObtained?
@@ -845,7 +845,7 @@ module RwLock refines Rw {
   predicate SharedIncCount(m: M, m': M, t: int)
   {
     && m.M?
-    && 0 <= t < RC_WIDTH
+    && 0 <= t < RC_WIDTH as int
     && t in m.refCounts
     && m == RefCount(t, m.refCounts[t])
     && m' == dot(
@@ -864,7 +864,7 @@ module RwLock refines Rw {
       SumFilterSimp<SharedState>();
       var state := dot(m, p);
       var state' := dot(m', p);
-      forall t0 | 0 <= t0 < RC_WIDTH
+      forall t0 | 0 <= t0 < RC_WIDTH as int
       ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
       {
         if t == t0 {
@@ -885,7 +885,7 @@ module RwLock refines Rw {
   predicate SharedDecCountPending(m: M, m': M, t: int)
   {
     && m.M?
-    && 0 <= t < RC_WIDTH
+    && 0 <= t < RC_WIDTH as int
     && t in m.refCounts
     && m == dot(
       RefCount(t, m.refCounts[t]),
@@ -918,7 +918,7 @@ module RwLock refines Rw {
 
       var state' := dot(m', p);
 
-      forall t0 | 0 <= t0 < RC_WIDTH
+      forall t0 | 0 <= t0 < RC_WIDTH as int
       ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
       {
         if t == t0 {
@@ -939,7 +939,7 @@ module RwLock refines Rw {
   predicate SharedDecCountObtained(m: M, m': M, t: int, b: StoredType)
   {
     && m.M?
-    && 0 <= t < RC_WIDTH
+    && 0 <= t < RC_WIDTH as int
     && t in m.refCounts
     && m == dot(
       RefCount(t, m.refCounts[t]),
@@ -972,7 +972,7 @@ module RwLock refines Rw {
 
       var state' := dot(m', p);
 
-      forall t0 | 0 <= t0 < RC_WIDTH
+      forall t0 | 0 <= t0 < RC_WIDTH as int
       ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
       {
         if t == t0 {
@@ -993,7 +993,7 @@ module RwLock refines Rw {
   predicate SharedCheckExc(m: M, m': M, t: int)
   {
     && m.M?
-    //&& 0 <= t < RC_WIDTH
+    //&& 0 <= t < RC_WIDTH as int
     && m.central.CentralState?
     && (m.central.flag == Available
         || m.central.flag == Writeback
@@ -1030,7 +1030,7 @@ module RwLock refines Rw {
   predicate SharedCheckReading(m: M, m': M, t: int)
   {
     && m.M?
-    && 0 <= t < RC_WIDTH
+    && 0 <= t < RC_WIDTH as int
     && m.central.CentralState?
     && m.central.flag != Reading
     && m.central.flag != Reading_ExcLock
@@ -1499,7 +1499,7 @@ module RwLockToken {
     && m.M?
     && m.exc.ExcPending?
     && m == ExcHandle(m.exc)
-    && 0 <= m.exc.visited < RC_WIDTH
+    && 0 <= m.exc.visited < RC_WIDTH as int
   requires var expected_rc := (if handle.val.exc.visited == handle.val.exc.t then 1 else 0);
     && rc.val == RefCount(handle.val.exc.visited, expected_rc)
   requires rc.loc == handle.loc
@@ -1519,7 +1519,7 @@ module RwLockToken {
   requires var m := rc.val;
       && m.M?
       && t in m.refCounts
-      && 0 <= t < RC_WIDTH
+      && 0 <= t < RC_WIDTH as int
       && m == RefCount(t, m.refCounts[t])
   requires handle.loc == rc.loc
   ensures rc'.loc == handle'.loc == rc.loc
@@ -1561,7 +1561,7 @@ module RwLockToken {
   returns (glinear rc': Token, glinear handle': Token)
   requires var m := rc.val;
     && m.M?
-    && 0 <= t < RC_WIDTH
+    && 0 <= t < RC_WIDTH as int
     && t in m.refCounts
     && m == RefCount(t, m.refCounts[t])
   ensures rc'.loc == handle'.loc == rc.loc
@@ -1603,7 +1603,7 @@ module RwLockToken {
   returns (glinear rc': Token)
   requires var m := rc.val;
     && m.M?
-    && 0 <= t < RC_WIDTH
+    && 0 <= t < RC_WIDTH as int
     && t in m.refCounts
     && m == RefCount(t, m.refCounts[t])
   requires var m := handle.val;
@@ -1652,7 +1652,7 @@ module RwLockToken {
   returns (glinear rc': Token)
   requires var m := rc.val;
     && m.M?
-    && 0 <= t < RC_WIDTH
+    && 0 <= t < RC_WIDTH as int
     && t in m.refCounts
     && m == RefCount(t, m.refCounts[t])
   requires var m := handle.val;
@@ -1673,7 +1673,7 @@ module RwLockToken {
 
   glinear method perform_SharedCheckExc(glinear c: Token, glinear handle: Token, ghost t: int)
   returns (glinear c': Token, glinear handle': Token)
-  //requires 0 <= t < RC_WIDTH
+  //requires 0 <= t < RC_WIDTH as int
   requires var m := c.val;
     && m.M?
     && m.central.CentralState?
@@ -1698,7 +1698,7 @@ module RwLockToken {
   glinear method possible_flags_SharedPending2(
       glinear c: Token, glinear handle: Token, ghost t: int)
   returns (glinear c': Token, glinear handle': Token)
-  requires 0 <= t < RC_WIDTH
+  requires 0 <= t < RC_WIDTH as int
   requires var m := c.val;
     && m.M?
     && m.central.CentralState?
@@ -1717,7 +1717,7 @@ module RwLockToken {
 
   glinear method perform_SharedCheckReading(glinear c: Token, glinear handle: Token, ghost t: int)
   returns (glinear c': Token, glinear handle': Token)
-  requires 0 <= t < RC_WIDTH
+  requires 0 <= t < RC_WIDTH as int
   requires var m := c.val;
     && m.M?
     && m.central.CentralState?
@@ -1796,7 +1796,7 @@ module RwLockToken {
   requires var m := handle.val;
     && m.M?
     && m.exc.ExcPending?
-    && m.exc.visited == RC_WIDTH
+    && m.exc.visited == RC_WIDTH as int
     && m == ExcHandle(m.exc)
   ensures handle'.loc == handle.loc
   ensures handle'.val == ExcHandle(ExcObtained(handle.val.exc.t, handle.val.exc.clean))
@@ -1837,7 +1837,7 @@ module RwLockToken {
   requires var m := handle.val;
     && m.M?
     && m.exc.ExcObtained?
-    && 0 <= m.exc.t < RC_WIDTH
+    && 0 <= m.exc.t < RC_WIDTH as int
     && m == ExcHandle(m.exc)
   requires c.loc == handle.loc
   ensures handle.val.exc.clean ==> c.val.central.flag == ExcLock_Clean
@@ -1980,7 +1980,7 @@ module RwLockToken {
   returns (glinear central: Token, glinear rcs: Token)
   ensures central.loc == rcs.loc
   ensures central.val == CentralHandle(CentralState(Unmapped, b))
-  ensures rcs.val == Rcs(0, RC_WIDTH)
+  ensures rcs.val == Rcs(0, RC_WIDTH as int)
 
   glinear method pop_rcs(glinear t: Token, ghost a: nat, ghost b: nat)
   returns (glinear x: Token, glinear t': Token)

@@ -585,7 +585,7 @@ module AtomicStatusImpl {
     requires this.inv()
     requires r.loc == rwlock_loc
     requires r.val == RwLock.SharedHandle(RwLock.SharedPending2(t))
-    requires 0 <= t < RC_WIDTH
+    requires 0 <= t < RC_WIDTH as int
     ensures r' == r
     {
       atomic_block var _ := execute_atomic_fetch_or_uint8(atomic, flag_accessed) {
@@ -624,7 +624,7 @@ module AtomicStatusImpl {
     requires this.inv()
     requires r.loc == rwlock_loc
     requires r.val == RwLock.SharedHandle(RwLock.SharedPending2(t))
-    requires 0 <= t < RC_WIDTH
+    requires 0 <= t < RC_WIDTH as int
     ensures !success ==> r' == glSome(r)
     ensures !success ==> handle == glNone
     ensures success ==>
@@ -933,7 +933,7 @@ module AtomicStatusImpl {
     requires !r.val.exc.clean ==> status.status == Dirty
     requires b.CacheEntryHandle?
     requires b.is_handle(key)
-    requires 0 <= r.val.exc.t < RC_WIDTH
+    requires 0 <= r.val.exc.t < RC_WIDTH as int
     ensures r'.loc == r.loc
     ensures r'.val == RwLock.ExcHandle(RwLock.ExcClaim(r.val.exc.t, b));
     {

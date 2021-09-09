@@ -222,6 +222,6 @@ module CacheResources {
   glinear method split_init(glinear t: T.Token)
   returns (glinear idxs: T.Token, glinear empties: T.Token)
   requires CacheSSM.Init(t.val)
-  ensures idxs == IdxsSeq(0, NUM_DISK_PAGES)
-  ensures empties == EmptySeq(0, CACHE_SIZE)
+  ensures idxs == IdxsSeq(0, NUM_DISK_PAGES as int)
+  ensures empties == EmptySeq(0, CACHE_SIZE as int)
 }

@@ -21,7 +21,7 @@ module AtomicIndexLookupImpl {
 
   predicate state_inv(v: uint64, g: CacheResources.DiskPageMap, disk_idx: nat)
   {
-    && (0 <= v as int < CACHE_SIZE || v == NOT_MAPPED)
+    && (0 <= v as int < CACHE_SIZE as int || v == NOT_MAPPED)
     && g == CacheResources.DiskPageMap(disk_idx,
         (if v == NOT_MAPPED then None else Some(v as nat)))
   }
@@ -36,7 +36,7 @@ module AtomicIndexLookupImpl {
       ghost disk_idx: nat)
   returns (cache_idx: uint64)
   requires atomic_index_lookup_inv(a, disk_idx)
-  ensures 0 <= cache_idx as int < CACHE_SIZE || cache_idx == NOT_MAPPED
+  ensures 0 <= cache_idx as int < CACHE_SIZE as int || cache_idx == NOT_MAPPED
   {
     atomic_block cache_idx := execute_atomic_load(a) { }
   }
@@ -82,7 +82,7 @@ module AtomicIndexLookupImpl {
   )
   requires atomic_index_lookup_inv(a, disk_idx as int)
   requires cache_empty.cache_idx == cache_idx as int
-  requires 0 <= cache_idx as int < CACHE_SIZE
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
   ensures !success ==> cache_empty' == glSome(cache_empty)
   ensures !success ==> cache_reading' == glNone
   ensures !success ==> read_ticket == glNone

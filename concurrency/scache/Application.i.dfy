@@ -1,4 +1,5 @@
 include "CacheOps.i.dfy"
+include "CacheInit.i.dfy"
 
 // Really simple application exercising the cache.
 
@@ -40,7 +41,7 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   returns (block: DiskIfc.Block, glinear stub: T.Token, glinear client': Client)
   requires cache.Inv()
   requires old_localState.WF()
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
   requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.ReadInput(disk_idx as int))
   ensures localState.WF()
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.ReadOutput(block))
@@ -68,7 +69,7 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   returns (glinear stub: T.Token, glinear client': Client)
   requires cache.Inv()
   requires old_localState.WF()
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
   requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.WriteInput(disk_idx as int, data))
   ensures localState.WF()
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.WriteOutput)

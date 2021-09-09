@@ -43,7 +43,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     {
       && handle.CacheEntryHandle?
       && handle.cache_entry.disk_idx == disk_idx
-      && 0 <= status.cache_idx < CACHE_SIZE
+      && 0 <= status.cache_idx < CACHE_SIZE as int
       && handle.is_handle(cache.key(status.cache_idx))
       && status.cache_idx == cache_idx as int
       //&& handle.data.ptr == ptr
@@ -79,7 +79,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     {
       && so.b.CacheEntryHandle?
       && so.b.cache_entry.disk_idx == disk_idx
-      && 0 <= cache_idx as int < CACHE_SIZE
+      && 0 <= cache_idx as int < CACHE_SIZE as int
       && so.is_handle(cache.key(cache_idx as int))
       && so.t == t
       && so.token.loc == cache.status[cache_idx].rwlock_loc
@@ -106,7 +106,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && eo.val == RwLock.ExcHandle(eo.val.exc)
       && eo.val.exc.b.CacheEntryHandle?
       && eo.val.exc.b.cache_entry.disk_idx == disk_idx
-      && 0 <= cache_idx as int < CACHE_SIZE
+      && 0 <= cache_idx as int < CACHE_SIZE as int
       && eo.val.exc.b.is_handle(cache.key(cache_idx as int))
       && eo.val.exc.t == t
       && eo.loc == cache.status[cache_idx].rwlock_loc
@@ -134,7 +134,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   )
   requires cache.Inv()
   requires localState.WF()
-  requires 0 <= cache_idx as int < CACHE_SIZE
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
   //requires client == RwLock.Internal(RwLock.Client(localState.t))
   ensures !success ==> handle_out.glNone?
       && client_out.glSome?
@@ -258,7 +258,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         batch_idx: uint64, is_urgent: bool)
   requires cache.Inv()
   requires old_local.WF()
-  requires 0 <= batch_idx as int < NUM_CHUNKS
+  requires 0 <= batch_idx as int < NUM_CHUNKS as int
   ensures local.WF()
   ensures local.t == old_local.t
   {
@@ -267,7 +267,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant local.WF()
     invariant local.t == old_local.t
     {
-      var cache_idx := batch_idx * (CHUNK_SIZE as uint64) + i as uint64;
+      var cache_idx := batch_idx * CHUNK_SIZE + i as uint64;
 
       glinear var write_back_r, ticket;
       var do_write_back;
@@ -313,7 +313,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     var done := false;
     while !done
-    invariant done ==> 0 <= evict_hand as int < NUM_CHUNKS
+    invariant done ==> 0 <= evict_hand as int < NUM_CHUNKS as int
     invariant local.WF()
     invariant local.t == old_local.t
     decreases *
@@ -322,8 +322,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       atomic_block l :=
           execute_atomic_fetch_add_uint32(cache.global_clockpointer, 1) { }
 
-      evict_hand := l as uint64 % NUM_CHUNKS as uint64;
-      var cleaner_hand := (evict_hand + CLEAN_AHEAD as uint64) % NUM_CHUNKS as uint64;
+      evict_hand := l as uint64 % NUM_CHUNKS;
+      var cleaner_hand := (evict_hand + CLEAN_AHEAD as uint64) % NUM_CHUNKS;
 
       atomic_block var do_clean := execute_atomic_compare_and_set_strong(
             lseq_peek(cache.batch_busy, cleaner_hand), false, true) { }
@@ -347,7 +347,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear r: T.Token)
   returns (success: bool, glinear r': T.Token)
   requires cache.Inv()
-  requires 0 <= cache_idx as int < CACHE_SIZE
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
   requires r.loc == cache.status[cache_idx].rwlock_loc
   requires r.val.M?
   requires r.val.exc.ExcPending?
@@ -356,7 +356,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures r'.loc == cache.status[cache_idx].rwlock_loc
   ensures r'.val.M?
   ensures r'.val.exc.ExcPending?
-  ensures success ==> r'.val.exc.visited == RC_WIDTH
+  ensures success ==> r'.val.exc.visited == RC_WIDTH as int
   ensures r'.val == RwLock.ExcHandle(RwLock.ExcPending(
       -1, r'.val.exc.visited, r.val.exc.clean, r.val.exc.b))
   {
@@ -364,8 +364,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     success := true;
     r' := r;
 
-    while i < (RC_WIDTH as uint64) && success
-    invariant 0 <= i as int <= RC_WIDTH
+    while i < RC_WIDTH && success
+    invariant 0 <= i as int <= RC_WIDTH as int
     invariant r'.loc == cache.status[cache_idx].rwlock_loc
     invariant r'.val.M?
     invariant r'.val.exc.ExcPending?
@@ -380,7 +380,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       i := i + 1;
     }
-    assert success ==> i as nat == RC_WIDTH;
+    assert success ==> i as nat == RC_WIDTH as int;
   }
 
   method check_all_refcounts_with_t_block(shared cache: Cache,
@@ -389,7 +389,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear r: T.Token)
   returns (glinear r': T.Token)
   requires cache.Inv()
-  requires 0 <= cache_idx as int < CACHE_SIZE
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
   requires r.loc == cache.status[cache_idx].rwlock_loc
   requires r.val.M?
   requires r.val.exc.ExcPending?
@@ -398,7 +398,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures r'.loc == cache.status[cache_idx].rwlock_loc
   ensures r'.val.M?
   ensures r'.val.exc.ExcPending?
-  ensures r'.val.exc.visited == RC_WIDTH
+  ensures r'.val.exc.visited == RC_WIDTH as int
   ensures r'.val == RwLock.ExcHandle(RwLock.ExcPending(
       t as int, r'.val.exc.visited, r.val.exc.clean, r.val.exc.b))
   decreases *
@@ -406,8 +406,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var i: uint64 := 0;
     r' := r;
 
-    while i < (RC_WIDTH as uint64)
-    invariant 0 <= i as int <= RC_WIDTH
+    while i < RC_WIDTH
+    invariant 0 <= i as int <= RC_WIDTH as int
     invariant r'.loc == cache.status[cache_idx].rwlock_loc
     invariant r'.val.M?
     invariant r'.val.exc.ExcPending?
@@ -430,7 +430,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method try_evict_page(shared cache: Cache, cache_idx: uint64)
   requires cache.Inv()
-  requires 0 <= cache_idx as int < CACHE_SIZE
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
   {
     // 1. get status
 
@@ -506,12 +506,12 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method evict_batch(shared cache: Cache, chunk: uint64)
   requires cache.Inv()
-  requires 0 <= chunk as int < NUM_CHUNKS
+  requires 0 <= chunk as int < NUM_CHUNKS as int
   {
     var i: uint64 := 0;
-    while i as int < CHUNK_SIZE
+    while i < CHUNK_SIZE
     {
-      var j: uint64 := chunk * CHUNK_SIZE as uint64 + i;
+      var j: uint64 := chunk * CHUNK_SIZE + i;
       try_evict_page(cache, j);
       i := i + 1;
     }
@@ -527,7 +527,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires old_localState.WF()
   ensures localState.WF()
   ensures
-      && 0 <= cache_idx as int < CACHE_SIZE
+      && 0 <= cache_idx as int < CACHE_SIZE as int
       && m.loc == cache.status[cache_idx].rwlock_loc
       && m.val == RwLock.ReadHandle(RwLock.ReadPending)
       && handle.is_handle(cache.key(cache_idx as int))
@@ -560,7 +560,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && handle_opt.glNone?
     invariant localState.free_hand != 0xffff_ffff_ffff_ffff
     invariant success ==>
-        && 0 <= cache_idx as int < CACHE_SIZE
+        && 0 <= cache_idx as int < CACHE_SIZE as int
         && m_opt.glSome?
         && m_opt.value.loc == cache.status[cache_idx].rwlock_loc
         && m_opt.value.val == RwLock.ReadHandle(RwLock.ReadPending)
@@ -568,18 +568,18 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && handle_opt.value.is_handle(cache.key(cache_idx as int))
         && handle_opt.value.CacheEmptyHandle?
     {
-      var chunk := localState.free_hand; 
+      var chunk: uint64 := localState.free_hand; 
 
       var i: uint64 := 0;
 
-      while i < CHUNK_SIZE as uint64 && !success
-      invariant 0 <= i as int <= CHUNK_SIZE
-      invariant 0 <= chunk as int < NUM_CHUNKS
+      while i < CHUNK_SIZE && !success
+      invariant 0 <= i as int <= CHUNK_SIZE as int
+      invariant 0 <= chunk as int < NUM_CHUNKS as int
       invariant !success ==>
           && m_opt.glNone?
           && handle_opt.glNone?
       invariant success ==>
-          && 0 <= cache_idx as int < CACHE_SIZE
+          && 0 <= cache_idx as int < CACHE_SIZE as int
           && m_opt.glSome?
           && m_opt.value.loc == cache.status[cache_idx].rwlock_loc
           && m_opt.value.val == RwLock.ReadHandle(RwLock.ReadPending)
@@ -587,7 +587,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           && handle_opt.value.is_handle(cache.key(cache_idx as int))
           && handle_opt.value.CacheEmptyHandle?
       {
-        cache_idx := chunk * CHUNK_SIZE as uint64 + i;
+        cache_idx := chunk * CHUNK_SIZE + i;
 
         dispose_glnone(m_opt);
         dispose_glnone(handle_opt);
@@ -623,7 +623,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear handle_out: glOption<ReadonlyPageHandle>,
     glinear client_out: glOption<Client>)
   requires cache.Inv()
-  requires 0 <= disk_idx as nat < NUM_DISK_PAGES
+  requires 0 <= disk_idx as nat < NUM_DISK_PAGES as int
   requires old_localState.WF()
   ensures ret_cache_idx == -1 ==> handle_out.glNone?
       && client_out.glSome?
@@ -725,7 +725,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear handle_out: ReadonlyPageHandle
   )
   requires cache.Inv()
-  requires 0 <= disk_idx as nat < NUM_DISK_PAGES
+  requires 0 <= disk_idx as nat < NUM_DISK_PAGES as int
   requires old_localState.WF()
   ensures localState.WF()
   ensures handle_out.is_disk_page_handle(
@@ -920,7 +920,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   returns (ph: PageHandle, glinear write_handle: WriteablePageHandle)
   requires cache.Inv()
   requires old_localState.WF()
-  requires 0 <= disk_idx as nat < NUM_DISK_PAGES
+  requires 0 <= disk_idx as nat < NUM_DISK_PAGES as int
   ensures localState.WF()
   ensures write_handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
   ensures write_handle.for_page_handle(ph)
@@ -994,7 +994,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       disk_idx: uint64)
   requires cache.Inv()
   requires old_localState.WF()
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
   ensures localState.WF()
   decreases *
   {

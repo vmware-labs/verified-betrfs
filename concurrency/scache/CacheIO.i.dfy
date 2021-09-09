@@ -22,7 +22,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache.Inv()
   requires old_local.WF()
   ensures local.WF()
-  ensures 0 <= idx as int < NUM_IO_SLOTS
+  ensures 0 <= idx as int < NUM_IO_SLOTS as int
   ensures is_slot_access(cache.io_slots[idx as nat], access)
   ensures local.t == old_local.t
 
@@ -36,8 +36,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache.Inv()
   requires old_local.WF()
 
-  requires 0 <= cache_idx as int < CACHE_SIZE
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
   requires wbo.is_handle(cache.key(cache_idx as int))
   requires wbo.b.CacheEntryHandle?
   requires ticket == CacheResources.DiskWriteTicket(disk_idx as int, wbo.b.data.s)
@@ -90,7 +90,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires |old_contents.s| == PageSize as int
   requires ticket == CacheResources.DiskReadTicket(disk_idx as nat)
   requires old_contents.ptr == ptr
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
   requires ptr.aligned(PageSize as int)
   ensures contents.ptr == ptr
   ensures |contents.s| == PageSize as int
@@ -115,8 +115,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear idx: CellContents<int64>,
       glinear stub: CacheResources.DiskReadStub)
   requires cache.Inv()
-  requires 0 <= cache_idx as int < CACHE_SIZE
-  requires 0 <= disk_addr < NUM_DISK_PAGES
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
+  requires 0 <= disk_addr < NUM_DISK_PAGES as int
   requires wp.ptr == cache.data[cache_idx]
   requires |wp.s| == PageSize as int
   requires stub == CacheResources.DiskReadStub(disk_addr as nat, wp.s)
@@ -150,7 +150,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear wbo: T.WritebackObtainedToken,
       glinear stub: CacheResources.DiskWriteStub)
   requires cache.Inv()
-  requires 0 <= cache_idx as int < CACHE_SIZE
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
   requires stub == CacheResources.DiskWriteStub(disk_addr)
   requires wbo.is_handle(cache.key(cache_idx as int))
   requires wbo.token.loc == cache.status[cache_idx as nat].rwlock_loc

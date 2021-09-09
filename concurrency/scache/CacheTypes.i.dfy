@@ -64,23 +64,23 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     predicate Inv()
     {
-      && |this.data| == CACHE_SIZE
-      && |this.disk_idx_of_entry| == CACHE_SIZE
-      && |this.status| == CACHE_SIZE
-      && (forall i | 0 <= i < CACHE_SIZE ::
+      && |this.data| == CACHE_SIZE as int
+      && |this.disk_idx_of_entry| == CACHE_SIZE as int
+      && |this.status| == CACHE_SIZE as int
+      && (forall i | 0 <= i < CACHE_SIZE as int ::
          && this.status[i].key == this.key(i)
          && this.status[i].inv()
         )
-      && |this.read_refcounts| == RC_WIDTH
-      && (forall j | 0 <= j < RC_WIDTH ::
-          |this.read_refcounts[j]| == CACHE_SIZE)
-      && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE ::
+      && |this.read_refcounts| == RC_WIDTH as int
+      && (forall j | 0 <= j < RC_WIDTH as int ::
+          |this.read_refcounts[j]| == CACHE_SIZE as int)
+      && (forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < CACHE_SIZE as int ::
           && this.read_refcounts[j][i].inv(j)
           && this.read_refcounts[j][i].rwlock_loc == this.status[i].rwlock_loc)
-      && |this.cache_idx_of_page| == NUM_DISK_PAGES
-      && (forall d | 0 <= d < NUM_DISK_PAGES ::
+      && |this.cache_idx_of_page| == NUM_DISK_PAGES as int
+      && (forall d | 0 <= d < NUM_DISK_PAGES as int ::
           atomic_index_lookup_inv(this.cache_idx_of_page[d], d))
-      && |io_slots| == NUM_IO_SLOTS
+      && |io_slots| == NUM_IO_SLOTS as int
       && (forall i | 0 <= i < |io_slots| :: lseq_has(io_slots)[i])
       && (forall i | 0 <= i < |io_slots| :: io_slots[i].WF())
       && (forall i | 0 <= i < |io_slots| ::
@@ -99,50 +99,50 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       && (forall v, g :: atomic_inv(global_clockpointer, v, g) <==> true)
 
-      && (forall i | 0 <= i < CACHE_SIZE ::
+      && (forall i | 0 <= i < CACHE_SIZE as int ::
         this.data[i].aligned(PageSize as int))
 
-      && this.data_base_ptr.as_nat() + PageSize as int * (CACHE_SIZE - 1) < 0x1_0000_0000_0000_0000
-      && (forall i | 0 <= i < CACHE_SIZE ::
+      && this.data_base_ptr.as_nat() + PageSize as int * (CACHE_SIZE as int - 1) < 0x1_0000_0000_0000_0000
+      && (forall i | 0 <= i < CACHE_SIZE as int ::
         && this.data[i] == ptr_add(this.data_base_ptr, (PageSize as int * i) as uint64))
 
-      && |lseqs_raw(this.cache_idx_of_page_array)| == NUM_DISK_PAGES
-      && (forall i | 0 <= i < NUM_DISK_PAGES :: lseq_has(this.cache_idx_of_page_array)[i]
+      && |lseqs_raw(this.cache_idx_of_page_array)| == NUM_DISK_PAGES as int
+      && (forall i | 0 <= i < NUM_DISK_PAGES as int :: lseq_has(this.cache_idx_of_page_array)[i]
           && lseq_peek(this.cache_idx_of_page_array, i as uint64) == this.cache_idx_of_page[i])
 
-      && |lseqs_raw(this.read_refcounts_array)| == RC_WIDTH * CACHE_SIZE
-      && (forall i | 0 <= i < RC_WIDTH * CACHE_SIZE :: lseq_has(this.read_refcounts_array)[i])
-      && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE ::
-          lseq_peek(this.read_refcounts_array, (j * CACHE_SIZE + i) as uint64)
+      && |lseqs_raw(this.read_refcounts_array)| == RC_WIDTH as int * CACHE_SIZE as int
+      && (forall i | 0 <= i < RC_WIDTH as int * CACHE_SIZE as int :: lseq_has(this.read_refcounts_array)[i])
+      && (forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < CACHE_SIZE as int ::
+          lseq_peek(this.read_refcounts_array, (j * CACHE_SIZE as int + i) as uint64)
               == this.read_refcounts[j][i])
 
-      && |lseqs_raw(this.status_idx_array)| == CACHE_SIZE
-      && (forall i | 0 <= i < CACHE_SIZE :: lseq_has(this.status_idx_array)[i]
+      && |lseqs_raw(this.status_idx_array)| == CACHE_SIZE as int
+      && (forall i | 0 <= i < CACHE_SIZE as int :: lseq_has(this.status_idx_array)[i]
         && lseq_peek(this.status_idx_array, i as uint64)
             == StatusIdx(this.status[i], this.disk_idx_of_entry[i])
       )
       /*
-      && this.read_refcounts_base_ptr.as_nat() + (RC_WIDTH-1) * CACHE_SIZE * (CACHE_SIZE-1) < 0x1_0000_0000_0000_0000
+      && this.read_refcounts_base_ptr.as_nat() + (RC_WIDTH-1) * CACHE_SIZE as int * (CACHE_SIZE as int -1) < 0x1_0000_0000_0000_0000
       && this.read_refcounts_gshared.len() == RC_WIDTH
       && (forall j | 0 <= j < RC_WIDTH ::
           && this.read_refcounts_gshared.has(j)
-          && this.read_refcounts_gshared.get(j).len() == CACHE_SIZE)
-      && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE ::
+          && this.read_refcounts_gshared.get(j).len() == CACHE_SIZE as int)
+      && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE as int ::
           && this.read_refcounts[j][i].a.ptr ==
-              ptr_add(this.read_refcounts_base_ptr, (j * CACHE_SIZE + i) as uint64)
+              ptr_add(this.read_refcounts_base_ptr, (j * CACHE_SIZE as int + i) as uint64)
           && this.read_refcounts_gshared.get(j).has(i)
           && this.read_refcounts[j][i].a.ga ==
               this.read_refcounts_gshared.get(j).get(i))
       */
 
-      && |this.batch_busy| == NUM_CHUNKS
-      && (forall i :: 0 <= i < NUM_CHUNKS ==> lseq_has(this.batch_busy)[i])
-      && (forall i, v, g :: 0 <= i < NUM_CHUNKS ==> atomic_inv(this.batch_busy[i], v, g) <==> true)
+      && |this.batch_busy| == NUM_CHUNKS as int
+      && (forall i :: 0 <= i < NUM_CHUNKS as int ==> lseq_has(this.batch_busy)[i])
+      && (forall i, v, g :: 0 <= i < NUM_CHUNKS as int ==> atomic_inv(this.batch_busy[i], v, g) <==> true)
     }
 
     shared function method data_ptr(i: uint64) : (p: Ptr)
     requires this.Inv()
-    requires 0 <= i as int < CACHE_SIZE
+    requires 0 <= i as int < CACHE_SIZE as int
     ensures p == this.data[i]
     {
       ptr_add(this.data_base_ptr, PageSize * i)
@@ -150,7 +150,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     shared function method status_atomic(i: uint64) : (shared at: AtomicStatus)
     requires this.Inv()
-    requires 0 <= i as int < CACHE_SIZE
+    requires 0 <= i as int < CACHE_SIZE as int
     ensures at == this.status[i]
     {
       lseq_peek(this.status_idx_array, i as uint64).status
@@ -158,7 +158,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     shared function method disk_idx_of_entry_ptr(i: uint64) : (shared c: Cell<int64>)
     requires this.Inv()
-    requires 0 <= i as int < CACHE_SIZE
+    requires 0 <= i as int < CACHE_SIZE as int
     ensures c == this.disk_idx_of_entry[i]
     {
       lseq_peek(this.status_idx_array, i as uint64).idx
@@ -166,16 +166,16 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     shared function method read_refcount_atomic(j: uint64, i: uint64) : (shared at: AtomicRefcount)
     requires this.Inv()
-    requires 0 <= j as int < RC_WIDTH
-    requires 0 <= i as int < CACHE_SIZE
+    requires 0 <= j as int < RC_WIDTH as int
+    requires 0 <= i as int < CACHE_SIZE as int
     ensures at == this.read_refcounts[j][i]
     {
-      lseq_peek(this.read_refcounts_array, j * (CACHE_SIZE as uint64) + i)
+      lseq_peek(this.read_refcounts_array, j * CACHE_SIZE + i)
     }
 
     shared function method cache_idx_of_page_atomic(i: uint64) : (shared at: AtomicIndexLookup)
     requires this.Inv()
-    requires 0 <= i as int < NUM_DISK_PAGES
+    requires 0 <= i as int < NUM_DISK_PAGES as int
     ensures at == this.cache_idx_of_page[i]
     {
       lseq_peek(this.cache_idx_of_page_array, i)
@@ -190,9 +190,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   {
     predicate WF()
     {
-      && (0 <= this.free_hand as int < NUM_CHUNKS || this.free_hand == 0xffff_ffff_ffff_ffff)
-      && 0 <= t as int < RC_WIDTH
-      && 0 <= io_slot_hand as int < NUM_IO_SLOTS
+      && (0 <= this.free_hand as int < NUM_CHUNKS as int || this.free_hand == 0xffff_ffff_ffff_ffff)
+      && 0 <= t as int < RC_WIDTH as int
+      && 0 <= io_slot_hand as int < NUM_IO_SLOTS as int
     }
   }
 
@@ -232,15 +232,15 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   {
     && iocb.IocbRead?
     && iocb.ptr == iocb_ptr
-    && g.slot_idx < NUM_IO_SLOTS
-    && |cache_io_slots| == NUM_IO_SLOTS
+    && g.slot_idx < NUM_IO_SLOTS as int
+    && |cache_io_slots| == NUM_IO_SLOTS as int
     && g.io_slot_info.cell == cache_io_slots[g.slot_idx].io_slot_info_cell
     && iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
-    && 0 <= g.key.cache_idx < CACHE_SIZE
-    && 0 <= iocb.offset < NUM_DISK_PAGES
-    && |cache_data| == CACHE_SIZE
-    && |cache_disk_idx_of_entry| == CACHE_SIZE
-    && |cache_status| == CACHE_SIZE
+    && 0 <= g.key.cache_idx < CACHE_SIZE as int
+    && 0 <= iocb.offset < NUM_DISK_PAGES as int
+    && |cache_data| == CACHE_SIZE as int
+    && |cache_disk_idx_of_entry| == CACHE_SIZE as int
+    && |cache_status| == CACHE_SIZE as int
     && data.ptr == cache_data[g.key.cache_idx]
     && g.io_slot_info.v == IOSlotRead(g.key.cache_idx as uint64)
     && iocb.nbytes == PageSize as int
@@ -265,17 +265,17 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && iocb.IocbWrite?
     && iocb.ptr == iocb_ptr
     && is_read_perm(iocb_ptr, iocb, data, g)
-    && g.slot_idx < NUM_IO_SLOTS
-    && |cache_io_slots| == NUM_IO_SLOTS
+    && g.slot_idx < NUM_IO_SLOTS as int
+    && |cache_io_slots| == NUM_IO_SLOTS as int
     && g.io_slot_info.cell == cache_io_slots[g.slot_idx].io_slot_info_cell
     && iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
     && g.wbo.b.CacheEntryHandle?
-    && 0 <= g.wbo.b.key.cache_idx < CACHE_SIZE
+    && 0 <= g.wbo.b.key.cache_idx < CACHE_SIZE as int
     && g.io_slot_info.v == IOSlotWrite(g.wbo.b.key.cache_idx as uint64)
     && g.wbo.is_handle(g.key)
-    && |cache_data| == CACHE_SIZE
-    && |cache_disk_idx_of_entry| == CACHE_SIZE
-    && |cache_status| == CACHE_SIZE
+    && |cache_data| == CACHE_SIZE as int
+    && |cache_disk_idx_of_entry| == CACHE_SIZE as int
+    && |cache_status| == CACHE_SIZE as int
     && g.key.data_ptr == cache_data[g.key.cache_idx]
     && g.key.idx_cell == cache_disk_idx_of_entry[g.key.cache_idx]
     && g.wbo.token.loc == cache_status[g.wbo.b.key.cache_idx as nat].rwlock_loc
