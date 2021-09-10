@@ -494,6 +494,9 @@ module RwTokens(rw: Rw) {
       expected_retrieved_value)
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures retrieved_value == expected_retrieved_value
+  {
+    token1', retrieved_value := withdraw(token1, expected_value1, expected_retrieved_value);
+  }
 
   glinear method withdraw_1_2(
       glinear token1: Token,
@@ -509,6 +512,13 @@ module RwTokens(rw: Rw) {
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
   ensures retrieved_value == expected_retrieved_value
+  {
+    glinear var y;
+    y, retrieved_value := withdraw(token1,
+        rw.dot(expected_value1, expected_value2),
+        expected_retrieved_value);
+    token1', token2' := T.split(y, expected_value1, expected_value2);
+  }
 
   glinear method withdraw_3_3(
       glinear token1: Token,
@@ -529,11 +539,26 @@ module RwTokens(rw: Rw) {
   ensures token2' == T.Token(token1.loc, expected_value2)
   ensures token3' == T.Token(token1.loc, expected_value3)
   ensures retrieved_value == expected_retrieved_value
+  {
+    glinear var x := T.join(token1, token2);
+    x := T.join(x, token3);
+    glinear var y;
+    y, retrieved_value := withdraw(x,
+        rw.dot(rw.dot(expected_value1, expected_value2), expected_value3),
+        expected_retrieved_value);
+    token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
+  }
 
   glinear method get_unit(ghost loc: Loc)
   returns (glinear t: Token)
   requires loc.ExtLoc? && loc.base_loc == Wrap.singleton_loc()
   ensures t.loc == loc
+  {
+    t := T.get_unit(loc);
+  }
 
   glinear method dispose(glinear t: Token)
+  {
+    T.dispose(t);
+  }
 }
