@@ -1,107 +1,46 @@
 include "../../framework/Rw.i.dfy"
-include "../../scache/FullMap.i.dfy"
+include "../../scache/rwlock/FullMap.i.dfy"
 include "Handle.i.dfy"
 include "../../../lib/Base/Option.s.dfy"
 
 module RwLock refines Rw {
-  import opened Constants
   import opened FullMaps
-  import CacheHandle
+  import Handle
 
-  ghost const RW_WIDTH := 24
-
-  /*
-   * We consider two bits of the status field, ExcLock and Writeback.
-   *
-   * ExcLock and Writeback. Of course, 'ExcLock'
-   * and 'Writeback' should be exclusive operations;
-   * When both flags are set,
-   * it should be interpreted as the 'ExcLock' being
-   * pending, with the 'Writeback' being active.
-   *
-   * Those 2 bits gives 2x2 = 4 states. We then have 2 more:
-   * Unmapped and Reading.
-   *
-   * NOTE: in retrospect, it might have made sense to have this
-   * just be a struct of 5-6 booleans.
-   */
-  datatype Flag =
-    | Unmapped
-    | Reading
-    | Reading_ExcLock
-    | Available
-    | Claimed
-    | Writeback
-    | Writeback_Claimed
-    | Writeback_PendingExcLock
-    | PendingExcLock
-    | ExcLock_Clean
-    | ExcLock_Dirty
+  ghost const RC_WIDTH := 24
 
   type ThreadId = nat
 
-  type StoredType = CacheHandle.Handle
+  type StoredType = Handle.Handle
 
   // Standard flow for obtaining a 'shared' lock
 
   datatype SharedState =
-    | SharedPending(ghost t: int)              // inc refcount
-    | SharedPending2(ghost t: int)             // !free & !writelocked
-    | SharedObtained(ghost t: int, b: StoredType)  // !reading
+    | SharedPending(ghost t: int)                  // inc refcount
+    | SharedObtained(ghost t: int, b: StoredType)  // exclusive bit not set
 
   // Standard flow for obtaining an 'exclusive' lock
 
   datatype ExcState = 
     | ExcNone
-    | ExcClaim(ghost t: int, b: StoredType) // !
-      // set ExcLock bit:
-    | ExcPendingAwaitWriteback(ghost t: int, b: StoredType)
-      // check Writeback bit unset
-      //   and `visited` of the refcounts
-    | ExcPending(ghost t: int, ghost visited: int, clean: bool, b: StoredType)
-    | ExcObtained(ghost t: int, clean: bool)
-
-  datatype WritebackState =
-    | WritebackNone
-      // set Writeback status bit
-    | WritebackObtained(b: StoredType)
-
-  // Flow for the phase of reading in a page from disk.
-  // This is a special-case flow, because it needs to be performed
-  // on the way to obtaining a 'shared' lock, but it requires
-  // exclusive access to the underlying memory and resources.
-  // End-game for this flow is to become an ordinary 'shared' lock
-  // It is also possible to skip the intermediate steps and go straight
-  // to ReadObtained without a refcount to get ReadObtained(-1)
-
-  datatype ReadState =
-    | ReadNone
-    | ReadPending                        // set status bit to ExcLock | Reading
-    | ReadPendingCounted(ghost t: int)   // inc refcount
-    | ReadObtained(ghost t: int)         // clear ExcLock bit
+    | ExcPending(ghost visited: int, b: StoredType)
+    | ExcObtained
 
   datatype CentralState =
     | CentralNone
-    | CentralState(flag: Flag, stored_value: StoredType)
+    | CentralState(exc: bool, stored_value: StoredType)
 
   datatype M = M(
     central: CentralState,
     ghost refCounts: map<ThreadId, nat>,
 
     ghost sharedState: FullMap<SharedState>,
-    exc: ExcState,
-    read: ReadState,
-
-    // Flow for the phase of doing a write-back.
-    // Special case in part because it can be initiated by any thread
-    // and completed by any thread (not necessarily the same one).
-    
-    writeback: WritebackState
+    exc: ExcState
   ) | Fail
 
   function unit() : M
   {
-    M(CentralNone, map[], zero_map(), ExcNone, ReadNone, WritebackNone)
+    M(CentralNone, map[], zero_map(), ExcNone)
   }
 
   function dot(x: M, y: M) : M
@@ -111,17 +50,13 @@ module RwLock refines Rw {
       && !(x.central.CentralState? && y.central.CentralState?)
       && x.refCounts.Keys !! y.refCounts.Keys
       && (x.exc.ExcNone? || y.exc.ExcNone?)
-      && (x.read.ReadNone? || y.read.ReadNone?)
-      && (x.writeback.WritebackNone? || y.writeback.WritebackNone?)
     then
       M(
         if x.central.CentralState? then x.central else y.central,
         (map k | k in x.refCounts.Keys + y.refCounts.Keys ::
             if k in x.refCounts.Keys then x.refCounts[k] else y.refCounts[k]),
         add_fns(x.sharedState, y.sharedState),
-        if !x.exc.ExcNone? then x.exc else y.exc,
-        if !x.read.ReadNone? then x.read else y.read,
-        if !x.writeback.WritebackNone? then x.writeback else y.writeback
+        if !x.exc.ExcNone? then x.exc else y.exc
       ) 
     else
       Fail
@@ -162,16 +97,6 @@ module RwLock refines Rw {
   requires state.M?
   {
     CountSharedRefs(state.sharedState, t)
-
-      + (if (state.exc.ExcPendingAwaitWriteback?
-            || state.exc.ExcClaim?
-            || state.exc.ExcPending?
-            || state.exc.ExcObtained?) && state.exc.t == t
-         then 1 else 0)
-
-      + (if (state.read.ReadPendingCounted?
-            || state.read.ReadObtained?) && state.read.t == t
-         then 1 else 0)
   }
 
   predicate Inv(x: M)
@@ -179,113 +104,24 @@ module RwLock refines Rw {
     && x != unit() ==> (
       && x.M?
       && x.central.CentralState?
-      && (x.exc.ExcPendingAwaitWriteback? ==>
-        && x.read.ReadNone?
-        && -1 <= x.exc.t < RC_WIDTH as int
-        && x.exc.b == x.central.stored_value
-      )
-      && (x.exc.ExcClaim? ==>
-        && x.read.ReadNone?
-        && -1 <= x.exc.t < RC_WIDTH as int
-        && x.exc.b == x.central.stored_value
-      )
       && (x.exc.ExcPending? ==>
-        && x.read == ReadNone
-        && x.writeback.WritebackNone?
         && 0 <= x.exc.visited <= RC_WIDTH as int
-        && -1 <= x.exc.t < RC_WIDTH as int
         && x.exc.b == x.central.stored_value
       )
-      && (x.exc.ExcObtained? ==>
-        && x.read == ReadNone
-        && x.writeback.WritebackNone?
-        && -1 <= x.exc.t < RC_WIDTH as int
-      )
-      && (x.writeback.WritebackObtained? ==>
-        && x.read == ReadNone
-        && x.writeback.b == x.central.stored_value
-      )
-      && (x.read.ReadPending? ==>
-        && x.writeback.WritebackNone?
-      )
-      && (x.read.ReadPendingCounted? ==>
-        && x.writeback.WritebackNone?
-        && 0 <= x.read.t < RC_WIDTH as int
-      )
-      && (x.read.ReadObtained? ==>
-        && -1 <= x.read.t < RC_WIDTH as int
-      )
-      //&& (x.stored_value.Some? ==>
-      //  x.stored_value.value.is_handle(key)
-      //)
       && (forall t | 0 <= t < RC_WIDTH as int
         :: t in x.refCounts && x.refCounts[t] == CountAllRefs(x, t))
 
-      && (x.central.flag == Unmapped ==>
-        && x.writeback.WritebackNone?
-        && x.read.ReadNone?
+      && (!x.central.exc ==>
         && x.exc.ExcNone?
       )
-      && (x.central.flag == Reading ==>
-        && x.read.ReadObtained?
-        && x.writeback.WritebackNone?
-        && x.writeback.WritebackNone?
-      )
-      && (x.central.flag == Reading_ExcLock ==>
-        && (x.read.ReadPending?
-          || x.read.ReadPendingCounted?)
-        && x.writeback.WritebackNone?
-      )
-      && (x.central.flag == Available ==>
-        && x.exc.ExcNone?
-        && x.read.ReadNone?
-        && x.writeback.WritebackNone?
-      )
-      && (x.central.flag == Writeback ==>
-        && x.exc.ExcNone?
-        && x.read.ReadNone?
-        && x.writeback.WritebackObtained?
-      )
-      && (x.central.flag == ExcLock_Clean ==>
+      && (x.central.exc ==>
         && (x.exc.ExcPending? || x.exc.ExcObtained?)
-        && x.exc.clean
-        && x.writeback.WritebackNone?
-      )
-      && (x.central.flag == ExcLock_Dirty ==>
-        && (x.exc.ExcPending? || x.exc.ExcObtained?)
-        && !x.exc.clean
-        && x.writeback.WritebackNone?
-      )
-      && (x.central.flag == Writeback_PendingExcLock ==>
-        && x.exc.ExcPendingAwaitWriteback?
-        && x.writeback.WritebackObtained?
-      )
-      && (x.central.flag == PendingExcLock ==>
-        && x.exc.ExcPendingAwaitWriteback?
-        && x.writeback.WritebackNone?
-      )
-      && (x.central.flag == Writeback_Claimed ==>
-        && x.exc.ExcClaim?
-        && x.writeback.WritebackObtained?
-      )
-      && (x.central.flag == Claimed ==>
-        && x.exc.ExcClaim?
-        && x.writeback.WritebackNone?
       )
       && (forall ss: SharedState :: x.sharedState.m[ss] > 0 ==>
         && 0 <= ss.t < RC_WIDTH as int
-        && (ss.SharedPending2? ==>
-          && !x.exc.ExcObtained?
-          && !x.read.ReadPending?
-          && !x.read.ReadPendingCounted?
-          && (x.exc.ExcPending? ==> x.exc.visited <= ss.t)
-          && x.central.flag != Unmapped
-        )
         && (ss.SharedObtained? ==>
           && ss.b == x.central.stored_value
           && !x.exc.ExcObtained?
-          && x.read.ReadNone?
-          && x.central.flag != Unmapped
           && (x.exc.ExcPending? ==> x.exc.visited <= ss.t)
         )
       )
@@ -295,7 +131,7 @@ module RwLock refines Rw {
   function I(x: M) : Option<StoredType>
   //requires Inv(x)
   {
-    if !x.M? || x == unit() || x.exc.ExcObtained? || !x.read.ReadNone? then (
+    if !x.M? || x == unit() || x.exc.ExcObtained? then (
       None
     ) else (
       Some(x.central.stored_value)
@@ -310,198 +146,38 @@ module RwLock refines Rw {
   ////// Handlers
 
   function CentralHandle(central: CentralState) : M {
-    M(central, map[], zero_map(), ExcNone, ReadNone, WritebackNone)
+    M(central, map[], zero_map(), ExcNone)
   }
 
   function RefCount(t: ThreadId, count: nat) : M {
-    M(CentralNone, map[t := count], zero_map(), ExcNone, ReadNone, WritebackNone)
+    M(CentralNone, map[t := count], zero_map(), ExcNone)
   }
 
   function SharedHandle(ss: SharedState) : M {
-    M(CentralNone, map[], unit_fn(ss), ExcNone, ReadNone, WritebackNone)
-  }
-
-  function ReadHandle(r: ReadState) : M {
-    M(CentralNone, map[], zero_map(), ExcNone, r, WritebackNone)
+    M(CentralNone, map[], unit_fn(ss), ExcNone)
   }
 
   function ExcHandle(e: ExcState) : M {
-    M(CentralNone, map[], zero_map(), e, ReadNone, WritebackNone)
-  }
-
-  function WritebackHandle(wb: WritebackState) : M {
-    M(CentralNone, map[], zero_map(), ExcNone, ReadNone, wb)
+    M(CentralNone, map[], zero_map(), e)
   }
 
   ////// Transitions
 
-  predicate TakeWriteback(m: M, m': M)
+  predicate ExcBegin(m: M, m': M)
   {
     && m.M?
     && m.central.CentralState?
-    && m.central.flag == Available
+    && !m.central.exc
 
     && m == CentralHandle(m.central)
     && m' == dot(
-      CentralHandle(m.central.(flag := Writeback)),
-      WritebackHandle(WritebackObtained(m.central.stored_value))
+      CentralHandle(m.central.(exc := true)),
+      ExcHandle(ExcPending(0, m.central.stored_value))
     )
   }
 
-  lemma TakeWriteback_Preserves(m: M, m': M)
-  requires TakeWriteback(m, m')
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-    }
-  }
-
-  predicate ReleaseWriteback(m: M, m': M)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && m.writeback.WritebackObtained?
-
-    && m == dot(
-      CentralHandle(m.central),
-      WritebackHandle(m.writeback)
-    )
-
-    && (m.central.flag == Writeback ==>
-      m' == CentralHandle(m.central.(flag := Available))
-    )
-    && (m.central.flag == Writeback_PendingExcLock ==>
-      m' == CentralHandle(m.central.(flag := PendingExcLock))
-    )
-    && (m.central.flag == Writeback_Claimed ==>
-      m' == CentralHandle(m.central.(flag := Claimed))
-    )
-  }
-
-  lemma ReleaseWriteback_Preserves(m: M, m': M)
-  requires ReleaseWriteback(m, m')
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-      assert m.central.flag == Writeback
-          || m.central.flag == Writeback_PendingExcLock
-          || m.central.flag == Writeback_Claimed;
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-    }
-  }
-
-  predicate ThreadlessClaim(m: M, m': M)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && (m.central.flag == Available || m.central.flag == Writeback)
-
-    && m == CentralHandle(m.central)
-    && m' == dot(
-      CentralHandle(m.central.(flag := 
-          if m.central.flag == Available then Claimed else Writeback_Claimed)),
-      ExcHandle(ExcClaim(-1, m.central.stored_value))
-    )
-  }
-
-  lemma ThreadlessClaim_Preserves(m: M, m': M)
-  requires ThreadlessClaim(m, m')
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-    }
-  }
-
-  predicate SharedToClaim(m: M, m': M, ss: SharedState)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && (m.central.flag == Available || m.central.flag == Writeback)
-    && ss.SharedObtained?
-
-    && m == dot(
-      CentralHandle(m.central),
-      SharedHandle(ss)
-    )
-    && m' == dot(
-      CentralHandle(m.central.(flag := 
-          if m.central.flag == Available then Claimed else Writeback_Claimed)),
-      ExcHandle(ExcClaim(ss.t, ss.b))
-    )
-  }
-
-  lemma SharedToClaim_Preserves(m: M, m': M, ss: SharedState)
-  requires SharedToClaim(m, m', ss)
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-      SumFilterSimp<SharedState>();
-
-      assert dot(m', p).refCounts == dot(m, p).refCounts;
-      assert forall b | b != ss :: dot(m', p).sharedState.m[b] == dot(m, p).sharedState.m[b];
-      assert dot(m', p).sharedState.m[ss] + 1 == dot(m, p).sharedState.m[ss];
-      assert CountAllRefs(dot(m', p), ss.t) == CountAllRefs(dot(m, p), ss.t);
-    }
-  }
-
-  predicate ClaimToPending(m: M, m': M)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && m.exc.ExcClaim?
-
-    && m == dot(
-      CentralHandle(m.central),
-      ExcHandle(m.exc)
-    )
-    && m' == dot(
-      CentralHandle(m.central.(flag :=
-          if m.central.flag == Writeback_Claimed
-            then Writeback_PendingExcLock
-            else PendingExcLock)),
-      ExcHandle(ExcPendingAwaitWriteback(m.exc.t, m.exc.b))
-    )
-  }
-
-  lemma ClaimToPending_Preserves(m: M, m': M)
-  requires ClaimToPending(m, m')
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-    }
-  }
-
-  predicate TakeExcLockFinishWriteback(m: M, m': M, clean: bool)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && m.exc.ExcPendingAwaitWriteback?
-    && m.central.flag != Writeback && m.central.flag != Writeback_PendingExcLock
-    && m == dot(
-      CentralHandle(m.central),
-      ExcHandle(m.exc)
-    )
-    && m' == dot(
-      CentralHandle(m.central.(flag :=
-        if clean then ExcLock_Clean else ExcLock_Dirty)),
-      ExcHandle(ExcPending(m.exc.t, 0, clean, m.exc.b))
-    )
-  }
-
-  lemma TakeExcLockFinishWriteback_Preserves(m: M, m': M, clean: bool)
-  requires TakeExcLockFinishWriteback(m, m', clean)
+  lemma ExcBegin_Preserves(m: M, m': M)
+  requires ExcBegin(m, m')
   ensures transition(m, m')
   {
     forall p: M | Inv(dot(m, p))
@@ -518,15 +194,13 @@ module RwLock refines Rw {
     && m.exc.visited in m.refCounts
     && 0 <= m.exc.visited < RC_WIDTH as int
 
-    && var expected_rc := (if m.exc.visited == m.exc.t then 1 else 0);
-
     && m == dot(
       ExcHandle(m.exc),
-      RefCount(m.exc.visited, expected_rc)
+      RefCount(m.exc.visited, 0)
     )
     && m' == dot(
       ExcHandle(m.exc.(visited := m.exc.visited + 1)),
-      RefCount(m.exc.visited, expected_rc)
+      RefCount(m.exc.visited, 0)
     )
   }
 
@@ -539,8 +213,7 @@ module RwLock refines Rw {
     {
       assert dot(m', p).sharedState == dot(m, p).sharedState;
       //assert dot(m, p).refCounts[m.exc.visited] == 0;
-      var expected_rc := (if m.exc.visited == m.exc.t then 1 else 0);
-      assert CountAllRefs(dot(m, p), m.exc.visited) == expected_rc;
+      assert CountAllRefs(dot(m, p), m.exc.visited) == 0;
       assert CountSharedRefs(dot(m, p).sharedState, m.exc.visited) == 0;
       UseZeroSum(IsSharedRefFor(m.exc.visited), dot(m, p).sharedState);
     }
@@ -552,7 +225,7 @@ module RwLock refines Rw {
     && m.exc.ExcPending?
     && m.exc.visited == RC_WIDTH as int
     && m == ExcHandle(m.exc)
-    && m' == ExcHandle(ExcObtained(m.exc.t, m.exc.clean))
+    && m' == ExcHandle(ExcObtained)
     && b' == m.exc.b
   }
 
@@ -569,69 +242,24 @@ module RwLock refines Rw {
     }
   }
 
-  predicate Deposit_DowngradeExcLock(m: M, m': M, b: StoredType)
+  predicate Deposit_ReleaseExcLock(m: M, m': M, b: StoredType)
   {
     && m.M?
     && m.exc.ExcObtained?
     && m.central.CentralState?
-    && 0 <= m.exc.t < RC_WIDTH as int
     && m == dot(
       CentralHandle(m.central),
       ExcHandle(m.exc)
     )
-    && m' == dot(
+    && m' ==
       CentralHandle(m.central
-        .(flag := Available)
+        .(exc := false)
         .(stored_value := b)
-      ),
-      SharedHandle(SharedObtained(m.exc.t, b))
-    )
+      )
   }
 
-  lemma Deposit_DowngradeExcLock_Preserves(m: M, m': M, b: StoredType)
-  requires Deposit_DowngradeExcLock(m, m', b)
-  ensures deposit(m, m', b)
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p))
-    ensures I(dot(m, p)) == None
-    ensures I(dot(m', p)) == Some(b)
-    {
-      SumFilterSimp<SharedState>();
-      var ss := SharedObtained(m.exc.t, b);
-      assert forall b | b != ss :: dot(m', p).sharedState.m[b] == dot(m, p).sharedState.m[b];
-      assert dot(m', p).sharedState.m[ss] == dot(m, p).sharedState.m[ss] + 1;
-
-      var state' := dot(m', p);
-      forall ss: SharedState | state'.sharedState.m[ss] > 0
-      ensures 0 <= ss.t < RC_WIDTH as int
-      ensures (ss.SharedObtained? ==> ss.b == state'.central.stored_value)
-      {
-      }
-    }
-  }
-
-  predicate Deposit_DowngradeExcLockToClaim(m: M, m': M, b: StoredType)
-  {
-    && m.M?
-    && m.exc.ExcObtained?
-    && m.central.CentralState?
-    && 0 <= m.exc.t < RC_WIDTH as int
-    && m == dot(
-      CentralHandle(m.central),
-      ExcHandle(m.exc)
-    )
-    && m' == dot(
-      CentralHandle(m.central
-        .(flag := Claimed)
-        .(stored_value := b)
-      ),
-      ExcHandle(ExcClaim(m.exc.t, b))
-    )
-  }
-
-  lemma Deposit_DowngradeExcLockToClaim_Preserves(m: M, m': M, b: StoredType)
-  requires Deposit_DowngradeExcLockToClaim(m, m', b)
+  lemma Deposit_ReleaseExcLock_Preserves(m: M, m': M, b: StoredType)
+  requires Deposit_ReleaseExcLock(m, m', b)
   ensures deposit(m, m', b)
   {
     forall p: M | Inv(dot(m, p))
@@ -650,198 +278,6 @@ module RwLock refines Rw {
       }
     }
   }
-
-  predicate Withdraw_Alloc(m: M, m': M, b': StoredType)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && m.central.flag == Unmapped
-    && m == CentralHandle(m.central)
-
-    && m' == dot(
-      CentralHandle(m.central.(flag := Reading_ExcLock)),
-      ReadHandle(ReadPending)
-    )
-
-    && b' == m.central.stored_value
-  }
-
-  lemma Withdraw_Alloc_Preserves(m: M, m': M, b': StoredType)
-  requires Withdraw_Alloc(m, m', b')
-  ensures withdraw(m, m', b')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p))
-    ensures I(dot(m, p)) == Some(b')
-    ensures I(dot(m', p)) == None
-    {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-    }
-  }
-
-  predicate Withdraw_AllocNoRefcount(m: M, m': M, b': StoredType)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && m.central.flag == Unmapped
-    && m == CentralHandle(m.central)
-
-    && m' == dot(
-      CentralHandle(m.central.(flag := Reading)),
-      ReadHandle(ReadObtained(-1))
-    )
-
-    && b' == m.central.stored_value
-  }
-
-  lemma Withdraw_AllocNoRefcount_Preserves(m: M, m': M, b': StoredType)
-  requires Withdraw_AllocNoRefcount(m, m', b')
-  ensures withdraw(m, m', b')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p))
-    ensures I(dot(m, p)) == Some(b')
-    ensures I(dot(m', p)) == None
-    {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-    }
-  }
-
-  predicate ReadingIncCount(m: M, m': M, t: int)
-  {
-    && m.M?
-    && t in m.refCounts
-    && 0 <= t < RC_WIDTH as int
-    && m == dot(
-      ReadHandle(ReadPending),
-      RefCount(t, m.refCounts[t])
-    )
-    && m' == dot(
-      ReadHandle(ReadPendingCounted(t)),
-      RefCount(t, m.refCounts[t] + 1)
-    )
-  }
-
-  lemma ReadingIncCount_Preserves(m: M, m': M, t: int)
-  requires ReadingIncCount(m, m', t)
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-      SumFilterSimp<SharedState>();
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-      var state := dot(m, p);
-      var state' := dot(m', p);
-      forall t0 | 0 <= t0 < RC_WIDTH as int
-      ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
-      {
-        if t == t0 {
-          assert CountAllRefs(state', t0) == CountAllRefs(state, t0) + 1;
-          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
-        } else{
-          assert CountAllRefs(state', t0) == CountAllRefs(state, t0);
-          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
-        }
-      }
-    }
-  }
-
-  predicate ObtainReading(m: M, m': M)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && m.read.ReadPendingCounted?
-    && m == dot(
-      CentralHandle(m.central),
-      ReadHandle(m.read)
-    )
-    && m' == dot(
-      CentralHandle(m.central.(flag := Reading)),
-      ReadHandle(ReadObtained(m.read.t))
-    )
-  }
-
-  lemma ObtainReading_Preserves(m: M, m': M)
-  requires ObtainReading(m, m')
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-    }
-  }
-
-  predicate Deposit_ReadingToShared(m: M, m': M, b: StoredType)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && m.read.ReadObtained?
-    && m == dot(
-      CentralHandle(m.central),
-      ReadHandle(m.read)
-    )
-    && m.read.t != -1
-    && m' == dot(
-      CentralHandle(m.central.(flag := Available).(stored_value := b)),
-      SharedHandle(SharedObtained(m.read.t, b))
-    )
-  }
-
-  lemma Deposit_ReadingToShared_Preserves(m: M, m': M, b: StoredType)
-  requires Deposit_ReadingToShared(m, m', b)
-  ensures deposit(m, m', b)
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p))
-    ensures I(dot(m, p)) == None
-    ensures I(dot(m', p)) == Some(b)
-    {
-      SumFilterSimp<SharedState>();
-      var state := dot(m, p);
-      var state' := dot(m', p);
-      forall ss: SharedState | state'.sharedState.m[ss] > 0
-      ensures 0 <= ss.t < RC_WIDTH as int
-      ensures ss.SharedObtained? ==>
-            && ss.b == state'.central.stored_value
-            && !state'.exc.ExcObtained?
-            && (state'.exc.ExcPending? ==> state'.exc.visited <= ss.t)
-      {
-        if ss.SharedObtained? {
-          assert ss.b == state'.central.stored_value;
-          assert !state'.exc.ExcObtained?;
-          assert (state'.exc.ExcPending? ==> state'.exc.visited <= ss.t);
-        }
-      }
-    }
-  }
-
-  predicate Deposit_ReadingToDone(m: M, m': M, b: StoredType)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && m.read.ReadObtained?
-    && m == dot(
-      CentralHandle(m.central),
-      ReadHandle(m.read)
-    )
-    && m.read.t == -1
-    && m' == CentralHandle(m.central.(flag := Available).(stored_value := b))
-  }
-
-  lemma Deposit_ReadingToDone_Preserves(m: M, m': M, b: StoredType)
-  requires Deposit_ReadingToDone(m, m', b)
-  ensures deposit(m, m', b)
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p))
-    ensures I(dot(m, p)) == None
-    ensures I(dot(m', p)) == Some(b)
-    {
-      SumFilterSimp<SharedState>();
-    }
-  }
-
 
   predicate SharedIncCount(m: M, m': M, t: int)
   {
@@ -996,18 +432,14 @@ module RwLock refines Rw {
     && m.M?
     //&& 0 <= t < RC_WIDTH as int
     && m.central.CentralState?
-    && (m.central.flag == Available
-        || m.central.flag == Writeback
-        || m.central.flag == Claimed
-        || m.central.flag == Writeback_Claimed
-        || m.central.flag == Reading)
+    && !m.central.exc
     && m == dot(
       CentralHandle(m.central),
       SharedHandle(SharedPending(t))
     )
     && m' == dot(
       CentralHandle(m.central),
-      SharedHandle(SharedPending2(t))
+      SharedHandle(SharedObtained(t, m.central.stored_value))
     )
   }
 
@@ -1028,179 +460,6 @@ module RwLock refines Rw {
     }
   }
 
-  predicate SharedCheckReading(m: M, m': M, t: int)
-  {
-    && m.M?
-    && 0 <= t < RC_WIDTH as int
-    && m.central.CentralState?
-    && m.central.flag != Reading
-    && m.central.flag != Reading_ExcLock
-    && m == dot(
-      CentralHandle(m.central),
-      SharedHandle(SharedPending2(t))
-    )
-    && m' == dot(
-      CentralHandle(m.central),
-      SharedHandle(SharedObtained(t, m.central.stored_value))
-    )
-  }
-
-  lemma SharedCheckReading_Preserves(m: M, m': M, t: int)
-  requires SharedCheckReading(m, m', t)
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-      SumFilterSimp<SharedState>();
-
-      var state := dot(m, p);
-      var state' := dot(m', p);
-
-      assert CountAllRefs(state, t) == CountAllRefs(state', t);
-      //assert forall t0 | t0 != t :: CountAllRefs(state, t) == CountAllRefs(state', t);
-    }
-  }
-
-  predicate Deposit_Unmap(m: M, m': M, b: StoredType)
-  {
-    && m.M?
-    && m.exc.ExcObtained?
-    && m.exc.t == -1
-    && m.central.CentralState?
-    && m == dot(
-      CentralHandle(m.central),
-      ExcHandle(m.exc)
-    )
-    && m' == CentralHandle(
-      m.central.(flag := Unmapped).(stored_value := b)
-    )
-  }
-
-  lemma Deposit_Unmap_Preserves(m: M, m': M, b: StoredType)
-  requires Deposit_Unmap(m, m', b)
-  ensures deposit(m, m', b)
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p))
-    ensures I(dot(m, p)) == None
-    ensures I(dot(m', p)) == Some(b)
-    {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-    }
-  }
-
-  predicate AbandonExcPending(m: M, m': M)
-  {
-    && m.M?
-    && m.exc.ExcPending?
-    && m.exc.t == -1
-    && m.central.CentralState?
-    && m == dot(
-      CentralHandle(m.central),
-      ExcHandle(m.exc)
-    )
-    && m' == CentralHandle(m.central.(flag := Available))
-  }
-
-  lemma AbandonExcPending_Preserves(m: M, m': M)
-  requires AbandonExcPending(m, m')
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-    }
-  }
-
-  predicate Deposit_AbandonReadPending(m: M, m': M, b: StoredType)
-  {
-    && m.M?
-    && m.read.ReadPending?
-    && m.central.CentralState?
-    && m == dot(
-      CentralHandle(m.central),
-      ReadHandle(m.read)
-    )
-    && m' == CentralHandle(m.central.(flag := Unmapped).(stored_value := b))
-  }
-
-  lemma Deposit_AbandonReadPending_Preserves(m: M, m': M, b: StoredType)
-  requires Deposit_AbandonReadPending(m, m', b)
-  ensures deposit(m, m', b)
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p))
-    ensures I(dot(m, p)) == None
-    ensures I(dot(m', p)) == Some(b)
-    {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-    }
-  }
-
-  predicate MarkDirty(m: M, m': M)
-  {
-    && m.M?
-    && m.exc.ExcObtained?
-    && m.central.CentralState?
-    && m == dot(
-      CentralHandle(m.central),
-      ExcHandle(m.exc)
-    )
-    && m' == dot(
-      CentralHandle(m.central.(flag := ExcLock_Dirty)),
-      ExcHandle(m.exc.(clean := false))
-    )
-  }
-
-  lemma MarkDirty_Preserves(m: M, m': M)
-  requires MarkDirty(m, m')
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-    }
-  }
-
-  predicate ClaimToShared(m: M, m': M)
-  {
-    && m.M?
-    && m.central.CentralState?
-    && m.exc.ExcClaim?
-    && m.exc.t != -1
-
-    && m == dot(
-      CentralHandle(m.central),
-      ExcHandle(m.exc)
-    )
-
-    && m' == dot(
-      CentralHandle(m.central.(flag := 
-          if m.central.flag == Writeback_Claimed then Writeback else Available)),
-      SharedHandle(SharedObtained(m.exc.t, m.exc.b))
-    )
-  }
-
-  lemma ClaimToShared_Preserves(m: M, m': M)
-  requires ClaimToShared(m, m')
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-      SumFilterSimp<SharedState>();
-
-      var ss := SharedObtained(m.exc.t, m.exc.b);
-      assert dot(m', p).refCounts == dot(m, p).refCounts;
-      assert forall b | b != ss :: dot(m', p).sharedState.m[b] == dot(m, p).sharedState.m[b];
-      assert dot(m', p).sharedState.m[ss] == dot(m, p).sharedState.m[ss] + 1;
-      assert CountAllRefs(dot(m', p), ss.t) == CountAllRefs(dot(m, p), ss.t);
-    }
-  }
-
   function Rcs(s: nat, t: nat) : M
   requires s <= t
   decreases t - s
@@ -1212,6 +471,7 @@ module RwLock refines Rw {
   }
 }
 
+/*
 module RwLockToken {
   import opened RwLock
   import opened Constants
@@ -1991,3 +1251,4 @@ module RwLockToken {
   ensures x.val == RefCount(a, 0)
   ensures x.loc == t'.loc == t.loc
 }
+*/
