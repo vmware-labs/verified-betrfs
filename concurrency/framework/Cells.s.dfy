@@ -1,4 +1,4 @@
-module Cells {
+module {:extern "Cells"} Cells {
   type {:predefined} Cell<V>
   datatype CellContents<V> = CellContents(ghost cell: Cell<V>, v: V)
 

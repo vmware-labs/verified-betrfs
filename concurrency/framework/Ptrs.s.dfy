@@ -2,7 +2,7 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 include "GlinearOption.i.dfy"
 include "GlinearSeq.s.dfy"
 
-module Ptrs {
+module {:extern "Ptrs"} Ptrs {
   import opened NativeTypes
   import opened GlinearOption
   import opened GlinearSeq
@@ -15,7 +15,7 @@ module Ptrs {
     | PointsToEmpty(ghost ptr: Ptr)
   datatype PointsToArray<V> = PointsToArray(ghost ptr: Ptr, ghost s: seq<V>)
 
-  type {:extern} Ptr(!new, ==)
+  type {:predefined} Ptr(!new, ==)
   {
     function {:extern} as_nat() : nat
 
