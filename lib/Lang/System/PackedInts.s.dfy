@@ -5,50 +5,24 @@ include "../NativeTypes.s.dfy"
 abstract module NativePackedInt {
   import opened NativeTypes
 
-  type Integer
+  function MinValue() : int
+    ensures MinValue() <= 0
+
+  function UpperBound() : int
+    ensures MinValue() < UpperBound() <= Uint64UpperBound()
+
+  type Integer = i: int | MinValue() <= i < UpperBound()
+    witness *
 
   function method Size() : uint64
     ensures 0 < Size()
 
-  function MinValue() : int
-    ensures MinValue() <= 0
-  function UpperBound() : int
-    ensures MinValue() < UpperBound()
-
-  // These exist because there's no way to promise dafny that Integer is an int type.
-  function fromInt(x: int) : (result: Integer)
-    requires MinValue() <= x < UpperBound()
-  function toInt(x: Integer) : (result: int)
-    ensures MinValue() <= result < UpperBound()
-  lemma fromtoInverses()
-    ensures forall x :: fromInt(toInt(x)) == x
-    ensures forall y | MinValue() <= y < UpperBound() :: toInt(fromInt(y)) == y
-  predicate method fitsInUint64(x: Integer)
-    ensures fitsInUint64(x) <==> 0 <= toInt(x) < 0x1_0000_0000_0000_0000
   predicate method fitsInInteger(x: uint64)
     ensures fitsInInteger(x) <==> MinValue() <= x as int < UpperBound()
-  function method fromUint64(x: uint64) : (result: Integer)
-    requires MinValue() <= x as int < UpperBound()
-    ensures result == fromInt(x as nat)
-  function method toUint64(x: Integer) : (result: uint64)
-    requires 0 <= toInt(x) < 0x1_0000_0000_0000_0000
-    ensures MinValue() <= result as int < UpperBound()
-    ensures result as int == toInt(x)
 
-  function {:opaque} fromIntSeq(s: seq<int>) : (result: seq<Integer>)
-    requires forall i | 0 <= i < |s| :: fromInt.requires(s[i])
-    ensures |result| == |s|
-    ensures forall i | 0 <= i < |result| :: result[i] == fromInt(s[i])
+  function method toUint64(i: Integer): uint64
   {
-    seq(|s|, i requires 0 <= i < |s| => fromInt(s[i]))
-  }
-
-  function {:opaque} toIntSeq(s: seq<Integer>) : (result: seq<int>)
-    requires forall i | 0 <= i < |s| :: toInt.requires(s[i])
-    ensures |result| == |s|
-    ensures forall i | 0 <= i < |result| :: result[i] == toInt(s[i])
-  {
-    seq(|s|, i requires 0 <= i < |s| => toInt(s[i]))
+    i as uint64
   }
 
   function unpack(s: seq<byte>) : Integer
@@ -102,31 +76,20 @@ abstract module NativePackedInt {
 }
 
 module NativePackedByte refines NativePackedInt{
-  type Integer = byte
+
+  function MinValue() : int { 0 }
+
+  function UpperBound() : int { 256 }
 
   function method Size() : uint64 { 1 }
-  function MinValue() : int { 0 }
-  function UpperBound() : int { 0x100 }
 
-  function fromInt(x: int) : (result: Integer) {
-    x as byte
-  }
+  // function method toUint64(x: Integer) : uint64 {
+  //   x as uint64
+  // }
 
-  function toInt(x: Integer) : int {
-    x as int
-  }
-
-  function method fromUint64(x: uint64) : (result: Integer) {
-    x as byte
-  }
-
-  function method toUint64(x: Integer) : uint64 {
-    x as uint64
-  }
-
-  function {:opaque} unpack(s: seq<byte>) : Integer {
-    s[0]
-  }
+  // function {:opaque} unpack(s: seq<byte>) : Integer {
+  //   s[0] as Integer
+  // }
 
   method {:extern} Unpack(shared packed: seq<byte>, offset: uint64) returns (i: Integer)
   method {:extern} Pack(i: Integer, linear inout s: seq<byte>, offset: uint64)
@@ -137,33 +100,26 @@ module NativePackedByte refines NativePackedInt{
 }
 
 module NativePackedUint32 refines NativePackedInt {
-  type Integer = uint32
 
   function MinValue() : int { 0 }
+
   function UpperBound() : int { 0x1_0000_0000 }
+
   function method Size() : uint64 { 4 }
 
-  function fromInt(x: int) : (result: Integer) {
-    x as uint32
-  }
+  // function method toUint64(x: Integer) : uint64 {
+  //   x as uint64
+  // }
 
-  function toInt(x: Integer) : int {
-    x as int
-  }
-
-  function method fromUint64(x: uint64) : (result: Integer) {
-    x as uint32
-  }
-
-  function method toUint64(x: Integer) : uint64 {
-    x as uint64
-  }
+  // function method fromUint64(x: uint64) : (result: Integer) {
+  //   x as Integer
+  // }
 
   function {:opaque} unpack(s: seq<byte>) : Integer {
-    (s[0] as uint32)
-    + (s[1] as uint32 * 0x1_00)
-    + (s[2] as uint32 * 0x1_00_00)
-    + (s[3] as uint32 * 0x1_00_00_00)
+    (s[0] as Integer)
+    + (s[1] as Integer * 0x1_00)
+    + (s[2] as Integer * 0x1_00_00)
+    + (s[3] as Integer * 0x1_00_00_00)
   }
 
   // framework/Framework.cpp
@@ -176,38 +132,39 @@ module NativePackedUint32 refines NativePackedInt {
 }
 
 module NativePackedUint64 refines NativePackedInt{
-  type Integer = uint64
 
   function MinValue() : int { 0 }
+
   function UpperBound() : int { 0x1_0000_0000_0000_0000 }
+
   function method Size() : uint64 { 8 }
 
-  function fromInt(x: int) : (result: Integer) {
-    x as uint64
-  }
+  // function fromInt(x: int) : (result: Integer) {
+  //   x as uint64
+  // }
 
-  function toInt(x: Integer) : int {
-    x as int
-  }
+  // function toInt(x: Integer) : int {
+  //   x as int
+  // }
 
-  function method fromUint64(x: uint64) : (result: Integer) {
-    x
-  }
+  // function method fromUint64(x: uint64) : (result: Integer) {
+  //   x
+  // }
 
-  function method toUint64(x: Integer) : uint64 {
-    x
-  }
+  // function method toUint64(x: Integer) : uint64 {
+  //   x
+  // }
 
   function {:opaque} unpack(s: seq<byte>) : Integer
   {
-    (s[0] as uint64)
-    + (s[1] as uint64 * 0x1_00)
-    + (s[2] as uint64 * 0x1_00_00)
-    + (s[3] as uint64 * 0x1_00_00_00)
-    + (s[4] as uint64 * 0x1_00_00_00_00)
-    + (s[5] as uint64 * 0x1_00_00_00_00_00)
-    + (s[6] as uint64 * 0x1_00_00_00_00_00_00)
-    + (s[7] as uint64 * 0x1_00_00_00_00_00_00_00)
+    (s[0] as Integer)
+    + (s[1] as Integer * 0x1_00)
+    + (s[2] as Integer * 0x1_00_00)
+    + (s[3] as Integer * 0x1_00_00_00)
+    + (s[4] as Integer * 0x1_00_00_00_00)
+    + (s[5] as Integer * 0x1_00_00_00_00_00)
+    + (s[6] as Integer * 0x1_00_00_00_00_00_00)
+    + (s[7] as Integer * 0x1_00_00_00_00_00_00_00)
   }
 
   method {:extern} Unpack(shared packed: seq<byte>, offset: uint64) returns (i: Integer)

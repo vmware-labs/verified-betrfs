@@ -1,5 +1,23 @@
 module {:extern} Options {
   datatype Option<V> = None | Some(value:V)
+  {
+    function method IsFailure() : bool
+    {
+      None?
+    }
+    
+    function method Extract(): V
+      requires !IsFailure()
+    {
+      value
+    }
+
+    function method PropagateFailure<U>(): Option<U>
+    requires IsFailure()
+    {
+      None
+    }
+  }
 
   function MapOption<V0, V1>(opt: Option<V0>, f: V0 ~> V1) : (result: Option<V1>)
   requires opt.Some? ==> f.requires(opt.value)

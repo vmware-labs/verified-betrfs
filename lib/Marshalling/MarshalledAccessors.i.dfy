@@ -899,15 +899,15 @@ refines SeqMarshalling(elementMarshalling) {
 
   predicate lengthable(cfg: Config, data: mseq<byte>) {
     && cfg.totalSize as nat <= |data|
-    && var ilen := LengthMarshalling.parse(cfg.lengthCfg, data[..sizeOfLengthField()]);
-    && LengthInt.fitsInUint64(ilen)
+    // && var ilen := LengthMarshalling.parse(cfg.lengthCfg, data[..sizeOfLengthField()]);
+    // && LengthInt.fitsInUint64(ilen)
   }
 
   function length(cfg: Config, data: mseq<byte>) : nat
     ensures sizeOfLengthField() as nat <= sizeOfLengthField() as nat + length(cfg, data) * UniformSize(cfg) as nat
   {
-    var len := LengthInt.toInt(LengthMarshalling.parse(cfg.lengthCfg, data[..sizeOfLengthField()]));
-    NatMulNatIsNat(len, UniformSize(cfg) as nat);
+    var len := LengthMarshalling.parse(cfg.lengthCfg, data[..sizeOfLengthField()]);
+    NatMulNatIsNat(LengthInt.toUint64(len) as nat, UniformSize(cfg) as nat);
     NLarith.DivLe(|data| - sizeOfLengthField() as nat,  UniformSize(cfg) as nat);
     len
   }
@@ -937,11 +937,11 @@ refines SeqMarshalling(elementMarshalling) {
       return None;
     }
     var l' := LengthMarshalling.Parse(cfg.lengthCfg, data[..sizeOfLengthField()]);
-    if LengthInt.fitsInUint64(l') {
+    // if LengthInt.fitsInUint64(l') {
       return Some(LengthInt.toUint64(l'));
-    } else {
-      olen := None;
-    }
+    // } else {
+    //   olen := None;
+    // }
   }
 
   predicate gettable(cfg: Config, data: mseq<byte>, idx: nat) {
@@ -1080,10 +1080,10 @@ refines SeqMarshalling(elementMarshalling) {
   method Resize(cfg: Config, slice: Slice, linear inout data: mseq<byte>, newlen: uint64)
     ensures forall i | slice.start + sizeOfLengthField() <= i < |data| as uint64 :: data[i] == old_data[i]
   {
-    var newend := LengthMarshalling.Marshall(cfg.lengthCfg, LengthInt.fromUint64(newlen), inout data, slice.start);
+    var newend := LengthMarshalling.Marshall(cfg.lengthCfg, newlen as LengthInt.Integer, inout data, slice.start);
 
     assert data[slice.start..slice.end][..LengthInt.Size()] == data[slice.start..slice.start + LengthInt.Size()];
-    LengthInt.fromtoInverses();
+    // LengthInt.fromtoInverses();
 
     forall i: nat | gettable(cfg, slice.I(old_data), i)
       ensures getData(cfg, slice.I(data), i) == getData(cfg, slice.I(old_data), i)
@@ -1173,10 +1173,9 @@ refines SeqMarshalling(elementMarshalling) {
   {
     end := start + cfg.totalSize;
     var slice := Slice(start, end);
-    var ilen' := LengthInt.fromUint64(|value| as uint64);
+    var ilen' := |value|;
     var dummy' := LengthMarshalling.Marshall(cfg.lengthCfg, ilen', inout data, start);
 
-    LengthInt.fromtoInverses();
     Seq.lemma_seq_slice_slice(data,
       start as nat,
       end as nat,
@@ -1300,7 +1299,7 @@ refines ResizableUniformSizedElementSeqMarshalling(lengthInt, IntegerMarshalling
   method Marshall(cfg: Config, value: UnmarshalledType, linear inout data: mseq<byte>, start: uint64)
     returns (end: uint64)
   {
-    var ilen := LengthInt.fromUint64(|value| as uint64);
+    var ilen := |value|;
     var dummy := LengthMarshalling.Marshall(cfg.lengthCfg, ilen, inout data, start);
     ghost var tmp := data[start..dummy];
     Int.Pack_Seq(value, inout data, start + sizeOfLengthField());
@@ -1308,7 +1307,7 @@ refines ResizableUniformSizedElementSeqMarshalling(lengthInt, IntegerMarshalling
     end := start + sz;
 
     assert data[start..end][..sizeOfLengthField()] == tmp;
-    LengthInt.fromtoInverses();
+    // LengthInt.fromtoInverses();
     Seq.lemma_seq_slice_slice(data,
       start as nat,
       end as nat,
@@ -1425,7 +1424,7 @@ refines SeqMarshalling(elt) {
     requires validConfig(cfg)
     requires BoundaryElementGettable(cfg, data, i)
   {
-    BoundaryInt.toInt(BoundarySeqMarshalling.getElt(BSMCfg(cfg), data, i))
+    BoundarySeqMarshalling.getElt(BSMCfg(cfg), data, i) as int
   }
 
   function ElementDataEnd(cfg: Config, data: mseq<byte>, i: nat) : int
@@ -1435,7 +1434,7 @@ refines SeqMarshalling(elt) {
     if i == 0 then
       totalSize(cfg) as nat
     else
-      BoundaryInt.toInt(BoundarySeqMarshalling.getElt(BSMCfg(cfg), data, i - 1))
+      BoundarySeqMarshalling.getElt(BSMCfg(cfg), data, i - 1)
   }
 
   predicate gettable(cfg: Config, data: mseq<byte>, idx: nat)
@@ -1456,18 +1455,14 @@ refines SeqMarshalling(elt) {
   {
     var olen := TryLength(cfg, slice.I(data));
     if olen.Some? && idx < maxLength(cfg) && idx < olen.value {
-      var istart := BoundarySeqMarshalling.GetElt(BSMCfg(cfg), slice.I(data), idx);
-      if !BoundaryInt.fitsInUint64(istart) {
-        return None;
-      }
+      var istart :BoundaryInt.Integer := BoundarySeqMarshalling.GetElt(BSMCfg(cfg), slice.I(data), idx);
       var start := BoundaryInt.toUint64(istart);
+
       var end := totalSize(cfg);
+
       if 0 < idx {
         var iend := BoundarySeqMarshalling.GetElt(BSMCfg(cfg), slice.I(data), idx - 1);
-        if !BoundaryInt.fitsInUint64(iend) {
-          return None;
-        }
-        end := BoundaryInt.toUint64(iend);
+        end :=  BoundaryInt.toUint64(iend);
       }
       if start <= end <= totalSize(cfg) <= |data| as uint64 {
         return Some(slice.sub(start, end));
@@ -1546,7 +1541,7 @@ refines SeqMarshalling(elt) {
     requires tableable(cfg, data)
   {
     var bt := btable(cfg, data);
-    seq(|bt|, i requires 0 <= i < |bt| => BoundaryInt.toInt(bt[i]))
+    seq(|bt|, i requires 0 <= i < |bt| => bt[i] as int)
   }
 
   predicate validTable(cfg: Config, data: mseq<byte>)
@@ -1612,7 +1607,7 @@ refines SeqMarshalling(elt) {
     requires appendable(cfg, data, value)
     ensures length(cfg, data) + 1 < Uint64UpperBound()
     ensures BoundaryInt.fitsInInteger(length(cfg, data) as uint64 + 1)
-    ensures BoundarySeqMarshalling.appendable(BSMCfg(cfg), data, BoundaryInt.fromUint64(appendOffset(cfg, data, value)))
+    ensures BoundarySeqMarshalling.appendable(BSMCfg(cfg), data, appendOffset(cfg, data, value) as BoundaryInt.Integer)
   {
     var len := length(cfg, data);
     NLarith.DistributeLeft(len, 1, BoundaryInt.Size() as nat);
@@ -1636,25 +1631,25 @@ refines SeqMarshalling(elt) {
     BoundarySeqMarshalling.index_bounds_facts(BSMCfg(cfg), len as nat - 1);
     var tbsz := sizeOfLengthField(cfg) + len * sizeOfBoundaryEntry(cfg);
 
-    if !BoundaryInt.fitsInUint64(tbl[len-1]) || BoundaryInt.toUint64(tbl[len-1]) < tbsz {
+    if BoundaryInt.toUint64(tbl[len-1]) < tbsz {
       return false;
     }
 
-    if !BoundaryInt.fitsInUint64(tbl[0]) || totalSize(cfg) < BoundaryInt.toUint64(tbl[0]) {
+    if totalSize(cfg) < BoundaryInt.toUint64(tbl[0]) {
       return false;
     }
 
     var i := 0;
     while i < len - 1
       invariant 0 <= i < len
-      invariant forall j | 0 <= j <= i :: BoundaryInt.fitsInUint64(tbl[j])
-      invariant forall i', j' | 0 <= i' <= j' <= i :: BoundaryInt.toInt(tbl[j']) <= BoundaryInt.toInt(tbl[i'])
+      // invariant forall j | 0 <= j <= i :: BoundaryInt.fitsInUint64(tbl[j])
+      invariant forall i', j' | 0 <= i' <= j' <= i :: tbl[j'] <= tbl[i']
     {
-      assert BoundaryInt.toInt(tbl[i]) == table(cfg, data)[i];
-      assert BoundaryInt.toInt(tbl[i+1]) == table(cfg, data)[i+1];
-      if !BoundaryInt.fitsInUint64(tbl[i+1]) {
-        return false;
-      }
+      assert tbl[i] == table(cfg, data)[i];
+      assert tbl[i+1] == table(cfg, data)[i+1];
+      // if !BoundaryInt.fitsInUint64(tbl[i+1]) {
+      //   return false;
+      // }
       if BoundaryInt.toUint64(tbl[i]) < BoundaryInt.toUint64(tbl[i+1]) {
         return false;
       }
@@ -1758,12 +1753,12 @@ refines SeqMarshalling(elt) {
     elementsIdentity(cfg, slice.I(old_data), middle);
 
 
-    var istart := BoundaryInt.fromUint64(start);
-    BoundarySeqMarshalling.Append(BSMCfg(cfg), slice, inout data, istart);
+    // var istart := BoundaryInt.fromUint64(start);
+    BoundarySeqMarshalling.Append(BSMCfg(cfg), slice, inout data, start as BoundaryInt.Integer);
 
     ghost var t := table(cfg, middle);
     ghost var t' := table(cfg, slice.I(data));
-    BoundaryInt.fromtoInverses();
+    // BoundaryInt.fromtoInverses();
     forall i | 0 <= i < |t|
       ensures t'[i] == t[i]
     {

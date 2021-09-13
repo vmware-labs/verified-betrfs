@@ -1,482 +1,556 @@
 include "MarshalledAccessors.i.dfy"
 include "../Base/sequences.i.dfy"
 
-abstract module Tuple2Marshalling refines Marshalling {
-  import FstMarshalling : Marshalling
-  import SndMarshalling : Marshalling
-  import OffsetMarshalling : IntegerMarshalling
+module Tuple2Marshalling(
+  BoundaryInt: NativePackedInt,
+  ElemMarshalling0 : Marshalling,
+  ElemMarshalling1 : Marshalling)
+  refines Marshalling {
+
   import Sequences
 
-  type UnmarshalledType = (FstMarshalling.UnmarshalledType, SndMarshalling.UnmarshalledType)
-  type SizeType = OffsetMarshalling.UnmarshalledType
+  import BSM = IntegerSeqMarshalling(BoundaryInt)
 
-  function method getTagEnd(): uint64
+  type Boundary = BoundaryInt.Integer
+  type BoundaryTable = mseq<Boundary>
+  type UnmarshalledType = (ElemMarshalling0.UnmarshalledType, ElemMarshalling1.UnmarshalledType)
+
+  datatype Config = Config(bsmCfg: BSM.Config,
+    elem0Cfg: ElemMarshalling0.Config,
+    elem1Cfg: ElemMarshalling1.Config)
+
+  const eltCount := 2;
+
+  predicate validConfig(cfg: Config)
   {
-    OffsetMarshalling.Int.Size() as uint64
+    && BSM.validConfig(cfg.bsmCfg)
+    && ElemMarshalling0.validConfig(cfg.elem0Cfg)
+    && ElemMarshalling1.validConfig(cfg.elem1Cfg)
   }
 
-  predicate parsable(data: mseq<byte>)
+  function sizeOfTable(): nat
   {
-    var tagEnd := getTagEnd() as int;
-    && |data| >= tagEnd
-    && OffsetMarshalling.parsable(data[..tagEnd])
-    && var fstEnd := OffsetMarshalling.Int.toInt(OffsetMarshalling.parse(data[..tagEnd]));
-    && tagEnd <= fstEnd <= |data| 
-    && FstMarshalling.parsable(data[tagEnd..fstEnd])
-    && SndMarshalling.parsable(data[fstEnd..])
+    (eltCount - 1) as nat * BoundaryInt.Size() as nat
   }
 
-  function parse(data: mseq<byte>) : UnmarshalledType
+  predicate sizeOfTableBounded()
   {
-    var tagEnd := getTagEnd() as int;
-    var fstEnd := OffsetMarshalling.Int.toInt(OffsetMarshalling.parse(data[..tagEnd]));
-    var fstValue := FstMarshalling.parse(data[tagEnd..fstEnd]);
-    var sndValue := SndMarshalling.parse(data[fstEnd..]);
-    (fstValue, sndValue)
+    sizeOfTable() < Uint64UpperBound()
   }
 
-  method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
+  function method SizeOfTable() : (size: uint64)
+    requires sizeOfTableBounded()
+    ensures size as nat == sizeOfTable()
   {
-    var tagEnd := getTagEnd();
+    (eltCount - 1) as uint64 * BoundaryInt.Size()
+  }
 
-    if tagEnd > |data| as uint64 {
+  predicate offsetTableParsable(bsmCfg: BSM.Config, data: mseq<byte>)
+  {
+    && sizeOfTableBounded()
+    && sizeOfTable() <= |data|
+  }
+
+  function parseOffsetTable(bsmCfg: BSM.Config, data: mseq<byte>): (table : mseq<Boundary>)
+    requires offsetTableParsable(bsmCfg, data)
+    ensures table == BoundaryInt.unpack_Seq(data[..sizeOfTable()], eltCount - 1)
+  {
+    var tableData := data[.. sizeOfTable()];
+    var table: mseq<Boundary> := BSM.parse(bsmCfg, tableData);
+    BSM.parse_is_unpack_Seq(bsmCfg, tableData);
+    assert BSM.length(bsmCfg, tableData) == |tableData| / BoundaryInt.Size() as nat;
+    table
+  }
+
+  predicate parsable(cfg: Config, data: mseq<byte>)
+  {
+    && offsetTableParsable(cfg.bsmCfg, data)
+    && var table := parseOffsetTable(cfg.bsmCfg, data);
+    && var bound0 := table[0];
+    && sizeOfTable() <= bound0 <= |data|
+    && ElemMarshalling0.parsable(cfg.elem0Cfg, data[sizeOfTable()..bound0])
+    && ElemMarshalling1.parsable(cfg.elem1Cfg, data[bound0..])
+  }
+
+  function parse(cfg: Config, data: mseq<byte>) : UnmarshalledType
+  {
+    var table := parseOffsetTable(cfg.bsmCfg, data);
+    var bound0 := table[0];
+    var elt0 := ElemMarshalling0.parse(cfg.elem0Cfg, data[sizeOfTable()..bound0]);
+    var elt1 := ElemMarshalling1.parse(cfg.elem1Cfg, data[bound0..]);
+    (elt0, elt1)
+  }
+
+  method TryParse(cfg: Config, data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
+  {
+    var tableEnd := SizeOfTable();
+
+    if tableEnd > |data| as uint64 {
       return None;
     }
 
-    var fstEndOpt := OffsetMarshalling.TryParse(data[..tagEnd]);
-    
-    if fstEndOpt.None? {
+    var table :- BSM.TryParse(cfg.bsmCfg, data[..tableEnd]);
+    assert table == parseOffsetTable(cfg.bsmCfg, data);
+
+    var bound0 := BoundaryInt.toUint64(table[0]);
+
+    if bound0 > |data| as uint64 || bound0 < tableEnd {
       return None;
     }
 
-    if !OffsetMarshalling.Int.fitsInUint64(fstEndOpt.value) {
-      return None;
-    }
+    var value0 :- ElemMarshalling0.TryParse(cfg.elem0Cfg, data[tableEnd..bound0]);
+    var value1 :- ElemMarshalling1.TryParse(cfg.elem1Cfg, data[bound0..]);
 
-    var fstEnd := OffsetMarshalling.Int.toUint64(fstEndOpt.value);
-
-    if fstEnd > |data| as uint64 || fstEnd < tagEnd {
-      return None;
-    }
-
-    var fstOvalue := FstMarshalling.TryParse(data[tagEnd..fstEnd]);
-    var sndOvalue := SndMarshalling.TryParse(data[fstEnd..]);
-    if fstOvalue.Some? && sndOvalue.Some? {
-      ovalue := Some((fstOvalue.value, sndOvalue.value));
-    } else {
-      ovalue := None;
-    }
+    ovalue := Some((value0, value1));
   }
 
-  method Parsable(data: mseq<byte>) returns (p: bool)
+  method Parsable(cfg: Config, data: mseq<byte>) returns (p: bool)
   {
-    var tagEnd := getTagEnd();
+    var tableEnd := SizeOfTable();
 
-    if tagEnd > |data| as uint64 {
+    if tableEnd > |data| as uint64 {
       return false;
     }
 
-    var fstEndOpt := OffsetMarshalling.TryParse(data[..tagEnd]);
-    
-    if fstEndOpt.None? {
+    var tableOpt := BSM.TryParse(cfg.bsmCfg, data[..tableEnd]);
+
+    if tableOpt.None? {
       return false;
     }
 
-    if !OffsetMarshalling.Int.fitsInUint64(fstEndOpt.value) {
+    var table := tableOpt.value;
+    assert table == parseOffsetTable(cfg.bsmCfg, data);
+
+    var bound0 := BoundaryInt.toUint64(table[0]);
+
+    if bound0 > |data| as uint64 || bound0 < tableEnd {
       return false;
     }
 
-    var fstEnd := OffsetMarshalling.Int.toUint64(fstEndOpt.value);
-
-    if fstEnd > |data| as uint64 || fstEnd < tagEnd {
-      return false;
-    }
-
-    var fstParsable := FstMarshalling.Parsable(data[tagEnd..fstEnd]);
-    var sndParsable := SndMarshalling.Parsable(data[fstEnd..]);
+    var fstParsable := ElemMarshalling0.Parsable(cfg.elem0Cfg, data[tableEnd..bound0]);
+    var sndParsable := ElemMarshalling1.Parsable(cfg.elem1Cfg, data[bound0..]);
 
     return fstParsable && sndParsable;
   }
 
-  method Parse(data: mseq<byte>) returns (value: UnmarshalledType)
+  method Parse(cfg: Config, data: mseq<byte>) returns (value: UnmarshalledType)
   {
-    var tagEnd := getTagEnd();
-    var isize := OffsetMarshalling.Parse(data[..tagEnd]);
-    var fstEnd := OffsetMarshalling.Int.toUint64(isize); 
+    var tableEnd := SizeOfTable();
+    var table := BSM.Parse(cfg.bsmCfg, data[..tableEnd]);
+    assert table == parseOffsetTable(cfg.bsmCfg, data);
+    var bound0 := table[0];
 
-    var fstValue := FstMarshalling.Parse(data[tagEnd..fstEnd]);
-    var sndValue := SndMarshalling.Parse(data[fstEnd..]);
-    value := (fstValue, sndValue);
+    var value0 := ElemMarshalling0.Parse(cfg.elem0Cfg, data[tableEnd..bound0]);
+    var value1 := ElemMarshalling1.Parse(cfg.elem1Cfg, data[bound0..]);
+    return (value0, value1);
   }
 
-  predicate marshallable(value: UnmarshalledType)
+  predicate marshallable(cfg: Config, value: UnmarshalledType)
   {
-    && var (fstValue, sndValue) := value;
-    && FstMarshalling.marshallable(fstValue)
-    && SndMarshalling.marshallable(sndValue)
-    && var fstSize := FstMarshalling.size(fstValue); var tagEnd := getTagEnd();
-    && OffsetMarshalling.Int.MinValue() <= tagEnd as int + fstSize < OffsetMarshalling.Int.UpperBound()
-    && OffsetMarshalling.marshallable(OffsetMarshalling.Int.fromInt(fstSize))
-  }
-
-  function size(value: UnmarshalledType) : nat
-  {
-    var (fstValue, sndValue) := value;
-    getTagEnd() as nat + FstMarshalling.size(fstValue) + SndMarshalling.size(sndValue)
-  }
-
-  method Size(value: UnmarshalledType) returns (sz: uint64)
-  {
-    var (fstValue, sndValue) := value;
-    var fstSz := FstMarshalling.Size(fstValue);
-    var sndSz := SndMarshalling.Size(sndValue);
-    sz := getTagEnd() + fstSz + sndSz;
-  }
-
-  method Marshall(value: UnmarshalledType, linear data: mseq<byte>, start: uint64)
-    returns (linear newdata: mseq<byte>, end: uint64)
-  {
-    var (fstValue, sndValue) := value;
-    var tagEnd : uint64 := getTagEnd();
-    var fstSz := FstMarshalling.Size(fstValue);
-    var fstEnd := tagEnd + fstSz;
-
-    newdata, end := OffsetMarshalling.Marshall(OffsetMarshalling.Int.fromUint64(fstEnd), data, start);
-    ghost var newdata1 :seq<byte>, end1 := newdata, end;
-
-    newdata, end := FstMarshalling.Marshall(fstValue, newdata, end);
-    ghost var newdata2 :seq<byte>, end2 := newdata, end;
-
-    newdata, end := SndMarshalling.Marshall(sndValue, newdata, end);
-
-    assert newdata1[start..end1] == newdata[start..end1];
-    assert newdata2[end1..end2] == newdata[end1..end2];
-
-    Sequences.lemma_seq_slice_slice(newdata, start as int, end as int, tagEnd as int, end2 as int- start as int);
-    assert newdata[start..end][tagEnd..end2 - start] == newdata[end1..end2];
-
-    ghost var size := OffsetMarshalling.Int.toInt(OffsetMarshalling.parse(newdata[start..end1]));
-    OffsetMarshalling.Int.fromtoInverses();
-
-    assert newdata[start..end][..tagEnd] == newdata[start..end1];
-    assert size == fstEnd as int;
-  }
-
-  method GetFst(data: mseq<byte>) returns (edata: mseq<byte>)
-    requires parsable(data)
-    ensures FstMarshalling.parsable(edata)
-    ensures FstMarshalling.parse(edata) == parse(data).0
-  {
-    var tagEnd := getTagEnd();
-    var ifstEnd := OffsetMarshalling.Parse(data[..tagEnd]);
-    var fstEnd := OffsetMarshalling.Int.toUint64(ifstEnd); 
-
-    edata := data[tagEnd..fstEnd];
-  }
-
-  method GetSnd(data: mseq<byte>) returns (edata: mseq<byte>)
-    requires parsable(data)
-    ensures SndMarshalling.parsable(edata)
-    ensures SndMarshalling.parse(edata) == parse(data).1
-  {
-    var tagEnd := getTagEnd();
-    var ifstEnd := OffsetMarshalling.Parse(data[..tagEnd]);
-    var fstEnd := OffsetMarshalling.Int.toUint64(ifstEnd); 
-
-    edata := data[fstEnd..];
-  }
-}
-
-abstract module Tuple3Marshalling refines Marshalling {
-  import ElemMarshalling0 : Marshalling
-  import ElemMarshalling1 : Marshalling
-  import ElemMarshalling2 : Marshalling
-  import TableMarshalling : IntegerSeqMarshalling
-  import Sequences
-  import BoundaryInt = TableMarshalling.Int
-
-  type UnmarshalledType = (ElemMarshalling0.UnmarshalledType, ElemMarshalling1.UnmarshalledType, ElemMarshalling2.UnmarshalledType)
-
-  type Boundary = BoundaryInt.Integer
-  type BoundaryTable = mseq<Boundary>
-
-  function method SizeOfBoundaryEntry() : uint64
-  {
-    BoundaryInt.Size()
-  }
-
-  function method sizeOfTable() : nat
-  {
-    2 * SizeOfBoundaryEntry() as nat
-  }
-
-  predicate parsable(data: mseq<byte>)
-  {
-    && var tableSize := sizeOfTable();
-    && tableSize < Uint64UpperBound()
-    && |data| >= tableSize
-    && TableMarshalling.parsable(data[..tableSize])
-    && var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
-
-    && var bound0 := BoundaryInt.toInt(table[0]);
-    && tableSize <= bound0 <= |data|
-    && ElemMarshalling0.parsable(data[tableSize..bound0])
-
-    && var bound1 := BoundaryInt.toInt(table[1]);
-    && bound0 <= bound1 <= |data|
-    && ElemMarshalling1.parsable(data[bound0..bound1])
-
-    && ElemMarshalling2.parsable(data[bound1..])
-  }
-
-  function parse(data: mseq<byte>) : UnmarshalledType
-  {
-    var tableSize := sizeOfTable();
-    var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
-    var bound0 := BoundaryInt.toInt(table[0]);
-    var elem0 := ElemMarshalling0.parse(data[tableSize..bound0]);
-    var bound1 := BoundaryInt.toInt(table[1]);
-    var elem1 := ElemMarshalling1.parse(data[bound0..bound1]);
-    var elem2 := ElemMarshalling2.parse(data[bound1..]);
-    (elem0, elem1, elem2)
-  }
-
-  method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
-  {
-    var entrySize := SizeOfBoundaryEntry();
-
-    if entrySize >= 0x8000_0000_0000_0000 {
-      return None;
-    }
-
-    var tableSize := entrySize * 2;
-
-    if tableSize > |data| as uint64 {
-      return None;
-    }
-
-    var tableOpt := TableMarshalling.TryParse(data[..tableSize]);
-    
-    if tableOpt.None? {
-      return None;
-    }
-
-    var table :mseq<Boundary> := tableOpt.value;
-  
-    if !BoundaryInt.fitsInUint64(table[0]) 
-      || !BoundaryInt.fitsInUint64(table[1]) {
-      return None;
-    }
-
-    var bound0 := BoundaryInt.toUint64(table[0]);
-    var bound1 := BoundaryInt.toUint64(table[1]);
-
-    if bound0 > |data| as uint64 || bound0 < tableSize {
-      return None;
-    }
-
-    if bound1 > |data| as uint64 || bound1 < bound0 {
-      return None;
-    }
-
-    var elemOpt0 := ElemMarshalling0.TryParse(data[tableSize..bound0]);
-    var elemOpt1 := ElemMarshalling1.TryParse(data[bound0..bound1]);
-    var elemOpt2 := ElemMarshalling2.TryParse(data[bound1..]);
-
-    if elemOpt0.None? || elemOpt1.None? || elemOpt2.None? {
-      return None;
-    }
-
-    return Some((elemOpt0.value, elemOpt1.value, elemOpt2.value));
-  }
-
-  method Parsable(data: mseq<byte>) returns (p: bool)
-  {
-    var entrySize := SizeOfBoundaryEntry();
-
-    if entrySize >= 0x8000_0000_0000_0000 {
-      return false;
-    }
-
-    var tableSize := sizeOfTable() as uint64;
-
-    if tableSize > |data| as uint64 {
-      return false;
-    }
-
-    var tableOpt := TableMarshalling.TryParse(data[..tableSize]);
-    
-    if tableOpt.None? {
-      return false;
-    }
-
-    var table :mseq<Boundary> := tableOpt.value;
-
-    if !BoundaryInt.fitsInUint64(table[0]) 
-      || !BoundaryInt.fitsInUint64(table[1]) {
-      return false;
-    }
-
-    var bound0 := BoundaryInt.toUint64(table[0]);
-    var bound1 := BoundaryInt.toUint64(table[1]);
-
-    if bound0 > |data| as uint64 || bound0 < tableSize {
-      return false;
-    }
-
-    if bound1 > |data| as uint64 || bound1 < bound0 {
-      return false;
-    }
-
-    var elemParsable0 := ElemMarshalling0.Parsable(data[tableSize..bound0]);
-    var elemParsable1 := ElemMarshalling1.Parsable(data[bound0..bound1]);
-    var elemParsable2 := ElemMarshalling2.Parsable(data[bound1..]);
-
-    if !elemParsable0 || !elemParsable1 || !elemParsable2 {
-      return false;
-    }
-
-    return true;
-  }
-
-  method Parse(data: mseq<byte>) returns (value: UnmarshalledType)
-  {
-    var tableSize := sizeOfTable() as uint64;
-    var table :mseq<Boundary> := TableMarshalling.Parse(data[..tableSize]);
-  
-    var bound0 := BoundaryInt.toUint64(table[0]);
-    var bound1 := BoundaryInt.toUint64(table[1]);
-
-    var elem0 := ElemMarshalling0.Parse(data[tableSize..bound0]);
-    var elem1 := ElemMarshalling1.Parse(data[bound0..bound1]);
-    var elem2 := ElemMarshalling2.Parse(data[bound1..]);
-    return (elem0, elem1, elem2);
-  }
-
-  predicate marshallable(value: UnmarshalledType)
-  {
-    && var (elem0, elem1, elem2) := value;
-    && ElemMarshalling0.marshallable(elem0)
-    && ElemMarshalling1.marshallable(elem1)
-    && ElemMarshalling2.marshallable(elem2)
-    && var tableSize := sizeOfTable();
-    var size0 := ElemMarshalling0.size(elem0);
-    var size1 := ElemMarshalling1.size(elem1);
-    var bound0 := tableSize + size0;
-    var bound1 := bound0 + size1;
+    && var (value0, value1) := value;
+    && ElemMarshalling0.marshallable(cfg.elem0Cfg, value0)
+    && ElemMarshalling1.marshallable(cfg.elem1Cfg, value1)
+    && var tableEnd := sizeOfTable();
+    && var bound0 := ElemMarshalling0.size(cfg.elem0Cfg, value0) as int + tableEnd;
+    && var bound1 := ElemMarshalling0.size(cfg.elem1Cfg, value1) as int + bound0;
     && BoundaryInt.MinValue() <= bound0 < BoundaryInt.UpperBound()
     && BoundaryInt.MinValue() <= bound1 < BoundaryInt.UpperBound()
-    && var table := [BoundaryInt.fromInt(bound0), BoundaryInt.fromInt(bound1)];
-    && TableMarshalling.marshallable(table)
   }
 
-  function size(value: UnmarshalledType) : nat
+  function size(cfg: Config, value: UnmarshalledType) : uint64
   {
-    var (elem0, elem1, elem2) := value;
-    var tableSize := sizeOfTable();
-    var size0 := ElemMarshalling0.size(elem0);
-    var size1 := ElemMarshalling1.size(elem1);
-    var size2 := ElemMarshalling2.size(elem2);
-    tableSize + size0 + size1 + size2
+    var (value0, value1) := value;
+    SizeOfTable() + ElemMarshalling0.size(cfg.elem0Cfg, value0) + ElemMarshalling1.size(cfg.elem1Cfg, value1)
   }
 
-  method Size(value: UnmarshalledType) returns (sz: uint64)
+  method Size(cfg: Config, value: UnmarshalledType) returns (sz: uint64)
   {
-    var (elem0, elem1, elem2) := value;
-    var tableSize := sizeOfTable() as uint64;
-    var size0 := ElemMarshalling0.Size(elem0);
-    var size1 := ElemMarshalling1.Size(elem1);
-    var size2 := ElemMarshalling2.Size(elem2);
-    sz := tableSize + size0 + size1 + size2;
+    var (value0, value1) := value;
+    var size0 := ElemMarshalling0.Size(cfg.elem0Cfg, value0);
+    var size1 := ElemMarshalling0.Size(cfg.elem1Cfg, value1);
+    return SizeOfTable() + size0 + size1;
   }
 
-  method Marshall(value: UnmarshalledType, linear data: mseq<byte>, start: uint64)
-    returns (linear newdata: mseq<byte>, end: uint64)
+  method Marshall(cfg: Config, value: UnmarshalledType, linear inout data: mseq<byte>, start: uint64)
+    returns (end: uint64)
   {
-    var (elem0, elem1, elem2) := value;
-    var tableSize := sizeOfTable() as uint64;
+    var (value0, value1) := value;
 
-    var size0 := ElemMarshalling0.Size(elem0);
-    var size1 := ElemMarshalling1.Size(elem1);
-
+    var size0 := ElemMarshalling0.Size(cfg.elem0Cfg, value0);
+    var tableSize := SizeOfTable();
     var bound0 := tableSize + size0;
-    var bound1 := bound0 + size1;
+    var table := [bound0 as BoundaryInt.Integer];
 
-    var table := [BoundaryInt.fromUint64(bound0), BoundaryInt.fromUint64(bound1)];
+    end := BSM.Marshall(cfg.bsmCfg, table, inout data, start);
+    ghost var newdata0 :seq<byte>, end0 := data, end;
 
-    newdata, end := TableMarshalling.Marshall(table, data, start);
-    ghost var newdata0 :seq<byte>, end0 := newdata, end;
+    end := ElemMarshalling0.Marshall(cfg.elem0Cfg, value0, inout data, end);
+    ghost var newdata1 :seq<byte>, end1 := data, end;
 
-    newdata, end := ElemMarshalling0.Marshall(elem0, newdata, end);
-    ghost var newdata1 :seq<byte>, end1 := newdata, end;
+    end := ElemMarshalling1.Marshall(cfg.elem1Cfg, value1, inout data, end);
 
-    newdata, end := ElemMarshalling1.Marshall(elem1, newdata, end);
-    ghost var newdata2 :seq<byte>, end2 := newdata, end;
+    assert data[start..end][..tableSize] == data[start..end0] == newdata0[start..end0];
+    // assert BSM.parse(cfg.bsmCfg, data[start..end0]) == table;
 
-    newdata, end := ElemMarshalling2.Marshall(elem2, newdata, end);
-
-    assert BoundaryInt.toInt(table[0]) == bound0 as int 
-      && BoundaryInt.toInt(table[1]) == bound1 as int by {
-      BoundaryInt.fromtoInverses();
+    assert data[start..end][tableSize..bound0] == data[end0..end1] == newdata1[end0..end1] by {
+      Sequences.lemma_seq_slice_slice(data, start as int, end as int, tableSize as int, bound0 as int);
     }
+    // assert ElemMarshalling0.parse(cfg.elem0Cfg, data[end0..end1]) == value0;
 
-    assert newdata[start..end][..tableSize] == newdata[start..end0] == newdata0[start..end0];
-    // assert TableMarshalling.parse(newdata[start..end0]) == table;
-    
-    assert newdata[start..end][tableSize..bound0] == newdata[end0..end1] == newdata1[end0..end1] by {
-      Sequences.lemma_seq_slice_slice(newdata, start as int, end as int, tableSize as int, bound0 as int);
-    }
-    // assert ElemMarshalling0.parse(newdata[end0..end1]) == elem0;
-
-    assert newdata[start..end][bound0..bound1] == newdata[end1..end2] == newdata2[end1..end2] by {
-      Sequences.lemma_seq_slice_slice(newdata, start as int, end as int, bound0 as int, bound1 as int);
-    }
-    // assert ElemMarshalling1.parse(newdata[end1..end2]) == elem1;
-
-    assert newdata[start..end][bound1..] == newdata[end2..end];
-    // assert ElemMarshalling2.parse(newdata[end2..end]) == elem2;
+    assert data[start..end][bound0..] == data[end1..end];
+    // assert ElemMarshalling1.parse(cfg.elem1Cfg, data[end1..end]) == value1;
   }
 
-  method GetElem0(data: mseq<byte>) returns (edata: mseq<byte>)
-    requires var tableSize := sizeOfTable();
-    // && TableMarshalling.parsable(data[..tableSize])
-    // && var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
-    // && BoundaryInt.fitsInUint64(table[0])
-    // && var bound0 := BoundaryInt.toInt(table[0]);
-    // && tableSize <= bound0 <= |data|
-    ensures parsable(data) ==> ElemMarshalling0.parsable(edata)
-    ensures parsable(data) ==> ElemMarshalling0.parse(edata) == parse(data).0
+  predicate boundGettable(cfg: Config, data: mseq<byte>, index: nat)
   {
-    var tableSize := sizeOfTable() as uint64;
-    var iend0 := TableMarshalling.FastGet(data[..tableSize], 0);
-    var end0 := BoundaryInt.toUint64(iend0); 
+    && validConfig(cfg)
+    && index <= eltCount - 1
 
-    edata := data[tableSize..end0];
+    && var tableSize := sizeOfTable();
+    && tableSize <= |data|
+    && var tableData := data[..tableSize];
+
+    && (index != eltCount - 1 ==>
+      (&& BSM.gettable(cfg.bsmCfg, tableData, index)
+      && BSM.eltParsable(cfg.bsmCfg, tableData, index)))
+    && (index != 0 ==> 
+      (&& BSM.gettable(cfg.bsmCfg, tableData, index-1)
+      && BSM.eltParsable(cfg.bsmCfg, tableData, index-1)))
   }
 
-  method GetElem1(data: mseq<byte>) returns (edata: mseq<byte>)
-    requires parsable(data)
-    ensures ElemMarshalling1.parsable(edata)
-    ensures ElemMarshalling1.parse(edata) == parse(data).1
+  function getBounds(cfg: Config, data: mseq<byte>, index: nat) :(int, int)
+    requires boundGettable(cfg, data, index)
   {
-    var tableSize := sizeOfTable() as uint64;
-    var iend0 := TableMarshalling.FastGet(data[..tableSize], 0);
-    var end0 := BoundaryInt.toUint64(iend0); 
-    var iend1 := TableMarshalling.FastGet(data[..tableSize], 1);
-    var end1 := BoundaryInt.toUint64(iend1); 
-
-    edata := data[end0..end1];
+    var tableData := data[..sizeOfTable()];
+    var start := if index == 0 then sizeOfTable() else BSM.getElt(cfg.bsmCfg, tableData, index - 1);
+    var end := if index == eltCount-1 then |data| else BSM.getElt(cfg.bsmCfg, tableData, index);
+    (start, end)
   }
 
-  method GetElem2(data: mseq<byte>) returns (edata: mseq<byte>)
-    requires parsable(data)
-    ensures ElemMarshalling2.parsable(edata)
-    ensures ElemMarshalling2.parse(edata) == parse(data).2
+  predicate gettable(cfg: Config, data: mseq<byte>, index: nat)
   {
-    var tableSize := sizeOfTable() as uint64;
-    var iend1 := TableMarshalling.FastGet(data[..tableSize], 1);
-    var end1 := BoundaryInt.toUint64(iend1); 
+    && boundGettable(cfg, data, index)
+    && var (start, end) := getBounds(cfg, data, index);
+    && 0 <= start <= end <= |data|
+  }
 
-    edata := data[end1..];
+  method GetElem0(cfg: Config, data: mseq<byte>)
+    returns (eslice: Slice)
+    requires gettable(cfg, data, 0)
+
+    ensures eslice.WF'(data)
+    ensures parsable(cfg, data) ==> ElemMarshalling0.parsable(cfg.elem0Cfg, eslice.I(data))
+    ensures parsable(cfg, data) ==> parse(cfg, data).0 == ElemMarshalling0.parse(cfg.elem0Cfg, eslice.I(data))
+  {
+    var tableSize := SizeOfTable();
+    var bound0 := BSM.GetElt(cfg.bsmCfg, data[..tableSize], 0);
+    eslice := Slice(tableSize, BoundaryInt.toUint64(bound0));
+  }
+
+  method GetElem1(cfg: Config, data: mseq<byte>)
+    returns (eslice: Slice)
+    requires gettable(cfg, data, 1)
+
+    ensures eslice.WF'(data)
+    ensures parsable(cfg, data) ==> ElemMarshalling1.parsable(cfg.elem1Cfg, eslice.I(data))
+    ensures parsable(cfg, data) ==> parse(cfg, data).1 == ElemMarshalling1.parse(cfg.elem1Cfg, eslice.I(data))
+  {
+    var tableSize := SizeOfTable();
+    var bound0 := BSM.GetElt(cfg.bsmCfg, data[..tableSize], 0);
+    eslice := Slice(BoundaryInt.toUint64(bound0), |data| as uint64);
+    assert eslice.I(data) == data[bound0..];
   }
 }
+
+// abstract module Tuple3Marshalling refines Marshalling {
+//   import ElemMarshalling0 : Marshalling
+//   import ElemMarshalling1 : Marshalling
+//   import ElemMarshalling2 : Marshalling
+//   import TableMarshalling : IntegerSeqMarshalling
+//   import Sequences
+//   import BoundaryInt = TableMarshalling.Int
+
+//   type UnmarshalledType = (ElemMarshalling0.UnmarshalledType, ElemMarshalling1.UnmarshalledType, ElemMarshalling2.UnmarshalledType)
+
+//   type Boundary = BoundaryInt.Integer
+//   type BoundaryTable = mseq<Boundary>
+
+//   function method SizeOfBoundaryEntry() : uint64
+//   {
+//     BoundaryInt.Size()
+//   }
+
+//   function method sizeOfTable() : nat
+//   {
+//     2 * SizeOfBoundaryEntry() as nat
+//   }
+
+//   predicate parsable(data: mseq<byte>)
+//   {
+//     && var tableSize := sizeOfTable();
+//     && tableSize < Uint64UpperBound()
+//     && |data| >= tableSize
+//     && TableMarshalling.parsable(data[..tableSize])
+//     && var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
+
+//     && var bound0 := BoundaryInt.toInt(table[0]);
+//     && tableSize <= bound0 <= |data|
+//     && ElemMarshalling0.parsable(data[tableSize..bound0])
+
+//     && var bound1 := BoundaryInt.toInt(table[1]);
+//     && bound0 <= bound1 <= |data|
+//     && ElemMarshalling1.parsable(data[bound0..bound1])
+
+//     && ElemMarshalling2.parsable(data[bound1..])
+//   }
+
+//   function parse(data: mseq<byte>) : UnmarshalledType
+//   {
+//     var tableSize := sizeOfTable();
+//     var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
+//     var bound0 := BoundaryInt.toInt(table[0]);
+//     var elem0 := ElemMarshalling0.parse(data[tableSize..bound0]);
+//     var bound1 := BoundaryInt.toInt(table[1]);
+//     var elem1 := ElemMarshalling1.parse(data[bound0..bound1]);
+//     var elem2 := ElemMarshalling2.parse(data[bound1..]);
+//     (elem0, elem1, elem2)
+//   }
+
+//   method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
+//   {
+//     var entrySize := SizeOfBoundaryEntry();
+
+//     if entrySize >= 0x8000_0000_0000_0000 {
+//       return None;
+//     }
+
+//     var tableSize := entrySize * 2;
+
+//     if tableSize > |data| as uint64 {
+//       return None;
+//     }
+
+//     var tableOpt := TableMarshalling.TryParse(data[..tableSize]);
+    
+//     if tableOpt.None? {
+//       return None;
+//     }
+
+//     var table :mseq<Boundary> := tableOpt.value;
+  
+//     if !BoundaryInt.fitsInUint64(table[0]) 
+//       || !BoundaryInt.fitsInUint64(table[1]) {
+//       return None;
+//     }
+
+//     var bound0 := BoundaryInt.toUint64(table[0]);
+//     var bound1 := BoundaryInt.toUint64(table[1]);
+
+//     if bound0 > |data| as uint64 || bound0 < tableSize {
+//       return None;
+//     }
+
+//     if bound1 > |data| as uint64 || bound1 < bound0 {
+//       return None;
+//     }
+
+//     var elemOpt0 := ElemMarshalling0.TryParse(data[tableSize..bound0]);
+//     var elemOpt1 := ElemMarshalling1.TryParse(data[bound0..bound1]);
+//     var elemOpt2 := ElemMarshalling2.TryParse(data[bound1..]);
+
+//     if elemOpt0.None? || elemOpt1.None? || elemOpt2.None? {
+//       return None;
+//     }
+
+//     return Some((elemOpt0.value, elemOpt1.value, elemOpt2.value));
+//   }
+
+//   method Parsable(data: mseq<byte>) returns (p: bool)
+//   {
+//     var entrySize := SizeOfBoundaryEntry();
+
+//     if entrySize >= 0x8000_0000_0000_0000 {
+//       return false;
+//     }
+
+//     var tableSize := sizeOfTable() as uint64;
+
+//     if tableSize > |data| as uint64 {
+//       return false;
+//     }
+
+//     var tableOpt := TableMarshalling.TryParse(data[..tableSize]);
+    
+//     if tableOpt.None? {
+//       return false;
+//     }
+
+//     var table :mseq<Boundary> := tableOpt.value;
+
+//     if !BoundaryInt.fitsInUint64(table[0]) 
+//       || !BoundaryInt.fitsInUint64(table[1]) {
+//       return false;
+//     }
+
+//     var bound0 := BoundaryInt.toUint64(table[0]);
+//     var bound1 := BoundaryInt.toUint64(table[1]);
+
+//     if bound0 > |data| as uint64 || bound0 < tableSize {
+//       return false;
+//     }
+
+//     if bound1 > |data| as uint64 || bound1 < bound0 {
+//       return false;
+//     }
+
+//     var elemParsable0 := ElemMarshalling0.Parsable(data[tableSize..bound0]);
+//     var elemParsable1 := ElemMarshalling1.Parsable(data[bound0..bound1]);
+//     var elemParsable2 := ElemMarshalling2.Parsable(data[bound1..]);
+
+//     if !elemParsable0 || !elemParsable1 || !elemParsable2 {
+//       return false;
+//     }
+
+//     return true;
+//   }
+
+//   method Parse(data: mseq<byte>) returns (value: UnmarshalledType)
+//   {
+//     var tableSize := sizeOfTable() as uint64;
+//     var table :mseq<Boundary> := TableMarshalling.Parse(data[..tableSize]);
+  
+//     var bound0 := BoundaryInt.toUint64(table[0]);
+//     var bound1 := BoundaryInt.toUint64(table[1]);
+
+//     var elem0 := ElemMarshalling0.Parse(data[tableSize..bound0]);
+//     var elem1 := ElemMarshalling1.Parse(data[bound0..bound1]);
+//     var elem2 := ElemMarshalling2.Parse(data[bound1..]);
+//     return (elem0, elem1, elem2);
+//   }
+
+//   predicate marshallable(value: UnmarshalledType)
+//   {
+//     && var (elem0, elem1, elem2) := value;
+//     && ElemMarshalling0.marshallable(elem0)
+//     && ElemMarshalling1.marshallable(elem1)
+//     && ElemMarshalling2.marshallable(elem2)
+//     && var tableSize := sizeOfTable();
+//     var size0 := ElemMarshalling0.size(elem0);
+//     var size1 := ElemMarshalling1.size(elem1);
+//     var bound0 := tableSize + size0;
+//     var bound1 := bound0 + size1;
+//     && BoundaryInt.MinValue() <= bound0 < BoundaryInt.UpperBound()
+//     && BoundaryInt.MinValue() <= bound1 < BoundaryInt.UpperBound()
+//     && var table := [BoundaryInt.fromInt(bound0), BoundaryInt.fromInt(bound1)];
+//     && TableMarshalling.marshallable(table)
+//   }
+
+//   function size(value: UnmarshalledType) : nat
+//   {
+//     var (elem0, elem1, elem2) := value;
+//     var tableSize := sizeOfTable();
+//     var size0 := ElemMarshalling0.size(elem0);
+//     var size1 := ElemMarshalling1.size(elem1);
+//     var size2 := ElemMarshalling2.size(elem2);
+//     tableSize + size0 + size1 + size2
+//   }
+
+//   method Size(value: UnmarshalledType) returns (sz: uint64)
+//   {
+//     var (elem0, elem1, elem2) := value;
+//     var tableSize := sizeOfTable() as uint64;
+//     var size0 := ElemMarshalling0.Size(elem0);
+//     var size1 := ElemMarshalling1.Size(elem1);
+//     var size2 := ElemMarshalling2.Size(elem2);
+//     sz := tableSize + size0 + size1 + size2;
+//   }
+
+//   method Marshall(value: UnmarshalledType, linear data: mseq<byte>, start: uint64)
+//     returns (linear newdata: mseq<byte>, end: uint64)
+//   {
+//     var (elem0, elem1, elem2) := value;
+//     var tableSize := sizeOfTable() as uint64;
+
+//     var size0 := ElemMarshalling0.Size(elem0);
+//     var size1 := ElemMarshalling1.Size(elem1);
+
+//     var bound0 := tableSize + size0;
+//     var bound1 := bound0 + size1;
+
+//     var table := [BoundaryInt.fromUint64(bound0), BoundaryInt.fromUint64(bound1)];
+
+//     newdata, end := TableMarshalling.Marshall(table, data, start);
+//     ghost var newdata0 :seq<byte>, end0 := newdata, end;
+
+//     newdata, end := ElemMarshalling0.Marshall(elem0, newdata, end);
+//     ghost var newdata1 :seq<byte>, end1 := newdata, end;
+
+//     newdata, end := ElemMarshalling1.Marshall(elem1, newdata, end);
+//     ghost var newdata2 :seq<byte>, end2 := newdata, end;
+
+//     newdata, end := ElemMarshalling2.Marshall(elem2, newdata, end);
+
+//     assert BoundaryInt.toInt(table[0]) == bound0 as int 
+//       && BoundaryInt.toInt(table[1]) == bound1 as int by {
+//       BoundaryInt.fromtoInverses();
+//     }
+
+//     assert newdata[start..end][..tableSize] == newdata[start..end0] == newdata0[start..end0];
+//     // assert TableMarshalling.parse(newdata[start..end0]) == table;
+    
+//     assert newdata[start..end][tableSize..bound0] == newdata[end0..end1] == newdata1[end0..end1] by {
+//       Sequences.lemma_seq_slice_slice(newdata, start as int, end as int, tableSize as int, bound0 as int);
+//     }
+//     // assert ElemMarshalling0.parse(newdata[end0..end1]) == elem0;
+
+//     assert newdata[start..end][bound0..bound1] == newdata[end1..end2] == newdata2[end1..end2] by {
+//       Sequences.lemma_seq_slice_slice(newdata, start as int, end as int, bound0 as int, bound1 as int);
+//     }
+//     // assert ElemMarshalling1.parse(newdata[end1..end2]) == elem1;
+
+//     assert newdata[start..end][bound1..] == newdata[end2..end];
+//     // assert ElemMarshalling2.parse(newdata[end2..end]) == elem2;
+//   }
+
+//   method GetElem0(data: mseq<byte>) returns (edata: mseq<byte>)
+//     requires var tableSize := sizeOfTable();
+//     // && TableMarshalling.parsable(data[..tableSize])
+//     // && var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
+//     // && BoundaryInt.fitsInUint64(table[0])
+//     // && var bound0 := BoundaryInt.toInt(table[0]);
+//     // && tableSize <= bound0 <= |data|
+//     ensures parsable(data) ==> ElemMarshalling0.parsable(edata)
+//     ensures parsable(data) ==> ElemMarshalling0.parse(edata) == parse(data).0
+//   {
+//     var tableSize := sizeOfTable() as uint64;
+//     var iend0 := TableMarshalling.FastGet(data[..tableSize], 0);
+//     var end0 := BoundaryInt.toUint64(iend0); 
+
+//     edata := data[tableSize..end0];
+//   }
+
+//   method GetElem1(data: mseq<byte>) returns (edata: mseq<byte>)
+//     requires parsable(data)
+//     ensures ElemMarshalling1.parsable(edata)
+//     ensures ElemMarshalling1.parse(edata) == parse(data).1
+//   {
+//     var tableSize := sizeOfTable() as uint64;
+//     var iend0 := TableMarshalling.FastGet(data[..tableSize], 0);
+//     var end0 := BoundaryInt.toUint64(iend0); 
+//     var iend1 := TableMarshalling.FastGet(data[..tableSize], 1);
+//     var end1 := BoundaryInt.toUint64(iend1); 
+
+//     edata := data[end0..end1];
+//   }
+
+//   method GetElem2(data: mseq<byte>) returns (edata: mseq<byte>)
+//     requires parsable(data)
+//     ensures ElemMarshalling2.parsable(edata)
+//     ensures ElemMarshalling2.parse(edata) == parse(data).2
+//   {
+//     var tableSize := sizeOfTable() as uint64;
+//     var iend1 := TableMarshalling.FastGet(data[..tableSize], 1);
+//     var end1 := BoundaryInt.toUint64(iend1); 
+
+//     edata := data[end1..];
+//   }
