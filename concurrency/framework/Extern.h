@@ -2,6 +2,8 @@
 #include <cstdlib>
 
 namespace Ptrs {
+  static_assert(sizeof(uintptr_t) == 8);
+  
   struct Ptr {
     uintptr_t ptr;
 
@@ -34,7 +36,7 @@ struct std::hash<Ptrs::Ptr> {
 namespace Cells {
   template <typename V>
   struct Cell {
-    volatile V v;
+    mutable volatile V v;
 
     Cell() : v(get_default<V>::call()) { }
   };
@@ -72,6 +74,25 @@ struct std::hash<Cells::Cell<V>> {
 namespace Atomics {
   template <typename V, typename G>
   struct Atomic {
+    std::atomic<V> slot;
+
+    Atomic() { }
+    Atomic(V v) : slot(v) { }
+
+    // std::atomic deletes the copy & assignment operators so we need to re-define them.
+    // Ideally, we would transfer ownership of a `linear Atomic` (and other linear objects)
+    // via move constructors. Right now that isn't the case - though we can still rely on
+    // the the linear type system to enforce that things aren't used after they are
+    // "moved" (but actually copied).
+
+    Atomic(Atomic<V, G> const& self)
+      : slot(self.slot.load()) { }
+
+    Atomic<V, G>& operator=(const Atomic<V, G>& other)
+    {
+      slot.store(other.slot.load());
+      return *this;
+    }
   };
 
   template <typename V, typename G>
@@ -84,6 +105,112 @@ namespace Atomics {
     std::cerr << "Error: Atomic == called" << std::endl;
     exit(1);
   }
+
+  template <typename V, typename G>
+  Atomic<V, G> new__atomic(V v) {
+    Atomic<V, G> ia(v);
+    return ia;
+  }
+
+  template <typename V, typename G>
+  bool execute__atomic__compare__and__set__strong(
+      Atomic<V, G>& a,
+      V v1,
+      V v2)
+  {
+    a.slot.compare_exchange_strong(v1, v2, std::memory_order_seq_cst);
+  }
+
+  template <typename V, typename G>
+  V execute__atomic__load(
+      Atomic<V, G>& a)
+  {
+    return a.slot.load(std::memory_order_seq_cst);
+  }
+
+  template <typename V, typename G>
+  void execute__atomic__store(
+      Atomic<V, G>& a,
+      V v)
+  {
+    a.slot.store(v, std::memory_order_seq_cst);
+  }
+
+  template <typename V, typename G>
+  V execute__atomic__fetch__or(
+      Atomic<V, G>& a,
+      V v)
+  {
+    return a.slot.fetch_or(v, std::memory_order_seq_cst);
+  }
+
+  template <typename V, typename G>
+  V execute__atomic__fetch__and(
+      Atomic<V, G>& a,
+      V v)
+  {
+    return a.slot.fetch_and(v, std::memory_order_seq_cst);
+  }
+
+  template <typename V, typename G>
+  V execute__atomic__fetch__xor(
+      Atomic<V, G>& a,
+      V v)
+  {
+    return a.slot.fetch_xor(v, std::memory_order_seq_cst);
+  }
+
+  template <typename V, typename G>
+  V execute__atomic__fetch__add(
+      Atomic<V, G>& a,
+      V v)
+  {
+    return a.slot.fetch_add(v, std::memory_order_seq_cst);
+  }
+
+  template <typename V, typename G>
+  V execute__atomic__fetch__sub(
+      Atomic<V, G>& a,
+      V v)
+  {
+    return a.slot.fetch_sub(v, std::memory_order_seq_cst);
+  }
+
+  // Dafny doesn't have generics over numeric types
+  // so we have to define the arithmetic actions
+  // over all integer precisions individually,
+  // e.g., execute__atomic__fetch__sub__uint8
+
+  #define ARITH_SPECIALIZE(t, name) \
+    template<typename G> \
+    t execute__atomic__fetch__sub__ ## name (Atomic<t, G>& a, t v) { \
+        return execute__atomic__fetch__sub<t, G>(a, v); } \
+        \
+    template<typename G> \
+    t execute__atomic__fetch__add__ ## name (Atomic<t, G>& a, t v) { \
+        return execute__atomic__fetch__add<t, G>(a, v); } \
+        \
+    template<typename G> \
+    t execute__atomic__fetch__or__ ## name (Atomic<t, G>& a, t v) { \
+        return execute__atomic__fetch__or<t, G>(a, v); } \
+        \
+    template<typename G> \
+    t execute__atomic__fetch__xor__ ## name (Atomic<t, G>& a, t v) { \
+        return execute__atomic__fetch__xor<t, G>(a, v); } \
+        \
+    template<typename G> \
+    t execute__atomic__fetch__and__ ## name (Atomic<t, G>& a, t v) { \
+        return execute__atomic__fetch__and<t, G>(a, v); } \
+
+  ARITH_SPECIALIZE(uint8_t, uint8)
+  ARITH_SPECIALIZE(uint16_t, uint16)
+  ARITH_SPECIALIZE(uint32_t, uint32)
+  ARITH_SPECIALIZE(uint64_t, uint64)
+
+  static_assert(std::atomic<uint8_t>::is_always_lock_free);
+  static_assert(std::atomic<uint16_t>::is_always_lock_free);
+  static_assert(std::atomic<uint32_t>::is_always_lock_free);
+  static_assert(std::atomic<uint64_t>::is_always_lock_free);
 }
 
 template <typename V, typename G>
@@ -93,4 +220,5 @@ struct std::hash<Atomics::Atomic<V, G>> {
     exit(1);
   }
 };
+
 
