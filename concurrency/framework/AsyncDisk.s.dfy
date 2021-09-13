@@ -6,7 +6,7 @@ module DiskIfc refines Ifc {
   import opened RequestIds
 
   type Block = s : seq<byte> | |s| == 4096
-    witness seq(4096, (i) => 0)
+    ghost witness seq(4096, (i) => 0)
 
   datatype ReqRead = ReqRead(ghost addr: nat)
   datatype ReqWrite = ReqWrite(ghost addr: nat, data: Block)

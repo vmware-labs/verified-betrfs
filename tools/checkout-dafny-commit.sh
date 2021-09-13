@@ -19,7 +19,7 @@ set -e
 set -x
 
 # set to betr-concurrent-mod branch
-commit=14f3d7937fcf9e7041a5188e530d3d123b12806f
+commit=b85879a65a67b05c1e8d145c3861f725f9f64ce7
 if [ $1 ]; then
    commit=$1
 fi

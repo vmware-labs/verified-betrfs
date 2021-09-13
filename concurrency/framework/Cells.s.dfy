@@ -1,5 +1,5 @@
 module {:extern "Cells"} Cells {
-  type {:predefined} Cell<V>
+  type {:extern "struct"} Cell<V>
   datatype CellContents<V> = CellContents(ghost cell: Cell<V>, v: V)
 
   method {:extern} new_cell<V>(v: V)
