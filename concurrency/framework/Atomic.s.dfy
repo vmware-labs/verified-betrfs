@@ -11,7 +11,7 @@ module {:extern "Atomics"} Atomics {
   import opened Ptrs
   import opened Options
 
-  type {:extern "predefined"} Atomic(==,!new)<!V, !G>
+  type {:extern "predefined"} Atomic(!new,00)<!V, !G>
   {
     function {:extern} namespace() : nat
   }

@@ -202,10 +202,11 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   linear datatype IOSlot = IOSlot(
     iocb_ptr: Ptr,
     linear io_slot_info_cell: Cell<IOSlotInfo>,
-    linear lock: BasicLock<IOSlotAccess>)
+    linear lock: pre_BasicLock<IOSlotAccess>)
   {
     predicate WF()
     {
+      && lock.wf()
       && (forall slot_access: IOSlotAccess :: this.lock.inv(slot_access) <==>
         && slot_access.iocb.ptr == this.iocb_ptr
         && slot_access.io_slot_info.cell == this.io_slot_info_cell

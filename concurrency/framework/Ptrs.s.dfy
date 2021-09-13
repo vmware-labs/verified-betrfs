@@ -15,7 +15,7 @@ module {:extern "Ptrs"} Ptrs {
     | PointsToEmpty(ghost ptr: Ptr)
   datatype PointsToArray<V> = PointsToArray(ghost ptr: Ptr, ghost s: seq<V>)
 
-  type {:extern "struct"} Ptr(!new, ==)
+  type {:extern "struct"} Ptr(!new, ==, 00)
   {
     function {:extern} as_nat() : nat
 

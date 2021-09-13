@@ -118,7 +118,16 @@ namespace Atomics {
       V v1,
       V v2)
   {
-    a.slot.compare_exchange_strong(v1, v2, std::memory_order_seq_cst);
+    return a.slot.compare_exchange_strong(v1, v2, std::memory_order_seq_cst);
+  }
+
+  template <typename V, typename G>
+  bool execute__atomic__compare__and__set__weak(
+      Atomic<V, G>& a,
+      V v1,
+      V v2)
+  {
+    return a.slot.compare_exchange_weak(v1, v2, std::memory_order_seq_cst);
   }
 
   template <typename V, typename G>
