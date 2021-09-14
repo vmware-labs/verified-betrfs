@@ -260,6 +260,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires 0 <= batch_idx as int < NUM_CHUNKS as int
   ensures local.WF()
   ensures local.t == old_local.t
+  decreases *
   {
     var i: uint32 := 0;
     while i < CHUNK_SIZE as uint32
