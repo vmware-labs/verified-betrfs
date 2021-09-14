@@ -39,6 +39,21 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures |batch_busy| == NUM_CHUNKS as int
   ensures (forall i :: 0 <= i < NUM_CHUNKS as int ==> lseq_has(batch_busy)[i])
   ensures (forall i, v, g :: 0 <= i < NUM_CHUNKS as int ==> atomic_inv(batch_busy[i], v, g) <==> true)
+  {
+    batch_busy := lseq_alloc<Atomic<bool, NullGhostType>>(NUM_CHUNKS);
+    var i: uint64 := 0;
+    while i < NUM_CHUNKS
+    invariant 0 <= i as int <= NUM_CHUNKS as int
+    invariant |batch_busy| == NUM_CHUNKS as int
+    invariant (forall j :: i as int <= j < NUM_CHUNKS as int ==> !lseq_has(batch_busy)[j])
+    invariant (forall j :: 0 <= j < i as int ==> lseq_has(batch_busy)[j])
+    invariant (forall j, v, g :: 0 <= j < i as int ==> atomic_inv(batch_busy[j], v, g) <==> true)
+    {
+      linear var ato := new_atomic(false, NullGhostType, (v, g) => true, 0);
+      lseq_give_inout(inout batch_busy, i, ato);
+      i := i + 1;
+    }
+  }
 
   method init_cache(glinear init_tok: T.Token)
   returns (linear c: Cache)
@@ -289,7 +304,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       assert read_refcounts_array[j * CACHE_SIZE as int + i].inv(j);
     }
 
-    var i0 := CACHE_SIZE as int - 1;
+    ghost var i0 := CACHE_SIZE as int - 1;
     assert data_pta_seq_copy.has(i0);
     assert 0 <= data_pta_full.ptr.as_nat() + i0 * PageSize as int < 0x1_0000_0000_0000_0000;
 

@@ -21,6 +21,8 @@ namespace IocbStruct {
     return (uintptr_t)(new iocb);
   }*/
 
+  inline Ptrs::Ptr new__iocb__array(uint64_t len);
+
   void iocb__prepare__read(Ptrs::Ptr i, int64_t offset, uint64_t nbytes, Ptrs::Ptr buf); /*{
     io_prep_pread((iocb *)i, fd, (void*)buf, nbytes, offset);
   }*/
@@ -40,6 +42,8 @@ namespace InstantiatedDiskInterface {
   };
 
   inline IOCtx get_IOCtx_default();
+
+  inline IOCtx init__ctx();
 
   inline bool operator==(const IOCtx &left, const IOCtx &right) {
     std::cerr << "Error: IOCtx == called" << std::endl;

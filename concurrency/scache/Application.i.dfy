@@ -18,18 +18,55 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Ptrs
   import CacheResources
   import opened CacheHandle
+  import opened LinearSequence_s
+  import CI = CacheInit(aio)
 
   method copy_seq_out(ptr: Ptr, gshared d: PointsToArray<byte>)
   returns (s: seq<byte>)
   requires |d.s| == 4096
   requires d.ptr == ptr
   ensures s == d.s
+  {
+    linear var sl := seq_alloc(4096, 0);
+    var i: uint64 := 0;
+    while i < 4096
+    invariant 0 <= i <= 4096
+    invariant |sl| == 4096
+    invariant forall j | 0 <= j < i :: sl[j] == d.s[j]
+    {
+      var val := ptr.index_read(d, i);
+      sl := seq_set(sl, i, val);
+      i := i + 1;
+    }
+    assert sl == d.s;
+    s := seq_unleash(sl);
+  }
 
   method copy_seq_in(ptr: Ptr, inout glinear d: PointsToArray<byte>, data: seq<byte>)
   requires old_d.ptr == ptr
   requires |old_d.s| == 4096
   requires |data| == 4096
   ensures d == old_d.(s := data)
+  {
+    var i: uint64 := 0;
+    while i < 4096
+    invariant 0 <= i <= 4096
+    invariant |d.s| == 4096
+    invariant d.ptr == old_d.ptr
+    invariant forall j | 0 <= j < i :: data[j] == d.s[j]
+    {
+      ptr.index_write(inout d, i, data[i]);
+      i := i + 1;
+    }
+  }
+
+  method init(glinear init_tok: T.Token)
+  returns (linear cache: Cache)
+  requires CacheSSM.Init(init_tok.val)
+  ensures cache.Inv()
+  {
+    cache := CI.init_cache(init_tok);
+  }
 
   method read_block(
       shared cache: Cache,

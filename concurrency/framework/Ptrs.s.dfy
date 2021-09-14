@@ -81,15 +81,15 @@ module {:extern "Ptrs"} Ptrs {
     requires d.ptr == this
     ensures v == d.v
 
-    method {:extern} index_write<V>(glinear inout d: PointsToArray, i: int, v: V)
+    method {:extern} index_write<V>(glinear inout d: PointsToArray, i: uint64, v: V)
     requires old_d.ptr == this
-    requires 0 <= i < |old_d.s|
-    ensures d == old_d.(s := old_d.s[i := v])
+    requires 0 <= i as int < |old_d.s|
+    ensures d == old_d.(s := old_d.s[i as int := v])
 
-    method {:extern} index_read<V>(gshared d: PointsToArray<V>, i: int)
+    method {:extern} index_read<V>(gshared d: PointsToArray<V>, i: uint64)
     returns (v: V)
     requires d.ptr == this
-    requires 0 <= i < |d.s|
+    requires 0 <= i as int < |d.s|
     ensures v == d.s[i]
   }
 

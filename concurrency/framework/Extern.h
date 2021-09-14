@@ -11,6 +11,18 @@ namespace Ptrs {
 
     Ptr() : ptr(0) { }
     Ptr(uintptr_t p) : ptr(p) { }
+
+    template <typename V>
+    void index__write(uint64_t i, V v) {
+      *(((V*)ptr) + i) = v;
+    }
+
+    template <typename V>
+    V index__read(uint64_t i) {
+      return *(((V*)ptr) + i);
+    }
+
+    Ptr* operator->() { return this; }
   };
 
   namespace __default {
@@ -32,6 +44,21 @@ namespace Ptrs {
   inline uint64_t ptr__diff(Ptr p, Ptr q) {
     return p.ptr - q.ptr;
   }
+
+  template <typename V>
+  Ptr alloc__array__aligned(uint64_t len, V init_v, uint64_t alignment) {
+    // TODO should check len * sizeof(V) <= max size_t
+    V* ptr;
+    int res = posix_memalign((void**)&ptr, alignment, len * sizeof(V));
+    if (res != 0) {
+      std::cerr << "posix_memalign failed" << std::endl;
+      exit(1);
+    }
+    for (uint64_t i = 0; i < len; i++) {
+      new (&ptr[i]) V(init_v);
+    }
+    return Ptr((uintptr_t)ptr);
+  }
 }
 
 template <>
@@ -49,6 +76,7 @@ namespace Cells {
     mutable V v;
 
     Cell() : v(get_default<V>::call()) { }
+    Cell(V v) : v(v) { }
 
     Cell(Cell const& other) : v(other.v) { }
 
@@ -62,6 +90,11 @@ namespace Cells {
   template <typename V>
   Cell<V> get_Cell_default() {
     return Cell<V>();
+  }
+
+  template <typename V>
+  Cell<V> new__cell(V v) {
+    return Cell(v);
   }
 
   template <typename V>
