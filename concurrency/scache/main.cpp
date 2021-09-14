@@ -71,11 +71,7 @@ uint8_t read_int(uint64_t disk_addr) {
   return res;
 }
 
-int main() {
-  init_fd();
-
-  global_cache = init_cache();
-  std::cout << "cache initialized" << std::endl;
+void thread1() {
   local_state = init_thread_local_state(0);
 
   for (int i = 0; i < 1050; i++) {
@@ -85,4 +81,29 @@ int main() {
   for (int i = 0; i < 1050; i++) {
     read_int(i);
   }
+}
+
+void thread2() {
+  local_state = init_thread_local_state(0);
+
+  for (int i = 0; i < 1050; i++) {
+    write_int(10000 + i, (uint8_t)(i % 256));
+  }
+
+  for (int i = 0; i < 1050; i++) {
+    read_int(10000 + i);
+  }
+}
+
+int main() {
+  init_fd();
+
+  global_cache = init_cache();
+  std::cout << "cache initialized" << std::endl;
+
+  std::thread t1(thread1);
+  std::thread t2(thread2);
+
+  t1.join();
+  t2.join();
 }

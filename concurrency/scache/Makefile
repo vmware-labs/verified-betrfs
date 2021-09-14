@@ -13,4 +13,4 @@ main.o: main.cpp ../framework/Extern.h ../framework/LinearExtern.h ../framework/
 	g++ -c -o main.o main.cpp -I ../../.dafny/dafny/Binaries/ -I ../framework/ -std=c++17 -O2 $(LIBAIO_FLAGS)
 
 app: main.o Application.o
-	g++ -o app Application.o main.o $(LIBAIO_LIB)
+	g++ -o app Application.o main.o $(LIBAIO_LIB) -lpthread
