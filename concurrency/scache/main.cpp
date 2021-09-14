@@ -74,6 +74,7 @@ int main() {
   init_fd();
 
   global_cache = init_cache();
+  std::cout << "cache initialized" << std::endl;
   local_state = init_thread_local_state(0);
 
   write_int(0, 17);
