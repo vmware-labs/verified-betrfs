@@ -183,7 +183,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  datatype LocalState = LocalState(
+  linear datatype LocalState = LocalState(
     t: uint64,
     free_hand: uint64,
     io_slot_hand: uint64

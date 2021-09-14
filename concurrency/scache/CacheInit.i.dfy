@@ -320,4 +320,10 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     assert c.Inv();
   }
 
+  method init_thread_local_state(t: uint64)
+  returns (linear l: LocalState)
+  ensures l.WF()
+  {
+    l := LocalState(t % RC_WIDTH, 0xffff_ffff_ffff_ffff, 0);
+  }
 }

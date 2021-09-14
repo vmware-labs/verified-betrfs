@@ -68,6 +68,13 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     cache := CI.init_cache(init_tok);
   }
 
+  method init_thread_local_state(t: uint64)
+  returns (linear l: LocalState)
+  ensures l.WF()
+  {
+    l := CI.init_thread_local_state(t);
+  }
+
   method read_block(
       shared cache: Cache,
       inout linear localState: LocalState,

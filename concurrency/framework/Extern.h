@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DafnyRuntime.h"
+
 #include <iostream>
 #include <cstdlib>
 #include <chrono>
