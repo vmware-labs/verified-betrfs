@@ -16,6 +16,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened LinearSequence_i
   import opened Cells
   import Math
+  import opened PageSizeConstant
 
   method get_free_io_slot(shared cache: Cache, inout linear local: LocalState)
   returns (idx: uint64, glinear access: IOSlotAccess)

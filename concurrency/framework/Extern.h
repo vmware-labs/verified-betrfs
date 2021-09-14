@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iostream>
 #include <cstdlib>
 
@@ -26,6 +28,10 @@ namespace Ptrs {
   inline Ptr ptr__add(Ptr p, uint64 a) {
     return Ptr(p.ptr + a);
   }
+
+  inline uint64_t ptr__diff(Ptr p, Ptr q) {
+    return p.ptr - q.ptr;
+  }
 }
 
 template <>
@@ -40,11 +46,17 @@ struct std::hash<Ptrs::Ptr> {
 namespace Cells {
   template <typename V>
   struct Cell {
-    mutable volatile V v;
+    mutable V v;
 
     Cell() : v(get_default<V>::call()) { }
 
     Cell(Cell const& other) : v(other.v) { }
+
+    Cell<V>& operator=(const Cell<V>& other)
+    {
+      this->v = other.v;
+      return *this;
+    }
   };
 
   template <typename V>
@@ -235,3 +247,9 @@ struct std::hash<Atomics::Atomic<V, G>> {
     exit(1);
   }
 };
+
+namespace ThreadUtils {
+  inline void thread__yield();
+
+  inline void sleep(uint64_t ns);
+}

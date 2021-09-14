@@ -25,6 +25,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened LinearSequence_s
   import RwLockToken
   import opened Cells
+  import opened PageSizeConstant
 
   glinear datatype NullGhostType = NullGhostType
 

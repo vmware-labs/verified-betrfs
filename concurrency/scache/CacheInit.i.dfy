@@ -22,6 +22,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened BasicLockImpl
   import RwLockToken
   import RwLock
+  import opened PageSizeConstant
 
   glinear method split_into_page_size_chunks(glinear pta: PointsToArray<byte>)
   returns (glinear pta_seq: glseq<PointsToArray<byte>>)

@@ -3,12 +3,16 @@ include "Ptrs.s.dfy"
 include "DiskSSM.s.dfy"
 include "GlinearSeq.s.dfy"
 
-module IocbStruct {
+module PageSizeConstant {
+  import opened NativeTypes
+  const PageSize: uint64 := 4096
+}
+
+module {:extern "IocbStruct"} IocbStruct {
   import opened Ptrs
   import opened NativeTypes
   import opened GlinearSeq
-
-  const PageSize: uint64 := 4096
+  import opened PageSizeConstant
 
   /*
    * iocb type
@@ -84,6 +88,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   import opened NativeTypes
   import opened IocbStruct
   import opened Ptrs
+  import opened PageSizeConstant
   import T = DiskSSMTokens(ioifc, ssm)
 
   /*

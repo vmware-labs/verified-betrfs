@@ -31,7 +31,7 @@ bool operator==(const maybe<A> &left, const maybe<A> &right) {
 }
 
 template <typename A>
-A peek(maybe<A> m) { return m.a; }
+A* peek(maybe<A>& m) { return &m.a; }
 
 template <typename A>
 A unwrap(maybe<A> m) { return m.a; }
@@ -201,8 +201,8 @@ Tuple<lseq<A>, LinearMaybe::maybe<A>> lseq_swap_raw_fun(lseq<A> s1, uint64 i, Li
 }
 
 template <typename A>
-LinearMaybe::maybe<A> lseq_share_raw(lseq<A> s, uint64 i) {
-  return (*s)[i];
+LinearMaybe::maybe<A>* lseq_share_raw(lseq<A> s, uint64 i) {
+  return &((*s)[i]);
 }
 
 template <typename A>

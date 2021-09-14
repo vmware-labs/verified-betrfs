@@ -1,6 +1,5 @@
 include "CacheIO.i.dfy"
 include "../framework/ThreadUtils.s.dfy"
-include "../framework/SystemTime.s.dfy"
 
 module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Constants
@@ -21,10 +20,10 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CacheStatusType
   import opened ClientCounter
   import opened BitOps
-  import opened SystemTime
   import opened Cells
   import opened LinearSequence_i
   import opened ThreadUtils
+  import opened PageSizeConstant
 
   datatype PageHandle = PageHandle(
     ptr: Ptr,

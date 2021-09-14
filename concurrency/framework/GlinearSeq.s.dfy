@@ -1,5 +1,5 @@
 module GlinearSeq {
-  type {:extern} glseq<V>
+  type {:extern "predefined"} glseq<V>
   {
     function {:extern} len() : nat
 
