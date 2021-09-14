@@ -95,5 +95,10 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var read_handle := CacheOps.unclaim(cache, localState, ph, disk_idx, claim_handle);
     client' := CacheOps.unget(cache, localState, ph, disk_idx, read_handle);
   }
-
 }
+
+// TODO move this to a .s file or something
+module {:extern "InstantiatedDiskInterface"}
+    TheAIO refines AIO(CacheAIOParams, CacheIfc, CacheSSM) { }
+
+import App = Application(TheAIO)

@@ -15,12 +15,16 @@ namespace Ptrs {
     Ptr null_ptr(0);
   }
 
-  Ptr get_Ptr_default() {
+  inline Ptr get_Ptr_default() {
     return Ptr(0);
   }
 
-  bool operator==(const Ptr &left, const Ptr &right) {
+  inline bool operator==(const Ptr &left, const Ptr &right) {
     return left.ptr == right.ptr;
+  }
+
+  inline Ptr ptr__add(Ptr p, uint64 a) {
+    return Ptr(p.ptr + a);
   }
 }
 
@@ -39,6 +43,8 @@ namespace Cells {
     mutable volatile V v;
 
     Cell() : v(get_default<V>::call()) { }
+
+    Cell(Cell const& other) : v(other.v) { }
   };
 
   template <typename V>
@@ -229,5 +235,3 @@ struct std::hash<Atomics::Atomic<V, G>> {
     exit(1);
   }
 };
-
-
