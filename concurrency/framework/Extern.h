@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <chrono>
 #include <thread>
+#include <atomic>
 
 namespace Ptrs {
   static_assert(sizeof(uintptr_t) == 8);
@@ -14,7 +15,7 @@ namespace Ptrs {
     uintptr_t ptr;
 
     Ptr() : ptr(0) { }
-    Ptr(uintptr_t p) : ptr(p) { }
+    explicit Ptr(uintptr_t p) : ptr(p) { }
 
     template <typename V>
     void index__write(uint64_t i, V v) {
@@ -80,7 +81,7 @@ namespace Cells {
     mutable V v;
 
     Cell() : v(get_default<V>::call()) { }
-    Cell(V v) : v(v) { }
+    explicit Cell(V v) : v(v) { }
 
     Cell(Cell const& other) : v(other.v) { }
 
@@ -139,7 +140,7 @@ namespace Atomics {
     std::atomic<V> slot;
 
     Atomic() { }
-    Atomic(V v) : slot(v) { }
+    explicit Atomic(V v) : slot(v) { }
 
     // std::atomic deletes the copy & assignment operators so we need to re-define them.
     // Ideally, we would transfer ownership of a `linear Atomic` (and other linear objects)
