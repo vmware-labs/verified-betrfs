@@ -18,8 +18,9 @@ namespace InstantiatedDiskInterface {
 using InstantiatedDiskInterface::fd;
 
 void init_fd() {
-  fd = open(".vericache",
-      O_RDWR | O_DIRECT | O_DSYNC | O_NOATIME | O_CREAT, S_IRUSR | S_IWUSR);
+  //fd = open(".vericache",
+  //    O_RDWR | O_DIRECT | O_DSYNC | O_NOATIME | O_CREAT, S_IRUSR | S_IWUSR);
+  fd = open(".vericache", O_RDWR | O_DIRECT | O_DSYNC | O_NOATIME);
   if (fd < 0) {
     std::cerr << "File open failed" << std::endl;
   }
@@ -60,13 +61,13 @@ void write_int(uint64_t disk_addr, uint8_t b) {
   auto d = DafnySequence<uint8_t>(4096);
   d = d.update(0, b);
   write_block(global_cache, local_state, disk_addr, d);
-  std::cout << "write: " << disk_addr << " value " << b << std::endl;
+  std::cout << "write: " << disk_addr << " value " << (int)b << std::endl;
 }
 
 uint8_t read_int(uint64_t disk_addr) {
   auto d = read_block(global_cache, local_state, disk_addr);
   uint8_t res = d.select(0);
-  std::cout << "read: " << disk_addr << " value " << res << std::endl;
+  std::cout << "read: " << disk_addr << " value " << (int)res << std::endl;
   return res;
 }
 
@@ -77,6 +78,11 @@ int main() {
   std::cout << "cache initialized" << std::endl;
   local_state = init_thread_local_state(0);
 
-  write_int(0, 17);
-  read_int(0);
+  for (int i = 0; i < 1050; i++) {
+    write_int(i, (uint8_t)(i % 256));
+  }
+
+  for (int i = 0; i < 1050; i++) {
+    read_int(i);
+  }
 }

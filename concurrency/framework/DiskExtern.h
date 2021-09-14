@@ -69,8 +69,8 @@ namespace InstantiatedDiskInterface {
   inline void sync__read(Ptrs::Ptr buf, uint64 nbytes, int64_t offset)
   {
     int ret = pread(fd, (void*)buf.ptr, nbytes, offset * 4096);
-    if (ret != 0) {
-      std::cerr << "pread failed" << std::endl;
+    if (ret != nbytes) {
+      std::cerr << "pread failed " << ret << std::endl;
       exit(1);
     }
   }
