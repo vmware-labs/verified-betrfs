@@ -93,7 +93,7 @@ module {:extern "Ptrs"} Ptrs {
     ensures v == d.s[i]
   }
 
-  const {:extern "null_ptr"} nullptr : Ptr
+  function method {:extern "null_ptr"} nullptr() : Ptr
 
   method {:extern} alloc<V>(v: V)
   returns (ptr: Ptr, glinear d: PointsTo<V>)

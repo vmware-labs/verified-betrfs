@@ -930,7 +930,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var write_handle_opt: glOption<WriteablePageHandle> := glNone;
     glinear var client_opt := glSome(client);
 
-    ph := PageHandle(nullptr, 0);
+    ph := PageHandle(nullptr(), 0);
 
     while !success
     invariant !success ==> write_handle_opt == glNone

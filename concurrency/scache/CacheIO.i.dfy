@@ -218,7 +218,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear var fr;
       iocb_ptr, fr := aio.get_event(cache.ioctx);
 
-      if iocb_ptr == nullptr {
+      if iocb_ptr == nullptr() {
         done := true;
         dispose_anything(fr);
       } else {

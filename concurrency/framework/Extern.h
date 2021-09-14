@@ -30,8 +30,8 @@ namespace Ptrs {
     Ptr* operator->() { return this; }
   };
 
-  namespace __default {
-    Ptr null_ptr(0);
+  inline Ptr null_ptr() {
+    return Ptr(0);
   }
 
   inline Ptr get_Ptr_default() {
