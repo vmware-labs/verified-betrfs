@@ -2,6 +2,8 @@
 
 #include <iostream>
 #include <cstdlib>
+#include <chrono>
+#include <thread>
 
 namespace Ptrs {
   static_assert(sizeof(uintptr_t) == 8);
@@ -119,6 +121,13 @@ struct std::hash<Cells::Cell<V>> {
   std::size_t operator()(const Cells::Cell<V>& x) const {
     std::cerr << "Error: Cell hash called" << std::endl;
     exit(1);
+  }
+};
+
+template <typename V>
+struct get_default<Cells::Cell<V> > {
+  static Cells::Cell<V> call() {
+    return Cells::Cell<V>();
   }
 };
 
@@ -281,8 +290,19 @@ struct std::hash<Atomics::Atomic<V, G>> {
   }
 };
 
-namespace ThreadUtils {
-  inline void thread__yield();
+template <typename V, typename G>
+struct get_default<Atomics::Atomic<V, G> > {
+  static Atomics::Atomic<V, G> call() {
+    return Atomics::Atomic<V, G>();
+  }
+};
 
-  inline void sleep(uint64_t ns);
+namespace ThreadUtils {
+  inline void thread__yield() {
+    // note: splinter had a function called 'platform_yield' which on linux does nothing
+  }
+
+  inline void sleep(uint64_t ns) {
+    std::this_thread::sleep_for(std::chrono::nanoseconds(ns));
+  }
 }
