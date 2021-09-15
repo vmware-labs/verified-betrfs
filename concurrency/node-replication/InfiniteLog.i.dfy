@@ -831,17 +831,12 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   {
     forall nodeId | nodeId in s.combiner :: match s.combiner[nodeId] {
       case CombinerReady => true
-      case CombinerPlaced(queued_ops: seq<RequestId>) => (
-        // there should be at least one queued op
-        && |queued_ops| > 0
-      )
+      case CombinerPlaced(queued_ops: seq<RequestId>) => true
       case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => (
         // we've just read the local tail value, and no-one else should modify that
         && localTail == s.localTails[nodeId]
         // the local tail should be smaller or equal than the ctail
         && localTail <= s.ctail.value
-        // there should be at least one queued op
-        && |queued_ops| > 0
       )
       case Combiner(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat) => (
         // the global tail may have already advanced...
@@ -852,8 +847,6 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
         && localTail <= globalTail
         // the log now contains all entries up to localtail
         && LogContainsEntriesUpToHere(s.log, localTail)
-        // there should be at least one queued op
-        && |queued_ops| > 0
       )
       case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => (
         // the global tail may have already advanced...
@@ -861,11 +854,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
         // update the ctail value
         && localAndGlobalTail <= s.ctail.value
         // the local tail should be smaller than this one here
-        && s.localTails[nodeId] < localAndGlobalTail
+        && s.localTails[nodeId] <= localAndGlobalTail
         // the log now contains all entries up to localAndGlobalTail
         && LogContainsEntriesUpToHere(s.log, localAndGlobalTail)
-        // there should be at least one queued op
-        && |queued_ops| > 0
       )
     }
   }
@@ -1062,7 +1053,13 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     requires AdvanceTail(m, m', nodeId, request_ids)
     ensures Inv(m')
   {
+    forall nid | nid in m'.replicas
+      ensures m'.replicas[nid] == state_at_version(m'.log, get_local_tail(m', nid))
+      {
+        state_at_version_preserves(m.log, m'.log, get_local_tail(m', nid));
+     }
   }
+
 
   lemma ExecLoadLtail_PreservesInv(m: M, m': M, nodeId: NodeId)
     requires Inv(m)
