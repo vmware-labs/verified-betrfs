@@ -41,7 +41,7 @@ class Counter:
       args += ["/noAutoReq"]
       args += ["/noVerify"]
       args += ["/compile:0"]
-      args += ["/nologo"]
+      # args += ["/nologo"]
       args += ["/env:0"]
       if show_ghost:
         args += ["/printMode:NoIncludes"]
@@ -138,7 +138,7 @@ class Counter:
       for line in lines:
         if (re.search("^\s*export ", line)
             or re.search("^\s*provides ", line)
-            or re.search("^\s*reveals ", line)
+            # or re.search("^\s*reveals ", line)
             or re.search("^\s*import ", line)):
           # Maybe these export controls should get billed, but it's unclear
           # (from out here in this python script) who to bill them to: some
