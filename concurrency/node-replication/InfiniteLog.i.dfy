@@ -1236,28 +1236,20 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     requires WriteLogEntry(m, m', nodeId)
     ensures Inv(m')
   {
-    assert m.replicas.Keys == m'.replicas.Keys;
-    assert m.replicas == m'.replicas;
     forall nid | nid in m'.replicas
       ensures m'.replicas[nid] == state_at_version(m'.log, get_local_tail(m', nid))
       {
-        assert get_local_tail(m', nid) == get_local_tail(m, nid);
-        assert forall k | 0 <= k < get_local_tail(m, nid) :: k in m.log;
-        assert forall k | 0 <= k < get_local_tail(m', nid) :: k in m'.log;
-
-        assert forall k | 0 <= k < m.ctail.value :: m.log[k] == m'.log[k];
-
         forall k | 0 <= k < get_local_tail(m', nid) ensures m.log[k] == m'.log[k] {
           match m.combiner[nid] {
             case Combiner(queued_ops, localTail, globalTail) =>
               if localTail > m.ctail.value {
+                // If this were true, then the whole lemma goes through.
+                assert m.combiner[nodeId].globalTail > m.combiner[nid].localTail;
                 // proof here
               }
             case _ =>
-              assert true;
           }
         }
-        assert forall k | 0 <= k < get_local_tail(m', nid) :: m.log[k] == m'.log[k];
 
         state_at_version_preserves(m.log, m'.log, get_local_tail(m', nid));
       }
