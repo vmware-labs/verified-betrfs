@@ -35,7 +35,7 @@ class Counter:
         self.iron_base = iron_base
 
     def run_dafny(self, show_ghost, dafny_filename, tmp_filename):
-      executable = self.iron_base + "/.dafny/dafny/Binaries/dafny"
+      executable = self.iron_base + "/.dafny/bin/dafny"
       args  = [] 
       args += ["/rprint:-"]
       args += ["/noAutoReq"]
