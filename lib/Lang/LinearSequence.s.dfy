@@ -60,7 +60,6 @@ module {:extern "LinearExtern"} LinearSequence_s {
   type {:extern "predefined"} lseq<A>
 
   function {:axiom} lseqs_raw<A(00)>(l:lseq<A>):(s:seq<maybe<A>>) // contents of an lseq, as ghost seq
-    ensures rank_is_less_than(s, l)
 
 
   function lseq_has<A(00)>(l:lseq<A>):(s:seq<bool>)
@@ -73,7 +72,6 @@ module {:extern "LinearExtern"} LinearSequence_s {
   lemma {:axiom} axiom_lseqs_rank<A(00)>(l:lseq<A>, s:seq<A>)
     requires |lseqs_raw(l)| == |s|
     requires forall i :: 0 <= i < |s| ==> s[i] == read(lseqs_raw(l)[i])
-    ensures rank_is_less_than(s, l)
 
   lemma {:axiom} axiom_lseqs_extensional<A(00)>(l1:lseq<A>, l2:lseq<A>)
     requires lseqs_raw(l1) == lseqs_raw(l2)
