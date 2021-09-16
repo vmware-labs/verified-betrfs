@@ -4,8 +4,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 
-echo "NOTE: this will use the /noNLarith flag! If you're working on a file where nonlinear arith is allowed use tools/local-dafny-nonlinear.sh"
-echo "NOTE: since it's okay to park in the middle of the street with my blinkers on, jonh added /compile:0"
+echo "NOTE: using /noNLarith and /compile:0"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 set -x
-$DIR/../.dafny/bin/dafny "$@" /induction:1 /noNLarith /compile:0
+$DIR/../.dafny/bin/dafny "$@" /induction:1 /noNLarith /compile:0 /timeLimit:20

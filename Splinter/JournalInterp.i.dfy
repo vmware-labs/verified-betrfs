@@ -202,6 +202,19 @@ module JournalInterpMod {
     }
   }
 
+  lemma MappingLemma(v: Variables, cache: CacheIfc.Variables, newCU: CU, sb: Superblock, cr: ChainResult)
+    requires v.WF()
+    requires sb == Superblock(Some(newCU), v.boundaryLSN)
+    requires cr == ChainFrom(cache.dv, sb)
+    requires v.lsnToCU == MappingFor(cache, sb)
+    requires parse(ReadValue(cache, newCU)) == Some(JournalRecord(TailToMsgSeq(v), priorCU);
+    ensures cr.chain.Some?
+    ensures CUForChainIdx(cr.chain.value, 0) == newCU
+  {
+      //assert ChainFrom(cache.dv, sb).readCUs[0] == newCU
+    reveal_MappingFor();
+  }
+
   // Add comment about what this supposed to do the TODOS here
   lemma InternalStepLemma(v: Variables, cache: CacheIfc.Variables, v': Variables, cache': CacheIfc.Variables,  sb:Superblock, base: InterpMod.Interp, cacheOps: CacheIfc.Ops, sk: Skolem)
     requires DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb))
@@ -308,8 +321,8 @@ module JournalInterpMod {
   }
 
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, base: InterpMod.Interp)
-    requires DiskViewsEquivalentForSeq(cache0.dv, cache1.dv, IReads(cache0, v.CurrentSuperblock()))
     requires v.WF()
+    requires DiskViewsEquivalentForSeq(cache0.dv, cache1.dv, IReads(cache0, v.CurrentSuperblock()))
     requires base.seqEnd == v.boundaryLSN
 
     // QUESTION: We need to require these right?, Need to figure this out for later
