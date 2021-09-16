@@ -318,7 +318,6 @@ module SimpleCache_Refines_AbstractCache refines
     }
   }
 
-
   lemma NextRefinesNext(s: A.Variables, s': A.Variables, op: ifc.Op)
   //requires Inv(s)
   //requires Inv(s')

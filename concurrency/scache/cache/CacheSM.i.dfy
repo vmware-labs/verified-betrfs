@@ -1,5 +1,6 @@
 include "../../framework/DiskSSM.s.dfy"
 include "CacheSpec.s.dfy"
+include "../Constants.i.dfy"
 include "../../../lib/Base/Option.s.dfy"
 
 module CacheStatusType {
@@ -11,6 +12,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   import opened Options
   import CacheIfc
   import opened CacheStatusType
+  import opened Constants
 
   datatype Entry =
     | Empty
@@ -179,6 +181,13 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   }
 
   predicate Init(s: M)
+  {
+    && s == M(
+      (map i: nat | 0 <= i < NUM_DISK_PAGES as nat :: None),
+      (map i: nat | 0 <= i < CACHE_SIZE as nat :: Empty),
+       map[], map[], {}, {},
+       map[], map[], map[], map[])
+  }
 
   function dot3(a: M, b: M, c: M) : M {
     dot(dot(a, b), c)
@@ -300,7 +309,53 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     && shard' == CacheStatus(cache_idx, Dirty)
   }
 
+  datatype Step =
+    | StartReadStep(cache_idx: nat, disk_idx: nat)
+    | FinishReadStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block)
+    | StartWritebackStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block)
+    | FinishWritebackStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block)
+    | EvictStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, cache_idx2_opt: Option<nat>)
+    | ObserveCleanForSyncStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, rid: RequestId, s: set<nat>)
+    | ApplyReadStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, rid: RequestId)
+    | ApplyWriteStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, new_data: DiskIfc.Block, rid: RequestId)
+    | MarkDirtyStep(cache_idx: nat)
+
+  predicate InternalStep(shard: M, shard': M, step: Step)
+  {
+    match step {
+      case StartReadStep(cache_idx, disk_idx) =>
+        StartRead(shard, shard', cache_idx, disk_idx)
+
+      case FinishReadStep(cache_idx, disk_idx, data) => 
+        FinishRead(shard, shard', cache_idx, disk_idx, data)
+
+      case StartWritebackStep(cache_idx, disk_idx, data) =>
+        StartWriteback(shard, shard', cache_idx, disk_idx, data)
+
+      case FinishWritebackStep(cache_idx, disk_idx, data) =>
+        FinishWriteback(shard, shard', cache_idx, disk_idx, data)
+
+      case EvictStep(cache_idx, disk_idx, data, cache_idx2_opt) =>
+        Evict(shard, shard', cache_idx, disk_idx, data, cache_idx2_opt)
+
+      case ObserveCleanForSyncStep(cache_idx, disk_idx, data, rid, s) =>
+        ObserveCleanForSync(shard, shard', cache_idx, disk_idx, data, rid, s)
+
+      case ApplyReadStep(cache_idx, disk_idx, data, rid) =>
+        ApplyRead(shard, shard', cache_idx, disk_idx, data, rid)
+
+      case ApplyWriteStep(cache_idx, disk_idx, data, new_data, rid) =>
+        ApplyWrite(shard, shard', cache_idx, disk_idx, data, new_data, rid)
+
+      case MarkDirtyStep(cache_idx) =>
+        MarkDirty(shard, shard', cache_idx)
+    }
+  }
+
   predicate Internal(shard: M, shard': M)
+  {
+    exists step :: InternalStep(shard, shard', step)
+  }
 
   predicate Inv(s: M) {
     true
