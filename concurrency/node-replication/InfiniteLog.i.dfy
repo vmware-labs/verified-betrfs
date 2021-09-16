@@ -576,7 +576,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   // STATE TRANSITION: CombinerUpdatedCtail -> CombinerReady
   //
-  // Update the local tail pointer of hte replica to the stored global tail
+  // Update the local tail pointer of the replica to the stored global tail
   //
   // { CombinerUpdatedCtail(gtail, ltail, gtail, j) ; … }
   //   store ltails[tkn] = gtail; // update replica's tail
@@ -1152,7 +1152,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
 
         assert  m'.log.Keys !! p.log.Keys;
         assert  m'.replicas.Keys !! p.replicas.Keys;
-        assert  m'.localTails.Keys !! p.localTails.Keys;   // <-- we update localTails, so that one fails
+        assert  m'.localTails.Keys !! p.localTails.Keys;
         assert  m'.localReads.Keys !! p.localReads.Keys;
         assert  m'.localUpdates.Keys !! p.localUpdates.Keys;
         assert  m'.combiner.Keys !! p.combiner.Keys;       // <-- we also write combiner, but that one is OK??

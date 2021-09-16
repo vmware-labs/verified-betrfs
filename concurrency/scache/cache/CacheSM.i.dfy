@@ -206,7 +206,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     && s.disk_idx_to_cache_idx[disk_idx] == None
     && s' == s
       .(entries := s.entries[cache_idx := Reading(disk_idx)])
-      .(disk_idx_to_cache_idx := s.disk_idx_to_cache_idx[cache_idx := Some(cache_idx)])
+      .(disk_idx_to_cache_idx := s.disk_idx_to_cache_idx[disk_idx := Some(cache_idx)])
       .(read_reqs := s.read_reqs + {disk_idx})
       /*
     && shard == dot(
@@ -243,8 +243,19 @@ module CacheSSM refines DiskSSM(CacheIfc) {
        */
   }
 
-  predicate StartWriteback(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, data: DiskIfc.Block) {
+  predicate StartWriteback(s: M, s': M,
+      cache_idx: nat)
+  {
+    && s.M?
+    && cache_idx in s.statuses
+    && s.statuses[cache_idx] == Dirty
+    && cache_idx in s.entries
+    && s.entries[cache_idx].Entry?
+    && s' == s
+      .(statuses := s.statuses[cache_idx := Writeback])
+      .(write_reqs := s.write_reqs[s.entries[cache_idx].disk_idx := s.entries[cache_idx].data])
+
+      /*
     && shard == dot(
         CacheStatus(cache_idx, Dirty),
         CacheEntry(cache_idx, disk_idx, data)
@@ -254,10 +265,21 @@ module CacheSSM refines DiskSSM(CacheIfc) {
         CacheEntry(cache_idx, disk_idx, data), // unchanged
         DiskWriteReq(disk_idx, data)
        )
+       */
   }
 
-  predicate FinishWriteback(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, data: DiskIfc.Block) {
+  predicate FinishWriteback(s: M, s': M,
+      cache_idx: nat)
+  {
+    && s.M?
+    && cache_idx in s.entries
+    && cache_idx in s.statuses
+    && s.entries[cache_idx].Entry?
+    && s.entries[cache_idx].disk_idx in s.write_resps
+    && s' == s
+        .(statuses := s.statuses[cache_idx := Clean])
+        .(write_resps := s.write_resps - {s.entries[cache_idx].disk_idx})
+  /*
     && shard == dot3(
         CacheEntry(cache_idx, disk_idx, data),
         CacheStatus(cache_idx, Writeback),
@@ -267,10 +289,19 @@ module CacheSSM refines DiskSSM(CacheIfc) {
         CacheEntry(cache_idx, disk_idx, data), // unchanged
         CacheStatus(cache_idx, Clean)
       )
+      */
   }
 
   predicate Evict(shard: M, shard': M,
       cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, cache_idx2: Option<nat>) {
+    && s.M?
+    && cache_idx in s.statuses
+    && cache_idx in s.entries
+    && s.statues[cache_idx] == Clean
+    && s.
+    && s' == s.(entries := s.entries[cache_idx := Empty])
+        .(disk_idx_to_cache_idx
+  /*
     && shard == dot3(
         CacheStatus(cache_idx, Clean),
         CacheEntry(cache_idx, disk_idx, data),
@@ -280,6 +311,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
         CacheEmpty(cache_idx),
         DiskIdxToCacheIdx(disk_idx, None)
       )
+      */
   }
 
   predicate ObserveCleanForSync(shard: M, shard': M,
@@ -332,9 +364,9 @@ module CacheSSM refines DiskSSM(CacheIfc) {
 
   datatype Step =
     | StartReadStep(cache_idx: nat, disk_idx: nat)
-    | FinishReadStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block)
-    | StartWritebackStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block)
-    | FinishWritebackStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block)
+    | FinishReadStep(cache_idx: nat, disk_idx: nat)
+    | StartWritebackStep(cache_idx: nat)
+    | FinishWritebackStep(cache_idx: nat)
     | EvictStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, cache_idx2_opt: Option<nat>)
     | ObserveCleanForSyncStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, rid: RequestId, s: set<nat>)
     | ApplyReadStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, rid: RequestId)
@@ -347,14 +379,14 @@ module CacheSSM refines DiskSSM(CacheIfc) {
       case StartReadStep(cache_idx, disk_idx) =>
         StartRead(shard, shard', cache_idx, disk_idx)
 
-      case FinishReadStep(cache_idx, disk_idx, data) => 
+      case FinishReadStep(cache_idx, disk_idx) => 
         FinishRead(shard, shard', cache_idx, disk_idx)
 
-      case StartWritebackStep(cache_idx, disk_idx, data) =>
-        StartWriteback(shard, shard', cache_idx, disk_idx, data)
+      case StartWritebackStep(cache_idx) =>
+        StartWriteback(shard, shard', cache_idx)
 
-      case FinishWritebackStep(cache_idx, disk_idx, data) =>
-        FinishWriteback(shard, shard', cache_idx, disk_idx, data)
+      case FinishWritebackStep(cache_idx) =>
+        FinishWriteback(shard, shard', cache_idx)
 
       case EvictStep(cache_idx, disk_idx, data, cache_idx2_opt) =>
         Evict(shard, shard', cache_idx, disk_idx, data, cache_idx2_opt)

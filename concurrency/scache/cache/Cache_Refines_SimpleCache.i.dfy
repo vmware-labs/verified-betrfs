@@ -10,7 +10,7 @@ module DiskSSM_Refines_SimpleCachine
   import opened Constants
   import opened RequestIds
   import opened Options
-  import CacheSSM
+  import opened CacheSSM
   import CacheIfc
   import DiskIfc
 
@@ -121,21 +121,21 @@ module DiskSSM_Refines_SimpleCachine
   requires s'.disk == s.disk
   ensures Inv(s')
 
-  lemma FinishRead_PreservesInv(s: A.Variables, s': A.Variables, cache_idx: nat, disk_idx: nat, data: DiskIfc.Block)
+  lemma FinishRead_PreservesInv(s: A.Variables, s': A.Variables, cache_idx: nat, disk_idx: nat)
   requires Inv(s)
-  requires CacheSSM.FinishRead(s.machine, s'.machine, cache_idx, disk_idx, data)
+  requires CacheSSM.FinishRead(s.machine, s'.machine, cache_idx, disk_idx)
   requires s'.disk == s.disk
   ensures Inv(s')
 
-  lemma StartWriteback_PreservesInv(s: A.Variables, s': A.Variables, cache_idx: nat, disk_idx: nat, data: DiskIfc.Block)
+  lemma StartWriteback_PreservesInv(s: A.Variables, s': A.Variables, cache_idx: nat)
   requires Inv(s)
-  requires CacheSSM.StartWriteback(s.machine, s'.machine, cache_idx, disk_idx, data)
+  requires CacheSSM.StartWriteback(s.machine, s'.machine, cache_idx)
   requires s'.disk == s.disk
   ensures Inv(s')
 
-  lemma FinishWriteback_PreservesInv(s: A.Variables, s': A.Variables, cache_idx: nat, disk_idx: nat, data: DiskIfc.Block)
+  lemma FinishWriteback_PreservesInv(s: A.Variables, s': A.Variables, cache_idx: nat)
   requires Inv(s)
-  requires CacheSSM.FinishWriteback(s.machine, s'.machine, cache_idx, disk_idx, data)
+  requires CacheSSM.FinishWriteback(s.machine, s'.machine, cache_idx)
   requires s'.disk == s.disk
   ensures Inv(s')
 
@@ -169,6 +169,108 @@ module DiskSSM_Refines_SimpleCachine
   requires s'.disk == s.disk
   ensures Inv(s')
 
+  lemma StartRead_Monotonic(s: A.Variables, s': A.Variables, rest: CacheSSM.M,
+      cache_idx: nat, disk_idx: nat)
+  requires Inv(A.Variables(s.disk, CacheSSM.dot(s.machine, rest)))
+  requires CacheSSM.StartRead(s.machine, s'.machine, cache_idx, disk_idx)
+  ensures CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest))
+  {
+    /*assert disk_idx in s.machine.read_reqs ==> IsReading(s.machine, disk_idx);
+    var f := CacheSSM.dot(s.machine, rest);
+    var f' := CacheSSM.dot(s'.machine, rest);
+    assert f'.M?;
+    assert (f'.entries == f.entries[cache_idx := CacheSSM.Reading(disk_idx)]);
+    assert (f'.disk_idx_to_cache_idx == f.disk_idx_to_cache_idx[disk_idx := Some(cache_idx)]);
+    assert (f'.read_reqs == f.read_reqs + {disk_idx});*/
+    assert CacheSSM.StartRead(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), cache_idx, disk_idx);
+    assert CacheSSM.InternalStep(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), CacheSSM.StartReadStep(cache_idx, disk_idx));
+  }
+
+  lemma FinishRead_Monotonic(s: A.Variables, s': A.Variables, rest: CacheSSM.M,
+      cache_idx: nat, disk_idx: nat)
+  requires Inv(A.Variables(s.disk, CacheSSM.dot(s.machine, rest)))
+  requires CacheSSM.FinishRead(s.machine, s'.machine, cache_idx, disk_idx)
+  ensures CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest))
+  {
+    assert CacheSSM.InternalStep(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), CacheSSM.FinishReadStep(cache_idx, disk_idx));
+  }
+
+  lemma StartWriteback_Monotonic(s: A.Variables, s': A.Variables, rest: CacheSSM.M,
+      cache_idx: nat)
+  requires Inv(A.Variables(s.disk, CacheSSM.dot(s.machine, rest)))
+  requires CacheSSM.StartWriteback(s.machine, s'.machine, cache_idx)
+  ensures CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest))
+  {
+    var disk_idx := s.machine.entries[cache_idx].disk_idx;
+    var f := CacheSSM.dot(s.machine, rest);
+    assert disk_idx in f.write_reqs ==> IsWriting(f, disk_idx);
+    assert CacheSSM.StartWriteback(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), cache_idx);
+    assert CacheSSM.InternalStep(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), CacheSSM.StartWritebackStep(cache_idx));
+  }
+
+  lemma FinishWriteback_Monotonic(s: A.Variables, s': A.Variables, rest: CacheSSM.M,
+      cache_idx: nat)
+  requires Inv(A.Variables(s.disk, CacheSSM.dot(s.machine, rest)))
+  requires CacheSSM.FinishWriteback(s.machine, s'.machine, cache_idx)
+  ensures CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest))
+  {
+    assert CacheSSM.InternalStep(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), CacheSSM.FinishWritebackStep(cache_idx));
+  }
+
+  lemma InternalMonotonic(s: A.Variables, s': A.Variables, rest: CacheSSM.M)
+  requires Inv(A.Variables(s.disk, CacheSSM.dot(s.machine, rest)))
+  requires CacheSSM.Internal(s.machine, s'.machine)
+  ensures CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest))
+  {
+    var step :| CacheSSM.InternalStep(s.machine, s'.machine, step);
+    match step {
+      case StartReadStep(cache_idx, disk_idx) => {
+        StartRead_Monotonic(s, s', rest, cache_idx, disk_idx);
+      }
+
+      case FinishReadStep(cache_idx, disk_idx) => {
+        assume false;
+        assert CacheSSM.InternalStep(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), step);
+      }
+
+      case StartWritebackStep(cache_idx) => {
+        assume false;
+        assert CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest));
+      }
+
+      case FinishWritebackStep(cache_idx) => {
+        assume false;
+        assert CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest));
+      }
+
+      case EvictStep(cache_idx, disk_idx, data, cache_idx2_opt) => {
+        assume false;
+        assert CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest));
+      }
+
+      case ObserveCleanForSyncStep(cache_idx, disk_idx, data, rid, se) => {
+        assume false;
+        assert CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest));
+      }
+
+      case ApplyReadStep(cache_idx, disk_idx, data, rid) => {
+        assume false;
+        assert CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest));
+      }
+
+      case ApplyWriteStep(cache_idx, disk_idx, data, new_data, rid) => {
+        assume false;
+        assert CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest));
+      }
+
+      case MarkDirtyStep(cache_idx) => {
+        assume false;
+        assert CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest));
+      }
+    }
+  }
+
+/*
   lemma Internal_PreservesInv(s: A.Variables, s': A.Variables)
   requires Inv(s)
   requires A.Machine(s, s')
@@ -179,8 +281,8 @@ module DiskSSM_Refines_SimpleCachine
       case StartReadStep(cache_idx, disk_idx) =>
         StartRead_PreservesInv(s, s', cache_idx, disk_idx);
 
-      case FinishReadStep(cache_idx, disk_idx, data) => 
-        FinishRead_PreservesInv(s, s', cache_idx, disk_idx, data);
+      case FinishReadStep(cache_idx, disk_idx) => 
+        FinishRead_PreservesInv(s, s', cache_idx, disk_idx);
 
       case StartWritebackStep(cache_idx, disk_idx, data) =>
         StartWriteback_PreservesInv(s, s', cache_idx, disk_idx, data);
@@ -204,6 +306,7 @@ module DiskSSM_Refines_SimpleCachine
         MarkDirty_PreservesInv(s, s', cache_idx);
     }
   }
+  */
 
   lemma NextPreservesInv(s: A.Variables, s': A.Variables, op: ifc.Op)
   //requires Inv(s)
@@ -221,7 +324,8 @@ module DiskSSM_Refines_SimpleCachine
         InitImpliesInv(s');
       }
       case InternalOp => {
-        Internal_PreservesInv(s, s');
+        assume false;
+        //Internal_PreservesInv(s, s');
       }
     }
   }
