@@ -197,8 +197,18 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     dot(dot(dot(a, b), c), d)
   }
 
-  predicate StartRead(shard: M, shard': M,
+  predicate StartRead(s: M, s': M,
       cache_idx: nat, disk_idx: nat) {
+    && s.M?
+    && cache_idx in s.entries
+    && s.entries[cache_idx] == Empty
+    && disk_idx in s.disk_idx_to_cache_idx
+    && s.disk_idx_to_cache_idx[disk_idx] == None
+    && s' == s
+      .(entries := s.entries[cache_idx := Reading(disk_idx)])
+      .(disk_idx_to_cache_idx := s.disk_idx_to_cache_idx[cache_idx := Some(cache_idx)])
+      .(read_reqs := s.read_reqs + {disk_idx})
+      /*
     && shard == dot(
         CacheEmpty(cache_idx),
         DiskIdxToCacheIdx(disk_idx, None)
@@ -208,10 +218,20 @@ module CacheSSM refines DiskSSM(CacheIfc) {
         DiskIdxToCacheIdx(disk_idx, Some(cache_idx)),
         DiskReadReq(disk_idx)
        )
+       */
   }
 
-  predicate FinishRead(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, data: DiskIfc.Block) {
+  predicate FinishRead(s: M, s': M, cache_idx: nat, disk_idx: nat)
+  {
+    && s.M?
+    && cache_idx in s.entries
+    && s.entries[cache_idx] == Reading(disk_idx)
+    && disk_idx in s.read_resps
+    && s' == s
+      .(entries := s.entries[cache_idx := Entry(disk_idx, s.read_resps[disk_idx])])
+      .(statuses := s.statuses[cache_idx := Clean])
+      .(read_resps := s.read_resps - {disk_idx})
+      /*
     && shard == dot(
         CacheReading(cache_idx, disk_idx),
         DiskReadResp(disk_idx, data)
@@ -220,6 +240,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
         CacheStatus(cache_idx, Clean),
         CacheEntry(cache_idx, disk_idx, data)
        )
+       */
   }
 
   predicate StartWriteback(shard: M, shard': M,
@@ -327,7 +348,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
         StartRead(shard, shard', cache_idx, disk_idx)
 
       case FinishReadStep(cache_idx, disk_idx, data) => 
-        FinishRead(shard, shard', cache_idx, disk_idx, data)
+        FinishRead(shard, shard', cache_idx, disk_idx)
 
       case StartWritebackStep(cache_idx, disk_idx, data) =>
         StartWriteback(shard, shard', cache_idx, disk_idx, data)
