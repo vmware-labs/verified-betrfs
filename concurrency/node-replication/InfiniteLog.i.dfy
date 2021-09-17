@@ -614,7 +614,6 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     // if either state is Fale, then fail
     if x == Fail || y == Fail then
       Fail
-    // what is exactly the condition here?
     else if x.log.Keys !! y.log.Keys
          && x.replicas.Keys !! y.replicas.Keys
          && x.localTails.Keys !! y.localTails.Keys
@@ -908,8 +907,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && Inv_CombinerLogNonOverlap(s)
     && Inv_ReadOnlyStateNodeIdExists(s)
 
-    // there are no entries placed in the log
-    && (forall idx | idx >= s.global_tail.value :: idx !in s.log.Keys)
+    // the log doesn't contain entries above the global tail
+    && (forall idx : nat | idx >= s.global_tail.value :: idx !in s.log.Keys)
+
 
     // && (forall nid | nid in s.combiner :: CombinerRange(s.combiner[nid]) !!  (set x | 0 <= x < get_local_tail(s, nid) :: x))
 
@@ -1139,28 +1139,13 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
 
   lemma InternalMonotonic(m: M, m': M, p: M)
   requires Internal(m, m')
+  requires Inv(dot(m, p))
   requires dot(m, p) != Fail
   ensures Internal(dot(m, p), dot(m', p))
   {
     var step :| NextStep(m, m', step);
     match step {
       case GoToCombinerReady_Step(nodeId: NodeId) => {
-        assert m.M?;
-        assert m'.M?;
-        assert p.M?;
-        assert dot(m, p).M?;
-
-        assert  m'.log.Keys !! p.log.Keys;
-        assert  m'.replicas.Keys !! p.replicas.Keys;
-        assert  m'.localTails.Keys !! p.localTails.Keys;
-        assert  m'.localReads.Keys !! p.localReads.Keys;
-        assert  m'.localUpdates.Keys !! p.localUpdates.Keys;
-        assert  m'.combiner.Keys !! p.combiner.Keys;       // <-- we also write combiner, but that one is OK??
-        assert  !(m'.ctail.Some? && p.ctail.Some?);
-        assert  !(m'.global_tail.Some? && p.global_tail.Some?);
-
-        assert dot(m', p).M?;
-
         assert GoToCombinerReady(dot(m, p), dot(m', p), nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
