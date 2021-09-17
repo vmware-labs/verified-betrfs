@@ -404,16 +404,7 @@ module JournalMachineMod {
         then ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())])
         else
           var rowResult := ChainSuccess([journalRecord], journalRecord.messageSeq);
-//          tupleOrdering(ChainFromDecreasesTuple(Some(journalRecord.messageSeq.seqStart)), ChainFromDecreasesTuple(expectedEnd));
           var remainder := ChainFromRecursive(cache, journalRecord.priorSB(sb), Some(journalRecord.messageSeq.seqStart));
-          assert remainder.success() && !remainder.interp().IsEmpty() ==> remainder.last().cumulativeResult.interp.seqEnd == rowResult.interp.seqStart by {
-            if remainder.success() && !remainder.interp().IsEmpty() {
-              calc {
-                remainder.last().cumulativeResult.interp.seqEnd;
-                rowResult.interp.seqStart;
-              }
-            }
-          }
           var cl := ChainLookup(remainder.rows + [ChainLookupRow(
             sb,
             expectedEnd,
@@ -424,40 +415,13 @@ module JournalMachineMod {
             remainder.last().cumulativeReadCUs+[cu],
             MapUnionPreferA(remainder.lsnMap(), rowResult.lsnMap(sb.freshestCU))
           )]);
-          assert expectedEnd.Some? && cl.success() && !cl.interp().IsEmpty() ==> cl.interp().seqEnd == expectedEnd.value by {
-            if expectedEnd.Some? && cl.success() && !cl.interp().IsEmpty() {
-              calc {
-                cl.interp().seqEnd;
-                rowResult.interp.seqEnd;
-                journalRecord.messageSeq.seqEnd;
-                expectedEnd.value;
+          assert cl.Chained() by {
+            forall idx | 0 <= idx < |cl.rows| ensures cl.Linked(idx) {
+              if idx < |cl.rows|-1 {
+                assert remainder.Linked(idx);  // trigger
               }
             }
           }
-//          assert cl.Chained() by {
-//            forall idx
-//             | 0 <= idx < |cl.rows|
-//             ensures cl.Linked(idx) {
-//             if idx == |cl.rows|-1 {
-//              assert cl.rows[|cl.rows|-2] == remainder.last();
-//
-//              assert cl.last().sb.freshestCU.Some?;
-//              assert cl.last().sb.boundaryLSN < cl.last().journalRec().messageSeq.seqEnd;
-//              if cl.last().journalRec().priorCU.Some? {
-//                assert cl.last().journalRec().priorCU.Some?;
-//                assert cl.last().priorSB() == cl.last().journalRec().priorSB(sb);
-//                assert journalRecord.priorSB(sb) == cl.last().priorSB();
-//              } else {
-//                assert journalRecord.priorSB(sb) == cl.last().priorSB();
-//              }
-//              assert remainder.last().expectedEnd == Some(journalRecord.messageSeq.seqStart);
-//              assert cl.Linked(idx);
-//             } else {
-//              assert remainder.Linked(idx);
-//              //assert cl.Linked(idx);
-//             }
-//            }
-//          }
           cl
   }
 
