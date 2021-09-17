@@ -125,6 +125,77 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         CacheResources.DiskWriteTicket_unfold(ticket));
   }
 
+  method disk_read_async(
+      shared cache: Cache,
+      inout linear local: LocalState,
+      disk_idx: uint64,
+      cache_idx: uint64,
+      ptr: Ptr,
+      glinear cache_reading: CacheResources.CacheReading,
+      glinear ro: T.Token,
+      glinear contents: PointsToArray<byte>,
+      glinear idx_perm: CellContents<int64>,
+      glinear ticket: CacheResources.DiskReadTicket)
+  requires cache.Inv()
+  requires old_local.WF()
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
+  requires |contents.s| == PageSize as int
+  requires ticket == CacheResources.DiskReadTicket(disk_idx as nat)
+  requires contents.ptr == ptr
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
+  requires ptr.aligned(PageSize as int)
+  requires cache_reading.disk_idx == disk_idx as nat
+  requires cache_reading.cache_idx == cache_idx as nat
+  requires ro.loc == cache.status[cache_idx].rwlock_loc
+  requires ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
+  requires contents.ptr == cache.data[cache_idx]
+  requires idx_perm.cell == cache.disk_idx_of_entry[cache_idx]
+  requires idx_perm.v as int == disk_idx as int
+
+  ensures local.WF()
+  ensures local.t == old_local.t
+  decreases *
+  {
+    var idx: uint64;
+    glinear var access;
+    idx, access := get_free_io_slot(cache, inout local);
+    glinear var IOSlotAccess(iocb, io_slot_info) := access;
+
+    iocb_prepare_read(
+        lseq_peek(cache.io_slots, idx).iocb_ptr,
+        inout iocb,
+        disk_idx as int64,
+        4096,
+        cache.data_ptr(cache_idx));
+
+    write_cell(
+        lseq_peek(cache.io_slots, idx).io_slot_info_cell,
+        inout io_slot_info,
+        IOSlotRead(cache_idx));
+
+    glinear var readg := ReadG(
+        cache.key(cache_idx as int),
+        cache_reading,
+        idx_perm,
+        ro,
+        idx as int,
+        io_slot_info);
+
+    assert ReadGInv(
+        cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+        cache.io_slots[idx as nat].iocb_ptr,
+        iocb, contents, readg);
+
+    aio.async_read(
+        cache.ioctx,
+        lseq_peek(cache.io_slots, idx).iocb_ptr,
+        iocb,
+        contents,
+        readg,
+        CacheResources.DiskReadTicket_unfold(ticket));
+  }
+
   method disk_read_sync(
       disk_idx: uint64,
       ptr: Ptr,
