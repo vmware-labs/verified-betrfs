@@ -382,9 +382,8 @@ module JournalMachineMod {
   // Need a sub-function that's recursive, so we need a decreases.
   function ChainFromRecursive(cache: CacheIfc.Variables, sb: Superblock, expectedEnd: Option<LSN>) : (cl:ChainLookup)
     ensures cl.WF()
-    ensures cl.last().sb == sb
-    ensures cl.last().expectedEnd == expectedEnd
     ensures cl.ValidForSB(cache, sb)
+    ensures cl.last().expectedEnd == expectedEnd
     ensures expectedEnd.Some? && cl.success() && !cl.interp().IsEmpty() ==> cl.interp().seqEnd == expectedEnd.value
     decreases if expectedEnd.Some? then 0 else 1, if expectedEnd.Some? then expectedEnd.value else 0
   {
