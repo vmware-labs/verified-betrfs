@@ -124,49 +124,26 @@ module JournalMachineMod {
       // Note: WF doesn't say anything about values of cumulative fields; those get
       // defined in ValidSuccessorTo
 
-      &&(
-        ||(
-           && sb.freshestCU.None?        // sb doesn't need anything
-           && rawPage.None?              // and we didn't read anything
-           && rowResult == ChainSuccess([], MsgHistoryMod.Empty())
-          )
-        ||(
-           && sb.freshestCU.Some?        // sb points at a page
-           && rawPage.None?              // but we couldn't read it
-           && rowResult == ChainFailed
-          )
-        ||(
-           && sb.freshestCU.Some?        // sb points at a page
-           && rawPage.Some?              // and we couldn read it
-           && parse(rawPage.value).None? // but we couldn't parse it
-           && rowResult == ChainFailed
-          )
-        ||(
-           && sb.freshestCU.Some?        // sb points at a page
-           && rawPage.Some?              // and we couldn read it
-           && parse(rawPage.value).Some? // and we couldnt parse it
-           && var journalRecord := parse(rawPage.value).value;
-           && expectedEnd.Some?          // and we're expecting a particular end value
-           && expectedEnd.value != journalRecord.messageSeq.seqEnd  // and didn't get it
-           && rowResult == ChainFailed
-          )
-        ||(
-           && sb.freshestCU.Some?        // sb points at a page
-           && rawPage.Some?              // and we couldn read it
-           && parse(rawPage.value).Some? // and we could parse it
-           && var journalRecord := parse(rawPage.value).value;
-           && rowResult == (
-              if journalRecord.messageSeq.seqEnd <= sb.boundaryLSN
-              then
-                // but we don't need any of its records
-                ChainSuccess([], MsgHistoryMod.Empty())
-              else
-                // and we need at least one thing it has to offer
-                ChainSuccess([journalRecord], journalRecord.messageSeq)
-              )
-              // NB that the CU is in our readCUs in either case, whether
-              // the journalRecord is in .records or not.
-          )
+      && (
+        if sb.freshestCU.None?          // sb doesn't need anything
+        then
+          && rawPage.None?              // and we didn't read anything
+          && rowResult == ChainSuccess([], MsgHistoryMod.Empty())
+        else if rawPage.None?           // sb points at a page but we couldn't read it
+        then rowResult == ChainFailed
+        else if parse(rawPage.value).None? // we couldn't parse the page
+        then rowResult == ChainFailed
+        else
+          var journalRecord := parse(rawPage.value).value;
+          if expectedEnd.Some? && expectedEnd.value != journalRecord.messageSeq.seqEnd
+            // and we're expecting a particular end value and record didn't stitch
+          then rowResult == ChainFailed
+          else if journalRecord.messageSeq.seqEnd <= sb.boundaryLSN
+            // parsed journal record but don't need any of its entries
+          then rowResult == ChainSuccess([], MsgHistoryMod.Empty())
+          else rowResult == ChainSuccess([journalRecord], journalRecord.messageSeq)
+            // NB that the CU is in our readCUs in either case, whether
+            // the journalRecord is in .records or not. TODO document where that's enforced.
         )
     }
 
@@ -398,24 +375,29 @@ module JournalMachineMod {
     then
       var cl := EmptyChainLookup(sb, expectedEnd);
       //assert cl.interp().seqEnd == maxLsn;
-      assert cl.last().expectedEnd == expectedEnd;
+      assert cl.last().expectedEnd == expectedEnd;  // TODO can delete?
+      assert cl.WF();
       cl
     else
       var cu := sb.freshestCU.value;
       var rawPage := CacheIfc.ReadValue(cache, cu);
       if rawPage.None?
-      then ChainLookup([ChainLookupRow(sb, expectedEnd, None, ChainFailed, ChainFailed, [cu], EmptyLSNMap())])
+      then var cl := ChainLookup([ChainLookupRow(sb, expectedEnd, None, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]);
+        assert cl.WF(); cl
       else if parse(rawPage.value).None?
-      then ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())])
+      then var cl := ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]);
+        assert cl.WF(); cl
       else
         var journalRecord := parse(rawPage.value).value;
-        if journalRecord.messageSeq.seqEnd <= sb.boundaryLSN
-        then  // FirstRow by virtue of the record preceding the boundaryLSN
+        if expectedEnd.Some? && expectedEnd.value != journalRecord.messageSeq.seqEnd
+          // we're expecting a particular end value and record didn't stitch
+        then var cl := ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]);
+          assert cl.WF(); cl
+        else if journalRecord.messageSeq.seqEnd <= sb.boundaryLSN
+        then // parsed journal record but don't need any of its entries
           var rowResult := ChainSuccess([], MsgHistoryMod.Empty());
-          ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, rowResult, rowResult, [cu], EmptyLSNMap())])
-        else if expectedEnd.Some? && expectedEnd.value != journalRecord.messageSeq.seqEnd
-          // We were expectind a particular record, and it didn't stitch.
-        then ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())])
+          var cl := ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, rowResult, rowResult, [cu], EmptyLSNMap())]);
+          assert cl.WF(); cl
         else
           var rowResult := ChainSuccess([journalRecord], journalRecord.messageSeq);
           var remainder := ChainFromRecursive(cache, journalRecord.priorSB(sb), Some(journalRecord.messageSeq.seqStart));
@@ -435,6 +417,7 @@ module JournalMachineMod {
               }
             }
           }
+          assert cl.WF(); // TODO delete
           cl
   }
 
