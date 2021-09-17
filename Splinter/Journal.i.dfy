@@ -297,6 +297,7 @@ module JournalMachineMod {
     }
 
     predicate ValidForSB(cache: CacheIfc.Variables, sb: Superblock) {
+      && WF()
       && Valid(cache)
       && ForSB(sb)
     }
@@ -381,10 +382,9 @@ module JournalMachineMod {
   // This looks a lot like WF(), but also tests RespectsDisk (cache contents).
   // Need a sub-function that's recursive, so we need a decreases.
   function ChainFromRecursive(cache: CacheIfc.Variables, sb: Superblock, expectedEnd: Option<LSN>) : (cl:ChainLookup)
-    ensures cl.WF()
     ensures cl.ValidForSB(cache, sb)
     ensures cl.last().expectedEnd == expectedEnd
-    ensures expectedEnd.Some? && cl.success() && !cl.interp().IsEmpty() ==> cl.interp().seqEnd == expectedEnd.value
+//    ensures expectedEnd.Some? && cl.success() && !cl.interp().IsEmpty() ==> cl.interp().seqEnd == expectedEnd.value
     decreases if expectedEnd.Some? then 0 else 1, if expectedEnd.Some? then expectedEnd.value else 0
   {
     if sb.freshestCU.None?
@@ -405,7 +405,7 @@ module JournalMachineMod {
         if journalRecord.messageSeq.seqEnd <= sb.boundaryLSN
         then  // FirstRow by virtue of the record preceding the boundaryLSN
           var rowResult := ChainSuccess([], MsgHistoryMod.Empty());
-          ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, rowResult, rowResult, [cu], EmptyLSNMap())]);
+          ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, rowResult, rowResult, [cu], EmptyLSNMap())])
         else if expectedEnd.Some? && expectedEnd.value != journalRecord.messageSeq.seqEnd
           // We were expectind a particular record, and it didn't stitch.
         then ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())])
@@ -431,10 +431,9 @@ module JournalMachineMod {
           cl
   }
 
-  lemma UniqueChainLookup(cache: CacheIfc.Variables, sb: Superblock, cla: ChainLookup, clb: ChainLookup)
+  lemma UniqueChainLookup(cache: CacheIfc.Variables, sb: Superblock, cla: ChainLookup)
     requires cla.ValidForSB(cache, sb)
-    requires clb.ValidForSB(cache, sb)
-    ensures cla == clb
+    ensures forall clb:ChainLookup | clb.ValidForSB(cache, sb) :: cla == clb
   {
     assume false;
   }
@@ -443,8 +442,9 @@ module JournalMachineMod {
     ensures cl.ValidForSB(cache, sb)
     ensures forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) :: ocl == cl
   {
-    assume false;
-    EmptyChainLookup(sb, None)
+    var cl := ChainFromRecursive(cache, sb, None);
+    UniqueChainLookup(cache, sb, cl);
+    cl
   }
 
   datatype Variables = Variables(
@@ -588,9 +588,9 @@ module JournalMachineMod {
   }
 
   // advances marshalledLSN forward by marshalling a batch of messages into a dirty cache page
-  predicate AdvanceMarshalled(s: Variables, s': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newCU: CU)
+  predicate AdvanceMarshalled(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newCU: CU)
   {
-    && s.WF()
+    && v.WF()
 
     // newCU is an unused CU.
     // That could be because the impl has freshly reserved a chunk of CUs from the outer
@@ -598,24 +598,24 @@ module JournalMachineMod {
     // batch allocations so it can avoid needing to rewrite the marshaled allocation before
     // commiting a fresh superblock (on sync). Thus "unused" may be computed as "reserved
     // but known not to be in use in the current JournalChain".
-    && newCU !in ChainFrom(cache, s.CurrentSuperblock()).last().cumulativeReadCUs
+    && newCU !in ChainFrom(cache, v.CurrentSuperblock()).last().cumulativeReadCUs
 
     // Marshal and write the current record out into the cache. (This doesn't issue
     // a disk write, it just dirties a page.)
-    && var priorCU := if s.marshalledLSN == s.boundaryLSN then None else Some(s.lsnMap()[s.marshalledLSN-1]);
-    && var jr := JournalRecord(TailToMsgSeq(s), priorCU);
+    && var priorCU := (v.marshalledLookup.LsnMapDomain(); if v.marshalledLSN == v.boundaryLSN then None else Some(v.lsnMap()[v.marshalledLSN-1]));
+    && var jr := JournalRecord(TailToMsgSeq(v), priorCU);
     && cacheOps == [CacheIfc.Write(newCU, marshal(jr))]
 
     // Record the changes to the marshalled, unmarshalled regions, and update the allocation.
-    && s' == s.(
+    && v' == v.(
       // Open a new, empty record to absorb future journal Appends
-      marshalledLSN := s.unmarshalledLSN(),
+      marshalledLSN := v.unmarshalledLSN(),
       unmarshalledTail := [],
-      marshalledLookup := s'.marshalledLookup  // Tautology to defer this constraint to next predicate
+      marshalledLookup := v'.marshalledLookup  // Tautology to defer this constraint to next predicate
       )
-    // constructive: (map lsn:LSN | 0 <= lsn < s.unmarshalledLSN() :: if lsn < s.marshalledLSN then s.marshalledLookup[lsn] else newCU),
+    // constructive: (map lsn:LSN | 0 <= lsn < v.unmarshalledLSN() :: if lsn < v.marshalledLSN then v.marshalledLookup[lsn] else newCU),
     // predicate:
-    && s'.marshalledLookup == ChainFrom(cache, Superblock(Some(newCU), s.boundaryLSN))
+    && v'.marshalledLookup == ChainFrom(cache, Superblock(Some(newCU), v.boundaryLSN))
   }
 
   // advances cleanLSN forward by learning that the cache has written back a contiguous
