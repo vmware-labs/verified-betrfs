@@ -360,6 +360,13 @@ module JournalMachineMod {
         idx := idx + 1;
       }
     }
+
+    function DropLast() : ChainLookup
+      requires WF()
+      requires 1 < |rows| // Have something extra to drop
+    {
+      ChainLookup(Sequences.DropLast(rows))
+    }
   }
 
   function EmptyLSNMap() : map<LSN, CU>
@@ -431,19 +438,79 @@ module JournalMachineMod {
           cl
   }
 
-  lemma UniqueChainLookup(cache: CacheIfc.Variables, sb: Superblock, cla: ChainLookup)
-    requires cla.ValidForSB(cache, sb)
-    ensures forall clb:ChainLookup | clb.ValidForSB(cache, sb) :: cla == clb
+  lemma ValidPrior(cache: CacheIfc.Variables, cl: ChainLookup)
+    requires cl.Valid(cache)
+    requires 1 < |cl.rows|
+    ensures cl.DropLast().Valid(cache)
   {
-    assume false;
+    var dl := cl.DropLast();
+    forall idx | 0 <= idx < |dl.rows| ensures dl.Linked(idx) {
+      assert cl.Linked(idx);
+    }
+  }
+
+  lemma UniqueChainLookup(cache: CacheIfc.Variables, cla: ChainLookup, clb: ChainLookup)
+    requires cla.Valid(cache)
+    requires clb.Valid(cache)
+    requires cla.last().sb == clb.last().sb
+    requires cla.last().expectedEnd == clb.last().expectedEnd
+    ensures cla == clb
+    decreases |cla.rows|
+  {
+    assume false; // try rewriting WF into if-then-else first
+    // These triggers establish that the two chainlookups have the same number of rows.
+    assert cla.Linked(|cla.rows|-1);  // trigger
+    assert clb.Linked(|clb.rows|-1);  // trigger
+
+    var ra := cla.last();
+    var rb := clb.last();
+
+    assert ra.sb == rb.sb;
+    assert ra.expectedEnd == rb.expectedEnd;
+    assert ra.rawPage == rb.rawPage;
+
+    if ra.sb.freshestCU.None? {
+      assert ra.rowResult == rb.rowResult;
+    } else {
+      var cu := ra.sb.freshestCU.value;
+      var rawPage := CacheIfc.ReadValue(cache, cu);
+      if rawPage.None? {
+        assert ra.rowResult == rb.rowResult;
+      } else if parse(rawPage.value).None? {
+        assert ra.rowResult == rb.rowResult;
+      } else {
+        var journalRecord := parse(rawPage.value).value;
+        if journalRecord.messageSeq.seqEnd <= ra.sb.boundaryLSN {
+          assert ra.rowResult == ChainSuccess([], MsgHistoryMod.Empty());
+          assert rb.rowResult == ChainSuccess([], MsgHistoryMod.Empty());
+        } else {
+          assert ra.rowResult == rb.rowResult;
+        }
+      }
+    }
+    assert ra.rowResult == rb.rowResult;
+    assert ra.cumulativeResult == rb.cumulativeResult;
+    assert ra.cumulativeReadCUs == rb.cumulativeReadCUs;
+    assert ra.cumulativeLsnMap == rb.cumulativeLsnMap;
+    assert ra == rb;
+
+    if 1 < |cla.rows| {
+      ValidPrior(cache, cla);
+      ValidPrior(cache, clb);
+      UniqueChainLookup(cache, cla.DropLast(), clb.DropLast()); // recurse
+    }
   }
 
   function ChainFrom(cache: CacheIfc.Variables, sb: Superblock) : (cl:ChainLookup)
     ensures cl.ValidForSB(cache, sb)
-    ensures forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) :: ocl == cl
+    ensures forall ocl:ChainLookup | ocl.Valid(cache) && ocl.last().expectedEnd.None? :: ocl == cl
   {
     var cl := ChainFromRecursive(cache, sb, None);
-    UniqueChainLookup(cache, sb, cl);
+    assert forall ocl:ChainLookup | ocl.Valid(cache) && ocl.last().expectedEnd.None? :: ocl == cl by {
+      forall ocl:ChainLookup | ocl.Valid(cache) ensures ocl == cl {
+        UniqueChainLookup(cache, cl, ocl);
+      }
+    }
     cl
   }
 
