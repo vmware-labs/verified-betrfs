@@ -517,7 +517,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method get_free_page(shared cache: Cache, linear inout localState: LocalState)
+  method get_free_page(shared cache: Cache, linear inout localState: LocalState,
+      new_status: uint8)
   returns (
     cache_idx: uint64,
     glinear m: T.Token,
@@ -525,11 +526,16 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   )
   requires cache.Inv()
   requires old_localState.WF()
+  requires new_status == flag_exc_accessed_reading_clean
+        || new_status == flag_accessed_reading_clean
   ensures localState.WF()
   ensures
       && 0 <= cache_idx as int < CACHE_SIZE as int
       && m.loc == cache.status[cache_idx].rwlock_loc
-      && m.val == RwLock.ReadHandle(RwLock.ReadPending)
+      && (new_status == flag_exc_accessed_reading_clean ==>
+           m.val == RwLock.ReadHandle(RwLock.ReadPending))
+      && (new_status == flag_accessed_reading_clean ==>
+           m.val == RwLock.ReadHandle(RwLock.ReadObtained(-1)))
       && handle.is_handle(cache.key(cache_idx as int))
       && handle.CacheEmptyHandle?
   ensures localState.t == old_localState.t
@@ -563,7 +569,10 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && 0 <= cache_idx as int < CACHE_SIZE as int
         && m_opt.glSome?
         && m_opt.value.loc == cache.status[cache_idx].rwlock_loc
-        && m_opt.value.val == RwLock.ReadHandle(RwLock.ReadPending)
+        && (new_status == flag_exc_accessed_reading_clean ==>
+             m_opt.value.val == RwLock.ReadHandle(RwLock.ReadPending))
+        && (new_status == flag_accessed_reading_clean ==>
+             m_opt.value.val == RwLock.ReadHandle(RwLock.ReadObtained(-1)))
         && handle_opt.glSome?
         && handle_opt.value.is_handle(cache.key(cache_idx as int))
         && handle_opt.value.CacheEmptyHandle?
@@ -582,7 +591,10 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           && 0 <= cache_idx as int < CACHE_SIZE as int
           && m_opt.glSome?
           && m_opt.value.loc == cache.status[cache_idx].rwlock_loc
-          && m_opt.value.val == RwLock.ReadHandle(RwLock.ReadPending)
+          && (new_status == flag_exc_accessed_reading_clean ==>
+               m_opt.value.val == RwLock.ReadHandle(RwLock.ReadPending))
+          && (new_status == flag_accessed_reading_clean ==>
+               m_opt.value.val == RwLock.ReadHandle(RwLock.ReadObtained(-1)))
           && handle_opt.glSome?
           && handle_opt.value.is_handle(cache.key(cache_idx as int))
           && handle_opt.value.CacheEmptyHandle?
@@ -591,7 +603,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
         dispose_glnone(m_opt);
         dispose_glnone(handle_opt);
-        success, m_opt, handle_opt := cache.status_atomic(cache_idx).try_alloc();
+        success, m_opt, handle_opt := cache.status_atomic(cache_idx).try_alloc(new_status);
 
         i := i + 1;
       }
@@ -640,7 +652,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     if cache_idx == NOT_MAPPED {
       glinear var r, handle;
-      cache_idx, r, handle := get_free_page(cache, inout localState);
+      cache_idx, r, handle := get_free_page(cache, inout localState,
+          flag_exc_accessed_reading_clean);
 
       glinear var read_stub;
       glinear var read_ticket_opt;
@@ -988,7 +1001,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     write_handle' := WriteablePageHandle(cache_idx, handle, status', eo');
   }
 
-  /*method prefetch(
+  method prefetch(
       shared cache: Cache,
       inout linear localState: LocalState,
       disk_idx: uint64)
@@ -1000,17 +1013,16 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   {
     var done := false;
     while !done
+    decreases *
     {
       var cache_idx := atomic_index_lookup_read(
           cache.cache_idx_of_page_atomic(disk_idx), disk_idx as nat);
       if cache_idx == NOT_MAPPED {
       } else {
-        glinear var m, handle_opt;
-        cache_idx, m, handle_opt := get_free_page(cache, inout localState);
+        glinear var m, handle;
+        cache_idx, m, handle := get_free_page(cache, inout localState,
+            flag_accessed_reading_clean);
 
-        glinear var r := unwrap_value(m);
-        glinear var handle: Handle := unwrap_value(handle_opt);
-        glinear var read_stub;
         glinear var read_ticket_opt;
         glinear var CacheEmptyHandle(_, cache_empty, idx, data) := handle;
 
@@ -1024,13 +1036,10 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
               cache_empty);
 
         if !success {
-          ret_cache_idx := -1;
-          handle_out := glNone;
           dispose_glnone(read_ticket_opt);
           dispose_glnone(cache_reading_opt);
-          client_out := glSome(client);
           cache.status_atomic(cache_idx).abandon_reading_pending(
-              r,
+              m,
               CacheEmptyHandle(
                   cache.key(cache_idx as int),
                   unwrap_value(cache_empty_opt),
@@ -1038,9 +1047,17 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
                   data));
         } else {
           dispose_glnone(cache_empty_opt);
+
+          disk_read_async(cache, inout localState,
+              disk_idx, cache_idx, cache.data_ptr(cache_idx),
+              unwrap_value(cache_reading_opt),
+              m,
+              data,
+              idx,
+              unwrap_value(read_ticket_opt));
+          done := true;
         }
       }
     }
-  }*/
-
+  }
 }

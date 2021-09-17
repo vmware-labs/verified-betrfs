@@ -1827,6 +1827,25 @@ module RwLockToken {
     c', handle', b' := T.withdraw_1_2(c, a, d, e);
   }
 
+  glinear method perform_Withdraw_AllocNoRefcount(glinear c: Token)
+  returns (glinear c': Token, glinear handle': Token, glinear b': Handle)
+  requires var m := c.val;
+    && m.M?
+    && m.central.CentralState?
+    && m.central.flag == Unmapped
+    && m == CentralHandle(m.central)
+  ensures handle'.loc == c'.loc == c.loc
+  ensures c'.val == CentralHandle(c.val.central.(flag := Reading))
+  ensures handle'.val == ReadHandle(ReadObtained(-1))
+  ensures b' == c.val.central.stored_value
+  {
+    var a := CentralHandle(c.val.central.(flag := Reading));
+    var d := ReadHandle(ReadObtained(-1));
+    var e := c.val.central.stored_value;
+    Withdraw_AllocNoRefcount_Preserves(c.val, dot(a, d), e);
+    c', handle', b' := T.withdraw_1_2(c, a, d, e);
+  }
+
   glinear method perform_Deposit_DowngradeExcLockToClaim(
       glinear c: Token, glinear handle: Token, glinear b: Handle)
   returns (glinear c': Token, glinear handle': Token)

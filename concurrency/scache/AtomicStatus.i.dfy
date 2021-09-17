@@ -169,7 +169,8 @@ module AtomicStatusImpl {
       || v == flag_reading_clean
       || v == flag_accessed_reading_clean
     )
-    && (flag == RwLock.Reading_ExcLock ==> v == flag_exc_reading || v == flag_exc_accessed_reading)
+    && (flag == RwLock.Reading_ExcLock ==>
+        v == flag_exc_reading_clean || v == flag_exc_accessed_reading_clean)
   }
 
   predicate status_inv(v: uint8, status: Status, key: Key)
@@ -394,15 +395,20 @@ module AtomicStatusImpl {
       clean := bit_and_uint8(f, flag_clean) != 0;
     }
 
-    shared method try_alloc()
+    shared method try_alloc(new_status: uint8)
     returns (success: bool,
         glinear m: glOption<Rw.Token>,
         glinear handle_opt: glOption<Handle>)
     requires this.inv()
+    requires new_status == flag_exc_accessed_reading_clean
+          || new_status == flag_accessed_reading_clean
     ensures !success ==> m.glNone?
     ensures !success ==> handle_opt.glNone?
     ensures success ==> m.glSome?
-        && m.value.val == RwLock.ReadHandle(RwLock.ReadPending)
+        && (new_status == flag_exc_accessed_reading_clean ==>
+              m.value.val == RwLock.ReadHandle(RwLock.ReadPending))
+        && (new_status == flag_accessed_reading_clean ==>
+              m.value.val == RwLock.ReadHandle(RwLock.ReadObtained(-1)))
         && m.value.loc == rwlock_loc
         && handle_opt.glSome?
         && handle_opt.value.is_handle(key)
@@ -417,7 +423,7 @@ module AtomicStatusImpl {
         handle_opt := glNone;
       } else {
         atomic_block var did_set := execute_atomic_compare_and_set_strong(
-            atomic, flag_unmapped, flag_exc_reading)
+            atomic, flag_unmapped, new_status)
         {
           ghost_acquire old_g;
           glinear var new_g;
@@ -428,7 +434,11 @@ module AtomicStatusImpl {
           if did_set {
             glinear var exc_handle, h;
             glinear var G(rwlock, status0) := old_g;
-            rwlock, exc_handle, h := Rw.perform_Withdraw_Alloc(rwlock);
+            if new_status == flag_exc_accessed_reading_clean {
+              rwlock, exc_handle, h := Rw.perform_Withdraw_Alloc(rwlock);
+            } else {
+              rwlock, exc_handle, h := Rw.perform_Withdraw_AllocNoRefcount(rwlock);
+            }
             new_g := G(rwlock, status0);
             m := glSome(exc_handle);
             handle_opt := glSome(h);
