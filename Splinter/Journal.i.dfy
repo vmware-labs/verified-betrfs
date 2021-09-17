@@ -434,51 +434,30 @@ module JournalMachineMod {
               }
             }
           }
-          assert cl.Chained() by {
-            forall idx
-             | 0 <= idx < |cl.rows|
-             ensures cl.Linked(idx) {
-             if idx == |cl.rows|-1 {
-              assert cl.rows[|cl.rows|-2] == remainder.last();
-
-              assert cl.last().sb.freshestCU.Some?;
-              assert cl.last().sb.boundaryLSN < cl.last().journalRec().messageSeq.seqEnd;
-              if cl.last().journalRec().priorCU.Some? {
-                assert cl.last().journalRec().priorCU.Some?;
-                assert cl.last().priorSB() == cl.last().journalRec().priorSB(sb);
-                assert journalRecord.priorSB(sb) == cl.last().priorSB();
-              } else {
-                assert journalRecord.priorSB(sb) == cl.last().priorSB();
-              }
-              assert remainder.last().expectedEnd == Some(journalRecord.messageSeq.seqStart);
-//              if cl.last().cumulativeResult.ChainSuccess? {
-//                if remainder.interp().IsEmpty() {
-//                  assert remainder.last().cumulativeResult.interp.seqEnd == cl.last().rowResult.interp.seqStart;
-//                  assert cl.last().cumulativeResult == remainder.last().cumulativeResult.Concat(rowResult);
-//                } else {
-//                  var rExpectedEnd := Some(journalRecord.messageSeq.seqStart);
-//                  assert rExpectedEnd.Some? && remainder.success() && !remainder.interp().IsEmpty() ==> remainder.interp().seqEnd == rExpectedEnd.value;
-//                  assert rExpectedEnd.Some?;
-//                  assert remainder.success();
-//                  assert !remainder.interp().IsEmpty();
-//                  assert remainder.interp().seqEnd == rExpectedEnd.value;
-//                  calc {
-//                    remainder.last().cumulativeResult.interp.seqEnd;
-//                    journalRecord.messageSeq.seqStart;
-//                    cl.last().rowResult.interp.seqStart;
-//                  }
-//                  assert cl.last().cumulativeResult == remainder.last().cumulativeResult.Concat(rowResult);
-//                }
-//                assert remainder.last().cumulativeResult.interp.seqEnd == cl.last().rowResult.interp.seqStart;
-//                assert cl.last().cumulativeResult == remainder.last().cumulativeResult.Concat(rowResult);
+//          assert cl.Chained() by {
+//            forall idx
+//             | 0 <= idx < |cl.rows|
+//             ensures cl.Linked(idx) {
+//             if idx == |cl.rows|-1 {
+//              assert cl.rows[|cl.rows|-2] == remainder.last();
+//
+//              assert cl.last().sb.freshestCU.Some?;
+//              assert cl.last().sb.boundaryLSN < cl.last().journalRec().messageSeq.seqEnd;
+//              if cl.last().journalRec().priorCU.Some? {
+//                assert cl.last().journalRec().priorCU.Some?;
+//                assert cl.last().priorSB() == cl.last().journalRec().priorSB(sb);
+//                assert journalRecord.priorSB(sb) == cl.last().priorSB();
+//              } else {
+//                assert journalRecord.priorSB(sb) == cl.last().priorSB();
 //              }
-              assert cl.Linked(idx);
-             } else {
-              assert remainder.Linked(idx);
-              //assert cl.Linked(idx);
-             }
-            }
-          }
+//              assert remainder.last().expectedEnd == Some(journalRecord.messageSeq.seqStart);
+//              assert cl.Linked(idx);
+//             } else {
+//              assert remainder.Linked(idx);
+//              //assert cl.Linked(idx);
+//             }
+//            }
+//          }
           cl
   }
 
