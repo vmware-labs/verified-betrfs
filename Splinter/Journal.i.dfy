@@ -440,42 +440,9 @@ module JournalMachineMod {
     ensures cla == clb
     decreases |cla.rows|
   {
-    assume false; // try rewriting WF into if-then-else first
     // These triggers establish that the two chainlookups have the same number of rows.
     assert cla.Linked(|cla.rows|-1);  // trigger
     assert clb.Linked(|clb.rows|-1);  // trigger
-
-    var ra := cla.last();
-    var rb := clb.last();
-
-    assert ra.sb == rb.sb;
-    assert ra.expectedEnd == rb.expectedEnd;
-    assert ra.rawPage == rb.rawPage;
-
-    if ra.sb.freshestCU.None? {
-      assert ra.rowResult == rb.rowResult;
-    } else {
-      var cu := ra.sb.freshestCU.value;
-      var rawPage := CacheIfc.ReadValue(cache, cu);
-      if rawPage.None? {
-        assert ra.rowResult == rb.rowResult;
-      } else if parse(rawPage.value).None? {
-        assert ra.rowResult == rb.rowResult;
-      } else {
-        var journalRecord := parse(rawPage.value).value;
-        if journalRecord.messageSeq.seqEnd <= ra.sb.boundaryLSN {
-          assert ra.rowResult == ChainSuccess([], MsgHistoryMod.Empty());
-          assert rb.rowResult == ChainSuccess([], MsgHistoryMod.Empty());
-        } else {
-          assert ra.rowResult == rb.rowResult;
-        }
-      }
-    }
-    assert ra.rowResult == rb.rowResult;
-    assert ra.cumulativeResult == rb.cumulativeResult;
-    assert ra.cumulativeReadCUs == rb.cumulativeReadCUs;
-    assert ra.cumulativeLsnMap == rb.cumulativeLsnMap;
-    assert ra == rb;
 
     if 1 < |cla.rows| {
       ValidPrior(cache, cla);
@@ -486,11 +453,11 @@ module JournalMachineMod {
 
   function ChainFrom(cache: CacheIfc.Variables, sb: Superblock) : (cl:ChainLookup)
     ensures cl.ValidForSB(cache, sb)
-    ensures forall ocl:ChainLookup | ocl.Valid(cache) && ocl.last().expectedEnd.None? :: ocl == cl
+    ensures forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.last().expectedEnd.None? :: ocl == cl
   {
     var cl := ChainFromRecursive(cache, sb, None);
-    assert forall ocl:ChainLookup | ocl.Valid(cache) && ocl.last().expectedEnd.None? :: ocl == cl by {
-      forall ocl:ChainLookup | ocl.Valid(cache) ensures ocl == cl {
+    assert forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.last().expectedEnd.None? :: ocl == cl by {
+      forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.last().expectedEnd.None? ensures ocl == cl {
         UniqueChainLookup(cache, cl, ocl);
       }
     }
