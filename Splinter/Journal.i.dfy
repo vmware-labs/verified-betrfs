@@ -211,12 +211,18 @@ module JournalMachineMod {
         Superblock(None, sb.boundaryLSN)
     }
 
+    predicate FirstRow()
+      requires WF()
+    {
+      || !hasRecord()
+      || journalRec().messageSeq.seqEnd <= sb.boundaryLSN
+    }
+
     predicate ValidSuccessorTo(prev: Option<ChainLookupRow>)
       requires WF()
     {
-      if !hasRecord()
+      if FirstRow()
       then
-        // This is the first row
         && prev.None?
         // Accumulators start out correctly
         && cumulativeResult == rowResult
@@ -398,7 +404,9 @@ module JournalMachineMod {
       else
         var journalRecord := parse(rawPage.value).value;
         if journalRecord.messageSeq.seqEnd <= sb.boundaryLSN
-        then EmptyChainLookup(sb, expectedEnd) // don't need this record -- TODO case not in ValidSuccessorTo
+        then  // FirstRow by virtue of the record preceding the boundaryLSN
+          var rowResult := ChainSuccess([], MsgHistoryMod.Empty());
+          ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, rowResult, rowResult, [cu], EmptyLSNMap())]);
         else if expectedEnd.Some? && expectedEnd.value != journalRecord.messageSeq.seqEnd
           // We were expectind a particular record, and it didn't stitch.
         then ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())])
@@ -410,7 +418,6 @@ module JournalMachineMod {
             expectedEnd,
             rawPage,
             rowResult,
-            // need && interp.seqEnd == next.interp.seqStart
             remainder.last().cumulativeResult.Concat(rowResult),
             remainder.last().cumulativeReadCUs+[cu],
             MapUnionPreferA(remainder.lsnMap(), rowResult.lsnMap(sb.freshestCU))
