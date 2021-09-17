@@ -116,6 +116,7 @@ module AsyncDisk refines StateMachine(DiskIfc) {
   {
     && id in s.reqWrites
     && var req := s.reqWrites[id];
+    && req.addr in s.contents
     && s' == s.(reqWrites := s.reqWrites - {id})
               .(respWrites := s.respWrites[id := RespWrite(req.addr)])
               .(contents := s.contents[req.addr := req.data])

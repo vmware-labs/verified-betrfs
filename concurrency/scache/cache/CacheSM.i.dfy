@@ -292,15 +292,18 @@ module CacheSSM refines DiskSSM(CacheIfc) {
       */
   }
 
-  predicate Evict(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, cache_idx2: Option<nat>) {
+  predicate Evict(s: M, s': M,
+      cache_idx: nat) {
     && s.M?
     && cache_idx in s.statuses
     && cache_idx in s.entries
-    && s.statues[cache_idx] == Clean
-    && s.
-    && s' == s.(entries := s.entries[cache_idx := Empty])
-        .(disk_idx_to_cache_idx
+    && s.statuses[cache_idx] == Clean
+    && s.entries[cache_idx].Entry?
+    && s.entries[cache_idx].disk_idx in s.disk_idx_to_cache_idx
+    && s' == s
+        .(entries := s.entries[cache_idx := Empty])
+        .(disk_idx_to_cache_idx := s.disk_idx_to_cache_idx[s.entries[cache_idx].disk_idx := None])
+        .(statuses := s.statuses - {cache_idx})
   /*
     && shard == dot3(
         CacheStatus(cache_idx, Clean),
@@ -314,9 +317,19 @@ module CacheSSM refines DiskSSM(CacheIfc) {
       */
   }
 
-  predicate ObserveCleanForSync(shard: M, shard': M,
-    cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, rid: RequestId, s: set<nat>)
+  predicate ObserveCleanForSync(s: M, s': M, cache_idx: nat, rid: RequestId)
   {
+    && s.M?
+    && cache_idx in s.statuses
+    && cache_idx in s.entries
+    && s.statuses[cache_idx] == Clean
+    && s.entries[cache_idx].Entry?
+    && rid in s.sync_reqs
+
+    && s' == s.(sync_reqs :=
+        s.sync_reqs[rid := s.sync_reqs[rid] - {s.entries[cache_idx].disk_idx}])
+
+    /*
     && shard == dot3(
       CacheStatus(cache_idx, Clean),
       CacheEntry(cache_idx, disk_idx, data),
@@ -327,11 +340,22 @@ module CacheSSM refines DiskSSM(CacheIfc) {
       CacheEntry(cache_idx, disk_idx, data),
       SyncReq(rid, s - {disk_idx})
     )
+    */
   }
 
-  predicate ApplyRead(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, rid: RequestId)
+  predicate ApplyRead(s: M, s': M,
+      cache_idx: nat, rid: RequestId)
   {
+    && s.M?
+    && cache_idx in s.entries
+    && s.entries[cache_idx].Entry?
+    && rid in s.tickets
+    && s.tickets[rid].ReadInput?
+    && s.tickets[rid].key == s.entries[cache_idx].disk_idx
+    && s' == s
+      .(tickets := s.tickets - {rid})
+      .(stubs := s.stubs[rid := CacheIfc.ReadOutput(s.entries[cache_idx].data)])
+    /*
     && shard == dot(
       CacheEntry(cache_idx, disk_idx, data),
       NormalTicket(rid, CacheIfc.ReadInput(disk_idx))
@@ -340,12 +364,27 @@ module CacheSSM refines DiskSSM(CacheIfc) {
       CacheEntry(cache_idx, disk_idx, data),
       NormalStub(rid, CacheIfc.ReadOutput(data))
     )
+    */
   }
 
-  predicate ApplyWrite(shard: M, shard': M,
-      cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, new_data: DiskIfc.Block,
-      rid: RequestId)
+  predicate ApplyWrite(s: M, s': M,
+      cache_idx: nat, rid: RequestId)
   {
+    && s.M?
+    && cache_idx in s.entries
+    && cache_idx in s.statuses
+    && s.entries[cache_idx].Entry?
+    && s.statuses[cache_idx].Dirty?
+    && rid in s.tickets
+    && s.tickets[rid].WriteInput?
+    && s.tickets[rid].key == s.entries[cache_idx].disk_idx
+    && |s.tickets[rid].data| == 4096
+    && s' == s
+      .(tickets := s.tickets - {rid})
+      .(stubs := s.stubs[rid := CacheIfc.WriteOutput])
+      .(entries := s.entries[cache_idx :=
+          Entry(s.entries[cache_idx].disk_idx, s.tickets[rid].data)])
+    /*
     && shard == dot(
       CacheEntry(cache_idx, disk_idx, data),
       NormalTicket(rid, CacheIfc.WriteInput(disk_idx, new_data))
@@ -354,12 +393,19 @@ module CacheSSM refines DiskSSM(CacheIfc) {
       CacheEntry(cache_idx, disk_idx, new_data),
       NormalStub(rid, CacheIfc.WriteOutput)
     )
+    */
   }
 
-  predicate MarkDirty(shard: M, shard': M, cache_idx: nat)
+  predicate MarkDirty(s: M, s': M, cache_idx: nat)
   {
+    && s.M?
+    && cache_idx in s.statuses
+    && s.statuses[cache_idx] == Clean
+    && s' == s.(statuses := s.statuses[cache_idx := Dirty])
+    /*
     && shard == CacheStatus(cache_idx, Clean)
     && shard' == CacheStatus(cache_idx, Dirty)
+    */
   }
 
   datatype Step =
@@ -367,10 +413,10 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     | FinishReadStep(cache_idx: nat, disk_idx: nat)
     | StartWritebackStep(cache_idx: nat)
     | FinishWritebackStep(cache_idx: nat)
-    | EvictStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, cache_idx2_opt: Option<nat>)
-    | ObserveCleanForSyncStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, rid: RequestId, s: set<nat>)
-    | ApplyReadStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, rid: RequestId)
-    | ApplyWriteStep(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block, new_data: DiskIfc.Block, rid: RequestId)
+    | EvictStep(cache_idx: nat)
+    | ObserveCleanForSyncStep(cache_idx: nat, rid: RequestId)
+    | ApplyReadStep(cache_idx: nat, rid: RequestId)
+    | ApplyWriteStep(cache_idx: nat, rid: RequestId)
     | MarkDirtyStep(cache_idx: nat)
 
   predicate InternalStep(shard: M, shard': M, step: Step)
@@ -388,17 +434,17 @@ module CacheSSM refines DiskSSM(CacheIfc) {
       case FinishWritebackStep(cache_idx) =>
         FinishWriteback(shard, shard', cache_idx)
 
-      case EvictStep(cache_idx, disk_idx, data, cache_idx2_opt) =>
-        Evict(shard, shard', cache_idx, disk_idx, data, cache_idx2_opt)
+      case EvictStep(cache_idx) =>
+        Evict(shard, shard', cache_idx)
 
-      case ObserveCleanForSyncStep(cache_idx, disk_idx, data, rid, s) =>
-        ObserveCleanForSync(shard, shard', cache_idx, disk_idx, data, rid, s)
+      case ObserveCleanForSyncStep(cache_idx, rid) =>
+        ObserveCleanForSync(shard, shard', cache_idx, rid)
 
-      case ApplyReadStep(cache_idx, disk_idx, data, rid) =>
-        ApplyRead(shard, shard', cache_idx, disk_idx, data, rid)
+      case ApplyReadStep(cache_idx, rid) =>
+        ApplyRead(shard, shard', cache_idx, rid)
 
-      case ApplyWriteStep(cache_idx, disk_idx, data, new_data, rid) =>
-        ApplyWrite(shard, shard', cache_idx, disk_idx, data, new_data, rid)
+      case ApplyWriteStep(cache_idx, rid) =>
+        ApplyWrite(shard, shard', cache_idx, rid)
 
       case MarkDirtyStep(cache_idx) =>
         MarkDirty(shard, shard', cache_idx)

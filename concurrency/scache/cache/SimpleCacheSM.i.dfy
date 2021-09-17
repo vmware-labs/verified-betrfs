@@ -25,8 +25,10 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     sync_reqs: map<RequestId, set<nat>>
   )
 
+  predicate True(d: nat) { true }
+
   predicate Init(s: Variables) {
-    && s.entries == (imap k | true :: Empty)
+    && s.entries == (imap k | True(k) :: Empty)
     && s.write_reqs == map[]
     && s.write_resps == {}
     && s.read_reqs == {}
@@ -114,7 +116,7 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
 
   predicate Crash(s: Variables, s': Variables, op: ifc.Op) {
     && op.CrashOp?
-    && s'.entries == (imap k | true :: Empty)
+    && s'.entries == (imap k | True(k) :: Empty)
     && s'.write_reqs == map[]
     && s'.write_resps == {}
     && s'.read_reqs == {}
@@ -207,6 +209,7 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
      | ObserveCleanForSync_Step(rid: RequestId, cache_idx: nat)
      | ApplyRead_Step(rid: RequestId, cache_idx: nat) 
      | ApplyWrite_Step(rid: RequestId, cache_idx: nat) 
+     | Stutter_Step
 
   predicate NextStep(s: Variables, s': Variables, op: ifc.Op, step: Step) {
     match step {
@@ -229,6 +232,7 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
           ObserveCleanForSync(s, s', op, rid, cache_idx)
        case ApplyRead_Step(rid, cache_idx) => ApplyRead(s, s', op, rid, cache_idx)
        case ApplyWrite_Step(rid, cache_idx) => ApplyWrite(s, s', op, rid, cache_idx)
+       case Stutter_Step => s == s' && op.InternalOp?
     }
   }
 
