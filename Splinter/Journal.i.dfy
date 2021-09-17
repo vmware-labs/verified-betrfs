@@ -398,7 +398,7 @@ module JournalMachineMod {
       else
         var journalRecord := parse(rawPage.value).value;
         if journalRecord.messageSeq.seqEnd <= sb.boundaryLSN
-        then assume false; EmptyChainLookup(sb, expectedEnd) // don't need this record -- TODO case not in ValidSuccessorTo
+        then EmptyChainLookup(sb, expectedEnd) // don't need this record -- TODO case not in ValidSuccessorTo
         else if expectedEnd.Some? && expectedEnd.value != journalRecord.messageSeq.seqEnd
           // We were expectind a particular record, and it didn't stitch.
         then ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())])
