@@ -409,15 +409,15 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   }
 
   datatype Step =
-    | StartReadStep(cache_idx: nat, disk_idx: nat)
-    | FinishReadStep(cache_idx: nat, disk_idx: nat)
-    | StartWritebackStep(cache_idx: nat)
-    | FinishWritebackStep(cache_idx: nat)
-    | EvictStep(cache_idx: nat)
-    | ObserveCleanForSyncStep(cache_idx: nat, rid: RequestId)
-    | ApplyReadStep(cache_idx: nat, rid: RequestId)
-    | ApplyWriteStep(cache_idx: nat, rid: RequestId)
-    | MarkDirtyStep(cache_idx: nat)
+    | StartReadStep(ghost cache_idx: nat, ghost disk_idx: nat)
+    | FinishReadStep(ghost cache_idx: nat, ghost disk_idx: nat)
+    | StartWritebackStep(ghost cache_idx: nat)
+    | FinishWritebackStep(ghost cache_idx: nat)
+    | EvictStep(ghost cache_idx: nat)
+    | ObserveCleanForSyncStep(ghost cache_idx: nat, ghost rid: RequestId)
+    | ApplyReadStep(ghost cache_idx: nat, ghost rid: RequestId)
+    | ApplyWriteStep(ghost cache_idx: nat, ghost rid: RequestId)
+    | MarkDirtyStep(ghost cache_idx: nat)
 
   predicate InternalStep(shard: M, shard': M, step: Step)
   {

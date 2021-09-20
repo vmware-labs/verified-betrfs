@@ -75,6 +75,15 @@ namespace InstantiatedDiskInterface {
     }
   }
 
+  inline void sync__write(Ptrs::Ptr buf, uint64 nbytes, int64_t offset)
+  {
+    int ret = pwrite(fd, (void*)buf.ptr, nbytes, offset * 4096);
+    if (ret != nbytes) {
+      std::cerr << "pwrite failed " << ret << std::endl;
+      exit(1);
+    }
+  }
+
   inline Ptrs::Ptr get__event(IOCtx& ioctx) {
     struct io_event event;
     int status = io_getevents(*ioctx.ctx, 0, 1, &event, NULL);
