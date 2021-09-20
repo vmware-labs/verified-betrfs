@@ -16,6 +16,7 @@ module Constants {
   const CLEAN_AHEAD: uint64 := NUM_CHUNKS / 3;
 
   const NUM_IO_SLOTS: uint64 := 256;
+  const AIO_HAND_BATCH_SIZE: uint64 := 32;
 
   const DEFAULT_MAX_IO_EVENTS: uint64 := 32;
 }

@@ -206,6 +206,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     dispose_anything(dis);
 
     linear var global_clockpointer := new_atomic(0, NullGhostType, (v, g) => true, 0);
+    linear var req_hand_base := new_atomic(0, NullGhostType, (v, g) => true, 0);
     linear var io_slots := lseq_alloc<IOSlot>(NUM_IO_SLOTS);
 
     ghost var iocbs_copy := iocbs;
@@ -286,6 +287,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         read_refcounts,
         cache_idx_of_page,
         global_clockpointer,
+        req_hand_base,
         batch_busy,
         io_slots,
         ioctx);

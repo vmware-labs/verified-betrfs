@@ -50,6 +50,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     ghost cache_idx_of_page: seq<AtomicIndexLookup>,
 
     linear global_clockpointer: Atomic<uint32, NullGhostType>,
+    linear req_hand_base: Atomic<uint32, NullGhostType>,
     linear batch_busy: lseq<Atomic<bool, NullGhostType>>,
 
     linear io_slots: lseq<IOSlot>,
@@ -99,6 +100,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
                   iocb_ptr, iocb, wp, g))
 
       && (forall v, g :: atomic_inv(global_clockpointer, v, g) <==> true)
+      && (forall v, g :: atomic_inv(req_hand_base, v, g) <==> true)
 
       && (forall i | 0 <= i < CACHE_SIZE as int ::
         this.data[i].aligned(PageSize as int))
@@ -193,7 +195,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     {
       && (0 <= this.free_hand as int < NUM_CHUNKS as int || this.free_hand == 0xffff_ffff_ffff_ffff)
       && 0 <= t as int < RC_WIDTH as int
-      && 0 <= io_slot_hand as int < NUM_IO_SLOTS as int
+      && 0 <= io_slot_hand as int <= NUM_IO_SLOTS as int
     }
   }
 

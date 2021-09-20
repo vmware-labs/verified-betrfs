@@ -18,6 +18,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import Math
   import opened GlinearOption
   import opened PageSizeConstant
+  import opened Atomics
 
   method get_free_io_slot(shared cache: Cache, inout linear local: LocalState)
   returns (idx: uint64, glinear access: IOSlotAccess)
@@ -37,35 +38,41 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var i := local.io_slot_hand;
     var done := false;
     while !done
-    invariant 0 <= i < NUM_IO_SLOTS
+    invariant 0 <= i <= NUM_IO_SLOTS
     invariant done ==> access_opt.glSome?
-        && is_slot_access(cache.io_slots[i as nat], access_opt.value)
+        && 0 <= idx < NUM_IO_SLOTS
+        && is_slot_access(cache.io_slots[idx as nat], access_opt.value)
     decreases *
     {
+      if i % AIO_HAND_BATCH_SIZE == 0 {
+        atomic_block var j := execute_atomic_fetch_add_uint32(cache.req_hand_base, 32) { }
+        i := (j as uint64) % NUM_IO_SLOTS;
+
+        var cleanup_done := false;
+        while !cleanup_done
+        decreases *
+        {
+          cleanup_done := io_cleanup_1(cache);
+        }
+      }
+
       glinear var iosa;
       assert cache.io_slots[i as nat].WF();
       done, iosa := BasicLockImpl.try_acquire(lseq_peek(cache.io_slots, i).lock);
 
       if !done {
         i := i + 1;
-        if i == NUM_IO_SLOTS { i := 0; }
-
-        if i == local.io_slot_hand {
-          io_cleanup(cache, DEFAULT_MAX_IO_EVENTS);
-        }
-
         dispose_anything(iosa);
       } else {
+        idx := i;
+        i := i + 1;
         dispose_anything(access_opt);
         access_opt := iosa;
       }
     }
 
-    idx := i;
     access := unwrap_value(access_opt);
 
-    i := i + 1;
-    if i == NUM_IO_SLOTS { i := 0; }
     inout local.io_slot_hand := i;
   }
 
