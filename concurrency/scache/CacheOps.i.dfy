@@ -660,6 +660,11 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       glinear var CacheEmptyHandle(_, cache_empty, idx, data) := handle;
 
+      // TODO this seems to be done in a different order than the reference implementation
+      // i.e., the ref impl first increments the refcount, then clears exc bit,
+      // THEN checks the index mapping. Should make sure that's not a problem in the
+      // reference impl.
+
       glinear var cache_empty_opt, cache_reading_opt;
       var success;
       success, cache_empty_opt, cache_reading_opt, read_ticket_opt := 
