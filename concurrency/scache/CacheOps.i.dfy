@@ -1097,4 +1097,42 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       dispose_glnone(ticket);
     }
   }
+
+  method page_sync_blocking(
+      shared cache: Cache,
+      inout linear localState: LocalState,
+      ph: PageHandle)
+  requires cache.Inv()
+  requires old_localState.WF()
+  requires 0 <= ph.cache_idx < CACHE_SIZE
+  decreases *
+  {
+    var cache_idx := ph.cache_idx;
+
+    var do_write_back : bool;
+    glinear var write_back_r, ticket;
+    do_write_back, write_back_r, ticket :=
+        cache.status_atomic(cache_idx as uint64).try_acquire_writeback(true);
+
+    if do_write_back {
+      var disk_idx := read_cell(
+          cache.disk_idx_of_entry_ptr(cache_idx as uint64),
+          T.borrow_wb(write_back_r.value.token).idx);
+      assert disk_idx != -1;
+
+      glinear var stub := disk_writeback_sync(
+          cache,
+          cache_idx as nat,
+          disk_idx as uint64,
+          cache.data_ptr(cache_idx),
+          write_back_r.value,
+          unwrap_value(ticket));
+
+      cache.status_atomic(cache_idx).release_writeback(
+          unwrap_value(write_back_r), stub);
+    } else {
+      dispose_glnone(write_back_r);
+      dispose_glnone(ticket);
+    }
+  }
 }

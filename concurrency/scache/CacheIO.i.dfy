@@ -220,6 +220,34 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     stub := CacheResources.DiskReadStub_fold(disk_idx as nat, contents.s, s);
   }
 
+  method disk_writeback_sync(
+      shared cache: Cache,
+      ghost cache_idx: nat,
+      disk_idx: uint64,
+      ptr: Ptr,
+      gshared wbo: T.WritebackObtainedToken,
+      glinear ticket: CacheResources.DiskWriteTicket)
+  returns (glinear stub: CacheResources.DiskWriteStub)
+  requires cache.Inv()
+  requires 0 <= cache_idx < CACHE_SIZE as int
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
+  requires wbo.is_handle(cache.key(cache_idx))
+  requires wbo.b.CacheEntryHandle?
+  requires ticket == CacheResources.DiskWriteTicket(disk_idx as int, wbo.b.data.s)
+  requires wbo.token.loc == cache.status[cache_idx].rwlock_loc
+  requires wbo.b.cache_entry.disk_idx == disk_idx as nat
+  requires ptr == cache.data[cache_idx]
+  ensures stub == CacheResources.DiskWriteStub(disk_idx as nat)
+  {
+    glinear var s := aio.sync_write(
+        ptr,
+        4096,
+        disk_idx,
+        T.borrow_wb(wbo.token).data,
+        CacheResources.DiskWriteTicket_unfold(ticket));
+    stub := CacheResources.DiskWriteStub_fold(disk_idx as nat, s);
+  }
+
   method disk_read_callback(
       shared cache: Cache,
       cache_idx: uint64,

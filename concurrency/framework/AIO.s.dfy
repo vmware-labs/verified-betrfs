@@ -198,4 +198,21 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   ensures wp.ptr == buf
   ensures |wp.s| == nbytes as int
   ensures stub == T.Token(ssm.DiskReadResp(offset as int, wp.s))
+
+  method {:extern} sync_write(
+      buf: Ptr,
+      nbytes: uint64,
+      offset: uint64,
+      gshared rp: PointsToArray<byte>,
+      glinear ticket: T.Token)
+  returns (glinear stub: T.Token)
+  requires rp.ptr == buf
+  requires |rp.s| == nbytes as int
+  requires nbytes as int == PageSize as int
+  requires PageSize as int * offset as int < 0x1_0000_0000_0000_0000
+  requires ticket == T.Token(ssm.DiskWriteReq(offset as int, rp.s))
+  requires buf.aligned(PageSize as int)
+  ensures rp.ptr == buf
+  ensures |rp.s| == nbytes as int
+  ensures stub == T.Token(ssm.DiskWriteResp(offset as int))
 }
