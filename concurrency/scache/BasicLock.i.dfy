@@ -59,6 +59,12 @@ module BasicLockImpl {
     }
   }
 
+  method is_locked<G(!new)>(shared l: BasicLock<G>)
+  returns (b: bool)
+  {
+    atomic_block b := execute_atomic_load(l.a) { }
+  }
+
   method new_basic_lock<G(!new)>(glinear g: G, ghost inv: G -> bool)
   returns (linear l: BasicLock<G>)
   requires inv(g)

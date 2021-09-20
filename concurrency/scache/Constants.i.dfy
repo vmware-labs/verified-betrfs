@@ -15,7 +15,7 @@ module Constants {
   const NUM_CHUNKS: uint64 := CACHE_SIZE / 64;
   const CLEAN_AHEAD: uint64 := NUM_CHUNKS / 3;
 
-  const NUM_IO_SLOTS: uint64 := 128;
+  const NUM_IO_SLOTS: uint64 := 256;
 
   const DEFAULT_MAX_IO_EVENTS: uint64 := 32;
 }

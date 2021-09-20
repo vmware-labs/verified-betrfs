@@ -1147,4 +1147,24 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       i := i + 1;
     }
   }
+
+  // TODO could give this a stronger specification that ensures it is actually doing a sync
+  // (this will probably require a state machine change)
+  method flush(shared cache: Cache, inout linear local: LocalState)
+  requires cache.Inv()
+  requires old_local.WF()
+  decreases *
+  {
+    io_cleanup_all(cache);
+
+    var flush_hand := 0;
+    while flush_hand < NUM_CHUNKS
+    invariant local.WF()
+    {
+      batch_start_writeback(cache, inout local, flush_hand, true);
+      flush_hand := flush_hand + 1;   
+    }
+
+    io_cleanup_all(cache);
+  }
 }
