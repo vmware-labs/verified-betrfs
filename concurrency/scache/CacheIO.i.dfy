@@ -359,7 +359,9 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       done := true;
       dispose_anything(fr);
     } else {
-      ghost var si := (if fr.FRWrite? then fr.wg.slot_idx else fr.rg.slot_idx);
+      ghost var si := (if fr.FRWrite? then fr.wg.slot_idx else
+          if fr.FRWritev? then fr.wvg.slot_idx else
+          fr.rg.slot_idx);
       calc {
         ptr_diff(iocb_ptr, cache.iocb_base_ptr) as int / SizeOfIocb() as int;
         ptr_diff(
@@ -393,6 +395,18 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           iocb1 := iocb;
           io_slot_info1 := io_slot_info;
         }
+        /*
+        case IOSlotWritev => {
+          glinear var FRWritev(iocb, iovec, datas, wvg, stubs) := fr;
+          glinear var WriteG(key, wbos, g_slot_idx, io_slot_info) := wvg;
+
+          glinear var ustub := CacheResources.DiskWriteStub_fold(iocb.offset, stub);
+          ghost var disk_idx := ustub.disk_idx;
+          disk_writeback_callback_vec(cache, iocb.iovec, iovec, wbos, stubs);
+
+          iocb1 := iocb;
+          io_slot_info1 := io_slot_info;
+        }*/
         case IOSlotRead(cache_idx) => {
           glinear var FRRead(iocb, wp, rg, stub) := fr;
           glinear var ReadG(key, cache_reading, idx, ro, g_slot_idx, io_slot_info) := rg;

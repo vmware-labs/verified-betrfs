@@ -5,9 +5,11 @@ module CacheAIOParams refines AIOParams {
   import T = RwLockToken
   import opened CacheHandle
   import opened Cells
+  import opened GlinearSeq
 
   datatype IOSlotInfo =
     | IOSlotWrite(cache_idx: uint64)
+    | IOSlotWritev
     | IOSlotRead(cache_idx: uint64)
 
   glinear datatype IOSlotAccess = IOSlotAccess(
@@ -26,6 +28,13 @@ module CacheAIOParams refines AIOParams {
   glinear datatype WriteG = WriteG(
     ghost key: Key,
     glinear wbo: T.WritebackObtainedToken,
+    ghost slot_idx: nat,
+    glinear io_slot_info: CellContents<IOSlotInfo>
+  )
+
+  glinear datatype WritevG = WritevG(
+    ghost key: Key,
+    glinear wbos: glseq<T.WritebackObtainedToken>,
     ghost slot_idx: nat,
     glinear io_slot_info: CellContents<IOSlotInfo>
   )
@@ -65,4 +74,36 @@ module CacheAIOParams refines AIOParams {
     && g.reading.CacheReadingHandle?
     && g.reading.is_handle(g.key)
   }*/
+
+  predicate is_read_perm_v(
+      iocb_ptr: Ptr,
+      iocb: Iocb,
+      iovec: PointsToArray<Iovec>,
+      datas: seq<seq<byte>>,
+      g: WritevG)
+  {
+    && g.wbos.len() == |datas| == |iovec.s|
+    && forall i | 0 <= i < g.wbos.len() ::
+      && g.wbos.has(i)
+      && g.wbos.get(i).is_handle(g.key)
+      && g.wbos.get(i).b.CacheEntryHandle?
+      && g.wbos.get(i).b.data.s == datas[i]
+      && g.wbos.get(i).b.data.ptr == iovec.s[i].iov_base()
+  }
+
+  glinear method get_read_perm_v(
+      ghost iocb_ptr: Ptr,
+      gshared iocb: Iocb,
+      gshared iovec: PointsToArray<Iovec>,
+      ghost datas: seq<seq<byte>>,
+      gshared g: WritevG,
+      ghost i: nat)
+  returns (gshared ad: PointsToArray<byte>)
+  //requires iocb.IocbWritev?
+  //requires is_read_perm_v(iocb_ptr, iocb, iovec, datas, g)
+  //requires 0 <= i < |datas| == |iovec.s|
+  ensures ad == PointsToArray(iovec.s[i].iov_base(), datas[i])
+  {
+    ad := T.borrow_wb(g.wbos.borrow(i).token).data;
+  }
 }

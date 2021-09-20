@@ -18,5 +18,7 @@ module Constants {
   const NUM_IO_SLOTS: uint64 := 256;
   const AIO_HAND_BATCH_SIZE: uint64 := 32;
 
+  const PAGES_PER_EXTENT: uint64 := 32;
+
   const DEFAULT_MAX_IO_EVENTS: uint64 := 32;
 }
