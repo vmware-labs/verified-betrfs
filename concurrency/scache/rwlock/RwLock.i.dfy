@@ -771,6 +771,31 @@ module RwLock refines Rw {
     }
   }
 
+  predicate ObtainReadingNoRefcount(m: M, m': M)
+  {
+    && m.M?
+    && m.central.CentralState?
+    && m.read.ReadPending?
+    && m == dot(
+      CentralHandle(m.central),
+      ReadHandle(m.read)
+    )
+    && m' == dot(
+      CentralHandle(m.central.(flag := Reading)),
+      ReadHandle(ReadObtained(-1))
+    )
+  }
+
+  lemma ObtainReadingNoRefcount_Preserves(m: M, m': M)
+  requires ObtainReadingNoRefcount(m, m')
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
+    {
+    }
+  }
+
   predicate Deposit_ReadingToShared(m: M, m': M, b: StoredType)
   {
     && m.M?
@@ -1554,6 +1579,31 @@ module RwLockToken {
     handle' := handle;
     var rest := T.obtain_invariant_2(inout c', inout handle');
     ObtainReading_Preserves(dot(c.val, handle.val), dot(a, b));
+    c', handle' := T.internal_transition_2_2(c', handle', a, b);
+  }
+
+  glinear method perform_ObtainReadingNoRefcount(glinear c: Token, glinear handle: Token)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.M?
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.M?
+    && m.read.ReadPending?
+    && m == ReadHandle(m.read)
+  requires c.loc == handle.loc
+  ensures c.val.central.flag == Reading_ExcLock
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == CentralHandle(c.val.central.(flag := Reading))
+  ensures handle'.val == ReadHandle(ReadObtained(-1))
+  {
+    var a := CentralHandle(c.val.central.(flag := Reading));
+    var b := ReadHandle(ReadObtained(-1));
+    c' := c;
+    handle' := handle;
+    var rest := T.obtain_invariant_2(inout c', inout handle');
+    ObtainReadingNoRefcount_Preserves(dot(c.val, handle.val), dot(a, b));
     c', handle' := T.internal_transition_2_2(c', handle', a, b);
   }
 

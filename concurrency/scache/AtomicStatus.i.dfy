@@ -395,20 +395,15 @@ module AtomicStatusImpl {
       clean := bit_and_uint8(f, flag_clean) != 0;
     }
 
-    shared method try_alloc(new_status: uint8)
+    shared method try_alloc()
     returns (success: bool,
         glinear m: glOption<Rw.Token>,
         glinear handle_opt: glOption<Handle>)
     requires this.inv()
-    requires new_status == flag_exc_accessed_reading_clean
-          || new_status == flag_accessed_reading_clean
     ensures !success ==> m.glNone?
     ensures !success ==> handle_opt.glNone?
     ensures success ==> m.glSome?
-        && (new_status == flag_exc_accessed_reading_clean ==>
-              m.value.val == RwLock.ReadHandle(RwLock.ReadPending))
-        && (new_status == flag_accessed_reading_clean ==>
-              m.value.val == RwLock.ReadHandle(RwLock.ReadObtained(-1)))
+        && m.value.val == RwLock.ReadHandle(RwLock.ReadPending)
         && m.value.loc == rwlock_loc
         && handle_opt.glSome?
         && handle_opt.value.is_handle(key)
@@ -423,7 +418,7 @@ module AtomicStatusImpl {
         handle_opt := glNone;
       } else {
         atomic_block var did_set := execute_atomic_compare_and_set_strong(
-            atomic, flag_unmapped, new_status)
+            atomic, flag_unmapped, flag_exc_accessed_reading_clean)
         {
           ghost_acquire old_g;
           glinear var new_g;
@@ -434,11 +429,7 @@ module AtomicStatusImpl {
           if did_set {
             glinear var exc_handle, h;
             glinear var G(rwlock, status0) := old_g;
-            if new_status == flag_exc_accessed_reading_clean {
-              rwlock, exc_handle, h := Rw.perform_Withdraw_Alloc(rwlock);
-            } else {
-              rwlock, exc_handle, h := Rw.perform_Withdraw_AllocNoRefcount(rwlock);
-            }
+            rwlock, exc_handle, h := Rw.perform_Withdraw_Alloc(rwlock);
             new_g := G(rwlock, status0);
             m := glSome(exc_handle);
             handle_opt := glSome(h);
@@ -469,17 +460,27 @@ module AtomicStatusImpl {
     requires this.inv()
     requires r.loc == this.rwlock_loc
     requires r.val.M?
-    requires r.val.read.ReadPendingCounted?
-    requires r.val == RwLock.ReadHandle(RwLock.ReadPendingCounted(r.val.read.t))
+    requires r.val.read.ReadPendingCounted? || r.val.read.ReadPending?
+    requires r.val.read.ReadPendingCounted? ==>
+      r.val == RwLock.ReadHandle(RwLock.ReadPendingCounted(r.val.read.t))
+    requires r.val.read.ReadPending? ==>
+      r.val == RwLock.ReadHandle(RwLock.ReadPending)
     ensures q.loc == this.rwlock_loc
-    ensures q.val == RwLock.ReadHandle(RwLock.ReadObtained(r.val.read.t))
+    ensures r.val.read.ReadPendingCounted? ==>
+        q.val == RwLock.ReadHandle(RwLock.ReadObtained(r.val.read.t))
+    ensures r.val.read.ReadPending? ==>
+        q.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
     {
       atomic_block var _ := execute_atomic_store(atomic, flag_accessed_reading_clean) {
         ghost_acquire old_g;
         glinear var new_g;
         var fl := old_g.rwlock.val.central.flag;
         glinear var G(rwlock, status) := old_g;
-        rwlock, q := Rw.perform_ObtainReading(rwlock, r);
+        if r.val.read.ReadPendingCounted? {
+          rwlock, q := Rw.perform_ObtainReading(rwlock, r);
+        } else {
+          rwlock, q := Rw.perform_ObtainReadingNoRefcount(rwlock, r);
+        }
         new_g := G(rwlock, status);
         assert status.glNone?;
         assert state_inv(new_value, new_g, key, rwlock_loc);
