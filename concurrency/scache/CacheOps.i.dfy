@@ -1098,6 +1098,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
+  // TODO could give this a stronger specification that ensures it is actually doing a sync
   method page_sync_blocking(
       shared cache: Cache,
       inout linear localState: LocalState,
@@ -1133,6 +1134,17 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     } else {
       dispose_glnone(write_back_r);
       dispose_glnone(ticket);
+    }
+  }
+
+  method evict_all(shared cache: Cache)
+  requires cache.Inv()
+  {
+    var i: uint64 := 0;
+    while i < NUM_CHUNKS {
+      evict_batch(cache, i);
+      evict_batch(cache, i);
+      i := i + 1;
     }
   }
 }
