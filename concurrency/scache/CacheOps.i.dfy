@@ -1059,4 +1059,42 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       }
     }
   }
+
+  // note: page_sync only makes sense if we're in read mode, NOT in write or even claim mode
+  // (in which case it would fail silently)
+  // In general though it effectively has no specification that can be useful for verifying
+  // sync code, because there's no way to determine when the page_sync actually completes
+  method page_sync_nonblocking(
+      shared cache: Cache,
+      inout linear localState: LocalState,
+      ph: PageHandle)
+  requires cache.Inv()
+  requires old_localState.WF()
+  requires 0 <= ph.cache_idx < CACHE_SIZE
+  decreases *
+  {
+    var cache_idx := ph.cache_idx;
+
+    var do_write_back : bool;
+    glinear var write_back_r, ticket;
+    do_write_back, write_back_r, ticket :=
+        cache.status_atomic(cache_idx as uint64).try_acquire_writeback(true);
+
+    if do_write_back {
+      var disk_idx := read_cell(
+          cache.disk_idx_of_entry_ptr(cache_idx as uint64),
+          T.borrow_wb(write_back_r.value.token).idx);
+      assert disk_idx != -1;
+
+      disk_writeback_async(
+          cache, inout localState,
+          disk_idx as uint64,
+          cache_idx as uint64,
+          unwrap_value(write_back_r),
+          unwrap_value(ticket));
+    } else {
+      dispose_glnone(write_back_r);
+      dispose_glnone(ticket);
+    }
+  }
 }
