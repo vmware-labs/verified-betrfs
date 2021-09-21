@@ -34,6 +34,18 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && pta_seq.get(i).ptr == ptr_add(pta.ptr, i as uint64 * PageSize)
         && |pta_seq.get(i).s| == PageSize as int
 
+  glinear method iovec_split(glinear pta: PointsToArray<Iovec>)
+  returns (glinear pta_seq: glseq<PointsToArray<Iovec>>)
+  requires |pta.s| == NUM_IO_SLOTS as int * PAGES_PER_EXTENT as int
+  ensures pta_seq.len() == NUM_IO_SLOTS as int
+  ensures forall i {:trigger pta_seq.has(i)} | 0 <= i < NUM_IO_SLOTS as int ::
+      pta_seq.has(i)
+        && 0 <= i * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
+        && 0 <= pta.ptr.as_nat() + i * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
+                < 0x1_0000_0000_0000_0000
+        && pta_seq.get(i).ptr == ptr_add(pta.ptr, i as uint64 * PAGES_PER_EXTENT * sizeof<Iovec>())
+        && |pta_seq.get(i).s| == PAGES_PER_EXTENT as int
+
   method init_batch_busy()
   returns (linear batch_busy: lseq<Atomic<bool, NullGhostType>>)
   ensures |batch_busy| == NUM_CHUNKS as int
@@ -55,6 +67,80 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
+  method init_ioslots()
+  returns (iocb_base_ptr: Ptr, linear io_slots: lseq<IOSlot>)
+  {
+    glinear var iocbs;
+    iocb_base_ptr, iocbs := new_iocb_array(NUM_IO_SLOTS);
+
+    io_slots := lseq_alloc<IOSlot>(NUM_IO_SLOTS);
+
+    var full_iovec_ptr;
+    glinear var full_iovec;
+    var dummy_iovec := new_iovec(nullptr(), 0);
+    full_iovec_ptr, full_iovec := alloc_array(PAGES_PER_EXTENT * NUM_IO_SLOTS, dummy_iovec);
+    glinear var iovecs := iovec_split(full_iovec);
+
+    ghost var iocbs_copy := iocbs;
+
+    var i3: uint64 := 0;
+    while i3 < NUM_IO_SLOTS
+    invariant 0 <= i3 as int <= NUM_IO_SLOTS as int
+    invariant iocbs.len() == NUM_IO_SLOTS as int
+    invariant forall j | i3 as int <= j < NUM_IO_SLOTS as int ::
+        iocbs.has(j) && iocbs.get(j) == iocbs_copy.get(j)
+    invariant |io_slots| == NUM_IO_SLOTS as int
+    invariant forall j | i3 as int <= j < NUM_IO_SLOTS as int :: j !in io_slots
+    invariant forall j | 0 <= j < i3 as int :: j in io_slots
+        && io_slots[j].WF()
+        && iocb_base_ptr.as_nat() + j * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
+        && 0 <= j * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
+        && io_slots[j].iocb_ptr == ptr_add(iocb_base_ptr, j as uint64 * SizeOfIocb())
+    invariant iovecs.len() == NUM_IO_SLOTS as int
+    invariant forall j {:trigger iovecs.has(j)} | i3 as int <= j < NUM_IO_SLOTS as int ::
+      iovecs.has(j)
+        && 0 <= j * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
+        && 0 <= full_iovec_ptr.as_nat() + j * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
+                < 0x1_0000_0000_0000_0000
+        && iovecs.get(j).ptr == ptr_add(full_iovec_ptr, j as uint64 * PAGES_PER_EXTENT * sizeof<Iovec>())
+        && |iovecs.get(j).s| == PAGES_PER_EXTENT as int
+
+    {
+      glinear var iocb;
+      iocbs, iocb := glseq_take(iocbs, i3 as int);
+
+      assert iovecs.has(i3 as int);
+      assume 0 <= i3 as int * sizeof<Iovec>() as int;
+      var iovec_ptr := ptr_add(full_iovec_ptr, i3 * PAGES_PER_EXTENT * sizeof<Iovec>());
+      glinear var iovec;
+      iovecs, iovec := glseq_take(iovecs, i3 as int);
+
+      assert iovec.ptr == iovec_ptr;
+      assert |iovec.s| == PAGES_PER_EXTENT as int;
+
+      glinear var io_slot_access := IOSlotAccess(iocb, iovec);
+
+      var iocb_ptr := ptr_add(iocb_base_ptr, i3 as uint64 * SizeOfIocb());
+      linear var slot_lock := new_basic_lock(io_slot_access, 
+        (slot_access: IOSlotAccess) =>
+          && slot_access.iocb.ptr == iocb_ptr
+          && slot_access.iovec.ptr == iovec_ptr
+          && |slot_access.iovec.s| == PAGES_PER_EXTENT as int
+      );
+      linear var io_slot := IOSlot(
+          iocb_ptr,
+          iovec_ptr,
+          slot_lock);
+      assert io_slot.WF();
+      lseq_give_inout(inout io_slots, i3, io_slot);
+
+      i3 := i3 + 1;
+    }
+
+    dispose_anything(iocbs);
+    dispose_anything(iovecs);
+  }
+
   method init_cache(glinear init_tok: T.Token)
   returns (linear c: Cache)
   requires CacheSSM.Init(init_tok.val)
@@ -66,10 +152,6 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         CACHE_SIZE * PageSize, 0, PageSize);
     glinear var data_pta_seq : glseq<PointsToArray<byte>> :=
         split_into_page_size_chunks(data_pta_full);
-
-    var iocb_base_ptr;
-    glinear var iocbs;
-    iocb_base_ptr, iocbs := new_iocb_array(NUM_IO_SLOTS);
 
     linear var read_refcounts_array := lseq_alloc<AtomicRefcount>(RC_WIDTH * CACHE_SIZE);
     linear var status_idx_array := lseq_alloc<StatusIdx>(CACHE_SIZE);
@@ -205,53 +287,14 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     dispose_anything(empty_seq);
     dispose_anything(dis);
 
-    linear var global_clockpointer := new_atomic(0, NullGhostType, (v, g) => true, 0);
-    linear var req_hand_base := new_atomic(0, NullGhostType, (v, g) => true, 0);
-    linear var io_slots := lseq_alloc<IOSlot>(NUM_IO_SLOTS);
-
-    ghost var iocbs_copy := iocbs;
+    linear var global_clockpointer := new_atomic(0 as uint32, NullGhostType, (v, g) => true, 0);
+    linear var req_hand_base := new_atomic(0 as uint32, NullGhostType, (v, g) => true, 0);
 
     assert {:split_here} true;
 
-    var i3: uint64 := 0;
-    while i3 < NUM_IO_SLOTS
-    invariant 0 <= i3 as int <= NUM_IO_SLOTS as int
-    invariant iocbs.len() == NUM_IO_SLOTS as int
-    invariant forall j | i3 as int <= j < NUM_IO_SLOTS as int ::
-        iocbs.has(j) && iocbs.get(j) == iocbs_copy.get(j)
-    invariant |io_slots| == NUM_IO_SLOTS as int
-    invariant forall j | i3 as int <= j < NUM_IO_SLOTS as int :: j !in io_slots
-    invariant forall j | 0 <= j < i3 as int :: j in io_slots
-        && io_slots[j].WF()
-        && iocb_base_ptr.as_nat() + j * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
-        && 0 <= j * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
-        && io_slots[j].iocb_ptr == ptr_add(iocb_base_ptr, j as uint64 * SizeOfIocb())
-    {
-      linear var io_slot_info_cell;
-      glinear var io_slot_info_contents;
-      io_slot_info_cell, io_slot_info_contents := new_cell(IOSlotRead(0)); // dummy value
-
-      glinear var iocb;
-      iocbs, iocb := glseq_take(iocbs, i3 as int);
-
-      glinear var io_slot_access := IOSlotAccess(iocb, io_slot_info_contents); 
-
-      var iocb_ptr := ptr_add(iocb_base_ptr, i3 as uint64 * SizeOfIocb());
-      linear var slot_lock := new_basic_lock(io_slot_access, 
-        (slot_access: IOSlotAccess) =>
-          && slot_access.iocb.ptr == iocb_ptr
-          && slot_access.io_slot_info.cell == io_slot_info_cell
-      );
-      linear var io_slot := IOSlot(
-          iocb_ptr,
-          io_slot_info_cell,
-          slot_lock);
-      lseq_give_inout(inout io_slots, i3, io_slot);
-
-      i3 := i3 + 1;
-    }
-
-    assert {:split_here} true;
+    linear var io_slots;
+    var iocb_base_ptr;
+    iocb_base_ptr, io_slots := init_ioslots();
 
     ghost var disk_idx_of_entry := seq(CACHE_SIZE as int, (i) requires 0 <= i < CACHE_SIZE as int =>
         status_idx_array[i].idx);
@@ -269,9 +312,9 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       ((iocb_ptr, iocb, wp, g) =>
           ReadGInv(io_slots, data, disk_idx_of_entry, status, iocb_ptr, iocb, wp, g)),
       ((iocb_ptr, iocb, p, g) =>
-          WriteGInv(io_slots, data, disk_idx_of_entry, status, iocb_ptr, iocb, p, g)));
-
-    dispose_anything(iocbs);
+          WriteGInv(io_slots, data, disk_idx_of_entry, status, iocb_ptr, iocb, p, g)),
+      ((iocb_ptr, iocb, x, p, g) =>
+          WritevGInv(io_slots, data, disk_idx_of_entry, status, iocb_ptr, iocb, x, p, g)));
 
     linear var batch_busy := init_batch_busy();
 

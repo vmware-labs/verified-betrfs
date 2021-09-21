@@ -194,11 +194,13 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
 
   method {:extern} init_ctx(
       ghost async_read_inv: (Ptr, Iocb, PointsToArray<byte>, aioparams.ReadG) -> bool,
-      ghost async_write_inv: (Ptr, Iocb, seq<byte>, aioparams.WriteG) -> bool
+      ghost async_write_inv: (Ptr, Iocb, seq<byte>, aioparams.WriteG) -> bool,
+      ghost async_writev_inv: (Ptr, Iocb, PointsToArray<Iovec>, seq<seq<byte>>, aioparams.WritevG) -> bool
     )
   returns (linear ioctx: IOCtx)
   ensures ioctx.async_read_inv == async_read_inv
   ensures ioctx.async_write_inv == async_write_inv
+  ensures ioctx.async_writev_inv == async_writev_inv
 
   method {:extern} async_write(
       shared ctx: IOCtx,

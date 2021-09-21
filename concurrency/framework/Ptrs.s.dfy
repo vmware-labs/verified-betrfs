@@ -103,6 +103,10 @@ module {:extern "Ptrs"} Ptrs {
   returns (ptr: Ptr, glinear d: PointsToLinear<V>)
   ensures d == PointsToLinear(ptr, v)
 
+  method {:extern} alloc_array<V>(len: uint64, init_value: V)
+  returns (ptr: Ptr, glinear d: PointsToArray<V>)
+  ensures d == PointsToArray(ptr, seq(len, (i) => init_value))
+
   method {:extern} alloc_array_aligned<V>(len: uint64, init_value: V, alignment: uint64)
   returns (ptr: Ptr, glinear d: PointsToArray<V>)
   requires alignment == 4096 // XXX(travis): should probably be "a power of 2" or something
