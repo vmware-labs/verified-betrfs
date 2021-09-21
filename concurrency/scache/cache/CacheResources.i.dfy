@@ -113,6 +113,14 @@ module CacheResources {
   ensures t3 == DiskPageMap(disk_idx, Some(cache_idx))
   ensures t4 == DiskReadTicket(disk_idx)
 
+  glinear method inv_map_agrees(
+      gshared cache_entry: CacheEntry,
+      glinear inout dpm: DiskPageMap
+  )
+  requires old_dpm.disk_idx == cache_entry.disk_idx
+  ensures old_dpm == dpm
+  ensures dpm.cache_idx_opt == Some(cache_entry.cache_idx)
+
   glinear method unassign_page(
       ghost cache_idx: nat,
       ghost disk_idx: nat,

@@ -31,6 +31,22 @@ module AtomicIndexLookupImpl {
     forall v, g :: atomic_inv(a, v, g) <==> state_inv(v, g, disk_idx)
   }
 
+  method read_known_cache_idx(
+      shared a: AtomicIndexLookup,
+      ghost disk_idx: nat,
+      gshared cache_entry: CacheEntry)
+  returns (cache_idx: uint64)
+  requires atomic_index_lookup_inv(a, disk_idx)
+  requires cache_entry.disk_idx == disk_idx
+  ensures cache_idx as int == cache_entry.cache_idx
+  {
+    atomic_block cache_idx := execute_atomic_load(a) {
+      ghost_acquire g;
+      inv_map_agrees(cache_entry, inout g);
+      ghost_release g;
+    }
+  }
+
   method atomic_index_lookup_read(
       shared a: AtomicIndexLookup,
       ghost disk_idx: nat)

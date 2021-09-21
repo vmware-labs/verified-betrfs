@@ -76,7 +76,7 @@ module CacheAIOParams refines AIOParams {
       datas: seq<seq<byte>>,
       g: WritevG)
   {
-    && g.wbos.len() == |datas| == |iovec.s| == |g.keys|
+    && g.wbos.len() == |datas| == |g.keys| <= |iovec.s|
     && forall i | 0 <= i < g.wbos.len() ::
       && g.wbos.has(i)
       && g.wbos.get(i).is_handle(g.keys[i])
