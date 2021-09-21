@@ -1,5 +1,6 @@
 include "CacheIO.i.dfy"
 include "../framework/ThreadUtils.s.dfy"
+include "CacheWritebackBatch.i.dfy"
 
 module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Constants
@@ -24,6 +25,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened LinearSequence_i
   import opened ThreadUtils
   import opened PageSizeConstant
+  import CWB = CacheWritebackBatch(aio)
 
   datatype PageHandle = PageHandle(
     ptr: Ptr,
@@ -253,6 +255,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
+  /*
   method batch_start_writeback(shared cache: Cache, inout linear local: LocalState,
         batch_idx: uint64, is_urgent: bool)
   requires cache.Inv()
@@ -294,6 +297,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       i := i + 1;
     }
   }
+  */
 
   method move_hand(shared cache: Cache, inout linear local: LocalState, is_urgent: bool)
   requires cache.Inv()
@@ -329,7 +333,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             lseq_peek(cache.batch_busy, cleaner_hand), false, true) { }
 
       if do_clean {
-        batch_start_writeback(cache, inout local, cleaner_hand, is_urgent);
+        CWB.batch_start_writeback(cache, inout local, cleaner_hand, is_urgent);
         atomic_block var _ := execute_atomic_store(
             lseq_peek(cache.batch_busy, cleaner_hand), false) { }
       }
@@ -1161,7 +1165,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     while flush_hand < NUM_CHUNKS
     invariant local.WF()
     {
-      batch_start_writeback(cache, inout local, flush_hand, true);
+      CWB.batch_start_writeback(cache, inout local, flush_hand, true);
       flush_hand := flush_hand + 1;   
     }
 

@@ -1,7 +1,7 @@
 include "CacheIO.i.dfy"
 include "../framework/ThreadUtils.s.dfy"
 
-module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
+module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Constants
   import opened AtomicStatusImpl
   import opened CacheAIOParams
@@ -300,6 +300,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       iocb_ptr, iocb, iovec, datas, g)
   ensures cache.ioctx.async_writev_inv(iocb_ptr, iocb, iovec, datas, g)
   {
+    // for some reason Dafny is able to prove this better when it is factored
+    // into its own lemma
   }
 
   method vec_writeback_async(shared cache: Cache, inout linear local: LocalState,
