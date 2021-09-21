@@ -659,15 +659,31 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     )
   }
 
-  function Ticket(rid: RequestId, input: IOIfc.Input) : M
-    // TODO fill this in
-    // should be UpdateInit or ReadonlyInit
+  function ReadOp(rid: RequestId, readonly_state: ReadonlyState) : M {
+    M(map[], None, map[], map[], None,
+      map[rid := readonly_state],
+      map[], map[])
+  }
 
+  function UpdateOp(rid: RequestId, update_state: UpdateState) : M {
+    M(map[], None, map[], map[], None, map[],
+      map[rid := update_state],
+      map[])
+  }
 
-  function Stub(rid: RequestId, output: IOIfc.Output) : M
-    // TODO fill this in
-    // should be UpdateDone or ReadonlyDone
+  function Ticket(rid: RequestId, input: IOIfc.Input) : M {
+    if input.ROp? then
+      ReadOp(rid, ReadonlyInit(input.readonly_op))
+    else
+      UpdateOp(rid, UpdateInit(input.update_op))
+  }
 
+  // Travis: should be UpdateDone or ReadonlyDone
+  function Stub(rid: RequestId, output: IOIfc.Output) : M {
+      // RS: How do we represent that the rid should be in one of localReads
+      // or localUpdates?
+      dot(ReadOp(rid, ReadonlyDone(output)), UpdateOp(rid, UpdateDone(output)))
+  }
 
   // By returning a set of request ids "in use", we enforce that
   // there are only a finite number of them (i.e., it is always possible to find
