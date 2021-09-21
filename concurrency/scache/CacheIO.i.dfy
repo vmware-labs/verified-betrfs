@@ -101,7 +101,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var idx: uint64;
     glinear var access;
     idx, access := get_free_io_slot(cache, inout local);
-    glinear var IOSlotAccess(iocb, io_slot_info) := access;
+    glinear var IOSlotAccess(iocb) := access;
 
     iocb_prepare_write(
         lseq_peek(cache.io_slots, idx).iocb_ptr,
@@ -110,14 +110,9 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         4096,
         cache.data_ptr(cache_idx));
 
-    write_cell(
-        lseq_peek(cache.io_slots, idx).io_slot_info_cell,
-        inout io_slot_info,
-        IOSlotWrite(cache_idx));
-
     glinear var writeg := WriteG(
         cache.key(cache_idx as int),
-        wbo, idx as int, io_slot_info);
+        wbo, idx as int);
 
     assert WriteGInv(
         cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
@@ -167,7 +162,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var idx: uint64;
     glinear var access;
     idx, access := get_free_io_slot(cache, inout local);
-    glinear var IOSlotAccess(iocb, io_slot_info) := access;
+    glinear var IOSlotAccess(iocb) := access;
 
     iocb_prepare_read(
         lseq_peek(cache.io_slots, idx).iocb_ptr,
@@ -176,18 +171,12 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         4096,
         cache.data_ptr(cache_idx));
 
-    write_cell(
-        lseq_peek(cache.io_slots, idx).io_slot_info_cell,
-        inout io_slot_info,
-        IOSlotRead(cache_idx));
-
     glinear var readg := ReadG(
         cache.key(cache_idx as int),
         cache_reading,
         idx_perm,
         ro,
-        idx as int,
-        io_slot_info);
+        idx as int);
 
     assert ReadGInv(
         cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
@@ -347,6 +336,10 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
+  method cache_idx_of_data_ptr(shared cache: Cache, data_ptr: Ptr, ghost cache_idx: nat)
+  returns (ci: uint64)
+  ensures ci as nat == cache_idx
+
   method io_cleanup_1(shared cache: Cache)
   returns (done: bool)
   requires cache.Inv()
@@ -376,53 +369,55 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       var slot_idx: uint64 := ptr_diff(iocb_ptr, cache.iocb_base_ptr) / SizeOfIocb();
 
-      var io_slot_info_value :=
-          read_cell(
-              lseq_peek(cache.io_slots, slot_idx).io_slot_info_cell,
-              if fr.FRWrite? then fr.wg.io_slot_info else fr.rg.io_slot_info);
+      glinear var iocb1;
 
-      glinear var iocb1, io_slot_info1;
+      var is_write := iocb_is_write(iocb_ptr, fr.iocb);
+      var is_writev := iocb_is_write(iocb_ptr, fr.iocb);
 
-      match io_slot_info_value {
-        case IOSlotWrite(cache_idx) => {
-          glinear var FRWrite(iocb, data, wg, stub) := fr;
-          glinear var WriteG(key, wbo, g_slot_idx, io_slot_info) := wg;
+      if is_write {
+        assert fr.FRWrite?;
+        glinear var FRWrite(iocb, data, wg, stub) := fr;
+        glinear var WriteG(key, wbo, g_slot_idx) := wg;
 
-          glinear var ustub := CacheResources.DiskWriteStub_fold(iocb.offset, stub);
-          ghost var disk_idx := ustub.disk_idx;
-          disk_writeback_callback(cache, cache_idx, disk_idx, wbo, ustub);
+        glinear var ustub := CacheResources.DiskWriteStub_fold(iocb.offset, stub);
+        ghost var disk_idx := ustub.disk_idx;
 
-          iocb1 := iocb;
-          io_slot_info1 := io_slot_info;
-        }
+        var data_ptr := iocb_buf(iocb_ptr, iocb);
+        var cache_idx := cache_idx_of_data_ptr(cache, data_ptr, key.cache_idx);
+
+        disk_writeback_callback(cache, cache_idx, disk_idx, wbo, ustub);
+
+        iocb1 := iocb;
+      } 
         /*
         case IOSlotWritev => {
           glinear var FRWritev(iocb, iovec, datas, wvg, stubs) := fr;
-          glinear var WriteG(key, wbos, g_slot_idx, io_slot_info) := wvg;
+          glinear var WriteG(key, wbos, g_slot_idx) := wvg;
 
           glinear var ustub := CacheResources.DiskWriteStub_fold(iocb.offset, stub);
           ghost var disk_idx := ustub.disk_idx;
           disk_writeback_callback_vec(cache, iocb.iovec, iovec, wbos, stubs);
 
           iocb1 := iocb;
-          io_slot_info1 := io_slot_info;
         }*/
-        case IOSlotRead(cache_idx) => {
-          glinear var FRRead(iocb, wp, rg, stub) := fr;
-          glinear var ReadG(key, cache_reading, idx, ro, g_slot_idx, io_slot_info) := rg;
+      else {
+        assert fr.FRRead?;
+        glinear var FRRead(iocb, wp, rg, stub) := fr;
+        glinear var ReadG(key, cache_reading, idx, ro, g_slot_idx) := rg;
 
-          glinear var ustub := CacheResources.DiskReadStub_fold(iocb.offset, wp.s, stub);
-          ghost var disk_idx := ustub.addr;
-          disk_read_callback(cache, cache_idx, disk_idx, wp, ro, cache_reading, idx, ustub);
+        glinear var ustub := CacheResources.DiskReadStub_fold(iocb.offset, wp.s, stub);
+        ghost var disk_idx := ustub.addr;
 
-          iocb1 := iocb;
-          io_slot_info1 := io_slot_info;
-        }
+        var data_ptr := iocb_buf(iocb_ptr, iocb);
+        var cache_idx := cache_idx_of_data_ptr(cache, data_ptr, key.cache_idx);
+
+        disk_read_callback(cache, cache_idx, disk_idx, wp, ro, cache_reading, idx, ustub);
+
+        iocb1 := iocb;
       }
 
-      glinear var slot_access := IOSlotAccess(iocb1, io_slot_info1);
+      glinear var slot_access := IOSlotAccess(iocb1);
       assert slot_access.iocb.ptr == cache.io_slots[slot_idx as nat].iocb_ptr;
-      assert slot_access.io_slot_info.cell == cache.io_slots[slot_idx as nat].io_slot_info_cell;
       assert lseq_peek(cache.io_slots, slot_idx).WF();
       BasicLockImpl.release(
           lseq_peek(cache.io_slots, slot_idx).lock,

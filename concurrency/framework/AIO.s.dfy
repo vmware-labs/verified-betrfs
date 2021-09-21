@@ -65,10 +65,45 @@ module {:extern "IocbStruct"} IocbStruct {
   requires offset >= 0
   ensures iocb == IocbWritev(ptr, offset as nat, iovec, iovec_len as nat)
 
-  type {:extern "struct"} Iovec {
-    function {:extern} iov_base() : Ptr
-    function {:extern} iov_len() : uint64
+  method {:extern} iocb_is_read(ptr: Ptr, gshared iocb: Iocb)
+  returns (b: bool)
+  requires iocb.ptr == ptr
+  requires !iocb.IocbUninitialized?
+  ensures b == iocb.IocbRead?
+
+  method {:extern} iocb_is_write(ptr: Ptr, gshared iocb: Iocb)
+  returns (b: bool)
+  requires iocb.ptr == ptr
+  requires !iocb.IocbUninitialized?
+  ensures b == iocb.IocbWrite?
+
+  method {:extern} iocb_is_writev(ptr: Ptr, gshared iocb: Iocb)
+  returns (b: bool)
+  requires iocb.ptr == ptr
+  requires !iocb.IocbUninitialized?
+  ensures b == iocb.IocbWritev?
+
+  method {:extern} iocb_buf(ptr: Ptr, gshared iocb: Iocb)
+  returns (buf: Ptr)
+  requires iocb.ptr == ptr
+  requires iocb.IocbRead? || iocb.IocbWrite?
+  ensures buf == iocb.buf
+
+  method {:extern} iocb_iovec(ptr: Ptr, gshared iocb: Iocb)
+  returns (iovec: Ptr)
+  requires iocb.ptr == ptr
+  requires iocb.IocbWritev?
+  ensures iovec == iocb.iovec
+
+  type {:extern "struct"} Iovec(!new) {
+    function method {:extern} iov_base() : Ptr
+    function method {:extern} iov_len() : uint64
   }
+
+  method {:extern} new_iovec(base: Ptr, len: uint64)
+  returns (iovec: Iovec)
+  ensures iovec.iov_base() == base
+  ensures iovec.iov_len() == len
 }
 
 abstract module AIOParams {
