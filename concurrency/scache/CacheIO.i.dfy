@@ -17,8 +17,11 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Cells
   import Math
   import opened GlinearOption
+  import opened GlinearSeq
   import opened PageSizeConstant
   import opened Atomics
+  import CacheSSM
+  import DT = DiskSSMTokens(CacheIfc, CacheSSM)
 
   method get_free_io_slot(shared cache: Cache, inout linear local: LocalState)
   returns (idx: uint64, glinear access: IOSlotAccess)
@@ -299,6 +302,55 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     cache.status_atomic(cache_idx).release_writeback(wbo, stub);
   }
 
+  method disk_writeback_callback_vec(
+      shared cache: Cache,
+      iovec_ptr: Ptr,
+      iovec_len: uint64,
+      gshared iovec: PointsToArray<Iovec>,
+      ghost offset: nat,
+      ghost keys: seq<Key>,
+      ghost datas: seq<seq<byte>>,
+      glinear wbos: glseq<T.WritebackObtainedToken>,
+      glinear stubs: glseq<DT.Token>)
+  requires cache.Inv()
+  requires |iovec.s| == wbos.len() == stubs.len() == |datas| == |keys| == iovec_len as int
+  requires iovec.ptr == iovec_ptr
+  requires forall i | 0 <= i < |iovec.s| ::
+    && wbos.has(i)
+    && stubs.has(i)
+    && simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
+        cache.status, offset + i, datas[i], keys[i], wbos.get(i))
+    && stubs.get(i).val == CacheSSM.DiskWriteResp(offset + i)
+  {
+    glinear var wbos' := wbos;
+    glinear var stubs' := stubs;
+
+    var j : uint64 := 0;
+    while j < iovec_len
+    invariant 0 <= j as int <= iovec_len as int
+    invariant |iovec.s| == wbos'.len() == stubs'.len() == |datas| == |keys| == iovec_len as int
+    invariant forall i: int | j as int <= i < |iovec.s| ::
+      && wbos'.has(i)
+      && stubs'.has(i)
+      && simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
+          cache.status, offset + i, datas[i], keys[i], wbos'.get(i))
+      && stubs'.get(i).val == CacheSSM.DiskWriteResp(offset + i)
+    {
+      glinear var wbo, stub;
+      wbos', wbo := glseq_take(wbos', j as int);
+      stubs', stub := glseq_take(stubs', j as int);
+      var my_iovec := iovec_ptr.index_read(iovec, j);
+      var data_ptr := my_iovec.iov_base();
+      var cache_idx := cache_idx_of_data_ptr(cache, data_ptr, keys[j].cache_idx);
+      glinear var ustub := CacheResources.DiskWriteStub_fold(offset + j as int, stub);
+      disk_writeback_callback(cache, cache_idx, offset + j as int, wbo, ustub);
+      j := j + 1;
+    }
+
+    dispose_anything(wbos');
+    dispose_anything(stubs');
+  }
+
   method io_cleanup(shared cache: Cache, max_io_events: uint64)
   requires cache.Inv()
   {
@@ -372,7 +424,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear var iocb1;
 
       var is_write := iocb_is_write(iocb_ptr, fr.iocb);
-      var is_writev := iocb_is_write(iocb_ptr, fr.iocb);
+      var is_writev := iocb_is_writev(iocb_ptr, fr.iocb);
 
       if is_write {
         assert fr.FRWrite?;
@@ -388,19 +440,21 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         disk_writeback_callback(cache, cache_idx, disk_idx, wbo, ustub);
 
         iocb1 := iocb;
-      } 
-        /*
-        case IOSlotWritev => {
-          glinear var FRWritev(iocb, iovec, datas, wvg, stubs) := fr;
-          glinear var WriteG(key, wbos, g_slot_idx) := wvg;
+      } else if is_writev {
+        assert fr.FRWritev?;
 
-          glinear var ustub := CacheResources.DiskWriteStub_fold(iocb.offset, stub);
-          ghost var disk_idx := ustub.disk_idx;
-          disk_writeback_callback_vec(cache, iocb.iovec, iovec, wbos, stubs);
+        glinear var FRWritev(iocb, iovec, datas, wvg, stubs) := fr;
+        glinear var WritevG(keys, wbos, g_slot_idx) := wvg;
 
-          iocb1 := iocb;
-        }*/
-      else {
+        var iovec_ptr := iocb_iovec(iocb_ptr, iocb);
+        var iovec_len := iocb_iovec_len(iocb_ptr, iocb);
+        ghost var disk_idx := iocb.offset;
+
+        disk_writeback_callback_vec(cache, iovec_ptr, iovec_len, iovec, disk_idx, keys, datas, wbos, stubs);
+        dispose_anything(iovec); // XXX TODO
+
+        iocb1 := iocb;
+      } else {
         assert fr.FRRead?;
         glinear var FRRead(iocb, wp, rg, stub) := fr;
         glinear var ReadG(key, cache_reading, idx, ro, g_slot_idx) := rg;

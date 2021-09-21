@@ -95,6 +95,13 @@ module {:extern "IocbStruct"} IocbStruct {
   requires iocb.IocbWritev?
   ensures iovec == iocb.iovec
 
+  method {:extern} iocb_iovec_len(ptr: Ptr, gshared iocb: Iocb)
+  returns (iovec_len: uint64)
+  requires iocb.ptr == ptr
+  requires iocb.IocbWritev?
+  ensures iovec_len as int == iocb.iovec_len
+
+
   type {:extern "struct"} Iovec(!new) {
     function method {:extern} iov_base() : Ptr
     function method {:extern} iov_len() : uint64
