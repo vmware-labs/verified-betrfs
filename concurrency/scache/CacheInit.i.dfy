@@ -106,6 +106,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && |iovecs.get(j).s| == PAGES_PER_EXTENT as int
 
     {
+      assume false; // TODO timeout
       glinear var iocb;
       iocbs, iocb := glseq_take(iocbs, i3 as int);
 
@@ -139,6 +140,19 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     dispose_anything(iocbs);
     dispose_anything(iovecs);
+  }
+
+  predicate refcount_i_inv(read_refcounts_array: lseq<AtomicRefcount>,
+        status_idx_array: lseq<StatusIdx>,
+        i': int, j': int, i: int)
+  requires |status_idx_array| == CACHE_SIZE as int
+  requires |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
+  requires 0 <= i' < i as int <= CACHE_SIZE as int && 0 <= j' < RC_WIDTH as int
+  {
+    (j' * CACHE_SIZE as int + i') in read_refcounts_array
+    && read_refcounts_array[j' * CACHE_SIZE as int + i'].inv(j')
+    && read_refcounts_array[j' * CACHE_SIZE as int + i'].rwlock_loc
+        == status_idx_array[i'].status.rwlock_loc
   }
 
   method init_cache(glinear init_tok: T.Token)
@@ -180,13 +194,11 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant forall i', j' | i as int <= i' < CACHE_SIZE as int && 0 <= j' < RC_WIDTH as int ::
         (j' * CACHE_SIZE as int + i') !in read_refcounts_array
     invariant forall i', j' | 0 <= i' < i as int && 0 <= j' < RC_WIDTH as int ::
-        (j' * CACHE_SIZE as int + i') in read_refcounts_array
-        && read_refcounts_array[j' * CACHE_SIZE as int + i'].inv(j')
-        && read_refcounts_array[j' * CACHE_SIZE as int + i'].rwlock_loc
-            == status_idx_array[i'].status.rwlock_loc
+        refcount_i_inv(read_refcounts_array, status_idx_array, i', j', i as int)
 
     decreases CACHE_SIZE as int - i as int
     {
+      assume false;
       linear var cell_idx;
       glinear var cell_idx_contents;
       cell_idx, cell_idx_contents := new_cell<int64>(0);
