@@ -8,20 +8,23 @@ module CacheAIOParams refines AIOParams {
   import opened GlinearSeq
 
   glinear datatype IOSlotAccess = IOSlotAccess(
-    glinear iocb: Iocb)
+    glinear iocb: Iocb,
+    glinear iovec: PointsToArray<Iovec>)
 
   glinear datatype ReadG = ReadG(
     ghost key: Key,
     glinear cache_reading: CacheResources.CacheReading,
     glinear idx: CellContents<int64>,
     glinear ro: T.Token,
-    ghost slot_idx: nat
+    ghost slot_idx: nat,
+    glinear iovec: PointsToArray<Iovec>
   )
 
   glinear datatype WriteG = WriteG(
     ghost key: Key,
     glinear wbo: T.WritebackObtainedToken,
-    ghost slot_idx: nat
+    ghost slot_idx: nat,
+    glinear iovec: PointsToArray<Iovec>
   )
 
   glinear datatype WritevG = WritevG(
@@ -73,7 +76,7 @@ module CacheAIOParams refines AIOParams {
       datas: seq<seq<byte>>,
       g: WritevG)
   {
-    && g.wbos.len() == |datas| == |iovec.s|
+    && g.wbos.len() == |datas| == |iovec.s| == |g.keys|
     && forall i | 0 <= i < g.wbos.len() ::
       && g.wbos.has(i)
       && g.wbos.get(i).is_handle(g.keys[i])

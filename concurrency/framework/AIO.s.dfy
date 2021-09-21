@@ -154,7 +154,7 @@ abstract module AIOParams {
   returns (gshared ad: PointsToArray<byte>)
   requires iocb.IocbWritev?
   requires is_read_perm_v(iocb_ptr, iocb, iovec, datas, g)
-  requires 0 <= i < |datas| == |iovec.s|
+  requires 0 <= i < |datas| <= |iovec.s|
   ensures ad == PointsToArray(iovec.s[i].iov_base(), datas[i])
 }
 
@@ -236,8 +236,8 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   requires iocb.ptr == iocb_ptr
   requires iocb.iovec_len > 0
   requires iovec.ptr == iocb.iovec
-  requires |iovec.s| == iocb.iovec_len == |datas| == tickets.len()
-  requires forall i | 0 <= i < |iovec.s| ::
+  requires |iovec.s| >= iocb.iovec_len == |datas| == tickets.len()
+  requires forall i | 0 <= i < iocb.iovec_len ::
       tickets.has(i)
       && writev_valid_i(iovec.s[i], datas[i], tickets.get(i), iocb.offset, i)
   requires aioparams.is_read_perm_v(iocb_ptr, iocb, iovec, datas, g)

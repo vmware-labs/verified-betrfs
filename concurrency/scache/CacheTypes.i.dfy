@@ -208,6 +208,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   linear datatype IOSlot = IOSlot(
     iocb_ptr: Ptr,
+    iovec_ptr: Ptr,
     linear lock: pre_BasicLock<IOSlotAccess>)
   {
     predicate WF()
@@ -215,6 +216,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && lock.wf()
       && (forall slot_access: IOSlotAccess :: this.lock.inv(slot_access) <==>
         && slot_access.iocb.ptr == this.iocb_ptr
+        && slot_access.iovec.ptr == this.iovec_ptr
+        && |slot_access.iovec.s| == PAGES_PER_EXTENT as int
       )
     }
   }
@@ -222,6 +225,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   predicate is_slot_access(io_slot: IOSlot, io_slot_access: IOSlotAccess)
   {
     && io_slot.iocb_ptr == io_slot_access.iocb.ptr
+    && io_slot.iovec_ptr == io_slot_access.iovec.ptr
+    && |io_slot_access.iovec.s| == PAGES_PER_EXTENT as int
   }
 
   predicate ReadGInv(
@@ -252,6 +257,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && g.cache_reading.cache_idx == g.key.cache_idx
     && g.ro.loc == cache_status[g.key.cache_idx].rwlock_loc
     && g.ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
+    && g.iovec.ptr == cache_io_slots[g.slot_idx].iovec_ptr
+    && |g.iovec.s| == PAGES_PER_EXTENT as int
   }
 
   predicate simpleWriteGInv(
@@ -292,6 +299,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && g.slot_idx < NUM_IO_SLOTS as int
     && |cache_io_slots| == NUM_IO_SLOTS as int
     && iocb.ptr == iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
+    && g.iovec.ptr == cache_io_slots[g.slot_idx].iovec_ptr
+    && |g.iovec.s| == PAGES_PER_EXTENT as int
     && is_read_perm(iocb_ptr, iocb, data, g)
     && simpleWriteGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status,
         iocb.offset, data, g.key, g.wbo)
@@ -313,13 +322,14 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && iocb.ptr == iocb_ptr
     && g.slot_idx < NUM_IO_SLOTS as int
     && |cache_io_slots| == NUM_IO_SLOTS as int
+    && iovec.ptr == iocb.iovec == cache_io_slots[g.slot_idx].iovec_ptr
     && iocb.ptr == iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
     && is_read_perm_v(iocb_ptr, iocb, iovec, datas, g)
-    && |iovec.s| == |datas| == iocb.iovec_len == |g.keys|
+    && |iovec.s| >= |datas| == iocb.iovec_len == |g.keys|
+    && |iovec.s| == PAGES_PER_EXTENT as int
     && (forall i | 0 <= i < |datas| :: g.wbos.has(i) && 
         simpleWriteGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status,
             iocb.offset + i, datas[i], g.keys[i], g.wbos.get(i))
     )
   }
-
 }
