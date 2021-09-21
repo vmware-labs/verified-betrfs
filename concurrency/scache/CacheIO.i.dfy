@@ -314,14 +314,15 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear wbos: glseq<T.WritebackObtainedToken>,
       glinear stubs: glseq<DT.Token>)
   requires cache.Inv()
-  requires |iovec.s| == wbos.len() == stubs.len() == |datas| == |keys| == iovec_len as int
+  requires |iovec.s| >= wbos.len() == stubs.len() == |datas| == |keys| == iovec_len as int
   requires iovec.ptr == iovec_ptr
-  requires forall i | 0 <= i < |iovec.s| ::
+  requires forall i | 0 <= i < |keys| ::
     && wbos.has(i)
     && stubs.has(i)
     && simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
         cache.status, offset + i, datas[i], keys[i], wbos.get(i))
     && stubs.get(i).val == CacheSSM.DiskWriteResp(offset + i)
+    && iovec.s[i].iov_base() == cache.data[keys[i].cache_idx]
   {
     glinear var wbos' := wbos;
     glinear var stubs' := stubs;
@@ -329,8 +330,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var j : uint64 := 0;
     while j < iovec_len
     invariant 0 <= j as int <= iovec_len as int
-    invariant |iovec.s| == wbos'.len() == stubs'.len() == |datas| == |keys| == iovec_len as int
-    invariant forall i: int | j as int <= i < |iovec.s| ::
+    invariant |iovec.s| >= wbos'.len() == stubs'.len() == |datas| == |keys| == iovec_len as int
+    invariant forall i: int | j as int <= i < |keys| ::
       && wbos'.has(i)
       && stubs'.has(i)
       && simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
@@ -391,7 +392,13 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method cache_idx_of_data_ptr(shared cache: Cache, data_ptr: Ptr, ghost cache_idx: nat)
   returns (ci: uint64)
+  requires cache.Inv()
+  requires 0 <= cache_idx < |cache.data|
+  requires data_ptr == cache.data[cache_idx]
   ensures ci as nat == cache_idx
+  {
+    ci := ptr_diff(data_ptr, cache.data_base_ptr) / 4096;
+  }
 
   method io_cleanup_1(shared cache: Cache)
   returns (done: bool)

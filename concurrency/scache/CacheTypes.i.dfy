@@ -259,6 +259,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && g.ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
     && g.iovec.ptr == cache_io_slots[g.slot_idx].iovec_ptr
     && |g.iovec.s| == PAGES_PER_EXTENT as int
+    && iocb.buf == cache_data[g.key.cache_idx]
   }
 
   predicate simpleWriteGInv(
@@ -304,6 +305,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && is_read_perm(iocb_ptr, iocb, data, g)
     && simpleWriteGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status,
         iocb.offset, data, g.key, g.wbo)
+    && iocb.buf == cache_data[g.key.cache_idx]
   }
 
   predicate WritevGInv(
@@ -330,6 +332,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && (forall i | 0 <= i < |datas| :: g.wbos.has(i) && 
         simpleWriteGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status,
             iocb.offset + i, datas[i], g.keys[i], g.wbos.get(i))
+    && (forall i | 0 <= i < |datas| ::
+        && 0 <= g.keys[i].cache_idx < |cache_data|
+        && iovec.s[i].iov_base() == cache_data[g.keys[i].cache_idx])
     )
   }
 }
