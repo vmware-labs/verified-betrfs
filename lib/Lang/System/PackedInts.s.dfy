@@ -15,7 +15,7 @@ abstract module NativePackedInt {
     witness *
 
   function method Size() : uint64
-    ensures 0 < Size()
+    ensures 0 < Size() <= 8
 
   predicate method fitsInInteger(x: uint64)
     ensures fitsInInteger(x) <==> MinValue() <= x as int < UpperBound()

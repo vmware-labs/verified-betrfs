@@ -45,14 +45,14 @@ module Tuple2Marshalling(
     (eltCount - 1) as uint64 * BoundaryInt.Size()
   }
 
-  predicate offsetTableParsable(bsmCfg: BSM.Config, data: mseq<byte>)
+  predicate tableParsable(bsmCfg: BSM.Config, data: mseq<byte>)
   {
     && sizeOfTableBounded()
     && sizeOfTable() <= |data|
   }
 
-  function parseOffsetTable(bsmCfg: BSM.Config, data: mseq<byte>): (table : mseq<Boundary>)
-    requires offsetTableParsable(bsmCfg, data)
+  function parseTable(bsmCfg: BSM.Config, data: mseq<byte>): (table : mseq<Boundary>)
+    requires tableParsable(bsmCfg, data)
     ensures table == BoundaryInt.unpack_Seq(data[..sizeOfTable()], eltCount - 1)
   {
     var tableData := data[.. sizeOfTable()];
@@ -64,8 +64,8 @@ module Tuple2Marshalling(
 
   predicate parsable(cfg: Config, data: mseq<byte>)
   {
-    && offsetTableParsable(cfg.bsmCfg, data)
-    && var table := parseOffsetTable(cfg.bsmCfg, data);
+    && tableParsable(cfg.bsmCfg, data)
+    && var table := parseTable(cfg.bsmCfg, data);
     && var bound0 := table[0];
     && sizeOfTable() <= bound0 <= |data|
     && ElemMarshalling0.parsable(cfg.elem0Cfg, data[sizeOfTable()..bound0])
@@ -74,7 +74,7 @@ module Tuple2Marshalling(
 
   function parse(cfg: Config, data: mseq<byte>) : UnmarshalledType
   {
-    var table := parseOffsetTable(cfg.bsmCfg, data);
+    var table := parseTable(cfg.bsmCfg, data);
     var bound0 := table[0];
     var elt0 := ElemMarshalling0.parse(cfg.elem0Cfg, data[sizeOfTable()..bound0]);
     var elt1 := ElemMarshalling1.parse(cfg.elem1Cfg, data[bound0..]);
@@ -83,22 +83,22 @@ module Tuple2Marshalling(
 
   method TryParse(cfg: Config, data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
   {
-    var tableEnd := SizeOfTable();
+    var tableSize := SizeOfTable();
 
-    if tableEnd > |data| as uint64 {
+    if tableSize > |data| as uint64 {
       return None;
     }
 
-    var table :- BSM.TryParse(cfg.bsmCfg, data[..tableEnd]);
-    assert table == parseOffsetTable(cfg.bsmCfg, data);
+    var table :- BSM.TryParse(cfg.bsmCfg, data[..tableSize]);
+    assert table == parseTable(cfg.bsmCfg, data);
 
     var bound0 := BoundaryInt.toUint64(table[0]);
 
-    if bound0 > |data| as uint64 || bound0 < tableEnd {
+    if bound0 > |data| as uint64 || bound0 < tableSize {
       return None;
     }
 
-    var value0 :- ElemMarshalling0.TryParse(cfg.elem0Cfg, data[tableEnd..bound0]);
+    var value0 :- ElemMarshalling0.TryParse(cfg.elem0Cfg, data[tableSize..bound0]);
     var value1 :- ElemMarshalling1.TryParse(cfg.elem1Cfg, data[bound0..]);
 
     ovalue := Some((value0, value1));
@@ -106,28 +106,28 @@ module Tuple2Marshalling(
 
   method Parsable(cfg: Config, data: mseq<byte>) returns (p: bool)
   {
-    var tableEnd := SizeOfTable();
+    var tableSize := SizeOfTable();
 
-    if tableEnd > |data| as uint64 {
+    if tableSize > |data| as uint64 {
       return false;
     }
 
-    var tableOpt := BSM.TryParse(cfg.bsmCfg, data[..tableEnd]);
+    var tableOpt := BSM.TryParse(cfg.bsmCfg, data[..tableSize]);
 
     if tableOpt.None? {
       return false;
     }
 
     var table := tableOpt.value;
-    assert table == parseOffsetTable(cfg.bsmCfg, data);
+    assert table == parseTable(cfg.bsmCfg, data);
 
     var bound0 := BoundaryInt.toUint64(table[0]);
 
-    if bound0 > |data| as uint64 || bound0 < tableEnd {
+    if bound0 > |data| as uint64 || bound0 < tableSize {
       return false;
     }
 
-    var fstParsable := ElemMarshalling0.Parsable(cfg.elem0Cfg, data[tableEnd..bound0]);
+    var fstParsable := ElemMarshalling0.Parsable(cfg.elem0Cfg, data[tableSize..bound0]);
     var sndParsable := ElemMarshalling1.Parsable(cfg.elem1Cfg, data[bound0..]);
 
     return fstParsable && sndParsable;
@@ -135,12 +135,12 @@ module Tuple2Marshalling(
 
   method Parse(cfg: Config, data: mseq<byte>) returns (value: UnmarshalledType)
   {
-    var tableEnd := SizeOfTable();
-    var table := BSM.Parse(cfg.bsmCfg, data[..tableEnd]);
-    assert table == parseOffsetTable(cfg.bsmCfg, data);
+    var tableSize := SizeOfTable();
+    var table := BSM.Parse(cfg.bsmCfg, data[..tableSize]);
+    assert table == parseTable(cfg.bsmCfg, data);
     var bound0 := table[0];
 
-    var value0 := ElemMarshalling0.Parse(cfg.elem0Cfg, data[tableEnd..bound0]);
+    var value0 := ElemMarshalling0.Parse(cfg.elem0Cfg, data[tableSize..bound0]);
     var value1 := ElemMarshalling1.Parse(cfg.elem1Cfg, data[bound0..]);
     return (value0, value1);
   }
@@ -150,8 +150,8 @@ module Tuple2Marshalling(
     && var (value0, value1) := value;
     && ElemMarshalling0.marshallable(cfg.elem0Cfg, value0)
     && ElemMarshalling1.marshallable(cfg.elem1Cfg, value1)
-    && var tableEnd := sizeOfTable();
-    && var bound0 := ElemMarshalling0.size(cfg.elem0Cfg, value0) as int + tableEnd;
+    && var tableSize := sizeOfTable();
+    && var bound0 := ElemMarshalling0.size(cfg.elem0Cfg, value0) as int + tableSize;
     && var bound1 := ElemMarshalling0.size(cfg.elem1Cfg, value1) as int + bound0;
     && BoundaryInt.MinValue() <= bound0 < BoundaryInt.UpperBound()
     && BoundaryInt.MinValue() <= bound1 < BoundaryInt.UpperBound()
@@ -210,12 +210,8 @@ module Tuple2Marshalling(
     && tableSize <= |data|
     && var tableData := data[..tableSize];
 
-    && (index != eltCount - 1 ==>
-      (&& BSM.gettable(cfg.bsmCfg, tableData, index)
-      && BSM.eltParsable(cfg.bsmCfg, tableData, index)))
-    && (index != 0 ==> 
-      (&& BSM.gettable(cfg.bsmCfg, tableData, index-1)
-      && BSM.eltParsable(cfg.bsmCfg, tableData, index-1)))
+    && (index != eltCount - 1 ==> BSM.gettable(cfg.bsmCfg, tableData, index))
+    && (index != 0 ==> BSM.gettable(cfg.bsmCfg, tableData, index-1))
   }
 
   function getBounds(cfg: Config, data: mseq<byte>, index: nat) :(int, int)
@@ -232,6 +228,47 @@ module Tuple2Marshalling(
     && boundGettable(cfg, data, index)
     && var (start, end) := getBounds(cfg, data, index);
     && 0 <= start <= end <= |data|
+  }
+
+  method Gettable(cfg: Config, data: mseq<byte>, index: uint64)
+    returns (g: bool)
+    requires validConfig(cfg)
+    requires index as nat < eltCount
+    ensures g == gettable(cfg, data, index as nat)
+  {
+    var tableSize := SizeOfTable();
+  
+    if tableSize > |data| as uint64 {
+      return false;
+    }
+    
+    var tableData := data[..tableSize];
+
+    if index != eltCount as uint64 - 1 {
+      var startGettable := BSM.Gettable(cfg.bsmCfg, tableData, index);
+      if !startGettable { return false; }
+    }
+
+    if index != 0 {
+      var endGettable := BSM.Gettable(cfg.bsmCfg, tableData, index-1);
+      if !endGettable { return false; }
+    }
+
+    var start := tableSize;
+
+    if index != 0 {
+      var istart := BSM.GetElt(cfg.bsmCfg, tableData, index - 1);
+      start := BoundaryInt.toUint64(istart);
+    }
+
+    var end := |data| as uint64;
+
+    if index != eltCount as uint64 - 1 {
+      var iend := BSM.GetElt(cfg.bsmCfg, tableData, index);
+      end := BoundaryInt.toUint64(iend);
+    }
+
+    g := 0 <= start <= end <= |data| as uint64;
   }
 
   method GetElem0(cfg: Config, data: mseq<byte>)
@@ -260,6 +297,12 @@ module Tuple2Marshalling(
     eslice := Slice(BoundaryInt.toUint64(bound0), |data| as uint64);
     assert eslice.I(data) == data[bound0..];
   }
+
+  // method SetElem0(cfg: Config, linear inout data: mseq<byte>, value: ElemMarshalling0.UnmarshalledType)
+  //   requires validConfig(cfg)
+  // {
+
+  // }
 }
 
 // abstract module Tuple3Marshalling refines Marshalling {
