@@ -38,7 +38,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   datatype UpdateState =
     | UpdateInit(op: nrifc.UpdateOp)
-    | UpdatePlaced(nodeId: NodeId) //, idx: nat)
+    | UpdatePlaced(nodeId: NodeId, idx: nat)
     | UpdateDone(ret: nrifc.ReturnType)
 
   // There is only one 'combiner' for a given node.
@@ -380,6 +380,19 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     forall rid | rid in request_ids :: (rid in localUpdates &&  localUpdates[rid].UpdateInit?)
   }
 
+
+  // Given a log of ops and a version number, compute the state at that version
+  function seq_of_tuples_to_map(s: seq<(RequestId, int)>) : map<RequestId, int>
+  ensures |s| == |seq_of_tuples_to_map(s)|
+  ensures (forall rid | rid in seq_of_tuples_to_map(s) :: (rid, seq_of_tuples_to_map(s)[rid]) in s)
+  {
+    if |s| == 0 then
+      map[]
+    else
+      map_union(seq_of_tuples_to_map(s[1..]), map[s[0].0 := s[0].1])
+  }
+
+
   // reserve entries on the shared log
   // { UpdateInit(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerReady ; GlobalTail(t) }
   //   tail = cmpxchg(tail, tail + ops.len()); // retry on fail
@@ -413,8 +426,11 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // calculate the new global tail
     && var global_tail_new := m.global_tail.value + |request_ids|;
 
-    // construct the new local updates, and record the placed updates
-    && var local_updates_new := (map rid | rid in request_ids :: UpdatePlaced(nodeId));
+    // [(rid0, global_tail_var), (rid1, global_tail_var+1), (rid2, global_tail_var+2), ...]
+    && var rid_idx_seq := seq(|request_ids|, i requires 0 <= i < |request_ids| => (request_ids[i], global_tail_var + i));
+    // {rid0: global_tail_var, ...]
+    && var rid_idx_map := seq_of_tuples_to_map(rid_idx_seq);
+    && var local_updates_new := (map rid | rid in rid_idx_map :: UpdatePlaced(nodeId, rid_idx_map[rid]));
 
     && m.log.Keys * updated_log.Keys == {}
 
@@ -922,6 +938,11 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && Inv_CombinerStateValid(s)
     && Inv_CombinerLogNonOverlap(s)
     && Inv_ReadOnlyStateNodeIdExists(s)
+
+    // all the `idx` in localUpdates.UpdatePlaced?.idx are also in the log
+    && forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdatePlaced? 
+      :: s.localUpdates[upd].idx in s.log.Keys
+
 
     // the log doesn't contain entries above the global tail
     && (forall idx : nat | idx >= s.global_tail.value :: idx !in s.log.Keys)

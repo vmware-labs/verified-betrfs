@@ -4,8 +4,8 @@ include "InfiniteLog.i.dfy"
 abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   Refinement(
     AsyncIfc(nrifc),
-    TicketStubStateMachine(nrifc, InfiniteLogSSM(nrifc)),
-    NRSimple(nrifc)
+    TicketStubStateMachine(nrifc, InfiniteLogSSM(nrifc)), // A
+    NRSimple(nrifc) // B
   )
 {
   import opened IL = InfiniteLogSSM(nrifc)
@@ -41,8 +41,39 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     }
   }
 
-  function I(s: A.Variables) : B.Variables // TODO fill me in
-  //requires Inv(s)
+  function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
+    map k | k in m1.Keys + m2.Keys ::
+        (if k in m1.Keys then m1[k] else m2[k])
+  }
+
+  function I(s: A.Variables) : B.Variables
+  //requires Inv(s) 
+  {
+    B.Variables(
+      seq(|s.log|, i requires i in s.log => s.log[i].op),
+      // [],
+      s.ctail.value,
+      // readonly_reqs - ReadReq(ctail_at_start: nat, op: nrifc.ReadonlyOp)
+      map rid | && rid in s.localReads
+                && (s.localReads[rid].ReadonlyCtail? || s.localReads[rid].ReadonlyReadyToRead?)
+        :: B.ReadReq(s.localReads[rid].ctail, s.localReads[rid].op),
+      // update_reqs - UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
+      map_union(
+        (map rid | && rid in s.localUpdates 
+                   && s.localUpdates[rid].UpdateInit?
+        :: s.localUpdates[rid].op),
+        (map rid | && rid in s.localUpdates 
+                   && s.localUpdates[rid].UpdatePlaced?
+        :: s.log[s.localUpdates[rid].idx].op)
+      ),
+      // update_resps - UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
+      // TODO: ask about NRSimple has log_idx in response but we don'thave it in infinite log?
+      // what's the purpose of having logidx in NrSimple?
+      map rid | && rid in s.localUpdates
+                && s.localUpdates[rid].UpdateDone?
+        :: B.UpdateResp(0, s.localUpdates[rid].ret)
+    )
+  }
 
   lemma InitRefinesInit(s: A.Variables)
   //requires A.Init(s)
