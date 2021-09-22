@@ -1,7 +1,5 @@
-module RwLock {
+module RwLockImpl {
   // TODO implement this
-
-  type V // TODO fill this in
 
   /*
    * Constructor for a new mutex.
@@ -13,8 +11,8 @@ module RwLock {
    *     behind this mutex.
    */
 
-  method {:extern} new_mutex(glinear v: V, ghost inv: (V) -> bool)
-  returns (m: RwLock)
+  method {:extern} new_mutex<V>(glinear v: V, ghost inv: (V) -> bool)
+  returns (m: RwLock<V>)
   requires inv(v)
   ensures m.inv == inv
 
@@ -26,13 +24,13 @@ module RwLock {
    * calls a `release` without previously calling `acquire`.
    */
 
-  datatype ExclusiveHandle = ExclusiveHandle(m: RwLock)
+  datatype ExclusiveHandle<V> = ExclusiveHandle(m: RwLock<V>)
 
   /*
    * A SharedHandle is for shared access.
    */
 
-  datatype SharedHandle = SharedHandle(m: RwLock, v: V)
+  datatype SharedHandle<V> = SharedHandle(m: RwLock<V>, v: V)
 
   /*
    * RwLock that protects a piece of data with some invariant.
@@ -49,7 +47,7 @@ module RwLock {
      */
 
     method {:extern} acquire()
-    returns (glinear v: V, glinear handle: ExclusiveHandle)
+    returns (glinear v: V, glinear handle: ExclusiveHandle<V>)
     ensures this.inv(v)
     ensures handle.m == this
 
@@ -58,7 +56,7 @@ module RwLock {
      * The client must ensure that the data meets the invariant.
      */
 
-    method {:extern} release(glinear v: V, glinear handle: ExclusiveHandle)
+    method {:extern} release(glinear v: V, glinear handle: ExclusiveHandle<V>)
     requires this.inv(v)
     requires handle.m == this
 
@@ -69,7 +67,7 @@ module RwLock {
      */
 
     method acquire_shared()
-    returns (glinear handle: SharedHandle)
+    returns (glinear handle: SharedHandle<V>)
     ensures this.inv(handle.v)
     ensures handle.m == this
 
@@ -77,11 +75,11 @@ module RwLock {
      * `acquire_release`
      */
 
-    method release_shared(glinear handle: SharedHandle)
+    method release_shared(glinear handle: SharedHandle<V>)
     requires handle.m == this
   }
 
-  function method {:extern} borrow_shared(gshared handle: SharedHandle)
+  function method {:extern} borrow_shared<V>(gshared handle: SharedHandle<V>)
       : (gshared v: V)
   ensures v == handle.v
 }
