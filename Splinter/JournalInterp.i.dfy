@@ -178,13 +178,50 @@ module JournalInterpMod {
       match sk {
         case AdvanceMarshalledStep(newCU) => {
           assert CacheIfc.WritesApplied(cache, cache', cacheOps);
+
+          var sb := v.marshalledLookup.last().sb;
+          var chain := ChainFrom(cache, sb);
+          var sb' := Superblock(Some(newCU), v.boundaryLSN);
+          var chain' := ChainFrom(cache', sb');
+
+          var priorCU := (v.marshalledLookup.LsnMapDomain(); if v.marshalledLSN == v.boundaryLSN then None else Some(v.lsnMap()[v.marshalledLSN-1]));
+          var jr := JournalRecord(TailToMsgSeq(v), priorCU);
+          assert CacheIfc.Read(cache', newCU, marshal(jr)) by {
+            assert cacheOps[0] == CacheIfc.Write(newCU, marshal(jr)); // observe trigger
+            CacheIfc.reveal_ApplyWrites();
+          }
+          assert chain'.last().rawPage == Some(marshal(jr));  // TODO delete
+          assert chain'.last().hasRecord();
+          calc {
+            chain'.last().journalRec();
+            parse(chain'.last().rawPage.value).value;
+            parse(marshal(jr)).value;
+            jr;
+          }
+          assert chain'.last().journalRec() == jr;
+          assert chain'.last().sb == sb';
+          assume !(jr.messageSeq.seqEnd <= sb'.boundaryLSN);
+          assert !(
+            || !chain'.last().hasRecord()
+            || chain'.last().journalRec().messageSeq.seqEnd <= chain'.last().sb.boundaryLSN
+          );
+          assert !chain'.last().FirstRow();
+          assert chain'.Linked(|chain'.rows| - 1); // trigger: chain' has more than 1 row
+          assert chain == ChainFrom(cache, chain'.last().priorSB());
+          assert chain == ChainFrom(cache', chain'.last().priorSB()) by {
+            assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, chain'.last().priorSB()));
+          }
+//          assert chain'.DropLast() == ChainFrom(cache', chain'.last().priorSB());
+//          assert chain'.DropLast() == chain; // except for expectedLSN not being None.
+
           calc {
             UnmarshalledMessageSeq(v, cache);
             v.marshalledLookup.interp().Concat(TailToMsgSeq(v));
-              { UniqueChainLookup(cache, v.marshalledLookup, ChainFrom(cache, v.marshalledLookup.last().sb)); }  // Use invariant
-            ChainFrom(cache, v.marshalledLookup.last().sb).interp().Concat(TailToMsgSeq(v));
-            ChainFrom(cache', Superblock(Some(newCU), v.boundaryLSN)).interp();
-            ChainFrom(cache', Superblock(Some(newCU), v.boundaryLSN)).interp().Concat(TailToMsgSeq(v'));
+              { UniqueChainLookup(cache, v.marshalledLookup, chain); }  // Use invariant
+            chain.interp().Concat(TailToMsgSeq(v));
+            chain.interp().Concat(jr.messageSeq);
+            chain'.interp();
+            chain'.interp().Concat(TailToMsgSeq(v'));
             v'.marshalledLookup.interp().Concat(TailToMsgSeq(v'));
             UnmarshalledMessageSeq(v', cache');
           }

@@ -62,6 +62,12 @@ module JournalMachineMod {
     }
   }
 
+  // TODO marshalling
+  function parse(b: UninterpretedDiskPage) : (jr: Option<JournalRecord>)
+    ensures jr.Some? ==> jr.value.WF()
+  function marshal(jr: JournalRecord) : UninterpretedDiskPage
+    ensures parse(marshal(jr)) == Some(jr)
+
   datatype ChainResult =
     | ChainFailed // missing blocks, or parse failures, or records that don't stitch.
 
@@ -589,11 +595,6 @@ module JournalMachineMod {
   {
     && v' == v.(unmarshalledTail := v.unmarshalledTail + [message])
   }
-
-  // TODO marshalling
-  function parse(b: UninterpretedDiskPage) : (jr: Option<JournalRecord>)
-    ensures jr.Some? ==> jr.value.WF()
-  function marshal(jr: JournalRecord) : UninterpretedDiskPage
 
   function TailToMsgSeq(v: Variables) : (result : MsgSeq)
     ensures result.WF()
