@@ -453,6 +453,7 @@ module JournalMachineMod {
 
   function ChainFrom(cache: CacheIfc.Variables, sb: Superblock) : (cl:ChainLookup)
     ensures cl.ValidForSB(cache, sb)
+    ensures cl.last().expectedEnd.None?
     ensures forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.last().expectedEnd.None? :: ocl == cl
   {
     var cl := ChainFromRecursive(cache, sb, None);
@@ -584,9 +585,9 @@ module JournalMachineMod {
   }
 
   // advances tailLSN forward by adding a message
-  predicate Append(s: Variables, s': Variables, message: KeyedMessage)
+  predicate Append(v: Variables, v': Variables, message: KeyedMessage)
   {
-    && s' == s.(unmarshalledTail := s.unmarshalledTail + [message])
+    && v' == v.(unmarshalledTail := v.unmarshalledTail + [message])
   }
 
   // TODO marshalling
@@ -594,14 +595,14 @@ module JournalMachineMod {
     ensures jr.Some? ==> jr.value.WF()
   function marshal(jr: JournalRecord) : UninterpretedDiskPage
 
-  function TailToMsgSeq(s: Variables) : (result : MsgSeq)
+  function TailToMsgSeq(v: Variables) : (result : MsgSeq)
     ensures result.WF()
   {
-    var start := s.marshalledLSN;
-    var end := s.unmarshalledLSN();
+    var start := v.marshalledLSN;
+    var end := v.unmarshalledLSN();
     if start==end
     then MsgHistoryMod.Empty()
-    else MsgSeq(map i: LSN | start <= i < end :: s.unmarshalledTail[i - start], start, end)
+    else MsgSeq(map i: LSN | start <= i < end :: v.unmarshalledTail[i - start], start, end)
   }
 
   // advances marshalledLSN forward by marshalling a batch of messages into a dirty cache page
@@ -632,7 +633,8 @@ module JournalMachineMod {
       )
     // constructive: (map lsn:LSN | 0 <= lsn < v.unmarshalledLSN() :: if lsn < v.marshalledLSN then v.marshalledLookup[lsn] else newCU),
     // predicate:
-    && v'.marshalledLookup == ChainFrom(cache, Superblock(Some(newCU), v.boundaryLSN))
+    && var cache' := CacheIfc.ApplyWrites(cache, cacheOps);
+      v'.marshalledLookup == ChainFrom(cache', Superblock(Some(newCU), v.boundaryLSN))
   }
 
   // advances cleanLSN forward by learning that the cache has written back a contiguous
