@@ -1,58 +1,72 @@
 include "MarshalledAccessors.i.dfy"
 
-abstract module Union{{count}}Marshalling refines Marshalling {
+abstract module Union{{count}}Marshalling(
 {%- for n in range(0,count) %}
-  import CaseMarshalling{{n}} : Marshalling
+  CaseMarshalling{{n}}: Marshalling,
 {%- endfor %}
-  import TagMarshalling : IntegerMarshalling
+  TagInt: NativePackedInt)
+refines Marshalling {
 
-  datatype UnionType =
+  import TGM = IntegerMarshalling(TagInt)
+
+  datatype UnmarshalledType =
 {%- for n in range(0,count) %}
     | Case{{n}}(c{{n}}: CaseMarshalling{{n}}.UnmarshalledType)
 {%- endfor %}
 
-  type UnmarshalledType = UnionType
+  datatype Config = Config(
+{%- for n in range(0,count) %}
+    elemCfg{{n}}: CaseMarshalling{{n}}.Config,
+{%- endfor %}
+    tgmCfg: TGM.Config)
+
+  predicate validConfig(cfg: Config)
+  {
+    && TGM.validConfig(cfg.tgmCfg)
+{%- for n in range(0,count) %}
+    && CaseMarshalling{{n}}.validConfig(cfg.elemCfg{{n}})
+{%- endfor %}
+  }
 
   function method getTagEnd(): uint64
   {
-    TagMarshalling.Int.Size() as uint64
+    TagInt.Size() as uint64
   }
 
-  predicate parsable(data: mseq<byte>)
+  predicate parsable(cfg: Config, data: mseq<byte>)
   {
     var tagEnd := getTagEnd() as int;
     && |data| >= tagEnd
-    && TagMarshalling.parsable(data[..tagEnd])
-    && TagMarshalling.Int.fitsInUint64(TagMarshalling.parse(data[..tagEnd]))
-    && var tag := TagMarshalling.Int.toInt(TagMarshalling.parse(data[..tagEnd]));
+    && TGM.parsable(cfg.tgmCfg, data[..tagEnd])
+    && var tag := TGM.parse(cfg.tgmCfg, data[..tagEnd]);
 {%- for n in range(0,count) %}
     {%- if n == 0 %}
-    (if tag == 0 then CaseMarshalling0.parsable(data[tagEnd..])
+    (if tag == 0 then CaseMarshalling0.parsable(cfg.elemCfg0, data[tagEnd..])
     {% elif n != count - 1 -%}
-      else if tag == {{n}} then CaseMarshalling{{n}}.parsable(data[tagEnd..])
+      else if tag == {{n}} then CaseMarshalling{{n}}.parsable(cfg.elemCfg{{n}}, data[tagEnd..])
     {% else -%}
-        else CaseMarshalling{{n}}.parsable(data[tagEnd..]))
+        else CaseMarshalling{{n}}.parsable(cfg.elemCfg{{n}}, data[tagEnd..]))
     {% endif %}
 {%- endfor %}
   }
 
-  function parse(data: mseq<byte>) : UnmarshalledType
+  function parse(cfg: Config, data: mseq<byte>) : UnmarshalledType
   {
     var tagEnd := getTagEnd() as int;
-    var tag := TagMarshalling.Int.toInt(TagMarshalling.parse(data[..tagEnd]));
+    var tag := TGM.parse(cfg.tgmCfg, data[..tagEnd]);
 
 {%- for n in range(0,count) %}
     {%- if n == 0 %}
-    if tag == 0 then Case0(CaseMarshalling0.parse(data[tagEnd..]))
+    if tag == 0 then Case0(CaseMarshalling0.parse(cfg.elemCfg{{n}}, data[tagEnd..]))
     {% elif n != count - 1 -%}
-      else if tag == {{n}} then Case{{n}}(CaseMarshalling{{n}}.parse(data[tagEnd..]))
+      else if tag == {{n}} then Case{{n}}(CaseMarshalling{{n}}.parse(cfg.elemCfg{{n}}, data[tagEnd..]))
     {% else -%}
-        else Case{{n}}(CaseMarshalling{{n}}.parse(data[tagEnd..]))
+        else Case{{n}}(CaseMarshalling{{n}}.parse(cfg.elemCfg{{n}}, data[tagEnd..]))
     {% endif %}
 {%- endfor %}
   }
 
-  method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
+  method TryParse(cfg: Config, data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
   {
     var tagEnd := getTagEnd();
 
@@ -60,44 +74,28 @@ abstract module Union{{count}}Marshalling refines Marshalling {
       return None;
     }
 
-    var tagOvalue := TagMarshalling.TryParse(data[..tagEnd]);
-    
-    if tagOvalue.None? {
-      return None;
-    }
-
-    if !TagMarshalling.Int.fitsInUint64(tagOvalue.value) {
-      return None;
-    }
-
-    var tag := TagMarshalling.Int.toUint64(tagOvalue.value);
+    var tag :- TGM.TryParse(cfg.tgmCfg, data[..tagEnd]);
     ovalue := None;
 
 {%- for n in range(0,count) %}
     {%- if n == 0 %}
     if tag == 0 {
-      var valueOpt := CaseMarshalling0.TryParse(data[tagEnd..]);
-      if valueOpt.Some? {
-        ovalue := Some(Case0(valueOpt.value));
-      }
+      var value :- CaseMarshalling{{n}}.TryParse(cfg.elemCfg{{n}}, data[tagEnd..]);
+      ovalue := Some(Case{{n}}(value));
     {% elif n != count - 1 -%}
     } else if tag == {{n}} {
-      var valueOpt := CaseMarshalling{{n}}.TryParse(data[tagEnd..]);
-      if valueOpt.Some? {
-        ovalue := Some(Case{{n}}(valueOpt.value));
-      }
+      var value :- CaseMarshalling{{n}}.TryParse(cfg.elemCfg{{n}}, data[tagEnd..]);
+      ovalue := Some(Case{{n}}(value));
     {% else -%}
     } else {
-      var valueOpt := CaseMarshalling{{n}}.TryParse(data[tagEnd..]);
-      if valueOpt.Some? {
-        ovalue := Some(Case{{n}}(valueOpt.value));
-      }
+      var value :- CaseMarshalling{{n}}.TryParse(cfg.elemCfg{{n}}, data[tagEnd..]);
+      ovalue := Some(Case{{n}}(value));
     }
     {% endif %}
 {%- endfor %}
   }
 
-  method Parsable(data: mseq<byte>) returns (p: bool)
+  method Parsable(cfg: Config, data: mseq<byte>) returns (p: bool)
   {
     var tagEnd := getTagEnd();
 
@@ -105,104 +103,103 @@ abstract module Union{{count}}Marshalling refines Marshalling {
       return false;
     }
 
-    var tagOvalue := TagMarshalling.TryParse(data[..tagEnd]);
+    var tagOvalue := TGM.TryParse(cfg.tgmCfg, data[..tagEnd]);
     
     if tagOvalue.None? {
       return false;
     }
 
-    if !TagMarshalling.Int.fitsInUint64(tagOvalue.value) {
-      return false;
-    }
-
-    var tag := TagMarshalling.Int.toUint64(tagOvalue.value);
+    var tag := TGM.Int.toUint64(tagOvalue.value);
+    var parsable := false;
 
 {%- for n in range(0,count) %}
     {%- if n == 0 %}
     if tag == 0 {
-      p := CaseMarshalling0.Parsable(data[tagEnd..]);
+      parsable := CaseMarshalling0.Parsable(cfg.elemCfg{{n}}, data[tagEnd..]);
     {% elif n != count - 1 -%}
     } else if tag == {{n}} {
-      p := CaseMarshalling{{n}}.Parsable(data[tagEnd..]);
+      parsable := CaseMarshalling{{n}}.Parsable(cfg.elemCfg{{n}}, data[tagEnd..]);
     {% else -%}
     } else {
-      p := CaseMarshalling{{n}}.Parsable(data[tagEnd..]);
+      parsable := CaseMarshalling{{n}}.Parsable(cfg.elemCfg{{n}}, data[tagEnd..]);
     }
     {% endif %}
 {%- endfor %}
+
+    return parsable;
   }
 
-  method Parse(data: mseq<byte>) returns (value: UnmarshalledType)
+  method Parse(cfg: Config, data: mseq<byte>) returns (value: UnmarshalledType)
   {
     var tagEnd := getTagEnd();
-    var tagOvalue := TagMarshalling.TryParse(data[..tagEnd]);
-    var tag := TagMarshalling.Int.toUint64(tagOvalue.value);
+    var tag := TGM.Parse(cfg.tgmCfg, data[..tagEnd]);
 {%- for n in range(0,count) %}
     {%- if n == 0 %}
     if tag == 0 {
-      var val := CaseMarshalling0.Parse(data[tagEnd..]);
-      value := Case0(val);
+      var result := CaseMarshalling{{n}}.Parse(cfg.elemCfg{{n}}, data[tagEnd..]);
+      return Case0(result);
     {% elif n != count - 1 -%}
     } else if tag == {{n}} {
-      var val := CaseMarshalling{{n}}.Parse(data[tagEnd..]);
-      value := Case{{n}}(val);
+      var result := CaseMarshalling{{n}}.Parse(cfg.elemCfg{{n}}, data[tagEnd..]);
+      return Case{{n}}(result);
     {% else -%}
     } else {
-      var val := CaseMarshalling{{n}}.Parse(data[tagEnd..]);
-      value := Case{{n}}(val);
+      var result := CaseMarshalling{{n}}.Parse(cfg.elemCfg{{n}}, data[tagEnd..]);
+      return Case{{n}}(result);
     }
     {% endif %}
 {%- endfor %}
   }
 
-  predicate marshallable(value: UnmarshalledType)
+  predicate marshallable(cfg: Config,  value: UnmarshalledType)
   {
-    && TagMarshalling.Int.MinValue() <= 0 < {{count-1}} < TagMarshalling.Int.UpperBound()
+    && TagInt.MinValue() <= 0 < {{count-1}} < TagInt.UpperBound()
     && match value {
 {%- for n in range(0,count) %}
-      case Case{{n}}(c{{n}}) => CaseMarshalling{{n}}.marshallable(c{{n}})
+      case Case{{n}}(c{{n}}) => 
+        (&& CaseMarshalling{{n}}.marshallable(cfg.elemCfg{{n}}, c{{n}})
+        && getTagEnd() as nat + CaseMarshalling{{n}}.size(cfg.elemCfg{{n}}, c{{n}}) as nat < Uint64UpperBound())
 {%- endfor %}
     }
   }
 
-  function size(value: UnmarshalledType) : nat
+  function size(cfg: Config, value: UnmarshalledType) : uint64
   {
     var tagEnd := getTagEnd();
     match value {
 {%- for n in range(0,count) %}
-      case Case{{n}}(c{{n}}) => tagEnd as nat + CaseMarshalling{{n}}.size(c{{n}})
+      case Case{{n}}(c{{n}}) => getTagEnd() + CaseMarshalling{{n}}.size(cfg.elemCfg{{n}}, c{{n}})
 {%- endfor %}
     }
   }
 
-  method Size(value: UnmarshalledType) returns (sz: uint64)
+  method Size(cfg: Config, value: UnmarshalledType) returns (sz: uint64)
   {
     sz := getTagEnd();
-    match value
+    match value {
 {%- for n in range(0,count) %}
-    case Case{{n}}(c{{n}}) => {
-      var size := CaseMarshalling{{n}}.Size(c{{n}});
-      sz := sz + size;
-    }
+      case Case{{n}}(c{{n}}) => {
+        var size := CaseMarshalling{{n}}.Size(cfg.elemCfg{{n}}, c{{n}});
+        sz := sz + size;
+      }
 {%- endfor %}
+    }
+    return sz;
   }
 
-  method Marshall(value: UnmarshalledType, linear data: mseq<byte>, start: uint64)
-    returns (linear newdata: mseq<byte>, end: uint64)
+  method Marshall(cfg: Config, value: UnmarshalledType, linear inout data: mseq<byte>, start: uint64) returns (end: uint64)
   {
     ghost var tagEnd : uint64 := getTagEnd();
 
     match value
     {%- for n in range(0,count) %}
     case Case{{n}}(c{{n}}) => {
-      newdata, end := TagMarshalling.Marshall(TagMarshalling.Int.fromUint64({{n}}), data, start);
-      ghost var newdata1 :seq<byte>, end1 := newdata, end;
-      newdata, end := CaseMarshalling{{n}}.Marshall(c{{n}}, newdata, end);
+      end := TGM.Marshall(cfg.tgmCfg, {{n}}, inout data, start);
+      ghost var newdata1 :seq<byte>, end1 := data, end;
+      end := CaseMarshalling{{n}}.Marshall(cfg.elemCfg{{n}}, c{{n}}, inout data, end);
 
-      assert newdata[start..end][..tagEnd] == newdata1[start..end1] == newdata[start..end1];
-      ghost var tag := TagMarshalling.Int.toInt(TagMarshalling.parse(newdata[start..end1]));
-      TagMarshalling.Int.fromtoInverses();
-      assert tag == {{n}};
+      assert newdata1[start..end1] == data[start..end1];
+      assert data[start..end][..tagEnd] == data[start..end1];
     }
     {%- endfor %}
   }
