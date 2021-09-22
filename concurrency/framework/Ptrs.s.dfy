@@ -1,11 +1,9 @@
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "GlinearOption.i.dfy"
-include "GlinearSeq.s.dfy"
 
 module {:extern "Ptrs"} Ptrs {
   import opened NativeTypes
   import opened GlinearOption
-  import opened GlinearSeq
 
   // Non-atomic data-race-free memory
 
@@ -124,12 +122,11 @@ module {:extern "Ptrs"} Ptrs {
   function method {:extern} sizeof<V>() : uint64
 
   glinear method {:extern} array_to_individual<V>(glinear pta: PointsToArray<V>)
-  returns (glinear s: glseq<PointsTo<V>>)
-  ensures s.len() == |pta.s|
+  returns (glinear s: map<nat, PointsTo<V>>)
   ensures forall i | 0 <= i < |pta.s| ::
-      && s.has(i)
-      && s.get(i).ptr.as_nat() == pta.ptr.as_nat() + i * sizeof<V>() as nat
-      && s.get(i).v == pta.s[i]
+      && i in s
+      && s[i].ptr.as_nat() == pta.ptr.as_nat() + i * sizeof<V>() as nat
+      && s[i].v == pta.s[i]
 
   glinear method {:extern} dispose_anything<V>(glinear v: V) // TODO better file for this
 }

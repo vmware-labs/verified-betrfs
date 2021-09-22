@@ -1,7 +1,6 @@
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "Ptrs.s.dfy"
 include "DiskSSM.s.dfy"
-include "GlinearSeq.s.dfy"
 
 module PageSizeConstant {
   import opened NativeTypes
@@ -11,7 +10,6 @@ module PageSizeConstant {
 module {:extern "IocbStruct"} IocbStruct {
   import opened Ptrs
   import opened NativeTypes
-  import opened GlinearSeq
   import opened PageSizeConstant
 
   /*
@@ -35,14 +33,13 @@ module {:extern "IocbStruct"} IocbStruct {
   ensures iocb.ptr == ptr
 
   method {:extern} new_iocb_array(n: uint64)
-  returns (ptr: Ptr, glinear iocb: glseq<Iocb>)
-  ensures iocb.len() == n as int
-  ensures forall i {:trigger iocb.has(i)} {:trigger iocb.get(i)} | 0 <= i < n as int
-      :: iocb.has(i)
-      && iocb.get(i).IocbUninitialized?
+  returns (ptr: Ptr, glinear iocb: map<nat, Iocb>)
+  ensures forall i {:trigger i in iocb} {:trigger iocb[i]} | 0 <= i < n as int
+      :: i in iocb
+      && iocb[i].IocbUninitialized?
       && 0 <= i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
       && 0 <= ptr.as_nat() + i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
-      && iocb.get(i).ptr == ptr_add(ptr, i as uint64 * SizeOfIocb())
+      && iocb[i].ptr == ptr_add(ptr, i as uint64 * SizeOfIocb())
 
   method {:extern} iocb_prepare_read(ptr: Ptr, glinear inout iocb: Iocb,
       offset: int64, nbytes: uint64, buf: Ptr)
@@ -163,7 +160,6 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   import opened IocbStruct
   import opened Ptrs
   import opened PageSizeConstant
-  import opened GlinearSeq
   import T = DiskSSMTokens(ioifc, ssm)
 
   /*
@@ -233,15 +229,15 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       glinear iovec: PointsToArray<Iovec>,
       ghost datas: seq<seq<byte>>,
       glinear g: aioparams.WritevG,
-      glinear tickets: glseq<T.Token>)
+      glinear tickets: map<nat, T.Token>)
   requires iocb.IocbWritev?
   requires iocb.ptr == iocb_ptr
   requires iocb.iovec_len > 0
   requires iovec.ptr == iocb.iovec
-  requires |iovec.s| >= iocb.iovec_len == |datas| == tickets.len()
+  requires |iovec.s| >= iocb.iovec_len == |datas|
   requires forall i | 0 <= i < iocb.iovec_len ::
-      tickets.has(i)
-      && writev_valid_i(iovec.s[i], datas[i], tickets.get(i), iocb.offset, i)
+      i in tickets
+      && writev_valid_i(iovec.s[i], datas[i], tickets[i], iocb.offset, i)
   requires aioparams.is_read_perm_v(iocb_ptr, iocb, iovec, datas, g)
   requires ctx.async_writev_inv(iocb_ptr, iocb, iovec, datas, g)
 
@@ -273,7 +269,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       glinear iovec: PointsToArray<Iovec>,
       ghost datas: seq<seq<byte>>,
       glinear wvg: aioparams.WritevG,
-      glinear stubs: glseq<T.Token>
+      glinear stubs: map<nat, T.Token>
     )
     | FRRead(
       glinear iocb: Iocb,
@@ -296,9 +292,8 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   ensures fr.FRWritev? ==>
     && fr.iocb.IocbWritev?
     && ctx.async_writev_inv(iocb_ptr, fr.iocb, fr.iovec, fr.datas, fr.wvg)
-    && fr.stubs.len() == fr.iocb.iovec_len as int
     && forall i | 0 <= i < fr.iocb.iovec_len ::
-        fr.stubs.has(i) && fr.stubs.get(i) == T.Token(ssm.DiskWriteResp(fr.iocb.offset + i))
+        i in fr.stubs && fr.stubs[i] == T.Token(ssm.DiskWriteResp(fr.iocb.offset + i))
   ensures fr.FRRead? ==>
     && fr.iocb.IocbRead?
     && ctx.async_read_inv(iocb_ptr, fr.iocb, fr.wp, fr.rg)

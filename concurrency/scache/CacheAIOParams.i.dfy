@@ -1,11 +1,12 @@
 include "../framework/AIO.s.dfy"
 include "rwlock/RwLock.i.dfy"
+include "../framework/GlinearMap.s.dfy"
 
 module CacheAIOParams refines AIOParams {
   import T = RwLockToken
   import opened CacheHandle
   import opened Cells
-  import opened GlinearSeq
+  import opened GlinearMap
 
   glinear datatype IOSlotAccess = IOSlotAccess(
     glinear iocb: Iocb,
@@ -29,7 +30,7 @@ module CacheAIOParams refines AIOParams {
 
   glinear datatype WritevG = WritevG(
     ghost keys: seq<Key>,
-    glinear wbos: glseq<T.WritebackObtainedToken>,
+    glinear wbos: map<nat, T.WritebackObtainedToken>,
     ghost slot_idx: nat
   )
 
@@ -76,13 +77,13 @@ module CacheAIOParams refines AIOParams {
       datas: seq<seq<byte>>,
       g: WritevG)
   {
-    && g.wbos.len() == |datas| == |g.keys| <= |iovec.s|
-    && forall i | 0 <= i < g.wbos.len() ::
-      && g.wbos.has(i)
-      && g.wbos.get(i).is_handle(g.keys[i])
-      && g.wbos.get(i).b.CacheEntryHandle?
-      && g.wbos.get(i).b.data.s == datas[i]
-      && g.wbos.get(i).b.data.ptr == iovec.s[i].iov_base()
+    && |datas| == |g.keys| <= |iovec.s|
+    && forall i | 0 <= i < |datas| ::
+      && i in g.wbos
+      && g.wbos[i].is_handle(g.keys[i])
+      && g.wbos[i].b.CacheEntryHandle?
+      && g.wbos[i].b.data.s == datas[i]
+      && g.wbos[i].b.data.ptr == iovec.s[i].iov_base()
   }
 
   glinear method get_read_perm_v(
@@ -98,6 +99,6 @@ module CacheAIOParams refines AIOParams {
   //requires 0 <= i < |datas| == |iovec.s|
   ensures ad == PointsToArray(iovec.s[i].iov_base(), datas[i])
   {
-    ad := T.borrow_wb(g.wbos.borrow(i).token).data;
+    ad := T.borrow_wb(gmap_borrow(g.wbos, i).token).data;
   }
 }

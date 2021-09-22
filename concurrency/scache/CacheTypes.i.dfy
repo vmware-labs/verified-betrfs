@@ -20,7 +20,6 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CacheHandle
   import opened IocbStruct
   import opened CacheAIOParams
-  import opened GlinearSeq
   import opened LinearSequence_i
   import opened LinearSequence_s
   import RwLockToken
@@ -329,9 +328,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && is_read_perm_v(iocb_ptr, iocb, iovec, datas, g)
     && |iovec.s| >= |datas| == iocb.iovec_len == |g.keys|
     && |iovec.s| == PAGES_PER_EXTENT as int
-    && (forall i | 0 <= i < |datas| :: g.wbos.has(i) && 
+    && (forall i | 0 <= i < |datas| :: i in g.wbos && 
         simpleWriteGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status,
-            iocb.offset + i, datas[i], g.keys[i], g.wbos.get(i))
+            iocb.offset + i, datas[i], g.keys[i], g.wbos[i])
     && (forall i | 0 <= i < |datas| ::
         && 0 <= g.keys[i].cache_idx < |cache_data|
         && iovec.s[i].iov_base() == cache_data[g.keys[i].cache_idx])

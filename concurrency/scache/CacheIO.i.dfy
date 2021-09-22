@@ -17,7 +17,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Cells
   import Math
   import opened GlinearOption
-  import opened GlinearSeq
+  import opened GlinearMap
   import opened PageSizeConstant
   import opened Atomics
   import CacheSSM
@@ -311,17 +311,17 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       ghost offset: nat,
       ghost keys: seq<Key>,
       ghost datas: seq<seq<byte>>,
-      glinear wbos: glseq<T.WritebackObtainedToken>,
-      glinear stubs: glseq<DT.Token>)
+      glinear wbos: map<nat, T.WritebackObtainedToken>,
+      glinear stubs: map<nat, DT.Token>)
   requires cache.Inv()
-  requires |iovec.s| >= wbos.len() == stubs.len() == |datas| == |keys| == iovec_len as int
+  requires |iovec.s| >= |datas| == |keys| == iovec_len as int
   requires iovec.ptr == iovec_ptr
   requires forall i | 0 <= i < |keys| ::
-    && wbos.has(i)
-    && stubs.has(i)
+    && i in wbos
+    && i in stubs
     && simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
-        cache.status, offset + i, datas[i], keys[i], wbos.get(i))
-    && stubs.get(i).val == CacheSSM.DiskWriteResp(offset + i)
+        cache.status, offset + i, datas[i], keys[i], wbos[i])
+    && stubs[i].val == CacheSSM.DiskWriteResp(offset + i)
     && iovec.s[i].iov_base() == cache.data[keys[i].cache_idx]
   {
     glinear var wbos' := wbos;
@@ -330,17 +330,17 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var j : uint64 := 0;
     while j < iovec_len
     invariant 0 <= j as int <= iovec_len as int
-    invariant |iovec.s| >= wbos'.len() == stubs'.len() == |datas| == |keys| == iovec_len as int
+    invariant |iovec.s| >= |datas| == |keys| == iovec_len as int
     invariant forall i: int | j as int <= i < |keys| ::
-      && wbos'.has(i)
-      && stubs'.has(i)
+      && i in wbos'
+      && i in stubs'
       && simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
-          cache.status, offset + i, datas[i], keys[i], wbos'.get(i))
-      && stubs'.get(i).val == CacheSSM.DiskWriteResp(offset + i)
+          cache.status, offset + i, datas[i], keys[i], wbos'[i])
+      && stubs'[i].val == CacheSSM.DiskWriteResp(offset + i)
     {
       glinear var wbo, stub;
-      wbos', wbo := glseq_take(wbos', j as int);
-      stubs', stub := glseq_take(stubs', j as int);
+      wbos', wbo := glmap_take(wbos', j as int);
+      stubs', stub := glmap_take(stubs', j as int);
       var my_iovec := iovec_ptr.index_read(iovec, j);
       var data_ptr := my_iovec.iov_base();
       var cache_idx := cache_idx_of_data_ptr(cache, data_ptr, keys[j].cache_idx);

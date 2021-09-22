@@ -25,7 +25,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened LinearSequence_i
   import opened ThreadUtils
   import opened PageSizeConstant
-  import opened GlinearSeq
+  import opened GlinearMap
   import DT = DiskSSMTokens(CacheIfc, CacheSSM)
   import IocbStruct
 
@@ -46,21 +46,21 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   predicate {:opaque} fwd_lists(cache: Cache, start: nat, end: nat,
       keys: seq<Key>,
-      tickets: glseq<DT.Token>,
-      wbos: glseq<WritebackObtainedToken>)
+      tickets: map<nat, DT.Token>,
+      wbos: map<nat, WritebackObtainedToken>)
   {
-    && |keys| == tickets.len() == wbos.len() == end - start
+    && |keys| == end - start
     && forall i | 0 <= i < |keys| ::
-        && tickets.has(i)
-        && wbos.has(i)
-        && ktw(cache, start + i, keys[i], tickets.get(i), wbos.get(i))
+        && i in tickets
+        && i in wbos
+        && ktw(cache, start + i, keys[i], tickets[i], wbos[i])
   }
 
   glinear method make_empty(ghost cache: Cache, ghost disk_addr: nat)
   returns (
       ghost keys: seq<Key>,
-      glinear tickets: glseq<DT.Token>,
-      glinear wbos: glseq<WritebackObtainedToken>
+      glinear tickets: map<nat, DT.Token>,
+      glinear wbos: map<nat, WritebackObtainedToken>
      )
   ensures fwd_lists(cache, disk_addr, disk_addr, keys, tickets, wbos)
 
@@ -68,15 +68,15 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       ghost cache: Cache,
       ghost a: nat, ghost b: nat, ghost c: nat,
       ghost keys1: seq<Key>,
-      glinear tickets1: glseq<DT.Token>,
-      glinear wbos1: glseq<WritebackObtainedToken>,
+      glinear tickets1: map<nat, DT.Token>,
+      glinear wbos1: map<nat, WritebackObtainedToken>,
       ghost keys2: seq<Key>,
-      glinear tickets2: glseq<DT.Token>,
-      glinear wbos2: glseq<WritebackObtainedToken>)
+      glinear tickets2: map<nat, DT.Token>,
+      glinear wbos2: map<nat, WritebackObtainedToken>)
   returns (
       ghost keys: seq<Key>,
-      glinear tickets: glseq<DT.Token>,
-      glinear wbos: glseq<WritebackObtainedToken>)
+      glinear tickets: map<nat, DT.Token>,
+      glinear wbos: map<nat, WritebackObtainedToken>)
   requires fwd_lists(cache, a, b, keys1, tickets1, wbos1)
   requires fwd_lists(cache, b, c, keys2, tickets2, wbos2)
   ensures fwd_lists(cache, a, c, keys, tickets, wbos)
@@ -86,15 +86,15 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       ghost start: nat,
       ghost end: nat,
       ghost keys: seq<Key>,
-      glinear tickets: glseq<DT.Token>,
-      glinear wbos: glseq<WritebackObtainedToken>,
+      glinear tickets: map<nat, DT.Token>,
+      glinear wbos: map<nat, WritebackObtainedToken>,
       ghost key: Key,
       glinear ticket: DT.Token,
       glinear wbo: WritebackObtainedToken)
   returns (
       ghost keys': seq<Key>,
-      glinear tickets': glseq<DT.Token>,
-      glinear wbos': glseq<WritebackObtainedToken>
+      glinear tickets': map<nat, DT.Token>,
+      glinear wbos': map<nat, WritebackObtainedToken>
      )
   requires fwd_lists(cache, start, end, keys, tickets, wbos)
   requires ktw(cache, end, key, ticket, wbo)
@@ -105,15 +105,15 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       ghost start: nat,
       ghost end: nat,
       ghost keys: seq<Key>,
-      glinear tickets: glseq<DT.Token>,
-      glinear wbos: glseq<WritebackObtainedToken>,
+      glinear tickets: map<nat, DT.Token>,
+      glinear wbos: map<nat, WritebackObtainedToken>,
       ghost key: Key,
       glinear ticket: DT.Token,
       glinear wbo: WritebackObtainedToken)
   returns (
       ghost keys': seq<Key>,
-      glinear tickets': glseq<DT.Token>,
-      glinear wbos': glseq<WritebackObtainedToken>
+      glinear tickets': map<nat, DT.Token>,
+      glinear wbos': map<nat, WritebackObtainedToken>
      )
   requires start > 0
   requires fwd_lists(cache, start, end, keys, tickets, wbos)
@@ -129,8 +129,8 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         disk_addr: uint64, is_urgent: bool)
   returns (end_addr: uint64,
       ghost keys: seq<Key>,
-      glinear tickets: glseq<DT.Token>,
-      glinear wbos: glseq<WritebackObtainedToken>
+      glinear tickets: map<nat, DT.Token>,
+      glinear wbos: map<nat, WritebackObtainedToken>
      )
   decreases *
   requires cache.Inv()
@@ -213,8 +213,8 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         disk_addr: uint64, is_urgent: bool)
   returns (start_addr: uint64,
       ghost keys: seq<Key>,
-      glinear tickets: glseq<DT.Token>,
-      glinear wbos: glseq<WritebackObtainedToken>
+      glinear tickets: map<nat, DT.Token>,
+      glinear wbos: map<nat, WritebackObtainedToken>
      )
   decreases *
   requires cache.Inv()
@@ -307,8 +307,8 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   method vec_writeback_async(shared cache: Cache, inout linear local: LocalState,
         start_addr: uint64, end_addr: uint64,
         ghost keys: seq<Key>,
-        glinear tickets: glseq<DT.Token>,
-        glinear wbos: glseq<WritebackObtainedToken>)
+        glinear tickets: map<nat, DT.Token>,
+        glinear wbos: map<nat, WritebackObtainedToken>)
   requires cache.Inv()
   requires old_local.WF()
   requires start_addr < end_addr <= NUM_DISK_PAGES
@@ -344,37 +344,37 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant |iovec.s| == PAGES_PER_EXTENT as int
     invariant iovec.ptr == iovec_ptr
     invariant forall i: nat | 0 <= i < j as nat ::
-        wbos.has(i as int) && datas[i] == wbos.get(i as int).b.data.s
-        && wbos.get(i).b.data.ptr == iovec.s[i].iov_base()
+        (i as int) in wbos && datas[i] == wbos[i as int].b.data.s
+        && wbos[i].b.data.ptr == iovec.s[i].iov_base()
         && iovec.s[i].iov_len() == PageSize
-    invariant forall i: nat | 0 <= i < j as nat :: wbos.has(i) && 
+    invariant forall i: nat | 0 <= i < j as nat :: (i as int) in wbos && 
         simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
-            iocb.offset + i, datas[i], keys[i], wbos.get(i))
+            iocb.offset + i, datas[i], keys[i], wbos[i])
     {
       var cache_idx := read_known_cache_idx(
           cache.cache_idx_of_page_atomic(start_addr + j),
           start_addr as int + j as int,
-          borrow_wb(wbos.borrow(j as int).token).cache_entry);
+          borrow_wb(gmap_borrow(wbos, j as int).token).cache_entry);
       var iov := IocbStruct.new_iovec(cache.data_ptr(cache_idx), 4096);
       iovec_ptr.index_write(inout iovec, j, iov);
 
-      datas := datas[j := wbos.get(j as int).b.data.s];
+      datas := datas[j := wbos[j as int].b.data.s];
 
       assert simpleWriteGInv(
           cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
-            iocb.offset + j as int, datas[j], keys[j as int], wbos.get(j as int));
+            iocb.offset + j as int, datas[j], keys[j as int], wbos[j as int]);
 
       j := j + 1;
     }
 
     glinear var writevg := WritevG(keys, wbos, idx as int);
-    forall i | 0 <= i < wbos.len()
+    forall i: int | 0 <= i < (end_addr - start_addr) as int
     ensures
-      && wbos.has(i)
-      && wbos.get(i).is_handle(keys[i])
-      && wbos.get(i).b.CacheEntryHandle?
-      && wbos.get(i).b.data.s == datas[i]
-      && wbos.get(i).b.data.ptr == iovec.s[i].iov_base()
+      && i in wbos
+      && wbos[i].is_handle(keys[i])
+      && wbos[i].b.CacheEntryHandle?
+      && wbos[i].b.data.s == datas[i]
+      && wbos[i].b.data.ptr == iovec.s[i].iov_base()
     {
     }
 
@@ -386,8 +386,8 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         iocb, iovec, datas, writevg);
 
     forall i | 0 <= i < iocb.iovec_len
-      ensures tickets.has(i)
-      ensures aio.writev_valid_i(iovec.s[i], datas[i], tickets.get(i), iocb.offset, i)
+      ensures i in tickets
+      ensures aio.writev_valid_i(iovec.s[i], datas[i], tickets[i], iocb.offset, i)
     {
     }
 
