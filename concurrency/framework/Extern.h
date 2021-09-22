@@ -64,6 +64,25 @@ namespace Ptrs {
     }
     return Ptr((uintptr_t)ptr);
   }
+
+  template <typename V>
+  Ptr alloc__array(uint64_t len, V init_v) {
+    // TODO should check len * sizeof(V) <= max size_t
+    V* ptr = (V*)malloc(len * sizeof(V));
+    if (ptr == nullptr) {
+      std::cerr << "malloc failed" << std::endl;
+      exit(1);
+    }
+    for (uint64_t i = 0; i < len; i++) {
+      new (&ptr[i]) V(init_v);
+    }
+    return Ptr((uintptr_t)ptr);
+  }
+
+  template <typename V>
+  uint64_t sizeof_() {
+    return sizeof(V);
+  }
 }
 
 template <>

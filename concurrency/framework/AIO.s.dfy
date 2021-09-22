@@ -24,7 +24,7 @@ module {:extern "IocbStruct"} IocbStruct {
     | IocbUninitialized(ptr: Ptr)
     | IocbRead(ptr: Ptr, ghost offset: nat, ghost nbytes: nat, buf: Ptr)
     | IocbWrite(ptr: Ptr, ghost offset: nat, ghost nbytes: nat, buf: Ptr)
-    | IocbWritev(ptr: Ptr, ghost offset: nat, ghost iovec: Ptr, iovec_len: nat)
+    | IocbWritev(ptr: Ptr, ghost offset: nat, ghost iovec: Ptr, ghost iovec_len: nat)
 
   function method {:extern} SizeOfIocb() : uint64
   ensures SizeOfIocb() != 0
