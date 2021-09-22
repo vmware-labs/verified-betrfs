@@ -114,7 +114,10 @@ module JournalMachineMod {
 
   datatype ChainLookupRow = ChainLookupRow(
     sb: Superblock, // The bounds definition -- first CU, boundaryLSN.
-    expectedEnd: Option<LSN>,     // if Some, can't Success if record end doesn't match
+    expectedEnd: LSN,     // if hasRecord() && seqEnd != expectedEnd, rowResult.ChainFailed.
+      // This is how we can have two chains, one that Successes and one that Faileds, even though
+      // they're looking at the same journalRecord. Note that, if !hasRecord(), expectedEnd can
+      // be anything, to satisfy the ValidSuccessorTo coming from the next row.
     rawPage: Option<UninterpretedDiskPage>, // The page we read from the cache if sb.freshestCU.Some?
     rowResult: ChainResult,        // Can we parse this row and stitch the JournalRecord?
     cumulativeResult: ChainResult, // only ChainSuccess if prior rows also succeed
@@ -141,7 +144,7 @@ module JournalMachineMod {
         then rowResult == ChainFailed
         else
           var journalRecord := parse(rawPage.value).value;
-          if expectedEnd.Some? && expectedEnd.value != journalRecord.messageSeq.seqEnd
+          if expectedEnd != journalRecord.messageSeq.seqEnd
             // and we're expecting a particular end value and record didn't stitch
           then rowResult == ChainFailed
           else if journalRecord.messageSeq.seqEnd <= sb.boundaryLSN
@@ -156,8 +159,9 @@ module JournalMachineMod {
     predicate hasRecord()
       requires WF()
     {
-      && rowResult.ChainSuccess?
       && sb.freshestCU.Some?
+      && rawPage.Some?
+      && parse(rawPage.value).Some?
     }
 
     function journalRec() : JournalRecord
@@ -197,7 +201,8 @@ module JournalMachineMod {
     predicate FirstRow()
       requires WF()
     {
-      || !hasRecord()
+      || sb.freshestCU.None?
+      || rowResult.ChainFailed?
       || journalRec().messageSeq.seqEnd <= sb.boundaryLSN
     }
 
@@ -217,7 +222,7 @@ module JournalMachineMod {
         // superblock defines the row; those should link as expected
         && prev.value.sb == priorSB()
         // if prior has a journalRec, its LSNs stitch seamlessly with this one
-        && prev.value.expectedEnd == Some(journalRec().messageSeq.seqStart)
+        && prev.value.expectedEnd == journalRec().messageSeq.seqStart
         // result success bit accumulates correctly
         && cumulativeResult.ChainSuccess?
           == (rowResult.ChainSuccess? && prev.value.cumulativeResult.ChainSuccess?)
@@ -350,6 +355,19 @@ module JournalMachineMod {
     {
       ChainLookup(Sequences.DropLast(rows))
     }
+
+    // A "complete" chain lookup is what you get from ChainFrom, when you're not expecting a particular end
+    // value. You can't get a ChainFailed due to a mismatched expectedEnd (since you weren't expecting one),
+    // and if you don't have a journalRec(), we use a canonical value for expectedEnd.
+    // Note that "interior" (non-last()) rows can still have mismatches, because that's how we explain
+    // a lookup that Failed due to mismatched records.
+    predicate Complete()
+      requires WF()
+    {
+      if last().hasRecord()
+      then last().expectedEnd == last().journalRec().messageSeq.seqEnd
+      else last().expectedEnd == 0
+    }
   }
 
   function EmptyLSNMap() : map<LSN, CU>
@@ -358,7 +376,7 @@ module JournalMachineMod {
     map lsn | lsn in empty :: CU(0, 0)
   }
 
-  function EmptyChainLookup(sb: Superblock, expectedEnd: Option<LSN>) : (cl: ChainLookup)
+  function EmptyChainLookup(sb: Superblock, expectedEnd: LSN) : (cl: ChainLookup)
     requires sb.freshestCU.None?
     ensures cl.WF()
   {
@@ -371,45 +389,62 @@ module JournalMachineMod {
   // There's only one answer to chain.Valid for a given Cache. Construct it.
   // This looks a lot like WF(), but also tests RespectsDisk (cache contents).
   // Need a sub-function that's recursive, so we need a decreases.
+  // expectedEnd is an Option, because, when the entry point ChainFrom calls
+  // us, it doesn't know (or care) what expectedEnd value we need; we should
+  // supply whatever the journalRec says.
   function ChainFromRecursive(cache: CacheIfc.Variables, sb: Superblock, expectedEnd: Option<LSN>) : (cl:ChainLookup)
     ensures cl.ValidForSB(cache, sb)
-    ensures cl.last().expectedEnd == expectedEnd
-//    ensures expectedEnd.Some? && cl.success() && !cl.interp().IsEmpty() ==> cl.interp().seqEnd == expectedEnd.value
+    ensures expectedEnd.Some? ==> cl.last().expectedEnd == expectedEnd.value
     decreases if expectedEnd.Some? then 0 else 1, if expectedEnd.Some? then expectedEnd.value else 0
   {
+    var expectedEndValue := match expectedEnd case Some(lsn) => lsn case None => 0;
     if sb.freshestCU.None?
     then
-      var cl := EmptyChainLookup(sb, expectedEnd);
+      var cl := EmptyChainLookup(sb, expectedEndValue);
       //assert cl.interp().seqEnd == maxLsn;
-      assert cl.last().expectedEnd == expectedEnd;  // TODO can delete?
-      assert cl.WF();
+      assert cl.WF(); // TODO delete all these debug WF asserts
+      assert cl.Chained();
       cl
     else
       var cu := sb.freshestCU.value;
       var rawPage := CacheIfc.ReadValue(cache, cu);
       if rawPage.None?
-      then var cl := ChainLookup([ChainLookupRow(sb, expectedEnd, None, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]);
-        assert cl.WF(); cl
+      then var cl := ChainLookup([ChainLookupRow(sb, expectedEndValue, None, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]);
+        assert cl.WF();
+        assert cl.Chained();
+        cl
       else if parse(rawPage.value).None?
-      then var cl := ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]);
-        assert cl.WF(); cl
+      then var cl := ChainLookup([ChainLookupRow(sb, expectedEndValue, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]);
+        assert cl.WF();
+        assert cl.Chained();
+        cl
       else
         var journalRecord := parse(rawPage.value).value;
-        if expectedEnd.Some? && expectedEnd.value != journalRecord.messageSeq.seqEnd
+        if expectedEnd.Some? && expectedEndValue != journalRecord.messageSeq.seqEnd
           // we're expecting a particular end value and record didn't stitch
-        then var cl := ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]);
-          assert cl.WF(); cl
+        then
+          var row := ChainLookupRow(sb, expectedEndValue, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap());
+          var cl := ChainLookup([row]);
+          assert cl.WF();
+          assert cl.last().ValidSuccessorTo(None);
+          assert cl.Linked(|cl.rows|-1);
+          assert cl.Chained();
+          cl
         else if journalRecord.messageSeq.seqEnd <= sb.boundaryLSN
         then // parsed journal record but don't need any of its entries
           var rowResult := ChainSuccess([], MsgHistoryMod.Empty());
-          var cl := ChainLookup([ChainLookupRow(sb, expectedEnd, rawPage, rowResult, rowResult, [cu], EmptyLSNMap())]);
-          assert cl.WF(); cl
+          var chainRow := ChainLookupRow(sb, journalRecord.messageSeq.seqEnd, rawPage, rowResult, rowResult, [cu], EmptyLSNMap());
+          assert chainRow.WF();
+          var cl := ChainLookup([chainRow]);
+          assert cl.WF();
+          assert cl.Chained();
+          cl
         else
           var rowResult := ChainSuccess([journalRecord], journalRecord.messageSeq);
           var remainder := ChainFromRecursive(cache, journalRecord.priorSB(sb), Some(journalRecord.messageSeq.seqStart));
           var cl := ChainLookup(remainder.rows + [ChainLookupRow(
             sb,
-            expectedEnd,
+            journalRecord.messageSeq.seqEnd,
             rawPage,
             rowResult,
             remainder.last().cumulativeResult.Concat(rowResult),
@@ -423,7 +458,8 @@ module JournalMachineMod {
               }
             }
           }
-          assert cl.WF(); // TODO delete
+          assert cl.WF();
+          assert cl.Chained();
           cl
   }
 
@@ -459,12 +495,43 @@ module JournalMachineMod {
 
   function {:opaque} ChainFrom(cache: CacheIfc.Variables, sb: Superblock) : (cl:ChainLookup)
     ensures cl.ValidForSB(cache, sb)
-    ensures cl.last().expectedEnd.None?
-    ensures forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.last().expectedEnd.None? :: ocl == cl
+    ensures cl.Complete()
+    ensures forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.Complete() :: ocl == cl
   {
     var cl := ChainFromRecursive(cache, sb, None);
-    assert forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.last().expectedEnd.None? :: ocl == cl by {
-      forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.last().expectedEnd.None? ensures ocl == cl {
+    assert forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.Complete() :: ocl == cl by {
+      forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.Complete() ensures ocl == cl {
+        assert cl.Complete();
+        assert ocl.Complete();
+        if cl.last().hasRecord() {
+          assert cl.last().sb.freshestCU.Some?;
+          assert ocl.last().sb.freshestCU.Some?;
+          assert cl.last().rawPage.Some?;
+          assert ocl.last().rawPage.Some?;
+          assert parse(cl.last().rawPage.value).Some?;
+          assert parse(ocl.last().rawPage.value).Some?;
+
+          assert cl.last().expectedEnd == cl.last().journalRec().messageSeq.seqEnd;
+          assert ocl.Complete();
+          assert ocl.last().journalRec() == parse(ocl.last().rawPage.value).value;
+          assert ocl.last().expectedEnd == ocl.last().journalRec().messageSeq.seqEnd;
+          assert ocl.last().expectedEnd == parse(ocl.last().rawPage.value).value.messageSeq.seqEnd;
+          assert ocl.last().rowResult.ChainSuccess?;
+          assert ocl.last().hasRecord();
+          calc {
+            ocl.last().expectedEnd;
+            ocl.last().journalRec().messageSeq.seqEnd;
+            cl.last().journalRec().messageSeq.seqEnd;
+            cl.last().expectedEnd;
+          }
+        } else {
+          assert !ocl.last().hasRecord();
+          calc {
+            ocl.last().expectedEnd;
+            0;
+            cl.last().expectedEnd;
+          }
+        }
         UniqueChainLookup(cache, cl, ocl);
       }
     }
@@ -581,7 +648,7 @@ module JournalMachineMod {
     && v.syncReqs == map[]
 
     // TODO this fails WF! And will require cache to decode
-    && v.marshalledLookup == EmptyChainLookup(Superblock(None, 0), None)
+    && v.marshalledLookup == EmptyChainLookup(Superblock(None, 0), 0)
   }
 
   // Recovery coordination
