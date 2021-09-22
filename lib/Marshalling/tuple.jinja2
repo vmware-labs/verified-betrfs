@@ -395,8 +395,8 @@ abstract module Tuple{{count}}Marshalling(
     && tableSize <= |data|
     && var tableData := data[..tableSize];
 
-    && (index != eltCount - 1 ==> BSM.gettable(cfg.bsmCfg, tableData, index)
-    && (index != 0 ==> BSM.gettable(cfg.bsmCfg, tableData, index-1)
+    && (index != eltCount - 1 ==> BSM.gettable(cfg.bsmCfg, tableData, index))
+    && (index != 0 ==> BSM.gettable(cfg.bsmCfg, tableData, index-1))
   }
 
   function getBounds(cfg: Config, data: mseq<byte>, index: nat) :(int, int)
