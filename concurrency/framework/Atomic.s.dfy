@@ -11,6 +11,58 @@ module {:extern "Atomics"} Atomics {
   import opened Ptrs
   import opened Options
 
+  /*
+     The 'Atomics' feature has several odd requirements which are integrated into Dafny
+     via some hacks. The best way to use atomics is with the `atomic_block` syntax.
+     This syntax is another hack on top of the previous hacks, but it serves to hide
+     the unpleasantness from the user.
+    
+     The syntax looks like this:
+    
+     atomic_block var x := execute_atomic_fetch_add_uint8(atomic, 5) {
+         ghost_acquire g;
+         // ...
+         ghost_release g;
+     }
+
+     A few things to note:
+
+      * An atomic of type Atomic<V, G> means that the atomic stores a physical
+        value V (which must be a type that fits in an 8-byte word)
+        along with glinear value G (which can be anything).
+        Every atomic variable `a` has an invariant relation between V and G,
+        given by the predicate `atomic_inv(a, v, g)`.
+
+      * Below, the execute_atomic_ methods all appear to return 4 arguments.
+        However the `atomic_block` syntax deals with the latter 3 specially;
+        only the first one is stored into the var `x` declared above.
+
+      * The glinear variable `g` is declared on the `ghost_acquire` line.
+        `g` has the type of `G` for an atomic of type `Atomic<V, G>`.
+
+      * `ghost_release g` releases `g` (it doesn't have to be the same variable).
+        i.e., it makes `g` unavailable after the block.
+
+      * Within the atomic_block, there are two special ghost variables you can use:
+        `old_value` and `new_value`. These both have the type of V.
+        The relationship between old_value, new_value, and the return_value is
+        dependent on the type of atomic update being performed. For example,
+        in the fetch_add call above, we would have:
+
+            new_value == old_value + 5 && return_value == old_value
+
+      * At the line `ghost_acquire`, we have the assumption that inv(g, old_value)
+        holds. at the line `ghost_release`, we must prove the condition that
+        inv(g, new_value) holds. Thus, the user of the ghost block is responsible
+        for performing some ghost-linear updates to ensure the invariant
+        still holds. These updates may interact with glinear objects declared
+        outside the atomic_block.
+
+      * For something like compare_exchange, you'll probably want to use a conditional
+        inside the atomic_block; one case for where the change happens and
+        one where it doesn't.
+    */
+
   type {:extern "predefined"} Atomic(!new,00)<!V, !G>
   {
     function {:extern} namespace() : nat
