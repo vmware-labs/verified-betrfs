@@ -451,7 +451,7 @@ module JournalMachineMod {
     }
   }
 
-  function ChainFrom(cache: CacheIfc.Variables, sb: Superblock) : (cl:ChainLookup)
+  function {:opaque} ChainFrom(cache: CacheIfc.Variables, sb: Superblock) : (cl:ChainLookup)
     ensures cl.ValidForSB(cache, sb)
     ensures cl.last().expectedEnd.None?
     ensures forall ocl:ChainLookup | ocl.ValidForSB(cache, sb) && ocl.last().expectedEnd.None? :: ocl == cl
@@ -616,6 +616,7 @@ module JournalMachineMod {
     // batch allocations so it can avoid needing to rewrite the marshaled allocation before
     // commiting a fresh superblock (on sync). Thus "unused" may be computed as "reserved
     // but known not to be in use in the current JournalChain".
+    && ValidCU(newCU)
     && newCU !in ChainFrom(cache, v.CurrentSuperblock()).last().cumulativeReadCUs
 
     // Marshal and write the current record out into the cache. (This doesn't issue
@@ -634,6 +635,7 @@ module JournalMachineMod {
     // constructive: (map lsn:LSN | 0 <= lsn < v.unmarshalledLSN() :: if lsn < v.marshalledLSN then v.marshalledLookup[lsn] else newCU),
     // predicate:
     && var cache' := CacheIfc.ApplyWrites(cache, cacheOps);
+      reveal_ChainFrom();
       v'.marshalledLookup == ChainFrom(cache', Superblock(Some(newCU), v.boundaryLSN))
   }
 
