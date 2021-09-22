@@ -400,45 +400,25 @@ module JournalMachineMod {
     var expectedEndValue := match expectedEnd case Some(lsn) => lsn case None => 0;
     if sb.freshestCU.None?
     then
-      var cl := EmptyChainLookup(sb, expectedEndValue);
-      //assert cl.interp().seqEnd == maxLsn;
-      assert cl.WF(); // TODO delete all these debug WF asserts
-      assert cl.Chained();
-      cl
+      var cl := EmptyChainLookup(sb, expectedEndValue); cl
     else
       var cu := sb.freshestCU.value;
       var rawPage := CacheIfc.ReadValue(cache, cu);
       if rawPage.None?
-      then var cl := ChainLookup([ChainLookupRow(sb, expectedEndValue, None, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]);
-        assert cl.WF();
-        assert cl.Chained();
-        cl
+      then var cl := ChainLookup([ChainLookupRow(sb, expectedEndValue, None, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]); cl
       else if parse(rawPage.value).None?
-      then var cl := ChainLookup([ChainLookupRow(sb, expectedEndValue, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]);
-        assert cl.WF();
-        assert cl.Chained();
-        cl
+      then var cl := ChainLookup([ChainLookupRow(sb, expectedEndValue, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap())]); cl
       else
         var journalRecord := parse(rawPage.value).value;
         if expectedEnd.Some? && expectedEndValue != journalRecord.messageSeq.seqEnd
           // we're expecting a particular end value and record didn't stitch
         then
           var row := ChainLookupRow(sb, expectedEndValue, rawPage, ChainFailed, ChainFailed, [cu], EmptyLSNMap());
-          var cl := ChainLookup([row]);
-          assert cl.WF();
-          assert cl.last().ValidSuccessorTo(None);
-          assert cl.Linked(|cl.rows|-1);
-          assert cl.Chained();
-          cl
+          var cl := ChainLookup([row]); cl
         else if journalRecord.messageSeq.seqEnd <= sb.boundaryLSN
         then // parsed journal record but don't need any of its entries
           var rowResult := ChainSuccess([], MsgHistoryMod.Empty());
-          var chainRow := ChainLookupRow(sb, journalRecord.messageSeq.seqEnd, rawPage, rowResult, rowResult, [cu], EmptyLSNMap());
-          assert chainRow.WF();
-          var cl := ChainLookup([chainRow]);
-          assert cl.WF();
-          assert cl.Chained();
-          cl
+          var cl := ChainLookup([ChainLookupRow(sb, journalRecord.messageSeq.seqEnd, rawPage, rowResult, rowResult, [cu], EmptyLSNMap())]); cl
         else
           var rowResult := ChainSuccess([journalRecord], journalRecord.messageSeq);
           var remainder := ChainFromRecursive(cache, journalRecord.priorSB(sb), Some(journalRecord.messageSeq.seqStart));
@@ -458,8 +438,6 @@ module JournalMachineMod {
               }
             }
           }
-          assert cl.WF();
-          assert cl.Chained();
           cl
   }
 
