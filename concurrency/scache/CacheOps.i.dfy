@@ -1174,73 +1174,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     io_cleanup_all(cache);
   }
 
-  // try to get read lock and immediately release
-  // mark access bit on success
-  // return true if it was in the cache
-  method try_get_read_and_release(
-      shared cache: Cache,
-      cache_idx: uint64,
-      shared localState: LocalState,
-      glinear client: Client)
-  returns (
-    in_cache: bool,
-    glinear client_out: Client
-  )
-  requires cache.Inv()
-  requires localState.WF()
-  requires 0 <= cache_idx as int < CACHE_SIZE as int
-  //requires client == RwLock.Internal(RwLock.Client(localState.t))
-  decreases *
-  {
-    // 1. check if writelocked
-
-    var is_exc_locked := cache.status_atomic(cache_idx).quicktest_is_exc_locked();
-    if is_exc_locked {
-      success := false;
-      client_out := client;
-    } else {
-      // 2. inc ref
-
-      // TODO I'm not sure incrementing the reference count is truly necessary
-
-      glinear var r := inc_refcount_for_shared(
-          cache.read_refcount_atomic(localState.t, cache_idx),
-          localState.t as nat,
-          client);
-
-      // 3. check not writelocked, not free
-      //        otherwise, dec and abort
-
-      var is_accessed: bool;
-      var succ;
-      succ, is_accessed, r := cache.status_atomic(cache_idx).is_exc_locked_or_free(
-          localState.t as nat, r);
-
-      if !succ {
-        glinear var client' := dec_refcount_for_shared_pending(
-            cache.read_refcount_atomic(localState.t, cache_idx),
-            localState.t as nat,
-            r);
-
-        client_out := client';
-      } else {
-        // 4. if !access, then mark accessed
-        if !is_accessed {
-          r := cache.status_atomic(cache_idx).mark_accessed(localState.t as nat, r);
-        }
-
-        glinear var client' := dec_refcount_for_shared_pending(
-            cache.read_refcount_atomic(localState.t, cache_idx),
-            localState.t as nat,
-            r);
-
-        client_out := client';
-      }
-
-      success := true;
-    }
-  }
-
+  
   method prefetch(
       shared cache: Cache,
       inout linear localState: LocalState,

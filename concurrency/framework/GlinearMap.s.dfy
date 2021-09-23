@@ -9,4 +9,13 @@ module GlinearMap {
   requires k in g
   ensures g' == g - {k}
   ensures v' == g[k]
+
+  glinear method {:extern} glmap_empty<K, V>()
+  returns (glinear g': map<K, V>)
+  ensures g' == map[]
+
+  glinear method {:extern} glmap_insert<K, V>(glinear g: map<K, V>, ghost k: K, glinear v: V)
+  returns (glinear g': map<K, V>)
+  ensures g' == g[k := v]
+
 }
