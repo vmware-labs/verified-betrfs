@@ -41,6 +41,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
   // When a 'readonly' request begins record the ctail.
   // When it ends, we must return the answer at some version >= the recorded value.
 
+  // Should correspond to point where we insert a ticket...
   predicate StartReadonly(s: Variables, s': Variables, rid: RequestId, op: nrifc.ReadonlyOp)
   {
     && rid !in s.readonly_reqs

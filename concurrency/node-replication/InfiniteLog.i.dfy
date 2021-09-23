@@ -39,6 +39,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   datatype UpdateState =
     | UpdateInit(op: nrifc.UpdateOp)
     | UpdatePlaced(nodeId: NodeId, idx: nat)
+    // TODO(travis): Add UpdatePreDone(ret: nrifc: ReturnType, idx: nat)
+    // TODO(travis): add idx here too:
     | UpdateDone(ret: nrifc.ReturnType)
 
   // There is only one 'combiner' for a given node.
@@ -382,7 +384,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
 
   // Given a log of ops and a version number, compute the state at that version
+  // TODO(travis): Try this syntax: map i | 0 <= i < |s| :: s[i].key := s[i].value (need proof to )
   function seq_of_tuples_to_map(s: seq<(RequestId, int)>) : map<RequestId, int>
+  // TODO(travis): Probably don't want this ensures here:
   ensures |s| == |seq_of_tuples_to_map(s)|
   ensures (forall rid | rid in seq_of_tuples_to_map(s) :: (rid, seq_of_tuples_to_map(s)[rid]) in s)
   {
@@ -405,6 +409,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //   }
   // { UpdatePlaced(r) ; UpdatePlaced(p) ; UpdatePlaced(q) ; CombinerPlaced( [p,q,r] ) ;
   //   Log(t, op1) ; Log(t+1, op2) ; Log(t+2, op1) ; GlobalTail(t + ops.len()) }
+  // TODO(travis): precondition that all request_ids are distinct?
   predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
   {
     && StateValid(m)
@@ -943,6 +948,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdatePlaced? 
       :: s.localUpdates[upd].idx in s.log.Keys
 
+    // TODO(travis): all the `idx` in localUpdates.UpdatePlaced?.idx and
+    // localUpdates.UpdateDone?.idx should be less than ctail?
 
     // the log doesn't contain entries above the global tail
     && (forall idx : nat | idx >= s.global_tail.value :: idx !in s.log.Keys)

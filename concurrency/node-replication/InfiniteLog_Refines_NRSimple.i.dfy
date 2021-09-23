@@ -50,10 +50,11 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   //requires Inv(s) 
   {
     B.Variables(
-      seq(|s.log|, i requires i in s.log => s.log[i].op),
-      // [],
+      seq(s.global_tail.value, i requires 0 <= i && i < s.global_tail.value => s.log[i].op), 
+      // [], TODO(travis): add this to Inv()
       s.ctail.value,
       // readonly_reqs - ReadReq(ctail_at_start: nat, op: nrifc.ReadonlyOp)
+      // TODO(travis): change NRCtail so it has states without ctail (corresponds to NrInfinite)
       map rid | && rid in s.localReads
                 && (s.localReads[rid].ReadonlyCtail? || s.localReads[rid].ReadonlyReadyToRead?)
         :: B.ReadReq(s.localReads[rid].ctail, s.localReads[rid].op),
@@ -67,8 +68,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
         :: s.log[s.localUpdates[rid].idx].op)
       ),
       // update_resps - UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
-      // TODO: ask about NRSimple has log_idx in response but we don'thave it in infinite log?
-      // what's the purpose of having logidx in NrSimple?
+      // TODO(travis): add idx_in_log here too?
       map rid | && rid in s.localUpdates
                 && s.localUpdates[rid].UpdateDone?
         :: B.UpdateResp(0, s.localUpdates[rid].ret)
