@@ -176,8 +176,7 @@ module JournalInterpMod {
       DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, marshalledSB))
     requires base.seqEnd == v.boundaryLSN
     requires Invariant(v, cache)
-    requires Invariant(v', cache')
-    requires v.boundaryLSN < v.unmarshalledLSN()
+    requires Invariant(v', cache')  // TODO should be an ensures!
     requires Internal(v, v', cache, cacheOps, sk);
     requires CacheIfc.WritesApplied(cache, cache', cacheOps)
     ensures v.boundaryLSN == v'.boundaryLSN
@@ -204,174 +203,17 @@ module JournalInterpMod {
             assert cacheOps[0] == CacheIfc.Write(newCU, marshal(jr)); // observe trigger
             CacheIfc.reveal_ApplyWrites();
           }
-          assert chain'.last().rawPage == Some(marshal(jr));  // TODO delete
-          assert chain'.last().hasRecord();
-          calc {
-            chain'.last().journalRec();
-            parse(chain'.last().rawPage.value).value;
-            parse(marshal(jr)).value;
-            jr;
-          }
-//          assert chain'.last().journalRec() == jr;
-//          assert chain'.last().sb == sb';
-//          assert v.marshalledLSN < v.unmarshalledLSN();
-//          assert jr.messageSeq.seqEnd == v.unmarshalledLSN();
-//          assert sb'.boundaryLSN == v.boundaryLSN;
-//          assert v.boundaryLSN < v.unmarshalledLSN();
-//          assert !(jr.messageSeq.seqEnd <= sb'.boundaryLSN);
-//          assert !(
-//            || !chain'.last().hasRecord()
-//            || chain'.last().journalRec().messageSeq.seqEnd <= chain'.last().sb.boundaryLSN
-//          );
-//          assert !chain'.last().FirstRow();
           assert chain'.Linked(|chain'.rows| - 1); // trigger: chain' has more than 1 row
+          assert chain'.Linked(|chain'.rows|-2);   // trigger
 
-          assert chain'.last().priorSB() == chain.last().sb;
-          var pchain := ChainFrom(cache, chain.last().sb);
-          var pchain' := ChainFrom(cache', chain.last().sb);
-
-          assert chain == ChainFrom(cache, chain'.last().priorSB());
-          assert chain == ChainFrom(cache', chain'.last().priorSB()) by {
-//            assume false;
-            forall cu | cu in IReads(cache, chain'.last().priorSB()) ensures EqualAt(cache.dv, cache'.dv, cu) {
-              assert chain'.last().priorSB() == chain.last().sb;
-              assert cu in IReads(cache, chain.last().sb);
-              assert chain.last().sb == sb;
-              assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb));
-              assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb));
-              assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, chain.last().sb));
-             // ChainFrom(cache, sb).last().cumulativeReadCUs
-            //assert IReads(cache, chain'.last().priorSB()) <= IReads(cache, sb);
-            }
-            assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, chain'.last().priorSB()));
-            FrameOneChain(cache, cache', chain'.last().priorSB());
-          }
-//          assert chain'.DropLast() == ChainFrom(cache', chain'.last().priorSB());
-//          assert chain'.DropLast() == chain; // except for expectedLSN not being None.
-//          assert chain.Valid(cache');
+          FrameOneChain(cache, cache', chain'.last().priorSB());
           assert chain'.DropLast().Valid(cache') by { ChainedPrior(chain'); }
 
-          if sb.freshestCU.Some? {
-            assert chain'.Linked(|chain'.rows|-2);
-            assert chain'.Linked(|chain'.rows|-1);
-//            assert chain'.DropLast().last().rowResult.ChainSuccess?;
-//            assert chain'.last().rowResult.ChainSuccess?;
-//            assert chain.last().hasRecord();
-//            assert chain.last().expectedEnd == chain.last().journalRec().messageSeq.seqEnd;
-//            assert chain'.DropLast().last().expectedEnd == chain'.last().journalRec().messageSeq.seqStart;
-//            assert chain'.last().cumulativeResult.ChainSuccess?;
-//            assert chain'.DropLast().last().expectedEnd == chain'.DropLast().last().journalRec().messageSeq.seqEnd;
-//            assert chain'.DropLast().last().journalRec().messageSeq.seqEnd == chain.last().journalRec().messageSeq.seqEnd;
-//            assert chain'.DropLast().last().expectedEnd == chain.last().journalRec().messageSeq.seqEnd;
-          } else {
-//            assert chain.last().expectedEnd == 0;
-//            assert chain'.DropLast().last().expectedEnd == 0;
-          }
           UniqueChainLookup(cache', chain, chain'.DropLast());
-//          assert chain'.DropLast() == chain;
-//          assert chain.rows[|chain.rows|-1] == chain'.rows[|chain.rows|-1];
-
-//          calc {
-//            UnmarshalledMessageSeq(v, cache);
-//            v.marshalledLookup.interp().Concat(TailToMsgSeq(v));
-//              { UniqueChainLookup(cache, v.marshalledLookup, chain); }  // Use invariant
-//            chain.interp().Concat(TailToMsgSeq(v));
-//            chain.interp().Concat(jr.messageSeq);
-//            chain.last().cumulativeResult.interp.Concat(chain'.last().rowResult.interp);
-//            chain.last().cumulativeResult.Concat(chain'.last().rowResult).interp;
-//              {
-//                assert chain'.last().cumulativeResult.ChainSuccess?;
-//                assert chain'.Linked(|chain'.rows|-1);
-//                assert chain'.last().ValidSuccessorTo(Some(chain'.rows[|chain'.rows|-2]));
-//                assert chain'.rows[|chain'.rows|-2] == chain.last();
-//              }
-//            chain'.last().cumulativeResult.interp;
-//            chain'.interp();
-//            chain'.interp().Concat(TailToMsgSeq(v'));
-//            v'.marshalledLookup.interp().Concat(TailToMsgSeq(v'));
-//            UnmarshalledMessageSeq(v', cache');
-//          }
-
-//          assert ChainFrom(cache'.dv, v'.CurrentSuperblock()).chain.Some?;
-//          var sb := v.CurrentSuperblock();
-//          var sb' := v'.CurrentSuperblock();
-//          var orig_chain_msgseq := ChainFrom(cache.dv, sb).chain.value.interp;
-//          var orig_tail_msgseq := TailToMsgSeq(v);
-//          var new_chain_msgseq := ChainFrom(cache'.dv, sb').chain.value.interp;
-//          var new_tail_msgseq := TailToMsgSeq(v');
-//
-//          var priorCU := if v.marshalledLSN == v.boundaryLSN then None else Some(v.lsnToCU[v.marshalledLSN-1]);
-//          var jr := JournalRecord(TailToMsgSeq(v), priorCU);
-//          var sb_old := jr.priorSB(sb');
-//          assert sb_old == sb;
-//
-//          assert newCU !in IReads(cache, sb);
-//          assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb));
-//          FrameOneChain(cache, cache', sb);
-////          assert ChainFrom(cache.dv, sb).chain == ChainFrom(cache'.dv, sb).chain; // ensures
-//          assert ChainFrom(cache'.dv, sb) == ChainFrom(cache.dv, sb);
-//          if ChainFrom(cache'.dv, sb).chain.None? {
-//            assert ChainFrom(cache'.dv, sb').chain.None?;
-//          } else {
-//	          calc {
-//	            ChainFrom(cache'.dv, sb').chain.value.recs;
-//	              {
-//	                assert sb'.freshestCU.Some?;
-//	                assert sb'.freshestCU.value in cache'.dv;
-//	                assert parse(cache'.dv[sb'.freshestCU.value]).Some?;
-//	                assert v'.marshalledLSN == v.unmarshalledLSN();
-//	
-//	                var cr := ChainFrom(cache'.dv, sb');
-//	                assert cr.chain.Some?;
-//	                var marshalledLsn := v'.marshalledLSN - 1;
-//	                var idx := cr.chain.value.locate[marshalledLsn];
-//	
-//	                calc {
-//	                  v'.FreshestMarshalledCU();
-//	                  Some(v'.lsnToCU[v'.marshalledLSN-1]);
-//	                  Some(CUForChainIdx(cr.chain.value, idx));
-//	                  Some(newCU);
-//	                }
-//	                assert sb'.freshestCU == Some(newCU);
-//	                assert sb'.boundaryLSN == v.boundaryLSN;
-//	                assert sb' == Superblock(Some(newCU), v.boundaryLSN);
-//	                assert MappingFor(cache, sb') == v'.lsnToCU;
-//	                assert v'.lsnToCU[marshalledLsn] == CUForChainIdx(cr.chain.value, idx);
-//	                assert v'.lsnToCU[marshalledLsn] == newCU;
-//	                assert v'.lsnToCU[v'.marshalledLSN - 1] == newCU; // CorrectMapping isn't defined
-//	                assert newCU == v'.FreshestMarshalledCU().value;
-//	                assert sb'.freshestCU.value == newCU;
-//	                assert jr == parse(cache'.dv[sb'.freshestCU.value]).value;  // CorrectMapping isn't defined.
-//	                assert !(jr.messageSeq.seqEnd <= sb'.boundaryLSN);
-//	                assert !(jr.messageSeq.seqStart <= sb.boundaryLSN);
-//	                assert !(jr.priorCU.None?);
-//	              }
-//	            [jr] + ChainFrom(MapRemove1(cache'.dv, sb'.freshestCU.value), jr.priorSB(sb')).chain.value.recs;
-//	            [jr] + ChainFrom(MapRemove1(cache'.dv, sb'.freshestCU.value), sb).chain.value.recs;
-//	            [jr] + ChainFrom(cache.dv, sb).chain.value.recs;
-//	              // Framing argument here
-//	            [jr] + ChainFrom(cache.dv, sb).chain.value.recs;
-//	          }
-//	          calc {
-//	            ChainAsMsgSeq(v', cache');
-//	            ChainFrom(cache'.dv, sb').chain.value.interp.Concat(TailToMsgSeq(v'));
-//	            new_chain_msgseq.Concat(new_tail_msgseq);
-//	            new_chain_msgseq;
-//	            orig_chain_msgseq.Concat(orig_tail_msgseq);
-//	            ChainFrom(cache.dv, sb).chain.value.interp.Concat(TailToMsgSeq(v));
-//	            ChainAsMsgSeq(v, cache);
-//	          }
-//	          assume false; // this is the slightly harder case, because the chain actually changes.
-//	          assert ChainAsMsgSeq(v, cache) == ChainAsMsgSeq(v', cache');
-//          }
         }
         case AdvanceCleanStep(newClean) => {
-//          assert cacheOps == [];
-//          CacheLemmasMod.EquivalentCaches(cache, cache', cacheOps);
-//          assert ChainAsMsgSeq(v, cache) == ChainAsMsgSeq(v', cache');
         }
       }
-//      assert ChainAsMsgSeq(v, cache) == ChainAsMsgSeq(v', cache');
     }
     assert IM(v, cache, base) == IM(v', cache', base);
   }
