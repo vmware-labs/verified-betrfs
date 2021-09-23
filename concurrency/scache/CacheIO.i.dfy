@@ -353,6 +353,71 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     dispose_anything(stubs');
   }
 
+  method disk_read_callback_vec(
+      shared cache: Cache,
+      iovec_ptr: Ptr,
+      iovec_len: uint64,
+      gshared iovec: PointsToArray<Iovec>,
+      ghost offset: nat,
+      ghost keys: seq<Key>,
+      glinear wps: map<nat, PointsToArray<byte>>,
+      glinear ros: map<nat, T.Token>,
+      glinear idxs: map<nat, CellContents<int64>>,
+      glinear cache_readings: map<nat, CacheResources.CacheReading>,
+      glinear stubs: map<nat, DT.Token>)
+  requires cache.Inv()
+  requires |iovec.s| >= |keys| == iovec_len as int
+  requires iovec.ptr == iovec_ptr
+  requires offset + |keys| <= NUM_DISK_PAGES as int
+  requires forall i | 0 <= i < |keys| ::
+    && i in ros && i in wps && i in idxs && i in stubs && i in cache_readings
+    && simpleReadGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
+        cache.status, offset + i, wps[i], keys[i], cache_readings[i], idxs[i], ros[i])
+    && |wps[i].s| == PageSize as int
+    && stubs[i].val == CacheSSM.DiskReadResp(offset + i, wps[i].s)
+    && iovec.s[i].iov_base() == cache.data[keys[i].cache_idx]
+  {
+    glinear var wps' := wps;
+    glinear var stubs' := stubs;
+    glinear var ros' := ros;
+    glinear var idxs' := idxs;
+    glinear var cache_readings' := cache_readings;
+
+    var j : uint64 := 0;
+    while j < iovec_len
+    invariant 0 <= j as int <= iovec_len as int
+    invariant |iovec.s| >= |keys| == iovec_len as int
+    invariant forall i: int | j as int <= i < |keys| ::
+      && i in ros' && i in wps' && i in idxs' && i in stubs' && i in cache_readings'
+      && simpleReadGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
+          cache.status, offset + i, wps'[i], keys[i], cache_readings'[i], idxs'[i], ros'[i])
+      && |wps'[i].s| == PageSize as int
+      && stubs'[i].val == CacheSSM.DiskReadResp(offset + i, wps'[i].s)
+      && iovec.s[i].iov_base() == cache.data[keys[i].cache_idx]
+    {
+      glinear var wp, stub, idx, ro, cache_reading;
+      wps', wp := glmap_take(wps', j as int);
+      stubs', stub := glmap_take(stubs', j as int);
+      ros', ro := glmap_take(ros', j as int);
+      cache_readings', cache_reading := glmap_take(cache_readings', j as int);
+      idxs', idx := glmap_take(idxs', j as int);
+      var my_iovec := iovec_ptr.index_read(iovec, j);
+      var data_ptr := my_iovec.iov_base();
+      var cache_idx := cache_idx_of_data_ptr(cache, data_ptr, keys[j].cache_idx);
+      assert |wp.s| == PageSize as int;
+      glinear var ustub := CacheResources.DiskReadStub_fold(offset + j as int, wp.s, stub);
+      disk_read_callback(cache, cache_idx, offset + j as int,
+          wp, ro, cache_reading, idx, ustub);
+      j := j + 1;
+    }
+
+    dispose_anything(stubs');
+    dispose_anything(wps');
+    dispose_anything(ros');
+    dispose_anything(idxs');
+    dispose_anything(cache_readings');
+  }
+
   method io_cleanup(shared cache: Cache, max_io_events: uint64)
   requires cache.Inv()
   {
@@ -434,6 +499,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       var is_write := iocb_is_write(iocb_ptr, fr.iocb);
       var is_writev := iocb_is_writev(iocb_ptr, fr.iocb);
+      var is_read := iocb_is_read(iocb_ptr, fr.iocb);
 
       if is_write {
         assert fr.FRWrite?;
@@ -464,8 +530,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
         iocb1 := iocb;
         iovec1 := iovec;
-      } else {
-        assert fr.FRRead?;
+      } else if is_read {
         glinear var FRRead(iocb, wp, rg, stub) := fr;
         glinear var ReadG(key, cache_reading, idx, ro, g_slot_idx, iovec) := rg;
 
@@ -476,6 +541,20 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         var cache_idx := cache_idx_of_data_ptr(cache, data_ptr, key.cache_idx);
 
         disk_read_callback(cache, cache_idx, disk_idx, wp, ro, cache_reading, idx, ustub);
+
+        iocb1 := iocb;
+        iovec1 := iovec;
+      } else {
+        assert fr.FRReadv?;
+
+        glinear var FRReadv(iocb, iovec, wps, rvg, stubs) := fr;
+        glinear var ReadvG(keys, cache_reading, idx, ro, g_slot_idx) := rvg;
+
+        var iovec_ptr := iocb_iovec(iocb_ptr, iocb);
+        var iovec_len := iocb_iovec_len(iocb_ptr, iocb);
+        ghost var disk_idx := iocb.offset;
+
+        disk_read_callback_vec(cache, iovec_ptr, iovec_len, iovec, disk_idx, keys, wps, ro, idx, cache_reading, stubs);
 
         iocb1 := iocb;
         iovec1 := iovec;

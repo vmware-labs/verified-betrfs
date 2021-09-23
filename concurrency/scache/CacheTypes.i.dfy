@@ -102,6 +102,10 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         <==> WritevGInv(io_slots, data, disk_idx_of_entry, status,
                   iocb_ptr, iocb, iovec, datas, g))
 
+      && (forall iocb_ptr, iocb, iovec, datas, g :: ioctx.async_readv_inv(iocb_ptr, iocb, iovec, datas, g)
+        <==> ReadvGInv(io_slots, data, disk_idx_of_entry, status,
+                  iocb_ptr, iocb, iovec, datas, g))
+
       && (forall v, g :: atomic_inv(global_clockpointer, v, g) <==> true)
       && (forall v, g :: atomic_inv(req_hand_base, v, g) <==> true)
 
@@ -334,6 +338,68 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && (forall i | 0 <= i < |datas| ::
         && 0 <= g.keys[i].cache_idx < |cache_data|
         && iovec.s[i].iov_base() == cache_data[g.keys[i].cache_idx])
+    )
+  }
+
+  predicate simpleReadGInv(
+      cache_io_slots: lseq<IOSlot>,
+      cache_data: seq<Ptr>,
+      cache_disk_idx_of_entry: seq<Cell<int64>>,
+      cache_status: seq<AtomicStatus>,
+
+      offset: nat,
+      wp: PointsToArray<byte>,
+      key: Key,
+      cache_reading: CacheResources.CacheReading,
+      idx: CellContents<int64>,
+      ro: T.Token)
+  {
+    && 0 <= key.cache_idx < CACHE_SIZE as int
+    && |cache_data| == CACHE_SIZE as int
+    && wp.ptr == cache_data[key.cache_idx]
+    && |cache_disk_idx_of_entry| == CACHE_SIZE as int
+    && |cache_status| == CACHE_SIZE as int
+    && idx.cell == cache_disk_idx_of_entry[key.cache_idx]
+    && idx.v as int == offset == cache_reading.disk_idx
+    && cache_reading.cache_idx == key.cache_idx
+    && ro.loc == cache_status[key.cache_idx].rwlock_loc
+    && ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
+  }
+
+  predicate ReadvGInv(
+      cache_io_slots: lseq<IOSlot>,
+      cache_data: seq<Ptr>,
+      cache_disk_idx_of_entry: seq<Cell<int64>>,
+      cache_status: seq<AtomicStatus>,
+
+      iocb_ptr: Ptr,
+      iocb: Iocb,
+      iovec: PointsToArray<Iovec>,
+      wps: map<nat, PointsToArray<byte>>,
+      g: ReadvG)
+  {
+    && iocb.IocbReadv?
+    && iocb.ptr == iocb_ptr
+    && g.slot_idx < NUM_IO_SLOTS as int
+    && |cache_io_slots| == NUM_IO_SLOTS as int
+    && iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
+    && 0 <= iocb.offset < NUM_DISK_PAGES as int
+    && iovec.ptr == cache_io_slots[g.slot_idx].iovec_ptr
+    && |g.keys| <= |iovec.s| == PAGES_PER_EXTENT as int
+
+    && (forall i | 0 <= i < |g.keys| ::
+        && i in wps
+        && i in g.cache_reading
+        && i in g.idx
+        && i in g.ro
+        && simpleReadGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status,
+            iocb.offset + i, wps[i], g.keys[i], g.cache_reading[i],
+            g.idx[i], g.ro[i])
+
+    && (forall i | 0 <= i < |g.keys| ::
+        && 0 <= g.keys[i].cache_idx < |cache_data|
+        && iovec.s[i].iov_base() == cache_data[g.keys[i].cache_idx])
+        && iovec.s[i].iov_len() as int == PageSize as int
     )
   }
 }

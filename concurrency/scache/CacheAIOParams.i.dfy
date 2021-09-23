@@ -21,6 +21,14 @@ module CacheAIOParams refines AIOParams {
     glinear iovec: PointsToArray<Iovec>
   )
 
+  glinear datatype ReadvG = ReadvG(
+    ghost keys: seq<Key>,
+    glinear cache_reading: map<nat, CacheResources.CacheReading>,
+    glinear idx: map<nat, CellContents<int64>>,
+    glinear ro: map<nat, T.Token>,
+    ghost slot_idx: nat
+  )
+
   glinear datatype WriteG = WriteG(
     ghost key: Key,
     glinear wbo: T.WritebackObtainedToken,

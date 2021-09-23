@@ -22,6 +22,7 @@ module {:extern "IocbStruct"} IocbStruct {
     | IocbUninitialized(ptr: Ptr)
     | IocbRead(ptr: Ptr, ghost offset: nat, ghost nbytes: nat, buf: Ptr)
     | IocbWrite(ptr: Ptr, ghost offset: nat, ghost nbytes: nat, buf: Ptr)
+    | IocbReadv(ptr: Ptr, ghost offset: nat, ghost iovec: Ptr, ghost iovec_len: nat)
     | IocbWritev(ptr: Ptr, ghost offset: nat, ghost iovec: Ptr, ghost iovec_len: nat)
 
   function method {:extern} SizeOfIocb() : uint64
@@ -62,6 +63,11 @@ module {:extern "IocbStruct"} IocbStruct {
   requires offset >= 0
   ensures iocb == IocbWritev(ptr, offset as nat, iovec, iovec_len as nat)
 
+  method {:extern} iocb_prepare_readv(ptr: Ptr, glinear inout iocb: Iocb,
+      offset: int64, iovec: Ptr, iovec_len: uint64)
+  requires offset >= 0
+  ensures iocb == IocbReadv(ptr, offset as nat, iovec, iovec_len as nat)
+
   method {:extern} iocb_is_read(ptr: Ptr, gshared iocb: Iocb)
   returns (b: bool)
   requires iocb.ptr == ptr
@@ -79,6 +85,12 @@ module {:extern "IocbStruct"} IocbStruct {
   requires iocb.ptr == ptr
   requires !iocb.IocbUninitialized?
   ensures b == iocb.IocbWritev?
+
+  method {:extern} iocb_is_readv(ptr: Ptr, gshared iocb: Iocb)
+  returns (b: bool)
+  requires iocb.ptr == ptr
+  requires !iocb.IocbUninitialized?
+  ensures b == iocb.IocbReadv?
 
   method {:extern} iocb_buf(ptr: Ptr, gshared iocb: Iocb)
   returns (buf: Ptr)
@@ -98,7 +110,6 @@ module {:extern "IocbStruct"} IocbStruct {
   requires iocb.IocbWritev?
   ensures iovec_len as int == iocb.iovec_len
 
-
   type {:extern "struct"} Iovec(!new) {
     function method {:extern} iov_base() : Ptr
     function method {:extern} iov_len() : uint64
@@ -115,6 +126,7 @@ abstract module AIOParams {
   import opened IocbStruct
   import opened NativeTypes
   type ReadG(!new)
+  type ReadvG(!new)
   type WriteG(!new)
   type WritevG(!new)
 
@@ -180,6 +192,13 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       data: seq<byte>,
       g: aioparams.WriteG)
 
+    predicate async_readv_inv(
+      iocb_ptr: Ptr,
+      iocb: Iocb,
+      iovec: PointsToArray<Iovec>,
+      wps: map<nat, PointsToArray<byte>>,
+      g: aioparams.ReadvG)
+
     predicate async_writev_inv(
       iocb_ptr: Ptr,
       iocb: Iocb,
@@ -191,10 +210,12 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   method {:extern} init_ctx(
       ghost async_read_inv: (Ptr, Iocb, PointsToArray<byte>, aioparams.ReadG) -> bool,
       ghost async_write_inv: (Ptr, Iocb, seq<byte>, aioparams.WriteG) -> bool,
+      ghost async_readv_inv: (Ptr, Iocb, PointsToArray<Iovec>, map<nat, PointsToArray<byte>>, aioparams.ReadvG) -> bool,
       ghost async_writev_inv: (Ptr, Iocb, PointsToArray<Iovec>, seq<seq<byte>>, aioparams.WritevG) -> bool
     )
   returns (linear ioctx: IOCtx)
   ensures ioctx.async_read_inv == async_read_inv
+  ensures ioctx.async_readv_inv == async_readv_inv
   ensures ioctx.async_write_inv == async_write_inv
   ensures ioctx.async_writev_inv == async_writev_inv
 
@@ -241,6 +262,34 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   requires aioparams.is_read_perm_v(iocb_ptr, iocb, iovec, datas, g)
   requires ctx.async_writev_inv(iocb_ptr, iocb, iovec, datas, g)
 
+  predicate readv_valid_i(iovec: Iovec, wp: PointsToArray<byte>, ticket: T.Token, offset: nat, i: nat)
+  {
+    && iovec.iov_len() as int == PageSize as int
+    && iovec.iov_base().aligned(PageSize as int)
+    && |wp.s| == iovec.iov_len() as int
+    && wp.ptr == iovec.iov_base()
+    && ticket == T.Token(ssm.DiskReadReq(offset + i))
+  }
+
+  method {:extern} async_readv(
+      shared ctx: IOCtx,
+      iocb_ptr: Ptr,
+      glinear iocb: Iocb,
+      glinear iovec: PointsToArray<Iovec>,
+      glinear wps: map<nat, PointsToArray<byte>>,
+      glinear g: aioparams.ReadvG,
+      glinear tickets: map<nat, T.Token>)
+  requires iocb.IocbWritev?
+  requires iocb.ptr == iocb_ptr
+  requires iocb.iovec_len > 0
+  requires iovec.ptr == iocb.iovec
+  requires |iovec.s| >= iocb.iovec_len
+  requires forall i | 0 <= i < iocb.iovec_len ::
+      && i in tickets
+      && i in wps
+      && readv_valid_i(iovec.s[i], wps[i], tickets[i], iocb.offset, i)
+  requires ctx.async_readv_inv(iocb_ptr, iocb, iovec, wps, g)
+
   method {:extern} async_read(
       shared ctx: IOCtx,
       iocb_ptr: Ptr,
@@ -277,6 +326,13 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       glinear rg: aioparams.ReadG,
       glinear stub: T.Token
     )
+    | FRReadv(
+      glinear iocb: Iocb,
+      glinear iovec: PointsToArray<Iovec>,
+      glinear wps: map<nat, PointsToArray<byte>>,
+      glinear rvg: aioparams.ReadvG,
+      glinear stubs: map<nat, T.Token>
+    )
 
   method {:extern} get_event(shared ctx: IOCtx)
   returns (
@@ -300,6 +356,13 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
     && |fr.wp.s| == fr.iocb.nbytes
     && fr.iocb.nbytes == 4096
     && fr.stub == T.Token(ssm.DiskReadResp(fr.iocb.offset, fr.wp.s))
+  ensures fr.FRReadv? ==>
+    && fr.iocb.IocbReadv?
+    && ctx.async_readv_inv(iocb_ptr, fr.iocb, fr.iovec, fr.wps, fr.rvg)
+    && forall i | 0 <= i < fr.iocb.iovec_len ::
+        && i in fr.stubs
+        && i in fr.wps
+        && fr.stubs[i] == T.Token(ssm.DiskReadResp(fr.iocb.offset + i, fr.wps[i].s))
 
   method {:extern} sync_read(
       buf: Ptr,
