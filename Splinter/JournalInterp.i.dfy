@@ -172,50 +172,42 @@ module JournalInterpMod {
   // Add comment about what this supposed to do the TODOS here
   lemma InternalStepLemma(v: Variables, cache: CacheIfc.Variables, v': Variables, cache': CacheIfc.Variables, base: InterpMod.Interp, cacheOps: CacheIfc.Ops, sk: Skolem)
     requires v.WF()
-    requires var marshalledSB := v.marshalledLookup.last().sb;
-      DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, marshalledSB))
+    requires v'.WF()
+    requires DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, v.CurrentSuperblock()))
     requires base.seqEnd == v.boundaryLSN
     requires Invariant(v, cache)
-    requires Invariant(v', cache')  // TODO should be an ensures!
     requires Internal(v, v', cache, cacheOps, sk);
     requires CacheIfc.WritesApplied(cache, cache', cacheOps)
+    ensures Invariant(v', cache')
     ensures v.boundaryLSN == v'.boundaryLSN
     ensures v.unmarshalledLSN() == v'.unmarshalledLSN()
     ensures IM(v, cache, base) == IM(v', cache', base)
   {
-    assert v.boundaryLSN == v'.boundaryLSN;
-    assert v.unmarshalledLSN() == v'.unmarshalledLSN();
-    forall lsn | v.boundaryLSN <= lsn < v.unmarshalledLSN()
-      ensures InterpFor(v, cache, base, lsn) == InterpFor(v', cache', base, lsn)
-    {
-      match sk {
-        case AdvanceMarshalledStep(newCU) => {
-          assert CacheIfc.WritesApplied(cache, cache', cacheOps);
+    match sk {
+      case AdvanceMarshalledStep(newCU) => {
+        var sb := v.marshalledLookup.last().sb;
+        var chain := ChainFrom(cache, sb);
+        var sb' := Superblock(Some(newCU), v.boundaryLSN);
+        var chain' := ChainFrom(cache', sb');
 
-          var sb := v.marshalledLookup.last().sb;
-          var chain := ChainFrom(cache, sb);
-          var sb' := Superblock(Some(newCU), v.boundaryLSN);
-          var chain' := ChainFrom(cache', sb');
-
-          var priorCU := (v.marshalledLookup.LsnMapDomain(); if v.marshalledLSN == v.boundaryLSN then None else Some(v.lsnMap()[v.marshalledLSN-1]));
-          var jr := JournalRecord(TailToMsgSeq(v), priorCU);
-          assert CacheIfc.Read(cache', newCU, marshal(jr)) by {
-            assert cacheOps[0] == CacheIfc.Write(newCU, marshal(jr)); // observe trigger
-            CacheIfc.reveal_ApplyWrites();
-          }
-          assert chain'.Linked(|chain'.rows| - 1); // trigger: chain' has more than 1 row
-          assert chain'.Linked(|chain'.rows|-2);   // trigger
-
-          FrameOneChain(cache, cache', chain'.last().priorSB());
-          assert chain'.DropLast().Valid(cache') by { ChainedPrior(chain'); }
-
-          UniqueChainLookup(cache', chain, chain'.DropLast());
+        var priorCU := (v.marshalledLookup.LsnMapDomain(); if v.marshalledLSN == v.boundaryLSN then None else Some(v.lsnMap()[v.marshalledLSN-1]));
+        var jr := JournalRecord(TailToMsgSeq(v), priorCU);
+        assert CacheIfc.Read(cache', newCU, marshal(jr)) by {
+          assert cacheOps[0] == CacheIfc.Write(newCU, marshal(jr)); // observe trigger
+          CacheIfc.reveal_ApplyWrites();
         }
-        case AdvanceCleanStep(newClean) => {
-        }
+        assert chain'.Linked(|chain'.rows| - 1); // trigger: chain' has more than 1 row
+        assert chain'.Linked(|chain'.rows|-2);   // trigger
+
+        FrameOneChain(cache, cache', chain'.last().priorSB());
+        assert chain'.DropLast().Valid(cache') by { ChainedPrior(chain'); }
+
+        UniqueChainLookup(cache', chain, chain'.DropLast());
+      }
+      case AdvanceCleanStep(newClean) => {
+        assert cache' == cache by { CacheIfc.reveal_ApplyWrites(); }
       }
     }
-    assert IM(v, cache, base) == IM(v', cache', base);
   }
 
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, base: InterpMod.Interp)
