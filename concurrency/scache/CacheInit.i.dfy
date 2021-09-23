@@ -321,7 +321,10 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       ((iocb_ptr, iocb, p, g) =>
           WriteGInv(io_slots, data, disk_idx_of_entry, status, iocb_ptr, iocb, p, g)),
       ((iocb_ptr, iocb, x, p, g) =>
-          WritevGInv(io_slots, data, disk_idx_of_entry, status, iocb_ptr, iocb, x, p, g)));
+          ReadvGInv(io_slots, data, disk_idx_of_entry, status, iocb_ptr, iocb, x, p, g)),
+      ((iocb_ptr, iocb, x, p, g) =>
+          WritevGInv(io_slots, data, disk_idx_of_entry, status, iocb_ptr, iocb, x, p, g))
+    );
 
     linear var batch_busy := init_batch_busy();
 
