@@ -26,7 +26,8 @@ module JournalInterpMod {
   {
     && v.WF()
     && v.marshalledLookup.ValidForSB(cache, v.CurrentSuperblock())
-    && v.marshalledLookup.last().expectedEnd.None?  // consider rolling this into ValidForSB, which isn't used inductively -- I think?
+    && v.marshalledLookup.Complete()
+    && v.marshalledLookup.success() // TODO will have to condition this when coming up after a crash; disk may be broken.
   }
 
   // XXX was ChainAsMsgSeq now v.marshalledLookup.interp
@@ -87,7 +88,7 @@ module JournalInterpMod {
     requires base.seqEnd == sb.boundaryLSN  // This crash-invariant condition should probably not be a requires; just return nonsense if it fails.
   {
     assume false; // this is all nonsense
-    var pretendVariables := Variables(sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, [], map[], EmptyChainLookup(Superblock(None, 0), None));
+    var pretendVariables := Variables(sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, [], map[], EmptyChainLookup(Superblock(None, 0), 0));
     var versions := Versions(pretendVariables, cache, base);
     CrashTolerantMapSpecMod.Variables(versions, 0) // TODO Sowmya pick up here
   }
@@ -111,10 +112,19 @@ module JournalInterpMod {
   }
 
   lemma CuInIReads(cl: ChainLookup, idx: nat)
+    requires cl.WF()
+    requires cl.Chained()
     requires 0 <= idx < |cl.rows|
     requires cl.rows[idx].sb.freshestCU.Some?
     ensures cl.rows[idx].sb.freshestCU.value in cl.last().cumulativeReadCUs
+    decreases |cl.rows|
   {
+    var cu := cl.rows[idx].sb.freshestCU.value;
+    assert cl.Linked(|cl.rows|-1); // trigger
+    if idx != |cl.rows|-1 {
+      ChainedPrior(cl);
+      CuInIReads(cl.DropLast(), idx);
+    }
   }
   
   // This lemma dominates UniqueChainLookup.
@@ -135,9 +145,9 @@ module JournalInterpMod {
     assert cl1.Linked(|cl1.rows| - 1);  // observe trigger -- lets us conclude cl1 has ==1 or >1 rows based on FirstRow() properties.
 
     if 1 < |cl0.rows| {
-      ValidPrior(cache0, cl0);
+      ChainedPrior(cl0);
       assert sb.freshestCU.value in cl0.last().cumulativeReadCUs; // observe trigger
-      ValidPrior(cache1, cl1);
+      ChainedPrior(cl1);
       var priorSB := cl0.rows[|cl0.rows|-2].sb;
       assert cl1.DropLast().ValidForSB(cache1, priorSB);  // trigger
 
@@ -152,14 +162,18 @@ module JournalInterpMod {
   {
     var cl0 := ChainFrom(cache0, sb);
     var cl1 := ChainFrom(cache1, sb);
+    if sb.freshestCU.Some? {
+      CuInIReads(cl0, |cl0.rows|-1);  // triggers DiskViewsEquivalentForSeq
+    }
     FrameOneChainInductive(cache0, cache1, sb, cl0, cl1);
     UniqueChainLookup(cache0, cl0, cl1);
   }
 
   // Add comment about what this supposed to do the TODOS here
-  lemma InternalStepLemma(v: Variables, cache: CacheIfc.Variables, v': Variables, cache': CacheIfc.Variables,  sb:Superblock, base: InterpMod.Interp, cacheOps: CacheIfc.Ops, sk: Skolem)
-    requires DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb))
+  lemma InternalStepLemma(v: Variables, cache: CacheIfc.Variables, v': Variables, cache': CacheIfc.Variables, base: InterpMod.Interp, cacheOps: CacheIfc.Ops, sk: Skolem)
     requires v.WF()
+    requires var marshalledSB := v.marshalledLookup.last().sb;
+      DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, marshalledSB))
     requires base.seqEnd == v.boundaryLSN
     requires Invariant(v, cache)
     requires Invariant(v', cache')
@@ -198,33 +212,85 @@ module JournalInterpMod {
             parse(marshal(jr)).value;
             jr;
           }
-          assert chain'.last().journalRec() == jr;
-          assert chain'.last().sb == sb';
-          assume !(jr.messageSeq.seqEnd <= sb'.boundaryLSN);
-          assert !(
-            || !chain'.last().hasRecord()
-            || chain'.last().journalRec().messageSeq.seqEnd <= chain'.last().sb.boundaryLSN
-          );
-          assert !chain'.last().FirstRow();
+//          assert chain'.last().journalRec() == jr;
+//          assert chain'.last().sb == sb';
+//          assert v.marshalledLSN < v.unmarshalledLSN();
+//          assert jr.messageSeq.seqEnd == v.unmarshalledLSN();
+//          assert sb'.boundaryLSN == v.boundaryLSN;
+//          assert v.boundaryLSN < v.unmarshalledLSN();
+//          assert !(jr.messageSeq.seqEnd <= sb'.boundaryLSN);
+//          assert !(
+//            || !chain'.last().hasRecord()
+//            || chain'.last().journalRec().messageSeq.seqEnd <= chain'.last().sb.boundaryLSN
+//          );
+//          assert !chain'.last().FirstRow();
           assert chain'.Linked(|chain'.rows| - 1); // trigger: chain' has more than 1 row
+
+          assert chain'.last().priorSB() == chain.last().sb;
+          var pchain := ChainFrom(cache, chain.last().sb);
+          var pchain' := ChainFrom(cache', chain.last().sb);
+
           assert chain == ChainFrom(cache, chain'.last().priorSB());
           assert chain == ChainFrom(cache', chain'.last().priorSB()) by {
+//            assume false;
+            forall cu | cu in IReads(cache, chain'.last().priorSB()) ensures EqualAt(cache.dv, cache'.dv, cu) {
+              assert chain'.last().priorSB() == chain.last().sb;
+              assert cu in IReads(cache, chain.last().sb);
+              assert chain.last().sb == sb;
+              assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb));
+              assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, sb));
+              assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, chain.last().sb));
+             // ChainFrom(cache, sb).last().cumulativeReadCUs
+            //assert IReads(cache, chain'.last().priorSB()) <= IReads(cache, sb);
+            }
             assert DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, chain'.last().priorSB()));
+            FrameOneChain(cache, cache', chain'.last().priorSB());
           }
 //          assert chain'.DropLast() == ChainFrom(cache', chain'.last().priorSB());
 //          assert chain'.DropLast() == chain; // except for expectedLSN not being None.
+//          assert chain.Valid(cache');
+          assert chain'.DropLast().Valid(cache') by { ChainedPrior(chain'); }
 
-          calc {
-            UnmarshalledMessageSeq(v, cache);
-            v.marshalledLookup.interp().Concat(TailToMsgSeq(v));
-              { UniqueChainLookup(cache, v.marshalledLookup, chain); }  // Use invariant
-            chain.interp().Concat(TailToMsgSeq(v));
-            chain.interp().Concat(jr.messageSeq);
-            chain'.interp();
-            chain'.interp().Concat(TailToMsgSeq(v'));
-            v'.marshalledLookup.interp().Concat(TailToMsgSeq(v'));
-            UnmarshalledMessageSeq(v', cache');
+          if sb.freshestCU.Some? {
+            assert chain'.Linked(|chain'.rows|-2);
+            assert chain'.Linked(|chain'.rows|-1);
+//            assert chain'.DropLast().last().rowResult.ChainSuccess?;
+//            assert chain'.last().rowResult.ChainSuccess?;
+//            assert chain.last().hasRecord();
+//            assert chain.last().expectedEnd == chain.last().journalRec().messageSeq.seqEnd;
+//            assert chain'.DropLast().last().expectedEnd == chain'.last().journalRec().messageSeq.seqStart;
+//            assert chain'.last().cumulativeResult.ChainSuccess?;
+//            assert chain'.DropLast().last().expectedEnd == chain'.DropLast().last().journalRec().messageSeq.seqEnd;
+//            assert chain'.DropLast().last().journalRec().messageSeq.seqEnd == chain.last().journalRec().messageSeq.seqEnd;
+//            assert chain'.DropLast().last().expectedEnd == chain.last().journalRec().messageSeq.seqEnd;
+          } else {
+//            assert chain.last().expectedEnd == 0;
+//            assert chain'.DropLast().last().expectedEnd == 0;
           }
+          UniqueChainLookup(cache', chain, chain'.DropLast());
+//          assert chain'.DropLast() == chain;
+//          assert chain.rows[|chain.rows|-1] == chain'.rows[|chain.rows|-1];
+
+//          calc {
+//            UnmarshalledMessageSeq(v, cache);
+//            v.marshalledLookup.interp().Concat(TailToMsgSeq(v));
+//              { UniqueChainLookup(cache, v.marshalledLookup, chain); }  // Use invariant
+//            chain.interp().Concat(TailToMsgSeq(v));
+//            chain.interp().Concat(jr.messageSeq);
+//            chain.last().cumulativeResult.interp.Concat(chain'.last().rowResult.interp);
+//            chain.last().cumulativeResult.Concat(chain'.last().rowResult).interp;
+//              {
+//                assert chain'.last().cumulativeResult.ChainSuccess?;
+//                assert chain'.Linked(|chain'.rows|-1);
+//                assert chain'.last().ValidSuccessorTo(Some(chain'.rows[|chain'.rows|-2]));
+//                assert chain'.rows[|chain'.rows|-2] == chain.last();
+//              }
+//            chain'.last().cumulativeResult.interp;
+//            chain'.interp();
+//            chain'.interp().Concat(TailToMsgSeq(v'));
+//            v'.marshalledLookup.interp().Concat(TailToMsgSeq(v'));
+//            UnmarshalledMessageSeq(v', cache');
+//          }
 
 //          assert ChainFrom(cache'.dv, v'.CurrentSuperblock()).chain.Some?;
 //          var sb := v.CurrentSuperblock();

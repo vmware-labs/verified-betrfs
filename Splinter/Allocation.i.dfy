@@ -25,12 +25,12 @@ module AllocationMod {
   // TODO : cleanup this interface -- we can get rid of this
   predicate DiskViewsEquivalent(dv0: DiskView, dv1: DiskView, cus: set<CU>)
   {
-    forall cu :: cu in cus ==> EqualAt(dv0, dv1, cu)
+    forall cu | cu in cus :: EqualAt(dv0, dv1, cu)
   }
 
   predicate DiskViewsEquivalentForSeq(dv0: DiskView, dv1: DiskView, cus: seq<CU>)
   {
-    forall cu :: cu in cus ==> EqualAt(dv0, dv1, cu)
+    forall cu | cu in cus :: EqualAt(dv0, dv1, cu)
   }
 
 

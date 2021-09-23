@@ -441,10 +441,11 @@ module JournalMachineMod {
           cl
   }
 
-  lemma ValidPrior(cache: CacheIfc.Variables, cl: ChainLookup)
-    requires cl.Valid(cache)
+  lemma ChainedPrior(cl: ChainLookup)
+    requires cl.WF()
+    requires cl.Chained()
     requires 1 < |cl.rows|
-    ensures cl.DropLast().Valid(cache)
+    ensures cl.DropLast().Chained()
   {
     var dl := cl.DropLast();
     forall idx | 0 <= idx < |dl.rows| ensures dl.Linked(idx) {
@@ -465,8 +466,8 @@ module JournalMachineMod {
     assert clb.Linked(|clb.rows|-1);  // trigger
 
     if 1 < |cla.rows| {
-      ValidPrior(cache, cla);
-      ValidPrior(cache, clb);
+      ChainedPrior(cla);
+      ChainedPrior(clb);
       UniqueChainLookup(cache, cla.DropLast(), clb.DropLast()); // recurse
     }
   }
@@ -655,6 +656,9 @@ module JournalMachineMod {
   predicate AdvanceMarshalled(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newCU: CU)
   {
     && v.WF()
+
+    // Not allowed to append empty journal records.
+    && 0 < |v.unmarshalledTail|
 
     // newCU is an unused CU.
     // That could be because the impl has freshly reserved a chunk of CUs from the outer
