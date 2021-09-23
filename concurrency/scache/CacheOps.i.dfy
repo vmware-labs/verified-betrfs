@@ -26,6 +26,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened ThreadUtils
   import opened PageSizeConstant
   import CWB = CacheWritebackBatch(aio)
+  import opened IocbStruct
+  import opened CacheAIOParams
+  import opened GlinearMap
 
   datatype PageHandle = PageHandle(
     ptr: Ptr,
@@ -1174,13 +1177,169 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     io_cleanup_all(cache);
   }
 
-  
+  // try to get read lock and immediately release
+  // mark access bit on success
+  // return true if it was in the cache
+  method try_get_read_and_release(
+      shared cache: Cache,
+      cache_idx: uint64,
+      shared localState: LocalState,
+      glinear client: Client)
+  returns (
+    in_cache: bool,
+    glinear client_out: Client
+  )
+  requires cache.Inv()
+  requires localState.WF()
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
+  //requires client == RwLock.Internal(RwLock.Client(localState.t))
+  decreases *
+  {
+    // 1. check if writelocked
+
+    var is_exc_locked := cache.status_atomic(cache_idx).quicktest_is_exc_locked();
+    if is_exc_locked {
+      in_cache := false;
+      client_out := client;
+    } else {
+      // 2. inc ref
+
+      // TODO I'm not sure incrementing the reference count is truly necessary
+
+      glinear var r := inc_refcount_for_shared(
+          cache.read_refcount_atomic(localState.t, cache_idx),
+          localState.t as nat,
+          client);
+
+      // 3. check not writelocked, not free
+      //        otherwise, dec and abort
+
+      var is_accessed: bool;
+      var succ;
+      succ, is_accessed, r := cache.status_atomic(cache_idx).is_exc_locked_or_free(
+          localState.t as nat, r);
+
+      if !succ {
+        glinear var client' := dec_refcount_for_shared_pending(
+            cache.read_refcount_atomic(localState.t, cache_idx),
+            localState.t as nat,
+            r);
+
+        client_out := client';
+      } else {
+        // 4. if !access, then mark accessed
+        if !is_accessed {
+          r := cache.status_atomic(cache_idx).mark_accessed(localState.t as nat, r);
+        }
+
+        glinear var client' := dec_refcount_for_shared_pending(
+            cache.read_refcount_atomic(localState.t, cache_idx),
+            localState.t as nat,
+            r);
+
+        client_out := client';
+      }
+
+      in_cache := true;
+    }
+  }
+
+  predicate prefetch_loop_inv(cache: Cache, pages_in_req: int, addr: int,
+      slot_idx: int,
+      iocb: Iocb,
+      iovec: PointsToArray<Iovec>,
+      iovec_ptr: Ptr,
+      keys: seq<Key>,
+      cache_readings: map<nat, CacheResources.CacheReading>,
+      idxs: map<nat, CellContents<int64>>,
+      ros: map<nat, T.Token>,
+      wps: map<nat, PointsToArray<byte>>,
+      tickets: map<nat, DT.Token>)
+  {
+    && 0 <= slot_idx < NUM_IO_SLOTS as int
+    && |cache.io_slots| == NUM_IO_SLOTS as int
+    && 0 <= addr - pages_in_req < NUM_DISK_PAGES as int
+    && iovec.ptr == cache.io_slots[slot_idx].iovec_ptr == iovec_ptr
+    && pages_in_req == |keys| <= |iovec.s| == PAGES_PER_EXTENT as int
+
+    && (forall i | 0 <= i < |keys| ::
+        && i in wps
+        && i in cache_readings
+        && i in idxs
+        && i in ros
+        && |wps[i].s| == PageSize as int
+        && simpleReadGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+            addr - pages_in_req + i, wps[i], keys[i], cache_readings[i],
+            idxs[i], ros[i])
+
+    && (forall i | 0 <= i < |keys| ::
+        && 0 <= keys[i].cache_idx < |cache.data|
+        && iovec.s[i].iov_base() == cache.data[keys[i].cache_idx])
+        && iovec.s[i].iov_len() as int == PageSize as int
+    )
+
+    && (forall i | 0 <= i < |keys| ::
+        && i in tickets
+        && tickets[i].val == CacheSSM.DiskReadReq(addr - pages_in_req + i)
+       )
+  }
+
+  method prefetch_io(shared cache: Cache, pages_in_req: uint64,
+      addr: uint64,
+      slot_idx: uint64,
+      glinear iocb: Iocb,
+      glinear iovec: PointsToArray<Iovec>,
+      iovec_ptr: Ptr,
+      ghost keys: seq<Key>,
+      glinear cache_readings: map<nat, CacheResources.CacheReading>,
+      glinear idxs: map<nat, CellContents<int64>>,
+      glinear ros: map<nat, T.Token>,
+      glinear wps: map<nat, PointsToArray<byte>>,
+      glinear tickets: map<nat, DT.Token>)
+  requires cache.Inv()
+  requires 0 < pages_in_req <= addr
+  requires prefetch_loop_inv(cache, pages_in_req as int, addr as int,
+            slot_idx as int, iocb, iovec, iovec_ptr,
+            keys, cache_readings, idxs, ros, wps, tickets)
+  {
+    //reveal_prefetch_loop_inv();
+
+    glinear var iocb' := iocb;
+    var iocb_ptr := lseq_peek(cache.io_slots, slot_idx).iocb_ptr;
+    iocb_prepare_readv(
+        iocb_ptr,
+        inout iocb',
+        (addr - pages_in_req) as int64,
+        iovec_ptr,
+        pages_in_req);
+
+    glinear var g := ReadvG(keys, cache_readings, idxs, ros, slot_idx as int);
+
+    forall i | 0 <= i < iocb'.iovec_len
+    ensures i in tickets
+    ensures i in wps
+    ensures aio.readv_valid_i(iovec.s[i], wps[i], tickets[i], iocb'.offset, i)
+    {
+    }
+
+    assert ReadvGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+        iocb_ptr, iocb', iovec, wps, g);
+
+    aio.async_readv(cache.ioctx,
+        iocb_ptr,
+        iocb',
+        iovec,
+        wps,
+        g,
+        tickets);
+  }
+
   method prefetch(
       shared cache: Cache,
       inout linear localState: LocalState,
       base_addr: uint64,
       glinear client: Client)
-  returns (client_out: Client)
+  returns (glinear client_out: Client)
   requires cache.Inv()
   requires old_localState.WF()
   requires base_addr % PAGES_PER_EXTENT == 0
@@ -1191,40 +1350,85 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     client_out := client;
 
     var pages_in_req: uint64 := 0;
-    ghost var slot_idx := 0;
-    glinear var iocb_opt : glSome<Iocb> := glNone;
-    glinear var iovec_opt : glSome<PointsToArray<Iovec>> := glNone;
-    var iovec_ptr : glSome<PointsToArray<Iovec>> := glNone;
+    var slot_idx: uint64 := 0;
+    glinear var iocb_opt : glOption<Iocb> := glNone;
+    glinear var iovec_opt : glOption<PointsToArray<Iovec>> := glNone;
+    var iovec_ptr : Ptr := nullptr();
+
+    ghost var keys: seq<Key> := [];
+    glinear var cache_readings: map<nat, CacheResources.CacheReading> := glmap_empty();
+    glinear var idxs: map<nat, CellContents<int64>> := glmap_empty();
+    glinear var ros: map<nat, T.Token> := glmap_empty();
+    glinear var wps: map<nat, PointsToArray<byte>> := glmap_empty();
+    glinear var tickets: map<nat, DT.Token> := glmap_empty();
 
     var page_off: uint64 := 0;
     while page_off < PAGES_PER_EXTENT
+    invariant 0 <= page_off <= PAGES_PER_EXTENT
+    invariant localState.WF()
     invariant pages_in_req as int <= page_off as int
+    invariant 0 <= slot_idx as int < NUM_IO_SLOTS as int
+    invariant pages_in_req == 0 ==>
+        && keys == []
+        && cache_readings == map[]
+        && idxs == map[]
+        && ros == map[]
+        && wps == map[]
+        && tickets == map[]
     invariant pages_in_req != 0 ==>
         && iocb_opt.glSome?
         && iovec_opt.glSome?
         && iovec_opt.glSome?
-        && prefetch_loop_inv(cache, pages_in_req as int,
-            slot_idx, iocb_opt.value, iovec_opt.value, iovec_ptr)
+        && iovec_opt.value.ptr == cache.io_slots[slot_idx as int].iovec_ptr == iovec_ptr
+        && |iovec_opt.value.s| == PAGES_PER_EXTENT as int
+        && prefetch_loop_inv(cache, pages_in_req as int, base_addr as int + page_off as int,
+            slot_idx as int, iocb_opt.value, iovec_opt.value, iovec_ptr,
+            keys, cache_readings, idxs, ros, wps, tickets)
     decreases *
     {
       var addr := base_addr + page_off;
 
       var cache_idx := atomic_index_lookup_read(
-          cache.cache_idx_of_page_atomic(disk_idx), disk_idx as nat);
+          cache.cache_idx_of_page_atomic(addr), addr as nat);
 
-      var already_in_cache := try_get_and_release(
-          cache, cache_idx, addr as int64, localState, client_out);
+      var already_in_cache: bool;
+      if cache_idx == NOT_MAPPED {
+        already_in_cache := false;
+      } else {
+        already_in_cache, client_out := try_get_read_and_release(
+            cache, cache_idx, localState, client_out);
+      }
 
       if already_in_cache {
         // contiguous chunk of stuff to read in ends here
         // do an I/O request if we have a nonempty range
         
-        prefetch_io(pages_in_req, slot_idx,
-            unwrap_value(iocb_opt), unwrap_value(iovec_opt),
-            iovec_ptr);
+        if pages_in_req != 0 {
+          prefetch_io(cache, pages_in_req, addr, slot_idx,
+              unwrap_value(iocb_opt), unwrap_value(iovec_opt),
+              iovec_ptr,
+              keys, cache_readings, idxs, ros, wps, tickets);
+        } else {
+          dispose_anything(iocb_opt);
+          dispose_anything(iovec_opt);
+          dispose_anything(cache_readings);
+          dispose_anything(idxs);
+          dispose_anything(ros);
+          dispose_anything(wps);
+          dispose_anything(tickets);
+        }
 
         pages_in_req := 0;
         page_off := page_off + 1;
+
+        keys := [];
+        cache_readings := glmap_empty();
+        idxs := glmap_empty();
+        ros := glmap_empty();
+        wps := glmap_empty();
+        tickets := glmap_empty();
+        iocb_opt := glNone;
+        iovec_opt := glNone;
       } else {
         // append to the current range
 
@@ -1232,16 +1436,16 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
         glinear var r, handle;
         var cache_idx;
-        cache_idx r, handle := get_free_page(cache, inout localState);
+        cache_idx, r, handle := get_free_page(cache, inout localState);
 
-        glinear var CacheEmptyHandle(_, cache_empty, idx, data) := handle;
+        glinear var CacheEmptyHandle(_, cache_empty, idx, wp) := handle;
 
-        glinear var cache_empty_opt, cache_reading_opt;
+        glinear var cache_empty_opt, cache_reading_opt, read_ticket_opt;
         var success;
         success, cache_empty_opt, cache_reading_opt, read_ticket_opt := 
             atomic_index_lookup_add_mapping(
-              cache.cache_idx_of_page_atomic(disk_idx),
-              disk_idx,
+              cache.cache_idx_of_page_atomic(addr),
+              addr,
               cache_idx,
               cache_empty);
 
@@ -1254,21 +1458,28 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
                 cache.key(cache_idx as int),
                 unwrap_value(cache_empty_opt),
                 idx,
-                data));
+                wp));
+
+          dispose_anything(read_ticket_opt);
+          dispose_anything(cache_reading_opt);
         } else {
+          r := cache.status_atomic(cache_idx).clear_exc_bit_during_load_phase(r);
+
           write_cell(
             cache.disk_idx_of_entry_ptr(cache_idx),
             inout idx,
-            disk_idx as int64);
+            addr as int64);
 
           if pages_in_req == 0 {
             glinear var access;
             var sidx;
             sidx, access := get_free_io_slot(cache, inout localState);
-            iovec_ptr := lseq_peek(cache.io_slots, sidx).iocb_ptr;
+            iovec_ptr := lseq_peek(cache.io_slots, sidx).iovec_ptr;
 
             slot_idx := sidx;
             glinear var IOSlotAccess(iocb, iovec) := access;
+            dispose_anything(iocb_opt);
+            dispose_anything(iovec_opt);
             iocb_opt := glSome(iocb);
             iovec_opt := glSome(iovec);
           }
@@ -1276,18 +1487,67 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           glinear var iovec := unwrap_value(iovec_opt);
           var iov := new_iovec(cache.data_ptr(cache_idx), 4096);
           iovec_ptr.index_write(inout iovec, pages_in_req, iov);
-          iovec_opt = glSome(iovec);
+          iovec_opt := glSome(iovec);
+
+          keys := keys + [cache.key(cache_idx as int)];
+          cache_readings := glmap_insert(cache_readings,
+              pages_in_req as int,
+              unwrap_value(cache_reading_opt));
+          idxs := glmap_insert(idxs,
+              pages_in_req as int,
+              idx);
+          ros := glmap_insert(ros,
+              pages_in_req as int,
+              r);
+          wps := glmap_insert(wps,
+              pages_in_req as int,
+              wp);
+          tickets := glmap_insert(tickets,
+              pages_in_req as int,
+              CacheResources.DiskReadTicket_unfold(unwrap_value(read_ticket_opt)));
+
+          ghost var x := pages_in_req as int + 1;
+          ghost var y := base_addr as int + page_off as int + 1;
+          assert prefetch_loop_inv(cache, x, y,
+            slot_idx as int, iocb_opt.value, iovec_opt.value, iovec_ptr,
+            keys, cache_readings, idxs, ros, wps, tickets)
+          by {
+            /*forall i | 0 <= i < |keys|
+            ensures i in wps
+            ensures i in cache_readings
+            ensures i in idxs
+            ensures i in ros
+            ensures |wps[i].s| == PageSize as int
+            ensures simpleReadGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+                  y - x + i, wps[i], keys[i], cache_readings[i],
+                  idxs[i], ros[i])
+            {
+            }*/
+          }
+
+          dispose_anything(cache_empty_opt);
 
           pages_in_req := pages_in_req + 1;
           page_off := page_off + 1;
         }
       }
     }
+
+    if pages_in_req != 0 {
+      var addr := base_addr + page_off;
+      prefetch_io(cache, pages_in_req, addr, slot_idx,
+          unwrap_value(iocb_opt), unwrap_value(iovec_opt),
+          iovec_ptr,
+          keys, cache_readings, idxs, ros, wps, tickets);
+    } else {
+      dispose_anything(iocb_opt);
+      dispose_anything(iovec_opt);
+      dispose_anything(cache_readings);
+      dispose_anything(idxs);
+      dispose_anything(ros);
+      dispose_anything(wps);
+      dispose_anything(tickets);
+    }
   }
 
-  if pages_in_req != 0 {
-    prefetch_io(pages_in_req, slot_idx,
-        unwrap_value(iocb_opt), unwrap_value(iovec_opt),
-        iovec_ptr);
-  }
 }

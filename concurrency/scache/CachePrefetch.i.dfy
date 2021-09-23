@@ -169,11 +169,13 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear wps: map<nat, PointsToArray<byte>>,
       glinear tickets: map<nat, DT.Token>)
   requires cache.Inv()
-  requires 0 < pages_in_req < addr
+  requires 0 < pages_in_req <= addr
   requires prefetch_loop_inv(cache, pages_in_req as int, addr as int,
             slot_idx as int, iocb, iovec, iovec_ptr,
             keys, cache_readings, idxs, ros, wps, tickets)
   {
+    //reveal_prefetch_loop_inv();
+
     glinear var iocb' := iocb;
     var iocb_ptr := lseq_peek(cache.io_slots, slot_idx).iocb_ptr;
     iocb_prepare_readv(
@@ -234,12 +236,23 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     var page_off: uint64 := 0;
     while page_off < PAGES_PER_EXTENT
+    invariant 0 <= page_off <= PAGES_PER_EXTENT
     invariant localState.WF()
     invariant pages_in_req as int <= page_off as int
+    invariant 0 <= slot_idx as int < NUM_IO_SLOTS as int
+    invariant pages_in_req == 0 ==>
+        && keys == []
+        && cache_readings == map[]
+        && idxs == map[]
+        && ros == map[]
+        && wps == map[]
+        && tickets == map[]
     invariant pages_in_req != 0 ==>
         && iocb_opt.glSome?
         && iovec_opt.glSome?
         && iovec_opt.glSome?
+        && iovec_opt.value.ptr == cache.io_slots[slot_idx as int].iovec_ptr == iovec_ptr
+        && |iovec_opt.value.s| == PAGES_PER_EXTENT as int
         && prefetch_loop_inv(cache, pages_in_req as int, base_addr as int + page_off as int,
             slot_idx as int, iocb_opt.value, iovec_opt.value, iovec_ptr,
             keys, cache_readings, idxs, ros, wps, tickets)
@@ -250,9 +263,13 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       var cache_idx := atomic_index_lookup_read(
           cache.cache_idx_of_page_atomic(addr), addr as nat);
 
-      var already_in_cache;
-      already_in_cache, client_out := try_get_read_and_release(
-          cache, cache_idx, localState, client_out);
+      var already_in_cache: bool;
+      if cache_idx == NOT_MAPPED {
+        already_in_cache := false;
+      } else {
+        already_in_cache, client_out := try_get_read_and_release(
+            cache, cache_idx, localState, client_out);
+      }
 
       if already_in_cache {
         // contiguous chunk of stuff to read in ends here
@@ -318,6 +335,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           dispose_anything(read_ticket_opt);
           dispose_anything(cache_reading_opt);
         } else {
+          r := cache.status_atomic(cache_idx).clear_exc_bit_during_load_phase(r);
+
           write_cell(
             cache.disk_idx_of_entry_ptr(cache_idx),
             inout idx,
@@ -327,7 +346,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             glinear var access;
             var sidx;
             sidx, access := get_free_io_slot(cache, inout localState);
-            iovec_ptr := lseq_peek(cache.io_slots, sidx).iocb_ptr;
+            iovec_ptr := lseq_peek(cache.io_slots, sidx).iovec_ptr;
 
             slot_idx := sidx;
             glinear var IOSlotAccess(iocb, iovec) := access;
@@ -358,6 +377,25 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           tickets := glmap_insert(tickets,
               pages_in_req as int,
               CacheResources.DiskReadTicket_unfold(unwrap_value(read_ticket_opt)));
+
+          ghost var x := pages_in_req as int + 1;
+          ghost var y := base_addr as int + page_off as int + 1;
+          assert prefetch_loop_inv(cache, x, y,
+            slot_idx as int, iocb_opt.value, iovec_opt.value, iovec_ptr,
+            keys, cache_readings, idxs, ros, wps, tickets)
+          by {
+            /*forall i | 0 <= i < |keys|
+            ensures i in wps
+            ensures i in cache_readings
+            ensures i in idxs
+            ensures i in ros
+            ensures |wps[i].s| == PageSize as int
+            ensures simpleReadGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+                  y - x + i, wps[i], keys[i], cache_readings[i],
+                  idxs[i], ros[i])
+            {
+            }*/
+          }
 
           dispose_anything(cache_empty_opt);
 
