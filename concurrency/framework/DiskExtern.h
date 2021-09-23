@@ -70,6 +70,10 @@ namespace InstantiatedDiskInterface {
     async__submit(ioctx, i);
   }
 
+  inline void async__readv(IOCtx& ioctx, Ptrs::Ptr i) {
+    async__submit(ioctx, i);
+  }
+
   inline void sync__read(Ptrs::Ptr buf, uint64 nbytes, int64_t offset)
   {
     int ret = pread(fd, (void*)buf.ptr, nbytes, offset * 4096);
@@ -144,6 +148,11 @@ namespace IocbStruct {
         (const struct iovec *)iovec.ptr, len, offset * 4096);
   }
 
+  inline void iocb__prepare__readv(Ptrs::Ptr i, int64_t offset, Ptrs::Ptr iovec, uint64_t len) {
+    io_prep_preadv((iocb *)i.ptr, InstantiatedDiskInterface::fd,
+        (const struct iovec *)iovec.ptr, len, offset * 4096);
+  }
+
   inline bool iocb__is__write(Ptrs::Ptr p) {
     iocb* i = ((iocb*)p.ptr);
     return i->aio_lio_opcode == IO_CMD_PWRITE;
@@ -157,6 +166,11 @@ namespace IocbStruct {
   inline bool iocb__is__writev(Ptrs::Ptr p) {
     iocb* i = ((iocb*)p.ptr);
     return i->aio_lio_opcode == IO_CMD_PWRITEV;
+  }
+
+  inline bool iocb__is__readv(Ptrs::Ptr p) {
+    iocb* i = ((iocb*)p.ptr);
+    return i->aio_lio_opcode == IO_CMD_PREADV;
   }
 
   inline Ptrs::Ptr iocb__buf(Ptrs::Ptr p) {

@@ -71,8 +71,16 @@ uint8_t read_int(uint64_t disk_addr) {
   return res;
 }
 
+void prefetch(uint64_t disk_addr) {
+  CacheOps_30_ON_TheAIO__Compile::__default::prefetch(global_cache.c, local_state.s, disk_addr);
+}
+
 void thread1() {
   local_state = init_thread_local_state(0);
+
+  for (int i = 0; i < 32; i++) {
+    prefetch(i * 32);
+  }
 
   for (int i = 0; i < 1050; i++) {
     write_int(i, (uint8_t)(i % 256));
