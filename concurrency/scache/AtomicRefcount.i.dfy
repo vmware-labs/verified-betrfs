@@ -117,13 +117,18 @@ module AtomicRefcountImpl {
   requires a.inv(t)
   requires m.loc == a.rwlock_loc
   requires m.val == RwLock.SharedHandle(RwLock.SharedPending(t))
+        || m.val == RwLock.SharedHandle(RwLock.SharedPending2(t))
   //ensures client == RwLock.Internal(RwLock.Client(t))
   {
     client := hack_new_client();
     atomic_block var orig_value := execute_atomic_fetch_sub_uint8(a.a, 1) {
       ghost_acquire old_g;
       glinear var new_g;
-      new_g := T.perform_SharedDecCountPending(old_g, m, t);
+      if m.val == RwLock.SharedHandle(RwLock.SharedPending(t)) {
+        new_g := T.perform_SharedDecCountPending(old_g, m, t);
+      } else {
+        new_g := T.perform_SharedDecCountPending2(old_g, m, t);
+      }
       assert atomic_inv(a.a, new_value, new_g);
       ghost_release new_g;
     }

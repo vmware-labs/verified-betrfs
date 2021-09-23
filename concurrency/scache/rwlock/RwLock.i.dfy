@@ -961,6 +961,61 @@ module RwLock refines Rw {
     }
   } 
 
+  predicate SharedDecCountPending2(m: M, m': M, t: int)
+  {
+    && m.M?
+    && 0 <= t < RC_WIDTH as int
+    && t in m.refCounts
+    && m == dot(
+      RefCount(t, m.refCounts[t]),
+      SharedHandle(SharedPending2(t))
+    )
+    && (m.refCounts[t] >= 1 ==>
+      m' == RefCount(t, m.refCounts[t] - 1)
+    )
+  }
+
+  lemma SharedDecCountPending2_Preserves(m: M, m': M, t: int)
+  requires SharedDecCountPending2(m, m', t)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
+    {
+      var state := dot(m, p);
+
+      SumFilterSimp<SharedState>();
+
+      assert state.refCounts[t] >= 1 by {
+        if state.refCounts[t] == 0 {
+          assert CountAllRefs(state, t) == 0;
+          assert CountSharedRefs(state.sharedState, t) == 0;
+          UseZeroSum(IsSharedRefFor(t), state.sharedState);
+          assert false;
+        }
+      }
+
+      var state' := dot(m', p);
+
+      forall t0 | 0 <= t0 < RC_WIDTH as int
+      ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
+      {
+        if t == t0 {
+          assert CountSharedRefs(state.sharedState, t)
+              == CountSharedRefs(state'.sharedState, t) + 1;
+          assert CountAllRefs(state, t)
+              == CountAllRefs(state', t) + 1;
+          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+        } else {
+          assert CountSharedRefs(state.sharedState, t0) == CountSharedRefs(state'.sharedState, t0);
+          assert CountAllRefs(state, t0) == CountAllRefs(state', t0);
+          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+        }
+      }
+    }
+  } 
+
+
   predicate SharedDecCountObtained(m: M, m': M, t: int, b: StoredType)
   {
     && m.M?
@@ -1669,6 +1724,54 @@ module RwLockToken {
     rc', handle' := pre_SharedDecCountPending(rc', handle', t);
     var a := RefCount(t, rc.val.refCounts[t] - 1);
     SharedDecCountPending_Preserves(dot(rc'.val, handle.val), a, t);
+    rc' := T.internal_transition_2_1(rc', handle', a);
+  }
+
+  glinear method pre_SharedDecCountPending2(glinear rc: Token, glinear handle: Token, ghost t: int)
+  returns (glinear rc': Token, glinear handle': Token)
+  requires rc.val.M?
+  requires handle.val.M?
+  requires rc.loc == handle.loc
+  requires t in rc.val.refCounts
+  requires handle.val.sharedState.m[SharedPending2(t)] >= 1
+  ensures rc.val.refCounts[t] >= 1
+  ensures handle' == handle
+  ensures rc' == rc
+  {
+    rc' := rc;
+    handle' := handle;
+    ghost var rest := T.obtain_invariant_2(inout rc', inout handle');
+    var m := dot(rc'.val, handle'.val);
+    ghost var state := dot(m, rest);
+    if CountSharedRefs(state.sharedState, t) == 0 {
+      assert state.sharedState.m[SharedPending2(t)] >= 1;
+      FullMaps.UseZeroSum(IsSharedRefFor(t), state.sharedState);
+      assert false;
+    }
+    assert state.refCounts[t] >= 1;
+    assert m.refCounts[t] == state.refCounts[t];
+  }
+
+  glinear method perform_SharedDecCountPending2(glinear rc: Token, glinear handle: Token, ghost t: int)
+  returns (glinear rc': Token)
+  requires var m := rc.val;
+    && m.M?
+    && 0 <= t < RC_WIDTH as int
+    && t in m.refCounts
+    && m == RefCount(t, m.refCounts[t])
+  requires var m := handle.val;
+    && m.M?
+    && m == SharedHandle(SharedPending2(t))
+  requires rc.loc == handle.loc
+  ensures rc'.loc == rc.loc
+  ensures rc.val.refCounts[t] >= 1
+  ensures rc'.val == RefCount(t, rc.val.refCounts[t] - 1)
+  {
+    rc' := rc;
+    glinear var handle' := handle;
+    rc', handle' := pre_SharedDecCountPending2(rc', handle', t);
+    var a := RefCount(t, rc.val.refCounts[t] - 1);
+    SharedDecCountPending2_Preserves(dot(rc'.val, handle.val), a, t);
     rc' := T.internal_transition_2_1(rc', handle', a);
   }
 

@@ -279,7 +279,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
       glinear wps: map<nat, PointsToArray<byte>>,
       glinear g: aioparams.ReadvG,
       glinear tickets: map<nat, T.Token>)
-  requires iocb.IocbWritev?
+  requires iocb.IocbReadv?
   requires iocb.ptr == iocb_ptr
   requires iocb.iovec_len > 0
   requires iovec.ptr == iocb.iovec

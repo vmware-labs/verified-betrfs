@@ -116,8 +116,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  predicate prefetch_loop_inv(cache: Cache, pages_in_req: int,
-      slot_Idx: int,
+  predicate prefetch_loop_inv(cache: Cache, pages_in_req: int, addr: int,
+      slot_idx: int,
       iocb: Iocb,
       iovec: PointsToArray<Iovec>,
       iovec_ptr: Ptr,
@@ -128,7 +128,32 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       wps: map<nat, PointsToArray<byte>>,
       tickets: map<nat, DT.Token>)
   {
-    true
+    && 0 <= slot_idx < NUM_IO_SLOTS as int
+    && |cache.io_slots| == NUM_IO_SLOTS as int
+    && 0 <= addr - pages_in_req < NUM_DISK_PAGES as int
+    && iovec.ptr == cache.io_slots[slot_idx].iovec_ptr == iovec_ptr
+    && pages_in_req == |keys| <= |iovec.s| == PAGES_PER_EXTENT as int
+
+    && (forall i | 0 <= i < |keys| ::
+        && i in wps
+        && i in cache_readings
+        && i in idxs
+        && i in ros
+        && |wps[i].s| == PageSize as int
+        && simpleReadGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+            addr - pages_in_req + i, wps[i], keys[i], cache_readings[i],
+            idxs[i], ros[i])
+
+    && (forall i | 0 <= i < |keys| ::
+        && 0 <= keys[i].cache_idx < |cache.data|
+        && iovec.s[i].iov_base() == cache.data[keys[i].cache_idx])
+        && iovec.s[i].iov_len() as int == PageSize as int
+    )
+
+    && (forall i | 0 <= i < |keys| ::
+        && i in tickets
+        && tickets[i].val == CacheSSM.DiskReadReq(addr - pages_in_req + i)
+       )
   }
 
   method prefetch_io(shared cache: Cache, pages_in_req: uint64,
@@ -144,14 +169,14 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear wps: map<nat, PointsToArray<byte>>,
       glinear tickets: map<nat, DT.Token>)
   requires cache.Inv()
-  requires pages_in_req < addr
-  requires prefetch_loop_inv(cache, pages_in_req as int,
+  requires 0 < pages_in_req < addr
+  requires prefetch_loop_inv(cache, pages_in_req as int, addr as int,
             slot_idx as int, iocb, iovec, iovec_ptr,
             keys, cache_readings, idxs, ros, wps, tickets)
   {
     glinear var iocb' := iocb;
     var iocb_ptr := lseq_peek(cache.io_slots, slot_idx).iocb_ptr;
-    iocb_prepare_writev(
+    iocb_prepare_readv(
         iocb_ptr,
         inout iocb',
         (addr - pages_in_req) as int64,
@@ -159,6 +184,16 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         pages_in_req);
 
     glinear var g := ReadvG(keys, cache_readings, idxs, ros, slot_idx as int);
+
+    forall i | 0 <= i < iocb'.iovec_len
+    ensures i in tickets
+    ensures i in wps
+    ensures aio.readv_valid_i(iovec.s[i], wps[i], tickets[i], iocb'.offset, i)
+    {
+    }
+
+    assert ReadvGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+        iocb_ptr, iocb', iovec, wps, g);
 
     aio.async_readv(cache.ioctx,
         iocb_ptr,
@@ -199,12 +234,13 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     var page_off: uint64 := 0;
     while page_off < PAGES_PER_EXTENT
+    invariant localState.WF()
     invariant pages_in_req as int <= page_off as int
     invariant pages_in_req != 0 ==>
         && iocb_opt.glSome?
         && iovec_opt.glSome?
         && iovec_opt.glSome?
-        && prefetch_loop_inv(cache, pages_in_req as int,
+        && prefetch_loop_inv(cache, pages_in_req as int, base_addr as int + page_off as int,
             slot_idx as int, iocb_opt.value, iovec_opt.value, iovec_ptr,
             keys, cache_readings, idxs, ros, wps, tickets)
     decreases *
@@ -222,10 +258,20 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         // contiguous chunk of stuff to read in ends here
         // do an I/O request if we have a nonempty range
         
-        prefetch_io(cache, pages_in_req, addr, slot_idx,
-            unwrap_value(iocb_opt), unwrap_value(iovec_opt),
-            iovec_ptr,
-            keys, cache_readings, idxs, ros, wps, tickets);
+        if pages_in_req != 0 {
+          prefetch_io(cache, pages_in_req, addr, slot_idx,
+              unwrap_value(iocb_opt), unwrap_value(iovec_opt),
+              iovec_ptr,
+              keys, cache_readings, idxs, ros, wps, tickets);
+        } else {
+          dispose_anything(iocb_opt);
+          dispose_anything(iovec_opt);
+          dispose_anything(cache_readings);
+          dispose_anything(idxs);
+          dispose_anything(ros);
+          dispose_anything(wps);
+          dispose_anything(tickets);
+        }
 
         pages_in_req := 0;
         page_off := page_off + 1;
