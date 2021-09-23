@@ -997,7 +997,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     write_handle' := WriteablePageHandle(cache_idx, handle, status', eo');
   }
 
-  method prefetch(
+  /*
+  method prefetch_one(
       shared cache: Cache,
       inout linear localState: LocalState,
       disk_idx: uint64)
@@ -1063,6 +1064,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       }
     }
   }
+  */
 
   // note: page_sync only makes sense if we're in read mode, NOT in write or even claim mode
   // (in which case it would fail silently)
@@ -1170,5 +1172,188 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
 
     io_cleanup_all(cache);
+  }
+
+  // try to get read lock and immediately release
+  // mark access bit on success
+  // return true if it was in the cache
+  method try_get_read_and_release(
+      shared cache: Cache,
+      cache_idx: uint64,
+      shared localState: LocalState,
+      glinear client: Client)
+  returns (
+    in_cache: bool,
+    glinear client_out: Client
+  )
+  requires cache.Inv()
+  requires localState.WF()
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
+  //requires client == RwLock.Internal(RwLock.Client(localState.t))
+  decreases *
+  {
+    // 1. check if writelocked
+
+    var is_exc_locked := cache.status_atomic(cache_idx).quicktest_is_exc_locked();
+    if is_exc_locked {
+      success := false;
+      client_out := client;
+    } else {
+      // 2. inc ref
+
+      // TODO I'm not sure incrementing the reference count is truly necessary
+
+      glinear var r := inc_refcount_for_shared(
+          cache.read_refcount_atomic(localState.t, cache_idx),
+          localState.t as nat,
+          client);
+
+      // 3. check not writelocked, not free
+      //        otherwise, dec and abort
+
+      var is_accessed: bool;
+      var succ;
+      succ, is_accessed, r := cache.status_atomic(cache_idx).is_exc_locked_or_free(
+          localState.t as nat, r);
+
+      if !succ {
+        glinear var client' := dec_refcount_for_shared_pending(
+            cache.read_refcount_atomic(localState.t, cache_idx),
+            localState.t as nat,
+            r);
+
+        client_out := client';
+      } else {
+        // 4. if !access, then mark accessed
+        if !is_accessed {
+          r := cache.status_atomic(cache_idx).mark_accessed(localState.t as nat, r);
+        }
+
+        glinear var client' := dec_refcount_for_shared_pending(
+            cache.read_refcount_atomic(localState.t, cache_idx),
+            localState.t as nat,
+            r);
+
+        client_out := client';
+      }
+
+      success := true;
+    }
+  }
+
+  method prefetch(
+      shared cache: Cache,
+      inout linear localState: LocalState,
+      base_addr: uint64,
+      glinear client: Client)
+  returns (client_out: Client)
+  requires cache.Inv()
+  requires old_localState.WF()
+  requires base_addr % PAGES_PER_EXTENT == 0
+  requires 0 <= base_addr as int < NUM_DISK_PAGES as int
+  ensures localState.WF()
+  decreases *
+  {
+    client_out := client;
+
+    var pages_in_req: uint64 := 0;
+    ghost var slot_idx := 0;
+    glinear var iocb_opt : glSome<Iocb> := glNone;
+    glinear var iovec_opt : glSome<PointsToArray<Iovec>> := glNone;
+    var iovec_ptr : glSome<PointsToArray<Iovec>> := glNone;
+
+    var page_off: uint64 := 0;
+    while page_off < PAGES_PER_EXTENT
+    invariant pages_in_req as int <= page_off as int
+    invariant pages_in_req != 0 ==>
+        && iocb_opt.glSome?
+        && iovec_opt.glSome?
+        && iovec_opt.glSome?
+        && prefetch_loop_inv(cache, pages_in_req as int,
+            slot_idx, iocb_opt.value, iovec_opt.value, iovec_ptr)
+    decreases *
+    {
+      var addr := base_addr + page_off;
+
+      var cache_idx := atomic_index_lookup_read(
+          cache.cache_idx_of_page_atomic(disk_idx), disk_idx as nat);
+
+      var already_in_cache := try_get_and_release(
+          cache, cache_idx, addr as int64, localState, client_out);
+
+      if already_in_cache {
+        // contiguous chunk of stuff to read in ends here
+        // do an I/O request if we have a nonempty range
+        
+        prefetch_io(pages_in_req, slot_idx,
+            unwrap_value(iocb_opt), unwrap_value(iovec_opt),
+            iovec_ptr);
+
+        pages_in_req := 0;
+        page_off := page_off + 1;
+      } else {
+        // append to the current range
+
+        // first, grab a free page:
+
+        glinear var r, handle;
+        var cache_idx;
+        cache_idx r, handle := get_free_page(cache, inout localState);
+
+        glinear var CacheEmptyHandle(_, cache_empty, idx, data) := handle;
+
+        glinear var cache_empty_opt, cache_reading_opt;
+        var success;
+        success, cache_empty_opt, cache_reading_opt, read_ticket_opt := 
+            atomic_index_lookup_add_mapping(
+              cache.cache_idx_of_page_atomic(disk_idx),
+              disk_idx,
+              cache_idx,
+              cache_empty);
+
+        if !success {
+          // oops, page is already in cache
+          // release the free page and just try this iteration over again
+          cache.status_atomic(cache_idx).abandon_reading_pending(
+            r,
+            CacheEmptyHandle(
+                cache.key(cache_idx as int),
+                unwrap_value(cache_empty_opt),
+                idx,
+                data));
+        } else {
+          write_cell(
+            cache.disk_idx_of_entry_ptr(cache_idx),
+            inout idx,
+            disk_idx as int64);
+
+          if pages_in_req == 0 {
+            glinear var access;
+            var sidx;
+            sidx, access := get_free_io_slot(cache, inout localState);
+            iovec_ptr := lseq_peek(cache.io_slots, sidx).iocb_ptr;
+
+            slot_idx := sidx;
+            glinear var IOSlotAccess(iocb, iovec) := access;
+            iocb_opt := glSome(iocb);
+            iovec_opt := glSome(iovec);
+          }
+
+          glinear var iovec := unwrap_value(iovec_opt);
+          var iov := new_iovec(cache.data_ptr(cache_idx), 4096);
+          iovec_ptr.index_write(inout iovec, pages_in_req, iov);
+          iovec_opt = glSome(iovec);
+
+          pages_in_req := pages_in_req + 1;
+          page_off := page_off + 1;
+        }
+      }
+    }
+  }
+
+  if pages_in_req != 0 {
+    prefetch_io(pages_in_req, slot_idx,
+        unwrap_value(iocb_opt), unwrap_value(iovec_opt),
+        iovec_ptr);
   }
 }
