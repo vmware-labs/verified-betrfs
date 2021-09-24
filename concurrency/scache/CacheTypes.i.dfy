@@ -155,7 +155,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     requires 0 <= i as int < CACHE_SIZE as int
     ensures p == this.data[i]
     {
-      ptr_add(this.data_base_ptr, PageSize * i)
+      ptr_add(this.data_base_ptr, PageSize64() * i)
     }
 
     shared function method status_atomic(i: uint64) : (shared at: AtomicStatus)
@@ -180,7 +180,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     requires 0 <= i as int < CACHE_SIZE as int
     ensures at == this.read_refcounts[j][i]
     {
-      lseq_peek(this.read_refcounts_array, j * CACHE_SIZE + i)
+      lseq_peek(this.read_refcounts_array, j * CACHE_SIZE_64() + i)
     }
 
     shared function method cache_idx_of_page_atomic(i: uint64) : (shared at: AtomicIndexLookup)

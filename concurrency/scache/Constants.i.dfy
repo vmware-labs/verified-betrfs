@@ -3,22 +3,31 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 module Constants {
   import opened NativeTypes
 
-  const RC_WIDTH: uint64 := 24;
-  //const CACHE_SIZE: uint64 := 1048576;
-  //const NUM_DISK_PAGES: uint64 := 536870912;
+  ghost const RC_WIDTH := 24;
+  //const CACHE_SIZE := 1048576;
+  //const NUM_DISK_PAGES := 536870912;
 
   // Using smaller constants to make small experiments faster
-  const CACHE_SIZE: uint64 := 1024;
-  const NUM_DISK_PAGES: uint64 := 1000000;
+  ghost const CACHE_SIZE := 1024;
+  ghost const NUM_DISK_PAGES := 1000000;
 
-  const CHUNK_SIZE: uint64 := 64;
-  const NUM_CHUNKS: uint64 := CACHE_SIZE / 64;
-  const CLEAN_AHEAD: uint64 := NUM_CHUNKS / 3;
+  ghost const CHUNK_SIZE := 64;
+  ghost const NUM_CHUNKS := CACHE_SIZE / 64;
+  ghost const CLEAN_AHEAD := NUM_CHUNKS / 3;
 
-  const NUM_IO_SLOTS: uint64 := 256;
-  const AIO_HAND_BATCH_SIZE: uint64 := 32;
+  ghost const NUM_IO_SLOTS := 256;
+  ghost const AIO_HAND_BATCH_SIZE := 32;
 
-  const PAGES_PER_EXTENT: uint64 := 32;
+  ghost const PAGES_PER_EXTENT := 32;
 
-  const DEFAULT_MAX_IO_EVENTS: uint64 := 32;
+  function method CACHE_SIZE_64(): uint64 { 1024 }
+  function method NUM_DISK_PAGES_64(): uint64 { 1000000 }
+  function method AIO_HAND_BATCH_SIZE_64(): uint64 { 32 }
+  function method NUM_IO_SLOTS_64(): uint64 { 256 }
+  function method PAGES_PER_EXTENT_64(): uint64 { 32 }
+  function method CHUNK_SIZE_64(): uint64 { 64 }
+  function method DEFAULT_MAX_IO_EVENTS_64(): uint64 { 32 }
+  function method RC_WIDTH_64(): uint64 { 24 }
+  function method NUM_CHUNKS_64(): uint64 { CACHE_SIZE_64() / 64 }
+  function method CLEAN_AHEAD_64(): uint64 { NUM_CHUNKS_64() / 3 }
 }

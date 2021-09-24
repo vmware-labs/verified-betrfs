@@ -38,18 +38,18 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     glinear var access_opt : glOption<IOSlotAccess> := glNone;
 
-    var i := local.io_slot_hand;
+    var i: uint64 := local.io_slot_hand;
     var done := false;
     while !done
-    invariant 0 <= i <= NUM_IO_SLOTS
+    invariant 0 <= i as int <= NUM_IO_SLOTS
     invariant done ==> access_opt.glSome?
-        && 0 <= idx < NUM_IO_SLOTS
+        && 0 <= idx as int < NUM_IO_SLOTS
         && is_slot_access(cache.io_slots[idx as nat], access_opt.value)
     decreases *
     {
-      if i % AIO_HAND_BATCH_SIZE == 0 {
+      if i % AIO_HAND_BATCH_SIZE_64() == 0 {
         atomic_block var j := execute_atomic_fetch_add_uint32(cache.req_hand_base, 32) { }
-        i := (j as uint64) % NUM_IO_SLOTS;
+        i := (j as uint64) % NUM_IO_SLOTS_64();
 
         var cleanup_done := false;
         while !cleanup_done
@@ -436,7 +436,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   decreases *
   {
     var i: uint64 := 0;
-    while i < NUM_IO_SLOTS
+    while i < NUM_IO_SLOTS_64()
     {
       assert lseq_peek(cache.io_slots, i).WF();
       var isl := BasicLockImpl.is_locked(lseq_peek(cache.io_slots, i).lock);

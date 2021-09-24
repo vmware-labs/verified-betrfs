@@ -122,7 +122,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   predicate method pages_share_extent(a: uint64, b: uint64)
   {
-    a / PAGES_PER_EXTENT == b / PAGES_PER_EXTENT
+    a / PAGES_PER_EXTENT_64() == b / PAGES_PER_EXTENT_64()
   }
 
   method walk_forward(shared cache: Cache, inout linear local: LocalState,
@@ -135,8 +135,8 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   decreases *
   requires cache.Inv()
   requires old_local.WF()
-  requires 0 <= disk_addr < NUM_DISK_PAGES
-  ensures 0 <= disk_addr < end_addr <= NUM_DISK_PAGES
+  requires 0 <= disk_addr as int < NUM_DISK_PAGES
+  ensures 0 <= disk_addr as int < end_addr as int <= NUM_DISK_PAGES
   ensures fwd_lists(cache, disk_addr as nat + 1, end_addr as nat, keys, tickets, wbos)
   ensures local.WF()
   ensures pages_share_extent(disk_addr, end_addr - 1)
@@ -149,8 +149,8 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     keys, tickets, wbos := make_empty(cache, disk_addr as nat + 1);
 
-    while end_addr < NUM_DISK_PAGES && !done
-    invariant disk_addr < end_addr <= NUM_DISK_PAGES
+    while end_addr < NUM_DISK_PAGES_64() && !done
+    invariant disk_addr as int < end_addr as int <= NUM_DISK_PAGES
     invariant fwd_lists(cache, disk_addr as nat + 1, end_addr as nat, keys, tickets, wbos)
     invariant local.WF()
     invariant pages_share_extent(disk_addr, end_addr - 1)
@@ -219,14 +219,14 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   decreases *
   requires cache.Inv()
   requires old_local.WF()
-  requires 0 <= disk_addr < NUM_DISK_PAGES
+  requires 0 <= disk_addr as int < NUM_DISK_PAGES
   ensures 0 <= start_addr <= disk_addr
   ensures fwd_lists(cache, start_addr as nat, disk_addr as nat, keys, tickets, wbos)
   ensures local.WF()
   ensures pages_share_extent(disk_addr, start_addr)
   ensures local.t == old_local.t
   {
-    ghost var t := local.t;
+    ghost var t: uint64 := local.t;
 
     start_addr := disk_addr;
     var done := false;
@@ -311,7 +311,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         glinear wbos: map<nat, WritebackObtainedToken>)
   requires cache.Inv()
   requires old_local.WF()
-  requires start_addr < end_addr <= NUM_DISK_PAGES
+  requires start_addr as int < end_addr as int <= NUM_DISK_PAGES
   requires end_addr as int - start_addr as int <= PAGES_PER_EXTENT as int
   requires fwd_lists(cache, start_addr as nat, end_addr as nat,
       keys, tickets, wbos)
@@ -346,7 +346,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant forall i: nat | 0 <= i < j as nat ::
         (i as int) in wbos && datas[i] == wbos[i as int].b.data.s
         && wbos[i].b.data.ptr == iovec.s[i].iov_base()
-        && iovec.s[i].iov_len() == PageSize
+        && iovec.s[i].iov_len() as int == PageSize
     invariant forall i: nat | 0 <= i < j as nat :: (i as int) in wbos && 
         simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
             iocb.offset + i, datas[i], keys[i], wbos[i])
@@ -414,11 +414,11 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   decreases *
   {
     var i: uint32 := 0;
-    while i < CHUNK_SIZE as uint32
+    while i < CHUNK_SIZE_64() as uint32
     invariant local.WF()
     invariant local.t == old_local.t
     {
-      var cache_idx := batch_idx * CHUNK_SIZE + i as uint64;
+      var cache_idx := batch_idx * CHUNK_SIZE_64() + i as uint64;
 
       glinear var write_back_r, ticket;
       var do_write_back;
@@ -453,7 +453,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             keys1, tickets1, wbos1,
             keys2, tickets2, wbos2);
 
-        assert end_addr - start_addr <= PAGES_PER_EXTENT;
+        assert end_addr as int - start_addr as int <= PAGES_PER_EXTENT;
         vec_writeback_async(cache, inout local, start_addr, end_addr,
             keys1, tickets1, wbos1);
       } else {

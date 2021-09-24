@@ -226,7 +226,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
               r);
 
           if !is_done_reading {
-            io_cleanup(cache, DEFAULT_MAX_IO_EVENTS);
+            io_cleanup(cache, DEFAULT_MAX_IO_EVENTS_64());
           }
         }
 
@@ -329,8 +329,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       atomic_block l :=
           execute_atomic_fetch_add_uint32(cache.global_clockpointer, 1) { }
 
-      evict_hand := l as uint64 % NUM_CHUNKS;
-      var cleaner_hand := (evict_hand + CLEAN_AHEAD as uint64) % NUM_CHUNKS;
+      evict_hand := l as uint64 % NUM_CHUNKS_64();
+      var cleaner_hand := (evict_hand + CLEAN_AHEAD_64()) % NUM_CHUNKS_64();
 
       atomic_block var do_clean := execute_atomic_compare_and_set_strong(
             lseq_peek(cache.batch_busy, cleaner_hand), false, true) { }
@@ -371,7 +371,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     success := true;
     r' := r;
 
-    while i < RC_WIDTH && success
+    while i < RC_WIDTH_64() && success
     invariant 0 <= i as int <= RC_WIDTH as int
     invariant r'.loc == cache.status[cache_idx].rwlock_loc
     invariant r'.val.M?
@@ -413,7 +413,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var i: uint64 := 0;
     r' := r;
 
-    while i < RC_WIDTH
+    while i < RC_WIDTH_64()
     invariant 0 <= i as int <= RC_WIDTH as int
     invariant r'.loc == cache.status[cache_idx].rwlock_loc
     invariant r'.val.M?
@@ -516,9 +516,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires 0 <= chunk as int < NUM_CHUNKS as int
   {
     var i: uint64 := 0;
-    while i < CHUNK_SIZE
+    while i < CHUNK_SIZE_64()
     {
-      var j: uint64 := chunk * CHUNK_SIZE + i;
+      var j: uint64 := chunk * CHUNK_SIZE_64() + i;
       try_evict_page(cache, j);
       i := i + 1;
     }
@@ -579,7 +579,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       var i: uint64 := 0;
 
-      while i < CHUNK_SIZE && !success
+      while i < CHUNK_SIZE_64() && !success
       invariant 0 <= i as int <= CHUNK_SIZE as int
       invariant 0 <= chunk as int < NUM_CHUNKS as int
       invariant !success ==>
@@ -594,7 +594,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           && handle_opt.value.is_handle(cache.key(cache_idx as int))
           && handle_opt.value.CacheEmptyHandle?
       {
-        cache_idx := chunk * CHUNK_SIZE + i;
+        cache_idx := chunk * CHUNK_SIZE_64() + i;
 
         dispose_glnone(m_opt);
         dispose_glnone(handle_opt);
@@ -610,7 +610,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           if num_passes != 1 {
             thread_yield();
           }
-          io_cleanup(cache, DEFAULT_MAX_IO_EVENTS);
+          io_cleanup(cache, DEFAULT_MAX_IO_EVENTS_64());
         }
         max_hand := localState.free_hand;
       }
@@ -1079,7 +1079,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       ph: PageHandle)
   requires cache.Inv()
   requires old_localState.WF()
-  requires 0 <= ph.cache_idx < CACHE_SIZE
+  requires 0 <= ph.cache_idx as int < CACHE_SIZE
   decreases *
   {
     var cache_idx := ph.cache_idx;
@@ -1114,7 +1114,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       ph: PageHandle)
   requires cache.Inv()
   requires old_localState.WF()
-  requires 0 <= ph.cache_idx < CACHE_SIZE
+  requires 0 <= ph.cache_idx as int < CACHE_SIZE
   decreases *
   {
     var cache_idx := ph.cache_idx;
@@ -1150,7 +1150,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache.Inv()
   {
     var i: uint64 := 0;
-    while i < NUM_CHUNKS {
+    while i < NUM_CHUNKS_64() {
       evict_batch(cache, i);
       evict_batch(cache, i);
       i := i + 1;
@@ -1166,8 +1166,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   {
     io_cleanup_all(cache);
 
-    var flush_hand := 0;
-    while flush_hand < NUM_CHUNKS
+    var flush_hand: uint64 := 0;
+    while flush_hand < NUM_CHUNKS_64()
     invariant local.WF()
     {
       CWB.batch_start_writeback(cache, inout local, flush_hand, true);
@@ -1342,7 +1342,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   returns (glinear client_out: Client)
   requires cache.Inv()
   requires old_localState.WF()
-  requires base_addr % PAGES_PER_EXTENT == 0
+  requires base_addr as int % PAGES_PER_EXTENT == 0
   requires 0 <= base_addr as int < NUM_DISK_PAGES as int
   ensures localState.WF()
   decreases *
@@ -1363,8 +1363,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var tickets: map<nat, DT.Token> := glmap_empty();
 
     var page_off: uint64 := 0;
-    while page_off < PAGES_PER_EXTENT
-    invariant 0 <= page_off <= PAGES_PER_EXTENT
+    while page_off < PAGES_PER_EXTENT_64()
+    invariant 0 <= page_off as int <= PAGES_PER_EXTENT
     invariant localState.WF()
     invariant pages_in_req as int <= page_off as int
     invariant 0 <= slot_idx as int < NUM_IO_SLOTS as int

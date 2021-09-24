@@ -30,7 +30,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures forall i {:trigger i in pta_seq} | 0 <= i < CACHE_SIZE as int ::
       i in pta_seq
         && 0 <= pta.ptr.as_nat() + i * PageSize as int < 0x1_0000_0000_0000_0000
-        && pta_seq[i].ptr == ptr_add(pta.ptr, i as uint64 * PageSize)
+        && pta_seq[i].ptr == ptr_add(pta.ptr, i as uint64 * PageSize as uint64)
         && |pta_seq[i].s| == PageSize as int
 
   glinear method iovec_split(glinear pta: PointsToArray<Iovec>)
@@ -41,7 +41,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && 0 <= i * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
         && 0 <= pta.ptr.as_nat() + i * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
                 < 0x1_0000_0000_0000_0000
-        && pta_seq[i].ptr == ptr_add(pta.ptr, i as uint64 * PAGES_PER_EXTENT * sizeof<Iovec>())
+        && pta_seq[i].ptr == ptr_add(pta.ptr, i as uint64 * PAGES_PER_EXTENT as uint64 * sizeof<Iovec>())
         && |pta_seq[i].s| == PAGES_PER_EXTENT as int
 
   method init_batch_busy()
@@ -50,9 +50,9 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures (forall i :: 0 <= i < NUM_CHUNKS as int ==> lseq_has(batch_busy)[i])
   ensures (forall i, v, g :: 0 <= i < NUM_CHUNKS as int ==> atomic_inv(batch_busy[i], v, g) <==> true)
   {
-    batch_busy := lseq_alloc<Atomic<bool, NullGhostType>>(NUM_CHUNKS);
+    batch_busy := lseq_alloc<Atomic<bool, NullGhostType>>(NUM_CHUNKS_64());
     var i: uint64 := 0;
-    while i < NUM_CHUNKS
+    while i < NUM_CHUNKS_64()
     invariant 0 <= i as int <= NUM_CHUNKS as int
     invariant |batch_busy| == NUM_CHUNKS as int
     invariant (forall j :: i as int <= j < NUM_CHUNKS as int ==> !lseq_has(batch_busy)[j])
@@ -69,20 +69,20 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   returns (iocb_base_ptr: Ptr, linear io_slots: lseq<IOSlot>)
   {
     glinear var iocbs;
-    iocb_base_ptr, iocbs := new_iocb_array(NUM_IO_SLOTS);
+    iocb_base_ptr, iocbs := new_iocb_array(NUM_IO_SLOTS_64());
 
-    io_slots := lseq_alloc<IOSlot>(NUM_IO_SLOTS);
+    io_slots := lseq_alloc<IOSlot>(NUM_IO_SLOTS_64());
 
     var full_iovec_ptr;
     glinear var full_iovec;
     var dummy_iovec := new_iovec(nullptr(), 0);
-    full_iovec_ptr, full_iovec := alloc_array(PAGES_PER_EXTENT * NUM_IO_SLOTS, dummy_iovec);
+    full_iovec_ptr, full_iovec := alloc_array(PAGES_PER_EXTENT_64() * NUM_IO_SLOTS_64(), dummy_iovec);
     glinear var iovecs := iovec_split(full_iovec);
 
     ghost var iocbs_copy := iocbs;
 
     var i3: uint64 := 0;
-    while i3 < NUM_IO_SLOTS
+    while i3 < NUM_IO_SLOTS_64()
     invariant 0 <= i3 as int <= NUM_IO_SLOTS as int
     invariant forall j | i3 as int <= j < NUM_IO_SLOTS as int ::
         j in iocbs && iocbs[j] == iocbs_copy[j]
@@ -98,7 +98,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && 0 <= j * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
         && 0 <= full_iovec_ptr.as_nat() + j * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
                 < 0x1_0000_0000_0000_0000
-        && iovecs[j].ptr == ptr_add(full_iovec_ptr, j as uint64 * PAGES_PER_EXTENT * sizeof<Iovec>())
+        && iovecs[j].ptr == ptr_add(full_iovec_ptr, j as uint64 * PAGES_PER_EXTENT as uint64 * sizeof<Iovec>())
         && |iovecs[j].s| == PAGES_PER_EXTENT as int
 
     {
@@ -108,7 +108,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       assert (i3 as int) in iovecs;
       assume 0 <= i3 as int * sizeof<Iovec>() as int;
-      var iovec_ptr := ptr_add(full_iovec_ptr, i3 * PAGES_PER_EXTENT * sizeof<Iovec>());
+      var iovec_ptr := ptr_add(full_iovec_ptr, i3 * PAGES_PER_EXTENT_64() * sizeof<Iovec>());
       glinear var iovec;
       iovecs, iovec := glmap_take(iovecs, i3 as int);
 
@@ -159,12 +159,12 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var data_base_ptr;
     glinear var data_pta_full;
     data_base_ptr, data_pta_full := alloc_array_aligned<byte>(
-        CACHE_SIZE * PageSize, 0, PageSize);
+        CACHE_SIZE_64() * PageSize64(), 0, PageSize64());
     glinear var data_pta_seq : map<nat, PointsToArray<byte>> :=
         split_into_page_size_chunks(data_pta_full);
 
-    linear var read_refcounts_array := lseq_alloc<AtomicRefcount>(RC_WIDTH * CACHE_SIZE);
-    linear var status_idx_array := lseq_alloc<StatusIdx>(CACHE_SIZE);
+    linear var read_refcounts_array := lseq_alloc<AtomicRefcount>(RC_WIDTH_64() * CACHE_SIZE_64());
+    linear var status_idx_array := lseq_alloc<StatusIdx>(CACHE_SIZE_64());
 
     glinear var dis, empty_seq := split_init(init_tok);
 
@@ -174,7 +174,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     ghost var data_pta_seq_copy := data_pta_seq;
 
     var i: uint64 := 0;
-    while i < CACHE_SIZE
+    while i < CACHE_SIZE_64()
     invariant 0 <= i as int <= CACHE_SIZE as int
     invariant empty_seq == EmptySeq(i as nat, CACHE_SIZE as int)
     invariant forall j | i as int <= j < CACHE_SIZE as int :: 
@@ -222,7 +222,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       lseq_give_inout(inout status_idx_array, i, status_idx);
 
       var j : uint64 := 0;
-      while j < RC_WIDTH
+      while j < RC_WIDTH_64()
       invariant 0 <= i as int < CACHE_SIZE as int
       invariant 0 <= j as int <= RC_WIDTH as int
       invariant rcs.val == RwLock.Rcs(j as nat, RC_WIDTH as int)
@@ -257,7 +257,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
         // XXX I don't care about the perf of the initialization method, but do note
         // that the access pattern for writing to this array might be completely awful.
-        lseq_give_inout(inout read_refcounts_array, j * CACHE_SIZE + i, ar);
+        lseq_give_inout(inout read_refcounts_array, j * CACHE_SIZE_64() + i, ar);
 
         j := j + 1;
       }
@@ -269,10 +269,10 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     assert {:split_here} true;
 
-    linear var cache_idx_of_page_array := lseq_alloc(NUM_DISK_PAGES);
+    linear var cache_idx_of_page_array := lseq_alloc(NUM_DISK_PAGES_64());
 
     var i2 := 0;
-    while i2 < NUM_DISK_PAGES
+    while i2 < NUM_DISK_PAGES_64()
     invariant 0 <= i2 as int <= NUM_DISK_PAGES as int
     invariant dis == IdxsSeq(i2 as nat, NUM_DISK_PAGES as int);
     invariant |cache_idx_of_page_array| == NUM_DISK_PAGES as int
@@ -379,6 +379,6 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   returns (linear l: LocalState)
   ensures l.WF()
   {
-    l := LocalState(t % RC_WIDTH, 0xffff_ffff_ffff_ffff, 0);
+    l := LocalState(t % RC_WIDTH_64(), 0xffff_ffff_ffff_ffff, 0);
   }
 }

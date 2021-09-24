@@ -4,7 +4,8 @@ include "DiskSSM.s.dfy"
 
 module PageSizeConstant {
   import opened NativeTypes
-  const PageSize: uint64 := 4096
+  ghost const PageSize := 4096
+  function method PageSize64(): uint64 { 4096 }
 }
 
 module {:extern "IocbStruct"} IocbStruct {
