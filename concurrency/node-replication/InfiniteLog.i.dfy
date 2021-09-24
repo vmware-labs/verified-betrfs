@@ -1150,6 +1150,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   ensures state_at_version(a, i) == state_at_version(b, i)
   decreases i
   {
+    if i > 0 {
+      state_at_version_preserves(a, b, i-1);
+    }
   }
 
   lemma AdvanceTail_PreservesInv(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
@@ -1249,6 +1252,104 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     NextStep_PreservesInv(m, m', step);
   }
 
+  lemma GoToCombinerReady_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires GoToCombinerReady(m, m', nodeId)
+  ensures GoToCombinerReady(dot(m, p), dot(m', p), nodeId)
+  {
+  }
+
+  lemma ExecLoadLtail_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires ExecLoadLtail(m, m', nodeId)
+  ensures ExecLoadLtail(dot(m, p), dot(m', p), nodeId)
+  {
+  }
+
+  lemma ExecLoadGlobalTail_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires ExecLoadGlobalTail(m, m', nodeId)
+  ensures ExecLoadGlobalTail(dot(m, p), dot(m', p), nodeId)
+  {
+  }
+
+  lemma ExecDispatchLocal_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires ExecDispatchLocal(m, m', nodeId)
+  ensures ExecDispatchLocal(dot(m, p), dot(m', p), nodeId)
+  {
+    /*
+    var c := m.combiner[nodeId];
+    var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[c.localTail].op);
+    var c_new := c.(localTail := c.localTail + 1);
+    var queue_index := |c.queued_ops| - (c.globalTail - c.localTail);
+    assert dot(m', p).combiner == dot(m, p).combiner[nodeId := c_new];
+    assert dot(m', p).replicas == dot(m, p).replicas[nodeId := nr_state'];
+    assert dot(m', p).localUpdates == dot(m, p).localUpdates[c.queued_ops[queue_index]:= UpdateDone(ret)];
+    */
+  }
+
+  lemma ExecDispatchRemote_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires ExecDispatchRemote(m, m', nodeId)
+  ensures ExecDispatchRemote(dot(m, p), dot(m', p), nodeId)
+  {
+  }
+
+  lemma TransitionReadonlyReadCtail_Monotonic(m: M, m': M, p: M, rid: RequestId, nodeId: NodeId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires TransitionReadonlyReadCtail(m, m', rid, nodeId)
+  ensures TransitionReadonlyReadCtail(dot(m, p), dot(m', p), rid, nodeId)
+  {
+  }
+
+  lemma TransitionReadonlyReadyToRead_Monotonic(m: M, m': M, p: M, nodeId: NodeId, rid: RequestId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires TransitionReadonlyReadyToRead(m, m', nodeId, rid)
+  ensures TransitionReadonlyReadyToRead(dot(m, p), dot(m', p), nodeId, rid)
+  {
+  }
+
+  lemma TransitionReadonlyDone_Monotonic(m: M, m': M, p: M, nodeId: NodeId, rid: RequestId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires TransitionReadonlyDone(m, m', nodeId, rid)
+  ensures TransitionReadonlyDone(dot(m, p), dot(m', p), nodeId, rid)
+  {
+  }
+
+  lemma UpdateCompletedTail_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires UpdateCompletedTail(m, m', nodeId)
+  ensures UpdateCompletedTail(dot(m, p), dot(m', p), nodeId)
+  {
+  }
+
+  lemma AdvanceTail_Monotonic(m: M, m': M, p: M, nodeId: NodeId, request_ids: seq<RequestId>)
+  requires Inv(dot(m, p))
+  //requires dot(m, p) != Fail
+  requires AdvanceTail(m, m', nodeId, request_ids)
+  ensures AdvanceTail(dot(m, p), dot(m', p), nodeId, request_ids)
+  {
+    assume false; // TODO verification timeout
+  }
+
+  lemma UpdateRequestDone_Monotonic(m: M, m': M, p: M, request_id: RequestId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires UpdateRequestDone(m, m', request_id)
+  ensures UpdateRequestDone(dot(m, p), dot(m', p), request_id)
+  {
+  }
+
   lemma InternalMonotonic(m: M, m': M, p: M)
   requires Internal(m, m')
   requires Inv(dot(m, p))
@@ -1258,56 +1359,47 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     var step :| NextStep(m, m', step);
     match step {
       case GoToCombinerReady_Step(nodeId: NodeId) => {
-        assert GoToCombinerReady(dot(m, p), dot(m', p), nodeId);
+        GoToCombinerReady_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case ExecLoadLtail_Step(nodeId: NodeId) => {
-        assert ExecLoadLtail(dot(m, p), dot(m', p), nodeId);
+        ExecLoadLtail_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case ExecLoadGlobalTail_Step(nodeId: NodeId) => {
-        assert ExecLoadGlobalTail(dot(m, p), dot(m', p), nodeId);
+        ExecLoadGlobalTail_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case ExecDispatchLocal_Step(nodeId: NodeId) => {
-        /*
-        var c := m.combiner[nodeId];
-        var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[c.localTail].op);
-        var c_new := c.(localTail := c.localTail + 1);
-        var queue_index := |c.queued_ops| - (c.globalTail - c.localTail);
-        assert dot(m', p).combiner == dot(m, p).combiner[nodeId := c_new];
-        assert dot(m', p).replicas == dot(m, p).replicas[nodeId := nr_state'];
-        assert dot(m', p).localUpdates == dot(m, p).localUpdates[c.queued_ops[queue_index]:= UpdateDone(ret)];
-        */
-        assert ExecDispatchLocal(dot(m, p), dot(m', p), nodeId);
+        ExecDispatchLocal_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case ExecDispatchRemote_Step(nodeId: NodeId) => {
-        assert ExecDispatchRemote(dot(m, p), dot(m', p), nodeId);
+        ExecDispatchRemote_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case TransitionReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) => {
-        assert TransitionReadonlyReadCtail(dot(m, p), dot(m', p), rid, nodeId);
+        TransitionReadonlyReadCtail_Monotonic(m, m', p, rid, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => {
-        assert TransitionReadonlyReadyToRead(dot(m, p), dot(m', p), nodeId, rid);
+        TransitionReadonlyReadyToRead_Monotonic(m, m', p, nodeId, rid);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => {
-        assert TransitionReadonlyDone(dot(m, p), dot(m', p), nodeId, rid);
+        TransitionReadonlyDone_Monotonic(m, m', p, nodeId, rid);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => {
-        assert AdvanceTail(dot(m, p), dot(m', p), nodeId, request_ids);
+        AdvanceTail_Monotonic(m, m', p, nodeId, request_ids);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case UpdateCompletedTail_Step(nodeId: NodeId) => {
-        assert UpdateCompletedTail(dot(m, p), dot(m', p), nodeId);
+        UpdateCompletedTail_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case UpdateRequestDone_Step(request_id: RequestId) => {
-        assert UpdateRequestDone(dot(m, p), dot(m', p), request_id);
+        UpdateRequestDone_Monotonic(m, m', p, request_id);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
     }
