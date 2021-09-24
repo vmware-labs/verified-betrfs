@@ -17,7 +17,7 @@ The linearizability argument goes:
 
  * An update _U_ can put its linearization point at the point in time when _ctail_ equals _U.idx_.
    This will always happen before the update returns, because we require that _ctail >= U.idx_.
- * A readonly operation _R_ can put its linearization point at the point in time when _ctail_ equals _U.idx_
+ * A readonly operation _R_ can put its linearization point at the point in time when _ctail_ equals _R.v_
    (right after the linearization point for the corresponding update). Of course, this will always be
    between the start and end of the request, because of the requirement that _R.baseCtail <= R.v <= ctail_.
 
