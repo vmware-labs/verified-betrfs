@@ -33,7 +33,7 @@ module CacheResources {
   datatype CacheEntry = CacheEntry(
       ghost cache_idx: nat, ghost disk_idx: nat, ghost data: DiskIfc.Block)
 
-  datatype DiskWriteTicket = DiskWriteTicket(
+  datatype {:glinear_fold} DiskWriteTicket = DiskWriteTicket(
       ghost addr: nat, ghost contents: DiskIfc.Block)
   {
     predicate writes(addr: nat, contents: DiskIfc.Block) {
@@ -45,11 +45,7 @@ module CacheResources {
     }
   }
 
-  function method DiskWriteTicket_unfold(glinear disk_write_ticket: DiskWriteTicket)
-      : (glinear t: T.Token)
-  ensures t == disk_write_ticket.defn()
-
-  datatype DiskWriteStub = DiskWriteStub(ghost disk_idx: nat)
+  datatype {:glinear_fold} DiskWriteStub = DiskWriteStub(ghost disk_idx: nat)
   {
     predicate written(disk_idx: uint64) {
       this.disk_idx == disk_idx as nat
@@ -60,40 +56,19 @@ module CacheResources {
     }
   }
 
-  function method DiskWriteStub_fold(ghost addr: nat, glinear t: T.Token)
-      : (glinear disk_write_stub: DiskWriteStub)
-  requires DiskWriteStub(addr).defn() == t
-  ensures disk_write_stub == DiskWriteStub(addr)
-
-  datatype DiskReadTicket = DiskReadTicket(ghost addr: nat)
+  datatype {:glinear_fold} DiskReadTicket = DiskReadTicket(ghost addr: nat)
   {
     function defn() : T.Token {
       T.Token(CacheSSM.DiskReadReq(addr))
     }
   }
 
-  function method DiskReadTicket_unfold(glinear disk_read_ticket: DiskReadTicket)
-      : (glinear t: T.Token)
-  ensures t == disk_read_ticket.defn()
-
-  datatype DiskReadStub = DiskReadStub(ghost addr: nat, ghost data: DiskIfc.Block)
+  datatype {:glinear_fold} DiskReadStub = DiskReadStub(ghost addr: nat, ghost data: DiskIfc.Block)
   {
     function defn() : T.Token {
       T.Token(CacheSSM.DiskReadResp(addr, data))
     }
   }
-
-  function method DiskReadStub_fold(ghost addr: nat, ghost data: DiskIfc.Block,
-          glinear t: T.Token)
-      : (glinear disk_read_stub: DiskReadStub)
-  requires DiskReadStub(addr, data).defn() == t
-  ensures disk_read_stub == DiskReadStub(addr, data)
-
-    /*| DiskReadTicket(addr: uint64)
-    | DiskReadStub(addr: uint64, contents: DiskIfc.Block)
-
-    | DiskWriteTicket(addr: uint64, contents: DiskIfc.Block)
-    | DiskWriteStub(addr: uint64)*/
 
   glinear method initiate_page_in(
       ghost cache_idx: nat,

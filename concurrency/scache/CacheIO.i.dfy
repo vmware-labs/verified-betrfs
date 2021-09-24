@@ -217,7 +217,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         disk_idx,
         inout contents,
         CacheResources.DiskReadTicket_unfold(ticket));
-    stub := CacheResources.DiskReadStub_fold(disk_idx as nat, contents.s, s);
+    stub := CacheResources.DiskReadStub_fold(CacheResources.DiskReadStub(disk_idx as nat, contents.s), s);
   }
 
   method disk_writeback_sync(
@@ -245,7 +245,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         disk_idx,
         T.borrow_wb(wbo.token).data,
         CacheResources.DiskWriteTicket_unfold(ticket));
-    stub := CacheResources.DiskWriteStub_fold(disk_idx as nat, s);
+    stub := CacheResources.DiskWriteStub_fold(CacheResources.DiskWriteStub(disk_idx as nat), s);
   }
 
   method disk_read_callback(
@@ -344,7 +344,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       var my_iovec := iovec_ptr.index_read(iovec, j);
       var data_ptr := my_iovec.iov_base();
       var cache_idx := cache_idx_of_data_ptr(cache, data_ptr, keys[j].cache_idx);
-      glinear var ustub := CacheResources.DiskWriteStub_fold(offset + j as int, stub);
+      glinear var ustub := CacheResources.DiskWriteStub_fold(CacheResources.DiskWriteStub(offset + j as int), stub);
       disk_writeback_callback(cache, cache_idx, offset + j as int, wbo, ustub);
       j := j + 1;
     }
@@ -405,7 +405,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       var data_ptr := my_iovec.iov_base();
       var cache_idx := cache_idx_of_data_ptr(cache, data_ptr, keys[j].cache_idx);
       assert |wp.s| == PageSize as int;
-      glinear var ustub := CacheResources.DiskReadStub_fold(offset + j as int, wp.s, stub);
+      glinear var ustub := CacheResources.DiskReadStub_fold(CacheResources.DiskReadStub(offset + j as int, wp.s), stub);
       disk_read_callback(cache, cache_idx, offset + j as int,
           wp, ro, cache_reading, idx, ustub);
       j := j + 1;
@@ -506,7 +506,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         glinear var FRWrite(iocb, data, wg, stub) := fr;
         glinear var WriteG(key, wbo, g_slot_idx, iovec) := wg;
 
-        glinear var ustub := CacheResources.DiskWriteStub_fold(iocb.offset, stub);
+        glinear var ustub := CacheResources.DiskWriteStub_fold(CacheResources.DiskWriteStub(iocb.offset), stub);
         ghost var disk_idx := ustub.disk_idx;
 
         var data_ptr := iocb_buf(iocb_ptr, iocb);
@@ -534,7 +534,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         glinear var FRRead(iocb, wp, rg, stub) := fr;
         glinear var ReadG(key, cache_reading, idx, ro, g_slot_idx, iovec) := rg;
 
-        glinear var ustub := CacheResources.DiskReadStub_fold(iocb.offset, wp.s, stub);
+        glinear var ustub := CacheResources.DiskReadStub_fold(CacheResources.DiskReadStub(iocb.offset, wp.s), stub);
         ghost var disk_idx := ustub.addr;
 
         var data_ptr := iocb_buf(iocb_ptr, iocb);
