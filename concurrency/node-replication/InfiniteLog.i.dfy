@@ -991,10 +991,10 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     // TODO(travis): all the `idx` in localUpdates.UpdatePlaced?.idx and
     // localUpdates.UpdateDone?.idx should be less than ctail?
 
-    && forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdatePlaced?
-      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value
-    && forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdateApplied?
-      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value
+    && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdatePlaced?
+      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value)
+    && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdateApplied?
+      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value)
   }
 
   // the invariant
@@ -1165,6 +1165,21 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       {
         state_at_version_preserves(m.log, m'.log, get_local_tail(m', nid));
      }
+    forall idx : nat | 0 <= idx < m'.global_tail.value
+    ensures idx in m'.log.Keys
+    {
+      if idx < m.global_tail.value {
+        assert idx in m'.log.Keys;
+      } else {
+        var i := idx - m.global_tail.value;
+        assert m.global_tail.value + i == idx;
+      }
+    }
+    forall upd | upd in m'.localUpdates && m'.localUpdates[upd].UpdatePlaced?
+    ensures m'.localUpdates[upd].idx in m'.log.Keys
+    ensures m'.localUpdates[upd].idx <= m'.global_tail.value
+    {
+    }
   }
 
 
