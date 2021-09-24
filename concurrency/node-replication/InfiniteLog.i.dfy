@@ -39,7 +39,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   datatype UpdateState =
     | UpdateInit(op: nrifc.UpdateOp)
     | UpdatePlaced(nodeId: NodeId, idx: nat)
-    // TODO(travis): Add UpdatePreDone(ret: nrifc: ReturnType, idx: nat)
+    | UpdateApplied(ret: nrifc.ReturnType, idx: nat)
     // TODO(travis): add idx here too:
     | UpdateDone(ret: nrifc.ReturnType)
 
@@ -246,6 +246,30 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m.combiner[nodeId].CombinerUpdatedCtail?
   }
 
+  /* ============================================================================================
+   * State Guards for UpdateRequests
+   * ============================================================================================
+   */
+
+  // GUARD: UpdatePlaced
+  //
+  // the update request for is in the placed state
+  predicate InUpdatePlaced(m : M, reqid: RequestId)
+    requires StateValid(m)
+  {
+    && reqid in m.localUpdates
+    && m.localUpdates[reqid].UpdatePlaced?
+  }
+
+  // GUARD: UpdateApplied
+  //
+  // the update request for is in the executed state
+  predicate InUpdateApplied(m : M, reqid: RequestId)
+    requires StateValid(m)
+  {
+    && reqid in m.localUpdates
+    && m.localUpdates[reqid].UpdateApplied?
+  }
 
   /*
    * ============================================================================================
@@ -379,15 +403,19 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   predicate RequestIdsValidAndUpdateInit(request_ids: seq<RequestId>, localUpdates: map<RequestId, UpdateState>)
   {
-    forall rid | rid in request_ids :: (rid in localUpdates &&  localUpdates[rid].UpdateInit?)
+    && forall rid | rid in request_ids :: (rid in localUpdates &&  localUpdates[rid].UpdateInit?)
+    && |(set x | x in request_ids :: x)| == |request_ids|
   }
 
+  predicate RequestIdsUnique(request_ids: seq<RequestId>) {
+    forall i, j | 0 <= i < |request_ids| && 0 <= j < |request_ids| && i != j :: request_ids[i] != request_ids[j]
+  }
 
   // Given a log of ops and a version number, compute the state at that version
   // TODO(travis): Try this syntax: map i | 0 <= i < |s| :: s[i].key := s[i].value (need proof to )
   function seq_of_tuples_to_map(s: seq<(RequestId, int)>) : map<RequestId, int>
   // TODO(travis): Probably don't want this ensures here:
-  ensures |s| == |seq_of_tuples_to_map(s)|
+  //ensures |s| == |seq_of_tuples_to_map(s)|
   ensures (forall rid | rid in seq_of_tuples_to_map(s) :: (rid, seq_of_tuples_to_map(s)[rid]) in s)
   {
     if |s| == 0 then
@@ -395,7 +423,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     else
       map_union(seq_of_tuples_to_map(s[1..]), map[s[0].0 := s[0].1])
   }
-
 
   // reserve entries on the shared log
   // { UpdateInit(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerReady ; GlobalTail(t) }
@@ -416,28 +443,28 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && InCombinerReady(m, nodeId)
     && GlobalTailValid(m)
     && RequestIdsValidAndUpdateInit(request_ids, m.localUpdates)
+    && RequestIdsUnique(request_ids)
 
     && var global_tail_var := m.global_tail.value;
 
-    // Question(RA): this one here should be part of the invariant, and not of this predicate
-    // && (forall i | global_tail_var <= i < global_tail_var+|request_ids| :: i !in m.log.Keys)
-
     // Add new entries to the log:
-    && var updated_log := (map idx | global_tail_var <= idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
+    && var updated_log := (map i | 0 <= i < |request_ids| :: (global_tail_var + i) :=  LogEntry(m.localUpdates[request_ids[i]].op, nodeId));
+    // var updated_log := (map idx | global_tail_var <= idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
+
+    // the new local updates
+    && var local_updates_new := (map i | 0 <= i < |request_ids| :: request_ids[i] := UpdatePlaced(nodeId, global_tail_var + i));
+
+    // // [(rid0, global_tail_var), (rid1, global_tail_var+1), (rid2, global_tail_var+2), ...]
+    // && var rid_idx_seq := seq(|request_ids|, i requires 0 <= i < |request_ids| => (request_ids[i], global_tail_var + i));
+    // // {rid0: global_tail_var, ...]
+    // && var rid_idx_map := seq_of_tuples_to_map(rid_idx_seq);
+    // && var local_updates_new := (map rid | rid in rid_idx_map :: UpdatePlaced(nodeId, rid_idx_map[rid]));
 
     // the new combiner state
     && var combiner_state_new := CombinerPlaced(request_ids);
 
     // calculate the new global tail
     && var global_tail_new := m.global_tail.value + |request_ids|;
-
-    // [(rid0, global_tail_var), (rid1, global_tail_var+1), (rid2, global_tail_var+2), ...]
-    && var rid_idx_seq := seq(|request_ids|, i requires 0 <= i < |request_ids| => (request_ids[i], global_tail_var + i));
-    // {rid0: global_tail_var, ...]
-    && var rid_idx_map := seq_of_tuples_to_map(rid_idx_seq);
-    && var local_updates_new := (map rid | rid in rid_idx_map :: UpdatePlaced(nodeId, rid_idx_map[rid]));
-
-    && m.log.Keys * updated_log.Keys == {}
 
     // update the state
     && m' == m.(log := update_map(m.log, updated_log))
@@ -537,7 +564,11 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var queue_index := |c.queued_ops| - (c.globalTail - c.localTail);
     && 0 <= queue_index < |c.queued_ops|
 
-    && c.queued_ops[queue_index] in m.localUpdates // NOTE(travis): added this
+    && var request_id := c.queued_ops[queue_index];
+    && InUpdatePlaced(m, request_id)
+
+    // we get the idx into the log here
+    && var idx :=  m.localUpdates[request_id].idx;
 
     // update the combiner state by incrementing the current local tail
     &&  var c_new := c.(localTail := c.localTail + 1);
@@ -545,7 +576,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // update the state
     && m' == m.(combiner := m.combiner[nodeId := c_new])
               .(replicas := m.replicas[nodeId := nr_state'])
-              .(localUpdates := m.localUpdates[c.queued_ops[queue_index]:= UpdateDone(ret)])
+              .(localUpdates := m.localUpdates[request_id := UpdateApplied(ret, idx)])
   }
 
   // STATE TRANSITION: Combiner -> Combiner (remote case)
@@ -595,9 +626,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
               .(ctail := Some(new_ctail))
   }
 
-  // STATE TRANSITION: CombinerUpdatedCtail -> CombinerReady
+  // STATE TRANSITION: UpdateApplied -> UpdateDone
   //
-  // Update the local tail pointer of the replica to the stored global tail
+  // Update the state of the update request from UpdateApplied to Done when the CTail has advanced
   //
   // { CombinerUpdatedCtail(gtail, ltail, gtail, j) ; … }
   //   store ltails[tkn] = gtail; // update replica's tail
@@ -612,6 +643,19 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // update the new state, set the combiner into ready state and update local tail
     && m' == m.(combiner := m.combiner[nodeId := CombinerReady])
               .(localTails := m.localTails[nodeId := c.localAndGlobalTail])
+  }
+
+  // STATE TRANSITION: UpdateApplied -> UpdateDone
+  //
+  // Update the state of the update request to done, if ctail has advanced far enough
+  predicate UpdateRequestDone(m : M, m' : M, request_id: RequestId) {
+    && StateValid(m)
+    && InUpdateApplied(m, request_id)
+    && CompleteTailValid(m)
+    && var idx := m.localUpdates[request_id].idx;
+    && var ret := m.localUpdates[request_id].ret;
+    && m.ctail.value >= idx
+    && m' == m.(localUpdates := m.localUpdates[request_id := UpdateDone(ret)])
   }
 
   /*
@@ -931,6 +975,28 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
         c1 == c2 || CombinerRange(s.combiner[c1]) !! CombinerRange(s.combiner[c2])
   }
 
+  // all entries up to the global tail in the log, above not in the log
+  predicate Inv_LogEntriesGlobalTail(s: M)
+    requires Inv_WF(s)
+  {
+    // the log doesn't contain entries above the global tail
+    && (forall idx : nat | idx >= s.global_tail.value :: idx !in s.log.Keys)
+    && (forall idx : nat | 0 <= idx < s.global_tail.value :: idx in s.log.Keys)
+  }
+
+  // the stored log idx are in the log, and smaller than the global tail
+  predicate Inv_LocalUpdatesIdx(s: M)
+    requires Inv_WF(s)
+  {
+    // TODO(travis): all the `idx` in localUpdates.UpdatePlaced?.idx and
+    // localUpdates.UpdateDone?.idx should be less than ctail?
+
+    && forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdatePlaced?
+      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value
+    && forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdateApplied?
+      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value
+  }
+
   // the invariant
   predicate Inv(s: M) {
     && Inv_WF(s)
@@ -943,17 +1009,8 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && Inv_CombinerStateValid(s)
     && Inv_CombinerLogNonOverlap(s)
     && Inv_ReadOnlyStateNodeIdExists(s)
-
-    // all the `idx` in localUpdates.UpdatePlaced?.idx are also in the log
-    && forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdatePlaced? 
-      :: s.localUpdates[upd].idx in s.log.Keys
-
-    // TODO(travis): all the `idx` in localUpdates.UpdatePlaced?.idx and
-    // localUpdates.UpdateDone?.idx should be less than ctail?
-
-    // the log doesn't contain entries above the global tail
-    && (forall idx : nat | idx >= s.global_tail.value :: idx !in s.log.Keys)
-
+    && Inv_LogEntriesGlobalTail(s)
+    && Inv_LocalUpdatesIdx(s)
 
     // && (forall nid | nid in s.combiner :: CombinerRange(s.combiner[nid]) !!  (set x | 0 <= x < get_local_tail(s, nid) :: x))
 
@@ -1032,6 +1089,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     | TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId)
     | UpdateCompletedTail_Step(nodeId: NodeId)
     | AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>)
+    | UpdateRequestDone_Step(request_id: RequestId)
 
 
   predicate NextStep(m: M, m': M, step: Step) {
@@ -1046,6 +1104,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone(m, m', nodeId, rid)
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail(m, m', nodeId, request_ids)
       case UpdateCompletedTail_Step(nodeId: NodeId) => UpdateCompletedTail(m, m',nodeId)
+      case UpdateRequestDone_Step(request_id: RequestId) => UpdateRequestDone(m, m', request_id)
     }
   }
 
@@ -1153,6 +1212,14 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
 
   }
 
+  lemma UpdateRequestDone_PreservesInv(m: M, m': M, request_id: RequestId)
+    requires Inv(m)
+    requires UpdateRequestDone(m, m', request_id)
+    ensures Inv(m')
+  {
+
+  }
+
   lemma NextStep_PreservesInv(m: M, m': M, step: Step)
     requires Inv(m)
     requires NextStep(m, m', step)
@@ -1169,6 +1236,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone_PreservesInv(m, m', nodeId, rid);
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail_PreservesInv(m, m', nodeId, request_ids);
       case UpdateCompletedTail_Step(nodeId: NodeId) =>  UpdateCompletedTail_PreservesInv(m, m', nodeId);
+      case UpdateRequestDone_Step(request_id: RequestId) => UpdateRequestDone_PreservesInv(m, m', request_id);
     }
   }
 
@@ -1238,48 +1306,10 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
         assert UpdateCompletedTail(dot(m, p), dot(m', p), nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
+      case UpdateRequestDone_Step(request_id: RequestId) => {
+        assert UpdateRequestDone(dot(m, p), dot(m', p), request_id);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
     }
   }
-
-  // import NRSimple
-  // include "NRSimple.i.dfy"
-
-  // // interpretation function
-  // function I(m: M) : NRSimple.Variables
-  // {
-  //   NRSimple.Variables(
-  //     // log: seq<nrifc.UpdateOp>,
-  //     // ctail: nat,
-  //     // readonly_reqs: map<RequestId, ReadReq>,
-  //     // update_reqs: map<RequestId, nrifc.UpdateOp>,
-  //     // update_resps: map<RequestId, UpdateResp>
-  //   )
-  // }
-
-  // // refinement
-  // lemma InfiniteLog_Refines_NRSimple_NextStep(m: M, m' : M, op: nrifc.Op, step: Step)
-  //   requires Inv(m)
-  //   requires NextStep(m, m', op, step)
-  //   requires Inv(m')
-  //   ensures NRSimple.Next(I(m), I(m'), op)
-  // {
-
-  // }
-
-  // lemma InfiniteLog_Refines_NRSimple_Next(m: M, m' : M,  op: nrifc.Op)
-  //   requires Inv(m)
-  //   requires Inv(m')
-  //   requires Next(m, m', op, step)
-  //   ensures NRSimple.Next(I(m), I(m'), op)
-  // {
-  //   var step :| NextStep(m, m', op, step);
-  //   InfiniteLog_Refines_NRSimple_NextStep(m, m', op, step);
-  // }
-
-  // lemma InfiniteLog_Refines_NRSimple_Init(m: M)
-  //   requires Init(m)
-  //   ensures NRSimple.init(I(m))
-  // {
-
-  // }
 }
