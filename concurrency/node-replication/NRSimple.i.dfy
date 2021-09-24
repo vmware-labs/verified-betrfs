@@ -53,6 +53,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
   {
     && rid in s.readonly_reqs
     && s.readonly_reqs[rid].ctail_at_start <= version <= |s.log|
+    && version <= s.ctail
     && s' == s.(readonly_reqs := s.readonly_reqs - {rid})
     && return_value == nrifc.read(state_at_version(s.log, version), s.readonly_reqs[rid].op)
   }
