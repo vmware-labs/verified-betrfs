@@ -32,7 +32,8 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
         IL.NewTicketPreservesInv(s, s', rid, input);
       }
       case End(rid, output) => {
-        IL.ConsumeStubPreservesInv(s, s', rid, output);
+        var stub :| IL.ConsumeStub(s, s', rid, output, stub);
+        IL.ConsumeStubPreservesInv(s, s', rid, output, stub);
       }
       case InternalOp => {
         var shard, shard', rest :| A.InternalNext(s, s', shard, shard', rest);
@@ -91,8 +92,8 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   }
 
   lemma ConsumeStub_Refines_End(s: A.Variables, s': A.Variables,
-      rid: RequestId, output: nrifc.Output)
-  requires IL.ConsumeStub(s, s', rid, output)
+      rid: RequestId, output: nrifc.Output, stub: M)
+  requires IL.ConsumeStub(s, s', rid, output, stub)
   requires Inv(s)
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.End(rid, output))
@@ -212,7 +213,8 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
         NewTicket_Refines_Start(s, s', rid, input);
       }
       case End(rid, output) => {
-        ConsumeStub_Refines_End(s, s', rid, output);
+        var stub :| IL.ConsumeStub(s, s', rid, output, stub);
+        ConsumeStub_Refines_End(s, s', rid, output, stub);
       }
       case InternalOp => {
         var shard, shard', rest :| A.InternalNext(s, s', shard, shard', rest);

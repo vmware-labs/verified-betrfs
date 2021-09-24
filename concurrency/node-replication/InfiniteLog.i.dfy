@@ -743,11 +743,9 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       UpdateOp(rid, UpdateInit(input.update_op))
   }
 
-  // Travis: should be UpdateDone or ReadonlyDone
-  function Stub(rid: RequestId, output: IOIfc.Output) : M {
-      // RS: How do we represent that the rid should be in one of localReads
-      // or localUpdates?
-      dot(ReadOp(rid, ReadonlyDone(output)), UpdateOp(rid, UpdateDone(output)))
+  predicate IsStub(rid: RequestId, output: IOIfc.Output, stub: M) {
+    || stub == ReadOp(rid, ReadonlyDone(output))
+    || stub == UpdateOp(rid, UpdateDone(output))
   }
 
   // By returning a set of request ids "in use", we enforce that
@@ -1040,7 +1038,7 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   //requires NewTicket(whole, whole', rid, input)
   ensures Inv(whole')
 
-  lemma ConsumeStubPreservesInv(whole: M, whole': M, rid: RequestId, output: IOIfc.Output)
+  lemma ConsumeStubPreservesInv(whole: M, whole': M, rid: RequestId, output: IOIfc.Output, stub: M)
   //requires Inv(whole)
   //requires ConsumeStub(whole, whole', rid, output)
   ensures Inv(whole')

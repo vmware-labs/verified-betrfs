@@ -10,7 +10,7 @@ abstract module TicketStubSSM(IOIfc: InputOutputIfc) {
   function unit() : M
 
   function Ticket(rid: RequestId, input: IOIfc.Input) : M
-  function Stub(rid: RequestId, output: IOIfc.Output) : M
+  predicate IsStub(rid: RequestId, output: IOIfc.Output, stub: M)
 
   // By returning a set of request ids "in use", we enforce that
   // there are only a finite number of them (i.e., it is always possible to find
@@ -25,8 +25,9 @@ abstract module TicketStubSSM(IOIfc: InputOutputIfc) {
     && whole' == dot(whole, Ticket(rid, input))
   }
 
-  predicate ConsumeStub(whole: M, whole': M, rid: RequestId, output: IOIfc.Output) {
-    && whole == dot(whole', Stub(rid, output))
+  predicate ConsumeStub(whole: M, whole': M, rid: RequestId, output: IOIfc.Output, stub: M) {
+    && IsStub(rid, output, stub)
+    && whole == dot(whole', stub)
   }
 
   predicate Inv(s: M)
@@ -45,9 +46,9 @@ abstract module TicketStubSSM(IOIfc: InputOutputIfc) {
   requires NewTicket(whole, whole', rid, input)
   ensures Inv(whole')
 
-  lemma ConsumeStubPreservesInv(whole: M, whole': M, rid: RequestId, output: IOIfc.Output)
+  lemma ConsumeStubPreservesInv(whole: M, whole': M, rid: RequestId, output: IOIfc.Output, stub: M)
   requires Inv(whole)
-  requires ConsumeStub(whole, whole', rid, output)
+  requires ConsumeStub(whole, whole', rid, output, stub)
   ensures Inv(whole')
 
   lemma dot_unit(x: M)
@@ -86,7 +87,7 @@ module TicketStubStateMachine(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc))
   predicate Next(s: Variables, s': Variables, op: ifc.Op) {
     match op {
       case Start(rid, input) => ssm.NewTicket(s, s', rid, input)
-      case End(rid, output) => ssm.ConsumeStub(s, s', rid, output)
+      case End(rid, output) => exists stub :: ssm.ConsumeStub(s, s', rid, output, stub)
       case InternalOp =>
         exists shard, shard', rest :: InternalNext(s, s', shard, shard', rest)
     }
