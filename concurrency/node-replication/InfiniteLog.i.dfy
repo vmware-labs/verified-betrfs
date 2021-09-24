@@ -403,7 +403,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   predicate RequestIdsValidAndUpdateInit(request_ids: seq<RequestId>, localUpdates: map<RequestId, UpdateState>)
   {
-    && forall rid | rid in request_ids :: (rid in localUpdates &&  localUpdates[rid].UpdateInit?)
+    && (forall rid | rid in request_ids :: (rid in localUpdates &&  localUpdates[rid].UpdateInit?))
     && |(set x | x in request_ids :: x)| == |request_ids|
   }
 
