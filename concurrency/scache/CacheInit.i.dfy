@@ -209,7 +209,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       ghost var rwlock_loc := central.loc;
 
       linear var atomic_status_atomic := new_atomic(
-          flag_unmapped,
+          flag_unmapped(),
           AtomicStatusImpl.G(central, glNone),
           (v, g) => AtomicStatusImpl.state_inv(v, g, key, rwlock_loc),
           0);

@@ -445,13 +445,13 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     // 2. if accessed, then clear 'access'
 
-    if bit_or_uint8(status, flag_accessed) != 0 {
+    if bit_or_uint8(status, flag_accessed()) != 0 {
       cache.status_atomic(cache_idx).clear_accessed();
     }
 
     // 3. if status != CLEAN, abort
 
-    if status != flag_clean {
+    if status != flag_clean() {
       // no cleanup to do
     } else {
       // 4. inc ref count for shared lock

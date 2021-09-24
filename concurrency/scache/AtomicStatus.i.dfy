@@ -20,51 +20,51 @@ module AtomicStatusImpl {
   import CacheResources
   import opened CacheStatusType
 
-  const flag_zero : uint8 := 0;
+  ghost const flag_zero : uint8 := 0;
 
-  const flag_writeback : uint8 := 1;
-  const flag_exc : uint8 := 2;
-  const flag_accessed : uint8 := 4;
-  const flag_unmapped : uint8 := 8;
-  const flag_reading : uint8 := 16;
-  const flag_clean : uint8 := 32;
-  const flag_claim : uint8 := 64;
+  function method flag_writeback() : uint8 { 1 }
+  function method flag_exc() : uint8 { 2 }
+  function method flag_accessed() : uint8 { 4 }
+  function method flag_unmapped() : uint8 { 8 }
+  function method flag_reading() : uint8 { 16 }
+  function method flag_clean() : uint8 { 32 }
+  function method flag_claim() : uint8 { 64 }
 
-  const flag_writeback_clean : uint8 := 33;
-  const flag_exc_clean : uint8 := 34;
-  const flag_accessed_clean : uint8 := 36;
-  const flag_unmapped_clean : uint8 := 40;
-  const flag_reading_clean : uint8 := 48;
-  const flag_writeback_exc : uint8 := 3;
-  const flag_writeback_accessed : uint8 := 5;
-  const flag_exc_accessed : uint8 := 6;
-  const flag_writeback_exc_accessed : uint8 := 7;
-  const flag_accessed_reading : uint8 := 20;
-  const flag_exc_reading : uint8 := 18;
-  const flag_exc_accessed_reading : uint8 := 22;
-  const flag_writeback_exc_clean : uint8 := 35;
-  const flag_writeback_accessed_clean : uint8 := 37;
-  const flag_exc_accessed_clean : uint8 := 38;
-  const flag_writeback_exc_accessed_clean : uint8 := 39;
-  const flag_accessed_reading_clean : uint8 := 52;
-  const flag_exc_reading_clean : uint8 := 50;
-  const flag_exc_accessed_reading_clean : uint8 := 54;
+  ghost const flag_writeback_clean : uint8 := 33;
+  ghost const flag_exc_clean : uint8 := 34;
+  ghost const flag_accessed_clean : uint8 := 36;
+  ghost const flag_unmapped_clean : uint8 := 40;
+  ghost const flag_reading_clean : uint8 := 48;
+  ghost const flag_writeback_exc : uint8 := 3;
+  ghost const flag_writeback_accessed : uint8 := 5;
+  ghost const flag_exc_accessed : uint8 := 6;
+  ghost const flag_writeback_exc_accessed : uint8 := 7;
+  ghost const flag_accessed_reading : uint8 := 20;
+  ghost const flag_exc_reading : uint8 := 18;
+  ghost const flag_exc_accessed_reading : uint8 := 22;
+  ghost const flag_writeback_exc_clean : uint8 := 35;
+  ghost const flag_writeback_accessed_clean : uint8 := 37;
+  ghost const flag_exc_accessed_clean : uint8 := 38;
+  ghost const flag_writeback_exc_accessed_clean : uint8 := 39;
+  ghost const flag_accessed_reading_clean : uint8 := 52;
+  ghost const flag_exc_reading_clean : uint8 := 50;
+  ghost const flag_exc_accessed_reading_clean : uint8 := 54;
 
-  const flag_exc_clean_claim : uint8 := 98;
-  const flag_exc_accessed_clean_claim : uint8 := 102;
-  const flag_exc_claim : uint8 := 66;
-  const flag_exc_accessed_claim : uint8 := 70;
-  const flag_accessed_claim : uint8 := 68;
-  const flag_accessed_clean_claim : uint8 := 100;
-  const flag_clean_claim : uint8 := 96;
-  const flag_writeback_claim : uint8 := 65;
-  const flag_writeback_accessed_claim : uint8 := 69;
-  const flag_writeback_clean_claim : uint8 := 97;
-  const flag_writeback_accessed_clean_claim : uint8 := 101;
-  const flag_writeback_exc_claim : uint8 := 67;
-  const flag_writeback_exc_accessed_claim : uint8 := 71;
-  const flag_writeback_exc_clean_claim : uint8 := 99;
-  const flag_writeback_exc_accessed_clean_claim : uint8 := 103;
+  ghost const flag_exc_clean_claim : uint8 := 98;
+  ghost const flag_exc_accessed_clean_claim : uint8 := 102;
+  ghost const flag_exc_claim : uint8 := 66;
+  ghost const flag_exc_accessed_claim : uint8 := 70;
+  ghost const flag_accessed_claim : uint8 := 68;
+  ghost const flag_accessed_clean_claim : uint8 := 100;
+  ghost const flag_clean_claim : uint8 := 96;
+  ghost const flag_writeback_claim : uint8 := 65;
+  ghost const flag_writeback_accessed_claim : uint8 := 69;
+  ghost const flag_writeback_clean_claim : uint8 := 97;
+  ghost const flag_writeback_accessed_clean_claim : uint8 := 101;
+  ghost const flag_writeback_exc_claim : uint8 := 67;
+  ghost const flag_writeback_exc_accessed_claim : uint8 := 71;
+  ghost const flag_writeback_exc_clean_claim : uint8 := 99;
+  ghost const flag_writeback_exc_accessed_clean_claim : uint8 := 103;
 
   glinear datatype G = G(
     glinear rwlock: Rw.Token,
@@ -89,7 +89,7 @@ module AtomicStatusImpl {
     )*/
     && (g.status.glNone? ==>
         && (
-        || v == flag_unmapped
+        || v == flag_unmapped()
         || v == flag_exc_claim
         || v == flag_exc_accessed_claim
         || v == flag_exc_reading
@@ -101,7 +101,7 @@ module AtomicStatusImpl {
         || v == flag_reading_clean
         || v == flag_accessed_reading_clean
         )
-        && (v == flag_unmapped ==>
+        && (v == flag_unmapped() ==>
           && g.rwlock.val.central.stored_value.CacheEmptyHandle?
         )
         && (v == flag_exc_claim || v == flag_exc_accessed_claim || v == flag_exc_clean_claim
@@ -123,12 +123,12 @@ module AtomicStatusImpl {
   {
     && (flag == RwLock.Available ==> (
       || v == flag_zero
-      || v == flag_accessed
-      || v == flag_clean
+      || v == flag_accessed()
+      || v == flag_clean()
       || v == flag_accessed_clean
     ))
     && (flag == RwLock.Writeback ==> (
-      || v == flag_writeback
+      || v == flag_writeback()
       || v == flag_writeback_accessed
     ))
     && (flag == RwLock.ExcLock_Clean ==> (
@@ -140,7 +140,7 @@ module AtomicStatusImpl {
       || v == flag_exc_accessed_claim
     ))
     && (flag == RwLock.Claimed ==> (
-      || v == flag_claim
+      || v == flag_claim()
       || v == flag_accessed_claim
       || v == flag_clean_claim
       || v == flag_accessed_clean_claim
@@ -163,9 +163,9 @@ module AtomicStatusImpl {
       || v == flag_writeback_exc_clean_claim
       || v == flag_writeback_exc_accessed_clean_claim
     ))
-    && (flag == RwLock.Unmapped ==> v == flag_unmapped)
+    && (flag == RwLock.Unmapped ==> v == flag_unmapped())
     && (flag == RwLock.Reading ==>
-      || v == flag_reading
+      || v == flag_reading()
       || v == flag_reading_clean
       || v == flag_accessed_reading_clean
     )
@@ -176,7 +176,7 @@ module AtomicStatusImpl {
   predicate status_inv(v: uint8, status: Status, key: Key)
   {
     && (status == Clean ==> (
-      || v == flag_clean
+      || v == flag_clean()
       || v == flag_clean_claim
       || v == flag_exc_clean_claim
       || v == flag_accessed_clean
@@ -185,14 +185,14 @@ module AtomicStatusImpl {
     ))
     && (status == Dirty ==> (
       || v == flag_zero
-      || v == flag_claim
+      || v == flag_claim()
       || v == flag_exc_claim
-      || v == flag_accessed
+      || v == flag_accessed()
       || v == flag_accessed_claim
       || v == flag_exc_accessed_claim
     ))
     && (status == Writeback ==> (
-      || v == flag_writeback
+      || v == flag_writeback()
       || v == flag_writeback_claim
       || v == flag_writeback_exc_claim
       || v == flag_writeback_accessed
@@ -231,14 +231,14 @@ module AtomicStatusImpl {
     {
       atomic_block var cur_flag := execute_atomic_load(this.atomic) { }
 
-      if !(cur_flag == flag_zero
-          || (with_access && cur_flag == flag_accessed)) {
+      if !(cur_flag == 0
+          || (with_access && cur_flag == flag_accessed())) {
         m := glNone;
         disk_write_ticket := glNone;
         success := false;
       } else {
         atomic_block var did_set :=
-            execute_atomic_compare_and_set_strong(this.atomic, flag_zero, flag_writeback)
+            execute_atomic_compare_and_set_strong(this.atomic, 0, flag_writeback())
         {
           ghost_acquire old_g;
 
@@ -277,7 +277,7 @@ module AtomicStatusImpl {
           success := false;
         } else {
           atomic_block var did_set :=
-              execute_atomic_compare_and_set_strong(this.atomic, flag_accessed, flag_writeback_accessed)
+              execute_atomic_compare_and_set_strong(this.atomic, flag_accessed(), flag_writeback() + flag_accessed())
           {
             ghost_acquire old_g;
             glinear var new_g;
@@ -324,7 +324,7 @@ module AtomicStatusImpl {
       glinear match handle { case WritebackObtainedToken(_, t) => { wb := t; } }
 
       // Unset Writeback; set Clean
-      atomic_block var _ := execute_atomic_fetch_xor_uint8(this.atomic, flag_writeback_clean) {
+      atomic_block var _ := execute_atomic_fetch_xor_uint8(this.atomic, flag_writeback() + flag_clean()) {
         ghost_acquire old_g;
         glinear var new_g;
 
@@ -377,11 +377,11 @@ module AtomicStatusImpl {
           assert m.val.exc == RwLock.ExcPendingAwaitWriteback(t, m.val.exc.b);
           assert m.val == RwLock.ExcHandle(m.val.exc);
           rwlock, m' := Rw.perform_TakeExcLockFinishWriteback(
-            rwlock, m, bit_and_uint8(f, flag_clean) != 0);
+            rwlock, m, bit_and_uint8(f, flag_clean()) != 0);
           assert status0.glSome?;
-          assert bit_and_uint8(f, flag_clean) != 0 ==>
+          assert bit_and_uint8(f, flag_clean()) != 0 ==>
               status0.value.status == Clean;
-          assert bit_and_uint8(f, flag_clean) == 0 ==>
+          assert bit_and_uint8(f, flag_clean()) == 0 ==>
               status0.value.status == Dirty;
           status := status0;
           new_g := G(rwlock, glNone);
@@ -391,8 +391,8 @@ module AtomicStatusImpl {
         ghost_release new_g;
       }
 
-      success := bit_and_uint8(f, flag_writeback) == 0;
-      clean := bit_and_uint8(f, flag_clean) != 0;
+      success := bit_and_uint8(f, flag_writeback()) == 0;
+      clean := bit_and_uint8(f, flag_clean()) != 0;
     }
 
     shared method try_alloc()
@@ -412,13 +412,14 @@ module AtomicStatusImpl {
       // check first to reduce contention
       atomic_block var f := execute_atomic_load(atomic) { }
 
-      if f != flag_unmapped {
+      if f != flag_unmapped() {
         success := false;
         m := glNone;
         handle_opt := glNone;
       } else {
         atomic_block var did_set := execute_atomic_compare_and_set_strong(
-            atomic, flag_unmapped, flag_exc_accessed_reading_clean)
+            atomic, flag_unmapped(),
+            flag_exc() + flag_accessed() + flag_reading() + flag_clean())
         {
           ghost_acquire old_g;
           glinear var new_g;
@@ -471,7 +472,7 @@ module AtomicStatusImpl {
     ensures r.val.read.ReadPending? ==>
         q.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
     {
-      atomic_block var _ := execute_atomic_store(atomic, flag_accessed_reading_clean) {
+      atomic_block var _ := execute_atomic_store(atomic, flag_accessed() + flag_reading() + flag_clean()) {
         ghost_acquire old_g;
         glinear var new_g;
         var fl := old_g.rwlock.val.central.flag;
@@ -505,7 +506,7 @@ module AtomicStatusImpl {
     ensures q.loc == rwlock_loc
     ensures q.val == RwLock.SharedHandle(RwLock.SharedObtained(r.val.read.t, handle))
     {
-      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_reading) {
+      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_reading()) {
         ghost_acquire old_g;
         glinear var new_g;
         var fl := old_g.rwlock.val.central.flag;
@@ -534,7 +535,7 @@ module AtomicStatusImpl {
     requires handle.CacheEntryHandle?
     requires status.is_status(key.cache_idx, Clean)
     {
-      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_reading) {
+      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_reading()) {
         ghost_acquire old_g;
         glinear var new_g;
         var fl := old_g.rwlock.val.central.flag;
@@ -553,7 +554,7 @@ module AtomicStatusImpl {
     returns (is_exc_locked: bool)
     {
       atomic_block var v := execute_atomic_load(atomic) { }
-      return ((v as bv8) & (flag_exc as bv8)) as uint8 != 0;
+      return ((v as bv8) & (flag_exc() as bv8)) as uint8 != 0;
     }
 
     shared method is_exc_locked_or_free(
@@ -585,8 +586,8 @@ module AtomicStatusImpl {
         ghost_release new_g;
       }
 
-      success := bit_and_uint8(f, bit_or_uint8(flag_exc, flag_unmapped)) == 0;
-      is_accessed := bit_and_uint8(f, flag_accessed) != 0;
+      success := bit_and_uint8(f, bit_or_uint8(flag_exc(), flag_unmapped())) == 0;
+      is_accessed := bit_and_uint8(f, flag_accessed()) != 0;
     }
 
     shared method mark_accessed(
@@ -599,7 +600,7 @@ module AtomicStatusImpl {
     requires 0 <= t < RC_WIDTH as int
     ensures r' == r
     {
-      atomic_block var _ := execute_atomic_fetch_or_uint8(atomic, flag_accessed) {
+      atomic_block var _ := execute_atomic_fetch_or_uint8(atomic, flag_accessed()) {
         ghost_acquire old_g;
         glinear var new_g;
 
@@ -616,7 +617,7 @@ module AtomicStatusImpl {
     shared method clear_accessed()
     requires this.inv()
     {
-      atomic_block var orig_value := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_accessed)
+      atomic_block var orig_value := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_accessed())
       {
         ghost_acquire g;
         assert state_inv(new_value, g, key, rwlock_loc);
@@ -665,7 +666,7 @@ module AtomicStatusImpl {
         ghost_release new_g;
       }
 
-      success := bit_and_uint8(f, flag_reading) == 0;
+      success := bit_and_uint8(f, flag_reading()) == 0;
     }
 
     shared method take_exc_if_eq_clean()
@@ -688,7 +689,7 @@ module AtomicStatusImpl {
         && b.is_handle(key)
     {
       atomic_block var did_set :=
-          execute_atomic_compare_and_set_strong(atomic, flag_clean, flag_exc_clean_claim)
+          execute_atomic_compare_and_set_strong(atomic, flag_clean(), flag_exc() + flag_clean() + flag_claim())
       {
         ghost_acquire old_g;
         glinear var new_g;
@@ -739,7 +740,7 @@ module AtomicStatusImpl {
     requires r.val == RwLock.ExcHandle(RwLock.ExcObtained(-1, true))
     requires r.loc == rwlock_loc
     {
-      atomic_block var _ := execute_atomic_store(atomic, flag_unmapped)
+      atomic_block var _ := execute_atomic_store(atomic, flag_unmapped())
       {
         ghost_acquire old_g;
         glinear var new_g;
@@ -766,7 +767,7 @@ module AtomicStatusImpl {
         -1, r.val.exc.visited, true, r.val.exc.b))
     requires status == CacheResources.CacheStatus(key.cache_idx, Clean)
     {
-      atomic_block var orig_value := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_exc - flag_claim) {
+      atomic_block var orig_value := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_exc() - flag_claim()) {
         ghost_acquire old_g;
         glinear var new_g;
         glinear var G(rwlock, empty_status) := old_g;
@@ -792,7 +793,7 @@ module AtomicStatusImpl {
     requires handle.is_handle(key)
     requires handle.CacheEmptyHandle?
     {
-      atomic_block var _ := execute_atomic_store(atomic, flag_unmapped) {
+      atomic_block var _ := execute_atomic_store(atomic, flag_unmapped()) {
         ghost_acquire old_g;
         glinear var new_g;
         glinear var G(rwlock, empty_status) := old_g;
@@ -823,7 +824,7 @@ module AtomicStatusImpl {
     ensures r'.val == RwLock.ExcHandle(r.val.exc.(clean := false))
     ensures status' == CacheResources.CacheStatus(key.cache_idx, Dirty)
     {
-      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_clean) {
+      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_clean()) {
         ghost_acquire old_g;
         glinear var new_g;
         glinear var G(rwlock, empty_status) := old_g;
@@ -857,11 +858,11 @@ module AtomicStatusImpl {
       // set claim bit
       // return 'true' iff it was not already set
 
-      atomic_block var ret := execute_atomic_fetch_or_uint8(atomic, flag_claim) {
+      atomic_block var ret := execute_atomic_fetch_or_uint8(atomic, flag_claim()) {
         ghost_acquire old_g;
         glinear var new_g;
 
-        if bit_and_uint8(flag_claim, ret) == 0 {
+        if bit_and_uint8(flag_claim(), ret) == 0 {
           glinear var G(rwlock, status) := old_g;
           rwlock, r' := Rw.perform_SharedToClaim(rwlock, r, ss);
           new_g := G(rwlock, status);
@@ -876,7 +877,7 @@ module AtomicStatusImpl {
         ghost_release new_g;
       }
 
-      success := bit_and_uint8(flag_claim, ret) == 0;
+      success := bit_and_uint8(flag_claim(), ret) == 0;
     }
 
     shared method unset_claim(glinear r: Rw.Token)
@@ -891,7 +892,7 @@ module AtomicStatusImpl {
     ensures r'.val ==
         RwLock.SharedHandle(RwLock.SharedObtained(r.val.exc.t, r.val.exc.b))
     {
-      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_claim) {
+      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_claim()) {
         ghost_acquire old_g;
         glinear var new_g;
 
@@ -915,7 +916,7 @@ module AtomicStatusImpl {
     ensures r'.val == RwLock.ExcHandle(RwLock.ExcPendingAwaitWriteback(
         r.val.exc.t, r.val.exc.b));
     {
-      atomic_block var _ := execute_atomic_fetch_or_uint8(atomic, flag_exc) {
+      atomic_block var _ := execute_atomic_fetch_or_uint8(atomic, flag_exc()) {
         ghost_acquire old_g;
         glinear var new_g;
 
@@ -948,7 +949,7 @@ module AtomicStatusImpl {
     ensures r'.loc == r.loc
     ensures r'.val == RwLock.ExcHandle(RwLock.ExcClaim(r.val.exc.t, b));
     {
-      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_exc) {
+      atomic_block var _ := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_exc()) {
         ghost_acquire old_g;
         glinear var new_g;
 
