@@ -459,7 +459,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   // constructs the log map with the new entries
-  function ConstructNewLogEntries(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>): (res: map<nat, LogEntry>)
+  function  {:opaque}  ConstructNewLogEntries(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>): (res: map<nat, LogEntry>)
     requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
   {
     //map i : nat | (gtail <= i < gtail + |rids|) && InRange2(rids, i, gtail) :: i := LogEntry(lupd[rids[i-gtail]].op, nodeId)
@@ -481,6 +481,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     ensures forall i : nat | gtail + |rids| <= i :: i !in res
     ensures forall i : nat | gtail <= i < gtail + |rids| :: i in res
   {
+    reveal_ConstructNewLogEntries();
     forall idx : nat | gtail <= idx < gtail + |rids|
     ensures idx in res
     {
@@ -495,6 +496,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     requires res == ConstructNewLogEntries(rids, nodeId, m.global_tail.value, m.localUpdates)
     ensures res.Keys !! m.log.Keys
   {
+    reveal_ConstructNewLogEntries();
   }
 
 
@@ -1216,17 +1218,17 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     requires AdvanceTail(m, m', nodeId, request_ids)
     ensures Inv(m')
   {
+    assert(seq_unique(request_ids));
+    var updated_log := ConstructNewLogEntries(request_ids, nodeId, m.global_tail.value, m.localUpdates);
+    ConstructNewLogEntries_InMap(request_ids, nodeId, m.global_tail.value, m.localUpdates, updated_log);
+
+    assert m'.log == map_update(m.log, updated_log);
+
     forall nid | nid in m'.replicas
       ensures m'.replicas[nid] == state_at_version(m'.log, get_local_tail(m', nid))
       {
         state_at_version_preserves(m.log, m'.log, get_local_tail(m', nid));
-     }
-
-    // assert(seq_unique(request_ids));
-    // var updated_log := ConstructNewLogEntries(request_ids, nodeId, m.global_tail.value, m.localUpdates);
-    // ConstructNewLogEntries_InMap(request_ids, nodeId, m.global_tail.value, m.localUpdates, updated_log);
-
-    // assert m'.log == map_update(m.log, updated_log);
+      }
 
 
     forall idx : nat | 0 <= idx < m'.global_tail.value
