@@ -2,6 +2,7 @@ include "../framework/AsyncSSM.s.dfy"
 include "NRSpec.s.dfy"
 include "../../lib/Base/Option.s.dfy"
 
+
 module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   import opened Options
 
@@ -246,10 +247,30 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m.combiner[nodeId].CombinerUpdatedCtail?
   }
 
-  /* ============================================================================================
+  /*
+   * ============================================================================================
    * State Guards for UpdateRequests
    * ============================================================================================
    */
+
+  // GUARD: UpdateInit
+  //
+  // the update request for is in the init state
+  predicate InUpdateInit(m : M, reqid : RequestId)
+    requires StateValid(m)
+  {
+    && reqid in m.localUpdates
+    && m.localUpdates[reqid].UpdateInit?
+  }
+
+  // GUARD: UpdateInit
+  //
+  // all requests are in the updateinit state
+  predicate InUpdateInitAll(m : M, rids: seq<RequestId>)
+    requires StateValid(m)
+  {
+    forall rid | rid in rids :: InUpdateInit(m, rid)
+  }
 
   // GUARD: UpdatePlaced
   //
@@ -270,6 +291,39 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && reqid in m.localUpdates
     && m.localUpdates[reqid].UpdateApplied?
   }
+
+
+  /*
+   * ============================================================================================
+   * Map/Seq Utilities
+   * ============================================================================================
+   */
+
+
+  // updates map m1 with map m2, where all values of m2 aree added to m1, and existing values updated
+  // see: https://stackoverflow.com/questions/52610402/updating-a-map-with-another-map-in-dafny
+  function map_update<K(!new), V>(m1: map<K, V>, m2: map<K, V>): map<K, V>
+  ensures
+    (forall k :: k in m1 || k in m2 ==> k in map_update(m1, m2)) &&
+    (forall k :: k in m2 ==> map_update(m1, m2)[k] == m2[k]) &&
+    (forall k :: !(k in m2) && k in m1 ==> map_update(m1, m2)[k] == m1[k]) &&
+    (forall k :: !(k in m2) && !(k in m1) ==> !(k in map_update(m1, m2)))
+  {
+    map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
+  }
+
+  // checks that two maps are equal
+  predicate map_equal<K(!new), V>(m1: map<K, V>, m2: map<K, V>)
+  {
+    && (forall k | k in m1 :: k in m2 && m1[k] == m2[k])
+    && (forall k | k in m2 :: k in m1 && m1[k] == m2[k])
+  }
+
+  // all elements in the sequence are unique
+  predicate seq_unique<V>(rids: seq<V>) {
+    forall i, j | 0 <= i < |rids| && 0 <= j < |rids| && i != j :: rids[i] != rids[j]
+  }
+
 
   /*
    * ============================================================================================
@@ -389,40 +443,60 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
    * TODO: ADD THE COMPLETE "pseudocode here"
    */
 
-  // https://stackoverflow.com/questions/52610402/updating-a-map-with-another-map-in-dafny
-  function update_map<K(!new), V>(m1: map<K, V>, m2: map<K, V>): map<K, V>
-  ensures
-    (forall k :: k in m1 || k in m2 ==> k in update_map(m1, m2)) &&
-    (forall k :: k in m2 ==> update_map(m1, m2)[k] == m2[k]) &&
-    (forall k :: !(k in m2) && k in m1 ==> update_map(m1, m2)[k] == m1[k]) &&
-    (forall k :: !(k in m2) && !(k in m1) ==> !(k in update_map(m1, m2)))
+  // predicate that states that `i` is within the range of the sequence
+  predicate InRange(s: seq<RequestId>, i: nat) {
+     0 <= i < |s|
+  }
+
+  // calculates the log index
+  function LogIdx(gtail: nat, i: nat) : nat {
+    gtail + i
+  }
+
+  predicate InRange2(s: seq<RequestId>, i: nat, g: nat)
   {
-    map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
+    && g <= i < g + |s|
   }
 
-
-  predicate RequestIdsValidAndUpdateInit(request_ids: seq<RequestId>, localUpdates: map<RequestId, UpdateState>)
+  // constructs the log map with the new entries
+  function ConstructNewLogEntries(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>): (res: map<nat, LogEntry>)
+    requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
   {
-    && (forall rid | rid in request_ids :: (rid in localUpdates &&  localUpdates[rid].UpdateInit?))
-    && |(set x | x in request_ids :: x)| == |request_ids|
+    //map i : nat | (gtail <= i < gtail + |rids|) && InRange2(rids, i, gtail) :: i := LogEntry(lupd[rids[i-gtail]].op, nodeId)
+    map i : nat | InRange(rids, i) && 0 <= i < |rids| :: LogIdx(gtail, i) :=  LogEntry(lupd[rids[i]].op, nodeId)
   }
 
-  predicate RequestIdsUnique(request_ids: seq<RequestId>) {
-    forall i, j | 0 <= i < |request_ids| && 0 <= j < |request_ids| && i != j :: request_ids[i] != request_ids[j]
-  }
-
-  // Given a log of ops and a version number, compute the state at that version
-  // TODO(travis): Try this syntax: map i | 0 <= i < |s| :: s[i].key := s[i].value (need proof to )
-  function seq_of_tuples_to_map(s: seq<(RequestId, int)>) : map<RequestId, int>
-  // TODO(travis): Probably don't want this ensures here:
-  //ensures |s| == |seq_of_tuples_to_map(s)|
-  ensures (forall rid | rid in seq_of_tuples_to_map(s) :: (rid, seq_of_tuples_to_map(s)[rid]) in s)
+  // constructs a localupdate map
+  function ConstructLocalUpdateMap(rids: seq<RequestId>, nodeId: NodeId, gtail: nat) : map<RequestId, UpdateState>
+    requires seq_unique(rids)
   {
-    if |s| == 0 then
-      map[]
-    else
-      map_union(seq_of_tuples_to_map(s[1..]), map[s[0].0 := s[0].1])
+    (map i : nat | InRange(rids, i) && 0 <= i < |rids| :: rids[i] as RequestId := UpdatePlaced(nodeId, LogIdx(gtail, i)))
   }
+
+  // lemma showing that 0 <= i < gtail not in new log, gtail <= i not in log, rest in log
+  lemma ConstructNewLogEntries_InMap(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>, res: map<RequestId, LogEntry>)
+    requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
+    requires res == ConstructNewLogEntries(rids, nodeId, gtail, lupd)
+    ensures forall i : nat | 0 <= i < gtail :: i !in res
+    ensures forall i : nat | gtail + |rids| <= i :: i !in res
+    ensures forall i : nat | gtail <= i < gtail + |rids| :: i in res
+  {
+    forall idx : nat | gtail <= idx < gtail + |rids|
+    ensures idx in res
+    {
+      var i := idx - gtail;
+      assert LogIdx(gtail, i) == idx;
+    }
+  }
+
+  lemma ConstructNewLogEntries_LogDisjunct(m: M, nodeId: NodeId, rids: seq<RequestId>, res: map<RequestId, LogEntry>)
+    requires Inv(m)
+    requires forall r | r in rids :: r in m.localUpdates && m.localUpdates[r].UpdateInit?
+    requires res == ConstructNewLogEntries(rids, nodeId, m.global_tail.value, m.localUpdates)
+    ensures res.Keys !! m.log.Keys
+  {
+  }
+
 
   // reserve entries on the shared log
   // { UpdateInit(r, op1) ; UpdateInit(p, op2) ; UpdateInit(q, op3) ; CombinerReady ; GlobalTail(t) }
@@ -436,39 +510,32 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //   }
   // { UpdatePlaced(r) ; UpdatePlaced(p) ; UpdatePlaced(q) ; CombinerPlaced( [p,q,r] ) ;
   //   Log(t, op1) ; Log(t+1, op2) ; Log(t+2, op1) ; GlobalTail(t + ops.len()) }
-  // TODO(travis): precondition that all request_ids are distinct?
   predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
   {
     && StateValid(m)
     && InCombinerReady(m, nodeId)
     && GlobalTailValid(m)
-    && RequestIdsValidAndUpdateInit(request_ids, m.localUpdates)
-    && RequestIdsUnique(request_ids)
+    && InUpdateInitAll(m, request_ids)
+    && seq_unique(request_ids)
 
-    && var global_tail_var := m.global_tail.value;
+    // define local variable for convenience
+    && var gtail := m.global_tail.value;
 
     // Add new entries to the log:
-    && var updated_log := (map i | 0 <= i < |request_ids| :: (global_tail_var + i) :=  LogEntry(m.localUpdates[request_ids[i]].op, nodeId));
-    // var updated_log := (map idx | global_tail_var <= idx < global_tail_var+|request_ids| :: LogEntry(m.localUpdates[request_ids[idx-global_tail_var]].op, nodeId));
+    && var updated_log := ConstructNewLogEntries(request_ids, nodeId, gtail, m.localUpdates);
 
     // the new local updates
-    && var local_updates_new := (map i | 0 <= i < |request_ids| :: request_ids[i] := UpdatePlaced(nodeId, global_tail_var + i));
-
-    // // [(rid0, global_tail_var), (rid1, global_tail_var+1), (rid2, global_tail_var+2), ...]
-    // && var rid_idx_seq := seq(|request_ids|, i requires 0 <= i < |request_ids| => (request_ids[i], global_tail_var + i));
-    // // {rid0: global_tail_var, ...]
-    // && var rid_idx_map := seq_of_tuples_to_map(rid_idx_seq);
-    // && var local_updates_new := (map rid | rid in rid_idx_map :: UpdatePlaced(nodeId, rid_idx_map[rid]));
+    && var local_updates_new := ConstructLocalUpdateMap(request_ids, nodeId, gtail);
 
     // the new combiner state
     && var combiner_state_new := CombinerPlaced(request_ids);
 
     // calculate the new global tail
-    && var global_tail_new := m.global_tail.value + |request_ids|;
+    && var global_tail_new := gtail + |request_ids|;
 
     // update the state
-    && m' == m.(log := update_map(m.log, updated_log))
-              .(localUpdates := update_map(m.localUpdates, local_updates_new))
+    && m' == m.(log := map_update(m.log, updated_log))
+              .(localUpdates := map_update(m.localUpdates, local_updates_new))
               .(global_tail := Some(global_tail_new))
               .(combiner := m.combiner[nodeId := combiner_state_new])
   }
@@ -664,16 +731,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
    * ============================================================================================
    */
 
-
-// update the map
-// Question: precedence between m1 and m2, currently always take m1 first
-function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
-    map k | k in m1.Keys + m2.Keys ::
-        (if k in m1.Keys then m1[k] else m2[k])
-  }
-
   // tips for implementing dot:
-  // you should probably be able to find a map_union function in the codebase you can steal
+  // you should probably be able to find a map_update function in the codebase you can steal
   // if two things conflict, get a Fail
   function dot(x: M, y: M) : M {
     // if either state is Fale, then fail
@@ -689,14 +748,14 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
          && !(x.global_tail.Some? && y.global_tail.Some?)
          then
       M(
-      map_union(x.log, y.log),
+      map_update(x.log, y.log),
       if x.global_tail.Some? then x.global_tail else y.global_tail,
-      map_union(x.replicas, y.replicas),
-      map_union(x.localTails, y.localTails),
+      map_update(x.replicas, y.replicas),
+      map_update(x.localTails, y.localTails),
       if x.ctail.Some? then x.ctail else y.ctail,
-      map_union(x.localReads, y.localReads),
-      map_union(x.localUpdates, y.localUpdates),
-      map_union(x.combiner, y.combiner)
+      map_update(x.localReads, y.localReads),
+      map_update(x.localUpdates, y.localUpdates),
+      map_update(x.combiner, y.combiner)
     )
     else
       Fail
@@ -771,12 +830,12 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     && s.replicas.Keys == s.localTails.Keys
     && s.replicas.Keys == s.combiner.Keys
     // all local tails == 0
-    && forall i | i in s.localTails :: s.localTails[i] == 0
+    && (forall i | i in s.localTails :: s.localTails[i] == 0)
     // all combiners are in ready state
-    && forall i | i in s.combiner :: s.combiner[i] == CombinerReady
+    && (forall i | i in s.combiner :: s.combiner[i] == CombinerReady)
 
     // all replicas should be identical
-    && forall i | i in s.replicas :: s.replicas[i] == nrifc.init_state()
+    && (forall i | i in s.replicas :: s.replicas[i] == nrifc.init_state())
 
     // the local reads, local updates, and the log should be empty
     && s.localReads == map[]
@@ -988,7 +1047,6 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
   {
     // TODO(travis): all the `idx` in localUpdates.UpdatePlaced?.idx and
     // localUpdates.UpdateDone?.idx should be less than ctail?
-
     && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdatePlaced?
       :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value)
     && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdateApplied?
@@ -1163,6 +1221,14 @@ function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
       {
         state_at_version_preserves(m.log, m'.log, get_local_tail(m', nid));
      }
+
+    // assert(seq_unique(request_ids));
+    // var updated_log := ConstructNewLogEntries(request_ids, nodeId, m.global_tail.value, m.localUpdates);
+    // ConstructNewLogEntries_InMap(request_ids, nodeId, m.global_tail.value, m.localUpdates, updated_log);
+
+    // assert m'.log == map_update(m.log, updated_log);
+
+
     forall idx : nat | 0 <= idx < m'.global_tail.value
     ensures idx in m'.log.Keys
     {
