@@ -81,11 +81,10 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   //requires Inv(s)
   ensures B.Init(I(s))
 
-  // s: the whole things
-  // s': some partial state
-  // stub: the missing piece
-  // s' = s+ticket
-  // `s` = `s'` + `stub`
+  // s: some previous thing with a missing piece
+  // s': some next thing
+  // "stub": the missing piece in s
+  // s' = s + ticket
   lemma NewTicket_Refines_Start(s: A.Variables, s': A.Variables,
       rid: RequestId, input: nrifc.Input)
   requires IL.NewTicket(s, s', rid, input)
@@ -116,7 +115,6 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     }
   }
 
-  // `s` = `s'` + `stub`
   lemma ConsumeStub_Refines_End(s: A.Variables, s': A.Variables,
       rid: RequestId, output: nrifc.Output, stub: M)
   requires IL.ConsumeStub(s, s', rid, output, stub)
