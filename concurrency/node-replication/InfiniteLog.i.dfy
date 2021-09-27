@@ -466,13 +466,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     map i : nat | InRange(rids, i) && 0 <= i < |rids| :: LogIdx(gtail, i) :=  LogEntry(lupd[rids[i]].op, nodeId)
   }
 
-  // constructs a localupdate map
-  function ConstructLocalUpdateMap(rids: seq<RequestId>, nodeId: NodeId, gtail: nat) : map<RequestId, UpdateState>
-    requires seq_unique(rids)
-  {
-    (map i : nat | InRange(rids, i) && 0 <= i < |rids| :: rids[i] as RequestId := UpdatePlaced(nodeId, LogIdx(gtail, i)))
-  }
-
   // lemma showing that 0 <= i < gtail not in new log, gtail <= i not in log, rest in log
   lemma ConstructNewLogEntries_InMap(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>, res: map<RequestId, LogEntry>)
     requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
@@ -480,6 +473,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     ensures forall i : nat | 0 <= i < gtail :: i !in res
     ensures forall i : nat | gtail + |rids| <= i :: i !in res
     ensures forall i : nat | gtail <= i < gtail + |rids| :: i in res
+    ensures forall i | i in res :: i >= gtail
+    ensures forall i | i in res :: i < gtail + |rids|
   {
     reveal_ConstructNewLogEntries();
     forall idx : nat | gtail <= idx < gtail + |rids|
@@ -497,6 +492,45 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     ensures res.Keys !! m.log.Keys
   {
     reveal_ConstructNewLogEntries();
+  }
+
+  lemma ConstructNewLogEntries_EqualKeys(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>, lupd2: map<RequestId, UpdateState>)
+    requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
+    requires forall r | r in rids :: r in lupd2 && lupd2[r].UpdateInit?
+    ensures ConstructNewLogEntries(rids, nodeId, gtail, lupd).Keys == ConstructNewLogEntries(rids, nodeId, gtail, lupd2).Keys
+  {
+    ConstructNewLogEntries_InMap(rids, nodeId, gtail, lupd, ConstructNewLogEntries(rids, nodeId, gtail, lupd));
+    ConstructNewLogEntries_InMap(rids, nodeId, gtail, lupd2, ConstructNewLogEntries(rids, nodeId, gtail, lupd2));
+  }
+
+  lemma ConstructNewLogEntries_Equal(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>, lupd2: map<RequestId, UpdateState>)
+    requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
+    requires forall r | r in rids :: r in lupd2 && lupd2[r].UpdateInit?
+    requires forall r | r in rids :: lupd[r] == lupd2[r]
+    ensures ConstructNewLogEntries(rids, nodeId, gtail, lupd) == ConstructNewLogEntries(rids, nodeId, gtail, lupd2)
+  {
+    ConstructNewLogEntries_InMap(rids, nodeId, gtail, lupd, ConstructNewLogEntries(rids, nodeId, gtail, lupd));
+    ConstructNewLogEntries_InMap(rids, nodeId, gtail, lupd2, ConstructNewLogEntries(rids, nodeId, gtail, lupd2));
+    reveal_ConstructNewLogEntries();
+  }
+
+  // constructs a localupdate map
+  function {:opaque} ConstructLocalUpdateMap(rids: seq<RequestId>, nodeId: NodeId, gtail: nat) : map<RequestId, UpdateState>
+    requires seq_unique(rids)
+  {
+    (map i : nat | InRange(rids, i) && 0 <= i < |rids| :: rids[i] as RequestId := UpdatePlaced(nodeId, LogIdx(gtail, i)))
+  }
+
+  lemma ConstructLocalUpdateMap_InMap(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, res: map<RequestId, UpdateState>)
+    requires seq_unique(rids)
+    requires res == ConstructLocalUpdateMap(rids, nodeId, gtail)
+    ensures forall r | r in rids :: r in res
+    ensures forall r | r in res :: r in rids
+    ensures forall r | r in rids :: res[r].UpdatePlaced?
+    ensures forall r | r in rids :: res[r].idx < gtail + |rids|
+    ensures forall r | r in rids :: gtail <= res[r].idx
+  {
+    reveal_ConstructLocalUpdateMap();
   }
 
 
@@ -1241,10 +1275,14 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
         assert m.global_tail.value + i == idx;
       }
     }
+
+    reveal_ConstructLocalUpdateMap();
+
     forall upd | upd in m'.localUpdates && m'.localUpdates[upd].UpdatePlaced?
     ensures m'.localUpdates[upd].idx in m'.log.Keys
     ensures m'.localUpdates[upd].idx <= m'.global_tail.value
     {
+
     }
   }
 
@@ -1416,11 +1454,56 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   lemma AdvanceTail_Monotonic(m: M, m': M, p: M, nodeId: NodeId, request_ids: seq<RequestId>)
   requires Inv(dot(m, p))
-  //requires dot(m, p) != Fail
+  // requires dot(m, p) != Fail
   requires AdvanceTail(m, m', nodeId, request_ids)
   ensures AdvanceTail(dot(m, p), dot(m', p), nodeId, request_ids)
   {
-    assume false; // TODO verification timeout
+    // SEEMS TO TAKE A BIT LONGER, but runs through.
+    // On my laptop:
+    // Verifying Impl$$InfiniteLogSSM.__default.AdvanceTail__Monotonic ...
+    //  [40.213 s, 106 proof obligations]  verified
+
+
+    // sequence must be unique, ensured by from AdvancedTail
+    assert(seq_unique(request_ids));
+
+    // the request ids are the same in dot(m, p) and in m
+    assert forall rid | rid in request_ids :: rid in m.localUpdates;
+    assert forall rid | rid in request_ids :: dot(m, p).localUpdates[rid] == m.localUpdates[rid];
+
+    // global tail in the dot(m, p) is the same as in m
+    assert dot(m, p).global_tail.value == m.global_tail.value;
+
+    // combiner:
+    assert nodeId !in p.combiner;
+    assert m'.combiner == m.combiner[nodeId := CombinerPlaced(request_ids)];
+
+    // local updates:
+    var lupd := ConstructLocalUpdateMap(request_ids, nodeId, dot(m, p).global_tail.value);
+    assert m'.localUpdates == map_update(m.localUpdates, lupd);
+    ConstructLocalUpdateMap_InMap(request_ids, nodeId, dot(m, p).global_tail.value, lupd);
+    assert m'.localUpdates.Keys !! p.localUpdates.Keys;
+
+    // log:
+    var updated_log := ConstructNewLogEntries(request_ids, nodeId, dot(m, p).global_tail.value, dot(m, p).localUpdates);
+    ConstructNewLogEntries_LogDisjunct(dot(m, p), nodeId, request_ids, updated_log);
+    var updated_log_m := ConstructNewLogEntries(request_ids, nodeId, m.global_tail.value, m.localUpdates);
+    ConstructNewLogEntries_Equal(request_ids, nodeId, m.global_tail.value, m.localUpdates, dot(m, p).localUpdates);
+    assert updated_log_m == updated_log;
+    assert m'.log == map_update(m.log, updated_log);
+    assert updated_log.Keys !! p.log.Keys;
+
+    // check the combiner state
+    assert dot(m', p).combiner == dot(m, p).combiner[nodeId := CombinerPlaced(request_ids)];
+
+    // global tail in the right state
+    assert dot(m', p).global_tail  == Some(dot(m, p).global_tail.value + |request_ids|);
+
+    // local updates in the right state
+    assert dot(m', p).localUpdates == map_update(dot(m, p).localUpdates, lupd);
+
+    // the updated log
+    assert dot(m', p).log == map_update(dot(m, p).log, updated_log);
   }
 
   lemma UpdateRequestDone_Monotonic(m: M, m': M, p: M, request_id: RequestId)
