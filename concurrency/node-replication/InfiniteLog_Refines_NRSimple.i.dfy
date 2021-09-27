@@ -42,6 +42,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     }
   }
 
+  // TODO(gz): reuse map_update from InfiniteLog.i.dfy
   function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
     map k | k in m1.Keys + m2.Keys ::
         (if k in m1.Keys then m1[k] else m2[k])
@@ -52,7 +53,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   {
     B.Variables(
       seq(s.global_tail.value, i requires 0 <= i && i < s.global_tail.value => s.log[i].op), 
-      // [], TODO(travis): add this to Inv()
+      // [], Inv_LogEntriesGlobalTail
       s.ctail.value,
       // readonly_reqs - ReadReq(ctail_at_start: nat, op: nrifc.ReadonlyOp)
       // TODO(travis): change NRCtail so it has states without ctail (corresponds to NrInfinite)
@@ -61,18 +62,17 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
         :: B.ReadReq(s.localReads[rid].ctail, s.localReads[rid].op),
       // update_reqs - UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
       map_union(
-        (map rid | && rid in s.localUpdates 
+        (map rid: nat | && rid in s.localUpdates 
                    && s.localUpdates[rid].UpdateInit?
         :: s.localUpdates[rid].op),
-        (map rid | && rid in s.localUpdates 
+        (map rid: nat | && rid in s.localUpdates 
                    && s.localUpdates[rid].UpdatePlaced?
         :: s.log[s.localUpdates[rid].idx].op)
       ),
       // update_resps - UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
-      // TODO(travis): add idx_in_log here too?
       map rid | && rid in s.localUpdates
-                && s.localUpdates[rid].UpdateDone?
-        :: B.UpdateResp(0, s.localUpdates[rid].ret)
+          && s.localUpdates[rid].UpdateApplied?
+          :: B.UpdateResp(s.localUpdates[rid].idx, s.localUpdates[rid].ret)
     )
   }
 
@@ -91,6 +91,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     // refine StartUpdate or StartReadonly
   }
 
+  // `s` = `s'` + `stub`
   lemma ConsumeStub_Refines_End(s: A.Variables, s': A.Variables,
       rid: RequestId, output: nrifc.Output, stub: M)
   requires IL.ConsumeStub(s, s', rid, output, stub)
@@ -99,6 +100,20 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   ensures B.Next(I(s), I(s'), ifc.End(rid, output))
   {
     // refine EndUpdate or EndReadonly
+
+    
+    if rid in s.localUpdates {
+      assume false;
+      assert s.localUpdates[rid].UpdateDone?;
+      assert B.EndUpdate(I(s), I(s'), rid, output);
+    } else {
+      // TODO(gz): why doesn't this hold?
+      assert rid in s.localReads && (rid !in s'.localReads && rid in stub.localReads);
+      assume false;
+      assert s'.localReads[rid].ReadonlyDone?;
+      //assert B.FinishReadonly(I(s), I(s'), rid, _, output);
+    } 
+
   }
 
   lemma GoToCombinerReady_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)
