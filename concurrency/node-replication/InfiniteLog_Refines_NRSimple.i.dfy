@@ -104,7 +104,10 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       assert s'.combiner == s.combiner;
       assert s'.localUpdates == s.localUpdates;
 
+      // Some attempts at trying to convince dafny to believe me:
       assert (forall r | r in s.localReads && r != rid :: r in s'.localReads);
+      assert (forall k | k in s.localReads && k != rid :: k in s'.localReads && s.localReads[k] == s'.localReads[k]);
+      assert (forall k | k in s'.localReads && k != rid :: k in s.localReads && s.localReads[k] == s'.localReads[k]);
 
       // TODO: Doesn't believe this:
       assert |s'.localReads| == |s.localReads| + 1;
@@ -126,13 +129,11 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
 
     
     if rid in s.localUpdates {
-      assume false;
       assert s.localUpdates[rid].UpdateDone?;
       assert B.EndUpdate(I(s), I(s'), rid, output);
     } else {
       // TODO(gz): why doesn't this hold?
       assert rid in s.localReads && (rid !in s'.localReads && rid in stub.localReads);
-      assume false;
       assert s'.localReads[rid].ReadonlyDone?;
       //assert B.FinishReadonly(I(s), I(s'), rid, _, output);
     } 
