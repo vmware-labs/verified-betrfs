@@ -81,6 +81,11 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   //requires Inv(s)
   ensures B.Init(I(s))
 
+  // s: the whole things
+  // s': some partial state
+  // stub: the missing piece
+  // s' = s+ticket
+  // `s` = `s'` + `stub`
   lemma NewTicket_Refines_Start(s: A.Variables, s': A.Variables,
       rid: RequestId, input: nrifc.Input)
   requires IL.NewTicket(s, s', rid, input)
@@ -88,7 +93,27 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
   {
-    // refine StartUpdate or StartReadonly
+    if input.ROp? {
+      assert s'.replicas == s.replicas;
+      assert s'.localTails == s.localTails;
+      assert s'.ctail == s.ctail;
+      assert s.ctail.Some?;
+
+      assert rid in s'.localReads;
+      assert rid !in s.localReads;
+
+      assert s'.combiner == s.combiner;
+      assert s'.localUpdates == s.localUpdates;
+
+      assert (forall r | r in s.localReads && r != rid :: r in s'.localReads);
+
+      // TODO: Doesn't believe this:
+      assert |s'.localReads| == |s.localReads| + 1;
+      assert s'.localReads == s.localReads[rid := ReadonlyCtail(input.readonly_op, s.ctail.value)];
+    }
+    else {
+      assume false;
+    }
   }
 
   // `s` = `s'` + `stub`
