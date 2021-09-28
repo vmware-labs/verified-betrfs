@@ -173,6 +173,12 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.InternalOp)
   {
+    reveal_I_ReadRequests();
+    reveal_I_UpdateRequests();
+    reveal_I_UpdateResponses();
+    reveal_I_Log();
+    assert I(s) == I(s');
+    assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.Stutter_Step);
   }
 
   lemma ExecLoadLtail_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)
