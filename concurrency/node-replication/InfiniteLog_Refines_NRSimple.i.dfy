@@ -50,6 +50,8 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     ensures forall k :: k in m2 ==> map_update(m1, m2)[k] == m2[k]
     ensures forall k :: !(k in m2) && k in m1 ==> map_update(m1, m2)[k] == m1[k]
     ensures forall k :: !(k in m2) && !(k in m1) ==> !(k in map_update(m1, m2))
+    ensures m1 == map[] ==> map_update(m1, m2) == m2
+    ensures m2 == map[] ==> map_update(m1, m2) == m1
   {
     map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
   }
