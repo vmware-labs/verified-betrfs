@@ -3,7 +3,9 @@ include "NRSpec.s.dfy"
 module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
   import opened RequestIds
 
-  datatype ReadReq = ReadReq(ctail_at_start: nat, op: nrifc.ReadonlyOp)
+  datatype ReadReq =
+    | ReadInit( op: nrifc.ReadonlyOp)
+    | ReadReq(ctail_at_start: nat, op: nrifc.ReadonlyOp)
 
   datatype UpdateResp = UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
 
@@ -45,6 +47,14 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
   predicate StartReadonly(s: Variables, s': Variables, rid: RequestId, op: nrifc.ReadonlyOp)
   {
     && rid !in s.readonly_reqs
+    && s' == s.(readonly_reqs := s.readonly_reqs[rid := ReadInit(op)])
+  }
+
+  predicate ReadCtail(s: Variables, s': Variables, rid: RequestId)
+  {
+    && rid in s.readonly_reqs
+    && s.readonly_reqs[rid].ReadInit?
+    && var op := s.readonly_reqs[rid].op;
     && s' == s.(readonly_reqs := s.readonly_reqs[rid := ReadReq(s.ctail, op)])
   }
 
@@ -52,6 +62,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
       rid: RequestId, version: nat, return_value: nrifc.ReturnType)
   {
     && rid in s.readonly_reqs
+    && s.readonly_reqs[rid].ReadReq?
     && s.readonly_reqs[rid].ctail_at_start <= version <= |s.log|
     && version <= s.ctail
     && s' == s.(readonly_reqs := s.readonly_reqs - {rid})
@@ -96,6 +107,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
     | EndUpdate_Step(rid: RequestId, return_value: nrifc.ReturnType)
     | IncreaseCtail_Step(new_ctail: nat)
     | StartReadonly_Step(rid: RequestId, rop: nrifc.ReadonlyOp)
+    | ReadCtail_Step(rid: RequestId)
     | FinishReadonly_Step(rid: RequestId, version: nat, return_value: nrifc.ReturnType)
     | Stutter_Step
 
@@ -117,11 +129,15 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
           && op == ifc.InternalOp
           && IncreaseCtail(s, s', new_ctail)
 
+      case ReadCtail_Step(rid: RequestId) =>
+          && op == ifc.InternalOp
+          && ReadCtail(s, s', rid)
+
       case StartReadonly_Step(rid: RequestId, read_op: nrifc.ReadonlyOp) =>
           && op == ifc.Start(rid, nrifc.ROp(read_op))
           && StartReadonly(s, s', rid, read_op)
 
-      case FinishReadonly_Step(rid: RequestId, version: nat, return_value: nrifc.ReturnType) => 
+      case FinishReadonly_Step(rid: RequestId, version: nat, return_value: nrifc.ReturnType) =>
           && op == ifc.End(rid, return_value)
           && FinishReadonly(s, s', rid, version, return_value)
 
@@ -144,6 +160,15 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
   lemma IncreaseCtail_PreservesInv(s: Variables, s': Variables, new_ctail: nat)
     requires Inv(s)
     requires IncreaseCtail(s, s', new_ctail)
+    ensures Inv(s')
+  {
+
+  }
+
+
+  lemma ReadCtail_PreservesInv(s: Variables, s': Variables, rid: RequestId)
+    requires Inv(s)
+    requires ReadCtail(s, s', rid)
     ensures Inv(s')
   {
 
@@ -201,6 +226,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
       case EndUpdate_Step(rid: RequestId, return_value: nrifc.ReturnType) => EndUpdate_PreservesInv(s, s', rid, return_value);
       case IncreaseCtail_Step(new_ctail: nat) => IncreaseCtail_PreservesInv(s, s', new_ctail);
       case StartReadonly_Step(rid: RequestId, op: nrifc.ReadonlyOp) => StartReadonly_PreservesInv(s, s', rid, op);
+      case ReadCtail_Step(rid: RequestId) => ReadCtail_PreservesInv(s, s', rid);
       case FinishReadonly_Step(rid: RequestId, version: nat, return_value: nrifc.ReturnType) => FinishReadonly_PreservesInv(s, s', rid, version, return_value);
       case Stutter_Step => { }
     }
