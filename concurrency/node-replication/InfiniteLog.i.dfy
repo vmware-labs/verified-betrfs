@@ -303,11 +303,12 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // updates map m1 with map m2, where all values of m2 aree added to m1, and existing values updated
   // see: https://stackoverflow.com/questions/52610402/updating-a-map-with-another-map-in-dafny
   function {:opaque} map_update<K(!new), V>(m1: map<K, V>, m2: map<K, V>): map<K, V>
-  ensures
-    (forall k :: k in m1 || k in m2 ==> k in map_update(m1, m2)) &&
-    (forall k :: k in m2 ==> map_update(m1, m2)[k] == m2[k]) &&
-    (forall k :: !(k in m2) && k in m1 ==> map_update(m1, m2)[k] == m1[k]) &&
-    (forall k :: !(k in m2) && !(k in m1) ==> !(k in map_update(m1, m2)))
+    ensures forall k :: k in m1 || k in m2 ==> k in map_update(m1, m2)
+    ensures forall k :: k in m2 ==> map_update(m1, m2)[k] == m2[k]
+    ensures forall k :: !(k in m2) && k in m1 ==> map_update(m1, m2)[k] == m1[k]
+    ensures forall k :: !(k in m2) && !(k in m1) ==> !(k in map_update(m1, m2))
+    ensures m1 == map[] ==> map_update(m1, m2) == m2
+    ensures m2 == map[] ==> map_update(m1, m2) == m1
   {
     map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
   }
