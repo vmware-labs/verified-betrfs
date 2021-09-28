@@ -132,6 +132,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     requires input.UOp?
     requires rid !in s.localUpdates;
     requires s'.localUpdates == s.localUpdates[rid :=  UpdateInit(input.update_op)]
+    requires s'.log == s.log
     ensures I(s').update_reqs == I(s).update_reqs[rid := input.update_op]
     ensures I(s').update_resps == I(s).update_resps
   {
