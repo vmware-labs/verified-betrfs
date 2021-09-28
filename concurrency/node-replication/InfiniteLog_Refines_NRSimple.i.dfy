@@ -42,37 +42,64 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     }
   }
 
-  // TODO(gz): reuse map_update from InfiniteLog.i.dfy
-  function map_union<K,V>(m1: map<K,V>, m2: map<K,V>) : map<K,V> {
-    map k | k in m1.Keys + m2.Keys ::
-        (if k in m1.Keys then m1[k] else m2[k])
+  // updates map m1 with map m2, where all values of m2 aree added to m1, and existing values updated
+  // can we just have one definition of this somewhere?
+  // see: https://stackoverflow.com/questions/52610402/updating-a-map-with-another-map-in-dafny
+  function {:opaque} map_update<K(!new), V>(m1: map<K, V>, m2: map<K, V>): map<K, V>
+    ensures forall k :: k in m1 || k in m2 ==> k in map_update(m1, m2)
+    ensures forall k :: k in m2 ==> map_update(m1, m2)[k] == m2[k]
+    ensures forall k :: !(k in m2) && k in m1 ==> map_update(m1, m2)[k] == m1[k]
+    ensures forall k :: !(k in m2) && !(k in m1) ==> !(k in map_update(m1, m2))
+  {
+    map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
+  }
+
+  function {:opaque} I_ReadRequests(s: A.Variables) : map<RequestId, B.ReadReq>
+    requires Inv(s)
+    ensures forall rid | rid in I_ReadRequests(s) :: rid in s.localReads
+  {
+    map rid | rid in s.localReads && (IL.InReadOnlyCTail(s, rid) || IL.InReadyToRead(s, rid)) :: B.ReadReq(s.localReads[rid].ctail, s.localReads[rid].op)
+  }
+
+  function {:opaque} I_UpdateRequests(s: A.Variables) : map<RequestId, nrifc.UpdateOp>
+    requires Inv(s)
+    ensures forall rid | rid in I_UpdateRequests(s) :: rid in s.localUpdates
+  {
+    map rid | rid in s.localUpdates && (IL.InUpdateInit(s, rid) || IL.InUpdatePlaced(s, rid)) ::
+      (if IL.InUpdateInit(s, rid) then s.localUpdates[rid].op else s.log[s.localUpdates[rid].idx].op)
+  }
+
+  function {:opaque} I_UpdateResponses(s: A.Variables) :  (res :map<RequestId, B.UpdateResp>)
+    requires Inv(s)
+    ensures forall rid | rid in I_UpdateResponses(s) :: rid in s.localUpdates
+    ensures forall rid | rid in I_UpdateResponses(s) :: s.localUpdates[rid].UpdateApplied?
+    ensures forall rid | rid in res :: res[rid].idx_in_log in s.log.Keys
+  {
+    map rid | rid in s.localUpdates && IL.InUpdateApplied(s, rid) :: B.UpdateResp(s.localUpdates[rid].idx, s.localUpdates[rid].ret)
+  }
+
+  function {:opaque} I_Log(s: A.Variables) : seq<nrifc.UpdateOp>
+    requires Inv(s)
+    ensures forall i:nat | 0 <= i < |I_Log(s)| :: i in s.log
+    ensures forall i:nat | 0 <= i < |I_Log(s)| :: i < s.global_tail.value
+  {
+    seq(s.global_tail.value, i requires 0 <= i < s.global_tail.value => s.log[i].op)
   }
 
   function I(s: A.Variables) : B.Variables
-  //requires Inv(s) 
+  //requires Inv(s)
   {
     B.Variables(
-      seq(s.global_tail.value, i requires 0 <= i && i < s.global_tail.value => s.log[i].op), 
+      I_Log(s),
       // [], Inv_LogEntriesGlobalTail
       s.ctail.value,
       // readonly_reqs - ReadReq(ctail_at_start: nat, op: nrifc.ReadonlyOp)
       // TODO(travis): change NRCtail so it has states without ctail (corresponds to NrInfinite)
-      map rid | && rid in s.localReads
-                && (s.localReads[rid].ReadonlyCtail? || s.localReads[rid].ReadonlyReadyToRead?)
-        :: B.ReadReq(s.localReads[rid].ctail, s.localReads[rid].op),
+      I_ReadRequests(s),
       // update_reqs - UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
-      map_union(
-        (map rid: nat | && rid in s.localUpdates 
-                   && s.localUpdates[rid].UpdateInit?
-        :: s.localUpdates[rid].op),
-        (map rid: nat | && rid in s.localUpdates 
-                   && s.localUpdates[rid].UpdatePlaced?
-        :: s.log[s.localUpdates[rid].idx].op)
-      ),
+      I_UpdateRequests(s),
       // update_resps - UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
-      map rid | && rid in s.localUpdates
-          && s.localUpdates[rid].UpdateApplied?
-          :: B.UpdateResp(s.localUpdates[rid].idx, s.localUpdates[rid].ret)
+      I_UpdateResponses(s)
     )
   }
 
@@ -127,7 +154,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   {
     // refine EndUpdate or EndReadonly
 
-    
+
     if rid in s.localUpdates {
       assert s.localUpdates[rid].UpdateDone?;
       assert B.EndUpdate(I(s), I(s'), rid, output);
@@ -136,7 +163,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       assert rid in s.localReads && (rid !in s'.localReads && rid in stub.localReads);
       assert s'.localReads[rid].ReadonlyDone?;
       //assert B.FinishReadonly(I(s), I(s'), rid, _, output);
-    } 
+    }
 
   }
 
