@@ -140,16 +140,6 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert I(s').update_resps == I(s).update_resps;
 
     reveal_I_UpdateRequests();
-    assert s'.localUpdates[rid] == UpdateInit(input.update_op);
-    assert s'.localUpdates[rid].op == input.update_op;
-    assert I(s').update_reqs[rid] == input.update_op;
-    assert rid !in I(s).update_reqs;
-    assert rid in I(s').update_reqs;
-    assert I(s').update_reqs[rid] == input.update_op;
-    assert forall r | r in I(s).update_reqs :: r in I(s').update_reqs;
-    assert forall r | r in I(s).update_reqs :: r in I(s').update_reqs && I(s').update_reqs[r] == I(s').update_reqs[r];
-    assert forall r | r in I(s').update_reqs :: r in I(s).update_reqs || r == rid;
-    // Dafny still doesn't believe me
     assert I(s').update_reqs == I(s).update_reqs[rid := input.update_op];
   }
 
