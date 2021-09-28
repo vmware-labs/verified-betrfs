@@ -79,6 +79,8 @@ module ProgramInterpMod {
   }
 
   function IMRunning(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
+    requires v.WF()
+    requires JournalInterpMod.Invariant(v.journal, v.cache)
     ensures iv.WF()
   {
     var sb := ISuperblock(v.cache.dv);
@@ -92,6 +94,7 @@ module ProgramInterpMod {
   }
 
   function IM(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
+    requires v.WF()
   {
     // Until we're running, there's no state in memory that's not also on the
     // disk.
@@ -117,6 +120,8 @@ module ProgramInterpMod {
   }
 
   lemma Framing(v0: Variables, v1: Variables)
+    requires v0.WF()
+    requires v1.WF()
     requires DiskViewsEquivalentForSeq(v0.cache.dv, v1.cache.dv, IReads(v0))
     requires v0.betree == v1.betree
     requires v0.journal == v1.journal
@@ -125,8 +130,13 @@ module ProgramInterpMod {
     assert ISuperblock(v0.cache.dv) == ISuperblock(v1.cache.dv);
     var sb := ISuperblock(v0.cache.dv);
     if sb.Some? {
+      assert forall cu | cu in SplinterTreeMachineMod.IReads(v0.betree, v0.cache) :: cu in IReads(v0);
+      assert DiskViewsEquivalent(v0.cache.dv, v1.cache.dv, SplinterTreeMachineMod.IReads(v0.betree, v0.cache));
       SplinterTreeInterpMod.Framing(v0.betree, v0.cache, v1.cache);
       var betreeInterp := SplinterTreeInterpMod.IMStable(v0.cache, sb.value.betree);
+
+      assert forall cu | cu in JournalInterpMod.IReads(v0.cache, v0.journal.CurrentSuperblock()) :: cu in IReads(v0);
+      assert DiskViewsEquivalentForSeq(v0.cache.dv, v1.cache.dv, JournalInterpMod.IReads(v0.cache, v0.journal.CurrentSuperblock()));
       JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, betreeInterp);
     }
   }

@@ -72,7 +72,7 @@ module ProgramMachineMod {
     )
   {
     predicate WF() {
-      true
+      && journal.WF()
     }
   }
 
@@ -113,6 +113,8 @@ module ProgramMachineMod {
 
   predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq, newbetree: SplinterTreeMachineMod.Variables)
   {
+    && v.WF()
+    && v'.WF()
     && v.phase.ReplayingJournal?
     && puts.WF()
     && puts.seqStart == v.betree.BetreeEndsLSNExclusive()
