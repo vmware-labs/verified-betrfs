@@ -54,52 +54,79 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
   }
 
-  function {:opaque} I_ReadRequests(s: A.Variables) : map<RequestId, B.ReadReq>
-    requires Inv(s)
-    ensures forall rid | rid in I_ReadRequests(s) :: rid in s.localReads
+  // predicate to filter the in-progress read requests
+  predicate ReadReq_InProgress(rid: RequestId, reqs: map<RequestId, ReadonlyState>)
   {
-    map rid | rid in s.localReads && (IL.InReadOnlyCTail(s, rid) || IL.InReadyToRead(s, rid)) :: B.ReadReq(s.localReads[rid].ctail, s.localReads[rid].op)
+    && rid in reqs
+    && (reqs[rid].ReadonlyCtail? || reqs[rid].ReadonlyReadyToRead? || reqs[rid].ReadonlyInit?)
   }
 
-  function {:opaque} I_UpdateRequests(s: A.Variables) : map<RequestId, nrifc.UpdateOp>
-    requires Inv(s)
-    ensures forall rid | rid in I_UpdateRequests(s) :: rid in s.localUpdates
+  // construction of the read requests for InfiniteLog -> NRSimple
+  function {:opaque} I_ReadRequests(reqs: map<RequestId, ReadonlyState>) : (res :map<RequestId, B.ReadReq>)
+    ensures forall rid | rid in res:: rid in reqs
+    ensures forall rid | rid in reqs && reqs[rid].ReadonlyInit? :: rid in res && res[rid].ReadInit?;
+    ensures forall rid | rid in reqs && reqs[rid].ReadonlyCtail? :: rid in res && res[rid].ReadReq?;
+    ensures forall rid | rid in reqs && reqs[rid].ReadonlyReadyToRead? :: rid in res && res[rid].ReadReq?;
   {
-    map rid | rid in s.localUpdates && (IL.InUpdateInit(s, rid) || IL.InUpdatePlaced(s, rid)) ::
-      (if IL.InUpdateInit(s, rid) then s.localUpdates[rid].op else s.log[s.localUpdates[rid].idx].op)
+    map rid | rid in reqs && ReadReq_InProgress(rid, reqs) ::
+      if reqs[rid].ReadonlyInit? then B.ReadInit(reqs[rid].op) else B.ReadReq(reqs[rid].ctail, reqs[rid].op)
   }
 
-  function {:opaque} I_UpdateResponses(s: A.Variables) :  (res :map<RequestId, B.UpdateResp>)
-    requires Inv(s)
-    ensures forall rid | rid in I_UpdateResponses(s) :: rid in s.localUpdates
-    ensures forall rid | rid in I_UpdateResponses(s) :: s.localUpdates[rid].UpdateApplied?
-    ensures forall rid | rid in res :: res[rid].idx_in_log in s.log.Keys
+  // predicate to filter in-progress update requests
+  predicate UpdateRequests_InProgress(rid: RequestId, lupd: map<RequestId, UpdateState>)
   {
-    map rid | rid in s.localUpdates && IL.InUpdateApplied(s, rid) :: B.UpdateResp(s.localUpdates[rid].idx, s.localUpdates[rid].ret)
+    && rid in lupd
+    && (lupd[rid].UpdateInit? || lupd[rid].UpdatePlaced?)
   }
 
-  function {:opaque} I_Log(s: A.Variables) : seq<nrifc.UpdateOp>
-    requires Inv(s)
-    ensures forall i:nat | 0 <= i < |I_Log(s)| :: i in s.log
-    ensures forall i:nat | 0 <= i < |I_Log(s)| :: i < s.global_tail.value
+  // construction of the update requests for InfiniteLog -> NRSimple
+  function {:opaque} I_UpdateRequests(lupd: map<RequestId, UpdateState>,  log: map<nat, LogEntry>) : (res : map<RequestId, nrifc.UpdateOp>)
+    requires forall rid | rid in lupd && lupd[rid].UpdatePlaced? :: lupd[rid].idx in log
+    ensures forall rid | rid in res :: rid in lupd
+    ensures forall rid | rid in lupd && lupd[rid].UpdateInit? :: rid in res
+    ensures forall rid | rid in lupd && lupd[rid].UpdatePlaced? :: rid in res
   {
-    seq(s.global_tail.value, i requires 0 <= i < s.global_tail.value => s.log[i].op)
+    map rid | rid in lupd && UpdateRequests_InProgress(rid, lupd) ::
+      (if lupd[rid].UpdateInit? then lupd[rid].op else log[lupd[rid].idx].op)
+  }
+
+  // predicate to filter completed update requests
+  predicate UpdateRequests_Done(rid: RequestId, lupd: map<RequestId, UpdateState>)
+  {
+    && rid in lupd
+    && (lupd[rid].UpdateApplied?)
+  }
+
+  // construction of the update responses for InfiniteLog -> NRSimple
+  function {:opaque} I_UpdateResponses(lupd: map<RequestId, UpdateState>) :  map<RequestId, B.UpdateResp>
+    ensures forall rid | rid in I_UpdateResponses(lupd) :: rid in lupd
+    ensures forall rid | rid in I_UpdateResponses(lupd) :: lupd[rid].UpdateApplied?
+  {
+    map rid | rid in lupd && UpdateRequests_Done(rid, lupd) :: B.UpdateResp(lupd[rid].idx, lupd[rid].ret)
+  }
+
+  function {:opaque} I_Log(gtail: nat, log: map<nat, LogEntry>) : seq<nrifc.UpdateOp>
+    requires forall i | 0 <= i < gtail :: i in log
+    ensures forall i:nat | 0 <= i < |I_Log(gtail, log)| :: i in log
+    ensures |I_Log(gtail, log)| == gtail
+  {
+    seq(gtail, i requires 0 <= i < gtail => log[i].op)
   }
 
   function I(s: A.Variables) : B.Variables
   //requires Inv(s)
   {
     B.Variables(
-      I_Log(s),
+      I_Log(s.global_tail.value, s.log),
       // [], Inv_LogEntriesGlobalTail
       s.ctail.value,
       // readonly_reqs - ReadReq(ctail_at_start: nat, op: nrifc.ReadonlyOp)
       // TODO(travis): change NRCtail so it has states without ctail (corresponds to NrInfinite)
-      I_ReadRequests(s),
+      I_ReadRequests(s.localReads),
       // update_reqs - UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
-      I_UpdateRequests(s),
+      I_UpdateRequests(s.localUpdates, s.log),
       // update_resps - UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
-      I_UpdateResponses(s)
+      I_UpdateResponses(s.localUpdates)
     )
   }
 
@@ -119,30 +146,67 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
   {
+    assert s' == dot(s, Ticket(rid, input));
+
+    assert s'.replicas == s.replicas;
+    assert s'.localTails == s.localTails;
+    assert s'.ctail == s.ctail;
+    assert s'.combiner == s.combiner;
+    assert s'.log == s.log;
+    assert s'.global_tail == s.global_tail;
+
+    var IS := I(s);
+    var IS' := I(s');
+
+    assert IS.ctail == IS'.ctail;
+    assert IS.log == IS'.log;
+    assert IS.update_resps == IS'.update_resps;
+
+
     if input.ROp? {
-      assert s'.replicas == s.replicas;
-      assert s'.localTails == s.localTails;
-      assert s'.ctail == s.ctail;
-      assert s.ctail.Some?;
-
-      assert rid in s'.localReads;
-      assert rid !in s.localReads;
-
-      assert s'.combiner == s.combiner;
       assert s'.localUpdates == s.localUpdates;
+      assert rid in s.localReads;
+      assert rid !in s'.localReads;
+      assert s'.localReads == s.localReads[rid := ReadonlyInit(input.readonly_op)];
+      assert rid !in IS.readonly_reqs;
+      assert IS.update_reqs == IS'.update_reqs;
+      assert IS'.readonly_reqs == IS.readonly_reqs[rid := B.ReadInit(s.localReads[rid].op) ];
 
-      // Some attempts at trying to convince dafny to believe me:
-      assert (forall r | r in s.localReads && r != rid :: r in s'.localReads);
-      assert (forall k | k in s.localReads && k != rid :: k in s'.localReads && s.localReads[k] == s'.localReads[k]);
-      assert (forall k | k in s'.localReads && k != rid :: k in s.localReads && s.localReads[k] == s'.localReads[k]);
+    } else {
+      assert input.UOp?;
+      assert s'.localReads == s.localReads;
+      assert rid !in s.localUpdates;
+      assert rid in s'.localUpdates;
+      assert s'.localUpdates == s.localUpdates[rid := UpdateInit(input.update_op)];
+      assert rid !in IS.update_reqs;
+      assert IS.readonly_reqs == IS'.readonly_reqs;
+      assert IS'.update_reqs == IS.update_reqs[rid := s.localUpdates[rid].op];
+    }
 
-      // TODO: Doesn't believe this:
-      assert |s'.localReads| == |s.localReads| + 1;
-      assert s'.localReads == s.localReads[rid := ReadonlyCtail(input.readonly_op, s.ctail.value)];
-    }
-    else {
-      assume false;
-    }
+
+
+    // if input.ROp? {
+
+    //   assert s.ctail.Some?;
+
+    //   assert rid in s'.localReads;
+    //   assert rid !in s.localReads;
+
+    //   assert s'.combiner == s.combiner;
+    //   assert s'.localUpdates == s.localUpdates;
+
+    //   // Some attempts at trying to convince dafny to believe me:
+    //   assert (forall r | r in s.localReads && r != rid :: r in s'.localReads);
+    //   assert (forall k | k in s.localReads && k != rid :: k in s'.localReads && s.localReads[k] == s'.localReads[k]);
+    //   assert (forall k | k in s'.localReads && k != rid :: k in s.localReads && s.localReads[k] == s'.localReads[k]);
+
+    //   // TODO: Doesn't believe this:
+    //   assert |s'.localReads| == |s.localReads| + 1;
+    //   assert s'.localReads == s.localReads[rid := ReadonlyCtail(input.readonly_op, s.ctail.value)];
+    // }
+    // else {
+    //   assume false;
+    // }
   }
 
   lemma ConsumeStub_Refines_End(s: A.Variables, s': A.Variables,
