@@ -632,6 +632,8 @@ module JournalMachineMod {
 
   // Recovery coordination
   predicate MessageSeqMatchesJournalAt(v: Variables, puts: MsgSeq)
+    requires v.WF()
+    requires puts.WF()
   {
     // NB elsewhere in the state machine, we rely only on v.marshalledLookup
     // containing an accurate mapping between LSNs and CUs; here, we care about
@@ -691,6 +693,7 @@ module JournalMachineMod {
       )
     // constructive: (map lsn:LSN | 0 <= lsn < v.unmarshalledLSN() :: if lsn < v.marshalledLSN then v.marshalledLookup[lsn] else newCU),
     // predicate:
+    && FullView(cache.dv)
     && var cache' := CacheIfc.ApplyWrites(cache, cacheOps);
       reveal_ChainFrom();
       v'.marshalledLookup == ChainFrom(cache', Superblock(Some(newCU), v.boundaryLSN))
