@@ -132,6 +132,30 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     )
   }
 
+  lemma I_ReadRequests_Update_is(s: A.Variables, s': A.Variables, rid: RequestId, input: nrifc.Input)
+    requires Inv(s)
+    requires Inv(s')
+    requires input.ROp?
+    requires s'.localReads == s.localReads[rid := ReadonlyInit(input.readonly_op)]
+    ensures I(s').readonly_reqs == I(s).readonly_reqs[rid := B.ReadInit(input.readonly_op)]
+  {
+     reveal_I_ReadRequests();
+  }
+
+  lemma I_UpdateRequests_Update_is(s: A.Variables, s': A.Variables, rid: RequestId, input: nrifc.Input)
+    requires Inv(s)
+    requires Inv(s')
+    requires input.UOp?
+    requires s'.localUpdates == s.localUpdates[rid :=  UpdateInit(input.update_op)]
+    ensures I(s').update_reqs == I(s).update_reqs[rid := input.update_op]
+    ensures I(s').update_resps == I(s).update_resps
+  {
+    assume false;
+    //  reveal_I_UpdateResponses();
+    //  reveal_I_UpdateRequests();
+  }
+
+
   lemma InitRefinesInit(s: A.Variables)
   //requires A.Init(s)
   //requires Inv(s)
@@ -148,68 +172,78 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
   {
-    assert s' == dot(s, Ticket(rid, input));
-
+    // construct the ticket
+    var ticket := Ticket(rid, input);
+    // establish that s' is the dot of the s and the new ticket.
+    assert s' == dot(s, ticket);
+    // assert the ticket values
+    assert ticket.log == map[];
+    assert !ticket.global_tail.Some?;
+    assert ticket.replicas == map[];
+    assert ticket.localTails == map[];
+    assert !ticket.ctail.Some?;
+    assert ticket.combiner == map[];
+    // assert the unchanged things for both branches
     assert s'.replicas == s.replicas;
     assert s'.localTails == s.localTails;
     assert s'.ctail == s.ctail;
     assert s'.combiner == s.combiner;
     assert s'.log == s.log;
     assert s'.global_tail == s.global_tail;
-
+    // create the lifted state machines
     var IS := I(s);
     var IS' := I(s');
+    // nothing should have changed in the ctail and the log
+    assert IS'.ctail == IS.ctail;
+    assert IS'.log == IS.log;
 
-    assert IS.ctail == IS'.ctail;
-    assert IS.log == IS'.log;
-    assert IS.update_resps == IS'.update_resps;
 
 
+
+    // now branch off depending up the update type
     if input.ROp? {
-      assert s'.localUpdates == s.localUpdates;
-      assert rid in s.localReads;
-      assert rid !in s'.localReads;
-      assert s'.localReads == s.localReads[rid := ReadonlyInit(input.readonly_op)];
+      // now assert the ROp ticket
+      assert ticket.localUpdates == map[];
+      assert ticket.localReads == map[rid := ReadonlyInit(input.readonly_op)];
+
+      // rid is not there before
+      assert rid !in s.localReads;
       assert rid !in IS.readonly_reqs;
-      assert IS.update_reqs == IS'.update_reqs;
-      assert IS'.readonly_reqs == IS.readonly_reqs[rid := B.ReadInit(s.localReads[rid].op) ];
 
+      assert s'.localUpdates == s.localUpdates;
+      assert IS'.update_reqs == IS.update_reqs;
+      assert IS'.update_resps == IS.update_resps;
+
+      // the next assert take a little while...
+      assert s'.localReads == s.localReads[rid := ReadonlyInit(input.readonly_op)];
+
+      I_ReadRequests_Update_is(s, s', rid, input);
+      assert IS'.readonly_reqs == IS.readonly_reqs[rid := B.ReadInit(input.readonly_op)];
+
+      assert B.NextStep(IS, IS', ifc.Start(rid, input), B.StartReadonly_Step(rid, input.readonly_op));
     } else {
+      // it has to be an UOp;
       assert input.UOp?;
-      assert s'.localReads == s.localReads;
+      assert ticket.localReads == map[];
+      assert ticket.localUpdates == map[rid :=  UpdateInit(input.update_op)];
+
       assert rid !in s.localUpdates;
-      assert rid in s'.localUpdates;
-      assert s'.localUpdates == s.localUpdates[rid := UpdateInit(input.update_op)];
       assert rid !in IS.update_reqs;
-      assert IS.readonly_reqs == IS'.readonly_reqs;
-      assert IS'.update_reqs == IS.update_reqs[rid := s.localUpdates[rid].op];
+
+      assert s'.localReads == s.localReads;
+      assert IS'.readonly_reqs == IS.readonly_reqs;
+      // that step takes a little while
+      assert s'.localUpdates == s.localUpdates[rid :=  UpdateInit(input.update_op)];
+
+      I_UpdateRequests_Update_is(s, s', rid, input);
+      assert IS'.update_reqs == IS.update_reqs[rid := input.update_op];
+      assert IS'.update_resps == IS.update_resps;
+
+      assert B.NextStep(IS, IS', ifc.Start(rid, input), B.StartUpdate_Step(rid, input.update_op));
     }
-
-
-
-    // if input.ROp? {
-
-    //   assert s.ctail.Some?;
-
-    //   assert rid in s'.localReads;
-    //   assert rid !in s.localReads;
-
-    //   assert s'.combiner == s.combiner;
-    //   assert s'.localUpdates == s.localUpdates;
-
-    //   // Some attempts at trying to convince dafny to believe me:
-    //   assert (forall r | r in s.localReads && r != rid :: r in s'.localReads);
-    //   assert (forall k | k in s.localReads && k != rid :: k in s'.localReads && s.localReads[k] == s'.localReads[k]);
-    //   assert (forall k | k in s'.localReads && k != rid :: k in s.localReads && s.localReads[k] == s'.localReads[k]);
-
-    //   // TODO: Doesn't believe this:
-    //   assert |s'.localReads| == |s.localReads| + 1;
-    //   assert s'.localReads == s.localReads[rid := ReadonlyCtail(input.readonly_op, s.ctail.value)];
-    // }
-    // else {
-    //   assume false;
-    // }
   }
+
+
 
   lemma ConsumeStub_Refines_End(s: A.Variables, s': A.Variables,
       rid: RequestId, output: nrifc.Output, stub: M)
