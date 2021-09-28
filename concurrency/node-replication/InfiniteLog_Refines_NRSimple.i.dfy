@@ -283,6 +283,46 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.InternalOp)
   {
+    assert s'.replicas == s.replicas;
+    assert s'.localTails == s.localTails;
+    assert s'.ctail == s.ctail;
+    assert s'.combiner == s.combiner;
+    assert s'.log == s.log;
+    assert s'.global_tail == s.global_tail;
+
+    var IS := I(s);
+    var IS' := I(s');
+
+    assert IS.ctail == IS'.ctail;
+    assert IS.log == IS'.log;
+    assert IS.update_resps == IS'.update_resps;
+    
+    assert IS'.ctail == s'.ctail.value;
+    assert IS.ctail == s.ctail.value;
+
+    assert s'.localUpdates == s.localUpdates;
+
+    assert rid in s.localReads;
+    assert rid in s'.localReads;
+    assert s.localReads[rid].ReadonlyInit?;
+    assert s'.localReads[rid].ReadonlyCtail?;
+
+    assert rid in IS.readonly_reqs;
+    assert rid in IS'.readonly_reqs;
+    assert IS.readonly_reqs[rid].ReadInit?;
+    assert IS'.readonly_reqs[rid].ReadReq?;
+
+    assert s.ctail.Some?;
+    assert s'.localReads == s.localReads[rid := ReadonlyCtail(s.localReads[rid].op, s.ctail.value)];    
+    assert IS.update_reqs == IS'.update_reqs;
+
+
+    //assert s'.localReads[rid].op == IS.readonly_reqs[rid].op;
+    assert s'.localReads[rid].op == s.localReads[rid].op;
+    //assert s'.localReads[rid].op == IS'.readonly_reqs[rid].op;
+
+    assert IS'.readonly_reqs == IS.readonly_reqs[rid := B.ReadReq(IS.ctail, IS.readonly_reqs[rid].op) ];
+    assert IS'.readonly_reqs == IS.readonly_reqs[rid := B.ReadReq(s.ctail.value, s.localReads[rid].op) ];
   }
 
   lemma TransitionReadonlyReadyToRead_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId, rid: RequestId)
