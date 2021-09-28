@@ -64,6 +64,7 @@ module CacheIfc {
 
   function {:opaque} ApplyWrites(v: Variables, ops: Ops) : (v': Variables)
     requires WFOpSeq(ops)
+    requires FullView(v.dv)
     ensures FullView(v'.dv)
   {
     Variables(map cu | cu in CUsInDisk() :: if WriteAt(ops, cu).Some? then WriteAt(ops, cu).value else v.dv[cu])

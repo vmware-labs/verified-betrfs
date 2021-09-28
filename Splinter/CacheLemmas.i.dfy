@@ -8,6 +8,7 @@ module CacheLemmasMod {
     requires cacheOps == []
     ensures cache.dv == cache'.dv
   {
+    reveal_ApplyWrites();
   }
 
 }
