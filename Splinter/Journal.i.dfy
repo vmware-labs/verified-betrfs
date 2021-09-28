@@ -633,7 +633,14 @@ module JournalMachineMod {
   // Recovery coordination
   predicate MessageSeqMatchesJournalAt(v: Variables, puts: MsgSeq)
   {
-    true  // TODO THAT'S not likely to prove :)
+    // NB elsewhere in the state machine, we rely only on v.marshalledLookup
+    // containing an accurate mapping between LSNs and CUs; here, we care about
+    // the message seq interpretation as well. So the refined implementation, in
+    // addition to maintaining location information, will need to fault in a
+    // range of marshalled pages to confirm these contents match during recovery.
+    // NB we only consider the marshalledLookup because, during recovery, there
+    // had best not be anything in the unmarshalledTail!
+    && v.marshalledLookup.interp().IncludesSubseq(puts)
   }
 
   // advances tailLSN forward by adding a message

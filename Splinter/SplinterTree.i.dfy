@@ -11,6 +11,7 @@ include "MsgHistory.i.dfy"
 include "../Spec/Message.s.dfy"
 include "../Spec/Interp.s.dfy"
 include "BranchTree.i.dfy"
+include "BranchTreeInterp.i.dfy"
 include "MsgSeq.i.dfy"
 include "../lib/Buckets/BoundedPivotsLib.i.dfy"
 
@@ -128,7 +129,10 @@ module SplinterTreeMachineMod {
 
   // This has to mkfs the initial root of the trunk tree which is just an
   // empty trunk node -- TODO: finish
-  function MkfsTrunkRoot() : CU
+  predicate Mkfs(dv: DiskView, treeRootCU: CU)
+  {
+    parseTrunkNode(dv[treeRootCU]) == Some(Leaf([]))
+  }
 
   function MkfsSuperblock(rootCU : CU) : Superblock
   {
@@ -166,8 +170,6 @@ module SplinterTreeMachineMod {
        && cu in CUsInDisk()
        // Note that every piece of information associated with a node must exist in the trunkNode
        // Since it has to parsable from a cu. We could get rid of this here?
-       && node.cu == cu
-       && node.id == id
     }
 
     predicate Valid(v: Variables, cache: CacheIfc.Variables)
@@ -179,15 +181,12 @@ module SplinterTreeMachineMod {
 
   // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
   // activeBranches tells us the lowest index of an active branch tree for the corresponding child
-  datatype TrunkNode = | Index( cu : CU,
-                                branches : seq<BranchTreeInterpIfc.BranchTop>,
-                                children : seq<CU>,
-                                pivots : PivotTable,
-                                activeBranches : seq<nat>,
-                                id: nat)
-                       | Leaf(  cu : CU,
-                                branches : seq<BranchTreeInterpIfc.BranchTop>,
-                                id: nat)
+  datatype TrunkNode =
+    | Index(branches : seq<BranchTreeInterpIfc.BranchTop>,
+        children : seq<CU>,
+        pivots : PivotTable,
+        activeBranches : seq<nat>)
+    | Leaf(branches : seq<BranchTreeInterpIfc.BranchTop>)
   {
 
     predicate WFIndexNode()
@@ -198,7 +197,6 @@ module SplinterTreeMachineMod {
       && |children| == |activeBranches|
       // activeBranches can only point to actual branch trees
       && (0 < |branches| ==> forall i |  0 <= i < |activeBranches| :: 0 <= activeBranches[i] < |branches|)
-      && cu in CUsInDisk()
     }
 
     predicate WF()
@@ -208,23 +206,17 @@ module SplinterTreeMachineMod {
 
     predicate ValidCU(cache : CacheIfc.Variables)
     {
-      && var unparsedPage := CacheIfc.ReadValue(cache, cu);
-      && unparsedPage.Some?
-      && var node := parseTrunkNode(unparsedPage.value);
-      && node.Some?
-      && this == node.value
-    }
-
-    predicate InIndTable(v: Variables)
-    {
-      && id in v.indTbl
-      && v.indTbl[id] == cu
+//      && var unparsedPage := CacheIfc.ReadValue(cache, cu);
+//      && unparsedPage.Some?
+//      && var node := parseTrunkNode(unparsedPage.value);
+//      && node.Some?
+//      && this == node.value
+      true
     }
 
     predicate Valid(v: Variables, cache: CacheIfc.Variables)
     {
       && WF()
-      && InIndTable(v)
       && ValidCU(cache)
     }
 
@@ -690,7 +682,7 @@ module SplinterTreeMachineMod {
 
   // TODO: We need make sure this flush op is flushing entire prefix of local trunk versions
   // We could make this a separate Flush receipt ??
-  predicate FlushesNodes(oldParent: TrunkNode, oldChild: TrunkNode, newParent: TrunkNode, newChild: TrunkNode)
+  predicate FlushesNodes(oldParent: TrunkNode, oldChild: NodeAssignment, newParent: TrunkNode, newChild: NodeAssignment)
     requires oldParent.WF()
     requires newParent.WF()
     requires oldChild.WF()
@@ -703,16 +695,16 @@ module SplinterTreeMachineMod {
     && oldChild.cu in oldParent.children
     && newParent.branches == oldParent.branches
     && newParent.children == oldParent.children
-    && (oldChild.Index? ==> && newChild.Index?
-                            && newChild.children == oldChild.children
+    && (oldChild.node.Index? ==> && newChild.node.Index?
+                            && newChild.node.children == oldChild.node.children
                             // Our flush is only one layer, so the activeBranches here shouldn't change
-                            && newChild.activeBranches == oldChild.activeBranches)
+                            && newChild.node.activeBranches == oldChild.node.activeBranches)
     // check that newChild got a branch from the oldParent
     && var oldChildId :| (0 <= oldChildId < |oldParent.children|) && oldParent.children[oldChildId] == oldChild.cu;
     && var newChildId :| (0 <= newChildId < |newParent.children|) && newParent.children[newChildId] == newChild.cu;
     && oldChildId == newChildId
     // for now we're flushing all current branches??
-    && (forall i | oldParent.activeBranches[oldChildId] <= i < |oldParent.branches| :: oldParent.branches[i] in newChild.branches)
+    && (forall i | oldParent.activeBranches[oldChildId] <= i < |oldParent.branches| :: oldParent.branches[i] in newChild.node.branches)
     && assert newParent.WF();
     && assert |newParent.activeBranches| == |newParent.children|;
     && assert 0 <= newChildId < |newParent.children|;
@@ -734,6 +726,10 @@ module SplinterTreeMachineMod {
      :: cu
  }
 
+ function IReadsSeq(v: Variables, cache: CacheIfc.Variables) : seq<CU> {
+   [] // TODO temporarily patching borked interface
+ }
+
 
   predicate CUIsAllocatable(v: Variables, cache: CacheIfc.Variables, cu: CU)
   {
@@ -751,7 +747,7 @@ module SplinterTreeMachineMod {
     && flush.Valid(v, cache)
     // TODO keep the parent's trunkId, but move the child, so that other nodes' outbound links
     // to existing child don't change.
-    && FlushesNodes(flush.ParentNode(), flush.ChildNode(), flush.newParent.node, flush.newChild.node)
+    && FlushesNodes(flush.ParentNode(), flush.ChildStep().na, flush.newParent.node, flush.newChild)
     && flush.newParent.id == flush.ParentStep().na.id  // parent keeps its id
     && true // UnusedId(flush.newChild.id) child gets id unallocated in eph ind tbl
     && CUIsAllocatable(v, cache, flush.newParent.cu)

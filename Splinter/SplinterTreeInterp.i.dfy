@@ -183,8 +183,8 @@ module SplinterTreeInterpMod {
          // Since they're in the IReadsSet, the nodes are also the same
           assert nextstep0.na.node == nextstep1.na.node;
 
-          assert nextstep0.na.node.InIndTable(v);
-          assert nextstep1.na.node.InIndTable(v);
+//          assert nextstep0.na.node.InIndTable(v);
+//          assert nextstep1.na.node.InIndTable(v);
           assert v.indTbl[nextstep0.na.id] == nextstep0.na.cu;
           assert v.indTbl[nextstep1.na.id] == nextstep1.na.cu;
           assert nextstep0.na.id == nextstep1.na.id;

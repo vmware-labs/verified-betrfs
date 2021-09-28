@@ -152,6 +152,13 @@ module MsgHistoryMod {
         var keepMap := map k | seqStart <= k < lsn :: msgs[k];
         MsgSeq(keepMap, seqStart, lsn)
     }
+
+    predicate IncludesSubseq(subseq: MsgSeq)
+      requires WF()
+      requires subseq.WF()
+    {
+      forall lsn | subseq.Contains(lsn) :: Contains(lsn) && msgs[lsn] == subseq.msgs[lsn]
+    }
   }
 
   function Empty() : (result: MsgSeq)

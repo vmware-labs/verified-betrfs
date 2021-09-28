@@ -53,7 +53,14 @@ module ProgramMachineMod {
     CU(0, 0)
   }
 
-  datatype Phase = SuperblockUnknown | RecoveringJournal | Running
+  // TODO: why does ProgramMachine know that the tree needs somewhere to store
+  // an empty tree? Poor isolation.
+  function TREE_ROOT_ADDRESS(): CU
+  {
+    CU(0, 1)
+  }
+
+  datatype Phase = SuperblockUnknown | ReplayingJournal | Running
 
   datatype Variables = Variables(
     phase: Phase,
@@ -76,9 +83,10 @@ module ProgramMachineMod {
     var initsb := Superblock(
       0,  // serial
       JournalMachineMod.MkfsSuperblock(),
-      SplinterTreeMachineMod.MkfsSuperblock());
+      SplinterTreeMachineMod.MkfsSuperblock(TREE_ROOT_ADDRESS()));
     && SUPERBLOCK_ADDRESS() in dv
     && parseSuperblock(dv[SUPERBLOCK_ADDRESS()]) == Some(initsb)
+    && SplinterTreeMachineMod.Mkfs(dv, TREE_ROOT_ADDRESS())
   }
 
   // Initialization of the program, which happens at the beginning but also after a crash.
@@ -95,7 +103,7 @@ module ProgramMachineMod {
     && var superblock := parseSuperblock(rawSuperblock);
     && superblock.Some?
 
-    && v'.phase.RecoveringJournal?
+    && v'.phase.ReplayingJournal?
     && v'.stableSuperblock == superblock.value
     && v'.cache == v.cache  // no cache writes
     && JournalMachineMod.Init(v'.journal, superblock.value.journal, v.cache, sk)
@@ -105,7 +113,7 @@ module ProgramMachineMod {
 
   predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq, newbetree: SplinterTreeMachineMod.Variables)
   {
-    && v.phase.RecoveringJournal?
+    && v.phase.ReplayingJournal?
     && puts.WF()
     && puts.seqStart == v.betree.BetreeEndsLSNExclusive()
     && puts.seqStart + |puts.msgs| <= v.journal.JournalBeginsLSNInclusive()
@@ -120,7 +128,7 @@ module ProgramMachineMod {
 
   predicate CompleteRecovery(v: Variables, v': Variables)
   {
-    && v.phase.RecoveringJournal?
+    && v.phase.ReplayingJournal?
     // We've brought the tree up-to-date with respect to the journal, so
     // we can enter normal operations
     && v.betree.BetreeEndsLSNExclusive() == v.journal.JournalBeginsLSNInclusive()
@@ -235,7 +243,7 @@ module ProgramMachineMod {
     && v'.betree == v.betree
     // Superblock constraints
     && v'.stableSuperblock == v.stableSuperblock
-    && CacheIfc.ApplyWrites(v.cache, v'.cache, cacheOps)
+    && CacheIfc.WritesApplied(v.cache, v'.cache, cacheOps)
     && WritesOkay(cacheOps, JournalMachineMod.Alloc(v'.journal))
     && AllocsDisjoint(v')
   }
@@ -248,7 +256,7 @@ module ProgramMachineMod {
     && v'.journal == v.journal
     && v'.stableSuperblock == v.stableSuperblock
     && SplinterTreeMachineMod.Internal(v.betree, v'.betree, v.cache, cacheOps, sk)
-    && CacheIfc.ApplyWrites(v.cache, v'.cache, cacheOps)
+    && CacheIfc.WritesApplied(v.cache, v'.cache, cacheOps)
     && AllocsDisjoint(v')
   }
 
@@ -291,7 +299,7 @@ module ProgramMachineMod {
     && (exists alloc :: JournalMachineMod.CommitStart(v.journal, v'.journal, v.cache, sb.journal, seqBoundary, alloc))
     && SplinterTreeMachineMod.CommitStart(v.betree, v'.betree, v.cache, sb.betree, seqBoundary)
 //    && sb.serial == v.stableSuperblock.serial + 1 // I think this isn't needed until duplicate-superblock code
-    && CacheIfc.ApplyWrites(v.cache, v'.cache, [CacheIfc.Write(SUPERBLOCK_ADDRESS(), marshalSuperblock(sb))])
+    && CacheIfc.WritesApplied(v.cache, v'.cache, [CacheIfc.Write(SUPERBLOCK_ADDRESS(), marshalSuperblock(sb))])
     && v'.stableSuperblock == v.stableSuperblock // only inFlightSuperblock should change at this step. stable should be well ... stable
   }
 

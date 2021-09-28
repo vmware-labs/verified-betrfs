@@ -93,6 +93,8 @@ module ProgramInterpMod {
 
   function IM(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
   {
+    // Until we're running, there's no state in memory that's not also on the
+    // disk.
     if v.phase.Running?
     then IMRunning(v)
     else IMNotRunning(v.cache.dv) // fresh start or recovered
@@ -104,8 +106,8 @@ module ProgramInterpMod {
     if sb.Some?
     then
       sbreads
-        + JournalInterpMod.IReads(v.journal, v.cache, sb.value.journal)
-        + SplinterTreeInterpMod.IReads(v.betree, v.cache, sb.value.betree)
+        + JournalInterpMod.IReads(v.cache, sb.value.journal)
+        + SplinterTreeMachineMod.IReadsSeq(v.betree, v.cache)
     else
       sbreads
   }
@@ -123,7 +125,7 @@ module ProgramInterpMod {
     assert ISuperblock(v0.cache.dv) == ISuperblock(v1.cache.dv);
     var sb := ISuperblock(v0.cache.dv);
     if sb.Some? {
-      SplinterTreeInterpMod.Framing(v0.betree, v0.cache, v1.cache, sb.value.betree);
+      SplinterTreeInterpMod.Framing(v0.betree, v0.cache, v1.cache);
       var betreeInterp := SplinterTreeInterpMod.IMStable(v0.cache, sb.value.betree);
       JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, betreeInterp);
     }

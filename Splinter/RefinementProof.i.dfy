@@ -62,14 +62,14 @@ module Proof refines ProofObligations {
       requires v.program.WF()
 
       requires ConcreteSystem.P.NextStep(v.program, v'.program, uiop, cacheOps, pstep)
-      requires pstep == ConcreteSystem.P.BetreeInternalStep(sk)
+      requires pstep == ConcreteSystem.P.SplinterTreeInternalStep(sk)
 
       // Is this a problem with using imports?
       ensures Inv(v')
       ensures SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
         SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree)
   {
-    SplinterTreeInterpMod.Framing(v.program.betree, v.program.cache, v'.program.cache, v.program.stableSuperblock.betree);
+    SplinterTreeInterpMod.Framing(v.program.betree, v.program.cache, v'.program.cache);
     assert v.program.betree.nextSeq == v'.program.betree.nextSeq;
 
     // Need to fix this later
@@ -78,7 +78,7 @@ module Proof refines ProofObligations {
     //
     // assert SplinterTreeInterpMod.IM(v.program.cache, v.program.betree) ==
     //  SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree);
-    SplinterTreeInterpMod.InternalStepLemma(v.program.betree, v'.program.betree, v.program.cache, v'.program.cache, v.program.stableSuperblock.betree, sk);
+    SplinterTreeInterpMod.InternalStepLemma(v.program.betree, v'.program.betree, v.program.cache, v'.program.cache, cacheOps, sk);
 
     EnsureInductive(v, v');
   }
@@ -114,7 +114,7 @@ module Proof refines ProofObligations {
     //assert BetreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree) == BetreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree);
 
     // Only thing new is the journal -- make a lemma journal on Internal step
-    JournalInterpMod.InternalStepLemma(v.program.journal, v.program.cache, v'.program.journal, v'.program.cache,  v.program.stableSuperblock.journal, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree), cacheOps, sk);
+    JournalInterpMod.InternalStepLemma(v.program.journal, v.program.cache, v'.program.journal, v'.program.cache, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree), cacheOps, sk);
 
     assert JournalInterpMod.IM(v.program.journal, v.program.cache, SplinterTreeInterpMod.IMStable(v.program.cache, v.program.stableSuperblock.betree)) ==
       JournalInterpMod.IM(v'.program.journal, v'.program.cache, SplinterTreeInterpMod.IMStable(v'.program.cache, v'.program.stableSuperblock.betree));
@@ -237,7 +237,7 @@ module Proof refines ProofObligations {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), CrashTolerantMapSpecMod.NoopOp); // WITNESS
 
       }
-      case BetreeInternalStep(sk) => {
+      case SplinterTreeInternalStep(sk) => {
           SplinterInternalRefined(v, v', uiop, cacheOps, pstep, sk);
 
           var sb := ProgramInterpMod.ISuperblock(v.program.cache.dv);

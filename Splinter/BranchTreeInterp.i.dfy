@@ -251,6 +251,8 @@ module BranchTreeInterpIfc {
     requires BranchLookupEquivalentRequirements(key, cache0, cache1, receipts0, receipts1)
     ensures receipts0 == receipts1
   {
-    BranchTreeInterpMod.BranchReceiptsEquivalent(key, cache0, cache1, receipts0, receipts1);
+    var baseReceipts0 := seq(|receipts0|, i requires 0<=i<|receipts0| => receipts0[i].base);
+    var baseReceipts1 := seq(|receipts0|, i requires 0<=i<|receipts0| => receipts1[i].base);
+    BranchTreeInterpMod.BranchReceiptsEquivalent(key, cache0, cache1, baseReceipts0, baseReceipts1);
   }
 }
