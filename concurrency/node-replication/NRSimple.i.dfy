@@ -7,6 +7,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
     | ReadInit( op: nrifc.ReadonlyOp)
     | ReadReq(ctail_at_start: nat, op: nrifc.ReadonlyOp)
 
+  // TODO: maybe remove ret, compute ret instead of storing it here
   datatype UpdateResp = UpdateResp(idx_in_log: nat, ret: nrifc.ReturnType)
 
   datatype Variables = Variables(
@@ -79,6 +80,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
     && s' == s.(update_reqs := s.update_reqs[rid := op])
   }
 
+  // TODO(gz): use seq<RequestId> instead of RequestId?
   predicate AddUpdateToLog(s: Variables, s': Variables, rid: RequestId)
   {
     && rid in s.update_reqs

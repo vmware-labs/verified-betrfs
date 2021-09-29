@@ -30,19 +30,19 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   datatype ReadonlyState =
     | ReadonlyInit(op: nrifc.ReadonlyOp)
-        // read the ctail
+    // read the ctail
     | ReadonlyCtail(op: nrifc.ReadonlyOp, ctail: nat)
-        // wait until localTail >= (the ctail value we just read)
+    // wait until localTail >= (the ctail value we just read)
     | ReadonlyReadyToRead(op: nrifc.ReadonlyOp, nodeId: NodeId, ctail: nat)
-        // read the op off the replica
-    | ReadonlyDone(ret: nrifc.ReturnType)
+    // read the op off the replica
+    | ReadonlyDone(ret: nrifc.ReturnType, ctail: nat)
 
   datatype UpdateState =
     | UpdateInit(op: nrifc.UpdateOp)
-    | UpdatePlaced(nodeId: NodeId, idx: nat)
-    | UpdateApplied(ret: nrifc.ReturnType, idx: nat)
+    | UpdatePlaced(nodeId: NodeId, idx: nat) // -> UpdateResp, no ret yet
+    | UpdateApplied(ret: nrifc.ReturnType, idx: nat) // -> UpdateResp
     // TODO(travis): add idx here too:
-    | UpdateDone(ret: nrifc.ReturnType)
+    | UpdateDone(ret: nrifc.ReturnType, idx: nat) // -> UpdateResp
 
   // There is only one 'combiner' for a given node.
   // You can't enter the combining phase whenever you want. You must
@@ -840,8 +840,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   predicate IsStub(rid: RequestId, output: IOIfc.Output, stub: M) {
-    || stub == ReadOp(rid, ReadonlyDone(output))
-    || stub == UpdateOp(rid, UpdateDone(output))
+    || (exists ctail :: stub == ReadOp(rid, ReadonlyDone(output, ctail)))
+    || (exists log_idx :: stub == UpdateOp(rid, UpdateDone(output, log_idx)))
   }
 
   // By returning a set of request ids "in use", we enforce that

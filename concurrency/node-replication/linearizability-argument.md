@@ -15,7 +15,7 @@ Furthermore, the _ctail_ value is allowed to nondeterministially increase at any
 
 The linearizability argument goes:
 
- * An update _U_ can put its linearization point at the point in time when _ctail_ equals _U.idx_.
+ * An update _U_ can put its linearization point at the point in time when _ctail_ equals _U.idx_ (on any of the replicas).
    This will always happen before the update returns, because we require that _ctail >= U.idx_.
  * A readonly operation _R_ can put its linearization point at the point in time when _ctail_ equals _R.v_
    (right after the linearization point for the corresponding update). Of course, this will always be
