@@ -212,9 +212,6 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert IS'.ctail == IS.ctail;
     assert IS'.log == IS.log;
 
-
-
-
     // now branch off depending up the update type
     if input.ROp? {
       // now assert the ROp ticket
@@ -230,7 +227,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       assert IS'.update_resps == IS.update_resps;
 
       // the next assert take a little while...
-      assume s'.localReads == s.localReads[rid := ReadonlyInit(input.readonly_op)];
+      assert s'.localReads == s.localReads[rid := ReadonlyInit(input.readonly_op)];
 
       I_ReadRequests_Update_is(s, s', rid, input);
       assert IS'.readonly_reqs == IS.readonly_reqs[rid := B.ReadInit(input.readonly_op)];
@@ -248,7 +245,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       assert s'.localReads == s.localReads;
       assert IS'.readonly_reqs == IS.readonly_reqs;
       // that step takes a little while
-      assume s'.localUpdates == s.localUpdates[rid :=  UpdateInit(input.update_op)];
+      assert s'.localUpdates == s.localUpdates[rid :=  UpdateInit(input.update_op)];
 
       I_UpdateRequests_Update_is(s, s', rid, input);
       assert IS'.update_reqs == IS.update_reqs[rid := input.update_op];
@@ -326,7 +323,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
 
       //assert IS'.update_resps == IS.update_resps - {rid};
 
-      assume B.NextStep(IS, IS', ifc.End(rid, output), B.EndUpdate_Step(rid, output));
+      assert B.NextStep(IS, IS', ifc.End(rid, output), B.EndUpdate_Step(rid, output));
     } else {
       assert rid in stub.localReads;
       assert stub == M(map[], None, map[], map[], None,
@@ -346,7 +343,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       assert rid !in IS'.readonly_reqs;
 
       var version := 0;
-      assume B.NextStep(IS, IS', ifc.End(rid, output), B.FinishReadonly_Step(rid, version, output));
+      assert B.NextStep(IS, IS', ifc.End(rid, output), B.FinishReadonly_Step(rid, version, output));
     }
   }
 
@@ -459,7 +456,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   ensures B.Next(I(s), I(s'), ifc.InternalOp)
   {
     // XXX: fix the readonly done stuff
-    assume false;
+    assert false;
   }
 
   lemma AdvanceTail_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId, request_ids: seq<RequestId>)
@@ -490,7 +487,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   ensures B.Next(I(s), I(s'), ifc.InternalOp)
   {
     // XXX: fix the readonly done stuff
-    assume false;
+    assert false;
   }
 
   lemma Internal_Refines_Internal(s: A.Variables, s': A.Variables)
