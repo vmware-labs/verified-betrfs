@@ -10,30 +10,30 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   // This is a way of dividing up the state into the pieces it will be convenient to
   // manipulate in our program.
 
-  datatype Readonly = Readonly(rid: RequestId, rs: ReadonlyState)
+  datatype {:glinear_fold} Readonly = Readonly(rid: RequestId, rs: ReadonlyState)
   {
-    function represents(): M {
+    function defn(): M {
       M(map[], None, map[], map[], None, map[rid := rs], map[], map[])
     }
   }
 
-  datatype Ctail = Ctail(ctail: nat)
+  datatype {:glinear_fold} Ctail = Ctail(ctail: nat)
   {
-    function represents(): M {
+    function defn(): M {
       M(map[], None, map[], map[], Some(ctail), map[], map[], map[])
     }
   }
 
-  datatype LocalTail = LocalTail(nodeId: NodeId, localTail: nat)
+  datatype {:glinear_fold} LocalTail = LocalTail(nodeId: NodeId, localTail: nat)
   {
-    function represents(): M {
+    function defn(): M {
       M(map[], None, map[], map[nodeId := localTail], None, map[], map[], map[])
     }
   }
 
-  datatype Replica = Replica(nodeId: NodeId, state: nrifc.NRState)
+  datatype {:glinear_fold} Replica = Replica(nodeId: NodeId, state: nrifc.NRState)
   {
-    function represents(): M {
+    function defn(): M {
       M(map[], None, map[nodeId := state], map[], None, map[], map[], map[])
     }
   }
