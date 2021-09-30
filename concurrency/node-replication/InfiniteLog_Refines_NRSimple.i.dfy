@@ -267,7 +267,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       assert IS'.update_resps == IS.update_resps;
 
       // the next assert take a little while...
-      assume s'.localReads == s.localReads[rid := ReadonlyInit(input.readonly_op)];
+      assert s'.localReads == s.localReads[rid := ReadonlyInit(input.readonly_op)];
 
       I_ReadRequests_Update_is(s, s', rid, input);
       assert IS'.readonly_reqs == IS.readonly_reqs[rid := B.ReadInit(input.readonly_op)];
@@ -285,7 +285,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       assert s'.localReads == s.localReads;
       assert IS'.readonly_reqs == IS.readonly_reqs;
       // that step takes a little while
-      assume s'.localUpdates == s.localUpdates[rid :=  UpdateInit(input.update_op)];
+      assert s'.localUpdates == s.localUpdates[rid :=  UpdateInit(input.update_op)];
 
       I_UpdateRequests_Update_is(s, s', rid, input);
       assert IS'.update_reqs == IS.update_reqs[rid := input.update_op];
@@ -334,48 +334,48 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert rid in stub.localUpdates || rid in stub.localReads;
 
     if rid in stub.localUpdates {
-      // var idx := stub.localUpdates[rid].idx;
+      var idx := stub.localUpdates[rid].idx;
 
-      // assert stub == M(map[], None, map[], map[], None, map[],
-      //                  map[rid := UpdateDone(output, idx)],
-      //                  map[]);
+      assert stub == M(map[], None, map[], map[], None, map[],
+                       map[rid := UpdateDone(output, idx)],
+                       map[]);
 
-      // // the local reads haven't changed
-      // assert s'.localReads == s.localReads;
-      // assert IS'.readonly_reqs == IS.readonly_reqs;
+      // the local reads haven't changed
+      assert s'.localReads == s.localReads;
+      assert IS'.readonly_reqs == IS.readonly_reqs;
 
-      // assert rid !in stub.localReads;
-      // assert rid !in s'.localUpdates;
-      // assert rid in s.localUpdates;
-      // assert rid in IS.update_resps;
-      // assert rid !in IS'.update_resps;
+      assert rid !in stub.localReads;
+      assert rid !in s'.localUpdates;
+      assert rid in s.localUpdates;
+      assert rid in IS.update_resps;
+      assert rid !in IS'.update_resps;
 
-      // // they are the same
-      // assert s.localUpdates[rid] == stub.localUpdates[rid];
-      // assert s.localUpdates[rid].UpdateDone?;
-      // assert output == s.localUpdates[rid].ret;
-      // assert output == IS.update_resps[rid].ret;
+      // they are the same
+      assert s.localUpdates[rid] == stub.localUpdates[rid];
+      assert s.localUpdates[rid].UpdateDone?;
+      assert output == s.localUpdates[rid].ret;
+      assert output == IS.update_resps[rid].ret;
 
-      // // the ctail value
-      // assert s.localUpdates[rid].idx <= s.ctail.value;
-      // assert s.ctail.value == IS.ctail;
-      // assert IS.update_resps[rid].idx_in_log == s.localUpdates[rid].idx;
-      // assert IS.update_resps[rid].idx_in_log <= IS.ctail;
+      // the ctail value
+      assert s.localUpdates[rid].idx <= s.ctail.value;
+      assert s.ctail.value == IS.ctail;
+      assert IS.update_resps[rid].idx_in_log == s.localUpdates[rid].idx;
+      assert IS.update_resps[rid].idx_in_log <= IS.ctail;
 
-      // // // that may take a while
-      // assume s.localUpdates == s'.localUpdates[rid := UpdateDone(output, idx)];
-      // assert rid !in s'.localUpdates;
-      // assert rid !in IS'.update_resps;
+      // // that may take a while
+      assert s.localUpdates == s'.localUpdates[rid := UpdateDone(output, idx)];
+      assert rid !in s'.localUpdates;
+      assert rid !in IS'.update_resps;
 
-      // I_UpdateResponses_Update_is(s, s', rid, idx, output);
-      // assert IS.update_resps == IS'.update_resps[rid := B.UpdateResp(idx, output)];
-      // assert IS.update_reqs == IS'.update_reqs;
+      I_UpdateResponses_Update_is(s, s', rid, idx, output);
+      assert IS.update_resps == IS'.update_resps[rid := B.UpdateResp(idx, output)];
+      assert IS.update_reqs == IS'.update_reqs;
 
-      // assert IS == IS'.(update_resps := IS'.update_resps[rid := B.UpdateResp(idx, output)]);
-      // assert IS' == IS.(update_resps := IS.update_resps - {rid});
+      assert IS == IS'.(update_resps := IS'.update_resps[rid := B.UpdateResp(idx, output)]);
+      assert IS' == IS.(update_resps := IS.update_resps - {rid});
 
-      // // && s' == s.(update_resps := s.update_resps - {rid})
-      assume B.NextStep(IS, IS', ifc.End(rid, output), B.EndUpdate_Step(rid, output));
+      // && s' == s.(update_resps := s.update_resps - {rid})
+      assert B.NextStep(IS, IS', ifc.End(rid, output), B.EndUpdate_Step(rid, output));
     } else {
       assert rid in stub.localReads;
       var ctail := stub.localReads[rid].ctail;
