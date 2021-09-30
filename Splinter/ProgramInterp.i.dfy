@@ -30,26 +30,52 @@ module ProgramInterpMod {
 
   function ISuperblock(dv: DiskView) : Option<Superblock>
   {
-    var bcu0 := CU(0, 0);
-    var bcu1 := CU(0, 1);
-    if bcu0 in dv && bcu1 in dv
+    if (
+      var cu0 := SUPERBLOCK_ADDRESSES()[0];
+      && cu0 in dv
+      && var sb0 := parseSuperblock(dv[cu0]);
+      && (forall cu | cu in SUPERBLOCK_ADDRESSES() ::
+          && cu in dv
+          && sb0.Some?
+          && parseSuperblock(dv[cu]) == sb0)
+      )
     then
-      var sb0 := parseSuperblock(dv[bcu0]);
-      var sb1 := parseSuperblock(dv[bcu1]);
-      if sb0.Some? && sb1.Some? && sb0.value.serial == sb1.value.serial
-      then
-        sb0
-      else
-        None  // Stop! Recovery should ... copy the newer one?
-          // well I think I() of that should be the newer one, but we should just
-          // not be allowed to write anything until we've got them back in sync.
+      // all the superblocks are present, parseable, and match each other.
+      parseSuperblock(dv[SUPERBLOCK_ADDRESSES()[0]])
     else
-      None  // silly expression: DV has holes in it
+      // Stop! Recovery should ... copy the newer one?
+      // well I think I() of that should be the newer one, but we should just
+      // not be allowed to write anything until we've got them back in sync.
+      None
   }
 
   function ISuperblockReads(dv: DiskView) : seq<CU>
   {
-    [ SUPERBLOCK_ADDRESS() ]
+    SUPERBLOCK_ADDRESSES()
+  }
+
+  predicate NotRunningInvariant(dv: DiskView)
+  {
+    && var pretendCache := CacheIfc.Variables(dv);
+    && var sb := ISuperblock(dv);
+    && sb.Some?
+    && var splinterTreeInterp := SplinterTreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
+    && splinterTreeInterp.seqEnd == sb.value.journal.boundaryLSN
+  }
+
+  predicate Invariant(v: Variables)
+  {
+    && v.WF()
+    && (if v.phase.Running?
+      then
+        && JournalInterpMod.Invariant(v.journal, v.cache)
+        && var sb := ISuperblock(v.cache.dv);
+        && sb.Some?
+        && var splinterTreeInterp := SplinterTreeInterpMod.IMStable(v.cache, sb.value.betree);
+        && splinterTreeInterp.seqEnd == v.journal.boundaryLSN
+      else
+        && NotRunningInvariant(v.cache.dv)
+      )
   }
 
   // Program will have a runtime view of what (ghost) alloc each subsystem thinks it's using,
@@ -65,41 +91,37 @@ module ProgramInterpMod {
   // is the set of versions. Yeah we need to put richer interps down in JournalInterp
   // before we try to add them here?
   function IMNotRunning(dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
+    requires NotRunningInvariant(dv)
     ensures iv.WF()
   {
     var pretendCache := CacheIfc.Variables(dv);
     var sb := ISuperblock(dv);
-    if sb.Some?
-    then
-      var splinterTreeInterp := SplinterTreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
-      var journalInterp := JournalInterpMod.IMNotRunning(pretendCache, sb.value.journal, splinterTreeInterp);
-      journalInterp
-    else
-      CrashTolerantMapSpecMod.InitState()
+    var splinterTreeInterp := SplinterTreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
+    var journalInterp := JournalInterpMod.IMNotRunning(pretendCache, sb.value.journal, splinterTreeInterp);
+    journalInterp
   }
 
   function IMRunning(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
-    requires v.WF()
-    requires JournalInterpMod.Invariant(v.journal, v.cache)
+    requires Invariant(v)
+    requires v.phase.Running?
     ensures iv.WF()
   {
-    var sb := ISuperblock(v.cache.dv);
-    if sb.Some?
-    then
-      var splinterTreeInterp := SplinterTreeInterpMod.IMStable(v.cache, sb.value.betree);
-      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, splinterTreeInterp);
-      journalInterp
-    else
-      CrashTolerantMapSpecMod.InitState()
+    var sb := ISuperblock(v.cache.dv).value;
+    var splinterTreeInterp := SplinterTreeInterpMod.IMStable(v.cache, sb.betree);
+    var journalInterp := JournalInterpMod.IM(v.journal, v.cache, splinterTreeInterp);
+    journalInterp
   }
 
   function IM(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
     requires v.WF()
   {
-    // Until we're running, there's no state in memory that's not also on the
-    // disk.
-    if v.phase.Running?
+    if !Invariant(v)  // keep Invariant out of requires by providing a dummy answer.
+    then
+      CrashTolerantMapSpecMod.InitState()
+    else if v.phase.Running?
     then IMRunning(v)
+      // Until we're running, there's no state in memory that's not also on the
+      // disk.
     else IMNotRunning(v.cache.dv) // fresh start or recovered
   }
 
@@ -127,9 +149,14 @@ module ProgramInterpMod {
     requires v0.journal == v1.journal
     ensures IM(v0) == IM(v1)
   {
+    assert CU(0, 0) in IReads(v0);
+    assert CU(0, 1) in IReads(v0);
     assert ISuperblock(v0.cache.dv) == ISuperblock(v1.cache.dv);
     var sb := ISuperblock(v0.cache.dv);
     if sb.Some? {
+      assert IReads(v0) == ISuperblockReads(v0.cache.dv)
+        + JournalInterpMod.IReads(v0.cache, sb.value.journal)
+        + SplinterTreeMachineMod.IReadsSeq(v0.betree, v0.cache);
       assert forall cu | cu in SplinterTreeMachineMod.IReads(v0.betree, v0.cache) :: cu in IReads(v0);
       assert DiskViewsEquivalent(v0.cache.dv, v1.cache.dv, SplinterTreeMachineMod.IReads(v0.betree, v0.cache));
       SplinterTreeInterpMod.Framing(v0.betree, v0.cache, v1.cache);

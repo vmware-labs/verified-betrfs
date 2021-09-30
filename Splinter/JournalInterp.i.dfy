@@ -50,7 +50,7 @@ module JournalInterpMod {
     requires v.WF()
     requires Invariant(v, cache)
     requires base.seqEnd == v.boundaryLSN
-    requires v.boundaryLSN <= lsn < v.unmarshalledLSN()
+    requires v.boundaryLSN <= lsn <= v.unmarshalledLSN()
   {
     UnmarshalledMessageSeq(v, cache).Truncate(lsn).ApplyToInterp(base)
   }
@@ -59,7 +59,7 @@ module JournalInterpMod {
      requires v.WF()
      requires Invariant(v, cache)
      requires base.seqEnd == v.boundaryLSN
-     requires v.boundaryLSN <= lsn < v.unmarshalledLSN() // we only need versions for the journal for the unapplied suffix of entries
+     requires v.boundaryLSN <= lsn <= v.unmarshalledLSN() // we only need versions for the journal for the unapplied suffix of entries
    {
      // TODO No accounting for v.syncReqs < boundaryLSN; hrmm.
      var mapspec := MapSpecMod.Variables(InterpFor(v, cache, base, lsn));
@@ -73,19 +73,20 @@ module JournalInterpMod {
     requires Invariant(v, cache)
    {
      // TODO: check
-     var numVersions := v.unmarshalledLSN() - v.boundaryLSN;
+     var numVersions := v.unmarshalledLSN() - v.boundaryLSN + 1;
      seq(numVersions, i requires 0 <= i < numVersions =>
         var lsn := i + v.boundaryLSN;
         assert v.boundaryLSN <= lsn;
-        assert lsn < v.unmarshalledLSN();
+        assert lsn <= v.unmarshalledLSN();
         VersionFor(v, cache, base, lsn)
      )
    }
 
    // TDODO: may have to lemma for the journal internal step
 
-  function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp) : CrashTolerantMapSpecMod.Variables
+  function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp) : (iv: CrashTolerantMapSpecMod.Variables)
     requires base.seqEnd == sb.boundaryLSN  // This crash-invariant condition should probably not be a requires; just return nonsense if it fails.
+    ensures iv.WF()
   {
     assume false; // this is all nonsense
     var pretendVariables := Variables(sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, [], map[], EmptyChainLookup(Superblock(None, 0), 0));
@@ -94,10 +95,11 @@ module JournalInterpMod {
   }
 
   function IM(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp)
-    : CrashTolerantMapSpecMod.Variables
+    : (iv: CrashTolerantMapSpecMod.Variables)
     requires v.WF()
     requires Invariant(v, cache)
     requires base.seqEnd == v.boundaryLSN
+    ensures iv.WF()
   {
     assert v.boundaryLSN <= v.unmarshalledLSN(); // Follows from WF & defn unmarshalledLSN
     var versions := Versions(v, cache, base);

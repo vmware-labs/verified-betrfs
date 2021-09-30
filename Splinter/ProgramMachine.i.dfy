@@ -32,6 +32,7 @@ module ProgramMachineMod {
   import opened KeyType
   import opened MsgHistoryMod
   import opened Options
+  import opened SequenceSetsMod
   import CacheIfc
   import D = AsyncDisk  // Importing for the interface, not the entire disk
 
@@ -48,9 +49,9 @@ module ProgramMachineMod {
   function marshalSuperblock(sb: Superblock) : (b: UninterpretedDiskPage)
     ensures parseSuperblock(b) == Some(sb)
 
-  function SUPERBLOCK_ADDRESS(): CU
+  function SUPERBLOCK_ADDRESSES(): seq<CU>
   {
-    CU(0, 0)
+    [CU(0, 0), CU(0, 1)]
   }
 
   // TODO: why does ProgramMachine know that the tree needs somewhere to store
@@ -84,8 +85,10 @@ module ProgramMachineMod {
       0,  // serial
       JournalMachineMod.MkfsSuperblock(),
       SplinterTreeMachineMod.MkfsSuperblock(TREE_ROOT_ADDRESS()));
-    && SUPERBLOCK_ADDRESS() in dv
-    && parseSuperblock(dv[SUPERBLOCK_ADDRESS()]) == Some(initsb)
+    && (forall cu | cu in SUPERBLOCK_ADDRESSES() ::
+      && cu in dv
+      && parseSuperblock(dv[cu]) == Some(initsb)
+      )
     && SplinterTreeMachineMod.Mkfs(dv, TREE_ROOT_ADDRESS())
   }
 
@@ -99,7 +102,7 @@ module ProgramMachineMod {
 
   predicate LearnSuperblock(v: Variables, v': Variables, rawSuperblock: UninterpretedDiskPage, sk: JournalMachineMod.InitSkolems)
   {
-    && CacheIfc.Read(v.cache, SUPERBLOCK_ADDRESS(), rawSuperblock)
+    && (forall cu | cu in SUPERBLOCK_ADDRESSES() :: CacheIfc.Read(v.cache, cu, rawSuperblock))
     && var superblock := parseSuperblock(rawSuperblock);
     && superblock.Some?
 
@@ -190,7 +193,7 @@ module ProgramMachineMod {
   predicate AllocsDisjoint(v: Variables)
   {
     SetsMutuallyDisjoint([
-      {SUPERBLOCK_ADDRESS()},
+      Members(SUPERBLOCK_ADDRESSES()),
       JournalMachineMod.Alloc(v.journal),
       SplinterTreeMachineMod.Alloc(v.betree, v.cache, v.stableSuperblock.betree)
       ])
@@ -301,7 +304,9 @@ module ProgramMachineMod {
     && (exists alloc :: JournalMachineMod.CommitStart(v.journal, v'.journal, v.cache, sb.journal, seqBoundary, alloc))
     && SplinterTreeMachineMod.CommitStart(v.betree, v'.betree, v.cache, sb.betree, seqBoundary)
 //    && sb.serial == v.stableSuperblock.serial + 1 // I think this isn't needed until duplicate-superblock code
-    && CacheIfc.WritesApplied(v.cache, v'.cache, [CacheIfc.Write(SUPERBLOCK_ADDRESS(), marshalSuperblock(sb))])
+    && CacheIfc.WritesApplied(v.cache, v'.cache,
+      seq(|SUPERBLOCK_ADDRESSES()|,
+        cui requires 0<=cui<|SUPERBLOCK_ADDRESSES()| => CacheIfc.Write(SUPERBLOCK_ADDRESSES()[cui], marshalSuperblock(sb))))
     && v'.stableSuperblock == v.stableSuperblock // only inFlightSuperblock should change at this step. stable should be well ... stable
   }
 
@@ -310,7 +315,7 @@ module ProgramMachineMod {
     && uiop.NoopOp?
     && v.phase.Running?
     && v.inFlightSuperblock.Some?
-    && CacheIfc.IsClean(v.cache, SUPERBLOCK_ADDRESS())
+    && (forall cu | cu in SUPERBLOCK_ADDRESSES() :: CacheIfc.IsClean(v.cache, cu))
 
     && var sb := v.inFlightSuperblock.value;
     && v'.stableSuperblock == sb

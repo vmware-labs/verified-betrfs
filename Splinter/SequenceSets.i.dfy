@@ -4,4 +4,9 @@ module SequenceSetsMod {
   {
     forall i | 0<=i<|a| :: a[i] in b
   }
+
+  function Members<T>(a: seq<T>) : set<T>
+  {
+    set e | e in a
+  }
 }
