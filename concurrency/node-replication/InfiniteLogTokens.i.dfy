@@ -95,7 +95,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   requires readonly.rs.ReadonlyReadyToRead?
   requires replica.nodeId == readonly.rs.nodeId
   ensures readonly' == Readonly(readonly.rid,
-      ReadonlyDone(nrifc.read(replica.state, readonly.rs.op)))
+      ReadonlyDone(nrifc.read(replica.state, readonly.rs.op), readonly.rs.ctail))
   //{
     //TODO
   //}
