@@ -430,7 +430,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var ret := nrifc.read(m.replicas[readRequest.nodeId], readRequest.op);
 
     // construct the new state
-    && var newst := ReadonlyDone(ret);
+    && var newst := ReadonlyDone(ret, readRequest.ctail); //, readRequest.op);
     // and update the state
     && m' == m.(localReads := m.localReads[rid := newst])
   }
@@ -756,10 +756,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && StateValid(m)
     && InUpdateApplied(m, request_id)
     && CompleteTailValid(m)
-    && var idx := m.localUpdates[request_id].idx;
-    && var ret := m.localUpdates[request_id].ret;
-    && m.ctail.value >= idx
-    && m' == m.(localUpdates := m.localUpdates[request_id := UpdateDone(ret)])
+    && var req := m.localUpdates[request_id];
+    && m.ctail.value >= req.idx
+    && m' == m.(localUpdates := m.localUpdates[request_id := UpdateDone(req.ret, req.idx)])
   }
 
   /*
@@ -965,6 +964,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     forall rid | rid in s.localReads :: match s.localReads[rid] {
       case ReadonlyCtail(_, ctail: nat) => ctail <= s.ctail.value
       case ReadonlyReadyToRead(_, _, ctail: nat) => ctail <= s.ctail.value
+      case ReadonlyDone(_, ctail: nat) =>  ctail <= s.ctail.value
       case _ => true
     }
   }
@@ -1088,6 +1088,10 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value)
     && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdateApplied?
       :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value)
+    && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdateDone?
+      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value)
+    && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdateDone?
+      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.ctail.value)
   }
 
   // the invariant

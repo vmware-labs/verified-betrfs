@@ -95,7 +95,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
       rid: RequestId, return_value: nrifc.ReturnType)
   {
     && rid in s.update_resps
-    && s.ctail > s.update_resps[rid].idx_in_log
+    && s.ctail >= s.update_resps[rid].idx_in_log
     && s' == s.(update_resps := s.update_resps - {rid})
     && return_value == s.update_resps[rid].ret
   }
