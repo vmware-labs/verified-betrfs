@@ -1,5 +1,5 @@
 include "../../lib/Lang/NativeTypes.s.dfy"
-include "GlinearOption.i.dfy"
+include "GlinearOption.s.dfy"
 
 module {:extern "Ptrs"} Ptrs {
   import opened NativeTypes

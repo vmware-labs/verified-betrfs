@@ -1,5 +1,5 @@
 include "../framework/Atomic.s.dfy"
-include "../framework//GlinearOption.i.dfy"
+include "../framework//GlinearOption.s.dfy"
 
 module BasicLockImpl {
   import opened GlinearOption

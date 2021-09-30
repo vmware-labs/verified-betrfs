@@ -1,6 +1,6 @@
 include "../framework/Atomic.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
-include "../framework/GlinearOption.i.dfy"
+include "../framework/GlinearOption.s.dfy"
 include "cache/CacheResources.i.dfy"
 include "Constants.i.dfy"
 include "../framework/Ptrs.s.dfy"

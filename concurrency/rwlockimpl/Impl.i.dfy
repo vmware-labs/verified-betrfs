@@ -1,5 +1,5 @@
 include "RwLock.i.dfy"
-include "../framework/GlinearOption.i.dfy"
+include "../framework/GlinearOption.s.dfy"
 include "../framework/Atomic.s.dfy"
 
 module RwLockImpl(stm: StoredTypeModule) {
