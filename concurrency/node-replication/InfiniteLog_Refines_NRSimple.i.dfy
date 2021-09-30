@@ -53,14 +53,23 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     ensures forall k :: !(k in m2) && !(k in m1) ==> !(k in map_update(m1, m2))
     ensures m1 == map[] ==> map_update(m1, m2) == m2
     ensures m2 == map[] ==> map_update(m1, m2) == m1
+    ensures (m1.Keys !! m2.Keys) ==> map_update(m1, m2).Keys == m1.Keys + m2.Keys
+    ensures (m1.Keys !! m2.Keys) ==> (forall k | k in m1 :: map_update(m1, m2)[k] == m1[k])
+    ensures (m1.Keys !! m2.Keys) ==> (forall k | k in m2 :: map_update(m1, m2)[k] == m2[k])
   {
     map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
   }
 
-  // predicate to filter the in-progress read requests
-  predicate ReadReq_InProgress(rid: RequestId, reqs: map<RequestId, ReadonlyState>)
+  lemma map_update_commutative<K(!new), V>(m1: map<K, V>, m2: map<K, V>)
+    requires m1.Keys !! m2.Keys
+    ensures map_update(m1, m2) == map_update(m2, m1)
   {
-    && rid in reqs
+  }
+
+  lemma map_update_associative<K(!new), V>(m1: map<K, V>, m2: map<K, V>, m3: map<K, V>)
+    requires m1.Keys !! m2.Keys && m2.Keys !! m3.Keys && m3.Keys !! m1.Keys
+    ensures map_update(m1, map_update(m2, m3)) == map_update(map_update(m1, m2), m3)
+  {
   }
 
   // construction of the read requests for InfiniteLog -> NRSimple
@@ -71,7 +80,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     ensures forall rid | rid in reqs && reqs[rid].ReadonlyReadyToRead? :: rid in res && res[rid].ReadReq? && res[rid].op == reqs[rid].op;
     ensures forall rid | rid !in reqs :: rid !in res
   {
-    map rid | rid in reqs && ReadReq_InProgress(rid, reqs) ::
+    map rid | rid in reqs ::
       if reqs[rid].ReadonlyInit? then B.ReadInit(reqs[rid].op) else B.ReadReq(reqs[rid].ctail, reqs[rid].op)
   }
 
@@ -379,8 +388,9 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     } else {
       assert rid in stub.localReads;
       var ctail := stub.localReads[rid].ctail;
+      var op := stub.localReads[rid].op;
       assert stub == M(map[], None, map[], map[], None,
-                       map[rid := ReadonlyDone(output, ctail)],
+                       map[rid := ReadonlyDone(op, output, ctail)],
                        map[], map[]);
 
       assume B.NextStep(IS, IS', ifc.End(rid, output), B.FinishReadonly_Step(rid, ctail, output));

@@ -35,7 +35,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // wait until localTail >= (the ctail value we just read)
     | ReadonlyReadyToRead(op: nrifc.ReadonlyOp, nodeId: NodeId, ctail: nat)
     // read the op off the replica
-    | ReadonlyDone(ret: nrifc.ReturnType, ctail: nat)
+    | ReadonlyDone(op: nrifc.ReadonlyOp, ret: nrifc.ReturnType, ctail: nat)
 
   datatype UpdateState =
     | UpdateInit(op: nrifc.UpdateOp)
@@ -309,8 +309,23 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     ensures forall k :: !(k in m2) && !(k in m1) ==> !(k in map_update(m1, m2))
     ensures m1 == map[] ==> map_update(m1, m2) == m2
     ensures m2 == map[] ==> map_update(m1, m2) == m1
+    ensures (m1.Keys !! m2.Keys) ==> map_update(m1, m2).Keys == m1.Keys + m2.Keys
+    ensures (m1.Keys !! m2.Keys) ==> (forall k | k in m1 :: map_update(m1, m2)[k] == m1[k])
+    ensures (m1.Keys !! m2.Keys) ==> (forall k | k in m2 :: map_update(m1, m2)[k] == m2[k])
   {
     map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
+  }
+
+  lemma map_update_commutative<K(!new), V>(m1: map<K, V>, m2: map<K, V>)
+    requires m1.Keys !! m2.Keys
+    ensures map_update(m1, m2) == map_update(m2, m1)
+  {
+  }
+
+  lemma map_update_associative<K(!new), V>(m1: map<K, V>, m2: map<K, V>, m3: map<K, V>)
+    requires m1.Keys !! m2.Keys && m2.Keys !! m3.Keys && m3.Keys !! m1.Keys
+    ensures map_update(m1, map_update(m2, m3)) == map_update(map_update(m1, m2), m3)
+  {
   }
 
   // checks that two maps are equal
@@ -421,16 +436,16 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && InReadyToRead(m, rid)
 
     // store the read request for convenience
-    && var readRequest := m.localReads[rid];
+    && var req := m.localReads[rid];
 
     // TODO require us to be in 'CombinerReady' state
     // && InCombinerReady(m, readRequest.nodeId)
 
     // perform the read operation from the replica
-    && var ret := nrifc.read(m.replicas[readRequest.nodeId], readRequest.op);
+    && var ret := nrifc.read(m.replicas[req.nodeId], req.op);
 
     // construct the new state
-    && var newst := ReadonlyDone(ret, readRequest.ctail); //, readRequest.op);
+    && var newst := ReadonlyDone(req.op, ret, req.ctail);
     // and update the state
     && m' == m.(localReads := m.localReads[rid := newst])
   }
@@ -722,7 +737,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // get the combiner state
     && var c := m.combiner[nodeId];
     // the new ctail is the maximum of the current ctail, and the local tail we've loaded
-    && var new_ctail := if m.ctail.value > c.localTail then m.ctail.value else c.localTail;
+    && var new_ctail := if c.localTail > m.ctail.value then  c.localTail else m.ctail.value;
     // construct the new combiner state
     && var newst := CombinerUpdatedCtail(c.queued_ops, c.localTail);
     // update the ctail and the combiner state
@@ -757,7 +772,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && InUpdateApplied(m, request_id)
     && CompleteTailValid(m)
     && var req := m.localUpdates[request_id];
-    && m.ctail.value >= req.idx
+    && m.ctail.value > req.idx
     && m' == m.(localUpdates := m.localUpdates[request_id := UpdateDone(req.ret, req.idx)])
   }
 
@@ -839,7 +854,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   predicate IsStub(rid: RequestId, output: IOIfc.Output, stub: M) {
-    || (exists ctail :: stub == ReadOp(rid, ReadonlyDone(output, ctail)))
+    || (exists ctail, op :: stub == ReadOp(rid, ReadonlyDone(op, output, ctail)))
     || (exists log_idx :: stub == UpdateOp(rid, UpdateDone(output, log_idx)))
   }
 
@@ -964,7 +979,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     forall rid | rid in s.localReads :: match s.localReads[rid] {
       case ReadonlyCtail(_, ctail: nat) => ctail <= s.ctail.value
       case ReadonlyReadyToRead(_, _, ctail: nat) => ctail <= s.ctail.value
-      case ReadonlyDone(_, ctail: nat) =>  ctail <= s.ctail.value
+      case ReadonlyDone(_, _, ctail: nat) =>  ctail <= s.ctail.value
       case _ => true
     }
   }
@@ -1085,13 +1100,13 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // TODO(travis): all the `idx` in localUpdates.UpdatePlaced?.idx and
     // localUpdates.UpdateDone?.idx should be less than ctail?
     && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdatePlaced?
-      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value)
+      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx < s.global_tail.value)
     && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdateApplied?
-      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value)
+      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx < s.global_tail.value)
     && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdateDone?
-      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.global_tail.value)
+      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx < s.global_tail.value)
     && (forall upd | upd in s.localUpdates && s.localUpdates[upd].UpdateDone?
-      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx <= s.ctail.value)
+      :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx < s.ctail.value)
   }
 
   // the invariant
