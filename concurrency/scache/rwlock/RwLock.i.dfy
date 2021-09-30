@@ -1113,7 +1113,7 @@ module RwLock refines Rw {
     && 0 <= t < RC_WIDTH as int
     && m.central.CentralState?
     && m.central.flag != Reading
-    && m.central.flag != Reading_ExcLock
+    //&& m.central.flag != Reading_ExcLock
     && m == dot(
       CentralHandle(m.central),
       SharedHandle(SharedPending2(t))
@@ -1875,11 +1875,13 @@ module RwLockToken {
     && m.M?
     && m.central.CentralState?
     && m.central.flag != Reading
-    && m.central.flag != Reading_ExcLock
+    //&& m.central.flag != Reading_ExcLock
     && m == CentralHandle(m.central)
   requires handle.val == SharedHandle(SharedPending2(t))
   requires c.loc == handle.loc
   ensures c.val.central.flag != Unmapped
+  ensures c.val.central.flag != Reading
+  ensures c.val.central.flag != Reading_ExcLock
   ensures c'.loc == handle'.loc == c.loc
   ensures c'.val == c.val
   ensures handle'.val == SharedHandle(SharedObtained(t, c.val.central.stored_value))

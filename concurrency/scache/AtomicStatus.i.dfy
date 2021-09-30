@@ -106,7 +106,8 @@ module AtomicStatusImpl {
         )
         && (v == flag_exc_claim || v == flag_exc_accessed_claim || v == flag_exc_clean_claim
             || v == flag_exc_accessed_clean_claim ==>
-          && g.rwlock.val.central.stored_value.CacheEntryHandle?
+          || g.rwlock.val.central.stored_value.CacheEntryHandle?
+          || flag == RwLock.Reading_ExcLock
         )
     )
     && (g.status.glSome? ==>
@@ -114,6 +115,7 @@ module AtomicStatusImpl {
       && status_inv(v, g.status.value.status, key)
       && g.rwlock.val.central.stored_value.CacheEntryHandle?
     )
+    && (flag == RwLock.Reading_ExcLock ==> g.status.glNone?)
     && (flag == RwLock.ExcLock_Clean ==> g.status.glNone?)
     && (flag == RwLock.ExcLock_Dirty ==> g.status.glNone?)
     && (flag == RwLock.PendingExcLock ==> g.status.glSome?)
@@ -170,7 +172,9 @@ module AtomicStatusImpl {
       || v == flag_accessed_reading_clean
     )
     && (flag == RwLock.Reading_ExcLock ==>
-        v == flag_exc_reading_clean || v == flag_exc_accessed_reading_clean)
+        //v == flag_exc_reading_clean || v == flag_exc_accessed_reading_clean ||
+        v == flag_exc_claim || v == flag_exc_accessed_claim
+        )
   }
 
   predicate status_inv(v: uint8, status: Status, key: Key)
@@ -419,7 +423,8 @@ module AtomicStatusImpl {
       } else {
         atomic_block var did_set := execute_atomic_compare_and_set_strong(
             atomic, flag_unmapped(),
-            flag_exc() + flag_accessed() + flag_reading() + flag_clean())
+            flag_exc() + flag_claim())
+            /*flag_exc() + flag_accessed() + flag_reading() + flag_clean())*/
         {
           ghost_acquire old_g;
           glinear var new_g;
@@ -651,7 +656,8 @@ module AtomicStatusImpl {
         ghost_acquire old_g;
         glinear var new_g;
         var fl := old_g.rwlock.val.central.flag;
-        if fl != RwLock.Reading && fl != RwLock.Reading_ExcLock {
+        if fl != RwLock.Reading {
+          assert bit_and_uint8(f, flag_reading()) == 0;
           glinear var hand;
           glinear var G(rwlock, status0) := old_g;
           rwlock, hand := Rw.perform_SharedCheckReading(rwlock, r, t);
@@ -659,6 +665,7 @@ module AtomicStatusImpl {
           r' := glNone;
           new_g := G(rwlock, status0);
         } else {
+          assert bit_and_uint8(f, flag_reading()) != 0;
           r' := glSome(r);
           new_g := old_g;
           handle := glNone;
