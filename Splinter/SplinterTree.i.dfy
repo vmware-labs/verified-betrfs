@@ -709,7 +709,6 @@ module SplinterTreeMachineMod {
     && assert |newParent.activeBranches| == |newParent.children|;
     && assert 0 <= newChildId < |newParent.children|;
     && newParent.activeBranches[newChildId] == |newParent.branches|
-
   }
 
   predicate ValidLookupHasCU(v: Variables, cache: CacheIfc.Variables, lookup: TrunkPath, cu: CU)
@@ -720,14 +719,14 @@ module SplinterTreeMachineMod {
 
 
  function {:opaque} IReads(v: Variables, cache: CacheIfc.Variables) : set<CU> {
-    set cu:CU |
-      && cu in CUsInDisk()
-      && (exists lookup :: ValidLookupHasCU(v, cache, lookup, cu))
-     :: cu
+   set cu:CU |
+     && cu in CUsInDisk()
+     && (exists lookup :: ValidLookupHasCU(v, cache, lookup, cu))
+    :: cu
  }
 
  function IReadsSeq(v: Variables, cache: CacheIfc.Variables) : seq<CU> {
-   [] // TODO temporarily patching borked interface
+   ArbitrarySequentialization(IReads(v, cache))
  }
 
 

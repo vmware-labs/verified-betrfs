@@ -106,8 +106,6 @@ module JournalInterpMod {
     CrashTolerantMapSpecMod.Variables(versions, 0)
   }
 
-  // TODO(jonh): Try porting this from recursive style to Travis' suggested
-  // repr-state style (see ReprsAsSets.i.dfy).
   function IReads(cache:CacheIfc.Variables, sb: Superblock) : seq<CU>
   {
     ChainFrom(cache, sb).last().cumulativeReadCUs

@@ -162,6 +162,7 @@ module ProgramInterpMod {
       SplinterTreeInterpMod.Framing(v0.betree, v0.cache, v1.cache);
       var betreeInterp := SplinterTreeInterpMod.IMStable(v0.cache, sb.value.betree);
 
+      assert ISuperblock(v0.cache.dv).value.journal == v0.journal.CurrentSuperblock();
       assert forall cu | cu in JournalInterpMod.IReads(v0.cache, v0.journal.CurrentSuperblock()) :: cu in IReads(v0);
       assert DiskViewsEquivalentForSeq(v0.cache.dv, v1.cache.dv, JournalInterpMod.IReads(v0.cache, v0.journal.CurrentSuperblock()));
       JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, betreeInterp);

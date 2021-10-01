@@ -212,11 +212,18 @@ module SplinterTreeInterpMod {
     reveal_IM();
   }
 
+//  predicate Invariant(v: Variables, cache: CacheIfc.Variables)
+//  {
+//    && v.WF()
+//    && cache.WF()
+////    && v.AllLookupsExist(v, cache)
+//  }
+
   // TODO; Might need to change this to table about both IM and IMStable
   lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables)
     requires DiskViewsEquivalent(cache0.dv, cache1.dv, IReads(v, cache0))
-    requires AllLookupsExist(v, cache0)
-    requires AllLookupsExist(v, cache1)
+//    requires AllLookupsExist(v, cache0)
+//    requires AllLookupsExist(v, cache1)
     ensures IM(cache0, v) == IM(cache1, v)
   {
     // TODO I'm surprised this proof passes easily.

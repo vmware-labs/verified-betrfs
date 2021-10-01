@@ -9,4 +9,16 @@ module SequenceSetsMod {
   {
     set e | e in a
   }
+
+  function ArbitrarySequentialization<T>(a: set<T>) : (b: seq<T>)
+    ensures |b| == |a|
+    //ensures forall x :: x in a <==> x in b
+    ensures Members(b) == a
+  {
+    if |a|==0
+    then []
+    else
+      var x :| x in a;
+      ArbitrarySequentialization(a - {x}) + [x]
+  }
 }
