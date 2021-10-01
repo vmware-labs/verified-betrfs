@@ -44,7 +44,7 @@ module Impl(nrifc: NRIfc) {
   )
   {
     predicate WF() {
-      && (forall v, g :: ctail.atomic_inv(ctail, v, g) <==>
+      && (forall v, g :: atomic_inv(ctail, v, g) <==>
           g == Ctail(v as int))
       && (forall nodeId | 0 <= nodeId < |nodes| ::
           nodes[nodeId].WF(nodeId))
@@ -67,15 +67,14 @@ module Impl(nrifc: NRIfc) {
     var nodeId := Runtime.CurrentNumaNode();
 
     // 1. Read ctail
-
     atomic_block var ctail := execute_atomic_load(nr.ctail) {
       ghost_acquire ctail_token; // declares ctail_token as a 'glinear' object
       assert ctail_token == Ctail(ctail as int); // this follows from the invariant on nr.ctail
 
-      // TODO perform transition of ghost state here ...
-      //perform_TransitionReadonlyReadCtail(
+      // perform transition of ghost state here ...
+      var stub := perform_TransitionReadonlyReadCtail(ticket, ctail_token);
 
-      //ghost_release ctail_token;
+      ghost_release ctail_token;
     }
 
     // 2. Read localTail (loop until you read a good value)
