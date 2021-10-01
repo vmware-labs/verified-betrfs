@@ -1550,4 +1550,169 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
+  method alloc(
+      shared cache: Cache,
+      inout linear localState: LocalState,
+      disk_idx: uint64,
+      gshared havoc: CacheResources.HavocPermission,
+      glinear client: Client
+      )
+  returns (success: bool, ph: PageHandle,
+      glinear write_handle_out: glOption<WriteablePageHandle>,
+      glinear client_out: glOption<Client>)
+  requires cache.Inv()
+  requires old_localState.WF()
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
+  requires havoc.disk_idx == disk_idx as nat
+  ensures localState.WF()
+  ensures success ==> write_handle_out.glSome?
+    && write_handle_out.value.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
+    && write_handle_out.value.for_page_handle(ph)
+    && !write_handle_out.value.is_clean()
+  ensures !success ==> client_out.glSome?
+  decreases *
+  {
+    var cache_idx;
+    glinear var r, handle;
+    cache_idx, r, handle := get_free_page(cache, inout localState);
+
+    glinear var CacheEmptyHandle(_, cache_empty, idx, data) := handle;
+
+    glinear var cache_empty_opt, cache_entry_opt, status_opt;
+    success, cache_empty_opt, cache_entry_opt, status_opt :=
+        atomic_index_lookup_add_mapping_instant(
+          cache.cache_idx_of_page_atomic(disk_idx),
+          disk_idx,
+          cache_idx,
+          havoc,
+          cache_empty,
+          handle.data.s);
+
+    if !success {
+      write_handle_out := glNone;
+      dispose_glnone(cache_entry_opt);
+      dispose_glnone(status_opt);
+      client_out := glSome(client);
+      cache.status_atomic(cache_idx).abandon_reading_pending(
+          r,
+          CacheEmptyHandle(
+              cache.key(cache_idx as int),
+              unwrap_value(cache_empty_opt),
+              idx,
+              data));
+
+      ph := PageHandle(nullptr(), 0);
+    } else {
+      r := inc_refcount_for_reading(
+          cache.read_refcount_atomic(localState.t, cache_idx),
+          localState.t as nat,
+          client,
+          r);
+
+      dispose_glnone(cache_empty_opt);
+
+      write_cell(
+        cache.disk_idx_of_entry_ptr(cache_idx),
+        inout idx,
+        disk_idx as int64);
+
+      glinear var ce := CacheEntryHandle(
+          cache.key(cache_idx as int), unwrap_value(cache_entry_opt), idx, data);
+
+      r := cache.status_atomic(cache_idx).read2exc_noop(r, ce);
+
+      write_handle_out := glSome(WriteablePageHandle(
+          cache_idx as int,
+          ce, unwrap_value(status_opt), r));
+      client_out := glNone;
+
+      ph := PageHandle(cache.data_ptr(cache_idx as uint64), cache_idx as uint64);
+    }
+  }
+
+  method try_dealloc_page(
+      shared cache: Cache,
+      shared localState: LocalState,
+      disk_idx: uint64,
+      gshared havoc: CacheResources.HavocPermission,
+      glinear client: Client
+    )
+  returns (glinear client': Client)
+  requires cache.Inv()
+  requires localState.WF()
+  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
+  requires havoc.disk_idx == disk_idx as nat
+  {
+    client' := client;
+
+    var done := false;
+    while !done
+    {
+      var cache_idx := atomic_index_lookup_read(
+          cache.cache_idx_of_page_atomic(disk_idx), disk_idx as nat);
+
+      if cache_idx == NOT_MAPPED {
+        done := true;
+      } else {
+        var success;
+        success, handle_opt, client_opt := try_take_read_lock_on_cache_entry(
+            cache, cache_idx, disk_idx as int64, localState, client');
+        if !success {
+          client' := unwrap_value(client_opt);
+        } else {
+          glinear var ReadonlyPageHandle(cache_idx, so) := unwrap_value(handle_opt);
+          glinear var SharedObtainedToken(t, b, token) := so;
+
+          success, token := cache.status_atomic(ph.cache_idx).try_set_claim(token, RwLock.SharedObtained(t, b));
+          if !success {
+            client' := dec_refcount_for_shared_obtained(
+                  cache.read_refcount_atomic(localState.t, cache_idx),
+                  localState.t as nat,
+                  b, token);
+          } else {
+            token := cache.status_atomic(ph.cache_idx).set_exc(token);
+
+            ghost var token_copy := token;
+            while !writeback_done
+            invariant !writeback_done ==> status_opt == glNone
+            invariant !writeback_done ==> token == token_copy;
+            invariant writeback_done ==>
+              && token.val == RwLock.ExcHandle(RwLock.ExcPending(t, 0, clean, claim_handle.eo.val.exc.b))
+              && token.loc == rwlock_loc
+              && status_opt.glSome?
+              && status_opt.value.cache_idx == cache_idx
+              && status_opt.value.status == (if clean then Clean else Dirty)
+            decreases *
+            {
+              dispose_glnone(status_opt);
+              writeback_done, clean, token, status_opt :=
+                  cache.status_atomic(ph.cache_idx).try_check_writeback_isnt_set(t, token);
+            }
+
+            token := check_all_refcounts_with_t_block(cache, localState.t, ph.cache_idx, token);
+
+            glinear var handle;
+            token, handle := perform_Withdraw_TakeExcLockFinish(token);
+
+            glinear var CacheEntryHandle(key, cache_entry, data, idx) := handle;
+
+            glinear var cache_empty := atomic_index_lookup_clear_mapping_havoc(
+                  cache.cache_idx_of_page_atomic(disk_idx as uint64),
+                  disk_idx as nat,
+                  havoc,
+                  cache_entry,
+                  status);
+
+            glinear var empty_handle := CacheEmptyHandle(key, cache_empty, data, idx);
+
+            // XXX these next two operations are in the other order in reference impl
+
+            set_to_free(empty_handle, token);
+
+            done := true;
+          }
+        }
+      }
+    }
+  }
 }

@@ -17,6 +17,8 @@ module CacheResources {
 
   datatype DiskPageMap = DiskPageMap(ghost disk_idx: int, ghost cache_idx_opt: Option<int>)
 
+  datatype HavocPermission = HavocPermission(ghost disk_idx: int)
+
   datatype CacheStatus = CacheStatus(ghost cache_idx: int, ghost status: Status)
   {
     predicate is_status(cache_idx: int, status: Status) {
@@ -88,6 +90,28 @@ module CacheResources {
   ensures t3 == DiskPageMap(disk_idx, Some(cache_idx))
   ensures t4 == DiskReadTicket(disk_idx)
 
+  glinear method havoc_page_in(
+      ghost cache_idx: nat,
+      ghost disk_idx: nat,
+      glinear s2: CacheEmpty,
+      glinear s3: DiskPageMap,
+      gshared havoc: HavocPermission,
+      ghost data: DiskIfc.Block
+  )
+  returns (
+      glinear t2: CacheEntry,
+      glinear t3: DiskPageMap,
+      glinear status: CacheStatus
+  )
+  requires s2.cache_idx == cache_idx
+  requires s3 == DiskPageMap(disk_idx, None)
+  requires havoc.disk_idx == disk_idx
+  ensures t2.cache_idx == cache_idx
+  ensures t2.disk_idx == disk_idx
+  ensures t2.data == data
+  ensures t3 == DiskPageMap(disk_idx, Some(cache_idx))
+  ensures status == CacheStatus(cache_idx, Dirty)
+
   glinear method inv_map_agrees(
       gshared cache_entry: CacheEntry,
       glinear inout dpm: DiskPageMap
@@ -110,6 +134,25 @@ module CacheResources {
   requires status == CacheStatus(cache_idx, Clean)
   requires cache_entry == CacheEntry(cache_idx, disk_idx, cache_entry.data)
   requires dpm == DiskPageMap(disk_idx, dpm.cache_idx_opt)
+  ensures cache_empty == CacheEmpty(cache_idx)
+  ensures dpm' == DiskPageMap(disk_idx, None)
+
+  glinear method unassign_page_havoc(
+      ghost cache_idx: nat,
+      ghost disk_idx: nat,
+      glinear status: CacheStatus,
+      glinear cache_entry: CacheEntry,
+      glinear dpm: DiskPageMap,
+      gshared havoc: HavocPermission
+  )
+  returns (
+      glinear cache_empty: CacheEmpty,
+      glinear dpm': DiskPageMap
+  )
+  requires status.cache_idx == cache_idx
+  requires cache_entry == CacheEntry(cache_idx, disk_idx, cache_entry.data)
+  requires dpm == DiskPageMap(disk_idx, dpm.cache_idx_opt)
+  requires havoc.disk_idx == disk_idx
   ensures cache_empty == CacheEmpty(cache_idx)
   ensures dpm' == DiskPageMap(disk_idx, None)
 

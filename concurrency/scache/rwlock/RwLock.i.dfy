@@ -771,6 +771,33 @@ module RwLock refines Rw {
     }
   }
 
+  predicate ReadPendingToExc(m: M, m': M, clean: bool, dummy_b: StoredType)
+  {
+    && m.M?
+    && m.central.CentralState?
+    && m.read.ReadPendingCounted?
+    && m == dot(
+      CentralHandle(m.central),
+      ReadHandle(m.read)
+    )
+    && m' == dot(
+      CentralHandle(m.central
+          .(flag := if clean then ExcLock_Clean else ExcLock_Dirty)
+          .(stored_value := dummy_b)),
+      ExcHandle(ExcObtained(m.read.t, clean))
+    )
+  }
+
+  lemma ReadPendingToExc_Preserves(m: M, m': M, clean: bool, dummy_b: StoredType)
+  requires ReadPendingToExc(m, m', clean, dummy_b)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
+    {
+    }
+  }
+
   predicate ObtainReadingNoRefcount(m: M, m': M)
   {
     && m.M?
@@ -866,6 +893,49 @@ module RwLock refines Rw {
     }
   }
 
+  predicate ExcIncCount(m: M, m': M, t: int)
+  {
+    && m.M?
+    && 0 <= t < RC_WIDTH as int
+    && t in m.refCounts
+    && m.exc.ExcObtained?
+    && m == dot(
+      RefCount(t, m.refCounts[t]),
+      ExcHandle(ExcObtained(-1, m.exc.clean))
+    )
+    && m' == dot(
+      RefCount(t, m.refCounts[t] + 1),
+      ExcHandle(ExcObtained(t, m.exc.clean))
+    )
+  }
+
+  lemma ExcIncCount_Preserves(m: M, m': M, t: int)
+  requires ExcIncCount(m, m', t)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
+    {
+      SumFilterSimp<SharedState>();
+      var state := dot(m, p);
+      var state' := dot(m', p);
+      forall t0 | 0 <= t0 < RC_WIDTH as int
+      ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
+      {
+        if t == t0 {
+          assert CountSharedRefs(state.sharedState, t)
+              == CountSharedRefs(state'.sharedState, t);
+          assert CountAllRefs(state, t) + 1
+              == CountAllRefs(state', t);
+          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+        } else {
+          assert CountSharedRefs(state.sharedState, t0) == CountSharedRefs(state'.sharedState, t0);
+          assert CountAllRefs(state, t0) == CountAllRefs(state', t0);
+          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+        }
+      }
+    }
+  }
 
   predicate SharedIncCount(m: M, m': M, t: int)
   {
@@ -1637,6 +1707,31 @@ module RwLockToken {
     c', handle' := T.internal_transition_2_2(c', handle', a, b);
   }
 
+  glinear method perform_ReadPendingToExc(glinear c: Token, glinear handle: Token, ghost clean: bool, ghost dummy_b: StoredType)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.M?
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.M?
+    && m.read.ReadPendingCounted?
+    && m == ReadHandle(m.read)
+  requires c.loc == handle.loc
+  ensures c.val.central.flag == Reading_ExcLock
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == CentralHandle(c.val.central.(flag := if clean then ExcLock_Clean else ExcLock_Dirty).(stored_value := dummy_b))
+  ensures handle'.val == ExcHandle(ExcObtained(handle.val.read.t, clean))
+  {
+    var a := CentralHandle(c.val.central.(flag := if clean then ExcLock_Clean else ExcLock_Dirty).(stored_value := dummy_b));
+    var b := ExcHandle(ExcObtained(handle.val.read.t, clean));
+    c' := c;
+    handle' := handle;
+    var rest := T.obtain_invariant_2(inout c', inout handle');
+    ReadPendingToExc_Preserves(dot(c.val, handle.val), dot(a, b), clean, dummy_b);
+    c', handle' := T.internal_transition_2_2(c', handle', a, b);
+  }
+
   glinear method perform_ObtainReadingNoRefcount(glinear c: Token, glinear handle: Token)
   returns (glinear c': Token, glinear handle': Token)
   requires var m := c.val;
@@ -1660,6 +1755,29 @@ module RwLockToken {
     var rest := T.obtain_invariant_2(inout c', inout handle');
     ObtainReadingNoRefcount_Preserves(dot(c.val, handle.val), dot(a, b));
     c', handle' := T.internal_transition_2_2(c', handle', a, b);
+  }
+
+  glinear method perform_ExcIncCount(glinear rc: Token, glinear handle: Token, ghost t: int)
+  returns (glinear rc': Token, glinear handle': Token)
+  requires var m := rc.val;
+    && m.M?
+    && 0 <= t < RC_WIDTH as int
+    && t in m.refCounts
+    && m == RefCount(t, m.refCounts[t])
+  requires var m := handle.val;
+    && m.M?
+    && m.exc.ExcObtained?
+    && m == ExcHandle(m.exc)
+    && m.exc.t == -1
+  requires rc.loc == handle.loc
+  ensures rc'.loc == handle'.loc == rc.loc
+  ensures rc'.val == RefCount(t, rc.val.refCounts[t] + 1)
+  ensures handle'.val == ExcHandle(ExcObtained(t, handle.val.exc.clean))
+  {
+    var a := RefCount(t, rc.val.refCounts[t] + 1);
+    var b := ExcHandle(ExcObtained(t, handle.val.exc.clean));
+    ExcIncCount_Preserves(dot(rc.val, handle.val), dot(a, b), t);
+    rc', handle' := T.internal_transition_2_2(rc, handle, a, b);
   }
 
   glinear method perform_SharedIncCount(glinear rc: Token, ghost t: int)

@@ -744,7 +744,8 @@ module AtomicStatusImpl {
     requires this.inv()
     requires handle.is_handle(key)
     requires handle.CacheEmptyHandle?
-    requires r.val == RwLock.ExcHandle(RwLock.ExcObtained(-1, true))
+    requires r.val.M? && r.val.exc.ExcObtained?
+    requires r.val == RwLock.ExcHandle(RwLock.ExcObtained(-1, r.val.exc.clean))
     requires r.loc == rwlock_loc
     {
       atomic_block var _ := execute_atomic_store(atomic, flag_unmapped())
@@ -965,6 +966,35 @@ module AtomicStatusImpl {
         rwlock, r' := Rw.perform_Deposit_DowngradeExcLockToClaim(rwlock, r, b);
         dispose_anything(status0);
         new_g := G(rwlock, glSome(status));
+
+        assert state_inv(new_value, new_g, key, rwlock_loc);
+        ghost_release new_g;
+      }
+    }
+
+    shared method read2exc_noop(glinear r: Rw.Token, ghost dummy_b: Handle)
+    returns (glinear r': Rw.Token)
+    requires this.inv()
+    requires r.loc == rwlock_loc
+    requires r.val.M?
+    requires r.val.read.ReadPendingCounted?
+    requires r.val == RwLock.ReadHandle(r.val.read)
+    requires dummy_b.CacheEntryHandle?
+    requires dummy_b.is_handle(key)
+    ensures r'.loc == r.loc
+    ensures r'.val == RwLock.ExcHandle(RwLock.ExcObtained(r.val.read.t, false))
+    {
+      // XXX noop wasn't working for some reason - load should compile itself away though
+      atomic_block var _ := execute_atomic_load(atomic) {
+        ghost_acquire old_g;
+        glinear var new_g;
+        glinear var G(rwlock, empty_status) := old_g;
+
+        var fl := rwlock.val.central.flag;
+        rwlock, r' := Rw.perform_ReadPendingToExc(rwlock, r, false, dummy_b);
+
+        dispose_anything(empty_status);
+        new_g := G(rwlock, glNone);
 
         assert state_inv(new_value, new_g, key, rwlock_loc);
         ghost_release new_g;

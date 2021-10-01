@@ -85,6 +85,35 @@ module AtomicIndexLookupImpl {
     }
   }
 
+  method atomic_index_lookup_clear_mapping_havoc(
+      shared a: AtomicIndexLookup,
+      ghost disk_idx: nat,
+      gshared havoc: HavocPermission,
+      glinear cache_entry: CacheResources.CacheEntry,
+      glinear status: CacheResources.CacheStatus
+  )
+  returns (
+      glinear cache_empty': CacheResources.CacheEmpty
+  )
+  requires atomic_index_lookup_inv(a, disk_idx)
+  requires status.CacheStatus?
+  requires cache_entry.CacheEntry?
+  requires cache_entry.cache_idx == status.cache_idx
+  requires cache_entry.disk_idx == disk_idx
+  requires havoc.disk_idx == disk_idx as int
+  ensures cache_empty' == CacheEmpty(cache_entry.cache_idx)
+  {
+    atomic_block var _ := execute_atomic_store(a, NOT_MAPPED) {
+      ghost_acquire g;
+
+      cache_empty', g := CacheResources.unassign_page_havoc(
+          status.cache_idx, disk_idx,
+          status, cache_entry, g, havoc);
+
+      ghost_release g;
+    }
+  }
+
   method atomic_index_lookup_add_mapping(
       shared a: AtomicIndexLookup,
       disk_idx: uint64,
@@ -135,4 +164,58 @@ module AtomicIndexLookupImpl {
 
     success := did_set;
   }
+
+  method atomic_index_lookup_add_mapping_instant(
+      shared a: AtomicIndexLookup,
+      disk_idx: uint64,
+      cache_idx: uint64,
+      gshared havoc: HavocPermission,
+      glinear cache_empty: CacheResources.CacheEmpty,
+      ghost data: DiskIfc.Block)
+  returns (
+    success: bool,
+    glinear cache_empty': glOption<CacheResources.CacheEmpty>,
+    glinear cache_entry': glOption<CacheResources.CacheEntry>,
+    glinear status': glOption<CacheResources.CacheStatus>
+  )
+  requires atomic_index_lookup_inv(a, disk_idx as int)
+  requires cache_empty.cache_idx == cache_idx as int
+  requires 0 <= cache_idx as int < CACHE_SIZE as int
+  requires havoc.disk_idx == disk_idx as int
+  ensures !success ==> cache_empty' == glSome(cache_empty)
+  ensures !success ==> cache_entry' == glNone
+  ensures !success ==> status' == glNone
+
+  ensures success ==> cache_empty' == glNone
+  ensures success ==> cache_entry' ==
+      glSome(CacheEntry(cache_idx as nat, disk_idx as nat, data))
+  ensures success ==> status' == glSome(CacheStatus(cache_idx as nat, Dirty))
+  {
+    atomic_block var did_set :=
+      execute_atomic_compare_and_set_strong(a, NOT_MAPPED, cache_idx)
+    {
+      ghost_acquire old_g;
+      glinear var new_g;
+
+      if did_set {
+        glinear var cr, status;
+        cr, new_g, status := CacheResources.havoc_page_in(
+            cache_idx as int, disk_idx as int, cache_empty, old_g, havoc, data);
+        cache_entry' := glSome(cr);
+        cache_empty' := glNone;
+        status' := glSome(status);
+      } else {
+        cache_empty' := glSome(cache_empty);
+        cache_entry' := glNone;
+        status' := glNone;
+        new_g := old_g;
+      }
+      assert state_inv(new_value, new_g, disk_idx as int);
+
+      ghost_release new_g;
+    }
+
+    success := did_set;
+  }
+
 }

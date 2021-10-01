@@ -110,6 +110,30 @@ module AtomicRefcountImpl {
     }
   }
 
+  method inc_refcount_for_exc(shared a: AtomicRefcount,
+      glinear m: T.Token,
+      ghost t: nat,
+      glinear client: Client)
+  returns (glinear m': T.Token)
+  requires a.inv(t)
+  //requires client == RwLock.Internal(RwLock.Client(t))
+  requires m.loc == a.rwlock_loc
+  requires m.val.M? && m.val.exc.ExcObtained?
+  requires m.val == RwLock.ExcHandle(RwLock.ExcObtained(-1, m.val.exc.clean))
+  ensures m'.val == RwLock.ExcHandle(RwLock.ExcObtained(t, m.val.exc.clean))
+  ensures m'.loc == a.rwlock_loc
+  {
+    dispose_anything(client);
+    atomic_block var orig_value := execute_atomic_fetch_add_uint8(a.a, 1) {
+      ghost_acquire old_g;
+      glinear var new_g;
+      new_g, m' := T.perform_ExcIncCount(old_g, m, t);
+      assume old_value < 255; // TODO
+      assert atomic_inv(a.a, new_value, new_g);
+      ghost_release new_g;
+    }
+  }
+
   method dec_refcount_for_shared_pending(shared a: AtomicRefcount,
       ghost t: nat,
       glinear m: T.Token)
