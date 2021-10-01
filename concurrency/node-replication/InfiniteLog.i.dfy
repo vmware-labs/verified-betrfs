@@ -330,7 +330,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   lemma map_update_distributive<K(!new), V>(m1: map<K, V>, m2: map<K, V>, m3: map<K, V>)
     requires m1.Keys !! m2.Keys && m2.Keys !! m3.Keys && m3.Keys !! m1.Keys
-    ensures map_update(map_update(m1, m3), m1) == map_update(map_update(m1, m2), m3)
+    ensures map_update(map_update(m1, m3), m2) == map_update(map_update(m1, m2), m3)
   {
   }
 
