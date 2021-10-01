@@ -2,6 +2,7 @@ include "InfiniteLogTokens.i.dfy"
 include "../../lib/Lang/LinearSequence.i.dfy"
 include "rwlock/Impl.i.dfy"
 include "../framework/Atomic.s.dfy"
+include "Runtime.s.dfy"
 
 module Impl(nrifc: NRIfc) {
   import opened Atomics
@@ -11,6 +12,7 @@ module Impl(nrifc: NRIfc) {
   import opened LinearSequence_s
   import opened NativeTypes
   import opened RwLockImpl
+  import opened Runtime
 
   linear datatype NodeReplica = NodeReplica(
     linear actual_replica: nrifc.DataStructureType,
@@ -62,6 +64,7 @@ module Impl(nrifc: NRIfc) {
   decreases * // method is not guaranteed to terminate
   {
     // TODO get nodeId value from somewhere
+    var nodeId := Runtime.CurrentNumaNode();
 
     // 1. Read ctail
 
@@ -70,9 +73,9 @@ module Impl(nrifc: NRIfc) {
       assert ctail_token == Ctail(ctail as int); // this follows from the invariant on nr.ctail
 
       // TODO perform transition of ghost state here ...
-      perform_TransitionReadonlyReadCtail(
+      //perform_TransitionReadonlyReadCtail(
 
-      ghost_release ctail_token;
+      //ghost_release ctail_token;
     }
 
     // 2. Read localTail (loop until you read a good value)
