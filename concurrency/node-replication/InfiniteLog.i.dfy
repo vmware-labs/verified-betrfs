@@ -452,7 +452,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var req := m.localReads[rid];
 
     // TODO require us to be in 'CombinerReady' state
-    // && InCombinerReady(m, readRequest.nodeId)
+    && InCombinerReady(m, req.nodeId)
 
     // perform the read operation from the replica
     && var ret := nrifc.read(m.replicas[req.nodeId], req.op);
@@ -1122,6 +1122,18 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       :: s.localUpdates[upd].idx in s.log.Keys && s.localUpdates[upd].idx < s.ctail.value)
   }
 
+  // the result of the read operation corresponds to reading the replica at one given version
+  // we wait until localTail >= ctail before we go ahead and read.
+  predicate Inv_ReadOnlyResult(s: M)
+    requires Inv_WF(s)
+    requires Inv_LogEntriesUpToCTailExists(s)
+  {
+      (forall r | r in s.localReads && s.localReads[r].ReadonlyDone? ::
+        exists v | 0 <= v <= s.ctail.value ::
+          s.localReads[r].ret == nrifc.read(state_at_version(s.log, v),  s.localReads[r].op)
+      )
+  }
+
   // the invariant
   predicate Inv(s: M) {
     && Inv_WF(s)
@@ -1136,6 +1148,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && Inv_ReadOnlyStateNodeIdExists(s)
     && Inv_LogEntriesGlobalTail(s)
     && Inv_LocalUpdatesIdx(s)
+    && Inv_ReadOnlyResult(s)
 
     // && (forall nid | nid in s.combiner :: CombinerRange(s.combiner[nid]) !!  (set x | 0 <= x < get_local_tail(s, nid) :: x))
 
@@ -1267,7 +1280,11 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     requires TransitionReadonlyDone(m, m', nodeId, rid)
     ensures Inv(m')
   {
-
+    var req := m.localReads[rid];
+    assert get_local_tail(m, req.nodeId) == m.localTails[req.nodeId];
+    assert m.replicas[req.nodeId] == state_at_version(m.log, get_local_tail(m, req.nodeId));
+    assert get_local_tail(m, req.nodeId) <= m.ctail.value;
+    assert m'.localReads[rid].ret ==  nrifc.read(state_at_version(m.log, get_local_tail(m, req.nodeId)),  m.localReads[rid].op);
   }
 
   lemma state_at_version_preserves(a: map<nat, LogEntry>, b: map<nat, LogEntry>, i: nat)
@@ -1307,6 +1324,12 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
         var i := idx - m.global_tail.value;
         assert m.global_tail.value + i == idx;
       }
+    }
+
+    forall v | 0 <= v <= m'.ctail.value
+    ensures state_at_version(m'.log, v) == state_at_version(m.log, v)
+    {
+      state_at_version_preserves(m.log, m'.log, v);
     }
 
     reveal_ConstructLocalUpdateMap();
