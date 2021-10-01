@@ -766,6 +766,38 @@ module AtomicStatusImpl {
       }
     }
 
+    shared method set_to_free2(
+        glinear handle: Handle,
+        glinear r: Rw.Token)
+    returns (glinear r': Rw.Token)
+    requires this.inv()
+    requires handle.is_handle(key)
+    requires handle.CacheEmptyHandle?
+    requires r.val.M? && r.val.exc.ExcObtained?
+    requires r.val.exc.t >= 0
+    requires r.loc == rwlock_loc
+    requires r.val == RwLock.ExcHandle(r.val.exc)
+    ensures r'.loc == r.loc
+    ensures r'.val == RwLock.SharedHandle(RwLock.SharedPending(r.val.exc.t))
+    {
+      atomic_block var _ := execute_atomic_store(atomic, flag_unmapped())
+      {
+        ghost_acquire old_g;
+        glinear var new_g;
+
+        glinear var G(rwlock, empty_status) := old_g;
+
+        var fl := rwlock.val.central.flag;
+        rwlock, r' := Rw.perform_Deposit_Unmap2(rwlock, r, handle);
+
+        dispose_anything(empty_status);
+        new_g := G(rwlock, glNone);
+
+        assert state_inv(new_value, new_g, key, rwlock_loc);
+        ghost_release new_g;
+      }
+    }
+
     shared method abandon_exc(glinear r: Rw.Token, glinear status: CacheResources.CacheStatus)
     requires this.inv()
     requires r.loc == rwlock_loc

@@ -1239,6 +1239,37 @@ module RwLock refines Rw {
     }
   }
 
+  predicate Deposit_Unmap2(m: M, m': M, b: StoredType)
+  {
+    && m.M?
+    && m.exc.ExcObtained?
+    && m.exc.t >= 0
+    && m.central.CentralState?
+    && m == dot(
+      CentralHandle(m.central),
+      ExcHandle(m.exc)
+    )
+    && m' == dot(
+      CentralHandle(
+        m.central.(flag := Unmapped).(stored_value := b)
+      ),
+      SharedHandle(SharedPending(m.exc.t))
+    )
+  }
+
+  lemma Deposit_Unmap2_Preserves(m: M, m': M, b: StoredType)
+  requires Deposit_Unmap2(m, m', b)
+  ensures deposit(m, m', b)
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+    ensures I(dot(m, p)) == None
+    ensures I(dot(m', p)) == Some(b)
+    {
+      SumFilterSimp<SharedState>();
+    }
+  }
+
   predicate AbandonExcPending(m: M, m': M)
   {
     && m.M?
@@ -2232,6 +2263,33 @@ module RwLockToken {
     var a := CentralHandle(c.val.central.(flag := Unmapped).(stored_value := b));
     Deposit_Unmap_Preserves(dot(c.val, handle.val), a, b);
     c' := T.deposit_2_1(c, handle, b, a);
+  }
+
+  glinear method perform_Deposit_Unmap2(
+      glinear c: Token, glinear handle: Token, glinear b: Handle)
+  returns (glinear c': Token, glinear handle': Token)
+  requires var m := c.val;
+    && m.M?
+    && m.central.CentralState?
+    && m == CentralHandle(m.central)
+  requires var m := handle.val;
+    && m.M?
+    && m.exc.ExcObtained?
+    && m.exc.t >= 0
+    && m == ExcHandle(m.exc)
+  requires c.loc == handle.loc
+  ensures handle'.loc == c'.loc == c.loc
+  ensures c'.val == 
+    CentralHandle(
+      c.val.central.(flag := Unmapped).(stored_value := b)
+    )
+  ensures handle'.val ==
+    SharedHandle(SharedPending(handle.val.exc.t))
+  {
+    var a := CentralHandle(c.val.central.(flag := Unmapped).(stored_value := b));
+    var x := SharedHandle(SharedPending(handle.val.exc.t));
+    Deposit_Unmap2_Preserves(dot(c.val, handle.val), dot(a, x), b);
+    c', handle' := T.deposit_2_2(c, handle, b, a, x);
   }
 
   glinear method perform_Deposit_AbandonReadPending(

@@ -1642,54 +1642,63 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires localState.WF()
   requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
   requires havoc.disk_idx == disk_idx as nat
+  decreases *
   {
     client' := client;
 
     var done := false;
     while !done
+    decreases *
     {
-      var cache_idx := atomic_index_lookup_read(
+      var cache_idx: uint64 := atomic_index_lookup_read(
           cache.cache_idx_of_page_atomic(disk_idx), disk_idx as nat);
 
       if cache_idx == NOT_MAPPED {
         done := true;
       } else {
         var success;
+        glinear var handle_opt, client_opt;
         success, handle_opt, client_opt := try_take_read_lock_on_cache_entry(
             cache, cache_idx, disk_idx as int64, localState, client');
         if !success {
           client' := unwrap_value(client_opt);
+          dispose_glnone(handle_opt);
         } else {
-          glinear var ReadonlyPageHandle(cache_idx, so) := unwrap_value(handle_opt);
+          dispose_glnone(client_opt);
+          glinear var ReadonlyPageHandle(_, so) := unwrap_value(handle_opt);
           glinear var SharedObtainedToken(t, b, token) := so;
 
-          success, token := cache.status_atomic(ph.cache_idx).try_set_claim(token, RwLock.SharedObtained(t, b));
+          success, token := cache.status_atomic(cache_idx).try_set_claim(token, RwLock.SharedObtained(t, b));
           if !success {
             client' := dec_refcount_for_shared_obtained(
                   cache.read_refcount_atomic(localState.t, cache_idx),
                   localState.t as nat,
                   b, token);
           } else {
-            token := cache.status_atomic(ph.cache_idx).set_exc(token);
+            token := cache.status_atomic(cache_idx).set_exc(token);
 
+            glinear var status_opt: glOption<CacheResources.CacheStatus> := glNone;
+            var writeback_done := false;
             ghost var token_copy := token;
+            ghost var rwlock_loc := cache.status_atomic(cache_idx as uint64).rwlock_loc;
+            ghost var clean;
             while !writeback_done
             invariant !writeback_done ==> status_opt == glNone
             invariant !writeback_done ==> token == token_copy;
             invariant writeback_done ==>
-              && token.val == RwLock.ExcHandle(RwLock.ExcPending(t, 0, clean, claim_handle.eo.val.exc.b))
+              && token.val == RwLock.ExcHandle(RwLock.ExcPending(t, 0, clean, token_copy.val.exc.b))
               && token.loc == rwlock_loc
               && status_opt.glSome?
-              && status_opt.value.cache_idx == cache_idx
+              && status_opt.value.cache_idx == cache_idx as int
               && status_opt.value.status == (if clean then Clean else Dirty)
             decreases *
             {
               dispose_glnone(status_opt);
               writeback_done, clean, token, status_opt :=
-                  cache.status_atomic(ph.cache_idx).try_check_writeback_isnt_set(t, token);
+                  cache.status_atomic(cache_idx).try_check_writeback_isnt_set(t, token);
             }
 
-            token := check_all_refcounts_with_t_block(cache, localState.t, ph.cache_idx, token);
+            token := check_all_refcounts_with_t_block(cache, localState.t, cache_idx, token);
 
             glinear var handle;
             token, handle := perform_Withdraw_TakeExcLockFinish(token);
@@ -1701,13 +1710,16 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
                   disk_idx as nat,
                   havoc,
                   cache_entry,
-                  status);
+                  unwrap_value(status_opt));
 
             glinear var empty_handle := CacheEmptyHandle(key, cache_empty, data, idx);
 
-            // XXX these next two operations are in the other order in reference impl
+            token := cache.status_atomic(cache_idx).set_to_free2(empty_handle, token);
 
-            set_to_free(empty_handle, token);
+            client' := dec_refcount_for_shared_pending(
+                  cache.read_refcount_atomic(localState.t, cache_idx),
+                  localState.t as nat,
+                  token);
 
             done := true;
           }
