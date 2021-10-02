@@ -35,11 +35,11 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && 0 <= key.cache_idx < CACHE_SIZE as nat
     && |cache.data| == CACHE_SIZE as nat
     && |cache.status| == CACHE_SIZE as nat
-    && |cache.disk_idx_of_entry| == CACHE_SIZE as nat
+    && |cache.page_handles| == CACHE_SIZE as nat
     && key == cache.key(key.cache_idx)
     && wbo.is_handle(key)
     && wbo.b.CacheEntryHandle?
-    && wbo.b.idx.v as nat == disk_idx
+    && wbo.b.idx.v.disk_addr as nat == disk_idx
     && ticket.val == CacheSSM.DiskWriteReq(disk_idx, wbo.b.data.s)
     && wbo.token.loc == cache.status[wbo.b.key.cache_idx as nat].rwlock_loc
   }
@@ -177,9 +177,10 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             dispose_anything(ticket);
             done := true;
           } else {
-            var disk_idx := read_cell(
-                cache.disk_idx_of_entry_ptr(cache_idx as uint64),
+            var ph := read_cell(
+                cache.page_handle_ptr(cache_idx as uint64),
                 T.borrow_wb(write_back_r.value.token).idx);
+            var disk_idx := ph.disk_addr;
 
             if disk_idx == next as int64 {
               keys, tickets, wbos := list_push_back(
@@ -260,9 +261,10 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             dispose_anything(ticket);
             done := true;
           } else {
-            var disk_idx := read_cell(
-                cache.disk_idx_of_entry_ptr(cache_idx as uint64),
+            var ph := read_cell(
+                cache.page_handle_ptr(cache_idx as uint64),
                 T.borrow_wb(write_back_r.value.token).idx);
+            var disk_idx := ph.disk_addr;
 
             if disk_idx == next as int64 {
               keys, tickets, wbos := list_push_front(
@@ -296,7 +298,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       iocb_ptr: Ptr, iocb: IocbStruct.Iocb, iovec: PointsToArray<IocbStruct.Iovec>,
       datas: seq<seq<byte>>, g: WritevG)
   requires cache.Inv()
-  requires WritevGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+  requires WritevGInv(cache.io_slots, cache.data, cache.page_handles, cache.status,
       iocb_ptr, iocb, iovec, datas, g)
   ensures cache.ioctx.async_writev_inv(iocb_ptr, iocb, iovec, datas, g)
   {
@@ -348,7 +350,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && wbos[i].b.data.ptr == iovec.s[i].iov_base()
         && iovec.s[i].iov_len() as int == PageSize
     invariant forall i: nat | 0 <= i < j as nat :: (i as int) in wbos && 
-        simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+        simpleWriteGInv(cache.io_slots, cache.data, cache.page_handles, cache.status,
             iocb.offset + i, datas[i], keys[i], wbos[i])
     {
       var cache_idx := read_known_cache_idx(
@@ -361,7 +363,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       datas := datas[j := wbos[j as int].b.data.s];
 
       assert simpleWriteGInv(
-          cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+          cache.io_slots, cache.data, cache.page_handles, cache.status,
             iocb.offset + j as int, datas[j], keys[j as int], wbos[j as int]);
 
       j := j + 1;
@@ -381,7 +383,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var iocb_ptr := lseq_peek(cache.io_slots, idx).iocb_ptr;
 
     assert WritevGInv(
-        cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+        cache.io_slots, cache.data, cache.page_handles, cache.status,
         iocb_ptr,
         iocb, iovec, datas, writevg);
 
@@ -426,9 +428,10 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           cache.status_atomic(cache_idx as uint64).try_acquire_writeback(is_urgent);
 
       if do_write_back {
-        var disk_idx := read_cell(
-            cache.disk_idx_of_entry_ptr(cache_idx as uint64),
+        var ph := read_cell(
+            cache.page_handle_ptr(cache_idx as uint64),
             T.borrow_wb(write_back_r.value.token).idx);
+        var disk_idx := ph.disk_addr;
         assert disk_idx != -1;
 
         var start_addr, end_addr;

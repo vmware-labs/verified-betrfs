@@ -15,7 +15,7 @@ module CacheAIOParams refines AIOParams {
   glinear datatype ReadG = ReadG(
     ghost key: Key,
     glinear cache_reading: CacheResources.CacheReading,
-    glinear idx: CellContents<int64>,
+    glinear idx: CellContents<PageHandle>,
     glinear ro: T.Token,
     ghost slot_idx: nat,
     glinear iovec: PointsToArray<Iovec>
@@ -24,7 +24,7 @@ module CacheAIOParams refines AIOParams {
   glinear datatype ReadvG = ReadvG(
     ghost keys: seq<Key>,
     glinear cache_reading: map<nat, CacheResources.CacheReading>,
-    glinear idx: map<nat, CellContents<int64>>,
+    glinear idx: map<nat, CellContents<PageHandle>>,
     glinear ro: map<nat, T.Token>,
     ghost slot_idx: nat
   )

@@ -30,7 +30,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   linear datatype StatusIdx = StatusIdx(
     linear status: AtomicStatus,
-    linear idx: Cell<int64>
+    linear page_handle: Cell<PageHandle>
   )
 
   linear datatype Cache = Cache(
@@ -41,7 +41,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     linear status_idx_array: lseq<StatusIdx>,
 
     ghost data: seq<Ptr>,
-    ghost disk_idx_of_entry: seq<Cell<int64>>,
+    ghost page_handles: seq<Cell<PageHandle>>,
     ghost status: seq<AtomicStatus>,
 
     ghost read_refcounts: seq<seq<AtomicRefcount>>,
@@ -58,15 +58,15 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   {
     function key(i: int) : Key
     requires 0 <= i < |this.data|
-    requires 0 <= i < |this.disk_idx_of_entry|
+    requires 0 <= i < |this.page_handles|
     {
-      Key(this.data[i], this.disk_idx_of_entry[i], i)
+      Key(this.data[i], this.page_handles[i], i)
     }
 
     predicate Inv()
     {
       && |this.data| == CACHE_SIZE as int
-      && |this.disk_idx_of_entry| == CACHE_SIZE as int
+      && |this.page_handles| == CACHE_SIZE as int
       && |this.status| == CACHE_SIZE as int
       && (forall i | 0 <= i < CACHE_SIZE as int ::
          && this.status[i].key == this.key(i)
@@ -91,19 +91,19 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
          )
 
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_read_inv(iocb_ptr, iocb, wp, g)
-        <==> ReadGInv(io_slots, data, disk_idx_of_entry, status,
+        <==> ReadGInv(io_slots, data, page_handles, status,
                   iocb_ptr, iocb, wp, g))
 
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_write_inv(iocb_ptr, iocb, wp, g)
-        <==> WriteGInv(io_slots, data, disk_idx_of_entry, status,
+        <==> WriteGInv(io_slots, data, page_handles, status,
                   iocb_ptr, iocb, wp, g))
 
       && (forall iocb_ptr, iocb, iovec, datas, g :: ioctx.async_writev_inv(iocb_ptr, iocb, iovec, datas, g)
-        <==> WritevGInv(io_slots, data, disk_idx_of_entry, status,
+        <==> WritevGInv(io_slots, data, page_handles, status,
                   iocb_ptr, iocb, iovec, datas, g))
 
       && (forall iocb_ptr, iocb, iovec, datas, g :: ioctx.async_readv_inv(iocb_ptr, iocb, iovec, datas, g)
-        <==> ReadvGInv(io_slots, data, disk_idx_of_entry, status,
+        <==> ReadvGInv(io_slots, data, page_handles, status,
                   iocb_ptr, iocb, iovec, datas, g))
 
       && (forall v, g :: atomic_inv(global_clockpointer, v, g) <==> true)
@@ -129,7 +129,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && |lseqs_raw(this.status_idx_array)| == CACHE_SIZE as int
       && (forall i | 0 <= i < CACHE_SIZE as int :: lseq_has(this.status_idx_array)[i]
         && lseq_peek(this.status_idx_array, i as uint64)
-            == StatusIdx(this.status[i], this.disk_idx_of_entry[i])
+            == StatusIdx(this.status[i], this.page_handles[i])
       )
       /*
       && this.read_refcounts_base_ptr.as_nat() + (RC_WIDTH-1) * CACHE_SIZE as int * (CACHE_SIZE as int -1) < 0x1_0000_0000_0000_0000
@@ -166,12 +166,12 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       lseq_peek(this.status_idx_array, i as uint64).status
     }
 
-    shared function method disk_idx_of_entry_ptr(i: uint64) : (shared c: Cell<int64>)
+    shared function method page_handle_ptr(i: uint64) : (shared c: Cell<PageHandle>)
     requires this.Inv()
     requires 0 <= i as int < CACHE_SIZE as int
-    ensures c == this.disk_idx_of_entry[i]
+    ensures c == this.page_handles[i]
     {
-      lseq_peek(this.status_idx_array, i as uint64).idx
+      lseq_peek(this.status_idx_array, i as uint64).page_handle
     }
 
     shared function method read_refcount_atomic(j: uint64, i: uint64) : (shared at: AtomicRefcount)
@@ -235,7 +235,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   predicate ReadGInv(
       cache_io_slots: lseq<IOSlot>,
       cache_data: seq<Ptr>,
-      cache_disk_idx_of_entry: seq<Cell<int64>>,
+      cache_page_handles: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
 
       iocb_ptr: Ptr,
@@ -251,12 +251,12 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && 0 <= g.key.cache_idx < CACHE_SIZE as int
     && 0 <= iocb.offset < NUM_DISK_PAGES as int
     && |cache_data| == CACHE_SIZE as int
-    && |cache_disk_idx_of_entry| == CACHE_SIZE as int
+    && |cache_page_handles| == CACHE_SIZE as int
     && |cache_status| == CACHE_SIZE as int
     && data.ptr == cache_data[g.key.cache_idx]
     && iocb.nbytes == PageSize as int
-    && g.idx.cell == cache_disk_idx_of_entry[g.key.cache_idx]
-    && g.idx.v as int == iocb.offset == g.cache_reading.disk_idx
+    && g.idx.cell == cache_page_handles[g.key.cache_idx]
+    && g.idx.v.disk_addr as int == iocb.offset == g.cache_reading.disk_idx
     && g.cache_reading.cache_idx == g.key.cache_idx
     && g.ro.loc == cache_status[g.key.cache_idx].rwlock_loc
     && g.ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
@@ -268,7 +268,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   predicate simpleWriteGInv(
       cache_io_slots: lseq<IOSlot>,
       cache_data: seq<Ptr>,
-      cache_disk_idx_of_entry: seq<Cell<int64>>,
+      cache_page_handles: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
 
       offset: nat,
@@ -280,10 +280,10 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && 0 <= wbo.b.key.cache_idx < CACHE_SIZE as int
     && wbo.is_handle(key)
     && |cache_data| == CACHE_SIZE as int
-    && |cache_disk_idx_of_entry| == CACHE_SIZE as int
+    && |cache_page_handles| == CACHE_SIZE as int
     && |cache_status| == CACHE_SIZE as int
     && key.data_ptr == cache_data[key.cache_idx]
-    && key.idx_cell == cache_disk_idx_of_entry[key.cache_idx]
+    && key.idx_cell == cache_page_handles[key.cache_idx]
     && wbo.token.loc == cache_status[wbo.b.key.cache_idx as nat].rwlock_loc
     && wbo.b.cache_entry.disk_idx == offset
   }
@@ -291,7 +291,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   predicate WriteGInv(
       cache_io_slots: lseq<IOSlot>,
       cache_data: seq<Ptr>,
-      cache_disk_idx_of_entry: seq<Cell<int64>>,
+      cache_disk_idx_of_entry: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
 
       iocb_ptr: Ptr,
@@ -314,7 +314,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   predicate WritevGInv(
       cache_io_slots: lseq<IOSlot>,
       cache_data: seq<Ptr>,
-      cache_disk_idx_of_entry: seq<Cell<int64>>,
+      cache_disk_idx_of_entry: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
 
       iocb_ptr: Ptr,
@@ -344,14 +344,14 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   predicate simpleReadGInv(
       cache_io_slots: lseq<IOSlot>,
       cache_data: seq<Ptr>,
-      cache_disk_idx_of_entry: seq<Cell<int64>>,
+      cache_disk_idx_of_entry: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
 
       offset: nat,
       wp: PointsToArray<byte>,
       key: Key,
       cache_reading: CacheResources.CacheReading,
-      idx: CellContents<int64>,
+      idx: CellContents<PageHandle>,
       ro: T.Token)
   {
     && 0 <= key.cache_idx < CACHE_SIZE as int
@@ -360,7 +360,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && |cache_disk_idx_of_entry| == CACHE_SIZE as int
     && |cache_status| == CACHE_SIZE as int
     && idx.cell == cache_disk_idx_of_entry[key.cache_idx]
-    && idx.v as int == offset == cache_reading.disk_idx
+    && idx.v.disk_addr as int == offset == cache_reading.disk_idx
     && cache_reading.cache_idx == key.cache_idx
     && ro.loc == cache_status[key.cache_idx].rwlock_loc
     && ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
@@ -369,7 +369,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   predicate ReadvGInv(
       cache_io_slots: lseq<IOSlot>,
       cache_data: seq<Ptr>,
-      cache_disk_idx_of_entry: seq<Cell<int64>>,
+      cache_disk_idx_of_entry: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
 
       iocb_ptr: Ptr,

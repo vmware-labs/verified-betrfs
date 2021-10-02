@@ -230,7 +230,7 @@ module AtomicStatusImpl {
         && m.value.token.loc == rwlock_loc
         && disk_write_ticket.glSome?
         && disk_write_ticket.value.writes(
-            m.value.b.idx.v as int,
+            m.value.b.idx.v.disk_addr as int,
             m.value.b.data.s)
     {
       atomic_block var cur_flag := execute_atomic_load(this.atomic) { }

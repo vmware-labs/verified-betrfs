@@ -21,19 +21,19 @@ namespace InstantiatedDiskInterface {
   extern int fd;
 
   struct IOCtx {
-    io_context_t* ctx;
+    io_context_t ctx;
   };
 
   inline IOCtx get_IOCtx_default() {
     IOCtx ioctx;
-    ioctx.ctx = NULL;
+    ioctx.ctx = 0;
     return ioctx;
   }
 
   inline IOCtx init__ctx() {
     IOCtx ioctx;
-    ioctx.ctx = new io_context_t;
-    int ret = io_setup(256, ioctx.ctx);
+    ioctx.ctx = 0; // this is needed or io_setup might return EINVAL
+    int ret = io_setup(256, &ioctx.ctx);
     if (ret != 0) {
       std::cerr << "io_setup failed" << std::endl;
       exit(1);
@@ -48,7 +48,7 @@ namespace InstantiatedDiskInterface {
 
   inline void async__submit(IOCtx& ioctx, Ptrs::Ptr i) {
     iocb* iocb_ptr = (iocb*) i.ptr;
-    int ret = io_submit(*ioctx.ctx, 1, &iocb_ptr);
+    int ret = io_submit(ioctx.ctx, 1, &iocb_ptr);
     //printf("%d\n", ret);
     //printf("%d %d %d %d %d %d\n",
     //    EAGAIN, EBADF, EFAULT, EINVAL, ENOSYS, EPERM);
@@ -94,7 +94,7 @@ namespace InstantiatedDiskInterface {
 
   inline Ptrs::Ptr get__event(IOCtx& ioctx) {
     struct io_event event;
-    int status = io_getevents(*ioctx.ctx, 0, 1, &event, NULL);
+    int status = io_getevents(ioctx.ctx, 0, 1, &event, NULL);
     if (status == 0) return Ptrs::null_ptr();
     assert (status == 1);
     assert (event.res > 0);

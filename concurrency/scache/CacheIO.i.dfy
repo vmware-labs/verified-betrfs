@@ -118,7 +118,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         wbo, idx as int, iovec);
 
     assert WriteGInv(
-        cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+        cache.io_slots, cache.data, cache.page_handles, cache.status,
         cache.io_slots[idx as nat].iocb_ptr,
         iocb, wbo.b.data.s, writeg);
     aio.async_write(
@@ -139,7 +139,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear cache_reading: CacheResources.CacheReading,
       glinear ro: T.Token,
       glinear contents: PointsToArray<byte>,
-      glinear idx_perm: CellContents<int64>,
+      glinear idx_perm: CellContents<PageHandle>,
       glinear ticket: CacheResources.DiskReadTicket)
   requires cache.Inv()
   requires old_local.WF()
@@ -155,8 +155,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires ro.loc == cache.status[cache_idx].rwlock_loc
   requires ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
   requires contents.ptr == cache.data[cache_idx]
-  requires idx_perm.cell == cache.disk_idx_of_entry[cache_idx]
-  requires idx_perm.v as int == disk_idx as int
+  requires idx_perm.cell == cache.page_handles[cache_idx]
+  requires idx_perm.v.disk_addr as int == disk_idx as int
 
   ensures local.WF()
   ensures local.t == old_local.t
@@ -183,7 +183,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         iovec);
 
     assert ReadGInv(
-        cache.io_slots, cache.data, cache.disk_idx_of_entry, cache.status,
+        cache.io_slots, cache.data, cache.page_handles, cache.status,
         cache.io_slots[idx as nat].iocb_ptr,
         iocb, contents, readg);
 
@@ -255,7 +255,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear wp: PointsToArray<byte>,
       glinear ro: T.Token,
       glinear cache_reading: CacheResources.CacheReading,
-      glinear idx: CellContents<int64>,
+      glinear idx: CellContents<PageHandle>,
       glinear stub: CacheResources.DiskReadStub)
   requires cache.Inv()
   requires 0 <= cache_idx as int < CACHE_SIZE as int
@@ -267,8 +267,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache_reading.cache_idx == cache_idx as nat
   requires ro.loc == cache.status[cache_idx].rwlock_loc
   requires ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
-  requires idx.cell == cache.disk_idx_of_entry[cache_idx]
-  requires idx.v as int == disk_addr
+  requires idx.cell == cache.page_handles[cache_idx]
+  requires idx.v.disk_addr as int == disk_addr
   {
     glinear var status, cache_entry;
     status, cache_entry := CacheResources.finish_page_in(
@@ -276,7 +276,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           cache_reading, stub);
 
     /*write_cell(
-            cache.disk_idx_of_entry_ptr(cache_idx),
+            cache.page_handles_ptr(cache_idx),
             inout idx,
             disk_addr as int64);*/
 
@@ -319,7 +319,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires forall i | 0 <= i < |keys| ::
     && i in wbos
     && i in stubs
-    && simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
+    && simpleWriteGInv(cache.io_slots, cache.data, cache.page_handles,
         cache.status, offset + i, datas[i], keys[i], wbos[i])
     && stubs[i].val == CacheSSM.DiskWriteResp(offset + i)
     && iovec.s[i].iov_base() == cache.data[keys[i].cache_idx]
@@ -334,7 +334,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant forall i: int | j as int <= i < |keys| ::
       && i in wbos'
       && i in stubs'
-      && simpleWriteGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
+      && simpleWriteGInv(cache.io_slots, cache.data, cache.page_handles,
           cache.status, offset + i, datas[i], keys[i], wbos'[i])
       && stubs'[i].val == CacheSSM.DiskWriteResp(offset + i)
     {
@@ -362,7 +362,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       ghost keys: seq<Key>,
       glinear wps: map<nat, PointsToArray<byte>>,
       glinear ros: map<nat, T.Token>,
-      glinear idxs: map<nat, CellContents<int64>>,
+      glinear idxs: map<nat, CellContents<PageHandle>>,
       glinear cache_readings: map<nat, CacheResources.CacheReading>,
       glinear stubs: map<nat, DT.Token>)
   requires cache.Inv()
@@ -371,7 +371,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires offset + |keys| <= NUM_DISK_PAGES as int
   requires forall i | 0 <= i < |keys| ::
     && i in ros && i in wps && i in idxs && i in stubs && i in cache_readings
-    && simpleReadGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
+    && simpleReadGInv(cache.io_slots, cache.data, cache.page_handles,
         cache.status, offset + i, wps[i], keys[i], cache_readings[i], idxs[i], ros[i])
     && |wps[i].s| == PageSize as int
     && stubs[i].val == CacheSSM.DiskReadResp(offset + i, wps[i].s)
@@ -389,7 +389,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant |iovec.s| >= |keys| == iovec_len as int
     invariant forall i: int | j as int <= i < |keys| ::
       && i in ros' && i in wps' && i in idxs' && i in stubs' && i in cache_readings'
-      && simpleReadGInv(cache.io_slots, cache.data, cache.disk_idx_of_entry,
+      && simpleReadGInv(cache.io_slots, cache.data, cache.page_handles,
           cache.status, offset + i, wps'[i], keys[i], cache_readings'[i], idxs'[i], ros'[i])
       && |wps'[i].s| == PageSize as int
       && stubs'[i].val == CacheSSM.DiskReadResp(offset + i, wps'[i].s)

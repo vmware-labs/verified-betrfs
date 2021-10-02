@@ -183,7 +183,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant forall j | i as int <= j < CACHE_SIZE as int :: j !in status_idx_array
     invariant forall j | 0 <= j < i as int :: j in status_idx_array
         && status_idx_array[j].status.inv()
-        && status_idx_array[j].status.key == Key(data[j], status_idx_array[j].idx, j)
+        && status_idx_array[j].status.key == Key(data[j], status_idx_array[j].page_handle, j)
 
     invariant |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
     invariant forall i', j' | i as int <= i' < CACHE_SIZE as int && 0 <= j' < RC_WIDTH as int ::
@@ -196,7 +196,9 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       assume false;
       linear var cell_idx;
       glinear var cell_idx_contents;
-      cell_idx, cell_idx_contents := new_cell<int64>(0);
+      cell_idx, cell_idx_contents := new_cell<PageHandle>(PageHandle(
+          ptr_add(data_base_ptr, i * PageSize64()),
+          0));
       glinear var data_pta;
       data_pta_seq, data_pta := glmap_take(data_pta_seq, i as nat);
 
@@ -304,7 +306,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     iocb_base_ptr, io_slots := init_ioslots();
 
     ghost var disk_idx_of_entry := seq(CACHE_SIZE as int, (i) requires 0 <= i < CACHE_SIZE as int =>
-        status_idx_array[i].idx);
+        status_idx_array[i].page_handle);
     ghost var status := seq(CACHE_SIZE as int, (i) requires 0 <= i < CACHE_SIZE as int =>
         status_idx_array[i].status);
     ghost var read_refcounts :=

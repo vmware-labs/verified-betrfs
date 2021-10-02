@@ -18,8 +18,10 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Ptrs
   import CacheResources
   import opened CacheHandle
+  import opened LinearSequence_i
   import opened LinearSequence_s
   import CI = CacheInit(aio)
+  import opened Cells
 
   method copy_seq_out(ptr: Ptr, gshared d: PointsToArray<byte>)
   returns (s: seq<byte>)
@@ -91,15 +93,19 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.ReadOutput(block))
   decreases *
   {
-    var ph;
+    var php;
     glinear var handle;
-    ph, handle := CacheOps.get(cache, inout localState, disk_idx, client);
+    php, handle := CacheOps.get(cache, inout localState, disk_idx, client);
 
-    block := copy_seq_out(ph.ptr, RwLockToken.borrow_sot(handle.so).data);
+    var ph := read_cell(lseq_peek(cache.status_idx_array, php.cache_idx).page_handle,
+        RwLockToken.borrow_sot(handle.so).idx);
+    var ptr := ph.data_ptr;
+
+    block := copy_seq_out(ptr, RwLockToken.borrow_sot(handle.so).data);
     stub := CacheResources.app_read_block(
         rid, RwLockToken.borrow_sot(handle.so).cache_entry, ticket);
 
-    client' := CacheOps.unget(cache, localState, ph, disk_idx, handle);
+    client' := CacheOps.unget(cache, localState, php, disk_idx, handle);
   }
 
   method write_block(
@@ -119,25 +125,28 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.WriteOutput)
   decreases *
   {
-    var ph;
+    var php;
     glinear var write_handle;
-    ph, write_handle := CacheOps.get_claim_lock(cache, inout localState, disk_idx, client);
+    php, write_handle := CacheOps.get_claim_lock(cache, inout localState, disk_idx, client);
 
-    write_handle := CacheOps.mark_dirty(cache, localState, ph, disk_idx, write_handle);
+    write_handle := CacheOps.mark_dirty(cache, localState, php, disk_idx, write_handle);
 
     glinear var WriteablePageHandle(cache_idx, handle, status, eo) := write_handle;
     glinear var CacheEntryHandle(key, cache_entry, idx, pointsto) := handle;
 
-    copy_seq_in(ph.ptr, inout pointsto, data);
+    var ph := read_cell(lseq_peek(cache.status_idx_array, php.cache_idx).page_handle, idx);
+    var ptr := ph.data_ptr;
+
+    copy_seq_in(ptr, inout pointsto, data);
     cache_entry, stub := CacheResources.app_write_block(
         rid, data, cache_entry, ticket);
 
     handle := CacheEntryHandle(key, cache_entry, idx, pointsto);
     write_handle := WriteablePageHandle(cache_idx, handle, status, eo);
 
-    glinear var claim_handle := CacheOps.unlock(cache, localState, ph, disk_idx, write_handle);
-    glinear var read_handle := CacheOps.unclaim(cache, localState, ph, disk_idx, claim_handle);
-    client' := CacheOps.unget(cache, localState, ph, disk_idx, read_handle);
+    glinear var claim_handle := CacheOps.unlock(cache, localState, php, disk_idx, write_handle);
+    glinear var read_handle := CacheOps.unclaim(cache, localState, php, disk_idx, claim_handle);
+    client' := CacheOps.unget(cache, localState, php, disk_idx, read_handle);
   }
 }
 
