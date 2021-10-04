@@ -1,3 +1,3 @@
 module Handle {
-  type Handle // TODO (replica data structure + replica state)
+  type Handle(!new) // TODO (replica data structure + replica state)
 }

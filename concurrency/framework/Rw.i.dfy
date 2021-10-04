@@ -292,7 +292,7 @@ module RwTokens(rw: Rw) {
 
   //method borrow(glinear token: Token)
 
-  // TODO borrow method
+  // TODO(jonh's problem): borrow method
 
   /*
    * Helpers
