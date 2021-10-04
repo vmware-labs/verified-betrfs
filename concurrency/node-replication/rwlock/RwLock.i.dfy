@@ -7,6 +7,8 @@ module RwLock refines Rw {
   import opened FullMaps
   import Handle
 
+  // TODO find the right constant for perf -- balancing contention
+  // and concurrency.
   ghost const RC_WIDTH := 24
 
   type ThreadId = nat
@@ -21,17 +23,22 @@ module RwLock refines Rw {
 
   // Standard flow for obtaining an 'exclusive' lock
 
-  datatype ExcState = 
+  // This is the thread state of a thread working on acquiring
+  // the exclusive lock. There can be only one of these, because only
+  // one thread can atomically set the ExclusiveState.exc bit to true.
+  datatype ExcState =
     | ExcNone
     | ExcPending(ghost visited: int, b: StoredType)
     | ExcObtained
 
-  datatype CentralState =
-    | CentralNone
-    | CentralState(exc: bool, stored_value: StoredType)
+  // This is the actual (non-ghost) state of the exclusive bit that
+  // a thread sets before it scans the read flags.
+  datatype ExclusiveState =
+    | ExclusiveNone
+    | ExclusiveState(exc: bool, stored_value: StoredType)
 
   datatype M = M(
-    central: CentralState,
+    exclusive: ExclusiveState,
     ghost refCounts: map<ThreadId, nat>,
 
     ghost sharedState: FullMap<SharedState>,
@@ -40,24 +47,24 @@ module RwLock refines Rw {
 
   function unit() : M
   {
-    M(CentralNone, map[], zero_map(), ExcNone)
+    M(ExclusiveNone, map[], zero_map(), ExcNone)
   }
 
   function dot(x: M, y: M) : M
   {
     if
       x.M? && y.M?
-      && !(x.central.CentralState? && y.central.CentralState?)
+      && !(x.exclusive.ExclusiveState? && y.exclusive.ExclusiveState?)
       && x.refCounts.Keys !! y.refCounts.Keys
       && (x.exc.ExcNone? || y.exc.ExcNone?)
     then
       M(
-        if x.central.CentralState? then x.central else y.central,
+        if x.exclusive.ExclusiveState? then x.exclusive else y.exclusive,
         (map k | k in x.refCounts.Keys + y.refCounts.Keys ::
             if k in x.refCounts.Keys then x.refCounts[k] else y.refCounts[k]),
         add_fns(x.sharedState, y.sharedState),
         if !x.exc.ExcNone? then x.exc else y.exc
-      ) 
+      )
     else
       Fail
   }
@@ -80,7 +87,11 @@ module RwLock refines Rw {
   lemma associative(x: M, y: M, z: M)
   ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
   {
-    assume false;
+    if dot(x, y) == Fail {
+      assert dot(x, dot(y, z)) == dot(dot(x, y), z);
+    } else {
+      assert dot(x, dot(y, z)) == dot(dot(x, y), z);
+    }
   }
 
   function IsSharedRefFor(t: int) : (SharedState) -> bool
@@ -103,24 +114,24 @@ module RwLock refines Rw {
   {
     && x != unit() ==> (
       && x.M?
-      && x.central.CentralState?
+      && x.exclusive.ExclusiveState?
       && (x.exc.ExcPending? ==>
         && 0 <= x.exc.visited <= RC_WIDTH as int
-        && x.exc.b == x.central.stored_value
+        && x.exc.b == x.exclusive.stored_value
       )
       && (forall t | 0 <= t < RC_WIDTH as int
         :: t in x.refCounts && x.refCounts[t] == CountAllRefs(x, t))
 
-      && (!x.central.exc ==>
+      && (!x.exclusive.exc ==>
         && x.exc.ExcNone?
       )
-      && (x.central.exc ==>
+      && (x.exclusive.exc ==>
         && (x.exc.ExcPending? || x.exc.ExcObtained?)
       )
       && (forall ss: SharedState :: x.sharedState.m[ss] > 0 ==>
         && 0 <= ss.t < RC_WIDTH as int
         && (ss.SharedObtained? ==>
-          && ss.b == x.central.stored_value
+          && ss.b == x.exclusive.stored_value
           && !x.exc.ExcObtained?
           && (x.exc.ExcPending? ==> x.exc.visited <= ss.t)
         )
@@ -134,7 +145,7 @@ module RwLock refines Rw {
     if !x.M? || x == unit() || x.exc.ExcObtained? then (
       None
     ) else (
-      Some(x.central.stored_value)
+      Some(x.exclusive.stored_value)
     )
   }
 
@@ -145,20 +156,20 @@ module RwLock refines Rw {
 
   ////// Handlers
 
-  function CentralHandle(central: CentralState) : M {
-    M(central, map[], zero_map(), ExcNone)
+  function CentralHandle(exclusive: ExclusiveState) : M {
+    M(exclusive, map[], zero_map(), ExcNone)
   }
 
   function RefCount(t: ThreadId, count: nat) : M {
-    M(CentralNone, map[t := count], zero_map(), ExcNone)
+    M(ExclusiveNone, map[t := count], zero_map(), ExcNone)
   }
 
   function SharedHandle(ss: SharedState) : M {
-    M(CentralNone, map[], unit_fn(ss), ExcNone)
+    M(ExclusiveNone, map[], unit_fn(ss), ExcNone)
   }
 
   function ExcHandle(e: ExcState) : M {
-    M(CentralNone, map[], zero_map(), e)
+    M(ExclusiveNone, map[], zero_map(), e)
   }
 
   ////// Transitions
@@ -166,13 +177,13 @@ module RwLock refines Rw {
   predicate ExcBegin(m: M, m': M)
   {
     && m.M?
-    && m.central.CentralState?
-    && !m.central.exc
+    && m.exclusive.ExclusiveState?
+    && !m.exclusive.exc
 
-    && m == CentralHandle(m.central)
+    && m == CentralHandle(m.exclusive)
     && m' == dot(
-      CentralHandle(m.central.(exc := true)),
-      ExcHandle(ExcPending(0, m.central.stored_value))
+      CentralHandle(m.exclusive.(exc := true)),
+      ExcHandle(ExcPending(0, m.exclusive.stored_value))
     )
   }
 
@@ -246,13 +257,13 @@ module RwLock refines Rw {
   {
     && m.M?
     && m.exc.ExcObtained?
-    && m.central.CentralState?
+    && m.exclusive.ExclusiveState?
     && m == dot(
-      CentralHandle(m.central),
+      CentralHandle(m.exclusive),
       ExcHandle(m.exc)
     )
     && m' ==
-      CentralHandle(m.central
+      CentralHandle(m.exclusive
         .(exc := false)
         .(stored_value := b)
       )
@@ -273,7 +284,7 @@ module RwLock refines Rw {
       var state' := dot(m', p);
       forall ss: SharedState | state'.sharedState.m[ss] > 0
       ensures 0 <= ss.t < RC_WIDTH as int
-      ensures (ss.SharedObtained? ==> ss.b == state'.central.stored_value)
+      ensures (ss.SharedObtained? ==> ss.b == state'.exclusive.stored_value)
       {
       }
     }
@@ -371,7 +382,7 @@ module RwLock refines Rw {
         }
       }
     }
-  } 
+  }
 
   predicate SharedDecCountObtained(m: M, m': M, t: int, b: StoredType)
   {
@@ -425,21 +436,21 @@ module RwLock refines Rw {
         }
       }
     }
-  } 
+  }
 
   predicate SharedCheckExc(m: M, m': M, t: int)
   {
     && m.M?
     //&& 0 <= t < RC_WIDTH as int
-    && m.central.CentralState?
-    && !m.central.exc
+    && m.exclusive.ExclusiveState?
+    && !m.exclusive.exc
     && m == dot(
-      CentralHandle(m.central),
+      CentralHandle(m.exclusive),
       SharedHandle(SharedPending(t))
     )
     && m' == dot(
-      CentralHandle(m.central),
-      SharedHandle(SharedObtained(t, m.central.stored_value))
+      CentralHandle(m.exclusive),
+      SharedHandle(SharedObtained(t, m.exclusive.stored_value))
     )
   }
 
@@ -469,289 +480,59 @@ module RwLock refines Rw {
     else
       dot(RefCount(s, 0), Rcs(s+1, t))
   }
+
+  predicate Init(s: M)
+  {
+    && s.M?
+    && s.exclusive.ExclusiveState?
+    && s.exclusive.exc
+    && s.refCounts == (map threadId | 0 <= threadId < RC_WIDTH :: 0)
+    && s.sharedState == FullMaps.zero_map()
+    && s.exc == ExcObtained // client starts out holding the exc lock so it can determine the inital value of the lock-protected field.
+  }
+
+  lemma InitImpliesInv(x: M)
+//  requires Init(x)
+//  ensures Inv(x)
+//  ensures I(x) == None
+  {
+    SumFilterSimp<SharedState>();
+    assert Init(x);
+    assert Inv(x);
+    assert I(x) == None;
+  }
+
+  lemma inv_unit()
+  // ensures Inv(unit())
+  // ensures I(unit()) == None
+  {}
 }
 
-/*
 module RwLockToken {
+  import opened Options
   import opened RwLock
-  import opened Constants
-  import opened CacheHandle
+  import HandleModule = Handle
   import T = RwTokens(RwLock)
 
   type Token = T.Token
+  type Handle = HandleModule.Handle
 
-  glinear datatype CentralToken = CentralToken(
-    ghost flag: Flag,
-    ghost stored_value: StoredType,
-    glinear token: Token)
-  {
-    predicate has_flag(flag: Flag) {
-      && this.flag == flag
-      && token.val == CentralHandle(CentralState(flag, stored_value))
-    }
-    predicate is_handle(flag: Flag, stored_value: StoredType) {
-      && this.flag == flag
-      && this.stored_value == stored_value
-      && token.val == CentralHandle(CentralState(flag, stored_value))
-    }
-  }
-
-  glinear datatype WritebackObtainedToken = WritebackObtainedToken(
-    ghost b: Handle,
-    glinear token: Token)
-  {
-    predicate has_state(b: StoredType) {
-      && this.b == b
-      && token.val == WritebackHandle(WritebackObtained(b))
-    }
-    predicate is_handle(key: Key) {
-      && b.is_handle(key)
-      && token.val == WritebackHandle(WritebackObtained(b))
-    }
-  }
-
-  glinear datatype SharedPendingToken = SharedToken(
-    ghost t: ThreadId,
-    glinear token: Token)
-  {
-    predicate is_handle(t: ThreadId) {
-      && this.t == t
-      && token.val == SharedHandle(SharedPending(t))
-    }
-  }
-
-  glinear datatype SharedPending2Token = SharedToken(
-    ghost t: ThreadId,
-    glinear token: Token)
-  {
-    predicate is_handle(t: ThreadId) {
-      && this.t == t
-      && token.val == SharedHandle(SharedPending2(t))
-    }
-  }
-
-  glinear datatype SharedObtainedToken = SharedObtainedToken(
-    ghost t: ThreadId,
-    ghost b: StoredType,
-    glinear token: Token)
-  {
-    predicate is_valid() {
-      && token.val == SharedHandle(SharedObtained(t, b))
-    }
-
-    predicate is_handle(key: Key) {
-      && b.is_handle(key)
-      && is_valid()
-    }
-  }
-
-  glinear method perform_TakeWriteback(glinear c: Token)
-  returns (glinear c': Token, glinear handle': Token)
-  requires c.val.M?
-  requires var m := c.val;
-    && m.central.CentralState?
-    && m.central.flag == Available
-    && m == CentralHandle(m.central)
-  ensures c'.loc == handle'.loc == c.loc
-  ensures c'.val == CentralHandle(c.val.central.(flag := Writeback))
-  ensures handle'.val == WritebackHandle(WritebackObtained(c.val.central.stored_value))
-  {
-    var a := CentralHandle(c.val.central.(flag := Writeback));
-    var b := WritebackHandle(WritebackObtained(c.val.central.stored_value));
-    TakeWriteback_Preserves(c.val, dot(a, b));
-    c', handle' := T.internal_transition_1_2(c, a, b);
-  }
-
-  glinear method pre_ReleaseWriteback(glinear c: Token, glinear handle: Token)
-  returns (glinear c': Token, glinear handle': Token)
-  requires c.val.M? && handle.val.M?
-  requires var m := c.val;
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.writeback.WritebackObtained?
-    && m == WritebackHandle(m.writeback)
-  requires c.loc == handle.loc
-  ensures c.val == c'.val && handle'.val == handle.val
-  ensures c.loc == c'.loc && handle'.loc == handle.loc
-  ensures c.val.central.flag == Writeback
-       || c.val.central.flag == Writeback_PendingExcLock
-       || c.val.central.flag == Writeback_Claimed
-  {
-    c' := c;
-    handle' := handle;
-    ghost var rest := T.obtain_invariant_2(inout c', inout handle');
-  }
-
-  glinear method perform_ReleaseWriteback(glinear c: Token, glinear handle: Token)
-  returns (glinear c': Token)
-  requires var m := c.val;
+  glinear method perform_ExcBegin(glinear centralToken: Token)
+  returns (glinear centralToken': Token, glinear excToken': Token)
+  requires var m := centralToken.val;
     && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.writeback.WritebackObtained?
-    && m == WritebackHandle(m.writeback)
-  requires c.loc == handle.loc
-  ensures c'.loc == c.loc
-  ensures c.val.central.flag == Writeback
-       || c.val.central.flag == Writeback_PendingExcLock
-       || c.val.central.flag == Writeback_Claimed
-  ensures c.val.central.flag == Writeback ==>
-      c'.val == CentralHandle(c.val.central.(flag := Available))
-  ensures c.val.central.flag == Writeback_PendingExcLock ==>
-      c'.val == CentralHandle(c.val.central.(flag := PendingExcLock))
-  ensures c.val.central.flag == Writeback_Claimed ==>
-      c'.val == CentralHandle(c.val.central.(flag := Claimed))
+    && m.exclusive.ExclusiveState?
+    && !m.exclusive.exc
+    && m == CentralHandle(m.exclusive)
+  ensures centralToken'.val == CentralHandle(centralToken.val.exclusive.(exc := true))
+  ensures excToken'.val == ExcHandle(ExcPending(0, centralToken.val.exclusive.stored_value))
+  ensures centralToken'.loc == excToken'.loc == centralToken.loc
   {
-    var a := CentralHandle(c.val.central.(flag :=
-            if c.val.central.flag == Writeback
-            then Available
-            else
-              if c.val.central.flag == Writeback_PendingExcLock
-              then PendingExcLock
-              else Claimed));
-    ReleaseWriteback_Preserves(dot(c.val, handle.val), a);
-    glinear var c1, handle1 := pre_ReleaseWriteback(c, handle);
-    c' := T.internal_transition_2_1(c1, handle1, a);
-  }
-
-  glinear method perform_ThreadlessClaim(glinear c: Token)
-  returns (glinear c': Token, glinear handle': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m.central.flag == Available
-    && m == CentralHandle(m.central)
-  ensures c'.loc == handle'.loc == c.loc
-  ensures c'.val == CentralHandle(c.val.central.(flag :=
-      if c.val.central.flag == Available then Claimed else Writeback_Claimed))
-  ensures handle'.val == ExcHandle(ExcClaim(-1, c.val.central.stored_value))
-  {
-    var a := CentralHandle(c.val.central.(flag :=
-      if c.val.central.flag == Available then Claimed else Writeback_Claimed));
-    var b := ExcHandle(ExcClaim(-1, c.val.central.stored_value));
-    ThreadlessClaim_Preserves(c.val, dot(a, b));
-    c', handle' := T.internal_transition_1_2(c, a, b);
-  }
-
-  glinear method perform_SharedToClaim(glinear c: Token, glinear handle: Token,
-      ghost ss: SharedState)
-  returns (glinear c': Token, glinear handle': Token)
-  requires ss.SharedObtained?
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m.central.flag != Claimed
-    && m.central.flag != Writeback_Claimed
-    && m.central.flag != Writeback_PendingExcLock
-    && m.central.flag != PendingExcLock
-    && m.central.flag != ExcLock_Clean
-    && m.central.flag != ExcLock_Dirty
-    && m == CentralHandle(m.central)
-  requires handle.val == SharedHandle(ss)
-  requires c.loc == handle.loc
-  ensures (c.val.central.flag == Available || c.val.central.flag == Writeback)
-  ensures c'.loc == handle'.loc == c.loc
-  ensures c'.val == CentralHandle(c.val.central.(flag := 
-          if c.val.central.flag == Available then Claimed else Writeback_Claimed))
-  ensures handle'.val == ExcHandle(ExcClaim(ss.t, ss.b))
-  {
-    var a := CentralHandle(c.val.central.(flag := 
-          if c.val.central.flag == Available then Claimed else Writeback_Claimed));
-    var b := ExcHandle(ExcClaim(ss.t, ss.b));
-    c' := c;
-    handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    SharedToClaim_Preserves(dot(c.val, handle.val), dot(a, b), ss);
-    c', handle' := T.internal_transition_2_2(c', handle', a, b);
-  }
-
-  glinear method perform_ClaimToShared(glinear c: Token, glinear handle: Token)
-  returns (glinear c': Token, glinear handle': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.exc.ExcClaim?
-    && m.exc.t != -1
-    && m == ExcHandle(m.exc)
-  requires c.loc == handle.loc
-  ensures c.val.central.flag == Writeback_Claimed
-       || c.val.central.flag == Claimed
-  ensures c'.loc == handle'.loc == c.loc
-  ensures c'.val == CentralHandle(c.val.central.(flag := 
-          if c.val.central.flag == Writeback_Claimed then Writeback else Available))
-  ensures handle'.val == SharedHandle(SharedObtained(handle.val.exc.t, handle.val.exc.b))
-  {
-    var a := CentralHandle(c.val.central.(flag := 
-          if c.val.central.flag == Writeback_Claimed then Writeback else Available));
-    var b := SharedHandle(SharedObtained(handle.val.exc.t, handle.val.exc.b));
-    c' := c;
-    handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    ClaimToShared_Preserves(dot(c.val, handle.val), dot(a, b));
-    c', handle' := T.internal_transition_2_2(c', handle', a, b);
-  }
-
-  glinear method perform_ClaimToPending(glinear c: Token, glinear handle: Token)
-  returns (glinear c': Token, glinear handle': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.exc.ExcClaim?
-    && m == ExcHandle(m.exc)
-  requires c.loc == handle.loc
-  ensures c.val.central.flag == Writeback_Claimed || c.val.central.flag == Claimed
-  ensures c'.loc == handle'.loc == c.loc
-  ensures c'.val == CentralHandle(c.val.central.(flag :=
-      if c.val.central.flag == Writeback_Claimed then Writeback_PendingExcLock else PendingExcLock))
-  ensures handle'.val == ExcHandle(ExcPendingAwaitWriteback(handle.val.exc.t, handle.val.exc.b))
-  {
-    var a := CentralHandle(c.val.central.(flag :=
-      if c.val.central.flag == Writeback_Claimed then Writeback_PendingExcLock else PendingExcLock));
-    var b := ExcHandle(ExcPendingAwaitWriteback(handle.val.exc.t, handle.val.exc.b));
-    ClaimToPending_Preserves(dot(c.val, handle.val), dot(a, b));
-    c' := c;
-    handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    c', handle' := T.internal_transition_2_2(c', handle', a, b);
-  }
-
-  glinear method perform_TakeExcLockFinishWriteback(glinear c: Token, glinear handle: Token, ghost clean: bool)
-  returns (glinear c': Token, glinear handle': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m.central.flag != Writeback && m.central.flag != Writeback_PendingExcLock
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.exc.ExcPendingAwaitWriteback?
-    && m == ExcHandle(m.exc)
-  requires c.loc == handle.loc
-  ensures c.val.central.flag == PendingExcLock
-  ensures c'.loc == handle'.loc == c.loc
-  ensures c'.val == 
-      CentralHandle(c.val.central.(flag :=
-        if clean then ExcLock_Clean else ExcLock_Dirty))
-  ensures handle'.val == 
-      ExcHandle(ExcPending(handle.val.exc.t, 0, clean, handle.val.exc.b))
-  {
-    var a := CentralHandle(c.val.central.(flag :=
-        if clean then ExcLock_Clean else ExcLock_Dirty));
-    var b := ExcHandle(ExcPending(handle.val.exc.t, 0, clean, handle.val.exc.b));
-    TakeExcLockFinishWriteback_Preserves(dot(c.val, handle.val), dot(a, b), clean);
-    c' := c;
-    handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    c', handle' := T.internal_transition_2_2(c', handle', a, b);
+    var m := centralToken.val;
+    var a := CentralHandle(m.exclusive.(exc := true));
+    var b := ExcHandle(ExcPending(0, m.exclusive.stored_value));
+    ExcBegin_Preserves(centralToken.val, dot(a, b));
+    centralToken', excToken' := T.internal_transition_1_2(centralToken, a, b);
   }
 
   glinear method perform_TakeExcLockCheckRefCount(glinear handle: Token, glinear rc: Token)
@@ -761,8 +542,7 @@ module RwLockToken {
     && m.exc.ExcPending?
     && m == ExcHandle(m.exc)
     && 0 <= m.exc.visited < RC_WIDTH as int
-  requires var expected_rc := (if handle.val.exc.visited == handle.val.exc.t then 1 else 0);
-    && rc.val == RefCount(handle.val.exc.visited, expected_rc)
+  requires rc.val == RefCount(handle.val.exc.visited, 0)
   requires rc.loc == handle.loc
   ensures rc'.loc == handle'.loc == rc.loc
   ensures handle'.val == ExcHandle(handle.val.exc.(visited := handle.val.exc.visited + 1))
@@ -772,50 +552,6 @@ module RwLockToken {
     var b := rc.val;
     TakeExcLockCheckRefCount_Preserves(dot(handle.val, rc.val), dot(a, b));
     handle', rc' := T.internal_transition_2_2(handle, rc, a, b);
-  }
-
-  glinear method perform_ReadingIncCount(glinear handle: Token, glinear rc: Token, ghost t: int)
-  returns (glinear handle': Token, glinear rc': Token)
-  requires handle.val == ReadHandle(ReadPending)
-  requires var m := rc.val;
-      && m.M?
-      && t in m.refCounts
-      && 0 <= t < RC_WIDTH as int
-      && m == RefCount(t, m.refCounts[t])
-  requires handle.loc == rc.loc
-  ensures rc'.loc == handle'.loc == rc.loc
-  ensures handle'.val == ReadHandle(ReadPendingCounted(t))
-  ensures rc'.val == RefCount(t, rc.val.refCounts[t] + 1)
-  {
-    var a := ReadHandle(ReadPendingCounted(t));
-    var b := RefCount(t, rc.val.refCounts[t] + 1);
-    ReadingIncCount_Preserves(dot(handle.val, rc.val), dot(a, b), t);
-    handle', rc' := T.internal_transition_2_2(handle, rc, a, b);
-  }
-
-  glinear method perform_ObtainReading(glinear c: Token, glinear handle: Token)
-  returns (glinear c': Token, glinear handle': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.read.ReadPendingCounted?
-    && m == ReadHandle(m.read)
-  requires c.loc == handle.loc
-  ensures c.val.central.flag == Reading_ExcLock
-  ensures c'.loc == handle'.loc == c.loc
-  ensures c'.val == CentralHandle(c.val.central.(flag := Reading))
-  ensures handle'.val == ReadHandle(ReadObtained(handle.val.read.t))
-  {
-    var a := CentralHandle(c.val.central.(flag := Reading));
-    var b := ReadHandle(ReadObtained(handle.val.read.t));
-    c' := c;
-    handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    ObtainReading_Preserves(dot(c.val, handle.val), dot(a, b));
-    c', handle' := T.internal_transition_2_2(c', handle', a, b);
   }
 
   glinear method perform_SharedIncCount(glinear rc: Token, ghost t: int)
@@ -937,119 +673,19 @@ module RwLockToken {
   //requires 0 <= t < RC_WIDTH as int
   requires var m := c.val;
     && m.M?
-    && m.central.CentralState?
-    && (m.central.flag == Available
-        || m.central.flag == Writeback
-        || m.central.flag == Claimed
-        || m.central.flag == Writeback_Claimed
-        || m.central.flag == Reading)
-    && m == CentralHandle(m.central)
+    && m.exclusive.ExclusiveState?
+    && !m.exclusive.exc
+    && m == CentralHandle(m.exclusive)
   requires handle.val == SharedHandle(SharedPending(t))
   requires c.loc == handle.loc
   ensures c'.loc == handle'.loc == c.loc
   ensures c'.val == c.val
-  ensures handle'.val == SharedHandle(SharedPending2(t))
+  ensures handle'.val == SharedHandle(SharedObtained(t, c.val.exclusive.stored_value))
   {
     var a := c.val;
-    var b := SharedHandle(SharedPending2(t));
+    var b := SharedHandle(SharedObtained(t, c.val.exclusive.stored_value));
     SharedCheckExc_Preserves(dot(c.val, handle.val), dot(a, b), t);
     c', handle' := T.internal_transition_2_2(c, handle, a, b);
-  }
-
-  glinear method possible_flags_SharedPending2(
-      glinear c: Token, glinear handle: Token, ghost t: int)
-  returns (glinear c': Token, glinear handle': Token)
-  requires 0 <= t < RC_WIDTH as int
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires handle.val == SharedHandle(SharedPending2(t))
-  requires c.loc == handle.loc
-  ensures c' == c
-  ensures handle' == handle
-  ensures c.val.central.flag != Unmapped
-  {
-    c' := c;
-    handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-  }
-
-
-  glinear method perform_SharedCheckReading(glinear c: Token, glinear handle: Token, ghost t: int)
-  returns (glinear c': Token, glinear handle': Token)
-  requires 0 <= t < RC_WIDTH as int
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m.central.flag != Reading
-    && m.central.flag != Reading_ExcLock
-    && m == CentralHandle(m.central)
-  requires handle.val == SharedHandle(SharedPending2(t))
-  requires c.loc == handle.loc
-  ensures c.val.central.flag != Unmapped
-  ensures c'.loc == handle'.loc == c.loc
-  ensures c'.val == c.val
-  ensures handle'.val == SharedHandle(SharedObtained(t, c.val.central.stored_value))
-  {
-    var a := c.val;
-    var b := SharedHandle(SharedObtained(t, c.val.central.stored_value));
-    SharedCheckReading_Preserves(dot(c.val, handle.val), dot(a, b), t);
-    c' := c;
-    handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    c', handle' := T.internal_transition_2_2(c', handle', a, b);
-  }
-
-  glinear method perform_AbandonExcPending(glinear c: Token, glinear handle: Token)
-  returns (glinear c': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.exc.ExcPending?
-    && m.exc.t == -1
-    && m == ExcHandle(m.exc)
-  requires c.loc == handle.loc
-  ensures handle.val.exc.clean ==> c.val.central.flag == ExcLock_Clean
-  ensures !handle.val.exc.clean ==> c.val.central.flag == ExcLock_Dirty
-  ensures c'.loc == c.loc
-  ensures c'.val == CentralHandle(c.val.central.(flag := Available))
-  {
-    var a := CentralHandle(c.val.central.(flag := Available));
-    AbandonExcPending_Preserves(dot(c.val, handle.val), a);
-    c' := c;
-    glinear var handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    c' := T.internal_transition_2_1(c', handle', a);
-  }
-
-  glinear method perform_MarkDirty(glinear c: Token, glinear handle: Token)
-  returns (glinear c': Token, glinear handle': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.exc.ExcObtained?
-    && m == ExcHandle(m.exc)
-  requires c.loc == handle.loc
-  ensures c'.loc == c.loc
-  ensures c.val.central.flag == ExcLock_Dirty || c.val.central.flag == ExcLock_Clean
-  ensures c'.val == CentralHandle(c.val.central.(flag := ExcLock_Dirty))
-  ensures handle'.loc == handle.loc
-  ensures handle'.val == ExcHandle(handle.val.exc.(clean := false))
-  {
-    var a := CentralHandle(c.val.central.(flag := ExcLock_Dirty));
-    var b := ExcHandle(handle.val.exc.(clean := false));
-    MarkDirty_Preserves(dot(c.val, handle.val), dot(a, b));
-    c' := c;
-    handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    c', handle' := T.internal_transition_2_2(c', handle', a, b);
   }
 
   glinear method perform_Withdraw_TakeExcLockFinish(glinear handle: Token)
@@ -1060,195 +696,30 @@ module RwLockToken {
     && m.exc.visited == RC_WIDTH as int
     && m == ExcHandle(m.exc)
   ensures handle'.loc == handle.loc
-  ensures handle'.val == ExcHandle(ExcObtained(handle.val.exc.t, handle.val.exc.clean))
+  ensures handle'.val == ExcHandle(ExcObtained)
   ensures b' == handle.val.exc.b
   {
-    var a := ExcHandle(ExcObtained(handle.val.exc.t, handle.val.exc.clean));
+    var a := ExcHandle(ExcObtained);
     var d := handle.val.exc.b;
     Withdraw_TakeExcLockFinish_Preserves(handle.val, a, d);
     handle', b' := T.withdraw_1_1(handle, a, d);
   }
 
-  glinear method perform_Withdraw_Alloc(glinear c: Token)
-  returns (glinear c': Token, glinear handle': Token, glinear b': Handle)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m.central.flag == Unmapped
-    && m == CentralHandle(m.central)
-  ensures handle'.loc == c'.loc == c.loc
-  ensures c'.val == CentralHandle(c.val.central.(flag := Reading_ExcLock))
-  ensures handle'.val == ReadHandle(ReadPending)
-  ensures b' == c.val.central.stored_value
-  {
-    var a := CentralHandle(c.val.central.(flag := Reading_ExcLock));
-    var d := ReadHandle(ReadPending);
-    var e := c.val.central.stored_value;
-    Withdraw_Alloc_Preserves(c.val, dot(a, d), e);
-    c', handle', b' := T.withdraw_1_2(c, a, d, e);
-  }
-
-  glinear method perform_Deposit_DowngradeExcLockToClaim(
-      glinear c: Token, glinear handle: Token, glinear b: Handle)
-  returns (glinear c': Token, glinear handle': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.exc.ExcObtained?
-    && 0 <= m.exc.t < RC_WIDTH as int
-    && m == ExcHandle(m.exc)
-  requires c.loc == handle.loc
-  ensures handle.val.exc.clean ==> c.val.central.flag == ExcLock_Clean
-  ensures !handle.val.exc.clean ==> c.val.central.flag == ExcLock_Dirty
-  ensures handle'.loc == c'.loc == c.loc
-  ensures c'.val == 
-      CentralHandle(c.val.central
-        .(flag := Claimed)
-        .(stored_value := b)
-      )
-  ensures handle'.val ==
-      ExcHandle(ExcClaim(handle.val.exc.t, b))
-  {
-    var a := CentralHandle(c.val.central
-        .(flag := Claimed)
-        .(stored_value := b)
-      );
-    var d := ExcHandle(ExcClaim(handle.val.exc.t, b));
-    Deposit_DowngradeExcLockToClaim_Preserves(dot(c.val, handle.val), dot(a, d), b);
-    c' := c;
-    handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    c', handle' := T.deposit_2_2(c', handle', b, a, d);
-  }
-
-  glinear method perform_Deposit_ReadingToShared(
-      glinear c: Token, glinear handle: Token, glinear b: Handle)
-  returns (glinear c': Token, glinear handle': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.read.ReadObtained?
-    && m.read.t != -1
-    && m == ReadHandle(m.read)
-  requires c.loc == handle.loc
-  ensures handle'.loc == c'.loc == c.loc
-  ensures c.val.central.flag == Reading
-  ensures c'.val == 
-      CentralHandle(c.val.central.(flag := Available).(stored_value := b))
-  ensures handle'.val ==
-      SharedHandle(SharedObtained(handle.val.read.t, b))
-  {
-    var a := CentralHandle(c.val.central.(flag := Available).(stored_value := b));
-    var d := SharedHandle(SharedObtained(handle.val.read.t, b));
-    Deposit_ReadingToShared_Preserves(dot(c.val, handle.val), dot(a, d), b);
-    c' := c;
-    handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    c', handle' := T.deposit_2_2(c', handle', b, a, d);
-  }
-
-  glinear method perform_Deposit_ReadingToDone(
-      glinear c: Token, glinear handle: Token, glinear b: Handle)
-  returns (glinear c': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.read.ReadObtained?
-    && m.read.t == -1
-    && m == ReadHandle(m.read)
-  requires c.loc == handle.loc
-  ensures c'.loc == c.loc
-  ensures c.val.central.flag == Reading
-  ensures c'.val == 
-      CentralHandle(c.val.central.(flag := Available).(stored_value := b))
-  {
-    var a := CentralHandle(c.val.central.(flag := Available).(stored_value := b));
-    Deposit_ReadingToDone_Preserves(dot(c.val, handle.val), a, b);
-    c' := c;
-    glinear var handle' := handle;
-    var rest := T.obtain_invariant_2(inout c', inout handle');
-    c' := T.deposit_2_1(c', handle', b, a);
-  }
-
-  glinear method perform_Deposit_Unmap(
-      glinear c: Token, glinear handle: Token, glinear b: Handle)
-  returns (glinear c': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.exc.ExcObtained?
-    && m.exc.t == -1
-    && m == ExcHandle(m.exc)
-  requires c.loc == handle.loc
-  ensures c'.loc == c.loc
-  ensures c'.val == 
-    CentralHandle(
-      c.val.central.(flag := Unmapped).(stored_value := b)
-    )
-  {
-    var a := CentralHandle(c.val.central.(flag := Unmapped).(stored_value := b));
-    Deposit_Unmap_Preserves(dot(c.val, handle.val), a, b);
-    c' := T.deposit_2_1(c, handle, b, a);
-  }
-
-  glinear method perform_Deposit_AbandonReadPending(
-      glinear c: Token, glinear handle: Token, glinear b: Handle)
-  returns (glinear c': Token)
-  requires var m := c.val;
-    && m.M?
-    && m.central.CentralState?
-    && m == CentralHandle(m.central)
-  requires var m := handle.val;
-    && m.M?
-    && m.read.ReadPending?
-    && m == ReadHandle(m.read)
-  requires c.loc == handle.loc
-  ensures c'.loc == c.loc
-  ensures c'.val == 
-    CentralHandle(c.val.central.(flag := Unmapped).(stored_value := b))
-  {
-    var a := CentralHandle(c.val.central.(flag := Unmapped).(stored_value := b));
-    Deposit_AbandonReadPending_Preserves(dot(c.val, handle.val), a, b);
-    c' := T.deposit_2_1(c, handle, b, a);
-  }
-
-  function method {:opaque} borrow_wb(gshared f: Token) : (gshared b: Handle)
-  requires f.val.M?
-  requires f.val.writeback.WritebackObtained?
-  ensures b == f.val.writeback.b
-  /*{
-    ghost var b := Base.one(f.val.writeback.b);
-    Base.unwrap_borrow( borrow_back_interp_exact(f, b) )
-  }*/
-
-  function method {:opaque} borrow_sot(gshared sot: SharedObtainedToken) : (gshared b: Handle)
-  requires sot.is_valid()
-  ensures b == sot.b
-
-  glinear method perform_Init(glinear b: Handle)
-  returns (glinear central: Token, glinear rcs: Token)
-  ensures central.loc == rcs.loc
-  ensures central.val == CentralHandle(CentralState(Unmapped, b))
-  ensures rcs.val == Rcs(0, RC_WIDTH as int)
-
-  glinear method pop_rcs(glinear t: Token, ghost a: nat, ghost b: nat)
-  returns (glinear x: Token, glinear t': Token)
-  requires a < b
-  requires t.val == Rcs(a, b)
-  ensures t'.val == Rcs(a+1, b)
-  ensures x.val == RefCount(a, 0)
-  ensures x.loc == t'.loc == t.loc
+//  function method {:opaque} borrow_sot(gshared sot: SharedObtainedToken) : (gshared b: Handle)
+//  requires sot.is_valid()
+//  ensures b == sot.b
+//
+//  glinear method perform_Init(glinear b: Handle)
+//  returns (glinear exclusive: Token, glinear rcs: Token)
+//  ensures exclusive.loc == rcs.loc
+//  ensures exclusive.val == CentralHandle(ExclusiveState(Unmapped, b))
+//  ensures rcs.val == Rcs(0, RC_WIDTH as int)
+//
+//  glinear method pop_rcs(glinear t: Token, ghost a: nat, ghost b: nat)
+//  returns (glinear x: Token, glinear t': Token)
+//  requires a < b
+//  requires t.val == Rcs(a, b)
+//  ensures t'.val == Rcs(a+1, b)
+//  ensures x.val == RefCount(a, 0)
+//  ensures x.loc == t'.loc == t.loc
 }
-*/
