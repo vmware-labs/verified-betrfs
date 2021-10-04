@@ -39,7 +39,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && key == cache.key(key.cache_idx)
     && wbo.is_handle(key)
     && wbo.b.CacheEntryHandle?
-    && wbo.b.idx.v.disk_addr as nat == disk_idx
+    && wbo.b.idx.v.disk_addr as nat == disk_idx * PageSize
     && ticket.val == CacheSSM.DiskWriteReq(disk_idx, wbo.b.data.s)
     && wbo.token.loc == cache.status[wbo.b.key.cache_idx as nat].rwlock_loc
   }
@@ -180,7 +180,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             var ph := read_cell(
                 cache.page_handle_ptr(cache_idx as uint64),
                 T.borrow_wb(write_back_r.value.token).idx);
-            var disk_idx := ph.disk_addr;
+            var disk_idx := ph.disk_addr / PageSize64() as int64;
 
             if disk_idx == next as int64 {
               keys, tickets, wbos := list_push_back(
@@ -264,7 +264,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             var ph := read_cell(
                 cache.page_handle_ptr(cache_idx as uint64),
                 T.borrow_wb(write_back_r.value.token).idx);
-            var disk_idx := ph.disk_addr;
+            var disk_idx := ph.disk_addr / PageSize64() as int64;
 
             if disk_idx == next as int64 {
               keys, tickets, wbos := list_push_front(
@@ -431,7 +431,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         var ph := read_cell(
             cache.page_handle_ptr(cache_idx as uint64),
             T.borrow_wb(write_back_r.value.token).idx);
-        var disk_idx := ph.disk_addr;
+        var disk_idx := ph.disk_addr / PageSize64() as int64;
         assert disk_idx != -1;
 
         var start_addr, end_addr;

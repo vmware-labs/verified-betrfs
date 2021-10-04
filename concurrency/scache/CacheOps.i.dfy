@@ -237,7 +237,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         var ph := read_cell(
             cache.page_handle_ptr(cache_idx),
             T.borrow_sot(handle_opt.value).idx);
-        var actual_disk_idx: int64 := ph.disk_addr;
+        var actual_disk_idx: int64 := ph.disk_addr / PageSize64() as int64;
 
         if actual_disk_idx != expected_disk_idx {
           glinear var ho: T.SharedObtainedToken := unwrap_value(handle_opt);
@@ -491,7 +491,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           // 7. clear cache_idx_of_page lookup
 
           var ph := read_cell(cache.page_handle_ptr(cache_idx), handle.idx);
-          var disk_idx := ph.disk_addr;
+          var disk_idx := ph.disk_addr / PageSize64() as int64;
 
           glinear var CacheEntryHandle(key, cache_entry, data, idx) := handle;
 
@@ -708,7 +708,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         write_cell(
           cache.page_handle_ptr(cache_idx),
           inout idx,
-          ph.(disk_addr := disk_idx as int64));
+          ph.(disk_addr := disk_idx as int64 * PageSize64() as int64));
 
         glinear var ceh := CacheEntryHandle(
             cache.key(cache_idx as int), cache_entry, idx, data);
@@ -1058,7 +1058,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           write_cell(
             cache.page_handle_ptr(cache_idx),
             inout idx,
-            disk_idx as int64);
+            disk_idx as int64 * PageSize64() as int64);
 
           disk_read_async(cache, inout localState,
               disk_idx, cache_idx, cache.data_ptr(cache_idx),
@@ -1098,7 +1098,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       var p := read_cell(
           cache.page_handle_ptr(cache_idx as uint64),
           T.borrow_wb(write_back_r.value.token).idx);
-      var disk_idx := p.disk_addr;
+      var disk_idx := p.disk_addr / PageSize64() as int64;
       assert disk_idx != -1;
 
       disk_writeback_async(
@@ -1134,7 +1134,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       var p := read_cell(
           cache.page_handle_ptr(cache_idx as uint64),
           T.borrow_wb(write_back_r.value.token).idx);
-      var disk_idx := p.disk_addr;
+      var disk_idx := p.disk_addr / PageSize64() as int64;
       assert disk_idx != -1;
 
       glinear var stub := disk_writeback_sync(
@@ -1478,7 +1478,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           write_cell(
             cache.page_handle_ptr(cache_idx),
             inout idx,
-            p.(disk_addr := addr as int64));
+            p.(disk_addr := addr as int64 * PageSize64() as int64));
 
           if pages_in_req == 0 {
             glinear var access;
@@ -1627,7 +1627,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       write_cell(
         cache.page_handle_ptr(cache_idx),
         inout idx,
-        p.(disk_addr := disk_idx as int64));
+        p.(disk_addr := disk_idx as int64 * PageSize64() as int64));
 
       glinear var ce := CacheEntryHandle(
           cache.key(cache_idx as int), unwrap_value(cache_entry_opt), idx, data);

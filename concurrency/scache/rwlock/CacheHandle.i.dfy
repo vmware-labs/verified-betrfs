@@ -43,7 +43,7 @@ module CacheHandle {
       && this.idx.cell == key.idx_cell
       && this.data.ptr == key.data_ptr
       && |this.data.s| == 4096
-      && 0 <= this.idx.v.disk_addr as int < NUM_DISK_PAGES as int
+      && 0 <= this.idx.v.disk_addr as int < NUM_DISK_PAGES as int * 4096
       && this.idx.v.data_ptr == key.data_ptr
 
       && (this.CacheEmptyHandle? ==>
@@ -51,11 +51,11 @@ module CacheHandle {
       )
       && (this.CacheReadingHandle? ==>
         && this.cache_reading.cache_idx == key.cache_idx
-        && this.cache_reading.disk_idx == this.idx.v.disk_addr as int
+        && this.cache_reading.disk_idx * 4096 == this.idx.v.disk_addr as int
       )
       && (this.CacheEntryHandle? ==>
         && this.cache_entry.cache_idx == key.cache_idx
-        && this.cache_entry.disk_idx == this.idx.v.disk_addr as int
+        && this.cache_entry.disk_idx * 4096 == this.idx.v.disk_addr as int
         && this.cache_entry.data == this.data.s
       )
     }

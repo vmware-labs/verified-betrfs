@@ -256,7 +256,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && data.ptr == cache_data[g.key.cache_idx]
     && iocb.nbytes == PageSize as int
     && g.idx.cell == cache_page_handles[g.key.cache_idx]
-    && g.idx.v.disk_addr as int == iocb.offset == g.cache_reading.disk_idx
+    && g.idx.v.disk_addr as int == iocb.offset * PageSize
+    && g.idx.v.data_ptr == cache_data[g.key.cache_idx]
+    && iocb.offset == g.cache_reading.disk_idx
     && g.cache_reading.cache_idx == g.key.cache_idx
     && g.ro.loc == cache_status[g.key.cache_idx].rwlock_loc
     && g.ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
@@ -360,7 +362,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && |cache_disk_idx_of_entry| == CACHE_SIZE as int
     && |cache_status| == CACHE_SIZE as int
     && idx.cell == cache_disk_idx_of_entry[key.cache_idx]
-    && idx.v.disk_addr as int == offset == cache_reading.disk_idx
+    && idx.v.disk_addr as int == offset * PageSize
+    && idx.v.data_ptr == cache_data[key.cache_idx]
+    && offset == cache_reading.disk_idx
     && cache_reading.cache_idx == key.cache_idx
     && ro.loc == cache_status[key.cache_idx].rwlock_loc
     && ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))

@@ -156,7 +156,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
   requires contents.ptr == cache.data[cache_idx]
   requires idx_perm.cell == cache.page_handles[cache_idx]
-  requires idx_perm.v.disk_addr as int == disk_idx as int
+  requires idx_perm.v.disk_addr as int == disk_idx as int * PageSize
+  requires idx_perm.v.data_ptr == cache.data[cache_idx]
 
   ensures local.WF()
   ensures local.t == old_local.t
@@ -268,7 +269,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires ro.loc == cache.status[cache_idx].rwlock_loc
   requires ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
   requires idx.cell == cache.page_handles[cache_idx]
-  requires idx.v.disk_addr as int == disk_addr
+  requires idx.v.disk_addr as int == disk_addr * PageSize
+  requires idx.v.data_ptr == cache.data[cache_idx]
   {
     glinear var status, cache_entry;
     status, cache_entry := CacheResources.finish_page_in(
