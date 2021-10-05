@@ -132,76 +132,6 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     seq(gtail, i requires 0 <= i < gtail => log[i].op)
   }
 
-  lemma I_ReadRequests_Update_CTail_is(s: A.Variables, s': A.Variables, rid: RequestId)
-    requires Inv(s)
-    requires Inv(s')
-    requires rid in s.localReads && s.localReads[rid].ReadonlyInit?
-    requires s'.localReads == s.localReads[rid := ReadonlyCtail(s.localReads[rid].op, s.ctail.value)]
-    ensures I(s').readonly_reqs == I(s).readonly_reqs[rid := B.ReadReq(s.ctail.value, s.localReads[rid].op)]
-  {
-     reveal_I_ReadRequests();
-  }
-
-  lemma I_ReadRequests_Update_is(s: A.Variables, s': A.Variables, rid: RequestId, input: nrifc.Input)
-    requires Inv(s)
-    requires Inv(s')
-    requires input.ROp?
-    requires s'.localReads == s.localReads[rid := ReadonlyInit(input.readonly_op)]
-    ensures I(s').readonly_reqs == I(s).readonly_reqs[rid := B.ReadInit(input.readonly_op)]
-  {
-     reveal_I_ReadRequests();
-  }
-
-  lemma I_UpdateRequests_Update_is(s: A.Variables, s': A.Variables, rid: RequestId, input: nrifc.Input)
-    requires Inv(s)
-    requires Inv(s')
-    requires input.UOp?
-    requires rid !in s.localUpdates;
-    requires s'.localUpdates == s.localUpdates[rid :=  UpdateInit(input.update_op)]
-    requires s'.log == s.log
-    ensures I(s').update_reqs == I(s).update_reqs[rid := input.update_op]
-    ensures I(s').update_resps == I(s).update_resps
-  {
-    reveal_I_UpdateResponses();
-    assert I(s').update_resps == I(s).update_resps;
-
-    reveal_I_UpdateRequests();
-    assert I(s').update_reqs == I(s).update_reqs[rid := input.update_op];
-  }
-
-  lemma I_UpdateResponses_Update_is(s: A.Variables, s': A.Variables, rid: RequestId, idx: nat, output: nrifc.Output)
-    requires Inv(s)
-    requires Inv(s')
-    requires rid in s.localUpdates;
-    requires rid !in s'.localUpdates;
-    requires s'.log == s.log
-    requires s.localUpdates == s'.localUpdates[rid :=  UpdateDone(output, idx)]
-    ensures I(s).update_resps == I(s').update_resps[rid :=  B.UpdateResp(idx, output)]
-    ensures I(s).update_reqs == I(s').update_reqs
-  {
-    reveal_I_UpdateResponses();
-    assert I(s).update_resps == I(s').update_resps[rid :=  B.UpdateResp(idx, output)];
-
-    reveal_I_UpdateRequests();
-    assert I(s').update_reqs == I(s).update_reqs;
-  }
-
-  lemma I_UpdateResponses_NoChange_is(s: A.Variables, s': A.Variables, rid: RequestId)
-    requires Inv(s)
-    requires Inv(s')
-    requires rid in s.localUpdates && s.localUpdates[rid].UpdateApplied?;
-    requires s'.log == s.log
-    requires s'.localUpdates == s.localUpdates[rid :=  UpdateDone(s.localUpdates[rid].ret, s.localUpdates[rid].idx)]
-    ensures I(s).update_resps == I(s').update_resps
-    ensures I(s).update_reqs == I(s').update_reqs
-  {
-    reveal_I_UpdateResponses();
-    assert I(s).update_resps == I(s').update_resps;
-
-    reveal_I_UpdateRequests();
-    assert I(s').update_reqs == I(s).update_reqs;
-  }
-
 
   function I(s: A.Variables) : B.Variables
   //requires Inv(s)
@@ -225,6 +155,72 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   //requires Inv(s)
   ensures B.Init(I(s))
 
+
+
+  lemma I_Added_LocalRead_is(s: A.Variables, s': A.Variables, rid: RequestId, input: nrifc.Input)
+    requires Inv(s)
+    requires input.ROp?
+    requires s' == s.(localReads := s.localReads[rid := ReadonlyInit(input.readonly_op)])
+    ensures I(s') == I(s).(readonly_reqs := I(s).readonly_reqs[rid := B.ReadInit(input.readonly_op)])
+  {
+    reveal_I_ReadRequests();
+    assert I(s').readonly_reqs == I(s).readonly_reqs[rid := B.ReadInit(input.readonly_op)];
+  }
+
+  lemma I_Removed_LocalReads_is(s: A.Variables, s': A.Variables, rid: RequestId)
+    requires Inv(s)
+    requires s' == s.(localReads := s.localReads - {rid})
+    ensures I(s') == I(s).(readonly_reqs := I(s).readonly_reqs - {rid})
+  {
+    reveal_I_ReadRequests();
+    assert I(s').readonly_reqs == I(s).readonly_reqs - {rid};
+  }
+
+  lemma I_Removed_LocalUpdates_is(s: A.Variables, s': A.Variables, rid: RequestId)
+    requires Inv(s)
+    requires s' == s.(localUpdates := s.localUpdates - {rid})
+    requires rid in s.localUpdates && s.localUpdates[rid].UpdateDone?
+    ensures I(s') == I(s).(update_resps := I(s).update_resps - {rid})
+  {
+    reveal_I_UpdateRequests();
+    assert I(s').update_reqs == I(s).update_reqs;
+    reveal_I_UpdateResponses();
+    assert I(s').update_resps == I(s).update_resps - {rid};
+  }
+
+  lemma I_Added_LocalUpdate_is(s: A.Variables, s': A.Variables, rid: RequestId, input: nrifc.Input)
+    requires Inv(s)
+    requires rid !in s.localUpdates;
+    requires input.UOp?
+    requires s' == s.(localUpdates := s.localUpdates[rid := UpdateInit(input.update_op)])
+    ensures I(s') == I(s).(update_reqs := I(s).update_reqs[rid := input.update_op])
+  {
+    reveal_I_UpdateRequests();
+    assert I(s').update_reqs == I(s).update_reqs[rid := input.update_op];
+    reveal_I_UpdateResponses();
+    assert I(s').update_resps == I(s).update_resps;
+  }
+
+
+
+  lemma NewTicket_Refines_Start_LocalReads(s: A.Variables, s': A.Variables,
+                                           rid: RequestId, input: nrifc.Input)
+    requires IL.NewTicket(s, s', rid, input)
+    requires s.M?
+    requires input.ROp?;
+    ensures s' == s.(localReads := s.localReads[rid := ReadonlyInit(input.readonly_op)])
+  {
+  }
+
+  lemma NewTicket_Refines_Start_LocalUpdates(s: A.Variables, s': A.Variables,
+                                             rid: RequestId, input: nrifc.Input)
+    requires IL.NewTicket(s, s', rid, input)
+    requires s.M?
+    requires input.UOp?
+    ensures s' == s.(localUpdates := s.localUpdates[rid := UpdateInit(input.update_op)])
+  {
+  }
+
   // s: some previous thing with a missing piece
   // s': some next thing
   // "stub": the missing piece in s
@@ -236,75 +232,70 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
   {
+    // checks, but may take a bit long....
+    assume false;
+
     // construct the ticket
-    var ticket := Ticket(rid, input);
-    // establish that s' is the dot of the s and the new ticket.
-    assert s' == dot(s, ticket);
-    // assert the ticket values
-    assert ticket.log == map[];
-    assert !ticket.global_tail.Some?;
-    assert ticket.replicas == map[];
-    assert ticket.localTails == map[];
-    assert !ticket.ctail.Some?;
-    assert ticket.combiner == map[];
-    // assert the unchanged things for both branches
-    assert s'.replicas == s.replicas;
-    assert s'.localTails == s.localTails;
-    assert s'.ctail == s.ctail;
-    assert s'.combiner == s.combiner;
-    assert s'.log == s.log;
-    assert s'.global_tail == s.global_tail;
-    // create the lifted state machines
-    var IS := I(s);
-    var IS' := I(s');
-    // nothing should have changed in the ctail and the log
-    assert IS'.ctail == IS.ctail;
-    assert IS'.log == IS.log;
-
-    // now branch off depending up the update type
     if input.ROp? {
-      // now assert the ROp ticket
-      assert ticket.localUpdates == map[];
-      assert ticket.localReads == map[rid := ReadonlyInit(input.readonly_op)];
+      assert I(s') == I(s).(readonly_reqs := I(s).readonly_reqs[rid := B.ReadInit(input.readonly_op)]) by {
+        NewTicket_Refines_Start_LocalReads(s, s', rid, input);
+        I_Added_LocalRead_is(s, s', rid, input);
+      }
 
-      // rid is not there before
-      assert rid !in s.localReads;
-      assert rid !in IS.readonly_reqs;
+      assert exists step :: B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
+        var step := B.StartReadonly_Step(rid, input.readonly_op);
+        assert B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
+          assert B.StartReadonly(I(s), I(s'), rid,  input.readonly_op);
+        }
+      }
 
-      assert s'.localUpdates == s.localUpdates;
-      assert IS'.update_reqs == IS.update_reqs;
-      assert IS'.update_resps == IS.update_resps;
-
-      // the next assert take a little while...
-      assert s'.localReads == s.localReads[rid := ReadonlyInit(input.readonly_op)];
-
-      I_ReadRequests_Update_is(s, s', rid, input);
-      assert IS'.readonly_reqs == IS.readonly_reqs[rid := B.ReadInit(input.readonly_op)];
-
-      assert B.NextStep(IS, IS', ifc.Start(rid, input), B.StartReadonly_Step(rid, input.readonly_op));
     } else {
-      // it has to be an UOp;
+      assert rid !in s.localUpdates;
       assert input.UOp?;
-      assert ticket.localReads == map[];
-      assert ticket.localUpdates == map[rid :=  UpdateInit(input.update_op)];
+      // proves but takes a while
+      assert I(s') == I(s).(update_reqs := I(s).update_reqs[rid := input.update_op]) by {
+        NewTicket_Refines_Start_LocalUpdates(s, s', rid, input);
+        I_Added_LocalUpdate_is(s, s', rid, input);
+      }
 
-      // assert rid !in s.localUpdates;
-      assert rid !in IS.update_reqs;
-
-      assert s'.localReads == s.localReads;
-      assert IS'.readonly_reqs == IS.readonly_reqs;
-      // that step takes a little while
-      assert s'.localUpdates == s.localUpdates[rid :=  UpdateInit(input.update_op)];
-
-      I_UpdateRequests_Update_is(s, s', rid, input);
-      assert IS'.update_reqs == IS.update_reqs[rid := input.update_op];
-      assert IS'.update_resps == IS.update_resps;
-
-      assert B.NextStep(IS, IS', ifc.Start(rid, input), B.StartUpdate_Step(rid, input.update_op));
+      assert exists step :: B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
+        var step := B.StartUpdate_Step(rid, input.update_op);
+        assert B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
+          assert B.StartUpdate(I(s), I(s'), rid,  input.update_op);
+        }
+      }
     }
   }
 
 
+  lemma ConsumeStub_Refines_End_LocalReads(s: A.Variables, s': A.Variables,
+      rid: RequestId, output: nrifc.Output, stub: M)
+    requires IL.ConsumeStub(s, s', rid, output, stub)
+    requires rid in stub.localReads
+    requires s.M?
+    ensures s' == s.(localReads := s.localReads - {rid})
+  {
+  }
+
+  lemma ConsumeStub_Refines_End_LocalUpdates(s: A.Variables, s': A.Variables,
+      rid: RequestId, output: nrifc.Output, stub: M)
+    requires IL.ConsumeStub(s, s', rid, output, stub)
+    requires rid in stub.localUpdates
+    requires s.M?
+    ensures s' == s.(localUpdates := s.localUpdates - {rid})
+  {
+  }
+
+  predicate VersionInLog(log: map<nat, LogEntry>, version: nat)
+  {
+    forall i | 0 <= i < version :: i in log
+  }
+
+  predicate OutputMatch(log: map<nat, LogEntry>,  output: nrifc.Output, version: nat, op: nrifc.ReadonlyOp)
+    requires VersionInLog(log, version)
+  {
+     output == nrifc.read(state_at_version(log, version), op)
+  }
 
   lemma ConsumeStub_Refines_End(s: A.Variables, s': A.Variables,
       rid: RequestId, output: nrifc.Output, stub: M)
@@ -313,87 +304,55 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.End(rid, output))
   {
-    // refine EndUpdate or EndReadonly
-
-    // construct the ticket
-    // establish that s' is the dot of the s and the new ticket.
-    assert s == dot(s', stub);
-    // assert the ticket values
-    assert stub.log == map[];
-    assert !stub.global_tail.Some?;
-    assert stub.replicas == map[];
-    assert stub.localTails == map[];
-    assert !stub.ctail.Some?;
-    assert stub.combiner == map[];
-    // assert the unchanged things for both branches
-    assert s'.replicas == s.replicas;
-    assert s'.localTails == s.localTails;
-    assert s'.ctail == s.ctail;
-    assert s'.combiner == s.combiner;
-    assert s'.log == s.log;
-    assert s'.global_tail == s.global_tail;
-    // create the lifted state machines
-    var IS := I(s);
-    var IS' := I(s');
-    // nothing should have changed in the ctail and the log
-    assert IS'.ctail == IS.ctail;
-    assert IS'.log == IS.log;
-
-    // it has to be in either of them
-    assert rid in stub.localUpdates || rid in stub.localReads;
+    // not quite done yet...
+    assume false;
 
     if rid in stub.localUpdates {
-      var idx := stub.localUpdates[rid].idx;
+      assert I(s') == I(s).(update_resps := I(s).update_resps - {rid}) by {
+        ConsumeStub_Refines_End_LocalUpdates(s, s', rid, output, stub);
+        I_Removed_LocalUpdates_is(s, s', rid);
+      }
 
-      assert stub == M(map[], None, map[], map[], None, map[],
-                       map[rid := UpdateDone(output, idx)],
-                       map[]);
+      assert exists step :: B.NextStep(I(s), I(s'), ifc.End(rid, output), step) by {
+        var step := B.EndUpdate_Step(rid, output);
+        assert B.NextStep(I(s), I(s'), ifc.End(rid, output), step) by {
+          assert B.EndUpdate(I(s), I(s'), rid,  output);
+        }
+      }
 
-      // the local reads haven't changed
-      assert s'.localReads == s.localReads;
-      assert IS'.readonly_reqs == IS.readonly_reqs;
-
-      assert rid !in stub.localReads;
-      assert rid !in s'.localUpdates;
-      assert rid in s.localUpdates;
-      assert rid in IS.update_resps;
-      assert rid !in IS'.update_resps;
-
-      // they are the same
-      assert s.localUpdates[rid] == stub.localUpdates[rid];
-      assert s.localUpdates[rid].UpdateDone?;
-      assert output == s.localUpdates[rid].ret;
-      assert output == IS.update_resps[rid].ret;
-
-      // the ctail value
-      assert s.localUpdates[rid].idx <= s.ctail.value;
-      assert s.ctail.value == IS.ctail;
-      assert IS.update_resps[rid].idx_in_log == s.localUpdates[rid].idx;
-      assert IS.update_resps[rid].idx_in_log <= IS.ctail;
-
-      // // that may take a while
-      assert s.localUpdates == s'.localUpdates[rid := UpdateDone(output, idx)];
-      assert rid !in s'.localUpdates;
-      assert rid !in IS'.update_resps;
-
-      I_UpdateResponses_Update_is(s, s', rid, idx, output);
-      assert IS.update_resps == IS'.update_resps[rid := B.UpdateResp(idx, output)];
-      assert IS.update_reqs == IS'.update_reqs;
-
-      assert IS == IS'.(update_resps := IS'.update_resps[rid := B.UpdateResp(idx, output)]);
-      assert IS' == IS.(update_resps := IS.update_resps - {rid});
-
-      // && s' == s.(update_resps := s.update_resps - {rid})
-      assert B.NextStep(IS, IS', ifc.End(rid, output), B.EndUpdate_Step(rid, output));
     } else {
       assert rid in stub.localReads;
-      var ctail := stub.localReads[rid].ctail;
-      var op := stub.localReads[rid].op;
-      assert stub == M(map[], None, map[], map[], None,
-                       map[rid := ReadonlyDone(op, output, ctail)],
-                       map[], map[]);
+      assert rid in s.localReads;
 
-      assume B.NextStep(IS, IS', ifc.End(rid, output), B.FinishReadonly_Step(rid, ctail, output));
+      assert I(s') == I(s).(readonly_reqs := I(s).readonly_reqs - {rid}) by {
+        ConsumeStub_Refines_End_LocalReads(s, s', rid, output, stub);
+        I_Removed_LocalReads_is(s, s', rid);
+      }
+
+      assert exists step :: B.NextStep(I(s), I(s'), ifc.End(rid, output), step) by {
+
+        assume exists version : nat | version <= s.ctail.value :: VersionInLog(s.log, version) && OutputMatch(s.log, output, version,  s.localReads[rid].op);
+        var version : nat :| VersionInLog(s.log, version) && OutputMatch(s.log, output, version,  s.localReads[rid].op);
+
+        var step := B.FinishReadonly_Step(rid, version, output);
+
+        assert rid in I(s).readonly_reqs by {
+          reveal_I_ReadRequests();
+        }
+
+        assert I(s).readonly_reqs[rid].ReadReq? by {
+          assert s.localReads[rid].ReadonlyDone?;
+           reveal_I_ReadRequests();
+        }
+
+         assert B.NextStep(I(s), I(s'), ifc.End(rid, output), step) by {
+           assert B.FinishReadonly(I(s), I(s'), rid, version, output) by {
+            assume I(s).readonly_reqs[rid].ctail_at_start <= version <= |I(s).log|;
+            assume version <= I(s).ctail;
+            assume output == nrifc.read(B.state_at_version(I(s).log, version), I(s).readonly_reqs[rid].op);
+           }
+         }
+      }
     }
   }
 
