@@ -25,7 +25,6 @@ module Impl(nrifc: NRIfc) {
   import opened GlinearMap
 
   // TODO fill in reasonable constants for these
-  const BUFFER_SIZE: uint64 := 9999;
   const GC_FROM_HEAD: uint64 := 9999;
   const WARN_THRESHOLD: uint64 := 9999;
   const MAX_COMBINED_OPS: uint64 := 9999;
@@ -255,7 +254,13 @@ module Impl(nrifc: NRIfc) {
       iteration := iteration + 1;
 
       atomic_block var tail := execute_atomic_load(nr.globalTail) { }
-      atomic_block var head := execute_atomic_load(nr.head) { }
+
+      glinear var advance_tail_state;
+      atomic_block var head := execute_atomic_load(nr.head) {
+        ghost_acquire h;
+        advance_tail_state := init_advance_tail_state(h);
+        ghost_release h;
+      }
 
       if tail > head + (BUFFER_SIZE - GC_FROM_HEAD) {
         if waitgc % WARN_THRESHOLD == 0 {
@@ -267,6 +272,8 @@ module Impl(nrifc: NRIfc) {
         // TODO call `exec`
 
         thread_yield();
+
+        dispose_anything(advance_tail_state);
       } else {
 
         assume tail as int + nops as int < 0x1_0000_0000_0000_0000; // TODO
@@ -282,11 +289,13 @@ module Impl(nrifc: NRIfc) {
             glinear var GlobalTailTokens(globalTail, cbGlobalTail) := globalTailTokens;
             globalTail, updates', combinerState', log_entries :=
               perform_AdvanceTail(globalTail, updates', combinerState', ops, requestIds, node.nodeId as int);
-            // TODO need to update cbGlobalTail
+            cbGlobalTail := finish_advance_tail(advance_tail_state, cbGlobalTail,
+                tail as int + nops as int);
             globalTailTokens := GlobalTailTokens(globalTail, cbGlobalTail);
           } else {
-            log_entries := glmap_empty(); // to satisfy linearity checker
             // no transition
+            log_entries := glmap_empty(); // to satisfy linearity checker
+            dispose_anything(advance_tail_state);
           }
           ghost_release globalTailTokens;
         }

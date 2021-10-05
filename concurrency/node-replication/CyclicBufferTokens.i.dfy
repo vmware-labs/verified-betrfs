@@ -4,7 +4,9 @@ module CyclicBufferTokens {
   import opened NativeTypes
 
   // Fixed number of replicas (in reference impl, this is variable)
+  // TODO fill in reasonable constants for these
   const NUM_REPLICAS: uint64 := 4;
+  const BUFFER_SIZE: uint64 := 9999;
 
   // Use 'CB' prefix to distinguish these from the corresponding state in the InfiniteLog
   // state machine.
@@ -18,6 +20,8 @@ module CyclicBufferTokens {
   datatype CBGlobalTail = CBGlobalTail(tail: nat)
 
   datatype AdvanceHeadState = AdvanceHeadState(idx: nat, min_tail: nat)
+
+  datatype AdvanceTailState = AdvanceTailState(observed_head: nat)
 
   glinear method init_advance_head_state(gshared first_local_tail: CBLocalTail)
   returns (glinear state': AdvanceHeadState)
@@ -37,4 +41,15 @@ module CyclicBufferTokens {
   returns (glinear head': CBHead)
   requires state.idx == NUM_REPLICAS as int
   ensures head' == CBHead(state.min_tail)
+
+  glinear method init_advance_tail_state(gshared head: CBHead)
+  returns (glinear state': AdvanceTailState)
+  ensures state'.observed_head == head.head
+
+  glinear method finish_advance_tail(glinear state: AdvanceTailState, glinear tail: CBGlobalTail,
+      ghost new_tail: nat)
+  returns (glinear tail': CBGlobalTail)
+  requires tail.tail <= new_tail <= state.observed_head + BUFFER_SIZE as int
+  ensures tail'.tail == new_tail
+
 }
