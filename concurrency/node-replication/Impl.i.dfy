@@ -440,11 +440,15 @@ module Impl(nrifc: NRIfc) {
   }
 
   method exec(shared nr: NR, shared node: Node,
+      linear actual_replica: nrifc.DataStructureType,
+      glinear ghost_replica: Replica,
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
       glinear combinerState: CombinerToken,
       glinear reader: Reader)
   returns (
+    linear actual_replica': nrifc.DataStructureType,
+    glinear ghost_replica': Replica,
     glinear updates': map<nat, Update>,
     glinear combinerState': CombinerToken,
     glinear reader': Reader)
@@ -458,11 +462,17 @@ module Impl(nrifc: NRIfc) {
       i in updates
         && updates[i].us.UpdatePlaced?
         && updates[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates[i].us.idx))
+  requires ghost_replica.state == nrifc.I(actual_replica)
+  requires ghost_replica.nodeId == node.nodeId as int
   ensures combinerState'.nodeId == node.nodeId as int
   ensures combinerState'.state == CombinerReady
   ensures reader' == reader
+  ensures ghost_replica.state == nrifc.I(actual_replica)
+  ensures ghost_replica.nodeId == node.nodeId as int
   decreases *
   {
+    actual_replica' := actual_replica;
+    ghost_replica' := ghost_replica;
     combinerState' := combinerState;
     updates' := updates;
     reader' := reader;
@@ -497,6 +507,8 @@ module Impl(nrifc: NRIfc) {
       invariant combinerState'.state.Combiner?
       invariant combinerState'.state == prev_combinerState.state.(localTail := i as int)
       invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
+      invariant ghost_replica'.state == nrifc.I(actual_replica')
+      invariant ghost_replica'.nodeId == node.nodeId as int
       {
         var iteration := 1;
 
@@ -504,6 +516,8 @@ module Impl(nrifc: NRIfc) {
         while !done
         invariant 0 <= iteration as int <= WARN_THRESHOLD as int
         invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
+        invariant ghost_replica'.state == nrifc.I(actual_replica')
+        invariant ghost_replica'.nodeId == node.nodeId as int
         decreases *
         {
           var bounded := i % BUFFER_SIZE;
@@ -523,6 +537,20 @@ module Impl(nrifc: NRIfc) {
           }
 
           if live_bit == ((i / BUFFER_SIZE) % 2 == 0) {
+            // read the log_entry from memory
+            var log_entry := read_cell(lseq_peek(nr.buffer, bounded).cell,
+                reader_borrow(reader').cellContents);
+
+            var ret;
+            actual_replica', ret := nrifc.do_update(actual_replica', log_entry.op);
+
+            if log_entry.node_id == node.nodeId as int {
+              // TODO local dispatch
+              // TODO add ret to results list
+            } else {
+              // TODO remote dispatch
+            }
+
             reader' := reader_unguard(reader');
             done := true;
           } else {
@@ -570,6 +598,7 @@ module Impl(nrifc: NRIfc) {
         ghost_acquire ltail_tokens;
         glinear var LocalTailTokens(localTail, cbLocalTail) := ltail_tokens;
         combinerState', localTail := perform_GoToCombinerReady(combinerState', localTail);
+        reader', cbLocalTail := reader_finish(reader', cbLocalTail);
         ltail_tokens := LocalTailTokens(localTail, cbLocalTail);
         ghost_release ltail_tokens;
       }

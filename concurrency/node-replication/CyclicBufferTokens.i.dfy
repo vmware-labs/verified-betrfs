@@ -173,4 +173,9 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires reader.rs.ReaderRange?
   ensures reader' == reader.(rs := ReaderIdle)
   ensures localTail' == localTail.(tail := reader.rs.end)
+
+  function method reader_borrow(gshared reader: Reader)
+    : (gshared v: StoredType)
+  requires reader.rs.ReaderGuard?
+  ensures v == reader.rs.val
 }
