@@ -14,7 +14,7 @@ module Impl(nrifc: NRIfc) {
   import opened Atomics
   import opened ILT = InfiniteLogTokens(nrifc)
   import opened IL = InfiniteLogSSM(nrifc)
-  import opened CyclicBufferTokens
+  import opened CBT = CyclicBufferTokens(nrifc)
   import opened LinearSequence_i
   import opened LinearSequence_s
   import opened NativeTypes
@@ -23,6 +23,8 @@ module Impl(nrifc: NRIfc) {
   import opened ThreadUtils
   import opened Ptrs
   import opened GlinearMap
+  import opened GlinearOption
+  import opened Cells
 
   // TODO fill in reasonable constants for these
   const GC_FROM_HEAD: uint64 := 9999;
@@ -77,11 +79,41 @@ module Impl(nrifc: NRIfc) {
     }
   }
 
+  linear datatype BufferEntry = BufferEntry(
+    linear cell: Cell<LogEntry>,
+    linear alive: Atomic<bool, AliveBit>)
+  {
+    predicate WF(i: nat)
+    {
+      (forall v, g :: atomic_inv(alive, v, g) <==> g == AliveBit(i, v))
+    }
+  }
+
+  predicate BufferEntryInv(buffer: lseq<BufferEntry>, i: nat, t: StoredType)
+  requires |buffer| == BUFFER_SIZE as int
+  {
+    && t.cellContents.cell == buffer[i % BUFFER_SIZE as int].cell
+    && (i >= 0 ==>
+      && t.logEntry.glSome?
+      && t.cellContents.v == LogEntry(t.logEntry.value.op, t.logEntry.value.node_id)
+      && t.logEntry.value.idx == i
+    )
+  }
+
+  predicate ContentsInv(buffer: lseq<BufferEntry>, contents: Contents)
+  requires |buffer| == BUFFER_SIZE as int
+  {
+    && (forall i | i in contents.contents :: BufferEntryInv(buffer, i, contents.contents[i]))
+  }
+
   linear datatype NR = NR(
     linear ctail: Atomic<uint64, Ctail>,
     linear head: Atomic<uint64, CBHead>,
     linear globalTail: Atomic<uint64, GlobalTailTokens>,
-    linear node_info: lseq<NodeInfo>
+    linear node_info: lseq<NodeInfo>,
+
+    linear buffer: lseq<BufferEntry>,
+    glinear bufferContents: GhostAtomic<Contents>
   )
   {
     predicate WF() {
@@ -92,6 +124,12 @@ module Impl(nrifc: NRIfc) {
       && |node_info| == NUM_REPLICAS as int
       && (forall nodeId | 0 <= nodeId < |node_info| :: nodeId in node_info)
       && (forall nodeId | 0 <= nodeId < |node_info| :: node_info[nodeId].WF(nodeId))
+      && |buffer| == BUFFER_SIZE as int
+      && (forall v, g :: atomic_inv(bufferContents, v, g) <==> ContentsInv(buffer, g))
+      && (forall i: nat | 0 <= i < BUFFER_SIZE as int :: buffer[i].WF(i))
+
+      && bufferContents.namespace() == 1
+      && globalTail.namespace() == 0
     }
   }
 
@@ -280,29 +318,50 @@ module Impl(nrifc: NRIfc) {
         var advance: bool := (tail + nops > head + (BUFFER_SIZE - GC_FROM_HEAD));
 
         glinear var log_entries;
+        glinear var cyclicBufferEntries;
+        glinear var appendStateOpt;
 
         atomic_block var success := execute_atomic_compare_and_set_weak(
             nr.globalTail, tail, tail + nops)
         {
           ghost_acquire globalTailTokens;
-          if success {
-            glinear var GlobalTailTokens(globalTail, cbGlobalTail) := globalTailTokens;
-            globalTail, updates', combinerState', log_entries :=
-              perform_AdvanceTail(globalTail, updates', combinerState', ops, requestIds, node.nodeId as int);
-            cbGlobalTail := finish_advance_tail(advance_tail_state, cbGlobalTail,
-                tail as int + nops as int);
-            globalTailTokens := GlobalTailTokens(globalTail, cbGlobalTail);
-          } else {
-            // no transition
-            log_entries := glmap_empty(); // to satisfy linearity checker
-            dispose_anything(advance_tail_state);
+          atomic_block var _ := execute_atomic_noop(nr.bufferContents)
+          {
+            ghost_acquire contents;
+            if success {
+              glinear var GlobalTailTokens(globalTail, cbGlobalTail) := globalTailTokens;
+              glinear var appendState;
+              globalTail, updates', combinerState', log_entries :=
+                perform_AdvanceTail(globalTail, updates', combinerState', ops, requestIds, node.nodeId as int);
+              cbGlobalTail, cyclicBufferEntries, appendState := finish_advance_tail(
+                  advance_tail_state, cbGlobalTail, tail as int + nops as int, contents);
+              appendStateOpt := glSome(appendState);
+              globalTailTokens := GlobalTailTokens(globalTail, cbGlobalTail);
+            } else {
+              // no transition
+              log_entries := glmap_empty(); // to satisfy linearity checker
+              cyclicBufferEntries := glmap_empty();
+              appendStateOpt := glNone;
+
+              dispose_anything(advance_tail_state);
+            }
+            ghost_release contents;
           }
           ghost_release globalTailTokens;
         }
 
         if success {
-          // TODO actual append happens here
+          /*var j := 0;
+          while j < nops
+          invariant 0 <= j <= nops
+          {
+            
+            j := j + 1;
+          }*/
+          // TODO
           dispose_anything(log_entries);
+          dispose_anything(cyclicBufferEntries);
+          dispose_anything(appendStateOpt);
 
           if advance {
             advance_head(nr, node);
@@ -311,6 +370,8 @@ module Impl(nrifc: NRIfc) {
           done := true;
         } else {
           dispose_anything(log_entries);
+          dispose_anything(cyclicBufferEntries);
+          dispose_anything(appendStateOpt);
         }
       }
     }

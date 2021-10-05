@@ -476,7 +476,7 @@ module {:extern "Atomics"} Atomics {
    */
 
   method {:extern} execute_atomic_noop<V, G>(
-      gshared a: Atomic<V, G>)
+      ghost a: Atomic<V, G>) // XXX(travis) TODO(travis) this is wrong
   returns (
       ghost ret_value: (),
       ghost orig_value: V,
