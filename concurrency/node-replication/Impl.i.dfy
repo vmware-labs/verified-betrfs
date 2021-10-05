@@ -311,8 +311,6 @@ module Impl(nrifc: NRIfc) {
 
         // TODO call `exec`
 
-        thread_yield();
-
         dispose_anything(advance_tail_state);
       } else {
 
@@ -492,8 +490,6 @@ module Impl(nrifc: NRIfc) {
         iteration := iteration + 1;
 
         // TODO call `exec`
-
-        thread_yield();
 
         dispose_anything(advance_state_token);
       } else {
