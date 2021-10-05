@@ -1,4 +1,5 @@
 include "InfiniteLogTokens.i.dfy"
+include "NRSpec.s.dfy"
 include "../../lib/Lang/LinearSequence.i.dfy"
 include "rwlock/Impl.i.dfy"
 include "../framework/Atomic.s.dfy"
@@ -41,6 +42,7 @@ module Impl(nrifc: NRIfc) {
   }
 
   linear datatype Node = Node(
+    linear combiner: Atomic<uint64, ()>,
     linear replica: RwLock<NodeReplica>,
     nodeId: uint64
   )
@@ -85,6 +87,55 @@ module Impl(nrifc: NRIfc) {
     }
   }
 
+
+  method is_replica_synced_for_reads(shared nr: NR, nodeId: uint64, ctail: uint64) 
+  returns (is_synced: bool) 
+  requires nr.WF()
+  requires nodeId < NUM_REPLICAS
+  {
+    // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/log.rs#L708
+
+    // TODO(unclear): what's so bad about `nr.node_info[nodeId as
+    // nat].localTail`
+    atomic_block var local_tail := execute_atomic_load(lseq_peek(nr.node_info, nodeId).localTail) { 
+      // TODO(unclear): when we need to so stuff in the `atomic_block` and when
+      // we don't
+    }
+
+    is_synced := local_tail >= ctail;
+  }
+
+  method try_combine(shared nr: NR, shared node: Node, tid: uint64)
+  requires tid > 0
+  requires nr.WF()
+  {
+    // TODO: Are we CombinerReady? I think so..
+
+    var i: uint64 := 0;
+    while i < 5
+    invariant 0 <= i <= 5
+    {
+      atomic_block var combiner := execute_atomic_load(node.combiner) {}
+      if combiner != 0 {
+        return;
+      }
+    }
+
+    atomic_block var acquired := execute_atomic_compare_and_set_weak(node.combiner, 0, tid) {}
+    if !acquired {
+      return;
+    }
+    combine();
+    atomic_block var acquired := execute_atomic_store(node.combiner, 0) {}
+  }
+
+  method combine(shared nr: NR, shared node: Node, tid: uint64)
+  requires tid > 0
+  requires nr.WF() 
+  {
+
+  }
+
   method do_read(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp,
       glinear ticket: Readonly)
   returns (result: nrifc.ReturnType, glinear stub: Readonly)
@@ -99,6 +150,15 @@ module Impl(nrifc: NRIfc) {
   ensures stub.rid == ticket.rid && stub.rs.ReadonlyDone? && stub.rs.ret == result
   decreases * // method is not guaranteed to terminate
   {
+    // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L559
+    //        let ctail = self.slog.get_ctail();
+    //        while !self.slog.is_replica_synced_for_reads(self.idx, ctail) {
+    //            self.try_combine(tid);
+    //            spin_loop();
+    //        }
+    //
+    //        return self.data.read(tid - 1).dispatch(op);
+
     // 1. Read ctail
     atomic_block var ctail := execute_atomic_load(nr.ctail) {
       ghost_acquire ctail_token; // declares ctail_token as a 'glinear' object
@@ -111,8 +171,25 @@ module Impl(nrifc: NRIfc) {
     }
 
     // 2. Read localTail (loop until you read a good value)
+    var tid := 1; // TODO: tid comes from client calling do_read
+    var synced := is_replica_synced_for_reads(nr, node.nodeId, ctail);
+    while !synced {
+      try_combine(nr, node, tid);
+      Runtime.SpinLoopHint();
+      synced := is_replica_synced_for_reads(nr, node.nodeId, ctail);
+    }
 
     // 3. Take read-lock on replica; apply operation on replica
+    linear var linear_guard := node.replica.acquire_shared();
+    result := apply_readonly(linear_guard, op);
+    node.replica.release_shared(linear_guard);
+  }
+
+  method apply_readonly(shared guard: SharedGuard<NodeReplica>, op: nrifc.ReadonlyOp) 
+  returns (result: nrifc.ReturnType)
+  {
+    shared var shared_v := RwLockImpl.borrow_shared(guard);
+    result := nrifc.do_readonly(shared_v.actual_replica, op);
   }
 
   method advance_head(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp)

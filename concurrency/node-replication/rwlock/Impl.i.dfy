@@ -68,7 +68,7 @@ module RwLockImpl {
      * Returns a handle that can be borrowed from
      */
 
-    method acquire_shared()
+    shared method acquire_shared()
     returns (linear handle: SharedGuard<V>)
     ensures this.inv(handle.v)
     ensures handle.m == this
@@ -77,7 +77,7 @@ module RwLockImpl {
      * `acquire_release`
      */
 
-    method release_shared(linear handle: SharedGuard<V>)
+    shared method release_shared(linear handle: SharedGuard<V>)
     requires handle.m == this
   }
 
