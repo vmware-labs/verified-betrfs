@@ -16,9 +16,9 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   const NUM_REPLICAS: uint64 := 4;
   const BUFFER_SIZE: uint64 := 9999;
 
-  datatype StoredType = StoredType(
-    cellContents: CellContents<LogEntry>,
-    logEntry: glOption<Log>
+  glinear datatype StoredType = StoredType(
+    glinear cellContents: CellContents<LogEntry>,
+    glinear logEntry: glOption<Log>
   )
 
   // TODO add 'ghost loc' to these types
@@ -94,8 +94,17 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   ensures tail'.tail == new_tail
   ensures forall i | tail.tail <= i < new_tail ::
       && i in entries'
-      && i in contents.contents
-      && entries'[i] == contents.contents[i]
+      && (i - BUFFER_SIZE as int) in contents.contents
+      && entries'[i] == contents.contents[i - BUFFER_SIZE as int]
   ensures append' == AppendState(tail.tail, new_tail)
 
+  glinear method append_flip_bit(
+      glinear state: AppendState, glinear bit: AliveBit, glinear contents: Contents,
+      glinear value: StoredType)
+  returns (glinear state': AppendState, glinear bit': AliveBit, glinear contents': Contents)
+  requires state.cur_idx < state.tail
+  requires bit.entry == state.cur_idx % BUFFER_SIZE as int
+  ensures state' == state.(cur_idx := state.cur_idx + 1)
+  ensures bit' == bit.(bit := ((state.cur_idx / BUFFER_SIZE as int) % 2 == 0))
+  ensures contents' == contents.(contents := contents.contents[state.cur_idx := value])
 }

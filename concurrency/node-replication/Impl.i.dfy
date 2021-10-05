@@ -85,11 +85,12 @@ module Impl(nrifc: NRIfc) {
   {
     predicate WF(i: nat)
     {
-      (forall v, g :: atomic_inv(alive, v, g) <==> g == AliveBit(i, v))
+      && (forall v, g :: atomic_inv(alive, v, g) <==> g == AliveBit(i, v))
+      && alive.namespace() == 0
     }
   }
 
-  predicate BufferEntryInv(buffer: lseq<BufferEntry>, i: nat, t: StoredType)
+  predicate BufferEntryInv(buffer: lseq<BufferEntry>, i: int, t: StoredType)
   requires |buffer| == BUFFER_SIZE as int
   {
     && t.cellContents.cell == buffer[i % BUFFER_SIZE as int].cell
@@ -126,6 +127,7 @@ module Impl(nrifc: NRIfc) {
       && (forall nodeId | 0 <= nodeId < |node_info| :: node_info[nodeId].WF(nodeId))
       && |buffer| == BUFFER_SIZE as int
       && (forall v, g :: atomic_inv(bufferContents, v, g) <==> ContentsInv(buffer, g))
+      && (forall i: nat | 0 <= i < BUFFER_SIZE as int :: i in buffer)
       && (forall i: nat | 0 <= i < BUFFER_SIZE as int :: buffer[i].WF(i))
 
       && bufferContents.namespace() == 1
@@ -318,7 +320,7 @@ module Impl(nrifc: NRIfc) {
         var advance: bool := (tail + nops > head + (BUFFER_SIZE - GC_FROM_HEAD));
 
         glinear var log_entries;
-        glinear var cyclicBufferEntries;
+        glinear var cyclic_buffer_entries;
         glinear var appendStateOpt;
 
         atomic_block var success := execute_atomic_compare_and_set_weak(
@@ -333,14 +335,14 @@ module Impl(nrifc: NRIfc) {
               glinear var appendState;
               globalTail, updates', combinerState', log_entries :=
                 perform_AdvanceTail(globalTail, updates', combinerState', ops, requestIds, node.nodeId as int);
-              cbGlobalTail, cyclicBufferEntries, appendState := finish_advance_tail(
+              cbGlobalTail, cyclic_buffer_entries, appendState := finish_advance_tail(
                   advance_tail_state, cbGlobalTail, tail as int + nops as int, contents);
               appendStateOpt := glSome(appendState);
               globalTailTokens := GlobalTailTokens(globalTail, cbGlobalTail);
             } else {
               // no transition
               log_entries := glmap_empty(); // to satisfy linearity checker
-              cyclicBufferEntries := glmap_empty();
+              cyclic_buffer_entries := glmap_empty();
               appendStateOpt := glNone;
 
               dispose_anything(advance_tail_state);
@@ -351,17 +353,75 @@ module Impl(nrifc: NRIfc) {
         }
 
         if success {
-          /*var j := 0;
+          glinear var append_state := unwrap_value(appendStateOpt);
+
+          ghost var original_cyclic_buffer_entries := cyclic_buffer_entries;
+          
+          var j := 0;
           while j < nops
           invariant 0 <= j <= nops
+          invariant append_state.cur_idx == tail as int + j as int
+          invariant append_state.tail == tail as int + nops as int
+          invariant forall i: int | j as int <= i < |requestIds| ::
+              i in log_entries
+                && log_entries[i] == Log(tail as int + i, ops[i], node.nodeId as int)
+          invariant forall i: int | j as int <= i < |requestIds| ::
+              && (tail as int + i) in cyclic_buffer_entries
+              && cyclic_buffer_entries[tail as int + i]
+                  == original_cyclic_buffer_entries[tail as int + i]
           {
+            // Get the single 'Log' token we're going to store
+            glinear var log_entry, cyclic_buffer_entry;
+            log_entries, log_entry := glmap_take(log_entries, j as int);
+            // Get the access to the 'Cell' in the buffer entry
+            cyclic_buffer_entries, cyclic_buffer_entry :=
+                glmap_take(cyclic_buffer_entries, tail as int + j as int);
+
+            assert BufferEntryInv(nr.buffer,
+                (tail as int + j as int) - BUFFER_SIZE as int, cyclic_buffer_entry);
+
+            glinear var StoredType(cellContents, oldLogEntry) := cyclic_buffer_entry;
+
+            dispose_anything(oldLogEntry); // don't need this anymore
+
+            var bounded_idx := (tail + j) % BUFFER_SIZE;
+            calc {
+              ((tail as int + j as int) - BUFFER_SIZE as int) % BUFFER_SIZE as int;
+              bounded_idx as int;
+            }
+
+            assert nr.buffer[bounded_idx as int].WF(bounded_idx as int);
+
+            // Physically write the log entry into the cyclic buffer
+            write_cell(lseq_peek(nr.buffer, bounded_idx).cell,
+                inout cellContents,
+                LogEntry(seq_get(ops, j), node.nodeId as int));
             
+            cyclic_buffer_entry := StoredType(cellContents, glSome(log_entry));
+            assert BufferEntryInv(nr.buffer,
+                (tail as int + j as int), cyclic_buffer_entry);
+
+            var m := ((tail + j) / BUFFER_SIZE) % 2 == 0;
+            atomic_block var _ := execute_atomic_store(
+                lseq_peek(nr.buffer, bounded_idx).alive, m)
+            {
+              ghost_acquire aliveToken;
+              atomic_block var _ := execute_atomic_noop(nr.bufferContents)
+              {
+                ghost_acquire contents;
+                append_state, aliveToken, contents :=
+                  append_flip_bit(append_state, aliveToken, contents, cyclic_buffer_entry);
+                ghost_release contents;
+              }
+              ghost_release aliveToken;
+            }
+
             j := j + 1;
-          }*/
-          // TODO
+          }
+
           dispose_anything(log_entries);
-          dispose_anything(cyclicBufferEntries);
-          dispose_anything(appendStateOpt);
+          dispose_anything(cyclic_buffer_entries);
+          dispose_anything(append_state);
 
           if advance {
             advance_head(nr, node);
@@ -370,7 +430,7 @@ module Impl(nrifc: NRIfc) {
           done := true;
         } else {
           dispose_anything(log_entries);
-          dispose_anything(cyclicBufferEntries);
+          dispose_anything(cyclic_buffer_entries);
           dispose_anything(appendStateOpt);
         }
       }
