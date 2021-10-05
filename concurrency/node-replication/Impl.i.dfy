@@ -125,8 +125,8 @@ module Impl(nrifc: NRIfc) {
     if !acquired {
       return;
     }
-    combine();
-    atomic_block var acquired := execute_atomic_store(node.combiner, 0) {}
+    combine(nr, node, tid);
+    atomic_block var _ := execute_atomic_store(node.combiner, 0) {}
   }
 
   method combine(shared nr: NR, shared node: Node, tid: uint64)
