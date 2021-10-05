@@ -63,6 +63,38 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     contents: map<int, StoredType>
   )
 
+  // For reading
+  // To begin reading, you can go
+  //
+  //      ReaderIdle --> ReaderStarting --> ReaderRange
+  //
+  // by reading first the localTail and the globalTail. This gives you the ability
+  // to read elements from that range.
+  // To actually read an element, you have to move into the guard state
+  //
+  //      ReaderRange --> ReaderGuard
+  //
+  // by checking that the 'alive' bit on that element is correct.
+  // When you're done with a guard you can go back to the ReaderRange state:
+  //
+  //      ReaderGuard --> ReaderRange
+  //
+  // (This only allows a guard for a single element at once, but this is all we need
+  // and makes it a bit easier to maintain a simple state.)
+  // Finally when we are done we can return to the idle state
+  //
+  //      ReaderRange --> ReaderIdle
+  //
+  // by writing to the localTail.
+
+  datatype ReaderState =
+    | ReaderIdle
+    | ReaderStarting(start: nat)
+    | ReaderRange(start: nat, end: nat)
+    | ReaderGuard(start: nat, end: nat, cur: nat, val: StoredType)
+
+  datatype Reader = Reader(nodeId: nat, rs: ReaderState)
+
   glinear method init_advance_head_state(gshared first_local_tail: CBLocalTail)
   returns (glinear state': AdvanceHeadState)
   requires first_local_tail.nodeId == 0
@@ -107,4 +139,38 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   ensures state' == state.(cur_idx := state.cur_idx + 1)
   ensures bit' == bit.(bit := ((state.cur_idx / BUFFER_SIZE as int) % 2 == 0))
   ensures contents' == contents.(contents := contents.contents[state.cur_idx := value])
+
+  glinear method reader_start(glinear reader: Reader, gshared localTail: CBLocalTail)
+  returns (glinear reader': Reader)
+  requires reader.nodeId == localTail.nodeId
+  requires reader.rs.ReaderIdle?
+  ensures reader' == reader.(rs := ReaderStarting(localTail.tail))
+
+  glinear method reader_enter(glinear reader: Reader, gshared globalTail: CBGlobalTail)
+  returns (glinear reader': Reader)
+  requires reader.rs.ReaderStarting?
+  ensures reader' == reader.(rs := ReaderRange(reader.rs.start, globalTail.tail))
+
+  glinear method reader_guard(glinear reader: Reader, gshared aliveBit: AliveBit, ghost i: nat,
+      gshared contents: Contents)
+  returns (glinear reader': Reader)
+  requires reader.rs.ReaderRange?
+  requires reader.rs.start <= i < reader.rs.end
+  requires i % BUFFER_SIZE as int == aliveBit.entry
+  requires aliveBit.bit == ((i / BUFFER_SIZE as int) % 2 == 0)
+  ensures i in contents.contents
+  ensures reader' == reader.(rs := ReaderGuard(reader.rs.start, reader.rs.end,
+      i, contents.contents[i]))
+
+  glinear method reader_unguard(glinear reader: Reader)
+  returns (glinear reader': Reader)
+  requires reader.rs.ReaderGuard?
+  ensures reader' == reader.(rs := ReaderRange(reader.rs.start, reader.rs.end))
+
+  glinear method reader_finish(glinear reader: Reader, glinear localTail: CBLocalTail)
+  returns (glinear reader': Reader, glinear localTail': CBLocalTail)
+  requires reader.nodeId == localTail.nodeId
+  requires reader.rs.ReaderRange?
+  ensures reader' == reader.(rs := ReaderIdle)
+  ensures localTail' == localTail.(tail := reader.rs.end)
 }

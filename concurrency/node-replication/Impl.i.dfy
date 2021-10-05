@@ -442,24 +442,30 @@ module Impl(nrifc: NRIfc) {
   method exec(shared nr: NR, shared node: Node,
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
-      glinear combinerState: CombinerToken)
+      glinear combinerState: CombinerToken,
+      glinear reader: Reader)
   returns (
     glinear updates': map<nat, Update>,
-    glinear combinerState': CombinerToken)
+    glinear combinerState': CombinerToken,
+    glinear reader': Reader)
   requires nr.WF()
   requires node.WF()
   requires combinerState.nodeId == node.nodeId as int
   requires combinerState.state == CombinerPlaced(requestIds)
+  requires reader.nodeId == node.nodeId as int
+  requires reader.rs.ReaderIdle?
   requires forall i | 0 <= i < |requestIds| ::
       i in updates
         && updates[i].us.UpdatePlaced?
         && updates[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates[i].us.idx))
   ensures combinerState'.nodeId == node.nodeId as int
   ensures combinerState'.state == CombinerReady
+  ensures reader' == reader
   decreases *
   {
     combinerState' := combinerState;
     updates' := updates;
+    reader' := reader;
 
     assert nr.node_info[node.nodeId as int].WF(node.nodeId as int);
 
@@ -467,6 +473,7 @@ module Impl(nrifc: NRIfc) {
     {
       ghost_acquire ltail_token;
       combinerState' := perform_ExecLoadLtail(combinerState', ltail_token.localTail);
+      reader' := reader_start(reader', ltail_token.cbLocalTail);
       ghost_release ltail_token;
     }
 
@@ -474,6 +481,7 @@ module Impl(nrifc: NRIfc) {
     {
       ghost_acquire gtail_token;
       combinerState' := perform_ExecLoadGlobalTail(combinerState', gtail_token.globalTail);
+      reader' := reader_enter(reader', gtail_token.cbGlobalTail);
       ghost_release gtail_token;
     }
 
@@ -488,21 +496,34 @@ module Impl(nrifc: NRIfc) {
       invariant combinerState'.nodeId == prev_combinerState.nodeId
       invariant combinerState'.state.Combiner?
       invariant combinerState'.state == prev_combinerState.state.(localTail := i as int)
+      invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
       {
         var iteration := 1;
 
         var done := false;
         while !done
         invariant 0 <= iteration as int <= WARN_THRESHOLD as int
+        invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
         decreases *
         {
           var bounded := i % BUFFER_SIZE;
           atomic_block var live_bit := execute_atomic_load(
               lseq_peek(nr.buffer, bounded).alive)
           {
+            ghost_acquire alive_bit;
+            atomic_block var _ := execute_atomic_noop(nr.bufferContents)
+            {
+              ghost_acquire contents;
+              if live_bit == ((i / BUFFER_SIZE) % 2 == 0) {
+                reader' := reader_guard(reader', alive_bit, i as int, contents);
+              }
+              ghost_release contents;
+            }
+            ghost_release alive_bit;
           }
 
-          if live_bit == (i / BUFFER_SIZE % 2 == 0) {
+          if live_bit == ((i / BUFFER_SIZE) % 2 == 0) {
+            reader' := reader_unguard(reader');
             done := true;
           } else {
             if iteration % WARN_THRESHOLD == 0 {
