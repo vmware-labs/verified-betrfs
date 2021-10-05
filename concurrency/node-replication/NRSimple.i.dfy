@@ -80,15 +80,62 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
     && s' == s.(update_reqs := s.update_reqs[rid := op])
   }
 
-  // TODO(gz): use seq<RequestId> instead of RequestId?
-  predicate AddUpdateToLog(s: Variables, s': Variables, rid: RequestId)
+
+
+  // filters a map
+  function {:opaque} map_filter<K(!new), V>(m: map<K, V>, filter: seq<K>): map<K, V>
+    ensures forall rid | rid in filter :: rid !in map_filter(m, filter)
   {
-    && rid in s.update_reqs
-    && var op := s.update_reqs[rid];
-    && var ret := nrifc.update(state_at_version(s.log, |s.log|), op).return_value;
-    && s' == s.(log := s.log + [s.update_reqs[rid]])
-              .(update_reqs := s.update_reqs - {rid})
-              .(update_resps := s.update_resps[rid := UpdateResp(|s.log|, ret)])
+    map k | k in m.Keys && k !in filter :: m[k]
+  }
+
+  // combines two maps
+  function {:opaque} map_update<K(!new), V>(m1: map<K, V>, m2: map<K, V>): map<K, V>
+    ensures forall k | k in (m1.Keys + m2.Keys) :: k in map_update(m1, m2)
+  {
+    map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
+  }
+
+  // predicate that the request ids are valid
+  predicate RequestIdsValid(request_ids: seq<RequestId>, update_reqs: map<RequestId, nrifc.UpdateOp>)
+  {
+    forall rid | rid in request_ids :: rid in update_reqs
+  }
+
+  // construct the new log entries
+  function ConstructNewLogEntries(request_ids: seq<RequestId>, update_reqs: map<RequestId, nrifc.UpdateOp>) : seq<nrifc.UpdateOp>
+    requires RequestIdsValid(request_ids, update_reqs)
+  {
+    seq(|request_ids|, rid requires 0 <= rid < |request_ids| => update_reqs[request_ids[rid]])
+  }
+
+  // update the responses
+  function ConstructUpdateResponses(request_ids: seq<RequestId>, log : seq<nrifc.UpdateOp>,  update_reqs: map<RequestId, nrifc.UpdateOp>) : map<RequestId, UpdateResp>
+    requires RequestIdsValid(request_ids, update_reqs)
+  {
+    if request_ids == [] then
+      map[]
+    else
+      var idx := |log|;
+      var rid := request_ids[0];
+      var op := update_reqs[rid];
+      var ret := nrifc.update(state_at_version(log, idx), op).return_value;
+      ConstructUpdateResponses(request_ids[1..], log + [op], update_reqs)[ rid :=  UpdateResp(|log|, ret)]
+  }
+
+  predicate AddUpdateToLog(s: Variables, s': Variables,  request_ids: seq<RequestId>)
+  {
+    && RequestIdsValid(request_ids, s.update_reqs)
+    // construct the new log entries
+    && var new_log_entries := ConstructNewLogEntries(request_ids, s.update_reqs);
+
+    // construct the responses
+    && var new_responses := ConstructUpdateResponses(request_ids, s.log, s.update_reqs);
+
+    // update the state
+    && s' == s.(log := s.log + new_log_entries)
+              .(update_reqs := map_filter(s.update_reqs, request_ids))
+              .(update_resps := map_update(s.update_resps, new_responses))
   }
 
   predicate EndUpdate(s: Variables, s': Variables,
@@ -105,7 +152,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
 
   datatype Step =
     | StartUpdate_Step(rid: RequestId, uop: nrifc.UpdateOp)
-    | AddUpdateToLog_Step(rid: RequestId)
+    | AddUpdateToLog_Step(request_ids:  seq<RequestId>)
     | EndUpdate_Step(rid: RequestId, return_value: nrifc.ReturnType)
     | IncreaseCtail_Step(new_ctail: nat)
     | StartReadonly_Step(rid: RequestId, rop: nrifc.ReadonlyOp)
@@ -119,9 +166,9 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
           && op == ifc.Start(rid, nrifc.UOp(update_op))
           && StartUpdate(s, s', rid, update_op)
 
-      case AddUpdateToLog_Step(rid: RequestId) =>
+      case AddUpdateToLog_Step(request_ids:  seq<RequestId>) =>
           && op == ifc.InternalOp
-          && AddUpdateToLog(s, s', rid)
+          && AddUpdateToLog(s, s', request_ids)
 
       case EndUpdate_Step(rid: RequestId, return_value: nrifc.ReturnType) =>
           && op == ifc.End(rid, return_value)
@@ -201,9 +248,9 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
 
   }
 
-  lemma AddUpdateToLog_PreservesInv(s: Variables, s': Variables, rid: RequestId)
+  lemma AddUpdateToLog_PreservesInv(s: Variables, s': Variables, request_ids:  seq<RequestId>)
     requires Inv(s)
-    requires AddUpdateToLog(s, s', rid)
+    requires AddUpdateToLog(s, s', request_ids)
     ensures Inv(s')
   {
 
@@ -224,7 +271,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
   {
     match step {
       case StartUpdate_Step(rid: RequestId, op: nrifc.UpdateOp) => StartUpdate_PreservesInv(s, s', rid, op);
-      case AddUpdateToLog_Step(rid: RequestId) => AddUpdateToLog_PreservesInv(s, s', rid);
+      case AddUpdateToLog_Step(request_ids:  seq<RequestId>) => AddUpdateToLog_PreservesInv(s, s', request_ids);
       case EndUpdate_Step(rid: RequestId, return_value: nrifc.ReturnType) => EndUpdate_PreservesInv(s, s', rid, return_value);
       case IncreaseCtail_Step(new_ctail: nat) => IncreaseCtail_PreservesInv(s, s', new_ctail);
       case StartReadonly_Step(rid: RequestId, op: nrifc.ReadonlyOp) => StartReadonly_PreservesInv(s, s', rid, op);
