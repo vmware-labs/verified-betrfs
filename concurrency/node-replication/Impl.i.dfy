@@ -37,12 +37,15 @@ module Impl(nrifc: NRIfc) {
 
   linear datatype NodeReplica = NodeReplica(
     linear actual_replica: nrifc.DataStructureType,
-    glinear ghost_replica: Replica
+    glinear ghost_replica: Replica,
+    glinear combiner: Combiner
   )
   {
     predicate WF(nodeId: NodeId) {
       && ghost_replica.state == nrifc.I(actual_replica)
       && ghost_replica.nodeId == nodeId
+      && combiner.state == CombinerReady
+      && combiner.nodeId == nodeId
     }
   }
 
