@@ -5,10 +5,12 @@ include "rwlock/Impl.i.dfy"
 include "../framework/Atomic.s.dfy"
 include "../framework/ThreadUtils.s.dfy"
 include "../framework/Ptrs.s.dfy"
+include "../framework/GlinearMap.s.dfy"
 include "Runtime.s.dfy"
 include "CyclicBufferTokens.i.dfy"
 
 module Impl(nrifc: NRIfc) {
+  import opened RequestIds
   import opened Atomics
   import opened ILT = InfiniteLogTokens(nrifc)
   import opened IL = InfiniteLogSSM(nrifc)
@@ -20,11 +22,13 @@ module Impl(nrifc: NRIfc) {
   import opened Runtime
   import opened ThreadUtils
   import opened Ptrs
+  import opened GlinearMap
 
   // TODO fill in reasonable constants for these
-  const BUFFER_SIZE: uint64 := 4096;
-  const GC_FROM_HEAD: uint64 := 19;
-  const WARN_THRESHOLD: uint64 := 1283748;
+  const BUFFER_SIZE: uint64 := 9999;
+  const GC_FROM_HEAD: uint64 := 9999;
+  const WARN_THRESHOLD: uint64 := 9999;
+  const MAX_COMBINED_OPS: uint64 := 9999;
 
   /*
    * Anything which is allocated on a NUMA node
@@ -60,6 +64,10 @@ module Impl(nrifc: NRIfc) {
       glinear localTail: LocalTail,
       glinear cbLocalTail: CBLocalTail)
 
+  glinear datatype GlobalTailTokens = GlobalTailTokens(
+      glinear globalTail: GlobalTail,
+      glinear cbGlobalTail: CBGlobalTail)
+
   linear datatype NodeInfo = NodeInfo(
     linear localTail: Atomic<uint64, LocalTailTokens>
   )
@@ -73,14 +81,15 @@ module Impl(nrifc: NRIfc) {
   linear datatype NR = NR(
     linear ctail: Atomic<uint64, Ctail>,
     linear head: Atomic<uint64, CBHead>,
-    linear globalTail: Atomic<uint64, CBGlobalTail>, // TODO Add the InfiniteLog's GlobalTail token
+    linear globalTail: Atomic<uint64, GlobalTailTokens>,
     linear node_info: lseq<NodeInfo>
   )
   {
     predicate WF() {
       && (forall v, g :: atomic_inv(ctail, v, g) <==> g == Ctail(v as int))
       && (forall v, g :: atomic_inv(head, v, g) <==> g == CBHead(v as int))
-      && (forall v, g :: atomic_inv(globalTail, v, g) <==> g == CBGlobalTail(v as int))
+      && (forall v, g :: atomic_inv(globalTail, v, g) <==>
+            g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int)))
       && |node_info| == NUM_REPLICAS as int
       && (forall nodeId | 0 <= nodeId < |node_info| :: nodeId in node_info)
       && (forall nodeId | 0 <= nodeId < |node_info| :: node_info[nodeId].WF(nodeId))
@@ -192,7 +201,113 @@ module Impl(nrifc: NRIfc) {
     result := nrifc.do_readonly(shared_v.actual_replica, op);
   }
 
-  method advance_head(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp)
+  method append(shared nr: NR, shared node: Node,
+      shared ops: seq<nrifc.UpdateOp>,
+      ghost requestIds: seq<RequestId>,
+      glinear updates: map<nat, Update>,
+      glinear combinerState: Combiner)
+  returns (glinear combinerState': Combiner, glinear updates': map<nat, Update>)
+  requires nr.WF()
+  requires node.WF()
+  requires |requestIds| == |ops| <= MAX_COMBINED_OPS as int
+  requires combinerState.nodeId == node.nodeId as int
+  requires combinerState.state == CombinerReady
+  requires forall i | 0 <= i < |requestIds| ::
+      i in updates && updates[i] == Update(requestIds[i], UpdateInit(ops[i]))
+  ensures combinerState'.nodeId == node.nodeId as int
+  ensures combinerState'.state == CombinerPlaced(requestIds)
+  ensures forall i | 0 <= i < |requestIds| ::
+      i in updates'
+        && updates'[i].us.UpdatePlaced?
+        && updates'[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates'[i].us.idx))
+  decreases *
+  {
+    updates' := updates;
+    combinerState' := combinerState;
+
+    var nops := seq_length(ops);
+    var iteration := 1;
+    var waitgc := 1;
+
+    var done := false;
+    while !done
+    invariant 0 <= iteration as int <= WARN_THRESHOLD as int
+    invariant 0 <= waitgc as int <= WARN_THRESHOLD as int
+    invariant !done ==>
+      && combinerState' == combinerState
+      && updates' == updates
+
+    invariant done ==>
+      && combinerState'.nodeId == node.nodeId as int
+      && combinerState'.state == CombinerPlaced(requestIds)
+      && (forall i | 0 <= i < |requestIds| ::
+          i in updates'
+            && updates'[i].us.UpdatePlaced?
+            && updates'[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates'[i].us.idx))
+      )
+
+    decreases *
+    {
+      if iteration % WARN_THRESHOLD == 0 {
+        iteration := 0;
+        print "append takes too many iterations to complete\n";
+      }
+      iteration := iteration + 1;
+
+      atomic_block var tail := execute_atomic_load(nr.globalTail) { }
+      atomic_block var head := execute_atomic_load(nr.head) { }
+
+      if tail > head + (BUFFER_SIZE - GC_FROM_HEAD) {
+        if waitgc % WARN_THRESHOLD == 0 {
+          waitgc := 0;
+          print "append takes too many waitgc to complete\n";
+        }
+        waitgc := waitgc + 1;
+
+        // TODO call `exec`
+
+        thread_yield();
+      } else {
+
+        assume tail as int + nops as int < 0x1_0000_0000_0000_0000; // TODO
+        var advance: bool := (tail + nops > head + (BUFFER_SIZE - GC_FROM_HEAD));
+
+        glinear var log_entries;
+
+        atomic_block var success := execute_atomic_compare_and_set_weak(
+            nr.globalTail, tail, tail + nops)
+        {
+          ghost_acquire globalTailTokens;
+          if success {
+            glinear var GlobalTailTokens(globalTail, cbGlobalTail) := globalTailTokens;
+            globalTail, updates', combinerState', log_entries :=
+              perform_AdvanceTail(globalTail, updates', combinerState', ops, requestIds, node.nodeId as int);
+            // TODO need to update cbGlobalTail
+            globalTailTokens := GlobalTailTokens(globalTail, cbGlobalTail);
+          } else {
+            log_entries := glmap_empty(); // to satisfy linearity checker
+            // no transition
+          }
+          ghost_release globalTailTokens;
+        }
+
+        if success {
+          // TODO actual append happens here
+          dispose_anything(log_entries);
+
+          if advance {
+            advance_head(nr, node);
+          }
+          
+          done := true;
+        } else {
+          dispose_anything(log_entries);
+        }
+      }
+    }
+  }
+
+  method advance_head(shared nr: NR, shared node: Node)
   requires nr.WF()
   requires node.WF()
   decreases *

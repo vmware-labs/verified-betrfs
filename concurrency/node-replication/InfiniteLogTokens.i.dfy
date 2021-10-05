@@ -17,6 +17,14 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
+  datatype {:glinear_fold} Update = Update(rid: RequestId, us: UpdateState)
+  {
+    function defn(): M {
+      M(map[], None, map[], map[], None, map[], map[rid := us], map[])
+    }
+  }
+
+
   datatype {:glinear_fold} Ctail = Ctail(ctail: nat)
   {
     function defn(): M {
@@ -31,10 +39,31 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
+  datatype {:glinear_fold} GlobalTail = GlobalTail(tail: nat)
+  {
+    function defn(): M {
+      M(map[], Some(tail), map[], map[], None, map[], map[], map[])
+    }
+  }
+
   datatype {:glinear_fold} Replica = Replica(nodeId: NodeId, state: nrifc.NRState)
   {
     function defn(): M {
       M(map[], None, map[nodeId := state], map[], None, map[], map[], map[])
+    }
+  }
+
+  datatype {:glinear_fold} Combiner = Combiner(nodeId: NodeId, state: CombinerState)
+  {
+    function defn(): M {
+      M(map[], None, map[], map[], None, map[], map[], map[nodeId := state])
+    }
+  }
+
+  datatype {:glinear_fold} Log = Log(idx: nat, op: nrifc.UpdateOp, node_id: NodeId)
+  {
+    function defn(): M {
+      M(map[idx := LogEntry(op, node_id)], None, map[], map[], None, map[], map[], map[])
     }
   }
 
@@ -99,4 +128,33 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   //{
     //TODO
   //}
+
+  glinear method perform_AdvanceTail(
+      glinear tail: GlobalTail,
+      glinear updates: map<nat, Update>,
+      glinear combiner: Combiner,
+      ghost ops: seq<nrifc.UpdateOp>,
+      ghost requestIds: seq<RequestId>,
+      ghost nodeId: NodeId)
+  returns (
+      glinear tail': GlobalTail,
+      glinear updates': map<nat, Update>,
+      glinear combiner': Combiner,
+      glinear logs': map<nat, Log>
+  )
+  requires |ops| == |requestIds|
+  requires forall i | 0 <= i < |requestIds| ::
+      i in updates && updates[i] == Update(requestIds[i], UpdateInit(ops[i]))
+  requires combiner.nodeId == nodeId
+  requires combiner.state == CombinerReady
+  ensures tail' == GlobalTail(tail.tail + |ops|)
+  ensures forall i | 0 <= i < |requestIds| ::
+      i in updates'
+        && updates'[i].us.UpdatePlaced?
+        && updates'[i] == Update(requestIds[i], UpdatePlaced(nodeId, updates'[i].us.idx))
+  ensures forall i | 0 <= i < |requestIds| ::
+      i in logs'
+        && logs'[i] == Log(tail.tail + i, ops[i], nodeId)
+  ensures combiner'.nodeId == nodeId
+  ensures combiner'.state == CombinerPlaced(requestIds)
 }
