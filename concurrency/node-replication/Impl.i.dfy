@@ -38,7 +38,7 @@ module Impl(nrifc: NRIfc) {
   linear datatype NodeReplica = NodeReplica(
     linear actual_replica: nrifc.DataStructureType,
     glinear ghost_replica: Replica,
-    glinear combiner: Combiner
+    glinear combiner: CombinerToken
   )
   {
     predicate WF(nodeId: NodeId) {
@@ -57,6 +57,7 @@ module Impl(nrifc: NRIfc) {
   {
     predicate WF() {
       && (forall nodeReplica :: replica.inv(nodeReplica) <==> nodeReplica.WF(nodeId as int))
+      && 0 <= nodeId as int < NUM_REPLICAS as int
     }
   }
 
@@ -247,8 +248,8 @@ module Impl(nrifc: NRIfc) {
       shared ops: seq<nrifc.UpdateOp>,
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
-      glinear combinerState: Combiner)
-  returns (glinear combinerState': Combiner, glinear updates': map<nat, Update>)
+      glinear combinerState: CombinerToken)
+  returns (glinear combinerState': CombinerToken, glinear updates': map<nat, Update>)
   requires nr.WF()
   requires node.WF()
   requires |requestIds| == |ops| <= MAX_COMBINED_OPS as int
@@ -434,6 +435,122 @@ module Impl(nrifc: NRIfc) {
           dispose_anything(cyclic_buffer_entries);
           dispose_anything(appendStateOpt);
         }
+      }
+    }
+  }
+
+  method exec(shared nr: NR, shared node: Node,
+      ghost requestIds: seq<RequestId>,
+      glinear updates: map<nat, Update>,
+      glinear combinerState: CombinerToken)
+  returns (
+    glinear updates': map<nat, Update>,
+    glinear combinerState': CombinerToken)
+  requires nr.WF()
+  requires node.WF()
+  requires combinerState.nodeId == node.nodeId as int
+  requires combinerState.state == CombinerPlaced(requestIds)
+  requires forall i | 0 <= i < |requestIds| ::
+      i in updates
+        && updates[i].us.UpdatePlaced?
+        && updates[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates[i].us.idx))
+  ensures combinerState'.nodeId == node.nodeId as int
+  ensures combinerState'.state == CombinerReady
+  decreases *
+  {
+    combinerState' := combinerState;
+    updates' := updates;
+
+    assert nr.node_info[node.nodeId as int].WF(node.nodeId as int);
+
+    atomic_block var ltail := execute_atomic_load(lseq_peek(nr.node_info, node.nodeId).localTail)
+    {
+      ghost_acquire ltail_token;
+      combinerState' := perform_ExecLoadLtail(combinerState', ltail_token.localTail);
+      ghost_release ltail_token;
+    }
+
+    atomic_block var gtail := execute_atomic_load(nr.globalTail)
+    {
+      ghost_acquire gtail_token;
+      combinerState' := perform_ExecLoadGlobalTail(combinerState', gtail_token.globalTail);
+      ghost_release gtail_token;
+    }
+
+    if ltail == gtail {
+      // done
+      assume false; // TODO
+    } else {
+      ghost var prev_combinerState := combinerState';
+      var i := ltail;
+      while i < gtail
+      invariant 0 <= i <= gtail
+      invariant combinerState'.nodeId == prev_combinerState.nodeId
+      invariant combinerState'.state.Combiner?
+      invariant combinerState'.state == prev_combinerState.state.(localTail := i as int)
+      {
+        var iteration := 1;
+
+        var done := false;
+        while !done
+        invariant 0 <= iteration as int <= WARN_THRESHOLD as int
+        decreases *
+        {
+          var bounded := i % BUFFER_SIZE;
+          atomic_block var live_bit := execute_atomic_load(
+              lseq_peek(nr.buffer, bounded).alive)
+          {
+          }
+
+          if live_bit == (i / BUFFER_SIZE % 2 == 0) {
+            done := true;
+          } else {
+            if iteration % WARN_THRESHOLD == 0 {
+              print "exec warn threshold\n";
+              iteration := 0;
+            }
+            iteration := iteration + 1;
+          }
+        }
+
+        i := i + 1;
+      }
+
+      // fetch & max
+      ghost var prev_combinerState1 := combinerState';
+      var done := false;
+      while !done
+      invariant !done ==> combinerState' == prev_combinerState1;
+      invariant done ==>
+        && combinerState'.nodeId == node.nodeId as int
+        && combinerState'.state == CombinerUpdatedCtail(
+            prev_combinerState1.state.queued_ops, gtail as int)
+      decreases *
+      {
+        atomic_block var cur_ctail := execute_atomic_load(nr.ctail) { }
+        var max_ctail := (if cur_ctail > gtail then cur_ctail else gtail);
+        // TODO strong or weak here?
+        atomic_block done := execute_atomic_compare_and_set_strong(nr.ctail, cur_ctail, max_ctail)
+        {
+          ghost_acquire ctail_token;
+          if done {
+            combinerState', ctail_token :=
+              perform_UpdateCompletedTail(combinerState', ctail_token);
+          } else {
+            // do nothing
+          }
+          ghost_release ctail_token;
+        }
+      }
+
+      atomic_block var _ :=
+        execute_atomic_store(lseq_peek(nr.node_info, node.nodeId).localTail, gtail)
+      {
+        ghost_acquire ltail_tokens;
+        glinear var LocalTailTokens(localTail, cbLocalTail) := ltail_tokens;
+        combinerState', localTail := perform_GoToCombinerReady(combinerState', localTail);
+        ltail_tokens := LocalTailTokens(localTail, cbLocalTail);
+        ghost_release ltail_tokens;
       }
     }
   }

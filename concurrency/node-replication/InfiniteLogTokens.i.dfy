@@ -53,7 +53,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} Combiner = Combiner(nodeId: NodeId, state: CombinerState)
+  datatype {:glinear_fold} CombinerToken = CombinerToken(nodeId: NodeId, state: CombinerState)
   {
     function defn(): M {
       M(map[], None, map[], map[], None, map[], map[], map[nodeId := state])
@@ -132,14 +132,14 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   glinear method perform_AdvanceTail(
       glinear tail: GlobalTail,
       glinear updates: map<nat, Update>,
-      glinear combiner: Combiner,
+      glinear combiner: CombinerToken,
       ghost ops: seq<nrifc.UpdateOp>,
       ghost requestIds: seq<RequestId>,
       ghost nodeId: NodeId)
   returns (
       glinear tail': GlobalTail,
       glinear updates': map<nat, Update>,
-      glinear combiner': Combiner,
+      glinear combiner': CombinerToken,
       glinear logs': map<nat, Log>
   )
   requires |ops| == |requestIds|
@@ -157,4 +157,42 @@ module InfiniteLogTokens(nrifc: NRIfc) {
         && logs'[i] == Log(tail.tail + i, ops[i], nodeId)
   ensures combiner'.nodeId == nodeId
   ensures combiner'.state == CombinerPlaced(requestIds)
+
+  glinear method perform_ExecLoadLtail(
+      glinear combiner: CombinerToken,
+      gshared ltail: LocalTail)
+  returns (glinear combiner': CombinerToken)
+  requires ltail.nodeId == combiner.nodeId
+  requires combiner.state.CombinerPlaced?
+  ensures combiner' == combiner.(state :=
+      CombinerLtail(combiner.state.queued_ops, ltail.localTail))
+
+  glinear method perform_ExecLoadGlobalTail(
+      glinear combiner: CombinerToken,
+      gshared globalTail: GlobalTail)
+  returns (glinear combiner': CombinerToken)
+  requires combiner.state.CombinerLtail?
+  ensures combiner' == combiner.(state :=
+      Combiner(combiner.state.queued_ops, combiner.state.localTail, globalTail.tail))
+  ensures combiner'.state.globalTail >= combiner'.state.localTail // follows from state machine invariant
+
+  glinear method perform_UpdateCompletedTail(
+      glinear combiner: CombinerToken,
+      glinear ctail: Ctail)
+  returns (glinear combiner': CombinerToken, glinear ctail': Ctail)
+  requires combiner.state.Combiner?
+  requires combiner.state.localTail == combiner.state.globalTail
+  ensures combiner' == combiner.(state :=
+      CombinerUpdatedCtail(combiner.state.queued_ops, combiner.state.localTail))
+  ensures ctail' == Ctail(if ctail.ctail > combiner.state.localTail
+      then ctail.ctail else combiner.state.localTail)
+
+  glinear method perform_GoToCombinerReady(
+      glinear combiner: CombinerToken,
+      glinear localTail: LocalTail)
+  returns (glinear combiner': CombinerToken, glinear localTail': LocalTail)
+  requires combiner.state.CombinerUpdatedCtail?
+  requires combiner.nodeId == localTail.nodeId
+  ensures combiner' == combiner.(state := CombinerReady)
+  ensures localTail' == localTail.(localTail := combiner.state.localAndGlobalTail)
 }

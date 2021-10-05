@@ -470,6 +470,20 @@ module {:extern "Atomics"} Atomics {
   ensures atomic_inv(a, orig_value, g)
 
   /*
+  method {:extern} execute_atomic_fetch_max_uint64<G>(
+      shared a: Atomic<uint64, G>,
+      operand: uint64) 
+  returns (
+      ret_value: uint64,
+      ghost orig_value: uint64,
+      ghost new_value: uint64,
+      glinear g: G)
+  ensures ret_value == orig_value
+  ensures new_value == (if operand > orig_value then operand else orig_value)
+  ensures atomic_inv(a, orig_value, g)
+  */
+
+  /*
    * No-op. Access the internal state without modifying the physical state.
    * May modify ghost state.
    * No observable non-ghost effects.
