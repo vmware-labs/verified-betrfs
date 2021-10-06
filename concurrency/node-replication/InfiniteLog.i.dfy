@@ -1134,6 +1134,25 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       )
   }
 
+  predicate Inv_UpdateResults(s: M)
+    requires Inv_WF(s)
+    requires Inv_LocalUpdatesIdx(s)
+    requires Inv_LogEntriesGlobalTail(s)
+  {
+      && (forall r | r in s.localUpdates && s.localUpdates[r].UpdateApplied? ::
+          s.localUpdates[r].ret
+            == nrifc.update(state_at_version(s.log, s.localUpdates[r].idx),
+                            s.log[s.localUpdates[r].idx].op).return_value
+      )
+
+      && (forall r | r in s.localUpdates && s.localUpdates[r].UpdateDone? ::
+           s.localUpdates[r].ret
+            == nrifc.update(state_at_version(s.log, s.localUpdates[r].idx),
+                            s.log[s.localUpdates[r].idx].op).return_value
+      )
+
+  }
+
   // the invariant
   predicate Inv(s: M) {
     && Inv_WF(s)
@@ -1149,6 +1168,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && Inv_LogEntriesGlobalTail(s)
     && Inv_LocalUpdatesIdx(s)
     && Inv_ReadOnlyResult(s)
+    && Inv_UpdateResults(s)
 
     // && (forall nid | nid in s.combiner :: CombinerRange(s.combiner[nid]) !!  (set x | 0 <= x < get_local_tail(s, nid) :: x))
 
