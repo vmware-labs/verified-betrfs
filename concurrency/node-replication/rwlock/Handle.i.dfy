@@ -1,3 +1,8 @@
+include "../../framework/Cells.s.dfy"
+
 module Handle {
-  type Handle(!new) // TODO (replica data structure + replica state)
+  import opened Cells
+
+  type ContentsType(!new)
+  type Handle = CellContents<ContentsType>
 }
