@@ -26,10 +26,13 @@ module Impl(nrifc: NRIfc) {
   import opened GlinearOption
   import opened Cells
 
+  type Tid = uint64
+
   // TODO fill in reasonable constants for these
   const GC_FROM_HEAD: uint64 := 9999;
   const WARN_THRESHOLD: uint64 := 9999;
   const MAX_COMBINED_OPS: uint64 := 9999;
+  const MAX_THREADS_PER_REPLICA: uint64 := 32;
 
   /*
    * Anything which is allocated on a NUMA node
@@ -52,7 +55,9 @@ module Impl(nrifc: NRIfc) {
   linear datatype Node = Node(
     linear combiner: Atomic<uint64, ()>,
     linear replica: RwLock<NodeReplica>,
-    nodeId: uint64
+    linear context: map<Tid, nrifc.UpdateOp>,
+    nodeId: uint64,
+    next: Atomic<Tid, ()>
   )
   {
     predicate WF() {
@@ -161,8 +166,6 @@ module Impl(nrifc: NRIfc) {
   requires tid > 0
   requires nr.WF()
   {
-    // TODO: Are we CombinerReady? I think so..
-
     var i: uint64 := 0;
     while i < 5
     invariant 0 <= i <= 5
@@ -185,6 +188,108 @@ module Impl(nrifc: NRIfc) {
   requires tid > 0
   requires nr.WF() 
   {
+    // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L631
+    //    fn combine(&self) {
+    //        let mut buffer = self.buffer.borrow_mut();
+    //        let mut operations = self.inflight.borrow_mut();
+    //        let mut results = self.result.borrow_mut();
+    //
+    //        buffer.clear();
+    //        results.clear();
+    //
+    //        let next = self.next.load(Ordering::Relaxed);
+    //
+    //        // Collect operations from each thread registered with this replica.
+    //        for i in 1..next {
+    //            operations[i - 1] = self.contexts[i - 1].ops(&mut buffer);
+    //        }
+
+//    atomic_block var next := execute_atomic_load(node.next) {}
+//
+//    linear var operations: lseq<uint64> := lseq_alloc<uint64>(MAX_THREADS_PER_REPLICA);
+//    linear var buffer: lseq<nrifc.UpdateOp> := lseq_alloc<nrifc.UpdateOp>(MAX_THREADS_PER_REPLICA);
+//    linear var results: lseq<nrifc.ReturnType> := lseq_alloc<nrifc.ReturnType>(MAX_THREADS_PER_REPLICA);
+
+/* use something like this for initializing the `lseq` stuff:
+
+  method init_batch_busy()
+  returns (linear batch_busy: lseq<Atomic<bool, NullGhostType>>)
+  ensures |batch_busy| == NUM_CHUNKS as int
+  ensures (forall i :: 0 <= i < NUM_CHUNKS as int ==> lseq_has(batch_busy)[i])
+  ensures (forall i, v, g :: 0 <= i < NUM_CHUNKS as int ==> atomic_inv(batch_busy[i], v, g) <==> true)
+  {
+    batch_busy := lseq_alloc<Atomic<bool, NullGhostType>>(NUM_CHUNKS_64());
+    var i: uint64 := 0;
+    while i < NUM_CHUNKS_64()
+    invariant 0 <= i as int <= NUM_CHUNKS as int
+    invariant |batch_busy| == NUM_CHUNKS as int
+    invariant (forall j :: i as int <= j < NUM_CHUNKS as int ==> !lseq_has(batch_busy)[j])
+    invariant (forall j :: 0 <= j < i as int ==> lseq_has(batch_busy)[j])
+    invariant (forall j, v, g :: 0 <= j < i as int ==> atomic_inv(batch_busy[j], v, g) <==> true)
+    {
+      linear var ato := new_atomic(false, NullGhostType, (v, g) => true, 0);
+      lseq_give_inout(inout batch_busy, i, ato);
+      i := i + 1;
+    }
+  }
+*/
+
+//    var i := 0;
+//    var j := 0;
+//    while i < next-1 {
+//      if i in node.context {
+//        operations[i] = 1;      
+//        buffer[j] = node.context[i];
+//        j := j + 1;
+//      }
+//      else {
+//        has_ops[i] = 0;
+//      }
+//    }
+
+
+    //
+    //        // Append all collected operations into the shared log. We pass a closure
+    //        // in here because operations on the log might need to be consumed for GC.
+    //        {
+    //            let mut data = self.data.write(next);
+    //            let f = |o: <D as Dispatch>::WriteOperation, i: usize| {
+    //                #[cfg(not(loom))]
+    //                let resp = data.dispatch_mut(o);
+    //                #[cfg(loom)]
+    //                let resp = data.dispatch_mut(o);
+    //                if i == self.idx {
+    //                    results.push(resp);
+    //                }
+    //            };
+    //            self.slog.append(&buffer, self.idx, f);
+    //        }
+    //
+    //        // Execute any operations on the shared log against this replica.
+    //        {
+    //            let mut data = self.data.write(next);
+    //            let mut f = |o: <D as Dispatch>::WriteOperation, i: usize| {
+    //                let resp = data.dispatch_mut(o);
+    //                if i == self.idx {
+    //                    results.push(resp)
+    //                };
+    //            };
+    //            self.slog.exec(self.idx, &mut f);
+    //        }
+    //
+    //        // Return/Enqueue responses back into the appropriate thread context(s).
+    //        let (mut s, mut f) = (0, 0);
+    //        for i in 1..next {
+    //            if operations[i - 1] == 0 {
+    //                continue;
+    //            };
+    //
+    //            f += operations[i - 1];
+    //            self.contexts[i - 1].enqueue_resps(&results[s..f]);
+    //            s += operations[i - 1];
+    //            operations[i - 1] = 0;
+    //        }
+    //    }
 
   }
 
