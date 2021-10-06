@@ -20,7 +20,7 @@ module Constants {
 
   ghost const PAGES_PER_EXTENT := 32;
 
-  function method CACHE_SIZE_64(): uint64 { 262144 }
+  function method CACHE_SIZE_64(): uint64 { 131072 }
   function method NUM_DISK_PAGES_64(): uint64 { 7864320 }
   function method AIO_HAND_BATCH_SIZE_64(): uint64 { 32 }
   function method NUM_IO_SLOTS_64(): uint64 { 256 }

@@ -6,7 +6,7 @@ include "../framework/Atomic.s.dfy"
 include "../framework/ThreadUtils.s.dfy"
 include "../framework/Ptrs.s.dfy"
 include "../framework/GlinearMap.s.dfy"
-include "Runtime.s.dfy"
+include "Runtime.i.dfy"
 include "CyclicBufferTokens.i.dfy"
 
 module Impl(nrifc: NRIfc) {
