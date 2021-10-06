@@ -1140,7 +1140,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     requires Inv_LogEntriesGlobalTail(s)
   {
       && (forall r | r in s.localUpdates && s.localUpdates[r].UpdateApplied? ::
-          s.localUpdates[r].ret
+           s.localUpdates[r].ret
             == nrifc.update(state_at_version(s.log, s.localUpdates[r].idx),
                             s.log[s.localUpdates[r].idx].op).return_value
       )
@@ -1359,6 +1359,13 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     ensures m'.localUpdates[upd].idx <= m'.global_tail.value
     {
 
+    }
+
+    forall r | r in m'.localUpdates && m'.localUpdates[r].UpdateApplied?
+      ensures m'.localUpdates[r].idx == m.localUpdates[r].idx
+      ensures state_at_version(m'.log, m'.localUpdates[r].idx) == state_at_version(m.log, m.localUpdates[r].idx)
+    {
+      state_at_version_preserves(m.log, m'.log, m'.localUpdates[r].idx);
     }
   }
 
