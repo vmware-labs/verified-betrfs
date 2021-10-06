@@ -544,6 +544,42 @@ module Impl(nrifc: NRIfc) {
     }
   }
 
+  predicate pre_exec(node: Node,
+      requestIds: seq<RequestId>,
+      responses: seq<nrifc.ReturnType>,
+      updates: map<nat, Update>,
+      combinerState: CombinerToken)
+  {
+    && combinerState.nodeId == node.nodeId as int
+    && combinerState.state == CombinerPlaced(requestIds)
+    && |responses| == NUM_REPLICAS as int
+    && |requestIds| <= NUM_REPLICAS as int
+    && (forall i | 0 <= i < |requestIds| ::
+      i in updates
+        && updates[i].us.UpdatePlaced?
+        && updates[i] == Update(requestIds[i],
+            UpdatePlaced(node.nodeId as int, updates[i].us.idx))
+    )
+  }
+
+  predicate post_exec(node: Node,
+      requestIds: seq<RequestId>,
+      responses': seq<nrifc.ReturnType>,
+      updates': map<nat, Update>,
+      combinerState': CombinerToken)
+  {
+    && combinerState'.nodeId == node.nodeId as int
+    && combinerState'.state == CombinerReady
+    && |responses'| == NUM_REPLICAS as int
+    && |requestIds| <= NUM_REPLICAS as int
+    && (forall i | 0 <= i < |requestIds| as int ::
+            i in updates'
+              && updates'[i].us.UpdateDone?
+              && updates'[i].rid == requestIds[i]
+              && updates'[i].us.ret == responses'[i]
+    )
+  }
+
   method exec(shared nr: NR, shared node: Node,
       linear actual_replica: nrifc.DataStructureType,
       linear responses: seq<nrifc.ReturnType>,
@@ -561,29 +597,15 @@ module Impl(nrifc: NRIfc) {
     glinear reader': Reader)
   requires nr.WF()
   requires node.WF()
-  requires combinerState.nodeId == node.nodeId as int
-  requires combinerState.state == CombinerPlaced(requestIds)
   requires reader.nodeId == node.nodeId as int
   requires reader.rs.ReaderIdle?
-  requires forall i | 0 <= i < |requestIds| ::
-      i in updates
-        && updates[i].us.UpdatePlaced?
-        && updates[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates[i].us.idx))
   requires ghost_replica.state == nrifc.I(actual_replica)
   requires ghost_replica.nodeId == node.nodeId as int
-  requires |responses| == NUM_REPLICAS as int
-  requires |requestIds| <= NUM_REPLICAS as int
-  ensures combinerState'.nodeId == node.nodeId as int
-  ensures combinerState'.state == CombinerReady
+  requires pre_exec(node, requestIds, responses, updates, combinerState)
+  ensures post_exec(node, requestIds, responses', updates', combinerState')
   ensures reader' == reader
   ensures ghost_replica.state == nrifc.I(actual_replica)
   ensures ghost_replica.nodeId == node.nodeId as int
-  ensures |responses'| == NUM_REPLICAS as int
-  ensures forall i | 0 <= i < |requestIds| as int ::
-          i in updates'
-            && updates'[i].us.UpdateDone?
-            && updates'[i].rid == requestIds[i]
-            && updates'[i].us.ret == responses'[i]
   decreases *
   {
     actual_replica' := actual_replica;
