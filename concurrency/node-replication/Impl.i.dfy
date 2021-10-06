@@ -546,6 +546,7 @@ module Impl(nrifc: NRIfc) {
 
   method exec(shared nr: NR, shared node: Node,
       linear actual_replica: nrifc.DataStructureType,
+      linear responses: seq<nrifc.ReturnType>,
       glinear ghost_replica: Replica,
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
@@ -553,6 +554,7 @@ module Impl(nrifc: NRIfc) {
       glinear reader: Reader)
   returns (
     linear actual_replica': nrifc.DataStructureType,
+    linear responses': seq<nrifc.ReturnType>,
     glinear ghost_replica': Replica,
     glinear updates': map<nat, Update>,
     glinear combinerState': CombinerToken,
@@ -569,6 +571,8 @@ module Impl(nrifc: NRIfc) {
         && updates[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates[i].us.idx))
   requires ghost_replica.state == nrifc.I(actual_replica)
   requires ghost_replica.nodeId == node.nodeId as int
+  requires |responses| == NUM_REPLICAS as int
+  requires |requestIds| <= NUM_REPLICAS as int
   ensures combinerState'.nodeId == node.nodeId as int
   ensures combinerState'.state == CombinerReady
   ensures reader' == reader
@@ -581,6 +585,7 @@ module Impl(nrifc: NRIfc) {
     combinerState' := combinerState;
     updates' := updates;
     reader' := reader;
+    responses' := responses;
 
     assert nr.node_info[node.nodeId as int].WF(node.nodeId as int);
 
@@ -604,6 +609,8 @@ module Impl(nrifc: NRIfc) {
       // done
       assume false; // TODO
     } else {
+      var responsesIndex: uint64 := 0;
+
       ghost var prev_combinerState := combinerState';
       var i := ltail;
       while i < gtail
@@ -614,6 +621,15 @@ module Impl(nrifc: NRIfc) {
       invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
       invariant ghost_replica'.state == nrifc.I(actual_replica')
       invariant ghost_replica'.nodeId == node.nodeId as int
+      invariant 0 <= responsesIndex as int <= |requestIds|
+      invariant forall i | responsesIndex as int <= i < |requestIds| ::
+          i in updates'
+            && updates'[i].us.UpdatePlaced?
+            && updates'[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates'[i].us.idx))
+      invariant forall i | 0 <= i < responsesIndex as int ::
+          i in updates'
+            && updates'[i].us.UpdateApplied?
+            && updates'[i].rid == requestIds[i]
       {
         var iteration := 1;
 
@@ -623,6 +639,20 @@ module Impl(nrifc: NRIfc) {
         invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
         invariant ghost_replica'.state == nrifc.I(actual_replica')
         invariant ghost_replica'.nodeId == node.nodeId as int
+        invariant combinerState'.nodeId == prev_combinerState.nodeId
+        invariant combinerState'.state.Combiner?
+        invariant !done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int)
+        invariant done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int + 1)
+        invariant 0 <= responsesIndex as int <= |requestIds|
+        invariant forall i | responsesIndex as int <= i < |requestIds| ::
+            i in updates'
+              && updates'[i].us.UpdatePlaced?
+              && updates'[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates'[i].us.idx))
+       invariant forall i | 0 <= i < responsesIndex as int ::
+            i in updates'
+              && updates'[i].us.UpdateApplied?
+              && updates'[i].rid == requestIds[i]
+
         decreases *
         {
           var bounded := i % BUFFER_SIZE;
@@ -652,8 +682,22 @@ module Impl(nrifc: NRIfc) {
             if log_entry.node_id == node.nodeId as int {
               // TODO local dispatch
               // TODO add ret to results list
+              assume responsesIndex as int < |requestIds|; // TODO should follow from InfiniteLog inv
+
+              glinear var my_update, my_update';
+              updates', my_update := glmap_take(updates', responsesIndex as int);
+              combinerState', ghost_replica', my_update' :=
+                perform_ExecDispatchLocal(combinerState', ghost_replica',
+                      my_update,
+                      reader_borrow(reader').logEntry.value);
+              updates' := glmap_insert(updates', responsesIndex as int, my_update');
+
+              responsesIndex := responsesIndex + 1;
             } else {
               // TODO remote dispatch
+              combinerState', ghost_replica' :=
+                perform_ExecDispatchRemote(combinerState', ghost_replica',
+                      reader_borrow(reader').logEntry.value);
             }
 
             reader' := reader_unguard(reader');
@@ -669,6 +713,8 @@ module Impl(nrifc: NRIfc) {
 
         i := i + 1;
       }
+
+      assume responsesIndex as int == |requestIds|; // TODO should follow from InfiniteLog inv
 
       // fetch & max
       ghost var prev_combinerState1 := combinerState';

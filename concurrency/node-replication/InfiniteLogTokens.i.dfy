@@ -195,4 +195,41 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   requires combiner.nodeId == localTail.nodeId
   ensures combiner' == combiner.(state := CombinerReady)
   ensures localTail' == localTail.(localTail := combiner.state.localAndGlobalTail)
+
+  glinear method perform_ExecDispatchRemote(
+      glinear combiner: CombinerToken,
+      glinear replica: Replica,
+      gshared log_entry: Log)
+  returns (
+      glinear combiner': CombinerToken,
+      glinear replica': Replica
+    )
+  requires combiner.nodeId == replica.nodeId
+  requires combiner.nodeId != log_entry.node_id
+  requires combiner.state.Combiner?
+  requires log_entry.idx == combiner.state.localTail
+  ensures combiner' == combiner.(state := combiner.state.(localTail := combiner.state.localTail + 1))
+  ensures replica' == replica.(state := nrifc.update(replica.state, log_entry.op).new_state)
+
+  glinear method perform_ExecDispatchLocal(
+      glinear combiner: CombinerToken,
+      glinear replica: Replica,
+      glinear update: Update,
+      gshared log_entry: Log)
+  returns (
+      glinear combiner': CombinerToken,
+      glinear replica': Replica,
+      glinear update': Update
+    )
+  requires combiner.nodeId == replica.nodeId
+  requires combiner.nodeId == log_entry.node_id
+  requires combiner.state.Combiner?
+  requires log_entry.idx == combiner.state.localTail
+  // TODO XXX this condition is not enough
+  requires update.us.UpdatePlaced?
+  ensures combiner' == combiner.(state := combiner.state.(localTail := combiner.state.localTail + 1))
+  ensures replica' == replica.(state := nrifc.update(replica.state, log_entry.op).new_state)
+  ensures update' == update.(us := UpdateApplied(
+      nrifc.update(replica.state, log_entry.op).return_value,
+      update.us.idx))
 }
