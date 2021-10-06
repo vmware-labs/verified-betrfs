@@ -431,7 +431,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       if success {
         i := i + 1;
       } else {
-        sleep(1);
+        pause();
       }
     }
   }
@@ -610,7 +610,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         if localState.free_hand < max_hand {
           if num_passes < 3 { num_passes := num_passes + 1; }
           if num_passes != 1 {
-            thread_yield();
+            //thread_yield();
           }
           io_cleanup(cache, DEFAULT_MAX_IO_EVENTS_64());
         }
@@ -970,7 +970,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         dispose_glnone(claim_handle_opt);
         client_opt := glSome(client');
 
-        sleep(1); // TODO what's the best way to wait, here?
+        pause();
       } else {
         write_handle := lock(cache, localState, ph, disk_idx, unwrap_value(claim_handle_opt));
         dispose_glnone(write_handle_opt);

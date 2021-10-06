@@ -320,11 +320,11 @@ struct get_default<Atomics::Atomic<V, G> > {
 };
 
 namespace ThreadUtils {
-  inline void thread__yield() {
-    // note: splinter had a function called 'platform_yield' which on linux does nothing
-  }
-
   inline void sleep(uint64_t ns) {
     std::this_thread::sleep_for(std::chrono::nanoseconds(ns));
+  }
+
+  inline void pause() {
+    __builtin_ia32_pause();
   }
 }
