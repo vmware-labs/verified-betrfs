@@ -1740,4 +1740,10 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       }
     }
   }
+
+  method wait(shared cache: Cache)
+  requires cache.Inv()
+  {
+    io_cleanup(cache, DEFAULT_MAX_IO_EVENTS_64());
+  }
 }

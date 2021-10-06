@@ -8,7 +8,7 @@ module Constants {
   //const NUM_DISK_PAGES := 536870912;
 
   // Using smaller constants to make small experiments faster
-  ghost const CACHE_SIZE := 262144;
+  ghost const CACHE_SIZE := 131072;
   ghost const NUM_DISK_PAGES := 7864320;
 
   ghost const CHUNK_SIZE := 64;

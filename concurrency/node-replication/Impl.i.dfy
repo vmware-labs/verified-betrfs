@@ -601,8 +601,16 @@ module Impl(nrifc: NRIfc) {
   requires reader.rs.ReaderIdle?
   requires ghost_replica.state == nrifc.I(actual_replica)
   requires ghost_replica.nodeId == node.nodeId as int
-  requires pre_exec(node, requestIds, responses, updates, combinerState)
-  ensures post_exec(node, requestIds, responses', updates', combinerState')
+  requires combinerState.state.CombinerReady?
+      || combinerState.state.CombinerPlaced?
+  requires combinerState.nodeId == node.nodeId as int
+  requires |responses| == NUM_REPLICAS as int
+  requires combinerState.state.CombinerPlaced? ==>
+      pre_exec(node, requestIds, responses, updates, combinerState)
+  ensures combinerState.state.CombinerPlaced? ==>
+      post_exec(node, requestIds, responses', updates', combinerState')
+  ensures combinerState.state.CombinerReady? ==>
+      responses == responses' && combinerState' == combinerState
   ensures reader' == reader
   ensures ghost_replica.state == nrifc.I(actual_replica)
   ensures ghost_replica.nodeId == node.nodeId as int
@@ -616,6 +624,12 @@ module Impl(nrifc: NRIfc) {
     responses' := responses;
 
     assert nr.node_info[node.nodeId as int].WF(node.nodeId as int);
+
+    ghost var requestIds' := requestIds;
+    if combinerState'.state.CombinerReady? {
+      combinerState' := perform_TrivialStartCombining(combinerState');
+      requestIds' := [];
+    }
 
     atomic_block var ltail := execute_atomic_load(lseq_peek(nr.node_info, node.nodeId).localTail)
     {
@@ -650,16 +664,17 @@ module Impl(nrifc: NRIfc) {
       invariant ghost_replica'.state == nrifc.I(actual_replica')
       invariant ghost_replica'.nodeId == node.nodeId as int
       invariant |responses'| == NUM_REPLICAS as int
-      invariant 0 <= responsesIndex as int <= |requestIds|
-      invariant forall i | responsesIndex as int <= i < |requestIds| ::
+      invariant 0 <= responsesIndex as int <= |requestIds'|
+      invariant forall i | responsesIndex as int <= i < |requestIds'| ::
           i in updates'
             && updates'[i].us.UpdatePlaced?
-            && updates'[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates'[i].us.idx))
+            && updates'[i] == Update(requestIds'[i], UpdatePlaced(node.nodeId as int, updates'[i].us.idx))
       invariant forall i | 0 <= i < responsesIndex as int ::
           i in updates'
             && updates'[i].us.UpdateApplied?
-            && updates'[i].rid == requestIds[i]
+            && updates'[i].rid == requestIds'[i]
             && updates'[i].us.ret == responses'[i]
+      invariant responsesIndex == 0 ==> responses' == responses
       {
         var iteration := 1;
 
@@ -673,17 +688,18 @@ module Impl(nrifc: NRIfc) {
         invariant combinerState'.state.Combiner?
         invariant !done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int)
         invariant done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int + 1)
-        invariant 0 <= responsesIndex as int <= |requestIds|
+        invariant 0 <= responsesIndex as int <= |requestIds'|
         invariant |responses'| == NUM_REPLICAS as int
-        invariant forall i | responsesIndex as int <= i < |requestIds| ::
+        invariant forall i | responsesIndex as int <= i < |requestIds'| ::
             i in updates'
               && updates'[i].us.UpdatePlaced?
-              && updates'[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates'[i].us.idx))
-       invariant forall i | 0 <= i < responsesIndex as int ::
+              && updates'[i] == Update(requestIds'[i], UpdatePlaced(node.nodeId as int, updates'[i].us.idx))
+        invariant forall i | 0 <= i < responsesIndex as int ::
             i in updates'
               && updates'[i].us.UpdateApplied?
-              && updates'[i].rid == requestIds[i]
+              && updates'[i].rid == requestIds'[i]
               && updates'[i].us.ret == responses'[i]
+        invariant responsesIndex == 0 ==> responses' == responses
 
         decreases *
         {
@@ -713,7 +729,7 @@ module Impl(nrifc: NRIfc) {
 
             if log_entry.node_id == node.nodeId as int {
               // TODO add ret to results list
-              assume responsesIndex as int < |requestIds|; // TODO should follow from InfiniteLog inv
+              assume responsesIndex as int < |requestIds'|; // TODO should follow from InfiniteLog inv
 
               glinear var my_update, my_update';
               updates', my_update := glmap_take(updates', responsesIndex as int);
@@ -747,7 +763,7 @@ module Impl(nrifc: NRIfc) {
         i := i + 1;
       }
 
-      assume responsesIndex as int == |requestIds|; // TODO should follow from InfiniteLog inv
+      assume responsesIndex as int == |requestIds'|; // TODO should follow from InfiniteLog inv
 
       // fetch & max
       ghost var prev_combinerState1 := combinerState';
@@ -764,7 +780,7 @@ module Impl(nrifc: NRIfc) {
         forall i | 0 <= i < responsesIndex as int ::
             i in updates'
               && updates'[i].us.UpdateDone?
-              && updates'[i].rid == requestIds[i]
+              && updates'[i].rid == requestIds'[i]
               && updates'[i].us.ret == responses'[i]
       decreases *
       {
@@ -776,7 +792,7 @@ module Impl(nrifc: NRIfc) {
           if done {
             combinerState', ctail_token :=
               perform_UpdateCompletedTail(combinerState', ctail_token);
-            updates' := perform_UpdateDone(|requestIds|, updates', combinerState');
+            updates' := perform_UpdateDone(|requestIds'|, updates', combinerState');
           } else {
             // do nothing
           }

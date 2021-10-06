@@ -129,6 +129,14 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     //TODO
   //}
 
+  glinear method perform_TrivialStartCombining(
+      glinear combiner: CombinerToken)
+  returns (
+      glinear combiner': CombinerToken
+  )
+  requires combiner.state.CombinerReady?
+  ensures combiner' == CombinerToken(combiner.nodeId, CombinerPlaced([]))
+
   glinear method perform_AdvanceTail(
       glinear tail: GlobalTail,
       glinear updates: map<nat, Update>,
