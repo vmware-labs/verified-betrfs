@@ -702,6 +702,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // we get the idx into the log here
     && var idx :=  m.localUpdates[request_id].idx;
 
+    // the index should be the same as the localTail.
+    && idx == c.localTail
+
     // update the combiner state by incrementing the current local tail
     &&  var c_new := c.(localTail := c.localTail + 1);
 
