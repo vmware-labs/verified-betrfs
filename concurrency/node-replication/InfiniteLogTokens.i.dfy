@@ -232,4 +232,18 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   ensures update' == update.(us := UpdateApplied(
       nrifc.update(replica.state, log_entry.op).return_value,
       update.us.idx))
+
+  glinear method perform_UpdateDone(
+      ghost n: nat,
+      glinear updates: map<nat, Update>,
+      gshared combiner: CombinerToken)
+  returns (
+      glinear updates': map<nat, Update>)
+  requires combiner.state.CombinerUpdatedCtail?
+  // TODO XXX this condition is not enough
+  requires forall i | 0 <= i < n :: i in updates && updates[i].us.UpdateApplied?
+  ensures forall i | 0 <= i < n ::
+      && i in updates'
+      && updates'[i] == Update(updates[i].rid, UpdateDone(updates[i].us.ret, updates[i].us.idx))
+  // TODO needs to do the UpdateDone transition in a loop
 }

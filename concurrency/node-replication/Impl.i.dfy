@@ -578,6 +578,12 @@ module Impl(nrifc: NRIfc) {
   ensures reader' == reader
   ensures ghost_replica.state == nrifc.I(actual_replica)
   ensures ghost_replica.nodeId == node.nodeId as int
+  ensures |responses'| == NUM_REPLICAS as int
+  ensures forall i | 0 <= i < |requestIds| as int ::
+          i in updates'
+            && updates'[i].us.UpdateDone?
+            && updates'[i].rid == requestIds[i]
+            && updates'[i].us.ret == responses'[i]
   decreases *
   {
     actual_replica' := actual_replica;
@@ -621,6 +627,7 @@ module Impl(nrifc: NRIfc) {
       invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
       invariant ghost_replica'.state == nrifc.I(actual_replica')
       invariant ghost_replica'.nodeId == node.nodeId as int
+      invariant |responses'| == NUM_REPLICAS as int
       invariant 0 <= responsesIndex as int <= |requestIds|
       invariant forall i | responsesIndex as int <= i < |requestIds| ::
           i in updates'
@@ -630,6 +637,7 @@ module Impl(nrifc: NRIfc) {
           i in updates'
             && updates'[i].us.UpdateApplied?
             && updates'[i].rid == requestIds[i]
+            && updates'[i].us.ret == responses'[i]
       {
         var iteration := 1;
 
@@ -644,6 +652,7 @@ module Impl(nrifc: NRIfc) {
         invariant !done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int)
         invariant done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int + 1)
         invariant 0 <= responsesIndex as int <= |requestIds|
+        invariant |responses'| == NUM_REPLICAS as int
         invariant forall i | responsesIndex as int <= i < |requestIds| ::
             i in updates'
               && updates'[i].us.UpdatePlaced?
@@ -652,6 +661,7 @@ module Impl(nrifc: NRIfc) {
             i in updates'
               && updates'[i].us.UpdateApplied?
               && updates'[i].rid == requestIds[i]
+              && updates'[i].us.ret == responses'[i]
 
         decreases *
         {
@@ -680,7 +690,6 @@ module Impl(nrifc: NRIfc) {
             actual_replica', ret := nrifc.do_update(actual_replica', log_entry.op);
 
             if log_entry.node_id == node.nodeId as int {
-              // TODO local dispatch
               // TODO add ret to results list
               assume responsesIndex as int < |requestIds|; // TODO should follow from InfiniteLog inv
 
@@ -691,6 +700,8 @@ module Impl(nrifc: NRIfc) {
                       my_update,
                       reader_borrow(reader').logEntry.value);
               updates' := glmap_insert(updates', responsesIndex as int, my_update');
+
+              responses' := seq_set(responses', responsesIndex, ret);
 
               responsesIndex := responsesIndex + 1;
             } else {
@@ -718,24 +729,32 @@ module Impl(nrifc: NRIfc) {
 
       // fetch & max
       ghost var prev_combinerState1 := combinerState';
+      ghost var prev_updates1 := updates';
       var done := false;
       while !done
-      invariant !done ==> combinerState' == prev_combinerState1;
+      invariant !done ==> combinerState' == prev_combinerState1
+      invariant !done ==> updates' == prev_updates1
       invariant done ==>
         && combinerState'.nodeId == node.nodeId as int
         && combinerState'.state == CombinerUpdatedCtail(
             prev_combinerState1.state.queued_ops, gtail as int)
+      invariant done ==>
+        forall i | 0 <= i < responsesIndex as int ::
+            i in updates'
+              && updates'[i].us.UpdateDone?
+              && updates'[i].rid == requestIds[i]
+              && updates'[i].us.ret == responses'[i]
       decreases *
       {
         atomic_block var cur_ctail := execute_atomic_load(nr.ctail) { }
         var max_ctail := (if cur_ctail > gtail then cur_ctail else gtail);
-        // TODO strong or weak here?
         atomic_block done := execute_atomic_compare_and_set_strong(nr.ctail, cur_ctail, max_ctail)
         {
           ghost_acquire ctail_token;
           if done {
             combinerState', ctail_token :=
               perform_UpdateCompletedTail(combinerState', ctail_token);
+            updates' := perform_UpdateDone(|requestIds|, updates', combinerState');
           } else {
             // do nothing
           }
