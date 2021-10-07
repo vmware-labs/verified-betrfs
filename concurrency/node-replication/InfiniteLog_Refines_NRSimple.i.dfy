@@ -525,6 +525,8 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.InternalOp)
   {
+    reveal_F();
+    assert F(3)==2;
 
     // that on takes a bit...?
     var new_log_entries := B.ConstructNewLogEntries(request_ids, I(s).update_reqs);
