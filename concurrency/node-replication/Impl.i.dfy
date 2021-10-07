@@ -351,10 +351,20 @@ module Impl(nrifc: NRIfc) {
 
   method append(shared nr: NR, shared node: Node,
       shared ops: seq<nrifc.UpdateOp>,
+      linear actual_replica: nrifc.DataStructureType,
+      linear responses: seq<nrifc.ReturnType>,
+      glinear ghost_replica: Replica,
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
-      glinear combinerState: CombinerToken)
-  returns (glinear combinerState': CombinerToken, glinear updates': map<nat, Update>)
+      glinear combinerState: CombinerToken,
+      glinear reader: Reader)
+  returns (
+    linear actual_replica': nrifc.DataStructureType,
+    linear responses': seq<nrifc.ReturnType>,
+    glinear ghost_replica': Replica,
+    glinear updates': map<nat, Update>,
+    glinear combinerState': CombinerToken,
+    glinear reader': Reader)
   requires nr.WF()
   requires node.WF()
   requires |requestIds| == |ops| <= MAX_COMBINED_OPS as int
@@ -362,16 +372,28 @@ module Impl(nrifc: NRIfc) {
   requires combinerState.state == CombinerReady
   requires forall i | 0 <= i < |requestIds| ::
       i in updates && updates[i] == Update(requestIds[i], UpdateInit(ops[i]))
-  ensures combinerState'.nodeId == node.nodeId as int
-  ensures combinerState'.state == CombinerPlaced(requestIds)
-  ensures forall i | 0 <= i < |requestIds| ::
-      i in updates'
-        && updates'[i].us.UpdatePlaced?
-        && updates'[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates'[i].us.idx))
+  requires reader.nodeId == node.nodeId as int
+  requires reader.rs.ReaderIdle?
+  requires ghost_replica.state == nrifc.I(actual_replica)
+  requires ghost_replica.nodeId == node.nodeId as int
+  requires |responses| == NUM_REPLICAS as int
+  requires |requestIds| <= NUM_REPLICAS as int
+
+  ensures combinerState'.state.CombinerReady?
+      || combinerState'.state.CombinerPlaced?
+  ensures combinerState'.state.CombinerReady? ==>
+      post_exec(node, requestIds, responses', updates', combinerState')
+  ensures combinerState'.state.CombinerPlaced? ==>
+      pre_exec(node, requestIds, responses', updates', combinerState')
+
   decreases *
   {
     updates' := updates;
     combinerState' := combinerState;
+    actual_replica' := actual_replica;
+    ghost_replica' := ghost_replica;
+    reader' := reader;
+    responses' := responses;
 
     var nops := seq_length(ops);
     var iteration := 1;
@@ -384,15 +406,18 @@ module Impl(nrifc: NRIfc) {
     invariant !done ==>
       && combinerState' == combinerState
       && updates' == updates
+      && reader' == reader
+      && responses' == responses
+      && ghost_replica'.state == nrifc.I(actual_replica')
+      && ghost_replica'.nodeId == node.nodeId as int
 
     invariant done ==>
-      && combinerState'.nodeId == node.nodeId as int
-      && combinerState'.state == CombinerPlaced(requestIds)
-      && (forall i | 0 <= i < |requestIds| ::
-          i in updates'
-            && updates'[i].us.UpdatePlaced?
-            && updates'[i] == Update(requestIds[i], UpdatePlaced(node.nodeId as int, updates'[i].us.idx))
-      )
+      && (combinerState'.state.CombinerReady?
+          || combinerState'.state.CombinerPlaced?)
+      && (combinerState'.state.CombinerReady? ==>
+          post_exec(node, requestIds, responses', updates', combinerState'))
+      && (combinerState'.state.CombinerPlaced? ==>
+          pre_exec(node, requestIds, responses', updates', combinerState'))
 
     decreases *
     {
@@ -418,9 +443,12 @@ module Impl(nrifc: NRIfc) {
         }
         waitgc := waitgc + 1;
 
-        // TODO call `exec`
-
         dispose_anything(advance_tail_state);
+
+        actual_replica', responses',
+            ghost_replica', updates', combinerState', reader' :=
+          exec(nr, node, actual_replica', responses', ghost_replica',
+              requestIds, updates', combinerState', reader');
       } else {
 
         assume tail as int + nops as int < 0x1_0000_0000_0000_0000; // TODO
@@ -530,8 +558,16 @@ module Impl(nrifc: NRIfc) {
           dispose_anything(cyclic_buffer_entries);
           dispose_anything(append_state);
 
+          assert pre_exec(node, requestIds, responses', updates', combinerState');
+
           if advance {
-            advance_head(nr, node);
+            actual_replica', responses', ghost_replica',
+                updates', combinerState', reader' :=
+              advance_head(nr, node, actual_replica', responses', ghost_replica',
+                  requestIds, updates', combinerState', reader');
+
+            assert combinerState'.state.CombinerPlaced? ==>
+                pre_exec(node, requestIds, responses', updates', combinerState');
           }
           
           done := true;
@@ -610,10 +646,10 @@ module Impl(nrifc: NRIfc) {
   ensures combinerState.state.CombinerPlaced? ==>
       post_exec(node, requestIds, responses', updates', combinerState')
   ensures combinerState.state.CombinerReady? ==>
-      responses == responses' && combinerState' == combinerState
+      responses == responses' && combinerState' == combinerState && updates' == updates
   ensures reader' == reader
-  ensures ghost_replica.state == nrifc.I(actual_replica)
-  ensures ghost_replica.nodeId == node.nodeId as int
+  ensures ghost_replica'.state == nrifc.I(actual_replica')
+  ensures ghost_replica'.nodeId == node.nodeId as int
   decreases *
   {
     actual_replica' := actual_replica;
@@ -674,7 +710,7 @@ module Impl(nrifc: NRIfc) {
             && updates'[i].us.UpdateApplied?
             && updates'[i].rid == requestIds'[i]
             && updates'[i].us.ret == responses'[i]
-      invariant responsesIndex == 0 ==> responses' == responses
+      invariant responsesIndex == 0 ==> responses' == responses && updates' == updates
       {
         var iteration := 1;
 
@@ -699,7 +735,7 @@ module Impl(nrifc: NRIfc) {
               && updates'[i].us.UpdateApplied?
               && updates'[i].rid == requestIds'[i]
               && updates'[i].us.ret == responses'[i]
-        invariant responsesIndex == 0 ==> responses' == responses
+        invariant responsesIndex == 0 ==> responses' == responses && updates' == updates
 
         decreases *
         {
@@ -763,7 +799,8 @@ module Impl(nrifc: NRIfc) {
         i := i + 1;
       }
 
-      assume responsesIndex as int == |requestIds'|; // TODO should follow from InfiniteLog inv
+      assume combinerState.state.CombinerPlaced? ==>
+          responsesIndex as int == |requestIds'|; // TODO should follow from InfiniteLog inv
 
       // fetch & max
       ghost var prev_combinerState1 := combinerState';
@@ -782,6 +819,7 @@ module Impl(nrifc: NRIfc) {
               && updates'[i].us.UpdateDone?
               && updates'[i].rid == requestIds'[i]
               && updates'[i].us.ret == responses'[i]
+      invariant |requestIds'| == 0 ==> responses' == responses && updates' == updates
       decreases *
       {
         atomic_block var cur_ctail := execute_atomic_load(nr.ctail) { }
@@ -792,7 +830,9 @@ module Impl(nrifc: NRIfc) {
           if done {
             combinerState', ctail_token :=
               perform_UpdateCompletedTail(combinerState', ctail_token);
-            updates' := perform_UpdateDone(|requestIds'|, updates', combinerState');
+            if |requestIds'| > 0 {
+              updates' := perform_UpdateDone(|requestIds'|, updates', combinerState');
+            }
           } else {
             // do nothing
           }
@@ -813,17 +853,76 @@ module Impl(nrifc: NRIfc) {
     }
   }
 
-  method advance_head(shared nr: NR, shared node: Node)
+  method advance_head(shared nr: NR, shared node: Node,
+      linear actual_replica: nrifc.DataStructureType,
+      linear responses: seq<nrifc.ReturnType>,
+      glinear ghost_replica: Replica,
+      ghost requestIds: seq<RequestId>,
+      glinear updates: map<nat, Update>,
+      glinear combinerState: CombinerToken,
+      glinear reader: Reader)
+  returns (
+    linear actual_replica': nrifc.DataStructureType,
+    linear responses': seq<nrifc.ReturnType>,
+    glinear ghost_replica': Replica,
+    glinear updates': map<nat, Update>,
+    glinear combinerState': CombinerToken,
+    glinear reader': Reader)
+
   requires nr.WF()
   requires node.WF()
+  requires reader.nodeId == node.nodeId as int
+  requires reader.rs.ReaderIdle?
+  requires ghost_replica.state == nrifc.I(actual_replica)
+  requires ghost_replica.nodeId == node.nodeId as int
+  requires combinerState.state.CombinerPlaced?
+  requires combinerState.nodeId == node.nodeId as int
+  requires |responses| == NUM_REPLICAS as int
+  requires pre_exec(node, requestIds, responses, updates, combinerState)
+
+  ensures reader' == reader
+  ensures ghost_replica'.state == nrifc.I(actual_replica')
+  ensures ghost_replica'.nodeId == node.nodeId as int
+  ensures combinerState'.nodeId == node.nodeId as int
+  ensures |responses'| == NUM_REPLICAS as int
+
+  ensures combinerState'.state.CombinerReady?
+      || combinerState'.state.CombinerPlaced?
+  ensures combinerState'.state.CombinerReady? ==>
+      post_exec(node, requestIds, responses', updates', combinerState')
+  ensures combinerState'.state.CombinerPlaced? ==>
+    updates' == updates && combinerState' == combinerState && reader' == reader
+
   decreases *
   {
+    actual_replica' := actual_replica;
+    ghost_replica' := ghost_replica;
+    combinerState' := combinerState;
+    updates' := updates;
+    reader' := reader;
+    responses' := responses;
+
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/log.rs#L570
 
     var iteration: uint64 := 1;
     var done := false;
     while !done
     invariant 0 <= iteration as int <= WARN_THRESHOLD as int
+
+    invariant reader' == reader
+    invariant ghost_replica'.state == nrifc.I(actual_replica')
+    invariant ghost_replica'.nodeId == node.nodeId as int
+
+    invariant combinerState'.nodeId == node.nodeId as int
+    invariant combinerState'.state.CombinerReady?
+        || combinerState'.state.CombinerPlaced?
+    invariant combinerState'.state.CombinerReady? ==>
+        post_exec(node, requestIds, responses', updates', combinerState')
+    invariant combinerState'.state.CombinerPlaced? ==>
+      updates' == updates && combinerState' == combinerState && reader' == reader
+            && responses' == responses
+    invariant |responses'| == NUM_REPLICAS as int
+
     decreases *
     {
       var r := NUM_REPLICAS;
@@ -846,6 +945,21 @@ module Impl(nrifc: NRIfc) {
       while idx < r
       invariant 0 <= idx <= r
       invariant advance_state_token == AdvanceHeadState(idx as int, min_local_tail as int)
+
+      invariant reader' == reader
+      invariant ghost_replica'.state == nrifc.I(actual_replica')
+      invariant ghost_replica'.nodeId == node.nodeId as int
+
+      invariant combinerState'.nodeId == node.nodeId as int
+      invariant combinerState'.state.CombinerReady?
+          || combinerState'.state.CombinerPlaced?
+      invariant combinerState'.state.CombinerReady? ==>
+          post_exec(node, requestIds, responses', updates', combinerState')
+      invariant combinerState'.state.CombinerPlaced? ==>
+        updates' == updates && combinerState' == combinerState && reader' == reader
+            && responses' == responses
+      invariant |responses'| == NUM_REPLICAS as int
+
       {
         atomic_block var cur_local_tail :=
             execute_atomic_load(lseq_peek(nr.node_info, idx).localTail)
@@ -867,7 +981,10 @@ module Impl(nrifc: NRIfc) {
         }
         iteration := iteration + 1;
 
-        // TODO call `exec`
+        actual_replica', responses',
+            ghost_replica', updates', combinerState', reader' :=
+          exec(nr, node, actual_replica', responses',
+              ghost_replica', requestIds, updates', combinerState', reader');
 
         dispose_anything(advance_state_token);
       } else {
@@ -878,10 +995,13 @@ module Impl(nrifc: NRIfc) {
           ghost_release head;
         }
 
-        if f < min_local_tail + BUFFER_SIZE - GC_FROM_HEAD { // TODO bounded int errors
+        if f < min_local_tail + (BUFFER_SIZE - GC_FROM_HEAD) { // TODO bounded int errors
           done := true;
         } else {
-          // TODO call `exec`
+          actual_replica', responses',
+              ghost_replica', updates', combinerState', reader' :=
+            exec(nr, node, actual_replica', responses',
+                ghost_replica', requestIds, updates', combinerState', reader');
         }
       }
     }
