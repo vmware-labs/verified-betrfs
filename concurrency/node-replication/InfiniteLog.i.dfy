@@ -35,7 +35,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // wait until localTail >= (the ctail value we just read)
     | ReadonlyReadyToRead(op: nrifc.ReadonlyOp, nodeId: NodeId, ctail: nat)
     // read the op off the replica
-    | ReadonlyDone(op: nrifc.ReadonlyOp, ret: nrifc.ReturnType, ctail: nat)
+    | ReadonlyDone(op: nrifc.ReadonlyOp, ret: nrifc.ReturnType, nodeId: NodeId, ctail: nat)
 
   datatype UpdateState =
     | UpdateInit(op: nrifc.UpdateOp)
@@ -458,7 +458,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var ret := nrifc.read(m.replicas[req.nodeId], req.op);
 
     // construct the new state
-    && var newst := ReadonlyDone(req.op, ret, req.ctail);
+    && var newst := ReadonlyDone(req.op, ret, req.nodeId, req.ctail);
     // and update the state
     && m' == m.(localReads := m.localReads[rid := newst])
   }
@@ -491,7 +491,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   function  {:opaque}  ConstructNewLogEntries(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>): (res: map<nat, LogEntry>)
     requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
   {
-    //map i : nat | (gtail <= i < gtail + |rids|) && InRange2(rids, i, gtail) :: i := LogEntry(lupd[rids[i-gtail]].op, nodeId)
+    //map[]
     map i : nat | InRange(rids, i) && 0 <= i < |rids| :: LogIdx(gtail, i) :=  LogEntry(lupd[rids[i]].op, nodeId)
   }
 
@@ -870,7 +870,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   predicate IsStub(rid: RequestId, output: IOIfc.Output, stub: M) {
-    || (exists ctail, op :: stub == ReadOp(rid, ReadonlyDone(op, output, ctail)))
+    || (exists ctail, op, nodeid :: stub == ReadOp(rid, ReadonlyDone(op, output, nodeid, ctail)))
     || (exists log_idx :: stub == UpdateOp(rid, UpdateDone(output, log_idx)))
   }
 
@@ -987,15 +987,27 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     forall nodeId | nodeId in s.localTails :: s.global_tail.value >= s.localTails[nodeId]
   }
 
+  // INVARIANT: make sure the read requests are well formed, i.e., all nodeids are in fact valid
+  predicate Inv_ReadRequest_WF(s: M)
+    requires Inv_WF(s)
+  {
+    forall rid | rid in s.localReads :: match s.localReads[rid] {
+      case ReadonlyReadyToRead(_, nodeId : nat, _) => nodeId in s.combiner && nodeId in s.localTails && nodeId in s.replicas
+      case ReadonlyDone(_, _, nodeId: nat, _) => nodeId in s.combiner && nodeId in s.localTails && nodeId in s.replicas
+      case _ => true
+    }
+  }
+
   // INVARIANT: Ordering of Ctail stored in ReadOnly state
   // The stored ctail values must be smaller or equal the actual ctail value
   predicate Inv_ReadOnlyCtailsCompleteTailOrdering(s: M)
     requires Inv_WF(s)
+    requires Inv_ReadRequest_WF(s)
   {
     forall rid | rid in s.localReads :: match s.localReads[rid] {
       case ReadonlyCtail(_, ctail: nat) => ctail <= s.ctail.value
-      case ReadonlyReadyToRead(_, _, ctail: nat) => ctail <= s.ctail.value
-      case ReadonlyDone(_, _, ctail: nat) =>  ctail <= s.ctail.value
+      case ReadonlyReadyToRead(_, nodeId : nat, ctail: nat) => ctail <= s.ctail.value && ctail <= get_local_tail(s, nodeId)
+      case ReadonlyDone(_, _, nodeId: nat,ctail: nat) =>  ctail <= s.ctail.value && ctail <= get_local_tail(s, nodeId)
       case _ => true
     }
   }
@@ -1014,8 +1026,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
     forall nid | nid in s.localTails :: LogContainsEntriesUpToHere(s.log, s.localTails[nid])
   }
-
-
 
 
   function get_local_tail(m: M, nodeId: NodeId) : nat
@@ -1132,8 +1142,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     requires Inv_LogEntriesUpToCTailExists(s)
   {
       (forall r | r in s.localReads && s.localReads[r].ReadonlyDone? ::
-        exists v | 0 <= v <= s.ctail.value ::
-          s.localReads[r].ret == nrifc.read(state_at_version(s.log, v),  s.localReads[r].op)
+        exists v | s.localReads[r].ctail <= v <= s.ctail.value ::
+          (s.localReads[r].ret == nrifc.read(state_at_version(s.log, v),  s.localReads[r].op))
       )
   }
 
@@ -1143,15 +1153,15 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     requires Inv_LogEntriesGlobalTail(s)
   {
       && (forall r | r in s.localUpdates && s.localUpdates[r].UpdateApplied? ::
-           s.localUpdates[r].ret
+           (s.localUpdates[r].ret
             == nrifc.update(state_at_version(s.log, s.localUpdates[r].idx),
-                            s.log[s.localUpdates[r].idx].op).return_value
+                            s.log[s.localUpdates[r].idx].op).return_value)
       )
 
       && (forall r | r in s.localUpdates && s.localUpdates[r].UpdateDone? ::
-           s.localUpdates[r].ret
+           (s.localUpdates[r].ret
             == nrifc.update(state_at_version(s.log, s.localUpdates[r].idx),
-                            s.log[s.localUpdates[r].idx].op).return_value
+                            s.log[s.localUpdates[r].idx].op).return_value)
       )
 
   }
@@ -1162,6 +1172,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && Inv_GlobalTailCompleteTailOrdering(s)
     && Inv_CompletedTailLowerBound(s)
     && Inv_GlobalTailLowerBound(s)
+    && Inv_ReadRequest_WF(s)
     && Inv_ReadOnlyCtailsCompleteTailOrdering(s)
     && Inv_LogEntriesUpToCTailExists(s)
     && Inv_LogEntriesUpToLocalTailExist(s)
@@ -1307,6 +1318,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     assert get_local_tail(m, req.nodeId) == m.localTails[req.nodeId];
     assert m.replicas[req.nodeId] == state_at_version(m.log, get_local_tail(m, req.nodeId));
     assert get_local_tail(m, req.nodeId) <= m.ctail.value;
+    assert m.localReads[rid].ctail <= get_local_tail(m, req.nodeId);
     assert m'.localReads[rid].ret ==  nrifc.read(state_at_version(m.log, get_local_tail(m, req.nodeId)),  m.localReads[rid].op);
   }
 

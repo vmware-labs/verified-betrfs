@@ -146,7 +146,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     requires Inv(s)
     requires Inv(s')
     requires rid in s.localReads && s.localReads[rid].ReadonlyReadyToRead?
-    requires s' == s.(localReads := s.localReads[rid := ReadonlyDone(s.localReads[rid].op, ret, s.localReads[rid].ctail)])
+    requires s' == s.(localReads := s.localReads[rid := ReadonlyDone(s.localReads[rid].op, ret, s.localReads[rid].nodeId, s.localReads[rid].ctail)])
     ensures I(s').readonly_reqs == I(s).readonly_reqs
   {
     reveal_I_ReadRequests();
@@ -200,14 +200,17 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     requires Inv(s)
     requires Inv(s')
     requires rid in s.localUpdates && s.localUpdates[rid].UpdateApplied?
+    requires s.localUpdates[rid].idx == idx;
     requires s' == s.(localUpdates := s.localUpdates[rid:= UpdateDone(ret, idx)]);
-    ensures I(s').update_reqs == I(s).update_reqs - {rid};
-    ensures I(s').update_resps == I(s).update_resps[rid := B.UpdateResp(idx)];
+    ensures I(s').update_reqs == I(s).update_reqs;
+    ensures I(s').update_resps == I(s).update_resps;
   {
-      assert I(s').update_reqs == I(s).update_reqs - {rid} by {
+      assert I(s').update_reqs == I(s).update_reqs  by {
         reveal_I_UpdateRequests();
       }
-      assert I(s').update_resps == I(s).update_resps[rid := B.UpdateResp(idx)] by {
+      assert I(s').update_resps == I(s).update_resps by {
+        assert UpdateRequests_Done(rid, s.localUpdates);
+        assert s.localUpdates[rid].idx == idx;
         reveal_I_UpdateResponses();
       }
   }
@@ -267,14 +270,15 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
   {
-    // checks, but may take a bit long....
-    assume false;
-
     // construct the ticket
     if input.ROp? {
       assert I(s') == I(s).(readonly_reqs := I(s).readonly_reqs[rid := B.ReadInit(input.readonly_op)]) by {
         NewTicket_Refines_Start_LocalReads(s, s', rid, input);
         I_Added_LocalRead_is(s, s', rid, input);
+      }
+
+      assert rid !in I(s).readonly_reqs by{
+        reveal_I_ReadRequests();
       }
 
       assert exists step :: B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
@@ -291,6 +295,10 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       assert I(s') == I(s).(update_reqs := I(s).update_reqs[rid := input.update_op]) by {
         NewTicket_Refines_Start_LocalUpdates(s, s', rid, input);
         I_Added_LocalUpdate_is(s, s', rid, input);
+      }
+
+      assert rid !in I(s).update_reqs by{
+        reveal_I_UpdateRequests();
       }
 
       assert exists step :: B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
@@ -401,12 +409,11 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
         reveal_I_ReadRequests();
       }
 
-      assert exists version : nat | s.localReads[rid].ctail <= version <= s.ctail.value :: VersionInLog(s.log, version) && OutputMatch(s.log, output, version,  s.localReads[rid].op) by {
+      assert exists version : nat | s.localReads[rid].ctail <= version <= s.ctail.value
+        :: VersionInLog(s.log, version) && OutputMatch(s.log, output, version,  s.localReads[rid].op) by {
         assert output ==  s.localReads[rid].ret;
-        assert s.localReads[rid].ReadonlyDone?;
-        assert exists v | s.localReads[rid].ctail  <= v <= s.ctail.value ::
-          s.localReads[rid].ret == nrifc.read(state_at_version(s.log, v),  s.localReads[rid].op);
-        assume false;
+        var v :| s.localReads[rid].ctail <= v <= s.ctail.value && (s.localReads[rid].ret == nrifc.read(state_at_version(s.log, v),  s.localReads[rid].op));
+        assert OutputMatch(s.log, output, v,  s.localReads[rid].op);
       }
       var version : nat :| s.localReads[rid].ctail<= version <= s.ctail.value  && VersionInLog(s.log, version) && OutputMatch(s.log, output, version,  s.localReads[rid].op);
 
@@ -613,6 +620,10 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   {
     var c := s.combiner[nodeId];
     var new_ctail := if s.ctail.value > c.localTail then s.ctail.value else c.localTail;
+
+    assert I(s).ctail <= new_ctail <= |I(s).log| by {
+      reveal_I_Log();
+    }
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.IncreaseCtail_Step(new_ctail));
   }
 
@@ -625,7 +636,6 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     var req := s.localUpdates[rid];
     assert s' == s.(localUpdates := s.localUpdates[rid:= UpdateDone(req.ret, req.idx)]);
     I_LocalUpdates_UpdateDone(s, s', rid, req.idx, req.ret);
-
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.Stutter_Step);
   }
 
