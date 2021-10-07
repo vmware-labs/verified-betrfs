@@ -14,7 +14,7 @@ module {:extern "LinearRegion_s"} LinearRegion_s {
   function Id(g: Region): RegionId
   function Allocated(g: Region): set<Loc>
   function RefLoc<A>(r: RefCell<A>): Loc
-  function LocRef<A>(l: Loc): RefCell<A>
+  function LocRef<A(00)>(l: Loc): RefCell<A>
 
   predicate ValidRef(loc: Loc, id: RegionId, is_linear: bool)
 
@@ -75,7 +75,7 @@ module {:extern "LinearRegion_s"} LinearRegion_s {
         Modifies(locs1, g1, g2) && Modifies(locs2, g2, g3) && locs3 == locs1 + locs2 ==>
         Modifies(locs3, g1, g3)
 
-  lemma LemmaUnmodified<A>()
+  lemma LemmaUnmodified<A(00)>()
     ensures forall r:RefCell<A> {:trigger RefLoc(r)} :: LocRef(RefLoc(r)) == r
     ensures forall l:Loc {:trigger RefLoc<A>(LocRef(l))} :: RefLoc<A>(LocRef(l)) == l
     ensures
