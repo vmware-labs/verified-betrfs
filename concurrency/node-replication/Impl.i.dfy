@@ -8,6 +8,7 @@ include "../framework/Ptrs.s.dfy"
 include "../framework/GlinearMap.s.dfy"
 include "Runtime.i.dfy"
 include "CyclicBufferTokens.i.dfy"
+include "FlatCombinerTokens.i.dfy"
 
 module Impl(nrifc: NRIfc) {
   import opened RequestIds
@@ -15,6 +16,7 @@ module Impl(nrifc: NRIfc) {
   import opened ILT = InfiniteLogTokens(nrifc)
   import opened IL = InfiniteLogSSM(nrifc)
   import opened CBT = CyclicBufferTokens(nrifc)
+  import opened FCT = FlatCombinerTokens(nrifc)
   import opened LinearSequence_i
   import opened LinearSequence_s
   import opened NativeTypes
@@ -52,17 +54,73 @@ module Impl(nrifc: NRIfc) {
     }
   }
 
+  datatype OpResponse = OpResponse(op: nrifc.UpdateOp, ret: nrifc.ReturnType)
+
+  glinear datatype ContextGhost = ContextGhost(
+    glinear contents: glOption<CellContents<OpResponse>>,
+    glinear fc: FCSlot,
+    glinear update: glOption<Update>
+  )
+  {
+    predicate inv(v: uint64, i: nat, cell: Cell<OpResponse>)
+    {
+      && fc.tid == i
+      && (v == 0 || v == 1 || v == 2)
+      && (v == 0 ==> fc.state.FCEmpty? || fc.state.FCResponse?)
+      && (v == 1 ==> fc.state.FCRequest?)
+      && (v == 2 ==> fc.state.FCInProgress?)
+      && (fc.state.FCEmpty? ==>
+        && update.glNone?
+        && contents.glNone?
+      )
+      && (fc.state.FCRequest? ==>
+        && update.glSome?
+        && contents.glSome?
+        && update.value.us.UpdateInit?
+        && update.value.rid == fc.state.rid
+        && contents.value.cell == cell
+        && contents.value.v.op == update.value.us.op
+      )
+      && (fc.state.FCInProgress? ==>
+        && update.glNone?
+        && contents.glNone?
+      )
+      && (fc.state.FCResponse? ==>
+        && update.glSome?
+        && contents.glSome?
+        && update.value.us.UpdateDone?
+        && update.value.rid == fc.state.rid
+        && contents.value.cell == cell
+        && contents.value.v.ret == update.value.us.ret
+      )
+    }
+  }
+
+  linear datatype Context = Context(
+    atomic: Atomic<uint64, ContextGhost>,
+    cell: Cell<OpResponse>
+  )
+  {
+    predicate WF(i: nat)
+    {
+      (forall v, g :: atomic_inv(atomic, v, g) <==> g.inv(v, i, cell))
+    }
+  }
+
   linear datatype Node = Node(
     linear combiner: Atomic<uint64, ()>,
     linear replica: RwLock<NodeReplica>,
-    linear context: map<Tid, nrifc.UpdateOp>,
-    nodeId: uint64,
-    next: Atomic<Tid, ()>
+    //linear context: map<Tid, nrifc.UpdateOp>,
+    linear contexts: lseq<Context>, // TODO cache-line padded?
+    nodeId: uint64
+    //next: Atomic<Tid, ()>
   )
   {
     predicate WF() {
       && (forall nodeReplica :: replica.inv(nodeReplica) <==> nodeReplica.WF(nodeId as int))
       && 0 <= nodeId as int < NUM_REPLICAS as int
+      && |contexts| == NUM_REPLICAS as int
+      && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i))
     }
   }
 
@@ -180,14 +238,104 @@ module Impl(nrifc: NRIfc) {
     if !acquired {
       return;
     }
-    combine(nr, node, tid);
+    //combine(nr, node, tid); // TODO
     atomic_block var _ := execute_atomic_store(node.combiner, 0) {}
   }
 
-  method combine(shared nr: NR, shared node: Node, tid: uint64)
-  requires tid > 0
+  method combine(shared nr: NR, shared node: Node,
+      // these are not inputs or ouputs;
+      // they only serve internally as buffers for ops and responses
+      linear ops: seq<nrifc.UpdateOp>,
+      linear responses: seq<nrifc.ReturnType>,
+      glinear flatCombiner: FCCombiner)
+  returns (
+      linear ops': seq<nrifc.UpdateOp>,
+      linear responses': seq<nrifc.ReturnType>,
+      glinear flatCombiner': FCCombiner)
   requires nr.WF() 
+  requires node.WF() 
+  requires |ops| == NUM_REPLICAS as int
+  requires |responses| == NUM_REPLICAS as int
+  requires flatCombiner.state == FCCombinerCollecting(0, [])
   {
+    /////// Collect the operations
+    glinear var updates, opCellPermissions;
+    ghost var requestIds;
+    var num_ops;
+    ops', num_ops, flatCombiner', requestIds, updates, opCellPermissions :=
+        combine_collect(node, ops, flatCombiner);
+
+    /////// Take the rwlock, append & exec
+    responses' := responses; // TODO
+
+    /////// Return responses
+    responses', flatCombiner' := combine_respond(
+        node, responses', flatCombiner', requestIds,
+        updates, opCellPermissions);
+  }
+
+  method combine_collect(
+      shared node: Node,
+      linear ops: seq<nrifc.UpdateOp>,
+      glinear flatCombiner: FCCombiner)
+  returns (
+      linear ops': seq<nrifc.UpdateOp>,
+      num_ops: uint64,
+      glinear flatCombiner': FCCombiner,
+      ghost requestIds: seq<RequestId>,
+      glinear updates: map<nat, Update>,
+      glinear opCellPermissions: map<nat, CellContents<OpResponse>>)
+  requires node.WF()
+  requires flatCombiner.state == FCCombinerCollecting(0, [])
+  ensures 0 <= num_ops as int < |ops| == NUM_REPLICAS as int
+  ensures flatCombiner'.state.FCCombinerResponding?
+      && flatCombiner'.state.idx == 0
+      && flatCombiner'.state.elem_idx == 0
+      && num_ops as int == |flatCombiner'.state.elems| == |requestIds|
+      && (forall i | 0 <= i < |flatCombiner'.state.elems| ::
+          && flatCombiner'.state.elems[i].rid == requestIds[i]
+          && flatCombiner'.state.elems[i].rid in updates
+          && i in updates
+          && updates[i].rid == flatCombiner'.state.elems[i].rid
+          && updates[i].us.UpdateInit?
+          && updates[i].us.op == ops[i]
+          && i in opCellPermissions
+          && 0 <= flatCombiner'.state.elems[i].tid < NUM_REPLICAS as int
+          && opCellPermissions[i].cell
+                  == node.contexts[flatCombiner'.state.elems[i].tid].cell
+      )
+
+  method combine_respond(
+      shared node: Node,
+      linear responses: seq<nrifc.ReturnType>,
+      glinear flatCombiner: FCCombiner,
+      ghost requestIds: seq<RequestId>,
+      glinear updates: map<nat, Update>,
+      glinear opCellPermissions: map<nat, CellContents<OpResponse>>)
+  returns (
+      linear responses': seq<nrifc.ReturnType>,
+      glinear flatCombiner': FCCombiner)
+  requires node.WF()
+  requires |responses| == NUM_REPLICAS as int
+  requires flatCombiner.state.FCCombinerResponding?
+      && flatCombiner.state.idx == 0
+      && flatCombiner.state.elem_idx == 0
+      && |flatCombiner.state.elems| == |requestIds| < |responses|
+      && (forall i | 0 <= i < |flatCombiner.state.elems| ::
+          && flatCombiner.state.elems[i].rid == requestIds[i]
+          && flatCombiner.state.elems[i].rid in updates
+          && i in updates
+          && updates[i].rid == flatCombiner.state.elems[i].rid
+          && updates[i].us.UpdateDone?
+          && updates[i].us.ret == responses[i]
+          && i in opCellPermissions
+          && 0 <= flatCombiner.state.elems[i].tid < NUM_REPLICAS as int
+          && opCellPermissions[i].cell
+                  == node.contexts[flatCombiner.state.elems[i].tid].cell
+      )
+  ensures |responses'| == NUM_REPLICAS as int
+  ensures flatCombiner.state == FCCombinerCollecting(0, [])
+
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L631
     //    fn combine(&self) {
     //        let mut buffer = self.buffer.borrow_mut();
@@ -291,7 +439,7 @@ module Impl(nrifc: NRIfc) {
     //        }
     //    }
 
-  }
+  //}
 
   method do_read(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp,
       glinear ticket: Readonly)
