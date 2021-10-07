@@ -1,9 +1,11 @@
 include "../framework/AsyncSSM.s.dfy"
-include "CyclicBufferTokens.i.dfy"
+include "../../lib/Lang/NativeTypes.s.dfy"
 
-module FlatCombinerTokens(nrifc: NRIfc) {
+module FlatCombinerTokens {
   import opened RequestIds
-  import opened CBT = CyclicBufferTokens(nrifc) // for NUM_REPLICAS constant
+  import opened NativeTypes
+
+  const MAX_THREADS_PER_REPLICA: uint64 := 32;
 
   // Allows clients to enqueue requests
   // The combiner reads the requests and returns responses
@@ -36,7 +38,7 @@ module FlatCombinerTokens(nrifc: NRIfc) {
   glinear method combiner_collect(glinear comb: FCCombiner, glinear slot: FCSlot)
   returns (glinear comb': FCCombiner, glinear slot': FCSlot)
   requires comb.state.FCCombinerCollecting?
-  requires comb.state.idx < NUM_REPLICAS as int
+  requires comb.state.idx < MAX_THREADS_PER_REPLICA as int
   requires slot.tid == comb.state.idx
   ensures slot.state.FCEmpty? || slot.state.FCRequest?
   ensures slot.state.FCEmpty? ==>
@@ -50,13 +52,13 @@ module FlatCombinerTokens(nrifc: NRIfc) {
   glinear method combiner_goto_responding(glinear comb: FCCombiner)
   returns (glinear comb': FCCombiner)
   requires comb.state.FCCombinerCollecting?
-  requires comb.state.idx == NUM_REPLICAS as int
+  requires comb.state.idx == MAX_THREADS_PER_REPLICA as int
   ensures comb' == FCCombiner(FCCombinerResponding(0, comb.state.elems, 0))
 
   glinear method combiner_response_matches(glinear comb: FCCombiner, glinear slot: FCSlot)
   returns (glinear comb': FCCombiner, glinear slot': FCSlot)
   requires comb.state.FCCombinerResponding?
-  requires comb.state.idx < NUM_REPLICAS as int
+  requires comb.state.idx < MAX_THREADS_PER_REPLICA as int
   requires slot.tid == comb.state.idx
   requires slot.state.FCInProgress?
   ensures 0 <= comb.state.elem_idx < |comb.state.elems|
@@ -67,7 +69,7 @@ module FlatCombinerTokens(nrifc: NRIfc) {
   glinear method combiner_response_skip(glinear comb: FCCombiner, glinear slot: FCSlot)
   returns (glinear comb': FCCombiner, glinear slot': FCSlot)
   requires comb.state.FCCombinerResponding?
-  requires comb.state.idx < NUM_REPLICAS as int
+  requires comb.state.idx < MAX_THREADS_PER_REPLICA as int
   requires slot.tid == comb.state.idx
   requires !slot.state.FCInProgress?
   ensures comb' == FCCombiner(comb.state.(idx := comb.state.idx + 1))
@@ -76,7 +78,7 @@ module FlatCombinerTokens(nrifc: NRIfc) {
   glinear method combiner_respond(glinear comb: FCCombiner, glinear slot: FCSlot)
   returns (glinear comb': FCCombiner, glinear slot': FCSlot)
   requires comb.state.FCCombinerResponding?
-  requires comb.state.idx < NUM_REPLICAS as int
+  requires comb.state.idx < MAX_THREADS_PER_REPLICA as int
   requires slot.tid == comb.state.idx
   requires slot.state.FCInProgress?
   ensures comb' == FCCombiner(comb.state.(idx := comb.state.idx + 1, elem_idx := comb.state.elem_idx + 1))
@@ -85,6 +87,6 @@ module FlatCombinerTokens(nrifc: NRIfc) {
   glinear method combiner_goto_collecting(glinear comb: FCCombiner)
   returns (glinear comb': FCCombiner)
   requires comb.state.FCCombinerResponding?
-  requires comb.state.idx == NUM_REPLICAS as int
+  requires comb.state.idx == MAX_THREADS_PER_REPLICA as int
   ensures comb' == FCCombiner(FCCombinerCollecting(0, []))
 }

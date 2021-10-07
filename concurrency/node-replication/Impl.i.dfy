@@ -16,7 +16,7 @@ module Impl(nrifc: NRIfc) {
   import opened ILT = InfiniteLogTokens(nrifc)
   import opened IL = InfiniteLogSSM(nrifc)
   import opened CBT = CyclicBufferTokens(nrifc)
-  import opened FCT = FlatCombinerTokens(nrifc)
+  import opened FCT = FlatCombinerTokens
   import opened LinearSequence_i
   import opened LinearSequence_s
   import opened NativeTypes
@@ -34,7 +34,6 @@ module Impl(nrifc: NRIfc) {
   const GC_FROM_HEAD: uint64 := 9999;
   const WARN_THRESHOLD: uint64 := 9999;
   const MAX_COMBINED_OPS: uint64 := 9999;
-  const MAX_THREADS_PER_REPLICA: uint64 := 32;
 
   /*
    * Anything which is allocated on a NUMA node
@@ -97,8 +96,8 @@ module Impl(nrifc: NRIfc) {
   }
 
   linear datatype Context = Context(
-    atomic: Atomic<uint64, ContextGhost>,
-    cell: Cell<OpResponse>
+    linear atomic: Atomic<uint64, ContextGhost>,
+    linear cell: Cell<OpResponse>
   )
   {
     predicate WF(i: nat)
@@ -287,27 +286,96 @@ module Impl(nrifc: NRIfc) {
       glinear opCellPermissions: map<nat, CellContents<OpResponse>>)
   requires node.WF()
   requires flatCombiner.state == FCCombinerCollecting(0, [])
-  ensures 0 <= num_ops as int < |ops| == MAX_THREADS_PER_REPLICA as int
+  requires |ops| == MAX_THREADS_PER_REPLICA as int
+  ensures |ops'| == |ops|
+  ensures 0 <= num_ops as int <= |ops'|
   ensures flatCombiner'.state.FCCombinerResponding?
       && flatCombiner'.state.idx == 0
       && flatCombiner'.state.elem_idx == 0
       && num_ops as int == |flatCombiner'.state.elems| == |requestIds|
       && (forall i | 0 <= i < |flatCombiner'.state.elems| ::
           && flatCombiner'.state.elems[i].rid == requestIds[i]
-          && flatCombiner'.state.elems[i].rid in updates
           && i in updates
           && updates[i].rid == flatCombiner'.state.elems[i].rid
           && updates[i].us.UpdateInit?
-          && updates[i].us.op == ops[i]
+          && updates[i].us.op == ops'[i]
           && i in opCellPermissions
           && 0 <= flatCombiner'.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
           && opCellPermissions[i].cell
                   == node.contexts[flatCombiner'.state.elems[i].tid].cell
       )
-  //{
-    //var j := 0 as uint64;
-    //while j < MAX_THREADS_PER_REPLICA as int;
-  //}
+  {
+    ops' := ops;
+    flatCombiner' := flatCombiner;
+    //requestIds := [];
+    num_ops := 0;
+    updates := glmap_empty();
+    opCellPermissions := glmap_empty();
+
+    var j := 0 as uint64;
+    while j < MAX_THREADS_PER_REPLICA
+    invariant 0 <= j <= MAX_THREADS_PER_REPLICA
+    invariant num_ops <= j
+    invariant |ops'| == |ops|
+    invariant flatCombiner'.state.FCCombinerCollecting?
+      && flatCombiner'.state.idx == j as int
+      && num_ops as int == |flatCombiner'.state.elems| // == |requestIds|
+      && (forall i | 0 <= i < |flatCombiner'.state.elems| ::
+          //&& flatCombiner'.state.elems[i].rid //== requestIds[i]
+          && i in updates
+          && updates[i].rid == flatCombiner'.state.elems[i].rid
+          && updates[i].us.UpdateInit?
+          && updates[i].us.op == ops'[i]
+          && i in opCellPermissions
+          && 0 <= flatCombiner'.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
+          && opCellPermissions[i].cell
+                  == node.contexts[flatCombiner'.state.elems[i].tid].cell
+      )
+    {
+      glinear var new_contents_opt;
+      glinear var new_update_opt;
+
+      atomic_block var has_op := execute_atomic_compare_and_set_strong(
+          lseq_peek(node.contexts, j).atomic, 1, 2)
+      {
+        ghost_acquire ghost_context;
+        glinear var ContextGhost(contents, fc, update) := ghost_context;
+        flatCombiner', fc := combiner_collect(flatCombiner', fc);
+        if has_op { // FCRequest
+          new_contents_opt := contents;
+          new_update_opt := update;
+          ghost_context := ContextGhost(glNone, fc, glNone);
+        } else {
+          ghost_context := ContextGhost(contents, fc, update);
+          new_contents_opt := glNone;
+          new_update_opt := glNone;
+        }
+        ghost_release ghost_context;
+      }
+
+      if has_op {
+        // get the op, add to ops' buffer
+        var opResponse := read_cell(lseq_peek(node.contexts, j).cell, new_contents_opt.value);
+        var op := opResponse.op;
+        ops' := seq_set(ops', num_ops, op);
+
+        // ghost state update
+        updates := glmap_insert(updates, num_ops as int, unwrap_value(new_update_opt));
+        opCellPermissions := glmap_insert(opCellPermissions, num_ops as int, unwrap_value(new_contents_opt));
+
+        num_ops := num_ops + 1;
+      } else {
+        dispose_glnone(new_contents_opt);
+        dispose_glnone(new_update_opt);
+      }
+
+      j := j + 1;
+    }
+
+    flatCombiner' := combiner_goto_responding(flatCombiner');
+    requestIds := seq(num_ops as int, (i) requires 0 <= i < num_ops as int =>
+        flatCombiner'.state.elems[i].rid);      
+  }
 
   method combine_respond(
       shared node: Node,
@@ -327,7 +395,6 @@ module Impl(nrifc: NRIfc) {
       && |flatCombiner.state.elems| == |requestIds| < |responses|
       && (forall i | 0 <= i < |flatCombiner.state.elems| ::
           && flatCombiner.state.elems[i].rid == requestIds[i]
-          && flatCombiner.state.elems[i].rid in updates
           && i in updates
           && updates[i].rid == flatCombiner.state.elems[i].rid
           && updates[i].us.UpdateDone?
