@@ -63,7 +63,6 @@ module FlatCombinerTokens {
   requires slot.state.FCInProgress?
   ensures 0 <= comb.state.elem_idx < |comb.state.elems|
   ensures comb.state.elems[comb.state.elem_idx].tid == comb.state.idx
-  ensures comb.state.elems[comb.state.elem_idx].rid == slot.state.rid
   ensures comb' == comb && slot' == slot
       
   glinear method combiner_response_skip(glinear comb: FCCombiner, glinear slot: FCSlot)
@@ -80,9 +79,12 @@ module FlatCombinerTokens {
   requires comb.state.FCCombinerResponding?
   requires comb.state.idx < MAX_THREADS_PER_REPLICA as int
   requires slot.tid == comb.state.idx
-  requires slot.state.FCInProgress?
+  requires 0 <= comb.state.elem_idx < |comb.state.elems|
+  requires comb.state.elems[comb.state.elem_idx].tid == comb.state.idx
+  ensures slot.state.FCInProgress?
   ensures comb' == FCCombiner(comb.state.(idx := comb.state.idx + 1, elem_idx := comb.state.elem_idx + 1))
-  ensures slot' == slot.(state := FCInProgress(slot.state.rid))
+  ensures slot' == slot.(state := FCResponse(slot.state.rid))
+  ensures comb.state.elems[comb.state.elem_idx].rid == slot.state.rid
 
   glinear method combiner_goto_collecting(glinear comb: FCCombiner)
   returns (glinear comb': FCCombiner)

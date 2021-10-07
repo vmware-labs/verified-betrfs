@@ -268,7 +268,7 @@ module Impl(nrifc: NRIfc) {
     responses' := responses; // TODO
 
     /////// Return responses
-    responses', flatCombiner' := combine_respond(
+    flatCombiner' := combine_respond(
         node, responses', flatCombiner', requestIds,
         updates, opCellPermissions);
   }
@@ -379,20 +379,19 @@ module Impl(nrifc: NRIfc) {
 
   method combine_respond(
       shared node: Node,
-      linear responses: seq<nrifc.ReturnType>,
+      shared responses: seq<nrifc.ReturnType>,
       glinear flatCombiner: FCCombiner,
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
       glinear opCellPermissions: map<nat, CellContents<OpResponse>>)
   returns (
-      linear responses': seq<nrifc.ReturnType>,
       glinear flatCombiner': FCCombiner)
   requires node.WF()
   requires |responses| == MAX_THREADS_PER_REPLICA as int
   requires flatCombiner.state.FCCombinerResponding?
       && flatCombiner.state.idx == 0
       && flatCombiner.state.elem_idx == 0
-      && |flatCombiner.state.elems| == |requestIds| < |responses|
+      && |flatCombiner.state.elems| == |requestIds| <= |responses|
       && (forall i | 0 <= i < |flatCombiner.state.elems| ::
           && flatCombiner.state.elems[i].rid == requestIds[i]
           && i in updates
@@ -404,8 +403,86 @@ module Impl(nrifc: NRIfc) {
           && opCellPermissions[i].cell
                   == node.contexts[flatCombiner.state.elems[i].tid].cell
       )
-  ensures |responses'| == MAX_THREADS_PER_REPLICA as int
-  ensures flatCombiner.state == FCCombinerCollecting(0, [])
+  ensures flatCombiner'.state == FCCombinerCollecting(0, [])
+  {
+    flatCombiner' := flatCombiner;
+    glinear var updates' := updates;
+    glinear var opCellPermissions' := opCellPermissions;
+
+    var cur_idx: uint64 := 0;
+    var j := 0;
+    while j < MAX_THREADS_PER_REPLICA
+    invariant 0 <= cur_idx <= j <= MAX_THREADS_PER_REPLICA
+    invariant
+      && flatCombiner'.state.FCCombinerResponding?
+      && flatCombiner'.state.idx == j as int
+      && flatCombiner'.state.elem_idx == cur_idx as int
+      && |flatCombiner'.state.elems| == |requestIds| <= |responses|
+      && (forall i | cur_idx as int <= i < |flatCombiner'.state.elems| ::
+          && flatCombiner'.state.elems[i].rid == requestIds[i]
+          && i in updates'
+          && updates'[i].rid == flatCombiner'.state.elems[i].rid
+          && updates'[i].us.UpdateDone?
+          && updates'[i].us.ret == responses[i]
+          && i in opCellPermissions'
+          && 0 <= flatCombiner'.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
+          && opCellPermissions'[i].cell
+                  == node.contexts[flatCombiner'.state.elems[i].tid].cell
+      )
+    {
+      atomic_block var slot_state := execute_atomic_load(
+          lseq_peek(node.contexts, j).atomic)
+      {
+        ghost_acquire ghost_context;
+        glinear var ContextGhost(contents, fc, update) := ghost_context;
+        if slot_state == 2 {
+          flatCombiner', fc :=
+            combiner_response_matches(flatCombiner', fc);
+        } else {
+          flatCombiner', fc := combiner_response_skip(flatCombiner', fc);
+        }
+        ghost_context := ContextGhost(contents, fc, update);
+        ghost_release ghost_context;
+      }
+
+      if slot_state == 2 {
+        glinear var update, opCellPerm;
+        updates', update := glmap_take(updates', cur_idx as int);
+        opCellPermissions', opCellPerm := glmap_take(opCellPermissions', cur_idx as int);
+
+        // write the return value
+
+        var opResponse := read_cell(lseq_peek(node.contexts, j).cell, opCellPerm);
+        opResponse := opResponse.(ret := seq_get(responses, cur_idx));
+
+        write_cell(lseq_peek(node.contexts, j).cell, inout opCellPerm,
+            opResponse);
+
+        atomic_block var slot_state := execute_atomic_store(
+            lseq_peek(node.contexts, j).atomic, 0)
+        {
+          ghost_acquire ghost_context;
+          glinear var ContextGhost(old_contents, fc, old_update) := ghost_context;
+
+          flatCombiner', fc := combiner_respond(flatCombiner', fc);
+
+          dispose_glnone(old_contents);
+          dispose_glnone(old_update);
+          ghost_context := ContextGhost(glSome(opCellPerm), fc, glSome(update));
+          assert ghost_context.inv(0, j as int, lseq_peek(node.contexts, j).cell);
+          ghost_release ghost_context;
+        }
+
+        cur_idx := cur_idx + 1;
+      }
+
+      j := j + 1;
+    }
+
+    dispose_anything(updates');
+    dispose_anything(opCellPermissions');
+    flatCombiner' := combiner_goto_collecting(flatCombiner');
+  }
 
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L631
     //    fn combine(&self) {
