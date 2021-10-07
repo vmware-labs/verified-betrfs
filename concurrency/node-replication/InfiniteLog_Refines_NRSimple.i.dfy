@@ -331,6 +331,16 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
      output == nrifc.read(state_at_version(log, version), op)
   }
 
+  lemma ConsumeStub_Refines_End_state_at_version(s_log: seq<nrifc.UpdateOp>, i_log: map<nat, LogEntry>, gtail: nat, idx:nat)
+    requires forall i | 0 <= i < gtail :: i in i_log
+    requires 0 <= idx <= |s_log|
+    requires idx <= gtail
+    requires s_log == I_Log(gtail, i_log);
+    ensures B.state_at_version(s_log, idx) == state_at_version(i_log, idx)
+  {
+    reveal_I_Log();
+  }
+
   lemma ConsumeStub_Refines_End(s: A.Variables, s': A.Variables,
       rid: RequestId, output: nrifc.Output, stub: M)
   requires IL.ConsumeStub(s, s', rid, output, stub)
@@ -345,15 +355,29 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
         I_Removed_LocalUpdates_is(s, s', rid);
       }
 
-      assert stub.localUpdates[rid].ret == output;
-      assert s.localUpdates[rid].ret == output;
-      // assert s.localUpdates[rid].ret == nrifc.update(state_at_version(s.log, idx), s.log[idx]).return_value;
+      assert rid in I(s).update_resps by {
+        reveal_I_UpdateResponses();
+      }
+      var idx := I(s).update_resps[rid].idx_in_log;
+
+      assert idx == s.localUpdates[rid].idx by {
+        reveal_I_UpdateResponses();
+      }
+
+      assert idx < |I(s).log| by {
+        reveal_I_Log();
+      }
+
+      assert output == nrifc.update(B.state_at_version(I(s).log, idx), I(s).log[idx]).return_value by {
+        assert output == nrifc.update(state_at_version(s.log, idx), s.log[idx].op).return_value;
+        reveal_I_Log();
+        assert s.log[idx].op ==  I(s).log[idx];
+        ConsumeStub_Refines_End_state_at_version(I(s).log, s.log, s.global_tail.value, idx);
+      }
 
       assert exists step :: B.NextStep(I(s), I(s'), ifc.End(rid, output), step) by {
         var step := B.EndUpdate_Step(rid, output);
         assert B.NextStep(I(s), I(s'), ifc.End(rid, output), step) by {
-          // that one now taks a bit longer, due to the return value that we now construct in the EndUpdate?
-          assume false;
           assert B.EndUpdate(I(s), I(s'), rid,  output);
         }
       }
@@ -367,37 +391,51 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
         ConsumeStub_Refines_End_LocalReads(s, s', rid, output, stub);
         I_Removed_LocalReads_is(s, s', rid);
       }
-      assert exists step :: B.NextStep(I(s), I(s'), ifc.End(rid, output), step) by {
 
-        assume exists version : nat | version <= s.ctail.value :: VersionInLog(s.log, version) && OutputMatch(s.log, output, version,  s.localReads[rid].op);
-        var version : nat :| version <= s.ctail.value  && VersionInLog(s.log, version) && OutputMatch(s.log, output, version,  s.localReads[rid].op);
 
-        var step := B.FinishReadonly_Step(rid, version, output);
+      assert rid in I(s).readonly_reqs && I(s).readonly_reqs[rid].ReadReq? by {
+        reveal_I_ReadRequests();
+      }
 
-        assert rid in I(s).readonly_reqs by {
+      assert I(s).readonly_reqs[rid].ctail_at_start == s.localReads[rid].ctail by {
+        reveal_I_ReadRequests();
+      }
+
+      assert exists version : nat | s.localReads[rid].ctail <= version <= s.ctail.value :: VersionInLog(s.log, version) && OutputMatch(s.log, output, version,  s.localReads[rid].op) by {
+        assert output ==  s.localReads[rid].ret;
+        assert s.localReads[rid].ReadonlyDone?;
+        assert exists v | s.localReads[rid].ctail  <= v <= s.ctail.value ::
+          s.localReads[rid].ret == nrifc.read(state_at_version(s.log, v),  s.localReads[rid].op);
+        assume false;
+      }
+      var version : nat :| s.localReads[rid].ctail<= version <= s.ctail.value  && VersionInLog(s.log, version) && OutputMatch(s.log, output, version,  s.localReads[rid].op);
+
+      assert version <= I(s).ctail;
+
+      assert I(s).readonly_reqs[rid].ctail_at_start <= version <= |I(s).log| by {
+          reveal_I_Log();
+          assert |I(s).log| == s.global_tail.value;
           reveal_I_ReadRequests();
+          assert I(s).readonly_reqs[rid].ctail_at_start <= I(s).ctail;
+          assert I(s).ctail <= |I(s).log|;
+          assert version <= |I(s).log|;
+      }
+
+      assert output == nrifc.read(B.state_at_version(I(s).log, version), I(s).readonly_reqs[rid].op) by {
+          // assert version <= s.ctail.value;
+          assert output == nrifc.read(state_at_version(s.log, version),s.localReads[rid].op);
+          reveal_I_Log();
+          assert I(s).readonly_reqs[rid].op == s.localReads[rid].op by {
+            reveal_I_ReadRequests();
+          }
+          ConsumeStub_Refines_End_state_at_version(I(s).log, s.log, s.global_tail.value, version);
+      }
+
+      assert exists step :: B.NextStep(I(s), I(s'), ifc.End(rid, output), step) by {
+        var step := B.FinishReadonly_Step(rid, version, output);
+        assert B.NextStep(I(s), I(s'), ifc.End(rid, output), step) by {
+          assert B.FinishReadonly(I(s), I(s'), rid, version, output);
         }
-
-        assert I(s).readonly_reqs[rid].ReadReq? by {
-          assert s.localReads[rid].ReadonlyDone?;
-           reveal_I_ReadRequests();
-        }
-
-        assert I(s).readonly_reqs[rid].ctail_at_start <= version <= |I(s).log| by {
-          assume false;
-        }
-
-        assert output == nrifc.read(B.state_at_version(I(s).log, version), I(s).readonly_reqs[rid].op) by {
-          assume false;
-        }
-
-         assert B.NextStep(I(s), I(s'), ifc.End(rid, output), step) by {
-           assert B.FinishReadonly(I(s), I(s'), rid, version, output) by {
-            assert version <= I(s).ctail;
-
-
-           }
-         }
       }
     }
   }
