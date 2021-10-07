@@ -9,7 +9,7 @@ module RwLockImpl {
   import opened Atomics
   import opened LinearSequence_s
   import opened LinearSequence_i
-  import opened Cells
+  import opened LinearCells
   import opened GhostLoc
   import opened GlinearOption
 
@@ -58,26 +58,29 @@ module RwLockImpl {
    */
 
   linear datatype RwLock = RwLock(
-    linear exclusiveFlag: Atomic<bool, Token>,  // implements ExclusiveState.exc
-    linear refCounts: lseq<Atomic<nat, Token>>,  // implements map<ThreadId, nat>
-    linear cell: Cell<Handle.ContentsType>,      // implements the actual value that ExclusiveState.shared_value represents
-    ghost loc: Loc                              // which instance of this lock we're talking about
+    linear exclusiveFlag: Atomic<bool, Token>,    // implements ExclusiveState.exc
+    linear refCounts: lseq<Atomic<nat, Token>>,   // implements map<ThreadId, nat>
+    linear lcell: LinearCell<Handle.ContentsType>, // implements the actual value that ExclusiveState.shared_value represents
+    ghost loc: Loc                                // which instance of this lock we're talking about
   )
   {
     predicate inv(v: V)  // client's invariant
 
     predicate InternalInv()
     {
+      && |refCounts| == RwLockMod.RC_WIDTH
       && (forall v, token :: atomic_inv(exclusiveFlag, v, token)
             <==> (
+              && token.val.M?
               && token.val.exclusive.ExclusiveState?          // Token has an ExclusiveState in it
               && token.val == RwLockMod.CentralHandle(token.val.exclusive)  // Token doesn't have anything else in it
               && v == token.val.exclusive.exc                 // Token lock state matches protected bool
-              && cell == token.val.exclusive.stored_value.cell  // Token stored value reflects what's in the cell
+              && lcell == token.val.exclusive.stored_value.lcell  // Token stored value reflects what's in the cell
               && token.loc == loc
             )
           )
-      && (forall t, count, token :: atomic_inv(refCounts[t], count, token)
+      && (forall t, count, token | 0 <= t < RwLockMod.RC_WIDTH
+          :: atomic_inv(refCounts[t], count, token)
             <==> (
               // Token is a single refcount that matches the protected count
               && token.val == RwLockMod.RefCount(t, count)
@@ -94,14 +97,15 @@ module RwLockImpl {
 
     predicate IsPendingHandle(token: RwLockToken.Token, visited: int)
     {
+      && token.val.M?
       && token.val == RwLockMod.ExcHandle(token.val.exc)  // it's an ExcState
       && token.val.exc.visited == visited
-      && token.val.exc.b.cell == this.cell
+      && token.val.exc.b.lcell == this.lcell
       && token.loc == this.loc
     }
 
     shared method acquire()
-    returns (glinear v: V, glinear handle: ExclusiveGuard)
+    returns (linear v: V, glinear handle: ExclusiveGuard)
     ensures this.inv(v)
     ensures handle.m == this
     decreases *
@@ -157,7 +161,8 @@ module RwLockImpl {
       glinear var b':Handle.Handle;
       pending_handle, b' := RwLockToken.perform_Withdraw_TakeExcLockFinish(pending_handle);
 
-      v := read_cell(cell, b');
+      v, b' := take_lcell(lcell, b');
+      Ptrs.dispose_anything(b'); // TODO(travis): I have no idea if this is okay. Do I need to remember the CellContents b'?
       handle := ExclusiveGuard(pending_handle, this);
     }
 

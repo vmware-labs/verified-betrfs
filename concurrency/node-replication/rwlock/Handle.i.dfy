@@ -1,8 +1,8 @@
 include "../../framework/Cells.s.dfy"
 
 module Handle {
-  import opened Cells
+  import opened LinearCells
 
   type ContentsType(!new)
-  type Handle = CellContents<ContentsType>
+  type Handle = LCellContents<ContentsType>
 }
