@@ -119,7 +119,7 @@ module Impl(nrifc: NRIfc) {
     predicate WF() {
       && (forall nodeReplica :: replica.inv(nodeReplica) <==> nodeReplica.WF(nodeId as int))
       && 0 <= nodeId as int < NUM_REPLICAS as int
-      && |contexts| == NUM_REPLICAS as int
+      && |contexts| == MAX_THREADS_PER_REPLICA as int
       && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i))
     }
   }
@@ -254,8 +254,8 @@ module Impl(nrifc: NRIfc) {
       glinear flatCombiner': FCCombiner)
   requires nr.WF() 
   requires node.WF() 
-  requires |ops| == NUM_REPLICAS as int
-  requires |responses| == NUM_REPLICAS as int
+  requires |ops| == MAX_THREADS_PER_REPLICA as int
+  requires |responses| == MAX_THREADS_PER_REPLICA as int
   requires flatCombiner.state == FCCombinerCollecting(0, [])
   {
     /////// Collect the operations
@@ -287,7 +287,7 @@ module Impl(nrifc: NRIfc) {
       glinear opCellPermissions: map<nat, CellContents<OpResponse>>)
   requires node.WF()
   requires flatCombiner.state == FCCombinerCollecting(0, [])
-  ensures 0 <= num_ops as int < |ops| == NUM_REPLICAS as int
+  ensures 0 <= num_ops as int < |ops| == MAX_THREADS_PER_REPLICA as int
   ensures flatCombiner'.state.FCCombinerResponding?
       && flatCombiner'.state.idx == 0
       && flatCombiner'.state.elem_idx == 0
@@ -300,10 +300,14 @@ module Impl(nrifc: NRIfc) {
           && updates[i].us.UpdateInit?
           && updates[i].us.op == ops[i]
           && i in opCellPermissions
-          && 0 <= flatCombiner'.state.elems[i].tid < NUM_REPLICAS as int
+          && 0 <= flatCombiner'.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
           && opCellPermissions[i].cell
                   == node.contexts[flatCombiner'.state.elems[i].tid].cell
       )
+  //{
+    //var j := 0 as uint64;
+    //while j < MAX_THREADS_PER_REPLICA as int;
+  //}
 
   method combine_respond(
       shared node: Node,
@@ -316,7 +320,7 @@ module Impl(nrifc: NRIfc) {
       linear responses': seq<nrifc.ReturnType>,
       glinear flatCombiner': FCCombiner)
   requires node.WF()
-  requires |responses| == NUM_REPLICAS as int
+  requires |responses| == MAX_THREADS_PER_REPLICA as int
   requires flatCombiner.state.FCCombinerResponding?
       && flatCombiner.state.idx == 0
       && flatCombiner.state.elem_idx == 0
@@ -329,11 +333,11 @@ module Impl(nrifc: NRIfc) {
           && updates[i].us.UpdateDone?
           && updates[i].us.ret == responses[i]
           && i in opCellPermissions
-          && 0 <= flatCombiner.state.elems[i].tid < NUM_REPLICAS as int
+          && 0 <= flatCombiner.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
           && opCellPermissions[i].cell
                   == node.contexts[flatCombiner.state.elems[i].tid].cell
       )
-  ensures |responses'| == NUM_REPLICAS as int
+  ensures |responses'| == MAX_THREADS_PER_REPLICA as int
   ensures flatCombiner.state == FCCombinerCollecting(0, [])
 
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L631
@@ -524,8 +528,8 @@ module Impl(nrifc: NRIfc) {
   requires reader.rs.ReaderIdle?
   requires ghost_replica.state == nrifc.I(actual_replica)
   requires ghost_replica.nodeId == node.nodeId as int
-  requires |responses| == NUM_REPLICAS as int
-  requires |requestIds| <= NUM_REPLICAS as int
+  requires |responses| == MAX_THREADS_PER_REPLICA as int
+  requires |requestIds| <= MAX_THREADS_PER_REPLICA as int
 
   ensures combinerState'.state.CombinerReady?
       || combinerState'.state.CombinerPlaced?
@@ -736,8 +740,8 @@ module Impl(nrifc: NRIfc) {
   {
     && combinerState.nodeId == node.nodeId as int
     && combinerState.state == CombinerPlaced(requestIds)
-    && |responses| == NUM_REPLICAS as int
-    && |requestIds| <= NUM_REPLICAS as int
+    && |responses| == MAX_THREADS_PER_REPLICA as int
+    && |requestIds| <= MAX_THREADS_PER_REPLICA as int
     && (forall i | 0 <= i < |requestIds| ::
       i in updates
         && updates[i].us.UpdatePlaced?
@@ -754,8 +758,8 @@ module Impl(nrifc: NRIfc) {
   {
     && combinerState'.nodeId == node.nodeId as int
     && combinerState'.state == CombinerReady
-    && |responses'| == NUM_REPLICAS as int
-    && |requestIds| <= NUM_REPLICAS as int
+    && |responses'| == MAX_THREADS_PER_REPLICA as int
+    && |requestIds| <= MAX_THREADS_PER_REPLICA as int
     && (forall i | 0 <= i < |requestIds| as int ::
             i in updates'
               && updates'[i].us.UpdateDone?
@@ -788,7 +792,7 @@ module Impl(nrifc: NRIfc) {
   requires combinerState.state.CombinerReady?
       || combinerState.state.CombinerPlaced?
   requires combinerState.nodeId == node.nodeId as int
-  requires |responses| == NUM_REPLICAS as int
+  requires |responses| == MAX_THREADS_PER_REPLICA as int
   requires combinerState.state.CombinerPlaced? ==>
       pre_exec(node, requestIds, responses, updates, combinerState)
   ensures combinerState.state.CombinerPlaced? ==>
@@ -847,7 +851,7 @@ module Impl(nrifc: NRIfc) {
       invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
       invariant ghost_replica'.state == nrifc.I(actual_replica')
       invariant ghost_replica'.nodeId == node.nodeId as int
-      invariant |responses'| == NUM_REPLICAS as int
+      invariant |responses'| == MAX_THREADS_PER_REPLICA as int
       invariant 0 <= responsesIndex as int <= |requestIds'|
       invariant forall i | responsesIndex as int <= i < |requestIds'| ::
           i in updates'
@@ -873,7 +877,7 @@ module Impl(nrifc: NRIfc) {
         invariant !done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int)
         invariant done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int + 1)
         invariant 0 <= responsesIndex as int <= |requestIds'|
-        invariant |responses'| == NUM_REPLICAS as int
+        invariant |responses'| == MAX_THREADS_PER_REPLICA as int
         invariant forall i | responsesIndex as int <= i < |requestIds'| ::
             i in updates'
               && updates'[i].us.UpdatePlaced?
@@ -1025,14 +1029,14 @@ module Impl(nrifc: NRIfc) {
   requires ghost_replica.nodeId == node.nodeId as int
   requires combinerState.state.CombinerPlaced?
   requires combinerState.nodeId == node.nodeId as int
-  requires |responses| == NUM_REPLICAS as int
+  requires |responses| == MAX_THREADS_PER_REPLICA as int
   requires pre_exec(node, requestIds, responses, updates, combinerState)
 
   ensures reader' == reader
   ensures ghost_replica'.state == nrifc.I(actual_replica')
   ensures ghost_replica'.nodeId == node.nodeId as int
   ensures combinerState'.nodeId == node.nodeId as int
-  ensures |responses'| == NUM_REPLICAS as int
+  ensures |responses'| == MAX_THREADS_PER_REPLICA as int
 
   ensures combinerState'.state.CombinerReady?
       || combinerState'.state.CombinerPlaced?
@@ -1069,7 +1073,7 @@ module Impl(nrifc: NRIfc) {
     invariant combinerState'.state.CombinerPlaced? ==>
       updates' == updates && combinerState' == combinerState && reader' == reader
             && responses' == responses
-    invariant |responses'| == NUM_REPLICAS as int
+    invariant |responses'| == MAX_THREADS_PER_REPLICA as int
 
     decreases *
     {
@@ -1106,7 +1110,7 @@ module Impl(nrifc: NRIfc) {
       invariant combinerState'.state.CombinerPlaced? ==>
         updates' == updates && combinerState' == combinerState && reader' == reader
             && responses' == responses
-      invariant |responses'| == NUM_REPLICAS as int
+      invariant |responses'| == MAX_THREADS_PER_REPLICA as int
 
       {
         atomic_block var cur_local_tail :=
