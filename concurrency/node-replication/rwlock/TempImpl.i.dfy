@@ -48,8 +48,8 @@ module RwLockImpl {
      * inside meets the invariant.
      */
 
-    method {:extern} acquire()
-    returns (glinear v: V, glinear handle: ExclusiveGuard<V>)
+    shared method {:extern} acquire()
+    returns (linear v: V, glinear handle: ExclusiveGuard<V>)
     ensures this.inv(v)
     ensures handle.m == this
 
@@ -58,7 +58,7 @@ module RwLockImpl {
      * The client must ensure that the data meets the invariant.
      */
 
-    method {:extern} release(glinear v: V, glinear handle: ExclusiveGuard<V>)
+    shared method {:extern} release(linear v: V, glinear handle: ExclusiveGuard<V>)
     requires this.inv(v)
     requires handle.m == this
 

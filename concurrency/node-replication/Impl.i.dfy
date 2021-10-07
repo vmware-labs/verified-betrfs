@@ -42,7 +42,8 @@ module Impl(nrifc: NRIfc) {
   linear datatype NodeReplica = NodeReplica(
     linear actual_replica: nrifc.DataStructureType,
     glinear ghost_replica: Replica,
-    glinear combiner: CombinerToken
+    glinear combiner: CombinerToken,
+    glinear reader: Reader
   )
   {
     predicate WF(nodeId: NodeId) {
@@ -50,6 +51,8 @@ module Impl(nrifc: NRIfc) {
       && ghost_replica.nodeId == nodeId
       && combiner.state == CombinerReady
       && combiner.nodeId == nodeId
+      && reader.nodeId == nodeId
+      && reader.rs.ReaderIdle?
     }
   }
 
@@ -256,6 +259,7 @@ module Impl(nrifc: NRIfc) {
   requires |ops| == MAX_THREADS_PER_REPLICA as int
   requires |responses| == MAX_THREADS_PER_REPLICA as int
   requires flatCombiner.state == FCCombinerCollecting(0, [])
+  decreases *
   {
     /////// Collect the operations
     glinear var updates, opCellPermissions;
@@ -264,8 +268,31 @@ module Impl(nrifc: NRIfc) {
     ops', num_ops, flatCombiner', requestIds, updates, opCellPermissions :=
         combine_collect(node, ops, flatCombiner);
 
-    /////// Take the rwlock, append & exec
-    responses' := responses; // TODO
+    /////// Take the rwlock
+    linear var rep;
+    glinear var guard;
+    rep, guard := node.replica.acquire();
+    assert rep.WF(node.nodeId as int);
+    linear var NodeReplica(actual_replica, ghost_replica, combinerState, reader) := rep;
+
+    /////// append
+    actual_replica, responses', ghost_replica, updates, combinerState, reader :=
+      append(nr, node, ops', num_ops, actual_replica, responses,
+          // ghost stuff
+          ghost_replica, requestIds, updates, combinerState, reader);
+
+    /////// exec
+
+    actual_replica, responses',
+        ghost_replica, updates, combinerState, reader :=
+      exec(nr, node, actual_replica, responses', ghost_replica,
+          requestIds, updates, combinerState, reader);
+
+    /////// Release the rwlock
+
+    node.replica.release(
+        NodeReplica(actual_replica, ghost_replica, combinerState, reader),
+        guard);
 
     /////// Return responses
     flatCombiner' := combine_respond(
@@ -647,6 +674,7 @@ module Impl(nrifc: NRIfc) {
 
   method append(shared nr: NR, shared node: Node,
       shared ops: seq<nrifc.UpdateOp>,
+      num_ops: uint64,
       linear actual_replica: nrifc.DataStructureType,
       linear responses: seq<nrifc.ReturnType>,
       glinear ghost_replica: Replica,
@@ -663,7 +691,8 @@ module Impl(nrifc: NRIfc) {
     glinear reader': Reader)
   requires nr.WF()
   requires node.WF()
-  requires |requestIds| == |ops| <= MAX_COMBINED_OPS as int
+  requires |ops| == MAX_THREADS_PER_REPLICA as int
+  requires |requestIds| == num_ops as int <= MAX_THREADS_PER_REPLICA as int
   requires combinerState.nodeId == node.nodeId as int
   requires combinerState.state == CombinerReady
   requires forall i | 0 <= i < |requestIds| ::
@@ -681,6 +710,9 @@ module Impl(nrifc: NRIfc) {
       post_exec(node, requestIds, responses', updates', combinerState')
   ensures combinerState'.state.CombinerPlaced? ==>
       pre_exec(node, requestIds, responses', updates', combinerState')
+  ensures reader' == reader
+  ensures ghost_replica'.state == nrifc.I(actual_replica')
+  ensures ghost_replica'.nodeId == node.nodeId as int
 
   decreases *
   {
@@ -691,7 +723,6 @@ module Impl(nrifc: NRIfc) {
     reader' := reader;
     responses' := responses;
 
-    var nops := seq_length(ops);
     var iteration := 1;
     var waitgc := 1;
 
@@ -699,10 +730,12 @@ module Impl(nrifc: NRIfc) {
     while !done
     invariant 0 <= iteration as int <= WARN_THRESHOLD as int
     invariant 0 <= waitgc as int <= WARN_THRESHOLD as int
+    invariant reader' == reader
+    invariant ghost_replica'.state == nrifc.I(actual_replica')
+    invariant ghost_replica'.nodeId == node.nodeId as int
     invariant !done ==>
       && combinerState' == combinerState
       && updates' == updates
-      && reader' == reader
       && responses' == responses
       && ghost_replica'.state == nrifc.I(actual_replica')
       && ghost_replica'.nodeId == node.nodeId as int
@@ -747,15 +780,15 @@ module Impl(nrifc: NRIfc) {
               requestIds, updates', combinerState', reader');
       } else {
 
-        assume tail as int + nops as int < 0x1_0000_0000_0000_0000; // TODO
-        var advance: bool := (tail + nops > head + (BUFFER_SIZE - GC_FROM_HEAD));
+        assume tail as int + num_ops as int < 0x1_0000_0000_0000_0000; // TODO
+        var advance: bool := (tail + num_ops > head + (BUFFER_SIZE - GC_FROM_HEAD));
 
         glinear var log_entries;
         glinear var cyclic_buffer_entries;
         glinear var appendStateOpt;
 
         atomic_block var success := execute_atomic_compare_and_set_weak(
-            nr.globalTail, tail, tail + nops)
+            nr.globalTail, tail, tail + num_ops)
         {
           ghost_acquire globalTailTokens;
           atomic_block var _ := execute_atomic_noop(nr.bufferContents)
@@ -765,9 +798,9 @@ module Impl(nrifc: NRIfc) {
               glinear var GlobalTailTokens(globalTail, cbGlobalTail) := globalTailTokens;
               glinear var appendState;
               globalTail, updates', combinerState', log_entries :=
-                perform_AdvanceTail(globalTail, updates', combinerState', ops, requestIds, node.nodeId as int);
+                perform_AdvanceTail(globalTail, updates', combinerState', ops[.. num_ops], requestIds, node.nodeId as int);
               cbGlobalTail, cyclic_buffer_entries, appendState := finish_advance_tail(
-                  advance_tail_state, cbGlobalTail, tail as int + nops as int, contents);
+                  advance_tail_state, cbGlobalTail, tail as int + num_ops as int, contents);
               appendStateOpt := glSome(appendState);
               globalTailTokens := GlobalTailTokens(globalTail, cbGlobalTail);
             } else {
@@ -789,10 +822,10 @@ module Impl(nrifc: NRIfc) {
           ghost var original_cyclic_buffer_entries := cyclic_buffer_entries;
           
           var j := 0;
-          while j < nops
-          invariant 0 <= j <= nops
+          while j < num_ops
+          invariant 0 <= j <= num_ops
           invariant append_state.cur_idx == tail as int + j as int
-          invariant append_state.tail == tail as int + nops as int
+          invariant append_state.tail == tail as int + num_ops as int
           invariant forall i: int | j as int <= i < |requestIds| ::
               i in log_entries
                 && log_entries[i] == Log(tail as int + i, ops[i], node.nodeId as int)
