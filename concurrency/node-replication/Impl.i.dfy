@@ -1,7 +1,7 @@
 include "InfiniteLogTokens.i.dfy"
 include "NRSpec.s.dfy"
 include "../../lib/Lang/LinearSequence.i.dfy"
-include "rwlock/Impl.i.dfy"
+include "rwlock/TempImpl.i.dfy"
 include "../framework/Atomic.s.dfy"
 include "../framework/ThreadUtils.s.dfy"
 include "../framework/Ptrs.s.dfy"
