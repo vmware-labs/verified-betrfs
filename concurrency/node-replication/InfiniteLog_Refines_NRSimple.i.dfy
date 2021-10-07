@@ -513,36 +513,55 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp,  B.Stutter_Step);
   }
 
-  // lemma AdvanceTail_Refines_foo(s: A.Variables, s': A.Variables, nodeId: IL.NodeId, request_ids: seq<RequestId>)
-  //   requires s'.localUpdates == map_update(s.localUpdates, local_updates_new)
-  //   requires Inv(s)
-  //   requires Inv(s')
-  //   ensures
-
   lemma AdvanceTail_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId, request_ids: seq<RequestId>)
-  requires IL.AdvanceTail(s, s', nodeId, request_ids)
-  requires Inv(s)
-  requires Inv(s')
+   requires IL.AdvanceTail(s, s', nodeId, request_ids)
+   requires Inv(s)
+   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.InternalOp)
   {
+    // establish the pre-condition
+    assert B.RequestIdsValid(request_ids, I(s).update_reqs) by {
+      reveal_I_UpdateRequests();
+    }
 
-    // that on takes a bit...?
     var new_log_entries := B.ConstructNewLogEntries(request_ids, I(s).update_reqs);
-//     assume I(s').log == I(s).log + new_log_entries;
+    assert I(s').log == I(s).log + new_log_entries by {
+      var updated_log := ConstructNewLogEntries(request_ids, nodeId, s.global_tail.value, s.localUpdates);
 
-    //assert B.RequestIdsValid(request_ids, I(s).update_reqs);
+      assert forall r | r in request_ids :: I(s).update_reqs[r] == s.localUpdates[r].op by {
+        reveal_I_UpdateRequests();
+      }
 
-    // construct the responses
+      assert forall i | 0 <= i < |request_ids| :: new_log_entries[i] == updated_log[LogIdx(s.global_tail.value, i)].op;
 
+      assert I(s').log == I_Log(s'.global_tail.value, map_update(s.log, updated_log)) by {
+        reveal_I_Log();
+      }
 
+      ConstructNewLogEntries_InMap(request_ids, nodeId, s.global_tail.value, s.localUpdates, updated_log);
+      reveal_I_Log();
+    }
 
-    //assume B.AddUpdateToLog(I(s), I(s'), request_ids);
+    assert I(s').update_reqs == B.map_filter(I(s).update_reqs, request_ids) by {
+      var local_updates_new := ConstructLocalUpdateMap(request_ids, nodeId, s.global_tail.value);
+      assert s'.localUpdates == map_update(s.localUpdates, local_updates_new);
+      ConstructLocalUpdateMap_InMap(request_ids, nodeId, s.global_tail.value, local_updates_new);
 
-    assume false;
+      reveal_I_UpdateRequests();
+      B.reveal_map_filter();
+    }
+
+    var new_responses := B.ConstructUpdateResponses(request_ids, |I(s).log|);
+    assert I(s').update_resps == B.map_update(I(s).update_resps, new_responses) by {
+      var local_updates_new := ConstructLocalUpdateMap(request_ids, nodeId, s.global_tail.value);
+      assert s'.localUpdates == map_update(s.localUpdates, local_updates_new);
+      ConstructLocalUpdateMap_InMap(request_ids, nodeId, s.global_tail.value, local_updates_new);
+       reveal_I_UpdateResponses();
+    }
+
     assert exists step :: B.NextStep(I(s), I(s'), ifc.InternalOp, step) by {
-    //   var step :=
       assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.AddUpdateToLog_Step(request_ids)) by {
-        assume B.AddUpdateToLog(I(s), I(s'), request_ids);
+        assert B.AddUpdateToLog(I(s), I(s'), request_ids);
       }
     }
 
