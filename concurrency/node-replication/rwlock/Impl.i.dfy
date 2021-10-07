@@ -4,6 +4,7 @@ include "../../../lib/Lang/LinearSequence.i.dfy"
 include "RwLock.i.dfy"
 
 module RwLockImpl {
+  import opened NativeTypes
   import opened RwLockToken
   import opened Atomics
   import opened LinearSequence_s
@@ -17,7 +18,7 @@ module RwLockImpl {
 
   // We wish that V were a type parameter, but we don't actually have
   // type parameters.
-  type V = Handle.Handle
+  type V = Handle.ContentsType
 
   /*
    * Constructor for a new mutex.
@@ -42,7 +43,7 @@ module RwLockImpl {
    * calls a `release` without previously calling `acquire`.
    */
 
-  datatype ExclusiveGuard = ExclusiveGuard(ghost m: RwLock)
+  glinear datatype ExclusiveGuard = ExclusiveGuard(glinear obtained_token: Token, ghost m: RwLock)
 
   /*
    * A SharedGuard is for shared access.
@@ -122,34 +123,42 @@ module RwLockImpl {
         }
       }
 
-      var visited := 0;
+      var visited:uint64 := 0;
+      var rc_width:uint64 := 24;
+      assert rc_width as int == RwLockMod.RC_WIDTH;  // TODO(travis): why is RC_WIDTH ghost?
 
-      while visited < RwLockMod.RC_WIDTH
-        invariant 0 <= visited < RwLockMod.RC_WIDTH
+      while visited < rc_width
+        invariant 0 <= visited as int < RwLockMod.RC_WIDTH
         // if we find a nonzero refcount, we'll just keep waiting.
         // (Deadlock breaking is the shared-acquirer's problem.)
         invariant this.InternalInv()
-        invariant if visited==RwLockMod.RC_WIDTH
+        invariant if visited as int ==RwLockMod.RC_WIDTH
           then pending_handle.val == RwLockMod.ExcHandle(RwLockMod.ExcObtained)
-          else IsPendingHandle(pending_handle, visited)
+          else IsPendingHandle(pending_handle, visited as int)
         invariant pending_handle.loc == this.loc
         decreases *
       {
-        atomic_block var ret_value := execute_atomic_load(this.refCounts[visited]) {
+        atomic_block var ret_value := execute_atomic_load(lseq_peek(this.refCounts, visited)) {
           ghost_acquire token_g; // the token in refCounts[visited]
 
           if ret_value == 0 {
             // If we find a zero, we advance visited
             pending_handle, token_g := RwLockToken.perform_TakeExcLockCheckRefCount(pending_handle, token_g);
-            visited := visited + 1;
           }
           // else try checking this slot again; maybe a reader left. visited stays where it is.
 
           ghost_release token_g;
         }
+        if ret_value == 0 {
+          visited := visited + 1;
+        }
       }
 
-      handle := pending_handle;
+      glinear var b':Handle.Handle;
+      pending_handle, b' := RwLockToken.perform_Withdraw_TakeExcLockFinish(pending_handle);
+
+      v := read_cell(cell, b');
+      handle := ExclusiveGuard(pending_handle, this);
     }
 
     /*
@@ -167,13 +176,8 @@ module RwLockImpl {
      * Returns a handle that can be borrowed from
      */
 
-<<<<<<< HEAD
     shared method acquire_shared()
-    returns (linear handle: SharedGuard<V>)
-=======
-    method acquire_shared()
     returns (linear handle: SharedGuard)
->>>>>>> 58375053 (progress on rwlock/Impl)
     ensures this.inv(handle.v)
     ensures handle.m == this
 
@@ -181,11 +185,7 @@ module RwLockImpl {
      * `acquire_release`
      */
 
-<<<<<<< HEAD
-    shared method release_shared(linear handle: SharedGuard<V>)
-=======
-    method release_shared(linear handle: SharedGuard)
->>>>>>> 58375053 (progress on rwlock/Impl)
+    shared method release_shared(linear handle: SharedGuard)
     requires handle.m == this
   }
 
