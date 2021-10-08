@@ -207,6 +207,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
         && logs'[i] == Log(tail.tail + i, ops[i], nodeId)
   ensures combiner'.nodeId == nodeId
   ensures combiner'.state == CombinerPlaced(requestIds)
+  // TODO this one is advanced
 
   glinear method perform_ExecLoadLtail(
       glinear combiner: CombinerToken,
@@ -267,16 +268,10 @@ module InfiniteLogTokens(nrifc: NRIfc) {
         GoToCombinerReady_Step(localTail.nodeId));
 
     // Perform the transition
-    // 1_1_1 indicates:
-    //    1 shared input (b)
-    //    1 linear input (a)
-    //    1 linear output (o)
     glinear var out1_token, out2_token := ILT.transition_2_2(a_token, b_token,
         out1_token_expect.val,
         out2_token_expect.val);
 
-    // Fold the raw token into the Readonly datatype
-    // Readonly_fold is another auto-generated glinear method.
     combiner' := CombinerToken_fold(out1_expect, out1_token);
     localTail' := LocalTail_fold(out2_expect, out2_token);
   }
@@ -293,8 +288,39 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   requires combiner.nodeId != log_entry.node_id
   requires combiner.state.Combiner?
   requires log_entry.idx == combiner.state.localTail
+  requires combiner.state.localTail < combiner.state.globalTail
   ensures combiner' == combiner.(state := combiner.state.(localTail := combiner.state.localTail + 1))
   ensures replica' == replica.(state := nrifc.update(replica.state, log_entry.op).new_state)
+  {
+    glinear var a_token := CombinerToken_unfold(combiner);
+    glinear var b_token := Replica_unfold(replica);
+    gshared var s_token := Log_unfold_borrow(log_entry);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := combiner.(state := combiner.state.(localTail := combiner.state.localTail + 1));
+    ghost var out1_token_expect := CombinerToken_unfold(out1_expect);
+
+    ghost var out2_expect := replica.(state := nrifc.update(replica.state, log_entry.op).new_state);
+    ghost var out2_token_expect := Replica_unfold(out2_expect);
+
+    // Explain what transition we're going to do
+    assert ExecDispatchRemote(
+        IL.dot(s_token.val, IL.dot(a_token.val, b_token.val)),
+        IL.dot(s_token.val, IL.dot(out1_token_expect.val, out2_token_expect.val)),
+        combiner.nodeId);
+    assert IL.NextStep(
+        IL.dot(s_token.val, IL.dot(a_token.val, b_token.val)),
+        IL.dot(s_token.val, IL.dot(out1_token_expect.val, out2_token_expect.val)),
+        ExecDispatchRemote_Step(combiner.nodeId));
+
+    // Perform the transition
+    glinear var out1_token, out2_token := ILT.transition_1_2_2(s_token, a_token, b_token,
+        out1_token_expect.val,
+        out2_token_expect.val);
+
+    combiner' := CombinerToken_fold(out1_expect, out1_token);
+    replica' := Replica_fold(out2_expect, out2_token);
+  }
 
   glinear method perform_ExecDispatchLocal(
       glinear combiner: CombinerToken,
