@@ -352,7 +352,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
      output == nrifc.read(state_at_version(log, version), op)
   }
 
-  lemma ConsumeStub_Refines_End_state_at_version(s_log: seq<nrifc.UpdateOp>, i_log: map<nat, LogEntry>, gtail: nat, idx:nat)
+  lemma {:induction true} ConsumeStub_Refines_End_state_at_version(s_log: seq<nrifc.UpdateOp>, i_log: map<nat, LogEntry>, gtail: nat, idx:nat)
     requires forall i | 0 <= i < gtail :: i in i_log
     requires 0 <= idx <= |s_log|
     requires idx <= gtail
