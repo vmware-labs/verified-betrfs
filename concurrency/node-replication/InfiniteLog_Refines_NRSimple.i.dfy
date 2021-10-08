@@ -499,8 +499,8 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.Stutter_Step);
   }
 
-  lemma TransitionReadonlyReadCtail_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId, rid: RequestId)
-  requires IL.TransitionReadonlyReadCtail(s, s', nodeId, rid)
+  lemma TransitionReadonlyReadCtail_Refines(s: A.Variables, s': A.Variables, rid: RequestId)
+  requires IL.TransitionReadonlyReadCtail(s, s', rid)
   requires Inv(s)
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.InternalOp)
@@ -652,7 +652,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       case ExecLoadGlobalTail_Step(nodeId) => { ExecLoadGlobalTail_Refines(s, s', nodeId); }
       case ExecDispatchLocal_Step(nodeId) => { ExecDispatchLocal_Refines(s, s',nodeId); }
       case ExecDispatchRemote_Step(nodeId) => { ExecDispatchRemote_Refines(s, s',nodeId); }
-      case TransitionReadonlyReadCtail_Step(nodeId, rid) => { TransitionReadonlyReadCtail_Refines(s, s', nodeId, rid); }
+      case TransitionReadonlyReadCtail_Step(rid) => { TransitionReadonlyReadCtail_Refines(s, s', rid); }
       case TransitionReadonlyReadyToRead_Step(nodeId, rid) => { TransitionReadonlyReadyToRead_Refines(s, s', nodeId, rid); }
       case TransitionReadonlyDone_Step(nodeId, rid) => { TransitionReadonlyDone_Refines(s, s', nodeId, rid); }
       case AdvanceTail_Step(nodeId, request_ids) => { AdvanceTail_Refines(s, s', nodeId, request_ids); }

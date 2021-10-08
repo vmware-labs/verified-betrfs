@@ -395,7 +395,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // { ReadonlyInit(r, op) }
   //   readTail ← sharedLog.completedTail
   // { ReadonlyCtail(r, op, readTail) }
-  predicate TransitionReadonlyReadCtail(m: M, m': M, nodeId: NodeId, rid: RequestId) {
+  predicate TransitionReadonlyReadCtail(m: M, m': M, rid: RequestId) {
     && StateValid(m)
     && InReadOnlyInit(m, rid)
     && CompleteTailValid(m)
@@ -1256,7 +1256,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     | ExecLoadGlobalTail_Step(nodeId: NodeId)
     | ExecDispatchLocal_Step(nodeId: NodeId)
     | ExecDispatchRemote_Step(nodeId: NodeId)
-    | TransitionReadonlyReadCtail_Step(nodeId: NodeId, rid: RequestId )
+    | TransitionReadonlyReadCtail_Step(rid: RequestId)
     | TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId)
     | TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId)
     | UpdateCompletedTail_Step(nodeId: NodeId)
@@ -1271,7 +1271,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail(m, m', nodeId)
       case ExecDispatchLocal_Step(nodeId: NodeId) => ExecDispatchLocal(m, m',nodeId)
       case ExecDispatchRemote_Step(nodeId: NodeId) => ExecDispatchRemote(m, m',nodeId)
-      case TransitionReadonlyReadCtail_Step(nodeId: NodeId, rid: RequestId) =>  TransitionReadonlyReadCtail(m, m', nodeId, rid)
+      case TransitionReadonlyReadCtail_Step(rid: RequestId) =>  TransitionReadonlyReadCtail(m, m', rid)
       case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyReadyToRead(m, m', nodeId, rid)
       case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone(m, m', nodeId, rid)
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail(m, m', nodeId, request_ids)
@@ -1293,9 +1293,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   }
 
-  lemma TransitionReadonlyReadCtail_PreservesInv(m: M, m': M, nodeId: NodeId, rid: RequestId)
+  lemma TransitionReadonlyReadCtail_PreservesInv(m: M, m': M, rid: RequestId)
     requires Inv(m)
-    requires TransitionReadonlyReadCtail(m, m', nodeId, rid)
+    requires TransitionReadonlyReadCtail(m, m', rid)
     ensures Inv(m')
   {
 
@@ -1451,7 +1451,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail_PreservesInv(m, m', nodeId);
       case ExecDispatchLocal_Step(nodeId: NodeId) => ExecDispatchLocal_PreservesInv(m, m',nodeId);
       case ExecDispatchRemote_Step(nodeId: NodeId) => ExecDispatchRemote_PreservesInv(m, m',nodeId);
-      case TransitionReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) =>  TransitionReadonlyReadCtail_PreservesInv(m, m', rid, nodeId);
+      case TransitionReadonlyReadCtail_Step(rid: RequestId) =>  TransitionReadonlyReadCtail_PreservesInv(m, m', rid);
       case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyReadyToRead_PreservesInv(m, m', nodeId, rid);
       case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone_PreservesInv(m, m', nodeId, rid);
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail_PreservesInv(m, m', nodeId, request_ids);
@@ -1518,11 +1518,11 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
   }
 
-  lemma TransitionReadonlyReadCtail_Monotonic(m: M, m': M, p: M, rid: RequestId, nodeId: NodeId)
+  lemma TransitionReadonlyReadCtail_Monotonic(m: M, m': M, p: M, rid: RequestId)
   //requires Inv(dot(m, p))
   requires dot(m, p) != Fail
-  requires TransitionReadonlyReadCtail(m, m', rid, nodeId)
-  ensures TransitionReadonlyReadCtail(dot(m, p), dot(m', p), rid, nodeId)
+  requires TransitionReadonlyReadCtail(m, m', rid)
+  ensures TransitionReadonlyReadCtail(dot(m, p), dot(m', p), rid)
   {
   }
 
@@ -1668,8 +1668,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
         ExecDispatchRemote_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case TransitionReadonlyReadCtail_Step(rid: RequestId, nodeId: NodeId) => {
-        TransitionReadonlyReadCtail_Monotonic(m, m', p, rid, nodeId);
+      case TransitionReadonlyReadCtail_Step(rid: RequestId) => {
+        TransitionReadonlyReadCtail_Monotonic(m, m', p, rid);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => {

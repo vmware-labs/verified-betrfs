@@ -216,6 +216,7 @@ module TicketStubPCM(IOIfc: InputOutputIfc,
   }
 }
 
+// TODO move this to a .i file?
 module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
   import pcm = TicketStubPCM(IOIfc, ssm)
   import Tokens = Tokens(pcm)
@@ -247,18 +248,29 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
     transition_of_next(a, b);
   }
 
-  function method {:opaque} update_next(glinear a: Token, ghost expect_b: ssm.M): (glinear b: Token)
+  glinear method transition_1_1(glinear a: Token, ghost expect_b: ssm.M)
+  returns (glinear b: Token)
   requires ssm.Internal(a.val, expect_b)
   ensures b == Tokens.Token(a.loc, expect_b)
   {
     transition_of_next_with_unit(a.val, expect_b);
-    Tokens.transition_update(Tokens.get_unit_shared(a.loc), a, expect_b)
+    b := Tokens.transition_update(Tokens.get_unit_shared(a.loc), a, expect_b);
   }
 
-  method {:opaque} inout_update_next(glinear inout a: Token, ghost expect_b: ssm.M)
+  glinear method transition_1_1_1(gshared s: Token, glinear a: Token, ghost expect_b: ssm.M)
+  returns (glinear b: Token)
+  requires ssm.Internal(ssm.dot(s.val, a.val), ssm.dot(s.val, expect_b))
+  requires s.loc == a.loc
+  ensures b == Tokens.Token(a.loc, expect_b)
+  {
+    transition_of_next(ssm.dot(s.val, a.val), ssm.dot(s.val, expect_b));
+    b := Tokens.transition_update(s, a, expect_b);
+  }
+
+  glinear method {:opaque} inout_update_next(glinear inout a: Token, ghost expect_b: ssm.M)
   requires ssm.Internal(old_a.val, expect_b)
   ensures a == Tokens.Token(old_a.loc, expect_b)
   {
-    a := update_next(a, expect_b);
+    a := transition_1_1(a, expect_b);
   }
 }
