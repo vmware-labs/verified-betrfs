@@ -1,12 +1,12 @@
 include "../framework/AsyncSSM.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
+include "Constants.i.dfy"
 
 module FlatCombinerTokens {
   import opened RequestIds
   import opened NativeTypes
   import opened GhostLoc
-
-  const MAX_THREADS_PER_REPLICA: uint64 := 32;
+  import opened Constants
 
   // Allows clients to enqueue requests
   // The combiner reads the requests and returns responses

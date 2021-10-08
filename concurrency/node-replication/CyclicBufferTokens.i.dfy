@@ -2,6 +2,7 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 include "InfiniteLogTokens.i.dfy"
 include "../framework/Cells.s.dfy"
 include "../framework/GlinearOption.s.dfy"
+include "Constants.i.dfy"
 
 module CyclicBufferTokens(nrifc: NRIfc) {
   import opened NativeTypes
@@ -10,11 +11,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   import opened ILT = InfiniteLogTokens(nrifc)
   import opened GlinearOption
   import opened Cells
-
-  // Fixed number of replicas (in reference impl, this is variable)
-  // TODO fill in reasonable constants for these
-  const NUM_REPLICAS: uint64 := 4;
-  const BUFFER_SIZE: uint64 := 9999;
+  import opened Constants
 
   glinear datatype StoredType = StoredType(
     glinear cellContents: CellContents<LogEntry>,

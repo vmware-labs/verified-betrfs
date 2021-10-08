@@ -28,13 +28,9 @@ module Impl(nrifc: NRIfc) {
   import opened GlinearOption
   import opened Cells
   import opened GhostLoc
+  import opened Constants
 
   type Tid = uint64
-
-  // TODO fill in reasonable constants for these
-  const GC_FROM_HEAD: uint64 := 9999;
-  const WARN_THRESHOLD: uint64 := 9999;
-  const MAX_COMBINED_OPS: uint64 := 9999;
 
   /*
    * Anything which is allocated on a NUMA node
