@@ -27,6 +27,7 @@ module Impl(nrifc: NRIfc) {
   import opened GlinearMap
   import opened GlinearOption
   import opened Cells
+  import opened GhostLoc
 
   type Tid = uint64
 
@@ -64,9 +65,10 @@ module Impl(nrifc: NRIfc) {
     glinear update: glOption<Update>
   )
   {
-    predicate inv(v: uint64, i: nat, cell: Cell<OpResponse>)
+    predicate inv(v: uint64, i: nat, cell: Cell<OpResponse>, fc_loc: Loc)
     {
       && fc.tid == i
+      && fc.loc == fc_loc
       && (v == 0 || v == 1 || v == 2)
       && (v == 0 ==> fc.state.FCEmpty? || fc.state.FCResponse?)
       && (v == 1 ==> fc.state.FCRequest?)
@@ -103,9 +105,9 @@ module Impl(nrifc: NRIfc) {
     linear cell: Cell<OpResponse>
   )
   {
-    predicate WF(i: nat)
+    predicate WF(i: nat, fc_loc: Loc)
     {
-      (forall v, g :: atomic_inv(atomic, v, g) <==> g.inv(v, i, cell))
+      (forall v, g :: atomic_inv(atomic, v, g) <==> g.inv(v, i, cell, fc_loc))
     }
   }
 
@@ -114,15 +116,17 @@ module Impl(nrifc: NRIfc) {
     linear replica: RwLock<NodeReplica>,
     //linear context: map<Tid, nrifc.UpdateOp>,
     linear contexts: lseq<Context>, // TODO cache-line padded?
-    nodeId: uint64
+    nodeId: uint64,
     //next: Atomic<Tid, ()>
+
+    ghost fc_loc: Loc
   )
   {
     predicate WF() {
       && (forall nodeReplica :: replica.inv(nodeReplica) <==> nodeReplica.WF(nodeId as int))
       && 0 <= nodeId as int < NUM_REPLICAS as int
       && |contexts| == MAX_THREADS_PER_REPLICA as int
-      && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i))
+      && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i, fc_loc))
     }
   }
 
@@ -259,6 +263,10 @@ module Impl(nrifc: NRIfc) {
   requires |ops| == MAX_THREADS_PER_REPLICA as int
   requires |responses| == MAX_THREADS_PER_REPLICA as int
   requires flatCombiner.state == FCCombinerCollecting(0, [])
+  requires flatCombiner.loc == node.fc_loc
+  ensures flatCombiner'.loc == node.fc_loc
+  ensures |ops'| == MAX_THREADS_PER_REPLICA as int
+  ensures |responses'| == MAX_THREADS_PER_REPLICA as int
   decreases *
   {
     /////// Collect the operations
@@ -312,9 +320,11 @@ module Impl(nrifc: NRIfc) {
       glinear updates: map<nat, Update>,
       glinear opCellPermissions: map<nat, CellContents<OpResponse>>)
   requires node.WF()
+  requires flatCombiner.loc == node.fc_loc
   requires flatCombiner.state == FCCombinerCollecting(0, [])
   requires |ops| == MAX_THREADS_PER_REPLICA as int
   ensures |ops'| == |ops|
+  ensures flatCombiner'.loc == node.fc_loc
   ensures 0 <= num_ops as int <= |ops'|
   ensures flatCombiner'.state.FCCombinerResponding?
       && flatCombiner'.state.idx == 0
@@ -344,6 +354,7 @@ module Impl(nrifc: NRIfc) {
     invariant 0 <= j <= MAX_THREADS_PER_REPLICA
     invariant num_ops <= j
     invariant |ops'| == |ops|
+    invariant flatCombiner'.loc == node.fc_loc
     invariant flatCombiner'.state.FCCombinerCollecting?
       && flatCombiner'.state.idx == j as int
       && num_ops as int == |flatCombiner'.state.elems| // == |requestIds|
@@ -415,6 +426,7 @@ module Impl(nrifc: NRIfc) {
       glinear flatCombiner': FCCombiner)
   requires node.WF()
   requires |responses| == MAX_THREADS_PER_REPLICA as int
+  requires flatCombiner.loc == node.fc_loc
   requires flatCombiner.state.FCCombinerResponding?
       && flatCombiner.state.idx == 0
       && flatCombiner.state.elem_idx == 0
@@ -430,6 +442,7 @@ module Impl(nrifc: NRIfc) {
           && opCellPermissions[i].cell
                   == node.contexts[flatCombiner.state.elems[i].tid].cell
       )
+  ensures flatCombiner'.loc == node.fc_loc
   ensures flatCombiner'.state == FCCombinerCollecting(0, [])
   {
     flatCombiner' := flatCombiner;
@@ -440,6 +453,7 @@ module Impl(nrifc: NRIfc) {
     var j := 0;
     while j < MAX_THREADS_PER_REPLICA
     invariant 0 <= cur_idx <= j <= MAX_THREADS_PER_REPLICA
+    invariant flatCombiner'.loc == node.fc_loc
     invariant
       && flatCombiner'.state.FCCombinerResponding?
       && flatCombiner'.state.idx == j as int
@@ -496,7 +510,7 @@ module Impl(nrifc: NRIfc) {
           dispose_glnone(old_contents);
           dispose_glnone(old_update);
           ghost_context := ContextGhost(glSome(opCellPerm), fc, glSome(update));
-          assert ghost_context.inv(0, j as int, lseq_peek(node.contexts, j).cell);
+          //assert ghost_context.inv(0, j as int, lseq_peek(node.contexts, j).cell);
           ghost_release ghost_context;
         }
 

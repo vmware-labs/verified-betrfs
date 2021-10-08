@@ -4,6 +4,7 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 module FlatCombinerTokens {
   import opened RequestIds
   import opened NativeTypes
+  import opened GhostLoc
 
   const MAX_THREADS_PER_REPLICA: uint64 := 32;
 
@@ -15,7 +16,7 @@ module FlatCombinerTokens {
     | FCClientIdle
     | FCClientWaiting(rid: RequestId)
   
-  datatype FCClient = FCClient(tid: nat, state: FCClientState)
+  datatype FCClient = FCClient(loc: Loc, tid: nat, state: FCClientState)
 
   datatype Elem = Elem(tid: nat, rid: nat)
   datatype FCCombinerState =
@@ -23,7 +24,7 @@ module FlatCombinerTokens {
     | FCCombinerCollecting(idx: nat, elems: seq<Elem>)
     | FCCombinerResponding(idx: nat, elems: seq<Elem>, elem_idx: nat)
 
-  datatype FCCombiner = FCCombiner(state: FCCombinerState)
+  datatype FCCombiner = FCCombiner(loc: Loc, state: FCCombinerState)
 
   datatype FCSlotState =
     | FCEmpty
@@ -31,7 +32,7 @@ module FlatCombinerTokens {
     | FCInProgress(rid: RequestId)
     | FCResponse(rid: RequestId)
 
-  datatype FCSlot = FCSlot(tid: nat, state: FCSlotState)
+  datatype FCSlot = FCSlot(loc: Loc, tid: nat, state: FCSlotState)
 
   // Ops for the combiner
 
@@ -40,12 +41,13 @@ module FlatCombinerTokens {
   requires comb.state.FCCombinerCollecting?
   requires comb.state.idx < MAX_THREADS_PER_REPLICA as int
   requires slot.tid == comb.state.idx
+  requires comb.loc == slot.loc
   ensures slot.state.FCEmpty? || slot.state.FCRequest?
   ensures slot.state.FCEmpty? ==>
-      && comb' == FCCombiner(comb.state.(idx := comb.state.idx + 1))
+      && comb' == FCCombiner(comb.loc, comb.state.(idx := comb.state.idx + 1))
       && slot' == slot
   ensures slot.state.FCRequest? ==>
-      && comb' == FCCombiner(FCCombinerCollecting(comb.state.idx + 1,
+      && comb' == FCCombiner(comb.loc, FCCombinerCollecting(comb.state.idx + 1,
             comb.state.elems + [Elem(comb.state.idx, slot.state.rid)]))
       && slot' == slot.(state := FCInProgress(slot.state.rid))
     
@@ -53,7 +55,7 @@ module FlatCombinerTokens {
   returns (glinear comb': FCCombiner)
   requires comb.state.FCCombinerCollecting?
   requires comb.state.idx == MAX_THREADS_PER_REPLICA as int
-  ensures comb' == FCCombiner(FCCombinerResponding(0, comb.state.elems, 0))
+  ensures comb' == FCCombiner(comb.loc, FCCombinerResponding(0, comb.state.elems, 0))
 
   glinear method combiner_response_matches(glinear comb: FCCombiner, glinear slot: FCSlot)
   returns (glinear comb': FCCombiner, glinear slot': FCSlot)
@@ -61,6 +63,7 @@ module FlatCombinerTokens {
   requires comb.state.idx < MAX_THREADS_PER_REPLICA as int
   requires slot.tid == comb.state.idx
   requires slot.state.FCInProgress?
+  requires comb.loc == slot.loc
   ensures 0 <= comb.state.elem_idx < |comb.state.elems|
   ensures comb.state.elems[comb.state.elem_idx].tid == comb.state.idx
   ensures comb' == comb && slot' == slot
@@ -71,7 +74,8 @@ module FlatCombinerTokens {
   requires comb.state.idx < MAX_THREADS_PER_REPLICA as int
   requires slot.tid == comb.state.idx
   requires !slot.state.FCInProgress?
-  ensures comb' == FCCombiner(comb.state.(idx := comb.state.idx + 1))
+  requires comb.loc == slot.loc
+  ensures comb' == FCCombiner(comb.loc, comb.state.(idx := comb.state.idx + 1))
   ensures slot' == slot
 
   glinear method combiner_respond(glinear comb: FCCombiner, glinear slot: FCSlot)
@@ -81,8 +85,9 @@ module FlatCombinerTokens {
   requires slot.tid == comb.state.idx
   requires 0 <= comb.state.elem_idx < |comb.state.elems|
   requires comb.state.elems[comb.state.elem_idx].tid == comb.state.idx
+  requires comb.loc == slot.loc
   ensures slot.state.FCInProgress?
-  ensures comb' == FCCombiner(comb.state.(idx := comb.state.idx + 1, elem_idx := comb.state.elem_idx + 1))
+  ensures comb' == FCCombiner(comb.loc, comb.state.(idx := comb.state.idx + 1, elem_idx := comb.state.elem_idx + 1))
   ensures slot' == slot.(state := FCResponse(slot.state.rid))
   ensures comb.state.elems[comb.state.elem_idx].rid == slot.state.rid
 
@@ -90,5 +95,5 @@ module FlatCombinerTokens {
   returns (glinear comb': FCCombiner)
   requires comb.state.FCCombinerResponding?
   requires comb.state.idx == MAX_THREADS_PER_REPLICA as int
-  ensures comb' == FCCombiner(FCCombinerCollecting(0, []))
+  ensures comb' == FCCombiner(comb.loc, FCCombinerCollecting(0, []))
 }
