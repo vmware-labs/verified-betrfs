@@ -4,6 +4,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   import opened RequestIds
   import opened Options
   import opened IL = InfiniteLogSSM(nrifc)
+  //import opened ILT = TicketStubToken(nrifc, IL)
 
   /////////////////////
   // Token types. These represent the smallest discrete parts of the InfiniteLog state.
@@ -23,7 +24,6 @@ module InfiniteLogTokens(nrifc: NRIfc) {
       M(map[], None, map[], map[], None, map[], map[rid := us], map[])
     }
   }
-
 
   datatype {:glinear_fold} Ctail = Ctail(ctail: nat)
   {
@@ -124,7 +124,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   requires readonly.rs.ReadonlyReadyToRead?
   requires replica.nodeId == readonly.rs.nodeId
   ensures readonly' == Readonly(readonly.rid,
-      ReadonlyDone(readonly.rs.op, nrifc.read(replica.state, readonly.rs.op), readonly.rs.ctail))
+      ReadonlyDone(readonly.rs.op, nrifc.read(replica.state, readonly.rs.op), readonly.rs.nodeId, readonly.rs.ctail))
   //{
     //TODO
   //}
