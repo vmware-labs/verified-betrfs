@@ -46,7 +46,7 @@ namespace LinearRegion_s {
   }
 
   template <typename A>
-  void Swap(Region g, RefCell<A> r, A a) {
+  void Swap(Region g, RefCell<A> r, A& a) {
     (void)g; // Avoid unused variable warning
     A tmp = a;
     a = *r;
