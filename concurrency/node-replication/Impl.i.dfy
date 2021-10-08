@@ -107,8 +107,10 @@ module Impl(nrifc: NRIfc) {
     }
   }
 
+  glinear datatype UnitGhostType = UnitGhostType
+
   linear datatype Node = Node(
-    linear combiner: Atomic<uint64, ()>,
+    linear combiner: Atomic<uint64, UnitGhostType>, // TODO something needs to go here
     linear replica: RwLock<NodeReplica>,
     //linear context: map<Tid, nrifc.UpdateOp>,
     linear contexts: lseq<Context>, // TODO cache-line padded?

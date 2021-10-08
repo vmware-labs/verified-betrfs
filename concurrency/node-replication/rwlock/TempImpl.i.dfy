@@ -11,8 +11,8 @@ module RwLockImpl {
    *     behind this mutex.
    */
 
-  method {:extern} new_mutex<V>(glinear v: V, ghost inv: (V) -> bool)
-  returns (m: RwLock<V>)
+  method {:extern} new_mutex<V>(linear v: V, ghost inv: (V) -> bool)
+  returns (linear m: RwLock<V>)
   requires inv(v)
   ensures m.inv == inv
 

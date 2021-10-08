@@ -36,6 +36,18 @@ module FlatCombinerTokens {
 
   // Ops for the combiner
 
+  glinear method fc_initialize()
+  returns (
+    glinear clients: map<nat, FCClient>,
+    glinear slots: map<nat, FCSlot>,
+    glinear combiner: FCCombiner
+  )
+  ensures combiner.state == FCCombinerCollecting(0, [])
+  ensures forall i | 0 <= i < MAX_THREADS_PER_REPLICA as int ::
+      i in slots && slots[i] == FCSlot(combiner.loc, i, FCEmpty)
+  ensures forall i | 0 <= i < MAX_THREADS_PER_REPLICA as int ::
+      i in clients && clients[i] == FCClient(combiner.loc, i, FCClientIdle)
+
   glinear method combiner_collect(glinear comb: FCCombiner, glinear slot: FCSlot)
   returns (glinear comb': FCCombiner, glinear slot': FCSlot)
   requires comb.state.FCCombinerCollecting?

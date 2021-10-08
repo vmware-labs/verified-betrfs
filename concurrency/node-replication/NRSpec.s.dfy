@@ -2,9 +2,9 @@ include "../framework/StateMachines.s.dfy"
 
 abstract module NRIfc refines InputOutputIfc {
   type NRState(!new)
-  type UpdateOp(!new)
-  type ReadonlyOp(!new)
-  type ReturnType(!new)
+  type UpdateOp(!new,0,00)
+  type ReadonlyOp(!new,0,00)
+  type ReturnType(!new,0,00)
 
   datatype UpdateResult = UpdateResult(new_state: NRState, return_value: ReturnType)
 
@@ -22,6 +22,10 @@ abstract module NRIfc refines InputOutputIfc {
 
   type DataStructureType(!new)
   function I(ds: DataStructureType) : NRState
+
+  method initialize()
+  returns (linear s: DataStructureType)
+  ensures I(s) == init_state()
 
   method do_update(linear s: DataStructureType, op: UpdateOp)
   returns (linear s': DataStructureType, ret: ReturnType)
