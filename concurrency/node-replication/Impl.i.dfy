@@ -207,18 +207,36 @@ module Impl(nrifc: NRIfc) {
   }
 
 
-  method is_replica_synced_for_reads(shared nr: NR, nodeId: uint64, ctail: uint64) 
-  returns (is_synced: bool) 
+  method is_replica_synced_for_reads(shared nr: NR, nodeId: uint64, ctail: uint64, 
+          glinear ticket: Readonly) 
+  returns (is_synced: bool, glinear ticket': Readonly) 
+  requires ticket.rs.ReadonlyCtail?
   requires nr.WF()
   requires nodeId < NUM_REPLICAS
+  //ensures is_synced ==> ticket'.ReadonlyReadyToRead?
+  //ensures lseq_peek(nr.node_info, nodeId) >= ctail
   {
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/log.rs#L708
 
-    // TODO(unclear): what's so bad about `nr.node_info[nodeId as
-    // nat].localTail`
     atomic_block var local_tail := execute_atomic_load(lseq_peek(nr.node_info, nodeId).localTail) { 
-      // TODO(unclear): when we need to so stuff in the `atomic_block` and when
-      // we don't
+      ghost_acquire local_tail_token;
+      
+      // TODO: maybe remove?
+      assert local_tail_token.localTail == LocalTail(nodeId as nat, local_tail as nat); 
+      
+
+      // perform transition of ghost state here ...
+      if local_tail_token.localTail.localTail >= ctail as nat {
+        assert ticket.rs.ctail >= ctail as nat;
+        //requires ltail.localTail >= ticket.rs.ctail
+        //assert local_tail_token.localTail.localTail >= ctail as nat;
+        ticket' := perform_TransitionReadonlyReadyToRead(ticket, local_tail_token.localTail);
+      }
+      else {
+        ticket' := ticket;
+      }
+
+      ghost_release local_tail_token;
     }
 
     is_synced := local_tail >= ctail;
@@ -639,7 +657,9 @@ module Impl(nrifc: NRIfc) {
   requires ticket.rs == ReadonlyInit(op)
   // And we must return a stub that validates that we performed the operation
   // with the result being that value that we are returning.
-  ensures stub.rid == ticket.rid && stub.rs.ReadonlyDone? && stub.rs.ret == result
+  ensures stub.rs.ReadonlyDone? 
+  ensures stub.rid == ticket.rid 
+  ensures stub.rs.ret == result
   decreases * // method is not guaranteed to terminate
   {
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L559
@@ -662,19 +682,28 @@ module Impl(nrifc: NRIfc) {
       ghost_release ctail_token;
     }
 
+    assert stub.rs.ReadonlyCtail?;
+
+
     // 2. Read localTail (loop until you read a good value)
     var tid := 1; // TODO: tid comes from client calling do_read
-    var synced := is_replica_synced_for_reads(nr, node.nodeId, ctail);
-    while !synced {
+    var synced := false;
+    synced, stub := is_replica_synced_for_reads(nr, node.nodeId, ctail, stub);
+    while !synced 
+    decreases * 
+    invariant synced ==> stub.rs.ReadonlyReadyToRead? 
+    {
       try_combine(nr, node, tid);
       Runtime.SpinLoopHint();
-      synced := is_replica_synced_for_reads(nr, node.nodeId, ctail);
+      synced, stub := is_replica_synced_for_reads(nr, node.nodeId, ctail, stub);
     }
 
     // 3. Take read-lock on replica; apply operation on replica
     linear var linear_guard := node.replica.acquire_shared();
     result := apply_readonly(linear_guard, op);
     node.replica.release_shared(linear_guard);
+
+    assert stub.rs.ReadonlyDone?;
   }
 
   method apply_readonly(shared guard: SharedGuard<NodeReplica>, op: nrifc.ReadonlyOp) 
