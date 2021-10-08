@@ -177,6 +177,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   )
   requires combiner.state.CombinerReady?
   ensures combiner' == CombinerToken(combiner.nodeId, CombinerPlaced([]))
+  // TODO (this requires a new transition, it's a much simpler version of AdvanceTail)
 
   glinear method perform_AdvanceTail(
       glinear tail: GlobalTail,
@@ -244,6 +245,41 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   requires combiner.nodeId == localTail.nodeId
   ensures combiner' == combiner.(state := CombinerReady)
   ensures localTail' == localTail.(localTail := combiner.state.localAndGlobalTail)
+  {
+    glinear var a_token := CombinerToken_unfold(combiner);
+    glinear var b_token := LocalTail_unfold(localTail);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := combiner.(state := CombinerReady);
+    ghost var out1_token_expect := CombinerToken_unfold(out1_expect);
+
+    ghost var out2_expect := localTail.(localTail := combiner.state.localAndGlobalTail);
+    ghost var out2_token_expect := LocalTail_unfold(out2_expect);
+
+    // Explain what transition we're going to do
+    assert GoToCombinerReady(
+        IL.dot(a_token.val, b_token.val),
+        IL.dot(out1_token_expect.val, out2_token_expect.val),
+        localTail.nodeId);
+    assert IL.NextStep(
+        IL.dot(a_token.val, b_token.val),
+        IL.dot(out1_token_expect.val, out2_token_expect.val),
+        GoToCombinerReady_Step(localTail.nodeId));
+
+    // Perform the transition
+    // 1_1_1 indicates:
+    //    1 shared input (b)
+    //    1 linear input (a)
+    //    1 linear output (o)
+    glinear var out1_token, out2_token := ILT.transition_2_2(a_token, b_token,
+        out1_token_expect.val,
+        out2_token_expect.val);
+
+    // Fold the raw token into the Readonly datatype
+    // Readonly_fold is another auto-generated glinear method.
+    combiner' := CombinerToken_fold(out1_expect, out1_token);
+    localTail' := LocalTail_fold(out2_expect, out2_token);
+  }
 
   glinear method perform_ExecDispatchRemote(
       glinear combiner: CombinerToken,

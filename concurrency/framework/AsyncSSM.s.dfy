@@ -267,6 +267,25 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
     b := Tokens.transition_update(s, a, expect_b);
   }
 
+  glinear method transition_2_2(
+      glinear token1: Token,
+      glinear token2: Token,
+      ghost expected_value1: pcm.M,
+      ghost expected_value2: pcm.M)
+  returns (glinear token1': Token, glinear token2': Token)
+  requires token1.loc == token2.loc
+  requires ssm.Internal(
+      ssm.dot(token1.val, token2.val),
+      ssm.dot(expected_value1, expected_value2))
+  ensures token1' == Tokens.Token(token1.loc, expected_value1)
+  ensures token2' == Tokens.Token(token1.loc, expected_value2)
+  {
+    glinear var x := Tokens.join(token1, token2);
+    glinear var y := transition_1_1(x,  
+        ssm.dot(expected_value1, expected_value2));
+    token1', token2' := Tokens.split(y, expected_value1, expected_value2);
+  }
+
   glinear method {:opaque} inout_update_next(glinear inout a: Token, ghost expect_b: ssm.M)
   requires ssm.Internal(old_a.val, expect_b)
   ensures a == Tokens.Token(old_a.loc, expect_b)

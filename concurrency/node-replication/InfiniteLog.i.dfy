@@ -771,7 +771,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   predicate GoToCombinerReady(m: M, m': M, nodeId: NodeId) {
     && StateValid(m)
     && InCombinerUpdateCompleteTail(m, nodeId)
-    && CompleteTailValid(m)
     // get the combiner state
     && var c := m.combiner[nodeId];
     && nodeId in m.localTails // NOTE(travis): we need this
