@@ -558,8 +558,16 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     ensures forall r | r in rids :: res[r].UpdatePlaced?
     ensures forall r | r in rids :: res[r].idx < gtail + |rids|
     ensures forall r | r in rids :: gtail <= res[r].idx
+    ensures forall i | 0 <= i < |rids| :: res[rids[i]].idx == LogIdx(gtail, i)
+    ensures forall i | 0 <= i < |rids| :: res[rids[i]].idx == gtail + i
+    decreases |rids|
   {
     reveal_ConstructLocalUpdateMap();
+    if rids != [] {
+      ConstructLocalUpdateMap_InMap(rids[1..], nodeId, gtail + 1,
+              ConstructLocalUpdateMap(rids[1..], nodeId, gtail + 1));
+    }
+
   }
 
 
@@ -1560,7 +1568,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // NOTE(travis): this lemma currenty verifies, takes 40s thought, so I'm adding
     // this for now to save time verifying the file. If the proof breaks again, we can
     // just fix it later.
-    assume false;
+    //assume false;
 
     var lupd := ConstructLocalUpdateMap(request_ids, nodeId, m.global_tail.value);
 

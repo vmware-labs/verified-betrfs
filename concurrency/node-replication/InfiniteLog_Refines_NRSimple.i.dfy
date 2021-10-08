@@ -215,6 +215,19 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       }
   }
 
+  lemma I_UpdateResponses_update_map_commute(lupd_old : map<RequestId, UpdateState>, lupd_new: map<RequestId, UpdateState>)
+    requires forall r | r in lupd_new :: lupd_new[r].UpdatePlaced?
+    ensures I_UpdateResponses(map_update(lupd_old, lupd_new))
+              == map_update(I_UpdateResponses(lupd_old), I_UpdateResponses(lupd_new))
+  {
+    assert forall r | r in lupd_new :: r in I_UpdateResponses(lupd_new) by {
+      reveal_I_UpdateResponses();
+    }
+    reveal_map_update();
+    reveal_I_UpdateResponses();
+  }
+
+
 
 
   function I(s: A.Variables) : B.Variables
@@ -577,7 +590,10 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
         reveal_I_UpdateRequests();
       }
 
-      assert forall i | 0 <= i < |request_ids| :: new_log_entries[i] == updated_log[LogIdx(s.global_tail.value, i)].op;
+      assert forall i | 0 <= i < |request_ids| :: new_log_entries[i] == updated_log[LogIdx(s.global_tail.value, i)].op
+      by {
+        reveal_ConstructNewLogEntries();
+      }
 
       assert I(s').log == I_Log(s'.global_tail.value, map_update(s.log, updated_log)) by {
         reveal_I_Log();
@@ -600,8 +616,32 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert I(s').update_resps == B.map_update(I(s).update_resps, new_responses) by {
       var local_updates_new := ConstructLocalUpdateMap(request_ids, nodeId, s.global_tail.value);
       assert s'.localUpdates == map_update(s.localUpdates, local_updates_new);
-      ConstructLocalUpdateMap_InMap(request_ids, nodeId, s.global_tail.value, local_updates_new);
-       reveal_I_UpdateResponses();
+
+      assert I(s').update_resps  == I_UpdateResponses(s'.localUpdates) by {
+        reveal_I_UpdateResponses();
+      }
+
+      assert |I(s).log| == s.global_tail.value by {
+          reveal_I_Log();
+        }
+
+      assert new_responses == I_UpdateResponses(local_updates_new) by {
+        reveal_I_UpdateResponses();
+        B.ConstructUpdateResponses_in_map(request_ids, |I(s).log|, new_responses);
+        ConstructLocalUpdateMap_InMap(request_ids, nodeId, s.global_tail.value, local_updates_new);
+      }
+
+      assert I_UpdateResponses(map_update(s.localUpdates, local_updates_new))
+                == map_update(I_UpdateResponses(s.localUpdates), I_UpdateResponses(local_updates_new))
+      by {
+        ConstructLocalUpdateMap_InMap(request_ids, nodeId, s.global_tail.value, local_updates_new);
+        I_UpdateResponses_update_map_commute(s.localUpdates, local_updates_new);
+      }
+
+      assert map_update(I(s).update_resps, new_responses) == B.map_update(I(s).update_resps, new_responses) by {
+        reveal_map_update();
+        B.reveal_map_update();
+      }
     }
 
     assert exists step :: B.NextStep(I(s), I(s'), ifc.InternalOp, step) by {
@@ -609,7 +649,6 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
         assert B.AddUpdateToLog(I(s), I(s'), request_ids);
       }
     }
-
   }
 
   lemma UpdateCompletedTail_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)

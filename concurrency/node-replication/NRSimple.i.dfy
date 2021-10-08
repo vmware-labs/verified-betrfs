@@ -96,6 +96,11 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
     map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
   }
 
+    // all elements in the sequence are unique
+  predicate seq_unique<V>(rids: seq<V>) {
+    forall i, j | 0 <= i < |rids| && 0 <= j < |rids| && i != j :: rids[i] != rids[j]
+  }
+
   // predicate that the request ids are valid
   predicate RequestIdsValid(request_ids: seq<RequestId>, update_reqs: map<RequestId, nrifc.UpdateOp>)
   {
@@ -118,6 +123,22 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
       map[]
     else
       ConstructUpdateResponses(request_ids[1..], idx + 1)[ request_ids[0] :=  UpdateResp(idx)]
+  }
+
+
+  lemma ConstructUpdateResponses_in_map(rids: seq<RequestId>, idx : nat, res: map<RequestId, UpdateResp>)
+    requires seq_unique(rids)
+    requires res == ConstructUpdateResponses(rids, idx)
+    ensures forall r | r in rids :: r in res
+    ensures forall r | r in res :: r in rids
+    ensures forall r | r in res ::res[r].idx_in_log < idx + |rids|
+    ensures forall r | r in res ::res[r].idx_in_log >= idx
+    ensures forall i | 0 <= i < |rids| :: res[rids[i]].idx_in_log == idx + i
+    decreases |rids|
+  {
+     if rids != [] {
+       ConstructUpdateResponses_in_map(rids[1..], idx + 1, ConstructUpdateResponses(rids[1..], idx + 1));
+     }
   }
 
   predicate AddUpdateToLog(s: Variables, s': Variables,  request_ids: seq<RequestId>)
