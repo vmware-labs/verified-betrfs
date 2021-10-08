@@ -1,4 +1,5 @@
 include "InfiniteLog.i.dfy"
+include "Constants.i.dfy"
 
 module InfiniteLogTokens(nrifc: NRIfc) {
   import opened RequestIds
@@ -6,6 +7,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   import opened IL = InfiniteLogSSM(nrifc)
   import opened GhostLoc
   import opened ILT = TicketStubToken(nrifc, IL)
+  import opened Constants
 
   function loc() : Loc // XXX TODO(travis)
 
@@ -357,4 +359,22 @@ module InfiniteLogTokens(nrifc: NRIfc) {
       && i in updates'
       && updates'[i] == Update(updates[i].rid, UpdateDone(updates[i].us.ret, updates[i].us.idx))
   // TODO needs to do the UpdateDone transition in a loop
+
+  glinear method perform_Init(glinear token: ILT.Token)
+  returns (
+      glinear globalTail: GlobalTail,
+      glinear replicas: map<nat, Replica>,
+      glinear localTails: map<nat, LocalTail>,
+      glinear ctail: Ctail,
+      glinear combiners: map<nat, CombinerToken>
+  )
+  requires token.loc == loc()
+  requires IL.Init(token.val)
+  ensures globalTail.tail == 0
+  ensures ctail.ctail == 0
+  ensures forall i | 0 <= i < NUM_REPLICAS as int ::
+      i in replicas && i in localTails && i in combiners
+      && replicas[i] == Replica(i, nrifc.init_state())
+      && localTails[i] == LocalTail(i, 0)
+      && combiners[i] == CombinerToken(i, CombinerReady)
 }

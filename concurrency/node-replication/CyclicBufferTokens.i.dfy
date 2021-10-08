@@ -175,4 +175,23 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     : (gshared v: StoredType)
   requires reader.rs.ReaderGuard?
   ensures v == reader.rs.val
+
+  glinear method cyclic_buffer_init(glinear m: map<int, StoredType>)
+  returns (
+    glinear head: CBHead,
+    glinear globalTail: CBGlobalTail,
+    glinear localTails: map<nat, CBLocalTail>,
+    glinear alive: map<nat, AliveBit>,
+    glinear contents: Contents,
+    glinear readers: map<nat, Reader>
+  )
+  requires forall i :: -(BUFFER_SIZE as int) <= i < 0 <==> i in m
+  ensures head == CBHead(0)
+  ensures globalTail == CBGlobalTail(0)
+  ensures forall i | 0 <= i < NUM_REPLICAS as int ::
+      && i in localTails && localTails[i] == CBLocalTail(i, 0)
+      && i in readers && readers[i] == Reader(i, ReaderIdle)
+  ensures forall i | 0 <= i < BUFFER_SIZE as int ::
+      i in alive && alive[i] == AliveBit(i, false)
+  ensures contents == Contents(m)
 }

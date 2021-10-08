@@ -20,6 +20,7 @@ module Init(nrifc: NRIfc) {
   import opened GhostLoc
   import opened Impl = Impl(nrifc)
   import opened Constants
+  import Tokens = TicketStubToken(nrifc, IL)
 
   linear datatype NodeCreationToken = NodeCreationToken(
     nodeId: uint64,
@@ -126,5 +127,108 @@ module Init(nrifc: NRIfc) {
     dispose_anything(fc_combiner); // TODO this should be put in combiner lock
 
     node := Node(combiner_atomic, replica, contexts, nodeId, fc_loc);
+  }
+
+  method make_buffer_cells()
+  returns (linear cells: lseq<Cell<LogEntry>>,
+      glinear cell_contents: map<nat, StoredType>)
+  ensures |cells| == BUFFER_SIZE as int
+  ensures forall i | 0 <= i < |cells| :: i in cells
+  ensures forall i | -(BUFFER_SIZE as int) <= i < 0 :: i in cell_contents
+      && cell_contents[i].cellContents.cell == cells[i % BUFFER_SIZE as int]
+  ensures forall i | i in cell_contents ::
+      -(BUFFER_SIZE as int) <= i < 0
+
+  method make_buffer(
+      linear cells: lseq<Cell<LogEntry>>, 
+      glinear alive: map<nat, AliveBit>)
+  returns (linear buffer: lseq<BufferEntry>)
+  requires |cells| == BUFFER_SIZE as int
+  requires forall i | 0 <= i < BUFFER_SIZE as int ::
+      && i in cells
+      && i in alive
+      && alive[i] == AliveBit(i, false)
+  ensures |buffer| == BUFFER_SIZE as int
+  ensures forall i | 0 <= i < BUFFER_SIZE as int
+    :: i in buffer && buffer[i].cell == cells[i]
+        && buffer[i].WF(i)
+
+  method make_node_infos(
+      glinear localTails: map<nat, LocalTail>,
+      glinear cbLocalTails: map<nat, CBLocalTail>)
+  returns (linear node_info: lseq<NodeInfo>)
+  requires forall i | 0 <= i < NUM_REPLICAS as int ::
+      && i in localTails
+      && i in cbLocalTails
+      && localTails[i] == LocalTail(i as int, 0)
+      && cbLocalTails[i] == CBLocalTail(i as int, 0)
+  ensures |node_info| == NUM_REPLICAS as int
+  ensures forall i | 0 <= i < NUM_REPLICAS as int
+      :: i in node_info && node_info[i].WF(i)
+
+  method make_node_creation_tokens(
+      glinear replicas: map<nat, Replica>,
+      glinear combiners: map<nat, CombinerToken>,
+      glinear readers: map<nat, Reader>)
+  returns (linear nodeCreationTokens: lseq<NodeCreationToken>)
+  requires forall i | 0 <= i < NUM_REPLICAS as int ::
+      && i in replicas
+      && i in combiners
+      && i in readers
+      && replicas[i] == Replica(i, nrifc.init_state())
+      && combiners[i] == CombinerToken(i, CombinerReady)
+      && readers[i] == Reader(i, ReaderIdle)
+  ensures |nodeCreationTokens| == NUM_REPLICAS as int
+  ensures forall i | 0 <= i < NUM_REPLICAS as int
+      :: i in nodeCreationTokens && nodeCreationTokens[i].WF()
+
+  method initNR(glinear token: Tokens.Token)
+  returns (
+      linear nr: NR,
+      linear nodeCreationTokens: lseq<NodeCreationToken>
+      )
+  requires token.loc == loc()
+  requires IL.Init(token.val)
+  ensures nr.WF()
+  ensures |nodeCreationTokens| == NUM_REPLICAS as int
+  ensures forall i | 0 <= i < |nodeCreationTokens| ::
+      i in nodeCreationTokens && nodeCreationTokens[i].WF()
+  {
+    linear var buffer_cells;
+    glinear var buffer_cell_contents;
+    buffer_cells, buffer_cell_contents := make_buffer_cells();
+
+    glinear var globalTail, replicas, localTails, ctail, combiners := perform_Init(token);
+    glinear var cbHead, cbGlobalTail, cbLocalTails, alive, cbContents, readers :=
+        cyclic_buffer_init(buffer_cell_contents);
+
+    linear var ctail_atomic: Atomic<uint64, Ctail> := new_atomic(
+        0,
+        ctail,
+        (v, g) => g == Ctail(v as int),
+        0);
+    linear var head_atomic: Atomic<uint64, CBHead> := new_atomic(
+        0,
+        cbHead,
+        (v, g) => g == CBHead(v as int),
+        0);
+    linear var globalTail_atomic: Atomic<uint64, GlobalTailTokens> := new_atomic(
+          0,
+          GlobalTailTokens(globalTail, cbGlobalTail),
+          ((v, g) => g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int))),
+          0);
+
+    linear var buffer: lseq<BufferEntry> := make_buffer(buffer_cells, alive);
+
+    glinear var bufferContents: GhostAtomic<Contents> := new_ghost_atomic(
+        cbContents,
+        (g) => ContentsInv(buffer, g),
+        1);
+
+    linear var node_infos: lseq<NodeInfo> := make_node_infos(localTails, cbLocalTails);
+
+    nr := NR(ctail_atomic, head_atomic, globalTail_atomic, node_infos, buffer, bufferContents);
+
+    nodeCreationTokens := make_node_creation_tokens(replicas, combiners, readers);
   }
 }
