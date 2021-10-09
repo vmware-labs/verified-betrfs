@@ -211,9 +211,11 @@ module Impl(nrifc: NRIfc) {
           glinear ticket: Readonly) 
   returns (is_synced: bool, glinear ticket': Readonly) 
   requires ticket.rs.ReadonlyCtail?
+  requires ticket.rs.ctail <= ctail as nat
   requires nr.WF()
   requires nodeId < NUM_REPLICAS
-  //ensures is_synced ==> ticket'.ReadonlyReadyToRead?
+  ensures is_synced ==> ticket'.rs.ReadonlyReadyToRead?
+  ensures !is_synced ==> ticket' == ticket
   //ensures lseq_peek(nr.node_info, nodeId) >= ctail
   {
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/log.rs#L708
@@ -224,12 +226,13 @@ module Impl(nrifc: NRIfc) {
       // TODO: maybe remove?
       assert local_tail_token.localTail == LocalTail(nodeId as nat, local_tail as nat); 
       
+      //assert local_tail_token.localTail.localTail == local_tail as nat;
+      //assume ticket.rs.ctail <= ctail as nat;
+      // ticket.rs.ctail <= ctail <= local_tail_token.localTail.localTail 
 
       // perform transition of ghost state here ...
       if local_tail_token.localTail.localTail >= ctail as nat {
-        assert ticket.rs.ctail >= ctail as nat;
-        //requires ltail.localTail >= ticket.rs.ctail
-        //assert local_tail_token.localTail.localTail >= ctail as nat;
+        assert local_tail_token.localTail.localTail >= ctail as nat;
         ticket' := perform_TransitionReadonlyReadyToRead(ticket, local_tail_token.localTail);
       }
       else {
@@ -249,11 +252,13 @@ module Impl(nrifc: NRIfc) {
     var i: uint64 := 0;
     while i < 5
     invariant 0 <= i <= 5
+    decreases 5 - i
     {
       atomic_block var combiner := execute_atomic_load(node.combiner) {}
       if combiner != 0 {
         return;
       }
+      i := i + 1;
     }
 
     atomic_block var acquired := execute_atomic_compare_and_set_weak(node.combiner, 0, tid) {}
@@ -684,14 +689,15 @@ module Impl(nrifc: NRIfc) {
 
     assert stub.rs.ReadonlyCtail?;
 
-
     // 2. Read localTail (loop until you read a good value)
     var tid := 1; // TODO: tid comes from client calling do_read
     var synced := false;
     synced, stub := is_replica_synced_for_reads(nr, node.nodeId, ctail, stub);
+
     while !synced 
     decreases * 
     invariant synced ==> stub.rs.ReadonlyReadyToRead? 
+    invariant !synced ==> stub.rs.ReadonlyCtail?
     {
       try_combine(nr, node, tid);
       Runtime.SpinLoopHint();
