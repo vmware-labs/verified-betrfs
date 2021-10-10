@@ -226,18 +226,35 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m.combiner[nodeId].localTail < m.combiner[nodeId].globalTail
   }
 
-  // GUARD: InCombinerPlaced
+  // GUARD: InCombinerDone
   //
-  // the supplied nodeid is valid, and the combiner is in the Combiner state with all updates done
+  // the supplied nodeid is valid, and the combiner is in the Combiner state with all updates done,
+  // and there have been updates applied, i.e. c.localTail != m.localTails[nodeId]
   predicate InCombinerDone(m: M, nodeId : NodeId)
     requires StateValid(m)
   {
     && nodeId in m.combiner
     && m.combiner[nodeId].Combiner?
+    && nodeId in m.localTails
     && m.combiner[nodeId].localTail == m.combiner[nodeId].globalTail
+    && m.localTails[nodeId] != m.combiner[nodeId].localTail
   }
 
-  // GUARD: InCombinerPlaced
+  // GUARD: InCombinerNoChange
+  //
+  // the supplied nodeid is valid, and the combiner is in the Combiner state with no updates
+  // done (i.e., combiner.ltail == m.localTail[nodeId])
+  predicate InCombinerNoChange(m: M, nodeId : NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.combiner
+    && nodeId in m.localTails
+    && m.combiner[nodeId].Combiner?
+    && m.combiner[nodeId].localTail == m.combiner[nodeId].globalTail
+    && m.localTails[nodeId] == m.combiner[nodeId].localTail
+  }
+
+  // GUARD: InCombinerUpdateCompleteTail
   //
   // the supplied nodeid is valid, and the combiner is in the UpdateCTail state
   predicate InCombinerUpdateCompleteTail(m : M, nodeId : NodeId)
@@ -769,6 +786,24 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
               .(ctail := Some(new_ctail))
   }
 
+  // STATE TRANSITION: Combiner -> CombinerReady
+  //
+  // Update the ctail to the maximum of the current stored global tail, and the current ctail
+  //
+  // assert (ltail = gtail)
+  // { Combiner(queue, ltail, gtail, j) ; … }
+  //   if ltail == gtail {
+  //       return
+  //   }
+  // { CombinerReady ; … }
+  predicate UpdateCompletedNoChange(m: M, m': M, nodeId: NodeId) {
+    && StateValid(m)
+    && InCombinerNoChange(m, nodeId)
+    && CompleteTailValid(m)
+    // update the ctail and the combiner state
+    && m' == m.(combiner := m.combiner[nodeId := CombinerReady])
+  }
+
   // STATE TRANSITION: UpdateApplied -> UpdateDone
   //
   // Update the state of the update request from UpdateApplied to Done when the CTail has advanced
@@ -1269,6 +1304,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     | UpdateCompletedTail_Step(nodeId: NodeId)
     | AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>)
     | UpdateRequestDone_Step(request_id: RequestId)
+    | UpdateCompletedNoChange_Step(nodeId: NodeId)
 
 
   predicate NextStep(m: M, m': M, step: Step) {
@@ -1284,6 +1320,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail(m, m', nodeId, request_ids)
       case UpdateCompletedTail_Step(nodeId: NodeId) => UpdateCompletedTail(m, m',nodeId)
       case UpdateRequestDone_Step(request_id: RequestId) => UpdateRequestDone(m, m', request_id)
+      case UpdateCompletedNoChange_Step(nodeId: NodeId) => UpdateCompletedNoChange(m, m', nodeId)
     }
   }
 
@@ -1447,6 +1484,14 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   }
 
+  lemma UpdateCompletedNoChange_PreservesInv(m: M, m': M, nodeId: NodeId)
+    requires Inv(m)
+    requires UpdateCompletedNoChange(m, m', nodeId)
+    ensures Inv(m')
+  {
+
+  }
+
   lemma NextStep_PreservesInv(m: M, m': M, step: Step)
     requires Inv(m)
     requires NextStep(m, m', step)
@@ -1464,6 +1509,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail_PreservesInv(m, m', nodeId, request_ids);
       case UpdateCompletedTail_Step(nodeId: NodeId) =>  UpdateCompletedTail_PreservesInv(m, m', nodeId);
       case UpdateRequestDone_Step(request_id: RequestId) => UpdateRequestDone_PreservesInv(m, m', request_id);
+      case UpdateCompletedNoChange_Step(nodeId: NodeId) => UpdateCompletedNoChange_PreservesInv(m, m', nodeId);
     }
   }
 
@@ -1647,6 +1693,14 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
   }
 
+  lemma UpdateCompletedNoChange_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires UpdateCompletedNoChange(m, m', nodeId)
+  ensures UpdateCompletedNoChange(dot(m, p), dot(m', p), nodeId)
+  {
+  }
+
   lemma InternalMonotonic(m: M, m': M, p: M)
   requires Internal(m, m')
   requires Inv(dot(m, p))
@@ -1697,6 +1751,10 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       }
       case UpdateRequestDone_Step(request_id: RequestId) => {
         UpdateRequestDone_Monotonic(m, m', p, request_id);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case UpdateCompletedNoChange_Step(nodeId: NodeId) => {
+        UpdateCompletedNoChange_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
     }

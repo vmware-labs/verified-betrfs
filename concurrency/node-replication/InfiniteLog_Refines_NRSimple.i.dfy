@@ -666,6 +666,16 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.IncreaseCtail_Step(new_ctail));
   }
 
+  lemma UpdateCompletedNoChange_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)
+  requires IL.UpdateCompletedNoChange(s, s', nodeId)
+  requires Inv(s)
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), ifc.InternalOp)
+  {
+    assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.Stutter_Step);
+  }
+
+
   lemma UpdateRequestDone_Refines(s: A.Variables, s': A.Variables, rid: RequestId)
   requires IL.UpdateRequestDone(s, s', rid)
   requires Inv(s)
@@ -697,6 +707,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       case AdvanceTail_Step(nodeId, request_ids) => { AdvanceTail_Refines(s, s', nodeId, request_ids); }
       case UpdateCompletedTail_Step(nodeId) => { UpdateCompletedTail_Refines(s, s',nodeId); }
       case UpdateRequestDone_Step(request_id: RequestId) => { UpdateRequestDone_Refines(s, s', request_id); }
+      case UpdateCompletedNoChange_Step(nodeId) => { UpdateCompletedNoChange_Refines(s, s',nodeId); }
     }
   }
 
