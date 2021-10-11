@@ -688,8 +688,7 @@ module Impl(nrifc: NRIfc) {
       ghost_release ctail_token;
     }
 
-    assert stub.rid == ticket.rid;
-    assert stub.rs.ReadonlyCtail?;
+    assert stub.rs.ReadonlyCtail?; // advisory
 
     // 2. Read localTail (loop until you read a good value)
     var tid := 1; // TODO: tid comes from client calling do_read
@@ -708,22 +707,23 @@ module Impl(nrifc: NRIfc) {
       synced, stub := is_replica_synced_for_reads(nr, node.nodeId, ctail, stub);
     }
 
-    assert stub.rid == ticket.rid;
-    assert stub.rs.ReadonlyReadyToRead?;
+    assert stub.rs.ReadonlyReadyToRead?; // advisory
 
     // 3. Take read-lock on replica; apply operation on replica
     linear var linear_guard := node.replica.acquire_shared();
     result, stub := apply_readonly(linear_guard, op, stub);
     node.replica.release_shared(linear_guard);
 
-    assert stub.rid == ticket.rid;
-    assert stub.rs.ReadonlyDone?;
+    assert stub.rs.ReadonlyDone?; // advisory
   }
 
   method apply_readonly(shared guard: SharedGuard<NodeReplica>, op: nrifc.ReadonlyOp,
       glinear ticket: Readonly)
   returns (result: nrifc.ReturnType, glinear ticket': Readonly)
+  requires ticket.rs.ReadonlyReadyToRead?
   ensures ticket.rid == ticket'.rid
+  ensures ticket'.rs.ReadonlyDone?
+  ensures ticket'.rs.ret == result
   {
     shared var shared_v := RwLockImpl.borrow_shared(guard);
     result := nrifc.do_readonly(shared_v.actual_replica, op);
