@@ -216,6 +216,7 @@ module Impl(nrifc: NRIfc) {
   requires nodeId < NUM_REPLICAS
   ensures is_synced ==> ticket'.rs.ReadonlyReadyToRead?
   ensures !is_synced ==> ticket' == ticket
+  ensures ticket.rid == ticket'.rid
   //ensures lseq_peek(nr.node_info, nodeId) >= ctail
   {
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/log.rs#L708
@@ -663,7 +664,7 @@ module Impl(nrifc: NRIfc) {
   // And we must return a stub that validates that we performed the operation
   // with the result being that value that we are returning.
   ensures stub.rs.ReadonlyDone? 
-  ensures stub.rid == ticket.rid 
+  ensures stub.rid == ticket.rid
   ensures stub.rs.ret == result
   decreases * // method is not guaranteed to terminate
   {
@@ -687,6 +688,7 @@ module Impl(nrifc: NRIfc) {
       ghost_release ctail_token;
     }
 
+    assert stub.rid == ticket.rid;
     assert stub.rs.ReadonlyCtail?;
 
     // 2. Read localTail (loop until you read a good value)
@@ -699,25 +701,34 @@ module Impl(nrifc: NRIfc) {
     invariant synced ==> stub.rs.ReadonlyReadyToRead? 
     invariant !synced ==> stub.rs.ReadonlyCtail?
     invariant !synced ==> stub.rs.ctail <= ctail as nat;
+    invariant stub.rid == ticket.rid
     {
       try_combine(nr, node, tid);
       Runtime.SpinLoopHint();
       synced, stub := is_replica_synced_for_reads(nr, node.nodeId, ctail, stub);
     }
 
+    assert stub.rid == ticket.rid;
+    assert stub.rs.ReadonlyReadyToRead?;
+
     // 3. Take read-lock on replica; apply operation on replica
     linear var linear_guard := node.replica.acquire_shared();
-    result := apply_readonly(linear_guard, op);
+    result, stub := apply_readonly(linear_guard, op, stub);
     node.replica.release_shared(linear_guard);
 
+    assert stub.rid == ticket.rid;
     assert stub.rs.ReadonlyDone?;
   }
 
-  method apply_readonly(shared guard: SharedGuard<NodeReplica>, op: nrifc.ReadonlyOp) 
-  returns (result: nrifc.ReturnType)
+  method apply_readonly(shared guard: SharedGuard<NodeReplica>, op: nrifc.ReadonlyOp,
+      glinear ticket: Readonly)
+  returns (result: nrifc.ReturnType, glinear ticket': Readonly)
+  ensures ticket.rid == ticket'.rid
   {
     shared var shared_v := RwLockImpl.borrow_shared(guard);
     result := nrifc.do_readonly(shared_v.actual_replica, op);
+    shared var NodeReplica(actual_replica, ghost_replica, combinerState, reader) := shared_v;
+    ticket' := perform_ReadonlyDone(ticket, ghost_replica);
   }
 
   method append(shared nr: NR, shared node: Node,
