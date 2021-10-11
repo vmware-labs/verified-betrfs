@@ -698,6 +698,7 @@ module Impl(nrifc: NRIfc) {
     decreases * 
     invariant synced ==> stub.rs.ReadonlyReadyToRead? 
     invariant !synced ==> stub.rs.ReadonlyCtail?
+    invariant !synced ==> stub.rs.ctail <= ctail as nat;
     {
       try_combine(nr, node, tid);
       Runtime.SpinLoopHint();
