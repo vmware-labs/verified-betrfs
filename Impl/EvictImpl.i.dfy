@@ -119,6 +119,8 @@ module EvictImpl {
             LruModel.LruRemove(s.lru.Queue(), ref);
             inout s.lru.Remove(ref);
             inout s.cache.Remove(ref);
+            assert BC.Evict(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, ref);
+            assert BBC.NextStep(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BBC.BlockCacheMoveStep(BC.EvictStep(ref)));
             assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.EvictStep(ref));
           } else {
             assert IOModel.noop(s.I(), s.I());
