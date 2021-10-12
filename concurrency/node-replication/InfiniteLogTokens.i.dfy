@@ -149,7 +149,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
       gshared ltail: LocalTail)
   returns (glinear ticket': Readonly)
   requires ticket.rs.ReadonlyCtail?
-  requires ltail.localTail >= ticket.rs.ctail
+  // requires ltail.localTail >= ticket.rs.ctail
   ensures ticket' == Readonly(ticket.rid,
       ReadonlyReadyToRead(ticket.rs.op, ltail.nodeId, ticket.rs.ctail))
   {

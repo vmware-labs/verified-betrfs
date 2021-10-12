@@ -108,9 +108,10 @@ module Impl(nrifc: NRIfc) {
   }
 
   glinear datatype UnitGhostType = UnitGhostType
+  glinear datatype CombinerLockGhost = CombinerLockGhost(glinear tid: nat)
 
   linear datatype Node = Node(
-    linear combiner: Atomic<uint64, UnitGhostType>, // TODO something needs to go here
+    linear combiner_lock: Atomic<uint64, CombinerLockGhost>,
     linear replica: RwLock<NodeReplica>,
     //linear context: map<Tid, nrifc.UpdateOp>,
     linear contexts: lseq<Context>, // TODO cache-line padded?
@@ -125,6 +126,7 @@ module Impl(nrifc: NRIfc) {
       && 0 <= nodeId as int < NUM_REPLICAS as int
       && |contexts| == MAX_THREADS_PER_REPLICA as int
       && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i, fc_loc))
+      && (forall v, g :: atomic_inv(combiner_lock, v, g) <==> g == CombinerLockGhost(v as nat))
     }
   }
 
@@ -206,12 +208,11 @@ module Impl(nrifc: NRIfc) {
     }
   }
 
-
   method is_replica_synced_for_reads(shared nr: NR, nodeId: uint64, ctail: uint64, 
           glinear ticket: Readonly) 
   returns (is_synced: bool, glinear ticket': Readonly) 
   requires ticket.rs.ReadonlyCtail?
-  requires ticket.rs.ctail <= ctail as nat
+  //requires ticket.rs.ctail <= ctail as nat
   requires nr.WF()
   requires nodeId < NUM_REPLICAS
   ensures is_synced ==> ticket'.rs.ReadonlyReadyToRead?
@@ -223,13 +224,13 @@ module Impl(nrifc: NRIfc) {
 
     atomic_block var local_tail := execute_atomic_load(lseq_peek(nr.node_info, nodeId).localTail) { 
       ghost_acquire local_tail_token;
-      
+
       // TODO: maybe remove?
       assert local_tail_token.localTail == LocalTail(nodeId as nat, local_tail as nat); 
-      
+
       //assert local_tail_token.localTail.localTail == local_tail as nat;
       //assume ticket.rs.ctail <= ctail as nat;
-      // ticket.rs.ctail <= ctail <= local_tail_token.localTail.localTail 
+      //ticket.rs.ctail <= ctail <= local_tail_token.localTail.localTail
 
       // perform transition of ghost state here ...
       if local_tail_token.localTail.localTail >= ctail as nat {
@@ -253,26 +254,58 @@ module Impl(nrifc: NRIfc) {
     var i: uint64 := 0;
     while i < 5
     invariant 0 <= i <= 5
-    decreases 5 - i
     {
-      atomic_block var combiner := execute_atomic_load(node.combiner) {}
-      if combiner != 0 {
+      atomic_block var combiner_lock := execute_atomic_load(node.combiner_lock) {
+        ghost_acquire ghost_context;
+        assert ghost_context == CombinerLockGhost(0 as int);
+        ghost_release ghost_context;
+      }
+      if combiner_lock != 0 {
         return;
       }
       i := i + 1;
     }
 
-    atomic_block var acquired := execute_atomic_compare_and_set_weak(node.combiner, 0, tid) {}
+//  ghost_acquire globalTailTokens;
+//  glinear var GlobalTailTokens(globalTail, cbGlobalTail) := globalTailTokens;
+//  globalTailTokens := GlobalTailTokens(globalTail, cbGlobalTail);
+//  ghost_release globalTailTokens;
+
+    atomic_block var acquired := execute_atomic_compare_and_set_weak(node.combiner_lock, 0, tid) {
+      ghost_acquire ghost_context;
+
+      glinear var CombinerLockGhost(old_val) := ghost_context;
+
+      if acquired {
+        assert new_value == tid;
+        glinear var tid_val := 
+        ghost_context := CombinerLockGhost(tid as nat);
+      }
+      else {
+        ghost_context := CombinerLockGhost(0);
+      }
+      ghost_release ghost_context;
+    }
+
     if !acquired {
       return;
     }
-    //combine(nr, node, tid); // TODO
-    atomic_block var _ := execute_atomic_store(node.combiner, 0) {}
+
+    // combine(nr, node, tid); // TODO
+    atomic_block var _ := execute_atomic_store(node.combiner_lock, 0) {
+        ghost_acquire ghost_context;
+        //glinear var ugg := ghost_context;
+        
+        //ghost_context := ugg;
+        //assert ghost_context == UnitGhostType;
+        ghost_release ghost_context;
+    }
   }
 
   method combine(shared nr: NR, shared node: Node,
       // these are not inputs or ouputs;
-      // they only serve internally as buffers for ops and responses
+      // they only serve internally as buffers 
+      // for ops and responses
       linear ops: seq<nrifc.UpdateOp>,
       linear responses: seq<nrifc.ReturnType>,
       glinear flatCombiner: FCCombiner)
