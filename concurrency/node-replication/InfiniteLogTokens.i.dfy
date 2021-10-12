@@ -192,10 +192,11 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   returns (glinear readonly': Readonly)
   requires readonly.rs.ReadonlyReadyToRead?
   requires replica.nodeId == readonly.rs.nodeId
+  ensures readonly'.rs.ret == nrifc.read(replica.state, readonly.rs.op)
   ensures readonly' == Readonly(readonly.rid,
       ReadonlyDone(readonly.rs.op, nrifc.read(replica.state, readonly.rs.op), readonly.rs.nodeId, readonly.rs.ctail))
   //{
-    //TODO
+    // TODO
   //}
 
   glinear method perform_TrivialStartCombining(

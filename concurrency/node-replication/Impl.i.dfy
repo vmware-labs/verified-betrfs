@@ -111,7 +111,7 @@ module Impl(nrifc: NRIfc) {
   glinear datatype CombinerLockGhost = CombinerLockGhost(glinear tid: nat)
 
   linear datatype Node = Node(
-    linear combiner_lock: Atomic<uint64, CombinerLockGhost>,
+    linear combiner_lock: Atomic<uint64, UnitGhostType>,
     linear replica: RwLock<NodeReplica>,
     //linear context: map<Tid, nrifc.UpdateOp>,
     linear contexts: lseq<Context>, // TODO cache-line padded?
@@ -126,7 +126,7 @@ module Impl(nrifc: NRIfc) {
       && 0 <= nodeId as int < NUM_REPLICAS as int
       && |contexts| == MAX_THREADS_PER_REPLICA as int
       && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i, fc_loc))
-      && (forall v, g :: atomic_inv(combiner_lock, v, g) <==> g == CombinerLockGhost(v as nat))
+      && (forall v, g :: atomic_inv(combiner_lock, v, g) <==> true)
     }
   }
 
@@ -218,6 +218,8 @@ module Impl(nrifc: NRIfc) {
   ensures is_synced ==> ticket'.rs.ReadonlyReadyToRead?
   ensures !is_synced ==> ticket' == ticket
   ensures ticket.rid == ticket'.rid
+  ensures is_synced ==> ticket'.rs.nodeId == nodeId as nat
+  ensures ticket.rs.op == ticket'.rs.op
   //ensures lseq_peek(nr.node_info, nodeId) >= ctail
   {
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/log.rs#L708
@@ -257,7 +259,7 @@ module Impl(nrifc: NRIfc) {
     {
       atomic_block var combiner_lock := execute_atomic_load(node.combiner_lock) {
         ghost_acquire ghost_context;
-        assert ghost_context == CombinerLockGhost(0 as int);
+        assert ghost_context == UnitGhostType;
         ghost_release ghost_context;
       }
       if combiner_lock != 0 {
@@ -266,24 +268,19 @@ module Impl(nrifc: NRIfc) {
       i := i + 1;
     }
 
-//  ghost_acquire globalTailTokens;
-//  glinear var GlobalTailTokens(globalTail, cbGlobalTail) := globalTailTokens;
-//  globalTailTokens := GlobalTailTokens(globalTail, cbGlobalTail);
-//  ghost_release globalTailTokens;
-
     atomic_block var acquired := execute_atomic_compare_and_set_weak(node.combiner_lock, 0, tid) {
       ghost_acquire ghost_context;
-
-      glinear var CombinerLockGhost(old_val) := ghost_context;
-
-      if acquired {
-        assert new_value == tid;
-        glinear var tid_val := 
-        ghost_context := CombinerLockGhost(tid as nat);
+      assert ghost_context == UnitGhostType;
+      
+      /*ghost var gacquired := acquired;
+      if gacquired {
+        assert atomic_inv(node.combiner_lock, tid, UnitGhostType);
       }
       else {
-        ghost_context := CombinerLockGhost(0);
-      }
+        assert atomic_inv(node.combiner_lock, old_value, UnitGhostType);
+      }*/
+
+      assert atomic_inv(node.combiner_lock, new_value, UnitGhostType);
       ghost_release ghost_context;
     }
 
@@ -292,6 +289,7 @@ module Impl(nrifc: NRIfc) {
     }
 
     // combine(nr, node, tid); // TODO
+
     atomic_block var _ := execute_atomic_store(node.combiner_lock, 0) {
         ghost_acquire ghost_context;
         //glinear var ugg := ghost_context;
@@ -690,6 +688,7 @@ module Impl(nrifc: NRIfc) {
   returns (result: nrifc.ReturnType, glinear stub: Readonly)
   requires nr.WF()
   requires node.WF()
+  //requires node.ghost_replica.state == nrifc.I(actual_replica)
   // The contract for this method works like this:
   // Input a ticket which "allows" us to perform the readonly operation specified
   // by the input parameter `op`
@@ -699,6 +698,7 @@ module Impl(nrifc: NRIfc) {
   ensures stub.rs.ReadonlyDone? 
   ensures stub.rid == ticket.rid
   ensures stub.rs.ret == result
+  //ensures ghost_replica'.state == nrifc.I(actual_replica')
   decreases * // method is not guaranteed to terminate
   {
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L559
@@ -734,6 +734,8 @@ module Impl(nrifc: NRIfc) {
     invariant !synced ==> stub.rs.ReadonlyCtail?
     invariant !synced ==> stub.rs.ctail <= ctail as nat;
     invariant stub.rid == ticket.rid
+    invariant synced ==> stub.rs.nodeId == node.nodeId as nat
+    invariant stub.rs.op == op
     {
       try_combine(nr, node, tid);
       Runtime.SpinLoopHint();
@@ -741,9 +743,12 @@ module Impl(nrifc: NRIfc) {
     }
 
     assert stub.rs.ReadonlyReadyToRead?; // advisory
+    assert stub.rs.nodeId == node.nodeId as nat;
 
     // 3. Take read-lock on replica; apply operation on replica
     linear var linear_guard := node.replica.acquire_shared();
+    assert linear_guard.v.ghost_replica.nodeId == stub.rs.nodeId;
+
     result, stub := apply_readonly(linear_guard, op, stub);
     node.replica.release_shared(linear_guard);
 
@@ -754,12 +759,20 @@ module Impl(nrifc: NRIfc) {
       glinear ticket: Readonly)
   returns (result: nrifc.ReturnType, glinear ticket': Readonly)
   requires ticket.rs.ReadonlyReadyToRead?
+  requires guard.v.ghost_replica.nodeId == ticket.rs.nodeId
+  requires ticket.rs.op == op
+  requires guard.v.ghost_replica.state == nrifc.I(guard.v.actual_replica)
   ensures ticket.rid == ticket'.rid
   ensures ticket'.rs.ReadonlyDone?
   ensures ticket'.rs.ret == result
+  ensures guard.v.ghost_replica.state == nrifc.I(guard.v.actual_replica)
   {
     shared var shared_v := RwLockImpl.borrow_shared(guard);
+    assert shared_v.ghost_replica.nodeId == ticket.rs.nodeId;
     result := nrifc.do_readonly(shared_v.actual_replica, op);
+
+    assert nrifc.read(shared_v.ghost_replica.state, ticket.rs.op) == result;
+
     shared var NodeReplica(actual_replica, ghost_replica, combinerState, reader) := shared_v;
     ticket' := perform_ReadonlyDone(ticket, ghost_replica);
   }
