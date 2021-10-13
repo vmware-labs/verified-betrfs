@@ -252,6 +252,7 @@ module Impl(nrifc: NRIfc) {
   method try_combine(shared nr: NR, shared node: Node, tid: uint64)
   requires tid > 0
   requires nr.WF()
+  requires node.WF()
   {
     var i: uint64 := 0;
     while i < 5
