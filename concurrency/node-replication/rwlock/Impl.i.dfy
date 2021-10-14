@@ -64,7 +64,10 @@ module RwLockImpl {
    * to the data structure stored in the mutex.
    */
 
-  datatype SharedGuard = SharedGuard(ghost m: RwLock, ghost v: V)
+  glinear datatype SharedGuard = SharedGuard(
+    glinear shared_obtained_token: Token,
+    ghost m: RwLock,
+    ghost v: V)
 
   /*
    * RwLock that protects a piece of data with some invariant.
@@ -209,7 +212,6 @@ module RwLockImpl {
     requires guard.Inv()
     requires this.inv(v)
     requires guard.m == this
-    ensures InternalInv()
     {
       glinear var ExclusiveGuard(exc_obtained_token, empty_cell_contents, m) := guard;
 
@@ -231,14 +233,21 @@ module RwLockImpl {
      */
 
     shared method acquire_shared(thread_id: uint8)
-//    returns (linear handle: SharedGuard)
+    returns (glinear guard: SharedGuard)
+    requires InternalInv()
     requires 0 <= thread_id as nat < RwLockMod.RC_WIDTH;
-//    ensures this.inv(handle.v)
-//    ensures handle.m == this
+    ensures this.inv(guard.v)
+    ensures guard.m == this
     decreases *
     {
-
-      while (true) {
+      // Use a glOption to exfiltrate a glinear value created inside the loop
+      glinear var shared_handle_result := glNone;
+      ghost var shared_value;
+      while (true)
+        //invariant obtained_handle is nice.
+        invariant 0 <= thread_id as nat < RwLockMod.RC_WIDTH;
+        decreases *
+      {
         var exc_acquired: bool;
 
         // Spin loop until nobody has the exclusive access acquired.
@@ -247,24 +256,31 @@ module RwLockImpl {
         // exclusiveFlag here.
         atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) { }
         while (exc_acquired)
+          decreases *
         {
           SpinLoopHint();
           atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) { }
         }
 
         // Increment my thread-specific refcount to indicate my enthusiasm to get this shared access.
+        glinear var shared_handle;
         atomic_block var orig_count :=
           execute_atomic_fetch_add_uint8(lseq_peek(this.refCounts, thread_id as uint64), 1) {
           ghost_acquire g;
-          g := perform_SharedIncCount(g, 1);
-          assert wrapped_add_uint8(orig_count, 1) as nat == orig_count as nat + 1;
+          g, shared_handle := perform_SharedIncCount(g, thread_id as nat);
+
+          // TODO(travis,jonh): need a Count token proving there are fewer than 256 threads participating
+          assume wrapped_add_uint8(orig_count, 1) as nat == orig_count as nat + 1;
+
           ghost_release g;
         }
 
         // Check if we acquired the shared access (because no exclusive locker got in our way)
         atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) {
           ghost_acquire g;
-          if (exc_acquired) {
+          if (!exc_acquired) {
+            g, shared_handle := perform_SharedCheckExc(g, shared_handle, thread_id as nat);
+            shared_value := g.val.exclusiveFlag.stored_value;
           }
           ghost_release g;
         }
@@ -272,14 +288,23 @@ module RwLockImpl {
         if (!exc_acquired)
         {
           // Yay! Any exclusive locker that arrives now will wait behind our incremented refcount.
+          dispose_glnone(shared_handle_result);
+          shared_handle_result := glSome(shared_handle);
           break;
         }
 
         // Decrement the refcount and go back to spinlooping
+        shared var refCountThisThread := lseq_peek(this.refCounts, thread_id as uint64);
         atomic_block var count_before_decr :=
-          execute_atomic_fetch_add_uint8(lseq_peek(this.refCounts, thread_id as uint64), 1) {
+          execute_atomic_fetch_sub_uint8(refCountThisThread, 1) {
+          ghost_acquire g;
+          g := perform_SharedDecCountPending(g, shared_handle, thread_id as nat);
+          ghost_release g;
         }
       }
+
+      glinear var shared_obtained_handle := unwrap_value(shared_handle_result);
+      guard := SharedGuard(shared_obtained_handle, this, shared_value.v.value);
     }
 
     /*

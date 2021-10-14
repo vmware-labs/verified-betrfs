@@ -674,13 +674,17 @@ module RwLockToken {
     flagToken' := T.deposit_2_1(flagToken, excAcqToken, b, expected_flag');
   }
 
-  glinear method perform_SharedIncCount(glinear rc: Token, ghost t: int)
-  returns (glinear rc': Token, glinear handle': Token)
-  requires var m := rc.val;
+  predicate IsSharedFlagHandleForThread(m: M, t: int)
+  {
     && m.M?
     && 0 <= t < RC_WIDTH as int
     && t in m.sharedFlags
     && m == SharedFlagHandle(t, m.sharedFlags[t])
+  }
+
+  glinear method perform_SharedIncCount(glinear rc: Token, ghost t: int)
+  returns (glinear rc': Token, glinear handle': Token)
+  requires IsSharedFlagHandleForThread(rc.val, t);
   ensures rc'.loc == handle'.loc == rc.loc
   ensures rc'.val == SharedFlagHandle(t, rc.val.sharedFlags[t] + 1)
   ensures handle'.val == SharedAcqHandle(SharedAcqPending(t))
