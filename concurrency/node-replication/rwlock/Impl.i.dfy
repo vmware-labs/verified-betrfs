@@ -73,10 +73,10 @@ module RwLockImpl {
       && (forall v, token :: atomic_inv(exclusiveFlag, v, token)
             <==> (
               && token.val.M?
-              && token.val.exclusive.ExclusiveState?          // Token has an ExclusiveState in it
-              && token.val == RwLockMod.CentralHandle(token.val.exclusive)  // Token doesn't have anything else in it
-              && v == token.val.exclusive.exc                 // Token lock state matches protected bool
-              && lcell == token.val.exclusive.stored_value.lcell  // Token stored value reflects what's in the cell
+              && token.val.exclusiveFlag.ExclusiveFlag?          // Token can observe ExclusiveFlag
+              && token.val == RwLockMod.ExcFlagHandle(token.val.exclusiveFlag)  // Token doesn't have anything else in it
+              && v == token.val.exclusiveFlag.acquired            // Token lock state matches protected bool
+              && lcell == token.val.exclusiveFlag.stored_value.lcell  // Token stored value reflects what's in the cell
               && token.loc == loc
             )
           )
@@ -84,7 +84,7 @@ module RwLockImpl {
           :: atomic_inv(refCounts[t], count, token)
             <==> (
               // Token is a single refcount that matches the protected count
-              && token.val == RwLockMod.RefCount(t, count)
+              && token.val == RwLockMod.SharedFlagHandle(t, count)
               && token.loc == loc
               )
           )
@@ -99,10 +99,10 @@ module RwLockImpl {
     predicate IsPendingHandle(token: RwLockToken.Token, visited: int)
     {
       && token.val.M?
-      && token.val == RwLockMod.ExcHandle(token.val.exc)  // it's an ExcState
-      && token.val.exc.ExcPending?
-      && token.val.exc.visited == visited
-      && token.val.exc.b.lcell == this.lcell
+      && token.val == RwLockMod.ExcAcqHandle(token.val.exclusiveAcquisition)  // it's an ExcState
+      && token.val.exclusiveAcquisition.ExcAcqPending?
+      && token.val.exclusiveAcquisition.visited == visited
+      && token.val.exclusiveAcquisition.b.lcell == this.lcell
       && token.loc == this.loc
     }
 
@@ -139,7 +139,7 @@ module RwLockImpl {
         // (Deadlock breaking is the shared-acquirer's problem.)
         invariant this.InternalInv()
         invariant if visited as int ==RwLockMod.RC_WIDTH
-          then pending_handle.val == RwLockMod.ExcHandle(RwLockMod.ExcObtained)
+          then pending_handle.val == RwLockMod.ExcAcqHandle(RwLockMod.ExcAcqObtained)
           else IsPendingHandle(pending_handle, visited as int)
         invariant pending_handle.loc == this.loc
         decreases *
