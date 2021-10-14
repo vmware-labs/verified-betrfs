@@ -242,6 +242,9 @@ module RwLockImpl {
         var exc_acquired: bool;
 
         // Spin loop until nobody has the exclusive access acquired.
+        // Note we don't do anything with handles here, because correctness
+        // doesn't (can't!) depend on the value we observe for the
+        // exclusiveFlag here.
         atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) { }
         while (exc_acquired)
         {
@@ -250,9 +253,13 @@ module RwLockImpl {
         }
 
         // Increment my thread-specific refcount to indicate my enthusiasm to get this shared access.
-        atomic_block var orig_count := execute_atomic_fetch_add_uint8(lseq_peek(this.refCounts, thread_id as uint64), 1) {
+        atomic_block var orig_count :=
+          execute_atomic_fetch_add_uint8(lseq_peek(this.refCounts, thread_id as uint64), 1) {
+          ghost_acquire g;
+          g := perform_SharedIncCount(g, 1);
+          assert wrapped_add_uint8(orig_count, 1) as nat == orig_count as nat + 1;
+          ghost_release g;
         }
-        assert wrapped_add_uint8(orig_count, 1) as nat == orig_count as nat + 1;
 
         // Check if we acquired the shared access (because no exclusive locker got in our way)
         atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) {
