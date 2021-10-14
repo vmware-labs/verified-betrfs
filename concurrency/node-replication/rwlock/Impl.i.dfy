@@ -13,6 +13,7 @@ module RwLockImpl {
   import opened LinearCells
   import opened GhostLoc
   import opened GlinearOption
+  import opened Options
   import opened Runtime
 
   import RwLockMod = RwLock
@@ -50,11 +51,12 @@ module RwLockImpl {
     glinear empty_cell_contents: Handle.Handle,
     ghost m: RwLock)
   {
-    predicate Inv() {
+    predicate Inv(expected_lock: RwLock) {
       && exc_obtained_token.loc == m.loc
       && IsExcAcqObtained(exc_obtained_token.val)
       && empty_cell_contents.lcell == m.lcell // empty_cell_contents is talking about m's cell
       && empty_cell_contents.v.None?  // m.cell is empty, ready to be give-n back a value at release time.
+      && m == expected_lock
     }
   }
 
@@ -64,10 +66,30 @@ module RwLockImpl {
    * to the data structure stored in the mutex.
    */
 
-  glinear datatype SharedGuard = SharedGuard(
+  linear datatype SharedGuard = SharedGuard(
+    // The shared access can be released on a different thread than the one that acquired it;
+    // the guard carries with it the necessary non-ghost thread id that matches the thread_id
+    // associated with the ghost shared_obtained_token.
+    acquiring_thread_id: uint8,
     glinear shared_obtained_token: Token,
     ghost m: RwLock,
     ghost v: V)
+  {
+    function StoredContents() : Handle.Handle
+    {
+      LCellContents(m.lcell, Some(v))
+    }
+
+    predicate Inv(expected_lock: RwLock)
+    {
+      && 0 <= acquiring_thread_id as nat < RwLockMod.RC_WIDTH
+      && shared_obtained_token.loc == m.loc
+      && shared_obtained_token.val.M?
+      && shared_obtained_token.val == RwLockMod.SharedAcqHandle(RwLockMod.SharedAcqObtained(
+        acquiring_thread_id as nat, StoredContents()))
+      && m == expected_lock
+    }
+  }
 
   /*
    * RwLock that protects a piece of data with some invariant.
@@ -139,11 +161,11 @@ module RwLockImpl {
     }
 
     shared method acquire()
-    returns (linear v: V, glinear handle: ExclusiveGuard)
+    returns (linear v: V, glinear guard: ExclusiveGuard)
     requires InternalInv()
     // ensures InternalInv() -- comes for free because this method is shared! we didn't modify it!
+    ensures guard.Inv(this)
     ensures this.inv(v)
-    ensures handle.m == this
     decreases *
     {
       var got_exc := false;
@@ -199,7 +221,7 @@ module RwLockImpl {
       
       assert inv(v);
 
-      handle := ExclusiveGuard(pending_handle, b', this);
+      guard := ExclusiveGuard(pending_handle, b', this);
     }
 
     /*
@@ -209,9 +231,8 @@ module RwLockImpl {
 
     shared method release(linear v: V, glinear guard: ExclusiveGuard)
     requires InternalInv()
-    requires guard.Inv()
+    requires guard.Inv(this)
     requires this.inv(v)
-    requires guard.m == this
     {
       glinear var ExclusiveGuard(exc_obtained_token, empty_cell_contents, m) := guard;
 
@@ -233,11 +254,11 @@ module RwLockImpl {
      */
 
     shared method acquire_shared(thread_id: uint8)
-    returns (glinear guard: SharedGuard)
+    returns (linear guard: SharedGuard)
     requires InternalInv()
     requires 0 <= thread_id as nat < RwLockMod.RC_WIDTH;
     ensures this.inv(guard.v)
-    ensures guard.m == this
+    ensures guard.Inv(this)
     decreases *
     {
       // Use a glOption to exfiltrate a glinear value created inside the loop
@@ -294,9 +315,8 @@ module RwLockImpl {
         }
 
         // Decrement the refcount and go back to spinlooping
-        shared var refCountThisThread := lseq_peek(this.refCounts, thread_id as uint64);
         atomic_block var count_before_decr :=
-          execute_atomic_fetch_sub_uint8(refCountThisThread, 1) {
+          execute_atomic_fetch_sub_uint8(lseq_peek(this.refCounts, thread_id as uint64), 1) {
           ghost_acquire g;
           g := perform_SharedDecCountPending(g, shared_handle, thread_id as nat);
           ghost_release g;
@@ -304,15 +324,29 @@ module RwLockImpl {
       }
 
       glinear var shared_obtained_handle := unwrap_value(shared_handle_result);
-      guard := SharedGuard(shared_obtained_handle, this, shared_value.v.value);
+      guard := SharedGuard(thread_id, shared_obtained_handle, this, shared_value.v.value);
     }
 
     /*
      * `acquire_release`
      */
 
-    shared method release_shared(linear handle: SharedGuard)
-    requires handle.m == this
+    shared method release_shared(linear guard: SharedGuard)
+    requires InternalInv()
+    requires guard.Inv(this)
+    {
+      linear var SharedGuard(acquiring_thread_id, shared_obtained_token, m, v) := guard;
+      atomic_block var count_before_decr :=
+        execute_atomic_fetch_sub_uint8(lseq_peek(this.refCounts, acquiring_thread_id as uint64), 1) {
+        ghost_acquire g;
+        g := perform_SharedDecCountObtained(
+          g,
+          shared_obtained_token,
+          acquiring_thread_id as int,
+          LCellContents(lcell, Some(v)));
+        ghost_release g;
+      }
+    }
   }
 
   function method borrow_shared(shared handle: SharedGuard)
