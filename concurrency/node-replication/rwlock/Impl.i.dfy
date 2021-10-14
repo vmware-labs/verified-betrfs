@@ -69,7 +69,9 @@ module RwLockImpl {
     predicate InternalInv()
     {
       && loc.ExtLoc?
+      && loc.base_loc == RwLockToken.T.Wrap.singleton_loc()
       && |refCounts| == RwLockMod.RC_WIDTH
+      && lseq_full(refCounts)
       && (forall v, token :: atomic_inv(exclusiveFlag, v, token)
             <==> (
               && token.val.M?
@@ -78,6 +80,8 @@ module RwLockImpl {
               && v == token.val.exclusiveFlag.acquired            // Token lock state matches protected bool
               && lcell == token.val.exclusiveFlag.stored_value.lcell  // Token stored value reflects what's in the cell
               && token.loc == loc
+              && token.val.exclusiveFlag.stored_value.v.Some?
+              && inv(token.val.exclusiveFlag.stored_value.v.value)
             )
           )
       && (forall t, count, token | 0 <= t < RwLockMod.RC_WIDTH
@@ -104,10 +108,15 @@ module RwLockImpl {
       && token.val.exclusiveAcquisition.visited == visited
       && token.val.exclusiveAcquisition.b.lcell == this.lcell
       && token.loc == this.loc
+
+      // ...and the handle is carrying forward the invariants on the value it protects
+      && token.val.exclusiveAcquisition.b.v.Some?
+      && inv(token.val.exclusiveAcquisition.b.v.value)
     }
 
     shared method acquire()
     returns (linear v: V, glinear handle: ExclusiveGuard)
+    requires InternalInv()
     ensures this.inv(v)
     ensures handle.m == this
     decreases *
@@ -131,16 +140,14 @@ module RwLockImpl {
 
       var visited:uint64 := 0;
       var rc_width:uint64 := 24;
-      assert rc_width as int == RwLockMod.RC_WIDTH;  // TODO(travis): why is RC_WIDTH ghost?
 
       while visited < rc_width
-        invariant 0 <= visited as int < RwLockMod.RC_WIDTH
+        invariant 0 <= visited as int <= RwLockMod.RC_WIDTH
+        invariant rc_width as int == RwLockMod.RC_WIDTH
         // if we find a nonzero refcount, we'll just keep waiting.
         // (Deadlock breaking is the shared-acquirer's problem.)
         invariant this.InternalInv()
-        invariant if visited as int ==RwLockMod.RC_WIDTH
-          then pending_handle.val == RwLockMod.ExcAcqHandle(RwLockMod.ExcAcqObtained)
-          else IsPendingHandle(pending_handle, visited as int)
+        invariant IsPendingHandle(pending_handle, visited as int)
         invariant pending_handle.loc == this.loc
         decreases *
       {
@@ -164,6 +171,9 @@ module RwLockImpl {
       pending_handle, b' := RwLockToken.perform_Withdraw_TakeExcLockFinish(pending_handle);
 
       v, b' := take_lcell(lcell, b');
+      
+      assert inv(v);
+
       Ptrs.dispose_anything(b'); // TODO(travis): I have no idea if this is okay. Do I need to remember the CellContents b'?
       handle := ExclusiveGuard(pending_handle, this);
     }
