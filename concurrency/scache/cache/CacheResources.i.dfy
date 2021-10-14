@@ -12,10 +12,17 @@ module CacheResources {
   import opened Constants
   import DiskIfc
   import CacheIfc
-  import T = DiskSSMTokens(CacheIfc, CacheSSM)
+  import T = DiskToken(CacheIfc, CacheSSM)
   import CacheSSM
 
-  datatype DiskPageMap = DiskPageMap(ghost disk_idx: int, ghost cache_idx_opt: Option<int>)
+  function loc(): Loc // XXX TODO
+
+  datatype {:glinear_fold} DiskPageMap = DiskPageMap(ghost disk_idx: nat, ghost cache_idx_opt: Option<nat>)
+  {
+    function defn() : T.Token {
+      T.Tokens.Token(loc(), CacheSSM.DiskIdxToCacheIdx(disk_idx, cache_idx_opt))
+    }
+  }
 
   datatype HavocPermission = HavocPermission(ghost disk_idx: int)
 
@@ -26,14 +33,29 @@ module CacheResources {
     }
   }
 
-  datatype CacheEmpty = CacheEmpty(
+  datatype {:glinear_fold} CacheEmpty = CacheEmpty(
       ghost cache_idx: nat)
+  {
+    function defn() : T.Token {
+      T.Tokens.Token(loc(), CacheSSM.CacheEmpty(cache_idx))
+    }
+  }
 
-  datatype CacheReading = CacheReading(
+  datatype {:glinear_fold} CacheReading = CacheReading(
       ghost cache_idx: nat, ghost disk_idx: nat)
+  {
+    function defn() : T.Token {
+      T.Tokens.Token(loc(), CacheSSM.CacheReading(cache_idx, disk_idx))
+    }
+  }
 
-  datatype CacheEntry = CacheEntry(
+  datatype {:glinear_fold} CacheEntry = CacheEntry(
       ghost cache_idx: nat, ghost disk_idx: nat, ghost data: DiskIfc.Block)
+  {
+    function defn() : T.Token {
+      T.Tokens.Token(loc(), CacheSSM.CacheEntry(cache_idx, disk_idx, data))
+    }
+  }
 
   datatype {:glinear_fold} DiskWriteTicket = DiskWriteTicket(
       ghost addr: nat, ghost contents: DiskIfc.Block)
@@ -43,7 +65,7 @@ module CacheResources {
     }
 
     function defn() : T.Token {
-      T.Token(CacheSSM.DiskWriteReq(addr, contents))
+      T.Tokens.Token(loc(), CacheSSM.DiskWriteReq(addr, contents))
     }
   }
 
@@ -54,21 +76,21 @@ module CacheResources {
     }
 
     function defn() : T.Token {
-      T.Token(CacheSSM.DiskWriteResp(disk_idx))
+      T.Tokens.Token(loc(), CacheSSM.DiskWriteResp(disk_idx))
     }
   }
 
   datatype {:glinear_fold} DiskReadTicket = DiskReadTicket(ghost addr: nat)
   {
     function defn() : T.Token {
-      T.Token(CacheSSM.DiskReadReq(addr))
+      T.Tokens.Token(loc(), CacheSSM.DiskReadReq(addr))
     }
   }
 
   datatype {:glinear_fold} DiskReadStub = DiskReadStub(ghost addr: nat, ghost data: DiskIfc.Block)
   {
     function defn() : T.Token {
-      T.Token(CacheSSM.DiskReadResp(addr, data))
+      T.Tokens.Token(loc(), CacheSSM.DiskReadResp(addr, data))
     }
   }
 
@@ -89,6 +111,42 @@ module CacheResources {
   ensures t2.disk_idx == disk_idx
   ensures t3 == DiskPageMap(disk_idx, Some(cache_idx))
   ensures t4 == DiskReadTicket(disk_idx)
+  {
+    glinear var a_token := CacheEmpty_unfold(s2);
+    glinear var b_token := DiskPageMap_unfold(s3);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := CacheReading(cache_idx, disk_idx);
+    ghost var out1_token_expect := CacheReading_unfold(out1_expect);
+
+    ghost var out2_expect := DiskPageMap(disk_idx, Some(cache_idx));
+    ghost var out2_token_expect := DiskPageMap_unfold(out2_expect);
+
+    ghost var out3_expect := DiskReadTicket(disk_idx);
+    ghost var out3_token_expect := DiskReadTicket_unfold(out3_expect);
+
+    // Explain what transition we're going to do
+    assert CacheSSM.StartRead(
+        CacheSSM.dot(a_token.val, b_token.val),
+        CacheSSM.dot(CacheSSM.dot(out1_token_expect.val, out2_token_expect.val),
+            out3_token_expect.val),
+        cache_idx, disk_idx);
+    assert CacheSSM.InternalStep(
+        CacheSSM.dot(a_token.val, b_token.val),
+        CacheSSM.dot(CacheSSM.dot(out1_token_expect.val, out2_token_expect.val),
+            out3_token_expect.val),
+        CacheSSM.StartReadStep(cache_idx, disk_idx));
+
+    // Perform the transition
+    glinear var out1_token, out2_token, out3_token := T.transition_2_3(a_token, b_token,
+        out1_token_expect.val,
+        out2_token_expect.val,
+        out3_token_expect.val);
+
+    t2 := CacheReading_fold(out1_expect, out1_token);
+    t3 := DiskPageMap_fold(out2_expect, out2_token);
+    t4 := DiskReadTicket_fold(out3_expect, out3_token);
+  }
 
   glinear method havoc_page_in(
       ghost cache_idx: nat,

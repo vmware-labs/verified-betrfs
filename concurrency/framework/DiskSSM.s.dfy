@@ -197,15 +197,125 @@ module AsyncDiskSystemStateMachine(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc))
   }
 }
 
-module DiskSSMTokens(ioifc: InputOutputIfc, ssm: DiskSSM(ioifc)) {
-  //import pcm = SSM_PCM(ssm)
-  //import Tokens = Tokens(pcm)
+module DiskPCM(IOIfc: InputOutputIfc,
+  ssm: DiskSSM(IOIfc)) refines PCM {
+  
+  type M = ssm.M
 
-  //type Token = Tokens.Token
-  datatype Token = Token(val: ssm.M)
+  function dot(x: M, y: M) : M
+  {
+    ssm.dot(x, y)
+  }
 
-  /*lemma transition_of_next(a: ssm.M, b: ssm.M)
-  requires ssm.Next(a, b)
+  predicate valid(x: M)
+  {
+    exists y: M :: ssm.Inv(dot(x, y))
+  }
+
+  function unit(): M
+  {
+    ssm.unit()
+  }
+
+  lemma dot_unit(x: M)
+  {
+    ssm.dot_unit(x);
+  }
+
+  lemma valid_unit(x: M)
+  {
+    var x := ssm.exists_inv_state();
+    commutative(unit(), x);
+    dot_unit(x);
+    assert ssm.Inv(dot(unit(), x));
+  }
+
+  lemma commutative(x: M, y: M)
+  //ensures dot(x, y) == dot(y, x)
+  {
+    ssm.commutative(x, y);
+  }
+
+  lemma associative(x: M, y: M, z: M)
+  //ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
+  {
+    ssm.associative(x, y, z);
+  }
+
+  predicate single_step_helper(a: M, b: M, a': M, b': M, c: M) {
+    a == dot(a', c) && b == dot(b', c) && ssm.Internal(a', b')
+  }
+
+  predicate single_step(a: M, b: M) {
+    exists a', b', c :: single_step_helper(a, b, a', b', c)
+  }
+
+  least predicate reachable(a: M, b: M) {
+    a == b || (exists z :: reachable(a, z) && single_step(z, b))
+  }
+
+  predicate transition(a: M, b: M) {
+    reachable(a, b)
+  }
+
+  lemma transition_is_refl(a: M)
+  //requires transition(a, a)
+  {
+  }
+
+  least lemma reachable_is_trans(a: M, b: M, c: M)
+  requires reachable(b, c)
+  requires transition(a, b)
+  ensures reachable(a, c)
+  {
+    if b == c {
+    } else {
+      var z :| reachable(b, z) && single_step(z, c);
+      reachable_is_trans(a, b, z);
+    }
+  }
+
+  lemma transition_is_trans(a: M, b: M, c: M)
+  //requires transition(a, b)
+  //requires transition(b, c)
+  ensures transition(a, c)
+  {
+    reachable_is_trans(a, b, c);
+  }
+
+  least lemma reachable_is_monotonic(a: M, b: M, c: M)
+  requires reachable(a, b)
+  ensures reachable(dot(a, c), dot(b, c))
+  {
+    if a == b {
+    } else {
+      var z :| reachable(a, z) && single_step(z, b);
+      reachable_is_monotonic(a, z, c);
+      var z', b', d :| single_step_helper(z, b, z', b', d);
+      associative(z', d, c);
+      associative(b', d, c);
+      assert single_step_helper(dot(z, c), dot(b, c), z', b', dot(d, c));
+      assert single_step(dot(z, c), dot(b, c));
+    }
+  }
+
+  lemma transition_is_monotonic(a: M, b: M, c: M)
+  //requires transition(a, b)
+  ensures transition(dot(a, c), dot(b, c))
+  {
+    reachable_is_monotonic(a, b, c);
+  }
+}
+
+// TODO move this to a .i file?
+module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
+  import pcm = DiskPCM(IOIfc, ssm)
+  import Tokens = Tokens(pcm)
+
+  type Token = Tokens.Token
+
+  lemma transition_of_next(a: ssm.M, b: ssm.M)
+  requires ssm.Internal(a, b)
   ensures pcm.transition(a, b)
   {
     ssm.dot_unit(a);
@@ -213,13 +323,13 @@ module DiskSSMTokens(ioifc: InputOutputIfc, ssm: DiskSSM(ioifc)) {
     var a' := a;
     var b' := b;
     var c := ssm.unit();
-    assert a == ssm.dot(a', c) && b == ssm.dot(b', c) && ssm.Next(a', b');
+    assert a == ssm.dot(a', c) && b == ssm.dot(b', c) && ssm.Internal(a', b');
     assert pcm.single_step_helper(a, b, a', b', c);
     assert pcm.single_step(a, b);
   }
 
   lemma transition_of_next_with_unit(a: ssm.M, b: ssm.M)
-  requires ssm.Next(a, b)
+  requires ssm.Internal(a, b)
   ensures pcm.transition(pcm.dot(ssm.unit(), a), pcm.dot(ssm.unit(), b))
   {
     ssm.dot_unit(a);
@@ -227,30 +337,128 @@ module DiskSSMTokens(ioifc: InputOutputIfc, ssm: DiskSSM(ioifc)) {
     ssm.commutative(a, ssm.unit());
     ssm.commutative(b, ssm.unit());
     transition_of_next(a, b);
-  }*/
+  }
 
-  /*function method {:opaque} update_next(glinear a: Token, ghost expect_b: ssm.M)
-      : (glinear b: Token)
-  requires ssm.Next(a.val, expect_b)
+  glinear method transition_1_1(glinear a: Token, ghost expect_b: ssm.M)
+  returns (glinear b: Token)
+  requires ssm.Internal(a.val, expect_b)
   ensures b == Tokens.Token(a.loc, expect_b)
   {
     transition_of_next_with_unit(a.val, expect_b);
-    Tokens.transition_update(Tokens.get_unit_shared(a.loc), a, expect_b)
-  }*/
+    b := Tokens.transition_update(Tokens.get_unit_shared(a.loc), a, expect_b);
+  }
 
-  // TODO more stuff here ...
+  glinear method transition_1_1_1(gshared s: Token, glinear a: Token, ghost expect_b: ssm.M)
+  returns (glinear b: Token)
+  requires ssm.Internal(ssm.dot(s.val, a.val), ssm.dot(s.val, expect_b))
+  requires s.loc == a.loc
+  ensures b == Tokens.Token(a.loc, expect_b)
+  {
+    transition_of_next(ssm.dot(s.val, a.val), ssm.dot(s.val, expect_b));
+    b := Tokens.transition_update(s, a, expect_b);
+  }
+
+  glinear method transition_2_2(
+      glinear token1: Token,
+      glinear token2: Token,
+      ghost expected_value1: pcm.M,
+      ghost expected_value2: pcm.M)
+  returns (glinear token1': Token, glinear token2': Token)
+  requires token1.loc == token2.loc
+  requires ssm.Internal(
+      ssm.dot(token1.val, token2.val),
+      ssm.dot(expected_value1, expected_value2))
+  ensures token1' == Tokens.Token(token1.loc, expected_value1)
+  ensures token2' == Tokens.Token(token1.loc, expected_value2)
+  {
+    glinear var x := Tokens.join(token1, token2);
+    glinear var y := transition_1_1(x,  
+        ssm.dot(expected_value1, expected_value2));
+    token1', token2' := Tokens.split(y, expected_value1, expected_value2);
+  }
+
+  glinear method transition_2_3(
+      glinear token1: Token,
+      glinear token2: Token,
+      ghost expected_value1: pcm.M,
+      ghost expected_value2: pcm.M,
+      ghost expected_value3: pcm.M)
+  returns (glinear token1': Token, glinear token2': Token, glinear token3': Token)
+  requires token1.loc == token2.loc
+  requires ssm.Internal(
+      ssm.dot(token1.val, token2.val),
+      ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3))
+  ensures token1' == Tokens.Token(token1.loc, expected_value1)
+  ensures token2' == Tokens.Token(token1.loc, expected_value2)
+  ensures token3' == Tokens.Token(token1.loc, expected_value3)
+  {
+    glinear var x := Tokens.join(token1, token2);
+    glinear var y := transition_1_1(x,  
+        ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3));
+    token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
+  }
+
+  glinear method {:extern} split3(glinear sum: Token,
+      ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M)
+  returns (glinear a': Token, glinear b': Token, glinear c': Token)
+  requires sum.val == ssm.dot(ssm.dot(a, b), c)
+  ensures a' == Tokens.Token(sum.loc, a)
+  ensures b' == Tokens.Token(sum.loc, b)
+  ensures c' == Tokens.Token(sum.loc, c)
+  {
+    glinear var x;
+    x, c' := Tokens.split(sum, ssm.dot(a, b), c);
+    a', b' := Tokens.split(x, a, b);
+  }
+
+  glinear method transition_1_2_2(
+      gshared s: Token,
+      glinear token1: Token,
+      glinear token2: Token,
+      ghost expected_value1: pcm.M,
+      ghost expected_value2: pcm.M)
+  returns (glinear token1': Token, glinear token2': Token)
+  requires s.loc == token1.loc == token2.loc
+  requires ssm.Internal(
+      ssm.dot(s.val, ssm.dot(token1.val, token2.val)),
+      ssm.dot(s.val, ssm.dot(expected_value1, expected_value2)))
+  ensures token1' == Tokens.Token(token1.loc, expected_value1)
+  ensures token2' == Tokens.Token(token1.loc, expected_value2)
+  {
+    glinear var x := Tokens.join(token1, token2);
+    glinear var y := transition_1_1_1(s, x,
+        ssm.dot(expected_value1, expected_value2));
+    token1', token2' := Tokens.split(y, expected_value1, expected_value2);
+  }
+
+  glinear method transition_1_3_3(
+      gshared s: Token,
+      glinear token1: Token,
+      glinear token2: Token,
+      glinear token3: Token,
+      ghost expected_value1: pcm.M,
+      ghost expected_value2: pcm.M,
+      ghost expected_value3: pcm.M)
+  returns (glinear token1': Token, glinear token2': Token, glinear token3': Token)
+  requires s.loc == token1.loc == token2.loc == token3.loc
+  requires ssm.Internal(
+      ssm.dot(s.val, ssm.dot(ssm.dot(token1.val, token2.val), token3.val)),
+      ssm.dot(s.val, ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3)))
+  ensures token1' == Tokens.Token(token1.loc, expected_value1)
+  ensures token2' == Tokens.Token(token1.loc, expected_value2)
+  ensures token3' == Tokens.Token(token1.loc, expected_value3)
+  {
+    glinear var x := Tokens.join(token1, token2);
+    x := Tokens.join(x, token3);
+    glinear var y := transition_1_1_1(s, x,
+        ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3));
+    token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
+  }
+
+  glinear method {:opaque} inout_update_next(glinear inout a: Token, ghost expect_b: ssm.M)
+  requires ssm.Internal(old_a.val, expect_b)
+  ensures a == Tokens.Token(old_a.loc, expect_b)
+  {
+    a := transition_1_1(a, expect_b);
+  }
 }
-
-/*
-module Obligations(
-    IOIfc: InputOutputIfc,
-    ssm: TicketStubSSM(IOIfc),
-    spec: StateMachine(IOIfc),
-    ref: Refinement(
-          AsyncIfc(IOIfc),
-          TicketStubStateMachine(IOIfc, ssm),
-          AsyncStateMachine(IOIfc, spec)
-       )
-  )
-{ }
-*/
