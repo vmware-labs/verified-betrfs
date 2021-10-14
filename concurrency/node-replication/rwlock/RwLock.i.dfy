@@ -232,6 +232,10 @@ module RwLock refines Rw {
 
   ////// Transitions
 
+  //
+  // acquire transitions
+  //
+
   predicate ExcBegin(m: M, m': M)
   {
     && m.M?
@@ -311,6 +315,10 @@ module RwLock refines Rw {
     }
   }
 
+  //
+  // release transitions
+  //
+
   predicate Deposit_ReleaseExcLock(m: M, m': M, b: StoredType)
   {
     && m.M?
@@ -347,6 +355,10 @@ module RwLock refines Rw {
       }
     }
   }
+
+  //
+  // acquire_shared transitions
+  //
 
   predicate SharedIncCount(m: M, m': M, t: int)
   {
@@ -388,6 +400,41 @@ module RwLock refines Rw {
     }
   }
 
+  // decide whether we obtain or abandon.
+  predicate SharedCheckExc(m: M, m': M, t: int)
+  {
+    && m.M?
+    //&& 0 <= t < RC_WIDTH as int
+    && m.exclusiveFlag.ExclusiveFlag?
+    && !m.exclusiveFlag.acquired
+    && m == dot(
+      ExcFlagHandle(m.exclusiveFlag),
+      SharedAcqHandle(SharedAcqPending(t))
+    )
+    && m' == dot(
+      ExcFlagHandle(m.exclusiveFlag),
+      SharedAcqHandle(SharedAcqObtained(t, m.exclusiveFlag.stored_value))
+    )
+  }
+
+  lemma SharedCheckExc_Preserves(m: M, m': M, t: int)
+  requires SharedCheckExc(m, m', t)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
+    {
+      SumFilterSimp<SharedAcquisitionStatus>();
+
+      var state := dot(m, p);
+      var state' := dot(m', p);
+
+      assert CountAllRefs(state, t) == CountAllRefs(state', t);
+      //assert forall t0 | t0 != t :: CountAllRefs(state, t) == CountAllRefs(state', t);
+    }
+  }
+
+  // abandon this acquisition attempt. Rats!
   predicate SharedDecCountPending(m: M, m': M, t: int)
   {
     && m.M?
@@ -441,6 +488,10 @@ module RwLock refines Rw {
       }
     }
   }
+
+  //
+  // acquire_release transitions
+  //
 
   predicate SharedDecCountObtained(m: M, m': M, t: int, b: StoredType)
   {
@@ -496,48 +547,17 @@ module RwLock refines Rw {
     }
   }
 
-  predicate SharedCheckExc(m: M, m': M, t: int)
-  {
-    && m.M?
-    //&& 0 <= t < RC_WIDTH as int
-    && m.exclusiveFlag.ExclusiveFlag?
-    && !m.exclusiveFlag.acquired
-    && m == dot(
-      ExcFlagHandle(m.exclusiveFlag),
-      SharedAcqHandle(SharedAcqPending(t))
-    )
-    && m' == dot(
-      ExcFlagHandle(m.exclusiveFlag),
-      SharedAcqHandle(SharedAcqObtained(t, m.exclusiveFlag.stored_value))
-    )
-  }
+  //////// Lock initializations
 
-  lemma SharedCheckExc_Preserves(m: M, m': M, t: int)
-  requires SharedCheckExc(m, m', t)
-  ensures transition(m, m')
-  {
-    forall p: M | Inv(dot(m, p))
-    ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
-    {
-      SumFilterSimp<SharedAcquisitionStatus>();
-
-      var state := dot(m, p);
-      var state' := dot(m', p);
-
-      assert CountAllRefs(state, t) == CountAllRefs(state', t);
-      //assert forall t0 | t0 != t :: CountAllRefs(state, t) == CountAllRefs(state', t);
-    }
-  }
-
-  function Rcs(s: nat, t: nat) : M
-  requires s <= t
-  decreases t - s
-  {
-    if t == s then
-      unit()
-    else
-      dot(SharedFlagHandle(s, 0), Rcs(s+1, t))
-  }
+//  function Rcs(s: nat, t: nat) : M
+//  requires s <= t
+//  decreases t - s
+//  {
+//    if t == s then
+//      unit()
+//    else
+//      dot(SharedFlagHandle(s, 0), Rcs(s+1, t))
+//  }
 
   predicate Init(s: M)
   {
@@ -575,22 +595,22 @@ module RwLockToken {
   type Token = T.Token
   type Handle = HandleModule.Handle
 
-  glinear method perform_ExcBegin(glinear centralToken: Token)
-  returns (glinear centralToken': Token, glinear excToken': Token)
-  requires var m := centralToken.val;
+  glinear method perform_ExcBegin(glinear flagToken: Token)
+  returns (glinear flagToken': Token, glinear excAcqToken': Token)
+  requires var m := flagToken.val;
     && m.M?
     && m.exclusiveFlag.ExclusiveFlag?
     && !m.exclusiveFlag.acquired
     && m == ExcFlagHandle(m.exclusiveFlag)
-  ensures centralToken'.val == ExcFlagHandle(centralToken.val.exclusiveFlag.(acquired := true))
-  ensures excToken'.val == ExcAcqHandle(ExcAcqPending(0, centralToken.val.exclusiveFlag.stored_value))
-  ensures centralToken'.loc == excToken'.loc == centralToken.loc
+  ensures flagToken'.val == ExcFlagHandle(flagToken.val.exclusiveFlag.(acquired := true))
+  ensures excAcqToken'.val == ExcAcqHandle(ExcAcqPending(0, flagToken.val.exclusiveFlag.stored_value))
+  ensures flagToken'.loc == excAcqToken'.loc == flagToken.loc
   {
-    var m := centralToken.val;
+    var m := flagToken.val;
     var a := ExcFlagHandle(m.exclusiveFlag.(acquired := true));
     var b := ExcAcqHandle(ExcAcqPending(0, m.exclusiveFlag.stored_value));
-    ExcBegin_Preserves(centralToken.val, dot(a, b));
-    centralToken', excToken' := T.internal_transition_1_2(centralToken, a, b);
+    ExcBegin_Preserves(flagToken.val, dot(a, b));
+    flagToken', excAcqToken' := T.internal_transition_1_2(flagToken, a, b);
   }
 
   glinear method perform_TakeExcLockCheckRefCount(glinear handle: Token, glinear rc: Token)
@@ -612,6 +632,48 @@ module RwLockToken {
     handle', rc' := T.internal_transition_2_2(handle, rc, a, b);
   }
 
+  glinear method perform_Withdraw_TakeExcLockFinish(glinear handle: Token)
+  returns (glinear handle': Token, glinear b': Handle)
+  requires var m := handle.val;
+    && m.M?
+    && m.exclusiveAcquisition.ExcAcqPending?
+    && m.exclusiveAcquisition.visited == RC_WIDTH as int
+    && m == ExcAcqHandle(m.exclusiveAcquisition)
+  ensures handle' == T.T.Token(handle.loc, ExcAcqHandle(ExcAcqObtained))
+  ensures b' == handle.val.exclusiveAcquisition.b
+  {
+    var a := ExcAcqHandle(ExcAcqObtained);
+    var d := handle.val.exclusiveAcquisition.b;
+    Withdraw_TakeExcLockFinish_Preserves(handle.val, a, d);
+    handle', b' := T.withdraw_1_1(handle, a, d);
+  }
+
+  predicate IsExcFlagAcquired(m: M)
+  {
+    && m.M?
+    && m.exclusiveFlag.ExclusiveFlag?
+    && m == ExcFlagHandle(m.exclusiveFlag)
+  }
+
+  predicate IsExcAcqObtained(m: M)
+  {
+    && m.M?
+    && m.exclusiveAcquisition.ExcAcqObtained?
+    && m == ExcAcqHandle(m.exclusiveAcquisition)
+  }
+
+  glinear method perform_Deposit_ReleaseExcLock(glinear flagToken: Token, glinear excAcqToken: Token, glinear b: Handle)
+  returns (glinear flagToken': Token)
+  requires flagToken.loc == excAcqToken.loc
+  requires IsExcFlagAcquired(flagToken.val)
+  requires IsExcAcqObtained(excAcqToken.val)
+  ensures flagToken' == T.T.Token(flagToken.loc, ExcFlagHandle(ExclusiveFlag(false, b)))
+  {
+    ghost var expected_flag' := ExcFlagHandle(ExclusiveFlag(false, b));
+    Deposit_ReleaseExcLock_Preserves(dot(flagToken.val, excAcqToken.val), expected_flag', b);
+    flagToken' := T.deposit_2_1(flagToken, excAcqToken, b, expected_flag');
+  }
+
   glinear method perform_SharedIncCount(glinear rc: Token, ghost t: int)
   returns (glinear rc': Token, glinear handle': Token)
   requires var m := rc.val;
@@ -627,6 +689,26 @@ module RwLockToken {
     var b := SharedAcqHandle(SharedAcqPending(t));
     SharedIncCount_Preserves(rc.val, dot(a, b), t);
     rc', handle' := T.internal_transition_1_2(rc, a, b);
+  }
+
+  glinear method perform_SharedCheckExc(glinear c: Token, glinear handle: Token, ghost t: int)
+  returns (glinear c': Token, glinear handle': Token)
+  //requires 0 <= t < RC_WIDTH as int
+  requires var m := c.val;
+    && m.M?
+    && m.exclusiveFlag.ExclusiveFlag?
+    && !m.exclusiveFlag.acquired
+    && m == ExcFlagHandle(m.exclusiveFlag)
+  requires handle.val == SharedAcqHandle(SharedAcqPending(t))
+  requires c.loc == handle.loc
+  ensures c'.loc == handle'.loc == c.loc
+  ensures c'.val == c.val
+  ensures handle'.val == SharedAcqHandle(SharedAcqObtained(t, c.val.exclusiveFlag.stored_value))
+  {
+    var a := c.val;
+    var b := SharedAcqHandle(SharedAcqObtained(t, c.val.exclusiveFlag.stored_value));
+    SharedCheckExc_Preserves(dot(c.val, handle.val), dot(a, b), t);
+    c', handle' := T.internal_transition_2_2(c, handle, a, b);
   }
 
   glinear method pre_SharedDecCountPending(glinear rc: Token, glinear handle: Token, ghost t: int)
@@ -724,43 +806,6 @@ module RwLockToken {
     var a := SharedFlagHandle(t, rc.val.sharedFlags[t] - 1);
     SharedDecCountObtained_Preserves(dot(rc'.val, handle.val), a, t, b);
     rc' := T.internal_transition_2_1(rc', handle', a);
-  }
-
-  glinear method perform_SharedCheckExc(glinear c: Token, glinear handle: Token, ghost t: int)
-  returns (glinear c': Token, glinear handle': Token)
-  //requires 0 <= t < RC_WIDTH as int
-  requires var m := c.val;
-    && m.M?
-    && m.exclusiveFlag.ExclusiveFlag?
-    && !m.exclusiveFlag.acquired
-    && m == ExcFlagHandle(m.exclusiveFlag)
-  requires handle.val == SharedAcqHandle(SharedAcqPending(t))
-  requires c.loc == handle.loc
-  ensures c'.loc == handle'.loc == c.loc
-  ensures c'.val == c.val
-  ensures handle'.val == SharedAcqHandle(SharedAcqObtained(t, c.val.exclusiveFlag.stored_value))
-  {
-    var a := c.val;
-    var b := SharedAcqHandle(SharedAcqObtained(t, c.val.exclusiveFlag.stored_value));
-    SharedCheckExc_Preserves(dot(c.val, handle.val), dot(a, b), t);
-    c', handle' := T.internal_transition_2_2(c, handle, a, b);
-  }
-
-  glinear method perform_Withdraw_TakeExcLockFinish(glinear handle: Token)
-  returns (glinear handle': Token, glinear b': Handle)
-  requires var m := handle.val;
-    && m.M?
-    && m.exclusiveAcquisition.ExcAcqPending?
-    && m.exclusiveAcquisition.visited == RC_WIDTH as int
-    && m == ExcAcqHandle(m.exclusiveAcquisition)
-  ensures handle'.loc == handle.loc
-  ensures handle'.val == ExcAcqHandle(ExcAcqObtained)
-  ensures b' == handle.val.exclusiveAcquisition.b
-  {
-    var a := ExcAcqHandle(ExcAcqObtained);
-    var d := handle.val.exclusiveAcquisition.b;
-    Withdraw_TakeExcLockFinish_Preserves(handle.val, a, d);
-    handle', b' := T.withdraw_1_1(handle, a, d);
   }
 
 //  function method {:opaque} borrow_sot(gshared sot: SharedObtainedToken) : (gshared b: Handle)

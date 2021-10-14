@@ -43,7 +43,18 @@ module RwLockImpl {
    * calls a `release` without previously calling `acquire`.
    */
 
-  glinear datatype ExclusiveGuard = ExclusiveGuard(glinear obtained_token: Token, ghost m: RwLock)
+  glinear datatype ExclusiveGuard = ExclusiveGuard(
+    glinear exc_obtained_token: Token,
+    glinear empty_cell_contents: Handle.Handle,
+    ghost m: RwLock)
+  {
+    predicate Inv() {
+      && exc_obtained_token.loc == m.loc
+      && IsExcAcqObtained(exc_obtained_token.val)
+      && empty_cell_contents.lcell == m.lcell // empty_cell_contents is talking about m's cell
+      && empty_cell_contents.v.None?  // m.cell is empty, ready to be give-n back a value at release time.
+    }
+  }
 
   /*
    * A SharedGuard is for shared access.
@@ -74,12 +85,20 @@ module RwLockImpl {
       && lseq_full(refCounts)
       && (forall v, token :: atomic_inv(exclusiveFlag, v, token)
             <==> (
+              // This token for this location.
+              && token.loc == loc
+
               && token.val.M?
               && token.val.exclusiveFlag.ExclusiveFlag?          // Token can observe ExclusiveFlag
               && token.val == RwLockMod.ExcFlagHandle(token.val.exclusiveFlag)  // Token doesn't have anything else in it
               && v == token.val.exclusiveFlag.acquired            // Token lock state matches protected bool
-              && lcell == token.val.exclusiveFlag.stored_value.lcell  // Token stored value reflects what's in the cell
-              && token.loc == loc
+              // The token and the physical cell are talking about the same reference
+              // (but not necessarily the same value -- while a thread holds the lock, it may
+              // tamper with the cell contents in a way that temporarily breaks inv, putting
+              // it back before release. That doesn't change the token's maintenance of inv
+              // based on the "stale" value at the point at which acquire happened.)
+              && lcell == token.val.exclusiveFlag.stored_value.lcell
+              // The value the token thinks is behind the cell always maintains the client inv.
               && token.val.exclusiveFlag.stored_value.v.Some?
               && inv(token.val.exclusiveFlag.stored_value.v.value)
             )
@@ -117,6 +136,7 @@ module RwLockImpl {
     shared method acquire()
     returns (linear v: V, glinear handle: ExclusiveGuard)
     requires InternalInv()
+    // ensures InternalInv() -- comes for free because this method is shared! we didn't modify it!
     ensures this.inv(v)
     ensures handle.m == this
     decreases *
@@ -174,8 +194,7 @@ module RwLockImpl {
       
       assert inv(v);
 
-      Ptrs.dispose_anything(b'); // TODO(travis): I have no idea if this is okay. Do I need to remember the CellContents b'?
-      handle := ExclusiveGuard(pending_handle, this);
+      handle := ExclusiveGuard(pending_handle, b', this);
     }
 
     /*
@@ -183,9 +202,25 @@ module RwLockImpl {
      * The client must ensure that the data meets the invariant.
      */
 
-    method release(glinear v: V, glinear handle: ExclusiveGuard)
+    shared method release(linear v: V, glinear guard: ExclusiveGuard)
+    requires InternalInv()
+    requires guard.Inv()
     requires this.inv(v)
-    requires handle.m == this
+    requires guard.m == this
+    ensures InternalInv()
+    {
+      glinear var ExclusiveGuard(exc_obtained_token, empty_cell_contents, m) := guard;
+
+      // Store the incoming value into the cell
+      glinear var v_cell_contents := give_lcell(lcell, empty_cell_contents, v);
+
+      // Release the lock.
+      atomic_block var _ := execute_atomic_store(this.exclusiveFlag, false) {
+        ghost_acquire g;
+        g := RwLockToken.perform_Deposit_ReleaseExcLock(g, exc_obtained_token, v_cell_contents);
+        ghost_release g;
+      }
+    }
 
     /*
      * `acquire_shared`
