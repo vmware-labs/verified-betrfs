@@ -62,8 +62,7 @@ module RwLock refines Rw {
   // of physical threads or asynchronous continuations.)
 // Dafny module bug: this type synonym works in this module, but fails when imported from RwLockToken with:
 // Error: type parameter (K) passed to type FullMap must support equality (got SharedAcquisitionStatus)
-  type SharedAcquisitionState = FullMap<SharedAcquisitionStatus>
-//  datatype SharedAcquisitionState = SharedAcquisitionState(refCounts: FullMap<SharedAcquisitionStatus>)
+//  type SharedAcquisitionState = FullMap<SharedAcquisitionStatus>
 //  type SharedAcquisitionState = multiset<SharedAcquisitionStatus> // TODO FullMap->multiset
 
   datatype M = M(
@@ -73,7 +72,7 @@ module RwLock refines Rw {
 
     // lock protocol state "stored in" stack frames of participating threads
     ghost exclusiveAcquisition: ExclusiveAcquisitionState,
-    ghost sharedAcquisition: SharedAcquisitionState
+    ghost sharedAcquisition: FullMap<SharedAcquisitionStatus>
   ) | Fail
 
   function unit() : M
@@ -156,7 +155,7 @@ module RwLock refines Rw {
 //    |MultisetFilter(fn, m)|
 //  }
 
-  function CountSharedRefs(m: SharedAcquisitionState, t: int) : nat
+  function CountSharedRefs(m: FullMap<SharedAcquisitionStatus>, t: int) : nat
   {
     SumFilter(IsSharedRefFor(t), m)
   }
@@ -178,7 +177,7 @@ module RwLock refines Rw {
         && x.exclusiveAcquisition.b == x.exclusiveFlag.stored_value
       )
       && (forall t | 0 <= t < RC_WIDTH as int
-        :: x.sharedFlags[t] == CountAllRefs(x, t))
+        :: t in x.sharedFlags && x.sharedFlags[t] == CountAllRefs(x, t))
 
       && (!x.exclusiveFlag.acquired ==>
         && x.exclusiveAcquisition.ExcAcqNotAttempting?
@@ -583,12 +582,12 @@ module RwLockToken {
     && m.exclusiveFlag.ExclusiveFlag?
     && !m.exclusiveFlag.acquired
     && m == ExcFlagHandle(m.exclusiveFlag)
-  ensures centralToken'.val == ExcFlagHandle(centralToken.val.exclusiveFlag.(exclusiveAcquisition := true))
+  ensures centralToken'.val == ExcFlagHandle(centralToken.val.exclusiveFlag.(acquired := true))
   ensures excToken'.val == ExcAcqHandle(ExcAcqPending(0, centralToken.val.exclusiveFlag.stored_value))
   ensures centralToken'.loc == excToken'.loc == centralToken.loc
   {
     var m := centralToken.val;
-    var a := ExcFlagHandle(m.exclusiveFlag.(exclusiveAcquisition := true));
+    var a := ExcFlagHandle(m.exclusiveFlag.(acquired := true));
     var b := ExcAcqHandle(ExcAcqPending(0, m.exclusiveFlag.stored_value));
     ExcBegin_Preserves(centralToken.val, dot(a, b));
     centralToken', excToken' := T.internal_transition_1_2(centralToken, a, b);
