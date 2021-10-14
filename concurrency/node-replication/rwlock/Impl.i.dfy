@@ -1,5 +1,6 @@
 include "../../framework/Atomic.s.dfy"
 include "../../framework/Cells.s.dfy"
+include "../Runtime.i.dfy"
 include "../../../lib/Lang/LinearSequence.i.dfy"
 include "RwLock.i.dfy"
 
@@ -12,6 +13,7 @@ module RwLockImpl {
   import opened LinearCells
   import opened GhostLoc
   import opened GlinearOption
+  import opened Runtime
 
   import RwLockMod = RwLock
   import Handle
@@ -70,7 +72,7 @@ module RwLockImpl {
 
   linear datatype RwLock = RwLock(
     linear exclusiveFlag: Atomic<bool, Token>,    // implements ExclusiveState.exc
-    linear refCounts: lseq<Atomic<nat, Token>>,   // implements map<ThreadId, nat>
+    linear refCounts: lseq<Atomic<uint8, Token>>,   // implements map<ThreadId, nat>
     linear lcell: LinearCell<Handle.ContentsType>, // implements the actual value that ExclusiveState.shared_value represents
     ghost loc: Loc                                // which instance of this lock we're talking about
   )
@@ -107,7 +109,7 @@ module RwLockImpl {
           :: atomic_inv(refCounts[t], count, token)
             <==> (
               // Token is a single refcount that matches the protected count
-              && token.val == RwLockMod.SharedFlagHandle(t, count)
+              && token.val == RwLockMod.SharedFlagHandle(t, count as nat)
               && token.loc == loc
               )
           )
@@ -228,10 +230,50 @@ module RwLockImpl {
      * Returns a handle that can be borrowed from
      */
 
-    shared method acquire_shared()
-    returns (linear handle: SharedGuard)
-    ensures this.inv(handle.v)
-    ensures handle.m == this
+    shared method acquire_shared(thread_id: uint8)
+//    returns (linear handle: SharedGuard)
+    requires 0 <= thread_id as nat < RwLockMod.RC_WIDTH;
+//    ensures this.inv(handle.v)
+//    ensures handle.m == this
+    decreases *
+    {
+
+      while (true) {
+        var exc_acquired: bool;
+
+        // Spin loop until nobody has the exclusive access acquired.
+        atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) { }
+        while (exc_acquired)
+        {
+          SpinLoopHint();
+          atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) { }
+        }
+
+        // Increment my thread-specific refcount to indicate my enthusiasm to get this shared access.
+        atomic_block var orig_count := execute_atomic_fetch_add_uint8(lseq_peek(this.refCounts, thread_id as uint64), 1) {
+        }
+        assert wrapped_add_uint8(orig_count, 1) as nat == orig_count as nat + 1;
+
+        // Check if we acquired the shared access (because no exclusive locker got in our way)
+        atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) {
+          ghost_acquire g;
+          if (exc_acquired) {
+          }
+          ghost_release g;
+        }
+
+        if (!exc_acquired)
+        {
+          // Yay! Any exclusive locker that arrives now will wait behind our incremented refcount.
+          break;
+        }
+
+        // Decrement the refcount and go back to spinlooping
+        atomic_block var count_before_decr :=
+          execute_atomic_fetch_add_uint8(lseq_peek(this.refCounts, thread_id as uint64), 1) {
+        }
+      }
+    }
 
     /*
      * `acquire_release`
