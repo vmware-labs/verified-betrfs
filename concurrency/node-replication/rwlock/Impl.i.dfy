@@ -68,6 +68,7 @@ module RwLockImpl {
 
     predicate InternalInv()
     {
+      && loc.ExtLoc?
       && |refCounts| == RwLockMod.RC_WIDTH
       && (forall v, token :: atomic_inv(exclusiveFlag, v, token)
             <==> (
@@ -99,6 +100,7 @@ module RwLockImpl {
     {
       && token.val.M?
       && token.val == RwLockMod.ExcHandle(token.val.exc)  // it's an ExcState
+      && token.val.exc.ExcPending?
       && token.val.exc.visited == visited
       && token.val.exc.b.lcell == this.lcell
       && token.loc == this.loc

@@ -15,55 +15,89 @@ module RwLock refines Rw {
 
   type StoredType = Handle.Handle
 
-  // Standard flow for obtaining a 'shared' lock
+  // Flags
+  // A "flag" is heap state stored "near" the protected StoredType (cell or reference).
 
-  datatype SharedState =
-    | SharedPending(ghost t: int)                  // inc refcount
-    | SharedObtained(ghost t: int, b: StoredType)  // exclusive bit not set
+  // ExclusiveFlag is the flag set by a thread that then is pending or has
+  // obtained exclusiveFlag access.
+  // There is always exactly one of these somewhere in the complete monoid giving the value
+  // of the flag.
+  datatype ExclusiveFlag =
+    | ExclusiveFlagUnknown  // Not known in this monoid shard
+    | ExclusiveFlag(acquired: bool, stored_value: StoredType)
 
-  // Standard flow for obtaining an 'exclusive' lock
+  // SharedFlags is the map of reference counts (one per thread id) set by a
+  // thread that then is pending or has obtained shared access.
+  // There may be none of these in the complete monoid; that corresponds to
+  // every thread's refcount being zero.
+  type SharedFlags = map<ThreadId, nat>
 
-  // This is the thread state of a thread working on acquiring
-  // the exclusive lock. There can be only one of these, because only
-  // one thread can atomically set the ExclusiveState.exc bit to true.
-  datatype ExcState =
-    | ExcNone
-    | ExcPending(ghost visited: int, b: StoredType)
-    | ExcObtained
+  // AcquisitionState
+  // An "acquisition state" is the thread-local state of a thread participating in this
+  // instance of the locking protocol. The values of these states cover some subset of
+  // threads.
 
-  // This is the actual (non-ghost) state of the exclusive bit that
-  // a thread sets before it scans the read flags.
-  datatype ExclusiveState =
-    | ExclusiveNone
-    | ExclusiveState(exc: bool, stored_value: StoredType)
+  // State of a thread acquiring exclusiveFlag access.
+  // If no thread in the covered subset is trying, the value is ExcAcqNotAttempting.
+  // If some thread is trying, the value is ExcAcqPending, or if it has obtained the
+  // exclusiveFlag lock, the value is ExcAcqObtained.
+  // The protocol enforces (by access to the ExclusiveFlag) that no subset of
+  // threads can have more than one thread in {Pending, Obtained} simultaneously.
+  datatype ExclusiveAcquisitionState =
+    | ExcAcqNotAttempting  // no thread in this shard is attempting to acquire exclusively
+    | ExcAcqPending(ghost visited: int, ghost b: StoredType)
+    | ExcAcqObtained
+
+  // State of threads acquiring shared access.
+  // SharedAcqPending(t) means thread t is known to be in the pending phase of the protocol.
+  // SharedAcqObtained (t) means thread t is known to have obtained shared access.
+  datatype SharedAcquisitionStatus =
+    | SharedAcqPending(ghost t: int)
+    | SharedAcqObtained(ghost t: int, b: StoredType)
+
+  // The number of acquisitions for each thread. If monoid represents thread t,
+  // and no elements of the multiset mention t, then t is not Pending or
+  // Obtained shared access. (Note that the multiset may contain multiple entries
+  // because a logical "thread id" in this world might be an equivalence class
+  // of physical threads or asynchronous continuations.)
+// Dafny module bug: this type synonym works in this module, but fails when imported from RwLockToken with:
+// Error: type parameter (K) passed to type FullMap must support equality (got SharedAcquisitionStatus)
+  type SharedAcquisitionState = FullMap<SharedAcquisitionStatus>
+//  datatype SharedAcquisitionState = SharedAcquisitionState(refCounts: FullMap<SharedAcquisitionStatus>)
+//  type SharedAcquisitionState = multiset<SharedAcquisitionStatus> // TODO FullMap->multiset
 
   datatype M = M(
-    exclusive: ExclusiveState,
-    ghost refCounts: map<ThreadId, nat>,
+    // lock protocol state stored in the heap allocation for this instance
+    ghost exclusiveFlag: ExclusiveFlag,
+    ghost sharedFlags: SharedFlags,
 
-    ghost sharedState: FullMap<SharedState>,
-    exc: ExcState
+    // lock protocol state "stored in" stack frames of participating threads
+    ghost exclusiveAcquisition: ExclusiveAcquisitionState,
+    ghost sharedAcquisition: SharedAcquisitionState
   ) | Fail
 
   function unit() : M
   {
-    M(ExclusiveNone, map[], zero_map(), ExcNone)
+    M(ExclusiveFlagUnknown, map[], ExcAcqNotAttempting,
+      zero_map()
+//      multiset{}  // TODO FullMap->multiset
+      )
   }
 
   function dot(x: M, y: M) : M
   {
     if
       x.M? && y.M?
-      && !(x.exclusive.ExclusiveState? && y.exclusive.ExclusiveState?)
-      && x.refCounts.Keys !! y.refCounts.Keys
-      && (x.exc.ExcNone? || y.exc.ExcNone?)
+      && !(x.exclusiveFlag.ExclusiveFlag? && y.exclusiveFlag.ExclusiveFlag?)
+      && x.sharedFlags.Keys !! y.sharedFlags.Keys
+      && (x.exclusiveAcquisition.ExcAcqNotAttempting? || y.exclusiveAcquisition.ExcAcqNotAttempting?)
     then
       M(
-        if x.exclusive.ExclusiveState? then x.exclusive else y.exclusive,
-        (map k | k in x.refCounts.Keys + y.refCounts.Keys ::
-            if k in x.refCounts.Keys then x.refCounts[k] else y.refCounts[k]),
-        add_fns(x.sharedState, y.sharedState),
-        if !x.exc.ExcNone? then x.exc else y.exc
+        if x.exclusiveFlag.ExclusiveFlag? then x.exclusiveFlag else y.exclusiveFlag,
+        x.sharedFlags + y.sharedFlags,
+        if !x.exclusiveAcquisition.ExcAcqNotAttempting? then x.exclusiveAcquisition else y.exclusiveAcquisition,
+        add_fns(x.sharedAcquisition, y.sharedAcquisition)
+//        x.sharedAcquisition + y.sharedAcquisition // TODO FullMap->multiset
       )
     else
       Fail
@@ -94,12 +128,35 @@ module RwLock refines Rw {
     }
   }
 
-  function IsSharedRefFor(t: int) : (SharedState) -> bool
+  function IsSharedRefFor(t: int) : (SharedAcquisitionStatus) -> bool
   {
-    (ss: SharedState) => ss.t == t
+    (ss: SharedAcquisitionStatus) => ss.t == t
   }
 
-  function CountSharedRefs(m: FullMap<SharedState>, t: int) : nat
+//  // TODO FullMap->multiset
+//  // TODO into a library
+//  function MultisetFilter<K(!new)>(selectfn: (K) -> bool, m: multiset<K>) : (rc:multiset<K>)
+//    ensures forall k :: k in rc <==> selectfn(k) && k in m
+//    ensures forall k | k in rc :: rc[k]==m[k]
+//  {
+//    if |m|==0
+//    then m
+//    else
+//      var elt :| elt in m;
+//      var smaller := m[elt := 0];
+//      if selectfn(elt)
+//      then
+//        MultisetFilter(selectfn, smaller)[elt := m[elt]]
+//      else
+//        smaller
+//  }
+//
+//  function MultisetSumFilter<K(!new)>(fn: (K) -> bool, m: multiset<K>) : nat
+//  {
+//    |MultisetFilter(fn, m)|
+//  }
+
+  function CountSharedRefs(m: SharedAcquisitionState, t: int) : nat
   {
     SumFilter(IsSharedRefFor(t), m)
   }
@@ -107,45 +164,47 @@ module RwLock refines Rw {
   function CountAllRefs(state: M, t: int) : nat
   requires state.M?
   {
-    CountSharedRefs(state.sharedState, t)
+    CountSharedRefs(state.sharedAcquisition, t)
   }
 
+  // Invariant over the complete monoid
   predicate Inv(x: M)
   {
     && x != unit() ==> (
       && x.M?
-      && x.exclusive.ExclusiveState?
-      && (x.exc.ExcPending? ==>
-        && 0 <= x.exc.visited <= RC_WIDTH as int
-        && x.exc.b == x.exclusive.stored_value
+      && x.exclusiveFlag.ExclusiveFlag?
+      && (x.exclusiveAcquisition.ExcAcqPending? ==>
+        && 0 <= x.exclusiveAcquisition.visited <= RC_WIDTH as int
+        && x.exclusiveAcquisition.b == x.exclusiveFlag.stored_value
       )
       && (forall t | 0 <= t < RC_WIDTH as int
-        :: t in x.refCounts && x.refCounts[t] == CountAllRefs(x, t))
+        :: x.sharedFlags[t] == CountAllRefs(x, t))
 
-      && (!x.exclusive.exc ==>
-        && x.exc.ExcNone?
+      && (!x.exclusiveFlag.acquired ==>
+        && x.exclusiveAcquisition.ExcAcqNotAttempting?
       )
-      && (x.exclusive.exc ==>
-        && (x.exc.ExcPending? || x.exc.ExcObtained?)
+      && (x.exclusiveFlag.acquired ==>
+        && (x.exclusiveAcquisition.ExcAcqPending? || x.exclusiveAcquisition.ExcAcqObtained?)
       )
-      && (forall ss: SharedState :: x.sharedState.m[ss] > 0 ==>
+      && (forall ss: SharedAcquisitionStatus :: x.sharedAcquisition.m[ss] > 0 ==>
         && 0 <= ss.t < RC_WIDTH as int
-        && (ss.SharedObtained? ==>
-          && ss.b == x.exclusive.stored_value
-          && !x.exc.ExcObtained?
-          && (x.exc.ExcPending? ==> x.exc.visited <= ss.t)
+        && (ss.SharedAcqObtained? ==>
+          && ss.b == x.exclusiveFlag.stored_value
+          && !x.exclusiveAcquisition.ExcAcqObtained?
+          && (x.exclusiveAcquisition.ExcAcqPending? ==> x.exclusiveAcquisition.visited <= ss.t)
         )
       )
     )
   }
 
+  // Interpretation of the complete monoid
   function I(x: M) : Option<StoredType>
   //requires Inv(x)
   {
-    if !x.M? || x == unit() || x.exc.ExcObtained? then (
+    if !x.M? || x == unit() || x.exclusiveAcquisition.ExcAcqObtained? then (
       None
     ) else (
-      Some(x.exclusive.stored_value)
+      Some(x.exclusiveFlag.stored_value)
     )
   }
 
@@ -154,22 +213,22 @@ module RwLock refines Rw {
     dot(dot(a, b), c)
   }
 
-  ////// Handlers
+  ////// A "Handle" is a single-serving slice of monoid; a minimal non-trivial fact.
 
-  function CentralHandle(exclusive: ExclusiveState) : M {
-    M(exclusive, map[], zero_map(), ExcNone)
+  function ExcFlagHandle(exclusiveFlag: ExclusiveFlag) : M {
+    M(exclusiveFlag, map[], ExcAcqNotAttempting, zero_map())
   }
 
-  function RefCount(t: ThreadId, count: nat) : M {
-    M(ExclusiveNone, map[t := count], zero_map(), ExcNone)
+  function SharedFlagHandle(t: ThreadId, count: nat) : M {
+    M(ExclusiveFlagUnknown, map[t := count], ExcAcqNotAttempting, zero_map())
   }
 
-  function SharedHandle(ss: SharedState) : M {
-    M(ExclusiveNone, map[], unit_fn(ss), ExcNone)
+  function ExcAcqHandle(e: ExclusiveAcquisitionState) : M {
+    M(ExclusiveFlagUnknown, map[], e, zero_map())
   }
 
-  function ExcHandle(e: ExcState) : M {
-    M(ExclusiveNone, map[], zero_map(), e)
+  function SharedAcqHandle(ss: SharedAcquisitionStatus) : M {
+    M(ExclusiveFlagUnknown, map[], ExcAcqNotAttempting, unit_fn(ss))
   }
 
   ////// Transitions
@@ -177,13 +236,13 @@ module RwLock refines Rw {
   predicate ExcBegin(m: M, m': M)
   {
     && m.M?
-    && m.exclusive.ExclusiveState?
-    && !m.exclusive.exc
+    && m.exclusiveFlag.ExclusiveFlag?
+    && !m.exclusiveFlag.acquired
 
-    && m == CentralHandle(m.exclusive)
+    && m == ExcFlagHandle(m.exclusiveFlag)
     && m' == dot(
-      CentralHandle(m.exclusive.(exc := true)),
-      ExcHandle(ExcPending(0, m.exclusive.stored_value))
+      ExcFlagHandle(m.exclusiveFlag.(acquired := true)),
+      ExcAcqHandle(ExcAcqPending(0, m.exclusiveFlag.stored_value))
     )
   }
 
@@ -194,24 +253,24 @@ module RwLock refines Rw {
     forall p: M | Inv(dot(m, p))
     ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
     {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
+      assert dot(m', p).sharedAcquisition == dot(m, p).sharedAcquisition;
     }
   }
 
   predicate TakeExcLockCheckRefCount(m: M, m': M)
   {
     && m.M?
-    && m.exc.ExcPending?
-    && m.exc.visited in m.refCounts
-    && 0 <= m.exc.visited < RC_WIDTH as int
+    && m.exclusiveAcquisition.ExcAcqPending?
+    && m.exclusiveAcquisition.visited in m.sharedFlags
+    && 0 <= m.exclusiveAcquisition.visited < RC_WIDTH as int
 
     && m == dot(
-      ExcHandle(m.exc),
-      RefCount(m.exc.visited, 0)
+      ExcAcqHandle(m.exclusiveAcquisition),
+      SharedFlagHandle(m.exclusiveAcquisition.visited, 0)
     )
     && m' == dot(
-      ExcHandle(m.exc.(visited := m.exc.visited + 1)),
-      RefCount(m.exc.visited, 0)
+      ExcAcqHandle(m.exclusiveAcquisition.(visited := m.exclusiveAcquisition.visited + 1)),
+      SharedFlagHandle(m.exclusiveAcquisition.visited, 0)
     )
   }
 
@@ -222,22 +281,22 @@ module RwLock refines Rw {
     forall p: M | Inv(dot(m, p))
     ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
     {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
-      //assert dot(m, p).refCounts[m.exc.visited] == 0;
-      assert CountAllRefs(dot(m, p), m.exc.visited) == 0;
-      assert CountSharedRefs(dot(m, p).sharedState, m.exc.visited) == 0;
-      UseZeroSum(IsSharedRefFor(m.exc.visited), dot(m, p).sharedState);
+      assert dot(m', p).sharedAcquisition == dot(m, p).sharedAcquisition;
+      //assert dot(m, p).sharedFlags[m.exclusiveAcquisition.visited] == 0;
+      assert CountAllRefs(dot(m, p), m.exclusiveAcquisition.visited) == 0;
+      assert CountSharedRefs(dot(m, p).sharedAcquisition, m.exclusiveAcquisition.visited) == 0;
+      UseZeroSum(IsSharedRefFor(m.exclusiveAcquisition.visited), dot(m, p).sharedAcquisition);
     }
   }
 
   predicate Withdraw_TakeExcLockFinish(m: M, m': M, b': StoredType)
   {
     && m.M?
-    && m.exc.ExcPending?
-    && m.exc.visited == RC_WIDTH as int
-    && m == ExcHandle(m.exc)
-    && m' == ExcHandle(ExcObtained)
-    && b' == m.exc.b
+    && m.exclusiveAcquisition.ExcAcqPending?
+    && m.exclusiveAcquisition.visited == RC_WIDTH as int
+    && m == ExcAcqHandle(m.exclusiveAcquisition)
+    && m' == ExcAcqHandle(ExcAcqObtained)
+    && b' == m.exclusiveAcquisition.b
   }
 
   lemma Withdraw_TakeExcLockFinish_Preserves(m: M, m': M, b': StoredType)
@@ -249,22 +308,22 @@ module RwLock refines Rw {
     ensures I(dot(m, p)) == Some(b')
     ensures I(dot(m', p)) == None
     {
-      assert dot(m', p).sharedState == dot(m, p).sharedState;
+      assert dot(m', p).sharedAcquisition == dot(m, p).sharedAcquisition;
     }
   }
 
   predicate Deposit_ReleaseExcLock(m: M, m': M, b: StoredType)
   {
     && m.M?
-    && m.exc.ExcObtained?
-    && m.exclusive.ExclusiveState?
+    && m.exclusiveAcquisition.ExcAcqObtained?
+    && m.exclusiveFlag.ExclusiveFlag?
     && m == dot(
-      CentralHandle(m.exclusive),
-      ExcHandle(m.exc)
+      ExcFlagHandle(m.exclusiveFlag),
+      ExcAcqHandle(m.exclusiveAcquisition)
     )
     && m' ==
-      CentralHandle(m.exclusive
-        .(exc := false)
+      ExcFlagHandle(m.exclusiveFlag
+        .(acquired := false)
         .(stored_value := b)
       )
   }
@@ -278,13 +337,13 @@ module RwLock refines Rw {
     ensures I(dot(m, p)) == None
     ensures I(dot(m', p)) == Some(b)
     {
-      SumFilterSimp<SharedState>();
-      assert forall b :: dot(m', p).sharedState.m[b] == dot(m, p).sharedState.m[b];
+      SumFilterSimp<SharedAcquisitionStatus>();
+      assert forall b :: dot(m', p).sharedAcquisition.m[b] == dot(m, p).sharedAcquisition.m[b];
 
       var state' := dot(m', p);
-      forall ss: SharedState | state'.sharedState.m[ss] > 0
+      forall ss: SharedAcquisitionStatus | state'.sharedAcquisition.m[ss] > 0
       ensures 0 <= ss.t < RC_WIDTH as int
-      ensures (ss.SharedObtained? ==> ss.b == state'.exclusive.stored_value)
+      ensures (ss.SharedAcqObtained? ==> ss.b == state'.exclusiveFlag.stored_value)
       {
       }
     }
@@ -294,11 +353,11 @@ module RwLock refines Rw {
   {
     && m.M?
     && 0 <= t < RC_WIDTH as int
-    && t in m.refCounts
-    && m == RefCount(t, m.refCounts[t])
+    && t in m.sharedFlags
+    && m == SharedFlagHandle(t, m.sharedFlags[t])
     && m' == dot(
-      RefCount(t, m.refCounts[t] + 1),
-      SharedHandle(SharedPending(t))
+      SharedFlagHandle(t, m.sharedFlags[t] + 1),
+      SharedAcqHandle(SharedAcqPending(t))
     )
   }
 
@@ -309,22 +368,22 @@ module RwLock refines Rw {
     forall p: M | Inv(dot(m, p))
     ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
     {
-      SumFilterSimp<SharedState>();
+      SumFilterSimp<SharedAcquisitionStatus>();
       var state := dot(m, p);
       var state' := dot(m', p);
       forall t0 | 0 <= t0 < RC_WIDTH as int
-      ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
+      ensures t0 in state'.sharedFlags && state'.sharedFlags[t0] == CountAllRefs(state', t0)
       {
         if t == t0 {
-          assert CountSharedRefs(state.sharedState, t) + 1
-              == CountSharedRefs(state'.sharedState, t);
+          assert CountSharedRefs(state.sharedAcquisition, t) + 1
+              == CountSharedRefs(state'.sharedAcquisition, t);
           assert CountAllRefs(state, t) + 1
               == CountAllRefs(state', t);
-          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+          assert t0 in state'.sharedFlags && state'.sharedFlags[t0] == CountAllRefs(state', t0);
         } else {
-          assert CountSharedRefs(state.sharedState, t0) == CountSharedRefs(state'.sharedState, t0);
+          assert CountSharedRefs(state.sharedAcquisition, t0) == CountSharedRefs(state'.sharedAcquisition, t0);
           assert CountAllRefs(state, t0) == CountAllRefs(state', t0);
-          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+          assert t0 in state'.sharedFlags && state'.sharedFlags[t0] == CountAllRefs(state', t0);
         }
       }
     }
@@ -334,13 +393,13 @@ module RwLock refines Rw {
   {
     && m.M?
     && 0 <= t < RC_WIDTH as int
-    && t in m.refCounts
+    && t in m.sharedFlags
     && m == dot(
-      RefCount(t, m.refCounts[t]),
-      SharedHandle(SharedPending(t))
+      SharedFlagHandle(t, m.sharedFlags[t]),
+      SharedAcqHandle(SharedAcqPending(t))
     )
-    && (m.refCounts[t] >= 1 ==>
-      m' == RefCount(t, m.refCounts[t] - 1)
+    && (m.sharedFlags[t] >= 1 ==>
+      m' == SharedFlagHandle(t, m.sharedFlags[t] - 1)
     )
   }
 
@@ -353,13 +412,13 @@ module RwLock refines Rw {
     {
       var state := dot(m, p);
 
-      SumFilterSimp<SharedState>();
+      SumFilterSimp<SharedAcquisitionStatus>();
 
-      assert state.refCounts[t] >= 1 by {
-        if state.refCounts[t] == 0 {
+      assert state.sharedFlags[t] >= 1 by {
+        if state.sharedFlags[t] == 0 {
           assert CountAllRefs(state, t) == 0;
-          assert CountSharedRefs(state.sharedState, t) == 0;
-          UseZeroSum(IsSharedRefFor(t), state.sharedState);
+          assert CountSharedRefs(state.sharedAcquisition, t) == 0;
+          UseZeroSum(IsSharedRefFor(t), state.sharedAcquisition);
           assert false;
         }
       }
@@ -367,18 +426,18 @@ module RwLock refines Rw {
       var state' := dot(m', p);
 
       forall t0 | 0 <= t0 < RC_WIDTH as int
-      ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
+      ensures t0 in state'.sharedFlags && state'.sharedFlags[t0] == CountAllRefs(state', t0)
       {
         if t == t0 {
-          assert CountSharedRefs(state.sharedState, t)
-              == CountSharedRefs(state'.sharedState, t) + 1;
+          assert CountSharedRefs(state.sharedAcquisition, t)
+              == CountSharedRefs(state'.sharedAcquisition, t) + 1;
           assert CountAllRefs(state, t)
               == CountAllRefs(state', t) + 1;
-          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+          assert t0 in state'.sharedFlags && state'.sharedFlags[t0] == CountAllRefs(state', t0);
         } else {
-          assert CountSharedRefs(state.sharedState, t0) == CountSharedRefs(state'.sharedState, t0);
+          assert CountSharedRefs(state.sharedAcquisition, t0) == CountSharedRefs(state'.sharedAcquisition, t0);
           assert CountAllRefs(state, t0) == CountAllRefs(state', t0);
-          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+          assert t0 in state'.sharedFlags && state'.sharedFlags[t0] == CountAllRefs(state', t0);
         }
       }
     }
@@ -388,13 +447,13 @@ module RwLock refines Rw {
   {
     && m.M?
     && 0 <= t < RC_WIDTH as int
-    && t in m.refCounts
+    && t in m.sharedFlags
     && m == dot(
-      RefCount(t, m.refCounts[t]),
-      SharedHandle(SharedObtained(t, b))
+      SharedFlagHandle(t, m.sharedFlags[t]),
+      SharedAcqHandle(SharedAcqObtained(t, b))
     )
-    && (m.refCounts[t] >= 1 ==>
-      m' == RefCount(t, m.refCounts[t] - 1)
+    && (m.sharedFlags[t] >= 1 ==>
+      m' == SharedFlagHandle(t, m.sharedFlags[t] - 1)
     )
   }
 
@@ -407,13 +466,13 @@ module RwLock refines Rw {
     {
       var state := dot(m, p);
 
-      SumFilterSimp<SharedState>();
+      SumFilterSimp<SharedAcquisitionStatus>();
 
-      assert state.refCounts[t] >= 1 by {
-        if state.refCounts[t] == 0 {
+      assert state.sharedFlags[t] >= 1 by {
+        if state.sharedFlags[t] == 0 {
           assert CountAllRefs(state, t) == 0;
-          assert CountSharedRefs(state.sharedState, t) == 0;
-          UseZeroSum(IsSharedRefFor(t), state.sharedState);
+          assert CountSharedRefs(state.sharedAcquisition, t) == 0;
+          UseZeroSum(IsSharedRefFor(t), state.sharedAcquisition);
           assert false;
         }
       }
@@ -421,18 +480,18 @@ module RwLock refines Rw {
       var state' := dot(m', p);
 
       forall t0 | 0 <= t0 < RC_WIDTH as int
-      ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
+      ensures t0 in state'.sharedFlags && state'.sharedFlags[t0] == CountAllRefs(state', t0)
       {
         if t == t0 {
-          assert CountSharedRefs(state.sharedState, t)
-              == CountSharedRefs(state'.sharedState, t) + 1;
+          assert CountSharedRefs(state.sharedAcquisition, t)
+              == CountSharedRefs(state'.sharedAcquisition, t) + 1;
           assert CountAllRefs(state, t)
               == CountAllRefs(state', t) + 1;
-          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+          assert t0 in state'.sharedFlags && state'.sharedFlags[t0] == CountAllRefs(state', t0);
         } else {
-          assert CountSharedRefs(state.sharedState, t0) == CountSharedRefs(state'.sharedState, t0);
+          assert CountSharedRefs(state.sharedAcquisition, t0) == CountSharedRefs(state'.sharedAcquisition, t0);
           assert CountAllRefs(state, t0) == CountAllRefs(state', t0);
-          assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+          assert t0 in state'.sharedFlags && state'.sharedFlags[t0] == CountAllRefs(state', t0);
         }
       }
     }
@@ -442,15 +501,15 @@ module RwLock refines Rw {
   {
     && m.M?
     //&& 0 <= t < RC_WIDTH as int
-    && m.exclusive.ExclusiveState?
-    && !m.exclusive.exc
+    && m.exclusiveFlag.ExclusiveFlag?
+    && !m.exclusiveFlag.acquired
     && m == dot(
-      CentralHandle(m.exclusive),
-      SharedHandle(SharedPending(t))
+      ExcFlagHandle(m.exclusiveFlag),
+      SharedAcqHandle(SharedAcqPending(t))
     )
     && m' == dot(
-      CentralHandle(m.exclusive),
-      SharedHandle(SharedObtained(t, m.exclusive.stored_value))
+      ExcFlagHandle(m.exclusiveFlag),
+      SharedAcqHandle(SharedAcqObtained(t, m.exclusiveFlag.stored_value))
     )
   }
 
@@ -461,7 +520,7 @@ module RwLock refines Rw {
     forall p: M | Inv(dot(m, p))
     ensures Inv(dot(m', p)) && I(dot(m, p)) == I(dot(m', p))
     {
-      SumFilterSimp<SharedState>();
+      SumFilterSimp<SharedAcquisitionStatus>();
 
       var state := dot(m, p);
       var state' := dot(m', p);
@@ -478,17 +537,17 @@ module RwLock refines Rw {
     if t == s then
       unit()
     else
-      dot(RefCount(s, 0), Rcs(s+1, t))
+      dot(SharedFlagHandle(s, 0), Rcs(s+1, t))
   }
 
   predicate Init(s: M)
   {
     && s.M?
-    && s.exclusive.ExclusiveState?
-    && s.exclusive.exc
-    && s.refCounts == (map threadId | 0 <= threadId < RC_WIDTH :: 0)
-    && s.sharedState == FullMaps.zero_map()
-    && s.exc == ExcObtained // client starts out holding the exc lock so it can determine the inital value of the lock-protected field.
+    && s.exclusiveFlag.ExclusiveFlag?
+    && s.exclusiveFlag.acquired
+    && s.sharedFlags == (map threadId | 0 <= threadId < RC_WIDTH :: 0)
+    && s.sharedAcquisition == FullMaps.zero_map()
+    && s.exclusiveAcquisition == ExcAcqObtained // client starts out holding the exclusiveAcquisition lock so it can determine the inital value of the lock-protected field.
   }
 
   lemma InitImpliesInv(x: M)
@@ -496,7 +555,7 @@ module RwLock refines Rw {
 //  ensures Inv(x)
 //  ensures I(x) == None
   {
-    SumFilterSimp<SharedState>();
+    SumFilterSimp<SharedAcquisitionStatus>();
     assert Init(x);
     assert Inv(x);
     assert I(x) == None;
@@ -521,16 +580,16 @@ module RwLockToken {
   returns (glinear centralToken': Token, glinear excToken': Token)
   requires var m := centralToken.val;
     && m.M?
-    && m.exclusive.ExclusiveState?
-    && !m.exclusive.exc
-    && m == CentralHandle(m.exclusive)
-  ensures centralToken'.val == CentralHandle(centralToken.val.exclusive.(exc := true))
-  ensures excToken'.val == ExcHandle(ExcPending(0, centralToken.val.exclusive.stored_value))
+    && m.exclusiveFlag.ExclusiveFlag?
+    && !m.exclusiveFlag.acquired
+    && m == ExcFlagHandle(m.exclusiveFlag)
+  ensures centralToken'.val == ExcFlagHandle(centralToken.val.exclusiveFlag.(exclusiveAcquisition := true))
+  ensures excToken'.val == ExcAcqHandle(ExcAcqPending(0, centralToken.val.exclusiveFlag.stored_value))
   ensures centralToken'.loc == excToken'.loc == centralToken.loc
   {
     var m := centralToken.val;
-    var a := CentralHandle(m.exclusive.(exc := true));
-    var b := ExcHandle(ExcPending(0, m.exclusive.stored_value));
+    var a := ExcFlagHandle(m.exclusiveFlag.(exclusiveAcquisition := true));
+    var b := ExcAcqHandle(ExcAcqPending(0, m.exclusiveFlag.stored_value));
     ExcBegin_Preserves(centralToken.val, dot(a, b));
     centralToken', excToken' := T.internal_transition_1_2(centralToken, a, b);
   }
@@ -539,16 +598,16 @@ module RwLockToken {
   returns (glinear handle': Token, glinear rc': Token)
   requires var m := handle.val;
     && m.M?
-    && m.exc.ExcPending?
-    && m == ExcHandle(m.exc)
-    && 0 <= m.exc.visited < RC_WIDTH as int
-  requires rc.val == RefCount(handle.val.exc.visited, 0)
+    && m.exclusiveAcquisition.ExcAcqPending?
+    && m == ExcAcqHandle(m.exclusiveAcquisition)
+    && 0 <= m.exclusiveAcquisition.visited < RC_WIDTH as int
+  requires rc.val == SharedFlagHandle(handle.val.exclusiveAcquisition.visited, 0)
   requires rc.loc == handle.loc
   ensures rc'.loc == handle'.loc == rc.loc
-  ensures handle'.val == ExcHandle(handle.val.exc.(visited := handle.val.exc.visited + 1))
+  ensures handle'.val == ExcAcqHandle(handle.val.exclusiveAcquisition.(visited := handle.val.exclusiveAcquisition.visited + 1))
   ensures rc'.val == rc.val
   {
-    var a := ExcHandle(handle.val.exc.(visited := handle.val.exc.visited + 1));
+    var a := ExcAcqHandle(handle.val.exclusiveAcquisition.(visited := handle.val.exclusiveAcquisition.visited + 1));
     var b := rc.val;
     TakeExcLockCheckRefCount_Preserves(dot(handle.val, rc.val), dot(a, b));
     handle', rc' := T.internal_transition_2_2(handle, rc, a, b);
@@ -559,14 +618,14 @@ module RwLockToken {
   requires var m := rc.val;
     && m.M?
     && 0 <= t < RC_WIDTH as int
-    && t in m.refCounts
-    && m == RefCount(t, m.refCounts[t])
+    && t in m.sharedFlags
+    && m == SharedFlagHandle(t, m.sharedFlags[t])
   ensures rc'.loc == handle'.loc == rc.loc
-  ensures rc'.val == RefCount(t, rc.val.refCounts[t] + 1)
-  ensures handle'.val == SharedHandle(SharedPending(t))
+  ensures rc'.val == SharedFlagHandle(t, rc.val.sharedFlags[t] + 1)
+  ensures handle'.val == SharedAcqHandle(SharedAcqPending(t))
   {
-    var a := RefCount(t, rc.val.refCounts[t] + 1);
-    var b := SharedHandle(SharedPending(t));
+    var a := SharedFlagHandle(t, rc.val.sharedFlags[t] + 1);
+    var b := SharedAcqHandle(SharedAcqPending(t));
     SharedIncCount_Preserves(rc.val, dot(a, b), t);
     rc', handle' := T.internal_transition_1_2(rc, a, b);
   }
@@ -576,9 +635,9 @@ module RwLockToken {
   requires rc.val.M?
   requires handle.val.M?
   requires rc.loc == handle.loc
-  requires t in rc.val.refCounts
-  requires handle.val.sharedState.m[SharedPending(t)] >= 1
-  ensures rc.val.refCounts[t] >= 1
+  requires t in rc.val.sharedFlags
+  requires handle.val.sharedAcquisition.m[SharedAcqPending(t)] >= 1
+  ensures rc.val.sharedFlags[t] >= 1
   ensures handle' == handle
   ensures rc' == rc
   {
@@ -587,13 +646,13 @@ module RwLockToken {
     ghost var rest := T.obtain_invariant_2(inout rc', inout handle');
     var m := dot(rc'.val, handle'.val);
     ghost var state := dot(m, rest);
-    if CountSharedRefs(state.sharedState, t) == 0 {
-      assert state.sharedState.m[SharedPending(t)] >= 1;
-      FullMaps.UseZeroSum(IsSharedRefFor(t), state.sharedState);
+    if CountSharedRefs(state.sharedAcquisition, t) == 0 {
+      assert state.sharedAcquisition.m[SharedAcqPending(t)] >= 1;
+      FullMaps.UseZeroSum(IsSharedRefFor(t), state.sharedAcquisition);
       assert false;
     }
-    assert state.refCounts[t] >= 1;
-    assert m.refCounts[t] == state.refCounts[t];
+    assert state.sharedFlags[t] >= 1;
+    assert m.sharedFlags[t] == state.sharedFlags[t];
   }
 
   glinear method perform_SharedDecCountPending(glinear rc: Token, glinear handle: Token, ghost t: int)
@@ -601,20 +660,20 @@ module RwLockToken {
   requires var m := rc.val;
     && m.M?
     && 0 <= t < RC_WIDTH as int
-    && t in m.refCounts
-    && m == RefCount(t, m.refCounts[t])
+    && t in m.sharedFlags
+    && m == SharedFlagHandle(t, m.sharedFlags[t])
   requires var m := handle.val;
     && m.M?
-    && m == SharedHandle(SharedPending(t))
+    && m == SharedAcqHandle(SharedAcqPending(t))
   requires rc.loc == handle.loc
   ensures rc'.loc == rc.loc
-  ensures rc.val.refCounts[t] >= 1
-  ensures rc'.val == RefCount(t, rc.val.refCounts[t] - 1)
+  ensures rc.val.sharedFlags[t] >= 1
+  ensures rc'.val == SharedFlagHandle(t, rc.val.sharedFlags[t] - 1)
   {
     rc' := rc;
     glinear var handle' := handle;
     rc', handle' := pre_SharedDecCountPending(rc', handle', t);
-    var a := RefCount(t, rc.val.refCounts[t] - 1);
+    var a := SharedFlagHandle(t, rc.val.sharedFlags[t] - 1);
     SharedDecCountPending_Preserves(dot(rc'.val, handle.val), a, t);
     rc' := T.internal_transition_2_1(rc', handle', a);
   }
@@ -624,9 +683,9 @@ module RwLockToken {
   requires rc.val.M?
   requires handle.val.M?
   requires rc.loc == handle.loc
-  requires t in rc.val.refCounts
-  requires handle.val.sharedState.m[SharedObtained(t, b)] >= 1
-  ensures rc.val.refCounts[t] >= 1
+  requires t in rc.val.sharedFlags
+  requires handle.val.sharedAcquisition.m[SharedAcqObtained(t, b)] >= 1
+  ensures rc.val.sharedFlags[t] >= 1
   ensures handle' == handle
   ensures rc' == rc
   {
@@ -635,13 +694,13 @@ module RwLockToken {
     ghost var rest := T.obtain_invariant_2(inout rc', inout handle');
     var m := dot(rc'.val, handle'.val);
     ghost var state := dot(m, rest);
-    if CountSharedRefs(state.sharedState, t) == 0 {
-      assert state.sharedState.m[SharedObtained(t, b)] >= 1;
-      FullMaps.UseZeroSum(IsSharedRefFor(t), state.sharedState);
+    if CountSharedRefs(state.sharedAcquisition, t) == 0 {
+      assert state.sharedAcquisition.m[SharedAcqObtained(t, b)] >= 1;
+      FullMaps.UseZeroSum(IsSharedRefFor(t), state.sharedAcquisition);
       assert false;
     }
-    assert state.refCounts[t] >= 1;
-    assert m.refCounts[t] == state.refCounts[t];
+    assert state.sharedFlags[t] >= 1;
+    assert m.sharedFlags[t] == state.sharedFlags[t];
   }
 
   glinear method perform_SharedDecCountObtained(glinear rc: Token, glinear handle: Token,
@@ -650,20 +709,20 @@ module RwLockToken {
   requires var m := rc.val;
     && m.M?
     && 0 <= t < RC_WIDTH as int
-    && t in m.refCounts
-    && m == RefCount(t, m.refCounts[t])
+    && t in m.sharedFlags
+    && m == SharedFlagHandle(t, m.sharedFlags[t])
   requires var m := handle.val;
     && m.M?
-    && m == SharedHandle(SharedObtained(t, b))
+    && m == SharedAcqHandle(SharedAcqObtained(t, b))
   requires rc.loc == handle.loc
   ensures rc'.loc == rc.loc
-  ensures rc.val.refCounts[t] >= 1
-  ensures rc'.val == RefCount(t, rc.val.refCounts[t] - 1)
+  ensures rc.val.sharedFlags[t] >= 1
+  ensures rc'.val == SharedFlagHandle(t, rc.val.sharedFlags[t] - 1)
   {
     rc' := rc;
     glinear var handle' := handle;
     rc', handle' := pre_SharedDecCountObtained(rc', handle', t, b);
-    var a := RefCount(t, rc.val.refCounts[t] - 1);
+    var a := SharedFlagHandle(t, rc.val.sharedFlags[t] - 1);
     SharedDecCountObtained_Preserves(dot(rc'.val, handle.val), a, t, b);
     rc' := T.internal_transition_2_1(rc', handle', a);
   }
@@ -673,17 +732,17 @@ module RwLockToken {
   //requires 0 <= t < RC_WIDTH as int
   requires var m := c.val;
     && m.M?
-    && m.exclusive.ExclusiveState?
-    && !m.exclusive.exc
-    && m == CentralHandle(m.exclusive)
-  requires handle.val == SharedHandle(SharedPending(t))
+    && m.exclusiveFlag.ExclusiveFlag?
+    && !m.exclusiveFlag.acquired
+    && m == ExcFlagHandle(m.exclusiveFlag)
+  requires handle.val == SharedAcqHandle(SharedAcqPending(t))
   requires c.loc == handle.loc
   ensures c'.loc == handle'.loc == c.loc
   ensures c'.val == c.val
-  ensures handle'.val == SharedHandle(SharedObtained(t, c.val.exclusive.stored_value))
+  ensures handle'.val == SharedAcqHandle(SharedAcqObtained(t, c.val.exclusiveFlag.stored_value))
   {
     var a := c.val;
-    var b := SharedHandle(SharedObtained(t, c.val.exclusive.stored_value));
+    var b := SharedAcqHandle(SharedAcqObtained(t, c.val.exclusiveFlag.stored_value));
     SharedCheckExc_Preserves(dot(c.val, handle.val), dot(a, b), t);
     c', handle' := T.internal_transition_2_2(c, handle, a, b);
   }
@@ -692,15 +751,15 @@ module RwLockToken {
   returns (glinear handle': Token, glinear b': Handle)
   requires var m := handle.val;
     && m.M?
-    && m.exc.ExcPending?
-    && m.exc.visited == RC_WIDTH as int
-    && m == ExcHandle(m.exc)
+    && m.exclusiveAcquisition.ExcAcqPending?
+    && m.exclusiveAcquisition.visited == RC_WIDTH as int
+    && m == ExcAcqHandle(m.exclusiveAcquisition)
   ensures handle'.loc == handle.loc
-  ensures handle'.val == ExcHandle(ExcObtained)
-  ensures b' == handle.val.exc.b
+  ensures handle'.val == ExcAcqHandle(ExcAcqObtained)
+  ensures b' == handle.val.exclusiveAcquisition.b
   {
-    var a := ExcHandle(ExcObtained);
-    var d := handle.val.exc.b;
+    var a := ExcAcqHandle(ExcAcqObtained);
+    var d := handle.val.exclusiveAcquisition.b;
     Withdraw_TakeExcLockFinish_Preserves(handle.val, a, d);
     handle', b' := T.withdraw_1_1(handle, a, d);
   }
@@ -710,9 +769,9 @@ module RwLockToken {
 //  ensures b == sot.b
 //
 //  glinear method perform_Init(glinear b: Handle)
-//  returns (glinear exclusive: Token, glinear rcs: Token)
-//  ensures exclusive.loc == rcs.loc
-//  ensures exclusive.val == CentralHandle(ExclusiveState(Unmapped, b))
+//  returns (glinear exclusiveFlag: Token, glinear rcs: Token)
+//  ensures exclusiveFlag.loc == rcs.loc
+//  ensures exclusiveFlag.val == ExcFlagHandle(ExclusiveFlag(Unmapped, b))
 //  ensures rcs.val == Rcs(0, RC_WIDTH as int)
 //
 //  glinear method pop_rcs(glinear t: Token, ghost a: nat, ghost b: nat)
@@ -720,6 +779,6 @@ module RwLockToken {
 //  requires a < b
 //  requires t.val == Rcs(a, b)
 //  ensures t'.val == Rcs(a+1, b)
-//  ensures x.val == RefCount(a, 0)
+//  ensures x.val == SharedFlagHandle(a, 0)
 //  ensures x.loc == t'.loc == t.loc
 }

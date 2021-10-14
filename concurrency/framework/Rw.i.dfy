@@ -3,6 +3,8 @@ include "PCMExt.s.dfy"
 include "PCMWrap.s.dfy"
 include "../../lib/Base/Option.s.dfy"
 
+// The common PCM contract for any concurrency primitive that supports a
+// single-writer-multi-reader access mode.
 abstract module Rw {
   import opened Options
 
@@ -17,20 +19,18 @@ abstract module Rw {
   predicate Inv(x: M) 
   function I(x: M) : Option<StoredType> requires Inv(x)
 
+  // The stored thing does not change (because the interpretation stays the same),
+  // but the implementation of the Rw primitive this object represents has changed
+  // state (in a way that doesn't affect the stored thing or the exclusivity/borrowedness).
+  // For example: a rw-lock counting down the number of readers.
   predicate transition(a: M, b: M) {
     forall p: M :: Inv(dot(a, p)) ==>
         && Inv(dot(b, p))
         && I(dot(a, p)) == I(dot(b, p))
   }
 
-  predicate deposit(a: M, b: M, x: StoredType)
-  {
-    forall p: M :: Inv(dot(a, p)) ==>
-        && Inv(dot(b, p))
-        && I(dot(a, p)) == None
-        && I(dot(b, p)) == Some(x)
-  }
-
+  // Expresses exclusivity: withdraw something, work with it exclusively for a
+  // while, deposit it back when you're done.
   predicate withdraw(a: M, b: M, x: StoredType)
   {
     forall p: M :: Inv(dot(a, p)) ==>
@@ -39,7 +39,25 @@ abstract module Rw {
         && I(dot(b, p)) == None
   }
 
-  predicate borrow(a: M, x: StoredType)
+  // The end of an exclusive acccess.
+  predicate deposit(a: M, b: M, x: StoredType)
+  {
+    forall p: M :: Inv(dot(a, p)) ==>
+        && Inv(dot(b, p))
+        && I(dot(a, p)) == None
+        && I(dot(b, p)) == Some(x)
+  }
+
+  // The property that supports shared access.
+  // a guards x; this is how we implement a linear borrow.
+  // A borrow "begins" when you acquire a.
+  // Once you have a, this property lets you reason about the value of x.
+  // The borrow "ends" when you don't hold a anymore, after which you don't
+  // know anything about x.
+  //
+  // This is the core magic of this module: it lets you go from a shard-monoid
+  // property (holding a) to knowledge of a complete-monoid property (I(a, ...)).
+  predicate guard(a: M, x: StoredType)
   {
     forall p: M :: Inv(dot(a, p)) ==>
         && I(dot(a, p)) == Some(x)
