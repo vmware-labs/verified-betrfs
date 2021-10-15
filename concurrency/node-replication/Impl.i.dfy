@@ -136,6 +136,7 @@ module Impl(nrifc: NRIfc) {
       && |contexts| == MAX_THREADS_PER_REPLICA as int
       && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i, fc_loc))
       && (forall v, g :: atomic_inv(combiner_lock, v, g) <==> true)
+      && replica.InternalInv()
     }
   }
 
