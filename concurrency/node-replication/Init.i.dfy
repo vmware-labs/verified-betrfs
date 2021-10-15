@@ -118,7 +118,7 @@ module Init(nrifc: NRIfc) {
   }
 
   method make_buffer_cells()
-  returns (linear cells: lseq<Cell<LogEntry>>,
+  returns (linear cells: lseq<Cell<ConcreteLogEntry>>,
       glinear cell_contents: map<int, StoredType>)
   ensures |cells| == BUFFER_SIZE as int
   ensures lseq_full(cells)
@@ -144,7 +144,7 @@ module Init(nrifc: NRIfc) {
       var op;
       linear var cell;
       glinear var cell_cont;
-      cell, cell_cont := new_cell(LogEntry(op, 0));
+      cell, cell_cont := new_cell(ConcreteLogEntry(op, 0));
       cells := lseq_give(cells, j, cell);
 
       glinear var st := StoredType(cell_cont, glNone);
@@ -155,7 +155,7 @@ module Init(nrifc: NRIfc) {
   }
 
   method make_buffer(
-      linear cells: lseq<Cell<LogEntry>>, 
+      linear cells: lseq<Cell<ConcreteLogEntry>>, 
       glinear alive: map<nat, AliveBit>)
   returns (linear buffer: lseq<BufferEntry>)
   requires |cells| == BUFFER_SIZE as int

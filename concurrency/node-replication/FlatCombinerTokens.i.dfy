@@ -14,25 +14,25 @@ module FlatCombinerTokens {
 
   datatype FCClientState =
     | FCClientIdle
-    | FCClientWaiting(rid: RequestId)
+    | FCClientWaiting(ghost rid: RequestId)
   
-  datatype FCClient = FCClient(loc: Loc, tid: nat, state: FCClientState)
+  datatype FCClient = FCClient(ghost loc: Loc, ghost tid: nat, ghost state: FCClientState)
 
-  datatype Elem = Elem(tid: nat, rid: nat)
+  datatype Elem = Elem(ghost tid: nat, ghost rid: nat)
   datatype FCCombinerState =
     // no 'idle' state - just use Collecting(0, [])
-    | FCCombinerCollecting(idx: nat, elems: seq<Elem>)
-    | FCCombinerResponding(idx: nat, elems: seq<Elem>, elem_idx: nat)
+    | FCCombinerCollecting(ghost idx: nat, ghost elems: seq<Elem>)
+    | FCCombinerResponding(ghost idx: nat, ghost elems: seq<Elem>, elem_idx: nat)
 
-  datatype FCCombiner = FCCombiner(loc: Loc, state: FCCombinerState)
+  datatype FCCombiner = FCCombiner(ghost loc: Loc, ghost state: FCCombinerState)
 
   datatype FCSlotState =
     | FCEmpty
-    | FCRequest(rid: RequestId)
-    | FCInProgress(rid: RequestId)
-    | FCResponse(rid: RequestId)
+    | FCRequest(ghost rid: RequestId)
+    | FCInProgress(ghost rid: RequestId)
+    | FCResponse(ghost rid: RequestId)
 
-  datatype FCSlot = FCSlot(loc: Loc, tid: nat, state: FCSlotState)
+  datatype FCSlot = FCSlot(ghost loc: Loc, ghost tid: nat, ghost state: FCSlotState)
 
   // Ops for the combiner
 

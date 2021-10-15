@@ -13,8 +13,10 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   import opened Cells
   import opened Constants
 
+  datatype ConcreteLogEntry = ConcreteLogEntry(op: nrifc.UpdateOp, node_id: uint64)
+
   glinear datatype StoredType = StoredType(
-    glinear cellContents: CellContents<LogEntry>,
+    glinear cellContents: CellContents<ConcreteLogEntry>,
     glinear logEntry: glOption<Log>
   )
 
@@ -22,24 +24,24 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
   // Use 'CB' prefix to distinguish these from the corresponding state in the InfiniteLog
   // state machine.
-  datatype CBHead = CBHead(head: nat)
-  datatype CBLocalTail = CBLocalTail(nodeId: nat, tail: nat)
-  datatype CBGlobalTail = CBGlobalTail(tail: nat)
+  datatype CBHead = CBHead(ghost head: nat)
+  datatype CBLocalTail = CBLocalTail(ghost nodeId: nat, ghost tail: nat)
+  datatype CBGlobalTail = CBGlobalTail(ghost tail: nat)
 
   // The 'alive' bit flips back and forth. So sometimes 'true' means 'alive',
   // and sometimes 'false' means 'alive'.
   // entry is an index into the buffer (0 <= entry < BUFFER_SIZE)
-  datatype AliveBit = AliveBit(entry: nat, bit: bool)
+  datatype AliveBit = AliveBit(ghost entry: nat, ghost bit: bool)
 
   // For advancing the head. We iterate idx from 0 .. NUM_REPLICAS and collect
   // the min of all tails. Then we can set head to min_tail.
-  datatype AdvanceHeadState = AdvanceHeadState(idx: nat, min_tail: nat)
+  datatype AdvanceHeadState = AdvanceHeadState(ghost idx: nat, ghost min_tail: nat)
 
   // For advancing the tail and writing new log entries.
   // First read the head, then advance the tail to some value allowed by the head.
   // Then write the actual log entries.
-  datatype AdvanceTailState = AdvanceTailState(observed_head: nat)
-  datatype AppendState = AppendState(cur_idx: nat, tail: nat)
+  datatype AdvanceTailState = AdvanceTailState(ghost observed_head: nat)
+  datatype AppendState = AppendState(ghost cur_idx: nat, ghost tail: nat)
 
   // Contents stored in the log.
   //
@@ -57,7 +59,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   // -BUFFER_SIZE, ..., -1
 
   datatype Contents = Contents(
-    contents: map<int, StoredType>
+    ghost contents: map<int, StoredType>
   )
 
   // For reading
@@ -86,11 +88,11 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
   datatype ReaderState =
     | ReaderIdle
-    | ReaderStarting(start: nat)
-    | ReaderRange(start: nat, end: nat)
-    | ReaderGuard(start: nat, end: nat, cur: nat, val: StoredType)
+    | ReaderStarting(ghost start: nat)
+    | ReaderRange(ghost start: nat, ghost end: nat)
+    | ReaderGuard(ghost start: nat, ghost end: nat, ghost cur: nat, ghost val: StoredType)
 
-  datatype Reader = Reader(nodeId: nat, rs: ReaderState)
+  datatype Reader = Reader(ghost nodeId: nat, ghost rs: ReaderState)
 
   glinear method init_advance_head_state(gshared first_local_tail: CBLocalTail)
   returns (glinear state': AdvanceHeadState)

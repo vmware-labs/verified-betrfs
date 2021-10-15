@@ -193,7 +193,7 @@ module Impl(nrifc: NRIfc) {
   }
 
   linear datatype BufferEntry = BufferEntry(
-    linear cell: Cell<LogEntry>,
+    linear cell: Cell<ConcreteLogEntry>,
     linear alive: Atomic<bool, AliveBit>)
   {
     predicate WF(i: nat)
@@ -209,7 +209,8 @@ module Impl(nrifc: NRIfc) {
     && t.cellContents.cell == buffer[i % BUFFER_SIZE as int].cell
     && (i >= 0 ==>
       && t.logEntry.glSome?
-      && t.cellContents.v == LogEntry(t.logEntry.value.op, t.logEntry.value.node_id)
+      && t.logEntry.value.op == t.cellContents.v.op
+      && t.logEntry.value.node_id == t.cellContents.v.node_id as int
       && t.logEntry.value.idx == i
     )
   }
@@ -992,7 +993,7 @@ module Impl(nrifc: NRIfc) {
             // Physically write the log entry into the cyclic buffer
             write_cell(lseq_peek(nr.buffer, bounded_idx).cell,
                 inout cellContents,
-                LogEntry(seq_get(ops, j), node.nodeId as int));
+                ConcreteLogEntry(seq_get(ops, j), node.nodeId));
             
             cyclic_buffer_entry := StoredType(cellContents, glSome(log_entry));
             assert BufferEntryInv(nr.buffer,
@@ -1225,7 +1226,7 @@ module Impl(nrifc: NRIfc) {
             var ret;
             actual_replica', ret := nrifc.do_update(actual_replica', log_entry.op);
 
-            if log_entry.node_id == node.nodeId as int {
+            if log_entry.node_id == node.nodeId {
               // TODO add ret to results list
               assume responsesIndex as int < |requestIds'|; // TODO should follow from InfiniteLog inv
 

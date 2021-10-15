@@ -27,20 +27,20 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // (the combining thread), and then transfer back once it is done.
 
   datatype ReadonlyState =
-    | ReadonlyInit(op: nrifc.ReadonlyOp)
+    | ReadonlyInit(ghost op: nrifc.ReadonlyOp)
     // read the ctail
-    | ReadonlyCtail(op: nrifc.ReadonlyOp, ctail: nat)
+    | ReadonlyCtail(ghost op: nrifc.ReadonlyOp, ghost ctail: nat)
     // wait until localTail >= (the ctail value we just read)
-    | ReadonlyReadyToRead(op: nrifc.ReadonlyOp, nodeId: nat, ctail: nat)
+    | ReadonlyReadyToRead(ghost op: nrifc.ReadonlyOp, ghost nodeId: nat, ghost ctail: nat)
     // read the op off the replica
-    | ReadonlyDone(op: nrifc.ReadonlyOp, ret: nrifc.ReturnType, nodeId: nat, ctail: nat)
+    | ReadonlyDone(ghost op: nrifc.ReadonlyOp, ghost ret: nrifc.ReturnType, ghost nodeId: nat, ghost ctail: nat)
 
   datatype UpdateState =
-    | UpdateInit(op: nrifc.UpdateOp)
-    | UpdatePlaced(nodeId: nat, idx: nat) // -> UpdateResp, no ret yet
-    | UpdateApplied(ret: nrifc.ReturnType, idx: nat) // -> UpdateResp
+    | UpdateInit(ghost op: nrifc.UpdateOp)
+    | UpdatePlaced(ghost nodeId: nat, ghost idx: nat) // -> UpdateResp, no ret yet
+    | UpdateApplied(ghost ret: nrifc.ReturnType, ghost idx: nat) // -> UpdateResp
     // TODO(travis): add idx here too:
-    | UpdateDone(ret: nrifc.ReturnType, idx: nat) // -> UpdateResp
+    | UpdateDone(ghost ret: nrifc.ReturnType, ghost idx: nat) // -> UpdateResp
 
   // There is only one 'combiner' for a given node.
   // You can't enter the combining phase whenever you want. You must
@@ -55,26 +55,26 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   datatype CombinerState =
     | CombinerReady
       // Increment global tail with compare_and_exchange
-    | CombinerPlaced(queued_ops: seq<RequestId>)
+    | CombinerPlaced(ghost queued_ops: seq<RequestId>)
       // Read ltail
-    | CombinerLtail(queued_ops: seq<RequestId>, localTail: nat)
+    | CombinerLtail(ghost queued_ops: seq<RequestId>, ghost localTail: nat)
       // Read global tail
-    | Combiner(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat)
+    | Combiner(ghost queued_ops: seq<RequestId>, ghost localTail: nat, ghost globalTail: nat)
       // increment localTail one at a time until localTail == globalTail
       // when localTail == globalTail, we can advance to the next step by updating the ctail
-    | CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat)
+    | CombinerUpdatedCtail(ghost queued_ops: seq<RequestId>, ghost localAndGlobalTail: nat)
       // Finally we write to the localTail atomic and return to CombinerReady state
 
-  datatype ReplicaState = ReplicaState(state: nrifc.NRState)
+  datatype ReplicaState = ReplicaState(ghost state: nrifc.NRState)
   // TODO(for-travis): what about the alive bit?
   // NOTE(travis): see the new notes in slide show
-  datatype LogEntry = LogEntry(op: nrifc.UpdateOp, node_id: nat)
+  datatype LogEntry = LogEntry(ghost op: nrifc.UpdateOp, ghost node_id: nat)
 
   datatype M = M(
     // the 'log' entries are shared via the circular buffer
     // (out of scope for this file)
-    log: map<nat, LogEntry>,
-    global_tail: Option<nat>,
+    ghost log: map<nat, LogEntry>,
+    ghost global_tail: Option<nat>,
 
     // TODO(for-travis): do we need RwLock?
     //
@@ -88,13 +88,13 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     //      the replica, we do NOT need to model it explicitly.
     //lockStates: map<nat, LockState>,
 
-    replicas: map<nat, nrifc.NRState>, // replicas protected by rwlock
-    localTails: map<nat, nat>,         // localTail (atomic ints)
-    ctail: Option<nat>,                   // ctail (atomic int)
+    ghost replicas: map<nat, nrifc.NRState>, // replicas protected by rwlock
+    ghost localTails: map<nat, nat>,         // localTail (atomic ints)
+    ghost ctail: Option<nat>,                   // ctail (atomic int)
 
-    localReads: map<RequestId, ReadonlyState>,
-    localUpdates: map<RequestId, UpdateState>,
-    combiner: map<nat, CombinerState>
+    ghost localReads: map<RequestId, ReadonlyState>,
+    ghost localUpdates: map<RequestId, UpdateState>,
+    ghost combiner: map<nat, CombinerState>
   ) | Fail
 
 
@@ -1291,18 +1291,18 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   ensures Inv(s)
 
   datatype Step =
-    | GoToCombinerReady_Step(nodeId: nat)
-    | ExecLoadLtail_Step(nodeId: nat)
-    | ExecLoadGlobalTail_Step(nodeId: nat)
-    | ExecDispatchLocal_Step(nodeId: nat)
-    | ExecDispatchRemote_Step(nodeId: nat)
-    | TransitionReadonlyReadCtail_Step(rid: RequestId)
-    | TransitionReadonlyReadyToRead_Step(nodeId: nat, rid: RequestId)
-    | TransitionReadonlyDone_Step(nodeId: nat, rid: RequestId)
-    | UpdateCompletedTail_Step(nodeId: nat)
-    | AdvanceTail_Step(nodeId: nat, request_ids: seq<RequestId>)
-    | UpdateRequestDone_Step(request_id: RequestId)
-    | UpdateCompletedNoChange_Step(nodeId: nat)
+    | GoToCombinerReady_Step(ghost nodeId: nat)
+    | ExecLoadLtail_Step(ghost nodeId: nat)
+    | ExecLoadGlobalTail_Step(ghost nodeId: nat)
+    | ExecDispatchLocal_Step(ghost nodeId: nat)
+    | ExecDispatchRemote_Step(ghost nodeId: nat)
+    | TransitionReadonlyReadCtail_Step(ghost rid: RequestId)
+    | TransitionReadonlyReadyToRead_Step(ghost nodeId: nat, ghost rid: RequestId)
+    | TransitionReadonlyDone_Step(ghost nodeId: nat, ghost rid: RequestId)
+    | UpdateCompletedTail_Step(ghost nodeId: nat)
+    | AdvanceTail_Step(ghost nodeId: nat, ghost request_ids: seq<RequestId>)
+    | UpdateRequestDone_Step(ghost request_id: RequestId)
+    | UpdateCompletedNoChange_Step(ghost nodeId: nat)
 
 
   predicate NextStep(m: M, m': M, step: Step) {
