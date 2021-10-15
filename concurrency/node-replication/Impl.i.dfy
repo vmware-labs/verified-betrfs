@@ -229,6 +229,7 @@ module Impl(nrifc: NRIfc) {
     }
   }
 
+  // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/log.rs#L708
   method is_replica_synced_for_reads(shared nr: NR, nodeId: uint64, ctail: uint64, 
           glinear ticket: Readonly) 
   returns (is_synced: bool, glinear ticket': Readonly) 
@@ -241,19 +242,12 @@ module Impl(nrifc: NRIfc) {
   ensures ticket.rid == ticket'.rid
   ensures is_synced ==> ticket'.rs.nodeId == nodeId as nat
   ensures ticket.rs.op == ticket'.rs.op
-  //ensures lseq_peek(nr.node_info, nodeId) >= ctail
   {
-    // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/log.rs#L708
-
     atomic_block var local_tail := execute_atomic_load(lseq_peek(nr.node_info, nodeId).localTail) { 
       ghost_acquire local_tail_token;
 
       // TODO: maybe remove?
       assert local_tail_token.localTail == LocalTail(nodeId as nat, local_tail as nat); 
-
-      //assert local_tail_token.localTail.localTail == local_tail as nat;
-      //assume ticket.rs.ctail <= ctail as nat;
-      //ticket.rs.ctail <= ctail <= local_tail_token.localTail.localTail
 
       // perform transition of ghost state here ...
       if local_tail_token.localTail.localTail >= ctail as nat {
@@ -270,6 +264,7 @@ module Impl(nrifc: NRIfc) {
     is_synced := local_tail >= ctail;
   }
 
+  // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L584
   method try_combine(shared nr: NR, shared node: Node, tid: uint64)
   requires tid > 0
   requires nr.WF()
