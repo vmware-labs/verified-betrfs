@@ -14,4 +14,6 @@ module Runtime {
   {
     pause();
   }
+
+  linear datatype {:alignment 128} CachePadded<T> = CachePadded(linear inner: T)
 }

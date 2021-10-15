@@ -3,6 +3,7 @@ include "../../framework/Cells.s.dfy"
 include "../Runtime.i.dfy"
 include "../../../lib/Lang/LinearSequence.i.dfy"
 include "RwLock.i.dfy"
+include "../Runtime.i.dfy"
 
 module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
   import opened NativeTypes
@@ -97,7 +98,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
 
   linear datatype RwLock = RwLock(
     linear exclusiveFlag: Atomic<bool, Token>,    // implements ExclusiveState.exc
-    linear refCounts: lseq<Atomic<uint8, Token>>,   // implements map<ThreadId, nat>
+    linear refCounts: lseq<CachePadded<Atomic<uint8, Token>>>,   // implements map<ThreadId, nat>
     linear lcell: LinearCell<contentsTypeMod.ContentsType>, // implements the actual value that ExclusiveState.shared_value represents
     ghost loc: Loc                                // which instance of this lock we're talking about
   )
@@ -131,7 +132,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
             )
           )
       && (forall t, count, token | 0 <= t < RwLockMod.RC_WIDTH
-          :: atomic_inv(refCounts[t], count, token)
+          :: atomic_inv(refCounts[t].inner, count, token)
             <==> (
               // Token is a single refcount that matches the protected count
               && token.val == RwLockMod.SharedFlagHandle(t, count as nat)
@@ -198,7 +199,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         invariant pending_handle.loc == this.loc
         decreases *
       {
-        atomic_block var ret_value := execute_atomic_load(lseq_peek(this.refCounts, visited)) {
+        atomic_block var ret_value := execute_atomic_load(lseq_peek(this.refCounts, visited).inner) {
           ghost_acquire token_g; // the token in refCounts[visited]
 
           if ret_value == 0 {
