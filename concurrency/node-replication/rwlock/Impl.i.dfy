@@ -287,7 +287,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         // Increment my thread-specific refcount to indicate my enthusiasm to get this shared access.
         glinear var shared_handle;
         atomic_block var orig_count :=
-          execute_atomic_fetch_add_uint8(lseq_peek(this.refCounts, thread_id as uint64), 1) {
+          execute_atomic_fetch_add_uint8(lseq_peek(this.refCounts, thread_id as uint64).inner, 1) {
           ghost_acquire g;
           g, shared_handle := perform_SharedIncCount(g, thread_id as nat);
 
@@ -317,7 +317,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
 
         // Decrement the refcount and go back to spinlooping
         atomic_block var count_before_decr :=
-          execute_atomic_fetch_sub_uint8(lseq_peek(this.refCounts, thread_id as uint64), 1) {
+          execute_atomic_fetch_sub_uint8(lseq_peek(this.refCounts, thread_id as uint64).inner, 1) {
           ghost_acquire g;
           g := perform_SharedDecCountPending(g, shared_handle, thread_id as nat);
           ghost_release g;
@@ -338,7 +338,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     {
       linear var SharedGuard(acquiring_thread_id, shared_obtained_token, m, v) := guard;
       atomic_block var count_before_decr :=
-        execute_atomic_fetch_sub_uint8(lseq_peek(this.refCounts, acquiring_thread_id as uint64), 1) {
+        execute_atomic_fetch_sub_uint8(lseq_peek(this.refCounts, acquiring_thread_id as uint64).inner, 1) {
         ghost_acquire g;
         g := perform_SharedDecCountObtained(
           g,
