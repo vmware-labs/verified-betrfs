@@ -173,7 +173,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
   import opened IocbStruct
   import opened Ptrs
   import opened PageSizeConstant
-  import T = DiskSSMTokens(ioifc, ssm)
+  import T = DiskToken(ioifc, ssm)
 
   /*
    * DiskInterface

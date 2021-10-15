@@ -21,7 +21,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened PageSizeConstant
   import opened Atomics
   import CacheSSM
-  import DT = DiskSSMTokens(CacheIfc, CacheSSM)
+  import DT = DiskToken(CacheIfc, CacheSSM)
 
   method get_free_io_slot(shared cache: Cache, inout linear local: LocalState)
   returns (idx: uint64, glinear access: IOSlotAccess)

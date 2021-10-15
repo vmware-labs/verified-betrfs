@@ -26,7 +26,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened ThreadUtils
   import opened PageSizeConstant
   import opened GlinearMap
-  import DT = DiskSSMTokens(CacheIfc, CacheSSM)
+  import DT = DiskToken(CacheIfc, CacheSSM)
   import IocbStruct
 
   predicate ktw(cache: Cache, disk_idx: nat, key: Key, ticket: DT.Token,

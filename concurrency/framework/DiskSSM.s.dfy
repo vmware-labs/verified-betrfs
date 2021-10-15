@@ -311,8 +311,16 @@ module DiskPCM(IOIfc: InputOutputIfc,
 module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
   import pcm = DiskPCM(IOIfc, ssm)
   import Tokens = Tokens(pcm)
+  import opened GhostLoc
 
-  type Token = Tokens.Token
+  function loc(): Loc // XXX TODO
+
+  datatype {:glinear_fold} Token = Token(val: ssm.M)
+  {
+    function defn() : Tokens.Token {
+      Tokens.Token(loc(), val)
+    }
+  }
 
   lemma transition_of_next(a: ssm.M, b: ssm.M)
   requires ssm.Internal(a, b)
@@ -342,20 +350,21 @@ module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
   glinear method transition_1_1(glinear a: Token, ghost expect_b: ssm.M)
   returns (glinear b: Token)
   requires ssm.Internal(a.val, expect_b)
-  ensures b == Tokens.Token(a.loc, expect_b)
+  ensures b == Token(expect_b)
   {
     transition_of_next_with_unit(a.val, expect_b);
-    b := Tokens.transition_update(Tokens.get_unit_shared(a.loc), a, expect_b);
+    glinear var bx := Tokens.transition_update(Tokens.get_unit_shared(loc()), Token_unfold(a), expect_b);
+    b := Token_fold(Token(bx.val), bx);
   }
 
   glinear method transition_1_1_1(gshared s: Token, glinear a: Token, ghost expect_b: ssm.M)
   returns (glinear b: Token)
   requires ssm.Internal(ssm.dot(s.val, a.val), ssm.dot(s.val, expect_b))
-  requires s.loc == a.loc
-  ensures b == Tokens.Token(a.loc, expect_b)
+  ensures b == Token(expect_b)
   {
     transition_of_next(ssm.dot(s.val, a.val), ssm.dot(s.val, expect_b));
-    b := Tokens.transition_update(s, a, expect_b);
+    glinear var bx := Tokens.transition_update(Token_unfold_borrow(s), Token_unfold(a), expect_b);
+    b := Token_fold(Token(bx.val), bx);
   }
 
   glinear method transition_2_2(
@@ -364,17 +373,16 @@ module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
       ghost expected_value1: pcm.M,
       ghost expected_value2: pcm.M)
   returns (glinear token1': Token, glinear token2': Token)
-  requires token1.loc == token2.loc
   requires ssm.Internal(
       ssm.dot(token1.val, token2.val),
       ssm.dot(expected_value1, expected_value2))
-  ensures token1' == Tokens.Token(token1.loc, expected_value1)
-  ensures token2' == Tokens.Token(token1.loc, expected_value2)
+  ensures token1' == Token(expected_value1)
+  ensures token2' == Token(expected_value2)
   {
-    glinear var x := Tokens.join(token1, token2);
+    glinear var x := join(token1, token2);
     glinear var y := transition_1_1(x,  
         ssm.dot(expected_value1, expected_value2));
-    token1', token2' := Tokens.split(y, expected_value1, expected_value2);
+    token1', token2' := split2(y, expected_value1, expected_value2);
   }
 
   glinear method transition_2_3(
@@ -384,31 +392,50 @@ module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
       ghost expected_value2: pcm.M,
       ghost expected_value3: pcm.M)
   returns (glinear token1': Token, glinear token2': Token, glinear token3': Token)
-  requires token1.loc == token2.loc
   requires ssm.Internal(
       ssm.dot(token1.val, token2.val),
       ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3))
-  ensures token1' == Tokens.Token(token1.loc, expected_value1)
-  ensures token2' == Tokens.Token(token1.loc, expected_value2)
-  ensures token3' == Tokens.Token(token1.loc, expected_value3)
+  ensures token1' == Token(expected_value1)
+  ensures token2' == Token(expected_value2)
+  ensures token3' == Token(expected_value3)
   {
-    glinear var x := Tokens.join(token1, token2);
+    glinear var x := join(token1, token2);
     glinear var y := transition_1_1(x,  
         ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3));
     token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
   }
 
-  glinear method {:extern} split3(glinear sum: Token,
+  glinear method join(glinear a: Token, glinear b: Token)
+  returns (glinear sum: Token)
+  ensures sum.val == ssm.dot(a.val, b.val)
+  {
+    glinear var sum1 := Tokens.join(Token_unfold(a), Token_unfold(b));
+    sum := Token_fold(Token(sum1.val), sum1);
+  }
+
+  glinear method split2(glinear sum: Token,
+      ghost a: pcm.M, ghost b: pcm.M)
+  returns (glinear a': Token, glinear b': Token)
+  requires sum.val == ssm.dot(a, b)
+  ensures a' == Token(a)
+  ensures b' == Token(b)
+  {
+    glinear var a1, b1 := Tokens.split(Token_unfold(sum), a, b);
+    a' := Token_fold(Token(a), a1);
+    b' := Token_fold(Token(b), b1);
+  }
+
+  glinear method split3(glinear sum: Token,
       ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M)
   returns (glinear a': Token, glinear b': Token, glinear c': Token)
   requires sum.val == ssm.dot(ssm.dot(a, b), c)
-  ensures a' == Tokens.Token(sum.loc, a)
-  ensures b' == Tokens.Token(sum.loc, b)
-  ensures c' == Tokens.Token(sum.loc, c)
+  ensures a' == Token(a)
+  ensures b' == Token(b)
+  ensures c' == Token(c)
   {
     glinear var x;
-    x, c' := Tokens.split(sum, ssm.dot(a, b), c);
-    a', b' := Tokens.split(x, a, b);
+    x, c' := split2(sum, ssm.dot(a, b), c);
+    a', b' := split2(x, a, b);
   }
 
   glinear method transition_1_2_2(
@@ -418,17 +445,16 @@ module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
       ghost expected_value1: pcm.M,
       ghost expected_value2: pcm.M)
   returns (glinear token1': Token, glinear token2': Token)
-  requires s.loc == token1.loc == token2.loc
   requires ssm.Internal(
       ssm.dot(s.val, ssm.dot(token1.val, token2.val)),
       ssm.dot(s.val, ssm.dot(expected_value1, expected_value2)))
-  ensures token1' == Tokens.Token(token1.loc, expected_value1)
-  ensures token2' == Tokens.Token(token1.loc, expected_value2)
+  ensures token1' == Token(expected_value1)
+  ensures token2' == Token(expected_value2)
   {
-    glinear var x := Tokens.join(token1, token2);
+    glinear var x := join(token1, token2);
     glinear var y := transition_1_1_1(s, x,
         ssm.dot(expected_value1, expected_value2));
-    token1', token2' := Tokens.split(y, expected_value1, expected_value2);
+    token1', token2' := split2(y, expected_value1, expected_value2);
   }
 
   glinear method transition_1_3_3(
@@ -440,25 +466,17 @@ module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
       ghost expected_value2: pcm.M,
       ghost expected_value3: pcm.M)
   returns (glinear token1': Token, glinear token2': Token, glinear token3': Token)
-  requires s.loc == token1.loc == token2.loc == token3.loc
   requires ssm.Internal(
       ssm.dot(s.val, ssm.dot(ssm.dot(token1.val, token2.val), token3.val)),
       ssm.dot(s.val, ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3)))
-  ensures token1' == Tokens.Token(token1.loc, expected_value1)
-  ensures token2' == Tokens.Token(token1.loc, expected_value2)
-  ensures token3' == Tokens.Token(token1.loc, expected_value3)
+  ensures token1' == Token(expected_value1)
+  ensures token2' == Token(expected_value2)
+  ensures token3' == Token(expected_value3)
   {
-    glinear var x := Tokens.join(token1, token2);
-    x := Tokens.join(x, token3);
+    glinear var x := join(token1, token2);
+    x := join(x, token3);
     glinear var y := transition_1_1_1(s, x,
         ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3));
     token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
-  }
-
-  glinear method {:opaque} inout_update_next(glinear inout a: Token, ghost expect_b: ssm.M)
-  requires ssm.Internal(old_a.val, expect_b)
-  ensures a == Tokens.Token(old_a.loc, expect_b)
-  {
-    a := transition_1_1(a, expect_b);
   }
 }

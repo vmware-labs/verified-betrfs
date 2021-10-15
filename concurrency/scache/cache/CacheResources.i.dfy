@@ -15,12 +15,10 @@ module CacheResources {
   import T = DiskToken(CacheIfc, CacheSSM)
   import CacheSSM
 
-  function loc(): Loc // XXX TODO
-
   datatype {:glinear_fold} DiskPageMap = DiskPageMap(ghost disk_idx: nat, ghost cache_idx_opt: Option<nat>)
   {
     function defn() : T.Token {
-      T.Tokens.Token(loc(), CacheSSM.DiskIdxToCacheIdx(disk_idx, cache_idx_opt))
+      T.Token(CacheSSM.DiskIdxToCacheIdx(disk_idx, cache_idx_opt))
     }
   }
 
@@ -37,7 +35,7 @@ module CacheResources {
       ghost cache_idx: nat)
   {
     function defn() : T.Token {
-      T.Tokens.Token(loc(), CacheSSM.CacheEmpty(cache_idx))
+      T.Token(CacheSSM.CacheEmpty(cache_idx))
     }
   }
 
@@ -45,7 +43,7 @@ module CacheResources {
       ghost cache_idx: nat, ghost disk_idx: nat)
   {
     function defn() : T.Token {
-      T.Tokens.Token(loc(), CacheSSM.CacheReading(cache_idx, disk_idx))
+      T.Token(CacheSSM.CacheReading(cache_idx, disk_idx))
     }
   }
 
@@ -53,7 +51,7 @@ module CacheResources {
       ghost cache_idx: nat, ghost disk_idx: nat, ghost data: DiskIfc.Block)
   {
     function defn() : T.Token {
-      T.Tokens.Token(loc(), CacheSSM.CacheEntry(cache_idx, disk_idx, data))
+      T.Token(CacheSSM.CacheEntry(cache_idx, disk_idx, data))
     }
   }
 
@@ -65,7 +63,7 @@ module CacheResources {
     }
 
     function defn() : T.Token {
-      T.Tokens.Token(loc(), CacheSSM.DiskWriteReq(addr, contents))
+      T.Token(CacheSSM.DiskWriteReq(addr, contents))
     }
   }
 
@@ -76,21 +74,21 @@ module CacheResources {
     }
 
     function defn() : T.Token {
-      T.Tokens.Token(loc(), CacheSSM.DiskWriteResp(disk_idx))
+      T.Token(CacheSSM.DiskWriteResp(disk_idx))
     }
   }
 
   datatype {:glinear_fold} DiskReadTicket = DiskReadTicket(ghost addr: nat)
   {
     function defn() : T.Token {
-      T.Tokens.Token(loc(), CacheSSM.DiskReadReq(addr))
+      T.Token(CacheSSM.DiskReadReq(addr))
     }
   }
 
   datatype {:glinear_fold} DiskReadStub = DiskReadStub(ghost addr: nat, ghost data: DiskIfc.Block)
   {
     function defn() : T.Token {
-      T.Tokens.Token(loc(), CacheSSM.DiskReadResp(addr, data))
+      T.Token(CacheSSM.DiskReadResp(addr, data))
     }
   }
 
