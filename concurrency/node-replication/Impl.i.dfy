@@ -182,7 +182,7 @@ module Impl(nrifc: NRIfc) {
       glinear globalTail: GlobalTail,
       glinear cbGlobalTail: CBGlobalTail)
 
-  linear datatype NodeInfo = NodeInfo(
+  linear datatype {:alignment 128} NodeInfo = NodeInfo(
     linear localTail: Atomic<uint64, LocalTailTokens>
   )
   {
@@ -221,19 +221,19 @@ module Impl(nrifc: NRIfc) {
   }
 
   linear datatype NR = NR(
-    linear ctail: Atomic<uint64, Ctail>,
-    linear head: Atomic<uint64, CBHead>,
-    linear globalTail: Atomic<uint64, GlobalTailTokens>,
-    linear node_info: lseq<NodeInfo>,
+    linear ctail: CachePadded<Atomic<uint64, Ctail>>,
+    linear head: CachePadded<Atomic<uint64, CBHead>>,
+    linear globalTail: CachePadded<Atomic<uint64, GlobalTailTokens>>,
+    linear node_info: lseq<NodeInfo>, // NodeInfo is padded
 
     linear buffer: lseq<BufferEntry>,
     glinear bufferContents: GhostAtomic<Contents>
   )
   {
     predicate WF() {
-      && (forall v, g :: atomic_inv(ctail, v, g) <==> g == Ctail(v as int))
-      && (forall v, g :: atomic_inv(head, v, g) <==> g == CBHead(v as int))
-      && (forall v, g :: atomic_inv(globalTail, v, g) <==>
+      && (forall v, g :: atomic_inv(ctail.inner, v, g) <==> g == Ctail(v as int))
+      && (forall v, g :: atomic_inv(head.inner, v, g) <==> g == CBHead(v as int))
+      && (forall v, g :: atomic_inv(globalTail.inner, v, g) <==>
             g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int)))
       && |node_info| == NUM_REPLICAS as int
       && (forall nodeId | 0 <= nodeId < |node_info| :: nodeId in node_info)
@@ -244,7 +244,7 @@ module Impl(nrifc: NRIfc) {
       && (forall i: nat | 0 <= i < BUFFER_SIZE as int :: buffer[i].WF(i))
 
       && bufferContents.namespace() == 1
-      && globalTail.namespace() == 0
+      && globalTail.inner.namespace() == 0
     }
   }
 
@@ -738,7 +738,7 @@ module Impl(nrifc: NRIfc) {
     //        return self.data.read(tid - 1).dispatch(op);
 
     // 1. Read ctail
-    atomic_block var ctail := execute_atomic_load(nr.ctail) {
+    atomic_block var ctail := execute_atomic_load(nr.ctail.inner) {
       ghost_acquire ctail_token; // declares ctail_token as a 'glinear' object
       assert ctail_token == Ctail(ctail as int); // this follows from the invariant on nr.ctail
 
@@ -889,10 +889,10 @@ module Impl(nrifc: NRIfc) {
       }
       iteration := iteration + 1;
 
-      atomic_block var tail := execute_atomic_load(nr.globalTail) { }
+      atomic_block var tail := execute_atomic_load(nr.globalTail.inner) { }
 
       glinear var advance_tail_state;
-      atomic_block var head := execute_atomic_load(nr.head) {
+      atomic_block var head := execute_atomic_load(nr.head.inner) {
         ghost_acquire h;
         advance_tail_state := init_advance_tail_state(h);
         ghost_release h;
@@ -921,7 +921,7 @@ module Impl(nrifc: NRIfc) {
         glinear var appendStateOpt;
 
         atomic_block var success := execute_atomic_compare_and_set_weak(
-            nr.globalTail, tail, tail + num_ops)
+            nr.globalTail.inner, tail, tail + num_ops)
         {
           ghost_acquire globalTailTokens;
           atomic_block var _ := execute_atomic_noop(nr.bufferContents)
@@ -1137,7 +1137,7 @@ module Impl(nrifc: NRIfc) {
       ghost_release ltail_token;
     }
 
-    atomic_block var gtail := execute_atomic_load(nr.globalTail)
+    atomic_block var gtail := execute_atomic_load(nr.globalTail.inner)
     {
       ghost_acquire gtail_token;
       combinerState' := perform_ExecLoadGlobalTail(combinerState', gtail_token.globalTail);
@@ -1284,9 +1284,9 @@ module Impl(nrifc: NRIfc) {
       invariant |requestIds'| == 0 ==> responses' == responses && updates' == updates
       decreases *
       {
-        atomic_block var cur_ctail := execute_atomic_load(nr.ctail) { }
+        atomic_block var cur_ctail := execute_atomic_load(nr.ctail.inner) { }
         var max_ctail := (if cur_ctail > gtail then cur_ctail else gtail);
-        atomic_block done := execute_atomic_compare_and_set_strong(nr.ctail, cur_ctail, max_ctail)
+        atomic_block done := execute_atomic_compare_and_set_strong(nr.ctail.inner, cur_ctail, max_ctail)
         {
           ghost_acquire ctail_token;
           if done {
@@ -1388,10 +1388,10 @@ module Impl(nrifc: NRIfc) {
     decreases *
     {
       var r := NUM_REPLICAS;
-      atomic_block var global_head := execute_atomic_load(nr.head) {
+      atomic_block var global_head := execute_atomic_load(nr.head.inner) {
         
       }
-      atomic_block var f := execute_atomic_load(nr.globalTail) { }
+      atomic_block var f := execute_atomic_load(nr.globalTail.inner) { }
 
       glinear var advance_state_token;
 
@@ -1450,7 +1450,7 @@ module Impl(nrifc: NRIfc) {
 
         dispose_anything(advance_state_token);
       } else {
-        atomic_block var _ := execute_atomic_store(nr.head, min_local_tail)
+        atomic_block var _ := execute_atomic_store(nr.head.inner, min_local_tail)
         {
           ghost_acquire head;
           head := finish_advance_head_state(head, advance_state_token);

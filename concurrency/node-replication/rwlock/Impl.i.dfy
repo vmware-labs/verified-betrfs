@@ -34,8 +34,8 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
    *     behind this mutex.
    */
 
-  method new_mutex(glinear v: V, ghost inv: (V) -> bool)
-  returns (m: RwLock)
+  method new_mutex(linear v: V, ghost inv: (V) -> bool)
+  returns (linear m: RwLock)
   requires inv(v)
   ensures m.inv == inv
 

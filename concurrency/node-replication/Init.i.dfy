@@ -11,7 +11,8 @@ module Init(nrifc: NRIfc) {
   import opened LinearSequence_s
   import opened LinearMaybe
   import opened NativeTypes
-  import opened RwLockImpl
+  import opened NodeReplicaApplied = NodeReplica(nrifc)
+  import opened Rwi = RwLockImpl(NodeReplicaApplied)
   import opened Runtime
   import opened ThreadUtils
   import opened Ptrs
@@ -374,7 +375,7 @@ module Init(nrifc: NRIfc) {
 
     linear var node_infos: lseq<NodeInfo> := make_node_infos(localTails, cbLocalTails);
 
-    nr := NR(ctail_atomic, head_atomic, globalTail_atomic, node_infos, buffer, bufferContents);
+    nr := NR(CachePadded(ctail_atomic), CachePadded(head_atomic), CachePadded(globalTail_atomic), node_infos, buffer, bufferContents);
 
     nodeCreationTokens := make_node_creation_tokens(replicas, combiners, readers);
   }
