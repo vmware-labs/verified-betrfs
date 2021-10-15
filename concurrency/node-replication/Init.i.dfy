@@ -9,6 +9,7 @@ module Init(nrifc: NRIfc) {
   import opened FCT = FlatCombinerTokens
   import opened LinearSequence_i
   import opened LinearSequence_s
+  import opened LinearMaybe
   import opened NativeTypes
   import opened RwLockImpl
   import opened Runtime
@@ -131,13 +132,40 @@ module Init(nrifc: NRIfc) {
 
   method make_buffer_cells()
   returns (linear cells: lseq<Cell<LogEntry>>,
-      glinear cell_contents: map<nat, StoredType>)
+      glinear cell_contents: map<int, StoredType>)
   ensures |cells| == BUFFER_SIZE as int
-  ensures forall i | 0 <= i < |cells| :: i in cells
+  ensures lseq_full(cells)
   ensures forall i | -(BUFFER_SIZE as int) <= i < 0 :: i in cell_contents
       && cell_contents[i].cellContents.cell == cells[i % BUFFER_SIZE as int]
   ensures forall i | i in cell_contents ::
       -(BUFFER_SIZE as int) <= i < 0
+  {
+    cells := lseq_alloc(BUFFER_SIZE);
+    cell_contents := glmap_empty();
+
+    var j := 0;
+    while j < BUFFER_SIZE
+    invariant 0 <= j <= BUFFER_SIZE
+    invariant |cells| == BUFFER_SIZE as int
+    invariant forall i | 0 <= i < j as int :: i in cells
+    invariant forall i | j as int <= i < BUFFER_SIZE as int :: i !in cells
+    invariant forall i | -(BUFFER_SIZE as int) <= i < -(BUFFER_SIZE as int) + j as int :: i in cell_contents
+       && cell_contents[i].cellContents.cell == cells[i % BUFFER_SIZE as int]
+    invariant forall i | i in cell_contents ::
+       -(BUFFER_SIZE as int) <= i < -(BUFFER_SIZE as int) + j as int
+    {
+      var op;
+      linear var cell;
+      glinear var cell_cont;
+      cell, cell_cont := new_cell(LogEntry(op, 0));
+      cells := lseq_give(cells, j, cell);
+
+      glinear var st := StoredType(cell_cont, glNone);
+      cell_contents := glmap_insert(cell_contents, -(BUFFER_SIZE as int) + j as int, st);
+
+      j := j + 1;
+    }
+  }
 
   method make_buffer(
       linear cells: lseq<Cell<LogEntry>>, 
@@ -152,6 +180,56 @@ module Init(nrifc: NRIfc) {
   ensures forall i | 0 <= i < BUFFER_SIZE as int
     :: i in buffer && buffer[i].cell == cells[i]
         && buffer[i].WF(i)
+  {
+    buffer := lseq_alloc(BUFFER_SIZE);
+    linear var cells' := cells;
+    glinear var alive' := alive;
+
+    var j := 0;
+    while j < BUFFER_SIZE
+    invariant 0 <= j <= BUFFER_SIZE
+    invariant |buffer| == BUFFER_SIZE as int
+    invariant forall i | 0 <= i < j as int
+      :: i in buffer && buffer[i].cell == cells[i]
+          && buffer[i].WF(i)
+    invariant forall i | j as int <= i < BUFFER_SIZE as int
+      :: i !in buffer
+    invariant |cells'| == BUFFER_SIZE as int
+    invariant forall i | j as int <= i < BUFFER_SIZE as int ::
+        && i in cells'
+        && i in alive'
+        && cells[i] == cells'[i]
+        && alive[i] == alive'[i]
+    invariant forall i | 0 <= i < j as int :: 
+        && i !in cells'
+        && i !in alive'
+    {
+      linear var cell;
+      cells', cell := lseq_take(cells', j);
+
+      glinear var aliveBit;
+      alive', aliveBit := glmap_take(alive', j as int);
+
+      linear var aliveAtomic := new_atomic(false, aliveBit,
+          ((v, g) => g == AliveBit(j as int, v)),
+          0);
+
+      linear var bufferEntry := BufferEntry(cell, aliveAtomic);
+      assert bufferEntry.WF(j as int);
+
+      buffer := lseq_give(buffer, j, bufferEntry);
+
+      j := j + 1;
+    }
+
+    assert j == BUFFER_SIZE;
+    forall i:nat | i < |lseqs_raw(cells')| ensures !has(lseqs_raw(cells')[i])
+    {
+      assert i !in cells';
+    }
+    var _ := lseq_free_raw(cells');
+    dispose_anything(alive');
+  }
 
   method make_node_infos(
       glinear localTails: map<nat, LocalTail>,
@@ -165,6 +243,49 @@ module Init(nrifc: NRIfc) {
   ensures |node_info| == NUM_REPLICAS as int
   ensures forall i | 0 <= i < NUM_REPLICAS as int
       :: i in node_info && node_info[i].WF(i)
+  {
+    node_info := lseq_alloc(NUM_REPLICAS);
+
+    glinear var localTails' := localTails;
+    glinear var cbLocalTails' := cbLocalTails;
+
+    var j := 0;
+    while j < NUM_REPLICAS
+    invariant 0 <= j <= NUM_REPLICAS
+    invariant forall i | j as int <= i < NUM_REPLICAS as int ::
+        && i in localTails'
+        && i in cbLocalTails'
+        && localTails'[i] == LocalTail(i as int, 0)
+        && cbLocalTails'[i] == CBLocalTail(i as int, 0)
+    invariant |node_info| == NUM_REPLICAS as int
+    invariant forall i | 0 <= i < j as int
+        :: i in node_info && node_info[i].WF(i)
+    invariant forall i | j as int <= i < NUM_REPLICAS as int
+        :: i !in node_info
+    {
+      glinear var localTail, cbLocalTail;
+      localTails', localTail := glmap_take(localTails', j as int);
+      cbLocalTails', cbLocalTail := glmap_take(cbLocalTails', j as int);
+
+      linear var localTailAtomic := new_atomic(
+          0,
+          LocalTailTokens(localTail, cbLocalTail),
+          ((v, g) => 
+            g == LocalTailTokens(LocalTail(j as int, v as int), CBLocalTail(j as int, v as int))
+          ),
+          0);
+
+      linear var nodeInfo := NodeInfo(localTailAtomic);
+      assert nodeInfo.WF(j as int);
+
+      node_info := lseq_give(node_info, j, nodeInfo);
+
+      j := j + 1;
+    }
+
+    dispose_anything(localTails');
+    dispose_anything(cbLocalTails');
+  }
 
   method make_node_creation_tokens(
       glinear replicas: map<nat, Replica>,
@@ -181,6 +302,46 @@ module Init(nrifc: NRIfc) {
   ensures |nodeCreationTokens| == NUM_REPLICAS as int
   ensures forall i | 0 <= i < NUM_REPLICAS as int
       :: i in nodeCreationTokens && nodeCreationTokens[i].WF()
+  {
+    nodeCreationTokens := lseq_alloc(NUM_REPLICAS);
+
+    glinear var replicas' := replicas;
+    glinear var combiners' := combiners;
+    glinear var readers' := readers;
+
+    var j := 0;
+    while j < NUM_REPLICAS
+    invariant 0 <= j <= NUM_REPLICAS
+    invariant forall i | j as int <= i < NUM_REPLICAS as int ::
+        && i in replicas'
+        && i in combiners'
+        && i in readers'
+        && replicas[i] == replicas'[i]
+        && combiners[i] == combiners'[i]
+        && readers[i] == readers'[i]
+    invariant |nodeCreationTokens| == NUM_REPLICAS as int
+    invariant forall i | 0 <= i < j as int
+        :: i in nodeCreationTokens && nodeCreationTokens[i].WF()
+    invariant forall i | j as int <= i < NUM_REPLICAS as int
+        :: i !in nodeCreationTokens
+    {
+      glinear var replica, combiner, reader;
+      replicas', replica := glmap_take(replicas', j as int);
+      combiners', combiner := glmap_take(combiners', j as int);
+      readers', reader := glmap_take(readers', j as int);
+
+      linear var nct := NodeCreationToken(j, combiner, reader, replica);
+      assert nct.WF();
+
+      nodeCreationTokens := lseq_give(nodeCreationTokens, j, nct);
+
+      j := j + 1;
+    }
+
+    dispose_anything(replicas');
+    dispose_anything(combiners');
+    dispose_anything(readers');
+  }
 
   method initNR(glinear token: Tokens.Token)
   returns (

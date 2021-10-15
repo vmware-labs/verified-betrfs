@@ -1,7 +1,7 @@
 include "../framework/StateMachines.s.dfy"
 
 abstract module NRIfc refines InputOutputIfc {
-  type NRState(!new)
+  type NRState(!new,0)
   type UpdateOp(!new,0,00)
   type ReadonlyOp(!new,0,00)
   type ReturnType(!new,0,00)
