@@ -3,9 +3,9 @@ include "../../scache/rwlock/FullMap.i.dfy"
 include "Handle.i.dfy"
 include "../../../lib/Base/Option.s.dfy"
 
-module RwLock refines Rw {
+module RwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
   import opened FullMaps
-  import Handle
+  import HandleTypeMod = Handle(contentsTypeMod)
 
   // TODO find the right constant for perf -- balancing contention
   // and concurrency.
@@ -13,7 +13,7 @@ module RwLock refines Rw {
 
   type ThreadId = nat
 
-  type StoredType = Handle.Handle
+  type StoredType = HandleTypeMod.Handle
 
   // Flags
   // A "flag" is heap state stored "near" the protected StoredType (cell or reference).
@@ -586,14 +586,14 @@ module RwLock refines Rw {
   {}
 }
 
-module RwLockToken {
+module RwLockToken(contentsTypeMod: ContentsTypeMod) {
   import opened Options
-  import opened RwLock
-  import HandleModule = Handle
+  import opened RwLock(contentsTypeMod)
+  import HandleTypeMod = Handle(contentsTypeMod)
   import T = RwTokens(RwLock)
 
   type Token = T.Token
-  type Handle = HandleModule.Handle
+  type Handle = HandleTypeMod.Handle
 
   glinear method perform_ExcBegin(glinear flagToken: Token)
   returns (glinear flagToken': Token, glinear excAcqToken': Token)

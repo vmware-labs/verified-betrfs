@@ -1,7 +1,7 @@
 include "InfiniteLogTokens.i.dfy"
 include "NRSpec.s.dfy"
 include "../../lib/Lang/LinearSequence.i.dfy"
-include "rwlock/TempImpl.i.dfy"
+include "rwlock/Impl.i.dfy"
 include "../framework/Atomic.s.dfy"
 include "../framework/ThreadUtils.s.dfy"
 include "../framework/Ptrs.s.dfy"
@@ -10,31 +10,10 @@ include "Runtime.i.dfy"
 include "CyclicBufferTokens.i.dfy"
 include "FlatCombinerTokens.i.dfy"
 
-module Impl(nrifc: NRIfc) {
-  import opened RequestIds
-  import opened Atomics
-  import opened ILT = InfiniteLogTokens(nrifc)
-  import opened IL = InfiniteLogSSM(nrifc)
-  import opened CBT = CyclicBufferTokens(nrifc)
-  import opened FCT = FlatCombinerTokens
-  import opened LinearSequence_i
-  import opened LinearSequence_s
-  import opened NativeTypes
-  import opened RwLockImpl
-  import opened Runtime
-  import opened ThreadUtils
-  import opened Ptrs
-  import opened GlinearMap
-  import opened GlinearOption
-  import opened Cells
-  import opened GhostLoc
-  import opened Constants
-
-  type Tid = uint64
-
-  /*
-   * Anything which is allocated on a NUMA node
-   */
+module NodeReplica(nrifc: NRIfc) refines ContentsTypeMod {
+  import opened ILT = InfiniteLogTokens(nrifc)    // Replica, CombinerToken
+  import opened IL = InfiniteLogSSM(nrifc)        // NodeId
+  import opened CBT = CyclicBufferTokens(nrifc)   // Reader
 
   linear datatype NodeReplica = NodeReplica(
     linear actual_replica: nrifc.DataStructureType,
@@ -52,6 +31,36 @@ module Impl(nrifc: NRIfc) {
       && reader.rs.ReaderIdle?
     }
   }
+
+  type ContentsType = NodeReplica
+}
+
+module Impl(nrifc: NRIfc) {
+  import opened RequestIds
+  import opened Atomics
+  import opened ILT = InfiniteLogTokens(nrifc)
+  import opened IL = InfiniteLogSSM(nrifc)
+  import opened CBT = CyclicBufferTokens(nrifc)
+  import opened FCT = FlatCombinerTokens
+  import opened LinearSequence_i
+  import opened LinearSequence_s
+  import opened NativeTypes
+  import opened NodeReplicaApplied = NodeReplica(nrifc)
+  import opened RwLockImpl(NodeReplicaApplied)
+  import opened Runtime
+  import opened ThreadUtils
+  import opened Ptrs
+  import opened GlinearMap
+  import opened GlinearOption
+  import opened Cells
+  import opened GhostLoc
+  import opened Constants
+
+  type Tid = uint64
+
+  /*
+   * Anything which is allocated on a NUMA node
+   */
 
   datatype OpResponse = OpResponse(op: nrifc.UpdateOp, ret: nrifc.ReturnType)
 
@@ -112,7 +121,7 @@ module Impl(nrifc: NRIfc) {
 
   linear datatype Node = Node(
     linear combiner_lock: Atomic<uint64, UnitGhostType>,
-    linear replica: RwLock<NodeReplica>,
+    linear replica: RwLock,
     //linear context: map<Tid, nrifc.UpdateOp>,
     linear contexts: lseq<Context>, // TODO cache-line padded?
     nodeId: uint64,
@@ -747,7 +756,8 @@ module Impl(nrifc: NRIfc) {
     assert stub.rs.nodeId == node.nodeId as nat;
 
     // 3. Take read-lock on replica; apply operation on replica
-    linear var linear_guard := node.replica.acquire_shared();
+    var thread_id:uint8 := 0;  //TODO(gerd): be smarter than jonh
+    linear var linear_guard := node.replica.acquire_shared(thread_id);
     assert linear_guard.v.ghost_replica.nodeId == stub.rs.nodeId;
 
     result, stub := apply_readonly(linear_guard, op, stub);
@@ -756,7 +766,7 @@ module Impl(nrifc: NRIfc) {
     assert stub.rs.ReadonlyDone?; // advisory
   }
 
-  method apply_readonly(shared guard: SharedGuard<NodeReplica>, op: nrifc.ReadonlyOp,
+  method apply_readonly(shared guard: SharedGuard, op: nrifc.ReadonlyOp,
       glinear ticket: Readonly)
   returns (result: nrifc.ReturnType, glinear ticket': Readonly)
   requires ticket.rs.ReadonlyReadyToRead?

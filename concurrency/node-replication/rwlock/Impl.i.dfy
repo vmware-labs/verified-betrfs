@@ -4,9 +4,9 @@ include "../Runtime.i.dfy"
 include "../../../lib/Lang/LinearSequence.i.dfy"
 include "RwLock.i.dfy"
 
-module RwLockImpl {
+module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
   import opened NativeTypes
-  import opened RwLockToken
+  import opened RwLockTokenMod = RwLockToken(contentsTypeMod)
   import opened Atomics
   import opened LinearSequence_s
   import opened LinearSequence_i
@@ -16,12 +16,12 @@ module RwLockImpl {
   import opened Options
   import opened Runtime
 
-  import RwLockMod = RwLock
-  import Handle
+  import RwLockMod = RwLock(contentsTypeMod)
+  import HandleTypeMod = Handle(contentsTypeMod)
 
   // We wish that V were a type parameter, but we don't actually have
   // type parameters.
-  type V = Handle.ContentsType
+  type V = contentsTypeMod.ContentsType
 
   /*
    * Constructor for a new mutex.
@@ -48,7 +48,7 @@ module RwLockImpl {
 
   glinear datatype ExclusiveGuard = ExclusiveGuard(
     glinear exc_obtained_token: Token,
-    glinear empty_cell_contents: Handle.Handle,
+    glinear empty_cell_contents: HandleTypeMod.Handle,
     ghost m: RwLock)
   {
     predicate Inv(expected_lock: RwLock) {
@@ -75,7 +75,7 @@ module RwLockImpl {
     ghost m: RwLock,
     ghost v: V)
   {
-    function StoredContents() : Handle.Handle
+    function StoredContents() : HandleTypeMod.Handle
     {
       LCellContents(m.lcell, Some(v))
     }
@@ -98,7 +98,7 @@ module RwLockImpl {
   linear datatype RwLock = RwLock(
     linear exclusiveFlag: Atomic<bool, Token>,    // implements ExclusiveState.exc
     linear refCounts: lseq<Atomic<uint8, Token>>,   // implements map<ThreadId, nat>
-    linear lcell: LinearCell<Handle.ContentsType>, // implements the actual value that ExclusiveState.shared_value represents
+    linear lcell: LinearCell<contentsTypeMod.ContentsType>, // implements the actual value that ExclusiveState.shared_value represents
     ghost loc: Loc                                // which instance of this lock we're talking about
   )
   {
@@ -107,7 +107,7 @@ module RwLockImpl {
     predicate InternalInv()
     {
       && loc.ExtLoc?
-      && loc.base_loc == RwLockToken.T.Wrap.singleton_loc()
+      && loc.base_loc == RwLockTokenMod.T.Wrap.singleton_loc()
       && |refCounts| == RwLockMod.RC_WIDTH
       && lseq_full(refCounts)
       && (forall v, token :: atomic_inv(exclusiveFlag, v, token)
@@ -146,7 +146,7 @@ module RwLockImpl {
      * inside meets the invariant.
      */
 
-    predicate IsPendingHandle(token: RwLockToken.Token, visited: int)
+    predicate IsPendingHandle(token: RwLockTokenMod.Token, visited: int)
     {
       && token.val.M?
       && token.val == RwLockMod.ExcAcqHandle(token.val.exclusiveAcquisition)  // it's an ExcState
@@ -169,7 +169,7 @@ module RwLockImpl {
     decreases *
     {
       var got_exc := false;
-      glinear var pending_handle := RwLockToken.T.get_unit(this.loc);
+      glinear var pending_handle := RwLockTokenMod.T.get_unit(this.loc);
 
       while !got_exc
       invariant got_exc ==> IsPendingHandle(pending_handle, 0)
@@ -178,8 +178,8 @@ module RwLockImpl {
         atomic_block got_exc := execute_atomic_compare_and_set_strong(this.exclusiveFlag, false, true) {
           ghost_acquire g;
           if got_exc {
-            RwLockToken.T.dispose(pending_handle);
-            g, pending_handle := RwLockToken.perform_ExcBegin(g);
+            RwLockTokenMod.T.dispose(pending_handle);
+            g, pending_handle := RwLockTokenMod.perform_ExcBegin(g);
           }
           ghost_release g;
         }
@@ -203,7 +203,7 @@ module RwLockImpl {
 
           if ret_value == 0 {
             // If we find a zero, we advance visited
-            pending_handle, token_g := RwLockToken.perform_TakeExcLockCheckRefCount(pending_handle, token_g);
+            pending_handle, token_g := RwLockTokenMod.perform_TakeExcLockCheckRefCount(pending_handle, token_g);
           }
           // else try checking this slot again; maybe a reader left. visited stays where it is.
 
@@ -214,8 +214,8 @@ module RwLockImpl {
         }
       }
 
-      glinear var b':Handle.Handle;
-      pending_handle, b' := RwLockToken.perform_Withdraw_TakeExcLockFinish(pending_handle);
+      glinear var b':HandleTypeMod.Handle;
+      pending_handle, b' := RwLockTokenMod.perform_Withdraw_TakeExcLockFinish(pending_handle);
 
       v, b' := take_lcell(lcell, b');
       
@@ -242,7 +242,7 @@ module RwLockImpl {
       // Release the lock.
       atomic_block var _ := execute_atomic_store(this.exclusiveFlag, false) {
         ghost_acquire g;
-        g := RwLockToken.perform_Deposit_ReleaseExcLock(g, exc_obtained_token, v_cell_contents);
+        g := RwLockTokenMod.perform_Deposit_ReleaseExcLock(g, exc_obtained_token, v_cell_contents);
         ghost_release g;
       }
     }
