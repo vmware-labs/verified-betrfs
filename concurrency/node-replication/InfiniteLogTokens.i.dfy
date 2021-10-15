@@ -43,7 +43,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} LocalTail = LocalTail(nodeId: NodeId, localTail: nat)
+  datatype {:glinear_fold} LocalTail = LocalTail(nodeId: nat, localTail: nat)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -61,7 +61,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} Replica = Replica(nodeId: NodeId, state: nrifc.NRState)
+  datatype {:glinear_fold} Replica = Replica(nodeId: nat, state: nrifc.NRState)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -70,7 +70,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} CombinerToken = CombinerToken(nodeId: NodeId, state: CombinerState)
+  datatype {:glinear_fold} CombinerToken = CombinerToken(nodeId: nat, state: CombinerState)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -79,7 +79,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} Log = Log(idx: nat, op: nrifc.UpdateOp, node_id: NodeId)
+  datatype {:glinear_fold} Log = Log(idx: nat, op: nrifc.UpdateOp, node_id: nat)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -159,7 +159,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     gshared var s_token := LocalTail_unfold_borrow(ltail); // use `borrow` for `gshared` types.
 
     // Compute the things we want to output (as ghost, _not_ glinear constructs)
-    //     | ReadonlyReadyToRead(op: nrifc.ReadonlyOp, nodeId: NodeId, ctail: nat)
+    //     | ReadonlyReadyToRead(op: nrifc.ReadonlyOp, nodeId: nat, ctail: nat)
 
     ghost var out_expect := Readonly(ticket.rid, ReadonlyReadyToRead(ticket.rs.op, ltail.nodeId, ticket.rs.ctail));
     ghost var out_token_expect := Readonly_unfold(out_expect);
@@ -214,7 +214,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
       glinear combiner: CombinerToken,
       ghost ops: seq<nrifc.UpdateOp>,
       ghost requestIds: seq<RequestId>,
-      ghost nodeId: NodeId)
+      ghost nodeId: nat)
   returns (
       glinear tail': GlobalTail,
       glinear updates': map<nat, Update>,

@@ -22,7 +22,7 @@ module NodeReplica(nrifc: NRIfc) refines ContentsTypeMod {
     glinear reader: Reader
   )
   {
-    predicate WF(nodeId: NodeId) {
+    predicate WF(nodeId: nat) {
       && ghost_replica.state == nrifc.I(actual_replica)
       && ghost_replica.nodeId == nodeId
       && combiner.state == CombinerReady
@@ -186,7 +186,7 @@ module Impl(nrifc: NRIfc) {
     linear localTail: Atomic<uint64, LocalTailTokens>
   )
   {
-    predicate WF(nodeId: NodeId) {
+    predicate WF(nodeId: nat) {
       && (forall v, g :: atomic_inv(localTail, v, g) <==>
           g == LocalTailTokens(LocalTail(nodeId, v as int), CBLocalTail(nodeId, v as int)))
     }

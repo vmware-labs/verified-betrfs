@@ -19,8 +19,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //   apply all entries (update replica) (update local tail to the end of the entries)
   //   update ctail
 
-  type NodeId = nat
-
   // `ReadonlyState` and `UpdateState` tokens can appear at any point time
   // (corresponding to a client beginning a read or an update, respectively).
   //
@@ -33,13 +31,13 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     // read the ctail
     | ReadonlyCtail(op: nrifc.ReadonlyOp, ctail: nat)
     // wait until localTail >= (the ctail value we just read)
-    | ReadonlyReadyToRead(op: nrifc.ReadonlyOp, nodeId: NodeId, ctail: nat)
+    | ReadonlyReadyToRead(op: nrifc.ReadonlyOp, nodeId: nat, ctail: nat)
     // read the op off the replica
-    | ReadonlyDone(op: nrifc.ReadonlyOp, ret: nrifc.ReturnType, nodeId: NodeId, ctail: nat)
+    | ReadonlyDone(op: nrifc.ReadonlyOp, ret: nrifc.ReturnType, nodeId: nat, ctail: nat)
 
   datatype UpdateState =
     | UpdateInit(op: nrifc.UpdateOp)
-    | UpdatePlaced(nodeId: NodeId, idx: nat) // -> UpdateResp, no ret yet
+    | UpdatePlaced(nodeId: nat, idx: nat) // -> UpdateResp, no ret yet
     | UpdateApplied(ret: nrifc.ReturnType, idx: nat) // -> UpdateResp
     // TODO(travis): add idx here too:
     | UpdateDone(ret: nrifc.ReturnType, idx: nat) // -> UpdateResp
@@ -70,7 +68,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   datatype ReplicaState = ReplicaState(state: nrifc.NRState)
   // TODO(for-travis): what about the alive bit?
   // NOTE(travis): see the new notes in slide show
-  datatype LogEntry = LogEntry(op: nrifc.UpdateOp, node_id: NodeId)
+  datatype LogEntry = LogEntry(op: nrifc.UpdateOp, node_id: nat)
 
   datatype M = M(
     // the 'log' entries are shared via the circular buffer
@@ -88,15 +86,15 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     //
     // * If it is determined that the *only* function of the lock is to protect
     //      the replica, we do NOT need to model it explicitly.
-    //lockStates: map<NodeId, LockState>,
+    //lockStates: map<nat, LockState>,
 
-    replicas: map<NodeId, nrifc.NRState>, // replicas protected by rwlock
-    localTails: map<NodeId, nat>,         // localTail (atomic ints)
+    replicas: map<nat, nrifc.NRState>, // replicas protected by rwlock
+    localTails: map<nat, nat>,         // localTail (atomic ints)
     ctail: Option<nat>,                   // ctail (atomic int)
 
     localReads: map<RequestId, ReadonlyState>,
     localUpdates: map<RequestId, UpdateState>,
-    combiner: map<NodeId, CombinerState>
+    combiner: map<nat, CombinerState>
   ) | Fail
 
 
@@ -117,13 +115,13 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && m.global_tail.Some?
   }
 
-  predicate LocalTailValid(m: M, nodeId: NodeId)
+  predicate LocalTailValid(m: M, nodeId: nat)
     requires StateValid(m)
   {
     && nodeId in m.localTails
   }
 
-  predicate ReplicaValid(m: M, nodeId: NodeId)
+  predicate ReplicaValid(m: M, nodeId: nat)
     requires StateValid(m)
   {
     && nodeId in m.replicas
@@ -135,7 +133,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && logentry in m.log.Keys
   }
 
-  predicate LogEntryIsLocal(m: M, logentry: nat, nodeId: NodeId)
+  predicate LogEntryIsLocal(m: M, logentry: nat, nodeId: nat)
     requires StateValid(m)
     requires LogEntryIsReady(m, logentry)
   {
@@ -188,7 +186,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // GUARD: InCombinerReady
   //
   // the supplied nodeid is valid, and the combiner is in the Ready state.
-  predicate InCombinerReady(m : M, nodeId : NodeId)
+  predicate InCombinerReady(m : M, nodeId : nat)
     requires StateValid(m)
   {
     && nodeId in m.combiner
@@ -198,7 +196,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // GUARD: InCombinerPlaced
   //
   // the supplied nodeid is valid, and the combiner is in the CombinerPlaced state
-  predicate InCombinerPlaced(m : M, nodeId : NodeId)
+  predicate InCombinerPlaced(m : M, nodeId : nat)
     requires StateValid(m)
   {
     && nodeId in m.combiner
@@ -208,7 +206,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // GUARD: InCombinerPlaced
   //
   // the supplied nodeid is valid, and the combiner is in the CombinerLocalTail state
-  predicate InCombinerLocalTail(m : M, nodeId : NodeId)
+  predicate InCombinerLocalTail(m : M, nodeId : nat)
     requires StateValid(m)
   {
     && nodeId in m.combiner
@@ -218,7 +216,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // GUARD: InCombiner
   //
   // the supplied nodeid is valid, and the combiner is in the Combiner state with updates to be done
-  predicate InCombiner(m : M, nodeId : NodeId)
+  predicate InCombiner(m : M, nodeId : nat)
     requires StateValid(m)
   {
     && nodeId in m.combiner
@@ -230,7 +228,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //
   // the supplied nodeid is valid, and the combiner is in the Combiner state with all updates done,
   // and there have been updates applied, i.e. c.localTail != m.localTails[nodeId]
-  predicate InCombinerDone(m: M, nodeId : NodeId)
+  predicate InCombinerDone(m: M, nodeId : nat)
     requires StateValid(m)
   {
     && nodeId in m.combiner
@@ -244,7 +242,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //
   // the supplied nodeid is valid, and the combiner is in the Combiner state with no updates
   // done (i.e., combiner.ltail == m.localTail[nodeId])
-  predicate InCombinerNoChange(m: M, nodeId : NodeId)
+  predicate InCombinerNoChange(m: M, nodeId : nat)
     requires StateValid(m)
   {
     && nodeId in m.combiner
@@ -257,7 +255,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // GUARD: InCombinerUpdateCompleteTail
   //
   // the supplied nodeid is valid, and the combiner is in the UpdateCTail state
-  predicate InCombinerUpdateCompleteTail(m : M, nodeId : NodeId)
+  predicate InCombinerUpdateCompleteTail(m : M, nodeId : nat)
     requires StateValid(m)
   {
     && nodeId in m.combiner
@@ -395,7 +393,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
 
   // the local tail must have advanced far enough, so we can perform our read
-  predicate LocalTailHasAdvanced(m: M, nodeId: NodeId,  readTail : nat)
+  predicate LocalTailHasAdvanced(m: M, nodeId: nat,  readTail : nat)
     requires StateValid(m)
   {
       && nodeId in m.localTails
@@ -436,7 +434,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //     WaitOrUpdate(readTail)
   //   }
   // { ReadonlyReadyToRead(r, op) }
-  predicate TransitionReadonlyReadyToRead(m: M, m': M, nodeId: NodeId, rid: RequestId) {
+  predicate TransitionReadonlyReadyToRead(m: M, m': M, nodeId: nat, rid: RequestId) {
     && StateValid(m)
     && InReadOnlyCTail(m, rid)
 
@@ -461,7 +459,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //   response ← replica.ReadOnly(args)
   //   rwLock.Release-Reader()
   // { ReadonlyDone(r, response) }
-  predicate TransitionReadonlyDone(m: M, m': M, nodeId: NodeId, rid: RequestId) {
+  predicate TransitionReadonlyDone(m: M, m': M, nodeId: nat, rid: RequestId) {
     && StateValid(m)
     && InReadyToRead(m, rid)
 
@@ -505,7 +503,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   // constructs the log map with the new entries
-  function  {:opaque}  ConstructNewLogEntries(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>): (res: map<nat, LogEntry>)
+  function  {:opaque}  ConstructNewLogEntries(rids: seq<RequestId>, nodeId: nat, gtail: nat, lupd: map<RequestId, UpdateState>): (res: map<nat, LogEntry>)
     requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
   {
     //map[]
@@ -513,7 +511,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   // lemma showing that 0 <= i < gtail not in new log, gtail <= i not in log, rest in log
-  lemma ConstructNewLogEntries_InMap(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>, res: map<RequestId, LogEntry>)
+  lemma ConstructNewLogEntries_InMap(rids: seq<RequestId>, nodeId: nat, gtail: nat, lupd: map<RequestId, UpdateState>, res: map<RequestId, LogEntry>)
     requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
     requires res == ConstructNewLogEntries(rids, nodeId, gtail, lupd)
     ensures forall i : nat | 0 <= i < gtail :: i !in res
@@ -531,7 +529,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     }
   }
 
-  lemma ConstructNewLogEntries_LogDisjunct(m: M, nodeId: NodeId, rids: seq<RequestId>, res: map<RequestId, LogEntry>)
+  lemma ConstructNewLogEntries_LogDisjunct(m: M, nodeId: nat, rids: seq<RequestId>, res: map<RequestId, LogEntry>)
     requires Inv(m)
     requires forall r | r in rids :: r in m.localUpdates && m.localUpdates[r].UpdateInit?
     requires res == ConstructNewLogEntries(rids, nodeId, m.global_tail.value, m.localUpdates)
@@ -540,7 +538,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     reveal_ConstructNewLogEntries();
   }
 
-  lemma ConstructNewLogEntries_EqualKeys(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>, lupd2: map<RequestId, UpdateState>)
+  lemma ConstructNewLogEntries_EqualKeys(rids: seq<RequestId>, nodeId: nat, gtail: nat, lupd: map<RequestId, UpdateState>, lupd2: map<RequestId, UpdateState>)
     requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
     requires forall r | r in rids :: r in lupd2 && lupd2[r].UpdateInit?
     ensures ConstructNewLogEntries(rids, nodeId, gtail, lupd).Keys == ConstructNewLogEntries(rids, nodeId, gtail, lupd2).Keys
@@ -549,7 +547,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     ConstructNewLogEntries_InMap(rids, nodeId, gtail, lupd2, ConstructNewLogEntries(rids, nodeId, gtail, lupd2));
   }
 
-  lemma ConstructNewLogEntries_Equal(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, lupd: map<RequestId, UpdateState>, lupd2: map<RequestId, UpdateState>)
+  lemma ConstructNewLogEntries_Equal(rids: seq<RequestId>, nodeId: nat, gtail: nat, lupd: map<RequestId, UpdateState>, lupd2: map<RequestId, UpdateState>)
     requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
     requires forall r | r in rids :: r in lupd2 && lupd2[r].UpdateInit?
     requires forall r | r in rids :: lupd[r] == lupd2[r]
@@ -561,13 +559,13 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
   // constructs a localupdate map
-  function {:opaque} ConstructLocalUpdateMap(rids: seq<RequestId>, nodeId: NodeId, gtail: nat) : map<RequestId, UpdateState>
+  function {:opaque} ConstructLocalUpdateMap(rids: seq<RequestId>, nodeId: nat, gtail: nat) : map<RequestId, UpdateState>
     requires seq_unique(rids)
   {
     (map i : nat | InRange(rids, i) && 0 <= i < |rids| :: rids[i] as RequestId := UpdatePlaced(nodeId, LogIdx(gtail, i)))
   }
 
-  lemma ConstructLocalUpdateMap_InMap(rids: seq<RequestId>, nodeId: NodeId, gtail: nat, res: map<RequestId, UpdateState>)
+  lemma ConstructLocalUpdateMap_InMap(rids: seq<RequestId>, nodeId: nat, gtail: nat, res: map<RequestId, UpdateState>)
     requires seq_unique(rids)
     requires res == ConstructLocalUpdateMap(rids, nodeId, gtail)
     ensures forall r | r in rids :: r in res
@@ -600,7 +598,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //   }
   // { UpdatePlaced(r) ; UpdatePlaced(p) ; UpdatePlaced(q) ; CombinerPlaced( [p,q,r] ) ;
   //   Log(t, op1) ; Log(t+1, op2) ; Log(t+2, op1) ; GlobalTail(t + ops.len()) }
-  predicate AdvanceTail(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
+  predicate AdvanceTail(m: M, m': M, nodeId: nat, request_ids: seq<RequestId>)
   {
     && StateValid(m)
     && InCombinerReady(m, nodeId)
@@ -646,7 +644,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // { CombinerPlaced(queue) ; … }
   //   ltail = load ltails[tkn] // read our local ltail
   // { CombinerLtail(queue, ltail) ; … }
-  predicate ExecLoadLtail(m: M, m': M, nodeId: NodeId) {
+  predicate ExecLoadLtail(m: M, m': M, nodeId: nat) {
     && StateValid(m)
     && InCombinerPlaced(m, nodeId)
     && LocalTailValid(m, nodeId)
@@ -671,7 +669,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // { CombinerLtail(queue, ltail) ; … }
   //   gtail = load tail
   // { Combiner (queue, ltail, gtail, 0) ; … }
-  predicate ExecLoadGlobalTail(m: M, m': M, nodeId: NodeId) {
+  predicate ExecLoadGlobalTail(m: M, m': M, nodeId: nat) {
     && StateValid(m)
     && InCombinerLocalTail(m, nodeId)
     && GlobalTailValid(m)
@@ -702,7 +700,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //       lmasks[tkn] = !lmasks[tkn]
   //     }
   //   }
-  predicate ExecDispatchLocal(m: M, m': M, nodeId: NodeId) {
+  predicate ExecDispatchLocal(m: M, m': M, nodeId: nat) {
     && StateValid(m)
     && InCombiner(m, nodeId)
     && ReplicaValid(m, nodeId)
@@ -742,7 +740,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // STATE TRANSITION: Combiner -> Combiner (remote case)
   //
   //
-  predicate ExecDispatchRemote(m: M, m': M, nodeId: NodeId) {
+  predicate ExecDispatchRemote(m: M, m': M, nodeId: nat) {
     && StateValid(m)
     && InCombiner(m, nodeId)
     && ReplicaValid(m, nodeId)
@@ -771,7 +769,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // { Combiner(queue, ltail, gtail, j) ; … }
   //   ctail = max(tail, ctail) // update completed tail
   // { CombinerUpdatedCtail(gtail, ltail, gtail, j) ; … }
-  predicate UpdateCompletedTail(m: M, m': M, nodeId: NodeId) {
+  predicate UpdateCompletedTail(m: M, m': M, nodeId: nat) {
     && StateValid(m)
     && InCombinerDone(m, nodeId)
     && CompleteTailValid(m)
@@ -796,7 +794,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   //       return
   //   }
   // { CombinerReady ; … }
-  predicate UpdateCompletedNoChange(m: M, m': M, nodeId: NodeId) {
+  predicate UpdateCompletedNoChange(m: M, m': M, nodeId: nat) {
     && StateValid(m)
     && InCombinerNoChange(m, nodeId)
     && CompleteTailValid(m)
@@ -811,7 +809,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   // { CombinerUpdatedCtail(gtail, ltail, gtail, j) ; … }
   //   store ltails[tkn] = gtail; // update replica's tail
   // { CombinerReady ; … }
-  predicate GoToCombinerReady(m: M, m': M, nodeId: NodeId) {
+  predicate GoToCombinerReady(m: M, m': M, nodeId: nat) {
     && StateValid(m)
     && InCombinerUpdateCompleteTail(m, nodeId)
     // get the combiner state
@@ -877,9 +875,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     map[],
     // global_tail: Option<nat>,
     None, // NOTE(travis): should be None
-    // replicas: map<NodeId, nrifc.NRState>,
+    // replicas: map<nat, nrifc.NRState>,
     map[], // Question: initialize for all nodes?
-    // localTails: map<NodeId, nat>
+    // localTails: map<nat, nat>
     map[], // Question: initialize for all nodes?
     // ctail: Option<nat>,                   // ctail (atomic int)
     None,
@@ -887,7 +885,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     map[],
     // localUpdates: map<RequestId, UpdateState>,
     map[],
-    // combiner: map<NodeId, CombinerState>
+    // combiner: map<nat, CombinerState>
     map[] // Question: intialize for all nodes?
     )
   }
@@ -1070,7 +1068,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
 
-  function get_local_tail(m: M, nodeId: NodeId) : nat
+  function get_local_tail(m: M, nodeId: nat) : nat
     requires Inv_WF(m)
     requires nodeId in m.localTails
     requires nodeId in m.combiner
@@ -1293,34 +1291,34 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   ensures Inv(s)
 
   datatype Step =
-    | GoToCombinerReady_Step(nodeId: NodeId)
-    | ExecLoadLtail_Step(nodeId: NodeId)
-    | ExecLoadGlobalTail_Step(nodeId: NodeId)
-    | ExecDispatchLocal_Step(nodeId: NodeId)
-    | ExecDispatchRemote_Step(nodeId: NodeId)
+    | GoToCombinerReady_Step(nodeId: nat)
+    | ExecLoadLtail_Step(nodeId: nat)
+    | ExecLoadGlobalTail_Step(nodeId: nat)
+    | ExecDispatchLocal_Step(nodeId: nat)
+    | ExecDispatchRemote_Step(nodeId: nat)
     | TransitionReadonlyReadCtail_Step(rid: RequestId)
-    | TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId)
-    | TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId)
-    | UpdateCompletedTail_Step(nodeId: NodeId)
-    | AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>)
+    | TransitionReadonlyReadyToRead_Step(nodeId: nat, rid: RequestId)
+    | TransitionReadonlyDone_Step(nodeId: nat, rid: RequestId)
+    | UpdateCompletedTail_Step(nodeId: nat)
+    | AdvanceTail_Step(nodeId: nat, request_ids: seq<RequestId>)
     | UpdateRequestDone_Step(request_id: RequestId)
-    | UpdateCompletedNoChange_Step(nodeId: NodeId)
+    | UpdateCompletedNoChange_Step(nodeId: nat)
 
 
   predicate NextStep(m: M, m': M, step: Step) {
     match step {
-      case GoToCombinerReady_Step(nodeId: NodeId) => GoToCombinerReady(m, m', nodeId)
-      case ExecLoadLtail_Step(nodeId: NodeId) => ExecLoadLtail(m, m', nodeId)
-      case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail(m, m', nodeId)
-      case ExecDispatchLocal_Step(nodeId: NodeId) => ExecDispatchLocal(m, m',nodeId)
-      case ExecDispatchRemote_Step(nodeId: NodeId) => ExecDispatchRemote(m, m',nodeId)
+      case GoToCombinerReady_Step(nodeId: nat) => GoToCombinerReady(m, m', nodeId)
+      case ExecLoadLtail_Step(nodeId: nat) => ExecLoadLtail(m, m', nodeId)
+      case ExecLoadGlobalTail_Step(nodeId: nat) => ExecLoadGlobalTail(m, m', nodeId)
+      case ExecDispatchLocal_Step(nodeId: nat) => ExecDispatchLocal(m, m',nodeId)
+      case ExecDispatchRemote_Step(nodeId: nat) => ExecDispatchRemote(m, m',nodeId)
       case TransitionReadonlyReadCtail_Step(rid: RequestId) =>  TransitionReadonlyReadCtail(m, m', rid)
-      case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyReadyToRead(m, m', nodeId, rid)
-      case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone(m, m', nodeId, rid)
-      case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail(m, m', nodeId, request_ids)
-      case UpdateCompletedTail_Step(nodeId: NodeId) => UpdateCompletedTail(m, m',nodeId)
+      case TransitionReadonlyReadyToRead_Step(nodeId: nat, rid: RequestId) => TransitionReadonlyReadyToRead(m, m', nodeId, rid)
+      case TransitionReadonlyDone_Step(nodeId: nat, rid: RequestId) => TransitionReadonlyDone(m, m', nodeId, rid)
+      case AdvanceTail_Step(nodeId: nat, request_ids: seq<RequestId>) => AdvanceTail(m, m', nodeId, request_ids)
+      case UpdateCompletedTail_Step(nodeId: nat) => UpdateCompletedTail(m, m',nodeId)
       case UpdateRequestDone_Step(request_id: RequestId) => UpdateRequestDone(m, m', request_id)
-      case UpdateCompletedNoChange_Step(nodeId: NodeId) => UpdateCompletedNoChange(m, m', nodeId)
+      case UpdateCompletedNoChange_Step(nodeId: nat) => UpdateCompletedNoChange(m, m', nodeId)
     }
   }
 
@@ -1345,7 +1343,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   }
 
-  lemma TransitionReadonlyReadyToRead_PreservesInv(m: M, m': M, nodeId: NodeId, rid: RequestId)
+  lemma TransitionReadonlyReadyToRead_PreservesInv(m: M, m': M, nodeId: nat, rid: RequestId)
     requires Inv(m)
     requires TransitionReadonlyReadyToRead(m, m', nodeId, rid)
     ensures Inv(m')
@@ -1353,7 +1351,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   }
 
-  lemma TransitionReadonlyDone_PreservesInv(m: M, m': M, nodeId: NodeId, rid: RequestId)
+  lemma TransitionReadonlyDone_PreservesInv(m: M, m': M, nodeId: nat, rid: RequestId)
     requires Inv(m)
     requires TransitionReadonlyDone(m, m', nodeId, rid)
     ensures Inv(m')
@@ -1376,7 +1374,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     }
   }
 
-  lemma AdvanceTail_PreservesInv(m: M, m': M, nodeId: NodeId, request_ids: seq<RequestId>)
+  lemma AdvanceTail_PreservesInv(m: M, m': M, nodeId: nat, request_ids: seq<RequestId>)
     requires Inv(m)
     requires AdvanceTail(m, m', nodeId, request_ids)
     ensures Inv(m')
@@ -1429,7 +1427,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
 
-  lemma ExecLoadLtail_PreservesInv(m: M, m': M, nodeId: NodeId)
+  lemma ExecLoadLtail_PreservesInv(m: M, m': M, nodeId: nat)
     requires Inv(m)
     requires ExecLoadLtail(m, m', nodeId)
     ensures Inv(m')
@@ -1438,14 +1436,14 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   }
 
 
-  lemma ExecLoadGlobalTail_PreservesInv(m: M, m': M, nodeId: NodeId)
+  lemma ExecLoadGlobalTail_PreservesInv(m: M, m': M, nodeId: nat)
     requires Inv(m)
     requires ExecLoadGlobalTail(m, m', nodeId)
     ensures Inv(m')
   {
   }
 
-  lemma ExecDispatchRemote_PreservesInv(m: M, m': M, nodeId: NodeId)
+  lemma ExecDispatchRemote_PreservesInv(m: M, m': M, nodeId: nat)
     requires Inv(m)
     requires ExecDispatchRemote(m, m',nodeId)
     ensures Inv(m')
@@ -1453,7 +1451,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   }
 
-  lemma ExecDispatchLocal_PreservesInv(m: M, m': M, nodeId: NodeId)
+  lemma ExecDispatchLocal_PreservesInv(m: M, m': M, nodeId: nat)
     requires Inv(m)
     requires ExecDispatchLocal(m, m',nodeId)
     ensures Inv(m')
@@ -1461,14 +1459,14 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   }
 
-  lemma UpdateCompletedTail_PreservesInv(m: M, m': M, nodeId: NodeId)
+  lemma UpdateCompletedTail_PreservesInv(m: M, m': M, nodeId: nat)
     requires Inv(m)
     requires UpdateCompletedTail(m, m',nodeId)
     ensures Inv(m')
   {
   }
 
-  lemma GoToCombinerReady_PreservesInv(m: M, m': M, nodeId: NodeId)
+  lemma GoToCombinerReady_PreservesInv(m: M, m': M, nodeId: nat)
     requires Inv(m)
     requires GoToCombinerReady(m, m', nodeId)
     ensures Inv(m')
@@ -1484,7 +1482,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   }
 
-  lemma UpdateCompletedNoChange_PreservesInv(m: M, m': M, nodeId: NodeId)
+  lemma UpdateCompletedNoChange_PreservesInv(m: M, m': M, nodeId: nat)
     requires Inv(m)
     requires UpdateCompletedNoChange(m, m', nodeId)
     ensures Inv(m')
@@ -1498,18 +1496,18 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     ensures Inv(m')
   {
     match step {
-      case GoToCombinerReady_Step(nodeId: NodeId) => GoToCombinerReady_PreservesInv(m, m', nodeId);
-      case ExecLoadLtail_Step(nodeId: NodeId) => ExecLoadLtail_PreservesInv(m, m', nodeId);
-      case ExecLoadGlobalTail_Step(nodeId: NodeId) => ExecLoadGlobalTail_PreservesInv(m, m', nodeId);
-      case ExecDispatchLocal_Step(nodeId: NodeId) => ExecDispatchLocal_PreservesInv(m, m',nodeId);
-      case ExecDispatchRemote_Step(nodeId: NodeId) => ExecDispatchRemote_PreservesInv(m, m',nodeId);
+      case GoToCombinerReady_Step(nodeId: nat) => GoToCombinerReady_PreservesInv(m, m', nodeId);
+      case ExecLoadLtail_Step(nodeId: nat) => ExecLoadLtail_PreservesInv(m, m', nodeId);
+      case ExecLoadGlobalTail_Step(nodeId: nat) => ExecLoadGlobalTail_PreservesInv(m, m', nodeId);
+      case ExecDispatchLocal_Step(nodeId: nat) => ExecDispatchLocal_PreservesInv(m, m',nodeId);
+      case ExecDispatchRemote_Step(nodeId: nat) => ExecDispatchRemote_PreservesInv(m, m',nodeId);
       case TransitionReadonlyReadCtail_Step(rid: RequestId) =>  TransitionReadonlyReadCtail_PreservesInv(m, m', rid);
-      case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyReadyToRead_PreservesInv(m, m', nodeId, rid);
-      case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => TransitionReadonlyDone_PreservesInv(m, m', nodeId, rid);
-      case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => AdvanceTail_PreservesInv(m, m', nodeId, request_ids);
-      case UpdateCompletedTail_Step(nodeId: NodeId) =>  UpdateCompletedTail_PreservesInv(m, m', nodeId);
+      case TransitionReadonlyReadyToRead_Step(nodeId: nat, rid: RequestId) => TransitionReadonlyReadyToRead_PreservesInv(m, m', nodeId, rid);
+      case TransitionReadonlyDone_Step(nodeId: nat, rid: RequestId) => TransitionReadonlyDone_PreservesInv(m, m', nodeId, rid);
+      case AdvanceTail_Step(nodeId: nat, request_ids: seq<RequestId>) => AdvanceTail_PreservesInv(m, m', nodeId, request_ids);
+      case UpdateCompletedTail_Step(nodeId: nat) =>  UpdateCompletedTail_PreservesInv(m, m', nodeId);
       case UpdateRequestDone_Step(request_id: RequestId) => UpdateRequestDone_PreservesInv(m, m', request_id);
-      case UpdateCompletedNoChange_Step(nodeId: NodeId) => UpdateCompletedNoChange_PreservesInv(m, m', nodeId);
+      case UpdateCompletedNoChange_Step(nodeId: nat) => UpdateCompletedNoChange_PreservesInv(m, m', nodeId);
     }
   }
 
@@ -1522,7 +1520,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     NextStep_PreservesInv(m, m', step);
   }
 
-  lemma GoToCombinerReady_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  lemma GoToCombinerReady_Monotonic(m: M, m': M, p: M, nodeId: nat)
   //requires Inv(dot(m, p))
   requires dot(m, p) != Fail
   requires GoToCombinerReady(m, m', nodeId)
@@ -1530,7 +1528,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
   }
 
-  lemma ExecLoadLtail_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  lemma ExecLoadLtail_Monotonic(m: M, m': M, p: M, nodeId: nat)
   //requires Inv(dot(m, p))
   requires dot(m, p) != Fail
   requires ExecLoadLtail(m, m', nodeId)
@@ -1538,7 +1536,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
   }
 
-  lemma ExecLoadGlobalTail_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  lemma ExecLoadGlobalTail_Monotonic(m: M, m': M, p: M, nodeId: nat)
   //requires Inv(dot(m, p))
   requires dot(m, p) != Fail
   requires ExecLoadGlobalTail(m, m', nodeId)
@@ -1546,7 +1544,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
   }
 
-  lemma ExecDispatchLocal_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  lemma ExecDispatchLocal_Monotonic(m: M, m': M, p: M, nodeId: nat)
   //requires Inv(dot(m, p))
   requires dot(m, p) != Fail
   requires ExecDispatchLocal(m, m', nodeId)
@@ -1563,7 +1561,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     */
   }
 
-  lemma ExecDispatchRemote_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  lemma ExecDispatchRemote_Monotonic(m: M, m': M, p: M, nodeId: nat)
   //requires Inv(dot(m, p))
   requires dot(m, p) != Fail
   requires ExecDispatchRemote(m, m', nodeId)
@@ -1579,7 +1577,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
   }
 
-  lemma TransitionReadonlyReadyToRead_Monotonic(m: M, m': M, p: M, nodeId: NodeId, rid: RequestId)
+  lemma TransitionReadonlyReadyToRead_Monotonic(m: M, m': M, p: M, nodeId: nat, rid: RequestId)
   //requires Inv(dot(m, p))
   requires dot(m, p) != Fail
   requires TransitionReadonlyReadyToRead(m, m', nodeId, rid)
@@ -1587,7 +1585,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
   }
 
-  lemma TransitionReadonlyDone_Monotonic(m: M, m': M, p: M, nodeId: NodeId, rid: RequestId)
+  lemma TransitionReadonlyDone_Monotonic(m: M, m': M, p: M, nodeId: nat, rid: RequestId)
   //requires Inv(dot(m, p))
   requires dot(m, p) != Fail
   requires TransitionReadonlyDone(m, m', nodeId, rid)
@@ -1595,7 +1593,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
   }
 
-  lemma UpdateCompletedTail_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  lemma UpdateCompletedTail_Monotonic(m: M, m': M, p: M, nodeId: nat)
   //requires Inv(dot(m, p))
   requires dot(m, p) != Fail
   requires UpdateCompletedTail(m, m', nodeId)
@@ -1603,7 +1601,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
   }
 
-  lemma AdvanceTail_Monotonic(m: M, m': M, p: M, nodeId: NodeId, request_ids: seq<RequestId>)
+  lemma AdvanceTail_Monotonic(m: M, m': M, p: M, nodeId: nat, request_ids: seq<RequestId>)
   requires Inv_WF(dot(m, p))
   requires Inv_LogEntriesGlobalTail(dot(m, p))
   //requires Inv(dot(m, p))
@@ -1693,7 +1691,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
   }
 
-  lemma UpdateCompletedNoChange_Monotonic(m: M, m': M, p: M, nodeId: NodeId)
+  lemma UpdateCompletedNoChange_Monotonic(m: M, m': M, p: M, nodeId: nat)
   //requires Inv(dot(m, p))
   requires dot(m, p) != Fail
   requires UpdateCompletedNoChange(m, m', nodeId)
@@ -1709,23 +1707,23 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
     var step :| NextStep(m, m', step);
     match step {
-      case GoToCombinerReady_Step(nodeId: NodeId) => {
+      case GoToCombinerReady_Step(nodeId: nat) => {
         GoToCombinerReady_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case ExecLoadLtail_Step(nodeId: NodeId) => {
+      case ExecLoadLtail_Step(nodeId: nat) => {
         ExecLoadLtail_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case ExecLoadGlobalTail_Step(nodeId: NodeId) => {
+      case ExecLoadGlobalTail_Step(nodeId: nat) => {
         ExecLoadGlobalTail_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case ExecDispatchLocal_Step(nodeId: NodeId) => {
+      case ExecDispatchLocal_Step(nodeId: nat) => {
         ExecDispatchLocal_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case ExecDispatchRemote_Step(nodeId: NodeId) => {
+      case ExecDispatchRemote_Step(nodeId: nat) => {
         ExecDispatchRemote_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
@@ -1733,19 +1731,19 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
         TransitionReadonlyReadCtail_Monotonic(m, m', p, rid);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case TransitionReadonlyReadyToRead_Step(nodeId: NodeId, rid: RequestId) => {
+      case TransitionReadonlyReadyToRead_Step(nodeId: nat, rid: RequestId) => {
         TransitionReadonlyReadyToRead_Monotonic(m, m', p, nodeId, rid);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case TransitionReadonlyDone_Step(nodeId: NodeId, rid: RequestId) => {
+      case TransitionReadonlyDone_Step(nodeId: nat, rid: RequestId) => {
         TransitionReadonlyDone_Monotonic(m, m', p, nodeId, rid);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case AdvanceTail_Step(nodeId: NodeId, request_ids: seq<RequestId>) => {
+      case AdvanceTail_Step(nodeId: nat, request_ids: seq<RequestId>) => {
         AdvanceTail_Monotonic(m, m', p, nodeId, request_ids);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case UpdateCompletedTail_Step(nodeId: NodeId) => {
+      case UpdateCompletedTail_Step(nodeId: nat) => {
         UpdateCompletedTail_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
@@ -1753,7 +1751,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
         UpdateRequestDone_Monotonic(m, m', p, request_id);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
-      case UpdateCompletedNoChange_Step(nodeId: NodeId) => {
+      case UpdateCompletedNoChange_Step(nodeId: nat) => {
         UpdateCompletedNoChange_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }

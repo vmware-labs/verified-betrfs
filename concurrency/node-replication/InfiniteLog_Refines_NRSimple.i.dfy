@@ -460,7 +460,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     }
   }
 
-  lemma GoToCombinerReady_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)
+  lemma GoToCombinerReady_Refines(s: A.Variables, s': A.Variables, nodeId: nat)
   requires IL.GoToCombinerReady(s, s', nodeId)
   requires Inv(s)
   requires Inv(s')
@@ -469,7 +469,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.Stutter_Step);
   }
 
-  lemma ExecLoadLtail_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)
+  lemma ExecLoadLtail_Refines(s: A.Variables, s': A.Variables, nodeId: nat)
   requires IL.ExecLoadLtail(s, s', nodeId)
   requires Inv(s)
   requires Inv(s')
@@ -478,7 +478,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.Stutter_Step);
   }
 
-  lemma ExecLoadGlobalTail_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)
+  lemma ExecLoadGlobalTail_Refines(s: A.Variables, s': A.Variables, nodeId: nat)
   requires IL.ExecLoadGlobalTail(s, s', nodeId)
   requires Inv(s)
   requires Inv(s')
@@ -487,7 +487,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.Stutter_Step);
   }
 
-  lemma ExecDispatchLocal_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)
+  lemma ExecDispatchLocal_Refines(s: A.Variables, s': A.Variables, nodeId: nat)
   requires IL.ExecDispatchLocal(s, s', nodeId)
   requires Inv(s)
   requires Inv(s')
@@ -503,7 +503,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.Stutter_Step);
   }
 
-  lemma ExecDispatchRemote_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)
+  lemma ExecDispatchRemote_Refines(s: A.Variables, s': A.Variables, nodeId: nat)
   requires IL.ExecDispatchRemote(s, s', nodeId)
   requires Inv(s)
   requires Inv(s')
@@ -534,7 +534,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.ReadCtail_Step(rid));
   }
 
-  lemma TransitionReadonlyReadyToRead_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId, rid: RequestId)
+  lemma TransitionReadonlyReadyToRead_Refines(s: A.Variables, s': A.Variables, nodeId: nat, rid: RequestId)
   requires IL.TransitionReadonlyReadyToRead(s, s', nodeId, rid)
   requires Inv(s)
   requires Inv(s')
@@ -559,7 +559,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.Stutter_Step);
   }
 
-  lemma TransitionReadonlyDone_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId, rid: RequestId)
+  lemma TransitionReadonlyDone_Refines(s: A.Variables, s': A.Variables, nodeId: nat, rid: RequestId)
   requires IL.TransitionReadonlyDone(s, s', nodeId, rid)
   requires Inv(s)
   requires Inv(s')
@@ -571,7 +571,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp,  B.Stutter_Step);
   }
 
-  lemma AdvanceTail_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId, request_ids: seq<RequestId>)
+  lemma AdvanceTail_Refines(s: A.Variables, s': A.Variables, nodeId: nat, request_ids: seq<RequestId>)
    requires IL.AdvanceTail(s, s', nodeId, request_ids)
    requires Inv(s)
    requires Inv(s')
@@ -651,7 +651,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     }
   }
 
-  lemma UpdateCompletedTail_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)
+  lemma UpdateCompletedTail_Refines(s: A.Variables, s': A.Variables, nodeId: nat)
   requires IL.UpdateCompletedTail(s, s', nodeId)
   requires Inv(s)
   requires Inv(s')
@@ -666,7 +666,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.IncreaseCtail_Step(new_ctail));
   }
 
-  lemma UpdateCompletedNoChange_Refines(s: A.Variables, s': A.Variables, nodeId: IL.NodeId)
+  lemma UpdateCompletedNoChange_Refines(s: A.Variables, s': A.Variables, nodeId: nat)
   requires IL.UpdateCompletedNoChange(s, s', nodeId)
   requires Inv(s)
   requires Inv(s')
