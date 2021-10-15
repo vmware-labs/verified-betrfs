@@ -16,7 +16,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   // This is a way of dividing up the state into the pieces it will be convenient to
   // manipulate in our program.
 
-  datatype {:glinear_fold} Readonly = Readonly(rid: RequestId, rs: ReadonlyState)
+  datatype {:glinear_fold} Readonly = Readonly(ghost rid: RequestId, ghost rs: ReadonlyState)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -25,7 +25,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} Update = Update(rid: RequestId, us: UpdateState)
+  datatype {:glinear_fold} Update = Update(ghost rid: RequestId, ghost us: UpdateState)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -34,7 +34,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} Ctail = Ctail(ctail: nat)
+  datatype {:glinear_fold} Ctail = Ctail(ghost ctail: nat)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -43,7 +43,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} LocalTail = LocalTail(nodeId: nat, localTail: nat)
+  datatype {:glinear_fold} LocalTail = LocalTail(ghost nodeId: nat, ghost localTail: nat)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -52,7 +52,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} GlobalTail = GlobalTail(tail: nat)
+  datatype {:glinear_fold} GlobalTail = GlobalTail(ghost tail: nat)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -61,7 +61,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} Replica = Replica(nodeId: nat, state: nrifc.NRState)
+  datatype {:glinear_fold} Replica = Replica(ghost nodeId: nat, ghost state: nrifc.NRState)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -70,7 +70,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} CombinerToken = CombinerToken(nodeId: nat, state: CombinerState)
+  datatype {:glinear_fold} CombinerToken = CombinerToken(ghost nodeId: nat, ghost state: CombinerState)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),
@@ -79,7 +79,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     }
   }
 
-  datatype {:glinear_fold} Log = Log(idx: nat, op: nrifc.UpdateOp, node_id: nat)
+  datatype {:glinear_fold} Log = Log(ghost idx: nat, ghost op: nrifc.UpdateOp, ghost node_id: nat)
   {
     function defn(): ILT.Token {
       ILT.Tokens.Token(loc(),

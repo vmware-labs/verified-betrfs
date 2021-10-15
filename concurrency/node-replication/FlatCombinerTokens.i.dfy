@@ -22,7 +22,7 @@ module FlatCombinerTokens {
   datatype FCCombinerState =
     // no 'idle' state - just use Collecting(0, [])
     | FCCombinerCollecting(ghost idx: nat, ghost elems: seq<Elem>)
-    | FCCombinerResponding(ghost idx: nat, ghost elems: seq<Elem>, elem_idx: nat)
+    | FCCombinerResponding(ghost idx: nat, ghost elems: seq<Elem>, ghost elem_idx: nat)
 
   datatype FCCombiner = FCCombiner(ghost loc: Loc, ghost state: FCCombinerState)
 
