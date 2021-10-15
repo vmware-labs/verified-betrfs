@@ -152,6 +152,25 @@ module Impl(nrifc: NRIfc) {
   }
 
   /*
+   * Per-thread
+   */
+
+  linear datatype ThreadOwnedContext = ThreadOwnedContext(
+    tid: uint64,
+    glinear fc_client: FCClient,
+    glinear cell_contents: CellContents<OpResponse>)
+  {
+    predicate WF(node: Node)
+    {
+      && node.WF()
+      && fc_client == FCClient(node.fc_loc, tid as nat, FCClientIdle)
+      && 0 <= tid < MAX_THREADS_PER_REPLICA
+      && cell_contents.cell == node.contexts[tid as nat].cell
+    }
+  }
+
+
+  /*
    * Central cyclic buffer stuff
    */
 
@@ -607,6 +626,89 @@ module Impl(nrifc: NRIfc) {
 //        has_ops[i] = 0;
 //      }
 //    }
+
+
+
+  method do_update(shared nr: NR, shared node: Node, op: nrifc.UpdateOp,
+      glinear ticket: Update, linear ctx: ThreadOwnedContext)
+  returns (result: nrifc.ReturnType, glinear stub: Update, linear ctx': ThreadOwnedContext)
+  requires nr.WF()
+  requires node.WF()
+  requires ctx.WF(node)
+  requires ticket.us == UpdateInit(op)
+  ensures stub.us.UpdateDone? 
+  ensures stub.rid == ticket.rid
+  ensures stub.us.ret == result
+  ensures ctx'.WF(node)
+  decreases * // method is not guaranteed to terminate
+  {
+    linear var ThreadOwnedContext(tid, fc_client, cell_contents) := ctx;
+
+    var opr := read_cell(lseq_peek(node.contexts, tid).cell, cell_contents);
+    opr := opr.(op := op);
+    write_cell(lseq_peek(node.contexts, tid).cell, inout cell_contents, opr);
+
+    assert node.contexts[tid as int].WF(tid as int, node.fc_loc);
+
+    atomic_block var _ := execute_atomic_store(lseq_peek(node.contexts, tid).atomic, 1)
+    {
+      ghost_acquire ctx_g;
+      glinear var ContextGhost(contents_none, fc_slot, update_none) := ctx_g;
+      fc_client, fc_slot := fc_send(fc_client, fc_slot, ticket.rid);
+      dispose_glnone(contents_none);
+      dispose_glnone(update_none);
+      ctx_g := ContextGhost(glSome(cell_contents), fc_slot, glSome(ticket));
+      ghost_release ctx_g;
+    }
+
+    assume tid > 0; // TODO
+    try_combine(nr, node, tid);
+
+    glinear var cell_contents_opt: glOption<CellContents<OpResponse>> := glNone;
+    glinear var stub_opt: glOption<Update> := glNone;
+
+    var done := false;
+    while !done
+    invariant !done ==>
+      && fc_client == FCClient(node.fc_loc, tid as int, FCClientWaiting(ticket.rid))
+    invariant done ==>
+      && cell_contents_opt.glSome?
+      && stub_opt.glSome?
+      && cell_contents_opt.value.cell == node.contexts[tid as nat].cell
+      && stub_opt.value.us.UpdateDone? 
+      && stub_opt.value.rid == ticket.rid
+      && stub_opt.value.us.ret == result
+      && fc_client == FCClient(node.fc_loc, tid as int, FCClientIdle)
+    decreases *
+    {
+      atomic_block var aval := execute_atomic_load(lseq_peek(node.contexts, tid).atomic)
+      {
+        ghost_acquire ctx_g;
+        if aval == 0 {
+          glinear var ContextGhost(cell_contents_opt', fc_slot, stub_opt') := ctx_g;
+          dispose_anything(cell_contents_opt);
+          dispose_anything(stub_opt);
+          cell_contents_opt := cell_contents_opt';
+          stub_opt := stub_opt';
+          fc_client, fc_slot := fc_recv(fc_client, fc_slot, ticket.rid);
+          ctx_g := ContextGhost(glNone, fc_slot, glNone);
+        }
+        ghost_release ctx_g;
+      }
+
+      if aval == 0 {
+        opr := read_cell(lseq_peek(node.contexts, tid).cell, cell_contents_opt.value);
+        result := opr.ret;
+        done := true;
+      } else {
+        SpinLoopHint();
+      }
+    }
+
+    cell_contents := unwrap_value(cell_contents_opt);
+    stub := unwrap_value(stub_opt);
+    ctx' := ThreadOwnedContext(tid, fc_client, cell_contents);
+  }
 
   method do_read(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp,
       glinear ticket: Readonly)

@@ -38,20 +38,6 @@ module Init(nrifc: NRIfc) {
     }
   }
 
-  linear datatype ThreadOwnedContext = ThreadOwnedContext(
-    tid: uint64,
-    glinear fc_client: FCClient,
-    glinear cell_contents: CellContents<OpResponse>)
-  {
-    predicate WF(node: Node)
-    {
-      && node.WF()
-      && fc_client == FCClient(node.fc_loc, tid as nat, FCClientIdle)
-      && 0 <= tid < MAX_THREADS_PER_REPLICA
-      && cell_contents.cell == node.contexts[tid as nat].cell
-    }
-  }
-
   method initNode(linear nct: NodeCreationToken)
   returns (linear node: Node, linear owned_contexts: lseq<ThreadOwnedContext>)
   requires nct.WF()

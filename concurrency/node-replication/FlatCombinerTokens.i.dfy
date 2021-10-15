@@ -108,4 +108,28 @@ module FlatCombinerTokens {
   requires comb.state.FCCombinerResponding?
   requires comb.state.idx == MAX_THREADS_PER_REPLICA as int
   ensures comb' == FCCombiner(comb.loc, FCCombinerCollecting(0, []))
+
+  // Ops for the requester
+
+  glinear method fc_send(glinear fc_client: FCClient, glinear fc_slot: FCSlot, ghost rid: RequestId)
+  returns (glinear fc_client': FCClient, glinear fc_slot': FCSlot)
+  requires fc_client.loc == fc_slot.loc
+  requires fc_client.tid == fc_slot.tid
+  requires fc_client.state.FCClientIdle?
+  ensures fc_slot.state.FCEmpty?
+  ensures fc_client' == fc_client.(state := FCClientWaiting(rid))
+  ensures fc_slot' == fc_slot.(state := FCRequest(rid))
+
+  glinear method fc_recv(glinear fc_client: FCClient, glinear fc_slot: FCSlot, ghost rid: RequestId)
+  returns (glinear fc_client': FCClient, glinear fc_slot': FCSlot)
+  requires fc_client.loc == fc_slot.loc
+  requires fc_client.tid == fc_slot.tid
+  requires fc_client.state.FCClientWaiting?
+  requires !fc_slot.state.FCRequest?
+  requires !fc_slot.state.FCInProgress?
+  ensures fc_slot.state.FCResponse?
+  ensures fc_slot.state.rid == fc_client.state.rid
+  ensures fc_client' == fc_client.(state := FCClientIdle)
+  ensures fc_slot' == fc_slot.(state := FCEmpty)
+
 }
