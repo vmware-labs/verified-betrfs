@@ -279,47 +279,24 @@ module Impl(nrifc: NRIfc) {
     while i < 5
     invariant 0 <= i <= 5
     {
-      atomic_block var combiner_lock := execute_atomic_load(node.combiner_lock) {
-        ghost_acquire ghost_context;
-        assert ghost_context == UnitGhostType;
-        ghost_release ghost_context;
-      }
+      atomic_block var combiner_lock := execute_atomic_load(node.combiner_lock) {}
       if combiner_lock != 0 {
         return;
       }
       i := i + 1;
     }
 
-    atomic_block var acquired := execute_atomic_compare_and_set_weak(node.combiner_lock, 0, tid) {
-      ghost_acquire ghost_context;
-      assert ghost_context == UnitGhostType;
-      
-      /*ghost var gacquired := acquired;
-      if gacquired {
-        assert atomic_inv(node.combiner_lock, tid, UnitGhostType);
-      }
-      else {
-        assert atomic_inv(node.combiner_lock, old_value, UnitGhostType);
-      }*/
-
-      assert atomic_inv(node.combiner_lock, new_value, UnitGhostType);
-      ghost_release ghost_context;
-    }
-
+    atomic_block var acquired := execute_atomic_compare_and_set_weak(node.combiner_lock, 0, tid) {}
     if !acquired {
       return;
     }
 
-    // combine(nr, node, tid); // TODO
+    //linear var ops := seq[];
+    //linear var responses := seq[];
+    //glinear var flatCombiner = FCCombiner;
+    //combine(nr, ops, responses, flatCombiner);
 
-    atomic_block var _ := execute_atomic_store(node.combiner_lock, 0) {
-        ghost_acquire ghost_context;
-        //glinear var ugg := ghost_context;
-        
-        //ghost_context := ugg;
-        //assert ghost_context == UnitGhostType;
-        ghost_release ghost_context;
-    }
+    atomic_block var _ := execute_atomic_store(node.combiner_lock, 0) {}
   }
 
   method combine(shared nr: NR, shared node: Node,
@@ -600,28 +577,6 @@ module Impl(nrifc: NRIfc) {
     flatCombiner' := combiner_goto_collecting(flatCombiner');
   }
 
-    // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L631
-    //    fn combine(&self) {
-    //        let mut buffer = self.buffer.borrow_mut();
-    //        let mut operations = self.inflight.borrow_mut();
-    //        let mut results = self.result.borrow_mut();
-    //
-    //        buffer.clear();
-    //        results.clear();
-    //
-    //        let next = self.next.load(Ordering::Relaxed);
-    //
-    //        // Collect operations from each thread registered with this replica.
-    //        for i in 1..next {
-    //            operations[i - 1] = self.contexts[i - 1].ops(&mut buffer);
-    //        }
-
-//    atomic_block var next := execute_atomic_load(node.next) {}
-//
-//    linear var operations: lseq<uint64> := lseq_alloc<uint64>(MAX_THREADS_PER_REPLICA);
-//    linear var buffer: lseq<nrifc.UpdateOp> := lseq_alloc<nrifc.UpdateOp>(MAX_THREADS_PER_REPLICA);
-//    linear var results: lseq<nrifc.ReturnType> := lseq_alloc<nrifc.ReturnType>(MAX_THREADS_PER_REPLICA);
-
 /* use something like this for initializing the `lseq` stuff:
 
   method init_batch_busy()
@@ -645,7 +600,6 @@ module Impl(nrifc: NRIfc) {
     }
   }
 */
-
 //    var i := 0;
 //    var j := 0;
 //    while i < next-1 {
@@ -658,52 +612,6 @@ module Impl(nrifc: NRIfc) {
 //        has_ops[i] = 0;
 //      }
 //    }
-
-
-    //
-    //        // Append all collected operations into the shared log. We pass a closure
-    //        // in here because operations on the log might need to be consumed for GC.
-    //        {
-    //            let mut data = self.data.write(next);
-    //            let f = |o: <D as Dispatch>::WriteOperation, i: usize| {
-    //                #[cfg(not(loom))]
-    //                let resp = data.dispatch_mut(o);
-    //                #[cfg(loom)]
-    //                let resp = data.dispatch_mut(o);
-    //                if i == self.idx {
-    //                    results.push(resp);
-    //                }
-    //            };
-    //            self.slog.append(&buffer, self.idx, f);
-    //        }
-    //
-    //        // Execute any operations on the shared log against this replica.
-    //        {
-    //            let mut data = self.data.write(next);
-    //            let mut f = |o: <D as Dispatch>::WriteOperation, i: usize| {
-    //                let resp = data.dispatch_mut(o);
-    //                if i == self.idx {
-    //                    results.push(resp)
-    //                };
-    //            };
-    //            self.slog.exec(self.idx, &mut f);
-    //        }
-    //
-    //        // Return/Enqueue responses back into the appropriate thread context(s).
-    //        let (mut s, mut f) = (0, 0);
-    //        for i in 1..next {
-    //            if operations[i - 1] == 0 {
-    //                continue;
-    //            };
-    //
-    //            f += operations[i - 1];
-    //            self.contexts[i - 1].enqueue_resps(&results[s..f]);
-    //            s += operations[i - 1];
-    //            operations[i - 1] = 0;
-    //        }
-    //    }
-
-  //}
 
   method do_read(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp,
       glinear ticket: Readonly)
