@@ -120,6 +120,17 @@ module Impl(nrifc: NRIfc) {
   glinear datatype CombinerLockGhost = CombinerLockGhost(glinear tid: nat)
 
   linear datatype Node = Node(
+    // TODO: This should protect the combiner state (cells etc.)
+    // --> e.g., this one glinear flatCombiner: FCCombiner
+    // 
+    // --> linear cell concept to protect responses in combiner()
+    // linear responses: seq<nrifc.ReturnType>,
+    // linear responses': seq<nrifc.ReturnType>,
+    //
+    // linear cell: puts ghost component behind lock, 
+    // physical component is just some memory (som address)
+    //
+    // add member: linearcell<responses>
     linear combiner_lock: Atomic<uint64, UnitGhostType>,
     linear replica: RwLock,
     //linear context: map<Tid, nrifc.UpdateOp>,
