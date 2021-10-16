@@ -19,12 +19,19 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     | AdvHeadHeadLoaded(next: NodeId, head : nat)
     | AdvHeadMinLtail(next: NodeId, head: nat, mintail: nat, idx: NodeId)
 
-  datatype AdvanceTailState = AdvanceTailState(obvserve_head: nat)
+  // not sure fi that one s needed?
+  //datatype AdvanceTailState = AdvanceTailState(obvserve_head: nat)
 
   datatype AppendState =
     | AppendIdle
     | AppendAdvanceTail(ops: seq<nrifc.UpdateOp>, tail: nat)
     | AppendWriteLogEntry(ops: seq<nrifc.UpdateOp>, tail: nat, idx: nat)
+
+
+  datatype ReaderState =
+    | ReaderIdle
+    | ReaderLoadTail(ltail: nat)
+    | ReaderReadEntries(ltail: nat, gtail:nat)
 
 
   // define the nodeid type
@@ -71,7 +78,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
       // TODO: could we have multiple threads advancing the head, we assume so
       advanceHead: map<NodeId, AdvanceHeadState>,
-      advanceTail: map<NodeId, AdvanceTailState>,
+      // advanceTail: map<NodeId, AdvanceTailState>,
+      readerState: map<NodeId, ReaderState>,
       appendState: map<NodeId, AppendState>
     )
 
@@ -87,6 +95,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   /////////////////////////////////////////////////////////////////////////////
 
   function Index(idx: nat, size: nat) : nat {
+    // logical & (self.size - 1)
     idx % size
   }
 
@@ -214,21 +223,176 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
 
   /////////////////////////////////////////////////////////////////////////////
+  // Reader Guards
+  /////////////////////////////////////////////////////////////////////////////
+
+  predicate ReaderInIdle(m: M, nodeId: NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.readerState
+    && m.readerState[nodeId].ReaderIdle?
+  }
+
+  predicate ReaderInLoadTail(m: M, nodeId: NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.readerState
+    && m.readerState[nodeId].ReaderLoadTail?
+  }
+
+  predicate ReaderInReadEntries(m: M, nodeId: NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.readerState
+    && m.readerState[nodeId].ReaderReadEntries?
+    && m.readerState[nodeId].ltail != m.readerState[nodeId].gtail
+  }
+
+  predicate ReaderInReadEntriesDone(m: M, nodeId: NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.readerState
+    && nodeId in m.localTails
+    && m.readerState[nodeId].ReaderReadEntries?
+    && m.readerState[nodeId].ltail == m.readerState[nodeId].gtail
+    && m.readerState[nodeId].ltail != m.localTails[nodeId]
+  }
+
+  predicate ReaderInReadEntriesDoneNoUpdate(m: M, nodeId: NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.readerState
+    && nodeId in m.localTails
+    && m.readerState[nodeId].ReaderReadEntries?
+    && m.readerState[nodeId].ltail == m.readerState[nodeId].gtail
+    && m.readerState[nodeId].ltail == m.localTails[nodeId]
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
   // Reading Transitions
   /////////////////////////////////////////////////////////////////////////////
 
-  //
-  //
-  //
-  //
+  // { ReaderIdle }
+  //   let ltail = self.ltails[idx - 1].load(Ordering::Relaxed);
+  // { ReaderLoadTail(ltail) }
+  predicate TransitionReaderLoadTail(m: M, m': M, nodeId: NodeId)
+  {
+    && StateValid(m)
+    && ReaderInIdle(m, nodeId)
+
+    // get the local tail
+    && var ltail := m.localTails[nodeId];
+
+    // construct the new state
+    && var new_st := ReaderLoadTail(ltail);
+
+    // the state transition
+    && m' == m.(readerState := m.readerState[ nodeId := new_st ])
+  }
+
+
+  // { ReaderLoadTail(ltail) }
+  //   let gtail = self.tail.load(Ordering::Relaxed);
+  // { ReaderReadEntries(ltail, gtail) }
+  predicate TransitionReaderReadEntries(m: M, m': M, nodeId: NodeId)
+  {
+    && StateValid(m)
+    && ReaderInLoadTail(m, nodeId)
+
+    // the old state
+    && var st := m.readerState[nodeId];
+
+    // get the local tail
+    && var gtail := m.tail.value;
+
+    // construct the new state
+    && var new_st := ReaderReadEntries(ltail, gtail);
+
+    // the state transition
+    && m' == m.(readerState := m.readerState[ nodeId := new_st ])
+  }
+
+  // { ReaderReadEntries(ltail, gtail) }
+  // { (*e).alivef.load(Ordering::Acquire) == self.lmasks[idx - 1].get() }
+  //   d((*e).operation.as_ref().unwrap().clone(), (*e).replica)
+  //   if self.index(i) == self.size - 1 { self.lmasks[idx - 1].set(!self.lmasks[idx - 1].get()); }
+  // { ReaderReadEntries(ltail + 1, gtail)  }
+  predicate TransitionReaderReadEntry(m: M, m': M, nodeId: NodeId)
+  {
+    && StateValid(m)
+    && ReaderInReadEntries(m, nodeId)
+
+    // the old state
+    && var st := m.readerState[nodeId];
+
+    && var entry := m.slog[st.ltail];
+    // TODO: do something
+
+    // update the new lmask if needed
+    && var m := m.lmasks[nodeId];
+    && var new_mask := if Index(st.ltail, m.size) == m.size - 1 then !m else m;
+
+    // construct the new state
+    && var new_st := ReaderReadEntries(st.ltail + 1, st.gtail);
+
+    // the state transition
+    && m' == m.(readerState := m.readerState[ nodeId := new_st ])
+              .(lmasks := m.lmasks[nodeId := new_mask])
+
+  }
+
+
+  // { ReaderReadEntries(ltail, gtail)}
+  // { gtail == ltail } && { m.localTails[nodeId] == ltail }
+  //   if ltail == gtail { return; }
+  // { ReaderIdle }
+  predicate TransitionReaderIdleNoUpdates(m: M, m': M, nodeId: NodeId)
+  {
+    && StateValid(m)
+    && ReaderInReadEntriesDoneNoUpdate(m, nodeId)
+
+    // construct the new state
+    && var new_st := ReaderIdle;
+
+    // the state transition
+    && m' == m.(readerState := m.readerState[ nodeId := new_st ])
+  }
+
+
+
+  // { ReaderReadEntries(ltail, gtail)}
+  // { gtail == ltail } && { m.localTails[nodeId] != ltail }
+  //    self.ltails[idx - 1].store(gtail, Ordering::Relaxed);
+  // { ReaderIdle }
+ predicate ReaderInReadEntriesDone(m: M, m': M, nodeId: NodeId)
+  {
+    && StateValid(m)
+    && ReaderInReadEntries(m, nodeId)
+
+    // the old state
+    && var st := m.readerState[nodeId];
+
+    // get the local tail
+    && var gtail := m.tail.value;
+
+    // construct the new state
+    && var new_st := ReaderIdle;
+
+    // the new ltail si the gtail
+    && var new_ltail := st.gtail;
+
+    // the state transition
+    && m' == m.(readerState := m.readerState[ nodeId := new_st ])
+              .(ltails := m.ltails[nodeId := new_ltail])
+  }
+
+
 
   /////////////////////////////////////////////////////////////////////////////
   // Append Transitions
   /////////////////////////////////////////////////////////////////////////////
 
   // pub fn append<F: FnMut(T, usize)>(&self, ops: &[T], idx: usize, mut s: F)
-
-
 
 
   // { AppendIdle }
