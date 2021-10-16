@@ -6,6 +6,7 @@ include "../framework/Atomic.s.dfy"
 include "../framework/ThreadUtils.s.dfy"
 include "../framework/Ptrs.s.dfy"
 include "../framework/GlinearMap.s.dfy"
+include "../framework/Cells.s.dfy"
 include "Runtime.i.dfy"
 include "CyclicBufferTokens.i.dfy"
 include "FlatCombinerTokens.i.dfy"
@@ -14,6 +15,7 @@ module NodeReplica(nrifc: NRIfc) refines ContentsTypeMod {
   import opened ILT = InfiniteLogTokens(nrifc)    // Replica, CombinerToken
   import opened IL = InfiniteLogSSM(nrifc)        // NodeId
   import opened CBT = CyclicBufferTokens(nrifc)   // Reader
+  import opened LC = LinearCells
 
   linear datatype NodeReplica = NodeReplica(
     linear actual_replica: nrifc.DataStructureType,
@@ -117,7 +119,7 @@ module Impl(nrifc: NRIfc) {
   }
 
   glinear datatype UnitGhostType = UnitGhostType
-  glinear datatype CombinerLockGhost = CombinerLockGhost(glinear tid: nat)
+  glinear datatype CombinerLock = CombinerLock
 
   linear datatype Node = Node(
     // TODO: This should protect the combiner state (cells etc.)
@@ -131,7 +133,10 @@ module Impl(nrifc: NRIfc) {
     // physical component is just some memory (som address)
     //
     // add member: linearcell<responses>
-    linear combiner_lock: Atomic<uint64, UnitGhostType>,
+
+    linear ops: LC.LinearCell<seq<nrifc.UpdateOp>>,
+    linear responses: LC.LinearCell<seq<nrifc.ReturnType>>,
+    linear combiner_lock: Atomic<uint64, CombinerLock>,
     linear replica: RwLock,
     //linear context: map<Tid, nrifc.UpdateOp>,
     linear contexts: lseq<Context>, // TODO cache-line padded?
@@ -146,6 +151,7 @@ module Impl(nrifc: NRIfc) {
       && 0 <= nodeId as int < NUM_REPLICAS as int
       && |contexts| == MAX_THREADS_PER_REPLICA as int
       && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i, fc_loc))
+      // TODO(gerd): `combiner_lock` needs a better invariant...
       && (forall v, g :: atomic_inv(combiner_lock, v, g) <==> true)
       && replica.InternalInv()
     }
@@ -284,12 +290,19 @@ module Impl(nrifc: NRIfc) {
     is_synced := local_tail >= ctail;
   }
 
+  glinear method perform_TransitionCombinerLockAcquired(
+    glinear combinerLock: CombinerLock)
+  returns (glinear combinerLock': CombinerLock, glinear flatCombiner: FCCombiner)
+  ensures flatCombiner.state == FCCombinerCollecting(0, [])
+
   // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L584
   method try_combine(shared nr: NR, shared node: Node, tid: uint64)
   requires tid > 0
   requires nr.WF()
   requires node.WF()
+  decreases *
   {
+    // Check `combiner_lock` a few times until it appears to be free...
     var i: uint64 := 0;
     while i < 5
     invariant 0 <= i <= 5
@@ -301,17 +314,48 @@ module Impl(nrifc: NRIfc) {
       i := i + 1;
     }
 
-    atomic_block var acquired := execute_atomic_compare_and_set_weak(node.combiner_lock, 0, tid) {}
-    if !acquired {
-      return;
+    glinear var fcStateOpt: glOption<FCCombiner>;
+    // Try and acquire the lock...
+    atomic_block var success := execute_atomic_compare_and_set_weak(node.combiner_lock, 0, tid) {
+      ghost_acquire contents;
+      if success {
+        assert contents == CombinerLock;
+        glinear var fc;
+        contents, fc := perform_TransitionCombinerLockAcquired(contents);
+        fcStateOpt := glSome(fc);
+      } else {
+        fcStateOpt := glNone;
+      }
+      ghost_release contents;
     }
 
-    //linear var ops := seq[];
-    //linear var responses := seq[];
-    //glinear var flatCombiner = FCCombiner;
-    //combine(nr, ops, responses, flatCombiner);
+    if success {
+      assert fcStateOpt.glSome?;
+/*
+      glinear var gops;
+      //glinear var gresponses;
 
-    atomic_block var _ := execute_atomic_store(node.combiner_lock, 0) {}
+      linear var ops;
+
+      ops, gops := LC.take_lcell(node.ops, gops);
+      linear var responses, gresponses' := LC.take_lcell(node.responses, gresponses);
+      linear var ops', responses', fcStateOpt' := combine(nr, node, ops, responses, fcStateOpt.value);
+
+      // Release combiner_lock
+      atomic_block var _ := execute_atomic_store(node.combiner_lock, 0) {
+        ghost_acquire contents;
+        contents := fcStateOpt';
+        ghost_release contents;
+      }
+
+      glinear var a := LC.give_lcell(node.ops, gops', ops');
+      glinear var b := LC.give_lcell(node.responses, gresponses', responses');*/
+      dispose_anything(fcStateOpt);
+    }
+    else {
+      dispose_glnone(fcStateOpt);
+    }
+
   }
 
   method combine(shared nr: NR, shared node: Node,
