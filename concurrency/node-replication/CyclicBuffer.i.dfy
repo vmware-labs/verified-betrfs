@@ -20,7 +20,12 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     | AdvHeadMinLtail(next: NodeId, head: nat, mintail: nat, idx: NodeId)
 
   datatype AdvanceTailState = AdvanceTailState(obvserve_head: nat)
-  datatype AppendState = AppendState(cur_idx: nat, tail: nat)
+
+  datatype AppendState =
+    | AppendIdle
+    | AppendAdvanceTail(ops: seq<nrifc.UpdateOp>, tail: nat)
+    | AppendWriteLogEntry(ops: seq<nrifc.UpdateOp>, tail: nat, idx: nat)
+
 
   // define the nodeid type
   type NodeId = nat
@@ -61,7 +66,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
       /// A reference to the actual log. Nothing but a slice of entries.
       // slog: &'a [Cell<Entry<T>>],
-      contents: map<int, StoredType>,
+      slog: map<int, StoredType>,
 
 
       // TODO: could we have multiple threads advancing the head, we assume so
@@ -76,6 +81,14 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   predicate Init(s: M)
   predicate Inv(x: M)
   function I(x: M) : map<Key, StoredType> requires Inv(x)
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Functions
+  /////////////////////////////////////////////////////////////////////////////
+
+  function Index(idx: nat, size: nat) : nat {
+    idx % size
+  }
 
   /////////////////////////////////////////////////////////////////////////////
   // State Guards
@@ -152,6 +165,52 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m.advanceHead[nodeId].idx == m.advanceHead[nodeId].next
   }
 
+  /////////////////////////////////////////////////////////////////////////////
+  // Append Guards
+  /////////////////////////////////////////////////////////////////////////////
+
+  predicate AppendInIdle(m: M, nodeId: NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.appendState
+    && m.appendState[nodeId].AppendIdle?
+  }
+
+  predicate AppendInAdvanceTail(m: M, nodeId: NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.appendState
+    && m.appendState[nodeId].AppendAdvanceTail?
+  }
+
+  predicate AppendInWriteLogEntryFlipMask(m: M, nodeId: NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.appendState
+    && m.appendState[nodeId].AppendWriteLogEntry?
+    && m.appendState[nodeId].idx < |m.appendState[nodeId].ops|
+    && nodeId in m.lmasks
+    && st.idx in m.slog
+    && m.slog[st.idx].alive == m.lmasks[nodeId]
+  }
+
+  predicate AppendInWriteLogEntryDone(m: M, nodeId: NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.appendState
+    && m.appendState[nodeId].AppendWriteLogEntry?
+    && m.appendState[nodeId].idx == |m.appendState[nodeId].ops|
+  }
+
+  predicate AppendInWriteLogEntry(m: M, nodeId: NodeId)
+    requires StateValid(m)
+  {
+    && nodeId in m.appendState
+    && m.appendState[nodeId].AppendWriteLogEntry?
+    && nodeId in m.lmasks
+    && st.idx in m.slog
+    && m.slog[st.idx].alive != m.lmasks[nodeId]
+  }
 
 
   /////////////////////////////////////////////////////////////////////////////
@@ -163,12 +222,144 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   //
   //
 
-
   /////////////////////////////////////////////////////////////////////////////
   // Append Transitions
   /////////////////////////////////////////////////////////////////////////////
 
   // pub fn append<F: FnMut(T, usize)>(&self, ops: &[T], idx: usize, mut s: F)
+
+
+
+
+  // { AppendIdle }
+  //   let tail = self.tail.load(Ordering::Relaxed);
+  // { AppendAdvanceTail(ops, tail) }
+  predicate TransitionAppendAdvanceTail(m: M, m': M, nodeId: NodeId, ops: seq<nrifc.UpdateOp>) {
+      && StateValid(m)
+      && AppendInIdle(m, nodeId)
+      && TailFieldValid(m)
+
+      // read the tail field
+      && var tail := m.tail.value;
+
+      // construct the new state
+      && var newst := AppendAdvanceTail(ops, tail);
+
+      // the state transition
+      && m' == m.(appendState := m.appendState[nodeId := newst])
+  }
+  // TODO, the case where we exec??? if tail > head + self.size - GC_FROM_HEAD {
+
+  // { AppendAdvanceTail(ops, tail) }
+  // self.tail.compare_exchange_weak()  // if we had another update
+  // { AppendAdvanceTail(ops, tail) }
+  predicate TransitionAppendWriteLogEntry(m: M, m': M, nodeId: NodeId) {
+      && StateValid(m)
+      && AppendAdvanceTail(m, nodeId)
+      && TailFieldValid(m)
+
+      // read the tail field
+      && var tail := m.tail.value;
+
+      // the old state
+      var st := m.appendState[nodeId];
+
+      // if the two tails are not equal, retry
+      && st.tail != tail
+
+      // construct the new state
+      && var newst := AppendAdvanceTail(ops, tail);
+
+      // the state transition
+      && m' == m.(appendState := m.appendState[nodeId := newst])
+  }
+
+
+  // { AppendAdvanceTail(ops, tail) }
+  // self.tail.compare_exchange_weak()
+  // { AppendWriteLogEntry(ops, tail, idx = 0) }
+  predicate TransitionAppendWriteLogEntry(m: M, m': M, nodeId: NodeId) {
+      && StateValid(m)
+      && AppendInAdvanceTail(m, nodeId)
+      && TailFieldValid(m)
+
+      // read the tail field
+      && var tail := m.tail.value;
+
+      // the old state
+      var st := m.appendState[nodeId];
+
+      // the two tails must be equal
+      && st.tail == tail
+
+      // read the tail field
+      && var tail_new := tail + |st.ops|;
+
+      // construct the new state
+      && var newst := AppendWriteLogEntry(ops, tail, idx);
+
+      // the state transition
+      && m' == m.(appendState := m.appendState[nodeId := newst])
+                .(tail := Some(tail_new))
+  }
+
+  // { AppendWriteLogEntry(ops, tail, idx) }
+  //   if unsafe { (*e).alivef.load(Ordering::Relaxed) == m } { m = !m; }
+  // { AppendWriteLogEntry(ops, tail, idx) }
+  predicate TransitionAppendWriteLogEntryOp(m: M, m': M, nodeId: NodeId) {
+      && StateValid(m)
+      && AppendInWriteLogEntryFlipMask(m, nodeId)
+
+      // the old state
+      && var st := m.appendState[nodeId];
+
+      // construct the new state
+      && var newst := AppendWriteLogEntryOp(ops, tail, idx);
+
+      // construct the new mask value
+      && var newmask := !m.lmasks[nodeId];
+
+      // the state transition
+      && m' == m.(appendState := m.appendState[nodeId := newst])
+                .(lmasks := m.lmasks[nodeId := newmask])
+  }
+
+  // { AppendWriteLogEntry(ops, tail, idx) }
+  //   unsafe { (*e).alivef.store(m, Ordering::Release) };
+  // { AppendWriteLogEntry(ops, tail, idx + 1) }
+  predicate TransitionAppendWriteLogNext(m: M, m': M, nodeId: NodeId) {
+      && StateValid(m)
+      && AppendInWriteLogEntry(m, nodeId)
+
+      // the old state
+      && var st := m.appendState[nodeId];
+
+      // construct the new state
+      && var newst := AppendWriteLogEntryOp(ops, tail, idx + 1);
+
+      // construct the log entry
+      && var logentry := StoredType(st.ops[st.idx]);
+
+      // the state transition
+      && m' == m.(appendState := m.appendState[nodeId := newst])
+                .(slog := m.slog[st.tail + st.idx := logentry])
+  }
+
+  // assert idx == |ops|
+  // { AppendWriteLogEntry(ops, tail, idx + 1) }
+  // { AppendIdle }
+  predicate TransitionAppendWriteLogDone(m: M, m': M, nodeId: NodeId) {
+      && StateValid(m)
+      && AppendInWriteLogEntryDone(m, nodeId)
+
+      // construct the new state
+      && var newst := AppendIdle;
+
+       // the state transition
+      && m' == m.(appendState := m.appendState[nodeId := newst])
+  }
+
+
 
   /////////////////////////////////////////////////////////////////////////////
   // AdvanceHead Transitions
