@@ -516,6 +516,22 @@ module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
     token1', token2' := split2(y, expected_value1, expected_value2);
   }
 
+  glinear method transition_1_2_1(
+      gshared s: Token,
+      glinear token1: Token,
+      glinear token2: Token,
+      ghost expected_value1: pcm.M)
+  returns (glinear token1': Token)
+  requires ssm.Internal(
+      ssm.dot(s.val, ssm.dot(token1.val, token2.val)),
+      ssm.dot(s.val, expected_value1))
+  ensures token1' == Token(expected_value1)
+  {
+    glinear var x := join(token1, token2);
+    glinear var y := transition_1_1_1(s, x, expected_value1);
+    token1' := y;
+  }
+
   glinear method transition_1_3_3(
       gshared s: Token,
       glinear token1: Token,
