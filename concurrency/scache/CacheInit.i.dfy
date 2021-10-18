@@ -15,7 +15,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CacheHandle
   import opened Atomics
   import opened Cells
-  import T = DiskSSMTokens(CacheIfc, CacheSSM)
+  import T = DiskToken(CacheIfc, CacheSSM)
   import opened CacheResources
   import opened GlinearOption
   import opened CacheAIOParams

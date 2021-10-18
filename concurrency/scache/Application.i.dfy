@@ -12,7 +12,7 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import CacheIfc
   import DiskIfc
   import opened Constants
-  import T = DiskSSMTokens(CacheIfc, CacheSSM)
+  import T = DiskToken(CacheIfc, CacheSSM)
   import opened ClientCounter
   import RwLockToken
   import opened Ptrs
@@ -139,7 +139,7 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     copy_seq_in(ptr, inout pointsto, data);
     cache_entry, stub := CacheResources.app_write_block(
-        rid, data, cache_entry, ticket);
+        rid, data, cache_entry, ticket, status);
 
     handle := CacheEntryHandle(key, cache_entry, idx, pointsto);
     write_handle := WriteablePageHandle(cache_idx, handle, status, eo);
