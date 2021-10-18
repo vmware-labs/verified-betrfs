@@ -24,7 +24,7 @@ module CacheResources {
 
   datatype HavocPermission = HavocPermission(ghost disk_idx: int)
 
-  datatype {:glinear_fold} CacheStatus = CacheStatus(ghost cache_idx: int, ghost status: Status)
+  datatype {:glinear_fold} CacheStatus = CacheStatus(ghost cache_idx: nat, ghost status: Status)
   {
     predicate is_status(cache_idx: int, status: Status) {
       this.cache_idx == cache_idx && this.status == status
@@ -378,6 +378,29 @@ module CacheResources {
   returns (glinear status': CacheStatus)
   requires status.status == Clean
   ensures status' == status.(status := Dirty)
+  {
+    glinear var a_token := CacheStatus_unfold(status);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := status.(status := Dirty);
+    ghost var out1_token_expect := CacheStatus_unfold(out1_expect);
+
+    // Explain what transition we're going to do
+    assert CacheSSM.MarkDirty(
+        a_token.val,
+        out1_token_expect.val,
+        status.cache_idx);
+    assert CacheSSM.InternalStep(
+        a_token.val,
+        out1_token_expect.val,
+        CacheSSM.MarkDirtyStep(status.cache_idx));
+
+    // Perform the transition
+    glinear var out1_token := T.transition_1_1(a_token,
+        out1_token_expect.val);
+
+    status' := CacheStatus_fold(out1_expect, out1_token);
+  }
 
   glinear method app_read_block(
       ghost rid: RequestId,
@@ -386,16 +409,71 @@ module CacheResources {
   returns (glinear stub: T.Token)
   requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.ReadInput(cache_entry.disk_idx))
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.ReadOutput(cache_entry.data))
+  {
+    gshared var s_token := CacheEntry_unfold_borrow(cache_entry);
+    glinear var a_token := ticket;
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_token_expect := CacheSSM.Stub(rid, CacheIfc.ReadOutput(cache_entry.data));
+
+    // Explain what transition we're going to do
+    assert CacheSSM.ApplyRead(
+        CacheSSM.dot(s_token.val, a_token.val),
+        CacheSSM.dot(s_token.val, out1_token_expect),
+        cache_entry.cache_idx, rid);
+    assert CacheSSM.InternalStep(
+        CacheSSM.dot(s_token.val, a_token.val),
+        CacheSSM.dot(s_token.val, out1_token_expect),
+        CacheSSM.ApplyReadStep(cache_entry.cache_idx, rid));
+
+    // Perform the transition
+    glinear var out1_token := T.transition_1_1_1(s_token, a_token,
+        out1_token_expect);
+
+    stub := out1_token;
+  }
 
   glinear method app_write_block(
       ghost rid: RequestId,
       ghost new_data: DiskIfc.Block,
       glinear cache_entry: CacheEntry,
-      glinear ticket: T.Token)
+      glinear ticket: T.Token,
+      gshared status: CacheStatus)
   returns (glinear cache_entry': CacheEntry, glinear stub: T.Token)
+  requires status.cache_idx == cache_entry.cache_idx
+  requires status.status == Dirty
   requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.WriteInput(cache_entry.disk_idx, new_data))
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.WriteOutput)
   ensures cache_entry' == cache_entry.(data := new_data)
+  {
+    glinear var a_token := CacheEntry_unfold(cache_entry);
+    glinear var b_token := ticket;
+    gshared var s_token := CacheStatus_unfold_borrow(status);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := cache_entry.(data := new_data);
+    ghost var out1_token_expect := CacheEntry_unfold(out1_expect);
+
+    ghost var out2_expect := CacheSSM.Stub(rid, CacheIfc.WriteOutput);
+
+    // Explain what transition we're going to do
+    assert CacheSSM.ApplyWrite(
+        CacheSSM.dot(s_token.val, CacheSSM.dot(a_token.val, b_token.val)),
+        CacheSSM.dot(s_token.val, CacheSSM.dot(out1_token_expect.val, out2_expect)),
+        cache_entry.cache_idx, rid);
+    assert CacheSSM.InternalStep(
+        CacheSSM.dot(s_token.val, CacheSSM.dot(a_token.val, b_token.val)),
+        CacheSSM.dot(s_token.val, CacheSSM.dot(out1_token_expect.val, out2_expect)),
+        CacheSSM.ApplyWriteStep(cache_entry.cache_idx, rid));
+
+    // Perform the transition
+    glinear var out1_token, out2_token := T.transition_1_2_2(s_token, a_token, b_token,
+        out1_token_expect.val,
+        out2_expect);
+
+    cache_entry' := CacheEntry_fold(out1_expect, out1_token);
+    stub := out2_token;
+  }
 
   function IdxsSeq(a: nat, b: nat) : T.Token
   requires a <= b
