@@ -48,7 +48,7 @@ module Impl(nrifc: NRIfc) {
   import opened LinearSequence_s
   import opened NativeTypes
   import opened NodeReplicaApplied = NodeReplica(nrifc)
-  import opened RwLockImpl(NodeReplicaApplied)
+  import opened RwLockImpl(NodeReplica(nrifc))
   import opened Runtime
   import opened ThreadUtils
   import opened Ptrs

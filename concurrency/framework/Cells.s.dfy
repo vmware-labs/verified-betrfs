@@ -24,7 +24,7 @@ module {:extern "LinearCells"} LinearCells {
   type {:extern "struct"} LinearCell(!new,00)<V>
   datatype LCellContents<V> = LCellContents(ghost lcell: LinearCell<V>, v: Option<V>)
 
-  method {:extern} new_cell<V>()
+  method {:extern} new_lcell<V>()
   returns (linear lcell: LinearCell<V>, glinear cellContents: LCellContents<V>)
   ensures cellContents == LCellContents(lcell, None)
 

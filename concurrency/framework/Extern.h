@@ -138,9 +138,66 @@ namespace Cells {
   }
 };
 
+namespace LinearCells {
+  template <typename V>
+  struct LinearCell {
+    mutable V v;
+
+    LinearCell() : v(get_default<V>::call()) { }
+    explicit LinearCell(V v) : v(v) { }
+
+    LinearCell(LinearCell const& other) : v(other.v) { }
+
+    LinearCell<V>& operator=(const LinearCell<V>& other)
+    {
+      this->v = other.v;
+      return *this;
+    }
+  };
+
+  template <typename V>
+  LinearCell<V> get_LinearCell_default() {
+    return LinearCell<V>();
+  }
+
+  template <typename V>
+  LinearCell<V> new__lcell() {
+    return LinearCell();
+  }
+
+  template <typename V>
+  V* read__lcell(LinearCell<V>& cell) {
+    return &cell.v;
+  }
+
+  template <typename V>
+  void give__lcell(LinearCell<V>& cell, V v) {
+    cell.v = v;
+  }
+
+  template <typename V>
+  V take__lcell(LinearCell<V>& cell) {
+    return cell.v;
+  }
+
+  template <typename V>
+  bool operator==(const LinearCell<V> &left, const LinearCell<V> &right) {
+    std::cerr << "Error: LinearCell == called" << std::endl;
+    exit(1);
+  }
+};
+
 template <typename V>
 struct std::hash<Cells::Cell<V>> {
   std::size_t operator()(const Cells::Cell<V>& x) const {
+    std::cerr << "Error: Cell hash called" << std::endl;
+    exit(1);
+  }
+};
+
+template <typename V>
+struct std::hash<LinearCells::LinearCell<V>> {
+  std::size_t operator()(const LinearCells::LinearCell<V>& x) const {
     std::cerr << "Error: Cell hash called" << std::endl;
     exit(1);
   }
@@ -194,6 +251,10 @@ namespace Atomics {
     return ia;
   }
 
+  template <typename V>
+  void new__ghost__atomic(V v) {
+  }
+
   template <typename V, typename G>
   bool execute__atomic__compare__and__set__strong(
       Atomic<V, G>& a,
@@ -217,6 +278,11 @@ namespace Atomics {
       Atomic<V, G>& a)
   {
     return a.slot.load(std::memory_order_seq_cst);
+  }
+
+  template <typename V, typename G>
+  void execute__atomic__noop()
+  {
   }
 
   template <typename V, typename G>

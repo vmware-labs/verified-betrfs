@@ -12,13 +12,14 @@ module Init(nrifc: NRIfc) {
   import opened LinearMaybe
   import opened NativeTypes
   import opened NodeReplicaApplied = NodeReplica(nrifc)
-  import opened Rwi = RwLockImpl(NodeReplicaApplied)
+  import opened Rwi = RwLockImpl(NodeReplica(nrifc))
   import opened Runtime
   import opened ThreadUtils
   import opened Ptrs
   import opened GlinearMap
   import opened GlinearOption
   import opened Cells
+  import LC = LinearCells
   import opened GhostLoc
   import opened Impl = Impl(nrifc)
   import opened Constants
@@ -56,7 +57,6 @@ module Init(nrifc: NRIfc) {
 
     // build stuff
 
-    linear var combiner_atomic := new_atomic(0, UnitGhostType, (v, g) => true, 0);
     linear var actual_replica := nrifc.initialize();
     linear var nodeReplica := NodeReplica(
       actual_replica, ghost_replica, combiner, reader);
@@ -90,8 +90,8 @@ module Init(nrifc: NRIfc) {
       fc_clients, fc_client := glmap_take(fc_clients, i as int);
       fc_slots, fc_slot := glmap_take(fc_slots, i as int);
 
-      var dummy_op :| true;
-      var dummy_ret :| true;
+      var dummy_op;
+      var dummy_ret;
       linear var ctx_cell;
       glinear var ctx_cell_contents;
       ctx_cell, ctx_cell_contents := new_cell(OpResponse(dummy_op, dummy_ret));
@@ -114,7 +114,21 @@ module Init(nrifc: NRIfc) {
 
     dispose_anything(fc_combiner); // TODO this should be put in combiner lock
 
-    node := Node(combiner_atomic, replica, contexts, nodeId, fc_loc);
+    // combiner stuff
+
+    var dummy_op: nrifc.UpdateOp;
+    var dummy_resp: nrifc.ReturnType;
+    linear var ops, responses;
+    glinear var opsContents, responsesContents;
+    ops, opsContents := LC.new_lcell(); //seq_alloc(MAX_THREADS_PER_REPLICA, dummy_op));
+    responses, responsesContents := LC.new_lcell(); //seq_alloc(MAX_THREADS_PER_REPLICA, dummy_resp));
+
+    dispose_anything(responsesContents); // TODO XXX
+    dispose_anything(opsContents);
+
+    linear var combiner_atomic := new_atomic(0, CombinerLock, (v, g) => true, 0);
+
+    node := Node(ops, responses, combiner_atomic, replica, contexts, nodeId, fc_loc);
   }
 
   method make_buffer_cells()

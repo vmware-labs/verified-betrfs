@@ -82,6 +82,8 @@ module {:extern "Atomics"} Atomics {
   ensures forall v1, g1 :: atomic_inv(a, v1, g1) <==> inv(v1, g1)
   ensures a.namespace() == namespace
 
+  // Note: this is intentionally not marked as 'glinear method' due to the logic
+  // that the Dafny checker uses to atomic operations are not re-entrant.
   method {:extern} new_ghost_atomic<G>(
       glinear g: G,
       ghost inv: (G) -> bool,
@@ -489,6 +491,8 @@ module {:extern "Atomics"} Atomics {
    * No observable non-ghost effects.
    */
 
+  // Note: this is intentionally not marked as 'glinear method' due to the logic
+  // that the Dafny checker uses to atomic operations are not re-entrant.
   method {:extern} execute_atomic_noop<V, G>(
       gshared a: Atomic<V, G>)
   returns (
