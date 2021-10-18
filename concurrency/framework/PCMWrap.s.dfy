@@ -34,21 +34,21 @@ abstract module PCMWrap refines PCM {
   }
 }
 
-module PCMWrapTokens(pcm: PCMWrap) {
-  import T = Tokens(pcm)
-  type G = pcm.G
+module PCMWrapTokens(pcmWrap: PCMWrap) {
+  import T = Tokens(pcmWrap)
+  type G = pcmWrap.G
 
-  type GToken = t : T.Token | t.loc == pcm.singleton_loc()
+  type GToken = t : T.Token | t.loc == pcmWrap.singleton_loc()
     witness *
 
   function method {:extern} wrap(glinear g: G) : (glinear t: GToken)
-  ensures t.val == pcm.one(g)
+  ensures t.val == pcmWrap.one(g)
 
   function method {:extern} unwrap(glinear t: GToken) : (glinear g: G)
-  requires pcm.is_one(t.val)
-  ensures g == pcm.get_one(t.val)
+  requires pcmWrap.is_one(t.val)
+  ensures g == pcmWrap.get_one(t.val)
 
   function method {:extern} unwrap_borrow(gshared t: GToken) : (gshared g: G)
-  requires pcm.is_one(t.val)
-  ensures g == pcm.get_one(t.val)
+  requires pcmWrap.is_one(t.val)
+  ensures g == pcmWrap.get_one(t.val)
 }
