@@ -24,10 +24,14 @@ module CacheResources {
 
   datatype HavocPermission = HavocPermission(ghost disk_idx: int)
 
-  datatype CacheStatus = CacheStatus(ghost cache_idx: int, ghost status: Status)
+  datatype {:glinear_fold} CacheStatus = CacheStatus(ghost cache_idx: int, ghost status: Status)
   {
     predicate is_status(cache_idx: int, status: Status) {
       this.cache_idx == cache_idx && this.status == status
+    }
+
+    function defn() : T.Token {
+      T.Token(CacheSSM.CacheStatus(cache_idx, status))
     }
   }
 
@@ -192,6 +196,36 @@ module CacheResources {
   requires dpm == DiskPageMap(disk_idx, dpm.cache_idx_opt)
   ensures cache_empty == CacheEmpty(cache_idx)
   ensures dpm' == DiskPageMap(disk_idx, None)
+  {
+    glinear var a_token := CacheStatus_unfold(status);
+    glinear var b_token := CacheEntry_unfold(cache_entry);
+    glinear var c_token := DiskPageMap_unfold(dpm);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := CacheEmpty(cache_idx);
+    ghost var out1_token_expect := CacheEmpty_unfold(out1_expect);
+
+    ghost var out2_expect := DiskPageMap(disk_idx, None);
+    ghost var out2_token_expect := DiskPageMap_unfold(out2_expect);
+
+    // Explain what transition we're going to do
+    assert CacheSSM.Evict(
+        CacheSSM.dot(CacheSSM.dot(a_token.val, b_token.val), c_token.val),
+        CacheSSM.dot(out1_token_expect.val, out2_token_expect.val),
+        cache_idx);
+    assert CacheSSM.InternalStep(
+        CacheSSM.dot(CacheSSM.dot(a_token.val, b_token.val), c_token.val),
+        CacheSSM.dot(out1_token_expect.val, out2_token_expect.val),
+        CacheSSM.EvictStep(cache_idx));
+
+    // Perform the transition
+    glinear var out1_token, out2_token := T.transition_3_2(a_token, b_token, c_token,
+        out1_token_expect.val,
+        out2_token_expect.val);
+
+    cache_empty := CacheEmpty_fold(out1_expect, out1_token);
+    dpm' := DiskPageMap_fold(out2_expect, out2_token);
+  }
 
   glinear method unassign_page_havoc(
       ghost cache_idx: nat,
