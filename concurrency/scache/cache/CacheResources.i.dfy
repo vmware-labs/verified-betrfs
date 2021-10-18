@@ -261,6 +261,35 @@ module CacheResources {
   requires s3.addr == disk_idx
   ensures t1 == CacheStatus(cache_idx, Clean)
   ensures t2 == CacheEntry(s2.cache_idx, s2.disk_idx, s3.data)
+  {
+    glinear var a_token := CacheReading_unfold(s2);
+    glinear var b_token := DiskReadStub_unfold(s3);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := CacheStatus(cache_idx, Clean);
+    ghost var out1_token_expect := CacheStatus_unfold(out1_expect);
+
+    ghost var out2_expect := CacheEntry(s2.cache_idx, s2.disk_idx, s3.data);
+    ghost var out2_token_expect := CacheEntry_unfold(out2_expect);
+
+    // Explain what transition we're going to do
+    assert CacheSSM.FinishRead(
+        CacheSSM.dot(a_token.val, b_token.val),
+        CacheSSM.dot(out1_token_expect.val, out2_token_expect.val),
+        cache_idx, disk_idx);
+    assert CacheSSM.InternalStep(
+        CacheSSM.dot(a_token.val, b_token.val),
+        CacheSSM.dot(out1_token_expect.val, out2_token_expect.val),
+        CacheSSM.FinishReadStep(cache_idx, disk_idx));
+
+    // Perform the transition
+    glinear var out1_token, out2_token := T.transition_2_2(a_token, b_token,
+        out1_token_expect.val,
+        out2_token_expect.val);
+
+    t1 := CacheStatus_fold(out1_expect, out1_token);
+    t2 := CacheEntry_fold(out2_expect, out2_token);
+  }
 
   glinear method initiate_writeback(
       gshared cache_entry: CacheEntry,
@@ -272,12 +301,40 @@ module CacheResources {
   )
   requires status.cache_idx == cache_entry.cache_idx
   requires status.status == Dirty
-  ensures status.cache_idx == cache_entry.cache_idx
-  ensures status.status == Writeback
-  ensures 0 <= cache_entry.disk_idx < 0x1_0000_0000_0000_0000
+  ensures status'.cache_idx == cache_entry.cache_idx
+  ensures status'.status == Writeback
   ensures ticket == DiskWriteTicket(
       cache_entry.disk_idx,
       cache_entry.data)
+  {
+    gshared var s_token := CacheEntry_unfold_borrow(cache_entry);
+    glinear var a_token := CacheStatus_unfold(status);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := CacheStatus(cache_entry.cache_idx, Writeback);
+    ghost var out1_token_expect := CacheStatus_unfold(out1_expect);
+
+    ghost var out2_expect := DiskWriteTicket(cache_entry.disk_idx, cache_entry.data);
+    ghost var out2_token_expect := DiskWriteTicket_unfold(out2_expect);
+
+    // Explain what transition we're going to do
+    assert CacheSSM.StartWriteback(
+        CacheSSM.dot(s_token.val, a_token.val),
+        CacheSSM.dot(s_token.val, CacheSSM.dot(out1_token_expect.val, out2_token_expect.val)),
+        cache_entry.cache_idx);
+    assert CacheSSM.InternalStep(
+        CacheSSM.dot(s_token.val, a_token.val),
+        CacheSSM.dot(s_token.val, CacheSSM.dot(out1_token_expect.val, out2_token_expect.val)),
+        CacheSSM.StartWritebackStep(cache_entry.cache_idx));
+
+    // Perform the transition
+    glinear var out1_token, out2_token := T.transition_1_1_2(s_token, a_token,
+        out1_token_expect.val,
+        out2_token_expect.val);
+
+    status' := CacheStatus_fold(out1_expect, out1_token);
+    ticket := DiskWriteTicket_fold(out2_expect, out2_token);
+  }
 
   glinear method finish_writeback(
       gshared cache_entry: CacheEntry,
