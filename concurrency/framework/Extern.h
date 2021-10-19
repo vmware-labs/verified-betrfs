@@ -162,7 +162,7 @@ namespace LinearCells {
 
   template <typename V>
   LinearCell<V> new__lcell() {
-    return LinearCell();
+    return LinearCell<V>();
   }
 
   template <typename V>
@@ -252,7 +252,7 @@ namespace Atomics {
   }
 
   template <typename V>
-  void new__ghost__atomic(V v) {
+  void new__ghost__atomic() {
   }
 
   template <typename V, typename G>
