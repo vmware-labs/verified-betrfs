@@ -314,8 +314,6 @@ module Impl(nrifc: NRIfc) {
       i := i + 1;
     }
 
-  //  glinear datatype CombinerLockState = CombinerLockState(glinear flatCombiner: FCCombiner, glinear gops: LC.LCellContents<seq<nrifc.UpdateOp>>, glinear gresponses: LC.LCellContents<seq<nrifc.ReturnType>>)
-
     glinear var fcStateOpt: glOption<FCCombiner>;
     glinear var gops: glOption<LC.LCellContents<seq<nrifc.UpdateOp>>>;
     glinear var gresponses: glOption<LC.LCellContents<seq<nrifc.ReturnType>>>;
@@ -353,9 +351,6 @@ module Impl(nrifc: NRIfc) {
       glinear var gresponses';
       glinear var fcstate';
       
-      //glinear var gops'';
-      //glinear var gresponses'';
-
       ops, gops' := LC.take_lcell(node.ops, unwrap_value(gops));
       responses, gresponses' := LC.take_lcell(node.responses, unwrap_value(gresponses));
 
