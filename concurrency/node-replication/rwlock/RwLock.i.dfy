@@ -1,17 +1,14 @@
 include "../../framework/Rw.i.dfy"
 include "../../scache/rwlock/FullMap.i.dfy"
 include "Handle.i.dfy"
+include "../Constants.i.dfy"
 include "../../../lib/Base/Option.s.dfy"
 
 module RwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
   import opened FullMaps
   import opened NativeTypes
+  import opened Constants
   import HandleTypeMod = Handle(contentsTypeMod)
-
-  // TODO find the right constant for perf -- balancing contention
-  // and concurrency.
-  ghost const RC_WIDTH := 24
-  function method RC_WIDTH_64() : uint64 { 24 }
 
   type ThreadId = nat
 
@@ -604,6 +601,7 @@ module RwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
 
 module RwLockToken(contentsTypeMod: ContentsTypeMod) {
   import opened Options
+  import opened Constants
   import opened RwLock(contentsTypeMod)
   import HandleTypeMod = Handle(contentsTypeMod)
   import T = RwTokens(RwLock)

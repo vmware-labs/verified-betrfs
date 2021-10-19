@@ -13,6 +13,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
   import opened LinearSequence_i
   import opened LinearCells
   import opened GhostLoc
+  import opened Constants
   import opened GlinearOption
   import opened Options
   import opened Runtime
@@ -53,23 +54,23 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         0);
 
     linear var refCounts: lseq<CachePadded<Atomic<uint8, Token>>>
-        := lseq_alloc(RwLockMod.RC_WIDTH_64());
+        := lseq_alloc(RC_WIDTH_64());
     var j: uint64 := 0;
     while j < 24
-    invariant 0 <= j <= RwLockMod.RC_WIDTH_64()
-    invariant |refCounts| == RwLockMod.RC_WIDTH
+    invariant 0 <= j <= RC_WIDTH_64()
+    invariant |refCounts| == RC_WIDTH
     invariant forall i: int | 0 <= i < j as int ::
         i in refCounts &&
         forall count, token ::
             atomic_inv(refCounts[i].inner, count, token) <==>
             refCountInv(count, token, loc, i)
-    invariant forall i: int | j as int <= i < RwLockMod.RC_WIDTH ::
+    invariant forall i: int | j as int <= i < RC_WIDTH ::
         i !in refCounts
     invariant rcs.loc == loc
-    invariant rcs.val == RwLockMod.Rcs(j as int, RwLockMod.RC_WIDTH)
+    invariant rcs.val == RwLockMod.Rcs(j as int, RC_WIDTH)
     {
       glinear var rcToken;
-      rcToken, rcs := pop_rcs(rcs, j as int, RwLockMod.RC_WIDTH);
+      rcToken, rcs := pop_rcs(rcs, j as int, RC_WIDTH);
       linear var rcAtomic := new_atomic(0, rcToken,
           (v, g) => refCountInv(v, g, loc, j as nat),
           0);
@@ -128,7 +129,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
 
     predicate Inv(expected_lock: RwLock)
     {
-      && 0 <= acquiring_thread_id as nat < RwLockMod.RC_WIDTH
+      && 0 <= acquiring_thread_id as nat < RC_WIDTH
       && shared_obtained_token.loc == m.loc
       && shared_obtained_token.val.M?
       && shared_obtained_token.val == RwLockMod.SharedAcqHandle(RwLockMod.SharedAcqObtained(
@@ -181,11 +182,11 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     {
       && loc.ExtLoc?
       && loc.base_loc == RwLockTokenMod.T.Wrap.singleton_loc()
-      && |refCounts| == RwLockMod.RC_WIDTH
+      && |refCounts| == RC_WIDTH
       && lseq_full(refCounts)
       && (forall v, token :: atomic_inv(exclusiveFlag, v, token)
             <==> exclusiveFlagInv(v, token, loc, inv, lcell))
-      && (forall t, count, token | 0 <= t < RwLockMod.RC_WIDTH
+      && (forall t, count, token | 0 <= t < RC_WIDTH
           :: atomic_inv(refCounts[t].inner, count, token)
             <==> refCountInv(count, token, loc, t))
     }
@@ -239,8 +240,8 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       var rc_width:uint64 := 24;
 
       while visited < rc_width
-        invariant 0 <= visited as int <= RwLockMod.RC_WIDTH
-        invariant rc_width as int == RwLockMod.RC_WIDTH
+        invariant 0 <= visited as int <= RC_WIDTH
+        invariant rc_width as int == RC_WIDTH
         // if we find a nonzero refcount, we'll just keep waiting.
         // (Deadlock breaking is the shared-acquirer's problem.)
         invariant this.InternalInv()
@@ -306,7 +307,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     shared method acquire_shared(thread_id: uint8)
     returns (linear guard: SharedGuard)
     requires InternalInv()
-    requires 0 <= thread_id as nat < RwLockMod.RC_WIDTH;
+    requires 0 <= thread_id as nat < RC_WIDTH;
     ensures this.inv(guard.v)
     ensures guard.Inv(this)
     decreases *
@@ -316,7 +317,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       ghost var shared_value;
       while (true)
         //invariant obtained_handle is nice.
-        invariant 0 <= thread_id as nat < RwLockMod.RC_WIDTH;
+        invariant 0 <= thread_id as nat < RC_WIDTH;
         decreases *
       {
         var exc_acquired: bool;

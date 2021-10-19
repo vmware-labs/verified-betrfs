@@ -14,4 +14,7 @@ module Constants {
   const BUFFER_SIZE: uint64 := 9999;
 
   const MAX_THREADS_PER_REPLICA: uint64 := 32;
+
+  function method RC_WIDTH_64() : uint64 { 24 }
+  ghost const RC_WIDTH := RC_WIDTH_64() as int
 }
