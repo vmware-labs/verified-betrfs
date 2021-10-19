@@ -31,8 +31,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     | CombinerIdle
     | CombinerReading(ghost readerState: ReaderState)
     | CombinerAdvancingHead(ghost idx: nat, ghost min_tail: nat)
-    | CombinerAdvancingTail(ghost obvserve_head: nat)
-    | CombinerAppendState(ghost cur_idx: nat, ghost tail: nat)
+    | CombinerAdvancingTail(ghost observed_head: nat)
+    | CombinerAppending(ghost cur_idx: nat, ghost tail: nat)
 
   // define the nodeid type
   type NodeId = nat
@@ -76,7 +76,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
    * ============================================================================================
    */
 
-  function Index(logical: int) : nat
+  function LogicalToPhysicalIndex(logical: int) : nat
   // ensures Index(-(BUFFER_SIZE as int)) == 0
   {
     logical % (BUFFER_SIZE as int)
@@ -94,7 +94,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && nodeId in m.localTails
   }
 
-  predicate CombierIdle(m: M, nodeId: NodeId)
+  predicate CombierIsIdle(m: M, nodeId: NodeId)
     requires m.M?
   {
     && nodeId in m.combinerState
@@ -105,6 +105,13 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     requires m.M?
   {
     && nodeId in m.combinerState
+  }
+
+  predicate CombinerIsIdle(m: M, nodeId: NodeId)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId].CombinerIdle?
   }
 
   predicate CombinerIsAdvancingHead(m: M, nodeId: NodeId)
@@ -121,6 +128,35 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m.combinerState[nodeId] == CombinerAdvancingHead(idx, min_tail)
   }
 
+  predicate CombinerIsAdvancingTail(m: M, nodeId: NodeId)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId].CombinerAdvancingTail?
+  }
+
+  predicate CombinerIsAdvancingTailAt(m: M, nodeId: NodeId, observed_head: nat)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId] == CombinerAdvancingTail(observed_head)
+  }
+
+  predicate CombinerIsAppending(m: M, nodeId: NodeId)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId].CombinerAppending?
+  }
+
+  predicate CombinerIsAppendingAt(m: M, nodeId: NodeId, cur_idx: nat, tail: nat)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId] == CombinerAppending(cur_idx, tail)
+  }
+
+
   /*
    * ============================================================================================
    * Advance Head Transitions
@@ -131,6 +167,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     && m.M?
     && LocalTailValid(m, 0)
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsIdle(m, combinerNodeId)
 
     && m'.M?
     && CombinerKnown(m', combinerNodeId)
@@ -164,6 +202,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m'.M?
     && m'.head.Some?
     && m'.head.value == combinerBefore.min_tail
+    && CombinerKnown(m', combinerNodeId)
+    && CombinerIsIdle(m', combinerNodeId)
   }
 
   /*
@@ -172,537 +212,53 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
    * ============================================================================================
    */
 
-  // predicate InitAdvanceTail(m: M, m': M, advancerNodeId: nat)
-  // {
-  //   && m.M?
-  //   && 
-  // }
+  predicate InitAdvanceTail(m: M, m': M, combinerNodeId: nat)
+  {
+    && m.M?
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsIdle(m, combinerNodeId)
+    && m.head.Some?
+    
+    && m'.M?
+    && CombinerKnown(m', combinerNodeId)
+    && CombinerIsAdvancingTailAt(m', combinerNodeId, m.head.value)
+  }
+
+  predicate FinishAdvanceTail(m: M, m': M, combinerNodeId: nat, new_tail: nat)
+  {
+    && m.M?
+    && m.tail.Some?
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsAdvancingTail(m, combinerNodeId)
+    && var combinerBefore := m.combinerState[combinerNodeId];
+    && m.tail.value <= new_tail <= (combinerBefore.observed_head + BUFFER_SIZE as int)
+
+    && m'.M?
+    && CombinerKnown(m', combinerNodeId)
+    && CombinerIsAppendingAt(m', combinerNodeId, m.tail.value, new_tail)
+  }
+
+  /*
+   * ============================================================================================
+   * Append flip bit
+   * ============================================================================================
+   */
+
+  predicate AppendFlipBit(m: M, m': M, combinerNodeId: nat, deposited: StoredType)
+  {
+    && m.M?
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsAppending(m, combinerNodeId)
+    && var combinerBefore := m.combinerState[combinerNodeId];
+    && combinerBefore.cur_idx in m.contents
+
+    && LogicalToPhysicalIndex(combinerBefore.cur_idx) in m.aliveBits
+
+    && m' == m.(
+      combinerState := m.combinerState[combinerNodeId := combinerBefore.(cur_idx := combinerBefore.cur_idx + 1)],
+      aliveBits := m.aliveBits[LogicalToPhysicalIndex(combinerBefore.cur_idx) := (combinerBefore.cur_idx / BUFFER_SIZE as int) % 2 == 0],
+      contents := m.contents[combinerBefore.cur_idx := deposited])
+  }
 
-  /////////////////////////////////////////////////////////////////////////////
-  // Functions
-  /////////////////////////////////////////////////////////////////////////////
-
-  // /////////////////////////////////////////////////////////////////////////////
-  // // Advance Head Guards
-  // /////////////////////////////////////////////////////////////////////////////
-
-  // // we're in the advance head idle state
-  // predicate AdvHeadInIdle(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.advanceHead
-  //   && m.advanceHead[nodeId].AdvanceHeadIdle?
-  // }
-
-  // predicate AdvHeadInNextLoaded(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.advanceHead
-  //   && m.advanceHead[nodeId].AdvHeadNextLoaded?
-  // }
-
-  // predicate AdvHeadInReadHead(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.advanceHead
-  //   && m.advanceHead[nodeId].AdvHeadHeadLoaded?
-  // }
-
-  // predicate AdvHeadInMinLTail(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.advanceHead
-  //   && m.advanceHead[nodeId].AdvHeadMinLtail?
-  //   && m.advanceHead[nodeId].idx < m.advanceHead[nodeId].next
-  // }
-
-  // predicate AdvHeadMinLtailValid(m: M, nodeId: NodeId)
-  //   requires AdvHeadInMinLTail(m, nodeId)
-  // {
-  //   && var st := m.advanceHead[nodeId];
-  //   && st.idx in m.LocalTails
-  // }
-
-  // predicate AdvHeadInMinLTailDone(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.advanceHead
-  //   && m.advanceHead[nodeId].AdvHeadMinLtail?
-  //   && m.advanceHead[nodeId].idx == m.advanceHead[nodeId].next
-  // }
-
-  // /////////////////////////////////////////////////////////////////////////////
-  // // Append Guards
-  // /////////////////////////////////////////////////////////////////////////////
-
-  // predicate AppendInIdle(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.appendState
-  //   && m.appendState[nodeId].AppendIdle?
-  // }
-
-  // predicate AppendInAdvanceTail(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.appendState
-  //   && m.appendState[nodeId].AppendAdvanceTail?
-  // }
-
-  // predicate AppendInWriteLogEntryFlipMask(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.appendState
-  //   && m.appendState[nodeId].AppendWriteLogEntry?
-  //   && m.appendState[nodeId].idx < |m.appendState[nodeId].ops|
-  //   && nodeId in m.lmasks
-  //   && st.idx in m.slog
-  //   && m.slog[st.idx].alive == m.lmasks[nodeId]
-  // }
-
-  // predicate AppendInWriteLogEntryDone(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.appendState
-  //   && m.appendState[nodeId].AppendWriteLogEntry?
-  //   && m.appendState[nodeId].idx == |m.appendState[nodeId].ops|
-  // }
-
-  // predicate AppendInWriteLogEntry(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.appendState
-  //   && m.appendState[nodeId].AppendWriteLogEntry?
-  //   && nodeId in m.lmasks
-  //   && st.idx in m.slog
-  //   && m.slog[st.idx].alive != m.lmasks[nodeId]
-  // }
-
-
-  // /////////////////////////////////////////////////////////////////////////////
-  // // Reader Guards
-  // /////////////////////////////////////////////////////////////////////////////
-
-  // predicate ReaderInIdle(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.readerState
-  //   && m.readerState[nodeId].ReaderIdle?
-  // }
-
-  // predicate ReaderInLoadTail(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.readerState
-  //   && m.readerState[nodeId].ReaderLoadTail?
-  // }
-
-  // predicate ReaderInReadEntries(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.readerState
-  //   && m.readerState[nodeId].ReaderReadEntries?
-  //   && m.readerState[nodeId].ltail != m.readerState[nodeId].gtail
-  // }
-
-  // predicate ReaderInReadEntriesDone(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.readerState
-  //   && nodeId in m.localTails
-  //   && m.readerState[nodeId].ReaderReadEntries?
-  //   && m.readerState[nodeId].ltail == m.readerState[nodeId].gtail
-  //   && m.readerState[nodeId].ltail != m.localTails[nodeId]
-  // }
-
-  // predicate ReaderInReadEntriesDoneNoUpdate(m: M, nodeId: NodeId)
-  //   requires StateValid(m)
-  // {
-  //   && nodeId in m.readerState
-  //   && nodeId in m.localTails
-  //   && m.readerState[nodeId].ReaderReadEntries?
-  //   && m.readerState[nodeId].ltail == m.readerState[nodeId].gtail
-  //   && m.readerState[nodeId].ltail == m.localTails[nodeId]
-  // }
-
-  // /////////////////////////////////////////////////////////////////////////////
-  // // Reading Transitions
-  // /////////////////////////////////////////////////////////////////////////////
-
-  // // { ReaderIdle }
-  // //   let ltail = self.ltails[idx - 1].load(Ordering::Relaxed);
-  // // { ReaderLoadTail(ltail) }
-  // predicate TransitionReaderLoadTail(m: M, m': M, nodeId: NodeId)
-  // {
-  //   && StateValid(m)
-  //   && ReaderInIdle(m, nodeId)
-
-  //   // get the local tail
-  //   && var ltail := m.localTails[nodeId];
-
-  //   // construct the new state
-  //   && var new_st := ReaderLoadTail(ltail);
-
-  //   // the state transition
-  //   && m' == m.(readerState := m.readerState[ nodeId := new_st ])
-  // }
-
-
-  // // { ReaderLoadTail(ltail) }
-  // //   let gtail = self.tail.load(Ordering::Relaxed);
-  // // { ReaderReadEntries(ltail, gtail) }
-  // predicate TransitionReaderReadEntries(m: M, m': M, nodeId: NodeId)
-  // {
-  //   && StateValid(m)
-  //   && ReaderInLoadTail(m, nodeId)
-
-  //   // the old state
-  //   && var st := m.readerState[nodeId];
-
-  //   // get the local tail
-  //   && var gtail := m.tail.value;
-
-  //   // construct the new state
-  //   && var new_st := ReaderReadEntries(ltail, gtail);
-
-  //   // the state transition
-  //   && m' == m.(readerState := m.readerState[ nodeId := new_st ])
-  // }
-
-  // // { ReaderReadEntries(ltail, gtail) }
-  // // { (*e).alivef.load(Ordering::Acquire) == self.lmasks[idx - 1].get() }
-  // //   d((*e).operation.as_ref().unwrap().clone(), (*e).replica)
-  // //   if self.index(i) == self.size - 1 { self.lmasks[idx - 1].set(!self.lmasks[idx - 1].get()); }
-  // // { ReaderReadEntries(ltail + 1, gtail)  }
-  // predicate TransitionReaderReadEntry(m: M, m': M, nodeId: NodeId)
-  // {
-  //   && StateValid(m)
-  //   && ReaderInReadEntries(m, nodeId)
-
-  //   // the old state
-  //   && var st := m.readerState[nodeId];
-
-  //   && var entry := m.slog[st.ltail];
-  //   // TODO: do something
-
-  //   // update the new lmask if needed
-  //   && var m := m.lmasks[nodeId];
-  //   && var new_mask := if Index(st.ltail, m.size) == m.size - 1 then !m else m;
-
-  //   // construct the new state
-  //   && var new_st := ReaderReadEntries(st.ltail + 1, st.gtail);
-
-  //   // the state transition
-  //   && m' == m.(readerState := m.readerState[ nodeId := new_st ])
-  //             .(lmasks := m.lmasks[nodeId := new_mask])
-
-  // }
-
-
-  // // { ReaderReadEntries(ltail, gtail)}
-  // // { gtail == ltail } && { m.localTails[nodeId] == ltail }
-  // //   if ltail == gtail { return; }
-  // // { ReaderIdle }
-  // predicate TransitionReaderIdleNoUpdates(m: M, m': M, nodeId: NodeId)
-  // {
-  //   && StateValid(m)
-  //   && ReaderInReadEntriesDoneNoUpdate(m, nodeId)
-
-  //   // construct the new state
-  //   && var new_st := ReaderIdle;
-
-  //   // the state transition
-  //   && m' == m.(readerState := m.readerState[ nodeId := new_st ])
-  // }
-
-
-
-  // // { ReaderReadEntries(ltail, gtail)}
-  // // { gtail == ltail } && { m.localTails[nodeId] != ltail }
-  // //    self.ltails[idx - 1].store(gtail, Ordering::Relaxed);
-  // // { ReaderIdle }
-  // redicate ReaderInReadEntriesDone(m: M, m': M, nodeId: NodeId)
-  // {
-  //   && StateValid(m)
-  //   && ReaderInReadEntries(m, nodeId)
-
-  //   // the old state
-  //   && var st := m.readerState[nodeId];
-
-  //   // get the local tail
-  //   && var gtail := m.tail.value;
-
-  //   // construct the new state
-  //   && var new_st := ReaderIdle;
-
-  //   // the new ltail si the gtail
-  //   && var new_ltail := st.gtail;
-
-  //   // the state transition
-  //   && m' == m.(readerState := m.readerState[ nodeId := new_st ])
-  //             .(ltails := m.ltails[nodeId := new_ltail])
-  // }
-
-
-
-  // /////////////////////////////////////////////////////////////////////////////
-  // // Append Transitions
-  // /////////////////////////////////////////////////////////////////////////////
-
-  // // pub fn append<F: FnMut(T, usize)>(&self, ops: &[T], idx: usize, mut s: F)
-
-
-  // // { AppendIdle }
-  // //   let tail = self.tail.load(Ordering::Relaxed);
-  // // { AppendAdvanceTail(ops, tail) }
-  // predicate TransitionAppendAdvanceTail(m: M, m': M, nodeId: NodeId, ops: seq<nrifc.UpdateOp>) {
-  //     && StateValid(m)
-  //     && AppendInIdle(m, nodeId)
-  //     && TailFieldValid(m)
-
-  //     // read the tail field
-  //     && var tail := m.tail.value;
-
-  //     // construct the new state
-  //     && var newst := AppendAdvanceTail(ops, tail);
-
-  //     // the state transition
-  //     && m' == m.(appendState := m.appendState[nodeId := newst])
-  // }
-  // // TODO, the case where we exec??? if tail > head + self.size - GC_FROM_HEAD {
-
-  // // { AppendAdvanceTail(ops, tail) }
-  // // self.tail.compare_exchange_weak()  // if we had another update
-  // // { AppendAdvanceTail(ops, tail) }
-  // predicate TransitionAppendWriteLogEntry(m: M, m': M, nodeId: NodeId) {
-  //     && StateValid(m)
-  //     && AppendAdvanceTail(m, nodeId)
-  //     && TailFieldValid(m)
-
-  //     // read the tail field
-  //     && var tail := m.tail.value;
-
-  //     // the old state
-  //     var st := m.appendState[nodeId];
-
-  //     // if the two tails are not equal, retry
-  //     && st.tail != tail
-
-  //     // construct the new state
-  //     && var newst := AppendAdvanceTail(ops, tail);
-
-  //     // the state transition
-  //     && m' == m.(appendState := m.appendState[nodeId := newst])
-  // }
-
-
-  // // { AppendAdvanceTail(ops, tail) }
-  // // self.tail.compare_exchange_weak()
-  // // { AppendWriteLogEntry(ops, tail, idx = 0) }
-  // predicate TransitionAppendWriteLogEntry(m: M, m': M, nodeId: NodeId) {
-  //     && StateValid(m)
-  //     && AppendInAdvanceTail(m, nodeId)
-  //     && TailFieldValid(m)
-
-  //     // read the tail field
-  //     && var tail := m.tail.value;
-
-  //     // the old state
-  //     var st := m.appendState[nodeId];
-
-  //     // the two tails must be equal
-  //     && st.tail == tail
-
-  //     // read the tail field
-  //     && var tail_new := tail + |st.ops|;
-
-  //     // construct the new state
-  //     && var newst := AppendWriteLogEntry(ops, tail, idx);
-
-  //     // the state transition
-  //     && m' == m.(appendState := m.appendState[nodeId := newst])
-  //               .(tail := Some(tail_new))
-  // }
-
-  // // { AppendWriteLogEntry(ops, tail, idx) }
-  // //   if unsafe { (*e).alivef.load(Ordering::Relaxed) == m } { m = !m; }
-  // // { AppendWriteLogEntry(ops, tail, idx) }
-  // predicate TransitionAppendWriteLogEntryOp(m: M, m': M, nodeId: NodeId) {
-  //     && StateValid(m)
-  //     && AppendInWriteLogEntryFlipMask(m, nodeId)
-
-  //     // the old state
-  //     && var st := m.appendState[nodeId];
-
-  //     // construct the new state
-  //     && var newst := AppendWriteLogEntryOp(ops, tail, idx);
-
-  //     // construct the new mask value
-  //     && var newmask := !m.lmasks[nodeId];
-
-  //     // the state transition
-  //     && m' == m.(appendState := m.appendState[nodeId := newst])
-  //               .(lmasks := m.lmasks[nodeId := newmask])
-  // }
-
-  // // { AppendWriteLogEntry(ops, tail, idx) }
-  // //   unsafe { (*e).alivef.store(m, Ordering::Release) };
-  // // { AppendWriteLogEntry(ops, tail, idx + 1) }
-  // predicate TransitionAppendWriteLogNext(m: M, m': M, nodeId: NodeId) {
-  //     && StateValid(m)
-  //     && AppendInWriteLogEntry(m, nodeId)
-
-  //     // the old state
-  //     && var st := m.appendState[nodeId];
-
-  //     // construct the new state
-  //     && var newst := AppendWriteLogEntryOp(ops, tail, idx + 1);
-
-  //     // construct the log entry
-  //     && var logentry := StoredType(st.ops[st.idx]);
-
-  //     // the state transition
-  //     && m' == m.(appendState := m.appendState[nodeId := newst])
-  //               .(slog := m.slog[st.tail + st.idx := logentry])
-  // }
-
-  // // assert idx == |ops|
-  // // { AppendWriteLogEntry(ops, tail, idx + 1) }
-  // // { AppendIdle }
-  // predicate TransitionAppendWriteLogDone(m: M, m': M, nodeId: NodeId) {
-  //     && StateValid(m)
-  //     && AppendInWriteLogEntryDone(m, nodeId)
-
-  //     // construct the new state
-  //     && var newst := AppendIdle;
-
-  //      // the state transition
-  //     && m' == m.(appendState := m.appendState[nodeId := newst])
-  // }
-
-
-
-  // /////////////////////////////////////////////////////////////////////////////
-  // // AdvanceHead Transitions
-  // /////////////////////////////////////////////////////////////////////////////
-
-  // // fn advance_head<F: FnMut(T, usize)>(&self, rid: usize, mut s: &mut F);
-
-  // // { AdvHeadIdle }
-  // //   let r = self.next.load(Ordering::Relaxed);
-  // // { AdvHeadNextLoaded(next) }
-  // predicate TransitionAdvHeadLoadNext(m: M, m': M, nodeId: NodeId) {
-  //   && StateValid(m)
-  //   && AdvHeadInIdle(m, nodeId)
-  //   && NextFieldValid(m)
-
-  //   // read the next field
-  //   && var next := m.next.value;
-
-  //   // construct the new state
-  //   && var newst := AdvHeadNextLoaded(next);
-
-  //   // update the state of the advanceHead
-  //   && m' == m.(advanceHead := m.advanceHead[ nodeId :=  newst])
-  // }
-
-  // // { AdvHeadNextLoaded(next) }
-  // //   let global_head = self.head.load(Ordering::Relaxed);
-  // // { AdvHeadHeadLoaded(next, head) }
-  // predicate TransitionAdvHeadReadHead(m: M, m': M, nodeId: NodeId) {
-  //   && StateValid(m)
-  //   && AdvHeadInNextLoaded(m, nodeId)
-  //   && HeadFieldValid(m)
-
-  //   // get the old state
-  //   && var st := m.advanceHead[nodeId];
-
-  //   // read the next field
-  //   && var head := m.head.value;
-
-  //   // construct the new state
-  //   && var newst := AdvHeadNextLoaded(st.next, head);
-
-  //   // update the state of the advanceHead
-  //   && m' == m.(advanceHead := m.advanceHead[ nodeId :=  newst])
-  // }
-
-
-  // // let f = self.tail.load(Ordering::Relaxed);
-  // // that one seems to be no-where used??
-
-  // // { AdvHeadHeadLoaded(next, head) }
-  // //   let mut min_local_tail = self.ltails[0].load(Ordering::Relaxed);
-  // // { AdvHeadMinLtail(next, head, min_local_tail, idx = 1) }
-  // predicate TransitionAdvHeadMinLTail(m: M, m': M, nodeId: NodeId) {
-  //   && StateValid(m)
-  //   && AdvHeadInReadHead(m, nodeId)
-  //   && 0 in m.localTails
-
-  //   // get the old state
-  //   && var st := m.advanceHead[nodeId];
-
-  //   // read the first local tail
-  //   && var ltail := m.localTails[0];
-
-  //   // construct the new state
-  //   && var newst := AdvHeadMinLtail(st.next, st.head, ltail, 1);
-
-  //   // update the state of the advanceHead
-  //   && m' == m.(advanceHead := m.advanceHead[ nodeId :=  newst])
-  // }
-
-
-  // // { AdvHeadMinLtail(next, head, min_local_tail, idx = 1)
-  // //   for idx in 1..r {
-  // //     let cur_local_tail = self.ltails[idx - 1].load(Ordering::Relaxed);
-  // //     if min_local_tail > cur_local_tail {
-  // //         min_local_tail = cur_local_tail
-  // //     };
-  // //   }
-  // // assert(idx == next)
-  // // { AdvHeadMinLtail(next, head, min_local_tail, idx = next)
-  // predicate TransitionAdvHeadMinLTailNext(m: M, m': M, nodeId: NodeId) {
-  //   && StateValid(m)
-  //   && AdvHeadInMinLTail(m, nodeId)
-  //   && AdvHeadMinLtailValid(m, nodeId)
-
-  //   // get the old state
-  //   && var st := m.advanceHead[nodeId];
-
-  //   // read the current local tail
-  //   && var cur_local_tail := m.localTails[st.idx];
-
-  //   // if the current local tail is smaller, update the value
-  //   && var ltail := if st.mintail > cur_local_tail then cur_local_tail else st.mintail;
-
-  //   // construct the new state
-  //   && var newst := AdvHeadMinLtail(st.next, st.head, ltail, st.idx + 1);
-
-  //   // update the state of the advanceHead
-  //   && m' == m.(advanceHead := m.advanceHead[ nodeId :=  newst])
-  // }
-
-  // // What About the exec stuff here?
-  // // { AdvHeadMinLtail(next, head, min_local_tail, idx = next)
-  // //   self.head.store(min_local_tail, Ordering::Relaxed);
-  // // { AdvHeadIdle }
-  // predicate TransitionAdvHeadIdle(m: M, m': M, nodeId: NodeId) {
-  //   && StateValid(m)
-  //   && AdvHeadInMinLTailDone(m, nodeId)
-
-  //   // get the old state
-  //   && var st := m.advanceHead[nodeId];
-
-  //   // the new head value
-  //   && var new_head := st.mintail;
-
-  //   // construct the new state
-  //   && var newst := AdvHeadIdle;
-
-  //   // update the state of the advanceHead
-  //   && m' == m.(advanceHead := m.advanceHead[ nodeId :=  newst])
-  //             .(head := Some(new_head))
-  // }
 
 }
