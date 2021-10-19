@@ -10,8 +10,10 @@ include "../framework/Cells.s.dfy"
 include "Runtime.i.dfy"
 include "CyclicBufferTokens.i.dfy"
 include "FlatCombinerTokens.i.dfy"
+include "../../lib/Base/Option.s.dfy"
 
 module NodeReplica(nrifc: NRIfc) refines ContentsTypeMod {
+  import opened O = Options
   import opened ILT = InfiniteLogTokens(nrifc)    // Replica, CombinerToken
   import opened IL = InfiniteLogSSM(nrifc)        // NodeId
   import opened CBT = CyclicBufferTokens(nrifc)   // Reader
@@ -119,7 +121,9 @@ module Impl(nrifc: NRIfc) {
   }
 
   glinear datatype UnitGhostType = UnitGhostType
-  glinear datatype CombinerLock = CombinerLock
+
+  // TODO(gz): add cellContents: LCellContents<V> to ghost state
+  glinear datatype CombinerLockState = CombinerLockState(glinear flatCombiner: FCCombiner, glinear gops: LC.LCellContents<seq<nrifc.UpdateOp>>, glinear gresponses: LC.LCellContents<seq<nrifc.ReturnType>>)
 
   linear datatype Node = Node(
     // TODO: This should protect the combiner state (cells etc.)
@@ -133,10 +137,9 @@ module Impl(nrifc: NRIfc) {
     // physical component is just some memory (som address)
     //
     // add member: linearcell<responses>
-
     linear ops: LC.LinearCell<seq<nrifc.UpdateOp>>,
     linear responses: LC.LinearCell<seq<nrifc.ReturnType>>,
-    linear combiner_lock: Atomic<uint64, CombinerLock>,
+    linear combiner_lock: Atomic<uint64, glOption<CombinerLockState>>,
     linear replica: RwLock,
     //linear context: map<Tid, nrifc.UpdateOp>,
     linear contexts: lseq<Context>, // TODO cache-line padded?
@@ -152,7 +155,9 @@ module Impl(nrifc: NRIfc) {
       && |contexts| == MAX_THREADS_PER_REPLICA as int
       && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i, fc_loc))
       // TODO(gerd): `combiner_lock` needs a better invariant...
-      && (forall v, g :: atomic_inv(combiner_lock, v, g) <==> true)
+      && (forall v, g :: atomic_inv(combiner_lock, v, g) ==> (
+        && ((v == 0) <==> g.glSome?) 
+        && ((v > 0) <==> g == glNone)))
       && replica.InternalInv()
     }
   }
@@ -291,9 +296,17 @@ module Impl(nrifc: NRIfc) {
   }
 
   glinear method perform_TransitionCombinerLockAcquired(
-    glinear combinerLock: CombinerLock)
-  returns (glinear combinerLock': CombinerLock, glinear flatCombiner: FCCombiner)
-  ensures flatCombiner.state == FCCombinerCollecting(0, [])
+    glinear combinerLock: CombinerLockState)
+  returns (glinear flatCombiner: glOption<FCCombiner>, 
+           glinear gops: glOption<LC.LCellContents<seq<nrifc.UpdateOp>>>,
+           glinear gresponses: glOption<LC.LCellContents<seq<nrifc.ReturnType>>>
+  )
+  //ensures flatCombiner.state == FCCombinerCollecting(0, []) 
+//    {
+//      flatCombiner := glSome(combinerLock.flatCombiner);
+//      gops := glSome(combinerLock.gops);
+//      gresponses := glSome(combinerLock.gresponses);
+//    }
 
   // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L584
   method try_combine(shared nr: NR, shared node: Node, tid: uint64)
@@ -314,48 +327,67 @@ module Impl(nrifc: NRIfc) {
       i := i + 1;
     }
 
+  //  glinear datatype CombinerLockState = CombinerLockState(glinear flatCombiner: FCCombiner, glinear gops: LC.LCellContents<seq<nrifc.UpdateOp>>, glinear gresponses: LC.LCellContents<seq<nrifc.ReturnType>>)
+
     glinear var fcStateOpt: glOption<FCCombiner>;
+    glinear var gops: glOption<LC.LCellContents<seq<nrifc.UpdateOp>>>;
+    glinear var gresponses: glOption<LC.LCellContents<seq<nrifc.ReturnType>>>;
+    
     // Try and acquire the lock...
     atomic_block var success := execute_atomic_compare_and_set_weak(node.combiner_lock, 0, tid) {
       ghost_acquire contents;
       if success {
-        assert contents == CombinerLock;
-        glinear var fc;
-        contents, fc := perform_TransitionCombinerLockAcquired(contents);
-        fcStateOpt := glSome(fc);
+        assert contents.glSome?;
+        fcStateOpt, gops, gresponses := perform_TransitionCombinerLockAcquired(unwrap_value(contents));
+        contents := glNone;
       } else {
         fcStateOpt := glNone;
+        gops := glNone;
+        gresponses := glNone;
       }
       ghost_release contents;
     }
 
     if success {
       assert fcStateOpt.glSome?;
-/*
-      glinear var gops;
-      //glinear var gresponses;
+      assert gops.glSome?;
+      assert gresponses.glSome?;
 
       linear var ops;
+      linear var responses;
 
-      ops, gops := LC.take_lcell(node.ops, gops);
-      linear var responses, gresponses' := LC.take_lcell(node.responses, gresponses);
-      linear var ops', responses', fcStateOpt' := combine(nr, node, ops, responses, fcStateOpt.value);
+      linear var ops';
+      linear var responses';
+
+      glinear var gops';
+      glinear var gresponses';
+      glinear var fcstate';
+      
+      //glinear var gops'';
+      //glinear var gresponses'';
+
+      ops, gops' := LC.take_lcell(node.ops, unwrap_value(gops));
+      responses, gresponses' := LC.take_lcell(node.responses, unwrap_value(gresponses));
+
+      ops', responses', fcstate' := combine(nr, node, ops, responses, unwrap_value(fcStateOpt));
+
+      glinear var gops'' := LC.give_lcell(node.ops, gops', ops');
+      glinear var gresponses'' := LC.give_lcell(node.responses, gresponses', responses');
 
       // Release combiner_lock
       atomic_block var _ := execute_atomic_store(node.combiner_lock, 0) {
         ghost_acquire contents;
-        contents := fcStateOpt';
+        assert contents == glNone;
+        dispose_glnone(contents);
+        contents := glSome(CombinerLockState(fcstate', gops'', gresponses''));
         ghost_release contents;
       }
-
-      glinear var a := LC.give_lcell(node.ops, gops', ops');
-      glinear var b := LC.give_lcell(node.responses, gresponses', responses');*/
-      dispose_anything(fcStateOpt);
     }
     else {
       dispose_glnone(fcStateOpt);
+      dispose_glnone(gops);
+      dispose_glnone(gresponses);
     }
-
   }
 
   method combine(shared nr: NR, shared node: Node,
