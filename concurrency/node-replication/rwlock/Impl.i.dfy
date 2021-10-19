@@ -16,6 +16,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
   import opened GlinearOption
   import opened Options
   import opened Runtime
+  import opened Ptrs
 
   import RwLockMod = RwLock(contentsTypeMod)
   import HandleTypeMod = Handle(contentsTypeMod)
@@ -38,6 +39,50 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
   returns (linear m: RwLock)
   requires inv(v)
   ensures m.inv == inv
+  {
+    linear var lcell;
+    glinear var lcellContents;
+    lcell, lcellContents := new_lcell();
+    lcellContents := give_lcell(lcell, lcellContents, v);
+
+    glinear var exclusiveFlagToken, rcs := RwLockTokenMod.perform_Init(lcellContents);
+    ghost var loc := exclusiveFlagToken.loc;
+
+    linear var exclusiveFlag := new_atomic(false, exclusiveFlagToken,
+        (v, g) => exclusiveFlagInv(v, g, loc, inv, lcell),
+        0);
+
+    linear var refCounts: lseq<CachePadded<Atomic<uint8, Token>>>
+        := lseq_alloc(RwLockMod.RC_WIDTH_64());
+    var j: uint64 := 0;
+    while j < 24
+    invariant 0 <= j <= RwLockMod.RC_WIDTH_64()
+    invariant |refCounts| == RwLockMod.RC_WIDTH
+    invariant forall i: int | 0 <= i < j as int ::
+        i in refCounts &&
+        forall count, token ::
+            atomic_inv(refCounts[i].inner, count, token) <==>
+            refCountInv(count, token, loc, i)
+    invariant forall i: int | j as int <= i < RwLockMod.RC_WIDTH ::
+        i !in refCounts
+    invariant rcs.loc == loc
+    invariant rcs.val == RwLockMod.Rcs(j as int, RwLockMod.RC_WIDTH)
+    {
+      glinear var rcToken;
+      rcToken, rcs := pop_rcs(rcs, j as int, RwLockMod.RC_WIDTH);
+      linear var rcAtomic := new_atomic(0, rcToken,
+          (v, g) => refCountInv(v, g, loc, j as nat),
+          0);
+
+      refCounts := lseq_give(refCounts, j, CachePadded(rcAtomic));
+
+      j := j + 1;
+    }
+
+    dispose_anything(rcs);
+
+    m := RwLock(exclusiveFlag, refCounts, lcell, loc, inv);
+  }
 
   /*
    * An ExclusiveGuard is a special ghost object you get when you
@@ -92,6 +137,34 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     }
   }
 
+  predicate exclusiveFlagInv(v: bool, token: Token, loc: Loc, inv: V -> bool,
+      lcell: LinearCell<contentsTypeMod.ContentsType>)
+  {
+    // This token for this location.
+    && token.loc == loc
+
+    && token.val.M?
+    && token.val.exclusiveFlag.ExclusiveFlag?          // Token can observe ExclusiveFlag
+    && token.val == RwLockMod.ExcFlagHandle(token.val.exclusiveFlag)  // Token doesn't have anything else in it
+    && v == token.val.exclusiveFlag.acquired            // Token lock state matches protected bool
+    // The token and the physical cell are talking about the same reference
+    // (but not necessarily the same value -- while a thread holds the lock, it may
+    // tamper with the cell contents in a way that temporarily breaks inv, putting
+    // it back before release. That doesn't change the token's maintenance of inv
+    // based on the "stale" value at the point at which acquire happened.)
+    && lcell == token.val.exclusiveFlag.stored_value.lcell
+    // The value the token thinks is behind the cell always maintains the client inv.
+    && token.val.exclusiveFlag.stored_value.v.Some?
+    && inv(token.val.exclusiveFlag.stored_value.v.value)
+  }
+
+  predicate refCountInv(count: uint8, token: Token, loc: Loc, t: nat)
+  {
+    // Token is a single refcount that matches the protected count
+    && token.val == RwLockMod.SharedFlagHandle(t, count as nat)
+    && token.loc == loc
+  }
+
   /*
    * RwLock that protects a piece of data with some invariant.
    */
@@ -100,11 +173,10 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     linear exclusiveFlag: Atomic<bool, Token>,    // implements ExclusiveState.exc
     linear refCounts: lseq<CachePadded<Atomic<uint8, Token>>>,   // implements map<ThreadId, nat>
     linear lcell: LinearCell<contentsTypeMod.ContentsType>, // implements the actual value that ExclusiveState.shared_value represents
-    ghost loc: Loc                                // which instance of this lock we're talking about
+    ghost loc: Loc,                                // which instance of this lock we're talking about
+    ghost inv: V -> bool
   )
   {
-    predicate inv(v: V)  // client's invariant
-
     predicate InternalInv()
     {
       && loc.ExtLoc?
@@ -112,33 +184,10 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       && |refCounts| == RwLockMod.RC_WIDTH
       && lseq_full(refCounts)
       && (forall v, token :: atomic_inv(exclusiveFlag, v, token)
-            <==> (
-              // This token for this location.
-              && token.loc == loc
-
-              && token.val.M?
-              && token.val.exclusiveFlag.ExclusiveFlag?          // Token can observe ExclusiveFlag
-              && token.val == RwLockMod.ExcFlagHandle(token.val.exclusiveFlag)  // Token doesn't have anything else in it
-              && v == token.val.exclusiveFlag.acquired            // Token lock state matches protected bool
-              // The token and the physical cell are talking about the same reference
-              // (but not necessarily the same value -- while a thread holds the lock, it may
-              // tamper with the cell contents in a way that temporarily breaks inv, putting
-              // it back before release. That doesn't change the token's maintenance of inv
-              // based on the "stale" value at the point at which acquire happened.)
-              && lcell == token.val.exclusiveFlag.stored_value.lcell
-              // The value the token thinks is behind the cell always maintains the client inv.
-              && token.val.exclusiveFlag.stored_value.v.Some?
-              && inv(token.val.exclusiveFlag.stored_value.v.value)
-            )
-          )
+            <==> exclusiveFlagInv(v, token, loc, inv, lcell))
       && (forall t, count, token | 0 <= t < RwLockMod.RC_WIDTH
           :: atomic_inv(refCounts[t].inner, count, token)
-            <==> (
-              // Token is a single refcount that matches the protected count
-              && token.val == RwLockMod.SharedFlagHandle(t, count as nat)
-              && token.loc == loc
-              )
-          )
+            <==> refCountInv(count, token, loc, t))
     }
 
     /*

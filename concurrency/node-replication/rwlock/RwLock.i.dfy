@@ -5,11 +5,13 @@ include "../../../lib/Base/Option.s.dfy"
 
 module RwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
   import opened FullMaps
+  import opened NativeTypes
   import HandleTypeMod = Handle(contentsTypeMod)
 
   // TODO find the right constant for perf -- balancing contention
   // and concurrency.
   ghost const RC_WIDTH := 24
+  function method RC_WIDTH_64() : uint64 { 24 }
 
   type ThreadId = nat
 
@@ -228,6 +230,10 @@ module RwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
 
   function SharedAcqHandle(ss: SharedAcquisitionStatus) : M {
     M(ExclusiveFlagUnknown, map[], ExcAcqNotAttempting, unit_fn(ss))
+  }
+
+  function RefCount(t: nat, n: nat) : M {
+    M(ExclusiveFlagUnknown, map[t := n], ExcAcqNotAttempting, zero_map())
   }
 
   ////// Transitions
@@ -584,6 +590,16 @@ module RwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
   // ensures Inv(unit())
   // ensures I(unit()) == None
   {}
+
+  function Rcs(s: nat, t: nat) : M
+  requires s <= t
+  decreases t - s
+  {
+    if t == s then
+      unit()
+    else
+      dot(RefCount(s, 0), Rcs(s+1, t))
+  }
 }
 
 module RwLockToken(contentsTypeMod: ContentsTypeMod) {
@@ -817,6 +833,20 @@ module RwLockToken(contentsTypeMod: ContentsTypeMod) {
   returns (gshared b': StoredType)
   requires tok.val == SharedAcqHandle(SharedAcqObtained(t, b))
   ensures b' == b
+
+  glinear method perform_Init(glinear b: StoredType)
+  returns (glinear central: Token, glinear rcs: Token)
+  ensures central.loc == rcs.loc
+  ensures central.val == ExcFlagHandle(ExclusiveFlag(false, b))
+  ensures rcs.val == Rcs(0, RC_WIDTH as int)
+
+  glinear method pop_rcs(glinear t: Token, ghost a: nat, ghost b: nat)
+  returns (glinear x: Token, glinear t': Token)
+  requires a < b
+  requires t.val == Rcs(a, b)
+  ensures t'.val == Rcs(a+1, b)
+  ensures x.val == RefCount(a, 0)
+  ensures x.loc == t'.loc == t.loc
 
 
 //  function method {:opaque} borrow_sot(gshared sot: SharedObtainedToken) : (gshared b: Handle)
