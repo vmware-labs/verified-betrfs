@@ -154,6 +154,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
 
   lemma I_Removed_LocalUpdates_is(s: A.Variables, s': A.Variables, rid: RequestId)
     requires Inv(s)
+    requires Inv(s')
     requires s' == s.(localUpdates := s.localUpdates - {rid})
     requires rid in s.localUpdates && s.localUpdates[rid].UpdateDone?
     ensures I(s') == I(s).(update_resps := I(s).update_resps - {rid})
@@ -166,6 +167,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
 
   lemma I_Added_LocalUpdate_is(s: A.Variables, s': A.Variables, rid: RequestId, input: nrifc.Input)
     requires Inv(s)
+    requires Inv(s')
     requires rid !in s.localUpdates;
     requires input.UOp?
     requires s' == s.(localUpdates := s.localUpdates[rid := UpdateInit(input.update_op)])
@@ -495,7 +497,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   {
     var c := s.combiner[nodeId];
     var UpdateResult(nr_state', ret) := nrifc.update(s.replicas[nodeId], s.log[c.localTail].op);
-    var queue_index := |c.queued_ops| - (c.globalTail - c.localTail);
+    var queue_index := c.queueIndex;
     var request_id := c.queued_ops[queue_index];
     var idx :=  s.localUpdates[request_id].idx;
 

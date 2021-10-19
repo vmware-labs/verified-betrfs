@@ -59,7 +59,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       // Read ltail
     | CombinerLtail(ghost queued_ops: seq<RequestId>, ghost localTail: nat)
       // Read global tail
-    | Combiner(ghost queued_ops: seq<RequestId>, ghost localTail: nat, ghost globalTail: nat)
+    | Combiner(ghost queued_ops: seq<RequestId>, queueIndex: nat, ghost localTail: nat, ghost globalTail: nat)
       // increment localTail one at a time until localTail == globalTail
       // when localTail == globalTail, we can advance to the next step by updating the ctail
     | CombinerUpdatedCtail(ghost queued_ops: seq<RequestId>, ghost localAndGlobalTail: nat)
@@ -529,6 +529,16 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     }
   }
 
+  lemma ConstructNewLogEntries_Get(rids: seq<RequestId>, nodeId: nat, gtail: nat, lupd: map<RequestId, UpdateState>, i: nat)
+  requires forall r | r in rids :: r in lupd && lupd[r].UpdateInit?
+  requires 0 <= i < |rids|
+  ensures var res := ConstructNewLogEntries(rids, nodeId, gtail, lupd);
+    var j := gtail + i;
+    j in res && res[j] == LogEntry(lupd[rids[i]].op, nodeId)
+  {
+    reveal_ConstructNewLogEntries();
+  }
+
   lemma ConstructNewLogEntries_LogDisjunct(m: M, nodeId: nat, rids: seq<RequestId>, res: map<RequestId, LogEntry>)
     requires Inv(m)
     requires forall r | r in rids :: r in m.localUpdates && m.localUpdates[r].UpdateInit?
@@ -680,7 +690,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && var gtail := m.global_tail.value;
 
     // construct the new combiner state
-    && var newst := Combiner(c.queued_ops, c.localTail, gtail);
+    && var newst := Combiner(c.queued_ops, 0, c.localTail, gtail);
     // update the state of the combiner
     && m' == m.(combiner := m.combiner[nodeId := newst])
   }
@@ -716,20 +726,17 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
     // calcualte the queue index.
     // Question(RA): could we use a map here instead? and associate it with the log index?
-    && var queue_index := |c.queued_ops| - (c.globalTail - c.localTail);
+    && var queue_index := c.queueIndex;
     && 0 <= queue_index < |c.queued_ops|
 
     && var request_id := c.queued_ops[queue_index];
     && InUpdatePlaced(m, request_id)
 
     // we get the idx into the log here
-    && var idx :=  m.localUpdates[request_id].idx;
-
-    // the index should be the same as the localTail.
-    && idx == c.localTail
+    && var idx := c.localTail;
 
     // update the combiner state by incrementing the current local tail
-    &&  var c_new := c.(localTail := c.localTail + 1);
+    && var c_new := c.(localTail := c.localTail + 1).(queueIndex := c.queueIndex + 1);
 
     // update the state
     && m' == m.(combiner := m.combiner[nodeId := c_new])
@@ -914,6 +921,20 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     || (exists log_idx :: stub == UpdateOp(rid, UpdateDone(output, log_idx)))
   }
 
+  function CombinerRequestIds(m: M) : set<RequestId>
+  requires m.M?
+  {
+    set nodeId, j | nodeId in m.combiner
+      && (
+        || m.combiner[nodeId].CombinerPlaced?
+        || m.combiner[nodeId].CombinerLtail?
+        || m.combiner[nodeId].Combiner?
+        || m.combiner[nodeId].CombinerUpdatedCtail?
+      )
+      && 0 <= j < |m.combiner[nodeId].queued_ops|
+      :: m.combiner[nodeId].queued_ops[j]
+  }
+
   // By returning a set of request ids "in use", we enforce that
   // there are only a finite number of them (i.e., it is always possible to find
   // a free one).
@@ -921,7 +942,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     if m == Fail then
       {}
     else
-      m.localReads.Keys + m.localUpdates.Keys
+      m.localReads.Keys + m.localUpdates.Keys + CombinerRequestIds(m)
   }
 
   predicate Init(s: M) {
@@ -1077,24 +1098,162 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       case CombinerReady => m.localTails[nodeId]
       case CombinerPlaced(_) => m.localTails[nodeId]
       case CombinerLtail(_, localTail: nat) => localTail
-      case Combiner(_, localTail: nat, _) => localTail
+      case Combiner(_, _, localTail: nat, _) => localTail
       case CombinerUpdatedCtail(_, localAndGlobalTail: nat) => localAndGlobalTail
+    }
+  }
+
+  predicate LogRangeMatchesQueue(queue: seq<RequestId>, log: map<nat, LogEntry>,
+      queueIndex: nat, logIndexLower: nat, logIndexUpper: nat, nodeId: nat, updates: map<nat, UpdateState>)
+  requires 0 <= queueIndex <= |queue|
+  requires logIndexLower <= logIndexUpper
+  decreases logIndexUpper - logIndexLower
+  {
+    && (logIndexLower == logIndexUpper ==>
+      queueIndex == |queue|
+    )
+    && (logIndexLower < logIndexUpper ==>
+      && logIndexLower in log
+      && (log[logIndexLower].node_id == nodeId ==>
+        && queueIndex < |queue|
+        && queue[queueIndex] in updates
+        && updates[queue[queueIndex]].UpdatePlaced?
+        && updates[queue[queueIndex]].idx == logIndexLower
+        && LogRangeMatchesQueue(queue, log, queueIndex+1, logIndexLower+1, logIndexUpper, nodeId, updates)
+      )
+      && (log[logIndexLower].node_id != nodeId ==>
+        && LogRangeMatchesQueue(queue, log, queueIndex, logIndexLower+1, logIndexUpper, nodeId, updates)
+      )
+    )
+  }
+
+  predicate LogRangeNoNodeId(log: map<nat, LogEntry>,
+      logIndexLower: nat, logIndexUpper: nat, nodeId: nat)
+  requires logIndexLower <= logIndexUpper
+  decreases logIndexUpper - logIndexLower
+  {
+    (logIndexLower < logIndexUpper ==>
+      && logIndexLower in log
+      && log[logIndexLower].node_id != nodeId
+      && LogRangeNoNodeId(log, logIndexLower+1, logIndexUpper, nodeId)
+    )
+  }
+
+  lemma concat_LogRangeNoNodeId_LogRangeMatchesQueue(
+      queue: seq<RequestId>, log: map<nat, LogEntry>,
+      queueIndex: nat, a: nat, b: nat, c: nat, nodeId: nat, updates: map<nat, UpdateState>)
+  requires a <= b <= c
+  requires 0 <= queueIndex <= |queue|
+  requires LogRangeNoNodeId(log, a, b, nodeId)
+  requires LogRangeMatchesQueue(queue, log, queueIndex, b, c, nodeId, updates)
+  ensures LogRangeMatchesQueue(queue, log, queueIndex, a, c, nodeId, updates)
+
+  lemma LogRangeMatchesQueue_update_change(queue: seq<RequestId>, log: map<nat, LogEntry>,
+      queueIndex: nat, logIndexLower: nat, logIndexUpper: nat, nodeId: nat,
+      updates1: map<nat, UpdateState>,
+      updates2: map<nat, UpdateState>)
+  requires 0 <= queueIndex <= |queue|
+  requires logIndexLower <= logIndexUpper
+  requires LogRangeMatchesQueue(queue, log, queueIndex, logIndexLower,
+      logIndexUpper, nodeId, updates1)
+  requires forall rid | rid in updates1 ::
+      updates1[rid].UpdatePlaced? && logIndexLower <= updates1[rid].idx < logIndexUpper ==>
+          rid in updates2 && updates2[rid] == updates1[rid]
+  ensures LogRangeMatchesQueue(queue, log, queueIndex, logIndexLower,
+      logIndexUpper, nodeId, updates2)
+  decreases logIndexUpper - logIndexLower
+  {
+    if logIndexLower == logIndexUpper {
+    } else {
+      if log[logIndexLower].node_id == nodeId {
+        LogRangeMatchesQueue_update_change(queue, log, queueIndex + 1,
+          logIndexLower + 1, logIndexUpper, nodeId, updates1, updates2);
+      } else {
+        LogRangeMatchesQueue_update_change(queue, log, queueIndex,
+          logIndexLower + 1, logIndexUpper, nodeId, updates1, updates2);
+      }
+    }
+  }
+
+  lemma LogRangeMatchesQueue_update_change_2(queue: seq<RequestId>, log: map<nat, LogEntry>,
+      queueIndex: nat, logIndexLower: nat, logIndexUpper: nat, nodeId: nat,
+      updates1: map<nat, UpdateState>,
+      updates2: map<nat, UpdateState>)
+  requires 0 <= queueIndex <= |queue|
+  requires logIndexLower <= logIndexUpper
+  requires LogRangeMatchesQueue(queue, log, queueIndex, logIndexLower,
+      logIndexUpper, nodeId, updates1)
+  requires forall rid | rid in updates1 :: rid in queue ==>
+          rid in updates2 && updates2[rid] == updates1[rid]
+  ensures LogRangeMatchesQueue(queue, log, queueIndex, logIndexLower,
+      logIndexUpper, nodeId, updates2)
+  decreases logIndexUpper - logIndexLower
+  {
+    if logIndexLower == logIndexUpper {
+    } else {
+      if log[logIndexLower].node_id == nodeId {
+        LogRangeMatchesQueue_update_change_2(queue, log, queueIndex + 1,
+          logIndexLower + 1, logIndexUpper, nodeId, updates1, updates2);
+      } else {
+        LogRangeMatchesQueue_update_change_2(queue, log, queueIndex,
+          logIndexLower + 1, logIndexUpper, nodeId, updates1, updates2);
+      }
     }
   }
 
   predicate Inv_CombinerStateValid(s: M)
     requires Inv_WF(s)
   {
-    forall nodeId | nodeId in s.combiner :: match s.combiner[nodeId] {
-      case CombinerReady => true
-      case CombinerPlaced(queued_ops: seq<RequestId>) => true
+    forall nodeId | nodeId in s.combiner ::
+      Inv_CombinerStateForNodeId(s, nodeId)
+  }
+
+  predicate {:opaque} QueueRidsUpdatePlaced(queued_ops: seq<RequestId>,
+      localUpdates: map<RequestId, UpdateState>, bound: nat)
+  requires 0 <= bound <= |queued_ops|
+  {
+    && (forall j | bound <= j < |queued_ops| ::
+        queued_ops[j] in localUpdates && localUpdates[queued_ops[j]].UpdatePlaced?
+    )
+  }
+
+  predicate {:opaque} QueueRidsUpdateDone(queued_ops: seq<RequestId>,
+      localUpdates: map<RequestId, UpdateState>, bound: nat)
+  requires 0 <= bound <= |queued_ops|
+  {
+    (forall j | 0 <= j < bound ::
+        queued_ops[j] in localUpdates ==>
+           || localUpdates[queued_ops[j]].UpdateApplied?
+           || localUpdates[queued_ops[j]].UpdateDone?
+    )
+  }
+
+  predicate Inv_CombinerStateForNodeId(s: M, nodeId: nat)
+    requires Inv_WF(s)
+    requires nodeId in s.combiner
+  {
+    match s.combiner[nodeId] {
+      case CombinerReady =>
+        && nodeId in s.localTails
+        && s.localTails[nodeId] <= s.global_tail.value
+        && LogRangeNoNodeId(s.log, s.localTails[nodeId], s.global_tail.value, nodeId)
+      case CombinerPlaced(queued_ops: seq<RequestId>) =>
+        && nodeId in s.localTails
+        && s.localTails[nodeId] <= s.global_tail.value
+        && LogRangeMatchesQueue(queued_ops, s.log, 0, s.localTails[nodeId], s.global_tail.value, nodeId, s.localUpdates)
+        && QueueRidsUpdatePlaced(queued_ops, s.localUpdates, 0)
+        && seq_unique(queued_ops)
       case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => (
         // we've just read the local tail value, and no-one else should modify that
         && localTail == s.localTails[nodeId]
         // the local tail should be smaller or equal than the ctail
         && localTail <= s.ctail.value
+        && localTail <= s.global_tail.value
+        && LogRangeMatchesQueue(queued_ops, s.log, 0, localTail, s.global_tail.value, nodeId, s.localUpdates)
+        && QueueRidsUpdatePlaced(queued_ops, s.localUpdates, 0)
+        && seq_unique(queued_ops)
       )
-      case Combiner(queued_ops: seq<RequestId>, localTail: nat, globalTail: nat) => (
+      case Combiner(queued_ops: seq<RequestId>, queueIndex: nat, localTail: nat, globalTail: nat) => (
         // the global tail may have already advanced...
         && globalTail <= s.global_tail.value
         // we're advancing the local tail here
@@ -1103,6 +1262,12 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
         && localTail <= globalTail
         // the log now contains all entries up to localtail
         && LogContainsEntriesUpToHere(s.log, localTail)
+        && 0 <= queueIndex <= |queued_ops|
+        && LogRangeMatchesQueue(queued_ops, s.log, queueIndex, localTail, globalTail, nodeId, s.localUpdates)
+        && LogRangeNoNodeId(s.log, globalTail, s.global_tail.value, nodeId)
+        && QueueRidsUpdatePlaced(queued_ops, s.localUpdates, queueIndex)
+        && QueueRidsUpdateDone(queued_ops, s.localUpdates, queueIndex)
+        && seq_unique(queued_ops)
       )
       case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => (
         // the global tail may have already advanced...
@@ -1113,6 +1278,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
         && s.localTails[nodeId] <= localAndGlobalTail
         // the log now contains all entries up to localAndGlobalTail
         && LogContainsEntriesUpToHere(s.log, localAndGlobalTail)
+        && LogRangeNoNodeId(s.log, localAndGlobalTail, s.global_tail.value, nodeId)
+        && QueueRidsUpdateDone(queued_ops, s.localUpdates, |queued_ops|)
+        && seq_unique(queued_ops)
       )
     }
   }
@@ -1137,7 +1305,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       case CombinerReady => {}
       case CombinerPlaced(_) => {}
       case CombinerLtail(_, _) => {}
-      case Combiner(_, _, _) => {}
+      case Combiner(_, _, _, _) => {}
       case CombinerUpdatedCtail(_, _) => {}
     }
   }
@@ -1205,6 +1373,26 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       )
 
   }
+  
+  predicate seqs_disjoint(s: seq<RequestId>, t: seq<RequestId>)
+  {
+    forall i, j :: 0 <= i < |s| && 0 <= j < |t| ==> s[i] != t[j]
+  }
+
+  predicate CombinerRidsDistinctTwoNodes(c1: CombinerState, c2: CombinerState)
+  {
+    (c1.CombinerPlaced? || c1.CombinerLtail? || c1.Combiner? || c1.CombinerUpdatedCtail?) ==>
+    (c2.CombinerPlaced? || c2.CombinerLtail? || c2.Combiner? || c2.CombinerUpdatedCtail?) ==>
+    seqs_disjoint(c1.queued_ops, c2.queued_ops)
+  }
+
+  predicate Inv_CombinerRidsDistinct(s: M)
+  requires s.M?
+  {
+    forall nodeId, nodeId' ::
+        nodeId in s.combiner && nodeId' in s.combiner && nodeId != nodeId' ==>
+          CombinerRidsDistinctTwoNodes(s.combiner[nodeId], s.combiner[nodeId'])
+  }
 
   // the invariant
   predicate Inv(s: M) {
@@ -1223,6 +1411,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && Inv_LocalUpdatesIdx(s)
     && Inv_ReadOnlyResult(s)
     && Inv_UpdateResults(s)
+    && Inv_CombinerRidsDistinct(s)
 
     // && (forall nid | nid in s.combiner :: CombinerRange(s.combiner[nid]) !!  (set x | 0 <= x < get_local_tail(s, nid) :: x))
 
@@ -1247,15 +1436,126 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     Next_Implies_inv(dot(shard, rest), dot(shard', rest));
   }
 
+  lemma NewTicketPreservesInv_read(m: M, m': M, rid: RequestId, input: IOIfc.Input)
+  requires Inv(m)
+  requires input.ROp?
+  requires m' == m.(localReads := m.localReads[rid := ReadonlyInit(input.readonly_op)])
+  requires rid !in m.localReads
+  ensures Inv(m')
+  {
+  }
+
+  lemma NewTicketPreservesInv_update(m: M, m': M, rid: RequestId, input: IOIfc.Input)
+  requires Inv(m)
+  requires input.UOp?
+  requires m' == m.(localUpdates := m.localUpdates[rid := UpdateInit(input.update_op)])
+  requires rid !in m.localUpdates
+  requires rid !in CombinerRequestIds(m)
+  ensures Inv(m')
+  {
+    reveal_QueueRidsUpdateDone();
+    reveal_QueueRidsUpdatePlaced();
+
+    forall nodeId' | nodeId' in m'.combiner
+    ensures Inv_CombinerStateForNodeId(m', nodeId')
+    {
+      match m.combiner[nodeId'] {
+        case CombinerReady => {
+          assert Inv_CombinerStateForNodeId(m', nodeId');
+        }
+        case CombinerPlaced(queued_ops: seq<RequestId>) => {
+          LogRangeMatchesQueue_update_change(
+            queued_ops, m'.log, 0, m'.localTails[nodeId'], m'.global_tail.value, nodeId', m.localUpdates, m'.localUpdates);
+          assert Inv_CombinerStateForNodeId(m', nodeId');
+        }
+        case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => {
+          LogRangeMatchesQueue_update_change(
+            queued_ops, m'.log, 0, localTail, m'.global_tail.value, nodeId', m.localUpdates, m'.localUpdates);
+          assert Inv_CombinerStateForNodeId(m', nodeId');
+        }
+        case Combiner(queued_ops: seq<RequestId>, queueIndex: nat, localTail: nat, globalTail: nat) => {
+          LogRangeMatchesQueue_update_change(
+            queued_ops, m'.log, queueIndex, localTail, globalTail, nodeId', m.localUpdates, m'.localUpdates);
+          assert Inv_CombinerStateForNodeId(m', nodeId');
+        }
+        case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => {
+          assert Inv_CombinerStateForNodeId(m', nodeId');
+        }
+      }
+    }
+  }
+
   lemma NewTicketPreservesInv(whole: M, whole': M, rid: RequestId, input: IOIfc.Input)
   //requires Inv(whole)
   //requires NewTicket(whole, whole', rid, input)
   ensures Inv(whole')
+  {
+    if input.ROp? {
+      NewTicketPreservesInv_read(whole, whole', rid, input);
+    } else {
+      NewTicketPreservesInv_update(whole, whole', rid, input);
+    }
+  }
+
+  lemma ConsumeStubPreservesInv_read(m: M, m': M, rid: RequestId)
+  requires Inv(m)
+  requires rid in m.localReads
+  requires m.localReads[rid].ReadonlyDone?
+  requires m' == m.(localReads := m.localReads - {rid})
+  ensures Inv(m')
+  {
+  }
+
+  lemma ConsumeStubPreservesInv_update(m: M, m': M, rid: RequestId)
+  requires Inv(m)
+  requires rid in m.localUpdates
+  requires m.localUpdates[rid].UpdateDone?
+  requires m' == m.(localUpdates := m.localUpdates - {rid})
+  ensures Inv(m')
+  {
+    reveal_QueueRidsUpdateDone();
+    reveal_QueueRidsUpdatePlaced();
+
+    forall nodeId' | nodeId' in m'.combiner
+    ensures Inv_CombinerStateForNodeId(m', nodeId')
+    {
+      match m.combiner[nodeId'] {
+        case CombinerReady => {
+          assert Inv_CombinerStateForNodeId(m', nodeId');
+        }
+        case CombinerPlaced(queued_ops: seq<RequestId>) => {
+          LogRangeMatchesQueue_update_change(
+            queued_ops, m'.log, 0, m'.localTails[nodeId'], m'.global_tail.value, nodeId', m.localUpdates, m'.localUpdates);
+          assert Inv_CombinerStateForNodeId(m', nodeId');
+        }
+        case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => {
+          LogRangeMatchesQueue_update_change(
+            queued_ops, m'.log, 0, localTail, m'.global_tail.value, nodeId', m.localUpdates, m'.localUpdates);
+          assert Inv_CombinerStateForNodeId(m', nodeId');
+        }
+        case Combiner(queued_ops: seq<RequestId>, queueIndex: nat, localTail: nat, globalTail: nat) => {
+          LogRangeMatchesQueue_update_change(
+            queued_ops, m'.log, queueIndex, localTail, globalTail, nodeId', m.localUpdates, m'.localUpdates);
+          assert Inv_CombinerStateForNodeId(m', nodeId');
+        }
+        case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => {
+          assert Inv_CombinerStateForNodeId(m', nodeId');
+        }
+      }
+    }
+  }
 
   lemma ConsumeStubPreservesInv(whole: M, whole': M, rid: RequestId, output: IOIfc.Output, stub: M)
   //requires Inv(whole)
   //requires ConsumeStub(whole, whole', rid, output)
   ensures Inv(whole')
+  {
+    if rid in stub.localReads {
+      ConsumeStubPreservesInv_read(whole, whole', rid);
+    } else {
+      ConsumeStubPreservesInv_update(whole, whole', rid);
+    }
+  }
 
   lemma dot_unit(x: M)
   ensures dot(x, unit()) == x
@@ -1332,7 +1632,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   requires Init(m)
   ensures Inv(m)
   {
-
+    //reveal_LogRangeMatchesQueue();
+    //reveal_LogRangeNoNodeId();
   }
 
   lemma TransitionReadonlyReadCtail_PreservesInv(m: M, m': M, rid: RequestId)
@@ -1373,6 +1674,148 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       state_at_version_preserves(a, b, i-1);
     }
   }
+
+  lemma LogRangeMatchesQueue_for_AdvanceTail(
+      m: M, m': M, nodeId: nat, request_ids: seq<RequestId>, i: nat)
+  requires Inv(m)
+  requires AdvanceTail(m, m', nodeId, request_ids)
+  requires 0 <= i <= |request_ids|
+  ensures LogRangeMatchesQueue(request_ids,
+          m'.log, i, m.global_tail.value + i, m'.global_tail.value, nodeId, m'.localUpdates)
+  decreases |request_ids| - i
+  {
+    //reveal_LogRangeMatchesQueue();
+    if i == |request_ids| {
+    } else {
+      var j := m.global_tail.value + i;
+      ConstructNewLogEntries_Get(request_ids, nodeId, m.global_tail.value, m.localUpdates, i);
+      LogRangeMatchesQueue_for_AdvanceTail(
+          m, m', nodeId, request_ids, i+1);
+      reveal_ConstructLocalUpdateMap();
+      assert LogRangeMatchesQueue(request_ids,
+              m'.log, i, j, m'.global_tail.value, nodeId, m'.localUpdates);
+    }
+  }
+
+  lemma LogRangeNoNodeId_preserved_AdvanceTail(
+      m: M, m': M, nodeId: nat, request_ids: seq<RequestId>,
+      logIndexLower: nat, logIndexUpper: nat, nodeId': nat)
+  requires Inv(m)
+  requires AdvanceTail(m, m', nodeId, request_ids)
+  requires logIndexLower <= logIndexUpper
+  requires LogRangeNoNodeId(m.log, logIndexLower, logIndexUpper, nodeId')
+  ensures LogRangeNoNodeId(m'.log, logIndexLower, logIndexUpper, nodeId')
+  decreases logIndexUpper - logIndexLower
+  {
+    //reveal_LogRangeNoNodeId();
+    if logIndexLower == logIndexUpper {
+    } else {
+      ConstructNewLogEntries_LogDisjunct(m, nodeId, request_ids,
+          ConstructNewLogEntries(request_ids, nodeId, m.global_tail.value, m.localUpdates));
+      LogRangeNoNodeId_preserved_AdvanceTail(m, m', nodeId, request_ids,
+          logIndexLower+1, logIndexUpper, nodeId');
+    }
+  }
+
+  lemma LogRangeNoNodeId_preserved_AdvanceTail_augment(
+      m: M, m': M, nodeId: nat, request_ids: seq<RequestId>,
+      logIndexLower: nat, nodeId': nat)
+  requires Inv(m)
+  requires AdvanceTail(m, m', nodeId, request_ids)
+  requires logIndexLower <= m'.global_tail.value
+  requires nodeId != nodeId'
+  requires logIndexLower < m.global_tail.value ==>
+      LogRangeNoNodeId(m.log, logIndexLower, m.global_tail.value, nodeId')
+  ensures LogRangeNoNodeId(m'.log, logIndexLower, m'.global_tail.value, nodeId')
+  decreases m'.global_tail.value - logIndexLower
+  {
+    //reveal_LogRangeNoNodeId();
+    if logIndexLower == m'.global_tail.value {
+    } else {
+      if logIndexLower < m.global_tail.value {
+        ConstructNewLogEntries_LogDisjunct(m, nodeId, request_ids,
+            ConstructNewLogEntries(request_ids, nodeId, m.global_tail.value, m.localUpdates));
+      } else {
+        ConstructNewLogEntries_Get(request_ids, nodeId, m.global_tail.value, m.localUpdates,
+            logIndexLower - m.global_tail.value);
+        assert m'.log[logIndexLower].node_id == nodeId;
+      }
+      LogRangeNoNodeId_preserved_AdvanceTail_augment(m, m', nodeId, request_ids,
+          logIndexLower+1, nodeId');
+    }
+  }
+
+  lemma LogRangeMatchesQueue_preserved_AdvanceTail(
+      m: M, m': M, nodeId: nat, request_ids: seq<RequestId>,
+      request_ids': seq<RequestId>, queueIndex: nat,
+      logIndexLower: nat, logIndexUpper: nat, nodeId': nat)
+  requires Inv(m)
+  requires AdvanceTail(m, m', nodeId, request_ids)
+  requires logIndexLower <= logIndexUpper
+  requires 0 <= queueIndex <= |request_ids'|
+  requires LogRangeMatchesQueue(request_ids', m.log, queueIndex, logIndexLower, logIndexUpper, nodeId', m.localUpdates)
+  ensures LogRangeMatchesQueue(request_ids', m'.log, queueIndex, logIndexLower, logIndexUpper, nodeId', m'.localUpdates)
+  decreases logIndexUpper - logIndexLower
+  {
+    if logIndexLower == logIndexUpper {
+    } else {
+      ConstructNewLogEntries_LogDisjunct(m, nodeId, request_ids,
+          ConstructNewLogEntries(request_ids, nodeId, m.global_tail.value, m.localUpdates));
+      reveal_ConstructLocalUpdateMap();
+      if m.log[logIndexLower].node_id == nodeId' {
+        LogRangeMatchesQueue_preserved_AdvanceTail(m, m', nodeId, request_ids,
+            request_ids', queueIndex + 1,
+            logIndexLower+1, logIndexUpper, nodeId');
+      } else {
+        LogRangeMatchesQueue_preserved_AdvanceTail(m, m', nodeId, request_ids,
+            request_ids', queueIndex,
+            logIndexLower+1, logIndexUpper, nodeId');
+      }
+    }
+  }
+
+  lemma LogRangeMatchesQueue_preserved_AdvanceTail_augment(
+      m: M, m': M, nodeId: nat, request_ids: seq<RequestId>,
+      request_ids': seq<RequestId>, queueIndex: nat,
+      logIndexLower: nat, nodeId': nat)
+  requires Inv(m)
+  requires AdvanceTail(m, m', nodeId, request_ids)
+  requires logIndexLower <= m'.global_tail.value
+  requires 0 <= queueIndex <= |request_ids'|
+  requires nodeId != nodeId'
+  requires logIndexLower < m.global_tail.value ==> LogRangeMatchesQueue(request_ids', m.log, queueIndex, logIndexLower, m.global_tail.value, nodeId', m.localUpdates)
+  requires logIndexLower >= m.global_tail.value ==> queueIndex == |request_ids'|
+  ensures LogRangeMatchesQueue(request_ids', m'.log, queueIndex, logIndexLower, m'.global_tail.value, nodeId', m'.localUpdates)
+  decreases m'.global_tail.value - logIndexLower
+  {
+    if logIndexLower == m'.global_tail.value {
+      assert LogRangeMatchesQueue(request_ids', m'.log, queueIndex, logIndexLower, m'.global_tail.value, nodeId', m'.localUpdates);
+    } else {
+      if logIndexLower < m.global_tail.value {
+        ConstructNewLogEntries_LogDisjunct(m, nodeId, request_ids,
+            ConstructNewLogEntries(request_ids, nodeId, m.global_tail.value, m.localUpdates));
+        reveal_ConstructLocalUpdateMap();
+        if m.log[logIndexLower].node_id == nodeId' {
+          LogRangeMatchesQueue_preserved_AdvanceTail_augment(m, m', nodeId, request_ids,
+              request_ids', queueIndex + 1,
+              logIndexLower+1, nodeId');
+        } else {
+          LogRangeMatchesQueue_preserved_AdvanceTail_augment(m, m', nodeId, request_ids,
+              request_ids', queueIndex,
+              logIndexLower+1, nodeId');
+        }
+      } else {
+        ConstructNewLogEntries_Get(request_ids, nodeId, m.global_tail.value, m.localUpdates,
+            logIndexLower - m.global_tail.value);
+        assert m'.log[logIndexLower].node_id == nodeId;
+        LogRangeMatchesQueue_preserved_AdvanceTail_augment(m, m', nodeId, request_ids,
+            request_ids', queueIndex,
+            logIndexLower+1, nodeId');
+      }
+    }
+  }
+
+
 
   lemma AdvanceTail_PreservesInv(m: M, m': M, nodeId: nat, request_ids: seq<RequestId>)
     requires Inv(m)
@@ -1424,6 +1867,59 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     {
       state_at_version_preserves(m.log, m'.log, m'.localUpdates[r].idx);
     }
+
+    assert Inv_CombinerStateForNodeId(m', nodeId) by {
+      LogRangeMatchesQueue_for_AdvanceTail(m, m', nodeId, request_ids, 0);
+      assert LogRangeMatchesQueue(request_ids,
+          m'.log, 0, m.global_tail.value, m'.global_tail.value, nodeId, m'.localUpdates);
+      LogRangeNoNodeId_preserved_AdvanceTail(m, m', nodeId, request_ids,
+          m.localTails[nodeId], m.global_tail.value, nodeId);
+      concat_LogRangeNoNodeId_LogRangeMatchesQueue(
+          request_ids, m'.log, 0,
+          m.localTails[nodeId],
+          m.global_tail.value, m'.global_tail.value, nodeId, m'.localUpdates);
+      reveal_QueueRidsUpdateDone();
+      reveal_QueueRidsUpdatePlaced();
+    }
+    forall nodeId' | nodeId' in m'.combiner && nodeId' != nodeId
+    ensures Inv_CombinerStateForNodeId(m', nodeId')
+    {
+      assert m.combiner[nodeId'] == m'.combiner[nodeId'];
+      assert Inv_CombinerStateForNodeId(m, nodeId');
+      match m.combiner[nodeId'] {
+        case CombinerReady => {
+          LogRangeNoNodeId_preserved_AdvanceTail_augment(m, m', nodeId, request_ids, m.localTails[nodeId'], nodeId');
+        }
+        case CombinerPlaced(queued_ops: seq<RequestId>) => {
+          LogRangeMatchesQueue_preserved_AdvanceTail_augment(m, m', nodeId, request_ids, queued_ops, 0, m.localTails[nodeId'], nodeId');
+        }
+        case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => {
+          LogRangeMatchesQueue_preserved_AdvanceTail_augment(m, m', nodeId, request_ids, queued_ops, 0, localTail, nodeId');
+        }
+        case Combiner(queued_ops: seq<RequestId>, queueIndex: nat, localTail: nat, globalTail: nat) => {
+          LogRangeMatchesQueue_preserved_AdvanceTail(m, m', nodeId, request_ids, queued_ops, queueIndex, localTail, globalTail, nodeId');
+          LogRangeNoNodeId_preserved_AdvanceTail_augment(m, m', nodeId, request_ids, globalTail, nodeId');
+        }
+        case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => {
+          LogRangeNoNodeId_preserved_AdvanceTail_augment(m, m', nodeId, request_ids, localAndGlobalTail, nodeId');
+        }
+      }
+      reveal_QueueRidsUpdateDone();
+      reveal_QueueRidsUpdatePlaced();
+    }
+
+    assert Inv_CombinerRidsDistinct(m') by {
+      reveal_QueueRidsUpdateDone();
+      reveal_QueueRidsUpdatePlaced();
+    }
+
+    /*forall nodeId1, nodeId2 ::
+        nodeId1 in s.combiner && nodeId2 in s.combiner && nodeId1 != nodeId2
+    ensures CombinerRidsDistinctTwoNodes(s.combiner[nodeId1], s.combiner[nodeId2])
+    {
+      if nodeId1 == node {
+      }
+    }*/
   }
 
 
@@ -1441,6 +1937,8 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     requires ExecLoadGlobalTail(m, m', nodeId)
     ensures Inv(m')
   {
+    reveal_QueueRidsUpdateDone();
+    reveal_QueueRidsUpdatePlaced();
   }
 
   lemma ExecDispatchRemote_PreservesInv(m: M, m': M, nodeId: nat)
@@ -1456,7 +1954,57 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     requires ExecDispatchLocal(m, m',nodeId)
     ensures Inv(m')
   {
+    assert Inv_CombinerStateForNodeId(m', nodeId) by {
+      /*assert LogRangeMatchesQueue(m.combiner[nodeId].queued_ops,
+          m.log, m.combiner[nodeId].queueIndex, m.combiner[nodeId].localTail,
+          m.combiner[nodeId].globalTail, nodeId, m.localUpdates);
+      assert LogRangeMatchesQueue(m'.combiner[nodeId].queued_ops,
+          m'.log, m'.combiner[nodeId].queueIndex, m'.combiner[nodeId].localTail,
+          m.combiner[nodeId].globalTail, nodeId, m.localUpdates);*/
+      LogRangeMatchesQueue_update_change(
+          m'.combiner[nodeId].queued_ops,
+          m'.log, m'.combiner[nodeId].queueIndex, m'.combiner[nodeId].localTail,
+          m.combiner[nodeId].globalTail, nodeId, m.localUpdates, m'.localUpdates);
+      /*assert LogRangeMatchesQueue(m'.combiner[nodeId].queued_ops,
+          m'.log, m'.combiner[nodeId].queueIndex, m'.combiner[nodeId].localTail,
+          m.combiner[nodeId].globalTail, nodeId, m'.localUpdates);*/
+      reveal_QueueRidsUpdateDone();
+      reveal_QueueRidsUpdatePlaced();
+    }
+    var c := m.combiner[nodeId];
+    var rid := c.queued_ops[c.queueIndex];
+    forall nodeId' | nodeId' in m'.combiner && nodeId' != nodeId
+    ensures Inv_CombinerStateForNodeId(m', nodeId')
+    {
+      if m'.combiner[nodeId'].CombinerPlaced?
+        || m'.combiner[nodeId'].CombinerLtail?
+        || m'.combiner[nodeId'].Combiner?
+      {
+        assert rid !in m'.combiner[nodeId'].queued_ops;
+      }
 
+      match m.combiner[nodeId'] {
+        case CombinerReady => {
+        }
+        case CombinerPlaced(queued_ops: seq<RequestId>) => {
+          LogRangeMatchesQueue_update_change_2(
+            queued_ops, m'.log, 0, m'.localTails[nodeId'], m'.global_tail.value, nodeId', m.localUpdates, m'.localUpdates);
+        }
+        case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => {
+          LogRangeMatchesQueue_update_change_2(
+            queued_ops, m'.log, 0, localTail, m'.global_tail.value, nodeId', m.localUpdates, m'.localUpdates);
+        }
+        case Combiner(queued_ops: seq<RequestId>, queueIndex: nat, localTail: nat, globalTail: nat) => {
+          LogRangeMatchesQueue_update_change_2(
+            queued_ops, m'.log, queueIndex, localTail, globalTail, nodeId', m.localUpdates, m'.localUpdates);
+        }
+        case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => {
+        }
+      }
+
+      reveal_QueueRidsUpdateDone();
+      reveal_QueueRidsUpdatePlaced();
+    }
   }
 
   lemma UpdateCompletedTail_PreservesInv(m: M, m': M, nodeId: nat)
@@ -1479,7 +2027,31 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     requires UpdateRequestDone(m, m', request_id)
     ensures Inv(m')
   {
+    forall nodeId' | nodeId' in m'.combiner
+    ensures Inv_CombinerStateForNodeId(m', nodeId')
+    {
+      match m.combiner[nodeId'] {
+        case CombinerReady => {
+        }
+        case CombinerPlaced(queued_ops: seq<RequestId>) => {
+          LogRangeMatchesQueue_update_change(
+            queued_ops, m'.log, 0, m'.localTails[nodeId'], m'.global_tail.value, nodeId', m.localUpdates, m'.localUpdates);
+        }
+        case CombinerLtail(queued_ops: seq<RequestId>, localTail: nat) => {
+          LogRangeMatchesQueue_update_change(
+            queued_ops, m'.log, 0, localTail, m'.global_tail.value, nodeId', m.localUpdates, m'.localUpdates);
+        }
+        case Combiner(queued_ops: seq<RequestId>, queueIndex: nat, localTail: nat, globalTail: nat) => {
+          LogRangeMatchesQueue_update_change(
+            queued_ops, m'.log, queueIndex, localTail, globalTail, nodeId', m.localUpdates, m'.localUpdates);
+        }
+        case CombinerUpdatedCtail(queued_ops: seq<RequestId>, localAndGlobalTail: nat) => {
+        }
+      }
 
+      reveal_QueueRidsUpdateDone();
+      reveal_QueueRidsUpdatePlaced();
+    }
   }
 
   lemma UpdateCompletedNoChange_PreservesInv(m: M, m': M, nodeId: nat)

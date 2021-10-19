@@ -1,7 +1,7 @@
 include "NRSpec.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 
-module CounterIfc refines NRIfc{
+module CounterIfc refines NRIfc {
   import opened NativeTypes
 
   type NRState = uint64

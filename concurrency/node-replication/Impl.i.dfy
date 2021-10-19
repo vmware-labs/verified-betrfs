@@ -1221,7 +1221,8 @@ module Impl(nrifc: NRIfc) {
       invariant 0 <= i <= gtail
       invariant combinerState'.nodeId == prev_combinerState.nodeId
       invariant combinerState'.state.Combiner?
-      invariant combinerState'.state == prev_combinerState.state.(localTail := i as int)
+      invariant combinerState'.state.queueIndex == responsesIndex as int
+      invariant combinerState'.state == prev_combinerState.state.(localTail := i as int).(queueIndex := responsesIndex as int)
       invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
       invariant ghost_replica'.state == nrifc.I(actual_replica')
       invariant ghost_replica'.nodeId == node.nodeId as int
@@ -1234,6 +1235,7 @@ module Impl(nrifc: NRIfc) {
       invariant forall i | 0 <= i < responsesIndex as int ::
           i in updates'
             && updates'[i].us.UpdateApplied?
+            && updates'[i].us.idx < combinerState'.state.globalTail
             && updates'[i].rid == requestIds'[i]
             && updates'[i].us.ret == responses'[i]
       invariant responsesIndex == 0 ==> responses' == responses && updates' == updates
@@ -1248,8 +1250,9 @@ module Impl(nrifc: NRIfc) {
         invariant ghost_replica'.nodeId == node.nodeId as int
         invariant combinerState'.nodeId == prev_combinerState.nodeId
         invariant combinerState'.state.Combiner?
-        invariant !done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int)
-        invariant done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int + 1)
+        invariant combinerState'.state.queueIndex == responsesIndex as int
+        invariant !done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int).(queueIndex := responsesIndex as int)
+        invariant done ==> combinerState'.state == prev_combinerState.state.(localTail := i as int + 1).(queueIndex := responsesIndex as int)
         invariant 0 <= responsesIndex as int <= |requestIds'|
         invariant |responses'| == MAX_THREADS_PER_REPLICA as int
         invariant forall i | responsesIndex as int <= i < |requestIds'| ::
@@ -1259,6 +1262,7 @@ module Impl(nrifc: NRIfc) {
         invariant forall i | 0 <= i < responsesIndex as int ::
             i in updates'
               && updates'[i].us.UpdateApplied?
+              && updates'[i].us.idx < combinerState'.state.globalTail
               && updates'[i].rid == requestIds'[i]
               && updates'[i].us.ret == responses'[i]
         invariant responsesIndex == 0 ==> responses' == responses && updates' == updates
@@ -1290,8 +1294,10 @@ module Impl(nrifc: NRIfc) {
             actual_replica', ret := nrifc.do_update(actual_replica', log_entry.op);
 
             if log_entry.node_id == node.nodeId {
-              // TODO add ret to results list
-              assume responsesIndex as int < |requestIds'|; // TODO should follow from InfiniteLog inv
+              combinerState' := pre_ExecDispatchLocal(
+                  combinerState',
+                  reader_borrow(reader').logEntry.value);
+              assert responsesIndex as int < |requestIds'|;
 
               glinear var my_update, my_update';
               updates', my_update := glmap_take(updates', responsesIndex as int);
@@ -1325,8 +1331,9 @@ module Impl(nrifc: NRIfc) {
         i := i + 1;
       }
 
-      assume combinerState.state.CombinerPlaced? ==>
-          responsesIndex as int == |requestIds'|; // TODO should follow from InfiniteLog inv
+      // Use the state machine invariant to learn that the queue is complete
+      combinerState' := queueIsFinishedAfterExec(combinerState');
+      assert responsesIndex as int == |requestIds'|;
 
       // fetch & max
       ghost var prev_combinerState1 := combinerState';
@@ -1357,7 +1364,7 @@ module Impl(nrifc: NRIfc) {
             combinerState', ctail_token :=
               perform_UpdateCompletedTail(combinerState', ctail_token);
             if |requestIds'| > 0 {
-              updates' := perform_UpdateDone(|requestIds'|, updates', combinerState');
+              updates' := perform_UpdateDoneMultiple(|requestIds'|, updates', ctail_token);
             }
           } else {
             // do nothing

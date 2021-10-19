@@ -223,6 +223,30 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
 
   type Token = Tokens.Token
 
+  glinear method obtain_invariant_1(
+      glinear inout token1: Token)
+  returns (ghost rest1: ssm.M)
+  ensures token1 == old_token1
+  ensures ssm.Inv(ssm.dot(token1.val, rest1))
+
+  glinear method obtain_invariant_1_1(
+      gshared s_token1: Token,
+      glinear inout token2: Token)
+  returns (ghost rest1: ssm.M)
+  requires s_token1.loc == old_token2.loc
+  ensures token2 == old_token2
+  ensures ssm.Inv(ssm.dot(ssm.dot(s_token1.val, token2.val), rest1))
+
+  glinear method obtain_invariant_1_2(
+      gshared s_token1: Token,
+      glinear inout token2: Token,
+      glinear inout token3: Token)
+  returns (ghost rest1: ssm.M)
+  requires s_token1.loc == old_token2.loc == old_token3.loc
+  ensures token2 == old_token2
+  ensures token3 == old_token3
+  ensures ssm.Inv(ssm.dot(ssm.dot(s_token1.val, ssm.dot(token2.val, token3.val)), rest1))
+
   lemma transition_of_next(a: ssm.M, b: ssm.M)
   requires ssm.Internal(a, b)
   ensures pcm.transition(a, b)

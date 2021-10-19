@@ -253,7 +253,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   returns (glinear combiner': CombinerToken)
   requires combiner.state.CombinerLtail?
   ensures combiner' == combiner.(state :=
-      Combiner(combiner.state.queued_ops, combiner.state.localTail, globalTail.tail))
+      Combiner(combiner.state.queued_ops, 0, combiner.state.localTail, globalTail.tail))
   ensures combiner'.state.globalTail >= combiner'.state.localTail // follows from state machine invariant
 
   glinear method perform_UpdateCompletedTail(
@@ -351,6 +351,59 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     replica' := Replica_fold(out2_expect, out2_token);
   }
 
+  glinear method queueIsFinishedAfterExec(
+      glinear combiner: CombinerToken)
+  returns (glinear combiner': CombinerToken)
+  requires combiner.state.Combiner?
+  requires combiner.state.localTail == combiner.state.globalTail
+  ensures combiner' == combiner
+  ensures combiner.state.queueIndex == |combiner.state.queued_ops| // follows from invariant
+  {
+    glinear var t1 := CombinerToken_unfold(combiner);
+    ghost var rest := ILT.obtain_invariant_1(inout t1);
+    combiner' := CombinerToken_fold(combiner, t1);
+  }
+
+  glinear method pre_ExecDispatchLocal(
+      glinear combiner: CombinerToken,
+      gshared log_entry: Log)
+  returns (glinear combiner': CombinerToken)
+  requires combiner.nodeId == log_entry.node_id  
+  requires combiner.state.Combiner?
+  requires combiner.state.localTail == log_entry.idx
+  requires combiner.state.localTail < combiner.state.globalTail
+  ensures 0 <= combiner.state.queueIndex < |combiner.state.queued_ops|
+  ensures combiner' == combiner
+  {
+    glinear var t1 := CombinerToken_unfold(combiner);
+    gshared var t2 := Log_unfold_borrow(log_entry);
+    ghost var rest := ILT.obtain_invariant_1_1(t2, inout t1);
+    combiner' := CombinerToken_fold(combiner, t1);
+  }
+
+  glinear method pre2_ExecDispatchLocal(
+      glinear combiner: CombinerToken,
+      gshared log_entry: Log,
+      glinear upd: Update)
+  returns (glinear combiner': CombinerToken, glinear upd': Update)
+  requires combiner.nodeId == log_entry.node_id  
+  requires combiner.state.Combiner?
+  requires combiner.state.localTail == log_entry.idx
+  requires combiner.state.localTail < combiner.state.globalTail
+  requires 0 <= combiner.state.queueIndex < |combiner.state.queued_ops|
+  requires combiner.state.queued_ops[combiner.state.queueIndex] == upd.rid
+  requires upd.us.UpdatePlaced?
+  ensures upd' == upd && combiner' == combiner
+  ensures upd.us.idx == combiner.state.localTail
+  {
+    glinear var t1 := CombinerToken_unfold(combiner);
+    gshared var t2 := Log_unfold_borrow(log_entry);
+    glinear var t3 := Update_unfold(upd);
+    ghost var rest := ILT.obtain_invariant_1_2(t2, inout t1, inout t3);
+    combiner' := CombinerToken_fold(combiner, t1);
+    upd' := Update_fold(upd, t3);
+  }
+
   glinear method perform_ExecDispatchLocal(
       glinear combiner: CombinerToken,
       glinear replica: Replica,
@@ -365,26 +418,126 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   requires combiner.nodeId == log_entry.node_id
   requires combiner.state.Combiner?
   requires log_entry.idx == combiner.state.localTail
-  // TODO XXX this condition is not enough
+  requires 0 <= combiner.state.queueIndex < |combiner.state.queued_ops|
+  requires combiner.state.queued_ops[combiner.state.queueIndex] == update.rid
   requires update.us.UpdatePlaced?
-  ensures combiner' == combiner.(state := combiner.state.(localTail := combiner.state.localTail + 1))
+  requires combiner.state.localTail < combiner.state.globalTail
+  ensures combiner' == combiner.(state := combiner.state.(localTail := combiner.state.localTail + 1).(queueIndex := combiner.state.queueIndex + 1))
   ensures replica' == replica.(state := nrifc.update(replica.state, log_entry.op).new_state)
+  ensures update.us.idx == combiner.state.localTail // follows from state machine invariant
   ensures update' == update.(us := UpdateApplied(
       nrifc.update(replica.state, log_entry.op).return_value,
       update.us.idx))
+  {
+    glinear var combiner1, update1;
+    combiner1, update1 := pre2_ExecDispatchLocal(combiner, log_entry, update);
+    assert update.us.idx == combiner.state.localTail;
+
+    glinear var a_token := CombinerToken_unfold(combiner1);
+    glinear var b_token := Replica_unfold(replica);
+    glinear var c_token := Update_unfold(update1);
+    gshared var s_token := Log_unfold_borrow(log_entry);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := combiner.(state := combiner.state.(localTail := combiner.state.localTail + 1).(queueIndex := combiner.state.queueIndex + 1));
+    ghost var out1_token_expect := CombinerToken_unfold(out1_expect);
+
+    ghost var out2_expect := replica.(state := nrifc.update(replica.state, log_entry.op).new_state);
+    ghost var out2_token_expect := Replica_unfold(out2_expect);
+
+    ghost var out3_expect := update.(us := UpdateApplied(nrifc.update(replica.state, log_entry.op).return_value, update.us.idx));
+    ghost var out3_token_expect := Update_unfold(out3_expect);
+
+    // Explain what transition we're going to do
+
+    /*
+    ghost var m := IL.dot(s_token.val, IL.dot(IL.dot(a_token.val, b_token.val), c_token.val));
+    ghost var m1 := IL.dot(s_token.val, IL.dot(IL.dot(out1_token_expect.val, out2_token_expect.val),out3_token_expect.val));
+
+    ghost var nodeId := combiner.nodeId;
+    ghost var c := m.combiner[nodeId];
+    ghost var UpdateResult(nr_state', ret) := nrifc.update(m.replicas[nodeId], m.log[c.localTail].op);
+    ghost var queue_index := c.queueIndex;
+    ghost var request_id := c.queued_ops[queue_index];
+    ghost var idx := c.localTail;
+    ghost var c_new := c.(localTail := c.localTail + 1).(queueIndex := c.queueIndex + 1);
+    ghost var m' := m.(combiner := m.combiner[nodeId := c_new])
+              .(replicas := m.replicas[nodeId := nr_state'])
+              .(localUpdates := m.localUpdates[request_id := UpdateApplied(ret, idx)]);
+
+    assert nrifc.update(replica.state, log_entry.op).return_value == ret;
+    assert idx == update.us.idx;
+    
+    assert m'.combiner == m1.combiner;
+    assert m'.replicas == m1.replicas;
+    assert m'.localUpdates == m1.localUpdates;
+    assert m' == m1;
+    */
+
+    assert ExecDispatchLocal(
+        IL.dot(s_token.val, IL.dot(IL.dot(a_token.val, b_token.val), c_token.val)),
+        IL.dot(s_token.val, IL.dot(IL.dot(out1_token_expect.val, out2_token_expect.val), out3_token_expect.val)),
+        combiner.nodeId);
+    assert IL.NextStep(
+        IL.dot(s_token.val, IL.dot(IL.dot(a_token.val, b_token.val), c_token.val)),
+        IL.dot(s_token.val, IL.dot(IL.dot(out1_token_expect.val, out2_token_expect.val), out3_token_expect.val)),
+        ExecDispatchLocal_Step(combiner.nodeId));
+
+    // Perform the transition
+    glinear var out1_token, out2_token, out3_token := ILT.transition_1_3_3(s_token, a_token, b_token, c_token,
+        out1_token_expect.val,
+        out2_token_expect.val,
+        out3_token_expect.val);
+
+    combiner' := CombinerToken_fold(out1_expect, out1_token);
+    replica' := Replica_fold(out2_expect, out2_token);
+    update' := Update_fold(out3_expect, out3_token);
+  }
 
   glinear method perform_UpdateDone(
       ghost n: nat,
+      glinear update: Update,
+      gshared ctail: Ctail)
+  returns (
+      glinear update': Update)
+  requires update.us.UpdateApplied?
+  requires update.us.idx < ctail.ctail
+  ensures update' == update.(us := UpdateDone(update.us.ret, update.us.idx))
+  {
+    glinear var a_token := Update_unfold(update);
+    gshared var s_token := Ctail_unfold_borrow(ctail); // use `borrow` for `gshared` types.
+
+    ghost var out_expect := update.(us := UpdateDone(update.us.ret, update.us.idx));
+    ghost var out_token_expect := Update_unfold(out_expect);
+
+    // Explain what transition we're going to do
+    assert IL.UpdateRequestDone(
+        IL.dot(s_token.val, a_token.val),
+        IL.dot(s_token.val, out_token_expect.val),
+        update.rid);
+    assert IL.NextStep(
+        IL.dot(s_token.val, a_token.val),
+        IL.dot(s_token.val, out_token_expect.val),
+        UpdateRequestDone_Step(update.rid));
+
+    glinear var out_token := ILT.transition_1_1_1(s_token, a_token, out_token_expect.val);
+
+    update' := Update_fold(out_expect, out_token);
+  }
+
+  glinear method perform_UpdateDoneMultiple(
+      ghost n: nat,
       glinear updates: map<nat, Update>,
-      gshared combiner: CombinerToken)
+      gshared ctail: Ctail)
   returns (
       glinear updates': map<nat, Update>)
-  requires combiner.state.CombinerUpdatedCtail?
-  // TODO XXX this condition is not enough
-  requires forall i | 0 <= i < n :: i in updates && updates[i].us.UpdateApplied?
+  requires forall i | 0 <= i < n ::
+    && i in updates
+    && updates[i].us.UpdateApplied?
+    && updates[i].us.idx < ctail.ctail
   ensures forall i | 0 <= i < n ::
-      && i in updates'
-      && updates'[i] == Update(updates[i].rid, UpdateDone(updates[i].us.ret, updates[i].us.idx))
+    && i in updates'
+    && updates'[i] == updates[i].(us := UpdateDone(updates[i].us.ret, updates[i].us.idx))
   // TODO needs to do the UpdateDone transition in a loop
 
   glinear method perform_Init(glinear token: ILT.Token)
