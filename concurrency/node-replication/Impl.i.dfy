@@ -295,19 +295,6 @@ module Impl(nrifc: NRIfc) {
     is_synced := local_tail >= ctail;
   }
 
-  glinear method perform_TransitionCombinerLockAcquired(
-    glinear combinerLock: CombinerLockState)
-  returns (glinear flatCombiner: glOption<FCCombiner>, 
-           glinear gops: glOption<LC.LCellContents<seq<nrifc.UpdateOp>>>,
-           glinear gresponses: glOption<LC.LCellContents<seq<nrifc.ReturnType>>>
-  )
-  //ensures flatCombiner.state == FCCombinerCollecting(0, []) 
-//    {
-//      flatCombiner := glSome(combinerLock.flatCombiner);
-//      gops := glSome(combinerLock.gops);
-//      gresponses := glSome(combinerLock.gresponses);
-//    }
-
   // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L584
   method try_combine(shared nr: NR, shared node: Node, tid: uint64)
   requires tid > 0
@@ -338,7 +325,10 @@ module Impl(nrifc: NRIfc) {
       ghost_acquire contents;
       if success {
         assert contents.glSome?;
-        fcStateOpt, gops, gresponses := perform_TransitionCombinerLockAcquired(unwrap_value(contents));
+        glinear var CombinerLockState(flatCombiner, go, gr) := unwrap_value(contents);
+        fcStateOpt := glSome(flatCombiner);
+        gops := glSome(go);
+        gresponses := glSome(gr);
         contents := glNone;
       } else {
         fcStateOpt := glNone;
