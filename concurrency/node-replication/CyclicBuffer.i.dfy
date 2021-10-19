@@ -156,6 +156,27 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m.combinerState[nodeId] == CombinerAppending(cur_idx, tail)
   }
 
+  predicate CombinerIsReaderStarting(m: M, nodeId: NodeId)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId].CombinerReading?
+    && m.combinerState[nodeId].readerState.ReaderStarting?
+  }
+
+  predicate CombinerIsReaderStartingAt(m: M, nodeId: NodeId, start: nat)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId] == CombinerReading(ReaderStarting(start))
+  }
+
+  predicate CombinerIsReaderRangeAt(m: M, nodeId: NodeId, start: nat, end: nat)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId] == CombinerReading(ReaderRange(start, end))
+  }
 
   /*
    * ============================================================================================
@@ -224,18 +245,24 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && CombinerIsAdvancingTailAt(m', combinerNodeId, m.head.value)
   }
 
-  predicate FinishAdvanceTail(m: M, m': M, combinerNodeId: nat, new_tail: nat)
+  predicate FinishAdvanceTail(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>) // withdraw
   {
     && m.M?
     && m.tail.Some?
     && CombinerKnown(m, combinerNodeId)
     && CombinerIsAdvancingTail(m, combinerNodeId)
+
     && var combinerBefore := m.combinerState[combinerNodeId];
     && m.tail.value <= new_tail <= (combinerBefore.observed_head + BUFFER_SIZE as int)
 
     && m'.M?
     && CombinerKnown(m', combinerNodeId)
     && CombinerIsAppendingAt(m', combinerNodeId, m.tail.value, new_tail)
+
+    && (forall i | m.tail.value <= i < new_tail ::
+      && i in withdrawn
+      && (i - BUFFER_SIZE as int) in m.contents
+      && withdrawn[i] == m.contents[i - BUFFER_SIZE as int])
   }
 
   /*
@@ -244,7 +271,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
    * ============================================================================================
    */
 
-  predicate AppendFlipBit(m: M, m': M, combinerNodeId: nat, deposited: StoredType)
+  predicate AppendFlipBit(m: M, m': M, combinerNodeId: nat, deposited: StoredType) // deposit
   {
     && m.M?
     && CombinerKnown(m, combinerNodeId)
@@ -260,5 +287,35 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       contents := m.contents[combinerBefore.cur_idx := deposited])
   }
 
+  /*
+   * ============================================================================================
+   * Reader
+   * ============================================================================================
+   */
+
+  predicate ReaderStart(m: M, m': M, combinerNodeId: nat)
+  {
+    && m.M?
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsIdle(m, combinerNodeId)
+    && combinerNodeId in m.localTails
+
+    && m'.M?
+    && CombinerKnown(m', combinerNodeId)
+    && CombinerIsReaderStartingAt(m', combinerNodeId, m.localTails[combinerNodeId])
+  }
+
+  predicate ReaderEnter(m: M, m': M, combinerNodeId: nat)
+  {
+    && m.M?
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsReaderStarting(m, combinerNodeId)
+    && m.tail.Some?
+    && var readerStateBefore := m.combinerState[combinerNodeId].readerState;
+
+    && m'.M?
+    && CombinerKnown(m', combinerNodeId)
+    && CombinerIsReaderRangeAt(m', combinerNodeId, readerStateBefore.start, m.tail.value)
+  }
 
 }
