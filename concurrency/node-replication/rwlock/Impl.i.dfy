@@ -350,7 +350,17 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     }
   }
 
-  function method borrow_shared(shared handle: SharedGuard)
-      : (shared v: V)
+  method borrow_shared(shared rwlock: RwLock, shared handle: SharedGuard)
+  returns (shared v: V)
+  requires rwlock.InternalInv()
+  requires handle.Inv(rwlock)
   ensures v == handle.v
+  {
+    gshared var cellContents := RwLockTokenMod.borrow_inner(
+        handle.shared_obtained_token,
+        handle.acquiring_thread_id as nat,
+        handle.StoredContents());
+
+    v := read_lcell(rwlock.lcell, cellContents);
+  }
 }

@@ -822,15 +822,17 @@ module Impl(nrifc: NRIfc) {
     linear var linear_guard := node.replica.acquire_shared(thread_id);
     assert linear_guard.v.ghost_replica.nodeId == stub.rs.nodeId;
 
-    result, stub := apply_readonly(linear_guard, op, stub);
+    result, stub := apply_readonly(node.replica, linear_guard, op, stub);
     node.replica.release_shared(linear_guard);
 
     assert stub.rs.ReadonlyDone?; // advisory
   }
 
-  method apply_readonly(shared guard: SharedGuard, op: nrifc.ReadonlyOp,
+  method apply_readonly(shared rwlock: RwLock, shared guard: SharedGuard, op: nrifc.ReadonlyOp,
       glinear ticket: Readonly)
   returns (result: nrifc.ReturnType, glinear ticket': Readonly)
+  requires rwlock.InternalInv()
+  requires guard.Inv(rwlock)
   requires ticket.rs.ReadonlyReadyToRead?
   requires guard.v.ghost_replica.nodeId == ticket.rs.nodeId
   requires ticket.rs.op == op
@@ -840,7 +842,7 @@ module Impl(nrifc: NRIfc) {
   ensures ticket'.rs.ret == result
   ensures guard.v.ghost_replica.state == nrifc.I(guard.v.actual_replica)
   {
-    shared var shared_v := RwLockImpl.borrow_shared(guard);
+    shared var shared_v := RwLockImpl.borrow_shared(rwlock, guard);
     assert shared_v.ghost_replica.nodeId == ticket.rs.nodeId;
     result := nrifc.do_readonly(shared_v.actual_replica, op);
 

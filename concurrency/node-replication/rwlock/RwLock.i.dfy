@@ -812,6 +812,13 @@ module RwLockToken(contentsTypeMod: ContentsTypeMod) {
     rc' := T.internal_transition_2_1(rc', handle', a);
   }
 
+  // TODO(jonh)
+  glinear method borrow_inner(gshared tok: Token, ghost t: nat, ghost b: StoredType)
+  returns (gshared b': StoredType)
+  requires tok.val == SharedAcqHandle(SharedAcqObtained(t, b))
+  ensures b' == b
+
+
 //  function method {:opaque} borrow_sot(gshared sot: SharedObtainedToken) : (gshared b: Handle)
 //  requires sot.is_valid()
 //  ensures b == sot.b
