@@ -59,7 +59,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       // Read ltail
     | CombinerLtail(ghost queued_ops: seq<RequestId>, ghost localTail: nat)
       // Read global tail
-    | Combiner(ghost queued_ops: seq<RequestId>, queueIndex: nat, ghost localTail: nat, ghost globalTail: nat)
+    | Combiner(ghost queued_ops: seq<RequestId>, ghost queueIndex: nat, ghost localTail: nat, ghost globalTail: nat)
       // increment localTail one at a time until localTail == globalTail
       // when localTail == globalTail, we can advance to the next step by updating the ctail
     | CombinerUpdatedCtail(ghost queued_ops: seq<RequestId>, ghost localAndGlobalTail: nat)

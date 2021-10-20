@@ -112,8 +112,6 @@ module Init(nrifc: NRIfc) {
     dispose_anything(fc_clients); // this are now empty
     dispose_anything(fc_slots); // this are now empty
 
-    dispose_anything(fc_combiner); // TODO this should be put in combiner lock
-
     // combiner stuff
 
     var dummy_op: nrifc.UpdateOp;
@@ -123,10 +121,9 @@ module Init(nrifc: NRIfc) {
     ops, opsContents := LC.new_lcell(); //seq_alloc(MAX_THREADS_PER_REPLICA, dummy_op));
     responses, responsesContents := LC.new_lcell(); //seq_alloc(MAX_THREADS_PER_REPLICA, dummy_resp));
 
-    dispose_anything(responsesContents); // TODO XXX
-    dispose_anything(opsContents);
+    glinear var cls := CombinerLockState(fc_combiner, opsContents, responsesContents);
 
-    linear var combiner_atomic := new_atomic(0, CombinerLock, (v, g) => true, 0);
+    linear var combiner_atomic := new_atomic(0, glSome(cls), (v, g) => true, 0);
 
     node := Node(ops, responses, combiner_atomic, replica, contexts, nodeId, fc_loc);
   }

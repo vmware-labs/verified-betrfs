@@ -42,25 +42,25 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     | MInvalid
     | M(
       // Logical index into the above slice at which the log starts.
-      head: Option<nat>,
+      ghost head: Option<nat>,
       // Logical index into the above slice at which the log ends.
       // New appends go here.
-      tail: Option<nat>,
+      ghost tail: Option<nat>,
 
       // Array consisting of the local tail of each replica registered with the log.
       // Required for garbage collection; since replicas make progress over the log
       // independently, we want to make sure that we don't garbage collect operations
       // that haven't been executed by all replicas.
-      localTails: map<NodeId, nat>,
+      ghost localTails: map<NodeId, nat>,
 
-      contents: map<int, StoredType>,
+      ghost contents: map<int, StoredType>,
 
       // The 'alive' bit flips back and forth. So sometimes 'true' means 'alive',
       // and sometimes 'false' means 'alive'.
       // entry is an index into the buffer (0 <= entry < BUFFER_SIZE)
-      aliveBits: map</* entry: */ nat, /* bit: */ bool>,
+      ghost aliveBits: map</* entry: */ nat, /* bit: */ bool>,
 
-      combinerState: map<NodeId, CombinerState>
+      ghost combinerState: map<NodeId, CombinerState>
     )
 
   function dot(x: M, y: M) : M
