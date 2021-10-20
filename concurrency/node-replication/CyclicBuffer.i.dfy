@@ -191,6 +191,14 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m.combinerState[nodeId] == CombinerReading(ReaderRange(start, end))
   }
 
+  predicate CombinerIsReaderGuard(m: M, nodeId: NodeId)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId].CombinerReading?
+    && m.combinerState[nodeId].readerState.ReaderGuard?
+  }
+
   /*
    * ============================================================================================
    * Advance Head Transitions
@@ -204,9 +212,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && CombinerKnown(m, combinerNodeId)
     && CombinerIsIdle(m, combinerNodeId)
 
-    && m'.M?
-    && CombinerKnown(m', combinerNodeId)
-    && CombinerIsAdvancingHeadAt(m', combinerNodeId, 1, m.localTails[0])
+    && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerAdvancingHead(
+      1, m.localTails[0])])
   }
 
   lemma InitAdvanceHead_is_transition(m: M, m': M, combinerNodeId: nat)
@@ -232,12 +239,11 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && var combinerBefore := m.combinerState[combinerNodeId];
     && LocalTailValid(m, combinerBefore.idx)
 
-    && m'.M?
-    && CombinerKnown(m', combinerNodeId)
-    && CombinerIsAdvancingHeadAt(m', combinerNodeId, combinerBefore.idx + 1,
+    && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerAdvancingHead(
+      combinerBefore.idx + 1,
       if combinerBefore.min_tail < m.localTails[combinerBefore.idx]
         then combinerBefore.min_tail
-        else m.localTails[combinerBefore.idx])
+        else m.localTails[combinerBefore.idx])])
   }
 
   predicate FinishAdvanceHead(m: M, m': M, combinerNodeId: nat)
@@ -316,7 +322,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
    * ============================================================================================
    */
 
-  predicate ReaderStart(m: M, m': M, combinerNodeId: nat)
+  predicate ReaderDoStart(m: M, m': M, combinerNodeId: nat)
   {
     && m.M?
     && CombinerKnown(m, combinerNodeId)
@@ -336,10 +342,10 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && CombinerIsReaderStarting(m, combinerNodeId)
     && m.tail.Some?
     && var combinerBefore := m.combinerState[combinerNodeId];
-    && var readerStateBefore := m.combinerState[combinerNodeId].readerState;
+    && var readerBefore := m.combinerState[combinerNodeId].readerState;
 
     && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerReading(
-      ReaderRange(readerStateBefore.start, m.tail.value))]
+      ReaderRange(readerBefore.start, m.tail.value))]
     )
   }
 
@@ -349,18 +355,48 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && CombinerKnown(m, combinerNodeId)
     && CombinerIsReaderRange(m, combinerNodeId)
     && var combinerBefore := m.combinerState[combinerNodeId];
-    && var readerStateBefore := m.combinerState[combinerNodeId].readerState;
+    && var readerBefore := m.combinerState[combinerNodeId].readerState;
 
     && i in m.contents
-    && readerStateBefore.start <= i < readerStateBefore.end
+    && readerBefore.start <= i < readerBefore.end
 
     && LogicalToPhysicalIndex(i) in m.aliveBits
     && m.aliveBits[LogicalToPhysicalIndex(i)] == LogicalToAliveBitAliveWhen(i)
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerReading(
-        ReaderGuard(readerStateBefore.start, readerStateBefore.end, i, m.contents[i]))]
+        ReaderGuard(readerBefore.start, readerBefore.end, i, m.contents[i]))]
       )
   }
 
+  predicate ReaderDoUnguard(m: M, m': M, combinerNodeId: nat)
+  {
+    && m.M?
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsReaderGuard(m, combinerNodeId)
+    && var combinerBefore := m.combinerState[combinerNodeId];
+    && var readerBefore := m.combinerState[combinerNodeId].readerState;
+
+    && m' == m.(
+      combinerState := m.combinerState[combinerNodeId := CombinerReading(
+        ReaderRange(readerBefore.start, readerBefore.end))]
+    )
+  }
+
+  predicate ReaderFinish(m: M, m': M, combinerNodeId: nat)
+  {
+    && m.M?
+
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsReaderRange(m, combinerNodeId)
+    && var combinerBefore := m.combinerState[combinerNodeId];
+    && var readerBefore := m.combinerState[combinerNodeId].readerState;
+
+    && combinerNodeId in m.localTails
+
+    && m' == m.(
+      combinerState := m.combinerState[combinerNodeId := CombinerIdle],
+      localTails := m.localTails[combinerNodeId := readerBefore.end]
+    )
+  }
 }
