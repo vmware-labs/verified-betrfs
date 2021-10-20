@@ -310,8 +310,6 @@ module RwTokens(rw: Rw) {
 
   //method borrow(glinear token: Token)
 
-  // TODO(jonh's problem): borrow method
-
   /*
    * Helpers
    */
@@ -578,5 +576,24 @@ module RwTokens(rw: Rw) {
   glinear method dispose(glinear t: Token)
   {
     T.dispose(t);
+  }
+
+  function method {:opaque} borrow_from_guard(gshared f: Token, ghost expected: rw.StoredType)
+      : (gshared s: rw.StoredType)
+  requires rw.guard(f.val, expected)
+  ensures s == expected
+  {
+    assert forall p ::
+        pcm.I(pcm.dot(f.val, p)).Some? ==> Wrap.le(Wrap.one(expected), pcm.I(pcm.dot(f.val, p)).value)
+    by {
+      forall p | pcm.I(pcm.dot(f.val, p)).Some?
+      ensures Wrap.le(Wrap.one(expected), pcm.I(pcm.dot(f.val, p)).value)
+      {
+        Wrap.dot_unit(Wrap.one(expected));
+      }
+    }
+    WrapT.unwrap_borrow(
+      ET.borrow_back(f, Wrap.one(expected))
+    )
   }
 }

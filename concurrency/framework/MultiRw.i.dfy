@@ -36,7 +36,7 @@ abstract module MultiRw {
         && key !in I(dot(b, p))
   }
 
-  predicate borrow(a: M, key: Key, x: StoredType)
+  predicate guard(a: M, key: Key, x: StoredType)
   {
     forall p: M :: Inv(dot(a, p)) ==>
         && key in I(dot(a, p))
@@ -318,8 +318,6 @@ module MultiRwTokens(rw: MultiRw) {
     rest :| rw.Inv(rw.dot(rw.dot(rw.dot(token1.val, token2.val), token3.val), rest));
   }
 
-  // TODO borrow method
-
   glinear method internal_transition_2_2(
       glinear token1: Token,
       glinear token2: Token,
@@ -395,4 +393,31 @@ module MultiRwTokens(rw: MultiRw) {
         key, expected_retrieved_value);
     token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
   }
+
+  function method {:opaque} borrow_from_guard(gshared f: Token, key: rw.Key, ghost expected: rw.StoredType)
+      : (gshared s: rw.StoredType)
+  requires rw.guard(f.val, key, expected)
+  ensures s == expected
+  {
+    assert forall p ::
+        pcm.I(pcm.dot(f.val, p)).Some? ==> Wrap.le(Wrap.one(expected), pcm.I(pcm.dot(f.val, p)).value)
+    by {
+      forall p | pcm.I(pcm.dot(f.val, p)).Some?
+      ensures Wrap.le(Wrap.one(expected), pcm.I(pcm.dot(f.val, p)).value)
+      {
+        var sub := rw.I(pcm.dot(f.val, p)) - {key};
+        Multisets.ValueMultisetInduct(sub, key, expected);
+        assert rw.I(pcm.dot(f.val, p)) == sub[key := expected];
+        assert multiset{expected} + Multisets.ValueMultiset(sub)
+            == Multisets.ValueMultiset(rw.I(pcm.dot(f.val, p)));
+        assert Wrap.dot(Wrap.one(expected), Wrap.M(Multisets.ValueMultiset(sub)))
+            == pcm.I(pcm.dot(f.val, p)).value;
+        Wrap.dot_unit(Wrap.one(expected));
+      }
+    }
+    WrapT.unwrap_borrow(
+      ET.borrow_back(f, Wrap.one(expected))
+    )
+  }
+
 }
