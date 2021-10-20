@@ -63,10 +63,74 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       ghost combinerState: map<NodeId, CombinerState>
     )
 
-  function dot(x: M, y: M) : M
-  function unit() : M
+ /*
+   * ============================================================================================
+   * Map/Seq Utilities
+   * ============================================================================================
+   */
 
-  predicate Init(s: M)
+  // XXX: can we have a single one of these, and reuse that thorugh imports???
+
+  // updates map m1 with map m2, where all values of m2 aree added to m1, and existing values updated
+  // see: https://stackoverflow.com/questions/52610402/updating-a-map-with-another-map-in-dafny
+  function {:opaque} map_update<K(!new), V>(m1: map<K, V>, m2: map<K, V>): map<K, V>
+    ensures forall k :: k in m1 || k in m2 ==> k in map_update(m1, m2)
+    ensures forall k :: k in m2 ==> map_update(m1, m2)[k] == m2[k]
+    ensures forall k :: !(k in m2) && k in m1 ==> map_update(m1, m2)[k] == m1[k]
+    ensures forall k :: !(k in m2) && !(k in m1) ==> !(k in map_update(m1, m2))
+    ensures m1 == map[] ==> map_update(m1, m2) == m2
+    ensures m2 == map[] ==> map_update(m1, m2) == m1
+    ensures (m1.Keys !! m2.Keys) ==> map_update(m1, m2).Keys == m1.Keys + m2.Keys
+    ensures (m1.Keys !! m2.Keys) ==> (forall k | k in m1 :: map_update(m1, m2)[k] == m1[k])
+    ensures (m1.Keys !! m2.Keys) ==> (forall k | k in m2 :: map_update(m1, m2)[k] == m2[k])
+  {
+    map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
+  }
+
+
+  function dot(x: M, y: M) : M {
+    if (
+      && x.M?                  && y.M?
+      && !(x.head.Some?        && y.head.Some?)
+      && !(x.tail.Some?        && y.tail.Some?)
+      && (x.localTails.Keys    !! y.localTails.Keys)
+      && (x.contents.Keys      !! y.contents.Keys)
+      && (x.aliveBits.Keys     !! y.aliveBits.Keys)
+      && (x.combinerState.Keys !! y.combinerState.Keys)
+    )
+    then
+      M(
+        if x.head.Some? then x.head else y.head,
+        if x.tail.Some? then x.tail else y.tail,
+        map_update(x.localTails, y.localTails),
+        map_update(x.contents, y.contents),
+        map_update(x.aliveBits, y.aliveBits),
+        map_update(x.combinerState, y.combinerState)
+      )
+    else
+      MInvalid
+
+  }
+  function unit() : M {
+    M(None, None, map[], map[], map[], map[])
+  }
+
+  predicate Init(s: M) {
+    && s.M?
+    && s.head == Some(0)
+    && s.tail == Some(0)
+    && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in s.localTails)
+    && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in s.combinerState)
+    && (forall i: nat :: i < BUFFER_SIZE as nat <==> i in s.aliveBits)
+    && (forall i: int :: -(BUFFER_SIZE as int) <= i < -1 <==> i in s.contents)
+  }
+
+
+  /*
+   * ============================================================================================
+   * Invariant
+   * ============================================================================================
+   */
 
   predicate Complete(x: M)
   {
@@ -79,15 +143,125 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.combinerState)
   }
 
+  predicate PointerOrdering(x: M)
+    requires Complete(x)
+  {
+    // the head must be smaller or equal to the tail,
+    && x.head.value <= x.tail.value
+    // all local tails must be between thea
+    && (forall i | i in x.localTails :: x.head.value <= x.localTails[i] <= x.tail.value)
+  }
+
+  predicate AliveBits(x: M)
+    requires Complete(x)
+  {
+    // somehow we should have something that alive bits are in the following form:
+    //  0 0 0 0 | 1 1 1 1 1 | 0 0 0 0
+    && true
+  }
+
+  predicate BufferContents(x: M)
+    requires Complete(x)
+  {
+    // the contents of
+    && true
+  }
+
+
+  predicate ReaderStateValid(x: M)
+    requires Complete(x)
+  {
+    forall n | n in x.combinerState && x.combinerState[n].CombinerReading?
+      :: match  x.combinerState[n].readerState {
+        case ReaderStarting(start: nat) => (
+          // the starting value should match the local tail
+          && start == x.localTails[n]
+        )
+        case ReaderRange(start: nat, end: nat) => (
+          // we may advance the start value here...
+          && x.localTails[n] <= start
+          && start <= end
+          && end <= x.tail.value
+        )
+        case ReaderGuard(start: nat, end: nat, cur: nat, val: StoredType) => (
+          && start == x.localTails[n]
+          && start <= end
+          && end <= x.tail.value
+          && x.head.value <= cur <= x.tail.value
+        )
+    }
+  }
+
+  predicate CombinerStateValid(x: M)
+    requires Complete(x)
+  {
+    forall n | n in x.combinerState
+      :: match x.combinerState[n] {
+        case CombinerIdle => (true)        // nothing to do
+        case CombinerReading(_) => (true)  // handled in ReaderState
+        case CombinerAdvancingHead(idx: nat, min_tail: nat) => (
+          && idx <= x.localTails[n]
+          && (forall n | n in x.localTails :: min_tail <= x.localTails[n])
+          && (forall n | n in x.localTails :: x.head.value <= min_tail)
+        )
+        case CombinerAdvancingTail(observed_head: nat) => (
+          && x.head.value <= observed_head
+          && observed_head <= x.tail.value
+        )
+        case CombinerAppending(cur_idx: nat, tail: nat) => (
+          && x.localTails[n] <= cur_idx < tail
+          && tail <= x.tail.value
+        )
+      }
+  }
+
   predicate Inv(x: M)
   {
     && Complete(x)
-
-    && true // TODO
+    && PointerOrdering(x)
+    && AliveBits(x)
+    && BufferContents(x)
+    && CombinerStateValid(x)
+    && ReaderStateValid(x)
   }
 
   function I(x: M) : map<Key, StoredType>
   // TODO: checked out between the latest alive cell and the tail
+
+
+  lemma InitImpliesInv(x: M)
+  //requires Init(s)
+  ensures Inv(x)
+
+  lemma dot_unit(x: M)
+  ensures dot(x, unit()) == x
+  {
+    assert unit().M?;
+    assert dot(unit(), unit()).M?;
+    assert dot(unit(), unit()) == unit();
+    assert dot(x, unit()) == x;
+  }
+
+  lemma commutative(x: M, y: M)
+  ensures dot(x, y) == dot(y, x)
+  {
+    if dot(x, y) == MInvalid {
+      assert dot(x, y) == dot(y, x);
+    } else {
+      assert dot(x, y) == dot(y, x);
+    }
+  }
+
+  lemma associative(x: M, y: M, z: M)
+  ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
+  {
+    if dot(x, dot(y, z)) == MInvalid {
+      assert dot(x, dot(y, z)) == dot(dot(x, y), z);
+    } else {
+      assert dot(x, dot(y, z)) == dot(dot(x, y), z);
+    }
+  }
+
 
   /*
    * ============================================================================================
@@ -245,6 +419,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     {
       // you can use concurrency/spsc-queue/QueueMultiRw.i.dfy as a template
       // TODO: fill this in
+      assert dot(m', p).M?;
       assume Inv(dot(m', p));
       assume I(dot(m, p)) == I(dot(m', p));
     }
