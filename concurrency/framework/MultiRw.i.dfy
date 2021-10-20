@@ -174,7 +174,12 @@ module MultiRwTokens(rw: MultiRw) {
   import opened GhostLoc
 
   import Wrap = MultiRw_PCMWrap(rw)
+  import WrapT = PCMWrapTokens(MultiRw_PCMWrap(rw))
+  import WrapPT = Tokens(MultiRw_PCMWrap(rw))
   import T = Tokens(MultiRw_PCMExt(rw))
+  import ET = ExtTokens(MultiRw_PCMWrap(rw), MultiRw_PCMExt(rw))
+  import pcm = MultiRw_PCMExt(rw)
+  import Multisets
   
   type Token = t : T.Token | t.loc.ExtLoc? && t.loc.base_loc == Wrap.singleton_loc()
     witness *
@@ -184,12 +189,29 @@ module MultiRwTokens(rw: MultiRw) {
   requires rw.Init(m)
   ensures token.val == m
 
+  function method {:opaque} update(
+      glinear b: Token,
+      ghost expected_out: rw.M)
+    : (glinear c: Token)
+  requires pcm.transition(b.val, expected_out)
+  ensures c == T.Token(b.loc, expected_out)
+  {
+    rw.dot_unit(b.val);
+    rw.dot_unit(expected_out);
+    rw.commutative(b.val, rw.unit());
+    rw.commutative(expected_out, rw.unit());
+    T.transition_update(T.get_unit_shared(b.loc), b, expected_out)
+  }
+
   glinear method internal_transition(
       glinear token: Token,
       ghost expected_value: rw.M)
   returns (glinear token': Token)
   requires rw.transition(token.val, expected_value)
   ensures token' == T.Token(token.loc, expected_value)
+  {
+    token' := update(token, expected_value);
+  }
 
   glinear method deposit(
       glinear token: Token,
@@ -199,6 +221,34 @@ module MultiRwTokens(rw: MultiRw) {
   returns (glinear token': Token)
   requires rw.deposit(token.val, expected_value, key, stored_value)
   ensures token' == T.Token(token.loc, expected_value)
+  {
+    glinear var m := WrapT.wrap(stored_value);
+    ghost var m' := Wrap.unit();
+
+    forall p |
+          pcm.I(pcm.dot(token.val, p)).Some?
+            && Wrap.valid(Wrap.dot(m.val, pcm.I(pcm.dot(token.val, p)).value))
+    ensures pcm.I(pcm.dot(expected_value, p)).Some?
+    ensures Wrap.transition(
+              Wrap.dot(m.val, pcm.I(pcm.dot(token.val, p)).value),
+              Wrap.dot(m', pcm.I(pcm.dot(expected_value, p)).value))
+    {
+      Multisets.ValueMultisetInduct(rw.I(rw.dot(token.val, p)), key, stored_value);
+      /*
+       calc {
+         Wrap.dot(m.val, pcm.I(pcm.dot(token.val, p)).value);
+         Wrap.dot(Wrap.M(multiset{stored_value}), pcm.I(pcm.dot(token.val, p)).value);
+         pcm.I(pcm.dot(expected_value, p)).value;
+         Wrap.dot(m', pcm.I(pcm.dot(expected_value, p)).value);
+       }
+       */
+    }
+
+    glinear var f, b := ET.ext_transfer(
+        token, expected_value, m, Wrap.unit());
+    WrapPT.dispose(b);
+    token' := f;
+  }
 
   glinear method withdraw(
       glinear token: Token,
@@ -209,6 +259,28 @@ module MultiRwTokens(rw: MultiRw) {
   requires rw.withdraw(token.val, expected_value, key, expected_retrieved_value)
   ensures token' == T.Token(token.loc, expected_value)
   ensures retrieved_value == expected_retrieved_value
+  {
+    glinear var m := WrapPT.get_unit(Wrap.singleton_loc());
+    ghost var m' := Wrap.one(expected_retrieved_value);
+
+    forall p |
+          pcm.I(pcm.dot(token.val, p)).Some?
+            && Wrap.valid(Wrap.dot(m.val, pcm.I(pcm.dot(token.val, p)).value))
+    ensures pcm.I(pcm.dot(expected_value, p)).Some?
+    ensures Wrap.transition(
+              Wrap.dot(m.val, pcm.I(pcm.dot(token.val, p)).value),
+              Wrap.dot(m', pcm.I(pcm.dot(expected_value, p)).value))
+    {
+      Multisets.ValueMultisetInduct(rw.I(rw.dot(expected_value, p)), key,
+          expected_retrieved_value);
+    }
+
+    glinear var f, b := ET.ext_transfer(
+        token, expected_value,
+        m, m');
+    token' := f;
+    retrieved_value := WrapT.unwrap(b);
+  }
 
   glinear method obtain_invariant_3(
       glinear inout token1: Token,
