@@ -46,7 +46,8 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     ghost read_resps: map<nat, DiskIfc.Block>,
     ghost tickets: map<RequestId, IOIfc.Input>,
     ghost stubs: map<RequestId, IOIfc.Output>,
-    ghost sync_reqs: map<RequestId, set<nat>>
+    ghost sync_reqs: map<RequestId, set<nat>>,
+    ghost havocs: map<RequestId, nat>
   ) | Fail
 
   function union_map<K, V>(m1: map<K, V>, m2: map<K, V>) : map<K, V> {
@@ -65,6 +66,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
         && x.tickets.Keys !! y.tickets.Keys
         && x.stubs.Keys !! y.stubs.Keys
         && x.sync_reqs.Keys !! y.sync_reqs.Keys
+        && x.havocs.Keys !! y.havocs.Keys
     then
       M(
         union_map(x.disk_idx_to_cache_idx, y.disk_idx_to_cache_idx),
@@ -76,7 +78,8 @@ module CacheSSM refines DiskSSM(CacheIfc) {
         union_map(x.read_resps, y.read_resps),
         union_map(x.tickets, y.tickets),
         union_map(x.stubs, y.stubs),
-        union_map(x.sync_reqs, y.sync_reqs)
+        union_map(x.sync_reqs, y.sync_reqs),
+        union_map(x.havocs, y.havocs)
       )
     else
       Fail
@@ -84,81 +87,88 @@ module CacheSSM refines DiskSSM(CacheIfc) {
 
   function DiskIdxToCacheIdx(disk_idx: nat, cache_idx: Option<nat>) : M {
     M(map[disk_idx := cache_idx],
-      map[], map[], map[], {}, {}, map[], map[], map[], map[])
+      map[], map[], map[], {}, {}, map[], map[], map[], map[], map[])
   }
 
   function CacheEntry(cache_idx: nat, disk_idx: nat, data: DiskIfc.Block) : M {
     M(map[],
       map[cache_idx := Entry(disk_idx, data)],
-      map[], map[], {}, {}, map[], map[], map[], map[])
+      map[], map[], {}, {}, map[], map[], map[], map[], map[])
   }
 
   function CacheReading(cache_idx: nat, disk_idx: nat) : M {
     M(map[],
       map[cache_idx := Reading(disk_idx)],
-      map[], map[], {}, {}, map[], map[], map[], map[])
+      map[], map[], {}, {}, map[], map[], map[], map[], map[])
   }
 
   function CacheEmpty(cache_idx: nat) : M {
     M(map[],
       map[cache_idx := Empty],
-      map[], map[], {}, {}, map[], map[], map[], map[])
+      map[], map[], {}, {}, map[], map[], map[], map[], map[])
   }
 
   function CacheStatus(cache_idx: nat, status: Status) : M {
     M(map[], map[],
       map[cache_idx := status],
-      map[], {}, {}, map[], map[], map[], map[])
+      map[], {}, {}, map[], map[], map[], map[], map[])
   }
 
   function DiskWriteReq(disk_addr: nat, data: DiskIfc.Block) : M {
     M(map[], map[], map[],
       map[disk_addr := data],
-      {}, {}, map[], map[], map[], map[])
+      {}, {}, map[], map[], map[], map[], map[])
   }
 
   function DiskWriteResp(disk_addr: nat) : M {
     M(map[], map[], map[], map[],
       {disk_addr},
-      {}, map[], map[], map[], map[])
+      {}, map[], map[], map[], map[], map[])
   }
 
   function DiskReadReq(disk_addr: nat) : M {
     M(map[], map[], map[], map[], {},
       {disk_addr},
-      map[], map[], map[], map[])
+      map[], map[], map[], map[], map[])
   }
 
   function DiskReadResp(disk_addr: nat, data: DiskIfc.Block) : M {
     M(map[], map[], map[], map[], {}, {},
       map[disk_addr := data],
-      map[], map[], map[])
+      map[], map[], map[], map[])
   }
 
   function NormalTicket(rid: RequestId, input: IOIfc.Input) : M {
     M(map[], map[], map[], map[], {}, {}, map[],
       map[rid := input],
-      map[], map[])
+      map[], map[], map[])
   }
 
   function NormalStub(rid: RequestId, output: IOIfc.Output) : M {
     M(map[], map[], map[], map[], {}, {}, map[], map[],
       map[rid := output],
-      map[])
+      map[], map[])
   }
 
   function SyncReq(rid: RequestId, disk_indices: set<nat>) : M {
     M(map[], map[], map[], map[], {}, {}, map[], map[], map[],
-      map[rid := disk_indices])
+      map[rid := disk_indices], map[])
+  }
+
+  function Havoc(rid: RequestId, disk_idx: nat) : M {
+    M(map[], map[], map[], map[], {}, {}, map[], map[], map[],
+      map[], map[rid := disk_idx])
   }
 
   function unit() : M {
-    M(map[], map[], map[], map[], {}, {}, map[], map[], map[], map[])
+    M(map[], map[], map[], map[], {}, {}, map[], map[], map[], map[], map[])
   }
 
   function Ticket(rid: RequestId, input: IOIfc.Input) : M {
     if input.SyncInput? then
       SyncReq(rid, input.keys)
+    else if input.HavocInput? then
+      Havoc(rid, input.key)
     else
       NormalTicket(rid, input)
   }
@@ -166,6 +176,8 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   function Stub(rid: RequestId, output: IOIfc.Output) : M {
     if output.SyncOutput? then
       SyncReq(rid, {})
+    else if output.HavocOutput? then
+      Havoc(rid, output.key)
     else
       NormalStub(rid, output)
   }
@@ -175,7 +187,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   // a free one).
   function request_ids_in_use(m: M) : set<RequestId> {
     if m.M? then
-      m.tickets.Keys + m.stubs.Keys + m.sync_reqs.Keys
+      m.tickets.Keys + m.stubs.Keys + m.sync_reqs.Keys + m.havocs.Keys
     else
       {}
   }
@@ -186,7 +198,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
       (map i: nat | 0 <= i < NUM_DISK_PAGES as nat :: None),
       (map i: nat | 0 <= i < CACHE_SIZE as nat :: Empty),
        map[], map[], {}, {},
-       map[], map[], map[], map[])
+       map[], map[], map[], map[], map[])
   }
 
   function dot3(a: M, b: M, c: M) : M {
@@ -408,6 +420,34 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     */
   }
 
+  predicate HavocNew(s: M, s': M, cache_idx: nat, rid: RequestId, new_data: DiskIfc.Block)
+  {
+    && s.M?
+    && cache_idx in s.entries
+    && s.entries[cache_idx] == Empty
+    && rid in s.havocs
+    && s.havocs[rid] in s.disk_idx_to_cache_idx
+    && s.disk_idx_to_cache_idx[s.havocs[rid]] == None
+    && s' == s
+      .(entries := s.entries[cache_idx := Entry(s.havocs[rid], new_data)])
+      .(statuses := s.statuses[cache_idx := Clean])
+      .(disk_idx_to_cache_idx := s.disk_idx_to_cache_idx[s.havocs[rid] := Some(cache_idx)])
+  }
+
+  predicate HavocEvict(s: M, s': M, cache_idx: nat, rid: RequestId)
+  {
+    && s.M?
+    && cache_idx in s.entries
+    && s.entries[cache_idx].Entry?
+    && cache_idx in s.statuses
+    && rid in s.havocs
+    && s.havocs[rid] in s.disk_idx_to_cache_idx
+    && s' == s
+      .(entries := s.entries[cache_idx := Empty])
+      .(statuses := s.statuses - {cache_idx})
+      .(disk_idx_to_cache_idx := s.disk_idx_to_cache_idx[s.havocs[rid] := None])
+  }
+
   datatype Step =
     | StartReadStep(ghost cache_idx: nat, ghost disk_idx: nat)
     | FinishReadStep(ghost cache_idx: nat, ghost disk_idx: nat)
@@ -418,6 +458,8 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     | ApplyReadStep(ghost cache_idx: nat, ghost rid: RequestId)
     | ApplyWriteStep(ghost cache_idx: nat, ghost rid: RequestId)
     | MarkDirtyStep(ghost cache_idx: nat)
+    | HavocNewStep(ghost cache_idx: nat, ghost rid: RequestId, ghost new_data: DiskIfc.Block)
+    | HavocEvictStep(ghost cache_idx: nat, ghost rid: RequestId)
 
   predicate InternalStep(shard: M, shard': M, step: Step)
   {
@@ -448,6 +490,12 @@ module CacheSSM refines DiskSSM(CacheIfc) {
 
       case MarkDirtyStep(cache_idx) =>
         MarkDirty(shard, shard', cache_idx)
+
+      case HavocNewStep(cache_idx, rid, new_data) =>
+        HavocNew(shard, shard', cache_idx, rid, new_data)
+
+      case HavocEvictStep(cache_idx, rid) =>
+        HavocEvict(shard, shard', cache_idx, rid)
     }
   }
 

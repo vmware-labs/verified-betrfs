@@ -9,11 +9,13 @@ module CacheIfc refines InputOutputIfc {
     | WriteInput(ghost key: nat, data: seq<byte>)
     | ReadInput(ghost key: nat)
     | SyncInput(ghost keys: set<nat>)
+    | HavocInput(ghost key: nat)
 
   datatype Output =
     | WriteOutput
     | ReadOutput(ghost data: seq<byte>)
     | SyncOutput
+    | HavocOutput(ghost key: nat)
 }
 
 module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
