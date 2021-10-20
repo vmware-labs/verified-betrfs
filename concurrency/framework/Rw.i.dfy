@@ -15,7 +15,6 @@ abstract module Rw {
   function dot(x: M, y: M) : M
   function unit() : M
 
-  predicate Init(s: M)
   predicate Inv(x: M) 
   function I(x: M) : Option<StoredType> requires Inv(x)
 
@@ -71,11 +70,6 @@ abstract module Rw {
 
   lemma associative(x: M, y: M, z: M)
   ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
-
-  lemma InitImpliesInv(x: M)
-  requires Init(x)
-  ensures Inv(x)
-  ensures I(x) == None
 
   // TODO(travis) I think this is probably unnecessary
   // For now, just add "or m == unit()" to your Invariant.
@@ -195,6 +189,7 @@ module Rw_PCMExt(rw: Rw) refines PCMExt(Rw_PCMWrap(rw)) {
 
 module RwTokens(rw: Rw) {
   import opened GhostLoc
+  import opened Options
 
   import Wrap = Rw_PCMWrap(rw)
   import WrapT = PCMWrapTokens(Rw_PCMWrap(rw))
@@ -206,9 +201,18 @@ module RwTokens(rw: Rw) {
   type Token = t : T.Token | t.loc.ExtLoc? && t.loc.base_loc == Wrap.singleton_loc()
     witness *
 
-  glinear method initialize(glinear m: rw.M)
+  /*
+  glinear method initialize_empty(ghost m: rw.M)
   returns (glinear token: Token)
-  requires rw.Init(m)
+  requires rw.Inv(m)
+  requires rw.I(m) == None
+  ensures token.val == m
+  */
+
+  glinear method initialize_nonempty(glinear b: rw.StoredType, ghost m: rw.M)
+  returns (glinear token: Token)
+  requires rw.Inv(m)
+  requires rw.I(m) == Some(b)
   ensures token.val == m
 
   glinear method obtain_invariant_2(

@@ -316,6 +316,18 @@ module RwLock refines Rw {
     M(CentralNone, map[t := count], zero_map(), ExcNone, ReadNone, WritebackNone)
   }
 
+  function RcRange(s: nat, t: nat) : map<ThreadId, nat>
+  {
+    map i: ThreadId | s <= i < t :: 0
+  }
+
+  function Rcs(s: nat, t: nat) : M
+  requires s <= t
+  decreases t - s
+  {
+    M(CentralNone, RcRange(s, t), zero_map(), ExcNone, ReadNone, WritebackNone)
+  }
+
   function SharedHandle(ss: SharedState) : M {
     M(CentralNone, map[], unit_fn(ss), ExcNone, ReadNone, WritebackNone)
   }
@@ -1381,16 +1393,6 @@ module RwLock refines Rw {
     }
   }
 
-  function Rcs(s: nat, t: nat) : M
-  requires s <= t
-  decreases t - s
-  {
-    if t == s then
-      unit()
-    else
-      dot(RefCount(s, 0), Rcs(s+1, t))
-  }
-
   lemma SharedObtained_guard(t: nat, b: StoredType)
   ensures guard(SharedHandle(SharedObtained(t, b)), b)
   {
@@ -1409,12 +1411,19 @@ module RwLock refines Rw {
       assert x.central.stored_value == b;
     }
   }
+
+  lemma inv_unit()
+  ensures Inv(unit())
+  ensures I(unit()) == None
+  {
+  }
 }
 
 module RwLockToken {
   import opened RwLock
   import opened Constants
   import opened CacheHandle
+  import opened FullMaps
   import T = RwTokens(RwLock)
 
   type Token = T.Token
@@ -2353,6 +2362,20 @@ module RwLockToken {
   ensures central.loc == rcs.loc
   ensures central.val == CentralHandle(CentralState(Unmapped, b))
   ensures rcs.val == Rcs(0, RC_WIDTH as int)
+  {
+    var x := CentralHandle(CentralState(Unmapped, b));
+    var y := Rcs(0, RC_WIDTH as int);
+    var z := dot(x, y);
+
+    forall t | 0 <= t < RC_WIDTH as int
+    ensures CountAllRefs(z, t) == 0
+    {
+      SumFilterSimp<SharedState>();
+    }
+
+    glinear var tok := T.initialize_nonempty(b, z);
+    central, rcs := T.T.split(tok, x, y);
+  }
 
   glinear method pop_rcs(glinear t: Token, ghost a: nat, ghost b: nat)
   returns (glinear x: Token, glinear t': Token)
