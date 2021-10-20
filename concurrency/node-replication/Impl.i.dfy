@@ -122,24 +122,14 @@ module Impl(nrifc: NRIfc) {
 
   glinear datatype UnitGhostType = UnitGhostType
 
-  // TODO(gz): add cellContents: LCellContents<V> to ghost state
   glinear datatype CombinerLockState = CombinerLockState(glinear flatCombiner: FCCombiner, glinear gops: LC.LCellContents<seq<nrifc.UpdateOp>>, glinear gresponses: LC.LCellContents<seq<nrifc.ReturnType>>)
 
   linear datatype Node = Node(
-    // TODO: This should protect the combiner state (cells etc.)
-    // --> e.g., this one glinear flatCombiner: FCCombiner
-    // 
-    // --> linear cell concept to protect responses in combiner()
-    // linear responses: seq<nrifc.ReturnType>,
-    // linear responses': seq<nrifc.ReturnType>,
-    //
-    // linear cell: puts ghost component behind lock, 
-    // physical component is just some memory (som address)
-    //
-    // add member: linearcell<responses>
-    linear ops: LC.LinearCell<seq<nrifc.UpdateOp>>,
-    linear responses: LC.LinearCell<seq<nrifc.ReturnType>>,
     linear combiner_lock: Atomic<uint64, glOption<CombinerLockState>>,
+    // protected by the `combiner_lock`
+    linear ops: LC.LinearCell<seq<nrifc.UpdateOp>>,
+    // protected by the `combiner_lock`
+    linear responses: LC.LinearCell<seq<nrifc.ReturnType>>,
     linear replica: RwLock,
     //linear context: map<Tid, nrifc.UpdateOp>,
     linear contexts: lseq<Context>, // TODO cache-line padded?
@@ -154,13 +144,27 @@ module Impl(nrifc: NRIfc) {
       && 0 <= nodeId as int < NUM_REPLICAS as int
       && |contexts| == MAX_THREADS_PER_REPLICA as int
       && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i, fc_loc))
-      // TODO(gerd): `combiner_lock` needs a better invariant...
-      && (forall v, g :: atomic_inv(combiner_lock, v, g) ==> (
-        && ((v == 0) <==> g.glSome?) 
-        && ((v > 0) <==> g == glNone)))
+      && (forall v, g :: atomic_inv(combiner_lock, v, g) <==> (
+        && ((v == 0) <==> (
+          && g.glSome? 
+          && g.value.flatCombiner.state == FCCombinerCollecting(0, [])
+          && g.value.flatCombiner.loc == fc_loc
+          && g.value.gops.v.Some?
+          && g.value.gops.lcell == ops
+          && |g.value.gops.v.value| == MAX_THREADS_PER_REPLICA as int
+          && g.value.gresponses.v.Some?
+          && g.value.gresponses.lcell == responses
+          && |g.value.gresponses.v.value| == MAX_THREADS_PER_REPLICA as int
+        ))
+        && ((v > 0) <==> g.glNone?)))
       && replica.InternalInv()
     }
   }
+
+  // requires flatCombiner.loc == node.fc_loc
+  // requires flatCombiner.state == FCCombinerCollecting(0, [])
+  // requires |ops| == MAX_THREADS_PER_REPLICA as int
+
 
   /*
    * Per-thread
@@ -307,7 +311,10 @@ module Impl(nrifc: NRIfc) {
     while i < 5
     invariant 0 <= i <= 5
     {
-      atomic_block var combiner_lock := execute_atomic_load(node.combiner_lock) {}
+      atomic_block var combiner_lock := execute_atomic_load(node.combiner_lock) {
+        ghost_acquire combiner_lock_token;
+        ghost_release combiner_lock_token;
+      }
       if combiner_lock != 0 {
         return;
       }
@@ -323,6 +330,7 @@ module Impl(nrifc: NRIfc) {
       ghost_acquire contents;
       if success {
         assert contents.glSome?;
+        //assert old_value == 0;
         glinear var CombinerLockState(flatCombiner, go, gr) := unwrap_value(contents);
         fcStateOpt := glSome(flatCombiner);
         gops := glSome(go);
