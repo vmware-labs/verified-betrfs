@@ -171,6 +171,14 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m.combinerState[nodeId] == CombinerReading(ReaderStarting(start))
   }
 
+  predicate CombinerIsReaderRange(m: M, nodeId: NodeId)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId].CombinerReading?
+    && m.combinerState[nodeId].readerState.ReaderRange?
+  }
+
   predicate CombinerIsReaderRangeAt(m: M, nodeId: NodeId, start: nat, end: nat)
     requires m.M?
     requires CombinerKnown(m, nodeId)
@@ -194,6 +202,21 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m'.M?
     && CombinerKnown(m', combinerNodeId)
     && CombinerIsAdvancingHeadAt(m', combinerNodeId, 1, m.localTails[0])
+  }
+
+  lemma InitAdvanceHead_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires InitAdvanceHead(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      // you can use concurrency/spsc-queue/QueueMultiRw.i.dfy as a template
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume I(dot(m, p)) == I(dot(m', p));
+    }
   }
 
   predicate StepAdvanceHead(m: M, m': M, combinerNodeId: nat)
@@ -316,6 +339,15 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m'.M?
     && CombinerKnown(m', combinerNodeId)
     && CombinerIsReaderRangeAt(m', combinerNodeId, readerStateBefore.start, m.tail.value)
+  }
+
+  predicate ReaderGuard(m: M, m': M, combinerNodeId: nat)
+  {
+    && m.M?
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsReaderRange(m, combinerNodeId)
+
+    && false // TODO
   }
 
 }
