@@ -1,17 +1,24 @@
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "InfiniteLogTokens.i.dfy"
+include "CyclicBuffer.i.dfy"
 include "../framework/Cells.s.dfy"
 include "../framework/GlinearOption.s.dfy"
 include "Constants.i.dfy"
 
 module CyclicBufferTokens(nrifc: NRIfc) {
   import opened NativeTypes
+  import opened Options
 
   import opened IL = InfiniteLogSSM(nrifc)
   import opened ILT = InfiniteLogTokens(nrifc)
+  import opened GhostLoc
   import opened GlinearOption
   import opened Cells
   import opened Constants
+  import CB = CyclicBufferRw(nrifc)
+  import CBTokens = MultiRwTokens(CB)
+
+  function cb_loc() : Loc // XXX TODO(andrea)
 
   datatype ConcreteLogEntry = ConcreteLogEntry(op: nrifc.UpdateOp, node_id: uint64)
 
@@ -24,14 +31,44 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
   // Use 'CB' prefix to distinguish these from the corresponding state in the InfiniteLog
   // state machine.
-  datatype CBHead = CBHead(ghost head: nat)
-  datatype CBLocalTail = CBLocalTail(ghost nodeId: nat, ghost tail: nat)
-  datatype CBGlobalTail = CBGlobalTail(ghost tail: nat)
+  datatype {:glinear_fold} CBHead = CBHead(ghost head: nat)
+  {
+    function defn(): CBTokens.Token {
+      CBTokens.T.Token(cb_loc(),
+        CB.M(Some(head), None, map[], map[], map[], map[])
+      )
+    }
+  }
+
+  datatype {:glinear_fold} CBLocalTail = CBLocalTail(ghost nodeId: nat, ghost tail: nat)
+  {
+    function defn(): CBTokens.Token {
+      CBTokens.T.Token(cb_loc(),
+        CB.M(None, None, map[nodeId := tail], map[], map[], map[])
+      )
+    }
+  }
+
+  datatype {:glinear_fold} CBGlobalTail = CBGlobalTail(ghost tail: nat)
+  {
+    function defn(): CBTokens.Token {
+      CBTokens.T.Token(cb_loc(),
+        CB.M(None, Some(tail), map[], map[], map[], map[])
+      )
+    }
+  }
 
   // The 'alive' bit flips back and forth. So sometimes 'true' means 'alive',
   // and sometimes 'false' means 'alive'.
   // entry is an index into the buffer (0 <= entry < BUFFER_SIZE)
-  datatype CBAliveBit = CBAliveBit(ghost entry: nat, ghost bit: bool)
+  datatype {:glinear_fold} CBAliveBit = CBAliveBit(ghost entry: nat, ghost bit: bool)
+  {
+    function defn(): CBTokens.Token {
+      CBTokens.T.Token(cb_loc(),
+        CB.M(None, None, map[], map[], map[entry := bit], map[])
+      )
+    }
+  }
 
   // For advancing the head. We iterate idx from 0 .. NUM_REPLICAS and collect
   // the min of all tails. Then we can set head to min_tail.
