@@ -897,6 +897,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       dispose_glnone(status_opt);
       writeback_done, clean, token, status_opt :=
           cache.status_atomic(ph.cache_idx).try_check_writeback_isnt_set(t, token);
+      if !writeback_done {
+        io_cleanup(cache, DEFAULT_MAX_IO_EVENTS_64());
+      }
     }
 
     token := check_all_refcounts_with_t_block(cache, localState.t, ph.cache_idx, token);
@@ -1709,6 +1712,9 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
               dispose_glnone(status_opt);
               writeback_done, clean, token, status_opt :=
                   cache.status_atomic(cache_idx).try_check_writeback_isnt_set(t, token);
+              if !writeback_done {
+                io_cleanup(cache, DEFAULT_MAX_IO_EVENTS_64());
+              }
             }
 
             token := check_all_refcounts_with_t_block(cache, localState.t, cache_idx, token);

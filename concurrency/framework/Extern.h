@@ -200,6 +200,13 @@ namespace LinearCells {
   }
 };
 
+template <>
+struct std::hash<Ptrs::Ptr> {
+  std::size_t operator()(const Ptrs::Ptr& x) const {
+    return std::hash<uintptr_t>()(x.ptr);
+  }
+};
+
 template <typename V>
 struct std::hash<Cells::Cell<V>> {
   std::size_t operator()(const Cells::Cell<V>& x) const {

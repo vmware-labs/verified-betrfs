@@ -20,11 +20,11 @@ module {:extern "IocbStruct"} IocbStruct {
    */
 
   datatype Iocb =
-    | IocbUninitialized(ptr: Ptr)
-    | IocbRead(ptr: Ptr, ghost offset: nat, ghost nbytes: nat, buf: Ptr)
-    | IocbWrite(ptr: Ptr, ghost offset: nat, ghost nbytes: nat, buf: Ptr)
-    | IocbReadv(ptr: Ptr, ghost offset: nat, ghost iovec: Ptr, ghost iovec_len: nat)
-    | IocbWritev(ptr: Ptr, ghost offset: nat, ghost iovec: Ptr, ghost iovec_len: nat)
+    | IocbUninitialized(ghost ptr: Ptr)
+    | IocbRead(ghost ptr: Ptr, ghost offset: nat, ghost nbytes: nat, ghost buf: Ptr)
+    | IocbWrite(ghost ptr: Ptr, ghost offset: nat, ghost nbytes: nat, ghost buf: Ptr)
+    | IocbReadv(ghost ptr: Ptr, ghost offset: nat, ghost iovec: Ptr, ghost iovec_len: nat)
+    | IocbWritev(ghost ptr: Ptr, ghost offset: nat, ghost iovec: Ptr, ghost iovec_len: nat)
 
   function method {:extern} SizeOfIocb() : uint64
   ensures SizeOfIocb() != 0
