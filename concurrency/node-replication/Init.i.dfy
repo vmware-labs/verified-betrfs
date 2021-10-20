@@ -28,7 +28,7 @@ module Init(nrifc: NRIfc) {
   linear datatype NodeCreationToken = NodeCreationToken(
     nodeId: uint64,
     glinear combiner: CombinerToken,
-    glinear reader: Reader,
+    glinear cb: CBCombinerToken,
     glinear ghost_replica: Replica)
   {
     predicate WF()
@@ -36,7 +36,7 @@ module Init(nrifc: NRIfc) {
       && 0 <= nodeId as int < NUM_REPLICAS as int
       && ghost_replica == Replica(nodeId as int, nrifc.init_state())
       && combiner == CombinerToken(nodeId as int, CombinerReady)
-      && reader == Reader(nodeId as int, ReaderIdle)
+      && cb == CBCombinerToken(nodeId as int, CBCombinerIdle)
     }
   }
 
@@ -48,7 +48,7 @@ module Init(nrifc: NRIfc) {
   ensures forall i | 0 <= i < |owned_contexts| ::
     i in owned_contexts && owned_contexts[i].WF(node)
   {
-    linear var NodeCreationToken(nodeId, combiner, reader, ghost_replica) := nct;
+    linear var NodeCreationToken(nodeId, combiner, cb, ghost_replica) := nct;
 
     // initialize the flat_combiner ghost tokens
 
@@ -59,7 +59,7 @@ module Init(nrifc: NRIfc) {
 
     linear var actual_replica := nrifc.initialize();
     linear var nodeReplica := NodeReplica(
-      actual_replica, ghost_replica, combiner, reader);
+      actual_replica, ghost_replica, combiner, cb);
     linear var replica := new_mutex(nodeReplica, (v: NodeReplica) => v.WF(nodeId as int));
 
     // thread contexts
@@ -170,13 +170,13 @@ module Init(nrifc: NRIfc) {
 
   method make_buffer(
       linear cells: lseq<Cell<ConcreteLogEntry>>, 
-      glinear alive: map<nat, AliveBit>)
+      glinear alive: map<nat, CBAliveBit>)
   returns (linear buffer: lseq<BufferEntry>)
   requires |cells| == BUFFER_SIZE as int
   requires forall i | 0 <= i < BUFFER_SIZE as int ::
       && i in cells
       && i in alive
-      && alive[i] == AliveBit(i, false)
+      && alive[i] == CBAliveBit(i, false)
   ensures |buffer| == BUFFER_SIZE as int
   ensures forall i | 0 <= i < BUFFER_SIZE as int
     :: i in buffer && buffer[i].cell == cells[i]
@@ -212,7 +212,7 @@ module Init(nrifc: NRIfc) {
       alive', aliveBit := glmap_take(alive', j as int);
 
       linear var aliveAtomic := new_atomic(false, aliveBit,
-          ((v, g) => g == AliveBit(j as int, v)),
+          ((v, g) => g == CBAliveBit(j as int, v)),
           0);
 
       linear var bufferEntry := BufferEntry(cell, aliveAtomic);
@@ -291,7 +291,7 @@ module Init(nrifc: NRIfc) {
   method make_node_creation_tokens(
       glinear replicas: map<nat, Replica>,
       glinear combiners: map<nat, CombinerToken>,
-      glinear readers: map<nat, Reader>)
+      glinear readers: map<nat, CBCombinerToken>)
   returns (linear nodeCreationTokens: lseq<NodeCreationToken>)
   requires forall i | 0 <= i < NUM_REPLICAS as int ::
       && i in replicas
@@ -299,7 +299,7 @@ module Init(nrifc: NRIfc) {
       && i in readers
       && replicas[i] == Replica(i, nrifc.init_state())
       && combiners[i] == CombinerToken(i, CombinerReady)
-      && readers[i] == Reader(i, ReaderIdle)
+      && readers[i] == CBCombinerToken(i, CBCombinerIdle)
   ensures |nodeCreationTokens| == NUM_REPLICAS as int
   ensures forall i | 0 <= i < NUM_REPLICAS as int
       :: i in nodeCreationTokens && nodeCreationTokens[i].WF()
@@ -326,12 +326,12 @@ module Init(nrifc: NRIfc) {
     invariant forall i | j as int <= i < NUM_REPLICAS as int
         :: i !in nodeCreationTokens
     {
-      glinear var replica, combiner, reader;
+      glinear var replica, combiner, cb;
       replicas', replica := glmap_take(replicas', j as int);
       combiners', combiner := glmap_take(combiners', j as int);
-      readers', reader := glmap_take(readers', j as int);
+      readers', cb := glmap_take(readers', j as int);
 
-      linear var nct := NodeCreationToken(j, combiner, reader, replica);
+      linear var nct := NodeCreationToken(j, combiner, cb, replica);
       assert nct.WF();
 
       nodeCreationTokens := lseq_give(nodeCreationTokens, j, nct);

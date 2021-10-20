@@ -31,17 +31,17 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   // The 'alive' bit flips back and forth. So sometimes 'true' means 'alive',
   // and sometimes 'false' means 'alive'.
   // entry is an index into the buffer (0 <= entry < BUFFER_SIZE)
-  datatype AliveBit = AliveBit(ghost entry: nat, ghost bit: bool)
+  datatype CBAliveBit = CBAliveBit(ghost entry: nat, ghost bit: bool)
 
   // For advancing the head. We iterate idx from 0 .. NUM_REPLICAS and collect
   // the min of all tails. Then we can set head to min_tail.
-  datatype AdvanceHeadState = AdvanceHeadState(ghost idx: nat, ghost min_tail: nat)
+  datatype CBAdvanceHeadState = CBAdvanceHeadState(ghost idx: nat, ghost min_tail: nat)
 
   // For advancing the tail and writing new log entries.
   // First read the head, then advance the tail to some value allowed by the head.
   // Then write the actual log entries.
-  datatype AdvanceTailState = AdvanceTailState(ghost observed_head: nat)
-  datatype AppendState = AppendState(ghost cur_idx: nat, ghost tail: nat)
+  datatype CBAdvanceTailState = CBAdvanceTailState(ghost observed_head: nat)
+  datatype CBAppendState = CBAppendState(ghost cur_idx: nat, ghost tail: nat)
 
   // Contents stored in the log.
   //
@@ -65,135 +65,141 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   // For reading
   // To begin reading, you can go
   //
-  //      ReaderIdle --> ReaderStarting --> ReaderRange
+  //      ReaderIdle --> CBReaderStarting --> CBReaderRange
   //
   // by reading first the localTail and the globalTail. This gives you the ability
   // to read elements from that range.
   // To actually read an element, you have to move into the guard state
   //
-  //      ReaderRange --> ReaderGuard
+  //      CBReaderRange --> CBReaderGuard
   //
   // by checking that the 'alive' bit on that element is correct.
-  // When you're done with a guard you can go back to the ReaderRange state:
+  // When you're done with a guard you can go back to the CBReaderRange state:
   //
-  //      ReaderGuard --> ReaderRange
+  //      CBReaderGuard --> CBReaderRange
   //
   // (This only allows a guard for a single element at once, but this is all we need
   // and makes it a bit easier to maintain a simple state.)
   // Finally when we are done we can return to the idle state
   //
-  //      ReaderRange --> ReaderIdle
+  //      CBReaderRange --> ReaderIdle
   //
   // by writing to the localTail.
 
-  datatype ReaderState =
-    | ReaderIdle
-    | ReaderStarting(ghost start: nat)
-    | ReaderRange(ghost start: nat, ghost end: nat)
-    | ReaderGuard(ghost start: nat, ghost end: nat, ghost cur: nat, ghost val: StoredType)
+  datatype CBReaderState =
+    | CBReaderStarting(ghost start: nat)
+    | CBReaderRange(ghost start: nat, ghost end: nat)
+    | CBReaderGuard(ghost start: nat, ghost end: nat, ghost cur: nat, ghost val: StoredType)
 
-  datatype Reader = Reader(ghost nodeId: nat, ghost rs: ReaderState)
+  datatype CBCombinerState =
+    | CBCombinerIdle
+    | CBCombinerReading(ghost readerState: CBReaderState)
+    | CBCombinerAdvancingHead(ghost idx: nat, ghost min_tail: nat)
+    | CBCombinerAdvancingTail(ghost obvserve_head: nat)
+    | CBCombinerAppendState(ghost cur_idx: nat, ghost tail: nat)
+
+  datatype CBCombinerToken = CBCombinerToken(ghost nodeId: nat, ghost rs: CBCombinerState)
 
   glinear method init_advance_head_state(gshared first_local_tail: CBLocalTail)
-  returns (glinear state': AdvanceHeadState)
+  returns (glinear state': CBAdvanceHeadState)
   requires first_local_tail.nodeId == 0
   ensures state'.idx == 1
   ensures state'.min_tail == first_local_tail.tail
 
   glinear method step_advance_head_state(
-      gshared local_tail: CBLocalTail, glinear state: AdvanceHeadState)
-  returns (glinear state': AdvanceHeadState)
+      gshared local_tail: CBLocalTail, glinear state: CBAdvanceHeadState)
+  returns (glinear state': CBAdvanceHeadState)
   requires local_tail.nodeId == state.idx
-  ensures state' == AdvanceHeadState(state.idx + 1,
+  ensures state' == CBAdvanceHeadState(state.idx + 1,
       if state.min_tail < local_tail.tail then state.min_tail else local_tail.tail)
 
   glinear method finish_advance_head_state(
-      glinear head: CBHead, glinear state: AdvanceHeadState)
+      glinear head: CBHead, glinear state: CBAdvanceHeadState)
   returns (glinear head': CBHead)
   requires state.idx == NUM_REPLICAS as int
   ensures head' == CBHead(state.min_tail)
 
   glinear method init_advance_tail_state(gshared head: CBHead)
-  returns (glinear state': AdvanceTailState)
+  returns (glinear state': CBAdvanceTailState)
   ensures state'.observed_head == head.head
 
-  glinear method finish_advance_tail(glinear state: AdvanceTailState, glinear tail: CBGlobalTail,
+  glinear method finish_advance_tail(glinear state: CBAdvanceTailState, glinear tail: CBGlobalTail,
       ghost new_tail: nat, gshared contents: Contents)
   returns (glinear tail': CBGlobalTail, glinear entries': map<nat, StoredType>,
-      glinear append': AppendState)
+      glinear append': CBAppendState)
   requires tail.tail <= new_tail <= state.observed_head + BUFFER_SIZE as int
   ensures tail'.tail == new_tail
   ensures forall i | tail.tail <= i < new_tail ::
       && i in entries'
       && (i - BUFFER_SIZE as int) in contents.contents
       && entries'[i] == contents.contents[i - BUFFER_SIZE as int]
-  ensures append' == AppendState(tail.tail, new_tail)
+  ensures append' == CBAppendState(tail.tail, new_tail)
 
   glinear method append_flip_bit(
-      glinear state: AppendState, glinear bit: AliveBit, glinear contents: Contents,
+      glinear state: CBAppendState, glinear bit: CBAliveBit, glinear contents: Contents,
       glinear value: StoredType)
-  returns (glinear state': AppendState, glinear bit': AliveBit, glinear contents': Contents)
+  returns (glinear state': CBAppendState, glinear bit': CBAliveBit, glinear contents': Contents)
   requires state.cur_idx < state.tail
   requires bit.entry == state.cur_idx % BUFFER_SIZE as int
   ensures state' == state.(cur_idx := state.cur_idx + 1)
   ensures bit' == bit.(bit := ((state.cur_idx / BUFFER_SIZE as int) % 2 == 0))
   ensures contents' == contents.(contents := contents.contents[state.cur_idx := value])
 
-  glinear method reader_start(glinear reader: Reader, gshared localTail: CBLocalTail)
-  returns (glinear reader': Reader)
-  requires reader.nodeId == localTail.nodeId
-  requires reader.rs.ReaderIdle?
-  ensures reader' == reader.(rs := ReaderStarting(localTail.tail))
+  glinear method reader_start(glinear combiner: CBCombinerToken, gshared localTail: CBLocalTail)
+  returns (glinear combiner': CBCombinerToken)
+  requires combiner.nodeId == localTail.nodeId
+  requires combiner.rs.CBCombinerIdle?
+  ensures combiner' == combiner.(rs := CBCombinerReading(CBReaderStarting(localTail.tail)))
 
-  glinear method reader_enter(glinear reader: Reader, gshared globalTail: CBGlobalTail)
-  returns (glinear reader': Reader)
-  requires reader.rs.ReaderStarting?
-  ensures reader' == reader.(rs := ReaderRange(reader.rs.start, globalTail.tail))
+  glinear method reader_enter(glinear combiner: CBCombinerToken, gshared globalTail: CBGlobalTail)
+  returns (glinear combiner': CBCombinerToken)
+  requires combiner.rs.CBCombinerReading? && combiner.rs.readerState.CBReaderStarting?
+  ensures combiner' == combiner.(rs := CBCombinerReading(CBReaderRange(combiner.rs.readerState.start, globalTail.tail)))
 
-  glinear method reader_guard(glinear reader: Reader, gshared aliveBit: AliveBit, ghost i: nat,
+  glinear method reader_guard(glinear combiner: CBCombinerToken, gshared aliveBit: CBAliveBit, ghost i: nat,
       gshared contents: Contents)
-  returns (glinear reader': Reader)
-  requires reader.rs.ReaderRange?
-  requires reader.rs.start <= i < reader.rs.end
+  returns (glinear combiner': CBCombinerToken)
+  requires combiner.rs.CBCombinerReading? && combiner.rs.readerState.CBReaderRange?
+  requires combiner.rs.readerState.start <= i < combiner.rs.readerState.end
   requires i % BUFFER_SIZE as int == aliveBit.entry
   requires aliveBit.bit == ((i / BUFFER_SIZE as int) % 2 == 0)
   ensures i in contents.contents
-  ensures reader' == reader.(rs := ReaderGuard(reader.rs.start, reader.rs.end,
-      i, contents.contents[i]))
+  ensures combiner' == combiner.(rs := CBCombinerReading(CBReaderGuard(combiner.rs.readerState.start, combiner.rs.readerState.end,
+      i, contents.contents[i])))
 
-  glinear method reader_unguard(glinear reader: Reader)
-  returns (glinear reader': Reader)
-  requires reader.rs.ReaderGuard?
-  ensures reader' == reader.(rs := ReaderRange(reader.rs.start, reader.rs.end))
+  glinear method reader_unguard(glinear combiner: CBCombinerToken)
+  returns (glinear combiner': CBCombinerToken)
+  requires combiner.rs.CBCombinerReading? && combiner.rs.readerState.CBReaderGuard?
+  ensures combiner' == combiner.(rs := CBCombinerReading(CBReaderRange(combiner.rs.readerState.start, combiner.rs.readerState.end)))
 
-  glinear method reader_finish(glinear reader: Reader, glinear localTail: CBLocalTail)
-  returns (glinear reader': Reader, glinear localTail': CBLocalTail)
-  requires reader.nodeId == localTail.nodeId
-  requires reader.rs.ReaderRange?
-  ensures reader' == reader.(rs := ReaderIdle)
-  ensures localTail' == localTail.(tail := reader.rs.end)
+  glinear method reader_finish(glinear combiner: CBCombinerToken, glinear localTail: CBLocalTail)
+  returns (glinear combiner': CBCombinerToken, glinear localTail': CBLocalTail)
+  requires combiner.nodeId == localTail.nodeId
+  requires combiner.rs.CBCombinerReading? && combiner.rs.readerState.CBReaderRange?
+  ensures combiner' == combiner.(rs := CBCombinerIdle)
+  ensures localTail' == localTail.(tail := combiner.rs.readerState.end)
 
-  function method reader_borrow(gshared reader: Reader)
+  function method reader_borrow(gshared combiner: CBCombinerToken)
     : (gshared v: StoredType)
-  requires reader.rs.ReaderGuard?
-  ensures v == reader.rs.val
+  requires combiner.rs.CBCombinerReading? && combiner.rs.readerState.CBReaderGuard?
+  ensures v == combiner.rs.readerState.val
 
   glinear method cyclic_buffer_init(glinear m: map<int, StoredType>)
   returns (
     glinear head: CBHead,
     glinear globalTail: CBGlobalTail,
     glinear localTails: map<nat, CBLocalTail>,
-    glinear alive: map<nat, AliveBit>,
+    glinear alive: map<nat, CBAliveBit>,
     glinear contents: Contents,
-    glinear readers: map<nat, Reader>
+    glinear readers: map<nat, CBCombinerToken>
   )
   requires forall i :: -(BUFFER_SIZE as int) <= i < 0 <==> i in m
   ensures head == CBHead(0)
   ensures globalTail == CBGlobalTail(0)
   ensures forall i | 0 <= i < NUM_REPLICAS as int ::
       && i in localTails && localTails[i] == CBLocalTail(i, 0)
-      && i in readers && readers[i] == Reader(i, ReaderIdle)
+      && i in readers && readers[i] == CBCombinerToken(i, CBCombinerIdle)
   ensures forall i | 0 <= i < BUFFER_SIZE as int ::
-      i in alive && alive[i] == AliveBit(i, false)
+      i in alive && alive[i] == CBAliveBit(i, false)
   ensures contents == Contents(m)
 }

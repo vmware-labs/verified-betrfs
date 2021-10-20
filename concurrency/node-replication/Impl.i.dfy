@@ -16,14 +16,14 @@ module NodeReplica(nrifc: NRIfc) refines ContentsTypeMod {
   import opened O = Options
   import opened ILT = InfiniteLogTokens(nrifc)    // Replica, CombinerToken
   import opened IL = InfiniteLogSSM(nrifc)        // NodeId
-  import opened CBT = CyclicBufferTokens(nrifc)   // Reader
+  import opened CBT = CyclicBufferTokens(nrifc)   // CBCombinerToken
   import opened LC = LinearCells
 
   linear datatype NodeReplica = NodeReplica(
     linear actual_replica: nrifc.DataStructureType,
     glinear ghost_replica: Replica,
     glinear combiner: CombinerToken,
-    glinear reader: Reader
+    glinear cb: CBCombinerToken
   )
   {
     predicate WF(nodeId: nat) {
@@ -31,8 +31,8 @@ module NodeReplica(nrifc: NRIfc) refines ContentsTypeMod {
       && ghost_replica.nodeId == nodeId
       && combiner.state == CombinerReady
       && combiner.nodeId == nodeId
-      && reader.nodeId == nodeId
-      && reader.rs.ReaderIdle?
+      && cb.nodeId == nodeId
+      && cb.rs.CBCombinerIdle?
     }
   }
 
@@ -205,11 +205,11 @@ module Impl(nrifc: NRIfc) {
 
   linear datatype BufferEntry = BufferEntry(
     linear cell: Cell<ConcreteLogEntry>,
-    linear alive: Atomic<bool, AliveBit>)
+    linear alive: Atomic<bool, CBAliveBit>)
   {
     predicate WF(i: nat)
     {
-      && (forall v, g :: atomic_inv(alive, v, g) <==> g == AliveBit(i, v))
+      && (forall v, g :: atomic_inv(alive, v, g) <==> g == CBAliveBit(i, v))
       && alive.namespace() == 0
     }
   }
@@ -409,25 +409,25 @@ module Impl(nrifc: NRIfc) {
     glinear var guard;
     rep, guard := node.replica.acquire();
     assert rep.WF(node.nodeId as int);
-    linear var NodeReplica(actual_replica, ghost_replica, combinerState, reader) := rep;
+    linear var NodeReplica(actual_replica, ghost_replica, combinerState, cb) := rep;
 
     /////// append
-    actual_replica, responses', ghost_replica, updates, combinerState, reader :=
+    actual_replica, responses', ghost_replica, updates, combinerState, cb :=
       append(nr, node, ops', num_ops, actual_replica, responses,
           // ghost stuff
-          ghost_replica, requestIds, updates, combinerState, reader);
+          ghost_replica, requestIds, updates, combinerState, cb);
 
     /////// exec
 
     actual_replica, responses',
-        ghost_replica, updates, combinerState, reader :=
+        ghost_replica, updates, combinerState, cb :=
       exec(nr, node, actual_replica, responses', ghost_replica,
-          requestIds, updates, combinerState, reader);
+          requestIds, updates, combinerState, cb);
 
     /////// Release the rwlock
 
     node.replica.release(
-        NodeReplica(actual_replica, ghost_replica, combinerState, reader),
+        NodeReplica(actual_replica, ghost_replica, combinerState, cb),
         guard);
 
     /////// Return responses
@@ -865,7 +865,7 @@ module Impl(nrifc: NRIfc) {
 
     assert nrifc.read(shared_v.ghost_replica.state, ticket.rs.op) == result;
 
-    shared var NodeReplica(actual_replica, ghost_replica, combinerState, reader) := shared_v;
+    shared var NodeReplica(actual_replica, ghost_replica, combinerState, cb) := shared_v;
     ticket' := perform_ReadonlyDone(ticket, ghost_replica);
   }
 
@@ -878,14 +878,14 @@ module Impl(nrifc: NRIfc) {
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
       glinear combinerState: CombinerToken,
-      glinear reader: Reader)
+      glinear cb: CBCombinerToken)
   returns (
     linear actual_replica': nrifc.DataStructureType,
     linear responses': seq<nrifc.ReturnType>,
     glinear ghost_replica': Replica,
     glinear updates': map<nat, Update>,
     glinear combinerState': CombinerToken,
-    glinear reader': Reader)
+    glinear cb': CBCombinerToken)
   requires nr.WF()
   requires node.WF()
   requires |ops| == MAX_THREADS_PER_REPLICA as int
@@ -894,8 +894,8 @@ module Impl(nrifc: NRIfc) {
   requires combinerState.state == CombinerReady
   requires forall i | 0 <= i < |requestIds| ::
       i in updates && updates[i] == Update(requestIds[i], UpdateInit(ops[i]))
-  requires reader.nodeId == node.nodeId as int
-  requires reader.rs.ReaderIdle?
+  requires cb.nodeId == node.nodeId as int
+  requires cb.rs.CBCombinerIdle?
   requires ghost_replica.state == nrifc.I(actual_replica)
   requires ghost_replica.nodeId == node.nodeId as int
   requires |responses| == MAX_THREADS_PER_REPLICA as int
@@ -907,7 +907,7 @@ module Impl(nrifc: NRIfc) {
       post_exec(node, requestIds, responses', updates', combinerState')
   ensures combinerState'.state.CombinerPlaced? ==>
       pre_exec(node, requestIds, responses', updates', combinerState')
-  ensures reader' == reader
+  ensures cb' == cb
   ensures ghost_replica'.state == nrifc.I(actual_replica')
   ensures ghost_replica'.nodeId == node.nodeId as int
 
@@ -917,7 +917,7 @@ module Impl(nrifc: NRIfc) {
     combinerState' := combinerState;
     actual_replica' := actual_replica;
     ghost_replica' := ghost_replica;
-    reader' := reader;
+    cb' := cb;
     responses' := responses;
 
     var iteration := 1;
@@ -927,7 +927,7 @@ module Impl(nrifc: NRIfc) {
     while !done
     invariant 0 <= iteration as int <= WARN_THRESHOLD as int
     invariant 0 <= waitgc as int <= WARN_THRESHOLD as int
-    invariant reader' == reader
+    invariant cb' == cb
     invariant ghost_replica'.state == nrifc.I(actual_replica')
     invariant ghost_replica'.nodeId == node.nodeId as int
     invariant !done ==>
@@ -972,9 +972,9 @@ module Impl(nrifc: NRIfc) {
         dispose_anything(advance_tail_state);
 
         actual_replica', responses',
-            ghost_replica', updates', combinerState', reader' :=
+            ghost_replica', updates', combinerState', cb' :=
           exec(nr, node, actual_replica', responses', ghost_replica',
-              requestIds, updates', combinerState', reader');
+              requestIds, updates', combinerState', cb');
       } else {
 
         assume tail as int + num_ops as int < 0x1_0000_0000_0000_0000; // TODO
@@ -1088,9 +1088,9 @@ module Impl(nrifc: NRIfc) {
 
           if advance {
             actual_replica', responses', ghost_replica',
-                updates', combinerState', reader' :=
+                updates', combinerState', cb' :=
               advance_head(nr, node, actual_replica', responses', ghost_replica',
-                  requestIds, updates', combinerState', reader');
+                  requestIds, updates', combinerState', cb');
 
             assert combinerState'.state.CombinerPlaced? ==>
                 pre_exec(node, requestIds, responses', updates', combinerState');
@@ -1149,18 +1149,18 @@ module Impl(nrifc: NRIfc) {
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
       glinear combinerState: CombinerToken,
-      glinear reader: Reader)
+      glinear cb: CBCombinerToken)
   returns (
     linear actual_replica': nrifc.DataStructureType,
     linear responses': seq<nrifc.ReturnType>,
     glinear ghost_replica': Replica,
     glinear updates': map<nat, Update>,
     glinear combinerState': CombinerToken,
-    glinear reader': Reader)
+    glinear cb': CBCombinerToken)
   requires nr.WF()
   requires node.WF()
-  requires reader.nodeId == node.nodeId as int
-  requires reader.rs.ReaderIdle?
+  requires cb.nodeId == node.nodeId as int
+  requires cb.rs.CBCombinerIdle?
   requires ghost_replica.state == nrifc.I(actual_replica)
   requires ghost_replica.nodeId == node.nodeId as int
   requires combinerState.state.CombinerReady?
@@ -1173,7 +1173,7 @@ module Impl(nrifc: NRIfc) {
       post_exec(node, requestIds, responses', updates', combinerState')
   ensures combinerState.state.CombinerReady? ==>
       responses == responses' && combinerState' == combinerState && updates' == updates
-  ensures reader' == reader
+  ensures cb' == cb
   ensures ghost_replica'.state == nrifc.I(actual_replica')
   ensures ghost_replica'.nodeId == node.nodeId as int
   decreases *
@@ -1182,7 +1182,7 @@ module Impl(nrifc: NRIfc) {
     ghost_replica' := ghost_replica;
     combinerState' := combinerState;
     updates' := updates;
-    reader' := reader;
+    cb' := cb;
     responses' := responses;
 
     assert nr.node_info[node.nodeId as int].WF(node.nodeId as int);
@@ -1197,7 +1197,7 @@ module Impl(nrifc: NRIfc) {
     {
       ghost_acquire ltail_token;
       combinerState' := perform_ExecLoadLtail(combinerState', ltail_token.localTail);
-      reader' := reader_start(reader', ltail_token.cbLocalTail);
+      cb' := reader_start(cb', ltail_token.cbLocalTail);
       ghost_release ltail_token;
     }
 
@@ -1205,7 +1205,7 @@ module Impl(nrifc: NRIfc) {
     {
       ghost_acquire gtail_token;
       combinerState' := perform_ExecLoadGlobalTail(combinerState', gtail_token.globalTail);
-      reader' := reader_enter(reader', gtail_token.cbGlobalTail);
+      cb' := reader_enter(cb', gtail_token.cbGlobalTail);
       ghost_release gtail_token;
     }
 
@@ -1223,7 +1223,7 @@ module Impl(nrifc: NRIfc) {
       invariant combinerState'.state.Combiner?
       invariant combinerState'.state.queueIndex == responsesIndex as int
       invariant combinerState'.state == prev_combinerState.state.(localTail := i as int).(queueIndex := responsesIndex as int)
-      invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
+      invariant cb' == CBCombinerToken(node.nodeId as int, CBCombinerReading(CBReaderRange(ltail as int, gtail as int)))
       invariant ghost_replica'.state == nrifc.I(actual_replica')
       invariant ghost_replica'.nodeId == node.nodeId as int
       invariant |responses'| == MAX_THREADS_PER_REPLICA as int
@@ -1245,7 +1245,7 @@ module Impl(nrifc: NRIfc) {
         var done := false;
         while !done
         invariant 0 <= iteration as int <= WARN_THRESHOLD as int
-        invariant reader' == Reader(node.nodeId as int, ReaderRange(ltail as int, gtail as int))
+        invariant cb' == CBCombinerToken(node.nodeId as int, CBCombinerReading(CBReaderRange(ltail as int, gtail as int)))
         invariant ghost_replica'.state == nrifc.I(actual_replica')
         invariant ghost_replica'.nodeId == node.nodeId as int
         invariant combinerState'.nodeId == prev_combinerState.nodeId
@@ -1278,7 +1278,7 @@ module Impl(nrifc: NRIfc) {
             {
               ghost_acquire contents;
               if live_bit == ((i / BUFFER_SIZE) % 2 == 0) {
-                reader' := reader_guard(reader', alive_bit, i as int, contents);
+                cb' := reader_guard(cb', alive_bit, i as int, contents);
               }
               ghost_release contents;
             }
@@ -1288,7 +1288,7 @@ module Impl(nrifc: NRIfc) {
           if live_bit == ((i / BUFFER_SIZE) % 2 == 0) {
             // read the log_entry from memory
             var log_entry := read_cell(lseq_peek(nr.buffer, bounded).cell,
-                reader_borrow(reader').cellContents);
+                reader_borrow(cb').cellContents);
 
             var ret;
             actual_replica', ret := nrifc.do_update(actual_replica', log_entry.op);
@@ -1296,7 +1296,7 @@ module Impl(nrifc: NRIfc) {
             if log_entry.node_id == node.nodeId {
               combinerState' := pre_ExecDispatchLocal(
                   combinerState',
-                  reader_borrow(reader').logEntry.value);
+                  reader_borrow(cb').logEntry.value);
               assert responsesIndex as int < |requestIds'|;
 
               glinear var my_update, my_update';
@@ -1304,7 +1304,7 @@ module Impl(nrifc: NRIfc) {
               combinerState', ghost_replica', my_update' :=
                 perform_ExecDispatchLocal(combinerState', ghost_replica',
                       my_update,
-                      reader_borrow(reader').logEntry.value);
+                      reader_borrow(cb').logEntry.value);
               updates' := glmap_insert(updates', responsesIndex as int, my_update');
 
               responses' := seq_set(responses', responsesIndex, ret);
@@ -1314,10 +1314,10 @@ module Impl(nrifc: NRIfc) {
               // TODO remote dispatch
               combinerState', ghost_replica' :=
                 perform_ExecDispatchRemote(combinerState', ghost_replica',
-                      reader_borrow(reader').logEntry.value);
+                      reader_borrow(cb').logEntry.value);
             }
 
-            reader' := reader_unguard(reader');
+            cb' := reader_unguard(cb');
             done := true;
           } else {
             if iteration % WARN_THRESHOLD == 0 {
@@ -1379,7 +1379,7 @@ module Impl(nrifc: NRIfc) {
         ghost_acquire ltail_tokens;
         glinear var LocalTailTokens(localTail, cbLocalTail) := ltail_tokens;
         combinerState', localTail := perform_GoToCombinerReady(combinerState', localTail);
-        reader', cbLocalTail := reader_finish(reader', cbLocalTail);
+        cb', cbLocalTail := reader_finish(cb', cbLocalTail);
         ltail_tokens := LocalTailTokens(localTail, cbLocalTail);
         ghost_release ltail_tokens;
       }
@@ -1393,19 +1393,19 @@ module Impl(nrifc: NRIfc) {
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
       glinear combinerState: CombinerToken,
-      glinear reader: Reader)
+      glinear cb: CBCombinerToken)
   returns (
     linear actual_replica': nrifc.DataStructureType,
     linear responses': seq<nrifc.ReturnType>,
     glinear ghost_replica': Replica,
     glinear updates': map<nat, Update>,
     glinear combinerState': CombinerToken,
-    glinear reader': Reader)
+    glinear cb': CBCombinerToken)
 
   requires nr.WF()
   requires node.WF()
-  requires reader.nodeId == node.nodeId as int
-  requires reader.rs.ReaderIdle?
+  requires cb.nodeId == node.nodeId as int
+  requires cb.rs.CBCombinerIdle?
   requires ghost_replica.state == nrifc.I(actual_replica)
   requires ghost_replica.nodeId == node.nodeId as int
   requires combinerState.state.CombinerPlaced?
@@ -1413,7 +1413,7 @@ module Impl(nrifc: NRIfc) {
   requires |responses| == MAX_THREADS_PER_REPLICA as int
   requires pre_exec(node, requestIds, responses, updates, combinerState)
 
-  ensures reader' == reader
+  ensures cb' == cb
   ensures ghost_replica'.state == nrifc.I(actual_replica')
   ensures ghost_replica'.nodeId == node.nodeId as int
   ensures combinerState'.nodeId == node.nodeId as int
@@ -1424,7 +1424,7 @@ module Impl(nrifc: NRIfc) {
   ensures combinerState'.state.CombinerReady? ==>
       post_exec(node, requestIds, responses', updates', combinerState')
   ensures combinerState'.state.CombinerPlaced? ==>
-    updates' == updates && combinerState' == combinerState && reader' == reader
+    updates' == updates && combinerState' == combinerState && cb' == cb
 
   decreases *
   {
@@ -1432,7 +1432,7 @@ module Impl(nrifc: NRIfc) {
     ghost_replica' := ghost_replica;
     combinerState' := combinerState;
     updates' := updates;
-    reader' := reader;
+    cb' := cb;
     responses' := responses;
 
     // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/log.rs#L570
@@ -1442,7 +1442,7 @@ module Impl(nrifc: NRIfc) {
     while !done
     invariant 0 <= iteration as int <= WARN_THRESHOLD as int
 
-    invariant reader' == reader
+    invariant cb' == cb
     invariant ghost_replica'.state == nrifc.I(actual_replica')
     invariant ghost_replica'.nodeId == node.nodeId as int
 
@@ -1452,7 +1452,7 @@ module Impl(nrifc: NRIfc) {
     invariant combinerState'.state.CombinerReady? ==>
         post_exec(node, requestIds, responses', updates', combinerState')
     invariant combinerState'.state.CombinerPlaced? ==>
-      updates' == updates && combinerState' == combinerState && reader' == reader
+      updates' == updates && combinerState' == combinerState && cb' == cb
             && responses' == responses
     invariant |responses'| == MAX_THREADS_PER_REPLICA as int
 
@@ -1477,9 +1477,9 @@ module Impl(nrifc: NRIfc) {
       var idx: uint64 := 1;
       while idx < r
       invariant 0 <= idx <= r
-      invariant advance_state_token == AdvanceHeadState(idx as int, min_local_tail as int)
+      invariant advance_state_token == CBAdvanceHeadState(idx as int, min_local_tail as int)
 
-      invariant reader' == reader
+      invariant cb' == cb
       invariant ghost_replica'.state == nrifc.I(actual_replica')
       invariant ghost_replica'.nodeId == node.nodeId as int
 
@@ -1489,7 +1489,7 @@ module Impl(nrifc: NRIfc) {
       invariant combinerState'.state.CombinerReady? ==>
           post_exec(node, requestIds, responses', updates', combinerState')
       invariant combinerState'.state.CombinerPlaced? ==>
-        updates' == updates && combinerState' == combinerState && reader' == reader
+        updates' == updates && combinerState' == combinerState && cb' == cb
             && responses' == responses
       invariant |responses'| == MAX_THREADS_PER_REPLICA as int
 
@@ -1515,9 +1515,9 @@ module Impl(nrifc: NRIfc) {
         iteration := iteration + 1;
 
         actual_replica', responses',
-            ghost_replica', updates', combinerState', reader' :=
+            ghost_replica', updates', combinerState', cb' :=
           exec(nr, node, actual_replica', responses',
-              ghost_replica', requestIds, updates', combinerState', reader');
+              ghost_replica', requestIds, updates', combinerState', cb');
 
         dispose_anything(advance_state_token);
       } else {
@@ -1532,9 +1532,9 @@ module Impl(nrifc: NRIfc) {
           done := true;
         } else {
           actual_replica', responses',
-              ghost_replica', updates', combinerState', reader' :=
+              ghost_replica', updates', combinerState', cb' :=
             exec(nr, node, actual_replica', responses',
-                ghost_replica', requestIds, updates', combinerState', reader');
+                ghost_replica', requestIds, updates', combinerState', cb');
         }
       }
     }
