@@ -1390,6 +1390,25 @@ module RwLock refines Rw {
     else
       dot(RefCount(s, 0), Rcs(s+1, t))
   }
+
+  lemma SharedObtained_guard(t: nat, b: StoredType)
+  ensures guard(SharedHandle(SharedObtained(t, b)), b)
+  {
+    SumFilterSimp<SharedState>();
+
+    var m := SharedHandle(SharedObtained(t, b));
+    forall p: M | Inv(dot(m, p))
+    ensures I(dot(m, p)) == Some(b)
+    {
+      var x := dot(m, p);
+      assert x != unit() by {
+        var ss := SharedObtained(t, b);
+        assert x.sharedState.m[ss] > 0;
+        assert unit().sharedState.m[ss] == 0;
+      }
+      assert x.central.stored_value == b;
+    }
+  }
 }
 
 module RwLockToken {
@@ -2317,14 +2336,17 @@ module RwLockToken {
   requires f.val.M?
   requires f.val.writeback.WritebackObtained?
   ensures b == f.val.writeback.b
-  /*{
-    ghost var b := Base.one(f.val.writeback.b);
-    Base.unwrap_borrow( borrow_back_interp_exact(f, b) )
-  }*/
+  {
+    T.borrow_from_guard(f, f.val.writeback.b)
+  }
 
   function method {:opaque} borrow_sot(gshared sot: SharedObtainedToken) : (gshared b: Handle)
   requires sot.is_valid()
   ensures b == sot.b
+  {
+    SharedObtained_guard(sot.t, sot.b);
+    T.borrow_from_guard(sot.token, sot.b)
+  }
 
   glinear method perform_Init(glinear b: Handle)
   returns (glinear central: Token, glinear rcs: Token)
