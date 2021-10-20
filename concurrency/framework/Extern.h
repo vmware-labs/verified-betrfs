@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DafnyRuntime.h"
+#include "LinearExtern.h"
 
 #include <iostream>
 #include <cstdlib>
@@ -85,15 +86,6 @@ namespace Ptrs {
   }
 }
 
-template <>
-struct std::hash<Ptrs::Ptr> {
-  std::size_t operator()(const Ptrs::Ptr& x) const {
-    size_t seed = 0;
-    hash_combine<uintptr_t>(seed, x.ptr);
-    return seed;
-  }
-};
-
 namespace Cells {
   template <typename V>
   struct Cell {
@@ -138,13 +130,34 @@ namespace Cells {
   }
 };
 
+template <typename T>
+struct get_default<LinearExtern::linear_seq<T>> {
+  static LinearExtern::linear_seq<T> call() {
+    return nullptr;
+  }
+};
+
 namespace LinearCells {
   template <typename V>
-  struct LinearCell {
-    mutable V v;
+  struct Linearization
+  {
+    using linear_type = V;
+    using shared_type = V;
+  };
 
-    LinearCell() : v(get_default<V>::call()) { }
-    explicit LinearCell(V v) : v(v) { }
+  template <typename T>
+  struct Linearization<DafnySequence<T>>
+  {
+    using linear_type = LinearExtern::linear_seq<T>;
+    using shared_type = LinearExtern::shared_seq<T>;
+  };
+
+  template <typename V>
+  struct LinearCell {
+    mutable typename Linearization<V>::linear_type v;
+
+    LinearCell() : v(get_default<typename Linearization<V>::linear_type>::call()) { }
+    //explicit LinearCell(typename Linearization<V>::linear_type v) : v(v) { }
 
     LinearCell(LinearCell const& other) : v(other.v) { }
 
@@ -166,17 +179,17 @@ namespace LinearCells {
   }
 
   template <typename V>
-  V* read__lcell(LinearCell<V>& cell) {
+  typename Linearization<V>::shared_type* read__lcell(LinearCell<V>& cell) {
     return &cell.v;
   }
 
   template <typename V>
-  void give__lcell(LinearCell<V>& cell, V v) {
+  void give__lcell(LinearCell<V>& cell, typename Linearization<V>::linear_type v) {
     cell.v = v;
   }
 
   template <typename V>
-  V take__lcell(LinearCell<V>& cell) {
+  typename Linearization<V>::linear_type take__lcell(LinearCell<V>& cell) {
     return cell.v;
   }
 
