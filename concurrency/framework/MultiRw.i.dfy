@@ -189,6 +189,19 @@ module MultiRwTokens(rw: MultiRw) {
   requires rw.Init(m)
   ensures token.val == m
 
+  glinear method {:extern} split3(glinear sum: Token,
+      ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M)
+  returns (glinear a': Token, glinear b': Token, glinear c': Token)
+  requires sum.val == rw.dot(rw.dot(a, b), c)
+  ensures a' == T.Token(sum.loc, a)
+  ensures b' == T.Token(sum.loc, b)
+  ensures c' == T.Token(sum.loc, c)
+  {
+    glinear var x;
+    x, c' := T.split(sum, rw.dot(a, b), c);
+    a', b' := T.split(x, a, b);
+  }
+
   function method {:opaque} update(
       glinear b: Token,
       ghost expected_out: rw.M)
@@ -282,6 +295,10 @@ module MultiRwTokens(rw: MultiRw) {
     retrieved_value := WrapT.unwrap(b);
   }
 
+  /*
+   * Helpers
+   */
+
   glinear method obtain_invariant_3(
       glinear inout token1: Token,
       glinear inout token2: Token,
@@ -294,12 +311,14 @@ module MultiRwTokens(rw: MultiRw) {
     && old_token3 == token3
   )
   ensures rw.Inv(rw.dot(rw.dot(rw.dot(token1.val, token2.val), token3.val), rest))
+  {
+    glinear var x := T.join(token1, token2);
+    T.is_valid(x, inout token3);
+    token1, token2 := T.split(x, token1.val, token2.val);
+    rest :| rw.Inv(rw.dot(rw.dot(rw.dot(token1.val, token2.val), token3.val), rest));
+  }
 
   // TODO borrow method
-
-  /*
-   * Helpers
-   */
 
   glinear method internal_transition_2_2(
       glinear token1: Token,
@@ -313,6 +332,12 @@ module MultiRwTokens(rw: MultiRw) {
       rw.dot(expected_value1, expected_value2))
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
+  {
+    glinear var x := T.join(token1, token2);
+    glinear var y := internal_transition(x,
+        rw.dot(expected_value1, expected_value2));
+    token1', token2' := T.split(y, expected_value1, expected_value2);
+  }
 
   glinear method deposit_3_3(
       glinear token1: Token,
@@ -332,6 +357,14 @@ module MultiRwTokens(rw: MultiRw) {
   ensures token1' == T.Token(token1.loc, expected_value1)
   ensures token2' == T.Token(token1.loc, expected_value2)
   ensures token3' == T.Token(token1.loc, expected_value3)
+  {
+    glinear var x := T.join(token1, token2);
+    x := T.join(x, token3);
+    glinear var y := deposit(x, key, stored_value,
+        rw.dot(rw.dot(expected_value1, expected_value2), expected_value3));
+    token1', token2', token3' := split3(y,
+        expected_value1, expected_value2, expected_value3);
+  }
 
   glinear method withdraw_3_3(
       glinear token1: Token,
@@ -353,4 +386,13 @@ module MultiRwTokens(rw: MultiRw) {
   ensures token2' == T.Token(token1.loc, expected_value2)
   ensures token3' == T.Token(token1.loc, expected_value3)
   ensures retrieved_value == expected_retrieved_value
+  {
+    glinear var x := T.join(token1, token2);
+    x := T.join(x, token3);
+    glinear var y;
+    y, retrieved_value := withdraw(x,
+        rw.dot(rw.dot(expected_value1, expected_value2), expected_value3),
+        key, expected_retrieved_value);
+    token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
+  }
 }
