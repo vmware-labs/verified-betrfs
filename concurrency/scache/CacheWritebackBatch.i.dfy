@@ -63,8 +63,14 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear wbos: map<nat, WritebackObtainedToken>
      )
   ensures fwd_lists(cache, disk_addr, disk_addr, keys, tickets, wbos)
+  {
+    keys := [];
+    tickets := glmap_empty();
+    wbos := glmap_empty();
+    reveal_fwd_lists();
+  }
 
-  glinear method list_concat(
+  glinear method {:fuel ktw,0} list_concat(
       ghost cache: Cache,
       ghost a: nat, ghost b: nat, ghost c: nat,
       ghost keys1: seq<Key>,
@@ -80,6 +86,40 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires fwd_lists(cache, a, b, keys1, tickets1, wbos1)
   requires fwd_lists(cache, b, c, keys2, tickets2, wbos2)
   ensures fwd_lists(cache, a, c, keys, tickets, wbos)
+  {
+    keys := keys1 + keys2;
+    tickets := tickets1;
+    wbos := wbos1;
+
+    reveal_fwd_lists();
+
+    glinear var tickets' := tickets2;
+    glinear var wbos' := wbos2;
+
+    ghost var j := 0;
+    while j < |keys2|
+    invariant 0 <= j <= |keys2|
+    invariant forall i | 0 <= i < |keys1| + j ::
+        && i in tickets
+        && i in wbos
+        && ktw(cache, a + i, keys[i], tickets[i], wbos[i])
+    invariant forall i | j <= i < |keys2| ::
+        && i in tickets'
+        && i in wbos'
+        && ktw(cache, b + i, keys2[i], tickets'[i], wbos'[i])
+    {
+      glinear var ticket, wbo;
+      tickets', ticket := glmap_take(tickets', j);
+      wbos', wbo := glmap_take(wbos', j);
+
+      tickets := glmap_insert(tickets, |keys1| + j, ticket);
+      wbos := glmap_insert(wbos, |keys1| + j, wbo);
+
+      j := j + 1;
+    }
+    dispose_anything(tickets');
+    dispose_anything(wbos');
+  }
 
   glinear method list_push_back(
       ghost cache: Cache,
@@ -99,6 +139,12 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires fwd_lists(cache, start, end, keys, tickets, wbos)
   requires ktw(cache, end, key, ticket, wbo)
   ensures fwd_lists(cache, start, end + 1, keys', tickets', wbos')
+  {
+    reveal_fwd_lists();
+    keys' := keys + [key];
+    tickets' := glmap_insert(tickets, |keys|, ticket);
+    wbos' := glmap_insert(wbos, |keys|, wbo);
+  }
 
   glinear method list_push_front(
       ghost cache: Cache,
@@ -119,6 +165,16 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires fwd_lists(cache, start, end, keys, tickets, wbos)
   requires ktw(cache, start - 1, key, ticket, wbo)
   ensures fwd_lists(cache, start - 1, end, keys', tickets', wbos')
+  {
+    ghost var keys1 := [key];
+    glinear var tickets1 := glmap_empty();
+    glinear var wbos1 := glmap_empty();
+    tickets1 := glmap_insert(tickets1, 0, ticket);
+    wbos1 := glmap_insert(wbos1, 0, wbo);
+    reveal_fwd_lists();
+    keys', tickets', wbos' := list_concat(cache, start - 1, start, end,
+        keys1, tickets1, wbos1, keys, tickets, wbos);
+  }
 
   predicate method pages_share_extent(a: uint64, b: uint64)
   {

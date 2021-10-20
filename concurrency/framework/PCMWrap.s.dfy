@@ -16,10 +16,15 @@ abstract module PCMWrap refines PCM {
 
   predicate transition(a: M, b: M) { a == b }
 
+  predicate valid(x: M) { true }
+
   lemma dot_unit(x: M) { }
   lemma commutative(x: M, y: M) { }
   lemma associative(x: M, y: M, z: M) { }
   lemma transition_is_monotonic(a: M, b: M, c: M) { }
+  lemma transition_is_refl(a: M) { }
+  lemma transition_is_trans(a: M, b: M, c: M) { }
+  lemma valid_unit(x: M) { }
 
   function {:extern} singleton_loc(): Loc
 
