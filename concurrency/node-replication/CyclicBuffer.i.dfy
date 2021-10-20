@@ -67,8 +67,27 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   function unit() : M
 
   predicate Init(s: M)
+
+  predicate Complete(x: M)
+  {
+    && x.M?
+    && x.head.Some?
+    && x.tail.Some?
+    && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.localTails)
+    && (true /* contents */)
+    && (forall i: nat :: i < BUFFER_SIZE as nat <==> i in x.aliveBits)
+    && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.combinerState)
+  }
+
   predicate Inv(x: M)
+  {
+    && Complete(x)
+
+    && true // TODO
+  }
+
   function I(x: M) : map<Key, StoredType>
+  // TODO: checked out between the latest alive cell and the tail
 
   /*
    * ============================================================================================
@@ -246,6 +265,20 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
         else m.localTails[combinerBefore.idx])])
   }
 
+  lemma StepAdvanceHead_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires StepAdvanceHead(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume I(dot(m, p)) == I(dot(m', p));
+    }
+  }
+
   predicate FinishAdvanceHead(m: M, m': M, combinerNodeId: nat)
   {
     && m.M?
@@ -258,6 +291,20 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       head := Some(combinerBefore.min_tail),
       combinerState := m.combinerState[combinerNodeId := CombinerIdle]
     )
+  }
+
+  lemma FinishAdvanceHead_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires FinishAdvanceHead(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume I(dot(m, p)) == I(dot(m', p));
+    }
   }
 
   /*
@@ -276,6 +323,21 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerAdvancingTail(m.head.value)])
   }
 
+  lemma InitAdvanceTail_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires InitAdvanceTail(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume I(dot(m, p)) == I(dot(m', p));
+    }
+  }
+
+  // TODO: the withdrawn type here may be wrong
   predicate FinishAdvanceTail(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>) // withdraw
   {
     && m.M?
@@ -293,6 +355,19 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && (i - BUFFER_SIZE as int) in m.contents
       && withdrawn[i] == m.contents[i - BUFFER_SIZE as int])
   }
+
+  // TODO: lemma FinishAdvanceTail_is_withdraw(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>)
+  // TODO: requires FinishAdvanceTail(m, m', combinerNodeId)
+  // TODO: ensures withdraw(m, m', new_tail, withdrawn)
+  // TODO: {
+  // TODO:   forall p: M | Inv(dot(m, p))
+  // TODO:   ensures Inv(dot(m', p))
+  // TODO:     && ...
+  // TODO:   {
+  // TODO:     // TODO: fill this in
+  // TODO:     assume Inv(dot(m', p));
+  // TODO:   }
+  // TODO: }
 
   /*
    * ============================================================================================
@@ -316,6 +391,26 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       contents := m.contents[combinerBefore.cur_idx := deposited])
   }
 
+  lemma AppendFlipBit_is_deposit(m: M, m': M, combinerNodeId: nat, deposited: StoredType)
+  requires AppendFlipBit(m, m', combinerNodeId, deposited)
+  ensures exists key :: deposit(m, m', key, deposited)
+  {
+    var key := *; // TODO
+
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && key !in I(dot(m, p))
+      && I(dot(m', p)) == I(dot(m, p))[key := deposited]
+    {
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume key !in I(dot(m, p));
+      assume I(dot(m', p)) == I(dot(m, p))[key := deposited];
+    }
+
+    assert deposit(m, m', key, deposited); // witness
+  }
+
   /*
    * ============================================================================================
    * Reader
@@ -332,7 +427,20 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerReading(
       ReaderStarting(m.localTails[combinerNodeId]))]
     )
+  }
 
+  lemma ReaderDoStart_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires ReaderDoStart(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume I(dot(m, p)) == I(dot(m', p));
+    }
   }
 
   predicate ReaderDoEnter(m: M, m': M, combinerNodeId: nat)
@@ -347,6 +455,20 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerReading(
       ReaderRange(readerBefore.start, m.tail.value))]
     )
+  }
+
+  lemma ReaderDoEnter_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires ReaderDoEnter(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume I(dot(m, p)) == I(dot(m', p));
+    }
   }
 
   predicate ReaderDoGuard(m: M, m': M, combinerNodeId: nat, i: nat)
@@ -369,6 +491,20 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       )
   }
 
+  lemma ReaderDoGuard_is_transition(m: M, m': M, combinerNodeId: nat, i: nat)
+  requires ReaderDoGuard(m, m', combinerNodeId, i)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume I(dot(m, p)) == I(dot(m', p));
+    }
+  }
+
   predicate ReaderDoUnguard(m: M, m': M, combinerNodeId: nat)
   {
     && m.M?
@@ -383,7 +519,21 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     )
   }
 
-  predicate ReaderFinish(m: M, m': M, combinerNodeId: nat)
+  lemma ReaderDoUnguard_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires ReaderDoUnguard(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume I(dot(m, p)) == I(dot(m', p));
+    }
+  }
+
+  predicate ReaderDoFinish(m: M, m': M, combinerNodeId: nat)
   {
     && m.M?
 
@@ -398,5 +548,19 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       combinerState := m.combinerState[combinerNodeId := CombinerIdle],
       localTails := m.localTails[combinerNodeId := readerBefore.end]
     )
+  }
+
+  lemma ReaderDoFinish_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires ReaderDoFinish(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume I(dot(m, p)) == I(dot(m', p));
+    }
   }
 }
