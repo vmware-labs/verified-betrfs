@@ -22,7 +22,12 @@ module CacheResources {
     }
   }
 
-  datatype HavocPermission = HavocPermission(ghost disk_idx: int)
+  datatype {:glinear_fold} HavocPermission = HavocPermission(ghost rid: RequestId, ghost disk_idx: int)
+  {
+    function defn() : T.Token {
+      T.Token(CacheSSM.Havoc(rid, disk_idx))
+    }
+  }
 
   datatype {:glinear_fold} CacheStatus = CacheStatus(ghost cache_idx: nat, ghost status: Status)
   {
@@ -171,6 +176,41 @@ module CacheResources {
   ensures t2.data == data
   ensures t3 == DiskPageMap(disk_idx, Some(cache_idx))
   ensures status == CacheStatus(cache_idx, Dirty)
+  {
+    glinear var a_token := CacheEmpty_unfold(s2);
+    glinear var b_token := DiskPageMap_unfold(s3);
+    gshared var s_token := HavocPermission_unfold_borrow(havoc);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := CacheEntry(cache_idx, disk_idx, data);
+    ghost var out1_token_expect := CacheEntry_unfold(out1_expect);
+
+    ghost var out2_expect := DiskPageMap(disk_idx, Some(cache_idx));
+    ghost var out2_token_expect := DiskPageMap_unfold(out2_expect);
+
+    ghost var out3_expect := CacheStatus(cache_idx, Dirty);
+    ghost var out3_token_expect := CacheStatus_unfold(out3_expect);
+
+    // Explain what transition we're going to do
+    assert CacheSSM.HavocNew(
+        CacheSSM.dot(s_token.val, CacheSSM.dot(a_token.val, b_token.val)),
+        CacheSSM.dot(s_token.val, CacheSSM.dot(CacheSSM.dot(out1_token_expect.val, out2_token_expect.val), out3_token_expect.val)),
+        cache_idx, havoc.rid, data);
+    assert CacheSSM.InternalStep(
+        CacheSSM.dot(s_token.val, CacheSSM.dot(a_token.val, b_token.val)),
+        CacheSSM.dot(s_token.val, CacheSSM.dot(CacheSSM.dot(out1_token_expect.val, out2_token_expect.val), out3_token_expect.val)),
+        CacheSSM.HavocNewStep(cache_idx, havoc.rid, data));
+
+    // Perform the transition
+    glinear var out1_token, out2_token, out3_token := T.transition_1_2_3(s_token, a_token, b_token,
+        out1_token_expect.val,
+        out2_token_expect.val,
+        out3_token_expect.val);
+
+    t2 := CacheEntry_fold(out1_expect, out1_token);
+    t3 := DiskPageMap_fold(out2_expect, out2_token);
+    status := CacheStatus_fold(out3_expect, out3_token);
+  }
 
   glinear method inv_map_agrees(
       gshared cache_entry: CacheEntry,
@@ -240,11 +280,43 @@ module CacheResources {
       glinear dpm': DiskPageMap
   )
   requires status.cache_idx == cache_idx
+  requires status.status != Writeback
   requires cache_entry == CacheEntry(cache_idx, disk_idx, cache_entry.data)
   requires dpm == DiskPageMap(disk_idx, dpm.cache_idx_opt)
   requires havoc.disk_idx == disk_idx
   ensures cache_empty == CacheEmpty(cache_idx)
   ensures dpm' == DiskPageMap(disk_idx, None)
+  {
+    glinear var a_token := CacheStatus_unfold(status);
+    glinear var b_token := CacheEntry_unfold(cache_entry);
+    glinear var c_token := DiskPageMap_unfold(dpm);
+    gshared var s_token := HavocPermission_unfold_borrow(havoc);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := CacheEmpty(cache_idx);
+    ghost var out1_token_expect := CacheEmpty_unfold(out1_expect);
+
+    ghost var out2_expect := DiskPageMap(disk_idx, None);
+    ghost var out2_token_expect := DiskPageMap_unfold(out2_expect);
+
+    // Explain what transition we're going to do
+    assert CacheSSM.HavocEvict(
+        CacheSSM.dot(s_token.val, CacheSSM.dot(CacheSSM.dot(a_token.val, b_token.val), c_token.val)),
+        CacheSSM.dot(s_token.val, CacheSSM.dot(out1_token_expect.val, out2_token_expect.val)),
+        cache_idx, havoc.rid);
+    assert CacheSSM.InternalStep(
+        CacheSSM.dot(s_token.val, CacheSSM.dot(CacheSSM.dot(a_token.val, b_token.val), c_token.val)),
+        CacheSSM.dot(s_token.val, CacheSSM.dot(out1_token_expect.val, out2_token_expect.val)),
+        CacheSSM.HavocEvictStep(cache_idx, havoc.rid));
+
+    // Perform the transition
+    glinear var out1_token, out2_token := T.transition_1_3_2(s_token, a_token, b_token, c_token,
+        out1_token_expect.val,
+        out2_token_expect.val);
+
+    cache_empty := CacheEmpty_fold(out1_expect, out1_token);
+    dpm' := DiskPageMap_fold(out2_expect, out2_token);
+  }
 
   glinear method finish_page_in(
       ghost cache_idx: nat,

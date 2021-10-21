@@ -99,6 +99,7 @@ module AtomicIndexLookupImpl {
   requires status.CacheStatus?
   requires cache_entry.CacheEntry?
   requires cache_entry.cache_idx == status.cache_idx
+  requires status.status != Writeback
   requires cache_entry.disk_idx == disk_idx
   requires havoc.disk_idx == disk_idx as int
   ensures cache_empty' == CacheEmpty(cache_entry.cache_idx)

@@ -430,7 +430,7 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     && s.disk_idx_to_cache_idx[s.havocs[rid]] == None
     && s' == s
       .(entries := s.entries[cache_idx := Entry(s.havocs[rid], new_data)])
-      .(statuses := s.statuses[cache_idx := Clean])
+      .(statuses := s.statuses[cache_idx := Dirty])
       .(disk_idx_to_cache_idx := s.disk_idx_to_cache_idx[s.havocs[rid] := Some(cache_idx)])
   }
 

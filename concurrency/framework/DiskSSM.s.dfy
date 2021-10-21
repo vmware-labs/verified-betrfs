@@ -497,6 +497,28 @@ module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
     token1', token2' := split2(y, expected_value1, expected_value2);
   }
 
+  glinear method transition_1_2_3(
+      gshared s: Token,
+      glinear token1: Token,
+      glinear token2: Token,
+      ghost expected_value1: pcm.M,
+      ghost expected_value2: pcm.M,
+      ghost expected_value3: pcm.M)
+  returns (glinear token1': Token, glinear token2': Token, glinear token3': Token)
+  requires ssm.Internal(
+      ssm.dot(s.val, ssm.dot(token1.val, token2.val)),
+      ssm.dot(s.val, ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3)))
+  ensures token1' == Token(expected_value1)
+  ensures token2' == Token(expected_value2)
+  ensures token3' == Token(expected_value3)
+  {
+    glinear var x := join(token1, token2);
+    glinear var y := transition_1_1_1(s, x,
+        ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3));
+    token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
+  }
+
+
   glinear method transition_1_2_2(
       gshared s: Token,
       glinear token1: Token,
@@ -531,6 +553,28 @@ module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
     glinear var y := transition_1_1_1(s, x, expected_value1);
     token1' := y;
   }
+
+  glinear method transition_1_3_2(
+      gshared s: Token,
+      glinear token1: Token,
+      glinear token2: Token,
+      glinear token3: Token,
+      ghost expected_value1: pcm.M,
+      ghost expected_value2: pcm.M)
+  returns (glinear token1': Token, glinear token2': Token)
+  requires ssm.Internal(
+      ssm.dot(s.val, ssm.dot(ssm.dot(token1.val, token2.val), token3.val)),
+      ssm.dot(s.val, ssm.dot(expected_value1, expected_value2)))
+  ensures token1' == Token(expected_value1)
+  ensures token2' == Token(expected_value2)
+  {
+    glinear var x := join(token1, token2);
+    x := join(x, token3);
+    glinear var y := transition_1_1_1(s, x,
+        ssm.dot(expected_value1, expected_value2));
+    token1', token2' := split2(y, expected_value1, expected_value2);
+  }
+
 
   glinear method transition_1_3_3(
       gshared s: Token,
