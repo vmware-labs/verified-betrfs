@@ -547,11 +547,34 @@ module CacheResources {
     stub := out2_token;
   }
 
+  function IdxsRange(a: nat, b: nat) : map<nat, Option<nat>>
+  requires a <= b
+  {
+    map i : nat | a <= i < b :: None
+  }
+
+  function EmptyRange(a: nat, b: nat) : map<nat, CacheSSM.Entry>
+  requires a <= b
+  {
+    map i : nat | a <= i < b :: CacheSSM.Empty
+  }
+
   function IdxsSeq(a: nat, b: nat) : T.Token
   requires a <= b
+  {
+    T.Token(
+      CacheSSM.M(IdxsRange(a, b),
+        map[], map[], map[], {}, {}, map[], map[], map[], map[], map[]))
+  }
 
   function EmptySeq(a: nat, b: nat) : T.Token
   requires a <= b
+  {
+    T.Token(
+      CacheSSM.M(map[],
+        EmptyRange(a, b),
+        map[], map[], {}, {}, map[], map[], map[], map[], map[]))
+  }
 
   glinear method pop_IdxSeq(glinear t: T.Token, ghost a: nat, ghost b: nat)
   returns (glinear x: DiskPageMap, glinear t': T.Token)

@@ -103,6 +103,10 @@ module RwLock refines Rw {
     M(CentralNone, map[], zero_map(), ExcNone, ReadNone, WritebackNone)
   }
 
+  function union_map<K, V>(m1: map<K, V>, m2: map<K, V>) : map<K, V> {
+    map k | k in m1.Keys + m2.Keys :: if k in m1 then m1[k] else m2[k]
+  }
+
   function dot(x: M, y: M) : M
   {
     if
@@ -115,8 +119,7 @@ module RwLock refines Rw {
     then
       M(
         if x.central.CentralState? then x.central else y.central,
-        (map k | k in x.refCounts.Keys + y.refCounts.Keys ::
-            if k in x.refCounts.Keys then x.refCounts[k] else y.refCounts[k]),
+        union_map(x.refCounts, y.refCounts),
         add_fns(x.sharedState, y.sharedState),
         if !x.exc.ExcNone? then x.exc else y.exc,
         if !x.read.ReadNone? then x.read else y.read,
@@ -316,14 +319,13 @@ module RwLock refines Rw {
     M(CentralNone, map[t := count], zero_map(), ExcNone, ReadNone, WritebackNone)
   }
 
-  function RcRange(s: nat, t: nat) : map<ThreadId, nat>
+  function {:opaque} RcRange(s: nat, t: nat) : map<ThreadId, nat>
   {
     map i: ThreadId | s <= i < t :: 0
   }
 
   function Rcs(s: nat, t: nat) : M
   requires s <= t
-  decreases t - s
   {
     M(CentralNone, RcRange(s, t), zero_map(), ExcNone, ReadNone, WritebackNone)
   }
@@ -2363,6 +2365,7 @@ module RwLockToken {
   ensures central.val == CentralHandle(CentralState(Unmapped, b))
   ensures rcs.val == Rcs(0, RC_WIDTH as int)
   {
+    reveal_RcRange();
     var x := CentralHandle(CentralState(Unmapped, b));
     var y := Rcs(0, RC_WIDTH as int);
     var z := dot(x, y);
@@ -2384,4 +2387,25 @@ module RwLockToken {
   ensures t'.val == Rcs(a+1, b)
   ensures x.val == RefCount(a, 0)
   ensures x.loc == t'.loc == t.loc
+  {
+    assert dot(RefCount(a, 0), Rcs(a+1, b)).M? by { reveal_RcRange(); }
+    assert t.val.refCounts == dot(RefCount(a, 0), Rcs(a+1, b)).refCounts
+    by {
+      var g := union_map(map[a := 0], RcRange(a+1, b));
+      var h := RcRange(a, b);
+      reveal_RcRange();
+      forall k | k in g
+      ensures k in h && g[k] == h[k]
+      {
+      }
+      forall k | k in h
+      ensures k in g
+      {
+        if k == a { assert k in g; }
+        else { assert k in g; }
+      }
+      assert g == h;
+    }
+    x, t' := T.T.split(t, RefCount(a, 0), Rcs(a+1, b));
+  }
 }
