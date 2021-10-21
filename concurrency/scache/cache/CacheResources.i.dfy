@@ -547,13 +547,13 @@ module CacheResources {
     stub := out2_token;
   }
 
-  function IdxsRange(a: nat, b: nat) : map<nat, Option<nat>>
+  function {:opaque} IdxsRange(a: nat, b: nat) : map<nat, Option<nat>>
   requires a <= b
   {
     map i : nat | a <= i < b :: None
   }
 
-  function EmptyRange(a: nat, b: nat) : map<nat, CacheSSM.Entry>
+  function {:opaque} EmptyRange(a: nat, b: nat) : map<nat, CacheSSM.Entry>
   requires a <= b
   {
     map i : nat | a <= i < b :: CacheSSM.Empty
@@ -582,6 +582,29 @@ module CacheResources {
   requires t == IdxsSeq(a, b)
   ensures t' == IdxsSeq(a+1, b)
   ensures x == DiskPageMap(a, None)
+  {
+    assert CacheSSM.dot(CacheSSM.DiskIdxToCacheIdx(a, None), IdxsSeq(a+1, b).val).M? by { reveal_IdxsRange(); }
+    assert t.val.disk_idx_to_cache_idx == CacheSSM.dot(CacheSSM.DiskIdxToCacheIdx(a, None), IdxsSeq(a+1, b).val).disk_idx_to_cache_idx
+    by {
+      var g := CacheSSM.union_map(map[a := None], IdxsRange(a+1, b));
+      var h := IdxsRange(a, b);
+      reveal_IdxsRange();
+      forall k | k in g
+      ensures k in h && g[k] == h[k]
+      {
+      }
+      forall k | k in h
+      ensures k in g
+      {
+        if k == a { assert k in g; }
+        else { assert k in g; }
+      }
+      assert g == h;
+    }
+    glinear var y;
+    y, t' := T.split2(t, CacheSSM.DiskIdxToCacheIdx(a, None), IdxsSeq(a+1, b).val);
+    x := DiskPageMap_fold(DiskPageMap(a, None), y);
+  }
 
   glinear method pop_EmptySeq(glinear t: T.Token, ghost a: nat, ghost b: nat)
   returns (glinear x: CacheEmpty, glinear t': T.Token)
@@ -589,10 +612,40 @@ module CacheResources {
   requires t == EmptySeq(a, b)
   ensures t' == EmptySeq(a+1, b)
   ensures x == CacheEmpty(a)
+  {
+    assert CacheSSM.dot(CacheSSM.CacheEmpty(a), EmptySeq(a+1, b).val).M? by { reveal_EmptyRange(); }
+    assert t.val.entries == CacheSSM.dot(CacheSSM.CacheEmpty(a), EmptySeq(a+1, b).val).entries
+    by {
+      var g := CacheSSM.union_map(map[a := CacheSSM.Empty], EmptyRange(a+1, b));
+      var h := EmptyRange(a, b);
+      reveal_EmptyRange();
+      forall k | k in g
+      ensures k in h && g[k] == h[k]
+      {
+      }
+      forall k | k in h
+      ensures k in g
+      {
+        if k == a { assert k in g; }
+        else { assert k in g; }
+      }
+      assert g == h;
+    }
+    glinear var y;
+    y, t' := T.split2(t, CacheSSM.CacheEmpty(a), EmptySeq(a+1, b).val);
+    x := CacheEmpty_fold(CacheEmpty(a), y);
+  }
 
   glinear method split_init(glinear t: T.Token)
   returns (glinear idxs: T.Token, glinear empties: T.Token)
   requires CacheSSM.Init(t.val)
   ensures idxs == IdxsSeq(0, NUM_DISK_PAGES as int)
   ensures empties == EmptySeq(0, CACHE_SIZE as int)
+  {
+    reveal_EmptyRange();
+    reveal_IdxsRange();
+    idxs, empties := T.split2(t,
+        IdxsSeq(0, NUM_DISK_PAGES as int).val,
+        EmptySeq(0, CACHE_SIZE as int).val);
+  }
 }
