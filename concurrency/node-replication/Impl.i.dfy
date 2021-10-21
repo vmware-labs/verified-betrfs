@@ -161,11 +161,6 @@ module Impl(nrifc: NRIfc) {
     }
   }
 
-  // requires flatCombiner.loc == node.fc_loc
-  // requires flatCombiner.state == FCCombinerCollecting(0, [])
-  // requires |ops| == MAX_THREADS_PER_REPLICA as int
-
-
   /*
    * Per-thread
    */
@@ -370,13 +365,25 @@ module Impl(nrifc: NRIfc) {
       // Release combiner_lock
       atomic_block var _ := execute_atomic_store(node.combiner_lock, 0) {
         ghost_acquire contents;
-        assert contents == glNone;
+        assert old_value > 0; // doesn't believe me
+        assert contents.glNone?;
+
+        //assert fcstate'.state == FCCombinerCollecting(0, []);
+        //assert fcstate'.loc == node.fc_loc;
+        //assert gops''.v.Some?;
+        //assert gops''.lcell == node.ops;
+        //assert |gops''.v.value| == MAX_THREADS_PER_REPLICA as int;
+        //assert gresponses''.v.Some?;
+        //assert gresponses''.lcell == node.responses;
+        //assert |gresponses''.v.value| == MAX_THREADS_PER_REPLICA as int;
+
         dispose_glnone(contents);
         contents := glSome(CombinerLockState(fcstate', gops'', gresponses''));
         ghost_release contents;
       }
     }
     else {
+      assert gops.glNone?;
       dispose_glnone(fcStateOpt);
       dispose_glnone(gops);
       dispose_glnone(gresponses);
@@ -401,6 +408,8 @@ module Impl(nrifc: NRIfc) {
   requires flatCombiner.state == FCCombinerCollecting(0, [])
   requires flatCombiner.loc == node.fc_loc
   ensures flatCombiner'.loc == node.fc_loc
+  // TODO: for travis is this ok?:
+  ensures flatCombiner'.state == FCCombinerCollecting(0, [])
   ensures |ops'| == MAX_THREADS_PER_REPLICA as int
   ensures |responses'| == MAX_THREADS_PER_REPLICA as int
   decreases *
