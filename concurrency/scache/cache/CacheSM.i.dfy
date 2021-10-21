@@ -440,7 +440,9 @@ module CacheSSM refines DiskSSM(CacheIfc) {
     && cache_idx in s.entries
     && s.entries[cache_idx].Entry?
     && cache_idx in s.statuses
+    && s.statuses[cache_idx] != Writeback
     && rid in s.havocs
+    && s.entries[cache_idx].disk_idx == s.havocs[rid]
     && s.havocs[rid] in s.disk_idx_to_cache_idx
     && s' == s
       .(entries := s.entries[cache_idx := Empty])
@@ -505,7 +507,40 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   }
 
   predicate Inv(s: M) {
-    true
+    && s.M?
+    && (forall cache_idx
+        | cache_idx in s.entries && (s.entries[cache_idx].Reading? || s.entries[cache_idx].Entry?)
+        :: s.entries[cache_idx].disk_idx in s.disk_idx_to_cache_idx
+          && s.disk_idx_to_cache_idx[s.entries[cache_idx].disk_idx] == Some(cache_idx))
+    && (forall disk_idx
+        | disk_idx in s.disk_idx_to_cache_idx && s.disk_idx_to_cache_idx[disk_idx].Some?
+        :: s.disk_idx_to_cache_idx[disk_idx].value in s.entries
+          && (
+            || s.entries[s.disk_idx_to_cache_idx[disk_idx].value].Reading?
+            || s.entries[s.disk_idx_to_cache_idx[disk_idx].value].Entry?
+          )
+          && s.entries[s.disk_idx_to_cache_idx[disk_idx].value].disk_idx == disk_idx
+       )
+    && s.read_reqs !! s.read_resps.Keys
+    && s.write_reqs.Keys !! s.write_resps
+    && (forall disk_idx ::
+      && (disk_idx in s.read_reqs || disk_idx in s.read_resps ==> 
+          && disk_idx in s.disk_idx_to_cache_idx
+          && s.disk_idx_to_cache_idx[disk_idx].Some?
+          && s.entries[s.disk_idx_to_cache_idx[disk_idx].value].Reading?)
+    )
+    && (forall disk_idx ::
+      && (disk_idx in s.write_reqs || disk_idx in s.write_resps ==> 
+          && disk_idx in s.disk_idx_to_cache_idx
+          && s.disk_idx_to_cache_idx[disk_idx].Some?
+          && s.disk_idx_to_cache_idx[disk_idx].value in s.statuses
+          && s.statuses[s.disk_idx_to_cache_idx[disk_idx].value] == Writeback
+      )
+    )
+    && (forall cache_idx ::
+      (cache_idx in s.entries && s.entries[cache_idx].Entry?) <==>
+          cache_idx in s.statuses)
+
   }
 
   lemma InitImpliesInv(s: M)
@@ -514,12 +549,280 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   {
   }
 
+  lemma StartRead_PreservesInv(s: M, s': M, cache_idx: nat, disk_idx: nat)
+  requires Inv(s)
+  requires StartRead(s, s', cache_idx, disk_idx)
+  ensures Inv(s')
+  {
+  }
+
+  lemma FinishRead_PreservesInv(s: M, s': M, cache_idx: nat, disk_idx: nat)
+  requires Inv(s)
+  requires FinishRead(s, s', cache_idx, disk_idx)
+  ensures Inv(s')
+  {
+  }
+
+  lemma StartWriteback_PreservesInv(s: M, s': M, cache_idx: nat)
+  requires Inv(s)
+  requires StartWriteback(s, s', cache_idx)
+  ensures Inv(s')
+  {
+  }
+
+  lemma FinishWriteback_PreservesInv(s: M, s': M, cache_idx: nat)
+  requires Inv(s)
+  requires FinishWriteback(s, s', cache_idx)
+  ensures Inv(s')
+  {
+  }
+
+  lemma Evict_PreservesInv(s: M, s': M, cache_idx: nat)
+  requires Inv(s)
+  requires Evict(s, s', cache_idx)
+  ensures Inv(s')
+  {
+  }
+
+  lemma ObserveCleanForSync_PreservesInv(s: M, s': M, cache_idx: nat, rid: RequestId)
+  requires Inv(s)
+  requires ObserveCleanForSync(s, s', cache_idx, rid)
+  ensures Inv(s')
+  {
+  }
+
+  lemma ApplyRead_PreservesInv(s: M, s': M, cache_idx: nat, rid: RequestId)
+  requires Inv(s)
+  requires ApplyRead(s, s', cache_idx, rid)
+  ensures Inv(s')
+  {
+  }
+
+  lemma ApplyWrite_PreservesInv(s: M, s': M, cache_idx: nat, rid: RequestId)
+  requires Inv(s)
+  requires ApplyWrite(s, s', cache_idx, rid)
+  ensures Inv(s')
+  {
+  }
+
+  lemma MarkDirty_PreservesInv(s: M, s': M, cache_idx: nat)
+  requires Inv(s)
+  requires MarkDirty(s, s', cache_idx)
+  ensures Inv(s')
+  {
+  }
+
+  lemma HavocNew_PreservesInv(s: M, s': M, cache_idx: nat, rid: RequestId, new_data: DiskIfc.Block)
+  requires Inv(s)
+  requires HavocNew(s, s', cache_idx, rid, new_data)
+  ensures Inv(s')
+  {
+  }
+
+  lemma HavocEvict_PreservesInv(s: M, s': M, cache_idx: nat, rid: RequestId)
+  requires Inv(s)
+  requires HavocEvict(s, s', cache_idx, rid)
+  ensures Inv(s')
+  {
+  }
+
+  lemma StartRead_Monotonic(s: M, s': M, rest: M,
+      cache_idx: nat, disk_idx: nat)
+  requires Inv(dot(s, rest))
+  requires StartRead(s, s', cache_idx, disk_idx)
+  ensures Internal(dot(s, rest), dot(s', rest))
+  {
+    assert InternalStep(dot(s, rest), dot(s', rest), StartReadStep(cache_idx, disk_idx));
+  }
+
+  lemma FinishRead_Monotonic(s: M, s': M, rest: M,
+      cache_idx: nat, disk_idx: nat)
+  requires Inv(dot(s, rest))
+  requires FinishRead(s, s', cache_idx, disk_idx)
+  ensures Internal(dot(s, rest), dot(s', rest))
+  {
+    assert InternalStep(dot(s, rest), dot(s', rest), FinishReadStep(cache_idx, disk_idx));
+  }
+
+  lemma StartWriteback_Monotonic(s: M, s': M, rest: M,
+      cache_idx: nat)
+  requires Inv(dot(s, rest))
+  requires StartWriteback(s, s', cache_idx)
+  ensures Internal(dot(s, rest), dot(s', rest))
+  {
+    assert InternalStep(dot(s, rest), dot(s', rest), StartWritebackStep(cache_idx));
+  }
+
+  lemma FinishWriteback_Monotonic(s: M, s': M, rest: M,
+      cache_idx: nat)
+  requires Inv(dot(s, rest))
+  requires FinishWriteback(s, s', cache_idx)
+  ensures Internal(dot(s, rest), dot(s', rest))
+  {
+    assert InternalStep(dot(s, rest), dot(s', rest), FinishWritebackStep(cache_idx));
+  }
+
+  lemma Evict_Monotonic(s: M, s': M, rest: M,
+      cache_idx: nat)
+  requires Inv(dot(s, rest))
+  requires Evict(s, s', cache_idx)
+  ensures Internal(dot(s, rest), dot(s', rest))
+  {
+    assert InternalStep(dot(s, rest), dot(s', rest), EvictStep(cache_idx));
+  }
+
+  lemma ObserveCleanForSync_Monotonic(s: M, s': M, rest: M,
+      cache_idx: nat, rid: RequestId)
+  requires Inv(dot(s, rest))
+  requires ObserveCleanForSync(s, s', cache_idx, rid)
+  ensures Internal(dot(s, rest), dot(s', rest))
+  {
+    assert InternalStep(dot(s, rest), dot(s', rest), ObserveCleanForSyncStep(cache_idx, rid));
+  }
+
+  lemma ApplyRead_Monotonic(s: M, s': M, rest: M,
+      cache_idx: nat, rid: RequestId)
+  requires Inv(dot(s, rest))
+  requires ApplyRead(s, s', cache_idx, rid)
+  ensures Internal(dot(s, rest), dot(s', rest))
+  {
+    assert ApplyRead(dot(s, rest), dot(s', rest), cache_idx, rid);
+    assert InternalStep(dot(s, rest), dot(s', rest), ApplyReadStep(cache_idx, rid));
+  }
+
+  lemma ApplyWrite_Monotonic(s: M, s': M, rest: M,
+      cache_idx: nat, rid: RequestId)
+  requires Inv(dot(s, rest))
+  requires ApplyWrite(s, s', cache_idx, rid)
+  ensures Internal(dot(s, rest), dot(s', rest))
+  {
+    assert ApplyWrite(dot(s, rest), dot(s', rest), cache_idx, rid);
+    assert InternalStep(dot(s, rest), dot(s', rest), ApplyWriteStep(cache_idx, rid));
+  }
+
+  lemma MarkDirty_Monotonic(s: M, s': M, rest: M,
+      cache_idx: nat)
+  requires Inv(dot(s, rest))
+  requires MarkDirty(s, s', cache_idx)
+  ensures Internal(dot(s, rest), dot(s', rest))
+  {
+    assert MarkDirty(dot(s, rest), dot(s', rest), cache_idx);
+    assert InternalStep(dot(s, rest), dot(s', rest), MarkDirtyStep(cache_idx));
+  }
+
+
+  /*
   lemma InternalPreservesInv(shard: M, shard': M, rest: M)
   //requires Inv(dot(shard, rest))
   //requires Internal(shard, shard')
   ensures Inv(dot(shard', rest))
   {
+    var step :| InternalStep(shard, shard', step);
+    match step {
+      case StartReadStep(cache_idx, disk_idx) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        /*
+        forall cache_idx'
+        | cache_idx' in s'.entries && (s'.entries[cache_idx'].Reading? || s'.entries[cache_idx'].Entry?)
+        ensures s'.entries[cache_idx'].disk_idx in s'.disk_idx_to_cache_idx
+        ensures s'.disk_idx_to_cache_idx[s'.entries[cache_idx'].disk_idx] == Some(cache_idx')
+        {
+          if cache_idx == cache_idx' {
+            assert s'.entries[cache_idx'].disk_idx in s'.disk_idx_to_cache_idx;
+            assert s'.disk_idx_to_cache_idx[s'.entries[cache_idx'].disk_idx] == Some(cache_idx');
+          } else {
+            assert s.entries[cache_idx'].disk_idx in s.disk_idx_to_cache_idx;
+            assert s'.entries[cache_idx'].disk_idx in s'.disk_idx_to_cache_idx;
+            assert s'.disk_idx_to_cache_idx[s'.entries[cache_idx'].disk_idx] == Some(cache_idx');
+          }
+        }
+        */
+        assert Inv(dot(shard', rest));
+      }
+
+      case FinishReadStep(cache_idx, disk_idx) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        assert Inv(dot(shard', rest));
+      }
+
+      case StartWritebackStep(cache_idx) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        assert Inv(dot(shard', rest));
+        assert Inv(dot(shard', rest));
+      }
+
+      case FinishWritebackStep(cache_idx) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        assert Inv(dot(shard', rest));
+        assert Inv(dot(shard', rest));
+      }
+
+      case EvictStep(cache_idx) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        assert Inv(dot(shard', rest));
+        assert Inv(dot(shard', rest));
+      }
+
+      case ObserveCleanForSyncStep(cache_idx, rid) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        assert Inv(dot(shard', rest));
+        assert Inv(dot(shard', rest));
+      }
+
+      case ApplyReadStep(cache_idx, rid) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        assert Inv(dot(shard', rest));
+        assert Inv(dot(shard', rest));
+      }
+
+      case ApplyWriteStep(cache_idx, rid) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        assert Inv(dot(shard', rest));
+        assert Inv(dot(shard', rest));
+      }
+
+      case MarkDirtyStep(cache_idx) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        assert Inv(dot(shard', rest));
+        assert Inv(dot(shard', rest));
+      }
+
+      case HavocNewStep(cache_idx, rid, new_data) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        assert Inv(dot(shard', rest));
+        assert Inv(dot(shard', rest));
+      }
+
+      case HavocEvictStep(cache_idx, rid) => {
+        var s := dot(shard, rest);
+        var s' := dot(shard', rest);
+        assert InternalStep(s, s', step);
+        assert Inv(dot(shard', rest));
+        assert Inv(dot(shard', rest));
+      }
+    }
   }
+  */
 
   lemma NewTicketPreservesInv(whole: M, whole': M, rid: RequestId, input: IOIfc.Input)
   //requires Inv(whole)
@@ -533,6 +836,9 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   //requires ConsumeStub(whole, whole', rid, output)
   ensures Inv(whole')
   {
+    assert whole.entries == whole'.entries;
+    assert whole.statuses == whole'.statuses;
+    assert whole.disk_idx_to_cache_idx == whole'.disk_idx_to_cache_idx;
   }
 
   lemma ProcessReadPreservesInv(disk_addr: nat, data: DiskIfc.Block, rest: M)
