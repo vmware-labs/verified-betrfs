@@ -125,7 +125,7 @@ module Init(nrifc: NRIfc) {
 
     linear var combiner_atomic := new_atomic(0, glSome(cls), (v, g) => true, 0);
 
-    node := Node(ops, responses, combiner_atomic, replica, contexts, nodeId, fc_loc);
+    node := Node(combiner_atomic, ops, responses, replica, contexts, nodeId, fc_loc);
   }
 
   method make_buffer_cells()
