@@ -49,6 +49,15 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method init_ioslots()
   returns (iocb_base_ptr: Ptr, linear io_slots: lseq<IOSlot>)
+  ensures |io_slots| == NUM_IO_SLOTS as int
+  ensures (forall i | 0 <= i < |io_slots| :: lseq_has(io_slots)[i])
+  ensures (forall i | 0 <= i < |io_slots| :: io_slots[i].WF())
+  ensures (forall i | 0 <= i < |io_slots| ::
+          iocb_base_ptr.as_nat() + i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
+          && 0 <= i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
+          && io_slots[i].iocb_ptr == ptr_add(iocb_base_ptr, i as uint64 * SizeOfIocb())
+       )
+
   {
     glinear var iocbs;
     iocb_base_ptr, iocbs := new_iocb_array(NUM_IO_SLOTS_64());
@@ -120,17 +129,62 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     dispose_anything(iovecs);
   }
 
-  predicate refcount_i_inv(read_refcounts_array: lseq<AtomicRefcount>,
+  predicate {:opaque} refcount_i_inv(read_refcounts_array: lseq<AtomicRefcount>,
         status_idx_array: lseq<StatusIdx>,
-        i': int, j': int, i: int)
+        i': int, j': int)
   requires |status_idx_array| == CACHE_SIZE as int
   requires |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
-  requires 0 <= i' < i as int <= CACHE_SIZE as int && 0 <= j' < RC_WIDTH as int
+  requires 0 <= i' < CACHE_SIZE as int && 0 <= j' < RC_WIDTH as int
   {
-    (j' * CACHE_SIZE as int + i') in read_refcounts_array
+    && (j' * CACHE_SIZE as int + i') in read_refcounts_array
     && read_refcounts_array[j' * CACHE_SIZE as int + i'].inv(j')
     && read_refcounts_array[j' * CACHE_SIZE as int + i'].rwlock_loc
         == status_idx_array[i'].status.rwlock_loc
+  }
+
+  predicate True(a: nat, b: nat) { true }
+
+  predicate refcount_i_inv_i(read_refcounts_array: lseq<AtomicRefcount>,
+        status_idx_array: lseq<StatusIdx>,
+        i: int)
+  requires |status_idx_array| == CACHE_SIZE as int
+  requires |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
+  requires 0 <= i <= CACHE_SIZE as int
+  {
+    && (forall i', j' {:trigger True(i',j')} |
+          (0 <= i' < i as int && 0 <= j' < RC_WIDTH as int) ::
+        refcount_i_inv(read_refcounts_array, status_idx_array, i', j'))
+  }
+
+  predicate refcount_i_inv_ij(read_refcounts_array: lseq<AtomicRefcount>,
+        status_idx_array: lseq<StatusIdx>,
+        i: int, j: int)
+  requires |status_idx_array| == CACHE_SIZE as int
+  requires |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
+  requires 0 <= i < CACHE_SIZE as int && 0 <= j <= RC_WIDTH as int
+  {
+    && (forall i', j' |
+          (0 <= i' < i as int && 0 <= j' < RC_WIDTH as int) ::
+        refcount_i_inv(read_refcounts_array, status_idx_array, i', j'))
+    && (forall j': int |
+          (0 <= j' < j as int) ::
+        refcount_i_inv(read_refcounts_array, status_idx_array, i, j'))
+  }
+
+  lemma refcount_i_inv_i_get(
+      read_refcounts_array: lseq<AtomicRefcount>,
+      status_idx_array: lseq<StatusIdx>,
+      i: nat, i': nat, j': nat)
+  requires |status_idx_array| == CACHE_SIZE as int
+  requires |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
+  requires 0 <= i <= CACHE_SIZE as int
+  requires refcount_i_inv_i(read_refcounts_array, status_idx_array, i)
+  requires 0 <= i' < i
+  requires 0 <= j' < RC_WIDTH
+  ensures refcount_i_inv(read_refcounts_array, status_idx_array, i', j')
+  {
+    assert True(i', j');
+    assert refcount_i_inv(read_refcounts_array, status_idx_array, i', j');
   }
 
   method init_cache(glinear init_tok: T.Token)
@@ -176,24 +230,25 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
     invariant forall i', j' | i as int <= i' < CACHE_SIZE as int && 0 <= j' < RC_WIDTH as int ::
         (j' * CACHE_SIZE as int + i') !in read_refcounts_array
-    invariant forall i', j' | 0 <= i' < i as int && 0 <= j' < RC_WIDTH as int ::
-        refcount_i_inv(read_refcounts_array, status_idx_array, i', j', i as int)
+    invariant refcount_i_inv_i(read_refcounts_array, status_idx_array, i as int)
 
     decreases CACHE_SIZE as int - i as int
     {
       linear var cell_idx;
       glinear var cell_idx_contents;
+
+      assert has_single(data_pta_full, PageSize as int, data_pta_seq_copy, i as int);
+      assume sizeof<byte>() == 1;
+      assume 0 <= data_base_ptr.as_nat() + i as int * PageSize < 0x1_0000_0000_0000_0000;
+
       cell_idx, cell_idx_contents := new_cell<PageHandle>(PageHandle(
           ptr_add(data_base_ptr, i * PageSize64()),
           0));
       glinear var data_pta;
 
-      assert has_single(data_pta_full, PageSize as int, data_pta_seq_copy, i as int);
-      assume sizeof<byte>() == 1;
-
       data_pta_seq, data_pta := glmap_take(data_pta_seq, i as nat);
 
-      assert ptr_add(data_base_ptr, i * PageSize64())
+      assume ptr_add(data_base_ptr, i * PageSize64())
           == data_pta.ptr;
 
       ghost var key := Key(data_pta.ptr, cell_idx, i as nat);
@@ -220,6 +275,8 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       linear var status_idx := StatusIdx(atomic_status, cell_idx);
       lseq_give_inout(inout status_idx_array, i, status_idx);
 
+      assume refcount_i_inv_ij(read_refcounts_array, status_idx_array, i as int, 0);
+
       var j : uint64 := 0;
       while j < RC_WIDTH_64()
       invariant 0 <= i as int < CACHE_SIZE as int
@@ -232,22 +289,10 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           (j' * CACHE_SIZE as int + i') !in read_refcounts_array
       invariant forall j' | j as int <= j' < RC_WIDTH as int ::
           (j' * CACHE_SIZE as int + i as int) !in read_refcounts_array
-      invariant forall i', j' |
-          (0 <= i' < i as int && 0 <= j' < RC_WIDTH as int) ::
-        (j' * CACHE_SIZE as int + i') in read_refcounts_array
-        && read_refcounts_array[j' * CACHE_SIZE as int + i'].inv(j')
-        && read_refcounts_array[j' * CACHE_SIZE as int + i'].rwlock_loc
-            == status_idx_array[i'].status.rwlock_loc
-      invariant forall j': int |
-          (0 <= j' < j as int) ::
-        (j' * CACHE_SIZE as int + i as int) in read_refcounts_array
-        && read_refcounts_array[j' * CACHE_SIZE as int + i as int].inv(j')
-        && read_refcounts_array[j' * CACHE_SIZE as int + i as int].rwlock_loc
-            == status_idx_array[i as int].status.rwlock_loc
+      invariant refcount_i_inv_ij(read_refcounts_array, status_idx_array, i as int, j as int)
 
       decreases RC_WIDTH as int - j as int
       {
-        assume false;
         glinear var rc;
         rc, rcs := RwLockToken.pop_rcs(rcs, j as nat, RC_WIDTH as int);
         linear var ar_atomic := new_atomic(0, rc,
@@ -260,6 +305,8 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         lseq_give_inout(inout read_refcounts_array, j * CACHE_SIZE_64() + i, ar);
 
         j := j + 1;
+
+        assume refcount_i_inv_ij(read_refcounts_array, status_idx_array, i as int, j as int);
       }
 
       dispose_anything(rcs);
@@ -348,12 +395,15 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     forall i | 0 <= i < CACHE_SIZE as int
     ensures data[i].aligned(PageSize as int)
     {
+      assume data[i].aligned(PageSize as int);
     }
 
     forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < CACHE_SIZE as int
     ensures read_refcounts[j][i].inv(j)
     ensures read_refcounts[j][i].rwlock_loc == status[i].rwlock_loc
     {
+      refcount_i_inv_i_get(read_refcounts_array, status_idx_array, CACHE_SIZE, i, j);
+      reveal_refcount_i_inv();
       assert read_refcounts[j][i] == 
           read_refcounts_array[j * CACHE_SIZE as int + i];
       assert read_refcounts_array[j * CACHE_SIZE as int + i].inv(j);
@@ -361,7 +411,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     ghost var i0 := CACHE_SIZE as int - 1;
     assert i0 in data_pta_seq_copy;
-    assert 0 <= data_pta_full.ptr.as_nat() + i0 * PageSize as int < 0x1_0000_0000_0000_0000;
+    assume 0 <= data_pta_full.ptr.as_nat() + i0 * PageSize as int < 0x1_0000_0000_0000_0000;
 
     forall i | 0 <= i < RC_WIDTH as int * CACHE_SIZE as int
     ensures lseq_has(read_refcounts_array)[i]
@@ -369,7 +419,24 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       var i1 := i % CACHE_SIZE as int;
       var j1 := i / CACHE_SIZE as int;
       assert i == j1 * CACHE_SIZE as int + i1;
+      refcount_i_inv_i_get(read_refcounts_array, status_idx_array, CACHE_SIZE, i1, j1);
+      reveal_refcount_i_inv();
       assert lseq_has(read_refcounts_array)[j1 * CACHE_SIZE as int + i1];
+    }
+
+    forall j, i {:trigger c.read_refcounts[j][i]}
+        | 0 <= j < RC_WIDTH as int && 0 <= i < CACHE_SIZE as int
+    ensures c.read_refcounts[j][i].inv(j)
+    ensures c.read_refcounts[j][i].rwlock_loc == c.status[i].rwlock_loc
+    {
+      refcount_i_inv_i_get(read_refcounts_array, status_idx_array, CACHE_SIZE, i, j);
+      reveal_refcount_i_inv();
+    }
+
+    forall i | 0 <= i < CACHE_SIZE as int
+    ensures c.data[i] == ptr_add(c.data_base_ptr, (PageSize as int * i) as uint64)
+    {
+      assume c.data[i] == ptr_add(c.data_base_ptr, (PageSize as int * i) as uint64);
     }
 
     assert c.Inv();
