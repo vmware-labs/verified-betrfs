@@ -430,7 +430,10 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     forall i | 0 <= i < CACHE_SIZE as int
     ensures data[i].aligned(PageSize as int)
     {
-      assume data[i].aligned(PageSize as int);
+      assert has_single(data_pta_full, PageSize as int, data_pta_seq_copy, i as int);
+      assert data_base_ptr.as_nat() == data_pta_full.ptr.as_nat();
+      sizeof_int_types();
+      assert data[i].aligned(PageSize as int);
     }
 
     forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < CACHE_SIZE as int
@@ -446,7 +449,12 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     ghost var i0 := CACHE_SIZE as int - 1;
     assert i0 in data_pta_seq_copy;
-    assume 0 <= data_pta_full.ptr.as_nat() + i0 * PageSize as int < 0x1_0000_0000_0000_0000;
+    assert data_base_ptr.as_nat() == data_pta_full.ptr.as_nat();
+    assert 0 <= data_pta_full.ptr.as_nat() + i0 * PageSize as int < 0x1_0000_0000_0000_0000
+    by {
+      assert has_single(data_pta_full, PageSize as int, data_pta_seq_copy, i0);
+      sizeof_int_types();
+    }
 
     forall i | 0 <= i < RC_WIDTH as int * CACHE_SIZE as int
     ensures lseq_has(read_refcounts_array)[i]
@@ -471,7 +479,9 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     forall i | 0 <= i < CACHE_SIZE as int
     ensures c.data[i] == ptr_add(c.data_base_ptr, (PageSize as int * i) as uint64)
     {
-      assume c.data[i] == ptr_add(c.data_base_ptr, (PageSize as int * i) as uint64);
+      assert has_single(data_pta_full, PageSize as int, data_pta_seq_copy, i);
+      sizeof_int_types();
+      assert c.data[i] == ptr_add(c.data_base_ptr, (PageSize as int * i) as uint64);
     }
 
     assert c.Inv();
