@@ -143,6 +143,8 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         == status_idx_array[i'].status.rwlock_loc
   }
 
+  // something is messed up with dafny's triggers here.
+  // use this trigger as a workaround
   predicate True(a: nat, b: nat) { true }
 
   predicate refcount_i_inv_i(read_refcounts_array: lseq<AtomicRefcount>,
@@ -164,10 +166,10 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
   requires 0 <= i < CACHE_SIZE as int && 0 <= j <= RC_WIDTH as int
   {
-    && (forall i', j' |
+    && (forall i', j' {:trigger True(i',j')} |
           (0 <= i' < i as int && 0 <= j' < RC_WIDTH as int) ::
         refcount_i_inv(read_refcounts_array, status_idx_array, i', j'))
-    && (forall j': int |
+    && (forall j': int {:Trigger True(i,j')} |
           (0 <= j' < j as int) ::
         refcount_i_inv(read_refcounts_array, status_idx_array, i, j'))
   }
@@ -183,6 +185,15 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && status_idx_array[k] == status_idx_array'[k]
   requires refcount_i_inv_i(read_refcounts_array, status_idx_array, i)
   ensures refcount_i_inv_ij(read_refcounts_array, status_idx_array', i, 0)
+  {
+    forall i', j' | (0 <= i' < i as int && 0 <= j' < RC_WIDTH as int)
+    ensures refcount_i_inv(read_refcounts_array, status_idx_array', i', j');
+    {
+      assert True(i', j');
+      assert refcount_i_inv(read_refcounts_array, status_idx_array, i', j');
+      reveal_refcount_i_inv();
+    }
+  }
 
   lemma refcount_i_inv_ij_inc(
         read_refcounts_array: lseq<AtomicRefcount>,
@@ -197,6 +208,43 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires refcount_i_inv_ij(read_refcounts_array, status_idx_array, i, j)
   requires refcount_i_inv(read_refcounts_array', status_idx_array, i, j)
   ensures refcount_i_inv_ij(read_refcounts_array', status_idx_array, i, j + 1)
+  {
+    forall i', j' | (0 <= i' < i as int && 0 <= j' < RC_WIDTH as int)
+    ensures refcount_i_inv(read_refcounts_array', status_idx_array, i', j')
+    {
+      assert True(i', j');
+      assert refcount_i_inv(read_refcounts_array, status_idx_array, i', j');
+      reveal_refcount_i_inv();
+    }
+    forall j': int | (0 <= j' < j as int + 1)
+    ensures refcount_i_inv(read_refcounts_array', status_idx_array, i, j')
+    {
+      if j' == j {
+        assert refcount_i_inv(read_refcounts_array', status_idx_array, i, j');
+      } else {
+        assert True(i, j');
+        assert refcount_i_inv(read_refcounts_array, status_idx_array, i, j');
+        reveal_refcount_i_inv();
+        assert refcount_i_inv(read_refcounts_array', status_idx_array, i, j');
+      }
+    }
+  }
+
+  lemma refcount_i_inv_ij_end(read_refcounts_array: lseq<AtomicRefcount>,
+        status_idx_array: lseq<StatusIdx>,
+        i: int)
+  requires |status_idx_array| == CACHE_SIZE
+  requires |read_refcounts_array| == RC_WIDTH * CACHE_SIZE
+  requires 0 <= i < CACHE_SIZE
+  requires refcount_i_inv_ij(read_refcounts_array, status_idx_array, i, RC_WIDTH)
+  ensures refcount_i_inv_i(read_refcounts_array, status_idx_array, i+1)
+  {
+    forall i', j' | (0 <= i' < i + 1 && 0 <= j' < RC_WIDTH)
+    ensures refcount_i_inv(read_refcounts_array, status_idx_array, i', j')
+    {
+      assert True(i', j');
+    }
+  }
 
   lemma refcount_i_inv_i_get(
       read_refcounts_array: lseq<AtomicRefcount>,
@@ -344,6 +392,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         j := j + 1;
       }
 
+      refcount_i_inv_ij_end(read_refcounts_array, status_idx_array, i as int);
       dispose_anything(rcs);
 
       i := i + 1;
