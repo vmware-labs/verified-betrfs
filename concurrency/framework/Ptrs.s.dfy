@@ -16,6 +16,7 @@ module {:extern "Ptrs"} Ptrs {
   type {:extern "struct"} Ptr(!new, ==, 00)
   {
     function {:extern} as_nat() : nat
+    ensures 0 <= as_nat() < 0x1_0000_0000_0000_0000
 
     predicate aligned(n: nat)
     {
@@ -128,5 +129,20 @@ module {:extern "Ptrs"} Ptrs {
       && s[i].ptr.as_nat() == pta.ptr.as_nat() + i * sizeof<V>() as nat
       && s[i].v == pta.s[i]
 
+  glinear method {:extern} individual_to_array<V>(
+      ghost ptr: Ptr, ghost n: nat, glinear s: map<nat, PointsTo<V>>)
+  returns (glinear pta: PointsToArray<V>)
+  requires forall i | 0 <= i < n ::
+      && i in s
+      && s[i].ptr.as_nat() == ptr.as_nat() + i * sizeof<V>() as nat
+  ensures pta.ptr == ptr
+  ensures |pta.s| == n
+  ensures forall i | 0 <= i < n ::
+      && s[i].v == pta.s[i]
+
   glinear method {:extern} dispose_anything<V>(glinear v: V) // TODO better file for this
+
+  lemma {:extern} ptrs_eq(a: Ptr, b: Ptr)
+  requires a.as_nat() == b.as_nat()
+  ensures a == b
 }

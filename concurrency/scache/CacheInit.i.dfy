@@ -1,4 +1,5 @@
 include "CacheTypes.i.dfy"
+include "MemSplit.i.dfy"
 
 module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened IocbStruct
@@ -20,29 +21,10 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened GlinearOption
   import opened CacheAIOParams
   import opened BasicLockImpl
+  import opened MemSplit
   import RwLockToken
   import RwLock
   import opened PageSizeConstant
-
-  glinear method split_into_page_size_chunks(glinear pta: PointsToArray<byte>)
-  returns (glinear pta_seq: map<nat, PointsToArray<byte>>)
-  requires |pta.s| == PageSize as int * CACHE_SIZE as int
-  ensures forall i {:trigger i in pta_seq} | 0 <= i < CACHE_SIZE as int ::
-      i in pta_seq
-        && 0 <= pta.ptr.as_nat() + i * PageSize as int < 0x1_0000_0000_0000_0000
-        && pta_seq[i].ptr == ptr_add(pta.ptr, i as uint64 * PageSize as uint64)
-        && |pta_seq[i].s| == PageSize as int
-
-  glinear method iovec_split(glinear pta: PointsToArray<Iovec>)
-  returns (glinear pta_seq: map<nat, PointsToArray<Iovec>>)
-  requires |pta.s| == NUM_IO_SLOTS as int * PAGES_PER_EXTENT as int
-  ensures forall i {:trigger i in pta_seq} | 0 <= i < NUM_IO_SLOTS as int ::
-      i in pta_seq
-        && 0 <= i * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
-        && 0 <= pta.ptr.as_nat() + i * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
-                < 0x1_0000_0000_0000_0000
-        && pta_seq[i].ptr == ptr_add(pta.ptr, i as uint64 * PAGES_PER_EXTENT as uint64 * sizeof<Iovec>())
-        && |pta_seq[i].s| == PAGES_PER_EXTENT as int
 
   method init_batch_busy()
   returns (linear batch_busy: lseq<Atomic<bool, NullGhostType>>)
@@ -77,7 +59,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var full_iovec;
     var dummy_iovec := new_iovec(nullptr(), 0);
     full_iovec_ptr, full_iovec := alloc_array(PAGES_PER_EXTENT_64() * NUM_IO_SLOTS_64(), dummy_iovec);
-    glinear var iovecs := iovec_split(full_iovec);
+    glinear var iovecs := mem_split(full_iovec, PAGES_PER_EXTENT, NUM_IO_SLOTS);
 
     ghost var iocbs_copy := iocbs;
 
@@ -93,19 +75,15 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && iocb_base_ptr.as_nat() + j * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
         && 0 <= j * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
         && io_slots[j].iocb_ptr == ptr_add(iocb_base_ptr, j as uint64 * SizeOfIocb())
-    invariant forall j {:trigger j in iovecs} | i3 as int <= j < NUM_IO_SLOTS as int ::
-      j in iovecs
-        && 0 <= j * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
-        && 0 <= full_iovec_ptr.as_nat() + j * PAGES_PER_EXTENT as int * sizeof<Iovec>() as int
-                < 0x1_0000_0000_0000_0000
-        && iovecs[j].ptr == ptr_add(full_iovec_ptr, j as uint64 * PAGES_PER_EXTENT as uint64 * sizeof<Iovec>())
-        && |iovecs[j].s| == PAGES_PER_EXTENT as int
-
+    invariant forall j | i3 as int <= j < NUM_IO_SLOTS as int ::
+        has_single(full_iovec, PAGES_PER_EXTENT, iovecs, j)
     {
-      assume false; // TODO timeout
+      ghost var old_iovecs := iovecs;
+
       glinear var iocb;
       iocbs, iocb := glmap_take(iocbs, i3 as int);
 
+      assert has_single(full_iovec, PAGES_PER_EXTENT, iovecs, i3 as int);
       assert (i3 as int) in iovecs;
       assume 0 <= i3 as int * sizeof<Iovec>() as int;
       var iovec_ptr := ptr_add(full_iovec_ptr, i3 * PAGES_PER_EXTENT_64() * sizeof<Iovec>());
@@ -132,6 +110,10 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       lseq_give_inout(inout io_slots, i3, io_slot);
 
       i3 := i3 + 1;
+
+      assert forall j | i3 as int <= j < NUM_IO_SLOTS as int ::
+          has_single(full_iovec, PAGES_PER_EXTENT, old_iovecs, j) ==>
+          has_single(full_iovec, PAGES_PER_EXTENT, iovecs, j);
     }
 
     dispose_anything(iocbs);
@@ -161,7 +143,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     data_base_ptr, data_pta_full := alloc_array_aligned<byte>(
         CACHE_SIZE_64() * PageSize64(), 0, PageSize64());
     glinear var data_pta_seq : map<nat, PointsToArray<byte>> :=
-        split_into_page_size_chunks(data_pta_full);
+        mem_split(data_pta_full, PageSize as int, CACHE_SIZE);
 
     linear var read_refcounts_array := lseq_alloc<AtomicRefcount>(RC_WIDTH_64() * CACHE_SIZE_64());
     linear var status_idx_array := lseq_alloc<StatusIdx>(CACHE_SIZE_64());

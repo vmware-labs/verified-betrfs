@@ -16,6 +16,13 @@ module NonlinearLemmas {
   {
   }
 
+  lemma mul_ge_0(a: int, b: int)
+  requires a >= 0
+  requires b >= 0
+  ensures a*b >= 0
+  {
+  }
+
   lemma mul_gt_0(a: int, b: int)
   requires a > 0
   requires b > 0
