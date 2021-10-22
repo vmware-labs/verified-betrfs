@@ -150,6 +150,12 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     glinear var dis, empty_seq := split_init(init_tok);
 
+    forall i | 0 <= i < CACHE_SIZE
+    ensures i in data_pta_seq
+    {
+      assert has_single(data_pta_full, PageSize as int, data_pta_seq, i);
+    }
+
     ghost var data := seq(CACHE_SIZE as int, (i) requires 0 <= i < CACHE_SIZE as int =>
         data_pta_seq[i].ptr);
 
@@ -175,13 +181,15 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     decreases CACHE_SIZE as int - i as int
     {
-      assume false;
       linear var cell_idx;
       glinear var cell_idx_contents;
       cell_idx, cell_idx_contents := new_cell<PageHandle>(PageHandle(
           ptr_add(data_base_ptr, i * PageSize64()),
           0));
       glinear var data_pta;
+
+      assert has_single(data_pta_full, PageSize as int, data_pta_seq, i as int);
+
       data_pta_seq, data_pta := glmap_take(data_pta_seq, i as nat);
 
       ghost var key := Key(data_pta.ptr, cell_idx, i as nat);
@@ -192,6 +200,9 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear var central, rcs := RwLockToken.perform_Init(handle);
       ghost var rwlock_loc := central.loc;
 
+      assert AtomicStatusImpl.state_inv(flag_unmapped(), 
+          AtomicStatusImpl.G(central, glNone),
+          key, rwlock_loc);
       linear var atomic_status_atomic := new_atomic(
           flag_unmapped(),
           AtomicStatusImpl.G(central, glNone),
@@ -201,6 +212,8 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           atomic_status_atomic,
           rwlock_loc,
           key);
+
+      assume false;
 
       linear var status_idx := StatusIdx(atomic_status, cell_idx);
       lseq_give_inout(inout status_idx_array, i, status_idx);
@@ -232,6 +245,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       decreases RC_WIDTH as int - j as int
       {
+        assume false;
         glinear var rc;
         rc, rcs := RwLockToken.pop_rcs(rcs, j as nat, RC_WIDTH as int);
         linear var ar_atomic := new_atomic(0, rc,
