@@ -188,9 +188,13 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           0));
       glinear var data_pta;
 
-      assert has_single(data_pta_full, PageSize as int, data_pta_seq, i as int);
+      assert has_single(data_pta_full, PageSize as int, data_pta_seq_copy, i as int);
+      assume sizeof<byte>() == 1;
 
       data_pta_seq, data_pta := glmap_take(data_pta_seq, i as nat);
+
+      assert ptr_add(data_base_ptr, i * PageSize64())
+          == data_pta.ptr;
 
       ghost var key := Key(data_pta.ptr, cell_idx, i as nat);
 
@@ -212,8 +216,6 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           atomic_status_atomic,
           rwlock_loc,
           key);
-
-      assume false;
 
       linear var status_idx := StatusIdx(atomic_status, cell_idx);
       lseq_give_inout(inout status_idx_array, i, status_idx);
