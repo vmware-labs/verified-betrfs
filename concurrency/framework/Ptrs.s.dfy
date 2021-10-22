@@ -122,6 +122,12 @@ module {:extern "Ptrs"} Ptrs {
 
   function method {:extern} sizeof<V>() : uint64
 
+  lemma sizeof_int_types()
+  ensures sizeof<byte>() == 1
+  ensures sizeof<uint16>() == 2
+  ensures sizeof<uint32>() == 4
+  ensures sizeof<uint64>() == 8
+
   glinear method {:extern} array_to_individual<V>(glinear pta: PointsToArray<V>)
   returns (glinear s: map<nat, PointsTo<V>>)
   ensures forall i | 0 <= i < |pta.s| ::

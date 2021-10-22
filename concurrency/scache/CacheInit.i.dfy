@@ -22,6 +22,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CacheAIOParams
   import opened BasicLockImpl
   import opened MemSplit
+  import NonlinearLemmas
   import RwLockToken
   import RwLock
   import opened PageSizeConstant
@@ -94,7 +95,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       assert has_single(full_iovec, PAGES_PER_EXTENT, iovecs, i3 as int);
       assert (i3 as int) in iovecs;
-      assume 0 <= i3 as int * sizeof<Iovec>() as int;
+      NonlinearLemmas.mul_ge_0(i3 as int, sizeof<Iovec>() as int);
       var iovec_ptr := ptr_add(full_iovec_ptr, i3 * PAGES_PER_EXTENT_64() * sizeof<Iovec>());
       glinear var iovec;
       iovecs, iovec := glmap_take(iovecs, i3 as int);
@@ -171,6 +172,32 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         refcount_i_inv(read_refcounts_array, status_idx_array, i, j'))
   }
 
+  lemma refcount_i_inv_ij_base(read_refcounts_array: lseq<AtomicRefcount>,
+        status_idx_array: lseq<StatusIdx>,
+        status_idx_array': lseq<StatusIdx>,
+        i: int)
+  requires |status_idx_array'| == |status_idx_array| == CACHE_SIZE as int
+  requires |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
+  requires 0 <= i < CACHE_SIZE
+  requires forall k | 0 <= k < i :: k in status_idx_array && k in status_idx_array'
+      && status_idx_array[k] == status_idx_array'[k]
+  requires refcount_i_inv_i(read_refcounts_array, status_idx_array, i)
+  ensures refcount_i_inv_ij(read_refcounts_array, status_idx_array', i, 0)
+
+  lemma refcount_i_inv_ij_inc(
+        read_refcounts_array: lseq<AtomicRefcount>,
+        read_refcounts_array': lseq<AtomicRefcount>,
+        status_idx_array: lseq<StatusIdx>,
+        i: int, j: int)
+  requires 0 <= i < CACHE_SIZE as int && 0 <= j < RC_WIDTH as int
+  requires |status_idx_array| == CACHE_SIZE as int
+  requires |read_refcounts_array| == |read_refcounts_array'| == RC_WIDTH * CACHE_SIZE
+  requires forall k | 0 <= k < |read_refcounts_array| && k in read_refcounts_array
+      :: k in read_refcounts_array' && read_refcounts_array'[k] == read_refcounts_array[k]
+  requires refcount_i_inv_ij(read_refcounts_array, status_idx_array, i, j)
+  requires refcount_i_inv(read_refcounts_array', status_idx_array, i, j)
+  ensures refcount_i_inv_ij(read_refcounts_array', status_idx_array, i, j + 1)
+
   lemma refcount_i_inv_i_get(
       read_refcounts_array: lseq<AtomicRefcount>,
       status_idx_array: lseq<StatusIdx>,
@@ -238,8 +265,9 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear var cell_idx_contents;
 
       assert has_single(data_pta_full, PageSize as int, data_pta_seq_copy, i as int);
-      assume sizeof<byte>() == 1;
-      assume 0 <= data_base_ptr.as_nat() + i as int * PageSize < 0x1_0000_0000_0000_0000;
+      assert data_base_ptr.as_nat() == data_pta_full.ptr.as_nat();
+      sizeof_int_types();
+      assert 0 <= data_base_ptr.as_nat() + i as int * PageSize < 0x1_0000_0000_0000_0000;
 
       cell_idx, cell_idx_contents := new_cell<PageHandle>(PageHandle(
           ptr_add(data_base_ptr, i * PageSize64()),
@@ -248,7 +276,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       data_pta_seq, data_pta := glmap_take(data_pta_seq, i as nat);
 
-      assume ptr_add(data_base_ptr, i * PageSize64())
+      assert ptr_add(data_base_ptr, i * PageSize64())
           == data_pta.ptr;
 
       ghost var key := Key(data_pta.ptr, cell_idx, i as nat);
@@ -273,9 +301,10 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           key);
 
       linear var status_idx := StatusIdx(atomic_status, cell_idx);
+      ghost var sia := status_idx_array;
       lseq_give_inout(inout status_idx_array, i, status_idx);
 
-      assume refcount_i_inv_ij(read_refcounts_array, status_idx_array, i as int, 0);
+      refcount_i_inv_ij_base(read_refcounts_array, sia, status_idx_array, i as int);
 
       var j : uint64 := 0;
       while j < RC_WIDTH_64()
@@ -300,13 +329,19 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             0);
         linear var ar := AtomicRefcount(ar_atomic, rwlock_loc);
 
+        ghost var rra := read_refcounts_array;
+
         // XXX I don't care about the perf of the initialization method, but do note
         // that the access pattern for writing to this array might be completely awful.
         lseq_give_inout(inout read_refcounts_array, j * CACHE_SIZE_64() + i, ar);
 
-        j := j + 1;
+        assert refcount_i_inv(read_refcounts_array, status_idx_array, i as int, j as int) by {
+          reveal_refcount_i_inv();
+        }
 
-        assume refcount_i_inv_ij(read_refcounts_array, status_idx_array, i as int, j as int);
+        refcount_i_inv_ij_inc(rra, read_refcounts_array, status_idx_array, i as int, j as int);
+
+        j := j + 1;
       }
 
       dispose_anything(rcs);
