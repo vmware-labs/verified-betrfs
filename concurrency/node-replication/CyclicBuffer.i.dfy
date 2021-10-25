@@ -118,10 +118,19 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && (forall i | i in x.localTails :: x.head.value <= x.localTails[i] <= x.tail.value)
   }
 
+  predicate PointerDifferences(x:M)
+    requires Complete(x) && PointerOrdering(x)
+  {
+    // the span of the entries between head and tail should never be larger than the buffer size
+    && (x.tail.value - x.head.value < BUFFER_SIZE as nat)
+    && (forall i | i in x.localTails ::  x.tail.value - x.localTails[i] < BUFFER_SIZE as nat)
+  }
+
   predicate AliveBits(x: M)
     requires Complete(x)
   {
-    //
+    // everything from the current head up to the tail is not alive.
+    // forall i | i in SetOfFreeBufferEntries(x.head.value, x.tail.value) :: !EntryIsAlive(x.aliveBits, i)
     && true
   }
 
@@ -201,6 +210,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     && Complete(x)
     && PointerOrdering(x)
+    && PointerDifferences(x)
     && AliveBits(x)
     && BufferContents(x)
     && CombinerStateValid(x)
@@ -320,6 +330,26 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     logical % (BUFFER_SIZE as int)
   }
+
+  function SetOfBufferEntries() : set<nat>
+  {
+    set x | 0 <= x < BUFFER_SIZE as nat :: x
+  }
+
+  function SetOfFreeBufferEntries(logical_head: int, logital_tail: int) : set<nat>
+    requires logical_head <= logital_tail
+    requires ((logital_tail -logical_head) < BUFFER_SIZE as nat)
+  {
+    SetOfBufferEntries() - SetOfReservedBufferEntries(logical_head, logital_tail)
+  }
+
+  function SetOfReservedBufferEntries(logical_head: int, logital_tail: int) : set<nat>
+    requires logical_head <= logital_tail
+    requires ((logital_tail -logical_head) < BUFFER_SIZE as nat)
+  {
+    set x | logical_head <= x < logital_tail :: LogicalToPhysicalIndex(x)
+  }
+
 
   function LogicalToAliveBitAliveWhen(logical: int) : bool
   {
