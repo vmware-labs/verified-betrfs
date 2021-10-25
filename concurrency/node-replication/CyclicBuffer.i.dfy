@@ -87,6 +87,11 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     map k | k in (m1.Keys + m2.Keys) :: if k in m2 then m2[k] else m1[k]
   }
 
+
+  function MinLocalTail(ltails: map<NodeId, nat>) : (m : nat)
+    ensures forall i | i in ltails :: m <= ltails[i]
+
+
   /*
    * ============================================================================================
    * Invariant
@@ -116,8 +121,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   predicate AliveBits(x: M)
     requires Complete(x)
   {
-    // somehow we should have something that alive bits are in the following form:
-    //  0 0 0 0 | 1 1 1 1 1 | 0 0 0 0
+    //
     && true
   }
 
@@ -139,16 +143,27 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           && start == x.localTails[n]
         )
         case ReaderRange(start: nat, end: nat) => (
-          // we may advance the start value here...
+          // the start value may have advanced.
+          // note the entry at curr
           && x.localTails[n] <= start
+          && x.localTails[n] == start
           && start <= end
           && end <= x.tail.value
         )
         case ReaderGuard(start: nat, end: nat, cur: nat, val: StoredType) => (
+          // we start reading at our local tail
           && x.localTails[n] <= start
+          && x.localTails[n] == start
           && start <= end
+          // end can't be past the tail value
           && end <= x.tail.value
-          && x.head.value <= cur <= x.tail.value
+          // current is between start and end
+          && start <= cur <= end
+          // the entry that we read must be alive
+          && EntryIsAlive(x.aliveBits, cur)
+          // the thing we are ready should match the log content
+          // XXX: is that actually true
+          && cur in x.contents && x.contents[cur] == val
         )
     }
   }
@@ -162,17 +177,22 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
         case CombinerIdle => (true)        // nothing to do
         case CombinerReading(_) => (true)  // handled in ReaderState
         case CombinerAdvancingHead(idx: nat, min_tail: nat) => (
+          // the index is always within the defined replicas
           && idx <= NUM_REPLICAS as nat
+          // forall replicas we'e seen, min_tail is smaller than all localTails
           && (forall n | 0 <= n < idx :: min_tail <= x.localTails[n])
-          && (forall n | n in x.localTails :: x.head.value <= x.localTails[n])
         )
         case CombinerAdvancingTail(observed_head: nat) => (
-          && x.head.value >= observed_head
-          && observed_head <= x.tail.value
+          // the observed head is smaller than all local tails
+          && (forall n | 0 <= n < NUM_REPLICAS as nat :: observed_head <= x.localTails[n])
         )
         case CombinerAppending(cur_idx: nat, tail: nat) => (
+          // the current index is between local tails and tail.
           && x.localTails[n] <= cur_idx < tail
+          // the read tail is smaller or equal to the current tail.
           && tail <= x.tail.value
+          // the entry we are writing mus not be alive
+          && !(EntryIsAlive(x.aliveBits, cur_idx))
         )
       }
   }
@@ -304,6 +324,13 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   function LogicalToAliveBitAliveWhen(logical: int) : bool
   {
     (logical / BUFFER_SIZE as int) % 2 == 0
+  }
+
+  predicate EntryIsAlive(aliveBits: map</* entry: */ nat, /* bit: */ bool>, logical: int)
+  {
+    && var physID := LogicalToPhysicalIndex(logical);
+    && physID in aliveBits
+    && aliveBits[physID] == LogicalToAliveBitAliveWhen(logical)
   }
 
   /*
@@ -687,8 +714,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && i in m.contents
     && readerBefore.start <= i < readerBefore.end
 
-    && LogicalToPhysicalIndex(i) in m.aliveBits
-    && m.aliveBits[LogicalToPhysicalIndex(i)] == LogicalToAliveBitAliveWhen(i)
+    && EntryIsAlive( m.aliveBits, i)
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerReading(
