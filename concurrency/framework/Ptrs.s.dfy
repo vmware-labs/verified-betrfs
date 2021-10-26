@@ -122,7 +122,7 @@ module {:extern "Ptrs"} Ptrs {
 
   function method {:extern} sizeof<V>() : uint64
 
-  lemma sizeof_int_types()
+  lemma {:extern} sizeof_int_types()
   ensures sizeof<byte>() == 1
   ensures sizeof<uint16>() == 2
   ensures sizeof<uint32>() == 4

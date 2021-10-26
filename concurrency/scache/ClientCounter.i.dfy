@@ -3,7 +3,7 @@ include "../framework/BasicPCM.i.dfy"
 module CounterPCM refines BasicPCM {
   ghost const max: nat := 0xff
 
-  datatype M = Counter(n: nat)
+  datatype M = Counter(ghost n: nat)
 
   function dot(x: M, y: M) : M
   {
