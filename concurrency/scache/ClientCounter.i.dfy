@@ -106,4 +106,8 @@ module ClientCounter {
   returns (glinear cs': Clients)
   ensures cs'.n == 0
   ensures cs'.loc == loc
+  {
+    glinear var t := T.get_unit(loc);
+    cs' := Clients_fold(Clients(loc, 0), t);
+  }
 }

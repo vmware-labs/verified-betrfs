@@ -214,6 +214,9 @@ module RwTokens(rw: Rw) {
   requires rw.Inv(m)
   requires rw.I(m) == Some(b)
   ensures token.val == m
+  {
+    token := ET.ext_init(WrapT.wrap(b), m);
+  }
 
   glinear method obtain_invariant_2(
       glinear inout token1: Token,
