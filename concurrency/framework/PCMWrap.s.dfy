@@ -9,6 +9,7 @@ abstract module PCMWrap refines PCM {
 
   function nil() : M { M(multiset{}) }
   function one(g: G) : M { M(multiset{g}) }
+  function many(gs: set<G>) : M { M(multiset(gs)) }
 
   function unit() : M { nil() }
 
@@ -32,10 +33,20 @@ abstract module PCMWrap refines PCM {
     exists a :: m == one(a)
   }
 
+  predicate is_many(m: M) {
+    exists gs :: m == many(gs)
+  }
+
   function get_one(m: M) : G
   requires is_one(m)
   {
     var a :| m == one(a); a
+  }
+
+  function get_many(m: M) : set<G>
+  requires is_many(m)
+  {
+    var gs :| m == many(gs); gs
   }
 }
 
@@ -52,6 +63,10 @@ module PCMWrapTokens(pcmWrap: PCMWrap) {
   function method {:extern} unwrap(glinear t: GToken) : (glinear g: G)
   requires pcmWrap.is_one(t.val)
   ensures g == pcmWrap.get_one(t.val)
+
+  function method {:extern} unwrap_many(glinear t: GToken) : (glinear g: set<G>)
+  requires pcmWrap.is_many(t.val)
+  ensures g == pcmWrap.get_many(t.val)
 
   function method {:extern} unwrap_borrow(gshared t: GToken) : (gshared g: G)
   requires pcmWrap.is_one(t.val)

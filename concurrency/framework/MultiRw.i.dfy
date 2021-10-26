@@ -312,7 +312,16 @@ module MultiRwTokens(rw: MultiRw) {
   requires rw.withdraw_many(token.val, expected_value, expected_retrieved_values)
   ensures token' == T.Token(token.loc, expected_value)
   ensures retrieved_values == expected_retrieved_values
-  // TODO
+  {
+    glinear var m := WrapPT.get_unit(Wrap.singleton_loc());
+    ghost var m' := Wrap.many(expected_retrieved_values.Values);
+
+    glinear var f, b := ET.ext_transfer(
+      token, expected_value,
+      m, m');
+    token' := f;
+    retrieved_values := WrapT.unwrap_many(b);
+  }
 
   /*
    * Helpers
