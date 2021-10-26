@@ -322,6 +322,22 @@ module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
     }
   }
 
+  glinear method obtain_invariant_1_1(
+      gshared s_token1: Token,
+      glinear inout token2: Token)
+  returns (ghost rest1: ssm.M)
+  ensures token2 == old_token2
+  ensures ssm.Inv(ssm.dot(ssm.dot(s_token1.val, token2.val), rest1))
+  {
+    glinear var t := Token_unfold(token2);
+    Tokens.is_valid(Token_unfold_borrow(s_token1), inout t);
+    token2 := Token_fold(token2, t);
+
+    rest1 :| ssm.Inv(ssm.dot(
+        ssm.dot(s_token1.defn().val, t.val),
+        rest1));
+  }
+
   lemma transition_of_next(a: ssm.M, b: ssm.M)
   requires ssm.Internal(a, b)
   ensures pcm.transition(a, b)

@@ -147,7 +147,11 @@ module RwLock refines Rw {
   lemma associative(x: M, y: M, z: M)
   ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
   {
-    assume false;
+    if dot(x, dot(y, z)) == Fail {
+      assert dot(x, dot(y, z)) == dot(dot(x, y), z);
+    } else {
+      assert dot(x, dot(y, z)) == dot(dot(x, y), z);
+    }
   }
 
   function IsSharedRefFor(t: int) : (SharedState) -> bool

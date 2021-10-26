@@ -219,6 +219,11 @@ module CacheResources {
   requires old_dpm.disk_idx == cache_entry.disk_idx
   ensures old_dpm == dpm
   ensures dpm.cache_idx_opt == Some(cache_entry.cache_idx)
+  {
+    glinear var t := DiskPageMap_unfold(dpm);
+    ghost var r := T.obtain_invariant_1_1(CacheEntry_unfold_borrow(cache_entry), inout t);
+    dpm := DiskPageMap_fold(dpm, t);
+  }
 
   glinear method unassign_page(
       ghost cache_idx: nat,
