@@ -140,8 +140,10 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires localState.WF()
   requires 0 <= cache_idx as int < CACHE_SIZE as int
   //requires client == RwLock.Internal(RwLock.Client(localState.t))
+  requires client.loc == cache.counter_loc
   ensures !success ==> handle_out.glNone?
       && client_out.glSome?
+      && client_out.value.loc == cache.counter_loc
   ensures success ==>
       && handle_out.glSome?
       && handle_out.value.is_disk_page_handle(
@@ -634,8 +636,10 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache.Inv()
   requires 0 <= disk_idx as nat < NUM_DISK_PAGES as int
   requires old_localState.WF()
+  requires client.loc == cache.counter_loc
   ensures ret_cache_idx == -1 ==> handle_out.glNone?
       && client_out.glSome?
+      && client_out.value.loc == cache.counter_loc
   ensures ret_cache_idx != -1 ==>
       && handle_out.glSome?
       && handle_out.value.is_disk_page_handle(cache, localState.t as nat, disk_idx as nat)
@@ -744,6 +748,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache.Inv()
   requires 0 <= disk_idx as nat < NUM_DISK_PAGES as int
   requires old_localState.WF()
+  requires client.loc == cache.counter_loc
   ensures localState.WF()
   ensures handle_out.is_disk_page_handle(
       cache, localState.t as nat, disk_idx as nat)
@@ -758,6 +763,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     while cache_idx == -1
     decreases *
     invariant cache_idx == -1 ==> client_opt.glSome?
+      && client_opt.value.loc == cache.counter_loc
     invariant localState.WF()
     invariant cache_idx != -1 ==>
       && handle_opt.glSome?
@@ -787,6 +793,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires localState.WF()
   requires handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
   requires handle.for_page_handle(ph)
+  ensures client.loc == cache.counter_loc
   {
     glinear var ReadonlyPageHandle(cache_idx, so) := handle;
     glinear var SharedObtainedToken(t, b, token) := so;
@@ -941,6 +948,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache.Inv()
   requires old_localState.WF()
   requires 0 <= disk_idx as nat < NUM_DISK_PAGES as int
+  requires client.loc == cache.counter_loc
   ensures localState.WF()
   ensures write_handle.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
   ensures write_handle.for_page_handle(ph)
@@ -955,6 +963,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     while !success
     invariant !success ==> write_handle_opt == glNone
     invariant !success ==> client_opt.glSome?
+      && client_opt.value.loc == cache.counter_loc
     invariant success ==> client_opt.glNone?
     invariant success ==> write_handle_opt.glSome?
     invariant localState.WF()
@@ -1202,6 +1211,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache.Inv()
   requires localState.WF()
   requires 0 <= cache_idx as int < CACHE_SIZE as int
+  requires client.loc == cache.counter_loc
+  ensures client_out.loc == cache.counter_loc
   //requires client == RwLock.Internal(RwLock.Client(localState.t))
   decreases *
   {
@@ -1354,6 +1365,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires old_localState.WF()
   requires base_addr as int % PAGES_PER_EXTENT == 0
   requires 0 <= base_addr as int < NUM_DISK_PAGES as int
+  requires client.loc == cache.counter_loc
+  ensures client_out.loc == cache.counter_loc
   ensures localState.WF()
   decreases *
   {
@@ -1378,6 +1391,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant localState.WF()
     invariant pages_in_req as int <= page_off as int
     invariant 0 <= slot_idx as int < NUM_IO_SLOTS as int
+    invariant client_out.loc == cache.counter_loc
     invariant pages_in_req == 0 ==>
         && keys == []
         && cache_readings == map[]
@@ -1577,12 +1591,14 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires old_localState.WF()
   requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
   requires havoc.disk_idx == disk_idx as nat
+  requires client.loc == cache.counter_loc
   ensures localState.WF()
   ensures success ==> write_handle_out.glSome?
     && write_handle_out.value.is_disk_page_handle(cache, localState.t as int, disk_idx as int)
     && write_handle_out.value.for_page_handle(ph)
     && !write_handle_out.value.is_clean()
   ensures !success ==> client_out.glSome?
+    && client_out.value.loc == cache.counter_loc
   decreases *
   {
     var cache_idx;
@@ -1658,12 +1674,15 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires localState.WF()
   requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
   requires havoc.disk_idx == disk_idx as nat
+  requires client.loc == cache.counter_loc
+  ensures client'.loc == cache.counter_loc
   decreases *
   {
     client' := client;
 
     var done := false;
     while !done
+    invariant client'.loc == cache.counter_loc
     decreases *
     {
       var cache_idx: uint64 := atomic_index_lookup_read(

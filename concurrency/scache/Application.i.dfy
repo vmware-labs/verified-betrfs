@@ -63,11 +63,12 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   }
 
   method init(glinear init_tok: T.Token)
-  returns (linear cache: Cache)
+  returns (linear cache: Cache, glinear counter: Clients)
   requires CacheSSM.Init(init_tok.val)
   ensures cache.Inv()
+  ensures counter.loc == cache.counter_loc && counter.n == 255
   {
-    cache := CI.init_cache(init_tok);
+    cache, counter := CI.init_cache(init_tok);
   }
 
   method init_thread_local_state(t: uint64)
@@ -89,6 +90,8 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires old_localState.WF()
   requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
   requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.ReadInput(disk_idx as int))
+  requires client.loc == cache.counter_loc
+  ensures client'.loc == cache.counter_loc
   ensures localState.WF()
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.ReadOutput(block))
   decreases *
@@ -121,6 +124,8 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires old_localState.WF()
   requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
   requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.WriteInput(disk_idx as int, data))
+  requires client.loc == cache.counter_loc
+  ensures client'.loc == cache.counter_loc
   ensures localState.WF()
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.WriteOutput)
   decreases *

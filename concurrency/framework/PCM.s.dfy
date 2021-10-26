@@ -46,35 +46,14 @@ abstract module PCM {
   ensures transition(dot(a, c), dot(b, c))
 }
 
-// TODO doesn't need to be a .s
-abstract module BasicPCM refines PCM {
-  predicate transition(a: M, b: M) {
-    forall c :: valid(dot(a, c)) ==> valid(dot(b, c))
-  }
-  
-  lemma transition_is_refl(a: M)
-  {
-  }
-
-  lemma transition_is_trans(a: M, b: M, c: M)
-  {
-  }
-
-  lemma transition_is_monotonic(a: M, b: M, c: M)
-  {
-    forall d | valid(dot(dot(a, c), d))
-    ensures valid(dot(dot(b, c), d))
-    {
-      associative(a, c, d);
-      associative(b, c, d);
-    }
-  }
-}
-
 module Tokens(pcm: PCM) {
   import opened GhostLoc
 
   datatype Token = Token(ghost loc: Loc, ghost val: pcm.M)
+
+  function method {:extern} init(ghost m: pcm.M) : (glinear t: Token)
+  requires pcm.valid(m)
+  ensures t.val == m
 
   function method {:extern} transition_update(
       gshared s: Token,

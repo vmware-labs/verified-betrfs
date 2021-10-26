@@ -19,7 +19,6 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CT = CacheTypes(aio)
   import opened CacheHandle
   import opened CacheStatusType
-  import opened ClientCounter
   import opened BitOps
   import opened Cells
   import opened LinearSequence_i

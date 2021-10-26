@@ -10,6 +10,7 @@ include "../../lib/Lang/LinearSequence.i.dfy"
 
 module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Ptrs
+  import opened GhostLoc
   import opened AtomicRefcountImpl
   import opened AtomicIndexLookupImpl
   import opened AtomicStatusImpl
@@ -53,7 +54,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     linear batch_busy: lseq<Atomic<bool, NullGhostType>>,
 
     linear io_slots: lseq<IOSlot>,
-    linear ioctx: aio.IOCtx
+    linear ioctx: aio.IOCtx,
+
+    ghost counter_loc: Loc
   )
   {
     function key(i: int) : Key
@@ -77,7 +80,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           |this.read_refcounts[j]| == CACHE_SIZE as int)
       && (forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < CACHE_SIZE as int ::
           && this.read_refcounts[j][i].inv(j)
-          && this.read_refcounts[j][i].rwlock_loc == this.status[i].rwlock_loc)
+          && this.read_refcounts[j][i].rwlock_loc == this.status[i].rwlock_loc
+          && this.read_refcounts[j][i].counter_loc == counter_loc
+         )
       && |this.cache_idx_of_page| == NUM_DISK_PAGES as int
       && (forall d | 0 <= d < NUM_DISK_PAGES as int ::
           atomic_index_lookup_inv(this.cache_idx_of_page[d], d))

@@ -15,20 +15,29 @@ module AtomicRefcountImpl {
   import RwLock
   import T = RwLockToken
 
-  predicate state_inv(v: uint8, g: T.Token, t: nat, rwlock_loc: Loc)
+  glinear datatype RG = RG(
+    glinear token: T.Token,
+    glinear counter: Clients
+  )
+
+  predicate state_inv(v: uint8, g: RG, t: nat, rwlock_loc: Loc, counter_loc: Loc)
   {
-    && g.loc == rwlock_loc
-    && g.val == RwLock.RefCount(t, v as nat)
+    && g.token.loc == rwlock_loc
+    && g.token.val == RwLock.RefCount(t, v as nat)
+    && g.counter.loc == counter_loc
+    && g.counter.n == v as int
     && 0 <= t < RC_WIDTH as int
   }
 
   linear datatype AtomicRefcount = AtomicRefcount(
-    linear a: Atomic<uint8, T.Token>,
-    ghost rwlock_loc: Loc
+    linear a: Atomic<uint8, RG>,
+    ghost rwlock_loc: Loc,
+    ghost counter_loc: Loc
   )
   {
     predicate inv(t: nat) {
-      forall v, g :: atomic_inv(a, v, g) <==> state_inv(v, g, t, this.rwlock_loc)
+      && (forall v, g :: atomic_inv(a, v, g) <==>
+          state_inv(v, g, t, this.rwlock_loc, this.counter_loc))
     }
   }
 
@@ -50,7 +59,9 @@ module AtomicRefcountImpl {
       ghost_acquire old_g;
       glinear var new_g;
       if c == val {
-        m', new_g := T.perform_TakeExcLockCheckRefCount(m, old_g);
+        glinear var RG(t, counter) := old_g;
+        m', t := T.perform_TakeExcLockCheckRefCount(m, t);
+        new_g := RG(t, counter);
       } else {
         m' := m;
         new_g := old_g;
@@ -71,20 +82,23 @@ module AtomicRefcountImpl {
   //requires client == RwLock.Internal(RwLock.Client(t))
   requires m.val == RwLock.ReadHandle(RwLock.ReadPending)
   requires m.loc == a.rwlock_loc
+  requires client.loc == a.counter_loc
   ensures m'.loc == m.loc
   ensures m'.val == RwLock.ReadHandle(RwLock.ReadPendingCounted(t))
   {
-    dispose_anything(client);
     atomic_block var orig_value := execute_atomic_fetch_add_uint8(a.a, 1) {
       ghost_acquire old_g;
       glinear var new_g;
-      m', new_g := T.perform_ReadingIncCount(m, old_g, t);
-      assume old_value < 255; // TODO
+      glinear var RG(token, counter) := old_g;
+      m', token := T.perform_ReadingIncCount(m, token, t);
       //assert new_value == old_value + 1;
       //assert old_g.val == RwLock.RefCount(t, old_value as int);
       //assert old_g.val.refCounts[t] == old_value as int;
       //assert new_g.val == RwLock.RefCount(t, new_value as int);
       //assert state_inv(new_value, new_g, t, rwlock_loc);
+      counter := merge(counter, client);
+      get_bound(counter);
+      new_g := RG(token, counter);
       assert atomic_inv(a.a, new_value, new_g);
       ghost_release new_g;
     }
@@ -95,16 +109,19 @@ module AtomicRefcountImpl {
       glinear client: Client)
   returns (glinear m': T.Token)
   requires a.inv(t)
+  requires client.loc == a.counter_loc
   //requires client == RwLock.Internal(RwLock.Client(t))
   ensures m'.val == RwLock.SharedHandle(RwLock.SharedPending(t))
   ensures m'.loc == a.rwlock_loc
   {
-    dispose_anything(client);
     atomic_block var orig_value := execute_atomic_fetch_add_uint8(a.a, 1) {
       ghost_acquire old_g;
       glinear var new_g;
-      new_g, m' := T.perform_SharedIncCount(old_g, t);
-      assume old_value < 255; // TODO
+      glinear var RG(token, counter) := old_g;
+      token, m' := T.perform_SharedIncCount(token, t);
+      counter := merge(counter, client);
+      get_bound(counter);
+      new_g := RG(token, counter);
       assert atomic_inv(a.a, new_value, new_g);
       ghost_release new_g;
     }
@@ -120,15 +137,18 @@ module AtomicRefcountImpl {
   requires m.loc == a.rwlock_loc
   requires m.val.M? && m.val.exc.ExcObtained?
   requires m.val == RwLock.ExcHandle(RwLock.ExcObtained(-1, m.val.exc.clean))
+  requires client.loc == a.counter_loc
   ensures m'.val == RwLock.ExcHandle(RwLock.ExcObtained(t, m.val.exc.clean))
   ensures m'.loc == a.rwlock_loc
   {
-    dispose_anything(client);
     atomic_block var orig_value := execute_atomic_fetch_add_uint8(a.a, 1) {
       ghost_acquire old_g;
       glinear var new_g;
-      new_g, m' := T.perform_ExcIncCount(old_g, m, t);
-      assume old_value < 255; // TODO
+      glinear var RG(token, counter) := old_g;
+      token, m' := T.perform_ExcIncCount(token, m, t);
+      counter := merge(counter, client);
+      get_bound(counter);
+      new_g := RG(token, counter);
       assert atomic_inv(a.a, new_value, new_g);
       ghost_release new_g;
     }
@@ -142,17 +162,19 @@ module AtomicRefcountImpl {
   requires m.loc == a.rwlock_loc
   requires m.val == RwLock.SharedHandle(RwLock.SharedPending(t))
         || m.val == RwLock.SharedHandle(RwLock.SharedPending2(t))
-  //ensures client == RwLock.Internal(RwLock.Client(t))
+  ensures client.loc == a.counter_loc
   {
-    client := hack_new_client();
     atomic_block var orig_value := execute_atomic_fetch_sub_uint8(a.a, 1) {
       ghost_acquire old_g;
       glinear var new_g;
+      glinear var RG(token, counter) := old_g;
       if m.val == RwLock.SharedHandle(RwLock.SharedPending(t)) {
-        new_g := T.perform_SharedDecCountPending(old_g, m, t);
+        token := T.perform_SharedDecCountPending(token, m, t);
       } else {
-        new_g := T.perform_SharedDecCountPending2(old_g, m, t);
+        token := T.perform_SharedDecCountPending2(token, m, t);
       }
+      counter, client := split(counter);
+      new_g := RG(token, counter);
       assert atomic_inv(a.a, new_value, new_g);
       ghost_release new_g;
     }
@@ -165,13 +187,15 @@ module AtomicRefcountImpl {
   requires a.inv(t)
   requires m.loc == a.rwlock_loc
   requires m.val == RwLock.SharedHandle(RwLock.SharedObtained(t, b))
-  //ensures client == RwLock.Internal(RwLock.Client(t))
+  ensures client.loc == a.counter_loc
   {
-    client := hack_new_client();
     atomic_block var orig_value := execute_atomic_fetch_sub_uint8(a.a, 1) {
       ghost_acquire old_g;
       glinear var new_g;
-      new_g := T.perform_SharedDecCountObtained(old_g, m, t, b);
+      glinear var RG(token, counter) := old_g;
+      token := T.perform_SharedDecCountObtained(token, m, t, b);
+      counter, client := split(counter);
+      new_g := RG(token, counter);
       assert atomic_inv(a.a, new_value, new_g);
       ghost_release new_g;
     }
