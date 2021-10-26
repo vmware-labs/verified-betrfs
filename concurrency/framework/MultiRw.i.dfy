@@ -5,7 +5,7 @@ include "../../lib/Base/Multisets.i.dfy"
 include "../../lib/Base/Option.s.dfy"
 
 abstract module MultiRw {
-  type Key(!new)
+  type Key(!new,==)
   type StoredType(!new)
 
   type M(!new)
@@ -34,6 +34,15 @@ abstract module MultiRw {
     forall p: M :: Inv(dot(a, p)) ==> Inv(dot(b, p))
         && I(dot(a, p)) == I(dot(b, p))[key := x]
         && key !in I(dot(b, p))
+  }
+
+  predicate withdraw_many(a: M, b: M, x: map<Key, StoredType>)
+  {
+    forall p: M :: Inv(dot(a, p)) ==> Inv(dot(b, p))
+        && I(dot(b, p)).Keys !! x.Keys
+        && I(dot(a, p)) == (
+          map k | k in (I(dot(b, p)).Keys + x.Keys) ::
+          if k in I(dot(b, p)).Keys then I(dot(b, p))[k] else x[k])
   }
 
   predicate guard(a: M, key: Key, x: StoredType)
@@ -294,6 +303,16 @@ module MultiRwTokens(rw: MultiRw) {
     token' := f;
     retrieved_value := WrapT.unwrap(b);
   }
+
+  glinear method withdraw_many(
+      glinear token: Token,
+      ghost expected_value: rw.M,
+      ghost expected_retrieved_values: map<rw.Key, rw.StoredType>)
+  returns (glinear token': Token, glinear retrieved_values: map<rw.Key, rw.StoredType>)
+  requires rw.withdraw_many(token.val, expected_value, expected_retrieved_values)
+  ensures token' == T.Token(token.loc, expected_value)
+  ensures retrieved_values == expected_retrieved_values
+  // TODO
 
   /*
    * Helpers

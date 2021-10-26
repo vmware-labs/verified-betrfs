@@ -616,18 +616,25 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && withdrawn[i] == m.contents[i - BUFFER_SIZE as int])
   }
 
-  // TODO: lemma FinishAdvanceTail_is_withdraw(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>)
-  // TODO: requires FinishAdvanceTail(m, m', combinerNodeId)
-  // TODO: ensures withdraw(m, m', new_tail, withdrawn)
-  // TODO: {
-  // TODO:   forall p: M | Inv(dot(m, p))
-  // TODO:   ensures Inv(dot(m', p))
-  // TODO:     && ...
-  // TODO:   {
-  // TODO:     // TODO: fill this in
-  // TODO:     assume Inv(dot(m', p));
-  // TODO:   }
-  // TODO: }
+  lemma FinishAdvanceTail_is_withdraw_many(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>)
+  requires FinishAdvanceTail(m, m', combinerNodeId, new_tail, withdrawn)
+  ensures withdraw_many(m, m', withdrawn)
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m', p)).Keys !! withdrawn.Keys
+      && I(dot(m, p)) == (
+        map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
+        if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k])
+    {
+      // TODO: fill this in
+      assume Inv(dot(m', p));
+      assume I(dot(m', p)).Keys !! withdrawn.Keys;
+      assume I(dot(m, p)) == (
+        map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
+        if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k]);
+    }
+  }
 
   /*
    * ============================================================================================
@@ -663,7 +670,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && I(dot(m', p)) == I(dot(m, p))[key := deposited]
     {
       // TODO: fill this in
-      assert Inv(dot(m', p));
+      assume Inv(dot(m', p));
       assume key !in I(dot(m, p));
       assume I(dot(m', p)) == I(dot(m, p))[key := deposited];
     }
