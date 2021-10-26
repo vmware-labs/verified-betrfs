@@ -18,6 +18,7 @@ module CacheIfc refines InputOutputIfc {
     | HavocOutput(ghost key: nat)
 }
 
+/*
 module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
   import opened NativeTypes
   import opened RequestIds
@@ -179,3 +180,4 @@ module CacheSpec refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     exists step :: NextStep(s, s', op, step)
   }
 }
+*/

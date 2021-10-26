@@ -307,13 +307,17 @@ module DiskPCM(IOIfc: InputOutputIfc,
   }
 }
 
+module DiskSingletonLoc {
+  import opened GhostLoc
+  function {:extern} loc(): Loc
+}
+
 // TODO move this to a .i file?
 module DiskToken(IOIfc: InputOutputIfc, ssm: DiskSSM(IOIfc)) {
   import pcm = DiskPCM(IOIfc, ssm)
   import Tokens = Tokens(pcm)
   import opened GhostLoc
-
-  function loc(): Loc // XXX TODO
+  import opened DiskSingletonLoc
 
   datatype {:glinear_fold} Token = Token(val: ssm.M)
   {

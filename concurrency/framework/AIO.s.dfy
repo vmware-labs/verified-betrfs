@@ -179,7 +179,7 @@ abstract module AIO(aioparams: AIOParams, ioifc: InputOutputIfc, ssm: DiskSSM(io
    * DiskInterface
    */
 
-  type {:extern} IOCtx
+  type {:extern "struct"} IOCtx
   {
     predicate async_read_inv(
       iocb_ptr: Ptr,
