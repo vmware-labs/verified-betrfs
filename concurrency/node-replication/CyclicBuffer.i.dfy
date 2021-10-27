@@ -121,9 +121,10 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   predicate PointerDifferences(x:M)
     requires Complete(x) && PointerOrdering(x)
   {
-    // the span of the entries between head and tail should never be larger than the buffer size
-    && (x.tail.value - x.head.value < BUFFER_SIZE as nat)
+    // the span of the entries between local tails and tail should never be larger than the buffer size
     && (forall i | i in x.localTails ::  x.tail.value - x.localTails[i] < BUFFER_SIZE as nat)
+    // RA: I think we can't really have it with the head, as the head could move "backwards"
+    // && (x.tail.value - x.head.value < BUFFER_SIZE as nat)
   }
 
   predicate AliveBits(x: M)
@@ -131,6 +132,13 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     // everything from the current head up to the tail is not alive.
     // forall i | i in SetOfFreeBufferEntries(x.head.value, x.tail.value) :: !EntryIsAlive(x.aliveBits, i)
+    // forall
+    // forall n | n in x.combinerState :: match x.combinerState[n] {
+    //     case CombinerAppending(cur_idx: nat, tail: nat) => (
+    //       forall i | cur_idx <= i < tail :: !EntryIsAlive(x.aliveBits, LogicalToPhysicalIndex(i))
+    //     )
+    //     case _ => true
+    //   }
     && true
   }
 
@@ -169,7 +177,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           // current is between start and end
           && start <= cur <= end
           // the entry that we read must be alive
-          && EntryIsAlive(x.aliveBits, cur)
+          && EntryIsAlive(x.aliveBits, LogicalToPhysicalIndex(cur))
           // the thing we are ready should match the log content
           // XXX: is that actually true
           && cur in x.contents && x.contents[cur] == val
@@ -200,8 +208,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           && x.localTails[n] <= cur_idx < tail
           // the read tail is smaller or equal to the current tail.
           && tail <= x.tail.value
-          // the entry we are writing mus not be alive
-          && !(EntryIsAlive(x.aliveBits, cur_idx))
+          // all the entries we're writing must not be alive.
+          && (forall i | cur_idx <= i < tail :: !(EntryIsAlive(x.aliveBits, LogicalToPhysicalIndex(i))))
         )
       }
   }
@@ -251,8 +259,9 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   function I(x: M) : map<Key, StoredType>
   {
     // TODO: Figure out something here...
-    map i | x.head.value <= i < x.tail.value && i in x.contents
-      :: i := x.contents[i]
+    map i : nat | x.tail.value - (BUFFER_SIZE as nat) <= i < x.tail.value && i in x.contents
+//      && EntryIsAlive(x.aliveBits, LogicalToPhysicalIndex(i))
+      :: i as Key := x.contents[i]
   }
   // TODO: checked out between the latest alive cell and the tail
 
@@ -428,6 +437,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     requires CombinerKnown(m, nodeId)
   {
     && m.combinerState[nodeId].CombinerAppending?
+    && m.combinerState[nodeId].cur_idx < m.combinerState[nodeId].tail
   }
 
   predicate CombinerIsAppendingAt(m: M, nodeId: NodeId, cur_idx: nat, tail: nat)
@@ -560,8 +570,11 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     ensures Inv(dot(m', p))
       && I(dot(m, p)) == I(dot(m', p))
     {
-      assume Inv(dot(m', p));
-      assume I(dot(m, p)) == I(dot(m', p));
+      assert PointerDifferences(dot(m', p));
+
+
+      assert Inv(dot(m', p));
+      assert I(dot(m, p)) == I(dot(m', p));
     }
   }
 
@@ -589,7 +602,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     ensures Inv(dot(m', p))
       && I(dot(m, p)) == I(dot(m', p))
     {
-      // TODO: fill this in
+
       assert Inv(dot(m', p));
       assert I(dot(m, p)) == I(dot(m', p));
     }
@@ -627,7 +640,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
         map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
         if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k])
     {
-      // TODO: fill this in
+
       assume Inv(dot(m', p));
       assume I(dot(m', p)).Keys !! withdrawn.Keys;
       assume I(dot(m, p)) == (
@@ -662,14 +675,15 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   requires AppendFlipBit(m, m', combinerNodeId, deposited)
   ensures exists key :: deposit(m, m', key, deposited)
   {
-    var key := *; // TODO
+    var combinerBefore := m.combinerState[combinerNodeId];
+    var key := combinerBefore.cur_idx;
+
 
     forall p: M | Inv(dot(m, p))
     ensures Inv(dot(m', p))
       && key !in I(dot(m, p))
       && I(dot(m', p)) == I(dot(m, p))[key := deposited]
     {
-      // TODO: fill this in
       assume Inv(dot(m', p));
       assume key !in I(dot(m, p));
       assume I(dot(m', p)) == I(dot(m, p))[key := deposited];
@@ -751,7 +765,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && i in m.contents
     && readerBefore.start <= i < readerBefore.end
 
-    && EntryIsAlive( m.aliveBits, i)
+    && EntryIsAlive( m.aliveBits, LogicalToPhysicalIndex(i))
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerReading(
