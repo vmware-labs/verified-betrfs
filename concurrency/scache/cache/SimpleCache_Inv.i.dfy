@@ -192,6 +192,24 @@ module SimpleCache_Inv {
     assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
   }
 
+  lemma NewHavocTicket_PreservesInv(s: Variables, s': Variables, op: ifc.Op)
+  requires Inv(s)
+  requires NewHavocTicket(s, s', op)
+  ensures Inv(s')
+  {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
+  }
+
+  lemma ConsumeHavocStub_PreservesInv(s: Variables, s': Variables, op: ifc.Op)
+  requires Inv(s)
+  requires ConsumeHavocStub(s, s', op)
+  ensures Inv(s')
+  {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
+  }
+
   lemma ObserveCleanForSync_PreservesInv(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, cache_idx: nat)
   requires Inv(s)
   requires ObserveCleanForSync(s, s', op, rid, cache_idx)
@@ -244,6 +262,8 @@ module SimpleCache_Inv {
       case ConsumeStub_Step => { ConsumeStub_PreservesInv(s, s', op); }
       case NewSyncTicket_Step => { NewSyncTicket_PreservesInv(s, s', op); }
       case ConsumeSyncStub_Step => { ConsumeSyncStub_PreservesInv(s, s', op); }
+      case NewHavocTicket_Step => { NewHavocTicket_PreservesInv(s, s', op); }
+      case ConsumeHavocStub_Step => { ConsumeHavocStub_PreservesInv(s, s', op); }
       case ObserveCleanForSync_Step(rid, cache_idx) => { ObserveCleanForSync_PreservesInv(s, s', op, rid, cache_idx); }
       case ApplyRead_Step(rid, cache_idx) => { ApplyRead_PreservesInv(s, s', op, rid, cache_idx); }
       case ApplyWrite_Step(rid, cache_idx) => { ApplyWrite_PreservesInv(s, s', op, rid, cache_idx); }

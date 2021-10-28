@@ -89,7 +89,31 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && op.output.SyncOutput?
     && op.rid in s.sync_reqs
     && s.sync_reqs[op.rid] == {}
-    && s' == s.(stubs := s.stubs - {op.rid})
+    && s' == s.(sync_reqs := s.sync_reqs- {op.rid})
+  }
+
+  predicate NewHavocTicket(s: Variables, s': Variables, op: ifc.Op) {
+    && op.Start?
+    && op.input.HavocInput?
+    && op.rid !in s.havoc_reqs
+    && s' == s.(havoc_reqs := s.havoc_reqs[op.rid := op.input.key])
+  }
+
+  predicate ConsumeHavocStub(s: Variables, s': Variables, op: ifc.Op) {
+    && op.End?
+    && op.output.HavocOutput?
+    && op.rid in s.havoc_reqs
+    && s' == s.(havoc_reqs := s.havoc_reqs - {op.rid})
+  }
+
+  predicate DoHavoc(s: Variables, s': Variables, op: ifc.Op, rid: RequestId) {
+    && op.InternalOp?
+    && rid in s.havoc_reqs
+    && s' == s.(store := s'.store)
+    && (forall k | k != s.havoc_reqs[rid] ::
+        && (k in s.store ==> k in s'.store && s'.store[k] == s.store[k])
+        && (k in s'.store ==> k in s.store)
+    )
   }
 
   predicate ObserveCleanForSync(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, key: nat) {
@@ -134,6 +158,9 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
      | ConsumeStub_Step
      | NewSyncTicket_Step
      | ConsumeSyncStub_Step
+     | NewHavocTicket_Step
+     | ConsumeHavocStub_Step
+     | DoHavoc_Step(rid: RequestId)
      | ObserveCleanForSync_Step(rid: RequestId, key: nat)
      | ApplyRead_Step(rid: RequestId)
      | ApplyWrite_Step(rid: RequestId) 
@@ -147,6 +174,9 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
       case ConsumeStub_Step => ConsumeStub(s, s', op)
       case NewSyncTicket_Step => NewSyncTicket(s, s', op)
       case ConsumeSyncStub_Step => ConsumeSyncStub(s, s', op)
+      case NewHavocTicket_Step => NewHavocTicket(s, s', op)
+      case ConsumeHavocStub_Step => ConsumeHavocStub(s, s', op)
+      case DoHavoc_Step(rid) => DoHavoc(s, s', op, rid)
       case ObserveCleanForSync_Step(rid, key) => ObserveCleanForSync(s, s', op, rid, key)
       case ApplyRead_Step(rid) => ApplyRead(s, s', op, rid)
       case ApplyWrite_Step(rid) => ApplyWrite(s, s', op, rid)

@@ -10,6 +10,7 @@ module SimpleCache_Refines_AbstractCache refines
   import opened SimpleCacheStateMachine
   import opened RequestIds
   import SimpleCache_Inv
+  import DiskIfc
 
   predicate Inv(s: A.Variables) {
     SimpleCache_Inv.Inv(s)
@@ -68,7 +69,8 @@ module SimpleCache_Refines_AbstractCache refines
       InterpStore(s),
       s.tickets,
       s.stubs,
-      s.sync_reqs
+      s.sync_reqs,
+      s.havocs
     )
   }
 
@@ -258,6 +260,48 @@ module SimpleCache_Refines_AbstractCache refines
     assert B.NextStep(I(s), I(s'), op, B.ConsumeSyncStub_Step);
   }
 
+  lemma NewHavocTicket_Refines(s: Variables, s': Variables, op: ifc.Op)
+  requires Inv(s)
+  requires NewHavocTicket(s, s', op)
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), op)
+  {
+    assert forall d, c :: IsInMem(s, c, d) <==> IsInMem(s', c, d);
+    assert B.NextStep(I(s), I(s'), op, B.NewHavocTicket_Step);
+  }
+
+  lemma ConsumeHavocStub_Refines(s: Variables, s': Variables, op: ifc.Op)
+  requires Inv(s)
+  requires ConsumeHavocStub(s, s', op)
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), op)
+  {
+    assert forall d, c :: IsInMem(s, c, d) <==> IsInMem(s', c, d);
+    assert B.NextStep(I(s), I(s'), op, B.ConsumeHavocStub_Step);
+  }
+
+  lemma HavocNew_Refines(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat, rid: RequestId, block: DiskIfc.Block)
+  requires Inv(s)
+  requires HavocNew(s, s', op, cache_idx, rid, block)
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), op)
+  {
+    assert forall d, c :: IsInMem(s, c, d) ==> IsInMem(s', c, d);
+    assert forall d, c :: c != cache_idx ==> IsInMem(s', c, d) ==> IsInMem(s, c, d);
+    assert B.NextStep(I(s), I(s'), op, B.DoHavoc_Step(rid));
+  }
+
+  lemma HavocEvict_Refines(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat, rid: RequestId)
+  requires Inv(s)
+  requires HavocEvict(s, s', op, cache_idx, rid)
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), op)
+  {
+    assert forall d, c :: c != cache_idx ==> IsInMem(s, c, d) ==> IsInMem(s', c, d);
+    assert forall d, c :: IsInMem(s', c, d) ==> IsInMem(s, c, d);
+    assert B.NextStep(I(s), I(s'), op, B.DoHavoc_Step(rid));
+  }
+
   lemma ObserveCleanForSync_Refines(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, cache_idx: nat)
   requires Inv(s)
   requires ObserveCleanForSync(s, s', op, rid, cache_idx)
@@ -312,9 +356,16 @@ module SimpleCache_Refines_AbstractCache refines
       case ConsumeStub_Step => { ConsumeStub_Refines(s, s', op); }
       case NewSyncTicket_Step => { NewSyncTicket_Refines(s, s', op); }
       case ConsumeSyncStub_Step => { ConsumeSyncStub_Refines(s, s', op); }
+      case NewHavocTicket_Step => { NewHavocTicket_Refines(s, s', op); }
+      case ConsumeHavocStub_Step => { ConsumeHavocStub_Refines(s, s', op); }
       case ObserveCleanForSync_Step(rid, cache_idx) => { ObserveCleanForSync_Refines(s, s', op, rid, cache_idx); }
       case ApplyRead_Step(rid, cache_idx) => { ApplyRead_Refines(s, s', op, rid, cache_idx); }
       case ApplyWrite_Step(rid, cache_idx) => { ApplyWrite_Refines(s, s', op, rid, cache_idx); }
+      case HavocNew_Step(cache_idx, rid, block) => { HavocNew_Refines(s, s', op, cache_idx, rid, block); }
+      case HavocEvict_Step(cache_idx, rid) => { HavocEvict_Refines(s, s', op, cache_idx, rid); }
+      case Stutter_Step => {
+        assert B.NextStep(I(s), I(s'), op, B.Stutter_Step);
+      }
     }
   }
 
