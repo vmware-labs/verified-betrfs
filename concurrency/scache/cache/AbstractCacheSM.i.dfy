@@ -17,7 +17,8 @@ module AbstractCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     store: imap<nat, Elem>,
     tickets: map<RequestId, CacheIfc.Input>,
     stubs: map<RequestId, CacheIfc.Output>,
-    sync_reqs: map<RequestId, set<nat>>
+    sync_reqs: map<RequestId, set<nat>>,
+    havoc_reqs: map<RequestId, nat>
   )
 
   predicate Init(s: Variables) {

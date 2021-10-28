@@ -114,7 +114,7 @@ module DiskSSM_Refines_SimpleCachine
   }
 
   function IDisk(contents: map<nat, DiskIfc.Block>) : imap<nat, seq<byte>> {
-    imap addr | addr in contents :: contents[addr]
+    imap addr | B.True(addr) :: if addr in contents then contents[addr] else []
   }
 
   function I(s: A.Variables) : B.Variables
@@ -129,7 +129,8 @@ module DiskSSM_Refines_SimpleCachine
       s.machine.tickets,
       s.machine.stubs,
       IDisk(s.disk.contents),
-      s.machine.sync_reqs
+      s.machine.sync_reqs,
+      s.machine.havocs
     )
   }
 
@@ -149,6 +150,95 @@ module DiskSSM_Refines_SimpleCachine
       ensures I(s).entries[k] == B.Empty
       { }
     }
+    forall k: nat ensures k in I(s).disk
+    {
+      assert B.True(k);
+      assert k in IDisk(s.disk.contents);
+    }
+  }
+
+  lemma Start_Refines_helper_normal(s: A.Variables, s': A.Variables, rid: RequestId, input: CacheIfc.Input)
+  requires Inv(s)
+  //requires A.NewTicket(s, s', rid, input)
+  requires Inv(s')
+  requires s.disk == s'.disk
+  requires input.WriteInput? || input.ReadInput?
+  requires s'.machine.disk_idx_to_cache_idx == s.machine.disk_idx_to_cache_idx
+  requires s'.machine.entries == s.machine.entries
+  requires s'.machine.statuses == s.machine.statuses
+  requires s'.machine.read_reqs == s.machine.read_reqs
+  requires s'.machine.read_resps == s.machine.read_resps
+  requires s'.machine.write_reqs == s.machine.write_reqs
+  requires s'.machine.write_resps == s.machine.write_resps
+  requires s'.machine.sync_reqs == s.machine.sync_reqs
+  requires s'.machine.havocs == s.machine.havocs
+  requires s'.machine.tickets == s.machine.tickets[rid := input]
+  requires s'.machine.stubs == s.machine.stubs
+  requires rid !in s.machine.tickets
+  ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
+  {
+    assert forall i :: InverseMapConsistent(s.machine, i) ==> InverseMapConsistent(s'.machine, i);
+    assert forall i :: IsReading(s.machine, i) ==> IsReading(s'.machine, i);
+    assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
+
+    assert B.NewTicket(I(s), I(s'), ifc.Start(rid, input));
+    assert B.NextStep(I(s), I(s'), ifc.Start(rid, input), B.NewTicket_Step);
+  }
+
+  lemma Start_Refines_helper_sync(s: A.Variables, s': A.Variables, rid: RequestId, input: CacheIfc.Input)
+  requires Inv(s)
+  //requires A.NewTicket(s, s', rid, input)
+  requires Inv(s')
+  requires s.disk == s'.disk
+  requires input.SyncInput?
+  requires s'.machine.disk_idx_to_cache_idx == s.machine.disk_idx_to_cache_idx
+  requires s'.machine.entries == s.machine.entries
+  requires s'.machine.statuses == s.machine.statuses
+  requires s'.machine.read_reqs == s.machine.read_reqs
+  requires s'.machine.read_resps == s.machine.read_resps
+  requires s'.machine.write_reqs == s.machine.write_reqs
+  requires s'.machine.write_resps == s.machine.write_resps
+  requires s'.machine.sync_reqs == s.machine.sync_reqs[rid := input.keys]
+  requires s'.machine.havocs == s.machine.havocs
+  requires s'.machine.tickets == s.machine.tickets
+  requires s'.machine.stubs == s.machine.stubs
+  requires rid !in s.machine.sync_reqs
+  ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
+  {
+    assert forall i :: InverseMapConsistent(s.machine, i) ==> InverseMapConsistent(s'.machine, i);
+    assert forall i :: IsReading(s.machine, i) ==> IsReading(s'.machine, i);
+    assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
+
+    assert B.NewSyncTicket(I(s), I(s'), ifc.Start(rid, input));
+    assert B.NextStep(I(s), I(s'), ifc.Start(rid, input), B.NewSyncTicket_Step);
+  }
+
+  lemma Start_Refines_helper_havoc(s: A.Variables, s': A.Variables, rid: RequestId, input: CacheIfc.Input)
+  requires Inv(s)
+  //requires A.NewTicket(s, s', rid, input)
+  requires Inv(s')
+  requires s.disk == s'.disk
+  requires input.HavocInput?
+  requires s'.machine.disk_idx_to_cache_idx == s.machine.disk_idx_to_cache_idx
+  requires s'.machine.entries == s.machine.entries
+  requires s'.machine.statuses == s.machine.statuses
+  requires s'.machine.read_reqs == s.machine.read_reqs
+  requires s'.machine.read_resps == s.machine.read_resps
+  requires s'.machine.write_reqs == s.machine.write_reqs
+  requires s'.machine.write_resps == s.machine.write_resps
+  requires s'.machine.sync_reqs == s.machine.sync_reqs
+  requires s'.machine.havocs == s.machine.havocs[rid := input.key]
+  requires s'.machine.tickets == s.machine.tickets
+  requires s'.machine.stubs == s.machine.stubs
+  requires rid !in s.machine.havocs
+  ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
+  {
+    assert forall i :: InverseMapConsistent(s.machine, i) ==> InverseMapConsistent(s'.machine, i);
+    assert forall i :: IsReading(s.machine, i) ==> IsReading(s'.machine, i);
+    assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
+
+    assert B.NewHavocTicket(I(s), I(s'), ifc.Start(rid, input));
+    assert B.NextStep(I(s), I(s'), ifc.Start(rid, input), B.NewHavocTicket_Step);
   }
 
   lemma Start_Refines(s: A.Variables, s': A.Variables, rid: RequestId, input: CacheIfc.Input)
@@ -157,17 +247,100 @@ module DiskSSM_Refines_SimpleCachine
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
   {
-    assume false;
-    assert s'.machine.entries == s.machine.entries;
-    assert s'.machine.statuses == s.machine.statuses;
-    assert s'.machine.read_reqs == s.machine.read_reqs;
-    assert s'.machine.read_resps == s.machine.read_resps;
-    assert s'.machine.write_reqs == s.machine.write_reqs;
-    assert s'.machine.write_resps == s.machine.write_resps;
+    if input.ReadInput? || input.WriteInput? {
+      Start_Refines_helper_normal(s, s', rid, input);
+    } else if input.SyncInput? {
+      Start_Refines_helper_sync(s, s', rid, input);
+    } else {
+      assert input.HavocInput?;
+      Start_Refines_helper_havoc(s, s', rid, input);
+    }
+  }
 
+  lemma End_Refines_helper_normal(s: A.Variables, s': A.Variables, rid: RequestId, output: CacheIfc.Output)
+  requires Inv(s)
+  //requires A.NewTicket(s, s', rid, input)
+  requires Inv(s')
+  requires s.disk == s'.disk
+  requires output.ReadOutput? || output.WriteOutput?
+  requires s'.machine.disk_idx_to_cache_idx == s.machine.disk_idx_to_cache_idx
+  requires s'.machine.entries == s.machine.entries
+  requires s'.machine.statuses == s.machine.statuses
+  requires s'.machine.read_reqs == s.machine.read_reqs
+  requires s'.machine.read_resps == s.machine.read_resps
+  requires s'.machine.write_reqs == s.machine.write_reqs
+  requires s'.machine.write_resps == s.machine.write_resps
+  requires s'.machine.sync_reqs == s.machine.sync_reqs
+  requires s'.machine.havocs == s.machine.havocs
+  requires s'.machine.tickets == s.machine.tickets
+  requires s'.machine.stubs == s.machine.stubs - {rid}
+  requires rid in s.machine.stubs
+  requires s.machine.stubs[rid] == output
+  ensures B.Next(I(s), I(s'), ifc.End(rid, output))
+  {
     assert forall i :: InverseMapConsistent(s.machine, i) ==> InverseMapConsistent(s'.machine, i);
     assert forall i :: IsReading(s.machine, i) ==> IsReading(s'.machine, i);
     assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
+
+    assert B.ConsumeStub(I(s), I(s'), ifc.End(rid, output));
+    assert B.NextStep(I(s), I(s'), ifc.End(rid, output), B.ConsumeStub_Step);
+  }
+
+  lemma End_Refines_helper_sync(s: A.Variables, s': A.Variables, rid: RequestId, output: CacheIfc.Output)
+  requires Inv(s)
+  //requires A.NewTicket(s, s', rid, input)
+  requires Inv(s')
+  requires s.disk == s'.disk
+  requires output.SyncOutput?
+  requires s'.machine.disk_idx_to_cache_idx == s.machine.disk_idx_to_cache_idx
+  requires s'.machine.entries == s.machine.entries
+  requires s'.machine.statuses == s.machine.statuses
+  requires s'.machine.read_reqs == s.machine.read_reqs
+  requires s'.machine.read_resps == s.machine.read_resps
+  requires s'.machine.write_reqs == s.machine.write_reqs
+  requires s'.machine.write_resps == s.machine.write_resps
+  requires s'.machine.sync_reqs == s.machine.sync_reqs - {rid}
+  requires s'.machine.havocs == s.machine.havocs
+  requires s'.machine.tickets == s.machine.tickets
+  requires s'.machine.stubs == s.machine.stubs
+  requires rid in s.machine.sync_reqs
+  requires s.machine.sync_reqs[rid] == {}
+  ensures B.Next(I(s), I(s'), ifc.End(rid, output))
+  {
+    assert forall i :: InverseMapConsistent(s.machine, i) ==> InverseMapConsistent(s'.machine, i);
+    assert forall i :: IsReading(s.machine, i) ==> IsReading(s'.machine, i);
+    assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
+
+    assert B.ConsumeSyncStub(I(s), I(s'), ifc.End(rid, output));
+    assert B.NextStep(I(s), I(s'), ifc.End(rid, output), B.ConsumeSyncStub_Step);
+  }
+
+  lemma End_Refines_helper_havoc(s: A.Variables, s': A.Variables, rid: RequestId, output: CacheIfc.Output)
+  requires Inv(s)
+  //requires A.NewTicket(s, s', rid, input)
+  requires Inv(s')
+  requires s.disk == s'.disk
+  requires output.HavocOutput?
+  requires s'.machine.disk_idx_to_cache_idx == s.machine.disk_idx_to_cache_idx
+  requires s'.machine.entries == s.machine.entries
+  requires s'.machine.statuses == s.machine.statuses
+  requires s'.machine.read_reqs == s.machine.read_reqs
+  requires s'.machine.read_resps == s.machine.read_resps
+  requires s'.machine.write_reqs == s.machine.write_reqs
+  requires s'.machine.write_resps == s.machine.write_resps
+  requires s'.machine.sync_reqs == s.machine.sync_reqs
+  requires s'.machine.havocs == s.machine.havocs - {rid}
+  requires s'.machine.tickets == s.machine.tickets
+  requires s'.machine.stubs == s.machine.stubs
+  requires rid in s.machine.havocs
+  ensures B.Next(I(s), I(s'), ifc.End(rid, output))
+  {
+    assert forall i :: InverseMapConsistent(s.machine, i) ==> InverseMapConsistent(s'.machine, i);
+    assert forall i :: IsReading(s.machine, i) ==> IsReading(s'.machine, i);
+    assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
+
+    assert B.ConsumeHavocStub(I(s), I(s'), ifc.End(rid, output));
+    assert B.NextStep(I(s), I(s'), ifc.End(rid, output), B.ConsumeHavocStub_Step);
   }
 
   lemma End_Refines(s: A.Variables, s': A.Variables, rid: RequestId, output: CacheIfc.Output)
@@ -176,13 +349,14 @@ module DiskSSM_Refines_SimpleCachine
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.End(rid, output))
   {
-    assume false;
-    assert s'.machine.entries == s.machine.entries;
-    assert s'.machine.statuses == s.machine.statuses;
-
-    assert forall i :: InverseMapConsistent(s.machine, i) ==> InverseMapConsistent(s'.machine, i);
-    assert forall i :: IsReading(s.machine, i) ==> IsReading(s'.machine, i);
-    assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
+    if output.ReadOutput? || output.WriteOutput? {
+      End_Refines_helper_normal(s, s', rid, output);
+    } else if output.SyncOutput? {
+      End_Refines_helper_sync(s, s', rid, output);
+    } else {
+      assert output.HavocOutput?;
+      End_Refines_helper_havoc(s, s', rid, output);
+    }
   }
 
   lemma StartRead_Refines(s: A.Variables, s': A.Variables, cache_idx: nat, disk_idx: nat)
@@ -301,9 +475,30 @@ module DiskSSM_Refines_SimpleCachine
   requires Inv(s')
   ensures B.Next(I(s), I(s'), ifc.InternalOp)
   {
-    assume false;
-    //assert B.MarkDirty(I(s), I(s'), ifc.InternalOp, cache_idx);
-    //assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.MarkDirty_Step(cache_idx));
+    assert B.MarkDirty(I(s), I(s'), ifc.InternalOp, cache_idx);
+    assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.MarkDirty_Step(cache_idx));
+  }
+
+  lemma HavocNew_Refines(s: A.Variables, s': A.Variables, cache_idx: nat, rid: RequestId, new_data: DiskIfc.Block)
+  requires Inv(s)
+  requires CacheSSM.HavocNew(s.machine, s'.machine, cache_idx, rid, new_data)
+  requires s'.disk == s.disk
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), ifc.InternalOp)
+  {
+    assert B.HavocNew(I(s), I(s'), ifc.InternalOp, cache_idx, rid, new_data);
+    assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.HavocNew_Step(cache_idx, rid, new_data));
+  }
+
+  lemma HavocEvict_Refines(s: A.Variables, s': A.Variables, cache_idx: nat, rid: RequestId)
+  requires Inv(s)
+  requires CacheSSM.HavocEvict(s.machine, s'.machine, cache_idx, rid)
+  requires s'.disk == s.disk
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), ifc.InternalOp)
+  {
+    assert B.HavocEvict(I(s), I(s'), ifc.InternalOp, cache_idx, rid);
+    assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.HavocEvict_Step(cache_idx, rid));
   }
 
   lemma Machine_Internal_Refines(s: A.Variables, s': A.Variables)
@@ -341,6 +536,12 @@ module DiskSSM_Refines_SimpleCachine
 
       case MarkDirtyStep(cache_idx) =>
         MarkDirty_Refines(s, s', cache_idx);
+
+      case HavocNewStep(cache_idx, rid, new_data) =>
+        HavocNew_Refines(s, s', cache_idx, rid, new_data);
+
+      case HavocEvictStep(cache_idx, rid) =>
+        HavocEvict_Refines(s, s', cache_idx, rid);
     }
   }
 
@@ -786,7 +987,7 @@ module DiskSSM_Refines_SimpleCachine
     var step :| A.InternalStep(s, s', step);
     match step {
       case MachineStep(shard, shard', rest) => {
-        InternalMonotonic(
+        CacheInv.InternalMonotonic(
             A.Variables(s.disk, shard),
             A.Variables(s.disk, shard'),
             rest);

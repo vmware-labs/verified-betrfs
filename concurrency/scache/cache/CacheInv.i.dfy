@@ -237,6 +237,28 @@ module CacheInv {
     assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
   }
 
+  lemma HavocNew_PreservesInv(s: A.Variables, s': A.Variables, cache_idx: nat, rid: RequestId, block: DiskIfc.Block)
+  requires Inv(s)
+  requires CacheSSM.HavocNew(s.machine, s'.machine, cache_idx, rid, block)
+  requires s'.disk == s.disk
+  ensures Inv(s')
+  {
+    assert forall i :: InverseMapConsistent(s.machine, i) ==> InverseMapConsistent(s'.machine, i);
+    assert forall i :: IsReading(s.machine, i) ==> IsReading(s'.machine, i);
+    assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
+  }
+
+  lemma HavocEvict_PreservesInv(s: A.Variables, s': A.Variables, cache_idx: nat, rid: RequestId)
+  requires Inv(s)
+  requires CacheSSM.HavocEvict(s.machine, s'.machine, cache_idx, rid)
+  requires s'.disk == s.disk
+  ensures Inv(s')
+  {
+    assert forall i :: InverseMapConsistent(s.machine, i) ==> InverseMapConsistent(s'.machine, i);
+    assert forall i :: IsReading(s.machine, i) ==> IsReading(s'.machine, i);
+    assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
+  }
+
   lemma StartRead_Monotonic(s: A.Variables, s': A.Variables, rest: CacheSSM.M,
       cache_idx: nat, disk_idx: nat)
   requires Inv(A.Variables(s.disk, CacheSSM.dot(s.machine, rest)))
@@ -333,6 +355,26 @@ module CacheInv {
     assert CacheSSM.InternalStep(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), CacheSSM.MarkDirtyStep(cache_idx));
   }
 
+  lemma HavocNew_Monotonic(s: A.Variables, s': A.Variables, rest: CacheSSM.M,
+      cache_idx: nat, rid: RequestId, new_data: DiskIfc.Block)
+  requires Inv(A.Variables(s.disk, CacheSSM.dot(s.machine, rest)))
+  requires CacheSSM.HavocNew(s.machine, s'.machine, cache_idx, rid, new_data)
+  ensures CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest))
+  {
+    assert CacheSSM.HavocNew(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), cache_idx, rid, new_data);
+    assert CacheSSM.InternalStep(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), CacheSSM.HavocNewStep(cache_idx, rid, new_data));
+  }
+
+  lemma HavocEvict_Monotonic(s: A.Variables, s': A.Variables, rest: CacheSSM.M,
+      cache_idx: nat, rid: RequestId)
+  requires Inv(A.Variables(s.disk, CacheSSM.dot(s.machine, rest)))
+  requires CacheSSM.HavocEvict(s.machine, s'.machine, cache_idx, rid)
+  ensures CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest))
+  {
+    assert CacheSSM.HavocEvict(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), cache_idx, rid);
+    assert CacheSSM.InternalStep(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), CacheSSM.HavocEvictStep(cache_idx, rid));
+  }
+
   lemma InternalMonotonic(s: A.Variables, s': A.Variables, rest: CacheSSM.M)
   requires Inv(A.Variables(s.disk, CacheSSM.dot(s.machine, rest)))
   requires CacheSSM.Internal(s.machine, s'.machine)
@@ -375,6 +417,14 @@ module CacheInv {
       case MarkDirtyStep(cache_idx) => {
         MarkDirty_Monotonic(s, s', rest, cache_idx);
       }
+
+      case HavocNewStep(cache_idx, rid, new_data) => {
+        HavocNew_Monotonic(s, s', rest, cache_idx, rid, new_data);
+      }
+
+      case HavocEvictStep(cache_idx, rid) => {
+        HavocEvict_Monotonic(s, s', rest, cache_idx, rid);
+      }
     }
   }
 
@@ -412,6 +462,12 @@ module CacheInv {
 
       case MarkDirtyStep(cache_idx) =>
         MarkDirty_PreservesInv(s, s', cache_idx);
+
+      case HavocNewStep(cache_idx, rid, new_data) =>
+        HavocNew_PreservesInv(s, s', cache_idx, rid, new_data);
+
+      case HavocEvictStep(cache_idx, rid) =>
+        HavocEvict_PreservesInv(s, s', cache_idx, rid);
     }
   }
 

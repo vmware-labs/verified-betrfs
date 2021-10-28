@@ -40,6 +40,7 @@ module SimpleCache_Inv {
     && (forall c | c in s.entries && s.entries[c].Writeback? && s.entries[c].disk_idx in s.write_resps
         :: s.entries[c].disk_idx in s.disk && s.disk[s.entries[c].disk_idx] == s.entries[c].data)
     && (forall c | c in s.entries && (s.entries[c].Writeback? || s.entries[c].Clean? || s.entries[c].Dirty?) :: s.entries[c].disk_idx in s.disk)
+    && (forall k | True(k) :: k in s.disk)
   }
 
   lemma StartRead_PreservesInv(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat, disk_idx: nat)
@@ -68,14 +69,33 @@ module SimpleCache_Inv {
     assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
   }
 
-  lemma MakeDirty_PreservesInv(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat) 
+  lemma MarkDirty_PreservesInv(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat) 
   requires Inv(s)
-  requires MakeDirty(s, s', op, cache_idx)
+  requires MarkDirty(s, s', op, cache_idx)
   ensures Inv(s')
   {
     assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
     assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
   }
+
+  lemma HavocNew_PreservesInv(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat, rid: RequestId, block: DiskIfc.Block) 
+  requires Inv(s)
+  requires HavocNew(s, s', op, cache_idx, rid, block)
+  ensures Inv(s')
+  {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
+  }
+
+  lemma HavocEvict_PreservesInv(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat, rid: RequestId)
+  requires Inv(s)
+  requires HavocEvict(s, s', op, cache_idx, rid)
+  ensures Inv(s')
+  {
+    assert forall d, c :: IsReader(s, c, d) ==> IsReader(s', c, d);
+    assert forall d, c :: IsWriter(s, c, d) ==> IsWriter(s', c, d);
+  }
+
 
   lemma StartWriteback_PreservesInv(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat, disk_idx: nat) 
   requires Inv(s)
@@ -213,7 +233,7 @@ module SimpleCache_Inv {
     match step {
       case StartRead_Step(cache_idx, disk_idx) => { StartRead_PreservesInv(s, s', op, cache_idx, disk_idx); }
       case FinishRead_Step(cache_idx, disk_idx) => { FinishRead_PreservesInv(s, s', op, cache_idx, disk_idx); }
-      case MakeDirty_Step(cache_idx) => { MakeDirty_PreservesInv(s, s', op, cache_idx); }
+      case MarkDirty_Step(cache_idx) => { MarkDirty_PreservesInv(s, s', op, cache_idx); }
       case StartWriteback_Step(cache_idx, disk_idx) => { StartWriteback_PreservesInv(s, s', op, cache_idx, disk_idx); }
       case FinishWriteback_Step(cache_idx, disk_idx) => { FinishWriteback_PreservesInv(s, s', op, cache_idx, disk_idx) ; }
       case Evict_Step(cache_idx) => { Evict_PreservesInv(s, s', op, cache_idx); }
@@ -227,6 +247,9 @@ module SimpleCache_Inv {
       case ObserveCleanForSync_Step(rid, cache_idx) => { ObserveCleanForSync_PreservesInv(s, s', op, rid, cache_idx); }
       case ApplyRead_Step(rid, cache_idx) => { ApplyRead_PreservesInv(s, s', op, rid, cache_idx); }
       case ApplyWrite_Step(rid, cache_idx) => { ApplyWrite_PreservesInv(s, s', op, rid, cache_idx); }
+      case HavocNew_Step(cache_idx, rid, block) => { HavocNew_PreservesInv(s, s', op, cache_idx, rid, block); }
+      case HavocEvict_Step(cache_idx, rid) => { HavocEvict_PreservesInv(s, s', op, cache_idx, rid); }
+      case Stutter_Step => { }
     }
   }
 

@@ -5,6 +5,7 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
   import opened NativeTypes
   import opened RequestIds
   import CacheIfc
+  import DiskIfc
 
   datatype Entry =
     | Empty
@@ -22,7 +23,8 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     tickets: map<RequestId, CacheIfc.Input>,
     stubs: map<RequestId, CacheIfc.Output>,
     disk: imap<nat, seq<byte>>,
-    sync_reqs: map<RequestId, set<nat>>
+    sync_reqs: map<RequestId, set<nat>>,
+    havocs: map<RequestId, nat>
   )
 
   predicate True(d: nat) { true }
@@ -35,6 +37,7 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && s.read_resps == map[]
     && s.tickets == map[]
     && s.stubs == map[]
+    && (forall k: nat :: k in s.disk)
   }
 
   predicate StartRead(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat, disk_idx: nat) {
@@ -59,7 +62,7 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
       .(read_resps := s.read_resps - {disk_idx})
   }
 
-  predicate MakeDirty(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat) {
+  predicate MarkDirty(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat) {
     && op.InternalOp?
     && cache_idx in s.entries
     && s.entries[cache_idx].Clean?
@@ -151,7 +154,7 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && op.output.SyncOutput?
     && op.rid in s.sync_reqs
     && s.sync_reqs[op.rid] == {}
-    && s' == s.(stubs := s.stubs - {op.rid})
+    && s' == s.(sync_reqs := s.sync_reqs - {op.rid})
   }
 
   predicate ObserveCleanForSync(s: Variables, s': Variables, op: ifc.Op, rid: RequestId, cache_idx: nat) {
@@ -161,6 +164,20 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
     && s.entries[cache_idx].Clean?
     && s' == s.(sync_reqs := s.sync_reqs[
         rid := s.sync_reqs[rid] - {s.entries[cache_idx].disk_idx}])
+  }
+
+  predicate NewHavocTicket(s: Variables, s': Variables, op: ifc.Op) {
+    && op.Start?
+    && op.input.HavocInput?
+    && op.rid !in s.havocs
+    && s' == s.(havocs := s.havocs[op.rid := op.input.key])
+  }
+
+  predicate ConsumeHavocStub(s: Variables, s': Variables, op: ifc.Op) {
+    && op.End?
+    && op.output.HavocOutput?
+    && op.rid in s.havocs
+    && s' == s.(havocs := s.havocs - {op.rid})
   }
 
   predicate ApplyRead(s: Variables, s': Variables, op: ifc.Op,
@@ -191,11 +208,36 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
       .(entries := s.entries[cache_idx :=
           Dirty(s.entries[cache_idx].disk_idx, s.tickets[rid].data)])
   }
+
+  predicate HavocNew(s: Variables, s': Variables, op: ifc.Op,
+      cache_idx: nat, rid: RequestId, new_data: DiskIfc.Block)
+  {
+    && op.InternalOp?
+    && cache_idx in s.entries
+    && s.entries[cache_idx] == Empty
+    && rid in s.havocs
+    && (forall i | i in s.entries :: !s.entries[i].Empty? ==>
+          s.entries[i].disk_idx != s.havocs[rid])
+    && s' == s
+      .(entries := s.entries[cache_idx := Dirty(s.havocs[rid], new_data)])
+  }
+
+  predicate HavocEvict(s: Variables, s': Variables, op: ifc.Op,
+      cache_idx: nat, rid: RequestId)
+  {
+    && op.InternalOp?
+    && cache_idx in s.entries
+    && (s.entries[cache_idx].Clean? || s.entries[cache_idx].Dirty?)
+    && rid in s.havocs
+    && s.entries[cache_idx].disk_idx == s.havocs[rid]
+    && s' == s
+      .(entries := s.entries[cache_idx := Empty])
+  }
   
   datatype Step =
      | StartRead_Step(cache_idx: nat, disk_idx: nat)
      | FinishRead_Step(cache_idx: nat, disk_idx: nat) 
-     | MakeDirty_Step(cache_idx: nat) 
+     | MarkDirty_Step(cache_idx: nat) 
      | StartWriteback_Step(cache_idx: nat, disk_idx: nat) 
      | FinishWriteback_Step(cache_idx: nat, disk_idx: nat) 
      | Evict_Step(cache_idx: nat) 
@@ -206,16 +248,20 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
      | ConsumeStub_Step
      | NewSyncTicket_Step
      | ConsumeSyncStub_Step
+     | NewHavocTicket_Step
+     | ConsumeHavocStub_Step
      | ObserveCleanForSync_Step(rid: RequestId, cache_idx: nat)
      | ApplyRead_Step(rid: RequestId, cache_idx: nat) 
      | ApplyWrite_Step(rid: RequestId, cache_idx: nat) 
+     | HavocNew_Step(cache_idx: nat, rid: RequestId, block: DiskIfc.Block)
+     | HavocEvict_Step(cache_idx: nat, rid: RequestId) 
      | Stutter_Step
 
   predicate NextStep(s: Variables, s': Variables, op: ifc.Op, step: Step) {
     match step {
        case StartRead_Step(cache_idx, disk_idx) => StartRead(s, s', op, cache_idx, disk_idx)
        case FinishRead_Step(cache_idx, disk_idx) => FinishRead(s, s', op, cache_idx, disk_idx)
-       case MakeDirty_Step(cache_idx) => MakeDirty(s, s', op, cache_idx)
+       case MarkDirty_Step(cache_idx) => MarkDirty(s, s', op, cache_idx)
        case StartWriteback_Step(cache_idx, disk_idx) => StartWriteback(
           s, s', op, cache_idx, disk_idx)
        case FinishWriteback_Step(cache_idx, disk_idx) => FinishWriteback(
@@ -228,10 +274,14 @@ module SimpleCacheStateMachine refines StateMachine(CrashAsyncIfc(CacheIfc)) {
        case ConsumeStub_Step => ConsumeStub(s, s', op)
        case NewSyncTicket_Step => NewSyncTicket(s, s', op)
        case ConsumeSyncStub_Step => ConsumeSyncStub(s, s', op)
+       case NewHavocTicket_Step => NewHavocTicket(s, s', op)
+       case ConsumeHavocStub_Step => ConsumeHavocStub(s, s', op)
        case ObserveCleanForSync_Step(rid, cache_idx) =>
           ObserveCleanForSync(s, s', op, rid, cache_idx)
        case ApplyRead_Step(rid, cache_idx) => ApplyRead(s, s', op, rid, cache_idx)
        case ApplyWrite_Step(rid, cache_idx) => ApplyWrite(s, s', op, rid, cache_idx)
+       case HavocNew_Step(cache_idx, rid, block) => HavocNew(s, s', op, cache_idx, rid, block)
+       case HavocEvict_Step(cache_idx, rid) => HavocEvict(s, s', op, cache_idx, rid)
        case Stutter_Step => s == s' && op.InternalOp?
     }
   }

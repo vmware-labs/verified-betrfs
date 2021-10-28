@@ -140,9 +140,9 @@ module SimpleCache_Refines_AbstractCache refines
     assert B.NextStep(I(s), I(s'), op, B.Stutter_Step);
   }
 
-  lemma MakeDirty_Refines(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat) 
+  lemma MarkDirty_Refines(s: Variables, s': Variables, op: ifc.Op, cache_idx: nat) 
   requires Inv(s)
-  requires MakeDirty(s, s', op, cache_idx)
+  requires MarkDirty(s, s', op, cache_idx)
   requires Inv(s')
   ensures B.Next(I(s), I(s'), op)
   {
@@ -301,7 +301,7 @@ module SimpleCache_Refines_AbstractCache refines
     match step {
       case StartRead_Step(cache_idx, disk_idx) => { StartRead_Refines(s, s', op, cache_idx, disk_idx); }
       case FinishRead_Step(cache_idx, disk_idx) => { FinishRead_Refines(s, s', op, cache_idx, disk_idx); }
-      case MakeDirty_Step(cache_idx) => { MakeDirty_Refines(s, s', op, cache_idx); }
+      case MarkDirty_Step(cache_idx) => { MarkDirty_Refines(s, s', op, cache_idx); }
       case StartWriteback_Step(cache_idx, disk_idx) => { StartWriteback_Refines(s, s', op, cache_idx, disk_idx); }
       case FinishWriteback_Step(cache_idx, disk_idx) => { FinishWriteback_Refines(s, s', op, cache_idx, disk_idx) ; }
       case Evict_Step(cache_idx) => { Evict_Refines(s, s', op, cache_idx); }
