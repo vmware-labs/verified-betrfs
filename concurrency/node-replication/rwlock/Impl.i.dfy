@@ -56,7 +56,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     linear var refCounts: lseq<CachePadded<Atomic<uint8, Token>>>
         := lseq_alloc(RC_WIDTH_64());
     var j: uint64 := 0;
-    while j < 24
+    while j < RC_WIDTH_64()
     invariant 0 <= j <= RC_WIDTH_64()
     invariant |refCounts| == RC_WIDTH
     invariant forall i: int | 0 <= i < j as int ::
@@ -237,7 +237,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       }
 
       var visited:uint64 := 0;
-      var rc_width:uint64 := 24;
+      var rc_width:uint64 := RC_WIDTH_64();
 
       while visited < rc_width
         invariant 0 <= visited as int <= RC_WIDTH
