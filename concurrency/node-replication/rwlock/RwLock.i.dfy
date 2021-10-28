@@ -572,8 +572,9 @@ module RwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
     && s.exclusiveAcquisition == ExcAcqObtained // client starts out holding the exclusiveAcquisition lock so it can determine the inital value of the lock-protected field.
   }
 
+  // TODO(travis): this used to be a module-refinement-driven obligation, but now it's not. What happened?
   lemma InitImpliesInv(x: M)
-//  requires Init(x)
+  requires Init(x)
 //  ensures Inv(x)
 //  ensures I(x) == None
   {
@@ -603,6 +604,7 @@ module RwLockToken(contentsTypeMod: ContentsTypeMod) {
   import opened Options
   import opened Constants
   import opened RwLock(contentsTypeMod)
+  import opened FullMaps
   import HandleTypeMod = Handle(contentsTypeMod)
   import T = RwTokens(RwLock)
 
@@ -826,17 +828,54 @@ module RwLockToken(contentsTypeMod: ContentsTypeMod) {
     rc' := T.internal_transition_2_1(rc', handle', a);
   }
 
-  // TODO(jonh)
+  lemma ShardAcqObtained_guard(t: nat, b: StoredType)
+    ensures guard(SharedAcqHandle(SharedAcqObtained(t, b)), b)
+  {
+    SumFilterSimp<SharedAcquisitionStatus>();
+
+    var m := SharedAcqHandle(SharedAcqObtained(t, b));
+    forall p: M | Inv(dot(m, p))
+    ensures I(dot(m, p)) == Some(b)
+    {
+      var x := dot(m, p);
+      assert x != unit() by {
+        var ss := SharedAcqObtained(t, b);
+        assert x.sharedAcquisition.m[ss] > 0;
+        assert unit().sharedAcquisition.m[ss] == 0;
+      }
+      assert x.exclusiveFlag.stored_value == b;
+    }
+  }
+
   glinear method borrow_inner(gshared tok: Token, ghost t: nat, ghost b: StoredType)
   returns (gshared b': StoredType)
   requires tok.val == SharedAcqHandle(SharedAcqObtained(t, b))
   ensures b' == b
+  {
+    ShardAcqObtained_guard(t, b);
+    b' := T.borrow_from_guard(tok, b);
+  }
 
   glinear method perform_Init(glinear b: StoredType)
-  returns (glinear central: Token, glinear rcs: Token)
-  ensures central.loc == rcs.loc
-  ensures central.val == ExcFlagHandle(ExclusiveFlag(false, b))
+  returns (glinear excFlagToken: Token, glinear rcs: Token)
+  ensures excFlagToken.loc == rcs.loc
+  ensures excFlagToken.val == ExcFlagHandle(ExclusiveFlag(false, b))
   ensures rcs.val == Rcs(0, RC_WIDTH as int)
+  {
+    //reveal_RcRange(); // not sure why we don't need this anymore?
+    var x := ExcFlagHandle(ExclusiveFlag(false, b));
+    var y := Rcs(0, RC_WIDTH as int);
+    var z := dot(x, y);
+
+    forall t | 0 <= t < RC_WIDTH as int
+    ensures CountAllRefs(z, t) == 0
+    {
+      SumFilterSimp<SharedAcquisitionStatus>();
+    }
+
+    glinear var tok := T.initialize_nonempty(b, z);
+    excFlagToken, rcs := T.T.split(tok, x, y);
+  }
 
   glinear method pop_rcs(glinear t: Token, ghost a: nat, ghost b: nat)
   returns (glinear x: Token, glinear t': Token)
@@ -846,22 +885,10 @@ module RwLockToken(contentsTypeMod: ContentsTypeMod) {
   ensures x.val == RefCount(a, 0)
   ensures x.loc == t'.loc == t.loc
 
+  // crib from scache
+
 
 //  function method {:opaque} borrow_sot(gshared sot: SharedObtainedToken) : (gshared b: Handle)
 //  requires sot.is_valid()
 //  ensures b == sot.b
-//
-//  glinear method perform_Init(glinear b: Handle)
-//  returns (glinear exclusiveFlag: Token, glinear rcs: Token)
-//  ensures exclusiveFlag.loc == rcs.loc
-//  ensures exclusiveFlag.val == ExcFlagHandle(ExclusiveFlag(Unmapped, b))
-//  ensures rcs.val == Rcs(0, RC_WIDTH as int)
-//
-//  glinear method pop_rcs(glinear t: Token, ghost a: nat, ghost b: nat)
-//  returns (glinear x: Token, glinear t': Token)
-//  requires a < b
-//  requires t.val == Rcs(a, b)
-//  ensures t'.val == Rcs(a+1, b)
-//  ensures x.val == SharedFlagHandle(a, 0)
-//  ensures x.loc == t'.loc == t.loc
 }
