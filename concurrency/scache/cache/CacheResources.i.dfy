@@ -22,7 +22,7 @@ module CacheResources {
     }
   }
 
-  datatype {:glinear_fold} HavocPermission = HavocPermission(ghost rid: RequestId, ghost disk_idx: int)
+  datatype {:glinear_fold} HavocPermission = HavocPermission(ghost rid: RequestId, ghost disk_idx: nat)
   {
     function defn() : T.Token {
       T.Token(CacheSSM.Havoc(rid, disk_idx))
