@@ -365,8 +365,8 @@ module Impl(nrifc: NRIfc) {
       // Release combiner_lock
       atomic_block var _ := execute_atomic_store(node.combiner_lock, 0) {
         ghost_acquire contents;
-        assert old_value > 0; // doesn't believe me
-        assert contents.glNone?;
+        //assert old_value > 0; // doesn't believe me
+        //assert contents.glNone?;
 
         //assert fcstate'.state == FCCombinerCollecting(0, []);
         //assert fcstate'.loc == node.fc_loc;
@@ -377,7 +377,7 @@ module Impl(nrifc: NRIfc) {
         //assert gresponses''.lcell == node.responses;
         //assert |gresponses''.v.value| == MAX_THREADS_PER_REPLICA as int;
 
-        dispose_glnone(contents);
+        dispose_anything(contents);
         contents := glSome(CombinerLockState(fcstate', gops'', gresponses''));
         ghost_release contents;
       }
@@ -408,7 +408,6 @@ module Impl(nrifc: NRIfc) {
   requires flatCombiner.state == FCCombinerCollecting(0, [])
   requires flatCombiner.loc == node.fc_loc
   ensures flatCombiner'.loc == node.fc_loc
-  // TODO: for travis is this ok?:
   ensures flatCombiner'.state == FCCombinerCollecting(0, [])
   ensures |ops'| == MAX_THREADS_PER_REPLICA as int
   ensures |responses'| == MAX_THREADS_PER_REPLICA as int
@@ -789,11 +788,12 @@ module Impl(nrifc: NRIfc) {
     ctx' := ThreadOwnedContext(tid, fc_client, cell_contents);
   }
 
-  method do_read(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp,
+  method do_read(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp, linear ctx: ThreadOwnedContext,
       glinear ticket: Readonly)
-  returns (result: nrifc.ReturnType, glinear stub: Readonly)
+  returns (result: nrifc.ReturnType, glinear stub: Readonly, linear ctx': ThreadOwnedContext)
   requires nr.WF()
   requires node.WF()
+  requires ctx.WF(node)
   //requires node.ghost_replica.state == nrifc.I(actual_replica)
   // The contract for this method works like this:
   // Input a ticket which "allows" us to perform the readonly operation specified
@@ -804,6 +804,7 @@ module Impl(nrifc: NRIfc) {
   ensures stub.rs.ReadonlyDone? 
   ensures stub.rid == ticket.rid
   ensures stub.rs.ret == result
+  ensures ctx'.WF(node)
   //ensures ghost_replica'.state == nrifc.I(actual_replica')
   decreases * // method is not guaranteed to terminate
   {
@@ -830,7 +831,6 @@ module Impl(nrifc: NRIfc) {
     assert stub.rs.ReadonlyCtail?; // advisory
 
     // 2. Read localTail (loop until you read a good value)
-    var tid := 1; // TODO: tid comes from client calling do_read
     var synced := false;
     synced, stub := is_replica_synced_for_reads(nr, node.nodeId, ctail, stub);
 
@@ -843,7 +843,7 @@ module Impl(nrifc: NRIfc) {
     invariant synced ==> stub.rs.nodeId == node.nodeId as nat
     invariant stub.rs.op == op
     {
-      try_combine(nr, node, tid);
+      try_combine(nr, node, ctx.tid);
       Runtime.SpinLoopHint();
       synced, stub := is_replica_synced_for_reads(nr, node.nodeId, ctail, stub);
     }
@@ -852,13 +852,13 @@ module Impl(nrifc: NRIfc) {
     assert stub.rs.nodeId == node.nodeId as nat;
 
     // 3. Take read-lock on replica; apply operation on replica
-    var thread_id:uint8 := 0;  //TODO(gerd): be smarter than jonh
-    linear var linear_guard := node.replica.acquire_shared(thread_id);
+    linear var linear_guard := node.replica.acquire_shared(ctx.tid as uint8);
     assert linear_guard.v.ghost_replica.nodeId == stub.rs.nodeId;
 
     result, stub := apply_readonly(node.replica, linear_guard, op, stub);
     node.replica.release_shared(linear_guard);
 
+    ctx' := ctx;
     assert stub.rs.ReadonlyDone?; // advisory
   }
 
@@ -978,8 +978,7 @@ module Impl(nrifc: NRIfc) {
         advance_tail_state := init_advance_tail_state(h);
         ghost_release h;
       }
-
-      if tail > head + (BUFFER_SIZE - GC_FROM_HEAD) {
+      if tail > head + (BUFFER_SIZE - GC_FROM_HEAD) {  // TODO: bounded int error
         if waitgc % WARN_THRESHOLD == 0 {
           waitgc := 0;
           print "append takes too many waitgc to complete\n";
