@@ -296,7 +296,8 @@ module Impl(nrifc: NRIfc) {
 
   // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L584
   method try_combine(shared nr: NR, shared node: Node, tid: uint64)
-  requires tid > 0
+  // requires tid > 0, rust version had tid > 0, in dafny we do tid >= 0
+  requires tid < MAX_THREADS_PER_REPLICA
   requires nr.WF()
   requires node.WF()
   decreases *
@@ -320,8 +321,8 @@ module Impl(nrifc: NRIfc) {
     glinear var gops: glOption<LC.LCellContents<seq<nrifc.UpdateOp>>>;
     glinear var gresponses: glOption<LC.LCellContents<seq<nrifc.ReturnType>>>;
     
-    // Try and acquire the lock...
-    atomic_block var success := execute_atomic_compare_and_set_weak(node.combiner_lock, 0, tid) {
+    // Try and acquire the lock... (tid+1 because we reserve 0 as "no-one holds the lock")
+    atomic_block var success := execute_atomic_compare_and_set_weak(node.combiner_lock, 0, tid + 1) {
       ghost_acquire contents;
       if success {
         assert contents.glSome?;
