@@ -11,7 +11,7 @@ DAFNY_FLAGS=
 DAFNY_GLOBAL_FLAGS=
 
 ifndef TL
-	TL=20
+	TL=0
 endif
 ifeq "$(TL)" "0"
   TIMELIMIT=
