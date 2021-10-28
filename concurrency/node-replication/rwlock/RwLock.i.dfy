@@ -589,14 +589,25 @@ module RwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
   // ensures I(unit()) == None
   {}
 
+  //////////////////////////////////////////////////////////////////////////////
+  // stuff cribbed out of scache/rwlock/RwLock.i.dfy; should refactor
+  // some pretty way.
+  function union_map<K, V>(m1: map<K, V>, m2: map<K, V>) : map<K, V> {
+    map k | k in m1.Keys + m2.Keys :: if k in m1 then m1[k] else m2[k]
+  }
+
+  function {:opaque} RcRange(s: nat, t: nat) : map<ThreadId, nat>
+  {
+    map i: ThreadId | s <= i < t :: 0
+  }
+  //
+  //////////////////////////////////////////////////////////////////////////////
+
+
   function Rcs(s: nat, t: nat) : M
   requires s <= t
-  decreases t - s
   {
-    if t == s then
-      unit()
-    else
-      dot(RefCount(s, 0), Rcs(s+1, t))
+    M(ExclusiveFlagUnknown, RcRange(s, t), ExcAcqNotAttempting, zero_map())
   }
 }
 
@@ -862,7 +873,7 @@ module RwLockToken(contentsTypeMod: ContentsTypeMod) {
   ensures excFlagToken.val == ExcFlagHandle(ExclusiveFlag(false, b))
   ensures rcs.val == Rcs(0, RC_WIDTH as int)
   {
-    //reveal_RcRange(); // not sure why we don't need this anymore?
+    reveal_RcRange();
     var x := ExcFlagHandle(ExclusiveFlag(false, b));
     var y := Rcs(0, RC_WIDTH as int);
     var z := dot(x, y);
@@ -884,11 +895,25 @@ module RwLockToken(contentsTypeMod: ContentsTypeMod) {
   ensures t'.val == Rcs(a+1, b)
   ensures x.val == RefCount(a, 0)
   ensures x.loc == t'.loc == t.loc
-
-  // crib from scache
-
-
-//  function method {:opaque} borrow_sot(gshared sot: SharedObtainedToken) : (gshared b: Handle)
-//  requires sot.is_valid()
-//  ensures b == sot.b
+  {
+    assert dot(RefCount(a, 0), Rcs(a+1, b)).M? by { reveal_RcRange(); }
+    assert t.val.sharedFlags == dot(RefCount(a, 0), Rcs(a+1, b)).sharedFlags
+    by {
+      var g := union_map(map[a := 0], RcRange(a+1, b));
+      var h := RcRange(a, b);
+      reveal_RcRange();
+      forall k | k in g
+      ensures k in h && g[k] == h[k]
+      {
+      }
+      forall k | k in h
+      ensures k in g
+      {
+        if k == a { assert k in g; }
+        else { assert k in g; }
+      }
+      assert g == h;
+    }
+    x, t' := T.T.split(t, RefCount(a, 0), Rcs(a+1, b));
+  }
 }
