@@ -215,6 +215,46 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       }
   }
 
+  function ReaderLogicalRange(c: CombinerState) : set<nat>
+  {
+     match c {
+      case CombinerIdle => {}
+      case CombinerReading(readerState: ReaderState) => (
+        match readerState {
+          case ReaderStarting(_) => {}
+          case ReaderRange(start: nat, end: nat) => {} // not really accessing yet
+          case ReaderGuard(start: nat, end: nat, cur: nat , _) => (
+            {cur} // we only access this one.
+          )
+        }
+      )
+      case CombinerAdvancingHead(idx: nat, min_tail: nat) => {}
+      case CombinerAdvancingTail(observed_head: nat) => {}
+      case CombinerAppending(cur_idx: nat, tail: nat) => {}
+    }
+  }
+
+function CombinerLogicalRange(c: CombinerState) : set<nat>
+  {
+    match c {
+      case CombinerIdle => {}
+      case CombinerReading(readerState: ReaderState) => {}
+      case CombinerAdvancingHead(idx: nat, min_tail: nat) => {}
+      case CombinerAdvancingTail(observed_head: nat) => {}
+      case CombinerAppending(cur_idx: nat, tail: nat) => (
+        set i | cur_idx <= i < tail :: i
+      )
+    }
+  }
+
+  predicate LogicalRangesNoOverlap(x: M)
+    requires Complete(x)
+  {
+    forall i, j | 0 <= i < NUM_REPLICAS as nat && 0 <= j < NUM_REPLICAS as nat && i != j ::
+      && (CombinerLogicalRange(x.combinerState[i]) !! CombinerLogicalRange(x.combinerState[j]))
+      && (CombinerLogicalRange(x.combinerState[i]) !! ReaderLogicalRange(x.combinerState[j]))
+  }
+
   predicate Inv(x: M)
   {
     && Complete(x)
@@ -224,6 +264,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && BufferContents(x)
     && CombinerStateValid(x)
     && ReaderStateValid(x)
+    && LogicalRangesNoOverlap(x)
   }
 
   /*
