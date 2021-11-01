@@ -13,14 +13,16 @@
 
 // - RwLock Benchmarking -
 
-typedef RwLockImpl_ON_BoolContentsTypeMod__Compile::RwLock RwLockBool;
+// Give a friendlier name to Dafny's generated namespace.
+namespace rwlock = RwLockImpl_ON_BoolContentsTypeMod__Compile;
+typedef rwlock::RwLock RwLockBool;
 
 std::atomic<size_t> n_threads_ready{0};
 std::atomic<bool> start_benchmark{false};
 std::atomic<bool> exit_benchmark{false};
 
 void run_rwlock_bench(
-    size_t thread_id,
+    uint8_t thread_id,
     RwLockBool& rwlock,
     std::atomic<uint64_t>& total_iters)
 {
@@ -29,8 +31,16 @@ void run_rwlock_bench(
 
   uint64_t iters = 0;
   while (!exit_benchmark.load(std::memory_order_relaxed)) {
-    rwlock.acquire();
-    rwlock.release(false);
+    if (iters & ~0xf) { // do a read
+      auto shared_guard = rwlock.acquire__shared(thread_id);
+      bool* value = rwlock::__default::borrow__shared(rwlock, shared_guard);
+      rwlock.release__shared(shared_guard);
+    } else { // do a write
+      bool value = rwlock.acquire();
+      value = !value;
+      rwlock.release(value);
+    }
+
     ++iters;
   }
 
@@ -41,12 +51,11 @@ int main(int argc, char* argv[]) {
   const size_t n_threads = 4;
   const auto run_duration = std::chrono::seconds{1};
 
-  auto rwlock =
-    RwLockImpl_ON_BoolContentsTypeMod__Compile::__default::new__mutex(false);
+  auto rwlock = rwlock::__default::new__mutex(false);
   std::atomic<uint64_t> total_iters{0};
 
   std::vector<std::thread> threads{};
-  for (size_t thread_id = 0; thread_id < n_threads; ++thread_id)
+  for (uint8_t thread_id = 0; thread_id < n_threads; ++thread_id)
     threads.emplace_back(std::thread{run_rwlock_bench,
                                      thread_id,
                                      std::ref(rwlock),
