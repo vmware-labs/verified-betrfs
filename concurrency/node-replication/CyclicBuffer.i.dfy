@@ -42,6 +42,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     | MInvalid
     | M(
       // Logical index into the above slice at which the log starts.
+      // NOTE: the tail _does not_ monotonically advances. It's only guaranteed to be <= all the local tails.
       ghost head: Option<nat>,
       // Logical index into the above slice at which the log ends.
       // New appends go here.
@@ -53,7 +54,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       // that haven't been executed by all replicas.
       ghost localTails: map<NodeId, nat>,
 
-      ghost contents: map<int, StoredType>,
+      ghost contents: map<int, Option<StoredType>>,
 
       // The 'alive' bit flips back and forth. So sometimes 'true' means 'alive',
       // and sometimes 'false' means 'alive'.
@@ -90,7 +91,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   function MinLocalTail(ltails: map<NodeId, nat>) : (m : nat)
     ensures forall i | i in ltails :: m <= ltails[i]
-
+    ensures m in ltails.Values
 
   /*
    * ============================================================================================
@@ -104,7 +105,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && x.head.Some?
     && x.tail.Some?
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.localTails)
-    && (true /* contents */)
+    && (forall i : int :: (x.tail.value - (BUFFER_SIZE as nat) <= i < x.tail.value) <==> i in x.contents)
     && (forall i: nat :: i < BUFFER_SIZE as nat <==> i in x.aliveBits)
     && (forall i: nat :: LogicalToPhysicalIndex(i) in x.aliveBits)
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.combinerState)
@@ -112,6 +113,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   predicate PointerOrdering(x: M)
     requires Complete(x)
+    ensures PointerOrdering(x) ==> (x.head.value <= MinLocalTail(x.localTails) <= x.tail.value)
   {
     // the head must be smaller or equal to the tail,
     && x.head.value <= x.tail.value
@@ -130,29 +132,29 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   predicate AliveBits(x: M)
     requires Complete(x)
+    requires PointerOrdering(x)
+    requires PointerDifferences(x)
   {
-    // everything from the current head up to the tail is not alive.
-    // forall i | i in SetOfFreeBufferEntries(x.head.value, x.tail.value) :: !EntryIsAlive(x.aliveBits, i)
-    // forall
-    // forall n | n in x.combinerState :: match x.combinerState[n] {
-    //     case CombinerAppending(cur_idx: nat, tail: nat) => (
-    //       forall i | cur_idx <= i < tail :: !EntryIsAlive(x.aliveBits, LogicalToPhysicalIndex(i))
-    //     )
-    //     case _ => true
-    //   }
-    && true
+    && (forall i | i in SetOfFreeBufferEntries(MinLocalTail(x.localTails), x.tail.value) :: !EntryIsAlive(x.aliveBits, i))
   }
 
   predicate BufferContents(x: M)
     requires Complete(x)
   {
-    // the contents of
-    && true
+    forall i : int | x.tail.value - (BUFFER_SIZE as nat) <= i < x.tail.value ::
+      (
+        || EntryIsAlive(x.aliveBits, i)
+        || i < MinLocalTail(x.localTails)
+      ) <==> x.contents[i].Some?
   }
 
 
   predicate ReaderStateValid(x: M)
     requires Complete(x)
+    //? requires PointerOrdering(x)
+    //? requires PointerDifferences(x)
+    //? requires AliveBits(x)
+    //? requires BufferContents(x)
   {
     forall n | n in x.combinerState && x.combinerState[n].CombinerReading?
       :: match  x.combinerState[n].readerState {
@@ -180,8 +182,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           // the entry that we read must be alive
           && EntryIsAlive(x.aliveBits, cur)
           // the thing we are ready should match the log content
-          // XXX: is that actually true
-          && cur in x.contents && x.contents[cur] == val
+          // TODO(andrea)
+          && x.contents[cur] == Some(val)
         )
     }
   }
@@ -282,7 +284,7 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in s.combinerState)
     && (forall i | i in s.combinerState :: s.combinerState[i].CombinerIdle?)
     && (forall i: nat :: i < BUFFER_SIZE as nat <==> i in s.aliveBits)
-    && (forall i: int :: -(BUFFER_SIZE as int) <= i < -1 <==> i in s.contents)
+    && (forall i: int :: -(BUFFER_SIZE as int) <= i < -1 <==> (i in s.contents && s.contents[i].Some?))
   }
 
   lemma InitImpliesInv(x: M)
@@ -300,12 +302,9 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
 
   function I(x: M) : map<Key, StoredType>
   {
-    // TODO: Figure out something here...
-    map i : nat | x.tail.value - (BUFFER_SIZE as nat) <= i < x.tail.value && i in x.contents
-      && EntryIsAlive(x.aliveBits, i)
-      :: i as Key := x.contents[i]
+    // Withdrawn: non-alive cells between head and tail
+    map i : nat | i in x.contents.Keys && x.contents[i].Some? :: x.contents[i].value
   }
-  // TODO: checked out between the latest alive cell and the tail
 
   /*
    * ============================================================================================
@@ -394,18 +393,18 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     set x | 0 <= x < BUFFER_SIZE as nat :: x
   }
 
-  function SetOfFreeBufferEntries(logical_head: int, logital_tail: int) : set<nat>
-    requires logical_head <= logital_tail
-    requires ((logital_tail -logical_head) < BUFFER_SIZE as nat)
+  function SetOfFreeBufferEntries(min_ltails: int, logital_tail: int) : set<nat>
+    requires min_ltails <= logital_tail
+    requires ((logital_tail - min_ltails) < BUFFER_SIZE as nat)
   {
-    SetOfBufferEntries() - SetOfReservedBufferEntries(logical_head, logital_tail)
+    SetOfBufferEntries() - SetOfReservedBufferEntries(min_ltails, logital_tail)
   }
 
-  function SetOfReservedBufferEntries(logical_head: int, logital_tail: int) : set<nat>
-    requires logical_head <= logital_tail
-    requires ((logital_tail -logical_head) < BUFFER_SIZE as nat)
+  function SetOfReservedBufferEntries(min_ltails: int, logital_tail: int) : set<nat>
+    requires min_ltails <= logital_tail
+    requires ((logital_tail - min_ltails) < BUFFER_SIZE as nat)
   {
-    set x | logical_head <= x < logital_tail :: LogicalToPhysicalIndex(x)
+    set x | min_ltails <= x < logital_tail :: LogicalToPhysicalIndex(x)
   }
 
 
@@ -659,7 +658,6 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
 
   /* ----------------------------------------------------------------------------------------- */
 
-  // TODO: the withdrawn type here may be wrong
   predicate FinishAdvanceTail(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>) // withdraw
   {
     && m.M?
@@ -675,7 +673,7 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     && (forall i | m.tail.value <= i < new_tail ::
       && i in withdrawn
       && (i - BUFFER_SIZE as int) in m.contents
-      && withdrawn[i] == m.contents[i - BUFFER_SIZE as int])
+      && Some(withdrawn[i]) == m.contents[i - BUFFER_SIZE as int])
   }
 
   lemma FinishAdvanceTail_is_withdraw_many(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>)
@@ -712,14 +710,14 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     && var combinerBefore := m.combinerState[combinerNodeId];
     && var key := combinerBefore.cur_idx;
     && key in m.contents
+    && m.contents[key].None?
     && LogicalToPhysicalIndex(key) in m.aliveBits
     && !EntryIsAlive(m.aliveBits, key)
-
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := combinerBefore.(cur_idx := combinerBefore.cur_idx + 1)],
       aliveBits := m.aliveBits[LogicalToPhysicalIndex(key) := LogicalToAliveBitAliveWhen(key)],
-      contents := m.contents[key := deposited])
+      contents := m.contents[key := Some(deposited)])
   }
 
   lemma AppendFlipBit_is_deposit(m: M, m': M, combinerNodeId: nat, deposited: StoredType)
@@ -819,6 +817,7 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     && var readerBefore := m.combinerState[combinerNodeId].readerState;
 
     && i in m.contents
+    && m.contents[i].Some?
     && readerBefore.start <= i < readerBefore.end
 
     && LogicalToPhysicalIndex(i) in m.aliveBits
@@ -826,7 +825,7 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerReading(
-        ReaderGuard(readerBefore.start, readerBefore.end, i, m.contents[i]))]
+        ReaderGuard(readerBefore.start, readerBefore.end, i, m.contents[i].value))]
       )
   }
 
