@@ -84,7 +84,6 @@ template <typename Duration>
 void bench_nr(size_t n_threads, Duration duration);
 
 int main(int argc, char* argv[]) {
-  const size_t n_threads = 4;
   const auto run_duration = std::chrono::seconds{1};
 
   if (argc < 2) {
@@ -93,9 +92,9 @@ int main(int argc, char* argv[]) {
   }
 
   if (std::string{argv[1]} == "rwlock") {
-    bench_rwlock(n_threads, run_duration);
+    bench_rwlock(NUM_THREADS, run_duration);
   } else {
-    bench_nr(n_threads, run_duration);
+    bench_nr(NUM_THREADS, run_duration);
   }
 
   return 0;
@@ -136,7 +135,7 @@ class nr_helper {
   nr::NR& get_nr() { return *nr; }
 
   nr::Node& get_node(uint8_t thread_id) {
-    return nodes.at(thread_id / NUM_REPLICAS);
+    return nodes[thread_id / THREADS_PER_REPLICA];
   }
 
   void init_nr() {
@@ -151,8 +150,8 @@ class nr_helper {
     std::unique_lock<std::mutex> lock{init_mutex};
 
     nrinit::NodeCreationToken* token{nullptr};
-    if (thread_id % NUM_REPLICAS == 0)
-      token = &node_creation_tokens->at(thread_id / NUM_REPLICAS).a;
+    if (thread_id % THREADS_PER_REPLICA == 0)
+      token = &node_creation_tokens->at(thread_id / THREADS_PER_REPLICA).a;
 
     if (token) {
       auto r = nrinit::__default::initNode(*token);
@@ -163,20 +162,32 @@ class nr_helper {
       nodes.emplace(node_id, r.get<0>());
       thread_owned_contexts.emplace(node_id, r.get<1>());
 
-      if (nodes.size() == NUM_REPLICAS)
+      if (nodes.size() == NUM_REPLICAS) {
+        for (const auto& pair : thread_owned_contexts) {
+          const auto& contexts = pair.second;
+          for (const auto& context : *contexts) {
+            std::cout << "context tid " << context.a.tid << std::endl;
+          }
+        }
         all_nodes_init.notify_all();
+      }
     }
 
     while (nodes.size() < NUM_REPLICAS)
       all_nodes_init.wait(lock);
-    std::cout << "thread_id " << static_cast<uint32_t>(thread_id)
-              << " registered" << std::endl;
 
     // TODO(stutsman) no pinning, affinity, and threads on different
     // nodes may actually use the wrong replica; all this needs to be
     // fixed if we want to use this harness.
-    const uint8_t node_id = thread_id / NUM_REPLICAS;
-    return &thread_owned_contexts.at(node_id)->at(thread_id % NUM_REPLICAS).a;
+    const uint8_t node_id = thread_id / THREADS_PER_REPLICA;
+    const uint8_t context_index = thread_id % THREADS_PER_REPLICA;
+
+    std::cout << "thread_id " << static_cast<uint32_t>(thread_id)
+              << " registered with node_id " << static_cast<uint32_t>(node_id)
+              << " context " << static_cast<uint32_t>(context_index)
+              << std::endl;
+
+    return &thread_owned_contexts.at(node_id)->at(context_index).a;
   }
 };
 
@@ -195,20 +206,22 @@ void run_nr_bench(
   uint64_t iters = 0;
   while (!exit_benchmark.load(std::memory_order_relaxed)) {
     if (iters & ~0xf) { // do a read
+      std::cerr << "thread_id " << thread_id << "calling with tid " << context->tid << std::endl;
       Tuple<uint64_t, nr::ThreadOwnedContext> r =
         Impl_ON_CounterIfc__Compile::__default::do__read(
           nr_helper.get_nr(),
           nr_helper.get_node(thread_id),
           CounterIfc_Compile::ReadonlyOp{},
-          *context); // TODO(stutsman) seems weird to pass by val?
+          *context);
           std::cerr << "read_op done" << std::endl;
     } else { // do a write
+      std::cerr << "thread_id " << thread_id << "calling with tid " << context->tid << std::endl;
       Tuple<uint64_t, nr::ThreadOwnedContext> r =
         Impl_ON_CounterIfc__Compile::__default::do__update(
           nr_helper.get_nr(),
           nr_helper.get_node(thread_id),
           CounterIfc_Compile::UpdateOp{},
-          *context); // TODO(stutsman) seems weird to pass by val?
+          *context);
           std::cerr << "update_op done" << std::endl;
     }
 
