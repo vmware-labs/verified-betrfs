@@ -9,13 +9,13 @@ Bundle.i.cpp: *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy
 	-mv $(TMPNAME) $@
 
 Bundle.o: Bundle.i.cpp ../framework/Extern.h ../framework/LinearExtern.h
-	g++ -c -o Bundle.o Bundle.i.cpp -I ../../.dafny/dafny/Binaries/ -I ../framework/ -std=c++17 -O2
+	g++ -g -c -o Bundle.o Bundle.i.cpp -I ../../.dafny/dafny/Binaries/ -I ../framework/ -std=c++17 -O2
 
 main.o: main.cpp ../framework/Extern.h ../framework/LinearExtern.h Bundle.i.cpp
-	g++ -c -o main.o main.cpp -I ../../.dafny/dafny/Binaries/ -I ../framework/ -std=c++17 -O2
+	g++ -g -c -o main.o main.cpp -I ../../.dafny/dafny/Binaries/ -I ../framework/ -std=c++17 -O2
 
 app: main.o Bundle.o
-	g++ -o app Bundle.o main.o -lpthread
+	g++ -g -o app Bundle.o main.o -lpthread
 
 .PHONY: clean
 

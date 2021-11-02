@@ -7,7 +7,7 @@ module Constants {
   const WARN_THRESHOLD: uint64 := 0x1000_0000; // 1 << 28
 
   // Fixed number of replicas (in reference impl, this is variable)
-  const NUM_REPLICAS: uint64 := 4;
+  const NUM_REPLICAS: uint64 := 2;
   const BUFFER_SIZE: uint64 := 9999; // TODO
 
   // Should be configured to the exact number of threads for best performance
