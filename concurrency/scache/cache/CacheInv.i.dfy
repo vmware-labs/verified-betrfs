@@ -103,7 +103,7 @@ module CacheInv {
   requires A.NewTicket(s, s', rid, input)
   ensures Inv(s')
   {
-    assume false;
+    assert s'.machine.disk_idx_to_cache_idx == s.machine.disk_idx_to_cache_idx;
     assert s'.machine.entries == s.machine.entries;
     assert s'.machine.statuses == s.machine.statuses;
     assert s'.machine.read_reqs == s.machine.read_reqs;
@@ -121,13 +121,24 @@ module CacheInv {
   requires A.ConsumeStub(s, s', rid, output)
   ensures Inv(s')
   {
-    assume false;
+    assert s'.machine.disk_idx_to_cache_idx == s.machine.disk_idx_to_cache_idx;
     assert s'.machine.entries == s.machine.entries;
     assert s'.machine.statuses == s.machine.statuses;
+    assert s'.machine.read_reqs == s.machine.read_reqs;
+    assert s'.machine.read_resps == s.machine.read_resps;
+    assert s'.machine.write_reqs == s.machine.write_reqs;
+    assert s'.machine.write_resps == s.machine.write_resps;
+
 
     assert forall i :: InverseMapConsistent(s.machine, i) ==> InverseMapConsistent(s'.machine, i);
     assert forall i :: IsReading(s.machine, i) ==> IsReading(s'.machine, i);
     assert forall i :: IsWriting(s.machine, i) ==> IsWriting(s'.machine, i);
+
+    if !output.SyncOutput? && !output.HavocOutput? {
+      assert s'.machine.stubs == s.machine.stubs - {rid};
+    } else {
+      assert s'.machine.stubs == s.machine.stubs;
+    }
   }
 
   lemma StartRead_PreservesInv(s: A.Variables, s': A.Variables, cache_idx: nat, disk_idx: nat)
