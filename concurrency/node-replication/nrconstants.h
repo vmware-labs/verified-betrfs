@@ -3,7 +3,7 @@
 
 #include <cinttypes>
 
-const uint8_t NUM_THREADS = 8;
+const uint8_t NUM_THREADS = 4;
 const uint8_t NUM_REPLICAS = 2;
 const uint8_t THREADS_PER_REPLICA = NUM_THREADS / NUM_REPLICAS;
 

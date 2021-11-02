@@ -7,7 +7,8 @@ HEADERS := \
 	../framework/Extern.h \
 	../framework/LinearExtern.h \
 	Bundle.i.h \
-	nr.h
+	nr.h \
+	nrconstants.h
 
 Bundle.i.cpp Bundle.i.h: *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy
 	$(eval TMPNAME=$(abspath $(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@))))
