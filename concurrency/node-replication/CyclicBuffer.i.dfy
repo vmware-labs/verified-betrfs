@@ -324,7 +324,8 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in s.combinerState)
     && (forall i | i in s.combinerState :: s.combinerState[i].CombinerIdle?)
     && (forall i: nat :: i < BUFFER_SIZE as nat <==> i in s.aliveBits)
-    && (forall i: int :: -(BUFFER_SIZE as int) <= i < -1 <==> (i in s.contents && s.contents[i].Some?))
+    && (forall i: int :: -(BUFFER_SIZE as int) <= i < 0 <==> (i in s.contents))
+    && (forall i: int :: -(BUFFER_SIZE as int) <= i < 0 <==> (i in s.contents && s.contents[i].Some?))
   }
 
   lemma InitImpliesInv(x: M)
