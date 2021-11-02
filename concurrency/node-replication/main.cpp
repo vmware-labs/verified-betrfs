@@ -13,8 +13,8 @@
 // - RwLock Benchmarking -
 
 // Give a friendlier name to Dafny's generated namespace.
-namespace rwlock = RwLockImpl_ON_BoolContentsTypeMod__Compile;
-typedef rwlock::RwLock RwLockBool;
+namespace rwlock = RwLockImpl_ON_Uint64ContentsTypeMod__Compile;
+typedef rwlock::RwLock RwLockUint64;
 
 std::atomic<size_t> n_threads_ready{0};
 std::atomic<bool> start_benchmark{false};
@@ -22,7 +22,7 @@ std::atomic<bool> exit_benchmark{false};
 
 void run_rwlock_bench(
     uint8_t thread_id,
-    RwLockBool& rwlock,
+    RwLockUint64& rwlock,
     std::atomic<uint64_t>& total_updates,
     std::atomic<uint64_t>& total_reads)
 {
@@ -34,13 +34,12 @@ void run_rwlock_bench(
   while (!exit_benchmark.load(std::memory_order_relaxed)) {
     if ((reads + updates) & 0xf) { // do a read
       auto shared_guard = rwlock.acquire__shared(thread_id);
-      bool* value = rwlock::__default::borrow__shared(rwlock, shared_guard);
+      uint64_t* value = rwlock::__default::borrow__shared(rwlock, shared_guard);
       rwlock.release__shared(shared_guard);
       ++reads;
     } else { // do a write
       bool value = rwlock.acquire();
-      value = !value;
-      rwlock.release(value);
+      rwlock.release(value + 1);
       ++updates;
     }
   }
