@@ -81,15 +81,8 @@ class nr_helper {
       nodes.emplace(node_id, r.get<0>());
       thread_owned_contexts.emplace(node_id, r.get<1>());
 
-      if (nodes.size() == NUM_REPLICAS) {
-        for (const auto& pair : thread_owned_contexts) {
-          const auto& contexts = pair.second;
-          for (const auto& context : *contexts) {
-            std::cout << "context tid " << context.a.tid << std::endl;
-          }
-        }
+      if (nodes.size() == NUM_REPLICAS)
         all_nodes_init.notify_all();
-      }
     }
 
     while (nodes.size() < NUM_REPLICAS)

@@ -107,23 +107,19 @@ void run_nr_bench(
   uint64_t iters = 0;
   while (!exit_benchmark.load(std::memory_order_relaxed)) {
     if (iters & ~0xf) { // do a read
-      std::cerr << "thread_id " << thread_id << "calling with tid " << context->tid << std::endl;
       Tuple<uint64_t, nr::ThreadOwnedContext> r =
         Impl_ON_CounterIfc__Compile::__default::do__read(
           nr_helper.get_nr(),
           nr_helper.get_node(thread_id),
           CounterIfc_Compile::ReadonlyOp{},
           *context);
-          std::cerr << "read_op done" << std::endl;
     } else { // do a write
-      std::cerr << "thread_id " << thread_id << "calling with tid " << context->tid << std::endl;
       Tuple<uint64_t, nr::ThreadOwnedContext> r =
         Impl_ON_CounterIfc__Compile::__default::do__update(
           nr_helper.get_nr(),
           nr_helper.get_node(thread_id),
           CounterIfc_Compile::UpdateOp{},
           *context);
-          std::cerr << "update_op done" << std::endl;
     }
 
     ++iters;

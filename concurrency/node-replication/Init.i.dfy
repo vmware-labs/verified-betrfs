@@ -118,8 +118,11 @@ module Init(nrifc: NRIfc) {
     var dummy_resp: nrifc.ReturnType;
     linear var ops, responses;
     glinear var opsContents, responsesContents;
-    ops, opsContents := LC.new_lcell(); //seq_alloc(MAX_THREADS_PER_REPLICA, dummy_op));
-    responses, responsesContents := LC.new_lcell(); //seq_alloc(MAX_THREADS_PER_REPLICA, dummy_resp));
+    ops, opsContents := LC.new_lcell();
+    opsContents := LC.give_lcell(ops, opsContents, seq_alloc(MAX_THREADS_PER_REPLICA, dummy_op));
+
+    responses, responsesContents := LC.new_lcell();
+    responsesContents := LC.give_lcell(responses, responsesContents, seq_alloc(MAX_THREADS_PER_REPLICA, dummy_resp));
 
     glinear var cls := CombinerLockState(fc_combiner, opsContents, responsesContents);
 
