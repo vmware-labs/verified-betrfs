@@ -203,20 +203,50 @@ build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
-build/lib/Buckets/BucketLib.i.verchk: DAFNY_FLAGS=/noNLarith
-build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
-build/lib/DataStructures/BtreeModel.i.verchk: DAFNY_FLAGS=/noNLarith
-build/lib/Buckets/LKMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
-build/lib/Buckets/PackedKVMarshalling.i.verchk: DAFNY_FLAGS=/noNLarith
-build/Impl/NodeImpl.i.verchk: DAFNY_FLAGS=/noNLarith
-build/Impl/QueryImpl.i.verchk: DAFNY_FLAGS=/noNLarith
-build/ByteBlockCacheSystem/InterpretationDisk.i.verchk: DAFNY_FLAGS=/noNLarith
-build/Betree/BetreeInv.i.verchk: DAFNY_FLAGS=/proverOpt:O:smt.random_seed=1
-build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt:O:smt.random_seed=1
+### Establish Dafny flag defaults
 
-build/lib/Checksums/%.i.verchk: DAFNY_FLAGS=/noNLarith
-build/lib/Checksums/Nonlinear.i.verchk: DAFNY_FLAGS=
-build/concurrency/disciplined/CapacityAllocator.i.verchk: DAFNY_FLAGS=/noNLarith
+# this flag means _NO_ non-linear arithmetic
+# unfortunately it can only be set on a per-file basis?
+
+NONLINEAR_FLAGS = /noNLarith
+
+# Only use auto-induction when specified, across all files.
+# To enable auto-induction, add {:induction true} to your source file.
+
+INDUCTION_FLAGS = /induction:1
+
+OTHER_PROVER_FLAGS =
+
+### Adjust defaults for a couple of files
+# (It would be nice if we could do this in the source instead.)
+
+# enable nonlinear arithmetic for some files
+# Note: Nonlinear.i.dfy and Math.i.dfy are designed to use nonlinear arith.
+# The other files are legacy'ed in, but it's no big deal as long
+# as they verify.
+build/concurrency/Math/Nonlinear.i.verchk: NONLINEAR_FLAGS=
+build/lib/Math/Nonlinear.i.verchk: NONLINEAR_FLAGS=
+build/lib/Base/mathematics.i.verchk: NONLINEAR_FLAGS=
+build/Impl/BookkeepingModel.i.verchk: NONLINEAR_FLAGS=
+build/Impl/IOImpl.i.verchk: NONLINEAR_FLAGS=
+build/Impl/IOModel.i.verchk: NONLINEAR_FLAGS=
+build/Impl/SyncImpl.i.verchk: NONLINEAR_FLAGS=
+build/Impl/BookkeepingImpl.i.verchk: NONLINEAR_FLAGS=
+build/lib/Base/SetBijectivity.i.verchk: NONLINEAR_FLAGS=
+build/lib/Marshalling/GenericMarshalling.i.verchk: NONLINEAR_FLAGS=
+build/lib/Buckets/BucketFlushModel.i.verchk: NONLINEAR_FLAGS=
+build/lib/Base/Sequences.i.verchk: NONLINEAR_FLAGS=
+build/BlockCacheSystem/DiskLayout.i.verchk: NONLINEAR_FLAGS=
+build/ByteBlockCacheSystem/Marshalling.i.verchk: NONLINEAR_FLAGS=
+build/ByteBlockCacheSystem/JournalBytes.i.verchk: NONLINEAR_FLAGS=
+build/PivotBetree/Bounds.i.verchk: NONLINEAR_FLAGS=
+build/Impl/Mkfs.i.verchk: NONLINEAR_FLAGS=
+build/Impl/MkfsModel.i.verchk: NONLINEAR_FLAGS=
+build/Impl/MarshallingImpl.i.verchk: NONLINEAR_FLAGS=
+
+### Put all the flags together
+
+DAFNY_FLAGS = $(NONLINEAR_FLAGS) $(INDUCTION_FLAGS) $(OTHER_PROVER_FLAGS)
 
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
