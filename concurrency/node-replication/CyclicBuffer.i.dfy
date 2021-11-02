@@ -89,9 +89,49 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   }
 
 
+
+  function SetToSequence(s:set<nat>) : (r: seq<nat>)
+    ensures forall i | i in s :: i in r
+    ensures forall i | 0 <= i < |r| :: r[i] in s
+    decreases s
+  {
+    if s == {} then []
+    else
+      var y := Pick(s);
+      [y] + SetToSequence(s - {y})
+  }
+
+  function Pick(s: set<nat>): nat
+    requires s != {}
+  {
+    var x :| x in s; x
+  }
+
+  function min(a: nat, b: nat) : (r: nat)
+    ensures r <= a && r <= b
+  {
+    if a < b then a
+    else b
+  }
+
+
+  function MinLocalTailRec(vals: seq<nat>) : (m : nat)
+    requires |vals| > 0
+    ensures forall i | 0 <= i < |vals| :: m <= vals[i]
+    ensures m in vals
+    decreases |vals|
+  {
+    if |vals| == 1 then
+      vals[0]
+    else
+      min(vals[0], MinLocalTailRec(vals[1..]))
+  }
+
+
   function MinLocalTail(ltails: map<NodeId, nat>) : (m : nat)
-    ensures forall i | i in ltails :: m <= ltails[i]
+    ensures forall i | i in ltails.Values :: m <= i
     ensures m in ltails.Values
+
 
   /*
    * ============================================================================================
