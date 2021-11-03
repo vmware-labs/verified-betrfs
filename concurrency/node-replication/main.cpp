@@ -33,36 +33,16 @@ struct benchmark_state {
   {}
 };
 
-// - C++ shared_mutex Benchmarking -
-
-struct cpprwlock {
-  using s_lock = std::shared_lock<std::shared_mutex>;
-  using x_lock = std::unique_lock<std::shared_mutex>;
-
-  std::shared_mutex mutex;
-  uint64_t value;
-
-  cpprwlock()
-    : mutex{}
-    , value{}
-  {}
-
-  uint64_t get() {
-    s_lock lock{mutex};
-    return value;
-  }
-
-  void inc() {
-    x_lock lock{mutex};
-    ++value;
-  }
-};
-
-void run_thread_cpprwlock(
+template <typename Monitor>
+void run_thread(
     uint8_t thread_id,
     benchmark_state& state,
-    cpprwlock& cpprwlock)
+    Monitor& monitor)
 {
+  // TODO(stutsman): pin threads properly
+
+  void* thread_context = monitor.create_thread_context(thread_id);
+
   state.n_threads_ready++;
   while (!state.start_benchmark) {}
 
@@ -70,10 +50,10 @@ void run_thread_cpprwlock(
   uint64_t reads = 0;
   while (!state.exit_benchmark.load(std::memory_order_relaxed)) {
     if ((reads + updates) & 0xf) { // do a read
-      cpprwlock.get();
+      monitor.get(thread_id, thread_context);
       ++reads;
     } else { // do a write
-      cpprwlock.inc();
+      monitor.inc(thread_id, thread_context);
       ++updates;
     }
   }
@@ -81,6 +61,43 @@ void run_thread_cpprwlock(
   state.total_updates += updates;
   state.total_reads += reads;
 }
+
+// - C++ shared_mutex Benchmarking -
+
+struct cpp_shared_mutex_monitor {
+  using s_lock = std::shared_lock<std::shared_mutex>;
+  using x_lock = std::unique_lock<std::shared_mutex>;
+
+  std::shared_mutex mutex;
+  uint64_t value;
+
+  cpp_shared_mutex_monitor()
+    : mutex{}
+    , value{}
+  {}
+
+  void* create_thread_context(uint8_t thread_id) {
+    return nullptr;
+  }
+
+  uint64_t get(uint8_t thread_id, void* thread_context) {
+    s_lock lock{mutex};
+    return value;
+  }
+
+  void inc(uint8_t thread_id, void* thread_context) {
+    x_lock lock{mutex};
+    ++value;
+  }
+
+  static void run_thread(
+      uint8_t thread_id,
+      benchmark_state& state,
+      cpp_shared_mutex_monitor& monitor)
+  {
+    ::run_thread(thread_id, state, monitor);
+  }
+};
 
 // - RwLock Benchmarking -
 
@@ -88,100 +105,91 @@ void run_thread_cpprwlock(
 namespace rwlock = RwLockImpl_ON_Uint64ContentsTypeMod__Compile;
 typedef rwlock::RwLock RwLockUint64;
 
-void run_thread_rwlock(
-    uint8_t thread_id,
-    benchmark_state& state,
-    RwLockUint64& rwlock)
-{
-  state.n_threads_ready++;
-  while (!state.start_benchmark) {}
+struct dafny_rwlock_monitor{
+  RwLockUint64 lock;
 
-  uint64_t updates = 0;
-  uint64_t reads = 0;
-  while (!state.exit_benchmark.load(std::memory_order_relaxed)) {
-    if ((reads + updates) & 0xf) { // do a read
-      auto shared_guard = rwlock.acquire__shared(thread_id);
-      uint64_t* value = rwlock::__default::borrow__shared(rwlock, shared_guard);
-      rwlock.release__shared(shared_guard);
-      ++reads;
-    } else { // do a write
-      bool value = rwlock.acquire();
-      rwlock.release(value + 1);
-      ++updates;
-    }
+  dafny_rwlock_monitor()
+    : lock{rwlock::__default::new__mutex(0lu)}
+  {}
+
+  void* create_thread_context(uint8_t thread_id) {
+    return nullptr;
   }
 
-  state.total_updates += updates;
-  state.total_reads += reads;
-}
-
-// - NR-related stuff -
-
-void run_thread_nr(
-    uint8_t thread_id,
-    benchmark_state& state,
-    nr_helper& nr_helper)
-{
-  // TODO(stutsman): pin threads properly
-
-  nr::ThreadOwnedContext* context = nr_helper.register_thread(thread_id);
-
-  state.n_threads_ready++;
-  while (!state.start_benchmark) {}
-
-  // Run one initial read to make sure the count is correct.
-  Tuple<uint64_t, nr::ThreadOwnedContext> r =
-    Impl_ON_CounterIfc__Compile::__default::do__read(
-      nr_helper.get_nr(),
-      nr_helper.get_node(thread_id),
-      CounterIfc_Compile::ReadonlyOp{},
-      *context);
-    std::cout << "thread_id final nr initial value: " << r.get<0>() << std::endl;
-
-  uint64_t reads = 0;
-  uint64_t updates = 0;
-  while (!state.exit_benchmark.load(std::memory_order_relaxed)) {
-    if ((reads + updates) & 0xf) { // do a read
-      Tuple<uint64_t, nr::ThreadOwnedContext> r =
-        Impl_ON_CounterIfc__Compile::__default::do__read(
-          nr_helper.get_nr(),
-          nr_helper.get_node(thread_id),
-          CounterIfc_Compile::ReadonlyOp{},
-          *context);
-      ++reads;
-    } else { // do a write
-      Tuple<uint64_t, nr::ThreadOwnedContext> r =
-        Impl_ON_CounterIfc__Compile::__default::do__update(
-          nr_helper.get_nr(),
-          nr_helper.get_node(thread_id),
-          CounterIfc_Compile::UpdateOp{},
-          *context);
-      ++updates;
-    }
+  uint64_t get(uint8_t thread_id, void* thread_context) {
+    auto shared_guard = lock.acquire__shared(thread_id);
+    uint64_t value = *rwlock::__default::borrow__shared(lock, shared_guard);
+    lock.release__shared(shared_guard);
+    return value;
   }
 
-  // Run one last read to make sure the final count is correct.
-  r =
-    Impl_ON_CounterIfc__Compile::__default::do__read(
-      nr_helper.get_nr(),
-      nr_helper.get_node(thread_id),
-      CounterIfc_Compile::ReadonlyOp{},
-      *context);
-    std::cout << "thread_id final nr counter value: " << r.get<0>() << std::endl;
+  void inc(uint8_t thread_id, void* thread_context) {
+    uint64_t value = lock.acquire();
+    lock.release(value + 1);
+  }
 
-  state.total_updates += updates;
-  state.total_reads += reads;
-}
+  static void run_thread(
+      uint8_t thread_id,
+      benchmark_state& state,
+      dafny_rwlock_monitor& monitor)
+  {
+    ::run_thread(thread_id, state, monitor);
+  }
+};
 
-template <typename Lock, typename F>
-void bench(F thread_entry, benchmark_state& state, Lock& lock)
+// - NR Benchmarking -
+
+struct dafny_nr_monitor{
+  nr_helper helper;
+
+  dafny_nr_monitor()
+    : helper{}
+  {
+    helper.init_nr();
+  }
+
+  void* create_thread_context(uint8_t thread_id) {
+    return helper.register_thread(thread_id);
+  }
+
+  uint64_t get(uint8_t thread_id, void* context) {
+    auto c = static_cast<nr::ThreadOwnedContext*>(context);
+    Tuple<uint64_t, nr::ThreadOwnedContext> r =
+      Impl_ON_CounterIfc__Compile::__default::do__read(
+        helper.get_nr(),
+        helper.get_node(thread_id),
+        CounterIfc_Compile::ReadonlyOp{},
+        *c);
+    return r.get<0>();
+  }
+
+  void inc(uint8_t thread_id, void* context) {
+    auto c = static_cast<nr::ThreadOwnedContext*>(context);
+    Impl_ON_CounterIfc__Compile::__default::do__update(
+      helper.get_nr(),
+      helper.get_node(thread_id),
+      CounterIfc_Compile::UpdateOp{},
+      *c);
+  }
+
+  static void run_thread(
+      uint8_t thread_id,
+      benchmark_state& state,
+      dafny_nr_monitor& monitor)
+  {
+    ::run_thread(thread_id, state, monitor);
+  }
+};
+
+template <typename Monitor>
+void bench(benchmark_state& state, Monitor& monitor)
 {
   std::vector<std::thread> threads{};
   for (uint8_t thread_id = 0; thread_id < state.n_threads; ++thread_id) {
-    threads.emplace_back(std::thread{thread_entry,
+    threads.emplace_back(std::thread{Monitor::run_thread,
                                      thread_id,
                                      std::ref(state),
-                                     std::ref(lock)});
+                                     std::ref(monitor)});
   }
 
   while (state.n_threads_ready < state.n_threads);
@@ -209,17 +217,19 @@ int main(int argc, char* argv[]) {
   std::string test = std::string{argv[1]};
 
   benchmark_state state{NUM_THREADS, run_duration};
-  if (test == "cpprwlock") {
-    cpprwlock cpprwlock{};
-    bench(run_thread_cpprwlock, state, cpprwlock);
-  } else if (test == "rwlock") {
-    auto rwlock = rwlock::__default::new__mutex(false);
-    bench(run_thread_rwlock, state, rwlock);
-  } else {
-    nr_helper nr_helper{};
-    nr_helper.init_nr();
-    bench(run_thread_nr, state, nr_helper);
+
+#define BENCHMARK(test_name) \
+  if (test == #test_name) { \
+    test_name ## _monitor monitor{}; \
+    bench(state, monitor); \
+    exit(0); \
   }
 
-  return 0;
+  BENCHMARK(cpp_shared_mutex);
+  BENCHMARK(dafny_rwlock);
+  BENCHMARK(dafny_nr);
+
+  std::cerr << "unrecongized benchmark name " << test << std::endl;
+
+  return -1;
 }
