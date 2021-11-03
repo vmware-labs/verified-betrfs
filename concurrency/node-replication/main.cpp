@@ -39,9 +39,9 @@ struct benchmark_state {
 namespace rwlock = RwLockImpl_ON_Uint64ContentsTypeMod__Compile;
 typedef rwlock::RwLock RwLockUint64;
 
-void run_rwlock_bench(
-    benchmark_state& state,
+void run_thread_rwlock(
     uint8_t thread_id,
+    benchmark_state& state,
     RwLockUint64& rwlock)
 {
   state.n_threads_ready++;
@@ -66,35 +66,11 @@ void run_rwlock_bench(
   state.total_reads += reads;
 }
 
-void bench_rwlock(benchmark_state& state) {
-  auto rwlock = rwlock::__default::new__mutex(false);
-
-  std::vector<std::thread> threads{};
-  for (uint8_t thread_id = 0; thread_id < state.n_threads; ++thread_id)
-    threads.emplace_back(std::thread{run_rwlock_bench,
-                                     std::ref(state),
-                                     thread_id,
-                                     std::ref(rwlock)});
-
-  while (state.n_threads_ready < state.n_threads);
-  state.start_benchmark = true;
-  std::this_thread::sleep_for(state.run_duration);
-  state.exit_benchmark = true;
-
-  for (auto& thread : threads)
-    thread.join();
-
-  std::cout << std::endl
-            << "threads " << state.n_threads << std::endl
-            << "updates " << state.total_updates << std::endl
-            << "reads   " << state.total_reads << std::endl;
-}
-
 // - NR-related stuff -
 
-void run_nr_bench(
-    benchmark_state& state,
+void run_thread_nr(
     uint8_t thread_id,
+    benchmark_state& state,
     nr_helper& nr_helper)
 {
   // TODO(stutsman): pin threads properly
@@ -148,17 +124,15 @@ void run_nr_bench(
   state.total_reads += reads;
 }
 
-void bench_nr(benchmark_state& state)
+template <typename Lock, typename F>
+void bench(F thread_entry, benchmark_state& state, Lock& lock)
 {
-  nr_helper nr_helper{};
-  nr_helper.init_nr();
-
   std::vector<std::thread> threads{};
   for (uint8_t thread_id = 0; thread_id < state.n_threads; ++thread_id) {
-    threads.emplace_back(std::thread{run_nr_bench,
-                                     std::ref(state),
+    threads.emplace_back(std::thread{thread_entry,
                                      thread_id,
-                                     std::ref(nr_helper)});
+                                     std::ref(state),
+                                     std::ref(lock)});
   }
 
   while (state.n_threads_ready < state.n_threads);
@@ -183,13 +157,16 @@ int main(int argc, char* argv[]) {
     exit(-1);
   }
 
-  std::string bench = std::string{argv[1]};
+  std::string test = std::string{argv[1]};
 
   benchmark_state state{NUM_THREADS, run_duration};
-  if (bench == "rwlock") {
-    bench_rwlock(state);
+  if (test == "rwlock") {
+    auto rwlock = rwlock::__default::new__mutex(false);
+    bench(run_thread_rwlock, state, rwlock);
   } else {
-    bench_nr(state);
+    nr_helper nr_helper{};
+    nr_helper.init_nr();
+    bench(run_thread_nr, state, nr_helper);
   }
 
   return 0;
