@@ -6,6 +6,7 @@
 
 #include <thread>
 #include <mutex>
+#include <shared_mutex>
 #include <condition_variable>
 
 #include "nr.h"
@@ -29,9 +30,57 @@ struct benchmark_state {
     , exit_benchmark{}
     , total_updates{}
     , total_reads{}
-  {
+  {}
+};
+
+// - C++ shared_mutex Benchmarking -
+
+struct cpprwlock {
+  using s_lock = std::shared_lock<std::shared_mutex>;
+  using x_lock = std::unique_lock<std::shared_mutex>;
+
+  std::shared_mutex mutex;
+  uint64_t value;
+
+  cpprwlock()
+    : mutex{}
+    , value{}
+  {}
+
+  uint64_t get() {
+    s_lock lock{mutex};
+    return value;
+  }
+
+  void inc() {
+    x_lock lock{mutex};
+    ++value;
   }
 };
+
+void run_thread_cpprwlock(
+    uint8_t thread_id,
+    benchmark_state& state,
+    cpprwlock& cpprwlock)
+{
+  state.n_threads_ready++;
+  while (!state.start_benchmark) {}
+
+  uint64_t updates = 0;
+  uint64_t reads = 0;
+  while (!state.exit_benchmark.load(std::memory_order_relaxed)) {
+    if ((reads + updates) & 0xf) { // do a read
+      cpprwlock.get();
+      ++reads;
+    } else { // do a write
+      cpprwlock.inc();
+      ++updates;
+    }
+  }
+
+  state.total_updates += updates;
+  state.total_reads += reads;
+}
 
 // - RwLock Benchmarking -
 
@@ -160,7 +209,10 @@ int main(int argc, char* argv[]) {
   std::string test = std::string{argv[1]};
 
   benchmark_state state{NUM_THREADS, run_duration};
-  if (test == "rwlock") {
+  if (test == "cpprwlock") {
+    cpprwlock cpprwlock{};
+    bench(run_thread_cpprwlock, state, cpprwlock);
+  } else if (test == "rwlock") {
     auto rwlock = rwlock::__default::new__mutex(false);
     bench(run_thread_rwlock, state, rwlock);
   } else {
