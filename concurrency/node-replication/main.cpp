@@ -10,28 +10,46 @@
 
 #include "nr.h"
 
+using duration = std::chrono::duration<uint64_t>;
+
+struct benchmark_state {
+  size_t n_threads;
+  duration run_duration;
+  std::atomic<size_t> n_threads_ready;
+  std::atomic<bool> start_benchmark;
+  std::atomic<bool> exit_benchmark;
+  std::atomic<uint64_t> total_updates;
+  std::atomic<uint64_t> total_reads;
+
+  benchmark_state(size_t n_threads, duration run_duration)
+    : n_threads{n_threads}
+    , run_duration{run_duration}
+    , n_threads_ready{}
+    , start_benchmark{}
+    , exit_benchmark{}
+    , total_updates{}
+    , total_reads{}
+  {
+  }
+};
+
 // - RwLock Benchmarking -
 
 // Give a friendlier name to Dafny's generated namespace.
 namespace rwlock = RwLockImpl_ON_Uint64ContentsTypeMod__Compile;
 typedef rwlock::RwLock RwLockUint64;
 
-std::atomic<size_t> n_threads_ready{0};
-std::atomic<bool> start_benchmark{false};
-std::atomic<bool> exit_benchmark{false};
-
 void run_rwlock_bench(
+    benchmark_state& state,
     uint8_t thread_id,
-    RwLockUint64& rwlock,
-    std::atomic<uint64_t>& total_updates,
-    std::atomic<uint64_t>& total_reads)
+    RwLockUint64& rwlock)
 {
-  n_threads_ready++;
-  while (!start_benchmark) {}
+  state.n_threads_ready++;
+  while (!state.start_benchmark) {}
 
   uint64_t updates = 0;
   uint64_t reads = 0;
-  while (!exit_benchmark.load(std::memory_order_relaxed)) {
+  while (!state.exit_benchmark.load(std::memory_order_relaxed)) {
     if ((reads + updates) & 0xf) { // do a read
       auto shared_guard = rwlock.acquire__shared(thread_id);
       uint64_t* value = rwlock::__default::borrow__shared(rwlock, shared_guard);
@@ -44,72 +62,47 @@ void run_rwlock_bench(
     }
   }
 
-  total_updates += updates;
-  total_reads += reads;
+  state.total_updates += updates;
+  state.total_reads += reads;
 }
 
-template <typename Duration>
-void bench_rwlock(size_t n_threads, Duration run_duration) {
+void bench_rwlock(benchmark_state& state) {
   auto rwlock = rwlock::__default::new__mutex(false);
-  std::atomic<uint64_t> total_updates{0};
-  std::atomic<uint64_t> total_reads{0};
 
   std::vector<std::thread> threads{};
-  for (uint8_t thread_id = 0; thread_id < n_threads; ++thread_id)
+  for (uint8_t thread_id = 0; thread_id < state.n_threads; ++thread_id)
     threads.emplace_back(std::thread{run_rwlock_bench,
+                                     std::ref(state),
                                      thread_id,
-                                     std::ref(rwlock),
-                                     std::ref(total_updates),
-                                     std::ref(total_reads)});
+                                     std::ref(rwlock)});
 
-  while (n_threads_ready < n_threads);
-  start_benchmark = true;
-  std::this_thread::sleep_for(run_duration);
-  exit_benchmark = true;
+  while (state.n_threads_ready < state.n_threads);
+  state.start_benchmark = true;
+  std::this_thread::sleep_for(state.run_duration);
+  state.exit_benchmark = true;
 
   for (auto& thread : threads)
     thread.join();
 
   std::cout << std::endl
-            << "threads " << n_threads << std::endl
-            << "updates " << total_updates << std::endl
-            << "reads   " << total_reads << std::endl;
-}
-
-template <typename Duration>
-void bench_nr(size_t n_threads, Duration duration);
-
-int main(int argc, char* argv[]) {
-  const auto run_duration = std::chrono::seconds{1};
-
-  if (argc < 2) {
-    std::cerr << "usage: " << argv[0] << " <rwlock|nr>" << std::endl;
-    exit(-1);
-  }
-
-  if (std::string{argv[1]} == "rwlock") {
-    bench_rwlock(NUM_THREADS, run_duration);
-  } else {
-    bench_nr(NUM_THREADS, run_duration);
-  }
-
-  return 0;
+            << "threads " << state.n_threads << std::endl
+            << "updates " << state.total_updates << std::endl
+            << "reads   " << state.total_reads << std::endl;
 }
 
 // - NR-related stuff -
 
 void run_nr_bench(
+    benchmark_state& state,
     uint8_t thread_id,
-    nr_helper& nr_helper,
-    std::atomic<uint64_t>& total_updates,
-    std::atomic<uint64_t>& total_reads)
+    nr_helper& nr_helper)
 {
   // TODO(stutsman): pin threads properly
 
   nr::ThreadOwnedContext* context = nr_helper.register_thread(thread_id);
 
-  n_threads_ready++;
-  while (!start_benchmark) {}
+  state.n_threads_ready++;
+  while (!state.start_benchmark) {}
 
   // Run one initial read to make sure the count is correct.
   Tuple<uint64_t, nr::ThreadOwnedContext> r =
@@ -122,7 +115,7 @@ void run_nr_bench(
 
   uint64_t reads = 0;
   uint64_t updates = 0;
-  while (!exit_benchmark.load(std::memory_order_relaxed)) {
+  while (!state.exit_benchmark.load(std::memory_order_relaxed)) {
     if ((reads + updates) & 0xf) { // do a read
       Tuple<uint64_t, nr::ThreadOwnedContext> r =
         Impl_ON_CounterIfc__Compile::__default::do__read(
@@ -151,37 +144,53 @@ void run_nr_bench(
       *context);
     std::cout << "thread_id final nr counter value: " << r.get<0>() << std::endl;
 
-  total_updates += updates;
-  total_reads += reads;
+  state.total_updates += updates;
+  state.total_reads += reads;
 }
 
-template <typename Duration>
-void bench_nr(size_t n_threads, Duration run_duration) {
+void bench_nr(benchmark_state& state)
+{
   nr_helper nr_helper{};
   nr_helper.init_nr();
 
-  std::atomic<uint64_t> total_updates{0};
-  std::atomic<uint64_t> total_reads{0};
   std::vector<std::thread> threads{};
-  for (uint8_t thread_id = 0; thread_id < n_threads; ++thread_id) {
+  for (uint8_t thread_id = 0; thread_id < state.n_threads; ++thread_id) {
     threads.emplace_back(std::thread{run_nr_bench,
+                                     std::ref(state),
                                      thread_id,
-                                     std::ref(nr_helper),
-                                     std::ref(total_updates),
-                                     std::ref(total_reads)});
+                                     std::ref(nr_helper)});
   }
 
-  while (n_threads_ready < n_threads);
-  start_benchmark = true;
-  std::this_thread::sleep_for(run_duration);
-  exit_benchmark = true;
+  while (state.n_threads_ready < state.n_threads);
+  state.start_benchmark = true;
+  std::this_thread::sleep_for(state.run_duration);
+  state.exit_benchmark = true;
 
   for (auto& thread : threads)
     thread.join();
 
   std::cout << std::endl
-            << "threads " << n_threads << std::endl
-            << "updates " << total_updates << std::endl
-            << "reads   " << total_reads << std::endl;
+            << "threads " << state.n_threads << std::endl
+            << "updates " << state.total_updates << std::endl
+            << "reads   " << state.total_reads << std::endl;
 }
 
+int main(int argc, char* argv[]) {
+  const auto run_duration = std::chrono::seconds{1};
+
+  if (argc < 2) {
+    std::cerr << "usage: " << argv[0] << " <rwlock|nr>" << std::endl;
+    exit(-1);
+  }
+
+  std::string bench = std::string{argv[1]};
+
+  benchmark_state state{NUM_THREADS, run_duration};
+  if (bench == "rwlock") {
+    bench_rwlock(state);
+  } else {
+    bench_nr(state);
+  }
+
+  return 0;
+}
