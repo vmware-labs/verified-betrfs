@@ -35,15 +35,16 @@ def accumulate(reports, mapper):
     return counters
 
 row_labels = {
-    "ManualMapper-map": "Map, 3States\\template{Map}",
-    "ManualMapper-abstractbetree": "Abstract{\\beptree}",
-    "ManualMapper-betree": "{\\beptree}",
-    "ManualMapper-compositeviewmap": "CompositeViewMap",
-    "ManualMapper-betreejournaliosystem": "{\\beptree}{\iosystem}",
-    "ManualMapper-concreteiosystem": "Concrete{\iosystem}",
-    "ManualMapper-impl": "implementation code",
-    "ManualMapper-lib": "libraries",
-        }
+    "ManualMapper-core": "Trusted Primitives",
+    "ManualMapper-lib": "Library",
+
+    "ManualMapper-diskcore": "Trusted Disk Primitives",
+    "ManualMapper-cachespec": "Cache Spec",
+    "ManualMapper-cachesm": "Cache LTS",
+    "ManualMapper-cacheref": "Refinement Proof",
+    "ManualMapper-cachelock": "CacheLock GLTS",
+    "ManualMapper-cacheimpl": "Implementation",
+}
 
 def write_tex_table(fp, counters):
     fp.write("\\begin{tabular}{|l|rrr|}\n")
@@ -62,6 +63,7 @@ def write_tex_table(fp, counters):
     keys = list(counters.keys())
     keys.sort()
     for key,label in row_labels.items():
+      if key in counters:
         label = row_labels[key]
         write_row(label, counters[key])
     fp.write("\\hline\n")
@@ -118,6 +120,7 @@ class ManualMapper(Mapper):
         super().__init__()
         self.mapping = {}
         for line in open("docs/file-classifications.txt").readlines():
+          if line.strip() != '':
             categ,path = line.split()
             if path.startswith("./"):
                 path = path[2:]
@@ -131,7 +134,6 @@ class ManualMapper(Mapper):
 
 def report(input, output):
     reports = gatherReports(input)
-
     counters = accumulate(reports, AllMapper())
     counters.update(accumulate(reports, DirMapper()))
     counters.update(accumulate(reports, ManualMapper()))
