@@ -24,6 +24,7 @@ module Init(nrifc: NRIfc) {
   import opened Impl = Impl(nrifc)
   import opened Constants
   import Tokens = TicketStubToken(nrifc, IL)
+  import opened ClientCounter
 
   linear datatype NodeCreationToken = NodeCreationToken(
     nodeId: uint64,
@@ -100,7 +101,8 @@ module Init(nrifc: NRIfc) {
       linear var ctx_atomic := new_atomic(0, ctx_ghost,
           (v, g: ContextGhost) => g.inv(v, i as int, ctx_cell, fc_loc), 0);
 
-      linear var toc := ThreadOwnedContext(i, fc_client, ctx_cell_contents);
+      glinear var client_counter:Client;
+      linear var toc := ThreadOwnedContext(i, fc_client, ctx_cell_contents, client_counter);
       linear var c := Context(ctx_atomic, ctx_cell);
 
       lseq_give_inout(inout contexts, i, c);
