@@ -422,6 +422,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     returns (glinear client: Client)
     requires InternalInv()
     requires guard.Inv(this)
+    ensures client.loc == this.loc
     {
       linear var SharedGuard(acquiring_thread_id, shared_obtained_token, m, v) := guard;
       atomic_block var count_before_decr :=
