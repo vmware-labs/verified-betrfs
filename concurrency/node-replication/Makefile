@@ -9,12 +9,14 @@ HEADERS := \
 	Bundle.i.h \
 	nr.h \
 	nrconstants.h \
-	thread_pin.h
+	thread_pin.h \
+	./vspace/target/cxxbridge/vspace/src/lib.rs.h
 
 LIBS := \
 	-lpthread \
 	-lnuma \
-	-lvspace
+	-lvspace \
+	-ldl # rust needs this :/
 
 Bundle.i.cpp Bundle.i.h: *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy
 	$(eval TMPNAME=$(abspath $(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@))))
@@ -24,7 +26,7 @@ Bundle.i.cpp Bundle.i.h: *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.
 	-dafny /trace /compile:0 /induction:1 /noNLarith /noVerify /spillTargetCode:3 /compileTarget:cpp /countVerificationErrors:0 Bundle.i.dfy Extern.h LinearExtern.h /out:$(TMPNAME)
 	-mv $(TMPNAME) $@
 
-./vspace/target/release/libvspace.a:
+./vspace/target/release/libvspace.a ./vspace/target/cxxbridge/vspace/src/lib.rs.cc ./vspace/target/cxxbridge/vspace/src/lib.rs.h:
 	cd vspace && cargo build --release
 
 Bundle.o: Bundle.i.cpp $(HEADERS)
@@ -33,8 +35,11 @@ Bundle.o: Bundle.i.cpp $(HEADERS)
 main.o: main.cpp $(HEADERS)
 	g++ $(CFLAGS) -c -o $@ $<
 
-app: main.o Bundle.o ./vspace/target/release/libvspace.a
-	g++ -g -o app Bundle.o main.o -L ./vspace/target/release/ $(LIBS)
+vspace_glue.o: ./vspace/target/cxxbridge/vspace/src/lib.rs.cc $(HEADERS)
+	g++ $(CFLAGS) -c -o $@ $<
+
+app: main.o Bundle.o vspace_glue.o ./vspace/target/release/libvspace.a
+	g++ -g -o app Bundle.o vspace_glue.o main.o -L ./vspace/target/release/ $(LIBS)
 
 .PHONY: clean
 
