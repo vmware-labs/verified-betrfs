@@ -10,22 +10,30 @@
 #include <condition_variable>
 
 #include "nr.h"
+#include "thread_pin.h"
 
 using duration = std::chrono::duration<uint64_t>;
 
 struct benchmark_state {
   size_t n_threads;
   duration run_duration;
+  core_map cores;
   std::atomic<size_t> n_threads_ready;
+  std::vector<std::thread> threads;
   std::atomic<bool> start_benchmark;
   std::atomic<bool> exit_benchmark;
   std::atomic<uint64_t> total_updates;
   std::atomic<uint64_t> total_reads;
 
-  benchmark_state(size_t n_threads, duration run_duration)
+  benchmark_state(size_t n_threads,
+                  duration run_duration,
+                  core_map::numa_policy numa_policy,
+                  core_map::core_policy core_policy)
     : n_threads{n_threads}
     , run_duration{run_duration}
+    , cores{numa_policy, core_policy}
     , n_threads_ready{}
+    , threads{}
     , start_benchmark{}
     , exit_benchmark{}
     , total_updates{}
@@ -33,13 +41,14 @@ struct benchmark_state {
   {}
 };
 
+
 template <typename Monitor>
 void run_thread(
     uint8_t thread_id,
     benchmark_state& state,
     Monitor& monitor)
 {
-  // TODO(stutsman): pin threads properly
+  state.cores.pin(thread_id);
 
   void* thread_context = monitor.create_thread_context(thread_id);
 
@@ -184,12 +193,11 @@ struct dafny_nr_monitor{
 template <typename Monitor>
 void bench(benchmark_state& state, Monitor& monitor)
 {
-  std::vector<std::thread> threads{};
   for (uint8_t thread_id = 0; thread_id < state.n_threads; ++thread_id) {
-    threads.emplace_back(std::thread{Monitor::run_thread,
-                                     thread_id,
-                                     std::ref(state),
-                                     std::ref(monitor)});
+    state.threads.emplace_back(std::thread{Monitor::run_thread,
+                                           thread_id,
+                                           std::ref(state),
+                                           std::ref(monitor)});
   }
 
   while (state.n_threads_ready < state.n_threads);
@@ -197,7 +205,7 @@ void bench(benchmark_state& state, Monitor& monitor)
   std::this_thread::sleep_for(state.run_duration);
   state.exit_benchmark = true;
 
-  for (auto& thread : threads)
+  for (auto& thread : state.threads)
     thread.join();
 
   std::cout << std::endl
@@ -207,16 +215,23 @@ void bench(benchmark_state& state, Monitor& monitor)
 }
 
 int main(int argc, char* argv[]) {
-  const auto run_duration = std::chrono::seconds{1};
+  disable_dvfs();
+
+  const auto run_duration = std::chrono::seconds{5};
 
   if (argc < 2) {
-    std::cerr << "usage: " << argv[0] << " <rwlock|nr>" << std::endl;
+    std::cerr << "usage: " << argv[0] << " <benchmarkname>" << std::endl;
     exit(-1);
   }
 
   std::string test = std::string{argv[1]};
 
-  benchmark_state state{NUM_THREADS, run_duration};
+  benchmark_state state{
+    NUM_THREADS,
+    run_duration,
+    core_map::NUMA_FILL,
+    core_map::CORES_FILL
+  };
 
 #define BENCHMARK(test_name) \
   if (test == #test_name) { \
@@ -229,7 +244,7 @@ int main(int argc, char* argv[]) {
   BENCHMARK(dafny_rwlock);
   BENCHMARK(dafny_nr);
 
-  std::cerr << "unrecongized benchmark name " << test << std::endl;
+  std::cerr << "unrecognized benchmark name " << test << std::endl;
 
   return -1;
 }

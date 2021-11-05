@@ -8,7 +8,12 @@ HEADERS := \
 	../framework/LinearExtern.h \
 	Bundle.i.h \
 	nr.h \
-	nrconstants.h
+	nrconstants.h \
+	thread_pin.h
+
+LIBS := \
+	-lpthread \
+	-lnuma
 
 Bundle.i.cpp Bundle.i.h: *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy
 	$(eval TMPNAME=$(abspath $(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@))))
@@ -25,7 +30,7 @@ main.o: main.cpp $(HEADERS)
 	g++ $(CFLAGS) -c -o $@ $<
 
 app: main.o Bundle.o
-	g++ -g -o app Bundle.o main.o -lpthread
+	g++ -g -o app Bundle.o main.o $(LIBS)
 
 .PHONY: clean
 
