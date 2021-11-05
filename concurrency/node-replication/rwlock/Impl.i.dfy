@@ -4,7 +4,6 @@ include "../Runtime.i.dfy"
 include "../../../lib/Lang/LinearSequence.i.dfy"
 include "RwLock.i.dfy"
 include "../Runtime.i.dfy"
-include "../../scache/ClientCounter.i.dfy"
 
 module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
   import opened NativeTypes
@@ -19,7 +18,6 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
   import opened Options
   import opened Runtime
   import opened Ptrs
-  import opened ClientCounter
 
   import RwLockMod = RwLock(contentsTypeMod)
   import HandleTypeMod = Handle(contentsTypeMod)
@@ -55,7 +53,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         (v, g) => exclusiveFlagInv(v, g, loc, inv, lcell),
         0);
 
-    linear var refCounts: lseq<CachePadded<Atomic<uint8, RefCount>>>
+    linear var refCounts: lseq<CachePadded<Atomic<uint8, Token>>>
         := lseq_alloc(RC_WIDTH_64());
     var j: uint64 := 0;
     while j < RC_WIDTH_64()
@@ -73,9 +71,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     {
       glinear var rcToken;
       rcToken, rcs := pop_rcs(rcs, j as int, RC_WIDTH);
-      glinear var client := empty_counter(loc);
-      glinear var refCountsToken := RefCount(rcToken, client);
-      linear var rcAtomic := new_atomic(0, refCountsToken,
+      linear var rcAtomic := new_atomic(0, rcToken,
           (v, g) => refCountInv(v, g, loc, j as nat),
           0);
 
@@ -163,31 +159,20 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     && inv(token.val.exclusiveFlag.stored_value.v.value)
   }
 
-  predicate refCountInv(count: uint8, refCount: RefCount, loc: Loc, t: nat)
+  predicate refCountInv(count: uint8, token: Token, loc: Loc, t: nat)
   {
     // Token is a single refcount that matches the protected count
-    && refCount.token.val == RwLockMod.SharedFlagHandle(t, count as nat)
-    && refCount.token.loc == loc
-    // Every read reference count is escorted by exactly one thread counter
-    && refCount.counter.loc == loc
-    && refCount.counter.n == refCount.token.val.sharedFlags[t]
+    && token.val == RwLockMod.SharedFlagHandle(t, count as nat)
+    && token.loc == loc
   }
 
   /*
    * RwLock that protects a piece of data with some invariant.
    */
 
-  // This RefCount type bundles both the token for the actual reference count plus
-  // a counter from the Clients monoid that tracks how many clients could ever possibly
-  // increment the token. That's what bounds the token to 255, which we need so that the
-  // implementation can be a uint8_t without overflowing.
-  glinear datatype RefCount = RefCount(
-    glinear token: Token,
-    glinear counter: Clients)
-
   linear datatype RwLock = RwLock(
     linear exclusiveFlag: Atomic<bool, Token>,    // implements ExclusiveState.exc
-    linear refCounts: lseq<CachePadded<Atomic<uint8, RefCount>>>,   // implements map<ThreadId, nat>
+    linear refCounts: lseq<CachePadded<Atomic<uint8, Token>>>,   // implements map<ThreadId, nat>
     linear lcell: LinearCell<contentsTypeMod.ContentsType>, // implements the actual value that ExclusiveState.shared_value represents
     ghost loc: Loc,                                // which instance of this lock we're talking about
     ghost inv: V -> bool
@@ -199,11 +184,11 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       && loc.base_loc == RwLockTokenMod.T.Wrap.singleton_loc()
       && |refCounts| == RC_WIDTH
       && lseq_full(refCounts)
-      && (forall v, refcount :: atomic_inv(exclusiveFlag, v, refcount)
-            <==> exclusiveFlagInv(v, refcount, loc, inv, lcell))
-      && (forall t, count, refcount | 0 <= t < RC_WIDTH
-          :: atomic_inv(refCounts[t].inner, count, refcount)
-            <==> refCountInv(count, refcount, loc, t))
+      && (forall v, token :: atomic_inv(exclusiveFlag, v, token)
+            <==> exclusiveFlagInv(v, token, loc, inv, lcell))
+      && (forall t, count, token | 0 <= t < RC_WIDTH
+          :: atomic_inv(refCounts[t].inner, count, token)
+            <==> refCountInv(count, token, loc, t))
     }
 
     /*
@@ -264,17 +249,16 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         invariant pending_handle.loc == this.loc
         decreases *
       {
-
         atomic_block var ret_value := execute_atomic_load(lseq_peek(this.refCounts, visited).inner) {
-          ghost_acquire old_g;
-          glinear var RefCount(readCounterToken, clientCounterToken) := old_g;
+          ghost_acquire token_g; // the token in refCounts[visited]
 
           if ret_value == 0 {
             // If we find a zero, we advance visited
-            pending_handle, readCounterToken := RwLockTokenMod.perform_TakeExcLockCheckRefCount(pending_handle, readCounterToken);
+            pending_handle, token_g := RwLockTokenMod.perform_TakeExcLockCheckRefCount(pending_handle, token_g);
           }
-          glinear var new_g := RefCount(readCounterToken, clientCounterToken);
-          ghost_release new_g;
+          // else try checking this slot again; maybe a reader left. visited stays where it is.
+
+          ghost_release token_g;
         }
         if ret_value == 0 {
           visited := visited + 1;
@@ -320,24 +304,20 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
      * Returns a handle that can be borrowed from
      */
 
-    shared method acquire_shared(thread_id: uint8, glinear in_client: Client)
+    shared method acquire_shared(thread_id: uint8)
     returns (linear guard: SharedGuard)
     requires InternalInv()
-    requires 0 <= thread_id as nat < RC_WIDTH
-    requires in_client.loc == this.loc
+    requires 0 <= thread_id as nat < RC_WIDTH;
     ensures this.inv(guard.v)
     ensures guard.Inv(this)
     decreases *
     {
-      glinear var optClient := glSome(in_client);  // mutable var: need to be able to put this back and forth until we succeed.
       // Use a glOption to exfiltrate a glinear value created inside the loop
-      glinear var shared_handle_result:glOption<Token> := glNone;
+      glinear var shared_handle_result := glNone;
       ghost var shared_value;
       while (true)
         //invariant obtained_handle is nice.
         invariant 0 <= thread_id as nat < RC_WIDTH;
-        invariant optClient.glSome?;
-        invariant optClient.value.loc == this.loc;
         decreases *
       {
         var exc_acquired: bool;
@@ -358,28 +338,20 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         glinear var shared_handle;
         atomic_block var orig_count :=
           execute_atomic_fetch_add_uint8(lseq_peek(this.refCounts, thread_id as uint64).inner, 1) {
-          ghost_acquire old_g;
-          glinear var RefCount(readCounterToken, clientCounterToken) := old_g;
+          ghost_acquire g;
+          g, shared_handle := perform_SharedIncCount(g, thread_id as nat);
 
-          glinear var pending_handle;
-          readCounterToken, pending_handle := perform_SharedIncCount(readCounterToken, thread_id as nat);
-          shared_handle := glSome(pending_handle);
-          glinear var client := unwrap_value(optClient);
-          optClient := glNone;
-          clientCounterToken := merge(clientCounterToken, client);
-          get_bound(clientCounterToken);
+          // TODO(travis,jonh): need a Count token proving there are fewer than 256 threads participating
+          assume wrapped_add_uint8(orig_count, 1) as nat == orig_count as nat + 1;
 
-          glinear var new_g := RefCount(readCounterToken, clientCounterToken);
-          ghost_release new_g;
+          ghost_release g;
         }
 
         // Check if we acquired the shared access (because no exclusive locker got in our way)
         atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) {
           ghost_acquire g;
           if (!exc_acquired) {
-            glinear var acquiredHandle := unwrap_value(shared_handle);
-            g, acquiredHandle := perform_SharedCheckExc(g, acquiredHandle, thread_id as nat);
-            shared_handle := glSome(acquiredHandle);
+            g, shared_handle := perform_SharedCheckExc(g, shared_handle, thread_id as nat);
             shared_value := g.val.exclusiveFlag.stored_value;
           }
           ghost_release g;
@@ -389,29 +361,21 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         {
           // Yay! Any exclusive locker that arrives now will wait behind our incremented refcount.
           dispose_glnone(shared_handle_result);
-          shared_handle_result := shared_handle;
+          shared_handle_result := glSome(shared_handle);
           break;
         }
 
         // Decrement the refcount and go back to spinlooping
         atomic_block var count_before_decr :=
           execute_atomic_fetch_sub_uint8(lseq_peek(this.refCounts, thread_id as uint64).inner, 1) {
-          ghost_acquire old_g;
-          glinear var RefCount(readCounterToken, clientCounterToken) := old_g;
-          glinear var acquiredHandle := unwrap_value(shared_handle);
-          readCounterToken := perform_SharedDecCountPending(readCounterToken, acquiredHandle, thread_id as nat);
-          glinear var client;
-          clientCounterToken, client := split(clientCounterToken);
-          dispose_glnone(optClient);
-          optClient := glSome(client);
-          glinear var new_g := RefCount(readCounterToken, clientCounterToken);
-          ghost_release new_g;
+          ghost_acquire g;
+          g := perform_SharedDecCountPending(g, shared_handle, thread_id as nat);
+          ghost_release g;
         }
       }
 
       glinear var shared_obtained_handle := unwrap_value(shared_handle_result);
       guard := SharedGuard(thread_id, shared_obtained_handle, this, shared_value.v.value);
-      dispose_glnone(optClient);
     }
 
     /*
@@ -419,23 +383,19 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
      */
 
     shared method release_shared(linear guard: SharedGuard)
-    returns (glinear client: Client)
     requires InternalInv()
     requires guard.Inv(this)
     {
       linear var SharedGuard(acquiring_thread_id, shared_obtained_token, m, v) := guard;
       atomic_block var count_before_decr :=
         execute_atomic_fetch_sub_uint8(lseq_peek(this.refCounts, acquiring_thread_id as uint64).inner, 1) {
-        ghost_acquire old_g;
-        glinear var RefCount(readCounterToken, clientCounterToken) := old_g;
-        readCounterToken := perform_SharedDecCountObtained(
-          readCounterToken,
+        ghost_acquire g;
+        g := perform_SharedDecCountObtained(
+          g,
           shared_obtained_token,
           acquiring_thread_id as int,
           LCellContents(lcell, Some(v)));
-        clientCounterToken, client := split(clientCounterToken);
-        glinear var new_g := RefCount(readCounterToken, clientCounterToken);
-        ghost_release new_g;
+        ghost_release g;
       }
     }
   }
