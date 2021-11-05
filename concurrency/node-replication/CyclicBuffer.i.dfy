@@ -301,7 +301,7 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in s.combinerState)
     && (forall i | i in s.combinerState :: s.combinerState[i].CombinerIdle?)
     && (forall i: nat :: i < BUFFER_SIZE as nat <==> i in s.aliveBits)
-    && (forall i: int | i < BUFFER_SIZE as nat :: s.aliveBits[i] == LogicalToAliveBitAliveWhen(i - BUFFER_SIZE as nat))
+    && (forall i: int | 0 <= i < BUFFER_SIZE as nat :: s.aliveBits[i] == LogicalToAliveBitAliveWhen(i - BUFFER_SIZE as nat))
     && (forall i: int :: -(BUFFER_SIZE as int) <= i < 0 <==> (i in s.contents))
     && (forall i: int :: -(BUFFER_SIZE as int) <= i < 0 <==> (i in s.contents && s.contents[i].Some?))
   }
