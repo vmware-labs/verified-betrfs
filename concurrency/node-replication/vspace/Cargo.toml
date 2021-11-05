@@ -1,0 +1,12 @@
+[package]
+name = "vspace"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+x86 = "0.43"
+log = "0.4"
+cxx = "1.0"
+
+[build-dependencies]
+cxx-build = "1.0"
