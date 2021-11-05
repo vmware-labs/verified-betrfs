@@ -24,7 +24,6 @@ namespace nr = Impl_ON_CounterIfc__Compile;
 namespace nrinit = Init_ON_CounterIfc__Compile;
 
 class nr_helper {
-  uint32_t n_replicas;
   uint32_t n_threads_per_replica;
   std::optional<nr::NR> nr;
   std::mutex init_mutex;
@@ -35,16 +34,23 @@ class nr_helper {
   std::condition_variable all_nodes_init;
 
  public:
-  nr_helper(uint32_t n_replicas, uint32_t n_threads_per_replica)
-    : n_replicas{n_replicas}
-    , n_threads_per_replica{n_threads_per_replica}
+  static uint64_t num_replicas() {
+    return Constants_Compile::__default::NUM__REPLICAS;
+  }
+
+  nr_helper(size_t n_threads)
+    : n_threads_per_replica{static_cast<uint32_t>(n_threads / num_replicas())}
     , nr{}
     , init_mutex{}
     , node_creation_tokens{}
     , nodes{}
     , thread_owned_contexts{}
     , all_nodes_init{}
-  {}
+  {
+    assert(num_replicas() > 0);
+    assert(num_replicas() <= n_threads);
+    assert(n_threads_per_replica * num_replicas() == n_threads);
+  }
 
   ~nr_helper() {
     for (auto seq : thread_owned_contexts)
@@ -64,7 +70,7 @@ class nr_helper {
     nr.emplace(init.get<0>());
 
     node_creation_tokens = init.get<1>();
-    assert(node_creation_tokens->size() == n_replicas);
+    assert(node_creation_tokens->size() == num_replicas());
   }
 
   nr::ThreadOwnedContext* register_thread(uint8_t thread_id) {
@@ -83,11 +89,11 @@ class nr_helper {
       nodes.emplace(node_id, r.get<0>());
       thread_owned_contexts.emplace(node_id, r.get<1>());
 
-      if (nodes.size() == n_replicas)
+      if (nodes.size() == num_replicas())
         all_nodes_init.notify_all();
     }
 
-    while (nodes.size() < n_replicas)
+    while (nodes.size() < num_replicas())
       all_nodes_init.wait(lock);
 
     // TODO(stutsman) no pinning, affinity, and threads on different

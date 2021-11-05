@@ -80,7 +80,7 @@ struct cpp_shared_mutex_monitor {
   std::shared_mutex mutex;
   uint64_t value;
 
-  cpp_shared_mutex_monitor(uint32_t n_threads, uint32_t n_threads_per_replica)
+  cpp_shared_mutex_monitor(size_t n_threads)
     : mutex{}
     , value{}
   {}
@@ -117,7 +117,7 @@ typedef rwlock::RwLock RwLockUint64;
 struct dafny_rwlock_monitor{
   RwLockUint64 lock;
 
-  dafny_rwlock_monitor(uint32_t n_threads, uint32_t n_threads_per_replica)
+  dafny_rwlock_monitor(size_t n_threads)
     : lock{rwlock::__default::new__mutex(0lu)}
   {}
 
@@ -151,8 +151,8 @@ struct dafny_rwlock_monitor{
 struct dafny_nr_monitor{
   nr_helper helper;
 
-  dafny_nr_monitor(uint32_t n_threads, uint32_t n_threads_per_replica)
-    : helper{n_threads, n_threads_per_replica}
+  dafny_nr_monitor(size_t n_threads)
+    : helper{n_threads}
   {
     helper.init_nr();
   }
@@ -216,14 +216,14 @@ void bench(benchmark_state& state, Monitor& monitor)
 
 void usage(const char* argv0) {
   std::cerr << "usage: " << argv0
-            << " <benchmarkname> <n_threads> "
-            << "<n_replicas> <n_seconds> <fill|interleave>"
+            << " <benchmarkname> <n_threads>"
+            << " <n_seconds> <fill|interleave>"
             << std::endl;
   exit(-1);
 }
 
 int main(int argc, char* argv[]) {
-  if (argc < 6)
+  if (argc < 5)
     usage(argv[0]);
 
   std::string bench_name = std::string{argv[1]};
@@ -231,18 +231,12 @@ int main(int argc, char* argv[]) {
   const size_t n_threads = atoi(argv[2]);
   assert(n_threads > 0);
 
-  const uint32_t n_replicas = atoi(argv[3]);
-  assert(n_replicas > 0);
-  const uint32_t n_threads_per_replica = n_threads / n_replicas;
-  assert(n_replicas <= n_threads);
-  assert(n_threads_per_replica * n_replicas == n_threads);
-
-  const size_t n_seconds = atoi(argv[4]);
+  const size_t n_seconds = atoi(argv[3]);
   assert(n_seconds > 0);
   const auto run_duration = std::chrono::seconds{n_seconds};
 
   core_map::numa_policy fill_policy;
-  const std::string policy_name = std::string(argv[5]);
+  const std::string policy_name = std::string(argv[4]);
   if (policy_name == "fill") {
     fill_policy = core_map::NUMA_FILL;
   } else if (policy_name == "interleave") {
@@ -262,7 +256,7 @@ int main(int argc, char* argv[]) {
 
 #define BENCHMARK(test_name) \
   if (bench_name == #test_name) { \
-    test_name ## _monitor monitor{n_replicas, n_threads_per_replica}; \
+    test_name ## _monitor monitor{n_threads}; \
     bench(state, monitor); \
     exit(0); \
   }
