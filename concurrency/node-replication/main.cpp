@@ -80,7 +80,7 @@ struct cpp_shared_mutex_monitor {
   std::shared_mutex mutex;
   uint64_t value;
 
-  cpp_shared_mutex_monitor()
+  cpp_shared_mutex_monitor(uint32_t n_threads, uint32_t n_threads_per_replica)
     : mutex{}
     , value{}
   {}
@@ -117,7 +117,7 @@ typedef rwlock::RwLock RwLockUint64;
 struct dafny_rwlock_monitor{
   RwLockUint64 lock;
 
-  dafny_rwlock_monitor()
+  dafny_rwlock_monitor(uint32_t n_threads, uint32_t n_threads_per_replica)
     : lock{rwlock::__default::new__mutex(0lu)}
   {}
 
@@ -151,8 +151,8 @@ struct dafny_rwlock_monitor{
 struct dafny_nr_monitor{
   nr_helper helper;
 
-  dafny_nr_monitor()
-    : helper{}
+  dafny_nr_monitor(uint32_t n_threads, uint32_t n_threads_per_replica)
+    : helper{n_threads, n_threads_per_replica}
   {
     helper.init_nr();
   }
@@ -214,28 +214,55 @@ void bench(benchmark_state& state, Monitor& monitor)
             << "reads   " << state.total_reads << std::endl;
 }
 
+void usage(const char* argv0) {
+  std::cerr << "usage: " << argv0
+            << " <benchmarkname> <n_threads> "
+            << "<n_replicas> <n_seconds> <fill|interleave>"
+            << std::endl;
+  exit(-1);
+}
+
 int main(int argc, char* argv[]) {
-  disable_dvfs();
+  if (argc < 6)
+    usage(argv[0]);
 
-  const auto run_duration = std::chrono::seconds{5};
+  std::string bench_name = std::string{argv[1]};
 
-  if (argc < 2) {
-    std::cerr << "usage: " << argv[0] << " <benchmarkname>" << std::endl;
-    exit(-1);
+  const size_t n_threads = atoi(argv[2]);
+  assert(n_threads > 0);
+
+  const uint32_t n_replicas = atoi(argv[3]);
+  assert(n_replicas > 0);
+  const uint32_t n_threads_per_replica = n_threads / n_replicas;
+  assert(n_replicas <= n_threads);
+  assert(n_threads_per_replica * n_replicas == n_threads);
+
+  const size_t n_seconds = atoi(argv[4]);
+  assert(n_seconds > 0);
+  const auto run_duration = std::chrono::seconds{n_seconds};
+
+  core_map::numa_policy fill_policy;
+  const std::string policy_name = std::string(argv[5]);
+  if (policy_name == "fill") {
+    fill_policy = core_map::NUMA_FILL;
+  } else if (policy_name == "interleave") {
+    fill_policy = core_map::NUMA_INTERLEAVE;
+  } else {
+    usage(argv[0]);
   }
 
-  std::string test = std::string{argv[1]};
+  disable_dvfs();
 
   benchmark_state state{
-    NUM_THREADS,
+    n_threads,
     run_duration,
-    core_map::NUMA_FILL,
+    fill_policy,
     core_map::CORES_FILL
   };
 
 #define BENCHMARK(test_name) \
-  if (test == #test_name) { \
-    test_name ## _monitor monitor{}; \
+  if (bench_name == #test_name) { \
+    test_name ## _monitor monitor{n_replicas, n_threads_per_replica}; \
     bench(state, monitor); \
     exit(0); \
   }
@@ -244,7 +271,7 @@ int main(int argc, char* argv[]) {
   BENCHMARK(dafny_rwlock);
   BENCHMARK(dafny_nr);
 
-  std::cerr << "unrecognized benchmark name " << test << std::endl;
+  std::cerr << "unrecognized benchmark name " << bench_name << std::endl;
 
   return -1;
 }

@@ -8,7 +8,6 @@ HEADERS := \
 	../framework/LinearExtern.h \
 	Bundle.i.h \
 	nr.h \
-	nrconstants.h \
 	thread_pin.h \
 	./vspace/target/cxxbridge/vspace/src/lib.rs.h
 

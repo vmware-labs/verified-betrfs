@@ -7,8 +7,6 @@
 #include "LinearExtern.h"
 #include "Bundle.i.h"
 
-#include "nrconstants.h"
-
 #include <cinttypes>
 #include <optional>
 #include <iostream>
@@ -26,6 +24,8 @@ namespace nr = Impl_ON_CounterIfc__Compile;
 namespace nrinit = Init_ON_CounterIfc__Compile;
 
 class nr_helper {
+  uint32_t n_replicas;
+  uint32_t n_threads_per_replica;
   std::optional<nr::NR> nr;
   std::mutex init_mutex;
   lseq<nrinit::NodeCreationToken> node_creation_tokens;
@@ -35,8 +35,10 @@ class nr_helper {
   std::condition_variable all_nodes_init;
 
  public:
-  nr_helper()
-    : nr{}
+  nr_helper(uint32_t n_replicas, uint32_t n_threads_per_replica)
+    : n_replicas{n_replicas}
+    , n_threads_per_replica{n_threads_per_replica}
+    , nr{}
     , init_mutex{}
     , node_creation_tokens{}
     , nodes{}
@@ -54,7 +56,7 @@ class nr_helper {
   nr::NR& get_nr() { return *nr; }
 
   nr::Node& get_node(uint8_t thread_id) {
-    return nodes[thread_id / THREADS_PER_REPLICA];
+    return nodes[thread_id / n_threads_per_replica];
   }
 
   void init_nr() {
@@ -62,15 +64,15 @@ class nr_helper {
     nr.emplace(init.get<0>());
 
     node_creation_tokens = init.get<1>();
-    assert(node_creation_tokens->size() == NUM_REPLICAS);
+    assert(node_creation_tokens->size() == n_replicas);
   }
 
   nr::ThreadOwnedContext* register_thread(uint8_t thread_id) {
     std::unique_lock<std::mutex> lock{init_mutex};
 
     nrinit::NodeCreationToken* token{nullptr};
-    if (thread_id % THREADS_PER_REPLICA == 0)
-      token = &node_creation_tokens->at(thread_id / THREADS_PER_REPLICA).a;
+    if (thread_id % n_threads_per_replica == 0)
+      token = &node_creation_tokens->at(thread_id / n_threads_per_replica).a;
 
     if (token) {
       auto r = nrinit::__default::initNode(*token);
@@ -81,18 +83,18 @@ class nr_helper {
       nodes.emplace(node_id, r.get<0>());
       thread_owned_contexts.emplace(node_id, r.get<1>());
 
-      if (nodes.size() == NUM_REPLICAS)
+      if (nodes.size() == n_replicas)
         all_nodes_init.notify_all();
     }
 
-    while (nodes.size() < NUM_REPLICAS)
+    while (nodes.size() < n_replicas)
       all_nodes_init.wait(lock);
 
     // TODO(stutsman) no pinning, affinity, and threads on different
     // nodes may actually use the wrong replica; all this needs to be
     // fixed if we want to use this harness.
-    const uint8_t node_id = thread_id / THREADS_PER_REPLICA;
-    const uint8_t context_index = thread_id % THREADS_PER_REPLICA;
+    const uint8_t node_id = thread_id / n_threads_per_replica;
+    const uint8_t context_index = thread_id % n_threads_per_replica;
 
     std::cout << "thread_id " << static_cast<uint32_t>(thread_id)
               << " registered with node_id " << static_cast<uint32_t>(node_id)
