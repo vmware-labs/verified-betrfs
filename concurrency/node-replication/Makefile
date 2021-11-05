@@ -13,7 +13,8 @@ HEADERS := \
 
 LIBS := \
 	-lpthread \
-	-lnuma
+	-lnuma \
+	-lvspace
 
 Bundle.i.cpp Bundle.i.h: *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy
 	$(eval TMPNAME=$(abspath $(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@))))
@@ -23,16 +24,20 @@ Bundle.i.cpp Bundle.i.h: *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.
 	-dafny /trace /compile:0 /induction:1 /noNLarith /noVerify /spillTargetCode:3 /compileTarget:cpp /countVerificationErrors:0 Bundle.i.dfy Extern.h LinearExtern.h /out:$(TMPNAME)
 	-mv $(TMPNAME) $@
 
+./vspace/target/release/libvspace.a:
+	cd vspace && cargo build --release
+
 Bundle.o: Bundle.i.cpp $(HEADERS)
 	g++ $(CFLAGS) -c -o $@ $<
 
 main.o: main.cpp $(HEADERS)
 	g++ $(CFLAGS) -c -o $@ $<
 
-app: main.o Bundle.o
-	g++ -g -o app Bundle.o main.o $(LIBS)
+app: main.o Bundle.o ./vspace/target/release/libvspace.a
+	g++ -g -o app Bundle.o main.o -L ./vspace/target/release/ $(LIBS)
 
 .PHONY: clean
 
 clean:
-	-rm app *.o Bundle.i.cpp Bundle.i.h
+	-rm -f app *.o Bundle.i.cpp Bundle.i.h
+	-rm -rf ./vspace/target/
