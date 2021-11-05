@@ -228,8 +228,12 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           && x.localTails[n] <= cur_idx <= tail
           // the read tail is smaller or equal to the current tail.
           && tail <= x.tail.value
+          //
+          // && x.tail.value - (BUFFER_SIZE as nat) <= cur_idx <= x.tail.value
           // all the entries we're writing must not be alive.
-          && (forall i | cur_idx <= i < tail :: !(EntryIsAlive(x.aliveBits, i)))
+          && (forall i : nat | cur_idx <= i < tail :: !(EntryIsAlive(x.aliveBits, i)))
+          // all the entries we're writing must not be SOme
+          // && (forall i | cur_idx <= i < tail :: m.contents[i].Some?)
         )
       }
   }
@@ -253,7 +257,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     }
   }
 
-function CombinerLogicalRange(c: CombinerState) : set<nat>
+  function CombinerLogicalRange(c: CombinerState) : set<nat>
   {
     match c {
       case CombinerIdle => {}
@@ -261,7 +265,7 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
       case CombinerAdvancingHead(idx: nat, min_tail: nat) => {}
       case CombinerAdvancingTail(observed_head: nat) => {}
       case CombinerAppending(cur_idx: nat, tail: nat) => (
-        set i | cur_idx <= i < tail :: i
+        set i : nat | cur_idx <= i < tail :: i
       )
     }
   }
@@ -274,6 +278,26 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
       && (CombinerLogicalRange(x.combinerState[i]) !! ReaderLogicalRange(x.combinerState[j]))
   }
 
+
+  predicate RangesNoOverlap(x: M)
+    requires Complete(x)
+  {
+    && (forall i, j | 0 <= i < NUM_REPLICAS as nat && 0 <= j < NUM_REPLICAS as nat && i != j
+      && x.combinerState[i].CombinerAppending? && x.combinerState[j].CombinerAppending?
+    :: ( || x.combinerState[i].cur_idx >= x.combinerState[j].tail
+         || x.combinerState[i].tail <= x.combinerState[j].cur_idx
+    ))
+
+    && (forall i, j | 0 <= i < NUM_REPLICAS as nat && 0 <= j < NUM_REPLICAS as nat && i != j
+      && x.combinerState[i].CombinerAppending? && x.combinerState[j].CombinerReading? && x.combinerState[j].readerState.ReaderGuard?
+    :: ( || x.combinerState[i].cur_idx > x.combinerState[j].readerState.cur
+         || x.combinerState[i].tail <=  x.combinerState[j].readerState.cur
+    ))
+  }
+
+
+
+
   predicate Inv(x: M)
   {
     && Complete(x)
@@ -281,9 +305,11 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     && PointerDifferences(x)
     && AliveBits(x)
     && BufferContents(x)
+    // let's use the non-set version
+    // && LogicalRangesNoOverlap(x)
+    && RangesNoOverlap(x)
     && CombinerStateValid(x)
     && ReaderStateValid(x)
-    && LogicalRangesNoOverlap(x)
   }
 
   /*
@@ -744,16 +770,26 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     && m.M?
     && CombinerKnown(m, combinerNodeId)
     && CombinerIsAppending(m, combinerNodeId)
+
+    // obtain the combiner state, and the key
     && var combinerBefore := m.combinerState[combinerNodeId];
     && var key := combinerBefore.cur_idx;
+
+    // there should be an entry corresponding to the key in the log, and it should be None.
     && key in m.contents
     && m.contents[key].None?
+
+    // the entry we're about to write is note alive,
     && LogicalToPhysicalIndex(key) in m.aliveBits
     && !EntryIsAlive(m.aliveBits, key)
 
+    // state realation
     && m' == m.(
+      // increase the current index by one
       combinerState := m.combinerState[combinerNodeId := combinerBefore.(cur_idx := key + 1)],
+      // update the alive bits
       aliveBits := m.aliveBits[LogicalToPhysicalIndex(key) := LogicalToAliveBitAliveWhen(key)],
+      // update the key element in the log
       contents := m.contents[key := Some(deposited)])
   }
 
@@ -763,28 +799,28 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
   {
     var combinerBefore := m.combinerState[combinerNodeId];
     var key := combinerBefore.cur_idx;
+    var tail := combinerBefore.tail;
 
     forall p: M | Inv(dot(m, p))
     ensures Inv(dot(m', p))
       && key !in I(dot(m, p))
       && I(dot(m', p)) == I(dot(m, p))[key := deposited]
     {
-      // those are fine, take about 77s in total
-      // assert Complete(dot(m', p));
-      // assert PointerOrdering(dot(m', p));
-      // assert PointerDifferences(dot(m', p));
-      // assert AliveBits(dot(m', p));
-      // assert LogicalRangesNoOverlap(dot(m', p));
-      // assert BufferContents(dot(m', p));
-      // assert ReaderStateValid(dot(m', p));
+      assert CombinerStateValid(dot(m', p)) by {
+        assert forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending? ::
+         (|| dot(m', p).combinerState[n].tail <= key
+          || dot(m', p).combinerState[n].cur_idx > key);
 
-      // that one currently fails...
-      assume CombinerStateValid(dot(m', p)) ;
+        assert forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending? ::
+          (forall i | dot(m', p).combinerState[n].cur_idx <= i < dot(m', p).combinerState[n].tail ::
+            (&& EntryIsAlive(dot(m', p).aliveBits, i) == EntryIsAlive(dot(m, p).aliveBits, i)
+            && !EntryIsAlive(dot(m', p).aliveBits, i))
+          );
+       }
 
       assert Inv(dot(m', p));
       assert key !in I(dot(m, p));
 
-      // was sucecssfull once, but takes a while.... that map comprehension again...
       assert I(dot(m', p)) == I(dot(m, p))[key := deposited];
     }
 
