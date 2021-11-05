@@ -11,6 +11,7 @@ crate-type = ["staticlib", "rlib"]
 x86 = "0.43"
 log = "0.4"
 cxx = "1.0"
+env_logger = "*"
 
 [build-dependencies]
 cxx-build = "1.0"

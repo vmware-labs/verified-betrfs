@@ -26,8 +26,10 @@ mod ffi {
             vbase: u64,
             pregion: u64,
             pregion_len: usize,
-            rights: &MapAction,
+            //rights: &MapAction,
         ) -> bool;
+
+        pub fn create_vspace() -> &'static mut VSpace;
     }
 }
 
@@ -171,15 +173,25 @@ impl Drop for VSpace {
     }
 }
 
+// cpp glue fun
+pub fn create_vspace() -> &'static mut VSpace {
+    env_logger::try_init();
+    Box::leak(Box::new(VSpace {
+        pml4: Box::pin(
+            [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
+        ),
+        allocs: Vec::with_capacity(1024),
+    }))
+}
+
 impl Default for VSpace {
     fn default() -> VSpace {
-        VSpace {
-            pml4: Box::pin(
-                [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
-            ),
-            allocs: Vec::with_capacity(1024),
-        }
-    }
+    VSpace {
+        pml4: Box::pin(
+            [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
+        ),
+        allocs: Vec::with_capacity(1024),
+    }    }
 }
 
 impl VSpace {
@@ -188,12 +200,12 @@ impl VSpace {
         vbase: u64,
         pregion: u64,
         pregion_len: usize,
-        rights: &MapAction,
     ) -> bool {
+        let rights = MapAction::ReadWriteExecuteUser;
         let r = self.map_generic(
             VAddr::from(vbase),
             (PAddr::from(pregion), pregion_len),
-            *rights,
+            rights,
         );
 
         r.is_ok()

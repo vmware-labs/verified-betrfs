@@ -12,6 +12,8 @@
 #include "nr.h"
 #include "thread_pin.h"
 
+#include "vspace/target/cxxbridge/vspace/src/lib.rs.h"
+
 using duration = std::chrono::duration<uint64_t>;
 
 struct benchmark_state {
@@ -225,6 +227,9 @@ void usage(const char* argv0) {
 int main(int argc, char* argv[]) {
   if (argc < 5)
     usage(argv[0]);
+
+  VSpace& vspace = create_vspace();
+  vspace.map_generic_wrapped(0x0, 0x0, 0x1000);
 
   std::string bench_name = std::string{argv[1]};
 
