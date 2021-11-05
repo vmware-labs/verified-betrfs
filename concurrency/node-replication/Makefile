@@ -1,6 +1,6 @@
 all: app
 
-CFLAGS := -g -O0 -std=c++17 \
+CFLAGS := -g -O3 -std=c++17 \
 	-I ../../.dafny/dafny/Binaries/ -I ../framework/
 
 HEADERS := \
