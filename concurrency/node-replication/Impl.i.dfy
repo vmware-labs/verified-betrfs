@@ -59,7 +59,6 @@ module Impl(nrifc: NRIfc) {
   import opened Cells
   import opened GhostLoc
   import opened Constants
-  import opened ClientCounter
 
   type Tid = uint64
 
@@ -169,8 +168,7 @@ module Impl(nrifc: NRIfc) {
   linear datatype ThreadOwnedContext = ThreadOwnedContext(
     tid: uint64,
     glinear fc_client: FCClient,
-    glinear cell_contents: CellContents<OpResponse>,
-    glinear client_counter: Client)
+    glinear cell_contents: CellContents<OpResponse>)
   {
     predicate WF(node: Node)
     {
@@ -178,7 +176,6 @@ module Impl(nrifc: NRIfc) {
       && fc_client == FCClient(node.fc_loc, tid as nat, FCClientIdle)
       && 0 <= tid < MAX_THREADS_PER_REPLICA
       && cell_contents.cell == node.contexts[tid as nat].cell
-      && client_counter.loc == node.replica.loc
     }
   }
 
@@ -724,7 +721,7 @@ module Impl(nrifc: NRIfc) {
   ensures ctx'.WF(node)
   decreases * // method is not guaranteed to terminate
   {
-    linear var ThreadOwnedContext(tid, fc_client, cell_contents, client_counter) := ctx;
+    linear var ThreadOwnedContext(tid, fc_client, cell_contents) := ctx;
 
     var opr := read_cell(lseq_peek(node.contexts, tid).cell, cell_contents);
     opr := opr.(op := op);
@@ -789,7 +786,7 @@ module Impl(nrifc: NRIfc) {
 
     cell_contents := unwrap_value(cell_contents_opt);
     stub := unwrap_value(stub_opt);
-    ctx' := ThreadOwnedContext(tid, fc_client, cell_contents, client_counter);
+    ctx' := ThreadOwnedContext(tid, fc_client, cell_contents);
   }
 
   method do_read(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp, linear ctx: ThreadOwnedContext,
@@ -855,16 +852,14 @@ module Impl(nrifc: NRIfc) {
     assert stub.rs.ReadonlyReadyToRead?; // advisory
     assert stub.rs.nodeId == node.nodeId as nat;
 
-    linear var ThreadOwnedContext(tid, fc_client, cell_contents, client_counter) := ctx;
-
     // 3. Take read-lock on replica; apply operation on replica
-    linear var linear_guard := node.replica.acquire_shared(tid as uint8, client_counter);
+    linear var linear_guard := node.replica.acquire_shared(ctx.tid as uint8);
     assert linear_guard.v.ghost_replica.nodeId == stub.rs.nodeId;
 
     result, stub := apply_readonly(node.replica, linear_guard, op, stub);
-    client_counter := node.replica.release_shared(linear_guard);
+    node.replica.release_shared(linear_guard);
 
-    ctx' := ThreadOwnedContext(tid, fc_client, cell_contents, client_counter);
+    ctx' := ctx;
     assert stub.rs.ReadonlyDone?; // advisory
   }
 
