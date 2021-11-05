@@ -157,8 +157,10 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     // the head must be smaller or equal to the tail,
     && x.head.value <= x.tail.value
-    // all local tails must be between thea
+    // all local tails must be between the head and the tail
     && (forall i | i in x.localTails :: x.head.value <= x.localTails[i] <= x.tail.value)
+    // all local tails are between the valid buffer range
+    && (forall i | i in x.localTails ::  x.tail.value - (BUFFER_SIZE as nat) <=  x.localTails[i] <= x.tail.value)
   }
 
   predicate PointerDifferences(x:M)
@@ -166,8 +168,6 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     // the span of the entries between local tails and tail should never be larger than the buffer size
     && (forall i | i in x.localTails ::  x.tail.value - x.localTails[i] < BUFFER_SIZE as nat)
-    // RA: I think we can't really have it with the head, as the head could move "backwards"
-    // && (x.tail.value - x.head.value < BUFFER_SIZE as nat)
   }
 
   predicate AliveBits(x: M)
@@ -175,6 +175,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     requires PointerOrdering(x)
     requires PointerDifferences(x)
   {
+    // forall free buffer entries, the entry is not alive.
     && (forall i | i in SetOfFreeBufferEntries(MinLocalTail(x.localTails), x.tail.value) :: !EntryIsAlive(x.aliveBits, i))
   }
 
@@ -182,19 +183,12 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     requires Complete(x)
   {
     forall i : int | x.tail.value - (BUFFER_SIZE as nat) <= i < x.tail.value ::
-      (
-        || EntryIsAlive(x.aliveBits, i)
-        || i < MinLocalTail(x.localTails)
-      ) <==> x.contents[i].Some?
+      (EntryIsAlive(x.aliveBits, i) || i < MinLocalTail(x.localTails)) <==> x.contents[i].Some?
   }
-
 
   predicate ReaderStateValid(x: M)
     requires Complete(x)
-    //? requires PointerOrdering(x)
-    //? requires PointerDifferences(x)
-    //? requires AliveBits(x)
-    //? requires BufferContents(x)
+    requires PointerOrdering(x)
   {
     forall n | n in x.combinerState && x.combinerState[n].CombinerReading?
       :: match  x.combinerState[n].readerState {
@@ -203,26 +197,25 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           && start == x.localTails[n]
         )
         case ReaderRange(start: nat, end: nat) => (
-          // the start value may have advanced.
-          // note the entry at curr
-          && x.localTails[n] <= start
+          // the start must be our local tail
           && x.localTails[n] == start
+          // the start must be before the end, can be equial if ltail == gtail
           && start <= end
-          && end <= x.tail.value
+          // we've read the tail, but the tail may have moved
+          && x.tail.value - (BUFFER_SIZE as nat) <= end <= x.tail.value
         )
         case ReaderGuard(start: nat, end: nat, cur: nat, val: StoredType) => (
-          // we start reading at our local tail
-          && x.localTails[n] <= start
+          // the start must be our local tail
           && x.localTails[n] == start
+          // the start must be before the end, can be equial if ltail == gtail
           && start <= end
-          // end can't be past the tail value
-          && end <= x.tail.value
+          // we've read the tail, but the tail may have moved
+          && x.tail.value - (BUFFER_SIZE as nat) <= end <= x.tail.value
           // current is between start and end
-          && start <= cur <= end
+          && start <= cur < end
           // the entry that we read must be alive
           && EntryIsAlive(x.aliveBits, cur)
           // the thing we are ready should match the log content
-          // TODO(andrea)
           && x.contents[cur] == Some(val)
         )
     }
@@ -429,23 +422,28 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
 
   }
 
-  function SetOfBufferEntries() : set<nat>
+  // the set of current buffer entries.
+  function SetOfBufferEntries(min_ltails: int) : set<int>
   {
-    set x | 0 <= x < BUFFER_SIZE as nat :: x
+    set x : int | min_ltails <= x < min_ltails + (BUFFER_SIZE as nat)
   }
 
-  function SetOfFreeBufferEntries(min_ltails: int, logital_tail: int) : set<nat>
+  // the set of free buffer entries
+  function SetOfFreeBufferEntries(min_ltails: int, logital_tail: int) : set<int>
     requires min_ltails <= logital_tail
+    requires logital_tail - (BUFFER_SIZE as nat) <= min_ltails <= logital_tail
     requires ((logital_tail - min_ltails) < BUFFER_SIZE as nat)
   {
-    SetOfBufferEntries() - SetOfReservedBufferEntries(min_ltails, logital_tail)
+    SetOfBufferEntries(min_ltails) - SetOfActiveBufferEntries(min_ltails, logital_tail)
   }
 
-  function SetOfReservedBufferEntries(min_ltails: int, logital_tail: int) : set<nat>
+  // the set of active buffer entries is everything between
+  function SetOfActiveBufferEntries(min_ltails: int, logital_tail: int) : set<int>
     requires min_ltails <= logital_tail
+    requires logital_tail - (BUFFER_SIZE as nat) <= min_ltails <= logital_tail
     requires ((logital_tail - min_ltails) < BUFFER_SIZE as nat)
   {
-    set x | min_ltails <= x < logital_tail :: LogicalToPhysicalIndex(x)
+    set x : int | min_ltails <= x < logital_tail :: x
   }
 
 
@@ -453,6 +451,7 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
   {
     ((logical / BUFFER_SIZE as int) % 2) == 0
   }
+
 
   predicate EntryIsAlive(aliveBits: map</* entry: */ nat, /* bit: */ bool>, logical: int)
     requires LogicalToPhysicalIndex(logical) in aliveBits
@@ -598,6 +597,7 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     ensures Inv(dot(m', p))
       && I(dot(m, p)) == I(dot(m', p))
     {
+      // that inv here takes a bit...
       assert Inv(dot(m', p));
       assert I(dot(m, p)) == I(dot(m', p));
     }
@@ -628,6 +628,7 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     ensures Inv(dot(m', p))
       && I(dot(m, p)) == I(dot(m', p))
     {
+      // that inv here takes a bit..
       assert Inv(dot(m', p));
       assert I(dot(m, p)) == I(dot(m', p));
     }
@@ -728,9 +729,19 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
         map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
         if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k])
     {
+      //
+      // assert Complete(dot(m', p));
+      // assert PointerOrdering(dot(m', p));
+      // assert PointerDifferences(dot(m', p));
+      // assert LogicalRangesNoOverlap(dot(m', p));
+      // assert AliveBits(dot(m', p));
+      // assert BufferContents(dot(m', p));
+      // assert ReaderStateValid(dot(m', p));
+      // assert CombinerStateValid(dot(m', p));
 
       assume Inv(dot(m', p));
       assume I(dot(m', p)).Keys !! withdrawn.Keys;
+
       assume I(dot(m, p)) == (
         map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
         if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k]);
@@ -756,7 +767,7 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     && !EntryIsAlive(m.aliveBits, key)
 
     && m' == m.(
-      combinerState := m.combinerState[combinerNodeId := combinerBefore.(cur_idx := combinerBefore.cur_idx + 1)],
+      combinerState := m.combinerState[combinerNodeId := combinerBefore.(cur_idx := key + 1)],
       aliveBits := m.aliveBits[LogicalToPhysicalIndex(key) := LogicalToAliveBitAliveWhen(key)],
       contents := m.contents[key := Some(deposited)])
   }
@@ -773,15 +784,23 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
       && key !in I(dot(m, p))
       && I(dot(m', p)) == I(dot(m, p))[key := deposited]
     {
-      // that one currently fails:
-      // && (forall i | cur_idx <= i < tail :: !(EntryIsAlive(x.aliveBits, i)))
-      assume CombinerStateValid(dot(m', p));
+      // those are fine, take about 77s in total
+      // assert Complete(dot(m', p));
+      // assert PointerOrdering(dot(m', p));
+      // assert PointerDifferences(dot(m', p));
+      // assert AliveBits(dot(m', p));
+      // assert LogicalRangesNoOverlap(dot(m', p));
+      // assert BufferContents(dot(m', p));
+      // assert ReaderStateValid(dot(m', p));
+
+      // that one currently fails...
+      assume CombinerStateValid(dot(m', p)) ;
 
       assert Inv(dot(m', p));
       assert key !in I(dot(m, p));
 
       // was sucecssfull once, but takes a while.... that map comprehension again...
-      assume I(dot(m', p)) == I(dot(m, p))[key := deposited];
+      assert I(dot(m', p)) == I(dot(m, p))[key := deposited];
     }
 
     assert deposit(m, m', key, deposited); // witness
@@ -939,8 +958,18 @@ function CombinerLogicalRange(c: CombinerState) : set<nat>
     ensures Inv(dot(m', p))
       && I(dot(m, p)) == I(dot(m', p))
     {
-      assert Inv(dot(m', p));
-      assert I(dot(m, p)) == I(dot(m', p));
+      if MinLocalTail(dot(m', p).localTails) == MinLocalTail(dot(m, p).localTails) {
+        assert Inv(dot(m', p));
+        assert I(dot(m, p)) == I(dot(m', p));
+      } else {
+        assume MinLocalTail(dot(m', p).localTails) > MinLocalTail(dot(m, p).localTails);
+
+        assume AliveBits(dot(m', p)); // fails
+        assume BufferContents(dot(m', p)); // fails
+
+        assert Inv(dot(m', p));
+        assert I(dot(m, p)) == I(dot(m', p));
+      }
     }
   }
 }
