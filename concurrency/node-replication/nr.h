@@ -83,7 +83,7 @@ class nr_helper {
     if (token) {
       auto r = nrinit::__default::initNode(*token);
       uint64_t node_id = r.get<0>().nodeId;
-      std::cout << "thread_id " << static_cast<uint32_t>(thread_id)
+      std::cerr << "thread_id " << static_cast<uint32_t>(thread_id)
                 << " done initializing node_id " << node_id << std::endl;
 
       nodes.emplace(node_id, r.get<0>());
@@ -102,7 +102,7 @@ class nr_helper {
     const uint8_t node_id = thread_id / n_threads_per_replica;
     const uint8_t context_index = thread_id % n_threads_per_replica;
 
-    std::cout << "thread_id " << static_cast<uint32_t>(thread_id)
+    std::cerr << "thread_id " << static_cast<uint32_t>(thread_id)
               << " registered with node_id " << static_cast<uint32_t>(node_id)
               << " context " << static_cast<uint32_t>(context_index)
               << std::endl;

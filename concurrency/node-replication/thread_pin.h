@@ -24,15 +24,21 @@ void enable_dvfs() {
 }
 
 class core_map {
-  struct core_id { uint32_t mask; };
-  std::vector<core_id> thread_to_core_map;
-
  public:
   enum numa_policy { NUMA_FILL, NUMA_INTERLEAVE };
   enum core_policy { CORES_FILL, CORES_INTERLEAVE };
 
-  core_map(numa_policy numa_policy, core_policy core_policy)
-    : thread_to_core_map{}
+ private:
+  numa_policy nm_policy;
+  core_policy cr_policy;
+  typedef uint32_t core_id;
+  std::vector<core_id> thread_to_core_map;
+
+ public:
+  core_map(numa_policy nm_policy, core_policy cr_policy)
+    : nm_policy{nm_policy}
+    , cr_policy{cr_policy}
+    , thread_to_core_map{}
   {
     if (numa_available() == -1) {
       std::cerr << "NUMA not available" << std::endl;
@@ -68,26 +74,26 @@ class core_map {
     thread_to_core_map.resize(n_cores);
 
     uint32_t i = 0;
-    switch (numa_policy) {
+    switch (nm_policy) {
      case NUMA_FILL:
-      std::cout << "Using NUMA fill policy; ignoring hyperthread policy"
+      std::cerr << "Using NUMA fill policy; ignoring hyperthread policy"
                 << std::endl;
         for (uint32_t n = 0; n < n_nodes; n++) {
           for (uint32_t c = 0; c < n_cores; c++) {
             if (numa_bitmask_isbitset(&*nodecpus[n], c))
-              thread_to_core_map[i++].mask = c;
+              thread_to_core_map[i++] = c;
           }
         }
         break;
 
      case NUMA_INTERLEAVE:
-      std::cout << "Using NUMA interleave policy; ignoring hyperthread policy"
+      std::cerr << "Using NUMA interleave policy; ignoring hyperthread policy"
                 << std::endl;
         for (uint32_t n = 0; n < n_nodes; n++) {
           i = 0;
           for (uint32_t c = 0; c < n_cores; c++) {
             if (numa_bitmask_isbitset(&*nodecpus[n], c))
-              thread_to_core_map[n + (i++) * n_nodes].mask = c;
+              thread_to_core_map[n + (i++) * n_nodes] = c;
           }
         }
         break;
@@ -99,15 +105,18 @@ class core_map {
   }
 
   void pin(uint32_t thread_id) {
-    uint32_t core_mask = thread_to_core_map[thread_id].mask;
+    uint32_t core_id = thread_to_core_map[thread_id];
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    CPU_SET(core_mask, &cpuset);
+    CPU_SET(core_id, &cpuset);
     int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
     if (rc != 0) {
       std::cerr << "setaffinity failed" << std::endl;
     }
   }
+
+  numa_policy get_numa_policy() { return nm_policy; }
+  core_policy get_core_policy() { return cr_policy; }
 };
 
 #endif

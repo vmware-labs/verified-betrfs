@@ -3,6 +3,8 @@
 #include <iostream>
 #include <chrono>
 #include <vector>
+#include <string>
+#include <fstream>
 
 #include <thread>
 #include <mutex>
@@ -14,11 +16,12 @@
 
 #include "vspace/target/cxxbridge/vspace/src/lib.rs.h"
 
-using duration = std::chrono::duration<uint64_t>;
+using seconds = std::chrono::seconds;
 
 struct benchmark_state {
+  std::string bench_name;
   size_t n_threads;
-  duration run_duration;
+  seconds run_seconds;
   core_map cores;
   std::atomic<size_t> n_threads_ready;
   std::vector<std::thread> threads;
@@ -27,12 +30,14 @@ struct benchmark_state {
   std::atomic<uint64_t> total_updates;
   std::atomic<uint64_t> total_reads;
 
-  benchmark_state(size_t n_threads,
-                  duration run_duration,
+  benchmark_state(std::string& bench_name,
+                  size_t n_threads,
+                  seconds run_seconds,
                   core_map::numa_policy numa_policy,
                   core_map::core_policy core_policy)
-    : n_threads{n_threads}
-    , run_duration{run_duration}
+    : bench_name{bench_name}
+    , n_threads{n_threads}
+    , run_seconds{run_seconds}
     , cores{numa_policy, core_policy}
     , n_threads_ready{}
     , threads{}
@@ -41,8 +46,38 @@ struct benchmark_state {
     , total_updates{}
     , total_reads{}
   {}
-};
 
+  void dump_json() {
+    std::string outpath{"data-"};
+    outpath += bench_name + "-";
+    outpath += std::to_string(n_threads) + "-";
+    outpath += std::to_string(run_seconds.count()) + "-";
+    outpath += cores.get_numa_policy() == core_map::NUMA_INTERLEAVE ?
+                    "interleave" : "fill";
+    outpath += ".json";
+    std::ofstream out{outpath.c_str()};
+
+    out << "{" << std::endl
+        << "  \"bench_name\": \"" << bench_name << "\"," << std::endl
+        << "  \"n_threads\": " << n_threads << "," << std::endl
+        << "  \"run_seconds\": " << run_seconds.count() << "," << std::endl
+        << "  \"numa_policy\": " << cores.get_numa_policy() << "," << std::endl
+        << "  \"core_policy\": " << cores.get_core_policy() << "," << std::endl
+        << "  \"reads\": " << total_reads << "," << std::endl
+        << "  \"updates\": " << total_updates << "," << std::endl
+        << "  \"total_ops\": " << total_reads + total_updates << "," << std::endl
+        << "  \"reads_per_s\": "
+          << static_cast<double>(total_reads) / run_seconds.count()
+          << "," << std::endl
+        << "  \"updates_per_s\": "
+          << static_cast<double>(total_updates) / run_seconds.count()
+          << "," << std::endl
+        << "  \"ops_per_s\": "
+          << static_cast<double>(total_reads + total_updates) / run_seconds.count()
+          << "," << std::endl
+        << "}" << std::endl;
+  }
+};
 
 template <typename Monitor>
 void run_thread(
@@ -204,16 +239,18 @@ void bench(benchmark_state& state, Monitor& monitor)
 
   while (state.n_threads_ready < state.n_threads);
   state.start_benchmark = true;
-  std::this_thread::sleep_for(state.run_duration);
+  std::this_thread::sleep_for(state.run_seconds);
   state.exit_benchmark = true;
 
   for (auto& thread : state.threads)
     thread.join();
 
-  std::cout << std::endl
+  std::cerr << std::endl
             << "threads " << state.n_threads << std::endl
             << "updates " << state.total_updates << std::endl
             << "reads   " << state.total_reads << std::endl;
+
+  state.dump_json();
 }
 
 void usage(const char* argv0) {
@@ -238,7 +275,7 @@ int main(int argc, char* argv[]) {
 
   const size_t n_seconds = atoi(argv[3]);
   assert(n_seconds > 0);
-  const auto run_duration = std::chrono::seconds{n_seconds};
+  const auto run_seconds = std::chrono::seconds{n_seconds};
 
   core_map::numa_policy fill_policy;
   const std::string policy_name = std::string(argv[4]);
@@ -253,10 +290,11 @@ int main(int argc, char* argv[]) {
   disable_dvfs();
 
   benchmark_state state{
+    bench_name,
     n_threads,
-    run_duration,
+    run_seconds,
     fill_policy,
-    core_map::CORES_FILL
+    core_map::core_policy::CORES_FILL
   };
 
 #define BENCHMARK(test_name) \
