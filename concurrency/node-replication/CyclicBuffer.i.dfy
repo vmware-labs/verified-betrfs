@@ -509,6 +509,40 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && aliveBits[physID] == LogicalToAliveBitAliveWhen(logical)
   }
 
+
+  lemma EntryIsAliveWrapAround(aliveBits: map</* entry: */ nat, /* bit: */ bool>, low: nat, high: nat)
+    requires forall i: nat :: i < BUFFER_SIZE as nat <==> i in aliveBits
+    requires low <= high < low +  (BUFFER_SIZE as int)
+    ensures forall i | low <= i < high ::
+      EntryIsAlive(aliveBits, i) == !EntryIsAlive(aliveBits, i + (BUFFER_SIZE as int))
+  {
+
+  }
+
+
+
+
+  lemma EntryIsAliveWrapAroundReformat(aliveBits: map</* entry: */ nat, /* bit: */ bool>, low: nat, high: nat)
+    requires forall i: nat :: i < BUFFER_SIZE as nat <==> i in aliveBits
+    requires low <= high < low +  (BUFFER_SIZE as nat)
+    requires forall i : nat | low <= i < high :: !EntryIsAlive(aliveBits, i + (BUFFER_SIZE as nat))
+    ensures forall i : nat | low + (BUFFER_SIZE as nat) <= i < high  + (BUFFER_SIZE as nat) :: !EntryIsAlive(aliveBits, i)
+    {
+
+      forall i : nat | low + (BUFFER_SIZE as nat) <= i < high  + (BUFFER_SIZE as nat)
+        ensures !EntryIsAlive(aliveBits, i)
+      {
+        assert i >= (BUFFER_SIZE as nat);
+        assert exists j |  low <= j < high :: j + (BUFFER_SIZE as nat) == i by {
+          var j := i - (BUFFER_SIZE as nat);
+          assert low <= j < high;
+          assert j + (BUFFER_SIZE as nat) == i;
+        }
+      }
+    }
+
+
+
   /*
    * ============================================================================================
    * State Guards
