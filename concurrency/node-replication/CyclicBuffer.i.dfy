@@ -24,7 +24,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   datatype ReaderState =
     | ReaderStarting(ghost start: nat)
-    | ReaderRange(ghost start: nat, ghost end: nat)
+    | ReaderRange(ghost start: nat, ghost end: nat, ghost cur: nat)
     | ReaderGuard(ghost start: nat, ghost end: nat, ghost cur: nat, ghost val: StoredType)
 
   datatype CombinerState =
@@ -207,13 +207,19 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           // the starting value should match the local tail
           && start == x.localTails[n]
         )
-        case ReaderRange(start: nat, end: nat) => (
+        case ReaderRange(start: nat, end: nat, cur: nat) => (
           // the start must be our local tail
           && x.localTails[n] == start
           // the start must be before the end, can be equial if ltail == gtail
           && start <= end
           // we've read the tail, but the tail may have moved
           && x.tail.value - (BUFFER_SIZE as nat) <= end <= x.tail.value
+          // current is between start and end
+          && start <= cur <= end
+          // the entries up to, and including  current must be alive
+          && (forall i | start <= i < cur :: EntryIsAlive(x.aliveBits, i))
+          // the entries up to, and including current must have something in the log
+          && (forall i | start <= i < cur :: x.contents[i].Some?)
         )
         case ReaderGuard(start: nat, end: nat, cur: nat, val: StoredType) => (
           // the start must be our local tail
@@ -224,8 +230,10 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           && x.tail.value - (BUFFER_SIZE as nat) <= end <= x.tail.value
           // current is between start and end
           && start <= cur < end
-          // the entry that we read must be alive
-          && EntryIsAlive(x.aliveBits, cur)
+          // the entries up to, and including  current must be alive
+          && (forall i | start <= i <= cur :: EntryIsAlive(x.aliveBits, i))
+          // the entries up to, and including current must have something in the log
+          && (forall i | start <= i <= cur :: x.contents[i].Some?)
           // the thing we are ready should match the log content
           && x.contents[cur] == Some(val)
         )
@@ -272,7 +280,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       case CombinerReading(readerState: ReaderState) => (
         match readerState {
           case ReaderStarting(_) => {}
-          case ReaderRange(start: nat, end: nat) => {} // not really accessing yet
+          case ReaderRange(start: nat, end: nat, _) => {} // not really accessing yet
           case ReaderGuard(start: nat, end: nat, cur: nat , _) => (
             {cur} // we only access this one.
           )
@@ -330,11 +338,11 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && Complete(x)
     && PointerOrdering(x)
     && PointerDifferences(x)
+    && RangesNoOverlap(x)
     && AliveBits(x)
     && BufferContents(x)
     // let's use the non-set version
     // && LogicalRangesNoOverlap(x)
-    && RangesNoOverlap(x)
     && CombinerStateValid(x)
     && ReaderStateValid(x)
   }
@@ -638,13 +646,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     && m.combinerState[nodeId].CombinerReading?
     && m.combinerState[nodeId].readerState.ReaderRange?
-  }
-
-  predicate CombinerIsReaderRangeAt(m: M, nodeId: NodeId, start: nat, end: nat)
-    requires m.M?
-    requires CombinerKnown(m, nodeId)
-  {
-    && m.combinerState[nodeId] == CombinerReading(ReaderRange(start, end))
+    && m.combinerState[nodeId].readerState.cur < m.combinerState[nodeId].readerState.end
   }
 
   predicate CombinerIsReaderGuard(m: M, nodeId: NodeId)
@@ -653,6 +655,15 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     && m.combinerState[nodeId].CombinerReading?
     && m.combinerState[nodeId].readerState.ReaderGuard?
+  }
+
+  predicate CombinerIsReaderRangeDone(m: M, nodeId: NodeId)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId].CombinerReading?
+    && m.combinerState[nodeId].readerState.ReaderRange?
+    && m.combinerState[nodeId].readerState.cur == m.combinerState[nodeId].readerState.end
   }
 
   /*
@@ -865,13 +876,13 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       contents := m.contents[key := Some(deposited)])
   }
 
+  // seems to take about 4 minutes...
   lemma AppendFlipBit_is_deposit(m: M, m': M, combinerNodeId: nat, deposited: StoredType)
-  requires AppendFlipBit(m, m', combinerNodeId, deposited)
-  ensures exists key :: deposit(m, m', key, deposited)
+    requires AppendFlipBit(m, m', combinerNodeId, deposited)
+    ensures exists key :: deposit(m, m', key, deposited)
   {
     var combinerBefore := m.combinerState[combinerNodeId];
     var key := combinerBefore.cur_idx;
-    var tail := combinerBefore.tail;
 
     forall p: M | Inv(dot(m, p))
     ensures Inv(dot(m', p))
@@ -888,7 +899,10 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
             (&& EntryIsAlive(dot(m', p).aliveBits, i) == EntryIsAlive(dot(m, p).aliveBits, i)
             && !EntryIsAlive(dot(m', p).aliveBits, i))
           );
-       }
+      }
+
+      assert AliveBits(dot(m', p));
+      assert BufferContents(dot(m', p));
 
       assert Inv(dot(m', p));
       assert key !in I(dot(m, p));
@@ -942,7 +956,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && var readerBefore := m.combinerState[combinerNodeId].readerState;
 
     && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerReading(
-      ReaderRange(readerBefore.start, m.tail.value))]
+      ReaderRange(readerBefore.start, m.tail.value, readerBefore.start))]
     )
   }
 
@@ -971,7 +985,12 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
     && i in m.contents
     && m.contents[i].Some?
-    && readerBefore.start <= i < readerBefore.end
+    // Question(RA): we sort of require to  process all entries before completing
+    //               and updating the local tail value. right now this is done
+    //               using the cur pointer, and requires linear processing of
+    //               the log, not sure if this causes a problem somewhere.
+    // && readerBefore.start <= i < readerBefore.end
+    && readerBefore.cur == i
 
     && LogicalToPhysicalIndex(i) in m.aliveBits
     && EntryIsAlive(m.aliveBits, i)
@@ -1007,7 +1026,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerReading(
-        ReaderRange(readerBefore.start, readerBefore.end))]
+        ReaderRange(readerBefore.start, readerBefore.end, readerBefore.cur + 1))]
     )
   }
 
@@ -1031,7 +1050,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m.M?
 
     && CombinerKnown(m, combinerNodeId)
-    && CombinerIsReaderRange(m, combinerNodeId)
+    && CombinerIsReaderRangeDone(m, combinerNodeId)
     && var combinerBefore := m.combinerState[combinerNodeId];
     && var readerBefore := m.combinerState[combinerNodeId].readerState;
 
@@ -1051,14 +1070,19 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     ensures Inv(dot(m', p))
       && I(dot(m, p)) == I(dot(m', p))
     {
-      if MinLocalTail(dot(m', p).localTails) == MinLocalTail(dot(m, p).localTails) {
+      if MinLocalTail(dot(m, p).localTails) == MinLocalTail(dot(m', p).localTails) {
         assert Inv(dot(m', p));
         assert I(dot(m, p)) == I(dot(m', p));
       } else {
-        assume MinLocalTail(dot(m', p).localTails) > MinLocalTail(dot(m, p).localTails);
+        assert MinLocalTail(dot(m, p).localTails) < MinLocalTail(dot(m', p).localTails);
+        var old_mintails := MinLocalTail(dot(m, p).localTails);
+        var new_mintails := MinLocalTail(dot(m', p).localTails);
 
-        assume AliveBits(dot(m', p)); // fails
-        assume BufferContents(dot(m', p)); // fails
+        // everything between old_mintails and new_mintails had to be alive, otherwise we
+        // couldn't have processed it. Now, transform this into the !Alive for the new mintail
+        assert forall i | old_mintails <= i < new_mintails :: EntryIsAlive(dot(m', p).aliveBits, i);
+        EntryIsAliveWrapAround(dot(m', p).aliveBits, old_mintails , new_mintails );
+        EntryIsAliveWrapAroundReformat(dot(m', p).aliveBits, old_mintails , new_mintails );
 
         assert Inv(dot(m', p));
         assert I(dot(m, p)) == I(dot(m', p));
