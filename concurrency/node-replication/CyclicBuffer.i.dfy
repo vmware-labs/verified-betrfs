@@ -117,6 +117,33 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     MinLocalTailRec(ltails, NUM_REPLICAS as nat - 1)
   }
 
+  function max(a: nat, b: nat) : nat {
+    if a > b then a
+    else b
+  }
+
+  function {:induction true}  MaxLocalTailRec(ltails: map<NodeId, nat>, idx: nat) : (m : nat)
+    requires idx < NUM_REPLICAS as nat
+    requires forall i:nat :: i < NUM_REPLICAS as nat <==> i in ltails
+    ensures forall i : nat | i <= idx ::  m >= ltails[i]
+    ensures exists i | 0 <= i <= idx :: ltails[i] == m
+    decreases idx
+  {
+    if idx == 0 then
+      ltails[0]
+    else
+      max(ltails[idx], MinLocalTailRec(ltails, idx - 1))
+  }
+
+  function MaxLocalTail(ltails: map<NodeId, nat>) : (m : nat)
+    requires forall i:nat :: i < NUM_REPLICAS as nat <==> i in ltails
+    ensures forall i | i in ltails :: m >= ltails[i]
+    ensures exists i | 0 <= i < NUM_REPLICAS as nat :: ltails[i] == m
+    ensures m in ltails.Values
+  {
+    MaxLocalTailRec(ltails, NUM_REPLICAS as nat - 1)
+  }
+
   /*
    * ============================================================================================
    * Invariant
