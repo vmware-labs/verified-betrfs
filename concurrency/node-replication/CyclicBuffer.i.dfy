@@ -461,29 +461,40 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   }
 
   // the set of current buffer entries.
-  function SetOfBufferEntries(min_ltails: int) : set<int>
+  function SetOfBufferEntries(min_ltails: int) : (r : set<int>)
+    ensures forall i :: min_ltails <= i < min_ltails + (BUFFER_SIZE as nat) <==> i in r
   {
     set x : int | min_ltails <= x < min_ltails + (BUFFER_SIZE as nat)
   }
 
   // the set of free buffer entries
-  function SetOfFreeBufferEntries(min_ltails: int, logital_tail: int) : set<int>
-    requires min_ltails <= logital_tail
-    requires logital_tail - (BUFFER_SIZE as nat) <= min_ltails <= logital_tail
-    requires ((logital_tail - min_ltails) < BUFFER_SIZE as nat)
+  function SetOfFreeBufferEntries(min_ltails: int, logical_tail: int) : (r : set<int>)
+    requires min_ltails <= logical_tail
+    requires logical_tail - (BUFFER_SIZE as int) <= min_ltails <= logical_tail
+    requires ((logical_tail - min_ltails) < BUFFER_SIZE as nat)
+    ensures forall i :: logical_tail <= i < min_ltails + (BUFFER_SIZE as nat) <==> i in r
   {
-    SetOfBufferEntries(min_ltails) - SetOfActiveBufferEntries(min_ltails, logital_tail)
+    SetOfBufferEntries(min_ltails) - SetOfActiveBufferEntries(min_ltails, logical_tail)
   }
 
   // the set of active buffer entries is everything between
-  function SetOfActiveBufferEntries(min_ltails: int, logital_tail: int) : set<int>
-    requires min_ltails <= logital_tail
-    requires logital_tail - (BUFFER_SIZE as nat) <= min_ltails <= logital_tail
-    requires ((logital_tail - min_ltails) < BUFFER_SIZE as nat)
+  function SetOfActiveBufferEntries(min_ltails: int, logical_tail: int) : (r : set<int>)
+    requires min_ltails <= logical_tail
+    requires logical_tail - (BUFFER_SIZE as int) <= min_ltails <= logical_tail
+    requires ((logical_tail - min_ltails) < BUFFER_SIZE as nat)
+    ensures forall i :: min_ltails <= i < logical_tail <==> i in r
   {
-    set x : int | min_ltails <= x < logital_tail :: x
+    set x : int | min_ltails <= x < logical_tail :: x
   }
 
+  lemma BufferUnion(ltails: int, tail: int)
+    requires ltails <= tail
+    requires tail - (BUFFER_SIZE as int) <= ltails <= tail
+    requires ((tail - ltails) < BUFFER_SIZE as int)
+    ensures SetOfActiveBufferEntries(ltails, tail) + SetOfFreeBufferEntries(ltails, tail) == SetOfBufferEntries(ltails)
+  {
+
+  }
 
   function LogicalToAliveBitAliveWhen(logical: int) : bool
   {
