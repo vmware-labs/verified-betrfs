@@ -27,6 +27,7 @@ struct benchmark_state {
   std::vector<std::thread> threads;
   std::atomic<bool> start_benchmark;
   std::atomic<bool> exit_benchmark;
+  std::atomic<size_t> n_threads_finished;
   std::atomic<uint64_t> total_updates;
   std::atomic<uint64_t> total_reads;
 
@@ -43,6 +44,7 @@ struct benchmark_state {
     , threads{}
     , start_benchmark{}
     , exit_benchmark{}
+    , n_threads_finished{}
     , total_updates{}
     , total_reads{}
   {}
@@ -104,6 +106,10 @@ void run_thread(
     }
   }
 
+  state.n_threads_finished++;
+  while (state.n_threads_finished < state.n_threads)
+    monitor.finish_up(thread_id, thread_context);
+
   state.total_updates += updates;
   state.total_reads += reads;
 }
@@ -135,6 +141,8 @@ struct cpp_shared_mutex_monitor {
     x_lock lock{mutex};
     ++value;
   }
+
+  void finish_up(uint8_t thread_id, void* thread_context) {}
 
   static void run_thread(
       uint8_t thread_id,
@@ -173,6 +181,8 @@ struct dafny_rwlock_monitor{
     uint64_t value = lock.acquire();
     lock.release(value + 1);
   }
+
+  void finish_up(uint8_t thread_id, void* thread_context) {}
 
   static void run_thread(
       uint8_t thread_id,
@@ -216,6 +226,14 @@ struct dafny_nr_monitor{
       helper.get_node(thread_id),
       CounterIfc_Compile::UpdateOp{},
       *c);
+  }
+
+  void finish_up(uint8_t thread_id, void* context) {
+    auto c = static_cast<nr::ThreadOwnedContext*>(context);
+    Impl_ON_CounterIfc__Compile::__default::try__combine(
+      helper.get_nr(),
+      helper.get_node(thread_id),
+      c->tid);
   }
 
   static void run_thread(
