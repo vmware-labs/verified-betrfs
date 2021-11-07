@@ -16,6 +16,8 @@ MAX_THREADS = NODES * CORES_PER_NODE
 BENCHES = ['dafny_nr', 'dafny_rwlock', 'cpp_shared_mutex']
 ALLOWED_N_REPLICAS = [1, 2, 4]
 
+N_THREADS = [1] + list(range(4, MAX_THREADS, 4))
+
 def bench_path(n_replicas):
     p = './app-%dreplicas' % n_replicas
     os.path.isfile(p) and os.access(p, os.X_OK)
@@ -42,12 +44,16 @@ def run(bench, n_replicas, n_threads):
     subprocess.run(cmd, shell=True, check=True)
 
 def run_all():
+    bench = 'dafny_nr'
     for n_replicas in [1, 2, 4]:
-        for bench in BENCHES:
-            for n_threads in [1] + list(range(4, MAX_THREADS, 4)):
-                if n_threads < n_replicas:
-                    continue
-                run(bench, n_replicas, n_threads)
-                combine_data_files()
+        for n_threads in N_THREADS:
+            if n_threads < n_replicas or n_threads > n_replicas * CORES_PER_NODE:
+                continue
+            run(bench, n_replicas, n_threads)
+            combine_data_files()
+
+    for bench in BENCHES[1:]:
+        for n_threads in N_THREADS:
+            run(bench, 1, n_threads)
 
 if __name__ == '__main__': run_all()

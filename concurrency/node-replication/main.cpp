@@ -62,6 +62,7 @@ struct benchmark_state {
     out << "{" << std::endl
         << "  \"bench_name\": \"" << bench_name << "\"," << std::endl
         << "  \"n_threads\": " << n_threads << "," << std::endl
+	<< "  \"n_replicas\": " << nr_helper::num_replicas() << "," << std::endl
         << "  \"run_seconds\": " << run_seconds.count() << "," << std::endl
         << "  \"numa_policy\": " << cores.get_numa_policy() << "," << std::endl
         << "  \"core_policy\": " << cores.get_core_policy() << "," << std::endl

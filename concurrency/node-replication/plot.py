@@ -84,7 +84,7 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
                mapping=aes(x='n_threads',
                            y='ops_per_s',
                            color='bench_name',
-                           shape='bench_name')) + \
+                           shape='n_replicas')) + \
         theme_my538() + \
         coord_cartesian(ylim=(0, None), expand=False) + \
         labs(y="Throughput [Melems/s]") + \
