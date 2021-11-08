@@ -1,8 +1,12 @@
 include "Init.i.dfy"
-include "ConcreteReplica.i.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 
+include "ConcreteReplica.i.dfy"
 import M = Init(CounterIfc)
+
+//include "ConcreteVSpaceReplica.i.dfy"
+//import M = Init(VSpaceIfc)
+
 
 // Create an extra RwLock just for C++ microbenchmarks.
 module Uint64ContentsTypeMod refines ContentsTypeMod {

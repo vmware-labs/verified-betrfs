@@ -11,10 +11,12 @@
 #include <shared_mutex>
 #include <condition_variable>
 
+#include "vspace/target/cxxbridge/vspace/src/lib.rs.h"
+using VSpacePtr = VSpace*;
+
 #include "nr.h"
 #include "thread_pin.h"
 
-#include "vspace/target/cxxbridge/vspace/src/lib.rs.h"
 
 using seconds = std::chrono::seconds;
 
@@ -212,27 +214,38 @@ struct dafny_nr_monitor{
 
   uint64_t get(uint8_t thread_id, void* context) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
+#if COUNTER
+    auto op = CounterIfc_Compile::ReadonlyOp{}; 
+#else
+    auto op = VSpaceIfc_Compile::ReadonlyOp{}; 
+#endif
     Tuple<uint64_t, nr::ThreadOwnedContext> r =
-      Impl_ON_CounterIfc__Compile::__default::do__read(
+      nr::__default::do__read(
         helper.get_nr(),
         helper.get_node(thread_id),
-        CounterIfc_Compile::ReadonlyOp{},
+        op,
         *c);
+
     return r.get<0>();
   }
 
   void inc(uint8_t thread_id, void* context) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
-    Impl_ON_CounterIfc__Compile::__default::do__update(
+#if COUNTER
+    auto op = CounterIfc_Compile::UpdateOp{}; 
+#else
+    auto op = VSpaceIfc_Compile::UpdateOp{}; 
+#endif
+    nr::__default::do__update(
       helper.get_nr(),
       helper.get_node(thread_id),
-      CounterIfc_Compile::UpdateOp{},
+      op,
       *c);
   }
 
   void finish_up(uint8_t thread_id, void* context) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
-    Impl_ON_CounterIfc__Compile::__default::try__combine(
+    nr::__default::try__combine(
       helper.get_nr(),
       helper.get_node(thread_id),
       c->tid);

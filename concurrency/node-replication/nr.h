@@ -20,8 +20,14 @@
 #include <memory>
 
 using LinearExtern::lseq;
+
+#ifdef COUNTER
 namespace nr = Impl_ON_CounterIfc__Compile;
 namespace nrinit = Init_ON_CounterIfc__Compile;
+#else
+namespace nr = Impl_ON_VSpaceIfc__Compile;
+namespace nrinit = Init_ON_VSpaceIfc__Compile;
+#endif
 
 class nr_helper {
   uint32_t n_threads_per_replica;

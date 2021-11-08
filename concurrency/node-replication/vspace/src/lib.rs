@@ -29,6 +29,8 @@ mod ffi {
             //rights: &MapAction,
         ) -> bool;
 
+        pub fn resolve_wrapper(self: &mut VSpace, vbase: u64) -> u64;
+
         pub fn create_vspace() -> &'static mut VSpace;
     }
 }
@@ -468,6 +470,10 @@ impl VSpace {
     /// Resolve a PML4Entry to a PDPT.
     fn get_pdpt<'b>(&self, entry: PML4Entry) -> &'b mut PDPT {
         unsafe { transmute::<VAddr, &mut PDPT>(paddr_to_kernel_vaddr(entry.address())) }
+    }
+
+    pub fn resolve_wrapper(&self, addr: u64) -> u64 {
+        self.resolve_addr(VAddr::from(addr)).map(|pa| pa.as_u64()).unwrap_or(0x0)
     }
 
     pub fn resolve_addr(&self, addr: VAddr) -> Option<PAddr> {

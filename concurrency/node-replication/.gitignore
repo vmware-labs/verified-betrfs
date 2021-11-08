@@ -5,3 +5,4 @@ Bundle.o
 app
 main.o
 vspace_glue.o
+*.runtimeconfig.json
