@@ -108,8 +108,15 @@ module {:extern "Ptrs"} Ptrs {
 
   method {:extern} alloc_array_aligned<V>(len: uint64, init_value: V, alignment: uint64)
   returns (ptr: Ptr, glinear d: PointsToArray<V>)
+  requires len * sizeof<V>() < 0x1_0000_0000_0000_0000
   requires alignment == 4096 // XXX(travis): should probably be "a power of 2" or something
   ensures ptr.aligned(alignment as nat)
+  ensures d == PointsToArray(ptr, seq(len, (i) => init_value))
+
+  method {:extern} alloc_array_hugetables<V>(len: uint64, init_value: V)
+  returns (ptr: Ptr, glinear d: PointsToArray<V>)
+  requires len * sizeof<V>() < 0x1_0000_0000_0000_0000
+  ensures ptr.aligned(4096)
   ensures d == PointsToArray(ptr, seq(len, (i) => init_value))
 
   function method {:extern} ptr_diff(ptr1: Ptr, ptr2: Ptr) : (i: uint64)

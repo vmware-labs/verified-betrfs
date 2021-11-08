@@ -10,6 +10,10 @@
 #include <cstdlib>
 #include <libaio.h>
 
+// for mmap
+#include <sys/mman.h>
+#include <sys/stat.h>
+
 #include "Extern.h"
 
 static_assert(sizeof(long long) == 8);
@@ -201,3 +205,25 @@ struct std::hash<InstantiatedDiskInterface::IOCtx> {
   }
 };
 
+namespace Ptrs {
+  template <typename V>
+  Ptr alloc__array__hugetables(uint64_t len, V init_v, uint64_t alignment) {
+    static_assert(sizeof(size_t) == 8);
+    size_t byte_len = len * init_v; // pre-condition requires this to not overflow
+
+    int prot= PROT_READ | PROT_WRITE;
+    int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB;
+    void* void_p = mmap(NULL, len, prot, flags, -1, 0);
+
+    if (void_p == MAP_FAILED) {
+      std::cerr << "alloc__arayy__hugetables: mmap failed" << std::endl;
+      exit(1);
+    }
+
+    V* ptr = (V*)void_p;
+    for (uint64_t i = 0; i < len; i++) {
+      new (&ptr[i]) V(init_v);
+    }
+    return Ptr((uintptr_t)ptr);
+  }
+}

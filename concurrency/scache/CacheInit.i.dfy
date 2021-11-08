@@ -284,8 +284,9 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     var data_base_ptr;
     glinear var data_pta_full;
-    data_base_ptr, data_pta_full := alloc_array_aligned<byte>(
-        CACHE_SIZE_64() * PageSize64(), 0, PageSize64());
+    sizeof_int_types();
+    data_base_ptr, data_pta_full := alloc_array_hugetables<byte>(
+        CACHE_SIZE_64() * PageSize64(), 0);
     glinear var data_pta_seq : map<nat, PointsToArray<byte>> :=
         mem_split(data_pta_full, PageSize as int, CACHE_SIZE);
 
