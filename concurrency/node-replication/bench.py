@@ -7,14 +7,13 @@ import glob
 import subprocess
 
 NUMA_POLICY = 'interleave'
-SECONDS = 10
+SECONDS = 30
 
 CORES_PER_NODE = 48
-NODES = 2
+NODES = 4
 MAX_THREADS = NODES * CORES_PER_NODE
 
 BENCHES = ['dafny_nr', 'dafny_rwlock', 'cpp_shared_mutex']
-ALLOWED_N_REPLICAS = [1, 2, 4]
 
 N_THREADS = [1] + list(range(4, MAX_THREADS, 4))
 
@@ -44,16 +43,17 @@ def run(bench, n_replicas, n_threads):
     subprocess.run(cmd, shell=True, check=True)
 
 def run_all():
-    bench = 'dafny_nr'
-    for n_replicas in [1, 2, 4]:
-        for n_threads in N_THREADS:
-            if n_threads < n_replicas or n_threads > n_replicas * CORES_PER_NODE:
+    for n_threads in N_THREADS:
+        for n_replicas in [1, 2, 4]:
+            bench = 'dafny_nr'
+            assert bench == BENCHES[0]
+            if (n_threads < n_replicas) or (n_threads > (n_replicas * CORES_PER_NODE)):
                 continue
             run(bench, n_replicas, n_threads)
             combine_data_files()
 
-    for bench in BENCHES[1:]:
-        for n_threads in N_THREADS:
+        for bench in BENCHES[1:]:
             run(bench, 1, n_threads)
+            combine_data_files()
 
 if __name__ == '__main__': run_all()

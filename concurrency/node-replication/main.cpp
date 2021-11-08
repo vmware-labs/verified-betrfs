@@ -53,6 +53,7 @@ struct benchmark_state {
     std::string outpath{"data-"};
     outpath += bench_name + "-";
     outpath += std::to_string(n_threads) + "-";
+    outpath += std::to_string(nr_helper::num_replicas()) + "-";
     outpath += std::to_string(run_seconds.count()) + "-";
     outpath += cores.get_numa_policy() == core_map::NUMA_INTERLEAVE ?
                     "interleave" : "fill";

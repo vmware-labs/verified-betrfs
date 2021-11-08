@@ -79,17 +79,22 @@ class theme_my538(theme_gray):
             inplace=True)
 
 def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
+    df['config'] = df['bench_name'] + [str(i) for i in df['n_replicas'].to_list()]
+    df = df.loc[df['n_threads'] >= 4]
+    df['n_replicas'] = pd.Categorical(df.n_replicas)
     xskip = int(machine[1]/8)
     p = ggplot(data=df,
                mapping=aes(x='n_threads',
                            y='ops_per_s',
-                           color='bench_name',
-                           shape='n_replicas')) + \
+                           color='config',
+                           shape='config',
+                           linetype='n_replicas',
+                           group='config')) + \
         theme_my538() + \
         coord_cartesian(ylim=(0, None), expand=False) + \
         labs(y="Throughput [Melems/s]") + \
         theme(legend_position='top', legend_title=element_blank()) + \
-        scale_x_continuous(breaks=[1] + list(range(xskip, 513, xskip)), name='# Threads') + \
+        scale_x_continuous(breaks=[1, 4] + list(range(xskip, 513, xskip)), name='# Threads') + \
         scale_y_continuous(labels=lambda lst: ["{:,.0f}".format(x / 1_000_000) for x in lst]) + \
         scale_color_manual([
             "#66C2A5",
