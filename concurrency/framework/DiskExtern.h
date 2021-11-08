@@ -213,7 +213,7 @@ namespace Ptrs {
 
     int prot= PROT_READ | PROT_WRITE;
     int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB;
-    void* void_p = mmap(NULL, len, prot, flags, -1, 0);
+    void* void_p = mmap(NULL, byte_len, prot, flags, -1, 0);
 
     if (void_p == MAP_FAILED) {
       std::cerr << "alloc__arayy__hugetables: mmap failed" << std::endl;
