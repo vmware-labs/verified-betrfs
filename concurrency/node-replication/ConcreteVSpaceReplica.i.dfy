@@ -7,8 +7,8 @@ module VSpaceIfc refines NRIfc {
   import opened VSpaceStruct
 
   type NRState = uint64
-  datatype UpdateOp = AdjustOp
-  datatype ReadonlyOp = ReadOp
+  datatype UpdateOp = UpdateOp(key: uint64, val: uint64)
+  datatype ReadonlyOp = ReadOp(key: uint64)
   type ReturnType = uint64
 
   function init_state() : NRState { 0 }
@@ -34,16 +34,16 @@ module VSpaceIfc refines NRIfc {
   returns (linear s': DataStructureType, ret: ReturnType)
   ensures UpdateResult(I(s'), ret) == update(I(s), op)
   {
-    //linear var VSpaceWrapper(inner) := s;
-    ret := s.inner.mapGenericWrapped(0x3000, 0x4000, 0x1000);
+    var UpdateOp(key, value) := op;
+    ret := s.inner.mapGenericWrapped(key, value, 0x1000);
     s' := s;
-    //s' := VSpaceWrapper(inner);
   }
 
   method do_readonly(shared s: DataStructureType, op: ReadonlyOp)
   returns (ret: ReturnType)
   ensures ret == read(I(s), op)
   {
-    ret := s.inner.resolveWrapped(0x0);
+    var ReadOp(key) := op;
+    ret := s.inner.resolveWrapped(key);
   }
 }

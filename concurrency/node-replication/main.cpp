@@ -14,6 +14,25 @@
 #include "nr.h"
 #include "thread_pin.h"
 
+const uint64_t MASK = 0x4fffff000; // range is: 4K -- 20 GIB, if you adjust this number also adjust
+                                   // TWENTY_GIB in vspace/lib.rs
+
+// https://en.wikipedia.org/wiki/Xorshift
+struct xorshift64_state
+{
+  uint64_t a;
+};
+
+uint64_t xorshift64(struct xorshift64_state *state)
+{
+  uint64_t x = state->a;
+  x ^= x << 13;
+  x ^= x >> 7;
+  x ^= x << 17;
+  return state->a = x;
+}
+
+static __thread xorshift64_state fast_rng = xorshift64_state{0xdeaddeaddeadbeef};
 
 using seconds = std::chrono::seconds;
 
@@ -214,7 +233,8 @@ struct dafny_nr_monitor{
 #if COUNTER
     auto op = CounterIfc_Compile::ReadonlyOp{}; 
 #else
-    auto op = VSpaceIfc_Compile::ReadonlyOp{}; 
+    auto key = xorshift64(&fast_rng) & MASK;
+    auto op = VSpaceIfc_Compile::ReadonlyOp{key}; 
 #endif
     Tuple<uint64_t, nr::ThreadOwnedContext> r =
       nr::__default::do__read(
@@ -231,7 +251,9 @@ struct dafny_nr_monitor{
 #if COUNTER
     auto op = CounterIfc_Compile::UpdateOp{}; 
 #else
-    auto op = VSpaceIfc_Compile::UpdateOp{}; 
+    auto key = xorshift64(&fast_rng) & MASK;
+    auto val = xorshift64(&fast_rng) & MASK;
+    auto op = VSpaceIfc_Compile::UpdateOp{key, val}; 
 #endif
     nr::__default::do__update(
       helper.get_nr(),
