@@ -295,8 +295,8 @@ int main(int argc, char* argv[]) {
   if (argc < 5)
     usage(argv[0]);
 
-  VSpace* vspace = createVSpace();
-  vspace->mapGenericWrapped(0x0, 0x0, 0x1000);
+  //VSpace* vspace = createVSpace();
+  //vspace->mapGenericWrapped(0x2000, 0x3000, 0x1000);
 
   std::string bench_name = std::string{argv[1]};
 

@@ -1,7 +1,7 @@
 all: app
 
-DATA_STRUCTURE=COUNTER
-#DATA_STRUCTURE=VSPACE # this doesn't exactly do anything in the code atm, but COUNTER shouldn't be defined if you want to use VSpace
+#DATA_STRUCTURE=COUNTER
+DATA_STRUCTURE=VSPACE # this doesn't exactly do anything in the code atm, but COUNTER shouldn't be defined if you want to use VSpace
 
 CFLAGS := -g -O3 -std=c++17 \
 	-I ../../.dafny/dafny/Binaries/ -I ../framework/ -D$(DATA_STRUCTURE)

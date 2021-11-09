@@ -154,7 +154,7 @@ impl fmt::Display for MapAction {
 
 pub struct VSpace {
     pub pml4: Pin<Box<PML4>>,
-    allocs: Vec<(*mut u8, usize)>,
+    //allocs: Vec<(*mut u8, usize)>,
 }
 
 unsafe impl Sync for VSpace {}
@@ -162,7 +162,7 @@ unsafe impl Send for VSpace {}
 
 impl Drop for VSpace {
     fn drop(&mut self) {
-        unsafe {
+        /*unsafe {
             self.allocs.reverse();
             for (base, size) in self.allocs.iter() {
                 //println!("-- dealloc {:p} {:#x}", base, size);
@@ -171,19 +171,31 @@ impl Drop for VSpace {
                     core::alloc::Layout::from_size_align_unchecked(*size, 4096),
                 );
             }
-        }
+        }*/
     }
 }
 
 // cpp glue fun
 pub fn createVSpace() -> &'static mut VSpace {
-    env_logger::try_init();
-    Box::leak(Box::new(VSpace {
+    log::info!("createVSpace");
+    //env_logger::try_init();
+    let vs = Box::leak(Box::new(VSpace {
         pml4: Box::pin(
             [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
         ),
-        allocs: Vec::with_capacity(1024),
-    }))
+        //allocs: Vec::with_capacity(1024),
+    }));
+
+    const TWENTY_GIB: u64 = 20*1024*1024*1024; 
+    for i in 0..TWENTY_GIB / 4096 {
+        assert!(vs.map_generic(
+            VAddr::from(i * 4096),
+            (PAddr::from(i * 4096), 4096),
+            MapAction::ReadWriteExecuteUser,
+        ).is_ok());
+    }
+
+    vs
 }
 
 impl Default for VSpace {
@@ -192,7 +204,7 @@ impl Default for VSpace {
         pml4: Box::pin(
             [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
         ),
-        allocs: Vec::with_capacity(1024),
+        //allocs: Vec::with_capacity(1024),
     }    }
 }
 
@@ -393,11 +405,12 @@ impl VSpace {
         let mut pt_idx = pt_index(vbase);
         let mut mapped: usize = 0;
         while mapped < psize && pt_idx < 512 {
-            if !pt[pt_idx].is_present() {
+            // XXX: allow updates
+            //if !pt[pt_idx].is_present() {
                 pt[pt_idx] = PTEntry::new(pbase + mapped, PTFlags::P | rights.to_pt_rights());
-            } else {
-                return Err(VSpaceError { at: vbase.as_u64() });
-            }
+            //} else {
+            //    return Err(VSpaceError { at: vbase.as_u64() });
+            //}
 
             mapped += BASE_PAGE_SIZE;
             pt_idx += 1;
@@ -421,10 +434,13 @@ impl VSpace {
 
     /// A simple wrapper function for allocating just one page.
     fn allocate_one_page(&mut self) -> PAddr {
+        log::info!("allocate a page...");
         self.allocate_pages(1, ResourceType::PageTable)
     }
 
     fn allocate_pages(&mut self, how_many: usize, _typ: ResourceType) -> PAddr {
+        log::info!("allocate_pages {}...", how_many);
+
         let new_region: *mut u8 = unsafe {
             alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(
                 how_many * BASE_PAGE_SIZE,
@@ -437,7 +453,7 @@ impl VSpace {
                 *new_region.offset(i as isize) = 0u8;
             }
         }
-        self.allocs.push((new_region, how_many * BASE_PAGE_SIZE));
+        //self.allocs.push((new_region, how_many * BASE_PAGE_SIZE));
 
         kernel_vaddr_to_paddr(VAddr::from(new_region as usize))
     }
@@ -646,3 +662,31 @@ fn main() {
     vspace_scale_out(&mut harness);
 }
 */
+
+#[test]
+fn silly() {
+    let vs = createVSpace();
+    assert!(vs.resolveWrapped(0x0) == 0x0);
+    assert!(vs.resolveWrapped(0x1000) == 0x1000);
+    assert!(vs.resolveWrapped((20*1024*1024*1024) - 4096) == (20*1024*1024*1024) - 4096);
+    assert!(vs.resolveWrapped(20*1024*1024*1024) == 0x0);
+    assert!(vs.resolveWrapped((20*1024*1024*1024) + 4096) == 0x0);
+
+    assert!(vs.mapGenericWrapped(20*1024*1024*1024, 0xf000, 0x1000));
+    assert!(vs.resolveWrapped(20*1024*1024*1024) == 0xf000);
+
+    assert!(vs.mapGenericWrapped((20*1024*1024*1024) - 4096, 0xd000, 0x1000));
+    assert!(vs.resolveWrapped((20*1024*1024*1024) - 4096) == 0xd000);
+
+
+/*        pub fn mapGenericWrapped(
+            self: &mut VSpace,
+            vbase: u64,
+            pregion: u64,
+            pregion_len: usize,
+            //rights: &MapAction,
+        ) -> bool;
+
+        pub fn resolveWrapped(self: &mut VSpace, vbase: u64) -> u64;
+*/
+}

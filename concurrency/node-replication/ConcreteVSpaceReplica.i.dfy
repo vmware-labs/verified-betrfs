@@ -34,9 +34,10 @@ module VSpaceIfc refines NRIfc {
   returns (linear s': DataStructureType, ret: ReturnType)
   ensures UpdateResult(I(s'), ret) == update(I(s), op)
   {
-    linear var VSpaceWrapper(inner) := s;
-    ret := inner.mapGenericWrapped(0x0, 0x0, 0x1000);
-    s' := VSpaceWrapper(inner);
+    //linear var VSpaceWrapper(inner) := s;
+    ret := s.inner.mapGenericWrapped(0x3000, 0x4000, 0x1000);
+    s' := s;
+    //s' := VSpaceWrapper(inner);
   }
 
   method do_readonly(shared s: DataStructureType, op: ReadonlyOp)
