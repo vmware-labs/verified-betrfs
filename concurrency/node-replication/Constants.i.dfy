@@ -12,7 +12,7 @@ module Constants {
   // Should be configured to the exact number of threads for best performance
   const MAX_THREADS_PER_REPLICA: uint64 := 256;
 
-  const MAX_PENDING_OPS: uint64 := 32
+  const MAX_PENDING_OPS: uint64 := 1
   const BUFFER_SIZE: uint64 := MAX_THREADS_PER_REPLICA * MAX_PENDING_OPS;
 
   // number of reference counts should be equal to the number of expected threads
