@@ -5,7 +5,12 @@
 
 #include "Extern.h"
 #include "LinearExtern.h"
-#include "Bundle.i.h"
+
+#ifdef USE_COUNTER
+#include "BundleCounter.i.h"
+#else
+#include "BundleVSpace.i.h"
+#endif
 
 #include <cinttypes>
 #include <optional>
@@ -21,7 +26,7 @@
 
 using LinearExtern::lseq;
 
-#ifdef COUNTER
+#ifdef USE_COUNTER
 namespace nr = Impl_ON_CounterIfc__Compile;
 namespace nrinit = Init_ON_CounterIfc__Compile;
 #else

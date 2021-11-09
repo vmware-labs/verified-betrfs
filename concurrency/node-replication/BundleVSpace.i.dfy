@@ -1,9 +1,6 @@
 include "Init.i.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 
-//include "ConcreteReplica.i.dfy"
-//import M = Init(CounterIfc)
-
 include "ConcreteVSpaceReplica.i.dfy"
 import M = Init(VSpaceIfc)
 

@@ -1,7 +1,7 @@
 vspace/target
-Bundle.i.cpp
-Bundle.i.h
-Bundle.o
+Bundle*.i.cpp
+Bundle*.i.h
+Bundle*.o
 app
 main.o
 vspace_glue.o

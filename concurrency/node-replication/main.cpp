@@ -230,7 +230,7 @@ struct dafny_nr_monitor{
 
   uint64_t get(uint8_t thread_id, void* context) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
-#if COUNTER
+#if USE_COUNTER
     auto op = CounterIfc_Compile::ReadonlyOp{}; 
 #else
     auto key = xorshift64(&fast_rng) & MASK;
@@ -248,7 +248,7 @@ struct dafny_nr_monitor{
 
   void inc(uint8_t thread_id, void* context) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
-#if COUNTER
+#if USE_COUNTER
     auto op = CounterIfc_Compile::UpdateOp{}; 
 #else
     auto key = xorshift64(&fast_rng) & MASK;
