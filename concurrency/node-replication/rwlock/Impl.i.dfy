@@ -262,6 +262,8 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         }
         if ret_value == 0 {
           visited := visited + 1;
+        } else {
+          SpinLoopHint();
         }
       }
 
