@@ -8,10 +8,12 @@ module Constants {
 
   // Fixed number of replicas (in reference impl, this is variable)
   const NUM_REPLICAS: uint64 := 4;
-  const BUFFER_SIZE: uint64 := 9999; // TODO
 
   // Should be configured to the exact number of threads for best performance
-  const MAX_THREADS_PER_REPLICA: uint64 := 48;
+  const MAX_THREADS_PER_REPLICA: uint64 := 256;
+
+  const MAX_PENDING_OPS: uint64 := 32
+  const BUFFER_SIZE: uint64 := MAX_THREADS_PER_REPLICA * MAX_PENDING_OPS;
 
   // number of reference counts should be equal to the number of expected threads
   function method RC_WIDTH_64() : uint64 { MAX_THREADS_PER_REPLICA }
