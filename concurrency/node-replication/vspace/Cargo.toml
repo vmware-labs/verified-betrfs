@@ -12,6 +12,7 @@ x86 = "0.43"
 log = "0.4"
 cxx = "1.0"
 env_logger = "*"
+node-replication = "0.1.1"
 
 [build-dependencies]
 cxx-build = "1.0"

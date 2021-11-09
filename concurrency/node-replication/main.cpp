@@ -279,6 +279,73 @@ struct dafny_nr_monitor{
   }
 };
 
+// - Rust NR Benchmarking -
+
+struct rust_nr_monitor{
+  nr_helper helper;
+
+  rust_nr_monitor(size_t n_threads)
+    : helper{n_threads}
+  {
+    helper.init_nr();
+  }
+
+  void* create_thread_context(uint8_t thread_id) {
+    return helper.register_thread(thread_id);
+  }
+
+  uint64_t get(uint8_t thread_id, void* context) {
+    auto c = static_cast<nr::ThreadOwnedContext*>(context);
+#if USE_COUNTER
+    assert(false); // NYI 
+#else
+    auto key = xorshift64(&fast_rng) & MASK;
+    auto op = VSpaceIfc_Compile::ReadonlyOp{key}; 
+#endif
+    /* Tuple<uint64_t, nr::ThreadOwnedContext> r =
+      nr::__default::do__read(
+        helper.get_nr(),
+        helper.get_node(thread_id),
+        op,
+        *c);
+
+    return r.get<0>(); */
+    return 0;
+  }
+
+  void inc(uint8_t thread_id, void* context) {
+    auto c = static_cast<nr::ThreadOwnedContext*>(context);
+#if USE_COUNTER
+    assert(false); // NYI 
+#else
+    auto key = xorshift64(&fast_rng) & MASK;
+    auto val = xorshift64(&fast_rng) & MASK;
+    //auto op = VSpaceIfc_Compile::UpdateOp{key, val}; 
+#endif
+    /*nr::__default::do__update(
+      helper.get_nr(),
+      helper.get_node(thread_id),
+      op,
+      *c);*/
+  }
+
+  void finish_up(uint8_t thread_id, void* context) {
+    auto c = static_cast<nr::ThreadOwnedContext*>(context);
+    /*nr::__default::try__combine(
+      helper.get_nr(),
+      helper.get_node(thread_id),
+      c->tid);*/
+  }
+
+  static void run_thread(
+      uint8_t thread_id,
+      benchmark_state& state,
+      rust_nr_monitor& monitor)
+  {
+    ::run_thread(thread_id, state, monitor);
+  }
+};
+
 template <typename Monitor>
 void bench(benchmark_state& state, Monitor& monitor)
 {
@@ -316,6 +383,12 @@ void usage(const char* argv0) {
 int main(int argc, char* argv[]) {
   if (argc < 5)
     usage(argv[0]);
+
+  //LogWrapper& lw = createLog();
+  //ReplicaWrapper* rw = createReplica(lw);
+  //auto tkn = rw->RegisterWrapper();
+  //rw->ReplicaMap(tkn, 0x2000, 0x3000);
+  //rw->ReplicaResolve(tkn, 0x2000);
 
   //VSpace* vspace = createVSpace();
   //vspace->mapGenericWrapped(0x2000, 0x3000, 0x1000);
@@ -359,6 +432,7 @@ int main(int argc, char* argv[]) {
   BENCHMARK(cpp_shared_mutex);
   BENCHMARK(dafny_rwlock);
   BENCHMARK(dafny_nr);
+  BENCHMARK(rust_nr);
 
   std::cerr << "unrecognized benchmark name " << bench_name << std::endl;
 

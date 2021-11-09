@@ -14,6 +14,8 @@ use std::pin::Pin;
 use log::{debug, trace};
 use x86::bits64::paging::*;
 
+use node_replication::{Log, Replica, Dispatch, ReplicaToken};
+
 #[cxx::bridge]
 mod ffi {
     extern "Rust" {
@@ -32,6 +34,19 @@ mod ffi {
         pub fn resolveWrapped(self: &mut VSpace, vbase: u64) -> u64;
 
         pub fn createVSpace() -> *mut VSpace;
+
+        // NR stuff
+        type Access;
+        type Modify;
+        type ReplicaWrapper;
+        type LogWrapper;
+
+        pub fn RegisterWrapper(self: &mut ReplicaWrapper) -> usize;
+        pub fn createLog() -> &'static mut LogWrapper;
+        pub fn createReplica(log: &'static mut LogWrapper) -> *mut ReplicaWrapper;
+
+        pub fn ReplicaResolve(self: &mut ReplicaWrapper, tkn: usize, key: u64) -> u64;
+        pub fn ReplicaMap(self: &mut ReplicaWrapper, tkn: usize, key: u64, val: u64) -> u64;
     }
 }
 
@@ -151,6 +166,44 @@ impl fmt::Display for MapAction {
         }
     }
 }
+use std::sync::Arc;
+
+pub struct ReplicaWrapper {
+    log: &'static LogWrapper,
+    inner: Arc<Replica<'static, VSpace>>,
+}
+
+impl ReplicaWrapper {
+    fn RegisterWrapper(&mut self) -> usize {
+        let tkn = self.inner.register().unwrap();
+        tkn.id()
+    }
+
+    fn ReplicaResolve(&self, tkn: usize, key: u64) -> u64 {
+        let tkn = unsafe { ReplicaToken::new(tkn) };
+        self.inner.execute(Access::Resolve(key), tkn)
+    }
+
+    fn ReplicaMap(&self, tkn: usize, key: u64, val: u64) -> u64 {
+        let tkn = unsafe { ReplicaToken::new(tkn) };
+        self.inner.execute_mut(Modify::Map(key, val), tkn)
+    }
+}
+
+pub fn createReplica(log: &'static LogWrapper) -> &'static mut ReplicaWrapper {
+    let inner = Replica::new(&log.0);
+    Box::leak(Box::new(ReplicaWrapper{ log, inner }))
+}
+
+pub struct LogWrapper(Arc<Log<'static, Modify>>);
+
+pub fn createLog() -> &'static mut LogWrapper {
+    const TWO_MIB: usize = 2*1024*1024;
+    let log = Arc::new(Log::new(TWO_MIB));
+
+    Box::leak(Box::new(LogWrapper(log)))
+}
+
 
 pub struct VSpace {
     pub pml4: Pin<Box<PML4>>,
@@ -159,6 +212,56 @@ pub struct VSpace {
 
 unsafe impl Sync for VSpace {}
 unsafe impl Send for VSpace {}
+
+/// We support a mutable put operation on the hashmap.
+#[derive(Debug, PartialEq, Clone)]
+pub enum Modify {
+   Map(u64, u64),
+}
+
+/// We support an immutable read operation to lookup a key from the hashmap.
+#[derive(Debug, PartialEq, Clone)]
+pub enum Access {
+   Resolve(u64),
+}
+
+/// The Dispatch traits executes `ReadOperation` (our Access enum)
+/// and `WriteOperation` (our Modify enum) against the replicated
+/// data-structure.
+impl Dispatch for VSpace {
+   type ReadOperation = Access;
+   type WriteOperation = Modify;
+   type Response = u64;
+
+   /// The `dispatch` function applies the immutable operations.
+   fn dispatch(&self, op: Self::ReadOperation) -> Self::Response {
+       match op {
+           Access::Resolve(key) => self.resolveWrapped(key),
+       }
+   }
+
+   /// The `dispatch_mut` function applies the mutable operations.
+   fn dispatch_mut(
+       &mut self,
+       op: Self::WriteOperation,
+   ) -> Self::Response {
+       match op {
+           Modify::Map(key, value) => self.mapGenericWrapped(key, value, 0x1000) as u64,
+       }
+   }
+}
+
+/*
+        pub fn mapGenericWrapped(
+            self: &mut VSpace,
+            vbase: u64,
+            pregion: u64,
+            pregion_len: usize,
+            //rights: &MapAction,
+        ) -> bool;
+
+        pub fn resolveWrapped(self: &mut VSpace, vbase: u64) -> u64;
+ */
 
 impl Drop for VSpace {
     fn drop(&mut self) {
