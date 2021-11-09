@@ -2,5 +2,5 @@
 using VSpacePtr = VSpace*;
 
 inline VSpacePtr get_VSpacePtr_default() {
-    return createVSpace();
+    return NULL;
 }
