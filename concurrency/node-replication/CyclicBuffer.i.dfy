@@ -794,6 +794,12 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   /* ----------------------------------------------------------------------------------------- */
 
+  function map_update_filter<V>(m1: map<int, V>, m2: map<int, V>, minkey: int): map<int, V>
+  requires m1.Keys !! m2.Keys
+  {
+    map k | k in (m1.Keys + m2.Keys) && minkey <= k :: if k in m2 then m2[k] else m1[k]
+  }
+
   predicate FinishAdvanceTail(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>) // withdraw
   {
     && m.M?
@@ -803,8 +809,15 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
     && var combinerBefore := m.combinerState[combinerNodeId];
     && m.tail.value <= new_tail <= (combinerBefore.observed_head + BUFFER_SIZE as int)
+    && (forall i: int | m.tail.value - BUFFER_SIZE as int <= i < (m.tail.value - BUFFER_SIZE as int) + (new_tail - m.tail.value) :: i in m.contents)
 
-    && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerAppending(m.tail.value, new_tail)])
+    && var new_entries := map x : int | m.tail.value <= x < new_tail :: x := None;
+
+    && m' == m.(
+      combinerState := m.combinerState[combinerNodeId := CombinerAppending(m.tail.value, new_tail)],
+      contents := map_update_filter(m.contents, new_entries, (new_tail as int - BUFFER_SIZE as int)),
+      tail := Some(new_tail)
+    )
 
     && (forall i | m.tail.value <= i < new_tail ::
       && i in withdrawn
@@ -824,7 +837,12 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
         if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k])
     {
       //
-      // assert Complete(dot(m', p));
+
+
+      var x := dot(m', p);
+      assert forall i : int :: (x.tail.value - (BUFFER_SIZE as nat) <= i < x.tail.value) ==> i in x.contents;
+
+      assert Complete(dot(m', p));
       // assert PointerOrdering(dot(m', p));
       // assert PointerDifferences(dot(m', p));
       // assert LogicalRangesNoOverlap(dot(m', p));
