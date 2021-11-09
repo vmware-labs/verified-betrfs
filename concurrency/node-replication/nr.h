@@ -29,12 +29,37 @@ namespace nr = Impl_ON_VSpaceIfc__Compile;
 namespace nrinit = Init_ON_VSpaceIfc__Compile;
 #endif
 
+constexpr size_t CACHELINE_SIZE = 128;
+
+constexpr size_t CLPAD(size_t sz) {
+  return ((sz / CACHELINE_SIZE) * CACHELINE_SIZE) +
+          (((sz % CACHELINE_SIZE) > 0) * CACHELINE_SIZE) - sz;
+}
+
+template<class T, bool = false>
+struct padded
+{
+  padded(const T& value) : value{value} {}
+  alignas(CACHELINE_SIZE)T value;
+  char padding[CLPAD(sizeof(T))];
+};
+
+template<class T>
+struct padded<T, true>
+{
+  padded(const T& value) : value{value} {}
+  alignas(CACHELINE_SIZE)T value;
+};
+
+template<class T>
+using cache_padded = padded<T, (sizeof(T) % CACHELINE_SIZE == 0)>;
+
 class nr_helper {
   uint32_t n_threads_per_replica;
   std::optional<nr::NR> nr;
   std::mutex init_mutex;
   lseq<nrinit::NodeCreationToken> node_creation_tokens;
-  std::unordered_map<uint8_t, std::unique_ptr<nr::Node>> nodes;
+  std::unordered_map<uint8_t, std::unique_ptr<cache_padded<nr::Node>>> nodes;
   /// Maps NodeId to vector of ThreadOwnedContexts for that Node.
   std::unordered_map<uint8_t, lseq<nr::ThreadOwnedContext>> thread_owned_contexts;
   std::condition_variable all_nodes_init;
@@ -68,7 +93,7 @@ class nr_helper {
   nr::NR& get_nr() { return *nr; }
 
   nr::Node& get_node(uint8_t thread_id) {
-    return *nodes[thread_id / n_threads_per_replica];
+    return nodes[thread_id / n_threads_per_replica]->value;
   }
 
   void init_nr() {
@@ -92,8 +117,8 @@ class nr_helper {
       std::cerr << "thread_id " << static_cast<uint32_t>(thread_id)
                 << " done initializing node_id " << node_id << std::endl;
 
-      nr::Node* node = new nr::Node(r.get<0>());
-      nodes.emplace(node_id, std::unique_ptr<nr::Node>{node});
+      auto node = new cache_padded<nr::Node>{nr::Node(r.get<0>())};
+      nodes.emplace(node_id, std::unique_ptr<cache_padded<nr::Node>>{node});
       thread_owned_contexts.emplace(node_id, r.get<1>());
 
       if (nodes.size() == num_replicas())
