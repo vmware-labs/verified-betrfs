@@ -34,7 +34,7 @@ class nr_helper {
   std::optional<nr::NR> nr;
   std::mutex init_mutex;
   lseq<nrinit::NodeCreationToken> node_creation_tokens;
-  std::unordered_map<uint8_t, nr::Node> nodes;
+  std::unordered_map<uint8_t, std::unique_ptr<nr::Node>> nodes;
   /// Maps NodeId to vector of ThreadOwnedContexts for that Node.
   std::unordered_map<uint8_t, lseq<nr::ThreadOwnedContext>> thread_owned_contexts;
   std::condition_variable all_nodes_init;
@@ -68,7 +68,7 @@ class nr_helper {
   nr::NR& get_nr() { return *nr; }
 
   nr::Node& get_node(uint8_t thread_id) {
-    return nodes[thread_id / n_threads_per_replica];
+    return *nodes[thread_id / n_threads_per_replica];
   }
 
   void init_nr() {
@@ -92,7 +92,8 @@ class nr_helper {
       std::cerr << "thread_id " << static_cast<uint32_t>(thread_id)
                 << " done initializing node_id " << node_id << std::endl;
 
-      nodes.emplace(node_id, r.get<0>());
+      nr::Node* node = new nr::Node(r.get<0>());
+      nodes.emplace(node_id, std::unique_ptr<nr::Node>{node});
       thread_owned_contexts.emplace(node_id, r.get<1>());
 
       if (nodes.size() == num_replicas())
