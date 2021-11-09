@@ -1,6 +1,7 @@
 all: app
 
 DATA_STRUCTURE=COUNTER
+#DATA_STRUCTURE=VSPACE # this doesn't exactly do anything in the code atm, but COUNTER shouldn't be defined if you want to use VSpace
 
 CFLAGS := -g -O3 -std=c++17 \
 	-I ../../.dafny/dafny/Binaries/ -I ../framework/ -D$(DATA_STRUCTURE)
@@ -11,7 +12,7 @@ HEADERS := \
 	Bundle.i.h \
 	nr.h \
 	thread_pin.h \
-	./vspace/target/cxxbridge/vspace/src/lib.rs.h
+	vspace_glue.h
 
 LIBS := \
 	-lpthread \
@@ -19,12 +20,12 @@ LIBS := \
 	-lvspace \
 	-ldl # rust needs this :/
 
-Bundle.i.cpp Bundle.i.h: *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy ./vspace/target/cxxbridge/vspace/src/lib.rs.h
+Bundle.i.cpp Bundle.i.h: *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy vspace_glue.h ./vspace/target/cxxbridge/vspace/src/lib.rs.h
 	$(eval TMPNAME=$(abspath $(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@))))
 	# Dafny currently produces Bundle.i.cpp, but it returns an error code
 	# since not everything verifies. Augment the next lines so that they don't
 	# ignore failures once things are supposed to verify.
-	-dafny /trace /compile:0 /induction:1 /noNLarith /noVerify /spillTargetCode:3 /compileTarget:cpp /countVerificationErrors:0 Bundle.i.dfy Extern.h LinearExtern.h ./vspace/target/cxxbridge/vspace/src/lib.rs.h /out:$(TMPNAME)
+	-dafny /trace /compile:0 /induction:1 /noNLarith /noVerify /spillTargetCode:3 /compileTarget:cpp /countVerificationErrors:0 Bundle.i.dfy Extern.h LinearExtern.h ./vspace_glue.h /out:$(TMPNAME)
 	-mv $(TMPNAME) $@
 
 ./vspace/target/release/libvspace.a ./vspace/target/cxxbridge/vspace/src/lib.rs.cc ./vspace/target/cxxbridge/vspace/src/lib.rs.h: ./vspace/src/lib.rs ./vspace/Cargo.toml ./vspace/build.rs

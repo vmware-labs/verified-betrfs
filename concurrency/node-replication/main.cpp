@@ -10,10 +10,7 @@
 #include <mutex>
 #include <shared_mutex>
 #include <condition_variable>
-
-#include "vspace/target/cxxbridge/vspace/src/lib.rs.h"
-using VSpacePtr = VSpace*;
-
+#include "vspace_glue.h"
 #include "nr.h"
 #include "thread_pin.h"
 
@@ -298,8 +295,8 @@ int main(int argc, char* argv[]) {
   if (argc < 5)
     usage(argv[0]);
 
-  VSpace& vspace = create_vspace();
-  vspace.map_generic_wrapped(0x0, 0x0, 0x1000);
+  VSpace* vspace = createVSpace();
+  vspace->mapGenericWrapped(0x0, 0x0, 0x1000);
 
   std::string bench_name = std::string{argv[1]};
 

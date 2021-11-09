@@ -26,7 +26,7 @@ module VSpaceIfc refines NRIfc {
   returns (linear s: DataStructureType)
   ensures I(s) == init_state()
   {
-    var inner := create_vspace();
+    var inner := createVSpace();
     s := VSpaceWrapper(inner);
   }
 
@@ -35,7 +35,7 @@ module VSpaceIfc refines NRIfc {
   ensures UpdateResult(I(s'), ret) == update(I(s), op)
   {
     linear var VSpaceWrapper(inner) := s;
-    ret := inner.map_generic_wrapped(0x0, 0x0, 0x1000);
+    ret := inner.mapGenericWrapped(0x0, 0x0, 0x1000);
     s' := VSpaceWrapper(inner);
   }
 
@@ -43,6 +43,6 @@ module VSpaceIfc refines NRIfc {
   returns (ret: ReturnType)
   ensures ret == read(I(s), op)
   {
-    ret := s.inner.resolve_wrapper(0x0);
+    ret := s.inner.resolveWrapped(0x0);
   }
 }

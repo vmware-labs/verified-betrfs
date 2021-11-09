@@ -21,7 +21,7 @@ mod ffi {
         type MapAction;
         type VSpaceError;
 
-        pub fn map_generic_wrapped(
+        pub fn mapGenericWrapped(
             self: &mut VSpace,
             vbase: u64,
             pregion: u64,
@@ -29,9 +29,9 @@ mod ffi {
             //rights: &MapAction,
         ) -> bool;
 
-        pub fn resolve_wrapper(self: &mut VSpace, vbase: u64) -> u64;
+        pub fn resolveWrapped(self: &mut VSpace, vbase: u64) -> u64;
 
-        pub fn create_vspace() -> &'static mut VSpace;
+        pub fn createVSpace() -> *mut VSpace;
     }
 }
 
@@ -176,7 +176,7 @@ impl Drop for VSpace {
 }
 
 // cpp glue fun
-pub fn create_vspace() -> &'static mut VSpace {
+pub fn createVSpace() -> &'static mut VSpace {
     env_logger::try_init();
     Box::leak(Box::new(VSpace {
         pml4: Box::pin(
@@ -197,7 +197,7 @@ impl Default for VSpace {
 }
 
 impl VSpace {
-    pub fn map_generic_wrapped(
+    pub fn mapGenericWrapped(
         self: &mut VSpace,
         vbase: u64,
         pregion: u64,
@@ -472,7 +472,7 @@ impl VSpace {
         unsafe { transmute::<VAddr, &mut PDPT>(paddr_to_kernel_vaddr(entry.address())) }
     }
 
-    pub fn resolve_wrapper(&self, addr: u64) -> u64 {
+    pub fn resolveWrapped(&self, addr: u64) -> u64 {
         self.resolve_addr(VAddr::from(addr)).map(|pa| pa.as_u64()).unwrap_or(0x0)
     }
 
