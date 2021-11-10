@@ -135,12 +135,13 @@ void run_thread(
   uint64_t reads_vruntime = 0;
   while (!state.exit_benchmark.load(std::memory_order_relaxed)) {
     uint64_t key = keygen.next();
+    uint64_t val = keygen.next();
     if (reads_vruntime <= updates_vruntime) {
       monitor.read(thread_id, thread_context, key);
       ++reads;
       reads_vruntime += state.reads_stride;
     } else { // do an update
-      monitor.update(thread_id, thread_context, key, key);
+      monitor.update(thread_id, thread_context, key, val);
       ++updates;
       updates_vruntime += state.updates_stride;
     }
@@ -256,7 +257,7 @@ struct dafny_rwlock_monitor {
     lock.release(val + 1);
 #else
     ::VSpacePtr vspace = lock.acquire();
-    bool ok = vspace->mapGenericWrapped(key, key, 4096);
+    bool ok = vspace->mapGenericWrapped(key, value, 4096);
     lock.release(vspace);
 #endif
   }
@@ -338,7 +339,7 @@ struct dafny_nr_monitor{
 // - Rust NR Benchmarking -
 
 struct rust_nr_monitor{
-  nr_helper helper;
+  nr_rust_helper helper;
 
   rust_nr_monitor(size_t n_threads)
     : helper{n_threads}
@@ -347,47 +348,31 @@ struct rust_nr_monitor{
   }
 
   void* create_thread_context(uint8_t thread_id) {
-    return helper.register_thread(thread_id);
+    return (void*)helper.register_thread(thread_id);
   }
 
   uint64_t read(uint8_t thread_id, void* context, uint64_t key) {
-    auto c = static_cast<nr::ThreadOwnedContext*>(context);
+    size_t replica_token = (size_t) context;
 #if USE_COUNTER
-    auto op = CounterIfc_Compile::ReadonlyOp{};
+    #error "NYI"
 #else
-    auto op = VSpaceIfc_Compile::ReadonlyOp{key}; 
+    helper.get_node(thread_id)->ReplicaResolve(replica_token, key);
 #endif
-    Tuple<uint64_t, nr::ThreadOwnedContext> r =
-      nr::__default::do__read(
-        helper.get_nr(),
-        helper.get_node(thread_id),
-        op,
-        *c);
-
-    return r.get<0>();
     return 0;
   }
 
   void update(uint8_t thread_id, void* context, uint64_t key, uint64_t value) {
-    auto c = static_cast<nr::ThreadOwnedContext*>(context);
+    size_t replica_token = (size_t)context;
 #if USE_COUNTER
-    auto op = CounterIfc_Compile::UpdateOp{};
+  #error "NYI"
 #else
-    auto op = VSpaceIfc_Compile::UpdateOp{key, value};
+    bool ok = helper.get_node(thread_id)->ReplicaMap(replica_token, key, value);
 #endif
-    nr::__default::do__update(
-      helper.get_nr(),
-      helper.get_node(thread_id),
-      op,
-      *c);
   }
 
   void finish_up(uint8_t thread_id, void* context) {
-    auto c = static_cast<nr::ThreadOwnedContext*>(context);
-    nr::__default::try__combine(
-      helper.get_nr(),
-      helper.get_node(thread_id),
-      c->tid);
+    auto replica_token = (size_t)context;
+    helper.get_node(thread_id)->ReplicaResolve(replica_token, 0x0);
   }
 
   static void run_thread(
