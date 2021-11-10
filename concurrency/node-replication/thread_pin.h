@@ -8,7 +8,10 @@
 #include <sys/sysinfo.h>
 
 void disable_dvfs() {
-  int ret = system("echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null");
+  int ret = system("[[ -d '/sys/devices/system/cpu/cpu0/cpufreq' ]] && "
+      "(echo performance | "
+      "sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor) > "
+      "/dev/null");
   if (ret == -1) {
     std::cerr << "Unable to disable DVFS" << std::endl;
     exit(-1);
