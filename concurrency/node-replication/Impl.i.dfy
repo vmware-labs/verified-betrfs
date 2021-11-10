@@ -740,7 +740,6 @@ module Impl(nrifc: NRIfc) {
       ghost_release ctx_g;
     }
 
-    assume tid > 0; // TODO
     try_combine(nr, node, tid);
 
     glinear var cell_contents_opt: glOption<CellContents<OpResponse>> := glNone;
