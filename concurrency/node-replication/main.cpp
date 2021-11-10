@@ -207,14 +207,6 @@ struct cpp_shared_mutex_monitor {
   }
 
   void finish_up(uint8_t thread_id, void* thread_context) {}
-
-  static void run_thread(
-      uint8_t thread_id,
-      benchmark_state& state,
-      cpp_shared_mutex_monitor& monitor)
-  {
-    ::run_thread(thread_id, state, monitor);
-  }
 };
 
 // - RwLock Benchmarking -
@@ -278,14 +270,6 @@ struct dafny_rwlock_monitor {
   }
 
   void finish_up(uint8_t thread_id, void* thread_context) {}
-
-  static void run_thread(
-      uint8_t thread_id,
-      benchmark_state& state,
-      dafny_rwlock_monitor& monitor)
-  {
-    ::run_thread(thread_id, state, monitor);
-  }
 };
 
 // - NR Benchmarking -
@@ -341,14 +325,6 @@ struct dafny_nr_monitor{
       helper.get_node(thread_id),
       c->tid);
   }
-
-  static void run_thread(
-      uint8_t thread_id,
-      benchmark_state& state,
-      dafny_nr_monitor& monitor)
-  {
-    ::run_thread(thread_id, state, monitor);
-  }
 };
 
 // - Rust NR Benchmarking -
@@ -389,21 +365,13 @@ struct rust_nr_monitor{
     auto replica_token = (size_t)context;
     helper.get_node(thread_id)->ReplicaResolve(replica_token, 0x0);
   }
-
-  static void run_thread(
-      uint8_t thread_id,
-      benchmark_state& state,
-      rust_nr_monitor& monitor)
-  {
-    ::run_thread(thread_id, state, monitor);
-  }
 };
 
 template <typename Monitor>
 void bench(benchmark_state& state, Monitor& monitor)
 {
   for (uint8_t thread_id = 0; thread_id < state.n_threads; ++thread_id) {
-    state.threads.emplace_back(std::thread{Monitor::run_thread,
+    state.threads.emplace_back(std::thread{run_thread<Monitor>,
                                            thread_id,
                                            std::ref(state),
                                            std::ref(monitor)});
@@ -495,3 +463,5 @@ int main(int argc, char* argv[]) {
 
   return -1;
 }
+
+
