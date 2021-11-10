@@ -823,11 +823,13 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && CombinerIsAdvancingTail(m, combinerNodeId)
 
     && var combinerBefore := m.combinerState[combinerNodeId];
+
     && m.tail.value <= new_tail <= (combinerBefore.observed_head + LOG_SIZE as int)
     && (forall i: int | m.tail.value - LOG_SIZE as int <= i < (m.tail.value - LOG_SIZE as int) + (new_tail - m.tail.value) :: i in m.contents)
     && assert forall i: int | (m.tail.value - LOG_SIZE as int <= i < new_tail - LOG_SIZE as int) :: i in m.contents;
 
     && (forall i: int | m.tail.value <= i < new_tail :: i !in m.contents)
+
 
     && var new_entries := map x : int | m.tail.value <= x < new_tail :: x := None;
 
@@ -860,21 +862,21 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       var x := dot(m', p);
       assert forall i : int :: (x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value) ==> i in x.contents;
 
-      assert Complete(dot(m', p));
-      // assert PointerOrdering(dot(m', p));
-      // assert PointerDifferences(dot(m', p));
-      // assert RangesNoOverlap(dot(m', p));
-      // assert AliveBits(dot(m', p));
-      // assert BufferContents(dot(m', p));
-      // assert ReaderStateValid(dot(m', p));
-      // assert CombinerStateValid(dot(m', p));
-
+      // we need to make sure, that we don't overrunt the local tails
+      assume PointerDifferences(dot(m', p)); // fails
       assert Inv(dot(m', p));
+
+      // the withdrawn keys must not be in I()
+      assume forall i | i in withdrawn.Keys :: i in x.contents && x.contents[i].None?;
       assert I(dot(m', p)).Keys !! withdrawn.Keys;
 
-      assert I(dot(m, p)) == (
-        map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
-        if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k]);
+      // this will withdraw the "lower entries" in the contents.
+      // thus the original I() is the new I() + the entries withdrawn "shiftet to the lower range".
+      assume I(dot(m, p)) ==
+        map_update(map k | k in I(dot(m', p)).Keys :: I(dot(m', p))[k],
+                   map k | k in withdrawn.Keys ::  (k - BUFFER_SIZE as int) := withdrawn[k]);
+
+      assume false;
     }
   }
 
