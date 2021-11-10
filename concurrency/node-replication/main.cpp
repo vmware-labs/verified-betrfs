@@ -162,23 +162,37 @@ struct cpp_shared_mutex_monitor {
   using x_lock = std::unique_lock<std::shared_mutex>;
 
   std::shared_mutex mutex;
+#if USE_COUNTER
   uint64_t value;
+#else
+  ::VSpacePtr vspace;
+#endif
 
   cpp_shared_mutex_monitor(size_t n_threads)
     : mutex{}
+#if USE_COUNTER
     , value{}
+#else
+    , vspace{createVSpace()}
+#endif
   {}
 
-  void* create_thread_context(uint8_t thread_id) {
-    return nullptr;
+  ~cpp_shared_mutex_monitor() {
+  #if USE_COUNTER
+  #else
+    //delete vspace; // TODO(stutsman): ~VSpace is deleted for some reason?
+  #endif
   }
+
+  void* create_thread_context(uint8_t thread_id) { return nullptr; }
 
   uint64_t read(uint8_t thread_id, void* thread_context, uint64_t key) {
   #if USE_COUNTER
     s_lock lock{mutex};
     return value;
   #else
-    assert(false); // NYI
+    s_lock lock{mutex};
+    return vspace->resolveWrapped(key);
   #endif
   }
 
@@ -187,7 +201,8 @@ struct cpp_shared_mutex_monitor {
     x_lock lock{mutex};
     ++value;
   #else
-    assert(false); // NYI
+    x_lock lock{mutex};
+    vspace->mapGenericWrapped(key, key, 4096);
   #endif
   }
 
