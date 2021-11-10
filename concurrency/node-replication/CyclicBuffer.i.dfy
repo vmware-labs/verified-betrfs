@@ -824,25 +824,30 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
     && var combinerBefore := m.combinerState[combinerNodeId];
 
+    // the new tail must not exceed the head we've read
     && m.tail.value <= new_tail <= (combinerBefore.observed_head + LOG_SIZE as int)
+
+    // the "old" entries must be in the log
     && (forall i: int | m.tail.value - LOG_SIZE as int <= i < (m.tail.value - LOG_SIZE as int) + (new_tail - m.tail.value) :: i in m.contents)
     && assert forall i: int | (m.tail.value - LOG_SIZE as int <= i < new_tail - LOG_SIZE as int) :: i in m.contents;
 
+    // all new entries must not be in the log
     && (forall i: int | m.tail.value <= i < new_tail :: i !in m.contents)
 
-
+    // construct the new log entries, all of them are none, as we withdraw them
     && var new_entries := map x : int | m.tail.value <= x < new_tail :: x := None;
+
+    // the things we're going to withdraw, must be in the new entries
+    && (forall i : int :: i in new_entries.Keys <==> i in withdrawn.Keys)
+
+    // the withdrawn things must be the old entries of the log
+    && (forall i | m.tail.value <= i < new_tail :: Some(withdrawn[i]) == m.contents[i - LOG_SIZE as int])
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerAppending(m.tail.value, new_tail)],
       contents := map_update_filter(m.contents, new_entries, (new_tail as int - LOG_SIZE as int)),
       tail := Some(new_tail)
     )
-
-    && (forall i | m.tail.value <= i < new_tail ::
-      && i in withdrawn
-      && (i - LOG_SIZE as int) in m.contents
-      && Some(withdrawn[i]) == m.contents[i - LOG_SIZE as int])
   }
 
   lemma FinishAdvanceTail_is_withdraw_many(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>)
@@ -858,23 +863,22 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     {
       //
 
-
       var x := dot(m', p);
       assert forall i : int :: (x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value) ==> i in x.contents;
 
       // we need to make sure, that we don't overrunt the local tails
       assume PointerDifferences(dot(m', p)); // fails
+      assert RangesNoOverlap(dot(m', p)) by {
+        reveal_RangesNoOverlap();
+      }
       assert Inv(dot(m', p));
-
-      // the withdrawn keys must not be in I()
-      assume forall i | i in withdrawn.Keys :: i in x.contents && x.contents[i].None?;
       assert I(dot(m', p)).Keys !! withdrawn.Keys;
 
       // this will withdraw the "lower entries" in the contents.
       // thus the original I() is the new I() + the entries withdrawn "shiftet to the lower range".
       assume I(dot(m, p)) ==
-        map_update(map k | k in I(dot(m', p)).Keys :: I(dot(m', p))[k],
-                   map k | k in withdrawn.Keys ::  (k - BUFFER_SIZE as int) := withdrawn[k]);
+        Maps.MapUnionPreferB(map k | k in I(dot(m', p)).Keys :: I(dot(m', p))[k],
+                   map k | k in withdrawn.Keys ::  (k - LOG_SIZE as int) := withdrawn[k]);
 
       assume false;
     }
