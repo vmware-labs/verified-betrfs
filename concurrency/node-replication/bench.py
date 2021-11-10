@@ -14,8 +14,9 @@ CORES_PER_NODE = 48
 NODES = 4
 MAX_THREADS = NODES * CORES_PER_NODE
 
-BENCHES = ['dafny_nr', 'dafny_rwlock', 'cpp_shared_mutex']
-READS_PCT = [100, 95, 90, 50, 0]
+NR_BENCHES = ['dafny_nr', 'rust_nr']
+OTHER_BENCHES = ['dafny_rwlock', 'cpp_shared_mutex']
+READS_PCT = [95, 100, 50, 0, 90]
 
 N_THREADS = [1] + list(range(4, MAX_THREADS, 4))
 
@@ -51,14 +52,13 @@ def run_all():
     for reads_pct in READS_PCT:
         for n_threads in threads:
             for n_replicas in [1, 2, 4]:
-                bench = 'dafny_nr'
-                assert bench == BENCHES[0]
-                if (n_threads < n_replicas):
-                    continue
-                run(bench, n_replicas, n_threads, reads_pct)
-                combine_data_files()
+                for bench in NR_BENCHES:
+                  if (n_threads < n_replicas):
+                      continue
+                  run(bench, n_replicas, n_threads, reads_pct)
+                  combine_data_files()
 
-            for bench in BENCHES[1:]:
+            for bench in OTHER_BENCHES:
                 run(bench, 1, n_threads, reads_pct)
                 combine_data_files()
 
