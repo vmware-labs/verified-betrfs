@@ -17,11 +17,11 @@
 class KeyGenerator {
   uint64_t state;
 
-  // range is: 4K -- 20 GIB, if you adjust this number also adjust
-  // TWENTY_GIB in vspace/lib.rs
-  static constexpr uint64_t MASK = 0x4fffff000;
+  // key range is: `VSPACE_RANGE` as defined in vspace/lib.rs
+  // adjust this number together with `MASK` (= VSPACE_RANGE & !0xfff):
+  static constexpr uint64_t MASK = 0x3fffffffff & !0xfff;
 
- public:
+public:
   KeyGenerator(uint8_t thread_id)
     : state{0xdeadbeefdeadbeef ^ thread_id}
   {}

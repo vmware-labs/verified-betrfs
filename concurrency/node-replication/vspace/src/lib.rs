@@ -15,6 +15,7 @@ use log::{debug, trace};
 use x86::bits64::paging::*;
 
 use node_replication::{Log, Replica, Dispatch, ReplicaToken};
+const VSPACE_RANGE: u64 = 256*1024*1024*1024; 
 
 #[cxx::bridge]
 mod ffi {
@@ -207,6 +208,7 @@ pub fn createLog() -> &'static mut LogWrapper {
 
 pub struct VSpace {
     pub pml4: Pin<Box<PML4>>,
+    pub mem_counter: usize,
     //allocs: Vec<(*mut u8, usize)>,
 }
 
@@ -287,10 +289,10 @@ pub fn createVSpace() -> &'static mut VSpace {
             [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
         ),
         //allocs: Vec::with_capacity(1024),
+        mem_counter: 4096,
     }));
 
-    const TWENTY_GIB: u64 = 20*1024*1024*1024; 
-    for i in 0..TWENTY_GIB / 4096 {
+    for i in 0..VSPACE_RANGE / 4096 {
         assert!(vs.map_generic(
             VAddr::from(i * 4096),
             (PAddr::from(i * 4096), 4096),
@@ -307,6 +309,7 @@ impl Default for VSpace {
         pml4: Box::pin(
             [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
         ),
+        mem_counter: 4096,
         //allocs: Vec::with_capacity(1024),
     }    }
 }
@@ -538,11 +541,13 @@ impl VSpace {
     /// A simple wrapper function for allocating just one page.
     fn allocate_one_page(&mut self) -> PAddr {
         log::info!("allocate a page...");
+        self.mem_counter += 4096;
         self.allocate_pages(1, ResourceType::PageTable)
     }
 
     fn allocate_pages(&mut self, how_many: usize, _typ: ResourceType) -> PAddr {
         log::info!("allocate_pages {}...", how_many);
+        self.mem_counter += how_many * 4096;
 
         let new_region: *mut u8 = unsafe {
             alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(
@@ -767,19 +772,26 @@ fn main() {
 */
 
 #[test]
+fn silly2() {
+    let _r = env_logger::try_init();
+    let vs = createVSpace();
+    log::error!("mem counter is {:?}", vs.mem_counter);
+}
+
+#[test]
 fn silly() {
     let vs = createVSpace();
     assert!(vs.resolveWrapped(0x0) == 0x0);
     assert!(vs.resolveWrapped(0x1000) == 0x1000);
-    assert!(vs.resolveWrapped((20*1024*1024*1024) - 4096) == (20*1024*1024*1024) - 4096);
-    assert!(vs.resolveWrapped(20*1024*1024*1024) == 0x0);
-    assert!(vs.resolveWrapped((20*1024*1024*1024) + 4096) == 0x0);
+    assert!(vs.resolveWrapped((VSPACE_RANGE) - 4096) == (VSPACE_RANGE) - 4096);
+    assert!(vs.resolveWrapped(VSPACE_RANGE) == 0x0);
+    assert!(vs.resolveWrapped((VSPACE_RANGE) + 4096) == 0x0);
 
-    assert!(vs.mapGenericWrapped(20*1024*1024*1024, 0xf000, 0x1000));
-    assert!(vs.resolveWrapped(20*1024*1024*1024) == 0xf000);
+    assert!(vs.mapGenericWrapped(VSPACE_RANGE, 0xf000, 0x1000));
+    assert!(vs.resolveWrapped(VSPACE_RANGE) == 0xf000);
 
-    assert!(vs.mapGenericWrapped((20*1024*1024*1024) - 4096, 0xd000, 0x1000));
-    assert!(vs.resolveWrapped((20*1024*1024*1024) - 4096) == 0xd000);
+    assert!(vs.mapGenericWrapped((VSPACE_RANGE) - 4096, 0xd000, 0x1000));
+    assert!(vs.resolveWrapped((VSPACE_RANGE) - 4096) == 0xd000);
 
 
 /*        pub fn mapGenericWrapped(
