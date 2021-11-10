@@ -6,9 +6,9 @@ import M = Init(VSpaceIfc)
 
 
 // Create an extra RwLock just for C++ microbenchmarks.
-module Uint64ContentsTypeMod refines ContentsTypeMod {
-  import opened NativeTypes
-  type ContentsType = uint64
+module VSpaceContentsTypeMod refines ContentsTypeMod {
+  import opened VSpaceStruct
+  type ContentsType = VSpacePtr
 }
 
-import RwLockImplBool = RwLockImpl(Uint64ContentsTypeMod)
+import RwLockImplBool = RwLockImpl(VSpaceContentsTypeMod)

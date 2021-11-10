@@ -204,15 +204,32 @@ struct cpp_shared_mutex_monitor {
 // - RwLock Benchmarking -
 
 // Give a friendlier name to Dafny's generated namespace.
+#if USE_COUNTER
 namespace rwlock = RwLockImpl_ON_Uint64ContentsTypeMod__Compile;
-typedef rwlock::RwLock RwLockUint64;
+#else
+namespace rwlock = RwLockImpl_ON_VSpaceContentsTypeMod__Compile;
+#endif
+typedef rwlock::RwLock RwLockT;
 
-struct dafny_rwlock_monitor{
-  RwLockUint64 lock;
+struct dafny_rwlock_monitor {
+  RwLockT lock;
 
   dafny_rwlock_monitor(size_t n_threads)
+  #if USE_COUNTER
     : lock{rwlock::__default::new__mutex(0lu)}
+  #else
+    : lock{rwlock::__default::new__mutex(createVSpace())}
+  #endif
   {}
+
+  ~dafny_rwlock_monitor() {
+  #if USE_COUNTER
+  #else
+    ::VSpacePtr vspace = lock.acquire();
+    // delete vspace; // TODO(stutsman): ~VSpace is deleted for some reason?
+    lock.release(nullptr);
+  #endif
+  }
 
   void* create_thread_context(uint8_t thread_id) {
     return nullptr;
@@ -225,7 +242,11 @@ struct dafny_rwlock_monitor{
     lock.release__shared(shared_guard);
     return value;
   #else
-    assert(false); // NYI
+    auto shared_guard = lock.acquire__shared(thread_id);
+    ::VSpacePtr vspace = *rwlock::__default::borrow__shared(lock, shared_guard);
+    uint64_t value = vspace->resolveWrapped(key);
+    lock.release__shared(shared_guard);
+    return value;
   #endif
   }
 
@@ -234,7 +255,9 @@ struct dafny_rwlock_monitor{
     uint64_t val = lock.acquire();
     lock.release(val + 1);
 #else
-    assert(false); // NYI
+    ::VSpacePtr vspace = lock.acquire();
+    bool ok = vspace->mapGenericWrapped(key, key, 4096);
+    lock.release(vspace);
 #endif
   }
 
@@ -330,7 +353,7 @@ struct rust_nr_monitor{
   uint64_t read(uint8_t thread_id, void* context, uint64_t key) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
 #if USE_COUNTER
-    assert(false); // NYI 
+    auto op = CounterIfc_Compile::ReadonlyOp{};
 #else
     auto op = VSpaceIfc_Compile::ReadonlyOp{key}; 
 #endif
@@ -348,7 +371,7 @@ struct rust_nr_monitor{
   void update(uint8_t thread_id, void* context, uint64_t key, uint64_t value) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
 #if USE_COUNTER
-    assert(false); // NYI 
+    auto op = CounterIfc_Compile::UpdateOp{};
 #else
     auto op = VSpaceIfc_Compile::UpdateOp{key, value};
 #endif
