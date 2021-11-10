@@ -15,6 +15,7 @@ NODES = 4
 MAX_THREADS = NODES * CORES_PER_NODE
 
 BENCHES = ['dafny_nr', 'dafny_rwlock', 'cpp_shared_mutex']
+READS_PCT = [0, 5, 10, 50, 100]
 
 N_THREADS = [1] + list(range(4, MAX_THREADS, 4))
 
@@ -36,9 +37,9 @@ def combine_data_files():
     with open('data.json', 'w') as f:
         f.write(combined_json)
 
-def run(bench, n_replicas, n_threads):
+def run(bench, n_replicas, n_threads, reads_pct):
     path = bench_path(n_replicas)
-    cmd = '%s %s %d %d %s' % (path, bench, n_threads,
+    cmd = '%s %s %d %d %d %s' % (path, bench, n_threads, reads_pct
                                    SECONDS, NUMA_POLICY)
     print(cmd)
     subprocess.run(cmd, shell=True, check=False)
@@ -47,18 +48,18 @@ def run_all():
     threads = N_THREADS[1:-1]
     random.shuffle(threads)
     threads = [N_THREADS[-1]] + threads + [N_THREADS[0]]
-    print(threads)
-    for n_threads in threads:
-        for n_replicas in [1, 2, 4]:
-            bench = 'dafny_nr'
-            assert bench == BENCHES[0]
-            if (n_threads < n_replicas):
-                continue
-            run(bench, n_replicas, n_threads)
-            combine_data_files()
+    for reads_pct in READS_PCT:
+        for n_threads in threads:
+            for n_replicas in [1, 2, 4]:
+                bench = 'dafny_nr'
+                assert bench == BENCHES[0]
+                if (n_threads < n_replicas, reads_pct):
+                    continue
+                run(bench, n_replicas, n_threads)
+                combine_data_files()
 
-        for bench in BENCHES[1:]:
-            run(bench, 1, n_threads)
-            combine_data_files()
+            for bench in BENCHES[1:]:
+                run(bench, 1, n_threads, reads_pct)
+                combine_data_files()
 
 if __name__ == '__main__': run_all()

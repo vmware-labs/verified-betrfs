@@ -39,6 +39,9 @@ using seconds = std::chrono::seconds;
 struct benchmark_state {
   std::string bench_name;
   size_t n_threads;
+  size_t reads_pct;
+  size_t reads_stride;
+  size_t updates_stride;
   seconds run_seconds;
   core_map cores;
   std::atomic<size_t> n_threads_ready;
@@ -49,13 +52,19 @@ struct benchmark_state {
   std::atomic<uint64_t> total_updates;
   std::atomic<uint64_t> total_reads;
 
+  static constexpr size_t stride1 = 10000;
+
   benchmark_state(std::string& bench_name,
                   size_t n_threads,
+                  size_t reads_pct,
                   seconds run_seconds,
                   core_map::numa_policy numa_policy,
                   core_map::core_policy core_policy)
     : bench_name{bench_name}
     , n_threads{n_threads}
+    , reads_pct{reads_pct}
+    , reads_stride{reads_pct != 0 ? stride1 * 100 / reads_pct : ~0lu}
+    , updates_stride{reads_pct == 100 ? ~0lu: stride1 * 100 / (100 - reads_pct)}
     , run_seconds{run_seconds}
     , cores{numa_policy, core_policy}
     , n_threads_ready{}
@@ -71,6 +80,7 @@ struct benchmark_state {
     std::string outpath{"data-"};
     outpath += bench_name + "-";
     outpath += std::to_string(n_threads) + "-";
+    outpath += std::to_string(reads_pct) + "-";
     outpath += std::to_string(nr_helper::num_replicas()) + "-";
     outpath += std::to_string(run_seconds.count()) + "-";
     outpath += cores.get_numa_policy() == core_map::NUMA_INTERLEAVE ?
@@ -81,7 +91,8 @@ struct benchmark_state {
     out << "{" << std::endl
         << "  \"bench_name\": \"" << bench_name << "\"," << std::endl
         << "  \"n_threads\": " << n_threads << "," << std::endl
-	<< "  \"n_replicas\": " << nr_helper::num_replicas() << "," << std::endl
+        << "  \"reads_pct\": " << reads_pct << "," << std::endl
+        << "  \"n_replicas\": " << nr_helper::num_replicas() << "," << std::endl
         << "  \"run_seconds\": " << run_seconds.count() << "," << std::endl
         << "  \"numa_policy\": " << cores.get_numa_policy() << "," << std::endl
         << "  \"core_policy\": " << cores.get_core_policy() << "," << std::endl
@@ -116,13 +127,17 @@ void run_thread(
 
   uint64_t updates = 0;
   uint64_t reads = 0;
+  uint64_t updates_vruntime = 0;
+  uint64_t reads_vruntime = 0;
   while (!state.exit_benchmark.load(std::memory_order_relaxed)) {
-    if ((reads + updates) & 0xf) { // do a read
+    if (reads_vruntime <= updates_vruntime) {
       monitor.get(thread_id, thread_context);
       ++reads;
+      reads_vruntime += state.reads_stride;
     } else { // do a write
       monitor.inc(thread_id, thread_context);
       ++updates;
+      updates_vruntime += state.updates_stride;
     }
   }
 
@@ -374,14 +389,14 @@ void bench(benchmark_state& state, Monitor& monitor)
 
 void usage(const char* argv0) {
   std::cerr << "usage: " << argv0
-            << " <benchmarkname> <n_threads>"
+            << " <benchmarkname> <n_threads> <read_pct>"
             << " <n_seconds> <fill|interleave>"
             << std::endl;
   exit(-1);
 }
 
 int main(int argc, char* argv[]) {
-  if (argc < 5)
+  if (argc < 6)
     usage(argv[0]);
 
   //LogWrapper& lw = createLog();
@@ -398,12 +413,15 @@ int main(int argc, char* argv[]) {
   const size_t n_threads = atoi(argv[2]);
   assert(n_threads > 0);
 
-  const size_t n_seconds = atoi(argv[3]);
+  const size_t reads_pct = atoi(argv[3]);
+  assert(reads_pct <= 100);
+
+  const size_t n_seconds = atoi(argv[4]);
   assert(n_seconds > 0);
   const auto run_seconds = std::chrono::seconds{n_seconds};
 
   core_map::numa_policy fill_policy;
-  const std::string policy_name = std::string(argv[4]);
+  const std::string policy_name = std::string{argv[5]};
   if (policy_name == "fill") {
     fill_policy = core_map::NUMA_FILL;
   } else if (policy_name == "interleave") {
@@ -417,6 +435,7 @@ int main(int argc, char* argv[]) {
   benchmark_state state{
     bench_name,
     n_threads,
+    reads_pct,
     run_seconds,
     fill_policy,
     core_map::core_policy::CORES_FILL
