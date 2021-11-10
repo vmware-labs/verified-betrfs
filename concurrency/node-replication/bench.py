@@ -5,6 +5,7 @@ import os
 import os.path
 import glob
 import subprocess
+import random
 
 NUMA_POLICY = 'interleave'
 SECONDS = 30
@@ -40,14 +41,18 @@ def run(bench, n_replicas, n_threads):
     cmd = '%s %s %d %d %s' % (path, bench, n_threads,
                                    SECONDS, NUMA_POLICY)
     print(cmd)
-    subprocess.run(cmd, shell=True, check=True)
+    subprocess.run(cmd, shell=True, check=False)
 
 def run_all():
-    for n_threads in N_THREADS:
+    threads = N_THREADS[1:-1]
+    random.shuffle(threads)
+    threads = [N_THREADS[-1]] + threads + [N_THREADS[0]]
+    print(threads)
+    for n_threads in threads:
         for n_replicas in [1, 2, 4]:
             bench = 'dafny_nr'
             assert bench == BENCHES[0]
-            if (n_threads < n_replicas) or (n_threads > (n_replicas * CORES_PER_NODE)):
+            if (n_threads < n_replicas):
                 continue
             run(bench, n_replicas, n_threads)
             combine_data_files()
