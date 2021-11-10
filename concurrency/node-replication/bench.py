@@ -15,7 +15,7 @@ NODES = 4
 MAX_THREADS = NODES * CORES_PER_NODE
 
 BENCHES = ['dafny_nr', 'dafny_rwlock', 'cpp_shared_mutex']
-READS_PCT = [0, 5, 10, 50, 100]
+READS_PCT = [100, 95, 90, 50, 0]
 
 N_THREADS = [1] + list(range(4, MAX_THREADS, 4))
 

@@ -82,6 +82,7 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
     df['config'] = df['bench_name'] + [str(i) for i in df['n_replicas'].to_list()]
     df = df.loc[df['n_threads'] >= 4]
     df['n_replicas'] = pd.Categorical(df.n_replicas)
+    df['write_ratio'] = 100 - df['reads_pct']
     xskip = int(machine[1]/8)
     p = ggplot(data=df,
                mapping=aes(x='n_threads',
@@ -91,7 +92,7 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
                            group='config')) + \
         theme_my538() + \
         coord_cartesian(ylim=(0, None), expand=False) + \
-        labs(y="Throughput [Melems/s]") + \
+        labs(y="Throughput [Mop/s]") + \
         theme(legend_position='top', legend_title=element_blank()) + \
         scale_x_continuous(breaks=[1, 4] + list(range(xskip, 513, xskip)), name='# Threads') + \
         scale_y_continuous(labels=lambda lst: ["{:,.0f}".format(x / 1_000_000) for x in lst]) + \
@@ -115,7 +116,7 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
             ]) + \
         geom_point() + \
         geom_line() + \
-        facet_grid(["reads_pct", "."], scales="free_y") + \
+        facet_grid(["write_ratio", "."], scales="free_y") + \
         guides(color=guide_legend(nrow=1))
 #        scale_color_manual([
 #            "#66C2A5",
@@ -150,10 +151,10 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
     #                           guide=None)
 
     p.save("{}-throughput-vs-cores.png".format(machine[0]),
-           dpi=300, width=PLOT_WIDTH, height=PLOT_HEIGHT,
+           dpi=300, width=PLOT_WIDTH, height=4*PLOT_HEIGHT,
            units=PLOT_SIZE_UNIT)
     p.save("{}-throughput-vs-cores.pdf".format(machine[0]),
-           dpi=300, width=PLOT_WIDTH, height=PLOT_HEIGHT,
+           dpi=300, width=PLOT_WIDTH, height=4*PLOT_HEIGHT,
            units=PLOT_SIZE_UNIT)
 
 if __name__ == '__main__':
