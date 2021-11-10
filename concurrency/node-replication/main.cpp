@@ -14,25 +14,28 @@
 #include "nr.h"
 #include "thread_pin.h"
 
-const uint64_t MASK = 0x4fffff000; // range is: 4K -- 20 GIB, if you adjust this number also adjust
-                                   // TWENTY_GIB in vspace/lib.rs
+class KeyGenerator {
+  uint64_t state;
 
-// https://en.wikipedia.org/wiki/Xorshift
-struct xorshift64_state
-{
-  uint64_t a;
+  // range is: 4K -- 20 GIB, if you adjust this number also adjust
+  // TWENTY_GIB in vspace/lib.rs
+  static constexpr uint64_t MASK = 0x4fffff000;
+
+ public:
+  KeyGenerator(uint8_t thread_id)
+    : state{0xdeadbeefdeadbeef ^ thread_id}
+  {}
+
+  // https://en.wikipedia.org/wiki/Xorshift
+  uint64_t next() {
+    uint64_t x = state;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    state = x;
+    return x & MASK;
+  }
 };
-
-uint64_t xorshift64(struct xorshift64_state *state)
-{
-  uint64_t x = state->a;
-  x ^= x << 13;
-  x ^= x >> 7;
-  x ^= x << 17;
-  return state->a = x;
-}
-
-static __thread xorshift64_state fast_rng = xorshift64_state{0xdeaddeaddeadbeef};
 
 using seconds = std::chrono::seconds;
 
@@ -120,6 +123,7 @@ void run_thread(
 {
   state.cores.pin(thread_id);
 
+  KeyGenerator keygen{thread_id};
   void* thread_context = monitor.create_thread_context(thread_id);
 
   state.n_threads_ready++;
@@ -130,12 +134,13 @@ void run_thread(
   uint64_t updates_vruntime = 0;
   uint64_t reads_vruntime = 0;
   while (!state.exit_benchmark.load(std::memory_order_relaxed)) {
+    uint64_t key = keygen.next();
     if (reads_vruntime <= updates_vruntime) {
-      monitor.get(thread_id, thread_context);
+      monitor.read(thread_id, thread_context, key);
       ++reads;
       reads_vruntime += state.reads_stride;
-    } else { // do a write
-      monitor.inc(thread_id, thread_context);
+    } else { // do an update
+      monitor.update(thread_id, thread_context, key, key);
       ++updates;
       updates_vruntime += state.updates_stride;
     }
@@ -167,14 +172,22 @@ struct cpp_shared_mutex_monitor {
     return nullptr;
   }
 
-  uint64_t get(uint8_t thread_id, void* thread_context) {
+  uint64_t read(uint8_t thread_id, void* thread_context, uint64_t key) {
+  #if USE_COUNTER
     s_lock lock{mutex};
     return value;
+  #else
+    assert(false); // NYI
+  #endif
   }
 
-  void inc(uint8_t thread_id, void* thread_context) {
+  void update(uint8_t thread_id, void* thread_context, uint64_t key, uint64_t value) {
+  #if USE_COUNTER
     x_lock lock{mutex};
     ++value;
+  #else
+    assert(false); // NYI
+  #endif
   }
 
   void finish_up(uint8_t thread_id, void* thread_context) {}
@@ -205,16 +218,24 @@ struct dafny_rwlock_monitor{
     return nullptr;
   }
 
-  uint64_t get(uint8_t thread_id, void* thread_context) {
+  uint64_t read(uint8_t thread_id, void* thread_context, uint64_t key) {
+  #if USE_COUNTER
     auto shared_guard = lock.acquire__shared(thread_id);
     uint64_t value = *rwlock::__default::borrow__shared(lock, shared_guard);
     lock.release__shared(shared_guard);
     return value;
+  #else
+    assert(false); // NYI
+  #endif
   }
 
-  void inc(uint8_t thread_id, void* thread_context) {
-    uint64_t value = lock.acquire();
-    lock.release(value + 1);
+  void update(uint8_t thread_id, void* thread_context, uint64_t key, uint64_t value) {
+#if USE_COUNTER
+    uint64_t val = lock.acquire();
+    lock.release(val + 1);
+#else
+    assert(false); // NYI
+#endif
   }
 
   void finish_up(uint8_t thread_id, void* thread_context) {}
@@ -243,12 +264,11 @@ struct dafny_nr_monitor{
     return helper.register_thread(thread_id);
   }
 
-  uint64_t get(uint8_t thread_id, void* context) {
+  uint64_t read(uint8_t thread_id, void* context, uint64_t key) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
 #if USE_COUNTER
     auto op = CounterIfc_Compile::ReadonlyOp{}; 
 #else
-    auto key = xorshift64(&fast_rng) & MASK;
     auto op = VSpaceIfc_Compile::ReadonlyOp{key}; 
 #endif
     Tuple<uint64_t, nr::ThreadOwnedContext> r =
@@ -261,14 +281,12 @@ struct dafny_nr_monitor{
     return r.get<0>();
   }
 
-  void inc(uint8_t thread_id, void* context) {
+  void update(uint8_t thread_id, void* context, uint64_t key, uint64_t value) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
 #if USE_COUNTER
     auto op = CounterIfc_Compile::UpdateOp{}; 
 #else
-    auto key = xorshift64(&fast_rng) & MASK;
-    auto val = xorshift64(&fast_rng) & MASK;
-    auto op = VSpaceIfc_Compile::UpdateOp{key, val}; 
+    auto op = VSpaceIfc_Compile::UpdateOp{key, value}; 
 #endif
     nr::__default::do__update(
       helper.get_nr(),
@@ -309,47 +327,44 @@ struct rust_nr_monitor{
     return helper.register_thread(thread_id);
   }
 
-  uint64_t get(uint8_t thread_id, void* context) {
+  uint64_t read(uint8_t thread_id, void* context, uint64_t key) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
 #if USE_COUNTER
     assert(false); // NYI 
 #else
-    auto key = xorshift64(&fast_rng) & MASK;
     auto op = VSpaceIfc_Compile::ReadonlyOp{key}; 
 #endif
-    /* Tuple<uint64_t, nr::ThreadOwnedContext> r =
+    Tuple<uint64_t, nr::ThreadOwnedContext> r =
       nr::__default::do__read(
         helper.get_nr(),
         helper.get_node(thread_id),
         op,
         *c);
 
-    return r.get<0>(); */
+    return r.get<0>();
     return 0;
   }
 
-  void inc(uint8_t thread_id, void* context) {
+  void update(uint8_t thread_id, void* context, uint64_t key, uint64_t value) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
 #if USE_COUNTER
     assert(false); // NYI 
 #else
-    auto key = xorshift64(&fast_rng) & MASK;
-    auto val = xorshift64(&fast_rng) & MASK;
-    //auto op = VSpaceIfc_Compile::UpdateOp{key, val}; 
+    auto op = VSpaceIfc_Compile::UpdateOp{key, value};
 #endif
-    /*nr::__default::do__update(
+    nr::__default::do__update(
       helper.get_nr(),
       helper.get_node(thread_id),
       op,
-      *c);*/
+      *c);
   }
 
   void finish_up(uint8_t thread_id, void* context) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
-    /*nr::__default::try__combine(
+    nr::__default::try__combine(
       helper.get_nr(),
       helper.get_node(thread_id),
-      c->tid);*/
+      c->tid);
   }
 
   static void run_thread(
