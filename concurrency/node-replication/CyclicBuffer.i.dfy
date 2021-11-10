@@ -58,7 +58,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
       // The 'alive' bit flips back and forth. So sometimes 'true' means 'alive',
       // and sometimes 'false' means 'alive'.
-      // entry is an index into the buffer (0 <= entry < BUFFER_SIZE)
+      // entry is an index into the buffer (0 <= entry < LOG_SIZE)
       ghost aliveBits: map</* entry: */ nat, /* bit: */ bool>,
 
       ghost combinerState: map<NodeId, CombinerState>
@@ -156,8 +156,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && x.head.Some?
     && x.tail.Some?
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.localTails)
-    && (forall i : int :: (x.tail.value - (BUFFER_SIZE as nat) <= i < x.tail.value) <==> i in x.contents)
-    && (forall i: nat :: i < BUFFER_SIZE as nat <==> i in x.aliveBits)
+    && (forall i : int :: (x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value) <==> i in x.contents)
+    && (forall i: nat :: i < LOG_SIZE as nat <==> i in x.aliveBits)
     && (forall i: nat :: LogicalToPhysicalIndex(i) in x.aliveBits)
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.combinerState)
   }
@@ -171,14 +171,14 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     // all local tails must be between the head and the tail
     && (forall i | i in x.localTails :: x.head.value <= x.localTails[i] <= x.tail.value)
     // all local tails are between the valid buffer range
-    && (forall i | i in x.localTails ::  x.tail.value - (BUFFER_SIZE as nat) <=  x.localTails[i] <= x.tail.value)
+    && (forall i | i in x.localTails ::  x.tail.value - (LOG_SIZE as nat) <=  x.localTails[i] <= x.tail.value)
   }
 
   predicate PointerDifferences(x:M)
     requires Complete(x) && PointerOrdering(x)
   {
     // the span of the entries between local tails and tail should never be larger than the buffer size
-    && (forall i | i in x.localTails ::  x.tail.value - x.localTails[i] < BUFFER_SIZE as nat)
+    && (forall i | i in x.localTails ::  x.tail.value - x.localTails[i] < LOG_SIZE as nat)
   }
 
   predicate AliveBits(x: M)
@@ -193,7 +193,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   predicate BufferContents(x: M)
     requires Complete(x)
   {
-    forall i : int | x.tail.value - (BUFFER_SIZE as nat) <= i < x.tail.value ::
+    forall i : int | x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value ::
       (EntryIsAlive(x.aliveBits, i) || i < MinLocalTail(x.localTails)) <==> x.contents[i].Some?
   }
 
@@ -213,7 +213,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           // the start must be before the end, can be equial if ltail == gtail
           && start <= end
           // we've read the tail, but the tail may have moved
-          && x.tail.value - (BUFFER_SIZE as nat) <= end <= x.tail.value
+          && x.tail.value - (LOG_SIZE as nat) <= end <= x.tail.value
           // current is between start and end
           && start <= cur <= end
           // the entries up to, and including  current must be alive
@@ -227,7 +227,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           // the start must be before the end, can be equial if ltail == gtail
           && start <= end
           // we've read the tail, but the tail may have moved
-          && x.tail.value - (BUFFER_SIZE as nat) <= end <= x.tail.value
+          && x.tail.value - (LOG_SIZE as nat) <= end <= x.tail.value
           // current is between start and end
           && start <= cur < end
           // the entries up to, and including  current must be alive
@@ -264,7 +264,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           // the read tail is smaller or equal to the current tail.
           && tail <= x.tail.value
           //
-          // && x.tail.value - (BUFFER_SIZE as nat) <= cur_idx <= x.tail.value
+          // && x.tail.value - (LOG_SIZE as nat) <= cur_idx <= x.tail.value
           // all the entries we're writing must not be alive.
           && (forall i : nat | cur_idx <= i < tail :: !(EntryIsAlive(x.aliveBits, i)))
           // all the entries we're writing must not be SOme
@@ -361,10 +361,10 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && (forall i | i in s.localTails :: s.localTails[i] == 0)
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in s.combinerState)
     && (forall i | i in s.combinerState :: s.combinerState[i].CombinerIdle?)
-    && (forall i: nat :: i < BUFFER_SIZE as nat <==> i in s.aliveBits)
-    && (forall i: int | 0 <= i < BUFFER_SIZE as nat :: s.aliveBits[i] == LogicalToAliveBitAliveWhen(i - BUFFER_SIZE as nat))
-    && (forall i: int :: -(BUFFER_SIZE as int) <= i < 0 <==> (i in s.contents))
-    && (forall i: int :: -(BUFFER_SIZE as int) <= i < 0 <==> (i in s.contents && s.contents[i].Some?))
+    && (forall i: nat :: i < LOG_SIZE as nat <==> i in s.aliveBits)
+    && (forall i: int | 0 <= i < LOG_SIZE as nat :: s.aliveBits[i] == LogicalToAliveBitAliveWhen(i - LOG_SIZE as nat))
+    && (forall i: int :: -(LOG_SIZE as int) <= i < 0 <==> (i in s.contents))
+    && (forall i: int :: -(LOG_SIZE as int) <= i < 0 <==> (i in s.contents && s.contents[i].Some?))
   }
 
   lemma InitImpliesInv(x: M)
@@ -456,13 +456,13 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
    */
 
   function LogicalToPhysicalIndex(logical: int) : nat
-  // ensures Index(-(BUFFER_SIZE as int)) == 0
+  // ensures Index(-(LOG_SIZE as int)) == 0
   {
-    logical % (BUFFER_SIZE as int)
+    logical % (LOG_SIZE as int)
   }
 
   lemma AllInAliveBits(aliveBits: map</* entry: */ nat, /* bit: */ bool>)
-    requires forall i: nat :: i < BUFFER_SIZE as nat <==> i in aliveBits
+    requires forall i: nat :: i < LOG_SIZE as nat <==> i in aliveBits
     ensures forall i: nat :: LogicalToPhysicalIndex(i) in aliveBits
   {
 
@@ -470,17 +470,17 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   // the set of current buffer entries.
   function SetOfBufferEntries(min_ltails: int) : (r : set<int>)
-    ensures forall i :: min_ltails <= i < min_ltails + (BUFFER_SIZE as nat) <==> i in r
+    ensures forall i :: min_ltails <= i < min_ltails + (LOG_SIZE as nat) <==> i in r
   {
-    set x : int | min_ltails <= x < min_ltails + (BUFFER_SIZE as nat)
+    set x : int | min_ltails <= x < min_ltails + (LOG_SIZE as nat)
   }
 
   // the set of free buffer entries
   function SetOfFreeBufferEntries(min_ltails: int, logical_tail: int) : (r : set<int>)
     requires min_ltails <= logical_tail
-    requires logical_tail - (BUFFER_SIZE as int) <= min_ltails <= logical_tail
-    requires ((logical_tail - min_ltails) < BUFFER_SIZE as nat)
-    ensures forall i :: logical_tail <= i < min_ltails + (BUFFER_SIZE as nat) <==> i in r
+    requires logical_tail - (LOG_SIZE as int) <= min_ltails <= logical_tail
+    requires ((logical_tail - min_ltails) < LOG_SIZE as nat)
+    ensures forall i :: logical_tail <= i < min_ltails + (LOG_SIZE as nat) <==> i in r
   {
     SetOfBufferEntries(min_ltails) - SetOfActiveBufferEntries(min_ltails, logical_tail)
   }
@@ -488,8 +488,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   // the set of active buffer entries is everything between
   function SetOfActiveBufferEntries(min_ltails: int, logical_tail: int) : (r : set<int>)
     requires min_ltails <= logical_tail
-    requires logical_tail - (BUFFER_SIZE as int) <= min_ltails <= logical_tail
-    requires ((logical_tail - min_ltails) < BUFFER_SIZE as nat)
+    requires logical_tail - (LOG_SIZE as int) <= min_ltails <= logical_tail
+    requires ((logical_tail - min_ltails) < LOG_SIZE as nat)
     ensures forall i :: min_ltails <= i < logical_tail <==> i in r
   {
     set x : int | min_ltails <= x < logical_tail :: x
@@ -497,8 +497,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   lemma BufferUnion(ltails: int, tail: int)
     requires ltails <= tail
-    requires tail - (BUFFER_SIZE as int) <= ltails <= tail
-    requires ((tail - ltails) < BUFFER_SIZE as int)
+    requires tail - (LOG_SIZE as int) <= ltails <= tail
+    requires ((tail - ltails) < LOG_SIZE as int)
     ensures SetOfActiveBufferEntries(ltails, tail) + SetOfFreeBufferEntries(ltails, tail) == SetOfBufferEntries(ltails)
   {
 
@@ -506,7 +506,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   function LogicalToAliveBitAliveWhen(logical: int) : bool
   {
-    ((logical / BUFFER_SIZE as int) % 2) == 0
+    ((logical / LOG_SIZE as int) % 2) == 0
   }
 
 
@@ -519,10 +519,10 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
 
   lemma EntryIsAliveWrapAround(aliveBits: map</* entry: */ nat, /* bit: */ bool>, low: nat, high: nat)
-    requires forall i: nat :: i < BUFFER_SIZE as nat <==> i in aliveBits
-    requires low <= high < low +  (BUFFER_SIZE as int)
+    requires forall i: nat :: i < LOG_SIZE as nat <==> i in aliveBits
+    requires low <= high < low +  (LOG_SIZE as int)
     ensures forall i | low <= i < high ::
-      EntryIsAlive(aliveBits, i) == !EntryIsAlive(aliveBits, i + (BUFFER_SIZE as int))
+      EntryIsAlive(aliveBits, i) == !EntryIsAlive(aliveBits, i + (LOG_SIZE as int))
   {
 
   }
@@ -531,20 +531,20 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
 
   lemma EntryIsAliveWrapAroundReformat(aliveBits: map</* entry: */ nat, /* bit: */ bool>, low: nat, high: nat)
-    requires forall i: nat :: i < BUFFER_SIZE as nat <==> i in aliveBits
-    requires low <= high < low +  (BUFFER_SIZE as nat)
-    requires forall i : nat | low <= i < high :: !EntryIsAlive(aliveBits, i + (BUFFER_SIZE as nat))
-    ensures forall i : nat | low + (BUFFER_SIZE as nat) <= i < high  + (BUFFER_SIZE as nat) :: !EntryIsAlive(aliveBits, i)
+    requires forall i: nat :: i < LOG_SIZE as nat <==> i in aliveBits
+    requires low <= high < low +  (LOG_SIZE as nat)
+    requires forall i : nat | low <= i < high :: !EntryIsAlive(aliveBits, i + (LOG_SIZE as nat))
+    ensures forall i : nat | low + (LOG_SIZE as nat) <= i < high  + (LOG_SIZE as nat) :: !EntryIsAlive(aliveBits, i)
     {
 
-      forall i : nat | low + (BUFFER_SIZE as nat) <= i < high  + (BUFFER_SIZE as nat)
+      forall i : nat | low + (LOG_SIZE as nat) <= i < high  + (LOG_SIZE as nat)
         ensures !EntryIsAlive(aliveBits, i)
       {
-        assert i >= (BUFFER_SIZE as nat);
-        assert exists j |  low <= j < high :: j + (BUFFER_SIZE as nat) == i by {
-          var j := i - (BUFFER_SIZE as nat);
+        assert i >= (LOG_SIZE as nat);
+        assert exists j |  low <= j < high :: j + (LOG_SIZE as nat) == i by {
+          var j := i - (LOG_SIZE as nat);
           assert low <= j < high;
-          assert j + (BUFFER_SIZE as nat) == i;
+          assert j + (LOG_SIZE as nat) == i;
         }
       }
     }
@@ -808,21 +808,21 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && CombinerIsAdvancingTail(m, combinerNodeId)
 
     && var combinerBefore := m.combinerState[combinerNodeId];
-    && m.tail.value <= new_tail <= (combinerBefore.observed_head + BUFFER_SIZE as int)
-    && (forall i: int | m.tail.value - BUFFER_SIZE as int <= i < (m.tail.value - BUFFER_SIZE as int) + (new_tail - m.tail.value) :: i in m.contents)
+    && m.tail.value <= new_tail <= (combinerBefore.observed_head + LOG_SIZE as int)
+    && (forall i: int | m.tail.value - LOG_SIZE as int <= i < (m.tail.value - LOG_SIZE as int) + (new_tail - m.tail.value) :: i in m.contents)
 
     && var new_entries := map x : int | m.tail.value <= x < new_tail :: x := None;
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerAppending(m.tail.value, new_tail)],
-      contents := map_update_filter(m.contents, new_entries, (new_tail as int - BUFFER_SIZE as int)),
+      contents := map_update_filter(m.contents, new_entries, (new_tail as int - LOG_SIZE as int)),
       tail := Some(new_tail)
     )
 
     && (forall i | m.tail.value <= i < new_tail ::
       && i in withdrawn
-      && (i - BUFFER_SIZE as int) in m.contents
-      && Some(withdrawn[i]) == m.contents[i - BUFFER_SIZE as int])
+      && (i - LOG_SIZE as int) in m.contents
+      && Some(withdrawn[i]) == m.contents[i - LOG_SIZE as int])
   }
 
   lemma FinishAdvanceTail_is_withdraw_many(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>)
@@ -840,7 +840,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
 
       var x := dot(m', p);
-      assert forall i : int :: (x.tail.value - (BUFFER_SIZE as nat) <= i < x.tail.value) ==> i in x.contents;
+      assert forall i : int :: (x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value) ==> i in x.contents;
 
       assert Complete(dot(m', p));
       // assert PointerOrdering(dot(m', p));

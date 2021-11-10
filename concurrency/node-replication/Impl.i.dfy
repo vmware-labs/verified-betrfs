@@ -214,9 +214,9 @@ module Impl(nrifc: NRIfc) {
   }
 
   predicate BufferEntryInv(buffer: lseq<BufferEntry>, i: int, t: StoredType)
-  requires |buffer| == BUFFER_SIZE as int
+  requires |buffer| == LOG_SIZE as int
   {
-    && t.cellContents.cell == buffer[i % BUFFER_SIZE as int].cell
+    && t.cellContents.cell == buffer[i % LOG_SIZE as int].cell
     && (i >= 0 ==>
       && t.logEntry.glSome?
       && t.logEntry.value.op == t.cellContents.v.op
@@ -226,7 +226,7 @@ module Impl(nrifc: NRIfc) {
   }
 
   predicate ContentsInv(buffer: lseq<BufferEntry>, contents: Contents)
-  requires |buffer| == BUFFER_SIZE as int
+  requires |buffer| == LOG_SIZE as int
   {
     && (forall i | i in contents.contents :: BufferEntryInv(buffer, i, contents.contents[i]))
   }
@@ -249,10 +249,10 @@ module Impl(nrifc: NRIfc) {
       && |node_info| == NUM_REPLICAS as int
       && (forall nodeId | 0 <= nodeId < |node_info| :: nodeId in node_info)
       && (forall nodeId | 0 <= nodeId < |node_info| :: node_info[nodeId].WF(nodeId))
-      && |buffer| == BUFFER_SIZE as int
+      && |buffer| == LOG_SIZE as int
       && (forall v, g :: atomic_inv(bufferContents, v, g) <==> ContentsInv(buffer, g))
-      && (forall i: nat | 0 <= i < BUFFER_SIZE as int :: i in buffer)
-      && (forall i: nat | 0 <= i < BUFFER_SIZE as int :: buffer[i].WF(i))
+      && (forall i: nat | 0 <= i < LOG_SIZE as int :: i in buffer)
+      && (forall i: nat | 0 <= i < LOG_SIZE as int :: buffer[i].WF(i))
 
       && bufferContents.namespace() == 1
       && globalTail.inner.namespace() == 0
@@ -979,7 +979,7 @@ module Impl(nrifc: NRIfc) {
         advance_tail_state := init_advance_tail_state(h);
         ghost_release h;
       }
-      if tail > head + (BUFFER_SIZE - GC_FROM_HEAD) {  // TODO: bounded int error
+      if tail > head + (LOG_SIZE - GC_FROM_HEAD) {  // TODO: bounded int error
         if waitgc % WARN_THRESHOLD == 0 {
           waitgc := 0;
           print "append takes too many waitgc to complete\n";
@@ -995,7 +995,7 @@ module Impl(nrifc: NRIfc) {
       } else {
 
         assume tail as int + num_ops as int < 0x1_0000_0000_0000_0000; // TODO
-        var advance: bool := (tail + num_ops > head + (BUFFER_SIZE - GC_FROM_HEAD));
+        var advance: bool := (tail + num_ops > head + (LOG_SIZE - GC_FROM_HEAD));
 
         glinear var log_entries;
         glinear var cyclic_buffer_entries;
@@ -1056,15 +1056,15 @@ module Impl(nrifc: NRIfc) {
                 glmap_take(cyclic_buffer_entries, tail as int + j as int);
 
             assert BufferEntryInv(nr.buffer,
-                (tail as int + j as int) - BUFFER_SIZE as int, cyclic_buffer_entry);
+                (tail as int + j as int) - LOG_SIZE as int, cyclic_buffer_entry);
 
             glinear var StoredType(cellContents, oldLogEntry) := cyclic_buffer_entry;
 
             dispose_anything(oldLogEntry); // don't need this anymore
 
-            var bounded_idx := (tail + j) % BUFFER_SIZE;
+            var bounded_idx := (tail + j) % LOG_SIZE;
             calc {
-              ((tail as int + j as int) - BUFFER_SIZE as int) % BUFFER_SIZE as int;
+              ((tail as int + j as int) - LOG_SIZE as int) % LOG_SIZE as int;
               bounded_idx as int;
             }
 
@@ -1079,7 +1079,7 @@ module Impl(nrifc: NRIfc) {
             assert BufferEntryInv(nr.buffer,
                 (tail as int + j as int), cyclic_buffer_entry);
 
-            var m := ((tail + j) / BUFFER_SIZE) % 2 == 0;
+            var m := ((tail + j) / LOG_SIZE) % 2 == 0;
             atomic_block var _ := execute_atomic_store(
                 lseq_peek(nr.buffer, bounded_idx).alive, m)
             {
@@ -1286,7 +1286,7 @@ module Impl(nrifc: NRIfc) {
 
         decreases *
         {
-          var bounded := i % BUFFER_SIZE;
+          var bounded := i % LOG_SIZE;
           atomic_block var live_bit := execute_atomic_load(
               lseq_peek(nr.buffer, bounded).alive)
           {
@@ -1294,7 +1294,7 @@ module Impl(nrifc: NRIfc) {
             atomic_block var _ := execute_atomic_noop(nr.bufferContents)
             {
               ghost_acquire contents;
-              if live_bit == ((i / BUFFER_SIZE) % 2 == 0) {
+              if live_bit == ((i / LOG_SIZE) % 2 == 0) {
                 cb' := reader_guard(cb', alive_bit, i as int, contents);
               }
               ghost_release contents;
@@ -1302,7 +1302,7 @@ module Impl(nrifc: NRIfc) {
             ghost_release alive_bit;
           }
 
-          if live_bit == ((i / BUFFER_SIZE) % 2 == 0) {
+          if live_bit == ((i / LOG_SIZE) % 2 == 0) {
             // read the log_entry from memory
             var log_entry := read_cell(lseq_peek(nr.buffer, bounded).cell,
                 reader_borrow(cb').cellContents);
@@ -1545,7 +1545,7 @@ module Impl(nrifc: NRIfc) {
           ghost_release head;
         }
 
-        if f < min_local_tail + (BUFFER_SIZE - GC_FROM_HEAD) { // TODO bounded int errors
+        if f < min_local_tail + (LOG_SIZE - GC_FROM_HEAD) { // TODO bounded int errors
           done := true;
         } else {
           actual_replica', responses',

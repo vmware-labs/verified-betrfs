@@ -134,26 +134,26 @@ module Init(nrifc: NRIfc) {
   method make_buffer_cells()
   returns (linear cells: lseq<Cell<ConcreteLogEntry>>,
       glinear cell_contents: map<int, StoredType>)
-  ensures |cells| == BUFFER_SIZE as int
+  ensures |cells| == LOG_SIZE as int
   ensures lseq_full(cells)
-  ensures forall i | -(BUFFER_SIZE as int) <= i < 0 :: i in cell_contents
-      && cell_contents[i].cellContents.cell == cells[i % BUFFER_SIZE as int]
+  ensures forall i | -(LOG_SIZE as int) <= i < 0 :: i in cell_contents
+      && cell_contents[i].cellContents.cell == cells[i % LOG_SIZE as int]
   ensures forall i | i in cell_contents ::
-      -(BUFFER_SIZE as int) <= i < 0
+      -(LOG_SIZE as int) <= i < 0
   {
-    cells := lseq_alloc(BUFFER_SIZE);
+    cells := lseq_alloc(LOG_SIZE);
     cell_contents := glmap_empty();
 
     var j := 0;
-    while j < BUFFER_SIZE
-    invariant 0 <= j <= BUFFER_SIZE
-    invariant |cells| == BUFFER_SIZE as int
+    while j < LOG_SIZE
+    invariant 0 <= j <= LOG_SIZE
+    invariant |cells| == LOG_SIZE as int
     invariant forall i | 0 <= i < j as int :: i in cells
-    invariant forall i | j as int <= i < BUFFER_SIZE as int :: i !in cells
-    invariant forall i | -(BUFFER_SIZE as int) <= i < -(BUFFER_SIZE as int) + j as int :: i in cell_contents
-       && cell_contents[i].cellContents.cell == cells[i % BUFFER_SIZE as int]
+    invariant forall i | j as int <= i < LOG_SIZE as int :: i !in cells
+    invariant forall i | -(LOG_SIZE as int) <= i < -(LOG_SIZE as int) + j as int :: i in cell_contents
+       && cell_contents[i].cellContents.cell == cells[i % LOG_SIZE as int]
     invariant forall i | i in cell_contents ::
-       -(BUFFER_SIZE as int) <= i < -(BUFFER_SIZE as int) + j as int
+       -(LOG_SIZE as int) <= i < -(LOG_SIZE as int) + j as int
     {
       var op;
       linear var cell;
@@ -162,7 +162,7 @@ module Init(nrifc: NRIfc) {
       cells := lseq_give(cells, j, cell);
 
       glinear var st := StoredType(cell_cont, glNone);
-      cell_contents := glmap_insert(cell_contents, -(BUFFER_SIZE as int) + j as int, st);
+      cell_contents := glmap_insert(cell_contents, -(LOG_SIZE as int) + j as int, st);
 
       j := j + 1;
     }
@@ -172,31 +172,31 @@ module Init(nrifc: NRIfc) {
       linear cells: lseq<Cell<ConcreteLogEntry>>, 
       glinear alive: map<nat, CBAliveBit>)
   returns (linear buffer: lseq<BufferEntry>)
-  requires |cells| == BUFFER_SIZE as int
-  requires forall i | 0 <= i < BUFFER_SIZE as int ::
+  requires |cells| == LOG_SIZE as int
+  requires forall i | 0 <= i < LOG_SIZE as int ::
       && i in cells
       && i in alive
       && alive[i] == CBAliveBit(i, false)
-  ensures |buffer| == BUFFER_SIZE as int
-  ensures forall i | 0 <= i < BUFFER_SIZE as int
+  ensures |buffer| == LOG_SIZE as int
+  ensures forall i | 0 <= i < LOG_SIZE as int
     :: i in buffer && buffer[i].cell == cells[i]
         && buffer[i].WF(i)
   {
-    buffer := lseq_alloc(BUFFER_SIZE);
+    buffer := lseq_alloc(LOG_SIZE);
     linear var cells' := cells;
     glinear var alive' := alive;
 
     var j := 0;
-    while j < BUFFER_SIZE
-    invariant 0 <= j <= BUFFER_SIZE
-    invariant |buffer| == BUFFER_SIZE as int
+    while j < LOG_SIZE
+    invariant 0 <= j <= LOG_SIZE
+    invariant |buffer| == LOG_SIZE as int
     invariant forall i | 0 <= i < j as int
       :: i in buffer && buffer[i].cell == cells[i]
           && buffer[i].WF(i)
-    invariant forall i | j as int <= i < BUFFER_SIZE as int
+    invariant forall i | j as int <= i < LOG_SIZE as int
       :: i !in buffer
-    invariant |cells'| == BUFFER_SIZE as int
-    invariant forall i | j as int <= i < BUFFER_SIZE as int ::
+    invariant |cells'| == LOG_SIZE as int
+    invariant forall i | j as int <= i < LOG_SIZE as int ::
         && i in cells'
         && i in alive'
         && cells[i] == cells'[i]
@@ -223,7 +223,7 @@ module Init(nrifc: NRIfc) {
       j := j + 1;
     }
 
-    assert j == BUFFER_SIZE;
+    assert j == LOG_SIZE;
     forall i:nat | i < |lseqs_raw(cells')| ensures !has(lseqs_raw(cells')[i])
     {
       assert i !in cells';

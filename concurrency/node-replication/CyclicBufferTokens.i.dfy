@@ -60,7 +60,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
   // The 'alive' bit flips back and forth. So sometimes 'true' means 'alive',
   // and sometimes 'false' means 'alive'.
-  // entry is an index into the buffer (0 <= entry < BUFFER_SIZE)
+  // entry is an index into the buffer (0 <= entry < LOG_SIZE)
   datatype {:glinear_fold} CBAliveBit = CBAliveBit(ghost entry: nat, ghost bit: bool)
   {
     function defn(): CBTokens.Token {
@@ -87,13 +87,13 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   // between the (unbounded) int and the resource.
   //
   // The way this is used is that the user, who is ready to write log-entry N,
-  //    * Advances the tail, obtaining access to buffer entry N % BUFFER_SIZE
-  //      which currently has entry N - BUFFER_SIZE
+  //    * Advances the tail, obtaining access to buffer entry N % LOG_SIZE
+  //      which currently has entry N - LOG_SIZE
   //    * They overwrite that entry with log entry N
   //    * Return write-access to the CyclicBuffer protocol by setting the 'alive' bit
   //
   // Thus, for convenience, the `contents` needs to be initialized with
-  // -BUFFER_SIZE, ..., -1
+  // -LOG_SIZE, ..., -1
 
   datatype Contents = Contents(
     ghost contents: map<int, StoredType>
@@ -164,12 +164,12 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       ghost new_tail: nat, gshared contents: Contents)
   returns (glinear tail': CBGlobalTail, glinear entries': map<nat, StoredType>,
       glinear append': CBAppendState)
-  requires tail.tail <= new_tail <= state.observed_head + BUFFER_SIZE as int
+  requires tail.tail <= new_tail <= state.observed_head + LOG_SIZE as int
   ensures tail'.tail == new_tail
   ensures forall i | tail.tail <= i < new_tail ::
       && i in entries'
-      && (i - BUFFER_SIZE as int) in contents.contents
-      && entries'[i] == contents.contents[i - BUFFER_SIZE as int]
+      && (i - LOG_SIZE as int) in contents.contents
+      && entries'[i] == contents.contents[i - LOG_SIZE as int]
   ensures append' == CBAppendState(tail.tail, new_tail)
 
   glinear method append_flip_bit(
@@ -177,9 +177,9 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       glinear value: StoredType)
   returns (glinear state': CBAppendState, glinear bit': CBAliveBit, glinear contents': Contents)
   requires state.cur_idx < state.tail
-  requires bit.entry == state.cur_idx % BUFFER_SIZE as int
+  requires bit.entry == state.cur_idx % LOG_SIZE as int
   ensures state' == state.(cur_idx := state.cur_idx + 1)
-  ensures bit' == bit.(bit := ((state.cur_idx / BUFFER_SIZE as int) % 2 == 0))
+  ensures bit' == bit.(bit := ((state.cur_idx / LOG_SIZE as int) % 2 == 0))
   ensures contents' == contents.(contents := contents.contents[state.cur_idx := value])
 
   glinear method reader_start(glinear combiner: CBCombinerToken, gshared localTail: CBLocalTail)
@@ -198,8 +198,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CBCombinerReading? && combiner.rs.readerState.CBReaderRange?
   requires combiner.rs.readerState.start <= i < combiner.rs.readerState.end
-  requires i % BUFFER_SIZE as int == aliveBit.entry
-  requires aliveBit.bit == ((i / BUFFER_SIZE as int) % 2 == 0)
+  requires i % LOG_SIZE as int == aliveBit.entry
+  requires aliveBit.bit == ((i / LOG_SIZE as int) % 2 == 0)
   ensures i in contents.contents
   ensures combiner' == combiner.(rs := CBCombinerReading(CBReaderGuard(combiner.rs.readerState.start, combiner.rs.readerState.end,
       i, contents.contents[i])))
@@ -230,13 +230,13 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     glinear contents: Contents,
     glinear readers: map<nat, CBCombinerToken>
   )
-  requires forall i :: -(BUFFER_SIZE as int) <= i < 0 <==> i in m
+  requires forall i :: -(LOG_SIZE as int) <= i < 0 <==> i in m
   ensures head == CBHead(0)
   ensures globalTail == CBGlobalTail(0)
   ensures forall i | 0 <= i < NUM_REPLICAS as int ::
       && i in localTails && localTails[i] == CBLocalTail(i, 0)
       && i in readers && readers[i] == CBCombinerToken(i, CBCombinerIdle)
-  ensures forall i | 0 <= i < BUFFER_SIZE as int ::
+  ensures forall i | 0 <= i < LOG_SIZE as int ::
       i in alive && alive[i] == CBAliveBit(i, false)
   ensures contents == Contents(m)
 }
