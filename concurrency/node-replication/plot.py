@@ -88,7 +88,6 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
                            y='ops_per_s',
                            color='config',
                            shape='config',
-                           linetype='n_replicas',
                            group='config')) + \
         theme_my538() + \
         coord_cartesian(ylim=(0, None), expand=False) + \
@@ -97,14 +96,14 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
         scale_x_continuous(breaks=[1, 4] + list(range(xskip, 513, xskip)), name='# Threads') + \
         scale_y_continuous(labels=lambda lst: ["{:,.0f}".format(x / 1_000_000) for x in lst]) + \
         scale_color_manual([
-            "#66C2A5",
-            "#8DA0CB",
-            "#E78AC3",
-            "#FC8D62",
-            "#A6D854",
-            "#FFD92F",
-            "#E5C494",
-            "#B3B3B3",
+            "#e41a1c",
+            "#377eb8",
+            "#4daf4a",
+            "#984ea3",
+            "#ff7f00",
+            "#f781bf",
+            "#999999",
+            "#a6cee3",
             ]) + \
         scale_shape_manual(values=[
             'o',
@@ -116,8 +115,18 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
             ]) + \
         geom_point() + \
         geom_line() + \
+        facet_grid(["reads_pct", "."], scales="free_y") + \
         guides(color=guide_legend(nrow=1))
-        #facet_grid(["write_ratio", "."], scales="free_y") + \
+#        scale_color_manual([
+#            "#66C2A5",
+#            "#8DA0CB",
+#            "#E78AC3",
+#            "#FC8D62",
+#            "#A6D854",
+#            "#FFD92F",
+#            "#E5C494",
+#            "#B3B3B3",
+#            ]) + \
 
     #sockets = machine[2]
     #threads_per_socket = machine[1] / machine[2]
@@ -141,10 +150,10 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
     #                           guide=None)
 
     p.save("{}-throughput-vs-cores.png".format(machine[0]),
-           dpi=300, width=PLOT_WIDTH, height=2.7*PLOT_HEIGHT,
+           dpi=300, width=PLOT_WIDTH, height=PLOT_HEIGHT,
            units=PLOT_SIZE_UNIT)
     p.save("{}-throughput-vs-cores.pdf".format(machine[0]),
-           dpi=300, width=PLOT_WIDTH, height=2.7*PLOT_HEIGHT,
+           dpi=300, width=PLOT_WIDTH, height=PLOT_HEIGHT,
            units=PLOT_SIZE_UNIT)
 
 if __name__ == '__main__':

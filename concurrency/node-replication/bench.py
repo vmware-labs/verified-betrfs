@@ -39,7 +39,7 @@ def combine_data_files():
 
 def run(bench, n_replicas, n_threads, reads_pct):
     path = bench_path(n_replicas)
-    cmd = '%s %s %d %d %d %s' % (path, bench, n_threads, reads_pct
+    cmd = '%s %s %d %d %d %s' % (path, bench, n_threads, reads_pct,
                                    SECONDS, NUMA_POLICY)
     print(cmd)
     subprocess.run(cmd, shell=True, check=False)
@@ -53,9 +53,9 @@ def run_all():
             for n_replicas in [1, 2, 4]:
                 bench = 'dafny_nr'
                 assert bench == BENCHES[0]
-                if (n_threads < n_replicas, reads_pct):
+                if (n_threads < n_replicas):
                     continue
-                run(bench, n_replicas, n_threads)
+                run(bench, n_replicas, n_threads, reads_pct)
                 combine_data_files()
 
             for bench in BENCHES[1:]:
