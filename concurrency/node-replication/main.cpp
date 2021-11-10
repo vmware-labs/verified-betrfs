@@ -14,7 +14,7 @@
 #include "nr.h"
 #include "thread_pin.h"
 
-class KeyGenerator {
+class key_generator {
   uint64_t state;
 
   // key range is: `VSPACE_RANGE` as defined in vspace/lib.rs
@@ -22,7 +22,7 @@ class KeyGenerator {
   static constexpr uint64_t MASK = 0x3fffffffff & !0xfff;
 
 public:
-  KeyGenerator(uint8_t thread_id)
+  key_generator(uint8_t thread_id)
     : state{0xdeadbeefdeadbeef ^ thread_id}
   {}
 
@@ -46,7 +46,7 @@ struct benchmark_state {
   size_t reads_stride;
   size_t updates_stride;
   seconds run_seconds;
-  core_map cores;
+  core_map& cores;
   std::atomic<size_t> n_threads_ready;
   std::vector<std::thread> threads;
   std::atomic<bool> start_benchmark;
@@ -61,15 +61,14 @@ struct benchmark_state {
                   size_t n_threads,
                   size_t reads_pct,
                   seconds run_seconds,
-                  core_map::numa_policy numa_policy,
-                  core_map::core_policy core_policy)
+                  core_map& cores)
     : bench_name{bench_name}
     , n_threads{n_threads}
     , reads_pct{reads_pct}
     , reads_stride{reads_pct != 0 ? stride1 * 100 / reads_pct : ~0lu}
     , updates_stride{reads_pct == 100 ? ~0lu: stride1 * 100 / (100 - reads_pct)}
     , run_seconds{run_seconds}
-    , cores{numa_policy, core_policy}
+    , cores{cores}
     , n_threads_ready{}
     , threads{}
     , start_benchmark{}
@@ -123,7 +122,7 @@ void run_thread(
 {
   state.cores.pin(thread_id);
 
-  KeyGenerator keygen{thread_id};
+  key_generator keygen{thread_id};
   void* thread_context = monitor.create_thread_context(thread_id);
 
   state.n_threads_ready++;
@@ -438,13 +437,17 @@ int main(int argc, char* argv[]) {
 
   disable_dvfs();
 
+  core_map cores{fill_policy, core_map::core_policy::CORES_FILL};
+  // The main thread mainly just sleeps, but pin it before constructing
+  // all the benchmark state to ensure determinism wrt to first-touch policy.
+  cores.pin(0);
+
   benchmark_state state{
     bench_name,
     n_threads,
     reads_pct,
     run_seconds,
-    fill_policy,
-    core_map::core_policy::CORES_FILL
+    cores
   };
 
 #define BENCHMARK(test_name) \

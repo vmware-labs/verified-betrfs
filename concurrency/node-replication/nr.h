@@ -34,39 +34,15 @@ namespace nr = Impl_ON_VSpaceIfc__Compile;
 namespace nrinit = Init_ON_VSpaceIfc__Compile;
 #endif
 
-constexpr size_t CACHELINE_SIZE = 128;
-
-constexpr size_t CLPAD(size_t sz) {
-  return ((sz / CACHELINE_SIZE) * CACHELINE_SIZE) +
-          (((sz % CACHELINE_SIZE) > 0) * CACHELINE_SIZE) - sz;
-}
-
-template<class T, bool = false>
-struct padded
-{
-  padded(const T& value) : value{value} {}
-  alignas(CACHELINE_SIZE)T value;
-  char padding[CLPAD(sizeof(T))];
-};
-
-template<class T>
-struct padded<T, true>
-{
-  padded(const T& value) : value{value} {}
-  alignas(CACHELINE_SIZE)T value;
-};
-
-template<class T>
-using cache_padded = padded<T, (sizeof(T) % CACHELINE_SIZE == 0)>;
-
 class nr_helper {
   uint32_t n_threads_per_replica;
   std::optional<nr::NR> nr;
   std::mutex init_mutex;
+  size_t nodes_init;
   lseq<nrinit::NodeCreationToken> node_creation_tokens;
-  std::unordered_map<uint8_t, std::unique_ptr<cache_padded<nr::Node>>> nodes;
+  std::vector<std::unique_ptr<nr::Node>> nodes;
   /// Maps NodeId to vector of ThreadOwnedContexts for that Node.
-  std::unordered_map<uint8_t, lseq<nr::ThreadOwnedContext>> thread_owned_contexts;
+  std::vector<lseq<nr::ThreadOwnedContext>> thread_owned_contexts;
   std::condition_variable all_nodes_init;
 
  public:
@@ -78,11 +54,14 @@ class nr_helper {
     : n_threads_per_replica{static_cast<uint32_t>(n_threads / num_replicas())}
     , nr{}
     , init_mutex{}
+    , nodes_init{}
     , node_creation_tokens{}
     , nodes{}
     , thread_owned_contexts{}
     , all_nodes_init{}
   {
+    nodes.resize(num_replicas());
+    thread_owned_contexts.resize(num_replicas());
     assert(num_replicas() > 0);
     assert(num_replicas() <= n_threads);
     assert(n_threads_per_replica * num_replicas() == n_threads);
@@ -90,7 +69,7 @@ class nr_helper {
 
   ~nr_helper() {
     for (auto seq : thread_owned_contexts)
-      delete seq.second;
+      delete seq;
 
     delete node_creation_tokens;
   }
@@ -98,7 +77,7 @@ class nr_helper {
   nr::NR& get_nr() { return *nr; }
 
   nr::Node& get_node(uint8_t thread_id) {
-    return nodes[thread_id / n_threads_per_replica]->value;
+    return *nodes[thread_id / n_threads_per_replica];
   }
 
   void init_nr() {
@@ -122,15 +101,16 @@ class nr_helper {
       std::cerr << "thread_id " << static_cast<uint32_t>(thread_id)
                 << " done initializing node_id " << node_id << std::endl;
 
-      auto node = new cache_padded<nr::Node>{nr::Node(r.get<0>())};
-      nodes.emplace(node_id, std::unique_ptr<cache_padded<nr::Node>>{node});
-      thread_owned_contexts.emplace(node_id, r.get<1>());
+      nr::Node* node = new nr::Node{r.get<0>()};
+      nodes[node_id] = std::unique_ptr<nr::Node>{node};
+      thread_owned_contexts[node_id] = r.get<1>();
+      ++nodes_init;
 
-      if (nodes.size() == num_replicas())
+      if (nodes_init == num_replicas())
         all_nodes_init.notify_all();
     }
 
-    while (nodes.size() < num_replicas())
+    while (nodes_init < num_replicas())
       all_nodes_init.wait(lock);
 
     // TODO(stutsman) no pinning, affinity, and threads on different
@@ -144,7 +124,7 @@ class nr_helper {
               << " context " << static_cast<uint32_t>(context_index)
               << std::endl;
 
-    return &thread_owned_contexts.at(node_id)->at(context_index).a;
+    return &(thread_owned_contexts[node_id]->at(context_index)).a;
   }
 };
 
@@ -160,24 +140,24 @@ class nr_rust_helper {
   uint32_t n_threads_per_replica;
   LogWrapper& log;
   std::mutex init_mutex;
-  std::unordered_map<uint8_t, ReplicaWrapper*> nodes;
-  /// Maps NodeId to vector of ReplicaToken Ids for that Node.
-  std::unordered_map<uint8_t, lseq<size_t>> thread_owned_contexts;
+  size_t nodes_init;
+  std::vector<ReplicaWrapper*> nodes;
   std::condition_variable all_nodes_init;
 
  public:
-  static uint64_t num_replicas() {
+  static size_t num_replicas() {
     return Constants_Compile::__default::NUM__REPLICAS;
   }
 
   nr_rust_helper(size_t n_threads)
     : n_threads_per_replica{static_cast<uint32_t>(n_threads / num_replicas())}
-    , log{ createLog()}
+    , log{createLog()}
     , init_mutex{}
+    , nodes_init{}
     , nodes{}
-    , thread_owned_contexts{}
     , all_nodes_init{}
   {
+    nodes.resize(num_replicas());
     assert(num_replicas() > 0);
     assert(num_replicas() <= n_threads);
     assert(n_threads_per_replica * num_replicas() == n_threads);
@@ -194,8 +174,7 @@ class nr_rust_helper {
     return nodes[thread_id / n_threads_per_replica];
   }
 
-  void init_nr() {
-  }
+  void init_nr() {}
 
   size_t register_thread(uint8_t thread_id) {
     std::unique_lock<std::mutex> lock{init_mutex};
@@ -206,13 +185,14 @@ class nr_rust_helper {
       auto replica = createReplica(log);
       std::cerr << "thread_id " << static_cast<uint32_t>(thread_id)
                 << " done initializing node_id " << node_id << std::endl;
-      nodes.emplace(node_id, replica);
+      nodes[node_id] = replica;
+      ++nodes_init;
 
-      if (nodes.size() == num_replicas())
+      if (nodes_init == num_replicas())
         all_nodes_init.notify_all();
     }
 
-    while (nodes.size() < num_replicas())
+    while (nodes_init < num_replicas())
       all_nodes_init.wait(lock);
 
     // TODO(stutsman) no pinning, affinity, and threads on different
@@ -228,6 +208,5 @@ class nr_rust_helper {
     return context;
   }
 };
-
 
 #endif
