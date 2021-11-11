@@ -78,24 +78,42 @@ class theme_my538(theme_gray):
                 strip_background=element_rect(size=0)),
             inplace=True)
 
-def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
+def throughput_vs_cores(machine, df, graph='compare-locks'):
     df['config'] = df['bench_name'] + [str(i) for i in df['n_replicas'].to_list()]
     df = df.loc[df['n_threads'] >= 4]
     df['n_replicas'] = pd.Categorical(df.n_replicas)
     df['write_ratio'] = 100 - df['reads_pct']
+
+    if graph == 'compare-locks':
+        df = df.loc[~df['bench_name'].isin(['dafny_nr', 'rust_nr'])
+                    | (df['n_replicas'] == 4)]
+        aest = aes(x='n_threads',
+                   y='ops_per_s',
+                   color='config',
+                   shape='config',
+                   group='config')
+    else:
+        df = df.loc[df['bench_name'].isin(['dafny_nr', 'rust_nr'])]
+        aest = aes(x='n_threads',
+                   y='ops_per_s',
+                   color='bench_name',
+                   shape='bench_name',
+                   linetype='n_replicas',
+                   group='config')
+
+    def read_pct_labeller(s):
+        return '%d%% Lookups'.format(s)
+
     xskip = int(machine[1]/8)
-    p = ggplot(data=df,
-               mapping=aes(x='n_threads',
-                           y='ops_per_s',
-                           color='config',
-                           shape='config',
-                           group='config')) + \
-        theme_my538() + \
-        coord_cartesian(ylim=(0, None), expand=False) + \
-        labs(y="Throughput [Mop/s]") + \
+    p = (
+        ggplot(data=df,
+                mapping=aest) +
+        theme_my538() +
+        coord_cartesian(ylim=(0, None), expand=False) +
+        labs(y="Throughput [Mop/s]") +
         theme(legend_position='top', legend_title=element_blank()) + \
-        scale_x_continuous(breaks=[1, 4] + list(range(xskip, 513, xskip)), name='# Threads') + \
-        scale_y_continuous(labels=lambda lst: ["{:,.0f}".format(x / 1_000_000) for x in lst]) + \
+        scale_x_continuous(breaks=[1, 4] + list(range(xskip, 513, xskip)), name='# Threads') +
+        scale_y_continuous(labels=lambda lst: ["{:,.0f}".format(x / 1_000_000) for x in lst]) +
         scale_color_manual([
             "#e41a1c",
             "#377eb8",
@@ -105,7 +123,7 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
             "#f781bf",
             "#999999",
             "#a6cee3",
-            ]) + \
+            ]) +
         scale_shape_manual(values=[
             'o',
             's',
@@ -113,21 +131,17 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
             '^',
             'v',
             '*',
-            ]) + \
-        geom_point() + \
-        geom_line() + \
-        facet_grid(["write_ratio", "."], scales="free_y") + \
+            'O',
+            'x',
+            ]) +
+        scale_linetype_discrete(size=0.2) +
+        geom_point(size=0.05) +
+        geom_line() +
+        facet_grid(["write_ratio", "."],
+                    scales="free_y",
+                    labeller=labeller(cols=read_pct_labeller)) +
         guides(color=guide_legend(nrow=1))
-#        scale_color_manual([
-#            "#66C2A5",
-#            "#8DA0CB",
-#            "#E78AC3",
-#            "#FC8D62",
-#            "#A6D854",
-#            "#FFD92F",
-#            "#E5C494",
-#            "#B3B3B3",
-#            ]) + \
+    )
 
     #sockets = machine[2]
     #threads_per_socket = machine[1] / machine[2]
@@ -150,10 +164,10 @@ def throughput_vs_cores(machine, df, write_ratios=[0, 10, 80]):
     #p += scale_linetype_manual(values=['dashed', 'dotted'],
     #                           guide=None)
 
-    p.save("{}-throughput-vs-cores.png".format(machine[0]),
+    p.save("%s-throughput-vs-cores-%s.png" % (machine[0], graph),
            dpi=300, width=PLOT_WIDTH, height=4*PLOT_HEIGHT,
            units=PLOT_SIZE_UNIT)
-    p.save("{}-throughput-vs-cores.pdf".format(machine[0]),
+    p.save("%s-throughput-vs-cores-%s.pdf" % (machine[0], graph),
            dpi=300, width=PLOT_WIDTH, height=4*PLOT_HEIGHT,
            units=PLOT_SIZE_UNIT)
 
@@ -167,4 +181,5 @@ if __name__ == '__main__':
     for machine in MACHINES:
         df = pd.read_json('data.json')
         print(df)
-        throughput_vs_cores(machine, df)
+        throughput_vs_cores(machine, df.copy(), 'compare-locks')
+        throughput_vs_cores(machine, df.copy(), 'compare-nrs')
