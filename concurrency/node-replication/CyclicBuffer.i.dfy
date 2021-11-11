@@ -6,9 +6,10 @@ include "../framework/MultiRw.i.dfy"
 include "../framework/GlinearOption.s.dfy"
 include "../../lib/Base/Option.s.dfy"
 include "../../lib/Base/Maps.i.dfy"
-
+include "../../lib/Lang/NativeTypes.s.dfy"
 
 module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
+  import opened NativeTypes
   import IL = InfiniteLogSSM(nrifc)
   import opened ILT = InfiniteLogTokens(nrifc)
   import opened GlinearOption
@@ -19,9 +20,11 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   type Key(!new) = nat
 
+  datatype ConcreteLogEntry = ConcreteLogEntry(op: nrifc.UpdateOp, node_id: uint64)
+
   glinear datatype StoredType = StoredType(
-    glinear cellContents: CellContents<IL.LogEntry>,
-    glinear logEntry: glOption<ILT.Log>
+    glinear cellContents: CellContents<ConcreteLogEntry>,
+    glinear logEntry: glOption<Log>
   )
 
   datatype ReaderState =
