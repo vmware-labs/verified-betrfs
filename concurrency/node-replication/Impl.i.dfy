@@ -156,6 +156,26 @@ module Impl(nrifc: NRIfc) {
     ghost fc_loc: Loc
   )
   {
+
+    predicate CombinerLockInv0(v: uint64, g: glOption<CombinerLockState>)
+    {
+      && g.glSome? 
+      && g.value.flatCombiner.state == FCCombinerCollecting(0, [])
+      && g.value.flatCombiner.loc == fc_loc
+      && g.value.gops.v.Some?
+      && g.value.gops.lcell == ops
+      && |g.value.gops.v.value| == MAX_THREADS_PER_REPLICA as int
+      && g.value.gresponses.v.Some?
+      && g.value.gresponses.lcell == responses
+      && |g.value.gresponses.v.value| == MAX_THREADS_PER_REPLICA as int
+    }
+
+    predicate CombinerLockInv(v: uint64, g: glOption<CombinerLockState>)
+    {
+      && ((v == 0) <==> CombinerLockInv0(v, g)) // TODO ==> enough?
+      && ((v > 0) <==> g.glNone?)
+    }
+  
     predicate WF() {
       && (forall nodeReplica :: replica.inv(nodeReplica) <==> nodeReplica.WF(nodeId as int))
       && 0 <= nodeId as int < NUM_REPLICAS as int
