@@ -8,7 +8,7 @@
 #include <sys/sysinfo.h>
 
 void disable_dvfs() {
-  int ret = system("[[ -d '/sys/devices/system/cpu/cpu0/cpufreq' ]] && "
+  int ret = system("test -d '/sys/devices/system/cpu/cpu0/cpufreq' && "
       "(echo performance | "
       "sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor) > "
       "/dev/null");
