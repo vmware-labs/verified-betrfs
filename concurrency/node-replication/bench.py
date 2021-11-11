@@ -8,17 +8,19 @@ import subprocess
 import random
 
 NUMA_POLICY = 'interleave'
-SECONDS = 30
+SECONDS = 10
 
 CORES_PER_NODE = 48
 NODES = 4
 MAX_THREADS = NODES * CORES_PER_NODE
 
 NR_BENCHES = ['dafny_nr', 'rust_nr']
-OTHER_BENCHES = ['dafny_rwlock', 'cpp_shared_mutex']
-READS_PCT = [95, 100, 50, 0, 90]
+OTHER_BENCHES = []
+#OTHER_BENCHES = ['dafny_rwlock', 'cpp_shared_mutex']
+#READS_PCT = [95, 100, 50, 0, 90]
+READS_PCT = [100]
 
-N_THREADS = [1] + list(range(4, MAX_THREADS, 4))
+N_THREADS = [1] + list(range(4, MAX_THREADS, 16))
 
 def bench_path(n_replicas):
     p = './app-%dreplicas' % n_replicas
