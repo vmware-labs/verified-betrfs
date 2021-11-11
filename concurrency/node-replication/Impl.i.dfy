@@ -124,6 +124,23 @@ module Impl(nrifc: NRIfc) {
 
   glinear datatype CombinerLockState = CombinerLockState(glinear flatCombiner: FCCombiner, glinear gops: LC.LCellContents<seq<nrifc.UpdateOp>>, glinear gresponses: LC.LCellContents<seq<nrifc.ReturnType>>)
 
+  predicate CombinerLockInv(v: uint64, g: glOption<CombinerLockState>,
+    fc_loc: Loc, ops: LC.LinearCell<seq<nrifc.UpdateOp>>, responses: LC.LinearCell<seq<nrifc.ReturnType>>)
+  { // TODO ==> enough?
+    && ((v == 0) <==> (
+      && g.glSome? 
+      && g.value.flatCombiner.state == FCCombinerCollecting(0, [])
+      && g.value.flatCombiner.loc == fc_loc
+      && g.value.gops.v.Some?
+      && g.value.gops.lcell == ops
+      && |g.value.gops.v.value| == MAX_THREADS_PER_REPLICA as int
+      && g.value.gresponses.v.Some?
+      && g.value.gresponses.lcell == responses
+      && |g.value.gresponses.v.value| == MAX_THREADS_PER_REPLICA as int
+    ))
+    && ((v > 0) <==> g.glNone?)
+  }
+
   linear datatype Node = Node(
     linear combiner_lock: Atomic<uint64, glOption<CombinerLockState>>,
     // protected by the `combiner_lock`
@@ -139,32 +156,12 @@ module Impl(nrifc: NRIfc) {
     ghost fc_loc: Loc
   )
   {
-
-    predicate CombinerLockInv0(v: uint64, g: glOption<CombinerLockState>)
-    {
-      && g.glSome? 
-      && g.value.flatCombiner.state == FCCombinerCollecting(0, [])
-      && g.value.flatCombiner.loc == fc_loc
-      && g.value.gops.v.Some?
-      && g.value.gops.lcell == ops
-      && |g.value.gops.v.value| == MAX_THREADS_PER_REPLICA as int
-      && g.value.gresponses.v.Some?
-      && g.value.gresponses.lcell == responses
-      && |g.value.gresponses.v.value| == MAX_THREADS_PER_REPLICA as int
-    }
-
-    predicate CombinerLockInv(v: uint64, g: glOption<CombinerLockState>)
-    {
-      && ((v == 0) <==> CombinerLockInv0(v, g)) // TODO ==> enough?
-      && ((v > 0) <==> g.glNone?)
-    }
-  
     predicate WF() {
       && (forall nodeReplica :: replica.inv(nodeReplica) <==> nodeReplica.WF(nodeId as int))
       && 0 <= nodeId as int < NUM_REPLICAS as int
       && |contexts| == MAX_THREADS_PER_REPLICA as int
       && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i, fc_loc))
-      && (forall v, g :: atomic_inv(combiner_lock, v, g) <==> CombinerLockInv(v, g))
+      && (forall v, g :: atomic_inv(combiner_lock, v, g) <==> CombinerLockInv(v, g, fc_loc, ops, responses))
       && replica.InternalInv()
     }
   }
