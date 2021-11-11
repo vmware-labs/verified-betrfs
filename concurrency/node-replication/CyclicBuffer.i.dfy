@@ -152,10 +152,10 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   predicate PointerOrdering(x: M)
     requires Complete(x)
-    ensures (reveal_Complete(); PointerOrdering(x) ==> (x.head.value <= MinLocalTail(x.localTails) <= x.tail.value))
+    ensures (
+      assert forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails by { reveal_Complete(); }
+      PointerOrdering(x) ==> (x.head.value <= MinLocalTail(x.localTails) <= x.tail.value))
   {
-    reveal_Complete();
-
     // the head must be smaller or equal to the tail,
     && x.head.value <= x.tail.value
     // all local tails must be between the head and the tail
@@ -183,10 +183,17 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   predicate BufferContents(x: M)
     requires Complete(x)
   {
-    reveal_Complete();
+    // reveal_Complete();
 
-    forall i : int | x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value ::
-      (EntryIsAlive(x.aliveBits, i) || i < MinLocalTail(x.localTails)) <==> x.contents[i].Some?
+    forall i : int | x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value :: (
+      assert (
+        && LogicalToPhysicalIndex(i) in x.aliveBits
+        && (forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails)
+        && i in x.contents) by {
+
+        reveal_Complete();
+      }
+      (EntryIsAlive(x.aliveBits, i) || i < MinLocalTail(x.localTails)) <==> x.contents[i].Some?)
   }
 
   predicate ReaderStateValid(x: M)
