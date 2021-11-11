@@ -1525,7 +1525,7 @@ module Impl(nrifc: NRIfc) {
 
       if min_local_tail == global_head {
         if iteration == WARN_THRESHOLD {
-          print "Spending a long time in `advance_head`, are we starving?";
+          print "Spending a long time in `advance_head`, are we starving?\n";
           iteration := 0;
         }
         iteration := iteration + 1;
