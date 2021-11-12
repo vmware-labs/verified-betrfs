@@ -1023,7 +1023,6 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       assert AliveBits(dot(m', p));
       assert BufferContents(dot(m', p));
 
-      }
       assert key !in I(dot(m, p));
 
       assert I(dot(m', p)) == I(dot(m, p))[key := deposited];
