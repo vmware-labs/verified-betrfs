@@ -8,7 +8,7 @@ import subprocess
 import random
 
 NUMA_POLICY = 'interleave'
-SECONDS = 10
+SECONDS = 30
 
 CORES_PER_NODE = 48
 NODES = 4
@@ -16,11 +16,17 @@ MAX_THREADS = NODES * CORES_PER_NODE
 
 NR_BENCHES = ['dafny_nr', 'rust_nr']
 OTHER_BENCHES = []
-#OTHER_BENCHES = ['dafny_rwlock', 'cpp_shared_mutex']
-#READS_PCT = [95, 100, 50, 0, 90]
-READS_PCT = [100]
+OTHER_BENCHES = ['dafny_rwlock', 'cpp_shared_mutex']
+READS_PCT = [95, 100, 50, 0, 90]
 
-N_THREADS = [1] + list(range(4, MAX_THREADS, 16))
+N_REPLICAS = [1, 2, 4]
+
+def reorder(l):
+  if len(l) < 2:
+    return l
+  p = len(l) // 2
+  return [l[p]] + reorder(l[p+1:] + l[:p])
+N_THREADS = [MAX_THREADS, 4] + reorder(list(range(16, MAX_THREADS, 16)))
 
 def bench_path(n_replicas):
     p = './app-%dreplicas' % n_replicas
@@ -48,12 +54,9 @@ def run(bench, n_replicas, n_threads, reads_pct):
     subprocess.run(cmd, shell=True, check=False)
 
 def run_all():
-    threads = N_THREADS[1:-1]
-    random.shuffle(threads)
-    threads = [N_THREADS[-1]] + threads + [N_THREADS[0]]
     for reads_pct in READS_PCT:
-        for n_threads in threads:
-            for n_replicas in [1, 2, 4]:
+        for n_threads in N_THREADS:
+            for n_replicas in N_REPLICAS:
                 for bench in NR_BENCHES:
                   if (n_threads < n_replicas):
                       continue
@@ -63,5 +66,8 @@ def run_all():
             for bench in OTHER_BENCHES:
                 run(bench, 1, n_threads, reads_pct)
                 combine_data_files()
+
+            subprocess.run('./plot.py', shell=True, check=False)
+            subprocess.run('cp *.png plots', shell=True, check=False)
 
 if __name__ == '__main__': run_all()
