@@ -130,6 +130,11 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     MaxLocalTailRec(ltails, NUM_REPLICAS as nat - 1)
   }
 
+
+  function MinusLogSize(i: int): int {
+    i - LOG_SIZE as int
+  }
+
   /*
    * ============================================================================================
    * Invariant
@@ -147,7 +152,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && x.head.Some?
     && x.tail.Some?
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.localTails)
-    && (forall i : int :: (x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value) <==> i in x.contents)
+    && (forall i: int :: (MinusLogSize(x.tail.value) <= i < x.tail.value) <==> i in x.contents)
     && (forall i: nat :: i < LOG_SIZE as nat <==> i in x.aliveBits)
     && (forall i: nat :: LogicalToPhysicalIndex(i) in x.aliveBits)
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.combinerState)
@@ -216,6 +221,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           && start == x.localTails[n]
         )
         case ReaderRange(start: nat, end: nat, cur: nat) => (
+          assert n in x.localTails by { reveal_Complete();}
           // the start must be our local tail
           && x.localTails[n] == start
           // the start must be before the end, can be equial if ltail == gtail
@@ -234,6 +240,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
             x.contents[i].Some?))
         )
         case ReaderGuard(start: nat, end: nat, cur: nat, val: StoredType) => (
+          assert n in x.localTails by { reveal_Complete();}
           // the start must be our local tail
           && x.localTails[n] == start
           // the start must be before the end, can be equial if ltail == gtail
@@ -862,9 +869,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     map k | k in (m1.Keys + m2.Keys) && minkey <= k :: if k in m2 then m2[k] else m1[k]
   }
 
-  function MinusLogSize(i: int): int {
-    i - LOG_SIZE as int
-  }
+
 
   predicate FinishAdvanceTail(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>) // withdraw
   {
@@ -887,27 +892,14 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
     // construct the new log entries, all of them are none, as we withdraw them
     && var new_entries := map x : int | m.tail.value <= x < new_tail :: x := None;
-
-    // the things we're going to withdraw, must be in the new entries
-    && (forall i : int :: i in new_entries.Keys <==> MinusLogSize(i) as int in withdrawn.Keys)
-
     && assert (forall i : int :: i in new_entries.Keys <==> (m.tail.value as int <= i < new_tail as int));
-    && assume (forall i : int :: i in withdrawn.Keys <==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)));
-    // TODO: proof   forall i : int
-    // TODO: proof   ensures i in withdrawn.Keys <==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail))
-    // TODO: proof   {
-    // TODO: proof     if i in new_entries.Keys {
-    // TODO: proof       assert MinusLogSize(i) in withdrawn.Keys;
-    // TODO: proof       // TODO
-    // TODO: proof       assert i in withdrawn.Keys ==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail));
-    // TODO: proof       assert i in withdrawn.Keys <== (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail));
-    // TODO: proof     } else {
-    // TODO: proof       // TODO
-    // TODO: proof       assert i in withdrawn.Keys ==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail));
-    // TODO: proof       assert i in withdrawn.Keys <== (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail));
-    // TODO: proof     }
-    // TODO: proof   }
-    // TODO: proof }
+
+    // the things we're going to withdraw, must be in the previous window
+    && (forall i : int :: i in withdrawn.Keys <==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)))
+    && assert (forall i : int :: i in withdrawn.Keys <==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)));
+
+    // the relationship between the entries and the withdrawn keys
+    && assert (forall i : int :: i in new_entries.Keys <==> MinusLogSize(i) as int in withdrawn.Keys);
 
     // the withdrawn things must be the old entries of the log
     && (forall i | i in withdrawn.Keys :: Some(withdrawn[i]) == m.contents[i])
@@ -941,27 +933,31 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       assert Inv(dot(m', p)) by {
         assert (
           && Complete(dot(m', p))
+          && PointerOrdering(dot(m', p))
           && PointerDifferences(dot(m', p))
           && RangesNoOverlap(dot(m', p))
           && CombinerStateValid(dot(m', p))
           && BufferContents(dot(m', p))
           && ReaderStateValid(dot(m', p))
         ) by {
+          reveal_Complete();
           reveal_RangesNoOverlap();
           assume false; // TODO: reveal_Complete(); reveal_RangesNoOverlap();
-                        // this reveals quantifiers that cause a timeout
-                        // it likely needs more granular trigger management
+          //               // this reveals quantifiers that cause a timeout
+          //               // it likely needs more granular trigger management
         }
       }
       assert I(dot(m', p)).Keys !! withdrawn.Keys;
 
-      // this will withdraw the "lower entries" in the contents.
-      // thus the original I() is the new I() + the entries withdrawn "shiftet to the lower range".
-      assume I(dot(m, p)) ==
-        Maps.MapUnionPreferB(map k | k in I(dot(m', p)).Keys :: I(dot(m', p))[k],
-                   map k | k in withdrawn.Keys ::  (k - LOG_SIZE as int) := withdrawn[k]);
+      forall i : int
+        ensures i in I(dot(m, p)).Keys <==> i in (I(dot(m', p)).Keys + withdrawn.Keys)
+      {
+        reveal_Complete();
+      }
 
-      assume false;
+      assert  I(dot(m, p)) == (
+        map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
+        if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k]);
     }
   }
 
@@ -1027,7 +1023,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       assert AliveBits(dot(m', p));
       assert BufferContents(dot(m', p));
 
-      assert Inv(dot(m', p));
+      }
       assert key !in I(dot(m, p));
 
       assert I(dot(m', p)) == I(dot(m, p))[key := deposited];
