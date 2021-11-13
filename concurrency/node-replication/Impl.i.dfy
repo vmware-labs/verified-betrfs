@@ -126,8 +126,8 @@ module Impl(nrifc: NRIfc) {
 
   predicate CombinerLockInv(v: uint64, g: glOption<CombinerLockState>,
     fc_loc: Loc, ops: LC.LinearCell<seq<nrifc.UpdateOp>>, responses: LC.LinearCell<seq<nrifc.ReturnType>>)
-  {
-    && ((v == 0) ==> (
+  { // TODO ==> enough?
+    && ((v == 0) <==> (
       && g.glSome? 
       && g.value.flatCombiner.state == FCCombinerCollecting(0, [])
       && g.value.flatCombiner.loc == fc_loc
@@ -138,7 +138,7 @@ module Impl(nrifc: NRIfc) {
       && g.value.gresponses.lcell == responses
       && |g.value.gresponses.v.value| == MAX_THREADS_PER_REPLICA as int
     ))
-    && ((v > 0) ==> g.glNone?)
+    && ((v > 0) <==> g.glNone?)
   }
 
   linear datatype Node = Node(
