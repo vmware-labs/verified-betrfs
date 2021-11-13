@@ -37,21 +37,14 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
    */
 
   method new_mutex(linear v: V, ghost inv: (V) -> bool)
-  returns (linear m: RwLock, glinear client_counters: Clients)
+  returns (linear m: RwLock)
   requires inv(v)
   ensures m.inv == inv
-  ensures m.InternalInv()
-  ensures client_counters.n == CounterPCM.max
-  ensures client_counters.loc == m.client_counter_loc
   {
     linear var lcell;
     glinear var lcellContents;
     lcell, lcellContents := new_lcell();
     lcellContents := give_lcell(lcell, lcellContents, v);
-
-    // Make a ClientCounter resource for this lock. Each thread can use one of these,
-    // which later lets us know that a uint8 refcount implementation won't overflow.
-    client_counters := counter_init();
 
     glinear var exclusiveFlagToken, rcs := RwLockTokenMod.perform_Init(lcellContents);
     ghost var loc := exclusiveFlagToken.loc;
@@ -70,7 +63,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         i in refCounts &&
         forall count, token ::
             atomic_inv(refCounts[i].inner, count, token) <==>
-            refCountInv(count, token, loc, client_counters.loc, i)
+            refCountInv(count, token, loc, i)
     invariant forall i: int | j as int <= i < RC_WIDTH ::
         i !in refCounts
     invariant rcs.loc == loc
@@ -78,10 +71,8 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     {
       glinear var rcToken;
       rcToken, rcs := pop_rcs(rcs, j as int, RC_WIDTH);
-      glinear var client := empty_counter(client_counters.loc);
-      glinear var refCountsToken := RefCount(rcToken, client);
-      linear var rcAtomic := new_atomic(0, refCountsToken,
-          (v, g) => refCountInv(v, g, loc, client_counters.loc, j as nat),
+      linear var rcAtomic := new_atomic(0, rcToken,
+          (v, g) => refCountInv(v, g, loc, j as nat),
           0);
 
       refCounts := lseq_give(refCounts, j, CachePadded(rcAtomic));
@@ -91,7 +82,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
 
     dispose_anything(rcs);
 
-    m := RwLock(exclusiveFlag, refCounts, lcell, loc, client_counters.loc, inv);
+    m := RwLock(exclusiveFlag, refCounts, lcell, loc, inv);
   }
 
   /*
@@ -168,14 +159,11 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     && inv(token.val.exclusiveFlag.stored_value.v.value)
   }
 
-  predicate refCountInv(count: uint8, refCount: RefCount, loc: Loc, client_counter_loc: Loc, t: nat)
+  predicate refCountInv(count: uint8, token: Token, loc: Loc, t: nat)
   {
     // Token is a single refcount that matches the protected count
-    && refCount.token.val == RwLockMod.SharedFlagHandle(t, count as nat)
-    && refCount.token.loc == loc
-    // Every read reference count is escorted by exactly one thread counter
-    && refCount.counter.loc == client_counter_loc
-    && refCount.counter.n == refCount.token.val.sharedFlags[t]
+    && token.val == RwLockMod.SharedFlagHandle(t, count as nat)
+    && token.loc == loc
   }
 
   /*
@@ -187,7 +175,6 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     linear refCounts: lseq<CachePadded<Atomic<uint8, Token>>>,   // implements map<ThreadId, nat>
     linear lcell: LinearCell<contentsTypeMod.ContentsType>, // implements the actual value that ExclusiveState.shared_value represents
     ghost loc: Loc,                                // which instance of this lock we're talking about
-    ghost client_counter_loc: Loc,                // ClientCounter has its own loc.
     ghost inv: V -> bool
   )
   {
@@ -197,11 +184,11 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       && loc.base_loc == RwLockTokenMod.T.Wrap.singleton_loc()
       && |refCounts| == RC_WIDTH
       && lseq_full(refCounts)
-      && (forall v, refcount :: atomic_inv(exclusiveFlag, v, refcount)
-            <==> exclusiveFlagInv(v, refcount, loc, inv, lcell))
-      && (forall t, count, refcount | 0 <= t < RC_WIDTH
-          :: atomic_inv(refCounts[t].inner, count, refcount)
-            <==> refCountInv(count, refcount, loc, client_counter_loc, t))
+      && (forall v, token :: atomic_inv(exclusiveFlag, v, token)
+            <==> exclusiveFlagInv(v, token, loc, inv, lcell))
+      && (forall t, count, token | 0 <= t < RC_WIDTH
+          :: atomic_inv(refCounts[t].inner, count, token)
+            <==> refCountInv(count, token, loc, t))
     }
 
     /*
@@ -322,8 +309,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     shared method acquire_shared(thread_id: uint8)
     returns (linear guard: SharedGuard)
     requires InternalInv()
-    requires 0 <= thread_id as nat < RC_WIDTH
-    requires in_client.loc == this.client_counter_loc
+    requires 0 <= thread_id as nat < RC_WIDTH;
     ensures this.inv(guard.v)
     ensures guard.Inv(this)
     decreases *
@@ -334,8 +320,6 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       while (true)
         //invariant obtained_handle is nice.
         invariant 0 <= thread_id as nat < RC_WIDTH;
-        invariant optClient.glSome?;
-        invariant optClient.value.loc == this.client_counter_loc;
         decreases *
       {
         var exc_acquired: bool;
@@ -403,7 +387,6 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     shared method release_shared(linear guard: SharedGuard)
     requires InternalInv()
     requires guard.Inv(this)
-    ensures client.loc == this.client_counter_loc
     {
       linear var SharedGuard(acquiring_thread_id, shared_obtained_token, m, v) := guard;
       atomic_block var count_before_decr :=

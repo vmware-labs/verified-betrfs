@@ -60,10 +60,7 @@ module Init(nrifc: NRIfc) {
     linear var actual_replica := nrifc.initialize();
     linear var nodeReplica := NodeReplica(
       actual_replica, ghost_replica, combiner, cb);
-    linear var replica;
-    glinear var client_counter_supply;
-    replica, client_counter_supply := new_mutex(nodeReplica, (v: NodeReplica) => v.WF(nodeId as int));
-    // deleteme assert replica.InternalInv();
+    linear var replica := new_mutex(nodeReplica, (v: NodeReplica) => v.WF(nodeId as int));
 
     // thread contexts
 
@@ -78,25 +75,16 @@ module Init(nrifc: NRIfc) {
         j in contexts && j in owned_contexts
     invariant forall j: nat | i as int <= j < MAX_THREADS_PER_REPLICA as int ::
         j !in contexts && j !in owned_contexts
-
-    invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].tid as int == j
-    invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].fc_client == FCClient(fc_loc, j, FCClientIdle)
-    invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].cell_contents.cell == contexts[j].cell
-    invariant forall j: nat | 0 <= j < i as int :: && owned_contexts[j].client_counter.loc == replica.client_counter_loc
-
     invariant forall j: nat | 0 <= j < i as int ::
         && owned_contexts[j].tid as int == j
         && owned_contexts[j].fc_client == FCClient(fc_loc, j, FCClientIdle)
         && owned_contexts[j].cell_contents.cell == contexts[j].cell
-        && owned_contexts[j].client_counter.loc == replica.client_counter_loc
     invariant forall j: nat | 0 <= j < i as int ::
         contexts[j].WF(j, fc_loc)
     invariant forall j: nat | i as int <= j < MAX_THREADS_PER_REPLICA as int ::
         j in fc_slots && fc_slots[j] == FCSlot(fc_loc, j, FCEmpty)
     invariant forall j: nat | i as int <= j < MAX_THREADS_PER_REPLICA as int ::
         j in fc_clients && fc_clients[j] == FCClient(fc_loc, j, FCClientIdle)
-    invariant client_counter_supply.loc == replica.client_counter_loc
-    invariant client_counter_supply.n >= MAX_THREADS_PER_REPLICA as int - i as int
     {
       glinear var fc_client, fc_slot;
       fc_clients, fc_client := glmap_take(fc_clients, i as int);
@@ -112,15 +100,8 @@ module Init(nrifc: NRIfc) {
       linear var ctx_atomic := new_atomic(0, ctx_ghost,
           (v, g: ContextGhost) => g.inv(v, i as int, ctx_cell, fc_loc), 0);
 
-      glinear var client_counter;
-      // deleteme assert client_counter_supply.loc == replica.client_counter_loc;
-      client_counter_supply, client_counter := ClientCounter.split(client_counter_supply);
-      // deleteme assert client_counter.loc == replica.client_counter_loc;
-
-      linear var toc := ThreadOwnedContext(i, fc_client, ctx_cell_contents, client_counter);
+      linear var toc := ThreadOwnedContext(i, fc_client, ctx_cell_contents);
       linear var c := Context(ctx_atomic, ctx_cell);
-
-      // deleteme assert client_counter.loc == replica.client_counter_loc;
 
       lseq_give_inout(inout contexts, i, c);
       lseq_give_inout(inout owned_contexts, i, toc);
@@ -148,25 +129,6 @@ module Init(nrifc: NRIfc) {
     linear var combiner_atomic := new_atomic(0, glSome(cls), (v, g) => true, 0);
 
     node := Node(combiner_atomic, ops, responses, replica, contexts, nodeId, fc_loc);
-//    assert node.CombinerLockInv(combiner_lock.
-//    forall v, g
-//      | atomic_inv(node.combiner_lock, v, g)
-//      ensures node.CombinerLockInv(v, g)
-//    {
-//      if v==0 {
-//        assert node.CombinerLockInv0(v, g);
-//      } else {
-//        assert g.glNone?;
-//      }
-//    }
-//    forall v, g
-//      | node.CombinerLockInv(v, g)
-//      ensures atomic_inv(node.combiner_lock, v, g)
-//    {
-//    }
-    assert node.WF();
-
-    dispose_anything(client_counter_supply);
   }
 
   method make_buffer_cells()
