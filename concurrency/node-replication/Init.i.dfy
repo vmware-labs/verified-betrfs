@@ -145,7 +145,7 @@ module Init(nrifc: NRIfc) {
 
     glinear var cls := CombinerLockState(fc_combiner, opsContents, responsesContents);
 
-    linear var combiner_atomic := new_atomic(0, glSome(cls), (v, g) => true, 0);
+    linear var combiner_atomic := new_atomic(0, glSome(cls), (v, g) => CombinerLockInv(v, g, fc_loc, ops, responses), 0);
 
     node := Node(combiner_atomic, ops, responses, replica, contexts, nodeId, fc_loc);
 //    assert node.CombinerLockInv(combiner_lock.
