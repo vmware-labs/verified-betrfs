@@ -59,6 +59,7 @@ module Impl(nrifc: NRIfc) {
   import opened Cells
   import opened GhostLoc
   import opened Constants
+  import opened ClientCounter
 
   type Tid = uint64
 
@@ -156,26 +157,6 @@ module Impl(nrifc: NRIfc) {
     ghost fc_loc: Loc
   )
   {
-
-    predicate CombinerLockInv0(v: uint64, g: glOption<CombinerLockState>)
-    {
-      && g.glSome? 
-      && g.value.flatCombiner.state == FCCombinerCollecting(0, [])
-      && g.value.flatCombiner.loc == fc_loc
-      && g.value.gops.v.Some?
-      && g.value.gops.lcell == ops
-      && |g.value.gops.v.value| == MAX_THREADS_PER_REPLICA as int
-      && g.value.gresponses.v.Some?
-      && g.value.gresponses.lcell == responses
-      && |g.value.gresponses.v.value| == MAX_THREADS_PER_REPLICA as int
-    }
-
-    predicate CombinerLockInv(v: uint64, g: glOption<CombinerLockState>)
-    {
-      && ((v == 0) <==> CombinerLockInv0(v, g)) // TODO ==> enough?
-      && ((v > 0) <==> g.glNone?)
-    }
-  
     predicate WF() {
       && (forall nodeReplica :: replica.inv(nodeReplica) <==> nodeReplica.WF(nodeId as int))
       && 0 <= nodeId as int < NUM_REPLICAS as int
@@ -193,7 +174,8 @@ module Impl(nrifc: NRIfc) {
   linear datatype ThreadOwnedContext = ThreadOwnedContext(
     tid: uint64,
     glinear fc_client: FCClient,
-    glinear cell_contents: CellContents<OpResponse>)
+    glinear cell_contents: CellContents<OpResponse>,
+    glinear client_counter: Client)
   {
     predicate WF(node: Node)
     {
@@ -747,7 +729,7 @@ module Impl(nrifc: NRIfc) {
   ensures ctx'.WF(node)
   decreases * // method is not guaranteed to terminate
   {
-    linear var ThreadOwnedContext(tid, fc_client, cell_contents) := ctx;
+    linear var ThreadOwnedContext(tid, fc_client, cell_contents, client_counter) := ctx;
 
     var opr := read_cell(lseq_peek(node.contexts, tid).cell, cell_contents);
     opr := opr.(op := op);
@@ -811,7 +793,7 @@ module Impl(nrifc: NRIfc) {
 
     cell_contents := unwrap_value(cell_contents_opt);
     stub := unwrap_value(stub_opt);
-    ctx' := ThreadOwnedContext(tid, fc_client, cell_contents);
+    ctx' := ThreadOwnedContext(tid, fc_client, cell_contents, client_counter);
   }
 
   method do_read(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp, linear ctx: ThreadOwnedContext,
@@ -877,14 +859,15 @@ module Impl(nrifc: NRIfc) {
     assert stub.rs.ReadonlyReadyToRead?; // advisory
     assert stub.rs.nodeId == node.nodeId as nat;
 
+    linear var ThreadOwnedContext(tid, fc_client, cell_contents, client_counter) := ctx;
     // 3. Take read-lock on replica; apply operation on replica
-    linear var linear_guard := node.replica.acquire_shared(ctx.tid as uint8);
+    linear var linear_guard := node.replica.acquire_shared(tid as uint8, client_counter);
     assert linear_guard.v.ghost_replica.nodeId == stub.rs.nodeId;
 
     result, stub := apply_readonly(node.replica, linear_guard, op, stub);
-    node.replica.release_shared(linear_guard);
+    client_counter := node.replica.release_shared(linear_guard);
 
-    ctx' := ctx;
+    ctx' := ThreadOwnedContext(tid, fc_client, cell_contents, client_counter);
     assert stub.rs.ReadonlyDone?; // advisory
   }
 

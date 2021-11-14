@@ -10,7 +10,7 @@ module Constants {
   const NUM_REPLICAS: uint64 := 4;
 
   // Should be configured to the exact number of threads for best performance
-  const MAX_THREADS_PER_REPLICA: uint64 := 256;
+  const MAX_THREADS_PER_REPLICA: uint64 := 255;
   const MAX_PENDING_OPS: uint64 := 1
   const GC_FROM_HEAD: uint64 := MAX_PENDING_OPS * MAX_THREADS_PER_REPLICA;
 
