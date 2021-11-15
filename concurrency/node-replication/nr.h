@@ -89,7 +89,6 @@ class nr_helper {
   }
 
   nr::ThreadOwnedContext* register_thread(uint8_t thread_id) {
-    std::unique_lock<std::mutex> lock{init_mutex};
 
     const uint8_t node_id = thread_id % num_replicas();
 
@@ -102,6 +101,8 @@ class nr_helper {
                 << static_cast<uint32_t>(node_id) << std::endl;
 
       nr::Node* node = new nr::Node{r.get<0>()};
+
+      std::unique_lock<std::mutex> lock{init_mutex};
       nodes[node_id] = std::unique_ptr<nr::Node>{node};
       thread_owned_contexts[node_id] = r.get<1>();
       ++nodes_init;
@@ -110,6 +111,7 @@ class nr_helper {
         all_nodes_init.notify_all();
     }
 
+    std::unique_lock<std::mutex> lock{init_mutex};
     while (nodes_init < num_replicas())
       all_nodes_init.wait(lock);
 
