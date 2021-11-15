@@ -136,7 +136,6 @@ void run_thread(
     for (uint32_t i = 0; i < 32; ++i) {
       uint64_t key = keygen.next();
       uint64_t val = key;
-      std::cout << key << std::endl;
       if (reads_vruntime <= updates_vruntime) {
         monitor.read(thread_id, thread_context, key);
         ++reads;
