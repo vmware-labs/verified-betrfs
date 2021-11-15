@@ -109,6 +109,7 @@ class core_map {
 
   void pin(uint32_t thread_id) {
     uint32_t core_id = thread_to_core_map[thread_id];
+    std::cerr << "Pinning thread " << thread_id << " to core " << core_id << std::endl;
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(core_id, &cpuset);

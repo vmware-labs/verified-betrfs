@@ -19,7 +19,7 @@ class key_generator {
 
   // key range is: `VSPACE_RANGE` as defined in vspace/lib.rs
   // adjust this number together with `MASK` (= VSPACE_RANGE & !0xfff):
-  static constexpr uint64_t MASK = 0x3fffffffff & !0xfff;
+  static constexpr uint64_t MASK = 0x3fffffffff & ~0xfff;
 
 public:
   key_generator(uint8_t thread_id)
@@ -133,16 +133,19 @@ void run_thread(
   uint64_t updates_vruntime = 0;
   uint64_t reads_vruntime = 0;
   while (!state.exit_benchmark.load(std::memory_order_relaxed)) {
-    uint64_t key = keygen.next();
-    uint64_t val = keygen.next();
-    if (reads_vruntime <= updates_vruntime) {
-      monitor.read(thread_id, thread_context, key);
-      ++reads;
-      reads_vruntime += state.reads_stride;
-    } else { // do an update
-      monitor.update(thread_id, thread_context, key, val);
-      ++updates;
-      updates_vruntime += state.updates_stride;
+    for (uint32_t i = 0; i < 32; ++i) {
+      uint64_t key = keygen.next();
+      uint64_t val = key;
+      std::cout << key << std::endl;
+      if (reads_vruntime <= updates_vruntime) {
+        monitor.read(thread_id, thread_context, key);
+        ++reads;
+        reads_vruntime += state.reads_stride;
+      } else { // do an update
+        monitor.update(thread_id, thread_context, key, val);
+        ++updates;
+        updates_vruntime += state.updates_stride;
+      }
     }
   }
 
@@ -384,10 +387,14 @@ void bench(benchmark_state& state, Monitor& monitor)
   for (auto& thread : state.threads)
     thread.join();
 
+  const size_t total_ops = state.total_updates + state.total_reads;
   std::cerr << std::endl
             << "threads " << state.n_threads << std::endl
             << "updates " << state.total_updates << std::endl
-            << "reads   " << state.total_reads << std::endl;
+            << "reads   " << state.total_reads << std::endl
+            << "Mops    " << total_ops / 1e6 << std::endl
+            << "Mops/s  " << total_ops / 1e6 / state.run_seconds.count()
+            << std::endl;
 
   state.dump_json();
 }
