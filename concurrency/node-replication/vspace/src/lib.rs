@@ -282,8 +282,8 @@ impl Drop for VSpace {
 
 // cpp glue fun
 pub fn createVSpace() -> &'static mut VSpace {
-    log::info!("createVSpace");
     //env_logger::try_init();
+    ///log::error!("createVSpace");
     let vs = Box::leak(Box::new(VSpace {
         pml4: Box::pin(
             [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
@@ -305,13 +305,26 @@ pub fn createVSpace() -> &'static mut VSpace {
 
 impl Default for VSpace {
     fn default() -> VSpace {
-    VSpace {
-        pml4: Box::pin(
-            [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
-        ),
-        mem_counter: 4096,
-        //allocs: Vec::with_capacity(1024),
-    }    }
+        //env_logger::try_init();
+
+        let mut vs = VSpace {
+            pml4: Box::pin(
+                [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
+            ),
+            mem_counter: 4096,
+            //allocs: Vec::with_capacity(1024),
+        };
+
+        for i in 0..VSPACE_RANGE / 4096 {
+            assert!(vs.map_generic(
+                VAddr::from(i * 4096),
+                (PAddr::from(i * 4096), 4096),
+                MapAction::ReadWriteExecuteUser,
+            ).is_ok());
+        }
+
+        vs
+    }
 }
 
 impl VSpace {
@@ -601,6 +614,7 @@ impl VSpace {
     }
 
     pub fn resolve_addr(&self, addr: VAddr) -> Option<PAddr> {
+        //log::error!("resolve addr {:#x}", addr);
         let pml4_idx = pml4_index(addr);
         if self.pml4[pml4_idx].is_present() {
             let pdpt_idx = pdpt_index(addr);
@@ -622,6 +636,7 @@ impl VSpace {
                             let pt_idx = pt_index(addr);
                             let pt = self.get_pt(pd[pd_idx]);
                             if pt[pt_idx].is_present() {
+                                //log::error!("resolved to {:#x}", pt[pt_idx].address());
                                 let page_offset = addr.base_page_offset();
                                 return Some(pt[pt_idx].address() + page_offset);
                             }
