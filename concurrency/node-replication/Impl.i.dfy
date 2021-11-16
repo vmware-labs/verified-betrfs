@@ -111,13 +111,13 @@ module Impl(nrifc: NRIfc) {
   }
 
   linear datatype Context = Context(
-    linear atomic: Atomic<uint64, ContextGhost>,
-    linear cell: Cell<OpResponse>
+    linear atomic: CachePadded<Atomic<uint64, ContextGhost>>,
+    linear cell: CachePadded<Cell<OpResponse>>
   )
   {
     predicate WF(i: nat, fc_loc: Loc)
     {
-      (forall v, g :: atomic_inv(atomic, v, g) <==> g.inv(v, i, cell, fc_loc))
+      (forall v, g :: atomic_inv(atomic.inner, v, g) <==> g.inv(v, i, cell.inner, fc_loc))
     }
   }
 
@@ -150,7 +150,7 @@ module Impl(nrifc: NRIfc) {
     linear responses: LC.LinearCell<seq<nrifc.ReturnType>>,
     linear replica: RwLock,
     //linear context: map<Tid, nrifc.UpdateOp>,
-    linear contexts: lseq<Context>, // TODO cache-line padded?
+    linear contexts: lseq<Context>,
     nodeId: uint64,
     //next: Atomic<Tid, ()>
 
@@ -182,7 +182,7 @@ module Impl(nrifc: NRIfc) {
       && node.WF()
       && fc_client == FCClient(node.fc_loc, tid as nat, FCClientIdle)
       && 0 <= tid < MAX_THREADS_PER_REPLICA
-      && cell_contents.cell == node.contexts[tid as nat].cell
+      && cell_contents.cell == node.contexts[tid as nat].cell.inner
       && client_counter.loc == node.replica.client_counter_loc
     }
   }
@@ -492,7 +492,7 @@ module Impl(nrifc: NRIfc) {
           && i in opCellPermissions
           && 0 <= flatCombiner'.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
           && opCellPermissions[i].cell
-                  == node.contexts[flatCombiner'.state.elems[i].tid].cell
+                  == node.contexts[flatCombiner'.state.elems[i].tid].cell.inner
       )
   {
     ops' := ops;
@@ -520,14 +520,14 @@ module Impl(nrifc: NRIfc) {
           && i in opCellPermissions
           && 0 <= flatCombiner'.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
           && opCellPermissions[i].cell
-                  == node.contexts[flatCombiner'.state.elems[i].tid].cell
+                  == node.contexts[flatCombiner'.state.elems[i].tid].cell.inner
       )
     {
       glinear var new_contents_opt;
       glinear var new_update_opt;
 
       atomic_block var has_op := execute_atomic_compare_and_set_strong(
-          lseq_peek(node.contexts, j).atomic, 1, 2)
+          lseq_peek(node.contexts, j).atomic.inner, 1, 2)
       {
         ghost_acquire ghost_context;
         glinear var ContextGhost(contents, fc, update) := ghost_context;
@@ -546,7 +546,7 @@ module Impl(nrifc: NRIfc) {
 
       if has_op {
         // get the op, add to ops' buffer
-        var opResponse := read_cell(lseq_peek(node.contexts, j).cell, new_contents_opt.value);
+        var opResponse := read_cell(lseq_peek(node.contexts, j).cell.inner, new_contents_opt.value);
         var op := opResponse.op;
         ops' := seq_set(ops', num_ops, op);
 
@@ -593,7 +593,7 @@ module Impl(nrifc: NRIfc) {
           && i in opCellPermissions
           && 0 <= flatCombiner.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
           && opCellPermissions[i].cell
-                  == node.contexts[flatCombiner.state.elems[i].tid].cell
+                  == node.contexts[flatCombiner.state.elems[i].tid].cell.inner
       )
   ensures flatCombiner'.loc == node.fc_loc
   ensures flatCombiner'.state == FCCombinerCollecting(0, [])
@@ -621,11 +621,11 @@ module Impl(nrifc: NRIfc) {
           && i in opCellPermissions'
           && 0 <= flatCombiner'.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
           && opCellPermissions'[i].cell
-                  == node.contexts[flatCombiner'.state.elems[i].tid].cell
+                  == node.contexts[flatCombiner'.state.elems[i].tid].cell.inner
       )
     {
       atomic_block var slot_state := execute_atomic_load(
-          lseq_peek(node.contexts, j).atomic)
+          lseq_peek(node.contexts, j).atomic.inner)
       {
         ghost_acquire ghost_context;
         glinear var ContextGhost(contents, fc, update) := ghost_context;
@@ -646,14 +646,14 @@ module Impl(nrifc: NRIfc) {
 
         // write the return value
 
-        var opResponse := read_cell(lseq_peek(node.contexts, j).cell, opCellPerm);
+        var opResponse := read_cell(lseq_peek(node.contexts, j).cell.inner, opCellPerm);
         opResponse := opResponse.(ret := seq_get(responses, cur_idx));
 
-        write_cell(lseq_peek(node.contexts, j).cell, inout opCellPerm,
+        write_cell(lseq_peek(node.contexts, j).cell.inner, inout opCellPerm,
             opResponse);
 
         atomic_block var slot_state := execute_atomic_store(
-            lseq_peek(node.contexts, j).atomic, 0)
+            lseq_peek(node.contexts, j).atomic.inner, 0)
         {
           ghost_acquire ghost_context;
           glinear var ContextGhost(old_contents, fc, old_update) := ghost_context;
@@ -731,13 +731,13 @@ module Impl(nrifc: NRIfc) {
   {
     linear var ThreadOwnedContext(tid, fc_client, cell_contents, client_counter) := ctx;
 
-    var opr := read_cell(lseq_peek(node.contexts, tid).cell, cell_contents);
+    var opr := read_cell(lseq_peek(node.contexts, tid).cell.inner, cell_contents);
     opr := opr.(op := op);
-    write_cell(lseq_peek(node.contexts, tid).cell, inout cell_contents, opr);
+    write_cell(lseq_peek(node.contexts, tid).cell.inner, inout cell_contents, opr);
 
     assert node.contexts[tid as int].WF(tid as int, node.fc_loc);
 
-    atomic_block var _ := execute_atomic_store(lseq_peek(node.contexts, tid).atomic, 1)
+    atomic_block var _ := execute_atomic_store(lseq_peek(node.contexts, tid).atomic.inner, 1)
     {
       ghost_acquire ctx_g;
       glinear var ContextGhost(contents_none, fc_slot, update_none) := ctx_g;
@@ -760,14 +760,14 @@ module Impl(nrifc: NRIfc) {
     invariant done ==>
       && cell_contents_opt.glSome?
       && stub_opt.glSome?
-      && cell_contents_opt.value.cell == node.contexts[tid as nat].cell
+      && cell_contents_opt.value.cell == node.contexts[tid as nat].cell.inner
       && stub_opt.value.us.UpdateDone? 
       && stub_opt.value.rid == ticket.rid
       && stub_opt.value.us.ret == result
       && fc_client == FCClient(node.fc_loc, tid as int, FCClientIdle)
     decreases *
     {
-      atomic_block var aval := execute_atomic_load(lseq_peek(node.contexts, tid).atomic)
+      atomic_block var aval := execute_atomic_load(lseq_peek(node.contexts, tid).atomic.inner)
       {
         ghost_acquire ctx_g;
         if aval == 0 {
@@ -783,7 +783,7 @@ module Impl(nrifc: NRIfc) {
       }
 
       if aval == 0 {
-        opr := read_cell(lseq_peek(node.contexts, tid).cell, cell_contents_opt.value);
+        opr := read_cell(lseq_peek(node.contexts, tid).cell.inner, cell_contents_opt.value);
         result := opr.ret;
         done := true;
       } else {

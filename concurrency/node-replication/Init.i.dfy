@@ -81,13 +81,13 @@ module Init(nrifc: NRIfc) {
 
     invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].tid as int == j
     invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].fc_client == FCClient(fc_loc, j, FCClientIdle)
-    invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].cell_contents.cell == contexts[j].cell
+    invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].cell_contents.cell == contexts[j].cell.inner
     invariant forall j: nat | 0 <= j < i as int :: && owned_contexts[j].client_counter.loc == replica.client_counter_loc
 
     invariant forall j: nat | 0 <= j < i as int ::
         && owned_contexts[j].tid as int == j
         && owned_contexts[j].fc_client == FCClient(fc_loc, j, FCClientIdle)
-        && owned_contexts[j].cell_contents.cell == contexts[j].cell
+        && owned_contexts[j].cell_contents.cell == contexts[j].cell.inner
         && owned_contexts[j].client_counter.loc == replica.client_counter_loc
     invariant forall j: nat | 0 <= j < i as int ::
         contexts[j].WF(j, fc_loc)
@@ -118,7 +118,7 @@ module Init(nrifc: NRIfc) {
       // deleteme assert client_counter.loc == replica.client_counter_loc;
 
       linear var toc := ThreadOwnedContext(i, fc_client, ctx_cell_contents, client_counter);
-      linear var c := Context(ctx_atomic, ctx_cell);
+      linear var c := Context(CachePadded(ctx_atomic), CachePadded(ctx_cell));
 
       // deleteme assert client_counter.loc == replica.client_counter_loc;
 
