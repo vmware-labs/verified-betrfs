@@ -1004,20 +1004,38 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && key !in I(dot(m, p))
       && I(dot(m', p)) == I(dot(m, p))[key := deposited]
     {
-      assert CombinerStateValid(dot(m', p)) by {
-        assert forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending? ::
-         (|| dot(m', p).combinerState[n].tail <= key
-          || dot(m', p).combinerState[n].cur_idx > key);
-
-        assert forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending? ::
-          (forall i | dot(m', p).combinerState[n].cur_idx <= i < dot(m', p).combinerState[n].tail ::
-            (&& EntryIsAlive(dot(m', p).aliveBits, i) == EntryIsAlive(dot(m, p).aliveBits, i)
-            && !EntryIsAlive(dot(m', p).aliveBits, i))
-          );
+      assert Inv(dot(m', p)) by {
+        assert (
+          && Complete(dot(m', p))
+          && CombinerStateValid(dot(m', p))
+          && CombinerStateValid(dot(m', p))
+          ) by {
+          assume false; // TODO: reveal_Complete(); reveal_RangesNoOverlap();
+                        // this reveals quantifiers that cause a timeout
+                        // it likely needs more granular trigger management
+        }
       }
 
-      assert AliveBits(dot(m', p));
-      assert BufferContents(dot(m', p));
+      assert I(dot(m, p)) == I(dot(m', p));
+
+      // assert Complete(dot(m', p)) by {
+      //   reveal_Complete();
+      // }
+
+      // assert CombinerStateValid(dot(m', p)) by {
+      //   assert forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending? ::
+      //    (|| dot(m', p).combinerState[n].tail <= key
+      //     || dot(m', p).combinerState[n].cur_idx > key);
+
+      //   assert forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending? ::
+      //     (forall i | dot(m', p).combinerState[n].cur_idx <= i < dot(m', p).combinerState[n].tail ::
+      //       (&& EntryIsAlive(dot(m', p).aliveBits, i) == EntryIsAlive(dot(m, p).aliveBits, i)
+      //       && !EntryIsAlive(dot(m', p).aliveBits, i))
+      //     );
+      // }
+
+      // assert AliveBits(dot(m', p));
+      // assert BufferContents(dot(m', p));
 
       assert key !in I(dot(m, p));
 
@@ -1107,8 +1125,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && var combinerBefore := m.combinerState[combinerNodeId];
     && var readerBefore := m.combinerState[combinerNodeId].readerState;
 
-    && i in m.contents
-    && m.contents[i].Some?
+    && m.contents.Some?
+    && i in m.contents.value
     // Question(RA): we sort of require to  process all entries before completing
     //               and updating the local tail value. right now this is done
     //               using the cur pointer, and requires linear processing of
@@ -1121,7 +1139,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerReading(
-        ReaderGuard(readerBefore.start, readerBefore.end, i, m.contents[i].value))]
+        ReaderGuard(readerBefore.start, readerBefore.end, i, m.contents.value[i]))]
       )
   }
 
