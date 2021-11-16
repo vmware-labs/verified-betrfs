@@ -143,7 +143,7 @@ module Impl(nrifc: NRIfc) {
   }
 
   linear datatype Node = Node(
-    linear combiner_lock: Atomic<uint64, glOption<CombinerLockState>>,
+    linear combiner_lock: CachePadded<Atomic<uint64, glOption<CombinerLockState>>>,
     // protected by the `combiner_lock`
     linear ops: LC.LinearCell<seq<nrifc.UpdateOp>>,
     // protected by the `combiner_lock`
@@ -162,7 +162,7 @@ module Impl(nrifc: NRIfc) {
       && 0 <= nodeId as int < NUM_REPLICAS as int
       && |contexts| == MAX_THREADS_PER_REPLICA as int
       && (forall i | 0 <= i < |contexts| :: i in contexts && contexts[i].WF(i, fc_loc))
-      && (forall v, g :: atomic_inv(combiner_lock, v, g) <==> CombinerLockInv(v, g, fc_loc, ops, responses))
+      && (forall v, g :: atomic_inv(combiner_lock.inner, v, g) <==> CombinerLockInv(v, g, fc_loc, ops, responses))
       && replica.InternalInv()
     }
   }
@@ -315,7 +315,7 @@ module Impl(nrifc: NRIfc) {
     while i < 5
     invariant 0 <= i <= 5
     {
-      atomic_block var combiner_lock := execute_atomic_load(node.combiner_lock) {
+      atomic_block var combiner_lock := execute_atomic_load(node.combiner_lock.inner) {
         ghost_acquire combiner_lock_token;
         ghost_release combiner_lock_token;
       }
@@ -330,7 +330,7 @@ module Impl(nrifc: NRIfc) {
     glinear var gresponses: glOption<LC.LCellContents<seq<nrifc.ReturnType>>>;
     
     // Try and acquire the lock... (tid+1 because we reserve 0 as "no-one holds the lock")
-    atomic_block var success := execute_atomic_compare_and_set_weak(node.combiner_lock, 0, tid + 1) {
+    atomic_block var success := execute_atomic_compare_and_set_weak(node.combiner_lock.inner, 0, tid + 1) {
       ghost_acquire contents;
       if success {
         assert contents.glSome?;
@@ -372,7 +372,7 @@ module Impl(nrifc: NRIfc) {
       glinear var gresponses'' := LC.give_lcell(node.responses, gresponses', responses');
 
       // Release combiner_lock
-      atomic_block var _ := execute_atomic_store(node.combiner_lock, 0) {
+      atomic_block var _ := execute_atomic_store(node.combiner_lock.inner, 0) {
         ghost_acquire contents;
         //assert old_value > 0; // doesn't believe me
         //assert contents.glNone?;

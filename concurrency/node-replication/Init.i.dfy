@@ -147,7 +147,7 @@ module Init(nrifc: NRIfc) {
 
     linear var combiner_atomic := new_atomic(0, glSome(cls), (v, g) => CombinerLockInv(v, g, fc_loc, ops, responses), 0);
 
-    node := Node(combiner_atomic, ops, responses, replica, contexts, nodeId, fc_loc);
+    node := Node(CachePadded(combiner_atomic), ops, responses, replica, contexts, nodeId, fc_loc);
 //    assert node.CombinerLockInv(combiner_lock.
 //    forall v, g
 //      | atomic_inv(node.combiner_lock, v, g)
