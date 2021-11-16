@@ -37,20 +37,6 @@ PLOT_HEIGHT = PLOT_WIDTH/PLOT_ASPECT_RATIO
 # What machine, max cores, sockets, revision
 MACHINES = [('skylake4x', 192, 4, '4b3c410')]
 
-
-# MACHINES = [('skylake8x', 448)]
-# REVISION = '3e08eac617'
-
-# Us the best obtained results for each DT
-BENCHMARKS = {
-    'hashmap': ("Socket", "Interleave", "128"),
-    'chashmap': ("One", "Interleave", "128"),
-    'std': ("One", "Interleave", "128"),
-    'flurry': ("One", "Interleave", "128"),
-    'urcu': ("One", "Interleave", "128"),
-    'dashmap': ("One", "Interleave", "128"),
-}
-
 class theme_my538(theme_gray):
     def __init__(self, base_size=6, base_family='DejaVu Sans'):
         theme_gray.__init__(self, base_size, base_family)
@@ -70,7 +56,7 @@ class theme_my538(theme_gray):
                 panel_background=element_rect(fill=bgcolor),
                 panel_border=element_blank(),
                 panel_grid_major=element_line(
-                    color='#D5D5D5', linetype='solid', size=0.5),
+                    color='#E5E5E5', linetype='solid', size=0.5),
                 panel_grid_minor=element_blank(),
                 panel_spacing=0.15,
                 plot_background=element_rect(
@@ -80,6 +66,8 @@ class theme_my538(theme_gray):
 
 def throughput_vs_cores(machine, df, graph='compare-locks'):
     df['config'] = df['bench_name'] + [str(i) for i in df['n_replicas'].to_list()]
+    bench_cat = pd.api.types.CategoricalDtype(categories=['dafny_nr', 'rust_nr', 'dafny_rwlock', 'cpp_shared_mutex'], ordered=True)
+    df['bench_name'] = df['bench_name'].astype(bench_cat)
     df = df.loc[df['n_threads'] >= 4]
     df['n_replicas'] = pd.Categorical(df.n_replicas)
     df['write_ratio'] = 100 - df['reads_pct']
@@ -89,20 +77,27 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
                     | (df['n_replicas'] == 4)]
         aest = aes(x='n_threads',
                    y='ops_per_s',
-                   color='config',
-                   shape='config',
-                   group='config')
+                   color='bench_name',
+                   shape='bench_name',
+                   group='bench_name')
+        labels = ['Dafny NR', 'Rust NR', 'Dafny RwLock', 'C++ std::shared_mutex']
+        linetypes = ['solid', 'dashed', 'dotted']
     else:
         df = df.loc[df['bench_name'].isin(['dafny_nr', 'rust_nr'])]
+        bench_cat = pd.api.types.CategoricalDtype(categories=['dafny_nr', 'rust_nr'], ordered=True)
+        df['bench_name'] = df['bench_name'].astype(bench_cat)
         aest = aes(x='n_threads',
                    y='ops_per_s',
                    color='bench_name',
                    shape='bench_name',
                    linetype='n_replicas',
                    group='config')
+        labels = ['Dafny NR', 'Rust NR']
+        linetypes = ['dotted', 'dashed', 'solid']
+    replicas_labels = ['1 System-wide Replica', '2 Replicas', '4 Replicas (One per NUMA node)']
 
     def read_pct_labeller(s):
-        return '%d%% Lookups'.format(s)
+        return '%d%% Updates' % int(s)
 
     xskip = int(machine[1]/8)
     p = (
@@ -110,7 +105,7 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
                 mapping=aest) +
         theme_my538() +
         coord_cartesian(ylim=(0, None), expand=False) +
-        labs(y="Throughput [Mop/s]") +
+        labs(y="Throughput (Mop/s)") +
         theme(legend_position='top', legend_title=element_blank()) + \
         scale_x_continuous(breaks=[1, 4] + list(range(xskip, 513, xskip)), name='# Threads') +
         scale_y_continuous(labels=lambda lst: ["{:,.0f}".format(x / 1_000_000) for x in lst]) +
@@ -123,7 +118,8 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
             "#f781bf",
             "#999999",
             "#a6cee3",
-            ]) +
+            ],
+            labels=labels) +
         scale_shape_manual(values=[
             'o',
             's',
@@ -133,13 +129,14 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
             '*',
             'O',
             'x',
-            ]) +
-        scale_linetype_discrete(size=0.2) +
-        geom_point(size=0.05) +
-        geom_line() +
+            ],
+            labels=labels) +
+        scale_linetype_manual(size=0.2, values=linetypes, labels=replicas_labels) +
+        geom_point(size=0.1) +
+        geom_line(size=0.2) +
         facet_grid(["write_ratio", "."],
                     scales="free_y",
-                    labeller=labeller(cols=read_pct_labeller)) +
+                    labeller=labeller(rows=read_pct_labeller)) +
         guides(color=guide_legend(nrow=1))
     )
 
