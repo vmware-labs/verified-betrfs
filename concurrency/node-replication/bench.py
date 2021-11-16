@@ -6,6 +6,7 @@ import os.path
 import glob
 import subprocess
 import random
+import time
 
 NUMA_POLICY = 'interleave'
 SECONDS = 30
@@ -15,11 +16,12 @@ NODES = 4
 MAX_THREADS = NODES * CORES_PER_NODE
 
 NR_BENCHES = ['dafny_nr', 'rust_nr']
-OTHER_BENCHES = []
 OTHER_BENCHES = ['dafny_rwlock', 'cpp_shared_mutex']
-READS_PCT = [95, 100, 50, 0, 90]
+READS_PCT = [100, 95, 50, 0, 90]
 
 N_REPLICAS = [1, 2, 4]
+
+ITERS = 1
 
 def reorder(l):
   if len(l) < 2:
@@ -46,28 +48,44 @@ def combine_data_files():
     with open('data.json', 'w') as f:
         f.write(combined_json)
 
-def run(bench, n_replicas, n_threads, reads_pct):
+def run(bench, n_replicas, n_threads, reads_pct, run_id_num):
     path = bench_path(n_replicas)
-    cmd = '%s %s %d %d %d %s' % (path, bench, n_threads, reads_pct,
-                                   SECONDS, NUMA_POLICY)
+    cmd = '%s %s %d %d %d %s %s' % (path, bench, n_threads, reads_pct,
+                                   SECONDS, NUMA_POLICY, run_id_num)
     print(cmd)
     subprocess.run(cmd, shell=True, check=False)
 
 def run_all():
-    for reads_pct in READS_PCT:
-        for n_threads in N_THREADS:
-            for n_replicas in N_REPLICAS:
-                for bench in NR_BENCHES:
-                  if (n_threads < n_replicas):
-                      continue
-                  run(bench, n_replicas, n_threads, reads_pct)
-                  combine_data_files()
+    subprocess.run('rm data*.json', shell=True, check=False)
 
-            for bench in OTHER_BENCHES:
-                run(bench, 1, n_threads, reads_pct)
+    try:
+        os.mkdir('runs')
+    except:
+        pass
+
+    run_id = time.strftime('run%Y%m%d%H%M%S')
+    try:
+        os.mkdir(os.path.join('runs', run_id))
+    except:
+        pass
+
+    run_num = -1
+    for i in range(ITERS):
+        run_num += 1
+        run_id_num = run_id + '-' + str(run_num)
+        for reads_pct in READS_PCT:
+            for n_threads in N_THREADS:
+                for n_replicas in N_REPLICAS:
+                    for bench in NR_BENCHES:
+                      if (n_threads < n_replicas):
+                          continue
+                      run(bench, n_replicas, n_threads, reads_pct, run_id_num)
+
+                for bench in OTHER_BENCHES:
+                    run(bench, 1, n_threads, reads_pct, run_id_num)
+
                 combine_data_files()
-
-            subprocess.run('./plot.py', shell=True, check=False)
-            subprocess.run('cp *.png plots', shell=True, check=False)
+                subprocess.run('./plot.py', shell=True, check=False)
+                subprocess.run('cp *.json skylake*.{png,pdf} runs/%s' % run_id, shell=True, check=False)
 
 if __name__ == '__main__': run_all()

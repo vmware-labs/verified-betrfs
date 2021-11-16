@@ -47,6 +47,7 @@ struct benchmark_state {
   size_t updates_stride;
   seconds run_seconds;
   core_map& cores;
+  std::string run_id;
   std::atomic<size_t> n_threads_ready;
   std::vector<std::thread> threads;
   std::atomic<bool> start_benchmark;
@@ -61,7 +62,8 @@ struct benchmark_state {
                   size_t n_threads,
                   size_t reads_pct,
                   seconds run_seconds,
-                  core_map& cores)
+                  core_map& cores,
+                  std::string run_id)
     : bench_name{bench_name}
     , n_threads{n_threads}
     , reads_pct{reads_pct}
@@ -69,6 +71,7 @@ struct benchmark_state {
     , updates_stride{reads_pct == 100 ? ~0lu: stride1 * 100 / (100 - reads_pct)}
     , run_seconds{run_seconds}
     , cores{cores}
+    , run_id{run_id}
     , n_threads_ready{}
     , threads{}
     , start_benchmark{}
@@ -87,6 +90,8 @@ struct benchmark_state {
     outpath += std::to_string(run_seconds.count()) + "-";
     outpath += cores.get_numa_policy() == core_map::NUMA_INTERLEAVE ?
                     "interleave" : "fill";
+    if (run_id != "")
+      outpath += "-" + run_id;
     outpath += ".json";
     std::ofstream out{outpath.c_str()};
 
@@ -401,7 +406,7 @@ void bench(benchmark_state& state, Monitor& monitor)
 void usage(const char* argv0) {
   std::cerr << "usage: " << argv0
             << " <benchmarkname> <n_threads> <read_pct>"
-            << " <n_seconds> <fill|interleave>"
+            << " <n_seconds> <fill|interleave> [run_id]"
             << std::endl;
   exit(-1);
 }
@@ -441,6 +446,10 @@ int main(int argc, char* argv[]) {
     usage(argv[0]);
   }
 
+  std::string run_id{};
+  if (argc == 7)
+    run_id = argv[6];
+
   disable_dvfs();
 
   core_map cores{fill_policy, core_map::core_policy::CORES_FILL};
@@ -453,7 +462,8 @@ int main(int argc, char* argv[]) {
     n_threads,
     reads_pct,
     run_seconds,
-    cores
+    cores,
+    run_id
   };
 
 #define BENCHMARK(test_name) \
