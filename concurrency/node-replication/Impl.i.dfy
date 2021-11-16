@@ -878,6 +878,8 @@ module Impl(nrifc: NRIfc) {
   requires guard.Inv(rwlock)
   requires ticket.rs.ReadonlyReadyToRead?
   requires guard.v.ghost_replica.nodeId == ticket.rs.nodeId
+      == guard.v.combiner.nodeId
+  requires guard.v.combiner.state.CombinerReady?
   requires ticket.rs.op == op
   requires guard.v.ghost_replica.state == nrifc.I(guard.v.actual_replica)
   ensures ticket.rid == ticket'.rid
@@ -892,7 +894,7 @@ module Impl(nrifc: NRIfc) {
     assert nrifc.read(shared_v.ghost_replica.state, ticket.rs.op) == result;
 
     shared var NodeReplica(actual_replica, ghost_replica, combinerState, cb) := shared_v;
-    ticket' := perform_ReadonlyDone(ticket, ghost_replica);
+    ticket' := perform_ReadonlyDone(ticket, ghost_replica, combinerState);
   }
 
   method append(shared nr: NR, shared node: Node,
