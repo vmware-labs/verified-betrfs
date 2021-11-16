@@ -233,9 +233,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   {
     && nodeId in m.combiner
     && m.combiner[nodeId].Combiner?
-    && nodeId in m.localTails
     && m.combiner[nodeId].localTail == m.combiner[nodeId].globalTail
-    && m.localTails[nodeId] != m.combiner[nodeId].localTail
   }
 
   // GUARD: InCombinerNoChange

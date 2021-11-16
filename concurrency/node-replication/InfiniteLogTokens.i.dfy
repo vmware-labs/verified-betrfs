@@ -332,6 +332,37 @@ module InfiniteLogTokens(nrifc: NRIfc) {
       CombinerUpdatedCtail(combiner.state.queued_ops, combiner.state.localTail))
   ensures ctail' == Ctail(if ctail.ctail > combiner.state.localTail
       then ctail.ctail else combiner.state.localTail)
+  {
+    glinear var a_token := CombinerToken_unfold(combiner);
+    glinear var b_token := Ctail_unfold(ctail);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := combiner.(state :=
+      CombinerUpdatedCtail(combiner.state.queued_ops, combiner.state.localTail));
+    ghost var out1_token_expect := CombinerToken_unfold(out1_expect);
+
+    ghost var out2_expect := Ctail(if ctail.ctail > combiner.state.localTail
+      then ctail.ctail else combiner.state.localTail);
+    ghost var out2_token_expect := Ctail_unfold(out2_expect);
+
+    // Explain what transition we're going to do
+    assert UpdateCompletedTail(
+        IL.dot(a_token.val, b_token.val),
+        IL.dot(out1_token_expect.val, out2_token_expect.val),
+        combiner.nodeId);
+    assert IL.NextStep(
+        IL.dot(a_token.val, b_token.val),
+        IL.dot(out1_token_expect.val, out2_token_expect.val),
+        UpdateCompletedTail_Step(combiner.nodeId));
+
+    // Perform the transition
+    glinear var out1_token, out2_token := ILT.transition_2_2(a_token, b_token,
+        out1_token_expect.val,
+        out2_token_expect.val);
+
+    combiner' := CombinerToken_fold(out1_expect, out1_token);
+    ctail' := Ctail_fold(out2_expect, out2_token);
+  }
 
   glinear method perform_GoToCombinerReady(
       glinear combiner: CombinerToken,
