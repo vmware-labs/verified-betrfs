@@ -1,5 +1,7 @@
 include "InfiniteLog.i.dfy"
 include "Constants.i.dfy"
+include "../framework/GlinearMap.s.dfy"
+include "../framework/Ptrs.s.dfy"
 
 module InfiniteLogTokens(nrifc: NRIfc) {
   import opened RequestIds
@@ -8,6 +10,8 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   import opened GhostLoc
   import opened ILT = TicketStubToken(nrifc, IL)
   import opened Constants
+  import opened GlinearMap
+  import opened Ptrs
 
   function loc() : Loc // XXX TODO(travis)
 
@@ -592,7 +596,6 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   }
 
   glinear method perform_UpdateDone(
-      ghost n: nat,
       glinear update: Update,
       gshared ctail: Ctail)
   returns (
@@ -635,7 +638,31 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   ensures forall i | 0 <= i < n ::
     && i in updates'
     && updates'[i] == updates[i].(us := UpdateDone(updates[i].us.ret, updates[i].us.idx))
-  // TODO needs to do the UpdateDone transition in a loop
+  {
+    glinear var updates0 := updates;
+    updates' := glmap_empty();
+
+    ghost var j := 0;
+    while j < n
+    invariant 0 <= j <= n
+    invariant forall i | j <= i < n ::
+      && i in updates0
+      && updates0[i] == updates[i]
+    invariant forall i | 0 <= i < j ::
+      && i in updates'
+      && updates'[i] == updates[i].(us := UpdateDone(updates[i].us.ret, updates[i].us.idx))
+    {
+      glinear var update;
+      updates0, update := glmap_take(updates0, j);
+      glinear var update' := perform_UpdateDone(update, ctail);
+
+      updates' := glmap_insert(updates', j, update');
+
+      j := j + 1;
+    }
+
+    dispose_anything(updates0);
+  }
 
   glinear method perform_Init(glinear token: ILT.Token)
   returns (
