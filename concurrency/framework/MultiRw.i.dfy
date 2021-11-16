@@ -356,6 +356,20 @@ module MultiRwTokens(rw: MultiRw) {
     token1', token2' := T.split(y, expected_value1, expected_value2);
   }
 
+  glinear method internal_transition_1_1_1(
+      glinear token1: Token,
+      gshared token2: Token,
+      ghost expected_value1: rw.M)
+  returns (glinear token1': Token)
+  requires token1.loc == token2.loc
+  requires rw.transition(
+      rw.dot(token2.val, token1.val),
+      rw.dot(token2.val, expected_value1))
+  ensures token1' == T.Token(token1.loc, expected_value1)
+  {
+    token1' := T.transition_update(token2, token1, expected_value1);
+  }
+
   glinear method deposit_3_3(
       glinear token1: Token,
       glinear token2: Token,
