@@ -59,7 +59,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       // that haven't been executed by all replicas.
       ghost localTails: map<NodeId, nat>,
 
-      ghost contents: map<int, Option<StoredType>>,
+      ghost contents: Option<map<int, StoredType>>,
 
       // The 'alive' bit flips back and forth. So sometimes 'true' means 'alive',
       // and sometimes 'false' means 'alive'.
@@ -146,13 +146,15 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && x.M?
     && x.head.Some?
     && x.tail.Some?
+    && x.contents.Some?
   )
   {
     && x.M?
     && x.head.Some?
     && x.tail.Some?
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.localTails)
-    && (forall i: int :: (MinusLogSize(x.tail.value) <= i < x.tail.value) <==> i in x.contents)
+    && x.contents.Some?
+    // TODO remove, I think && (forall i: int :: (MinusLogSize(x.tail.value) <= i < x.tail.value) <==> i in x.contents.value)
     && (forall i: nat :: i < LOG_SIZE as nat <==> i in x.aliveBits)
     && (forall i: nat :: LogicalToPhysicalIndex(i) in x.aliveBits)
     && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.combinerState)
@@ -201,12 +203,11 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     forall i : int | x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value :: (
       assert (
         && LogicalToPhysicalIndex(i) in x.aliveBits
-        && (forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails)
-        && i in x.contents) by {
+        && (forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails)) by {
 
         reveal_Complete();
       }
-      (EntryIsAlive(x.aliveBits, i) || i < MinLocalTail(x.localTails)) <==> x.contents[i].Some?)
+      (EntryIsAlive(x.aliveBits, i) || i < MinLocalTail(x.localTails)) <==> i in x.contents.value)
   }
 
   predicate ReaderStateValid(x: M)
@@ -235,9 +236,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
             assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_Complete(); }
             EntryIsAlive(x.aliveBits, i)))
           // the entries up to, and including current must have something in the log
-          && (forall i | start <= i < cur :: (
-            assert i in x.contents by { reveal_Complete(); }
-            x.contents[i].Some?))
+          && (forall i | start <= i < cur :: i in x.contents.value)
         )
         case ReaderGuard(start: nat, end: nat, cur: nat, val: StoredType) => (
           assert n in x.localTails by { reveal_Complete();}
@@ -254,13 +253,9 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
             assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_Complete(); }
             EntryIsAlive(x.aliveBits, i)))
           // the entries up to, and including current must have something in the log
-          && (forall i | start <= i <= cur :: (
-            assert i in x.contents by { reveal_Complete(); }
-            x.contents[i].Some?))
+          && (forall i | start <= i <= cur :: i in x.contents.value)
           // the thing we are ready should match the log content
-          && (
-            assert cur in x.contents by { reveal_Complete(); }
-            x.contents[cur] == Some(val))
+          && (cur in x.contents.value && x.contents.value[cur] == val)
         )
     }
   }
@@ -397,8 +392,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && (forall i | i in s.combinerState :: s.combinerState[i].CombinerIdle?)
     && (forall i: nat :: i < LOG_SIZE as nat <==> i in s.aliveBits)
     && (forall i: int | 0 <= i < LOG_SIZE as nat :: s.aliveBits[i] == LogicalToAliveBitAliveWhen(i - LOG_SIZE as nat))
-    && (forall i: int :: -(LOG_SIZE as int) <= i < 0 <==> (i in s.contents))
-    && (forall i: int :: -(LOG_SIZE as int) <= i < 0 <==> (i in s.contents && s.contents[i].Some?))
+    && s.contents.Some?
+    && (forall i: int :: -(LOG_SIZE as int) <= i < 0 <==> (i in s.contents.value))
   }
 
   lemma InitImpliesInv(x: M)
@@ -424,7 +419,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   function I(x: M) : map<Key, StoredType>
   {
     // Withdrawn: non-alive cells between head and tail
-    map i : nat | i in x.contents.Keys && x.contents[i].Some? :: x.contents[i].value
+    map i : nat | i in x.contents.value.Keys :: x.contents.value[i]
   }
 
   /*
@@ -439,7 +434,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && !(x.head.Some?        && y.head.Some?)
       && !(x.tail.Some?        && y.tail.Some?)
       && (x.localTails.Keys    !! y.localTails.Keys)
-      && (x.contents.Keys      !! y.contents.Keys)
+      && !(x.contents.Some?    && y.contents.Some?)
       && (x.aliveBits.Keys     !! y.aliveBits.Keys)
       && (x.combinerState.Keys !! y.combinerState.Keys)
     )
@@ -448,7 +443,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
         if x.head.Some? then x.head else y.head,
         if x.tail.Some? then x.tail else y.tail,
         Maps.MapUnionPreferB(x.localTails, y.localTails),
-        Maps.MapUnionPreferB(x.contents, y.contents),
+        if x.contents.Some? then x.contents else y.contents,
         Maps.MapUnionPreferB(x.aliveBits, y.aliveBits),
         Maps.MapUnionPreferB(x.combinerState, y.combinerState)
       )
@@ -457,7 +452,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   }
 
   function unit() : M {
-    M(None, None, map[], map[], map[], map[])
+    M(None, None, map[], None, map[], map[])
   }
 
   lemma dot_unit(x: M)
@@ -863,10 +858,9 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   /* ----------------------------------------------------------------------------------------- */
 
-  function map_update_filter<V>(m1: map<int, V>, m2: map<int, V>, minkey: int): map<int, V>
-  requires m1.Keys !! m2.Keys
+  function MapFilter<V>(m1: map<int, V>, minkey: int): map<int, V>
   {
-    map k | k in (m1.Keys + m2.Keys) && minkey <= k :: if k in m2 then m2[k] else m1[k]
+    map k | k in m1.Keys && minkey <= k :: m1[k]
   }
 
 
@@ -875,6 +869,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     && m.M?
     && m.tail.Some?
+    && m.contents.Some?
     && CombinerKnown(m, combinerNodeId)
     && CombinerIsAdvancingTail(m, combinerNodeId)
 
@@ -884,29 +879,30 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m.tail.value <= new_tail <= (combinerBefore.observed_head + LOG_SIZE as int)
 
     // the "old" entries must be in the log
-    && (forall i: int | MinusLogSize(m.tail.value) <= i < (MinusLogSize(m.tail.value)) + (new_tail - m.tail.value) :: i in m.contents)
-    && assert forall i: int | (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)) :: i in m.contents;
+    && (forall i: int | MinusLogSize(m.tail.value) <= i < (MinusLogSize(m.tail.value)) + (new_tail - m.tail.value) :: i in m.contents.value) // TODO: may need to change after the contents refactor
+    && assert forall i: int | (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)) :: i in m.contents.value; // TODO: may need to change after the contents refactor
+
 
     // all new entries must not be in the log
-    && (forall i: int | m.tail.value <= i < new_tail :: i !in m.contents)
+    && (forall i: int | m.tail.value <= i < new_tail :: i !in m.contents.value)
 
     // construct the new log entries, all of them are none, as we withdraw them
-    && var new_entries := map x : int | m.tail.value <= x < new_tail :: x := None;
-    && assert (forall i : int :: i in new_entries.Keys <==> (m.tail.value as int <= i < new_tail as int));
+    && var remove_entries := set x : int | m.tail.value <= x < new_tail;
+    && assert (forall i : int :: i in remove_entries <==> (m.tail.value as int <= i < new_tail as int));
 
     // the things we're going to withdraw, must be in the previous window
     && (forall i : int :: i in withdrawn.Keys <==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)))
     && assert (forall i : int :: i in withdrawn.Keys <==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)));
 
     // the relationship between the entries and the withdrawn keys
-    && assert (forall i : int :: i in new_entries.Keys <==> MinusLogSize(i) as int in withdrawn.Keys);
+    && assert (forall i : int :: i in remove_entries <==> MinusLogSize(i) as int in withdrawn.Keys);
 
     // the withdrawn things must be the old entries of the log
-    && (forall i | i in withdrawn.Keys :: Some(withdrawn[i]) == m.contents[i])
+    && (forall i | i in withdrawn.Keys :: withdrawn[i] == m.contents.value[i])
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerAppending(m.tail.value, new_tail)],
-      contents := map_update_filter(m.contents, new_entries, (new_tail as int - LOG_SIZE as int)),
+      contents := Some(Maps.MapRemove(MapFilter(m.contents.value, (new_tail as int - LOG_SIZE as int)), remove_entries)),
       tail := Some(new_tail)
     )
   }
@@ -978,8 +974,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && var key := combinerBefore.cur_idx;
 
     // there should be an entry corresponding to the key in the log, and it should be None.
-    && key in m.contents
-    && m.contents[key].None?
+    && m.contents.Some?
+    && key !in m.contents.value
 
     // the entry we're about to write is note alive,
     && LogicalToPhysicalIndex(key) in m.aliveBits
@@ -992,7 +988,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       // update the alive bits
       aliveBits := m.aliveBits[LogicalToPhysicalIndex(key) := LogicalToAliveBitAliveWhen(key)],
       // update the key element in the log
-      contents := m.contents[key := Some(deposited)])
+      contents := Some(m.contents.value[key := deposited]))
   }
 
   // seems to take about 4 minutes...
