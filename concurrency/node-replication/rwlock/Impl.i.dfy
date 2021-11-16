@@ -93,7 +93,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
 
     dispose_anything(rcs);
 
-    m := RwLock(exclusiveFlag, refCounts, lcell, loc, client_counters.loc, inv);
+    m := RwLock(CachePadded(exclusiveFlag), refCounts, CachePadded(lcell), loc, client_counters.loc, inv);
   }
 
   /*
@@ -112,7 +112,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     predicate Inv(expected_lock: RwLock) {
       && exc_obtained_token.loc == m.loc
       && IsExcAcqObtained(exc_obtained_token.val)
-      && empty_cell_contents.lcell == m.lcell // empty_cell_contents is talking about m's cell
+      && empty_cell_contents.lcell == m.lcell.inner // empty_cell_contents is talking about m's cell
       && empty_cell_contents.v.None?  // m.cell is empty, ready to be give-n back a value at release time.
       && m == expected_lock
     }
@@ -135,7 +135,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
   {
     function StoredContents() : HandleTypeMod.Handle
     {
-      LCellContents(m.lcell, Some(v))
+      LCellContents(m.lcell.inner, Some(v))
     }
 
     predicate Inv(expected_lock: RwLock)
@@ -193,9 +193,9 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
     glinear counter: Clients)
 
   linear datatype RwLock = RwLock(
-    linear exclusiveFlag: Atomic<bool, Token>,    // implements ExclusiveState.exc
+    linear exclusiveFlag: CachePadded<Atomic<bool, Token>>,    // implements ExclusiveState.exc
     linear refCounts: lseq<CachePadded<Atomic<uint8, RefCount>>>,   // implements map<ThreadId, nat>
-    linear lcell: LinearCell<contentsTypeMod.ContentsType>, // implements the actual value that ExclusiveState.shared_value represents
+    linear lcell: CachePadded<LinearCell<contentsTypeMod.ContentsType>>, // implements the actual value that ExclusiveState.shared_value represents
     ghost loc: Loc,                                // which instance of this lock we're talking about
     ghost client_counter_loc: Loc,                // ClientCounter has its own loc.
     ghost inv: V -> bool
@@ -207,8 +207,8 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       && loc.base_loc == RwLockTokenMod.T.Wrap.singleton_loc()
       && |refCounts| == RC_WIDTH
       && lseq_full(refCounts)
-      && (forall v, refcount :: atomic_inv(exclusiveFlag, v, refcount)
-            <==> exclusiveFlagInv(v, refcount, loc, inv, lcell))
+      && (forall v, refcount :: atomic_inv(exclusiveFlag.inner, v, refcount)
+            <==> exclusiveFlagInv(v, refcount, loc, inv, lcell.inner))
       && (forall t, count, refcount | 0 <= t < RC_WIDTH
           :: atomic_inv(refCounts[t].inner, count, refcount)
             <==> refCountInv(count, refcount, loc, client_counter_loc, t))
@@ -226,7 +226,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       && token.val == RwLockMod.ExcAcqHandle(token.val.exclusiveAcquisition)  // it's an ExcState
       && token.val.exclusiveAcquisition.ExcAcqPending?
       && token.val.exclusiveAcquisition.visited == visited
-      && token.val.exclusiveAcquisition.b.lcell == this.lcell
+      && token.val.exclusiveAcquisition.b.lcell == this.lcell.inner
       && token.loc == this.loc
 
       // ...and the handle is carrying forward the invariants on the value it protects
@@ -249,7 +249,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       invariant got_exc ==> IsPendingHandle(pending_handle, 0)
       decreases *
       {
-        atomic_block got_exc := execute_atomic_compare_and_set_strong(this.exclusiveFlag, false, true) {
+        atomic_block got_exc := execute_atomic_compare_and_set_strong(this.exclusiveFlag.inner, false, true) {
           ghost_acquire g;
           if got_exc {
             RwLockTokenMod.T.dispose(pending_handle);
@@ -293,7 +293,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       glinear var b':HandleTypeMod.Handle;
       pending_handle, b' := RwLockTokenMod.perform_Withdraw_TakeExcLockFinish(pending_handle);
 
-      v, b' := take_lcell(lcell, b');
+      v, b' := take_lcell(lcell.inner, b');
       
       assert inv(v);
 
@@ -313,10 +313,10 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
       glinear var ExclusiveGuard(exc_obtained_token, empty_cell_contents, m) := guard;
 
       // Store the incoming value into the cell
-      glinear var v_cell_contents := give_lcell(lcell, empty_cell_contents, v);
+      glinear var v_cell_contents := give_lcell(lcell.inner, empty_cell_contents, v);
 
       // Release the lock.
-      atomic_block var _ := execute_atomic_store(this.exclusiveFlag, false) {
+      atomic_block var _ := execute_atomic_store(this.exclusiveFlag.inner, false) {
         ghost_acquire g;
         g := RwLockTokenMod.perform_Deposit_ReleaseExcLock(g, exc_obtained_token, v_cell_contents);
         ghost_release g;
@@ -356,12 +356,12 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         // Note we don't do anything with handles here, because correctness
         // doesn't (can't!) depend on the value we observe for the
         // exclusiveFlag here.
-        atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) { }
+        atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag.inner) { }
         while (exc_acquired)
           decreases *
         {
           SpinLoopHint();
-          atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) { }
+          atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag.inner) { }
         }
 
         // Increment my thread-specific refcount to indicate my enthusiasm to get this shared access.
@@ -384,7 +384,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         }
 
         // Check if we acquired the shared access (because no exclusive locker got in our way)
-        atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag) {
+        atomic_block exc_acquired := execute_atomic_load(this.exclusiveFlag.inner) {
           ghost_acquire g;
           if (!exc_acquired) {
             glinear var acquiredHandle := unwrap_value(shared_handle);
@@ -443,7 +443,7 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
           readCounterToken,
           shared_obtained_token,
           acquiring_thread_id as int,
-          LCellContents(lcell, Some(v)));
+          LCellContents(lcell.inner, Some(v)));
         clientCounterToken, client := split(clientCounterToken);
         glinear var new_g := RefCount(readCounterToken, clientCounterToken);
         ghost_release new_g;
@@ -462,6 +462,6 @@ module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
         handle.acquiring_thread_id as nat,
         handle.StoredContents());
 
-    v := read_lcell(rwlock.lcell, cellContents);
+    v := read_lcell(rwlock.lcell.inner, cellContents);
   }
 }
