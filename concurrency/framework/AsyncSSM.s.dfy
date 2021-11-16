@@ -310,6 +310,30 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
     token1', token2' := Tokens.split(y, expected_value1, expected_value2);
   }
 
+  glinear method transition_3_3(
+      glinear token1: Token,
+      glinear token2: Token,
+      glinear token3: Token,
+      ghost expected_value1: pcm.M,
+      ghost expected_value2: pcm.M,
+      ghost expected_value3: pcm.M)
+  returns (glinear token1': Token, glinear token2': Token, glinear token3': Token)
+  requires token1.loc == token2.loc == token3.loc
+  requires ssm.Internal(
+      ssm.dot(ssm.dot(token1.val, token2.val), token3.val),
+      ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3))
+  ensures token1' == Tokens.Token(token1.loc, expected_value1)
+  ensures token2' == Tokens.Token(token1.loc, expected_value2)
+  ensures token3' == Tokens.Token(token1.loc, expected_value3)
+  /*
+  {
+    glinear var x := Tokens.join(token1, token2);
+    glinear var y := transition_1_1(x,  
+        ssm.dot(expected_value1, expected_value2));
+    token1', token2' := Tokens.split(y, expected_value1, expected_value2);
+  }
+  */
+
   glinear method {:extern} split3(glinear sum: Token,
       ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M)
   returns (glinear a': Token, glinear b': Token, glinear c': Token)

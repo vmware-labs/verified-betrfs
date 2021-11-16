@@ -243,6 +243,112 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   ensures combiner' == CombinerToken(combiner.nodeId, CombinerPlaced([]))
   // TODO (this requires a new transition, it's a much simpler version of AdvanceTail)
 
+  glinear method mapUpdate_to_raw(ghost requestIds: seq<nat>, glinear updates: map<nat, Update>)
+  returns (glinear raw: ILT.Token)
+  requires forall i | 0 <= i < |requestIds| ::
+      i in updates && updates[i].rid == requestIds[i]
+  ensures raw.loc == loc()
+  ensures raw.val.M?
+  ensures forall i | 0 <= i < |requestIds| ::
+      requestIds[i] in raw.val.localUpdates
+      && raw.val.localUpdates[requestIds[i]] == updates[i].us
+  ensures seq_unique(requestIds)
+  ensures raw.val.global_tail.None?
+  ensures raw.val.combiner == map[]
+  {
+    glinear var updates' := updates;
+    raw := ILT.Tokens.get_unit(loc());
+    ghost var j := 0;
+    while j < |requestIds|
+    invariant 0 <= j <= |requestIds|
+    invariant forall i | j <= i < |requestIds| ::
+        i in updates' && updates'[i] == updates[i]
+    invariant raw.val.M?
+    invariant raw.loc == loc()
+    invariant forall i | 0 <= i < j ::
+        requestIds[i] in raw.val.localUpdates
+        && raw.val.localUpdates[requestIds[i]] == updates[i].us
+    invariant raw.val.global_tail.None?
+    invariant raw.val.combiner == map[]
+    invariant forall i, k | 0 <= i < j && 0 <= k < j && i != k :: requestIds[i] != requestIds[k]
+    {
+      glinear var upd;
+      updates', upd := glmap_take(updates', j);
+      glinear var u := Update_unfold(upd);
+      raw := ILT.Tokens.join(raw, u);
+
+      j := j + 1;
+    }
+    dispose_anything(updates');
+  }
+
+  glinear method raw_to_mapUpdate(ghost requestIds: seq<nat>, glinear raw: ILT.Token)
+  returns (glinear raw': ILT.Token, glinear updates: map<nat, Update>)
+  requires raw.loc == loc()
+  requires raw.val.M?
+  requires forall i | 0 <= i < |requestIds| ::
+      requestIds[i] in raw.val.localUpdates
+  requires seq_unique(requestIds)
+  ensures forall i | 0 <= i < |requestIds| ::
+      i in updates && updates[i].rid == requestIds[i]
+      && raw.val.localUpdates[requestIds[i]] == updates[i].us
+  ensures raw'.val.M?
+  ensures raw'.loc == raw.loc && raw'.val.log == raw.val.log
+  {
+    raw' := raw;
+    updates := glmap_empty();
+    ghost var j := 0;
+    while j < |requestIds|
+    invariant raw'.loc == loc()
+    invariant raw'.val.M?
+    invariant forall i | j <= i < |requestIds| ::
+        && requestIds[i] in raw'.val.localUpdates
+        && raw'.val.localUpdates[requestIds[i]] == raw.val.localUpdates[requestIds[i]]
+    invariant 0 <= j <= |requestIds|
+    invariant forall i | 0 <= i < j ::
+        i in updates && updates[i].rid == requestIds[i]
+        && raw.val.localUpdates[requestIds[i]] == updates[i].us
+    invariant raw'.val.M?
+    invariant raw'.loc == raw.loc && raw'.val.log == raw.val.log
+    {
+      var expected_upd := Update(requestIds[j], 
+          raw.val.localUpdates[requestIds[j]]);
+      var x := expected_upd.defn().val;
+      var y := raw'.val.(localUpdates := raw'.val.localUpdates - {requestIds[j]});
+
+      glinear var xl;
+      raw', xl := ILT.Tokens.split(raw', y, x);
+
+      glinear var upd := Update_fold(expected_upd, xl);
+      updates := glmap_insert(updates, j, upd);
+
+      j := j + 1;
+    }
+  }
+
+  glinear method raw_to_mapLogs(
+    ghost mlog: map<nat, LogEntry>,
+    ghost requestIds: seq<nat>,
+    ghost nodeId: nat,
+    ghost gtail: nat,
+    ghost localUpdates: map<RequestId, UpdateState>,
+    ghost ops: seq<nrifc.UpdateOp>,
+    glinear raw: ILT.Token)
+  returns (glinear logs': map<nat, Log>)
+  requires raw.val.M?
+  requires raw.loc == loc()
+  requires |ops| == |requestIds|
+  requires forall i | 0 <= i < |requestIds| ::
+      requestIds[i] in localUpdates && localUpdates[requestIds[i]] == UpdateInit(ops[i])
+  requires raw.val.log == map_update(mlog,
+      ConstructNewLogEntries(requestIds, nodeId, gtail, localUpdates))
+  //requires seq_unique(request_ids)
+
+  ensures forall i | 0 <= i < |requestIds| ::
+      i in logs'
+        && logs'[i] == Log(gtail + i, ops[i], nodeId)
+
+
   glinear method perform_AdvanceTail(
       glinear tail: GlobalTail,
       glinear updates: map<nat, Update>,
@@ -271,7 +377,56 @@ module InfiniteLogTokens(nrifc: NRIfc) {
         && logs'[i] == Log(tail.tail + i, ops[i], nodeId)
   ensures combiner'.nodeId == nodeId
   ensures combiner'.state == CombinerPlaced(requestIds)
-  // TODO this one is advanced
+  {
+    glinear var a_token := GlobalTail_unfold(tail);
+    glinear var b_token := mapUpdate_to_raw(requestIds, updates);
+    glinear var c_token := CombinerToken_unfold(combiner);
+
+    // Compute the things we want to output (as ghost, _not_ glinear constructs)
+    ghost var out1_expect := GlobalTail(tail.tail + |ops|);
+    ghost var out1_token_expect := GlobalTail_unfold(out1_expect);
+
+    ghost var m := b_token.val;
+    var updated_log := ConstructNewLogEntries(requestIds, combiner.nodeId, tail.tail, m.localUpdates);
+    var local_updates_new := ConstructLocalUpdateMap(requestIds, combiner.nodeId, tail.tail);
+    ghost var m' := m
+        .(log := map_update(m.log, updated_log))
+        .(localUpdates := map_update(m.localUpdates, local_updates_new));
+    ghost var out2_token_expect := ILT.Tokens.Token(loc(), m');
+
+    ghost var out3_expect := CombinerToken(nodeId, CombinerPlaced(requestIds));
+    ghost var out3_token_expect := CombinerToken_unfold(out3_expect);
+
+    // Explain what transition we're going to do
+    assert AdvanceTail(
+        IL.dot(IL.dot(a_token.val, m), c_token.val),
+        IL.dot(IL.dot(out1_token_expect.val, m'), out3_token_expect.val),
+        combiner.nodeId, requestIds);
+    assert IL.NextStep(
+        IL.dot(IL.dot(a_token.val, m), c_token.val),
+        IL.dot(IL.dot(out1_token_expect.val, m'), out3_token_expect.val),
+        AdvanceTail_Step(combiner.nodeId, requestIds));
+
+    // Perform the transition
+    glinear var out1_token, out2_token, out3_token :=
+      ILT.transition_3_3(a_token, b_token, c_token,
+        out1_token_expect.val, m', out3_token_expect.val);
+
+    tail' := GlobalTail_fold(out1_expect, out1_token);
+    combiner' := CombinerToken_fold(out3_expect, out3_token);
+
+    out2_token, updates' := raw_to_mapUpdate(requestIds, out2_token);
+    logs' := raw_to_mapLogs(m.log, requestIds, combiner.nodeId, tail.tail, m.localUpdates,
+          ops, out2_token);
+
+    forall i | 0 <= i < |requestIds|
+    ensures i in updates'
+    ensures updates'[i].us.UpdatePlaced?
+    ensures updates'[i] == Update(requestIds[i], UpdatePlaced(nodeId, updates'[i].us.idx))
+    {
+      reveal_ConstructLocalUpdateMap();
+    }
+  }
 
   glinear method perform_ExecLoadLtail(
       glinear combiner: CombinerToken,
