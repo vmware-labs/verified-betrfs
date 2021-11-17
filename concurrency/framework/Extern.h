@@ -230,6 +230,13 @@ struct get_default<Cells::Cell<V> > {
   }
 };
 
+template <typename V>
+struct get_default<LinearCells::LinearCell<V> > {
+  static LinearCells::LinearCell<V> call() {
+    return LinearCells::LinearCell<V>();
+  }
+};
+
 namespace Atomics {
   template <typename V, typename G>
   struct Atomic {
