@@ -2,7 +2,7 @@
 # System configuration
 
 # You can build anything reachable from these root files.
-DAFNY_ROOTS=concurrency/scache/Bundle.i.dfy
+DAFNY_ROOTS=concurrency/scache/Bundle.i.dfy concurrency/node-replication/BundleCounter.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
@@ -125,6 +125,7 @@ endef
 .PHONY: status
 status: build/deps build/Impl/Bundle.i.status.pdf
 scache-status: build/concurrency/scache/Bundle.i.status.pdf
+nr-status: build/concurrency/node-replication/BundleCounter.i.status.pdf
 
 # Longer time-limit for CI
 .PHONY: verichecks-status
