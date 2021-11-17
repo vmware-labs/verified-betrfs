@@ -188,6 +188,11 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires combiner.rs.CBCombinerIdle?
   ensures combiner' == combiner.(rs := CBCombinerReading(CBReaderStarting(localTail.tail)))
 
+  glinear method reader_abort(glinear combiner: CBCombinerToken)
+  returns (glinear combiner': CBCombinerToken)
+  requires combiner.rs.CBCombinerReading? && combiner.rs.readerState.CBReaderStarting?
+  ensures combiner' == combiner.(rs := CBCombinerIdle)
+
   glinear method reader_enter(glinear combiner: CBCombinerToken, gshared globalTail: CBGlobalTail)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CBCombinerReading? && combiner.rs.readerState.CBReaderStarting?

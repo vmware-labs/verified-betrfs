@@ -245,10 +245,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     requires StateValid(m)
   {
     && nodeId in m.combiner
-    && nodeId in m.localTails
-    && m.combiner[nodeId].Combiner?
-    && m.combiner[nodeId].localTail == m.combiner[nodeId].globalTail
-    && m.localTails[nodeId] == m.combiner[nodeId].localTail
+    && m.combiner[nodeId].CombinerLtail?
+    && m.global_tail.Some?
+    && m.combiner[nodeId].localTail == m.global_tail.value
   }
 
   // GUARD: InCombinerUpdateCompleteTail
@@ -812,7 +811,6 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   predicate UpdateCompletedNoChange(m: M, m': M, nodeId: nat) {
     && StateValid(m)
     && InCombinerNoChange(m, nodeId)
-    && CompleteTailValid(m)
     // update the ctail and the combiner state
     && m' == m.(combiner := m.combiner[nodeId := CombinerReady])
   }

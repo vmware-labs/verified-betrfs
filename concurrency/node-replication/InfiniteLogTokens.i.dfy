@@ -553,6 +553,35 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     combiner' := CombinerToken_fold(out_expect, out_token);
   }
 
+  glinear method perform_UpdateCompletedNoChange(
+      glinear combiner: CombinerToken,
+      gshared globalTail: GlobalTail)
+  returns (glinear combiner': CombinerToken)
+  requires combiner.state.CombinerLtail?
+  requires combiner.state.localTail == globalTail.tail
+  ensures combiner' == CombinerToken(combiner.nodeId, CombinerReady)
+  ensures |combiner.state.queued_ops| == 0 // follows from invariant
+  {
+    glinear var a_token := CombinerToken_unfold(combiner);
+    gshared var s_token := GlobalTail_unfold_borrow(globalTail);
+
+    ghost var out_expect := CombinerToken(combiner.nodeId, CombinerReady);
+    ghost var out_token_expect := CombinerToken_unfold(out_expect);
+
+    assert IL.UpdateCompletedNoChange(
+        IL.dot(s_token.val, a_token.val),
+        IL.dot(s_token.val, out_token_expect.val),
+        combiner.nodeId);
+    assert IL.NextStep(
+        IL.dot(s_token.val, a_token.val),
+        IL.dot(s_token.val, out_token_expect.val),
+        UpdateCompletedNoChange_Step(combiner.nodeId));
+
+    glinear var out_token := ILT.transition_1_1_1(s_token, a_token, out_token_expect.val);
+
+    combiner' := CombinerToken_fold(out_expect, out_token);
+  }
+
   glinear method perform_UpdateCompletedTail(
       glinear combiner: CombinerToken,
       glinear ctail: Ctail)

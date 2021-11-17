@@ -1231,14 +1231,19 @@ module Impl(nrifc: NRIfc) {
     atomic_block var gtail := execute_atomic_load(nr.globalTail.inner)
     {
       ghost_acquire gtail_token;
-      combinerState' := perform_ExecLoadGlobalTail(combinerState', gtail_token.globalTail);
-      cb' := reader_enter(cb', gtail_token.cbGlobalTail);
+      if ltail == gtail {
+        combinerState' := perform_UpdateCompletedNoChange(
+            combinerState', gtail_token.globalTail);
+        cb' := reader_abort(cb');
+      } else {
+        combinerState' := perform_ExecLoadGlobalTail(combinerState', gtail_token.globalTail);
+        cb' := reader_enter(cb', gtail_token.cbGlobalTail);
+      }
       ghost_release gtail_token;
     }
 
     if ltail == gtail {
       // done
-      assume false; // TODO
     } else {
       var responsesIndex: uint64 := 0;
 
