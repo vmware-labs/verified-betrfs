@@ -899,6 +899,35 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   ensures forall i | 0 <= i < NUM_REPLICAS as int ::
       && i in replicas
       && replicas[i] == Replica(i, nrifc.init_state())
+  {
+    glinear var t' := t;
+    ghost var j := 0;
+    replicas := glmap_empty();
+    while j < NUM_REPLICAS as int
+    invariant 0 <= j <= NUM_REPLICAS as int
+    invariant t'.loc == loc()
+    invariant t'.val.M?
+    invariant forall i | j <= i < NUM_REPLICAS as int ::
+        && i in t'.val.replicas
+        && t.val.replicas[i] == t'.val.replicas[i]
+    invariant forall i | 0 <= i < j ::
+        && i in replicas
+        && replicas[i] == Replica(i, nrifc.init_state())
+    {
+      var expected := Replica(j, nrifc.init_state());
+      var x := expected.defn().val;
+      var y := t'.val.(replicas := t'.val.replicas - {j});
+
+      glinear var xl;
+      t', xl := ILT.Tokens.split(t', y, x);
+
+      glinear var z := Replica_fold(expected, xl);
+      replicas := glmap_insert(replicas, j, z);
+
+      j := j + 1;
+    }
+    dispose_anything(t');
+  }
 
   glinear method doInitLocalTails(glinear t: ILT.Token)
   returns (glinear localTails: map<nat, LocalTail>)
@@ -908,6 +937,35 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   ensures forall i | 0 <= i < NUM_REPLICAS as int ::
       && i in localTails
       && localTails[i] == LocalTail(i, 0)
+  {
+    glinear var t' := t;
+    ghost var j := 0;
+    localTails := glmap_empty();
+    while j < NUM_REPLICAS as int
+    invariant 0 <= j <= NUM_REPLICAS as int
+    invariant t'.loc == loc()
+    invariant t'.val.M?
+    invariant forall i | j <= i < NUM_REPLICAS as int ::
+        && i in t'.val.localTails
+        && t.val.localTails[i] == t'.val.localTails[i]
+    invariant forall i | 0 <= i < j ::
+        && i in localTails
+        && localTails[i] == LocalTail(i, 0)
+    {
+      var expected := LocalTail(j, 0);
+      var x := expected.defn().val;
+      var y := t'.val.(localTails := t'.val.localTails - {j});
+
+      glinear var xl;
+      t', xl := ILT.Tokens.split(t', y, x);
+
+      glinear var z := LocalTail_fold(expected, xl);
+      localTails := glmap_insert(localTails, j, z);
+
+      j := j + 1;
+    }
+    dispose_anything(t');
+  }
 
   glinear method doInitCombiners(glinear t: ILT.Token)
   returns (glinear combiners: map<nat, CombinerToken>)
@@ -917,6 +975,35 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   ensures forall i | 0 <= i < NUM_REPLICAS as int ::
       && i in combiners
       && combiners[i] == CombinerToken(i, CombinerReady)
+  {
+    glinear var t' := t;
+    ghost var j := 0;
+    combiners := glmap_empty();
+    while j < NUM_REPLICAS as int
+    invariant 0 <= j <= NUM_REPLICAS as int
+    invariant t'.loc == loc()
+    invariant t'.val.M?
+    invariant forall i | j <= i < NUM_REPLICAS as int ::
+        && i in t'.val.combiner
+        && t.val.combiner[i] == t'.val.combiner[i]
+    invariant forall i | 0 <= i < j ::
+        && i in combiners
+        && combiners[i] == CombinerToken(i, CombinerReady)
+    {
+      var expected := CombinerToken(j, CombinerReady);
+      var x := expected.defn().val;
+      var y := t'.val.(combiner := t'.val.combiner - {j});
+
+      glinear var xl;
+      t', xl := ILT.Tokens.split(t', y, x);
+
+      glinear var z := CombinerToken_fold(expected, xl);
+      combiners := glmap_insert(combiners, j, z);
+
+      j := j + 1;
+    }
+    dispose_anything(t');
+  }
 
   glinear method perform_Init(glinear token: ILT.Token)
   returns (
