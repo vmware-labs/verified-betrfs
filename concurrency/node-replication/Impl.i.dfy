@@ -275,6 +275,7 @@ module Impl(nrifc: NRIfc) {
   //requires ticket.rs.ctail <= ctail as nat
   requires nr.WF()
   requires nodeId < NUM_REPLICAS
+  requires ticket.rs.ctail == ctail as nat
   ensures is_synced ==> ticket'.rs.ReadonlyReadyToRead?
   ensures !is_synced ==> ticket' == ticket
   ensures ticket.rid == ticket'.rid
@@ -846,7 +847,7 @@ module Impl(nrifc: NRIfc) {
     decreases * 
     invariant synced ==> stub.rs.ReadonlyReadyToRead? 
     invariant !synced ==> stub.rs.ReadonlyCtail?
-    invariant !synced ==> stub.rs.ctail <= ctail as nat;
+    invariant !synced ==> stub.rs.ctail == ctail as nat;
     invariant stub.rid == ticket.rid
     invariant synced ==> stub.rs.nodeId == node.nodeId as nat
     invariant stub.rs.op == op

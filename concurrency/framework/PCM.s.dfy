@@ -109,7 +109,7 @@ module Tokens(pcm: PCM) {
 
   function method {:extern} join_shared(gshared s: Token, gshared t: Token, ghost expected_q: pcm.M)
     : (gshared q: Token)
-  requires forall r :: pcm.le(s.val, r) && pcm.le(t.val, r) ==> pcm.le(expected_q, r)
+  requires forall r :: pcm.valid(r) && pcm.le(s.val, r) && pcm.le(t.val, r) ==> pcm.le(expected_q, r)
   requires s.loc == t.loc
   ensures q == Token(s.loc, expected_q)
 

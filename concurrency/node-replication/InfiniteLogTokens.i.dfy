@@ -194,12 +194,66 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   //      -->
   //    Readonly(rid, ReadonlyDone(ret))                      , Replica(nodeId, state)
 
+  predicate map_le<K,V>(a: map<K, V>, b: map<K, V>) {
+    forall k | k in a :: k in b && a[k] == b[k]
+  }
+
+  function map_sub<K,V>(a: map<K, V>, b: map<K, V>) : map<K, V> {
+    map k | k in b && k !in a :: b[k]
+  }
+
+  predicate opt_le<V>(a: Option<V>, b: Option<V>) {
+    a.Some? ==> a == b
+  }
+
+  function opt_sub<V>(a: Option<V>, b: Option<V>) : Option<V> {
+    if b.Some? && a.None? then b else None
+  }
+
+  lemma to_le(a: IL.M, b: IL.M)
+  requires a.M?
+  requires b.M?
+  requires map_le(a.log, b.log)
+  requires map_le(a.replicas, b.replicas)
+  requires map_le(a.localTails, b.localTails)
+  requires map_le(a.localReads, b.localReads)
+  requires map_le(a.localUpdates, b.localUpdates)
+  requires map_le(a.combiner, b.combiner)
+  requires opt_le(a.global_tail, b.global_tail)
+  requires opt_le(a.ctail, b.ctail)
+  ensures ILT.pcm.le(a, b)
+  {
+    var x := M(
+      map_sub(a.log, b.log),
+      opt_sub(a.global_tail, b.global_tail),
+      map_sub(a.replicas, b.replicas),
+      map_sub(a.localTails, b.localTails),
+      opt_sub(a.ctail, b.ctail),
+      map_sub(a.localReads, b.localReads),
+      map_sub(a.localUpdates, b.localUpdates),
+      map_sub(a.combiner, b.combiner)
+    );
+    assert ILT.pcm.dot(a, x) == b;
+  }
+
   glinear method sharedReplicaComb(
       gshared replica: Replica,
       gshared comb: CombinerToken)
   returns (gshared rc: ILT.Token)
   ensures rc.loc == loc()
   ensures rc.val == IL.dot(replica.defn().val, comb.defn().val)
+  {
+    gshared var s := Replica_unfold_borrow(replica);
+    gshared var t := CombinerToken_unfold_borrow(comb);
+    ghost var expected_q := IL.dot(s.val, t.val);
+    forall r | ILT.pcm.valid(r) && ILT.pcm.le(s.val, r) && ILT.pcm.le(t.val, r)
+    ensures ILT.pcm.le(expected_q, r)
+    {
+      assert expected_q.replicas == s.val.replicas;
+      to_le(expected_q, r);
+    }
+    rc := ILT.Tokens.join_shared(s, t, expected_q);
+  }
 
   glinear method perform_ReadonlyDone(
       glinear readonly: Readonly,
