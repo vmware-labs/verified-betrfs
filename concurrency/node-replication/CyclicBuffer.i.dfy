@@ -82,11 +82,12 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   function {:induction true}  MinLocalTailRec(ltails: map<NodeId, nat>, idx: nat) : (m : nat)
     requires idx < NUM_REPLICAS as nat
-    requires forall i:nat :: i < NUM_REPLICAS as nat <==> i in ltails
-    ensures forall i : nat | i <= idx ::  m <= ltails[i]
-    ensures exists i | 0 <= i <= idx :: ltails[i] == m
+    requires LocalTailsComplete(ltails)
+    ensures forall i : nat | 0 <= i <= idx :: i in ltails && m <= ltails[i]
+    ensures exists i : nat | 0 <= i <= idx :: i in ltails && ltails[i] == m
     decreases idx
   {
+    assert forall i : nat | 0 <= i <= idx :: i in ltails by { reveal_LocalTailsComplete(); }
     if idx == 0 then
       ltails[0]
     else
@@ -95,11 +96,13 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
 
   function MinLocalTail(ltails: map<NodeId, nat>) : (m : nat)
-    requires forall i:nat :: i < NUM_REPLICAS as nat <==> i in ltails
-    ensures forall i | i in ltails :: m <= ltails[i]
-    ensures exists i | 0 <= i < NUM_REPLICAS as nat :: ltails[i] == m
+    requires LocalTailsComplete(ltails)
+    ensures forall i : nat | 0 <= i < NUM_REPLICAS as nat :: i in ltails && m <= ltails[i]
+    ensures forall i : nat | i in ltails :: m <= ltails[i]
+    ensures exists i : nat | 0 <= i < NUM_REPLICAS as nat :: i in ltails && ltails[i] == m
     ensures m in ltails.Values
   {
+    assert forall i : nat | i in ltails ::  0 <= i < NUM_REPLICAS as nat by { reveal_LocalTailsComplete(); }
     MinLocalTailRec(ltails, NUM_REPLICAS as nat - 1)
   }
 
@@ -110,11 +113,13 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   function {:induction true} MaxLocalTailRec(ltails: map<NodeId, nat>, idx: nat) : (m : nat)
     requires idx < NUM_REPLICAS as nat
-    requires forall i:nat :: i < NUM_REPLICAS as nat <==> i in ltails
-    ensures forall i : nat | i <= idx ::  m >= ltails[i]
-    ensures exists i | 0 <= i <= idx :: ltails[i] == m
+    requires LocalTailsComplete(ltails)
+    requires LocalTailsComplete(ltails)
+    ensures forall i : nat | 0 <= i <= idx :: i in ltails && m >= ltails[i]
+    ensures exists i : nat | 0 <= i <= idx :: i in ltails && ltails[i] == m
     decreases idx
   {
+    assert forall i : nat | 0 <= i <= idx :: i in ltails by { reveal_LocalTailsComplete(); }
     if idx == 0 then
       ltails[0]
     else
@@ -122,11 +127,13 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   }
 
   function MaxLocalTail(ltails: map<NodeId, nat>) : (m : nat)
-    requires forall i:nat :: i < NUM_REPLICAS as nat <==> i in ltails
-    ensures forall i | i in ltails :: m >= ltails[i]
-    ensures exists i | 0 <= i < NUM_REPLICAS as nat :: ltails[i] == m
+    requires LocalTailsComplete(ltails)
+    ensures forall i : nat | 0 <= i < NUM_REPLICAS as nat :: i in ltails && m >= ltails[i]
+    ensures forall i : nat | i in ltails :: m >= ltails[i]
+    ensures exists i : nat | 0 <= i < NUM_REPLICAS as nat :: i in ltails && ltails[i] == m
     ensures m in ltails.Values
   {
+    assert forall i : nat | i in ltails ::  0 <= i < NUM_REPLICAS as nat by { reveal_LocalTailsComplete(); }
     MaxLocalTailRec(ltails, NUM_REPLICAS as nat - 1)
   }
 
@@ -141,29 +148,44 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
    * ============================================================================================
    */
 
-  predicate {:opaque} Complete(x: M)
-  ensures Complete(x) ==> (
-    && x.M?
-    && x.head.Some?
-    && x.tail.Some?
-    && x.contents.Some?
-  )
+  predicate {:opaque} AliveBitsComplete(aliveBits: map</* entry: */ nat, /* bit: */ bool>) {
+    && (forall i : nat | i <  LOG_SIZE as nat :: i in aliveBits)
+    && (forall i : nat | i in aliveBits :: i < LOG_SIZE as nat)
+  }
+
+  predicate {:opaque} CombinerStateComplete(combinerState: map<NodeId, CombinerState>) {
+    && (forall i : nat | i < NUM_REPLICAS as nat :: i in combinerState)
+    && (forall i : nat | i in combinerState :: i < NUM_REPLICAS as nat)
+  }
+
+  predicate {:opaque} LocalTailsComplete(localTails: map<NodeId, nat>)
+  {
+    && (forall i : nat | i < NUM_REPLICAS as nat :: i in localTails)
+    && (forall i : nat | i in localTails :: i < NUM_REPLICAS as nat)
+  }
+
+  predicate {:opaque} ContentsComplete( tail: nat, contents: map<int, StoredType>) {
+    && (forall i : nat | MinusLogSize(tail) <= i < tail :: i in contents)
+    && (forall i : nat | i in contents :: MinusLogSize(tail) <= i < tail)
+  }
+
+  predicate Complete(x: M)
   {
     && x.M?
     && x.head.Some?
     && x.tail.Some?
-    && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.localTails)
+    && LocalTailsComplete(x.localTails)
     && x.contents.Some?
-    // TODO remove, I think && (forall i: int :: (MinusLogSize(x.tail.value) <= i < x.tail.value) <==> i in x.contents.value)
-    && (forall i: nat :: i < LOG_SIZE as nat <==> i in x.aliveBits)
-    && (forall i: nat :: LogicalToPhysicalIndex(i) in x.aliveBits)
-    && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.combinerState)
+    // TODO remove, I think
+    && ContentsComplete(x.tail.value, x.contents.value)
+    && AliveBitsComplete(x.aliveBits)
+    && CombinerStateComplete(x.combinerState)
   }
 
   predicate PointerOrdering(x: M)
     requires Complete(x)
     ensures (
-      assert forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails by { reveal_Complete(); }
+      assert forall i:nat :: LocalTailsComplete(x.localTails) by {  }
       PointerOrdering(x) ==> (x.head.value <= MinLocalTail(x.localTails) <= x.tail.value))
   {
     // the head must be smaller or equal to the tail,
@@ -187,27 +209,23 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     requires PointerOrdering(x)
     requires PointerDifferences(x)
   {
-    assert forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails by { reveal_Complete(); }
+    assert forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails by { reveal_LocalTailsComplete(); }
 
     // forall free buffer entries, the entry is not alive.
     && (forall i | i in SetOfFreeBufferEntries(MinLocalTail(x.localTails), x.tail.value) :: (
-      assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_Complete(); }
+      assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_AliveBitsComplete();  }
       !EntryIsAlive(x.aliveBits, i)))
   }
 
   predicate BufferContents(x: M)
     requires Complete(x)
   {
-    // reveal_Complete();
+    //
 
     forall i : int | x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value :: (
-      assert (
-        && LogicalToPhysicalIndex(i) in x.aliveBits
-        && (forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails)) by {
-
-        reveal_Complete();
-      }
-      (EntryIsAlive(x.aliveBits, i) || i < MinLocalTail(x.localTails)) <==> i in x.contents.value)
+      assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_AliveBitsComplete(); }
+      assert forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails by { reveal_LocalTailsComplete(); }
+      (EntryIsAlive(x.aliveBits, i) || (i < MinLocalTail(x.localTails)) <==> i in x.contents.value))
   }
 
   predicate ReaderStateValid(x: M)
@@ -218,11 +236,11 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       :: match  x.combinerState[n].readerState {
         case ReaderStarting(start: nat) => (
           // the starting value should match the local tail
-          && assert n in x.localTails by { reveal_Complete(); }
+          && assert n in x.localTails by {  reveal_LocalTailsComplete(); reveal_CombinerStateComplete(); }
           && start == x.localTails[n]
         )
         case ReaderRange(start: nat, end: nat, cur: nat) => (
-          assert n in x.localTails by { reveal_Complete();}
+          assert n in x.localTails by { reveal_LocalTailsComplete(); reveal_CombinerStateComplete(); }
           // the start must be our local tail
           && x.localTails[n] == start
           // the start must be before the end, can be equial if ltail == gtail
@@ -233,13 +251,13 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           && start <= cur <= end
           // the entries up to, and including  current must be alive
           && (forall i | start <= i < cur :: (
-            assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_Complete(); }
+            assert LogicalToPhysicalIndex(i) in x.aliveBits by {  reveal_AliveBitsComplete(); }
             EntryIsAlive(x.aliveBits, i)))
           // the entries up to, and including current must have something in the log
           && (forall i | start <= i < cur :: i in x.contents.value)
         )
         case ReaderGuard(start: nat, end: nat, cur: nat, val: StoredType) => (
-          assert n in x.localTails by { reveal_Complete();}
+          assert n in x.localTails by { reveal_LocalTailsComplete(); reveal_CombinerStateComplete(); }
           // the start must be our local tail
           && x.localTails[n] == start
           // the start must be before the end, can be equial if ltail == gtail
@@ -250,7 +268,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           && start <= cur < end
           // the entries up to, and including  current must be alive
           && (forall i | start <= i <= cur :: (
-            assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_Complete(); }
+            assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_AliveBitsComplete(); }
             EntryIsAlive(x.aliveBits, i)))
           // the entries up to, and including current must have something in the log
           && (forall i | start <= i <= cur :: i in x.contents.value)
@@ -260,7 +278,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     }
   }
 
-  predicate CombinerStateValid(x: M)
+predicate CombinerStateValid(x: M)
     requires Complete(x)
     requires PointerOrdering(x)
   {
@@ -273,18 +291,18 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           && idx <= NUM_REPLICAS as nat
           // forall replicas we'e seen, min_tail is smaller than all localTails
           && (forall n | 0 <= n < idx :: min_tail <= (
-            assert n in x.localTails by { reveal_Complete(); }
+            assert n in x.localTails by { reveal_LocalTailsComplete(); reveal_CombinerStateComplete(); }
             x.localTails[n]))
         )
         case CombinerAdvancingTail(observed_head: nat) => (
           // the observed head is smaller than all local tails
           && (forall n | 0 <= n < NUM_REPLICAS as nat :: observed_head <= (
-            assert n in x.localTails by { reveal_Complete(); }
+            assert n in x.localTails by {  }
             x.localTails[n]))
         )
         case CombinerAppending(cur_idx: nat, tail: nat) => (
           // the current index is between local tails and tail.
-          && assert n in x.localTails by { reveal_Complete(); }
+          && assert n in x.localTails by { reveal_LocalTailsComplete(); reveal_CombinerStateComplete(); }
           && x.localTails[n] <= cur_idx <= tail
           // the read tail is smaller or equal to the current tail.
           && tail <= x.tail.value
@@ -292,13 +310,14 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           // && x.tail.value - (LOG_SIZE as nat) <= cur_idx <= x.tail.value
           // all the entries we're writing must not be alive.
           && (forall i : nat | cur_idx <= i < tail :: (
-            assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_Complete(); }
+            assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_AliveBitsComplete(); }
             !(EntryIsAlive(x.aliveBits, i))))
           // all the entries we're writing must not be SOme
           // && (forall i | cur_idx <= i < tail :: m.contents[i].Some?)
         )
       }
   }
+
 
   // function ReaderLogicalRange(c: CombinerState) : set<nat>
   // {
@@ -335,33 +354,47 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   // predicate LogicalRangesNoOverlap(x: M)
   //   requires Complete(x)
   // {
-  //   reveal_Complete();
+  //
 
   //   forall i, j | 0 <= i < NUM_REPLICAS as nat && 0 <= j < NUM_REPLICAS as nat && i != j ::
   //     && (CombinerLogicalRange(x.combinerState[i]) !! CombinerLogicalRange(x.combinerState[j]))
   //     && (CombinerLogicalRange(x.combinerState[i]) !! ReaderLogicalRange(x.combinerState[j]))
   // }
 
-  predicate {:opaque} RangesNoOverlap(x: M)
+
+  predicate {:opaque} RangesNoOverlapCombinerCombiner(combinerState: map<NodeId, CombinerState>)
+    requires CombinerStateComplete(combinerState)
+  {
+    assert (forall i: nat :: i < NUM_REPLICAS as nat <==> i in combinerState) by {
+      reveal_CombinerStateComplete();
+    }
+    (forall i, j | 0 <= i < NUM_REPLICAS as nat && 0 <= j < NUM_REPLICAS as nat && i != j
+      && combinerState[i].CombinerAppending? && combinerState[j].CombinerAppending?
+    :: (
+      || combinerState[i].cur_idx >= combinerState[j].tail
+      || combinerState[i].tail <= combinerState[j].cur_idx
+    ))
+  }
+
+  predicate {:opaque} RangesNoOverlapCombinerReader(combinerState: map<NodeId, CombinerState>)
+    requires CombinerStateComplete(combinerState)
+  {
+    assert (forall i: nat :: i < NUM_REPLICAS as nat <==> i in combinerState) by {
+      reveal_CombinerStateComplete();
+    }
+    (forall i, j | 0 <= i < NUM_REPLICAS as nat && 0 <= j < NUM_REPLICAS as nat && i != j
+      && combinerState[i].CombinerAppending? && combinerState[j].CombinerReading? && combinerState[j].readerState.ReaderGuard?
+    :: (
+      || combinerState[i].cur_idx > combinerState[j].readerState.cur
+      || combinerState[i].tail <=  combinerState[j].readerState.cur
+    ))
+  }
+
+  predicate RangesNoOverlap(x: M)
     requires Complete(x)
   {
-    assert (forall i: nat :: i < NUM_REPLICAS as nat <==> i in x.combinerState) by {
-      reveal_Complete();
-    }
-
-    && (forall i, j | 0 <= i < NUM_REPLICAS as nat && 0 <= j < NUM_REPLICAS as nat && i != j
-      && x.combinerState[i].CombinerAppending? && x.combinerState[j].CombinerAppending?
-    :: (
-      || x.combinerState[i].cur_idx >= x.combinerState[j].tail
-      || x.combinerState[i].tail <= x.combinerState[j].cur_idx
-    ))
-
-    && (forall i, j | 0 <= i < NUM_REPLICAS as nat && 0 <= j < NUM_REPLICAS as nat && i != j
-      && x.combinerState[i].CombinerAppending? && x.combinerState[j].CombinerReading? && x.combinerState[j].readerState.ReaderGuard?
-    :: (
-      || x.combinerState[i].cur_idx > x.combinerState[j].readerState.cur
-      || x.combinerState[i].tail <=  x.combinerState[j].readerState.cur
-    ))
+    && RangesNoOverlapCombinerReader(x.combinerState)
+    && RangesNoOverlapCombinerCombiner(x.combinerState)
   }
 
   predicate Inv(x: M)
@@ -386,12 +419,9 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && s.M?
     && s.head == Some(0)
     && s.tail == Some(0)
-    && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in s.localTails)
-    && (forall i | i in s.localTails :: s.localTails[i] == 0)
-    && (forall i: nat :: i < NUM_REPLICAS as nat <==> i in s.combinerState)
-    && (forall i | i in s.combinerState :: s.combinerState[i].CombinerIdle?)
-    && (forall i: nat :: i < LOG_SIZE as nat <==> i in s.aliveBits)
-    && (forall i: int | 0 <= i < LOG_SIZE as nat :: s.aliveBits[i] == LogicalToAliveBitAliveWhen(i - LOG_SIZE as nat))
+    && (s.localTails    == map x : nat | x < (NUM_REPLICAS as nat) :: 0 as nat)
+    && (s.combinerState == map x : nat | x < (NUM_REPLICAS as nat) :: CombinerIdle)
+    && (s.aliveBits     == map x : nat | x < LOG_SIZE as nat :: x := LogicalToAliveBitAliveWhen(x - LOG_SIZE as nat))
     && s.contents.Some?
     && (forall i: int :: -(LOG_SIZE as int) <= i < 0 <==> (i in s.contents.value))
   }
@@ -400,10 +430,15 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   // requires Init(x)
   ensures Inv(x)
   {
-    assert Complete(x) by { reveal_Complete(); }
+    assert Complete(x) by {
+      reveal_AliveBitsComplete();
+      reveal_CombinerStateComplete();
+      reveal_LocalTailsComplete();
+      reveal_ContentsComplete();
+    }
     assert PointerOrdering(x);
     assert PointerDifferences(x);
-    assert RangesNoOverlap(x) by { reveal_RangesNoOverlap(); }
+    assert RangesNoOverlap(x) by { reveal_RangesNoOverlapCombinerCombiner(); reveal_RangesNoOverlapCombinerReader();}
     assert AliveBits(x);
     assert BufferContents(x);
     assert CombinerStateValid(x);
@@ -596,7 +631,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && nodeId in m.localTails
   }
 
-  predicate CombierIsIdle(m: M, nodeId: NodeId)
+  predicate CombinerIsIdle(m: M, nodeId: NodeId)
     requires m.M?
   {
     && nodeId in m.combinerState
@@ -621,6 +656,15 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     requires CombinerKnown(m, nodeId)
   {
     && m.combinerState[nodeId].CombinerAdvancingHead?
+    && m.combinerState[nodeId].idx < NUM_REPLICAS as nat
+  }
+
+  predicate CombinerIsAdvancingHeadDone(m: M, nodeId: NodeId)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId].CombinerAdvancingHead?
+    && m.combinerState[nodeId].idx == NUM_REPLICAS as nat
   }
 
   predicate CombinerIsAdvancingHeadAt(m: M, nodeId: NodeId, idx: nat, min_tail: nat)
@@ -665,6 +709,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     && m.combinerState[nodeId].CombinerReading?
     && m.combinerState[nodeId].readerState.ReaderStarting?
+
   }
   predicate CombinerIsReaderStartingAt(m: M, nodeId: NodeId, start: nat)
     requires m.M?
@@ -725,10 +770,18 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && I(dot(m, p)) == I(dot(m', p))
     {
       assert Inv(dot(m', p)) by {
-        assert Complete(dot(m', p)) && RangesNoOverlap(dot(m', p)) by {
-          assume false; // TODO: reveal_Complete(); reveal_RangesNoOverlap();
-                        // this reveals quantifiers that cause a timeout
-                        // it likely needs more granular trigger management
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
+        assert RangesNoOverlap(dot(m', p)) by {
+          assert dot(m', p).combinerState
+                  == dot(m, p).combinerState[combinerNodeId := CombinerAdvancingHead(1, m.localTails[0])];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
         }
       }
       assert I(dot(m, p)) == I(dot(m', p));
@@ -752,7 +805,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerAdvancingHead(combinerBefore.idx + 1, new_min_tail)])
   }
 
-  lemma StepAdvanceHead_is_transition(m: M, m': M, combinerNodeId: nat)
+  lemma {:induction true }StepAdvanceHead_is_transition(m: M, m': M, combinerNodeId: nat)
   requires StepAdvanceHead(m, m', combinerNodeId)
   ensures transition(m, m')
   {
@@ -761,14 +814,25 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && I(dot(m, p)) == I(dot(m', p))
     {
       assert Inv(dot(m', p)) by {
-        assert (
-          && Complete(dot(m', p))
-          && RangesNoOverlap(dot(m', p))
-          && CombinerStateValid(dot(m', p))
-          ) by {
-          assume false; // TODO: reveal_Complete(); reveal_RangesNoOverlap();
-                        // this reveals quantifiers that cause a timeout
-                        // it likely needs more granular trigger management
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
+
+
+        var combinerBefore := dot(m, p).combinerState[combinerNodeId];
+         var new_min_tail :=  if combinerBefore.min_tail < dot(m, p).localTails[combinerBefore.idx]
+                              then combinerBefore.min_tail
+                              else dot(m, p).localTails[combinerBefore.idx];
+        assert dot(m', p).combinerState
+                  == dot(m, p).combinerState[combinerNodeId := CombinerAdvancingHead(combinerBefore.idx + 1, new_min_tail)];
+
+        assert RangesNoOverlap(dot(m', p)) by {
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
         }
       }
       assert I(dot(m, p)) == I(dot(m', p));
@@ -781,9 +845,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   {
     && m.M?
     && CombinerKnown(m, combinerNodeId)
-    && CombinerIsAdvancingHead(m, combinerNodeId)
+    && CombinerIsAdvancingHeadDone(m, combinerNodeId)
     && var combinerBefore := m.combinerState[combinerNodeId];
-    && combinerBefore.idx == (NUM_REPLICAS as nat)
 
     && m.head.Some? // need this
 
@@ -802,15 +865,18 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && I(dot(m, p)) == I(dot(m', p))
     {
       assert Inv(dot(m', p)) by {
-        assert (
-          && Complete(dot(m', p))
-          && PointerOrdering(dot(m', p))
-          && PointerDifferences(dot(m', p))
-          && RangesNoOverlap(dot(m', p))
-        ) by {
-          assume false; // TODO: reveal_Complete(); reveal_RangesNoOverlap();
-                        // this reveals quantifiers that cause a timeout
-                        // it likely needs more granular trigger management
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
+
+        assert  RangesNoOverlap(dot(m', p)) by {
+          assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
         }
       }
       assert I(dot(m, p)) == I(dot(m', p));
@@ -843,13 +909,19 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     {
 
       assert Inv(dot(m', p)) by {
-        assert (
-          && Complete(dot(m', p))
-          && RangesNoOverlap(dot(m', p))
-        ) by {
-          assume false; // TODO: reveal_Complete(); reveal_RangesNoOverlap();
-                        // this reveals quantifiers that cause a timeout
-                        // it likely needs more granular trigger management
+
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
+
+        assert  RangesNoOverlap(dot(m', p)) by {
+          assert dot(m', p).combinerState  == dot(m, p).combinerState[combinerNodeId := CombinerAdvancingTail(dot(m, p).head.value)];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
         }
       }
       assert I(dot(m, p)) == I(dot(m', p));
@@ -918,37 +990,38 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
         map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
         if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k])
     {
-      //
-
-      // var x := dot(m', p);
-      // assert forall i : int :: (x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value) ==> i in x.contents by {
-      //   reveal_Complete();
-      // }
 
       // we need to make sure, that we don't overrunt the local tails
       assert Inv(dot(m', p)) by {
-        assert (
-          && Complete(dot(m', p))
-          && PointerOrdering(dot(m', p))
-          && PointerDifferences(dot(m', p))
-          && RangesNoOverlap(dot(m', p))
-          && CombinerStateValid(dot(m', p))
-          && BufferContents(dot(m', p))
-          && ReaderStateValid(dot(m', p))
-        ) by {
-          reveal_Complete();
-          reveal_RangesNoOverlap();
-          assume false; // TODO: reveal_Complete(); reveal_RangesNoOverlap();
-          //               // this reveals quantifiers that cause a timeout
-          //               // it likely needs more granular trigger management
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+          reveal_ContentsComplete(); // requires some more thoughts
+          assume false;
+        }
+
+        assert PointerDifferences(dot(m', p)) by {
+          assume false;
+        }
+
+        assert RangesNoOverlap(dot(m', p)) by {
+          assume false;
+        }
+
+        assert CombinerStateValid(dot(m', p)) by {
+          assume false;
+        }
+
+        assert ReaderStateValid(dot(m', p)) by {
+          assume false;
         }
       }
+
       assert I(dot(m', p)).Keys !! withdrawn.Keys;
 
       forall i : int
         ensures i in I(dot(m, p)).Keys <==> i in (I(dot(m', p)).Keys + withdrawn.Keys)
       {
-        reveal_Complete();
+
       }
 
       assert  I(dot(m, p)) == (
@@ -1005,40 +1078,42 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && I(dot(m', p)) == I(dot(m, p))[key := deposited]
     {
       assert Inv(dot(m', p)) by {
-        assert (
-          && Complete(dot(m', p))
-          && CombinerStateValid(dot(m', p))
-          && CombinerStateValid(dot(m', p))
-          ) by {
-          assume false; // TODO: reveal_Complete(); reveal_RangesNoOverlap();
-                        // this reveals quantifiers that cause a timeout
-                        // it likely needs more granular trigger management
+
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+          reveal_AliveBitsComplete();
+          reveal_ContentsComplete();
+        }
+        var combinerBefore := dot(m, p).combinerState[combinerNodeId];
+        assert RangesNoOverlap(dot(m', p)) by {
+
+          assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := combinerBefore.(cur_idx := key + 1)];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
+        }
+
+        assert AliveBits(dot(m', p)) by {
+          assume false;
+        }
+
+        assert BufferContents(dot(m', p)) by {
+          assume false;
+        }
+
+        assert CombinerStateValid(dot(m', p)) by {
+          assume false;
+        }
+
+        assert ReaderStateValid(dot(m', p)) by {
+          assume false;
         }
       }
 
-      assert I(dot(m, p)) == I(dot(m', p));
-
-      // assert Complete(dot(m', p)) by {
-      //   reveal_Complete();
-      // }
-
-      // assert CombinerStateValid(dot(m', p)) by {
-      //   assert forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending? ::
-      //    (|| dot(m', p).combinerState[n].tail <= key
-      //     || dot(m', p).combinerState[n].cur_idx > key);
-
-      //   assert forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending? ::
-      //     (forall i | dot(m', p).combinerState[n].cur_idx <= i < dot(m', p).combinerState[n].tail ::
-      //       (&& EntryIsAlive(dot(m', p).aliveBits, i) == EntryIsAlive(dot(m, p).aliveBits, i)
-      //       && !EntryIsAlive(dot(m', p).aliveBits, i))
-      //     );
-      // }
-
-      // assert AliveBits(dot(m', p));
-      // assert BufferContents(dot(m', p));
-
       assert key !in I(dot(m, p));
-
       assert I(dot(m', p)) == I(dot(m, p))[key := deposited];
     }
 
@@ -1072,9 +1147,18 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && I(dot(m, p)) == I(dot(m', p))
     {
       assert Inv(dot(m', p)) by {
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
         assert RangesNoOverlap(dot(m', p)) by {
-          // TODO: reveal_RangesNoOverlap(); this reveals quantifiers that cause a timeout
-          //       it likely needs more granular trigger management
+          assert dot(m', p).combinerState
+                  == dot(m, p).combinerState[combinerNodeId := CombinerReading(ReaderStarting(m.localTails[combinerNodeId]))];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
         }
       }
       assert I(dot(m, p)) == I(dot(m', p));
@@ -1089,7 +1173,6 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && CombinerKnown(m, combinerNodeId)
     && CombinerIsReaderStarting(m, combinerNodeId)
     && m.tail.Some?
-    && var combinerBefore := m.combinerState[combinerNodeId];
     && var readerBefore := m.combinerState[combinerNodeId].readerState;
 
     && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerReading(
@@ -1106,9 +1189,25 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && I(dot(m, p)) == I(dot(m', p))
     {
       assert Inv(dot(m', p)) by {
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
         assert RangesNoOverlap(dot(m', p)) by {
-          // TODO: reveal_RangesNoOverlap(); this reveals quantifiers that cause a timeout
-          //       it likely needs more granular trigger management
+          var readerBefore := m.combinerState[combinerNodeId].readerState;
+          assert dot(m', p).combinerState
+                   == dot(m, p).combinerState[combinerNodeId := CombinerReading(ReaderRange(readerBefore.start, m.tail.value, readerBefore.start))];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
+        }
+        assert ReaderStateValid(dot(m', p)) by {
+          assert combinerNodeId in dot(m, p).localTails by {
+            reveal_LocalTailsComplete();
+            reveal_CombinerStateComplete();
+          }
         }
       }
       assert I(dot(m, p)) == I(dot(m', p));
@@ -1122,7 +1221,6 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m.M?
     && CombinerKnown(m, combinerNodeId)
     && CombinerIsReaderRange(m, combinerNodeId)
-    && var combinerBefore := m.combinerState[combinerNodeId];
     && var readerBefore := m.combinerState[combinerNodeId].readerState;
 
     && m.contents.Some?
@@ -1152,9 +1250,20 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && I(dot(m, p)) == I(dot(m', p))
     {
       assert Inv(dot(m', p)) by {
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
         assert RangesNoOverlap(dot(m', p)) by {
-          // TODO: reveal_RangesNoOverlap(); this reveals quantifiers that cause a timeout
-          //       it likely needs more granular trigger management
+          var readerBefore := m.combinerState[combinerNodeId].readerState;
+          assert dot(m', p).combinerState
+                    == dot(m, p).combinerState[combinerNodeId := CombinerReading(ReaderGuard(readerBefore.start, readerBefore.end, i, m.contents.value[i]))];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+            assume false; // TODO: proof
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
         }
       }
       assert I(dot(m, p)) == I(dot(m', p));
@@ -1168,7 +1277,6 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && m.M?
     && CombinerKnown(m, combinerNodeId)
     && CombinerIsReaderGuard(m, combinerNodeId)
-    && var combinerBefore := m.combinerState[combinerNodeId];
     && var readerBefore := m.combinerState[combinerNodeId].readerState;
 
     && m' == m.(
@@ -1186,9 +1294,19 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
       && I(dot(m, p)) == I(dot(m', p))
     {
       assert Inv(dot(m', p)) by {
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
         assert RangesNoOverlap(dot(m', p)) by {
-          // TODO: reveal_RangesNoOverlap(); this reveals quantifiers that cause a timeout
-          //       it likely needs more granular trigger management
+          var readerBefore := m.combinerState[combinerNodeId].readerState;
+          assert dot(m', p).combinerState
+                    == dot(m, p).combinerState[combinerNodeId := CombinerReading(ReaderRange(readerBefore.start, readerBefore.end, readerBefore.cur + 1))];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
         }
       }
       assert I(dot(m, p)) == I(dot(m', p));
@@ -1214,6 +1332,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     )
   }
 
+  // takes about 20 seconds still
   lemma ReaderDoFinish_is_transition(m: M, m': M, combinerNodeId: nat)
   requires ReaderDoFinish(m, m', combinerNodeId)
   ensures transition(m, m')
@@ -1222,22 +1341,55 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     ensures Inv(dot(m', p))
       && I(dot(m, p)) == I(dot(m', p))
     {
-      if MinLocalTail(dot(m, p).localTails) == MinLocalTail(dot(m', p).localTails) {
-        assert Inv(dot(m', p));
-        assert I(dot(m, p)) == I(dot(m', p));
-      } else {
-        assert MinLocalTail(dot(m, p).localTails) < MinLocalTail(dot(m', p).localTails);
-        var old_mintails := MinLocalTail(dot(m, p).localTails);
-        var new_mintails := MinLocalTail(dot(m', p).localTails);
+      assert Inv(dot(m', p)) by {
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+          reveal_LocalTailsComplete();
+        }
 
-        // everything between old_mintails and new_mintails had to be alive, otherwise we
-        // couldn't have processed it. Now, transform this into the !Alive for the new mintail
-        assert forall i | old_mintails <= i < new_mintails :: EntryIsAlive(dot(m', p).aliveBits, i);
-        EntryIsAliveWrapAround(dot(m', p).aliveBits, old_mintails , new_mintails );
-        EntryIsAliveWrapAroundReformat(dot(m', p).aliveBits, old_mintails , new_mintails );
 
-        assert Inv(dot(m', p));
-        assert I(dot(m, p)) == I(dot(m', p));
+      assert dot(m', p).combinerState
+                    == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
+        assert RangesNoOverlap(dot(m', p)) by {
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+            assume false;
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
+        }
+
+        assert CombinerStateValid(dot(m', p)) by {
+          assert forall n | n in dot(m', p).combinerState ::
+             n in dot(m', p).localTails by { reveal_LocalTailsComplete(); reveal_CombinerStateComplete(); }
+        }
+
+        assert ReaderStateValid(dot(m', p)) by {
+          assert forall n | n in dot(m', p).combinerState ::
+           n in dot(m', p).localTails by { reveal_LocalTailsComplete(); reveal_CombinerStateComplete(); }
+        }
+
+        if MinLocalTail(dot(m, p).localTails) == MinLocalTail(dot(m', p).localTails) {
+          assert  Inv(dot(m', p)) ;
+        } else {
+          assert MinLocalTail(dot(m, p).localTails) < MinLocalTail(dot(m', p).localTails);
+          assert AliveBits(dot(m', p)) by {
+            var old_mintails := MinLocalTail(dot(m, p).localTails);
+            var new_mintails := MinLocalTail(dot(m', p).localTails);
+
+            assert forall i: nat :: i < LOG_SIZE as nat <==> i in dot(m', p).aliveBits by {
+              reveal_AliveBitsComplete();
+            }
+
+            // everything between old_mintails and new_mintails had to be alive, otherwise we
+            // couldn't have processed it. Now, transform this into the !Alive for the new mintail
+            assert forall i | old_mintails <= i < new_mintails :: EntryIsAlive(dot(m', p).aliveBits, i);
+
+            EntryIsAliveWrapAround(dot(m', p).aliveBits, old_mintails , new_mintails );
+            EntryIsAliveWrapAroundReformat(dot(m', p).aliveBits, old_mintails , new_mintails );
+          }
+        }
       }
     }
   }
