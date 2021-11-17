@@ -304,6 +304,26 @@ module MultiRwTokens(rw: MultiRw) {
     retrieved_value := WrapT.unwrap(b);
   }
 
+  glinear method withdraw_many_3_3(
+      glinear token1: Token,
+      glinear token2: Token,
+      glinear token3: Token,
+      ghost expected_value1: rw.M,
+      ghost expected_value2: rw.M,
+      ghost expected_value3: rw.M,
+      ghost expected_retrieved_values: map<rw.Key, rw.StoredType>)
+  returns (glinear token1': Token, glinear token2': Token, glinear token3': Token,
+      glinear retrieved_values: map<rw.Key, rw.StoredType>)
+  requires token1.loc == token2.loc == token3.loc
+  requires rw.withdraw_many(
+      rw.dot(rw.dot(token1.val, token2.val), token3.val),
+      rw.dot(rw.dot(expected_value1, expected_value2), expected_value3),
+      expected_retrieved_values)
+  ensures token1' == T.Token(token1.loc, expected_value1)
+  ensures token2' == T.Token(token1.loc, expected_value2)
+  ensures token3' == T.Token(token1.loc, expected_value3)
+  ensures retrieved_values == expected_retrieved_values
+
   glinear method withdraw_many(
       glinear token: Token,
       ghost expected_value: rw.M,
@@ -368,6 +388,27 @@ module MultiRwTokens(rw: MultiRw) {
   ensures token1' == T.Token(token1.loc, expected_value1)
   {
     token1' := T.transition_update(token2, token1, expected_value1);
+  }
+
+  glinear method deposit_2_2(
+      glinear token1: Token,
+      glinear token2: Token,
+      ghost key: rw.Key,
+      glinear stored_value: rw.StoredType,
+      ghost expected_value1: rw.M,
+      ghost expected_value2: rw.M)
+  returns (glinear token1': Token, glinear token2': Token)
+  requires token1.loc == token2.loc
+  requires rw.deposit(
+    rw.dot(token1.val, token2.val),
+    rw.dot(expected_value1, expected_value2),
+    key, stored_value)
+  ensures token1' == T.Token(token1.loc, expected_value1)
+  ensures token2' == T.Token(token1.loc, expected_value2)
+  {
+    glinear var x := T.join(token1, token2);
+    glinear var y := deposit(x, key, stored_value, rw.dot(expected_value1, expected_value2));
+    token1', token2' := T.split(y, expected_value1, expected_value2);
   }
 
   glinear method deposit_3_3(
