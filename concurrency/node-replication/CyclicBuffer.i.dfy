@@ -201,7 +201,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     requires PointerOrdering(x)
   {
     // the span of the entries between local tails and tail should never be larger than the buffer size
-    && (forall i | i in x.localTails ::  x.tail.value - x.localTails[i] < LOG_SIZE as nat)
+    && (forall i | i in x.localTails ::  x.tail.value - x.localTails[i] <= LOG_SIZE as nat)
   }
 
   predicate AliveBits(x: M)
@@ -550,7 +550,7 @@ predicate CombinerStateValid(x: M)
   function SetOfFreeBufferEntries(min_ltails: int, logical_tail: int) : (r : set<int>)
     requires min_ltails <= logical_tail
     requires logical_tail - (LOG_SIZE as int) <= min_ltails <= logical_tail
-    requires ((logical_tail - min_ltails) < LOG_SIZE as nat)
+    requires ((logical_tail - min_ltails) <= LOG_SIZE as nat)
     ensures forall i :: logical_tail <= i < min_ltails + (LOG_SIZE as nat) <==> i in r
   {
     SetOfBufferEntries(min_ltails) - SetOfActiveBufferEntries(min_ltails, logical_tail)
@@ -560,7 +560,7 @@ predicate CombinerStateValid(x: M)
   function SetOfActiveBufferEntries(min_ltails: int, logical_tail: int) : (r : set<int>)
     requires min_ltails <= logical_tail
     requires logical_tail - (LOG_SIZE as int) <= min_ltails <= logical_tail
-    requires ((logical_tail - min_ltails) < LOG_SIZE as nat)
+    requires ((logical_tail - min_ltails) <= LOG_SIZE as nat)
     ensures forall i :: min_ltails <= i < logical_tail <==> i in r
   {
     set x : int | min_ltails <= x < logical_tail :: x
@@ -983,6 +983,7 @@ predicate CombinerStateValid(x: M)
         map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
         if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k])
     {
+      var combinerBefore := dot(m, p).combinerState[combinerNodeId];
 
       // we need to make sure, that we don't overrunt the local tails
       assert Inv(dot(m', p)) by {
@@ -993,7 +994,11 @@ predicate CombinerStateValid(x: M)
         }
 
         assert PointerDifferences(dot(m', p)) by {
-          assume false;
+          reveal_LocalTailsComplete();
+          assert combinerBefore.observed_head <= dot(m, p).tail.value <= dot(m', p).tail.value;
+          assert dot(m, p).tail.value <= dot(m', p).tail.value <= combinerBefore.observed_head + LOG_SIZE as int;
+          assert dot(m', p).tail.value - combinerBefore.observed_head <= LOG_SIZE as nat;
+          assert combinerBefore.observed_head <= MinLocalTail(dot(m', p).localTails);
         }
 
         assert RangesNoOverlap(dot(m', p)) by {
@@ -1011,13 +1016,14 @@ predicate CombinerStateValid(x: M)
 
       assert I(dot(m', p)).Keys !! withdrawn.Keys;
 
-      forall i : int
-        ensures i in I(dot(m, p)).Keys <==> i in (I(dot(m', p)).Keys + withdrawn.Keys)
-      {
+      // TODO needed
+      // forall i : int
+      //   ensures i in I(dot(m, p)).Keys <==> i in (I(dot(m', p)).Keys + withdrawn.Keys)
+      // {
 
-      }
+      // }
 
-      assert  I(dot(m, p)) == (
+      assume I(dot(m, p)) == (
         map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
         if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k]);
     }
