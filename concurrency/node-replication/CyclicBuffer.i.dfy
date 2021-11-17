@@ -631,13 +631,6 @@ predicate CombinerStateValid(x: M)
     && nodeId in m.localTails
   }
 
-  predicate CombinerIsIdle(m: M, nodeId: NodeId)
-    requires m.M?
-  {
-    && nodeId in m.combinerState
-    && m.combinerState[nodeId] == CombinerIdle
-  }
-
   predicate CombinerKnown(m: M, nodeId: NodeId)
     requires m.M?
   {
