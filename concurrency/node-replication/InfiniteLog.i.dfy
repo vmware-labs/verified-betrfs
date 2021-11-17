@@ -1442,6 +1442,9 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   lemma InitImpliesInv(s: M)
   //requires Init(s)
   ensures Inv(s)
+  {
+    assert 0 in s.replicas;
+  }
 
   lemma InternalPreservesInv(shard: M, shard': M, rest: M)
   //requires Inv(dot(shard, rest))
@@ -1605,6 +1608,10 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   lemma exists_inv_state()
   returns (s: M)
   ensures Inv(s)
+  {
+    s := Init();
+    InitImpliesInv(s);
+  }
 
   datatype Step =
     | GoToCombinerReady_Step(ghost nodeId: nat)
@@ -1644,16 +1651,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     exists step :: NextStep(m, m', step)
   }
 
-
   /// invariance proofs
-  lemma Init_Implies_Inv(m: M)
-  requires m == Init()
-  ensures Inv(m)
-  {
-    assert 0 in m.replicas;
-    //reveal_LogRangeMatchesQueue();
-    //reveal_LogRangeNoNodeId();
-  }
 
   lemma TransitionReadonlyReadCtail_PreservesInv(m: M, m': M, rid: RequestId)
     requires Inv(m)

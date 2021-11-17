@@ -228,6 +228,12 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
   returns (ghost rest1: ssm.M)
   ensures token1 == old_token1
   ensures ssm.Inv(ssm.dot(token1.val, rest1))
+  {
+    gshared var u := Tokens.get_unit_shared(token1.loc);
+    ssm.commutative(u.val, token1.val);
+    ssm.dot_unit(token1.val);
+    rest1 := obtain_invariant_1_1(u, inout token1);
+  }
 
   glinear method obtain_invariant_1_1(
       gshared s_token1: Token,
@@ -236,6 +242,13 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
   requires s_token1.loc == old_token2.loc
   ensures token2 == old_token2
   ensures ssm.Inv(ssm.dot(ssm.dot(s_token1.val, token2.val), rest1))
+  {
+    Tokens.is_valid(s_token1, inout token2);
+
+    rest1 :| ssm.Inv(ssm.dot(
+        ssm.dot(s_token1.val, token2.val),
+        rest1));
+  }
 
   glinear method obtain_invariant_1_2(
       gshared s_token1: Token,
@@ -246,6 +259,11 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
   ensures token2 == old_token2
   ensures token3 == old_token3
   ensures ssm.Inv(ssm.dot(ssm.dot(s_token1.val, ssm.dot(token2.val, token3.val)), rest1))
+  {
+    glinear var t := Tokens.join(token2, token3);
+    rest1 := obtain_invariant_1_1(s_token1, inout t);
+    token2, token3 := Tokens.split(t, token2.val, token3.val);
+  }
 
   lemma transition_of_next(a: ssm.M, b: ssm.M)
   requires ssm.Internal(a, b)
@@ -325,14 +343,13 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
   ensures token1' == Tokens.Token(token1.loc, expected_value1)
   ensures token2' == Tokens.Token(token1.loc, expected_value2)
   ensures token3' == Tokens.Token(token1.loc, expected_value3)
-  /*
   {
     glinear var x := Tokens.join(token1, token2);
+    x := Tokens.join(x, token3);
     glinear var y := transition_1_1(x,  
-        ssm.dot(expected_value1, expected_value2));
-    token1', token2' := Tokens.split(y, expected_value1, expected_value2);
+        ssm.dot(ssm.dot(expected_value1, expected_value2), expected_value3));
+    token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
   }
-  */
 
   glinear method {:extern} split3(glinear sum: Token,
       ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M)
@@ -401,10 +418,17 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
   glinear method split5(glinear sum: Token,
       ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M, ghost d: pcm.M, ghost e: pcm.M)
   returns (glinear a': Token, glinear b': Token, glinear c': Token, glinear d': Token, glinear e': Token)
-  requires sum.val == pcm.dot(pcm.dot(pcm.dot(pcm.dot(a, b), c), d), e)
+  requires sum.val == ssm.dot(ssm.dot(ssm.dot(ssm.dot(a, b), c), d), e)
   ensures a' == Tokens.Token(sum.loc, a)
   ensures b' == Tokens.Token(sum.loc, b)
   ensures c' == Tokens.Token(sum.loc, c)
   ensures d' == Tokens.Token(sum.loc, d)
   ensures e' == Tokens.Token(sum.loc, e)
+  {
+    glinear var x;
+    x, e' := Tokens.split(sum, ssm.dot(ssm.dot(ssm.dot(a, b), c), d), e);
+    x, d' := Tokens.split(x, ssm.dot(ssm.dot(a, b), c), d);
+    x, c' := Tokens.split(x, ssm.dot(a, b), c);
+    a', b' := Tokens.split(x, a, b);
+  }
 }
