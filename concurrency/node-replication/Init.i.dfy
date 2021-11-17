@@ -36,7 +36,7 @@ module Init(nrifc: NRIfc) {
       && 0 <= nodeId as int < NUM_REPLICAS as int
       && ghost_replica == Replica(nodeId as int, nrifc.init_state())
       && combiner == CombinerToken(nodeId as int, CombinerReady)
-      && cb == CBCombinerToken(nodeId as int, CBCombinerIdle)
+      && cb == CBCombinerToken(nodeId as int, CB.CombinerIdle)
     }
   }
 
@@ -170,8 +170,8 @@ module Init(nrifc: NRIfc) {
   }
 
   method make_buffer_cells()
-  returns (linear cells: lseq<Cell<ConcreteLogEntry>>,
-      glinear cell_contents: map<int, StoredType>)
+  returns (linear cells: lseq<Cell<CB.ConcreteLogEntry>>,
+      glinear cell_contents: map<int, CB.StoredType>)
   ensures |cells| == LOG_SIZE as int
   ensures lseq_full(cells)
   ensures forall i | -(LOG_SIZE as int) <= i < 0 :: i in cell_contents
@@ -196,10 +196,10 @@ module Init(nrifc: NRIfc) {
       var op;
       linear var cell;
       glinear var cell_cont;
-      cell, cell_cont := new_cell(ConcreteLogEntry(op, 0));
+      cell, cell_cont := new_cell(CB.ConcreteLogEntry(op, 0));
       cells := lseq_give(cells, j, cell);
 
-      glinear var st := StoredType(cell_cont, glNone);
+      glinear var st := CB.StoredType(cell_cont, glNone);
       cell_contents := glmap_insert(cell_contents, -(LOG_SIZE as int) + j as int, st);
 
       j := j + 1;
@@ -207,7 +207,7 @@ module Init(nrifc: NRIfc) {
   }
 
   method make_buffer(
-      linear cells: lseq<Cell<ConcreteLogEntry>>, 
+      linear cells: lseq<Cell<CB.ConcreteLogEntry>>, 
       glinear alive: map<nat, CBAliveBit>)
   returns (linear buffer: lseq<BufferEntry>)
   requires |cells| == LOG_SIZE as int
@@ -337,7 +337,7 @@ module Init(nrifc: NRIfc) {
       && i in readers
       && replicas[i] == Replica(i, nrifc.init_state())
       && combiners[i] == CombinerToken(i, CombinerReady)
-      && readers[i] == CBCombinerToken(i, CBCombinerIdle)
+      && readers[i] == CBCombinerToken(i, CB.CombinerIdle)
   ensures |nodeCreationTokens| == NUM_REPLICAS as int
   ensures forall i | 0 <= i < NUM_REPLICAS as int
       :: i in nodeCreationTokens && nodeCreationTokens[i].WF()
@@ -420,7 +420,7 @@ module Init(nrifc: NRIfc) {
 
     linear var buffer: lseq<BufferEntry> := make_buffer(buffer_cells, alive);
 
-    glinear var bufferContents: GhostAtomic<Contents> := new_ghost_atomic(
+    glinear var bufferContents: GhostAtomic<CBContents> := new_ghost_atomic(
         cbContents,
         (g) => ContentsInv(buffer, g),
         1);
