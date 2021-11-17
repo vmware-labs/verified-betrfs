@@ -898,6 +898,13 @@ module Impl(nrifc: NRIfc) {
     ticket' := perform_ReadonlyDone(ticket, ghost_replica, combinerState);
   }
 
+  method panic_forever()
+  decreases *
+  ensures false
+  {
+    while true decreases * { }
+  }
+
   method append(shared nr: NR, shared node: Node,
       shared ops: seq<nrifc.UpdateOp>,
       num_ops: uint64,
@@ -990,6 +997,12 @@ module Impl(nrifc: NRIfc) {
         cb' := init_advance_tail_state(cb', h);
         ghost_release h;
       }
+
+      if head >= 0xffff_ffff_0000_0000 {
+        print "panicing and failing: head is too big\n";
+        panic_forever();
+      }
+
       if tail > head + (LOG_SIZE - GC_FROM_HEAD) {  // TODO: bounded int error
         if waitgc % WARN_THRESHOLD == 0 {
           waitgc := 0;
@@ -1004,8 +1017,6 @@ module Impl(nrifc: NRIfc) {
           exec(nr, node, actual_replica', responses', ghost_replica',
               requestIds, updates', combinerState', cb');
       } else {
-
-        assume tail as int + num_ops as int < 0x1_0000_0000_0000_0000; // TODO
         var advance: bool := (tail + num_ops > head + (LOG_SIZE - GC_FROM_HEAD));
 
         glinear var log_entries;
