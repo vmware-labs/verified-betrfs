@@ -1346,7 +1346,6 @@ predicate CombinerStateValid(x: M)
         assert RangesNoOverlap(dot(m', p)) by {
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
             reveal_RangesNoOverlapCombinerReader();
-            assume false;
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
             reveal_RangesNoOverlapCombinerCombiner();
