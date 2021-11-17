@@ -347,7 +347,57 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   ensures forall i | 0 <= i < |requestIds| ::
       i in logs'
         && logs'[i] == Log(gtail + i, ops[i], nodeId)
+  {
+    glinear var raw' := raw;
+    logs' := glmap_empty();
+    ghost var j := 0;
 
+    forall i | gtail <= i < gtail + |requestIds|
+    ensures i in raw.val.log
+    ensures i in raw'.val.log
+    ensures raw.val.log[i] == raw.val.log[i]
+    {
+      ConstructNewLogEntries_Get(requestIds, nodeId, gtail, localUpdates, 
+          i - gtail);
+    }
+
+    while j < |requestIds|
+    invariant 0 <= j <= |requestIds|
+    invariant raw'.val.M?
+    invariant raw'.loc == loc()
+    invariant |ops| == |requestIds|
+    invariant forall i | 0 <= i < |requestIds| ::
+        requestIds[i] in localUpdates && localUpdates[requestIds[i]] == UpdateInit(ops[i])
+    invariant forall i | gtail + j <= i < gtail + |requestIds| ::
+        && i in raw.val.log
+        && i in raw'.val.log
+        && raw'.val.log[i] == raw.val.log[i]
+
+    invariant forall i | 0 <= i < j ::
+        i in logs'
+          && logs'[i] == Log(gtail + i, ops[i], nodeId)
+    {
+      var j' := gtail + j;
+      var expected_log := Log(j', ops[j], nodeId);
+      var x := expected_log.defn().val;
+      var y := raw'.val.(log := raw'.val.log - {j'});
+
+      ConstructNewLogEntries_Get(requestIds, nodeId, gtail, localUpdates, j);
+      assert j' in raw'.val.log;
+      assert raw'.val.log[j'].op == ops[j];
+      assert raw'.val.log[j'].node_id == nodeId;
+      assert raw'.val.log[j'] == LogEntry(ops[j], nodeId);
+
+      glinear var xl;
+      raw', xl := ILT.Tokens.split(raw', y, x);
+
+      glinear var upd := Log_fold(expected_log, xl);
+      logs' := glmap_insert(logs', j, upd);
+
+      j := j + 1;
+    }
+    dispose_anything(raw');
+  }
 
   glinear method perform_AdvanceTail(
       glinear tail: GlobalTail,
