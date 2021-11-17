@@ -56,7 +56,7 @@ def run(bench, n_replicas, n_threads, reads_pct, run_id_num):
     subprocess.run(cmd, shell=True, check=False)
 
 def run_all():
-    subprocess.run('rm data*.json', shell=True, check=False)
+    subprocess.run('rm data*.json *throughput*.pdf *throughput*.png', shell=True, check=False)
 
     try:
         os.mkdir('runs')
@@ -86,6 +86,6 @@ def run_all():
 
                 combine_data_files()
                 subprocess.run('./plot.py', shell=True, check=False)
-                subprocess.run('cp *.json skylake*.{png,pdf} runs/%s' % run_id, shell=True, check=False)
+                subprocess.run('cp *.json *.png *.pdf runs/%s' % run_id, shell=True, check=False)
 
 if __name__ == '__main__': run_all()

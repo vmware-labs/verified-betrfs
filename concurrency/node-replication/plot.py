@@ -86,6 +86,8 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
         df = df.loc[df['bench_name'].isin(['dafny_nr', 'rust_nr'])]
         bench_cat = pd.api.types.CategoricalDtype(categories=['dafny_nr', 'rust_nr'], ordered=True)
         df['bench_name'] = df['bench_name'].astype(bench_cat)
+        n_replicas_cat = pd.api.types.CategoricalDtype(categories=[1, 2, 4], ordered=True)
+        df['n_replicas'] = df['n_replicas'].astype(n_replicas_cat)
         aest = aes(x='n_threads',
                    y='ops_per_s',
                    color='bench_name',
@@ -96,7 +98,9 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
         linetypes = ['dotted', 'dashed', 'solid']
     replicas_labels = ['1 System-wide Replica', '2 Replicas', '4 Replicas (One per NUMA node)']
 
-    def read_pct_labeller(s):
+    print(df)
+
+    def write_ratio_labeller(s):
         return '%d%% Updates' % int(s)
 
     xskip = int(machine[1]/8)
@@ -131,12 +135,16 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
             'x',
             ],
             labels=labels) +
-        scale_linetype_manual(size=0.2, values=linetypes, labels=replicas_labels) +
+        scale_linetype_manual(linetypes, labels=replicas_labels, size=0.2) +
         geom_point(size=0.1) +
-        geom_line(size=0.2) +
+        #geom_line(size=0.2) +
+        #stat_summary(fun_data='mean_sdl', fun_args={'mult': 1}, geom='errorbar') +
+        stat_summary(fun_ymin=np.min, fun_ymax=np.max, geom='errorbar', size=0.1) +
+        stat_summary(fun_y=np.median, geom='line', size=0.2) +
+        #stat_summary(fun_y=np.median, geom='point') +
         facet_grid(["write_ratio", "."],
                     scales="free_y",
-                    labeller=labeller(rows=read_pct_labeller)) +
+                    labeller=labeller(rows=write_ratio_labeller)) +
         guides(color=guide_legend(nrow=1))
     )
 
@@ -177,6 +185,5 @@ if __name__ == '__main__':
 
     for machine in MACHINES:
         df = pd.read_json('data.json')
-        print(df)
         throughput_vs_cores(machine, df.copy(), 'compare-locks')
         throughput_vs_cores(machine, df.copy(), 'compare-nrs')
