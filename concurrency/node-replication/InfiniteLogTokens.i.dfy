@@ -568,6 +568,8 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     ghost var out_expect := CombinerToken(combiner.nodeId, CombinerReady);
     ghost var out_token_expect := CombinerToken_unfold(out_expect);
 
+    ghost var rest := ILT.obtain_invariant_1_1(s_token, inout a_token);
+
     assert IL.UpdateCompletedNoChange(
         IL.dot(s_token.val, a_token.val),
         IL.dot(s_token.val, out_token_expect.val),
