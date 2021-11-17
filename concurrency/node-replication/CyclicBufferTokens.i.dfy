@@ -193,6 +193,12 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     combiner' := CBCombinerToken_fold(out_expect, out_token);
   }
 
+  glinear method abandon_advance_head_state(glinear combiner: CBCombinerToken)
+  returns (glinear combiner': CBCombinerToken)
+  requires combiner.rs.CombinerAdvancingHead?
+  ensures combiner'.nodeId == combiner.nodeId
+  ensures combiner'.rs == CB.CombinerIdle
+
   glinear method finish_advance_head_state(glinear combiner: CBCombinerToken, glinear head: CBHead)
   returns (glinear combiner': CBCombinerToken, glinear head': CBHead)
   requires combiner.rs.CombinerAdvancingHead?
@@ -247,6 +253,12 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   ghost method XXX_TODO_invent<A>() returns (a: A)
   glinear method XXX_TODO_invent_glinear<A>() returns (glinear a: A)
 
+  glinear method abandon_advance_tail(glinear combiner: CBCombinerToken)
+  returns (glinear combiner': CBCombinerToken)
+  requires combiner.rs.CombinerAdvancingTail?
+  ensures combiner'.nodeId == combiner.nodeId
+  ensures combiner'.rs == CB.CombinerIdle
+
   glinear method finish_advance_tail(glinear combiner: CBCombinerToken, glinear tail: CBGlobalTail,
       glinear contents: CBContents, ghost new_tail: nat)
   returns (glinear combiner': CBCombinerToken, glinear tail': CBGlobalTail, glinear contents': CBContents, glinear entries': map<nat, CB.StoredType>)
@@ -276,10 +288,12 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     ghost var withdrawn := map i |
       && tail.tail <= i < new_tail
-      :: contents.contents[i - LOG_SIZE as int];
+      // TODO
+      :: (assume i - LOG_SIZE as int in contents.contents; contents.contents[i - LOG_SIZE as int]);
 
+    assume false; // TODO
     CB.FinishAdvanceTail_is_withdraw_many(
-      CB.dot(c_token.val, t_token.val),
+      CB.dot(CB.dot(c_token.val, t_token.val), contents_token.val),
       CB.dot(CB.dot(out_token_expect_1.val, out_token_expect_2.val), out_token_expect_3.val),
       nodeId, new_tail, withdrawn);
 
@@ -289,7 +303,9 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     contents' := CBContents_fold(out_expect_3, out_token_3);
 
     // TODO entries' keys should be shifted down by LOG_SIZE
+
     entries' := w_entries;
+    assume false;
   }
 
   glinear method append_flip_bit(
@@ -297,10 +313,12 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   returns (glinear combiner': CBCombinerToken, glinear bit': CBAliveBit, glinear contents': CBContents)
   requires combiner.rs.CombinerAppending?
   requires combiner.rs.cur_idx < combiner.rs.tail
-  requires bit.entry == combiner.rs.cur_idx % LOG_SIZE as int
+  requires bit.entry == CB.LogicalToPhysicalIndex(combiner.rs.cur_idx)   // TODO(andrea) is this a problem?
+  requires bit.bit != CB.LogicalToAliveBitAliveWhen(combiner.rs.cur_idx) // TODO(andrea) is this a problem?
+  requires combiner.rs.cur_idx !in contents.contents                     // TODO(andrea) is this a problem?
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == combiner.rs.(cur_idx := combiner.rs.cur_idx + 1)
-  ensures bit' == bit.(bit := ((combiner.rs.cur_idx / LOG_SIZE as int) % 2 == 0))
+  ensures bit' == bit.(bit := CB.LogicalToAliveBitAliveWhen(combiner.rs.cur_idx))
   ensures contents' == contents.(contents := contents.contents[combiner.rs.cur_idx := value])
   {
     glinear var a_token := CBAliveBit_unfold(bit);
@@ -312,7 +330,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost var out_expect_1 := CBCombinerToken(nodeId, combiner.rs.(cur_idx := combiner.rs.cur_idx + 1));
     ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
 
-    ghost var out_expect_2 := bit.(bit := ((combiner.rs.cur_idx / LOG_SIZE as int) % 2 == 0));
+    ghost var out_expect_2 := bit.(bit := CB.LogicalToAliveBitAliveWhen(combiner.rs.cur_idx));
     ghost var out_token_expect_2 := CBAliveBit_unfold(out_expect_2);
 
     ghost var out_expect_3 := contents.(contents := contents.contents[combiner.rs.cur_idx := value]);
@@ -321,8 +339,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost var key := combiner.rs.cur_idx;
 
     CB.AppendFlipBit_is_deposit(
-      CB.dot(c_token.val, a_token.val),
-      CB.dot(out_token_expect_1.val, out_token_expect_2.val),
+      CB.dot(CB.dot(c_token.val, a_token.val), contents_token.val),
+      CB.dot(CB.dot(out_token_expect_1.val, out_token_expect_2.val), out_token_expect_3.val),
       nodeId,
       value);
 

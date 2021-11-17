@@ -32,7 +32,7 @@ module NodeReplica(nrifc: NRIfc) refines ContentsTypeMod {
       && combiner.state == CombinerReady
       && combiner.nodeId == nodeId
       && cb.nodeId == nodeId
-      && cb.rs.CBCombinerIdle?
+      && cb.rs.CombinerIdle?
     }
   }
 
@@ -211,7 +211,7 @@ module Impl(nrifc: NRIfc) {
   }
 
   linear datatype BufferEntry = BufferEntry(
-    linear cell: Cell<ConcreteLogEntry>,
+    linear cell: Cell<CB.ConcreteLogEntry>,
     linear alive: Atomic<bool, CBAliveBit>)
   {
     predicate WF(i: nat)
@@ -221,7 +221,7 @@ module Impl(nrifc: NRIfc) {
     }
   }
 
-  predicate BufferEntryInv(buffer: lseq<BufferEntry>, i: int, t: StoredType)
+  predicate BufferEntryInv(buffer: lseq<BufferEntry>, i: int, t: CB.StoredType)
   requires |buffer| == LOG_SIZE as int
   {
     && t.cellContents.cell == buffer[i % LOG_SIZE as int].cell
@@ -233,7 +233,7 @@ module Impl(nrifc: NRIfc) {
     )
   }
 
-  predicate ContentsInv(buffer: lseq<BufferEntry>, contents: Contents)
+  predicate ContentsInv(buffer: lseq<BufferEntry>, contents: CBContents)
   requires |buffer| == LOG_SIZE as int
   {
     && (forall i | i in contents.contents :: BufferEntryInv(buffer, i, contents.contents[i]))
@@ -246,7 +246,7 @@ module Impl(nrifc: NRIfc) {
     linear node_info: lseq<NodeInfo>, // NodeInfo is padded
 
     linear buffer: lseq<BufferEntry>,
-    glinear bufferContents: GhostAtomic<Contents>
+    glinear bufferContents: GhostAtomic<CBContents>
   )
   {
     predicate WF() {
@@ -923,7 +923,7 @@ module Impl(nrifc: NRIfc) {
   requires forall i | 0 <= i < |requestIds| ::
       i in updates && updates[i] == Update(requestIds[i], UpdateInit(ops[i]))
   requires cb.nodeId == node.nodeId as int
-  requires cb.rs.CBCombinerIdle?
+  requires cb.rs.CombinerIdle?
   requires ghost_replica.state == nrifc.I(actual_replica)
   requires ghost_replica.nodeId == node.nodeId as int
   requires |responses| == MAX_THREADS_PER_REPLICA as int
@@ -956,6 +956,7 @@ module Impl(nrifc: NRIfc) {
     invariant 0 <= iteration as int <= WARN_THRESHOLD as int
     invariant 0 <= waitgc as int <= WARN_THRESHOLD as int
     invariant cb' == cb
+    invariant cb'.rs.CombinerIdle?
     invariant ghost_replica'.state == nrifc.I(actual_replica')
     invariant ghost_replica'.nodeId == node.nodeId as int
     invariant !done ==>
@@ -983,10 +984,9 @@ module Impl(nrifc: NRIfc) {
 
       atomic_block var tail := execute_atomic_load(nr.globalTail.inner) { }
 
-      glinear var advance_tail_state;
       atomic_block var head := execute_atomic_load(nr.head.inner) {
         ghost_acquire h;
-        advance_tail_state := init_advance_tail_state(h);
+        cb' := init_advance_tail_state(cb', h);
         ghost_release h;
       }
       if tail > head + (LOG_SIZE - GC_FROM_HEAD) {  // TODO: bounded int error
@@ -996,7 +996,7 @@ module Impl(nrifc: NRIfc) {
         }
         waitgc := waitgc + 1;
 
-        dispose_anything(advance_tail_state);
+        cb' := abandon_advance_tail(cb');
 
         actual_replica', responses',
             ghost_replica', updates', combinerState', cb' :=
@@ -1009,7 +1009,6 @@ module Impl(nrifc: NRIfc) {
 
         glinear var log_entries;
         glinear var cyclic_buffer_entries;
-        glinear var appendStateOpt;
 
         atomic_block var success := execute_atomic_compare_and_set_weak(
             nr.globalTail.inner, tail, tail + num_ops)
@@ -1020,36 +1019,31 @@ module Impl(nrifc: NRIfc) {
             ghost_acquire contents;
             if success {
               glinear var GlobalTailTokens(globalTail, cbGlobalTail) := globalTailTokens;
-              glinear var appendState;
               globalTail, updates', combinerState', log_entries :=
                 perform_AdvanceTail(globalTail, updates', combinerState', ops[.. num_ops], requestIds, node.nodeId as int);
-              cbGlobalTail, cyclic_buffer_entries, appendState := finish_advance_tail(
-                  advance_tail_state, cbGlobalTail, tail as int + num_ops as int, contents);
-              appendStateOpt := glSome(appendState);
+              cb', cbGlobalTail, contents, cyclic_buffer_entries := finish_advance_tail(
+                  cb', cbGlobalTail, contents, tail as int + num_ops as int);
               globalTailTokens := GlobalTailTokens(globalTail, cbGlobalTail);
             } else {
               // no transition
               log_entries := glmap_empty(); // to satisfy linearity checker
               cyclic_buffer_entries := glmap_empty();
-              appendStateOpt := glNone;
-
-              dispose_anything(advance_tail_state);
             }
+            // TODO(andrea) requires additional ensures on finish_advance_tail
             ghost_release contents;
           }
           ghost_release globalTailTokens;
         }
 
         if success {
-          glinear var append_state := unwrap_value(appendStateOpt);
-
           ghost var original_cyclic_buffer_entries := cyclic_buffer_entries;
           
           var j := 0;
           while j < num_ops
           invariant 0 <= j <= num_ops
-          invariant append_state.cur_idx == tail as int + j as int
-          invariant append_state.tail == tail as int + num_ops as int
+          invariant cb'.rs.CombinerAppending?
+          invariant cb'.rs.cur_idx == tail as int + j as int
+          invariant cb'.rs.tail == tail as int + num_ops as int
           invariant forall i: int | j as int <= i < |requestIds| ::
               i in log_entries
                 && log_entries[i] == Log(tail as int + i, ops[i], node.nodeId as int)
@@ -1059,7 +1053,7 @@ module Impl(nrifc: NRIfc) {
                   == original_cyclic_buffer_entries[tail as int + i]
           {
             // Get the single 'Log' token we're going to store
-            glinear var log_entry, cyclic_buffer_entry;
+            glinear var log_entry, cyclic_buffer_entry: CB.StoredType;
             log_entries, log_entry := glmap_take(log_entries, j as int);
             // Get the access to the 'Cell' in the buffer entry
             cyclic_buffer_entries, cyclic_buffer_entry :=
@@ -1083,9 +1077,9 @@ module Impl(nrifc: NRIfc) {
             // Physically write the log entry into the cyclic buffer
             write_cell(lseq_peek(nr.buffer, bounded_idx).cell,
                 inout cellContents,
-                ConcreteLogEntry(seq_get(ops, j), node.nodeId));
+                CB.ConcreteLogEntry(seq_get(ops, j), node.nodeId));
             
-            cyclic_buffer_entry := StoredType(cellContents, glSome(log_entry));
+            cyclic_buffer_entry := CB.StoredType(cellContents, glSome(log_entry));
             assert BufferEntryInv(nr.buffer,
                 (tail as int + j as int), cyclic_buffer_entry);
 
@@ -1097,8 +1091,8 @@ module Impl(nrifc: NRIfc) {
               atomic_block var _ := execute_atomic_noop(nr.bufferContents)
               {
                 ghost_acquire contents;
-                append_state, aliveToken, contents :=
-                  append_flip_bit(append_state, aliveToken, contents, cyclic_buffer_entry);
+                cb', aliveToken, contents :=
+                  append_flip_bit(cb', aliveToken, contents, cyclic_buffer_entry);
                 ghost_release contents;
               }
               ghost_release aliveToken;
@@ -1106,10 +1100,9 @@ module Impl(nrifc: NRIfc) {
 
             j := j + 1;
           }
-
+          
           dispose_anything(log_entries);
           dispose_anything(cyclic_buffer_entries);
-          dispose_anything(append_state);
 
           assert pre_exec(node, requestIds, responses', updates', combinerState');
 
@@ -1127,7 +1120,6 @@ module Impl(nrifc: NRIfc) {
         } else {
           dispose_anything(log_entries);
           dispose_anything(cyclic_buffer_entries);
-          dispose_anything(appendStateOpt);
         }
       }
     }
@@ -1187,7 +1179,7 @@ module Impl(nrifc: NRIfc) {
   requires nr.WF()
   requires node.WF()
   requires cb.nodeId == node.nodeId as int
-  requires cb.rs.CBCombinerIdle?
+  requires cb.rs.CombinerIdle?
   requires ghost_replica.state == nrifc.I(actual_replica)
   requires ghost_replica.nodeId == node.nodeId as int
   requires combinerState.state.CombinerReady?
@@ -1232,7 +1224,8 @@ module Impl(nrifc: NRIfc) {
     {
       ghost_acquire gtail_token;
       combinerState' := perform_ExecLoadGlobalTail(combinerState', gtail_token.globalTail);
-      cb' := reader_enter(cb', gtail_token.cbGlobalTail);
+      ghost var cur := 0;
+      cb' := reader_enter(cb', gtail_token.cbGlobalTail, cur);
       ghost_release gtail_token;
     }
 
@@ -1250,7 +1243,7 @@ module Impl(nrifc: NRIfc) {
       invariant combinerState'.state.Combiner?
       invariant combinerState'.state.queueIndex == responsesIndex as int
       invariant combinerState'.state == prev_combinerState.state.(localTail := i as int).(queueIndex := responsesIndex as int)
-      invariant cb' == CBCombinerToken(node.nodeId as int, CBCombinerReading(CBReaderRange(ltail as int, gtail as int)))
+      invariant cb' == CBCombinerToken(node.nodeId as int, CB.CombinerReading(CB.ReaderRange(ltail as int, gtail as int, i as nat)))
       invariant ghost_replica'.state == nrifc.I(actual_replica')
       invariant ghost_replica'.nodeId == node.nodeId as int
       invariant |responses'| == MAX_THREADS_PER_REPLICA as int
@@ -1272,7 +1265,7 @@ module Impl(nrifc: NRIfc) {
         var done := false;
         while !done
         invariant 0 <= iteration as int <= WARN_THRESHOLD as int
-        invariant cb' == CBCombinerToken(node.nodeId as int, CBCombinerReading(CBReaderRange(ltail as int, gtail as int)))
+        invariant cb' == CBCombinerToken(node.nodeId as int, CB.CombinerReading(CB.ReaderRange(ltail as int, gtail as int, i as nat)))
         invariant ghost_replica'.state == nrifc.I(actual_replica')
         invariant ghost_replica'.nodeId == node.nodeId as int
         invariant combinerState'.nodeId == prev_combinerState.nodeId
@@ -1432,7 +1425,7 @@ module Impl(nrifc: NRIfc) {
   requires nr.WF()
   requires node.WF()
   requires cb.nodeId == node.nodeId as int
-  requires cb.rs.CBCombinerIdle?
+  requires cb.rs.CombinerIdle?
   requires ghost_replica.state == nrifc.I(actual_replica)
   requires ghost_replica.nodeId == node.nodeId as int
   requires combinerState.state.CombinerPlaced?
@@ -1491,20 +1484,18 @@ module Impl(nrifc: NRIfc) {
       }
       atomic_block var f := execute_atomic_load(nr.globalTail.inner) { }
 
-      glinear var advance_state_token;
-
       atomic_block var min_local_tail :=
           execute_atomic_load(lseq_peek(nr.node_info, 0).localTail)
       {
         ghost_acquire ltail;
-        advance_state_token := init_advance_head_state(ltail.cbLocalTail);
+        cb' := init_advance_head_state(cb', ltail.cbLocalTail);
         ghost_release ltail;
       }
 
       var idx: uint64 := 1;
       while idx < r
       invariant 0 <= idx <= r
-      invariant advance_state_token == CBAdvanceHeadState(idx as int, min_local_tail as int)
+      invariant cb.rs == CB.CombinerAdvancingHead(idx as int, min_local_tail as int)
 
       invariant cb' == cb
       invariant ghost_replica'.state == nrifc.I(actual_replica')
@@ -1525,7 +1516,7 @@ module Impl(nrifc: NRIfc) {
             execute_atomic_load(lseq_peek(nr.node_info, idx).localTail)
         {
           ghost_acquire ltail;
-          advance_state_token := step_advance_head_state(ltail.cbLocalTail, advance_state_token);
+          cb' := step_advance_head_state(cb', ltail.cbLocalTail);
           ghost_release ltail;
         }
         if cur_local_tail < min_local_tail {
@@ -1541,17 +1532,17 @@ module Impl(nrifc: NRIfc) {
         }
         iteration := iteration + 1;
 
+        cb' := abandon_advance_head_state(cb');
+
         actual_replica', responses',
             ghost_replica', updates', combinerState', cb' :=
           exec(nr, node, actual_replica', responses',
               ghost_replica', requestIds, updates', combinerState', cb');
-
-        dispose_anything(advance_state_token);
       } else {
         atomic_block var _ := execute_atomic_store(nr.head.inner, min_local_tail)
         {
           ghost_acquire head;
-          head := finish_advance_head_state(head, advance_state_token);
+          cb', head := finish_advance_head_state(cb', head);
           ghost_release head;
         }
 
