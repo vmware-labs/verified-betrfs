@@ -388,7 +388,7 @@ module Init(nrifc: NRIfc) {
       linear nodeCreationTokens: lseq<NodeCreationToken>
       )
   requires token.loc == loc()
-  requires IL.Init(token.val)
+  requires token.val == IL.Init()
   ensures nr.WF()
   ensures |nodeCreationTokens| == NUM_REPLICAS as int
   ensures forall i | 0 <= i < |nodeCreationTokens| ::

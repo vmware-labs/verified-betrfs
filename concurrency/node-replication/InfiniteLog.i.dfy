@@ -1,10 +1,11 @@
 include "../framework/AsyncSSM.s.dfy"
 include "NRSpec.s.dfy"
 include "../../lib/Base/Option.s.dfy"
-
+include "Constants.i.dfy"
 
 module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   import opened Options
+  import opened Constants
 
   // Read (node i):
   //
@@ -952,7 +953,14 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       m.localReads.Keys + m.localUpdates.Keys + CombinerRequestIds(m)
   }
 
-  predicate Init(s: M) {
+  function Init() : M {
+    var n := NUM_REPLICAS as int;
+    var replicaM := map i | 0 <= i < n :: nrifc.init_state();
+    var combinerM := map i | 0 <= i < n :: CombinerReady;
+    var localTailM: map<nat, nat> := map i: nat | 0 <= i < n :: (0 as nat);
+    M(map[], Some(0), replicaM, localTailM, Some(0), map[], map[], combinerM)
+
+  /*
     // the state is not fail
     s.M?
     // pointers are zero
@@ -976,6 +984,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     && s.localReads == map[]
     && s.localUpdates == map[]
     && s.log == map[]
+    */
   }
 
   // take a look at scache/cache/SimpleCacheSM.i.dfy for an example
@@ -1638,9 +1647,10 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
 
   /// invariance proofs
   lemma Init_Implies_Inv(m: M)
-  requires Init(m)
+  requires m == Init()
   ensures Inv(m)
   {
+    assert 0 in m.replicas;
     //reveal_LogRangeMatchesQueue();
     //reveal_LogRangeNoNodeId();
   }

@@ -891,6 +891,33 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     dispose_anything(updates0);
   }
 
+  glinear method doInitReplicas(glinear t: ILT.Token)
+  returns (glinear replicas: map<nat, Replica>)
+  requires t.loc == loc()
+  requires var replicaM := map i | 0 <= i < NUM_REPLICAS as int :: nrifc.init_state();
+    t.val == M(map[], None, replicaM, map[], None, map[], map[], map[])
+  ensures forall i | 0 <= i < NUM_REPLICAS as int ::
+      && i in replicas
+      && replicas[i] == Replica(i, nrifc.init_state())
+
+  glinear method doInitLocalTails(glinear t: ILT.Token)
+  returns (glinear localTails: map<nat, LocalTail>)
+  requires t.loc == loc()
+  requires var localTailM: map<nat, nat> := map i: nat | 0 <= i < NUM_REPLICAS as int :: (0 as nat);
+    t.val == M(map[], None, map[], localTailM, None, map[], map[], map[])
+  ensures forall i | 0 <= i < NUM_REPLICAS as int ::
+      && i in localTails
+      && localTails[i] == LocalTail(i, 0)
+
+  glinear method doInitCombiners(glinear t: ILT.Token)
+  returns (glinear combiners: map<nat, CombinerToken>)
+  requires t.loc == loc()
+  requires var combinerM := map i | 0 <= i < NUM_REPLICAS as int :: CombinerReady;
+    t.val == M(map[], None, map[], map[], None, map[], map[], combinerM)
+  ensures forall i | 0 <= i < NUM_REPLICAS as int ::
+      && i in combiners
+      && combiners[i] == CombinerToken(i, CombinerReady)
+
   glinear method perform_Init(glinear token: ILT.Token)
   returns (
       glinear globalTail: GlobalTail,
@@ -900,7 +927,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
       glinear combiners: map<nat, CombinerToken>
   )
   requires token.loc == loc()
-  requires IL.Init(token.val)
+  requires token.val == IL.Init()
   ensures globalTail.tail == 0
   ensures ctail.ctail == 0
   ensures forall i | 0 <= i < NUM_REPLICAS as int ::
@@ -908,4 +935,27 @@ module InfiniteLogTokens(nrifc: NRIfc) {
       && replicas[i] == Replica(i, nrifc.init_state())
       && localTails[i] == LocalTail(i, 0)
       && combiners[i] == CombinerToken(i, CombinerReady)
+  {
+    var n := NUM_REPLICAS as int;
+    var replicaM := map i | 0 <= i < n :: nrifc.init_state();
+    var combinerM := map i | 0 <= i < n :: CombinerReady;
+    var localTailM: map<nat, nat> := map i: nat | 0 <= i < n :: (0 as nat);
+    var v := M(map[], Some(0), replicaM, localTailM, Some(0), map[], map[], combinerM);
+    
+    assert token.val == v;
+
+    var vgt := M(map[], Some(0), map[], map[], None, map[], map[], map[]);
+    var vr  := M(map[], None, replicaM, map[], None, map[], map[], map[]);
+    var vl  := M(map[], None, map[], localTailM, None, map[], map[], map[]);
+    var vct := M(map[], None, map[], map[], Some(0), map[], map[], map[]);
+    var vc  := M(map[], None, map[], map[], None, map[], map[], combinerM);
+    
+    glinear var tgt, tr, tl, tct, tc := ILT.split5(token, vgt, vr, vl, vct, vc);
+    globalTail := GlobalTail_fold(GlobalTail(0), tgt);
+    ctail := Ctail_fold(Ctail(0), tct);
+
+    replicas := doInitReplicas(tr);
+    localTails := doInitLocalTails(tl);
+    combiners := doInitCombiners(tc);
+  }
 }

@@ -17,7 +17,7 @@ abstract module TicketStubSSM(IOIfc: InputOutputIfc) {
   // a free one).
   function request_ids_in_use(m: M) : set<RequestId>
 
-  predicate Init(s: M)
+  function Init() : M
   predicate Internal(shard: M, shard': M)
 
   predicate NewTicket(whole: M, whole': M, rid: RequestId, input: IOIfc.Input) {
@@ -33,7 +33,7 @@ abstract module TicketStubSSM(IOIfc: InputOutputIfc) {
   predicate Inv(s: M)
 
   lemma InitImpliesInv(s: M)
-  requires Init(s)
+  requires s == Init()
   ensures Inv(s)
 
   lemma InternalPreservesInv(shard: M, shard': M, rest: M)
@@ -73,7 +73,7 @@ module TicketStubStateMachine(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc))
   type Variables = ssm.M
 
   predicate Init(s: Variables) {
-    ssm.Init(s)
+    s == ssm.Init()
   }
 
   predicate InternalNext(s: Variables, s': Variables,
@@ -397,4 +397,14 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
   {
     a := transition_1_1(a, expect_b);
   }
+
+  glinear method split5(glinear sum: Token,
+      ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M, ghost d: pcm.M, ghost e: pcm.M)
+  returns (glinear a': Token, glinear b': Token, glinear c': Token, glinear d': Token, glinear e': Token)
+  requires sum.val == pcm.dot(pcm.dot(pcm.dot(pcm.dot(a, b), c), d), e)
+  ensures a' == Tokens.Token(sum.loc, a)
+  ensures b' == Tokens.Token(sum.loc, b)
+  ensures c' == Tokens.Token(sum.loc, c)
+  ensures d' == Tokens.Token(sum.loc, d)
+  ensures e' == Tokens.Token(sum.loc, e)
 }
