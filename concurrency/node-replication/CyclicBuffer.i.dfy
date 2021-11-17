@@ -220,8 +220,6 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   predicate BufferContents(x: M)
     requires Complete(x)
   {
-    //
-
     forall i : int | x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value :: (
       assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_AliveBitsComplete(); }
       assert forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails by { reveal_LocalTailsComplete(); }
@@ -613,9 +611,8 @@ predicate CombinerStateValid(x: M)
           var j := i - (LOG_SIZE as nat);
           assert low <= j < high;
           assert j + (LOG_SIZE as nat) == i;
-          assume false; // TODO proof
         }
-        assume !EntryIsAlive(aliveBits, i); // TODO proof
+        assert !EntryIsAlive(aliveBits, i);
       }
     }
 
@@ -1076,16 +1073,26 @@ predicate CombinerStateValid(x: M)
       && key !in I(dot(m, p))
       && I(dot(m', p)) == I(dot(m, p))[key := deposited]
     {
-      assert Inv(dot(m', p)) by {
 
+      assert combinerNodeId in dot(m', p).localTails by {
+        reveal_LocalTailsComplete();
+        reveal_CombinerStateComplete();
+      }
+
+      assert 0 <= combinerNodeId < NUM_REPLICAS as nat by {
+        reveal_CombinerStateComplete();
+      }
+
+      var combinerBefore := dot(m, p).combinerState[combinerNodeId];
+
+      assert Inv(dot(m', p)) by {
         assert Complete(dot(m', p)) by {
           reveal_CombinerStateComplete();
           reveal_AliveBitsComplete();
           reveal_ContentsComplete();
         }
-        var combinerBefore := dot(m, p).combinerState[combinerNodeId];
-        assert RangesNoOverlap(dot(m', p)) by {
 
+        assert RangesNoOverlap(dot(m', p)) by {
           assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := combinerBefore.(cur_idx := key + 1)];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
             reveal_RangesNoOverlapCombinerReader();
@@ -1095,26 +1102,83 @@ predicate CombinerStateValid(x: M)
           }
         }
 
-        assert CombinerStateValid(dot(m', p)) by {
-          assume false;
-        }
-
-        assert PointerOrdering(dot(m', p));
-
         assert AliveBits(dot(m', p)) by {
           reveal_AliveBitsComplete();
-          assert combinerNodeId in dot(m', p).localTails by {
-            reveal_LocalTailsComplete();
-            reveal_CombinerStateComplete();
-          }
         }
 
         assert BufferContents(dot(m', p)) by {
-          assume false;
+          forall i : int | dot(m', p).tail.value - (LOG_SIZE as nat) <= i < dot(m', p).tail.value
+          ensures (
+            || EntryIsAlive(dot(m', p).aliveBits, i)
+            || (i < MinLocalTail(dot(m', p).localTails)) <==> i in dot(m', p).contents.value)
+          {
+            if i == key {
+              assert EntryIsAlive(dot(m', p).aliveBits, i);
+              assert i in dot(m', p).contents.value;
+            } else {
+              assert LogicalToPhysicalIndex(i) != LogicalToPhysicalIndex(key) ;
+              assert LogicalToPhysicalIndex(i) in dot(m', p).aliveBits by {
+                reveal_AliveBitsComplete();
+              }
+              assert EntryIsAlive(dot(m', p).aliveBits, i) == EntryIsAlive(dot(m, p).aliveBits, i);
+              assert i in dot(m', p).contents.value ==> dot(m', p).contents.value[i] == dot(m, p).contents.value[i];
+            }
+          }
+        }
+
+        assert CombinerStateValid(dot(m', p)) by {
+          assert forall i : nat :: LogicalToPhysicalIndex(i) in dot(m', p).aliveBits by { reveal_AliveBitsComplete(); }
+
+          forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending?
+            ensures forall i : nat | dot(m', p).combinerState[n].cur_idx <= i < dot(m', p).combinerState[n].tail :: !(EntryIsAlive(dot(m', p).aliveBits, i))
+          {
+            assert 0 <= n < NUM_REPLICAS as nat by {
+              reveal_CombinerStateComplete();
+            }
+
+            forall i : nat | dot(m', p).combinerState[n].cur_idx <= i < dot(m', p).combinerState[n].tail
+              ensures !(EntryIsAlive(dot(m', p).aliveBits, i))
+              {
+                if n == combinerNodeId {
+                  assert EntryIsAlive(dot(m', p).aliveBits, i) == EntryIsAlive(dot(m, p).aliveBits, i);
+                  assert !(EntryIsAlive(dot(m', p).aliveBits, i));
+                } else {
+                  assert (dot(m, p).combinerState[n].cur_idx >= dot(m, p).combinerState[combinerNodeId].tail
+                          || dot(m, p).combinerState[n].tail <= dot(m, p).combinerState[combinerNodeId].cur_idx) by {
+                    reveal_RangesNoOverlapCombinerCombiner();
+                  }
+
+                  assert LogicalToPhysicalIndex(i) != LogicalToPhysicalIndex(key);
+                  assert EntryIsAlive(dot(m', p).aliveBits, i) == EntryIsAlive(dot(m, p).aliveBits, i);
+                  assert !(EntryIsAlive(dot(m', p).aliveBits, i));
+                }
+              }
+          }
         }
 
         assert ReaderStateValid(dot(m', p)) by {
-          assume false;
+          forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerReading?
+              && dot(m', p).combinerState[n].readerState.ReaderRange?
+          ensures forall i | dot(m', p).combinerState[n].readerState.start <= i < dot(m', p).combinerState[n].readerState.cur :: EntryIsAlive(dot(m', p).aliveBits, i)
+          {
+            assert n != combinerNodeId;
+            assert 0 <= n < NUM_REPLICAS as nat by {
+              reveal_CombinerStateComplete();
+            }
+
+            assert !(dot(m', p).combinerState[n].readerState.start <= key < dot(m', p).combinerState[n].readerState.cur);
+          }
+
+          forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerReading?
+              && dot(m', p).combinerState[n].readerState.ReaderGuard?
+          ensures forall i | dot(m', p).combinerState[n].readerState.start <= i <= dot(m', p).combinerState[n].readerState.cur :: EntryIsAlive(dot(m', p).aliveBits, i)
+          {
+            assert 0 <= n < NUM_REPLICAS as nat by {
+              reveal_CombinerStateComplete();
+            }
+
+            assert !(dot(m', p).combinerState[n].readerState.start <= key <= dot(m', p).combinerState[n].readerState.cur);
+          }
         }
       }
 
