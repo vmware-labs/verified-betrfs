@@ -35,7 +35,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   {
     function defn(): CBTokens.Token {
       CBTokens.T.Token(cb_loc(),
-        CB.M(Some(head), None, map[], map[], map[], map[])
+        CB.M(Some(head), None, map[], None, map[], map[])
       )
     }
   }
@@ -44,7 +44,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   {
     function defn(): CBTokens.Token {
       CBTokens.T.Token(cb_loc(),
-        CB.M(None, None, map[nodeId := tail], map[], map[], map[])
+        CB.M(None, None, map[nodeId := tail], None, map[], map[])
       )
     }
   }
@@ -53,7 +53,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   {
     function defn(): CBTokens.Token {
       CBTokens.T.Token(cb_loc(),
-        CB.M(None, Some(tail), map[], map[], map[], map[])
+        CB.M(None, Some(tail), map[], None, map[], map[])
       )
     }
   }
@@ -65,7 +65,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   {
     function defn(): CBTokens.Token {
       CBTokens.T.Token(cb_loc(),
-        CB.M(None, None, map[], map[], map[entry := bit], map[])
+        CB.M(None, None, map[], None, map[entry := bit], map[])
       )
     }
   }
