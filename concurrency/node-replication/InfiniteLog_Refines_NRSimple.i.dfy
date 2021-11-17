@@ -573,6 +573,16 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
     assert B.NextStep(I(s), I(s'), ifc.InternalOp,  B.Stutter_Step);
   }
 
+  lemma TrivialStart_Refines(s: A.Variables, s': A.Variables, nodeId: nat)
+   requires IL.TrivialStart(s, s', nodeId)
+   requires Inv(s)
+   requires Inv(s')
+  ensures B.Next(I(s), I(s'), ifc.InternalOp)
+  {
+    assert I(s) == I(s');
+    assert B.NextStep(I(s), I(s'), ifc.InternalOp, B.Stutter_Step);
+  }
+
   lemma AdvanceTail_Refines(s: A.Variables, s': A.Variables, nodeId: nat, request_ids: seq<RequestId>)
    requires IL.AdvanceTail(s, s', nodeId, request_ids)
    requires Inv(s)
@@ -706,6 +716,7 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
       case TransitionReadonlyReadCtail_Step(rid) => { TransitionReadonlyReadCtail_Refines(s, s', rid); }
       case TransitionReadonlyReadyToRead_Step(nodeId, rid) => { TransitionReadonlyReadyToRead_Refines(s, s', nodeId, rid); }
       case TransitionReadonlyDone_Step(nodeId, rid) => { TransitionReadonlyDone_Refines(s, s', nodeId, rid); }
+      case TrivialStart_Step(nodeId) => { TrivialStart_Refines(s, s', nodeId); }
       case AdvanceTail_Step(nodeId, request_ids) => { AdvanceTail_Refines(s, s', nodeId, request_ids); }
       case UpdateCompletedTail_Step(nodeId) => { UpdateCompletedTail_Refines(s, s',nodeId); }
       case UpdateRequestDone_Step(request_id: RequestId) => { UpdateRequestDone_Refines(s, s', request_id); }

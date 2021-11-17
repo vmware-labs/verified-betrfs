@@ -153,7 +153,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
       gshared ltail: LocalTail)
   returns (glinear ticket': Readonly)
   requires ticket.rs.ReadonlyCtail?
-  // requires ltail.localTail >= ticket.rs.ctail
+  requires ltail.localTail >= ticket.rs.ctail
   ensures ticket' == Readonly(ticket.rid,
       ReadonlyReadyToRead(ticket.rs.op, ltail.nodeId, ticket.rs.ctail))
   {
@@ -169,6 +169,10 @@ module InfiniteLogTokens(nrifc: NRIfc) {
     ghost var out_token_expect := Readonly_unfold(out_expect);
 
     // Explain what transition we're going to do
+    assert IL.TransitionReadonlyReadyToRead(
+        IL.dot(s_token.val, a_token.val),
+        IL.dot(s_token.val, out_token_expect.val),
+        ltail.nodeId, ticket.rid);
     assert IL.NextStep(
         IL.dot(s_token.val, a_token.val),
         IL.dot(s_token.val, out_token_expect.val),
@@ -241,7 +245,25 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   )
   requires combiner.state.CombinerReady?
   ensures combiner' == CombinerToken(combiner.nodeId, CombinerPlaced([]))
-  // TODO (this requires a new transition, it's a much simpler version of AdvanceTail)
+  {
+    glinear var a_token := CombinerToken_unfold(combiner);
+
+    ghost var out_expect := CombinerToken(combiner.nodeId, CombinerPlaced([]));
+    ghost var out_token_expect := CombinerToken_unfold(out_expect);
+
+    assert IL.TrivialStart(
+        a_token.val,
+        out_token_expect.val,
+        combiner.nodeId);
+    assert IL.NextStep(
+        a_token.val,
+        out_token_expect.val,
+        TrivialStart_Step(combiner.nodeId));
+
+    glinear var out_token := ILT.transition_1_1(a_token, out_token_expect.val);
+
+    combiner' := CombinerToken_fold(out_expect, out_token);
+  }
 
   glinear method mapUpdate_to_raw(ghost requestIds: seq<nat>, glinear updates: map<nat, Update>)
   returns (glinear raw: ILT.Token)

@@ -636,6 +636,15 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
               .(combiner := m.combiner[nodeId := combiner_state_new])
   }
 
+  predicate TrivialStart(m: M, m': M, nodeId: nat)
+  {
+    && StateValid(m)
+    && InCombinerReady(m, nodeId)
+
+    // update the state
+    && m' == m.(combiner := m.combiner[nodeId := CombinerPlaced([])])
+  }
+
   /*
    * ============================================================================================
    * EXECUTE OPERATIONS
@@ -1598,6 +1607,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     | TransitionReadonlyReadyToRead_Step(ghost nodeId: nat, ghost rid: RequestId)
     | TransitionReadonlyDone_Step(ghost nodeId: nat, ghost rid: RequestId)
     | UpdateCompletedTail_Step(ghost nodeId: nat)
+    | TrivialStart_Step(ghost nodeId: nat)
     | AdvanceTail_Step(ghost nodeId: nat, ghost request_ids: seq<RequestId>)
     | UpdateRequestDone_Step(ghost request_id: RequestId)
     | UpdateCompletedNoChange_Step(ghost nodeId: nat)
@@ -1613,6 +1623,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       case TransitionReadonlyReadCtail_Step(rid: RequestId) =>  TransitionReadonlyReadCtail(m, m', rid)
       case TransitionReadonlyReadyToRead_Step(nodeId: nat, rid: RequestId) => TransitionReadonlyReadyToRead(m, m', nodeId, rid)
       case TransitionReadonlyDone_Step(nodeId: nat, rid: RequestId) => TransitionReadonlyDone(m, m', nodeId, rid)
+      case TrivialStart_Step(nodeId: nat) => TrivialStart(m, m', nodeId)
       case AdvanceTail_Step(nodeId: nat, request_ids: seq<RequestId>) => AdvanceTail(m, m', nodeId, request_ids)
       case UpdateCompletedTail_Step(nodeId: nat) => UpdateCompletedTail(m, m',nodeId)
       case UpdateRequestDone_Step(request_id: RequestId) => UpdateRequestDone(m, m', request_id)
@@ -1813,7 +1824,33 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
     }
   }
 
-
+  lemma TrivialStart_PreservesInv(m: M, m': M, nodeId: nat)
+    requires Inv(m)
+    requires TrivialStart(m, m', nodeId)
+    ensures Inv(m')
+  {
+    assert Inv_CombinerStateForNodeId(m', nodeId) by {
+      /*
+      LogRangeMatchesQueue_for_AdvanceTail(m, m', nodeId, request_ids, 0);
+      assert LogRangeMatchesQueue(request_ids,
+          m'.log, 0, m.global_tail.value, m'.global_tail.value, nodeId, m'.localUpdates);
+      LogRangeNoNodeId_preserved_AdvanceTail(m, m', nodeId, request_ids,
+          m.localTails[nodeId], m.global_tail.value, nodeId);
+          */
+      concat_LogRangeNoNodeId_LogRangeMatchesQueue(
+          [], m'.log, 0,
+          m.localTails[nodeId],
+          m.global_tail.value, m'.global_tail.value, nodeId, m'.localUpdates);
+      reveal_QueueRidsUpdateDone();
+      reveal_QueueRidsUpdatePlaced();
+    }
+    forall nodeId' | nodeId' in m'.combiner && nodeId' != nodeId
+    ensures Inv_CombinerStateForNodeId(m', nodeId')
+    {
+      assert m.combiner[nodeId'] == m'.combiner[nodeId'];
+      assert Inv_CombinerStateForNodeId(m, nodeId');
+    }
+  }
 
   lemma AdvanceTail_PreservesInv(m: M, m': M, nodeId: nat, request_ids: seq<RequestId>)
     requires Inv(m)
@@ -2074,6 +2111,7 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       case TransitionReadonlyReadCtail_Step(rid: RequestId) =>  TransitionReadonlyReadCtail_PreservesInv(m, m', rid);
       case TransitionReadonlyReadyToRead_Step(nodeId: nat, rid: RequestId) => TransitionReadonlyReadyToRead_PreservesInv(m, m', nodeId, rid);
       case TransitionReadonlyDone_Step(nodeId: nat, rid: RequestId) => TransitionReadonlyDone_PreservesInv(m, m', nodeId, rid);
+      case TrivialStart_Step(nodeId: nat) => TrivialStart_PreservesInv(m, m', nodeId);
       case AdvanceTail_Step(nodeId: nat, request_ids: seq<RequestId>) => AdvanceTail_PreservesInv(m, m', nodeId, request_ids);
       case UpdateCompletedTail_Step(nodeId: nat) =>  UpdateCompletedTail_PreservesInv(m, m', nodeId);
       case UpdateRequestDone_Step(request_id: RequestId) => UpdateRequestDone_PreservesInv(m, m', request_id);
@@ -2168,6 +2206,14 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   requires dot(m, p) != Fail
   requires UpdateCompletedTail(m, m', nodeId)
   ensures UpdateCompletedTail(dot(m, p), dot(m', p), nodeId)
+  {
+  }
+
+  lemma TrivialStart_Monotonic(m: M, m': M, p: M, nodeId: nat)
+  //requires Inv(dot(m, p))
+  requires dot(m, p) != Fail
+  requires TrivialStart(m, m', nodeId)
+  ensures TrivialStart(dot(m, p), dot(m', p), nodeId)
   {
   }
 
@@ -2307,6 +2353,10 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
       }
       case TransitionReadonlyDone_Step(nodeId: nat, rid: RequestId) => {
         TransitionReadonlyDone_Monotonic(m, m', p, nodeId, rid);
+        assert NextStep(dot(m, p), dot(m', p), step);
+      }
+      case TrivialStart_Step(nodeId: nat) => {
+        TrivialStart_Monotonic(m, m', p, nodeId);
         assert NextStep(dot(m, p), dot(m', p), step);
       }
       case AdvanceTail_Step(nodeId: nat, request_ids: seq<RequestId>) => {
