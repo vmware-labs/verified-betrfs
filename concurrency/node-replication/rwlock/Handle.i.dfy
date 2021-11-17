@@ -1,6 +1,6 @@
 include "../../framework/Cells.s.dfy"
 
-module ContentsTypeMod {
+abstract module ContentsTypeMod {
   type ContentsType(!new)
 }
 
