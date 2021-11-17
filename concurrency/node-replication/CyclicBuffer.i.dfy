@@ -1089,15 +1089,21 @@ predicate CombinerStateValid(x: M)
           }
         }
 
-        assert AliveBits(dot(m', p)) by {
+        assert CombinerStateValid(dot(m', p)) by {
           assume false;
+        }
+
+        assert PointerOrdering(dot(m', p));
+
+        assert AliveBits(dot(m', p)) by {
+          reveal_AliveBitsComplete();
+          assert combinerNodeId in dot(m', p).localTails by {
+            reveal_LocalTailsComplete();
+            reveal_CombinerStateComplete();
+          }
         }
 
         assert BufferContents(dot(m', p)) by {
-          assume false;
-        }
-
-        assert CombinerStateValid(dot(m', p)) by {
           assume false;
         }
 
