@@ -106,6 +106,11 @@ module Obligations(
   )
 { }
 
+module TicketStubSingletonLoc {
+  import opened GhostLoc
+  function {:extern} loc(): Loc
+}
+
 module TicketStubPCM(IOIfc: InputOutputIfc,
   ssm: TicketStubSSM(IOIfc)) refines PCM {
   

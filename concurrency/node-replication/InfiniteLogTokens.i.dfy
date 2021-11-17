@@ -12,8 +12,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   import opened Constants
   import opened GlinearMap
   import opened Ptrs
-
-  function loc() : Loc // XXX TODO(travis)
+  import opened TicketStubSingletonLoc
 
   /////////////////////
   // Token types. These represent the smallest discrete parts of the InfiniteLog state.

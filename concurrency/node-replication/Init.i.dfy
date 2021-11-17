@@ -24,6 +24,7 @@ module Init(nrifc: NRIfc) {
   import opened Impl = Impl(nrifc)
   import opened Constants
   import Tokens = TicketStubToken(nrifc, IL)
+  import opened TicketStubSingletonLoc
 
   linear datatype NodeCreationToken = NodeCreationToken(
     nodeId: uint64,
