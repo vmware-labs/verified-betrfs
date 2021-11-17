@@ -1161,6 +1161,16 @@ module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   requires LogRangeNoNodeId(log, a, b, nodeId)
   requires LogRangeMatchesQueue(queue, log, queueIndex, b, c, nodeId, updates)
   ensures LogRangeMatchesQueue(queue, log, queueIndex, a, c, nodeId, updates)
+  decreases b - a
+  {
+    if a == b {
+    } else {
+      concat_LogRangeNoNodeId_LogRangeMatchesQueue(
+          queue, log, queueIndex,
+          a+1, b, c,
+          nodeId, updates);
+    }
+  }
 
   lemma LogRangeMatchesQueue_update_change(queue: seq<RequestId>, log: map<nat, LogEntry>,
       queueIndex: nat, logIndexLower: nat, logIndexUpper: nat, nodeId: nat,
