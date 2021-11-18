@@ -361,13 +361,11 @@ predicate CombinerStateValid(x: M)
   // }
 
 
+
   predicate {:opaque} RangesNoOverlapCombinerCombiner(combinerState: map<NodeId, CombinerState>)
     requires CombinerStateComplete(combinerState)
   {
-    assert (forall i: nat :: i < NUM_REPLICAS as nat <==> i in combinerState) by {
-      reveal_CombinerStateComplete();
-    }
-    (forall i, j | 0 <= i < NUM_REPLICAS as nat && 0 <= j < NUM_REPLICAS as nat && i != j
+    (forall i, j | i in combinerState && j in combinerState && i != j
       && combinerState[i].CombinerAppending? && combinerState[j].CombinerAppending?
     :: (
       || combinerState[i].cur_idx >= combinerState[j].tail
@@ -378,10 +376,7 @@ predicate CombinerStateValid(x: M)
   predicate {:opaque} RangesNoOverlapCombinerReader(combinerState: map<NodeId, CombinerState>)
     requires CombinerStateComplete(combinerState)
   {
-    assert (forall i: nat :: i < NUM_REPLICAS as nat <==> i in combinerState) by {
-      reveal_CombinerStateComplete();
-    }
-    (forall i, j | 0 <= i < NUM_REPLICAS as nat && 0 <= j < NUM_REPLICAS as nat && i != j
+    (forall i, j | i in combinerState && j in combinerState && i != j
       && combinerState[i].CombinerAppending? && combinerState[j].CombinerReading? && combinerState[j].readerState.ReaderGuard?
     :: (
       || combinerState[i].cur_idx > combinerState[j].readerState.cur
@@ -965,7 +960,7 @@ predicate CombinerStateValid(x: M)
   }
 
   /* ----------------------------------------------------------------------------------------- */
-  
+
   predicate AbandonAdvanceTail(m: M, m': M, combinerNodeId: nat)
   {
     && m.M?
@@ -1019,33 +1014,30 @@ predicate CombinerStateValid(x: M)
     // the new tail must not exceed the head we've read
     && m.tail.value <= new_tail <= (combinerBefore.observed_head + LOG_SIZE as int)
 
-    // the "old" entries must be in the log
-    && (forall i: int | MinusLogSize(m.tail.value) <= i < (MinusLogSize(m.tail.value)) + (new_tail - m.tail.value) :: i in m.contents.value) // TODO: may need to change after the contents refactor
-    && assert forall i: int | (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)) :: i in m.contents.value; // TODO: may need to change after the contents refactor
-
-
     // all new entries must not be in the log
     && (forall i: int | m.tail.value <= i < new_tail :: i !in m.contents.value)
 
-    // construct the new log entries, all of them are none, as we withdraw them
-    && var remove_entries := set x : int | m.tail.value <= x < new_tail;
-    && assert (forall i : int :: i in remove_entries <==> (m.tail.value as int <= i < new_tail as int));
+    // all withdrawn entries are in the log and have the same values
+    && (forall i: int | i in withdrawn.Keys :: i in m.contents.value && withdrawn[i] == m.contents.value[i])
 
-    // the things we're going to withdraw, must be in the previous window
+    // the window  of the withdrawn entries.
     && (forall i : int :: i in withdrawn.Keys <==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)))
-    && assert (forall i : int :: i in withdrawn.Keys <==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)));
-
-    // the relationship between the entries and the withdrawn keys
-    && assert (forall i : int :: i in remove_entries <==> MinusLogSize(i) as int in withdrawn.Keys);
-
-    // the withdrawn things must be the old entries of the log
-    && (forall i | i in withdrawn.Keys :: withdrawn[i] == m.contents.value[i])
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerAppending(m.tail.value, new_tail)],
       contents := Some(Maps.MapRemove(m.contents.value, withdrawn.Keys)),
       tail := Some(new_tail)
     )
+  }
+
+  lemma FinishAdvanceTail_asserts(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>)
+    requires Inv(m)
+    requires FinishAdvanceTail(m, m', combinerNodeId, new_tail, withdrawn)
+    ensures forall i: int | (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)) :: i in m.contents.value
+    ensures forall i : int :: i in withdrawn.Keys <==> (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail))
+    ensures forall i: int | MinusLogSize(m.tail.value) <= i < (MinusLogSize(m.tail.value)) + (new_tail - m.tail.value) :: i in m.contents.value// TODO: may need to change after the contents refactor
+  {
+
   }
 
   lemma FinishAdvanceTail_is_withdraw_many(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>)
@@ -1078,14 +1070,12 @@ predicate CombinerStateValid(x: M)
           reveal_ContentsComplete();
         }
 
+        assert forall n | n in dot(m', p).combinerState :: n in dot(m', p).localTails by {
+          reveal_CombinerStateComplete();
+          reveal_LocalTailsComplete();
+        }
+
         assert RangesNoOverlap(dot(m', p)) by {
-          assert forall n | n in dot(m, p).combinerState && dot(m, p).combinerState[n].CombinerAppending? ::
-            dot(m, p).combinerState[n].tail <= dot(m, p).tail.value;
-
-          assert forall i | 0 <= i < NUM_REPLICAS as nat :: i in dot(m', p).combinerState by {
-            reveal_CombinerStateComplete();
-          }
-
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
             reveal_RangesNoOverlapCombinerCombiner();
           }
@@ -1121,24 +1111,6 @@ predicate CombinerStateValid(x: M)
               reveal_LocalTailsComplete();
             }
             assert dot(m', p).combinerState[n].readerState.end >= dot(m', p).localTails[n];
-          }
-
-          forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerReading? && dot(m', p).combinerState[n].readerState.ReaderRange?
-          ensures (forall i | dot(m', p).combinerState[n].readerState.start <= i < dot(m', p).combinerState[n].readerState.cur :: i in dot(m', p).contents.value)
-          {
-            assert n in dot(m', p).localTails by {
-              reveal_CombinerStateComplete();
-              reveal_LocalTailsComplete();
-            }
-          }
-
-          forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerReading? && dot(m', p).combinerState[n].readerState.ReaderGuard?
-          ensures (forall i | dot(m', p).combinerState[n].readerState.start <= i <= dot(m', p).combinerState[n].readerState.cur :: i in dot(m', p).contents.value)
-          {
-            assert n in dot(m', p).localTails by {
-              reveal_CombinerStateComplete();
-              reveal_LocalTailsComplete();
-            }
           }
         }
       }
@@ -1496,19 +1468,16 @@ predicate CombinerStateValid(x: M)
           reveal_CombinerStateComplete();
         }
 
-        assert forall i | 0 <= i < NUM_REPLICAS as nat :: i in dot(m', p).combinerState by {
-          reveal_CombinerStateComplete();
-        }
-
         assert RangesNoOverlap(dot(m', p)) by {
           var readerBefore := m.combinerState[combinerNodeId].readerState;
           assert dot(m', p).combinerState
                     == dot(m, p).combinerState[combinerNodeId := CombinerReading(ReaderGuard(readerBefore.start, readerBefore.end, i, m.contents.value[i]))];
-          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
-          }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
             reveal_RangesNoOverlapCombinerCombiner();
+          }
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+            reveal_CombinerStateComplete();
           }
         }
       }
