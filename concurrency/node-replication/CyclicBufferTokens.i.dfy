@@ -302,6 +302,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       && i in entries'
       && (i - LOG_SIZE as int) in contents.contents
       && entries'[i] == contents.contents[i - LOG_SIZE as int]
+  ensures forall i | i in contents'.contents :: i in contents.contents && contents.contents[i] == contents'.contents[i]
   ensures combiner'.rs == CB.CombinerAppending(tail.tail, new_tail)
   {
     glinear var t_token := CBGlobalTail_unfold(tail);

@@ -1048,7 +1048,6 @@ module Impl(nrifc: NRIfc) {
             forall i | i in contents.contents
             ensures BufferEntryInv(nr.buffer, i, contents.contents[i])
             {
-              assume BufferEntryInv(nr.buffer, i, contents.contents[i]); // TODO
             }
 
             ghost_release contents;
