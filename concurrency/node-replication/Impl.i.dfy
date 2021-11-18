@@ -716,6 +716,7 @@ module Impl(nrifc: NRIfc) {
 //    }
 
 
+  const RESPONSE_CHECK_INTERVAL: uint32 := 512 * 1024 * 1024; // 1 << 29, voodoo const from Rust code
 
   method do_update(shared nr: NR, shared node: Node, op: nrifc.UpdateOp,
       glinear ticket: Update, linear ctx: ThreadOwnedContext)
@@ -755,6 +756,7 @@ module Impl(nrifc: NRIfc) {
     glinear var stub_opt: glOption<Update> := glNone;
 
     var done := false;
+    var iter: uint32 := 0;
     while !done
     invariant !done ==>
       && fc_client == FCClient(node.fc_loc, tid as int, FCClientWaiting(ticket.rid))
@@ -788,7 +790,11 @@ module Impl(nrifc: NRIfc) {
         result := opr.ret;
         done := true;
       } else {
-        SpinLoopHint();
+        iter := iter + 1;
+        if iter == RESPONSE_CHECK_INTERVAL {
+          try_combine(nr, node, tid);
+          iter := 0;
+        }
       }
     }
 
