@@ -684,6 +684,14 @@ predicate CombinerStateValid(x: M)
     && m.combinerState[nodeId].cur_idx < m.combinerState[nodeId].tail
   }
 
+  predicate CombinerIsDoneAppending(m: M, nodeId: NodeId)
+    requires m.M?
+    requires CombinerKnown(m, nodeId)
+  {
+    && m.combinerState[nodeId].CombinerAppending?
+    && m.combinerState[nodeId].cur_idx == m.combinerState[nodeId].tail
+  }
+
   predicate CombinerIsAppendingAt(m: M, nodeId: NodeId, cur_idx: nat, tail: nat)
     requires m.M?
     requires CombinerKnown(m, nodeId)
@@ -1311,6 +1319,47 @@ predicate CombinerStateValid(x: M)
     }
 
     assert deposit(m, m', key, deposited); // witness
+  }
+
+  /* ----------------------------------------------------------------------------------------- */
+
+  predicate FinishAppending(m: M, m': M, combinerNodeId: nat)
+  {
+    && m.M?
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsDoneAppending(m, combinerNodeId)
+
+    // state relation
+    && m' == m.(
+      combinerState := m.combinerState[combinerNodeId := CombinerIdle]
+    )
+  }
+
+  lemma FinishAppending_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires FinishAppending(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      assert Inv(dot(m', p)) by {
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
+
+        assert  RangesNoOverlap(dot(m', p)) by {
+          assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
+        }
+      }
+      assert I(dot(m, p)) == I(dot(m', p));
+    }
   }
 
   /*

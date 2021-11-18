@@ -390,6 +390,22 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires combiner.rs.cur_idx == combiner.rs.tail
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == CB.CombinerIdle
+  {
+    ghost var nodeId := combiner.nodeId;
+    glinear var c_token := CBCombinerToken_unfold(combiner);
+
+    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle);
+    ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
+
+    CB.FinishAppending_is_transition(
+      c_token.val,
+      out_token_expect_1.val,
+      nodeId);
+
+    glinear var out_token_1 := CBTokens.internal_transition(c_token, out_token_expect_1.val);
+
+    combiner' := CBCombinerToken_fold(out_expect_1, out_token_1);
+  }
 
   glinear method reader_start(glinear combiner: CBCombinerToken, gshared localTail: CBLocalTail)
   returns (glinear combiner': CBCombinerToken)
