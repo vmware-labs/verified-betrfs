@@ -51,7 +51,7 @@ $(BUNDLE_CPP) $(BUNDLE_H): *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/
 Bundle.o: $(BUNDLE_CPP) $(HEADERS)
 	g++ $(CFLAGS) -c -o $@ $<
 
-mcs.o: mcs.c mcs.h padding.h util.h
+mcs.o: mcs.c mcs.h padding.h utils.h
 	g++ $(CFLAGS) -c -o $@ $<
 
 main.o: main.cpp $(HEADERS)
