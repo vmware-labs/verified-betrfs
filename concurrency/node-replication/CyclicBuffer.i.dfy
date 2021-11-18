@@ -80,7 +80,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     else b
   }
 
-  function {:induction true}  MinLocalTailRec(ltails: map<NodeId, nat>, idx: nat) : (m : nat)
+  function {:induction true} MinLocalTailRec(ltails: map<NodeId, nat>, idx: nat) : (m : nat)
     requires idx < NUM_REPLICAS as nat
     requires LocalTailsComplete(ltails)
     ensures forall i : nat | 0 <= i <= idx :: i in ltails && m <= ltails[i]
@@ -97,10 +97,8 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
 
   function MinLocalTail(ltails: map<NodeId, nat>) : (m : nat)
     requires LocalTailsComplete(ltails)
-    ensures forall i : nat | 0 <= i < NUM_REPLICAS as nat :: i in ltails && m <= ltails[i]
     ensures forall i : nat | i in ltails :: m <= ltails[i]
-    ensures exists i : nat | 0 <= i < NUM_REPLICAS as nat :: i in ltails && ltails[i] == m
-    ensures m in ltails.Values
+    ensures exists i : nat | i in ltails :: ltails[i] == m
   {
     assert forall i : nat | i in ltails ::  0 <= i < NUM_REPLICAS as nat by { reveal_LocalTailsComplete(); }
     MinLocalTailRec(ltails, NUM_REPLICAS as nat - 1)
