@@ -165,7 +165,9 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   }
 
   predicate {:opaque} ContentsComplete( tail: nat, contents: map<int, StoredType>) {
-    && (forall i : nat | MinusLogSize(tail) <= i < tail :: i in contents)
+    // we can only make statements if there is something in the contents, then it must be
+    // within the tail - LOG_SIZE .. tail range
+    //&& (forall i : nat | MinusLogSize(tail) <= i < tail :: i in contents)
     && (forall i : nat | i in contents :: MinusLogSize(tail) <= i < tail)
   }
 
@@ -176,7 +178,6 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     && x.tail.Some?
     && LocalTailsComplete(x.localTails)
     && x.contents.Some?
-    // TODO remove, I think
     && ContentsComplete(x.tail.value, x.contents.value)
     && AliveBitsComplete(x.aliveBits)
     && CombinerStateComplete(x.combinerState)
@@ -201,7 +202,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     requires PointerOrdering(x)
   {
     // the span of the entries between local tails and tail should never be larger than the buffer size
-    && (forall i | i in x.localTails ::  x.tail.value - x.localTails[i] <= LOG_SIZE as nat)
+    && (forall i | i in x.localTails :: x.localTails[i] <= x.tail.value <= x.localTails[i] + LOG_SIZE as nat)
   }
 
   predicate AliveBits(x: M)
@@ -244,7 +245,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           // the start must be before the end, can be equial if ltail == gtail
           && start <= end
           // we've read the tail, but the tail may have moved
-          && x.tail.value - (LOG_SIZE as nat) <= end <= x.tail.value
+          && (x.tail.value as int) - (LOG_SIZE as int) <= end <= (x.tail.value as int)
           // current is between start and end
           && start <= cur <= end
           // the entries up to, and including  current must be alive
@@ -261,7 +262,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
           // the start must be before the end, can be equial if ltail == gtail
           && start <= end
           // we've read the tail, but the tail may have moved
-          && x.tail.value - (LOG_SIZE as nat) <= end <= x.tail.value
+          && (x.tail.value as int) - (LOG_SIZE as int) <= end <= (x.tail.value as int)
           // current is between start and end
           && start <= cur < end
           // the entries up to, and including  current must be alive
@@ -275,6 +276,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
         )
     }
   }
+
 
 predicate CombinerStateValid(x: M)
     requires Complete(x)
@@ -305,7 +307,7 @@ predicate CombinerStateValid(x: M)
           // the read tail is smaller or equal to the current tail.
           && tail <= x.tail.value
           //
-          // && x.tail.value - (LOG_SIZE as nat) <= cur_idx <= x.tail.value
+          && (x.tail.value as int) - (LOG_SIZE as int) <= cur_idx <= (x.tail.value as int)
           // all the entries we're writing must not be alive.
           && (forall i : nat | cur_idx <= i < tail :: (
             assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_AliveBitsComplete(); }
@@ -315,7 +317,6 @@ predicate CombinerStateValid(x: M)
         )
       }
   }
-
 
   // function ReaderLogicalRange(c: CombinerState) : set<nat>
   // {
@@ -548,7 +549,6 @@ predicate CombinerStateValid(x: M)
   function SetOfFreeBufferEntries(min_ltails: int, logical_tail: int) : (r : set<int>)
     requires min_ltails <= logical_tail
     requires logical_tail - (LOG_SIZE as int) <= min_ltails <= logical_tail
-    requires ((logical_tail - min_ltails) <= LOG_SIZE as nat)
     ensures forall i :: logical_tail <= i < min_ltails + (LOG_SIZE as nat) <==> i in r
   {
     SetOfBufferEntries(min_ltails) - SetOfActiveBufferEntries(min_ltails, logical_tail)
@@ -558,7 +558,6 @@ predicate CombinerStateValid(x: M)
   function SetOfActiveBufferEntries(min_ltails: int, logical_tail: int) : (r : set<int>)
     requires min_ltails <= logical_tail
     requires logical_tail - (LOG_SIZE as int) <= min_ltails <= logical_tail
-    requires ((logical_tail - min_ltails) <= LOG_SIZE as nat)
     ensures forall i :: min_ltails <= i < logical_tail <==> i in r
   {
     set x : int | min_ltails <= x < logical_tail :: x
@@ -567,7 +566,6 @@ predicate CombinerStateValid(x: M)
   lemma BufferUnion(ltails: int, tail: int)
     requires ltails <= tail
     requires tail - (LOG_SIZE as int) <= ltails <= tail
-    requires ((tail - ltails) < LOG_SIZE as int)
     ensures SetOfActiveBufferEntries(ltails, tail) + SetOfFreeBufferEntries(ltails, tail) == SetOfBufferEntries(ltails)
   {
 
@@ -589,7 +587,7 @@ predicate CombinerStateValid(x: M)
 
   lemma EntryIsAliveWrapAround(aliveBits: map</* entry: */ nat, /* bit: */ bool>, low: nat, high: nat)
     requires forall i: nat :: i < LOG_SIZE as nat <==> i in aliveBits
-    requires low <= high < low +  (LOG_SIZE as int)
+    requires low <= high <= low +  (LOG_SIZE as int)
     ensures forall i | low <= i < high ::
       EntryIsAlive(aliveBits, i) == !EntryIsAlive(aliveBits, i + (LOG_SIZE as int))
   {
@@ -598,7 +596,7 @@ predicate CombinerStateValid(x: M)
 
   lemma EntryIsAliveWrapAroundReformat(aliveBits: map</* entry: */ nat, /* bit: */ bool>, low: nat, high: nat)
     requires forall i: nat :: i < LOG_SIZE as nat <==> i in aliveBits
-    requires low <= high < low +  (LOG_SIZE as nat)
+    requires low <= high <= low +  (LOG_SIZE as nat)
     requires forall i : nat | low <= i < high :: !EntryIsAlive(aliveBits, i + (LOG_SIZE as nat))
     ensures forall i : nat | low + (LOG_SIZE as nat) <= i < high  + (LOG_SIZE as nat) :: !EntryIsAlive(aliveBits, i)
     {
@@ -964,7 +962,7 @@ predicate CombinerStateValid(x: M)
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerAppending(m.tail.value, new_tail)],
-      contents := Some(Maps.MapRemove(MapFilter(m.contents.value, (new_tail as int - LOG_SIZE as int)), remove_entries)),
+      contents := Some(Maps.MapRemove(m.contents.value, withdrawn.Keys)),
       tail := Some(new_tail)
     )
   }
@@ -984,43 +982,96 @@ predicate CombinerStateValid(x: M)
 
       // we need to make sure, that we don't overrunt the local tails
       assert Inv(dot(m', p)) by {
-        assert Complete(dot(m', p)) by {
+
+        assert combinerNodeId in dot(m', p).localTails by {
+          reveal_LocalTailsComplete();
           reveal_CombinerStateComplete();
-          reveal_ContentsComplete(); // requires some more thoughts
-          assume false;
         }
 
-        assert PointerDifferences(dot(m', p)) by {
-          reveal_LocalTailsComplete();
-          assert combinerBefore.observed_head <= dot(m, p).tail.value <= dot(m', p).tail.value;
-          assert dot(m, p).tail.value <= dot(m', p).tail.value <= combinerBefore.observed_head + LOG_SIZE as int;
-          assert dot(m', p).tail.value - combinerBefore.observed_head <= LOG_SIZE as nat;
-          assert combinerBefore.observed_head <= MinLocalTail(dot(m', p).localTails);
+        assert 0 <= combinerNodeId < NUM_REPLICAS as nat by {
+          reveal_CombinerStateComplete();
+        }
+
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+          reveal_ContentsComplete();
         }
 
         assert RangesNoOverlap(dot(m', p)) by {
-          assume false;
+          assert forall n | n in dot(m, p).combinerState && dot(m, p).combinerState[n].CombinerAppending? ::
+            dot(m, p).combinerState[n].tail <= dot(m, p).tail.value;
+
+          assert forall i | 0 <= i < NUM_REPLICAS as nat :: i in dot(m', p).combinerState by {
+            reveal_CombinerStateComplete();
+          }
+
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
+
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
         }
 
         assert CombinerStateValid(dot(m', p)) by {
-          assume false;
+          forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending?
+          ensures  dot(m', p).tail.value - (LOG_SIZE as nat) <= dot(m', p).combinerState[n].cur_idx <= dot(m', p).tail.value
+          {
+            if n == combinerNodeId {
+              assert dot(m', p).tail.value - (LOG_SIZE as nat) <= dot(m', p).combinerState[n].cur_idx <= dot(m', p).tail.value;
+            } else {
+              assert dot(m', p).combinerState[n].cur_idx <= dot(m', p).tail.value;
+              assert n in dot(m', p).localTails by {
+                reveal_LocalTailsComplete(); reveal_CombinerStateComplete();
+              }
+              assert dot(m', p).localTails[n] <= dot(m', p).combinerState[n].cur_idx;
+              assert dot(m', p).tail.value as int - (LOG_SIZE as int) <= dot(m', p).combinerState[n].cur_idx;
+            }
+          }
         }
 
         assert ReaderStateValid(dot(m', p)) by {
-          assume false;
+          forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerReading? && !dot(m', p).combinerState[n].readerState.ReaderStarting?
+          ensures (dot(m', p).tail.value as int) - (LOG_SIZE as int) <= dot(m', p).combinerState[n].readerState.end <= (dot(m', p).tail.value as int)
+          {
+            assert n in dot(m', p).localTails by {
+              reveal_CombinerStateComplete();
+              reveal_LocalTailsComplete();
+            }
+            assert dot(m', p).combinerState[n].readerState.end >= dot(m', p).localTails[n];
+          }
+
+          forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerReading? && dot(m', p).combinerState[n].readerState.ReaderRange?
+          ensures (forall i | dot(m', p).combinerState[n].readerState.start <= i < dot(m', p).combinerState[n].readerState.cur :: i in dot(m', p).contents.value)
+          {
+            assert n in dot(m', p).localTails by {
+              reveal_CombinerStateComplete();
+              reveal_LocalTailsComplete();
+            }
+          }
+
+          forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerReading? && dot(m', p).combinerState[n].readerState.ReaderGuard?
+          ensures (forall i | dot(m', p).combinerState[n].readerState.start <= i <= dot(m', p).combinerState[n].readerState.cur :: i in dot(m', p).contents.value)
+          {
+            assert n in dot(m', p).localTails by {
+              reveal_CombinerStateComplete();
+              reveal_LocalTailsComplete();
+            }
+          }
         }
       }
 
       assert I(dot(m', p)).Keys !! withdrawn.Keys;
 
       // TODO needed
-      // forall i : int
-      //   ensures i in I(dot(m, p)).Keys <==> i in (I(dot(m', p)).Keys + withdrawn.Keys)
-      // {
+      forall i : int
+        ensures i in I(dot(m, p)).Keys <==> i in (I(dot(m', p)).Keys + withdrawn.Keys)
+      {
 
-      // }
+      }
 
-      assume I(dot(m, p)) == (
+      assert I(dot(m, p)) == (
         map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::
         if k in I(dot(m', p)).Keys then I(dot(m', p))[k] else withdrawn[k]);
     }
@@ -1322,13 +1373,17 @@ predicate CombinerStateValid(x: M)
         assert Complete(dot(m', p)) by {
           reveal_CombinerStateComplete();
         }
+
+        assert forall i | 0 <= i < NUM_REPLICAS as nat :: i in dot(m', p).combinerState by {
+          reveal_CombinerStateComplete();
+        }
+
         assert RangesNoOverlap(dot(m', p)) by {
           var readerBefore := m.combinerState[combinerNodeId].readerState;
           assert dot(m', p).combinerState
                     == dot(m, p).combinerState[combinerNodeId := CombinerReading(ReaderGuard(readerBefore.start, readerBefore.end, i, m.contents.value[i]))];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
             reveal_RangesNoOverlapCombinerReader();
-            assume false; // TODO: proof
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
             reveal_RangesNoOverlapCombinerCombiner();
