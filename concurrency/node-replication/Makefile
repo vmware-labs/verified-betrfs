@@ -51,14 +51,17 @@ $(BUNDLE_CPP) $(BUNDLE_H): *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/
 Bundle.o: $(BUNDLE_CPP) $(HEADERS)
 	g++ $(CFLAGS) -c -o $@ $<
 
+mcs.o: mcs.c mcs.h padding.h util.h
+	g++ $(CFLAGS) -c -o $@ $<
+
 main.o: main.cpp $(HEADERS)
 	g++ $(CFLAGS) -c -o $@ $<
 
 vspace_glue.o: ./vspace/target/cxxbridge/vspace/src/lib.rs.cc $(HEADERS)
 	g++ $(CFLAGS) -c -o $@ $<
 
-app: main.o Bundle.o vspace_glue.o ./vspace/target/release/libvspace.a
-	g++ -g -o app Bundle.o vspace_glue.o main.o -L ./vspace/target/release/ $(LIBS)
+app: main.o Bundle.o vspace_glue.o ./vspace/target/release/libvspace.a mcs.o
+	g++ -g -o app mcs.o Bundle.o vspace_glue.o main.o -L ./vspace/target/release/ $(LIBS)
 
 .PHONY: clean
 

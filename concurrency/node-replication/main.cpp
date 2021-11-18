@@ -14,6 +14,8 @@
 #include "nr.h"
 #include "thread_pin.h"
 
+#include "mcs.h"
+
 class key_generator {
   uint64_t state;
 
@@ -210,6 +212,64 @@ struct cpp_shared_mutex_monitor {
     x_lock lock{mutex};
     vspace->mapGenericWrapped(key, key, 4096);
   #endif
+  }
+
+  void finish_up(uint8_t thread_id, void* thread_context) {}
+};
+
+// - C MCS Lock Benchmarking -
+
+struct mcs_monitor {
+  mcs_mutex_t* mutex;
+#if USE_COUNTER
+  uint64_t value;
+#else
+  ::VSpacePtr vspace;
+#endif
+
+  mcs_monitor(size_t n_threads)
+    : mutex{mcs_mutex_create(NULL)}
+#if USE_COUNTER
+    , value{}
+#else
+    , vspace{createVSpace()}
+#endif
+  {}
+
+  ~mcs_monitor() {
+#if USE_COUNTER
+#else
+    //delete vspace; // TODO(stutsman): ~VSpace is deleted for some reason?
+#endif
+    mcs_mutex_destroy(mutex);
+  }
+
+  void* create_thread_context(uint8_t thread_id) {
+    return new mcs_node_t{}; // Just leak it...
+  }
+
+  uint64_t read(uint8_t thread_id, void* thread_context, uint64_t key) {
+    mcs_node_t* me = static_cast<mcs_node_t*>(thread_context);
+    uint64_t r;
+    mcs_mutex_lock(mutex, me);
+  #if USE_COUNTER
+    r = value;
+  #else
+    r = vspace->resolveWrapped(key);
+  #endif
+    mcs_mutex_unlock(mutex, me);
+    return r;
+  }
+
+  void update(uint8_t thread_id, void* thread_context, uint64_t key, uint64_t value) {
+    mcs_node_t* me = static_cast<mcs_node_t*>(thread_context);
+    mcs_mutex_lock(mutex, me);
+  #if USE_COUNTER
+    ++value;
+  #else
+    vspace->mapGenericWrapped(key, key, 4096);
+  #endif
+    mcs_mutex_unlock(mutex, me);
   }
 
   void finish_up(uint8_t thread_id, void* thread_context) {}
@@ -477,6 +537,7 @@ int main(int argc, char* argv[]) {
   BENCHMARK(dafny_rwlock);
   BENCHMARK(dafny_nr);
   BENCHMARK(rust_nr);
+  BENCHMARK(mcs);
 
   std::cerr << "unrecognized benchmark name " << bench_name << std::endl;
 
