@@ -184,8 +184,12 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       combiner.rs.idx + 1, if combiner.rs.min_tail < local_tail.tail then combiner.rs.min_tail else local_tail.tail));
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
-    assert combiner.rs.idx <= NUM_REPLICAS as nat; // TODO for Travis: from the invariant
-    assert combiner.rs.idx < NUM_REPLICAS as nat; // invariant + requires
+    ghost var rest := CBTokens.obtain_invariant_1_1(t_token, inout c_token);
+
+    assert combiner.rs.idx <= NUM_REPLICAS as nat by {
+      assert nodeId in c_token.val.combinerState && c_token.val.combinerState[nodeId].idx <= NUM_REPLICAS as nat; // observe
+    }
+
     CB.StepAdvanceHead_is_transition(
       CB.dot(t_token.val, c_token.val),
       CB.dot(t_token.val, out_token_expect.val),
@@ -370,9 +374,23 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost var out_token_expect_3 := CBContents_unfold(out_expect_3);
 
     ghost var key := combiner.rs.cur_idx;
+  
+    ghost var rest := CBTokens.obtain_invariant_3(inout a_token, inout c_token, inout contents_token);
+    assert CB.CombinerStateValid(CB.dot(CB.dot(CB.dot(a_token.val, c_token.val), contents_token.val), rest));
+    assert nodeId in c_token.val.combinerState && combiner.rs == c_token.val.combinerState[nodeId];
+    assert bit.entry in a_token.val.aliveBits && a_token.val.aliveBits[bit.entry] == bit.bit;
+    assert contents_token.val.contents.Some? && contents.contents == contents_token.val.contents.value;
 
-    assume key !in contents.contents; // TODO ask Travis
-    assume !CB.EntryIsAlive(a_token.val.aliveBits, key); // TODO ask Travis
+    assert key !in contents.contents; // TODO fails
+    assert !CB.EntryIsAlive(a_token.val.aliveBits, key) by {
+      CB.reveal_AliveBitsComplete();
+      assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: ( // TODO fails
+        && CB.LogicalToPhysicalIndex(i) in a_token.val.aliveBits
+      );
+      assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: (
+        && !(CB.EntryIsAlive(a_token.val.aliveBits, i))
+      );
+    }
     CB.AppendFlipBit_is_deposit(
       CB.dot(CB.dot(c_token.val, a_token.val), contents_token.val),
       CB.dot(CB.dot(out_token_expect_1.val, out_token_expect_2.val), out_token_expect_3.val),

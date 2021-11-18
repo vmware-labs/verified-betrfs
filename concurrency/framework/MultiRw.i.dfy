@@ -338,6 +338,35 @@ module MultiRwTokens(rw: MultiRw) {
    * Helpers
    */
 
+  glinear method obtain_invariant_1_1(
+      gshared token1: Token,
+      glinear inout token2: Token)
+  returns (ghost rest: rw.M)
+  requires old_token2.loc == token1.loc
+  ensures (
+    && old_token2 == token2
+  )
+  ensures rw.Inv(rw.dot(rw.dot(token1.val, token2.val), rest))
+  {
+    T.is_valid(token1, inout token2);
+    rest :| rw.Inv(rw.dot(rw.dot(token1.val, token2.val), rest));
+  }
+
+  glinear method obtain_invariant_2(
+      glinear inout token1: Token,
+      glinear inout token2: Token)
+  returns (ghost rest: rw.M)
+  requires old_token1.loc == old_token2.loc
+  ensures (
+    && old_token1 == token1
+    && old_token2 == token2
+  )
+  ensures rw.Inv(rw.dot(rw.dot(token1.val, token2.val), rest))
+  {
+    T.is_valid(token1, inout token2);
+    rest :| rw.Inv(rw.dot(rw.dot(token1.val, token2.val), rest));
+  }
+
   glinear method obtain_invariant_3(
       glinear inout token1: Token,
       glinear inout token2: Token,
