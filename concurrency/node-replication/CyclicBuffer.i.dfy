@@ -841,7 +841,7 @@ predicate CombinerStateValid(x: M)
   {
     && m.M?
     && CombinerKnown(m, combinerNodeId)
-    && CombinerIsAdvancingHead(m, combinerNodeId)
+    && CombinerIsAdvancingHeadDone(m, combinerNodeId)
 
     && m' == m.(
       combinerState := m.combinerState[combinerNodeId := CombinerIdle]

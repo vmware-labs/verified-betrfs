@@ -171,6 +171,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerAdvancingHead?
   requires local_tail.nodeId == combiner.rs.idx
+  requires combiner.rs.idx != NUM_REPLICAS as nat
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == CB.CombinerAdvancingHead(combiner.rs.idx + 1,
       if combiner.rs.min_tail < local_tail.tail then combiner.rs.min_tail else local_tail.tail)
@@ -183,7 +184,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       combiner.rs.idx + 1, if combiner.rs.min_tail < local_tail.tail then combiner.rs.min_tail else local_tail.tail));
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
-    assume combiner.rs.idx < NUM_REPLICAS as nat; // TODO
+    assert combiner.rs.idx <= NUM_REPLICAS as nat; // TODO for Travis: from the invariant
+    assert combiner.rs.idx < NUM_REPLICAS as nat; // invariant + requires
     CB.StepAdvanceHead_is_transition(
       CB.dot(t_token.val, c_token.val),
       CB.dot(t_token.val, out_token_expect.val),
@@ -197,6 +199,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   glinear method abandon_advance_head_state(glinear combiner: CBCombinerToken)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerAdvancingHead?
+  requires combiner.rs.idx == NUM_REPLICAS as nat
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == CB.CombinerIdle
   {
@@ -206,7 +209,6 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle);
     ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
 
-    assume combiner.rs.idx < NUM_REPLICAS as nat; // TODO
     CB.AbandonAdvanceHead_is_transition(
       c_token.val,
       out_token_expect_1.val,
@@ -369,8 +371,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     ghost var key := combiner.rs.cur_idx;
 
-    assume key !in contents.contents; // TODO
-    assume !CB.EntryIsAlive(a_token.val.aliveBits, key);
+    assume key !in contents.contents; // TODO ask Travis
+    assume !CB.EntryIsAlive(a_token.val.aliveBits, key); // TODO ask Travis
     CB.AppendFlipBit_is_deposit(
       CB.dot(CB.dot(c_token.val, a_token.val), contents_token.val),
       CB.dot(CB.dot(out_token_expect_1.val, out_token_expect_2.val), out_token_expect_3.val),
