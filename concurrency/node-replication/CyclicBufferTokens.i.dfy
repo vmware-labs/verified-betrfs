@@ -183,6 +183,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       combiner.rs.idx + 1, if combiner.rs.min_tail < local_tail.tail then combiner.rs.min_tail else local_tail.tail));
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
+    assume combiner.rs.idx < NUM_REPLICAS as nat; // TODO
     CB.StepAdvanceHead_is_transition(
       CB.dot(t_token.val, c_token.val),
       CB.dot(t_token.val, out_token_expect.val),
@@ -313,9 +314,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   returns (glinear combiner': CBCombinerToken, glinear bit': CBAliveBit, glinear contents': CBContents)
   requires combiner.rs.CombinerAppending?
   requires combiner.rs.cur_idx < combiner.rs.tail
-  requires bit.entry == CB.LogicalToPhysicalIndex(combiner.rs.cur_idx)   // TODO(andrea) is this a problem?
-  requires bit.bit != CB.LogicalToAliveBitAliveWhen(combiner.rs.cur_idx) // TODO(andrea) is this a problem?
-  requires combiner.rs.cur_idx !in contents.contents                     // TODO(andrea) is this a problem?
+  requires bit.entry == CB.LogicalToPhysicalIndex(combiner.rs.cur_idx)
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == combiner.rs.(cur_idx := combiner.rs.cur_idx + 1)
   ensures bit' == bit.(bit := CB.LogicalToAliveBitAliveWhen(combiner.rs.cur_idx))
@@ -338,6 +337,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     ghost var key := combiner.rs.cur_idx;
 
+    assume key !in contents.contents; // TODO
     CB.AppendFlipBit_is_deposit(
       CB.dot(CB.dot(c_token.val, a_token.val), contents_token.val),
       CB.dot(CB.dot(out_token_expect_1.val, out_token_expect_2.val), out_token_expect_3.val),
@@ -352,6 +352,13 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     contents' := CBContents_fold(out_expect_3, out_token_3);
   }
 
+  glinear method finish_appending(glinear combiner: CBCombinerToken)
+  returns (glinear combiner': CBCombinerToken)
+  requires combiner.rs.CombinerAppending?
+  requires combiner.rs.cur_idx == combiner.rs.tail
+  ensures combiner'.nodeId == combiner.nodeId
+  ensures combiner'.rs == CB.CombinerIdle
+
   glinear method reader_start(glinear combiner: CBCombinerToken, gshared localTail: CBLocalTail)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.nodeId == localTail.nodeId
@@ -363,10 +370,10 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderStarting?
   ensures combiner' == combiner.(rs := CB.CombinerIdle)
 
-  glinear method reader_enter(glinear combiner: CBCombinerToken, gshared globalTail: CBGlobalTail, ghost cur: nat)
+  glinear method reader_enter(glinear combiner: CBCombinerToken, gshared globalTail: CBGlobalTail)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderStarting?
-  ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, globalTail.tail, cur)))
+  ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, globalTail.tail, combiner.rs.readerState.start)))
 
   glinear method reader_guard(glinear combiner: CBCombinerToken, gshared aliveBit: CBAliveBit, ghost i: nat,
       gshared contents: CBContents)
@@ -382,7 +389,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   glinear method reader_unguard(glinear combiner: CBCombinerToken)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderGuard?
-  ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, combiner.rs.readerState.end, combiner.rs.readerState.cur)))
+  ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, combiner.rs.readerState.end, combiner.rs.readerState.cur + 1)))
 
   glinear method reader_finish(glinear combiner: CBCombinerToken, glinear localTail: CBLocalTail)
   returns (glinear combiner': CBCombinerToken, glinear localTail': CBLocalTail)

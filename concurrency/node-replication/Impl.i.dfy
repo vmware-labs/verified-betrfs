@@ -963,7 +963,8 @@ module Impl(nrifc: NRIfc) {
     while !done
     invariant 0 <= iteration as int <= WARN_THRESHOLD as int
     invariant 0 <= waitgc as int <= WARN_THRESHOLD as int
-    invariant cb' == cb
+    // invariant cb' == cb
+    invariant cb'.nodeId == cb.nodeId
     invariant cb'.rs.CombinerIdle?
     invariant ghost_replica'.state == nrifc.I(actual_replica')
     invariant ghost_replica'.nodeId == node.nodeId as int
@@ -1040,8 +1041,16 @@ module Impl(nrifc: NRIfc) {
               // no transition
               log_entries := glmap_empty(); // to satisfy linearity checker
               cyclic_buffer_entries := glmap_empty();
+
+              cb' := abandon_advance_tail(cb');
             }
-            // TODO(andrea) requires additional ensures on finish_advance_tail
+
+            forall i | i in contents.contents
+            ensures BufferEntryInv(nr.buffer, i, contents.contents[i])
+            {
+              assume BufferEntryInv(nr.buffer, i, contents.contents[i]); // TODO
+            }
+
             ghost_release contents;
           }
           ghost_release globalTailTokens;
@@ -1053,6 +1062,7 @@ module Impl(nrifc: NRIfc) {
           var j := 0;
           while j < num_ops
           invariant 0 <= j <= num_ops
+          invariant cb'.nodeId == cb.nodeId
           invariant cb'.rs.CombinerAppending?
           invariant cb'.rs.cur_idx == tail as int + j as int
           invariant cb'.rs.tail == tail as int + num_ops as int
@@ -1118,6 +1128,8 @@ module Impl(nrifc: NRIfc) {
 
           assert pre_exec(node, requestIds, responses', updates', combinerState');
 
+          cb' := finish_appending(cb');
+
           if advance {
             actual_replica', responses', ghost_replica',
                 updates', combinerState', cb' :=
@@ -1127,9 +1139,13 @@ module Impl(nrifc: NRIfc) {
             assert combinerState'.state.CombinerPlaced? ==>
                 pre_exec(node, requestIds, responses', updates', combinerState');
           }
+
+          assert cb'.rs.CombinerIdle?;
           
           done := true;
         } else {
+          assert cb'.rs.CombinerIdle?;
+
           dispose_anything(log_entries);
           dispose_anything(cyclic_buffer_entries);
         }
@@ -1241,8 +1257,7 @@ module Impl(nrifc: NRIfc) {
         cb' := reader_abort(cb');
       } else {
         combinerState' := perform_ExecLoadGlobalTail(combinerState', gtail_token.globalTail);
-        ghost var cur := 0; // TODO ?
-        cb' := reader_enter(cb', gtail_token.cbGlobalTail, cur);
+        cb' := reader_enter(cb', gtail_token.cbGlobalTail);
       }
       ghost_release gtail_token;
     }
@@ -1254,6 +1269,10 @@ module Impl(nrifc: NRIfc) {
 
       ghost var prev_combinerState := combinerState';
       var i := ltail;
+
+      assert cb'.rs.CombinerReading?;
+      assert cb'.rs.readerState == CB.ReaderRange(ltail as int, gtail as int, i as nat);
+
       while i < gtail
       invariant 0 <= i <= gtail
       invariant combinerState'.nodeId == prev_combinerState.nodeId
@@ -1282,7 +1301,7 @@ module Impl(nrifc: NRIfc) {
         var done := false;
         while !done
         invariant 0 <= iteration as int <= WARN_THRESHOLD as int
-        invariant cb' == CBCombinerToken(node.nodeId as int, CB.CombinerReading(CB.ReaderRange(ltail as int, gtail as int, i as nat)))
+        invariant cb' == CBCombinerToken(node.nodeId as int, CB.CombinerReading(CB.ReaderRange(ltail as int, gtail as int, if !done then i as nat else i as nat + 1)))
         invariant ghost_replica'.state == nrifc.I(actual_replica')
         invariant ghost_replica'.nodeId == node.nodeId as int
         invariant combinerState'.nodeId == prev_combinerState.nodeId
@@ -1366,6 +1385,9 @@ module Impl(nrifc: NRIfc) {
         }
 
         i := i + 1;
+
+        assert cb'.rs.CombinerReading?;
+        assert cb'.rs.readerState == CB.ReaderRange(ltail as int, gtail as int, i as nat);
       }
 
       // Use the state machine invariant to learn that the queue is complete
@@ -1512,9 +1534,9 @@ module Impl(nrifc: NRIfc) {
       var idx: uint64 := 1;
       while idx < r
       invariant 0 <= idx <= r
-      invariant cb.rs == CB.CombinerAdvancingHead(idx as int, min_local_tail as int)
+      invariant cb'.nodeId == cb.nodeId
+      invariant cb'.rs == CB.CombinerAdvancingHead(idx as int, min_local_tail as int)
 
-      invariant cb' == cb
       invariant ghost_replica'.state == nrifc.I(actual_replica')
       invariant ghost_replica'.nodeId == node.nodeId as int
 
@@ -1524,7 +1546,7 @@ module Impl(nrifc: NRIfc) {
       invariant combinerState'.state.CombinerReady? ==>
           post_exec(node, requestIds, responses', updates', combinerState')
       invariant combinerState'.state.CombinerPlaced? ==>
-        updates' == updates && combinerState' == combinerState && cb' == cb
+        updates' == updates && combinerState' == combinerState
             && responses' == responses
       invariant |responses'| == MAX_THREADS_PER_REPLICA as int
 
@@ -1563,7 +1585,8 @@ module Impl(nrifc: NRIfc) {
           ghost_release head;
         }
 
-        if f < min_local_tail + (LOG_SIZE - GC_FROM_HEAD) { // TODO bounded int errors
+        assume min_local_tail as nat + (LOG_SIZE as int - GC_FROM_HEAD as nat) < Uint64UpperBound(); // TODO bounded int errors
+        if f < min_local_tail + (LOG_SIZE - GC_FROM_HEAD) {
           done := true;
         } else {
           actual_replica', responses',
