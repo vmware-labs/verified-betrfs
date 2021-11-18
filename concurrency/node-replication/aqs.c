@@ -11,7 +11,6 @@
 #include <sys/mman.h>
 #include <pthread.h>
 #include <assert.h>
-#include <papi.h>
 
 #include "utils.h"
 #include "aqs.h"
