@@ -20,7 +20,7 @@ BUNDLE_DAFNY=Bundle$(DATA_STRUCTURE_NAME).i.dfy
 BUNDLE_CPP=Bundle$(DATA_STRUCTURE_NAME).i.cpp
 BUNDLE_H=Bundle$(DATA_STRUCTURE_NAME).i.h
 
-CFLAGS := -g -O3 -std=c++17 \
+CFLAGS := -g -O3 -std=gnu++17 \
 	-I ../../.dafny/dafny/Binaries/ -I ../framework/ -D$(DATA_STRUCTURE)
 
 HEADERS := \
@@ -51,6 +51,9 @@ $(BUNDLE_CPP) $(BUNDLE_H): *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/
 Bundle.o: $(BUNDLE_CPP) $(HEADERS)
 	g++ $(CFLAGS) -c -o $@ $<
 
+aqs.o: aqs.c aqs.h padding.h utils.h
+	g++ $(CFLAGS) -c -o $@ $<
+
 mcs.o: mcs.c mcs.h padding.h utils.h
 	g++ $(CFLAGS) -c -o $@ $<
 
@@ -60,8 +63,8 @@ main.o: main.cpp $(HEADERS)
 vspace_glue.o: ./vspace/target/cxxbridge/vspace/src/lib.rs.cc $(HEADERS)
 	g++ $(CFLAGS) -c -o $@ $<
 
-app: main.o Bundle.o vspace_glue.o ./vspace/target/release/libvspace.a mcs.o
-	g++ -g -o app mcs.o Bundle.o vspace_glue.o main.o -L ./vspace/target/release/ $(LIBS)
+app: main.o Bundle.o vspace_glue.o ./vspace/target/release/libvspace.a mcs.o aqs.o
+	g++ -g -o app aqs.o mcs.o Bundle.o vspace_glue.o main.o -L ./vspace/target/release/ $(LIBS)
 
 .PHONY: clean
 
