@@ -829,6 +829,46 @@ predicate CombinerStateValid(x: M)
 
   /* ----------------------------------------------------------------------------------------- */
 
+  predicate AbandonAdvanceHead(m: M, m': M, combinerNodeId: nat)
+  {
+    && m.M?
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsAdvancingHead(m, combinerNodeId)
+
+    && m' == m.(
+      combinerState := m.combinerState[combinerNodeId := CombinerIdle]
+    )
+  }
+
+  lemma AbandonAdvanceHead_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires AbandonAdvanceHead(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      assert Inv(dot(m', p)) by {
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
+
+        assert  RangesNoOverlap(dot(m', p)) by {
+          assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
+        }
+      }
+      assert I(dot(m, p)) == I(dot(m', p));
+    }
+  }
+
+  /* ----------------------------------------------------------------------------------------- */
+
   predicate FinishAdvanceHead(m: M, m': M, combinerNodeId: nat)
   {
     && m.M?
@@ -917,13 +957,46 @@ predicate CombinerStateValid(x: M)
   }
 
   /* ----------------------------------------------------------------------------------------- */
-
-  function MapFilter<V>(m1: map<int, V>, minkey: int): map<int, V>
+  
+  predicate AbandonAdvanceTail(m: M, m': M, combinerNodeId: nat)
   {
-    map k | k in m1.Keys && minkey <= k :: m1[k]
+    && m.M?
+    && CombinerKnown(m, combinerNodeId)
+    && CombinerIsAdvancingTail(m, combinerNodeId)
+
+    && m' == m.(
+      combinerState := m.combinerState[combinerNodeId := CombinerIdle]
+    )
   }
 
+  lemma AbandonAdvanceTail_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires AbandonAdvanceTail(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      assert Inv(dot(m', p)) by {
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
 
+        assert  RangesNoOverlap(dot(m', p)) by {
+          assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
+          assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerReader();
+          }
+          assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
+            reveal_RangesNoOverlapCombinerCombiner();
+          }
+        }
+      }
+      assert I(dot(m, p)) == I(dot(m', p));
+    }
+  }
+
+  /* ----------------------------------------------------------------------------------------- */
 
   predicate FinishAdvanceTail(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>) // withdraw
   {
