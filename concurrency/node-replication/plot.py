@@ -66,7 +66,13 @@ class theme_my538(theme_gray):
 
 def throughput_vs_cores(machine, df, graph='compare-locks'):
     df['config'] = df['bench_name'] + [str(i) for i in df['n_replicas'].to_list()]
-    bench_cat = pd.api.types.CategoricalDtype(categories=['dafny_nr', 'rust_nr', 'dafny_rwlock', 'mcs', 'cpp_shared_mutex'], ordered=True)
+    bench_cat = pd.api.types.CategoricalDtype(categories=['dafny_nr'
+                                                         , 'rust_nr'
+                                                         , 'dafny_rwlock'
+                                                         , 'shfllock'
+                                                         , 'mcs'
+                                                         , 'cpp_shared_mutex'
+                                                         ], ordered=True)
     df['bench_name'] = df['bench_name'].astype(bench_cat)
     df = df.loc[df['n_threads'] >= 4]
     df['n_replicas'] = pd.Categorical(df.n_replicas)
@@ -80,7 +86,13 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
                    color='bench_name',
                    shape='bench_name',
                    group='bench_name')
-        labels = ['Dafny NR', 'Rust NR', 'Dafny RwLock', 'C++ MCS Lock', 'C++ std::shared_mutex']
+        labels = ['Dafny NR'
+                 , 'Rust NR'
+                 , 'Dafny RwLock'
+                 , 'C++ ShflLock'
+                 , 'C++ MCS Lock'
+                 , 'C++ std::shared_mutex'
+                 ]
         linetypes = ['solid', 'dashed', 'dotted']
     else:
         df = df.loc[df['bench_name'].isin(['dafny_nr', 'rust_nr'])]

@@ -16,7 +16,7 @@ NODES = 4
 MAX_THREADS = NODES * CORES_PER_NODE
 
 NR_BENCHES = ['dafny_nr', 'rust_nr']
-OTHER_BENCHES = ['dafny_rwlock', 'cpp_shared_mutex']
+OTHER_BENCHES = ['dafny_rwlock', 'shfllock', 'mcs', 'cpp_shared_mutex']
 READS_PCT = [100, 95, 50, 0, 90]
 
 N_REPLICAS = [1, 2, 4]
