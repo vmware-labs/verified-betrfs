@@ -567,8 +567,16 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     assert combiner.rs.readerState == c_token.val.combinerState[nodeId].readerState;
     assert aliveBit.entry in a_token.val.aliveBits && a_token.val.aliveBits[aliveBit.entry] == aliveBit.bit;
 
+    assert CB.Complete(all);
     assert CB.ReaderStateValid(all);
-    assert c_token.val.combinerState[nodeId].readerState.cur in contents_token.val.contents.value;
+    assert c_token.val.combinerState[nodeId].readerState.cur in contents_token.val.contents.value by {
+      CB.reveal_AliveBitsComplete();
+      CB.reveal_LocalTailsComplete();
+      CB.reveal_ContentsComplete();
+
+      assert all.tail.value - (LOG_SIZE as nat) <= i < all.tail.value; // TODO this should be provable from the invariant
+      assert CB.EntryIsAlive(a_token.val.aliveBits, i);
+    }
     assert c_token.val.combinerState[nodeId].readerState.start <= c_token.val.combinerState[nodeId].readerState.cur < c_token.val.combinerState[nodeId].readerState.end by {
       CB.reveal_LocalTailsComplete();
       CB.reveal_CombinerStateComplete();
