@@ -143,6 +143,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     }
   }
 
+  /* ----------------------------------------------------------------------------------------- */
+
   glinear method init_advance_head_state(glinear combiner: CBCombinerToken, gshared first_local_tail: CBLocalTail)
   returns (glinear combiner': CBCombinerToken)
   requires first_local_tail.nodeId == 0
@@ -166,6 +168,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     combiner' := CBCombinerToken_fold(out_expect, out_token);
   }
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method step_advance_head_state(glinear combiner: CBCombinerToken, gshared local_tail: CBLocalTail)
   returns (glinear combiner': CBCombinerToken)
@@ -200,6 +204,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     combiner' := CBCombinerToken_fold(out_expect, out_token);
   }
 
+  /* ----------------------------------------------------------------------------------------- */
+
   glinear method abandon_advance_head_state(glinear combiner: CBCombinerToken)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerAdvancingHead?
@@ -221,6 +227,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     glinear var out_token_1 := CBTokens.internal_transition(c_token, out_token_expect_1.val);
     combiner' := CBCombinerToken_fold(out_expect_1, out_token_1);
   }
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method finish_advance_head_state(glinear combiner: CBCombinerToken, glinear head: CBHead)
   returns (glinear combiner': CBCombinerToken, glinear head': CBHead)
@@ -250,6 +258,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     head' := CBHead_fold(out_expect_2, out_token_2);
   }
 
+  /* ----------------------------------------------------------------------------------------- */
+
   glinear method init_advance_tail_state(glinear combiner: CBCombinerToken, gshared head: CBHead)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs == CB.CombinerIdle
@@ -273,8 +283,12 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     combiner' := CBCombinerToken_fold(out_expect, out_token);
   }
 
+  /* ----------------------------------------------------------------------------------------- */
+
   ghost method XXX_TODO_invent<A>() returns (a: A)
   glinear method XXX_TODO_invent_glinear<A>() returns (glinear a: A)
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method abandon_advance_tail(glinear combiner: CBCombinerToken)
   returns (glinear combiner': CBCombinerToken)
@@ -296,6 +310,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     glinear var out_token_1 := CBTokens.internal_transition(c_token, out_token_expect_1.val);
     combiner' := CBCombinerToken_fold(out_expect_1, out_token_1);
   }
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method finish_advance_tail(glinear combiner: CBCombinerToken, glinear tail: CBGlobalTail,
       glinear contents: CBContents, ghost new_tail: nat)
@@ -347,6 +363,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     assume false;
   }
 
+  /* ----------------------------------------------------------------------------------------- */
+
   glinear method append_flip_bit(
       glinear combiner: CBCombinerToken, glinear bit: CBAliveBit, glinear contents: CBContents, glinear value: CB.StoredType)
   returns (glinear combiner': CBCombinerToken, glinear bit': CBAliveBit, glinear contents': CBContents)
@@ -374,7 +392,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost var out_token_expect_3 := CBContents_unfold(out_expect_3);
 
     ghost var key := combiner.rs.cur_idx;
-  
+
     ghost var rest := CBTokens.obtain_invariant_3(inout a_token, inout c_token, inout contents_token);
     assert CB.CombinerStateValid(CB.dot(CB.dot(CB.dot(a_token.val, c_token.val), contents_token.val), rest));
     assert nodeId in c_token.val.combinerState && combiner.rs == c_token.val.combinerState[nodeId];
@@ -404,6 +422,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     bit' := CBAliveBit_fold(out_expect_2, out_token_2);
     contents' := CBContents_fold(out_expect_3, out_token_3);
   }
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method finish_appending(glinear combiner: CBCombinerToken)
   returns (glinear combiner': CBCombinerToken)
@@ -489,10 +509,14 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     localTail' := CBLocalTail_fold(out_expect_2, out_token_2);
   }
 
+  /* ----------------------------------------------------------------------------------------- */
+
   function method reader_borrow(gshared combiner: CBCombinerToken)
     : (gshared v: CB.StoredType)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderGuard?
   ensures v == combiner.rs.readerState.val
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method cyclic_buffer_init(glinear m: map<int, CB.StoredType>)
   returns (
