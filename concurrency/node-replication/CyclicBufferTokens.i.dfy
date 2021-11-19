@@ -580,7 +580,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       CB.dot(CB.dot(a_token.val, contents_token.val), out_token_expect.val), nodeId, i);
 
     // do the internal transition
-    glinear var out_token := CBTokens.internal_transition_1_1_1(c_token, contents_token, out_token_expect.val);
+    glinear var out_token := CBTokens.internal_transition_2_1_1(a_token, contents_token, c_token, out_token_expect.val);
 
     // update the combiner
     combiner' := CBCombinerToken_fold(out_expect, out_token);
