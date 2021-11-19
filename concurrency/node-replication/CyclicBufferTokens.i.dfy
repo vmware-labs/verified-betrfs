@@ -537,9 +537,10 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       gshared contents: CBContents)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderRange?
-  requires combiner.rs.readerState.start <= i < combiner.rs.readerState.end
+  // requires combiner.rs.readerState.start <= i < combiner.rs.readerState.end
   requires i % LOG_SIZE as int == aliveBit.entry
   requires aliveBit.bit == ((i / LOG_SIZE as int) % 2 == 0)
+  requires i == combiner.rs.readerState.cur
   ensures i in contents.contents
   ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderGuard(combiner.rs.readerState.start, combiner.rs.readerState.end,
       i, contents.contents[i])))
@@ -547,23 +548,39 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     // get the node id and combiner token
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
+    gshared var a_token := CBAliveBit_unfold_borrow(aliveBit);
 
-    // updated result
-    assume i in contents.contents;
-    assume combiner.rs.readerState.cur < combiner.rs.readerState.end;
+    gshared var contents_token := CBContents_unfold_borrow(contents);
 
-    // TODO: do we need to construct a new M here or change the type of content?
-    // glinear var c := CBContents(contents.contents);
-    //assume contents.Some?
+    ghost var expected_x := CB.dot(a_token.val, contents_token.val);
+    forall r | CBTokens.pcm.valid(r) && CBTokens.pcm.le(a_token.val, r) && CBTokens.pcm.le(contents_token.val, r)
+    ensures CBTokens.pcm.le(expected_x, r)
+    {
+      assert CBTokens.pcm.le(expected_x, r);
+    }
+    ghost var rest := CBTokens.obtain_invariant_2_1(a_token, contents_token, inout c_token);
+
+    assert contents_token.val.contents.value == contents.contents;
+    assert nodeId in c_token.val.combinerState && combiner.rs == c_token.val.combinerState[nodeId];
+    assert aliveBit.entry in a_token.val.aliveBits && a_token.val.aliveBits[aliveBit.entry] == aliveBit.bit;
+
+    assert i in contents_token.val.contents.value;
+    assert combiner.rs.readerState.cur < combiner.rs.readerState.end;
+
+    assert contents_token.val.contents.value[i] == contents.contents[i];
 
     ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderGuard(combiner.rs.readerState.start, combiner.rs.readerState.end, i, contents.contents[i])));
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
+    assert CB.LogicalToPhysicalIndex(i) in a_token.val.aliveBits;
+
     // the transition
-    CB.ReaderDoGuard_is_transition(c_token.val, out_token_expect.val, nodeId, i);
+    CB.ReaderDoGuard_is_transition(
+      CB.dot(CB.dot(a_token.val, contents_token.val), c_token.val),
+      CB.dot(CB.dot(a_token.val, contents_token.val), out_token_expect.val), nodeId, i);
 
     // do the internal transition
-    glinear var out_token := CBTokens.internal_transition(c_token, out_token_expect.val);
+    glinear var out_token := CBTokens.internal_transition_1_1_1(c_token, contents_token, out_token_expect.val);
 
     // update the combiner
     combiner' := CBCombinerToken_fold(out_expect, out_token);
