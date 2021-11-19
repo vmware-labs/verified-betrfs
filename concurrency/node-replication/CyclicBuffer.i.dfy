@@ -95,45 +95,46 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   }
 
 
-  function MinLocalTail(ltails: map<NodeId, nat>) : (m : nat)
+  function {:opaque} MinLocalTail(ltails: map<NodeId, nat>) : (m : nat)
     requires LocalTailsComplete(ltails)
     ensures forall i : nat | i in ltails :: m <= ltails[i]
     ensures exists i : nat | i in ltails :: ltails[i] == m
+    ensures m in ltails.Values
   {
     assert forall i : nat | i in ltails ::  0 <= i < NUM_REPLICAS as nat by { reveal_LocalTailsComplete(); }
     MinLocalTailRec(ltails, NUM_REPLICAS as nat - 1)
   }
 
-  function max(a: nat, b: nat) : nat {
-    if a > b then a
-    else b
-  }
+  // function max(a: nat, b: nat) : nat {
+  //   if a > b then a
+  //   else b
+  // }
 
-  function {:induction true} MaxLocalTailRec(ltails: map<NodeId, nat>, idx: nat) : (m : nat)
-    requires idx < NUM_REPLICAS as nat
-    requires LocalTailsComplete(ltails)
-    requires LocalTailsComplete(ltails)
-    ensures forall i : nat | 0 <= i <= idx :: i in ltails && m >= ltails[i]
-    ensures exists i : nat | 0 <= i <= idx :: i in ltails && ltails[i] == m
-    decreases idx
-  {
-    assert forall i : nat | 0 <= i <= idx :: i in ltails by { reveal_LocalTailsComplete(); }
-    if idx == 0 then
-      ltails[0]
-    else
-      max(ltails[idx], MaxLocalTailRec(ltails, idx - 1))
-  }
+  // function {:induction true} MaxLocalTailRec(ltails: map<NodeId, nat>, idx: nat) : (m : nat)
+  //   requires idx < NUM_REPLICAS as nat
+  //   requires LocalTailsComplete(ltails)
+  //   requires LocalTailsComplete(ltails)
+  //   ensures forall i : nat | 0 <= i <= idx :: i in ltails && m >= ltails[i]
+  //   ensures exists i : nat | 0 <= i <= idx :: i in ltails && ltails[i] == m
+  //   decreases idx
+  // {
+  //   assert forall i : nat | 0 <= i <= idx :: i in ltails by { reveal_LocalTailsComplete(); }
+  //   if idx == 0 then
+  //     ltails[0]
+  //   else
+  //     max(ltails[idx], MaxLocalTailRec(ltails, idx - 1))
+  // }
 
-  function MaxLocalTail(ltails: map<NodeId, nat>) : (m : nat)
-    requires LocalTailsComplete(ltails)
-    ensures forall i : nat | 0 <= i < NUM_REPLICAS as nat :: i in ltails && m >= ltails[i]
-    ensures forall i : nat | i in ltails :: m >= ltails[i]
-    ensures exists i : nat | 0 <= i < NUM_REPLICAS as nat :: i in ltails && ltails[i] == m
-    ensures m in ltails.Values
-  {
-    assert forall i : nat | i in ltails ::  0 <= i < NUM_REPLICAS as nat by { reveal_LocalTailsComplete(); }
-    MaxLocalTailRec(ltails, NUM_REPLICAS as nat - 1)
-  }
+  // function MaxLocalTail(ltails: map<NodeId, nat>) : (m : nat)
+  //   requires LocalTailsComplete(ltails)
+  //   ensures forall i : nat | 0 <= i < NUM_REPLICAS as nat :: i in ltails && m >= ltails[i]
+  //   ensures forall i : nat | i in ltails :: m >= ltails[i]
+  //   ensures exists i : nat | 0 <= i < NUM_REPLICAS as nat :: i in ltails && ltails[i] == m
+  //   ensures m in ltails.Values
+  // {
+  //   assert forall i : nat | i in ltails ::  0 <= i < NUM_REPLICAS as nat by { reveal_LocalTailsComplete(); }
+  //   MaxLocalTailRec(ltails, NUM_REPLICAS as nat - 1)
+  // }
 
 
   function MinusLogSize(i: int): int {
@@ -295,7 +296,7 @@ predicate CombinerStateValid(x: M)
         case CombinerAdvancingTail(observed_head: nat) => (
           // the observed head is smaller than all local tails
           && (forall n | 0 <= n < NUM_REPLICAS as nat :: observed_head <= (
-            assert n in x.localTails by {  }
+            assert n in x.localTails by { reveal_LocalTailsComplete(); }
             x.localTails[n]))
         )
         case CombinerAppending(cur_idx: nat, tail: nat) => (
@@ -898,6 +899,10 @@ predicate CombinerStateValid(x: M)
           reveal_CombinerStateComplete();
         }
 
+        assert PointerOrdering(dot(m', p)) by {
+          reveal_MinLocalTail();
+        }
+
         assert  RangesNoOverlap(dot(m', p)) by {
           assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
@@ -941,6 +946,10 @@ predicate CombinerStateValid(x: M)
 
         assert Complete(dot(m', p)) by {
           reveal_CombinerStateComplete();
+        }
+
+        assert CombinerStateValid(dot(m', p)) by {
+          reveal_MinLocalTail();
         }
 
         assert  RangesNoOverlap(dot(m', p)) by {
@@ -1066,6 +1075,10 @@ predicate CombinerStateValid(x: M)
         assert Complete(dot(m', p)) by {
           reveal_CombinerStateComplete();
           reveal_ContentsComplete();
+        }
+
+        assert PointerOrdering(dot(m', p)) by {
+          reveal_MinLocalTail();
         }
 
         assert forall n | n in dot(m', p).combinerState :: n in dot(m', p).localTails by {
@@ -1259,6 +1272,7 @@ predicate CombinerStateValid(x: M)
         }
 
         assert ReaderStateValid(dot(m', p)) by {
+          reveal_MinLocalTail();
           forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerReading?
               && dot(m', p).combinerState[n].readerState.ReaderRange?
           ensures forall i | dot(m', p).combinerState[n].readerState.start <= i < dot(m', p).combinerState[n].readerState.cur :: EntryIsAlive(dot(m', p).aliveBits, i)
@@ -1278,7 +1292,6 @@ predicate CombinerStateValid(x: M)
             assert 0 <= n < NUM_REPLICAS as nat by {
               reveal_CombinerStateComplete();
             }
-
             assert !(dot(m', p).combinerState[n].readerState.start <= key <= dot(m', p).combinerState[n].readerState.cur);
           }
         }
@@ -1476,6 +1489,7 @@ predicate CombinerStateValid(x: M)
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
             reveal_RangesNoOverlapCombinerReader();
             reveal_CombinerStateComplete();
+            reveal_MinLocalTail();
           }
         }
       }
@@ -1575,6 +1589,7 @@ predicate CombinerStateValid(x: M)
         assert CombinerStateValid(dot(m', p)) by {
           assert forall n | n in dot(m', p).combinerState ::
              n in dot(m', p).localTails by { reveal_LocalTailsComplete(); reveal_CombinerStateComplete(); }
+          reveal_MinLocalTail();
         }
 
         assert ReaderStateValid(dot(m', p)) by {
@@ -1605,4 +1620,39 @@ predicate CombinerStateValid(x: M)
       }
     }
   }
+
+  /* ----------------------------------------------------------------------------------------- */
+
+  predicate ReaderDoAbort(m: M, m': M, combinerNodeId: nat)
+  {
+    && m.M?
+
+    && CombinerKnown(m, combinerNodeId)
+    && (CombinerIsReaderRange(m, combinerNodeId) || CombinerIsReaderStarting(m, combinerNodeId))
+
+    && m' == m.(combinerState := m.combinerState[combinerNodeId := CombinerIdle])
+  }
+
+  lemma ReaderDoAbort_is_transition(m: M, m': M, combinerNodeId: nat)
+  requires ReaderDoAbort(m, m', combinerNodeId)
+  ensures transition(m, m')
+  {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
+      assert Inv(dot(m', p)) by {
+        assert Complete(dot(m', p)) by {
+          reveal_CombinerStateComplete();
+        }
+        assert RangesNoOverlap(dot(m', p)) by {
+          reveal_RangesNoOverlapCombinerCombiner();
+          reveal_RangesNoOverlapCombinerReader();
+        }
+      }
+      assert I(dot(m, p)) == I(dot(m', p));
+    }
+  }
 }
+
+
