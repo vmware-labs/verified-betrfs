@@ -537,7 +537,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       gshared contents: CBContents)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderRange?
-  // requires combiner.rs.readerState.start <= i < combiner.rs.readerState.end
+  // TODO I don't think this should be needed: requires combiner.rs.readerState.start <= i < combiner.rs.readerState.end
   requires i % LOG_SIZE as int == aliveBit.entry
   requires aliveBit.bit == ((i / LOG_SIZE as int) % 2 == 0)
   requires i == combiner.rs.readerState.cur
@@ -556,16 +556,24 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     forall r | CBTokens.pcm.valid(r) && CBTokens.pcm.le(a_token.val, r) && CBTokens.pcm.le(contents_token.val, r)
     ensures CBTokens.pcm.le(expected_x, r)
     {
-      assert CBTokens.pcm.le(expected_x, r);
+      assume CBTokens.pcm.le(expected_x, r); // TODO
     }
     ghost var rest := CBTokens.obtain_invariant_2_1(a_token, contents_token, inout c_token);
+    ghost var all := CB.dot(CB.dot(CB.dot(a_token.val, contents_token.val), c_token.val), rest);
+    assert CB.Inv(all);
 
     assert contents_token.val.contents.value == contents.contents;
     assert nodeId in c_token.val.combinerState && combiner.rs == c_token.val.combinerState[nodeId];
+    assert combiner.rs.readerState == c_token.val.combinerState[nodeId].readerState;
     assert aliveBit.entry in a_token.val.aliveBits && a_token.val.aliveBits[aliveBit.entry] == aliveBit.bit;
 
-    assert i in contents_token.val.contents.value;
-    assert combiner.rs.readerState.cur < combiner.rs.readerState.end;
+    assert CB.ReaderStateValid(all);
+    assert c_token.val.combinerState[nodeId].readerState.cur in contents_token.val.contents.value;
+    assert c_token.val.combinerState[nodeId].readerState.start <= c_token.val.combinerState[nodeId].readerState.cur < c_token.val.combinerState[nodeId].readerState.end by {
+      CB.reveal_LocalTailsComplete();
+      CB.reveal_CombinerStateComplete();
+    } // TODO should be trivial from CB.ReaderStateValid(all)
+    assert combiner.rs.readerState.cur < combiner.rs.readerState.end; // TODO
 
     assert contents_token.val.contents.value[i] == contents.contents[i];
 
