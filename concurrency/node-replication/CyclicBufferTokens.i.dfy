@@ -448,21 +448,87 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     combiner' := CBCombinerToken_fold(out_expect_1, out_token_1);
   }
 
+  /* ----------------------------------------------------------------------------------------- */
+
   glinear method reader_start(glinear combiner: CBCombinerToken, gshared localTail: CBLocalTail)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.nodeId == localTail.nodeId
   requires combiner.rs.CombinerIdle?
   ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderStarting(localTail.tail)))
+  {
+    gshared var t_token := CBLocalTail_unfold_borrow(localTail);
+    ghost var nodeId := combiner.nodeId;
+    glinear var c_token := CBCombinerToken_unfold(combiner);
+
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderStarting(localTail.tail)));
+    ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
+
+    CB.ReaderDoStart_is_transition(
+      CB.dot(t_token.val, c_token.val),
+      CB.dot(t_token.val, out_token_expect.val),
+      nodeId);
+
+    glinear var out_token := CBTokens.internal_transition_1_1_1(c_token, t_token, out_token_expect.val);
+
+    combiner' := CBCombinerToken_fold(out_expect, out_token);
+
+  }
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method reader_abort(glinear combiner: CBCombinerToken)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderStarting?
   ensures combiner' == combiner.(rs := CB.CombinerIdle)
+  {
+    // get the node id and combiner token
+    ghost var nodeId := combiner.nodeId;
+    glinear var c_token := CBCombinerToken_unfold(combiner);
+
+    // updated result
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerIdle);
+    ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
+
+    // the transition
+    CB.ReaderDoAbort_is_transition(c_token.val,out_token_expect.val,nodeId);
+
+    // do the internal transition
+    glinear var out_token := CBTokens.internal_transition(c_token, out_token_expect.val);
+
+    // update the combiner
+    combiner' := CBCombinerToken_fold(out_expect, out_token);
+  }
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method reader_enter(glinear combiner: CBCombinerToken, gshared globalTail: CBGlobalTail)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderStarting?
   ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, globalTail.tail, combiner.rs.readerState.start)))
+  {
+
+    // get the node id and combiner token
+    ghost var nodeId := combiner.nodeId;
+    glinear var c_token := CBCombinerToken_unfold(combiner);
+
+    // updated result
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, globalTail.tail, combiner.rs.readerState.start)));
+    ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
+
+    // TODO:
+    assume  c_token.val.tail.Some?;
+
+    // the transition
+    CB.ReaderDoEnter_is_transition(c_token.val, out_token_expect.val, nodeId);
+
+    // do the internal transition
+    glinear var out_token := CBTokens.internal_transition(c_token, out_token_expect.val);
+
+    // update the combiner
+    combiner' := CBCombinerToken_fold(out_expect, out_token);
+  }
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method reader_guard(glinear combiner: CBCombinerToken, gshared aliveBit: CBAliveBit, ghost i: nat,
       gshared contents: CBContents)
@@ -474,11 +540,58 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   ensures i in contents.contents
   ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderGuard(combiner.rs.readerState.start, combiner.rs.readerState.end,
       i, contents.contents[i])))
+  {
+    // get the node id and combiner token
+    ghost var nodeId := combiner.nodeId;
+    glinear var c_token := CBCombinerToken_unfold(combiner);
+
+    // updated result
+    assume i in contents.contents;
+    assume combiner.rs.readerState.cur < combiner.rs.readerState.end;
+
+    // TODO: do we need to construct a new M here or change the type of content?
+    // glinear var c := CBContents(contents.contents);
+    //assume contents.Some?
+
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderGuard(combiner.rs.readerState.start, combiner.rs.readerState.end, i, contents.contents[i])));
+    ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
+
+    // the transition
+    CB.ReaderDoGuard_is_transition(c_token.val, out_token_expect.val, nodeId, i);
+
+    // do the internal transition
+    glinear var out_token := CBTokens.internal_transition(c_token, out_token_expect.val);
+
+    // update the combiner
+    combiner' := CBCombinerToken_fold(out_expect, out_token);
+  }
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method reader_unguard(glinear combiner: CBCombinerToken)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderGuard?
   ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, combiner.rs.readerState.end, combiner.rs.readerState.cur + 1)))
+  {
+    // get the node id and combiner token
+    ghost var nodeId := combiner.nodeId;
+    glinear var c_token := CBCombinerToken_unfold(combiner);
+
+    // updated result
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, combiner.rs.readerState.end, combiner.rs.readerState.cur + 1)));
+    ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
+
+    // the transition
+    CB.ReaderDoUnguard_is_transition(c_token.val,out_token_expect.val,nodeId);
+
+    // do the internal transition
+    glinear var out_token := CBTokens.internal_transition(c_token, out_token_expect.val);
+
+    // update the combiner
+    combiner' := CBCombinerToken_fold(out_expect, out_token);
+  }
+
+  /* ----------------------------------------------------------------------------------------- */
 
   glinear method reader_finish(glinear combiner: CBCombinerToken, glinear localTail: CBLocalTail)
   returns (glinear combiner': CBCombinerToken, glinear localTail': CBLocalTail)
