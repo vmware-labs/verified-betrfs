@@ -511,18 +511,21 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
+    // the local tail
+    gshared var t_token := CBGlobalTail_unfold_borrow(globalTail);
+
     // updated result
     ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, globalTail.tail, combiner.rs.readerState.start)));
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
-    // TODO:
-    assume  c_token.val.tail.Some?;
-
     // the transition
-    CB.ReaderDoEnter_is_transition(c_token.val, out_token_expect.val, nodeId);
+    CB.ReaderDoEnter_is_transition(
+        CB.dot(t_token.val, c_token.val),
+        CB.dot(t_token.val, out_token_expect.val),
+        nodeId);
 
     // do the internal transition
-    glinear var out_token := CBTokens.internal_transition(c_token, out_token_expect.val);
+    glinear var out_token := CBTokens.internal_transition_1_1_1(c_token, t_token, out_token_expect.val);
 
     // update the combiner
     combiner' := CBCombinerToken_fold(out_expect, out_token);
