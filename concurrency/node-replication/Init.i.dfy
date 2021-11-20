@@ -90,6 +90,7 @@ module Init(nrifc: NRIfc) {
         && owned_contexts[j].fc_client == FCClient(fc_loc, j, FCClientIdle)
         && owned_contexts[j].cell_contents.cell == contexts[j].cell.inner
         && owned_contexts[j].client_counter.loc == replica.client_counter_loc
+        && |owned_contexts[j].activeIdxs| == MAX_THREADS_PER_REPLICA as int
     invariant forall j: nat | 0 <= j < i as int ::
         contexts[j].WF(j, fc_loc)
     invariant forall j: nat | i as int <= j < MAX_THREADS_PER_REPLICA as int ::
@@ -118,7 +119,8 @@ module Init(nrifc: NRIfc) {
       client_counter_supply, client_counter := ClientCounter.split(client_counter_supply);
       // deleteme assert client_counter.loc == replica.client_counter_loc;
 
-      linear var toc := ThreadOwnedContext(i, fc_client, ctx_cell_contents, client_counter);
+      linear var toc := ThreadOwnedContext(i, seq_alloc(MAX_THREADS_PER_REPLICA, false),
+            fc_client, ctx_cell_contents, client_counter);
       linear var c := Context(CachePadded(ctx_atomic), CachePadded(ctx_cell));
 
       // deleteme assert client_counter.loc == replica.client_counter_loc;

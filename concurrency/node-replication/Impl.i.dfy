@@ -173,12 +173,14 @@ module Impl(nrifc: NRIfc) {
 
   linear datatype ThreadOwnedContext = ThreadOwnedContext(
     tid: uint64,
+    linear activeIdxs: seq<bool>,
     glinear fc_client: FCClient,
     glinear cell_contents: CellContents<OpResponse>,
     glinear client_counter: Client)
   {
     predicate WF(node: Node)
     {
+      && |activeIdxs| == MAX_THREADS_PER_REPLICA as int
       && node.WF()
       && fc_client == FCClient(node.fc_loc, tid as nat, FCClientIdle)
       && 0 <= tid < MAX_THREADS_PER_REPLICA
@@ -304,7 +306,7 @@ module Impl(nrifc: NRIfc) {
   }
 
   // https://github.com/vmware/node-replication/blob/1d92cb7c040458287bedda0017b97120fd8675a7/nr/src/replica.rs#L584
-  method try_combine(shared nr: NR, shared node: Node, tid: uint64)
+  method try_combine(shared nr: NR, shared node: Node, tid: uint64, linear inout activeIdxs: seq<bool>)
   // requires tid > 0, rust version had tid > 0, in dafny we do tid >= 0
   requires tid < MAX_THREADS_PER_REPLICA
   requires nr.WF()
@@ -312,6 +314,7 @@ module Impl(nrifc: NRIfc) {
   decreases *
   {
     // Check `combiner_lock` a few times until it appears to be free...
+    var fail: bool := false;
     var i: uint64 := 0;
     while i < 5
     invariant 0 <= i <= 5
@@ -321,82 +324,85 @@ module Impl(nrifc: NRIfc) {
         ghost_release combiner_lock_token;
       }
       if combiner_lock != 0 {
-        return;
+        fail := true;
+        i := 5;
       }
       i := i + 1;
     }
 
-    glinear var fcStateOpt: glOption<FCCombiner>;
-    glinear var gops: glOption<LC.LCellContents<seq<nrifc.UpdateOp>>>;
-    glinear var gresponses: glOption<LC.LCellContents<seq<nrifc.ReturnType>>>;
-    
-    // Try and acquire the lock... (tid+1 because we reserve 0 as "no-one holds the lock")
-    atomic_block var success := execute_atomic_compare_and_set_weak(node.combiner_lock.inner, 0, tid + 1) {
-      ghost_acquire contents;
-      if success {
-        assert contents.glSome?;
-        //assert old_value == 0;
-        glinear var CombinerLockState(flatCombiner, go, gr) := unwrap_value(contents);
-        fcStateOpt := glSome(flatCombiner);
-        gops := glSome(go);
-        gresponses := glSome(gr);
-        contents := glNone;
-      } else {
-        fcStateOpt := glNone;
-        gops := glNone;
-        gresponses := glNone;
-      }
-      ghost_release contents;
-    }
-
-    if success {
-      assert fcStateOpt.glSome?;
-      assert gops.glSome?;
-      assert gresponses.glSome?;
-
-      linear var ops;
-      linear var responses;
-
-      linear var ops';
-      linear var responses';
-
-      glinear var gops';
-      glinear var gresponses';
-      glinear var fcstate';
+    if !fail {
+      glinear var fcStateOpt: glOption<FCCombiner>;
+      glinear var gops: glOption<LC.LCellContents<seq<nrifc.UpdateOp>>>;
+      glinear var gresponses: glOption<LC.LCellContents<seq<nrifc.ReturnType>>>;
       
-      ops, gops' := LC.take_lcell(node.ops, unwrap_value(gops));
-      responses, gresponses' := LC.take_lcell(node.responses, unwrap_value(gresponses));
-
-      ops', responses', fcstate' := combine(nr, node, ops, responses, unwrap_value(fcStateOpt));
-
-      glinear var gops'' := LC.give_lcell(node.ops, gops', ops');
-      glinear var gresponses'' := LC.give_lcell(node.responses, gresponses', responses');
-
-      // Release combiner_lock
-      atomic_block var _ := execute_atomic_store(node.combiner_lock.inner, 0) {
+      // Try and acquire the lock... (tid+1 because we reserve 0 as "no-one holds the lock")
+      atomic_block var success := execute_atomic_compare_and_set_weak(node.combiner_lock.inner, 0, tid + 1) {
         ghost_acquire contents;
-        //assert old_value > 0; // doesn't believe me
-        //assert contents.glNone?;
-
-        //assert fcstate'.state == FCCombinerCollecting(0, []);
-        //assert fcstate'.loc == node.fc_loc;
-        //assert gops''.v.Some?;
-        //assert gops''.lcell == node.ops;
-        //assert |gops''.v.value| == MAX_THREADS_PER_REPLICA as int;
-        //assert gresponses''.v.Some?;
-        //assert gresponses''.lcell == node.responses;
-        //assert |gresponses''.v.value| == MAX_THREADS_PER_REPLICA as int;
-
-        dispose_anything(contents);
-        contents := glSome(CombinerLockState(fcstate', gops'', gresponses''));
+        if success {
+          assert contents.glSome?;
+          //assert old_value == 0;
+          glinear var CombinerLockState(flatCombiner, go, gr) := unwrap_value(contents);
+          fcStateOpt := glSome(flatCombiner);
+          gops := glSome(go);
+          gresponses := glSome(gr);
+          contents := glNone;
+        } else {
+          fcStateOpt := glNone;
+          gops := glNone;
+          gresponses := glNone;
+        }
         ghost_release contents;
       }
-    }
-    else {
-      assert gops.glNone?;
-      dispose_glnone(fcStateOpt);
-      dispose_glnone(gops);
-      dispose_glnone(gresponses);
+
+      if success {
+        assert fcStateOpt.glSome?;
+        assert gops.glSome?;
+        assert gresponses.glSome?;
+
+        linear var ops;
+        linear var responses;
+
+        linear var ops';
+        linear var responses';
+
+        glinear var gops';
+        glinear var gresponses';
+        glinear var fcstate';
+        
+        ops, gops' := LC.take_lcell(node.ops, unwrap_value(gops));
+        responses, gresponses' := LC.take_lcell(node.responses, unwrap_value(gresponses));
+
+        ops', responses', fcstate' := combine(nr, node, ops, responses, unwrap_value(fcStateOpt), inout activeIdxs);
+
+        glinear var gops'' := LC.give_lcell(node.ops, gops', ops');
+        glinear var gresponses'' := LC.give_lcell(node.responses, gresponses', responses');
+
+        // Release combiner_lock
+        atomic_block var _ := execute_atomic_store(node.combiner_lock.inner, 0) {
+          ghost_acquire contents;
+          //assert old_value > 0; // doesn't believe me
+          //assert contents.glNone?;
+
+          //assert fcstate'.state == FCCombinerCollecting(0, []);
+          //assert fcstate'.loc == node.fc_loc;
+          //assert gops''.v.Some?;
+          //assert gops''.lcell == node.ops;
+          //assert |gops''.v.value| == MAX_THREADS_PER_REPLICA as int;
+          //assert gresponses''.v.Some?;
+          //assert gresponses''.lcell == node.responses;
+          //assert |gresponses''.v.value| == MAX_THREADS_PER_REPLICA as int;
+
+          dispose_anything(contents);
+          contents := glSome(CombinerLockState(fcstate', gops'', gresponses''));
+          ghost_release contents;
+        }
+      }
+      else {
+        assert gops.glNone?;
+        dispose_glnone(fcStateOpt);
+        dispose_glnone(gops);
+        dispose_glnone(gresponses);
+      }
     }
   }
 
@@ -406,7 +412,8 @@ module Impl(nrifc: NRIfc) {
       // for ops and responses
       linear ops: seq<nrifc.UpdateOp>,
       linear responses: seq<nrifc.ReturnType>,
-      glinear flatCombiner: FCCombiner)
+      glinear flatCombiner: FCCombiner,
+      linear inout activeIdxs: seq<bool>)
   returns (
       linear ops': seq<nrifc.UpdateOp>,
       linear responses': seq<nrifc.ReturnType>,
@@ -428,7 +435,7 @@ module Impl(nrifc: NRIfc) {
     ghost var requestIds;
     var num_ops;
     ops', num_ops, flatCombiner', requestIds, updates, opCellPermissions :=
-        combine_collect(node, ops, flatCombiner);
+        combine_collect(node, ops, flatCombiner, inout activeIdxs);
 
     /////// Take the rwlock
     linear var rep;
@@ -459,13 +466,14 @@ module Impl(nrifc: NRIfc) {
     /////// Return responses
     flatCombiner' := combine_respond(
         node, responses', flatCombiner', requestIds,
-        updates, opCellPermissions);
+        updates, opCellPermissions, inout activeIdxs);
   }
 
   method combine_collect(
       shared node: Node,
       linear ops: seq<nrifc.UpdateOp>,
-      glinear flatCombiner: FCCombiner)
+      glinear flatCombiner: FCCombiner,
+      linear inout activeIdxs: seq<bool>)
   returns (
       linear ops': seq<nrifc.UpdateOp>,
       num_ops: uint64,
@@ -527,13 +535,13 @@ module Impl(nrifc: NRIfc) {
       glinear var new_contents_opt;
       glinear var new_update_opt;
 
-      atomic_block var has_op := execute_atomic_compare_and_set_strong(
-          lseq_peek(node.contexts, j).atomic.inner, 1, 2)
+      atomic_block var has_op := execute_atomic_load(
+          lseq_peek(node.contexts, j).atomic.inner)
       {
         ghost_acquire ghost_context;
         glinear var ContextGhost(contents, fc, update) := ghost_context;
         flatCombiner', fc := combiner_collect(flatCombiner', fc);
-        if has_op { // FCRequest
+        if has_op == 1 { // FCRequest
           new_contents_opt := contents;
           new_update_opt := update;
           ghost_context := ContextGhost(glNone, fc, glNone);
@@ -545,7 +553,7 @@ module Impl(nrifc: NRIfc) {
         ghost_release ghost_context;
       }
 
-      if has_op {
+      if has_op == 1 {
         // get the op, add to ops' buffer
         var opResponse := read_cell(lseq_peek(node.contexts, j).cell.inner, new_contents_opt.value);
         var op := opResponse.op;
@@ -556,9 +564,13 @@ module Impl(nrifc: NRIfc) {
         opCellPermissions := glmap_insert(opCellPermissions, num_ops as int, unwrap_value(new_contents_opt));
 
         num_ops := num_ops + 1;
+
+        activeIdxs := seq_set(activeIdxs, j, true);
       } else {
         dispose_glnone(new_contents_opt);
         dispose_glnone(new_update_opt);
+
+        activeIdxs := seq_set(activeIdxs, j, false);
       }
 
       j := j + 1;
@@ -575,7 +587,8 @@ module Impl(nrifc: NRIfc) {
       glinear flatCombiner: FCCombiner,
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
-      glinear opCellPermissions: map<nat, CellContents<OpResponse>>)
+      glinear opCellPermissions: map<nat, CellContents<OpResponse>>,
+      linear inout activeIdxs: seq<bool>)
   returns (
       glinear flatCombiner': FCCombiner)
   requires node.WF()
@@ -625,7 +638,7 @@ module Impl(nrifc: NRIfc) {
                   == node.contexts[flatCombiner'.state.elems[i].tid].cell.inner
       )
     {
-      atomic_block var slot_state := execute_atomic_load(
+      /*atomic_block var slot_state := execute_atomic_load(
           lseq_peek(node.contexts, j).atomic.inner)
       {
         ghost_acquire ghost_context;
@@ -638,9 +651,9 @@ module Impl(nrifc: NRIfc) {
         }
         ghost_context := ContextGhost(contents, fc, update);
         ghost_release ghost_context;
-      }
+      }*/
 
-      if slot_state == 2 {
+      if seq_get(activeIdxs, j) {
         glinear var update, opCellPerm;
         updates', update := glmap_take(updates', cur_idx as int);
         opCellPermissions', opCellPerm := glmap_take(opCellPermissions', cur_idx as int);
@@ -730,7 +743,7 @@ module Impl(nrifc: NRIfc) {
   ensures ctx'.WF(node)
   decreases * // method is not guaranteed to terminate
   {
-    linear var ThreadOwnedContext(tid, fc_client, cell_contents, client_counter) := ctx;
+    linear var ThreadOwnedContext(tid, activeIdxs, fc_client, cell_contents, client_counter) := ctx;
 
     var opr := read_cell(lseq_peek(node.contexts, tid).cell.inner, cell_contents);
     opr := opr.(op := op);
@@ -749,7 +762,7 @@ module Impl(nrifc: NRIfc) {
       ghost_release ctx_g;
     }
 
-    try_combine(nr, node, tid);
+    try_combine(nr, node, tid, inout activeIdxs);
 
     glinear var cell_contents_opt: glOption<CellContents<OpResponse>> := glNone;
     glinear var stub_opt: glOption<Update> := glNone;
@@ -794,7 +807,7 @@ module Impl(nrifc: NRIfc) {
 
     cell_contents := unwrap_value(cell_contents_opt);
     stub := unwrap_value(stub_opt);
-    ctx' := ThreadOwnedContext(tid, fc_client, cell_contents, client_counter);
+    ctx' := ThreadOwnedContext(tid, activeIdxs, fc_client, cell_contents, client_counter);
   }
 
   method do_read(shared nr: NR, shared node: Node, op: nrifc.ReadonlyOp, linear ctx: ThreadOwnedContext,
@@ -843,6 +856,8 @@ module Impl(nrifc: NRIfc) {
     var synced := false;
     synced, stub := is_replica_synced_for_reads(nr, node.nodeId, ctail, stub);
 
+    linear var ThreadOwnedContext(tid, activeIdxs, fc_client, cell_contents, client_counter) := ctx;
+
     while !synced 
     decreases * 
     invariant synced ==> stub.rs.ReadonlyReadyToRead? 
@@ -852,7 +867,7 @@ module Impl(nrifc: NRIfc) {
     invariant synced ==> stub.rs.nodeId == node.nodeId as nat
     invariant stub.rs.op == op
     {
-      try_combine(nr, node, ctx.tid);
+      try_combine(nr, node, tid, inout activeIdxs);
       Runtime.SpinLoopHint();
       synced, stub := is_replica_synced_for_reads(nr, node.nodeId, ctail, stub);
     }
@@ -860,7 +875,6 @@ module Impl(nrifc: NRIfc) {
     assert stub.rs.ReadonlyReadyToRead?; // advisory
     assert stub.rs.nodeId == node.nodeId as nat;
 
-    linear var ThreadOwnedContext(tid, fc_client, cell_contents, client_counter) := ctx;
     // 3. Take read-lock on replica; apply operation on replica
     linear var linear_guard := node.replica.acquire_shared(tid as uint8, client_counter);
     assert linear_guard.v.ghost_replica.nodeId == stub.rs.nodeId;
@@ -868,7 +882,7 @@ module Impl(nrifc: NRIfc) {
     result, stub := apply_readonly(node.replica, linear_guard, op, stub);
     client_counter := node.replica.release_shared(linear_guard);
 
-    ctx' := ThreadOwnedContext(tid, fc_client, cell_contents, client_counter);
+    ctx' := ThreadOwnedContext(tid, activeIdxs, fc_client, cell_contents, client_counter);
     assert stub.rs.ReadonlyDone?; // advisory
   }
 
