@@ -457,7 +457,8 @@ struct dafny_nr_monitor{
     nr::__default::try__combine(
       helper.get_nr(),
       helper.get_node(thread_id),
-      c->tid);
+      c->tid,
+      c->activeIdxs);
   }
 };
 
