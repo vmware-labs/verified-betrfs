@@ -537,7 +537,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       gshared contents: CBContents)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderRange?
-  // TODO I don't think this should be needed: requires combiner.rs.readerState.start <= i < combiner.rs.readerState.end
+  // TODO I don't think this should be needed: --- yes we do! otherwise we read one past the end.
+  requires combiner.rs.readerState.start <= i < combiner.rs.readerState.end
   requires i % LOG_SIZE as int == aliveBit.entry
   requires aliveBit.bit == ((i / LOG_SIZE as int) % 2 == 0)
   requires i == combiner.rs.readerState.cur
@@ -573,6 +574,20 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       CB.reveal_AliveBitsComplete();
       CB.reveal_LocalTailsComplete();
       CB.reveal_ContentsComplete();
+
+      assert c_token.val.combinerState[nodeId].readerState.cur == i;
+      assert c_token.val.combinerState[nodeId].readerState.start <= i;
+      assert nodeId in all.localTails by {
+        CB.reveal_CombinerStateComplete();
+        CB.reveal_LocalTailsComplete();
+      }
+
+      assert c_token.val.combinerState[nodeId].readerState.end <= all.tail.value;
+      assert c_token.val.combinerState[nodeId].readerState.cur < c_token.val.combinerState[nodeId].readerState.end;
+
+      assert c_token.val.combinerState[nodeId].readerState.start  == all.localTails[nodeId];
+      assert i < all.tail.value;
+      assert all.tail.value - (LOG_SIZE as nat) <= i;
 
       assert all.tail.value - (LOG_SIZE as nat) <= i < all.tail.value; // TODO this should be provable from the invariant
       assert CB.EntryIsAlive(a_token.val.aliveBits, i);
