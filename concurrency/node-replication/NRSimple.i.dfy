@@ -47,6 +47,8 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
   // Should correspond to point where we insert a ticket...
   predicate StartReadonly(s: Variables, s': Variables, rid: RequestId, op: nrifc.ReadonlyOp)
   {
+    && rid !in s.update_reqs
+    && rid !in s.update_resps
     && rid !in s.readonly_reqs
     && s' == s.(readonly_reqs := s.readonly_reqs[rid := ReadInit(op)])
   }
@@ -77,6 +79,8 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
   predicate StartUpdate(s: Variables, s': Variables, rid: RequestId, op: nrifc.UpdateOp)
   {
     && rid !in s.update_reqs
+    && rid !in s.update_resps
+    && rid !in s.readonly_reqs
     && s' == s.(update_reqs := s.update_reqs[rid := op])
   }
 
@@ -143,6 +147,7 @@ module NRSimple(nrifc: NRIfc) refines StateMachine(AsyncIfc(nrifc)) {
 
   predicate AddUpdateToLog(s: Variables, s': Variables,  request_ids: seq<RequestId>)
   {
+    && seq_unique(request_ids)
     && RequestIdsValid(request_ids, s.update_reqs)
     // construct the new log entries
     && var new_log_entries := ConstructNewLogEntries(request_ids, s.update_reqs);

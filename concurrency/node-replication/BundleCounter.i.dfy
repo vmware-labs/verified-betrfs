@@ -1,5 +1,6 @@
 include "Init.i.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
+include "Linearize.i.dfy"
 
 include "ConcreteReplica.i.dfy"
 import M = Init(CounterIfc)

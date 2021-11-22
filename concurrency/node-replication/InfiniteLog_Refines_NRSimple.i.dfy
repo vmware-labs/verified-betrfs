@@ -254,24 +254,48 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   //requires Inv(s)
   ensures B.Init(I(s))
 
-
-
-  lemma NewTicket_Refines_Start_LocalReads(s: A.Variables, s': A.Variables,
-                                           rid: RequestId, input: nrifc.Input)
-    requires IL.NewTicket(s, s', rid, input)
-    requires s.M?
-    requires input.ROp?;
-    ensures s' == s.(localReads := s.localReads[rid := ReadonlyInit(input.readonly_op)])
+  lemma NewTicket_Refines_Start_read(
+      s: A.Variables, s': A.Variables, rid: RequestId, input: nrifc.Input)
+  requires Inv(s)
+  requires input.ROp?
+  requires s' == s.(localReads := s.localReads[rid := ReadonlyInit(input.readonly_op)])
+  requires rid !in s.localReads
+  requires rid !in s.localUpdates
+  requires rid !in CombinerRequestIds(s)
+  ensures Inv(s')
+  ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
   {
+    reveal_I_ReadRequests();
+    reveal_I_UpdateRequests();
+    reveal_I_UpdateResponses();
+
+    var step := B.StartReadonly_Step(rid, input.readonly_op);
+    assert B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
+      assert B.StartReadonly(I(s), I(s'), rid,  input.readonly_op);
+    }
   }
 
-  lemma NewTicket_Refines_Start_LocalUpdates(s: A.Variables, s': A.Variables,
-                                             rid: RequestId, input: nrifc.Input)
-    requires IL.NewTicket(s, s', rid, input)
-    requires s.M?
-    requires input.UOp?
-    ensures s' == s.(localUpdates := s.localUpdates[rid := UpdateInit(input.update_op)])
+
+  lemma NewTicket_Refines_Start_update(
+      s: A.Variables, s': A.Variables, rid: RequestId, input: nrifc.Input)
+  requires Inv(s)
+  requires input.UOp?
+  requires s' == s.(localUpdates := s.localUpdates[rid := UpdateInit(input.update_op)])
+  requires rid !in s.localReads
+  requires rid !in s.localUpdates
+  requires rid !in CombinerRequestIds(s)
+  requires Inv(s')
+  ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
   {
+    reveal_I_ReadRequests();
+    reveal_I_UpdateRequests();
+    reveal_I_UpdateResponses();
+    I_Added_LocalUpdate_is(s, s', rid, input);
+
+    var step := B.StartUpdate_Step(rid, input.update_op);
+    assert B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
+      assert B.StartUpdate(I(s), I(s'), rid,  input.update_op);
+    }
   }
 
   // s: some previous thing with a missing piece
@@ -287,41 +311,9 @@ abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   {
     // construct the ticket
     if input.ROp? {
-      assert I(s') == I(s).(readonly_reqs := I(s).readonly_reqs[rid := B.ReadInit(input.readonly_op)]) by {
-        NewTicket_Refines_Start_LocalReads(s, s', rid, input);
-        I_Added_LocalRead_is(s, s', rid, input);
-      }
-
-      assert rid !in I(s).readonly_reqs by{
-        reveal_I_ReadRequests();
-      }
-
-      assert exists step :: B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
-        var step := B.StartReadonly_Step(rid, input.readonly_op);
-        assert B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
-          assert B.StartReadonly(I(s), I(s'), rid,  input.readonly_op);
-        }
-      }
-
+      NewTicket_Refines_Start_read(s, s', rid, input);
     } else {
-      assert rid !in s.localUpdates;
-      assert input.UOp?;
-      // proves but takes a while
-      assert I(s') == I(s).(update_reqs := I(s).update_reqs[rid := input.update_op]) by {
-        NewTicket_Refines_Start_LocalUpdates(s, s', rid, input);
-        I_Added_LocalUpdate_is(s, s', rid, input);
-      }
-
-      assert rid !in I(s).update_reqs by{
-        reveal_I_UpdateRequests();
-      }
-
-      assert exists step :: B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
-        var step := B.StartUpdate_Step(rid, input.update_op);
-        assert B.NextStep(I(s), I(s'), ifc.Start(rid, input), step) by {
-          assert B.StartUpdate(I(s), I(s'), rid,  input.update_op);
-        }
-      }
+      NewTicket_Refines_Start_update(s, s', rid, input);
     }
   }
 

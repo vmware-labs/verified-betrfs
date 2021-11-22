@@ -49,7 +49,7 @@ module AsyncStateMachine(IOIfc: InputOutputIfc, SM: StateMachine(IOIfc))
     && s.resps == map[]
   }
 
-  predicate InteralNext(rid: RequestId, input: IOIfc.Input, output: IOIfc.Output, s: Variables, s': Variables)
+  predicate InternalNext(rid: RequestId, input: IOIfc.Input, output: IOIfc.Output, s: Variables, s': Variables)
   {
     && rid in s.reqs
     && s.reqs[rid] == input
@@ -71,7 +71,7 @@ module AsyncStateMachine(IOIfc: InputOutputIfc, SM: StateMachine(IOIfc))
         // resolve request step
         // serialization point: remove 'input' from 'reqs',
         // add 'output' to 'resps'
-        || exists rid, input, output :: InteralNext(rid, input, output, s, s')
+        || exists rid, input, output :: InternalNext(rid, input, output, s, s')
       )
       case End(rid, output) =>
         // remove from 'resps'
