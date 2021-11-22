@@ -209,6 +209,7 @@ pub fn createLog() -> &'static mut LogWrapper {
 pub struct VSpace {
     pub pml4: Pin<Box<PML4>>,
     pub mem_counter: usize,
+    mem_ptr: *mut u8,
     //allocs: Vec<(*mut u8, usize)>,
 }
 
@@ -283,13 +284,16 @@ impl Drop for VSpace {
 // cpp glue fun
 pub fn createVSpace() -> &'static mut VSpace {
     //env_logger::try_init();
-    ///log::error!("createVSpace");
+    //log::error!("createVSpace");
+    let mem_ptr = unsafe { alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(1075851264, 4096)) };
+
     let vs = Box::leak(Box::new(VSpace {
         pml4: Box::pin(
             [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
         ),
         //allocs: Vec::with_capacity(1024),
         mem_counter: 4096,
+        mem_ptr
     }));
 
     for i in 0..VSPACE_RANGE / 4096 {
@@ -303,18 +307,23 @@ pub fn createVSpace() -> &'static mut VSpace {
     vs
 }
 
+
 impl Default for VSpace {
     fn default() -> VSpace {
-        //env_logger::try_init();
-
+        
+        // make sure the memory for ptable is some contiguous block
+        // this allows Linux / THP to kick in and increase tput by ~60Mops
+        // make sure to do:
+        // sudo sh -c "echo always > /sys/kernel/mm/transparent_hugepage/enabled"
+        let mem_ptr = unsafe { alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(1075851264, 4096)) };
         let mut vs = VSpace {
             pml4: Box::pin(
                 [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
             ),
             mem_counter: 4096,
+            mem_ptr
             //allocs: Vec::with_capacity(1024),
         };
-
         for i in 0..VSPACE_RANGE / 4096 {
             assert!(vs.map_generic(
                 VAddr::from(i * 4096),
@@ -322,6 +331,8 @@ impl Default for VSpace {
                 MapAction::ReadWriteExecuteUser,
             ).is_ok());
         }
+
+        log::error!("vs.mem_counter {}", vs.mem_counter);
 
         vs
     }
@@ -560,14 +571,17 @@ impl VSpace {
 
     fn allocate_pages(&mut self, how_many: usize, _typ: ResourceType) -> PAddr {
         log::info!("allocate_pages {}...", how_many);
-        self.mem_counter += how_many * 4096;
 
         let new_region: *mut u8 = unsafe {
-            alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(
+            /*alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(
                 how_many * BASE_PAGE_SIZE,
                 4096,
-            ))
+            ))*/
+            assert!(self.mem_counter < 1075851264); // if this triggers you need to adjust the alloc size of `mem_ptr`
+            self.mem_ptr.offset(self.mem_counter as isize)
         };
+        self.mem_counter += how_many * 4096;
+
         assert!(!new_region.is_null());
         for i in 0..how_many * BASE_PAGE_SIZE {
             unsafe {
@@ -610,11 +624,13 @@ impl VSpace {
     }
 
     pub fn resolveWrapped(&self, addr: u64) -> u64 {
-        self.resolve_addr(VAddr::from(addr)).map(|pa| pa.as_u64()).unwrap_or(0x0)
+        let a = self.resolve_addr(VAddr::from(addr)).map(|pa| pa.as_u64()).unwrap_or(0x0);
+        //log::error!("{:#x} -> {:#x}", addr, a);
+        a
     }
 
     pub fn resolve_addr(&self, addr: VAddr) -> Option<PAddr> {
-        //log::error!("resolve addr {:#x}", addr);
+        //log::error!("resolv addr {:#x}", addr);
         let pml4_idx = pml4_index(addr);
         if self.pml4[pml4_idx].is_present() {
             let pdpt_idx = pdpt_index(addr);
@@ -623,6 +639,7 @@ impl VSpace {
                 if pdpt[pdpt_idx].is_page() {
                     // Page is a 1 GiB mapping, we have to return here
                     let page_offset = addr.huge_page_offset();
+                    unreachable!("dont go here");
                     return Some(pdpt[pdpt_idx].address() + page_offset);
                 } else {
                     let pd_idx = pd_index(addr);
@@ -631,12 +648,14 @@ impl VSpace {
                         if pd[pd_idx].is_page() {
                             // Encountered a 2 MiB mapping, we have to return here
                             let page_offset = addr.large_page_offset();
+                            unreachable!("dont go here");
                             return Some(pd[pd_idx].address() + page_offset);
                         } else {
                             let pt_idx = pt_index(addr);
                             let pt = self.get_pt(pd[pd_idx]);
                             if pt[pt_idx].is_present() {
-                                //log::error!("resolved to {:#x}", pt[pt_idx].address());
+                                //log::error!("return {:#x}", pt[pt_idx].address());
+
                                 let page_offset = addr.base_page_offset();
                                 return Some(pt[pt_idx].address() + page_offset);
                             }
@@ -644,7 +663,12 @@ impl VSpace {
                     }
                 }
             }
+        }else {
+            // log::error!("pml4 not present {:#x}", addr);
+            unreachable!("dont go here");
         }
+        
+        unreachable!("dont go here");
         None
     }
 
@@ -661,7 +685,6 @@ impl VSpace {
         Ok((paddr, size))
     }
 }
-
 /*
 mod mkbench;
 mod utils;
