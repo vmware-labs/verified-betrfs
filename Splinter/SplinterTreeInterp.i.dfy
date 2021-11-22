@@ -68,6 +68,33 @@ module SplinterTreeInterpMod {
     RawInterp((imap key | AnyKey(key) :: IMKey(v, cache, key)), v.nextSeq) // check v.nextSeq used to be sb.endSeq
   }
 
+  predicate DiskSupportsVariables(v: Variables, dv: DiskView, sb: Superblock)
+  {
+    && IndirectionTableMod.DurableAt(v.indTbl, CacheIfc.Variables(dv), sb.indTbl)
+    && v.memBuffer.Keys == {}
+    && v.nextSeq == sb.endSeq
+    && v.frozen.Idle?
+    && v.root == sb.root
+  }
+
+  function EmptyVars(sb: Superblock) : Variables
+  {
+    Variables(
+      IndirectionTableMod.Empty(),
+      map[], // empty memBuffer
+      0,     // nextSeq
+      Idle,  // frozen
+      sb.root // tree root (must be given to us)
+    )
+  }
+  
+  function SynthesizeRunningVariables(dv: DiskView, sb: Superblock) : Variables
+  {
+    if exists v :: DiskSupportsVariables(v, dv, sb)
+    then var v :| DiskSupportsVariables(v, dv, sb); v
+    else EmptyVars(sb)
+  }
+
   function IMStable(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
   {
     if exists indTbl :: IndirectionTableMod.DurableAt(indTbl, cache, sb.indTbl)

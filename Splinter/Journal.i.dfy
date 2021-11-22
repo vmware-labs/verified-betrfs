@@ -741,6 +741,9 @@ module JournalMachineMod {
     // These are the LSNs whose syncs will complete when the sb commit completes.
     && v.persistentLSN <= v.cleanLSN  // presumably provable from Inv
 
+    // everything we're proposing to commit is cleaned
+    && newBoundaryLSN <= v.cleanLSN
+
     // The allocation we actually commit to is a superset of the allocation we're using.
     && (forall cu | cu in v.lsnMap().Values :: cu in alloc.table)
 

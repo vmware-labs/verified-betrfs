@@ -24,6 +24,11 @@ module IndirectionTableMod refines MarshalledSnapshot {
     parse(IBytes(dv, sb.snapshot))
   }
 
+  function Empty() : IndirectionTable
+  {
+    map[]
+  }
+
   predicate DurableAt(itbl: IndirectionTable, cache: CacheIfc.Variables, sb: Superblock)
   {
     // TODO kind of dirty peeking into the entire cache here

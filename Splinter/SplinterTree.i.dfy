@@ -256,6 +256,9 @@ module SplinterTreeMachineMod {
     endSeq: LSN)
 
   datatype Variables = Variables(
+    endSeq: LSN,  // SB fields
+    root: CU,     // SB fields
+    indTbl: IndirectionTableMod.IndirectionTable,
     // Write Opt file systems allows us to leverage immutability to simplfy reasoning about crash safety using cow
     // Add a layer of indirection over Immutable splinter tree. This indirection table adds mutability over the tree
     indTbl: IndirectionTableMod.IndirectionTable,
@@ -263,11 +266,10 @@ module SplinterTreeMachineMod {
     // TODO add a membuffer to record LSN; a frozen-like transition to keep one membuffer available
     // for filling while packing the other into a b+tree in the top trunk.
     // OR just have freeze drain the membuffer, introducing a write hiccup every 20GB.
-    nextSeq: LSN,  // exclusive
-    frozen: Frozen,
-    root : CU // The CU to the root of the trunk tree
+    // TODO replace nextSeq, root with SB!
     // we need this because we need ro
     //rootNode : TrunkNode
+    frozen: Frozen,
   )
   {
       predicate WF()
@@ -302,7 +304,7 @@ module SplinterTreeMachineMod {
   function FindCorrectBranch(v : Variables, k: Key) : Option<TrunkPath>
 
   // TODO replay log!
-  predicate Start(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock)
+  predicate Init(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock)
   {
     // Note predicate-style assignment of some fields of v'
     && IndirectionTableMod.DurableAt(v'.indTbl, cache, sb.indTbl) // Parse ind tbl from cache

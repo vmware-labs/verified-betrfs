@@ -93,6 +93,7 @@ module ProgramMachineMod {
   }
 
   // Initialization of the program, which happens at the beginning but also after a crash.
+  // Phase SuperblockUnknown means we get the interpretation straight from the disk.
   predicate Init(v: Variables)
   {
     && v.phase.SuperblockUnknown?
@@ -100,6 +101,9 @@ module ProgramMachineMod {
     // Journal and Betree get initialized once we know their superblocks
   }
 
+  // Now we know what the disk superblock says, and we can initialize the Journal, Tree Variables.
+  // They'll still not be ready to go, so they'll probably defer Interpretation to the disk,
+  // but *we* don't have to know that.
   predicate LearnSuperblock(v: Variables, v': Variables, rawSuperblock: UninterpretedDiskPage, sk: JournalMachineMod.InitSkolems)
   {
     && (forall cu | cu in SUPERBLOCK_ADDRESSES() :: CacheIfc.Read(v.cache, cu, rawSuperblock))
@@ -110,10 +114,17 @@ module ProgramMachineMod {
     && v'.stableSuperblock == superblock.value
     && v'.cache == v.cache  // no cache writes
     && JournalMachineMod.Init(v'.journal, superblock.value.journal, v.cache, sk)
-    && SplinterTreeMachineMod.Start(v.betree, v'.betree, v.cache, superblock.value.betree)
+    && SplinterTreeMachineMod.Init(v.betree, v'.betree, v.cache, superblock.value.betree)
     && v'.inFlightSuperblock.None?
   }
 
+  // Then some JournalInternal steps occur. The Journal knows it's in the Loading phase, but
+  // we don't need to know that.
+
+  // Once the Journal is ready to read, and for as long as it's ahead of the Tree, we PutMany
+  // messages from Journal to Tree.
+  // Interpretation is still punted to the disk, although routing it to the Journal would also
+  // be okay right now, since its Variables match the disk and no writes have occurred since Init.
   predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq, newbetree: SplinterTreeMachineMod.Variables)
   {
     && v.WF()
@@ -131,11 +142,15 @@ module ProgramMachineMod {
     && v' == v.(betree := newbetree)
   }
 
+  // Once we've brought the tree up-to-date with respect to the journal,
+  // we can enter normal operations.
+  // Interpretation goes to the Tree's variables. (It could point to the
+  // Journal, too, since their ephemeral views are kept synchronized -- but if
+  // we ever want to support a mode where we abandon the Journal during long
+  // periods of no sync requests, we need to use the Tree.)
   predicate CompleteRecovery(v: Variables, v': Variables)
   {
     && v.phase.ReplayingJournal?
-    // We've brought the tree up-to-date with respect to the journal, so
-    // we can enter normal operations
     && v.betree.BetreeEndsLSNExclusive() == v.journal.JournalBeginsLSNInclusive()
 
     && v' == v.(phase := Running)

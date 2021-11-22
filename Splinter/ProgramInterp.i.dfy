@@ -54,52 +54,36 @@ module ProgramInterpMod {
     SUPERBLOCK_ADDRESSES()
   }
 
-  predicate NotRunningInvariant(dv: DiskView)
-  {
-    && var pretendCache := CacheIfc.Variables(dv);
-    && var sb := ISuperblock(dv);
-    && sb.Some?
-    && var splinterTreeInterp := SplinterTreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
-    && splinterTreeInterp.seqEnd == sb.value.journal.boundaryLSN
-  }
-
   predicate Invariant(v: Variables)
   {
     && v.WF()
-    && (if v.phase.Running?
-      then
-        && JournalInterpMod.Invariant(v.journal, v.cache)
-        && var sb := ISuperblock(v.cache.dv);
-        && sb.Some?
-        && var splinterTreeInterp := SplinterTreeInterpMod.IMStable(v.cache, sb.value.betree);
-        && splinterTreeInterp.seqEnd == v.journal.boundaryLSN
-      else
-        && NotRunningInvariant(v.cache.dv)
-      )
+    && ISuperblock(v.cache.dv).Some?
+//    && v.journal.boundaryLSN == v.betree.nextSeq
   }
 
-  // Program will have a runtime view of what (ghost) alloc each subsystem thinks it's using,
-  // and use that to filter the dvs here.
-  // Those ghost views will invariantly match the IReads functions of the actual disk -- that is,
-  // * if we were to recover after a crash (when the physical alloc is empty), we'd fault in
-  // an alloc table for the subsystem.
-  // * that alloc table would invariantly match IReads.
-  //
-  // IM == Interpret as InterpMod
-  // TODO NEXT well actually we need a chain of Interps; see CrashTolerantMapSpecMod
-  // Journal interprets to a MsgSeq. The not-yet-sb-persistent part of that chain
-  // is the set of versions. Yeah we need to put richer interps down in JournalInterp
-  // before we try to add them here?
-  function IMNotRunning(dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
-    requires NotRunningInvariant(dv)
-    ensures iv.WF()
-  {
-    var pretendCache := CacheIfc.Variables(dv);
-    var sb := ISuperblock(dv);
-    var splinterTreeInterp := SplinterTreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
-    var journalInterp := JournalInterpMod.IMNotRunning(pretendCache, sb.value.journal, splinterTreeInterp);
-    journalInterp
-  }
+// TODO deleteme
+//  // Program will have a runtime view of what (ghost) alloc each subsystem thinks it's using,
+//  // and use that to filter the dvs here.
+//  // Those ghost views will invariantly match the IReads functions of the actual disk -- that is,
+//  // * if we were to recover after a crash (when the physical alloc is empty), we'd fault in
+//  // an alloc table for the subsystem.
+//  // * that alloc table would invariantly match IReads.
+//  //
+//  // IM == Interpret as InterpMod
+//  // TODO NEXT well actually we need a chain of Interps; see CrashTolerantMapSpecMod
+//  // Journal interprets to a MsgSeq. The not-yet-sb-persistent part of that chain
+//  // is the set of versions. Yeah we need to put richer interps down in JournalInterp
+//  // before we try to add them here?
+//  function IMNotRunning(dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
+//    requires NotRunningInvariant(dv)
+//    ensures iv.WF()
+//  {
+//    var pretendCache := CacheIfc.Variables(dv);
+//    var sb := ISuperblock(dv);
+//    var splinterTreeInterp := SplinterTreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
+//    var journalInterp := JournalInterpMod.IMNotRunning(pretendCache, sb.value.journal, splinterTreeInterp);
+//    journalInterp
+//  }
 
   function IMRunning(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
     requires Invariant(v)
@@ -112,17 +96,63 @@ module ProgramInterpMod {
     journalInterp
   }
 
-  function IM(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
+  // Dummy values for when we can't decode the disk. Not actually used in real behaviors
+  // since the Invariant keeps us from needing it; used to complete definitions when
+  // knowledge of the Invariant isn't at hand.
+  function EmptyVars() : (ev: Variables)
+    ensures Invariant(ev)
+  {
+    var sb := Superblock(
+      0,
+      JournalMachineMod.MkfsSuperblock(),
+      SplinterTreeMachineMod.MkfsSuperblock(TREE_ROOT_ADDRESS()));
+    var sbPage := marshalSuperblock(sb);
+    var fakeDv := map cu | cu in CUsInDisk() :: sbPage;
+    var v := Variables(
+      Running,
+      sb,
+      CacheIfc.Variables(fakeDv),
+      JournalInterpMod.EmptyVars(),
+      SplinterTreeInterpMod.EmptyVars(sb.betree),
+      None
+      );
+    v
+  }
+
+  // Any given view of the disk implies some set of Variables that we'd get if we were
+  // to Init from that disk image.
+  function SynthesizeRunningVariables(dv: DiskView) : (sv: Variables)
+    ensures Invariant(sv)
+  {
+    var sb := ISuperblock(dv);
+    if sb.Some?
+    then
+      Variables(
+        Running,
+        sb.value,
+        CacheIfc.Variables(dv),
+        JournalInterpMod.SynthesizeRunningVariables(dv, sb.value.journal),
+        SplinterTreeInterpMod.SynthesizeRunningVariables(dv, sb.value.betree),
+        None
+        )
+    else
+      EmptyVars()
+  }
+
+  function IM(v: Variables, dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
     requires v.WF()
+    ensures iv.WF()
   {
     if !Invariant(v)  // keep Invariant out of requires by providing a dummy answer.
     then
       CrashTolerantMapSpecMod.InitState()
-    else if v.phase.Running?
-    then IMRunning(v)
+    else if !v.phase.Running?
       // Until we're running, there's no state in memory that's not also on the
       // disk.
-    else IMNotRunning(v.cache.dv) // fresh start or recovered
+    then IMRunning(SynthesizeRunningVariables(dv))
+      // Once Program is running, stitch together the ephemeral state of the journal & tree.
+      // Generally they'll agree, but during recovery, the journal may be ahead of the tree.
+    else IMRunning(v)
   }
 
   function IMReads(v: Variables) : seq<CU> {
@@ -147,7 +177,7 @@ module ProgramInterpMod {
     requires DiskViewsEquivalentForSeq(v0.cache.dv, v1.cache.dv, IReads(v0))
     requires v0.betree == v1.betree
     requires v0.journal == v1.journal
-    ensures IM(v0) == IM(v1)
+    ensures IMRunning(v0) == IMRunning(v1)
   {
     assert CU(0, 0) in IReads(v0);
     assert CU(0, 1) in IReads(v0);

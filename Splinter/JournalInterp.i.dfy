@@ -22,12 +22,17 @@ module JournalInterpMod {
   import opened SequenceSetsMod
   import CacheLemmasMod
 
+  predicate DiskSupportsChainLookup(chainLookup: ChainLookup, dv: DiskView, sb: Superblock)
+  {
+    && chainLookup.ValidForSB(CacheIfc.Variables(dv), sb)
+    && chainLookup.Complete()
+    && chainLookup.success()
+  }
+
   predicate Invariant(v: Variables, cache: CacheIfc.Variables)
   {
     && v.WF()
-    && v.marshalledLookup.ValidForSB(cache, v.CurrentSuperblock())
-    && v.marshalledLookup.Complete()
-    && v.marshalledLookup.success() // TODO will have to condition this when coming up after a crash; disk may be broken.
+    && DiskSupportsChainLookup(v.marshalledLookup, cache.dv, v.CurrentSuperblock())
   }
 
   // XXX was ChainAsMsgSeq now v.marshalledLookup.interp
@@ -82,18 +87,6 @@ module JournalInterpMod {
      )
    }
 
-   // TDODO: may have to lemma for the journal internal step
-
-  function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock, base: InterpMod.Interp) : (iv: CrashTolerantMapSpecMod.Variables)
-    requires base.seqEnd == sb.boundaryLSN  // This crash-invariant condition should probably not be a requires; just return nonsense if it fails.
-    ensures iv.WF()
-  {
-    assume false; // this is all nonsense
-    var pretendVariables := Variables(sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, sb.boundaryLSN, [], map[], EmptyChainLookup(Superblock(None, 0), 0));
-    var versions := Versions(pretendVariables, cache, base);
-    CrashTolerantMapSpecMod.Variables(versions, 0) // TODO Sowmya pick up here
-  }
-
   function IM(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp)
     : (iv: CrashTolerantMapSpecMod.Variables)
     requires v.WF()
@@ -104,6 +97,76 @@ module JournalInterpMod {
     assert v.boundaryLSN <= v.unmarshalledLSN(); // Follows from WF & defn unmarshalledLSN
     var versions := Versions(v, cache, base);
     CrashTolerantMapSpecMod.Variables(versions, 0)
+  }
+
+  function EmptyVars() : (ev: Variables)
+    ensures forall cache :: Invariant(ev, cache)
+  {
+    Variables(
+      0,
+      0,
+      0,
+      0,
+      [], // unmarshalledTail
+      map[], // syncReqs
+      EmptyChainLookup(Superblock(None, 0), 0)
+    )
+  }
+
+  function SynthesizeRunningVariables(dv: DiskView, sb: Superblock) : (sv: Variables)
+    ensures Invariant(sv, CacheIfc.Variables(dv))
+  {
+    if exists chainLookup :: DiskSupportsChainLookup(chainLookup, dv, sb)
+    then
+      var chainLookup :| DiskSupportsChainLookup(chainLookup, dv, sb);
+      var sv := Variables(
+        chainLookup.interp().seqStart,
+        chainLookup.interp().seqEnd,
+        chainLookup.interp().seqEnd,
+        chainLookup.interp().seqEnd,
+        [], // unmarshalledTail
+        map[], // syncReqs
+        chainLookup
+      );
+      assert chainLookup.ValidForSB(CacheIfc.Variables(dv), sb);
+      assert chainLookup.ForSB(sb);
+      assert sb.boundaryLSN == chainLookup.interp().seqStart by {
+        forall row | row in chainLookup.rows ensures row.sb.boundaryLSN == sb.boundaryLSN {
+        }
+        assert chainLookup.rows[0].sb.boundaryLSN == chainLookup.interp().seqStart;
+      }
+      assert sb.freshestCU == sv.FreshestMarshalledCU();
+      assert DiskSupportsChainLookup(chainLookup, dv, sv.CurrentSuperblock()) by {
+        assert sv.marshalledLookup.ForSB(sv.CurrentSuperblock());
+        assert sv.marshalledLookup.ForSB(sv.CurrentSuperblock());
+      }
+//      assert sv.FreshestMarshalledCU() == sb.freshestCU by {
+//        assume false;
+//        if sv.marshalledLSN == sv.boundaryLSN {
+//          assert sb.freshestCU.None?;
+//        } else {
+//          assert sb.freshestCU == Some(sv.marshalledLookup.lsnMap()[sv.marshalledLSN-1]);
+//        }
+//      }
+//      assert sv.boundaryLSN == sb.boundaryLSN by {
+//        assert chainLookup.interp().seqStart == boundaryLSN;
+//        calc {
+//          chainLookup.interp().seqStart;
+//          Last(chainLookup.rows).sb.boundaryLSN;
+//          sb.boundaryLSN;
+//        }
+//      }
+//      calc {
+//        sv.CurrentSuperblock();
+//        Superblock(sv.FreshestMarshalledCU(), sv.boundaryLSN);
+//        sb;
+//      }
+//      assert chainLookup.ForSB(sb);
+      assert Invariant(sv, CacheIfc.Variables(dv));
+      sv
+    else
+      // Eww, the journal on the disk is nonsense!
+      EmptyVars()
   }
 
   function IReads(cache:CacheIfc.Variables, sb: Superblock) : seq<CU>
