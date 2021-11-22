@@ -21,7 +21,7 @@ READS_PCT = [100, 95, 50, 0, 90]
 
 N_REPLICAS = [1, 2, 4]
 
-ITERS = 1
+ITERS = 10
 
 def reorder(l):
   if len(l) < 2:

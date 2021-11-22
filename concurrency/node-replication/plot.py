@@ -148,16 +148,17 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
             ],
             labels=labels) +
         scale_linetype_manual(linetypes, labels=replicas_labels, size=0.2) +
-        geom_point(size=0.1) +
+        #geom_point(size=0.1) +
         #geom_line(size=0.2) +
         #stat_summary(fun_data='mean_sdl', fun_args={'mult': 1}, geom='errorbar') +
         stat_summary(fun_ymin=np.min, fun_ymax=np.max, geom='errorbar', size=0.1) +
         stat_summary(fun_y=np.median, geom='line', size=0.2) +
+        stat_summary(fun_y=np.median, geom='point', size=0.1) +
         #stat_summary(fun_y=np.median, geom='point') +
         facet_grid(["write_ratio", "."],
                     scales="free_y",
-                    labeller=labeller(rows=write_ratio_labeller)) +
-        guides(color=guide_legend(nrow=1))
+                    labeller=labeller(rows=write_ratio_labeller))
+#guides(color=guide_legend(nrow=1))
     )
 
     #sockets = machine[2]
