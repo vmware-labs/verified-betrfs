@@ -18,7 +18,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   import opened Constants
   import Maps
 
-  type Key(!new) = nat
+  type Key(!new) = int
 
   datatype ConcreteLogEntry = ConcreteLogEntry(op: nrifc.UpdateOp, node_id: uint64)
 
@@ -1008,7 +1008,7 @@ predicate CombinerStateValid(x: M)
 
   /* ----------------------------------------------------------------------------------------- */
 
-  predicate FinishAdvanceTail(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>) // withdraw
+  predicate FinishAdvanceTail(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<int, StoredType>) // withdraw
   {
     && m.M?
     && m.tail.Some?
@@ -1037,7 +1037,7 @@ predicate CombinerStateValid(x: M)
     )
   }
 
-  lemma FinishAdvanceTail_asserts(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>)
+  lemma FinishAdvanceTail_asserts(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<int, StoredType>)
     requires Inv(m)
     requires FinishAdvanceTail(m, m', combinerNodeId, new_tail, withdrawn)
     ensures forall i: int | (MinusLogSize(m.tail.value) <= i < MinusLogSize(new_tail)) :: i in m.contents.value
@@ -1047,7 +1047,7 @@ predicate CombinerStateValid(x: M)
 
   }
 
-  lemma FinishAdvanceTail_is_withdraw_many(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<nat, StoredType>)
+  lemma FinishAdvanceTail_is_withdraw_many(m: M, m': M, combinerNodeId: nat, new_tail: nat, withdrawn: map<int, StoredType>)
   requires FinishAdvanceTail(m, m', combinerNodeId, new_tail, withdrawn)
   ensures withdraw_many(m, m', withdrawn)
   {

@@ -316,7 +316,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
   glinear method finish_advance_tail(glinear combiner: CBCombinerToken, glinear tail: CBGlobalTail,
       glinear contents: CBContents, ghost new_tail: nat)
-  returns (glinear combiner': CBCombinerToken, glinear tail': CBGlobalTail, glinear contents': CBContents, glinear entries': map<nat, CB.StoredType>)
+  returns (glinear combiner': CBCombinerToken, glinear tail': CBGlobalTail, glinear contents': CBContents, glinear entries': map<int, CB.StoredType>)
   requires combiner.rs.CombinerAdvancingTail?
   requires tail.tail <= new_tail <= combiner.rs.observed_head + LOG_SIZE as int
   ensures combiner'.nodeId == combiner.nodeId
