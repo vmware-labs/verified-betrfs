@@ -343,8 +343,21 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     assert t_token.val.tail.Some? && t_token.val.tail.value == tail.tail;
     assert nodeId in c_token.val.combinerState && combiner.rs == c_token.val.combinerState[nodeId];
 
-    // TODO should follow that forall these it holds that i > MinLocalTails() && !EntryIsAlive();
-    assume forall i: int |  tail.tail <= i < new_tail :: i !in contents.contents;
+    ghost var all := CB.dot(CB.dot(CB.dot(c_token.val, t_token.val), contents_token.val), rest);
+    assert CB.Inv(all);
+
+    assert forall i: int |  tail.tail <= i < new_tail :: i >= CB.MinLocalTail(all.localTails);
+    assert forall i: int |  tail.tail <= i < new_tail :: (CB.reveal_AliveBitsComplete(); !CB.EntryIsAlive(all.aliveBits, i)) by {
+      // TODO CB.reveal_AliveBitsComplete();
+      assume false;
+    }
+
+    // TODO should follow that forall these it holds that i > MinLocalTail() && !EntryIsAlive();
+    assert forall i: int |  tail.tail <= i < new_tail :: i !in contents.contents by { // TODO still failing
+      CB.reveal_AliveBitsComplete();
+      CB.reveal_LocalTailsComplete();
+    }
+
 
     // TODO follows from CB.BufferContents(), it should hold that new_tail - LOG_SIZE < MinLocalTails()
     assume forall i: int |  tail.tail - LOG_SIZE as int <= i < new_tail - LOG_SIZE as int :: i in contents.contents;
