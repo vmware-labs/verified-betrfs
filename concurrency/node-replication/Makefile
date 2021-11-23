@@ -14,14 +14,21 @@ DATA_STRUCTURE := USE_VSPACE
 # because that looks ugly
 DATA_STRUCTURE_NAME=VSpace
 
+# Un/comment to use clang & lld & LTO
+#CC := clang -fheinous-gnu-extensions -flto
+#LD := ld.lld
+#RFLAGS := -Clinker-plugin-lto -Clinker=ld.lld
+
+# Un/comment to use g++ & ld (and no LTO)
+LD := g++
+CC := g++
+RFLAGS := 
+
 ########################################
 
 BUNDLE_DAFNY=Bundle$(DATA_STRUCTURE_NAME).i.dfy
 BUNDLE_CPP=Bundle$(DATA_STRUCTURE_NAME).i.cpp
 BUNDLE_H=Bundle$(DATA_STRUCTURE_NAME).i.h
-
-CC := clang -fheinous-gnu-extensions
-#CC := g++
 
 CPPFLAGS := -std=gnu++17
 CFLAGS := -g -O3 \
@@ -52,7 +59,7 @@ $(BUNDLE_CPP) $(BUNDLE_H): *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/
 	-mv $(TMPNAME) $@
 
 ./vspace/target/release/libvspace.a ./vspace/target/cxxbridge/vspace/src/lib.rs.cc ./vspace/target/cxxbridge/vspace/src/lib.rs.h: ./vspace/src/lib.rs ./vspace/Cargo.toml ./vspace/build.rs
-	cd vspace && cargo build --release
+	cd vspace &&  RUSTFLAGS="$(RFLAGS)" cargo build --release
 
 Bundle.o: $(BUNDLE_CPP) $(HEADERS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
