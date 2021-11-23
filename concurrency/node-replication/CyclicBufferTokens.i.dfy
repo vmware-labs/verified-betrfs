@@ -341,6 +341,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost var rest := CBTokens.obtain_invariant_3(inout c_token, inout t_token, inout contents_token);
     assert contents_token.val.contents.Some? && contents.contents == contents_token.val.contents.value;
     assert t_token.val.tail.Some? && t_token.val.tail.value == tail.tail;
+    assert nodeId in c_token.val.combinerState && combiner.rs == c_token.val.combinerState[nodeId];
 
     // TODO should follow that forall these it holds that i > MinLocalTails() && !EntryIsAlive();
     assume forall i: int |  tail.tail <= i < new_tail :: i !in contents.contents;
