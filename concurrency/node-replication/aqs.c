@@ -162,7 +162,9 @@ static inline int current_numa_node() {
     int core;
     __asm__ volatile("rdtscp" : "=a"(a), "=d"(d), "=c"(c));
     core = c & 0xFFF;
-    return core / (CPU_NUMBER / NUMA_NODES);
+    // The core topology on our machine differs from the
+    // one shfllock was originally run on.
+    return core % NUMA_NODES;
 }
 
 #define false 0
