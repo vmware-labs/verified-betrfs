@@ -15,6 +15,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   import opened GlinearOption
   import opened Cells
   import opened Constants
+  import Maps
   import CB = CyclicBufferRw(nrifc)
   import CBTokens = MultiRwTokens(CB)
 
@@ -332,21 +333,27 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     glinear var c_token := CBCombinerToken_unfold(combiner);
     glinear var contents_token := CBContents_unfold(contents);
 
-    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle);
+    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerAppending(tail.tail, new_tail));
     ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
 
     ghost var out_expect_2 := CBGlobalTail(new_tail);
     ghost var out_token_expect_2 := CBGlobalTail_unfold(out_expect_2);
 
-    ghost var out_expect_3 := XXX_TODO_invent<CBContents>();
+
+    // should follow that forall these it holds that i > MinLocalTails() && !EntryIsAlive();
+    assert forall i: int |  tail.tail <= i < new_tail :: i !in contents.contents;
+
+    // follows fom CB.BufferContents(), it should hold that new_tail - LOG_SIZE < MinLocalTails()
+    assert forall i: int |  tail.tail - LOG_SIZE as int <= i < new_tail - LOG_SIZE as int :: i in contents.contents;
+
+    ghost var withdrawn := map i : int | tail.tail - LOG_SIZE as int <= i < new_tail - LOG_SIZE as int :: contents.contents[i];
+
+    assert forall i: int | i in withdrawn.Keys :: i in contents.contents && withdrawn[i] == contents.contents[i];
+
+    // remove the withdrawn keys from contents
+    ghost var out_expect_3 := CBContents(Maps.MapRemove(contents.contents, withdrawn.Keys));
     ghost var out_token_expect_3 := CBContents_unfold(out_expect_3);
 
-    ghost var withdrawn := map i |
-      && tail.tail <= i < new_tail
-      // TODO
-      :: (assume i - LOG_SIZE as int in contents.contents; contents.contents[i - LOG_SIZE as int]);
-
-    assume false; // TODO
     CB.FinishAdvanceTail_is_withdraw_many(
       CB.dot(CB.dot(c_token.val, t_token.val), contents_token.val),
       CB.dot(CB.dot(out_token_expect_1.val, out_token_expect_2.val), out_token_expect_3.val),
@@ -358,9 +365,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     contents' := CBContents_fold(out_expect_3, out_token_3);
 
     // TODO entries' keys should be shifted down by LOG_SIZE
-
+    //  map x | x in entries :: x + LOG_SIZE as int := entries[x];
     entries' := w_entries;
-    assume false;
   }
 
   /* ----------------------------------------------------------------------------------------- */
@@ -393,22 +399,43 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     ghost var key := combiner.rs.cur_idx;
 
+
+
     ghost var rest := CBTokens.obtain_invariant_3(inout a_token, inout c_token, inout contents_token);
     assert CB.CombinerStateValid(CB.dot(CB.dot(CB.dot(a_token.val, c_token.val), contents_token.val), rest));
     assert nodeId in c_token.val.combinerState && combiner.rs == c_token.val.combinerState[nodeId];
     assert bit.entry in a_token.val.aliveBits && a_token.val.aliveBits[bit.entry] == bit.bit;
     assert contents_token.val.contents.Some? && contents.contents == contents_token.val.contents.value;
 
-    assert key !in contents.contents; // TODO fails
-    assert !CB.EntryIsAlive(a_token.val.aliveBits, key) by {
+
+    // TODO: we need to show this...
+    assert CB.AliveBitsComplete(a_token.val.aliveBits) by {
       CB.reveal_AliveBitsComplete();
-      assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: ( // TODO fails
-        && CB.LogicalToPhysicalIndex(i) in a_token.val.aliveBits
-      );
+    }
+
+    assert !CB.EntryIsAlive(a_token.val.aliveBits, key) by {
       assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: (
+        && CB.LogicalToPhysicalIndex(i) < LOG_SIZE as nat
+        && CB.LogicalToPhysicalIndex(i) in a_token.val.aliveBits
+      ) by {
+        CB.reveal_AliveBitsComplete();
+      }
+      // do we need the non-overlap thing here?
+
+      CB.reveal_RangesNoOverlapCombinerReader();
+      CB.reveal_RangesNoOverlapCombinerCombiner();
+
+      assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: ( // fails
         && !(CB.EntryIsAlive(a_token.val.aliveBits, i))
       );
     }
+
+    // we know that the entry is not alive
+    // we know that MinLocalTails <= localTail[nodeId] <= key
+    // thus:
+    assert key !in contents.contents; // TODO fails
+
+
     CB.AppendFlipBit_is_deposit(
       CB.dot(CB.dot(c_token.val, a_token.val), contents_token.val),
       CB.dot(CB.dot(out_token_expect_1.val, out_token_expect_2.val), out_token_expect_3.val),
