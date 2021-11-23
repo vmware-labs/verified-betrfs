@@ -1339,7 +1339,7 @@ module Impl(nrifc: NRIfc) {
             {
               ghost_acquire contents;
               if live_bit == ((i / LOG_SIZE) % 2 == 0) {
-                cb' := reader_guard(cb', alive_bit, i as int, contents);
+                cb', contents := reader_guard(cb', alive_bit, i as int, contents);
               }
               ghost_release contents;
             }
