@@ -589,8 +589,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   /* ----------------------------------------------------------------------------------------- */
 
   glinear method reader_guard(glinear combiner: CBCombinerToken, gshared aliveBit: CBAliveBit, ghost i: nat,
-      gshared contents: CBContents)
-  returns (glinear combiner': CBCombinerToken)
+      glinear contents: CBContents)
+  returns (glinear combiner': CBCombinerToken, glinear contents': CBContents)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderRange?
   // TODO I don't think this should be needed: --- yes we do! otherwise we read one past the end.
   requires combiner.rs.readerState.start <= i < combiner.rs.readerState.end
@@ -600,22 +600,18 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   ensures i in contents.contents
   ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderGuard(combiner.rs.readerState.start, combiner.rs.readerState.end,
       i, contents.contents[i])))
+  ensures contents' == contents
   {
     // get the node id and combiner token
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
     gshared var a_token := CBAliveBit_unfold_borrow(aliveBit);
 
-    gshared var contents_token := CBContents_unfold_borrow(contents);
+    glinear var contents_token := CBContents_unfold(contents);
 
     ghost var expected_x := CB.dot(a_token.val, contents_token.val);
-    forall r | CBTokens.pcm.valid(r) && CBTokens.pcm.le(a_token.val, r) && CBTokens.pcm.le(contents_token.val, r)
-    ensures CBTokens.pcm.le(expected_x, r)
-    {
-      assume CBTokens.pcm.le(expected_x, r); // TODO
-    }
-    ghost var rest := CBTokens.obtain_invariant_2_1(a_token, contents_token, inout c_token);
-    ghost var all := CB.dot(CB.dot(CB.dot(a_token.val, contents_token.val), c_token.val), rest);
+    ghost var rest := CBTokens.obtain_invariant_1_2(a_token, inout contents_token, inout c_token);
+    ghost var all := CB.dot(CB.dot(a_token.val, CB.dot(contents_token.val, c_token.val)), rest);
     assert CB.Inv(all);
 
     assert contents_token.val.contents.value == contents.contents;
@@ -661,15 +657,21 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     assert CB.LogicalToPhysicalIndex(i) in a_token.val.aliveBits;
 
     // the transition
+    // CB.ReaderDoGuard_is_transition(
+    //   CB.dot(CB.dot(a_token.val, contents_token.val), c_token.val),
+    //   CB.dot(CB.dot(a_token.val, contents_token.val), out_token_expect.val), nodeId, i);
+
+    // the transition
     CB.ReaderDoGuard_is_transition(
-      CB.dot(CB.dot(a_token.val, contents_token.val), c_token.val),
-      CB.dot(CB.dot(a_token.val, contents_token.val), out_token_expect.val), nodeId, i);
+      CB.dot(a_token.val, CB.dot(contents_token.val, c_token.val)),
+      CB.dot(a_token.val, CB.dot(contents_token.val, out_token_expect.val)), nodeId, i);
 
     // do the internal transition
-    glinear var out_token := CBTokens.internal_transition_2_1_1(a_token, contents_token, c_token, out_token_expect.val);
+    glinear var out_token1, out_token2 := CBTokens.internal_transition_1_2_1(a_token, contents_token, c_token, contents_token.val, out_token_expect.val);
 
     // update the combiner
-    combiner' := CBCombinerToken_fold(out_expect, out_token);
+    contents' := CBContents_fold(contents, out_token1);
+    combiner' := CBCombinerToken_fold(out_expect, out_token2);
   }
 
   /* ----------------------------------------------------------------------------------------- */

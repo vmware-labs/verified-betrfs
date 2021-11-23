@@ -477,6 +477,25 @@ module MultiRwTokens(rw: MultiRw) {
     rest :| rw.Inv(rw.dot(rw.dot(rw.dot(token1.val, token2.val), token3.val), rest));
   }
 
+  glinear method obtain_invariant_1_2(
+      gshared token1: Token,
+      glinear inout token2: Token,
+      glinear inout token3: Token)
+  returns (ghost rest: rw.M)
+  requires old_token3.loc == old_token2.loc == token1.loc
+  ensures (
+    && old_token2 == token2
+    && old_token3 == token3
+  )
+  ensures rw.Inv(rw.dot(rw.dot(token1.val, rw.dot(token2.val, token3.val)), rest))
+  {
+    ghost var expected_x := rw.dot(token2.val, token3.val);
+    glinear var x := T.join(token2, token3);
+    T.is_valid(token1, inout x);
+    token2, token3 := T.split(x, token2.val, token3.val);
+    rest :| rw.Inv(rw.dot(rw.dot(token1.val, rw.dot(token2.val, token3.val)), rest));
+  }
+
   glinear method obtain_invariant_2(
       glinear inout token1: Token,
       glinear inout token2: Token)
@@ -559,6 +578,25 @@ module MultiRwTokens(rw: MultiRw) {
   {
     gshared var x := T.join_shared(token1, token2, rw.dot(token1.val, token2.val));
     token3' := T.transition_update(x, token3, expected_value3);
+  }
+
+  glinear method internal_transition_1_2_1(
+      gshared token1: Token,
+      glinear token2: Token,
+      glinear token3: Token,
+      ghost expected_value2: rw.M,
+      ghost expected_value3: rw.M)
+  returns (glinear token2': Token, glinear token3': Token)
+  requires token1.loc == token2.loc == token3.loc
+  requires rw.transition(
+      rw.dot(token1.val, rw.dot(token2.val, token3.val)),
+      rw.dot(token1.val, rw.dot(expected_value2, expected_value3)))
+  ensures token2' == T.Token(token2.loc, expected_value2)
+  ensures token3' == T.Token(token3.loc, expected_value3)
+  {
+    glinear var x := T.join(token2, token3);
+    glinear var x' := T.transition_update(token1, x, rw.dot(expected_value2, expected_value3));
+    token2', token3' := T.split(x', expected_value2, expected_value3);
   }
 
   glinear method deposit_2_2(
