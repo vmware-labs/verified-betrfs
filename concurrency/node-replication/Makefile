@@ -14,10 +14,12 @@ DATA_STRUCTURE := USE_VSPACE
 # because that looks ugly
 DATA_STRUCTURE_NAME=VSpace
 
-# Un/comment to use clang & lld & LTO
-#CC := clang -fheinous-gnu-extensions -flto
-#LD := ld.lld
-#RFLAGS := -Clinker-plugin-lto -Clinker=ld.lld
+# Un/comment to use clang & lld
+#CC := clang-13 -fheinous-gnu-extensions
+#LD := ld.lld-13 --gcc-toolchain
+
+# Don't uncomment this (yet) as LTO is not working
+##RFLAGS := -Clinker=clang-13 -Clinker-plugin-lto -Clink-arg=-fuse-ld=lld
 
 # Un/comment to use g++ & ld (and no LTO)
 LD := g++
