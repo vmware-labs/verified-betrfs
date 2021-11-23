@@ -5,7 +5,6 @@ include "Ptrs.s.dfy"
 include "../../lib/Base/Multisets.i.dfy"
 include "../../lib/Base/Option.s.dfy"
 
-include "GlinearSet.s.dfy"
 include "GlinearMap.s.dfy"
 
 abstract module MultiRw {
@@ -193,7 +192,6 @@ module MultiRwTokens(rw: MultiRw) {
   import ET = ExtTokens(MultiRw_PCMWrap(rw), MultiRw_PCMExt(rw))
   import pcm = MultiRw_PCMExt(rw)
   import Multisets
-  import GlinearSet
   import GlinearMap
   import Ptrs
   
