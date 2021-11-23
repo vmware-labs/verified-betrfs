@@ -290,11 +290,6 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
   /* ----------------------------------------------------------------------------------------- */
 
-  ghost method XXX_TODO_invent<A>() returns (a: A)
-  glinear method XXX_TODO_invent_glinear<A>() returns (glinear a: A)
-
-  /* ----------------------------------------------------------------------------------------- */
-
   glinear method abandon_advance_tail(glinear combiner: CBCombinerToken)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerAdvancingTail?
