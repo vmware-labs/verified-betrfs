@@ -3,6 +3,8 @@ include "InfiniteLogTokens.i.dfy"
 include "CyclicBuffer.i.dfy"
 include "../framework/Cells.s.dfy"
 include "../framework/GlinearOption.s.dfy"
+include "../framework/GlinearMap.s.dfy"
+include "../framework/Ptrs.s.dfy"
 include "Constants.i.dfy"
 
 module CyclicBufferTokens(nrifc: NRIfc) {
@@ -13,11 +15,13 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   import opened ILT = InfiniteLogTokens(nrifc)
   import opened GhostLoc
   import opened GlinearOption
+  import GlinearMap
   import opened Cells
   import opened Constants
   import Maps
   import CB = CyclicBufferRw(nrifc)
   import CBTokens = MultiRwTokens(CB)
+  import Ptrs
 
   function cb_loc() : Loc // XXX TODO(andrea)
   ensures cb_loc().ExtLoc? && cb_loc().base_loc == CBTokens.Wrap.singleton_loc()
@@ -339,12 +343,15 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost var out_expect_2 := CBGlobalTail(new_tail);
     ghost var out_token_expect_2 := CBGlobalTail_unfold(out_expect_2);
 
+    ghost var rest := CBTokens.obtain_invariant_3(inout c_token, inout t_token, inout contents_token);
+    assert contents_token.val.contents.Some? && contents.contents == contents_token.val.contents.value;
+    assert t_token.val.tail.Some? && t_token.val.tail.value == tail.tail;
 
-    // should follow that forall these it holds that i > MinLocalTails() && !EntryIsAlive();
-    assert forall i: int |  tail.tail <= i < new_tail :: i !in contents.contents;
+    // TODO should follow that forall these it holds that i > MinLocalTails() && !EntryIsAlive();
+    assume forall i: int |  tail.tail <= i < new_tail :: i !in contents.contents;
 
-    // follows fom CB.BufferContents(), it should hold that new_tail - LOG_SIZE < MinLocalTails()
-    assert forall i: int |  tail.tail - LOG_SIZE as int <= i < new_tail - LOG_SIZE as int :: i in contents.contents;
+    // TODO follows from CB.BufferContents(), it should hold that new_tail - LOG_SIZE < MinLocalTails()
+    assume forall i: int |  tail.tail - LOG_SIZE as int <= i < new_tail - LOG_SIZE as int :: i in contents.contents;
 
     ghost var withdrawn := map i : int | tail.tail - LOG_SIZE as int <= i < new_tail - LOG_SIZE as int :: contents.contents[i];
 
@@ -364,9 +371,35 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     tail' := CBGlobalTail_fold(out_expect_2, out_token_2);
     contents' := CBContents_fold(out_expect_3, out_token_3);
 
-    // TODO entries' keys should be shifted down by LOG_SIZE
-    //  map x | x in entries :: x + LOG_SIZE as int := entries[x];
-    entries' := w_entries;
+    assert forall k: int :: tail.tail - LOG_SIZE as int <= k < new_tail - LOG_SIZE as int <==> k in w_entries;
+
+    entries' := GlinearMap.glmap_empty();
+
+    ghost var j: int := tail.tail - LOG_SIZE as int;
+
+    while j < new_tail - LOG_SIZE as int
+    invariant tail.tail - LOG_SIZE as int <= j
+    invariant j <= new_tail - LOG_SIZE as int
+    invariant forall k: int :: (
+      && (k < j ==> k !in w_entries)
+      && (j <= k < new_tail - LOG_SIZE as int ==> k in w_entries)
+      && (new_tail - LOG_SIZE as int <= k ==> k !in w_entries)
+    )
+    invariant forall k: int :: (
+      && (k < tail.tail ==> k !in entries')
+      && (tail.tail <= k < j + LOG_SIZE as int ==> k in entries')
+      && (j + LOG_SIZE as int <= k ==> k !in entries')
+    )
+    invariant forall k: int | k in w_entries :: w_entries[k] == contents.contents[k]
+    invariant forall k: int | tail.tail <= k < j + LOG_SIZE as int :: entries'[k] == contents.contents[k - LOG_SIZE as int]
+    {
+      glinear var v;
+      w_entries, v := GlinearMap.glmap_take(w_entries, j);
+      entries' := GlinearMap.glmap_insert(entries', j + LOG_SIZE as int, v);
+
+      j := j + 1;
+    }
+    Ptrs.dispose_anything(w_entries);
   }
 
   /* ----------------------------------------------------------------------------------------- */
@@ -425,7 +458,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       CB.reveal_RangesNoOverlapCombinerReader();
       CB.reveal_RangesNoOverlapCombinerCombiner();
 
-      assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: ( // fails
+      assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: ( // TODO fails
         && !(CB.EntryIsAlive(a_token.val.aliveBits, i))
       );
     }
