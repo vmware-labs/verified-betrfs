@@ -64,7 +64,7 @@
 //__VA_ARGS__)
 #define DEBUG_PTHREAD(...)
 
-void *alloc_cache_align(size_t n);
+//void *alloc_cache_align(size_t n);
 
 static inline void *xchg_64(void *ptr, void *x) {
     __asm__ __volatile__("xchgq %0,%1"

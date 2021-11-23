@@ -14,8 +14,16 @@
 #include "nr.h"
 #include "thread_pin.h"
 
+#ifdef __clang__
+extern "C" {
+#endif
+
 #include "mcs.h"
 #include "aqs.h"
+
+#ifdef __clang__
+}
+#endif
 
 class key_generator {
   uint64_t state;

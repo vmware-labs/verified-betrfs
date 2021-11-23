@@ -20,7 +20,11 @@ BUNDLE_DAFNY=Bundle$(DATA_STRUCTURE_NAME).i.dfy
 BUNDLE_CPP=Bundle$(DATA_STRUCTURE_NAME).i.cpp
 BUNDLE_H=Bundle$(DATA_STRUCTURE_NAME).i.h
 
-CFLAGS := -g -O3 -std=gnu++17 \
+CC := clang -fheinous-gnu-extensions
+#CC := g++
+
+CPPFLAGS := -std=gnu++17
+CFLAGS := -g -O3 \
 	-I ../../.dafny/dafny/Binaries/ -I ../framework/ -D$(DATA_STRUCTURE)
 
 HEADERS := \
@@ -32,9 +36,11 @@ HEADERS := \
 	vspace_glue.h
 
 LIBS := \
+	-lstdc++ \
 	-lpthread \
 	-lnuma \
 	-lvspace \
+	-lm \
 	-ldl # rust needs this :/
 
 $(BUNDLE_CPP) $(BUNDLE_H): *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy vspace_glue.h ./vspace/target/cxxbridge/vspace/src/lib.rs.h
@@ -49,22 +55,22 @@ $(BUNDLE_CPP) $(BUNDLE_H): *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/
 	cd vspace && cargo build --release
 
 Bundle.o: $(BUNDLE_CPP) $(HEADERS)
-	g++ $(CFLAGS) -c -o $@ $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 aqs.o: aqs.c aqs.h padding.h utils.h
-	g++ $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 mcs.o: mcs.c mcs.h padding.h utils.h
-	g++ $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 main.o: main.cpp $(HEADERS)
-	g++ $(CFLAGS) -c -o $@ $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 vspace_glue.o: ./vspace/target/cxxbridge/vspace/src/lib.rs.cc $(HEADERS)
-	g++ $(CFLAGS) -c -o $@ $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 app: main.o Bundle.o vspace_glue.o ./vspace/target/release/libvspace.a mcs.o aqs.o
-	g++ -g -o app aqs.o mcs.o Bundle.o vspace_glue.o main.o -L ./vspace/target/release/ $(LIBS)
+	$(CC) -g -o app aqs.o mcs.o Bundle.o vspace_glue.o main.o -L ./vspace/target/release/ $(LIBS)
 
 .PHONY: clean
 

@@ -16,12 +16,12 @@ NODES = 4
 MAX_THREADS = NODES * CORES_PER_NODE
 
 NR_BENCHES = ['dafny_nr', 'rust_nr']
-OTHER_BENCHES = ['dafny_rwlock', 'shfllock', 'mcs', 'cpp_shared_mutex']
-READS_PCT = [100, 95, 50, 0, 90]
+OTHER_BENCHES = ['dafny_rwlock']
+READS_PCT = [100, 10, 0]
 
-N_REPLICAS = [1, 2, 4]
+N_REPLICAS = [4]
 
-ITERS = 10
+ITERS = 3
 
 def reorder(l):
   if len(l) < 2:
