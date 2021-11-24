@@ -805,7 +805,7 @@ module Impl(nrifc: NRIfc) {
       } else {
         iter := iter + 1;
         if iter == RESPONSE_CHECK_INTERVAL {
-          try_combine(nr, node, tid);
+          try_combine(nr, node, tid, inout activeIdxs);
           iter := 0;
         }
       }
