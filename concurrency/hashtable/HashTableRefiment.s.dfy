@@ -35,7 +35,7 @@ module HashTableRefiment refines
       case Start(rid, input) =>
         SSM.NewTicketPreservesInv(s, s', rid, input);
       case End(rid, output) =>
-        SSM.ConsumeStubPreservesInv(s, s', rid, output);
+        SSM.ConsumeStubPreservesInv(s, s', rid, output, SSM.Stub(rid, output));
       case InternalOp => {
         assert exists shard, shard', rest :: A.InternalNext(s, s', shard, shard', rest);
         var shard, shard', rest :| A.InternalNext(s, s', shard, shard', rest);
@@ -249,7 +249,7 @@ module HashTableRefiment refines
     }
 
     assert B.Next(si, si', ifc.InternalOp) by {
-      assert B.InteralNext(rid, input, output, si, si');
+      assert B.InternalNext(rid, input, output, si, si');
     }
   }
 

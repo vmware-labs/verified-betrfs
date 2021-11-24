@@ -246,6 +246,11 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
   {
     unit().(resps := map[rid := output])
   }
+  
+  predicate IsStub(rid: RequestId, output: IOIfc.Output, stub: M)
+  {
+    stub== Stub(rid, output) 
+  }
 
   function OneRowTable(i: Index, entry: Entry) : FixedTable
   {
@@ -266,13 +271,11 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
       (set rid | rid in m.resps :: rid)
   }
 
-  predicate Init(s: M)
+  function Init(): M
   {
-    && s.Variables?
-    && (forall i | 0 <= i < |s.table| :: s.table[i] == Some(Empty))
-    && s.insert_capacity == Capacity()
-    && s.reqs == map[]
-    && s.resps == map[]
+    Variables(
+      EmptyTable(),
+      Capacity(), map[], map[])
   }
 
   datatype Step =
@@ -805,19 +808,29 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
     assert rid !in c.resps;
   }
 
-  // lemma RemoveMonotonic(a: M, b: M, c: M, step: Step)
-  //   requires NextStep(a, b, step)
-  //   requires step.RemoveStep?
-  //   requires Inv(dot(a, c))
-  //   ensures NextStep(dot(a, c), dot(b, c), step)
-  // {
-  //   var RemoveStep(rid, input, start, end) := step;
-  //   var a' := dot(a, c);
-  //   assert a.RemoveEnable(step);
-  //   var r := Partial(start, end);
-  //   assert ValidTidyRange(a.table, r, input.key);
-  //   assert ValidTidyRange(a'.table, r, input.key);
-  // }
+  lemma RemoveMonotonic(a: M, b: M, c: M, step: Step)
+    requires NextStep(a, b, step)
+    requires step.RemoveStep?
+    requires Inv(dot(a, c))
+    ensures NextStep(dot(a, c), dot(b, c), step)
+  {
+    var RemoveStep(rid, input, start, end) := step;
+    var a' := dot(a, c);
+    assert a.RemoveEnable(step);
+    assert a'.RemoveEnable(step);
+  }
+
+  lemma InsertMonotonic(a: M, b: M, c: M, step: Step)
+    requires NextStep(a, b, step)
+    requires step.InsertStep?
+    requires Inv(dot(a, c))
+    ensures NextStep(dot(a, c), dot(b, c), step)
+  {
+    var InsertStep(rid, input, start, end) := step;
+    var a' := dot(a, c);
+    assert a.InsertEnable(step);
+    assert a'.InsertEnable(step);
+  }
 
   lemma TransitionMonotonic(a: M, b: M, c: M)
   requires Internal(a, b)
@@ -826,7 +839,13 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
   {
     TransitionFailEquivalent(a, b, c);
     var step :| NextStep(a, b, step);
-    assert NextStep(dot(a, c), dot(b, c), step);
+    if step.RemoveStep? {
+      RemoveMonotonic(a, b, c, step);
+    } else if step.InsertStep? {
+      InsertMonotonic(a, b, c, step);
+    } else {
+      assert NextStep(dot(a, c), dot(b, c), step);
+    }
   }
 
   lemma InternalPreservesInv(shard: M, shard': M, rest: M)
@@ -880,7 +899,7 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
       whole.(reqs := whole.reqs[rid := input]);
   }
 
-  lemma ConsumeStubPreservesInv(whole: M, whole': M, rid: RequestId, output: IOIfc.Output)
+  lemma ConsumeStubPreservesInv(whole: M, whole': M, rid: RequestId, output: IOIfc.Output, stub: M)
   {
     assert dot(whole', Stub(rid, output)) == 
       whole'.(resps := whole'.resps[rid := output]);
@@ -916,7 +935,7 @@ module HashTableStubSSM refines TicketStubSSM(MapIfc)
   lemma exists_inv_state() returns (s: M)
   {
     s := Variables(EmptyTable(), Capacity(), map[], map[]);
-    assert Init(s);
+    assert s == Init();
     InitImpliesInv(s);
   }
 }

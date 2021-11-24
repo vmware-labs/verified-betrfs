@@ -657,7 +657,7 @@ module Impl {
   method init(glinear in_token: Token)
   returns (linear v: Variables, linear iv: IVariables)
     requires in_token.val.Variables?
-    requires SSM.Init(in_token.val)
+    requires SSM.Init() == in_token.val
     ensures v.Inv(iv)
     ensures v.HasNoRowHandle()
     ensures v.token.val == SSM.unit()
