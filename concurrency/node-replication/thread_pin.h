@@ -107,7 +107,9 @@ class core_map {
     }
   }
 
-  void pin(uint32_t thread_id) {
+  // Returns core_id of the core this thread was pinned to (which is controlled
+  // by the topology and fill policy.
+  uint32_t pin(uint32_t thread_id) {
     uint32_t core_id = thread_to_core_map[thread_id];
     std::cerr << "Pinning thread " << thread_id << " to core " << core_id << std::endl;
     cpu_set_t cpuset;
@@ -117,6 +119,7 @@ class core_map {
     if (rc != 0) {
       std::cerr << "setaffinity failed" << std::endl;
     }
+    return core_id;
   }
 
   numa_policy get_numa_policy() { return nm_policy; }
