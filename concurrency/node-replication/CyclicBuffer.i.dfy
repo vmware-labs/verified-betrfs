@@ -193,7 +193,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
     // all local tails must be between the head and the tail
     && (forall i | i in x.localTails :: x.head.value <= x.localTails[i] <= x.tail.value)
     // all local tails are between the valid buffer range
-    && (forall i | i in x.localTails ::  x.tail.value - (LOG_SIZE as nat) <=  x.localTails[i] <= x.tail.value)
+    && (forall i | i in x.localTails ::  x.tail.value - (LOG_SIZE as int) <=  x.localTails[i] <= x.tail.value)
   }
 
   predicate PointerDifferences(x:M)
@@ -220,10 +220,11 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   predicate BufferContents(x: M)
     requires Complete(x)
   {
-    forall i : int | x.tail.value - (LOG_SIZE as nat) <= i < x.tail.value :: (
+    && (forall i : int | x.tail.value - (LOG_SIZE as int) <= i < x.tail.value :: (
       assert LogicalToPhysicalIndex(i) in x.aliveBits by { reveal_AliveBitsComplete(); }
       assert forall i:nat :: i < NUM_REPLICAS as nat <==> i in x.localTails by { reveal_LocalTailsComplete(); }
-      (EntryIsAlive(x.aliveBits, i) || (i < MinLocalTail(x.localTails)) <==> i in x.contents.value))
+      (EntryIsAlive(x.aliveBits, i) || (i < MinLocalTail(x.localTails)) <==> i in x.contents.value)))
+    && (forall i : int | x.tail.value <= i :: i !in x.contents.value)
   }
 
   predicate ReaderStateValid(x: M)
@@ -414,7 +415,7 @@ predicate CombinerStateValid(x: M)
     && s.tail == Some(0)
     && (s.localTails    == map x : nat | x < (NUM_REPLICAS as nat) :: 0 as nat)
     && (s.combinerState == map x : nat | x < (NUM_REPLICAS as nat) :: CombinerIdle)
-    && (s.aliveBits     == map x : nat | x < LOG_SIZE as nat :: x := LogicalToAliveBitAliveWhen(x - LOG_SIZE as nat))
+    && (s.aliveBits     == map x : nat | x < LOG_SIZE as nat :: x := LogicalToAliveBitAliveWhen(x - LOG_SIZE as int))
     && s.contents.Some?
     && (forall i: int :: -(LOG_SIZE as int) <= i < 0 <==> (i in s.contents.value))
   }
@@ -1098,10 +1099,10 @@ predicate CombinerStateValid(x: M)
 
         assert CombinerStateValid(dot(m', p)) by {
           forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending?
-          ensures  dot(m', p).tail.value - (LOG_SIZE as nat) <= dot(m', p).combinerState[n].cur_idx <= dot(m', p).tail.value
+          ensures  dot(m', p).tail.value - (LOG_SIZE as int) <= dot(m', p).combinerState[n].cur_idx <= dot(m', p).tail.value
           {
             if n == combinerNodeId {
-              assert dot(m', p).tail.value - (LOG_SIZE as nat) <= dot(m', p).combinerState[n].cur_idx <= dot(m', p).tail.value;
+              assert dot(m', p).tail.value - (LOG_SIZE as int) <= dot(m', p).combinerState[n].cur_idx <= dot(m', p).tail.value;
             } else {
               assert dot(m', p).combinerState[n].cur_idx <= dot(m', p).tail.value;
               assert n in dot(m', p).localTails by {
@@ -1132,7 +1133,7 @@ predicate CombinerStateValid(x: M)
       forall i : int
         ensures i in I(dot(m, p)).Keys <==> i in (I(dot(m', p)).Keys + withdrawn.Keys)
       {
-
+        assume false;
       }
 
       assert I(dot(m, p)) == (
@@ -1222,7 +1223,7 @@ predicate CombinerStateValid(x: M)
         }
 
         assert BufferContents(dot(m', p)) by {
-          forall i : int | dot(m', p).tail.value - (LOG_SIZE as nat) <= i < dot(m', p).tail.value
+          forall i : int | dot(m', p).tail.value - (LOG_SIZE as int) <= i < dot(m', p).tail.value
           ensures (
             || EntryIsAlive(dot(m', p).aliveBits, i)
             || (i < MinLocalTail(dot(m', p).localTails)) <==> i in dot(m', p).contents.value)
