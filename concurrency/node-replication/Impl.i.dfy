@@ -79,10 +79,9 @@ module Impl(nrifc: NRIfc) {
     {
       && fc.tid == i
       && fc.loc == fc_loc
-      && (v == 0 || v == 1 || v == 2)
+      && (v == 0 || v == 1)
       && (v == 0 ==> fc.state.FCEmpty? || fc.state.FCResponse?)
-      && (v == 1 ==> fc.state.FCRequest?)
-      && (v == 2 ==> fc.state.FCInProgress?)
+      && (v == 1 ==> fc.state.FCRequest? || fc.state.FCInProgress?)
       && (fc.state.FCEmpty? ==>
         && update.glNone?
         && contents.glNone?
@@ -130,7 +129,7 @@ module Impl(nrifc: NRIfc) {
   {
     && ((v == 0) ==> (
       && g.glSome? 
-      && g.value.flatCombiner.state == FCCombinerCollecting(0, [])
+      && g.value.flatCombiner.state == FCCombinerCollecting([])
       && g.value.flatCombiner.loc == fc_loc
       && g.value.gops.v.Some?
       && g.value.gops.lcell == ops
@@ -309,8 +308,10 @@ module Impl(nrifc: NRIfc) {
   method try_combine(shared nr: NR, shared node: Node, tid: uint64, linear inout activeIdxs: seq<bool>)
   // requires tid > 0, rust version had tid > 0, in dafny we do tid >= 0
   requires tid < MAX_THREADS_PER_REPLICA
+  requires |old_activeIdxs| == MAX_THREADS_PER_REPLICA as int
   requires nr.WF()
   requires node.WF()
+  ensures |activeIdxs| == MAX_THREADS_PER_REPLICA as int
   decreases *
   {
     // Check `combiner_lock` a few times until it appears to be free...
@@ -326,8 +327,9 @@ module Impl(nrifc: NRIfc) {
       if combiner_lock != 0 {
         fail := true;
         i := 5;
+      } else {
+        i := i + 1;
       }
-      i := i + 1;
     }
 
     if !fail {
@@ -422,12 +424,14 @@ module Impl(nrifc: NRIfc) {
   requires node.WF() 
   requires |ops| == MAX_THREADS_PER_REPLICA as int
   requires |responses| == MAX_THREADS_PER_REPLICA as int
-  requires flatCombiner.state == FCCombinerCollecting(0, [])
+  requires flatCombiner.state == FCCombinerCollecting([])
   requires flatCombiner.loc == node.fc_loc
+  requires |old_activeIdxs| == MAX_THREADS_PER_REPLICA as int
   ensures flatCombiner'.loc == node.fc_loc
-  ensures flatCombiner'.state == FCCombinerCollecting(0, [])
+  ensures flatCombiner'.state == FCCombinerCollecting([])
   ensures |ops'| == MAX_THREADS_PER_REPLICA as int
   ensures |responses'| == MAX_THREADS_PER_REPLICA as int
+  ensures |activeIdxs| == MAX_THREADS_PER_REPLICA as int
   decreases *
   {
     /////// Collect the operations
@@ -466,7 +470,7 @@ module Impl(nrifc: NRIfc) {
     /////// Return responses
     flatCombiner' := combine_respond(
         node, responses', flatCombiner', requestIds,
-        updates, opCellPermissions, inout activeIdxs);
+        updates, opCellPermissions, activeIdxs);
   }
 
   method combine_collect(
@@ -483,30 +487,34 @@ module Impl(nrifc: NRIfc) {
       glinear opCellPermissions: map<nat, CellContents<OpResponse>>)
   requires node.WF()
   requires flatCombiner.loc == node.fc_loc
-  requires flatCombiner.state == FCCombinerCollecting(0, [])
-  requires |ops| == MAX_THREADS_PER_REPLICA as int
-  ensures |ops'| == |ops|
+  requires flatCombiner.state == FCCombinerCollecting([])
+  requires |old_activeIdxs| == |ops| == MAX_THREADS_PER_REPLICA as int
+  ensures |activeIdxs| == |ops'| == |ops|
   ensures flatCombiner'.loc == node.fc_loc
   ensures 0 <= num_ops as int <= |ops'|
   ensures flatCombiner'.state.FCCombinerResponding?
       && flatCombiner'.state.idx == 0
-      && flatCombiner'.state.elem_idx == 0
-      && num_ops as int == |flatCombiner'.state.elems| == |requestIds|
-      && (forall i | 0 <= i < |flatCombiner'.state.elems| ::
-          && flatCombiner'.state.elems[i].rid == requestIds[i]
+      && |flatCombiner'.state.elems| == MAX_THREADS_PER_REPLICA as int == |activeIdxs|
+      && num_ops as int == |requestIds|
+      && (forall i | 0 <= i < |requestIds| ::
           && i in updates
-          && updates[i].rid == flatCombiner'.state.elems[i].rid
+          && updates[i].rid == requestIds[i]
           && updates[i].us.UpdateInit?
-          && updates[i].us.op == ops'[i]
-          && i in opCellPermissions
-          && 0 <= flatCombiner'.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
-          && opCellPermissions[i].cell
-                  == node.contexts[flatCombiner'.state.elems[i].tid].cell.inner
+          && updates[i].us.op == ops'[i])
+      && (forall i | 0 <= i < |flatCombiner'.state.elems| ::
+          && activeIdxs[i] == flatCombiner'.state.elems[i].Some?
+          && (flatCombiner'.state.elems[i].Some? ==> (
+            && i in opCellPermissions
+            && opCellPermissions[i].cell == node.contexts[i].cell.inner
+          ))
       )
+  ensures RidsMatch(flatCombiner'.state.elems, requestIds,
+      0, |flatCombiner'.state.elems|,
+      0, |requestIds|)
   {
     ops' := ops;
     flatCombiner' := flatCombiner;
-    //requestIds := [];
+    requestIds := [];
     num_ops := 0;
     updates := glmap_empty();
     opCellPermissions := glmap_empty();
@@ -514,26 +522,34 @@ module Impl(nrifc: NRIfc) {
     var j := 0 as uint64;
     while j < MAX_THREADS_PER_REPLICA
     invariant 0 <= j <= MAX_THREADS_PER_REPLICA
-    invariant num_ops <= j
+    invariant |requestIds| == num_ops as int <= j as int
     invariant |ops'| == |ops|
     invariant flatCombiner'.loc == node.fc_loc
     invariant flatCombiner'.state.FCCombinerCollecting?
-      && flatCombiner'.state.idx == j as int
-      && num_ops as int == |flatCombiner'.state.elems| // == |requestIds|
-      && (forall i | 0 <= i < |flatCombiner'.state.elems| ::
-          //&& flatCombiner'.state.elems[i].rid //== requestIds[i]
+    invariant |requestIds| <= j as int
+      && |flatCombiner'.state.elems| == j as int
+      && MAX_THREADS_PER_REPLICA as int == |activeIdxs|
+      && (forall i | 0 <= i < |requestIds| ::
           && i in updates
-          && updates[i].rid == flatCombiner'.state.elems[i].rid
+          && updates[i].rid == requestIds[i]
           && updates[i].us.UpdateInit?
-          && updates[i].us.op == ops'[i]
-          && i in opCellPermissions
-          && 0 <= flatCombiner'.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
-          && opCellPermissions[i].cell
-                  == node.contexts[flatCombiner'.state.elems[i].tid].cell.inner
+          && updates[i].us.op == ops'[i])
+      && (forall i | 0 <= i < |flatCombiner'.state.elems| ::
+          && activeIdxs[i] == flatCombiner'.state.elems[i].Some?
+          && (flatCombiner'.state.elems[i].Some? ==> (
+            && i in opCellPermissions
+            && opCellPermissions[i].cell == node.contexts[i].cell.inner
+          ))
       )
+    invariant RidsMatch(flatCombiner'.state.elems, requestIds,
+        0, |flatCombiner'.state.elems|,
+        0, |requestIds|)
     {
       glinear var new_contents_opt;
       glinear var new_update_opt;
+
+      ghost var old_requestIds := requestIds;
+      ghost var old_elems := flatCombiner'.state.elems;
 
       atomic_block var has_op := execute_atomic_load(
           lseq_peek(node.contexts, j).atomic.inner)
@@ -561,24 +577,32 @@ module Impl(nrifc: NRIfc) {
 
         // ghost state update
         updates := glmap_insert(updates, num_ops as int, unwrap_value(new_update_opt));
-        opCellPermissions := glmap_insert(opCellPermissions, num_ops as int, unwrap_value(new_contents_opt));
+        opCellPermissions := glmap_insert(opCellPermissions, j as int, unwrap_value(new_contents_opt));
 
         num_ops := num_ops + 1;
 
         activeIdxs := seq_set(activeIdxs, j, true);
+        requestIds := requestIds + [new_update_opt.value.rid];
+
+        RidsMatchAddRidElem(old_elems, old_requestIds,
+          0, |old_elems|,
+          0, |old_requestIds|,
+          new_update_opt.value.rid);
       } else {
         dispose_glnone(new_contents_opt);
         dispose_glnone(new_update_opt);
 
         activeIdxs := seq_set(activeIdxs, j, false);
+
+        RidsMatchAddNone(old_elems, old_requestIds,
+          0, |old_elems|,
+          0, |old_requestIds|);
       }
 
       j := j + 1;
     }
 
     flatCombiner' := combiner_goto_responding(flatCombiner');
-    requestIds := seq(num_ops as int, (i) requires 0 <= i < num_ops as int =>
-        flatCombiner'.state.elems[i].rid);      
   }
 
   method combine_respond(
@@ -588,7 +612,7 @@ module Impl(nrifc: NRIfc) {
       ghost requestIds: seq<RequestId>,
       glinear updates: map<nat, Update>,
       glinear opCellPermissions: map<nat, CellContents<OpResponse>>,
-      linear inout activeIdxs: seq<bool>)
+      shared activeIdxs: seq<bool>)
   returns (
       glinear flatCombiner': FCCombiner)
   requires node.WF()
@@ -596,21 +620,26 @@ module Impl(nrifc: NRIfc) {
   requires flatCombiner.loc == node.fc_loc
   requires flatCombiner.state.FCCombinerResponding?
       && flatCombiner.state.idx == 0
-      && flatCombiner.state.elem_idx == 0
-      && |flatCombiner.state.elems| == |requestIds| <= |responses|
-      && (forall i | 0 <= i < |flatCombiner.state.elems| ::
-          && flatCombiner.state.elems[i].rid == requestIds[i]
+      && |flatCombiner.state.elems| == MAX_THREADS_PER_REPLICA as int == |activeIdxs|
+      && |requestIds| <= |responses|
+      && (forall i | 0 <= i < |requestIds| ::
           && i in updates
-          && updates[i].rid == flatCombiner.state.elems[i].rid
+          && updates[i].rid == requestIds[i]
           && updates[i].us.UpdateDone?
           && updates[i].us.ret == responses[i]
-          && i in opCellPermissions
-          && 0 <= flatCombiner.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
-          && opCellPermissions[i].cell
-                  == node.contexts[flatCombiner.state.elems[i].tid].cell.inner
+        )
+      && (forall i | 0 <= i < |flatCombiner.state.elems| ::
+          && activeIdxs[i] == flatCombiner.state.elems[i].Some?
+          && (flatCombiner.state.elems[i].Some? ==> (
+            && i in opCellPermissions
+            && opCellPermissions[i].cell == node.contexts[i].cell.inner
+          ))
       )
+  requires RidsMatch(flatCombiner.state.elems, requestIds,
+      0, |flatCombiner.state.elems|,
+      0, |requestIds|)
   ensures flatCombiner'.loc == node.fc_loc
-  ensures flatCombiner'.state == FCCombinerCollecting(0, [])
+  ensures flatCombiner'.state == FCCombinerCollecting([])
   {
     flatCombiner' := flatCombiner;
     glinear var updates' := updates;
@@ -620,43 +649,36 @@ module Impl(nrifc: NRIfc) {
     var j := 0;
     while j < MAX_THREADS_PER_REPLICA
     invariant 0 <= cur_idx <= j <= MAX_THREADS_PER_REPLICA
+    invariant 0 <= cur_idx as int <= |requestIds|
     invariant flatCombiner'.loc == node.fc_loc
-    invariant
-      && flatCombiner'.state.FCCombinerResponding?
+    invariant flatCombiner'.state.FCCombinerResponding?
       && flatCombiner'.state.idx == j as int
-      && flatCombiner'.state.elem_idx == cur_idx as int
-      && |flatCombiner'.state.elems| == |requestIds| <= |responses|
-      && (forall i | cur_idx as int <= i < |flatCombiner'.state.elems| ::
-          && flatCombiner'.state.elems[i].rid == requestIds[i]
+      && |flatCombiner'.state.elems| == MAX_THREADS_PER_REPLICA as int == |activeIdxs|
+      && (forall i | cur_idx as int <= i < |requestIds| ::
           && i in updates'
-          && updates'[i].rid == flatCombiner'.state.elems[i].rid
+          && updates'[i].rid == requestIds[i]
           && updates'[i].us.UpdateDone?
           && updates'[i].us.ret == responses[i]
-          && i in opCellPermissions'
-          && 0 <= flatCombiner'.state.elems[i].tid < MAX_THREADS_PER_REPLICA as int
-          && opCellPermissions'[i].cell
-                  == node.contexts[flatCombiner'.state.elems[i].tid].cell.inner
       )
+      && (forall i | j as int <= i < |flatCombiner'.state.elems| ::
+          && activeIdxs[i] == flatCombiner'.state.elems[i].Some?
+          && (flatCombiner'.state.elems[i].Some? ==> (
+            && i in opCellPermissions'
+            && opCellPermissions'[i].cell == node.contexts[i].cell.inner
+          ))
+      )
+    invariant RidsMatch(flatCombiner'.state.elems, requestIds,
+        j as int, |flatCombiner'.state.elems|,
+        cur_idx as int, |requestIds|)
     {
-      /*atomic_block var slot_state := execute_atomic_load(
-          lseq_peek(node.contexts, j).atomic.inner)
-      {
-        ghost_acquire ghost_context;
-        glinear var ContextGhost(contents, fc, update) := ghost_context;
-        if slot_state == 2 {
-          flatCombiner', fc :=
-            combiner_response_matches(flatCombiner', fc);
-        } else {
-          flatCombiner', fc := combiner_response_skip(flatCombiner', fc);
-        }
-        ghost_context := ContextGhost(contents, fc, update);
-        ghost_release ghost_context;
-      }*/
+      RidsMatchPop(flatCombiner'.state.elems, requestIds,
+        j as int, |flatCombiner'.state.elems|,
+        cur_idx as int, |requestIds|);
 
       if seq_get(activeIdxs, j) {
         glinear var update, opCellPerm;
         updates', update := glmap_take(updates', cur_idx as int);
-        opCellPermissions', opCellPerm := glmap_take(opCellPermissions', cur_idx as int);
+        opCellPermissions', opCellPerm := glmap_take(opCellPermissions', j as int);
 
         // write the return value
 
@@ -682,6 +704,8 @@ module Impl(nrifc: NRIfc) {
         }
 
         cur_idx := cur_idx + 1;
+      } else {
+        flatCombiner' := combiner_response_skip(flatCombiner');
       }
 
       j := j + 1;
@@ -781,6 +805,8 @@ module Impl(nrifc: NRIfc) {
       && stub_opt.value.rid == ticket.rid
       && stub_opt.value.us.ret == result
       && fc_client == FCClient(node.fc_loc, tid as int, FCClientIdle)
+    invariant |activeIdxs| == MAX_THREADS_PER_REPLICA as int
+    invariant 0 <= iter < RESPONSE_CHECK_INTERVAL
     decreases *
     {
       atomic_block var aval := execute_atomic_load(lseq_peek(node.contexts, tid).atomic.inner)
@@ -872,6 +898,7 @@ module Impl(nrifc: NRIfc) {
     invariant stub.rid == ticket.rid
     invariant synced ==> stub.rs.nodeId == node.nodeId as nat
     invariant stub.rs.op == op
+    invariant |activeIdxs| == MAX_THREADS_PER_REPLICA as int
     {
       try_combine(nr, node, tid, inout activeIdxs);
       Runtime.SpinLoopHint();
