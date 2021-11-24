@@ -15,7 +15,7 @@ module {:extern "Mutexes"} Mutexes {
      * Note that there is no deadlock prevention.
      */
 
-    method {:extern} acquire()
+    shared method {:extern} acquire()
     returns (linear v: V, glinear handle: MutexHandle<V>)
     ensures this.inv(v)
     ensures handle.m == this
@@ -24,7 +24,7 @@ module {:extern "Mutexes"} Mutexes {
      * `release`
      */
 
-    method {:extern} release(linear v: V, glinear handle: MutexHandle<V>)
+    shared method {:extern} release(linear v: V, glinear handle: MutexHandle<V>)
     requires this.inv(v)
     requires handle.m == this
   }
@@ -40,7 +40,7 @@ module {:extern "Mutexes"} Mutexes {
    */
 
   method {:extern} new_mutex<V>(linear v: V, ghost inv: (V) -> bool)
-  returns (m: Mutex)
+  returns (linear m: Mutex)
   requires inv(v)
   ensures m.inv == inv
 
