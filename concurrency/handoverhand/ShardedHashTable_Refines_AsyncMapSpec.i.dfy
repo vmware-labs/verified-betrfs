@@ -5,15 +5,16 @@ module ResourceStateMachine_Refines_AsyncMapSpec
   refines Refinement(
       AsyncIfc(MapIfc),
       TicketStubStateMachine(MapIfc, ShardedHashTable),
-      AsyncStateMachine(MapIfc, MapSpec)
+      AsyncStateMachineWithMultisets(MapIfc, MapSpec)
   )
 {
   import HT = ShardedHashTable
   import opened Interpretation
+  import opened RequestIds
   import Multisets
   import MapSpec
-  import Ifc = AsyncIfc
   import MapIfc
+  import SummaryMonoid
   import opened KeyValueType
 
   function req_of_ticket(t: HT.Request) : B.Req {
@@ -33,7 +34,7 @@ module ResourceStateMachine_Refines_AsyncMapSpec
   }
 
   function I(s: A.Variables) : B.Variables
-  requires A.Inv(s)
+  //requires Inv(s)
   {
     var t := interp(s.table);
     B.Variables(
@@ -45,12 +46,17 @@ module ResourceStateMachine_Refines_AsyncMapSpec
           + resps_of_stubs(apply_to_remove_stub(t.removes))
     )
   }
+
+  predicate Inv(s: A.Variables)
+  {
+    HT.Inv(s)
+  }
  
   lemma Internal_RefinesMap(s: A.Variables, s': A.Variables)
-    requires A.Inv(s)
-    requires A.Internal(s, s')
-    ensures A.Inv(s')
-    ensures B.Next(I(s), I(s'), Ifc.InternalOp)
+    requires Inv(s)
+    requires HT.Internal(s, s')
+    ensures Inv(s')
+    ensures B.Next(I(s), I(s'), ifc.InternalOp)
   {
     MultisetLemmas.MultisetSimplificationTriggers<HT.Request, B.Req>();
     MultisetLemmas.MultisetSimplificationTriggers<HT.Response, B.Resp>();
@@ -147,11 +153,11 @@ module ResourceStateMachine_Refines_AsyncMapSpec
     }
   }
 
-  lemma NewTicket_RefinesMap(s: A.Variables, s': A.Variables, rid: int, input: MapIfc.Input)
-    requires A.Inv(s)
-    requires A.NewTicket(s, s', rid, input)
-    ensures A.Inv(s')
-    ensures B.Next(I(s), I(s'), Ifc.Start(rid, input))
+  lemma NewTicket_RefinesMap(s: A.Variables, s': A.Variables, rid: RequestId, input: MapIfc.Input)
+    requires Inv(s)
+    requires HT.NewTicket(s, s', rid, input)
+    ensures Inv(s')
+    ensures B.Next(I(s), I(s'), ifc.Start(rid, input))
   {
     assert s'.table == s.table;
     assert s'.stubs == s.stubs;
@@ -161,22 +167,87 @@ module ResourceStateMachine_Refines_AsyncMapSpec
     //assert I(s').s == I(s).s;
   }
 
-  // lemma ConsumeStub_RefinesMap(s: A.Variables, s': A.Variables, rid: int, output: MapIfc.Output)
-  //   requires A.Inv(s)
-  //   requires A.ConsumeStub(s, s', rid, output)
-  //   ensures A.Inv(s')
-  //   ensures B.Next(I(s), I(s'), Ifc.End(rid, output))
-  // {
-  //   assert s'.table == s.table;
-  //   assert s'.tickets == s.tickets;
-  //   assert s.stubs == s'.stubs + multiset{HT.Response(rid, output)};
-  //   MultisetLemmas.MultisetSimplificationTriggers<HT.Response, B.Resp>();
-  //   /*assert s.stubs == s'.stubs + multiset{HT.Response(rid, output)};
-  //   assert I(s).resps == I(s').resps + multiset{B.Resp(rid, output)};
-  //   assert I(s').resps == I(s).resps - multiset{B.Resp(rid, output)};
-  //   assert I(s').s == I(s).s;
-  //   assert I(s').reqs == I(s).reqs;
-  //   assert B.Resp(rid, output) in I(s).resps;*/
-  // }
+  lemma ConsumeStub_RefinesMap(s: A.Variables, s': A.Variables, rid: RequestId, output: MapIfc.Output)
+     requires Inv(s)
+     requires HT.ConsumeStub(s, s', rid, output, HT.output_stub(rid, output))
+     ensures Inv(s')
+     ensures B.Next(I(s), I(s'), ifc.End(rid, output))
+   {
+     assert s'.table == s.table;
+     assert s'.tickets == s.tickets;
+     assert s.stubs == s'.stubs + multiset{HT.Response(rid, output)};
+     MultisetLemmas.MultisetSimplificationTriggers<HT.Response, B.Resp>();
+     /*assert s.stubs == s'.stubs + multiset{HT.Response(rid, output)};
+     assert I(s).resps == I(s').resps + multiset{B.Resp(rid, output)};
+     assert I(s').resps == I(s).resps - multiset{B.Resp(rid, output)};
+     assert I(s').s == I(s).s;
+     assert I(s').reqs == I(s).reqs;
+     assert B.Resp(rid, output) in I(s).resps;*/
+  }
+
+  lemma InitImpliesInv(s: A.Variables)
+  //requires A.Init(s)
+  ensures Inv(s)
+  {
+    HT.InitImpliesInv(s);
+  }
+
+  lemma NextPreservesInv(s: A.Variables, s': A.Variables, op: ifc.Op)
+  //requires Inv(s)
+  //requires A.Next(s, s', op)
+  ensures Inv(s')
+  {
+    match op {
+      case Start(rid, input) => {
+        HT.NewTicketPreservesInv(s, s', rid, input);
+      }
+      case End(rid, output) => {
+        var stub :| HT.ConsumeStub(s, s', rid, output, stub);
+        HT.ConsumeStubPreservesInv(s, s', rid, output, stub);
+      }
+      case InternalOp => {
+        var shard, shard', rest :| A.InternalNext(s, s', shard, shard', rest);
+        HT.InternalPreservesInv(shard, shard', rest);
+      }
+    }
+  }
+
+  lemma InitRefinesInit(s: A.Variables)
+  //requires A.Init(s)
+  //requires Inv(s)
+  ensures B.Init(I(s))
+  {
+    assert interp(s.table) == SummaryMonoid.unit()
+    by {
+      var e := HT.get_empty_cell(s.table);
+      reveal_interp();
+      reveal_interp_wrt();
+      SummaryMonoid.concat_all_units(s.table[e+1..] + s.table[..e+1]);
+    }
+  }
+
+  lemma NextRefinesNext(s: A.Variables, s': A.Variables, op: ifc.Op)
+  //requires Inv(s)
+  //requires Inv(s')
+  //requires A.Next(s, s', op)
+  ensures B.Next(I(s), I(s'), op)
+  {
+    match op {
+      case Start(rid, input) => {
+        NewTicket_RefinesMap(s, s', rid, input);
+      }
+      case End(rid, output) => {
+        var stub :| HT.ConsumeStub(s, s', rid, output, stub);
+        ConsumeStub_RefinesMap(s, s', rid, output);
+      }
+      case InternalOp => {
+        var shard, shard', rest :| A.InternalNext(s, s', shard, shard', rest);
+        HT.InternalPreservesInv(shard, shard', rest);
+        HT.InvImpliesValid(HT.dot(shard, rest));
+        HT.update_monotonic(shard, shard', rest);
+        Internal_RefinesMap(HT.dot(shard, rest), HT.dot(shard', rest));
+      }
+    }
+  }
 
 }

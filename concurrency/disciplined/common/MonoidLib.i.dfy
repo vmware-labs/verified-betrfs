@@ -74,6 +74,17 @@ abstract module MonoidMap {
     )
   }
 
+  lemma concat_all_units(s: seq<Q>)
+  requires forall i | 0 <= i < |s| :: f(s[i]) == unit()
+  ensures concat_map(s) == unit()
+  {
+    reveal_concat_map();
+    if |s| > 0 {
+      concat_all_units(s[..|s|-1]);
+      add_unit(unit());
+    }
+  }
+
   lemma concat_map_additive(s: seq<Q>, t: seq<Q>)
   ensures concat_map(s + t) == add(concat_map(s), concat_map(t))
   decreases |t|
