@@ -1,6 +1,7 @@
 include "../framework/GhostLinearSequence.i.dfy"
 include "../framework/Mutex.s.dfy"
-include "HashTableStubSSM.s.dfy"
+include "HashTableStubSSM.i.dfy"
+include "../../lib/Lang/LinearSequence.i.dfy"
 
 module Impl {
   import opened NativeTypes
@@ -17,6 +18,9 @@ module Impl {
   import SSM = HashTableStubSSM
   import opened CircularTable
   import opened CircularRange
+
+  import opened LinearSequence_i
+  import opened LinearSequence_s
 
   import PCM = TicketStubPCM(MapIfc, SSM)
   import T = Tokens(PCM)
@@ -49,13 +53,21 @@ module Impl {
 
   type RowMutex = Mutex<Row>
 
-  type RowMutexTable = seq<RowMutex>
+  type RowMutexTable = lseq<RowMutex>
+
+  predicate RowMutexTablePartialInv(row_mutexes: RowMutexTable, loc: Loc, index: nat)
+    requires index <= |row_mutexes| == FixedSize()
+  {
+    && (forall i | 0 <= i < index ::
+      (i in row_mutexes) && (row_mutexes[i].inv == ((row: Row) => row.Inv(loc, i))))
+    && (forall i | index <= i < |row_mutexes| ::
+      (i !in row_mutexes))
+  }
 
   predicate RowMutexTableInv(row_mutexes: RowMutexTable, loc: Loc)
-    requires |row_mutexes| <= FixedSize()
+    requires |row_mutexes| == FixedSize()
   {
-    (forall i | 0 <= i < |row_mutexes|
-      :: row_mutexes[i].inv == ((row: Row) => row.Inv(loc, i)))
+    RowMutexTablePartialInv(row_mutexes, loc, |row_mutexes|)
   }
 
   datatype CapUpdate =
@@ -64,8 +76,8 @@ module Impl {
     | Unchanged
 
   linear datatype IVariables = IVariables(
-    row_mutexes: RowMutexTable,
-    cap_mutex: Mutex<Cap>)
+    linear row_mutexes: RowMutexTable,
+    linear cap_mutex: Mutex<Cap>)
 
   linear datatype Variables = Variables(
     glinear token: Token,
@@ -138,7 +150,7 @@ module Impl {
       assert !old_range.Contains(index);
   
       linear var row; glinear var handle: MutexHandle<Row>;
-      row, handle := iv.row_mutexes[index].acquire();
+      row, handle := lseq_peek(iv.row_mutexes, index as uint64).acquire();
   
       linear var Row(out_entry, row_token) := row;
       entry := out_entry;
@@ -194,8 +206,10 @@ module Impl {
       ghost var right := SSM.OneRowResource(index, entry);
       mutex_token := T.inout_split(inout self.token, left, right);
 
-      glinear var handle := lseq_take_inout(inout self.handles, index);
-      iv.row_mutexes[index].release(Row(entry, mutex_token), handle);
+      glinear var handle := glseq_take_inout(inout self.handles, index);
+
+      lseq_peek(iv.row_mutexes, index as uint64).release(Row(entry, mutex_token), handle);
+
       range := old_range.RightShrink1();
 
       RangeEquivalentUnwrap(old_self.token.val.table,
@@ -664,7 +678,7 @@ module Impl {
   {
     var loc := in_token.loc;
     glinear var token := in_token;
-    var row_mutexes : RowMutexTable:= [];
+    linear var row_mutexes := lseq_alloc(FixedSizeImpl() as uint64);
     var i: uint32 := 0;
 
     assert token.val == InitResoucePartial(0) by {
@@ -673,15 +687,17 @@ module Impl {
 
     while i < FixedSizeImpl()
       invariant token.loc == loc
-      invariant i as int == |row_mutexes| <= FixedSize()
+      invariant i as int <= |row_mutexes| == FixedSize()
       invariant token.val == InitResoucePartial(i as nat)
-      invariant RowMutexTableInv(row_mutexes, loc)
+      invariant RowMutexTablePartialInv(row_mutexes, loc, i as nat)
     {
       ghost var splitted := Split(token.val, i as int);
       glinear var mutex_token := T.inout_split(inout token, splitted.expected, splitted.ri);
-      var m := new_mutex<Row>(Row(Empty, mutex_token),
+      linear var m := new_mutex<Row>(Row(Empty, mutex_token),
         (row: Row) => row.Inv(loc, i as nat));
-      row_mutexes := row_mutexes + [m];
+  
+      lseq_give_inout(inout row_mutexes, i as uint64, m);
+
       i := i + 1;
     }
 
@@ -691,12 +707,12 @@ module Impl {
 
     glinear var mutex_token := T.inout_split(inout token, SSM.unit(), SSM.unit().(insert_capacity := Capacity()));
 
-    var cap_mutex := new_mutex<Cap>(Cap(CapacityImpl() as nat, mutex_token),
+    linear var cap_mutex := new_mutex<Cap>(Cap(CapacityImpl() as nat, mutex_token),
       (cap: Cap) => cap.Inv(loc));
 
     v := Variables.Variables(
       token,
-      lseq_alloc<MutexHandle<Row>>(FixedSize()));
+      glseq_alloc<MutexHandle<Row>>(FixedSize()));
 
     iv := IVariables(row_mutexes, cap_mutex);
   }

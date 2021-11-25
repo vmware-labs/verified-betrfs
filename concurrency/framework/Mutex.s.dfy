@@ -6,7 +6,7 @@ module {:extern "Mutexes"} Mutexes {
    * Mutex that protects a piece of data with some invariant.
    */
 
-  type {:extern} Mutex(==)<!V>
+  type {:extern} Mutex(00,==)<!V>
   {
     predicate {:extern} inv(v: V)
 

@@ -1,4 +1,4 @@
-include "HashTableStubSSM.s.dfy"
+include "HashTableStubSSM.i.dfy"
 
 module HashTableRefiment refines
   Refinement(AsyncIfc(MapIfc),

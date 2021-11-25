@@ -4,7 +4,7 @@ module GhostLinearSequence_i {
   import opened GhostLinearMaybe
   import opened GhostLinearSequence_s
 
-  function method lseq_alloc<A>(length: nat): (glinear s:glseq<A>)
+  function method glseq_alloc<A>(length: nat): (glinear s:glseq<A>)
       ensures |s| == length as nat
       ensures forall i:nat | i < length as nat :: i !in s
 
@@ -66,7 +66,7 @@ module GhostLinearSequence_i {
     s1 := glseq_give(s1, i, a);
   }
 
-  method lseq_take_inout<A>(glinear inout s:glseq<A>, i: nat) returns(glinear a:A)
+  method glseq_take_inout<A>(glinear inout s:glseq<A>, i: nat) returns(glinear a:A)
       requires i < |old_s| && i in old_s
       ensures a == old_s[i]
       ensures glseq_has(s) == glseq_has(old_s)[i := false]
