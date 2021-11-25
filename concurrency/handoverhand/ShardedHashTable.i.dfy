@@ -208,7 +208,7 @@ module ShardedHashTable refines TicketStubSSM(MapIfc) {
   {
     M(
       seq(FixedSize(), (i) => Some(Info(Empty, Free))),
-      0,
+      Capacity(),
       multiset{},
       multiset{}
     )
@@ -882,7 +882,7 @@ module ShardedHashTable refines TicketStubSSM(MapIfc) {
   predicate TableQuantityInv(s: M)
   {
     && s.M?
-    && TableQuantity(s.table) + s.insert_capacity == 0
+    && TableQuantity(s.table) + s.insert_capacity == Capacity()
   }
 
   predicate InvTable(table: seq<Option<Info>>)
