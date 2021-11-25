@@ -1,6 +1,6 @@
 include "ShardedHashTable.i.dfy"
 
-module ShardedHashTableTokens refines TicketStubSSM(MapIfc) {
+module ShardedHashTableTokens {
   import T = TicketStubToken(MapIfc, ShardedHashTable)
   import opened TicketStubSingletonLoc
   import opened ShardedHashTable
