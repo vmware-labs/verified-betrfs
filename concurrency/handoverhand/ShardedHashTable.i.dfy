@@ -92,9 +92,14 @@ module ShardedHashTable refines TicketStubSSM(MapIfc) {
     unit().(tickets := multiset{Request(rid, input)})
   }
 
-  function output_stub(rid: RequestId, output: MapIfc.Output) : M
+  function Stub(rid: RequestId, output: MapIfc.Output) : M
   {
     unit().(stubs := multiset{Response(rid, output)})
+  }
+
+  function output_stub(rid: RequestId, output: MapIfc.Output) : M
+  {
+    Stub(rid, output)
   }
 
   function oneRowTable(k: nat, info: Info) : seq<Option<Info>>
@@ -1802,7 +1807,7 @@ module ShardedHashTable refines TicketStubSSM(MapIfc) {
 
   predicate IsStub(rid: RequestId, output: IOIfc.Output, stub: M)
   {
-    stub == output_stub(rid, output)
+    stub == Stub(rid, output)
   }
 
   // By returning a set of request ids "in use", we enforce that
