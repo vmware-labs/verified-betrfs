@@ -437,24 +437,20 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     ghost var key := combiner.rs.cur_idx;
 
-
-
     ghost var rest := CBTokens.obtain_invariant_3(inout a_token, inout c_token, inout contents_token);
-    assert CB.CombinerStateValid(CB.dot(CB.dot(CB.dot(a_token.val, c_token.val), contents_token.val), rest));
+    ghost var all := CB.dot(CB.dot(CB.dot(a_token.val, c_token.val), contents_token.val), rest);
+    assert CB.CombinerStateValid(all);
     assert nodeId in c_token.val.combinerState && combiner.rs == c_token.val.combinerState[nodeId];
     assert bit.entry in a_token.val.aliveBits && a_token.val.aliveBits[bit.entry] == bit.bit;
+    assert all.aliveBits[CB.LogicalToPhysicalIndex(key)] == a_token.val.aliveBits[bit.entry];
     assert contents_token.val.contents.Some? && contents.contents == contents_token.val.contents.value;
 
-
-    // TODO: we need to show this...
-    assert CB.AliveBitsComplete(a_token.val.aliveBits) by {
-      CB.reveal_AliveBitsComplete();
-    }
+    assert CB.Inv(all);
 
     assert !CB.EntryIsAlive(a_token.val.aliveBits, key) by {
       assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: (
         && CB.LogicalToPhysicalIndex(i) < LOG_SIZE as nat
-        && CB.LogicalToPhysicalIndex(i) in a_token.val.aliveBits
+        && CB.LogicalToPhysicalIndex(i) in all.aliveBits
       ) by {
         CB.reveal_AliveBitsComplete();
       }
@@ -464,15 +460,19 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       CB.reveal_RangesNoOverlapCombinerCombiner();
 
       assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: ( // TODO fails
-        && !(CB.EntryIsAlive(a_token.val.aliveBits, i))
+        && !(CB.EntryIsAlive(all.aliveBits, i))
       );
     }
 
     // we know that the entry is not alive
     // we know that MinLocalTails <= localTail[nodeId] <= key
     // thus:
-    assert key !in contents.contents; // TODO fails
-
+    assert key !in contents.contents by {
+      CB.reveal_LocalTailsComplete();
+      CB.reveal_CombinerStateComplete();
+      assert CB.MinLocalTail(all.localTails) <= all.localTails[nodeId];
+      assert CB.MinLocalTail(all.localTails) <= key;
+    }
 
     CB.AppendFlipBit_is_deposit(
       CB.dot(CB.dot(c_token.val, a_token.val), contents_token.val),
