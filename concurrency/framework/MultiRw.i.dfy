@@ -446,6 +446,7 @@ module MultiRwTokens(rw: MultiRw) {
    * Helpers
    */
 
+  // TODO (Travis) does this need more from the PCM, or is it unsound?
   function method obtain_invariant_borrow(gshared token1: Token)
     : (rest: rw.M)
   ensures rw.Inv(rw.dot(token1.val, rest))
