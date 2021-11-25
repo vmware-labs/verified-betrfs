@@ -745,6 +745,17 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     : (gshared v: CB.StoredType)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderGuard?
   ensures v == combiner.rs.readerState.val
+  {
+    ghost var nodeId := combiner.nodeId;
+
+    gshared var combiner_t := CBCombinerToken_unfold_borrow(combiner);
+    ghost var rest := CBTokens.obtain_invariant_borrow(combiner_t);
+
+    assert combiner.rs.readerState == combiner_t.val.combinerState[nodeId].readerState;
+
+    assert CBTokens.rw.guard(combiner_t.val, combiner.rs.readerState.cur, combiner.rs.readerState.val);
+    CBTokens.borrow_from_guard(combiner_t, combiner.rs.readerState.cur, combiner.rs.readerState.val)
+  }
 
   /* ----------------------------------------------------------------------------------------- */
 
