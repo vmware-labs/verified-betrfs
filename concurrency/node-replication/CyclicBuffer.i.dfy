@@ -420,6 +420,7 @@ predicate CombinerStateValid(x: M)
     && (forall i: int :: -(LOG_SIZE as int) <= i < 0 <==> (i in s.contents.value))
   }
 
+  // TODO (Travis) can we have MultiRw allow non-empty I() at initialization?
   lemma InitImpliesInv(x: M)
   // requires Init(x)
   ensures Inv(x)
@@ -448,7 +449,7 @@ predicate CombinerStateValid(x: M)
   function I(x: M) : map<Key, StoredType>
   {
     // Withdrawn: non-alive cells between head and tail
-    map i : nat | i in x.contents.value.Keys :: x.contents.value[i]
+    map i : int | i in x.contents.value.Keys :: x.contents.value[i]
   }
 
   /*
@@ -1129,12 +1130,7 @@ predicate CombinerStateValid(x: M)
 
       assert I(dot(m', p)).Keys !! withdrawn.Keys;
 
-      // TODO needed
-      forall i : int
-        ensures i in I(dot(m, p)).Keys <==> i in (I(dot(m', p)).Keys + withdrawn.Keys)
-      {
-        assume false;
-      }
+      assert I(dot(m, p)).Keys == (I(dot(m', p)).Keys + withdrawn.Keys);
 
       assert I(dot(m, p)) == (
         map k | k in (I(dot(m', p)).Keys + withdrawn.Keys) ::

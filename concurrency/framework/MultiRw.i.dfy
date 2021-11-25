@@ -446,6 +446,11 @@ module MultiRwTokens(rw: MultiRw) {
    * Helpers
    */
 
+  // TODO (Travis) does this need more from the PCM, or is it unsound?
+  function method obtain_invariant_borrow(gshared token1: Token)
+    : (rest: rw.M)
+  ensures rw.Inv(rw.dot(token1.val, rest))
+
   glinear method obtain_invariant_1_1(
       gshared token1: Token,
       glinear inout token2: Token)
@@ -678,7 +683,7 @@ module MultiRwTokens(rw: MultiRw) {
     token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
   }
 
-  function method {:opaque} borrow_from_guard(gshared f: Token, key: rw.Key, ghost expected: rw.StoredType)
+  function method {:opaque} borrow_from_guard(gshared f: Token, ghost key: rw.Key, ghost expected: rw.StoredType)
       : (gshared s: rw.StoredType)
   requires rw.guard(f.val, key, expected)
   ensures s == expected
