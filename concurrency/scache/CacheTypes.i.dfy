@@ -34,6 +34,18 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     linear page_handle: Cell<PageHandle>
   )
 
+  function method {:opaque} rc_index(j: uint64, i: uint64) : (k: uint64)
+  requires 0 <= j as int < RC_WIDTH as int
+  requires 0 <= i as int < CACHE_SIZE as int
+  ensures 0 <= k as int < RC_WIDTH as int * CACHE_SIZE as int
+  {
+    var cacheline_capacity := CACHE_SIZE_64() / PLATFORM_CACHELINE_SIZE_64();
+    assert cacheline_capacity as int == 2048;
+    var rc_number := (i % cacheline_capacity) * PLATFORM_CACHELINE_SIZE_64()
+        + (i / cacheline_capacity);
+    j * CACHE_SIZE_64() + rc_number
+  }
+
   linear datatype Cache = Cache(
     data_base_ptr: Ptr,
     iocb_base_ptr: Ptr,
@@ -128,7 +140,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && |lseqs_raw(this.read_refcounts_array)| == RC_WIDTH as int * CACHE_SIZE as int
       && (forall i | 0 <= i < RC_WIDTH as int * CACHE_SIZE as int :: lseq_has(this.read_refcounts_array)[i])
       && (forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < CACHE_SIZE as int ::
-          lseq_peek(this.read_refcounts_array, (j * CACHE_SIZE as int + i) as uint64)
+          lseq_peek(this.read_refcounts_array, rc_index(j as uint64, i as uint64) as uint64)
               == this.read_refcounts[j][i])
 
       && |lseqs_raw(this.status_idx_array)| == CACHE_SIZE as int
@@ -179,13 +191,14 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       lseq_peek(this.status_idx_array, i as uint64).page_handle
     }
 
+
     shared function method read_refcount_atomic(j: uint64, i: uint64) : (shared at: AtomicRefcount)
     requires this.Inv()
     requires 0 <= j as int < RC_WIDTH as int
     requires 0 <= i as int < CACHE_SIZE as int
     ensures at == this.read_refcounts[j][i]
     {
-      lseq_peek(this.read_refcounts_array, j * CACHE_SIZE_64() + i)
+      lseq_peek(this.read_refcounts_array, rc_index(j, i))
     }
 
     shared function method cache_idx_of_page_atomic(i: uint64) : (shared at: AtomicIndexLookup)

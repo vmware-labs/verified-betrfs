@@ -30,4 +30,6 @@ module Constants {
   function method RC_WIDTH_64(): uint64 { 4 }
   function method NUM_CHUNKS_64(): uint64 { CACHE_SIZE_64() / 64 }
   function method CLEAN_AHEAD_64(): uint64 { 512 }
+
+  function method PLATFORM_CACHELINE_SIZE_64(): uint64 { 64 }
 }

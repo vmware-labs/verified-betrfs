@@ -207,7 +207,7 @@ struct std::hash<InstantiatedDiskInterface::IOCtx> {
 
 namespace Ptrs {
   template <typename V>
-  Ptr alloc__array__hugetables(uint64_t len, V init_v, uint64_t alignment) {
+  Ptr alloc__array__hugetables(uint64_t len, V init_v) {
     static_assert(sizeof(size_t) == 8);
     size_t byte_len = len * init_v; // pre-condition requires this to not overflow
 
