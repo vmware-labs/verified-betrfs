@@ -40,7 +40,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   ensures 0 <= k as int < RC_WIDTH as int * CACHE_SIZE as int
   {
     var cacheline_capacity := CACHE_SIZE_64() / PLATFORM_CACHELINE_SIZE_64();
-    assert cacheline_capacity as int == 2048;
+    assert cacheline_capacity as int == CACHELINE_CAPACITY();
     var rc_number := (i % cacheline_capacity) * PLATFORM_CACHELINE_SIZE_64()
         + (i / cacheline_capacity);
     j * CACHE_SIZE_64() + rc_number

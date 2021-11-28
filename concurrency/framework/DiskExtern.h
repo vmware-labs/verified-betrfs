@@ -209,7 +209,7 @@ namespace Ptrs {
   template <typename V>
   Ptr alloc__array__hugetables(uint64_t len, V init_v) {
     static_assert(sizeof(size_t) == 8);
-    size_t byte_len = len * init_v; // pre-condition requires this to not overflow
+    size_t byte_len = len * sizeof(V); // pre-condition requires this to not overflow
 
     int prot= PROT_READ | PROT_WRITE;
     int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB;

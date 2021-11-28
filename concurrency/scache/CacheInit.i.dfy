@@ -274,6 +274,41 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     assert refcount_i_inv(read_refcounts_array, status_idx_array, counter_loc, i', j');
   }
 
+  lemma inverse_rc_index(k: int)
+  returns (j: int, i: int)
+  requires 0 <= k as int < RC_WIDTH as int * CACHE_SIZE as int
+  ensures 0 <= j as int < RC_WIDTH as int
+  ensures 0 <= i as int < CACHE_SIZE as int
+  ensures k == rc_index(j as uint64, i as uint64) as int
+  {
+    j := k / CACHE_SIZE;
+    var rc_number := k % CACHE_SIZE;
+
+    var cacheline_capacity: int := (CACHE_SIZE_64() / PLATFORM_CACHELINE_SIZE_64()) as int;
+    assert cacheline_capacity as int == CACHELINE_CAPACITY();
+
+    i := (rc_number % (PLATFORM_CACHELINE_SIZE_64() as int)) * cacheline_capacity
+        + (rc_number / (PLATFORM_CACHELINE_SIZE_64() as int));
+
+    var rc_number2 := (i % cacheline_capacity) * (PLATFORM_CACHELINE_SIZE_64() as int)
+        + (i / cacheline_capacity);
+
+    calc {
+      rc_number2 % (PLATFORM_CACHELINE_SIZE_64() as int);
+      (i / cacheline_capacity);
+      rc_number % (PLATFORM_CACHELINE_SIZE_64() as int);
+    }
+
+    calc {
+      rc_number2 / (PLATFORM_CACHELINE_SIZE_64() as int);
+      (i % cacheline_capacity);
+      rc_number / (PLATFORM_CACHELINE_SIZE_64() as int);
+    }
+
+    assert rc_number == rc_number2;
+    reveal_rc_index();
+  }
+
   method init_cache(glinear init_tok: T.Token)
   returns (linear c: Cache, glinear counter: Clients)
   requires CacheSSM.Init(init_tok.val)
@@ -416,7 +451,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         {
           reveal_rc_index();
           var cacheline_capacity := CACHE_SIZE_64() / PLATFORM_CACHELINE_SIZE_64();
-          assert cacheline_capacity as int == 2048;
+          assert cacheline_capacity as int == CACHELINE_CAPACITY();
           assert rc_index(j' as uint64, i' as uint64) != rc_index(j-1, i);
         }
         /*
@@ -547,19 +582,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     forall i | 0 <= i < RC_WIDTH as int * CACHE_SIZE as int
     ensures lseq_has(read_refcounts_array)[i]
     {
-      var rc_number: int := i % CACHE_SIZE as int;
-      var j1 := i / CACHE_SIZE as int;
-
-      var cacheline_capacity := CACHE_SIZE / (PLATFORM_CACHELINE_SIZE_64() as int);
-      assert cacheline_capacity as int == 2048;
-      var i1 := (rc_number % cacheline_capacity) * (PLATFORM_CACHELINE_SIZE_64() as int)
-          + (rc_number / cacheline_capacity);
-
-      var rc_number2 := (i1 % cacheline_capacity) * (PLATFORM_CACHELINE_SIZE_64() as int)
-          + (i1 / cacheline_capacity);
-      assert rc_number == rc_number2;
-
-      reveal_rc_index();
+      var j1, i1 := inverse_rc_index(i);
       var rci := rc_index(j1 as uint64, i1 as uint64) as int;
       assert i == rci;
       refcount_i_inv_i_get(read_refcounts_array, status_idx_array, counter_loc, CACHE_SIZE, i1, j1);

@@ -32,4 +32,8 @@ module Constants {
   function method CLEAN_AHEAD_64(): uint64 { 512 }
 
   function method PLATFORM_CACHELINE_SIZE_64(): uint64 { 64 }
+
+  function CACHELINE_CAPACITY() : int
+  ensures CACHELINE_CAPACITY() == CACHE_SIZE / PLATFORM_CACHELINE_SIZE_64() as int
+  { 2048 }
 }
