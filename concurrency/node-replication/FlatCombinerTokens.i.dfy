@@ -1,4 +1,4 @@
-include "../framework/AsyncSSM.s.dfy"
+include "../framework/AsyncSSM.i.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Base/Option.s.dfy"
 include "Constants.i.dfy"

@@ -1,4 +1,4 @@
-include "../framework/AsyncSSM.s.dfy"
+include "../framework/AsyncSSM.i.dfy"
 include "../framework/StateMachines.s.dfy"
 include "CircularTable.i.dfy"
 
