@@ -766,15 +766,34 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     t.val == CB.M(None, None, localTailsM, None, map[], map[]))
   ensures forall i | 0 <= i < NUM_REPLICAS as nat ::
       i in localTails && localTails[i] == CBLocalTail(i, 0)
-  // {
-  //   glinear var t' := t;
-  //   ghost var j := 0;
-  //   localTails := GlinearMap.glmap_empty();
-  //   while j < NUM_REPLICAS as nat
-  //   invariant 0 <= j <= NUM_REPLICAS as nat
-  //   invariant t'.loc == loc()
-  //   invariant t'.val.M?
-  // }
+  {
+    glinear var t' := t;
+    ghost var j := 0;
+    localTails := GlinearMap.glmap_empty();
+    while j < NUM_REPLICAS as nat
+    invariant 0 <= j <= NUM_REPLICAS as nat
+    invariant t'.loc == cb_loc()
+    invariant t'.val.M?
+    invariant forall i | j <= i < NUM_REPLICAS as nat ::
+      && i in t'.val.localTails && t.val.localTails[i] == t'.val.localTails[i]
+    invariant forall i | 0 <= i < j ::
+      && i in localTails && localTails[i] == CBLocalTail(i, 0)
+    {
+      var expected := CBLocalTail(j, 0);
+      var x := expected.defn().val;
+      var y := t'.val.(localTails := t'.val.localTails - {j});
+
+      glinear var xl;
+      t', xl := CBTokens.T.split(t', y, x);
+
+      glinear var z := CBLocalTail_fold(expected, xl);
+      localTails := GlinearMap.glmap_insert(localTails, j, z);
+
+      j := j + 1;
+    }
+
+    Ptrs.dispose_anything(t');
+  }
 
   glinear method do_init_alive(glinear t: CBTokens.Token)
   returns (glinear alive: map<nat, CBAliveBit>)
@@ -784,6 +803,34 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     t.val == CB.M(None, None, map[], None, aliveBitsM, map[]))
   ensures forall i | 0 <= i < LOG_SIZE as int ::
       i in alive && alive[i] == CBAliveBit(i, false)
+  {
+    glinear var t' := t;
+    ghost var j := 0;
+    alive := GlinearMap.glmap_empty();
+    while j < LOG_SIZE as nat
+    invariant 0 <= j <= LOG_SIZE as nat
+    invariant t'.loc == cb_loc()
+    invariant t'.val.M?
+    invariant forall i | j <= i < LOG_SIZE as nat ::
+      && i in t'.val.aliveBits && t.val.aliveBits[i] == t'.val.aliveBits[i]
+    invariant forall i | 0 <= i < j ::
+      && i in alive && alive[i] == CBAliveBit(i, false)
+    {
+      var expected := CBAliveBit(j, false);
+      var x := expected.defn().val;
+      var y := t'.val.(aliveBits := t'.val.aliveBits - {j});
+
+      glinear var xl;
+      t', xl := CBTokens.T.split(t', y, x);
+
+      glinear var z := CBAliveBit_fold(expected, xl);
+      alive := GlinearMap.glmap_insert(alive, j, z);
+
+      j := j + 1;
+    }
+
+    Ptrs.dispose_anything(t');
+  }
 
   glinear method do_init_combiners(glinear t: CBTokens.Token)
   returns (glinear combiners: map<nat, CBCombinerToken>)
@@ -793,6 +840,34 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     t.val == CB.M(None, None, map[], None, map[], combinersM))
   ensures forall i | 0 <= i < NUM_REPLICAS as int ::
       i in combiners && combiners[i] == CBCombinerToken(i, CB.CombinerIdle)
+  {
+    glinear var t' := t;
+    ghost var j := 0;
+    combiners := GlinearMap.glmap_empty();
+    while j < NUM_REPLICAS as nat
+    invariant 0 <= j <= NUM_REPLICAS as nat
+    invariant t'.loc == cb_loc()
+    invariant t'.val.M?
+    invariant forall i | j <= i < NUM_REPLICAS as nat ::
+      && i in t'.val.combinerState && t.val.combinerState[i] == t'.val.combinerState[i]
+    invariant forall i | 0 <= i < j ::
+      && i in combiners && combiners[i] == CBCombinerToken(i, CB.CombinerIdle)
+    {
+      var expected := CBCombinerToken(j, CB.CombinerIdle);
+      var x := expected.defn().val;
+      var y := t'.val.(combinerState := t'.val.combinerState - {j});
+
+      glinear var xl;
+      t', xl := CBTokens.T.split(t', y, x);
+
+      glinear var z := CBCombinerToken_fold(expected, xl);
+      combiners := GlinearMap.glmap_insert(combiners, j, z);
+
+      j := j + 1;
+    }
+
+    Ptrs.dispose_anything(t');
+  }
 
   glinear method cyclic_buffer_init(glinear b: map<int, CB.StoredType>)
   returns (
