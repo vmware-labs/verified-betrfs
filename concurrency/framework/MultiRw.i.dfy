@@ -216,6 +216,23 @@ module MultiRwTokens(rw: MultiRw) {
   returns (glinear b': map<rw.Key, rw.StoredType>)
   requires y.val.m == Multisets.ValueMultiset(b)
   ensures b' == b
+  decreases |b|
+  {
+    if b == map[] {
+      b' := GlinearMap.glmap_empty();
+      Ptrs.dispose_anything(y);
+    } else {
+      ghost var k :| k in b;
+      ghost var b0 := b - {k};
+      assert b == b0[k := b[k]];
+      assert |b0| < |b|;
+      Multisets.ValueMultisetInduct(b0, k, b[k]);
+      glinear var y0, x := WrapPT.split(y,
+          Wrap.M(Multisets.ValueMultiset(b0)), Wrap.one(b[k]));
+      glinear var b0' := multiset_to_map(y0, b0);
+      b' := GlinearMap.glmap_insert(b0', k, WrapT.unwrap(x));
+    }
+  }
 
   lemma multiset_union_maps<K,V>(a: map<K,V>, b: map<K, V>, c: map<K, V>)
   requires a.Keys !! b.Keys
