@@ -207,6 +207,8 @@ module Impl(nrifc: NRIfc) {
   )
   {
     predicate WF(nodeId: nat, cb_loc: Loc) {
+      && cb_loc.ExtLoc?
+      && cb_loc.base_loc == CBT.CBTokens.Wrap.singleton_loc()
       && (forall v, g :: atomic_inv(localTail, v, g) <==>
           g == LocalTailTokens(LocalTail(nodeId, v as int), CBLocalTail(nodeId, v as int, cb_loc.s)))
     }
@@ -218,6 +220,8 @@ module Impl(nrifc: NRIfc) {
   {
     predicate WF(i: nat, cb_loc: Loc)
     {
+      && cb_loc.ExtLoc?
+      && cb_loc.base_loc == CBT.CBTokens.Wrap.singleton_loc()
       && (forall v, g :: atomic_inv(alive, v, g) <==> g == CBAliveBit(i, v, cb_loc.s))
       && alive.namespace() == 0
     }
