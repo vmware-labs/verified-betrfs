@@ -436,4 +436,23 @@ module TicketStubToken(IOIfc: InputOutputIfc, ssm: TicketStubSSM(IOIfc)) {
     x, c' := Tokens.split(x, ssm.dot(a, b), c);
     a', b' := Tokens.split(x, a, b);
   }
+
+  // TODO unused glinear method split6(glinear sum: Token,
+  // TODO unused     ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M, ghost d: pcm.M, ghost e: pcm.M, ghost f: pcm.M)
+  // TODO unused returns (glinear a': Token, glinear b': Token, glinear c': Token, glinear d': Token, glinear e': Token, glinear f': Token)
+  // TODO unused requires sum.val == ssm.dot(ssm.dot(ssm.dot(ssm.dot(ssm.dot(a, b), c), d), e), f)
+  // TODO unused ensures a' == Tokens.Token(sum.loc, a)
+  // TODO unused ensures b' == Tokens.Token(sum.loc, b)
+  // TODO unused ensures c' == Tokens.Token(sum.loc, c)
+  // TODO unused ensures d' == Tokens.Token(sum.loc, d)
+  // TODO unused ensures e' == Tokens.Token(sum.loc, e)
+  // TODO unused ensures f' == Tokens.Token(sum.loc, f)
+  // TODO unused {
+  // TODO unused   glinear var x;
+  // TODO unused   x, f' := Tokens.split(sum, ssm.dot(ssm.dot(ssm.dot(ssm.dot(a, b), c), d), e), f);
+  // TODO unused   x, e' := Tokens.split(x, ssm.dot(ssm.dot(ssm.dot(a, b), c), d), e);
+  // TODO unused   x, d' := Tokens.split(x, ssm.dot(ssm.dot(a, b), c), d);
+  // TODO unused   x, c' := Tokens.split(x, ssm.dot(a, b), c);
+  // TODO unused   a', b' := Tokens.split(x, a, b);
+  // TODO unused }
 }

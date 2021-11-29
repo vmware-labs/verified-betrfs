@@ -758,22 +758,76 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
   /* ----------------------------------------------------------------------------------------- */
 
-  glinear method cyclic_buffer_init(glinear m: map<int, CB.StoredType>)
+  glinear method do_init_local_tails(glinear t: CBTokens.Token)
+  returns (glinear localTails: map<nat, CBLocalTail>)
+  requires t.loc == cb_loc()
+  requires (
+    var localTailsM := map i: nat | 0 <= i < NUM_REPLICAS as nat :: 0;
+    t.val == CB.M(None, None, localTailsM, None, map[], map[]))
+  ensures forall i | 0 <= i < NUM_REPLICAS as nat ::
+      i in localTails && localTails[i] == CBLocalTail(i, 0)
+
+  glinear method do_init_alive(glinear t: CBTokens.Token)
+  returns (glinear alive: map<nat, CBAliveBit>)
+  requires t.loc == cb_loc()
+  requires (
+    var aliveBitsM := map i: nat | 0 <= i < LOG_SIZE as nat :: false;
+    t.val == CB.M(None, None, map[], None, aliveBitsM, map[]))
+  ensures forall i | 0 <= i < LOG_SIZE as int ::
+      i in alive && alive[i] == CBAliveBit(i, false)
+
+  glinear method do_init_combiners(glinear t: CBTokens.Token)
+  returns (glinear combiners: map<nat, CBCombinerToken>)
+  requires t.loc == cb_loc()
+  requires (
+    var combinersM := map i: nat | 0 <= i < NUM_REPLICAS as nat :: CB.CombinerIdle;
+    t.val == CB.M(None, None, map[], None, map[], combinersM))
+  ensures forall i | 0 <= i < NUM_REPLICAS as int ::
+      i in combiners && combiners[i] == CBCombinerToken(i, CB.CombinerIdle)
+
+  glinear method cyclic_buffer_init(glinear b: map<int, CB.StoredType>)
   returns (
     glinear head: CBHead,
     glinear globalTail: CBGlobalTail,
     glinear localTails: map<nat, CBLocalTail>,
     glinear alive: map<nat, CBAliveBit>,
     glinear contents: CBContents,
-    glinear readers: map<nat, CBCombinerToken>
+    glinear combiners: map<nat, CBCombinerToken>
   )
-  requires forall i :: -(LOG_SIZE as int) <= i < 0 <==> i in m
+  requires forall i :: -(LOG_SIZE as int) <= i < 0 <==> i in b
   ensures head == CBHead(0)
   ensures globalTail == CBGlobalTail(0)
   ensures forall i | 0 <= i < NUM_REPLICAS as int ::
       && i in localTails && localTails[i] == CBLocalTail(i, 0)
-      && i in readers && readers[i] == CBCombinerToken(i, CB.CombinerIdle)
+      && i in combiners && combiners[i] == CBCombinerToken(i, CB.CombinerIdle)
   ensures forall i | 0 <= i < LOG_SIZE as int ::
       i in alive && alive[i] == CBAliveBit(i, false)
-  ensures contents == CBContents(m)
+  ensures contents == CBContents(b)
+  {
+
+    ghost var localTailsM := map i: nat | 0 <= i < NUM_REPLICAS as nat :: 0;
+    ghost var aliveBitsM := map i: nat | 0 <= i < LOG_SIZE as nat :: false;
+    ghost var combinersM := map i: nat | 0 <= i < NUM_REPLICAS as nat :: CB.CombinerIdle;
+
+    ghost var m := CB.M(Some(0), Some(0), localTailsM, Some(b), aliveBitsM, combinersM);
+
+    CB.InitImpliesInv(m);
+    glinear var token := CBTokens.initialize_nonempty(b, m);
+
+    ghost var ht := CB.M(Some(0), None, map[], None, map[], map[]);
+    ghost var gtt := CB.M(None, Some(0), map[], None, map[], map[]);
+    ghost var ltt := CB.M(None, None, localTailsM, None, map[], map[]);
+    ghost var ct := CB.M(None, None, map[], Some(b), map[], map[]);
+    ghost var at := CB.M(None, None, map[], None, aliveBitsM, map[]);
+    ghost var cmt := CB.M(None, None, map[], None, map[], combinersM);
+
+    glinear var tht, tgtt, tltt, tct, tat, tcmt := CBTokens.split6(token, ht, gtt, ltt, ct, at, cmt);
+
+    head := CBHead_fold(CBHead(0), tht); // TODO(Travis) ???
+    globalTail := CBGlobalTail_fold(CBGlobalTail(0), tgtt);
+    localTails := do_init_local_tails(tltt);
+    contents := CBContents_fold(CBContents(b), tct);
+    alive := do_init_alive(tat);
+    combiners := do_init_combiners(tcmt);
+  }
 }

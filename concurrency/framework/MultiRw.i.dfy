@@ -252,7 +252,7 @@ module MultiRwTokens(rw: MultiRw) {
     token := ET.ext_init(wrapped, m);
   }
 
-  glinear method {:extern} split3(glinear sum: Token,
+  glinear method  split3(glinear sum: Token,
       ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M)
   returns (glinear a': Token, glinear b': Token, glinear c': Token)
   requires sum.val == rw.dot(rw.dot(a, b), c)
@@ -262,6 +262,25 @@ module MultiRwTokens(rw: MultiRw) {
   {
     glinear var x;
     x, c' := T.split(sum, rw.dot(a, b), c);
+    a', b' := T.split(x, a, b);
+  }
+
+  glinear method {:extern} split6(glinear sum: Token,
+      ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M, ghost d: pcm.M, ghost e: pcm.M, ghost f: pcm.M)
+  returns (glinear a': Token, glinear b': Token, glinear c': Token, glinear d': Token, glinear e': Token, glinear f': Token)
+  requires sum.val == rw.dot(rw.dot(rw.dot(rw.dot(rw.dot(a, b), c), d), e), f)
+  ensures a' == T.Token(sum.loc, a)
+  ensures b' == T.Token(sum.loc, b)
+  ensures c' == T.Token(sum.loc, c)
+  ensures d' == T.Token(sum.loc, d)
+  ensures e' == T.Token(sum.loc, e)
+  ensures f' == T.Token(sum.loc, f)
+  {
+    glinear var x;
+    x, f' := T.split(sum, rw.dot(rw.dot(rw.dot(rw.dot(a, b), c), d), e), f);
+    x, e' := T.split(x, rw.dot(rw.dot(rw.dot(a, b), c), d), e);
+    x, d' := T.split(x, rw.dot(rw.dot(a, b), c), d);
+    x, c' := T.split(x, rw.dot(a, b), c);
     a', b' := T.split(x, a, b);
   }
 

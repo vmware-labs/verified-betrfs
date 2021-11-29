@@ -420,24 +420,24 @@ predicate CombinerStateValid(x: M)
     && (forall i: int :: -(LOG_SIZE as int) <= i < 0 <==> (i in s.contents.value))
   }
 
-  // TODO remove? lemma InitImpliesInv(x: M)
-  // TODO remove? // requires Init(x)
-  // TODO remove? ensures Inv(x)
-  // TODO remove? {
-  // TODO remove?   assert Complete(x) by {
-  // TODO remove?     reveal_AliveBitsComplete();
-  // TODO remove?     reveal_CombinerStateComplete();
-  // TODO remove?     reveal_LocalTailsComplete();
-  // TODO remove?     reveal_ContentsComplete();
-  // TODO remove?   }
-  // TODO remove?   assert PointerOrdering(x);
-  // TODO remove?   assert PointerDifferences(x);
-  // TODO remove?   assert RangesNoOverlap(x) by { reveal_RangesNoOverlapCombinerCombiner(); reveal_RangesNoOverlapCombinerReader();}
-  // TODO remove?   assert AliveBits(x);
-  // TODO remove?   assert BufferContents(x);
-  // TODO remove?   assert CombinerStateValid(x);
-  // TODO remove?   assert ReaderStateValid(x);
-  // TODO remove? }
+  lemma InitImpliesInv(x: M)
+  requires Init(x)
+  ensures Inv(x)
+  {
+    assert Complete(x) by {
+      reveal_AliveBitsComplete();
+      reveal_CombinerStateComplete();
+      reveal_LocalTailsComplete();
+      reveal_ContentsComplete();
+    }
+    assert PointerOrdering(x);
+    assert PointerDifferences(x);
+    assert RangesNoOverlap(x) by { reveal_RangesNoOverlapCombinerCombiner(); reveal_RangesNoOverlapCombinerReader();}
+    assert AliveBits(x);
+    assert BufferContents(x);
+    assert CombinerStateValid(x);
+    assert ReaderStateValid(x);
+  }
 
   /*
    * ============================================================================================
