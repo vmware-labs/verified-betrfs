@@ -16,7 +16,6 @@ abstract module MultiRw {
   function dot(x: M, y: M) : M
   function unit() : M
 
-  predicate Init(s: M)
   predicate Inv(x: M) 
   function I(x: M) : map<Key, StoredType> requires Inv(x)
 
@@ -63,11 +62,6 @@ abstract module MultiRw {
 
   lemma associative(x: M, y: M, z: M)
   ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
-
-  lemma InitImpliesInv(x: M)
-  requires Init(x)
-  ensures Inv(x)
-  ensures I(x) == map[]
 
   // TODO(travis) I think this is probably unnecessary
   // For now, just add "or m == unit()" to your Invariant.
@@ -198,10 +192,31 @@ module MultiRwTokens(rw: MultiRw) {
   type Token = t : T.Token | t.loc.ExtLoc? && t.loc.base_loc == Wrap.singleton_loc()
     witness *
 
-  glinear method initialize(glinear m: rw.M)
+  glinear method initialize_nonempty(glinear b: map<rw.Key, rw.StoredType>, ghost m: rw.M)
   returns (glinear token: Token)
-  requires rw.Init(m)
+  requires rw.Inv(m)
+  requires rw.I(m) == b
   ensures token.val == m
+  {
+    // TODO(Travis)
+    glinear var bi := b;
+    token := ET.ExtTokens.init(m);
+
+    ghost var transfer_keys := bi.Keys;
+
+    while |transfer_keys| > 0
+    {
+      ghost var k :| k in transfer_keys;
+      glinear var one;
+      bi, one := GlinearMap.glmap_take(bi, k);
+      glinear var one_token := ET.ext_init(WrapT.wrap(one), m);
+      token := T.join(token, one_token);
+
+      transfer_keys := transfer_keys - {k};
+    }
+
+    Ptrs.dispose_anything(bi);
+  }
 
   glinear method {:extern} split3(glinear sum: Token,
       ghost a: pcm.M, ghost b: pcm.M, ghost c: pcm.M)
@@ -342,6 +357,7 @@ module MultiRwTokens(rw: MultiRw) {
   ensures token' == T.Token(token.loc, expected_value)
   ensures retrieved_values == expected_retrieved_values
   {
+    // TODO(Travis)
     glinear var m := WrapPT.get_unit(Wrap.singleton_loc());
     ghost var m' := Wrap.M(Multisets.ValueMultiset(expected_retrieved_values));
 
@@ -446,7 +462,7 @@ module MultiRwTokens(rw: MultiRw) {
    * Helpers
    */
 
-  // TODO (Travis) does this need more from the PCM, or is it unsound?
+  // TODO(Travis) does this need more from the PCM, or is it unsound?
   function method obtain_invariant_borrow(gshared token1: Token)
     : (rest: rw.M)
   ensures rw.Inv(rw.dot(token1.val, rest))

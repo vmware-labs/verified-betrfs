@@ -348,7 +348,6 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     assert forall i: int |  tail.tail <= i < new_tail :: i !in contents.contents;
 
-    // TODO follows from CB.BufferContents(), it should hold that new_tail - LOG_SIZE < MinLocalTails()
     assert forall i: int |  tail.tail - LOG_SIZE as int <= i < new_tail - LOG_SIZE as int :: i in contents.contents by {
       assert all.contents.value == contents.contents;
       assert all.tail.value == tail.tail;
@@ -459,7 +458,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       CB.reveal_RangesNoOverlapCombinerReader();
       CB.reveal_RangesNoOverlapCombinerCombiner();
 
-      assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: ( // TODO fails
+      assert forall i : nat | combiner.rs.cur_idx <= i < combiner.rs.tail :: (
         && !(CB.EntryIsAlive(all.aliveBits, i))
       );
     }
@@ -649,14 +648,14 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       assert i < all.tail.value;
       assert all.tail.value - (LOG_SIZE as nat) <= i;
 
-      assert all.tail.value - (LOG_SIZE as nat) <= i < all.tail.value; // TODO this should be provable from the invariant
+      assert all.tail.value - (LOG_SIZE as nat) <= i < all.tail.value;
       assert CB.EntryIsAlive(a_token.val.aliveBits, i);
     }
     assert c_token.val.combinerState[nodeId].readerState.start <= c_token.val.combinerState[nodeId].readerState.cur < c_token.val.combinerState[nodeId].readerState.end by {
       CB.reveal_LocalTailsComplete();
       CB.reveal_CombinerStateComplete();
-    } // TODO should be trivial from CB.ReaderStateValid(all)
-    assert combiner.rs.readerState.cur < combiner.rs.readerState.end; // TODO
+    }
+    assert combiner.rs.readerState.cur < combiner.rs.readerState.end;
 
     assert contents_token.val.contents.value[i] == contents.contents[i];
 
