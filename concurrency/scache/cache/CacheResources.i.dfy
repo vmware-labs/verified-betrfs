@@ -2,6 +2,7 @@ include "../../../lib/Base/Option.s.dfy"
 include "../../../lib/Lang/NativeTypes.s.dfy"
 include "CacheSM.i.dfy"
 include "../Constants.i.dfy"
+include "../../framework/DiskSSM.i.dfy"
 
 module CacheResources {
   import opened Options
@@ -13,6 +14,7 @@ module CacheResources {
   import DiskIfc
   import CacheIfc
   import T = DiskToken(CacheIfc, CacheSSM)
+  import TU = DiskTokenUtils(CacheIfc, CacheSSM)
   import CacheSSM
 
   datatype {:glinear_fold} DiskPageMap = DiskPageMap(ghost disk_idx: nat, ghost cache_idx_opt: Option<nat>)
@@ -145,7 +147,7 @@ module CacheResources {
         CacheSSM.StartReadStep(cache_idx, disk_idx));
 
     // Perform the transition
-    glinear var out1_token, out2_token, out3_token := T.transition_2_3(a_token, b_token,
+    glinear var out1_token, out2_token, out3_token := TU.transition_2_3(a_token, b_token,
         out1_token_expect.val,
         out2_token_expect.val,
         out3_token_expect.val);
@@ -202,7 +204,7 @@ module CacheResources {
         CacheSSM.HavocNewStep(cache_idx, havoc.rid, data));
 
     // Perform the transition
-    glinear var out1_token, out2_token, out3_token := T.transition_1_2_3(s_token, a_token, b_token,
+    glinear var out1_token, out2_token, out3_token := TU.transition_1_2_3(s_token, a_token, b_token,
         out1_token_expect.val,
         out2_token_expect.val,
         out3_token_expect.val);
@@ -221,7 +223,7 @@ module CacheResources {
   ensures dpm.cache_idx_opt == Some(cache_entry.cache_idx)
   {
     glinear var t := DiskPageMap_unfold(dpm);
-    ghost var r := T.obtain_invariant_1_1(CacheEntry_unfold_borrow(cache_entry), inout t);
+    ghost var r := TU.obtain_invariant_1_1(CacheEntry_unfold_borrow(cache_entry), inout t);
     dpm := DiskPageMap_fold(dpm, t);
   }
 
@@ -264,7 +266,7 @@ module CacheResources {
         CacheSSM.EvictStep(cache_idx));
 
     // Perform the transition
-    glinear var out1_token, out2_token := T.transition_3_2(a_token, b_token, c_token,
+    glinear var out1_token, out2_token := TU.transition_3_2(a_token, b_token, c_token,
         out1_token_expect.val,
         out2_token_expect.val);
 
@@ -315,7 +317,7 @@ module CacheResources {
         CacheSSM.HavocEvictStep(cache_idx, havoc.rid));
 
     // Perform the transition
-    glinear var out1_token, out2_token := T.transition_1_3_2(s_token, a_token, b_token, c_token,
+    glinear var out1_token, out2_token := TU.transition_1_3_2(s_token, a_token, b_token, c_token,
         out1_token_expect.val,
         out2_token_expect.val);
 
@@ -360,7 +362,7 @@ module CacheResources {
         CacheSSM.FinishReadStep(cache_idx, disk_idx));
 
     // Perform the transition
-    glinear var out1_token, out2_token := T.transition_2_2(a_token, b_token,
+    glinear var out1_token, out2_token := TU.transition_2_2(a_token, b_token,
         out1_token_expect.val,
         out2_token_expect.val);
 
@@ -405,7 +407,7 @@ module CacheResources {
         CacheSSM.StartWritebackStep(cache_entry.cache_idx));
 
     // Perform the transition
-    glinear var out1_token, out2_token := T.transition_1_1_2(s_token, a_token,
+    glinear var out1_token, out2_token := TU.transition_1_1_2(s_token, a_token,
         out1_token_expect.val,
         out2_token_expect.val);
 
@@ -445,7 +447,7 @@ module CacheResources {
         CacheSSM.FinishWritebackStep(cache_entry.cache_idx));
 
     // Perform the transition
-    glinear var out1_token := T.transition_1_2_1(s_token, a_token, b_token,
+    glinear var out1_token := TU.transition_1_2_1(s_token, a_token, b_token,
         out1_token_expect.val);
 
     status' := CacheStatus_fold(out1_expect, out1_token);
@@ -473,7 +475,7 @@ module CacheResources {
         CacheSSM.MarkDirtyStep(status.cache_idx));
 
     // Perform the transition
-    glinear var out1_token := T.transition_1_1(a_token,
+    glinear var out1_token := TU.transition_1_1(a_token,
         out1_token_expect.val);
 
     status' := CacheStatus_fold(out1_expect, out1_token);
@@ -504,7 +506,7 @@ module CacheResources {
         CacheSSM.ApplyReadStep(cache_entry.cache_idx, rid));
 
     // Perform the transition
-    glinear var out1_token := T.transition_1_1_1(s_token, a_token,
+    glinear var out1_token := TU.transition_1_1_1(s_token, a_token,
         out1_token_expect);
 
     stub := out1_token;
@@ -544,7 +546,7 @@ module CacheResources {
         CacheSSM.ApplyWriteStep(cache_entry.cache_idx, rid));
 
     // Perform the transition
-    glinear var out1_token, out2_token := T.transition_1_2_2(s_token, a_token, b_token,
+    glinear var out1_token, out2_token := TU.transition_1_2_2(s_token, a_token, b_token,
         out1_token_expect.val,
         out2_expect);
 
@@ -607,7 +609,7 @@ module CacheResources {
       assert g == h;
     }
     glinear var y;
-    y, t' := T.split2(t, CacheSSM.DiskIdxToCacheIdx(a, None), IdxsSeq(a+1, b).val);
+    y, t' := TU.split2(t, CacheSSM.DiskIdxToCacheIdx(a, None), IdxsSeq(a+1, b).val);
     x := DiskPageMap_fold(DiskPageMap(a, None), y);
   }
 
@@ -637,7 +639,7 @@ module CacheResources {
       assert g == h;
     }
     glinear var y;
-    y, t' := T.split2(t, CacheSSM.CacheEmpty(a), EmptySeq(a+1, b).val);
+    y, t' := TU.split2(t, CacheSSM.CacheEmpty(a), EmptySeq(a+1, b).val);
     x := CacheEmpty_fold(CacheEmpty(a), y);
   }
 
@@ -649,7 +651,7 @@ module CacheResources {
   {
     reveal_EmptyRange();
     reveal_IdxsRange();
-    idxs, empties := T.split2(t,
+    idxs, empties := TU.split2(t,
         IdxsSeq(0, NUM_DISK_PAGES as int).val,
         EmptySeq(0, CACHE_SIZE as int).val);
   }
