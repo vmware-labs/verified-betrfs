@@ -27,28 +27,28 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
   // Use 'CB' prefix to distinguish these from the corresponding state in the InfiniteLog
   // state machine.
-  datatype {:glinear_fold} CBHead = CBHead(ghost head: nat, ghost cb_loc: Loc)
+  datatype {:glinear_fold} CBHead = CBHead(ghost head: nat, ghost cb_loc_s: nat)
   {
     function defn(): CBTokens.Token {
-      CBTokens.T.Token(cb_loc,
+      CBTokens.T.Token(ExtLoc(cb_loc_s, CBTokens.Wrap.singleton_loc()),
         CB.M(Some(head), None, map[], None, map[], map[])
       )
     }
   }
 
-  datatype {:glinear_fold} CBLocalTail = CBLocalTail(ghost nodeId: nat, ghost tail: nat, ghost cb_loc: Loc)
+  datatype {:glinear_fold} CBLocalTail = CBLocalTail(ghost nodeId: nat, ghost tail: nat, ghost cb_loc_s: nat)
   {
     function defn(): CBTokens.Token {
-      CBTokens.T.Token(cb_loc,
+      CBTokens.T.Token(ExtLoc(cb_loc_s, CBTokens.Wrap.singleton_loc()),
         CB.M(None, None, map[nodeId := tail], None, map[], map[])
       )
     }
   }
 
-  datatype {:glinear_fold} CBGlobalTail = CBGlobalTail(ghost tail: nat, ghost cb_loc: Loc)
+  datatype {:glinear_fold} CBGlobalTail = CBGlobalTail(ghost tail: nat, ghost cb_loc_s: nat)
   {
     function defn(): CBTokens.Token {
-      CBTokens.T.Token(cb_loc,
+      CBTokens.T.Token(ExtLoc(cb_loc_s, CBTokens.Wrap.singleton_loc()),
         CB.M(None, Some(tail), map[], None, map[], map[])
       )
     }
@@ -57,10 +57,10 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   // The 'alive' bit flips back and forth. So sometimes 'true' means 'alive',
   // and sometimes 'false' means 'alive'.
   // entry is an index into the buffer (0 <= entry < LOG_SIZE)
-  datatype {:glinear_fold} CBAliveBit = CBAliveBit(ghost entry: nat, ghost bit: bool, ghost cb_loc: Loc)
+  datatype {:glinear_fold} CBAliveBit = CBAliveBit(ghost entry: nat, ghost bit: bool, ghost cb_loc_s: nat)
   {
     function defn(): CBTokens.Token {
-      CBTokens.T.Token(cb_loc,
+      CBTokens.T.Token(ExtLoc(cb_loc_s, CBTokens.Wrap.singleton_loc()),
         CB.M(None, None, map[], None, map[entry := bit], map[])
       )
     }
@@ -91,10 +91,10 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   // Thus, for convenience, the `contents` needs to be initialized with
   // -LOG_SIZE, ..., -1
 
-  datatype {:glinear_fold} CBContents = CBContents(ghost contents: map<int, CB.StoredType>, ghost cb_loc: Loc)
+  datatype {:glinear_fold} CBContents = CBContents(ghost contents: map<int, CB.StoredType>, ghost cb_loc_s: nat)
   {
     function defn(): CBTokens.Token {
-      CBTokens.T.Token(cb_loc,
+      CBTokens.T.Token(ExtLoc(cb_loc_s, CBTokens.Wrap.singleton_loc()),
         CB.M(None, None, map[], Some(contents), map[], map[])
       )
     }
@@ -136,10 +136,10 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   //   | CBCombinerAdvancingTail(ghost obvserve_head: nat)
   //   | CBCombinerAppendState(ghost cur_idx: nat, ghost tail: nat)
 
-  datatype {:glinear_fold} CBCombinerToken = CBCombinerToken(ghost nodeId: CB.NodeId, ghost rs: CB.CombinerState, ghost cb_loc: Loc)
+  datatype {:glinear_fold} CBCombinerToken = CBCombinerToken(ghost nodeId: CB.NodeId, ghost rs: CB.CombinerState, ghost cb_loc_s: nat)
   {
     function defn(): CBTokens.Token {
-      CBTokens.T.Token(cb_loc,
+      CBTokens.T.Token(ExtLoc(cb_loc_s, CBTokens.Wrap.singleton_loc()),
         CB.M(None, None, map[], None, map[], map[nodeId := rs])
       )
     }
@@ -151,16 +151,16 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   returns (glinear combiner': CBCombinerToken)
   requires first_local_tail.nodeId == 0
   requires combiner.rs == CB.CombinerIdle
-  requires combiner.cb_loc == first_local_tail.cb_loc
+  requires combiner.cb_loc_s == first_local_tail.cb_loc_s
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == CB.CombinerAdvancingHead(1, first_local_tail.tail)
-  ensures combiner'.cb_loc == combiner.cb_loc
+  ensures combiner'.cb_loc_s == combiner.cb_loc_s
   {
     gshared var t_token := CBLocalTail_unfold_borrow(first_local_tail);
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
-    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerAdvancingHead(1, first_local_tail.tail), combiner.cb_loc);
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerAdvancingHead(1, first_local_tail.tail), combiner.cb_loc_s);
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
     CB.InitAdvanceHead_is_transition(
@@ -180,11 +180,11 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires combiner.rs.CombinerAdvancingHead?
   requires local_tail.nodeId == combiner.rs.idx
   requires combiner.rs.idx != NUM_REPLICAS as nat
-  requires combiner.cb_loc == local_tail.cb_loc
+  requires combiner.cb_loc_s == local_tail.cb_loc_s
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == CB.CombinerAdvancingHead(combiner.rs.idx + 1,
       if combiner.rs.min_tail < local_tail.tail then combiner.rs.min_tail else local_tail.tail)
-  ensures combiner'.cb_loc == combiner.cb_loc
+  ensures combiner'.cb_loc_s == combiner.cb_loc_s
   {
     gshared var t_token := CBLocalTail_unfold_borrow(local_tail);
     ghost var nodeId := combiner.nodeId;
@@ -192,7 +192,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerAdvancingHead(
       combiner.rs.idx + 1, if combiner.rs.min_tail < local_tail.tail then combiner.rs.min_tail else local_tail.tail),
-      combiner.cb_loc);
+      combiner.cb_loc_s);
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
     ghost var rest := CBTokens.obtain_invariant_1_1(t_token, inout c_token);
@@ -219,12 +219,12 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires combiner.rs.idx == NUM_REPLICAS as nat
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == CB.CombinerIdle
-  ensures combiner'.cb_loc == combiner.cb_loc
+  ensures combiner'.cb_loc_s == combiner.cb_loc_s
   {
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
-    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc);
+    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc_s);
     ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
 
     CB.AbandonAdvanceHead_is_transition(
@@ -242,20 +242,20 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   returns (glinear combiner': CBCombinerToken, glinear head': CBHead)
   requires combiner.rs.CombinerAdvancingHead?
   requires combiner.rs.idx == NUM_REPLICAS as int
-  requires combiner.cb_loc == head.cb_loc
+  requires combiner.cb_loc_s == head.cb_loc_s
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == CB.CombinerIdle
-  ensures head' == CBHead(combiner.rs.min_tail, head.cb_loc)
-  ensures combiner'.cb_loc == combiner.cb_loc
+  ensures head' == CBHead(combiner.rs.min_tail, head.cb_loc_s)
+  ensures combiner'.cb_loc_s == combiner.cb_loc_s
   {
     glinear var h_token := CBHead_unfold(head);
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
-    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc);
+    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc_s);
     ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
 
-    ghost var out_expect_2 := CBHead(combiner.rs.min_tail, head.cb_loc);
+    ghost var out_expect_2 := CBHead(combiner.rs.min_tail, head.cb_loc_s);
     ghost var out_token_expect_2 := CBHead_unfold(out_expect_2);
 
     CB.FinishAdvanceHead_is_transition(
@@ -273,16 +273,16 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   glinear method init_advance_tail_state(glinear combiner: CBCombinerToken, gshared head: CBHead)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs == CB.CombinerIdle
-  requires combiner.cb_loc == head.cb_loc
+  requires combiner.cb_loc_s == head.cb_loc_s
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == CB.CombinerAdvancingTail(head.head)
-  ensures combiner'.cb_loc == combiner.cb_loc
+  ensures combiner'.cb_loc_s == combiner.cb_loc_s
   {
     gshared var h_token := CBHead_unfold_borrow(head);
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
-    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerAdvancingTail(head.head), combiner.cb_loc);
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerAdvancingTail(head.head), combiner.cb_loc_s);
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
     CB.InitAdvanceTail_is_transition(
@@ -302,12 +302,12 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires combiner.rs.CombinerAdvancingTail?
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == CB.CombinerIdle
-  ensures combiner'.cb_loc == combiner.cb_loc
+  ensures combiner'.cb_loc_s == combiner.cb_loc_s
   {
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
-    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc);
+    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc_s);
     ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
 
     CB.AbandonAdvanceTail_is_transition(
@@ -326,7 +326,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   returns (glinear combiner': CBCombinerToken, glinear tail': CBGlobalTail, glinear contents': CBContents, glinear entries': map<int, CB.StoredType>)
   requires combiner.rs.CombinerAdvancingTail?
   requires tail.tail <= new_tail <= combiner.rs.observed_head + LOG_SIZE as int
-  requires combiner.cb_loc == tail.cb_loc == contents.cb_loc
+  requires combiner.cb_loc_s == tail.cb_loc_s == contents.cb_loc_s
   ensures combiner'.nodeId == combiner.nodeId
   ensures tail'.tail == new_tail
   ensures forall i | tail.tail <= i < new_tail ::
@@ -335,20 +335,20 @@ module CyclicBufferTokens(nrifc: NRIfc) {
       && entries'[i] == contents.contents[i - LOG_SIZE as int]
   ensures forall i | i in contents'.contents :: i in contents.contents && contents.contents[i] == contents'.contents[i]
   ensures combiner'.rs == CB.CombinerAppending(tail.tail, new_tail)
-  ensures combiner'.cb_loc == combiner.cb_loc
-  ensures tail'.cb_loc == tail.cb_loc
-  ensures contents'.cb_loc == contents.cb_loc
-  // TODO(Andrea)? ensures forall i | i in entries' :: entries'[i].cb_loc == combiner.cb_loc
+  ensures combiner'.cb_loc_s == combiner.cb_loc_s
+  ensures tail'.cb_loc_s == tail.cb_loc_s
+  ensures contents'.cb_loc_s == contents.cb_loc_s
+  // TODO(Andrea)? ensures forall i | i in entries' :: entries'[i].cb_loc_s == combiner.cb_loc_s
   {
     glinear var t_token := CBGlobalTail_unfold(tail);
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
     glinear var contents_token := CBContents_unfold(contents);
 
-    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerAppending(tail.tail, new_tail), combiner.cb_loc);
+    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerAppending(tail.tail, new_tail), combiner.cb_loc_s);
     ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
 
-    ghost var out_expect_2 := CBGlobalTail(new_tail, tail.cb_loc);
+    ghost var out_expect_2 := CBGlobalTail(new_tail, tail.cb_loc_s);
     ghost var out_token_expect_2 := CBGlobalTail_unfold(out_expect_2);
 
     ghost var rest := CBTokens.obtain_invariant_3(inout c_token, inout t_token, inout contents_token);
@@ -375,7 +375,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     assert forall i: int | i in withdrawn.Keys :: i in contents.contents && withdrawn[i] == contents.contents[i];
 
     // remove the withdrawn keys from contents
-    ghost var out_expect_3 := CBContents(Maps.MapRemove(contents.contents, withdrawn.Keys), contents.cb_loc);
+    ghost var out_expect_3 := CBContents(Maps.MapRemove(contents.contents, withdrawn.Keys), contents.cb_loc_s);
     ghost var out_token_expect_3 := CBContents_unfold(out_expect_3);
 
     CB.FinishAdvanceTail_is_withdraw_many(
@@ -427,10 +427,10 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires combiner.rs.CombinerAppending?
   requires combiner.rs.cur_idx < combiner.rs.tail
   requires bit.entry == CB.LogicalToPhysicalIndex(combiner.rs.cur_idx)
-  requires combiner.cb_loc == bit.cb_loc == contents.cb_loc
+  requires combiner.cb_loc_s == bit.cb_loc_s == contents.cb_loc_s
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == combiner.rs.(cur_idx := combiner.rs.cur_idx + 1)
-  ensures combiner'.cb_loc == combiner.cb_loc
+  ensures combiner'.cb_loc_s == combiner.cb_loc_s
   ensures bit' == bit.(bit := CB.LogicalToAliveBitAliveWhen(combiner.rs.cur_idx))
   ensures contents' == contents.(contents := contents.contents[combiner.rs.cur_idx := value])
   {
@@ -440,7 +440,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     glinear var contents_token := CBContents_unfold(contents);
 
-    ghost var out_expect_1 := CBCombinerToken(nodeId, combiner.rs.(cur_idx := combiner.rs.cur_idx + 1), combiner.cb_loc);
+    ghost var out_expect_1 := CBCombinerToken(nodeId, combiner.rs.(cur_idx := combiner.rs.cur_idx + 1), combiner.cb_loc_s);
     ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
 
     ghost var out_expect_2 := bit.(bit := CB.LogicalToAliveBitAliveWhen(combiner.rs.cur_idx));
@@ -510,12 +510,12 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires combiner.rs.cur_idx == combiner.rs.tail
   ensures combiner'.nodeId == combiner.nodeId
   ensures combiner'.rs == CB.CombinerIdle
-  ensures combiner'.cb_loc == combiner.cb_loc
+  ensures combiner'.cb_loc_s == combiner.cb_loc_s
   {
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
-    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc);
+    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc_s);
     ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
 
     CB.FinishAppending_is_transition(
@@ -534,14 +534,14 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   returns (glinear combiner': CBCombinerToken)
   requires combiner.nodeId == localTail.nodeId
   requires combiner.rs.CombinerIdle?
-  requires combiner.cb_loc == localTail.cb_loc
+  requires combiner.cb_loc_s == localTail.cb_loc_s
   ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderStarting(localTail.tail)))
   {
     gshared var t_token := CBLocalTail_unfold_borrow(localTail);
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
-    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderStarting(localTail.tail)), combiner.cb_loc);
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderStarting(localTail.tail)), combiner.cb_loc_s);
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
     CB.ReaderDoStart_is_transition(
@@ -567,7 +567,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
     // updated result
-    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc);
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc_s);
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
     // the transition
@@ -585,7 +585,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   glinear method reader_enter(glinear combiner: CBCombinerToken, gshared globalTail: CBGlobalTail)
   returns (glinear combiner': CBCombinerToken)
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderStarting?
-  requires combiner.cb_loc == globalTail.cb_loc
+  requires combiner.cb_loc_s == globalTail.cb_loc_s
   ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, globalTail.tail, combiner.rs.readerState.start)))
   {
 
@@ -597,7 +597,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     gshared var t_token := CBGlobalTail_unfold_borrow(globalTail);
 
     // updated result
-    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, globalTail.tail, combiner.rs.readerState.start)), combiner.cb_loc);
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, globalTail.tail, combiner.rs.readerState.start)), combiner.cb_loc_s);
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
     // the transition
@@ -623,7 +623,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires i % LOG_SIZE as int == aliveBit.entry
   requires aliveBit.bit == ((i / LOG_SIZE as int) % 2 == 0)
   requires i == combiner.rs.readerState.cur
-  requires combiner.cb_loc == aliveBit.cb_loc == contents.cb_loc
+  requires combiner.cb_loc_s == aliveBit.cb_loc_s == contents.cb_loc_s
   ensures i in contents.contents
   ensures combiner' == combiner.(rs := CB.CombinerReading(CB.ReaderGuard(combiner.rs.readerState.start, combiner.rs.readerState.end,
       i, contents.contents[i])))
@@ -678,7 +678,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     assert contents_token.val.contents.value[i] == contents.contents[i];
 
-    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderGuard(combiner.rs.readerState.start, combiner.rs.readerState.end, i, contents.contents[i])), combiner.cb_loc);
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderGuard(combiner.rs.readerState.start, combiner.rs.readerState.end, i, contents.contents[i])), combiner.cb_loc_s);
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
     assert CB.LogicalToPhysicalIndex(i) in a_token.val.aliveBits;
@@ -713,7 +713,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
     // updated result
-    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, combiner.rs.readerState.end, combiner.rs.readerState.cur + 1)), combiner.cb_loc);
+    ghost var out_expect := CBCombinerToken(nodeId, CB.CombinerReading(CB.ReaderRange(combiner.rs.readerState.start, combiner.rs.readerState.end, combiner.rs.readerState.cur + 1)), combiner.cb_loc_s);
     ghost var out_token_expect := CBCombinerToken_unfold(out_expect);
 
     // the transition
@@ -733,7 +733,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   requires combiner.nodeId == localTail.nodeId
   requires combiner.rs.CombinerReading? && combiner.rs.readerState.ReaderRange?
   requires combiner.rs.readerState.cur == combiner.rs.readerState.end;
-  requires combiner.cb_loc == localTail.cb_loc
+  requires combiner.cb_loc_s == localTail.cb_loc_s
   ensures combiner' == combiner.(rs := CB.CombinerIdle)
   ensures localTail' == localTail.(tail := combiner.rs.readerState.end)
   {
@@ -741,7 +741,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost var nodeId := combiner.nodeId;
     glinear var c_token := CBCombinerToken_unfold(combiner);
 
-    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc);
+    ghost var out_expect_1 := CBCombinerToken(nodeId, CB.CombinerIdle, combiner.cb_loc_s);
     ghost var out_token_expect_1 := CBCombinerToken_unfold(out_expect_1);
 
     ghost var out_expect_2 := localTail.(tail := combiner.rs.readerState.end);
@@ -785,7 +785,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     t.val == CB.M(None, None, localTailsM, None, map[], map[]))
   ensures forall i | 0 <= i < NUM_REPLICAS as nat ::
       && i in localTails
-      && localTails[i] == CBLocalTail(i, 0, t.loc)
+      && localTails[i] == CBLocalTail(i, 0, t.loc.s)
   {
     glinear var t' := t;
     ghost var j := 0;
@@ -797,9 +797,9 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     invariant forall i | j <= i < NUM_REPLICAS as nat ::
       && i in t'.val.localTails && t.val.localTails[i] == t'.val.localTails[i]
     invariant forall i | 0 <= i < j ::
-      && i in localTails && localTails[i] == CBLocalTail(i, 0, t.loc)
+      && i in localTails && localTails[i] == CBLocalTail(i, 0, t.loc.s)
     {
-      var expected := CBLocalTail(j, 0, t.loc);
+      var expected := CBLocalTail(j, 0, t.loc.s);
       var x := expected.defn().val;
       var y := t'.val.(localTails := t'.val.localTails - {j});
 
@@ -821,7 +821,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     var aliveBitsM := map i: nat | 0 <= i < LOG_SIZE as nat :: false;
     t.val == CB.M(None, None, map[], None, aliveBitsM, map[]))
   ensures forall i | 0 <= i < LOG_SIZE as int ::
-      i in alive && alive[i] == CBAliveBit(i, false, t.loc)
+      i in alive && alive[i] == CBAliveBit(i, false, t.loc.s)
   {
     glinear var t' := t;
     ghost var j := 0;
@@ -833,9 +833,9 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     invariant forall i | j <= i < LOG_SIZE as nat ::
       && i in t'.val.aliveBits && t.val.aliveBits[i] == t'.val.aliveBits[i]
     invariant forall i | 0 <= i < j ::
-      && i in alive && alive[i] == CBAliveBit(i, false, t.loc)
+      && i in alive && alive[i] == CBAliveBit(i, false, t.loc.s)
     {
-      var expected := CBAliveBit(j, false, t.loc);
+      var expected := CBAliveBit(j, false, t.loc.s);
       var x := expected.defn().val;
       var y := t'.val.(aliveBits := t'.val.aliveBits - {j});
 
@@ -857,7 +857,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     var combinersM := map i: nat | 0 <= i < NUM_REPLICAS as nat :: CB.CombinerIdle;
     t.val == CB.M(None, None, map[], None, map[], combinersM))
   ensures forall i | 0 <= i < NUM_REPLICAS as int ::
-      i in combiners && combiners[i] == CBCombinerToken(i, CB.CombinerIdle, t.loc)
+      i in combiners && combiners[i] == CBCombinerToken(i, CB.CombinerIdle, t.loc.s)
   {
     glinear var t' := t;
     ghost var j := 0;
@@ -869,9 +869,9 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     invariant forall i | j <= i < NUM_REPLICAS as nat ::
       && i in t'.val.combinerState && t.val.combinerState[i] == t'.val.combinerState[i]
     invariant forall i | 0 <= i < j ::
-      && i in combiners && combiners[i] == CBCombinerToken(i, CB.CombinerIdle, t.loc)
+      && i in combiners && combiners[i] == CBCombinerToken(i, CB.CombinerIdle, t.loc.s)
     {
-      var expected := CBCombinerToken(j, CB.CombinerIdle, t.loc);
+      var expected := CBCombinerToken(j, CB.CombinerIdle, t.loc.s);
       var x := expected.defn().val;
       var y := t'.val.(combinerState := t'.val.combinerState - {j});
 
@@ -898,14 +898,16 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost cb_loc: Loc
   )
   requires forall i :: -(LOG_SIZE as int) <= i < 0 <==> i in b
-  ensures head == CBHead(0, cb_loc)
-  ensures globalTail == CBGlobalTail(0, cb_loc)
+  ensures cb_loc.ExtLoc?
+  ensures cb_loc.base_loc == CBTokens.Wrap.singleton_loc()
+  ensures head == CBHead(0, cb_loc.s)
+  ensures globalTail == CBGlobalTail(0, cb_loc.s)
   ensures forall i | 0 <= i < NUM_REPLICAS as int ::
-      && i in localTails && localTails[i] == CBLocalTail(i, 0, cb_loc)
-      && i in combiners && combiners[i] == CBCombinerToken(i, CB.CombinerIdle, cb_loc)
+      && i in localTails && localTails[i] == CBLocalTail(i, 0, cb_loc.s)
+      && i in combiners && combiners[i] == CBCombinerToken(i, CB.CombinerIdle, cb_loc.s)
   ensures forall i | 0 <= i < LOG_SIZE as int ::
-      i in alive && alive[i] == CBAliveBit(i, false, cb_loc)
-  ensures contents == CBContents(b, cb_loc)
+      i in alive && alive[i] == CBAliveBit(i, false, cb_loc.s)
+  ensures contents == CBContents(b, cb_loc.s)
   {
 
     ghost var localTailsM := map i: nat | 0 <= i < NUM_REPLICAS as nat :: 0;
@@ -927,10 +929,10 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     glinear var tht, tgtt, tltt, tct, tat, tcmt := CBTokens.split6(token, ht, gtt, ltt, ct, at, cmt);
 
-    head := CBHead_fold(CBHead(0, cb_loc), tht);
-    globalTail := CBGlobalTail_fold(CBGlobalTail(0, cb_loc), tgtt);
+    head := CBHead_fold(CBHead(0, cb_loc.s), tht);
+    globalTail := CBGlobalTail_fold(CBGlobalTail(0, cb_loc.s), tgtt);
     localTails := do_init_local_tails(tltt);
-    contents := CBContents_fold(CBContents(b, cb_loc), tct);
+    contents := CBContents_fold(CBContents(b, cb_loc.s), tct);
     alive := do_init_alive(tat);
     combiners := do_init_combiners(tcmt);
   }
