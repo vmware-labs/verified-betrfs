@@ -475,10 +475,18 @@ module MultiRwTokens(rw: MultiRw) {
    * Helpers
    */
 
-  // TODO(Travis) does this need more from the PCM, or is it unsound?
-  function method obtain_invariant_borrow(gshared token1: Token)
-    : (rest: rw.M)
+  /*
+  glinear method obtain_invariant_borrow(gshared token1: Token)
+  returns (ghost rest: rw.M)
   ensures rw.Inv(rw.dot(token1.val, rest))
+  {
+    glinear var v := T.get_unit(token1.loc);
+    T.is_valid(token1, inout v);
+    Ptrs.dispose_anything(v);
+    rest :| rw.Inv(rw.dot(rw.dot(token1.val, v.val), rest));
+    rw.dot_unit(token1.val);
+  }
+  */
 
   glinear method obtain_invariant_1_1(
       gshared token1: Token,

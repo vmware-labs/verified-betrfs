@@ -748,7 +748,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     ghost var nodeId := combiner.nodeId;
 
     gshared var combiner_t := CBCombinerToken_unfold_borrow(combiner);
-    ghost var rest := CBTokens.obtain_invariant_borrow(combiner_t);
+    //ghost var rest := CBTokens.obtain_invariant_borrow(combiner_t);
 
     assert combiner.rs.readerState == combiner_t.val.combinerState[nodeId].readerState;
 
