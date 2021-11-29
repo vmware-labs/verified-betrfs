@@ -195,6 +195,22 @@ module MultiRwTokens(rw: MultiRw) {
   glinear method map_to_multiset(glinear b: map<rw.Key, rw.StoredType>)
   returns (glinear y: WrapT.GToken)
   ensures y.val.m == Multisets.ValueMultiset(b)
+  decreases |b|
+  {
+    ghost var ghost_b := b;
+    if (ghost_b == map[]) {
+      y := WrapPT.get_unit(Wrap.singleton_loc());
+      Ptrs.dispose_anything(b);
+    } else {
+      ghost var k :| k in b;
+      glinear var b0, x := GlinearMap.glmap_take(b, k);
+      assert b == b0[k := b[k]];
+      assert |b0| < |b|;
+      glinear var y0 := map_to_multiset(b0);
+      y := WrapPT.join(y0, WrapT.wrap(x));
+      Multisets.ValueMultisetInduct(b0, k, b[k]);
+    }
+  }
 
   glinear method multiset_to_map(glinear y: WrapT.GToken, ghost b: map<rw.Key, rw.StoredType>)
   returns (glinear b': map<rw.Key, rw.StoredType>)
