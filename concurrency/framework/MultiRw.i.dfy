@@ -192,30 +192,64 @@ module MultiRwTokens(rw: MultiRw) {
   type Token = t : T.Token | t.loc.ExtLoc? && t.loc.base_loc == Wrap.singleton_loc()
     witness *
 
+  glinear method map_to_multiset(glinear b: map<rw.Key, rw.StoredType>)
+  returns (glinear y: WrapT.GToken)
+  ensures y.val.m == Multisets.ValueMultiset(b)
+
+  glinear method multiset_to_map(glinear y: WrapT.GToken, ghost b: map<rw.Key, rw.StoredType>)
+  returns (glinear b': map<rw.Key, rw.StoredType>)
+  requires y.val.m == Multisets.ValueMultiset(b)
+  ensures b' == b
+
+  lemma multiset_union_maps<K,V>(a: map<K,V>, b: map<K, V>, c: map<K, V>)
+  requires a.Keys !! b.Keys
+  requires forall k | k in c :: k in a || k in b
+  requires forall k | k in a :: k in c && c[k] == a[k]
+  requires forall k | k in b :: k in c && c[k] == b[k]
+  ensures Multisets.ValueMultiset(a) + Multisets.ValueMultiset(b) == Multisets.ValueMultiset(c)
+  decreases |b|
+  {
+    if (b == map[]) {
+      assert Multisets.ValueMultiset(b) == multiset{};
+      assert a == c;
+    } else {
+      var k :| k in b.Keys;
+      var b1 := b - {k};
+      assert |b1| < |b| by {
+        assert b == b1[k := b[k]];
+        assert |b| == |b1| + 1;
+      }
+      var c1 := c - {k};
+      calc {
+        Multisets.ValueMultiset(a) + Multisets.ValueMultiset(b);
+        {
+          Multisets.ValueMultisetInduct(b1, k, b[k]);
+          assert b == b1[k := b[k]];
+          assert Multisets.ValueMultiset(b)
+              == Multisets.ValueMultiset(b1) + multiset{b[k]};
+        }
+        Multisets.ValueMultiset(a) + Multisets.ValueMultiset(b1) + multiset{b[k]};
+        {
+          multiset_union_maps(a, b1, c1);
+        }
+        Multisets.ValueMultiset(c1) + multiset{b[k]};
+        {
+          Multisets.ValueMultisetInduct(c1, k, b[k]);
+          assert c == c1[k := b[k]];
+        }
+        Multisets.ValueMultiset(c);
+      }
+    }
+  }
+
   glinear method initialize_nonempty(glinear b: map<rw.Key, rw.StoredType>, ghost m: rw.M)
   returns (glinear token: Token)
   requires rw.Inv(m)
   requires rw.I(m) == b
   ensures token.val == m
   {
-    // TODO(Travis)
-    glinear var bi := b;
-    token := ET.ExtTokens.init(m);
-
-    ghost var transfer_keys := bi.Keys;
-
-    while |transfer_keys| > 0
-    {
-      ghost var k :| k in transfer_keys;
-      glinear var one;
-      bi, one := GlinearMap.glmap_take(bi, k);
-      glinear var one_token := ET.ext_init(WrapT.wrap(one), m);
-      token := T.join(token, one_token);
-
-      transfer_keys := transfer_keys - {k};
-    }
-
-    Ptrs.dispose_anything(bi);
+    glinear var wrapped := map_to_multiset(b);
+    token := ET.ext_init(wrapped, m);
   }
 
   glinear method {:extern} split3(glinear sum: Token,
@@ -357,7 +391,6 @@ module MultiRwTokens(rw: MultiRw) {
   ensures token' == T.Token(token.loc, expected_value)
   ensures retrieved_values == expected_retrieved_values
   {
-    // TODO(Travis)
     glinear var m := WrapPT.get_unit(Wrap.singleton_loc());
     ghost var m' := Wrap.M(Multisets.ValueMultiset(expected_retrieved_values));
 
@@ -369,93 +402,16 @@ module MultiRwTokens(rw: MultiRw) {
               Wrap.dot(m.val, pcm.I(pcm.dot(token.val, p)).value),
               Wrap.dot(m', pcm.I(pcm.dot(expected_value, p)).value))
     {
-      // Multisets.ValueMultisetInduct(rw.I(rw.dot(expected_value, p)), key,
-      //     expected_retrieved_value);
-      assume false; // TODO
+      multiset_union_maps(expected_retrieved_values,
+          rw.I(pcm.dot(expected_value, p)),
+          rw.I(pcm.dot(token.val, p)));
     }
-
+    
     glinear var f, b := ET.ext_transfer(
-      token, expected_value,
-      m, m');
+        token, expected_value,
+        m, m');
     token' := f;
-
-    retrieved_values := GlinearMap.glmap_empty();
-
-    ghost var transfer_keys := expected_retrieved_values.Keys;
-    assume forall k | k in expected_retrieved_values.Keys :: expected_retrieved_values[k] in b.val.m; // TODO
-    assert forall k | k in transfer_keys :: expected_retrieved_values[k] in b.val.m;
-
-    while |transfer_keys| > 0
-
-    // invariant res <= expected_retrieved_values.Values
-    invariant retrieved_values.Keys <= expected_retrieved_values.Keys
-    invariant retrieved_values.Values <= expected_retrieved_values.Values
-    invariant transfer_keys <= expected_retrieved_values.Keys
-    invariant forall k | k in transfer_keys :: expected_retrieved_values[k] in b.val.m
-    // invariant (multiset k | k in transfer_keys :: expected_retrieved_values[k]) == b.val.m
-    invariant forall k | k in retrieved_values :: retrieved_values[k] == expected_retrieved_values[k]
-    invariant expected_retrieved_values.Keys - retrieved_values.Keys == transfer_keys
-    invariant b.val.m <= Multisets.ValueMultiset(expected_retrieved_values)
-    invariant Multisets.ValueMultiset(retrieved_values) + b.val.m == Multisets.ValueMultiset(expected_retrieved_values)
-    {
-      ghost var gv :| gv in b.val.m;
-
-      glinear var vt;
-      b, vt := WrapT.T.split(b, Wrap.M(b.val.m - multiset{gv}), Wrap.one(gv));
-      assume vt.loc == Wrap.singleton_loc(); // TODO
-
-      assume exists k :: k in transfer_keys && expected_retrieved_values[k] == gv; // TODO
-      ghost var k :| k in transfer_keys && expected_retrieved_values[k] == gv;
-      glinear var v := WrapT.unwrap(vt);
-
-      assert k !in retrieved_values.Keys;
-      retrieved_values := GlinearMap.glmap_insert(retrieved_values, k, v);
-
-      transfer_keys := transfer_keys - {k};
-
-      forall l | l in transfer_keys
-      ensures expected_retrieved_values[l] in b.val.m {
-        if k == l {
-          assert false;
-        } else {
-          assume expected_retrieved_values[l] in b.val.m; // TODO
-        }
-      }
-      assume Multisets.ValueMultiset(retrieved_values) + b.val.m ==
-          Multisets.ValueMultiset(expected_retrieved_values); // TODO
-      // TODO use ValueMultisetInduct?
-    }
-
-    assert retrieved_values.Keys == expected_retrieved_values.Keys;
-
-    assert |b.val.m| == 0;
-    Ptrs.dispose_anything(b);
-
-    // TODO remove Attempt 0:
-
-    // TODO remove ghost var k :| k in transfer_keys;
-    // TODO remove assert expected_retrieved_values[k] in res;
-
-    // TODO remove ghost var res_before: set<rw.StoredType> := res;
-    // TODO remove glinear var v;
-    // TODO remove res, v := GlinearSet.glset_take(res, expected_retrieved_values[k]);
-    // TODO remove assert res - {v} == res_before - {v};
-
-    // TODO remove assert k !in retrieved_values.Keys;
-    // TODO remove retrieved_values := GlinearMap.glmap_insert(retrieved_values, k, v);
-
-    // TODO remove transfer_keys := transfer_keys - {k};
-
-    // TODO remove forall l | l in transfer_keys
-    // TODO remove ensures expected_retrieved_values[l] in res
-    // TODO remove {
-    // TODO remove   if l == k {
-    // TODO remove     assert false;
-    // TODO remove   } else {
-    // TODO remove     assert l in transfer_keys;
-    // TODO remove     assert expected_retrieved_values[l] in res;
-    // TODO remove   }
-    // TODO remove }
+    retrieved_values := multiset_to_map(b, expected_retrieved_values);
   }
 
   /*
