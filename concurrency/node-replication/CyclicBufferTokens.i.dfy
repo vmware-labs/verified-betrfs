@@ -766,6 +766,15 @@ module CyclicBufferTokens(nrifc: NRIfc) {
     t.val == CB.M(None, None, localTailsM, None, map[], map[]))
   ensures forall i | 0 <= i < NUM_REPLICAS as nat ::
       i in localTails && localTails[i] == CBLocalTail(i, 0)
+  // {
+  //   glinear var t' := t;
+  //   ghost var j := 0;
+  //   localTails := GlinearMap.glmap_empty();
+  //   while j < NUM_REPLICAS as nat
+  //   invariant 0 <= j <= NUM_REPLICAS as nat
+  //   invariant t'.loc == loc()
+  //   invariant t'.val.M?
+  // }
 
   glinear method do_init_alive(glinear t: CBTokens.Token)
   returns (glinear alive: map<nat, CBAliveBit>)
@@ -823,7 +832,8 @@ module CyclicBufferTokens(nrifc: NRIfc) {
 
     glinear var tht, tgtt, tltt, tct, tat, tcmt := CBTokens.split6(token, ht, gtt, ltt, ct, at, cmt);
 
-    head := CBHead_fold(CBHead(0), tht); // TODO(Travis) ???
+    assume tht.loc == cb_loc(); // TODO(Travis)
+    head := CBHead_fold(CBHead(0), tht);
     globalTail := CBGlobalTail_fold(CBGlobalTail(0), tgtt);
     localTails := do_init_local_tails(tltt);
     contents := CBContents_fold(CBContents(b), tct);
