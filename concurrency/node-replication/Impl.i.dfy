@@ -208,7 +208,7 @@ module Impl(nrifc: NRIfc) {
   {
     predicate WF(nodeId: nat, cb_loc: Loc) {
       && (forall v, g :: atomic_inv(localTail, v, g) <==>
-          g == LocalTailTokens(LocalTail(nodeId, v as int), CBLocalTail(nodeId, v as int, cb_loc)))
+          g == LocalTailTokens(LocalTail(nodeId, v as int), CBLocalTail(nodeId, v as int, cb_loc.s)))
     }
   }
 
@@ -218,7 +218,7 @@ module Impl(nrifc: NRIfc) {
   {
     predicate WF(i: nat, cb_loc: Loc)
     {
-      && (forall v, g :: atomic_inv(alive, v, g) <==> g == CBAliveBit(i, v, cb_loc))
+      && (forall v, g :: atomic_inv(alive, v, g) <==> g == CBAliveBit(i, v, cb_loc.s))
       && alive.namespace() == 0
     }
   }
@@ -254,10 +254,13 @@ module Impl(nrifc: NRIfc) {
   )
   {
     predicate WF() {
+      && cb_loc.ExtLoc?
+      && cb_loc.base_loc == CBT.CBTokens.Wrap.singleton_loc()
+
       && (forall v, g :: atomic_inv(ctail.inner, v, g) <==> g == Ctail(v as int))
-      && (forall v, g :: atomic_inv(head.inner, v, g) <==> g == CBHead(v as int, cb_loc))
+      && (forall v, g :: atomic_inv(head.inner, v, g) <==> g == CBHead(v as int, cb_loc.s))
       && (forall v, g :: atomic_inv(globalTail.inner, v, g) <==>
-            g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int, cb_loc)))
+            g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int, cb_loc.s)))
       && |node_info| == NUM_REPLICAS as int
       && (forall nodeId | 0 <= nodeId < |node_info| :: nodeId in node_info)
       && (forall nodeId | 0 <= nodeId < |node_info| :: node_info[nodeId].WF(nodeId, cb_loc))
@@ -974,7 +977,7 @@ module Impl(nrifc: NRIfc) {
     glinear cb': CBCombinerToken)
   requires nr.WF()
   requires node.WF()
-  requires nr.cb_loc == cb.cb_loc
+  requires nr.cb_loc.s == cb.cb_loc_s
   requires |ops| == MAX_THREADS_PER_REPLICA as int
   requires |requestIds| == num_ops as int <= MAX_THREADS_PER_REPLICA as int
   requires combinerState.nodeId == node.nodeId as int
@@ -1017,7 +1020,7 @@ module Impl(nrifc: NRIfc) {
     // invariant cb' == cb
     invariant cb'.nodeId == cb.nodeId
     invariant cb'.rs.CombinerIdle?
-    invariant cb'.cb_loc == cb.cb_loc
+    invariant cb'.cb_loc_s == cb.cb_loc_s
     invariant ghost_replica'.state == nrifc.I(actual_replica')
     invariant ghost_replica'.nodeId == node.nodeId as int
     invariant !done ==>
@@ -1098,7 +1101,7 @@ module Impl(nrifc: NRIfc) {
             }
 
             forall i | i in contents.contents
-            ensures BufferEntryInv(nr.buffer, i, contents.contents[i], contents.cb_loc)
+            ensures BufferEntryInv(nr.buffer, i, contents.contents[i], ExtLoc(contents.cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()))
             {
             }
 
@@ -1117,7 +1120,7 @@ module Impl(nrifc: NRIfc) {
           invariant cb'.rs.CombinerAppending?
           invariant cb'.rs.cur_idx == tail as int + j as int
           invariant cb'.rs.tail == tail as int + num_ops as int
-          invariant cb'.cb_loc == cb.cb_loc
+          invariant cb'.cb_loc_s == cb.cb_loc_s
           invariant forall i: int | j as int <= i < |requestIds| ::
               i in log_entries
                 && log_entries[i] == Log(tail as int + i, ops[i], node.nodeId as int)
@@ -1134,7 +1137,7 @@ module Impl(nrifc: NRIfc) {
                 glmap_take(cyclic_buffer_entries, tail as int + j as int);
 
             assert BufferEntryInv(nr.buffer,
-                (tail as int + j as int) - LOG_SIZE as int, cyclic_buffer_entry, cb'.cb_loc);
+                (tail as int + j as int) - LOG_SIZE as int, cyclic_buffer_entry, ExtLoc(cb'.cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()));
 
             glinear var StoredType(cellContents, oldLogEntry) := cyclic_buffer_entry;
 
@@ -1146,7 +1149,7 @@ module Impl(nrifc: NRIfc) {
               bounded_idx as int;
             }
 
-            assert nr.buffer[bounded_idx as int].WF(bounded_idx as int, cb'.cb_loc);
+            assert nr.buffer[bounded_idx as int].WF(bounded_idx as int, ExtLoc(cb'.cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()));
 
             // Physically write the log entry into the cyclic buffer
             write_cell(lseq_peek(nr.buffer, bounded_idx).cell,
@@ -1155,7 +1158,7 @@ module Impl(nrifc: NRIfc) {
             
             cyclic_buffer_entry := CB.StoredType(cellContents, glSome(log_entry));
             assert BufferEntryInv(nr.buffer,
-                (tail as int + j as int), cyclic_buffer_entry, cb'.cb_loc);
+                (tail as int + j as int), cyclic_buffer_entry, ExtLoc(cb'.cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()));
 
             var m := ((tail + j) / LOG_SIZE) % 2 == 0;
             atomic_block var _ := execute_atomic_store(
@@ -1284,7 +1287,7 @@ module Impl(nrifc: NRIfc) {
     cb' := cb;
     responses' := responses;
 
-    assert nr.node_info[node.nodeId as int].WF(node.nodeId as int, cb'.cb_loc);
+    assert nr.node_info[node.nodeId as int].WF(node.nodeId as int, ExtLoc(cb'.cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()));
 
     ghost var requestIds' := requestIds;
     if combinerState'.state.CombinerReady? {
@@ -1331,7 +1334,7 @@ module Impl(nrifc: NRIfc) {
       invariant combinerState'.state.Combiner?
       invariant combinerState'.state.queueIndex == responsesIndex as int
       invariant combinerState'.state == prev_combinerState.state.(localTail := i as int).(queueIndex := responsesIndex as int)
-      invariant cb' == CBCombinerToken(node.nodeId as int, CB.CombinerReading(CB.ReaderRange(ltail as int, gtail as int, i as nat)), cb.cb_loc)
+      invariant cb' == CBCombinerToken(node.nodeId as int, CB.CombinerReading(CB.ReaderRange(ltail as int, gtail as int, i as nat)), cb.cb_loc_s)
       invariant ghost_replica'.state == nrifc.I(actual_replica')
       invariant ghost_replica'.nodeId == node.nodeId as int
       invariant |responses'| == MAX_THREADS_PER_REPLICA as int
@@ -1353,7 +1356,7 @@ module Impl(nrifc: NRIfc) {
         var done := false;
         while !done
         invariant 0 <= iteration as int <= WARN_THRESHOLD as int
-        invariant cb' == CBCombinerToken(node.nodeId as int, CB.CombinerReading(CB.ReaderRange(ltail as int, gtail as int, if !done then i as nat else i as nat + 1)), cb.cb_loc)
+        invariant cb' == CBCombinerToken(node.nodeId as int, CB.CombinerReading(CB.ReaderRange(ltail as int, gtail as int, if !done then i as nat else i as nat + 1)), cb.cb_loc_s)
         invariant ghost_replica'.state == nrifc.I(actual_replica')
         invariant ghost_replica'.nodeId == node.nodeId as int
         invariant combinerState'.nodeId == prev_combinerState.nodeId
