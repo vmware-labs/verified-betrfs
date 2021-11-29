@@ -429,10 +429,15 @@ module MultiRwTokens(rw: MultiRw) {
   ensures token2' == T.Token(token1.loc, expected_value2)
   ensures token3' == T.Token(token1.loc, expected_value3)
   ensures retrieved_values == expected_retrieved_values
-
-  ghost method XXX_TODO_invent<A>() returns (a: A)
-  glinear method XXX_TODO_invent_glinear<A>() returns (glinear a: A)
-  glinear method XXX_TODO_dispose_glinear<A>(glinear a: A)
+  {
+    glinear var x := T.join(token1, token2);
+    x := T.join(x, token3);
+    glinear var y;
+    y, retrieved_values := withdraw_many(x,
+        rw.dot(rw.dot(expected_value1, expected_value2), expected_value3),
+        expected_retrieved_values);
+    token1', token2', token3' := split3(y, expected_value1, expected_value2, expected_value3);
+  }
 
   glinear method withdraw_many(
       glinear token: Token,
