@@ -6,7 +6,8 @@ module Init(nrifc: NRIfc) {
   import opened ILT = InfiniteLogTokens(nrifc)
   import opened IL = InfiniteLogSSM(nrifc)
   import opened CBT = CyclicBufferTokens(nrifc)
-  import opened FCT = FlatCombinerTokens
+  import FC = FlatCombiner
+  import opened FlatCombinerTokens
   import opened LinearSequence_i
   import opened LinearSequence_s
   import opened LinearMaybe
@@ -21,7 +22,7 @@ module Init(nrifc: NRIfc) {
   import opened Cells
   import LC = LinearCells
   import opened GhostLoc
-  import opened Impl = Impl(nrifc)
+  import opened Im = Impl(nrifc)
   import opened Constants
   import Tokens = TicketStubToken(nrifc, IL)
   import opened TicketStubSingletonLoc
@@ -81,22 +82,22 @@ module Init(nrifc: NRIfc) {
         j !in contexts && j !in owned_contexts
 
     invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].tid as int == j
-    invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].fc_client == FCClient(fc_loc, j, FCClientIdle)
+    invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].fc_client == FCClient(fc_loc, j, FC.FCClientIdle)
     invariant forall j: nat | 0 <= j < i as int :: owned_contexts[j].cell_contents.cell == contexts[j].cell.inner
     invariant forall j: nat | 0 <= j < i as int :: && owned_contexts[j].client_counter.loc == replica.client_counter_loc
 
     invariant forall j: nat | 0 <= j < i as int ::
         && owned_contexts[j].tid as int == j
-        && owned_contexts[j].fc_client == FCClient(fc_loc, j, FCClientIdle)
+        && owned_contexts[j].fc_client == FCClient(fc_loc, j, FC.FCClientIdle)
         && owned_contexts[j].cell_contents.cell == contexts[j].cell.inner
         && owned_contexts[j].client_counter.loc == replica.client_counter_loc
         && |owned_contexts[j].activeIdxs| == MAX_THREADS_PER_REPLICA as int
     invariant forall j: nat | 0 <= j < i as int ::
         contexts[j].WF(j, fc_loc)
     invariant forall j: nat | i as int <= j < MAX_THREADS_PER_REPLICA as int ::
-        j in fc_slots && fc_slots[j] == FCSlot(fc_loc, j, FCEmpty)
+        j in fc_slots && fc_slots[j] == FCSlot(fc_loc, j, FC.FCEmpty)
     invariant forall j: nat | i as int <= j < MAX_THREADS_PER_REPLICA as int ::
-        j in fc_clients && fc_clients[j] == FCClient(fc_loc, j, FCClientIdle)
+        j in fc_clients && fc_clients[j] == FCClient(fc_loc, j, FC.FCClientIdle)
     invariant client_counter_supply.loc == replica.client_counter_loc
     invariant client_counter_supply.n >= MAX_THREADS_PER_REPLICA as int - i as int
     {

@@ -2,31 +2,16 @@ include "../framework/AsyncSSM.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Base/Option.s.dfy"
 include "Constants.i.dfy"
+include "../framework/Rw.i.dfy"
 
-module FlatCombinerTokens {
+module FlatCombiner refines Rw {
   import opened RequestIds
-  import opened NativeTypes
-  import opened GhostLoc
-  import opened Constants
-  import opened Options
 
-  // Allows clients to enqueue requests
-  // The combiner reads the requests and returns responses
-  // This machinery allows us make sure the requestId of the request & response match
+  datatype Elem = Elem(ghost rid: nat)
 
   datatype FCClientState =
     | FCClientIdle
     | FCClientWaiting(ghost rid: RequestId)
-  
-  datatype FCClient = FCClient(ghost loc: Loc, ghost tid: nat, ghost state: FCClientState)
-
-  datatype Elem = Elem(ghost rid: nat)
-  datatype FCCombinerState =
-    // no 'idle' state - just use Collecting(0, [])
-    | FCCombinerCollecting(ghost elems: seq<Option<Elem>>)
-    | FCCombinerResponding(ghost elems: seq<Option<Elem>>, ghost idx: nat)
-
-  datatype FCCombiner = FCCombiner(ghost loc: Loc, ghost state: FCCombinerState)
 
   datatype FCSlotState =
     | FCEmpty
@@ -34,6 +19,34 @@ module FlatCombinerTokens {
     | FCInProgress(ghost rid: RequestId)
     | FCResponse(ghost rid: RequestId)
 
+  datatype FCCombinerState =
+    // no 'idle' state - just use Collecting([])
+    | FCCombinerCollecting(ghost elems: seq<Option<Elem>>)
+    | FCCombinerResponding(ghost elems: seq<Option<Elem>>, ghost idx: nat)
+
+  datatype M = M(
+    ghost clients: map<nat, FCClientState>,
+    ghost slots: map<nat, FCSlotState>,
+    ghost combiner: Option<FCCombinerState>
+  ) | Fail
+}
+
+module FlatCombinerTokens {
+  import opened RequestIds
+  import opened NativeTypes
+  import opened GhostLoc
+  import opened Constants
+  import opened Options
+  import opened FlatCombiner
+
+  // Allows clients to enqueue requests
+  // The combiner reads the requests and returns responses
+  // This machinery allows us make sure the requestId of the request & response match
+  
+  datatype FCClient = FCClient(ghost loc: Loc, ghost tid: nat, ghost state: FCClientState)
+  
+  datatype FCCombiner = FCCombiner(ghost loc: Loc, ghost state: FCCombinerState)
+  
   datatype FCSlot = FCSlot(ghost loc: Loc, ghost tid: nat, ghost state: FCSlotState)
 
   // Ops for the combiner

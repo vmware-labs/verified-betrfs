@@ -45,7 +45,8 @@ module Impl(nrifc: NRIfc) {
   import opened ILT = InfiniteLogTokens(nrifc)
   import opened IL = InfiniteLogSSM(nrifc)
   import opened CBT = CyclicBufferTokens(nrifc)
-  import opened FCT = FlatCombinerTokens
+  import FC = FlatCombiner
+  import opened FlatCombinerTokens
   import opened LinearSequence_i
   import opened LinearSequence_s
   import opened NativeTypes
@@ -129,7 +130,7 @@ module Impl(nrifc: NRIfc) {
   {
     && ((v == 0) ==> (
       && g.glSome? 
-      && g.value.flatCombiner.state == FCCombinerCollecting([])
+      && g.value.flatCombiner.state == FC.FCCombinerCollecting([])
       && g.value.flatCombiner.loc == fc_loc
       && g.value.gops.v.Some?
       && g.value.gops.lcell == ops
@@ -181,7 +182,7 @@ module Impl(nrifc: NRIfc) {
     {
       && |activeIdxs| == MAX_THREADS_PER_REPLICA as int
       && node.WF()
-      && fc_client == FCClient(node.fc_loc, tid as nat, FCClientIdle)
+      && fc_client == FCClient(node.fc_loc, tid as nat, FC.FCClientIdle)
       && 0 <= tid < MAX_THREADS_PER_REPLICA
       && cell_contents.cell == node.contexts[tid as nat].cell.inner
       && client_counter.loc == node.replica.client_counter_loc
@@ -385,7 +386,7 @@ module Impl(nrifc: NRIfc) {
           //assert old_value > 0; // doesn't believe me
           //assert contents.glNone?;
 
-          //assert fcstate'.state == FCCombinerCollecting(0, []);
+          //assert fcstate'.state == FC.FCCombinerCollecting(0, []);
           //assert fcstate'.loc == node.fc_loc;
           //assert gops''.v.Some?;
           //assert gops''.lcell == node.ops;
@@ -424,11 +425,11 @@ module Impl(nrifc: NRIfc) {
   requires node.WF() 
   requires |ops| == MAX_THREADS_PER_REPLICA as int
   requires |responses| == MAX_THREADS_PER_REPLICA as int
-  requires flatCombiner.state == FCCombinerCollecting([])
+  requires flatCombiner.state == FC.FCCombinerCollecting([])
   requires flatCombiner.loc == node.fc_loc
   requires |old_activeIdxs| == MAX_THREADS_PER_REPLICA as int
   ensures flatCombiner'.loc == node.fc_loc
-  ensures flatCombiner'.state == FCCombinerCollecting([])
+  ensures flatCombiner'.state == FC.FCCombinerCollecting([])
   ensures |ops'| == MAX_THREADS_PER_REPLICA as int
   ensures |responses'| == MAX_THREADS_PER_REPLICA as int
   ensures |activeIdxs| == MAX_THREADS_PER_REPLICA as int
@@ -487,7 +488,7 @@ module Impl(nrifc: NRIfc) {
       glinear opCellPermissions: map<nat, CellContents<OpResponse>>)
   requires node.WF()
   requires flatCombiner.loc == node.fc_loc
-  requires flatCombiner.state == FCCombinerCollecting([])
+  requires flatCombiner.state == FC.FCCombinerCollecting([])
   requires |old_activeIdxs| == |ops| == MAX_THREADS_PER_REPLICA as int
   ensures |activeIdxs| == |ops'| == |ops|
   ensures flatCombiner'.loc == node.fc_loc
@@ -639,7 +640,7 @@ module Impl(nrifc: NRIfc) {
       0, |flatCombiner.state.elems|,
       0, |requestIds|)
   ensures flatCombiner'.loc == node.fc_loc
-  ensures flatCombiner'.state == FCCombinerCollecting([])
+  ensures flatCombiner'.state == FC.FCCombinerCollecting([])
   {
     flatCombiner' := flatCombiner;
     glinear var updates' := updates;
@@ -796,7 +797,7 @@ module Impl(nrifc: NRIfc) {
     var iter: uint32 := 0;
     while !done
     invariant !done ==>
-      && fc_client == FCClient(node.fc_loc, tid as int, FCClientWaiting(ticket.rid))
+      && fc_client == FCClient(node.fc_loc, tid as int, FC.FCClientWaiting(ticket.rid))
     invariant done ==>
       && cell_contents_opt.glSome?
       && stub_opt.glSome?
@@ -804,7 +805,7 @@ module Impl(nrifc: NRIfc) {
       && stub_opt.value.us.UpdateDone? 
       && stub_opt.value.rid == ticket.rid
       && stub_opt.value.us.ret == result
-      && fc_client == FCClient(node.fc_loc, tid as int, FCClientIdle)
+      && fc_client == FCClient(node.fc_loc, tid as int, FC.FCClientIdle)
     invariant |activeIdxs| == MAX_THREADS_PER_REPLICA as int
     invariant 0 <= iter < RESPONSE_CHECK_INTERVAL
     decreases *
