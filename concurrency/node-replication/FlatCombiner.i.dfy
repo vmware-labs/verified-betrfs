@@ -273,14 +273,14 @@ module FlatCombiner refines Rw {
     requires m.M?
   {
     && tid in m.slots
-    && m.slots[tid].FCRequest?
+    && m.slots[tid].FCInProgress?
   }
 
   predicate SlotHasResponse(m: M, tid: nat)
     requires m.M?
   {
     && tid in m.slots
-    && m.slots[tid].FCRequest?
+    && m.slots[tid].FCResponse?
   }
 
   /*
