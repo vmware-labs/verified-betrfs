@@ -1,7 +1,7 @@
 include "NRSimple.i.dfy"
 include "InfiniteLog.i.dfy"
 
-abstract module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
+module InfiniteLog_Refines_NRSimple(nrifc: NRIfc) refines
   Refinement(
     AsyncIfc(nrifc),
     TicketStubStateMachine(nrifc, InfiniteLogSSM(nrifc)), // A
