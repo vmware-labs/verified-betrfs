@@ -209,6 +209,7 @@ pub fn createLog() -> &'static mut LogWrapper {
 pub struct VSpace {
     pub pml4: Pin<Box<PML4>>,
     pub mem_counter: usize,
+    mapping: mmap::MemoryMap,
     mem_ptr: *mut u8,
     //allocs: Vec<(*mut u8, usize)>,
 }
@@ -281,17 +282,71 @@ impl Drop for VSpace {
     }
 }
 
+pub const TWO_MIB: usize = 2 * 1024 * 1024;
+pub const ONE_GIB: usize = 1024 * 1024 * 1024;
+
+// sudo sh -c "echo 16 > /sys/devices/system/node/node0/hugepages/hugepages-1048576kB/nr_hugepages"
+// sudo sh -c "echo 16 > /sys/devices/system/node/node1/hugepages/hugepages-1048576kB/nr_hugepages"
+// sudo sh -c "echo 16 > /sys/devices/system/node/node2/hugepages/hugepages-1048576kB/nr_hugepages"
+// sudo sh -c "echo 16 > /sys/devices/system/node/node3/hugepages/hugepages-1048576kB/nr_hugepages"
+
+pub fn alloc(size: usize, ps: usize) -> mmap::MemoryMap {
+    use libc;
+    use libc::{MAP_ANON, MAP_HUGETLB, MAP_POPULATE, MAP_SHARED};
+    use mmap;
+    
+    const MAP_HUGE_SHIFT: usize = 26;
+    const MAP_HUGE_2MB: i32 = 21 << MAP_HUGE_SHIFT;
+    const MAP_HUGE_1GB: i32 = 30 << MAP_HUGE_SHIFT;
+    
+    pub const FOUR_KIB: usize = 4 * 1024;
+    const PAGESIZE: u64 = FOUR_KIB as u64;
+    
+    
+    assert!(size % FOUR_KIB == 0|| size % TWO_MIB ==0 || size % ONE_GIB ==0);
+
+    let mut non_standard_flags = MAP_SHARED | MAP_ANON | MAP_POPULATE;
+    match ps {
+        TWO_MIB => non_standard_flags |= MAP_HUGETLB | MAP_HUGE_2MB,
+        ONE_GIB => non_standard_flags |= MAP_HUGETLB | MAP_HUGE_1GB,
+        _ => (),
+    }
+
+    let flags = [
+        mmap::MapOption::MapNonStandardFlags(non_standard_flags),
+        mmap::MapOption::MapReadable,
+        mmap::MapOption::MapWritable,
+    ];
+    let res = mmap::MemoryMap::new(size, &flags).expect("can't allocate?");
+    if res.data().is_null() {
+        panic!("can't get memory, do we have reserved huge-pages?");
+    }
+
+    // Make sure memory is not swapped:
+    //let lock_ret = unsafe { libc::mlock(res.data() as *const libc::c_void, res.len()) };
+    //if lock_ret == -1 {
+    //    panic!("can't mlock mem");
+    //}
+    //assert!(lock_ret == 0);
+
+    res
+}
+
 // cpp glue fun
 pub fn createVSpace() -> &'static mut VSpace {
     //env_logger::try_init();
     //log::error!("createVSpace");
-    let mem_ptr = unsafe { alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(1075851264, 4096)) };
+    let mapping = alloc(2*ONE_GIB, ONE_GIB); 
+    let mem_ptr = mapping.data();
+
+    //unsafe { alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(1075851264, 4096)) };
 
     let vs = Box::leak(Box::new(VSpace {
         pml4: Box::pin(
             [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
         ),
         //allocs: Vec::with_capacity(1024),
+        mapping,
         mem_counter: 4096,
         mem_ptr
     }));
@@ -311,15 +366,20 @@ pub fn createVSpace() -> &'static mut VSpace {
 impl Default for VSpace {
     fn default() -> VSpace {
         
+        let mapping = alloc(2*ONE_GIB, ONE_GIB); 
+        let mem_ptr = mapping.data();
+
         // make sure the memory for ptable is some contiguous block
         // this allows Linux / THP to kick in and increase tput by ~60Mops
         // make sure to do:
         // sudo sh -c "echo always > /sys/kernel/mm/transparent_hugepage/enabled"
-        let mem_ptr = unsafe { alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(1075851264, 4096)) };
+        //let mem_ptr = unsafe { alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(1075851264, 4096)) };
+
         let mut vs = VSpace {
             pml4: Box::pin(
                 [PML4Entry::new(PAddr::from(0x0u64), PML4Flags::empty()); PAGE_SIZE_ENTRIES],
             ),
+            mapping,
             mem_counter: 4096,
             mem_ptr
             //allocs: Vec::with_capacity(1024),

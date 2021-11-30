@@ -57,6 +57,9 @@ def run(bench, n_replicas, n_threads, reads_pct, run_id_num):
 
 def run_all():
     subprocess.run('sudo sh -c "echo always > /sys/kernel/mm/transparent_hugepage/enabled"', shell=True, check=False)
+    for nid in range(0, 4):
+        subprocess.run('sudo sh -c "echo 4 > /sys/devices/system/node/node{}/hugepages/hugepages-1048576kB/nr_hugepages"'.format(nid), shell=True, check=False)
+
     subprocess.run('rm data*.json *throughput*.pdf *throughput*.png', shell=True, check=False)
 
     try:
