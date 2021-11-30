@@ -16,19 +16,21 @@ NODES = 4
 MAX_THREADS = NODES * CORES_PER_NODE
 
 NR_BENCHES = ['dafny_nr', 'rust_nr']
-OTHER_BENCHES = ['dafny_rwlock']
-READS_PCT = [100, 10, 0]
+OTHER_BENCHES = ['dafny_rwlock', 'shfllock', 'mcs', 'cpp_shared_mutex']
+READS_PCT = [100, 95, 50, 0, 90]
 
-N_REPLICAS = [4]
+N_REPLICAS = [1, 2, 4]
 
-ITERS = 3
+ITERS = 5
+
+TRANSPARENT_HUGEPAGES = True
 
 def reorder(l):
   if len(l) < 2:
     return l
   p = len(l) // 2
   return [l[p]] + reorder(l[p+1:] + l[:p])
-N_THREADS = [MAX_THREADS, 4] + reorder(list(range(16, MAX_THREADS, 16)))
+N_THREADS = [MAX_THREADS, 4] + reorder(list(range(12, MAX_THREADS, 12)))
 
 def bench_path(n_replicas):
     p = './app-%dreplicas' % n_replicas
@@ -56,7 +58,7 @@ def run(bench, n_replicas, n_threads, reads_pct, run_id_num):
     subprocess.run(cmd, shell=True, check=False)
 
 def run_all():
-    subprocess.run('sudo sh -c "echo always > /sys/kernel/mm/transparent_hugepage/enabled"', shell=True, check=False)
+    subprocess.run('sudo sh -c "echo %s > /sys/kernel/mm/transparent_hugepage/enabled"' % ('never', 'always')[TRANSPARENT_HUGEPAGES], shell=True, check=False)
     for nid in range(0, 4):
         subprocess.run('sudo sh -c "echo 4 > /sys/devices/system/node/node{}/hugepages/hugepages-1048576kB/nr_hugepages"'.format(nid), shell=True, check=False)
 

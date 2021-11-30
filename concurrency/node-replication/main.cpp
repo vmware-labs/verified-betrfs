@@ -201,9 +201,9 @@ struct cpp_shared_mutex_monitor {
   #endif
   }
 
-  void* create_thread_context(uint8_t thread_id) { return nullptr; }
+  void* create_thread_context(uint8_t thread_id, uint32_t core_id) { return nullptr; }
 
-  uint64_t read(uint8_t thread_id, void* thread_context, uint64_t key) {
+  uint64_t read(uint8_t thread_id, uint32_t core_id, void* thread_context, uint64_t key) {
   #if USE_COUNTER
     s_lock lock{mutex};
     return value;
@@ -213,7 +213,7 @@ struct cpp_shared_mutex_monitor {
   #endif
   }
 
-  void update(uint8_t thread_id, void* thread_context, uint64_t key, uint64_t value) {
+  void update(uint8_t thread_id, uint32_t core_id, void* thread_context, uint64_t key, uint64_t value) {
   #if USE_COUNTER
     x_lock lock{mutex};
     ++value;
@@ -223,7 +223,7 @@ struct cpp_shared_mutex_monitor {
   #endif
   }
 
-  void finish_up(uint8_t thread_id, void* thread_context) {}
+  void finish_up(uint8_t thread_id, uint32_t core_id, void* thread_context) {}
 };
 
 // - C MCS Lock Benchmarking -
@@ -431,7 +431,7 @@ struct dafny_nr_monitor{
     Tuple<uint64_t, nr::ThreadOwnedContext> r =
       nr::__default::do__read(
         helper.get_nr(),
-        helper.get_node(core_id),
+        *helper.get_node(core_id),
         op,
         *c);
 
@@ -447,7 +447,7 @@ struct dafny_nr_monitor{
 #endif
     nr::__default::do__update(
       helper.get_nr(),
-      helper.get_node(core_id),
+      *helper.get_node(core_id),
       op,
       *c);
   }
@@ -456,7 +456,7 @@ struct dafny_nr_monitor{
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
     nr::__default::try__combine(
       helper.get_nr(),
-      helper.get_node(core_id),
+      *helper.get_node(core_id),
       c->tid,
       c->activeIdxs);
   }
@@ -582,6 +582,14 @@ int main(int argc, char* argv[]) {
   disable_dvfs();
 
   core_map cores{fill_policy, core_map::core_policy::CORES_FILL};
+
+  // It's possible to run with 4 Dafny NR nodes, but then only create
+  // enough threads such that, say, threads only run on 3 of the 4
+  // NUMA nodes. In this case, things would deadlock since no threads
+  // drive the 4th replica. Just bail if we run into a configuration
+  // that would suffer from that problem.
+  assert(cores.n_active_nodes(n_threads, &nr_helper::get_node_id) == nr_helper::num_replicas());
+
   // The main thread mainly just sleeps, but pin it before constructing
   // all the benchmark state to ensure determinism wrt to first-touch policy.
   cores.pin(0);

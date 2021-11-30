@@ -82,7 +82,13 @@ class core_map {
       std::cerr << "Using NUMA fill policy; ignoring hyperthread policy"
                 << std::endl;
         for (uint32_t n = 0; n < n_nodes; n++) {
-          for (uint32_t c = 0; c < n_cores; c++) {
+          for (uint32_t c = 0; c < n_cores / 2; c++) {
+            if (numa_bitmask_isbitset(&*nodecpus[n], c))
+              thread_to_core_map[i++] = c;
+          }
+        }
+        for (uint32_t n = 0; n < n_nodes; n++) {
+          for (uint32_t c = n_cores / 2; c < n_cores; c++) {
             if (numa_bitmask_isbitset(&*nodecpus[n], c))
               thread_to_core_map[i++] = c;
           }
@@ -120,6 +126,13 @@ class core_map {
       std::cerr << "setaffinity failed" << std::endl;
     }
     return core_id;
+  }
+
+  uint32_t n_active_nodes(uint32_t n_threads, uint32_t (*get_node_id)(uint32_t)) {
+    std::unordered_set<uint32_t> active_nodes{};
+    for (uint32_t i = 0; i < n_threads; ++i)
+      active_nodes.insert(get_node_id(thread_to_core_map[i]));
+    return active_nodes.size();
   }
 
   numa_policy get_numa_policy() { return nm_policy; }

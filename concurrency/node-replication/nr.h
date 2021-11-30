@@ -76,8 +76,12 @@ class nr_helper {
 
   nr::NR& get_nr() { return *nr; }
 
-  nr::Node& get_node(uint32_t core_id) {
-    return *nodes[core_id % num_replicas()];
+  static uint32_t get_node_id(uint32_t core_id) {
+    return core_id % num_replicas();
+  }
+
+  nr::Node* get_node(uint32_t core_id) {
+    return nodes[get_node_id(core_id)].get();
   }
 
   void init_nr() {
@@ -164,11 +168,13 @@ class nr_rust_helper {
     // NYI
   }
 
-  //nr::NR& get_nr() { return *nr; }
+  static uint32_t get_node_id(uint32_t core_id) {
+    return core_id % num_replicas();
+  }
 
   ReplicaWrapper *get_node(uint32_t core_id)
   {
-    return nodes[core_id % num_replicas()];
+    return nodes[get_node_id(core_id)];
   }
 
   void init_nr() {}
