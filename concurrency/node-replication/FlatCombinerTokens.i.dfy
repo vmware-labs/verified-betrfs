@@ -4,33 +4,6 @@ include "../../lib/Base/Option.s.dfy"
 include "Constants.i.dfy"
 include "../framework/Rw.i.dfy"
 
-module FlatCombiner refines Rw {
-  import opened RequestIds
-
-  datatype Elem = Elem(ghost rid: nat)
-
-  datatype FCClientState =
-    | FCClientIdle
-    | FCClientWaiting(ghost rid: RequestId)
-
-  datatype FCSlotState =
-    | FCEmpty
-    | FCRequest(ghost rid: RequestId)
-    | FCInProgress(ghost rid: RequestId)
-    | FCResponse(ghost rid: RequestId)
-
-  datatype FCCombinerState =
-    // no 'idle' state - just use Collecting([])
-    | FCCombinerCollecting(ghost elems: seq<Option<Elem>>)
-    | FCCombinerResponding(ghost elems: seq<Option<Elem>>, ghost idx: nat)
-
-  datatype M = M(
-    ghost clients: map<nat, FCClientState>,
-    ghost slots: map<nat, FCSlotState>,
-    ghost combiner: Option<FCCombinerState>
-  ) | Fail
-}
-
 module FlatCombinerTokens {
   import opened RequestIds
   import opened NativeTypes
@@ -42,11 +15,11 @@ module FlatCombinerTokens {
   // Allows clients to enqueue requests
   // The combiner reads the requests and returns responses
   // This machinery allows us make sure the requestId of the request & response match
-  
+
   datatype FCClient = FCClient(ghost loc: Loc, ghost tid: nat, ghost state: FCClientState)
-  
+
   datatype FCCombiner = FCCombiner(ghost loc: Loc, ghost state: FCCombinerState)
-  
+
   datatype FCSlot = FCSlot(ghost loc: Loc, ghost tid: nat, ghost state: FCSlotState)
 
   // Ops for the combiner
@@ -79,7 +52,7 @@ module FlatCombinerTokens {
           FCCombinerCollecting(
             comb.state.elems + [Some(Elem(slot.state.rid))]))
       && slot' == slot.(state := FCInProgress(slot.state.rid))
-    
+
   glinear method combiner_goto_responding(glinear comb: FCCombiner)
   returns (glinear comb': FCCombiner)
   requires comb.state.FCCombinerCollecting?
