@@ -136,10 +136,10 @@ void run_thread(
     benchmark_state& state,
     Monitor& monitor)
 {
-  state.cores.pin(thread_id);
+  uint32_t core_id = state.cores.pin(thread_id);
 
   key_generator keygen{thread_id};
-  void* thread_context = monitor.create_thread_context(thread_id);
+  void* thread_context = monitor.create_thread_context(thread_id, core_id);
 
   state.n_threads_ready++;
   while (!state.start_benchmark) {}
@@ -153,11 +153,11 @@ void run_thread(
       uint64_t key = keygen.next();
       uint64_t val = key;
       if (reads_vruntime <= updates_vruntime) {
-        monitor.read(thread_id, thread_context, key);
+        monitor.read(thread_id, core_id, thread_context, key);
         ++reads;
         reads_vruntime += state.reads_stride;
       } else { // do an update
-        monitor.update(thread_id, thread_context, key, val);
+        monitor.update(thread_id, core_id, thread_context, key, val);
         ++updates;
         updates_vruntime += state.updates_stride;
       }
@@ -166,7 +166,7 @@ void run_thread(
 
   state.n_threads_finished++;
   while (state.n_threads_finished < state.n_threads)
-    monitor.finish_up(thread_id, thread_context);
+    monitor.finish_up(thread_id, core_id, thread_context);
 
   state.total_updates += updates;
   state.total_reads += reads;
@@ -253,11 +253,11 @@ struct mcs_monitor {
     mcs_mutex_destroy(mutex);
   }
 
-  void* create_thread_context(uint8_t thread_id) {
+  void* create_thread_context(uint8_t thread_id, uint32_t core_id) {
     return new mcs_node_t{}; // Just leak it...
   }
 
-  uint64_t read(uint8_t thread_id, void* thread_context, uint64_t key) {
+  uint64_t read(uint8_t thread_id, uint32_t core_id, void* thread_context, uint64_t key) {
     mcs_node_t* me = static_cast<mcs_node_t*>(thread_context);
     uint64_t r;
     mcs_mutex_lock(mutex, me);
@@ -270,7 +270,7 @@ struct mcs_monitor {
     return r;
   }
 
-  void update(uint8_t thread_id, void* thread_context, uint64_t key, uint64_t value) {
+  void update(uint8_t thread_id, uint32_t core_id, void* thread_context, uint64_t key, uint64_t value) {
     mcs_node_t* me = static_cast<mcs_node_t*>(thread_context);
     mcs_mutex_lock(mutex, me);
   #if USE_COUNTER
@@ -281,7 +281,7 @@ struct mcs_monitor {
     mcs_mutex_unlock(mutex, me);
   }
 
-  void finish_up(uint8_t thread_id, void* thread_context) {}
+  void finish_up(uint8_t thread_id, uint32_t core_id, void* thread_context) {}
 };
 
 // - ShflLock Benchmarking -
@@ -311,12 +311,12 @@ struct shfllock_monitor {
     aqs_mutex_destroy(mutex);
   }
 
-  void* create_thread_context(uint8_t thread_id) {
+  void* create_thread_context(uint8_t thread_id, uint32_t core_id) {
     aqs_mutex_set_cur_thread_id(thread_id);
     return new aqs_node_t{}; // Just leak it...
   }
 
-  uint64_t read(uint8_t thread_id, void* thread_context, uint64_t key) {
+  uint64_t read(uint8_t thread_id, uint32_t core_id, void* thread_context, uint64_t key) {
     aqs_node_t* me = static_cast<aqs_node_t*>(thread_context);
     uint64_t r;
     aqs_mutex_lock(mutex, me);
@@ -329,7 +329,7 @@ struct shfllock_monitor {
     return r;
   }
 
-  void update(uint8_t thread_id, void* thread_context, uint64_t key, uint64_t value) {
+  void update(uint8_t thread_id, uint32_t core_id, void* thread_context, uint64_t key, uint64_t value) {
     aqs_node_t* me = static_cast<aqs_node_t*>(thread_context);
     aqs_mutex_lock(mutex, me);
   #if USE_COUNTER
@@ -340,7 +340,7 @@ struct shfllock_monitor {
     aqs_mutex_unlock(mutex, me);
   }
 
-  void finish_up(uint8_t thread_id, void* thread_context) {}
+  void finish_up(uint8_t thread_id, uint32_t core_id, void* thread_context) {}
 };
 
 // - RwLock Benchmarking -
@@ -373,11 +373,11 @@ struct dafny_rwlock_monitor {
   #endif
   }
 
-  void* create_thread_context(uint8_t thread_id) {
+  void* create_thread_context(uint8_t thread_id, uint32_t core_id) {
     return nullptr;
   }
 
-  uint64_t read(uint8_t thread_id, void* thread_context, uint64_t key) {
+  uint64_t read(uint8_t thread_id, uint32_t core_id, void* thread_context, uint64_t key) {
   #if USE_COUNTER
     auto shared_guard = lock.acquire__shared(thread_id);
     uint64_t value = *rwlock::__default::borrow__shared(lock, shared_guard);
@@ -392,7 +392,7 @@ struct dafny_rwlock_monitor {
   #endif
   }
 
-  void update(uint8_t thread_id, void* thread_context, uint64_t key, uint64_t value) {
+  void update(uint8_t thread_id, uint32_t core_id, void* thread_context, uint64_t key, uint64_t value) {
 #if USE_COUNTER
     uint64_t val = lock.acquire();
     lock.release(val + 1);
@@ -403,7 +403,7 @@ struct dafny_rwlock_monitor {
 #endif
   }
 
-  void finish_up(uint8_t thread_id, void* thread_context) {}
+  void finish_up(uint8_t thread_id, uint32_t core_id, void* thread_context) {}
 };
 
 // - NR Benchmarking -
@@ -417,11 +417,11 @@ struct dafny_nr_monitor{
     helper.init_nr();
   }
 
-  void* create_thread_context(uint8_t thread_id) {
-    return helper.register_thread(thread_id);
+  void* create_thread_context(uint8_t thread_id, uint32_t core_id) {
+    return helper.register_thread(core_id);
   }
 
-  uint64_t read(uint8_t thread_id, void* context, uint64_t key) {
+  uint64_t read(uint8_t thread_id, uint32_t core_id, void* context, uint64_t key) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
 #if USE_COUNTER
     auto op = CounterIfc_Compile::ReadonlyOp{}; 
@@ -431,14 +431,14 @@ struct dafny_nr_monitor{
     Tuple<uint64_t, nr::ThreadOwnedContext> r =
       nr::__default::do__read(
         helper.get_nr(),
-        helper.get_node(thread_id),
+        helper.get_node(core_id),
         op,
         *c);
 
     return r.get<0>();
   }
 
-  void update(uint8_t thread_id, void* context, uint64_t key, uint64_t value) {
+  void update(uint8_t thread_id, uint32_t core_id, void* context, uint64_t key, uint64_t value) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
 #if USE_COUNTER
     auto op = CounterIfc_Compile::UpdateOp{}; 
@@ -447,16 +447,16 @@ struct dafny_nr_monitor{
 #endif
     nr::__default::do__update(
       helper.get_nr(),
-      helper.get_node(thread_id),
+      helper.get_node(core_id),
       op,
       *c);
   }
 
-  void finish_up(uint8_t thread_id, void* context) {
+  void finish_up(uint8_t thread_id, uint32_t core_id, void* context) {
     auto c = static_cast<nr::ThreadOwnedContext*>(context);
     nr::__default::try__combine(
       helper.get_nr(),
-      helper.get_node(thread_id),
+      helper.get_node(core_id),
       c->tid,
       c->activeIdxs);
   }
@@ -473,32 +473,32 @@ struct rust_nr_monitor{
     helper.init_nr();
   }
 
-  void* create_thread_context(uint8_t thread_id) {
-    return (void*)helper.register_thread(thread_id);
+  void* create_thread_context(uint8_t thread_id, uint32_t core_id) {
+    return (void*)helper.register_thread(core_id);
   }
 
-  uint64_t read(uint8_t thread_id, void* context, uint64_t key) {
+  uint64_t read(uint8_t thread_id, uint32_t core_id, void* context, uint64_t key) {
     size_t replica_token = (size_t) context;
 #if USE_COUNTER
     #error "NYI"
 #else
-    helper.get_node(thread_id)->ReplicaResolve(replica_token, key);
+    helper.get_node(core_id)->ReplicaResolve(replica_token, key);
 #endif
     return 0;
   }
 
-  void update(uint8_t thread_id, void* context, uint64_t key, uint64_t value) {
+  void update(uint8_t thread_id, uint32_t core_id, void* context, uint64_t key, uint64_t value) {
     size_t replica_token = (size_t)context;
 #if USE_COUNTER
   #error "NYI"
 #else
-    bool ok = helper.get_node(thread_id)->ReplicaMap(replica_token, key, value);
+    bool ok = helper.get_node(core_id)->ReplicaMap(replica_token, key, value);
 #endif
   }
 
-  void finish_up(uint8_t thread_id, void* context) {
+  void finish_up(uint8_t thread_id, uint32_t core_id, void* context) {
     auto replica_token = (size_t)context;
-    helper.get_node(thread_id)->ReplicaResolve(replica_token, 0x0);
+    helper.get_node(core_id)->ReplicaResolve(replica_token, 0x0);
   }
 };
 

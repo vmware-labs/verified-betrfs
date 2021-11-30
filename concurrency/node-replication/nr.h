@@ -76,8 +76,8 @@ class nr_helper {
 
   nr::NR& get_nr() { return *nr; }
 
-  nr::Node& get_node(uint8_t thread_id) {
-    return *nodes[thread_id % num_replicas()];
+  nr::Node& get_node(uint32_t core_id) {
+    return *nodes[core_id % num_replicas()];
   }
 
   void init_nr() {
@@ -88,17 +88,16 @@ class nr_helper {
     assert(node_creation_tokens->size() == num_replicas());
   }
 
-  nr::ThreadOwnedContext* register_thread(uint8_t thread_id) {
+  nr::ThreadOwnedContext* register_thread(uint32_t core_id) {
+    const uint32_t node_id = core_id % num_replicas();
 
-    const uint8_t node_id = thread_id % num_replicas();
-
-    if (thread_id / num_replicas() == 0) {
+    if (core_id / num_replicas() == 0) {
       auto token =
         &node_creation_tokens->at(node_id).a;
       auto r = nrinit::__default::initNode(*token);
-      std::cerr << "thread_id " << static_cast<uint32_t>(thread_id)
+      std::cerr << "thread on core_id " << core_id
                 << " done initializing node_id "
-                << static_cast<uint32_t>(node_id) << std::endl;
+                << node_id << std::endl;
 
       nr::Node* node = new nr::Node{r.get<0>()};
 
@@ -115,11 +114,11 @@ class nr_helper {
     while (nodes_init < num_replicas())
       all_nodes_init.wait(lock);
 
-    const uint8_t context_index = thread_id / num_replicas();
+    const uint32_t context_index = core_id / num_replicas();
 
-    std::cerr << "thread_id " << static_cast<uint32_t>(thread_id)
-              << " registered with node_id " << static_cast<uint32_t>(node_id)
-              << " context " << static_cast<uint32_t>(context_index)
+    std::cerr << "thread on core_id " << core_id
+              << " registered with node_id " << node_id
+              << " context " << context_index
               << std::endl;
 
     return &(thread_owned_contexts[node_id]->at(context_index)).a;
@@ -167,21 +166,21 @@ class nr_rust_helper {
 
   //nr::NR& get_nr() { return *nr; }
 
-  ReplicaWrapper *get_node(uint8_t thread_id)
+  ReplicaWrapper *get_node(uint32_t core_id)
   {
-    return nodes[thread_id % num_replicas()];
+    return nodes[core_id % num_replicas()];
   }
 
   void init_nr() {}
 
-  size_t register_thread(uint8_t thread_id) {
+  size_t register_thread(uint32_t core_id) {
     std::unique_lock<std::mutex> lock{init_mutex};
-    uint64_t node_id = thread_id % num_replicas();
+    uint64_t node_id = core_id % num_replicas();
 
-    if (thread_id / num_replicas() == 0)
+    if (core_id / num_replicas() == 0)
     {
       auto replica = createReplica(log);
-      std::cerr << "thread_id " << static_cast<uint32_t>(thread_id)
+      std::cerr << "thread on core_id " << core_id
                 << " done initializing node_id " << node_id << std::endl;
       nodes[node_id] = replica;
       ++nodes_init;
@@ -198,9 +197,9 @@ class nr_rust_helper {
     // fixed if we want to use this harness.
     auto context = nodes[node_id]->RegisterWrapper();
 
-    std::cerr << "thread_id " << static_cast<uint32_t>(thread_id)
-              << " registered with node_id " << static_cast<uint32_t>(node_id)
-              << " context " << static_cast<uint32_t>(context)
+    std::cerr << "thread on core_id" << core_id
+              << " registered with node_id " << node_id
+              << " context " << context
               << std::endl;
 
     return context;
