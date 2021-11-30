@@ -8,6 +8,9 @@ module GhostLinearSequence_i {
       ensures |s| == length as nat
       ensures forall i:nat | i < length as nat :: i !in s
 
+  method glseq_delete<A>(glinear s:glseq<A>)
+    requires forall i:nat | i < |s| as nat :: i !in s
+
   function glseqs<A>(l:glseq<A>):(s:seq<A>)
     ensures rank_is_less_than(s, l)
     ensures |s| == |glseqs_raw(l)|

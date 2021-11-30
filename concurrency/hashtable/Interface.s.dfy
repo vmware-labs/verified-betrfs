@@ -15,6 +15,7 @@ abstract module Interface(
   import PCM = TicketStubPCM(MapIfc, ssm)
   import T = Tokens(PCM)
   import MapIfc
+  import opened GhostLoc
 
   type SharedVars
 
@@ -29,8 +30,11 @@ abstract module Interface(
   method do_operation(shared s: SharedVars,
       ghost rid: nat, input: MapIfc.Input, glinear ticket: T.Token)
   returns (output: MapIfc.Output, glinear stub: T.Token)
+  decreases *
+  requires SharedWF(s)
   requires ticket.loc == TicketStubSingletonLoc.loc()
   requires ticket.val == ssm.Ticket(rid, input)
   ensures stub.loc == TicketStubSingletonLoc.loc()
   ensures ssm.IsStub(rid, output, stub.val)
+  ensures SharedWF(s)
 }

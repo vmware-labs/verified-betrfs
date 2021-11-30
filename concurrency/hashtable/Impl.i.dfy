@@ -78,6 +78,14 @@ module Impl {
   linear datatype IVariables = IVariables(
     linear row_mutexes: RowMutexTable,
     linear cap_mutex: Mutex<Cap>)
+  {
+    predicate Inv(loc: Loc)
+    {
+      && |row_mutexes| == FixedSize()
+      && RowMutexTableInv(row_mutexes, loc)
+      && (cap_mutex.inv == ((cap: Cap) => cap.Inv(loc)))
+    }
+  }
 
   linear datatype Variables = Variables(
     glinear token: Token,
@@ -98,19 +106,15 @@ module Impl {
     predicate Inv(iv: IVariables)
     {
       && token.val.Variables?
-
-      && |iv.row_mutexes| == FixedSize()
-      && RowMutexTableInv(iv.row_mutexes, token.loc)
-
       && |handles| == FixedSize()
 
+      && iv.Inv(token.loc)
       // have the handle ==> corresponds to the row mutex
       && (forall i: Index :: HasRowHandle(i) ==> 
         handles[i].m == iv.row_mutexes[i])
       // have the handle <==> have the row in token
       && (forall i: Index ::HasRowHandle(i) <==> token.val.table[i].Some?)
 
-      && (iv.cap_mutex.inv == ((cap: Cap) => cap.Inv(token.loc)))
     }
 
     predicate RangeOwnershipInv(iv: IVariables, entries: seq<Entry>, range: Range)
@@ -360,7 +364,7 @@ module Impl {
       }
     }
 
-    linear inout method query(shared iv: IVariables, rid: nat, input: MapIfc.Input)
+    linear inout method query(shared iv: IVariables, ghost rid: nat, input: MapIfc.Input)
       returns (output: MapIfc.Output)
 
       requires old_self.Inv(iv)
@@ -369,6 +373,7 @@ module Impl {
       requires old_self.token.val == SSM.Ticket(rid, input)
 
       ensures self.Inv(iv)
+      ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var query_key := input.key;
@@ -397,7 +402,7 @@ module Impl {
 
     linear inout method insertOverwrite(
       shared iv: IVariables,
-      rid: nat, input: MapIfc.Input,
+      ghost rid: nat, input: MapIfc.Input,
       entries: seq<Entry>, range: Range)
       returns (output: MapIfc.Output)
 
@@ -411,6 +416,7 @@ module Impl {
       requires KeyPresentProbeRange(old_self.token.val.table, input.key, range.RightShrink1())
 
       ensures self.Inv(iv)
+      ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var probe_key := input.key;
@@ -441,7 +447,7 @@ module Impl {
 
     linear inout method insertNotFound(
       shared iv: IVariables,
-      rid: nat, input: MapIfc.Input,
+      ghost rid: nat, input: MapIfc.Input,
       entries: seq<Entry>, range: Range)
       returns (output: MapIfc.Output)
 
@@ -455,6 +461,7 @@ module Impl {
       requires KeyAbsentProbeRange(old_self.token.val.table, input.key, range.RightShrink1())
 
       ensures self.Inv(iv)
+      ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var probe_key := input.key;
@@ -506,7 +513,7 @@ module Impl {
       output := MapIfc.InsertOutput(true);
     }
 
-    linear inout method insert(shared iv: IVariables, rid: nat, input: MapIfc.Input)
+    linear inout method insert(shared iv: IVariables, ghost rid: nat, input: MapIfc.Input)
       returns (output: MapIfc.Output)
       decreases *
 
@@ -516,6 +523,7 @@ module Impl {
       requires old_self.token.val == SSM.Ticket(rid, input)
 
       ensures self.Inv(iv)
+      ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var insert_key, insert_value := input.key, input.value;
@@ -533,7 +541,7 @@ module Impl {
 
     linear inout method removeFound(
       shared iv: IVariables,
-      rid: nat, input: MapIfc.Input,
+      ghost rid: nat, input: MapIfc.Input,
       entries: seq<Entry>, range: Range)
       returns (output: MapIfc.Output)
 
@@ -547,6 +555,7 @@ module Impl {
       requires KeyPresentProbeRange(old_self.token.val.table, input.key, range.RightShrink1())
 
       ensures self.Inv(iv)
+      ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var probe_key := input.key;
@@ -598,7 +607,7 @@ module Impl {
       output := MapIfc.RemoveOutput(true);
     }
 
-    linear inout method remove(shared iv: IVariables, rid: nat, input: MapIfc.Input)
+    linear inout method remove(shared iv: IVariables, ghost rid: nat, input: MapIfc.Input)
       returns (output: MapIfc.Output)
 
       requires old_self.Inv(iv)
@@ -607,6 +616,7 @@ module Impl {
       requires old_self.token.val == SSM.Ticket(rid, input)
 
       ensures self.Inv(iv)
+      ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
     {
       var remove_key := input.key;
@@ -627,7 +637,7 @@ module Impl {
       }
     }
 
-    linear inout method call(shared iv: IVariables, rid: nat, input: MapIfc.Input)
+    linear inout method call(shared iv: IVariables, ghost rid: nat, input: MapIfc.Input)
       returns (output: MapIfc.Output)
       decreases *
 
@@ -635,6 +645,7 @@ module Impl {
       requires old_self.HasNoRowHandle()
       requires old_self.token.val == SSM.Ticket(rid, input)
       ensures self.Inv(iv)
+      ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
     {
       if input.QueryInput? {
@@ -672,6 +683,7 @@ module Impl {
   returns (linear v: Variables, linear iv: IVariables)
     requires in_token.val.Variables?
     requires SSM.Init() == in_token.val
+    ensures v.token.loc == in_token.loc
     ensures v.Inv(iv)
     ensures v.HasNoRowHandle()
     ensures v.token.val == SSM.unit()
