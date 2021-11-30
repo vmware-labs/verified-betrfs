@@ -152,8 +152,8 @@ module FlatCombinerTokens {
   requires |comb.state.elems| < MAX_THREADS_PER_REPLICA as int
   requires slot.tid == |comb.state.elems|
   requires comb.loc_s == slot.loc_s
-  ensures slot.state.FCEmpty? || slot.state.FCRequest?
-  ensures slot.state.FCEmpty? ==>
+  ensures slot.state.FCEmpty? || slot.state.FCRequest? || slot.state.FCResponse?
+  ensures (slot.state.FCEmpty? || slot.state.FCResponse?) ==>
       && comb' == FCCombiner(comb.loc_s,
           FC.FCCombinerCollecting(comb.state.elems + [None]))
       && slot' == slot
@@ -166,12 +166,15 @@ module FlatCombinerTokens {
     glinear var c_token := FCCombiner_unfold(comb);
     glinear var s_token := FCSlot_unfold(slot);
 
-    if slot.state.FCEmpty? {
+    ghost var rest := FCTokens.obtain_invariant_1_1(s_token, inout c_token);
+    ghost var full := FC.dot(FC.dot(s_token.val, c_token.val), rest);
+
+    if slot.state.FCEmpty? || slot.state.FCResponse? {
 
       ghost var out_expect_c := FCCombiner(comb.loc_s, FC.FCCombinerCollecting(comb.state.elems + [None]));
       ghost var out_token_expect_c := FCCombiner_unfold(out_expect_c);
 
-      ghost var out_expect_s := FCSlot(slot.loc_s, slot.tid, FC.FCEmpty);
+      ghost var out_expect_s := slot;
       ghost var out_token_expect_s := FCSlot_unfold(out_expect_s);
 
       FC.CombinerDoCollectEmpty_is_transition(
@@ -188,7 +191,7 @@ module FlatCombinerTokens {
 
     } else {
 
-      assume slot.state.FCRequest?;
+      assert slot.state.FCRequest?;
 
       ghost var out_expect_c := FCCombiner(comb.loc_s, FC.FCCombinerCollecting(comb.state.elems  + [Some(FC.Elem(slot.state.rid))]));
       ghost var out_token_expect_c := FCCombiner_unfold(out_expect_c);
@@ -196,17 +199,17 @@ module FlatCombinerTokens {
       ghost var out_expect_s := FCSlot(slot.loc_s, slot.tid, FC.FCInProgress(slot.state.rid));
       ghost var out_token_expect_s := FCSlot_unfold(out_expect_s);
 
-    FC.CombinerDoCollectRequest_is_transition(
-      FC.dot(c_token.val, s_token.val),
-      FC.dot(out_token_expect_c.val, out_token_expect_s.val)
-    );
+      FC.CombinerDoCollectRequest_is_transition(
+        FC.dot(c_token.val, s_token.val),
+        FC.dot(out_token_expect_c.val, out_token_expect_s.val)
+      );
 
-    glinear var out_token_c, out_token_s := FCTokens.internal_transition_2_2(
-      c_token, s_token, out_token_expect_c.val, out_token_expect_s.val
-    );
+      glinear var out_token_c, out_token_s := FCTokens.internal_transition_2_2(
+        c_token, s_token, out_token_expect_c.val, out_token_expect_s.val
+      );
 
-    comb' := FCCombiner_fold(out_expect_c, out_token_c);
-    slot' := FCSlot_fold(out_expect_s, out_token_s);
+      comb' := FCCombiner_fold(out_expect_c, out_token_c);
+      slot' := FCSlot_fold(out_expect_s, out_token_s);
 
     }
   }
@@ -273,13 +276,13 @@ module FlatCombinerTokens {
   ensures slot' == slot.(state := FC.FCResponse(slot.state.rid))
   ensures comb.state.elems[comb.state.idx].value.rid == slot.state.rid
   {
-    // that should follow from the invariant, need to obtain the invariant here.
-    assume slot.state.FCInProgress?;
-    assume comb.state.elems[comb.state.idx].value.rid == slot.state.rid;
-
-
     glinear var c_token := FCCombiner_unfold(comb);
     glinear var s_token := FCSlot_unfold(slot);
+
+    // that should follow from the invariant, need to obtain the invariant here.
+    ghost var rest := FCTokens.obtain_invariant_1_1(s_token, inout c_token);
+    assert slot.state.FCInProgress?;
+    assert comb.state.elems[comb.state.idx].value.rid == slot.state.rid;
 
     ghost var out_expect_c := FCCombiner(comb.loc_s, FC.FCCombinerResponding(comb.state.elems, comb.state.idx + 1));
     ghost var out_token_expect_c := FCCombiner_unfold(out_expect_c);
@@ -308,12 +311,10 @@ module FlatCombinerTokens {
   returns (glinear comb': FCCombiner)
   requires comb.state.FCCombinerResponding?
   requires comb.state.idx == MAX_THREADS_PER_REPLICA as int
+  requires |comb.state.elems| == MAX_THREADS_PER_REPLICA as int
   ensures comb' == FCCombiner(comb.loc_s, FC.FCCombinerCollecting([]))
   {
     glinear var c_token := FCCombiner_unfold(comb);
-
-    // that can be obtained from the Invariant: CombinerState_Elems
-    assume |comb.state.elems| == MAX_THREADS_PER_REPLICA as int;
 
     ghost var out_expect := FCCombiner(comb.loc_s, FC.FCCombinerCollecting([]));
     ghost var out_token_expect := FCCombiner_unfold(out_expect);
@@ -341,11 +342,16 @@ module FlatCombinerTokens {
   ensures fc_client' == fc_client.(state := FC.FCClientWaiting(rid))
   ensures fc_slot' == fc_slot.(state := FC.FCRequest(rid))
   {
-    // that should follow from the invariant
-    assume fc_slot.state.FCEmpty?;
-
     glinear var c_token := FCClient_unfold(fc_client);
     glinear var s_token := FCSlot_unfold(fc_slot);
+
+    ghost var rest := FCTokens.obtain_invariant_1_1(s_token, inout c_token);
+    var full := FC.dot(FC.dot(s_token.val, c_token.val), rest);
+    assert full.clients[fc_client.tid] == FC.FCClientIdle;
+    assert full.slots[fc_client.tid] == FC.FCEmpty;
+
+    // that should follow from the invariant
+    assert fc_slot.state.FCEmpty?;
 
     ghost var out_expect_c := FCClient(fc_client.loc_s, fc_client.tid , FC.FCClientWaiting(rid));
     ghost var out_token_expect_c := FCClient_unfold(out_expect_c);
@@ -385,12 +391,16 @@ module FlatCombinerTokens {
   ensures fc_client' == fc_client.(state := FC.FCClientIdle)
   ensures fc_slot' == fc_slot.(state := FC.FCEmpty)
   {
-    // that should follow from the invariant
-    assume fc_slot.state.FCResponse?;
-    assume fc_slot.state.rid == fc_client.state.rid;
-
     glinear var c_token := FCClient_unfold(fc_client);
     glinear var s_token := FCSlot_unfold(fc_slot);
+
+    ghost var rest := FCTokens.obtain_invariant_1_1(s_token, inout c_token);
+    var full := FC.dot(FC.dot(s_token.val, c_token.val), rest);
+    assert full.clients[fc_client.tid].FCClientWaiting?;
+
+    // that should follow from the invariant
+    assert fc_slot.state.FCResponse?;
+    assert fc_slot.state.rid == fc_client.state.rid;
 
     ghost var out_expect_c := FCClient(fc_client.loc_s, fc_client.tid , FC.FCClientIdle);
     ghost var out_token_expect_c := FCClient_unfold(out_expect_c);

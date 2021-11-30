@@ -305,7 +305,7 @@ module FlatCombiner refines Rw {
     && var tid := |m.combiner.value.elems|;
 
     // the slot was empty
-    && SlotIsEmpty(m, tid)
+    && (SlotIsEmpty(m, tid) || SlotHasResponse(m, tid))
 
     // add a None to the collected elements
     && m' == m.(combiner := Some(FCCombinerCollecting(m.combiner.value.elems + [None])))
