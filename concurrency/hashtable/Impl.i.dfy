@@ -1,5 +1,5 @@
 include "../framework/GhostLinearSequence.i.dfy"
-include "../framework/Mutex.s.dfy"
+include "../framework/Mutex.i.dfy"
 include "HashTableStubSSM.i.dfy"
 include "../../lib/Lang/LinearSequence.i.dfy"
 
@@ -149,6 +149,7 @@ module Impl {
       ensures self.token.loc == old_self.token.loc
       ensures entry.Full? ==> RangeFull(self.token.val.table, range)
       ensures self.RowOnlyUpdate(old_self)
+      decreases *
     {
       var index := old_range.end;
       assert !old_range.Contains(index);
@@ -276,6 +277,7 @@ module Impl {
 
       ensures self.Inv(iv)
       ensures self.CapOnlyUpdate(old_self, Decrement)
+      decreases *
     {
       linear var cap; glinear var handle: MutexHandle<Cap>;
       cap, handle := iv.cap_mutex.acquire();
@@ -330,6 +332,7 @@ module Impl {
       ensures found ==> KeyPresentProbeRange(self.token.val.table, probe_key, range.RightShrink1())
       ensures !found ==> KeyAbsentProbeRange(self.token.val.table, probe_key, range.RightShrink1())
       ensures self.RowOnlyUpdate(old_self)
+      decreases *
     {
       var p_hash := hash(probe_key);
 
@@ -375,6 +378,7 @@ module Impl {
       ensures self.Inv(iv)
       ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
+      decreases *
     {
       var query_key := input.key;
 
@@ -463,6 +467,7 @@ module Impl {
       ensures self.Inv(iv)
       ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
+      decreases *
     {
       var probe_key := input.key;
       var h := hash(probe_key);
@@ -557,6 +562,7 @@ module Impl {
       ensures self.Inv(iv)
       ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
+      decreases *
     {
       var probe_key := input.key;
       var h := hash(probe_key);
@@ -618,6 +624,7 @@ module Impl {
       ensures self.Inv(iv)
       ensures self.token.loc == old_self.token.loc
       ensures self.token.val == SSM.Stub(rid, output)
+      decreases *
     {
       var remove_key := input.key;
 
