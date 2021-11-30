@@ -318,9 +318,7 @@ module Init(nrifc: NRIfc) {
       linear var localTailAtomic := new_atomic(
           0,
           LocalTailTokens(localTail, cbLocalTail),
-          ((v, g) => 
-            g == LocalTailTokens(LocalTail(j as int, v as int), CBLocalTail(j as int, v as int, cb_loc_s))
-          ),
+          ((v, g) => LocalTailInv(v, g, j as int, cb_loc_s)),
           0);
 
       linear var nodeInfo := NodeInfo(localTailAtomic);
@@ -426,7 +424,7 @@ module Init(nrifc: NRIfc) {
     linear var globalTail_atomic: Atomic<uint64, GlobalTailTokens> := new_atomic(
           0,
           GlobalTailTokens(globalTail, cbGlobalTail),
-          ((v, g) => g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int, cb_loc_s))),
+          ((v, g) => GlobalTailInv(v, g, cb_loc_s)),
           0);
 
     linear var buffer: lseq<BufferEntry> := make_buffer(buffer_cells, alive, cb_loc_s);
