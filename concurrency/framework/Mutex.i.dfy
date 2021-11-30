@@ -45,6 +45,7 @@ module {:extern "Mutexes"} Mutexes {
     requires this.WF()
     ensures this.inv(v)
     ensures handle.m == this
+    ensures handle.WF()
     decreases *
     {
       glinear var go : glOption<LCellContents<V>> := glNone;

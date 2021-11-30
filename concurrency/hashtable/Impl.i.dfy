@@ -59,7 +59,9 @@ module Impl {
     requires index <= |row_mutexes| == FixedSize()
   {
     && (forall i | 0 <= i < index ::
-      (i in row_mutexes) && (row_mutexes[i].inv == ((row: Row) => row.Inv(loc, i))))
+      && i in row_mutexes
+      && row_mutexes[i].WF()
+      && (row_mutexes[i].inv == ((row: Row) => row.Inv(loc, i))))
     && (forall i | index <= i < |row_mutexes| ::
       (i !in row_mutexes))
   }
@@ -83,6 +85,7 @@ module Impl {
     {
       && |row_mutexes| == FixedSize()
       && RowMutexTableInv(row_mutexes, loc)
+      && cap_mutex.WF()
       && (cap_mutex.inv == ((cap: Cap) => cap.Inv(loc)))
     }
   }
@@ -110,11 +113,11 @@ module Impl {
 
       && iv.Inv(token.loc)
       // have the handle ==> corresponds to the row mutex
-      && (forall i: Index :: HasRowHandle(i) ==> 
-        handles[i].m == iv.row_mutexes[i])
+      && (forall i: Index :: HasRowHandle(i) ==> (
+        && handles[i].WF()
+        && handles[i].m == iv.row_mutexes[i]))
       // have the handle <==> have the row in token
       && (forall i: Index ::HasRowHandle(i) <==> token.val.table[i].Some?)
-
     }
 
     predicate RangeOwnershipInv(iv: IVariables, entries: seq<Entry>, range: Range)
