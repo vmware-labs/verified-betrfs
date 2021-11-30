@@ -53,62 +53,72 @@ module FlatCombinerTokens {
 
   // Ops for the combiner
 
-  // glinear method do_init_slots(glinear t: FCTokens.Token)
-  // returns (glinear slots: map<nat, FCSlot>)
-  // {
-  //   glinear var t' := t;
-  //   ghost var j := 0;
-  //   slots := GlinearMap.glmap_empty();
+  glinear method do_init_slots(glinear t: FCTokens.Token)
+  returns (glinear slots: map<nat, FCSlot>)
+  requires (
+    var new_slots := map x : nat | 0 <= x < (MAX_THREADS_PER_REPLICA as nat) :: x := FC.FCEmpty;
+    t.val == FC.M(map[], new_slots, None))
+  ensures forall x | 0 <= x < (MAX_THREADS_PER_REPLICA as nat) ::
+    x in slots && slots[x] == FCSlot(t.loc.s, x, FC.FCEmpty)
+  {
+    glinear var t' := t;
+    ghost var j := 0;
+    slots := GlinearMap.glmap_empty();
 
-  //   while j < MAX_THREADS_PER_REPLICA as nat
-  //   invariant 0 <= j <= LOG_SIZE as nat
-  //   invariant t'.loc_s == t.loc_s
-  //   invariant t'.val.M?
-  //   invariant forall i | 0 <= i < j :: i in slots && slots[i] == FCSlot(t.loc_s, j, FC.FCEmpty)
-  //   invariant forall i | j <= i <  MAX_THREADS_PER_REPLICA as nat :: t.val.slots[i] == t'.val.slots[i]
-  //   {
-  //     var expected := FCSlot(t.loc_s, j, FC.FCEmpty);
-  //     var x := expected.defn().val;
-  //     var y := t'.val.(slots := t'.val.slots - {j});
+    while j < MAX_THREADS_PER_REPLICA as nat
+    invariant 0 <= j <= MAX_THREADS_PER_REPLICA as nat
+    invariant t'.loc == t.loc
+    invariant t'.val.M?
+    invariant forall i | 0 <= i < j :: i in slots && slots[i] == FCSlot(t.loc.s, i, FC.FCEmpty)
+    invariant forall i | j <= i <  MAX_THREADS_PER_REPLICA as nat :: i in t'.val.slots && t.val.slots[i] == t'.val.slots[i]
+    {
+      var expected := FCSlot(t.loc.s, j, FC.FCEmpty);
+      var x := expected.defn().val;
+      var y := t'.val.(slots := t'.val.slots - {j});
 
-  //     glinear var xl;
-  //     t', xl := FCTokens.T.split(t', y, x);
+      glinear var xl;
+      t', xl := FCTokens.T.split(t', y, x);
 
-  //     glinear var z := FCSlot_fold(expected, xl);
-  //     slots := GlinearMap.glmap_insert(slots, j, z);
-  //     j := j + 1;
-  //   }
-  //   Ptrs.dispose_anything(t');
-  // }
+      glinear var z := FCSlot_fold(expected, xl);
+      slots := GlinearMap.glmap_insert(slots, j, z);
+      j := j + 1;
+    }
+    Ptrs.dispose_anything(t');
+  }
 
-  // glinear method do_init_clients(glinear t: FCTokens.Token)
-  // returns (glinear clients: map<nat, FCClient>)
-  // {
-  //   glinear var t' := t;
-  //   ghost var j := 0;
-  //   clients := GlinearMap.glmap_empty();
+  glinear method do_init_clients(glinear t: FCTokens.Token)
+  returns (glinear clients: map<nat, FCClient>)
+  requires (
+    var new_clients := map x : nat | 0 <= x < (MAX_THREADS_PER_REPLICA as nat) :: x := FC.FCClientIdle;
+    t.val == FC.M(new_clients, map[], None))
+  ensures forall x | 0 <= x < (MAX_THREADS_PER_REPLICA as nat) ::
+    x in clients && clients[x] == FCClient(t.loc.s, x, FC.FCClientIdle)
+  {
+    glinear var t' := t;
+    ghost var j := 0;
+    clients := GlinearMap.glmap_empty();
 
-  //   while j < MAX_THREADS_PER_REPLICA as nat
-  //   invariant 0 <= j <= LOG_SIZE as nat
-  //   invariant t'.loc_s == t.loc_s
-  //   invariant t'.val.M?
-  //   invariant forall i | 0<= i < j :: i in clients && clients[i] == FCClient(t.loc_s, i, FC.FCClientIdle)
-  //   invariant forall i | j <= i <  MAX_THREADS_PER_REPLICA as nat :: t.val.clients[i] == t'.val.clients[i]
-  //   {
-  //     var expected := FCClient(t.loc_s, j, FC.FCClientIdle);
-  //     var x := expected.defn().val;
-  //     var y := t'.val.(clients := t'.val.clients - {j});
+    while j < MAX_THREADS_PER_REPLICA as nat
+    invariant 0 <= j <= LOG_SIZE as nat
+    invariant t'.loc == t.loc
+    invariant t'.val.M?
+    invariant forall i | 0<= i < j :: i in clients && clients[i] == FCClient(t.loc.s, i, FC.FCClientIdle)
+    invariant forall i | j <= i <  MAX_THREADS_PER_REPLICA as nat :: i in t'.val.clients && t.val.clients[i] == t'.val.clients[i]
+    {
+      var expected := FCClient(t.loc.s, j, FC.FCClientIdle);
+      var x := expected.defn().val;
+      var y := t'.val.(clients := t'.val.clients - {j});
 
-  //     glinear var xl;
-  //     t', xl := FCTokens.T.split(t', y, x);
+      glinear var xl;
+      t', xl := FCTokens.T.split(t', y, x);
 
-  //     glinear var z := FCClient_fold(expected, xl);
-  //     clients := GlinearMap.glmap_insert(clients, j, z);
-  //     j := j + 1;
-  //   }
+      glinear var z := FCClient_fold(expected, xl);
+      clients := GlinearMap.glmap_insert(clients, j, z);
+      j := j + 1;
+    }
 
-  //   Ptrs.dispose_anything(t');
-  // }
+    Ptrs.dispose_anything(t');
+  }
 
   glinear method fc_initialize()
   returns (
@@ -121,26 +131,26 @@ module FlatCombinerTokens {
       i in slots && slots[i] == FCSlot(combiner.loc_s, i, FC.FCEmpty)
   ensures forall i | 0 <= i < MAX_THREADS_PER_REPLICA as int ::
       i in clients && clients[i] == FCClient(combiner.loc_s, i, FC.FCClientIdle)
-  // {
+  {
 
-  //   ghost var new_clients := map x : nat | 0 <= x < (MAX_THREADS_PER_REPLICA as nat) :: x := FC.FCClientIdle;
-  //   ghost var new_slots   := map x : nat | 0 <= x < (MAX_THREADS_PER_REPLICA as nat) :: x := FC.FCEmpty;
-  //   ghost var new_comb := FC.FCCombinerCollecting([]);
-  //   ghost var m := FC.M(new_clients, new_slots, Some(new_comb));
+    ghost var new_clients := map x : nat | 0 <= x < (MAX_THREADS_PER_REPLICA as nat) :: x := FC.FCClientIdle;
+    ghost var new_slots   := map x : nat | 0 <= x < (MAX_THREADS_PER_REPLICA as nat) :: x := FC.FCEmpty;
+    ghost var new_comb := FC.FCCombinerCollecting([]);
+    ghost var m := FC.M(new_clients, new_slots, Some(new_comb));
 
-  //   FC.InitImpliesInv(m);
-  //   glinear var token := FCTokens.initialize_nonempty(0, m);
+    FC.InitImpliesInv(m);
+    glinear var token := FCTokens.initialize_empty(m);
 
-  //   ghost var cl := FC.M(new_clients, map[], None);
-  //   ghost var s  := FC.M(map[], new_slots, None);
-  //   ghost var co := FC.M(map[], map[], Some(new_comb));
+    ghost var cl := FC.M(new_clients, map[], None);
+    ghost var s  := FC.M(map[], new_slots, None);
+    ghost var co := FC.M(map[], map[], Some(new_comb));
 
-  //   glinear var tcl, ts, tco := FCTokens.split3(token, cl, s, co);
+    glinear var tcl, ts, tco := FCTokens.split3(token, cl, s, co);
 
-  //   clients := do_init_clients(tcl);
-  //   slots := do_init_slots(ts);
-  //   combiner := FCCombiner_fold(FCCombiner(token.loc_s, new_comb), tco);
-  // }
+    clients := do_init_clients(tcl);
+    slots := do_init_slots(ts);
+    combiner := FCCombiner_fold(FCCombiner(token.loc.s, new_comb), tco);
+  }
 
   /* ----------------------------------------------------------------------------------------- */
 

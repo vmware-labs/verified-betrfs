@@ -201,13 +201,14 @@ module RwTokens(rw: Rw) {
   type Token = t : T.Token | t.loc.ExtLoc? && t.loc.base_loc == Wrap.singleton_loc()
     witness *
 
-  /*
   glinear method initialize_empty(ghost m: rw.M)
   returns (glinear token: Token)
   requires rw.Inv(m)
   requires rw.I(m) == None
   ensures token.val == m
-  */
+  {
+    token := ET.ext_init(WrapPT.get_unit(Wrap.singleton_loc()), m);
+  }
 
   glinear method initialize_nonempty(glinear b: rw.StoredType, ghost m: rw.M)
   returns (glinear token: Token)
