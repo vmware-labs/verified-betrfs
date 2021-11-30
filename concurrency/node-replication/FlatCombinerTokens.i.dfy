@@ -3,6 +3,7 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Base/Option.s.dfy"
 include "Constants.i.dfy"
 include "../framework/Rw.i.dfy"
+include "FlatCombiner.i.dfy"
 
 module FlatCombinerTokens {
   import opened RequestIds

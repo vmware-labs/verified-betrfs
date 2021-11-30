@@ -1,4 +1,5 @@
 include "Impl.i.dfy"
+include "FlatCombiner.i.dfy"
 
 module Init(nrifc: NRIfc) {
   import opened RequestIds
