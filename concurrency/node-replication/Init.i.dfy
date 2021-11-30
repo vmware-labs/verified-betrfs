@@ -32,28 +32,27 @@ module Init(nrifc: NRIfc) {
     glinear combiner: CombinerToken,
     glinear cb: CBCombinerToken,
     glinear ghost_replica: Replica,
-    ghost cb_loc: Loc)
+    ghost cb_loc_s: nat)
   {
-    predicate WF()
+    predicate WF(nr: NR)
     {
-      && cb_loc.ExtLoc?
-      && cb_loc.base_loc == CBT.CBTokens.Wrap.singleton_loc()
+      && nr.cb_loc_s == cb_loc_s
       && 0 <= nodeId as int < NUM_REPLICAS as int
       && ghost_replica == Replica(nodeId as int, nrifc.init_state())
       && combiner == CombinerToken(nodeId as int, CombinerReady)
-      && cb == CBCombinerToken(nodeId as int, CB.CombinerIdle, cb_loc.s)
+      && cb == CBCombinerToken(nodeId as int, CB.CombinerIdle, cb_loc_s)
     }
   }
 
-  method initNode(linear nct: NodeCreationToken)
+  method initNode(ghost nr: NR, linear nct: NodeCreationToken)
   returns (linear node: Node, linear owned_contexts: lseq<ThreadOwnedContext>)
-  requires nct.WF()
-  ensures node.WF()
+  requires nct.WF(nr)
+  ensures node.WF(nr)
   ensures |owned_contexts| == MAX_THREADS_PER_REPLICA as int
   ensures forall i | 0 <= i < |owned_contexts| ::
-    i in owned_contexts && owned_contexts[i].WF(node)
+    i in owned_contexts && owned_contexts[i].WF(node, nr)
   {
-    linear var NodeCreationToken(nodeId, combiner, cb, ghost_replica, cb_loc) := nct;
+    linear var NodeCreationToken(nodeId, combiner, cb, ghost_replica, cb_loc_s) := nct;
 
     // initialize the flat_combiner ghost tokens
 
@@ -67,7 +66,7 @@ module Init(nrifc: NRIfc) {
       actual_replica, ghost_replica, combiner, cb);
     linear var replica;
     glinear var client_counter_supply;
-    replica, client_counter_supply := new_mutex(nodeReplica, (v: NodeReplica) => v.WF(nodeId as int));
+    replica, client_counter_supply := new_mutex(nodeReplica, (v: NodeReplica) => v.WF(nodeId as int, nr.cb_loc_s));
     // deleteme assert replica.InternalInv();
 
     // thread contexts
@@ -171,7 +170,7 @@ module Init(nrifc: NRIfc) {
 //      ensures atomic_inv(node.combiner_lock, v, g)
 //    {
 //    }
-    assert node.WF();
+    assert node.WF(nr);
 
     dispose_anything(client_counter_supply);
   }
@@ -215,17 +214,18 @@ module Init(nrifc: NRIfc) {
 
   method make_buffer(
       linear cells: lseq<Cell<CB.ConcreteLogEntry>>, 
-      glinear alive: map<nat, CBAliveBit>)
+      glinear alive: map<nat, CBAliveBit>,
+      ghost cb_loc_s: nat)
   returns (linear buffer: lseq<BufferEntry>)
   requires |cells| == LOG_SIZE as int
-  requires exists cb_loc :: forall i | 0 <= i < LOG_SIZE as int ::
+  requires forall i | 0 <= i < LOG_SIZE as int ::
       && i in cells
       && i in alive
-      && alive[i] == CBAliveBit(i, false, cb_loc)
+      && alive[i] == CBAliveBit(i, false, cb_loc_s)
   ensures |buffer| == LOG_SIZE as int
   ensures forall i | 0 <= i < LOG_SIZE as int
     :: i in buffer && buffer[i].cell == cells[i]
-        && buffer[i].WF(i, ExtLoc(alive[i].cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()))
+        && buffer[i].WF(i, cb_loc_s)
   {
     buffer := lseq_alloc(LOG_SIZE);
     linear var cells' := cells;
@@ -237,7 +237,7 @@ module Init(nrifc: NRIfc) {
     invariant |buffer| == LOG_SIZE as int
     invariant forall i | 0 <= i < j as int
       :: i in buffer && buffer[i].cell == cells[i]
-          && buffer[i].WF(i, ExtLoc(alive[i].cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()))
+          && buffer[i].WF(i, alive[i].cb_loc_s)
     invariant forall i | j as int <= i < LOG_SIZE as int
       :: i !in buffer
     invariant |cells'| == LOG_SIZE as int
@@ -261,7 +261,7 @@ module Init(nrifc: NRIfc) {
           0);
 
       linear var bufferEntry := BufferEntry(cell, aliveAtomic);
-      assert bufferEntry.WF(j as int, ExtLoc(alive[j as nat].cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()));
+      assert bufferEntry.WF(j as int, cb_loc_s);
 
       buffer := lseq_give(buffer, j, bufferEntry);
 
@@ -279,16 +279,17 @@ module Init(nrifc: NRIfc) {
 
   method make_node_infos(
       glinear localTails: map<nat, LocalTail>,
-      glinear cbLocalTails: map<nat, CBLocalTail>)
+      glinear cbLocalTails: map<nat, CBLocalTail>,
+      ghost cb_loc_s: nat)
   returns (linear node_info: lseq<NodeInfo>)
-  requires exists cb_loc :: forall i | 0 <= i < NUM_REPLICAS as int ::
+  requires forall i | 0 <= i < NUM_REPLICAS as int ::
       && i in localTails
       && i in cbLocalTails
       && localTails[i] == LocalTail(i as int, 0)
-      && cbLocalTails[i] == CBLocalTail(i as int, 0, cb_loc)
+      && cbLocalTails[i] == CBLocalTail(i as int, 0, cb_loc_s)
   ensures |node_info| == NUM_REPLICAS as int
   ensures forall i | 0 <= i < NUM_REPLICAS as int
-      :: i in node_info && node_info[i].WF(i, ExtLoc(cbLocalTails[i].cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()))
+      :: i in node_info && node_info[i].WF(i, cb_loc_s)
   {
     node_info := lseq_alloc(NUM_REPLICAS);
 
@@ -302,10 +303,10 @@ module Init(nrifc: NRIfc) {
         && i in localTails'
         && i in cbLocalTails'
         && localTails'[i] == LocalTail(i as int, 0)
-        && cbLocalTails'[i] == CBLocalTail(i as int, 0, cbLocalTails[i].cb_loc_s)
+        && cbLocalTails'[i] == CBLocalTail(i as int, 0, cb_loc_s)
     invariant |node_info| == NUM_REPLICAS as int
     invariant forall i | 0 <= i < j as int
-        :: i in node_info && node_info[i].WF(i, ExtLoc(cbLocalTails[i].cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()))
+        :: i in node_info && node_info[i].WF(i, cb_loc_s)
     invariant forall i | j as int <= i < NUM_REPLICAS as int
         :: i !in node_info
     {
@@ -317,12 +318,12 @@ module Init(nrifc: NRIfc) {
           0,
           LocalTailTokens(localTail, cbLocalTail),
           ((v, g) => 
-            g == LocalTailTokens(LocalTail(j as int, v as int), CBLocalTail(j as int, v as int, cbLocalTails[j as nat].cb_loc_s))
+            g == LocalTailTokens(LocalTail(j as int, v as int), CBLocalTail(j as int, v as int, cb_loc_s))
           ),
           0);
 
       linear var nodeInfo := NodeInfo(localTailAtomic);
-      assert nodeInfo.WF(j as int, ExtLoc(cbLocalTails[j as nat].cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()));
+      assert nodeInfo.WF(j as int, cb_loc_s);
 
       node_info := lseq_give(node_info, j, nodeInfo);
 
@@ -334,20 +335,21 @@ module Init(nrifc: NRIfc) {
   }
 
   method make_node_creation_tokens(
+      ghost nr: NR,
       glinear replicas: map<nat, Replica>,
       glinear combiners: map<nat, CombinerToken>,
       glinear readers: map<nat, CBCombinerToken>)
   returns (linear nodeCreationTokens: lseq<NodeCreationToken>)
-  requires exists cb_loc :: forall i | 0 <= i < NUM_REPLICAS as int ::
+  requires forall i | 0 <= i < NUM_REPLICAS as int ::
       && i in replicas
       && i in combiners
       && i in readers
       && replicas[i] == Replica(i, nrifc.init_state())
       && combiners[i] == CombinerToken(i, CombinerReady)
-      && readers[i] == CBCombinerToken(i, CB.CombinerIdle, cb_loc)
+      && readers[i] == CBCombinerToken(i, CB.CombinerIdle, nr.cb_loc_s)
   ensures |nodeCreationTokens| == NUM_REPLICAS as int
   ensures forall i | 0 <= i < NUM_REPLICAS as int
-      :: i in nodeCreationTokens && nodeCreationTokens[i].WF()
+      :: i in nodeCreationTokens && nodeCreationTokens[i].WF(nr)
   {
     nodeCreationTokens := lseq_alloc(NUM_REPLICAS);
 
@@ -367,7 +369,7 @@ module Init(nrifc: NRIfc) {
         && readers[i] == readers'[i]
     invariant |nodeCreationTokens| == NUM_REPLICAS as int
     invariant forall i | 0 <= i < j as int
-        :: i in nodeCreationTokens && nodeCreationTokens[i].WF()
+        :: i in nodeCreationTokens && nodeCreationTokens[i].WF(nr)
     invariant forall i | j as int <= i < NUM_REPLICAS as int
         :: i !in nodeCreationTokens
     {
@@ -376,8 +378,8 @@ module Init(nrifc: NRIfc) {
       combiners', combiner := glmap_take(combiners', j as int);
       readers', cb := glmap_take(readers', j as int);
 
-      linear var nct := NodeCreationToken(j, combiner, cb, replica, ExtLoc(readers[j as nat].cb_loc_s, CBT.CBTokens.Wrap.singleton_loc()));
-      assert nct.WF();
+      linear var nct := NodeCreationToken(j, combiner, cb, replica, nr.cb_loc_s);
+      assert nct.WF(nr);
 
       nodeCreationTokens := lseq_give(nodeCreationTokens, j, nct);
 
@@ -399,7 +401,7 @@ module Init(nrifc: NRIfc) {
   ensures nr.WF()
   ensures |nodeCreationTokens| == NUM_REPLICAS as int
   ensures forall i | 0 <= i < |nodeCreationTokens| ::
-      i in nodeCreationTokens && nodeCreationTokens[i].WF()
+      i in nodeCreationTokens && nodeCreationTokens[i].WF(nr)
   {
     linear var buffer_cells;
     glinear var buffer_cell_contents;
@@ -408,6 +410,7 @@ module Init(nrifc: NRIfc) {
     glinear var globalTail, replicas, localTails, ctail, combiners := perform_Init(token);
     glinear var cbHead, cbGlobalTail, cbLocalTails, alive, cbContents, readers, cb_loc :=
         cyclic_buffer_init(buffer_cell_contents);
+    ghost var cb_loc_s := cb_loc.s;
 
     linear var ctail_atomic: Atomic<uint64, Ctail> := new_atomic(
         0,
@@ -417,25 +420,25 @@ module Init(nrifc: NRIfc) {
     linear var head_atomic: Atomic<uint64, CBHead> := new_atomic(
         0,
         cbHead,
-        (v, g) => g == CBHead(v as int, cb_loc.s),
+        (v, g) => g == CBHead(v as int, cb_loc_s),
         0);
     linear var globalTail_atomic: Atomic<uint64, GlobalTailTokens> := new_atomic(
           0,
           GlobalTailTokens(globalTail, cbGlobalTail),
-          ((v, g) => g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int, cb_loc.s))),
+          ((v, g) => g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int, cb_loc_s))),
           0);
 
-    linear var buffer: lseq<BufferEntry> := make_buffer(buffer_cells, alive);
+    linear var buffer: lseq<BufferEntry> := make_buffer(buffer_cells, alive, cb_loc_s);
 
     glinear var bufferContents: GhostAtomic<CBContents> := new_ghost_atomic(
         cbContents,
-        (g) => ContentsInv(buffer, g, cb_loc),
+        (g) => ContentsInv(buffer, g, cb_loc_s),
         1);
 
-    linear var node_infos: lseq<NodeInfo> := make_node_infos(localTails, cbLocalTails);
+    linear var node_infos: lseq<NodeInfo> := make_node_infos(localTails, cbLocalTails, cb_loc_s);
 
-    nr := NR(CachePadded(ctail_atomic), CachePadded(head_atomic), CachePadded(globalTail_atomic), node_infos, buffer, bufferContents, cb_loc);
+    nr := NR(CachePadded(ctail_atomic), CachePadded(head_atomic), CachePadded(globalTail_atomic), node_infos, buffer, bufferContents, cb_loc_s);
 
-    nodeCreationTokens := make_node_creation_tokens(replicas, combiners, readers);
+    nodeCreationTokens := make_node_creation_tokens(nr, replicas, combiners, readers);
   }
 }
