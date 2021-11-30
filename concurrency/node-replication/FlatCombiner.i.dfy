@@ -106,13 +106,20 @@ module FlatCombiner refines Rw {
   }
 
   predicate Inv(x: M) {
-    && Complete(x)
-    && ClientIdle_SlotEmtpy(x)
-    && ClientWaiting_RequestId(x)
-    && CombinerState_Elems(x)
-    && CombinerState_RequestIds(x)
+    x != unit() ==> (
+      && Complete(x)
+      && ClientIdle_SlotEmtpy(x)
+      && ClientWaiting_RequestId(x)
+      && CombinerState_Elems(x)
+      && CombinerState_RequestIds(x)
+    )
   }
 
+  lemma inv_unit()
+  ensures Inv(unit())
+  ensures I(unit()) == None
+  {
+  }
 
   /*
    * ============================================================================================

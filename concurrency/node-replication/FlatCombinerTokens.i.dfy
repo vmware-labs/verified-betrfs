@@ -191,7 +191,7 @@ module FlatCombinerTokens {
 
     } else {
 
-      assert slot.state.FCRequest?;
+      assume slot.state.FCRequest?;
 
       ghost var out_expect_c := FCCombiner(comb.loc_s, FC.FCCombinerCollecting(comb.state.elems  + [Some(FC.Elem(slot.state.rid))]));
       ghost var out_token_expect_c := FCCombiner_unfold(out_expect_c);
