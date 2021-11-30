@@ -94,12 +94,12 @@ module FlatCombiner refines Rw {
     match x.combiner.value {
       case FCCombinerCollecting(elems: seq<Option<Elem>>) => (
         forall i : nat | 0 <= i < |x.combiner.value.elems| && x.combiner.value.elems[i].Some? :: (
-            x.slots[i].FCInProgress? || x.slots[i].FCResponse? ==> x.slots[i].rid == x.combiner.value.elems[i].value.rid
+            x.slots[i].FCInProgress? && x.slots[i].rid == x.combiner.value.elems[i].value.rid
         )
       )
       case FCCombinerResponding(elems: seq<Option<Elem>>, idx: nat) => (
         forall i : nat | idx <= i < |x.combiner.value.elems| && x.combiner.value.elems[i].Some? :: (
-            x.slots[i].FCInProgress? || x.slots[i].FCResponse? ==> x.slots[i].rid == x.combiner.value.elems[i].value.rid
+            x.slots[i].FCInProgress? && x.slots[i].rid == x.combiner.value.elems[i].value.rid
         )
       )
     }
@@ -366,7 +366,12 @@ module FlatCombiner refines Rw {
     requires CombinerGoToResponding(m, m')
     ensures transition(m, m')
   {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
 
+    }
   }
 
 
@@ -464,7 +469,7 @@ module FlatCombiner refines Rw {
       ensures Inv(dot(m', p))
       && I(dot(m, p)) == I(dot(m', p))
     {
-     assume false;
+
     }
   }
 
