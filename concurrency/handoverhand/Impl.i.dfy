@@ -100,7 +100,7 @@ module Impl {
     requires r == InitResoucePartial(i)
     ensures SSM.dot(splt.expected, splt.ri) == r
   {
-    var expected := InitResoucePartial(i+1);
+    ghost var expected := InitResoucePartial(i+1);
     var ri := oneRowResource(i as nat, Info(Empty, Free), 0);
     reveal InitResoucePartial();
     Splitted(expected, ri)
@@ -109,7 +109,7 @@ module Impl {
   method init(glinear in_token: Token)
   returns (glinear token: Token, linear iv: IVariables)
     requires in_token.val == SSM.Init()
-    // ensures Inv(v)
+    ensures iv.Inv(in_token.loc)
     ensures token.val == SSM.unit()
   {
     var loc := in_token.loc;
@@ -271,11 +271,12 @@ module Impl {
     iv.cap_mutex.release(Cap(count, cap_token), handle);
   }
 
-  method doQuery(shared iv: IVariables, input: MapIfc.Input, rid: nat, glinear in_token: Token)
+  method doQuery(shared iv: IVariables, input: MapIfc.Input, ghost rid: nat, glinear in_token: Token)
   returns (output: MapIfc.Output, glinear out_token: Token)
     requires iv.Inv(in_token.loc)
     requires input.QueryInput?
     requires in_token.val == SSM.Ticket(rid, input)
+    ensures out_token.loc == in_token.loc
     ensures out_token.val == SSM.Stub(rid, output)
     decreases *
   {
@@ -287,8 +288,8 @@ module Impl {
     var entry; glinear var handle;
     entry, handle, out_token := acquireRow(iv, hash_idx, in_token);
 
-    var step := ProcessQueryTicketStep(query_ticket);
-    var expected := SSM.GetTransition(out_token.val, step);
+    ghost var step := ProcessQueryTicketStep(query_ticket);
+    ghost var expected := SSM.GetTransition(out_token.val, step);
     out_token := TST.transition_1_1(out_token, expected);
 
     while true 
@@ -299,6 +300,7 @@ module Impl {
       invariant handle.m == iv.row_mutexes[slot_idx as nat];
       decreases *
     {
+      var should_break := true;
       var next_slot_idx := getNextIndex(slot_idx);
 
       match entry {
@@ -314,6 +316,7 @@ module Impl {
             var should_go_before := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
             if !should_go_before {
               step := QuerySkipStep(slot_idx as nat);
+              should_break := false;
             } else {
               output := MapIfc.QueryOutput(NotFound);
               step := QueryNotFoundStep(slot_idx as nat);
@@ -322,7 +325,7 @@ module Impl {
         }
       }
 
-      if !step.QuerySkipStep? {
+      if should_break {
         // this test is required for termination, but is not enforced by verification
         // because we are using decreases *
         break;
@@ -346,11 +349,12 @@ module Impl {
     out_token := releaseRow(iv, slot_idx, entry, handle, out_token);
   }
 
-  method doInsert(shared iv: IVariables, input: MapIfc.Input, rid: nat, thread_id: uint32, glinear in_token: Token)
+  method doInsert(shared iv: IVariables, input: MapIfc.Input, ghost rid: nat, glinear in_token: Token)
   returns (output: MapIfc.Output, glinear out_token: Token)
     requires iv.Inv(in_token.loc)
     requires input.InsertInput?
     requires in_token.val == SSM.Ticket(rid, input)
+    ensures out_token.loc == in_token.loc
     ensures out_token.val == SSM.Stub(rid, output)
     decreases *
   {
@@ -368,9 +372,10 @@ module Impl {
     var entry; glinear var handle;
     entry, handle, out_token := acquireRow(iv, slot_idx, out_token);
 
-    var step := ProcessInsertTicketStep(SSM.Request(rid, input));
-    var expected := SSM.GetTransition(out_token.val, step);
+    ghost var expected := SSM.GetTransition(out_token.val, ProcessInsertTicketStep(SSM.Request(rid, input)));
     out_token := TST.transition_1_1(out_token, expected);
+
+    var step: Step;
 
     while true 
       invariant iv.Inv(loc)
@@ -437,7 +442,7 @@ module Impl {
     }
   }
 
-  method doRemoveFound(shared iv: IVariables, rid: nat, 
+  method doRemoveFound(shared iv: IVariables, ghost rid: nat,
     slot_idx: uint32,
     hash_idx: uint32,
     inital_key: Key,
@@ -454,6 +459,7 @@ module Impl {
     requires entry.Full? && entry.kv.key == inital_key
     requires hash(inital_key) == hash_idx
     requires handle.m == iv.row_mutexes[slot_idx as nat]
+    ensures out_token.loc == in_token.loc
     ensures out_token.val == SSM.Stub(rid, output)
   {
     ghost var loc := in_token.loc;
@@ -467,10 +473,10 @@ module Impl {
     out_token := in_token;
     next_entry, next_handle, out_token := acquireRow(iv, next_slot_idx, out_token);
 
-    var step := RemoveFoundItStep(slot_idx as nat);
-
-    var expected := SSM.GetTransition(out_token.val, step);
+    ghost var expected := SSM.GetTransition(out_token.val, RemoveFoundItStep(slot_idx as nat));
     out_token := TST.transition_1_1(out_token, expected);
+
+    var step :Step;
 
     while true
       invariant iv.Inv(loc)
@@ -517,13 +523,14 @@ module Impl {
     assert out_token.val.insert_capacity == 0;
   }
 
-  method doRemove(shared iv: IVariables, input: MapIfc.Input, rid: nat, thread_id: uint32, glinear in_token: Token)
+  method doRemove(shared iv: IVariables, input: MapIfc.Input, ghost rid: nat, glinear in_token: Token)
     returns (output: MapIfc.Output, glinear out_token: Token)
     decreases *
 
     requires iv.Inv(in_token.loc)
     requires input.RemoveInput?
     requires in_token.val == SSM.Ticket(rid, input)
+    ensures out_token.loc == in_token.loc
     ensures out_token.val == SSM.Stub(rid, output)
   {
     ghost var loc := in_token.loc;
@@ -536,10 +543,9 @@ module Impl {
     var entry; glinear var handle;
     entry, handle, out_token := acquireRow(iv, slot_idx, in_token);
 
-    var step : Step := ProcessRemoveTicketStep(query_ticket);
-    // r := easy_transform_step(r, step);
-    var expected := SSM.GetTransition(out_token.val, step);
+    ghost var expected := SSM.GetTransition(out_token.val, ProcessRemoveTicketStep(query_ticket));
     out_token := TST.transition_1_1(out_token, expected);
+    var step :Step := RemoveSkipStep(slot_idx as nat);
 
     while true 
       invariant iv.Inv(loc)
