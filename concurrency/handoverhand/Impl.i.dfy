@@ -1,5 +1,5 @@
 include "../framework/GhostLinearSequence.i.dfy"
-include "../framework/Mutex.s.dfy"
+include "../framework/Mutex.i.dfy"
 include "ShardedHashTableTokens.i.dfy"
 include "ShardedHashTable.i.dfy"
 include "../../lib/Lang/LinearSequence.i.dfy"
@@ -62,8 +62,10 @@ module Impl {
   predicate RowMutexTablePartialInv(row_mutexes: RowMutexTable, loc: Loc, index: nat)
     requires index <= |row_mutexes| == FixedSize()
   {
-    && (forall i | 0 <= i < index ::
-      (i in row_mutexes) && (row_mutexes[i].inv == ((row: Row) => RowInv(loc, i, row))))
+    && (forall i | 0 <= i < index :: 
+      && (i in row_mutexes)
+      && row_mutexes[i].WF()
+      && (row_mutexes[i].inv == ((row: Row) => RowInv(loc, i, row))))
     && (forall i | index <= i < |row_mutexes| ::
       (i !in row_mutexes))
   }
@@ -82,6 +84,7 @@ module Impl {
     {
       && |row_mutexes| == FixedSize()
       && RowMutexTableInv(row_mutexes, loc)
+      && cap_mutex.WF()
       && (cap_mutex.inv == ((cap: Cap) => cap.Inv(loc)))
     }
   }
@@ -171,8 +174,10 @@ module Impl {
     requires iv.Inv(in_token.loc)
     requires index < FixedSizeImpl();
     ensures handle.m == iv.row_mutexes[index as nat];
+    ensures handle.WF();
     ensures out_token.loc == in_token.loc;
     ensures out_token.val == dot(in_token.val, oneRowResource(index as nat, Info(entry, Free), 0))
+  decreases *
   {
     linear var row; 
     row, handle := lseq_peek(iv.row_mutexes, index as uint64).acquire();
@@ -193,6 +198,7 @@ module Impl {
     requires iv.Inv(in_token.loc);
     requires index < FixedSizeImpl();
     requires handle.m == iv.row_mutexes[index as nat];
+    requires handle.WF()
     requires in_token.val.M?;
     requires in_token.val.table[index as nat] == Some(Info(entry, Free));
     ensures out_token.loc == in_token.loc;
@@ -254,6 +260,7 @@ module Impl {
 
     ensures out_token ==
       in_token.(val := in_token.val.(insert_capacity := in_token.val.insert_capacity - 1))
+  decreases *
   {
     linear var cap; glinear var handle: MutexHandle<Cap>;
     cap, handle := iv.cap_mutex.acquire();
@@ -298,6 +305,7 @@ module Impl {
       invariant out_token.loc == loc;
       invariant out_token.val == oneRowResource(slot_idx as nat, Info(entry, Querying(rid, key)), 0);
       invariant handle.m == iv.row_mutexes[slot_idx as nat];
+      invariant handle.WF();
       decreases *
     {
       var should_break := true;
@@ -385,6 +393,7 @@ module Impl {
       invariant kv.key == key
       invariant hash_idx == hash(key)
       invariant handle.m == iv.row_mutexes[slot_idx as nat];
+      invariant handle.WF();
       decreases *
     {
       var next_slot_idx := getNextIndex(slot_idx);
@@ -459,6 +468,7 @@ module Impl {
     requires entry.Full? && entry.kv.key == inital_key
     requires hash(inital_key) == hash_idx
     requires handle.m == iv.row_mutexes[slot_idx as nat]
+    requires handle.WF()
     ensures out_token.loc == in_token.loc
     ensures out_token.val == SSM.Stub(rid, output)
   {
@@ -487,7 +497,9 @@ module Impl {
         NextPos(slot_idx as nat), Info(next_entry, Free),
         0)
       invariant handle.m == iv.row_mutexes[slot_idx as nat]
+      invariant handle.WF();
       invariant next_handle.m == iv.row_mutexes[NextPos(slot_idx as nat)]
+      invariant next_handle.WF();
       decreases *
     {
       next_slot_idx := getNextIndex(slot_idx);
@@ -558,6 +570,7 @@ module Impl {
         && TidyEnable(out_token.val, slot_idx as nat)
         && KnowRowIsFree(out_token.val, NextPos(slot_idx as nat)))
       invariant handle.m == iv.row_mutexes[slot_idx as nat]
+      invariant handle.WF();
       decreases *
     {
       var next_slot_idx := getNextIndex(slot_idx);
