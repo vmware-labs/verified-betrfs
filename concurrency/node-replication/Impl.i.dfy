@@ -203,13 +203,19 @@ module Impl(nrifc: NRIfc) {
       glinear globalTail: GlobalTail,
       glinear cbGlobalTail: CBGlobalTail)
 
+  predicate LocalTailInv(v: uint64, g: LocalTailTokens, nodeId: nat, cb_loc_s: nat)
+  {
+    && 0 <= v < 0xffff_ffff_f000_0000
+    && g == LocalTailTokens(LocalTail(nodeId, v as int), CBLocalTail(nodeId, v as int, cb_loc_s))
+  }
+
   linear datatype {:alignment 128} NodeInfo = NodeInfo(
     linear localTail: Atomic<uint64, LocalTailTokens>
   )
   {
     predicate WF(nodeId: nat, cb_loc_s: nat) {
       && (forall v, g :: atomic_inv(localTail, v, g) <==>
-          g == LocalTailTokens(LocalTail(nodeId, v as int), CBLocalTail(nodeId, v as int, cb_loc_s)))
+          LocalTailInv(v, g, nodeId, cb_loc_s))
     }
   }
 
@@ -243,6 +249,11 @@ module Impl(nrifc: NRIfc) {
     && (forall i | i in contents.contents :: BufferEntryInv(buffer, i, contents.contents[i]))
   }
 
+  predicate GlobalTailInv(v: uint64, g: GlobalTailTokens, cb_loc_s: nat) {
+    && v < 0xffff_ffff_f000_0000
+    && g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int, cb_loc_s))
+  }
+
   linear datatype NR = NR(
     linear ctail: CachePadded<Atomic<uint64, Ctail>>,
     linear head: CachePadded<Atomic<uint64, CBHead>>,
@@ -258,8 +269,7 @@ module Impl(nrifc: NRIfc) {
     predicate WF() {
       && (forall v, g :: atomic_inv(ctail.inner, v, g) <==> g == Ctail(v as int))
       && (forall v, g :: atomic_inv(head.inner, v, g) <==> g == CBHead(v as int, cb_loc_s))
-      && (forall v, g :: atomic_inv(globalTail.inner, v, g) <==>
-            g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int, cb_loc_s)))
+      && (forall v, g :: atomic_inv(globalTail.inner, v, g) <==> GlobalTailInv(v, g, cb_loc_s))
       && |node_info| == NUM_REPLICAS as int
       && (forall nodeId | 0 <= nodeId < |node_info| :: nodeId in node_info)
       && (forall nodeId | 0 <= nodeId < |node_info| :: node_info[nodeId].WF(nodeId, cb_loc_s))
@@ -1609,6 +1619,7 @@ module Impl(nrifc: NRIfc) {
         updates' == updates && combinerState' == combinerState
             && responses' == responses
       invariant |responses'| == MAX_THREADS_PER_REPLICA as int
+      invariant min_local_tail < 0xffff_ffff_f000_0000
 
       {
         atomic_block var cur_local_tail :=
@@ -1645,7 +1656,7 @@ module Impl(nrifc: NRIfc) {
           ghost_release head;
         }
 
-        assume min_local_tail as nat + (LOG_SIZE as int - GC_FROM_HEAD as nat) < Uint64UpperBound(); // TODO bounded int errors
+        assert min_local_tail as nat + (LOG_SIZE as int - GC_FROM_HEAD as nat) < Uint64UpperBound(); // TODO bounded int errors
         if f < min_local_tail + (LOG_SIZE - GC_FROM_HEAD) {
           done := true;
         } else {
