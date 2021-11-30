@@ -22,24 +22,30 @@ module FlatCombinerTokens {
   // The combiner reads the requests and returns responses
   // This machinery allows us make sure the requestId of the request & response match
 
-  datatype {:glinear_fold} FCClient = FCClient(ghost loc: Loc, ghost tid: nat, ghost state: FC.FCClientState)
+  datatype {:glinear_fold} FCClient = FCClient(ghost loc_s: nat, ghost tid: nat, ghost state: FC.FCClientState)
   {
     function defn(): FCTokens.Token {
-      FCTokens.T.Token(loc, FC.M(map[tid := state], map[], None))
+      FCTokens.T.Token(
+          ExtLoc(loc_s, FCTokens.Wrap.singleton_loc()),
+          FC.M(map[tid := state], map[], None))
     }
   }
 
-  datatype {:glinear_fold}  FCCombiner = FCCombiner(ghost loc: Loc, ghost state: FC.FCCombinerState)
+  datatype {:glinear_fold}  FCCombiner = FCCombiner(ghost loc_s: nat, ghost state: FC.FCCombinerState)
   {
     function defn(): FCTokens.Token {
-      FCTokens.T.Token(loc, FC.M(map[], map[], Some(state)))
+      FCTokens.T.Token(
+          ExtLoc(loc_s, FCTokens.Wrap.singleton_loc()),
+          FC.M(map[], map[], Some(state)))
     }
   }
 
-  datatype {:glinear_fold} FCSlot = FCSlot(ghost loc: Loc, ghost tid: nat, ghost state: FC.FCSlotState)
+  datatype {:glinear_fold} FCSlot = FCSlot(ghost loc_s: nat, ghost tid: nat, ghost state: FC.FCSlotState)
   {
     function defn(): FCTokens.Token {
-      FCTokens.T.Token(loc, FC.M(map[], map[tid := state], None))
+      FCTokens.T.Token(
+          ExtLoc(loc_s, FCTokens.Wrap.singleton_loc()),
+          FC.M(map[], map[tid := state], None))
     }
   }
 
@@ -56,12 +62,12 @@ module FlatCombinerTokens {
 
   //   while j < MAX_THREADS_PER_REPLICA as nat
   //   invariant 0 <= j <= LOG_SIZE as nat
-  //   invariant t'.loc == t.loc
+  //   invariant t'.loc_s == t.loc_s
   //   invariant t'.val.M?
-  //   invariant forall i | 0 <= i < j :: i in slots && slots[i] == FCSlot(t.loc, j, FC.FCEmpty)
+  //   invariant forall i | 0 <= i < j :: i in slots && slots[i] == FCSlot(t.loc_s, j, FC.FCEmpty)
   //   invariant forall i | j <= i <  MAX_THREADS_PER_REPLICA as nat :: t.val.slots[i] == t'.val.slots[i]
   //   {
-  //     var expected := FCSlot(t.loc, j, FC.FCEmpty);
+  //     var expected := FCSlot(t.loc_s, j, FC.FCEmpty);
   //     var x := expected.defn().val;
   //     var y := t'.val.(slots := t'.val.slots - {j});
 
@@ -84,12 +90,12 @@ module FlatCombinerTokens {
 
   //   while j < MAX_THREADS_PER_REPLICA as nat
   //   invariant 0 <= j <= LOG_SIZE as nat
-  //   invariant t'.loc == t.loc
+  //   invariant t'.loc_s == t.loc_s
   //   invariant t'.val.M?
-  //   invariant forall i | 0<= i < j :: i in clients && clients[i] == FCClient(t.loc, i, FC.FCClientIdle)
+  //   invariant forall i | 0<= i < j :: i in clients && clients[i] == FCClient(t.loc_s, i, FC.FCClientIdle)
   //   invariant forall i | j <= i <  MAX_THREADS_PER_REPLICA as nat :: t.val.clients[i] == t'.val.clients[i]
   //   {
-  //     var expected := FCClient(t.loc, j, FC.FCClientIdle);
+  //     var expected := FCClient(t.loc_s, j, FC.FCClientIdle);
   //     var x := expected.defn().val;
   //     var y := t'.val.(clients := t'.val.clients - {j});
 
@@ -112,9 +118,9 @@ module FlatCombinerTokens {
   )
   ensures combiner.state == FC.FCCombinerCollecting([])
   ensures forall i | 0 <= i < MAX_THREADS_PER_REPLICA as int ::
-      i in slots && slots[i] == FCSlot(combiner.loc, i, FC.FCEmpty)
+      i in slots && slots[i] == FCSlot(combiner.loc_s, i, FC.FCEmpty)
   ensures forall i | 0 <= i < MAX_THREADS_PER_REPLICA as int ::
-      i in clients && clients[i] == FCClient(combiner.loc, i, FC.FCClientIdle)
+      i in clients && clients[i] == FCClient(combiner.loc_s, i, FC.FCClientIdle)
   // {
 
   //   ghost var new_clients := map x : nat | 0 <= x < (MAX_THREADS_PER_REPLICA as nat) :: x := FC.FCClientIdle;
@@ -133,7 +139,7 @@ module FlatCombinerTokens {
 
   //   clients := do_init_clients(tcl);
   //   slots := do_init_slots(ts);
-  //   combiner := FCCombiner_fold(FCCombiner(token.loc, new_comb), tco);
+  //   combiner := FCCombiner_fold(FCCombiner(token.loc_s, new_comb), tco);
   // }
 
   /* ----------------------------------------------------------------------------------------- */
@@ -145,14 +151,14 @@ module FlatCombinerTokens {
   requires comb.state.FCCombinerCollecting?
   requires |comb.state.elems| < MAX_THREADS_PER_REPLICA as int
   requires slot.tid == |comb.state.elems|
-  requires comb.loc == slot.loc
+  requires comb.loc_s == slot.loc_s
   ensures slot.state.FCEmpty? || slot.state.FCRequest?
   ensures slot.state.FCEmpty? ==>
-      && comb' == FCCombiner(comb.loc,
+      && comb' == FCCombiner(comb.loc_s,
           FC.FCCombinerCollecting(comb.state.elems + [None]))
       && slot' == slot
   ensures slot.state.FCRequest? ==>
-      && comb' == FCCombiner(comb.loc,
+      && comb' == FCCombiner(comb.loc_s,
           FC.FCCombinerCollecting(
             comb.state.elems + [Some(FC.Elem(slot.state.rid))]))
       && slot' == slot.(state := FC.FCInProgress(slot.state.rid))
@@ -162,10 +168,10 @@ module FlatCombinerTokens {
 
     if slot.state.FCEmpty? {
 
-      ghost var out_expect_c := FCCombiner(comb.loc, FC.FCCombinerCollecting(comb.state.elems + [None]));
+      ghost var out_expect_c := FCCombiner(comb.loc_s, FC.FCCombinerCollecting(comb.state.elems + [None]));
       ghost var out_token_expect_c := FCCombiner_unfold(out_expect_c);
 
-      ghost var out_expect_s := FCSlot(slot.loc, slot.tid, FC.FCEmpty);
+      ghost var out_expect_s := FCSlot(slot.loc_s, slot.tid, FC.FCEmpty);
       ghost var out_token_expect_s := FCSlot_unfold(out_expect_s);
 
       FC.CombinerDoCollectEmpty_is_transition(
@@ -184,10 +190,10 @@ module FlatCombinerTokens {
 
       assume slot.state.FCRequest?;
 
-      ghost var out_expect_c := FCCombiner(comb.loc, FC.FCCombinerCollecting(comb.state.elems  + [Some(FC.Elem(slot.state.rid))]));
+      ghost var out_expect_c := FCCombiner(comb.loc_s, FC.FCCombinerCollecting(comb.state.elems  + [Some(FC.Elem(slot.state.rid))]));
       ghost var out_token_expect_c := FCCombiner_unfold(out_expect_c);
 
-      ghost var out_expect_s := FCSlot(slot.loc, slot.tid, FC.FCInProgress(slot.state.rid));
+      ghost var out_expect_s := FCSlot(slot.loc_s, slot.tid, FC.FCInProgress(slot.state.rid));
       ghost var out_token_expect_s := FCSlot_unfold(out_expect_s);
 
     FC.CombinerDoCollectRequest_is_transition(
@@ -212,11 +218,11 @@ module FlatCombinerTokens {
   returns (glinear comb': FCCombiner)
   requires comb.state.FCCombinerCollecting?
   requires |comb.state.elems| == MAX_THREADS_PER_REPLICA as int
-  ensures comb' == FCCombiner(comb.loc, FC.FCCombinerResponding(comb.state.elems, 0))
+  ensures comb' == FCCombiner(comb.loc_s, FC.FCCombinerResponding(comb.state.elems, 0))
   {
     glinear var c_token := FCCombiner_unfold(comb);
 
-    ghost var out_expect := FCCombiner(comb.loc, FC.FCCombinerResponding(comb.state.elems, 0));
+    ghost var out_expect := FCCombiner(comb.loc_s, FC.FCCombinerResponding(comb.state.elems, 0));
     ghost var out_token_expect := FCCombiner_unfold(out_expect);
 
     FC.CombinerGoToResponding_is_transition(c_token.val,out_token_expect.val);
@@ -236,11 +242,11 @@ module FlatCombinerTokens {
   requires comb.state.FCCombinerResponding?
   requires comb.state.idx < |comb.state.elems|
   requires comb.state.elems[comb.state.idx].None?
-  ensures comb' == FCCombiner(comb.loc, comb.state.(idx := comb.state.idx + 1))
+  ensures comb' == FCCombiner(comb.loc_s, comb.state.(idx := comb.state.idx + 1))
   {
     glinear var c_token := FCCombiner_unfold(comb);
 
-    ghost var out_expect := FCCombiner(comb.loc, FC.FCCombinerResponding(comb.state.elems, comb.state.idx + 1));
+    ghost var out_expect := FCCombiner(comb.loc_s, FC.FCCombinerResponding(comb.state.elems, comb.state.idx + 1));
     ghost var out_token_expect := FCCombiner_unfold(out_expect);
 
 
@@ -261,9 +267,9 @@ module FlatCombinerTokens {
   requires comb.state.idx < |comb.state.elems|
   requires comb.state.elems[comb.state.idx].Some?
   requires slot.tid == comb.state.idx
-  requires comb.loc == slot.loc
+  requires comb.loc_s == slot.loc_s
   ensures slot.state.FCInProgress?
-  ensures comb' == FCCombiner(comb.loc, comb.state.(idx := comb.state.idx + 1))
+  ensures comb' == FCCombiner(comb.loc_s, comb.state.(idx := comb.state.idx + 1))
   ensures slot' == slot.(state := FC.FCResponse(slot.state.rid))
   ensures comb.state.elems[comb.state.idx].value.rid == slot.state.rid
   {
@@ -275,10 +281,10 @@ module FlatCombinerTokens {
     glinear var c_token := FCCombiner_unfold(comb);
     glinear var s_token := FCSlot_unfold(slot);
 
-    ghost var out_expect_c := FCCombiner(comb.loc, FC.FCCombinerResponding(comb.state.elems, comb.state.idx + 1));
+    ghost var out_expect_c := FCCombiner(comb.loc_s, FC.FCCombinerResponding(comb.state.elems, comb.state.idx + 1));
     ghost var out_token_expect_c := FCCombiner_unfold(out_expect_c);
 
-    ghost var out_expect_s := FCSlot(slot.loc, slot.tid, FC.FCResponse(slot.state.rid));
+    ghost var out_expect_s := FCSlot(slot.loc_s, slot.tid, FC.FCResponse(slot.state.rid));
     ghost var out_token_expect_s := FCSlot_unfold(out_expect_s);
 
     FC.CombinerDoResponse_is_transition(
@@ -302,14 +308,14 @@ module FlatCombinerTokens {
   returns (glinear comb': FCCombiner)
   requires comb.state.FCCombinerResponding?
   requires comb.state.idx == MAX_THREADS_PER_REPLICA as int
-  ensures comb' == FCCombiner(comb.loc, FC.FCCombinerCollecting([]))
+  ensures comb' == FCCombiner(comb.loc_s, FC.FCCombinerCollecting([]))
   {
     glinear var c_token := FCCombiner_unfold(comb);
 
     // that can be obtained from the Invariant: CombinerState_Elems
     assume |comb.state.elems| == MAX_THREADS_PER_REPLICA as int;
 
-    ghost var out_expect := FCCombiner(comb.loc, FC.FCCombinerCollecting([]));
+    ghost var out_expect := FCCombiner(comb.loc_s, FC.FCCombinerCollecting([]));
     ghost var out_token_expect := FCCombiner_unfold(out_expect);
 
 
@@ -328,7 +334,7 @@ module FlatCombinerTokens {
 
   glinear method fc_send(glinear fc_client: FCClient, glinear fc_slot: FCSlot, ghost rid: RequestId)
   returns (glinear fc_client': FCClient, glinear fc_slot': FCSlot)
-  requires fc_client.loc == fc_slot.loc
+  requires fc_client.loc_s == fc_slot.loc_s
   requires fc_client.tid == fc_slot.tid
   requires fc_client.state.FCClientIdle?
   ensures fc_slot.state.FCEmpty?
@@ -341,10 +347,10 @@ module FlatCombinerTokens {
     glinear var c_token := FCClient_unfold(fc_client);
     glinear var s_token := FCSlot_unfold(fc_slot);
 
-    ghost var out_expect_c := FCClient(fc_client.loc, fc_client.tid , FC.FCClientWaiting(rid));
+    ghost var out_expect_c := FCClient(fc_client.loc_s, fc_client.tid , FC.FCClientWaiting(rid));
     ghost var out_token_expect_c := FCClient_unfold(out_expect_c);
 
-    ghost var out_expect_s := FCSlot(fc_slot.loc, fc_slot.tid, FC.FCRequest(rid));
+    ghost var out_expect_s := FCSlot(fc_slot.loc_s, fc_slot.tid, FC.FCRequest(rid));
     ghost var out_token_expect_s := FCSlot_unfold(out_expect_s);
 
 
@@ -369,7 +375,7 @@ module FlatCombinerTokens {
 
   glinear method fc_recv(glinear fc_client: FCClient, glinear fc_slot: FCSlot, ghost rid: RequestId)
   returns (glinear fc_client': FCClient, glinear fc_slot': FCSlot)
-  requires fc_client.loc == fc_slot.loc
+  requires fc_client.loc_s == fc_slot.loc_s
   requires fc_client.tid == fc_slot.tid
   requires fc_client.state.FCClientWaiting?
   requires !fc_slot.state.FCRequest?
@@ -386,10 +392,10 @@ module FlatCombinerTokens {
     glinear var c_token := FCClient_unfold(fc_client);
     glinear var s_token := FCSlot_unfold(fc_slot);
 
-    ghost var out_expect_c := FCClient(fc_client.loc, fc_client.tid , FC.FCClientIdle);
+    ghost var out_expect_c := FCClient(fc_client.loc_s, fc_client.tid , FC.FCClientIdle);
     ghost var out_token_expect_c := FCClient_unfold(out_expect_c);
 
-    ghost var out_expect_s := FCSlot(fc_slot.loc, fc_slot.tid, FC.FCEmpty);
+    ghost var out_expect_s := FCSlot(fc_slot.loc_s, fc_slot.tid, FC.FCEmpty);
     ghost var out_token_expect_s := FCSlot_unfold(out_expect_s);
 
 
