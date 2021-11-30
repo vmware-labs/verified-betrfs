@@ -87,6 +87,23 @@ module FlatCombiner refines Rw {
       )
   }
 
+  predicate CombinerState_SlotsNotInProgress(x: M)
+    requires Complete(x)
+    requires CombinerState_Elems(x)
+  {
+     match x.combiner.value {
+      case FCCombinerCollecting(elems: seq<Option<Elem>>) => (
+        && (forall i : nat | 0 <= i < |x.combiner.value.elems| && x.combiner.value.elems[i].None? :: !x.slots[i].FCInProgress?)
+        && (forall i : nat | |x.combiner.value.elems| <= i < MAX_THREADS_PER_REPLICA as nat :: !x.slots[i].FCInProgress?)
+      )
+      case FCCombinerResponding(elems: seq<Option<Elem>>, idx: nat) => (
+        && (forall i : nat | 0 <= i < |x.combiner.value.elems| && x.combiner.value.elems[i].None? :: !x.slots[i].FCInProgress?)
+        && (forall i : nat | 0 <= i < idx :: !x.slots[i].FCInProgress?)
+
+      )
+    }
+  }
+
   predicate CombinerState_RequestIds(x: M)
     requires Complete(x)
     requires CombinerState_Elems(x)
@@ -112,6 +129,7 @@ module FlatCombiner refines Rw {
       && ClientWaiting_RequestId(x)
       && CombinerState_Elems(x)
       && CombinerState_RequestIds(x)
+      && CombinerState_SlotsNotInProgress(x)
     )
   }
 

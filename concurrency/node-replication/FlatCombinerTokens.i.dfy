@@ -200,8 +200,11 @@ module FlatCombinerTokens {
       slot' := FCSlot_fold(out_expect_s, out_token_s);
 
     } else {
+      assert  |full.combiner.value.elems| == slot.tid;
+      assert full.slots[slot.tid] == slot.state;
 
-      assume slot.state.FCRequest?;
+      assert !slot.state.FCInProgress?;
+
 
       ghost var out_expect_c := FCCombiner(comb.loc_s, FC.FCCombinerCollecting(comb.state.elems  + [Some(FC.Elem(slot.state.rid))]));
       ghost var out_token_expect_c := FCCombiner_unfold(out_expect_c);
