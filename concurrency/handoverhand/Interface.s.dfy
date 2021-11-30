@@ -36,5 +36,4 @@ abstract module Interface(
   requires ticket.val == ssm.Ticket(rid, input)
   ensures stub.loc == TicketStubSingletonLoc.loc()
   ensures ssm.IsStub(rid, output, stub.val)
-  ensures SharedWF(s)
 }
