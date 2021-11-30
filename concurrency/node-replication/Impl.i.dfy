@@ -77,10 +77,10 @@ module Impl(nrifc: NRIfc) {
     glinear update: glOption<Update>
   )
   {
-    predicate inv(v: uint64, i: nat, cell: Cell<OpResponse>, fc_loc: Loc)
+    predicate inv(v: uint64, i: nat, cell: Cell<OpResponse>, fc_loc_s: nat)
     {
       && fc.tid == i
-      && fc.loc == fc_loc
+      && fc.loc_s == fc_loc_s
       && (v == 0 || v == 1)
       && (v == 0 ==> fc.state.FCEmpty? || fc.state.FCResponse?)
       && (v == 1 ==> fc.state.FCRequest? || fc.state.FCInProgress?)
@@ -116,7 +116,7 @@ module Impl(nrifc: NRIfc) {
     linear cell: CachePadded<Cell<OpResponse>>
   )
   {
-    predicate WF(i: nat, fc_loc: Loc)
+    predicate WF(i: nat, fc_loc: nat)
     {
       (forall v, g :: atomic_inv(atomic.inner, v, g) <==> g.inv(v, i, cell.inner, fc_loc))
     }
@@ -127,12 +127,12 @@ module Impl(nrifc: NRIfc) {
   glinear datatype CombinerLockState = CombinerLockState(glinear flatCombiner: FCCombiner, glinear gops: LC.LCellContents<seq<nrifc.UpdateOp>>, glinear gresponses: LC.LCellContents<seq<nrifc.ReturnType>>)
 
   predicate CombinerLockInv(v: uint64, g: glOption<CombinerLockState>,
-    fc_loc: Loc, ops: LC.LinearCell<seq<nrifc.UpdateOp>>, responses: LC.LinearCell<seq<nrifc.ReturnType>>)
+    fc_loc: nat, ops: LC.LinearCell<seq<nrifc.UpdateOp>>, responses: LC.LinearCell<seq<nrifc.ReturnType>>)
   {
     && ((v == 0) ==> (
       && g.glSome? 
       && g.value.flatCombiner.state == FC.FCCombinerCollecting([])
-      && g.value.flatCombiner.loc == fc_loc
+      && g.value.flatCombiner.loc_s == fc_loc
       && g.value.gops.v.Some?
       && g.value.gops.lcell == ops
       && |g.value.gops.v.value| == MAX_THREADS_PER_REPLICA as int
@@ -155,7 +155,7 @@ module Impl(nrifc: NRIfc) {
     nodeId: uint64,
     //next: Atomic<Tid, ()>
 
-    ghost fc_loc: Loc
+    ghost fc_loc: nat
   )
   {
     predicate WF(nr: NR) {
@@ -203,13 +203,19 @@ module Impl(nrifc: NRIfc) {
       glinear globalTail: GlobalTail,
       glinear cbGlobalTail: CBGlobalTail)
 
+  predicate LocalTailInv(v: uint64, g: LocalTailTokens, nodeId: nat, cb_loc_s: nat)
+  {
+    && 0 <= v < 0xffff_ffff_f000_0000
+    && g == LocalTailTokens(LocalTail(nodeId, v as int), CBLocalTail(nodeId, v as int, cb_loc_s))
+  }
+
   linear datatype {:alignment 128} NodeInfo = NodeInfo(
     linear localTail: Atomic<uint64, LocalTailTokens>
   )
   {
     predicate WF(nodeId: nat, cb_loc_s: nat) {
       && (forall v, g :: atomic_inv(localTail, v, g) <==>
-          g == LocalTailTokens(LocalTail(nodeId, v as int), CBLocalTail(nodeId, v as int, cb_loc_s)))
+          LocalTailInv(v, g, nodeId, cb_loc_s))
     }
   }
 
@@ -243,6 +249,11 @@ module Impl(nrifc: NRIfc) {
     && (forall i | i in contents.contents :: BufferEntryInv(buffer, i, contents.contents[i]))
   }
 
+  predicate GlobalTailInv(v: uint64, g: GlobalTailTokens, cb_loc_s: nat) {
+    && v < 0xffff_ffff_f000_0000
+    && g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int, cb_loc_s))
+  }
+
   linear datatype NR = NR(
     linear ctail: CachePadded<Atomic<uint64, Ctail>>,
     linear head: CachePadded<Atomic<uint64, CBHead>>,
@@ -258,8 +269,7 @@ module Impl(nrifc: NRIfc) {
     predicate WF() {
       && (forall v, g :: atomic_inv(ctail.inner, v, g) <==> g == Ctail(v as int))
       && (forall v, g :: atomic_inv(head.inner, v, g) <==> g == CBHead(v as int, cb_loc_s))
-      && (forall v, g :: atomic_inv(globalTail.inner, v, g) <==>
-            g == GlobalTailTokens(GlobalTail(v as int), CBGlobalTail(v as int, cb_loc_s)))
+      && (forall v, g :: atomic_inv(globalTail.inner, v, g) <==> GlobalTailInv(v, g, cb_loc_s))
       && |node_info| == NUM_REPLICAS as int
       && (forall nodeId | 0 <= nodeId < |node_info| :: nodeId in node_info)
       && (forall nodeId | 0 <= nodeId < |node_info| :: node_info[nodeId].WF(nodeId, cb_loc_s))
@@ -430,9 +440,9 @@ module Impl(nrifc: NRIfc) {
   requires |ops| == MAX_THREADS_PER_REPLICA as int
   requires |responses| == MAX_THREADS_PER_REPLICA as int
   requires flatCombiner.state == FC.FCCombinerCollecting([])
-  requires flatCombiner.loc == node.fc_loc
+  requires flatCombiner.loc_s == node.fc_loc
   requires |old_activeIdxs| == MAX_THREADS_PER_REPLICA as int
-  ensures flatCombiner'.loc == node.fc_loc
+  ensures flatCombiner'.loc_s == node.fc_loc
   ensures flatCombiner'.state == FC.FCCombinerCollecting([])
   ensures |ops'| == MAX_THREADS_PER_REPLICA as int
   ensures |responses'| == MAX_THREADS_PER_REPLICA as int
@@ -492,11 +502,11 @@ module Impl(nrifc: NRIfc) {
       glinear updates: map<nat, Update>,
       glinear opCellPermissions: map<nat, CellContents<OpResponse>>)
   requires node.WF(nr)
-  requires flatCombiner.loc == node.fc_loc
+  requires flatCombiner.loc_s == node.fc_loc
   requires flatCombiner.state == FC.FCCombinerCollecting([])
   requires |old_activeIdxs| == |ops| == MAX_THREADS_PER_REPLICA as int
   ensures |activeIdxs| == |ops'| == |ops|
-  ensures flatCombiner'.loc == node.fc_loc
+  ensures flatCombiner'.loc_s == node.fc_loc
   ensures 0 <= num_ops as int <= |ops'|
   ensures flatCombiner'.state.FCCombinerResponding?
       && flatCombiner'.state.idx == 0
@@ -530,7 +540,7 @@ module Impl(nrifc: NRIfc) {
     invariant 0 <= j <= MAX_THREADS_PER_REPLICA
     invariant |requestIds| == num_ops as int <= j as int
     invariant |ops'| == |ops|
-    invariant flatCombiner'.loc == node.fc_loc
+    invariant flatCombiner'.loc_s == node.fc_loc
     invariant flatCombiner'.state.FCCombinerCollecting?
     invariant |requestIds| <= j as int
       && |flatCombiner'.state.elems| == j as int
@@ -624,7 +634,7 @@ module Impl(nrifc: NRIfc) {
       glinear flatCombiner': FCCombiner)
   requires node.WF(nr)
   requires |responses| == MAX_THREADS_PER_REPLICA as int
-  requires flatCombiner.loc == node.fc_loc
+  requires flatCombiner.loc_s == node.fc_loc
   requires flatCombiner.state.FCCombinerResponding?
       && flatCombiner.state.idx == 0
       && |flatCombiner.state.elems| == MAX_THREADS_PER_REPLICA as int == |activeIdxs|
@@ -645,7 +655,7 @@ module Impl(nrifc: NRIfc) {
   requires RidsMatch(flatCombiner.state.elems, requestIds,
       0, |flatCombiner.state.elems|,
       0, |requestIds|)
-  ensures flatCombiner'.loc == node.fc_loc
+  ensures flatCombiner'.loc_s == node.fc_loc
   ensures flatCombiner'.state == FC.FCCombinerCollecting([])
   {
     flatCombiner' := flatCombiner;
@@ -657,7 +667,7 @@ module Impl(nrifc: NRIfc) {
     while j < MAX_THREADS_PER_REPLICA
     invariant 0 <= cur_idx <= j <= MAX_THREADS_PER_REPLICA
     invariant 0 <= cur_idx as int <= |requestIds|
-    invariant flatCombiner'.loc == node.fc_loc
+    invariant flatCombiner'.loc_s == node.fc_loc
     invariant flatCombiner'.state.FCCombinerResponding?
       && flatCombiner'.state.idx == j as int
       && |flatCombiner'.state.elems| == MAX_THREADS_PER_REPLICA as int == |activeIdxs|
@@ -1609,6 +1619,7 @@ module Impl(nrifc: NRIfc) {
         updates' == updates && combinerState' == combinerState
             && responses' == responses
       invariant |responses'| == MAX_THREADS_PER_REPLICA as int
+      invariant min_local_tail < 0xffff_ffff_f000_0000
 
       {
         atomic_block var cur_local_tail :=
@@ -1645,7 +1656,7 @@ module Impl(nrifc: NRIfc) {
           ghost_release head;
         }
 
-        assume min_local_tail as nat + (LOG_SIZE as int - GC_FROM_HEAD as nat) < Uint64UpperBound(); // TODO bounded int errors
+        assert min_local_tail as nat + (LOG_SIZE as int - GC_FROM_HEAD as nat) < Uint64UpperBound(); // TODO bounded int errors
         if f < min_local_tail + (LOG_SIZE - GC_FROM_HEAD) {
           done := true;
         } else {

@@ -94,25 +94,32 @@ module FlatCombiner refines Rw {
     match x.combiner.value {
       case FCCombinerCollecting(elems: seq<Option<Elem>>) => (
         forall i : nat | 0 <= i < |x.combiner.value.elems| && x.combiner.value.elems[i].Some? :: (
-            x.slots[i].FCInProgress? || x.slots[i].FCResponse? ==> x.slots[i].rid == x.combiner.value.elems[i].value.rid
+            x.slots[i].FCInProgress? && x.slots[i].rid == x.combiner.value.elems[i].value.rid
         )
       )
       case FCCombinerResponding(elems: seq<Option<Elem>>, idx: nat) => (
         forall i : nat | idx <= i < |x.combiner.value.elems| && x.combiner.value.elems[i].Some? :: (
-            x.slots[i].FCInProgress? || x.slots[i].FCResponse? ==> x.slots[i].rid == x.combiner.value.elems[i].value.rid
+            x.slots[i].FCInProgress? && x.slots[i].rid == x.combiner.value.elems[i].value.rid
         )
       )
     }
   }
 
   predicate Inv(x: M) {
-    && Complete(x)
-    && ClientIdle_SlotEmtpy(x)
-    && ClientWaiting_RequestId(x)
-    && CombinerState_Elems(x)
-    && CombinerState_RequestIds(x)
+    x != unit() ==> (
+      && Complete(x)
+      && ClientIdle_SlotEmtpy(x)
+      && ClientWaiting_RequestId(x)
+      && CombinerState_Elems(x)
+      && CombinerState_RequestIds(x)
+    )
   }
 
+  lemma inv_unit()
+  ensures Inv(unit())
+  ensures I(unit()) == None
+  {
+  }
 
   /*
    * ============================================================================================
@@ -273,14 +280,14 @@ module FlatCombiner refines Rw {
     requires m.M?
   {
     && tid in m.slots
-    && m.slots[tid].FCRequest?
+    && m.slots[tid].FCInProgress?
   }
 
   predicate SlotHasResponse(m: M, tid: nat)
     requires m.M?
   {
     && tid in m.slots
-    && m.slots[tid].FCRequest?
+    && m.slots[tid].FCResponse?
   }
 
   /*
@@ -305,7 +312,7 @@ module FlatCombiner refines Rw {
     && var tid := |m.combiner.value.elems|;
 
     // the slot was empty
-    && SlotIsEmpty(m, tid)
+    && (SlotIsEmpty(m, tid) || SlotHasResponse(m, tid))
 
     // add a None to the collected elements
     && m' == m.(combiner := Some(FCCombinerCollecting(m.combiner.value.elems + [None])))
@@ -366,7 +373,12 @@ module FlatCombiner refines Rw {
     requires CombinerGoToResponding(m, m')
     ensures transition(m, m')
   {
+    forall p: M | Inv(dot(m, p))
+    ensures Inv(dot(m', p))
+      && I(dot(m, p)) == I(dot(m', p))
+    {
 
+    }
   }
 
 
@@ -464,7 +476,7 @@ module FlatCombiner refines Rw {
       ensures Inv(dot(m', p))
       && I(dot(m, p)) == I(dot(m', p))
     {
-     assume false;
+
     }
   }
 

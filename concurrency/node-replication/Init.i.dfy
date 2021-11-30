@@ -1,4 +1,5 @@
 include "Impl.i.dfy"
+include "FlatCombiner.i.dfy"
 
 module Init(nrifc: NRIfc) {
   import opened RequestIds
@@ -57,7 +58,7 @@ module Init(nrifc: NRIfc) {
     // initialize the flat_combiner ghost tokens
 
     glinear var fc_clients, fc_slots, fc_combiner := fc_initialize();
-    ghost var fc_loc := fc_combiner.loc;
+    ghost var fc_loc := fc_combiner.loc_s;
 
     // build stuff
 

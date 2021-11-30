@@ -393,14 +393,22 @@ predicate CombinerStateValid(x: M)
 
   predicate Inv(x: M)
   {
-    && Complete(x)
-    && PointerOrdering(x)
-    && PointerDifferences(x)
-    && RangesNoOverlap(x)
-    && AliveBits(x)
-    && BufferContents(x)
-    && CombinerStateValid(x)
-    && ReaderStateValid(x)
+    x != unit() ==> (
+      && Complete(x)
+      && PointerOrdering(x)
+      && PointerDifferences(x)
+      && RangesNoOverlap(x)
+      && AliveBits(x)
+      && BufferContents(x)
+      && CombinerStateValid(x)
+      && ReaderStateValid(x)
+    )
+  }
+
+  lemma inv_unit()
+  ensures Inv(unit())
+  ensures I(unit()) == map[]
+  {
   }
 
   /*
@@ -447,8 +455,11 @@ predicate CombinerStateValid(x: M)
 
   function I(x: M) : map<Key, StoredType>
   {
-    // Withdrawn: non-alive cells between head and tail
-    map i : int | i in x.contents.value.Keys :: x.contents.value[i]
+    if x.contents.Some? then
+      // Withdrawn: non-alive cells between head and tail
+      map i : int | i in x.contents.value.Keys :: x.contents.value[i]
+    else
+      map[]
   }
 
   /*
