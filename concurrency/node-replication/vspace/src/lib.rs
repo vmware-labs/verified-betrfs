@@ -15,7 +15,7 @@ use log::{debug, trace};
 use x86::bits64::paging::*;
 
 use node_replication::{Log, Replica, Dispatch, ReplicaToken};
-const VSPACE_RANGE: u64 = 256*1024*1024*1024; 
+const VSPACE_RANGE: u64 = 512*1024*1024*1024; 
 
 #[cxx::bridge]
 mod ffi {
@@ -336,7 +336,7 @@ pub fn alloc(size: usize, ps: usize) -> mmap::MemoryMap {
 pub fn createVSpace() -> &'static mut VSpace {
     //env_logger::try_init();
     //log::error!("createVSpace");
-    let mapping = alloc(2*ONE_GIB, ONE_GIB); 
+    let mapping = alloc(3*ONE_GIB, ONE_GIB); 
     let mem_ptr = mapping.data();
 
     //unsafe { alloc::alloc::alloc(core::alloc::Layout::from_size_align_unchecked(1075851264, 4096)) };
@@ -366,7 +366,7 @@ pub fn createVSpace() -> &'static mut VSpace {
 impl Default for VSpace {
     fn default() -> VSpace {
         
-        let mapping = alloc(2*ONE_GIB, ONE_GIB); 
+        let mapping = alloc(3*ONE_GIB, ONE_GIB); 
         let mem_ptr = mapping.data();
 
         // make sure the memory for ptable is some contiguous block
@@ -637,7 +637,7 @@ impl VSpace {
                 how_many * BASE_PAGE_SIZE,
                 4096,
             ))*/
-            assert!(self.mem_counter < 1075851264); // if this triggers you need to adjust the alloc size of `mem_ptr`
+            assert!(self.mem_counter < 3*ONE_GIB); // if this triggers you need to adjust the alloc size of `mem_ptr`
             self.mem_ptr.offset(self.mem_counter as isize)
         };
         self.mem_counter += how_many * 4096;

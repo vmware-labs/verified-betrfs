@@ -30,7 +30,10 @@ class key_generator {
 
   // key range is: `VSPACE_RANGE` as defined in vspace/lib.rs
   // adjust this number together with `MASK` (= VSPACE_RANGE & !0xfff):
-  static constexpr uint64_t MASK = 0x3fffffffff & ~0xfff;
+  //
+  //static constexpr uint64_t MASK = 0x3fffffffff & ~0xfff; // 256 GiB
+  static constexpr uint64_t MASK = 0x7fffffffff & ~0xfff; // 512 GiB
+  
 
 public:
   key_generator(uint8_t thread_id)
