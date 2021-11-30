@@ -1,6 +1,6 @@
 include "HashTableStubSSM.i.dfy"
 
-module HashTableRefiment refines
+module HashTableRefinement refines
   Refinement(AsyncIfc(MapIfc),
     TicketStubStateMachine(MapIfc, HashTableStubSSM),
     AsyncStateMachine(MapIfc, MapSpec))
