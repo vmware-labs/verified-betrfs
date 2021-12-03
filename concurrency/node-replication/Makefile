@@ -52,7 +52,7 @@ LIBS := \
 	-lm \
 	-ldl # rust needs this :/
 
-$(BUNDLE_CPP) $(BUNDLE_H): *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy #vspace_glue.h ./vspace/target/cxxbridge/vspace/src/lib.rs.h
+$(BUNDLE_CPP) $(BUNDLE_H): *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy vspace_glue.h ./vspace/target/cxxbridge/vspace/src/lib.rs.h
 	$(eval TMPNAME=$(abspath $(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@))))
 	# Dafny currently produces Bundle$(DATA_STRUCTURE_NAME).i.cpp, but it returns an error code
 	# since not everything verifies. Augment the next lines so that they don't

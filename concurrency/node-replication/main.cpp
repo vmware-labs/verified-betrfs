@@ -315,7 +315,7 @@ struct shfllock_monitor {
   }
 
   void* create_thread_context(uint8_t thread_id, uint32_t core_id) {
-    aqs_mutex_set_cur_thread_id(thread_id);
+    aqs_mutex_set_cur_thread_id(core_id);
     return new aqs_node_t{}; // Just leak it...
   }
 

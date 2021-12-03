@@ -7,9 +7,9 @@ import glob
 import subprocess
 import random
 import time
+import math
 
-NUMA_POLICY = 'interleave'
-SECONDS = 30
+SECONDS = 10
 
 CORES_PER_NODE = 48
 NODES = 4
@@ -17,9 +17,10 @@ MAX_THREADS = NODES * CORES_PER_NODE
 
 NR_BENCHES = ['dafny_nr', 'rust_nr']
 OTHER_BENCHES = ['dafny_rwlock', 'shfllock', 'mcs', 'cpp_shared_mutex']
-READS_PCT = [100, 95, 50, 0, 90]
+#READS_PCT = [100, 95, 50, 0, 90]
+READS_PCT = [100, 90, 0]
 
-N_REPLICAS = [1, 2, 4]
+N_REPLICAS = [4]
 
 ITERS = 5
 
@@ -50,10 +51,10 @@ def combine_data_files():
     with open('data.json', 'w') as f:
         f.write(combined_json)
 
-def run(bench, n_replicas, n_threads, reads_pct, run_id_num):
+def run(bench, n_replicas, n_threads, reads_pct, run_id_num, numa_policy):
     path = bench_path(n_replicas)
     cmd = '%s %s %d %d %d %s %s' % (path, bench, n_threads, reads_pct,
-                                   SECONDS, NUMA_POLICY, run_id_num)
+                                   SECONDS, numa_policy, run_id_num)
     print(cmd)
     subprocess.run(cmd, shell=True, check=False)
 
@@ -81,14 +82,15 @@ def run_all():
         run_id_num = run_id + '-' + str(run_num)
         for reads_pct in READS_PCT:
             for n_threads in N_THREADS:
-                for n_replicas in N_REPLICAS:
-                    for bench in NR_BENCHES:
-                      if (n_threads < n_replicas):
-                          continue
-                      run(bench, n_replicas, n_threads, reads_pct, run_id_num)
+                n_replicas = min(math.ceil(n_threads / (CORES_PER_NODE / 2)), NODES)
+                mode = ('fill', 'interleave')[n_threads >= MAX_THREADS / 2]
+                for bench in NR_BENCHES:
+                    if (n_threads < n_replicas):
+                        continue
+                    run(bench, n_replicas, n_threads, reads_pct, run_id_num, mode)
 
                 for bench in OTHER_BENCHES:
-                    run(bench, 1, n_threads, reads_pct, run_id_num)
+                    run(bench, 1, n_threads, reads_pct, run_id_num, mode)
 
                 combine_data_files()
                 subprocess.run('./plot.py', shell=True, check=False)
