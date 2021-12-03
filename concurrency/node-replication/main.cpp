@@ -591,7 +591,8 @@ int main(int argc, char* argv[]) {
   // NUMA nodes. In this case, things would deadlock since no threads
   // drive the 4th replica. Just bail if we run into a configuration
   // that would suffer from that problem.
-  assert(cores.n_active_nodes(n_threads, &nr_helper::get_node_id) == nr_helper::num_replicas());
+  assert(!(bench_name == "dafny_nr" || bench_name == "rust_nr") ||
+         cores.n_active_nodes(n_threads, &nr_helper::get_node_id) == nr_helper::num_replicas());
 
   // The main thread mainly just sleeps, but pin it before constructing
   // all the benchmark state to ensure determinism wrt to first-touch policy.

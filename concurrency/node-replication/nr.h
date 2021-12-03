@@ -77,7 +77,7 @@ class nr_helper {
   nr::NR& get_nr() { return *nr; }
 
   static uint32_t get_node_id(uint32_t core_id) {
-    return core_id % num_replicas();
+    return core_id % 4;
   }
 
   nr::Node* get_node(uint32_t core_id) {
@@ -169,7 +169,7 @@ class nr_rust_helper {
   }
 
   static uint32_t get_node_id(uint32_t core_id) {
-    return core_id % num_replicas();
+    return core_id % 4;
   }
 
   ReplicaWrapper *get_node(uint32_t core_id)

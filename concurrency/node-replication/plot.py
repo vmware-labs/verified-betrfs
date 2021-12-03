@@ -54,7 +54,7 @@ class theme_my538(theme_gray):
                 axis_ticks_length=-10,
                 axis_ticks=element_line(size=0.5),
                 title=element_text(color='#3C3C3C'),
-                legend_background=element_rect(fill='None'),
+                legend_background=element_rect(fill='None', size=0.2, linetype='solid'),
                 legend_key=element_rect(fill='#FFFFFF', colour=None),
                 panel_background=element_rect(fill=bgcolor),
                 panel_border=element_line(color='#000000', linetype='solid', size=0.2),
@@ -65,7 +65,7 @@ class theme_my538(theme_gray):
                 panel_spacing=0.15,
                 plot_background=element_rect(
                     fill=bgcolor, color=bgcolor, size=1),
-                strip_background=element_rect(alpha=0, size=0)),
+                strip_background=element_rect(fill='#FFFFFF', size=0.2)),
             inplace=True)
 
 def throughput_vs_cores(machine, df, graph='compare-locks'):
@@ -90,9 +90,9 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
                    color='bench_name',
                    shape='bench_name',
                    group='bench_name')
-        labels = ['Dafny NR'
-                 , 'Rust NR'
-                 , 'Dafny RwLock'
+        labels = [ 'Verified NR'
+                 , 'Reference NR'
+                 , 'Verified RwLock'
                  , 'Shfl'
                  , 'MCS'
                  , 'std::shared_mutex'
