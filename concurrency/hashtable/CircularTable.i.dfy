@@ -391,7 +391,7 @@ module CircularTable {
       (TableQuantity(s[..|s| - 1]) + EntryQuantity(Last(s)))
   }
 
-  lemma FullTableQuantity(table: Table)
+  lemma {:induction true} FullTableQuantity(table: Table)
     requires forall i: int :: 
       0 <= i < |table| ==> SlotFull(table[i])
     ensures TableQuantity(table) == |table|
@@ -399,7 +399,7 @@ module CircularTable {
     reveal TableQuantity();
   }
 
-  lemma EmptyTableQuantity(table: Table)
+  lemma {:induction true} EmptyTableQuantity(table: Table)
     requires forall i : int ::
       0 <= i < |table| ==> SlotEmpty(table[i])
     ensures TableQuantity(table) == 0
@@ -651,7 +651,7 @@ module CircularTable {
       if item.Empty? then rest else rest[item.key := item.value]
   }
 
-  lemma EmptyTableEmptyMap(table: Table)
+  lemma {:induction true} EmptyTableEmptyMap(table: Table)
     requires table == seq(|table|, i => Some(Empty))
     ensures I(table) == map[]
   {
@@ -744,7 +744,7 @@ module CircularTable {
     ContainmentSufficient(rest, key);
   }
 
-  lemma ContainmentEquivalent(table: Table, key: Key)
+  lemma {:induction true} ContainmentEquivalent(table: Table, key: Key)
     requires TableWF(table)
     ensures key in I(table) <==> TableContainsKey(table, key)
     ensures key in I(table) ==> I(table)[key] == TableGetValue(table, key)
