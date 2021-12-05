@@ -2,6 +2,7 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Base/Option.s.dfy"
 include "../disciplined/common/Limits.i.dfy"
 include "../hashtable/MapSpec.s.dfy"
+include "../framework/AsyncSSM.i.dfy"
 
 module ShardedHashTable refines TicketStubSSM(MapIfc) {
   import opened NativeTypes

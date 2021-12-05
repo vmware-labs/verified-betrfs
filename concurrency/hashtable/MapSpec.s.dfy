@@ -1,5 +1,4 @@
 include "../../lib/Lang/NativeTypes.s.dfy"
-include "../framework/AsyncSSM.i.dfy"
 include "../framework/StateMachines.s.dfy"
 
 module KeyValueType {
