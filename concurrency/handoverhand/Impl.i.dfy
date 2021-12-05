@@ -105,8 +105,16 @@ module Impl {
   {
     ghost var expected := InitResoucePartial(i+1);
     var ri := oneRowResource(i as nat, Info(Empty, Free), 0);
-    reveal InitResoucePartial();
-    Splitted(expected, ri)
+    var splt := Splitted(expected, ri);
+
+    assert SSM.dot(splt.expected, splt.ri) == r by {
+      reveal InitResoucePartial();
+      var x := SSM.dot(splt.expected, splt.ri);
+      assert x.M?;
+      assert x == r;
+    }
+
+    splt
   }
 
   method init(glinear in_token: Token)
