@@ -704,6 +704,16 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   requires ApplyWrite(s, s', cache_idx, rid)
   ensures Internal(dot(s, rest), dot(s', rest))
   {
+    var a := dot(s, rest);
+    var b := dot(s', rest);
+    assert rid in a.tickets;
+    assert rid !in a.stubs;
+    assert rid !in rest.stubs;
+    assert b.M?;
+    assert b.tickets == a.tickets - {rid};
+    assert b.stubs == a.stubs[rid := CacheIfc.WriteOutput];
+    assert b.entries == a.entries[cache_idx :=
+          Entry(a.entries[cache_idx].disk_idx, a.tickets[rid].data)];
     assert ApplyWrite(dot(s, rest), dot(s', rest), cache_idx, rid);
     assert InternalStep(dot(s, rest), dot(s', rest), ApplyWriteStep(cache_idx, rid));
   }
