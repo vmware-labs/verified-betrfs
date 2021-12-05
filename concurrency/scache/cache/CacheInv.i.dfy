@@ -342,6 +342,13 @@ module CacheInv {
   requires CacheSSM.ApplyRead(s.machine, s'.machine, cache_idx, rid)
   ensures CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest))
   {
+    var a := CacheSSM.dot(s.machine, rest);
+    var b := CacheSSM.dot(s'.machine, rest);
+    assert rid in a.tickets;
+    assert rid !in a.stubs;
+    assert rid !in rest.stubs;
+    assert b.M?;
+
     assert CacheSSM.ApplyRead(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), cache_idx, rid);
     assert CacheSSM.InternalStep(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), CacheSSM.ApplyReadStep(cache_idx, rid));
   }
@@ -352,6 +359,13 @@ module CacheInv {
   requires CacheSSM.ApplyWrite(s.machine, s'.machine, cache_idx, rid)
   ensures CacheSSM.Internal(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest))
   {
+    var a := CacheSSM.dot(s.machine, rest);
+    var b := CacheSSM.dot(s'.machine, rest);
+    assert rid in a.tickets;
+    assert rid !in a.stubs;
+    assert rid !in rest.stubs;
+    assert b.M?;
+
     assert CacheSSM.ApplyWrite(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), cache_idx, rid);
     assert CacheSSM.InternalStep(CacheSSM.dot(s.machine, rest), CacheSSM.dot(s'.machine, rest), CacheSSM.ApplyWriteStep(cache_idx, rid));
   }
