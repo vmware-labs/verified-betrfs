@@ -22,7 +22,7 @@ READS_PCT = [100, 90, 0]
 
 N_REPLICAS = [4]
 
-ITERS = 5
+ITERS = 1
 
 TRANSPARENT_HUGEPAGES = True
 
@@ -83,7 +83,7 @@ def run_all():
         for reads_pct in READS_PCT:
             for n_threads in N_THREADS:
                 n_replicas = min(math.ceil(n_threads / (CORES_PER_NODE / 2)), NODES)
-                mode = ('fill', 'fill')[n_threads >= MAX_THREADS / 2]
+                mode = 'fill'
                 for bench in NR_BENCHES:
                     if (n_threads < n_replicas):
                         continue
@@ -94,6 +94,6 @@ def run_all():
 
                 combine_data_files()
                 subprocess.run('./plot.py', shell=True, check=False)
-                subprocess.run('cp *.json *.png *.pdf *.pgf runs/%s' % run_id, shell=True, check=False)
+                subprocess.run('cp *.json *.png *.pdf *.pgf plot.py runs/%s' % run_id, shell=True, check=False)
 
 if __name__ == '__main__': run_all()

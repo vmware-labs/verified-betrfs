@@ -54,7 +54,8 @@ class theme_my538(theme_gray):
                 axis_ticks_length=-10,
                 axis_ticks=element_line(size=0.5),
                 title=element_text(color='#3C3C3C'),
-                legend_background=element_rect(fill='None', size=0.2, linetype='solid'),
+                legend_background=element_rect(fill='None', color='#000000',
+                                               size=0.2, linetype='solid'),
                 legend_key=element_rect(fill='#FFFFFF', colour=None),
                 panel_background=element_rect(fill=bgcolor),
                 panel_border=element_line(color='#000000', linetype='solid', size=0.2),
@@ -62,7 +63,7 @@ class theme_my538(theme_gray):
                   #color='#E5E5E5', linetype='solid', size=0.5),
                 panel_grid_major=element_blank(),
                 panel_grid_minor=element_blank(),
-                panel_spacing=0.15,
+                panel_spacing=0.25,
                 plot_background=element_rect(
                     fill=bgcolor, color=bgcolor, size=1),
                 strip_background=element_rect(fill='#FFFFFF', size=0.2)),
@@ -88,14 +89,20 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
         aest = aes(x='n_threads',
                    y='ops_per_s',
                    color='bench_name',
-                   shape='bench_name',
-                   group='bench_name')
+                   shape='bench_name')
         labels = [ 'Verified NR'
                  , 'Reference NR'
                  , 'Verified RwLock'
                  , 'Shfl'
                  , 'MCS'
                  , 'std::shared_mutex'
+                 ]
+        breaks = ['dafny_nr'
+                 , 'rust_nr'
+                 , 'dafny_rwlock'
+                 , 'mcs'
+                 , 'shfllock'
+                 , 'cpp_shared_mutex'
                  ]
         linetypes = ['solid', 'dashed', 'dotted']
     else:
@@ -125,21 +132,24 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
                 mapping=aest) +
         theme_my538() +
         coord_cartesian(ylim=(0, None), expand=False) +
-        labs(y="Throughput (Mop/s)") +
+        labs(y=None) +
         theme(legend_position='top', legend_title=element_blank()) + \
-        scale_x_continuous(breaks=[1, 4] + list(range(xskip, 513, xskip)), name='Number of Threads') +
-        scale_y_continuous(labels=lambda lst: ["{:,.0f}".format(x / 1_000_000) for x in lst]) +
-        scale_color_manual([
-            "#e41a1c",
-            "#377eb8",
+        scale_x_continuous(
+            breaks=[1, 4] + list(range(xskip, 513, xskip)),
+            name='Number of Threads') +
+        scale_y_continuous(
+            labels=lambda lst: ["{:,.0f}M".format(x / 1_000_000) for x in lst]) +
+        scale_color_manual(values=[
+            "#bf0040",
+            "#0000ff",
             "#4daf4a",
             "#984ea3",
             "#ff7f00",
             "#f781bf",
-            "#999999",
-            "#a6cee3",
+            #"#999999",
+            #"#a6cee3",
             ],
-            labels=labels) +
+            labels=labels, breaks=breaks) +
         scale_shape_manual(values=[
             'o',
             's',
@@ -147,17 +157,17 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
             '^',
             'v',
             '*',
-            '+',
-            'x',
+            #'+',
+            #'x',
             ],
-            labels=labels) +
-        scale_linetype_manual(linetypes, labels=replicas_labels, size=0.2) +
-        #geom_point(size=0.1) +
-        #geom_line(size=0.2) +
+            labels=labels, breaks=breaks) +
+        #scale_linetype_manual(linetypes, labels=replicas_labels, size=0.2) +
+        geom_point(size=0.01) +
+        geom_line(size=0.1) +
         #stat_summary(fun_data='mean_sdl', fun_args={'mult': 1}, geom='errorbar') +
-        stat_summary(fun_ymin=np.min, fun_ymax=np.max, geom='errorbar', size=0.1) +
-        stat_summary(fun_y=np.median, geom='line', size=0.1) +
-        stat_summary(fun_y=np.median, geom='point', size=0.05) +
+        #stat_summary(fun_ymin=np.min, fun_ymax=np.max, geom='errorbar', size=0.1) +
+        #stat_summary(fun_y=np.median, geom='line', size=0.1) +
+        #stat_summary(fun_y=np.median, geom='point', size=0.05) +
         #stat_summary(fun_y=np.median, geom='point') +
         facet_wrap(["write_ratio"],
                     scales="free",
@@ -186,7 +196,7 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
                                     y=0, yend='yend', linetype='lt'),
                         color='black',
                         size=0.1)
-      p += scale_linetype_manual(values=['dashed', 'dotted'],
+      p += scale_linetype_manual(values=['dotted', 'dashed'],
                                    guide=None)
 
     p.save("%s-throughput-vs-cores-%s.png" % (machine[0], graph),
