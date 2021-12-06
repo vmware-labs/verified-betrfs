@@ -93,7 +93,7 @@ class nr_helper {
   }
 
   nr::ThreadOwnedContext* register_thread(uint32_t core_id) {
-    const uint32_t node_id = core_id % num_replicas();
+    const uint32_t node_id = core_id % 4;
 
     if (core_id / num_replicas() == 0) {
       auto token =
@@ -181,7 +181,7 @@ class nr_rust_helper {
 
   size_t register_thread(uint32_t core_id) {
     std::unique_lock<std::mutex> lock{init_mutex};
-    uint64_t node_id = core_id % num_replicas();
+    uint64_t node_id = core_id % 4;
 
     if (core_id / num_replicas() == 0)
     {
