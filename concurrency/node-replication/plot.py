@@ -92,9 +92,9 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
                    y='ops_per_s',
                    color='bench_name',
                    shape='bench_name')
-        labels = [ 'Verified NR'
-                 , 'Reference NR'
-                 , 'Verified RwLock'
+        labels = [ 'Seagull-NR'
+                 , 'Reference-NR'
+                 , 'DistRwLock'
                  , 'Shfl'
                  , 'MCS'
                  , 'std::shared_mutex'
