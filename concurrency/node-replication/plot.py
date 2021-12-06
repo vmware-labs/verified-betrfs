@@ -17,10 +17,10 @@ import warnings
 from io import BytesIO
 
 # this is the width of a column in the latex template
-LATEX_TEMPLATE_COLUMNWIDTH = 84.70798
+LATEX_TEMPLATE_COLUMNWIDTH = 2.875
 
 # the unit of the latex template column width
-LATEX_TEMPLATE_COLUMNWDITH_UNIT = 'mm'
+LATEX_TEMPLATE_COLUMNWDITH_UNIT = 'in'
 
 # this is the width of the plot
 PLOT_WIDTH = LATEX_TEMPLATE_COLUMNWIDTH
@@ -54,6 +54,7 @@ class theme_my538(theme_gray):
                 axis_ticks_length=-10,
                 axis_ticks=element_line(size=0.5),
                 title=element_text(color='#3C3C3C'),
+                legend_text=element_text(size=base_size),
                 legend_background=element_rect(fill='None', color='#000000',
                                                size=0.2, linetype='solid'),
                 legend_key=element_rect(fill='#FFFFFF', colour=None),
@@ -63,9 +64,10 @@ class theme_my538(theme_gray):
                   #color='#E5E5E5', linetype='solid', size=0.5),
                 panel_grid_major=element_blank(),
                 panel_grid_minor=element_blank(),
-                panel_spacing=0.25,
+                panel_spacing=0.30,
                 plot_background=element_rect(
                     fill=bgcolor, color=bgcolor, size=1),
+                plot_margin=0,
                 strip_background=element_rect(fill='#FFFFFF', size=0.2)),
             inplace=True)
 
@@ -100,8 +102,8 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
         breaks = ['dafny_nr'
                  , 'rust_nr'
                  , 'dafny_rwlock'
-                 , 'mcs'
                  , 'shfllock'
+                 , 'mcs'
                  , 'cpp_shared_mutex'
                  ]
         linetypes = ['solid', 'dashed', 'dotted']
@@ -151,8 +153,8 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
             ],
             labels=labels, breaks=breaks) +
         scale_shape_manual(values=[
-            'o',
             's',
+            'o',
             'D',
             '^',
             'v',
@@ -162,7 +164,7 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
             ],
             labels=labels, breaks=breaks) +
         #scale_linetype_manual(linetypes, labels=replicas_labels, size=0.2) +
-        geom_point(size=0.01) +
+        geom_point(size=0.5) +
         geom_line(size=0.1) +
         #stat_summary(fun_data='mean_sdl', fun_args={'mult': 1}, geom='errorbar') +
         #stat_summary(fun_ymin=np.min, fun_ymax=np.max, geom='errorbar', size=0.1) +
