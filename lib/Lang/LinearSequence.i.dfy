@@ -25,7 +25,7 @@ module LinearSequence_i {
   }
 
   function lseqs<A(00)>(l:lseq<A>):(s:seq<A>)
-    ensures rank_is_less_than(s, l)
+//    ensures rank_is_less_than(s, l)
     ensures |s| == |lseqs_raw(l)|
   {
     var s := seq(|lseqs_raw(l)|, i requires 0 <= i < |lseqs_raw(l)| => read(lseqs_raw(l)[i]));
