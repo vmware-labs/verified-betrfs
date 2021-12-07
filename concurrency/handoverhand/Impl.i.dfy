@@ -1,4 +1,3 @@
-include "../framework/GhostLinearSequence.i.dfy"
 include "../framework/Mutex.i.dfy"
 include "ShardedHashTableTokens.i.dfy"
 include "ShardedHashTable.i.dfy"
@@ -9,9 +8,6 @@ module Impl {
   import opened NativeTypes
   import opened Options
   import opened Sequences
-  import opened GhostLinearMaybe
-  import opened GhostLinearSequence_s
-  import opened GhostLinearSequence_i
   import opened Mutexes
 
   import opened Limits

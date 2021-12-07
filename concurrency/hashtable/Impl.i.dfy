@@ -1,4 +1,5 @@
-include "../framework/GhostLinearSequence.i.dfy"
+include "../framework/GlinearMap.s.dfy"
+include "../framework/GlinearMap.i.dfy"
 include "../framework/Mutex.i.dfy"
 include "HashTableStubSSM.i.dfy"
 include "../../lib/Lang/LinearSequence.i.dfy"
@@ -7,9 +8,8 @@ module Impl {
   import opened NativeTypes
   import opened Options
   import opened Sequences
-  import opened GhostLinearMaybe
-  import opened GhostLinearSequence_s
-  import opened GhostLinearSequence_i
+  import opened GlinearMap
+  import opened GlinearMap_i
   import opened Mutexes
 
   import opened Limits
@@ -92,16 +92,14 @@ module Impl {
 
   linear datatype Variables = Variables(
     glinear token: Token,
-    glinear handles: glseq<MutexHandle<Row>>)
+    glinear handles: map<Index, MutexHandle<Row>>)
   {
     predicate HasRowHandle(index: Index)
-      requires |handles| == FixedSize()
     {
       index in handles
     }
 
     predicate HasNoRowHandle()
-      requires |handles| == FixedSize()
     {
       forall i: Index :: !HasRowHandle(i)
     }
@@ -109,7 +107,6 @@ module Impl {
     predicate Inv(iv: IVariables)
     {
       && token.val.Variables?
-      && |handles| == FixedSize()
 
       && iv.Inv(token.loc)
       // have the handle ==> corresponds to the row mutex
@@ -164,7 +161,7 @@ module Impl {
       entry := out_entry;
 
       T.inout_join(inout self.token, row_token);
-      glseq_give_inout(inout self.handles, index, handle);
+      glmap_insert_inout(inout self.handles, index, handle);
 
       if old_range.AlmostComplete() {
         gshared var temp := T.get_unit_shared(self.token.loc);
@@ -214,7 +211,7 @@ module Impl {
       ghost var right := SSM.OneRowResource(index, entry);
       mutex_token := T.inout_split(inout self.token, left, right);
 
-      glinear var handle := glseq_take_inout(inout self.handles, index);
+      glinear var handle := glmap_take_inout(inout self.handles, index);
 
       lseq_peek(iv.row_mutexes, index as uint64).release(Row(entry, mutex_token), handle);
 
@@ -732,9 +729,11 @@ module Impl {
     linear var cap_mutex := new_mutex<Cap>(Cap(CapacityImpl() as nat, mutex_token),
       (cap: Cap) => cap.Inv(loc));
 
+    glinear var handles := glmap_empty<Index, MutexHandle<Row>>();
+
     v := Variables.Variables(
       token,
-      glseq_alloc<MutexHandle<Row>>(FixedSize()));
+      handles);
 
     iv := IVariables(row_mutexes, cap_mutex);
   }

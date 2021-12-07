@@ -925,6 +925,8 @@ module CircularTable {
   {
     if r1.HasSome() {
       UnwrapRangeIndex(table, r1.RightShrink1(), DropLast(entries));
+    } else {
+      assert |r1| == 0;
     }
   }
 

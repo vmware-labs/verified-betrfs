@@ -18,4 +18,6 @@ module GlinearMap {
   returns (glinear g': map<K, V>)
   ensures g' == g[k := v]
 
+  glinear method {:extern} glmap_delete<K, V>(glinear g: map<K, V>)
+    requires g == map[]
 }

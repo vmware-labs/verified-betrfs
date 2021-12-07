@@ -7,9 +7,9 @@ module FilledInInterface refines Interface(
   HashTableRefinement)
 {
   import opened Impl
-  import opened GhostLinearSequence_i
   import opened CircularRange
   import opened Limits
+  import opened GlinearMap
 
   import opened Mutexes
 
@@ -38,7 +38,7 @@ module FilledInInterface refines Interface(
     linear var Variables(
       token, handles) := v;
 
-    glseq_delete(handles);
+    glmap_delete(handles);
     T.dispose(token);
   }
 
@@ -51,7 +51,7 @@ module FilledInInterface refines Interface(
   ensures ssm.IsStub(rid, output, stub.val)
   decreases *
   {
-    glinear var fresh_handles := glseq_alloc<MutexHandle<Row>>(FixedSize());
+    glinear var fresh_handles := glmap_empty<Index, MutexHandle<Row>>();
     linear var v := Variables(ticket, fresh_handles);
 
     output := inout v.call(s, rid, input);
@@ -67,6 +67,6 @@ module FilledInInterface refines Interface(
 
     stub := token;
     
-    glseq_delete(handles);
+    glmap_delete(handles);
   }
 }
