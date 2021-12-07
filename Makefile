@@ -2,7 +2,7 @@
 # System configuration
 
 # You can build anything reachable from these root files.
-DAFNY_ROOTS=concurrency/scache/Bundle.i.dfy concurrency/node-replication/BundleCounter.i.dfy concurrency/hashtable/Interface.i.dfy concurrency/handoverhand/Interface.i.dfy
+DAFNY_ROOTS=concurrency/scache/Bundle.i.dfy concurrency/node-replication/BundleCounter.i.dfy concurrency/hashtable/Interface.i.dfy concurrency/handoverhand/Interface.i.dfy functor-application-linecount-test/system.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
