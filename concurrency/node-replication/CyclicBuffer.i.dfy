@@ -360,27 +360,61 @@ predicate CombinerStateValid(x: M)
   //     && (CombinerLogicalRange(x.combinerState[i]) !! ReaderLogicalRange(x.combinerState[j]))
   // }
 
+  function CombinerStateCurIdx(combinerState: map<NodeId, CombinerState>, i: nat): nat
+    requires i in combinerState
+    requires combinerState[i].CombinerAppending?
+  {
+    combinerState[i].cur_idx
+  }
 
+  function CombinerStateTail(combinerState: map<NodeId, CombinerState>, i: nat): nat
+    requires i in combinerState
+    requires combinerState[i].CombinerAppending?
+  {
+    combinerState[i].tail
+  }
 
-  predicate {:opaque} RangesNoOverlapCombinerCombiner(combinerState: map<NodeId, CombinerState>)
+  function CombinerStateReaderStateCur(combinerState: map<NodeId, CombinerState>, i: nat): nat
+    requires i in combinerState
+    requires combinerState[i].CombinerReading?
+    requires combinerState[i].readerState.ReaderGuard?
+  {
+    combinerState[i].readerState.cur
+  }
+
+  predicate RangesNoOverlapCombinerCombinerAntecedent(combinerState: map<NodeId, CombinerState>, i: nat, j: nat) {
+    && i in combinerState
+    && j in combinerState
+    && i != j
+    && combinerState[i].CombinerAppending?
+    && combinerState[j].CombinerAppending?
+  }
+
+  predicate RangesNoOverlapCombinerCombiner(combinerState: map<NodeId, CombinerState>)
     requires CombinerStateComplete(combinerState)
   {
-    (forall i, j | i in combinerState && j in combinerState && i != j
-      && combinerState[i].CombinerAppending? && combinerState[j].CombinerAppending?
-    :: (
-      || combinerState[i].cur_idx >= combinerState[j].tail
-      || combinerState[i].tail <= combinerState[j].cur_idx
+    (forall i, j | RangesNoOverlapCombinerCombinerAntecedent(combinerState, i, j) :: (
+      || CombinerStateCurIdx(combinerState, i) >= CombinerStateTail(combinerState, j)
+      || CombinerStateTail(combinerState, i) <= CombinerStateCurIdx(combinerState, j)
     ))
   }
 
-  predicate {:opaque} RangesNoOverlapCombinerReader(combinerState: map<NodeId, CombinerState>)
+  predicate RangesNoOverlapCombinerReaderAntecedent(combinerState: map<NodeId, CombinerState>, i: nat, j: nat) {
+    && i in combinerState
+    && j in combinerState
+    && i != j
+    && combinerState[i].CombinerAppending?
+    && combinerState[j].CombinerReading?
+    && combinerState[j].readerState.ReaderGuard?
+  }
+
+  predicate RangesNoOverlapCombinerReader(combinerState: map<NodeId, CombinerState>)
     requires CombinerStateComplete(combinerState)
   {
-    (forall i, j | i in combinerState && j in combinerState && i != j
-      && combinerState[i].CombinerAppending? && combinerState[j].CombinerReading? && combinerState[j].readerState.ReaderGuard?
+    (forall i, j | RangesNoOverlapCombinerReaderAntecedent(combinerState, i, j)
     :: (
-      || combinerState[i].cur_idx > combinerState[j].readerState.cur
-      || combinerState[i].tail <=  combinerState[j].readerState.cur
+      || CombinerStateCurIdx(combinerState, i) > CombinerStateReaderStateCur(combinerState, j)
+      || CombinerStateTail(combinerState, i) <= CombinerStateReaderStateCur(combinerState, j)
     ))
   }
 
@@ -440,7 +474,7 @@ predicate CombinerStateValid(x: M)
     }
     assert PointerOrdering(x);
     assert PointerDifferences(x);
-    assert RangesNoOverlap(x) by { reveal_RangesNoOverlapCombinerCombiner(); reveal_RangesNoOverlapCombinerReader();}
+    assert RangesNoOverlap(x) by {  }
     assert AliveBits(x);
     assert BufferContents(x);
     assert CombinerStateValid(x);
@@ -779,10 +813,10 @@ predicate CombinerStateValid(x: M)
           assert dot(m', p).combinerState
                   == dot(m, p).combinerState[combinerNodeId := CombinerAdvancingHead(1, m.localTails[0])];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
+            
           }
         }
       }
@@ -830,10 +864,10 @@ predicate CombinerStateValid(x: M)
 
         assert RangesNoOverlap(dot(m', p)) by {
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
+            
           }
         }
       }
@@ -870,10 +904,10 @@ predicate CombinerStateValid(x: M)
         assert  RangesNoOverlap(dot(m', p)) by {
           assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
+            
           }
         }
       }
@@ -918,10 +952,10 @@ predicate CombinerStateValid(x: M)
         assert  RangesNoOverlap(dot(m', p)) by {
           assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
+            
           }
         }
       }
@@ -967,10 +1001,10 @@ predicate CombinerStateValid(x: M)
         assert  RangesNoOverlap(dot(m', p)) by {
           assert dot(m', p).combinerState  == dot(m, p).combinerState[combinerNodeId := CombinerAdvancingTail(dot(m, p).head.value)];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
+            
           }
         }
       }
@@ -1007,10 +1041,10 @@ predicate CombinerStateValid(x: M)
         assert  RangesNoOverlap(dot(m', p)) by {
           assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
+            
           }
         }
       }
@@ -1084,12 +1118,16 @@ predicate CombinerStateValid(x: M)
           reveal_CombinerStateComplete();
         }
 
+        // 5 seconds
         assert Complete(dot(m', p)) by {
+          assume false;
           reveal_CombinerStateComplete();
           reveal_ContentsComplete();
         }
 
+        // 5 seconds
         assert PointerOrdering(dot(m', p)) by {
+          assume false;
           reveal_MinLocalTail();
         }
 
@@ -1098,17 +1136,28 @@ predicate CombinerStateValid(x: M)
           reveal_LocalTailsComplete();
         }
 
+        // 38 seconds, now 18
         assert RangesNoOverlap(dot(m', p)) by {
+          // now better
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
+            var combinerState := dot(m', p).combinerState;
+            forall i, j | RangesNoOverlapCombinerCombinerAntecedent(combinerState, i, j) 
+            ensures
+              || CombinerStateCurIdx(combinerState, i) >= CombinerStateTail(combinerState, j)
+              || CombinerStateTail(combinerState, i) <= CombinerStateCurIdx(combinerState, j)
+            {
+              assert RangesNoOverlapCombinerCombinerAntecedent(dot(m, p).combinerState, i, j) || true; // use induction hypothesis when necessary
+            }
           }
 
+          // 14 seconds
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
           }
         }
 
+        // 11 seconds
         assert CombinerStateValid(dot(m', p)) by {
+          assume false;
           forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerAppending?
           ensures  dot(m', p).tail.value - (LOG_SIZE as int) <= dot(m', p).combinerState[n].cur_idx <= dot(m', p).tail.value
           {
@@ -1125,7 +1174,9 @@ predicate CombinerStateValid(x: M)
           }
         }
 
+        // 11 seconds
         assert ReaderStateValid(dot(m', p)) by {
+          assume false;
           forall n | n in dot(m', p).combinerState && dot(m', p).combinerState[n].CombinerReading? && !dot(m', p).combinerState[n].readerState.ReaderStarting?
           ensures (dot(m', p).tail.value as int) - (LOG_SIZE as int) <= dot(m', p).combinerState[n].readerState.end <= (dot(m', p).tail.value as int)
           {
@@ -1137,6 +1188,8 @@ predicate CombinerStateValid(x: M)
           }
         }
       }
+
+      assume false;
 
       assert I(dot(m', p)).Keys !! withdrawn.Keys;
 
@@ -1217,10 +1270,9 @@ predicate CombinerStateValid(x: M)
         assert RangesNoOverlap(dot(m', p)) by {
           assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := combinerBefore.(cur_idx := key + 1)];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
           }
         }
 
@@ -1267,7 +1319,6 @@ predicate CombinerStateValid(x: M)
                 } else {
                   assert (dot(m, p).combinerState[n].cur_idx >= dot(m, p).combinerState[combinerNodeId].tail
                           || dot(m, p).combinerState[n].tail <= dot(m, p).combinerState[combinerNodeId].cur_idx) by {
-                    reveal_RangesNoOverlapCombinerCombiner();
                   }
 
                   assert LogicalToPhysicalIndex(i) != LogicalToPhysicalIndex(key);
@@ -1341,10 +1392,9 @@ predicate CombinerStateValid(x: M)
         assert  RangesNoOverlap(dot(m', p)) by {
           assert dot(m', p).combinerState == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
           }
         }
       }
@@ -1386,10 +1436,9 @@ predicate CombinerStateValid(x: M)
           assert dot(m', p).combinerState
                   == dot(m, p).combinerState[combinerNodeId := CombinerReading(ReaderStarting(m.localTails[combinerNodeId]))];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
           }
         }
       }
@@ -1429,10 +1478,9 @@ predicate CombinerStateValid(x: M)
           assert dot(m', p).combinerState
                    == dot(m, p).combinerState[combinerNodeId := CombinerReading(ReaderRange(readerBefore.start, m.tail.value, readerBefore.start))];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
           }
         }
         assert ReaderStateValid(dot(m', p)) by {
@@ -1491,10 +1539,9 @@ predicate CombinerStateValid(x: M)
           assert dot(m', p).combinerState
                     == dot(m, p).combinerState[combinerNodeId := CombinerReading(ReaderGuard(readerBefore.start, readerBefore.end, i, m.contents.value[i]))];
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
           }
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
             reveal_CombinerStateComplete();
             reveal_MinLocalTail();
           }
@@ -1536,10 +1583,9 @@ predicate CombinerStateValid(x: M)
           assert dot(m', p).combinerState
                     == dot(m, p).combinerState[combinerNodeId := CombinerReading(ReaderRange(readerBefore.start, readerBefore.end, readerBefore.cur + 1))];
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
           }
         }
       }
@@ -1586,10 +1632,9 @@ predicate CombinerStateValid(x: M)
                     == dot(m, p).combinerState[combinerNodeId := CombinerIdle];
         assert RangesNoOverlap(dot(m', p)) by {
           assert RangesNoOverlapCombinerReader(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerReader();
+            
           }
           assert RangesNoOverlapCombinerCombiner(dot(m', p).combinerState) by {
-            reveal_RangesNoOverlapCombinerCombiner();
           }
         }
 
@@ -1653,8 +1698,7 @@ predicate CombinerStateValid(x: M)
           reveal_CombinerStateComplete();
         }
         assert RangesNoOverlap(dot(m', p)) by {
-          reveal_RangesNoOverlapCombinerCombiner();
-          reveal_RangesNoOverlapCombinerReader();
+          
         }
       }
       assert I(dot(m, p)) == I(dot(m', p));
