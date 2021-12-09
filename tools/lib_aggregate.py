@@ -59,6 +59,9 @@ class DafnySyntaxOK(DafnyCondition):
     def __init__(self):
         super().__init__(7, True, "syntax ok", "fillcolor=green; shape=ellipse")
 
+def chkFromDafny(chk, dfy):
+    return "build/"+dfy.replace(".dfy", "."+chk)
+
 def dafnyFromVerchk(verchk):
     return verchk.replace("build/", "./").replace(".verchk", ".dfy").replace(".synchk", ".dfy")
 

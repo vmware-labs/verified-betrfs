@@ -42,9 +42,11 @@ def loadFile(synchk):
 
 def count(input, output):
     counter = line_count_lib.Counter(".")
-    dafnyFile = line_count_lib.DafnyFile(input, 0.0)
+    time = lib_aggregate.summarize(lib_aggregate.VERCHK, lib_aggregate.chkFromDafny(lib_aggregate.VERCHK, input)).userTimeSec
+    #print(f"time {time}")
+    dafnyFile = line_count_lib.DafnyFile(input, time)
     counter.collect_line_counts([dafnyFile])
-    obj = {"spec":dafnyFile.spec, "impl":dafnyFile.impl, "proof":dafnyFile.proof}
+    obj = {"spec":dafnyFile.spec, "impl":dafnyFile.impl, "proof":dafnyFile.proof, "time": time}
     fp = open(output, "w")
     json.dump(obj, fp)
     fp.write("\n")
