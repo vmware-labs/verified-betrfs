@@ -12,11 +12,11 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
 
   type SyncReqId = nat
   datatype Version =
-    | Truncated
+    | Forgotten
       // jonh apology: The spec exposes the implementation-specific idea
       // of log truncation to keep the interpretation functions easy to
       // build. This way, when we truncate in the implementation, we
-      // can just map that to a Truncated version in this spec version
+      // can just map that to a Forgotten version in this spec version
       // sequence. This is lame, because we're asking the spec inspector
       // to understand impl details. An alternative would be to add
       // a "write-only ghost state" mechanism to the bottom bread, into
@@ -32,7 +32,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     predicate WF() {
       && 0 < |versions|  // always some persistent, ephemeral version
       // All versions beginning with the stableIdx aren't truncated,
-      // so that crashing can't take us to a Truncated version.
+      // so that crashing can't take us to a Forgotten version.
 
       // QUESTION: Sowmya note: asyncState doesn't have a Version, but i think we're
       // trying to express that there are valid entries for all the records after the stable idx
@@ -76,7 +76,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     // Commit can truncate old versions
     && (forall i | 0<=i<|s.versions| ::
       || s'.versions == s.versions
-      || (i < s.stableIdx && s'.versions[i].Truncated?)
+      || (i < s.stableIdx && s'.versions[i].Forgotten?)
       )
     && s'.WF()  // But it can't truncate things after stableIdx
     // stableIdx advances towards, possibly all the way to, ephemeral state.
