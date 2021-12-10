@@ -12,7 +12,7 @@ module LinearSequence_i {
     provides LinearSequence_s
     provides NativeTypes
     provides seq_alloc_init, mut_seq_set, SeqCopy, lseqs, imagine_lseq, lseq_peek, lseq_free_fun, lseq_take_fun, lseq_swap_inout, lseq_take_inout, lseq_give_inout
-    provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64, lseq_add
+    provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64, lseq_add, lseq_alloc_hugetables
     provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, SeqResizeMut, InsertSeq, InsertLSeq, Replace1With2Lseq, Replace1With2Lseq_inout
     reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all 
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
@@ -134,6 +134,13 @@ module LinearSequence_i {
       ensures forall i:nat | i < length as nat :: i !in s
   {
       s := lseq_alloc_raw(length);
+  }
+
+  method lseq_alloc_hugetables<A(00)>(length:uint64) returns(linear s:lseq<A>)
+      ensures |s| == length as nat
+      ensures forall i:nat | i < length as nat :: i !in s
+  {
+      s := lseq_alloc_raw_hugetables(length);
   }
 
   method lseq_free<A(00)>(linear s:lseq<A>)

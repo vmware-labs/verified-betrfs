@@ -168,52 +168,68 @@ linear_seq<A> TrustedRuntimeSeqResize(linear_seq<A> s, uint64 newlen) {
 //   lseqs
 //
 ////////////////////////////////////////////////////////////
+
 template <typename A>
-using lseq = std::vector<LinearMaybe::maybe<A>>*;
+struct LinearLSeq {
+  size_t len;
+  LinearMaybe::maybe<A>* ptr;
+};
+
+template <typename A>
+bool operator==(const LinearLSeq<A> &left, const LinearLSeq<A> &right) {
+  std::cerr << "Error: LinearLSeq == called" << std::endl;
+  exit(1);
+}
+
+template <typename A>
+using lseq = LinearLSeq<A>;
 
 template <typename A>
 uint64 lseq_length_raw(lseq<A> s) {
-  return s->size();
+  return s.len;
 }
 
 template <typename A>
 lseq<A> lseq_alloc_raw(uint64 length) {
   lseq<A> ret;
-  ret = new std::vector<LinearMaybe::maybe<A>>;
-  ret->assign(length, get_default<LinearMaybe::maybe<A>>::call());
+  ret.ptr = new LinearMaybe::maybe<A>[length];
+  ret.len = length;
   return ret;
 }
 
 template <typename A>
 Tuple0 lseq_free_raw(lseq<A> s) {
-  s->clear();
-  delete s;
+  delete[] s.ptr;
   Tuple0 ret;
   return ret;
 }
 
 template <typename A>
 Tuple<lseq<A>, LinearMaybe::maybe<A>> lseq_swap_raw_fun(lseq<A> s1, uint64 i, LinearMaybe::maybe<A> a1) {
-  LinearMaybe::maybe<A> oldElement = (*s1)[i];
-  (*s1)[i] = a1;
+  LinearMaybe::maybe<A> oldElement = s1.ptr[i];
+  s1.ptr[i] = a1;
   Tuple ret(s1, oldElement);
   return ret;
 }
 
 template <typename A>
 LinearMaybe::maybe<A>* lseq_share_raw(lseq<A> s, uint64 i) {
-  return &((*s)[i]);
+  return &s.ptr[i];
 }
 
 template <typename A>
 lseq<A> TrustedRuntimeLSeqResize(lseq<A> s, uint64 newlen) {
+  std::cerr << "Error: lseq resize not implemented" << std::endl;
+  exit(1);
+  /*
   s->resize(newlen);
   return s;
+  */
 }
 
 template <typename A>
 lseq<A> get_lseq_default() {
-  return nullptr;
+  return LinearLSeq<A>();
 }
 
 template <typename A>
@@ -222,6 +238,15 @@ Tuple0 lseq_length_bound(lseq<A> s) {
 }
 
 }
+
+template<typename A>
+struct std::hash<LinearExtern::LinearLSeq<A>> {
+  std::size_t operator()(const LinearExtern::LinearLSeq<A>& x) const {
+    std::cerr << "Error: lseq hash called" << std::endl;
+    exit(1);
+  }
+};
+
 
 //template<typename A>
 //struct std::hash<LinearExtern::linear_seq<A>> {

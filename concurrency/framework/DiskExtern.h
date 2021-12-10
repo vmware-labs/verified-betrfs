@@ -227,3 +227,39 @@ namespace Ptrs {
     return Ptr((uintptr_t)ptr);
   }
 }
+
+namespace LinearExtern {
+  template <typename A>
+  lseq<A> lseq_alloc_raw_hugetables(uint64 length) {
+    size_t byte_len = length * sizeof(A);
+    if (length != 0 && byte_len / length != sizeof(A)) {
+      std::cerr << "lseq_alloc_raw_hugetables: overflow detected" << std::endl;
+      exit(1);
+    }
+
+    byte_len = ((byte_len + 4095) / 4096) * 4096;
+    if (byte_len == 0) {
+      std::cerr << "lseq_alloc_raw_hugetables: overflow detected" << std::endl;
+      exit(1);
+    }
+
+    int prot= PROT_READ | PROT_WRITE;
+    int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB;
+    void* void_p = mmap(NULL, byte_len, prot, flags, -1, 0);
+
+    if (void_p == MAP_FAILED) {
+      std::cerr << "alloc__arayy__hugetables: mmap failed" << std::endl;
+      exit(1);
+    }
+
+    LinearMaybe::maybe<A>* ptr = (LinearMaybe::maybe<A>*)void_p;
+    for (uint64_t i = 0; i < length; i++) {
+      new (&ptr[i]) LinearMaybe::maybe<A>();
+    }
+
+    lseq<A> ret;
+    ret.ptr = ptr;
+    ret.len = length;
+    return ret;
+  }
+}

@@ -712,7 +712,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         write_cell(
           cache.page_handle_ptr(cache_idx),
           inout idx,
-          ph.(disk_addr := disk_idx as int64 * PageSize64() as int64));
+          PageHandle(ph.data_ptr, disk_idx as int64 * PageSize64() as int64));
 
         glinear var ceh := CacheEntryHandle(
             cache.key(cache_idx as int), cache_entry, idx, data);
@@ -1495,7 +1495,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           write_cell(
             cache.page_handle_ptr(cache_idx),
             inout idx,
-            p.(disk_addr := addr as int64 * PageSize64() as int64));
+            PageHandle(p.data_ptr, addr as int64 * PageSize64() as int64));
 
           if pages_in_req == 0 {
             glinear var access;
@@ -1646,7 +1646,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       write_cell(
         cache.page_handle_ptr(cache_idx),
         inout idx,
-        p.(disk_addr := disk_idx as int64 * PageSize64() as int64));
+        PageHandle(p.data_ptr, disk_idx as int64 * PageSize64() as int64));
 
       glinear var ce := CacheEntryHandle(
           cache.key(cache_idx as int), unwrap_value(cache_entry_opt), idx, data);
