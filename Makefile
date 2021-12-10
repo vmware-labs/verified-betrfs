@@ -125,7 +125,7 @@ endef
 .PHONY: status
 status: build/deps build/Impl/Bundle.i.status.pdf
 scache-status: build/concurrency/scache/Bundle.i.status.pdf
-nr-status: build/concurrency/node-replication/BundleCounter.i.status.pdf
+nr-status: build/concurrency/node-replication/Interface.i.status.pdf
 hash-status: build/concurrency/hashtable/Interface.i.status.pdf
 hoh-status: build/concurrency/handoverhand/Interface.i.status.pdf
 

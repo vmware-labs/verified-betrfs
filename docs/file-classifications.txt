@@ -126,6 +126,8 @@ htatomic-spec concurrency/hashtable/MapSpec.s.dfy
 framework concurrency/node-replication/Runtime.s.dfy
 
 nr-spec concurrency/node-replication/NRSpec.s.dfy
+nr-spec concurrency/node-replication/Interface.s.dfy
+nr-spec concurrency/node-replication/Linearize.s.dfy
 
 nr-guard-cyclicbuffer concurrency/node-replication/CyclicBuffer.i.dfy
 nr-guard-cyclicbuffer concurrency/node-replication/CyclicBufferTokens.i.dfy
@@ -142,6 +144,7 @@ nr-impl concurrency/node-replication/Init.i.dfy
 nr-impl concurrency/node-replication/Constants.i.dfy
 nr-impl concurrency/node-replication/Impl.i.dfy
 nr-impl concurrency/node-replication/BundleCounter.i.dfy
+nr-impl concurrency/node-replication/Interface.i.dfy
 nr-impl concurrency/node-replication/ConcreteReplica.i.dfy
 
 nr-rwlock-guard concurrency/node-replication/rwlock/Handle.i.dfy
