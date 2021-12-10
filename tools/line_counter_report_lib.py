@@ -200,7 +200,10 @@ def highlights(reports, counters):
     s += "\\newcommand{\\dataCaseStudyImplLoc}{%d}\n" % caseStudyImplLoc
     allProof = counters["total"]["proof"]
     s += "\\newcommand{\\dataAllProof}{%d}\n" % allProof
-    proofCodeRatio = allProof / counters["total"]["impl"]
+    try:
+      proofCodeRatio = allProof / counters["total"]["impl"]
+    except:
+      proofCodeRatio = -1
     s += "\\newcommand{\\dataProofCodeRatio}{%.1f}\n" % proofCodeRatio
     s += "\\newcommand{\\dataTrustedLoc}{%d}\n" % counters["total"]["spec"]
     s += "\\newcommand{\\dataTrustedFrameworkLoc}{%d}\n" % counters["ManualMapper-framework"]["spec"]
