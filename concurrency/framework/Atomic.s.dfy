@@ -241,6 +241,7 @@ module {:extern "Atomics"} Atomics {
    * uint16 arithmetic and bit operations
    */
 
+/*
   function wrapped_add_uint16(a: uint16, b: uint16): uint16 {
     if a as int + b as int < 0x1_0000 then
       a + b
@@ -315,6 +316,8 @@ module {:extern "Atomics"} Atomics {
   ensures new_value == wrapped_sub_uint16(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
 
+  */
+
   /*
    * uint32 arithmetic and bit operations
    */
@@ -325,6 +328,8 @@ module {:extern "Atomics"} Atomics {
     else
       (a as int + b as int - 0x1_0000_0000) as uint32
   }
+
+  /*
 
   function wrapped_sub_uint32(a: uint32, b: uint32): uint32 {
     if a as int - b as int >= 0 then
@@ -368,6 +373,7 @@ module {:extern "Atomics"} Atomics {
   ensures ret_value == orig_value
   ensures new_value == bit_xor_uint32(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
+  */
 
   method {:extern} execute_atomic_fetch_add_uint32<G>(
       shared a: Atomic<uint32, G>,
@@ -381,6 +387,8 @@ module {:extern "Atomics"} Atomics {
   ensures new_value == wrapped_add_uint32(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
 
+  /*
+
   method {:extern} execute_atomic_fetch_sub_uint32<G>(
       shared a: Atomic<uint32, G>,
       operand: uint32) 
@@ -392,6 +400,7 @@ module {:extern "Atomics"} Atomics {
   ensures ret_value == orig_value
   ensures new_value == wrapped_sub_uint32(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
+  */
 
   /*
    * uint64 arithmetic and bit operations
@@ -411,6 +420,7 @@ module {:extern "Atomics"} Atomics {
       (a as int - b as int + 0x1_0000_0000_0000_0000) as uint64
   }
 
+/*
   method {:extern} execute_atomic_fetch_or_uint64<G>(
       shared a: Atomic<uint64, G>,
       operand: uint64) 
@@ -470,6 +480,7 @@ module {:extern "Atomics"} Atomics {
   ensures ret_value == orig_value
   ensures new_value == wrapped_sub_uint64(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
+  */
 
   /*
   method {:extern} execute_atomic_fetch_max_uint64<G>(
@@ -519,6 +530,7 @@ module BitOps {
     ((a as bv8) ^ (b as bv8)) as uint8
   }
 
+/*
   function method bit_or_uint16(a: uint16, b: uint16): uint16 {
     ((a as bv16) | (b as bv16)) as uint16
   }
@@ -542,6 +554,7 @@ module BitOps {
   function method bit_xor_uint32(a: uint32, b: uint32): uint32 {
     ((a as bv32) ^ (b as bv32)) as uint32
   }
+  */
 
   function method bit_or_uint64(a: uint64, b: uint64): uint64 {
     ((a as bv64) | (b as bv64)) as uint64
