@@ -49,9 +49,10 @@ def accumulate(reports, mapper, debugTable):
     return counters
 
 class Row:
-    def __init__(self, type, label, counter_key = None):
+    def __init__(self, type, label, counter_key = None, impl = False):
         self.type = type
         self.label = label
+        self.impl = impl    # if False, impl lines suspended here and added into later impl row.
         if self.type=="data":
           assert counter_key
           self.counter_key = counter_key
@@ -61,69 +62,85 @@ class Row:
     #Row("data", "foo", "ManualMapper-ignore"),
 row_descriptors = [
     Row("header", "Atomic Hashtable"),
-      Row("data", "specification", "ManualMapper-htatomic-spec"),
+      Row("data", "Trusted spec", "ManualMapper-htatomic-spec"),
       Row("data", "IO LTS", "ManualMapper-htatomic-lts"),
       Row("data", "refinement proof", "ManualMapper-htatomic-refinementproof"),
-      Row("data", "implementation", "ManualMapper-htatomic-impl"),
+      Row("data", "implementation", "ManualMapper-htatomic-impl", impl=True),
 
     Row("header", "Hand-over-hand Hashtable"),
-      Row("data", "specification", "ManualMapper-hthh-spec"),
+      Row("data", "Trusted spec", "ManualMapper-hthh-spec"),
       Row("data", "IO LTS", "ManualMapper-hthh-lts"),
       Row("data", "refinement proof", "ManualMapper-hthh-refinementproof"),
-      Row("data", "implementation", "ManualMapper-hthh-impl"),
+      Row("data", "implementation", "ManualMapper-hthh-impl", impl=True),
 
     Row("header", "Node Replication"),
-      Row("data", "specification", "ManualMapper-nr-spec"),
+      Row("data", "Trusted spec", "ManualMapper-nr-spec"),
       Row("data", "IO LTS", "ManualMapper-nr-lts"),
       Row("data", "refinement proof", "ManualMapper-nr-refinementproof"),
-      Row("data", "implementation", "ManualMapper-nr-impl"),
       Row("data", "guard: cyclic buffer", "ManualMapper-nr-guard-cyclicbuffer"),
       Row("data", "guard: flat combiner", "ManualMapper-nr-guard-fc"),
+      Row("data", "implementation", "ManualMapper-nr-impl", impl=True),
       Row("data", "guard: rwlock", "ManualMapper-nr-rwlock-guard"),
-      Row("data", "rwlock implementation", "ManualMapper-nr-rwlock-impl"),
+      Row("data", "rwlock implementation", "ManualMapper-nr-rwlock-impl", impl=True),
 
     Row("header", "Splinter Cache"),
-      Row("data", "specification", "ManualMapper-scache-spec"),
+      Row("data", "Trusted spec", "ManualMapper-scache-spec"),
       Row("data", "IO LTS", "ManualMapper-scache-lts"),
       Row("data", "refinement proof", "ManualMapper-scache-refinementproof"),
       Row("data", "implementation", "ManualMapper-scache-impl"),
-      Row("data", "guard: rwlock", "ManualMapper-scache-rwlock-guard"),
+      Row("data", "guard: rwlock", "ManualMapper-scache-rwlock-guard", impl=True),
 
     Row("header", "Shared"),
-      Row("data", "Trusted Framework", "ManualMapper-framework"),
-      Row("data", "Library", "ManualMapper-library"),
+      Row("data", "Trusted Framework", "ManualMapper-framework", impl = True),
+      Row("data", "Library", "ManualMapper-library", impl = True),
 ]
 
 def write_tex_table(fp, counters):
     fp.write("\\begin{tabular}{|ll|rrr|}\n")
     fp.write("\\hline\n")
 
-    fp.write("\multicolumn{2}{|l|}{Major component} & spec & impl & proof \\\\\n")
+    fp.write("\multicolumn{2}{|l|}{Major component} & model & impl & verif. time\\\\\n")
     fp.write("\\hline\n")
 
     def write_row(label, rowdata):
-      def dropzero(d):
-        return "" if d == 0 else str(d)
+      def dropzero(d, suffix=""):
+        return "" if d == 0 else str(d)+suffix
 
-      fp.write("& %s & %s & %s & %s \\\\\n" % (
+      assert label=="total" or rowdata["spec"]==0 or rowdata["proof"]==0  # collapsing model && spec into a column; alarm if data overlaps
+      model = dropzero(rowdata["spec"] + rowdata["proof"])
+      fp.write("& %s & %s & %s & %s\\\\\n" % (
               label,
-              dropzero(rowdata["spec"]),
+              model,
               dropzero(rowdata["impl"]),
-              dropzero(rowdata["proof"])
+              dropzero(int(rowdata["time"]), suffix="~s"),
               ))
 
     keys = list(counters.keys())
     keys.sort()
+    deferred_impl = 0
+    # add up totals here rather than using AllMapper to get desired 'trusted' total layout (and allmapper includes ignored row)
+    total_counter = collections.Counter()
     for row in row_descriptors:
       if row.type == "header":
         fp.write("\\multicolumn{2}{|l|}{%s} &&& \\\\\n" % row.label)
       elif row.type == "data":
         if row.counter_key in counters:
-          write_row(row.label, counters[row.counter_key])
+          local_counter = dict(counters[row.counter_key])
+          total_counter.update(local_counter)
+          if row.impl:
+            local_counter["impl"] += deferred_impl
+            deferred_impl = 0
+          else:
+            deferred_impl += local_counter["impl"]
+            local_counter["impl"] = 0
+          write_row(row.label, local_counter)
         else:
           print("Warning: missing counter for %s" % row.counter_key)
+    assert deferred_impl == 0   # Don't let any fall off the end.
     fp.write("\\hline\n")
-    write_row("total", counters["AllMapper-all"])
+    write_row("Trusted total", dict([(k,v if k == "spec" else 0) for k,v in total_counter.items()]))
+        #{"spec": total_counter["spec"], "proof":0, "impl":0, "time":0})
+    write_row("Verified total", dict([(k,v if k != "spec" else 0) for k,v in total_counter.items()]))
     fp.write("\\hline\n")
     fp.write("\\end{tabular}\n")
 
