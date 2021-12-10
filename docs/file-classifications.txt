@@ -123,8 +123,7 @@ htatomic-impl concurrency/hashtable/Impl.i.dfy
 htatomic-spec concurrency/hashtable/Interface.s.dfy
 htatomic-spec concurrency/hashtable/MapSpec.s.dfy
 
-#TODO should be a .s; should be enforced
-framework concurrency/node-replication/Runtime.i.dfy
+framework concurrency/node-replication/Runtime.s.dfy
 
 nr-spec concurrency/node-replication/NRSpec.s.dfy
 
@@ -150,8 +149,7 @@ nr-rwlock-guard concurrency/node-replication/rwlock/RwLock.i.dfy
 nr-rwlock-impl concurrency/node-replication/rwlock/Impl.i.dfy
 
 scache-spec concurrency/scache/cache/CacheSpec.s.dfy
-#TODO should be .s
-scache-spec concurrency/scache/cache/AbstractCacheSM.i.dfy
+scache-spec concurrency/scache/cache/AbstractCacheSM.s.dfy
 
 scache-impl concurrency/scache/Application.i.dfy
 scache-impl concurrency/scache/AtomicIndexLookup.i.dfy

@@ -15,7 +15,7 @@ module CyclicBufferRw(nrifc: NRIfc) refines MultiRw {
   import opened GlinearOption
   import opened Cells
   import opened Options
-  import opened Constants
+  import opened NRConstants
   import Maps
 
   type Key(!new) = int

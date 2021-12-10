@@ -9,7 +9,7 @@ module InfiniteLogTokens(nrifc: NRIfc) {
   import opened IL = InfiniteLogSSM(nrifc)
   import opened GhostLoc
   import opened ILT = TicketStubToken(nrifc, IL)
-  import opened Constants
+  import opened NRConstants
   import opened GlinearMap
   import opened Ptrs
   import opened TicketStubSingletonLoc

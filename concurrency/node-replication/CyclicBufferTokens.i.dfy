@@ -17,7 +17,7 @@ module CyclicBufferTokens(nrifc: NRIfc) {
   import opened GlinearOption
   import GlinearMap
   import opened Cells
-  import opened Constants
+  import opened NRConstants
   import Maps
   import CB = CyclicBufferRw(nrifc)
   import CBTokens = MultiRwTokens(CB)

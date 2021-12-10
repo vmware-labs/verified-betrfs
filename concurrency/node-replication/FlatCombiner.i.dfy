@@ -7,7 +7,7 @@ include "../../lib/Base/Maps.i.dfy"
 
 module FlatCombiner refines Rw {
   import opened RequestIds
-  import opened Constants
+  import opened NRConstants
   import Maps
 
   type Key(!new) = nat

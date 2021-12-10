@@ -11,7 +11,7 @@ module FlatCombinerTokens {
   import opened RequestIds
   import opened NativeTypes
   import opened GhostLoc
-  import opened Constants
+  import opened NRConstants
   import opened Options
   import FC = FlatCombiner
   import FCTokens = RwTokens(FC)

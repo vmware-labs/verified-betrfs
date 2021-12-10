@@ -2,7 +2,7 @@ include "../hashtable/MapSpec.s.dfy"
 include "../framework/AsyncSSM.s.dfy"
 include "../framework/StateMachines.s.dfy"
 
-abstract module Interface(
+abstract module HOHInterface(
   ssm: TicketStubSSM(MapIfc),
   refinement: Refinement(
       AsyncIfc(MapIfc),

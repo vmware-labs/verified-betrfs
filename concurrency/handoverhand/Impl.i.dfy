@@ -4,7 +4,7 @@ include "ShardedHashTable.i.dfy"
 include "../../lib/Lang/LinearSequence.i.dfy"
 include "../../lib/Base/sequences.i.dfy"
 
-module Impl {
+module HOHImpl {
   import opened NativeTypes
   import opened Options
   import opened Sequences

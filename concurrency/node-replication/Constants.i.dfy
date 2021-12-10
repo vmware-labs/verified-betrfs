@@ -1,6 +1,6 @@
 include "../../lib/Lang/NativeTypes.s.dfy"
 
-module Constants {
+module NRConstants {
   import opened NativeTypes
 
   const LOG_SIZE: uint64 := 1024 * 1024;

@@ -1,4 +1,4 @@
-include "AbstractCacheSM.i.dfy"
+include "AbstractCacheSM.s.dfy"
 include "SimpleCacheSM.i.dfy"
 include "SimpleCache_Inv.i.dfy"
 

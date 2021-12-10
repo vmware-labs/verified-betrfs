@@ -2,11 +2,11 @@ include "Interface.s.dfy"
 include "Impl.i.dfy"
 include "ShardedHashTable_Refines_AsyncMapSpec.i.dfy"
 
-module FilledInInterface refines Interface(
+module HOHFilledInInterface refines HOHInterface(
   ShardedHashTable,
   ResourceStateMachine_Refines_AsyncMapSpec)
 {
-  import opened Impl
+  import opened HOHImpl
   import opened Limits
   import opened Mutexes
 
@@ -25,7 +25,7 @@ module FilledInInterface refines Interface(
   {
     glinear var token;
 
-    token, s := Impl.init(in_token);
+    token, s := HOHImpl.init(in_token);
     
     T.dispose(token);
   }

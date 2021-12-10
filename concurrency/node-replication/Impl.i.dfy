@@ -7,7 +7,7 @@ include "../framework/ThreadUtils.s.dfy"
 include "../framework/Ptrs.s.dfy"
 include "../framework/GlinearMap.s.dfy"
 include "../framework/Cells.s.dfy"
-include "Runtime.i.dfy"
+include "Runtime.s.dfy"
 include "CyclicBufferTokens.i.dfy"
 include "FlatCombinerTokens.i.dfy"
 include "../../lib/Base/Option.s.dfy"
@@ -40,7 +40,7 @@ module NodeReplica(nrifc: NRIfc) refines ContentsTypeMod {
   type ContentsType = NodeReplica
 }
 
-module Impl(nrifc: NRIfc) {
+module NRImpl(nrifc: NRIfc) {
   import opened RequestIds
   import opened Atomics
   import opened ILT = InfiniteLogTokens(nrifc)
@@ -60,7 +60,7 @@ module Impl(nrifc: NRIfc) {
   import opened GlinearOption
   import opened Cells
   import opened GhostLoc
-  import opened Constants
+  import opened NRConstants
   import opened ClientCounter
 
   type Tid = uint64

@@ -23,8 +23,8 @@ module Init(nrifc: NRIfc) {
   import opened Cells
   import LC = LinearCells
   import opened GhostLoc
-  import opened Im = Impl(nrifc)
-  import opened Constants
+  import opened Im = NRImpl(nrifc)
+  import opened NRConstants
   import Tokens = TicketStubToken(nrifc, IL)
   import opened TicketStubSingletonLoc
 

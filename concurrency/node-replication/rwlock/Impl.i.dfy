@@ -1,27 +1,26 @@
 include "../../framework/Atomic.s.dfy"
 include "../../framework/Cells.s.dfy"
-include "../Runtime.i.dfy"
+include "../Runtime.s.dfy"
 include "../../../lib/Lang/LinearSequence.i.dfy"
 include "RwLock.i.dfy"
-include "../Runtime.i.dfy"
 include "../../scache/ClientCounter.i.dfy"
 
 module RwLockImpl(contentsTypeMod: ContentsTypeMod) {
   import opened NativeTypes
-  import opened RwLockTokenMod = RwLockToken(contentsTypeMod)
+  import opened RwLockTokenMod = NRRwLockToken(contentsTypeMod)
   import opened Atomics
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened LinearCells
   import opened GhostLoc
-  import opened Constants
+  import opened NRConstants
   import opened GlinearOption
   import opened Options
   import opened Runtime
   import opened Ptrs
   import opened ClientCounter
 
-  import RwLockMod = RwLock(contentsTypeMod)
+  import RwLockMod = NRRwLock(contentsTypeMod)
   import HandleTypeMod = Handle(contentsTypeMod)
 
   // We wish that V were a type parameter, but we don't actually have

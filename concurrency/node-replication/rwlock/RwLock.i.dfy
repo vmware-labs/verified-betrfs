@@ -4,10 +4,10 @@ include "Handle.i.dfy"
 include "../Constants.i.dfy"
 include "../../../lib/Base/Option.s.dfy"
 
-module RwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
+module NRRwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
   import opened FullMaps
   import opened NativeTypes
-  import opened Constants
+  import opened NRConstants
   import HandleTypeMod = Handle(contentsTypeMod)
 
   type ThreadId = nat
@@ -611,13 +611,13 @@ module RwLock(contentsTypeMod: ContentsTypeMod) refines Rw {
   }
 }
 
-module RwLockToken(contentsTypeMod: ContentsTypeMod) {
+module NRRwLockToken(contentsTypeMod: ContentsTypeMod) {
   import opened Options
-  import opened Constants
-  import opened RwLock(contentsTypeMod)
+  import opened NRConstants
+  import opened NRRwLock(contentsTypeMod)
   import opened FullMaps
   import HandleTypeMod = Handle(contentsTypeMod)
-  import T = RwTokens(RwLock)
+  import T = RwTokens(NRRwLock)
 
   type Token = T.Token
   type Handle = HandleTypeMod.Handle

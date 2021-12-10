@@ -5,7 +5,7 @@ include "Constants.i.dfy"
 
 module InfiniteLogSSM(nrifc: NRIfc) refines TicketStubSSM(nrifc) {
   import opened Options
-  import opened Constants
+  import opened NRConstants
 
   // Read (node i):
   //
