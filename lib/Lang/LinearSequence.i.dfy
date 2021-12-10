@@ -17,6 +17,8 @@ module LinearSequence_i {
     reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all 
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
+  export T reveals *
+
   function method seq_alloc_init<A>(length:uint64, a:A) : (linear s:seq<A>)
       ensures |s| == length as int
       ensures forall i:nat | i < |s| :: s[i] == a

@@ -1,57 +1,16 @@
 include "../framework/StateMachines.s.dfy"
 include "NRSpec.s.dfy"
 include "NRSimple.i.dfy"
+include "Linearize.s.dfy"
 
-module NROne(nrifc: NRIfc) refines StateMachine(nrifc) {
-  type Variables = nrifc.NRState
+module NRSimple_Refines_NRSingle(ifc: NRIfc) refines Linearizer(ifc, NRSimple(ifc)) {
+  //import simple = NRSimple(nrifc)
+  //import one = AsyncStateMachine(nrifc, NROne(nrifc))
 
-  predicate Init(s: Variables) { s == nrifc.init_state() }
-
-  predicate Next(s: Variables, s': Variables, op: ifc.Op) {
-    match op.input {
-      case ROp(readonly_op) =>
-        && op.output == nrifc.read(s, readonly_op)
-        && s' == s
-      case UOp(update_op) =>
-        && nrifc.update(s, update_op) == nrifc.UpdateResult(s', op.output)
-    }
-  }
-}
-
-module Behavior(ifc: Ifc, sm: StateMachine(ifc)) {
-  datatype Behavior =
-    | Stepped(s: sm.Variables, op: sm.ifc.Op, tail: Behavior)
-    | Inited(s: sm.Variables)
-  {
-    predicate WF() {
-      match this {
-        case Stepped(s', op, tail) =>
-          && tail.WF()
-          && sm.Next(tail.s, s', op)
-        case Inited(s) =>
-          && sm.Init(s)
-      }
-    }
-  }
-}
-
-module NRSimple_Refines_NRSingle(nrifc: NRIfc) {
-  import simple = NRSimple(nrifc)
-  import one = AsyncStateMachine(nrifc, NROne(nrifc))
-
-  import AI = AsyncIfc(nrifc)
-  import SimpleB = Behavior(AsyncIfc(nrifc), NRSimple(nrifc))
-  import OneB = Behavior(AsyncIfc(nrifc), AsyncStateMachine(nrifc, NROne(nrifc)))
+  import AI = AsyncIfc(ifc)
+  //import SimpleB = Behavior(AsyncIfc(nrifc), NRSimple(nrifc))
+  //import OneB = Behavior(AsyncIfc(nrifc), AsyncStateMachine(nrifc, NROne(nrifc)))
   import opened RequestIds
-
-  predicate equiv(a: SimpleB.Behavior, b: OneB.Behavior)
-  decreases a, b
-  {
-    || (a.Inited? && b.Inited?)
-    || (a.Stepped? && a.op.InternalOp? && equiv(a.tail, b))
-    || (b.Stepped? && b.op.InternalOp? && equiv(a, b.tail))
-    || (a.Stepped? && b.Stepped? && a.op == b.op && equiv(a.tail, b.tail))
-  }
 
   /*
   function IReqs(s: simple.Variables, r_points: map<RequestId, nat>)
@@ -627,7 +586,7 @@ module NRSimple_Refines_NRSingle(nrifc: NRIfc) {
 
   lemma ExistsEquivBehavior(a: SimpleB.Behavior)
   returns (b: OneB.Behavior)
-  requires a.WF()
+  //requires a.WF()
   ensures b.WF()
   ensures equiv(a, b)
   {

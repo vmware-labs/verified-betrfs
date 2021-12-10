@@ -36,17 +36,18 @@ abstract module NRIfc refines InputOutputIfc {
   ensures ret == read(I(s), op)
 }
 
-module NR(nrifc: NRIfc) refines StateMachine(nrifc)
-{
-  datatype Variables = Variables(state: nrifc.NRState)
+module NROne(nrifc: NRIfc) refines StateMachine(nrifc) {
+  type Variables = nrifc.NRState
+
+  predicate Init(s: Variables) { s == nrifc.init_state() }
 
   predicate Next(s: Variables, s': Variables, op: ifc.Op) {
-    match op {
-      case Op(ROp(readonly_op), ret) =>
+    match op.input {
+      case ROp(readonly_op) =>
+        && op.output == nrifc.read(s, readonly_op)
         && s' == s
-        && ret == nrifc.read(s.state, readonly_op)
-      case Op(UOp(update_op), ret) =>
-        && nrifc.update(s.state, update_op) == nrifc.UpdateResult(s'.state, ret)
+      case UOp(update_op) =>
+        && nrifc.update(s, update_op) == nrifc.UpdateResult(s', op.output)
     }
   }
 }
