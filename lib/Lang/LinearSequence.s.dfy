@@ -91,6 +91,10 @@ module {:extern "LinearExtern"} LinearSequence_s {
       ensures |lseqs_raw(s)| == length as nat
       ensures forall i:nat | i < length as nat :: !has(lseqs_raw(s)[i])
 
+  function method {:extern "LinearExtern", "lseq_alloc_raw_hugetables"} lseq_alloc_raw_hugetables<A(00)>(length:uint64):(linear s:lseq<A>)
+      ensures |lseqs_raw(s)| == length as nat
+      ensures forall i:nat | i < length as nat :: !has(lseqs_raw(s)[i])
+
   function method {:extern "LinearExtern", "lseq_free_raw"} lseq_free_raw<A(00)>(linear s:lseq<A>):()
       requires forall i:nat | i < |lseqs_raw(s)| :: !has(lseqs_raw(s)[i])
 

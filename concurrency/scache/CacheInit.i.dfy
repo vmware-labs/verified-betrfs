@@ -326,7 +326,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var data_pta_seq : map<nat, PointsToArray<byte>> :=
         mem_split(data_pta_full, PageSize as int, CACHE_SIZE);
 
-    linear var read_refcounts_array := lseq_alloc<AtomicRefcount>(RC_WIDTH_64() * CACHE_SIZE_64());
+    linear var read_refcounts_array := lseq_alloc_hugetables<AtomicRefcount>(RC_WIDTH_64() * CACHE_SIZE_64());
     linear var status_idx_array := lseq_alloc<StatusIdx>(CACHE_SIZE_64());
 
     glinear var dis, empty_seq := split_init(init_tok);
