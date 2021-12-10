@@ -3,8 +3,8 @@ include "Init.i.dfy"
 include "InfiniteLog_Refines_NRSimple.i.dfy"
 include "Linearize.i.dfy"
 
-module FilledInInterface(nifc: NRIfc)
-  refines Interface(
+module NRFilledInInterface(nifc: NRIfc)
+  refines NRInterface(
     nifc,
     InfiniteLogSSM(nifc),
     NRSimple(nifc),

@@ -36,14 +36,17 @@ class DebugTable:
 # I should probably just dump stuff into an in-memory sqlite, huh?
 def accumulate(reports, mapper, debugTable):
     counters = {}
-    def getCounter(report):
-        key = mapper.key(report)
-        debugTable.add(mapper, key, report)
+    def getCounter(key):
         if key not in counters:
             counters[key] = collections.Counter()
         return counters[key]
     for report in reports:
-        getCounter(report).update(report)
+      for key in mapper.keys(report):
+        debugTable.add(mapper, key, report)
+        getCounter(key).update(report)
+      # add each report only once into the total line, even if it contributes to multiple rows above.
+      if not key.endswith("ignore"):
+        getCounter("total").update(report)
     for counter in counters.values():
         del counter["source"]
     return counters
@@ -61,88 +64,48 @@ class Row:
 
     #Row("data", "foo", "ManualMapper-ignore"),
 row_descriptors = [
-    Row("header", "Atomic Hashtable"),
-      Row("data", "Trusted spec", "ManualMapper-htatomic-spec"),
-      Row("data", "IO LTS", "ManualMapper-htatomic-lts"),
-      Row("data", "refinement proof", "ManualMapper-htatomic-refinementproof"),
-      Row("data", "implementation", "ManualMapper-htatomic-impl", impl=True),
-
-    Row("header", "Hand-over-hand Hashtable"),
-      Row("data", "Trusted spec", "ManualMapper-hthh-spec"),
-      Row("data", "IO LTS", "ManualMapper-hthh-lts"),
-      Row("data", "refinement proof", "ManualMapper-hthh-refinementproof"),
-      Row("data", "implementation", "ManualMapper-hthh-impl", impl=True),
-
-    Row("header", "Node Replication"),
-      Row("data", "Trusted spec", "ManualMapper-nr-spec"),
-      Row("data", "IO LTS", "ManualMapper-nr-lts"),
-      Row("data", "refinement proof", "ManualMapper-nr-refinementproof"),
-      Row("data", "guard: cyclic buffer", "ManualMapper-nr-guard-cyclicbuffer"),
-      Row("data", "guard: flat combiner", "ManualMapper-nr-guard-fc"),
-      Row("data", "implementation", "ManualMapper-nr-impl", impl=True),
-      Row("data", "guard: rwlock", "ManualMapper-nr-rwlock-guard"),
-      Row("data", "rwlock implementation", "ManualMapper-nr-rwlock-impl", impl=True),
-
-    Row("header", "Splinter Cache"),
-      Row("data", "Trusted spec", "ManualMapper-scache-spec"),
-      Row("data", "IO LTS", "ManualMapper-scache-lts"),
-      Row("data", "refinement proof", "ManualMapper-scache-refinementproof"),
-      Row("data", "implementation", "ManualMapper-scache-impl"),
-      Row("data", "guard: rwlock", "ManualMapper-scache-rwlock-guard", impl=True),
-
-    Row("header", "Shared"),
-      Row("data", "Trusted Framework", "ManualMapper-framework", impl = True),
-      Row("data", "Library", "ManualMapper-library", impl = True),
+    Row("data", "Atomic Hashtable~\\autoref{sec:ht:normal}", "ManualMapper-htatomic"),
+    Row("data", "Hand-over-hand~\\autoref{sec:handoverhand}", "ManualMapper-hthh"),
+    Row("data", "Node Replication~\\autoref{sec:nr}", "ManualMapper-nr"),
+    Row("data", "SplinterCache~\\autoref{sec:cache}", "ManualMapper-scache"),
+    Row("data", "Seagull Framework~\\autoref{sec:impl}", "ManualMapper-framework"),
 ]
 
 def write_tex_table(fp, counters):
-    fp.write("\\begin{tabular}{|ll|rrr|}\n")
+    fp.write("\\begin{center}\n")
+    fp.write("\\setlength{\\tabcolsep}{5pt}\n")
+    fp.write("\\begin{tabular}{|l|rrrr|}\n")
     fp.write("\\hline\n")
 
-    fp.write("\multicolumn{2}{|l|}{Major component} & model & impl & verif. time\\\\\n")
+    fp.write("Major component & trusted & impl & proof & verif\\\\\n")
+    fp.write("& {\\small LOC} & {\\small LOC} & {\\small LOC} & time\\\\\n")
     fp.write("\\hline\n")
 
     def write_row(label, rowdata):
       def dropzero(d, suffix=""):
         return "" if d == 0 else str(d)+suffix
 
-      assert label=="total" or rowdata["spec"]==0 or rowdata["proof"]==0  # collapsing model && spec into a column; alarm if data overlaps
-      model = dropzero(rowdata["spec"] + rowdata["proof"])
-      fp.write("& %s & %s & %s & %s\\\\\n" % (
+      fp.write("%s & %s & %s & %s & %s\\\\\n" % (
               label,
-              model,
+              dropzero(rowdata["spec"]),
               dropzero(rowdata["impl"]),
-              dropzero(int(rowdata["time"]), suffix="~s"),
+              dropzero(rowdata["proof"]),
+              dropzero(int(rowdata["time"]), suffix="s"),
               ))
 
     keys = list(counters.keys())
     keys.sort()
-    deferred_impl = 0
-    # add up totals here rather than using AllMapper to get desired 'trusted' total layout (and allmapper includes ignored row)
-    total_counter = collections.Counter()
     for row in row_descriptors:
-      if row.type == "header":
-        fp.write("\\multicolumn{2}{|l|}{%s} &&& \\\\\n" % row.label)
-      elif row.type == "data":
-        if row.counter_key in counters:
-          local_counter = dict(counters[row.counter_key])
-          total_counter.update(local_counter)
-          if row.impl:
-            local_counter["impl"] += deferred_impl
-            deferred_impl = 0
-          else:
-            deferred_impl += local_counter["impl"]
-            local_counter["impl"] = 0
-          write_row(row.label, local_counter)
-        else:
-          print("Warning: missing counter for %s" % row.counter_key)
-    assert deferred_impl == 0   # Don't let any fall off the end.
+      if row.counter_key in counters:
+        local_counter = dict(counters[row.counter_key])
+        write_row(row.label, local_counter)
+      else:
+        print("Warning: missing counter for %s" % row.counter_key)
     fp.write("\\hline\n")
-    write_row("Trusted total", dict([(k,v if k == "spec" else 0) for k,v in total_counter.items()]))
-        #{"spec": total_counter["spec"], "proof":0, "impl":0, "time":0})
-    write_row("Verified total", dict([(k,v if k != "spec" else 0) for k,v in total_counter.items()]))
+    write_row("Total", counters["total"])
     fp.write("\\hline\n")
     fp.write("\\end{tabular}\n")
+    fp.write("\\end{center}\n")
 
 def write_compact_table(fp, counters):
     def write_row(key, rowdata):
@@ -161,15 +124,16 @@ class Mapper:
     def __init__(self):
         self.categ = self.__class__.__name__
 
-    def key(self, report):
-        return "%s-%s" % (self.categ, self.map(report))
+    def keys(self, report):
+        rc = ["%s-%s" % (self.categ, key) for key in self.map(report)]
+        return rc
 
 class AllMapper(Mapper):
     def __init__(self):
         super().__init__()
 
     def map(self, path):
-        return "all"
+        return ["all"]
 
 class DirMapper(Mapper):
     def __init__(self):
@@ -181,13 +145,13 @@ class DirMapper(Mapper):
         if dirpart == "Impl":
             base = source.split(".")[0]
             if base.endswith("Model"):
-                return "Impl-Model"
+                return ["Impl-Model"]
             elif base.endswith("Impl"):
-                return "Impl-Impl"
+                return ["Impl-Impl"]
             else:
-                return "Impl-Misc"
+                return ["Impl-Misc"]
         else:
-            return dirpart
+            return [dirpart]
 
 class ManualMapper(Mapper):
     def __init__(self):
@@ -199,7 +163,9 @@ class ManualMapper(Mapper):
             categ,path = line.split()
             if path.startswith("./"):
                 path = path[2:]
-            self.mapping[path] = categ
+            if path not in self.mapping:
+                self.mapping[path] = set()
+            self.mapping[path].add(categ)
 
     def map(self, report):
         source = report["source"]
@@ -210,20 +176,62 @@ class ManualMapper(Mapper):
 def emit_tex_commented(fp, multiline_string):
     for line in multiline_string.split("\n"):
         fp.write("% "+line+"\n")
-    
+
+def emit_tidy_table(reports):
+    selected = [report for report in reports if report["source"].endswith(".s.dfy")]
+    selected.sort(key=lambda report: -report["spec"])
+    s = ""
+    for report in selected:
+        s += "%5d %s\n" % (report["spec"], report["source"])
+    return s
+
+def highlights(reports, counters):
+    s = ""
+    count_under_minute = len([report for report in reports if report["time"]<60.0])
+    pctFilesUnderOneMinute = count_under_minute / len(reports) * 100.0
+    s += "\\newcommand{\\dataPctFilesUnderOneMinute}{%d}\n" % int(pctFilesUnderOneMinute)
+    slowestFileSec = sorted(reports, key=lambda r: r["time"])[-1]["time"]
+    s += "\\newcommand{\\dataSlowestFileSec}{%d}\n" % int(slowestFileSec)
+    slowestFileMin = int(slowestFileSec) / 60 + 1
+    s += "\\newcommand{\\dataSlowestFileMin}{%d}\n" % int(slowestFileMin)
+    frameworkImplLoc = counters["ManualMapper-framework"]["impl"]
+    s += "\\newcommand{\\dataFrameworkImplLoc}{%d}\n" % frameworkImplLoc
+    caseStudyImplLoc = counters["total"]["impl"] - frameworkImplLoc
+    s += "\\newcommand{\\dataCaseStudyImplLoc}{%d}\n" % caseStudyImplLoc
+    allProof = counters["total"]["proof"]
+    s += "\\newcommand{\\dataAllProof}{%d}\n" % allProof
+    proofCodeRatio = allProof / counters["total"]["impl"]
+    s += "\\newcommand{\\dataProofCodeRatio}{%.1f}\n" % proofCodeRatio
+    s += "\\newcommand{\\dataTrustedLoc}{%d}\n" % counters["total"]["spec"]
+    s += "\\newcommand{\\dataTrustedFrameworkLoc}{%d}\n" % counters["ManualMapper-framework"]["spec"]
+    trustedAppLines = [counter["spec"] for k,counter in counters.items() if "ignore" not in k and "total" not in k and "framework" not in k]
+    s += "\\newcommand{\\dataMinTrustedAppLines}{%d}\n" % min(trustedAppLines)
+    s += "\\newcommand{\\dataMaxTrustedAppLines}{%d}\n" % max(trustedAppLines)
+    return s
+
 def report(input, output):
     debugTable = DebugTable()
     reports = gatherReports(input)
-    counters = accumulate(reports, AllMapper(), debugTable)
-    counters.update(accumulate(reports, DirMapper(), debugTable))
-    counters.update(accumulate(reports, ManualMapper(), debugTable))
+#    counters = accumulate(reports, AllMapper(), debugTable)
+#    counters.update(accumulate(reports, DirMapper(), debugTable))
+#    counters.update(accumulate(reports, ManualMapper(), debugTable))
+    counters = accumulate(reports, ManualMapper(), debugTable)
     debugTable.display(open("/tmp/debugtable", "w"))
     fp = open(output, "w")
+    emit_tex_commented(fp, "%%%% highlights")
+
+    fp.write("\\ifx\\tablemode\\undefined\n")
+    fp.write(highlights(reports, counters))
+    fp.write("\\else\n")
     write_tex_table(fp, counters)
+    fp.write("\\fi\n")
+
     emit_tex_commented(fp, "%%%% reports")
     emit_tex_commented(fp, json.dumps(reports, sort_keys=True, indent=2))
     emit_tex_commented(fp, "%%%% counters")
     emit_tex_commented(fp, json.dumps(counters, sort_keys=True, indent=2))
+    emit_tex_commented(fp, "%%%% tidy table")
+    emit_tex_commented(fp, emit_tidy_table(reports))
     write_compact_table(fp, counters)
     fp.close()
 

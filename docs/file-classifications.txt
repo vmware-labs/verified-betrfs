@@ -1,92 +1,16 @@
-
-
-
-#core ./lib/Lang/NativeTypes.s.dfy
-#core ./lib/Base/Option.s.dfy
-#core lib/Lang/LinearSequence.s.dfy
-#core lib/Lang/LinearMaybe.s.dfy
-#lib concurrency/Math/Nonlinear.i.dfy
-#lib lib/Lang/LinearSequence.i.dfy
-#lib concurrency/Math/Math.i.dfy
-#
-#lib ./concurrency/framework/Rw.i.dfy
-#lib ./concurrency/framework/BasicPCM.i.dfy
-#lib ./concurrency/framework/Ext.i.dfy
-#lib ./concurrency/framework/GhostLinearSequence.i.dfy
-#
-#core ./concurrency/framework/Mutex.s.dfy
-#core ./concurrency/framework/Atomic.s.dfy
-#core ./concurrency/framework/PCMWrap.s.dfy
-#core ./concurrency/framework/Ptrs.s.dfy
-#core ./concurrency/framework/PCMExt.s.dfy
-#core ./concurrency/framework/PCM.s.dfy
-#core ./concurrency/framework/Cells.s.dfy
-#
-#core ./concurrency/framework/AsyncSSM.s.dfy
-#core ./concurrency/framework/GhostLinearMaybe.s.dfy
-#core ./concurrency/framework/GlinearOption.s.dfy
-#core ./concurrency/framework/ThreadUtils.s.dfy
-#core ./concurrency/framework/GlinearMap.s.dfy
-#core ./concurrency/framework/GhostLinearSequence.s.dfy
-#core ./concurrency/framework/StateMachines.s.dfy
-#
-#lib ./concurrency/framework/SSM.i.dfy
-#lib ./concurrency/framework/EasyExt.i.dfy
-#lib ./concurrency/framework/MultiRw.i.dfy
-#
-#diskcore ./concurrency/framework/DiskSSM.s.dfy
-#diskcore ./concurrency/framework/AsyncDisk.s.dfy
-#diskcore ./concurrency/framework/AIO.s.dfy
-#
-#
-#cachesm ./concurrency/scache/cache/CacheSM.i.dfy
-#cachespec ./concurrency/scache/cache/CacheSpec.s.dfy
-#
-#cacheref ./concurrency/scache/cache/AbstractCacheSM.i.dfy
-#cacheref ./concurrency/scache/cache/SimpleCacheSM.i.dfy
-#cacheref ./concurrency/scache/cache/SimpleCache_Refines_AbstractCache.i.dfy
-#cacheref ./concurrency/scache/cache/SimpleCache_Inv.i.dfy
-#cacheref ./concurrency/scache/cache/CacheInv.i.dfy
-#cacheref ./concurrency/scache/cache/CacheResources.i.dfy
-#cacheref ./concurrency/scache/cache/Cache_Refines_SimpleCache.i.dfy
-#
-#cachelock ./concurrency/scache/rwlock/CacheHandle.i.dfy
-#cachelock ./concurrency/scache/rwlock/FullMap.i.dfy
-#cachelock ./concurrency/scache/rwlock/RwLock.i.dfy
-#cachelock ./concurrency/scache/rwlock/MapSum.i.dfy
-#
-#cacheimpl ./concurrency/scache/CacheTypes.i.dfy
-#cacheimpl ./concurrency/scache/BasicLock.i.dfy
-#cacheimpl ./concurrency/scache/AtomicStatus.i.dfy
-#cacheimpl ./concurrency/scache/CacheIO.i.dfy
-#cacheimpl ./concurrency/scache/AtomicIndexLookup.i.dfy
-#cacheimpl ./concurrency/scache/Constants.i.dfy
-#cacheimpl ./concurrency/scache/MemSplit.i.dfy
-#cacheimpl ./concurrency/scache/Bundle.i.dfy
-#cacheimpl ./concurrency/scache/CacheAIOParams.i.dfy
-#cacheimpl ./concurrency/scache/Application.i.dfy
-#cacheimpl ./concurrency/scache/CacheWritebackBatch.i.dfy
-#cacheimpl ./concurrency/scache/CacheInit.i.dfy
-#cacheimpl ./concurrency/scache/ClientCounter.i.dfy
-#cacheimpl ./concurrency/scache/CacheOps.i.dfy
-#cacheimpl ./concurrency/scache/AtomicRefcount.i.dfy
-
-
 ignore concurrency/SeagullBundle.i.dfy
 
-library concurrency/Math/Math.i.dfy
-library concurrency/Math/Nonlinear.i.dfy
+framework concurrency/Math/Math.i.dfy
+framework concurrency/Math/Nonlinear.i.dfy
 
-library concurrency/disciplined/common/Limits.i.dfy
-library concurrency/disciplined/common/MonoidLib.i.dfy
-library concurrency/disciplined/common/MultisetLemmas.i.dfy
+framework concurrency/disciplined/common/Limits.i.dfy
+framework concurrency/disciplined/common/MonoidLib.i.dfy
+framework concurrency/disciplined/common/MultisetLemmas.i.dfy
 
 framework concurrency/framework/AIO.s.dfy
-framework concurrency/framework/AsyncDisk.s.dfy
 framework concurrency/framework/AsyncSSM.s.dfy
 framework concurrency/framework/Atomic.s.dfy
 framework concurrency/framework/Cells.s.dfy
-framework concurrency/framework/DiskSSM.s.dfy
 framework concurrency/framework/GlinearMap.s.dfy
 framework concurrency/framework/GlinearOption.s.dfy
 framework concurrency/framework/PCM.s.dfy
@@ -96,93 +20,96 @@ framework concurrency/framework/Ptrs.s.dfy
 framework concurrency/framework/StateMachines.s.dfy
 framework concurrency/framework/ThreadUtils.s.dfy
 
-library concurrency/framework/AsyncSSM.i.dfy
-library concurrency/framework/BasicPCM.i.dfy
-library concurrency/framework/DiskSSM.i.dfy
-library concurrency/framework/GlinearMap.i.dfy
-library concurrency/framework/MultiRw.i.dfy
-library concurrency/framework/Mutex.i.dfy
-library concurrency/framework/Rw.i.dfy
+framework concurrency/framework/AsyncSSM.i.dfy
+framework concurrency/framework/BasicPCM.i.dfy
+framework concurrency/framework/DiskSSM.i.dfy
+framework concurrency/framework/GlinearMap.i.dfy
+framework concurrency/framework/MultiRw.i.dfy
+framework concurrency/framework/Mutex.i.dfy
+framework concurrency/framework/Rw.i.dfy
 
-#TODO uses same MapSpec
-hthh-spec concurrency/handoverhand/Interface.s.dfy
-hthh-lts concurrency/handoverhand/Interface.i.dfy
-hthh-lts concurrency/handoverhand/ShardedHashTable.i.dfy
-hthh-lts concurrency/handoverhand/ShardedHashTableTokens.i.dfy
-hthh-refinementproof concurrency/handoverhand/Interpretation.i.dfy
-hthh-refinementproof concurrency/handoverhand/ShardedHashTable_Refines_AsyncMapSpec.i.dfy
-hthh-impl concurrency/handoverhand/Impl.i.dfy
+hthh concurrency/handoverhand/Interface.s.dfy
+hthh concurrency/handoverhand/Interface.i.dfy
+hthh concurrency/handoverhand/ShardedHashTable.i.dfy
+hthh concurrency/handoverhand/ShardedHashTableTokens.i.dfy
+hthh concurrency/handoverhand/Interpretation.i.dfy
+hthh concurrency/handoverhand/ShardedHashTable_Refines_AsyncMapSpec.i.dfy
+hthh concurrency/handoverhand/Impl.i.dfy
+# Note that MapSpec.s applies to both htth and htatomic, so the trusted columns sum to more than the total.
+hthh concurrency/hashtable/MapSpec.s.dfy
 
 
-htatomic-lts concurrency/hashtable/Interface.i.dfy
-htatomic-lts concurrency/hashtable/CircularRange.i.dfy
-htatomic-refinementproof concurrency/hashtable/CircularTable.i.dfy
-htatomic-lts concurrency/hashtable/HashTableStubSSM.i.dfy
-htatomic-refinementproof concurrency/hashtable/HashTableRefinement.i.dfy
-htatomic-impl concurrency/hashtable/Impl.i.dfy
-htatomic-spec concurrency/hashtable/Interface.s.dfy
-htatomic-spec concurrency/hashtable/MapSpec.s.dfy
+htatomic concurrency/hashtable/Interface.i.dfy
+htatomic concurrency/hashtable/CircularRange.i.dfy
+htatomic concurrency/hashtable/CircularTable.i.dfy
+htatomic concurrency/hashtable/HashTableStubSSM.i.dfy
+htatomic concurrency/hashtable/HashTableRefinement.i.dfy
+htatomic concurrency/hashtable/Impl.i.dfy
+htatomic concurrency/hashtable/Interface.s.dfy
+htatomic concurrency/hashtable/MapSpec.s.dfy
 
 framework concurrency/node-replication/Runtime.s.dfy
 
-nr-spec concurrency/node-replication/NRSpec.s.dfy
-nr-spec concurrency/node-replication/Interface.s.dfy
-nr-spec concurrency/node-replication/Linearize.s.dfy
+nr concurrency/node-replication/NRSpec.s.dfy
+nr concurrency/node-replication/Interface.s.dfy
+nr concurrency/node-replication/Linearize.s.dfy
 
-nr-guard-cyclicbuffer concurrency/node-replication/CyclicBuffer.i.dfy
-nr-guard-cyclicbuffer concurrency/node-replication/CyclicBufferTokens.i.dfy
-nr-guard-fc concurrency/node-replication/FlatCombiner.i.dfy
-nr-guard-fc concurrency/node-replication/FlatCombinerTokens.i.dfy
-nr-lts concurrency/node-replication/InfiniteLog.i.dfy
-nr-lts concurrency/node-replication/InfiniteLogTokens.i.dfy
+nr concurrency/node-replication/CyclicBuffer.i.dfy
+nr concurrency/node-replication/CyclicBufferTokens.i.dfy
+nr concurrency/node-replication/FlatCombiner.i.dfy
+nr concurrency/node-replication/FlatCombinerTokens.i.dfy
+nr concurrency/node-replication/InfiniteLog.i.dfy
+nr concurrency/node-replication/InfiniteLogTokens.i.dfy
 
-nr-refinementproof concurrency/node-replication/Linearize.i.dfy
-nr-refinementproof concurrency/node-replication/NRSimple.i.dfy
-nr-refinementproof concurrency/node-replication/InfiniteLog_Refines_NRSimple.i.dfy
+nr concurrency/node-replication/Linearize.i.dfy
+nr concurrency/node-replication/NRSimple.i.dfy
+nr concurrency/node-replication/InfiniteLog_Refines_NRSimple.i.dfy
 
-nr-impl concurrency/node-replication/Init.i.dfy
-nr-impl concurrency/node-replication/Constants.i.dfy
-nr-impl concurrency/node-replication/Impl.i.dfy
-nr-impl concurrency/node-replication/BundleCounter.i.dfy
-nr-impl concurrency/node-replication/Interface.i.dfy
-nr-impl concurrency/node-replication/ConcreteReplica.i.dfy
+nr concurrency/node-replication/Init.i.dfy
+nr concurrency/node-replication/Constants.i.dfy
+nr concurrency/node-replication/Impl.i.dfy
+nr concurrency/node-replication/BundleCounter.i.dfy
+nr concurrency/node-replication/Interface.i.dfy
+nr concurrency/node-replication/ConcreteReplica.i.dfy
 
-nr-rwlock-guard concurrency/node-replication/rwlock/Handle.i.dfy
-nr-rwlock-guard concurrency/node-replication/rwlock/RwLock.i.dfy
-nr-rwlock-impl concurrency/node-replication/rwlock/Impl.i.dfy
+nr concurrency/node-replication/rwlock/Handle.i.dfy
+nr concurrency/node-replication/rwlock/RwLock.i.dfy
+nr concurrency/node-replication/rwlock/Impl.i.dfy
 
-scache-spec concurrency/scache/cache/CacheSpec.s.dfy
-scache-spec concurrency/scache/cache/AbstractCacheSM.s.dfy
+scache concurrency/scache/cache/CacheSpec.s.dfy
+scache concurrency/scache/cache/AbstractCacheSM.s.dfy
+scache concurrency/framework/AsyncDisk.s.dfy
+scache concurrency/framework/DiskSSM.s.dfy
 
-scache-impl concurrency/scache/Application.i.dfy
-scache-impl concurrency/scache/AtomicIndexLookup.i.dfy
-scache-impl concurrency/scache/AtomicRefcount.i.dfy
-scache-impl concurrency/scache/AtomicStatus.i.dfy
-scache-impl concurrency/scache/BasicLock.i.dfy
-scache-impl concurrency/scache/Bundle.i.dfy
-scache-impl concurrency/scache/CacheAIOParams.i.dfy
-scache-impl concurrency/scache/CacheIO.i.dfy
-scache-impl concurrency/scache/CacheInit.i.dfy
-scache-impl concurrency/scache/CacheOps.i.dfy
-scache-impl concurrency/scache/CacheTypes.i.dfy
-scache-impl concurrency/scache/CacheWritebackBatch.i.dfy
-scache-impl concurrency/scache/ClientCounter.i.dfy
-scache-impl concurrency/scache/Constants.i.dfy
-scache-impl concurrency/scache/MemSplit.i.dfy
+scache concurrency/scache/Application.i.dfy
+scache concurrency/scache/AtomicIndexLookup.i.dfy
+scache concurrency/scache/AtomicRefcount.i.dfy
+scache concurrency/scache/AtomicStatus.i.dfy
+scache concurrency/scache/BasicLock.i.dfy
+scache concurrency/scache/Bundle.i.dfy
+scache concurrency/scache/CacheAIOParams.i.dfy
+scache concurrency/scache/CacheIO.i.dfy
+scache concurrency/scache/CacheInit.i.dfy
+scache concurrency/scache/CacheOps.i.dfy
+scache concurrency/scache/CacheTypes.i.dfy
+scache concurrency/scache/CacheWritebackBatch.i.dfy
+scache concurrency/scache/ClientCounter.i.dfy
+scache concurrency/scache/Constants.i.dfy
+scache concurrency/scache/MemSplit.i.dfy
 
-scache-lts concurrency/scache/cache/CacheResources.i.dfy
-scache-lts concurrency/scache/cache/CacheSM.i.dfy
+scache concurrency/scache/cache/CacheResources.i.dfy
+scache concurrency/scache/cache/CacheSM.i.dfy
 
-scache-refinementproof concurrency/scache/cache/CacheInv.i.dfy
-scache-refinementproof concurrency/scache/cache/SimpleCacheSM.i.dfy
-scache-refinementproof concurrency/scache/cache/SimpleCache_Inv.i.dfy
-scache-refinementproof concurrency/scache/cache/Cache_Refines_SimpleCache.i.dfy
-scache-refinementproof concurrency/scache/cache/SimpleCache_Refines_AbstractCache.i.dfy
+scache concurrency/scache/cache/CacheInv.i.dfy
+scache concurrency/scache/cache/SimpleCacheSM.i.dfy
+scache concurrency/scache/cache/SimpleCache_Inv.i.dfy
+scache concurrency/scache/cache/Cache_Refines_SimpleCache.i.dfy
+scache concurrency/scache/cache/SimpleCache_Refines_AbstractCache.i.dfy
 
-scache-rwlock-guard concurrency/scache/rwlock/CacheHandle.i.dfy
-scache-rwlock-guard concurrency/scache/rwlock/FullMap.i.dfy
-scache-rwlock-guard concurrency/scache/rwlock/MapSum.i.dfy
-scache-rwlock-guard concurrency/scache/rwlock/RwLock.i.dfy
+scache concurrency/scache/rwlock/CacheHandle.i.dfy
+scache concurrency/scache/rwlock/FullMap.i.dfy
+scache concurrency/scache/rwlock/MapSum.i.dfy
+scache concurrency/scache/rwlock/RwLock.i.dfy
 
 framework lib/Base/MapRemove.s.dfy
 framework lib/Lang/LinearSequence.s.dfy
@@ -190,8 +117,8 @@ framework lib/Lang/NativeTypes.s.dfy
 framework lib/Lang/LinearMaybe.s.dfy
 framework lib/Base/Option.s.dfy
 
-library lib/Base/Maps.i.dfy
-library lib/Base/Multisets.i.dfy
-library lib/Base/mathematics.i.dfy
-library lib/Base/sequences.i.dfy
-library lib/Lang/LinearSequence.i.dfy
+framework lib/Base/Maps.i.dfy
+framework lib/Base/Multisets.i.dfy
+framework lib/Base/mathematics.i.dfy
+framework lib/Base/sequences.i.dfy
+framework lib/Lang/LinearSequence.i.dfy

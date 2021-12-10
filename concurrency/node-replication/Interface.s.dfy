@@ -4,7 +4,7 @@ include "../framework/AsyncSSM.s.dfy"
 include "../framework/StateMachines.s.dfy"
 include "../../lib/Lang/LinearSequence.s.dfy"
 
-abstract module Interface(
+abstract module NRInterface(
   nrifc: NRIfc,
   ssm: TicketStubSSM(nrifc),
   X: StateMachine(AsyncIfc(nrifc)),
