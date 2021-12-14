@@ -17,7 +17,7 @@ import warnings
 from io import BytesIO
 
 # this is the width of a column in the latex template
-LATEX_TEMPLATE_COLUMNWIDTH = 2.875
+LATEX_TEMPLATE_COLUMNWIDTH = 2.8
 
 # the unit of the latex template column width
 LATEX_TEMPLATE_COLUMNWDITH_UNIT = 'in'
@@ -49,12 +49,13 @@ class theme_my538(theme_gray):
                 legend_box_margin=0,
                 legend_margin=0,
                 axis_title=element_text(size=base_size),
+                axis_title_y=element_text(size=base_size, margin={'l': 0, 'r': 0}),
                 axis_text_x=element_text(size=base_size, margin={'t': 12}),
                 axis_text_y=element_text(size=base_size, margin={'r': 12}),
                 axis_ticks_length=-10,
                 axis_ticks=element_line(size=0.5),
                 title=element_text(color='#3C3C3C'),
-                legend_text=element_text(size=base_size),
+                legend_text=element_text(size=base_size-1),
                 legend_background=element_rect(fill='None', color='#000000',
                                                size=0.2, linetype='solid'),
                 legend_key=element_rect(fill='#FFFFFF', colour=None),
@@ -64,7 +65,7 @@ class theme_my538(theme_gray):
                   #color='#E5E5E5', linetype='solid', size=0.5),
                 panel_grid_major=element_blank(),
                 panel_grid_minor=element_blank(),
-                panel_spacing=0.30,
+                panel_spacing=0.25,
                 plot_background=element_rect(
                     fill=bgcolor, color=bgcolor, size=1),
                 plot_margin=0,
@@ -95,9 +96,9 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
         labels = [ 'Seagull-NR'
                  , 'Reference-NR'
                  , 'DistRwLock'
-                 , 'Shfl'
+                 , 'Shuffle Lock'
                  , 'MCS'
-                 , 'std::shared_mutex'
+                 , 'libstdc++ shared_mutex'
                  ]
         breaks = ['dafny_nr'
                  , 'rust_nr'
@@ -138,8 +139,9 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
         theme(legend_position='top', legend_title=element_blank()) + \
         scale_x_continuous(
             breaks=[1, 4] + list(range(xskip, 513, xskip)),
-            name='Number of Threads') +
+            name='threads') +
         scale_y_continuous(
+            name='ops/sec',
             labels=lambda lst: ["{:,.0f}M".format(x / 1_000_000) for x in lst]) +
         scale_color_manual(values=[
             "#bf0040",
