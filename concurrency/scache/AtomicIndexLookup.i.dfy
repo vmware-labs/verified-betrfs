@@ -19,24 +19,25 @@ module AtomicIndexLookupImpl {
 
   const NOT_MAPPED : uint32 := 0xffff_ffff;
 
-  predicate state_inv(v: uint32, g: CacheResources.DiskPageMap, disk_idx: nat)
+  predicate state_inv(v: uint32, g: CacheResources.DiskPageMap, disk_idx: nat, config: Config)
   {
-    && (0 <= v as int < CACHE_SIZE as int || v == 0xffff_ffff)
+    && (0 <= v as int < config.cache_size as int || v == 0xffff_ffff)
     && g == CacheResources.DiskPageMap(disk_idx,
         (if v == 0xffff_ffff then None else Some(v as nat)))
   }
 
-  predicate atomic_index_lookup_inv(a: AtomicIndexLookup, disk_idx: nat)
+  predicate atomic_index_lookup_inv(a: AtomicIndexLookup, disk_idx: nat, config: Config)
   {
-    forall v, g :: atomic_inv(a, v, g) <==> state_inv(v, g, disk_idx)
+    forall v, g :: atomic_inv(a, v, g) <==> state_inv(v, g, disk_idx, config)
   }
 
   method read_known_cache_idx(
       shared a: AtomicIndexLookup,
       ghost disk_idx: nat,
+      ghost config: Config,
       gshared cache_entry: CacheEntry)
   returns (cache_idx: uint32)
-  requires atomic_index_lookup_inv(a, disk_idx)
+  requires atomic_index_lookup_inv(a, disk_idx, config)
   requires cache_entry.disk_idx == disk_idx
   ensures cache_idx as int == cache_entry.cache_idx
   {
@@ -50,10 +51,11 @@ module AtomicIndexLookupImpl {
 
   method atomic_index_lookup_read(
       shared a: AtomicIndexLookup,
-      ghost disk_idx: nat)
+      ghost disk_idx: nat,
+      ghost config: Config)
   returns (cache_idx: uint32)
-  requires atomic_index_lookup_inv(a, disk_idx)
-  ensures 0 <= cache_idx as int < CACHE_SIZE as int || cache_idx == NOT_MAPPED
+  requires atomic_index_lookup_inv(a, disk_idx, config)
+  ensures 0 <= cache_idx as int < config.cache_size as int || cache_idx == NOT_MAPPED
   {
     atomic_block var ci := execute_atomic_load(a) { }
     cache_idx := ci;
@@ -62,13 +64,14 @@ module AtomicIndexLookupImpl {
   method atomic_index_lookup_clear_mapping(
       shared a: AtomicIndexLookup,
       ghost disk_idx: nat,
+      ghost config: Config,
       glinear cache_entry: CacheResources.CacheEntry,
       glinear status: CacheResources.CacheStatus
   )
   returns (
       glinear cache_empty': CacheResources.CacheEmpty
   )
-  requires atomic_index_lookup_inv(a, disk_idx)
+  requires atomic_index_lookup_inv(a, disk_idx, config)
   requires status.CacheStatus?
   requires status.status == Clean
   requires cache_entry.CacheEntry?
@@ -90,6 +93,7 @@ module AtomicIndexLookupImpl {
   method atomic_index_lookup_clear_mapping_havoc(
       shared a: AtomicIndexLookup,
       ghost disk_idx: nat,
+      ghost config: Config,
       gshared havoc: HavocPermission,
       glinear cache_entry: CacheResources.CacheEntry,
       glinear status: CacheResources.CacheStatus
@@ -97,7 +101,7 @@ module AtomicIndexLookupImpl {
   returns (
       glinear cache_empty': CacheResources.CacheEmpty
   )
-  requires atomic_index_lookup_inv(a, disk_idx)
+  requires atomic_index_lookup_inv(a, disk_idx, config)
   requires status.CacheStatus?
   requires cache_entry.CacheEntry?
   requires cache_entry.cache_idx == status.cache_idx
@@ -120,6 +124,7 @@ module AtomicIndexLookupImpl {
   method atomic_index_lookup_add_mapping(
       shared a: AtomicIndexLookup,
       disk_idx: uint64,
+      ghost config: Config,
       cache_idx: uint32,
       glinear cache_empty: CacheResources.CacheEmpty)
   returns (
@@ -128,9 +133,9 @@ module AtomicIndexLookupImpl {
     glinear cache_reading': glOption<CacheResources.CacheReading>,
     glinear read_ticket: glOption<CacheResources.DiskReadTicket>
   )
-  requires atomic_index_lookup_inv(a, disk_idx as int)
+  requires atomic_index_lookup_inv(a, disk_idx as int, config)
   requires cache_empty.cache_idx == cache_idx as int
-  requires 0 <= cache_idx as int < CACHE_SIZE as int
+  requires 0 <= cache_idx as int < config.cache_size as int
   ensures !success ==> cache_empty' == glSome(cache_empty)
   ensures !success ==> cache_reading' == glNone
   ensures !success ==> read_ticket == glNone
@@ -160,7 +165,7 @@ module AtomicIndexLookupImpl {
         read_ticket := glNone;
         new_g := old_g;
       }
-      assert state_inv(new_value, new_g, disk_idx as int);
+      assert state_inv(new_value, new_g, disk_idx as int, config);
 
       ghost_release new_g;
     }
@@ -171,6 +176,7 @@ module AtomicIndexLookupImpl {
   method atomic_index_lookup_add_mapping_instant(
       shared a: AtomicIndexLookup,
       disk_idx: uint64,
+      ghost config: Config,
       cache_idx: uint32,
       gshared havoc: HavocPermission,
       glinear cache_empty: CacheResources.CacheEmpty,
@@ -181,9 +187,9 @@ module AtomicIndexLookupImpl {
     glinear cache_entry': glOption<CacheResources.CacheEntry>,
     glinear status': glOption<CacheResources.CacheStatus>
   )
-  requires atomic_index_lookup_inv(a, disk_idx as int)
+  requires atomic_index_lookup_inv(a, disk_idx as int, config)
   requires cache_empty.cache_idx == cache_idx as int
-  requires 0 <= cache_idx as int < CACHE_SIZE as int
+  requires 0 <= cache_idx as int < config.cache_size as int
   requires havoc.disk_idx == disk_idx as int
   ensures !success ==> cache_empty' == glSome(cache_empty)
   ensures !success ==> cache_entry' == glNone
@@ -213,7 +219,7 @@ module AtomicIndexLookupImpl {
         status' := glNone;
         new_g := old_g;
       }
-      assert state_inv(new_value, new_g, disk_idx as int);
+      assert state_inv(new_value, new_g, disk_idx as int, config);
 
       ghost_release new_g;
     }

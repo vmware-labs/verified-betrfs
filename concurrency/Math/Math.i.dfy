@@ -265,4 +265,99 @@ module Math {
       //}
     }
   }
+
+  lemma div_bound(a: int, b: int)
+  requires a >= 0
+  requires b > 0
+  ensures 0 <= (a / b) <= a
+  {
+    div_ge_0(a, b);
+    calc {
+      a / b; <=
+      { mul_ge_0(a / b, b - 1); }
+      a / b + (a / b) * (b - 1);
+      {
+        distributive_left(a/b, 1, b-1);
+      }
+      (a / b) * b;
+      <= (a / b) * b + (a % b);
+      { div_mul_plus_mod(a, b); }
+      a;
+    }
+  }
+
+  lemma mod_div_transpose_bound(i: int, a: int, b: int)
+  requires 0 <= i < a * b
+  requires b >= 0
+  requires a > 0
+  ensures 0 <= (i % a) * b + (i / a) < a * b
+  {
+    calc {
+      0; <=
+      {
+        mod_bound(i, a);
+        div_bound(i, a);
+        mul_ge_0(i % a, b);
+      }
+      (i % a) * b + (i / a);
+    }
+    calc {
+      (i % a) * b + (i / a); <=
+      {
+        mod_bound(i, a);
+        mul_le_left(i%a, a-1, b);
+      }
+      (a - 1) * b + (i / a); <
+      {
+        if i / a >= b {
+          div_mul_plus_mod(i, a);
+          mul_le_left(b, i/a, a);
+          mul_comm(a, b);
+          assert (i / a) * a >= a * b;
+        }
+      }
+      (a - 1) * b + b;
+      {
+        distributive_right(a-1, 1, b);
+      }
+      a * b;
+    }
+  }
+
+  lemma mod_le_for_same_div(a: int, b: int, c: int)
+  requires c > 0
+  requires 0 <= a < b
+  requires a / c == (b - 1) / c
+  ensures 0 <= b - a <= c
+  {
+    div_mul_plus_mod(a, c);
+    div_mul_plus_mod(b-1, c);
+    mod_bound(a, c);
+    mod_bound(b-1, c);
+  }
+
+  lemma abc_mod(a: int, b: int, c: int)
+  requires 0 <= c < b
+  ensures (a * b + c) % b == c
+  {
+    mul_comm(a, b);
+    div_mul_plus_mod(a * b + c, b);
+    lemma_div_multiples_vanish_fancy(a, c, b);
+  }
+
+  lemma ab_div_lt(a: int, b: int, c: int)
+  requires b > 0
+  requires a >= 0
+  requires 0 <= c
+  requires c < a * b || c < b * a
+  ensures 0 <= c / b < a
+  {
+    div_mul_plus_mod(c, b);
+    mod_bound(c, b);
+    mul_comm(a, b);
+    div_bound(c, b);
+    if c / b >= a {
+      mul_le_left(a, c/b, b);
+    }
+  }
 }

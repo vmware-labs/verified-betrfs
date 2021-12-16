@@ -71,13 +71,13 @@ module AtomicStatusImpl {
     glinear status: glOption<CacheResources.CacheStatus>
   )
 
-  predicate state_inv(v: uint8, g: G, key: Key, rwlock_loc: Loc)
+  predicate state_inv(v: uint8, g: G, key: Key, config: Config, rwlock_loc: Loc)
   {
     && g.rwlock.val.M?
     && g.rwlock.val.central.CentralState?
     && g.rwlock.val == RwLock.CentralHandle(g.rwlock.val.central)
 
-    && g.rwlock.val.central.stored_value.is_handle(key)
+    && g.rwlock.val.central.stored_value.is_handle(key, config)
 
     && g.rwlock.loc == rwlock_loc
 
@@ -208,12 +208,13 @@ module AtomicStatusImpl {
   linear datatype AtomicStatus = AtomicStatus(
     linear atomic: Atomic<uint8, G>,
     ghost rwlock_loc: Loc,
-    ghost key: Key
+    ghost key: Key,
+    ghost config: Config
   )
   {
     predicate inv()
     {
-      forall v, g :: atomic_inv(this.atomic, v, g) <==> state_inv(v, g, key, this.rwlock_loc)
+      forall v, g :: atomic_inv(this.atomic, v, g) <==> state_inv(v, g, key, config, this.rwlock_loc)
     }
 
     shared method try_acquire_writeback(with_access: bool)
@@ -225,7 +226,7 @@ module AtomicStatusImpl {
     ensures !success ==> disk_write_ticket.glNone?
     ensures success ==>
         && m.glSome?
-        && m.value.is_handle(key)
+        && m.value.is_handle(key, config)
         && m.value.b.CacheEntryHandle?
         && m.value.token.loc == rwlock_loc
         && disk_write_ticket.glSome?
@@ -263,14 +264,14 @@ module AtomicStatusImpl {
             new_g := G(rwlock, glSome(stat));
             m := glSome(Rw.WritebackObtainedToken(handle.val.writeback.b, handle));
             disk_write_ticket := glSome(ticket);
-            assert state_inv(new_value, new_g, key, this.rwlock_loc);
+            assert state_inv(new_value, new_g, key, config, this.rwlock_loc);
           } else {
             m := glNone;
             new_g := old_g;
             disk_write_ticket := glNone;
-            assert state_inv(new_value, new_g, key, this.rwlock_loc);
+            assert state_inv(new_value, new_g, key, config, this.rwlock_loc);
           }
-          assert state_inv(new_value, new_g, key, this.rwlock_loc);
+          assert state_inv(new_value, new_g, key, config, this.rwlock_loc);
 
           ghost_release new_g;
         }
@@ -302,7 +303,7 @@ module AtomicStatusImpl {
               m := glNone;
               disk_write_ticket := glNone;
             }
-            assert state_inv(new_value, new_g, key, this.rwlock_loc);
+            assert state_inv(new_value, new_g, key, config, this.rwlock_loc);
 
             ghost_release new_g;
           }
@@ -318,7 +319,7 @@ module AtomicStatusImpl {
     requires this.inv()
     requires handle.token.loc == this.rwlock_loc
     //requires disk_write_stub.loc == key.cr_loc
-    requires handle.is_handle(key)
+    requires handle.is_handle(key, config)
     requires handle.b.CacheEntryHandle?
     requires 0 <= handle.b.cache_entry.disk_idx
                < 0x1_0000_0000_0000_0000
@@ -343,7 +344,7 @@ module AtomicStatusImpl {
         rwlock := Rw.perform_ReleaseWriteback(rwlock, wb);
         new_g := G(rwlock, glSome(stat));
 
-        assert state_inv(new_value, new_g, key, this.rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, this.rwlock_loc);
 
         ghost_release new_g;
       }
@@ -375,7 +376,7 @@ module AtomicStatusImpl {
           new_g := old_g;
           m' := m;
           status := glNone;
-          assert state_inv(new_value, new_g, key, rwlock_loc);
+          assert state_inv(new_value, new_g, key, config, rwlock_loc);
         } else {
           glinear var G(rwlock, status0) := old_g;
           assert m.val.exc == RwLock.ExcPendingAwaitWriteback(t, m.val.exc.b);
@@ -389,7 +390,7 @@ module AtomicStatusImpl {
               status0.value.status == Dirty;
           status := status0;
           new_g := G(rwlock, glNone);
-          assert state_inv(new_value, new_g, key, rwlock_loc);
+          assert state_inv(new_value, new_g, key, config, rwlock_loc);
         }
 
         ghost_release new_g;
@@ -410,7 +411,7 @@ module AtomicStatusImpl {
         && m.value.val == RwLock.ReadHandle(RwLock.ReadPending)
         && m.value.loc == rwlock_loc
         && handle_opt.glSome?
-        && handle_opt.value.is_handle(key)
+        && handle_opt.value.is_handle(key, config)
         && handle_opt.value.CacheEmptyHandle?
     {
       // check first to reduce contention
@@ -430,7 +431,7 @@ module AtomicStatusImpl {
           glinear var new_g;
 
           assert atomic_inv(this.atomic, old_value, old_g);
-          assert state_inv(old_value, old_g, key, rwlock_loc);
+          assert state_inv(old_value, old_g, key, config, rwlock_loc);
 
           if did_set {
             glinear var exc_handle, h;
@@ -441,16 +442,16 @@ module AtomicStatusImpl {
             handle_opt := glSome(h);
             assert new_g.rwlock.val.central.stored_value
                 == old_g.rwlock.val.central.stored_value;
-            assert old_g.rwlock.val.central.stored_value.is_handle(key);
-            assert new_g.rwlock.val.central.stored_value.is_handle(key);
-            assert state_inv(new_value, new_g, key, rwlock_loc);
+            assert old_g.rwlock.val.central.stored_value.is_handle(key, config);
+            assert new_g.rwlock.val.central.stored_value.is_handle(key, config);
+            assert state_inv(new_value, new_g, key, config, rwlock_loc);
           } else {
             m := glNone;
             handle_opt := glNone;
             new_g := old_g;
-            assert state_inv(new_value, new_g, key, rwlock_loc);
+            assert state_inv(new_value, new_g, key, config, rwlock_loc);
           }
-          assert state_inv(new_value, new_g, key, rwlock_loc);
+          assert state_inv(new_value, new_g, key, config, rwlock_loc);
 
           ghost_release new_g;
         }
@@ -489,7 +490,7 @@ module AtomicStatusImpl {
         }
         new_g := G(rwlock, status);
         assert status.glNone?;
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }
@@ -505,7 +506,7 @@ module AtomicStatusImpl {
     requires r.val.read.ReadObtained?
     requires r.val.read.t != -1
     requires r.val == RwLock.ReadHandle(RwLock.ReadObtained(r.val.read.t))
-    requires handle.is_handle(key)
+    requires handle.is_handle(key, config)
     requires handle.CacheEntryHandle?
     requires status.is_status(key.cache_idx, Clean)
     ensures q.loc == rwlock_loc
@@ -521,7 +522,7 @@ module AtomicStatusImpl {
         dispose_glnone(status_empty);
         new_g := G(rwlock, glSome(status));
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }
@@ -536,7 +537,7 @@ module AtomicStatusImpl {
     requires r.val.read.ReadObtained?
     requires r.val.read.t == -1
     requires r.val == RwLock.ReadHandle(RwLock.ReadObtained(r.val.read.t))
-    requires handle.is_handle(key)
+    requires handle.is_handle(key, config)
     requires handle.CacheEntryHandle?
     requires status.is_status(key.cache_idx, Clean)
     {
@@ -550,7 +551,7 @@ module AtomicStatusImpl {
         dispose_glnone(status_empty);
         new_g := G(rwlock, glSome(status));
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }
@@ -613,7 +614,7 @@ module AtomicStatusImpl {
         rwlock, r' := Rw.possible_flags_SharedPending2(rwlock, r, t);
 
         new_g := G(rwlock, status);
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
 
         ghost_release new_g;
       }
@@ -625,7 +626,7 @@ module AtomicStatusImpl {
       atomic_block var orig_value := execute_atomic_fetch_and_uint8(atomic, 0xff - flag_accessed())
       {
         ghost_acquire g;
-        assert state_inv(new_value, g, key, rwlock_loc);
+        assert state_inv(new_value, g, key, config, rwlock_loc);
         ghost_release g;
       }
     }
@@ -647,7 +648,7 @@ module AtomicStatusImpl {
     ensures success ==>
         && r' == glNone
         && handle.glSome?
-        && handle.value.is_handle(key)
+        && handle.value.is_handle(key, config)
         && handle.value.token.loc == rwlock_loc
         && handle.value.b.CacheEntryHandle?
         && handle.value.t == t
@@ -693,7 +694,7 @@ module AtomicStatusImpl {
         && status == glSome(CacheResources.CacheStatus(
             key.cache_idx, Clean))
         && b.CacheEntryHandle?
-        && b.is_handle(key)
+        && b.is_handle(key, config)
     {
       atomic_block var did_set :=
           execute_atomic_compare_and_set_strong(atomic, flag_clean(), flag_exc() + flag_clean() + flag_claim())
@@ -724,12 +725,12 @@ module AtomicStatusImpl {
 
           new_g := G(rwlock, glNone);
           status := status0;
-          assert state_inv(new_value, new_g, key, rwlock_loc);
+          assert state_inv(new_value, new_g, key, config, rwlock_loc);
         } else {
           new_g := old_g;
           m' := glNone;
           status := glNone;
-          assert state_inv(new_value, new_g, key, rwlock_loc);
+          assert state_inv(new_value, new_g, key, config, rwlock_loc);
           b :| true;
         }
         ghost_release new_g;
@@ -742,7 +743,7 @@ module AtomicStatusImpl {
         glinear handle: Handle,
         glinear r: Rw.Token)
     requires this.inv()
-    requires handle.is_handle(key)
+    requires handle.is_handle(key, config)
     requires handle.CacheEmptyHandle?
     requires r.val.M? && r.val.exc.ExcObtained?
     requires r.val == RwLock.ExcHandle(RwLock.ExcObtained(-1, r.val.exc.clean))
@@ -761,7 +762,7 @@ module AtomicStatusImpl {
         dispose_anything(empty_status);
         new_g := G(rwlock, glNone);
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }
@@ -771,7 +772,7 @@ module AtomicStatusImpl {
         glinear r: Rw.Token)
     returns (glinear r': Rw.Token)
     requires this.inv()
-    requires handle.is_handle(key)
+    requires handle.is_handle(key, config)
     requires handle.CacheEmptyHandle?
     requires r.val.M? && r.val.exc.ExcObtained?
     requires r.val.exc.t >= 0
@@ -793,7 +794,7 @@ module AtomicStatusImpl {
         dispose_anything(empty_status);
         new_g := G(rwlock, glNone);
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }
@@ -818,7 +819,7 @@ module AtomicStatusImpl {
         dispose_anything(empty_status);
         new_g := G(rwlock, glSome(status));
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }
@@ -830,7 +831,7 @@ module AtomicStatusImpl {
     requires r.loc == rwlock_loc
     requires r.val.M?
     requires r.val == RwLock.ReadHandle(RwLock.ReadPending)
-    requires handle.is_handle(key)
+    requires handle.is_handle(key, config)
     requires handle.CacheEmptyHandle?
     {
       atomic_block var _ := execute_atomic_store(atomic, flag_unmapped()) {
@@ -844,7 +845,7 @@ module AtomicStatusImpl {
         dispose_anything(empty_status);
         new_g := G(rwlock, glNone);
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }
@@ -879,7 +880,7 @@ module AtomicStatusImpl {
           status' := status;
         }
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }
@@ -906,14 +907,14 @@ module AtomicStatusImpl {
           glinear var G(rwlock, status) := old_g;
           rwlock, r' := Rw.perform_SharedToClaim(rwlock, r, ss);
           new_g := G(rwlock, status);
-          assert state_inv(new_value, new_g, key, rwlock_loc);
+          assert state_inv(new_value, new_g, key, config, rwlock_loc);
         } else {
           new_g := old_g;
           r' := r;
-          assert state_inv(new_value, new_g, key, rwlock_loc);
+          assert state_inv(new_value, new_g, key, config, rwlock_loc);
         }
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
 
@@ -965,7 +966,7 @@ module AtomicStatusImpl {
         rwlock, r' := Rw.perform_ClaimToPending(rwlock, r);
         new_g := G(rwlock, status);
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }
@@ -984,7 +985,7 @@ module AtomicStatusImpl {
     requires r.val.exc.clean ==> status.status == Clean
     requires !r.val.exc.clean ==> status.status == Dirty
     requires b.CacheEntryHandle?
-    requires b.is_handle(key)
+    requires b.is_handle(key, config)
     requires 0 <= r.val.exc.t < RC_WIDTH as int
     ensures r'.loc == r.loc
     ensures r'.val == RwLock.ExcHandle(RwLock.ExcClaim(r.val.exc.t, b));
@@ -999,7 +1000,7 @@ module AtomicStatusImpl {
         dispose_anything(status0);
         new_g := G(rwlock, glSome(status));
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }
@@ -1012,7 +1013,7 @@ module AtomicStatusImpl {
     requires r.val.read.ReadPendingCounted?
     requires r.val == RwLock.ReadHandle(r.val.read)
     requires dummy_b.CacheEntryHandle?
-    requires dummy_b.is_handle(key)
+    requires dummy_b.is_handle(key, config)
     ensures r'.loc == r.loc
     ensures r'.val == RwLock.ExcHandle(RwLock.ExcObtained(r.val.read.t, false))
     {
@@ -1028,7 +1029,7 @@ module AtomicStatusImpl {
         dispose_anything(empty_status);
         new_g := G(rwlock, glNone);
 
-        assert state_inv(new_value, new_g, key, rwlock_loc);
+        assert state_inv(new_value, new_g, key, config, rwlock_loc);
         ghost_release new_g;
       }
     }

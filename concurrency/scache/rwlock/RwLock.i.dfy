@@ -1458,8 +1458,8 @@ module RwLockToken {
       && this.b == b
       && token.val == WritebackHandle(WritebackObtained(b))
     }
-    predicate is_handle(key: Key) {
-      && b.is_handle(key)
+    predicate is_handle(key: Key, config: Config) {
+      && b.is_handle(key, config)
       && token.val == WritebackHandle(WritebackObtained(b))
     }
   }
@@ -1493,8 +1493,8 @@ module RwLockToken {
       && token.val == SharedHandle(SharedObtained(t, b))
     }
 
-    predicate is_handle(key: Key) {
-      && b.is_handle(key)
+    predicate is_handle(key: Key, config: Config) {
+      && b.is_handle(key, config)
       && is_valid()
     }
   }

@@ -62,20 +62,22 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method init(glinear init_tok: T.Token)
+  method init(glinear init_tok: T.Token, preConfig: PreConfig)
   returns (linear cache: Cache, glinear counter: Clients)
+  requires preConfig.WF()
   requires CacheSSM.Init(init_tok.val)
   ensures cache.Inv()
   ensures counter.loc == cache.counter_loc && counter.n == 255
   {
-    cache, counter := CI.init_cache(init_tok);
+    cache, counter := CI.init_cache(init_tok, preConfig);
   }
 
-  method init_thread_local_state(t: uint64)
+  method init_thread_local_state(ghost cache: Cache, t: uint64)
   returns (linear l: LocalState)
-  ensures l.WF()
+  requires cache.Inv()
+  ensures l.WF(cache.config)
   {
-    l := CI.init_thread_local_state(t);
+    l := CI.init_thread_local_state(cache, t);
   }
 
   method read_block(
@@ -87,12 +89,12 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear client: Client)
   returns (block: DiskIfc.Block, glinear stub: T.Token, glinear client': Client)
   requires cache.Inv()
-  requires old_localState.WF()
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
+  requires old_localState.WF(cache.config)
+  requires 0 <= disk_idx as int < cache.config.num_disk_pages as int
   requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.ReadInput(disk_idx as int))
   requires client.loc == cache.counter_loc
   ensures client'.loc == cache.counter_loc
-  ensures localState.WF()
+  ensures localState.WF(cache.config)
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.ReadOutput(block))
   decreases *
   {
@@ -100,7 +102,7 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var handle;
     php, handle := CacheOps.get(cache, inout localState, disk_idx, client);
 
-    var ph := read_cell(lseq_peek(cache.status_idx_array, php.cache_idx).page_handle,
+    var ph := read_cell(lseq_peek(cache.status_idx_array, php.cache_idx as uint64).page_handle,
         RwLockToken.borrow_sot(handle.so).idx);
     var ptr := ph.data_ptr;
 
@@ -121,12 +123,12 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear client: Client)
   returns (glinear stub: T.Token, glinear client': Client)
   requires cache.Inv()
-  requires old_localState.WF()
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
+  requires old_localState.WF(cache.config)
+  requires 0 <= disk_idx as int < cache.config.num_disk_pages as int
   requires ticket.val == CacheSSM.Ticket(rid, CacheIfc.WriteInput(disk_idx as int, data))
   requires client.loc == cache.counter_loc
   ensures client'.loc == cache.counter_loc
-  ensures localState.WF()
+  ensures localState.WF(cache.config)
   ensures stub.val == CacheSSM.Stub(rid, CacheIfc.WriteOutput)
   decreases *
   {
@@ -139,7 +141,7 @@ module Application(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     glinear var WriteablePageHandle(cache_idx, handle, status, eo) := write_handle;
     glinear var CacheEntryHandle(key, cache_entry, idx, pointsto) := handle;
 
-    var ph := read_cell(lseq_peek(cache.status_idx_array, php.cache_idx).page_handle, idx);
+    var ph := read_cell(lseq_peek(cache.status_idx_array, php.cache_idx as uint64).page_handle, idx);
     var ptr := ph.data_ptr;
 
     copy_seq_in(ptr, inout pointsto, data);

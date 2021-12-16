@@ -7,6 +7,7 @@ include "../framework/AIO.s.dfy"
 include "cache/CacheSM.i.dfy"
 include "CacheAIOParams.i.dfy"
 include "../../lib/Lang/LinearSequence.i.dfy"
+include "../Math/Math.i.dfy"
 
 module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened Ptrs
@@ -23,6 +24,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   import opened CacheAIOParams
   import opened LinearSequence_i
   import opened LinearSequence_s
+  import NonlinearLemmas
+  import Math
   import RwLockToken
   import opened Cells
   import opened PageSizeConstant
@@ -34,19 +37,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     linear page_handle: Cell<PageHandle>
   )
 
-  function method {:opaque} rc_index(j: uint64, i: uint32) : (k: uint64)
-  requires 0 <= j as int < RC_WIDTH as int
-  requires 0 <= i as int < CACHE_SIZE as int
-  ensures 0 <= k as int < RC_WIDTH as int * CACHE_SIZE as int
-  {
-    var cacheline_capacity := CACHE_SIZE_64() as uint32 / PLATFORM_CACHELINE_SIZE_64() as uint32;
-    assert cacheline_capacity as int == CACHELINE_CAPACITY();
-    var rc_number := (i as uint32 % cacheline_capacity as uint32) * PLATFORM_CACHELINE_SIZE_64() as uint32
-        + (i as uint32 / cacheline_capacity as uint32);
-    (j as uint32 * CACHE_SIZE_64() as uint32 + rc_number) as uint64
-  }
-
   linear datatype Cache = Cache(
+    config: Config,
     data_base_ptr: Ptr,
     iocb_base_ptr: Ptr,
     linear read_refcounts_array: lseq<AtomicRefcount>,
@@ -80,27 +72,29 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     predicate Inv()
     {
-      && |this.data| == CACHE_SIZE as int
-      && |this.page_handles| == CACHE_SIZE as int
-      && |this.status| == CACHE_SIZE as int
-      && (forall i | 0 <= i < CACHE_SIZE as int ::
+      && |this.data| == config.cache_size as int
+      && |this.page_handles| == config.cache_size as int
+      && |this.status| == config.cache_size as int
+      && config.WF()
+      && (forall i | 0 <= i < config.cache_size as int ::
          && this.status[i].key == this.key(i)
+         && this.status[i].config == config
          && this.status[i].inv()
         )
       && |this.read_refcounts| == RC_WIDTH as int
       && (forall j | 0 <= j < RC_WIDTH as int ::
-          |this.read_refcounts[j]| == CACHE_SIZE as int)
-      && (forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < CACHE_SIZE as int ::
+          |this.read_refcounts[j]| == config.cache_size as int)
+      && (forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < config.cache_size as int ::
           && this.read_refcounts[j][i].inv(j)
           && this.read_refcounts[j][i].rwlock_loc == this.status[i].rwlock_loc
           && this.read_refcounts[j][i].counter_loc == counter_loc
          )
-      && |this.cache_idx_of_page| == NUM_DISK_PAGES as int
-      && (forall d | 0 <= d < NUM_DISK_PAGES as int ::
-          atomic_index_lookup_inv(this.cache_idx_of_page[d], d))
+      && |this.cache_idx_of_page| == config.num_disk_pages as int
+      && (forall d | 0 <= d < config.num_disk_pages as int ::
+          atomic_index_lookup_inv(this.cache_idx_of_page[d], d, config))
       && |io_slots| == NUM_IO_SLOTS as int
       && (forall i | 0 <= i < |io_slots| :: lseq_has(io_slots)[i])
-      && (forall i | 0 <= i < |io_slots| :: io_slots[i].WF())
+      && (forall i | 0 <= i < |io_slots| :: io_slots[i].WF(config))
       && (forall i | 0 <= i < |io_slots| ::
             this.iocb_base_ptr.as_nat() + i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
             && 0 <= i * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
@@ -108,68 +102,68 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
          )
 
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_read_inv(iocb_ptr, iocb, wp, g)
-        <==> ReadGInv(io_slots, data, page_handles, status,
+        <==> ReadGInv(io_slots, data, page_handles, status, config,
                   iocb_ptr, iocb, wp, g))
 
       && (forall iocb_ptr, iocb, wp, g :: ioctx.async_write_inv(iocb_ptr, iocb, wp, g)
-        <==> WriteGInv(io_slots, data, page_handles, status,
+        <==> WriteGInv(io_slots, data, page_handles, status, config,
                   iocb_ptr, iocb, wp, g))
 
       && (forall iocb_ptr, iocb, iovec, datas, g :: ioctx.async_writev_inv(iocb_ptr, iocb, iovec, datas, g)
-        <==> WritevGInv(io_slots, data, page_handles, status,
+        <==> WritevGInv(io_slots, data, page_handles, status, config,
                   iocb_ptr, iocb, iovec, datas, g))
 
       && (forall iocb_ptr, iocb, iovec, datas, g :: ioctx.async_readv_inv(iocb_ptr, iocb, iovec, datas, g)
-        <==> ReadvGInv(io_slots, data, page_handles, status,
+        <==> ReadvGInv(io_slots, data, page_handles, status, config,
                   iocb_ptr, iocb, iovec, datas, g))
 
       && (forall v, g :: atomic_inv(global_clockpointer, v, g) <==> true)
       && (forall v, g :: atomic_inv(req_hand_base, v, g) <==> true)
 
-      && (forall i | 0 <= i < CACHE_SIZE as int ::
+      && (forall i | 0 <= i < config.cache_size as int ::
         this.data[i].aligned(PageSize as int))
 
-      && this.data_base_ptr.as_nat() + PageSize as int * (CACHE_SIZE as int - 1) < 0x1_0000_0000_0000_0000
-      && (forall i | 0 <= i < CACHE_SIZE as int ::
+      && this.data_base_ptr.as_nat() + PageSize as int * (config.cache_size as int - 1) < 0x1_0000_0000_0000_0000
+      && (forall i | 0 <= i < config.cache_size as int ::
         && this.data[i] == ptr_add(this.data_base_ptr, (PageSize as int * i) as uint64))
 
-      && |lseqs_raw(this.cache_idx_of_page_array)| == NUM_DISK_PAGES as int
-      && (forall i | 0 <= i < NUM_DISK_PAGES as int :: lseq_has(this.cache_idx_of_page_array)[i]
+      && |lseqs_raw(this.cache_idx_of_page_array)| == config.num_disk_pages as int
+      && (forall i | 0 <= i < config.num_disk_pages as int :: lseq_has(this.cache_idx_of_page_array)[i]
           && lseq_peek(this.cache_idx_of_page_array, i as uint64) == this.cache_idx_of_page[i])
 
-      && |lseqs_raw(this.read_refcounts_array)| == RC_WIDTH as int * CACHE_SIZE as int
-      && (forall i | 0 <= i < RC_WIDTH as int * CACHE_SIZE as int :: lseq_has(this.read_refcounts_array)[i])
-      && (forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < CACHE_SIZE as int ::
-          lseq_peek(this.read_refcounts_array, rc_index(j as uint64, i as uint32) as uint64)
+      && |lseqs_raw(this.read_refcounts_array)| == RC_WIDTH as int * config.cache_size as int
+      && (forall i | 0 <= i < RC_WIDTH as int * config.cache_size as int :: lseq_has(this.read_refcounts_array)[i])
+      && (forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < config.cache_size as int ::
+          lseq_peek(this.read_refcounts_array, rc_index(config, j as uint64, i as uint32) as uint64)
               == this.read_refcounts[j][i])
 
-      && |lseqs_raw(this.status_idx_array)| == CACHE_SIZE as int
-      && (forall i | 0 <= i < CACHE_SIZE as int :: lseq_has(this.status_idx_array)[i]
+      && |lseqs_raw(this.status_idx_array)| == config.cache_size as int
+      && (forall i | 0 <= i < config.cache_size as int :: lseq_has(this.status_idx_array)[i]
         && lseq_peek(this.status_idx_array, i as uint64)
             == StatusIdx(this.status[i], this.page_handles[i])
       )
       /*
-      && this.read_refcounts_base_ptr.as_nat() + (RC_WIDTH-1) * CACHE_SIZE as int * (CACHE_SIZE as int -1) < 0x1_0000_0000_0000_0000
+      && this.read_refcounts_base_ptr.as_nat() + (RC_WIDTH-1) * config.cache_size as int * (config.cache_size as int -1) < 0x1_0000_0000_0000_0000
       && this.read_refcounts_gshared.len() == RC_WIDTH
       && (forall j | 0 <= j < RC_WIDTH ::
           && this.read_refcounts_gshared.has(j)
-          && this.read_refcounts_gshared.get(j).len() == CACHE_SIZE as int)
-      && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < CACHE_SIZE as int ::
+          && this.read_refcounts_gshared.get(j).len() == config.cache_size as int)
+      && (forall j, i | 0 <= j < RC_WIDTH && 0 <= i < config.cache_size as int ::
           && this.read_refcounts[j][i].a.ptr ==
-              ptr_add(this.read_refcounts_base_ptr, (j * CACHE_SIZE as int + i) as uint64)
+              ptr_add(this.read_refcounts_base_ptr, (j * config.cache_size as int + i) as uint64)
           && this.read_refcounts_gshared.get(j).has(i)
           && this.read_refcounts[j][i].a.ga ==
               this.read_refcounts_gshared.get(j).get(i))
       */
 
-      && |this.batch_busy| == NUM_CHUNKS as int
-      && (forall i :: 0 <= i < NUM_CHUNKS as int ==> lseq_has(this.batch_busy)[i])
-      && (forall i, v, g :: 0 <= i < NUM_CHUNKS as int ==> atomic_inv(this.batch_busy[i], v, g) <==> true)
+      && |this.batch_busy| == config.batch_capacity as int
+      && (forall i :: 0 <= i < config.batch_capacity as int ==> lseq_has(this.batch_busy)[i])
+      && (forall i, v, g :: 0 <= i < config.batch_capacity as int ==> atomic_inv(this.batch_busy[i], v, g) <==> true)
     }
 
     shared function method data_ptr(i: uint32) : (p: Ptr)
     requires this.Inv()
-    requires 0 <= i as int < CACHE_SIZE as int
+    requires 0 <= i as int < config.cache_size as int
     ensures p == this.data[i]
     {
       ptr_add(this.data_base_ptr, PageSize64() * i as uint64)
@@ -177,7 +171,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     shared function method status_atomic(i: uint32) : (shared at: AtomicStatus)
     requires this.Inv()
-    requires 0 <= i as int < CACHE_SIZE as int
+    requires 0 <= i as int < config.cache_size as int
     ensures at == this.status[i]
     {
       lseq_peek(this.status_idx_array, i as uint64).status
@@ -185,7 +179,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     shared function method page_handle_ptr(i: uint32) : (shared c: Cell<PageHandle>)
     requires this.Inv()
-    requires 0 <= i as int < CACHE_SIZE as int
+    requires 0 <= i as int < config.cache_size as int
     ensures c == this.page_handles[i]
     {
       lseq_peek(this.status_idx_array, i as uint64).page_handle
@@ -195,15 +189,15 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     shared function method read_refcount_atomic(j: uint64, i: uint32) : (shared at: AtomicRefcount)
     requires this.Inv()
     requires 0 <= j as int < RC_WIDTH as int
-    requires 0 <= i as int < CACHE_SIZE as int
+    requires 0 <= i as int < config.cache_size as int
     ensures at == this.read_refcounts[j][i]
     {
-      lseq_peek(this.read_refcounts_array, rc_index(j, i))
+      lseq_peek(this.read_refcounts_array, rc_index(config, j, i))
     }
 
     shared function method cache_idx_of_page_atomic(i: uint64) : (shared at: AtomicIndexLookup)
     requires this.Inv()
-    requires 0 <= i as int < NUM_DISK_PAGES as int
+    requires 0 <= i as int < config.num_disk_pages as int
     ensures at == this.cache_idx_of_page[i]
     {
       lseq_peek(this.cache_idx_of_page_array, i)
@@ -216,9 +210,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     io_slot_hand: uint64
   )
   {
-    predicate WF()
+    predicate WF(config: Config)
     {
-      && (0 <= this.free_hand as int < NUM_CHUNKS as int || this.free_hand == 0xffff_ffff_ffff_ffff)
+      && (0 <= this.free_hand as int < config.batch_capacity as int || this.free_hand == 0xffff_ffff_ffff_ffff)
       && 0 <= t as int < RC_WIDTH as int
       && 0 <= io_slot_hand as int <= NUM_IO_SLOTS as int
     }
@@ -232,22 +226,22 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     iovec_ptr: Ptr,
     linear lock: pre_BasicLock<IOSlotAccess>)
   {
-    predicate WF()
+    predicate WF(config: Config)
     {
       && lock.wf()
       && (forall slot_access: IOSlotAccess :: this.lock.inv(slot_access) <==>
         && slot_access.iocb.ptr == this.iocb_ptr
         && slot_access.iovec.ptr == this.iovec_ptr
-        && |slot_access.iovec.s| == PAGES_PER_EXTENT as int
+        && |slot_access.iovec.s| == config.pages_per_extent as int
       )
     }
   }
 
-  predicate is_slot_access(io_slot: IOSlot, io_slot_access: IOSlotAccess)
+  predicate is_slot_access(io_slot: IOSlot, io_slot_access: IOSlotAccess, config: Config)
   {
     && io_slot.iocb_ptr == io_slot_access.iocb.ptr
     && io_slot.iovec_ptr == io_slot_access.iovec.ptr
-    && |io_slot_access.iovec.s| == PAGES_PER_EXTENT as int
+    && |io_slot_access.iovec.s| == config.pages_per_extent as int
   }
 
   predicate ReadGInv(
@@ -255,6 +249,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       cache_data: seq<Ptr>,
       cache_page_handles: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
+      config: Config,
 
       iocb_ptr: Ptr,
       iocb: Iocb,
@@ -266,11 +261,11 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && g.slot_idx < NUM_IO_SLOTS as int
     && |cache_io_slots| == NUM_IO_SLOTS as int
     && iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
-    && 0 <= g.key.cache_idx < CACHE_SIZE as int
-    && 0 <= iocb.offset < NUM_DISK_PAGES as int
-    && |cache_data| == CACHE_SIZE as int
-    && |cache_page_handles| == CACHE_SIZE as int
-    && |cache_status| == CACHE_SIZE as int
+    && 0 <= g.key.cache_idx < config.cache_size as int
+    && 0 <= iocb.offset < config.num_disk_pages as int
+    && |cache_data| == config.cache_size as int
+    && |cache_page_handles| == config.cache_size as int
+    && |cache_status| == config.cache_size as int
     && data.ptr == cache_data[g.key.cache_idx]
     && iocb.nbytes == PageSize as int
     && g.idx.cell == cache_page_handles[g.key.cache_idx]
@@ -281,7 +276,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && g.ro.loc == cache_status[g.key.cache_idx].rwlock_loc
     && g.ro.val == RwLock.ReadHandle(RwLock.ReadObtained(-1))
     && g.iovec.ptr == cache_io_slots[g.slot_idx].iovec_ptr
-    && |g.iovec.s| == PAGES_PER_EXTENT as int
+    && |g.iovec.s| == config.pages_per_extent as int
     && iocb.buf == cache_data[g.key.cache_idx]
   }
 
@@ -290,6 +285,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       cache_data: seq<Ptr>,
       cache_page_handles: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
+      config: Config,
 
       offset: nat,
       data: seq<byte>,
@@ -297,11 +293,11 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       wbo: T.WritebackObtainedToken)
   {
     && wbo.b.CacheEntryHandle?
-    && 0 <= wbo.b.key.cache_idx < CACHE_SIZE as int
-    && wbo.is_handle(key)
-    && |cache_data| == CACHE_SIZE as int
-    && |cache_page_handles| == CACHE_SIZE as int
-    && |cache_status| == CACHE_SIZE as int
+    && 0 <= wbo.b.key.cache_idx < config.cache_size as int
+    && wbo.is_handle(key, config)
+    && |cache_data| == config.cache_size as int
+    && |cache_page_handles| == config.cache_size as int
+    && |cache_status| == config.cache_size as int
     && key.data_ptr == cache_data[key.cache_idx]
     && key.idx_cell == cache_page_handles[key.cache_idx]
     && wbo.token.loc == cache_status[wbo.b.key.cache_idx as nat].rwlock_loc
@@ -313,6 +309,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       cache_data: seq<Ptr>,
       cache_disk_idx_of_entry: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
+      config: Config,
 
       iocb_ptr: Ptr,
       iocb: Iocb,
@@ -324,9 +321,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && |cache_io_slots| == NUM_IO_SLOTS as int
     && iocb.ptr == iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
     && g.iovec.ptr == cache_io_slots[g.slot_idx].iovec_ptr
-    && |g.iovec.s| == PAGES_PER_EXTENT as int
+    && |g.iovec.s| == config.pages_per_extent as int
     && is_read_perm(iocb_ptr, iocb, data, g)
-    && simpleWriteGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status,
+    && simpleWriteGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status, config,
         iocb.offset, data, g.key, g.wbo)
     && iocb.buf == cache_data[g.key.cache_idx]
   }
@@ -336,6 +333,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       cache_data: seq<Ptr>,
       cache_disk_idx_of_entry: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
+      config: Config,
 
       iocb_ptr: Ptr,
       iocb: Iocb,
@@ -351,9 +349,9 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && iocb.ptr == iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
     && is_read_perm_v(iocb_ptr, iocb, iovec, datas, g)
     && |iovec.s| >= |datas| == iocb.iovec_len == |g.keys|
-    && |iovec.s| == PAGES_PER_EXTENT as int
+    && |iovec.s| == config.pages_per_extent as int
     && (forall i | 0 <= i < |datas| :: i in g.wbos && 
-        simpleWriteGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status,
+        simpleWriteGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status, config,
             iocb.offset + i, datas[i], g.keys[i], g.wbos[i])
     && (forall i | 0 <= i < |datas| ::
         && 0 <= g.keys[i].cache_idx < |cache_data|
@@ -366,6 +364,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       cache_data: seq<Ptr>,
       cache_disk_idx_of_entry: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
+      config: Config,
 
       offset: nat,
       wp: PointsToArray<byte>,
@@ -374,11 +373,11 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       idx: CellContents<PageHandle>,
       ro: T.Token)
   {
-    && 0 <= key.cache_idx < CACHE_SIZE as int
-    && |cache_data| == CACHE_SIZE as int
+    && 0 <= key.cache_idx < config.cache_size as int
+    && |cache_data| == config.cache_size as int
     && wp.ptr == cache_data[key.cache_idx]
-    && |cache_disk_idx_of_entry| == CACHE_SIZE as int
-    && |cache_status| == CACHE_SIZE as int
+    && |cache_disk_idx_of_entry| == config.cache_size as int
+    && |cache_status| == config.cache_size as int
     && idx.cell == cache_disk_idx_of_entry[key.cache_idx]
     && idx.v.disk_addr as int == offset * PageSize
     && idx.v.data_ptr == cache_data[key.cache_idx]
@@ -393,6 +392,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       cache_data: seq<Ptr>,
       cache_disk_idx_of_entry: seq<Cell<PageHandle>>,
       cache_status: seq<AtomicStatus>,
+      config: Config,
 
       iocb_ptr: Ptr,
       iocb: Iocb,
@@ -405,16 +405,16 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && g.slot_idx < NUM_IO_SLOTS as int
     && |cache_io_slots| == NUM_IO_SLOTS as int
     && iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
-    && 0 <= iocb.offset < NUM_DISK_PAGES as int
+    && 0 <= iocb.offset < config.num_disk_pages as int
     && iovec.ptr == cache_io_slots[g.slot_idx].iovec_ptr
-    && |g.keys| <= |iovec.s| == PAGES_PER_EXTENT as int
+    && |g.keys| <= |iovec.s| == config.pages_per_extent as int
 
     && (forall i | 0 <= i < |g.keys| ::
         && i in wps
         && i in g.cache_reading
         && i in g.idx
         && i in g.ro
-        && simpleReadGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status,
+        && simpleReadGInv(cache_io_slots, cache_data, cache_disk_idx_of_entry, cache_status, config,
             iocb.offset + i, wps[i], g.keys[i], g.cache_reading[i],
             g.idx[i], g.ro[i])
 

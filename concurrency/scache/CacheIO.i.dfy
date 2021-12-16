@@ -26,10 +26,10 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   method get_free_io_slot(shared cache: Cache, inout linear local: LocalState)
   returns (idx: uint64, glinear access: IOSlotAccess)
   requires cache.Inv()
-  requires old_local.WF()
-  ensures local.WF()
+  requires old_local.WF(cache.config)
+  ensures local.WF(cache.config)
   ensures 0 <= idx as int < NUM_IO_SLOTS as int
-  ensures is_slot_access(cache.io_slots[idx as nat], access)
+  ensures is_slot_access(cache.io_slots[idx as nat], access, cache.config)
   ensures local.t == old_local.t
   decreases *
   {
@@ -44,7 +44,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant 0 <= i as int <= NUM_IO_SLOTS
     invariant done ==> access_opt.glSome?
         && 0 <= idx as int < NUM_IO_SLOTS
-        && is_slot_access(cache.io_slots[idx as nat], access_opt.value)
+        && is_slot_access(cache.io_slots[idx as nat], access_opt.value, cache.config)
     decreases *
     {
       if i % AIO_HAND_BATCH_SIZE_64() == 0 {
@@ -60,7 +60,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       }
 
       glinear var iosa;
-      assert cache.io_slots[i as nat].WF();
+      assert cache.io_slots[i as nat].WF(cache.config);
       done, iosa := BasicLockImpl.try_acquire(lseq_peek(cache.io_slots, i).lock);
 
       if !done {
@@ -87,17 +87,17 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear wbo: T.WritebackObtainedToken,
       glinear ticket: CacheResources.DiskWriteTicket)
   requires cache.Inv()
-  requires old_local.WF()
+  requires old_local.WF(cache.config)
 
-  requires 0 <= cache_idx as int < CACHE_SIZE as int
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
-  requires wbo.is_handle(cache.key(cache_idx as int))
+  requires 0 <= cache_idx as int < cache.config.cache_size as int
+  requires 0 <= disk_idx as int < cache.config.num_disk_pages as int
+  requires wbo.is_handle(cache.key(cache_idx as int), cache.config)
   requires wbo.b.CacheEntryHandle?
   requires ticket == CacheResources.DiskWriteTicket(disk_idx as int, wbo.b.data.s)
   requires wbo.token.loc == cache.status[cache_idx as nat].rwlock_loc
   requires wbo.b.cache_entry.disk_idx == disk_idx as nat
 
-  ensures local.WF()
+  ensures local.WF(cache.config)
   ensures local.t == old_local.t
   decreases *
   {
@@ -115,10 +115,10 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     glinear var writeg := WriteG(
         cache.key(cache_idx as int),
-        wbo, idx as int, iovec);
+        wbo, idx as int, iovec, cache.config);
 
     assert WriteGInv(
-        cache.io_slots, cache.data, cache.page_handles, cache.status,
+        cache.io_slots, cache.data, cache.page_handles, cache.status, cache.config,
         cache.io_slots[idx as nat].iocb_ptr,
         iocb, wbo.b.data.s, writeg);
     aio.async_write(
@@ -142,13 +142,13 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear idx_perm: CellContents<PageHandle>,
       glinear ticket: CacheResources.DiskReadTicket)
   requires cache.Inv()
-  requires old_local.WF()
-  requires 0 <= cache_idx as int < CACHE_SIZE as int
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
+  requires old_local.WF(cache.config)
+  requires 0 <= cache_idx as int < cache.config.cache_size as int
+  requires 0 <= disk_idx as int < cache.config.num_disk_pages as int
   requires |contents.s| == PageSize as int
   requires ticket == CacheResources.DiskReadTicket(disk_idx as nat)
   requires contents.ptr == ptr
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
+  requires 0 <= disk_idx as int < cache.config.num_disk_pages as int
   requires ptr.aligned(PageSize as int)
   requires cache_reading.disk_idx == disk_idx as nat
   requires cache_reading.cache_idx == cache_idx as nat
@@ -159,7 +159,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires idx_perm.v.disk_addr as int == disk_idx as int * PageSize
   requires idx_perm.v.data_ptr == cache.data[cache_idx]
 
-  ensures local.WF()
+  ensures local.WF(cache.config)
   ensures local.t == old_local.t
   decreases *
   {
@@ -184,7 +184,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         iovec);
 
     assert ReadGInv(
-        cache.io_slots, cache.data, cache.page_handles, cache.status,
+        cache.io_slots, cache.data, cache.page_handles, cache.status, cache.config,
         cache.io_slots[idx as nat].iocb_ptr,
         iocb, contents, readg);
 
@@ -206,7 +206,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires |old_contents.s| == PageSize as int
   requires ticket == CacheResources.DiskReadTicket(disk_idx as nat)
   requires old_contents.ptr == ptr
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
+  requires 0 <= disk_idx as int
+  requires disk_idx as int * 4096 < 0x1_0000_0000_0000_0000
   requires ptr.aligned(PageSize as int)
   ensures contents.ptr == ptr
   ensures |contents.s| == PageSize as int
@@ -230,9 +231,9 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear ticket: CacheResources.DiskWriteTicket)
   returns (glinear stub: CacheResources.DiskWriteStub)
   requires cache.Inv()
-  requires 0 <= cache_idx < CACHE_SIZE as int
-  requires 0 <= disk_idx as int < NUM_DISK_PAGES as int
-  requires wbo.is_handle(cache.key(cache_idx))
+  requires 0 <= cache_idx < cache.config.cache_size as int
+  requires 0 <= disk_idx as int < cache.config.num_disk_pages as int
+  requires wbo.is_handle(cache.key(cache_idx), cache.config)
   requires wbo.b.CacheEntryHandle?
   requires ticket == CacheResources.DiskWriteTicket(disk_idx as int, wbo.b.data.s)
   requires wbo.token.loc == cache.status[cache_idx].rwlock_loc
@@ -259,8 +260,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear idx: CellContents<PageHandle>,
       glinear stub: CacheResources.DiskReadStub)
   requires cache.Inv()
-  requires 0 <= cache_idx as int < CACHE_SIZE as int
-  requires 0 <= disk_addr < NUM_DISK_PAGES as int
+  requires 0 <= cache_idx as int < cache.config.cache_size as int
+  requires 0 <= disk_addr < cache.config.num_disk_pages as int
   requires wp.ptr == cache.data[cache_idx]
   requires |wp.s| == PageSize as int
   requires stub == CacheResources.DiskReadStub(disk_addr as nat, wp.s)
@@ -295,9 +296,9 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear wbo: T.WritebackObtainedToken,
       glinear stub: CacheResources.DiskWriteStub)
   requires cache.Inv()
-  requires 0 <= cache_idx as int < CACHE_SIZE as int
+  requires 0 <= cache_idx as int < cache.config.cache_size as int
   requires stub == CacheResources.DiskWriteStub(disk_addr)
-  requires wbo.is_handle(cache.key(cache_idx as int))
+  requires wbo.is_handle(cache.key(cache_idx as int), cache.config)
   requires wbo.token.loc == cache.status[cache_idx as nat].rwlock_loc
   requires wbo.b.CacheEntryHandle?
   requires wbo.b.cache_entry.disk_idx == disk_addr
@@ -322,7 +323,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     && i in wbos
     && i in stubs
     && simpleWriteGInv(cache.io_slots, cache.data, cache.page_handles,
-        cache.status, offset + i, datas[i], keys[i], wbos[i])
+        cache.status, cache.config, offset + i, datas[i], keys[i], wbos[i])
     && stubs[i].val == CacheSSM.DiskWriteResp(offset + i)
     && iovec.s[i].iov_base() == cache.data[keys[i].cache_idx]
   {
@@ -337,7 +338,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && i in wbos'
       && i in stubs'
       && simpleWriteGInv(cache.io_slots, cache.data, cache.page_handles,
-          cache.status, offset + i, datas[i], keys[i], wbos'[i])
+          cache.status, cache.config, offset + i, datas[i], keys[i], wbos'[i])
       && stubs'[i].val == CacheSSM.DiskWriteResp(offset + i)
     {
       glinear var wbo, stub;
@@ -370,11 +371,11 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache.Inv()
   requires |iovec.s| >= |keys| == iovec_len as int
   requires iovec.ptr == iovec_ptr
-  requires offset + |keys| <= NUM_DISK_PAGES as int
+  requires offset + |keys| <= cache.config.num_disk_pages as int
   requires forall i | 0 <= i < |keys| ::
     && i in ros && i in wps && i in idxs && i in stubs && i in cache_readings
     && simpleReadGInv(cache.io_slots, cache.data, cache.page_handles,
-        cache.status, offset + i, wps[i], keys[i], cache_readings[i], idxs[i], ros[i])
+        cache.status, cache.config, offset + i, wps[i], keys[i], cache_readings[i], idxs[i], ros[i])
     && |wps[i].s| == PageSize as int
     && stubs[i].val == CacheSSM.DiskReadResp(offset + i, wps[i].s)
     && iovec.s[i].iov_base() == cache.data[keys[i].cache_idx]
@@ -392,7 +393,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant forall i: int | j as int <= i < |keys| ::
       && i in ros' && i in wps' && i in idxs' && i in stubs' && i in cache_readings'
       && simpleReadGInv(cache.io_slots, cache.data, cache.page_handles,
-          cache.status, offset + i, wps'[i], keys[i], cache_readings'[i], idxs'[i], ros'[i])
+          cache.status, cache.config, offset + i, wps'[i], keys[i], cache_readings'[i], idxs'[i], ros'[i])
       && |wps'[i].s| == PageSize as int
       && stubs'[i].val == CacheSSM.DiskReadResp(offset + i, wps'[i].s)
       && iovec.s[i].iov_base() == cache.data[keys[i].cache_idx]
@@ -440,7 +441,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var i: uint64 := 0;
     while i < NUM_IO_SLOTS_64()
     {
-      assert lseq_peek(cache.io_slots, i).WF();
+      assert lseq_peek(cache.io_slots, i).WF(cache.config);
       var isl := BasicLockImpl.is_locked(lseq_peek(cache.io_slots, i).lock);
       while isl
       decreases *
@@ -506,7 +507,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       if is_write {
         assert fr.FRWrite?;
         glinear var FRWrite(iocb, data, wg, stub) := fr;
-        glinear var WriteG(key, wbo, g_slot_idx, iovec) := wg;
+        glinear var WriteG(key, wbo, g_slot_idx, iovec, c_config) := wg;
 
         glinear var ustub := CacheResources.DiskWriteStub_fold(CacheResources.DiskWriteStub(iocb.offset), stub);
         ghost var disk_idx := ustub.disk_idx;
@@ -522,7 +523,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         assert fr.FRWritev?;
 
         glinear var FRWritev(iocb, iovec, datas, wvg, stubs) := fr;
-        glinear var WritevG(keys, wbos, g_slot_idx) := wvg;
+        glinear var WritevG(keys, wbos, g_slot_idx, c_config) := wvg;
 
         var iovec_ptr := iocb_iovec(iocb_ptr, iocb);
         var iovec_len := iocb_iovec_len(iocb_ptr, iocb);
@@ -565,8 +566,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       glinear var slot_access := IOSlotAccess(iocb1, iovec1);
       assert slot_access.iocb.ptr == cache.io_slots[slot_idx as nat].iocb_ptr;
       assert slot_access.iovec.ptr == cache.io_slots[slot_idx as nat].iovec_ptr;
-      assert |slot_access.iovec.s| == PAGES_PER_EXTENT as int;
-      assert lseq_peek(cache.io_slots, slot_idx).WF();
+      assert |slot_access.iovec.s| == cache.config.pages_per_extent as int;
+      assert lseq_peek(cache.io_slots, slot_idx).WF(cache.config);
       BasicLockImpl.release(
           lseq_peek(cache.io_slots, slot_idx).lock,
           slot_access);

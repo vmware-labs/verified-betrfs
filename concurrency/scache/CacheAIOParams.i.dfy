@@ -7,6 +7,7 @@ module CacheAIOParams refines AIOParams {
   import opened CacheHandle
   import opened Cells
   import opened GlinearMap
+  import opened Constants
 
   glinear datatype IOSlotAccess = IOSlotAccess(
     glinear iocb: Iocb,
@@ -33,13 +34,15 @@ module CacheAIOParams refines AIOParams {
     ghost key: Key,
     glinear wbo: T.WritebackObtainedToken,
     ghost slot_idx: nat,
-    glinear iovec: PointsToArray<Iovec>
+    glinear iovec: PointsToArray<Iovec>,
+    ghost config: Config
   )
 
   glinear datatype WritevG = WritevG(
     ghost keys: seq<Key>,
     glinear wbos: map<nat, T.WritebackObtainedToken>,
-    ghost slot_idx: nat
+    ghost slot_idx: nat,
+    ghost config: Config
   )
 
   predicate is_read_perm(
@@ -48,7 +51,7 @@ module CacheAIOParams refines AIOParams {
       data: seq<byte>,
       g: WriteG)
   {
-    && g.wbo.is_handle(g.key)
+    && g.wbo.is_handle(g.key, g.config)
     && g.wbo.b.CacheEntryHandle?
     && g.wbo.b.data.s == data
     && iocb.IocbWrite?
@@ -88,7 +91,7 @@ module CacheAIOParams refines AIOParams {
     && |datas| == |g.keys| <= |iovec.s|
     && forall i | 0 <= i < |datas| ::
       && i in g.wbos
-      && g.wbos[i].is_handle(g.keys[i])
+      && g.wbos[i].is_handle(g.keys[i], g.config)
       && g.wbos[i].b.CacheEntryHandle?
       && g.wbos[i].b.data.s == datas[i]
       && g.wbos[i].b.data.ptr == iovec.s[i].iov_base()

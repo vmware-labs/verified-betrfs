@@ -192,11 +192,14 @@ module CacheSSM refines DiskSSM(CacheIfc) {
       {}
   }
 
+  ghost const MAX_DISK_PAGES := 0xffff_ffff_ffff_ffff;
+  ghost const MAX_CACHE_SIZE := 0xffff_ffff;
+
   predicate Init(s: M)
   {
     && s == M(
-      (map i: nat | 0 <= i < NUM_DISK_PAGES as nat :: None),
-      (map i: nat | 0 <= i < CACHE_SIZE as nat :: Empty),
+      (map i: nat | 0 <= i < MAX_DISK_PAGES as nat :: None),
+      (map i: nat | 0 <= i < MAX_CACHE_SIZE as nat :: Empty),
        map[], map[], {}, {},
        map[], map[], map[], map[], map[])
   }
@@ -919,8 +922,8 @@ module CacheSSM refines DiskSSM(CacheIfc) {
   ensures Inv(s)
   {
     s := M(
-      (map i: nat | 0 <= i < NUM_DISK_PAGES as nat :: None),
-      (map i: nat | 0 <= i < CACHE_SIZE as nat :: Empty),
+      (map i: nat | 0 <= i < MAX_DISK_PAGES as nat :: None),
+      (map i: nat | 0 <= i < MAX_CACHE_SIZE as nat :: Empty),
        map[], map[], {}, {},
        map[], map[], map[], map[], map[]);
     InitImpliesInv(s);

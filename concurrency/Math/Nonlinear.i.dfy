@@ -90,6 +90,13 @@ module NonlinearLemmas {
   {
   }
 
+  lemma mul_le_left(a: int, b: int, c: int)
+  requires 0 <= c
+  requires a <= b
+  ensures a*c <= b*c
+  {
+  }
+
   lemma mul_le_right(a: int, b: int, c: int)
   requires 0 <= a
   requires b <= c
@@ -104,4 +111,15 @@ module NonlinearLemmas {
   {
   }
 
+  lemma mod_bound(a: int, b: int)
+  requires b > 0
+  ensures 0 <= a % b <= b - 1
+  {
+  }
+
+  /*lemma mul3_bound(a: int, b: int, c: int, d: int, e: int, f: int)
+  requires 0 <= a <= d
+  requires 0 <= b <= e
+  requires 0 <= c <= f
+  ensures 0 <= a * b * c <= d * e * f*/
 }

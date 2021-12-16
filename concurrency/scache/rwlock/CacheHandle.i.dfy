@@ -37,13 +37,13 @@ module CacheHandle {
         glinear idx: CellContents<PageHandle>,
         glinear data: PointsToArray<byte>)
   {
-    predicate is_handle(key: Key)
+    predicate is_handle(key: Key, config: Config)
     {
       && this.key == key
       && this.idx.cell == key.idx_cell
       && this.data.ptr == key.data_ptr
       && |this.data.s| == 4096
-      && 0 <= this.idx.v.disk_addr as int < NUM_DISK_PAGES as int * 4096
+      && 0 <= this.idx.v.disk_addr as int < config.num_disk_pages as int * 4096
       && this.idx.v.data_ptr == key.data_ptr
 
       && (this.CacheEmptyHandle? ==>
