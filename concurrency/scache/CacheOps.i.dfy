@@ -125,7 +125,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method try_take_read_lock_on_cache_entry(
+  method {:cpp_inline} try_take_read_lock_on_cache_entry(
       shared cache: Cache,
       cache_idx: uint64,
       expected_disk_idx: int64,
