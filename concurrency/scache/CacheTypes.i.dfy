@@ -39,11 +39,11 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires 0 <= i as int < CACHE_SIZE as int
   ensures 0 <= k as int < RC_WIDTH as int * CACHE_SIZE as int
   {
-    var cacheline_capacity := CACHE_SIZE_64() / PLATFORM_CACHELINE_SIZE_64();
+    var cacheline_capacity := CACHE_SIZE_64() as uint32 / PLATFORM_CACHELINE_SIZE_64() as uint32;
     assert cacheline_capacity as int == CACHELINE_CAPACITY();
-    var rc_number := (i % cacheline_capacity) * PLATFORM_CACHELINE_SIZE_64()
-        + (i / cacheline_capacity);
-    j * CACHE_SIZE_64() + rc_number
+    var rc_number := (i as uint32 % cacheline_capacity as uint32) * PLATFORM_CACHELINE_SIZE_64() as uint32
+        + (i as uint32 / cacheline_capacity as uint32);
+    (j as uint32 * CACHE_SIZE_64() as uint32 + rc_number) as uint64
   }
 
   linear datatype Cache = Cache(

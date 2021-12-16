@@ -486,7 +486,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     {
       glinear var di;
       di, dis := pop_IdxSeq(dis, i2 as nat, NUM_DISK_PAGES as int);
-      linear var ail := new_atomic(NOT_MAPPED, di,
+      linear var ail := new_atomic(NOT_MAPPED as uint32, di,
           (v, g) => AtomicIndexLookupImpl.state_inv(v, g, i2 as nat),
           0);
       lseq_give_inout(inout cache_idx_of_page_array, i2, ail);

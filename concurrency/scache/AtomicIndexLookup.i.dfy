@@ -15,15 +15,15 @@ module AtomicIndexLookupImpl {
   import opened GlinearOption
   import opened CacheStatusType
 
-  type AtomicIndexLookup = Atomic<uint64, CacheResources.DiskPageMap>
+  type AtomicIndexLookup = Atomic<uint32, CacheResources.DiskPageMap>
 
-  const NOT_MAPPED : uint64 := 0xffff_ffff_ffff_ffff;
+  const NOT_MAPPED : uint64 := 0xffff_ffff;
 
-  predicate state_inv(v: uint64, g: CacheResources.DiskPageMap, disk_idx: nat)
+  predicate state_inv(v: uint32, g: CacheResources.DiskPageMap, disk_idx: nat)
   {
-    && (0 <= v as int < CACHE_SIZE as int || v == NOT_MAPPED)
+    && (0 <= v as int < CACHE_SIZE as int || v == 0xffff_ffff)
     && g == CacheResources.DiskPageMap(disk_idx,
-        (if v == NOT_MAPPED then None else Some(v as nat)))
+        (if v == 0xffff_ffff then None else Some(v as nat)))
   }
 
   predicate atomic_index_lookup_inv(a: AtomicIndexLookup, disk_idx: nat)
@@ -40,11 +40,12 @@ module AtomicIndexLookupImpl {
   requires cache_entry.disk_idx == disk_idx
   ensures cache_idx as int == cache_entry.cache_idx
   {
-    atomic_block cache_idx := execute_atomic_load(a) {
+    atomic_block var ci := execute_atomic_load(a) {
       ghost_acquire g;
       inv_map_agrees(cache_entry, inout g);
       ghost_release g;
     }
+    cache_idx := ci as uint64;
   }
 
   method atomic_index_lookup_read(
@@ -54,7 +55,8 @@ module AtomicIndexLookupImpl {
   requires atomic_index_lookup_inv(a, disk_idx)
   ensures 0 <= cache_idx as int < CACHE_SIZE as int || cache_idx == NOT_MAPPED
   {
-    atomic_block cache_idx := execute_atomic_load(a) { }
+    atomic_block var ci := execute_atomic_load(a) { }
+    cache_idx := ci as uint64;
   }
 
   method atomic_index_lookup_clear_mapping(
@@ -74,7 +76,7 @@ module AtomicIndexLookupImpl {
   requires cache_entry.disk_idx == disk_idx
   ensures cache_empty' == CacheEmpty(cache_entry.cache_idx)
   {
-    atomic_block var _ := execute_atomic_store(a, NOT_MAPPED) {
+    atomic_block var _ := execute_atomic_store(a, NOT_MAPPED as uint32) {
       ghost_acquire g;
 
       cache_empty', g := CacheResources.unassign_page(
@@ -104,7 +106,7 @@ module AtomicIndexLookupImpl {
   requires havoc.disk_idx == disk_idx as int
   ensures cache_empty' == CacheEmpty(cache_entry.cache_idx)
   {
-    atomic_block var _ := execute_atomic_store(a, NOT_MAPPED) {
+    atomic_block var _ := execute_atomic_store(a, NOT_MAPPED as uint32) {
       ghost_acquire g;
 
       cache_empty', g := CacheResources.unassign_page_havoc(
@@ -140,7 +142,7 @@ module AtomicIndexLookupImpl {
       && read_ticket == glSome(DiskReadTicket(disk_idx as int))
   {
     atomic_block var did_set :=
-      execute_atomic_compare_and_set_strong(a, NOT_MAPPED, cache_idx)
+      execute_atomic_compare_and_set_strong(a, NOT_MAPPED as uint32, cache_idx as uint32)
     {
       ghost_acquire old_g;
       glinear var new_g;
@@ -193,7 +195,7 @@ module AtomicIndexLookupImpl {
   ensures success ==> status' == glSome(CacheStatus(cache_idx as nat, Dirty))
   {
     atomic_block var did_set :=
-      execute_atomic_compare_and_set_strong(a, NOT_MAPPED, cache_idx)
+      execute_atomic_compare_and_set_strong(a, NOT_MAPPED as uint32, cache_idx as uint32)
     {
       ghost_acquire old_g;
       glinear var new_g;
