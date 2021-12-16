@@ -55,7 +55,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   method init_ioslots(config: Config)
   returns (iocb_base_ptr: Ptr, linear io_slots: lseq<IOSlot>)
   requires config.WF()
-  ensures |io_slots| == NUM_IO_SLOTS as int
+  ensures |io_slots| == config.num_io_slots as int
   ensures (forall i | 0 <= i < |io_slots| :: lseq_has(io_slots)[i])
   ensures (forall i | 0 <= i < |io_slots| :: io_slots[i].WF(config))
   ensures (forall i | 0 <= i < |io_slots| ::
@@ -66,31 +66,34 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   {
     glinear var iocbs;
-    iocb_base_ptr, iocbs := new_iocb_array(NUM_IO_SLOTS_64());
+    iocb_base_ptr, iocbs := new_iocb_array(config.num_io_slots);
 
-    io_slots := lseq_alloc<IOSlot>(NUM_IO_SLOTS_64());
+    io_slots := lseq_alloc<IOSlot>(config.num_io_slots);
 
     var full_iovec_ptr;
     glinear var full_iovec;
     var dummy_iovec := new_iovec(nullptr(), 0);
-    full_iovec_ptr, full_iovec := alloc_array(config.pages_per_extent * NUM_IO_SLOTS_64(), dummy_iovec);
-    glinear var iovecs := mem_split(full_iovec, config.pages_per_extent as int, NUM_IO_SLOTS);
+
+    NonlinearLemmas.mul_ge_0(config.pages_per_extent as int, config.num_io_slots as int);
+    NonlinearLemmas.mul_le_right(config.pages_per_extent as int, config.num_io_slots as int, 0x1_0000);
+    full_iovec_ptr, full_iovec := alloc_array(config.pages_per_extent * config.num_io_slots, dummy_iovec);
+    glinear var iovecs := mem_split(full_iovec, config.pages_per_extent as int, config.num_io_slots as int);
 
     ghost var iocbs_copy := iocbs;
 
     var i3: uint64 := 0;
-    while i3 < NUM_IO_SLOTS_64()
-    invariant 0 <= i3 as int <= NUM_IO_SLOTS as int
-    invariant forall j | i3 as int <= j < NUM_IO_SLOTS as int ::
+    while i3 < config.num_io_slots
+    invariant 0 <= i3 as int <= config.num_io_slots as int
+    invariant forall j | i3 as int <= j < config.num_io_slots as int ::
         j in iocbs && iocbs[j] == iocbs_copy[j]
-    invariant |io_slots| == NUM_IO_SLOTS as int
-    invariant forall j | i3 as int <= j < NUM_IO_SLOTS as int :: j !in io_slots
+    invariant |io_slots| == config.num_io_slots as int
+    invariant forall j | i3 as int <= j < config.num_io_slots as int :: j !in io_slots
     invariant forall j | 0 <= j < i3 as int :: j in io_slots
         && io_slots[j].WF(config)
         && iocb_base_ptr.as_nat() + j * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
         && 0 <= j * SizeOfIocb() as int < 0x1_0000_0000_0000_0000
         && io_slots[j].iocb_ptr == ptr_add(iocb_base_ptr, j as uint64 * SizeOfIocb())
-    invariant forall j | i3 as int <= j < NUM_IO_SLOTS as int ::
+    invariant forall j | i3 as int <= j < config.num_io_slots as int ::
         has_single(full_iovec, config.pages_per_extent as int, iovecs, j)
     {
       ghost var old_iovecs := iovecs;
@@ -129,7 +132,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       i3 := i3 + 1;
 
-      assert forall j | i3 as int <= j < NUM_IO_SLOTS as int ::
+      assert forall j | i3 as int <= j < config.num_io_slots as int ::
           has_single(full_iovec, config.pages_per_extent as int, old_iovecs, j) ==>
           has_single(full_iovec, config.pages_per_extent as int, iovecs, j);
     }

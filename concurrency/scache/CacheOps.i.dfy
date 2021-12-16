@@ -1279,8 +1279,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       wps: map<nat, PointsToArray<byte>>,
       tickets: map<nat, DT.Token>)
   {
-    && 0 <= slot_idx < NUM_IO_SLOTS as int
-    && |cache.io_slots| == NUM_IO_SLOTS as int
+    && 0 <= slot_idx < cache.config.num_io_slots as int
+    && |cache.io_slots| == cache.config.num_io_slots as int
     && 0 <= addr - pages_in_req < cache.config.num_disk_pages as int
     && iovec.ptr == cache.io_slots[slot_idx].iovec_ptr == iovec_ptr
     && pages_in_req == |keys| <= |iovec.s| == cache.config.pages_per_extent as int
@@ -1393,7 +1393,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant 0 <= page_off as int <= cache.config.pages_per_extent as int
     invariant localState.WF(cache.config)
     invariant pages_in_req as int <= page_off as int
-    invariant 0 <= slot_idx as int < NUM_IO_SLOTS as int
+    invariant 0 <= slot_idx as int < cache.config.num_io_slots as int
     invariant client_out.loc == cache.counter_loc
     invariant pages_in_req == 0 ==>
         && keys == []

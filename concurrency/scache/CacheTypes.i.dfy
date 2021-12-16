@@ -92,7 +92,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && |this.cache_idx_of_page| == config.num_disk_pages as int
       && (forall d | 0 <= d < config.num_disk_pages as int ::
           atomic_index_lookup_inv(this.cache_idx_of_page[d], d, config))
-      && |io_slots| == NUM_IO_SLOTS as int
+      && |io_slots| == config.num_io_slots as int
       && (forall i | 0 <= i < |io_slots| :: lseq_has(io_slots)[i])
       && (forall i | 0 <= i < |io_slots| :: io_slots[i].WF(config))
       && (forall i | 0 <= i < |io_slots| ::
@@ -214,7 +214,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     {
       && (0 <= this.free_hand as int < config.batch_capacity as int || this.free_hand == 0xffff_ffff_ffff_ffff)
       && 0 <= t as int < RC_WIDTH as int
-      && 0 <= io_slot_hand as int <= NUM_IO_SLOTS as int
+      && 0 <= io_slot_hand as int <= config.num_io_slots as int
     }
   }
 
@@ -258,8 +258,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   {
     && iocb.IocbRead?
     && iocb.ptr == iocb_ptr
-    && g.slot_idx < NUM_IO_SLOTS as int
-    && |cache_io_slots| == NUM_IO_SLOTS as int
+    && g.slot_idx < config.num_io_slots as int
+    && |cache_io_slots| == config.num_io_slots as int
     && iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
     && 0 <= g.key.cache_idx < config.cache_size as int
     && 0 <= iocb.offset < config.num_disk_pages as int
@@ -317,8 +317,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       g: WriteG)
   {
     && iocb.IocbWrite?
-    && g.slot_idx < NUM_IO_SLOTS as int
-    && |cache_io_slots| == NUM_IO_SLOTS as int
+    && g.slot_idx < config.num_io_slots as int
+    && |cache_io_slots| == config.num_io_slots as int
     && iocb.ptr == iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
     && g.iovec.ptr == cache_io_slots[g.slot_idx].iovec_ptr
     && |g.iovec.s| == config.pages_per_extent as int
@@ -343,8 +343,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   {
     && iocb.IocbWritev?
     && iocb.ptr == iocb_ptr
-    && g.slot_idx < NUM_IO_SLOTS as int
-    && |cache_io_slots| == NUM_IO_SLOTS as int
+    && g.slot_idx < config.num_io_slots as int
+    && |cache_io_slots| == config.num_io_slots as int
     && iovec.ptr == iocb.iovec == cache_io_slots[g.slot_idx].iovec_ptr
     && iocb.ptr == iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
     && is_read_perm_v(iocb_ptr, iocb, iovec, datas, g)
@@ -402,8 +402,8 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   {
     && iocb.IocbReadv?
     && iocb.ptr == iocb_ptr
-    && g.slot_idx < NUM_IO_SLOTS as int
-    && |cache_io_slots| == NUM_IO_SLOTS as int
+    && g.slot_idx < config.num_io_slots as int
+    && |cache_io_slots| == config.num_io_slots as int
     && iocb_ptr == cache_io_slots[g.slot_idx].iocb_ptr
     && 0 <= iocb.offset < config.num_disk_pages as int
     && iovec.ptr == cache_io_slots[g.slot_idx].iovec_ptr

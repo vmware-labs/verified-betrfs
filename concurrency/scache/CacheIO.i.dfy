@@ -28,7 +28,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache.Inv()
   requires old_local.WF(cache.config)
   ensures local.WF(cache.config)
-  ensures 0 <= idx as int < NUM_IO_SLOTS as int
+  ensures 0 <= idx as int < cache.config.num_io_slots as int
   ensures is_slot_access(cache.io_slots[idx as nat], access, cache.config)
   ensures local.t == old_local.t
   decreases *
@@ -41,15 +41,15 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var i: uint64 := local.io_slot_hand;
     var done := false;
     while !done
-    invariant 0 <= i as int <= NUM_IO_SLOTS
+    invariant 0 <= i as int <= cache.config.num_io_slots as int
     invariant done ==> access_opt.glSome?
-        && 0 <= idx as int < NUM_IO_SLOTS
+        && 0 <= idx as int < cache.config.num_io_slots as int
         && is_slot_access(cache.io_slots[idx as nat], access_opt.value, cache.config)
     decreases *
     {
       if i % AIO_HAND_BATCH_SIZE_64() == 0 {
         atomic_block var j := execute_atomic_fetch_add_uint32(cache.req_hand_base, 32) { }
-        i := (j as uint64) % NUM_IO_SLOTS_64();
+        i := (j as uint64) % cache.config.num_io_slots;
 
         var cleanup_done := false;
         while !cleanup_done
@@ -58,6 +58,8 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           cleanup_done := io_cleanup_1(cache);
         }
       }
+
+      //assert i != cache.config.num_io_slots;
 
       glinear var iosa;
       assert cache.io_slots[i as nat].WF(cache.config);
@@ -439,7 +441,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   decreases *
   {
     var i: uint64 := 0;
-    while i < NUM_IO_SLOTS_64()
+    while i < cache.config.num_io_slots
     {
       assert lseq_peek(cache.io_slots, i).WF(cache.config);
       var isl := BasicLockImpl.is_locked(lseq_peek(cache.io_slots, i).lock);

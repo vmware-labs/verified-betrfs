@@ -12,7 +12,8 @@ module Constants {
   datatype PreConfig = PreConfig(
     cache_size: uint32,
     num_disk_pages: uint64,
-    pages_per_extent: uint64
+    pages_per_extent: uint64,
+    num_io_slots: uint64
   )
   {
     predicate WF() {
@@ -23,6 +24,8 @@ module Constants {
       && 0 < num_disk_pages as int < 0x1_0000_0000_0000
       && pages_per_extent != 0
       && pages_per_extent <= 0x1_0000
+      && 0 < num_io_slots <= 0x1_0000
+      && num_io_slots % AIO_HAND_BATCH_SIZE_64() == 0
     }
   }
 
@@ -31,6 +34,7 @@ module Constants {
     num_disk_pages: uint64,
 
     pages_per_extent: uint64,
+    num_io_slots: uint64,
 
     batch_capacity: uint64,
     cacheline_capacity: uint64
@@ -45,6 +49,8 @@ module Constants {
       && cache_size as int * RC_WIDTH < 0x1_0000_0000
       && num_disk_pages as int * 4096 < 0x1000_0000_0000_0000
       && 0 < num_disk_pages as int
+      && 0 < num_io_slots <= 0x1_0000
+      && num_io_slots % AIO_HAND_BATCH_SIZE_64() == 0
     }
   }
 
@@ -53,24 +59,23 @@ module Constants {
   ensures config.WF()
   {
     config := Config(pre.cache_size, pre.num_disk_pages, pre.pages_per_extent,
+        pre.num_io_slots,
         pre.cache_size as uint64 / ENTRIES_PER_BATCH_32() as uint64,
         pre.cache_size as uint64 / PLATFORM_CACHELINE_SIZE_64());
   }
 
-  ghost const RC_WIDTH := 4;
+  ghost const RC_WIDTH := 4; // constant
 
-  ghost const CHUNK_SIZE := 64;
-  ghost const CLEAN_AHEAD := 512;
+  ghost const CHUNK_SIZE := 64; // constant
+  ghost const CLEAN_AHEAD := 512; // constant
 
-  ghost const NUM_IO_SLOTS := 256;
-  ghost const AIO_HAND_BATCH_SIZE := 32;
+  ghost const AIO_HAND_BATCH_SIZE := 32; // constant
 
-  function method CHUNK_SIZE_32(): uint32 { 64 }
-  function method AIO_HAND_BATCH_SIZE_64(): uint64 { 32 }
-  function method NUM_IO_SLOTS_64(): uint64 { 256 }
-  function method DEFAULT_MAX_IO_EVENTS_64(): uint64 { 32 }
-  function method RC_WIDTH_64(): uint64 { 4 }
-  function method CLEAN_AHEAD_64(): uint64 { 512 }
+  function method CHUNK_SIZE_32(): uint32 { 64 } // constant
+  function method AIO_HAND_BATCH_SIZE_64(): uint64 { 32 } // constant
+  function method DEFAULT_MAX_IO_EVENTS_64(): uint64 { 32 } // constant
+  function method RC_WIDTH_64(): uint64 { 4 } // constant
+  function method CLEAN_AHEAD_64(): uint64 { 512 } // constant
 
   function method {:opaque} rc_index(config: Config, j: uint64, i: uint32) : (k: uint64)
   requires config.WF()
