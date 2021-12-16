@@ -83,7 +83,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       shared cache: Cache,
       inout linear local: LocalState,
       disk_idx: uint64,
-      cache_idx: uint64,
+      cache_idx: uint32,
       glinear wbo: T.WritebackObtainedToken,
       glinear ticket: CacheResources.DiskWriteTicket)
   requires cache.Inv()
@@ -134,7 +134,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       shared cache: Cache,
       inout linear local: LocalState,
       disk_idx: uint64,
-      cache_idx: uint64,
+      cache_idx: uint32,
       ptr: Ptr,
       glinear cache_reading: CacheResources.CacheReading,
       glinear ro: T.Token,
@@ -251,7 +251,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method disk_read_callback(
       shared cache: Cache,
-      cache_idx: uint64,
+      cache_idx: uint32,
       ghost disk_addr: nat,
       glinear wp: PointsToArray<byte>,
       glinear ro: T.Token,
@@ -290,7 +290,7 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method disk_writeback_callback(
       shared cache: Cache,
-      cache_idx: uint64,
+      cache_idx: uint32,
       ghost disk_addr: nat,
       glinear wbo: T.WritebackObtainedToken,
       glinear stub: CacheResources.DiskWriteStub)
@@ -458,13 +458,13 @@ module CacheIO(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   }
 
   method cache_idx_of_data_ptr(shared cache: Cache, data_ptr: Ptr, ghost cache_idx: nat)
-  returns (ci: uint64)
+  returns (ci: uint32)
   requires cache.Inv()
   requires 0 <= cache_idx < |cache.data|
   requires data_ptr == cache.data[cache_idx]
   ensures ci as nat == cache_idx
   {
-    ci := ptr_diff(data_ptr, cache.data_base_ptr) / 4096;
+    ci := (ptr_diff(data_ptr, cache.data_base_ptr) / 4096) as uint32;
   }
 
   method io_cleanup_1(shared cache: Cache)

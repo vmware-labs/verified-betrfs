@@ -25,7 +25,7 @@ module Constants {
   function method AIO_HAND_BATCH_SIZE_64(): uint64 { 32 }
   function method NUM_IO_SLOTS_64(): uint64 { 256 }
   function method PAGES_PER_EXTENT_64(): uint64 { 32 }
-  function method CHUNK_SIZE_64(): uint64 { 64 }
+  function method CHUNK_SIZE_32(): uint32 { 64 }
   function method DEFAULT_MAX_IO_EVENTS_64(): uint64 { 32 }
   function method RC_WIDTH_64(): uint64 { 4 }
   function method NUM_CHUNKS_64(): uint64 { CACHE_SIZE_64() / 64 }

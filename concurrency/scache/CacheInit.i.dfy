@@ -140,7 +140,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
   requires 0 <= i' < CACHE_SIZE as int && 0 <= j' < RC_WIDTH as int
   {
-    && var rci := rc_index(j' as uint64, i' as uint64) as int;
+    && var rci := rc_index(j' as uint64, i' as uint32) as int;
     && rci in read_refcounts_array
     && read_refcounts_array[rci].inv(j')
     && read_refcounts_array[rci].rwlock_loc
@@ -279,7 +279,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires 0 <= k as int < RC_WIDTH as int * CACHE_SIZE as int
   ensures 0 <= j as int < RC_WIDTH as int
   ensures 0 <= i as int < CACHE_SIZE as int
-  ensures k == rc_index(j as uint64, i as uint64) as int
+  ensures k == rc_index(j as uint64, i as uint32) as int
   {
     j := k / CACHE_SIZE;
     var rc_number := k % CACHE_SIZE;
@@ -356,7 +356,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     invariant |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
     invariant forall i', j' | i as int <= i' < CACHE_SIZE as int && 0 <= j' < RC_WIDTH as int ::
-        (rc_index(j' as uint64, i' as uint64) as int) !in read_refcounts_array
+        (rc_index(j' as uint64, i' as uint32) as int) !in read_refcounts_array
     invariant refcount_i_inv_i(read_refcounts_array, status_idx_array, counter_loc, i as int)
 
     decreases CACHE_SIZE as int - i as int
@@ -415,9 +415,9 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
       invariant |read_refcounts_array| == RC_WIDTH as int * CACHE_SIZE as int
       invariant forall i', j' | i as int < i' < CACHE_SIZE as int && 0 <= j' < RC_WIDTH as int ::
-          rc_index(j' as uint64, i' as uint64) as int !in read_refcounts_array
+          rc_index(j' as uint64, i' as uint32) as int !in read_refcounts_array
       invariant forall j' | j as int <= j' < RC_WIDTH as int ::
-          rc_index(j' as uint64, i as uint64) as int !in read_refcounts_array
+          rc_index(j' as uint64, i as uint32) as int !in read_refcounts_array
       invariant refcount_i_inv_ij(read_refcounts_array, status_idx_array, counter_loc, i as int, j as int)
 
       decreases RC_WIDTH as int - j as int
@@ -435,7 +435,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
         // XXX I don't care about the perf of the initialization method, but do note
         // that the access pattern for writing to this array might be completely awful.
-        lseq_give_inout(inout read_refcounts_array, rc_index(j, i), ar);
+        lseq_give_inout(inout read_refcounts_array, rc_index(j, i as uint32), ar);
 
         assert refcount_i_inv(read_refcounts_array, status_idx_array, counter_loc, i as int, j as int) by {
           reveal_refcount_i_inv();
@@ -447,12 +447,12 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
         forall i', j' | i as int < i' < CACHE_SIZE as int && 0 <= j' < RC_WIDTH as int
         //ensures rc_index(j' as uint64, i' as uint64) as int !in read_refcounts_array
-        ensures rc_index(j' as uint64, i' as uint64) != rc_index(j-1, i)
+        ensures rc_index(j' as uint64, i' as uint32) != rc_index(j-1, i as uint32)
         {
           reveal_rc_index();
           var cacheline_capacity := CACHE_SIZE_64() / PLATFORM_CACHELINE_SIZE_64();
           assert cacheline_capacity as int == CACHELINE_CAPACITY();
-          assert rc_index(j' as uint64, i' as uint64) != rc_index(j-1, i);
+          assert rc_index(j' as uint64, i' as uint32) != rc_index(j-1, i as uint32);
         }
         /*
         forall j' | j as int <= j' < RC_WIDTH as int
@@ -513,7 +513,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     ghost var read_refcounts :=
         seq(RC_WIDTH as int, (j) requires 0 <= j < RC_WIDTH as int =>
           seq(CACHE_SIZE as int, (i) requires 0 <= i < CACHE_SIZE as int =>
-            read_refcounts_array[rc_index(j as uint64, i as uint64) as int]));
+            read_refcounts_array[rc_index(j as uint64, i as uint32) as int]));
     ghost var cache_idx_of_page :=
         seq(NUM_DISK_PAGES as int, (i) requires 0 <= i < NUM_DISK_PAGES as int =>
           cache_idx_of_page_array[i]);
@@ -564,7 +564,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     {
       refcount_i_inv_i_get(read_refcounts_array, status_idx_array, counter_loc, CACHE_SIZE, i, j);
       reveal_refcount_i_inv();
-      var rci := rc_index(j as uint64, i as uint64) as int;
+      var rci := rc_index(j as uint64, i as uint32) as int;
       assert read_refcounts[j][i] == 
           read_refcounts_array[rci];
       assert read_refcounts_array[rci].inv(j);
@@ -583,7 +583,7 @@ module CacheInit(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     ensures lseq_has(read_refcounts_array)[i]
     {
       var j1, i1 := inverse_rc_index(i);
-      var rci := rc_index(j1 as uint64, i1 as uint64) as int;
+      var rci := rc_index(j1 as uint64, i1 as uint32) as int;
       assert i == rci;
       refcount_i_inv_i_get(read_refcounts_array, status_idx_array, counter_loc, CACHE_SIZE, i1, j1);
       reveal_refcount_i_inv();

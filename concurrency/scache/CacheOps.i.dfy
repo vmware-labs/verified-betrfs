@@ -32,7 +32,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   datatype PageHandleIdx = PageHandleIdx(
     ghost ptr: Ptr,
-    cache_idx: uint64)
+    cache_idx: uint32)
 
   glinear datatype WriteablePageHandle = WriteablePageHandle(
     ghost cache_idx: int,
@@ -127,7 +127,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method {:cpp_inline} try_take_read_lock_on_cache_entry(
       shared cache: Cache,
-      cache_idx: uint64,
+      cache_idx: uint32,
       expected_disk_idx: int64,
       shared localState: LocalState,
       glinear client: Client)
@@ -339,7 +339,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             lseq_peek(cache.batch_busy, cleaner_hand), false, true) { }
 
       if do_clean {
-        CWB.batch_start_writeback(cache, inout local, cleaner_hand, is_urgent);
+        CWB.batch_start_writeback(cache, inout local, cleaner_hand as uint32, is_urgent);
         atomic_block var _ := execute_atomic_store(
             lseq_peek(cache.batch_busy, cleaner_hand), false) { }
       }
@@ -348,12 +348,12 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           lseq_peek(cache.batch_busy, evict_hand), false, true) { }
     }
 
-    evict_batch(cache, evict_hand);
+    evict_batch(cache, evict_hand as uint32);
     inout local.free_hand := evict_hand;
   }
 
   method check_all_refcounts_dont_wait(shared cache: Cache,
-      cache_idx: uint64,
+      cache_idx: uint32,
       glinear r: T.Token)
   returns (success: bool, glinear r': T.Token)
   requires cache.Inv()
@@ -395,7 +395,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method check_all_refcounts_with_t_block(shared cache: Cache,
       t: uint64,
-      cache_idx: uint64,
+      cache_idx: uint32,
       glinear r: T.Token)
   returns (glinear r': T.Token)
   requires cache.Inv()
@@ -438,7 +438,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method try_evict_page(shared cache: Cache, cache_idx: uint64)
+  method try_evict_page(shared cache: Cache, cache_idx: uint32)
   requires cache.Inv()
   requires 0 <= cache_idx as int < CACHE_SIZE as int
   {
@@ -515,14 +515,14 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
-  method evict_batch(shared cache: Cache, chunk: uint64)
+  method evict_batch(shared cache: Cache, chunk: uint32)
   requires cache.Inv()
   requires 0 <= chunk as int < NUM_CHUNKS as int
   {
-    var i: uint64 := 0;
-    while i < CHUNK_SIZE_64()
+    var i: uint32 := 0;
+    while i < CHUNK_SIZE_32()
     {
-      var j: uint64 := chunk * CHUNK_SIZE_64() + i;
+      var j: uint32 := chunk * CHUNK_SIZE_32() + i;
       try_evict_page(cache, j);
       i := i + 1;
     }
@@ -530,7 +530,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
   method get_free_page(shared cache: Cache, linear inout localState: LocalState)
   returns (
-    cache_idx: uint64,
+    cache_idx: uint32,
     glinear m: T.Token,
     glinear handle: Handle
   )
@@ -579,11 +579,11 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
         && handle_opt.value.is_handle(cache.key(cache_idx as int))
         && handle_opt.value.CacheEmptyHandle?
     {
-      var chunk: uint64 := localState.free_hand; 
+      var chunk: uint32 := localState.free_hand as uint32;
 
-      var i: uint64 := 0;
+      var i: uint32 := 0;
 
-      while i < CHUNK_SIZE_64() && !success
+      while i < CHUNK_SIZE_32() && !success
       invariant 0 <= i as int <= CHUNK_SIZE as int
       invariant 0 <= chunk as int < NUM_CHUNKS as int
       invariant !success ==>
@@ -598,7 +598,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           && handle_opt.value.is_handle(cache.key(cache_idx as int))
           && handle_opt.value.CacheEmptyHandle?
       {
-        cache_idx := chunk * CHUNK_SIZE_64() + i;
+        cache_idx := chunk * CHUNK_SIZE_32() + i;
 
         dispose_glnone(m_opt);
         dispose_glnone(handle_opt);
@@ -779,7 +779,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     dispose_anything(client_opt);
     handle_out := unwrap_value(handle_opt);
 
-    ph := PageHandleIdx(cache.data_ptr(cache_idx as uint64), cache_idx as uint64);
+    ph := PageHandleIdx(cache.data_ptr(cache_idx as uint32), cache_idx as uint32);
   }
 
   method unget(
@@ -884,7 +884,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
 
     glinear var ClaimPageHandle(cache_idx, token) := claim_handle;
     ghost var t := localState.t as int;
-    ghost var rwlock_loc := cache.status_atomic(cache_idx as uint64).rwlock_loc;
+    ghost var rwlock_loc := cache.status_atomic(cache_idx as uint32).rwlock_loc;
     ghost var clean;
 
     token := cache.status_atomic(ph.cache_idx).set_exc(token);
@@ -1104,11 +1104,11 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var do_write_back : bool;
     glinear var write_back_r, ticket;
     do_write_back, write_back_r, ticket :=
-        cache.status_atomic(cache_idx as uint64).try_acquire_writeback(true);
+        cache.status_atomic(cache_idx).try_acquire_writeback(true);
 
     if do_write_back {
       var p := read_cell(
-          cache.page_handle_ptr(cache_idx as uint64),
+          cache.page_handle_ptr(cache_idx),
           T.borrow_wb(write_back_r.value.token).idx);
       var disk_idx := p.disk_addr / PageSize64() as int64;
       assert disk_idx != -1;
@@ -1116,7 +1116,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       disk_writeback_async(
           cache, inout localState,
           disk_idx as uint64,
-          cache_idx as uint64,
+          cache_idx,
           unwrap_value(write_back_r),
           unwrap_value(ticket));
     } else {
@@ -1140,11 +1140,11 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     var do_write_back : bool;
     glinear var write_back_r, ticket;
     do_write_back, write_back_r, ticket :=
-        cache.status_atomic(cache_idx as uint64).try_acquire_writeback(true);
+        cache.status_atomic(cache_idx).try_acquire_writeback(true);
 
     if do_write_back {
       var p := read_cell(
-          cache.page_handle_ptr(cache_idx as uint64),
+          cache.page_handle_ptr(cache_idx),
           T.borrow_wb(write_back_r.value.token).idx);
       var disk_idx := p.disk_addr / PageSize64() as int64;
       assert disk_idx != -1;
@@ -1168,8 +1168,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   method evict_all(shared cache: Cache)
   requires cache.Inv()
   {
-    var i: uint64 := 0;
-    while i < NUM_CHUNKS_64() {
+    var i: uint32 := 0;
+    while i < NUM_CHUNKS_64() as uint32 {
       evict_batch(cache, i);
       evict_batch(cache, i);
       i := i + 1;
@@ -1185,8 +1185,8 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   {
     io_cleanup_all(cache);
 
-    var flush_hand: uint64 := 0;
-    while flush_hand < NUM_CHUNKS_64()
+    var flush_hand: uint32 := 0;
+    while flush_hand < NUM_CHUNKS_64() as uint32
     invariant local.WF()
     {
       CWB.batch_start_writeback(cache, inout local, flush_hand, true);
@@ -1201,7 +1201,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   // return true if it was in the cache
   method try_get_read_and_release(
       shared cache: Cache,
-      cache_idx: uint64,
+      cache_idx: uint32,
       shared localState: LocalState,
       glinear client: Client)
   returns (
@@ -1658,7 +1658,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           ce, unwrap_value(status_opt), r));
       client_out := glNone;
 
-      ph := PageHandleIdx(cache.data_ptr(cache_idx as uint64), cache_idx as uint64);
+      ph := PageHandleIdx(cache.data_ptr(cache_idx), cache_idx);
     }
   }
 
@@ -1685,7 +1685,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     invariant client'.loc == cache.counter_loc
     decreases *
     {
-      var cache_idx: uint64 := atomic_index_lookup_read(
+      var cache_idx: uint32 := atomic_index_lookup_read(
           cache.cache_idx_of_page_atomic(disk_idx), disk_idx as nat);
 
       if cache_idx == NOT_MAPPED {
@@ -1715,7 +1715,7 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             glinear var status_opt: glOption<CacheResources.CacheStatus> := glNone;
             var writeback_done := false;
             ghost var token_copy := token;
-            ghost var rwlock_loc := cache.status_atomic(cache_idx as uint64).rwlock_loc;
+            ghost var rwlock_loc := cache.status_atomic(cache_idx).rwlock_loc;
             ghost var clean;
             while !writeback_done
             invariant !writeback_done ==> status_opt == glNone

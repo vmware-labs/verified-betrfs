@@ -34,7 +34,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     linear page_handle: Cell<PageHandle>
   )
 
-  function method {:opaque} rc_index(j: uint64, i: uint64) : (k: uint64)
+  function method {:opaque} rc_index(j: uint64, i: uint32) : (k: uint64)
   requires 0 <= j as int < RC_WIDTH as int
   requires 0 <= i as int < CACHE_SIZE as int
   ensures 0 <= k as int < RC_WIDTH as int * CACHE_SIZE as int
@@ -140,7 +140,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && |lseqs_raw(this.read_refcounts_array)| == RC_WIDTH as int * CACHE_SIZE as int
       && (forall i | 0 <= i < RC_WIDTH as int * CACHE_SIZE as int :: lseq_has(this.read_refcounts_array)[i])
       && (forall j, i | 0 <= j < RC_WIDTH as int && 0 <= i < CACHE_SIZE as int ::
-          lseq_peek(this.read_refcounts_array, rc_index(j as uint64, i as uint64) as uint64)
+          lseq_peek(this.read_refcounts_array, rc_index(j as uint64, i as uint32) as uint64)
               == this.read_refcounts[j][i])
 
       && |lseqs_raw(this.status_idx_array)| == CACHE_SIZE as int
@@ -167,15 +167,15 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && (forall i, v, g :: 0 <= i < NUM_CHUNKS as int ==> atomic_inv(this.batch_busy[i], v, g) <==> true)
     }
 
-    shared function method data_ptr(i: uint64) : (p: Ptr)
+    shared function method data_ptr(i: uint32) : (p: Ptr)
     requires this.Inv()
     requires 0 <= i as int < CACHE_SIZE as int
     ensures p == this.data[i]
     {
-      ptr_add(this.data_base_ptr, PageSize64() * i)
+      ptr_add(this.data_base_ptr, PageSize64() * i as uint64)
     }
 
-    shared function method status_atomic(i: uint64) : (shared at: AtomicStatus)
+    shared function method status_atomic(i: uint32) : (shared at: AtomicStatus)
     requires this.Inv()
     requires 0 <= i as int < CACHE_SIZE as int
     ensures at == this.status[i]
@@ -183,7 +183,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       lseq_peek(this.status_idx_array, i as uint64).status
     }
 
-    shared function method page_handle_ptr(i: uint64) : (shared c: Cell<PageHandle>)
+    shared function method page_handle_ptr(i: uint32) : (shared c: Cell<PageHandle>)
     requires this.Inv()
     requires 0 <= i as int < CACHE_SIZE as int
     ensures c == this.page_handles[i]
@@ -192,7 +192,7 @@ module CacheTypes(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
 
 
-    shared function method read_refcount_atomic(j: uint64, i: uint64) : (shared at: AtomicRefcount)
+    shared function method read_refcount_atomic(j: uint64, i: uint32) : (shared at: AtomicRefcount)
     requires this.Inv()
     requires 0 <= j as int < RC_WIDTH as int
     requires 0 <= i as int < CACHE_SIZE as int

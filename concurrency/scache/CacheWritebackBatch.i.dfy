@@ -225,7 +225,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           glinear var write_back_r, ticket;
           var do_write_back;
           do_write_back, write_back_r, ticket :=
-              cache.status_atomic(cache_idx as uint64).try_acquire_writeback(is_urgent);
+              cache.status_atomic(cache_idx as uint32).try_acquire_writeback(is_urgent);
 
           if !do_write_back {
             dispose_anything(write_back_r);
@@ -233,7 +233,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             done := true;
           } else {
             var ph := read_cell(
-                cache.page_handle_ptr(cache_idx as uint64),
+                cache.page_handle_ptr(cache_idx),
                 T.borrow_wb(write_back_r.value.token).idx);
             var disk_idx := ph.disk_addr / PageSize64() as int64;
 
@@ -253,7 +253,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
               disk_writeback_async(
                   cache, inout local,
                   disk_idx as uint64,
-                  cache_idx as uint64,
+                  cache_idx,
                   unwrap_value(write_back_r),
                   unwrap_value(ticket));
               
@@ -309,7 +309,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
           glinear var write_back_r, ticket;
           var do_write_back;
           do_write_back, write_back_r, ticket :=
-              cache.status_atomic(cache_idx as uint64).try_acquire_writeback(is_urgent);
+              cache.status_atomic(cache_idx).try_acquire_writeback(is_urgent);
 
           if !do_write_back {
             dispose_anything(write_back_r);
@@ -317,7 +317,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
             done := true;
           } else {
             var ph := read_cell(
-                cache.page_handle_ptr(cache_idx as uint64),
+                cache.page_handle_ptr(cache_idx),
                 T.borrow_wb(write_back_r.value.token).idx);
             var disk_idx := ph.disk_addr / PageSize64() as int64;
 
@@ -337,7 +337,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
               disk_writeback_async(
                   cache, inout local,
                   disk_idx as uint64,
-                  cache_idx as uint64,
+                  cache_idx,
                   unwrap_value(write_back_r),
                   unwrap_value(ticket));
               
@@ -462,7 +462,7 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   }
 
   method batch_start_writeback(shared cache: Cache, inout linear local: LocalState,
-        batch_idx: uint64, is_urgent: bool)
+        batch_idx: uint32, is_urgent: bool)
   requires cache.Inv()
   requires old_local.WF()
   requires 0 <= batch_idx as int < NUM_CHUNKS as int
@@ -471,20 +471,20 @@ module CacheWritebackBatch(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   decreases *
   {
     var i: uint32 := 0;
-    while i < CHUNK_SIZE_64() as uint32
+    while i < CHUNK_SIZE_32()
     invariant local.WF()
     invariant local.t == old_local.t
     {
-      var cache_idx := batch_idx * CHUNK_SIZE_64() + i as uint64;
+      var cache_idx := batch_idx * CHUNK_SIZE_32() + i;
 
       glinear var write_back_r, ticket;
       var do_write_back;
       do_write_back, write_back_r, ticket :=
-          cache.status_atomic(cache_idx as uint64).try_acquire_writeback(is_urgent);
+          cache.status_atomic(cache_idx).try_acquire_writeback(is_urgent);
 
       if do_write_back {
         var ph := read_cell(
-            cache.page_handle_ptr(cache_idx as uint64),
+            cache.page_handle_ptr(cache_idx),
             T.borrow_wb(write_back_r.value.token).idx);
         var disk_idx := ph.disk_addr / PageSize64() as int64;
         assert disk_idx != -1;
