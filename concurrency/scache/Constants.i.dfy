@@ -16,7 +16,7 @@ module Constants {
     num_io_slots: uint64
   )
   {
-    predicate WF() {
+    predicate method WF() {
       && cache_size as int % PLATFORM_CACHELINE_SIZE_64() as int == 0
       && cache_size as int % ENTRIES_PER_BATCH_32() as int == 0
       && cache_size as int > 0
