@@ -17,11 +17,11 @@ module Constants {
   )
   {
     predicate method WF() {
-      && cache_size as int % PLATFORM_CACHELINE_SIZE_64() as int == 0
-      && cache_size as int % ENTRIES_PER_BATCH_32() as int == 0
-      && cache_size as int > 0
-      && cache_size as int < 0x4000_0000
-      && 0 < num_disk_pages as int < 0x1_0000_0000_0000
+      && cache_size as uint64 % PLATFORM_CACHELINE_SIZE_64() == 0
+      && cache_size % ENTRIES_PER_BATCH_32() == 0
+      && cache_size > 0
+      && cache_size < 0x4000_0000
+      && 0 < num_disk_pages < 0x1_0000_0000_0000
       && pages_per_extent != 0
       && pages_per_extent <= 0x1_0000
       && 0 < num_io_slots <= 0x1_0000
