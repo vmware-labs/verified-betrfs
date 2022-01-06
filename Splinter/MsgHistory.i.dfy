@@ -25,6 +25,7 @@ module MsgHistoryMod {
   datatype KeyedMessage = KeyedMessage(key: Key, message: Message)
 
   // TODO: Rename the datatype to MsgHistory here to match the module
+  // A contiguous sequence of messages from seqStart up to (not including) seqEnd.
   datatype MsgSeq = MsgSeq(msgs: map<LSN, KeyedMessage>, seqStart: LSN, seqEnd: LSN)
     // seqEnd is exclusive
   {
@@ -64,6 +65,8 @@ module MsgHistoryMod {
         seqEnd+1)
     }
 
+    // TODO(jonh): this empty representation is gross. Better to add a datatype constructor
+    // that's got no seqStart/seqEnd fields.
     predicate IsEmpty() {
       seqStart == seqEnd
     }
@@ -125,6 +128,7 @@ module MsgHistoryMod {
       ApplyToKeyMapRecursive(orig, Len())
     }
 
+    // Returns every message in this after and including lsn
     function Behead(lsn: LSN) : (r: MsgSeq)
       requires seqStart <= lsn <= seqEnd
       requires WF()
@@ -134,11 +138,11 @@ module MsgHistoryMod {
       then
         Empty()
       else
-        var keepVersions := seqEnd - lsn;
         var keepMap := map k | lsn <= k < seqEnd :: msgs[k];
         MsgSeq(keepMap, lsn, seqEnd)
     }
 
+    // Returns every message in this up to but not including lsn.
     function Truncate(lsn: LSN) : (r: MsgSeq)
       requires seqStart <= lsn <= seqEnd
       requires WF()
@@ -148,7 +152,6 @@ module MsgHistoryMod {
       then
         Empty()
       else
-        var keepVersions := lsn - seqStart;
         var keepMap := map k | seqStart <= k < lsn :: msgs[k];
         MsgSeq(keepMap, seqStart, lsn)
     }

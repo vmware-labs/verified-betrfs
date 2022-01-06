@@ -19,6 +19,8 @@ module SequenceSetsMod {
     then []
     else
       var x :| x in a;
-      ArbitrarySequentialization(a - {x}) + [x]
+      var b := ArbitrarySequentialization(a - {x}) + [x];
+      assert Members(b) == Members(ArbitrarySequentialization(a - {x})) + {x};  // trigger
+      b
   }
 }

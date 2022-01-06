@@ -259,9 +259,6 @@ module SplinterTreeMachineMod {
     endSeq: LSN,  // SB fields
     root: CU,     // SB fields
     indTbl: IndirectionTableMod.IndirectionTable,
-    // Write Opt file systems allows us to leverage immutability to simplfy reasoning about crash safety using cow
-    // Add a layer of indirection over Immutable splinter tree. This indirection table adds mutability over the tree
-    indTbl: IndirectionTableMod.IndirectionTable,
     memBuffer: map<Key, Message>,  // Real Splinter (next layer down? :v) has >1 memBuffers so we can be inserting at the front while flushing at the back.
     // TODO add a membuffer to record LSN; a frozen-like transition to keep one membuffer available
     // for filling while packing the other into a b+tree in the top trunk.
@@ -269,7 +266,7 @@ module SplinterTreeMachineMod {
     // TODO replace nextSeq, root with SB!
     // we need this because we need ro
     //rootNode : TrunkNode
-    frozen: Frozen,
+    frozen: Frozen
   )
   {
       predicate WF()
@@ -292,7 +289,7 @@ module SplinterTreeMachineMod {
       }
 
       function BetreeEndsLSNExclusive() : LSN {
-        nextSeq
+        endSeq
       }
 
       function getRoot() : CU {
@@ -309,7 +306,7 @@ module SplinterTreeMachineMod {
     // Note predicate-style assignment of some fields of v'
     && IndirectionTableMod.DurableAt(v'.indTbl, cache, sb.indTbl) // Parse ind tbl from cache
     && v'.memBuffer == map[]
-    && v'.nextSeq == sb.endSeq
+    && v'.endSeq == sb.endSeq
     && v'.frozen == Idle
   }
 
@@ -620,13 +617,13 @@ module SplinterTreeMachineMod {
   {
     && sk.PutStep?
     && var newMessage := MakeValueMessage(value);
-    && v' == v.(memBuffer := v.memBuffer[key := newMessage], nextSeq := v.nextSeq + 1)
+    && v' == v.(memBuffer := v.memBuffer[key := newMessage], endSeq := v.endSeq + 1)
   }
 
   predicate PutMany(v: Variables, v': Variables, puts: MsgSeq)
     requires puts.WF()
   {
-    &&  v' == v.(memBuffer := puts.ApplyToKeyMap(v.memBuffer), nextSeq := v.nextSeq + puts.Len())
+    &&  v' == v.(memBuffer := puts.ApplyToKeyMap(v.memBuffer), endSeq := v.endSeq + puts.Len())
   }
 
   datatype FlushRec = FlushRec(
@@ -816,7 +813,7 @@ module SplinterTreeMachineMod {
   {
     && v.frozen.Idle?
     && v.memBuffer == map[]  // someday we'd like to avoid clogging the memtable during freeze, but...
-    && v' == v.(frozen := Frozen(v.indTbl,  v.nextSeq))
+    && v' == v.(frozen := Frozen(v.indTbl,  v.endSeq))
   }
 
   predicate KnowFrozenIsClean(v: Variables, sb: Superblock, cache: CacheIfc.Variables)

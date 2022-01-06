@@ -22,3 +22,23 @@ Eventually need to add realistic cache. Presently we pass entire DVs.
 Presently imagining this shown as a refinement layer
 
 Lookups, Jay Normal Form, Receipts are all examples of "Eager Skolemization"
+
+------------------------------------------------------------------------------
+
+Journal interpretation strategy.
+
+* Define a function IRunning that interprets a diskview based on Variables.
+* Define a function IVars that defines Variables based on a superblock + diskview.
+* Before recovery, I = IRunning(IVars(disk), disk)
+* During recovery, I = IRunning(IVars(disk), disk) ... but IVars is somehow converging on Vars.
+* After recovery, I = IRunning(vars, disk)
+
+Betree interpretation strategy.
+
+* Define a function IRunning that interprets a diskview based on Variables.
+  -- indTbl, memBuffer
+* Define a function IVars that defines Variables based on a superblock + diskview.
+  -- indTbl read from disk, empty memBuffer
+* Before recovery, I = IRunning(IVars(disk), disk)
+* During recovery, I = IRunning(IVars(disk), disk) ... but IVars is somehow converging on Vars.
+* After recovery, I = IRunning(vars, disk)

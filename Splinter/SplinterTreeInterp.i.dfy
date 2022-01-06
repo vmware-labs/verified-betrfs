@@ -65,14 +65,14 @@ module SplinterTreeInterpMod {
 
   function {:opaque} IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
   {
-    RawInterp((imap key | AnyKey(key) :: IMKey(v, cache, key)), v.nextSeq) // check v.nextSeq used to be sb.endSeq
+    RawInterp((imap key | AnyKey(key) :: IMKey(v, cache, key)), v.endSeq) // check v.endSeq used to be sb.endSeq
   }
 
   predicate DiskSupportsVariables(v: Variables, dv: DiskView, sb: Superblock)
   {
     && IndirectionTableMod.DurableAt(v.indTbl, CacheIfc.Variables(dv), sb.indTbl)
     && v.memBuffer.Keys == {}
-    && v.nextSeq == sb.endSeq
+    && v.endSeq == sb.endSeq
     && v.frozen.Idle?
     && v.root == sb.root
   }
@@ -80,11 +80,11 @@ module SplinterTreeInterpMod {
   function EmptyVars(sb: Superblock) : Variables
   {
     Variables(
+      0,       // endSeq
+      sb.root, // tree root (must be given to us)
       IndirectionTableMod.Empty(),
-      map[], // empty memBuffer
-      0,     // nextSeq
-      Idle,  // frozen
-      sb.root // tree root (must be given to us)
+      map[],   // empty memBuffer
+      Idle     // frozen
     )
   }
   
@@ -100,7 +100,7 @@ module SplinterTreeInterpMod {
     if exists indTbl :: IndirectionTableMod.DurableAt(indTbl, cache, sb.indTbl)
     then
       var indTbl :| IndirectionTableMod.DurableAt(indTbl, cache, sb.indTbl);
-      var v := Variables(indTbl, map[], sb.endSeq, Frozen.Idle, sb.root);
+      var v := Variables(sb.endSeq, sb.root, indTbl, map[], Frozen.Idle);
       IM(cache, v)
     else
       InterpMod.Empty()
@@ -114,7 +114,7 @@ module SplinterTreeInterpMod {
     if indTbl.None?
      then InterpMod.Empty()
    else
-      var pretendVariables := Variables(indTbl.value, map[], sb.endSeq, Idle, sb.root);
+      var pretendVariables := Variables(sb.endSeq, sb.root, indTbl.value, map[], Idle);
       IM(cache, pretendVariables)
   }
 

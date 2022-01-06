@@ -28,7 +28,7 @@ module Proof refines ProofObligations {
 
   function I(v: ConcreteSystem.Variables) : CrashTolerantMapSpecMod.Variables
   {
-    ProgramInterpMod.IM(v.program)
+    ProgramInterpMod.IM(v.program, v.disk.contents)
   }
 
   // NOTE: These are all program invariants. Maybe we should change the argument
@@ -70,7 +70,7 @@ module Proof refines ProofObligations {
         SplinterTreeInterpMod.IM(v'.program.cache, v'.program.betree)
   {
     SplinterTreeInterpMod.Framing(v.program.betree, v.program.cache, v'.program.cache);
-    assert v.program.betree.nextSeq == v'.program.betree.nextSeq;
+    assert v.program.betree.endSeq == v'.program.betree.endSeq;
 
     // Need to fix this later
     // assume SplinterTreeInterpMod.IM(v.program.cache, v.program.betree).mi ==
