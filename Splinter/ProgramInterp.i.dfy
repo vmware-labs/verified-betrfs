@@ -58,32 +58,8 @@ module ProgramInterpMod {
   {
     && v.WF()
     && ISuperblock(v.cache.dv).Some?
-//    && v.journal.boundaryLSN == v.betree.nextSeq
+    && v.journal.boundaryLSN == v.betree.endSeq
   }
-
-// TODO deleteme
-//  // Program will have a runtime view of what (ghost) alloc each subsystem thinks it's using,
-//  // and use that to filter the dvs here.
-//  // Those ghost views will invariantly match the IReads functions of the actual disk -- that is,
-//  // * if we were to recover after a crash (when the physical alloc is empty), we'd fault in
-//  // an alloc table for the subsystem.
-//  // * that alloc table would invariantly match IReads.
-//  //
-//  // IM == Interpret as InterpMod
-//  // TODO NEXT well actually we need a chain of Interps; see CrashTolerantMapSpecMod
-//  // Journal interprets to a MsgSeq. The not-yet-sb-persistent part of that chain
-//  // is the set of versions. Yeah we need to put richer interps down in JournalInterp
-//  // before we try to add them here?
-//  function IMNotRunning(dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
-//    requires NotRunningInvariant(dv)
-//    ensures iv.WF()
-//  {
-//    var pretendCache := CacheIfc.Variables(dv);
-//    var sb := ISuperblock(dv);
-//    var splinterTreeInterp := SplinterTreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
-//    var journalInterp := JournalInterpMod.IMNotRunning(pretendCache, sb.value.journal, splinterTreeInterp);
-//    journalInterp
-//  }
 
   function IMRunning(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
     requires Invariant(v)
@@ -127,14 +103,13 @@ module ProgramInterpMod {
     var sb := ISuperblock(dv);
     if sb.Some?
     then
-      Variables(
-        Running,
-        sb.value,
-        CacheIfc.Variables(dv),
-        JournalInterpMod.SynthesizeRunningVariables(dv, sb.value.journal),
-        SplinterTreeInterpMod.SynthesizeRunningVariables(dv, sb.value.betree),
-        None
-        )
+      var stv := SplinterTreeInterpMod.SynthesizeRunningVariables(dv, sb.value.betree);
+      var jv := JournalInterpMod.SynthesizeRunningVariables(dv, sb.value.journal);
+      if stv.endSeq == jv.boundaryLSN
+      then
+        Variables(Running, sb.value, CacheIfc.Variables(dv), jv, stv, None)
+      else
+        EmptyVars()
     else
       EmptyVars()
   }
@@ -172,8 +147,8 @@ module ProgramInterpMod {
   }
 
   lemma Framing(v0: Variables, v1: Variables)
-    requires v0.WF()
-    requires v1.WF()
+    requires v0.WF() && Invariant(v0) && v0.phase.Running?
+    requires v1.WF() && Invariant(v1) && v1.phase.Running?
     requires DiskViewsEquivalentForSeq(v0.cache.dv, v1.cache.dv, IReads(v0))
     requires v0.betree == v1.betree
     requires v0.journal == v1.journal
@@ -190,12 +165,12 @@ module ProgramInterpMod {
       assert forall cu | cu in SplinterTreeMachineMod.IReads(v0.betree, v0.cache) :: cu in IReads(v0);
       assert DiskViewsEquivalent(v0.cache.dv, v1.cache.dv, SplinterTreeMachineMod.IReads(v0.betree, v0.cache));
       SplinterTreeInterpMod.Framing(v0.betree, v0.cache, v1.cache);
-      var betreeInterp := SplinterTreeInterpMod.IMStable(v0.cache, sb.value.betree);
+//      var betreeInterp := SplinterTreeInterpMod.IMStable(v0.cache, sb.value.betree);
 
-      assert ISuperblock(v0.cache.dv).value.journal == v0.journal.CurrentSuperblock();
-      assert forall cu | cu in JournalInterpMod.IReads(v0.cache, v0.journal.CurrentSuperblock()) :: cu in IReads(v0);
-      assert DiskViewsEquivalentForSeq(v0.cache.dv, v1.cache.dv, JournalInterpMod.IReads(v0.cache, v0.journal.CurrentSuperblock()));
-      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, betreeInterp);
+//      assert ISuperblock(v0.cache.dv).value.journal == v0.journal.CurrentSuperblock();
+//      assert forall cu | cu in JournalInterpMod.IReads(v0.cache, v0.journal.CurrentSuperblock()) :: cu in IReads(v0);
+//      assert DiskViewsEquivalentForSeq(v0.cache.dv, v1.cache.dv, JournalInterpMod.IReads(v0.cache, v0.journal.CurrentSuperblock()));
+//      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, betreeInterp);
     }
   }
 
