@@ -9,7 +9,6 @@ include "CacheIfc.i.dfy"
 
 include "AsyncDisk.s.dfy"
 include "AsyncDiskProgram.s.dfy"
-include "IOSystem.s.dfy"
 include "../lib/Base/KeyType.s.dfy"
 
 
@@ -273,10 +272,12 @@ module ProgramMachineMod {
     && uiop.NoopOp?
     && v.WF()
     && !v.phase.SuperblockUnknown?  // Betree not initted until we leave this phase
-    && v'.journal == v.journal
+    && v'.phase == v.phase
     && v'.stableSuperblock == v.stableSuperblock
-    && SplinterTreeMachineMod.Internal(v.betree, v'.betree, v.cache, cacheOps, sk)
     && CacheIfc.WritesApplied(v.cache, v'.cache, cacheOps)
+    && v'.journal == v.journal
+    && SplinterTreeMachineMod.Internal(v.betree, v'.betree, v.cache, cacheOps, sk)
+    && v'.inFlightSuperblock == v.inFlightSuperblock
     && AllocsDisjoint(v')
   }
 

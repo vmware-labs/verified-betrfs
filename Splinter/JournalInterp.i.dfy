@@ -21,6 +21,7 @@ module JournalInterpMod {
   import opened InterpMod
   import opened SequenceSetsMod
   import CacheLemmasMod
+  import CrashTolerantMapSpecMod
 
   predicate DiskSupportsChainLookup(chainLookup: ChainLookup, dv: DiskView, sb: Superblock)
   {
@@ -35,68 +36,61 @@ module JournalInterpMod {
     && DiskSupportsChainLookup(v.marshalledLookup, cache.dv, v.CurrentSuperblock())
   }
 
-  // XXX was ChainAsMsgSeq now v.marshalledLookup.interp
-
-  function SyncReqsAt(v: Variables, lsn: LSN) : set<CrashTolerantMapSpecMod.SyncReqId>
-    //requires v.persistentLSN <= lsn < v.unmarshalledLSN()
-    //requires v.WF()
-  {
-    //set syncReqId | v.syncReqs[syncReqId] == lsn //&& (syncReqId in nat)
-    set lsns |  v.persistentLSN <= lsns <= lsn
-  }
-
-  function UnmarshalledMessageSeq(v: Variables, cache:CacheIfc.Variables) : MsgSeq
+  // Interpret just the journaled messages
+  function IMsgSeq(v: Variables, cache:CacheIfc.Variables) : MsgSeq
     requires v.WF()
   {
     v.marshalledLookup.interp().Concat(TailToMsgSeq(v))
   }
 
-  function InterpFor(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp, lsn: LSN) : Interp
-    requires v.WF()
-    requires Invariant(v, cache)
-    requires base.seqEnd == v.boundaryLSN
-    requires v.boundaryLSN <= lsn <= v.unmarshalledLSN()
+  //////////////////////////////////////////////////////////////////////
+  // Interpret an Interp + JournalInterp -> spec Versions
+  // This perhaps belongs higher up?
+  //////////////////////////////////////////////////////////////////////
+
+  datatype JournalInterp = JournalInterp(msgSeq: MsgSeq, syncReqs: map<CrashTolerantMapSpecMod.SyncReqId, LSN>)
   {
-    UnmarshalledMessageSeq(v, cache).Truncate(lsn).ApplyToInterp(base)
+    predicate WF() {
+      && msgSeq.WF()
+    }
+
+    function SyncReqsAt(lsn: LSN) : set<CrashTolerantMapSpecMod.SyncReqId>
+      requires WF()
+    {
+      set id | id in syncReqs && syncReqs[id] == lsn
+    }
+    
+    function VersionFor(base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
+      requires WF()
+      requires base.seqEnd == msgSeq.seqStart
+      requires msgSeq.seqStart <= lsn <= msgSeq.seqEnd
+    {
+      // TODO No accounting for v.syncReqs < boundaryLSN; hrmm.
+      var mapspec := MapSpecMod.Variables(msgSeq.Truncate(lsn).ApplyToInterp(base));
+      var asyncmapspec := CrashTolerantMapSpecMod.async.Variables(mapspec, {}, {}); // TODO um, no reqs & replies!?
+      CrashTolerantMapSpecMod.Version(asyncmapspec, SyncReqsAt(lsn))
+    }
+
+    function VersionsFromBase(base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
+      requires WF()
+      requires base.seqEnd == msgSeq.seqStart
+    {
+      var numVersions := msgSeq.Len()+1;  // Can apply zero to Len() messages.
+      seq(msgSeq.Len()+1, i requires 0 <= i < numVersions => VersionFor(base, i + msgSeq.seqStart))
+    }
+
+    function AsCrashTolerantMapSpec(base: InterpMod.Interp) : CrashTolerantMapSpecMod.Variables
+      requires WF()
+      requires base.seqEnd == msgSeq.seqStart
+    {
+      CrashTolerantMapSpecMod.Variables(VersionsFromBase(base), 0)  // 0 is always the stable idx; why do we allow others in spec?
+    }
   }
 
-   function VersionFor(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
-     requires v.WF()
-     requires Invariant(v, cache)
-     requires base.seqEnd == v.boundaryLSN
-     requires v.boundaryLSN <= lsn <= v.unmarshalledLSN() // we only need versions for the journal for the unapplied suffix of entries
-   {
-     // TODO No accounting for v.syncReqs < boundaryLSN; hrmm.
-     var mapspec := MapSpecMod.Variables(InterpFor(v, cache, base, lsn));
-     var asyncmapspec := CrashTolerantMapSpecMod.async.Variables(mapspec, {}, {});
-     CrashTolerantMapSpecMod.Version(asyncmapspec, SyncReqsAt(v, lsn))
-   }
-
-  function Versions(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
+  function I(v: Variables, cache:CacheIfc.Variables) : JournalInterp
     requires v.WF()
-    requires base.seqEnd == v.boundaryLSN // Can we require this here?
-    requires Invariant(v, cache)
-   {
-     // TODO: check
-     var numVersions := v.unmarshalledLSN() - v.boundaryLSN + 1;
-     seq(numVersions, i requires 0 <= i < numVersions =>
-        var lsn := i + v.boundaryLSN;
-        assert v.boundaryLSN <= lsn;
-        assert lsn <= v.unmarshalledLSN();
-        VersionFor(v, cache, base, lsn)
-     )
-   }
-
-  function IM(v: Variables, cache:CacheIfc.Variables, base: InterpMod.Interp)
-    : (iv: CrashTolerantMapSpecMod.Variables)
-    requires v.WF()
-    requires Invariant(v, cache)
-    requires base.seqEnd == v.boundaryLSN
-    ensures iv.WF()
   {
-    assert v.boundaryLSN <= v.unmarshalledLSN(); // Follows from WF & defn unmarshalledLSN
-    var versions := Versions(v, cache, base);
-    CrashTolerantMapSpecMod.Variables(versions, 0)
+    JournalInterp(IMsgSeq(v, cache), v.syncReqs)
   }
 
   function EmptyVars() : (ev: Variables)
@@ -233,18 +227,17 @@ module JournalInterpMod {
   }
 
   // Add comment about what this supposed to do the TODOS here
-  lemma InternalStepLemma(v: Variables, cache: CacheIfc.Variables, v': Variables, cache': CacheIfc.Variables, base: InterpMod.Interp, cacheOps: CacheIfc.Ops, sk: Skolem)
+  lemma InternalStepLemma(v: Variables, cache: CacheIfc.Variables, v': Variables, cache': CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
     requires v.WF()
     requires v'.WF()
     requires DiskViewsEquivalentForSeq(cache.dv, cache'.dv, IReads(cache, v.CurrentSuperblock()))
-    requires base.seqEnd == v.boundaryLSN
     requires Invariant(v, cache)
     requires Internal(v, v', cache, cacheOps, sk);
     requires CacheIfc.WritesApplied(cache, cache', cacheOps)
     ensures Invariant(v', cache')
     ensures v.boundaryLSN == v'.boundaryLSN
     ensures v.unmarshalledLSN() == v'.unmarshalledLSN()
-    ensures IM(v, cache, base) == IM(v', cache', base)
+    ensures I(v, cache) == I(v', cache')
   {
     match sk {
       case AdvanceMarshalledStep(newCU) => {
@@ -273,24 +266,12 @@ module JournalInterpMod {
     }
   }
 
-  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, base: InterpMod.Interp)
+  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables)
     requires v.WF()
     requires DiskViewsEquivalentForSeq(cache0.dv, cache1.dv, IReads(cache0, v.CurrentSuperblock()))
-    requires base.seqEnd == v.boundaryLSN
-
-    // QUESTION: We need to require these right?, Need to figure this out for later
-    requires Invariant(v, cache0)
-    requires Invariant(v, cache1)
-    requires base.seqEnd == v.persistentLSN
-    requires v.persistentLSN < v.unmarshalledLSN()
-    ensures IM(v, cache0, base) == IM(v, cache1, base)
+    ensures I(v, cache0) == I(v, cache1)
   {
 //    assume false; // there's a timeout here that seems to point at opaque WFChainInner. That's weird.
     FrameOneChain(cache0, cache1, v.CurrentSuperblock());
-    // This works --- I'm suspicious -- Sowmya
-    calc {
-      IM(v, cache0, base);
-      IM(v, cache1, base);
-    }
   }
 }

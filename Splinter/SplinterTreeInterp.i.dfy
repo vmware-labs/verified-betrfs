@@ -64,6 +64,7 @@ module SplinterTreeInterpMod {
   }
 
   function {:opaque} IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
+    ensures i.seqEnd == v.endSeq
   {
     RawInterp((imap key | AnyKey(key) :: IMKey(v, cache, key)), v.endSeq) // check v.endSeq used to be sb.endSeq
   }
@@ -93,29 +94,6 @@ module SplinterTreeInterpMod {
     if exists v :: DiskSupportsVariables(v, dv, sb)
     then var v :| DiskSupportsVariables(v, dv, sb); v
     else EmptyVars(sb)
-  }
-
-  function IMStable(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
-  {
-    if exists indTbl :: IndirectionTableMod.DurableAt(indTbl, cache, sb.indTbl)
-    then
-      var indTbl :| IndirectionTableMod.DurableAt(indTbl, cache, sb.indTbl);
-      var v := Variables(sb.endSeq, sb.root, indTbl, map[], Frozen.Idle);
-      IM(cache, v)
-    else
-      InterpMod.Empty()
-  }
-
-  // Imagine what the disk would look like if we were running and haven't
-  // added any stuff to the membuffer.
-  function IMNotRunning(cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
-  {
-    var indTbl := IndirectionTableMod.I(cache.dv, sb.indTbl);
-    if indTbl.None?
-     then InterpMod.Empty()
-   else
-      var pretendVariables := Variables(sb.endSeq, sb.root, indTbl.value, map[], Idle);
-      IM(cache, pretendVariables)
   }
 
   predicate AllLookupsExist(v: Variables, cache: CacheIfc.Variables)

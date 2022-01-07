@@ -91,8 +91,8 @@ module ProgramInterpMod {
     ensures iv.WF()
   {
     var sb := ISuperblock(v.cache.dv).value;
-    var splinterTreeInterp := SplinterTreeInterpMod.IMStable(v.cache, sb.betree);
-    var journalInterp := JournalInterpMod.IM(v.journal, v.cache, splinterTreeInterp);
+    var splinterTreeInterp := SplinterTreeInterpMod.IM(v.cache, v.betree);
+    var journalInterp := JournalInterpMod.I(v.journal, v.cache).AsCrashTolerantMapSpec(splinterTreeInterp);
     journalInterp
   }
 
