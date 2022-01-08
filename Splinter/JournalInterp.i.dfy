@@ -107,6 +107,13 @@ module JournalInterpMod {
     )
   }
 
+  lemma ChainLookupsShareBoundaryLSN(cl:ChainLookup)
+    requires cl.WF()
+    requires cl.Chained()
+    ensures forall row | 0<=row<|cl.rows| :: cl.rows[row].sb.boundaryLSN == Last(cl.rows).sb.boundaryLSN
+  {
+  }
+
   function SynthesizeRunningVariables(dv: DiskView, sb: Superblock) : (sv: Variables)
     ensures Invariant(sv, CacheIfc.Variables(dv))
   {
@@ -125,9 +132,14 @@ module JournalInterpMod {
       assert chainLookup.ValidForSB(CacheIfc.Variables(dv), sb);
       assert chainLookup.ForSB(sb);
       assert sb.boundaryLSN == chainLookup.interp().seqStart by {
-        forall row | row in chainLookup.rows ensures row.sb.boundaryLSN == sb.boundaryLSN {
+        calc {
+          chainLookup.interp().seqStart;
+          chainLookup.last().cumulativeResult.interp.seqStart;
+          chainLookup.last().sb.boundaryLSN;
+            { ChainLookupsShareBoundaryLSN(chainLookup); }
+          chainLookup.rows[0].sb.boundaryLSN;
+          sb.boundaryLSN;
         }
-        assert chainLookup.rows[0].sb.boundaryLSN == chainLookup.interp().seqStart;
       }
       assert sb.freshestCU == sv.FreshestMarshalledCU();
       assert DiskSupportsChainLookup(chainLookup, dv, sv.CurrentSuperblock()) by {
