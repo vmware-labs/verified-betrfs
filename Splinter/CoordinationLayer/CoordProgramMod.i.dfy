@@ -5,7 +5,7 @@ include "JournalInterp.i.dfy"
 include "../../Spec/Interp.s.dfy"
 include "../../lib/Base/KeyType.s.dfy"
 
-module ProgramMachineMod {
+module CoordProgramMod {
   import opened Options
   import InterpMod
   import JournalInterpTypeMod
@@ -48,7 +48,7 @@ module ProgramMachineMod {
     predicate WF()
     {
       && stableSuperblock.WF()
-      && journal.WF()
+      && (!phase.SuperblockUnknown? ==> journal.WF())
       && (inFlightSuperblock.Some? ==> inFlightSuperblock.value.WF())
     }
 
@@ -66,12 +66,12 @@ module ProgramMachineMod {
 
   }
 
-  // Initialization of the program, which happens at the beginning but also after a crash.
-  // Phase SuperblockUnknown means we get the interpretation straight from the disk.
+  // Since this state machine is an abstraction of the entire IOSystem (including
+  // disk and crashes), this Init is the Mkfs() step. Reboots (where RAM is cleared
+  // but disk state remains) appear elsewhere.
   predicate Init(v: Variables)
   {
-    && v.phase.SuperblockUnknown?
-    // Journal and Betree get initialized once we know their superblocks
+    v.Mkfs()
   }
 
   // Now we know what the disk superblock says, and we can initialize the Journal, Tree Variables.

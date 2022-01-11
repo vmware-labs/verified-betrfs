@@ -170,6 +170,11 @@ module MsgHistoryMod {
     MsgSeq(map[], 0, 0)
   }
 
+  function Singleton(lsn: LSN, msg: KeyedMessage) : MsgSeq
+  {
+    MsgSeq(map [lsn := msg], lsn, lsn+1)
+  }
+
 
   // QUESTION: Is this supposed to return messages, cuz i changed it to
   function IKey(key:Key, baseValue: Message, ms: MsgSeq) : (m: Message)
