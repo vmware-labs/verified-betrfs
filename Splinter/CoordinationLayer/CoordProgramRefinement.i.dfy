@@ -13,9 +13,9 @@ module CoordProgramRefinement {
   {
     if !Inv(v)
     then CrashTolerantMapSpecMod.InitState()
-    else if v.phase.SuperblockUnknown?
-      then v.stableSuperblock.journal.AsCrashTolerantMapSpec(v.stableSuperblock.mapadt)
-      else v.journal.AsCrashTolerantMapSpec(v.mapadt)
+    else if v.phase.Running?
+      then v.journal.AsCrashTolerantMapSpec(v.mapadt)
+      else v.stableSuperblock.journal.AsCrashTolerantMapSpec(v.stableSuperblock.mapadt)
     
   }
 
@@ -23,7 +23,7 @@ module CoordProgramRefinement {
   {
     && v.WF()
     && v.stableSuperblock.mapadt.seqEnd == v.stableSuperblock.journal.msgSeq.seqStart
-    && (!v.phase.SuperblockUnknown? ==>
+    && (v.phase.Running? ==>
       && v.mapadt.seqEnd == v.journal.msgSeq.seqStart
     )
   }
@@ -50,6 +50,7 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case PutStep() => {
+        assert v'.mapadt.seqEnd == v'.journal.msgSeq.seqStart;
         assert Inv(v'); // here
       }
 //    case JournalInternalStep(sk) => { assert Inv(v'); }
