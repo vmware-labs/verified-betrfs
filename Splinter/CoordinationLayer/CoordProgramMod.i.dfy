@@ -38,11 +38,28 @@ module CoordProgramMod {
     }
   }
 
+  function MkfsSuperblock() : Superblock
+  {
+    Superblock(JournalInterpTypeMod.Mkfs(), MapAdtMkfs())
+  }
+
   // In-memory state. It may be unknown if we've just booted and haven't
   // read anything off the disk.
   datatype Ephemeral =
     | Unknown
-    | Known(journal: Journal, mapadt: MapAdt)
+    | Known(
+      journal: Journal,
+
+      // journal.Truncate(frozenJournalLSN) is persisted, and hence can be
+      // copied into an inFlightSuperblock.
+      frozenJournalLSN: LSN,
+
+      mapadt: MapAdt,
+
+      // If Some, .value is persisted and can be copied into an
+      // inFlightSuperblock.
+      frozenMap: Option<MapAdt>
+      )
   {
     predicate WF()
     {
@@ -53,8 +70,7 @@ module CoordProgramMod {
   datatype Variables = Variables(
     persistentSuperblock: Superblock,
     ephemeral: Ephemeral,
-    inFlightSuperblock: Option<Superblock>
-    )
+    inFlightSuperblock: Option<Superblock>)
   {
     predicate WF()
     {
@@ -67,9 +83,7 @@ module CoordProgramMod {
     // an empty K-V store?
     predicate Mkfs()
     {
-      && persistentSuperblock == Superblock(
-        JournalInterpTypeMod.Mkfs(),
-        MapAdtMkfs())
+      && persistentSuperblock == MkfsSuperblock()
       && ephemeral.Unknown?
       && inFlightSuperblock.None?
     }
@@ -92,9 +106,16 @@ module CoordProgramMod {
   {
     && uiop.NoopOp?
     && v.ephemeral.Unknown?
-    && v' == v.(ephemeral := Known(v.persistentSuperblock.journal, v.persistentSuperblock.mapadt))
+    && v' == v.(ephemeral := Known(
+      v.persistentSuperblock.journal,
+      v.persistentSuperblock.journal.msgSeq.seqEnd, // this journal is frozen.
+      v.persistentSuperblock.mapadt,
+      None
+      ))
   }
 
+  // The ephemeral map and ephemeral journal are at the same lsn, which only happens
+  // after recovery has "caught the map up" to the journal.
   predicate MapIsFresh(v: Variables)
   {
     && v.WF()
@@ -151,9 +172,10 @@ module CoordProgramMod {
         MsgHistoryMod.Singleton(v.ephemeral.mapadt.seqEnd, KeyedMessage(key, Define(val)));
 
     && v.WF()
-    && v' == v.(ephemeral := Known(
-      v.ephemeral.journal.(msgSeq := v.ephemeral.journal.msgSeq.Concat(singleton)),
-      MsgHistoryMod.Concat(v.ephemeral.mapadt, singleton)
+    && v' == v.(ephemeral := v.ephemeral.(
+          journal := v.ephemeral.journal.(msgSeq := v.ephemeral.journal.msgSeq.Concat(singleton)),
+          mapadt := MsgHistoryMod.Concat(v.ephemeral.mapadt, singleton)
+          // Frozen stuff unchanged here.
       ))
   }
 
@@ -186,22 +208,46 @@ module CoordProgramMod {
     && v' == v.(ephemeral := v.ephemeral.(journal := v'.ephemeral.journal))  // unchanged except journal changes as specified above
   }
 
-  function PersistentSB(v: Variables) : Superblock
-    requires MapIsFresh(v)
+  function BestFrozenState(v: Variables) : (sb:Superblock)
+    requires v.WF()
+    requires v.ephemeral.Known?
+    ensures sb.WF()
   {
-    Superblock(
-      v.ephemeral.journal.Behead(v.ephemeral.mapadt.seqEnd),
-      v.ephemeral.mapadt) // TODO change this to use frozen
-      // TODO should also forget IO retirement receipts and syncreqs.
+    if
+      // no frozen map to write
+      || v.ephemeral.frozenMap.None?
+    then MkfsSuperblock()
+    else if
+      // frozen journal is useless
+      || !(v.ephemeral.frozenMap.value.seqEnd < v.ephemeral.frozenJournalLSN)
+      // frozen LSN is out of bounds for the actual joural it's pointing to
+      || !v.ephemeral.journal.CanPruneTo(v.ephemeral.frozenJournalLSN)
+      // or has been beheaded beyond the frozen tree
+      || !v.ephemeral.journal.CanPruneTo(v.ephemeral.frozenMap.value.seqEnd)
+    then
+      // Could actually just use the frozen map here, but we don't really care
+      // to support this case; treat this is a silly branch.
+      // Superblock(v.ephemeral.frozenMap.value, JournalInterpTypeMod.Mkfs())
+      MkfsSuperblock()
+    else
+      // Use frozen map and available frozen journal.
+      var frozenJournal := v.ephemeral.journal
+        .Truncate(v.ephemeral.frozenJournalLSN)
+        .Behead(v.ephemeral.frozenMap.value.seqEnd)
+        .DropSyncReqs();
+      Superblock(frozenJournal, v.ephemeral.frozenMap.value)
   }
 
   predicate CommitStart(v: Variables, v': Variables, uiop : UIOp, seqBoundary: LSN)
   {
     && uiop.NoopOp?
-    && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
+    && v.WF()
+    && v.ephemeral.Known?
+    // Have to go forwards in LSN time
+    && v.ephemeral.mapadt.seqEnd < BestFrozenState(v).journal.msgSeq.seqEnd
     && v.inFlightSuperblock.None?
     && v'.inFlightSuperblock.Some?
-    && v' == v.(inFlightSuperblock := Some(PersistentSB(v)))
+    && v' == v.(inFlightSuperblock := Some(BestFrozenState(v)))
   }
 
   predicate CommitComplete(v: Variables, v': Variables, uiop : UIOp)
@@ -217,7 +263,7 @@ module CoordProgramMod {
     // onto the persistent mapadt.
     && var j := v.ephemeral.journal;
     && var j' :=
-      if j.CanBeheadTo(sb.mapadt.seqEnd)
+      if j.CanPruneTo(sb.mapadt.seqEnd)
       then j.Behead(sb.mapadt.seqEnd)
       else j;    // Case never occurs, but need Inv to prove so.
 

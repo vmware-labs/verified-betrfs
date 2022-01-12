@@ -32,19 +32,11 @@ module CoordProgramRefinement {
       )
   }
 
-  predicate InvInFlightImpliesFresh(v: CoordProgramMod.Variables)
+  predicate InvInFlightProperties(v: CoordProgramMod.Variables)
   {
-    v.inFlightSuperblock.Some? ==> MapIsFresh(v)
-  }
-
-  predicate InvCanBeheadJournalToInflightMapAdt(v: CoordProgramMod.Variables)
-  {
-    && v.WF()
-    && InvInFlightImpliesFresh(v)
-    && (v.inFlightSuperblock.Some? ==>
-          v.ephemeral.journal.CanBeheadTo(v.inFlightSuperblock.value.mapadt.seqEnd)
-      )
-
+    v.inFlightSuperblock.Some? ==>
+      && v.ephemeral.Known?
+      && v.ephemeral.journal.CanPruneTo(v.inFlightSuperblock.value.mapadt.seqEnd)
   }
 
   predicate Inv(v: CoordProgramMod.Variables)
@@ -57,7 +49,7 @@ module CoordProgramRefinement {
       && v.ephemeral.journal.CanFollow(v.persistentSuperblock.mapadt.seqEnd)
       && InvLSNTracksPersistentWhenJournalEmpty(v)
       )
-    && InvCanBeheadJournalToInflightMapAdt(v)
+    && InvInFlightProperties(v)
   }
 
   lemma InitRefines(v: CoordProgramMod.Variables)
@@ -96,24 +88,9 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case CommitStartStep(seqBoundary) => {
-        var lsn := v.ephemeral.mapadt.seqEnd;
-        var msgSeq := v.ephemeral.journal.msgSeq;
-//        assert msgSeq.Behead(lsn).seqStart == lsn;
-//        assert v.ephemeral.journal.Suffix(lsn).msgSeq.seqStart == lsn;
-//        assert PersistentSB(v).journal.msgSeq.seqStart == PersistentSB(v).mapadt.seqEnd;
-        assert v'.WF();
         assert Inv(v');
       }
       case CommitCompleteStep() => {
-        var sb := v.inFlightSuperblock.value;
-        var j := v.ephemeral.journal;
-        var j' := v'.ephemeral.journal;
-        assert j.CanBeheadTo(sb.mapadt.seqEnd);
-        assert j' == j.Behead(sb.mapadt.seqEnd);
-        assert v'.ephemeral.journal.CanFollow(v'.persistentSuperblock.mapadt.seqEnd);
-        assert InvLSNTracksPersistentWhenJournalEmpty(v');
-
-        assert v'.WF();
         assert Inv(v');
       }
     }

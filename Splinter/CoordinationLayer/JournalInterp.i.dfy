@@ -15,6 +15,11 @@ module JournalInterpTypeMod {
     map k | k in sr && lsn <= sr[k] :: sr[k]
   }
 
+  function TruncateSyncReqs(sr: SyncReqs, lsn: LSN) : SyncReqs
+  {
+    map k | k in sr && sr[k] < lsn :: sr[k]
+  }
+
   datatype Variables = Variables(msgSeq: MsgSeq, syncReqs: SyncReqs)
   {
     predicate WF() {
@@ -33,9 +38,10 @@ module JournalInterpTypeMod {
       || msgSeq.seqStart == lsn
     }
 
-    // NB CanBehead includes one more LSN than Contains, because you can behead
-    // all the way to seqEnd (and get an empty).
-    predicate CanBeheadTo(lsn: LSN)
+    // NB Pruning (Behead or Truncate) allows one more LSN than Contains,
+    // because you can Behead all the way to seqEnd (and get an empty)
+    // (or Truncate all the way to seqStart).
+    predicate CanPruneTo(lsn: LSN)
     {
       msgSeq.seqStart <= lsn <= msgSeq.seqEnd
     }
@@ -43,7 +49,7 @@ module JournalInterpTypeMod {
     function VersionFor(base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
       requires WF()
       requires CanFollow(base.seqEnd)
-      requires CanBeheadTo(lsn)
+      requires CanPruneTo(lsn)
     {
       // TODO No accounting for v.syncReqs < boundaryLSN; hrmm.
       var mapspec := MapSpecMod.Variables(msgSeq.Truncate(lsn).ApplyToInterp(base));
@@ -68,9 +74,21 @@ module JournalInterpTypeMod {
 
     function Behead(lsn: LSN) : Variables
       requires WF()
-      requires CanBeheadTo(lsn)
+      requires CanPruneTo(lsn)
     {
       Variables(msgSeq.Behead(lsn), BeheadSyncReqs(syncReqs, lsn))
+    }
+
+    function Truncate(lsn: LSN) : Variables
+      requires WF()
+      requires CanPruneTo(lsn)
+    {
+      Variables(msgSeq.Truncate(lsn), TruncateSyncReqs(syncReqs, lsn))
+    }
+
+    function DropSyncReqs() : Variables
+    {
+      Variables(msgSeq, map[])
     }
   }
 
