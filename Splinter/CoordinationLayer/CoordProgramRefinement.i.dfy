@@ -6,11 +6,14 @@ include "CoordProgramMod.i.dfy"
 // thereby functioning as the top layer in a refinement stack for program
 // models in refinement layers below.
 module CoordProgramRefinement {
+  import opened SequencesLite // Last, DropLast
   import opened CoordProgramMod
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
   import MapSpecMod
+
+  import Async = CrashTolerantMapSpecMod.async
 
   function I(v: CoordProgramMod.Variables) : CrashTolerantMapSpecMod.Variables
   {
@@ -103,7 +106,57 @@ module CoordProgramRefinement {
     ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
   {
     InvInductive(v, v', uiop);
-    assume false;
+    var step :| NextStep(v, v', uiop, step);
+    match step {
+      case LoadEphemeralStateStep() => {
+        assume false;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
+          CrashTolerantMapSpecMod.NoopOp);
+      }
+      case RecoverStep(puts) => {
+        assume false;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
+          CrashTolerantMapSpecMod.NoopOp);
+      }
+      case QueryStep(key, val) => {
+        assert uiop.OperateOp?;
+        assert uiop.baseOp.ExecuteOp?;
+        assert Query(v, v', uiop, key, val);
+        assert CrashTolerantMapSpecMod.async.DoExecute(
+          Async.Variables(Last(I(v).versions).asyncState, v.ephemeral.journal.reqProgress),
+          Async.Variables(Last(I(v').versions).asyncState, v.ephemeral.journal.reqProgress),
+          uiop.baseOp.req, uiop.baseOp.reply);
+        assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
+          uiop);
+//        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
+//          CrashTolerantMapSpecMod.NoopOp);
+      }
+      case PutStep() => {
+        assume false;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
+      }
+//    case JournalInternalStep(sk) => { assert Inv(v'); }
+//    case SplinterTreeInternalStep(sk) => { assert Inv(v'); }
+      case ReqSyncStep(syncReqId) => {
+        assume false;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
+      }
+      case CompleteSyncStep(syncReqId) => {
+        assume false;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
+      }
+      case CommitStartStep(seqBoundary) => {
+        assume false;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
+          CrashTolerantMapSpecMod.NoopOp);
+      }
+      case CommitCompleteStep() => {
+        assume false;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
+          CrashTolerantMapSpecMod.NoopOp);
+      }
+    }
     assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
   }
 }

@@ -1,4 +1,5 @@
 include "../lib/Base/SequencesLite.s.dfy"
+include "../lib/Base/MapRemove.s.dfy"
 include "Async.s.dfy"
 
 // Collect the entire history of possible snapshots, with a pointer to the persistent one.
@@ -7,6 +8,7 @@ include "Async.s.dfy"
 // We don't do anything with old snapshots (indeed, no implementation could); I just wrote it
 // this way for greatest simplicity.
 module CrashTolerantMod(atomic: AtomicStateMachineMod) {
+  import opened MapRemove_s
   import opened SequencesLite // Last, DropLast
   import async = AsyncMod(atomic) // Crash tolerance adds asynchrony whether you like it or not.
 
@@ -23,11 +25,15 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
       // which Program.i could tuck away old ghost versions going back
       // to the dawn of time, and then the interpretation function
       // could peek at those to construct the version seq. This is a way
-      // to add Lamport's history variable while respecting the .s/.i
+      // to add Lamport's history variable while respecting the .v/.i
       // split. But I'm too lazy to do that now, so please judge away.
-    | Version(asyncState: async.Variables, syncReqIds: set<SyncReqId>)
+    | Version(asyncState: async.PersistentState)
 
-  datatype Variables = Variables(versions: seq<Version>, stableIdx: nat)
+  datatype Variables = Variables(
+    versions: seq<Version>,
+    asyncEphemeral: async.EphemeralState,
+    syncRequests: map<SyncReqId, nat>,  // sync complete when value <= stableIdx
+    stableIdx: nat)
   {
     predicate WF() {
       && 0 < |versions|  // always some persistent, ephemeral version
@@ -45,70 +51,69 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
 
 
   function InitState() : Variables {
-    Variables([Version(async.InitState(), {})], 0)
+    Variables([Version(async.InitPersistentState())], async.InitEphemeralState(), map[], 0)
   }
 
-  predicate Operate(s: Variables, s': Variables, op: async.UIOp)
+  predicate Operate(v: Variables, v': Variables, op: async.UIOp)
   {
-    && s.WF()
-    && s'.WF()
-    && DropLast(s'.versions) == s.versions  // Concatenate a single version.
-    && async.NextStep(Last(s.versions).asyncState, Last(s'.versions).asyncState, op)
-    && Last(s'.versions).syncReqIds == {} // taking a map step introduces a new version, with no new sync reqs on it yet
-    && s'.stableIdx == s.stableIdx
+    && v.WF()
+    && v'.WF()
+    && DropLast(v'.versions) == v.versions  // Append a single version.
+    && async.NextStep(
+        async.Variables(Last(v.versions).asyncState, v.asyncEphemeral),
+        async.Variables(Last(v'.versions).asyncState, v'.asyncEphemeral),
+        op)
+    && v'.syncRequests == v.syncRequests  // unchanged
+    && v'.stableIdx == v.stableIdx    // unchanged
   }
 
   // Uh oh, anything not flushed (past stableIdx) is gone. But you still get a consistent version
   // at least as new as every version synced before the crash.
-  predicate Crash(s: Variables, s': Variables)
+  predicate Crash(v: Variables, v': Variables)
   {
-    && s.WF()
-    && s'.versions == s.versions[..s.stableIdx+1]
-    && s'.stableIdx == s.stableIdx
+    && v.WF()
+    && v'.versions == v.versions[..v.stableIdx+1]
+    // Crash forgets ephemeral stuff -- requests and syncRequests submitted but not answered.
+    && v'.asyncEphemeral == async.InitEphemeralState()
+    && v'.syncRequests == map[]
+    && v'.stableIdx == v.stableIdx
   }
 
   // The implementation may push some stuff out to the disk without getting
   // all the way up to date with the ephemeral state.
-  predicate SpontaneousCommit(s: Variables, s': Variables)
+  predicate SpontaneousCommit(v: Variables, v': Variables)
   {
-    && s.WF()
-    && |s'.versions| == |s.versions|
-    // Commit can truncate old versions
-    && (forall i | 0<=i<|s.versions| ::
-      || s'.versions == s.versions
-      || (i < s.stableIdx && s'.versions[i].Forgotten?)
+    && v.WF()
+    && |v'.versions| == |v.versions|
+    // Commit can truncate old versions (see apology at definition of Forgotten)
+    && (forall i | 0<=i<|v.versions| ::
+      || v'.versions == v.versions
+      || (i < v.stableIdx && v'.versions[i].Forgotten?)
       )
-    && s'.WF()  // But it can't truncate things after stableIdx
+    && v'.WF()  // But it can't truncate things after stableIdx
+    && v'.asyncEphemeral == v.asyncEphemeral
+    && v'.syncRequests == v.syncRequests
     // stableIdx advances towards, possibly all the way to, ephemeral state.
-    && s.stableIdx < s'.stableIdx < |s.versions|
+    && v.stableIdx < v'.stableIdx < |v.versions|
   }
 
   // sync api contract to the end user
-  predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
+  predicate ReqSync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
-    && s.WF()
-    // Add the syncReqId to the ephemeral version.
-    // NB If there is only one version, ephemeral==persistent, so the sync
-    // request is immediately complete. Which means the right thing happens.
-    && var eph := Last(s.versions);
-    && s'.versions == DropLast(s.versions)
-                  + [eph.(syncReqIds := eph.syncReqIds + {syncReqId})]
+    && v.WF()
+    && v' == v.(syncRequests := v.syncRequests[syncReqId := |v.versions|-1])
   }
 
   // When your syncReqId gets flushed all the way to the persistent version slot,
   // the sync is complete and that version is stable.
-  // requestedAt is a there-exists variable that we're pushing up to stay in Jay Normal Form.
-  predicate CompleteSync(s: Variables, s': Variables, syncReqId: SyncReqId, requestedAt: nat)
+  predicate CompleteSync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
-    && s.WF()
-    && requestedAt < |s.versions|
-    && s.versions[requestedAt].Version?
-    && syncReqId in s.versions[requestedAt].syncReqIds
-    && requestedAt <= s.stableIdx
+    && v.WF()
+    && syncReqId in v.syncRequests
+    && v.syncRequests[syncReqId] <= v.stableIdx
+    && v' == v.(syncRequests := MapRemove1(v.syncRequests, syncReqId))
   }
 
-  // The Op provides *most* of Jay Normal Form -- except skolem variables, of which we have
-  // exactly one, so I decided to just exists it like a clown.
   datatype UIOp =
     | OperateOp(baseOp: async.UIOp) // Put or Query Internally
     | CrashOp
@@ -117,21 +122,21 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     | CompleteSyncOp(syncReqId: SyncReqId)
     | NoopOp
 
-  predicate NextStep(s: Variables, s': Variables, uiop: UIOp)
+  predicate NextStep(v: Variables, v': Variables, uiop: UIOp)
   {
     match uiop {
-      case OperateOp(baseOp) => Operate(s, s', baseOp)
-      case CrashOp => Crash(s, s')
-      case SpontaneousCommitOp => SpontaneousCommit(s, s')
-      case ReqSyncOp(syncReqId) => ReqSync(s, s', syncReqId)
-      case CompleteSyncOp(syncReqId) => (exists requestedAt :: CompleteSync(s, s', syncReqId, requestedAt))
-      case NoopOp => s' == s
+      case OperateOp(baseOp) => Operate(v, v', baseOp)
+      case CrashOp => Crash(v, v')
+      case SpontaneousCommitOp => SpontaneousCommit(v, v')
+      case ReqSyncOp(syncReqId) => ReqSync(v, v', syncReqId)
+      case CompleteSyncOp(syncReqId) => CompleteSync(v, v', syncReqId)
+      case NoopOp => v' == v
     }
   }
 
-  predicate Next(s: Variables, s': Variables, uiop: UIOp)
+  predicate Next(v: Variables, v': Variables, uiop: UIOp)
   {
-    exists uiop :: NextStep(s, s', uiop)
+    exists uiop :: NextStep(v, v', uiop)
   }
 }
 

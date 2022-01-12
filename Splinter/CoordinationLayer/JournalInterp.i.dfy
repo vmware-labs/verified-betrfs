@@ -8,8 +8,10 @@ module JournalInterpTypeMod {
   import CrashTolerantMapSpecMod
   import opened MsgHistoryMod
 
-  type SyncReqs = map<CrashTolerantMapSpecMod.SyncReqId, LSN>
+  import Async = CrashTolerantMapSpecMod.async
 
+  type SyncReqs = map<CrashTolerantMapSpecMod.SyncReqId, LSN>
+  
   function BeheadSyncReqs(sr: SyncReqs, lsn: LSN) : SyncReqs
   {
     map k | k in sr && lsn <= sr[k] :: sr[k]
@@ -20,7 +22,11 @@ module JournalInterpTypeMod {
     map k | k in sr && sr[k] < lsn :: sr[k]
   }
 
-  datatype Variables = Variables(msgSeq: MsgSeq, syncReqs: SyncReqs)
+  datatype Variables = Variables(
+    msgSeq: MsgSeq,
+    reqProgress: Async.EphemeralState,
+    syncReqs: SyncReqs)
+
   {
     predicate WF() {
       && msgSeq.WF()
@@ -53,8 +59,7 @@ module JournalInterpTypeMod {
     {
       // TODO No accounting for v.syncReqs < boundaryLSN; hrmm.
       var mapspec := MapSpecMod.Variables(msgSeq.Truncate(lsn).ApplyToInterp(base));
-      var asyncmapspec := CrashTolerantMapSpecMod.async.Variables(mapspec, {}, {}); // TODO um, no reqs & replies!?
-      CrashTolerantMapSpecMod.Version(asyncmapspec, SyncReqsAt(lsn))
+      CrashTolerantMapSpecMod.Version(Async.PersistentState(mapspec))
     }
 
     function VersionsFromBase(base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
@@ -69,26 +74,29 @@ module JournalInterpTypeMod {
       requires WF()
       requires CanFollow(base.seqEnd)
     {
-      CrashTolerantMapSpecMod.Variables(VersionsFromBase(base), 0)  // 0 is always the stable idx; why do we allow others in spec?
+      // TODO suspicious that 0 is always the stable idx; that can't survive
+      // journal truncation.
+      CrashTolerantMapSpecMod.Variables(
+        VersionsFromBase(base), reqProgress, syncReqs, 0)
     }
 
     function Behead(lsn: LSN) : Variables
       requires WF()
       requires CanPruneTo(lsn)
     {
-      Variables(msgSeq.Behead(lsn), BeheadSyncReqs(syncReqs, lsn))
+      Variables(msgSeq.Behead(lsn), reqProgress, BeheadSyncReqs(syncReqs, lsn))
     }
 
     function Truncate(lsn: LSN) : Variables
       requires WF()
       requires CanPruneTo(lsn)
     {
-      Variables(msgSeq.Truncate(lsn), TruncateSyncReqs(syncReqs, lsn))
+      Variables(msgSeq.Truncate(lsn), reqProgress, TruncateSyncReqs(syncReqs, lsn))
     }
 
-    function DropSyncReqs() : Variables
+    function DropEphemeral() : Variables
     {
-      Variables(msgSeq, map[])
+      Variables(msgSeq, Async.InitEphemeralState(), map[])
     }
   }
 
@@ -108,6 +116,6 @@ module JournalInterpTypeMod {
 
   function Mkfs() : Variables
   {
-    Variables(MsgHistoryMod.Empty(), map[])
+    Variables(MsgHistoryMod.Empty(), Async.InitEphemeralState(), map[])
   }
 } // module

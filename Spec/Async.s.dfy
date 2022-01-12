@@ -5,30 +5,42 @@ module AsyncMod(atomic: AtomicStateMachineMod) {
   datatype Request = Request(input: atomic.Input, id: ID)
   datatype Reply = Reply(output: atomic.Output, id: ID)
 
-  datatype Variables = Variables(mapv: atomic.Variables, requests: set<Request>, replies: set<Reply>)
+  datatype PersistentState = PersistentState(appv: atomic.Variables)
 
-  function InitState() : Variables {
-    Variables(atomic.InitState(), {}, {})
+  // This "extra state" is carried around separately by the outer state machine
+  // (CrashTolerant<>) because it disappears on Crash. (You could also imagine
+  // carrying it inside the Variables and deleting it, but that's ugly in a
+  // different way).
+  datatype EphemeralState = EphemeralState(requests: set<Request>, replies: set<Reply>)
+
+  datatype Variables = Variables(persistent: PersistentState, ephemeral: EphemeralState)
+
+  function InitPersistentState() : PersistentState {
+    PersistentState(atomic.InitState())
+  }
+
+  function InitEphemeralState() : EphemeralState {
+    EphemeralState({}, {})
   }
 
   predicate DoRequest(v: Variables, v': Variables, req: Request) {
     // TODO Probably should disallow ID conflicts
-    && v' == v.(requests := v.requests + {req})
+    && v' == v.(ephemeral := v.ephemeral.(requests := v.ephemeral.requests + {req}))
   }
 
   // The serialization point for this request
   predicate DoExecute(v: Variables, v': Variables, req: Request, reply: Reply) {
     && reply.id == req.id
-    && req in v.requests
-    && atomic.Next(v.mapv, v'.mapv, req.input, reply.output)
-    && v'.requests == v.requests - {req}
-    && v'.replies == v.replies + {reply}
+    && req in v.ephemeral.requests
+    && atomic.Next(v.persistent.appv, v'.persistent.appv, req.input, reply.output)
+    && v'.ephemeral.requests == v.ephemeral.requests - {req}
+    && v'.ephemeral.replies == v.ephemeral.replies + {reply}
   }
 
   predicate DoReply(v: Variables, v': Variables, reply: Reply)
   {
-    && reply in v.replies
-    && v' == v.(replies := v.replies - {reply})
+    && reply in v.ephemeral.replies
+    && v' == v.(ephemeral := v.ephemeral.(replies := v.ephemeral.replies - {reply}))
   }
 
   datatype UIOp =

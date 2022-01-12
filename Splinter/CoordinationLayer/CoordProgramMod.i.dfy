@@ -146,6 +146,10 @@ module CoordProgramMod {
     && uiop.OperateOp?
     && uiop.baseOp.ExecuteOp?
     && uiop.baseOp.req.input.GetInput? // ensures that the uiop translates to a Get op
+    // TODO Now that we've fixed spec, reqProgress, syncReqs should float out of
+    // Journal up into Program.
+    && uiop.baseOp.req in v.ephemeral.journal.reqProgress.requests
+    && uiop.baseOp.reply.id == uiop.baseOp.req.id
     && MapIsFresh(v)
     && val == v.ephemeral.mapadt.mi[key].value
     && v' == v  // TODO update new reqs/resps fields to record retirement of uiop
@@ -156,6 +160,7 @@ module CoordProgramMod {
     && uiop.OperateOp?
     && uiop.baseOp.ExecuteOp?
     && uiop.baseOp.req.input.PutInput? // ensures that the uiop translates to a put op
+    && uiop.baseOp.reply.id == uiop.baseOp.req.id
  
     && var key := uiop.baseOp.req.input.k;
     && var val := uiop.baseOp.req.input.v;
@@ -234,7 +239,7 @@ module CoordProgramMod {
       var frozenJournal := v.ephemeral.journal
         .Truncate(v.ephemeral.frozenJournalLSN)
         .Behead(v.ephemeral.frozenMap.value.seqEnd)
-        .DropSyncReqs();
+        .DropEphemeral();
       Superblock(frozenJournal, v.ephemeral.frozenMap.value)
   }
 
