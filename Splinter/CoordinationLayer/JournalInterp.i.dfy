@@ -8,7 +8,14 @@ module JournalInterpTypeMod {
   import CrashTolerantMapSpecMod
   import opened MsgHistoryMod
 
-  datatype Variables = Variables(msgSeq: MsgSeq, syncReqs: map<CrashTolerantMapSpecMod.SyncReqId, LSN>)
+  type SyncReqs = map<CrashTolerantMapSpecMod.SyncReqId, LSN>
+
+  function BeheadSyncReqs(sr: SyncReqs, lsn: LSN) : SyncReqs
+  {
+    map k | k in sr && lsn <= sr[k] :: sr[k]
+  }
+
+  datatype Variables = Variables(msgSeq: MsgSeq, syncReqs: SyncReqs)
   {
     predicate WF() {
       && msgSeq.WF()
@@ -19,11 +26,24 @@ module JournalInterpTypeMod {
     {
       set id | id in syncReqs && syncReqs[id] == lsn
     }
+
+    predicate CanFollow(lsn: LSN)
+    {
+      || msgSeq.IsEmpty()
+      || msgSeq.seqStart == lsn
+    }
+
+    // NB CanBehead includes one more LSN than Contains, because you can behead
+    // all the way to seqEnd (and get an empty).
+    predicate CanBeheadTo(lsn: LSN)
+    {
+      msgSeq.seqStart <= lsn <= msgSeq.seqEnd
+    }
     
     function VersionFor(base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
       requires WF()
-      requires base.seqEnd == msgSeq.seqStart
-      requires msgSeq.seqStart <= lsn <= msgSeq.seqEnd
+      requires CanFollow(base.seqEnd)
+      requires CanBeheadTo(lsn)
     {
       // TODO No accounting for v.syncReqs < boundaryLSN; hrmm.
       var mapspec := MapSpecMod.Variables(msgSeq.Truncate(lsn).ApplyToInterp(base));
@@ -33,7 +53,7 @@ module JournalInterpTypeMod {
 
     function VersionsFromBase(base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
       requires WF()
-      requires base.seqEnd == msgSeq.seqStart
+      requires CanFollow(base.seqEnd)
     {
       var numVersions := msgSeq.Len()+1;  // Can apply zero to Len() messages.
       seq(msgSeq.Len()+1, i requires 0 <= i < numVersions => VersionFor(base, i + msgSeq.seqStart))
@@ -41,9 +61,16 @@ module JournalInterpTypeMod {
 
     function AsCrashTolerantMapSpec(base: InterpMod.Interp) : CrashTolerantMapSpecMod.Variables
       requires WF()
-      requires base.seqEnd == msgSeq.seqStart
+      requires CanFollow(base.seqEnd)
     {
       CrashTolerantMapSpecMod.Variables(VersionsFromBase(base), 0)  // 0 is always the stable idx; why do we allow others in spec?
+    }
+
+    function Behead(lsn: LSN) : Variables
+      requires WF()
+      requires CanBeheadTo(lsn)
+    {
+      Variables(msgSeq.Behead(lsn), BeheadSyncReqs(syncReqs, lsn))
     }
   }
 

@@ -20,6 +20,10 @@ module CoordProgramMod {
   type Journal = JournalInterpTypeMod.Variables
   type MapAdt = InterpMod.Interp
 
+  function MapAdtMkfs() : MapAdt {
+    InterpMod.Empty()
+  }
+
   // Persistent state of disk
   datatype Superblock = Superblock(
     journal: Journal,
@@ -28,27 +32,34 @@ module CoordProgramMod {
     predicate WF()
     {
       && journal.WF()
+      // No point even assembling a superblock that doesn't have its journal adjacent to its map.
+      && journal.CanFollow(mapadt.seqEnd)
+
     }
   }
 
-  datatype Phase = SuperblockUnknown | ReplayingJournal | Running
-
-  function MapAdtMkfs() : MapAdt {
-    InterpMod.Empty()
+  // In-memory state. It may be unknown if we've just booted and haven't
+  // read anything off the disk.
+  datatype Ephemeral =
+    | Unknown
+    | Known(journal: Journal, mapadt: MapAdt)
+  {
+    predicate WF()
+    {
+      Known? ==> journal.WF()
+    }
   }
 
   datatype Variables = Variables(
-    phase: Phase,
-    stableSuperblock: Superblock,
-    journal: Journal,
-    mapadt: MapAdt,
+    persistentSuperblock: Superblock,
+    ephemeral: Ephemeral,
     inFlightSuperblock: Option<Superblock>
     )
   {
     predicate WF()
     {
-      && stableSuperblock.WF()
-      && (!phase.SuperblockUnknown? ==> journal.WF())
+      && persistentSuperblock.WF()
+      && (ephemeral.Known? ==> ephemeral.WF())
       && (inFlightSuperblock.Some? ==> inFlightSuperblock.value.WF())
     }
 
@@ -56,11 +67,10 @@ module CoordProgramMod {
     // an empty K-V store?
     predicate Mkfs()
     {
-      && phase == SuperblockUnknown
-      && stableSuperblock == Superblock(
+      && persistentSuperblock == Superblock(
         JournalInterpTypeMod.Mkfs(),
         MapAdtMkfs())
-      // Don't care about journal, mapadt
+      && ephemeral.Unknown?
       && inFlightSuperblock.None?
     }
 
@@ -74,41 +84,40 @@ module CoordProgramMod {
     v.Mkfs()
   }
 
-  // Now we know what the disk superblock says, and we can initialize the Journal, Tree Variables.
-  // They'll still not be ready to go, so they'll probably defer Interpretation to the disk,
-  // but *we* don't have to know that.
-  predicate LearnSuperblock(v: Variables, v': Variables)
+  // Learn what the persistent state is, so we 
+  // (In the next layer down, we don't bring *all* the persistent state into
+  // ephemeral RAM, but the proof can still refine by filling the details from
+  // the disk state.)
+  predicate LoadEphemeralState(v: Variables, v': Variables, uiop : UIOp)
   {
-    // not sure what this means yet.
-    false
+    && uiop.NoopOp?
+    && v.ephemeral.Unknown?
+    && v' == v.(ephemeral := Known(v.persistentSuperblock.journal, v.persistentSuperblock.mapadt))
   }
 
-  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq)
+  predicate MapIsFresh(v: Variables)
   {
     && v.WF()
+    && v.ephemeral.Known?
+    && v.ephemeral.mapadt.seqEnd == v.ephemeral.journal.msgSeq.seqEnd
+  }
+
+  // Move some journal state into the map to make it (closer to) fresh
+  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq)
+  {
+    && uiop.NoopOp?
+    && v.WF()
+    && v.ephemeral.Known?
+    && !MapIsFresh(v)
     && v'.WF()
-    && v.phase.ReplayingJournal?
+
     && puts.WF()
-    && puts.seqStart == v.mapadt.seqEnd
-    && v.journal.msgSeq.IncludesSubseq(puts)
+    && puts.seqStart == v.ephemeral.mapadt.seqEnd
+    && v.ephemeral.journal.msgSeq.IncludesSubseq(puts)
 
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
-    && v' == v.(mapadt := MsgHistoryMod.Concat(v.mapadt, puts))
-  }
-
-  // Once we've brought the tree up-to-date with respect to the journal,
-  // we can enter normal operations.
-  // Interpretation goes to the Tree's variables. (It could point to the
-  // Journal, too, since their ephemeral views are kept synchronized -- but if
-  // we ever want to support a mode where we abandon the Journal during long
-  // periods of no sync requests, we need to use the Tree.)
-  predicate CompleteRecovery(v: Variables, v': Variables)
-  {
-    && v.phase.ReplayingJournal?
-    && v.mapadt.seqEnd == v.journal.msgSeq.seqStart
-
-    && v' == v.(phase := Running)
+    && v' == v.(ephemeral := v.ephemeral.(mapadt := MsgHistoryMod.Concat(v.ephemeral.mapadt, puts)))
   }
 
   predicate Query(v: Variables, v': Variables, uiop : UIOp, key: Key, val: Value)
@@ -116,33 +125,36 @@ module CoordProgramMod {
     && uiop.OperateOp?
     && uiop.baseOp.ExecuteOp?
     && uiop.baseOp.req.input.GetInput? // ensures that the uiop translates to a Get op
-    && v.phase.Running?
-    && v.WF()
-    && val == v.mapadt.mi[key].value
+    && MapIsFresh(v)
+    && val == v.ephemeral.mapadt.mi[key].value
     && v' == v  // TODO update new reqs/resps fields to record retirement of uiop
   }
-
-  // No analog to cacheop, I think.
 
   predicate Put(v: Variables, v': Variables, uiop : UIOp)
   {
     && uiop.OperateOp?
     && uiop.baseOp.ExecuteOp?
     && uiop.baseOp.req.input.PutInput? // ensures that the uiop translates to a put op
+ 
     && var key := uiop.baseOp.req.input.k;
     && var val := uiop.baseOp.req.input.v;
-    // This is an invariant, but we're not allowed to even express this step
-    // without so constraining it.
-    && v.journal.msgSeq.seqEnd == v.mapadt.seqEnd
-    && var singleton :=
-        MsgHistoryMod.Singleton(v.mapadt.seqEnd, KeyedMessage(key, Define(val)));
 
-    && v.phase.Running?
+    // Here we're not allowing puts until MapIsFresh, and then maintaining that
+    // invariant. We could alternately allow puts to run ahead, and then just
+    // let Queries be delayed until Recover catches up the mapadt.
+    // I'm modeling it this way because this matches the phase-driven behavior
+    // (recover, then be done recovering until next crash) we expect the real
+    // implementation to maintain.
+    && MapIsFresh(v)
+
+    && var singleton :=
+        MsgHistoryMod.Singleton(v.ephemeral.mapadt.seqEnd, KeyedMessage(key, Define(val)));
+
     && v.WF()
-    && v' == v.(
-      journal := v.journal.(msgSeq := v.journal.msgSeq.Concat(singleton)),
-      mapadt := MsgHistoryMod.Concat(v.mapadt, singleton)
-      )
+    && v' == v.(ephemeral := Known(
+      v.ephemeral.journal.(msgSeq := v.ephemeral.journal.msgSeq.Concat(singleton)),
+      MsgHistoryMod.Concat(v.ephemeral.mapadt, singleton)
+      ))
   }
 
   // TODO Inteprereted data model doesn't leave much room to model Journal
@@ -150,7 +162,7 @@ module CoordProgramMod {
   // Should we capture that here, maybe with a "secret" field of the mapadt,
   // representing its internal representation, that can change but the mapadt
   // interp stays unchanged?
-  // One bit of mapadt internal state might be the frozen interp.
+  // One bit of mapadt internal state might be the frozen interp. YEAH THAT
   // One bit of journal internal state might be the how much is known to be clean.
 
   // predicate JournalInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: JournalMachineMod.Skolem)
@@ -159,45 +171,65 @@ module CoordProgramMod {
   predicate ReqSync(v: Variables, v': Variables, uiop : UIOp, syncReqId: SyncReqId)
   {
     && uiop == ReqSyncOp(syncReqId)
-    && v.phase.Running?
-    && v.WF()
-    && JournalInterpTypeMod.ReqSync(v.journal, v'.journal, syncReqId)
-    && v' == v.(journal := v'.journal)  // unchanged except journal changes as specified above
+    && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
+    && v'.ephemeral.Known?
+    && JournalInterpTypeMod.ReqSync(v.ephemeral.journal, v'.ephemeral.journal, syncReqId)
+    && v' == v.(ephemeral := v.ephemeral.(journal := v'.ephemeral.journal))  // unchanged except journal changes as specified above
   }
 
   predicate CompleteSync(v: Variables, v': Variables, uiop : UIOp, syncReqId: SyncReqId)
   {
     && uiop == CompleteSyncOp(syncReqId)
-    && v.phase.Running?
-    && v.WF()
-    && JournalInterpTypeMod.CompleteSync(v.journal, v'.journal, syncReqId)
-    && v' == v.(journal := v'.journal)  // unchanged except journal changes as specified above
+    && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
+    && v'.ephemeral.Known?
+    && JournalInterpTypeMod.CompleteSync(v.ephemeral.journal, v'.ephemeral.journal, syncReqId)
+    && v' == v.(ephemeral := v.ephemeral.(journal := v'.ephemeral.journal))  // unchanged except journal changes as specified above
+  }
+
+  function PersistentSB(v: Variables) : Superblock
+    requires MapIsFresh(v)
+  {
+    Superblock(
+      v.ephemeral.journal.Behead(v.ephemeral.mapadt.seqEnd),
+      v.ephemeral.mapadt) // TODO change this to use frozen
+      // TODO should also forget IO retirement receipts and syncreqs.
   }
 
   predicate CommitStart(v: Variables, v': Variables, uiop : UIOp, seqBoundary: LSN)
   {
     && uiop.NoopOp?
-    && v.phase.Running?
+    && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && v.inFlightSuperblock.None?
     && v'.inFlightSuperblock.Some?
-    && var sb := Superblock(v.journal, v.mapadt);
-    && v' == v.(inFlightSuperblock := Some(sb))
+    && v' == v.(inFlightSuperblock := Some(PersistentSB(v)))
   }
 
   predicate CommitComplete(v: Variables, v': Variables, uiop : UIOp)
   {
     && uiop.NoopOp?
-    && v.phase.Running?
+    && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && v.inFlightSuperblock.Some?
 
     && var sb := v.inFlightSuperblock.value;
+
+    // Now that the disk journal is updated, we need to behead the
+    // ephemeral journal, since interpretation want to CanFollow it
+    // onto the persistent mapadt.
+    && var j := v.ephemeral.journal;
+    && var j' :=
+      if j.CanBeheadTo(sb.mapadt.seqEnd)
+      then j.Behead(sb.mapadt.seqEnd)
+      else j;    // Case never occurs, but need Inv to prove so.
+
     && v' == v.(
-        stableSuperblock := sb,
+        persistentSuperblock := sb,
+        ephemeral := v.ephemeral.(journal := j'),
         // Update journal, mapadt here if modeling clean, frozen
         inFlightSuperblock := None)
   }
 
   datatype Step =
+    | LoadEphemeralStateStep()
     | RecoverStep(puts:MsgSeq)
     | QueryStep(key: Key, val: Value)
     | PutStep()
@@ -209,7 +241,8 @@ module CoordProgramMod {
     | CommitCompleteStep()
 
   predicate NextStep(v: Variables, v': Variables, uiop : UIOp, step: Step) {
-    && match step {
+    match step {
+      case LoadEphemeralStateStep() => LoadEphemeralState(v, v', uiop)
       case RecoverStep(puts) => Recover(v, v', uiop, puts)
       case QueryStep(key, val) => Query(v, v', uiop, key, val)
       case PutStep() => Put(v, v', uiop)
