@@ -1,15 +1,16 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "JournalInterp.i.dfy"
+include "../../Spec/MapSpec.s.dfy"
 include "../../Spec/Interp.s.dfy"
 include "../../lib/Base/KeyType.s.dfy"
+include "../../lib/Base/MapRemove.s.dfy"
+include "../MsgHistory.i.dfy"
 
 module CoordProgramMod {
   import opened Options
   import opened MapRemove_s
   import InterpMod
-  import JournalInterpTypeMod
   import opened CrashTolerantMapSpecMod
   import opened MsgHistoryMod
   import opened KeyType
@@ -18,8 +19,13 @@ module CoordProgramMod {
   import Async = CrashTolerantMapSpecMod.async
 
   type UIOp = CrashTolerantMapSpecMod.UIOp
-  type Journal = JournalInterpTypeMod.Variables
+  type Journal = MsgSeq
   type MapAdt = InterpMod.Interp
+
+  function JournalMkfs() : Journal
+  {
+    MsgHistoryMod.Empty()
+  }
 
   function MapAdtMkfs() : MapAdt {
     InterpMod.Empty()
@@ -41,13 +47,13 @@ module CoordProgramMod {
     predicate ContainsLSN(lsn: LSN)
     {
       || lsn <= mapadt.seqEnd
-      || journal.msgSeq.Contains(lsn)
+      || journal.Contains(lsn)
     }
   }
 
   function MkfsSuperblock() : Superblock
   {
-    Superblock(JournalInterpTypeMod.Mkfs(), MapAdtMkfs())
+    Superblock(JournalMkfs(), MapAdtMkfs())
   }
 
   type SyncReqs = map<CrashTolerantMapSpecMod.SyncReqId, LSN>
@@ -127,7 +133,7 @@ module CoordProgramMod {
       Async.InitEphemeralState(),
       map[],  // syncReqs
       v.persistentSuperblock.journal,
-      v.persistentSuperblock.journal.msgSeq.seqEnd, // this journal is frozen.
+      v.persistentSuperblock.journal.seqEnd, // this journal is frozen.
       v.persistentSuperblock.mapadt,
       None
       ))
@@ -139,7 +145,7 @@ module CoordProgramMod {
   {
     && v.WF()
     && v.ephemeral.Known?
-    && v.ephemeral.mapadt.seqEnd == v.ephemeral.journal.msgSeq.seqEnd
+    && v.ephemeral.mapadt.seqEnd == v.ephemeral.journal.seqEnd
   }
 
   function NextLSN(v: Variables) : LSN
@@ -159,7 +165,7 @@ module CoordProgramMod {
 
     && puts.WF()
     && puts.seqStart == v.ephemeral.mapadt.seqEnd
-    && v.ephemeral.journal.msgSeq.IncludesSubseq(puts)
+    && v.ephemeral.journal.IncludesSubseq(puts)
 
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
@@ -280,7 +286,7 @@ module CoordProgramMod {
     && v.WF()
     && v.ephemeral.Known?
     // Freezin' only goes forward.
-    && v.ephemeral.frozenJournalLSN < newFrozenLSN <= v.ephemeral.journal.msgSeq.seqEnd
+    && v.ephemeral.frozenJournalLSN < newFrozenLSN <= v.ephemeral.journal.seqEnd
     && v' == v.(ephemeral := v.ephemeral.(frozenJournalLSN := newFrozenLSN))
   }
 
@@ -301,7 +307,7 @@ module CoordProgramMod {
     && v.WF()
     && v.ephemeral.Known?
     // Have to go forwards in LSN time
-    && v.ephemeral.mapadt.seqEnd < BestFrozenState(v).journal.msgSeq.seqEnd
+    && v.ephemeral.mapadt.seqEnd < BestFrozenState(v).journal.seqEnd
     && v.inFlightSuperblock.None?
     && v'.inFlightSuperblock.Some?
     && v' == v.(inFlightSuperblock := Some(BestFrozenState(v)))

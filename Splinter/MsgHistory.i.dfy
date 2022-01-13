@@ -138,9 +138,17 @@ module MsgHistoryMod {
       ApplyToKeyMapRecursive(orig, Len())
     }
 
+    predicate CanPruneTo(lsn: LSN)
+    {
+      // NB Pruning allows one more LSN than Contains, because you can
+      // PruneHead all the way to seqEnd (and get an empty) (or PruneTail all
+      // the way to seqStart).
+      seqStart <= lsn <= seqEnd
+    }
+
     // Returns every message in this after and including lsn
     function PruneHead(lsn: LSN) : (r: MsgSeq)
-      requires seqStart <= lsn <= seqEnd
+      requires CanPruneTo(lsn)
       requires WF()
       ensures r.WF()
     {
@@ -154,7 +162,7 @@ module MsgHistoryMod {
 
     // Returns every message in this up to but not including lsn.
     function PruneTail(lsn: LSN) : (r: MsgSeq)
-      requires seqStart <= lsn <= seqEnd
+      requires CanPruneTo(lsn)
       requires WF()
       ensures r.WF()
     {

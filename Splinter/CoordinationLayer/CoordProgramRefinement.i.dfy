@@ -15,14 +15,31 @@ module CoordProgramRefinement {
 
   import Async = CrashTolerantMapSpecMod.async
 
+  function InterpsFromBase(base: InterpMod.Interp, journal: Journal) : seq<InterpMod.Interp>
+    requires journal.WF()
+    requires journal.CanFollow(base.seqEnd)
+  {
+    var numVersions := journal.Len()+1;  // Can apply zero to Len() messages.
+    seq(numVersions, i requires 0 <= i < numVersions =>
+      journal.PruneTail(i + journal.seqStart).ApplyToInterp(base))
+  }
+
+  function VersionsFromBase(base: InterpMod.Interp, journal: Journal) : seq<CrashTolerantMapSpecMod.Version>
+    requires journal.WF()
+    requires journal.CanFollow(base.seqEnd)
+  {
+    var numVersions := journal.Len()+1;
+    seq(numVersions, i requires 0 <= i < numVersions => 
+      var interp := InterpsFromBase(base, journal)[i];
+      CrashTolerantMapSpecMod.Version(Async.PersistentState(MapSpecMod.Variables(interp))))
+  }
+
   // Stitch together a base map, a journal, and the specified ephemeral request state.
   function IStitch(base: MapAdt, journal: Journal, progress: Async.EphemeralState, syncReqs: SyncReqs) : CrashTolerantMapSpecMod.Variables
     requires journal.WF()
     requires journal.CanFollow(base.seqEnd)
   {
-    // TODO suspicious that 0 is always the stable idx; that can't survive
-    // journal truncation.
-    CrashTolerantMapSpecMod.Variables(journal.VersionsFromBase(base), progress, syncReqs, 0)
+    CrashTolerantMapSpecMod.Variables(VersionsFromBase(base, journal), progress, syncReqs, 0)
   }
 
   function I(v: CoordProgramMod.Variables) : CrashTolerantMapSpecMod.Variables
@@ -40,7 +57,7 @@ module CoordProgramRefinement {
     // We need this extra condition to ensure that, when the ephemeral journal
     // is empty, the ephemeral map indeed matches the disk -- otherwise we won't
     // assign the right lsn to new puts.
-    && (v.ephemeral.Known? && v.ephemeral.journal.msgSeq.IsEmpty() ==>
+    && (v.ephemeral.Known? && v.ephemeral.journal.IsEmpty() ==>
         v.ephemeral.mapadt.seqEnd == v.persistentSuperblock.mapadt.seqEnd
       )
   }
@@ -147,96 +164,96 @@ module CoordProgramRefinement {
 //        assert |s1| == |s2|;
 
         // Rob-style SuperTrigger for some sequence rearrangement identity:
-        assert forall i | 0<=i<|DropLast(j'.VersionsFromBase(base'))| ::
-          var seqStart := j'.msgSeq.seqStart;
-          j'.PruneTail(NextLSN(v)).PruneTail(i + seqStart) == j'.PruneTail(i + seqStart);
-
-//        forall i | 0<=i<|s1| ensures s1[i]==s2[i] {
-////          var seqStart := j'.msgSeq.seqStart;
-////          assert seqStart == j'.PruneTail(NextLSN(v)).msgSeq.seqStart;
-////          calc {
-////            j'.PruneTail(NextLSN(v)).PruneTail(i + seqStart);
-////            j'.PruneTail(i + seqStart);
-////          }
+//        assert forall i | 0<=i<|DropLast(j'.VersionsFromBase(base'))| ::
+//          var seqStart := j'.msgSeq.seqStart;
+//          j'.PruneTail(NextLSN(v)).PruneTail(i + seqStart) == j'.PruneTail(i + seqStart);
+//
+////        forall i | 0<=i<|s1| ensures s1[i]==s2[i] {
+//////          var seqStart := j'.msgSeq.seqStart;
+//////          assert seqStart == j'.PruneTail(NextLSN(v)).msgSeq.seqStart;
+//////          calc {
+//////            j'.PruneTail(NextLSN(v)).PruneTail(i + seqStart);
+//////            j'.PruneTail(i + seqStart);
+//////          }
+////        }
+////        calc {
+////          v'.ephemeral.journal.PruneTail(NextLSN(v)).VersionsFromBase(v'.persistentSuperblock.mapadt);
+////          DropLast(v'.ephemeral.journal.VersionsFromBase(v'.persistentSuperblock.mapadt));
+////        }
+//        assert v.ephemeral.journal == v'.ephemeral.journal.PruneTail(NextLSN(v));
+////        calc {
+////          I(v).versions;
+////          v.ephemeral.journal.VersionsFromBase(v.persistentSuperblock.mapadt);
+////          v.ephemeral.journal.VersionsFromBase(v'.persistentSuperblock.mapadt);
+////            { assert v.ephemeral.journal == v'.ephemeral.journal.PruneTail(NextLSN(v)); }
+////          v'.ephemeral.journal.PruneTail(NextLSN(v)).VersionsFromBase(v'.persistentSuperblock.mapadt);
+////          DropLast(v'.ephemeral.journal.VersionsFromBase(v'.persistentSuperblock.mapadt));
+////          DropLast(I(v').versions);
+////        }
+//        var key := uiop.baseOp.req.input.k;
+//        var val := uiop.baseOp.req.input.v;
+//        var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
+//        assert CrashTolerantMapSpecMod.OptionallyAppendVersion(I(v), I(v'));
+//
+//        assert j.PruneTail(j.msgSeq.seqEnd).msgSeq == j'.PruneTail(j.msgSeq.seqEnd).msgSeq; // seq assembly trigger
+//        assert j'.PruneTail(j'.msgSeq.seqEnd) == j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton);  // seq assembly trigger
+//        var outerbase := JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp;
+//        var outer := outerbase.Put(key, Define(val));
+//        var inner := JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton)).asyncState.appv.interp;
+//
+//        assert j'.PruneTail(j.msgSeq.seqEnd).msgSeq.seqEnd == j.msgSeq.seqEnd;
+//        assert JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.seqEnd
+//          == j.msgSeq.seqEnd;
+//        assert inner.seqEnd
+//          == j.msgSeq.seqEnd + 1;
+//        assert j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton).msgSeq.seqEnd == j.msgSeq.seqEnd + 1;
+//        assert inner.seqEnd == j.msgSeq.seqEnd + 1;
+//
+//        assert outer.seqEnd == inner.seqEnd;
+//
+//        forall k
+//          ensures outer.mi[k] == inner.mi[k]
+//        {
+//
+//          assert InterpMod.AnyKey(k); // trigger
+//          if k == key {
+////            assert outer.mi[k] == Define(val);
+//            assert inner == JournalInterpTypeMod.VersionFor(base', j.Concat(singleton)).asyncState.appv.interp;
+////            calc {
+////              inner.mi[k];
+////              j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton).msgSeq.ApplyToInterp(base').mi[k];
+////              {
+////                var oldMessage := j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton).msgSeq.ApplyToInterpRecursive(base', )
+////              }
+////              Merge(oldMessage, newMessage);
+////            }
+//            assert Define(val) == inner.mi[k];
+//          } else {
+////            assert outer.mi[k] == outerbase.mi[k];
+//            assert outerbase.mi[k] == inner.mi[k];
+//          }
 //        }
 //        calc {
-//          v'.ephemeral.journal.PruneTail(NextLSN(v)).VersionsFromBase(v'.persistentSuperblock.mapadt);
-//          DropLast(v'.ephemeral.journal.VersionsFromBase(v'.persistentSuperblock.mapadt));
-//        }
-        assert v.ephemeral.journal == v'.ephemeral.journal.PruneTail(NextLSN(v));
-//        calc {
-//          I(v).versions;
-//          v.ephemeral.journal.VersionsFromBase(v.persistentSuperblock.mapadt);
-//          v.ephemeral.journal.VersionsFromBase(v'.persistentSuperblock.mapadt);
-//            { assert v.ephemeral.journal == v'.ephemeral.journal.PruneTail(NextLSN(v)); }
-//          v'.ephemeral.journal.PruneTail(NextLSN(v)).VersionsFromBase(v'.persistentSuperblock.mapadt);
-//          DropLast(v'.ephemeral.journal.VersionsFromBase(v'.persistentSuperblock.mapadt));
-//          DropLast(I(v').versions);
-//        }
-        var key := uiop.baseOp.req.input.k;
-        var val := uiop.baseOp.req.input.v;
-        var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
-        assert CrashTolerantMapSpecMod.OptionallyAppendVersion(I(v), I(v'));
-
-        assert j.PruneTail(j.msgSeq.seqEnd).msgSeq == j'.PruneTail(j.msgSeq.seqEnd).msgSeq; // seq assembly trigger
-        assert j'.PruneTail(j'.msgSeq.seqEnd) == j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton);  // seq assembly trigger
-        var outerbase := JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp;
-        var outer := outerbase.Put(key, Define(val));
-        var inner := JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton)).asyncState.appv.interp;
-
-        assert j'.PruneTail(j.msgSeq.seqEnd).msgSeq.seqEnd == j.msgSeq.seqEnd;
-        assert JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.seqEnd
-          == j.msgSeq.seqEnd;
-        assert inner.seqEnd
-          == j.msgSeq.seqEnd + 1;
-        assert j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton).msgSeq.seqEnd == j.msgSeq.seqEnd + 1;
-        assert inner.seqEnd == j.msgSeq.seqEnd + 1;
-
-        assert outer.seqEnd == inner.seqEnd;
-
-        forall k
-          ensures outer.mi[k] == inner.mi[k]
-        {
-
-          assert InterpMod.AnyKey(k); // trigger
-          if k == key {
-//            assert outer.mi[k] == Define(val);
-            assert inner == JournalInterpTypeMod.VersionFor(base', j.Concat(singleton)).asyncState.appv.interp;
-            calc {
-              inner.mi[k];
-              j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton).msgSeq.ApplyToInterp(base').mi[k];
-              {
-                var oldMessage := j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton).msgSeq.ApplyToInterpRecursive(base', )
-              }
-              Merge(oldMessage, newMessage);
-            }
-            assert Define(val) == inner.mi[k];
-          } else {
-//            assert outer.mi[k] == outerbase.mi[k];
-            assert outerbase.mi[k] == inner.mi[k];
-          }
-        }
-        calc {
-          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
-            //here
-          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton)).asyncState.appv.interp;
-          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j'.msgSeq.seqEnd)).asyncState.appv.interp;
-        }
-        calc {
-          Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
-//          Last(j.VersionsFromBase(base)).asyncState.appv.interp.Put(key, Define(val));
-//          JournalInterpTypeMod.VersionFor(base, j.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
-//          JournalInterpTypeMod.VersionFor(base, j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
 //          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
+//            //here
+//          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton)).asyncState.appv.interp;
 //          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j'.msgSeq.seqEnd)).asyncState.appv.interp;
-//          Last(j'.VersionsFromBase(base')).asyncState.appv.interp;
-          Last(I(v').versions).asyncState.appv.interp;
-        }
-        assert Last(I(v').versions).asyncState.appv.interp == Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
-        assert MapSpecMod.Put(
-          Last(I(v).versions).asyncState.appv,
-          Last(I(v').versions).asyncState.appv,
-          key, val);
+//        }
+//        calc {
+//          Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
+////          Last(j.VersionsFromBase(base)).asyncState.appv.interp.Put(key, Define(val));
+////          JournalInterpTypeMod.VersionFor(base, j.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
+////          JournalInterpTypeMod.VersionFor(base, j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
+////          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
+////          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j'.msgSeq.seqEnd)).asyncState.appv.interp;
+////          Last(j'.VersionsFromBase(base')).asyncState.appv.interp;
+//          Last(I(v').versions).asyncState.appv.interp;
+//        }
+//        assert Last(I(v').versions).asyncState.appv.interp == Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
+//        assert MapSpecMod.Put(
+//          Last(I(v).versions).asyncState.appv,
+//          Last(I(v').versions).asyncState.appv,
+//          key, val);
 
         assume Async.DoExecute( // TODO darn it
           Async.Variables(Last(I(v).versions).asyncState, I(v).asyncEphemeral),
