@@ -159,6 +159,8 @@ module CoordProgramRefinement {
         var j' := v'.ephemeral.journal;
         var base := v.persistentSuperblock.mapadt;
         var base' := v'.persistentSuperblock.mapadt;
+        var key := uiop.baseOp.req.input.k;
+        var val := uiop.baseOp.req.input.v;
 //        var s1 := j'.PruneTail(NextLSN(v)).VersionsFromBase(base');
 //        var s2 := DropLast(j'.VersionsFromBase(base'));
 //        assert |s1| == |s2|;
@@ -190,8 +192,6 @@ module CoordProgramRefinement {
 ////          DropLast(v'.ephemeral.journal.VersionsFromBase(v'.persistentSuperblock.mapadt));
 ////          DropLast(I(v').versions);
 ////        }
-//        var key := uiop.baseOp.req.input.k;
-//        var val := uiop.baseOp.req.input.v;
 //        var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
 //        assert CrashTolerantMapSpecMod.OptionallyAppendVersion(I(v), I(v'));
 //
@@ -250,10 +250,10 @@ module CoordProgramRefinement {
 //          Last(I(v').versions).asyncState.appv.interp;
 //        }
 //        assert Last(I(v').versions).asyncState.appv.interp == Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
-//        assert MapSpecMod.Put(
-//          Last(I(v).versions).asyncState.appv,
-//          Last(I(v').versions).asyncState.appv,
-//          key, val);
+        assert MapSpecMod.Put(
+          Last(I(v).versions).asyncState.appv,
+          Last(I(v').versions).asyncState.appv,
+          key, val);
 
         assume Async.DoExecute( // TODO darn it
           Async.Variables(Last(I(v).versions).asyncState, I(v).asyncEphemeral),
