@@ -54,11 +54,21 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     Variables([Version(async.InitPersistentState())], async.InitEphemeralState(), map[], 0)
   }
 
+  // This isn't a transition, just a partial action for readibility.
+  predicate OptionallyAppendVersion(v: Variables, v': Variables)
+  {
+    // new versions list is either some new thing appended to the old one,
+    || (0<|v'.versions| && DropLast(v'.versions) == v.versions)
+    // or unchanged. We allow unchanged in the trusted spec so that
+    // implementations don't have to account for number of read-only (query) ops.
+    || v'.versions == v.versions
+  }
+
   predicate Operate(v: Variables, v': Variables, op: async.UIOp)
   {
     && v.WF()
     && v'.WF()
-    && DropLast(v'.versions) == v.versions  // Append a single version.
+    && OptionallyAppendVersion(v, v')
     && async.NextStep(
         async.Variables(Last(v.versions).asyncState, v.asyncEphemeral),
         async.Variables(Last(v'.versions).asyncState, v'.asyncEphemeral),
@@ -98,6 +108,10 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   }
 
   // sync api contract to the end user
+  // NB it's a very little bit funky. For all normal requests, three atomic
+  // actions occur: the request arrives, it's executed (serialized), the reply
+  // is delivered. For Syncs, we don't bother explicitly recording the serialization
+  // point; CompleteSync just gets enabled at some point before it occurs. Sorry?
   predicate ReqSync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
     && v.WF()
@@ -139,4 +153,3 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     exists uiop :: NextStep(v, v', uiop)
   }
 }
-

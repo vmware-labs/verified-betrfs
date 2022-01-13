@@ -8,58 +8,28 @@ module JournalInterpTypeMod {
   import CrashTolerantMapSpecMod
   import opened MsgHistoryMod
 
+  // TODO now that we've pulled all the ephemeral gunk out of here, any reason to keep this wrapper?
+  // Maybe we can strip this down to msgSeq in CoordProgramMod (just as base map is an Interp).
+
   import Async = CrashTolerantMapSpecMod.async
 
-  type SyncReqs = map<CrashTolerantMapSpecMod.SyncReqId, LSN>
-  
-  function BeheadSyncReqs(sr: SyncReqs, lsn: LSN) : SyncReqs
+  function VersionFor(base: InterpMod.Interp, v: Variables) : CrashTolerantMapSpecMod.Version
+    requires v.WF()
+    requires v.msgSeq.CanFollow(base.seqEnd)
   {
-    map k | k in sr && lsn <= sr[k] :: sr[k]
+    var mapspec := MapSpecMod.Variables(v.msgSeq.ApplyToInterp(base));
+    CrashTolerantMapSpecMod.Version(Async.PersistentState(mapspec))
   }
 
-  function TruncateSyncReqs(sr: SyncReqs, lsn: LSN) : SyncReqs
-  {
-    map k | k in sr && sr[k] < lsn :: sr[k]
-  }
-
-  datatype Variables = Variables(
-    msgSeq: MsgSeq,
-    reqProgress: Async.EphemeralState,
-    syncReqs: SyncReqs)
-
+  datatype Variables = Variables(msgSeq: MsgSeq)
   {
     predicate WF() {
       && msgSeq.WF()
     }
 
-    function SyncReqsAt(lsn: LSN) : set<CrashTolerantMapSpecMod.SyncReqId>
-      requires WF()
-    {
-      set id | id in syncReqs && syncReqs[id] == lsn
-    }
-
     predicate CanFollow(lsn: LSN)
     {
-      || msgSeq.IsEmpty()
-      || msgSeq.seqStart == lsn
-    }
-
-    // NB Pruning (Behead or Truncate) allows one more LSN than Contains,
-    // because you can Behead all the way to seqEnd (and get an empty)
-    // (or Truncate all the way to seqStart).
-    predicate CanPruneTo(lsn: LSN)
-    {
-      msgSeq.seqStart <= lsn <= msgSeq.seqEnd
-    }
-    
-    function VersionFor(base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
-      requires WF()
-      requires CanFollow(base.seqEnd)
-      requires CanPruneTo(lsn)
-    {
-      // TODO No accounting for v.syncReqs < boundaryLSN; hrmm.
-      var mapspec := MapSpecMod.Variables(msgSeq.Truncate(lsn).ApplyToInterp(base));
-      CrashTolerantMapSpecMod.Version(Async.PersistentState(mapspec))
+      msgSeq.CanFollow(lsn)
     }
 
     function VersionsFromBase(base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
@@ -67,55 +37,43 @@ module JournalInterpTypeMod {
       requires CanFollow(base.seqEnd)
     {
       var numVersions := msgSeq.Len()+1;  // Can apply zero to Len() messages.
-      seq(msgSeq.Len()+1, i requires 0 <= i < numVersions => VersionFor(base, i + msgSeq.seqStart))
+      seq(msgSeq.Len()+1, i requires 0 <= i < numVersions =>
+        VersionFor(base, PruneTail(i + msgSeq.seqStart)))
     }
 
-    function AsCrashTolerantMapSpec(base: InterpMod.Interp) : CrashTolerantMapSpecMod.Variables
-      requires WF()
-      requires CanFollow(base.seqEnd)
+    predicate CanPruneTo(lsn: LSN)
     {
-      // TODO suspicious that 0 is always the stable idx; that can't survive
-      // journal truncation.
-      CrashTolerantMapSpecMod.Variables(
-        VersionsFromBase(base), reqProgress, syncReqs, 0)
+      // NB Pruning allows one more LSN than Contains, because you can PruneHead
+      // all the way to seqEnd (and get an empty) (or PruneTail all the way to
+      // seqStart).
+      msgSeq.seqStart <= lsn <= msgSeq.seqEnd
     }
 
-    function Behead(lsn: LSN) : Variables
-      requires WF()
-      requires CanPruneTo(lsn)
-    {
-      Variables(msgSeq.Behead(lsn), reqProgress, BeheadSyncReqs(syncReqs, lsn))
-    }
-
-    function Truncate(lsn: LSN) : Variables
+    function PruneHead(lsn: LSN) : Variables
       requires WF()
       requires CanPruneTo(lsn)
     {
-      Variables(msgSeq.Truncate(lsn), reqProgress, TruncateSyncReqs(syncReqs, lsn))
+      Variables(msgSeq.PruneHead(lsn))
     }
 
-    function DropEphemeral() : Variables
+    function PruneTail(lsn: LSN) : Variables
+      requires WF()
+      requires CanPruneTo(lsn)
     {
-      Variables(msgSeq, Async.InitEphemeralState(), map[])
+      Variables(msgSeq.PruneTail(lsn))
     }
-  }
 
-  predicate ReqSync(v: Variables, v': Variables, syncReqId: CrashTolerantMapSpecMod.SyncReqId)
-  {
-    && 0 < v.msgSeq.seqEnd
-    && syncReqId !in v.syncReqs.Keys
-    && v' == v.(syncReqs := v.syncReqs[syncReqId := v.msgSeq.seqEnd-1])
-  }
-
-  predicate CompleteSync(v: Variables, v': Variables, syncReqId: CrashTolerantMapSpecMod.SyncReqId)
-  {
-    && syncReqId in v.syncReqs.Keys
-    //&& v.syncReqs[syncReqId] < v.persistentLSN  // TODO! hidden state for this model.
-    && v' == v.(syncReqs := MapRemove1(v.syncReqs, syncReqId))
+    function Concat(tail: MsgSeq) : Variables
+      requires WF()
+      requires tail.WF()
+      requires msgSeq.seqEnd == tail.seqStart
+    {
+      Variables(msgSeq.Concat(tail))
+    }
   }
 
   function Mkfs() : Variables
   {
-    Variables(MsgHistoryMod.Empty(), Async.InitEphemeralState(), map[])
+    Variables(MsgHistoryMod.Empty())
   }
 } // module

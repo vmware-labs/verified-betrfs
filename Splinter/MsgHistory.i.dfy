@@ -80,16 +80,24 @@ module MsgHistoryMod {
       // conditions on msgSeq bounds
     {
       if IsEmpty()
-      then other
+        then other
       else if other.IsEmpty()
       then this
       else
         MsgSeq( MapDisjointUnion(msgs, other.msgs), seqStart, other.seqEnd)
     }
 
+    predicate CanFollow(lsn: LSN)
+    {
+      || IsEmpty()
+      || seqStart == lsn
+    }
+
     function ApplyToInterpRecursive(orig: Interp, count: nat) : (out: Interp)
       requires WF()
       requires count <= Len()
+      requires CanFollow(orig.seqEnd)
+      ensures out.seqEnd == orig.seqEnd + count
     {
       if count==0
       then orig
@@ -100,11 +108,13 @@ module MsgHistoryMod {
         var newMessage := msgs[lsn].message;
 
         var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Merge(oldMessage, newMessage)];
-        InterpMod.RawInterp(mapp, lsn)
+        InterpMod.RawInterp(mapp, lsn + 1)
     }
 
-    function ApplyToInterp(orig: Interp) : Interp
+    function ApplyToInterp(orig: Interp) : (out: Interp)
       requires WF()
+      requires CanFollow(orig.seqEnd)
+      ensures out.seqEnd == orig.seqEnd + Len()
     {
       ApplyToInterpRecursive(orig, Len())
     }
@@ -129,7 +139,7 @@ module MsgHistoryMod {
     }
 
     // Returns every message in this after and including lsn
-    function Behead(lsn: LSN) : (r: MsgSeq)
+    function PruneHead(lsn: LSN) : (r: MsgSeq)
       requires seqStart <= lsn <= seqEnd
       requires WF()
       ensures r.WF()
@@ -143,7 +153,7 @@ module MsgHistoryMod {
     }
 
     // Returns every message in this up to but not including lsn.
-    function Truncate(lsn: LSN) : (r: MsgSeq)
+    function PruneTail(lsn: LSN) : (r: MsgSeq)
       requires seqStart <= lsn <= seqEnd
       requires WF()
       ensures r.WF()

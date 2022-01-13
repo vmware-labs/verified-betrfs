@@ -7,14 +7,15 @@ include "../../lib/Base/KeyType.s.dfy"
 
 module CoordProgramMod {
   import opened Options
+  import opened MapRemove_s
   import InterpMod
   import JournalInterpTypeMod
   import opened CrashTolerantMapSpecMod
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
-//  import opened SequenceSetsMod
-//  import D = AsyncDisk  // Importing for the interface, not the entire disk
+
+  import Async = CrashTolerantMapSpecMod.async
 
   type UIOp = CrashTolerantMapSpecMod.UIOp
   type Journal = JournalInterpTypeMod.Variables
@@ -26,15 +27,21 @@ module CoordProgramMod {
 
   // Persistent state of disk
   datatype Superblock = Superblock(
-    journal: Journal,
-    mapadt: MapAdt)
+      journal: Journal,
+      mapadt: MapAdt)
   {
     predicate WF()
     {
       && journal.WF()
-      // No point even assembling a superblock that doesn't have its journal adjacent to its map.
+        // No point even assembling a superblock that doesn't have its journal adjacent to its map.
       && journal.CanFollow(mapadt.seqEnd)
 
+    }
+
+    predicate ContainsLSN(lsn: LSN)
+    {
+      || lsn <= mapadt.seqEnd
+      || journal.msgSeq.Contains(lsn)
     }
   }
 
@@ -43,17 +50,27 @@ module CoordProgramMod {
     Superblock(JournalInterpTypeMod.Mkfs(), MapAdtMkfs())
   }
 
+  type SyncReqs = map<CrashTolerantMapSpecMod.SyncReqId, LSN>
+
   // In-memory state. It may be unknown if we've just booted and haven't
   // read anything off the disk.
   datatype Ephemeral =
     | Unknown
     | Known(
+      // the requests and responses of uiops
+      progress: Async.EphemeralState,
+
+      // Same idea for sync reqs (which get layered after Async reqs/resps)
+      syncReqs: SyncReqs,
+    
+      // The journal
       journal: Journal,
 
-      // journal.Truncate(frozenJournalLSN) is persisted, and hence can be
+      // The prefix of the journal that's persisted and hence can be
       // copied into an inFlightSuperblock.
       frozenJournalLSN: LSN,
 
+      // The map that enables journal beheading.
       mapadt: MapAdt,
 
       // If Some, .value is persisted and can be copied into an
@@ -107,6 +124,8 @@ module CoordProgramMod {
     && uiop.NoopOp?
     && v.ephemeral.Unknown?
     && v' == v.(ephemeral := Known(
+      Async.InitEphemeralState(),
+      map[],  // syncReqs
       v.persistentSuperblock.journal,
       v.persistentSuperblock.journal.msgSeq.seqEnd, // this journal is frozen.
       v.persistentSuperblock.mapadt,
@@ -121,6 +140,12 @@ module CoordProgramMod {
     && v.WF()
     && v.ephemeral.Known?
     && v.ephemeral.mapadt.seqEnd == v.ephemeral.journal.msgSeq.seqEnd
+  }
+
+  function NextLSN(v: Variables) : LSN
+    requires MapIsFresh(v)
+  {
+    v.ephemeral.mapadt.seqEnd
   }
 
   // Move some journal state into the map to make it (closer to) fresh
@@ -143,16 +168,17 @@ module CoordProgramMod {
 
   predicate Query(v: Variables, v': Variables, uiop : UIOp, key: Key, val: Value)
   {
+    && MapIsFresh(v)
     && uiop.OperateOp?
     && uiop.baseOp.ExecuteOp?
     && uiop.baseOp.req.input.GetInput? // ensures that the uiop translates to a Get op
-    // TODO Now that we've fixed spec, reqProgress, syncReqs should float out of
-    // Journal up into Program.
-    && uiop.baseOp.req in v.ephemeral.journal.reqProgress.requests
+    && uiop.baseOp.req in v.ephemeral.progress.requests
     && uiop.baseOp.reply.id == uiop.baseOp.req.id
-    && MapIsFresh(v)
     && val == v.ephemeral.mapadt.mi[key].value
-    && v' == v  // TODO update new reqs/resps fields to record retirement of uiop
+    && v' == v.(ephemeral := v.ephemeral.(progress := v.ephemeral.progress.(
+        requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
+        replies := v.ephemeral.progress.replies + {uiop.baseOp.reply}
+      )))
   }
 
   predicate Put(v: Variables, v': Variables, uiop : UIOp)
@@ -174,43 +200,48 @@ module CoordProgramMod {
     && MapIsFresh(v)
 
     && var singleton :=
-        MsgHistoryMod.Singleton(v.ephemeral.mapadt.seqEnd, KeyedMessage(key, Define(val)));
+        MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
 
     && v.WF()
     && v' == v.(ephemeral := v.ephemeral.(
-          journal := v.ephemeral.journal.(msgSeq := v.ephemeral.journal.msgSeq.Concat(singleton)),
-          mapadt := MsgHistoryMod.Concat(v.ephemeral.mapadt, singleton)
+          journal := v.ephemeral.journal.Concat(singleton),
+          mapadt := MsgHistoryMod.Concat(v.ephemeral.mapadt, singleton),
           // Frozen stuff unchanged here.
+          progress := v.ephemeral.progress.(
+            requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
+            replies := v.ephemeral.progress.replies + {uiop.baseOp.reply}
+          )
       ))
   }
 
-  // TODO Inteprereted data model doesn't leave much room to model Journal
-  // or Betree *internal* steps, because they're noops at the interp layer.
-  // Should we capture that here, maybe with a "secret" field of the mapadt,
-  // representing its internal representation, that can change but the mapadt
-  // interp stays unchanged?
-  // One bit of mapadt internal state might be the frozen interp. YEAH THAT
-  // One bit of journal internal state might be the how much is known to be clean.
+  // Journal Internal steps (writing stuff out to disk, for example)
+  // and Betree Internal steps (writing stuff to disk, flushing and compacting,
+  // which create new blocks in cache and rearrange the indirection table)
+  // all look like stutters at this layer.
 
   // predicate JournalInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: JournalMachineMod.Skolem)
   // predicate SplinterTreeInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: SplinterTreeMachineMod.Skolem)
 
-  predicate ReqSync(v: Variables, v': Variables, uiop : UIOp, syncReqId: SyncReqId)
+  predicate ReqSync(v: Variables, v': Variables, uiop : UIOp)
   {
-    && uiop == ReqSyncOp(syncReqId)
+    && uiop.ReqSyncOp?
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && v'.ephemeral.Known?
-    && JournalInterpTypeMod.ReqSync(v.ephemeral.journal, v'.ephemeral.journal, syncReqId)
-    && v' == v.(ephemeral := v.ephemeral.(journal := v'.ephemeral.journal))  // unchanged except journal changes as specified above
+    && 0 < NextLSN(v) // Invariant, but don't have that here.
+    && v' == v.(ephemeral := v.ephemeral.(
+        syncReqs := v.ephemeral.syncReqs[uiop.syncReqId := NextLSN(v)-1]
+      ))
   }
 
-  predicate CompleteSync(v: Variables, v': Variables, uiop : UIOp, syncReqId: SyncReqId)
+  predicate CompleteSync(v: Variables, v': Variables, uiop : UIOp)
   {
-    && uiop == CompleteSyncOp(syncReqId)
+    && uiop.CompleteSyncOp?
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
-    && v'.ephemeral.Known?
-    && JournalInterpTypeMod.CompleteSync(v.ephemeral.journal, v'.ephemeral.journal, syncReqId)
-    && v' == v.(ephemeral := v.ephemeral.(journal := v'.ephemeral.journal))  // unchanged except journal changes as specified above
+    && uiop.syncReqId in v.ephemeral.syncReqs
+    && v.persistentSuperblock.ContainsLSN(v.ephemeral.syncReqs[uiop.syncReqId]) // sync lsn is persistent
+    && v' == v.(ephemeral := v.ephemeral.(
+        syncReqs := MapRemove1(v.ephemeral.syncReqs, uiop.syncReqId)
+      ))
   }
 
   function BestFrozenState(v: Variables) : (sb:Superblock)
@@ -231,16 +262,37 @@ module CoordProgramMod {
       || !v.ephemeral.journal.CanPruneTo(v.ephemeral.frozenMap.value.seqEnd)
     then
       // Could actually just use the frozen map here, but we don't really care
-      // to support this case; treat this is a silly branch.
+      // to support this case; this is a silly branch in that it's never
+      // invoked in any Inv()-preserving behavior.
       // Superblock(v.ephemeral.frozenMap.value, JournalInterpTypeMod.Mkfs())
       MkfsSuperblock()
     else
       // Use frozen map and available frozen journal.
       var frozenJournal := v.ephemeral.journal
-        .Truncate(v.ephemeral.frozenJournalLSN)
-        .Behead(v.ephemeral.frozenMap.value.seqEnd)
-        .DropEphemeral();
+        .PruneTail(v.ephemeral.frozenJournalLSN)
+        .PruneHead(v.ephemeral.frozenMap.value.seqEnd);
       Superblock(frozenJournal, v.ephemeral.frozenMap.value)
+  }
+
+  predicate FreezeJournal(v: Variables, v': Variables, uiop : UIOp, newFrozenLSN: LSN)
+  {
+    && uiop.NoopOp?
+    && v.WF()
+    && v.ephemeral.Known?
+    // Freezin' only goes forward.
+    && v.ephemeral.frozenJournalLSN < newFrozenLSN <= v.ephemeral.journal.msgSeq.seqEnd
+    && v' == v.(ephemeral := v.ephemeral.(frozenJournalLSN := newFrozenLSN))
+  }
+
+  predicate FreezeMapAdt(v: Variables, v': Variables, uiop : UIOp)
+  {
+    && uiop.NoopOp?
+    && v.WF()
+    && v.ephemeral.Known?
+    // Copy the current map into the frozen one, deleting whatever was
+    // frozen.
+    // TODO this should cause mischief if a Commit is in progress. Does it?
+    && v' == v.(ephemeral := v.ephemeral.(frozenMap := Some(v.ephemeral.mapadt)))
   }
 
   predicate CommitStart(v: Variables, v': Variables, uiop : UIOp, seqBoundary: LSN)
@@ -269,7 +321,7 @@ module CoordProgramMod {
     && var j := v.ephemeral.journal;
     && var j' :=
       if j.CanPruneTo(sb.mapadt.seqEnd)
-      then j.Behead(sb.mapadt.seqEnd)
+      then j.PruneHead(sb.mapadt.seqEnd)
       else j;    // Case never occurs, but need Inv to prove so.
 
     && v' == v.(
@@ -286,8 +338,10 @@ module CoordProgramMod {
     | PutStep()
 //    | JournalInternalStep()
 //    | SplinterTreeInternalStep()
-    | ReqSyncStep(syncReqId: SyncReqId)
-    | CompleteSyncStep(syncReqId: SyncReqId)
+    | ReqSyncStep()
+    | CompleteSyncStep()
+    | FreezeJournalStep(newFrozenLSN: LSN)
+    | FreezeMapAdtStep()
     | CommitStartStep(seqBoundary: LSN)
     | CommitCompleteStep()
 
@@ -299,8 +353,10 @@ module CoordProgramMod {
       case PutStep() => Put(v, v', uiop)
 //      case JournalInternalStep(sk) => JournalInternal(v, v', uiop, cacheOps, sk)
 //      case SplinterTreeInternalStep(sk) => SplinterTreeInternal(v, v', uiop, cacheOps, sk)
-      case ReqSyncStep(syncReqId) => ReqSync(v, v', uiop, syncReqId)
-      case CompleteSyncStep(syncReqId) => CompleteSync(v, v', uiop, syncReqId)
+      case ReqSyncStep() => ReqSync(v, v', uiop)
+      case CompleteSyncStep() => CompleteSync(v, v', uiop)
+      case FreezeJournalStep(newFrozenLSN) => FreezeJournal(v, v', uiop, newFrozenLSN)
+      case FreezeMapAdtStep() => FreezeMapAdt(v, v', uiop)
       case CommitStartStep(seqBoundary) => CommitStart(v, v', uiop, seqBoundary)
       case CommitCompleteStep() => CommitComplete(v, v', uiop)
     }
