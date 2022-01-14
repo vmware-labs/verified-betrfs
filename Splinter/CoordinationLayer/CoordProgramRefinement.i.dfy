@@ -136,7 +136,7 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case CommitCompleteStep() => {
-        assume Inv(v');
+        assert Inv(v');
       }
     }
   }
