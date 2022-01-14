@@ -75,6 +75,7 @@ module CoordProgramRefinement {
     v.inFlightSuperblock.Some? ==>
       && v.ephemeral.Known?
       && v.ephemeral.journal.CanPruneTo(v.inFlightSuperblock.value.mapadt.seqEnd)
+      && v.inFlightSuperblock.value.journal.seqEnd <= v.ephemeral.journal.seqEnd  // maintain InvJournalMonotonic
   }
 
   predicate Inv(v: CoordProgramMod.Variables)
