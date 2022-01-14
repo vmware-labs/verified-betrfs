@@ -214,75 +214,14 @@ module CoordProgramRefinement {
   {
     if !z.IsEmpty() {
       var ztrim := z.PruneTail(z.seqEnd - 1);
-      calc {
-        ztrim.ApplyToInterp(y.ApplyToInterp(x));
-          { JournalAssociativity(x, y, ztrim); }
-        y.Concat(ztrim).ApplyToInterp(x);
-      }
+      var yz := y.Concat(z);
 
-        var subInterp := z.ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len()-1);
-        var lsn := z.seqStart + z.Len() - 1;
-        var key := z.msgs[lsn].key;
-        var oldMessage := subInterp.mi[key];
-        var newMessage := z.msgs[lsn].message;
-
-        var yz := y.Concat(z);
-        var yzsubInterp := yz.ApplyToInterpRecursive(x, yz.Len()-1);
-        var yzlsn := yz.seqStart + yz.Len() - 1;
-        var yzkey := yz.msgs[yzlsn].key;
-        var yzoldMessage := yzsubInterp.mi[yzkey];
-        var yznewMessage := yz.msgs[yzlsn].message;
-        var yztrim := yz.PruneTail(yz.seqEnd - 1);
-
-      calc {
-        z.ApplyToInterp(y.ApplyToInterp(x)).mi;
-        z.ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len()).mi;
-        {
-          assert z.Len() != 0;  // open the defn
-        }
-        z.ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len()-1).mi[key := Merge(newMessage, oldMessage)];
-        {
-          ApplyToInterpRecursiveIsPrune(z, y.ApplyToInterp(x), z.Len() -1);
-//          assert z.ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len() -1) ==
-//            z.PruneTail(z.seqStart + z.Len() - 1).ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len()-1);
-        }
-        ztrim.ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len()-1).mi[key := Merge(newMessage, oldMessage)];
-        ztrim.ApplyToInterp(y.ApplyToInterp(x)).mi[key := Merge(newMessage, oldMessage)];
-          { JournalAssociativity(x, y, ztrim); }
-        y.Concat(ztrim).ApplyToInterp(x).mi[key := Merge(newMessage, oldMessage)];
-        {
-          assert yztrim == y.Concat(ztrim); // Trigger
-          calc {
-            oldMessage;
-            z.ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len()-1).mi[key];
-              { ApplyToInterpRecursiveIsPrune(z, y.ApplyToInterp(x), z.Len()-1); }
-            ztrim.ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len()-1).mi[key];
-            yztrim.ApplyToInterpRecursive(x, yz.Len()-1).mi[key];
-            yztrim.ApplyToInterp(x).mi[key];
-            yz.PruneTail(yz.seqStart + yz.Len()-1).ApplyToInterpRecursive(x, yz.Len()-1).mi[key];
-              { ApplyToInterpRecursiveIsPrune(yz, x, yz.Len()-1); }
-            yz.ApplyToInterpRecursive(x, yz.Len()-1).mi[yzkey];
-            yzoldMessage;
-          }
-        }
-
-        yztrim.ApplyToInterp(x).mi[yzkey := Merge(yznewMessage, yzoldMessage)];
-        yztrim.ApplyToInterpRecursive(x, yz.Len()-1).mi[yzkey := Merge(yznewMessage, yzoldMessage)];
-          { ApplyToInterpRecursiveIsPrune(yz, x, yz.Len() -1); }
-        yz.ApplyToInterpRecursive(x, yz.Len()-1).mi[yzkey := Merge(yznewMessage, yzoldMessage)];
-
-        y.Concat(z).ApplyToInterpRecursive(x, y.Concat(z).Len()).mi;
-        y.Concat(z).ApplyToInterp(x).mi;
-      }
+      JournalAssociativity(x, y, ztrim);
+      ApplyToInterpRecursiveIsPrune(z, y.ApplyToInterp(x), z.Len()-1);
+      assert yz.PruneTail(yz.seqEnd - 1) == y.Concat(ztrim); // trigger
+      ApplyToInterpRecursiveIsPrune(yz, x, yz.Len()-1);
     }
   }
-
-//  lemma JournalSplit(j: Journal, lsn: LSN)
-//    requires j.WF()
-//    requires j.CanPruneTo(lsn)
-//    ensures j.PruneTail(lsn).Concat(j.PruneHead(lsn)) == j
-//  {
-//  }
 
   lemma NextRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp)
     requires Inv(v)
