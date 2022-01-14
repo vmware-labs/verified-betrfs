@@ -32,7 +32,15 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   datatype Variables = Variables(
     versions: seq<Version>,
     asyncEphemeral: async.EphemeralState,
-    syncRequests: map<SyncReqId, nat>,  // sync complete when value <= stableIdx
+
+    // Request id points at the number of LSNs that must be persisted.
+    // So if the client ReqSyncs after 3 writes (seqEnd==3), the value
+    // in the map is 3.
+    syncRequests: map<SyncReqId, nat>,
+
+    // The index of the last persistent version. Notice that, since we
+    // never delete versions, that index is also the count of writes
+    // and thus also the "NextLSN" value when that version was created.
     stableIdx: nat)
   {
     predicate WF() {

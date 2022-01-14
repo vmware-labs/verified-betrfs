@@ -41,12 +41,11 @@ module CoordProgramMod {
       && journal.WF()
         // No point even assembling a superblock that doesn't have its journal adjacent to its map.
       && journal.CanFollow(mapadt.seqEnd)
-
     }
 
-    predicate ContainsLSN(lsn: LSN)
+    predicate CompletesSync(lsn: LSN)
     {
-      || lsn <= mapadt.seqEnd
+      || lsn < mapadt.seqEnd
       || journal.Contains(lsn)
     }
   }
@@ -234,9 +233,9 @@ module CoordProgramMod {
     && uiop.ReqSyncOp?
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && v'.ephemeral.Known?
-    && 0 < NextLSN(v) // Invariant, but don't have that here.
+    // NB that the label for a sync in the table is the LSN AFTER the last write
     && v' == v.(ephemeral := v.ephemeral.(
-        syncReqs := v.ephemeral.syncReqs[uiop.syncReqId := NextLSN(v)-1]
+        syncReqs := v.ephemeral.syncReqs[uiop.syncReqId := NextLSN(v)]
       ))
   }
 
@@ -245,7 +244,7 @@ module CoordProgramMod {
     && uiop.CompleteSyncOp?
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && uiop.syncReqId in v.ephemeral.syncReqs
-    && v.persistentSuperblock.ContainsLSN(v.ephemeral.syncReqs[uiop.syncReqId]) // sync lsn is persistent
+    && v.persistentSuperblock.CompletesSync(v.ephemeral.syncReqs[uiop.syncReqId]) // sync lsn is persistent
     && v' == v.(ephemeral := v.ephemeral.(
         syncReqs := MapRemove1(v.ephemeral.syncReqs, uiop.syncReqId)
       ))

@@ -39,7 +39,8 @@ module CoordProgramRefinement {
     requires journal.WF()
     requires journal.CanFollow(base.seqEnd)
   {
-    CrashTolerantMapSpecMod.Variables(VersionsFromBase(base, journal), progress, syncReqs, 0)
+    var forgottenVersions := seq(base.seqEnd, i => CrashTolerantMapSpecMod.Forgotten);
+    CrashTolerantMapSpecMod.Variables(forgottenVersions + VersionsFromBase(base, journal), progress, syncReqs, base.seqEnd)
   }
 
   function I(v: CoordProgramMod.Variables) : CrashTolerantMapSpecMod.Variables
@@ -157,16 +158,15 @@ module CoordProgramRefinement {
     var step :| NextStep(v, v', uiop, step);
     match step {
       case LoadEphemeralStateStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
-          CrashTolerantMapSpecMod.NoopOp);
+        assert uiop == CrashTolerantMapSpecMod.NoopOp;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case RecoverStep(puts) => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
-          CrashTolerantMapSpecMod.NoopOp);
+        assert uiop == CrashTolerantMapSpecMod.NoopOp;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case QueryStep(key, val) => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
-          uiop);
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case PutStep() => {
         var j := v.ephemeral.journal;
@@ -178,34 +178,34 @@ module CoordProgramRefinement {
         assert j == j.PruneTail(j.Len() + j.seqStart);  // seq trigger
         assert j' == j'.PruneTail(j'.Len() + j'.seqStart);  // seq trigger
         ApplicationConcatenation(base, j, j.seqEnd, KeyedMessage(key, Define(val)));
-        assert forall i | 0<=i<|I(v).versions| :: j'.PruneTail(i + j.seqStart) == j.PruneTail(i + j.seqStart);  // Rob Power Trigger
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
+        assert forall i | v.persistentSuperblock.mapadt.seqEnd<=i<|I(v).versions| :: j'.PruneTail(i) == j.PruneTail(i);  // Rob Power Trigger
+
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
 //    case JournalInternalStep(sk) => { assert Inv(v'); }
 //    case SplinterTreeInternalStep(sk) => { assert Inv(v'); }
       case ReqSyncStep() => {
-        assume false;
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
       }
       case CompleteSyncStep() => {
         assume false;
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case FreezeJournalStep(newFrozenLSN) => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case FreezeMapAdtStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case CommitStartStep(seqBoundary) => {
         assume false;
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
-          CrashTolerantMapSpecMod.NoopOp);
+        assert uiop == CrashTolerantMapSpecMod.NoopOp;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case CommitCompleteStep() => {
         assume false;
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'),
-          CrashTolerantMapSpecMod.NoopOp);
+        assert uiop == CrashTolerantMapSpecMod.NoopOp;
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
     }
     assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
