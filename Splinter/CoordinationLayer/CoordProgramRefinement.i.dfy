@@ -37,7 +37,7 @@ module CoordProgramRefinement {
   function VersionsWithForgottenPrefix(base: InterpMod.Interp, journal: Journal) : (versions:seq<CrashTolerantMapSpecMod.Version>)
     requires journal.WF()
     requires journal.CanFollow(base.seqEnd)
-    ensures |versions| == SeqEndFor(base, journal)+1
+    ensures |versions| == SeqEndFor(base.seqEnd, journal)+1
   {
     var forgottenVersions := seq(base.seqEnd, i => CrashTolerantMapSpecMod.Forgotten);
     forgottenVersions + VersionsFromBase(base, journal)
@@ -79,23 +79,38 @@ module CoordProgramRefinement {
       v.persistentSuperblock.journal.seqEnd <= v.ephemeral.journal.seqEnd
   }
 
-  predicate InvEphemeralJournalMatchesPersistentJournal(v: CoordProgramMod.Variables)
-    requires v.WF()
+  predicate JournalExtendsJournal(jlong: Journal, jshort: Journal, startLsn: LSN)
   {
-    v.ephemeral.journal.PruneTail(v.persistentSuperblock.SeqEnd()) == v.persistentSuperblock.journal
+    && jlong.WF()
+    && jshort.WF()
+    && jshort.CanFollow(startLsn)
+    && jlong.CanFollow(startLsn)
+    && jlong.CanPruneTo(SeqEndFor(startLsn, jshort))
+    && jlong.PruneTail(SeqEndFor(startLsn, jshort)) == jshort
+  }
+
+  predicate InvEphemeralJournalExtendsPersistentJournal(v: CoordProgramMod.Variables)
+  {
+    && v.WF()
+    && v.ephemeral.Known?
+    && JournalExtendsJournal(v.ephemeral.journal, v.persistentSuperblock.journal, v.persistentSuperblock.mapadt.seqEnd)
   }
 
   predicate InvInFlightVersionAgreement(v: CoordProgramMod.Variables)
-    requires v.WF()
-    requires v.inFlightSuperblock.Some?
   {
-    var psb := v.persistentSuperblock;
-    var isb := v.inFlightSuperblock.value;
+    && InvEphemeralJournalExtendsPersistentJournal(v) // already appears higher in Inv, but we need it too.
 
-    // in-flight map summarizes existing persistent map plus necessary prefix of persistent journal
-    && isb.mapadt == psb.journal.PruneTail(isb.mapadt.seqEnd).ApplyToInterp(psb.mapadt)
-    // in-flight journal captures remainder of persistent journal
-    && isb.journal.PruneTail(psb.SeqEnd()) == psb.journal.PruneHead(isb.mapadt.seqEnd)
+    && v.inFlightSuperblock.Some?
+    && var psb := v.persistentSuperblock;
+    && var isb := v.inFlightSuperblock.value;
+    && var ej := v.ephemeral.journal;
+
+    // Ephemeral journal is at least as far as in-flight (frozen) map.
+    && ej.CanPruneTo(isb.mapadt.seqEnd)
+    // in-flight journal extends persistent journal
+    && JournalExtendsJournal(isb.journal, psb.journal, psb.mapadt.seqEnd)
+    // Ephemeral journal agrees with in-flight journal
+    && JournalExtendsJournal(ej.PruneHead(isb.mapadt.seqEnd), isb.journal, isb.mapadt.seqEnd)
   }
 
   predicate InvInFlightProperties(v: CoordProgramMod.Variables)
@@ -117,8 +132,7 @@ module CoordProgramRefinement {
       // Interpret ephemeral state by stitching ephemeral journal (which
       // invariantly matches ephemeral mapadt) with persistent mapadt (which
       // it can follow exactly without beheading).
-      && v.ephemeral.journal.CanFollow(v.persistentSuperblock.mapadt.seqEnd)
-      && InvEphemeralJournalMatchesPersistentJournal(v)
+      && InvEphemeralJournalExtendsPersistentJournal(v)
       && InvLSNTracksPersistentWhenJournalEmpty(v)
       )
     && InvJournalMonotonic(v)
@@ -194,7 +208,7 @@ module CoordProgramRefinement {
     requires y.WF()
     requires z.WF()
     requires y.CanFollow(x.seqEnd)
-    requires z.CanFollow(SeqEndFor(x, y))
+    requires z.CanFollow(SeqEndFor(x.seqEnd, y))
     ensures z.ApplyToInterp(y.ApplyToInterp(x)) == y.Concat(z).ApplyToInterp(x);
     decreases z.Len();
   {
@@ -206,10 +220,19 @@ module CoordProgramRefinement {
         y.Concat(ztrim).ApplyToInterp(x);
       }
 
+        var subInterp := z.ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len()-1);
         var lsn := z.seqStart + z.Len() - 1;
         var key := z.msgs[lsn].key;
-        var oldMessage := y.ApplyToInterp(x).mi[key];
+        var oldMessage := subInterp.mi[key];
         var newMessage := z.msgs[lsn].message;
+
+        var yz := y.Concat(z);
+        var yzsubInterp := yz.ApplyToInterpRecursive(x, yz.Len()-1);
+        var yzlsn := yz.seqStart + yz.Len() - 1;
+        var yzkey := yz.msgs[yzlsn].key;
+        var yzoldMessage := yzsubInterp.mi[yzkey];
+        var yznewMessage := yz.msgs[yzlsn].message;
+        var yztrim := yz.PruneTail(yz.seqEnd - 1);
 
       calc {
         z.ApplyToInterp(y.ApplyToInterp(x)).mi;
@@ -227,18 +250,27 @@ module CoordProgramRefinement {
         ztrim.ApplyToInterp(y.ApplyToInterp(x)).mi[key := Merge(newMessage, oldMessage)];
           { JournalAssociativity(x, y, ztrim); }
         y.Concat(ztrim).ApplyToInterp(x).mi[key := Merge(newMessage, oldMessage)];
-
-        y.Concat(z).ApplyToInterpRecursive(x, y.Concat(z).Len()-1).mi[key := Merge(newMessage, oldMessage)];
         {
-          var yz := y.Concat(z);
-          var yzlsn := yz.seqStart + yz.Len() - 1;
-          var yzkey := yz.msgs[lsn].key;
-          var yzoldMessage := x.mi[key];
-          var yznewMessage := yz.msgs[lsn].message;
-          assert yzkey == key;
-          assert yznewMessage == newMessage;
-          assert yzoldMessage == oldMessage;
+          assert yztrim == y.Concat(ztrim); // Trigger
+          calc {
+            oldMessage;
+            z.ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len()-1).mi[key];
+              { ApplyToInterpRecursiveIsPrune(z, y.ApplyToInterp(x), z.Len()-1); }
+            ztrim.ApplyToInterpRecursive(y.ApplyToInterp(x), z.Len()-1).mi[key];
+            yztrim.ApplyToInterpRecursive(x, yz.Len()-1).mi[key];
+            yztrim.ApplyToInterp(x).mi[key];
+            yz.PruneTail(yz.seqStart + yz.Len()-1).ApplyToInterpRecursive(x, yz.Len()-1).mi[key];
+              { ApplyToInterpRecursiveIsPrune(yz, x, yz.Len()-1); }
+            yz.ApplyToInterpRecursive(x, yz.Len()-1).mi[yzkey];
+            yzoldMessage;
+          }
         }
+
+        yztrim.ApplyToInterp(x).mi[yzkey := Merge(yznewMessage, yzoldMessage)];
+        yztrim.ApplyToInterpRecursive(x, yz.Len()-1).mi[yzkey := Merge(yznewMessage, yzoldMessage)];
+          { ApplyToInterpRecursiveIsPrune(yz, x, yz.Len() -1); }
+        yz.ApplyToInterpRecursive(x, yz.Len()-1).mi[yzkey := Merge(yznewMessage, yzoldMessage)];
+
         y.Concat(z).ApplyToInterpRecursive(x, y.Concat(z).Len()).mi;
         y.Concat(z).ApplyToInterp(x).mi;
       }
@@ -356,7 +388,7 @@ module CoordProgramRefinement {
                 JournalAssociativity(psb.mapadt, v.ephemeral.journal.PruneTail(refLsn), v'.ephemeral.journal.PruneTail(i));
               }
               v.ephemeral.journal.PruneTail(refLsn).Concat(v'.ephemeral.journal.PruneTail(i)).ApplyToInterp(psb.mapadt);
-                // InvEphemeralJournalMatchesPersistentJournal
+                // InvEphemeralJournalExtendsPersistentJournal
               v.ephemeral.journal.PruneTail(refLsn).Concat(v.ephemeral.journal.PruneHead(refLsn).PruneTail(i)).ApplyToInterp(psb.mapadt);
               v.ephemeral.journal.PruneTail(refLsn).Concat(eji.PruneHead(refLsn)).ApplyToInterp(psb.mapadt);
               { assert v.ephemeral.journal.PruneTail(refLsn) == eji.PruneTail(refLsn); } // trigger

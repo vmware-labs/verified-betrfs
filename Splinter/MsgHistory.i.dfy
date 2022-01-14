@@ -102,13 +102,14 @@ module MsgHistoryMod {
       if count==0
       then orig
       else
+        var subInterp := ApplyToInterpRecursive(orig, count-1);
+
         var lsn := seqStart + count - 1;
         var key := msgs[lsn].key;
-        var oldMessage := orig.mi[key];
         var newMessage := msgs[lsn].message;
+        var oldMessage := subInterp.mi[key];
 
-        // This oldMessage makes a deep assumption that there are no other intermediate writes!!
-        var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Merge(newMessage, oldMessage)];
+        var mapp := subInterp.mi[key := Merge(newMessage, oldMessage)];
         InterpMod.RawInterp(mapp, lsn + 1)
     }
 

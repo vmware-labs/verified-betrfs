@@ -31,9 +31,9 @@ module CoordProgramMod {
     InterpMod.Empty()
   }
 
-  function SeqEndFor(mapadt: MapAdt, journal: Journal) : LSN
+  function SeqEndFor(lsn: LSN, journal: Journal) : LSN
   {
-      if journal.IsEmpty() then mapadt.seqEnd else journal.seqEnd
+      if journal.IsEmpty() then lsn else journal.seqEnd
   }
 
   // Persistent state of disk
@@ -50,7 +50,7 @@ module CoordProgramMod {
 
     function SeqEnd() : LSN
     {
-      SeqEndFor(mapadt, journal)
+      SeqEndFor(mapadt.seqEnd, journal)
     }
 
     predicate CompletesSync(lsn: LSN)
@@ -100,7 +100,7 @@ module CoordProgramMod {
     function SeqEnd() : LSN
       requires Known?
     {
-      SeqEndFor(mapadt, journal)
+      SeqEndFor(mapadt.seqEnd, journal)
     }
   }
 
