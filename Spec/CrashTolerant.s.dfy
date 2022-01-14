@@ -104,14 +104,18 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     && |v'.versions| == |v.versions|
     // Commit can truncate old versions (see apology at definition of Forgotten)
     && (forall i | 0<=i<|v.versions| ::
-      || v'.versions == v.versions
-      || (i < v.stableIdx && v'.versions[i].Forgotten?)
+      || v'.versions[i] == v.versions[i]
+      || (i < v'.stableIdx && v'.versions[i].Forgotten?)
       )
     && v'.WF()  // But it can't truncate things after stableIdx
     && v'.asyncEphemeral == v.asyncEphemeral
     && v'.syncRequests == v.syncRequests
     // stableIdx advances towards, possibly all the way to, ephemeral state.
-    && v.stableIdx < v'.stableIdx < |v.versions|
+    // (It's okay to not advance if you're just, say, truncating your journal
+    // instead. Note that we don't require either truncating or
+    // persistification, so this step can also admit a Noop. No biggie until we
+    // care about proving liveness.)
+    && v.stableIdx <= v'.stableIdx < |v.versions|
   }
 
   // sync api contract to the end user

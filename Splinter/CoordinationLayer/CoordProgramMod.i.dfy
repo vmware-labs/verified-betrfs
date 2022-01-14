@@ -31,6 +31,11 @@ module CoordProgramMod {
     InterpMod.Empty()
   }
 
+  function SeqEndFor(mapadt: MapAdt, journal: Journal) : LSN
+  {
+      if journal.IsEmpty() then mapadt.seqEnd else journal.seqEnd
+  }
+
   // Persistent state of disk
   datatype Superblock = Superblock(
       journal: Journal,
@@ -45,7 +50,7 @@ module CoordProgramMod {
 
     function SeqEnd() : LSN
     {
-      if journal.IsEmpty() then mapadt.seqEnd else journal.seqEnd
+      SeqEndFor(mapadt, journal)
     }
 
     predicate CompletesSync(lsn: LSN)
@@ -90,6 +95,12 @@ module CoordProgramMod {
     predicate WF()
     {
       Known? ==> journal.WF()
+    }
+
+    function SeqEnd() : LSN
+      requires Known?
+    {
+      SeqEndFor(mapadt, journal)
     }
   }
 
@@ -319,7 +330,7 @@ module CoordProgramMod {
 
   predicate CommitComplete(v: Variables, v': Variables, uiop : UIOp)
   {
-    && uiop.NoopOp?
+    && uiop.SpontaneousCommitOp?
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && v.inFlightSuperblock.Some?
 

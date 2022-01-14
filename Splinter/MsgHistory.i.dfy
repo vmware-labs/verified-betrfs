@@ -107,6 +107,7 @@ module MsgHistoryMod {
         var oldMessage := orig.mi[key];
         var newMessage := msgs[lsn].message;
 
+        // This oldMessage makes a deep assumption that there are no other intermediate writes!!
         var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Merge(newMessage, oldMessage)];
         InterpMod.RawInterp(mapp, lsn + 1)
     }
@@ -143,7 +144,7 @@ module MsgHistoryMod {
       // NB Pruning allows one more LSN than Contains, because you can
       // PruneHead all the way to seqEnd (and get an empty) (or PruneTail all
       // the way to seqStart).
-      seqStart <= lsn <= seqEnd
+      IsEmpty() || seqStart <= lsn <= seqEnd
     }
 
     // Returns every message in this after and including lsn
@@ -152,9 +153,10 @@ module MsgHistoryMod {
       requires WF()
       ensures r.WF()
     {
-      if lsn==seqEnd
-      then
-        Empty()
+      if IsEmpty()
+      then Empty()
+      else if lsn==seqEnd
+      then Empty()
       else
         var keepMap := map k | lsn <= k < seqEnd :: msgs[k];
         MsgSeq(keepMap, lsn, seqEnd)
@@ -166,9 +168,10 @@ module MsgHistoryMod {
       requires WF()
       ensures r.WF()
     {
-      if lsn==seqStart
-      then
-        Empty()
+      if IsEmpty()
+      then Empty()
+      else if lsn==seqStart
+      then Empty()
       else
         var keepMap := map k | seqStart <= k < lsn :: msgs[k];
         MsgSeq(keepMap, seqStart, lsn)
@@ -187,10 +190,9 @@ module MsgHistoryMod {
 
   lemma ApplyToInterpRecursiveIsPrune(ms: MsgSeq, orig: Interp, count: nat)
     requires ms.WF()
-    requires count <= ms.Len()
+    requires count+1 <= ms.Len()
     requires ms.CanFollow(orig.seqEnd)
-    ensures 0<count ==>
-      ms.ApplyToInterpRecursive(orig, count-1) == ms.PruneTail(ms.seqStart + count).ApplyToInterpRecursive(orig, count-1);
+    ensures ms.ApplyToInterpRecursive(orig, count) == ms.PruneTail(ms.seqStart + count).ApplyToInterpRecursive(orig, count);
     decreases count;
   {
     if 1 < count {
