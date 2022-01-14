@@ -35,12 +35,12 @@ module CoordProgramRefinement {
   }
 
   // Stitch together a base map, a journal, and the specified ephemeral request state.
-  function IStitch(base: MapAdt, journal: Journal, progress: Async.EphemeralState, syncReqs: SyncReqs) : CrashTolerantMapSpecMod.Variables
+  function IStitch(base: MapAdt, journal: Journal, progress: Async.EphemeralState, syncReqs: SyncReqs, stableLSN: LSN) : CrashTolerantMapSpecMod.Variables
     requires journal.WF()
     requires journal.CanFollow(base.seqEnd)
   {
     var forgottenVersions := seq(base.seqEnd, i => CrashTolerantMapSpecMod.Forgotten);
-    CrashTolerantMapSpecMod.Variables(forgottenVersions + VersionsFromBase(base, journal), progress, syncReqs, base.seqEnd)
+    CrashTolerantMapSpecMod.Variables(forgottenVersions + VersionsFromBase(base, journal), progress, syncReqs, stableLSN)
   }
 
   function I(v: CoordProgramMod.Variables) : CrashTolerantMapSpecMod.Variables
@@ -48,9 +48,10 @@ module CoordProgramRefinement {
     if !Inv(v)
     then CrashTolerantMapSpecMod.InitState()
     else if v.ephemeral.Known?
-      then IStitch(v.persistentSuperblock.mapadt, v.ephemeral.journal, v.ephemeral.progress, v.ephemeral.syncReqs)
+      then IStitch(v.persistentSuperblock.mapadt, v.ephemeral.journal,
+        v.ephemeral.progress, v.ephemeral.syncReqs, v.persistentSuperblock.SeqEnd())
       else IStitch(v.persistentSuperblock.mapadt, v.persistentSuperblock.journal,
-        Async.InitEphemeralState(), map[])
+        Async.InitEphemeralState(), map[], v.persistentSuperblock.SeqEnd())
   }
 
   predicate InvLSNTracksPersistentWhenJournalEmpty(v: CoordProgramMod.Variables)
@@ -61,6 +62,12 @@ module CoordProgramRefinement {
     && (v.ephemeral.Known? && v.ephemeral.journal.IsEmpty() ==>
         v.ephemeral.mapadt.seqEnd == v.persistentSuperblock.mapadt.seqEnd
       )
+  }
+
+  predicate InvJournalMonotonic(v: CoordProgramMod.Variables)
+  {
+    v.ephemeral.Known? ==>
+      v.persistentSuperblock.journal.seqEnd <= v.ephemeral.journal.seqEnd
   }
 
   predicate InvInFlightProperties(v: CoordProgramMod.Variables)
@@ -80,6 +87,7 @@ module CoordProgramRefinement {
       && v.ephemeral.journal.CanFollow(v.persistentSuperblock.mapadt.seqEnd)
       && InvLSNTracksPersistentWhenJournalEmpty(v)
       )
+    && InvJournalMonotonic(v)
     && InvInFlightProperties(v)
   }
 
@@ -128,7 +136,7 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case CommitCompleteStep() => {
-        assert Inv(v');
+        assume Inv(v');
       }
     }
   }
@@ -155,6 +163,7 @@ module CoordProgramRefinement {
     ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
   {
     InvInductive(v, v', uiop);
+
     var step :| NextStep(v, v', uiop, step);
     match step {
       case LoadEphemeralStateStep() => {
@@ -185,10 +194,9 @@ module CoordProgramRefinement {
 //    case JournalInternalStep(sk) => { assert Inv(v'); }
 //    case SplinterTreeInternalStep(sk) => { assert Inv(v'); }
       case ReqSyncStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case CompleteSyncStep() => {
-        assume false;
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case FreezeJournalStep(newFrozenLSN) => {

@@ -44,15 +44,14 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     stableIdx: nat)
   {
     predicate WF() {
-      && 0 < |versions|  // always some persistent, ephemeral version
+      // There is always some persistent version, even if just a view of the
+      // mkfs state
+      && 0 < |versions|
+
       // All versions beginning with the stableIdx aren't truncated,
       // so that crashing can't take us to a Forgotten version.
+      && (forall i | stableIdx<=i<|versions| :: versions[i].Version?)
 
-      // QUESTION: Sowmya note: asyncState doesn't have a Version, but i think we're
-      // trying to express that there are valid entries for all the records after the stable idx
-      // So I think I'm right?
-      //&& (forall i :: stableIdx<=i<|versions| ==> versions[i].asyncState.Version?)
-      && (forall i :: stableIdx<=i<|versions| ==> versions[i].Version?)
       && stableIdx < |versions|
     }
   }

@@ -43,10 +43,14 @@ module CoordProgramMod {
       && journal.CanFollow(mapadt.seqEnd)
     }
 
+    function SeqEnd() : LSN
+    {
+      if journal.IsEmpty() then mapadt.seqEnd else journal.seqEnd
+    }
+
     predicate CompletesSync(lsn: LSN)
     {
-      || lsn < mapadt.seqEnd
-      || journal.Contains(lsn)
+      lsn < SeqEnd()
     }
   }
 
