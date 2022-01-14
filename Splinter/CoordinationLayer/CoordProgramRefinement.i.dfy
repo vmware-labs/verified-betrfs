@@ -169,40 +169,16 @@ module CoordProgramRefinement {
           uiop);
       }
       case PutStep() => {
-//        assert 0<|I(v').versions|;
         var j := v.ephemeral.journal;
         var j' := v'.ephemeral.journal;
         var base := v.persistentSuperblock.mapadt;
-        var base' := v'.persistentSuperblock.mapadt;
         var key := uiop.baseOp.req.input.k;
         var val := uiop.baseOp.req.input.v;
-        var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
-        calc {
-          j.Concat(singleton);
-          j';
-        }
-        calc {
-          Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
-          Last(InterpsFromBase(base, j)).Put(key, Define(val));
-          Last(InterpsFromBase(base, j'));
-          Last(I(v').versions).asyncState.appv.interp;
-        }
-        assert Last(I(v').versions).asyncState.appv.interp == Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
-        assert MapSpecMod.Put(
-          Last(I(v).versions).asyncState.appv,
-          Last(I(v').versions).asyncState.appv,
-          key, val);
 
-        assume Async.DoExecute( // TODO darn it
-          Async.Variables(Last(I(v).versions).asyncState, I(v).asyncEphemeral),
-          Async.Variables(Last(I(v').versions).asyncState, I(v').asyncEphemeral),
-          uiop.baseOp.req,
-          uiop.baseOp.reply);
-        assert Async.NextStep(
-          Async.Variables(Last(I(v).versions).asyncState, I(v).asyncEphemeral),
-          Async.Variables(Last(I(v').versions).asyncState, I(v').asyncEphemeral),
-          uiop.baseOp);
-        assume CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp); // TODO!!
+        assert j == j.PruneTail(j.Len() + j.seqStart);  // seq trigger
+        assert j' == j'.PruneTail(j'.Len() + j'.seqStart);  // seq trigger
+        ApplicationConcatenation(base, j, j.seqEnd, KeyedMessage(key, Define(val)));
+        assert forall i | 0<=i<|I(v).versions| :: j'.PruneTail(i + j.seqStart) == j.PruneTail(i + j.seqStart);  // Rob Power Trigger
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
       }
 //    case JournalInternalStep(sk) => { assert Inv(v'); }

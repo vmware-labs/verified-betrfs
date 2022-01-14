@@ -189,14 +189,6 @@ module CoordProgramMod {
 
   predicate Put(v: Variables, v': Variables, uiop : UIOp)
   {
-    && uiop.OperateOp?
-    && uiop.baseOp.ExecuteOp?
-    && uiop.baseOp.req.input.PutInput? // ensures that the uiop translates to a put op
-    && uiop.baseOp.reply.id == uiop.baseOp.req.id
- 
-    && var key := uiop.baseOp.req.input.k;
-    && var val := uiop.baseOp.req.input.v;
-
     // Here we're not allowing puts until MapIsFresh, and then maintaining that
     // invariant. We could alternately allow puts to run ahead, and then just
     // let Queries be delayed until Recover catches up the mapadt.
@@ -204,6 +196,15 @@ module CoordProgramMod {
     // (recover, then be done recovering until next crash) we expect the real
     // implementation to maintain.
     && MapIsFresh(v)
+
+    && uiop.OperateOp?
+    && uiop.baseOp.ExecuteOp?
+    && uiop.baseOp.req.input.PutInput? // ensures that the uiop translates to a put op
+    && uiop.baseOp.req in v.ephemeral.progress.requests
+    && uiop.baseOp.reply.id == uiop.baseOp.req.id
+ 
+    && var key := uiop.baseOp.req.input.k;
+    && var val := uiop.baseOp.req.input.v;
 
     && var singleton :=
         MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
