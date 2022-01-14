@@ -132,6 +132,21 @@ module CoordProgramRefinement {
     }
   }
 
+  lemma ApplicationConcatenation(base: InterpMod.Interp, j: Journal, lsn: LSN, kmsg: KeyedMessage)
+    requires j.WF()
+    requires j.CanFollow(base.seqEnd)
+    requires lsn == if j.IsEmpty() then base.seqEnd else j.seqEnd
+    requires kmsg.message.Define?;  // we'll have to get smarter if we want to generalize.
+    ensures j.Concat(MsgHistoryMod.Singleton(lsn, kmsg)).CanFollow(base.seqEnd)
+    ensures j.ApplyToInterp(base).mi[kmsg.key := kmsg.message]
+      == j.Concat(MsgHistoryMod.Singleton(lsn, kmsg)).ApplyToInterp(base).mi
+  {
+    var j' := j.Concat(MsgHistoryMod.Singleton(lsn, kmsg));
+    ApplyToInterpRecursiveIsPrune(j', base, j'.Len()-1);
+    assert j'.PruneTail(j'.seqStart + j.Len()) == j;  // trigger
+    assert j'.ApplyToInterp(base).mi == j'.ApplyToInterpRecursive(base, j'.Len()-1).mi[kmsg.key := kmsg.message];  // trigger
+  }
+
   lemma NextRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp)
     requires Inv(v)
     requires CoordProgramMod.Next(v, v', uiop)
@@ -161,95 +176,18 @@ module CoordProgramRefinement {
         var base' := v'.persistentSuperblock.mapadt;
         var key := uiop.baseOp.req.input.k;
         var val := uiop.baseOp.req.input.v;
-//        var s1 := j'.PruneTail(NextLSN(v)).VersionsFromBase(base');
-//        var s2 := DropLast(j'.VersionsFromBase(base'));
-//        assert |s1| == |s2|;
-
-        // Rob-style SuperTrigger for some sequence rearrangement identity:
-//        assert forall i | 0<=i<|DropLast(j'.VersionsFromBase(base'))| ::
-//          var seqStart := j'.msgSeq.seqStart;
-//          j'.PruneTail(NextLSN(v)).PruneTail(i + seqStart) == j'.PruneTail(i + seqStart);
-//
-////        forall i | 0<=i<|s1| ensures s1[i]==s2[i] {
-//////          var seqStart := j'.msgSeq.seqStart;
-//////          assert seqStart == j'.PruneTail(NextLSN(v)).msgSeq.seqStart;
-//////          calc {
-//////            j'.PruneTail(NextLSN(v)).PruneTail(i + seqStart);
-//////            j'.PruneTail(i + seqStart);
-//////          }
-////        }
-////        calc {
-////          v'.ephemeral.journal.PruneTail(NextLSN(v)).VersionsFromBase(v'.persistentSuperblock.mapadt);
-////          DropLast(v'.ephemeral.journal.VersionsFromBase(v'.persistentSuperblock.mapadt));
-////        }
-//        assert v.ephemeral.journal == v'.ephemeral.journal.PruneTail(NextLSN(v));
-////        calc {
-////          I(v).versions;
-////          v.ephemeral.journal.VersionsFromBase(v.persistentSuperblock.mapadt);
-////          v.ephemeral.journal.VersionsFromBase(v'.persistentSuperblock.mapadt);
-////            { assert v.ephemeral.journal == v'.ephemeral.journal.PruneTail(NextLSN(v)); }
-////          v'.ephemeral.journal.PruneTail(NextLSN(v)).VersionsFromBase(v'.persistentSuperblock.mapadt);
-////          DropLast(v'.ephemeral.journal.VersionsFromBase(v'.persistentSuperblock.mapadt));
-////          DropLast(I(v').versions);
-////        }
-//        var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
-//        assert CrashTolerantMapSpecMod.OptionallyAppendVersion(I(v), I(v'));
-//
-//        assert j.PruneTail(j.msgSeq.seqEnd).msgSeq == j'.PruneTail(j.msgSeq.seqEnd).msgSeq; // seq assembly trigger
-//        assert j'.PruneTail(j'.msgSeq.seqEnd) == j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton);  // seq assembly trigger
-//        var outerbase := JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp;
-//        var outer := outerbase.Put(key, Define(val));
-//        var inner := JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton)).asyncState.appv.interp;
-//
-//        assert j'.PruneTail(j.msgSeq.seqEnd).msgSeq.seqEnd == j.msgSeq.seqEnd;
-//        assert JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.seqEnd
-//          == j.msgSeq.seqEnd;
-//        assert inner.seqEnd
-//          == j.msgSeq.seqEnd + 1;
-//        assert j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton).msgSeq.seqEnd == j.msgSeq.seqEnd + 1;
-//        assert inner.seqEnd == j.msgSeq.seqEnd + 1;
-//
-//        assert outer.seqEnd == inner.seqEnd;
-//
-//        forall k
-//          ensures outer.mi[k] == inner.mi[k]
-//        {
-//
-//          assert InterpMod.AnyKey(k); // trigger
-//          if k == key {
-////            assert outer.mi[k] == Define(val);
-//            assert inner == JournalInterpTypeMod.VersionFor(base', j.Concat(singleton)).asyncState.appv.interp;
-////            calc {
-////              inner.mi[k];
-////              j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton).msgSeq.ApplyToInterp(base').mi[k];
-////              {
-////                var oldMessage := j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton).msgSeq.ApplyToInterpRecursive(base', )
-////              }
-////              Merge(oldMessage, newMessage);
-////            }
-//            assert Define(val) == inner.mi[k];
-//          } else {
-////            assert outer.mi[k] == outerbase.mi[k];
-//            assert outerbase.mi[k] == inner.mi[k];
-//          }
-//        }
-//        calc {
-//          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
-//            //here
-//          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd).Concat(singleton)).asyncState.appv.interp;
-//          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j'.msgSeq.seqEnd)).asyncState.appv.interp;
-//        }
-//        calc {
-//          Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
-////          Last(j.VersionsFromBase(base)).asyncState.appv.interp.Put(key, Define(val));
-////          JournalInterpTypeMod.VersionFor(base, j.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
-////          JournalInterpTypeMod.VersionFor(base, j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
-////          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j.msgSeq.seqEnd)).asyncState.appv.interp.Put(key, Define(val));
-////          JournalInterpTypeMod.VersionFor(base', j'.PruneTail(j'.msgSeq.seqEnd)).asyncState.appv.interp;
-////          Last(j'.VersionsFromBase(base')).asyncState.appv.interp;
-//          Last(I(v').versions).asyncState.appv.interp;
-//        }
-//        assert Last(I(v').versions).asyncState.appv.interp == Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
+        var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
+        calc {
+          j.Concat(singleton);
+          j';
+        }
+        calc {
+          Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
+          Last(InterpsFromBase(base, j)).Put(key, Define(val));
+          Last(InterpsFromBase(base, j'));
+          Last(I(v').versions).asyncState.appv.interp;
+        }
+        assert Last(I(v').versions).asyncState.appv.interp == Last(I(v).versions).asyncState.appv.interp.Put(key, Define(val));
         assert MapSpecMod.Put(
           Last(I(v).versions).asyncState.appv,
           Last(I(v').versions).asyncState.appv,
@@ -264,7 +202,7 @@ module CoordProgramRefinement {
           Async.Variables(Last(I(v).versions).asyncState, I(v).asyncEphemeral),
           Async.Variables(Last(I(v').versions).asyncState, I(v').asyncEphemeral),
           uiop.baseOp);
-        assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
+        assume CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp); // TODO!!
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop);
       }
 //    case JournalInternalStep(sk) => { assert Inv(v'); }

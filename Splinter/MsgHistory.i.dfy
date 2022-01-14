@@ -107,7 +107,7 @@ module MsgHistoryMod {
         var oldMessage := orig.mi[key];
         var newMessage := msgs[lsn].message;
 
-        var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Merge(oldMessage, newMessage)];
+        var mapp := ApplyToInterpRecursive(orig, count-1).mi[key := Merge(newMessage, oldMessage)];
         InterpMod.RawInterp(mapp, lsn + 1)
     }
 
@@ -182,6 +182,23 @@ module MsgHistoryMod {
       var result := forall lsn | subseq.Contains(lsn) :: Contains(lsn) && msgs[lsn] == subseq.msgs[lsn];
       assert  result && !subseq.IsEmpty() ==> subseq.seqStart in msgs;  // witness to the ensures.
       result
+    }
+  }
+
+  lemma ApplyToInterpRecursiveIsPrune(ms: MsgSeq, orig: Interp, count: nat)
+    requires ms.WF()
+    requires count <= ms.Len()
+    requires ms.CanFollow(orig.seqEnd)
+    ensures 0<count ==>
+      ms.ApplyToInterpRecursive(orig, count-1) == ms.PruneTail(ms.seqStart + count).ApplyToInterpRecursive(orig, count-1);
+    decreases count;
+  {
+    if 1 < count {
+      var msPruned := ms.PruneTail(ms.seqStart + count);
+
+      ApplyToInterpRecursiveIsPrune(ms, orig, count-1);
+      assert ms.PruneTail(ms.seqStart + count - 1) == msPruned.PruneTail(msPruned.seqStart + count - 1); // trigger
+      ApplyToInterpRecursiveIsPrune(msPruned, orig, count - 1);
     }
   }
 
