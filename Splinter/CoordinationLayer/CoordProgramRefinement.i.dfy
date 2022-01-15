@@ -285,7 +285,7 @@ module CoordProgramRefinement {
         //  _________ __________
         // | psb.map | psb.jrnl |
         //  --------- ----------
-        //  ______________ __________
+        //  ______________R__________
         // | isb.map      | isb.jrnl |
         //  -------------- ----------
         //            ____________________
@@ -294,116 +294,37 @@ module CoordProgramRefinement {
         //                 _______________
         //                | eph'.jrnl     |
         //                 ---------------
+        // "R" is the "reference LSN" -- that's where we're going to prune ephemeral.journal, since
+        // after the commit it is going to be the LSN of the persistent map.
 
         forall i | 0<=i<|I(v).versions| ensures
           || I(v').versions[i] == I(v).versions[i]
           || (i < I(v').stableIdx && I(v').versions[i].Forgotten?)
         {
-          var psb := v.persistentSuperblock;
-          var isb := v.inFlightSuperblock.value;
-          assert isb == v'.persistentSuperblock;
+          var refLsn := v.inFlightSuperblock.value.mapadt.seqEnd;
 
-          var forgottenVersions' := seq(isb.mapadt.seqEnd, i => CrashTolerantMapSpecMod.Forgotten);
-          assert |forgottenVersions'| == isb.mapadt.seqEnd;
-
-          assert i < isb.mapadt.seqEnd <==> I(v').versions[i].Forgotten?;
-
-          if |forgottenVersions'| <= i {
-            var refVersion := isb.mapadt;
-            var refLsn := refVersion.seqEnd;
-            assert refVersion == v'.persistentSuperblock.mapadt;
+          if refLsn <= i {
             var ej := v.ephemeral.journal;
-//            calc {
-//              ej.PruneTail(isb.mapadt.seqEnd);
-//                { assert isb.mapadt.seqEnd <= psb.SeqEnd(); }
-//              ej.PruneTail(psb.SeqEnd()).PruneTail(isb.mapadt.seqEnd);
-//              psb.journal.PruneTail(isb.mapadt.seqEnd);
-//            }
-//            calc {
-//              refVersion;
-//              isb.mapadt;
-//                // InvInFlightVersionAgreement
-//              ej.PruneTail(isb.mapadt.seqEnd).ApplyToInterp(psb.mapadt);
-//              psb.journal.PruneTail(isb.mapadt.seqEnd).ApplyToInterp(psb.mapadt);
-//            }
-
             var eji := v.ephemeral.journal.PruneTail(i);
-            var ej' := v'.ephemeral.journal;
-            calc {
-              I(v').versions[i].asyncState.appv.interp;
-                // defn
-              ej'.PruneTail(i).ApplyToInterp(isb.mapadt);  // isb == v'.psb
-                // inv
-              ej.PruneTail(i).PruneHead(refLsn).ApplyToInterp(isb.mapadt);
-              {
-                assert isb.mapadt == ej.PruneTail(refLsn).ApplyToInterp(psb.mapadt);  // inv
-              }
-              ej.PruneTail(i).PruneHead(refLsn).ApplyToInterp(ej.PruneTail(refLsn).ApplyToInterp(psb.mapadt));
-              { JournalAssociativity(psb.mapadt, ej.PruneTail(refLsn), ej.PruneTail(i).PruneHead(refLsn)); }
-              ej.PruneTail(refLsn).Concat(ej.PruneTail(i).PruneHead(refLsn)).ApplyToInterp(psb.mapadt);
-              {
-                calc {
-                  ej.PruneTail(refLsn);
-                  ej.PruneTail(i).PruneTail(refLsn);
-                }
-                calc {
-                  ej.PruneTail(refLsn).Concat(ej.PruneTail(i).PruneHead(refLsn));
-                  ej.PruneTail(i).PruneTail(refLsn).Concat(ej.PruneTail(i).PruneHead(refLsn));
-                }
-              }
-              ej.PruneTail(i).PruneTail(refLsn).Concat(ej.PruneTail(i).PruneHead(refLsn)).ApplyToInterp(psb.mapadt);
-              {
-                var eji := ej.PruneTail(i);
-                assert eji.PruneTail(refLsn).Concat(eji.PruneHead(refLsn)) == eji;
-              }
-              ej.PruneTail(i).ApplyToInterp(psb.mapadt);
-                // defn
-              I(v).versions[i].asyncState.appv.interp;
-            }
 
-//            assert refVersion == VersionsWithForgottenPrefix(isb.mapadt, v'.ephemeral.journal)[refVersion.seqEnd].asyncState.appv.interp;
-//            assert refVersion == v'.ephemeral.journal.PruneTail(refVersion.seqEnd).ApplyToInterp(isb.mapadt);
-//           
-//            var subsumedJournal := v.ephemeral.journal.PruneTail(refVersion.seqEnd);
-//            var keptJournal := v.ephemeral.journal.PruneHead(refVersion.seqEnd);
-//
-//            assert subsumedJournal.CanPruneTo(refVersion.seqEnd);
-//            assert subsumedJournal.PruneTail(refVersion.seqEnd).CanFollow(psb.mapadt.seqEnd);
-//
-//            calc {
-//              VersionsWithForgottenPrefix(psb.mapadt, subsumedJournal)[refVersion.seqEnd].asyncState.appv.interp;
-//                // just the defn
-//              subsumedJournal.PruneTail(refVersion.seqEnd).ApplyToInterp(psb.mapadt);
-//              {
-//                assert subsumedJournal.IsEmpty() || subsumedJournal.seqEnd == refVersion.seqEnd;
-//                assert subsumedJournal.PruneTail(refVersion.seqEnd) == subsumedJournal; // trigger?
-//              }
-//              subsumedJournal.ApplyToInterp(psb.mapadt);
-//              isb.mapadt;
-//                { assert v'.ephemeral.journal.PruneTail(refVersion.seqEnd).IsEmpty(); }
-//              // refVersion is v'.ephemeral.journal.PruneTail(refVersion.seqEnd).ApplyToInterp(isb.mapadt);
-//              refVersion;
-//            }
-//            assert refVersion == VersionsWithForgottenPrefix(psb.mapadt, subsumedJournal)[refVersion.seqEnd].asyncState.appv.interp;
-//            assert refVersion == subsumedJournal.ApplyToInterp(psb.mapadt);
-//
-//            assert refVersion.seqEnd <= i;
-//
-//            assert keptJournal.PruneTail(i).CanFollow(refVersion.seqEnd);
-//            var j:int := i;
-//            calc {
-//              I(v).versions[i].asyncState.appv.interp;
-//              v.ephemeral.journal.PruneTail(i).ApplyToInterp(psb.mapadt);
-//              keptJournal.PruneTail(i).ApplyToInterp(refVersion);
-//              v'.ephemeral.journal.PruneTail(i).ApplyToInterp(refVersion);
-//              I(v').versions[i].asyncState.appv.interp;
-//            }
+            // Here's a calc, but commented to use a shorthand algebra:
+            // Let + be ApplyToInterp and Concat (they're associative).
+            // var im:=v.inFlightSuperblock.value.mapadt, pm:=v.persistentSuperblock.mapadt, R:=im.seqEnd
+            // I(v')
+            // im+ej'[..i]
+            // im+ej[..i][R..]
+            // InvInFlightVersionAgreement
+            // (pm+ej[..R])+ej[..i][R..]
+            JournalAssociativity(v.persistentSuperblock.mapadt, ej.PruneTail(refLsn), ej.PruneTail(i).PruneHead(refLsn));
+            // pm+(ej[..R]+ej[..i][R..])
+            assert ej.PruneTail(refLsn) == ej.PruneTail(i).PruneTail(refLsn);  // because R <= i; smaller i are Forgotten
+            // pm+(ej[..i][..R]+ej[..i][R..])
+            assert eji.PruneTail(refLsn).Concat(eji.PruneHead(refLsn)) == eji;  // trigger
+            // pm+ej[..i]
+            // I(v)
           }
         }
       
-        assert v.persistentSuperblock.SeqEnd() <= v.inFlightSuperblock.value.SeqEnd();
-        assert v.persistentSuperblock.SeqEnd() <= v'.persistentSuperblock.SeqEnd();
-        assert CrashTolerantMapSpecMod.SpontaneousCommit(I(v), I(v'));
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
     }
