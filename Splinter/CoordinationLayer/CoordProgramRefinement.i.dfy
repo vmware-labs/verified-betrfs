@@ -111,6 +111,8 @@ module CoordProgramRefinement {
     && JournalExtendsJournal(isb.journal, psb.journal, psb.mapadt.seqEnd)
     // Ephemeral journal agrees with in-flight journal
     && JournalExtendsJournal(ej.PruneHead(isb.mapadt.seqEnd), isb.journal, isb.mapadt.seqEnd)
+    // in-flight map matches corresponding state in ephemeral world
+    && isb.mapadt == ej.PruneTail(isb.mapadt.seqEnd).ApplyToInterp(psb.mapadt)
   }
 
   predicate InvInFlightProperties(v: CoordProgramMod.Variables)
@@ -310,34 +312,51 @@ module CoordProgramRefinement {
             var refVersion := isb.mapadt;
             var refLsn := refVersion.seqEnd;
             assert refVersion == v'.persistentSuperblock.mapadt;
-            assert refVersion == psb.journal.PruneTail(isb.mapadt.seqEnd).ApplyToInterp(psb.mapadt);  // invariant
+            var ej := v.ephemeral.journal;
+//            calc {
+//              ej.PruneTail(isb.mapadt.seqEnd);
+//                { assert isb.mapadt.seqEnd <= psb.SeqEnd(); }
+//              ej.PruneTail(psb.SeqEnd()).PruneTail(isb.mapadt.seqEnd);
+//              psb.journal.PruneTail(isb.mapadt.seqEnd);
+//            }
+//            calc {
+//              refVersion;
+//              isb.mapadt;
+//                // InvInFlightVersionAgreement
+//              ej.PruneTail(isb.mapadt.seqEnd).ApplyToInterp(psb.mapadt);
+//              psb.journal.PruneTail(isb.mapadt.seqEnd).ApplyToInterp(psb.mapadt);
+//            }
 
             var eji := v.ephemeral.journal.PruneTail(i);
+            var ej' := v'.ephemeral.journal;
             calc {
               I(v').versions[i].asyncState.appv.interp;
                 // defn
-              v'.ephemeral.journal.PruneTail(i).ApplyToInterp(isb.mapadt);  // isb == v'.psb
-                // invariant InvInFlightVersionAgreement
-              v'.ephemeral.journal.PruneTail(i).ApplyToInterp(psb.journal.PruneTail(refLsn).ApplyToInterp(psb.mapadt));
-                // invariant that ephemeral journal agrees with persistent journal on overlapping stuff
-              v'.ephemeral.journal.PruneTail(i).ApplyToInterp(v.ephemeral.journal.PruneTail(psb.SeqEnd()).PruneTail(refLsn).ApplyToInterp(psb.mapadt));
-                { assert v.ephemeral.journal.PruneTail(psb.SeqEnd()).PruneTail(refLsn) == v.ephemeral.journal.PruneTail(refLsn); }  // trigger
-              v'.ephemeral.journal.PruneTail(i).ApplyToInterp(v.ephemeral.journal.PruneTail(refLsn).ApplyToInterp(psb.mapadt));
+              ej'.PruneTail(i).ApplyToInterp(isb.mapadt);  // isb == v'.psb
+                // inv
+              ej.PruneTail(i).PruneHead(refLsn).ApplyToInterp(isb.mapadt);
               {
-                JournalAssociativity(psb.mapadt, v.ephemeral.journal.PruneTail(refLsn), v'.ephemeral.journal.PruneTail(i));
+                assert isb.mapadt == ej.PruneTail(refLsn).ApplyToInterp(psb.mapadt);  // inv
               }
-              v.ephemeral.journal.PruneTail(refLsn).Concat(v'.ephemeral.journal.PruneTail(i)).ApplyToInterp(psb.mapadt);
-                // InvEphemeralJournalExtendsPersistentJournal
-              v.ephemeral.journal.PruneTail(refLsn).Concat(v.ephemeral.journal.PruneHead(refLsn).PruneTail(i)).ApplyToInterp(psb.mapadt);
-              v.ephemeral.journal.PruneTail(refLsn).Concat(eji.PruneHead(refLsn)).ApplyToInterp(psb.mapadt);
-              { assert v.ephemeral.journal.PruneTail(refLsn) == eji.PruneTail(refLsn); } // trigger
-              eji.PruneTail(refLsn).Concat(eji.PruneHead(refLsn)).ApplyToInterp(psb.mapadt);
+              ej.PruneTail(i).PruneHead(refLsn).ApplyToInterp(ej.PruneTail(refLsn).ApplyToInterp(psb.mapadt));
+              { JournalAssociativity(psb.mapadt, ej.PruneTail(refLsn), ej.PruneTail(i).PruneHead(refLsn)); }
+              ej.PruneTail(refLsn).Concat(ej.PruneTail(i).PruneHead(refLsn)).ApplyToInterp(psb.mapadt);
               {
-                assert eji.PruneTail(refLsn).Concat(eji.PruneHead(refLsn)) == eji;  // trigger
-//                JournalSplit(eji, refLsn);
+                calc {
+                  ej.PruneTail(refLsn);
+                  ej.PruneTail(i).PruneTail(refLsn);
+                }
+                calc {
+                  ej.PruneTail(refLsn).Concat(ej.PruneTail(i).PruneHead(refLsn));
+                  ej.PruneTail(i).PruneTail(refLsn).Concat(ej.PruneTail(i).PruneHead(refLsn));
+                }
               }
-              eji.ApplyToInterp(psb.mapadt);
-              v.ephemeral.journal.PruneTail(i).ApplyToInterp(psb.mapadt);
+              ej.PruneTail(i).PruneTail(refLsn).Concat(ej.PruneTail(i).PruneHead(refLsn)).ApplyToInterp(psb.mapadt);
+              {
+                var eji := ej.PruneTail(i);
+                assert eji.PruneTail(refLsn).Concat(eji.PruneHead(refLsn)) == eji;
+              }
+              ej.PruneTail(i).ApplyToInterp(psb.mapadt);
                 // defn
               I(v).versions[i].asyncState.appv.interp;
             }
