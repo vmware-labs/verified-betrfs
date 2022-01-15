@@ -166,6 +166,7 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case PutStep() => {
+        assume false;
         assert Inv(v');
       }
 //    case JournalInternalStep(sk) => { assert Inv(v'); }
@@ -247,7 +248,6 @@ module CoordProgramRefinement {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case PutStep() => {
-        assume false; // skip for now
         var j := v.ephemeral.journal;
         var j' := v'.ephemeral.journal;
         var base := v.persistentSuperblock.mapadt;
