@@ -166,7 +166,10 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case PutStep() => {
-        assume false;
+        if v.inFlightSuperblock.Some? {
+          var isbEnd := v.inFlightSuperblock.value.mapadt.seqEnd;
+          assert v.ephemeral.journal.PruneTail(isbEnd) == v'.ephemeral.journal.PruneTail(isbEnd); // trigger
+        }
         assert Inv(v');
       }
 //    case JournalInternalStep(sk) => { assert Inv(v'); }
