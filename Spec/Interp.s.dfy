@@ -6,6 +6,7 @@ include "../lib/Base/KeyType.s.dfy"
 include "Message.s.dfy"
 
 // Basic template for defining map Interpretations
+// TODO(jonh): Rename to LSNLabeledMapMod
 module InterpMod {
   import opened ValueMessage
   import opened KeyType

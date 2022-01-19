@@ -15,18 +15,11 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   type SyncReqId = nat
   datatype Version =
     | Forgotten
-      // jonh apology: The spec exposes the implementation-specific idea
-      // of log truncation to keep the interpretation functions easy to
-      // build. This way, when we truncate in the implementation, we
-      // can just map that to a Forgotten version in this spec version
-      // sequence. This is lame, because we're asking the spec inspector
-      // to understand impl details. An alternative would be to add
-      // a "write-only ghost state" mechanism to the bottom bread, into
-      // which Program.i could tuck away old ghost versions going back
-      // to the dawn of time, and then the interpretation function
-      // could peek at those to construct the version seq. This is a way
-      // to add Lamport's history variable while respecting the .v/.i
-      // split. But I'm too lazy to do that now, so please judge away.
+      // Keeping placeholders for LSNs before stableIdx makes it more
+      // obvious how the versions sequence evolves. To avoid the need
+      // for a bunch of ghost history complexity, we Forget the values
+      // at those LSNs so the implementation has an easy time constructing
+      // the interpretation.
     | Version(asyncState: async.PersistentState)
 
   datatype Variables = Variables(
@@ -96,17 +89,18 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     && v'.stableIdx == v.stableIdx
   }
 
+  // The Sync *action* causes some LSNs to become persistent, which may enable
+  // the system to reply to some sync *requests*.
+  // some sync *requests* to be replied to.
   // The implementation may push some stuff out to the disk without getting
   // all the way up to date with the ephemeral state.
-  predicate SpontaneousCommit(v: Variables, v': Variables)
+  predicate Sync(v: Variables, v': Variables)
   {
     && v.WF()
     && |v'.versions| == |v.versions|
-    // Commit can truncate old versions (see apology at definition of Forgotten)
+    // Commit truncates old versions.
     && (forall i | 0<=i<|v.versions| ::
-      || v'.versions[i] == v.versions[i]
-      || (i < v'.stableIdx && v'.versions[i].Forgotten?)
-      )
+      v'.versions[i] == if i < v'.stableIdx then Forgotten else v.versions[i])
     && v'.WF()  // But it can't truncate things after stableIdx
     && v'.asyncEphemeral == v.asyncEphemeral
     && v'.syncRequests == v.syncRequests
@@ -122,7 +116,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   // NB it's a very little bit funky. For all normal requests, three atomic
   // actions occur: the request arrives, it's executed (serialized), the reply
   // is delivered. For Syncs, we don't bother explicitly recording the serialization
-  // point; CompleteSync just gets enabled at some point before it occurs. Sorry?
+  // point; ReplySync just gets enabled at some point before it occurs. Sorry?
   predicate ReqSync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
     && v.WF()
@@ -131,7 +125,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
 
   // When your syncReqId gets flushed all the way to the persistent version slot,
   // the sync is complete and that version is stable.
-  predicate CompleteSync(v: Variables, v': Variables, syncReqId: SyncReqId)
+  predicate ReplySync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
     && v.WF()
     && syncReqId in v.syncRequests
@@ -142,9 +136,9 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   datatype UIOp =
     | OperateOp(baseOp: async.UIOp) // Put or Query Internally
     | CrashOp
-    | SpontaneousCommitOp // Check with Jon
+    | SyncOp
     | ReqSyncOp(syncReqId: SyncReqId)
-    | CompleteSyncOp(syncReqId: SyncReqId)
+    | ReplySyncOp(syncReqId: SyncReqId)
     | NoopOp
 
   predicate NextStep(v: Variables, v': Variables, uiop: UIOp)
@@ -152,9 +146,9 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     match uiop {
       case OperateOp(baseOp) => Operate(v, v', baseOp)
       case CrashOp => Crash(v, v')
-      case SpontaneousCommitOp => SpontaneousCommit(v, v')
+      case SyncOp => Sync(v, v')
       case ReqSyncOp(syncReqId) => ReqSync(v, v', syncReqId)
-      case CompleteSyncOp(syncReqId) => CompleteSync(v, v', syncReqId)
+      case ReplySyncOp(syncReqId) => ReplySync(v, v', syncReqId)
       case NoopOp => v' == v
     }
   }

@@ -113,6 +113,7 @@ module MsgHistoryMod {
         InterpMod.RawInterp(mapp, lsn + 1)
     }
 
+    // TODO(jonh): rename, because Interps shan't be named that anymore.
     function ApplyToInterp(orig: Interp) : (out: Interp)
       requires WF()
       requires CanFollow(orig.seqEnd)
@@ -148,6 +149,7 @@ module MsgHistoryMod {
       IsEmpty() || seqStart <= lsn <= seqEnd
     }
 
+    // TODO(jonh): rename PruneHead->DiscardOld, PruneTail->DiscardRecent
     // Returns every message in this after and including lsn
     function PruneHead(lsn: LSN) : (r: MsgSeq)
       requires CanPruneTo(lsn)
@@ -254,6 +256,7 @@ module MsgHistoryMod {
         None
   }
 
+  // TODO(jonh): Rename to Apply (or "Play"?) UM ACTUALLY DELETE THIS AND IKey. Subsumed by ApplyToInterp
   function Concat(interp: Interp, ms:MsgSeq) : Interp
     requires ms.WF()
     requires interp.seqEnd == ms.seqStart

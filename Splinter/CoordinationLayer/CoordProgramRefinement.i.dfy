@@ -1,5 +1,3 @@
-include "../IOSystem.s.dfy"
-include "../ProofObligations.s.dfy"
 include "CoordProgramMod.i.dfy"
 
 // This module shows refinement of CoordProgram to CrashTolerantMapSpecMod,
@@ -69,7 +67,7 @@ module CoordProgramRefinement {
     // is empty, the ephemeral map indeed matches the disk -- otherwise we won't
     // assign the right lsn to new puts.
     && (v.ephemeral.Known? && v.ephemeral.journal.IsEmpty() ==>
-        v.ephemeral.mapadt.seqEnd == v.persistentSuperblock.mapadt.seqEnd
+        NextLSN(v) == v.persistentSuperblock.mapadt.seqEnd
       )
   }
 
@@ -177,7 +175,7 @@ module CoordProgramRefinement {
       case ReqSyncStep() => {
         assert Inv(v');
       }
-      case CompleteSyncStep() => {
+      case ReplySyncStep() => {
         assert Inv(v');
       }
       case FreezeJournalStep(newFrozenLSN) => {
@@ -187,7 +185,15 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case CommitStartStep(seqBoundary) => {
-        assume Inv(v');
+        assert v'.inFlightSuperblock.Some?;
+        //assert v'.persistentSuperblock.SeqEnd() <=  LEFT OFF HERE looking at BestFrozenState.
+        assert v'.persistentSuperblock.SeqEnd() <= v'.inFlightSuperblock.value.SeqEnd(); // commit doesn't shrink persistent state
+        var psb' := v'.persistentSuperblock;
+        var isb' := v'.inFlightSuperblock.value;
+        var ej' := v'.ephemeral.journal;
+        assume JournalExtendsJournal(isb'.journal, psb'.journal, psb'.mapadt.seqEnd);
+        assume InvInFlightVersionAgreement(v');
+        assert Inv(v');
       }
       case CommitCompleteStep() => {
         assert Inv(v');
@@ -269,7 +275,7 @@ module CoordProgramRefinement {
       case ReqSyncStep() => {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
-      case CompleteSyncStep() => {
+      case ReplySyncStep() => {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case FreezeJournalStep(newFrozenLSN) => {
