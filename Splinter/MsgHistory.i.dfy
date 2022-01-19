@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 include "../Spec/Message.s.dfy"
-include "../Spec/Interp.s.dfy"
+include "../Spec/StampedMap.s.dfy"
 
 include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
@@ -17,10 +17,10 @@ module MsgHistoryMod {
   import opened Options
   import opened ValueMessage
   import opened KeyType
-  import InterpMod
+  import StampedMapMod
 
-  type LSN = InterpMod.LSN
-  type Interp = InterpMod.Interp
+  type LSN = StampedMapMod.LSN
+  type StampedMap = StampedMapMod.StampedMap
 
   datatype KeyedMessage = KeyedMessage(key: Key, message: Message)
 
@@ -93,7 +93,7 @@ module MsgHistoryMod {
       || seqStart == lsn
     }
 
-    function ApplyToInterpRecursive(orig: Interp, count: nat) : (out: Interp)
+    function ApplyToInterpRecursive(orig: StampedMap, count: nat) : (out: StampedMap)
       requires WF()
       requires count <= Len()
       requires CanFollow(orig.seqEnd)
@@ -110,11 +110,11 @@ module MsgHistoryMod {
         var oldMessage := subInterp.mi[key];
 
         var mapp := subInterp.mi[key := Merge(newMessage, oldMessage)];
-        InterpMod.RawInterp(mapp, lsn + 1)
+        StampedMapMod.RawStampedMap(mapp, lsn + 1)
     }
 
-    // TODO(jonh): rename, because Interps shan't be named that anymore.
-    function ApplyToInterp(orig: Interp) : (out: Interp)
+    // TODO(jonh): rename, because StampedMaps shan't be named that anymore.
+    function ApplyToInterp(orig: StampedMap) : (out: StampedMap)
       requires WF()
       requires CanFollow(orig.seqEnd)
       ensures out.seqEnd == orig.seqEnd + Len()
@@ -191,7 +191,7 @@ module MsgHistoryMod {
     }
   }
 
-  lemma ApplyToInterpRecursiveIsPrune(ms: MsgSeq, orig: Interp, count: nat)
+  lemma ApplyToInterpRecursiveIsPrune(ms: MsgSeq, orig: StampedMap, count: nat)
     requires ms.WF()
     requires count+1 <= ms.Len()
     requires ms.CanFollow(orig.seqEnd)
@@ -257,11 +257,11 @@ module MsgHistoryMod {
   }
 
   // TODO(jonh): Rename to Apply (or "Play"?) UM ACTUALLY DELETE THIS AND IKey. Subsumed by ApplyToInterp
-  function Concat(interp: Interp, ms:MsgSeq) : Interp
+  function Concat(interp: StampedMap, ms:MsgSeq) : StampedMap
     requires ms.WF()
     requires interp.seqEnd == ms.seqStart
   {
-    var ri := InterpMod.RawInterp(imap k | InterpMod.AnyKey(k) :: IKey(k, interp.mi[k], ms), ms.seqEnd);
+    var ri := StampedMapMod.RawStampedMap(imap k | StampedMapMod.AnyKey(k) :: IKey(k, interp.mi[k], ms), ms.seqEnd);
     assert ri.secretWF();
     ri
   }

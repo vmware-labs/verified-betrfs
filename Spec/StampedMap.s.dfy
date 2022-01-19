@@ -5,9 +5,9 @@ include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Base/KeyType.s.dfy"
 include "Message.s.dfy"
 
-// Basic template for defining map Interpretations
-// TODO(jonh): Rename to LSNLabeledMapMod
-module InterpMod {
+// A "StampedMap" is a full imap "stamped" with an LSN that identifies how many
+// operations it represents.
+module StampedMapMod {
   import opened ValueMessage
   import opened KeyType
 
@@ -16,7 +16,7 @@ module InterpMod {
   // Provide a Triggerable symbol for the quantifier
   predicate AnyKey(k: Key) { true }
 
-  datatype RawInterp = RawInterp(mi: imap<Key, Message>, seqEnd: LSN)
+  datatype RawStampedMap = RawStampedMap(mi: imap<Key, Message>, seqEnd: LSN)
   {
     predicate secretWF() {
       // TODO How is ImapComplete not in Maps.i?
@@ -25,31 +25,30 @@ module InterpMod {
     }
 
     // The effect of a put
-    function Put(key: Key, value: Message) : (outInterp : Interp)
+    function Put(key: Key, value: Message) : (outStampedMap : StampedMap)
       requires value.Define?
       requires secretWF()
-      ensures outInterp.secretWF()
+      ensures outStampedMap.secretWF()
     {
-      RawInterp(mi[key := value], seqEnd + 1)
+      RawStampedMap(mi[key := value], seqEnd + 1)
     }
   }
 
-  function RawEmpty() : RawInterp
+  function RawEmpty() : RawStampedMap
   {
-    RawInterp(imap k | AnyKey(k) :: DefaultMessage(), 0)
+    RawStampedMap(imap k | AnyKey(k) :: DefaultMessage(), 0)
   }
 
-  // Dafny demands a compilable witness for RawInterp, but also doesn't
+  // Dafny demands a compilable witness for RawStampedMap, but also doesn't
   // compile imaps. Lucky we're in a .s file so I can just lie with an
   // axiom. This makes me feel uncomfortable.
-  function method Witness() : RawInterp
+  function method Witness() : RawStampedMap
     ensures Witness() == RawEmpty()
 
-  type Interp = ri:RawInterp | ri.secretWF() witness Witness()
+  type StampedMap = ri:RawStampedMap | ri.secretWF() witness Witness()
 
-  function Empty() : Interp
+  function Empty() : StampedMap
   {
     RawEmpty()
   }
-
 }

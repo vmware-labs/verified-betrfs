@@ -8,7 +8,7 @@ include "../Spec/Message.s.dfy"
 module SplinterTreeInvariantMod {
   import opened SplinterTreeInterpMod
   import opened Options
-  import opened InterpMod
+  import opened StampedMapMod
   import opened DiskTypesMod
   import opened ValueMessage
   import opened KeyType

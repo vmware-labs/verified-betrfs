@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../../Spec/MapSpec.s.dfy"
-include "../../Spec/Interp.s.dfy"
+include "../../Spec/StampedMap.s.dfy"
 include "../../lib/Base/KeyType.s.dfy"
 include "../../lib/Base/MapRemove.s.dfy"
 include "../MsgHistory.i.dfy"
@@ -10,7 +10,7 @@ include "../MsgHistory.i.dfy"
 module CoordProgramMod {
   import opened Options
   import opened MapRemove_s
-  import InterpMod
+  import StampedMapMod
   import opened CrashTolerantMapSpecMod
   import opened MsgHistoryMod
   import opened KeyType
@@ -20,7 +20,7 @@ module CoordProgramMod {
 
   type UIOp = CrashTolerantMapSpecMod.UIOp
   type Journal = MsgSeq
-  type MapAdt = InterpMod.Interp
+  type MapAdt = StampedMapMod.StampedMap
 
   function JournalMkfs() : Journal
   {
@@ -28,7 +28,7 @@ module CoordProgramMod {
   }
 
   function MapAdtMkfs() : MapAdt {
-    InterpMod.Empty()
+    StampedMapMod.Empty()
   }
 
   function SeqEndFor(lsn: LSN, journal: Journal) : LSN
@@ -331,11 +331,11 @@ module CoordProgramMod {
 
   predicate CommitComplete(v: Variables, v': Variables, uiop : UIOp)
   {
+    && v.inFlightSuperblock.Some?
     && var sb := v.inFlightSuperblock.value;
 
     && uiop.SyncOp?
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
-    && v.inFlightSuperblock.Some?
 
     // pruning below is nonsense without this, but "luckily" this is an invariant:
     && v.ephemeral.journal.CanPruneTo(sb.mapadt.seqEnd)

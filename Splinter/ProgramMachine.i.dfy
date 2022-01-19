@@ -26,7 +26,7 @@ module ProgramMachineMod {
   import opened AllocationMod
   import opened DiskTypesMod
   import opened CrashTolerantMapSpecMod
-  import opened InterpMod
+  import opened StampedMapMod
   import opened ValueMessage
   import opened KeyType
   import opened MsgHistoryMod
@@ -101,7 +101,7 @@ module ProgramMachineMod {
   }
 
   // Now we know what the disk superblock says, and we can initialize the Journal, Tree Variables.
-  // They'll still not be ready to go, so they'll probably defer Interpretation to the disk,
+  // They'll still not be ready to go, so they'll probably defer StampedMapretation to the disk,
   // but *we* don't have to know that.
   predicate LearnSuperblock(v: Variables, v': Variables, rawSuperblock: UninterpretedDiskPage, sk: JournalMachineMod.InitSkolems)
   {
@@ -122,7 +122,7 @@ module ProgramMachineMod {
 
   // Once the Journal is ready to read, and for as long as it's ahead of the Tree, we PutMany
   // messages from Journal to Tree.
-  // Interpretation is still punted to the disk, although routing it to the Journal would also
+  // StampedMapretation is still punted to the disk, although routing it to the Journal would also
   // be okay right now, since its Variables match the disk and no writes have occurred since Init.
   predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq, newbetree: SplinterTreeMachineMod.Variables)
   {
@@ -143,7 +143,7 @@ module ProgramMachineMod {
 
   // Once we've brought the tree up-to-date with respect to the journal,
   // we can enter normal operations.
-  // Interpretation goes to the Tree's variables. (It could point to the
+  // StampedMapretation goes to the Tree's variables. (It could point to the
   // Journal, too, since their ephemeral views are kept synchronized -- but if
   // we ever want to support a mode where we abandon the Journal during long
   // periods of no sync requests, we need to use the Tree.)

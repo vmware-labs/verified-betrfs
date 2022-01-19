@@ -4,24 +4,24 @@
 include "../lib/Base/KeyType.s.dfy"
 include "../lib/Base/SequencesLite.s.dfy"
 include "Message.s.dfy"
-include "Interp.s.dfy"
+include "StampedMap.s.dfy"
 include "AtomicStateMachine.s.dfy"
 include "CrashTolerant.s.dfy"
 
 module MapSpecMod refines AtomicStateMachineMod {
   import opened ValueMessage
   import opened KeyType
-  import InterpMod
+  import StampedMapMod
 
   // UI
   datatype Input = GetInput(k: Key) | PutInput(k: Key, v: Value) | NoopInput
   datatype Output = GetOutput(v: Value) | PutOutput | NoopOutput
 
   // State machine
-  datatype Variables = Variables(interp: InterpMod.Interp)
+  datatype Variables = Variables(interp: StampedMapMod.StampedMap)
 
   function InitState() : Variables {
-    Variables(InterpMod.Empty())
+    Variables(StampedMapMod.Empty())
   }
 
   predicate Query(s: Variables, s': Variables, k: Key, v: Value)

@@ -5,7 +5,7 @@ include "SequenceSets.i.dfy"
 include "Journal.i.dfy"
 include "CacheLemmas.i.dfy"
 
-// The Module that Interprets the Journal.
+// The Module that StampedMaprets the Journal.
 module JournalInterpMod {
 
   import opened ValueMessage
@@ -18,7 +18,7 @@ module JournalInterpMod {
   import opened DiskTypesMod
   import opened AllocationMod
   import opened JournalMachineMod
-  import opened InterpMod
+  import opened StampedMapMod
   import opened SequenceSetsMod
   import CacheLemmasMod
   import CrashTolerantMapSpecMod
@@ -36,7 +36,7 @@ module JournalInterpMod {
     && DiskSupportsChainLookup(v.marshalledLookup, cache.dv, v.CurrentSuperblock())
   }
 
-  // Interpret just the journaled messages
+  // StampedMapret just the journaled messages
   function IMsgSeq(v: Variables, cache:CacheIfc.Variables) : MsgSeq
     requires v.WF()
   {
@@ -44,7 +44,7 @@ module JournalInterpMod {
   }
 
   //////////////////////////////////////////////////////////////////////
-  // Interpret an Interp + JournalInterp -> spec Versions
+  // StampedMapret an StampedMap + JournalInterp -> spec Versions
   // This perhaps belongs higher up?
   //////////////////////////////////////////////////////////////////////
 
@@ -60,7 +60,7 @@ module JournalInterpMod {
       set id | id in syncReqs && syncReqs[id] == lsn
     }
     
-    function VersionFor(base: InterpMod.Interp, lsn: LSN) : CrashTolerantMapSpecMod.Version
+    function VersionFor(base: StampedMapMod.StampedMap, lsn: LSN) : CrashTolerantMapSpecMod.Version
       requires WF()
       requires base.seqEnd == msgSeq.seqStart
       requires msgSeq.seqStart <= lsn <= msgSeq.seqEnd
@@ -71,7 +71,7 @@ module JournalInterpMod {
       CrashTolerantMapSpecMod.Version(asyncmapspec, SyncReqsAt(lsn))
     }
 
-    function VersionsFromBase(base: InterpMod.Interp) : seq<CrashTolerantMapSpecMod.Version>
+    function VersionsFromBase(base: StampedMapMod.StampedMap) : seq<CrashTolerantMapSpecMod.Version>
       requires WF()
       requires base.seqEnd == msgSeq.seqStart
     {
@@ -79,7 +79,7 @@ module JournalInterpMod {
       seq(msgSeq.Len()+1, i requires 0 <= i < numVersions => VersionFor(base, i + msgSeq.seqStart))
     }
 
-    function AsCrashTolerantMapSpec(base: InterpMod.Interp) : CrashTolerantMapSpecMod.Variables
+    function AsCrashTolerantMapSpec(base: StampedMapMod.StampedMap) : CrashTolerantMapSpecMod.Variables
       requires WF()
       requires base.seqEnd == msgSeq.seqStart
     {

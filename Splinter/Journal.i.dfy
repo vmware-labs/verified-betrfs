@@ -33,7 +33,7 @@ module JournalMachineMod {
   import opened Maps
   import opened ValueMessage
   import opened KeyType
-  import opened InterpMod
+  import opened StampedMapMod
   import opened CrashTolerantMapSpecMod
   import opened MsgHistoryMod
   import opened DiskTypesMod

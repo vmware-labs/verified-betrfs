@@ -6,7 +6,7 @@ include "AllocationTableMachine.i.dfy"
 include "MsgHistory.i.dfy"
 include "BranchTree.i.dfy"
 include "../Spec/Message.s.dfy"
-include "../Spec/Interp.s.dfy"
+include "../Spec/StampedMap.s.dfy"
 include "BranchTreeInterp.i.dfy"
 include "../lib/Base/Sequences.i.dfy"
 
@@ -20,7 +20,7 @@ module BranchTreeStackMod {
   import opened Options
   import opened ValueMessage
   import KeyType
-  import opened InterpMod
+  import opened StampedMapMod
   import opened DiskTypesMod
   import opened AllocationMod
   import opened MsgHistoryMod

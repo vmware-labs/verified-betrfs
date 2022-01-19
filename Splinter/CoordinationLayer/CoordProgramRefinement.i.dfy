@@ -13,7 +13,7 @@ module CoordProgramRefinement {
 
   import Async = CrashTolerantMapSpecMod.async
 
-  function InterpsFromBase(base: InterpMod.Interp, journal: Journal) : seq<InterpMod.Interp>
+  function StampedMapsFromBase(base: StampedMapMod.StampedMap, journal: Journal) : seq<StampedMapMod.StampedMap>
     requires journal.WF()
     requires journal.CanFollow(base.seqEnd)
   {
@@ -22,17 +22,17 @@ module CoordProgramRefinement {
       journal.PruneTail(i + journal.seqStart).ApplyToInterp(base))
   }
 
-  function VersionsFromBase(base: InterpMod.Interp, journal: Journal) : (versions:seq<CrashTolerantMapSpecMod.Version>)
+  function VersionsFromBase(base: StampedMapMod.StampedMap, journal: Journal) : (versions:seq<CrashTolerantMapSpecMod.Version>)
     requires journal.WF()
     requires journal.CanFollow(base.seqEnd)
   {
     var numVersions := journal.Len()+1;
     seq(numVersions, i requires 0 <= i < numVersions => 
-      var interp := InterpsFromBase(base, journal)[i];
+      var interp := StampedMapsFromBase(base, journal)[i];
       CrashTolerantMapSpecMod.Version(Async.PersistentState(MapSpecMod.Variables(interp))))
   }
 
-  function VersionsWithForgottenPrefix(base: InterpMod.Interp, journal: Journal) : (versions:seq<CrashTolerantMapSpecMod.Version>)
+  function VersionsWithForgottenPrefix(base: StampedMapMod.StampedMap, journal: Journal) : (versions:seq<CrashTolerantMapSpecMod.Version>)
     requires journal.WF()
     requires journal.CanFollow(base.seqEnd)
     ensures |versions| == SeqEndFor(base.seqEnd, journal)+1
@@ -129,7 +129,7 @@ module CoordProgramRefinement {
   {
     && v.WF()
     && (v.ephemeral.Known? ==>
-      // Interpret ephemeral state by stitching ephemeral journal (which
+      // StampedMapret ephemeral state by stitching ephemeral journal (which
       // invariantly matches ephemeral mapadt) with persistent mapadt (which
       // it can follow exactly without beheading).
       && InvEphemeralJournalExtendsPersistentJournal(v)
@@ -201,7 +201,7 @@ module CoordProgramRefinement {
     }
   }
 
-  lemma ApplicationConcatenation(base: InterpMod.Interp, j: Journal, lsn: LSN, kmsg: KeyedMessage)
+  lemma ApplicationConcatenation(base: StampedMapMod.StampedMap, j: Journal, lsn: LSN, kmsg: KeyedMessage)
     requires j.WF()
     requires j.CanFollow(base.seqEnd)
     requires lsn == if j.IsEmpty() then base.seqEnd else j.seqEnd

@@ -13,7 +13,7 @@ module VeribetrIOSystem refines IOSystem {
 module Proof refines ProofObligations {
   import opened DiskTypesMod
   import MapSpecMod
-  import InterpMod
+  import StampedMapMod
   import AllocationMod
   import opened SequenceSetsMod
 

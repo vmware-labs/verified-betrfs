@@ -18,7 +18,7 @@ module ProgramInterpMod {
   import opened Options
   import opened ValueMessage
   import opened KeyType
-  import opened InterpMod
+  import opened StampedMapMod
   import opened DiskTypesMod
   import opened AllocationMod
   import opened MsgHistoryMod

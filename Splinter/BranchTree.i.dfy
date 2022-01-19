@@ -1,5 +1,5 @@
 include "../Spec/Message.s.dfy"
-include "../Spec/Interp.s.dfy"
+include "../Spec/StampedMap.s.dfy"
 include "DiskTypes.s.dfy"
 
 include "../lib/Base/total_order.i.dfy"

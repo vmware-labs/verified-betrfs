@@ -9,7 +9,7 @@ include "MsgHistory.i.dfy"
 include "SplinterTree.i.dfy"
 include "BranchTreeInterp.i.dfy"
 include "../Spec/Message.s.dfy"
-include "../Spec/Interp.s.dfy"
+include "../Spec/StampedMap.s.dfy"
 include "../lib/Base/mathematics.i.dfy"
 
 // interpretation for the SplinterTree Implementation
@@ -18,7 +18,7 @@ module SplinterTreeInterpMod {
   import opened Options
   import opened ValueMessage
   import opened KeyType
-  import opened InterpMod
+  import opened StampedMapMod
   import opened DiskTypesMod
   import opened AllocationMod
   import opened MsgHistoryMod
@@ -63,7 +63,7 @@ module SplinterTreeInterpMod {
       DefaultMessage() // this is not a absence of a key, this case cannot happen by invariant
   }
 
-  function {:opaque} IM(cache: CacheIfc.Variables, v: Variables) : (i:Interp)
+  function {:opaque} IM(cache: CacheIfc.Variables, v: Variables) : (i:StampedMap)
     ensures i.seqEnd == v.endSeq
   {
     RawInterp((imap key | AnyKey(key) :: IMKey(v, cache, key)), v.endSeq) // check v.endSeq used to be sb.endSeq
