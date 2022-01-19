@@ -124,7 +124,7 @@ module ProgramMachineMod {
   // messages from Journal to Tree.
   // StampedMapretation is still punted to the disk, although routing it to the Journal would also
   // be okay right now, since its Variables match the disk and no writes have occurred since Init.
-  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq, newbetree: SplinterTreeMachineMod.Variables)
+  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgHistory, newbetree: SplinterTreeMachineMod.Variables)
   {
     && v.WF()
     && v'.WF()
@@ -342,7 +342,7 @@ module ProgramMachineMod {
   }
 
   datatype Step =
-    | RecoverStep(puts:MsgSeq, newbetree: SplinterTreeMachineMod.Variables)
+    | RecoverStep(puts:MsgHistory, newbetree: SplinterTreeMachineMod.Variables)
     | QueryStep(key: Key, val: Value, bsk: SplinterTreeMachineMod.Skolem)
     | PutStep(bsk: SplinterTreeMachineMod.Skolem)
     | JournalInternalStep(jsk: JournalMachineMod.Skolem)

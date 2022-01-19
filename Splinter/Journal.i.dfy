@@ -47,7 +47,7 @@ module JournalMachineMod {
 
   // On-disk JournalRecords
   datatype JournalRecord = JournalRecord(
-    messageSeq: MsgSeq,
+    messageSeq: MsgHistory,
     priorCU: Option<CU>   // linked list pointer
   )
   {
@@ -73,7 +73,7 @@ module JournalMachineMod {
 
     | ChainSuccess( // the disk had a parseable journal chain on it.
         records: seq<JournalRecord>,
-        interp: MsgSeq)
+        interp: MsgHistory)
   {
     predicate WF()
     {
@@ -304,7 +304,7 @@ module JournalMachineMod {
       && last().cumulativeResult.ChainSuccess?
     }
 
-    function interp() : MsgSeq
+    function interp() : MsgHistory
       requires WF()
       requires success()
     {
@@ -631,7 +631,7 @@ module JournalMachineMod {
   }
 
   // Recovery coordination
-  predicate MessageSeqMatchesJournalAt(v: Variables, puts: MsgSeq)
+  predicate MessageSeqMatchesJournalAt(v: Variables, puts: MsgHistory)
     requires v.WF()
     requires puts.WF()
   {
@@ -651,14 +651,14 @@ module JournalMachineMod {
     && v' == v.(unmarshalledTail := v.unmarshalledTail + [message])
   }
 
-  function TailToMsgSeq(v: Variables) : (result : MsgSeq)
+  function TailToMsgSeq(v: Variables) : (result : MsgHistory)
     ensures result.WF()
   {
     var start := v.marshalledLSN;
     var end := v.unmarshalledLSN();
     if start==end
     then MsgHistoryMod.Empty()
-    else MsgSeq(map i: LSN | start <= i < end :: v.unmarshalledTail[i - start], start, end)
+    else MsgHistory(map i: LSN | start <= i < end :: v.unmarshalledTail[i - start], start, end)
   }
 
   // advances marshalledLSN forward by marshalling a batch of messages into a dirty cache page

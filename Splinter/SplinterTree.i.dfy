@@ -12,7 +12,7 @@ include "../Spec/Message.s.dfy"
 include "../Spec/StampedMap.s.dfy"
 include "BranchTree.i.dfy"
 include "BranchTreeInterp.i.dfy"
-include "MsgSeq.i.dfy"
+include "CoordinationLayer/MsgHistory.i.dfy"
 include "../lib/Buckets/BoundedPivotsLib.i.dfy"
 
 /*
@@ -350,7 +350,7 @@ module SplinterTreeMachineMod {
     }
 
     // Messages in all the branch receipts at this layer
-    function MsgSeq() : seq<Message>
+    function MsgHistory() : seq<Message>
       requires WF()
     {
       MsgSeqRecurse(|branchReceipts|)
@@ -464,11 +464,11 @@ module SplinterTreeMachineMod {
       then
           membufferMsgs
       else
-         msgSeqRecurse(count-1) + steps[count-1].MsgSeq()
+         msgSeqRecurse(count-1) + steps[count-1].MsgHistory()
     }
 
     // Collapse all the messages in this trunk path
-    function MsgSeq() : (out : seq<Message>)
+    function MsgHistory() : (out : seq<Message>)
       requires WF()
     {
       msgSeqRecurse(|steps|)
@@ -525,8 +525,8 @@ module SplinterTreeMachineMod {
       && WF()
       && (forall i | (0 <= i < |steps|) :: steps[i].Valid(v, cache))
       && (0 < |steps| ==> steps[0].na.id == RootId()) // check for root
-      && 0 < |MsgSeq()|
-      && Last(MsgSeq()).Define?
+      && 0 < |MsgHistory()|
+      && Last(MsgHistory()).Define?
       && ValidPrefix()
       // check that the first step is the root
       && (0 < |steps| ==> steps[0].na.cu == v.root)
@@ -542,7 +542,7 @@ module SplinterTreeMachineMod {
       requires WF()
       ensures msg.Define?
     {
-      var msg := MsgSeqMod.CombineDeltasWithDefine(MsgSeq());
+      var msg := MsgSeqMod.CombineDeltasWithDefine(MsgHistory());
       if msg.None?
       then
         DefaultMessage()
@@ -620,7 +620,7 @@ module SplinterTreeMachineMod {
     && v' == v.(memBuffer := v.memBuffer[key := newMessage], endSeq := v.endSeq + 1)
   }
 
-  predicate PutMany(v: Variables, v': Variables, puts: MsgSeq)
+  predicate PutMany(v: Variables, v': Variables, puts: MsgHistory)
     requires puts.WF()
   {
     &&  v' == v.(memBuffer := puts.ApplyToKeyMap(v.memBuffer), endSeq := v.endSeq + puts.Len())

@@ -19,7 +19,7 @@ module CoordProgramMod {
   import Async = CrashTolerantMapSpecMod.async
 
   type UIOp = CrashTolerantMapSpecMod.UIOp
-  type Journal = MsgSeq
+  type Journal = MsgHistory
   type MapAdt = StampedMapMod.StampedMap
 
   function JournalMkfs() : Journal
@@ -169,7 +169,7 @@ module CoordProgramMod {
   }
 
   // Move some journal state into the map to make it (closer to) fresh
-  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq)
+  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgHistory)
   {
     && uiop.NoopOp?
     && v.WF()
@@ -354,7 +354,7 @@ module CoordProgramMod {
 
   datatype Step =
     | LoadEphemeralStateStep()
-    | RecoverStep(puts:MsgSeq)
+    | RecoverStep(puts:MsgHistory)
     | QueryStep(key: Key, val: Value)
     | PutStep()
 //    | JournalInternalStep()

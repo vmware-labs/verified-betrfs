@@ -27,7 +27,7 @@ module MsgHistoryMod {
 
   // TODO: Rename the datatype to MsgHistory here to match the module
   // A contiguous sequence of messages from seqStart up to (not including) seqEnd.
-  datatype MsgSeq = MsgSeq(msgs: map<LSN, KeyedMessage>, seqStart: LSN, seqEnd: LSN)
+  datatype MsgHistory = MsgHistory(msgs: map<LSN, KeyedMessage>, seqStart: LSN, seqEnd: LSN)
     // seqEnd is exclusive
   {
     predicate Contains(lsn: LSN)
@@ -58,9 +58,9 @@ module MsgHistoryMod {
 
     // Add a single message to the end of the sequence. It gets LSN 'seqEnd', since
     // that's exclusive (points at the next empty slot).
-    function Extend(m: KeyedMessage) : MsgSeq
+    function Extend(m: KeyedMessage) : MsgHistory
     {
-      MsgSeq(
+      MsgHistory(
         map k | k in msgs.Keys + { seqEnd } :: if k == seqEnd then m else msgs[k],
         seqStart,
         seqEnd+1)
@@ -72,7 +72,7 @@ module MsgHistoryMod {
       seqStart == seqEnd
     }
 
-    function Concat(other : MsgSeq) : (result : MsgSeq)
+    function Concat(other : MsgHistory) : (result : MsgHistory)
       requires WF()
       requires other.WF()
       requires IsEmpty() || other.CanFollow(seqEnd)
@@ -85,7 +85,7 @@ module MsgHistoryMod {
       else if other.IsEmpty()
       then this
       else
-        MsgSeq( MapDisjointUnion(msgs, other.msgs), seqStart, other.seqEnd)
+        MsgHistory( MapDisjointUnion(msgs, other.msgs), seqStart, other.seqEnd)
     }
 
     predicate CanFollow(lsn: LSN)
@@ -152,7 +152,7 @@ module MsgHistoryMod {
 
     // TODO(jonh): rename PruneHead->DiscardOld, PruneTail->DiscardRecent
     // Returns every message in this after and including lsn
-    function PruneHead(lsn: LSN) : (r: MsgSeq)
+    function PruneHead(lsn: LSN) : (r: MsgHistory)
       requires CanPruneTo(lsn)
       requires WF()
       ensures r.WF()
@@ -163,11 +163,11 @@ module MsgHistoryMod {
       then Empty()
       else
         var keepMap := map k | lsn <= k < seqEnd :: msgs[k];
-        MsgSeq(keepMap, lsn, seqEnd)
+        MsgHistory(keepMap, lsn, seqEnd)
     }
 
     // Returns every message in this up to but not including lsn.
-    function PruneTail(lsn: LSN) : (r: MsgSeq)
+    function PruneTail(lsn: LSN) : (r: MsgHistory)
       requires CanPruneTo(lsn)
       requires WF()
       ensures r.WF()
@@ -178,10 +178,10 @@ module MsgHistoryMod {
       then Empty()
       else
         var keepMap := map k | seqStart <= k < lsn :: msgs[k];
-        MsgSeq(keepMap, seqStart, lsn)
+        MsgHistory(keepMap, seqStart, lsn)
     }
 
-    predicate IncludesSubseq(subseq: MsgSeq)
+    predicate IncludesSubseq(subseq: MsgHistory)
       requires WF()
       requires subseq.WF()
       ensures IncludesSubseq(subseq) && IsEmpty() ==> subseq.IsEmpty()
@@ -192,7 +192,7 @@ module MsgHistoryMod {
     }
   }
 
-  lemma ApplyToInterpRecursiveIsPrune(ms: MsgSeq, orig: StampedMap, count: nat)
+  lemma ApplyToInterpRecursiveIsPrune(ms: MsgHistory, orig: StampedMap, count: nat)
     requires ms.WF()
     requires count+1 <= ms.Len()
     requires ms.CanFollow(orig.seqEnd)
@@ -208,24 +208,24 @@ module MsgHistoryMod {
     }
   }
 
-  function Empty() : (result: MsgSeq)
+  function Empty() : (result: MsgHistory)
     ensures result.WF()
   {
-    MsgSeq(map[], 0, 0)
+    MsgHistory(map[], 0, 0)
   }
 
-  function Singleton(lsn: LSN, msg: KeyedMessage) : MsgSeq
+  function Singleton(lsn: LSN, msg: KeyedMessage) : MsgHistory
   {
-    MsgSeq(map [lsn := msg], lsn, lsn+1)
+    MsgHistory(map [lsn := msg], lsn, lsn+1)
   }
 
 
 // TODO(jonh): delete. These were based on the idea that we should't have two
-// writes to the same key in a MsgSeq. That was to make defining "Apply" easier
-// -- but that was a false economy; it makes all the MsgSeq algebra more
+// writes to the same key in a MsgHistory. That was to make defining "Apply" easier
+// -- but that was a false economy; it makes all the MsgHistory algebra more
 // difficult.
 //
-//  function Condense(m0: MsgSeq, m1: MsgSeq) : (mo: Option<MsgSeq>)
+//  function Condense(m0: MsgHistory, m1: MsgHistory) : (mo: Option<MsgHistory>)
 //    ensures mo.Some? ==> mo.value.WF()
 //  {
 //    if !m0.WF() || !m1.WF()
@@ -235,12 +235,12 @@ module MsgHistoryMod {
 //    else if m1.IsEmpty()
 //      then Some(m0)
 //    else if m0.seqEnd == m1.seqStart
-//      then Some(MsgSeq(MapDisjointUnion(m0.msgs, m1.msgs), m0.seqStart, m1.seqEnd))
+//      then Some(MsgHistory(MapDisjointUnion(m0.msgs, m1.msgs), m0.seqStart, m1.seqEnd))
 //    else
 //      None  // Inputs don't stitch
 //  }
 //
-//  function CondenseAll(mss: seq<MsgSeq>) : Option<MsgSeq>
+//  function CondenseAll(mss: seq<MsgHistory>) : Option<MsgHistory>
 //  {
 //    if |mss|==0
 //    then Some(Empty())

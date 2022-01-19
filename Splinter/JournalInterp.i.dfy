@@ -37,7 +37,7 @@ module JournalInterpMod {
   }
 
   // StampedMapret just the journaled messages
-  function IMsgSeq(v: Variables, cache:CacheIfc.Variables) : MsgSeq
+  function IMsgSeq(v: Variables, cache:CacheIfc.Variables) : MsgHistory
     requires v.WF()
   {
     v.marshalledLookup.interp().Concat(TailToMsgSeq(v))
@@ -48,7 +48,7 @@ module JournalInterpMod {
   // This perhaps belongs higher up?
   //////////////////////////////////////////////////////////////////////
 
-  datatype JournalInterp = JournalInterp(msgSeq: MsgSeq, syncReqs: map<CrashTolerantMapSpecMod.SyncReqId, LSN>)
+  datatype JournalInterp = JournalInterp(msgSeq: MsgHistory, syncReqs: map<CrashTolerantMapSpecMod.SyncReqId, LSN>)
   {
     predicate WF() {
       && msgSeq.WF()
