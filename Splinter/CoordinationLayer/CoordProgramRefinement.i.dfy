@@ -163,6 +163,9 @@ module CoordProgramRefinement {
       case RecoverStep(puts) => {
         assert Inv(v');
       }
+      case AcceptRequestStep() => {
+        assert Inv(v');
+      }
       case QueryStep(key, val) => {
         assert Inv(v');
       }
@@ -171,6 +174,9 @@ module CoordProgramRefinement {
           var isbEnd := v.inFlightSuperblock.value.mapadt.seqEnd;
           assert v.ephemeral.journal.DiscardRecent(isbEnd) == v'.ephemeral.journal.DiscardRecent(isbEnd); // trigger
         }
+        assert Inv(v');
+      }
+      case DeliverReplyStep() => {
         assert Inv(v');
       }
 //    case JournalInternalStep(sk) => { assert Inv(v'); }
@@ -256,6 +262,9 @@ module CoordProgramRefinement {
         assert uiop == CrashTolerantMapSpecMod.NoopOp;
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
+      case AcceptRequestStep() => {
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+      }
       case QueryStep(key, val) => {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
@@ -273,6 +282,9 @@ module CoordProgramRefinement {
         }
         assert forall i | v.persistentSuperblock.mapadt.seqEnd<=i<|I(v).versions| :: j'.DiscardRecent(i) == j.DiscardRecent(i);  // Rob Power Trigger
 
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+      }
+      case DeliverReplyStep() => {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
 //    case JournalInternalStep(sk) => { assert Inv(v'); }

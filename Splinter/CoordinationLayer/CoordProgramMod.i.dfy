@@ -187,6 +187,15 @@ module CoordProgramMod {
     && v' == v.(ephemeral := v.ephemeral.(mapadt := MapPlusHistory(v.ephemeral.mapadt, puts)))
   }
 
+  predicate AcceptRequest(v: Variables, v': Variables, uiop : UIOp)
+  {
+    && v.ephemeral.Known?
+    && uiop.OperateOp?
+    && uiop.baseOp.RequestOp?
+    && v' == v.(ephemeral := v.ephemeral.(progress := v.ephemeral.progress.(
+        requests := v.ephemeral.progress.requests + {uiop.baseOp.req})))
+  }
+
   predicate Query(v: Variables, v': Variables, uiop : UIOp, key: Key, val: Value)
   {
     && MapIsFresh(v)
@@ -233,6 +242,16 @@ module CoordProgramMod {
             replies := v.ephemeral.progress.replies + {uiop.baseOp.reply}
           )
       ))
+  }
+
+  predicate DeliverReply(v: Variables, v': Variables, uiop : UIOp)
+  {
+    && v.ephemeral.Known?
+    && uiop.OperateOp?
+    && uiop.baseOp.ReplyOp?
+    && uiop.baseOp.reply in v.ephemeral.progress.replies
+    && v' == v.(ephemeral := v.ephemeral.(progress := v.ephemeral.progress.(
+        replies := v.ephemeral.progress.replies - {uiop.baseOp.reply})))
   }
 
   // Journal Internal steps (writing stuff out to disk, for example)
@@ -350,8 +369,10 @@ module CoordProgramMod {
   datatype Step =
     | LoadEphemeralStateStep()
     | RecoverStep(puts:MsgHistory)
+    | AcceptRequestStep()
     | QueryStep(key: Key, val: Value)
     | PutStep()
+    | DeliverReplyStep()
 //    | JournalInternalStep()
 //    | SplinterTreeInternalStep()
     | ReqSyncStep()
@@ -365,11 +386,12 @@ module CoordProgramMod {
     match step {
       case LoadEphemeralStateStep() => LoadEphemeralState(v, v', uiop)
       case RecoverStep(puts) => Recover(v, v', uiop, puts)
-      // TODO(jonh): nothing implements Async request arrival, reply departure.
+      case AcceptRequestStep() => AcceptRequest(v, v', uiop)
       case QueryStep(key, val) => Query(v, v', uiop, key, val)
       case PutStep() => Put(v, v', uiop)
 //      case JournalInternalStep(sk) => JournalInternal(v, v', uiop, cacheOps, sk)
 //      case SplinterTreeInternalStep(sk) => SplinterTreeInternal(v, v', uiop, cacheOps, sk)
+      case DeliverReplyStep() => DeliverReply(v, v', uiop)
       case ReqSyncStep() => ReqSync(v, v', uiop)
       case ReplySyncStep() => ReplySync(v, v', uiop)
       case FreezeJournalStep(newFrozenLSN) => FreezeJournal(v, v', uiop, newFrozenLSN)
