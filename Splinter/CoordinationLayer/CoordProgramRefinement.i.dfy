@@ -13,54 +13,38 @@ module CoordProgramRefinement {
 
   import Async = CrashTolerantMapSpecMod.async
 
-  function StampedMapsFromBase(base: StampedMapMod.StampedMap, journal: Journal) : seq<StampedMapMod.StampedMap>
-    requires journal.WF()
-    requires journal.CanFollow(base.seqEnd)
+  function StampedMapToVersion(sm: StampedMapMod.StampedMap) : CrashTolerantMapSpecMod.Version
   {
-    if journal.EmptyHistory?
-    then [ base ]
-    else
-      var numVersions := journal.Len()+1;  // Can apply zero to Len() messages.
-      seq(numVersions, i requires 0 <= i < numVersions =>
-        MapPlusHistory(base, journal.DiscardRecent(i + journal.seqStart)))
+    CrashTolerantMapSpecMod.Version(Async.PersistentState(MapSpecMod.Variables(sm)))
   }
 
-  function VersionsFromBase(base: StampedMapMod.StampedMap, journal: Journal) : (versions:seq<CrashTolerantMapSpecMod.Version>)
+  function VersionsWithForgottenPrefix(base: StampedMapMod.StampedMap, journal: Journal, stableLSN: LSN) : (versions:seq<CrashTolerantMapSpecMod.Version>)
     requires journal.WF()
     requires journal.CanFollow(base.seqEnd)
-  {
-    var numVersions := journal.Len()+1;
-    seq(numVersions, i requires 0 <= i < numVersions => 
-      var interp := StampedMapsFromBase(base, journal)[i];
-      CrashTolerantMapSpecMod.Version(Async.PersistentState(MapSpecMod.Variables(interp))))
-  }
-
-  function VersionsWithForgottenPrefix(base: StampedMapMod.StampedMap, journal: Journal) : (versions:seq<CrashTolerantMapSpecMod.Version>)
-    requires journal.WF()
-    requires journal.CanFollow(base.seqEnd)
+    requires journal.CanDiscardTo(stableLSN)
     ensures |versions| == SeqEndFor(base.seqEnd, journal)+1
   {
-    var forgottenVersions := seq(base.seqEnd, i => CrashTolerantMapSpecMod.Forgotten);
-    forgottenVersions + VersionsFromBase(base, journal)
-  }
-
-  // Stitch together a base map, a journal, and the specified ephemeral request state.
-  function IStitch(base: MapAdt, journal: Journal, progress: Async.EphemeralState, syncReqs: SyncReqs, stableLSN: LSN) : CrashTolerantMapSpecMod.Variables
-    requires journal.WF()
-    requires journal.CanFollow(base.seqEnd)
-  {
-    CrashTolerantMapSpecMod.Variables(VersionsWithForgottenPrefix(base, journal), progress, syncReqs, stableLSN)
+    // Construct a Version seq with the entries before stableLSN Forgotten: that's what spec expects.
+    var numVersions := SeqEndFor(base.seqEnd, journal) + 1;
+    seq(numVersions, lsn requires 0<=lsn<numVersions =>
+      if lsn < stableLSN
+      then CrashTolerantMapSpecMod.Forgotten
+      else StampedMapToVersion(MapPlusHistory(base, journal.DiscardRecent(lsn))))
   }
 
   function I(v: CoordProgramMod.Variables) : CrashTolerantMapSpecMod.Variables
   {
+    var stableLSN := v.persistentSuperblock.SeqEnd();
+
     if !Inv(v)
-    then CrashTolerantMapSpecMod.InitState()
+    then CrashTolerantMapSpecMod.InitState()  // silly-handler
     else if v.ephemeral.Known?
-      then IStitch(v.persistentSuperblock.mapadt, v.ephemeral.journal,
-        v.ephemeral.progress, v.ephemeral.syncReqs, v.persistentSuperblock.SeqEnd())
-      else IStitch(v.persistentSuperblock.mapadt, v.persistentSuperblock.journal,
-        Async.InitEphemeralState(), map[], v.persistentSuperblock.SeqEnd())
+    then CrashTolerantMapSpecMod.Variables(
+      VersionsWithForgottenPrefix(v.persistentSuperblock.mapadt, v.ephemeral.journal, stableLSN),
+        v.ephemeral.progress, v.ephemeral.syncReqs, stableLSN)
+    else CrashTolerantMapSpecMod.Variables(
+      VersionsWithForgottenPrefix(v.persistentSuperblock.mapadt, v.persistentSuperblock.journal, stableLSN),
+        Async.InitEphemeralState(), map[], stableLSN)
   }
 
   predicate InvLSNTracksPersistentWhenJournalEmpty(v: CoordProgramMod.Variables)
@@ -244,6 +228,63 @@ module CoordProgramRefinement {
     }
   }
 
+  lemma CommitStepRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
+    requires Inv(v)
+    requires CoordProgramMod.Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step);
+    requires step.CommitCompleteStep?
+    ensures Inv(v')
+    ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
+  {
+    // There are six pieces in play here: the persistent and in-flight superblocks and the ephemeral journals:
+    //  _________ __________
+    // | psb.map | psb.jrnl |
+    //  --------- ----------
+    //  ______________R__________
+    // | isb.map      | isb.jrnl |
+    //  -------------- ----------
+    //            ____________________
+    //           | eph.jrnl           |
+    //            --------------------
+    //                 _______________
+    //                | eph'.jrnl     |
+    //                 ---------------
+    // "R" is the "reference LSN" -- that's where we're going to prune ephemeral.journal, since
+    // after the commit it is going to be the LSN of the persistent map.
+
+    forall i | 0<=i<|I(v).versions| ensures
+      || I(v').versions[i] == I(v).versions[i]
+      || (i < I(v').stableIdx && I(v').versions[i].Forgotten?)
+    {
+      var refLsn := v.inFlightSuperblock.value.mapadt.seqEnd;
+
+      if refLsn <= i {
+        var ej := v.ephemeral.journal;
+        var eji := v.ephemeral.journal.DiscardRecent(i);
+
+        // Here's a calc, but commented to use a shorthand algebra:
+        // Let + represent both MapPlusHistory and Concat (they're associative).
+        // Let [x..] represent DiscardOld(x) and [..y] represent DiscardRecent(y).
+        // var im:=v.inFlightSuperblock.value.mapadt, pm:=v.persistentSuperblock.mapadt, R:=im.seqEnd
+        // I(v')
+        // im+ej'[..i]
+        // im+ej[..i][R..]
+        // InvInFlightVersionAgreement
+        // (pm+ej[..R])+ej[..i][R..]
+        JournalAssociativity(v.persistentSuperblock.mapadt, ej.DiscardRecent(refLsn), ej.DiscardRecent(i).DiscardOld(refLsn));
+        // pm+(ej[..R]+ej[..i][R..])
+        assert ej.DiscardRecent(refLsn) == ej.DiscardRecent(i).DiscardRecent(refLsn);  // because R <= i; smaller i are Forgotten
+        // pm+(ej[..i][..R]+ej[..i][R..])
+        assert eji.DiscardRecent(refLsn).Concat(eji.DiscardOld(refLsn)) == eji;  // trigger
+        // pm+ej[..i]
+        // I(v)
+      }
+    }
+    assert CrashTolerantMapSpecMod.Sync(I(v), I(v'));
+    assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), UIOp.SyncOp);
+    assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+  }
+
   lemma NextRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp)
     requires Inv(v)
     requires CoordProgramMod.Next(v, v', uiop)
@@ -306,54 +347,7 @@ module CoordProgramRefinement {
         assert uiop == CrashTolerantMapSpecMod.NoopOp;
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
-      case CommitCompleteStep() => {
-        // There are six pieces in play here: the persistent and in-flight superblocks and the ephemeral journals:
-        //  _________ __________
-        // | psb.map | psb.jrnl |
-        //  --------- ----------
-        //  ______________R__________
-        // | isb.map      | isb.jrnl |
-        //  -------------- ----------
-        //            ____________________
-        //           | eph.jrnl           |
-        //            --------------------
-        //                 _______________
-        //                | eph'.jrnl     |
-        //                 ---------------
-        // "R" is the "reference LSN" -- that's where we're going to prune ephemeral.journal, since
-        // after the commit it is going to be the LSN of the persistent map.
-
-        forall i | 0<=i<|I(v).versions| ensures
-          || I(v').versions[i] == I(v).versions[i]
-          || (i < I(v').stableIdx && I(v').versions[i].Forgotten?)
-        {
-          var refLsn := v.inFlightSuperblock.value.mapadt.seqEnd;
-
-          if refLsn <= i {
-            var ej := v.ephemeral.journal;
-            var eji := v.ephemeral.journal.DiscardRecent(i);
-
-            // Here's a calc, but commented to use a shorthand algebra:
-            // Let + represent both MapPlusHistory and Concat (they're associative).
-            // Let [x..] represent DiscardOld(x) and [..y] represent DiscardRecent(y).
-            // var im:=v.inFlightSuperblock.value.mapadt, pm:=v.persistentSuperblock.mapadt, R:=im.seqEnd
-            // I(v')
-            // im+ej'[..i]
-            // im+ej[..i][R..]
-            // InvInFlightVersionAgreement
-            // (pm+ej[..R])+ej[..i][R..]
-            JournalAssociativity(v.persistentSuperblock.mapadt, ej.DiscardRecent(refLsn), ej.DiscardRecent(i).DiscardOld(refLsn));
-            // pm+(ej[..R]+ej[..i][R..])
-            assert ej.DiscardRecent(refLsn) == ej.DiscardRecent(i).DiscardRecent(refLsn);  // because R <= i; smaller i are Forgotten
-            // pm+(ej[..i][..R]+ej[..i][R..])
-            assert eji.DiscardRecent(refLsn).Concat(eji.DiscardOld(refLsn)) == eji;  // trigger
-            // pm+ej[..i]
-            // I(v)
-          }
-        }
-      
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
-      }
+      case CommitCompleteStep() => { CommitStepRefines(v, v', uiop, step); }
     }
     assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
   }
