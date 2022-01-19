@@ -19,7 +19,7 @@ module CoordProgramRefinement {
   {
     var numVersions := journal.Len()+1;  // Can apply zero to Len() messages.
     seq(numVersions, i requires 0 <= i < numVersions =>
-      journal.PruneTail(i + journal.seqStart).ApplyToInterp(base))
+      MapPlusHistory(base, journal.DiscardRecent(i + journal.seqStart)))
   }
 
   function VersionsFromBase(base: StampedMapMod.StampedMap, journal: Journal) : (versions:seq<CrashTolerantMapSpecMod.Version>)
@@ -83,8 +83,8 @@ module CoordProgramRefinement {
     && jshort.WF()
     && jshort.CanFollow(startLsn)
     && jlong.CanFollow(startLsn)
-    && jlong.CanPruneTo(SeqEndFor(startLsn, jshort))
-    && jlong.PruneTail(SeqEndFor(startLsn, jshort)) == jshort
+    && jlong.CanDiscardTo(SeqEndFor(startLsn, jshort))
+    && jlong.DiscardRecent(SeqEndFor(startLsn, jshort)) == jshort
   }
 
   predicate InvEphemeralJournalExtendsPersistentJournal(v: CoordProgramMod.Variables)
@@ -104,13 +104,13 @@ module CoordProgramRefinement {
     && var ej := v.ephemeral.journal;
 
     // Ephemeral journal is at least as far as in-flight (frozen) map.
-    && ej.CanPruneTo(isb.mapadt.seqEnd)
+    && ej.CanDiscardTo(isb.mapadt.seqEnd)
     // in-flight journal extends persistent journal
     && JournalExtendsJournal(isb.journal, psb.journal, psb.mapadt.seqEnd)
     // Ephemeral journal agrees with in-flight journal
-    && JournalExtendsJournal(ej.PruneHead(isb.mapadt.seqEnd), isb.journal, isb.mapadt.seqEnd)
+    && JournalExtendsJournal(ej.DiscardOld(isb.mapadt.seqEnd), isb.journal, isb.mapadt.seqEnd)
     // in-flight map matches corresponding state in ephemeral world
-    && isb.mapadt == ej.PruneTail(isb.mapadt.seqEnd).ApplyToInterp(psb.mapadt)
+    && isb.mapadt == MapPlusHistory(psb.mapadt, ej.DiscardRecent(isb.mapadt.seqEnd))
   }
 
   predicate InvInFlightProperties(v: CoordProgramMod.Variables)
@@ -118,7 +118,7 @@ module CoordProgramRefinement {
     && v.WF()
     && (v.inFlightSuperblock.Some? ==>
       && v.ephemeral.Known?
-      && v.ephemeral.journal.CanPruneTo(v.inFlightSuperblock.value.mapadt.seqEnd)
+      && v.ephemeral.journal.CanDiscardTo(v.inFlightSuperblock.value.mapadt.seqEnd)
       && v.persistentSuperblock.SeqEnd() <= v.inFlightSuperblock.value.SeqEnd() // commit doesn't shrink persistent state
       && v.inFlightSuperblock.value.SeqEnd() <= v.ephemeral.SeqEnd()  // maintain InvJournalMonotonic
       && InvInFlightVersionAgreement(v)
@@ -166,7 +166,7 @@ module CoordProgramRefinement {
       case PutStep() => {
         if v.inFlightSuperblock.Some? {
           var isbEnd := v.inFlightSuperblock.value.mapadt.seqEnd;
-          assert v.ephemeral.journal.PruneTail(isbEnd) == v'.ephemeral.journal.PruneTail(isbEnd); // trigger
+          assert v.ephemeral.journal.DiscardRecent(isbEnd) == v'.ephemeral.journal.DiscardRecent(isbEnd); // trigger
         }
         assert Inv(v');
       }
@@ -201,19 +201,19 @@ module CoordProgramRefinement {
     }
   }
 
-  lemma ApplicationConcatenation(base: StampedMapMod.StampedMap, j: Journal, lsn: LSN, kmsg: KeyedMessage)
+  lemma SingletonConcatIsMapUpdate(base: StampedMapMod.StampedMap, j: Journal, lsn: LSN, kmsg: KeyedMessage)
     requires j.WF()
     requires j.CanFollow(base.seqEnd)
     requires lsn == if j.IsEmpty() then base.seqEnd else j.seqEnd
     requires kmsg.message.Define?;  // we'll have to get smarter if we want to generalize.
     ensures j.Concat(MsgHistoryMod.Singleton(lsn, kmsg)).CanFollow(base.seqEnd)
-    ensures j.ApplyToInterp(base).mi[kmsg.key := kmsg.message]
-      == j.Concat(MsgHistoryMod.Singleton(lsn, kmsg)).ApplyToInterp(base).mi
+    ensures MapPlusHistory(base, j).mi[kmsg.key := kmsg.message]
+      == MapPlusHistory(base, j.Concat(MsgHistoryMod.Singleton(lsn, kmsg))).mi
   {
     var j' := j.Concat(MsgHistoryMod.Singleton(lsn, kmsg));
-    ApplyToInterpRecursiveIsPrune(j', base, j'.Len()-1);
-    assert j'.PruneTail(j'.seqStart + j.Len()) == j;  // trigger
-    assert j'.ApplyToInterp(base).mi == j'.ApplyToInterpRecursive(base, j'.Len()-1).mi[kmsg.key := kmsg.message];  // trigger
+    ApplyToStampedMapRecursiveIsDiscardTail(j', base, j'.Len()-1);
+    assert j'.DiscardRecent(j'.seqStart + j.Len()) == j;  // trigger
+    assert j'.ApplyToStampedMap(base).mi == j'.ApplyToStampedMapRecursive(base, j'.Len()-1).mi[kmsg.key := kmsg.message];  // trigger
   }
 
   lemma JournalAssociativity(x: MapAdt, y: Journal, z: Journal)
@@ -221,17 +221,17 @@ module CoordProgramRefinement {
     requires z.WF()
     requires y.CanFollow(x.seqEnd)
     requires z.CanFollow(SeqEndFor(x.seqEnd, y))
-    ensures z.ApplyToInterp(y.ApplyToInterp(x)) == y.Concat(z).ApplyToInterp(x);
+    ensures MapPlusHistory(MapPlusHistory(x, y), z) == MapPlusHistory(x, y.Concat(z))
     decreases z.Len();
   {
     if !z.IsEmpty() {
-      var ztrim := z.PruneTail(z.seqEnd - 1);
+      var ztrim := z.DiscardRecent(z.seqEnd - 1);
       var yz := y.Concat(z);
 
       JournalAssociativity(x, y, ztrim);
-      ApplyToInterpRecursiveIsPrune(z, y.ApplyToInterp(x), z.Len()-1);
-      assert yz.PruneTail(yz.seqEnd - 1) == y.Concat(ztrim); // trigger
-      ApplyToInterpRecursiveIsPrune(yz, x, yz.Len()-1);
+      ApplyToStampedMapRecursiveIsDiscardTail(z, MapPlusHistory(x, y), z.Len()-1);
+      assert yz.DiscardRecent(yz.seqEnd - 1) == y.Concat(ztrim); // trigger
+      ApplyToStampedMapRecursiveIsDiscardTail(yz, x, yz.Len()-1);
     }
   }
 
@@ -263,10 +263,10 @@ module CoordProgramRefinement {
         var key := uiop.baseOp.req.input.k;
         var val := uiop.baseOp.req.input.v;
 
-        assert j == j.PruneTail(j.Len() + j.seqStart);  // seq trigger
-        assert j' == j'.PruneTail(j'.Len() + j'.seqStart);  // seq trigger
-        ApplicationConcatenation(base, j, j.seqEnd, KeyedMessage(key, Define(val)));
-        assert forall i | v.persistentSuperblock.mapadt.seqEnd<=i<|I(v).versions| :: j'.PruneTail(i) == j.PruneTail(i);  // Rob Power Trigger
+        assert j == j.DiscardRecent(j.Len() + j.seqStart);  // seq trigger
+        assert j' == j'.DiscardRecent(j'.Len() + j'.seqStart);  // seq trigger
+        SingletonConcatIsMapUpdate(base, j, j.seqEnd, KeyedMessage(key, Define(val)));
+        assert forall i | v.persistentSuperblock.mapadt.seqEnd<=i<|I(v).versions| :: j'.DiscardRecent(i) == j.DiscardRecent(i);  // Rob Power Trigger
 
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
@@ -314,21 +314,22 @@ module CoordProgramRefinement {
 
           if refLsn <= i {
             var ej := v.ephemeral.journal;
-            var eji := v.ephemeral.journal.PruneTail(i);
+            var eji := v.ephemeral.journal.DiscardRecent(i);
 
             // Here's a calc, but commented to use a shorthand algebra:
-            // Let + be ApplyToInterp and Concat (they're associative).
+            // Let + represent both MapPlusHistory and Concat (they're associative).
+            // Let [x..] represent DiscardOld(x) and [..y] represent DiscardRecent(y).
             // var im:=v.inFlightSuperblock.value.mapadt, pm:=v.persistentSuperblock.mapadt, R:=im.seqEnd
             // I(v')
             // im+ej'[..i]
             // im+ej[..i][R..]
             // InvInFlightVersionAgreement
             // (pm+ej[..R])+ej[..i][R..]
-            JournalAssociativity(v.persistentSuperblock.mapadt, ej.PruneTail(refLsn), ej.PruneTail(i).PruneHead(refLsn));
+            JournalAssociativity(v.persistentSuperblock.mapadt, ej.DiscardRecent(refLsn), ej.DiscardRecent(i).DiscardOld(refLsn));
             // pm+(ej[..R]+ej[..i][R..])
-            assert ej.PruneTail(refLsn) == ej.PruneTail(i).PruneTail(refLsn);  // because R <= i; smaller i are Forgotten
+            assert ej.DiscardRecent(refLsn) == ej.DiscardRecent(i).DiscardRecent(refLsn);  // because R <= i; smaller i are Forgotten
             // pm+(ej[..i][..R]+ej[..i][R..])
-            assert eji.PruneTail(refLsn).Concat(eji.PruneHead(refLsn)) == eji;  // trigger
+            assert eji.DiscardRecent(refLsn).Concat(eji.DiscardOld(refLsn)) == eji;  // trigger
             // pm+ej[..i]
             // I(v)
           }

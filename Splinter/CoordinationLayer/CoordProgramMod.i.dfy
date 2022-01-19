@@ -183,7 +183,7 @@ module CoordProgramMod {
 
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
-    && v' == v.(ephemeral := v.ephemeral.(mapadt := MsgHistoryMod.Concat(v.ephemeral.mapadt, puts)))
+    && v' == v.(ephemeral := v.ephemeral.(mapadt := MapPlusHistory(v.ephemeral.mapadt, puts)))
   }
 
   predicate Query(v: Variables, v': Variables, uiop : UIOp, key: Key, val: Value)
@@ -220,13 +220,12 @@ module CoordProgramMod {
     && var key := uiop.baseOp.req.input.k;
     && var val := uiop.baseOp.req.input.v;
 
-    && var singleton :=
-        MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
+    && var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
 
     && v.WF()
     && v' == v.(ephemeral := v.ephemeral.(
           journal := v.ephemeral.journal.Concat(singleton),
-          mapadt := MsgHistoryMod.Concat(v.ephemeral.mapadt, singleton),
+          mapadt := MapPlusHistory(v.ephemeral.mapadt, singleton),
           // Frozen stuff unchanged here.
           progress := v.ephemeral.progress.(
             requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
@@ -300,9 +299,9 @@ module CoordProgramMod {
       // frozen journal is useless
       || !(v.ephemeral.frozenMap.value.seqEnd < v.ephemeral.frozenJournalLSN) // TODO(robj): why not remove this case?
       // frozen LSN is out of bounds for the actual joural it's pointing to
-      || !v.ephemeral.journal.CanPruneTo(v.ephemeral.frozenJournalLSN)
+      || !v.ephemeral.journal.CanDiscardTo(v.ephemeral.frozenJournalLSN)
       // or has been beheaded beyond the frozen tree
-      || !v.ephemeral.journal.CanPruneTo(v.ephemeral.frozenMap.value.seqEnd)
+      || !v.ephemeral.journal.CanDiscardTo(v.ephemeral.frozenMap.value.seqEnd)
     then
       // Could actually just use the frozen map here, but we don't really care
       // to support this case; this is a silly branch in that it's never
@@ -312,8 +311,8 @@ module CoordProgramMod {
     else
       // Use frozen map and available frozen journal.
       var frozenJournal := v.ephemeral.journal
-        .PruneTail(v.ephemeral.frozenJournalLSN)
-        .PruneHead(v.ephemeral.frozenMap.value.seqEnd);
+        .DiscardRecent(v.ephemeral.frozenJournalLSN)
+        .DiscardOld(v.ephemeral.frozenMap.value.seqEnd);
       Superblock(frozenJournal, v.ephemeral.frozenMap.value)
   }
 
@@ -338,12 +337,12 @@ module CoordProgramMod {
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
 
     // pruning below is nonsense without this, but "luckily" this is an invariant:
-    && v.ephemeral.journal.CanPruneTo(sb.mapadt.seqEnd)
+    && v.ephemeral.journal.CanDiscardTo(sb.mapadt.seqEnd)
 
     // Now that the disk journal is updated, we need to behead the
     // ephemeral journal, since interpretation want to CanFollow it
     // onto the persistent mapadt.
-    && var j' := v.ephemeral.journal.PruneHead(sb.mapadt.seqEnd);
+    && var j' := v.ephemeral.journal.DiscardOld(sb.mapadt.seqEnd);
 
     && v' == v.(
         persistentSuperblock := sb,

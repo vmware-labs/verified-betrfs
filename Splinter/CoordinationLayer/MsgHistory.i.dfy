@@ -94,7 +94,7 @@ module MsgHistoryMod {
       || seqStart == lsn
     }
 
-    function ApplyToInterpRecursive(orig: StampedMap, count: nat) : (out: StampedMap)
+    function ApplyToStampedMapRecursive(orig: StampedMap, count: nat) : (out: StampedMap)
       requires WF()
       requires count <= Len()
       requires CanFollow(orig.seqEnd)
@@ -103,7 +103,7 @@ module MsgHistoryMod {
       if count==0
       then orig
       else
-        var subInterp := ApplyToInterpRecursive(orig, count-1);
+        var subInterp := ApplyToStampedMapRecursive(orig, count-1);
 
         var lsn := seqStart + count - 1;
         var key := msgs[lsn].key;
@@ -115,45 +115,26 @@ module MsgHistoryMod {
     }
 
     // TODO(jonh): rename, because StampedMaps shan't be named that anymore.
-    function ApplyToInterp(orig: StampedMap) : (out: StampedMap)
+    function ApplyToStampedMap(orig: StampedMap) : (out: StampedMap)
       requires WF()
       requires CanFollow(orig.seqEnd)
       ensures out.seqEnd == orig.seqEnd + Len()
     {
-      ApplyToInterpRecursive(orig, Len())
+      ApplyToStampedMapRecursive(orig, Len())
     }
 
-    function ApplyToKeyMapRecursive(orig: map<Key, Message>, count: nat) : (out: map<Key, Message>)
-      requires WF()
-      requires count <= Len()
-    {
-      if count==0
-      then orig
-      else
-        var lsn := seqStart + count - 1;
-        var key := msgs[lsn].key;
-        var message := msgs[lsn].message;
-        ApplyToKeyMapRecursive(orig, count-1)[key := message]
-    }
-
-    function ApplyToKeyMap(orig: map<Key, Message>) : map<Key, Message>
-      requires WF()
-    {
-      ApplyToKeyMapRecursive(orig, Len())
-    }
-
-    predicate CanPruneTo(lsn: LSN)
+    predicate CanDiscardTo(lsn: LSN)
     {
       // NB Pruning allows one more LSN than Contains, because you can
-      // PruneHead all the way to seqEnd (and get an empty) (or PruneTail all
+      // DiscardOld all the way to seqEnd (and get an empty) (or DiscardRecent all
       // the way to seqStart).
       IsEmpty() || seqStart <= lsn <= seqEnd
     }
 
-    // TODO(jonh): rename PruneHead->DiscardOld, PruneTail->DiscardRecent
+    // TODO(jonh): rename DiscardOld->DiscardOld, DiscardRecent->DiscardRecent
     // Returns every message in this after and including lsn
-    function PruneHead(lsn: LSN) : (r: MsgHistory)
-      requires CanPruneTo(lsn)
+    function DiscardOld(lsn: LSN) : (r: MsgHistory)
+      requires CanDiscardTo(lsn)
       requires WF()
       ensures r.WF()
     {
@@ -167,8 +148,8 @@ module MsgHistoryMod {
     }
 
     // Returns every message in this up to but not including lsn.
-    function PruneTail(lsn: LSN) : (r: MsgHistory)
-      requires CanPruneTo(lsn)
+    function DiscardRecent(lsn: LSN) : (r: MsgHistory)
+      requires CanDiscardTo(lsn)
       requires WF()
       ensures r.WF()
     {
@@ -192,19 +173,19 @@ module MsgHistoryMod {
     }
   }
 
-  lemma ApplyToInterpRecursiveIsPrune(ms: MsgHistory, orig: StampedMap, count: nat)
+  lemma ApplyToStampedMapRecursiveIsDiscardTail(ms: MsgHistory, orig: StampedMap, count: nat)
     requires ms.WF()
     requires count+1 <= ms.Len()
     requires ms.CanFollow(orig.seqEnd)
-    ensures ms.ApplyToInterpRecursive(orig, count) == ms.PruneTail(ms.seqStart + count).ApplyToInterpRecursive(orig, count);
+    ensures ms.ApplyToStampedMapRecursive(orig, count) == ms.DiscardRecent(ms.seqStart + count).ApplyToStampedMapRecursive(orig, count);
     decreases count;
   {
     if 1 < count {
-      var msPruned := ms.PruneTail(ms.seqStart + count);
+      var msDiscarded := ms.DiscardRecent(ms.seqStart + count);
 
-      ApplyToInterpRecursiveIsPrune(ms, orig, count-1);
-      assert ms.PruneTail(ms.seqStart + count - 1) == msPruned.PruneTail(msPruned.seqStart + count - 1); // trigger
-      ApplyToInterpRecursiveIsPrune(msPruned, orig, count - 1);
+      ApplyToStampedMapRecursiveIsDiscardTail(ms, orig, count-1);
+      assert ms.DiscardRecent(ms.seqStart + count - 1) == msDiscarded.DiscardRecent(msDiscarded.seqStart + count - 1); // trigger
+      ApplyToStampedMapRecursiveIsDiscardTail(msDiscarded, orig, count - 1);
     }
   }
 
@@ -219,37 +200,15 @@ module MsgHistoryMod {
     MsgHistory(map [lsn := msg], lsn, lsn+1)
   }
 
-
-// TODO(jonh): delete. These were based on the idea that we should't have two
-// writes to the same key in a MsgHistory. That was to make defining "Apply" easier
-// -- but that was a false economy; it makes all the MsgHistory algebra more
-// difficult.
-//
-//  function Condense(m0: MsgHistory, m1: MsgHistory) : (mo: Option<MsgHistory>)
-//    ensures mo.Some? ==> mo.value.WF()
-//  {
-//    if !m0.WF() || !m1.WF()
-//      then None   // Bonkers inputs
-//    else if m0.IsEmpty()
-//      then Some(m1)
-//    else if m1.IsEmpty()
-//      then Some(m0)
-//    else if m0.seqEnd == m1.seqStart
-//      then Some(MsgHistory(MapDisjointUnion(m0.msgs, m1.msgs), m0.seqStart, m1.seqEnd))
-//    else
-//      None  // Inputs don't stitch
-//  }
-//
-//  function CondenseAll(mss: seq<MsgHistory>) : Option<MsgHistory>
-//  {
-//    if |mss|==0
-//    then Some(Empty())
-//    else
-//      var prefix := CondenseAll(DropLast(mss));
-//      if prefix.Some?
-//      then
-//        Condense(prefix.value, Last(mss))
-//      else
-//        None
-//  }
+  // Wrapper reverses argument list to make "history algebra" easier to read.
+  // We might have preferred to write something more infix, like:
+  //   stampedMap.Apply(history)
+  // ...but stampedMap is trusted (.s); we don't want it to know about the
+  // verified (i.) MsgHistory type.
+  function MapPlusHistory(stampedMap: StampedMap, history: MsgHistory) : StampedMap
+    requires history.WF()
+    requires history.CanFollow(stampedMap.seqEnd)
+  {
+    history.ApplyToStampedMap(stampedMap)
+  }
 }
