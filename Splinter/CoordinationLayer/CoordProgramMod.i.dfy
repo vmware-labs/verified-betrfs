@@ -24,7 +24,7 @@ module CoordProgramMod {
 
   function JournalMkfs() : Journal
   {
-    MsgHistoryMod.Empty()
+    MsgHistoryMod.EmptyHistory
   }
 
   function MapAdtMkfs() : MapAdt {
@@ -33,7 +33,7 @@ module CoordProgramMod {
 
   function SeqEndFor(lsn: LSN, journal: Journal) : LSN
   {
-      if journal.IsEmpty() then lsn else journal.seqEnd
+      if journal.EmptyHistory? then lsn else journal.seqEnd
   }
 
   // Persistent state of disk
@@ -147,7 +147,8 @@ module CoordProgramMod {
       Async.InitEphemeralState(),
       map[],  // syncReqs
       v.persistentSuperblock.journal,
-      v.persistentSuperblock.journal.seqEnd, // this journal is frozen.
+      // sb journal is already frozen:
+      if v.persistentSuperblock.journal.EmptyHistory? then 0 else v.persistentSuperblock.journal.seqEnd,
       v.persistentSuperblock.mapadt,
       None
       ))
@@ -159,7 +160,7 @@ module CoordProgramMod {
   {
     && v.WF()
     && v.ephemeral.Known?
-    && v.ephemeral.mapadt.seqEnd == v.ephemeral.journal.seqEnd
+    && (v.ephemeral.journal.MsgHistory? ==> v.ephemeral.journal.seqEnd == v.ephemeral.mapadt.seqEnd)
   }
 
   function NextLSN(v: Variables) : LSN
@@ -178,7 +179,7 @@ module CoordProgramMod {
     && v'.WF()
 
     && puts.WF()
-    && puts.seqStart == v.ephemeral.mapadt.seqEnd
+    && puts.CanFollow(v.ephemeral.mapadt.seqEnd)
     && v.ephemeral.journal.IncludesSubseq(puts)
 
     // NB that Recover can interleave with mapadt steps (the Betree
@@ -270,7 +271,9 @@ module CoordProgramMod {
     && v.WF()
     && v.ephemeral.Known?
     // Freezin' only goes forward.
-    && v.ephemeral.frozenJournalLSN < newFrozenLSN <= v.ephemeral.journal.seqEnd
+    && v.ephemeral.frozenJournalLSN < newFrozenLSN
+    // ephemeral journal actually includes all the proposed-frozen stuff
+    && v.ephemeral.journal.CanDiscardTo(newFrozenLSN)
     && v' == v.(ephemeral := v.ephemeral.(frozenJournalLSN := newFrozenLSN))
   }
 
@@ -285,35 +288,27 @@ module CoordProgramMod {
     && v' == v.(ephemeral := v.ephemeral.(frozenMap := Some(v.ephemeral.mapadt)))
   }
 
-  // TODO(jonh): These "MkfsSuperblock()-as-failure" branches are difficult to read. Replace return type with Option<>
-  function BestFrozenState(v: Variables) : (sb:Superblock)
+  function BestFrozenState(v: Variables) : (osb:Option<Superblock>)
     requires v.WF()
     requires v.ephemeral.Known?
-    ensures sb.WF()
+    ensures osb.Some? ==> osb.value.WF()
   {
     if
       // no frozen map to write
       || v.ephemeral.frozenMap.None?
-    then MkfsSuperblock()
-    else if
       // frozen journal is useless
       || !(v.ephemeral.frozenMap.value.seqEnd < v.ephemeral.frozenJournalLSN) // TODO(robj): why not remove this case?
       // frozen LSN is out of bounds for the actual joural it's pointing to
       || !v.ephemeral.journal.CanDiscardTo(v.ephemeral.frozenJournalLSN)
       // or has been beheaded beyond the frozen tree
       || !v.ephemeral.journal.CanDiscardTo(v.ephemeral.frozenMap.value.seqEnd)
-    then
-      // Could actually just use the frozen map here, but we don't really care
-      // to support this case; this is a silly branch in that it's never
-      // invoked in any Inv()-preserving behavior.
-      // Superblock(v.ephemeral.frozenMap.value, JournalInterpTypeMod.Mkfs())
-      MkfsSuperblock()
+    then None
     else
       // Use frozen map and available frozen journal.
       var frozenJournal := v.ephemeral.journal
         .DiscardRecent(v.ephemeral.frozenJournalLSN)
         .DiscardOld(v.ephemeral.frozenMap.value.seqEnd);
-      Superblock(frozenJournal, v.ephemeral.frozenMap.value)
+      Some(Superblock(frozenJournal, v.ephemeral.frozenMap.value))
   }
 
   predicate CommitStart(v: Variables, v': Variables, uiop : UIOp, seqBoundary: LSN)
@@ -321,11 +316,12 @@ module CoordProgramMod {
     && uiop.NoopOp?
     && v.WF()
     && v.ephemeral.Known?
+    && BestFrozenState(v).Some?
     // Have to go forwards in LSN time
-    && NextLSN(v) < BestFrozenState(v).journal.seqEnd
+    && NextLSN(v) < BestFrozenState(v).value.SeqEnd()
     && v.inFlightSuperblock.None?
     && v'.inFlightSuperblock.Some?
-    && v' == v.(inFlightSuperblock := Some(BestFrozenState(v)))
+    && v' == v.(inFlightSuperblock := BestFrozenState(v))
   }
 
   predicate CommitComplete(v: Variables, v': Variables, uiop : UIOp)

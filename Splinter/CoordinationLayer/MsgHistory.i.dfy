@@ -26,62 +26,53 @@ module MsgHistoryMod {
   datatype KeyedMessage = KeyedMessage(key: Key, message: Message)
 
   // A contiguous sequence of messages from seqStart up to (not including) seqEnd.
-  datatype MsgHistory = MsgHistory(msgs: map<LSN, KeyedMessage>, seqStart: LSN, seqEnd: LSN)
+  datatype MsgHistory = EmptyHistory | MsgHistory(msgs: map<LSN, KeyedMessage>, seqStart: LSN, seqEnd: LSN)
     // seqEnd is exclusive
   {
+    predicate WF()
+    {
+      MsgHistory? ==> (
+      // Note that MsgHistory() instances CANNOT be empty, so that empty repr is normalized.
+        && seqStart < seqEnd
+        && (forall k :: k in msgs <==> Contains(k))
+      )
+    }
+
     predicate Contains(lsn: LSN)
     {
-      seqStart <= lsn < seqEnd
+      && !EmptyHistory?
+      && seqStart <= lsn < seqEnd
     }
 
     // For use in map comprehensions, where "lsn in msgSeq.Contains()" doesn't
     // satisfy Dafny's bounded set heuristic.
     function {:opaque} LSNSet() : (lsns: set<LSN>)
-      ensures forall lsn :: lsn in lsns <==> seqStart <= lsn < seqEnd
+      ensures forall lsn :: lsn in lsns <==> Contains(lsn)
     {
-      set lsn | seqStart <= lsn < seqEnd
+      if EmptyHistory?
+      then {}
+      else set lsn | seqStart <= lsn < seqEnd
     }
 
     function Len() : nat
       requires WF()
     {
-      seqEnd - seqStart
-    }
-
-    predicate WF()
-    {
-      && seqStart <= seqEnd
-      && (seqStart==seqEnd ==> seqStart==0) // normalize Empty.
-      && (forall k :: k in msgs <==> Contains(k))
-    }
-
-    // Add a single message to the end of the sequence. It gets LSN 'seqEnd', since
-    // that's exclusive (points at the next empty slot).
-    function Extend(m: KeyedMessage) : MsgHistory
-    {
-      MsgHistory(
-        map k | k in msgs.Keys + { seqEnd } :: if k == seqEnd then m else msgs[k],
-        seqStart,
-        seqEnd+1)
-    }
-
-    // TODO(jonh): this empty representation is gross. Better to add a datatype constructor
-    // that's got no seqStart/seqEnd fields.
-    predicate IsEmpty() {
-      seqStart == seqEnd
+      if EmptyHistory?
+      then 0
+      else seqEnd - seqStart
     }
 
     function Concat(other : MsgHistory) : (result : MsgHistory)
       requires WF()
       requires other.WF()
-      requires IsEmpty() || other.CanFollow(seqEnd)
+      requires EmptyHistory? || other.CanFollow(seqEnd)
       ensures result.WF()
       ensures result.LSNSet() == LSNSet() + other.LSNSet()
       // conditions on msgSeq bounds
     {
-      if IsEmpty()
+      if EmptyHistory?
         then other
-      else if other.IsEmpty()
+      else if other.EmptyHistory?
       then this
       else
         MsgHistory( MapDisjointUnion(msgs, other.msgs), seqStart, other.seqEnd)
@@ -89,7 +80,7 @@ module MsgHistoryMod {
 
     predicate CanFollow(lsn: LSN)
     {
-      || IsEmpty()
+      || EmptyHistory?
       || seqStart == lsn
     }
 
@@ -126,7 +117,7 @@ module MsgHistoryMod {
       // NB Pruning allows one more LSN than Contains, because you can
       // DiscardOld all the way to seqEnd (and get an empty) (or DiscardRecent all
       // the way to seqStart).
-      IsEmpty() || seqStart <= lsn <= seqEnd
+      EmptyHistory? || seqStart <= lsn <= seqEnd
     }
 
     // Returns every message in this after and including lsn
@@ -135,10 +126,8 @@ module MsgHistoryMod {
       requires WF()
       ensures r.WF()
     {
-      if IsEmpty()
-      then Empty()
-      else if lsn==seqEnd
-      then Empty()
+      if EmptyHistory? || lsn==seqEnd
+      then EmptyHistory
       else
         var keepMap := map k | lsn <= k < seqEnd :: msgs[k];
         MsgHistory(keepMap, lsn, seqEnd)
@@ -150,10 +139,8 @@ module MsgHistoryMod {
       requires WF()
       ensures r.WF()
     {
-      if IsEmpty()
-      then Empty()
-      else if lsn==seqStart
-      then Empty()
+      if EmptyHistory? || lsn==seqStart
+      then EmptyHistory
       else
         var keepMap := map k | seqStart <= k < lsn :: msgs[k];
         MsgHistory(keepMap, seqStart, lsn)
@@ -162,10 +149,10 @@ module MsgHistoryMod {
     predicate IncludesSubseq(subseq: MsgHistory)
       requires WF()
       requires subseq.WF()
-      ensures IncludesSubseq(subseq) && IsEmpty() ==> subseq.IsEmpty()
+      ensures IncludesSubseq(subseq) && EmptyHistory? ==> subseq.EmptyHistory?
     {
       var result := forall lsn | subseq.Contains(lsn) :: Contains(lsn) && msgs[lsn] == subseq.msgs[lsn];
-      assert  result && !subseq.IsEmpty() ==> subseq.seqStart in msgs;  // witness to the ensures.
+      assert result && subseq.MsgHistory? ==> Contains(subseq.seqStart);  // seqStart is witness to contradiction
       result
     }
   }
@@ -184,12 +171,6 @@ module MsgHistoryMod {
       assert ms.DiscardRecent(ms.seqStart + count - 1) == msDiscarded.DiscardRecent(msDiscarded.seqStart + count - 1); // trigger
       ApplyToStampedMapRecursiveIsDiscardTail(msDiscarded, orig, count - 1);
     }
-  }
-
-  function Empty() : (result: MsgHistory)
-    ensures result.WF()
-  {
-    MsgHistory(map[], 0, 0)
   }
 
   function Singleton(lsn: LSN, msg: KeyedMessage) : MsgHistory

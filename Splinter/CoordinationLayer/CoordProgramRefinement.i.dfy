@@ -17,9 +17,12 @@ module CoordProgramRefinement {
     requires journal.WF()
     requires journal.CanFollow(base.seqEnd)
   {
-    var numVersions := journal.Len()+1;  // Can apply zero to Len() messages.
-    seq(numVersions, i requires 0 <= i < numVersions =>
-      MapPlusHistory(base, journal.DiscardRecent(i + journal.seqStart)))
+    if journal.EmptyHistory?
+    then [ base ]
+    else
+      var numVersions := journal.Len()+1;  // Can apply zero to Len() messages.
+      seq(numVersions, i requires 0 <= i < numVersions =>
+        MapPlusHistory(base, journal.DiscardRecent(i + journal.seqStart)))
   }
 
   function VersionsFromBase(base: StampedMapMod.StampedMap, journal: Journal) : (versions:seq<CrashTolerantMapSpecMod.Version>)
@@ -66,15 +69,9 @@ module CoordProgramRefinement {
     // We need this extra condition to ensure that, when the ephemeral journal
     // is empty, the ephemeral map indeed matches the disk -- otherwise we won't
     // assign the right lsn to new puts.
-    && (v.ephemeral.Known? && v.ephemeral.journal.IsEmpty() ==>
+    && (v.ephemeral.Known? && v.ephemeral.journal.EmptyHistory? ==>
         NextLSN(v) == v.persistentSuperblock.mapadt.seqEnd
       )
-  }
-
-  predicate InvJournalMonotonic(v: CoordProgramMod.Variables)
-  {
-    v.ephemeral.Known? ==>
-      v.persistentSuperblock.journal.seqEnd <= v.ephemeral.journal.seqEnd
   }
 
   predicate JournalExtendsJournal(jlong: Journal, jshort: Journal, startLsn: LSN)
@@ -85,6 +82,12 @@ module CoordProgramRefinement {
     && jlong.CanFollow(startLsn)
     && jlong.CanDiscardTo(SeqEndFor(startLsn, jshort))
     && jlong.DiscardRecent(SeqEndFor(startLsn, jshort)) == jshort
+  }
+
+  predicate InvJournalMonotonic(v: CoordProgramMod.Variables)
+  {
+    v.ephemeral.Known? ==>
+      JournalExtendsJournal(v.ephemeral.journal, v.persistentSuperblock.journal, v.persistentSuperblock.mapadt.seqEnd)
   }
 
   predicate InvEphemeralJournalExtendsPersistentJournal(v: CoordProgramMod.Variables)
@@ -204,7 +207,7 @@ module CoordProgramRefinement {
   lemma SingletonConcatIsMapUpdate(base: StampedMapMod.StampedMap, j: Journal, lsn: LSN, kmsg: KeyedMessage)
     requires j.WF()
     requires j.CanFollow(base.seqEnd)
-    requires lsn == if j.IsEmpty() then base.seqEnd else j.seqEnd
+    requires lsn == if j.EmptyHistory? then base.seqEnd else j.seqEnd
     requires kmsg.message.Define?;  // we'll have to get smarter if we want to generalize.
     ensures j.Concat(MsgHistoryMod.Singleton(lsn, kmsg)).CanFollow(base.seqEnd)
     ensures MapPlusHistory(base, j).mi[kmsg.key := kmsg.message]
@@ -224,7 +227,7 @@ module CoordProgramRefinement {
     ensures MapPlusHistory(MapPlusHistory(x, y), z) == MapPlusHistory(x, y.Concat(z))
     decreases z.Len();
   {
-    if !z.IsEmpty() {
+    if !z.EmptyHistory? {
       var ztrim := z.DiscardRecent(z.seqEnd - 1);
       var yz := y.Concat(z);
 
@@ -263,9 +266,11 @@ module CoordProgramRefinement {
         var key := uiop.baseOp.req.input.k;
         var val := uiop.baseOp.req.input.v;
 
-        assert j == j.DiscardRecent(j.Len() + j.seqStart);  // seq trigger
-        assert j' == j'.DiscardRecent(j'.Len() + j'.seqStart);  // seq trigger
-        SingletonConcatIsMapUpdate(base, j, j.seqEnd, KeyedMessage(key, Define(val)));
+        assert j'.MsgHistory? ==> j' == j'.DiscardRecent(j'.Len() + j'.seqStart);  // seq trigger
+        if j.MsgHistory? {
+          assert j == j.DiscardRecent(j.Len() + j.seqStart);  // seq trigger
+          SingletonConcatIsMapUpdate(base, j, j.seqEnd, KeyedMessage(key, Define(val)));
+        }
         assert forall i | v.persistentSuperblock.mapadt.seqEnd<=i<|I(v).versions| :: j'.DiscardRecent(i) == j.DiscardRecent(i);  // Rob Power Trigger
 
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
