@@ -6,7 +6,7 @@ include "../lib/Base/total_order.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
-include "MsgHistory.i.dfy"
+include "CoordinationLayer/MsgHistory.i.dfy"
 
 
 include "CacheIfc.i.dfy"

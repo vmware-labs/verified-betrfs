@@ -1,13 +1,12 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
-include "../Spec/Message.s.dfy"
-include "../Spec/StampedMap.s.dfy"
+include "../../Spec/Message.s.dfy"
+include "../../Spec/StampedMap.s.dfy"
 
-include "../lib/Base/Sequences.i.dfy"
-include "../lib/Base/Maps.i.dfy"
-include "../lib/Base/Option.s.dfy"
-include "Allocation.i.dfy"
-include "../lib/Base/KeyType.s.dfy"
+include "../../lib/Base/Sequences.i.dfy"
+include "../../lib/Base/Maps.i.dfy"
+include "../../lib/Base/Option.s.dfy"
+include "../../lib/Base/KeyType.s.dfy"
 
 
 // QUESTION: Helper module that contains what exactly?

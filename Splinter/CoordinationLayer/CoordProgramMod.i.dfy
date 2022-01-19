@@ -5,7 +5,7 @@ include "../../Spec/MapSpec.s.dfy"
 include "../../Spec/StampedMap.s.dfy"
 include "../../lib/Base/KeyType.s.dfy"
 include "../../lib/Base/MapRemove.s.dfy"
-include "../MsgHistory.i.dfy"
+include "MsgHistory.i.dfy"
 
 module CoordProgramMod {
   import opened Options
