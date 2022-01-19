@@ -25,7 +25,6 @@ module MsgHistoryMod {
 
   datatype KeyedMessage = KeyedMessage(key: Key, message: Message)
 
-  // TODO: Rename the datatype to MsgHistory here to match the module
   // A contiguous sequence of messages from seqStart up to (not including) seqEnd.
   datatype MsgHistory = MsgHistory(msgs: map<LSN, KeyedMessage>, seqStart: LSN, seqEnd: LSN)
     // seqEnd is exclusive
@@ -114,7 +113,6 @@ module MsgHistoryMod {
         StampedMapMod.RawStampedMap(mapp, lsn + 1)
     }
 
-    // TODO(jonh): rename, because StampedMaps shan't be named that anymore.
     function ApplyToStampedMap(orig: StampedMap) : (out: StampedMap)
       requires WF()
       requires CanFollow(orig.seqEnd)
@@ -131,7 +129,6 @@ module MsgHistoryMod {
       IsEmpty() || seqStart <= lsn <= seqEnd
     }
 
-    // TODO(jonh): rename DiscardOld->DiscardOld, DiscardRecent->DiscardRecent
     // Returns every message in this after and including lsn
     function DiscardOld(lsn: LSN) : (r: MsgHistory)
       requires CanDiscardTo(lsn)
