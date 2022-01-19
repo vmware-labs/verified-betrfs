@@ -9,7 +9,9 @@ include "../../lib/Base/Option.s.dfy"
 include "../../lib/Base/KeyType.s.dfy"
 
 
-// QUESTION: Helper module that contains what exactly?
+// A MsgHistory is a contiguous sequence of LSN-stamped key-message pairs.
+// A MsgHistory can be applied to a StampedMap (if the LSNs line up) to get a
+// new StampedMap reflecting the updates from the MsgHistory.
 module MsgHistoryMod {
   import opened Sequences
   import opened Maps
@@ -218,50 +220,36 @@ module MsgHistoryMod {
   }
 
 
-  // QUESTION: Is this supposed to return messages, cuz i changed it to
-  function IKey(key:Key, baseValue: Message, ms: MsgSeq) : (m: Message)
-    requires baseValue.Define?
-    requires ms.WF()
-    ensures m.Define?
-    // Gaah look up existing message delta definitions. For
-    // replacement/deletion messages, returns the value in the most-recent
-    // message matching key else baseValue.
-
-  function Condense(m0: MsgSeq, m1: MsgSeq) : (mo: Option<MsgSeq>)
-    ensures mo.Some? ==> mo.value.WF()
-  {
-    if !m0.WF() || !m1.WF()
-      then None   // Bonkers inputs
-    else if m0.IsEmpty()
-      then Some(m1)
-    else if m1.IsEmpty()
-      then Some(m0)
-    else if m0.seqEnd == m1.seqStart
-      then Some(MsgSeq(MapDisjointUnion(m0.msgs, m1.msgs), m0.seqStart, m1.seqEnd))
-    else
-      None  // Inputs don't stitch
-  }
-
-  function CondenseAll(mss: seq<MsgSeq>) : Option<MsgSeq>
-  {
-    if |mss|==0
-    then Some(Empty())
-    else
-      var prefix := CondenseAll(DropLast(mss));
-      if prefix.Some?
-      then
-        Condense(prefix.value, Last(mss))
-      else
-        None
-  }
-
-  // TODO(jonh): Rename to Apply (or "Play"?) UM ACTUALLY DELETE THIS AND IKey. Subsumed by ApplyToInterp
-  function Concat(interp: StampedMap, ms:MsgSeq) : StampedMap
-    requires ms.WF()
-    requires interp.seqEnd == ms.seqStart
-  {
-    var ri := StampedMapMod.RawStampedMap(imap k | StampedMapMod.AnyKey(k) :: IKey(k, interp.mi[k], ms), ms.seqEnd);
-    assert ri.secretWF();
-    ri
-  }
+// TODO(jonh): delete. These were based on the idea that we should't have two
+// writes to the same key in a MsgSeq. That was to make defining "Apply" easier
+// -- but that was a false economy; it makes all the MsgSeq algebra more
+// difficult.
+//
+//  function Condense(m0: MsgSeq, m1: MsgSeq) : (mo: Option<MsgSeq>)
+//    ensures mo.Some? ==> mo.value.WF()
+//  {
+//    if !m0.WF() || !m1.WF()
+//      then None   // Bonkers inputs
+//    else if m0.IsEmpty()
+//      then Some(m1)
+//    else if m1.IsEmpty()
+//      then Some(m0)
+//    else if m0.seqEnd == m1.seqStart
+//      then Some(MsgSeq(MapDisjointUnion(m0.msgs, m1.msgs), m0.seqStart, m1.seqEnd))
+//    else
+//      None  // Inputs don't stitch
+//  }
+//
+//  function CondenseAll(mss: seq<MsgSeq>) : Option<MsgSeq>
+//  {
+//    if |mss|==0
+//    then Some(Empty())
+//    else
+//      var prefix := CondenseAll(DropLast(mss));
+//      if prefix.Some?
+//      then
+//        Condense(prefix.value, Last(mss))
+//      else
+//        None
+//  }
 }
