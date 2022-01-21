@@ -58,6 +58,13 @@ module CoordProgramRefinement {
       )
   }
 
+  // Where these journals share an LSN, they map it to the same message.
+  predicate JournalOverlapsAgree(j0: Journal, j1: Journal)
+    requires j0.WF() && j1.WF()
+  {
+    forall lsn | j0.Contains(lsn) && j1.Contains(lsn) :: j0.msgs[lsn] == j1.msgs[lsn]
+  }
+
   predicate JournalExtendsJournal(jlong: Journal, jshort: Journal, startLsn: LSN)
   {
     && jlong.WF()
@@ -68,10 +75,10 @@ module CoordProgramRefinement {
     && jlong.DiscardRecent(SeqEndFor(startLsn, jshort)) == jshort
   }
 
-  predicate InvJournalMonotonic(v: CoordProgramMod.Variables)
+  predicate InvEphemeralJournalStartsAtPersistentMap(v: CoordProgramMod.Variables)
+    requires v.ephemeral.Known?
   {
-    v.ephemeral.Known? ==>
-      JournalExtendsJournal(v.ephemeral.journal, v.persistentSuperblock.journal, v.persistentSuperblock.mapadt.seqEnd)
+    && v.ephemeral.journal.CanFollow(v.persistentSuperblock.mapadt.seqEnd)
   }
 
   predicate InvEphemeralJournalExtendsPersistentJournal(v: CoordProgramMod.Variables)
@@ -79,6 +86,38 @@ module CoordProgramRefinement {
     && v.WF()
     && v.ephemeral.Known?
     && JournalExtendsJournal(v.ephemeral.journal, v.persistentSuperblock.journal, v.persistentSuperblock.mapadt.seqEnd)
+  }
+
+  predicate InvFrozenNotProphetic(v: CoordProgramMod.Variables)
+  {
+    // without knowing this invariant, a state could hold a frozen map that's
+    // not FrozenMapUsable because its seqEnd is "in the future", and then a
+    // Put() finally "catches up" with that seqEnd -- how could we then show
+    // that the Put-modified ephemeral state matches the prophecy of the frozen
+    // map? The answer is that frozen maps aren't prophetic.
+    v.ephemeral.Known? && v.ephemeral.frozenMap.Some?
+      ==>
+    v.ephemeral.frozenMap.value.seqEnd <= v.ephemeral.SeqEnd()
+  }
+
+  predicate FrozenMapUsable(v: CoordProgramMod.Variables)
+  {
+    && v.ephemeral.Known?
+    // There is a frozen map
+    && v.ephemeral.frozenMap.Some?
+    // And it doesn't stop before the persistent superblock (so we'll be able
+    // to DiscardOld on the ephemeral journal to see they agree)
+    && v.persistentSuperblock.mapadt.seqEnd <= v.ephemeral.frozenMap.value.seqEnd
+  }
+
+  predicate InvFrozenAgreement(v: CoordProgramMod.Variables)
+    requires v.WF()
+    requires v.ephemeral.Known?
+    requires InvEphemeralJournalStartsAtPersistentMap(v)
+    requires InvFrozenNotProphetic(v)
+  {
+    FrozenMapUsable(v) ==>
+      v.ephemeral.frozenMap.value == MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.frozenMap.value.seqEnd))
   }
 
   predicate InvInFlightVersionAgreement(v: CoordProgramMod.Variables)
@@ -90,10 +129,12 @@ module CoordProgramRefinement {
     && var isb := v.inFlightSuperblock.value;
     && var ej := v.ephemeral.journal;
 
+    // In-flight journal stitches to in-flight map
+    && isb.journal.CanFollow(isb.mapadt.seqEnd)
     // Ephemeral journal is at least as far as in-flight (frozen) map.
     && ej.CanDiscardTo(isb.mapadt.seqEnd)
     // in-flight journal extends persistent journal
-    && JournalExtendsJournal(isb.journal, psb.journal, psb.mapadt.seqEnd)
+    && JournalOverlapsAgree(isb.journal, psb.journal)
     // Ephemeral journal agrees with in-flight journal
     && JournalExtendsJournal(ej.DiscardOld(isb.mapadt.seqEnd), isb.journal, isb.mapadt.seqEnd)
     // in-flight map matches corresponding state in ephemeral world
@@ -107,7 +148,7 @@ module CoordProgramRefinement {
       && v.ephemeral.Known?
       && v.ephemeral.journal.CanDiscardTo(v.inFlightSuperblock.value.mapadt.seqEnd)
       && v.persistentSuperblock.SeqEnd() <= v.inFlightSuperblock.value.SeqEnd() // commit doesn't shrink persistent state
-      && v.inFlightSuperblock.value.SeqEnd() <= v.ephemeral.SeqEnd()  // maintain InvJournalMonotonic
+      && v.inFlightSuperblock.value.SeqEnd() <= v.ephemeral.SeqEnd()  // maintain InvEphemeralJournalExtendsPersistentJournal
       && InvInFlightVersionAgreement(v)
       )
   }
@@ -116,13 +157,16 @@ module CoordProgramRefinement {
   {
     && v.WF()
     && (v.ephemeral.Known? ==>
-      // StampedMapret ephemeral state by stitching ephemeral journal (which
+      // Interpret ephemeral state by stitching ephemeral journal (which
       // invariantly matches ephemeral mapadt) with persistent mapadt (which
       // it can follow exactly without beheading).
+      && InvEphemeralJournalStartsAtPersistentMap(v)
       && InvEphemeralJournalExtendsPersistentJournal(v)
       && InvLSNTracksPersistentWhenJournalEmpty(v)
+      // Frozen state is consistent with ephemeral state
+      && InvFrozenNotProphetic(v)
+      && InvFrozenAgreement(v)
       )
-    && InvJournalMonotonic(v)
     && InvInFlightProperties(v)
   }
 
@@ -132,6 +176,54 @@ module CoordProgramRefinement {
     ensures I(v) == CrashTolerantMapSpecMod.InitState()
   {
 //    assert JournalInterpTypeMod.Mkfs().SyncReqsAt(0) == {}; // trigger set comprehension
+  }
+
+  lemma CommitStepPreservesHistory(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step, lsn: LSN)
+    requires Inv(v)
+    requires CoordProgramMod.Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step);
+    requires step.CommitCompleteStep?
+    requires v.persistentSuperblock.mapadt.seqEnd <= lsn <= v.ephemeral.SeqEnd()
+    requires v.inFlightSuperblock.value.mapadt.seqEnd <= lsn  // Can't do much with lsns that have been forgotten
+    ensures v'.ephemeral.journal.CanDiscardTo(lsn);
+    ensures MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(lsn))
+            == MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(lsn));
+  {
+    // There are six pieces in play here: the persistent and in-flight superblocks and the ephemeral journals:
+    //  _________ __________
+    // | psb.map | psb.jrnl |
+    //  --------- ----------
+    //  ______________R__________
+    // | isb.map      | isb.jrnl |
+    //  -------------- ----------
+    //            ____________________
+    //           | eph.jrnl           |
+    //            --------------------
+    //                 _______________
+    //                | eph'.jrnl     |
+    //                 ---------------
+    // "R" is the "reference LSN" -- that's where we're going to prune ephemeral.journal, since
+    // after the commit it is going to be the LSN of the persistent map.
+
+    var refLsn := v.inFlightSuperblock.value.mapadt.seqEnd;
+    var ej := v.ephemeral.journal;
+    var eji := v.ephemeral.journal.DiscardRecent(lsn);
+
+    // Here's a calc, but in comments so we can use a shorthand algebra:
+    // Let + represent both MapPlusHistory and Concat (they're associative).
+    // Let [x..] represent DiscardOld(x) and [..y] represent DiscardRecent(y).
+    // var im:=v.inFlightSuperblock.value.mapadt, pm:=v.persistentSuperblock.mapadt, R:=im.seqEnd
+    // pm'+ej'[..lsn]
+    // im+ej'[..lsn]
+    // im+ej[..lsn][R..]
+    // InvInFlightVersionAgreement
+    // (pm+ej[..R])+ej[..lsn][R..]
+    JournalAssociativity(v.persistentSuperblock.mapadt, ej.DiscardRecent(refLsn), ej.DiscardRecent(lsn).DiscardOld(refLsn));
+    // pm+(ej[..R]+ej[..lsn][R..])
+    assert ej.DiscardRecent(refLsn) == ej.DiscardRecent(lsn).DiscardRecent(refLsn);  // because R <= lsn; smaller lsn are Forgotten
+    // pm+(ej[..lsn][..R]+ej[..lsn][R..])
+    assert eji.DiscardRecent(refLsn).Concat(eji.DiscardOld(refLsn)) == eji;  // trigger
+    // pm+ej[..lsn]
   }
 
   lemma InvInductive(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp)
@@ -158,6 +250,13 @@ module CoordProgramRefinement {
           var isbEnd := v.inFlightSuperblock.value.mapadt.seqEnd;
           assert v.ephemeral.journal.DiscardRecent(isbEnd) == v'.ephemeral.journal.DiscardRecent(isbEnd); // trigger
         }
+        if FrozenMapUsable(v') {
+          assert FrozenMapUsable(v);
+          var frozenEnd := v.ephemeral.frozenMap.value.seqEnd;
+          assert v.ephemeral.journal.DiscardRecent(frozenEnd) == v'.ephemeral.journal.DiscardRecent(frozenEnd); // trigger
+          assert v'.ephemeral.frozenMap.value == MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
+        }
+        assert InvFrozenAgreement(v');
         assert Inv(v');
       }
       case DeliverReplyStep() => {
@@ -175,20 +274,32 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case FreezeMapAdtStep() => {
-        assert Inv(v');
+        assume Inv(v');
       }
       case CommitStartStep(seqBoundary) => {
-        assert v'.inFlightSuperblock.Some?;
-        //assert v'.persistentSuperblock.SeqEnd() <=  LEFT OFF HERE looking at BestFrozenState.
-        assert v'.persistentSuperblock.SeqEnd() <= v'.inFlightSuperblock.value.SeqEnd(); // commit doesn't shrink persistent state
-        var psb' := v'.persistentSuperblock;
-        var isb' := v'.inFlightSuperblock.value;
-        var ej' := v'.ephemeral.journal;
-        assume JournalExtendsJournal(isb'.journal, psb'.journal, psb'.mapadt.seqEnd);
-        assume InvInFlightVersionAgreement(v');
         assert Inv(v');
       }
       case CommitCompleteStep() => {
+        if FrozenMapUsable(v') {
+          assert FrozenMapUsable(v);
+          calc {
+            v'.ephemeral.frozenMap.value;
+            v.ephemeral.frozenMap.value;
+//            {
+//              calc {
+//                v.persistentSuperblock.mapadt.seqEnd;
+//                <= v'.persistentSuperblock.mapadt.seqEnd;
+//                <= v.ephemeral.frozenMap.value.seqEnd;
+//              }
+//              assert FrozenMapUsable(v);
+//            }
+            MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.frozenMap.value.seqEnd));
+            {
+              CommitStepPreservesHistory(v, v', uiop, step, v.ephemeral.frozenMap.value.seqEnd);
+            }
+            MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
+          }
+        }
         assert Inv(v');
       }
     }
@@ -236,53 +347,16 @@ module CoordProgramRefinement {
     ensures Inv(v')
     ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
   {
-    // There are six pieces in play here: the persistent and in-flight superblocks and the ephemeral journals:
-    //  _________ __________
-    // | psb.map | psb.jrnl |
-    //  --------- ----------
-    //  ______________R__________
-    // | isb.map      | isb.jrnl |
-    //  -------------- ----------
-    //            ____________________
-    //           | eph.jrnl           |
-    //            --------------------
-    //                 _______________
-    //                | eph'.jrnl     |
-    //                 ---------------
-    // "R" is the "reference LSN" -- that's where we're going to prune ephemeral.journal, since
-    // after the commit it is going to be the LSN of the persistent map.
-
-    forall i | 0<=i<|I(v).versions| ensures
-      || I(v').versions[i] == I(v).versions[i]
-      || (i < I(v').stableIdx && I(v').versions[i].Forgotten?)
+    // See description & diagram in CommitStepPreservesHistory.
+    InvInductive(v, v', uiop);
+    forall i | 0<=i<|I(v).versions|
+      ensures I(v').versions[i] == if i < I(v').stableIdx then CrashTolerantMapSpecMod.Forgotten else I(v).versions[i]
     {
-      var refLsn := v.inFlightSuperblock.value.mapadt.seqEnd;
-
-      if refLsn <= i {
-        var ej := v.ephemeral.journal;
-        var eji := v.ephemeral.journal.DiscardRecent(i);
-
-        // Here's a calc, but commented to use a shorthand algebra:
-        // Let + represent both MapPlusHistory and Concat (they're associative).
-        // Let [x..] represent DiscardOld(x) and [..y] represent DiscardRecent(y).
-        // var im:=v.inFlightSuperblock.value.mapadt, pm:=v.persistentSuperblock.mapadt, R:=im.seqEnd
-        // I(v')
-        // im+ej'[..i]
-        // im+ej[..i][R..]
-        // InvInFlightVersionAgreement
-        // (pm+ej[..R])+ej[..i][R..]
-        JournalAssociativity(v.persistentSuperblock.mapadt, ej.DiscardRecent(refLsn), ej.DiscardRecent(i).DiscardOld(refLsn));
-        // pm+(ej[..R]+ej[..i][R..])
-        assert ej.DiscardRecent(refLsn) == ej.DiscardRecent(i).DiscardRecent(refLsn);  // because R <= i; smaller i are Forgotten
-        // pm+(ej[..i][..R]+ej[..i][R..])
-        assert eji.DiscardRecent(refLsn).Concat(eji.DiscardOld(refLsn)) == eji;  // trigger
-        // pm+ej[..i]
-        // I(v)
+      if v.inFlightSuperblock.value.SeqEnd() <= i {
+        CommitStepPreservesHistory(v, v', uiop, step, i);
       }
     }
-    assert CrashTolerantMapSpecMod.Sync(I(v), I(v'));
-    assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), UIOp.SyncOp);
-    assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+    assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), UIOp.SyncOp);  // witness
   }
 
   lemma NextRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp)
@@ -343,7 +417,6 @@ module CoordProgramRefinement {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case CommitStartStep(seqBoundary) => {
-        assume false;
         assert uiop == CrashTolerantMapSpecMod.NoopOp;
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }

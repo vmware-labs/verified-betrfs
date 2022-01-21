@@ -315,12 +315,18 @@ module CoordProgramMod {
     if
       // no frozen map to write
       || v.ephemeral.frozenMap.None?
+      || var frozenMap := v.ephemeral.frozenMap.value;
       // frozen journal is useless
-      || !(v.ephemeral.frozenMap.value.seqEnd < v.ephemeral.frozenJournalLSN) // TODO(robj): why not remove this case?
+      || !(frozenMap.seqEnd < v.ephemeral.frozenJournalLSN) // TODO(robj): why not remove this case?
       // frozen LSN is out of bounds for the actual joural it's pointing to
       || !v.ephemeral.journal.CanDiscardTo(v.ephemeral.frozenJournalLSN)
       // or has been beheaded beyond the frozen tree
-      || !v.ephemeral.journal.CanDiscardTo(v.ephemeral.frozenMap.value.seqEnd)
+      || !v.ephemeral.journal.CanDiscardTo(frozenMap.seqEnd)
+      // or frozen state loses information
+      || !(v.persistentSuperblock.SeqEnd() <= v.ephemeral.frozenJournalLSN)
+      // or frozen map goes backwards, so if we committed it, we could have a
+      // gap to our ephemeral journal start
+      || !(v.persistentSuperblock.mapadt.seqEnd <= frozenMap.seqEnd)
     then None
     else
       // Use frozen map and available frozen journal.

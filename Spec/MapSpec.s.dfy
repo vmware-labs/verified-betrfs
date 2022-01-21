@@ -18,7 +18,7 @@ module MapSpecMod refines AtomicStateMachineMod {
   datatype Output = GetOutput(v: Value) | PutOutput | NoopOutput
 
   // State machine
-  datatype Variables = Variables(interp: StampedMapMod.StampedMap)
+  datatype Variables = Variables(smap: StampedMapMod.StampedMap)
 
   function InitState() : Variables {
     Variables(StampedMapMod.Empty())
@@ -26,13 +26,13 @@ module MapSpecMod refines AtomicStateMachineMod {
 
   predicate Query(s: Variables, s': Variables, k: Key, v: Value)
   {
-    && v == s.interp.mi[k].value
+    && v == s.smap.mi[k].value
     && s' == s
   }
 
   predicate Put(s: Variables, s': Variables, k: Key, v: Value)
   {
-    && s' == s.(interp := s.interp.Put(k, Define(v)))
+    && s' == s.(smap := s.smap.Put(k, Define(v)))
   }
 
   predicate Next(v: Variables, v': Variables, input: Input, out: Output)
