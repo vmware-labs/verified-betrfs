@@ -38,7 +38,7 @@ module MsgHistoryMod {
       )
     }
 
-    predicate {:opaque} ContainsExactly(lsns: set<LSN>)
+    predicate ContainsExactly(lsns: set<LSN>)
     {
       forall lsn :: lsn in lsns <==> Contains(lsn)
     }

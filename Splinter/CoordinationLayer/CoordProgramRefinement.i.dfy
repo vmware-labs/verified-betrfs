@@ -249,7 +249,7 @@ module CoordProgramRefinement {
     // pm+ej[..lsn]
   }
 
-  lemma InvInductivePutStep(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
+  lemma {:timeLimitMultiplier 2} InvInductivePutStep(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
     requires Inv(v)
     requires CoordProgramMod.Next(v, v', uiop)
     requires NextStep(v, v', uiop, step)
@@ -258,16 +258,12 @@ module CoordProgramRefinement {
   {
     if v.inFlightSuperblock.Some? {
       var isbEnd := v.inFlightSuperblock.value.mapadt.seqEnd;
-      assert v.ephemeral.journal.DiscardRecent(isbEnd) == v'.ephemeral.journal.DiscardRecent(isbEnd) by {
-        v.ephemeral.journal.reveal_ContainsExactly();
-      }
+      assert v.ephemeral.journal.DiscardRecent(isbEnd) == v'.ephemeral.journal.DiscardRecent(isbEnd); // trigger
     }
     if FrozenMapUsable(v') {
       assert FrozenMapUsable(v);
       var frozenEnd := v.ephemeral.frozenMap.value.seqEnd;
-      assert v.ephemeral.journal.DiscardRecent(frozenEnd) == v'.ephemeral.journal.DiscardRecent(frozenEnd) by {
-        v.ephemeral.journal.reveal_ContainsExactly();
-      }
+      assert v.ephemeral.journal.DiscardRecent(frozenEnd) == v'.ephemeral.journal.DiscardRecent(frozenEnd); // trigger
       assert v'.ephemeral.frozenMap.value == MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
     }
     assert InvFrozenAgreement(v');
@@ -276,11 +272,8 @@ module CoordProgramRefinement {
     var key := uiop.baseOp.req.input.k;
     var val := uiop.baseOp.req.input.v;
     var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
-    assert singleton.WF() by { v.ephemeral.journal.reveal_ContainsExactly(); }
     JournalAssociativity(v.persistentSuperblock.mapadt, v.ephemeral.journal, singleton);
-    assert v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd) == v.ephemeral.journal by {
-        v.ephemeral.journal.reveal_ContainsExactly();
-    }
+    assert v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd) == v.ephemeral.journal; // trigger
     assert v'.ephemeral.journal == v'.ephemeral.journal.DiscardRecent(v'.ephemeral.mapadt.seqEnd); // trigger
     // TODO(chris): I'm wondering why these subexpressions aren't sort of
     // self-triggering? It's a very common pattern in this code.
