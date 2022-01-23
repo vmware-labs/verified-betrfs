@@ -88,6 +88,25 @@ module CoordProgramRefinement {
     && JournalExtendsJournal(v.ephemeral.journal, v.persistentSuperblock.journal, v.persistentSuperblock.mapadt.seqEnd)
   }
 
+  predicate InvEphemeralMapWithinEphemeralJournal(v: CoordProgramMod.Variables)
+    requires v.WF() && v.ephemeral.Known?
+  {
+    v.ephemeral.journal.CanDiscardTo(v.ephemeral.mapadt.seqEnd)
+  }
+  predicate InvEphemeralMapIsJournalSnapshot(v: CoordProgramMod.Variables)
+    requires v.WF() && v.ephemeral.Known?
+    requires InvEphemeralMapWithinEphemeralJournal(v)
+    requires InvEphemeralJournalExtendsPersistentJournal(v)
+  {
+    && v.ephemeral.mapadt == MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd))
+  }
+
+  predicate InvEphemeralJournalBeyondEphemeralMap(v: CoordProgramMod.Variables)
+    requires v.WF() && v.ephemeral.Known?
+  {
+    && v.ephemeral.mapadt.seqEnd <= v.ephemeral.SeqEnd()
+  }
+
   predicate InvFrozenNotProphetic(v: CoordProgramMod.Variables)
   {
     // without knowing this invariant, a state could hold a frozen map that's
@@ -162,6 +181,10 @@ module CoordProgramRefinement {
       // it can follow exactly without beheading).
       && InvEphemeralJournalStartsAtPersistentMap(v)
       && InvEphemeralJournalExtendsPersistentJournal(v)
+      && InvEphemeralMapWithinEphemeralJournal(v)
+      && InvEphemeralMapIsJournalSnapshot(v)
+      && InvEphemeralJournalBeyondEphemeralMap(v)
+      
       && InvLSNTracksPersistentWhenJournalEmpty(v)
       // Frozen state is consistent with ephemeral state
       && InvFrozenNotProphetic(v)
@@ -226,6 +249,103 @@ module CoordProgramRefinement {
     // pm+ej[..lsn]
   }
 
+  lemma InvInductivePutStep(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
+    requires Inv(v)
+    requires CoordProgramMod.Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step)
+    requires step.PutStep?
+    ensures Inv(v')
+  {
+    if v.inFlightSuperblock.Some? {
+      var isbEnd := v.inFlightSuperblock.value.mapadt.seqEnd;
+      assert v.ephemeral.journal.DiscardRecent(isbEnd) == v'.ephemeral.journal.DiscardRecent(isbEnd) by {
+        v.ephemeral.journal.reveal_ContainsExactly();
+      }
+    }
+    if FrozenMapUsable(v') {
+      assert FrozenMapUsable(v);
+      var frozenEnd := v.ephemeral.frozenMap.value.seqEnd;
+      assert v.ephemeral.journal.DiscardRecent(frozenEnd) == v'.ephemeral.journal.DiscardRecent(frozenEnd) by {
+        v.ephemeral.journal.reveal_ContainsExactly();
+      }
+      assert v'.ephemeral.frozenMap.value == MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
+    }
+    assert InvFrozenAgreement(v');
+
+    // InvEphemeralMapIsJournalSnapshot
+    var key := uiop.baseOp.req.input.k;
+    var val := uiop.baseOp.req.input.v;
+    var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
+    assert singleton.WF() by { v.ephemeral.journal.reveal_ContainsExactly(); }
+    JournalAssociativity(v.persistentSuperblock.mapadt, v.ephemeral.journal, singleton);
+    assert v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd) == v.ephemeral.journal by {
+        v.ephemeral.journal.reveal_ContainsExactly();
+    }
+    assert v'.ephemeral.journal == v'.ephemeral.journal.DiscardRecent(v'.ephemeral.mapadt.seqEnd); // trigger
+    // TODO(chris): I'm wondering why these subexpressions aren't sort of
+    // self-triggering? It's a very common pattern in this code.
+//    calc {
+//      v'.ephemeral.mapadt;
+//      MapPlusHistory(v.ephemeral.mapadt, singleton);
+//      MapPlusHistory(MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd)), singleton);
+//      MapPlusHistory(MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal), singleton);
+//      MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.Concat(singleton));
+//      MapPlusHistory(v.persistentSuperblock.mapadt, v'.ephemeral.journal);
+//      MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.mapadt.seqEnd));
+//    }
+    assert Inv(v');
+  }
+
+  lemma InvInductiveCommitCompleteStep(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
+    requires Inv(v)
+    requires CoordProgramMod.Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step)
+    requires step.CommitCompleteStep?
+    ensures Inv(v')
+  {
+    if FrozenMapUsable(v') {
+      assert FrozenMapUsable(v);
+      calc {
+        v'.ephemeral.frozenMap.value;
+        v.ephemeral.frozenMap.value;
+        MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.frozenMap.value.seqEnd));
+        {
+          CommitStepPreservesHistory(v, v', uiop, step, v.ephemeral.frozenMap.value.seqEnd);
+        }
+        MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
+      }
+    }
+
+    // InvEphemeralMapIsJournalSnapshot
+    var pm := v.persistentSuperblock.mapadt;
+    var em := v.ephemeral.mapadt;
+    var ej := v.ephemeral.journal;
+    var imEnd := v.inFlightSuperblock.value.mapadt.seqEnd;
+
+    JournalAssociativity(pm, ej.DiscardRecent(imEnd), ej.DiscardOld(imEnd).DiscardRecent(em.seqEnd));
+    assert ej.DiscardRecent(em.seqEnd) == ej.DiscardRecent(imEnd).Concat(ej.DiscardOld(imEnd).DiscardRecent(em.seqEnd));   // trigger
+
+//    var pm' := v'.persistentSuperblock.mapadt;
+//    var em' := v'.ephemeral.mapadt;
+//    var ej' := v'.ephemeral.journal;
+//    var im := v.inFlightSuperblock.value.mapadt;
+//    calc {
+//      v'.ephemeral.mapadt;
+//      v.ephemeral.mapadt;
+//        // ind hyp
+//      MapPlusHistory(pm, ej.DiscardRecent(em.seqEnd));
+//        // split journal at im.seqEnd
+//      MapPlusHistory(pm, ej.DiscardRecent(im.seqEnd).Concat(ej.DiscardOld(im.seqEnd).DiscardRecent(em.seqEnd)));
+//        // Jassoc
+//      MapPlusHistory(MapPlusHistory(pm, ej.DiscardRecent(im.seqEnd)), ej.DiscardOld(im.seqEnd).DiscardRecent(em.seqEnd));
+//        // In flight inv
+//      MapPlusHistory(im, ej.DiscardOld(im.seqEnd).DiscardRecent(em.seqEnd));
+//        // step ident
+//      MapPlusHistory(im, ej'.DiscardRecent(em.seqEnd));
+//      MapPlusHistory(pm', ej'.DiscardRecent(em'.seqEnd));
+//    }
+  }
+
   lemma InvInductive(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp)
     requires Inv(v)
     requires CoordProgramMod.Next(v, v', uiop)
@@ -237,7 +357,12 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case RecoverStep(puts) => {
-        assert Inv(v');
+        // InvEphemeralMapIsJournalSnapshot
+        var em := v.ephemeral.mapadt;
+        var ej := v.ephemeral.journal;
+        JournalAssociativity(v.persistentSuperblock.mapadt, ej.DiscardRecent(em.seqEnd), puts);
+        assert ej.DiscardRecent(em.seqEnd).Concat(puts)
+          == v'.ephemeral.journal.DiscardRecent(v'.ephemeral.mapadt.seqEnd);  // trigger
       }
       case AcceptRequestStep() => {
         assert Inv(v');
@@ -246,18 +371,7 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case PutStep() => {
-        if v.inFlightSuperblock.Some? {
-          var isbEnd := v.inFlightSuperblock.value.mapadt.seqEnd;
-          assert v.ephemeral.journal.DiscardRecent(isbEnd) == v'.ephemeral.journal.DiscardRecent(isbEnd); // trigger
-        }
-        if FrozenMapUsable(v') {
-          assert FrozenMapUsable(v);
-          var frozenEnd := v.ephemeral.frozenMap.value.seqEnd;
-          assert v.ephemeral.journal.DiscardRecent(frozenEnd) == v'.ephemeral.journal.DiscardRecent(frozenEnd); // trigger
-          assert v'.ephemeral.frozenMap.value == MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
-        }
-        assert InvFrozenAgreement(v');
-        assert Inv(v');
+        InvInductivePutStep(v, v', uiop, step);
       }
       case DeliverReplyStep() => {
         assert Inv(v');
@@ -274,33 +388,44 @@ module CoordProgramRefinement {
         assert Inv(v');
       }
       case FreezeMapAdtStep() => {
-        assume Inv(v');
+        assert v'.ephemeral.Known?;
+        assert v'.ephemeral.frozenMap.Some?;
+//        calc {
+//          v'.ephemeral.frozenMap.value.seqEnd;
+//          v'.ephemeral.mapadt.seqEnd;
+//          v.ephemeral.mapadt.seqEnd;
+//          <=
+//          {
+//            assert InvEphemeralJournalBeyondEphemeralMap(v);
+//            assert v.ephemeral.mapadt.seqEnd <= v.ephemeral.SeqEnd();
+//          }
+//          SeqEndFor(v.ephemeral.mapadt.seqEnd, v.ephemeral.journal);
+//          v.ephemeral.SeqEnd();
+//          v'.ephemeral.SeqEnd();
+//        }
+//        assert InvFrozenNotProphetic(v');
+//        if v'.ephemeral.journal.MsgHistory? {
+//          calc {
+//            v'.ephemeral.journal.seqStart;
+//            <=
+//            v'.ephemeral.mapadt.seqEnd;
+//            v'.ephemeral.frozenMap.value.seqEnd;
+//          }
+//          assert v'.ephemeral.journal.seqStart <= v'.ephemeral.frozenMap.value.seqEnd <= v'.ephemeral.journal.seqEnd;
+//        }
+//        assert v'.ephemeral.journal.CanDiscardTo(v'.ephemeral.frozenMap.value.seqEnd);
+        calc {
+          v'.ephemeral.frozenMap.value;
+          MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
+        }
+        assert InvFrozenAgreement(v');
+        assert Inv(v');
       }
       case CommitStartStep(seqBoundary) => {
         assert Inv(v');
       }
       case CommitCompleteStep() => {
-        if FrozenMapUsable(v') {
-          assert FrozenMapUsable(v);
-          calc {
-            v'.ephemeral.frozenMap.value;
-            v.ephemeral.frozenMap.value;
-//            {
-//              calc {
-//                v.persistentSuperblock.mapadt.seqEnd;
-//                <= v'.persistentSuperblock.mapadt.seqEnd;
-//                <= v.ephemeral.frozenMap.value.seqEnd;
-//              }
-//              assert FrozenMapUsable(v);
-//            }
-            MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.frozenMap.value.seqEnd));
-            {
-              CommitStepPreservesHistory(v, v', uiop, step, v.ephemeral.frozenMap.value.seqEnd);
-            }
-            MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
-          }
-        }
-        assert Inv(v');
+        InvInductiveCommitCompleteStep(v, v', uiop, step);
       }
     }
   }
@@ -417,7 +542,6 @@ module CoordProgramRefinement {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case CommitStartStep(seqBoundary) => {
-        assert uiop == CrashTolerantMapSpecMod.NoopOp;
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case CommitCompleteStep() => { CommitStepRefines(v, v', uiop, step); }

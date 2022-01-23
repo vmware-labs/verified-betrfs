@@ -34,8 +34,13 @@ module MsgHistoryMod {
       MsgHistory? ==> (
       // Note that MsgHistory() instances CANNOT be empty, so that empty repr is normalized.
         && seqStart < seqEnd
-        && (forall k :: k in msgs <==> Contains(k))
+        && ContainsExactly(msgs.Keys)
       )
+    }
+
+    predicate {:opaque} ContainsExactly(lsns: set<LSN>)
+    {
+      forall lsn :: lsn in lsns <==> Contains(lsn)
     }
 
     predicate Contains(lsn: LSN)
@@ -46,8 +51,8 @@ module MsgHistoryMod {
 
     // For use in map comprehensions, where "lsn in msgSeq.Contains()" doesn't
     // satisfy Dafny's bounded set heuristic.
-    function {:opaque} LSNSet() : (lsns: set<LSN>)
-      ensures forall lsn :: lsn in lsns <==> Contains(lsn)
+    function {:opaque} LSNSet() : set<LSN>
+      ensures ContainsExactly(LSNSet())
     {
       if EmptyHistory?
       then {}
