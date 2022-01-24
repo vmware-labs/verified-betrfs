@@ -47,17 +47,6 @@ module CoordProgramRefinement {
         Async.InitEphemeralState(), map[], stableLSN)
   }
 
-  predicate InvLSNTracksPersistentWhenJournalEmpty(v: CoordProgramMod.Variables)
-  {
-    // TODO this may be obsoleted by cleaner use of SeqEnd() predicate
-    // We need this extra condition to ensure that, when the ephemeral journal
-    // is empty, the ephemeral map indeed matches the disk -- otherwise we won't
-    // assign the right lsn to new puts.
-    && (v.ephemeral.Known? && v.ephemeral.journal.EmptyHistory? ==>
-        NextLSN(v) == v.persistentSuperblock.mapadt.seqEnd
-      )
-  }
-
   // Where these journals share an LSN, they map it to the same message.
   predicate JournalOverlapsAgree(j0: Journal, j1: Journal)
     requires j0.WF() && j1.WF()
@@ -179,7 +168,6 @@ module CoordProgramRefinement {
       && InvEphemeralMapWithinEphemeralJournal(v)
       && InvEphemeralMapIsJournalSnapshot(v)
       
-      && InvLSNTracksPersistentWhenJournalEmpty(v)
       // Frozen state is consistent with ephemeral state
       && InvFrozenNotProphetic(v)
       && InvFrozenAgreement(v)
@@ -432,7 +420,7 @@ module CoordProgramRefinement {
     assert j'.ApplyToStampedMap(base).mi == j'.ApplyToStampedMapRecursive(base, j'.Len()-1).mi[kmsg.key := kmsg.message];  // trigger
   }
 
-  lemma JournalAssociativity(x: MapAdt, y: Journal, z: Journal)
+  lemma {:timeLimitMultiplier 2} JournalAssociativity(x: MapAdt, y: Journal, z: Journal)
     requires y.WF()
     requires z.WF()
     requires y.CanFollow(x.seqEnd)
