@@ -68,8 +68,8 @@ module CoordProgramRefinement {
     && v.persistentSuperblock.journal.CanFollow(v.persistentSuperblock.mapadt.seqEnd)
   }
 
-  predicate InvEphemeralJournalGeometry(v: CoordProgramMod.Variables)
-    requires v.ephemeral.Known?
+  predicate InvEphemeralGeometry(v: CoordProgramMod.Variables)
+    requires v.WF() && v.ephemeral.Known?
   {
     // Ephemeral journal begins at persistent map
     && v.ephemeral.journal.CanFollow(v.persistentSuperblock.mapadt.seqEnd)
@@ -83,24 +83,13 @@ module CoordProgramRefinement {
     && v.persistentSuperblock.SeqEnd() <= v.ephemeral.SeqEnd()
   }
 
-  predicate InvEphemeralJournalExtendsPersistentJournal(v: CoordProgramMod.Variables)
-    requires v.WF()
-    requires v.ephemeral.Known?
-  {
-    && JournalOverlapsAgree(v.persistentSuperblock.journal, v.ephemeral.journal)
-  }
-
-  predicate InvEphemeralMapIsJournalSnapshot(v: CoordProgramMod.Variables)
+  predicate InvEphemeralValueAgreement(v: CoordProgramMod.Variables)
     requires v.WF() && v.ephemeral.Known?
-    requires InvEphemeralJournalGeometry(v)
-    requires InvEphemeralJournalExtendsPersistentJournal(v)
+    requires InvEphemeralGeometry(v)
   {
-    && assert v.ephemeral.journal.CanDiscardTo(v.ephemeral.mapadt.seqEnd) by {
-      if v.ephemeral.journal.MsgHistory? {
-        assert v.ephemeral.mapadt.seqEnd <= v.ephemeral.journal.seqEnd;
-        assert v.ephemeral.journal.seqStart <= v.ephemeral.mapadt.seqEnd;
-      }
-    }
+    // Ephemeral journal agrees with persistent journal
+    && JournalOverlapsAgree(v.persistentSuperblock.journal, v.ephemeral.journal)
+    // Ephemeral map state agrees with ephemeral journal (tacked onto persistent map)
     && v.ephemeral.mapadt == MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd))
   }
 
@@ -129,47 +118,47 @@ module CoordProgramRefinement {
   predicate InvFrozenMapAgreement(v: CoordProgramMod.Variables)
     requires v.WF()
     requires v.ephemeral.Known?
-    requires InvEphemeralJournalGeometry(v)
+    requires InvEphemeralGeometry(v)
     requires InvFrozenNotProphetic(v)
   {
     FrozenMapGeometryUsable(v) ==>
       v.ephemeral.frozenMap.value == MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.frozenMap.value.seqEnd))
   }
 
-  predicate InvInFlightVersionAgreement(v: CoordProgramMod.Variables)
-    requires v.WF()
-    requires v.ephemeral.Known?
-    requires InvEphemeralJournalGeometry(v)
+  predicate InvInFlightGeometry(v: CoordProgramMod.Variables)
+    requires v.WF() && v.inFlightSuperblock.Some?
   {
-
-    && v.inFlightSuperblock.Some?
-    && var psb := v.persistentSuperblock;
     && var isb := v.inFlightSuperblock.value;
-    && var ej := v.ephemeral.journal;
 
-    // In-flight journal stitches to in-flight map
+    // We need a well-behaved journal to relate in-flight state to.
+    && v.ephemeral.Known?
+    && InvEphemeralGeometry(v)
+
+    // Geometry properties
+    // In-flight map + journal stitch.
     && isb.journal.CanFollow(isb.mapadt.seqEnd)
-    // Ephemeral journal is at least as far as in-flight (frozen) map.
-    && ej.CanDiscardTo(isb.mapadt.seqEnd)
-    // in-flight journal extends persistent journal
-    && JournalOverlapsAgree(isb.journal, psb.journal)
-    // Ephemeral journal agrees with in-flight journal
-    && JournalExtendsJournal(ej.DiscardOld(isb.mapadt.seqEnd), isb.journal, isb.mapadt.seqEnd)
-    // in-flight map matches corresponding state in ephemeral world
-    && isb.mapadt == MapPlusHistory(psb.mapadt, ej.DiscardRecent(isb.mapadt.seqEnd))
+    // Commiting in-flight state won't shrink persistent state
+    && v.persistentSuperblock.SeqEnd() <= isb.SeqEnd()
+    // In-flight map doesn't precede persistent map -- that would cause
+    // forgotten lsns to pop back into existence, and we don't have those lsns
+    // in the ephemeral journal to compare to.
+    && v.persistentSuperblock.mapadt.seqEnd <= isb.mapadt.seqEnd
+    // in-flight view hsan't passed ephemeral journal
+    && isb.SeqEnd() <= v.ephemeral.SeqEnd()
   }
 
-  predicate InvInFlightProperties(v: CoordProgramMod.Variables)
+  predicate InvInFlightValueAgreement(v: CoordProgramMod.Variables)
+    requires v.WF() && v.inFlightSuperblock.Some?
+    requires InvInFlightGeometry(v)
   {
-    && v.WF()
-    && (v.inFlightSuperblock.Some? ==>
-      && v.ephemeral.Known?
-      && InvEphemeralJournalGeometry(v)
-      && v.ephemeral.journal.CanDiscardTo(v.inFlightSuperblock.value.mapadt.seqEnd)
-      && v.persistentSuperblock.SeqEnd() <= v.inFlightSuperblock.value.SeqEnd() // commit doesn't shrink persistent state
-      && v.inFlightSuperblock.value.SeqEnd() <= v.ephemeral.SeqEnd()  // maintain InvEphemeralJournalExtendsPersistentJournal
-      && InvInFlightVersionAgreement(v)
-      )
+    && var isb := v.inFlightSuperblock.value;
+    // in-flight journal is consistent with the persistent journal
+    && JournalOverlapsAgree(isb.journal, v.persistentSuperblock.journal)
+    // in-flight journal is consistent with the ephemeral journal
+    && JournalOverlapsAgree(isb.journal, v.ephemeral.journal)
+    // in-flight map matches corresponding state in ephemeral world
+    && isb.mapadt == MapPlusHistory(v.persistentSuperblock.mapadt,
+                      v.ephemeral.journal.DiscardRecent(isb.mapadt.seqEnd))
   }
 
   predicate Inv(v: CoordProgramMod.Variables)
@@ -180,15 +169,20 @@ module CoordProgramRefinement {
       // Interpret ephemeral state by stitching ephemeral journal (which
       // invariantly matches ephemeral mapadt) with persistent mapadt (which
       // it can follow exactly without beheading).
-      && InvEphemeralJournalGeometry(v)
-      && InvEphemeralJournalExtendsPersistentJournal(v)
-      && InvEphemeralMapIsJournalSnapshot(v)
+      && InvEphemeralGeometry(v)
+      && InvEphemeralValueAgreement(v)
       
       // Frozen state is consistent with ephemeral state
       && InvFrozenNotProphetic(v)
+      // NB: Frozen Journal agreement comes "for free" because the frozen
+      // journal is just defined as the frozenJournalLSN prefix of the
+      // ephemeral journal.
       && InvFrozenMapAgreement(v)
       )
-    && InvInFlightProperties(v)
+    && (v.inFlightSuperblock.Some? ==>
+      && InvInFlightGeometry(v)
+      && InvInFlightValueAgreement(v)
+      )
   }
 
   lemma InitRefines(v: CoordProgramMod.Variables)
