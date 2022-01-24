@@ -55,46 +55,59 @@ module CoordProgramRefinement {
   }
 
   predicate JournalExtendsJournal(jlong: Journal, jshort: Journal, startLsn: LSN)
+    requires jlong.WF() && jshort.WF()
+    requires jlong.CanFollow(startLsn)
+    requires jshort.CanFollow(startLsn)
   {
-    && jlong.WF()
-    && jshort.WF()
-    && jshort.CanFollow(startLsn)
-    && jlong.CanFollow(startLsn)
-    && jlong.CanDiscardTo(SeqEndFor(startLsn, jshort))
-    && jlong.DiscardRecent(SeqEndFor(startLsn, jshort)) == jshort
+    && jlong.CanDiscardTo(SeqEndFor(startLsn, jshort))            // jlong is longer
+    && jlong.DiscardRecent(SeqEndFor(startLsn, jshort)) == jshort // they agree on contents in overlap
   }
 
-  predicate InvEphemeralJournalStartsAtPersistentMap(v: CoordProgramMod.Variables)
+  predicate InvPersistentJournalGeometry(v: CoordProgramMod.Variables)
+  {
+    && v.persistentSuperblock.journal.CanFollow(v.persistentSuperblock.mapadt.seqEnd)
+  }
+
+  predicate InvEphemeralJournalGeometry(v: CoordProgramMod.Variables)
     requires v.ephemeral.Known?
   {
+    // Ephemeral journal begins at persistent map
     && v.ephemeral.journal.CanFollow(v.persistentSuperblock.mapadt.seqEnd)
+    // Ephemeral map ends no earlier than persistent map
+    && v.persistentSuperblock.mapadt.seqEnd <= v.ephemeral.mapadt.seqEnd
+    // Ephemeral journal ends no earlier than ephmeral map
+    // (With the first conjunct, this conjunct happens to subsume the second conjunct,
+    // but this was the nicest way to write it.)
+    && v.ephemeral.journal.CanDiscardTo(v.ephemeral.mapadt.seqEnd)
+    // Ephemeral journal is no shorter than persistent state
+    && v.persistentSuperblock.SeqEnd() <= v.ephemeral.SeqEnd()
   }
 
   predicate InvEphemeralJournalExtendsPersistentJournal(v: CoordProgramMod.Variables)
+    requires v.WF()
+    requires v.ephemeral.Known?
   {
-    && v.WF()
-    && v.ephemeral.Known?
-    && JournalExtendsJournal(v.ephemeral.journal, v.persistentSuperblock.journal, v.persistentSuperblock.mapadt.seqEnd)
-  }
-
-  predicate InvEphemeralMapWithinEphemeralJournal(v: CoordProgramMod.Variables)
-    requires v.WF() && v.ephemeral.Known?
-  {
-    v.ephemeral.journal.CanDiscardTo(v.ephemeral.mapadt.seqEnd)
+    && JournalOverlapsAgree(v.persistentSuperblock.journal, v.ephemeral.journal)
   }
 
   predicate InvEphemeralMapIsJournalSnapshot(v: CoordProgramMod.Variables)
     requires v.WF() && v.ephemeral.Known?
-    requires InvEphemeralMapWithinEphemeralJournal(v)
+    requires InvEphemeralJournalGeometry(v)
     requires InvEphemeralJournalExtendsPersistentJournal(v)
   {
+    && assert v.ephemeral.journal.CanDiscardTo(v.ephemeral.mapadt.seqEnd) by {
+      if v.ephemeral.journal.MsgHistory? {
+        assert v.ephemeral.mapadt.seqEnd <= v.ephemeral.journal.seqEnd;
+        assert v.ephemeral.journal.seqStart <= v.ephemeral.mapadt.seqEnd;
+      }
+    }
     && v.ephemeral.mapadt == MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd))
   }
 
   predicate InvFrozenNotProphetic(v: CoordProgramMod.Variables)
   {
     // without knowing this invariant, a state could hold a frozen map that's
-    // not FrozenMapUsable because its seqEnd is "in the future", and then a
+    // not FrozenMapGeometryUsable because its seqEnd is "in the future", and then a
     // Put() finally "catches up" with that seqEnd -- how could we then show
     // that the Put-modified ephemeral state matches the prophecy of the frozen
     // map? The answer is that frozen maps aren't prophetic.
@@ -103,7 +116,7 @@ module CoordProgramRefinement {
     v.ephemeral.frozenMap.value.seqEnd <= v.ephemeral.SeqEnd()
   }
 
-  predicate FrozenMapUsable(v: CoordProgramMod.Variables)
+  predicate FrozenMapGeometryUsable(v: CoordProgramMod.Variables)
   {
     && v.ephemeral.Known?
     // There is a frozen map
@@ -113,19 +126,21 @@ module CoordProgramRefinement {
     && v.persistentSuperblock.mapadt.seqEnd <= v.ephemeral.frozenMap.value.seqEnd
   }
 
-  predicate InvFrozenAgreement(v: CoordProgramMod.Variables)
+  predicate InvFrozenMapAgreement(v: CoordProgramMod.Variables)
     requires v.WF()
     requires v.ephemeral.Known?
-    requires InvEphemeralJournalStartsAtPersistentMap(v)
+    requires InvEphemeralJournalGeometry(v)
     requires InvFrozenNotProphetic(v)
   {
-    FrozenMapUsable(v) ==>
+    FrozenMapGeometryUsable(v) ==>
       v.ephemeral.frozenMap.value == MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.frozenMap.value.seqEnd))
   }
 
   predicate InvInFlightVersionAgreement(v: CoordProgramMod.Variables)
+    requires v.WF()
+    requires v.ephemeral.Known?
+    requires InvEphemeralJournalGeometry(v)
   {
-    && InvEphemeralJournalExtendsPersistentJournal(v) // already appears higher in Inv, but we need it too.
 
     && v.inFlightSuperblock.Some?
     && var psb := v.persistentSuperblock;
@@ -149,6 +164,7 @@ module CoordProgramRefinement {
     && v.WF()
     && (v.inFlightSuperblock.Some? ==>
       && v.ephemeral.Known?
+      && InvEphemeralJournalGeometry(v)
       && v.ephemeral.journal.CanDiscardTo(v.inFlightSuperblock.value.mapadt.seqEnd)
       && v.persistentSuperblock.SeqEnd() <= v.inFlightSuperblock.value.SeqEnd() // commit doesn't shrink persistent state
       && v.inFlightSuperblock.value.SeqEnd() <= v.ephemeral.SeqEnd()  // maintain InvEphemeralJournalExtendsPersistentJournal
@@ -159,18 +175,18 @@ module CoordProgramRefinement {
   predicate Inv(v: CoordProgramMod.Variables)
   {
     && v.WF()
+    && InvPersistentJournalGeometry(v)
     && (v.ephemeral.Known? ==>
       // Interpret ephemeral state by stitching ephemeral journal (which
       // invariantly matches ephemeral mapadt) with persistent mapadt (which
       // it can follow exactly without beheading).
-      && InvEphemeralJournalStartsAtPersistentMap(v)
+      && InvEphemeralJournalGeometry(v)
       && InvEphemeralJournalExtendsPersistentJournal(v)
-      && InvEphemeralMapWithinEphemeralJournal(v)
       && InvEphemeralMapIsJournalSnapshot(v)
       
       // Frozen state is consistent with ephemeral state
       && InvFrozenNotProphetic(v)
-      && InvFrozenAgreement(v)
+      && InvFrozenMapAgreement(v)
       )
     && InvInFlightProperties(v)
   }
@@ -242,13 +258,13 @@ module CoordProgramRefinement {
       var isbEnd := v.inFlightSuperblock.value.mapadt.seqEnd;
       assert v.ephemeral.journal.DiscardRecent(isbEnd) == v'.ephemeral.journal.DiscardRecent(isbEnd); // trigger
     }
-    if FrozenMapUsable(v') {
-      assert FrozenMapUsable(v);
+    if FrozenMapGeometryUsable(v') {
+      assert FrozenMapGeometryUsable(v);
       var frozenEnd := v.ephemeral.frozenMap.value.seqEnd;
       assert v.ephemeral.journal.DiscardRecent(frozenEnd) == v'.ephemeral.journal.DiscardRecent(frozenEnd); // trigger
       assert v'.ephemeral.frozenMap.value == MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
     }
-    assert InvFrozenAgreement(v');
+    assert InvFrozenMapAgreement(v');
 
     // InvEphemeralMapIsJournalSnapshot
     var key := uiop.baseOp.req.input.k;
@@ -278,8 +294,8 @@ module CoordProgramRefinement {
     requires step.CommitCompleteStep?
     ensures Inv(v')
   {
-    if FrozenMapUsable(v') {
-      assert FrozenMapUsable(v);
+    if FrozenMapGeometryUsable(v') {
+      assert FrozenMapGeometryUsable(v);
       calc {
         v'.ephemeral.frozenMap.value;
         v.ephemeral.frozenMap.value;
@@ -393,7 +409,7 @@ module CoordProgramRefinement {
           v'.ephemeral.frozenMap.value;
           MapPlusHistory(v'.persistentSuperblock.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
         }
-        assert InvFrozenAgreement(v');
+        assert InvFrozenMapAgreement(v');
         assert Inv(v');
       }
       case CommitStartStep(seqBoundary) => {
