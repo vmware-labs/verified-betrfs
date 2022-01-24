@@ -93,18 +93,13 @@ module CoordProgramRefinement {
   {
     v.ephemeral.journal.CanDiscardTo(v.ephemeral.mapadt.seqEnd)
   }
+
   predicate InvEphemeralMapIsJournalSnapshot(v: CoordProgramMod.Variables)
     requires v.WF() && v.ephemeral.Known?
     requires InvEphemeralMapWithinEphemeralJournal(v)
     requires InvEphemeralJournalExtendsPersistentJournal(v)
   {
     && v.ephemeral.mapadt == MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd))
-  }
-
-  predicate InvEphemeralJournalBeyondEphemeralMap(v: CoordProgramMod.Variables)
-    requires v.WF() && v.ephemeral.Known?
-  {
-    && v.ephemeral.mapadt.seqEnd <= v.ephemeral.SeqEnd()
   }
 
   predicate InvFrozenNotProphetic(v: CoordProgramMod.Variables)
@@ -183,7 +178,6 @@ module CoordProgramRefinement {
       && InvEphemeralJournalExtendsPersistentJournal(v)
       && InvEphemeralMapWithinEphemeralJournal(v)
       && InvEphemeralMapIsJournalSnapshot(v)
-      && InvEphemeralJournalBeyondEphemeralMap(v)
       
       && InvLSNTracksPersistentWhenJournalEmpty(v)
       // Frozen state is consistent with ephemeral state
