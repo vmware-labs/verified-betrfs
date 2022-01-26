@@ -35,24 +35,19 @@ module MapSpecMod refines AtomicStateMachineMod {
     && v' == v.(smap := v.smap.Put(key, Define(value)))
   }
 
-  // TODO JNF
   predicate Next(v: Variables, v': Variables, input: Input, out: Output)
   {
-    || (
-        && input.GetInput?
+    match input {
+      case GetInput(key) =>
         && out.GetOutput?
-        && Query(v, v', input.key, out.value)
-       )
-    || (
-        && input.PutInput?
+        && Query(v, v', key, out.value)
+      case PutInput(key, value) =>
         && out.PutOutput?
-        && Put(v, v', input.key, input.value)
-       )
-    || (
-        && input.NoopInput?
+        && Put(v, v', key, value)
+      case NoopInput =>
         && out.NoopOutput?
         && v' == v
-       )
+    }
   }
 }
 
