@@ -19,10 +19,7 @@ module MsgHistoryMod {
   import opened ValueMessage
   import opened KeyType
   import opened FullKMMapMod
-  import StampedMapMod
-
-  type LSN = StampedMapMod.LSN
-  type StampedMap = StampedMapMod.StampedMap
+  import opened StampedMapMod
 
   datatype KeyedMessage = KeyedMessage(key: Key, message: Message)
 
@@ -90,34 +87,22 @@ module MsgHistoryMod {
       || seqStart == lsn
     }
 
-    // TODO(jonh): Rewrite as DiscardRecent(lsn-1)
-    function ApplyToStampedMapRecursive(orig: StampedMap, count: nat) : (out: StampedMap)
-      requires WF()
-      requires count <= Len()
-      requires CanFollow(orig.seqEnd)
-      ensures out.seqEnd == orig.seqEnd + count
-    {
-      if count==0
-      then orig
-      else
-        var subInterp := ApplyToStampedMapRecursive(orig, count-1);
-
-        var lsn := seqStart + count - 1;
-        var key := msgs[lsn].key;
-        var newMessage := msgs[lsn].message;
-        assert AnyKey(key);
-        var oldMessage := subInterp.mi[key];
-
-        var mapp := subInterp.mi[key := Merge(newMessage, oldMessage)];
-        StampedMapMod.StampedMap(mapp, lsn + 1)
-    }
-
     function ApplyToStampedMap(orig: StampedMap) : (out: StampedMap)
       requires WF()
       requires CanFollow(orig.seqEnd)
       ensures out.seqEnd == orig.seqEnd + Len()
+      decreases Len()
     {
-      ApplyToStampedMapRecursive(orig, Len())
+      if EmptyHistory?
+      then orig
+      else
+        var lastLsn := seqEnd - 1;
+        var subMap := DiscardRecent(lastLsn).ApplyToStampedMap(orig);
+        var key := msgs[lastLsn].key;
+        var newMessage := msgs[lastLsn].message;
+        assert AnyKey(key);
+        var oldMessage := subMap.mi[key];
+        StampedMap(subMap.mi[key := Merge(newMessage, oldMessage)], subMap.seqEnd+1)
     }
 
     predicate CanDiscardTo(lsn: LSN)
@@ -162,22 +147,6 @@ module MsgHistoryMod {
       var result := forall lsn | subseq.Contains(lsn) :: Contains(lsn) && msgs[lsn] == subseq.msgs[lsn];
       assert result && subseq.MsgHistory? ==> Contains(subseq.seqStart);  // seqStart is witness to contradiction
       result
-    }
-  }
-
-  lemma ApplyToStampedMapRecursiveIsDiscardTail(ms: MsgHistory, orig: StampedMap, count: nat)
-    requires ms.WF()
-    requires count+1 <= ms.Len()
-    requires ms.CanFollow(orig.seqEnd)
-    ensures ms.ApplyToStampedMapRecursive(orig, count) == ms.DiscardRecent(ms.seqStart + count).ApplyToStampedMapRecursive(orig, count);
-    decreases count;
-  {
-    if 1 < count {
-      var msDiscarded := ms.DiscardRecent(ms.seqStart + count);
-
-      ApplyToStampedMapRecursiveIsDiscardTail(ms, orig, count-1);
-      assert ms.DiscardRecent(ms.seqStart + count - 1) == msDiscarded.DiscardRecent(msDiscarded.seqStart + count - 1); // trigger
-      ApplyToStampedMapRecursiveIsDiscardTail(msDiscarded, orig, count - 1);
     }
   }
 

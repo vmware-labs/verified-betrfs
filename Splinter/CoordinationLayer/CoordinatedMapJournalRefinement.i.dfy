@@ -8,6 +8,7 @@ include "CoordinatedMapJournalMod.i.dfy"
 module CoordinatedMapJournalRefinement {
   import opened SequencesLite // Last, DropLast
   import opened CoordinatedMapJournalMod
+  import opened StampedMapMod
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
@@ -371,21 +372,6 @@ module CoordinatedMapJournalRefinement {
     }
   }
 
-  lemma SingletonConcatIsMapUpdate(base: StampedMapMod.StampedMap, j: Journal, lsn: LSN, kmsg: KeyedMessage)
-    requires j.WF()
-    requires j.CanFollow(base.seqEnd)
-    requires lsn == if j.EmptyHistory? then base.seqEnd else j.seqEnd
-    requires kmsg.message.Define?;  // we'll have to get smarter if we want to generalize.
-    ensures j.Concat(MsgHistoryMod.Singleton(lsn, kmsg)).CanFollow(base.seqEnd)
-    ensures MapPlusHistory(base, j).mi[kmsg.key := kmsg.message]
-      == MapPlusHistory(base, j.Concat(MsgHistoryMod.Singleton(lsn, kmsg))).mi
-  {
-    var j' := j.Concat(MsgHistoryMod.Singleton(lsn, kmsg));
-    ApplyToStampedMapRecursiveIsDiscardTail(j', base, j'.Len()-1);
-    assert j'.DiscardRecent(j'.seqStart + j.Len()) == j;  // trigger
-    assert j'.ApplyToStampedMap(base).mi == j'.ApplyToStampedMapRecursive(base, j'.Len()-1).mi[kmsg.key := kmsg.message];  // trigger
-  }
-
   lemma {:timeLimitMultiplier 2} JournalAssociativity(x: MapAdt, y: Journal, z: Journal)
     requires y.WF()
     requires z.WF()
@@ -399,9 +385,7 @@ module CoordinatedMapJournalRefinement {
       var yz := y.Concat(z);
 
       JournalAssociativity(x, y, ztrim);
-      ApplyToStampedMapRecursiveIsDiscardTail(z, MapPlusHistory(x, y), z.Len()-1);
       assert yz.DiscardRecent(yz.seqEnd - 1) == y.Concat(ztrim); // trigger
-      ApplyToStampedMapRecursiveIsDiscardTail(yz, x, yz.Len()-1);
     }
   }
 
@@ -422,7 +406,6 @@ module CoordinatedMapJournalRefinement {
     var value := uiop.baseOp.req.input.value;
 
     assert j'.MsgHistory? ==> j' == j'.DiscardRecent(j'.Len() + j'.seqStart);  // seq trigger
-    SingletonConcatIsMapUpdate(base, j, v.ephemeral.SeqEnd(), KeyedMessage(key, Define(value)));
     assert j.MsgHistory? ==> j == j.DiscardRecent(j.Len() + j.seqStart);  // seq trigger
 
     assert forall i | v.persistentSuperblock.mapadt.seqEnd<=i<|I(v).versions| :: j'.DiscardRecent(i) == j.DiscardRecent(i);  // Rob Power Trigger

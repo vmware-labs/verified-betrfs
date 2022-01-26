@@ -16,7 +16,7 @@ module CoordinatedMapJournalMod {
 
   import opened Options
   import opened MapRemove_s
-  import StampedMapMod
+  import opened StampedMapMod
   import opened CrashTolerantMapSpecMod
   import opened MsgHistoryMod
   import opened KeyType
