@@ -14,6 +14,7 @@ module CoordProgramMod {
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
+  import opened FullKMMapMod
 
   import Async = CrashTolerantMapSpecMod.async
 
@@ -213,6 +214,7 @@ module CoordProgramMod {
     && uiop.baseOp.reply !in v.ephemeral.progress.replies
     && var key := uiop.baseOp.req.input.key;
     && var value := uiop.baseOp.reply.output.value;
+    && assert AnyKey(key);
     && value == v.ephemeral.mapadt.mi[key].value
     && v' == v.(ephemeral := v.ephemeral.(progress := v.ephemeral.progress.(
         requests := v.ephemeral.progress.requests - {uiop.baseOp.req},

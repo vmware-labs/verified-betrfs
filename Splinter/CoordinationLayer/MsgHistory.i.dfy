@@ -18,6 +18,7 @@ module MsgHistoryMod {
   import opened Options
   import opened ValueMessage
   import opened KeyType
+  import opened FullKMMapMod
   import StampedMapMod
 
   type LSN = StampedMapMod.LSN
@@ -104,10 +105,11 @@ module MsgHistoryMod {
         var lsn := seqStart + count - 1;
         var key := msgs[lsn].key;
         var newMessage := msgs[lsn].message;
+        assert AnyKey(key);
         var oldMessage := subInterp.mi[key];
 
         var mapp := subInterp.mi[key := Merge(newMessage, oldMessage)];
-        StampedMapMod.RawStampedMap(mapp, lsn + 1)
+        StampedMapMod.StampedMap(mapp, lsn + 1)
     }
 
     function ApplyToStampedMap(orig: StampedMap) : (out: StampedMap)
