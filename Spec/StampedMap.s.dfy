@@ -16,6 +16,7 @@ module StampedMapMod {
   // Provide a Triggerable symbol for the quantifier
   predicate AnyKey(k: Key) { true }
 
+  // TODO(jonh): Okay, LSNs don't really need to be in the spec, do they?
   datatype RawStampedMap = RawStampedMap(mi: imap<Key, Message>, seqEnd: LSN)
   {
     predicate secretWF() {

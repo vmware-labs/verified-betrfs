@@ -24,7 +24,7 @@ module AsyncMod(atomic: AtomicStateMachineMod) {
   }
 
   predicate DoRequest(v: Variables, v': Variables, req: Request) {
-    // TODO Probably should disallow ID conflicts
+    && req !in v.ephemeral.requests  // disallow ID conflicts
     && v' == v.(ephemeral := v.ephemeral.(requests := v.ephemeral.requests + {req}))
   }
 
@@ -32,6 +32,7 @@ module AsyncMod(atomic: AtomicStateMachineMod) {
   predicate DoExecute(v: Variables, v': Variables, req: Request, reply: Reply) {
     && reply.id == req.id
     && req in v.ephemeral.requests
+    && reply !in v.ephemeral.replies  // disallow ID conflicts
     && atomic.Next(v.persistent.appv, v'.persistent.appv, req.input, reply.output)
     && v'.ephemeral.requests == v.ephemeral.requests - {req}
     && v'.ephemeral.replies == v.ephemeral.replies + {reply}

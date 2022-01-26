@@ -96,6 +96,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   // all the way up to date with the ephemeral state.
   predicate Sync(v: Variables, v': Variables)
   {
+  // TODO(jonh): rewrite in adt-update syntax here and elsewhere
     && v.WF()
     && |v'.versions| == |v.versions|
     // Commit truncates old versions.
@@ -120,6 +121,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   predicate ReqSync(v: Variables, v': Variables, syncReqId: SyncReqId)
   {
     && v.WF()
+    && syncReqId !in v.syncRequests // don't want to talk about weird behavior with duplicate ids
     && v' == v.(syncRequests := v.syncRequests[syncReqId := |v.versions|-1])
   }
 

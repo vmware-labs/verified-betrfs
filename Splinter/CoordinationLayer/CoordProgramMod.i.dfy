@@ -36,10 +36,11 @@ module CoordProgramMod {
       if journal.EmptyHistory? then lsn else journal.seqEnd
   }
 
+  // TODO(jonh): rename "DiskImage"
   // Persistent state of disk
   datatype Superblock = Superblock(
-      journal: Journal,
-      mapadt: MapAdt)
+      mapadt: MapAdt,
+      journal: Journal)
   {
     predicate WF()
     {
@@ -61,7 +62,7 @@ module CoordProgramMod {
 
   function MkfsSuperblock() : Superblock
   {
-    Superblock(JournalMkfs(), MapAdtMkfs())
+    Superblock(MapAdtMkfs(), JournalMkfs())
   }
 
   type SyncReqs = map<CrashTolerantMapSpecMod.SyncReqId, LSN>
@@ -105,9 +106,10 @@ module CoordProgramMod {
   }
 
   datatype Variables = Variables(
-    persistentSuperblock: Superblock,
-    ephemeral: Ephemeral,
-    inFlightSuperblock: Option<Superblock>)
+    persistentSuperblock: Superblock,       // represents the persistent disk state reachable from superblock
+    ephemeral: Ephemeral,                   // represents the in-memory filesystem state
+    inFlightSuperblock: Option<Superblock>  // represents an in-flight disk I/O request to the superblock
+  )
   {
     predicate WF()
     {
@@ -139,6 +141,7 @@ module CoordProgramMod {
   // (In the next layer down, we don't bring *all* the persistent state into
   // ephemeral RAM, but the proof can still refine by filling the details from
   // the disk state.)
+  // TODO(jonh): rename LoadEphemeralFromPersistent
   predicate LoadEphemeralState(v: Variables, v': Variables, uiop : UIOp)
   {
     && uiop.NoopOp?
@@ -192,19 +195,26 @@ module CoordProgramMod {
     && v.ephemeral.Known?
     && uiop.OperateOp?
     && uiop.baseOp.RequestOp?
+    && uiop.baseOp.req !in v.ephemeral.progress.requests
     && v' == v.(ephemeral := v.ephemeral.(progress := v.ephemeral.progress.(
         requests := v.ephemeral.progress.requests + {uiop.baseOp.req})))
   }
 
-  predicate Query(v: Variables, v': Variables, uiop : UIOp, key: Key, val: Value)
+  predicate Query(v: Variables, v': Variables, uiop : UIOp)
   {
     && MapIsFresh(v)
     && uiop.OperateOp?
     && uiop.baseOp.ExecuteOp?
     && uiop.baseOp.req.input.GetInput? // ensures that the uiop translates to a Get op
+    && uiop.baseOp.reply.output.GetOutput?
     && uiop.baseOp.req in v.ephemeral.progress.requests
     && uiop.baseOp.reply.id == uiop.baseOp.req.id
-    && val == v.ephemeral.mapadt.mi[key].value
+
+    && uiop.baseOp.req in v.ephemeral.progress.requests
+    && uiop.baseOp.reply !in v.ephemeral.progress.replies
+    && var key := uiop.baseOp.req.input.key;
+    && var value := uiop.baseOp.reply.output.value;
+    && value == v.ephemeral.mapadt.mi[key].value
     && v' == v.(ephemeral := v.ephemeral.(progress := v.ephemeral.progress.(
         requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
         replies := v.ephemeral.progress.replies + {uiop.baseOp.reply}
@@ -226,9 +236,10 @@ module CoordProgramMod {
     && uiop.baseOp.req.input.PutInput? // ensures that the uiop translates to a put op
     && uiop.baseOp.req in v.ephemeral.progress.requests
     && uiop.baseOp.reply.id == uiop.baseOp.req.id
+    && uiop.baseOp.reply !in v.ephemeral.progress.replies
  
-    && var key := uiop.baseOp.req.input.k;
-    && var val := uiop.baseOp.req.input.v;
+    && var key := uiop.baseOp.req.input.key;
+    && var val := uiop.baseOp.req.input.value;
 
     && var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
 
@@ -267,6 +278,7 @@ module CoordProgramMod {
     && uiop.ReqSyncOp?
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && v'.ephemeral.Known?
+    && uiop.syncReqId !in v.ephemeral.syncReqs
     // NB that the label for a sync in the table is the LSN AFTER the last write
     && v' == v.(ephemeral := v.ephemeral.(
         syncReqs := v.ephemeral.syncReqs[uiop.syncReqId := NextLSN(v)]
@@ -333,7 +345,7 @@ module CoordProgramMod {
       var frozenJournal := v.ephemeral.journal
         .DiscardRecent(v.ephemeral.frozenJournalLSN)
         .DiscardOld(v.ephemeral.frozenMap.value.seqEnd);
-      Some(Superblock(frozenJournal, v.ephemeral.frozenMap.value))
+      Some(Superblock(v.ephemeral.frozenMap.value, frozenJournal))
   }
 
   predicate CommitStart(v: Variables, v': Variables, uiop : UIOp, seqBoundary: LSN)
@@ -376,7 +388,7 @@ module CoordProgramMod {
     | LoadEphemeralStateStep()
     | RecoverStep(puts:MsgHistory)
     | AcceptRequestStep()
-    | QueryStep(key: Key, val: Value)
+    | QueryStep()
     | PutStep()
     | DeliverReplyStep()
 //    | JournalInternalStep()
@@ -393,7 +405,7 @@ module CoordProgramMod {
       case LoadEphemeralStateStep() => LoadEphemeralState(v, v', uiop)
       case RecoverStep(puts) => Recover(v, v', uiop, puts)
       case AcceptRequestStep() => AcceptRequest(v, v', uiop)
-      case QueryStep(key, val) => Query(v, v', uiop, key, val)
+      case QueryStep() => Query(v, v', uiop)
       case PutStep() => Put(v, v', uiop)
 //      case JournalInternalStep(sk) => JournalInternal(v, v', uiop, cacheOps, sk)
 //      case SplinterTreeInternalStep(sk) => SplinterTreeInternal(v, v', uiop, cacheOps, sk)
@@ -404,6 +416,7 @@ module CoordProgramMod {
       case FreezeMapAdtStep() => FreezeMapAdt(v, v', uiop)
       case CommitStartStep(seqBoundary) => CommitStart(v, v', uiop, seqBoundary)
       case CommitCompleteStep() => CommitComplete(v, v', uiop)
+      // TODO Um, Crash!?
     }
   }
 

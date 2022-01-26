@@ -89,6 +89,7 @@ module MsgHistoryMod {
       || seqStart == lsn
     }
 
+    // TODO(jonh): Rewrite as DiscardRecent(lsn-1)
     function ApplyToStampedMapRecursive(orig: StampedMap, count: nat) : (out: StampedMap)
       requires WF()
       requires count <= Len()

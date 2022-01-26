@@ -14,8 +14,8 @@ module MapSpecMod refines AtomicStateMachineMod {
   import StampedMapMod
 
   // UI
-  datatype Input = GetInput(k: Key) | PutInput(k: Key, v: Value) | NoopInput
-  datatype Output = GetOutput(v: Value) | PutOutput | NoopOutput
+  datatype Input = GetInput(key: Key) | PutInput(key: Key, value: Value) | NoopInput
+  datatype Output = GetOutput(value: Value) | PutOutput | NoopOutput
 
   // State machine
   datatype Variables = Variables(smap: StampedMapMod.StampedMap)
@@ -24,29 +24,30 @@ module MapSpecMod refines AtomicStateMachineMod {
     Variables(StampedMapMod.Empty())
   }
 
-  predicate Query(s: Variables, s': Variables, k: Key, v: Value)
+  predicate Query(v: Variables, v': Variables, key: Key, value: Value)
   {
-    && v == s.smap.mi[k].value
-    && s' == s
+    && value == v.smap.mi[key].value
+    && v' == v
   }
 
-  predicate Put(s: Variables, s': Variables, k: Key, v: Value)
+  predicate Put(v: Variables, v': Variables, key: Key, value: Value)
   {
-    && s' == s.(smap := s.smap.Put(k, Define(v)))
+    && v' == v.(smap := v.smap.Put(key, Define(value)))
   }
 
+  // TODO JNF
   predicate Next(v: Variables, v': Variables, input: Input, out: Output)
   {
   true
     || (
         && input.GetInput?
         && out.GetOutput?
-        && Query(v, v', input.k, out.v)
+        && Query(v, v', input.key, out.value)
        )
     || (
         && input.PutInput?
         && out.PutOutput?
-        && Put(v, v', input.k, input.v)
+        && Put(v, v', input.key, input.value)
        )
     || (
         && input.NoopInput?

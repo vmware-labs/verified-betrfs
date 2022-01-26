@@ -3,6 +3,8 @@ include "CoordProgramMod.i.dfy"
 // This module shows refinement of CoordProgram to CrashTolerantMapSpecMod,
 // thereby functioning as the top layer in a refinement stack for program
 // models in refinement layers below.
+
+// TODO(jonh): satisfy a refinement-module proof obligation!
 module CoordProgramRefinement {
   import opened SequencesLite // Last, DropLast
   import opened CoordProgramMod
@@ -258,8 +260,8 @@ module CoordProgramRefinement {
     }
 
     // InvEphemeralMapIsJournalSnapshot
-    var key := uiop.baseOp.req.input.k;
-    var val := uiop.baseOp.req.input.v;
+    var key := uiop.baseOp.req.input.key;
+    var val := uiop.baseOp.req.input.value;
     var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
     JournalAssociativity(v.persistentSuperblock.mapadt, v.ephemeral.journal, singleton);
     assert v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd) == v.ephemeral.journal; // trigger
@@ -329,7 +331,7 @@ module CoordProgramRefinement {
       case AcceptRequestStep() => {
         assert Inv(v');
       }
-      case QueryStep(key, val) => {
+      case QueryStep() => {
         assert Inv(v');
       }
       case PutStep() => {
@@ -402,6 +404,36 @@ module CoordProgramRefinement {
     }
   }
 
+  lemma PutStepRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
+    requires Inv(v)
+    requires CoordProgramMod.Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step);
+    requires step.PutStep?
+    ensures Inv(v')
+    ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
+  {
+    InvInductivePutStep(v, v', uiop, step); // TODO why do we need a whole fancy proof up there but not here!?
+
+    var j := v.ephemeral.journal;
+    var j' := v'.ephemeral.journal;
+    var base := v.persistentSuperblock.mapadt;
+    var key := uiop.baseOp.req.input.key;
+    var val := uiop.baseOp.req.input.value;
+
+    assert j'.MsgHistory? ==> j' == j'.DiscardRecent(j'.Len() + j'.seqStart);  // seq trigger
+    if j.MsgHistory? {
+      assert j == j.DiscardRecent(j.Len() + j.seqStart);  // seq trigger
+      SingletonConcatIsMapUpdate(base, j, j.seqEnd, KeyedMessage(key, Define(val)));
+    }
+    assert forall i | v.persistentSuperblock.mapadt.seqEnd<=i<|I(v).versions| :: j'.DiscardRecent(i) == j.DiscardRecent(i);  // Rob Power Trigger
+
+//    var av := Async.Variables(Last(I(v).versions).asyncState, I(v).asyncEphemeral);
+//    var av' := Async.Variables(Last(I(v').versions).asyncState, I(v').asyncEphemeral);
+//    assert Async.DoExecute(av, av', uiop.baseOp.req, uiop.baseOp.reply);
+//    assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
+    assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // witness
+  }
+
   lemma CommitStepRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
     requires Inv(v)
     requires CoordProgramMod.Next(v, v', uiop)
@@ -443,24 +475,11 @@ module CoordProgramRefinement {
       case AcceptRequestStep() => {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
-      case QueryStep(key, val) => {
+      case QueryStep() => {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case PutStep() => {
-        var j := v.ephemeral.journal;
-        var j' := v'.ephemeral.journal;
-        var base := v.persistentSuperblock.mapadt;
-        var key := uiop.baseOp.req.input.k;
-        var val := uiop.baseOp.req.input.v;
-
-        assert j'.MsgHistory? ==> j' == j'.DiscardRecent(j'.Len() + j'.seqStart);  // seq trigger
-        if j.MsgHistory? {
-          assert j == j.DiscardRecent(j.Len() + j.seqStart);  // seq trigger
-          SingletonConcatIsMapUpdate(base, j, j.seqEnd, KeyedMessage(key, Define(val)));
-        }
-        assert forall i | v.persistentSuperblock.mapadt.seqEnd<=i<|I(v).versions| :: j'.DiscardRecent(i) == j.DiscardRecent(i);  // Rob Power Trigger
-
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        PutStepRefines(v, v', uiop, step);
       }
       case DeliverReplyStep() => {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
