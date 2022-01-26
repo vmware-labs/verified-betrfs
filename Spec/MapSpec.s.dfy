@@ -38,7 +38,6 @@ module MapSpecMod refines AtomicStateMachineMod {
   // TODO JNF
   predicate Next(v: Variables, v': Variables, input: Input, out: Output)
   {
-  true
     || (
         && input.GetInput?
         && out.GetOutput?

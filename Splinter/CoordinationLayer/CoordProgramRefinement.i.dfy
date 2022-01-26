@@ -418,19 +418,14 @@ module CoordProgramRefinement {
     var j' := v'.ephemeral.journal;
     var base := v.persistentSuperblock.mapadt;
     var key := uiop.baseOp.req.input.key;
-    var val := uiop.baseOp.req.input.value;
+    var value := uiop.baseOp.req.input.value;
 
     assert j'.MsgHistory? ==> j' == j'.DiscardRecent(j'.Len() + j'.seqStart);  // seq trigger
-    if j.MsgHistory? {
-      assert j == j.DiscardRecent(j.Len() + j.seqStart);  // seq trigger
-      SingletonConcatIsMapUpdate(base, j, j.seqEnd, KeyedMessage(key, Define(val)));
-    }
+    SingletonConcatIsMapUpdate(base, j, v.ephemeral.SeqEnd(), KeyedMessage(key, Define(value)));
+    assert j.MsgHistory? ==> j == j.DiscardRecent(j.Len() + j.seqStart);  // seq trigger
+
     assert forall i | v.persistentSuperblock.mapadt.seqEnd<=i<|I(v).versions| :: j'.DiscardRecent(i) == j.DiscardRecent(i);  // Rob Power Trigger
 
-//    var av := Async.Variables(Last(I(v).versions).asyncState, I(v).asyncEphemeral);
-//    var av' := Async.Variables(Last(I(v').versions).asyncState, I(v').asyncEphemeral);
-//    assert Async.DoExecute(av, av', uiop.baseOp.req, uiop.baseOp.reply);
-//    assert CrashTolerantMapSpecMod.Operate(I(v), I(v'), uiop.baseOp);
     assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // witness
   }
 

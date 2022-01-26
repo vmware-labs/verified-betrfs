@@ -234,6 +234,7 @@ module CoordProgramMod {
     && uiop.OperateOp?
     && uiop.baseOp.ExecuteOp?
     && uiop.baseOp.req.input.PutInput? // ensures that the uiop translates to a put op
+    && uiop.baseOp.reply.output.PutOutput?
     && uiop.baseOp.req in v.ephemeral.progress.requests
     && uiop.baseOp.reply.id == uiop.baseOp.req.id
     && uiop.baseOp.reply !in v.ephemeral.progress.replies
