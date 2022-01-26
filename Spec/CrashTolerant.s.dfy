@@ -55,26 +55,34 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   }
 
   // This isn't a transition, just a partial action for readibility.
-  predicate OptionallyAppendVersion(v: Variables, v': Variables)
+  predicate OptionallyAppendVersion(versions: seq<Version>, versions': seq<Version>)
   {
     // new versions list is either some new thing appended to the old one,
-    || (0<|v'.versions| && DropLast(v'.versions) == v.versions)
+    || (0<|versions'| && DropLast(versions') == versions)
     // or unchanged. We allow unchanged in the trusted spec so that
     // implementations don't have to account for number of read-only (query) ops.
-    || v'.versions == v.versions
+    || versions' == versions
   }
 
   predicate Operate(v: Variables, v': Variables, op: async.UIOp)
   {
+    // let nondeterminism of v' choose these values
+    // (Imagine they're coming in from JNF via a skolemized exists -- but that makes
+    // proofs need exists-witnesses.)
+    && var newVersions := v'.versions;
+    && var newAsyncEphemeral := v'.asyncEphemeral;
+
     && v.WF()
     && v'.WF()
-    && OptionallyAppendVersion(v, v')
+    && OptionallyAppendVersion(v.versions, newVersions)
     && async.NextStep(
         async.Variables(Last(v.versions).asyncState, v.asyncEphemeral),
-        async.Variables(Last(v'.versions).asyncState, v'.asyncEphemeral),
+        async.Variables(Last(newVersions).asyncState, newAsyncEphemeral),
         op)
-    && v'.syncRequests == v.syncRequests  // unchanged
-    && v'.stableIdx == v.stableIdx    // unchanged
+    && v' == v.(
+        versions := newVersions,
+        asyncEphemeral := newAsyncEphemeral
+      )
   }
 
   // Uh oh, anything not flushed (past stableIdx) is gone. But you still get a consistent version
@@ -82,11 +90,12 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   predicate Crash(v: Variables, v': Variables)
   {
     && v.WF()
-    && v'.versions == v.versions[..v.stableIdx+1]
-    // Crash forgets ephemeral stuff -- requests and syncRequests submitted but not answered.
-    && v'.asyncEphemeral == async.InitEphemeralState()
-    && v'.syncRequests == map[]
-    && v'.stableIdx == v.stableIdx
+    && v' == v.(
+        versions := v.versions[..v.stableIdx+1],
+      // Crash forgets ephemeral stuff -- requests and syncRequests submitted but not answered.
+        asyncEphemeral := async.InitEphemeralState(),
+        syncRequests := map[]
+      )
   }
 
   // The Sync *action* causes some LSNs to become persistent, which may enable
@@ -96,21 +105,16 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   // all the way up to date with the ephemeral state.
   predicate Sync(v: Variables, v': Variables)
   {
-  // TODO(jonh): rewrite in adt-update syntax here and elsewhere
+    // let nondeterminism of v' choose this value
+    && var newStableIdx := v'.stableIdx;
+
     && v.WF()
-    && |v'.versions| == |v.versions|
-    // Commit truncates old versions.
-    && (forall i | 0<=i<|v.versions| ::
-      v'.versions[i] == if i < v'.stableIdx then Forgotten else v.versions[i])
-    && v'.WF()  // But it can't truncate things after stableIdx
-    && v'.asyncEphemeral == v.asyncEphemeral
-    && v'.syncRequests == v.syncRequests
-    // stableIdx advances towards, possibly all the way to, ephemeral state.
-    // (It's okay to not advance if you're just, say, truncating your journal
-    // instead. Note that we don't require either truncating or
-    // persistification, so this step can also admit a Noop. No biggie until we
-    // care about proving liveness.)
-    && v.stableIdx <= v'.stableIdx < |v.versions|
+    && v.stableIdx <= newStableIdx < |v.versions|
+    && v' == v.(
+        // Commit forgets old versions.
+        versions := seq(|v.versions|, i requires 0<=i<|v.versions| =>
+          if i < v'.stableIdx then Forgotten else v.versions[i]),
+        stableIdx := newStableIdx)
   }
 
   // sync api contract to the end user
@@ -136,7 +140,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   }
 
   datatype UIOp =
-    | OperateOp(baseOp: async.UIOp) // Put or Query Internally
+    | OperateOp(baseOp: async.UIOp)
     | CrashOp
     | SyncOp
     | ReqSyncOp(syncReqId: SyncReqId)
@@ -148,7 +152,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     match uiop {
       case OperateOp(baseOp) => Operate(v, v', baseOp)
       case CrashOp => Crash(v, v')
-      case SyncOp => Sync(v, v')
+      case SyncOp() => Sync(v, v')
       case ReqSyncOp(syncReqId) => ReqSync(v, v', syncReqId)
       case ReplySyncOp(syncReqId) => ReplySync(v, v', syncReqId)
       case NoopOp => v' == v
