@@ -43,16 +43,17 @@ module CoordinatedMapJournalMod {
       if journal.EmptyHistory? then lsn else journal.seqEnd
   }
 
-  // TODO(jonh): rename "DiskImage"
-  // Persistent state of disk
-  datatype Superblock = Superblock(
+  // An image of the quiescent disk. The persistent state is this (because we
+  // come up from shutdown to see a quiescent disk image). The in-flight state
+  // is also a DiskImage, since it's destined to become a persistent state.
+  datatype DiskImage = DiskImage(
       mapadt: MapAdt,
       journal: Journal)
   {
     predicate WF()
     {
       && journal.WF()
-        // No point even assembling a superblock that doesn't have its journal adjacent to its map.
+        // No point even assembling a disk image that doesn't have its journal adjacent to its map.
       && journal.CanFollow(mapadt.seqEnd)
     }
 
@@ -67,9 +68,9 @@ module CoordinatedMapJournalMod {
     }
   }
 
-  function MkfsSuperblock() : Superblock
+  function MkfsDiskImage() : DiskImage
   {
-    Superblock(MapAdtMkfs(), JournalMkfs())
+    DiskImage(MapAdtMkfs(), JournalMkfs())
   }
 
   type SyncReqs = map<CrashTolerantMapSpecMod.SyncReqId, LSN>
@@ -88,15 +89,20 @@ module CoordinatedMapJournalMod {
       // The journal
       journal: Journal,
 
-      // The prefix of the journal that's persisted and hence can be
-      // copied into an inFlightSuperblock.
-      frozenJournalLSN: LSN,
-
       // The map that enables journal beheading.
+      // Note that, here in the ephemeral object, (mapadt,journal) don't form a
+      // DiskImage. In a DiskImage, they work in serial: the journal starts
+      // where the map left off. In the ephemeral state, they work in parallel:
+      // the mapadt captures the effects of all the LSNs that the journal records (plus
+      // those in the persistent map the ephemeral journal is based on).
       mapadt: MapAdt,
 
+      // The prefix of the journal that's persisted and hence can be
+      // copied into an inFlightImage.
+      frozenJournalLSN: LSN,
+
       // If Some, .value is persisted and can be copied into an
-      // inFlightSuperblock.
+      // inFlightImage.
       frozenMap: Option<MapAdt>
       )
   {
@@ -113,25 +119,25 @@ module CoordinatedMapJournalMod {
   }
 
   datatype Variables = Variables(
-    persistentSuperblock: Superblock,       // represents the persistent disk state reachable from superblock
-    ephemeral: Ephemeral,                   // represents the in-memory filesystem state
-    inFlightSuperblock: Option<Superblock>  // represents an in-flight disk I/O request to the superblock
+    persistentImage: DiskImage,       // represents the persistent disk state reachable from superblock
+    ephemeral: Ephemeral,             // represents the in-memory filesystem state
+    inFlightImage: Option<DiskImage>  // represents an in-flight disk I/O request to the superblock
   )
   {
     predicate WF()
     {
-      && persistentSuperblock.WF()
+      && persistentImage.WF()
       && (ephemeral.Known? ==> ephemeral.WF())
-      && (inFlightSuperblock.Some? ==> inFlightSuperblock.value.WF())
+      && (inFlightImage.Some? ==> inFlightImage.value.WF())
     }
 
     // How should the disk look on first startup if we want it to act like
     // an empty K-V store?
     predicate Mkfs()
     {
-      && persistentSuperblock == MkfsSuperblock()
+      && persistentImage == MkfsDiskImage()
       && ephemeral.Unknown?
-      && inFlightSuperblock.None?
+      && inFlightImage.None?
     }
 
   }
@@ -158,10 +164,10 @@ module CoordinatedMapJournalMod {
     && v' == v.(ephemeral := Known(
       Async.InitEphemeralState(),
       map[],  // syncReqs
-      v.persistentSuperblock.journal,
-      // sb journal is already frozen:
-      if v.persistentSuperblock.journal.EmptyHistory? then 0 else v.persistentSuperblock.journal.seqEnd,
-      v.persistentSuperblock.mapadt,
+      v.persistentImage.journal,
+      v.persistentImage.mapadt,
+      // persistent journal is already frozen:
+      if v.persistentImage.journal.EmptyHistory? then 0 else v.persistentImage.journal.seqEnd,
       None
       ))
   }
@@ -301,7 +307,7 @@ module CoordinatedMapJournalMod {
     && uiop.ReplySyncOp?
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && uiop.syncReqId in v.ephemeral.syncReqs
-    && v.persistentSuperblock.CompletesSync(v.ephemeral.syncReqs[uiop.syncReqId]) // sync lsn is persistent
+    && v.persistentImage.CompletesSync(v.ephemeral.syncReqs[uiop.syncReqId]) // sync lsn is persistent
     && v' == v.(ephemeral := v.ephemeral.(
         syncReqs := MapRemove1(v.ephemeral.syncReqs, uiop.syncReqId)
       ))
@@ -330,10 +336,10 @@ module CoordinatedMapJournalMod {
     && v' == v.(ephemeral := v.ephemeral.(frozenMap := Some(v.ephemeral.mapadt)))
   }
 
-  function BestFrozenState(v: Variables) : (osb:Option<Superblock>)
+  function BestFrozenState(v: Variables) : (odi:Option<DiskImage>)
     requires v.WF()
     requires v.ephemeral.Known?
-    ensures osb.Some? ==> osb.value.WF()
+    ensures odi.Some? ==> odi.value.WF()
   {
     if
       // no frozen map to write
@@ -346,17 +352,17 @@ module CoordinatedMapJournalMod {
       // or has been beheaded beyond the frozen tree
       || !v.ephemeral.journal.CanDiscardTo(frozenMap.seqEnd)
       // or frozen state loses information
-      || !(v.persistentSuperblock.SeqEnd() <= v.ephemeral.frozenJournalLSN)
+      || !(v.persistentImage.SeqEnd() <= v.ephemeral.frozenJournalLSN)
       // or frozen map goes backwards, so if we committed it, we could have a
       // gap to our ephemeral journal start
-      || !(v.persistentSuperblock.mapadt.seqEnd <= frozenMap.seqEnd)
+      || !(v.persistentImage.mapadt.seqEnd <= frozenMap.seqEnd)
     then None
     else
       // Use frozen map and available frozen journal.
       var frozenJournal := v.ephemeral.journal
         .DiscardRecent(v.ephemeral.frozenJournalLSN)
         .DiscardOld(v.ephemeral.frozenMap.value.seqEnd);
-      Some(Superblock(v.ephemeral.frozenMap.value, frozenJournal))
+      Some(DiskImage(v.ephemeral.frozenMap.value, frozenJournal))
   }
 
   predicate CommitStart(v: Variables, v': Variables, uiop : UIOp, seqBoundary: LSN)
@@ -367,32 +373,32 @@ module CoordinatedMapJournalMod {
     && BestFrozenState(v).Some?
     // Have to go forwards in LSN time
     && NextLSN(v) < BestFrozenState(v).value.SeqEnd()
-    && v.inFlightSuperblock.None?
-    && v'.inFlightSuperblock.Some?
-    && v' == v.(inFlightSuperblock := BestFrozenState(v))
+    && v.inFlightImage.None?
+    && v'.inFlightImage.Some?
+    && v' == v.(inFlightImage := BestFrozenState(v))
   }
 
   predicate CommitComplete(v: Variables, v': Variables, uiop : UIOp)
   {
-    && v.inFlightSuperblock.Some?
-    && var sb := v.inFlightSuperblock.value;
+    && v.inFlightImage.Some?
+    && var ifImage := v.inFlightImage.value;
 
     && uiop.SyncOp?
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
 
     // pruning below is nonsense without this, but "luckily" this is an invariant:
-    && v.ephemeral.journal.CanDiscardTo(sb.mapadt.seqEnd)
+    && v.ephemeral.journal.CanDiscardTo(ifImage.mapadt.seqEnd)
 
     // Now that the disk journal is updated, we need to behead the
     // ephemeral journal, since interpretation want to CanFollow it
     // onto the persistent mapadt.
-    && var j' := v.ephemeral.journal.DiscardOld(sb.mapadt.seqEnd);
+    && var j' := v.ephemeral.journal.DiscardOld(ifImage.mapadt.seqEnd);
 
     && v' == v.(
-        persistentSuperblock := sb,
+        persistentImage := ifImage,
         ephemeral := v.ephemeral.(journal := j'),
         // Update journal, mapadt here if modeling clean, frozen
-        inFlightSuperblock := None)
+        inFlightImage := None)
   }
 
   datatype Step =
