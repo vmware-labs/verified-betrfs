@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 include "../../Spec/Message.s.dfy"
-include "../../Spec/StampedMap.s.dfy"
+include "StampedMap.i.dfy"
 
 include "../../lib/Base/Sequences.i.dfy"
 include "../../lib/Base/Maps.i.dfy"

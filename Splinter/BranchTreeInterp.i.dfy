@@ -5,7 +5,7 @@ include "AllocationTableMachine.i.dfy"
 include "CoordinationLayer/MsgHistory.i.dfy"
 include "BranchTree.i.dfy"
 include "../Spec/Message.s.dfy"
-include "../Spec/StampedMap.s.dfy"
+include "CoordinationLayer/StampedMap.i.dfy"
 include "../lib/Base/mathematics.i.dfy"
 
 module BranchTreeInterpMod {

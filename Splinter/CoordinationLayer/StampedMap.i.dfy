@@ -1,9 +1,9 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "../lib/Lang/NativeTypes.s.dfy"
-include "../lib/Base/KeyType.s.dfy"
-include "Message.s.dfy"
+include "../../lib/Lang/NativeTypes.s.dfy"
+include "../../lib/Base/KeyType.s.dfy"
+include "../../Spec/Message.s.dfy"
 
 // A "StampedMap" is a full imap "stamped" with an LSN that identifies how many
 // operations it represents.

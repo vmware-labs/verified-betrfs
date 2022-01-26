@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../../Spec/MapSpec.s.dfy"
-include "../../Spec/StampedMap.s.dfy"
 include "../../lib/Base/KeyType.s.dfy"
 include "../../lib/Base/MapRemove.s.dfy"
 include "MsgHistory.i.dfy"

@@ -11,13 +11,14 @@ module CoordProgramRefinement {
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
+  import opened FullKMMapMod
   import MapSpecMod
 
   import Async = CrashTolerantMapSpecMod.async
 
   function StampedMapToVersion(sm: StampedMapMod.StampedMap) : CrashTolerantMapSpecMod.Version
   {
-    CrashTolerantMapSpecMod.Version(Async.PersistentState(MapSpecMod.Variables(sm)))
+    CrashTolerantMapSpecMod.Version(Async.PersistentState(MapSpecMod.Variables(sm.mi)))
   }
 
   function VersionsWithForgottenPrefix(base: StampedMapMod.StampedMap, journal: Journal, stableLSN: LSN) : (versions:seq<CrashTolerantMapSpecMod.Version>)
@@ -189,7 +190,7 @@ module CoordProgramRefinement {
     ensures Inv(v)
     ensures I(v) == CrashTolerantMapSpecMod.InitState()
   {
-//    assert JournalInterpTypeMod.Mkfs().SyncReqsAt(0) == {}; // trigger set comprehension
+    assert I(v).versions[0].asyncState.appv.kmmap == FullKMMapMod.EmptyKMMap(); // trigger
   }
 
   lemma CommitStepPreservesHistory(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step, lsn: LSN)
@@ -404,7 +405,7 @@ module CoordProgramRefinement {
     }
   }
 
-  lemma PutStepRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
+  lemma {:timeLimitMultiplier 4} PutStepRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
     requires Inv(v)
     requires CoordProgramMod.Next(v, v', uiop)
     requires NextStep(v, v', uiop, step);
