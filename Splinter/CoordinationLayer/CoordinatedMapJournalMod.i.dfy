@@ -6,7 +6,14 @@ include "../../lib/Base/KeyType.s.dfy"
 include "../../lib/Base/MapRemove.s.dfy"
 include "MsgHistory.i.dfy"
 
-module CoordProgramMod {
+module CoordinatedMapJournalMod {
+  // This module models how the program coordinates interactions between a map
+  // datatype (an abstraction of the B^epsilon tree) and a journal. Here we
+  // abstract away both data structures to simple models. This state machine
+  // models the entire system, not just the program: it models the disk state,
+  // program memory state, in-flight disk writes for the superblock, and
+  // crashes.
+
   import opened Options
   import opened MapRemove_s
   import StampedMapMod

@@ -5,7 +5,7 @@
 # System configuration
 
 # You can build anything reachable from these root files.
-DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy Splinter/RefinementProof.i.dfy Splinter/CoordinationLayer/CoordProgramRefinement.i.dfy
+DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy Splinter/RefinementProof.i.dfy Splinter/CoordinationLayer/CoordinatedMapJournalRefinement.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny

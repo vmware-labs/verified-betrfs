@@ -1,13 +1,13 @@
-include "CoordProgramMod.i.dfy"
+include "CoordinatedMapJournalMod.i.dfy"
 
-// This module shows refinement of CoordProgram to CrashTolerantMapSpecMod,
-// thereby functioning as the top layer in a refinement stack for program
-// models in refinement layers below.
+// This module shows refinement of CoordinatedMapJournalMod to
+// CrashTolerantMapSpecMod, thereby functioning as the top layer in a
+// refinement stack for program models in refinement layers below.
 
 // TODO(jonh): satisfy a refinement-module proof obligation!
-module CoordProgramRefinement {
+module CoordinatedMapJournalRefinement {
   import opened SequencesLite // Last, DropLast
-  import opened CoordProgramMod
+  import opened CoordinatedMapJournalMod
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
@@ -35,7 +35,7 @@ module CoordProgramRefinement {
       else StampedMapToVersion(MapPlusHistory(base, journal.DiscardRecent(lsn))))
   }
 
-  function I(v: CoordProgramMod.Variables) : CrashTolerantMapSpecMod.Variables
+  function I(v: Variables) : CrashTolerantMapSpecMod.Variables
   {
     var stableLSN := v.persistentSuperblock.SeqEnd();
 
@@ -66,12 +66,12 @@ module CoordProgramRefinement {
     && jlong.DiscardRecent(SeqEndFor(startLsn, jshort)) == jshort // they agree on contents in overlap
   }
 
-  predicate InvPersistentJournalGeometry(v: CoordProgramMod.Variables)
+  predicate InvPersistentJournalGeometry(v: Variables)
   {
     && v.persistentSuperblock.journal.CanFollow(v.persistentSuperblock.mapadt.seqEnd)
   }
 
-  predicate InvEphemeralGeometry(v: CoordProgramMod.Variables)
+  predicate InvEphemeralGeometry(v: Variables)
     requires v.WF() && v.ephemeral.Known?
   {
     // Ephemeral journal begins at persistent map
@@ -86,7 +86,7 @@ module CoordProgramRefinement {
     && v.persistentSuperblock.SeqEnd() <= v.ephemeral.SeqEnd()
   }
 
-  predicate InvEphemeralValueAgreement(v: CoordProgramMod.Variables)
+  predicate InvEphemeralValueAgreement(v: Variables)
     requires v.WF() && v.ephemeral.Known?
     requires InvEphemeralGeometry(v)
   {
@@ -96,7 +96,7 @@ module CoordProgramRefinement {
     && v.ephemeral.mapadt == MapPlusHistory(v.persistentSuperblock.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd))
   }
 
-  predicate InvFrozenGeometry(v: CoordProgramMod.Variables)
+  predicate InvFrozenGeometry(v: Variables)
     requires v.WF() && v.ephemeral.Known?
     requires v.ephemeral.frozenMap.Some?
   {
@@ -104,7 +104,7 @@ module CoordProgramRefinement {
     && v.ephemeral.frozenMap.value.seqEnd <= v.ephemeral.SeqEnd()
   }
 
-  predicate FrozenMapDoesntRegress(v: CoordProgramMod.Variables)
+  predicate FrozenMapDoesntRegress(v: Variables)
   {
     && v.ephemeral.Known?
     && v.ephemeral.frozenMap.Some?
@@ -113,7 +113,7 @@ module CoordProgramRefinement {
     && v.persistentSuperblock.mapadt.seqEnd <= v.ephemeral.frozenMap.value.seqEnd
   }
 
-  predicate InvFrozenValueAgreement(v: CoordProgramMod.Variables)
+  predicate InvFrozenValueAgreement(v: Variables)
     requires v.WF()
     requires v.ephemeral.Known?
     requires InvEphemeralGeometry(v)
@@ -130,7 +130,7 @@ module CoordProgramRefinement {
     // ephemeral journal.
   }
 
-  predicate InvInFlightGeometry(v: CoordProgramMod.Variables)
+  predicate InvInFlightGeometry(v: Variables)
     requires v.WF() && v.inFlightSuperblock.Some?
   {
     && var isb := v.inFlightSuperblock.value;
@@ -152,7 +152,7 @@ module CoordProgramRefinement {
     && isb.SeqEnd() <= v.ephemeral.SeqEnd()
   }
 
-  predicate InvInFlightValueAgreement(v: CoordProgramMod.Variables)
+  predicate InvInFlightValueAgreement(v: Variables)
     requires v.WF() && v.inFlightSuperblock.Some?
     requires InvInFlightGeometry(v)
   {
@@ -166,7 +166,7 @@ module CoordProgramRefinement {
                       v.ephemeral.journal.DiscardRecent(isb.mapadt.seqEnd))
   }
 
-  predicate Inv(v: CoordProgramMod.Variables)
+  predicate Inv(v: Variables)
   {
     && v.WF()
     && InvPersistentJournalGeometry(v)
@@ -185,17 +185,17 @@ module CoordProgramRefinement {
       )
   }
 
-  lemma InitRefines(v: CoordProgramMod.Variables)
-    requires CoordProgramMod.Init(v)
+  lemma InitRefines(v: Variables)
+    requires Init(v)
     ensures Inv(v)
     ensures I(v) == CrashTolerantMapSpecMod.InitState()
   {
     assert I(v).versions[0].asyncState.appv.kmmap == FullKMMapMod.EmptyKMMap(); // trigger
   }
 
-  lemma CommitStepPreservesHistory(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step, lsn: LSN)
+  lemma CommitStepPreservesHistory(v: Variables, v': Variables, uiop: UIOp, step: Step, lsn: LSN)
     requires Inv(v)
-    requires CoordProgramMod.Next(v, v', uiop)
+    requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step);
     requires step.CommitCompleteStep?
     requires v.persistentSuperblock.mapadt.seqEnd <= lsn <= v.ephemeral.SeqEnd()
@@ -241,9 +241,9 @@ module CoordProgramRefinement {
     // pm+ej[..lsn]
   }
 
-  lemma {:timeLimitMultiplier 2} InvInductivePutStep(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
+  lemma {:timeLimitMultiplier 2} InvInductivePutStep(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
-    requires CoordProgramMod.Next(v, v', uiop)
+    requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step)
     requires step.PutStep?
     ensures Inv(v')
@@ -281,9 +281,9 @@ module CoordProgramRefinement {
     assert Inv(v');
   }
 
-  lemma InvInductiveCommitCompleteStep(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
+  lemma InvInductiveCommitCompleteStep(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
-    requires CoordProgramMod.Next(v, v', uiop)
+    requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step)
     requires step.CommitCompleteStep?
     ensures Inv(v')
@@ -311,9 +311,9 @@ module CoordProgramRefinement {
     assert ej.DiscardRecent(em.seqEnd) == ej.DiscardRecent(imEnd).Concat(ej.DiscardOld(imEnd).DiscardRecent(em.seqEnd));   // trigger
   }
 
-  lemma InvInductive(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp)
+  lemma InvInductive(v: Variables, v': Variables, uiop: UIOp)
     requires Inv(v)
-    requires CoordProgramMod.Next(v, v', uiop)
+    requires Next(v, v', uiop)
     ensures Inv(v')
   {
     var step :| NextStep(v, v', uiop, step);
@@ -405,9 +405,9 @@ module CoordProgramRefinement {
     }
   }
 
-  lemma {:timeLimitMultiplier 4} PutStepRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
+  lemma {:timeLimitMultiplier 4} PutStepRefines(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
-    requires CoordProgramMod.Next(v, v', uiop)
+    requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step);
     requires step.PutStep?
     ensures Inv(v')
@@ -430,9 +430,9 @@ module CoordProgramRefinement {
     assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // witness
   }
 
-  lemma CommitStepRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp, step: Step)
+  lemma CommitStepRefines(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
-    requires CoordProgramMod.Next(v, v', uiop)
+    requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step);
     requires step.CommitCompleteStep?
     ensures Inv(v')
@@ -450,9 +450,9 @@ module CoordProgramRefinement {
     assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), UIOp.SyncOp);  // witness
   }
 
-  lemma {:timeLimitMultiplier 2} NextRefines(v: CoordProgramMod.Variables, v': CoordProgramMod.Variables, uiop: CoordProgramMod.UIOp)
+  lemma {:timeLimitMultiplier 2} NextRefines(v: Variables, v': Variables, uiop: UIOp)
     requires Inv(v)
-    requires CoordProgramMod.Next(v, v', uiop)
+    requires Next(v, v', uiop)
     ensures Inv(v')
     ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
   {
