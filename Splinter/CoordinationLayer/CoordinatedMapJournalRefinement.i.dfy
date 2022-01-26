@@ -318,7 +318,7 @@ module CoordinatedMapJournalRefinement {
   {
     var step :| NextStep(v, v', uiop, step);
     match step {
-      case LoadEphemeralStateStep() => {
+      case LoadEphemeralFromPersistentStep() => {
         assert Inv(v');
       }
       case RecoverStep(puts) => {
@@ -460,7 +460,7 @@ module CoordinatedMapJournalRefinement {
 
     var step :| NextStep(v, v', uiop, step);
     match step {
-      case LoadEphemeralStateStep() => {
+      case LoadEphemeralFromPersistentStep() => {
         assert uiop == CrashTolerantMapSpecMod.NoopOp;
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }

@@ -144,12 +144,14 @@ module CoordinatedMapJournalMod {
     v.Mkfs()
   }
 
-  // Learn what the persistent state is, so we 
+  // This operation corresponds to faulting in the superblock: before we do, we
+  // have to get our interpretation only from the disk; once we do, we can fill
+  // in the ephemeral state and interpret it (with the rest of the disk as
+  // backing store) as if we're in normal operating mode.
   // (In the next layer down, we don't bring *all* the persistent state into
   // ephemeral RAM, but the proof can still refine by filling the details from
   // the disk state.)
-  // TODO(jonh): rename LoadEphemeralFromPersistent
-  predicate LoadEphemeralState(v: Variables, v': Variables, uiop : UIOp)
+  predicate LoadEphemeralFromPersistent(v: Variables, v': Variables, uiop : UIOp)
   {
     && uiop.NoopOp?
     && v.ephemeral.Unknown?
@@ -394,7 +396,7 @@ module CoordinatedMapJournalMod {
   }
 
   datatype Step =
-    | LoadEphemeralStateStep()
+    | LoadEphemeralFromPersistentStep()
     | RecoverStep(puts:MsgHistory)
     | AcceptRequestStep()
     | QueryStep()
@@ -411,7 +413,7 @@ module CoordinatedMapJournalMod {
 
   predicate NextStep(v: Variables, v': Variables, uiop : UIOp, step: Step) {
     match step {
-      case LoadEphemeralStateStep() => LoadEphemeralState(v, v', uiop)
+      case LoadEphemeralFromPersistentStep() => LoadEphemeralFromPersistent(v, v', uiop)
       case RecoverStep(puts) => Recover(v, v', uiop, puts)
       case AcceptRequestStep() => AcceptRequest(v, v', uiop)
       case QueryStep() => Query(v, v', uiop)
