@@ -85,7 +85,7 @@ module CoordinatedMapJournalMod {
 
       // Same idea for sync reqs (which get layered after Async reqs/resps)
       syncReqs: SyncReqs,
-    
+
       // The journal
       journal: Journal,
 
@@ -254,7 +254,7 @@ module CoordinatedMapJournalMod {
     && uiop.baseOp.req in v.ephemeral.progress.requests
     && uiop.baseOp.reply.id == uiop.baseOp.req.id
     && uiop.baseOp.reply !in v.ephemeral.progress.replies
- 
+
     && var key := uiop.baseOp.req.input.key;
     && var val := uiop.baseOp.req.input.value;
 
@@ -401,6 +401,12 @@ module CoordinatedMapJournalMod {
         inFlightImage := None)
   }
 
+  predicate Crash(v: Variables, v': Variables, uiop : UIOp)
+  {
+    && uiop.CrashOp?
+    && v' == v.(ephemeral := Unknown, inFlightImage := None)
+  }
+
   datatype Step =
     | LoadEphemeralFromPersistentStep()
     | RecoverStep(puts:MsgHistory)
@@ -416,6 +422,7 @@ module CoordinatedMapJournalMod {
     | FreezeMapAdtStep()
     | CommitStartStep(seqBoundary: LSN)
     | CommitCompleteStep()
+    | CrashStep()
 
   predicate NextStep(v: Variables, v': Variables, uiop : UIOp, step: Step) {
     match step {
@@ -433,7 +440,7 @@ module CoordinatedMapJournalMod {
       case FreezeMapAdtStep() => FreezeMapAdt(v, v', uiop)
       case CommitStartStep(seqBoundary) => CommitStart(v, v', uiop, seqBoundary)
       case CommitCompleteStep() => CommitComplete(v, v', uiop)
-      // TODO Um, Crash!?
+      case CrashStep() => Crash(v, v', uiop)
     }
   }
 

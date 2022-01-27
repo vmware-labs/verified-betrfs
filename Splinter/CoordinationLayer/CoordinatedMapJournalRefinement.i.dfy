@@ -174,7 +174,7 @@ module CoordinatedMapJournalRefinement {
     && (v.ephemeral.Known? ==>
       && InvEphemeralGeometry(v)
       && InvEphemeralValueAgreement(v)
-      
+
       && (v.ephemeral.frozenMap.Some? ==>
         && InvFrozenGeometry(v)
         && InvFrozenValueAgreement(v)
@@ -369,6 +369,9 @@ module CoordinatedMapJournalRefinement {
       case CommitCompleteStep() => {
         InvInductiveCommitCompleteStep(v, v', uiop, step);
       }
+      case CrashStep() => {
+        assert Inv(v');
+      }
     }
   }
 
@@ -397,7 +400,7 @@ module CoordinatedMapJournalRefinement {
     ensures Inv(v')
     ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
   {
-    InvInductivePutStep(v, v', uiop, step); // TODO why do we need a whole fancy proof up there but not here!?
+    InvInductivePutStep(v, v', uiop, step);
 
     var j := v.ephemeral.journal;
     var j' := v'.ephemeral.journal;
@@ -481,6 +484,13 @@ module CoordinatedMapJournalRefinement {
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
       }
       case CommitCompleteStep() => { CommitStepRefines(v, v', uiop, step); }
+      case CrashStep() => {
+        var stableLSN := v'.persistentImage.SeqEnd();
+        if v.ephemeral.Known? {
+          assert v'.persistentImage.journal.DiscardRecent(stableLSN) == v.ephemeral.journal.DiscardRecent(stableLSN); // trigger
+        }
+        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+      }
     }
     assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
   }
