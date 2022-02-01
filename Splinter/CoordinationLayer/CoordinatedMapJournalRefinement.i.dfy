@@ -26,10 +26,10 @@ module CoordinatedMapJournalRefinement {
     requires journal.WF()
     requires journal.CanFollow(base.seqEnd)
     requires journal.CanDiscardTo(stableLSN)
-    ensures |versions| == SeqEndFor(base.seqEnd, journal)+1
+    ensures |versions| == journal.SeqEndFor(base.seqEnd)+1
   {
     // Construct a Version seq with the entries before stableLSN Forgotten: that's what spec expects.
-    var numVersions := SeqEndFor(base.seqEnd, journal) + 1;
+    var numVersions := journal.SeqEndFor(base.seqEnd) + 1;
     seq(numVersions, lsn requires 0<=lsn<numVersions =>
       if lsn < stableLSN
       then CrashTolerantMapSpecMod.Forgotten
@@ -63,8 +63,8 @@ module CoordinatedMapJournalRefinement {
     requires jlong.CanFollow(startLsn)
     requires jshort.CanFollow(startLsn)
   {
-    && jlong.CanDiscardTo(SeqEndFor(startLsn, jshort))            // jlong is longer
-    && jlong.DiscardRecent(SeqEndFor(startLsn, jshort)) == jshort // they agree on contents in overlap
+    && jlong.CanDiscardTo(jshort.SeqEndFor(startLsn))            // jlong is longer
+    && jlong.DiscardRecent(jshort.SeqEndFor(startLsn)) == jshort // they agree on contents in overlap
   }
 
   predicate InvPersistentJournalGeometry(v: Variables)
@@ -379,7 +379,7 @@ module CoordinatedMapJournalRefinement {
     requires y.WF()
     requires z.WF()
     requires y.CanFollow(x.seqEnd)
-    requires z.CanFollow(SeqEndFor(x.seqEnd, y))
+    requires z.CanFollow(y.SeqEndFor(x.seqEnd))
     ensures MapPlusHistory(MapPlusHistory(x, y), z) == MapPlusHistory(x, y.Concat(z))
     decreases z.Len();
   {

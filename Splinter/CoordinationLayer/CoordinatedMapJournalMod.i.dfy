@@ -38,11 +38,6 @@ module CoordinatedMapJournalMod {
     StampedMapMod.Empty()
   }
 
-  function SeqEndFor(lsn: LSN, journal: Journal) : LSN
-  {
-      if journal.EmptyHistory? then lsn else journal.seqEnd
-  }
-
   // An image of the quiescent disk. The persistent state is this (because we
   // come up from shutdown to see a quiescent disk image). The in-flight state
   // is also a DiskImage, since it's destined to become a persistent state.
@@ -59,7 +54,7 @@ module CoordinatedMapJournalMod {
 
     function SeqEnd() : LSN
     {
-      SeqEndFor(mapadt.seqEnd, journal)
+      journal.SeqEndFor(mapadt.seqEnd)
     }
 
     predicate CompletesSync(lsn: LSN)
@@ -114,7 +109,7 @@ module CoordinatedMapJournalMod {
     function SeqEnd() : LSN
       requires Known?
     {
-      SeqEndFor(mapadt.seqEnd, journal)
+      journal.SeqEndFor(mapadt.seqEnd)
     }
   }
 

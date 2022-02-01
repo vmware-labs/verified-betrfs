@@ -87,6 +87,12 @@ module MsgHistoryMod {
       || seqStart == lsn
     }
 
+    // Where does this journal end if it's concatenated to a map for lsn?
+    function SeqEndFor(lsn: LSN) : LSN
+    {
+        if EmptyHistory? then lsn else seqEnd
+    }
+
     function ApplyToStampedMap(orig: StampedMap) : (out: StampedMap)
       requires WF()
       requires CanFollow(orig.seqEnd)
