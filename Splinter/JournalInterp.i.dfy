@@ -5,7 +5,7 @@ include "SequenceSets.i.dfy"
 include "Journal.i.dfy"
 include "CacheLemmas.i.dfy"
 
-// The Module that StampedMaprets the Journal.
+// The Module that Interprets the Journal.
 module JournalInterpMod {
 
   import opened ValueMessage

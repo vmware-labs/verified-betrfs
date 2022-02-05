@@ -13,6 +13,7 @@ module MapSpecMod refines AtomicStateMachineMod {
   import opened FullKMMapMod
 
   // UI
+  // TODO(jonh): I don't think we need Noops at this layer; we get them from Async & above anyway.
   datatype Input = GetInput(key: Key) | PutInput(key: Key, value: Value) | NoopInput
   datatype Output = GetOutput(value: Value) | PutOutput | NoopOutput
 

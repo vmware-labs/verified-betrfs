@@ -31,6 +31,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     // in the map is 3.
     syncRequests: map<SyncReqId, nat>,
 
+    // TODO(jonh): reorder stableIdx aftern versions
     // The index of the last persistent version. Notice that, since we
     // never delete versions, that index is also the count of writes
     // and thus also the "NextLSN" value when that version was created.
@@ -106,6 +107,8 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   predicate Sync(v: Variables, v': Variables)
   {
     // let nondeterminism of v' choose this value
+    // This wouldn't take so much explaining if we just exists newStableIdx, but then
+    // it's harder to use and muddies up the UIOp skolem. Sorry.
     && var newStableIdx := v'.stableIdx;
 
     && v.WF()
@@ -113,7 +116,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     && v' == v.(
         // Commit forgets old versions.
         versions := seq(|v.versions|, i requires 0<=i<|v.versions| =>
-          if i < v'.stableIdx then Forgotten else v.versions[i]),
+          if i < newStableIdx then Forgotten else v.versions[i]),
         stableIdx := newStableIdx)
   }
 
