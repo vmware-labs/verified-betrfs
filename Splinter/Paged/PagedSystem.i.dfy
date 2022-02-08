@@ -11,6 +11,7 @@ abstract module JournalIfc {
   import opened MsgHistoryMod
   import opened StampedMapMod // LSN TODO(jonh): move
 
+  // TODO(jonh): Recover and document why these are different types.
   type PersistentJournal(==,!new)
   type EphemeralJournal(==,!new)
 
@@ -161,9 +162,9 @@ module CoordinatorMod(journalMod: JournalIfc)  {
       lsn < SeqEnd()
     }
   }
-  
+
   type SyncReqs = map<CrashTolerantMapSpecMod.SyncReqId, LSN>
-  
+
   datatype Ephemeral =
     | Unknown
     | Known(
@@ -211,7 +212,7 @@ module CoordinatorMod(journalMod: JournalIfc)  {
       && inFlightImage.None?
     }
   }
-    
+
   predicate LoadEphemeralFromPersistent(v: Variables, v': Variables, uiop : UIOp)
   {
     && uiop.NoopOp?
@@ -231,7 +232,7 @@ module CoordinatorMod(journalMod: JournalIfc)  {
   {
     && v.WF()
     && v.ephemeral.Known?
-    && var jend := journalMod.JournalSeqEnd(v.persistentImage.journal);
+    && var jend := journalMod.EJournalSeqEnd(v.ephemeral.journal);
       (jend.Some? ==> jend.value == v.ephemeral.mapadt.seqEnd)
   }
 
@@ -445,7 +446,6 @@ module CoordinatorMod(journalMod: JournalIfc)  {
 //    | SplinterTreeInternalStep()
     | ReqSyncStep()
     | ReplySyncStep()
-    | FreezeJournalStep(newFrozenLSN: LSN)
     | FreezeMapAdtStep()
     | CommitStartStep(seqBoundary: LSN)
     | CommitCompleteStep()
