@@ -18,36 +18,71 @@ abstract module JournalIfc {
   predicate PWF(pj: PersistentJournal)
   predicate EWF(ej: EphemeralJournal)
 
-  function Mkfs() : PersistentJournal
+  // Interpretations of these journals, for proof semantics (Refinement file).
+  function IPJ(pj: PersistentJournal) : (out:MsgHistory)
+    requires PWF(pj)
+    ensures out.WF()
 
-  function LoadJournal(pj: PersistentJournal) : EphemeralJournal
+  function IEJ(ej: EphemeralJournal) : (out:MsgHistory)
+    requires EWF(ej)
+    ensures out.WF()
+
+  // Functions used in the runtime specification (this file).
+
+  function Mkfs() : (out:PersistentJournal)
+    ensures PWF(out)
+    ensures IPJ(out).EmptyHistory?
+
+  function LoadJournal(pj: PersistentJournal) : (out:EphemeralJournal)
+    requires PWF(pj)
+    ensures EWF(out)
+    ensures IEJ(out) == IPJ(pj)
 
   // TODO rename PJournalSeqEnd, I guess
-  function JournalSeqEnd(pj: PersistentJournal) : Option<LSN>
+  function JournalSeqEnd(pj: PersistentJournal) : (out:Option<LSN>)
+    requires PWF(pj)
+    ensures out.Some? == IPJ(pj).MsgHistory?
+    ensures out.Some? ==> out.value == IPJ(pj).seqEnd
 
-  function EJournalSeqEnd(ej: EphemeralJournal) : Option<LSN>
+  function EJournalSeqEnd(ej: EphemeralJournal) : (out:Option<LSN>)
+    requires EWF(ej)
+    ensures out.Some? == IEJ(ej).MsgHistory?
+    ensures out.Some? ==> out.value == IEJ(ej).seqEnd
 
   predicate JournalIncludesSubseq(ej: EphemeralJournal, msgs: MsgHistory)
     requires EWF(ej)
     requires msgs.WF()
+    ensures JournalIncludesSubseq(ej, msgs) <==> IEJ(ej).IncludesSubseq(msgs)
 
-  function JournalConcat(ej: EphemeralJournal, msgs: MsgHistory) : EphemeralJournal
+  function JournalConcat(ej: EphemeralJournal, msgs: MsgHistory) : (out:EphemeralJournal)
     requires EWF(ej)
     requires msgs.WF()
     requires msgs.EmptyHistory? || EJournalSeqEnd(ej).None? || msgs.CanFollow(EJournalSeqEnd(ej).value)
     ensures EWF(JournalConcat(ej, msgs))
+    ensures EWF(out)
+    ensures IEJ(ej).Concat(msgs) == IEJ(out)
 
   predicate JournalCanFreeze(ej: EphemeralJournal, startLsn: LSN, endLsn: LSN)
+    requires EWF(ej)
+    ensures JournalCanFreeze(ej, startLsn, endLsn) <==>
+      (IEJ(ej).CanDiscardTo(startLsn) && IEJ(ej).CanDiscardTo(endLsn))
 
-  function JournalFreeze(ej: EphemeralJournal, startLsn: LSN, endLsn: LSN) : PersistentJournal
-    requires EWF(ej);
+  function JournalFreeze(ej: EphemeralJournal, startLsn: LSN, endLsn: LSN) : (out:PersistentJournal)
+    requires EWF(ej)
     requires JournalCanFreeze(ej, startLsn, endLsn)
+    requires startLsn <= endLsn
+    ensures PWF(out)
+    ensures IPJ(out) == IEJ(ej).DiscardOld(startLsn).DiscardRecent(endLsn)
 
   predicate CanDiscardOld(ej: EphemeralJournal, lsn: LSN)
+    requires EWF(ej)
+    ensures CanDiscardOld(ej, lsn) <==> IEJ(ej).CanDiscardTo(lsn)
 
-  function DiscardOld(ej: EphemeralJournal, lsn: LSN) : EphemeralJournal
+  function DiscardOld(ej: EphemeralJournal, lsn: LSN) : (out:EphemeralJournal)
     requires EWF(ej)
     requires CanDiscardOld(ej, lsn)
+    ensures EWF(out)
+    ensures IEJ(out) == IEJ(ej).DiscardOld(lsn)
 }
 
 module AbstractJournal refines JournalIfc {
@@ -61,6 +96,10 @@ module AbstractJournal refines JournalIfc {
   predicate EWF(ej: EphemeralJournal) {
     ej.WF()
   }
+
+  function IPJ(pj: PersistentJournal) : (out:MsgHistory) { pj }
+
+  function IEJ(ej: EphemeralJournal) : (out:MsgHistory) { ej}
 
   function JournalSeqEnd(pj: PersistentJournal) : Option<LSN>
   {
@@ -102,13 +141,16 @@ module AbstractJournal refines JournalIfc {
 
   predicate JournalCanFreeze(ej: EphemeralJournal, startLsn: LSN, endLsn: LSN)
   {
-    // TODO(jonh): journal impl tells us what it can freeze.
-    // Here we pretend we can freeze anything in the journal
-    || startLsn==endLsn
-    || (
-      && ej.MsgHistory?
-      && ej.seqStart <= startLsn < endLsn <= ej.seqStart
-      )
+    && ej.CanDiscardTo(startLsn)
+    && ej.CanDiscardTo(endLsn)
+// TODO(jonh): delete this nonsense
+//    // TODO(jonh): journal impl tells us what it can freeze.
+//    // Here we pretend we can freeze anything in the journal
+//    || startLsn==endLsn
+//    || (
+//      && ej.MsgHistory?
+//      && ej.seqStart <= startLsn < endLsn <= ej.seqStart
+//      )
   }
 
   function JournalFreeze(ej: EphemeralJournal, startLsn: LSN, endLsn: LSN) : PersistentJournal
@@ -136,6 +178,7 @@ module CoordinatorMod(journalMod: JournalIfc)  {
   import opened FullKMMapMod
 
   import Async = CrashTolerantMapSpecMod.async
+  type UIOp = CrashTolerantMapSpecMod.UIOp
 
   // TODO(jonh): plug in PagedMap here. Right now only exploring journal.
   type MapAdt = StampedMapMod.StampedMap
@@ -150,14 +193,18 @@ module CoordinatorMod(journalMod: JournalIfc)  {
     journal: Journal
     )
   {
-    predicate WF() { true }
+    predicate WF() {
+      && journalMod.PWF(journal)
+    }
 
     function SeqEnd() : LSN
+      requires WF()
     {
       if journalMod.JournalSeqEnd(journal).Some? then journalMod.JournalSeqEnd(journal).value else mapadt.seqEnd
     }
 
     predicate CompletesSync(lsn: LSN)
+      requires WF()
     {
       lsn < SeqEnd()
     }
@@ -215,6 +262,7 @@ module CoordinatorMod(journalMod: JournalIfc)  {
 
   predicate LoadEphemeralFromPersistent(v: Variables, v': Variables, uiop : UIOp)
   {
+    && v.WF()
     && uiop.NoopOp?
     && v.ephemeral.Unknown?
     && v' == v.(ephemeral := Known(
@@ -393,6 +441,8 @@ module CoordinatorMod(journalMod: JournalIfc)  {
     && v.persistentImage.mapadt.seqEnd <= startJournal
     // And of course there should be no way for it to have passed the ephemeral map!
     && startJournal <= v.ephemeral.mapadt.seqEnd
+    && startJournal <= endJournal
+    && v.persistentImage.SeqEnd() <= endJournal
     && journalMod.JournalCanFreeze(v.ephemeral.journal, startJournal, endJournal)
 
     && v'.inFlightImage.Some?

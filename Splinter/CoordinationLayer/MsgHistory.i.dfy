@@ -121,8 +121,8 @@ module MsgHistoryMod {
 
     // Returns every message in this after and including lsn
     function DiscardOld(lsn: LSN) : (r: MsgHistory)
-      requires CanDiscardTo(lsn)
       requires WF()
+      requires CanDiscardTo(lsn)
       ensures r.WF()
     {
       if EmptyHistory? || lsn==seqEnd
