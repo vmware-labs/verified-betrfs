@@ -14,7 +14,18 @@ module PagedSystemRefinement(journalMod: JournalIfc) {
   import opened ValueMessage
   import opened FullKMMapMod
   import MapSpecMod
-  import opened JM = journalMod
+
+//  import opened JM = journalMod // Sadly this trick doesn't work if we refine this module; the synonym throws off the module-functor system.
+// so I'll make some function synonyms to keep down the namespace clutter in this file.
+  function IPJ(pj: journalMod.PersistentJournal) : (out:MsgHistory)
+    requires journalMod.PWF(pj)
+    ensures out.WF()
+  { journalMod.IPJ(pj) }
+
+  function IEJ(ej: journalMod.EphemeralJournal) : (out:MsgHistory)
+    requires journalMod.EWF(ej)
+    ensures out.WF()
+  { journalMod.IEJ(ej) }
 
   import Async = CrashTolerantMapSpecMod.async
   type Journal = MsgHistory
