@@ -232,7 +232,7 @@ module CoordinatedMapJournalRefinement {
     // pm'+ej'[..lsn]
     // im+ej'[..lsn]
     // im+ej[..lsn][R..]
-    // InvInFlightVersionAgreement
+    //   {InvInFlightVersionAgreement}
     // (pm+ej[..R])+ej[..lsn][R..]
     JournalAssociativity(v.persistentImage.mapadt, ej.DiscardRecent(refLsn), ej.DiscardRecent(lsn).DiscardOld(refLsn));
     // pm+(ej[..R]+ej[..lsn][R..])
