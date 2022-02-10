@@ -39,7 +39,7 @@ module CoordinatorMod(journalMod: JournalIfc)  {
     function SeqEnd() : LSN
       requires WF()
     {
-      if journalMod.JournalSeqEnd(journal).Some? then journalMod.JournalSeqEnd(journal).value else mapadt.seqEnd
+      if journalMod.PJournalSeqEnd(journal).Some? then journalMod.PJournalSeqEnd(journal).value else mapadt.seqEnd
     }
 
     predicate CompletesSync(lsn: LSN)

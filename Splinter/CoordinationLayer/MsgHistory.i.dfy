@@ -65,10 +65,17 @@ module MsgHistoryMod {
       else seqEnd - seqStart
     }
 
-    function Concat(other : MsgHistory) : (result : MsgHistory)
+    predicate CanConcat(other: MsgHistory)
       requires WF()
       requires other.WF()
-      requires EmptyHistory? || other.CanFollow(seqEnd)
+    {
+      EmptyHistory? || other.CanFollow(seqEnd)
+    }
+
+    function Concat(other: MsgHistory) : (result : MsgHistory)
+      requires WF()
+      requires other.WF()
+      requires CanConcat(other)
       ensures result.WF()
       ensures result.LSNSet() == LSNSet() + other.LSNSet()
       // conditions on msgSeq bounds

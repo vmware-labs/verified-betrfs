@@ -15,11 +15,28 @@ module AbstractJournal refines JournalIfc {
     ej.WF()
   }
 
-  function IPJ(pj: PersistentJournal) : (out:MsgHistory) { pj }
+  function IPJ(pj: PersistentJournal) : (out:MsgHistory)
+  { pj }
 
-  function IEJ(ej: EphemeralJournal) : (out:MsgHistory) { ej}
+  function IEJ(ej: EphemeralJournal) : (out:MsgHistory)
+  { ej }
 
-  function JournalSeqEnd(pj: PersistentJournal) : Option<LSN>
+  function Mkfs() : (out:PersistentJournal)
+    //ensures PWF(out)
+    //ensures IPJ(out).EmptyHistory?
+  {
+    EmptyHistory
+  }
+
+  function LoadJournal(pj: PersistentJournal) : (out:EphemeralJournal)
+    //requires PWF(pj)
+    //ensures EWF(out)
+    //ensures IEJ(out) == IPJ(pj)
+  {
+    pj
+  }
+
+  function PJournalSeqEnd(pj: PersistentJournal) : Option<LSN>
   {
     if pj.MsgHistory? then Some(pj.seqEnd) else None
   }
