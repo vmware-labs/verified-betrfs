@@ -357,6 +357,8 @@ module PagedJournal refines JournalIfc {
     lemma BoundaryLSN()
       requires TJValid()
       ensures I().MsgHistory? ==> I().seqStart == boundaryLSN
+      ensures I().MsgHistory? ==> FreshestRec().value.messageSeq.MsgHistory?  // just TJFacts
+      ensures I().MsgHistory? ==> I().seqEnd == FreshestRec().value.messageSeq.seqEnd
     {
       TJFacts();
       if I().MsgHistory? {
@@ -599,10 +601,6 @@ module PagedJournal refines JournalIfc {
       out
     }
 
-    // TODO(jonh): We need an internal operation that replaces a chain
-    // with another chain with a None instead of a dereference when the
-    // links go back before boundaryLSN, to represent journal truncation.
-
     // msgs appears as the (boundary-truncated) contents of the i'th entry in the
     // receipt
     predicate IncludesSubseqAt(msgs: MsgHistory, i: nat)
@@ -610,7 +608,6 @@ module PagedJournal refines JournalIfc {
       requires msgs.WF()
     {
       && i < |BuildReceiptTJ().lines|
-      //&& BuildReceiptTJ().MessageSeqAt(i) == msgs // TODO deleteme
       && BuildReceiptTJ().MessageSeqAt(i).IncludesSubseq(msgs)
     }
 
@@ -670,6 +667,39 @@ module PagedJournal refines JournalIfc {
       requires WF()
     {
       truncatedJournal.I().Concat(unmarshalledTail)
+    }
+
+    predicate Empty()
+      // TODO show Equivalent to I().EmptyHistory?
+    {
+      && truncatedJournal.freshestRec.None?
+      && unmarshalledTail.EmptyHistory?
+    }
+
+    function SeqStart() : LSN
+      requires WF()
+      requires !Empty()
+      ensures SeqStart() == I().seqStart
+    {
+      var out := if truncatedJournal.freshestRec.Some?
+        then truncatedJournal.boundaryLSN
+        else unmarshalledTail.seqStart;
+      assert out == I().seqStart by {
+        if truncatedJournal.freshestRec.Some? {
+          truncatedJournal.BuildReceiptTJ().BoundaryLSN();
+        }
+      }
+      out
+    }
+
+    function SeqEnd() : LSN
+      // TODO show equivalent to I().seqEnd
+      requires WF()
+      requires !Empty()
+    {
+      if unmarshalledTail.MsgHistory?
+      then unmarshalledTail.seqEnd
+      else truncatedJournal.freshestRec.value.messageSeq.seqEnd
     }
   }
 
@@ -746,12 +776,10 @@ module PagedJournal refines JournalIfc {
     EphemeralJournal(ej.truncatedJournal, ej.unmarshalledTail.Concat(msgs))
   }
 
-  // TODO(jonh): a rewrite function that marshalls (some of?) unmarshalledTail
-
   predicate CanDiscardOld(ej: EphemeralJournal, lsn: LSN)
   {
-    // TODO(jonh): ref data structures efficiently, not via the interp
-    IEJ(ej).CanDiscardTo(lsn)
+    if ej.Empty() then true
+    else ej.SeqStart() <= lsn <= ej.SeqEnd()
   }
 
   function DiscardOld(ej: EphemeralJournal, lsn: LSN) : EphemeralJournal
@@ -838,4 +866,6 @@ module PagedJournal refines JournalIfc {
 
   // TODO(jonh): internal operation to truncate old journal garbage
   // TODO(jonh): internal operation to marshall tail
+  // TODO(jonh): a rewrite function that marshalls (some of?) unmarshalledTail
+
 }
