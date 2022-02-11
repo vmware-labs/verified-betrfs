@@ -430,7 +430,23 @@ module PagedJournal refines JournalIfc {
         assert out.I() == I().DiscardOld(lsn);  // case boilerplate
       }
     }
-  }
+
+    lemma LsnInReceiptBelongs(i: nat)
+      requires TJValid()
+      requires i < |lines|
+      ensures lines[i].WF()
+      ensures I().CanDiscardTo(lines[i].journalRec.messageSeq.seqEnd)
+      decreases |lines|
+    {
+      TJFacts();
+      assert OneLinkedInterpretation(i) by { reveal_LinkedInterpretations(); }
+      if i<|lines|-1 {
+        SnippedReceiptTJValid();  // recurse
+        SnipLast().LsnInReceiptBelongs(i);
+        assert OneLinkedInterpretation(|lines|-1) by { reveal_LinkedInterpretations(); }
+      }
+    }
+  } // datatype Receipt
 
   // Constructive evidence that a Valid receipt exists for each TJ
   function BuildReceipt(boundaryLSN: LSN, optRec: Option<JournalRecord>) : (out:Receipt)
@@ -512,7 +528,7 @@ module PagedJournal refines JournalIfc {
           }
         }
         out
-  }
+  } // BuildReceipt
 
   // A TruncatedJournal is some long chain but which we ignore beyond the boundaryLSN
   // (because we have a map telling us that part of the history).
@@ -598,7 +614,7 @@ module PagedJournal refines JournalIfc {
       && BuildReceiptTJ().MessageSeqAt(i).IncludesSubseq(msgs)
     }
 
-    lemma SubseqEntireOfInterpretation(msgs: MsgHistory, i: nat)
+    lemma SubseqOfEntireInterpretation(msgs: MsgHistory, i: nat)
       requires WF()
       requires msgs.WF()
       requires IncludesSubseqAt(msgs, i)
@@ -633,7 +649,7 @@ module PagedJournal refines JournalIfc {
         prior().LsnBelongs(lsn);
       }
     }
-  }
+  } // datatype TruncatedJournal
 
   type PersistentJournal = TruncatedJournal
 
@@ -703,7 +719,7 @@ module PagedJournal refines JournalIfc {
     assert out ==> IEJ(ej).IncludesSubseq(msgs) by {
       if out {
         var i :| ej.truncatedJournal.IncludesSubseqAt(msgs, i);
-        ej.truncatedJournal.SubseqEntireOfInterpretation(msgs, i);
+        ej.truncatedJournal.SubseqOfEntireInterpretation(msgs, i);
       }
     }
     out
@@ -784,7 +800,7 @@ module PagedJournal refines JournalIfc {
       // endLsn-1 is in the interp, so we can discard to endLsn
       var receipt := tj.BuildReceiptTJ();
       receipt.TJFacts();
-      tj.SubseqEntireOfInterpretation(receipt.MessageSeqAt(i), i);
+      tj.SubseqOfEntireInterpretation(receipt.MessageSeqAt(i), i);
       assert receipt.MessageSeqAt(i).Contains(endLsn-1);  // trigger
 
       // startLsn is in the interp, so we can discard to it
@@ -812,31 +828,11 @@ module PagedJournal refines JournalIfc {
     else
       var tj := ej.truncatedJournal;
       var receipt := tj.BuildReceiptTJ();
-      receipt.TJFacts();
       var i:nat :| JournalCanFreezeAt(ej, startLsn, endLsn, i);
-
-      assert JournalCanFreezeAt(ej, startLsn, endLsn, i);
-      assert endLsn == receipt.lines[i].journalRec.messageSeq.seqEnd;
-      assert endLsn == receipt.lines[i].interpretation.value.seqEnd;
-
-      assert receipt.InterpretationWF(i);
-      assert receipt.lines[i].interpretation.value.seqEnd <= Last(receipt.lines).interpretation.value.seqEnd;
-      assert endLsn == receipt.lines[i].interpretation.value.seqEnd;
-//      assert tj.I().seqEnd == Last(receipt.lines).interpretation.value.seqEnd;
-//      assert endLsn <= tj.I().seqEnd;
-      assert tj.I().CanDiscardTo(endLsn);
 
       var discardRecent := TruncatedJournal(tj.boundaryLSN, Some(receipt.lines[i].journalRec));
       receipt.AbbreviatedReceiptTJValid(i, endLsn, discardRecent);
-      calc {
-        IPJ(discardRecent);
-        IPJ(tj).DiscardRecent(endLsn);
-        IEJ(ej).DiscardRecent(endLsn);
-      }
-
-      var out := TruncatedJournal(startLsn, Some(receipt.lines[i].journalRec));
-      assert PWF(out);
-      assert IPJ(out) == IEJ(ej).DiscardOld(startLsn).DiscardRecent(endLsn);
+      var out := discardRecent.DiscardOld(startLsn);
       out
   }
 
