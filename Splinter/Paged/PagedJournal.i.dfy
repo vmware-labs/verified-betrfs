@@ -40,6 +40,36 @@ module PagedJournal refines JournalIfc {
       then journalRec.messageSeq.DiscardOld(boundaryLSN)
       else journalRec.messageSeq
     }
+
+    predicate Borked() { !journalRec.WF() }
+    predicate Unused(boundaryLSN: LSN) {
+      && journalRec.messageSeq.MsgHistory?
+      && journalRec.messageSeq.seqEnd <= boundaryLSN
+    }
+    predicate ListEnd() { journalRec.priorRec.None? }
+    predicate LineTJValid(boundaryLSN: LSN) {
+      // The record is well-formed, is a history, and includes the boundaryLSN.
+      && journalRec.WF()
+      && journalRec.messageSeq.MsgHistory?
+      && journalRec.messageSeq.seqStart <= boundaryLSN < journalRec.messageSeq.seqEnd
+    }
+
+    // A valid receipt either shows a valid TJ, or shows that the TJ starts in
+    // an invalid way.
+    predicate ValidFirstLine(boundaryLSN: LSN) {
+      || Borked()
+      || Unused(boundaryLSN)
+      || ListEnd()
+      || LineTJValid(boundaryLSN)
+    }
+
+    // A valid receipt doesn't have broken stuff in the middle. If something is
+    // wrong, it should be wrong at the top of the receipt
+    predicate ValidLaterLine(boundaryLSN: LSN) {
+      && journalRec.WF()
+      && journalRec.messageSeq.MsgHistory?
+      && boundaryLSN < journalRec.messageSeq.seqStart
+    }
   }
 
   datatype Receipt = Receipt(boundaryLSN: LSN, lines: seq<ReceiptLine>)
@@ -47,7 +77,7 @@ module PagedJournal refines JournalIfc {
     predicate LineRespectsLinkedList(i: nat)
       requires 0<i<|lines|
     {
-      lines[i].journalRec.priorRec == Some(lines[i-1].journalRec)
+      && lines[i].journalRec.priorRec == Some(lines[i-1].journalRec)
     }
 
     predicate LinesRespectLinkedList()
@@ -55,36 +85,15 @@ module PagedJournal refines JournalIfc {
       forall i | 0<i<|lines| :: LineRespectsLinkedList(i)
     }
 
-    predicate FirstLineTJValid()
+    predicate ValidLine(i: nat)
+      requires 0<=i<|lines|
     {
-      // The first record is well-formed, is a history, and includes the boundaryLSN.
-      0<|lines| ==> (
-        && var jr := lines[0].journalRec;
-        && jr.WF()
-        && jr.messageSeq.MsgHistory?
-        && jr.messageSeq.seqStart <= boundaryLSN < jr.messageSeq.seqEnd
-      )
+      if i==0 then lines[i].ValidFirstLine(boundaryLSN) else lines[i].ValidLaterLine(boundaryLSN)
     }
 
-    // A valid receipt either shows a valid TJ, or shows that the TJ starts in
-    // an invalid way.
-    predicate FirstLineValid()
+    predicate ValidLines()
     {
-      0<|lines| ==> (
-        // the journalRec is borked (so !TJValid())
-        || !lines[0].journalRec.WF()
-        // or the first record somehow goes too far into the past (presumably
-        // because that's the only record; otherwise stitching would fail first
-        // in BuildReceipt).
-        || (
-          && lines[0].journalRec.messageSeq.MsgHistory?
-          && lines[0].journalRec.messageSeq.seqEnd <= boundaryLSN
-          )
-        // or if we're at the end of the linked list (but perhaps didn't reach the boundaryLSN)
-        || lines[0].journalRec.priorRec.None?
-        // Or it's actually valid -- it provides boundaryLSN.
-        || FirstLineTJValid()
-      )
+      forall i | 0<=i<|lines| :: ValidLine(i)
     }
 
     predicate InterpretationWF(i: nat)
@@ -96,6 +105,10 @@ module PagedJournal refines JournalIfc {
     predicate InterpretationsWF()
     {
       forall i | 0<=i<|lines| :: InterpretationWF(i)
+    }
+
+    predicate FirstLineTJValid() {
+      0<|lines| ==> lines[0].LineTJValid(boundaryLSN)
     }
 
     function LinkedInterpretation(i: nat) : Option<MsgHistory>
@@ -136,7 +149,7 @@ module PagedJournal refines JournalIfc {
     predicate Valid()
     {
       && LinesRespectLinkedList()
-      && FirstLineValid()
+      && ValidLines()
       && InterpretationsWF()
       && LinkedInterpretations()
     }
@@ -144,14 +157,13 @@ module PagedJournal refines JournalIfc {
     // TJValid means the TruncatedJournal this receipt represents is itself
     // valid -- it has a valid interpretation.
     predicate TJValid()
-      requires Valid()
     {
+      && Valid()
       // Final interpretation is happy.
       && (0 < |lines| ==> && Last(lines).interpretation.Some?)
     }
 
     lemma SomeInterpretation(j: nat)
-      requires Valid()
       requires TJValid()
       requires j <= |lines|
       ensures forall i | j <= i < |lines| :: lines[i].interpretation.Some?
@@ -168,7 +180,6 @@ module PagedJournal refines JournalIfc {
     }
 
     lemma JournalRecsAllWF()
-      requires Valid()
       requires TJValid()
       ensures forall i | 0<=i<|lines| :: lines[i].journalRec.WF()
     {
@@ -181,21 +192,32 @@ module PagedJournal refines JournalIfc {
 
     // A package of popular facts about TJValid receipts.
     lemma TJFacts()
-      requires Valid()
       requires TJValid()
       ensures forall i | 0<=i<|lines| :: lines[i].interpretation.Some?
+      ensures forall i | 0<=i<|lines| :: lines[i].interpretation.value.MsgHistory?
       ensures forall i | 0<=i<|lines| :: lines[i].journalRec.WF()
+      ensures forall i | 0<=i<|lines| :: lines[i].interpretation.value.seqEnd == lines[i].journalRec.messageSeq.seqEnd
       ensures FirstLineTJValid()
+      ensures I().WF()
     {
       SomeInterpretation(0);
       JournalRecsAllWF();
       if 0 < |lines| {
         assert OneLinkedInterpretation(0) by { reveal_LinkedInterpretations(); }
       }
+      forall i | 0<=i<|lines|
+        ensures lines[i].interpretation.value.MsgHistory?
+        ensures lines[i].interpretation.value.seqEnd == lines[i].journalRec.messageSeq.seqEnd
+      {
+        if i>0 {
+          assert OneLinkedInterpretation(i) by { reveal_LinkedInterpretations(); }
+          assert InterpretationWF(i-1);
+        }
+      }
+      if 0<|lines| { assert InterpretationWF(|lines|-1); } // trigger to get I().WF()
     }
 
     function I() : MsgHistory
-      requires Valid()
       requires TJValid()
     {
       if |lines|==0
@@ -206,7 +228,6 @@ module PagedJournal refines JournalIfc {
     // Returns the message history represented by journal page i in this receipt
     function MessageSeqAt(i: nat) : (out:MsgHistory)
       requires i < |lines|
-      requires Valid()
       requires TJValid()  // maybe?
       ensures out.WF()
     {
@@ -215,6 +236,199 @@ module PagedJournal refines JournalIfc {
       if rec.messageSeq.CanDiscardTo(boundaryLSN)
       then rec.messageSeq.DiscardOld(boundaryLSN)
       else rec.messageSeq
+    }
+
+    function SnipLast() : Receipt
+      requires 0 < |lines|
+    {
+      Receipt(boundaryLSN, DropLast(lines))
+    }
+
+    lemma SnippedReceiptValid()
+      requires Valid()
+      requires 0 < |lines|
+      ensures SnipLast().Valid()
+    {
+      // trigger party.
+      forall i | 0<i<|lines|-1 ensures SnipLast().LineRespectsLinkedList(i) {
+        assert LineRespectsLinkedList(i);
+      }
+      reveal_LinkedInterpretations();
+      forall i | 0<=i<|lines|-1
+        ensures SnipLast().ValidLine(i)
+        ensures SnipLast().InterpretationWF(i)
+        ensures SnipLast().OneLinkedInterpretation(i)
+      {
+        assert ValidLine(i);
+        assert InterpretationWF(i);
+        assert OneLinkedInterpretation(i);
+      }
+    }
+
+    // You can snip the end off of a TJValid receipt and what's left is still valid.
+    // (This is a way to construct a TJValid receipt other than BuildReceipt.)
+    lemma SnippedReceiptTJValid()
+      requires TJValid()
+      requires 0 < |lines|
+      ensures SnipLast().TJValid()
+    {
+      SnippedReceiptValid();
+      assert OneLinkedInterpretation(|lines|-1) by { reveal_LinkedInterpretations(); }
+    }
+
+    function FreshestRec() : Option<JournalRecord>
+    {
+      if |lines|==0 then None else Some(Last(lines).journalRec)
+    }
+
+    function TJ() : TruncatedJournal
+    {
+      TruncatedJournal(boundaryLSN, FreshestRec())
+    }
+
+    lemma ReceiptsUnique(r2: Receipt)
+      requires Valid()
+      requires r2.Valid()
+      requires TJ() == r2.TJ()
+      ensures this == r2
+      decreases |lines|
+    {
+      if |lines| == 0 {
+        // assert this == r2;  // case boilerplate
+      } else {
+        SnippedReceiptValid();
+        r2.SnippedReceiptValid();
+        assert OneLinkedInterpretation(|lines|-1) by { reveal_LinkedInterpretations(); }
+        assert r2.OneLinkedInterpretation(|r2.lines|-1) by { reveal_LinkedInterpretations(); }
+
+        if 1==|lines| && 1==|r2.lines| {
+          // assert this == r2;  // case boilerplate
+        } else if 1==|lines| {
+          // If I'm out of records, r2 can't keep going.
+          assert r2.LineRespectsLinkedList(|r2.lines|-1); // trigger
+          assert ValidLine(0);  // trigger
+          assert !r2.ValidLine(|r2.lines|-1); // witness to contradiction
+        } else if 1==|r2.lines| {
+          // symmetric impossible case
+          assert LineRespectsLinkedList(|lines|-1); // trigger
+          assert r2.ValidLine(0);  // trigger
+          assert !ValidLine(|lines|-1); // witness to contradiction
+        } else {
+          // recurse
+          assert r2.LineRespectsLinkedList(|r2.lines|-1); // trigger
+          assert LineRespectsLinkedList(|lines|-1); // trigger
+          SnipLast().ReceiptsUnique(r2.SnipLast()); // recurse
+          // assert this == r2;  // case boilerplate
+        }
+      }
+    }
+
+    lemma AbbreviatedReceiptTJValid(i: nat, endLsn: LSN, tj: TruncatedJournal)
+      requires TJValid()
+      requires i < |lines|
+      requires
+        assert lines[i].journalRec.WF() by { TJFacts(); }
+        endLsn == lines[i].journalRec.messageSeq.seqEnd
+      requires tj == TruncatedJournal(boundaryLSN, Some(lines[i].journalRec))
+      ensures tj.WF()
+      ensures I().WF()
+      ensures I().CanDiscardTo(endLsn)
+      ensures tj.I() == I().DiscardRecent(endLsn)
+      decreases |lines|
+    {
+      TJFacts();
+      assert OneLinkedInterpretation(|lines|-1) by { reveal_LinkedInterpretations(); }
+      if i == |lines| - 1 {
+        // Receipt for same TJ -> same receipt!
+        ReceiptsUnique(tj.BuildReceiptTJ());
+      } else if i == |lines|-2 {  
+        // just dropping one row from receipt?
+        SnippedReceiptTJValid();
+        if 1<|lines| {
+          tj.BuildReceiptTJ().ReceiptsUnique(SnipLast());
+        }
+      } else {
+        // Dropping many rows; induct.
+        SnippedReceiptTJValid();
+        SnipLast().AbbreviatedReceiptTJValid(i, endLsn, tj);
+      }
+    }
+
+    lemma BoundaryLSN()
+      requires TJValid()
+      ensures I().MsgHistory? ==> I().seqStart == boundaryLSN
+    {
+      TJFacts();
+      if I().MsgHistory? {
+        var i:nat := 0;
+        while i<|lines|
+          invariant i<=|lines|
+          invariant forall j | 0<=j<i :: lines[j].interpretation.value.seqStart == boundaryLSN
+        {
+          assert OneLinkedInterpretation(i) by { reveal_LinkedInterpretations(); }
+          i := i + 1;
+        }
+      }
+    }
+
+    lemma DiscardOld(lsn: LSN) returns (out:Receipt)
+      requires TJValid()
+      requires I().CanDiscardTo(lsn)
+      ensures out.TJ() == TruncatedJournal(lsn, if I().EmptyHistory? || lsn==I().seqEnd then None else FreshestRec());
+//      ensures out == TruncatedJournal(lsn, if I().EmptyHistory? || lsn==I().seqEnd then None else FreshestRec());
+      ensures out.TJValid()
+      ensures I().WF()
+      ensures TJ().WF() // just TJValid + ReceiptsUnique
+      ensures TJ().I().CanDiscardTo(lsn);
+      ensures out.TJ() == TJ().DiscardOldDefn(lsn)
+      ensures out.I() == I().DiscardOld(lsn)
+      decreases |lines|
+    {
+      TJFacts();
+      BoundaryLSN();
+      ReceiptsUnique(TJ().BuildReceiptTJ());
+      if I().EmptyHistory? || lsn == I().seqEnd {
+        out := Receipt(lsn, []);
+        assert out.TJValid() by { reveal_LinkedInterpretations(); }
+        assert out.I() == I().DiscardOld(lsn);  // case boilerplate
+      } else if lsn in Last(lines).journalRec.messageSeq.LSNSet() {
+        var lastRec := Last(lines).journalRec;
+        out := Receipt(lsn, [ReceiptLine(lastRec, Some(lastRec.messageSeq.DiscardOld(lsn)))]);
+        assert out.LinkedInterpretations() by { reveal_LinkedInterpretations(); }
+        // This is the top of the new receipt
+        assert OneLinkedInterpretation(|lines|-1) by { reveal_LinkedInterpretations(); }
+        assert out.I() == I().DiscardOld(lsn);  // case boilerplate
+      } else {
+        // Recurse to generate all but the last line of the receipt.
+        SnippedReceiptTJValid();
+        assert OneLinkedInterpretation(|lines|-1) by { reveal_LinkedInterpretations(); }
+        var shortReceipt := SnipLast().DiscardOld(lsn); // here's the recursive call.
+        // Tack on the last line.
+        var lastInterp := shortReceipt.I().Concat(Last(lines).journalRec.messageSeq);
+        out := Receipt(lsn, shortReceipt.lines + [ReceiptLine(Last(lines).journalRec, Some(lastInterp))]);
+
+        // trigger party for automation-controlled Valid quantifiers
+        forall i | 0<i<|out.lines| ensures out.LineRespectsLinkedList(i) {
+          if i < |out.lines|-1 {
+            assert shortReceipt.LineRespectsLinkedList(i);  // induction hypothesis
+          } else {
+            assert LineRespectsLinkedList(|lines|-1);       // new line
+          }
+        }
+        forall i | 0<=i<|out.lines|
+          ensures out.ValidLine(i)
+          ensures out.InterpretationWF(i)
+          ensures out.OneLinkedInterpretation(i)
+        {
+          if i < |out.lines|-1 {
+            assert shortReceipt.ValidLine(i);
+            assert shortReceipt.InterpretationWF(i);
+            assert shortReceipt.OneLinkedInterpretation(i) by { reveal_LinkedInterpretations(); }
+          }
+        }
+        assert out.Valid() by { reveal_LinkedInterpretations(); }
+        assert out.I() == I().DiscardOld(lsn);  // case boilerplate
+      }
     }
   }
 
@@ -274,9 +488,13 @@ module PagedJournal refines JournalIfc {
           priorReceipt.lines + [ReceiptLine(rec, newInterpretation)]);
         assert out.Valid() by {
           // trigger some features of the base case lines
-          forall i | 0<=i<|out.lines| ensures out.InterpretationWF(i) {
+          forall i | 0<=i<|out.lines|
+            ensures out.InterpretationWF(i)
+            ensures out.ValidLine(i)
+          {
             if i<|out.lines|-1 {
               assert priorReceipt.InterpretationWF(i);
+              assert priorReceipt.ValidLine(i);
             }
           }
           forall i | 0<i<|out.lines| ensures out.LineRespectsLinkedList(i) {
@@ -320,7 +538,6 @@ module PagedJournal refines JournalIfc {
 
     predicate WF() {
       && var receipt := BuildReceiptTJ();
-      && receipt.Valid()
       && receipt.TJValid()
     }
 
@@ -343,14 +560,27 @@ module PagedJournal refines JournalIfc {
       BuildReceiptTJ().I()
     }
 
+    function DiscardOldDefn(lsn: LSN) : (out:TruncatedJournal)
+      requires WF()
+      requires I().CanDiscardTo(lsn)
+    {
+      if freshestRec.None? || lsn == freshestRec.value.messageSeq.seqEnd
+      then TruncatedJournal(lsn, None)
+      else TruncatedJournal(lsn, freshestRec)
+    }
+
     function DiscardOld(lsn: LSN) : (out:TruncatedJournal)
       requires WF()
       requires I().CanDiscardTo(lsn)
       ensures out.WF()
       ensures out.I() == I().DiscardOld(lsn)
     {
-      assume false;
-      TruncatedJournal(lsn, freshestRec)
+      var out := DiscardOldDefn(lsn);
+      assert out.WF() && out.I() == I().DiscardOld(lsn) by {
+        var discardReceipt := BuildReceiptTJ().DiscardOld(lsn);
+        out.BuildReceiptTJ().ReceiptsUnique(discardReceipt);
+      }
+      out
     }
 
     // TODO(jonh): We need an internal operation that replaces a chain
@@ -391,7 +621,6 @@ module PagedJournal refines JournalIfc {
     }
 
     lemma LsnBelongs(lsn: LSN)
-      requires BuildReceiptTJ().Valid()
       requires BuildReceiptTJ().TJValid()
       requires !Empty()
       requires boundaryLSN <= lsn < SeqEnd()
@@ -404,37 +633,6 @@ module PagedJournal refines JournalIfc {
         prior().LsnBelongs(lsn);
       }
     }
-
-// TODO delete
-//    predicate InterpretationCanDiscardAt(lsn: LSN, i: nat)
-//    {
-//      && WF()
-//      && i < |BuildReceiptTJ().lines|
-//      && var interpi := BuildReceiptTJ().lines[i].interpretation;
-//      && interpi.Some?
-//      && interpi.value.CanDiscardTo(lsn)
-//    }
-//
-//    lemma InterpretationCanDiscardTo(lsn: LSN, i: nat)
-//      requires InterpretationCanDiscardAt(lsn, i)
-//      ensures I().CanDiscardTo(lsn)
-//    {
-//      // Propagate CanDiscardTo relation inductively down the receipt
-//      var receipt := BuildReceiptTJ();
-//      receipt.SomeInterpretation(0);
-//      var j:=i;
-//      assert receipt.OneLinkedInterpretation(j) by { receipt.reveal_LinkedInterpretations(); }
-//
-//      while j<|receipt.lines|-1
-//        invariant j<|receipt.lines|
-//        invariant var jint := receipt.lines[j].interpretation;
-//              && jint.Some?  && jint.value.WF() && jint.value.CanDiscardTo(lsn)
-//      {
-//        assert receipt.OneLinkedInterpretation(j+1) by { receipt.reveal_LinkedInterpretations(); }
-//        assert receipt.lines[j+1].interpretation.value.CanDiscardTo(lsn);
-//        j:=j+1;
-//      }
-//    }
   }
 
   type PersistentJournal = TruncatedJournal
@@ -567,25 +765,37 @@ module PagedJournal refines JournalIfc {
     && startLsn <= endLsn
   }
 
+  predicate JournalCanFreezeInternal(ej: EphemeralJournal, startLsn: LSN, endLsn: LSN)
+    requires EWF(ej)
+  {
+    || startLsn==endLsn // can always freeze to empty
+    || (exists i :: JournalCanFreezeAt(ej, startLsn, endLsn, i))
+  }
+
+  lemma JournalFreezeLemma(ej: EphemeralJournal, startLsn: LSN, endLsn: LSN)
+    requires EWF(ej)
+    ensures JournalCanFreezeInternal(ej, startLsn, endLsn) && startLsn < endLsn ==>
+      IEJ(ej).CanDiscardTo(startLsn) && IEJ(ej).CanDiscardTo(endLsn)
+  {
+    if JournalCanFreezeInternal(ej, startLsn, endLsn) && startLsn < endLsn {
+      var i:nat :| JournalCanFreezeAt(ej, startLsn, endLsn, i);
+      var tj := ej.truncatedJournal;
+
+      // endLsn-1 is in the interp, so we can discard to endLsn
+      var receipt := tj.BuildReceiptTJ();
+      receipt.TJFacts();
+      tj.SubseqEntireOfInterpretation(receipt.MessageSeqAt(i), i);
+      assert receipt.MessageSeqAt(i).Contains(endLsn-1);  // trigger
+
+      // startLsn is in the interp, so we can discard to it
+      tj.LsnBelongs(startLsn);
+    }
+  }
+
   predicate JournalCanFreeze(ej: EphemeralJournal, startLsn: LSN, endLsn: LSN)
   {
-    var out := startLsn==endLsn || (exists i :: JournalCanFreezeAt(ej, startLsn, endLsn, i));
-    assert out && startLsn < endLsn ==> IEJ(ej).CanDiscardTo(startLsn) && IEJ(ej).CanDiscardTo(endLsn) by {
-      if out && startLsn < endLsn {
-	      var i:nat :| JournalCanFreezeAt(ej, startLsn, endLsn, i);
-	      var tj := ej.truncatedJournal;
-
-        // endLsn-1 is in the interp, so we can discard to endLsn
-        var receipt := tj.BuildReceiptTJ();
-        receipt.TJFacts();
-        tj.SubseqEntireOfInterpretation(receipt.MessageSeqAt(i), i);
-        assert receipt.MessageSeqAt(i).Contains(endLsn-1);  // trigger
-
-        // startLsn is in the interp, so we can discard to it
-	      tj.LsnBelongs(startLsn);
-      }
-    }
-    out
+    JournalFreezeLemma(ej, startLsn, endLsn);
+    JournalCanFreezeInternal(ej, startLsn, endLsn)
   }
 
   function JournalFreeze(ej: EphemeralJournal, startLsn: LSN, endLsn: LSN) : PersistentJournal
@@ -594,17 +804,37 @@ module PagedJournal refines JournalIfc {
     // ensures PWF(out)
     // ensures IPJ(out) == IEJ(ej).DiscardOld(startLsn).DiscardRecent(endLsn)
   {
+    JournalFreezeLemma(ej, startLsn, endLsn);
     if startLsn==endLsn
     then
       var out := TruncatedJournal(startLsn, None);
-      assert PWF(out);
-      assert IPJ(out) == IEJ(ej).DiscardOld(startLsn).DiscardRecent(endLsn);
       out
     else
       var tj := ej.truncatedJournal;
-      var receiptLines := BuildReceipt(tj.boundaryLSN, tj.freshestRec).lines;
+      var receipt := tj.BuildReceiptTJ();
+      receipt.TJFacts();
       var i:nat :| JournalCanFreezeAt(ej, startLsn, endLsn, i);
-      var out := TruncatedJournal(startLsn, Some(receiptLines[i].journalRec));
+
+      assert JournalCanFreezeAt(ej, startLsn, endLsn, i);
+      assert endLsn == receipt.lines[i].journalRec.messageSeq.seqEnd;
+      assert endLsn == receipt.lines[i].interpretation.value.seqEnd;
+
+      assert receipt.InterpretationWF(i);
+      assert receipt.lines[i].interpretation.value.seqEnd <= Last(receipt.lines).interpretation.value.seqEnd;
+      assert endLsn == receipt.lines[i].interpretation.value.seqEnd;
+//      assert tj.I().seqEnd == Last(receipt.lines).interpretation.value.seqEnd;
+//      assert endLsn <= tj.I().seqEnd;
+      assert tj.I().CanDiscardTo(endLsn);
+
+      var discardRecent := TruncatedJournal(tj.boundaryLSN, Some(receipt.lines[i].journalRec));
+      receipt.AbbreviatedReceiptTJValid(i, endLsn, discardRecent);
+      calc {
+        IPJ(discardRecent);
+        IPJ(tj).DiscardRecent(endLsn);
+        IEJ(ej).DiscardRecent(endLsn);
+      }
+
+      var out := TruncatedJournal(startLsn, Some(receipt.lines[i].journalRec));
       assert PWF(out);
       assert IPJ(out) == IEJ(ej).DiscardOld(startLsn).DiscardRecent(endLsn);
       out
