@@ -6,7 +6,7 @@ include "../../Spec/MapSpec.s.dfy"
 include "../../lib/Base/KeyType.s.dfy"
 include "../../lib/Base/MapRemove.s.dfy"
 
-module CoordinatorMod(journalMod: JournalIfc)  {
+module CoordinationSystem(journalMod: JournalIfc)  {
   import opened Options
   import opened MapRemove_s
   import opened StampedMapMod
@@ -75,9 +75,6 @@ module CoordinatorMod(journalMod: JournalIfc)  {
     DiskImage(MapAdtMkfs(), journalMod.Mkfs())
   }
 
-  // TODO(jonh): maybe this is a parameterized type we can reuse in CMJ & here?
-  // Actually, maybe we should parameterize the entire module and plug in these
-  // paged implementations! I'll start with it concrete though.
   datatype Variables = Variables(
     persistentImage: DiskImage,
     ephemeral: Ephemeral,

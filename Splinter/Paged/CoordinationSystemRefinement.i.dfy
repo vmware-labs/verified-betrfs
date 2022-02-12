@@ -1,13 +1,13 @@
-include "PagedSystem.i.dfy"
+include "CoordinationSystem.i.dfy"
 
 // This module shows refinement of CoordinatorMod to
 // CrashTolerantMapSpecMod, thereby functioning as the top layer in a
 // refinement stack for program models in refinement layers below.
 
 // TODO(jonh): satisfy a refinement-module proof obligation!
-module PagedSystemRefinement(journalMod: JournalIfc) {
+module CoordinationSystemRefinement(journalMod: JournalIfc) {
   import opened SequencesLite // Last, DropLast
-  import opened CM = CoordinatorMod(journalMod)
+  import opened CM = CoordinationSystem(journalMod)
   import opened StampedMapMod
   import opened MsgHistoryMod
   import opened KeyType
