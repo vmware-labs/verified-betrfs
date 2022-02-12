@@ -670,7 +670,6 @@ module PagedJournal refines JournalIfc {
     }
 
     predicate Empty()
-      // TODO show Equivalent to I().EmptyHistory?
     {
       && truncatedJournal.freshestRec.None?
       && unmarshalledTail.EmptyHistory?
@@ -693,7 +692,6 @@ module PagedJournal refines JournalIfc {
     }
 
     function SeqEnd() : LSN
-      // TODO show equivalent to I().seqEnd
       requires WF()
       requires !Empty()
     {
@@ -865,7 +863,28 @@ module PagedJournal refines JournalIfc {
   }
 
   // TODO(jonh): internal operation to truncate old journal garbage
-  // TODO(jonh): internal operation to marshall tail
-  // TODO(jonh): a rewrite function that marshalls (some of?) unmarshalledTail
+  // Actually I think this only happens in the refinement. At this layer, the receipt just
+  // stops when it gets to the end.
 
+  // A prefix of the unmarshalled tail can be carted off as a new page-sized journal record
+  function JournalMarshal(ej: EphemeralJournal, cut: LSN) : (out: EphemeralJournal)
+    requires EWF(ej)
+    requires ej.unmarshalledTail.MsgHistory?
+    requires ej.unmarshalledTail.seqStart < cut // Can't marshall nothing.
+    requires ej.unmarshalledTail.CanDiscardTo(cut)
+    ensures EWF(out)
+    ensures IEJ(out) == IEJ(ej)
+  {
+    // Construct the new record with the cut-out section of the unmarshalled tail.
+    var newRec := JournalRecord(ej.unmarshalledTail.DiscardRecent(cut), ej.truncatedJournal.freshestRec);
+    // Build up a new TruncatedJournal that adds the new record to the old chain.
+    var newBoundary :=
+      if ej.truncatedJournal.freshestRec.None?  // if tj is empty, its boundary is nonsense.
+      then ej.unmarshalledTail.seqStart
+      else ej.truncatedJournal.boundaryLSN;
+    var tj := TruncatedJournal(newBoundary, Some(newRec));
+    // The new unmarshalled tail is what's left after the cut
+    var out := EphemeralJournal(tj, ej.unmarshalledTail.DiscardOld(cut));
+    out
+  }
 }

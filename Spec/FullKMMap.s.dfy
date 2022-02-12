@@ -4,6 +4,7 @@
 include "../lib/Base/KeyType.s.dfy"
 include "Message.s.dfy"
 
+// TODO(jonh): Rename to TotalKVMMap
 module FullKMMapMod {
   import opened ValueMessage
   import opened KeyType

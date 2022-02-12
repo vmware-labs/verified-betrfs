@@ -35,7 +35,6 @@ abstract module JournalIfc {
     ensures EWF(out)
     ensures IEJ(out) == IPJ(pj)
 
-  // TODO rename PJournalSeqEnd, I guess
   function PJournalSeqEnd(pj: PersistentJournal) : (out:Option<LSN>)
     requires PWF(pj)
     ensures out.Some? == IPJ(pj).MsgHistory?
