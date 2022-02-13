@@ -3,14 +3,14 @@
 
 include "../lib/Base/KeyType.s.dfy"
 include "../lib/Base/SequencesLite.s.dfy"
-include "FullKMMap.s.dfy"
+include "TotalKMMap.s.dfy"
 include "AtomicStateMachine.s.dfy"
 include "CrashTolerant.s.dfy"
 
 module MapSpecMod refines AtomicStateMachineMod {
   import opened ValueMessage
   import opened KeyType
-  import opened FullKMMapMod
+  import opened TotalKMMapMod
 
   // UI
   // TODO(jonh): I don't think we need Noops at this layer; we get them from Async & above anyway.
@@ -18,7 +18,7 @@ module MapSpecMod refines AtomicStateMachineMod {
   datatype Output = GetOutput(value: Value) | PutOutput | NoopOutput
 
   // State machine
-  datatype Variables = Variables(kmmap: FullKMMap)
+  datatype Variables = Variables(kmmap: TotalKMMap)
 
   function InitState() : Variables {
     Variables(EmptyKMMap())

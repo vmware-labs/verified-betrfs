@@ -18,7 +18,7 @@ module MsgHistoryMod {
   import opened Options
   import opened ValueMessage
   import opened KeyType
-  import opened FullKMMapMod
+  import opened TotalKMMapMod
   import opened StampedMapMod
 
   datatype KeyedMessage = KeyedMessage(key: Key, message: Message)

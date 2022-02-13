@@ -14,7 +14,7 @@ module CoordinationSystem(journalMod: JournalIfc)  {
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
-  import opened FullKMMapMod
+  import opened TotalKMMapMod
 
   import Async = CrashTolerantMapSpecMod.async
   type UIOp = CrashTolerantMapSpecMod.UIOp

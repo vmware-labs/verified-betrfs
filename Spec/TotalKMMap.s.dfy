@@ -5,7 +5,7 @@ include "../lib/Base/KeyType.s.dfy"
 include "Message.s.dfy"
 
 // TODO(jonh): Rename to TotalKVMMap
-module FullKMMapMod {
+module TotalKMMapMod {
   import opened ValueMessage
   import opened KeyType
   // Defines a fully-populated Key-Message imap
@@ -23,9 +23,9 @@ module FullKMMapMod {
     imap k | AnyKey(k) :: DefaultMessage()
   }
 
-  // Dafny demands a compilable witness for FullKMMap, but also doesn't
+  // Dafny demands a compilable witness for TotalKMMap, but also doesn't
   // compile imaps. Lucky we're in a .s file so I can just lie with an
   // axiom. This makes me feel uncomfortable.
   function method Witness() : imap<Key,Message> ensures Witness() == EmptyKMMap()
-  type FullKMMap = ikv: imap<Key,Message> | KMMapIsFull(ikv) witness Witness()
+  type TotalKMMap = ikv: imap<Key,Message> | KMMapIsFull(ikv) witness Witness()
 }

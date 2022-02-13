@@ -12,7 +12,7 @@ module CoordinationSystemRefinement(journalMod: JournalIfc) {
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
-  import opened FullKMMapMod
+  import opened TotalKMMapMod
   import MapSpecMod
 
 //  import opened JM = journalMod // Sadly this trick doesn't work if we refine this module; the synonym throws off the module-functor system.
@@ -211,7 +211,7 @@ module CoordinationSystemRefinement(journalMod: JournalIfc) {
     ensures Inv(v)
     ensures I(v) == CrashTolerantMapSpecMod.InitState()
   {
-    assert I(v).versions[0].asyncState.appv.kmmap == FullKMMapMod.EmptyKMMap(); // trigger
+    assert I(v).versions[0].asyncState.appv.kmmap == TotalKMMapMod.EmptyKMMap(); // trigger
   }
 
   lemma CommitStepPreservesHistory(v: Variables, v': Variables, uiop: UIOp, step: Step, lsn: LSN)

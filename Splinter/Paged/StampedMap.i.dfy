@@ -4,18 +4,18 @@
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Base/KeyType.s.dfy"
 include "../../Spec/Message.s.dfy"
-include "../../Spec/FullKMMap.s.dfy"
+include "../../Spec/TotalKMMap.s.dfy"
 
 // A "StampedMap" is a full imap "stamped" with an LSN that identifies how many
 // operations it represents.
 module StampedMapMod {
   import opened ValueMessage
   import opened KeyType
-  import opened FullKMMapMod
+  import opened TotalKMMapMod
 
   type LSN = nat // Log sequence number
 
-  datatype StampedMap = StampedMap(mi: FullKMMap, seqEnd: LSN)
+  datatype StampedMap = StampedMap(mi: TotalKMMap, seqEnd: LSN)
 
   function Empty() : StampedMap
   {
