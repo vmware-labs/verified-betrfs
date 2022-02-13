@@ -501,6 +501,7 @@ module CoordinationSystemRefinement(journalMod: JournalIfc) {
       case CrashStep() => {
         var stableLSN := v'.persistentImage.SeqEnd();
         if v.ephemeral.Known? {
+          assert forall lsn | v.persistentImage.mapadt.seqEnd <= lsn < stableLSN :: true; // trigger
           assert IPJ(v'.persistentImage.journal).DiscardRecent(stableLSN) == IEJ(v.ephemeral.journal).DiscardRecent(stableLSN); // trigger
         }
         assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
