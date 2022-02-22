@@ -1,4 +1,9 @@
 abstract module AtomicStateMachineMod {
+  // This interface is for a state machine where the inputs arrive, event
+  // occurs, and outputs are delivered all atomically. The Async module
+  // converts one of these machines into one where all three events are
+  // separate asynchronous steps.
+
   // Application Interface -- parameters to transition labels that
   // become Requests and Replies in AsyncMod.
   type Input

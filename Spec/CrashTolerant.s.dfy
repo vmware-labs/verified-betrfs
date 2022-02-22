@@ -1,18 +1,44 @@
 include "../lib/Base/SequencesLite.s.dfy"
 include "../lib/Base/MapRemove.s.dfy"
+include "RefinementObligation.s.dfy"
 include "Async.s.dfy"
 
 // Collect the entire history of possible snapshots, with a pointer to the persistent one.
 // Sync requests begin at the head of the list (the ephemeral state).
 // Once the persistent pointer reaches that same index, the sync may be acknowledged as complete.
-// We don't do anything with old snapshots (indeed, no implementation could); I just wrote it
-// this way for greatest simplicity.
-module CrashTolerantMod(atomic: AtomicStateMachineMod) {
-  import opened MapRemove_s
-  import opened SequencesLite // Last, DropLast
+// Old snapshots are "forgotten", but we keep their place in the sequence for
+// simplicity and hence readability: we don't have to do a bunch of confusing
+// offset math to represent truncation.
+
+module CrashTolerantUIOp(atomic: AtomicStateMachineMod) refines UIOpIfc {
   import async = AsyncMod(atomic) // Crash tolerance adds asynchrony whether you like it or not.
 
   type SyncReqId = nat
+  datatype UIOp =
+    | OperateOp(baseOp: async.UIOp)
+    | CrashOp
+    | SyncOp
+    | ReqSyncOp(syncReqId: SyncReqId)
+    | ReplySyncOp(syncReqId: SyncReqId)
+    | NoopOp
+}
+
+module CrashTolerantMod(atomic: AtomicStateMachineMod) refines StateMachineIfc(CrashTolerantUIOp(atomic)) {
+  import opened MapRemove_s
+  import opened SequencesLite // Last, DropLast
+
+  // Crash tolerance adds asynchrony whether you like it or not.
+
+  //import uiopifc = CrashTolerantUIOp(atomic)
+  // TODO(bparno): I think it's a bug that I have to use the next line, but the
+  // prior isn't equivalent.
+   // I really want to write this, but uiopifc isn't available in imports
+//  import async = uiopifc.async
+  // So I tried other synonyms, but they don't act module-equivalent:
+  // import uiopmod = StateMachineIfc(CrashTolerantUIOp(atomic)).uiopifc
+  //import async = uiopifc.async
+  //import async = StateMachineIfc(CrashTolerantUIOp(atomic)).uiopifc.async
+
   datatype Version =
     | Forgotten
       // Keeping placeholders for LSNs before stableIdx makes it more
@@ -20,16 +46,17 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
       // for a bunch of ghost history complexity, we Forget the values
       // at those LSNs so the implementation has an easy time constructing
       // the interpretation.
-    | Version(asyncState: async.PersistentState)
+    | Version(asyncState: uiopifc.async.PersistentState)
 
+  datatype Constants = Constants
   datatype Variables = Variables(
     versions: seq<Version>,
-    asyncEphemeral: async.EphemeralState,
+    asyncEphemeral: uiopifc.async.EphemeralState,
 
     // Request id points at the number of LSNs that must be persisted.
     // So if the client ReqSyncs after 3 writes (seqEnd==3), the value
     // in the map is 3.
-    syncRequests: map<SyncReqId, nat>,
+    syncRequests: map<uiopifc.SyncReqId, nat>,
 
     // TODO(jonh): reorder stableIdx aftern versions
     // The index of the last persistent version. Notice that, since we
@@ -52,7 +79,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
 
 
   function InitState() : Variables {
-    Variables([Version(async.InitPersistentState())], async.InitEphemeralState(), map[], 0)
+    Variables([Version(uiopifc.async.InitPersistentState())], uiopifc.async.InitEphemeralState(), map[], 0)
   }
 
   // This isn't a transition, just a partial action for readibility.
@@ -65,7 +92,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     || versions' == versions
   }
 
-  predicate Operate(v: Variables, v': Variables, op: async.UIOp)
+  predicate Operate(v: Variables, v': Variables, op: uiopifc.async.UIOp)
   {
     // let nondeterminism of v' choose these values
     // (Imagine they're coming in from JNF via a skolemized exists -- but that makes
@@ -76,9 +103,9 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     && v.WF()
     && v'.WF()
     && OptionallyAppendVersion(v.versions, newVersions)
-    && async.NextStep(
-        async.Variables(Last(v.versions).asyncState, v.asyncEphemeral),
-        async.Variables(Last(newVersions).asyncState, newAsyncEphemeral),
+    && uiopifc.async.NextStep(
+        uiopifc.async.Variables(Last(v.versions).asyncState, v.asyncEphemeral),
+        uiopifc.async.Variables(Last(newVersions).asyncState, newAsyncEphemeral),
         op)
     && v' == v.(
         versions := newVersions,
@@ -94,7 +121,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     && v' == v.(
         versions := v.versions[..v.stableIdx+1],
       // Crash forgets ephemeral stuff -- requests and syncRequests submitted but not answered.
-        asyncEphemeral := async.InitEphemeralState(),
+        asyncEphemeral := uiopifc.async.InitEphemeralState(),
         syncRequests := map[]
       )
   }
@@ -125,7 +152,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
   // actions occur: the request arrives, it's executed (serialized), the reply
   // is delivered. For Syncs, we don't bother explicitly recording the serialization
   // point; ReplySync just gets enabled at some point before it occurs. Sorry?
-  predicate ReqSync(v: Variables, v': Variables, syncReqId: SyncReqId)
+  predicate ReqSync(v: Variables, v': Variables, syncReqId: uiopifc.SyncReqId)
   {
     && v.WF()
     && syncReqId !in v.syncRequests // don't want to talk about weird behavior with duplicate ids
@@ -134,7 +161,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
 
   // When your syncReqId gets flushed all the way to the persistent version slot,
   // the sync is complete and that version is stable.
-  predicate ReplySync(v: Variables, v': Variables, syncReqId: SyncReqId)
+  predicate ReplySync(v: Variables, v': Variables, syncReqId: uiopifc.SyncReqId)
   {
     && v.WF()
     && syncReqId in v.syncRequests
@@ -142,15 +169,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     && v' == v.(syncRequests := MapRemove1(v.syncRequests, syncReqId))
   }
 
-  datatype UIOp =
-    | OperateOp(baseOp: async.UIOp)
-    | CrashOp
-    | SyncOp
-    | ReqSyncOp(syncReqId: SyncReqId)
-    | ReplySyncOp(syncReqId: SyncReqId)
-    | NoopOp
-
-  predicate NextStep(v: Variables, v': Variables, uiop: UIOp)
+  predicate NextStep(c: Constants, v: Variables, v': Variables, uiop: uiopifc.UIOp)
   {
     match uiop {
       case OperateOp(baseOp) => Operate(v, v', baseOp)
@@ -162,8 +181,8 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) {
     }
   }
 
-  predicate Next(v: Variables, v': Variables, uiop: UIOp)
+  predicate Next(c: Constants, v: Variables, v': Variables, uiop: uiopifc.UIOp)
   {
-    exists uiop :: NextStep(v, v', uiop)
+    exists uiop :: NextStep(c, v, v', uiop)
   }
 }
