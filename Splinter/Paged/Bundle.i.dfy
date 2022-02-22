@@ -6,9 +6,9 @@ include "../../Spec/RefinementObligation.s.dfy"
 // Hey look, this abstract journal satisfies the refinement.
 module AbstractJournalRefinement refines CoordinationSystemRefinement(AbstractJournal, AbstractMap) { }
 
-module ImplementationObligation(implementation: StateMachineIfc) refines RefinesIfc(implementation, CrashTolerantMapSpecMod) { }
+module ConcreteRefinementProof refines ImplementationObligation(AbstractJournalRefinement, AbstractMap) { }
 
-module ConcreteRefinementProof refines ImplementationObligation(AbstractJournalRefinement) { }
+module ImplementationObligation(implementation: StateMachineIfc) refines RefinesIfc(implementation, CrashTolerantMapSpecMod) { }
 
 // Ooh, and so does this Paged journal
 module PagedJournalRefinement refines CoordinationSystemRefinement(PagedJournal, AbstractMap) { }
