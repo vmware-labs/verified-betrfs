@@ -317,20 +317,9 @@ module CoordinationSystemRefinement(journalMod: JournalIfc, mapMod: MapIfc) {
     ensures Inv(v')
   {
     if FrozenMapDoesntRegress(v') {
-      // TODO(jonh): clean up some proof here?
-      assert FrozenMapDoesntRegress(v);
-      calc {
-        IMap(v'.ephemeral.frozenMap.value);
-        IMap(v.ephemeral.frozenMap.value);
-        MapPlusHistory(IMap(v.persistentImage.mapadt), IEJ(v.ephemeral.journal).DiscardRecent(IMap(v.ephemeral.frozenMap.value).seqEnd));
-        {
-          CommitStepPreservesHistory(v, v', uiop, step, IMap(v.ephemeral.frozenMap.value).seqEnd);
-        }
-        MapPlusHistory(IMap(v'.persistentImage.mapadt), IEJ(v'.ephemeral.journal).DiscardRecent(IMap(v'.ephemeral.frozenMap.value).seqEnd));
-      }
+      CommitStepPreservesHistory(v, v', uiop, step, IMap(v.ephemeral.frozenMap.value).seqEnd);
     }
 
-    // InvEphemeralMapIsJournalSnapshot
     var pm := v.persistentImage.mapadt;
     var em := IMap(v.ephemeral.mapadt);
     var ej := IEJ(v.ephemeral.journal);
@@ -379,14 +368,6 @@ module CoordinationSystemRefinement(journalMod: JournalIfc, mapMod: MapIfc) {
         assert Inv(v');
       }
       case FreezeMapAdtStep() => {
-        // TODO(jonh): clean up some proof here?
-        assert v'.ephemeral.Known?;
-        assert v'.ephemeral.frozenMap.Some?;
-        calc {
-          IMap(v'.ephemeral.frozenMap.value);
-          MapPlusHistory(IMap(v'.persistentImage.mapadt), IEJ(v'.ephemeral.journal).DiscardRecent(IMap(v'.ephemeral.frozenMap.value).seqEnd));
-        }
-        assert InvFrozenValueAgreement(v');
         assert Inv(v');
       }
       case CommitStartStep(seqBoundary) => {
