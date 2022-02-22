@@ -2,29 +2,30 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "JournalIfc.i.dfy"
+include "MapIfc.i.dfy"
 include "../../Spec/MapSpec.s.dfy"
 include "../../lib/Base/KeyType.s.dfy"
 include "../../lib/Base/MapRemove.s.dfy"
 
-module CoordinationSystem(journalMod: JournalIfc)  {
+module CoordinationSystem(journalMod: JournalIfc, mapMod: MapIfc)  {
   import opened Options
   import opened MapRemove_s
-  import opened StampedMapMod
   import opened CrashTolerantMapSpecMod
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
   import opened TotalKMMapMod
+  import opened StampedMapMod // LSN TODO(jonh): move
 
   import Async = CrashTolerantMapSpecMod.async
   type UIOp = CrashTolerantMapSpecMod.UIOp
 
   // TODO(jonh): plug in PagedMap here. Right now only exploring journal.
-  type MapAdt = StampedMapMod.StampedMap
+  type MapAdt = mapMod.Map
   type Journal = journalMod.PersistentJournal
 
   function MapAdtMkfs() : MapAdt {
-    StampedMapMod.Empty()
+    mapMod.Mkfs()
   }
 
   datatype DiskImage = DiskImage(
@@ -34,12 +35,13 @@ module CoordinationSystem(journalMod: JournalIfc)  {
   {
     predicate WF() {
       && journalMod.PWF(journal)
+      && mapMod.WF(mapadt)
     }
 
     function SeqEnd() : LSN
       requires WF()
     {
-      if journalMod.PJournalSeqEnd(journal).Some? then journalMod.PJournalSeqEnd(journal).value else mapadt.seqEnd
+      if journalMod.PJournalSeqEnd(journal).Some? then journalMod.PJournalSeqEnd(journal).value else mapMod.SeqEnd(mapadt)
     }
 
     predicate CompletesSync(lsn: LSN)
@@ -66,6 +68,8 @@ module CoordinationSystem(journalMod: JournalIfc)  {
     predicate WF() {
       Known? ==> (
         && journalMod.EWF(journal)
+        && mapMod.WF(mapadt)
+        && (frozenMap.Some? ==> mapMod.WF(frozenMap.value))
       )
     }
   }
@@ -117,13 +121,14 @@ module CoordinationSystem(journalMod: JournalIfc)  {
     && v.WF()
     && v.ephemeral.Known?
     && var jend := journalMod.EJournalSeqEnd(v.ephemeral.journal);
-      (jend.Some? ==> jend.value == v.ephemeral.mapadt.seqEnd)
+      (jend.Some? ==> jend.value == mapMod.SeqEnd(v.ephemeral.mapadt))
   }
 
   function NextLSN(v: Variables) : LSN
+    requires v.WF()
     requires v.ephemeral.Known?
   {
-    v.ephemeral.mapadt.seqEnd
+    mapMod.SeqEnd(v.ephemeral.mapadt)
   }
 
   // Move some journal state into the map to make it (closer to) fresh
@@ -136,12 +141,12 @@ module CoordinationSystem(journalMod: JournalIfc)  {
     && v'.WF()
 
     && puts.WF()
-    && puts.CanFollow(v.ephemeral.mapadt.seqEnd)
+    && puts.CanFollow(mapMod.SeqEnd(v.ephemeral.mapadt))
     && journalMod.JournalIncludesSubseq(v.ephemeral.journal, puts)
 
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
-    && v' == v.(ephemeral := v.ephemeral.(mapadt := MapPlusHistory(v.ephemeral.mapadt, puts)))
+    && v' == v.(ephemeral := v.ephemeral.(mapadt := mapMod.ApplyPuts(v.ephemeral.mapadt, puts)))
   }
 
   predicate AcceptRequest(v: Variables, v': Variables, uiop : UIOp)
@@ -169,7 +174,7 @@ module CoordinationSystem(journalMod: JournalIfc)  {
     && var key := uiop.baseOp.req.input.key;
     && var value := uiop.baseOp.reply.output.value;
     && assert AnyKey(key);
-    && value == v.ephemeral.mapadt.mi[key].value
+    && value == mapMod.Query(v.ephemeral.mapadt, key)
     && v' == v.(ephemeral := v.ephemeral.(progress := v.ephemeral.progress.(
         requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
         replies := v.ephemeral.progress.replies + {uiop.baseOp.reply}
@@ -202,7 +207,7 @@ module CoordinationSystem(journalMod: JournalIfc)  {
     && v.WF()
     && v' == v.(ephemeral := v.ephemeral.(
           journal := journalMod.JournalConcat(v.ephemeral.journal, singleton),
-          mapadt := MapPlusHistory(v.ephemeral.mapadt, singleton),
+          mapadt := mapMod.ApplyPuts(v.ephemeral.mapadt, singleton),
           // Frozen stuff unchanged here.
           progress := v.ephemeral.progress.(
             requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
@@ -271,12 +276,12 @@ module CoordinationSystem(journalMod: JournalIfc)  {
     && v.inFlightImage.None?
 
     && v.ephemeral.frozenMap.Some?
-    && var startJournal := v.ephemeral.frozenMap.value.seqEnd;
+    && var startJournal := mapMod.SeqEnd(v.ephemeral.frozenMap.value);
     // Frozen map can't go backwards vs persistent map, lest we end up with
     // a gap to the ephemeral journal start.
-    && v.persistentImage.mapadt.seqEnd <= startJournal
+    && mapMod.SeqEnd(v.persistentImage.mapadt) <= startJournal
     // And of course there should be no way for it to have passed the ephemeral map!
-    && startJournal <= v.ephemeral.mapadt.seqEnd
+    && startJournal <= mapMod.SeqEnd(v.ephemeral.mapadt)
     && startJournal <= endJournal
     && v.persistentImage.SeqEnd() <= endJournal
     && journalMod.JournalCanFreeze(v.ephemeral.journal, startJournal, endJournal)
@@ -298,15 +303,15 @@ module CoordinationSystem(journalMod: JournalIfc)  {
     // TODO(jonh): this had better be an invariant, but if it's not, we're
     // gonna have a weird liveness/crash recovery bug. Confirm that'll show up in
     // proof.
-    && journalMod.CanDiscardOld(v.ephemeral.journal, ifImage.mapadt.seqEnd)
+    && journalMod.CanDiscardOld(v.ephemeral.journal, mapMod.SeqEnd(ifImage.mapadt))
 
     // pruning below is nonsense without this, but "luckily" this is an invariant:
-//    && JournalCanDiscardTo(v.ephemeral.journal, ifImage.mapadt.seqEnd)
+//    && JournalCanDiscardTo(v.ephemeral.journal, mapMod.SeqEnd(ifImage.mapadt))
 
     // Now that the disk journal is updated, we need to behead the
     // ephemeral journal, since interpretation want to CanFollow it
     // onto the persistent mapadt.
-    && var j' := journalMod.DiscardOld(v.ephemeral.journal, ifImage.mapadt.seqEnd);
+    && var j' := journalMod.DiscardOld(v.ephemeral.journal, mapMod.SeqEnd(ifImage.mapadt));
 
     && v' == v.(
         persistentImage := ifImage,
