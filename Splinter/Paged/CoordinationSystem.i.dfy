@@ -17,8 +17,8 @@ module CoordinationSystem(journalMod: JournalIfc, mapMod: MapIfc)  {
   import opened TotalKMMapMod
   import opened StampedMapMod // LSN TODO(jonh): move
 
-  import Async = CrashTolerantMapSpecMod.async
-  type UIOp = CrashTolerantMapSpecMod.UIOp
+  import Async = CrashTolerantMapSpecMod.uiopifc.async
+  type UIOp = CrashTolerantMapSpecMod.uiopifc.UIOp
 
   // TODO(jonh): plug in PagedMap here. Right now only exploring journal.
   type MapAdt = mapMod.Map
@@ -51,7 +51,7 @@ module CoordinationSystem(journalMod: JournalIfc, mapMod: MapIfc)  {
     }
   }
 
-  type SyncReqs = map<CrashTolerantMapSpecMod.SyncReqId, LSN>
+  type SyncReqs = map<CrashTolerantMapSpecMod.uiopifc.SyncReqId, LSN>
 
   datatype Ephemeral =
     | Unknown

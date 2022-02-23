@@ -33,7 +33,7 @@ module CoordinationSystemRefinement(journalMod: JournalIfc, mapMod: MapIfc) {
     mapMod.I(mapp)
   }
 
-  import Async = CrashTolerantMapSpecMod.async
+  import Async = CM.Async
   type Journal = MsgHistory
 
   function EphemeralSeqEnd(ephemeral: Ephemeral) : LSN
@@ -59,6 +59,11 @@ module CoordinationSystemRefinement(journalMod: JournalIfc, mapMod: MapIfc) {
       if lsn < stableLSN
       then CrashTolerantMapSpecMod.Forgotten
       else StampedMapToVersion(MapPlusHistory(base, msgHistory.DiscardRecent(lsn))))
+  }
+
+  function Ic() : CrashTolerantMapSpecMod.Constants
+  {
+    CrashTolerantMapSpecMod.Constants()
   }
 
   function I(v: Variables) : CrashTolerantMapSpecMod.Variables
@@ -406,7 +411,7 @@ module CoordinationSystemRefinement(journalMod: JournalIfc, mapMod: MapIfc) {
     requires NextStep(v, v', uiop, step);
     requires step.PutStep?
     ensures Inv(v')
-    ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
+    ensures CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop)
   {
     InvInductivePutStep(v, v', uiop, step);
 
@@ -421,7 +426,7 @@ module CoordinationSystemRefinement(journalMod: JournalIfc, mapMod: MapIfc) {
 
     assert forall i | IMap(v.persistentImage.mapadt).seqEnd<=i<|I(v).versions| :: j'.DiscardRecent(i) == j.DiscardRecent(i);  // Rob Power Trigger
 
-    assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // witness
+    assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // witness
   }
 
   lemma CommitStepRefines(v: Variables, v': Variables, uiop: UIOp, step: Step)
@@ -430,7 +435,7 @@ module CoordinationSystemRefinement(journalMod: JournalIfc, mapMod: MapIfc) {
     requires NextStep(v, v', uiop, step);
     requires step.CommitCompleteStep?
     ensures Inv(v')
-    ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
+    ensures CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop)
   {
     // See description & diagram in CommitStepPreservesHistory.
     InvInductive(v, v', uiop);
@@ -441,52 +446,52 @@ module CoordinationSystemRefinement(journalMod: JournalIfc, mapMod: MapIfc) {
         CommitStepPreservesHistory(v, v', uiop, step, i);
       }
     }
-    assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), UIOp.SyncOp);  // witness
+    assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), UIOp.SyncOp);  // witness
   }
 
   lemma {:timeLimitMultiplier 2} NextRefines(v: Variables, v': Variables, uiop: UIOp)
     requires Inv(v)
     requires Next(v, v', uiop)
     ensures Inv(v')
-    ensures CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop)
+    ensures CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop)
   {
     InvInductive(v, v', uiop);
 
     var step :| NextStep(v, v', uiop, step);
     match step {
       case LoadEphemeralFromPersistentStep() => {
-        assert uiop == CrashTolerantMapSpecMod.NoopOp;
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        assert uiop == UIOp.NoopOp;
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
       case RecoverStep(puts) => {
-        assert uiop == CrashTolerantMapSpecMod.NoopOp;
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        assert uiop == UIOp.NoopOp;
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
       case AcceptRequestStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
       case QueryStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
       case PutStep() => {
         PutStepRefines(v, v', uiop, step);
       }
       case DeliverReplyStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
 //    case JournalInternalStep(sk) => { assert Inv(v'); }
 //    case SplinterTreeInternalStep(sk) => { assert Inv(v'); }
       case ReqSyncStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
       case ReplySyncStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
       case FreezeMapAdtStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
       case CommitStartStep(seqBoundary) => {
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
       case CommitCompleteStep() => { CommitStepRefines(v, v', uiop, step); }
       case CrashStep() => {
@@ -495,10 +500,10 @@ module CoordinationSystemRefinement(journalMod: JournalIfc, mapMod: MapIfc) {
           assert forall lsn | IMap(v.persistentImage.mapadt).seqEnd <= lsn < stableLSN :: true; // trigger
           assert IPJ(v'.persistentImage.journal).DiscardRecent(stableLSN) == IEJ(v.ephemeral.journal).DiscardRecent(stableLSN); // trigger
         }
-        assert CrashTolerantMapSpecMod.NextStep(I(v), I(v'), uiop); // case boilerplate
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
     }
-    assert CrashTolerantMapSpecMod.Next(I(v), I(v'), uiop);
+    assert CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop);
   }
 }
 
