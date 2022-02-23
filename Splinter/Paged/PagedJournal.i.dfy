@@ -3,8 +3,13 @@ include "JournalIfc.i.dfy"
 module PagedJournal refines JournalIfc {
   import opened Sequences
 
-  // This module constructs a journal out of a chain of page-sized journal records.
+  // This PagedJournal module constructs a journal out of a chain of page-sized
+  // journal records.
+  //
   // It satisfyies JournalIfc, so it can enjoy the PagedSystemRefinement result.
+
+  /////////////////////////////////////////////////////////////////////////////
+  // A journal is a linked list of these JournalRecords.
 
   datatype JournalRecord = JournalRecord(
     messageSeq: MsgHistory,
@@ -20,7 +25,139 @@ module PagedJournal refines JournalIfc {
     }
   }
 
-  // Does a JournalRecord begin a sensible linked list?
+  // A TruncatedJournal is some long chain but which we ignore beyond the boundaryLSN
+  // (because we have a map telling us that part of the history).
+  // In the refinement layer below, we'll have some situations where the disk has extra
+  // journal records, but we'll ignore them in the refinement (since we never read them)
+  // and instead supply a None? for the interpretation at this layer.
+  // That's what keeps us out of trouble when those un-read pages get reclaimed -- we don't
+  // want to have to say we can interpret them.
+  datatype TruncatedJournal = TruncatedJournal(
+    boundaryLSN : LSN,  // exclusive: lsns <= boundaryLSN are discarded
+    freshestRec: Option<JournalRecord>)
+  {
+    function prior() : TruncatedJournal
+      requires freshestRec.Some?
+    {
+      TruncatedJournal(boundaryLSN, freshestRec.value.priorRec)
+    }
+
+    function BuildReceiptTJ() : Receipt
+    {
+      BuildReceipt(boundaryLSN, freshestRec)
+    }
+
+    predicate WF() {
+      && var receipt := BuildReceiptTJ();
+      && receipt.TJValid()
+    }
+
+    predicate Empty()
+    requires WF()
+    {
+      freshestRec.None?
+    }
+
+    function SeqEnd() : LSN
+      requires WF()
+      requires !Empty()
+    {
+      freshestRec.value.messageSeq.seqEnd
+    }
+
+    function I() : MsgHistory
+      requires WF()
+    {
+      BuildReceiptTJ().I()
+    }
+
+    function DiscardOldDefn(lsn: LSN) : (out:TruncatedJournal)
+      requires WF()
+      requires I().CanDiscardTo(lsn)
+    {
+      if freshestRec.None? || lsn == freshestRec.value.messageSeq.seqEnd
+      then TruncatedJournal(lsn, None)
+      else TruncatedJournal(lsn, freshestRec)
+    }
+
+    function DiscardOld(lsn: LSN) : (out:TruncatedJournal)
+      requires WF()
+      requires I().CanDiscardTo(lsn)
+      ensures out.WF()
+      ensures out.I() == I().DiscardOld(lsn)
+    {
+      var out := DiscardOldDefn(lsn);
+      assert out.WF() && out.I() == I().DiscardOld(lsn) by {
+        var discardReceipt := BuildReceiptTJ().DiscardOld(lsn);
+        out.BuildReceiptTJ().ReceiptsUnique(discardReceipt);
+      }
+      out
+    }
+
+    // msgs appears as the (boundary-truncated) contents of the i'th entry in the
+    // receipt
+    predicate IncludesSubseqAt(msgs: MsgHistory, i: nat)
+      requires WF()
+      requires msgs.WF()
+    {
+      && i < |BuildReceiptTJ().lines|
+      && BuildReceiptTJ().MessageSeqAt(i).IncludesSubseq(msgs)
+    }
+
+    lemma SubseqOfEntireInterpretation(msgs: MsgHistory, i: nat)
+      requires WF()
+      requires msgs.WF()
+      requires IncludesSubseqAt(msgs, i)
+      ensures I().IncludesSubseq(msgs)
+    {
+      // Propagate subseq relation inductively down the receipt
+      var receipt := BuildReceiptTJ();
+      receipt.TJFacts();
+      var j:=i;
+      assert receipt.OneLinkedInterpretation(j) by { receipt.reveal_LinkedInterpretations(); }
+
+      while j<|receipt.lines|-1
+        invariant j<|receipt.lines|
+        invariant var jint := receipt.lines[j].interpretation;
+              && jint.Some?  && jint.value.WF() && jint.value.IncludesSubseq(msgs)
+      {
+        assert receipt.OneLinkedInterpretation(j+1) by { receipt.reveal_LinkedInterpretations(); }
+        j:=j+1;
+      }
+    }
+
+    lemma LsnBelongs(lsn: LSN)
+      requires BuildReceiptTJ().TJValid()
+      requires !Empty()
+      requires boundaryLSN <= lsn < SeqEnd()
+      ensures lsn in BuildReceiptTJ().I().LSNSet()
+      decreases freshestRec
+    {
+      if lsn < Last(BuildReceiptTJ().lines).journalRec.messageSeq.seqStart {
+        // If it's not it in the last journal record, it's gotta be in here
+        // somewhere. Look upstream.
+        prior().LsnBelongs(lsn);
+      }
+    }
+  } // datatype TruncatedJournal
+
+  type PersistentJournal = TruncatedJournal
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Receipt framework
+  //
+  // A Valid() Receipt is evidence that a JournalRecord does or does not
+  // contain a sensible linked list.
+  //
+  // A TJValid() Receipt is evidence that the JournalRecord DOES contain
+  // a sensible linked list.
+  //
+  // BuildReceipt is evidence that every TruncatedJournal has a Valid receipt.
+  //
+  // ReceiptsUnique says that any two Valid receipts for the same
+  //   TruncatedJournal are identical, so the one you Build matches the
+  //   one you get by snipping a line off of another receipt.
+  ////////////////////////////////////////////////////////////////////////////
 
   datatype ReceiptLine = ReceiptLine(
     journalRec: JournalRecord,
@@ -532,123 +669,10 @@ module PagedJournal refines JournalIfc {
         out
   } // BuildReceipt
 
-  // A TruncatedJournal is some long chain but which we ignore beyond the boundaryLSN
-  // (because we have a map telling us that part of the history).
-  // In the refinement layer below, we'll have some situations where the disk has extra
-  // journal records, but we'll ignore them in the refinement (since we never read them)
-  // and instead supply a None? for the interpretation at this layer.
-  // That's what keeps us out of trouble when those un-read pages get reclaimed -- we don't
-  // want to have to say we can interpret them.
-  datatype TruncatedJournal = TruncatedJournal(
-    boundaryLSN : LSN,  // exclusive: lsns <= boundaryLSN are discarded
-    freshestRec: Option<JournalRecord>)
-  {
-    function prior() : TruncatedJournal
-      requires freshestRec.Some?
-    {
-      TruncatedJournal(boundaryLSN, freshestRec.value.priorRec)
-    }
-
-    function BuildReceiptTJ() : Receipt
-    {
-      BuildReceipt(boundaryLSN, freshestRec)
-    }
-
-    predicate WF() {
-      && var receipt := BuildReceiptTJ();
-      && receipt.TJValid()
-    }
-
-    predicate Empty()
-    requires WF()
-    {
-      freshestRec.None?
-    }
-
-    function SeqEnd() : LSN
-      requires WF()
-      requires !Empty()
-    {
-      freshestRec.value.messageSeq.seqEnd
-    }
-
-    function I() : MsgHistory
-      requires WF()
-    {
-      BuildReceiptTJ().I()
-    }
-
-    function DiscardOldDefn(lsn: LSN) : (out:TruncatedJournal)
-      requires WF()
-      requires I().CanDiscardTo(lsn)
-    {
-      if freshestRec.None? || lsn == freshestRec.value.messageSeq.seqEnd
-      then TruncatedJournal(lsn, None)
-      else TruncatedJournal(lsn, freshestRec)
-    }
-
-    function DiscardOld(lsn: LSN) : (out:TruncatedJournal)
-      requires WF()
-      requires I().CanDiscardTo(lsn)
-      ensures out.WF()
-      ensures out.I() == I().DiscardOld(lsn)
-    {
-      var out := DiscardOldDefn(lsn);
-      assert out.WF() && out.I() == I().DiscardOld(lsn) by {
-        var discardReceipt := BuildReceiptTJ().DiscardOld(lsn);
-        out.BuildReceiptTJ().ReceiptsUnique(discardReceipt);
-      }
-      out
-    }
-
-    // msgs appears as the (boundary-truncated) contents of the i'th entry in the
-    // receipt
-    predicate IncludesSubseqAt(msgs: MsgHistory, i: nat)
-      requires WF()
-      requires msgs.WF()
-    {
-      && i < |BuildReceiptTJ().lines|
-      && BuildReceiptTJ().MessageSeqAt(i).IncludesSubseq(msgs)
-    }
-
-    lemma SubseqOfEntireInterpretation(msgs: MsgHistory, i: nat)
-      requires WF()
-      requires msgs.WF()
-      requires IncludesSubseqAt(msgs, i)
-      ensures I().IncludesSubseq(msgs)
-    {
-      // Propagate subseq relation inductively down the receipt
-      var receipt := BuildReceiptTJ();
-      receipt.TJFacts();
-      var j:=i;
-      assert receipt.OneLinkedInterpretation(j) by { receipt.reveal_LinkedInterpretations(); }
-
-      while j<|receipt.lines|-1
-        invariant j<|receipt.lines|
-        invariant var jint := receipt.lines[j].interpretation;
-              && jint.Some?  && jint.value.WF() && jint.value.IncludesSubseq(msgs)
-      {
-        assert receipt.OneLinkedInterpretation(j+1) by { receipt.reveal_LinkedInterpretations(); }
-        j:=j+1;
-      }
-    }
-
-    lemma LsnBelongs(lsn: LSN)
-      requires BuildReceiptTJ().TJValid()
-      requires !Empty()
-      requires boundaryLSN <= lsn < SeqEnd()
-      ensures lsn in BuildReceiptTJ().I().LSNSet()
-      decreases freshestRec
-    {
-      if lsn < Last(BuildReceiptTJ().lines).journalRec.messageSeq.seqStart {
-        // If it's not it in the last journal record, it's gotta be in here
-        // somewhere. Look upstream.
-        prior().LsnBelongs(lsn);
-      }
-    }
-  } // datatype TruncatedJournal
-
-  type PersistentJournal = TruncatedJournal
+  /////////////////////////////////////////////////////////////////////////////
+  // EphemeralJournal is an TruncatedJournal with an extra unmarshalledTail
+  // field to represent entries we have collected in memory but not marhsalled
+  // into a JournalRecord yet.
 
   datatype EphemeralJournal = EphemeralJournal(
     truncatedJournal: TruncatedJournal,
@@ -700,6 +724,9 @@ module PagedJournal refines JournalIfc {
       else truncatedJournal.freshestRec.value.messageSeq.seqEnd
     }
   }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // implementation of JournalIfc obligations
 
   predicate PWF(pj: PersistentJournal) {
     pj.WF()
