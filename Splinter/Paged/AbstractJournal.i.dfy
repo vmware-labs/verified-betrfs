@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "CoordinationSystemRefinement.i.dfy"
+include "JournalIfc.i.dfy"
 
 module AbstractJournal refines JournalIfc {
   type PersistentJournal = MsgHistory

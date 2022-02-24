@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "CoordinationSystemRefinement.i.dfy"
+include "MapIfc.i.dfy"
 
 module AbstractMap refines MapIfc {
   type Map = StampedMap
