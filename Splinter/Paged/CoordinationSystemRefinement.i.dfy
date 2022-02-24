@@ -16,6 +16,7 @@ module CoordinationSystemRefinement(journalMod: JournalIfc, mapMod: MapIfc) {
   import opened KeyType
   import opened ValueMessage
   import opened TotalKMMapMod
+  import opened LSNMod
   import MapSpecMod
 
 //  import opened JM = journalMod // Sadly this trick doesn't work if we refine this module; the synonym throws off the module-functor system.

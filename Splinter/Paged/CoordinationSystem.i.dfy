@@ -15,12 +15,11 @@ module CoordinationSystem(journalMod: JournalIfc, mapMod: MapIfc)  {
   import opened KeyType
   import opened ValueMessage
   import opened TotalKMMapMod
-  import opened StampedMapMod // LSN TODO(jonh): move
+  import opened LSNMod
 
   import Async = CrashTolerantMapSpecMod.uiopifc.async
   type UIOp = CrashTolerantMapSpecMod.uiopifc.UIOp
 
-  // TODO(jonh): plug in PagedMap here. Right now only exploring journal.
   type MapAdt = mapMod.Map
   type Journal = journalMod.PersistentJournal
 

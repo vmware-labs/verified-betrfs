@@ -10,6 +10,7 @@ abstract module MapIfc {
   import opened MsgHistoryMod
   import opened ValueMessage
   import opened KeyType
+  import opened LSNMod
 
   type Map(==,!new)
 
