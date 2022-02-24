@@ -6,7 +6,7 @@ include "MsgHistory.i.dfy"
 abstract module JournalIfc {
   import opened Options
   import opened MsgHistoryMod
-  import opened StampedMapMod // LSN TODO(jonh): move
+  import opened LSNMod
 
   // TODO(jonh): Recover and document why these are different types.
   type PersistentJournal(==,!new)

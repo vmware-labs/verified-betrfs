@@ -1,16 +1,13 @@
 include "JournalIfc.i.dfy"
 
-module PagedJournal refines JournalIfc {
+module PagedJournalIfc {
+  import opened Options
+  import opened MsgHistoryMod
+  import opened LSNMod
   import opened Sequences
-
-  // This PagedJournal module constructs a journal out of a chain of page-sized
-  // journal records.
-  //
-  // It satisfyies JournalIfc, so it can enjoy the PagedSystemRefinement result.
 
   /////////////////////////////////////////////////////////////////////////////
   // A journal is a linked list of these JournalRecords.
-
   datatype JournalRecord = JournalRecord(
     messageSeq: MsgHistory,
     priorRec: Option<JournalRecord>
@@ -140,8 +137,6 @@ module PagedJournal refines JournalIfc {
       }
     }
   } // datatype TruncatedJournal
-
-  type PersistentJournal = TruncatedJournal
 
   ////////////////////////////////////////////////////////////////////////////
   // Receipt framework
@@ -669,33 +664,117 @@ module PagedJournal refines JournalIfc {
         out
   } // BuildReceipt
 
+  type JournalRecordType(!new,==)
+  predicate JR_WF(self: JournalRecordType)
+  function JR_I(self: JournalRecordType) : JournalRecord
+    requires JR_WF(self)
+
+  type TruncatedJournalType(!new,==)
+  predicate TJ_WF(self: TruncatedJournalType)
+  function TJ_I(self: TruncatedJournalType) : (out: TruncatedJournal)
+    requires TJ_WF(self)
+    ensures out.WF()
+
+  function TJ_EmptyAt(lsn: LSN) : (out:TruncatedJournalType)
+    ensures TJ_WF(out)
+    ensures TJ_WF(out)
+    ensures TJ_I(out).I().EmptyHistory?
+    ensures TJ_I(out).boundaryLSN == lsn
+    ensures TJ_I(out).freshestRec.None?
+
+  function TJ_Mkfs() : (out:TruncatedJournalType)
+    ensures TJ_WF(out)
+    ensures TJ_I(out).I().EmptyHistory?
+  {
+    TJ_EmptyAt(0)
+  }
+
+  function TJ_DiscardOld(self: TruncatedJournalType, lsn: LSN) : (out:TruncatedJournalType)
+    requires TJ_WF(self)
+    requires TJ_I(self).I().CanDiscardTo(lsn)
+    ensures TJ_WF(out)
+    ensures TJ_I(out) == TJ_I(self).DiscardOld(lsn)
+
+  predicate TJ_CanDiscardRecentAtLine(self: TruncatedJournalType, i: nat)
+    requires TJ_WF(self)
+  {
+    && var receipt := TJ_I(self).BuildReceiptTJ();
+    && i < |receipt.lines|
+//    && assert receipt.lines[i].journalRec.messageSeq.MsgHistory? by { receipt.JournalRecsAllWF(); }
+  }
+
+  function TJ_DiscardRecent(self: TruncatedJournalType, i: nat) : (out:TruncatedJournalType)
+    requires TJ_WF(self)
+    requires TJ_CanDiscardRecentAtLine(self, i)
+    ensures TJ_WF(out)
+    ensures
+      var receipt := TJ_I(self).BuildReceiptTJ();
+      TJ_I(out) == TruncatedJournal(TJ_I(self).boundaryLSN, Some(receipt.lines[i].journalRec))
+
+  function TJ_AppendNewBoundary(self: TruncatedJournalType, msgs: MsgHistory) : (out:LSN)
+    requires TJ_WF(self)
+    requires msgs.MsgHistory?
+  {
+      if TJ_I(self).freshestRec.None?  // if tj is empty, its boundary is nonsense.
+      then msgs.seqStart
+      else TJ_I(self).boundaryLSN
+  }
+
+  function TJ_AppendRecord(self: TruncatedJournalType, msgs: MsgHistory) : (out:TruncatedJournalType)
+    requires TJ_WF(self)
+    requires msgs.MsgHistory?
+    requires TJ_I(self).Empty() || msgs.CanFollow(TJ_I(self).SeqEnd())
+    ensures TJ_WF(out)
+    ensures TJ_I(out) == TruncatedJournal(
+      TJ_AppendNewBoundary(self, msgs),
+      Some(JournalRecord(msgs, TJ_I(self).freshestRec)))
+}
+
+module PagedJournal(pages: PagedJournalIfc) refines JournalIfc {
+  import opened Sequences
+  import opened PagedJournalIfc
+
+  // This PagedJournal module constructs a journal out of a chain of page-sized
+  // journal records.
+  //
+  // It satisfyies JournalIfc, so it can enjoy the PagedSystemRefinement result.
+
+  type PersistentJournal = pages.TruncatedJournalType
+
   /////////////////////////////////////////////////////////////////////////////
   // EphemeralJournal is an TruncatedJournal with an extra unmarshalledTail
   // field to represent entries we have collected in memory but not marhsalled
   // into a JournalRecord yet.
 
   datatype EphemeralJournal = EphemeralJournal(
-    truncatedJournal: TruncatedJournal,
+    truncatedJournal: TruncatedJournalType,
     unmarshalledTail: MsgHistory
   )
   {
+    function tji() : TruncatedJournal
+      requires TJ_WF(truncatedJournal)
+    {
+      TJ_I(truncatedJournal)
+    }
+
     predicate WF() {
-      && truncatedJournal.WF()
+      && TJ_WF(truncatedJournal)
       && unmarshalledTail.WF()
       && (unmarshalledTail.MsgHistory? ==>
-          truncatedJournal.I().CanConcat(unmarshalledTail)
+          tji().I().CanConcat(unmarshalledTail)
          )
     }
 
     function I() : MsgHistory
       requires WF()
     {
-      truncatedJournal.I().Concat(unmarshalledTail)
+      tji().I().Concat(unmarshalledTail)
     }
 
     predicate Empty()
+      requires TJ_WF(truncatedJournal)
     {
-      && truncatedJournal.freshestRec.None?
+      && tji().freshestRec.None?
       && unmarshalledTail.EmptyHistory?
     }
 
@@ -704,12 +783,12 @@ module PagedJournal refines JournalIfc {
       requires !Empty()
       ensures SeqStart() == I().seqStart
     {
-      var out := if truncatedJournal.freshestRec.Some?
-        then truncatedJournal.boundaryLSN
+      var out := if tji().freshestRec.Some?
+        then tji().boundaryLSN
         else unmarshalledTail.seqStart;
       assert out == I().seqStart by {
-        if truncatedJournal.freshestRec.Some? {
-          truncatedJournal.BuildReceiptTJ().BoundaryLSN();
+        if tji().freshestRec.Some? {
+          tji().BuildReceiptTJ().BoundaryLSN();
         }
       }
       out
@@ -721,7 +800,7 @@ module PagedJournal refines JournalIfc {
     {
       if unmarshalledTail.MsgHistory?
       then unmarshalledTail.seqEnd
-      else truncatedJournal.freshestRec.value.messageSeq.seqEnd
+      else tji().freshestRec.value.messageSeq.seqEnd
     }
   }
 
@@ -729,14 +808,14 @@ module PagedJournal refines JournalIfc {
   // implementation of JournalIfc obligations
 
   predicate PWF(pj: PersistentJournal) {
-    pj.WF()
+    TJ_WF(pj)
   }
 
   predicate EWF(ej: EphemeralJournal) {
     ej.WF()
   }
 
-  function IPJ(pj: PersistentJournal) : (out:MsgHistory) { pj.I() }
+  function IPJ(pj: PersistentJournal) : (out:MsgHistory) { TJ_I(pj).I() }
 
   function IEJ(ej: EphemeralJournal) : (out:MsgHistory) { ej.I() }
 
@@ -744,7 +823,7 @@ module PagedJournal refines JournalIfc {
     //ensures PWF(out)
     //ensures IPJ(out).EmptyHistory?
   {
-    TruncatedJournal(0, None)
+    TJ_Mkfs()
   }
 
   function LoadJournal(pj: PersistentJournal) : (out:EphemeralJournal)
@@ -758,11 +837,12 @@ module PagedJournal refines JournalIfc {
   function PJournalSeqEnd(pj: PersistentJournal) : Option<LSN>
     // ensures out.Some? == IPJ(pj).MsgHistory?
   {
+    // TODO(jonh): export to interface to avoid calls through TJ_I?
     if
-      || pj.freshestRec.None?
-      || pj.boundaryLSN == pj.freshestRec.value.messageSeq.seqEnd
+      || TJ_I(pj).freshestRec.None?
+      || TJ_I(pj).boundaryLSN == TJ_I(pj).freshestRec.value.messageSeq.seqEnd
     then None
-    else Some(pj.freshestRec.value.messageSeq.seqEnd)
+    else Some(TJ_I(pj).freshestRec.value.messageSeq.seqEnd)
   }
 
   predicate JournalIncludesSubseq(ej: EphemeralJournal, msgs: MsgHistory)
@@ -770,11 +850,12 @@ module PagedJournal refines JournalIfc {
     //requires msgs.WF()
   {
     // subseq appears in committed pages
-    var out := (exists i :: ej.truncatedJournal.IncludesSubseqAt(msgs, i));
+    // TODO(jonh): export to interface to avoid calls through TJ_I?
+    var out := (exists i :: ej.tji().IncludesSubseqAt(msgs, i));
     assert out ==> IEJ(ej).IncludesSubseq(msgs) by {
       if out {
-        var i :| ej.truncatedJournal.IncludesSubseqAt(msgs, i);
-        ej.truncatedJournal.SubseqOfEntireInterpretation(msgs, i);
+        var i :| ej.tji().IncludesSubseqAt(msgs, i);
+        ej.tji().SubseqOfEntireInterpretation(msgs, i);
       }
     }
     out
@@ -786,6 +867,7 @@ module PagedJournal refines JournalIfc {
 
   function EJournalSeqEnd(ej: EphemeralJournal) : Option<LSN>
   {
+    // TODO(jonh): export to interface to avoid calls through TJ_I?
     if ej.unmarshalledTail.MsgHistory?
     then Some(ej.unmarshalledTail.seqEnd)
     else PJournalSeqEnd(ej.truncatedJournal)
@@ -815,14 +897,14 @@ module PagedJournal refines JournalIfc {
     then
       EphemeralJournal(Mkfs(), ej.unmarshalledTail.DiscardOld(lsn))
     else
-      EphemeralJournal(ej.truncatedJournal.DiscardOld(lsn), ej.unmarshalledTail)
+      EphemeralJournal(TJ_DiscardOld(ej.truncatedJournal, lsn), ej.unmarshalledTail)
   }
 
   predicate JournalCanFreezeAt(ej: EphemeralJournal, startLsn: LSN, endLsn: LSN, i: nat)
     requires ej.WF()
   {
     // Can't freeze anything in unmarshalledTail yet!
-    && var tj := ej.truncatedJournal;
+    && var tj := ej.tji();
     // Anything we freeze must start no later than journal is already truncated.
     && tj.boundaryLSN <= startLsn
     // And must end at an existing page boundary.
@@ -848,7 +930,7 @@ module PagedJournal refines JournalIfc {
   {
     if JournalCanFreezeInternal(ej, startLsn, endLsn) && startLsn < endLsn {
       var i:nat :| JournalCanFreezeAt(ej, startLsn, endLsn, i);
-      var tj := ej.truncatedJournal;
+      var tj := ej.tji();
 
       // endLsn-1 is in the interp, so we can discard to endLsn
       var receipt := tj.BuildReceiptTJ();
@@ -876,16 +958,16 @@ module PagedJournal refines JournalIfc {
     JournalFreezeLemma(ej, startLsn, endLsn);
     if startLsn==endLsn
     then
-      var out := TruncatedJournal(startLsn, None);
+      var out := TJ_EmptyAt(startLsn);
       out
     else
-      var tj := ej.truncatedJournal;
+      var tj := ej.tji();
       var receipt := tj.BuildReceiptTJ();
       var i:nat :| JournalCanFreezeAt(ej, startLsn, endLsn, i);
 
-      var discardRecent := TruncatedJournal(tj.boundaryLSN, Some(receipt.lines[i].journalRec));
-      receipt.AbbreviatedReceiptTJValid(i, endLsn, discardRecent);
-      var out := discardRecent.DiscardOld(startLsn);
+      var discardRecent := TJ_DiscardRecent(ej.truncatedJournal, i);
+      receipt.AbbreviatedReceiptTJValid(i, endLsn, TJ_I(discardRecent));
+      var out := TJ_DiscardOld(discardRecent, startLsn);
       out
   }
 
@@ -902,14 +984,9 @@ module PagedJournal refines JournalIfc {
     ensures EWF(out)
     ensures IEJ(out) == IEJ(ej)
   {
-    // Construct the new record with the cut-out section of the unmarshalled tail.
-    var newRec := JournalRecord(ej.unmarshalledTail.DiscardRecent(cut), ej.truncatedJournal.freshestRec);
-    // Build up a new TruncatedJournal that adds the new record to the old chain.
-    var newBoundary :=
-      if ej.truncatedJournal.freshestRec.None?  // if tj is empty, its boundary is nonsense.
-      then ej.unmarshalledTail.seqStart
-      else ej.truncatedJournal.boundaryLSN;
-    var tj := TruncatedJournal(newBoundary, Some(newRec));
+    var marshalledMsgs := ej.unmarshalledTail.DiscardRecent(cut);
+    var tj := TJ_AppendRecord(ej.truncatedJournal, marshalledMsgs);
+
     // The new unmarshalled tail is what's left after the cut
     var out := EphemeralJournal(tj, ej.unmarshalledTail.DiscardOld(cut));
     out
