@@ -39,5 +39,7 @@ abstract module MapIfc {
 
   function Query(mapp: Map, key: Key) : (out: Value)
     requires WF(mapp)
-    ensures assert TotalKMMapMod.AnyKey(key); out == I(mapp).mi[key].value
+    ensures
+      assert TotalKMMapMod.AnyKey(key); // trigger to deref mi
+      out == I(mapp).mi[key].value
 }

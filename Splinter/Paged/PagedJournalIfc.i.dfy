@@ -668,12 +668,16 @@ module PagedJournalIfc {
   } // BuildReceipt
 
   type JournalRecordType(!new,==)
+
   predicate JR_WF(self: JournalRecordType)
+
   function JR_I(self: JournalRecordType) : JournalRecord
     requires JR_WF(self)
 
   type TruncatedJournalType(!new,==)
+
   predicate TJ_WF(self: TruncatedJournalType)
+
   function TJ_I(self: TruncatedJournalType) : (out: TruncatedJournal)
     requires TJ_WF(self)
     ensures out.WF()
