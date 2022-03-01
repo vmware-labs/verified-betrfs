@@ -5,10 +5,7 @@ include "PagedJournalIfc.i.dfy"
 
 // The plan is something that refines to a TruncatedJournal.
 
-module LinkedJournal {
-  import opened Options
-  import opened MsgHistoryMod
-  import opened LSNMod
+module LinkedJournal refines PagedJournalIfc {
   import PagedJournalIfc
 
   type Pointer(==,!new)
@@ -56,66 +53,42 @@ module LinkedJournal {
 
   predicate JR_WF(self: JournalRecordType)
 
-  function JR_I(self: JournalRecordType) : PagedJournalIfc.JournalRecord
-    requires JR_WF(self)
+  function JR_I(self: JournalRecordType) : JournalRecord
+    //requires JR_WF(self)
 
   predicate TJ_WF(self: TruncatedJournalType)
 
-  function TJ_I(self: TruncatedJournalType) : (out: PagedJournalIfc.TruncatedJournal)
-    requires TJ_WF(self)
-    ensures out.WF()
+  function TJ_I(self: TruncatedJournalType) : (out: TruncatedJournal)
+    //requires TJ_WF(self)
+    //ensures out.WF()
 
   function TJ_EmptyAt(lsn: LSN) : (out:TruncatedJournalType)
-    ensures TJ_WF(out)
-    ensures TJ_WF(out)
-    ensures TJ_I(out).I().EmptyHistory?
-    ensures TJ_I(out).boundaryLSN == lsn
-    ensures TJ_I(out).freshestRec.None?
-
-  function TJ_Mkfs() : (out:TruncatedJournalType)
-    ensures TJ_WF(out)
-    ensures TJ_I(out).I().EmptyHistory?
-  {
-    TJ_EmptyAt(0)
-  }
+    //ensures TJ_WF(out)
+    //ensures TJ_WF(out)
+    //ensures TJ_I(out).I().EmptyHistory?
+    //ensures TJ_I(out).boundaryLSN == lsn
+    //ensures TJ_I(out).freshestRec.None?
 
   function TJ_DiscardOld(self: TruncatedJournalType, lsn: LSN) : (out:TruncatedJournalType)
-    requires TJ_WF(self)
-    requires TJ_I(self).I().CanDiscardTo(lsn)
-    ensures TJ_WF(out)
-    ensures TJ_I(out) == TJ_I(self).DiscardOld(lsn)
-
-  predicate TJ_CanDiscardRecentAtLine(self: TruncatedJournalType, i: nat)
-    requires TJ_WF(self)
-  {
-    && var receipt := TJ_I(self).BuildReceiptTJ();
-    && i < |receipt.lines|
-//    && assert receipt.lines[i].journalRec.messageSeq.MsgHistory? by { receipt.JournalRecsAllWF(); }
-  }
+    //requires TJ_WF(self)
+    //requires TJ_I(self).I().CanDiscardTo(lsn)
+    //ensures TJ_WF(out)
+    //ensures TJ_I(out) == TJ_I(self).DiscardOld(lsn)
 
   function TJ_DiscardRecent(self: TruncatedJournalType, i: nat) : (out:TruncatedJournalType)
-    requires TJ_WF(self)
-    requires TJ_CanDiscardRecentAtLine(self, i)
-    ensures TJ_WF(out)
-    ensures
-      var receipt := TJ_I(self).BuildReceiptTJ();
-      TJ_I(out) == PagedJournalIfc.TruncatedJournal(TJ_I(self).boundaryLSN, Some(receipt.lines[i].journalRec))
-
-  function TJ_AppendNewBoundary(self: TruncatedJournalType, msgs: MsgHistory) : (out:LSN)
-    requires TJ_WF(self)
-    requires msgs.MsgHistory?
-  {
-      if TJ_I(self).freshestRec.None?  // if tj is empty, its boundary is nonsense.
-      then msgs.seqStart
-      else TJ_I(self).boundaryLSN
-  }
+    //requires TJ_WF(self)
+    //requires TJ_CanDiscardRecentAtLine(self, i)
+    //ensures TJ_WF(out)
+    //ensures
+    //  var receipt := TJ_I(self).BuildReceiptTJ();
+    //  TJ_I(out) == TruncatedJournal(TJ_I(self).boundaryLSN, Some(receipt.lines[i].journalRec))
 
   function TJ_AppendRecord(self: TruncatedJournalType, msgs: MsgHistory) : (out:TruncatedJournalType)
-    requires TJ_WF(self)
-    requires msgs.MsgHistory?
-    requires TJ_I(self).Empty() || msgs.CanFollow(TJ_I(self).SeqEnd())
-    ensures TJ_WF(out)
-    ensures TJ_I(out) == PagedJournalIfc.TruncatedJournal(
-      TJ_AppendNewBoundary(self, msgs),
-      Some(PagedJournalIfc.JournalRecord(msgs, TJ_I(self).freshestRec)))
+    //requires TJ_WF(self)
+    //requires msgs.MsgHistory?
+    //requires TJ_I(self).Empty() || msgs.CanFollow(TJ_I(self).SeqEnd())
+    //ensures TJ_WF(out)
+    //ensures TJ_I(out) == TruncatedJournal(
+    //  TJ_AppendNewBoundary(self, msgs),
+    //  Some(JournalRecord(msgs, TJ_I(self).freshestRec)))
 }
