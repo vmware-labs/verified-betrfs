@@ -11,20 +11,15 @@ module LinkedJournal refines PagedJournalIfc {
   type Pointer(==,!new)
 
   datatype CacheView = CacheView(entries: map<Pointer, JournalRecordType>) {
-    function I(opointer: Option<Pointer>, used: set<Pointer>) : Option<PagedJournalIfc.JournalRecord>
-      decreases entries.Keys - used
+    function I(pointer: Pointer, used: set<Pointer>) : Option<JournalRecord>
+      decreases entries.Keys - used, 0
     {
-      if opointer.None?
-      then None
-      else
-      var pointer := opointer.value;
       if pointer in used
       then None // Pointer cycle; fail.
       else if pointer !in entries
       then None
       else
-        var entry := entries[pointer];
-        Some(PagedJournalIfc.JournalRecord(entry.messageSeq, I(entry.priorRec, used + {pointer})))
+        entries[pointer].CacheI(this, used + {pointer})
     }
   }
 
@@ -33,15 +28,26 @@ module LinkedJournal refines PagedJournalIfc {
     messageSeq: MsgHistory,
     priorRec: Option<Pointer>
   )
+  {
+    function CacheI(cacheView: CacheView, used: set<Pointer>) : Option<JournalRecord>
+      decreases cacheView.entries.Keys - used, 1
+    {
+      Some(JournalRecord(messageSeq,
+        if priorRec.None?  then None
+        else cacheView.I(priorRec.value, used)))
+    }
+  }
 
   datatype TruncatedJournalType = TruncatedJournalType(
     boundaryLSN : LSN,  // exclusive: lsns <= boundaryLSN are discarded
     freshestRec: Option<Pointer>,
     cacheView: CacheView)
   {
-    function I() : PagedJournalIfc.TruncatedJournal
+    function I() : TruncatedJournal
     {
-      PagedJournalIfc.TruncatedJournal(boundaryLSN, cacheView.I(freshestRec, {}))
+      TruncatedJournal(boundaryLSN,
+        if freshestRec.None? then None
+        else cacheView.I(freshestRec.value, {}))
     }
   }
 
@@ -55,9 +61,6 @@ module LinkedJournal refines PagedJournalIfc {
   {
     && self.messageSeq.WF()
   }
-
-  function JR_I(self: JournalRecordType) : JournalRecord
-    //requires JR_WF(self)
 
   predicate TJ_WF(self: TruncatedJournalType)
 
