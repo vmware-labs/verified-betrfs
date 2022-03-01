@@ -52,6 +52,9 @@ module LinkedJournal refines PagedJournalIfc {
   }
 
   predicate JR_WF(self: JournalRecordType)
+  {
+    && self.messageSeq.WF()
+  }
 
   function JR_I(self: JournalRecordType) : JournalRecord
     //requires JR_WF(self)
