@@ -681,7 +681,6 @@ module PagedJournalIfc {
 
   function TJ_EmptyAt(lsn: LSN) : (out:TruncatedJournalType)
     ensures TJ_WF(out)
-    ensures TJ_WF(out)
     ensures TJ_I(out).I().EmptyHistory?
     ensures TJ_I(out).boundaryLSN == lsn
     ensures TJ_I(out).freshestRec.None?
