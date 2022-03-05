@@ -413,12 +413,16 @@ module Marshalling {
     assert TypeProvidesModel(v, typed); // WITNESS
   }
 
+  function TheTypedDisk(v: Variables): FraringCyclicity.Disk
+    requires Inv(v)
+  {
+    var typed :| TypeProvidesModel(v, typed); typed
+  }
+
   function I(v: Variables) : FraringCyclicity.Variables
     requires Inv(v)
   {
-    var typed :| TypeProvidesModel(v, typed);
-    var fv := FraringCyclicity.Variables(typed, v.a, v.b);
-    fv
+    FraringCyclicity.Variables(TheTypedDisk(v), v.a, v.b)
   }
 
   lemma InvConsA(v: Variables, v': Variables, x: int, addr: Address)
@@ -427,7 +431,7 @@ module Marshalling {
     ensures Inv(v')
   {
     var fv' := FraringCyclicity.ConsAFunc(I(v), x, addr);
-    FraringCyclicity.InvConsA(fv, fv', x, addr);
+    FraringCyclicity.InvConsA(I(v), fv', x, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
@@ -437,7 +441,7 @@ module Marshalling {
     ensures Inv(v')
   {
     var fv' := FraringCyclicity.ConsBFunc(I(v), x, addr);
-    FraringCyclicity.InvConsB(fv, fv', x, addr);
+    FraringCyclicity.InvConsB(I(v), fv', x, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
@@ -447,68 +451,75 @@ module Marshalling {
     ensures Inv(v')
   {
     var fv' := FraringCyclicity.CopyBtoAFunc(I(v));
-    FraringCyclicity.InvCopyBtoA(fv, fv');
+    FraringCyclicity.InvCopyBtoA(I(v), fv');
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
   lemma RefinementInit(v: Variables)
     requires Init(v)
     ensures Inv(v)
-    ensures Representation.Init(I(v))
+    ensures FraringCyclicity.Init(I(v))
   {
     InvInit(v);
-  }
-
-  predicate MapSubset(d: Disk, d': Disk)  // TODO: standard library
-  {
-    forall k | k in d :: k in d' && d'[k] == d[k]
-  }
-
-  lemma Fresh(v: Variables, v': Variables, p: Pointer)
-    requires Inv(v)
-    requires Inv(v')
-    requires PointerValid(p, v.disk)
-    requires MapSubset(v.disk, v'.disk)
-    ensures IList(v', p, TheRank(v')) == IList(v, p, TheRank(v))
-    decreases if p.Some? then TheRank(v)[p.value] else -1
-  {
-    if p.None? {
-      assert IList(v', p, TheRank(v')) == IList(v, p, TheRank(v));
-    } else {
-      Fresh(v, v', v.disk[p.value].tail);
-      assert IList(v', p, TheRank(v')) == IList(v, p, TheRank(v));
-    }
   }
 
   lemma RefinementConsA(v: Variables, v': Variables, x:int, addr: Address)
     requires Inv(v)
     requires ConsA(v, v', x, addr)
     ensures Inv(v')
-    ensures Representation.ConsA(I(v), I(v'), x)
+    ensures FraringCyclicity.ConsA(I(v), I(v'), x, addr)
   {
     InvConsA(v, v', x, addr);
-    Fresh(v, v', v.a);
-    Fresh(v, v', v.b);
+    forall k
+      ensures k in TheTypedDisk(v').Keys
+        <==> k in TheTypedDisk(v)[addr := FraringCyclicity.CellPage(x, v.a)].Keys
+    {
+      assert k in v'.disk.Keys || true; // TRIGGER (obviously)
+    }
+    forall k | k in TheTypedDisk(v')
+      ensures TheTypedDisk(v')[k]
+        == TheTypedDisk(v)[addr := FraringCyclicity.CellPage(x, v.a)][k]
+    {
+      ParseAxiom(TheTypedDisk(v')[k]);
+      if k==addr {
+        assert v'.disk[k] == Marshal(FraringCyclicity.CellPage(x, v.a));  // TRIGGER
+        ParseAxiom(FraringCyclicity.CellPage(x, v.a));
+      } else {
+        assert Parse<FraringCyclicity.CellPage>(v'.disk[k]) == Parse(v.disk[k]);  // TRIGGER
+        ParseAxiom(TheTypedDisk(v)[k]);
+      }
+    }
   }
 
   lemma RefinementConsB(v: Variables, v': Variables, x:int, addr: Address)
     requires Inv(v)
     requires ConsB(v, v', x, addr)
     ensures Inv(v')
-    ensures Representation.ConsB(I(v), I(v'), x)
+    ensures FraringCyclicity.ConsB(I(v), I(v'), x, addr)
   {
-    InvConsB(v, v', x, addr);
-    Fresh(v, v', v.a);
-    Fresh(v, v', v.b);
+    assume false; // WOLOG and jonh is lazy
   }
 
   lemma RefinementCopyBtoA(v: Variables, v': Variables)
     requires Inv(v)
     requires CopyBtoA(v, v')
     ensures Inv(v')
-    ensures Representation.CopyBtoA(I(v), I(v'))
+    ensures FraringCyclicity.CopyBtoA(I(v), I(v'))
   {
     InvCopyBtoA(v, v');
-    Fresh(v, v', v.b);
+    forall k
+      ensures k in TheTypedDisk(v').Keys
+        <==> k in TheTypedDisk(v).Keys
+    {
+      assert k in v'.disk.Keys || true; // TRIGGER (obviously)
+    }
+    forall k | k in TheTypedDisk(v')
+      ensures TheTypedDisk(v')[k]
+        == TheTypedDisk(v)[k]
+    {
+      ParseAxiom(TheTypedDisk(v')[k]);
+      assert Parse<FraringCyclicity.CellPage>(v'.disk[k]) == Parse(v.disk[k]);  // TRIGGER
+      ParseAxiom(TheTypedDisk(v)[k]);
+    }
   }
 }
