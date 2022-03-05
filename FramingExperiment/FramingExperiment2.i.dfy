@@ -413,14 +413,20 @@ module Marshalling {
     assert TypeProvidesModel(v, typed); // WITNESS
   }
 
+  function I(v: Variables) : FraringCyclicity.Variables
+    requires Inv(v)
+  {
+    var typed :| TypeProvidesModel(v, typed);
+    var fv := FraringCyclicity.Variables(typed, v.a, v.b);
+    fv
+  }
+
   lemma InvConsA(v: Variables, v': Variables, x: int, addr: Address)
     requires Inv(v)
     requires ConsA(v, v', x, addr)
     ensures Inv(v')
   {
-    var typed :| TypeProvidesModel(v, typed);
-    var fv := FraringCyclicity.Variables(typed, v.a, v.b);
-    var fv' := FraringCyclicity.ConsAFunc(fv, x, addr);
+    var fv' := FraringCyclicity.ConsAFunc(I(v), x, addr);
     FraringCyclicity.InvConsA(fv, fv', x, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
@@ -430,9 +436,7 @@ module Marshalling {
     requires ConsB(v, v', x, addr)
     ensures Inv(v')
   {
-    var typed :| TypeProvidesModel(v, typed);
-    var fv := FraringCyclicity.Variables(typed, v.a, v.b);
-    var fv' := FraringCyclicity.ConsBFunc(fv, x, addr);
+    var fv' := FraringCyclicity.ConsBFunc(I(v), x, addr);
     FraringCyclicity.InvConsB(fv, fv', x, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
@@ -442,10 +446,69 @@ module Marshalling {
     requires CopyBtoA(v, v')
     ensures Inv(v')
   {
-    var typed :| TypeProvidesModel(v, typed);
-    var fv := FraringCyclicity.Variables(typed, v.a, v.b);
-    var fv' := FraringCyclicity.CopyBtoAFunc(fv);
+    var fv' := FraringCyclicity.CopyBtoAFunc(I(v));
     FraringCyclicity.InvCopyBtoA(fv, fv');
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
+  }
+
+  lemma RefinementInit(v: Variables)
+    requires Init(v)
+    ensures Inv(v)
+    ensures Representation.Init(I(v))
+  {
+    InvInit(v);
+  }
+
+  predicate MapSubset(d: Disk, d': Disk)  // TODO: standard library
+  {
+    forall k | k in d :: k in d' && d'[k] == d[k]
+  }
+
+  lemma Fresh(v: Variables, v': Variables, p: Pointer)
+    requires Inv(v)
+    requires Inv(v')
+    requires PointerValid(p, v.disk)
+    requires MapSubset(v.disk, v'.disk)
+    ensures IList(v', p, TheRank(v')) == IList(v, p, TheRank(v))
+    decreases if p.Some? then TheRank(v)[p.value] else -1
+  {
+    if p.None? {
+      assert IList(v', p, TheRank(v')) == IList(v, p, TheRank(v));
+    } else {
+      Fresh(v, v', v.disk[p.value].tail);
+      assert IList(v', p, TheRank(v')) == IList(v, p, TheRank(v));
+    }
+  }
+
+  lemma RefinementConsA(v: Variables, v': Variables, x:int, addr: Address)
+    requires Inv(v)
+    requires ConsA(v, v', x, addr)
+    ensures Inv(v')
+    ensures Representation.ConsA(I(v), I(v'), x)
+  {
+    InvConsA(v, v', x, addr);
+    Fresh(v, v', v.a);
+    Fresh(v, v', v.b);
+  }
+
+  lemma RefinementConsB(v: Variables, v': Variables, x:int, addr: Address)
+    requires Inv(v)
+    requires ConsB(v, v', x, addr)
+    ensures Inv(v')
+    ensures Representation.ConsB(I(v), I(v'), x)
+  {
+    InvConsB(v, v', x, addr);
+    Fresh(v, v', v.a);
+    Fresh(v, v', v.b);
+  }
+
+  lemma RefinementCopyBtoA(v: Variables, v': Variables)
+    requires Inv(v)
+    requires CopyBtoA(v, v')
+    ensures Inv(v')
+    ensures Representation.CopyBtoA(I(v), I(v'))
+  {
+    InvCopyBtoA(v, v');
+    Fresh(v, v', v.b);
   }
 }
