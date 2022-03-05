@@ -159,14 +159,25 @@ module FraringCyclicity {
     && v' == ConsAFunc(v, x, addr)
   }
 
+  function ConsBFunc(v: Variables, x: int, addr: Address) : Variables
+    requires IsFree(v, addr)
+  {
+    Variables(v.disk[addr := CellPage(x, v.b)], v.a, Some(addr))
+  }
+
   predicate ConsB(v: Variables, v': Variables, x: int, addr: Address) {
     && IsFree(v, addr)
-    && v' == v.(disk := v.disk[addr := CellPage(x, v.b)], b := Some(addr))
+    && v' == ConsBFunc(v, x, addr)
+  }
+
+  function CopyBtoAFunc(v: Variables) : Variables
+  {
+    v.(a := v.b)
   }
 
   predicate CopyBtoA(v: Variables, v': Variables) {
     // Ignoring deallocation -- leaving garbage on the disk.
-    && v' == v.(a := v.b)
+    && v' == CopyBtoAFunc(v)
   }
 
   predicate PointerValid(p: Pointer, disk: Disk) {
@@ -409,15 +420,9 @@ module Marshalling {
   {
     var typed :| TypeProvidesModel(v, typed);
     var fv := FraringCyclicity.Variables(typed, v.a, v.b);
-    var fv' = ConsAFunc(fv, x, addr);
-    var typed' := fv'.disk;
-
-//    assert FraringCyclicity.ConsA(fv, fv', x, addr);
+    var fv' := FraringCyclicity.ConsAFunc(fv, x, addr);
     FraringCyclicity.InvConsA(fv, fv', x, addr);
-    var rank' :| FraringCyclicity.PointersRespectRank(fv', rank');
-//    assert FraringCyclicity.PointersRespectRank(fv', rank'); // WITNESS
-    assert TypeProvidesModel(v', typed'); // WITNESS
-//    assert Inv(v');
+    assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
   lemma InvConsB(v: Variables, v': Variables, x: int, addr: Address)
@@ -425,7 +430,11 @@ module Marshalling {
     requires ConsB(v, v', x, addr)
     ensures Inv(v')
   {
-    assume Inv(v');
+    var typed :| TypeProvidesModel(v, typed);
+    var fv := FraringCyclicity.Variables(typed, v.a, v.b);
+    var fv' := FraringCyclicity.ConsBFunc(fv, x, addr);
+    FraringCyclicity.InvConsB(fv, fv', x, addr);
+    assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
   lemma InvCopyBtoA(v: Variables, v': Variables)
@@ -433,6 +442,10 @@ module Marshalling {
     requires CopyBtoA(v, v')
     ensures Inv(v')
   {
-    assume Inv(v');
+    var typed :| TypeProvidesModel(v, typed);
+    var fv := FraringCyclicity.Variables(typed, v.a, v.b);
+    var fv' := FraringCyclicity.CopyBtoAFunc(fv);
+    FraringCyclicity.InvCopyBtoA(fv, fv');
+    assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 }
