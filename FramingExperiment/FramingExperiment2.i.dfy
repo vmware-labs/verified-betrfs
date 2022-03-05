@@ -408,9 +408,10 @@ module Marshalling {
     ensures Inv(v')
   {
     var typed :| TypeProvidesModel(v, typed);
-    var typed' := typed[addr := FraringCyclicity.CellPage(x, v.a)];
     var fv := FraringCyclicity.Variables(typed, v.a, v.b);
-    var fv' := FraringCyclicity.Variables(typed', v'.a, v'.b);
+    var fv' = ConsAFunc(fv, x, addr);
+    var typed' := fv'.disk;
+
 //    assert FraringCyclicity.ConsA(fv, fv', x, addr);
     FraringCyclicity.InvConsA(fv, fv', x, addr);
     var rank' :| FraringCyclicity.PointersRespectRank(fv', rank');
