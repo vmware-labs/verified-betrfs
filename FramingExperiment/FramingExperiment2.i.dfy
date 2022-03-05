@@ -1,6 +1,10 @@
 include "../lib/Base/Option.s.dfy"
 
 module Types {
+  import opened Options
+
+  type Address(!new, ==)
+  type Pointer = Option<Address>
 }
 
 module Spec {
@@ -128,9 +132,6 @@ module FraringCyclicity {
   import opened Types
   import Representation
 
-  type Address(!new, ==)
-  type Pointer = Option<Address>
-
   datatype CellPage = CellPage(x: int, tail: Pointer)
   type Disk = map<Address, CellPage>
 
@@ -147,9 +148,15 @@ module FraringCyclicity {
     && addr !in v.disk
   }
 
+  function ConsAFunc(v: Variables, x: int, addr: Address) : Variables
+    requires IsFree(v, addr)
+  {
+    Variables(v.disk[addr := CellPage(x, v.a)], Some(addr), v.b)
+  }
+
   predicate ConsA(v: Variables, v': Variables, x: int, addr: Address) {
     && IsFree(v, addr)
-    && v' == v.(disk := v.disk[addr := CellPage(x, v.a)], a := Some(addr))
+    && v' == ConsAFunc(v, x, addr)
   }
 
   predicate ConsB(v: Variables, v': Variables, x: int, addr: Address) {
@@ -328,5 +335,103 @@ module FraringCyclicity {
 module Marshalling {
   import opened Options
   import opened Types
-  import Representation
+  import FraringCyclicity 
+
+  type Block(!new, ==)
+  function Parse<T>(block: Block) : T
+  function Marshal<T>(t: T) : Block
+  lemma ParseAxiom<T>(t: T)
+    ensures Parse(Marshal(t)) == t
+
+  type Disk = map<Address, Block>
+  datatype Variables = Variables(disk: Disk, a: Pointer, b: Pointer)
+
+  type CellPage = FraringCyclicity.CellPage
+
+  predicate Init(v: Variables) {
+    && v.disk == map[]
+    && v.a == None
+    && v.b == None
+  }
+
+  predicate IsFree(v: Variables, addr: Address) {
+    // Ignoring deallocation -- leaving garbage on the disk.
+    && addr !in v.disk
+  }
+
+  predicate ConsA(v: Variables, v': Variables, x: int, addr: Address) {
+    && IsFree(v, addr)
+    && v' == v.(disk := v.disk[addr := Marshal(FraringCyclicity.CellPage(x, v.a))], a := Some(addr))
+  }
+
+  predicate ConsB(v: Variables, v': Variables, x: int, addr: Address) {
+    && IsFree(v, addr)
+    && v' == v.(disk := v.disk[addr := Marshal(FraringCyclicity.CellPage(x, v.b))], b := Some(addr))
+  }
+
+  predicate CopyBtoA(v: Variables, v': Variables) {
+    // Ignoring deallocation -- leaving garbage on the disk.
+    && v' == v.(a := v.b)
+  }
+
+  //////////////////////////////////////////////////////////////////////
+  // Inv
+
+  function MarshalDisk(typed: FraringCyclicity.Disk) : Disk
+  {
+    map addr | addr in typed :: Marshal(typed[addr])
+  }
+
+  predicate TypeProvidesModel(v: Variables, typed: FraringCyclicity.Disk)
+  {
+    && v.disk == MarshalDisk(typed)
+    && FraringCyclicity.Inv(FraringCyclicity.Variables(typed, v.a, v.b))
+  }
+
+  predicate Inv(v: Variables) {
+    && (exists typed :: TypeProvidesModel(v, typed))
+  }
+
+  lemma InvInit(v: Variables)
+    requires Init(v)
+    ensures Inv(v)
+  {
+    var typed:FraringCyclicity.Disk := map[];
+    var fv := FraringCyclicity.Variables(typed, v.a, v.b);
+    assert FraringCyclicity.PointersRespectRank(fv, map[]); // WITNESS
+    assert TypeProvidesModel(v, typed); // WITNESS
+  }
+
+  lemma InvConsA(v: Variables, v': Variables, x: int, addr: Address)
+    requires Inv(v)
+    requires ConsA(v, v', x, addr)
+    ensures Inv(v')
+  {
+    var typed :| TypeProvidesModel(v, typed);
+    var typed' := typed[addr := FraringCyclicity.CellPage(x, v.a)];
+    var fv := FraringCyclicity.Variables(typed, v.a, v.b);
+    var fv' := FraringCyclicity.Variables(typed', v'.a, v'.b);
+//    assert FraringCyclicity.ConsA(fv, fv', x, addr);
+    FraringCyclicity.InvConsA(fv, fv', x, addr);
+    var rank' :| FraringCyclicity.PointersRespectRank(fv', rank');
+//    assert FraringCyclicity.PointersRespectRank(fv', rank'); // WITNESS
+    assert TypeProvidesModel(v', typed'); // WITNESS
+//    assert Inv(v');
+  }
+
+  lemma InvConsB(v: Variables, v': Variables, x: int, addr: Address)
+    requires Inv(v)
+    requires ConsB(v, v', x, addr)
+    ensures Inv(v')
+  {
+    assume Inv(v');
+  }
+
+  lemma InvCopyBtoA(v: Variables, v': Variables)
+    requires Inv(v)
+    requires CopyBtoA(v, v')
+    ensures Inv(v')
+  {
+    assume Inv(v');
+  }
 }
