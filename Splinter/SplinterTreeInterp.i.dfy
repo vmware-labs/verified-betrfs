@@ -5,11 +5,11 @@ include "../lib/Base/total_order.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
-include "Paged/MsgHistory.i.dfy"
+include "CoordinationLayer/MsgHistory.i.dfy"
 include "SplinterTree.i.dfy"
 include "BranchTreeInterp.i.dfy"
 include "../Spec/Message.s.dfy"
-include "Paged/StampedMap.i.dfy"
+include "CoordinationLayer/StampedMap.i.dfy"
 include "../lib/Base/mathematics.i.dfy"
 
 // interpretation for the SplinterTree Implementation

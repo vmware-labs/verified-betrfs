@@ -4,7 +4,7 @@
 include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "../Spec/MapSpec.s.dfy"
-include "Paged/MsgHistory.i.dfy"
+include "CoordinationLayer/MsgHistory.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
