@@ -10,16 +10,19 @@ module Types {
   type Pointer = Option<Address>
 }
 
+module Labels {
+  datatype TransitionLabel =
+      ConsALabel(x: int)
+    | ConsBLabel(x: int)
+    | CopyBtoALabel
+}
+
 module Spec {
   import opened Options
   import opened Types
+  import opened Labels
 
   datatype Variables = Variables(a: seq<int>, b: seq<int>)
-
-  predicate Init(v: Variables) {
-    && v.a == []
-    && v.b == []
-  }
 
   predicate ConsA(v: Variables, v': Variables, x: int) {
     && v' == v.(a := [x] + v.a)
@@ -32,21 +35,29 @@ module Spec {
   predicate CopyBtoA(v: Variables, v': Variables) {
     && v' == v.(a := v.b)
   }
+
+  predicate Init(v: Variables) {
+    && v.a == []
+    && v.b == []
+  }
+
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
+    match lbl
+      case ConsALabel(x) => ConsA(v, v', x)
+      case ConsBLabel(x) => ConsB(v, v', x)
+      case CopyBtoALabel() => CopyBtoA(v, v')
+  }
 }
 
 module Representation {
   import opened Options
   import opened Types
+  import opened Labels
   import Spec
 
   datatype Cell = Cell(x: int, tail: Cell) | Nil
 
   datatype Variables = Variables(a: Cell, b: Cell)
-
-  predicate Init(v: Variables) {
-    && v.a == Nil
-    && v.b == Nil
-  }
 
   predicate ConsA(v: Variables, v': Variables, x: int) {
     && v' == v.(a := Cell(x, v.a))
@@ -59,6 +70,21 @@ module Representation {
   predicate CopyBtoA(v: Variables, v': Variables) {
     && v' == v.(a := v.b)
   }
+
+  predicate Init(v: Variables) {
+    && v.a == Nil
+    && v.b == Nil
+  }
+
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
+    match lbl
+      case ConsALabel(x) => ConsA(v, v', x)
+      case ConsBLabel(x) => ConsB(v, v', x)
+      case CopyBtoALabel() => CopyBtoA(v, v')
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Invariants
 
   predicate Inv(v: Variables) {
     true
@@ -91,6 +117,9 @@ module Representation {
   {
   }
 
+  //////////////////////////////////////////////////////////////////////////////
+  // Refinement
+
   function IList(c: Cell) : seq<int>
   {
     if c.Nil? then [] else [c.x] + IList(c.tail)
@@ -102,30 +131,19 @@ module Representation {
     Spec.Variables(IList(v.a), IList(v.b))
   }
 
+  //////////////////////////////////////////////////////////////////////////////
+  // externally-facing refinement lemma
+
   lemma RefinementInit(v: Variables)
     requires Init(v)
     ensures Spec.Init(I(v))
   {
   }
 
-  lemma RefinementConsA(v: Variables, v': Variables, x:int)
+  lemma RefinementNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires ConsA(v, v', x)
-    ensures Spec.ConsA(I(v), I(v'), x)
-  {
-  }
-
-  lemma RefinementConsB(v: Variables, v': Variables, x:int)
-    requires Inv(v)
-    requires ConsB(v, v', x)
-    ensures Spec.ConsB(I(v), I(v'), x)
-  {
-  }
-
-  lemma RefinementCopyBtoA(v: Variables, v': Variables)
-    requires Inv(v)
-    requires CopyBtoA(v, v')
-    ensures Spec.CopyBtoA(I(v), I(v'))
+    requires Next(v, v', lbl)
+    ensures Spec.Next(I(v), I(v'), lbl)
   {
   }
 }
@@ -133,18 +151,13 @@ module Representation {
 module FraringCyclicity {
   import opened Options
   import opened Types
+  import opened Labels
   import Representation
 
   datatype CellPage = CellPage(x: int, tail: Pointer)
   type Disk = map<Address, CellPage>
 
   datatype Variables = Variables(disk: Disk, a: Pointer, b: Pointer)
-
-  predicate Init(v: Variables) {
-    && v.disk == map[]
-    && v.a == None
-    && v.b == None
-  }
 
   predicate IsFree(v: Variables, addr: Address) {
     // Ignoring deallocation -- leaving garbage on the disk.
@@ -182,6 +195,31 @@ module FraringCyclicity {
     // Ignoring deallocation -- leaving garbage on the disk.
     && v' == CopyBtoAFunc(v)
   }
+
+  predicate Init(v: Variables) {
+    && v.disk == map[]
+    && v.a == None
+    && v.b == None
+  }
+
+  datatype Step =
+      ConsAStep(addr: Address)
+    | ConsBStep(addr: Address)
+    | CopyBtoAStep()
+
+  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) {
+    match step
+      case ConsAStep(addr) => lbl.ConsALabel? && ConsA(v, v', lbl.x, addr)
+      case ConsBStep(addr) => lbl.ConsBLabel? && ConsB(v, v', lbl.x, addr)
+      case CopyBtoAStep() => lbl.CopyBtoALabel? && CopyBtoA(v, v')
+  }
+
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
+    exists step: Step :: NextStep(v, v', lbl, step)
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Invariants
 
   predicate PointerValid(p: Pointer, disk: Disk) {
     && (p.Some? ==> p.value in disk)
@@ -268,6 +306,9 @@ module FraringCyclicity {
       Representation.Cell(cellpage.x, IList(v, cellpage.tail, rank))
   }
 
+  //////////////////////////////////////////////////////////////////////////////
+  // Refinement
+
   function TheRank(v: Variables) : Ranking
     requires DiskPointersValid(v)
     requires Acyclic(v)
@@ -282,14 +323,6 @@ module FraringCyclicity {
   {
     var rank := TheRank(v);
     Representation.Variables(IList(v, v.a, rank), IList(v, v.b, rank))
-  }
-
-  lemma RefinementInit(v: Variables)
-    requires Init(v)
-    ensures Inv(v)
-    ensures Representation.Init(I(v))
-  {
-    InvInit(v);
   }
 
   predicate MapSubset(d: Disk, d': Disk)  // TODO: standard library
@@ -344,11 +377,37 @@ module FraringCyclicity {
     InvCopyBtoA(v, v');
     Fresh(v, v', v.b);
   }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // externally-facing refinement lemma
+
+  lemma RefinementInit(v: Variables)
+    requires Init(v)
+    ensures Inv(v)
+    ensures Representation.Init(I(v))
+  {
+    InvInit(v);
+  }
+
+  lemma RefinementNext(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    ensures Inv(v')
+    ensures Representation.Next(I(v), I(v'), lbl)
+  {
+    var step :| NextStep(v, v', lbl, step);
+    match step {
+      case ConsAStep(addr) => { RefinementConsA(v, v', lbl.x, addr); }
+      case ConsBStep(addr) => { RefinementConsB(v, v', lbl.x, addr); }
+      case CopyBtoAStep() => { RefinementCopyBtoA(v, v'); }
+    }
+  }
 }
 
 module Marshalling {
   import opened Options
   import opened Types
+  import opened Labels
   import FraringCyclicity 
 
   type Block(!new, ==)
@@ -373,19 +432,38 @@ module Marshalling {
     && addr !in v.disk
   }
 
-  predicate ConsA(v: Variables, v': Variables, x: int, addr: Address) {
+  predicate ConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
+    && lbl.ConsALabel?
     && IsFree(v, addr)
-    && v' == v.(disk := v.disk[addr := Marshal(FraringCyclicity.CellPage(x, v.a))], a := Some(addr))
+    && v' == v.(disk := v.disk[addr := Marshal(FraringCyclicity.CellPage(lbl.x, v.a))], a := Some(addr))
   }
 
-  predicate ConsB(v: Variables, v': Variables, x: int, addr: Address) {
+  predicate ConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
+    && lbl.ConsBLabel?
     && IsFree(v, addr)
-    && v' == v.(disk := v.disk[addr := Marshal(FraringCyclicity.CellPage(x, v.b))], b := Some(addr))
+    && v' == v.(disk := v.disk[addr := Marshal(FraringCyclicity.CellPage(lbl.x, v.b))], b := Some(addr))
   }
 
-  predicate CopyBtoA(v: Variables, v': Variables) {
+  predicate CopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel) {
     // Ignoring deallocation -- leaving garbage on the disk.
+    && lbl.CopyBtoALabel?
     && v' == v.(a := v.b)
+  }
+
+  datatype Step =
+      ConsAStep(addr: Address)
+    | ConsBStep(addr: Address)
+    | CopyBtoAStep()
+
+  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) {
+    match step
+      case ConsAStep(addr) => lbl.ConsALabel? && ConsA(v, v', lbl, addr)
+      case ConsBStep(addr) => lbl.ConsBLabel? && ConsB(v, v', lbl, addr)
+      case CopyBtoAStep() => lbl.CopyBtoALabel? && CopyBtoA(v, v', lbl)
+  }
+
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
+    exists step: Step :: NextStep(v, v', lbl, step)
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -428,29 +506,29 @@ module Marshalling {
     FraringCyclicity.Variables(TheTypedDisk(v), v.a, v.b)
   }
 
-  lemma InvConsA(v: Variables, v': Variables, x: int, addr: Address)
+  lemma InvConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsA(v, v', x, addr)
+    requires ConsA(v, v', lbl, addr)
     ensures Inv(v')
   {
-    var fv' := FraringCyclicity.ConsAFunc(I(v), x, addr);
-    FraringCyclicity.InvConsA(I(v), fv', x, addr);
+    var fv' := FraringCyclicity.ConsAFunc(I(v), lbl.x, addr);
+    FraringCyclicity.InvConsA(I(v), fv', lbl.x, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
-  lemma InvConsB(v: Variables, v': Variables, x: int, addr: Address)
+  lemma InvConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsB(v, v', x, addr)
+    requires ConsB(v, v', lbl, addr)
     ensures Inv(v')
   {
-    var fv' := FraringCyclicity.ConsBFunc(I(v), x, addr);
-    FraringCyclicity.InvConsB(I(v), fv', x, addr);
+    var fv' := FraringCyclicity.ConsBFunc(I(v), lbl.x, addr);
+    FraringCyclicity.InvConsB(I(v), fv', lbl.x, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
-  lemma InvCopyBtoA(v: Variables, v': Variables)
+  lemma InvCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires CopyBtoA(v, v')
+    requires CopyBtoA(v, v', lbl)
     ensures Inv(v')
   {
     var fv' := FraringCyclicity.CopyBtoAFunc(I(v));
@@ -458,21 +536,17 @@ module Marshalling {
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
-  lemma RefinementInit(v: Variables)
-    requires Init(v)
-    ensures Inv(v)
-    ensures FraringCyclicity.Init(I(v))
-  {
-    InvInit(v);
-  }
+  //////////////////////////////////////////////////////////////////////
+  // Refinement
 
-  lemma RefinementConsA(v: Variables, v': Variables, x:int, addr: Address)
+  lemma RefinementConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsA(v, v', x, addr)
+    requires ConsA(v, v', lbl, addr)
     ensures Inv(v')
-    ensures FraringCyclicity.ConsA(I(v), I(v'), x, addr)
+    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
   {
-    InvConsA(v, v', x, addr);
+    var x := lbl.x;
+    InvConsA(v, v', lbl, addr);
     forall k
       ensures k in TheTypedDisk(v').Keys
         <==> k in TheTypedDisk(v)[addr := FraringCyclicity.CellPage(x, v.a)].Keys
@@ -492,24 +566,25 @@ module Marshalling {
         ParseAxiom(TheTypedDisk(v)[k]);
       }
     }
+    assert FraringCyclicity.NextStep(I(v), I(v'), lbl, FraringCyclicity.ConsAStep(addr));
   }
 
-  lemma RefinementConsB(v: Variables, v': Variables, x:int, addr: Address)
+  lemma RefinementConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsB(v, v', x, addr)
+    requires ConsB(v, v', lbl, addr)
     ensures Inv(v')
-    ensures FraringCyclicity.ConsB(I(v), I(v'), x, addr)
+    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
   {
     assume false; // WOLOG and jonh is lazy
   }
 
-  lemma RefinementCopyBtoA(v: Variables, v': Variables)
+  lemma RefinementCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires CopyBtoA(v, v')
+    requires CopyBtoA(v, v', lbl)
     ensures Inv(v')
-    ensures FraringCyclicity.CopyBtoA(I(v), I(v'))
+    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
   {
-    InvCopyBtoA(v, v');
+    InvCopyBtoA(v, v', lbl);
     forall k
       ensures k in TheTypedDisk(v').Keys
         <==> k in TheTypedDisk(v).Keys
@@ -523,6 +598,32 @@ module Marshalling {
       ParseAxiom(TheTypedDisk(v')[k]);
       assert Parse<FraringCyclicity.CellPage>(v'.disk[k]) == Parse(v.disk[k]);  // TRIGGER
       ParseAxiom(TheTypedDisk(v)[k]);
+    }
+    assert FraringCyclicity.NextStep(I(v), I(v'), lbl, FraringCyclicity.CopyBtoAStep());
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // externally-facing refinement lemma
+
+  lemma RefinementInit(v: Variables)
+    requires Init(v)
+    ensures Inv(v)
+    ensures FraringCyclicity.Init(I(v))
+  {
+    InvInit(v);
+  }
+
+  lemma RefinementNext(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    ensures Inv(v')
+    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
+  {
+    var step :| NextStep(v, v', lbl, step);
+    match step {
+      case ConsAStep(addr) => { RefinementConsA(v, v', lbl, addr); }
+      case ConsBStep(addr) => { RefinementConsB(v, v', lbl, addr); }
+      case CopyBtoAStep() => { RefinementCopyBtoA(v, v', lbl); }
     }
   }
 }
