@@ -17,7 +17,7 @@ module Constants {
   )
   {
     predicate method WF() {
-      && cache_size as uint64 % PLATFORM_CACHELINE_SIZE_64() == 0
+      && cache_size as uint64 % (PLATFORM_CACHELINE_SIZE_64() * PLATFORM_CACHELINE_SIZE_64()) == 0
       && cache_size % ENTRIES_PER_BATCH_32() == 0
       && cache_size > 0
       && cache_size < 0x4000_0000
@@ -44,6 +44,7 @@ module Constants {
       && cacheline_capacity != 0
       && pages_per_extent != 0
       && pages_per_extent <= 0x1_0000
+      && cache_size as int % (PLATFORM_CACHELINE_SIZE_64() as int * PLATFORM_CACHELINE_SIZE_64() as int) == 0
       && cache_size as int == cacheline_capacity as int * PLATFORM_CACHELINE_SIZE_64() as int
       && cache_size as int == batch_capacity as int * ENTRIES_PER_BATCH_32() as int
       && cache_size as int * RC_WIDTH < 0x1_0000_0000
@@ -77,23 +78,100 @@ module Constants {
   function method RC_WIDTH_64(): uint64 { 4 } // constant
   function method CLEAN_AHEAD_64(): uint64 { 512 } // constant
 
+  function method {:opaque} ref_internal(i: uint32) : uint32
+  {
+     var block_modulus := i % (PLATFORM_CACHELINE_SIZE_64() as uint32 * PLATFORM_CACHELINE_SIZE_64() as uint32);
+     var column := block_modulus % PLATFORM_CACHELINE_SIZE_64() as uint32;
+     var row := block_modulus / PLATFORM_CACHELINE_SIZE_64() as uint32;
+     var new_modulus := column * PLATFORM_CACHELINE_SIZE_64() as uint32 + row;
+     i - block_modulus + new_modulus
+  }
+
+  lemma ref_internal_bound(i: uint32, cache_size: nat)
+  requires cache_size % (PLATFORM_CACHELINE_SIZE_64() as int * PLATFORM_CACHELINE_SIZE_64() as int) == 0
+  requires 0 <= i as int < cache_size
+  ensures 0 <= ref_internal(i) as int < cache_size
+  {
+     reveal_ref_internal();
+
+     var sqr := (PLATFORM_CACHELINE_SIZE_64() as int * PLATFORM_CACHELINE_SIZE_64() as int);
+
+     var block_modulus := i as int % sqr;
+     var column := block_modulus % PLATFORM_CACHELINE_SIZE_64() as int;
+     var row := block_modulus / PLATFORM_CACHELINE_SIZE_64() as int;
+     var new_modulus := column * PLATFORM_CACHELINE_SIZE_64() as int + row;
+
+     assert (i as int - block_modulus) <= cache_size - sqr
+     by {
+       calc {
+          i as int - block_modulus;
+          == { NonlinearLemmas.div_mul_plus_mod(i as int, sqr); }
+          (i as int / sqr) * sqr;
+          <= {
+              if i as int / sqr > cache_size / sqr - 1 {
+                  assert i as int / sqr >= cache_size / sqr;
+                  calc {
+                      i as int;
+                      >= { NonlinearLemmas.div_mul_plus_mod(i as int, sqr); }
+                      (i as int / sqr) * sqr;
+                      >= { NonlinearLemmas.mul_le_left(cache_size as int / sqr, i as int / sqr, sqr); }
+                      (cache_size as int / sqr) * sqr;
+                      == { NonlinearLemmas.div_mul_plus_mod(cache_size as int, sqr); }
+                      cache_size;
+                  }
+                  assert i as int >= cache_size;
+                  assert false;
+              }
+              NonlinearLemmas.mul_le_left(i as int / sqr, cache_size / sqr - 1, sqr);
+          }
+          (cache_size / sqr - 1) * sqr;
+          == { NonlinearLemmas.distributive_right_sub(cache_size / sqr, 1, sqr); }
+          (cache_size / sqr) * sqr - sqr;
+          == { NonlinearLemmas.div_mul_plus_mod(cache_size, sqr); }
+          cache_size - sqr;
+       }
+     }
+
+     assert new_modulus < sqr;
+  }
+
   function method {:opaque} rc_index(config: Config, j: uint64, i: uint32) : (k: uint64)
   requires config.WF()
   requires 0 <= j as int < RC_WIDTH as int
   requires 0 <= i as int < config.cache_size as int
   ensures 0 <= k as int < RC_WIDTH as int * config.cache_size as int
   {
-    NonlinearLemmas.mod_bound(i as int, config.cacheline_capacity as int);
-    Math.div_bound(i as int, config.cacheline_capacity as int);
-    Math.mod_div_transpose_bound(i as int, config.cacheline_capacity as int,
-        PLATFORM_CACHELINE_SIZE_64() as int);
+    ref_internal_bound(i, config.cache_size as nat);
     NonlinearLemmas.mul_le_left(j as int, config.cache_size as int, RC_WIDTH as int - 1);
 
-    //var cacheline_capacity := config.cache_size / PLATFORM_CACHELINE_SIZE_64() as uint32;
-    //assert cacheline_capacity as int == CACHELINE_CAPACITY();
-    var rc_number := (i % config.cacheline_capacity as uint32) * PLATFORM_CACHELINE_SIZE_64() as uint32
-        + (i / config.cacheline_capacity as uint32);
+    var rc_number := ref_internal(i);
     (j as uint32 * config.cache_size + rc_number) as uint64
+  }
+
+  lemma ref_internal_ref_internal(i: uint32)
+  ensures ref_internal(ref_internal(i)) == i
+  {
+    reveal_ref_internal();
+    var block_modulus := i as int % (PLATFORM_CACHELINE_SIZE_64() as int * PLATFORM_CACHELINE_SIZE_64() as int);
+    var column := block_modulus % PLATFORM_CACHELINE_SIZE_64() as int;
+    var row := block_modulus / PLATFORM_CACHELINE_SIZE_64() as int;
+    var new_modulus := column * PLATFORM_CACHELINE_SIZE_64() as int + row;
+    var i' := i as int - block_modulus + new_modulus;
+
+    assert i' == ref_internal(i) as int;
+
+    var block_modulus' := i' % (PLATFORM_CACHELINE_SIZE_64() as int * PLATFORM_CACHELINE_SIZE_64() as int);
+
+    assert block_modulus' == new_modulus;
+
+    var column' := block_modulus' % PLATFORM_CACHELINE_SIZE_64() as int;
+    var row' := block_modulus' / PLATFORM_CACHELINE_SIZE_64() as int;
+    var new_modulus' := column' * PLATFORM_CACHELINE_SIZE_64() as int + row';
+
+    assert column == row';
+    assert row == column';
+
+    assert i as int == i' - block_modulus' + new_modulus';
   }
 
   lemma inverse_rc_index(config: Config, k: int)
@@ -106,15 +184,10 @@ module Constants {
   {
     j := k / config.cache_size as int;
     var rc_number := k % config.cache_size as int;
+    i := ref_internal(rc_number as uint32) as int;
 
-    var cacheline_capacity: int := (config.cache_size as int / PLATFORM_CACHELINE_SIZE_64() as int) as int;
-    //assert cacheline_capacity as int == CACHELINE_CAPACITY();
-
-    i := (rc_number % (PLATFORM_CACHELINE_SIZE_64() as int)) * cacheline_capacity
-        + (rc_number / (PLATFORM_CACHELINE_SIZE_64() as int));
-
-    var rc_number2 := (i % cacheline_capacity) * (PLATFORM_CACHELINE_SIZE_64() as int)
-        + (i / cacheline_capacity);
+    ref_internal_ref_internal(rc_number as uint32);
+    ref_internal_bound(rc_number as uint32, config.cache_size as nat);
 
     if j >= RC_WIDTH as int {
       NonlinearLemmas.div_mul_plus_mod(k, config.cache_size as int);
@@ -127,61 +200,7 @@ module Constants {
       Math.div_bound(k, config.cache_size as int);
     }
 
-    if i / cacheline_capacity >= PLATFORM_CACHELINE_SIZE_64() as int {
-      NonlinearLemmas.div_mul_plus_mod(i, cacheline_capacity);
-      NonlinearLemmas.mod_bound(i, cacheline_capacity);
-      NonlinearLemmas.mul_le_left(PLATFORM_CACHELINE_SIZE_64() as int,
-          i / cacheline_capacity, cacheline_capacity);
-    }
-
-    NonlinearLemmas.mod_bound(rc_number, PLATFORM_CACHELINE_SIZE_64() as int);
-    Math.div_bound(rc_number, PLATFORM_CACHELINE_SIZE_64() as int);
-    Math.mod_div_transpose_bound(rc_number,
-        PLATFORM_CACHELINE_SIZE_64() as int,
-        config.cacheline_capacity as int);
-
-    NonlinearLemmas.mod_bound(i as int, config.cacheline_capacity as int);
-    Math.div_bound(i as int, config.cacheline_capacity as int);
-    Math.mod_div_transpose_bound(i as int, config.cacheline_capacity as int,
-        PLATFORM_CACHELINE_SIZE_64() as int);
-
     NonlinearLemmas.mul_le_left(j as int, config.cache_size as int, RC_WIDTH as int - 1);
-
-    calc {
-      rc_number2 % (PLATFORM_CACHELINE_SIZE_64() as int);
-      (i / cacheline_capacity);
-      {
-        Math.lemma_div_multiples_vanish_fancy(
-            (rc_number % (PLATFORM_CACHELINE_SIZE_64() as int)),
-            (rc_number / (PLATFORM_CACHELINE_SIZE_64() as int)),
-            cacheline_capacity);
-        NonlinearLemmas.mul_comm(
-            (rc_number % (PLATFORM_CACHELINE_SIZE_64() as int)),
-            cacheline_capacity);
-      }
-      rc_number % (PLATFORM_CACHELINE_SIZE_64() as int);
-    }
-
-    calc {
-      rc_number2 / (PLATFORM_CACHELINE_SIZE_64() as int);
-      {
-        /*
-        Math.lemma_div_multiples_vanish_fancy(
-            i % cacheline_capacity, i / cacheline_capacity,
-            PLATFORM_CACHELINE_SIZE_64() as int);
-        NonlinearLemmas.mul_comm(i % cacheline_capacity,
-            PLATFORM_CACHELINE_SIZE_64() as int);
-            */
-      }
-      (i % cacheline_capacity);
-      {
-        Math.abc_mod(
-          (rc_number % (PLATFORM_CACHELINE_SIZE_64() as int)),
-          cacheline_capacity,
-          (rc_number / (PLATFORM_CACHELINE_SIZE_64() as int)));
-      }
-      rc_number / (PLATFORM_CACHELINE_SIZE_64() as int);
-    }
 
     calc {
       k;
@@ -190,7 +209,6 @@ module Constants {
       }
       (k / config.cache_size as int) * config.cache_size as int + k % config.cache_size as int;
       {
-        assert rc_number == rc_number2;
         reveal_rc_index();
       }
       rc_index(config, j as uint64, i as uint32) as int;
@@ -211,54 +229,35 @@ module Constants {
     {
       reveal_rc_index();
 
-      var rc_number1 := (i1 % config.cacheline_capacity as int) * PLATFORM_CACHELINE_SIZE_64() as int
-          + (i1 / config.cacheline_capacity as int);
+      var rc_number1 := ref_internal(i1 as uint32) as int;
+      var rc_number2 := ref_internal(i2 as uint32) as int;
 
-      Math.mod_div_transpose_bound(i1 as int, config.cacheline_capacity as int,
-          PLATFORM_CACHELINE_SIZE_64() as int);
-
-      var rc_number2 := (i2 % config.cacheline_capacity as int) * PLATFORM_CACHELINE_SIZE_64() as int
-          + (i2 / config.cacheline_capacity as int);
-
-      Math.mod_div_transpose_bound(i2 as int, config.cacheline_capacity as int,
-          PLATFORM_CACHELINE_SIZE_64() as int);
+      ref_internal_bound(i1 as uint32, config.cache_size as nat);
+      ref_internal_bound(i2 as uint32, config.cache_size as nat);
 
       var k := rc_index(config, j1 as uint64, i1 as uint32) as int;
 
       calc {
-        rc_number1;
-        { Math.abc_mod(j1, config.cache_size as int, rc_number1); }
-        k % config.cache_size as int;
-        { Math.abc_mod(j2, config.cache_size as int, rc_number2); }
-        rc_number2;
-      }
-
-      Math.ab_div_lt(PLATFORM_CACHELINE_SIZE_64() as int,
-          config.cacheline_capacity as int, i1);
-      Math.ab_div_lt(PLATFORM_CACHELINE_SIZE_64() as int,
-          config.cacheline_capacity as int, i2);
-
-      calc {
-        i1 / config.cacheline_capacity as int;
+        i1 as int;
         {
-          Math.abc_mod(i1 % config.cacheline_capacity as int,
-            PLATFORM_CACHELINE_SIZE_64() as int,
-            i1 / config.cacheline_capacity as int);
+          ref_internal_ref_internal(i1 as uint32);
         }
-        rc_number1 % PLATFORM_CACHELINE_SIZE_64() as int;
-        rc_number2 % PLATFORM_CACHELINE_SIZE_64() as int;
-        i2 / config.cacheline_capacity as int;
+        ref_internal(rc_number1 as uint32) as int;
+        {
+          calc {
+            rc_number1;
+            { Math.abc_mod(j1, config.cache_size as int, rc_number1); }
+            k % config.cache_size as int;
+            { Math.abc_mod(j2, config.cache_size as int, rc_number2); }
+            rc_number2;
+          }
+        }
+        ref_internal(rc_number2 as uint32) as int;
+        {
+          ref_internal_ref_internal(i2 as uint32);
+        }
+        i2 as int;
       }
-
-      calc {
-        i1 % config.cacheline_capacity as int;
-        rc_number1 / PLATFORM_CACHELINE_SIZE_64() as int;
-        rc_number2 / PLATFORM_CACHELINE_SIZE_64() as int;
-        i2 % config.cacheline_capacity as int;
-      }
-
-      NonlinearLemmas.div_mul_plus_mod(i1, config.cacheline_capacity as int);
-      NonlinearLemmas.div_mul_plus_mod(i2, config.cacheline_capacity as int);
 
       calc {
         j1;
@@ -275,5 +274,4 @@ module Constants {
       }
     }
   }
-
 }
