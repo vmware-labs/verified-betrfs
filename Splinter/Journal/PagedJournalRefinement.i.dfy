@@ -35,45 +35,40 @@ module PagedJournalRefinement
   {
   }
 
-  lemma IncludesSubseqRefines(v: Variables, messages: MsgHistory)
-    requires v.WF()
-    requires messages.WF()
-    ensures v.IncludesSubseq(messages) ==> I(v).IncludesSubseq(messages)
+  lemma ReadForRecoveryRefines(v: Variables, v': Variables, lbl: TransitionLabel, receiptIndex: nat)
+    requires ReadForRecovery(v, v', lbl, receiptIndex)
+    ensures AbstractJournal.Next(I(v), I(v'), lbl)
   {
-    if v.IncludesSubseq(messages) {
-      var i:nat :| v.truncatedJournal.IncludesSubseqAt(messages, i);
-      var receipt := v.truncatedJournal.BuildReceiptTJ();
-      receipt.TJFacts();
+    var receipt := v.truncatedJournal.BuildReceiptTJ();
+    receipt.TJFacts();
 
-      // Base case: messages is in the interp of receipt line i
+    // Base case: messages is in the interp of receipt line i
+    assert receipt.OneLinkedInterpretation(receiptIndex) by { receipt.reveal_LinkedInterpretations(); }
+
+    // now induct forward to the last line
+    var i := receiptIndex;
+    while i<|receipt.lines|-1
+      invariant i<|receipt.lines|
+      invariant receipt.lines[i].interpretation.value.WF();
+      invariant receipt.lines[i].interpretation.value.IncludesSubseq(lbl.messages);
+    {
+      i := i + 1;
       assert receipt.OneLinkedInterpretation(i) by { receipt.reveal_LinkedInterpretations(); }
-
-      // now induct forward to the last line
-      while i<|receipt.lines|-1
-        invariant i<|receipt.lines|
-        invariant receipt.lines[i].interpretation.value.WF();
-        invariant receipt.lines[i].interpretation.value.IncludesSubseq(messages);
-      {
-        i := i + 1;
-        assert receipt.OneLinkedInterpretation(i) by { receipt.reveal_LinkedInterpretations(); }
-      }
     }
   }
 
-  lemma CanFreezeAsRefines(v: Variables, startLsn: LSN, endLsn: LSN, keepReceiptLines: nat) returns (messages: MsgHistory)
-    requires v.WF()
-    ensures v.CanFreezeAs(startLsn, endLsn, keepReceiptLines) ==> I(v).CanFreezeAs(startLsn, endLsn, messages)
+  lemma FreezeForCommitRefines(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
+    requires FreezeForCommit(v, v', lbl, keepReceiptLines)
+    ensures v'.WF();
+    ensures AbstractJournal.Next(I(v), I(v'), lbl)
   {
-    if v.CanFreezeAs(startLsn, endLsn, keepReceiptLines) {
-      if startLsn < endLsn {
-        // endLsn-1 is in the interp, so we can discard to endLsn
-        var i := keepReceiptLines - 1;
-        var receipt := v.truncatedJournal.BuildReceiptTJ();
-        receipt.TJFacts();
-        v.truncatedJournal.SubseqOfEntireInterpretation(receipt.MessageSeqAt(i), i);
-        assert receipt.MessageSeqAt(i).Contains(endLsn-1);  // trigger
-      }
-      messages := I(v).journal.DiscardOld(startLsn).DiscardRecent(endLsn);
+    if lbl.startLsn < lbl.endLsn {
+      // endLsn-1 is in the interp, so we can discard to endLsn
+      var i := keepReceiptLines - 1;
+      var receipt := v.truncatedJournal.BuildReceiptTJ();
+      receipt.TJFacts();
+      v.truncatedJournal.SubseqOfEntireInterpretation(receipt.MessageSeqAt(i), i);
+      assert receipt.MessageSeqAt(i).Contains(lbl.endLsn-1);  // trigger
     }
   }
 
@@ -107,7 +102,21 @@ module PagedJournalRefinement
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
+    ensures v'.WF()
     ensures AbstractJournal.Next(I(v), I(v'), lbl)
   {
+    var step: Step :| NextStep(v, v', lbl, step);
+    if step.ReadForRecoveryStep? {
+      ReadForRecoveryRefines(v, v', lbl, step.receiptIndex);
+      assert AbstractJournal.Next(I(v), I(v'), lbl);
+    } else if step.FreezeForCommitStep? {
+      FreezeForCommitRefines(v, v', lbl, step.keepReceiptLines);
+      assert AbstractJournal.Next(I(v), I(v'), lbl);
+    } else {
+      assert AbstractJournal.Next(I(v), I(v'), lbl);
+      //case PutStep() => Put(v, v', lbl)
+      //case DiscardOldStep() => DiscardOld(v, v', lbl)
+      //case InternalJournalMarshalStep(cut) => InternalJournalMarshal(v, v', lbl, cut)
+    }
   }
 } // module

@@ -130,18 +130,20 @@ module CoordinationSystem {
     && uiop.NoopOp?
     && v.WF()
     && v.ephemeral.Known?
-    && !MapIsFresh(v)
     && v'.WF()
     && v'.ephemeral.Known?
 
     && puts.WF()
     && puts.CanFollow(v.ephemeral.mapadt.SeqEnd())
-    && v.ephemeral.journal.IncludesSubseq(puts)
 
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.ReadForRecoveryLabel(puts))
     && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, puts)
-    && v' == v.(ephemeral := v.ephemeral.(mapadt := v'.ephemeral.mapadt)) // predicate update above
+    && v' == v.(ephemeral := v.ephemeral.(
+        journal := v'.ephemeral.journal, // predicate update above
+        mapadt := v'.ephemeral.mapadt    // predicate update above
+      ))
   }
 
   predicate AcceptRequest(v: Variables, v': Variables, uiop : UIOp)
@@ -181,13 +183,14 @@ module CoordinationSystem {
 
   predicate Put(v: Variables, v': Variables, uiop : UIOp)
   {
-    // Here we're not allowing puts until MapIsFresh, and then maintaining that
-    // invariant. We could alternately allow puts to run ahead, and then just
-    // let Queries be delayed until Recover catches up the mapadt.
-    // I'm modeling it this way because this matches the phase-driven behavior
-    // (recover, then be done recovering until next crash) we expect the real
-    // implementation to maintain.
-    && MapIsFresh(v)
+    // At this layer we allow puts to run ahead, and then just let Queries be
+    // delayed until Recover catches up the mapadt.
+    // We expect the real implementation to maintain the invariant that, after
+    // recovery, the map stays "fresh" with the puts in the journal rather than
+    // checking that property at each query.
+    && v.WF()
+    && v'.WF()
+    && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
     && uiop.OperateOp?
@@ -204,8 +207,8 @@ module CoordinationSystem {
     && var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
 
     && v.WF()
-    && AbstractJournal.Put(v.ephemeral.journal, v'.ephemeral.journal, singleton)
-    && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, singleton)
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.PutLabel(singleton))
+    && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, singleton)  // TODO: interact only through Next!
     && v' == v.(ephemeral := v.ephemeral.(
           journal := v'.ephemeral.journal,  // predicate update above
           mapadt := v'.ephemeral.mapadt,  // predicate update above
@@ -280,6 +283,7 @@ module CoordinationSystem {
     && uiop.NoopOp?
     && v.WF()
     && v.ephemeral.Known?
+    && v'.ephemeral.Known?
     && v.inFlightImage.None?
 
     && v.ephemeral.frozenMap.Some?
@@ -292,7 +296,9 @@ module CoordinationSystem {
     && startJournal <= endJournal
     && v.persistentImage.SeqEnd() <= endJournal
 
-    && v.ephemeral.journal.CanFreezeAs(startJournal, endJournal, frozenJournal)
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
+        JournalLabels.FreezeForCommitLabel(startJournal, endJournal, frozenJournal))
+    // Map is unchanged in this step.
 
     && v'.inFlightImage.Some?
     && v' == v.(inFlightImage := Some(DiskImage(v.ephemeral.frozenMap.value, frozenJournal)))
@@ -307,7 +313,8 @@ module CoordinationSystem {
     && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && v'.ephemeral.Known?
 
-    && AbstractJournal.DiscardOld(v.ephemeral.journal, v'.ephemeral.journal, ifImage.mapadt.seqEnd)
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
+        JournalLabels.DiscardOldLabel(ifImage.mapadt.seqEnd))
 
     && v' == v.(
         persistentImage := ifImage,

@@ -757,46 +757,54 @@ module PagedJournal {
       else truncatedJournal.MaybeSeqEnd()
     }
 
-    predicate IncludesSubseq(msgs: MsgHistory)
-      requires WF()
-      requires msgs.WF()
-    {
-      // subseq appears in committed pages
-      exists i :: truncatedJournal.IncludesSubseqAt(msgs, i)
-      // We don't bother allowing you to "find" the msgs in unmarshalledTail,
-      // since the includes operation is only relevant during recovery time,
-      // during which the unmarshalledTail is kept empty.
-      // (I mean, we COULD allow Puts during that time, but why bother?)
-    }
-
     predicate SeqEndMatches(lsn: LSN)
       requires WF()
     {
       SeqEnd().Some? ==> lsn == SeqEnd().value
     }
-
-    predicate CanFreezeAs(startLsn: LSN, endLsn: LSN, keepReceiptLines: nat)
-    {
-      && WF()
-      && (SeqStart().Some? ==> startLsn == SeqStart().value)
-      && if startLsn == endLsn
-        then (
-          && keepReceiptLines == 0
-        ) else (
-          && startLsn < endLsn
-          // Can't freeze anything in unmarshalledTail, as it's certainly not clean on disk.
-          // Anything we freeze must start no later than journal is already truncated.
-          && truncatedJournal.boundaryLSN <= startLsn
-          // And must end at an existing page boundary.
-          // (In lower layers, that page and those before it must also be clean on disk.)
-          && var receipt := truncatedJournal.BuildReceiptTJ();
-          && 0 < keepReceiptLines <= |receipt.lines|
-          && assert receipt.lines[keepReceiptLines-1].journalRec.messageSeq.MsgHistory? by { receipt.JournalRecsAllWF(); }
-          endLsn == receipt.lines[keepReceiptLines-1].journalRec.messageSeq.seqEnd
-        )
-    }
   }
 
+  predicate ReadForRecovery(v: Variables, v': Variables, lbl: TransitionLabel, receiptIndex: nat)
+  {
+    && v.WF()
+    && lbl.ReadForRecoveryLabel?
+    && lbl.messages.WF()
+    && v.truncatedJournal.IncludesSubseqAt(lbl.messages, receiptIndex) // subseq appears in committed pages
+    && v' == v
+
+    // We don't bother allowing you to "find" the msgs in unmarshalledTail,
+    // since the includes operation is only relevant during recovery time,
+    // during which the unmarshalledTail is kept empty.
+    // (I mean, we COULD allow Puts during that time, but why bother?)
+  }
+
+  predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
+  {
+    && v.WF()
+    && lbl.FreezeForCommitLabel?
+    && lbl.frozenJournal.WF()
+    && (v.SeqStart().Some? ==> lbl.startLsn == v.SeqStart().value)
+    && (if lbl.startLsn == lbl.endLsn
+        then (
+          && keepReceiptLines == 0
+          && lbl.frozenJournal == EmptyHistory
+        ) else (
+          && lbl.startLsn < lbl.endLsn
+          // Can't freeze anything in unmarshalledTail, as it's certainly not clean on disk.
+          // Anything we freeze must start no later than journal is already truncated.
+          && v.truncatedJournal.boundaryLSN <= lbl.startLsn
+          // And must end at an existing page boundary.
+          // (In lower layers, that page and those before it must also be clean on disk.)
+          && var receipt := v.truncatedJournal.BuildReceiptTJ();
+          && 0 < keepReceiptLines <= |receipt.lines|
+          && assert receipt.lines[keepReceiptLines-1].journalRec.messageSeq.MsgHistory? by { receipt.JournalRecsAllWF(); } true
+          && lbl.endLsn == receipt.lines[keepReceiptLines-1].journalRec.messageSeq.seqEnd
+          && assert lbl.endLsn <= v.truncatedJournal.I().seqEnd by { receipt.LsnInReceiptBelongs(keepReceiptLines-1); } true
+          && lbl.frozenJournal == v.truncatedJournal.I().DiscardOld(lbl.startLsn).DiscardRecent(lbl.endLsn)
+        )
+      )
+    && v' == v
+  }
 
   /////////////////////////////////////////////////////////////////////////////
   // implementation of JournalIfc obligations
@@ -804,7 +812,7 @@ module PagedJournal {
   predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && lbl.PutLabel?
-    && var msgs := lbl.msgs;
+    && var msgs := lbl.messages;
     && v.WF()
     && v'.WF()
     && msgs.WF()
@@ -815,7 +823,7 @@ module PagedJournal {
   predicate DiscardOld(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && lbl.DiscardOldLabel?
-    && var lsn := lbl.lsn;
+    && var lsn := lbl.startLsn;
     && v.WF()
     && v'.WF()
     && (if v.Empty() then true else v.SeqStart().value <= lsn <= v.SeqEnd().value)
@@ -851,7 +859,9 @@ module PagedJournal {
   }
 
   datatype Step =
-      PutStep()
+      ReadForRecoveryStep(receiptIndex: nat)
+    | FreezeForCommitStep(keepReceiptLines: nat)
+    | PutStep()
     | DiscardOldStep()
     | InternalJournalMarshalStep(cut: LSN)
 
@@ -860,6 +870,8 @@ module PagedJournal {
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     match step {
+      case ReadForRecoveryStep(receiptIndex) => ReadForRecovery(v, v', lbl, receiptIndex)
+      case FreezeForCommitStep(keepReceiptLines) => FreezeForCommit(v, v', lbl, keepReceiptLines)
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
       case InternalJournalMarshalStep(cut) => InternalJournalMarshal(v, v', lbl, cut)

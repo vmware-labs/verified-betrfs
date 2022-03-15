@@ -9,8 +9,11 @@ module JournalLabels {
   import opened LSNMod
 
   datatype TransitionLabel =
-      PutLabel(msgs: MsgHistory)
-    | DiscardOldLabel(lsn: LSN)
+      ReadForRecoveryLabel(messages: MsgHistory)
+    | FreezeForCommitLabel(startLsn: LSN, endLsn: LSN, frozenJournal: MsgHistory)
+    | ObserveFreshJournalLabel(endLsn: LSN)
+    | PutLabel(messages: MsgHistory)
+    | DiscardOldLabel(startLsn: LSN)
     | InternalLabel()
 }
 
@@ -39,45 +42,70 @@ module AbstractJournal {
       || journal.EmptyHistory?
       || journal.seqEnd == lsn
     }
-    
-    predicate IncludesSubseq(messages: MsgHistory) {
-      && WF()
-      && messages.WF()
-      && journal.IncludesSubseq(messages)
-    }
-
-    predicate CanFreezeAs(startLsn: LSN, endLsn: LSN, frozenJournal: MsgHistory)
-    {
-      && WF()
-      && startLsn <= endLsn
-      && journal.CanDiscardTo(startLsn)
-      && journal.CanDiscardTo(endLsn)
-      && frozenJournal == (if startLsn==endLsn
-          then EmptyHistory
-          else journal.DiscardOld(startLsn).DiscardRecent(endLsn))
-    }
   }
 
-  predicate Put(v: Variables, v': Variables, messages: MsgHistory)
+  // private:
+  predicate ReadForRecovery(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && messages.WF()
-    && v.journal.CanConcat(messages)
-    && v' == v.(journal := v.journal.Concat(messages))
-  }
-
-  predicate DiscardOld(v: Variables, v': Variables, startLsn: LSN)
-  {
-    && v.WF()
-    && v.journal.CanDiscardTo(startLsn)
-    && v'.journal == v.journal.DiscardOld(startLsn)
-  }
-
-  predicate Internal(v: Variables, v': Variables)
-  {
+    && lbl.ReadForRecoveryLabel?
+    && lbl.messages.WF()
+    && v.journal.IncludesSubseq(lbl.messages)
     && v' == v
   }
 
+  // frozenJournal is sort of an "output parameter".
+  predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.FreezeForCommitLabel?
+    && lbl.frozenJournal.WF()
+    && lbl.startLsn <= lbl.endLsn
+    && v.journal.CanDiscardTo(lbl.startLsn)
+    && v.journal.CanDiscardTo(lbl.endLsn)
+    && lbl.frozenJournal == (if lbl.startLsn==lbl.endLsn
+        then EmptyHistory
+        else v.journal.DiscardOld(lbl.startLsn).DiscardRecent(lbl.endLsn))
+    && v' == v
+  }
+
+  // This is the journal's half of a precondition check for Query: can't query the
+  // map if we don't know it's up to date with the journal.
+  predicate ObserveFreshJournal(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.ObserveFreshJournalLabel?
+    && (
+        || v.journal.EmptyHistory?
+        || v.journal.seqEnd == lbl.endLsn
+      )
+    && v' == v
+  }
+
+  predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.PutLabel?
+    && lbl.messages.WF()
+    && v.journal.CanConcat(lbl.messages)
+    && v' == v.(journal := v.journal.Concat(lbl.messages))
+  }
+
+  predicate DiscardOld(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.DiscardOldLabel?
+    && v.journal.CanDiscardTo(lbl.startLsn)
+    && v'.journal == v.journal.DiscardOld(lbl.startLsn)
+  }
+
+  predicate Internal(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.InternalLabel?
+    && v' == v
+  }
+
+  // public:
   predicate Init(v: Variables, persistentJournal: MsgHistory)
   {
     v == Variables(persistentJournal)
@@ -86,9 +114,12 @@ module AbstractJournal {
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     match lbl {
-      case PutLabel(msgs) => Put(v, v', msgs)
-      case DiscardOldLabel(lsn) => DiscardOld(v, v', lsn)
-      case InternalLabel() => Internal(v, v')
+      case ReadForRecoveryLabel(_) => ReadForRecovery(v, v', lbl)
+      case FreezeForCommitLabel(_, _, _) => FreezeForCommit(v, v', lbl)
+      case ObserveFreshJournalLabel(_) => ObserveFreshJournal(v, v', lbl)
+      case PutLabel(_) => Put(v, v', lbl)
+      case DiscardOldLabel(_) => DiscardOld(v, v', lbl)
+      case InternalLabel() => Internal(v, v', lbl)
     }
   }
 }
