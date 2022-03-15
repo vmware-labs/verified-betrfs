@@ -215,7 +215,7 @@ module CoordinationSystemRefinement {
   }
 
   lemma InitRefines(v: Variables)
-    requires v.Mkfs()
+    requires v.Init()
     ensures Inv(v)
     ensures I(v) == CrashTolerantMapSpecMod.InitState()
   {

@@ -730,20 +730,23 @@ module PagedJournal {
       && unmarshalledTail.EmptyHistory?
     }
 
-    function SeqStart() : LSN
+    function SeqStart() : Option<LSN>
       requires WF()
-      requires !Empty()
-      ensures SeqStart() == I().seqStart
+      ensures !Empty() ==> SeqStart().Some? && SeqStart().value == I().seqStart
     {
-      var out := if truncatedJournal.freshestRec.Some?
-        then truncatedJournal.boundaryLSN
-        else unmarshalledTail.seqStart;
-      assert out == I().seqStart by {
-        if truncatedJournal.freshestRec.Some? {
-          truncatedJournal.BuildReceiptTJ().BoundaryLSN();
+      if Empty()
+      then None
+      else (
+        var out := if truncatedJournal.freshestRec.Some?
+          then truncatedJournal.boundaryLSN
+          else unmarshalledTail.seqStart;
+        assert out == I().seqStart by {
+          if truncatedJournal.freshestRec.Some? {
+            truncatedJournal.BuildReceiptTJ().BoundaryLSN();
+          }
         }
-      }
-      out
+        Some(out)
+      )
     }
 
     function SeqEnd() : Option<LSN>
@@ -775,7 +778,7 @@ module PagedJournal {
     predicate CanFreezeAs(startLsn: LSN, endLsn: LSN, keepReceiptLines: nat)
     {
       && WF()
-      && startLsn == SeqStart()
+      && (SeqStart().Some? ==> startLsn == SeqStart().value)
       && if startLsn == endLsn
         then (
           && keepReceiptLines == 0
@@ -815,7 +818,7 @@ module PagedJournal {
     && var lsn := lbl.lsn;
     && v.WF()
     && v'.WF()
-    && (if v.Empty() then true else v.SeqStart() <= lsn <= v.SeqEnd().value)
+    && (if v.Empty() then true else v.SeqStart().value <= lsn <= v.SeqEnd().value)
     && (if v.unmarshalledTail.MsgHistory? && v.unmarshalledTail.seqStart <= lsn
         then v' == Variables(Mkfs(), v.unmarshalledTail.DiscardOld(lsn))
         else v' == v.(truncatedJournal := v.truncatedJournal.DiscardOld(lsn))
