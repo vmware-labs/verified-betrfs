@@ -4,10 +4,27 @@
 include "StampedMap.i.dfy"
 include "MsgHistory.i.dfy"
 
+module JournalLabels {
+  import opened MsgHistoryMod
+  import opened LSNMod
+
+  datatype TransitionLabel =
+      PutLabel(msgs: MsgHistory)
+    | DiscardOldLabel(lsn: LSN)
+    | InternalLabel()
+}
+
 module AbstractJournal {
   import opened Options
   import opened MsgHistoryMod
   import opened LSNMod
+  import opened JournalLabels
+
+  // Mkfs is used by CoordinationSystem to define its Init
+  function Mkfs() : MsgHistory
+  {
+    MsgHistoryMod.EmptyHistory
+  }
 
   datatype Variables = Variables(journal: MsgHistory)
   {
@@ -41,12 +58,6 @@ module AbstractJournal {
     }
   }
 
-  // Should I do this as a predicate step with no enabling conditions?
-  function LoadJournal(persistentJournal: MsgHistory) : Variables
-  {
-    Variables(persistentJournal)
-  }
-
   predicate Put(v: Variables, v': Variables, messages: MsgHistory)
   {
     && v.WF()
@@ -60,5 +71,24 @@ module AbstractJournal {
     && v.WF()
     && v.journal.CanDiscardTo(startLsn)
     && v'.journal == v.journal.DiscardOld(startLsn)
+  }
+
+  predicate Internal(v: Variables, v': Variables)
+  {
+    && v' == v
+  }
+
+  predicate Init(v: Variables, persistentJournal: MsgHistory)
+  {
+    v == Variables(persistentJournal)
+  }
+
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    match lbl {
+      case PutLabel(msgs) => Put(v, v', msgs)
+      case DiscardOldLabel(lsn) => DiscardOld(v, v', lsn)
+      case InternalLabel() => Internal(v, v')
+    }
   }
 }

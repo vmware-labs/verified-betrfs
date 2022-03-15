@@ -68,7 +68,7 @@ module CoordinationSystem {
 
   function MkfsDiskImage() : DiskImage
   {
-    DiskImage(StampedMapMod.Empty(), MsgHistoryMod.EmptyHistory)
+    DiskImage(StampedMapMod.Empty(), AbstractJournal.Mkfs())
   }
 
   datatype Variables = Variables(
@@ -84,7 +84,7 @@ module CoordinationSystem {
       && (inFlightImage.Some? ==> inFlightImage.value.WF())
     }
 
-    predicate Mkfs()
+    predicate Init()
     {
       && persistentImage == MkfsDiskImage()
       && ephemeral.Unknown?
@@ -97,11 +97,13 @@ module CoordinationSystem {
     && v.WF()
     && uiop.NoopOp?
     && v.ephemeral.Unknown?
+    && v'.ephemeral.Known?
+    && AbstractJournal.Init(v'.ephemeral.journal, v.persistentImage.journal)
     && v' == v.(ephemeral := Known(
       Async.InitEphemeralState(),
       map[],  // syncReqs
-      AbstractMap.LoadMap(v.persistentImage.mapadt),
-      AbstractJournal.LoadJournal(v.persistentImage.journal),
+      AbstractMap.LoadMap(v.persistentImage.mapadt),  // TODO(jonh): make this AbstractMap.Init, following the pattern for journal in next line
+      v'.ephemeral.journal, // defined by predicate update update
       None  // frozen map
       ))
   }
