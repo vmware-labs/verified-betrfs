@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Base/Option.s.dfy"
+include "HilbertChoose.i.dfy"
 
 module Types {
   import opened Options
@@ -23,29 +24,33 @@ module Spec {
   import opened Labels
 
   datatype Variables = Variables(a: seq<int>, b: seq<int>)
+  {
+    function ConsA(x: int) : Option<Variables>
+    {
+      Some(this.(a := [x] + a))
+    }
 
-  predicate ConsA(v: Variables, v': Variables, x: int) {
-    && v' == v.(a := [x] + v.a)
+    function ConsB(x: int) : Option<Variables>
+    {
+      Some(this.(b := [x] + b))
+    }
+
+    function CopyBtoA() : Option<Variables>
+    {
+      Some(this.(a := b))
+    }
+
+    function Next(lbl: TransitionLabel) : Option<Variables>
+    {
+      match lbl
+        case ConsALabel(x) => ConsA(x)
+        case ConsBLabel(x) => ConsB(x)
+        case CopyBtoALabel() => CopyBtoA()
+    }
   }
 
-  predicate ConsB(v: Variables, v': Variables, x: int) {
-    && v' == v.(b := [x] + v.b)
-  }
-
-  predicate CopyBtoA(v: Variables, v': Variables) {
-    && v' == v.(a := v.b)
-  }
-
-  predicate Init(v: Variables) {
-    && v.a == []
-    && v.b == []
-  }
-
-  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
-    match lbl
-      case ConsALabel(x) => ConsA(v, v', x)
-      case ConsBLabel(x) => ConsB(v, v', x)
-      case CopyBtoALabel() => CopyBtoA(v, v')
+  function Init() : Variables {
+    Variables([], [])
   }
 }
 
@@ -58,29 +63,48 @@ module Representation {
   datatype Cell = Cell(x: int, tail: Cell) | Nil
 
   datatype Variables = Variables(a: Cell, b: Cell)
+  {
+    function ConsA(lbl: TransitionLabel) : Option<Variables>
+    {
+      var enabled :=
+        && lbl.ConsALabel?
+        ;
+      if !enabled then None else Some(
+        this.(a := Cell(lbl.x, a))
+      )
+    }
 
-  predicate ConsA(v: Variables, v': Variables, x: int) {
-    && v' == v.(a := Cell(x, v.a))
+    function ConsB(lbl: TransitionLabel) : Option<Variables>
+    {
+      var enabled :=
+        && lbl.ConsBLabel?
+        ;
+      if !enabled then None else Some(
+        this.(b := Cell(lbl.x, b))
+      )
+    }
+
+    function CopyBtoA(lbl: TransitionLabel) : Option<Variables>
+    {
+      var enabled :=
+        && lbl.CopyBtoALabel?
+        ;
+      if !enabled then None else Some(
+        this.(a := b)
+      )
+    }
+
+    function Next(lbl: TransitionLabel) : Option<Variables>
+    {
+      match lbl
+        case ConsALabel(x) => ConsA(lbl)
+        case ConsBLabel(x) => ConsB(lbl)
+        case CopyBtoALabel() => CopyBtoA(lbl)
+    }
   }
 
-  predicate ConsB(v: Variables, v': Variables, x: int) {
-    && v' == v.(b := Cell(x, v.b))
-  }
-
-  predicate CopyBtoA(v: Variables, v': Variables) {
-    && v' == v.(a := v.b)
-  }
-
-  predicate Init(v: Variables) {
-    && v.a == Nil
-    && v.b == Nil
-  }
-
-  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
-    match lbl
-      case ConsALabel(x) => ConsA(v, v', x)
-      case ConsBLabel(x) => ConsB(v, v', x)
-      case CopyBtoALabel() => CopyBtoA(v, v')
+  function Init() : Variables {
+    Variables(Nil, Nil)
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -91,28 +115,28 @@ module Representation {
   }
 
   lemma InvInit(v: Variables)
-    requires Init(v)
+    requires v == Init()
     ensures Inv(v)
   {
   }
 
-  lemma InvConsA(v: Variables, v': Variables, x: int)
+  lemma InvConsA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires ConsA(v, v', x)
+    requires Some(v') == v.ConsA(lbl)
     ensures Inv(v')
   {
   }
 
-  lemma InvConsB(v: Variables, v': Variables, x: int)
+  lemma InvConsB(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires ConsB(v, v', x)
+    requires Some(v') == v.ConsB(lbl)
     ensures Inv(v')
   {
   }
 
-  lemma InvCopyBtoA(v: Variables, v': Variables)
+  lemma InvCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires CopyBtoA(v, v')
+    requires Some(v') == v.CopyBtoA(lbl)
     ensures Inv(v')
   {
   }
@@ -135,15 +159,15 @@ module Representation {
   // externally-facing refinement lemma
 
   lemma RefinementInit(v: Variables)
-    requires Init(v)
-    ensures Spec.Init(I(v))
+    requires v == Init()
+    ensures I(v) == Spec.Init()
   {
   }
 
   lemma RefinementNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires Next(v, v', lbl)
-    ensures Spec.Next(I(v), I(v'), lbl)
+    requires Some(v') == v.Next(lbl)
+    ensures Some(I(v')) == I(v).Next(lbl)
   {
   }
 }
@@ -153,69 +177,70 @@ module FraringCyclicity {
   import opened Types
   import opened Labels
   import Representation
+  import opened HilbertChoose 
 
   datatype CellPage = CellPage(x: int, tail: Pointer)
   type Disk = map<Address, CellPage>
-
-  datatype Variables = Variables(disk: Disk, a: Pointer, b: Pointer)
-
-  predicate IsFree(v: Variables, addr: Address) {
-    // Ignoring deallocation -- leaving garbage on the disk.
-    && addr !in v.disk
-  }
-
-  function ConsAFunc(v: Variables, x: int, addr: Address) : Variables
-    requires IsFree(v, addr)
-  {
-    Variables(v.disk[addr := CellPage(x, v.a)], Some(addr), v.b)
-  }
-
-  predicate ConsA(v: Variables, v': Variables, x: int, addr: Address) {
-    && IsFree(v, addr)
-    && v' == ConsAFunc(v, x, addr)
-  }
-
-  function ConsBFunc(v: Variables, x: int, addr: Address) : Variables
-    requires IsFree(v, addr)
-  {
-    Variables(v.disk[addr := CellPage(x, v.b)], v.a, Some(addr))
-  }
-
-  predicate ConsB(v: Variables, v': Variables, x: int, addr: Address) {
-    && IsFree(v, addr)
-    && v' == ConsBFunc(v, x, addr)
-  }
-
-  function CopyBtoAFunc(v: Variables) : Variables
-  {
-    v.(a := v.b)
-  }
-
-  predicate CopyBtoA(v: Variables, v': Variables) {
-    // Ignoring deallocation -- leaving garbage on the disk.
-    && v' == CopyBtoAFunc(v)
-  }
-
-  predicate Init(v: Variables) {
-    && v.disk == map[]
-    && v.a == None
-    && v.b == None
-  }
 
   datatype Step =
       ConsAStep(addr: Address)
     | ConsBStep(addr: Address)
     | CopyBtoAStep()
 
-  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) {
-    match step
-      case ConsAStep(addr) => lbl.ConsALabel? && ConsA(v, v', lbl.x, addr)
-      case ConsBStep(addr) => lbl.ConsBLabel? && ConsB(v, v', lbl.x, addr)
-      case CopyBtoAStep() => lbl.CopyBtoALabel? && CopyBtoA(v, v')
+  datatype Variables = Variables(disk: Disk, a: Pointer, b: Pointer)
+  {
+    predicate IsFree(addr: Address) {
+      // Ignoring deallocation -- leaving garbage on the disk.
+      && addr !in disk
+    }
+
+    function ConsA(lbl: TransitionLabel, addr: Address) : Option<Variables>
+    {
+      var enabled :=
+        && lbl.ConsALabel?
+        && IsFree(addr)
+        ;
+      if !enabled then None else Some(
+        Variables(disk[addr := CellPage(lbl.x, a)], Some(addr), b)
+      )
+    }
+
+    function ConsB(lbl: TransitionLabel, addr: Address) : Option<Variables>
+    {
+      var enabled :=
+        && lbl.ConsBLabel?
+        && IsFree(addr)
+        ;
+      if !enabled then None else Some(
+        Variables(disk[addr := CellPage(lbl.x, b)], a, Some(addr))
+      )
+    }
+
+    function CopyBtoA(lbl: TransitionLabel) : Option<Variables>
+    {
+      var enabled :=
+        && lbl.CopyBtoALabel?
+        ;
+      if !enabled then None else Some(this.(a := b))
+    }
+
+    function NextStep(lbl: TransitionLabel, step: Step) : Option<Variables> {
+      match step
+        case ConsAStep(addr) => ConsA(lbl, addr)
+        case ConsBStep(addr) => ConsB(lbl, addr)
+        case CopyBtoAStep() => CopyBtoA(lbl)
+    }
+
+    function Next(lbl: TransitionLabel) : Option<Variables> {
+      var step := ChooseIf(step => NextStep(lbl, step).Some?);
+      if step.Some? then NextStep(lbl, step.value) else None
+    }
   }
 
-  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
-    exists step: Step :: NextStep(v, v', lbl, step)
+  predicate Init(v: Variables) {
+    && v.disk == map[]
+    && v.a == None
+    && v.b == None
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -264,9 +289,9 @@ module FraringCyclicity {
     assert PointersRespectRank(v, map[]); // witness is an empty Ranking
   }
 
-  lemma InvConsA(v: Variables, v': Variables, x: int, addr: Address)
+  lemma InvConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsA(v, v', x, addr)
+    requires Some(v') == v.ConsA(lbl, addr)
     ensures Inv(v')
   {
     var rank :| PointersRespectRank(v, rank);
@@ -274,9 +299,9 @@ module FraringCyclicity {
     assert PointersRespectRank(v', rank');
   }
 
-  lemma InvConsB(v: Variables, v': Variables, x: int, addr: Address)
+  lemma InvConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsB(v, v', x, addr)
+    requires Some(v') == v.ConsB(lbl, addr)
     ensures Inv(v')
   {
     var rank :| PointersRespectRank(v, rank);
@@ -284,9 +309,9 @@ module FraringCyclicity {
     assert PointersRespectRank(v', rank');
   }
 
-  lemma InvCopyBtoA(v: Variables, v': Variables)
+  lemma InvCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires CopyBtoA(v, v')
+    requires Some(v') == v.CopyBtoA(lbl)
     ensures Inv(v')
   {
     var rank :| PointersRespectRank(v, rank);
@@ -346,35 +371,35 @@ module FraringCyclicity {
     }
   }
 
-  lemma RefinementConsA(v: Variables, v': Variables, x:int, addr: Address)
+  lemma RefinementConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsA(v, v', x, addr)
+    requires Some(v') == v.ConsA(lbl, addr)
     ensures Inv(v')
-    ensures Representation.ConsA(I(v), I(v'), x)
+    ensures Some(I(v')) == I(v).ConsA(lbl)
   {
-    InvConsA(v, v', x, addr);
+    InvConsA(v, v', lbl, addr);
     Fresh(v, v', v.a);
     Fresh(v, v', v.b);
   }
 
-  lemma RefinementConsB(v: Variables, v': Variables, x:int, addr: Address)
+  lemma RefinementConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsB(v, v', x, addr)
+    requires Some(v') == v.ConsB(lbl, addr)
     ensures Inv(v')
-    ensures Representation.ConsB(I(v), I(v'), x)
+    ensures Some(I(v')) == I(v).ConsB(lbl)
   {
-    InvConsB(v, v', x, addr);
+    InvConsB(v, v', lbl, addr);
     Fresh(v, v', v.a);
     Fresh(v, v', v.b);
   }
 
-  lemma RefinementCopyBtoA(v: Variables, v': Variables)
+  lemma RefinementCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires CopyBtoA(v, v')
+    requires Some(v') == v.CopyBtoA(lbl)
     ensures Inv(v')
-    ensures Representation.CopyBtoA(I(v), I(v'))
+    ensures Some(I(v')) == I(v).CopyBtoA(lbl)
   {
-    InvCopyBtoA(v, v');
+    InvCopyBtoA(v, v', lbl);
     Fresh(v, v', v.b);
   }
 
@@ -384,22 +409,22 @@ module FraringCyclicity {
   lemma RefinementInit(v: Variables)
     requires Init(v)
     ensures Inv(v)
-    ensures Representation.Init(I(v))
+    ensures I(v) == Representation.Init()
   {
     InvInit(v);
   }
 
   lemma RefinementNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires Next(v, v', lbl)
+    requires Some(v') == v.Next(lbl)
     ensures Inv(v')
-    ensures Representation.Next(I(v), I(v'), lbl)
+    ensures Some(I(v')) == I(v).Next(lbl)
   {
-    var step :| NextStep(v, v', lbl, step);
+    var step := ChooseIf(step => v.NextStep(lbl, step).Some?).value;
     match step {
-      case ConsAStep(addr) => { RefinementConsA(v, v', lbl.x, addr); }
-      case ConsBStep(addr) => { RefinementConsB(v, v', lbl.x, addr); }
-      case CopyBtoAStep() => { RefinementCopyBtoA(v, v'); }
+      case ConsAStep(addr) => { RefinementConsA(v, v', lbl, addr); }
+      case ConsBStep(addr) => { RefinementConsB(v, v', lbl, addr); }
+      case CopyBtoAStep() => { RefinementCopyBtoA(v, v', lbl); }
     }
   }
 }
@@ -409,6 +434,7 @@ module Marshalling {
   import opened Types
   import opened Labels
   import FraringCyclicity 
+  import opened HilbertChoose 
 
   type Block(!new, ==)
   function Parse<T>(block: Block) : T
@@ -417,53 +443,70 @@ module Marshalling {
     ensures Parse(Marshal(t)) == t
 
   type Disk = map<Address, Block>
-  datatype Variables = Variables(disk: Disk, a: Pointer, b: Pointer)
-
   type CellPage = FraringCyclicity.CellPage
-
-  predicate Init(v: Variables) {
-    && v.disk == map[]
-    && v.a == None
-    && v.b == None
-  }
-
-  predicate IsFree(v: Variables, addr: Address) {
-    // Ignoring deallocation -- leaving garbage on the disk.
-    && addr !in v.disk
-  }
-
-  predicate ConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
-    && lbl.ConsALabel?
-    && IsFree(v, addr)
-    && v' == v.(disk := v.disk[addr := Marshal(FraringCyclicity.CellPage(lbl.x, v.a))], a := Some(addr))
-  }
-
-  predicate ConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
-    && lbl.ConsBLabel?
-    && IsFree(v, addr)
-    && v' == v.(disk := v.disk[addr := Marshal(FraringCyclicity.CellPage(lbl.x, v.b))], b := Some(addr))
-  }
-
-  predicate CopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel) {
-    // Ignoring deallocation -- leaving garbage on the disk.
-    && lbl.CopyBtoALabel?
-    && v' == v.(a := v.b)
-  }
 
   datatype Step =
       ConsAStep(addr: Address)
     | ConsBStep(addr: Address)
     | CopyBtoAStep()
 
-  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) {
-    match step
-      case ConsAStep(addr) => lbl.ConsALabel? && ConsA(v, v', lbl, addr)
-      case ConsBStep(addr) => lbl.ConsBLabel? && ConsB(v, v', lbl, addr)
-      case CopyBtoAStep() => lbl.CopyBtoALabel? && CopyBtoA(v, v', lbl)
+  datatype Variables = Variables(disk: Disk, a: Pointer, b: Pointer)
+  {
+    predicate IsFree(addr: Address)
+    {
+      // Ignoring deallocation -- leaving garbage on the disk.
+      && addr !in disk
+    }
+
+    function ConsA(lbl: TransitionLabel, addr: Address) : Option<Variables>
+    {
+      var enabled :=
+        && lbl.ConsALabel?
+        && IsFree(addr)
+      ;
+      if !enabled then None else Some(
+        this.(disk := disk[addr := Marshal(FraringCyclicity.CellPage(lbl.x, a))], a := Some(addr))
+      )
+    }
+
+    function ConsB(lbl: TransitionLabel, addr: Address) : Option<Variables>
+    {
+      var enabled :=
+        && lbl.ConsBLabel?
+        && IsFree(addr)
+      ;
+      if !enabled then None else Some(
+        this.(disk := disk[addr := Marshal(FraringCyclicity.CellPage(lbl.x, b))], b := Some(addr))
+      )
+    }
+
+    function CopyBtoA(lbl: TransitionLabel) : Option<Variables>
+    {
+      // Ignoring deallocation -- leaving garbage on the disk.
+      var enabled :=
+        lbl.CopyBtoALabel?
+      ;
+      if !enabled then None else Some(this.(a := b))
+    }
+
+    function NextStep(lbl: TransitionLabel, step: Step) : Option<Variables>
+    {
+      match step
+        case ConsAStep(addr) => ConsA(lbl, addr)
+        case ConsBStep(addr) => ConsB(lbl, addr)
+        case CopyBtoAStep() => CopyBtoA(lbl)
+    }
+
+    function Next(lbl: TransitionLabel) : Option<Variables>
+    {
+      if step: Step :| NextStep(lbl, step).Some?  then NextStep(lbl, step) else None
+    }
   }
 
-  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
-    exists step: Step :: NextStep(v, v', lbl, step)
+  predicate Init(v: Variables) {
+    && v.disk == map[]
+    && v.a == None
+    && v.b == None
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -508,31 +551,31 @@ module Marshalling {
 
   lemma InvConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsA(v, v', lbl, addr)
+    requires Some(v') == v.ConsA(lbl, addr)
     ensures Inv(v')
   {
-    var fv' := FraringCyclicity.ConsAFunc(I(v), lbl.x, addr);
-    FraringCyclicity.InvConsA(I(v), fv', lbl.x, addr);
+    var fv' := I(v).ConsA(lbl, addr).value;
+    FraringCyclicity.InvConsA(I(v), fv', lbl, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
   lemma InvConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsB(v, v', lbl, addr)
+    requires Some(v') == v.ConsB(lbl, addr)
     ensures Inv(v')
   {
-    var fv' := FraringCyclicity.ConsBFunc(I(v), lbl.x, addr);
-    FraringCyclicity.InvConsB(I(v), fv', lbl.x, addr);
+    var fv' := I(v).ConsB(lbl, addr).value;
+    FraringCyclicity.InvConsB(I(v), fv', lbl, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
   lemma InvCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires CopyBtoA(v, v', lbl)
+    requires Some(v') == v.CopyBtoA(lbl)
     ensures Inv(v')
   {
-    var fv' := FraringCyclicity.CopyBtoAFunc(I(v));
-    FraringCyclicity.InvCopyBtoA(I(v), fv');
+    var fv' := I(v).CopyBtoA(lbl).value;
+    FraringCyclicity.InvCopyBtoA(I(v), fv', lbl);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
@@ -541,9 +584,10 @@ module Marshalling {
 
   lemma RefinementConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsA(v, v', lbl, addr)
+    requires Some(v') == v.Next(lbl)  // Essential
+    requires Some(v') == v.ConsA(lbl, addr)
     ensures Inv(v')
-    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
+    ensures Some(I(v')) == I(v).Next(lbl)
   {
     var x := lbl.x;
     InvConsA(v, v', lbl, addr);
@@ -566,23 +610,33 @@ module Marshalling {
         ParseAxiom(TheTypedDisk(v)[k]);
       }
     }
-    assert FraringCyclicity.NextStep(I(v), I(v'), lbl, FraringCyclicity.ConsAStep(addr));
+
+    var hstep := FraringCyclicity.ConsAStep(addr);
+//    assert I(v).NextStep(lbl, hstep).Some?;
+//    assert exists step :: I(v).NextStep(lbl, step).Some?;
+    var p := step => I(v).NextStep(lbl, step).Some?;
+    assert p.requires(hstep) && p(hstep); // trigger
+    var step := ChooseIf(step => I(v).NextStep(lbl, step).Some?).value;
+    assert step.ConsAStep?;
+    assert step == hstep;
+    assert I(v).NextStep(lbl, FraringCyclicity.ConsAStep(addr)) == I(v).Next(lbl);
+    assert Some(I(v')) == I(v).NextStep(lbl, FraringCyclicity.ConsAStep(addr));
   }
 
   lemma RefinementConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsB(v, v', lbl, addr)
+    requires Some(v') == v.ConsB(lbl, addr)
     ensures Inv(v')
-    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
+    ensures Some(I(v')) == I(v).Next(lbl)
   {
     assume false; // WOLOG and jonh is lazy
   }
 
   lemma RefinementCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires CopyBtoA(v, v', lbl)
+    requires Some(v') == v.CopyBtoA(lbl)
     ensures Inv(v')
-    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
+    ensures Some(I(v')) == I(v).Next(lbl)
   {
     InvCopyBtoA(v, v', lbl);
     forall k
@@ -599,7 +653,7 @@ module Marshalling {
       assert Parse<FraringCyclicity.CellPage>(v'.disk[k]) == Parse(v.disk[k]);  // TRIGGER
       ParseAxiom(TheTypedDisk(v)[k]);
     }
-    assert FraringCyclicity.NextStep(I(v), I(v'), lbl, FraringCyclicity.CopyBtoAStep());
+    assert Some(I(v')) == I(v).NextStep(lbl, FraringCyclicity.CopyBtoAStep());
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -615,11 +669,11 @@ module Marshalling {
 
   lemma RefinementNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires Next(v, v', lbl)
+    requires Some(v') == v.Next(lbl)
     ensures Inv(v')
-    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
+    ensures Some(I(v')) == I(v).Next(lbl)
   {
-    var step :| NextStep(v, v', lbl, step);
+    var step :| Some(v') == v.NextStep(lbl, step);
     match step {
       case ConsAStep(addr) => { RefinementConsA(v, v', lbl, addr); }
       case ConsBStep(addr) => { RefinementConsB(v, v', lbl, addr); }
