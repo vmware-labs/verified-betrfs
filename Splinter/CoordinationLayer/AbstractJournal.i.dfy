@@ -7,6 +7,9 @@ include "MsgHistory.i.dfy"
 module JournalLabels {
   import opened MsgHistoryMod
   import opened LSNMod
+  // These labels are in a separate module so that refining state machines can
+  // import them opened for brevity without colliding with the Variables/Next
+  // boilerplate names in AbstractJournal.
 
   datatype TransitionLabel =
       ReadForRecoveryLabel(messages: MsgHistory)

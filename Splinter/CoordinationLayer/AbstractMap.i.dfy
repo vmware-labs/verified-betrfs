@@ -5,18 +5,30 @@ include "StampedMap.i.dfy"
 include "MsgHistory.i.dfy"
 include "LSNMod.i.dfy"
 
-module AbstractMap {
+module MapLabels {
   import opened ValueMessage
   import opened KeyType
   import opened StampedMapMod
   import opened MsgHistoryMod
   import opened LSNMod
+  // These labels are in a separate module so that refining state machines can
+  // import them opened for brevity without colliding with the Variables/Next
+  // boilerplate names in AbstractMap.
 
   datatype TransitionLabel =
       QueryLabel(endLsn: LSN, key: Key, value: Value)
     | PutLabel(puts: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(stampedMap: StampedMap)
+}
+
+module AbstractMap {
+  import opened ValueMessage
+  import opened KeyType
+  import opened StampedMapMod
+  import opened MsgHistoryMod
+  import opened LSNMod
+  import opened MapLabels
 
   datatype Variables = Variables(stampedMap: StampedMap)
 

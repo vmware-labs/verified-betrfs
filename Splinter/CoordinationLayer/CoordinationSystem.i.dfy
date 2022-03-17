@@ -125,7 +125,7 @@ module CoordinationSystem {
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.ReadForRecoveryLabel(puts))
-    && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.PutLabel(puts))
+    && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.PutLabel(puts))
     && v' == v.(ephemeral := v.ephemeral.(
         journal := v'.ephemeral.journal, // predicate update above
         mapadt := v'.ephemeral.mapadt,   // predicate update above
@@ -162,7 +162,7 @@ module CoordinationSystem {
     && var value := uiop.baseOp.reply.output.value;
     && assert AnyKey(key);
     // Map handles the query
-    && AbstractMap.Query(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryLabel(v.ephemeral.mapLsn, key, value))
+    && AbstractMap.Query(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryLabel(v.ephemeral.mapLsn, key, value))
     // Journal confirms that the map is up-to-date (but otherwise doesn't do anything).
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
     && v' == v.(ephemeral := v.ephemeral.(
@@ -201,7 +201,7 @@ module CoordinationSystem {
 
     && v.WF()
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.PutLabel(singleton))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.PutLabel(singleton))
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.PutLabel(singleton))
     && v' == v.(ephemeral := v.ephemeral.(
           journal := v'.ephemeral.journal,  // predicate update above
           mapadt := v'.ephemeral.mapadt,  // predicate update above
@@ -244,7 +244,7 @@ module CoordinationSystem {
     // also need to confirm that the journal hasn't gone ahead, since sync is relative to
     // writes (which have affected the journal).
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     // NB that the label for a sync in the table is the LSN AFTER the last write
     && v' == v.(ephemeral := v.ephemeral.(
@@ -275,7 +275,7 @@ module CoordinationSystem {
     // Copy the current map into the frozen one, deleting whatever was
     // frozen.
     && v'.ephemeral.frozenMap.Some?
-    && AbstractMap.FreezeAs(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.FreezeAsLabel(v'.ephemeral.frozenMap.value))
+    && AbstractMap.FreezeAs(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.FreezeAsLabel(v'.ephemeral.frozenMap.value))
     // TODO this should cause mischief if a Commit is in progress. Does it?
     && v' == v.(ephemeral := v.ephemeral.(
         mapadt := v'.ephemeral.mapadt,  // predicate update above
@@ -304,7 +304,7 @@ module CoordinationSystem {
 
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
         JournalLabels.FreezeForCommitLabel(startJournal, endJournal, frozenJournal))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     && v'.inFlightImage.Some?
     && v' == v.(
@@ -325,7 +325,7 @@ module CoordinationSystem {
 
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
         JournalLabels.DiscardOldLabel(ifImage.mapadt.seqEnd, v.ephemeral.mapLsn))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     && v' == v.(
         persistentImage := ifImage,
