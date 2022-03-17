@@ -54,6 +54,7 @@ module CoordinationSystem {
       syncReqs: SyncReqs,
 
       mapadt: AbstractMap.Variables,
+      mapLsn: LSN,  // invariant: agrees with mapadt.stampedMap.seqEnd
       journal: AbstractJournal.Variables,
 
       frozenMap: Option<StampedMap>
@@ -99,29 +100,15 @@ module CoordinationSystem {
     && v.ephemeral.Unknown?
     && v'.ephemeral.Known?
     && AbstractJournal.Init(v'.ephemeral.journal, v.persistentImage.journal)
+    && AbstractMap.Init(v'.ephemeral.mapadt, v.persistentImage.mapadt)
     && v' == v.(ephemeral := Known(
       Async.InitEphemeralState(),
       map[],  // syncReqs
-      AbstractMap.LoadMap(v.persistentImage.mapadt),  // TODO(jonh): make this AbstractMap.Init, following the pattern for journal in next line
+      v'.ephemeral.mapadt, // defined by predicate update update
+      v.persistentImage.mapadt.seqEnd,
       v'.ephemeral.journal, // defined by predicate update update
       None  // frozen map
       ))
-  }
-
-  // The ephemeral map and ephemeral journal are at the same lsn, which only happens
-  // after recovery has "caught the map up" to the journal.
-  predicate MapIsFresh(v: Variables)
-  {
-    && v.WF()
-    && v.ephemeral.Known?
-    && v.ephemeral.journal.SeqEndMatches(v.ephemeral.mapadt.SeqEnd())
-  }
-
-  function NextLSN(v: Variables) : LSN
-    requires v.WF()
-    requires v.ephemeral.Known?
-  {
-    v.ephemeral.mapadt.SeqEnd()
   }
 
   // Move some journal state into the map to make it (closer to) fresh
@@ -134,15 +121,15 @@ module CoordinationSystem {
     && v'.ephemeral.Known?
 
     && puts.WF()
-    && puts.CanFollow(v.ephemeral.mapadt.SeqEnd())
 
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.ReadForRecoveryLabel(puts))
-    && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, puts)
+    && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.PutLabel(puts))
     && v' == v.(ephemeral := v.ephemeral.(
         journal := v'.ephemeral.journal, // predicate update above
-        mapadt := v'.ephemeral.mapadt    // predicate update above
+        mapadt := v'.ephemeral.mapadt,   // predicate update above
+        mapLsn := puts.SeqEndFor(v.ephemeral.mapLsn)
       ))
   }
 
@@ -158,7 +145,9 @@ module CoordinationSystem {
 
   predicate Query(v: Variables, v': Variables, uiop : UIOp)
   {
-    && MapIsFresh(v)
+    && v.WF()
+    && v'.WF()
+    && v.ephemeral.Known?
     && v'.ephemeral.Known?
     && uiop.OperateOp?
     && uiop.baseOp.ExecuteOp?
@@ -172,9 +161,13 @@ module CoordinationSystem {
     && var key := uiop.baseOp.req.input.key;
     && var value := uiop.baseOp.reply.output.value;
     && assert AnyKey(key);
-    && AbstractMap.Query(v.ephemeral.mapadt, v'.ephemeral.mapadt, key, value)
+    // Map handles the query
+    && AbstractMap.Query(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryLabel(v.ephemeral.mapLsn, key, value))
+    // Journal confirms that the map is up-to-date (but otherwise doesn't do anything).
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
     && v' == v.(ephemeral := v.ephemeral.(
         mapadt := v'.ephemeral.mapadt,  // predicate update above
+        journal := v'.ephemeral.journal,  // predicate update above
         progress := v.ephemeral.progress.(
           requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
           replies := v.ephemeral.progress.replies + {uiop.baseOp.reply}
@@ -204,14 +197,15 @@ module CoordinationSystem {
     && var key := uiop.baseOp.req.input.key;
     && var val := uiop.baseOp.req.input.value;
 
-    && var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
+    && var singleton := MsgHistoryMod.Singleton(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
 
     && v.WF()
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.PutLabel(singleton))
-    && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, singleton)  // TODO: interact only through Next!
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.PutLabel(singleton))
     && v' == v.(ephemeral := v.ephemeral.(
           journal := v'.ephemeral.journal,  // predicate update above
           mapadt := v'.ephemeral.mapadt,  // predicate update above
+          mapLsn := v.ephemeral.mapLsn + 1,
           // Frozen stuff unchanged here.
           progress := v.ephemeral.progress.(
             requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
@@ -240,19 +234,31 @@ module CoordinationSystem {
 
   predicate ReqSync(v: Variables, v': Variables, uiop : UIOp)
   {
+    && v.WF()
+    && v'.WF()
+    && v.ephemeral.Known?
+    && v'.ephemeral.Known?
     && uiop.ReqSyncOp?
-    && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && uiop.syncReqId !in v.ephemeral.syncReqs
+    // Need to record the current LSN, which is generally the current map state. But we
+    // also need to confirm that the journal hasn't gone ahead, since sync is relative to
+    // writes (which have affected the journal).
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
+
     // NB that the label for a sync in the table is the LSN AFTER the last write
     && v' == v.(ephemeral := v.ephemeral.(
-        syncReqs := v.ephemeral.syncReqs[uiop.syncReqId := NextLSN(v)]
+        journal := v'.ephemeral.journal,  // predicate update above
+        mapadt := v'.ephemeral.mapadt,  // predicate update above
+        syncReqs := v.ephemeral.syncReqs[uiop.syncReqId := v.ephemeral.mapLsn]
       ))
   }
 
   predicate ReplySync(v: Variables, v': Variables, uiop : UIOp)
   {
+    && v.WF()
+    && v.ephemeral.Known?
     && uiop.ReplySyncOp?
-    && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && uiop.syncReqId in v.ephemeral.syncReqs
     && v.persistentImage.CompletesSync(v.ephemeral.syncReqs[uiop.syncReqId]) // sync lsn is persistent
     && v' == v.(ephemeral := v.ephemeral.(
@@ -269,7 +275,7 @@ module CoordinationSystem {
     // Copy the current map into the frozen one, deleting whatever was
     // frozen.
     && v'.ephemeral.frozenMap.Some?
-    && AbstractMap.FreezeAs(v.ephemeral.mapadt, v'.ephemeral.mapadt, v'.ephemeral.frozenMap.value)
+    && AbstractMap.FreezeAs(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.FreezeAsLabel(v'.ephemeral.frozenMap.value))
     // TODO this should cause mischief if a Commit is in progress. Does it?
     && v' == v.(ephemeral := v.ephemeral.(
         mapadt := v'.ephemeral.mapadt,  // predicate update above
@@ -292,34 +298,41 @@ module CoordinationSystem {
     // a gap to the ephemeral journal start.
     && v.persistentImage.mapadt.seqEnd <= startJournal
     // And of course there should be no way for it to have passed the ephemeral map!
-    && startJournal <= v.ephemeral.mapadt.SeqEnd()
+    && startJournal <= v.ephemeral.mapLsn
     && startJournal <= endJournal
     && v.persistentImage.SeqEnd() <= endJournal
 
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
         JournalLabels.FreezeForCommitLabel(startJournal, endJournal, frozenJournal))
-    // Map is unchanged in this step.
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     && v'.inFlightImage.Some?
-    && v' == v.(inFlightImage := Some(DiskImage(v.ephemeral.frozenMap.value, frozenJournal)))
+    && v' == v.(
+        ephemeral := v.ephemeral.(mapadt := v'.ephemeral.mapadt),  // predicate update above
+        inFlightImage := Some(DiskImage(v.ephemeral.frozenMap.value, frozenJournal)))
   }
 
   predicate CommitComplete(v: Variables, v': Variables, uiop : UIOp)
   {
+    && v.WF()
+    && v'.WF()
+    && v.ephemeral.Known?
     && v.inFlightImage.Some?
     && var ifImage := v.inFlightImage.value;
 
     && uiop.SyncOp?
-    && MapIsFresh(v) // Actually, v.ephemeral.Known? is sufficient here.
     && v'.ephemeral.Known?
 
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
-        JournalLabels.DiscardOldLabel(ifImage.mapadt.seqEnd))
+        JournalLabels.DiscardOldLabel(ifImage.mapadt.seqEnd, v.ephemeral.mapLsn))
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     && v' == v.(
         persistentImage := ifImage,
-        ephemeral := v.ephemeral.(journal := v'.ephemeral.journal), // predicate update above
-        // Update journal, mapadt here if modeling clean, frozen
+        ephemeral := v.ephemeral.(
+          journal := v'.ephemeral.journal, // predicate update above
+          mapadt := v'.ephemeral.mapadt    // predicate update above
+        ),
         inFlightImage := None)
   }
 

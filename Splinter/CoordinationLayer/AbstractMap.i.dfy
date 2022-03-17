@@ -12,37 +12,59 @@ module AbstractMap {
   import opened MsgHistoryMod
   import opened LSNMod
 
-  datatype Variables = Variables(sm: StampedMap)
+  datatype TransitionLabel =
+      QueryLabel(endLsn: LSN, key: Key, value: Value)
+    | PutLabel(puts: MsgHistory)
+    | QueryEndLsnLabel(endLsn: LSN)
+    | FreezeAsLabel(stampedMap: StampedMap)
+
+  datatype Variables = Variables(stampedMap: StampedMap)
+
+  // private:
+  predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    function SeqEnd(): LSN
-    {
-      sm.seqEnd
+    && lbl.QueryLabel?
+    && lbl.endLsn == v.stampedMap.seqEnd
+    && assert TotalKMMapMod.AnyKey(lbl.key);
+    && lbl.value == v.stampedMap.mi[lbl.key].value
+    && v' == v
+  }
+
+  predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.PutLabel?
+    && lbl.puts.WF()
+    && lbl.puts.CanFollow(v.stampedMap.seqEnd)
+    && v'.stampedMap == MapPlusHistory(v.stampedMap, lbl.puts)
+  }
+
+  predicate QueryEndLsn(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.QueryEndLsnLabel?
+    && lbl.endLsn == v.stampedMap.seqEnd
+    && v' == v
+  }
+
+  predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.FreezeAsLabel?
+    && lbl.stampedMap == v.stampedMap
+    && v' == v
+  }
+
+  // public:
+  predicate Init(v: Variables, persistentMap: StampedMap)
+  {
+    v == Variables(persistentMap)
+  }
+
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    match lbl {
+      case QueryLabel(_, _, _) => Query(v, v', lbl)
+      case PutLabel(_) => Put(v, v', lbl)
+      case QueryEndLsnLabel(_) => QueryEndLsn(v, v', lbl)
+      case FreezeAsLabel(_) => FreezeAs(v, v', lbl)
     }
-  }
-
-  // Should I do this as a predicate step with no enabling conditions?
-  function LoadMap(persistentMap: StampedMap) : Variables
-  {
-    Variables(persistentMap)
-  }
-
-  predicate Query(v: Variables, v': Variables, key: Key, value: Value)
-  {
-    && assert TotalKMMapMod.AnyKey(key);
-    && value == v.sm.mi[key].value
-    && v' == v
-  }
-
-  predicate Put(v: Variables, v': Variables, puts: MsgHistory)
-  {
-    && puts.WF()
-    && puts.CanFollow(v.SeqEnd())
-    && v'.sm == MapPlusHistory(v.sm, puts)
-  }
-
-  predicate FreezeAs(v: Variables, v': Variables, sm: StampedMap)
-  {
-    && sm == v.sm
-    && v' == v
   }
 }

@@ -29,12 +29,6 @@ module PagedJournalRefinement
   {
   }
 
-  lemma SeqEndMatchesRefines(v: Variables, lsn: LSN)
-    requires v.WF()
-    ensures v.SeqEndMatches(lsn) <==> I(v).SeqEndMatches(lsn)
-  {
-  }
-
   lemma ReadForRecoveryRefines(v: Variables, v': Variables, lbl: TransitionLabel, receiptIndex: nat)
     requires ReadForRecovery(v, v', lbl, receiptIndex)
     ensures AbstractJournal.Next(I(v), I(v'), lbl)
@@ -112,11 +106,18 @@ module PagedJournalRefinement
     } else if step.FreezeForCommitStep? {
       FreezeForCommitRefines(v, v', lbl, step.keepReceiptLines);
       assert AbstractJournal.Next(I(v), I(v'), lbl);
-    } else {
+    } else if step.ObserveFreshJournalLabel? {
       assert AbstractJournal.Next(I(v), I(v'), lbl);
-      //case PutStep() => Put(v, v', lbl)
-      //case DiscardOldStep() => DiscardOld(v, v', lbl)
-      //case InternalJournalMarshalStep(cut) => InternalJournalMarshal(v, v', lbl, cut)
+    } else if step.PutStep? {
+      assert AbstractJournal.Next(I(v), I(v'), lbl);
+    } else if step.DiscardOldStep? {
+      assert I(v).CanEndAt(lbl.requireEnd);
+      assert AbstractJournal.DiscardOld(I(v), I(v'), lbl);
+      assert AbstractJournal.Next(I(v), I(v'), lbl);
+    } else if step.InternalJournalMarshalStep? {
+      assert AbstractJournal.Next(I(v), I(v'), lbl);
+    } else {
+      assert false;
     }
   }
 } // module

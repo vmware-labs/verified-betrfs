@@ -756,12 +756,6 @@ module PagedJournal {
       then Some(unmarshalledTail.seqEnd)
       else truncatedJournal.MaybeSeqEnd()
     }
-
-    predicate SeqEndMatches(lsn: LSN)
-      requires WF()
-    {
-      SeqEnd().Some? ==> lsn == SeqEnd().value
-    }
   }
 
   predicate ReadForRecovery(v: Variables, v': Variables, lbl: TransitionLabel, receiptIndex: nat)
@@ -806,6 +800,14 @@ module PagedJournal {
     && v' == v
   }
 
+  predicate ObserveFreshJournal(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.QueryEndLsnLabel?
+    && (v.SeqEnd().Some? ==> lbl.endLsn == v.SeqEnd().value)
+    && v' == v
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // implementation of JournalIfc obligations
 
@@ -827,6 +829,7 @@ module PagedJournal {
     && v.WF()
     && v'.WF()
     && (if v.Empty() then true else v.SeqStart().value <= lsn <= v.SeqEnd().value)
+    && (if v.Empty() then true else v.SeqEnd().value == lbl.requireEnd)
     && (if v.unmarshalledTail.MsgHistory? && v.unmarshalledTail.seqStart <= lsn
         then v' == Variables(Mkfs(), v.unmarshalledTail.DiscardOld(lsn))
         else v' == v.(truncatedJournal := v.truncatedJournal.DiscardOld(lsn))
@@ -861,6 +864,7 @@ module PagedJournal {
   datatype Step =
       ReadForRecoveryStep(receiptIndex: nat)
     | FreezeForCommitStep(keepReceiptLines: nat)
+    | ObserveFreshJournalLabel()
     | PutStep()
     | DiscardOldStep()
     | InternalJournalMarshalStep(cut: LSN)
@@ -872,6 +876,7 @@ module PagedJournal {
     match step {
       case ReadForRecoveryStep(receiptIndex) => ReadForRecovery(v, v', lbl, receiptIndex)
       case FreezeForCommitStep(keepReceiptLines) => FreezeForCommit(v, v', lbl, keepReceiptLines)
+      case ObserveFreshJournalLabel() => ObserveFreshJournal(v, v', lbl)
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
       case InternalJournalMarshalStep(cut) => InternalJournalMarshal(v, v', lbl, cut)

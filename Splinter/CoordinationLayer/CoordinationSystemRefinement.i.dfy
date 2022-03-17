@@ -26,7 +26,7 @@ module CoordinationSystemRefinement {
 
   function IMap(mapp: AbstractMap.Variables) : (out:StampedMap)
   {
-    mapp.sm
+    mapp.stampedMap
   }
 
   import Async = CM.Async
@@ -112,6 +112,8 @@ module CoordinationSystemRefinement {
     && IEJ(v.ephemeral.journal).CanDiscardTo(IMap(v.ephemeral.mapadt).seqEnd)
     // Ephemeral journal is no shorter than persistent state
     && v.persistentImage.SeqEnd() <= EphemeralSeqEnd(v.ephemeral)
+    // Local snapshot of mapLsn matched actual map state machine
+    && v.ephemeral.mapLsn == v.ephemeral.mapadt.stampedMap.seqEnd
   }
 
   predicate InvEphemeralValueAgreement(v: Variables)
@@ -292,7 +294,7 @@ module CoordinationSystemRefinement {
     // InvEphemeralMapIsJournalSnapshot
     var key := uiop.baseOp.req.input.key;
     var val := uiop.baseOp.req.input.value;
-    var singleton := MsgHistoryMod.Singleton(NextLSN(v), KeyedMessage(key, Define(val)));
+    var singleton := MsgHistoryMod.Singleton(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
     JournalAssociativity(v.persistentImage.mapadt, IEJ(v.ephemeral.journal), singleton);
     assert IEJ(v.ephemeral.journal).DiscardRecent(IMap(v.ephemeral.mapadt).seqEnd) == IEJ(v.ephemeral.journal); // trigger
     assert IEJ(v'.ephemeral.journal) == IEJ(v'.ephemeral.journal).DiscardRecent(IMap(v'.ephemeral.mapadt).seqEnd); // trigger

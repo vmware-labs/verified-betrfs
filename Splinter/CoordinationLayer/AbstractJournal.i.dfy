@@ -11,9 +11,13 @@ module JournalLabels {
   datatype TransitionLabel =
       ReadForRecoveryLabel(messages: MsgHistory)
     | FreezeForCommitLabel(startLsn: LSN, endLsn: LSN, frozenJournal: MsgHistory)
-    | ObserveFreshJournalLabel(endLsn: LSN)
+    | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
-    | DiscardOldLabel(startLsn: LSN)
+    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
+      // TODO(jonh): requireEnd is an enabling-condition check to enforce
+      // MapIsFresh in CommitComplete. I don't think it's actually necessary,
+      // but removing it broke the CoordinationSystemRefinement proof and I
+      // couldn't fix it in five minutes.
     | InternalLabel()
 }
 
@@ -35,10 +39,8 @@ module AbstractJournal {
       && journal.WF()
     }
 
-    // Some parial enabling conditions.
-    // TODO(jonh) Not yet sure how to set these up for refinement in a
-    // non-funky-module-refinement way.
-    predicate SeqEndMatches(lsn: LSN) {
+    predicate CanEndAt(lsn: LSN)
+    {
       || journal.EmptyHistory?
       || journal.seqEnd == lsn
     }
@@ -74,11 +76,8 @@ module AbstractJournal {
   predicate ObserveFreshJournal(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.ObserveFreshJournalLabel?
-    && (
-        || v.journal.EmptyHistory?
-        || v.journal.seqEnd == lbl.endLsn
-      )
+    && lbl.QueryEndLsnLabel?
+    && v.CanEndAt(lbl.endLsn)
     && v' == v
   }
 
@@ -95,6 +94,7 @@ module AbstractJournal {
   {
     && v.WF()
     && lbl.DiscardOldLabel?
+    && v.CanEndAt(lbl.requireEnd)
     && v.journal.CanDiscardTo(lbl.startLsn)
     && v'.journal == v.journal.DiscardOld(lbl.startLsn)
   }
@@ -116,9 +116,9 @@ module AbstractJournal {
     match lbl {
       case ReadForRecoveryLabel(_) => ReadForRecovery(v, v', lbl)
       case FreezeForCommitLabel(_, _, _) => FreezeForCommit(v, v', lbl)
-      case ObserveFreshJournalLabel(_) => ObserveFreshJournal(v, v', lbl)
+      case QueryEndLsnLabel(_) => ObserveFreshJournal(v, v', lbl)
       case PutLabel(_) => Put(v, v', lbl)
-      case DiscardOldLabel(_) => DiscardOld(v, v', lbl)
+      case DiscardOldLabel(_, _) => DiscardOld(v, v', lbl)
       case InternalLabel() => Internal(v, v', lbl)
     }
   }
