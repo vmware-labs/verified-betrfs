@@ -148,7 +148,8 @@ module Representation {
   }
 }
 
-module FraringCyclicity {
+// Pointers: Framing/sharing & acyclicity
+module AcyclicityAndFraming {
   import opened Options
   import opened Types
   import opened Labels
@@ -408,7 +409,7 @@ module Marshalling {
   import opened Options
   import opened Types
   import opened Labels
-  import FraringCyclicity 
+  import AcyclicityAndFraming
 
   type Block(!new, ==)
   function Parse<T>(block: Block) : T
@@ -419,7 +420,7 @@ module Marshalling {
   type Disk = map<Address, Block>
   datatype Variables = Variables(disk: Disk, a: Pointer, b: Pointer)
 
-  type CellPage = FraringCyclicity.CellPage
+  type CellPage = AcyclicityAndFraming.CellPage
 
   predicate Init(v: Variables) {
     && v.disk == map[]
@@ -435,13 +436,13 @@ module Marshalling {
   predicate ConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
     && lbl.ConsALabel?
     && IsFree(v, addr)
-    && v' == v.(disk := v.disk[addr := Marshal(FraringCyclicity.CellPage(lbl.x, v.a))], a := Some(addr))
+    && v' == v.(disk := v.disk[addr := Marshal(AcyclicityAndFraming.CellPage(lbl.x, v.a))], a := Some(addr))
   }
 
   predicate ConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
     && lbl.ConsBLabel?
     && IsFree(v, addr)
-    && v' == v.(disk := v.disk[addr := Marshal(FraringCyclicity.CellPage(lbl.x, v.b))], b := Some(addr))
+    && v' == v.(disk := v.disk[addr := Marshal(AcyclicityAndFraming.CellPage(lbl.x, v.b))], b := Some(addr))
   }
 
   predicate CopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel) {
@@ -469,15 +470,15 @@ module Marshalling {
   //////////////////////////////////////////////////////////////////////
   // Inv
 
-  function MarshalDisk(typed: FraringCyclicity.Disk) : Disk
+  function MarshalDisk(typed: AcyclicityAndFraming.Disk) : Disk
   {
     map addr | addr in typed :: Marshal(typed[addr])
   }
 
-  predicate TypeProvidesModel(v: Variables, typed: FraringCyclicity.Disk)
+  predicate TypeProvidesModel(v: Variables, typed: AcyclicityAndFraming.Disk)
   {
     && v.disk == MarshalDisk(typed)
-    && FraringCyclicity.Inv(FraringCyclicity.Variables(typed, v.a, v.b))
+    && AcyclicityAndFraming.Inv(AcyclicityAndFraming.Variables(typed, v.a, v.b))
   }
 
   predicate Inv(v: Variables) {
@@ -488,22 +489,22 @@ module Marshalling {
     requires Init(v)
     ensures Inv(v)
   {
-    var typed:FraringCyclicity.Disk := map[];
-    var fv := FraringCyclicity.Variables(typed, v.a, v.b);
-    assert FraringCyclicity.PointersRespectRank(fv, map[]); // WITNESS
+    var typed:AcyclicityAndFraming.Disk := map[];
+    var fv := AcyclicityAndFraming.Variables(typed, v.a, v.b);
+    assert AcyclicityAndFraming.PointersRespectRank(fv, map[]); // WITNESS
     assert TypeProvidesModel(v, typed); // WITNESS
   }
 
-  function TheTypedDisk(v: Variables): FraringCyclicity.Disk
+  function TheTypedDisk(v: Variables): AcyclicityAndFraming.Disk
     requires Inv(v)
   {
     var typed :| TypeProvidesModel(v, typed); typed
   }
 
-  function I(v: Variables) : FraringCyclicity.Variables
+  function I(v: Variables) : AcyclicityAndFraming.Variables
     requires Inv(v)
   {
-    FraringCyclicity.Variables(TheTypedDisk(v), v.a, v.b)
+    AcyclicityAndFraming.Variables(TheTypedDisk(v), v.a, v.b)
   }
 
   lemma InvConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
@@ -511,8 +512,8 @@ module Marshalling {
     requires ConsA(v, v', lbl, addr)
     ensures Inv(v')
   {
-    var fv' := FraringCyclicity.ConsAFunc(I(v), lbl.x, addr);
-    FraringCyclicity.InvConsA(I(v), fv', lbl.x, addr);
+    var fv' := AcyclicityAndFraming.ConsAFunc(I(v), lbl.x, addr);
+    AcyclicityAndFraming.InvConsA(I(v), fv', lbl.x, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
@@ -521,8 +522,8 @@ module Marshalling {
     requires ConsB(v, v', lbl, addr)
     ensures Inv(v')
   {
-    var fv' := FraringCyclicity.ConsBFunc(I(v), lbl.x, addr);
-    FraringCyclicity.InvConsB(I(v), fv', lbl.x, addr);
+    var fv' := AcyclicityAndFraming.ConsBFunc(I(v), lbl.x, addr);
+    AcyclicityAndFraming.InvConsB(I(v), fv', lbl.x, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
@@ -531,8 +532,8 @@ module Marshalling {
     requires CopyBtoA(v, v', lbl)
     ensures Inv(v')
   {
-    var fv' := FraringCyclicity.CopyBtoAFunc(I(v));
-    FraringCyclicity.InvCopyBtoA(I(v), fv');
+    var fv' := AcyclicityAndFraming.CopyBtoAFunc(I(v));
+    AcyclicityAndFraming.InvCopyBtoA(I(v), fv');
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
@@ -543,37 +544,37 @@ module Marshalling {
     requires Inv(v)
     requires ConsA(v, v', lbl, addr)
     ensures Inv(v')
-    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
+    ensures AcyclicityAndFraming.Next(I(v), I(v'), lbl)
   {
     var x := lbl.x;
     InvConsA(v, v', lbl, addr);
     forall k
       ensures k in TheTypedDisk(v').Keys
-        <==> k in TheTypedDisk(v)[addr := FraringCyclicity.CellPage(x, v.a)].Keys
+        <==> k in TheTypedDisk(v)[addr := AcyclicityAndFraming.CellPage(x, v.a)].Keys
     {
       assert k in v'.disk.Keys || true; // TRIGGER (obviously)
     }
     forall k | k in TheTypedDisk(v')
       ensures TheTypedDisk(v')[k]
-        == TheTypedDisk(v)[addr := FraringCyclicity.CellPage(x, v.a)][k]
+        == TheTypedDisk(v)[addr := AcyclicityAndFraming.CellPage(x, v.a)][k]
     {
       ParseAxiom(TheTypedDisk(v')[k]);
       if k==addr {
-        assert v'.disk[k] == Marshal(FraringCyclicity.CellPage(x, v.a));  // TRIGGER
-        ParseAxiom(FraringCyclicity.CellPage(x, v.a));
+        assert v'.disk[k] == Marshal(AcyclicityAndFraming.CellPage(x, v.a));  // TRIGGER
+        ParseAxiom(AcyclicityAndFraming.CellPage(x, v.a));
       } else {
-        assert Parse<FraringCyclicity.CellPage>(v'.disk[k]) == Parse(v.disk[k]);  // TRIGGER
+        assert Parse<AcyclicityAndFraming.CellPage>(v'.disk[k]) == Parse(v.disk[k]);  // TRIGGER
         ParseAxiom(TheTypedDisk(v)[k]);
       }
     }
-    assert FraringCyclicity.NextStep(I(v), I(v'), lbl, FraringCyclicity.ConsAStep(addr));
+    assert AcyclicityAndFraming.NextStep(I(v), I(v'), lbl, AcyclicityAndFraming.ConsAStep(addr));
   }
 
   lemma RefinementConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
     requires ConsB(v, v', lbl, addr)
     ensures Inv(v')
-    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
+    ensures AcyclicityAndFraming.Next(I(v), I(v'), lbl)
   {
     assume false; // WOLOG and jonh is lazy
   }
@@ -582,7 +583,7 @@ module Marshalling {
     requires Inv(v)
     requires CopyBtoA(v, v', lbl)
     ensures Inv(v')
-    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
+    ensures AcyclicityAndFraming.Next(I(v), I(v'), lbl)
   {
     InvCopyBtoA(v, v', lbl);
     forall k
@@ -596,10 +597,10 @@ module Marshalling {
         == TheTypedDisk(v)[k]
     {
       ParseAxiom(TheTypedDisk(v')[k]);
-      assert Parse<FraringCyclicity.CellPage>(v'.disk[k]) == Parse(v.disk[k]);  // TRIGGER
+      assert Parse<AcyclicityAndFraming.CellPage>(v'.disk[k]) == Parse(v.disk[k]);  // TRIGGER
       ParseAxiom(TheTypedDisk(v)[k]);
     }
-    assert FraringCyclicity.NextStep(I(v), I(v'), lbl, FraringCyclicity.CopyBtoAStep());
+    assert AcyclicityAndFraming.NextStep(I(v), I(v'), lbl, AcyclicityAndFraming.CopyBtoAStep());
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -608,7 +609,7 @@ module Marshalling {
   lemma RefinementInit(v: Variables)
     requires Init(v)
     ensures Inv(v)
-    ensures FraringCyclicity.Init(I(v))
+    ensures AcyclicityAndFraming.Init(I(v))
   {
     InvInit(v);
   }
@@ -617,7 +618,7 @@ module Marshalling {
     requires Inv(v)
     requires Next(v, v', lbl)
     ensures Inv(v')
-    ensures FraringCyclicity.Next(I(v), I(v'), lbl)
+    ensures AcyclicityAndFraming.Next(I(v), I(v'), lbl)
   {
     var step :| NextStep(v, v', lbl, step);
     match step {
