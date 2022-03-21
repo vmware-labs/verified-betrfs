@@ -46,13 +46,13 @@ module PagedJournal {
       TruncatedJournal(boundaryLSN, freshestRec.value.priorRec)
     }
 
-    function BuildReceiptTJ() : Receipt
+    function BuildReceipt() : Receipt
     {
-      BuildReceipt(boundaryLSN, freshestRec)
+      BuildReceiptRecursive(boundaryLSN, freshestRec)
     }
 
     predicate WF() {
-      && var receipt := BuildReceiptTJ();
+      && var receipt := BuildReceipt();
       && receipt.TJValid()
     }
 
@@ -64,9 +64,8 @@ module PagedJournal {
 
     function SeqEnd() : LSN
       requires WF()
-      requires !Empty()
     {
-      freshestRec.value.messageSeq.seqEnd
+      if freshestRec.Some? then freshestRec.value.messageSeq.seqEnd else boundaryLSN
     }
 
     function MaybeSeqEnd() : (out: Option<LSN>)
@@ -82,7 +81,7 @@ module PagedJournal {
     function I() : MsgHistory
       requires WF()
     {
-      BuildReceiptTJ().I()
+      BuildReceipt().I()
     }
 
     function DiscardOldDefn(lsn: LSN) : (out:TruncatedJournal)
@@ -102,8 +101,8 @@ module PagedJournal {
     {
       var out := DiscardOldDefn(lsn);
       assert out.WF() && out.I() == I().DiscardOld(lsn) by {
-        var discardReceipt := BuildReceiptTJ().DiscardOld(lsn);
-        out.BuildReceiptTJ().ReceiptsUnique(discardReceipt);
+        var discardReceipt := BuildReceipt().DiscardOld(lsn);
+        out.BuildReceipt().ReceiptsUnique(discardReceipt);
       }
       out
     }
@@ -114,9 +113,9 @@ module PagedJournal {
       requires WF()
       requires msgs.WF()
     {
-      && i < |BuildReceiptTJ().lines|
+      && i < |BuildReceipt().lines|
       // TODO(jonh): Wait, this allows non-truncated inclusions.
-      && BuildReceiptTJ().MessageSeqAt(i).IncludesSubseq(msgs)
+      && BuildReceipt().MessageSeqAt(i).IncludesSubseq(msgs)
     }
 
     lemma SubseqOfEntireInterpretation(msgs: MsgHistory, i: nat)
@@ -126,7 +125,7 @@ module PagedJournal {
       ensures I().IncludesSubseq(msgs)
     {
       // Propagate subseq relation inductively down the receipt
-      var receipt := BuildReceiptTJ();
+      var receipt := BuildReceipt();
       receipt.TJFacts();
       var j:=i;
       assert receipt.OneLinkedInterpretation(j) by { receipt.reveal_LinkedInterpretations(); }
@@ -142,13 +141,13 @@ module PagedJournal {
     }
 
     lemma LsnBelongs(lsn: LSN)
-      requires BuildReceiptTJ().TJValid()
-      requires !Empty()
+      requires BuildReceipt().TJValid()
+      requires !Empty() // TODO(jonh): can we survive without this now?
       requires boundaryLSN <= lsn < SeqEnd()
-      ensures lsn in BuildReceiptTJ().I().LSNSet()
+      ensures lsn in BuildReceipt().I().LSNSet()
       decreases freshestRec
     {
-      if lsn < Last(BuildReceiptTJ().lines).journalRec.messageSeq.seqStart {
+      if lsn < Last(BuildReceipt().lines).journalRec.messageSeq.seqStart {
         // If it's not it in the last journal record, it's gotta be in here
         // somewhere. Look upstream.
         prior().LsnBelongs(lsn);
@@ -357,6 +356,7 @@ module PagedJournal {
       ensures forall i | 0<=i<|lines| :: lines[i].journalRec.WF()
       ensures forall i | 0<=i<|lines| :: lines[i].interpretation.value.seqEnd == lines[i].journalRec.messageSeq.seqEnd
       ensures FirstLineTJValid()
+      ensures I().seqStart == boundaryLSN
       ensures I().WF()
     {
       SomeInterpretation(0);
@@ -374,14 +374,27 @@ module PagedJournal {
         }
       }
       if 0<|lines| { assert InterpretationWF(|lines|-1); } // trigger to get I().WF()
+
+      var i:=0;
+      while i<|lines|
+        invariant i<=|lines|
+        invariant forall j:nat | j < i :: lines[j].interpretation.value.seqStart == boundaryLSN
+      {
+        assert OneLinkedInterpretation(i) by { reveal_LinkedInterpretations(); }
+        i:=i+1;
+      }
     }
 
     function I() : MsgHistory
       requires TJValid()
+      ensures I().WF()
     {
       if |lines|==0
-      then EmptyHistory
-      else Last(lines).interpretation.value
+      then EmptyHistoryAt(boundaryLSN)
+      else
+        var lastInterp := Last(lines).interpretation.value;
+        assert InterpretationWF(|lines|-1);
+        lastInterp
     }
 
     // Returns the message history represented by journal page i in this receipt
@@ -499,12 +512,12 @@ module PagedJournal {
       assert OneLinkedInterpretation(|lines|-1) by { reveal_LinkedInterpretations(); }
       if i == |lines| - 1 {
         // Receipt for same TJ -> same receipt!
-        ReceiptsUnique(tj.BuildReceiptTJ());
+        ReceiptsUnique(tj.BuildReceipt());
       } else if i == |lines|-2 {  
         // just dropping one row from receipt?
         SnippedReceiptTJValid();
         if 1<|lines| {
-          tj.BuildReceiptTJ().ReceiptsUnique(SnipLast());
+          tj.BuildReceipt().ReceiptsUnique(SnipLast());
         }
       } else {
         // Dropping many rows; induct.
@@ -515,28 +528,25 @@ module PagedJournal {
 
     lemma BoundaryLSN()
       requires TJValid()
-      ensures I().MsgHistory? ==> I().seqStart == boundaryLSN
-      ensures I().MsgHistory? ==> FreshestRec().value.messageSeq.MsgHistory?  // just TJFacts
-      ensures I().MsgHistory? ==> I().seqEnd == FreshestRec().value.messageSeq.seqEnd
+      ensures I().seqStart == boundaryLSN
+      ensures !I().IsEmpty() ==> FreshestRec().Some?  // from TJFacts
+      ensures !I().IsEmpty() ==> I().seqEnd == FreshestRec().value.messageSeq.seqEnd
     {
       TJFacts();
-      if I().MsgHistory? {
-        var i:nat := 0;
-        while i<|lines|
-          invariant i<=|lines|
-          invariant forall j | 0<=j<i :: lines[j].interpretation.value.seqStart == boundaryLSN
-        {
-          assert OneLinkedInterpretation(i) by { reveal_LinkedInterpretations(); }
-          i := i + 1;
-        }
+      var i:nat := 0;
+      while i<|lines|
+        invariant i<=|lines|
+        invariant forall j | 0<=j<i :: lines[j].interpretation.value.seqStart == boundaryLSN
+      {
+        assert OneLinkedInterpretation(i) by { reveal_LinkedInterpretations(); }
+        i := i + 1;
       }
     }
 
     lemma DiscardOld(lsn: LSN) returns (out:Receipt)
       requires TJValid()
       requires I().CanDiscardTo(lsn)
-      ensures out.TJ() == TruncatedJournal(lsn, if I().EmptyHistory? || lsn==I().seqEnd then None else FreshestRec());
-//      ensures out == TruncatedJournal(lsn, if I().EmptyHistory? || lsn==I().seqEnd then None else FreshestRec());
+      ensures out.TJ() == TruncatedJournal(lsn, if I().IsEmpty() || lsn==I().seqEnd then None else FreshestRec());
       ensures out.TJValid()
       ensures I().WF()
       ensures TJ().WF() // just TJValid + ReceiptsUnique
@@ -547,12 +557,12 @@ module PagedJournal {
     {
       TJFacts();
       BoundaryLSN();
-      ReceiptsUnique(TJ().BuildReceiptTJ());
-      if I().EmptyHistory? || lsn == I().seqEnd {
+      ReceiptsUnique(TJ().BuildReceipt());
+      if I().IsEmpty() || lsn==I().seqEnd {
         out := Receipt(lsn, []);
         assert out.TJValid() by { reveal_LinkedInterpretations(); }
         assert out.I() == I().DiscardOld(lsn);  // case boilerplate
-      } else if lsn in Last(lines).journalRec.messageSeq.LSNSet() {
+      } else if Last(lines).journalRec.messageSeq.seqStart <= lsn { // Discarding something (or everything) in last
         var lastRec := Last(lines).journalRec;
         out := Receipt(lsn, [ReceiptLine(lastRec, Some(lastRec.messageSeq.DiscardOld(lsn)))]);
         assert out.LinkedInterpretations() by { reveal_LinkedInterpretations(); }
@@ -610,7 +620,7 @@ module PagedJournal {
   } // datatype Receipt
 
   // Constructive evidence that a Valid receipt exists for each TJ
-  function BuildReceipt(boundaryLSN: LSN, optRec: Option<JournalRecord>) : (out:Receipt)
+  function BuildReceiptRecursive(boundaryLSN: LSN, optRec: Option<JournalRecord>) : (out:Receipt)
     ensures out.Valid()
   {
     // A global Receipt(0,[]).reveal_LinkedInterpretations() makes this function
@@ -651,7 +661,7 @@ module PagedJournal {
       )
       else
         // Recurse.
-        var priorReceipt := BuildReceipt(boundaryLSN, rec.priorRec);
+        var priorReceipt := BuildReceiptRecursive(boundaryLSN, rec.priorRec);
         var priorInterpretation := Last(priorReceipt.lines).interpretation;
         var newInterpretation :=
           if
@@ -689,12 +699,12 @@ module PagedJournal {
           }
         }
         out
-  } // BuildReceipt
+  } // BuildReceiptRecursive
 
   // TruncatedJournal is the datatype "refinement" of MsgHistory; here we refine the Mkfs function.
   function Mkfs() : (out:TruncatedJournal)
     ensures out.WF()
-    ensures out.I().EmptyHistory?
+    ensures out.I().IsEmpty()
   {
     TruncatedJournal(0, None)
   }
@@ -712,9 +722,7 @@ module PagedJournal {
     predicate WF() {
       && truncatedJournal.WF()
       && unmarshalledTail.WF()
-      && (unmarshalledTail.MsgHistory? ==>
-          truncatedJournal.I().CanConcat(unmarshalledTail)
-         )
+      && truncatedJournal.SeqEnd() == unmarshalledTail.seqStart
     }
 
     function I() : MsgHistory
@@ -727,34 +735,21 @@ module PagedJournal {
       requires WF()
     {
       && truncatedJournal.freshestRec.None?
-      && unmarshalledTail.EmptyHistory?
+      && unmarshalledTail.IsEmpty()
     }
 
-    function SeqStart() : Option<LSN>
+    function SeqStart() : LSN
       requires WF()
-      ensures !Empty() ==> SeqStart().Some? && SeqStart().value == I().seqStart
+      ensures SeqStart() == I().seqStart
     {
-      if Empty()
-      then None
-      else (
-        var out := if truncatedJournal.freshestRec.Some?
-          then truncatedJournal.boundaryLSN
-          else unmarshalledTail.seqStart;
-        assert out == I().seqStart by {
-          if truncatedJournal.freshestRec.Some? {
-            truncatedJournal.BuildReceiptTJ().BoundaryLSN();
-          }
-        }
-        Some(out)
-      )
+      truncatedJournal.BuildReceipt().TJFacts();
+      truncatedJournal.boundaryLSN
     }
 
-    function SeqEnd() : Option<LSN>
+    function SeqEnd() : LSN
       requires WF()
     {
-      if unmarshalledTail.MsgHistory?
-      then Some(unmarshalledTail.seqEnd)
-      else truncatedJournal.MaybeSeqEnd()
+      unmarshalledTail.seqEnd
     }
   }
 
@@ -777,11 +772,11 @@ module PagedJournal {
     && v.WF()
     && lbl.FreezeForCommitLabel?
     && lbl.frozenJournal.WF()
-    && (v.SeqStart().Some? ==> lbl.startLsn == v.SeqStart().value)
+    && lbl.startLsn == v.SeqStart()
     && (if lbl.startLsn == lbl.endLsn
         then (
           && keepReceiptLines == 0
-          && lbl.frozenJournal == EmptyHistory
+          && lbl.frozenJournal == EmptyHistoryAt(lbl.startLsn)
         ) else (
           && lbl.startLsn < lbl.endLsn
           // Can't freeze anything in unmarshalledTail, as it's certainly not clean on disk.
@@ -789,7 +784,7 @@ module PagedJournal {
           && v.truncatedJournal.boundaryLSN <= lbl.startLsn
           // And must end at an existing page boundary.
           // (In lower layers, that page and those before it must also be clean on disk.)
-          && var receipt := v.truncatedJournal.BuildReceiptTJ();
+          && var receipt := v.truncatedJournal.BuildReceipt();
           && 0 < keepReceiptLines <= |receipt.lines|
           && assert receipt.lines[keepReceiptLines-1].journalRec.messageSeq.MsgHistory? by { receipt.JournalRecsAllWF(); } true
           && lbl.endLsn == receipt.lines[keepReceiptLines-1].journalRec.messageSeq.seqEnd
@@ -804,7 +799,7 @@ module PagedJournal {
   {
     && v.WF()
     && lbl.QueryEndLsnLabel?
-    && (v.SeqEnd().Some? ==> lbl.endLsn == v.SeqEnd().value)
+    && lbl.endLsn == v.SeqEnd()
     && v' == v
   }
 
@@ -818,7 +813,7 @@ module PagedJournal {
     && v.WF()
     && v'.WF()
     && msgs.WF()
-    && (v.SeqEnd().None? || msgs.EmptyHistory? || msgs.seqStart == v.SeqEnd().value)  // CanFollow, but without interpreting this.
+    && msgs.seqStart == v.SeqEnd()  // CanFollow, but without interpreting this.
     && v' == v.(unmarshalledTail := v.unmarshalledTail.Concat(msgs))
   }
 
@@ -828,10 +823,12 @@ module PagedJournal {
     && var lsn := lbl.startLsn;
     && v.WF()
     && v'.WF()
-    && (if v.Empty() then true else v.SeqStart().value <= lsn <= v.SeqEnd().value)
-    && (if v.Empty() then true else v.SeqEnd().value == lbl.requireEnd)
+    && v.SeqStart() <= lsn <= v.SeqEnd()
+    && v.SeqEnd() == lbl.requireEnd
     && (if v.unmarshalledTail.MsgHistory? && v.unmarshalledTail.seqStart <= lsn
-        then v' == Variables(Mkfs(), v.unmarshalledTail.DiscardOld(lsn))
+        then
+          assert lsn <= v.unmarshalledTail.seqEnd;
+          v' == Variables(Mkfs(), v.unmarshalledTail.DiscardOld(lsn))
         else v' == v.(truncatedJournal := v.truncatedJournal.DiscardOld(lsn))
        )
   }
@@ -858,7 +855,7 @@ module PagedJournal {
   predicate Init(v: Variables, tj: TruncatedJournal)
   {
     && tj.WF()
-    && v == Variables(tj, EmptyHistory)
+    && v == Variables(tj, EmptyHistoryAt(tj.SeqEnd()))
   }
 
   datatype Step =

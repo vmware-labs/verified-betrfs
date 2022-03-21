@@ -129,7 +129,7 @@ module CoordinationSystem {
     && v' == v.(ephemeral := v.ephemeral.(
         journal := v'.ephemeral.journal, // predicate update above
         mapadt := v'.ephemeral.mapadt,   // predicate update above
-        mapLsn := puts.SeqEndFor(v.ephemeral.mapLsn)
+        mapLsn := puts.seqEnd
       ))
   }
 
@@ -197,7 +197,7 @@ module CoordinationSystem {
     && var key := uiop.baseOp.req.input.key;
     && var val := uiop.baseOp.req.input.value;
 
-    && var singleton := MsgHistoryMod.Singleton(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
+    && var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
 
     && v.WF()
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.PutLabel(singleton))

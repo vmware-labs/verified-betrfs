@@ -33,7 +33,7 @@ module PagedJournalRefinement
     requires ReadForRecovery(v, v', lbl, receiptIndex)
     ensures AbstractJournal.Next(I(v), I(v'), lbl)
   {
-    var receipt := v.truncatedJournal.BuildReceiptTJ();
+    var receipt := v.truncatedJournal.BuildReceipt();
     receipt.TJFacts();
 
     // Base case: messages is in the interp of receipt line i
@@ -59,10 +59,10 @@ module PagedJournalRefinement
     if lbl.startLsn < lbl.endLsn {
       // endLsn-1 is in the interp, so we can discard to endLsn
       var i := keepReceiptLines - 1;
-      var receipt := v.truncatedJournal.BuildReceiptTJ();
+      var receipt := v.truncatedJournal.BuildReceipt();
       receipt.TJFacts();
       v.truncatedJournal.SubseqOfEntireInterpretation(receipt.MessageSeqAt(i), i);
-      assert receipt.MessageSeqAt(i).Contains(lbl.endLsn-1);  // trigger
+      receipt.LsnInReceiptBelongs(keepReceiptLines-1);
     }
   }
 

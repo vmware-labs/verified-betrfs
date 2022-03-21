@@ -33,7 +33,7 @@ module AbstractJournal {
   // Mkfs is used by CoordinationSystem to define its Init
   function Mkfs() : MsgHistory
   {
-    MsgHistoryMod.EmptyHistory
+    MsgHistoryMod.MsgHistory(map[], 0, 0)
   }
 
   datatype Variables = Variables(journal: MsgHistory)
@@ -44,8 +44,7 @@ module AbstractJournal {
 
     predicate CanEndAt(lsn: LSN)
     {
-      || journal.EmptyHistory?
-      || journal.seqEnd == lsn
+      journal.seqEnd == lsn
     }
   }
 
@@ -68,9 +67,7 @@ module AbstractJournal {
     && lbl.startLsn <= lbl.endLsn
     && v.journal.CanDiscardTo(lbl.startLsn)
     && v.journal.CanDiscardTo(lbl.endLsn)
-    && lbl.frozenJournal == (if lbl.startLsn==lbl.endLsn
-        then EmptyHistory
-        else v.journal.DiscardOld(lbl.startLsn).DiscardRecent(lbl.endLsn))
+    && lbl.frozenJournal == v.journal.DiscardOld(lbl.startLsn).DiscardRecent(lbl.endLsn)
     && v' == v
   }
 

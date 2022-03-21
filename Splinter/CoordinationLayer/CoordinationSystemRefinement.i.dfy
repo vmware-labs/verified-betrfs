@@ -35,7 +35,7 @@ module CoordinationSystemRefinement {
   function EphemeralSeqEnd(ephemeral: Ephemeral) : LSN
     requires ephemeral.WF() && ephemeral.Known?
   {
-    IEJ(ephemeral.journal).SeqEndFor(IMap(ephemeral.mapadt).seqEnd)
+    IEJ(ephemeral.journal).seqEnd
   }
 
   function StampedMapToVersion(sm: StampedMapMod.StampedMap) : CrashTolerantMapSpecMod.Version
@@ -47,10 +47,10 @@ module CoordinationSystemRefinement {
     requires msgHistory.WF()
     requires msgHistory.CanFollow(base.seqEnd)
     requires msgHistory.CanDiscardTo(stableLSN)
-    ensures |versions| == msgHistory.SeqEndFor(base.seqEnd)+1
+    ensures |versions| == msgHistory.seqEnd+1
   {
     // Construct a Version seq with the entries before stableLSN Forgotten: that's what spec expects.
-    var numVersions := msgHistory.SeqEndFor(base.seqEnd) + 1;
+    var numVersions := msgHistory.seqEnd + 1;
     seq(numVersions, lsn requires 0<=lsn<numVersions =>
       if lsn < stableLSN
       then CrashTolerantMapSpecMod.Forgotten
@@ -89,8 +89,8 @@ module CoordinationSystemRefinement {
     requires jlong.CanFollow(startLsn)
     requires jshort.CanFollow(startLsn)
   {
-    && jlong.CanDiscardTo(jshort.SeqEndFor(startLsn))            // jlong is longer
-    && jlong.DiscardRecent(jshort.SeqEndFor(startLsn)) == jshort // they agree on contents in overlap
+    && jlong.CanDiscardTo(jshort.seqEnd)            // jlong is longer
+    && jlong.DiscardRecent(jshort.seqEnd) == jshort // they agree on contents in overlap
   }
 
   predicate InvPersistentJournalGeometry(v: Variables)
@@ -294,7 +294,7 @@ module CoordinationSystemRefinement {
     // InvEphemeralMapIsJournalSnapshot
     var key := uiop.baseOp.req.input.key;
     var val := uiop.baseOp.req.input.value;
-    var singleton := MsgHistoryMod.Singleton(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
+    var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
     JournalAssociativity(v.persistentImage.mapadt, IEJ(v.ephemeral.journal), singleton);
     assert IEJ(v.ephemeral.journal).DiscardRecent(IMap(v.ephemeral.mapadt).seqEnd) == IEJ(v.ephemeral.journal); // trigger
     assert IEJ(v'.ephemeral.journal) == IEJ(v'.ephemeral.journal).DiscardRecent(IMap(v'.ephemeral.mapadt).seqEnd); // trigger
@@ -389,13 +389,14 @@ module CoordinationSystemRefinement {
     requires y.WF()
     requires z.WF()
     requires y.CanFollow(x.seqEnd)
-    requires z.CanFollow(y.SeqEndFor(x.seqEnd))
+    requires z.CanFollow(y.seqEnd)
     ensures MapPlusHistory(MapPlusHistory(x, y), z) == MapPlusHistory(x, y.Concat(z))
     decreases z.Len();
   {
-    if !z.EmptyHistory? {
+    if !z.IsEmpty() {
       var ztrim := z.DiscardRecent(z.seqEnd - 1);
       var yz := y.Concat(z);
+
 
       JournalAssociativity(x, y, ztrim);
       assert yz.DiscardRecent(yz.seqEnd - 1) == y.Concat(ztrim); // trigger
