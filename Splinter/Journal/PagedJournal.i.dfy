@@ -159,8 +159,7 @@ module PagedJournal {
       requires msgs.WF()
       requires msgs.MsgHistory?
     {
-      var newBoundary := if freshestRec.None? then msgs.seqStart else boundaryLSN;
-      TruncatedJournal(newBoundary, Some(JournalRecord(msgs, freshestRec)))
+      this.(freshestRec := Some(JournalRecord(msgs, freshestRec)))
     }
   } // datatype TruncatedJournal
 
