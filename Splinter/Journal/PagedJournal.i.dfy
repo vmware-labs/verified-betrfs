@@ -23,9 +23,6 @@ module PagedJournal {
     predicate WF()
     {
       && messageSeq.WF()
-
-      // Disallow empty records. Means we can always talk about seqEnd
-      && messageSeq.MsgHistory?
     }
   }
 
@@ -157,7 +154,6 @@ module PagedJournal {
     function AppendRecord(msgs: MsgHistory) : (out: TruncatedJournal)
       requires WF()
       requires msgs.WF()
-      requires msgs.MsgHistory?
     {
       this.(freshestRec := Some(JournalRecord(msgs, freshestRec)))
     }
@@ -200,14 +196,12 @@ module PagedJournal {
 
     predicate Borked() { !journalRec.WF() }
     predicate Unused(boundaryLSN: LSN) {
-      && journalRec.messageSeq.MsgHistory?
       && journalRec.messageSeq.seqEnd <= boundaryLSN
     }
     predicate ListEnd() { journalRec.priorRec.None? }
     predicate LineTJValid(boundaryLSN: LSN) {
       // The record is well-formed, is a history, and includes the boundaryLSN.
       && journalRec.WF()
-      && journalRec.messageSeq.MsgHistory?
       && journalRec.messageSeq.seqStart <= boundaryLSN < journalRec.messageSeq.seqEnd
     }
 
@@ -224,7 +218,6 @@ module PagedJournal {
     // wrong, it should be wrong at the top of the receipt
     predicate ValidLaterLine(boundaryLSN: LSN) {
       && journalRec.WF()
-      && journalRec.messageSeq.MsgHistory?
       && boundaryLSN < journalRec.messageSeq.seqStart
     }
   }
@@ -351,7 +344,6 @@ module PagedJournal {
     lemma TJFacts()
       requires TJValid()
       ensures forall i | 0<=i<|lines| :: lines[i].interpretation.Some?
-      ensures forall i | 0<=i<|lines| :: lines[i].interpretation.value.MsgHistory?
       ensures forall i | 0<=i<|lines| :: lines[i].journalRec.WF()
       ensures forall i | 0<=i<|lines| :: lines[i].interpretation.value.seqEnd == lines[i].journalRec.messageSeq.seqEnd
       ensures FirstLineTJValid()
@@ -364,7 +356,6 @@ module PagedJournal {
         assert OneLinkedInterpretation(0) by { reveal_LinkedInterpretations(); }
       }
       forall i | 0<=i<|lines|
-        ensures lines[i].interpretation.value.MsgHistory?
         ensures lines[i].interpretation.value.seqEnd == lines[i].journalRec.messageSeq.seqEnd
       {
         if i>0 {
@@ -785,7 +776,6 @@ module PagedJournal {
           // (In lower layers, that page and those before it must also be clean on disk.)
           && var receipt := v.truncatedJournal.BuildReceipt();
           && 0 < keepReceiptLines <= |receipt.lines|
-          && assert receipt.lines[keepReceiptLines-1].journalRec.messageSeq.MsgHistory? by { receipt.JournalRecsAllWF(); } true
           && lbl.endLsn == receipt.lines[keepReceiptLines-1].journalRec.messageSeq.seqEnd
           && assert lbl.endLsn <= v.truncatedJournal.I().seqEnd by { receipt.LsnInReceiptBelongs(keepReceiptLines-1); } true
           && lbl.frozenJournal == v.truncatedJournal.I().DiscardOld(lbl.startLsn).DiscardRecent(lbl.endLsn)
@@ -824,7 +814,7 @@ module PagedJournal {
     && v'.WF()
     && v.SeqStart() <= lsn <= v.SeqEnd()
     && v.SeqEnd() == lbl.requireEnd
-    && (if v.unmarshalledTail.MsgHistory? && v.unmarshalledTail.seqStart <= lsn
+    && (if v.unmarshalledTail.seqStart <= lsn
         then
           assert lsn <= v.unmarshalledTail.seqEnd;
           v' == Variables(Mkfs(), v.unmarshalledTail.DiscardOld(lsn))
@@ -842,7 +832,6 @@ module PagedJournal {
     && lbl.InternalLabel?
     && v.WF()
     && v'.WF()
-    && v.unmarshalledTail.MsgHistory?
     && v.unmarshalledTail.seqStart < cut // Can't marshall nothing.
     && v.unmarshalledTail.CanDiscardTo(cut)
     && var marshalledMsgs := v.unmarshalledTail.DiscardRecent(cut);
