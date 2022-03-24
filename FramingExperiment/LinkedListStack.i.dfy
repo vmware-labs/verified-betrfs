@@ -294,6 +294,9 @@ module AcyclicityAndFraming {
     assert PointersRespectRank(v', rank);
   }
 
+  //////////////////////////////////////////////////////////////////////////////
+  // Refinement
+
   function IList(v: Variables, p: Pointer, rank: Ranking) : Representation.Cell
     requires PointerValid(p, v.disk)
     requires DiskPointersValid(v)
@@ -306,9 +309,6 @@ module AcyclicityAndFraming {
       var cellpage := v.disk[p.value];
       Representation.Cell(cellpage.x, IList(v, cellpage.tail, rank))
   }
-
-  //////////////////////////////////////////////////////////////////////////////
-  // Refinement
 
   function TheRank(v: Variables) : Ranking
     requires DiskPointersValid(v)

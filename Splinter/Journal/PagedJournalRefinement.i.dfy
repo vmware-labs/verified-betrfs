@@ -4,8 +4,9 @@
 include "PagedJournal.i.dfy"
 
 module PagedJournalRefinement
-// TODO refines RefinementObligation(mapuiop? journaluiop?, AbstractJournal)
+// TODO refines RefinementObligation(JournalLabels, AbstractJournal)
 {
+  import opened Options
   import opened MsgHistoryMod
   import opened LSNMod
   import opened JournalLabels
@@ -19,14 +20,6 @@ module PagedJournalRefinement
     ensures out.WF()
   {
     AbstractJournal.Variables(v.I())
-  }
-
-  //////////////////////////////////////////////////////////////////////////////
-  // non-state-machine function & predicate refinement lemmas
-
-  lemma MkfsRefines()
-    ensures Mkfs().I() == AbstractJournal.Mkfs()
-  {
   }
 
   lemma ReadForRecoveryRefines(v: Variables, v': Variables, lbl: TransitionLabel, receiptIndex: nat)
@@ -56,14 +49,23 @@ module PagedJournalRefinement
     ensures v'.WF();
     ensures AbstractJournal.Next(I(v), I(v'), lbl)
   {
+    var receipt := v.truncatedJournal.BuildReceipt();
+    receipt.TJFacts();
+
     if lbl.startLsn < lbl.endLsn {
       // endLsn-1 is in the interp, so we can discard to endLsn
       var i := keepReceiptLines - 1;
-      var receipt := v.truncatedJournal.BuildReceipt();
-      receipt.TJFacts();
       v.truncatedJournal.SubseqOfEntireInterpretation(receipt.MessageSeqAt(i), i);
       receipt.LsnInReceiptBelongs(keepReceiptLines-1);
     }
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // non-state-machine function & predicate refinement lemmas
+
+  lemma MkfsRefines()
+    ensures Mkfs().I() == AbstractJournal.Mkfs()
+  {
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -111,8 +113,6 @@ module PagedJournalRefinement
     } else if step.PutStep? {
       assert AbstractJournal.Next(I(v), I(v'), lbl);
     } else if step.DiscardOldStep? {
-      assert I(v).CanEndAt(lbl.requireEnd);
-      assert AbstractJournal.DiscardOld(I(v), I(v'), lbl);
       assert AbstractJournal.Next(I(v), I(v'), lbl);
     } else if step.InternalJournalMarshalStep? {
       assert AbstractJournal.Next(I(v), I(v'), lbl);

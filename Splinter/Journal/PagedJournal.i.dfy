@@ -157,6 +157,33 @@ module PagedJournal {
     {
       this.(freshestRec := Some(JournalRecord(msgs, freshestRec)))
     }
+
+    predicate FreezeForCommit(lbl: TransitionLabel, keepReceiptLines: nat)
+      requires WF()
+    {
+      && lbl.FreezeForCommitLabel?
+      && lbl.frozenJournal.WF()
+      && lbl.startLsn == boundaryLSN
+      && (if lbl.startLsn == lbl.endLsn
+          then (
+            && keepReceiptLines == 0
+            && lbl.frozenJournal == EmptyHistoryAt(lbl.startLsn)
+          ) else (
+            && lbl.startLsn < lbl.endLsn
+            // Can't freeze anything in unmarshalledTail, as it's certainly not clean on disk.
+            // Anything we freeze must start no later than journal is already truncated.
+            && boundaryLSN <= lbl.startLsn
+            // And must end at an existing page boundary.
+            // (In lower layers, that page and those before it must also be clean on disk.)
+            && var receipt := BuildReceipt();
+            && 0 < keepReceiptLines <= |receipt.lines|
+            && lbl.endLsn == receipt.lines[keepReceiptLines-1].journalRec.messageSeq.seqEnd
+            && assert lbl.endLsn <= I().seqEnd by { receipt.LsnInReceiptBelongs(keepReceiptLines-1); } true
+            && assert I().seqStart == boundaryLSN by { receipt.TJFacts(); } true
+            && lbl.frozenJournal == I().DiscardOld(lbl.startLsn).DiscardRecent(lbl.endLsn)
+          )
+        )
+    }
   } // datatype TruncatedJournal
 
   ////////////////////////////////////////////////////////////////////////////
@@ -760,27 +787,7 @@ module PagedJournal {
   predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
   {
     && v.WF()
-    && lbl.FreezeForCommitLabel?
-    && lbl.frozenJournal.WF()
-    && lbl.startLsn == v.SeqStart()
-    && (if lbl.startLsn == lbl.endLsn
-        then (
-          && keepReceiptLines == 0
-          && lbl.frozenJournal == EmptyHistoryAt(lbl.startLsn)
-        ) else (
-          && lbl.startLsn < lbl.endLsn
-          // Can't freeze anything in unmarshalledTail, as it's certainly not clean on disk.
-          // Anything we freeze must start no later than journal is already truncated.
-          && v.truncatedJournal.boundaryLSN <= lbl.startLsn
-          // And must end at an existing page boundary.
-          // (In lower layers, that page and those before it must also be clean on disk.)
-          && var receipt := v.truncatedJournal.BuildReceipt();
-          && 0 < keepReceiptLines <= |receipt.lines|
-          && lbl.endLsn == receipt.lines[keepReceiptLines-1].journalRec.messageSeq.seqEnd
-          && assert lbl.endLsn <= v.truncatedJournal.I().seqEnd by { receipt.LsnInReceiptBelongs(keepReceiptLines-1); } true
-          && lbl.frozenJournal == v.truncatedJournal.I().DiscardOld(lbl.startLsn).DiscardRecent(lbl.endLsn)
-        )
-      )
+    && v.truncatedJournal.FreezeForCommit(lbl, keepReceiptLines)
     && v' == v
   }
 
@@ -800,7 +807,6 @@ module PagedJournal {
     && lbl.PutLabel?
     && var msgs := lbl.messages;
     && v.WF()
-    && v'.WF()
     && msgs.WF()
     && msgs.seqStart == v.SeqEnd()  // CanFollow, but without interpreting this.
     && v' == v.(unmarshalledTail := v.unmarshalledTail.Concat(msgs))
@@ -811,14 +817,15 @@ module PagedJournal {
     && lbl.DiscardOldLabel?
     && var lsn := lbl.startLsn;
     && v.WF()
-    && v'.WF()
     && v.SeqStart() <= lsn <= v.SeqEnd()
     && v.SeqEnd() == lbl.requireEnd
-    && (if v.unmarshalledTail.seqStart <= lsn
+    && v' == (
+        if v.unmarshalledTail.seqStart <= lsn
         then
           assert lsn <= v.unmarshalledTail.seqEnd;
-          v' == Variables(Mkfs(), v.unmarshalledTail.DiscardOld(lsn))
-        else v' == v.(truncatedJournal := v.truncatedJournal.DiscardOld(lsn))
+          Variables(TruncatedJournal(lsn, None), v.unmarshalledTail.DiscardOld(lsn))
+        else
+          v.(truncatedJournal := v.truncatedJournal.DiscardOld(lsn))
        )
   }
 
@@ -831,7 +838,6 @@ module PagedJournal {
   {
     && lbl.InternalLabel?
     && v.WF()
-    && v'.WF()
     && v.unmarshalledTail.seqStart < cut // Can't marshall nothing.
     && v.unmarshalledTail.CanDiscardTo(cut)
     && var marshalledMsgs := v.unmarshalledTail.DiscardRecent(cut);
@@ -854,8 +860,6 @@ module PagedJournal {
     | DiscardOldStep()
     | InternalJournalMarshalStep(cut: LSN)
 
-  // TODO(jonh): Per Wednesday meeting with oded & robj, maybe we need a local notion of uiop that
-  // forces the refinement to meet the obligations of the client, CoordinationSystem.
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     match step {
