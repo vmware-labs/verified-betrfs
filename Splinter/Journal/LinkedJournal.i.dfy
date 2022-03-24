@@ -235,7 +235,7 @@ module LinkedJournal {
     && lbl.requireEnd == v.SeqEnd()
     && v.SeqStart() <= lbl.startLsn <= v.SeqEnd()
     && (if v.unmarshalledTail.seqStart <= lbl.startLsn
-        then v' == Variables(Mkfs(), v.unmarshalledTail.DiscardOld(lbl.startLsn))
+        then v' == Variables(TruncatedJournal(lbl.startLsn, None, DiskView(map[])), v.unmarshalledTail.DiscardOld(lbl.startLsn))
         else v' == v.(truncatedJournal := v.truncatedJournal.DiscardOld(lbl.startLsn))
        )
   }

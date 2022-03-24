@@ -91,10 +91,8 @@ module LinkedJournalRefinement
     } else if step.PutStep? {
       assert Inv(v');
     } else if step.DiscardOldStep? {
-      assume false;
-      assert PagedJournal.DiscardOld(I(v), I(v'), lbl);
-      assert v'.WF();
-      assert v'.truncatedJournal.Decodable();
+      assert DiskView(map[]).PointersRespectRank(map[]);  // need ranking for case where we make a fresh empty diskview
+      assert PagedJournal.DiscardOld(I(v), I(v'), lbl); // trigger
       assert Inv(v');
     } else if step.InternalJournalMarshalStep? {
       // Witness new rank
