@@ -262,7 +262,7 @@ module LinkedJournal {
   datatype Step =
       ReadForRecoveryStep(receiptIndex: nat)
     | FreezeForCommitStep(keepReceiptLines: nat)
-    | ObserveFreshJournalLabel()
+    | ObserveFreshJournalStep()
     | PutStep()
     | DiscardOldStep()
     | InternalJournalMarshalStep(cut: LSN, addr: Address)
@@ -272,7 +272,7 @@ module LinkedJournal {
     match step {
       case ReadForRecoveryStep(receiptIndex) => ReadForRecovery(v, v', lbl, receiptIndex)
       case FreezeForCommitStep(keepReceiptLines) => FreezeForCommit(v, v', lbl, keepReceiptLines)
-      case ObserveFreshJournalLabel() => ObserveFreshJournal(v, v', lbl)
+      case ObserveFreshJournalStep() => ObserveFreshJournal(v, v', lbl)
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
       case InternalJournalMarshalStep(cut, addr) => InternalJournalMarshal(v, v', lbl, cut, addr)

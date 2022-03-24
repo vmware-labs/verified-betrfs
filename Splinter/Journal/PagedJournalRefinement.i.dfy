@@ -108,7 +108,7 @@ module PagedJournalRefinement
     } else if step.FreezeForCommitStep? {
       FreezeForCommitRefines(v, v', lbl, step.keepReceiptLines);
       assert AbstractJournal.Next(I(v), I(v'), lbl);
-    } else if step.ObserveFreshJournalLabel? {
+    } else if step.ObserveFreshJournalStep? {
       assert AbstractJournal.Next(I(v), I(v'), lbl);
     } else if step.PutStep? {
       assert AbstractJournal.Next(I(v), I(v'), lbl);
