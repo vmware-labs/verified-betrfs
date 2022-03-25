@@ -20,6 +20,7 @@ module MapLabels {
     | PutLabel(puts: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(stampedMap: StampedMap)
+    | InternalLabel()
 }
 
 module AbstractMap {
@@ -77,6 +78,7 @@ module AbstractMap {
       case PutLabel(_) => Put(v, v', lbl)
       case QueryEndLsnLabel(_) => QueryEndLsn(v, v', lbl)
       case FreezeAsLabel(_) => FreezeAs(v, v', lbl)
+      case InternalLabel() => v == v'
     }
   }
 }
