@@ -26,6 +26,23 @@ module PagedJournal {
     }
   }
 
+  // Recursive "ignorant" discard: throws away old records, but doesn't really
+  // have any idea if the records are meaningfully chained; we'll need to assume
+  // TJValid later to prove anything about the output of this function.
+  function DiscardOldJournalRec(rec: Option<JournalRecord>, lsn: LSN) : (out: Option<JournalRecord>)
+  {
+    if rec.None?
+    then None
+    else if rec.value.messageSeq.seqEnd <= lsn
+    then None
+    else
+      Some(JournalRecord(rec.value.messageSeq,
+        if rec.value.messageSeq.seqStart <= lsn
+        then None
+        else DiscardOldJournalRec(rec.value.priorRec, lsn)
+      ))
+  }
+
   // A TruncatedJournal is some long chain but which we ignore beyond the boundaryLSN
   // (because we have a map telling us that part of the history).
   // In the refinement layer below, we'll have some situations where the disk has extra
@@ -85,9 +102,7 @@ module PagedJournal {
       requires WF()
       requires I().CanDiscardTo(lsn)
     {
-      if freshestRec.None? || lsn == freshestRec.value.messageSeq.seqEnd
-      then TruncatedJournal(lsn, None)
-      else TruncatedJournal(lsn, freshestRec)
+      TruncatedJournal(lsn, DiscardOldJournalRec(freshestRec, lsn))
     }
 
     function DiscardOld(lsn: LSN) : (out:TruncatedJournal)
@@ -563,7 +578,6 @@ module PagedJournal {
     lemma DiscardOld(lsn: LSN) returns (out:Receipt)
       requires TJValid()
       requires I().CanDiscardTo(lsn)
-      ensures out.TJ() == TruncatedJournal(lsn, if I().IsEmpty() || lsn==I().seqEnd then None else FreshestRec());
       ensures out.TJValid()
       ensures I().WF()
       ensures TJ().WF() // just TJValid + ReceiptsUnique
@@ -575,25 +589,25 @@ module PagedJournal {
       TJFacts();
       BoundaryLSN();
       ReceiptsUnique(TJ().BuildReceipt());
-      if I().IsEmpty() || lsn==I().seqEnd {
+      if I().IsEmpty() || lsn==I().seqEnd {   // Output receipt is entirely empty
         out := Receipt(lsn, []);
         assert out.TJValid() by { reveal_LinkedInterpretations(); }
         assert out.I() == I().DiscardOld(lsn);  // case boilerplate
-      } else if Last(lines).journalRec.messageSeq.seqStart <= lsn { // Discarding something (or everything) in last
-        var lastRec := Last(lines).journalRec;
-        out := Receipt(lsn, [ReceiptLine(lastRec, Some(lastRec.messageSeq.DiscardOld(lsn)))]);
+      } else if Last(lines).journalRec.messageSeq.seqStart <= lsn { // Discarding something in last, but keeping some of it
+        var outRec := JournalRecord(Last(lines).journalRec.messageSeq, None);
+        out := Receipt(lsn, [ReceiptLine(outRec, Some(outRec.messageSeq.DiscardOld(lsn)))]);
         assert out.LinkedInterpretations() by { reveal_LinkedInterpretations(); }
         // This is the top of the new receipt
         assert OneLinkedInterpretation(|lines|-1) by { reveal_LinkedInterpretations(); }
         assert out.I() == I().DiscardOld(lsn);  // case boilerplate
-      } else {
-        // Recurse to generate all but the last line of the receipt.
+      } else {  // Recurse
         SnippedReceiptTJValid();
         assert OneLinkedInterpretation(|lines|-1) by { reveal_LinkedInterpretations(); }
         var shortReceipt := SnipLast().DiscardOld(lsn); // here's the recursive call.
         // Tack on the last line.
         var lastInterp := shortReceipt.I().Concat(Last(lines).journalRec.messageSeq);
-        out := Receipt(lsn, shortReceipt.lines + [ReceiptLine(Last(lines).journalRec, Some(lastInterp))]);
+        var lastRecordDiscarded := DiscardOldJournalRec(Some(Last(lines).journalRec), lsn).value;
+        out := Receipt(lsn, shortReceipt.lines + [ReceiptLine(lastRecordDiscarded, Some(lastInterp))]);
 
         // trigger party for automation-controlled Valid quantifiers
         forall i | 0<i<|out.lines| ensures out.LineRespectsLinkedList(i) {
