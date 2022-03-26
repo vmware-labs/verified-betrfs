@@ -10,6 +10,7 @@ module LinkedJournal {
   import opened LSNMod
   import opened Sequences
   import opened JournalLabels
+  import opened Maps
   import PagedJournal
 
   type Address(!new, ==)
@@ -17,24 +18,46 @@ module LinkedJournal {
 
   type Ranking = map<Address, nat>
 
-  // TODO(robj): where does this go?
+  datatype JournalRecord = JournalRecord(messageSeq: MsgHistory, priorRec: Pointer)
+  {
+    predicate WF()
+    {
+      messageSeq.WF()
+    }
+  }
+
   // The DiskView in this module is a tightly-populated mapping:
   // every record the journal needs is present in the mapping,
   // and every address is "important" to the journal.
-  datatype DiskView = DiskView(entries: map<Address, JournalRecord>) {
+  // The boundaryLSN enables us to ignore "cropped" pointers.
+  datatype DiskView = DiskView(boundaryLSN: LSN, entries: map<Address, JournalRecord>) {
     predicate EntriesWF()
     {
       (forall addr | addr in entries :: entries[addr].WF())
     }
 
-    predicate NondanglingPointer(ptr: Pointer)
+    // Read the priorRec pointer through the lens of some boundaryLSN, so we can
+    // pretend the last journal we care about has a null prior pointer.
+    function CroppedPointer(ptr: Pointer) : Pointer
+    {
+      if ptr.None?
+        then None
+      else if ptr.value !in entries
+        then None
+      else if entries[ptr.value].messageSeq.seqEnd <= boundaryLSN
+        then None
+      else
+        ptr
+    }
+
+    predicate IsNondanglingPointer(ptr: Pointer)
     {
       ptr.Some? ==> ptr.value in entries
     }
 
     predicate NondanglingPointers()
     {
-      (forall addr | addr in entries :: NondanglingPointer(entries[addr].priorRec))
+      (forall addr | addr in entries :: IsNondanglingPointer(CroppedPointer(entries[addr].priorRec)))
     }
 
     predicate WF()
@@ -47,8 +70,8 @@ module LinkedJournal {
       requires WF()
     {
       && ranking.Keys == entries.Keys
-      && (forall address | address in entries && entries[address].priorRec.Some? ::
-          && ranking[entries[address].priorRec.value] < ranking[address]
+      && (forall address | address in entries && CroppedPointer(entries[address].priorRec).Some? ::
+          && ranking[CroppedPointer(entries[address].priorRec).value] < ranking[address]
          )
     }
 
@@ -68,66 +91,84 @@ module LinkedJournal {
 
     function RankedIPtr(ptr: Pointer, ranking: Ranking) : Option<PagedJournal.JournalRecord>
       requires WF()
-      requires NondanglingPointer(ptr)
+      requires IsNondanglingPointer(ptr)
       requires PointersRespectRank(ranking)
       decreases if ptr.Some? then ranking[ptr.value] else -1 // I can't believe this works, Rustan!
     {
-      if ptr.None?
+      if CroppedPointer(ptr).None?
       then None
       else
         var jr := entries[ptr.value];
-        Some(PagedJournal.JournalRecord(jr.messageSeq, RankedIPtr(jr.priorRec, ranking)))
+        // Bail early if lsn is satisfied -- necessary to match
+        // PagedJournal.DiscardOldJournalRec because at this layer we don't yet
+        // know that the priorRec's boundaries correctly chain.
+        var priorRec := if jr.messageSeq.seqStart <= boundaryLSN then None else jr.priorRec;
+        // A bit redundant to crop priorRec in advance, but it's necessary
+        // to match IsNondanglingPointer and PointersRespectRank (decreases).
+        Some(PagedJournal.JournalRecord(jr.messageSeq, RankedIPtr(CroppedPointer(priorRec), ranking)))
     }
 
     function IPtr(ptr: Pointer) : Option<PagedJournal.JournalRecord>
       requires WF()
       requires Acyclic()
-      requires NondanglingPointer(ptr)
+      requires IsNondanglingPointer(ptr)
     {
       RankedIPtr(ptr, TheRanking())
     }
-  }
 
-  datatype JournalRecord = JournalRecord(messageSeq: MsgHistory, priorRec: Pointer)
-  {
-    predicate WF()
+    function DiscardOld(newBoundary: LSN) : (out: DiskView)
+      requires WF()
+      requires boundaryLSN <= newBoundary
+      ensures out.WF()
     {
-      messageSeq.WF()
+      DiskView(newBoundary, entries)
+    }
+
+    predicate IsSubDisk(bigger: DiskView)
+    {
+      && boundaryLSN == bigger.boundaryLSN
+      && IsSubMap(entries, bigger.entries)
+    }
+
+    predicate Tight()
+      requires WF()
+    {
+      forall other:DiskView |
+        && other.WF()
+        && other.IsSubDisk(this)
+        :: other == this
     }
   }
 
   datatype TruncatedJournal = TruncatedJournal(
-    boundaryLSN : LSN,  // exclusive: lsns <= boundaryLSN are discarded
     freshestRec: Pointer,
     diskView: DiskView)
   {
     predicate WF() {
       && diskView.WF()
-      && diskView.NondanglingPointer(freshestRec)
+      && diskView.IsNondanglingPointer(freshestRec)
     }
 
     function SeqStart() : LSN
     {
-      boundaryLSN
+      diskView.boundaryLSN
     }
 
     function SeqEnd() : LSN
       requires WF()
     {
       if freshestRec.None?  // normal case with empty TJ
-      then boundaryLSN
+      then diskView.boundaryLSN
       else diskView.entries[freshestRec.value].messageSeq.seqEnd
     }
 
-    // TODO(jonh): this function doesn't yet correctly maintain the "DiskView
-    // tightness" property; it leaks pages. We'll probably need a receipt to locate
-    // the subset of addresses we want to keep.
     function DiscardOld(lsn: LSN) : (out:TruncatedJournal)
       requires WF()
+      requires diskView.boundaryLSN <= lsn
     {
-      if freshestRec.None? || lsn == diskView.entries[freshestRec.value].messageSeq.seqEnd
-      then TruncatedJournal(lsn, None, diskView)
-      else TruncatedJournal(lsn, freshestRec, diskView)
+      if freshestRec.None? || diskView.entries[freshestRec.value].messageSeq.seqEnd <= lsn
+      then TruncatedJournal(None, diskView.DiscardOld(lsn))
+      else TruncatedJournal(freshestRec, diskView.DiscardOld(lsn))
     }
 
     function AppendRecord(addr: Address, msgs: MsgHistory) : (out: TruncatedJournal)
@@ -142,7 +183,7 @@ module LinkedJournal {
       requires WF()
       requires diskView.Acyclic()
     {
-      PagedJournal.TruncatedJournal(boundaryLSN, diskView.IPtr(freshestRec))
+      PagedJournal.TruncatedJournal(diskView.boundaryLSN, diskView.IPtr(freshestRec))
     }
 
     predicate Decodable()
@@ -155,7 +196,7 @@ module LinkedJournal {
 
   function Mkfs() : (out:TruncatedJournal)
   {
-    TruncatedJournal(0, None, DiskView(map[]))
+    TruncatedJournal(None, DiskView(0, map[]))
   }
 
   datatype Variables = Variables(
@@ -227,17 +268,24 @@ module LinkedJournal {
     && v' == v.(unmarshalledTail := v.unmarshalledTail.Concat(lbl.messages))
   }
 
-  predicate DiscardOld(v: Variables, v': Variables, lbl: TransitionLabel)
+  predicate DiscardOld(v: Variables, v': Variables, lbl: TransitionLabel, tightDiskView: DiskView)
   {
     // diskView not tightened here
     && lbl.DiscardOldLabel?
     && v.WF()
-    && lbl.requireEnd == v.SeqEnd()
+    && tightDiskView.WF()
+    && tightDiskView.Tight()  // We don't really need to require tightness at this layer, but I feel like it.
     && v.SeqStart() <= lbl.startLsn <= v.SeqEnd()
-    && (if v.unmarshalledTail.seqStart <= lbl.startLsn
-        then v' == Variables(TruncatedJournal(lbl.startLsn, None, DiskView(map[])), v.unmarshalledTail.DiscardOld(lbl.startLsn))
-        else v' == v.(truncatedJournal := v.truncatedJournal.DiscardOld(lbl.startLsn))
-       )
+    && var croppedTJ := v.truncatedJournal.DiscardOld(lbl.startLsn);
+    && tightDiskView.IsSubDisk(croppedTJ.diskView)
+    && lbl.requireEnd == v.SeqEnd()
+    && var tightTJ := croppedTJ;
+    // && var tightTJ := TruncatedJournal(croppedTJ.freshestRec, tightDiskView); // TODO(jonh): install
+    && v' == Variables(tightTJ,
+        if v.unmarshalledTail.seqStart <= lbl.startLsn
+        then v.unmarshalledTail.DiscardOld(lbl.startLsn)
+        else v.unmarshalledTail
+      )
   }
 
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN, addr: Address)
@@ -264,7 +312,7 @@ module LinkedJournal {
     | FreezeForCommitStep(keepReceiptLines: nat)
     | ObserveFreshJournalStep()
     | PutStep()
-    | DiscardOldStep()
+    | DiscardOldStep(tightDiskView: DiskView)
     | InternalJournalMarshalStep(cut: LSN, addr: Address)
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -274,7 +322,7 @@ module LinkedJournal {
       case FreezeForCommitStep(keepReceiptLines) => FreezeForCommit(v, v', lbl, keepReceiptLines)
       case ObserveFreshJournalStep() => ObserveFreshJournal(v, v', lbl)
       case PutStep() => Put(v, v', lbl)
-      case DiscardOldStep() => DiscardOld(v, v', lbl)
+      case DiscardOldStep(tightDiskView) => DiscardOld(v, v', lbl, tightDiskView)
       case InternalJournalMarshalStep(cut, addr) => InternalJournalMarshal(v, v', lbl, cut, addr)
     }
   }
