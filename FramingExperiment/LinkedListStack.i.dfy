@@ -59,15 +59,18 @@ module Representation {
 
   datatype Variables = Variables(a: Cell, b: Cell)
 
-  predicate ConsA(v: Variables, v': Variables, x: int) {
-    && v' == v.(a := Cell(x, v.a))
+  predicate ConsA(v: Variables, v': Variables, lbl: TransitionLabel) {
+    && lbl.ConsALabel?
+    && v' == v.(a := Cell(lbl.x, v.a))
   }
 
-  predicate ConsB(v: Variables, v': Variables, x: int) {
-    && v' == v.(b := Cell(x, v.b))
+  predicate ConsB(v: Variables, v': Variables, lbl: TransitionLabel) {
+    && lbl.ConsBLabel?
+    && v' == v.(b := Cell(lbl.x, v.b))
   }
 
-  predicate CopyBtoA(v: Variables, v': Variables) {
+  predicate CopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel) {
+    && lbl.CopyBtoALabel?
     && v' == v.(a := v.b)
   }
 
@@ -78,9 +81,9 @@ module Representation {
 
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
     match lbl
-      case ConsALabel(x) => ConsA(v, v', x)
-      case ConsBLabel(x) => ConsB(v, v', x)
-      case CopyBtoALabel() => CopyBtoA(v, v')
+      case ConsALabel(_) => ConsA(v, v', lbl)
+      case ConsBLabel(_) => ConsB(v, v', lbl)
+      case CopyBtoALabel() => CopyBtoA(v, v', lbl)
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -96,23 +99,9 @@ module Representation {
   {
   }
 
-  lemma InvConsA(v: Variables, v': Variables, x: int)
+  lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires ConsA(v, v', x)
-    ensures Inv(v')
-  {
-  }
-
-  lemma InvConsB(v: Variables, v': Variables, x: int)
-    requires Inv(v)
-    requires ConsB(v, v', x)
-    ensures Inv(v')
-  {
-  }
-
-  lemma InvCopyBtoA(v: Variables, v': Variables)
-    requires Inv(v)
-    requires CopyBtoA(v, v')
+    requires Next(v, v', lbl)
     ensures Inv(v')
   {
   }
@@ -171,9 +160,10 @@ module AcyclicityAndFraming {
     Variables(v.disk[addr := CellPage(x, v.a)], Some(addr), v.b)
   }
 
-  predicate ConsA(v: Variables, v': Variables, x: int, addr: Address) {
+  predicate ConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
+    && lbl.ConsALabel?
     && IsFree(v, addr)
-    && v' == ConsAFunc(v, x, addr)
+    && v' == ConsAFunc(v, lbl.x, addr)
   }
 
   function ConsBFunc(v: Variables, x: int, addr: Address) : Variables
@@ -182,9 +172,10 @@ module AcyclicityAndFraming {
     Variables(v.disk[addr := CellPage(x, v.b)], v.a, Some(addr))
   }
 
-  predicate ConsB(v: Variables, v': Variables, x: int, addr: Address) {
+  predicate ConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
+    && lbl.ConsBLabel?
     && IsFree(v, addr)
-    && v' == ConsBFunc(v, x, addr)
+    && v' == ConsBFunc(v, lbl.x, addr)
   }
 
   function CopyBtoAFunc(v: Variables) : Variables
@@ -192,8 +183,9 @@ module AcyclicityAndFraming {
     v.(a := v.b)
   }
 
-  predicate CopyBtoA(v: Variables, v': Variables) {
+  predicate CopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel) {
     // Ignoring deallocation -- leaving garbage on the disk.
+    && lbl.CopyBtoALabel?
     && v' == CopyBtoAFunc(v)
   }
 
@@ -210,9 +202,9 @@ module AcyclicityAndFraming {
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) {
     match step
-      case ConsAStep(addr) => lbl.ConsALabel? && ConsA(v, v', lbl.x, addr)
-      case ConsBStep(addr) => lbl.ConsBLabel? && ConsB(v, v', lbl.x, addr)
-      case CopyBtoAStep() => lbl.CopyBtoALabel? && CopyBtoA(v, v')
+      case ConsAStep(addr) => ConsA(v, v', lbl, addr)
+      case ConsBStep(addr) => ConsB(v, v', lbl, addr)
+      case CopyBtoAStep() => CopyBtoA(v, v', lbl)
   }
 
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
@@ -265,9 +257,9 @@ module AcyclicityAndFraming {
     assert PointersRespectRank(v, map[]); // witness is an empty Ranking
   }
 
-  lemma InvConsA(v: Variables, v': Variables, x: int, addr: Address)
+  lemma InvConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsA(v, v', x, addr)
+    requires ConsA(v, v', lbl, addr)
     ensures Inv(v')
   {
     var rank :| PointersRespectRank(v, rank);
@@ -275,9 +267,9 @@ module AcyclicityAndFraming {
     assert PointersRespectRank(v', rank');
   }
 
-  lemma InvConsB(v: Variables, v': Variables, x: int, addr: Address)
+  lemma InvConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsB(v, v', x, addr)
+    requires ConsB(v, v', lbl, addr)
     ensures Inv(v')
   {
     var rank :| PointersRespectRank(v, rank);
@@ -285,9 +277,9 @@ module AcyclicityAndFraming {
     assert PointersRespectRank(v', rank');
   }
 
-  lemma InvCopyBtoA(v: Variables, v': Variables)
+  lemma InvCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires CopyBtoA(v, v')
+    requires CopyBtoA(v, v', lbl)
     ensures Inv(v')
   {
     var rank :| PointersRespectRank(v, rank);
@@ -347,35 +339,35 @@ module AcyclicityAndFraming {
     }
   }
 
-  lemma RefinementConsA(v: Variables, v': Variables, x:int, addr: Address)
+  lemma RefinementConsA(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsA(v, v', x, addr)
+    requires ConsA(v, v', lbl, addr)
     ensures Inv(v')
-    ensures Representation.ConsA(I(v), I(v'), x)
+    ensures Representation.ConsA(I(v), I(v'), lbl)
   {
-    InvConsA(v, v', x, addr);
+    InvConsA(v, v', lbl, addr);
     Fresh(v, v', v.a);
     Fresh(v, v', v.b);
   }
 
-  lemma RefinementConsB(v: Variables, v': Variables, x:int, addr: Address)
+  lemma RefinementConsB(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address)
     requires Inv(v)
-    requires ConsB(v, v', x, addr)
+    requires ConsB(v, v', lbl, addr)
     ensures Inv(v')
-    ensures Representation.ConsB(I(v), I(v'), x)
+    ensures Representation.ConsB(I(v), I(v'), lbl)
   {
-    InvConsB(v, v', x, addr);
+    InvConsB(v, v', lbl, addr);
     Fresh(v, v', v.a);
     Fresh(v, v', v.b);
   }
 
-  lemma RefinementCopyBtoA(v: Variables, v': Variables)
+  lemma RefinementCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires CopyBtoA(v, v')
+    requires CopyBtoA(v, v', lbl)
     ensures Inv(v')
-    ensures Representation.CopyBtoA(I(v), I(v'))
+    ensures Representation.CopyBtoA(I(v), I(v'), lbl)
   {
-    InvCopyBtoA(v, v');
+    InvCopyBtoA(v, v', lbl);
     Fresh(v, v', v.b);
   }
 
@@ -398,9 +390,9 @@ module AcyclicityAndFraming {
   {
     var step :| NextStep(v, v', lbl, step);
     match step {
-      case ConsAStep(addr) => { RefinementConsA(v, v', lbl.x, addr); }
-      case ConsBStep(addr) => { RefinementConsB(v, v', lbl.x, addr); }
-      case CopyBtoAStep() => { RefinementCopyBtoA(v, v'); }
+      case ConsAStep(addr) => { RefinementConsA(v, v', lbl, addr); }
+      case ConsBStep(addr) => { RefinementConsB(v, v', lbl, addr); }
+      case CopyBtoAStep() => { RefinementCopyBtoA(v, v', lbl); }
     }
   }
 }
@@ -513,7 +505,7 @@ module Marshalling {
     ensures Inv(v')
   {
     var fv' := AcyclicityAndFraming.ConsAFunc(I(v), lbl.x, addr);
-    AcyclicityAndFraming.InvConsA(I(v), fv', lbl.x, addr);
+    AcyclicityAndFraming.InvConsA(I(v), fv', lbl, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
@@ -523,7 +515,7 @@ module Marshalling {
     ensures Inv(v')
   {
     var fv' := AcyclicityAndFraming.ConsBFunc(I(v), lbl.x, addr);
-    AcyclicityAndFraming.InvConsB(I(v), fv', lbl.x, addr);
+    AcyclicityAndFraming.InvConsB(I(v), fv', lbl, addr);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
@@ -533,7 +525,7 @@ module Marshalling {
     ensures Inv(v')
   {
     var fv' := AcyclicityAndFraming.CopyBtoAFunc(I(v));
-    AcyclicityAndFraming.InvCopyBtoA(I(v), fv');
+    AcyclicityAndFraming.InvCopyBtoA(I(v), fv', lbl);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
   }
 
