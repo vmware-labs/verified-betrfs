@@ -18,11 +18,19 @@ module LinkedJournal {
 
   type Ranking = map<Address, nat>
 
-  datatype JournalRecord = JournalRecord(messageSeq: MsgHistory, priorRec: Pointer)
+  datatype JournalRecord = JournalRecord(messageSeq: MsgHistory, priorRecXXX: Pointer)
   {
     predicate WF()
     {
       messageSeq.WF()
+    }
+
+    // The DiskView always evaluates the priorRec pointer through the lens of
+    // the boundaryLSN, dropping pointers that can't possibly provide any
+    // useful LSNs.
+    function CroppedPrior(boundaryLSN: LSN) : Pointer
+    {
+      if boundaryLSN < messageSeq.seqStart then priorRecXXX else None
     }
   }
 
@@ -36,20 +44,6 @@ module LinkedJournal {
       (forall addr | addr in entries :: entries[addr].WF())
     }
 
-    // Read the priorRec pointer through the lens of some boundaryLSN, so we can
-    // pretend the last journal we care about has a null prior pointer.
-    function CroppedPointer(ptr: Pointer) : Pointer
-    {
-      if ptr.None?
-        then None
-      else if ptr.value !in entries
-        then None
-      else if entries[ptr.value].messageSeq.seqEnd <= boundaryLSN
-        then None
-      else
-        ptr
-    }
-
     predicate IsNondanglingPointer(ptr: Pointer)
     {
       ptr.Some? ==> ptr.value in entries
@@ -57,7 +51,7 @@ module LinkedJournal {
 
     predicate NondanglingPointers()
     {
-      (forall addr | addr in entries :: IsNondanglingPointer(CroppedPointer(entries[addr].priorRec)))
+      (forall addr | addr in entries :: IsNondanglingPointer(entries[addr].CroppedPrior(boundaryLSN)))
     }
 
     predicate WF()
@@ -69,10 +63,10 @@ module LinkedJournal {
     predicate PointersRespectRank(ranking: Ranking)
       requires WF()
     {
-      && ranking.Keys == entries.Keys
-      && (forall address | address in entries && CroppedPointer(entries[address].priorRec).Some? ::
-          && ranking[CroppedPointer(entries[address].priorRec).value] < ranking[address]
-         )
+      && entries.Keys <= ranking.Keys
+      && (forall address | address in entries && entries[address].CroppedPrior(boundaryLSN).Some? ::
+          && ranking[entries[address].CroppedPrior(boundaryLSN).value] < ranking[address]
+        )
     }
 
     predicate Acyclic()
@@ -95,17 +89,11 @@ module LinkedJournal {
       requires PointersRespectRank(ranking)
       decreases if ptr.Some? then ranking[ptr.value] else -1 // I can't believe this works, Rustan!
     {
-      if CroppedPointer(ptr).None?
+      if ptr.None?
       then None
       else
         var jr := entries[ptr.value];
-        // Bail early if lsn is satisfied -- necessary to match
-        // PagedJournal.DiscardOldJournalRec because at this layer we don't yet
-        // know that the priorRec's boundaries correctly chain.
-        var priorRec := if jr.messageSeq.seqStart <= boundaryLSN then None else jr.priorRec;
-        // A bit redundant to crop priorRec in advance, but it's necessary
-        // to match IsNondanglingPointer and PointersRespectRank (decreases).
-        Some(PagedJournal.JournalRecord(jr.messageSeq, RankedIPtr(CroppedPointer(priorRec), ranking)))
+        Some(PagedJournal.JournalRecord(jr.messageSeq, RankedIPtr(jr.CroppedPrior(boundaryLSN), ranking)))
     }
 
     function IPtr(ptr: Pointer) : Option<PagedJournal.JournalRecord>
@@ -166,7 +154,7 @@ module LinkedJournal {
       requires WF()
       requires diskView.boundaryLSN <= lsn
     {
-      if freshestRec.None? || diskView.entries[freshestRec.value].messageSeq.seqEnd <= lsn
+      if SeqEnd() <= lsn
       then TruncatedJournal(None, diskView.DiscardOld(lsn))
       else TruncatedJournal(freshestRec, diskView.DiscardOld(lsn))
     }
@@ -273,14 +261,15 @@ module LinkedJournal {
     // diskView not tightened here
     && lbl.DiscardOldLabel?
     && v.WF()
-    && tightDiskView.WF()
+    && tightDiskView.WF() // When you GC the disk, you must preserve the reachable pointers.
     && tightDiskView.Tight()  // We don't really need to require tightness at this layer, but I feel like it.
     && v.SeqStart() <= lbl.startLsn <= v.SeqEnd()
     && var croppedTJ := v.truncatedJournal.DiscardOld(lbl.startLsn);
     && tightDiskView.IsSubDisk(croppedTJ.diskView)
+    && tightDiskView.IsNondanglingPointer(croppedTJ.freshestRec)  // Can't crop to nothing!
     && lbl.requireEnd == v.SeqEnd()
-    && var tightTJ := croppedTJ;
-    // && var tightTJ := TruncatedJournal(croppedTJ.freshestRec, tightDiskView); // TODO(jonh): install
+    // && var tightTJ := croppedTJ; TODO(jonh): deleteme
+    && var tightTJ := TruncatedJournal(croppedTJ.freshestRec, tightDiskView);
     && v' == Variables(tightTJ,
         if v.unmarshalledTail.seqStart <= lbl.startLsn
         then v.unmarshalledTail.DiscardOld(lbl.startLsn)

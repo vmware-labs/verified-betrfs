@@ -33,8 +33,6 @@ module PagedJournal {
   {
     if rec.None?
     then None
-    else if rec.value.messageSeq.seqEnd <= lsn
-    then None
     else
       Some(JournalRecord(rec.value.messageSeq,
         if rec.value.messageSeq.seqStart <= lsn
@@ -82,16 +80,6 @@ module PagedJournal {
       if freshestRec.Some? then freshestRec.value.messageSeq.seqEnd else boundaryLSN
     }
 
-    function MaybeSeqEnd() : (out: Option<LSN>)
-      requires WF()
-    {
-      if
-        || freshestRec.None?
-        || boundaryLSN == freshestRec.value.messageSeq.seqEnd
-      then None
-      else Some(freshestRec.value.messageSeq.seqEnd)
-    }
-
     function I() : MsgHistory
       requires WF()
     {
@@ -102,7 +90,8 @@ module PagedJournal {
       requires WF()
       requires I().CanDiscardTo(lsn)
     {
-      TruncatedJournal(lsn, DiscardOldJournalRec(freshestRec, lsn))
+      TruncatedJournal(lsn,
+        if SeqEnd() <= lsn then None else DiscardOldJournalRec(freshestRec, lsn))
     }
 
     function DiscardOld(lsn: LSN) : (out:TruncatedJournal)
@@ -836,6 +825,13 @@ module PagedJournal {
     && v' == (
         if v.unmarshalledTail.seqStart <= lsn
         then
+          // NB this branch is goofy -- the policy we've expressed in
+          // CoordinationSystem only ever calls this function from
+          // CommitComplete, when we've learned that some part of the journal
+          // is persistent. No way that could gobble up any of the unmarshalled
+          // tail! But we write it out for completeness. (But could have simply
+          // excluded this case via an enabling condition, and the lower
+          // refinement layers wouldn't have objected.)
           assert lsn <= v.unmarshalledTail.seqEnd;
           Variables(TruncatedJournal(lsn, None), v.unmarshalledTail.DiscardOld(lsn))
         else
