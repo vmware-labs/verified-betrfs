@@ -4,6 +4,21 @@
 include "../CoordinationLayer/AbstractJournal.i.dfy"
 include "PagedJournal.i.dfy"
 
+module GenericDisk {
+  import opened Options
+
+  type Block(!new, ==)
+  function Parse<T>(block: Block) : T
+  function Marshal<T>(t: T) : Block
+  lemma ParseAxiom<T>(t: T)
+    ensures Parse(Marshal(t)) == t
+
+  type Address(!new, ==)
+  type Pointer = Option<Address>
+
+  type Disk = map<Address, Block> // TODO(jonh): rename DiskView, since it's partial.
+}
+
 module LinkedJournal {
   import opened Options
   import opened MsgHistoryMod
@@ -11,10 +26,11 @@ module LinkedJournal {
   import opened Sequences
   import opened JournalLabels
   import opened Maps
+  import GenericDisk
   import PagedJournal
 
-  type Address(!new, ==)
-  type Pointer = Option<Address>
+  type Pointer = GenericDisk.Pointer
+  type Address = GenericDisk.Address
 
   type Ranking = map<Address, nat>
 
@@ -231,6 +247,7 @@ module LinkedJournal {
 
   predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
   {
+    // && lbl.FreezeForCommitLabel? enforced by pagedTJ.FreezeForCommit.
     && v.WF()
     && v.truncatedJournal.Decodable()
     && var pagedTJ := v.truncatedJournal.I();

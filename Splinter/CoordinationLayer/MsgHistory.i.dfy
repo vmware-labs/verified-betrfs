@@ -142,9 +142,11 @@ module MsgHistoryMod {
       requires subseq.WF()
       ensures IncludesSubseq(subseq) && IsEmpty() ==> subseq.IsEmpty()
     {
-      var result := forall lsn | subseq.Contains(lsn) :: Contains(lsn) && msgs[lsn] == subseq.msgs[lsn];
-      assert result && !subseq.IsEmpty() ==> Contains(subseq.seqStart); // seqStart is witness to contradiction
-      result
+      && seqStart <= subseq.seqStart
+      && subseq.seqEnd <= seqEnd
+      && var result := forall lsn | subseq.Contains(lsn) :: Contains(lsn) && msgs[lsn] == subseq.msgs[lsn];
+        assert result && !subseq.IsEmpty() ==> Contains(subseq.seqStart); // seqStart is witness to contradiction
+        result
     }
   }
 

@@ -13,7 +13,7 @@ module JournalLabels {
 
   datatype TransitionLabel =
       ReadForRecoveryLabel(messages: MsgHistory)
-    | FreezeForCommitLabel(startLsn: LSN, endLsn: LSN, frozenJournal: MsgHistory)
+    | FreezeForCommitLabel(frozenJournal: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
@@ -64,10 +64,7 @@ module AbstractJournal {
     && v.WF()
     && lbl.FreezeForCommitLabel?
     && lbl.frozenJournal.WF()
-    && lbl.startLsn <= lbl.endLsn
-    && v.journal.CanDiscardTo(lbl.startLsn)
-    && v.journal.CanDiscardTo(lbl.endLsn)
-    && lbl.frozenJournal == v.journal.DiscardOld(lbl.startLsn).DiscardRecent(lbl.endLsn)
+    && v.journal.IncludesSubseq(lbl.frozenJournal)
     && v' == v
   }
 
@@ -115,7 +112,7 @@ module AbstractJournal {
   {
     match lbl {
       case ReadForRecoveryLabel(_) => ReadForRecovery(v, v', lbl)
-      case FreezeForCommitLabel(_, _, _) => FreezeForCommit(v, v', lbl)
+      case FreezeForCommitLabel(_) => FreezeForCommit(v, v', lbl)
       case QueryEndLsnLabel(_) => ObserveFreshJournal(v, v', lbl)
       case PutLabel(_) => Put(v, v', lbl)
       case DiscardOldLabel(_, _) => DiscardOld(v, v', lbl)

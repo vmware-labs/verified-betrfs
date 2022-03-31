@@ -131,10 +131,13 @@ module PagedJournal {
       var j:=i;
       assert receipt.OneLinkedInterpretation(j) by { receipt.reveal_LinkedInterpretations(); }
 
+      assert 0<i ==> receipt.InterpretationWF(i-1);
       while j<|receipt.lines|-1
         invariant j<|receipt.lines|
         invariant var jint := receipt.lines[j].interpretation;
-              && jint.Some?  && jint.value.WF() && jint.value.IncludesSubseq(msgs)
+            && jint.Some?
+            && jint.value.WF()
+            && jint.value.IncludesSubseq(msgs)
       {
         assert receipt.OneLinkedInterpretation(j+1) by { receipt.reveal_LinkedInterpretations(); }
         j:=j+1;
@@ -167,24 +170,22 @@ module PagedJournal {
     {
       && lbl.FreezeForCommitLabel?
       && lbl.frozenJournal.WF()
-      && lbl.startLsn == boundaryLSN
-      && (if lbl.startLsn == lbl.endLsn
+      // Anything we freeze must start no earlier than journal is already truncated.
+      && boundaryLSN <= lbl.frozenJournal.seqStart
+      && lbl.frozenJournal.seqEnd <= SeqEnd()
+      && (if lbl.frozenJournal.IsEmpty()
           then (
             && keepReceiptLines == 0
-            && lbl.frozenJournal == EmptyHistoryAt(lbl.startLsn)
           ) else (
-            && lbl.startLsn < lbl.endLsn
-            // Can't freeze anything in unmarshalledTail, as it's certainly not clean on disk.
-            // Anything we freeze must start no later than journal is already truncated.
-            && boundaryLSN <= lbl.startLsn
             // And must end at an existing page boundary.
+            // (Note that means we also don't freeze anything in unmarshalledTail.)
             // (In lower layers, that page and those before it must also be clean on disk.)
             && var receipt := BuildReceipt();
             && 0 < keepReceiptLines <= |receipt.lines|
-            && lbl.endLsn == receipt.lines[keepReceiptLines-1].journalRec.messageSeq.seqEnd
-            && assert lbl.endLsn <= I().seqEnd by { receipt.LsnInReceiptBelongs(keepReceiptLines-1); } true
+            && lbl.frozenJournal.seqEnd == receipt.lines[keepReceiptLines-1].journalRec.messageSeq.seqEnd
+            && assert lbl.frozenJournal.seqEnd <= I().seqEnd by { receipt.LsnInReceiptBelongs(keepReceiptLines-1); } true
             && assert I().seqStart == boundaryLSN by { receipt.TJFacts(); } true
-            && lbl.frozenJournal == I().DiscardOld(lbl.startLsn).DiscardRecent(lbl.endLsn)
+            && I().IncludesSubseq(lbl.frozenJournal)
           )
         )
     }

@@ -283,8 +283,7 @@ module CoordinationSystem {
       ))
   }
 
-  predicate CommitStart(v: Variables, v': Variables, uiop : UIOp,
-      endJournal: LSN, frozenJournal: MsgHistory)
+  predicate CommitStart(v: Variables, v': Variables, uiop : UIOp, frozenJournal: MsgHistory)
   {
     && uiop.NoopOp?
     && v.WF()
@@ -293,17 +292,17 @@ module CoordinationSystem {
     && v.inFlightImage.None?
 
     && v.ephemeral.frozenMap.Some?
-    && var startJournal := v.ephemeral.frozenMap.value.seqEnd;
+    && frozenJournal.seqStart == v.ephemeral.frozenMap.value.seqEnd
     // Frozen map can't go backwards vs persistent map, lest we end up with
     // a gap to the ephemeral journal start.
-    && v.persistentImage.mapadt.seqEnd <= startJournal
+    && v.persistentImage.mapadt.seqEnd <= frozenJournal.seqStart
     // And of course there should be no way for it to have passed the ephemeral map!
-    && startJournal <= v.ephemeral.mapLsn
-    && startJournal <= endJournal
-    && v.persistentImage.SeqEnd() <= endJournal
+    && frozenJournal.seqStart <= v.ephemeral.mapLsn
+    && frozenJournal.seqStart <= frozenJournal.seqEnd
+    && v.persistentImage.SeqEnd() <= frozenJournal.seqEnd
 
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
-        JournalLabels.FreezeForCommitLabel(startJournal, endJournal, frozenJournal))
+        JournalLabels.FreezeForCommitLabel(frozenJournal))
     && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     && v'.inFlightImage.Some?
@@ -354,7 +353,7 @@ module CoordinationSystem {
     | ReqSyncStep()
     | ReplySyncStep()
     | FreezeMapAdtStep()
-    | CommitStartStep(seqBoundary: LSN, frozenJournal: MsgHistory)
+    | CommitStartStep(frozenJournal: MsgHistory)
     | CommitCompleteStep()
     | CrashStep()
 
@@ -371,7 +370,7 @@ module CoordinationSystem {
       case ReqSyncStep() => ReqSync(v, v', uiop)
       case ReplySyncStep() => ReplySync(v, v', uiop)
       case FreezeMapAdtStep() => FreezeMapAdt(v, v', uiop)
-      case CommitStartStep(seqBoundary, frozenJournal) => CommitStart(v, v', uiop, seqBoundary, frozenJournal)
+      case CommitStartStep(frozenJournal) => CommitStart(v, v', uiop, frozenJournal)
       case CommitCompleteStep() => CommitComplete(v, v', uiop)
       case CrashStep() => Crash(v, v', uiop)
     }

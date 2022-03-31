@@ -34,6 +34,7 @@ module PagedJournalRefinement
 
     // now induct forward to the last line
     var i := receiptIndex;
+    assert 0<i ==> receipt.InterpretationWF(i-1);
     while i<|receipt.lines|-1
       invariant i<|receipt.lines|
       invariant receipt.lines[i].interpretation.value.WF();
@@ -51,13 +52,6 @@ module PagedJournalRefinement
   {
     var receipt := v.truncatedJournal.BuildReceipt();
     receipt.TJFacts();
-
-    if lbl.startLsn < lbl.endLsn {
-      // endLsn-1 is in the interp, so we can discard to endLsn
-      var i := keepReceiptLines - 1;
-      v.truncatedJournal.SubseqOfEntireInterpretation(receipt.MessageSeqAt(i), i);
-      receipt.LsnInReceiptBelongs(keepReceiptLines-1);
-    }
   }
 
   //////////////////////////////////////////////////////////////////////////////

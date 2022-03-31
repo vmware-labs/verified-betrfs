@@ -373,7 +373,7 @@ module CoordinationSystemRefinement {
       case FreezeMapAdtStep() => {
         assert Inv(v');
       }
-      case CommitStartStep(seqBoundary, frozenJournal) => {
+      case CommitStartStep(frozenJournal) => {
         assert Inv(v');
       }
       case CommitCompleteStep() => {
@@ -488,7 +488,7 @@ module CoordinationSystemRefinement {
       case FreezeMapAdtStep() => {
         assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
-      case CommitStartStep(seqBoundary, frozenJournal) => {
+      case CommitStartStep(frozenJournal) => {
         assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
       case CommitCompleteStep() => { CommitStepRefines(v, v', uiop, step); }
