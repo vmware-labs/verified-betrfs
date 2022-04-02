@@ -10,7 +10,6 @@ module LinkedJournalRefinement
   import opened Options
   import opened MsgHistoryMod
   import opened LSNMod
-  import opened JournalLabels
   import PagedJournal
   import PagedJournalRefinement
   import opened LinkedJournal
@@ -159,18 +158,18 @@ module LinkedJournalRefinement
     requires Next(v, v', lbl)
     ensures v'.WF()
     ensures Inv(v')
-    ensures PagedJournal.Next(I(v), I(v'), lbl)
+    ensures PagedJournal.Next(I(v), I(v'), lbl.I())
   {
     InvNext(v, v', lbl);
     var step: Step :| NextStep(v, v', lbl, step);
     if step.ReadForRecoveryStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), lbl, PagedJournal.ReadForRecoveryStep(step.receiptIndex)); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.ReadForRecoveryStep(step.receiptIndex)); // witness step
     } else if step.FreezeForCommitStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), lbl, PagedJournal.FreezeForCommitStep(step.keepReceiptLines)); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.FreezeForCommitStep(step.keepReceiptLines)); // witness step
     } else if step.ObserveFreshJournalStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), lbl, PagedJournal.ObserveFreshJournalStep()); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.ObserveFreshJournalStep()); // witness step
     } else if step.PutStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), lbl, PagedJournal.PutStep()); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.PutStep()); // witness step
     } else if step.DiscardOldStep? {
       var lsn := lbl.startLsn;
       if !(v.unmarshalledTail.seqStart <= lsn) {
@@ -183,10 +182,10 @@ module LinkedJournalRefinement
         DiscardInterp(v.truncatedJournal.diskView, lsn, croppedTJ.diskView, v.truncatedJournal.freshestRec);
         SubDiskInterp(v'.truncatedJournal.diskView, croppedTJ.diskView, croppedTJ.freshestRec);
       }
-      assert PagedJournal.NextStep(I(v), I(v'), lbl, PagedJournal.DiscardOldStep()); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.DiscardOldStep()); // witness step
     } else if step.InternalJournalMarshalStep? {
       IPtrFraming(v.truncatedJournal.diskView, v'.truncatedJournal.diskView, v.truncatedJournal.freshestRec);
-      assert PagedJournal.NextStep(I(v), I(v'), lbl, PagedJournal.InternalJournalMarshalStep(step.cut)); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.InternalJournalMarshalStep(step.cut)); // witness step
     } else {
       assert false;
     }

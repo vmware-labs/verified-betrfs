@@ -124,7 +124,7 @@ module CoordinationSystem {
 
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.ReadForRecoveryLabel(puts))
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.ReadForRecoveryLabel(puts))
     && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.PutLabel(puts))
     && v' == v.(ephemeral := v.ephemeral.(
         journal := v'.ephemeral.journal, // predicate update above
@@ -164,7 +164,7 @@ module CoordinationSystem {
     // Map handles the query
     && AbstractMap.Query(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryLabel(v.ephemeral.mapLsn, key, value))
     // Journal confirms that the map is up-to-date (but otherwise doesn't do anything).
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.QueryEndLsnLabel(v.ephemeral.mapLsn))
     && v' == v.(ephemeral := v.ephemeral.(
         mapadt := v'.ephemeral.mapadt,  // predicate update above
         journal := v'.ephemeral.journal,  // predicate update above
@@ -200,7 +200,7 @@ module CoordinationSystem {
     && var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
 
     && v.WF()
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.PutLabel(singleton))
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.PutLabel(singleton))
     && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.PutLabel(singleton))
     && v' == v.(ephemeral := v.ephemeral.(
           journal := v'.ephemeral.journal,  // predicate update above
@@ -243,7 +243,7 @@ module CoordinationSystem {
     // Need to record the current LSN, which is generally the current map state. But we
     // also need to confirm that the journal hasn't gone ahead, since sync is relative to
     // writes (which have affected the journal).
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, JournalLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.QueryEndLsnLabel(v.ephemeral.mapLsn))
     && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     // NB that the label for a sync in the table is the LSN AFTER the last write
@@ -302,7 +302,7 @@ module CoordinationSystem {
     && v.persistentImage.SeqEnd() <= frozenJournal.seqEnd
 
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
-        JournalLabels.FreezeForCommitLabel(frozenJournal))
+        AbstractJournal.FreezeForCommitLabel(frozenJournal))
     && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     && v'.inFlightImage.Some?
@@ -323,7 +323,7 @@ module CoordinationSystem {
     && v'.ephemeral.Known?
 
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
-        JournalLabels.DiscardOldLabel(ifImage.mapadt.seqEnd, v.ephemeral.mapLsn))
+        AbstractJournal.DiscardOldLabel(ifImage.mapadt.seqEnd, v.ephemeral.mapLsn))
     && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     && v' == v.(

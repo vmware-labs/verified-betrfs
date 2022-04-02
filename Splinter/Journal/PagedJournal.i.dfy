@@ -8,10 +8,22 @@ module PagedJournal {
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
-  import opened JournalLabels
 
   // This PagedJournal module constructs a journal out of a chain of page-sized
   // (immutable, algebraic) journal records.
+
+  datatype TransitionLabel =
+      ReadForRecoveryLabel(messages: MsgHistory)
+    | FreezeForCommitLabel(frozenJournal: TruncatedJournal)
+    | QueryEndLsnLabel(endLsn: LSN)
+    | PutLabel(messages: MsgHistory)
+    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
+    | InternalLabel()
+  {
+    predicate WF() {
+      && (FreezeForCommitLabel? ==> frozenJournal.WF())
+    }
+  }
 
   /////////////////////////////////////////////////////////////////////////////
   // A journal is a linked list of these JournalRecords.
@@ -165,29 +177,31 @@ module PagedJournal {
       this.(freshestRec := Some(JournalRecord(msgs, freshestRec)))
     }
 
-    predicate FreezeForCommit(lbl: TransitionLabel, keepReceiptLines: nat)
+    function FreezeOffRecent(keepReceiptLines: nat) : (out: TruncatedJournal)
+      requires WF()
+      requires keepReceiptLines <= |BuildReceipt().lines|
+      ensures out.WF()
+    {
+      var out := TruncatedJournal(boundaryLSN,
+        if keepReceiptLines==0 then None
+        else Some(BuildReceipt().lines[keepReceiptLines-1].journalRec));
+      assert out.WF() by {
+        BuildReceipt().SnipAtTJValid(keepReceiptLines);
+        out.BuildReceipt().ReceiptsUnique(BuildReceipt().SnipAt(keepReceiptLines));
+      }
+      out
+    }
+
+    predicate FreezeForCommit(frozenJournal: TruncatedJournal, keepReceiptLines: nat)
       requires WF()
     {
-      && lbl.FreezeForCommitLabel?
-      && lbl.frozenJournal.WF()
-      // Anything we freeze must start no earlier than journal is already truncated.
-      && boundaryLSN <= lbl.frozenJournal.seqStart
-      && lbl.frozenJournal.seqEnd <= SeqEnd()
-      && (if lbl.frozenJournal.IsEmpty()
-          then (
-            && keepReceiptLines == 0
-          ) else (
-            // And must end at an existing page boundary.
-            // (Note that means we also don't freeze anything in unmarshalledTail.)
-            // (In lower layers, that page and those before it must also be clean on disk.)
-            && var receipt := BuildReceipt();
-            && 0 < keepReceiptLines <= |receipt.lines|
-            && lbl.frozenJournal.seqEnd == receipt.lines[keepReceiptLines-1].journalRec.messageSeq.seqEnd
-            && assert lbl.frozenJournal.seqEnd <= I().seqEnd by { receipt.LsnInReceiptBelongs(keepReceiptLines-1); } true
-            && assert I().seqStart == boundaryLSN by { receipt.TJFacts(); } true
-            && I().IncludesSubseq(lbl.frozenJournal)
-          )
-        )
+      && frozenJournal.WF()
+      && keepReceiptLines <= |BuildReceipt().lines|
+      && boundaryLSN <= frozenJournal.boundaryLSN
+      && frozenJournal.SeqEnd() <= SeqEnd()
+      && var freezed := FreezeOffRecent(keepReceiptLines);
+      && freezed.I().CanDiscardTo(frozenJournal.boundaryLSN)
+      && frozenJournal == freezed.DiscardOld(frozenJournal.boundaryLSN)
     }
   } // datatype TruncatedJournal
 
@@ -468,6 +482,29 @@ module PagedJournal {
     {
       SnippedReceiptValid();
       assert OneLinkedInterpretation(|lines|-1) by { reveal_LinkedInterpretations(); }
+    }
+
+    function SnipAt(keepReceiptLines: nat) : Receipt
+      requires keepReceiptLines <= |lines|
+    {
+      Receipt(boundaryLSN, lines[..keepReceiptLines])
+    }
+  
+    lemma SnipAtTJValid(keepReceiptLines: nat)
+      requires TJValid()
+      requires keepReceiptLines <= |lines|
+      ensures SnipAt(keepReceiptLines).TJValid()
+      decreases |lines|
+    {
+      if keepReceiptLines==|lines| {
+        assert SnipAt(keepReceiptLines) == this;  // seq trigger
+      } else {
+        SnippedReceiptTJValid();
+        if keepReceiptLines < |lines|-1 {
+          assert SnipLast().SnipAt(keepReceiptLines) == SnipAt(keepReceiptLines); // seq trigger
+          SnipLast().SnipAtTJValid(keepReceiptLines);
+        }
+      }
     }
 
     function FreshestRec() : Option<JournalRecord>
@@ -791,7 +828,8 @@ module PagedJournal {
   predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
   {
     && v.WF()
-    && v.truncatedJournal.FreezeForCommit(lbl, keepReceiptLines)
+    && lbl.FreezeForCommitLabel?
+    && v.truncatedJournal.FreezeForCommit(lbl.frozenJournal, keepReceiptLines)
     && v' == v
   }
 

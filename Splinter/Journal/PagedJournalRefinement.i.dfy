@@ -9,7 +9,6 @@ module PagedJournalRefinement
   import opened Options
   import opened MsgHistoryMod
   import opened LSNMod
-  import opened JournalLabels
   import AbstractJournal
   import opened PagedJournal
 
@@ -22,9 +21,21 @@ module PagedJournalRefinement
     AbstractJournal.Variables(v.I())
   }
 
+  function ILbl(lbl: TransitionLabel) : AbstractJournal.TransitionLabel
+    requires lbl.WF()
+  {
+    match lbl
+      case ReadForRecoveryLabel(messages) => AbstractJournal.ReadForRecoveryLabel(messages)
+      case FreezeForCommitLabel(frozenJournal) => AbstractJournal.FreezeForCommitLabel(frozenJournal.I())
+      case QueryEndLsnLabel(endLsn) => AbstractJournal.QueryEndLsnLabel(endLsn)
+      case PutLabel(messages) => AbstractJournal.PutLabel(messages)
+      case DiscardOldLabel(startLsn, requireEnd) => AbstractJournal.DiscardOldLabel(startLsn, requireEnd)
+      case InternalLabel() => AbstractJournal.InternalLabel()
+  }
+
   lemma ReadForRecoveryRefines(v: Variables, v': Variables, lbl: TransitionLabel, receiptIndex: nat)
     requires ReadForRecovery(v, v', lbl, receiptIndex)
-    ensures AbstractJournal.Next(I(v), I(v'), lbl)
+    ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
     var receipt := v.truncatedJournal.BuildReceipt();
     receipt.TJFacts();
@@ -45,13 +56,29 @@ module PagedJournalRefinement
     }
   }
 
+  lemma TJFreezeForCommit(tj: TruncatedJournal, frozen: TruncatedJournal, keepReceiptLines: nat)
+    requires tj.WF()
+    requires tj.FreezeForCommit(frozen, keepReceiptLines)
+    ensures tj.I().IncludesSubseq(frozen.I())
+  {
+    var freezed := tj.FreezeOffRecent(keepReceiptLines);
+    tj.BuildReceipt().BoundaryLSN();
+    if 0 < keepReceiptLines {
+      tj.BuildReceipt().LsnInReceiptBelongs(keepReceiptLines-1);
+      tj.BuildReceipt().SnipAtTJValid(keepReceiptLines);
+      freezed.BuildReceipt().ReceiptsUnique(tj.BuildReceipt().SnipAt(keepReceiptLines));
+      tj.BuildReceipt().AbbreviatedReceiptTJValid(keepReceiptLines-1, freezed.SeqEnd(), freezed);
+    }
+  }
+
   lemma FreezeForCommitRefines(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
     requires FreezeForCommit(v, v', lbl, keepReceiptLines)
     ensures v'.WF();
-    ensures AbstractJournal.Next(I(v), I(v'), lbl)
+    ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
     var receipt := v.truncatedJournal.BuildReceipt();
     receipt.TJFacts();
+    TJFreezeForCommit(v.truncatedJournal, lbl.frozenJournal, keepReceiptLines);
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -93,23 +120,23 @@ module PagedJournalRefinement
     requires Inv(v)
     requires Next(v, v', lbl)
     ensures v'.WF()
-    ensures AbstractJournal.Next(I(v), I(v'), lbl)
+    ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
     var step: Step :| NextStep(v, v', lbl, step);
     if step.ReadForRecoveryStep? {
       ReadForRecoveryRefines(v, v', lbl, step.receiptIndex);
-      assert AbstractJournal.Next(I(v), I(v'), lbl);
+      assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else if step.FreezeForCommitStep? {
       FreezeForCommitRefines(v, v', lbl, step.keepReceiptLines);
-      assert AbstractJournal.Next(I(v), I(v'), lbl);
+      assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else if step.ObserveFreshJournalStep? {
-      assert AbstractJournal.Next(I(v), I(v'), lbl);
+      assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else if step.PutStep? {
-      assert AbstractJournal.Next(I(v), I(v'), lbl);
+      assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else if step.DiscardOldStep? {
-      assert AbstractJournal.Next(I(v), I(v'), lbl);
+      assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else if step.InternalJournalMarshalStep? {
-      assert AbstractJournal.Next(I(v), I(v'), lbl);
+      assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else {
       assert false;
     }

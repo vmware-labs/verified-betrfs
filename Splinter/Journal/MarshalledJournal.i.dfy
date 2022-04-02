@@ -9,22 +9,13 @@ module MarshalledJournal {
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
-  import JournalLabels
   import opened Maps
   import LinkedJournal
+  import opened GenericDisk
 
-  datatype JournalSB = JournalSB(
-    boundaryLSN: LSN,
-    freshestRec: Pointer)
-
-  datatype JournalImage = JournalImage(
-    superblock: JournalSB,
-    blockDiskView: Disk)
-
-  // TODO(jonh): appeal to parent lbl
   datatype TransitionLabel =
       ReadForRecoveryLabel(messages: MsgHistory)
-    | FreezeForCommitLabel(frozenJournal: MsgHistory, journalImage: JournalImage)
+    | FreezeForCommitLabel(frozenJournal: JournalImage)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
@@ -33,69 +24,133 @@ module MarshalledJournal {
       // but removing it broke the CoordinationSystemRefinement proof and I
       // couldn't fix it in five minutes.
     | InternalLabel()
+  {
+    predicate WF() {
+      && (FreezeForCommitLabel? ==> frozenJournal.WF())
+    }
+
+    function I() : LinkedJournal.TransitionLabel
+      requires WF()
+    {
+      match this
+        case ReadForRecoveryLabel(messages) => LinkedJournal.ReadForRecoveryLabel(messages)
+        case FreezeForCommitLabel(frozenJournal) => LinkedJournal.FreezeForCommitLabel(frozenJournal.I())
+        case QueryEndLsnLabel(endLsn) => LinkedJournal.QueryEndLsnLabel(endLsn)
+        case PutLabel(messages) => LinkedJournal.PutLabel(messages)
+        case DiscardOldLabel(startLsn, requireEnd) => LinkedJournal.DiscardOldLabel(startLsn, requireEnd)
+        case InternalLabel() => LinkedJournal.InternalLabel()
+    }
+  }
+
+  datatype JournalSB = JournalSB(
+    boundaryLSN: LSN,
+    freshestRec: Pointer)
+
+  datatype JournalImage = JournalImage(
+    superblock: JournalSB,
+    diskView: DiskView)
+  {
+    predicate TypeProvidesModel(typed: LinkedJournal.TruncatedJournal) {
+      && typed.WF()
+      && superblock.boundaryLSN == typed.diskView.boundaryLSN
+      && superblock.freshestRec == typed.freshestRec
+      && diskView == MarshalDisk(typed.diskView.entries)
+    }
+
+    predicate HasModel() {
+      exists typed :: TypeProvidesModel(typed)
+    }
+
+    predicate WF()
+    {
+      HasModel()
+    }
+
+    function I() : LinkedJournal.TruncatedJournal
+      requires WF()
+    {
+      var typed :| TypeProvidesModel(typed); typed
+    }
+
+    predicate IsEmpty() {
+      superblock.freshestRec.None?
+    }
+
+    function SeqStart() : LSN
+    {
+      superblock.boundaryLSN
+    }
+
+    function SeqEnd() : LSN
+      requires WF()
+    {
+      I().SeqEnd()
+    }
+  }
 
   datatype Variables = Variables(
     journalImage: JournalImage,
     unmarshalledTail: MsgHistory)
 
-  function MarshalDisk(typed: map<Address, LinkedJournal.JournalRecord>) : Disk
+  function MarshalDisk(typed: map<Address, LinkedJournal.JournalRecord>) : DiskView
   {
-    map addr | addr in typed :: Marshal(typed[addr])
+    DiskView(map addr | addr in typed :: Marshal(typed[addr]))
   }
 
   predicate TypeProvidesModel(v: Variables, typed: LinkedJournal.Variables)
   {
-    && typed.unmarshalledTail == v.unmarshalledTail 
-    && typed.truncatedJournal.freshestRec == v.freshestRec
-    && MarshalDisk(typed.truncatedJournal.diskView.entries) == v.disk
-    && typed.truncatedJournal.diskView.boundaryLSN == v.boundaryLSN
+    && v.unmarshalledTail == typed.unmarshalledTail
+    && v.journalImage.TypeProvidesModel(typed.truncatedJournal)
   }
 
-  function JournalImageI() : LinkedJournal.TruncatedJournal
+//  function JournalImageI() : LinkedJournal.TruncatedJournal
+//  {
+//    true
+//  }
+
+//  function I(v: Variables) : LinkedJournal.Variables {
+//    LinkedJournal.Variables(v.journalImage.I(), v.unmarshalledTail)
+//  }
+
+  predicate InitModel(v: Variables, journalImage: JournalImage, t: LinkedJournal.Variables)
   {
-    true
-  }
-
-  function I(v: Variables) : LinkedJournal.Variables {
-    LinkedJournal.Variables(v.journalImage.I(), v.unmarshalledTail)
+    && TypeProvidesModel(v, t)
+    && t.truncatedJournal.diskView.Acyclic()
+    && LinkedJournal.Init(t, t.truncatedJournal)  // TODO(jonh): second argument now feels weirdly redundant
+    && v.journalImage == journalImage
+//      && v.unmarshalledTail.IsEmpty() // Implied by LinkedJournal.Init && TypeProvidesModel.
   }
 
   predicate Init(v: Variables, journalImage: JournalImage)
   {
-    (exists t ::
-      && TypeProvidesModel(v, t)
-      && LinkedJournal.Init(t, tj)
-      && v.disk == journalImage.blockDiskView
-      && v.boundaryLSN == journalImage.superblock.boundaryLSN
-      && v.freshestRec == journalImage.superblock.pointer
-//      && v.unmarshalledTail.IsEmpty() // Implied by LinkedJournal.Init && TypeProvidesModel.
-    )
+    (exists t :: InitModel(v, journalImage, t))
   }
 
   predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
+    requires lbl.WF()
   {
-    (exists t, t' ::
+    && lbl.FreezeForCommitLabel?
+    && (exists t, t' ::
       // Connection up a layer
       && TypeProvidesModel(v, t)
       && TypeProvidesModel(v', t')
-      && LinkedJournal.Next(t, t', lbl)
+      && LinkedJournal.Next(t, t', lbl.I())
+
+      && var fr := lbl.frozenJournal.superblock.freshestRec;
 
       // Have a tight model of the disk that's rooted where the SB points.
-      && var fr := journalImage.superblock.freshestRec;
-      && lbl.journalImage.blockDiskView.WF()
-      && lbl.journalImage.blockDiskView.IsSubDisk(v.disk)
-      && lbl.journalImage.blockDiskView.IsNondanglingPointer(fr)
-      && lbl.journalImage.blockDiskView.Tight()
+      && lbl.frozenJournal.diskView.IsSubDisk(v.journalImage.diskView)
+      && lbl.frozenJournal.superblock.boundaryLSN == v.journalImage.superblock.boundaryLSN
+      && lbl.frozenJournal.diskView.IsNondanglingPointer(fr)
+      && lbl.frozenJournal.diskView.Tight()
 
-      // Start where the v journal starts
-      && lbl.journalImage.superblock.boundaryLSN == v.boundaryLSN
-
-      // End at a block that matches the end we promised in the (abstract ghosty) frozenJournal
+      // Constraint on freshestRec: End at a block that matches the end we
+      // promised in the (abstract ghosty) frozenJournal
       && (if lbl.frozenJournal.IsEmpty()
           then fr.None?
           else
             && fr.Some?
-            && t.diskView[fr.value].messageSeq.seqEnd == lbl.frozenJournal.seqEnd
+            && t.truncatedJournal.diskView.entries[fr.value].messageSeq.seqEnd == lbl.frozenJournal.SeqEnd()
          )
     )
   }
@@ -104,13 +159,13 @@ module MarshalledJournal {
     && (exists typed :: TypeProvidesModel(v, typed))
   }
 
-  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel, journalImage: JournalImage)
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    (exists t, t' ::
+    && lbl.WF()
+    && (exists t, t' ::
       && TypeProvidesModel(v, t)
       && TypeProvidesModel(v', t')
-      && LinkedJournal.Next(t, t', lbl)
-      && AdditionalStupidConstraint(v, v', t, lbl, journalImage)
+      && LinkedJournal.Next(t, t', lbl.I())
     )
   }
 }

@@ -4,12 +4,10 @@
 include "StampedMap.i.dfy"
 include "MsgHistory.i.dfy"
 
-module JournalLabels {
+module AbstractJournal {
+  import opened Options
   import opened MsgHistoryMod
   import opened LSNMod
-  // These labels are in a separate module so that refining state machines can
-  // import them opened for brevity without colliding with the Variables/Next
-  // boilerplate names in AbstractJournal.
 
   datatype TransitionLabel =
       ReadForRecoveryLabel(messages: MsgHistory)
@@ -22,13 +20,6 @@ module JournalLabels {
       // but removing it broke the CoordinationSystemRefinement proof and I
       // couldn't fix it in five minutes.
     | InternalLabel()
-}
-
-module AbstractJournal {
-  import opened Options
-  import opened MsgHistoryMod
-  import opened LSNMod
-  import opened JournalLabels
 
   // Mkfs is used by CoordinationSystem to define its Init
   function Mkfs() : MsgHistory

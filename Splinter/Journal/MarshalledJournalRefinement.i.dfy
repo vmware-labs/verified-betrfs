@@ -10,10 +10,10 @@ module MarhalledJournalRefinement
   import opened Options
   import opened MsgHistoryMod
   import opened LSNMod
-  import opened JournalLabels
   import LinkedJournal
   import LinkedJournalRefinement
   import opened MarshalledJournal
+  import opened GenericDisk
 
   predicate HasTypedModel(v: Variables)
   {
@@ -27,22 +27,24 @@ module MarhalledJournalRefinement
   }
 
   lemma TypedModelUnique()
-    ensures forall v, t1, t2 | TypeProvidesModel(v, t1) && TypeProvidesModel(v, t2) :: t1 == t2
+    ensures forall v: JournalImage, t1, t2 | v.TypeProvidesModel(t1) && v.TypeProvidesModel(t2) :: t1 == t2
   {
-    forall v, t1, t2 | TypeProvidesModel(v, t1) && TypeProvidesModel(v, t2)
+    forall v: JournalImage, t1, t2 | v.TypeProvidesModel(t1) && v.TypeProvidesModel(t2)
       ensures t1 == t2
     {
-      var e1 := t1.truncatedJournal.diskView.entries;
-      var e2 := t2.truncatedJournal.diskView.entries;
+      var e1 := t1.diskView.entries;
+      var e2 := t2.diskView.entries;
       forall addr ensures addr in e1 <==> addr in e2 {
-        assert addr in MarshalDisk(t2.truncatedJournal.diskView.entries) || true;  // trigger
+        assert addr in MarshalDisk(t2.diskView.entries).entries || true;  // trigger
       }
       forall addr | addr in e1
         ensures e1[addr] == e2[addr]
       {
         ParseAxiom(e1[addr]);
         ParseAxiom(e2[addr]);
-        assert Marshal(e1[addr]) == v.disk[addr] == Marshal(e2[addr]);  // trigger
+        //assert Marshal(e1[addr]) == v.journalImage.diskView.entries[addr] == Marshal(e2[addr]);  // trigger
+        assert Marshal(e1[addr]) == v.diskView.entries[addr];  // TODO(jonh): which is a trigger?
+        assert v.diskView.entries[addr] == Marshal(e2[addr]);  // trigger
       }
 
     }
@@ -53,8 +55,8 @@ module MarhalledJournalRefinement
     && LinkedJournalRefinement.Inv(TheTypedModel(v))
   }
 
-  lemma InvInit(v: Variables, tj: LinkedJournal.TruncatedJournal)
-    requires Init(v, tj)
+  lemma InvInit(v: Variables, journalImage: JournalImage)
+    requires Init(v, journalImage)
     ensures Inv(v)
   {
     TypedModelUnique();
@@ -66,10 +68,10 @@ module MarhalledJournalRefinement
     TheTypedModel(v)
   }
   
-  lemma RefinementInit(v: Variables, tj: LinkedJournal.TruncatedJournal)
-    requires Init(v, tj)
+  lemma RefinementInit(v: Variables, journalImage: JournalImage)
+    requires Init(v, journalImage)
     ensures Inv(v)
-    ensures LinkedJournal.Init(I(v), tj)
+    ensures LinkedJournal.Init(I(v), journalImage.I())
   {
     TypedModelUnique();
   }
@@ -78,14 +80,14 @@ module MarhalledJournalRefinement
     requires Inv(v)
     requires Next(v, v', lbl)
     ensures Inv(v')
-    ensures LinkedJournal.Next(I(v), I(v'), lbl)
+    ensures LinkedJournal.Next(I(v), I(v'), lbl.I())
   {
     var t, t' :|
       && TypeProvidesModel(v, t)
       && TypeProvidesModel(v', t')
-      && LinkedJournal.Next(t, t', lbl);
+      && LinkedJournal.Next(t, t', lbl.I());
     TypedModelUnique();
-    LinkedJournalRefinement.InvNext(t, t', lbl);
-    LinkedJournalRefinement.NextRefines(t, t', lbl);
+    LinkedJournalRefinement.InvNext(t, t', lbl.I());
+    LinkedJournalRefinement.NextRefines(t, t', lbl.I());
   }
 }

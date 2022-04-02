@@ -1,36 +1,45 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "../CoordinationLayer/AbstractJournal.i.dfy"
 include "PagedJournal.i.dfy"
-
-module GenericDisk {
-  import opened Options
-
-  type Block(!new, ==)
-  function Parse<T>(block: Block) : T
-  function Marshal<T>(t: T) : Block
-  lemma ParseAxiom<T>(t: T)
-    ensures Parse(Marshal(t)) == t
-
-  type Address(!new, ==)
-  type Pointer = Option<Address>
-
-  type Disk = map<Address, Block> // TODO(jonh): rename DiskView, since it's partial.
-}
+include "GenericDisk.i.dfy"
 
 module LinkedJournal {
   import opened Options
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
-  import opened JournalLabels
   import opened Maps
   import GenericDisk
   import PagedJournal
 
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
+
+  datatype TransitionLabel =
+      ReadForRecoveryLabel(messages: MsgHistory)
+    | FreezeForCommitLabel(frozenJournal: TruncatedJournal)
+    | QueryEndLsnLabel(endLsn: LSN)
+    | PutLabel(messages: MsgHistory)
+    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
+    | InternalLabel()
+  {
+    predicate WF() {
+      && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
+    }
+
+    function I() : PagedJournal.TransitionLabel
+      requires WF()
+    {
+      match this
+        case ReadForRecoveryLabel(messages) => PagedJournal.ReadForRecoveryLabel(messages)
+        case FreezeForCommitLabel(frozenJournal) => PagedJournal.FreezeForCommitLabel(frozenJournal.I())
+        case QueryEndLsnLabel(endLsn) => PagedJournal.QueryEndLsnLabel(endLsn)
+        case PutLabel(messages) => PagedJournal.PutLabel(messages)
+        case DiscardOldLabel(startLsn, requireEnd) => PagedJournal.DiscardOldLabel(startLsn, requireEnd)
+        case InternalLabel() => PagedJournal.InternalLabel()
+    }
+  }
 
   type Ranking = map<Address, nat>
 
@@ -54,6 +63,7 @@ module LinkedJournal {
   // every record the journal needs is present in the mapping,
   // and every address is "important" to the journal.
   // The boundaryLSN enables us to ignore "cropped" pointers.
+  // The values in this DiskView are typed, unlike GenericDisk.DiskView.
   datatype DiskView = DiskView(boundaryLSN: LSN, entries: map<Address, JournalRecord>) {
     predicate EntriesWF()
     {
@@ -247,11 +257,12 @@ module LinkedJournal {
 
   predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
   {
-    // && lbl.FreezeForCommitLabel? enforced by pagedTJ.FreezeForCommit.
+    && lbl.WF()
+    && lbl.FreezeForCommitLabel?
     && v.WF()
     && v.truncatedJournal.Decodable()
     && var pagedTJ := v.truncatedJournal.I();
-    && pagedTJ.FreezeForCommit(lbl, keepReceiptLines)
+    && pagedTJ.FreezeForCommit(lbl.I().frozenJournal, keepReceiptLines)
     && v' == v
   }
 
