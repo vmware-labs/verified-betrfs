@@ -65,11 +65,6 @@ module BlockCoordinationSystem
     }
   }
 
-  function MkfsDiskImage() : DiskImage
-  {
-    DiskImage(StampedMapMod.Empty(), MarshalledJournal.Mkfs())
-  }
-
   datatype Variables = Variables(
     persistentImage: DiskImage,
     ephemeral: Ephemeral,
@@ -80,13 +75,6 @@ module BlockCoordinationSystem
       && persistentImage.WF()
       && (ephemeral.Known? ==> ephemeral.WF())
       && (inFlightImage.Some? ==> inFlightImage.value.WF())
-    }
-
-    predicate Init()
-    {
-      && persistentImage == MkfsDiskImage()
-      && ephemeral.Unknown?
-      && inFlightImage.None?
     }
   }
 
