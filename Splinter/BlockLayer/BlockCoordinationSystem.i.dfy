@@ -339,6 +339,18 @@ module BlockCoordinationSystem
     && v' == v.(ephemeral := Unknown, inFlightImage := None)
   }
 
+  function MkfsDiskImage() : DiskImage
+  {
+    DiskImage(StampedMapMod.Empty(), MarshalledJournal.Mkfs())
+  }
+
+  predicate Init(v: Variables)
+  {
+    && v.persistentImage == MkfsDiskImage()
+    && v.ephemeral.Unknown?
+    && v.inFlightImage.None?
+  }
+
   datatype Step =
     | LoadEphemeralFromPersistentStep()
     | RecoverStep(puts:MsgHistory)

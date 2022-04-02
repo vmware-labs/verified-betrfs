@@ -498,10 +498,10 @@ module CoordinationSystemRefinement {
           assert forall lsn | v.persistentImage.mapadt.seqEnd <= lsn < stableLSN :: true; // trigger
           assert v'.persistentImage.journal.DiscardRecent(stableLSN) == IEJ(v.ephemeral.journal).DiscardRecent(stableLSN); // trigger
         }
+        assert CrashTolerantMapSpecMod.Crash(I(v), I(v'));  //trigger
         assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
     }
     assert CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop);
   }
 }
-

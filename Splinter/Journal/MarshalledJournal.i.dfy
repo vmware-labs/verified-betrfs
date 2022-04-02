@@ -96,6 +96,13 @@ module MarshalledJournal {
   datatype Variables = Variables(
     journalImage: JournalImage,
     unmarshalledTail: MsgHistory)
+  {
+    predicate WF()
+    {
+      && journalImage.WF()
+      && unmarshalledTail.WF()
+    }
+  }
 
   function MarshalDisk(typed: map<Address, LinkedJournal.JournalRecord>) : DiskView
   {
@@ -116,6 +123,11 @@ module MarshalledJournal {
 //  function I(v: Variables) : LinkedJournal.Variables {
 //    LinkedJournal.Variables(v.journalImage.I(), v.unmarshalledTail)
 //  }
+
+  function Mkfs() : (out: JournalImage)
+  {
+    JournalImage(JournalSB(0, None), DiskView(map[]))
+  }
 
   predicate InitModel(v: Variables, journalImage: JournalImage, t: LinkedJournal.Variables)
   {

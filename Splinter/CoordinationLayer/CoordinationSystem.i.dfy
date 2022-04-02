@@ -341,6 +341,10 @@ module CoordinationSystem {
     && v' == v.(ephemeral := Unknown, inFlightImage := None)
   }
 
+  predicate Init(v: Variables) {
+    v.Init()
+  }
+
   datatype Step =
     | LoadEphemeralFromPersistentStep()
     | RecoverStep(puts:MsgHistory)

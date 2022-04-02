@@ -4,7 +4,7 @@
 include "LinkedJournalRefinement.i.dfy"
 include "MarshalledJournal.i.dfy"
 
-module MarhalledJournalRefinement
+module MarshalledJournalRefinement
 // TODO refines RefinementObligation(JournalLabels, PagedJournal)
 {
   import opened Options
@@ -48,6 +48,15 @@ module MarhalledJournalRefinement
       }
 
     }
+  }
+
+  lemma MkfsRefines()
+    ensures Mkfs().WF()
+    ensures Mkfs().I().Decodable()
+  {
+    assert Mkfs().TypeProvidesModel(LinkedJournal.Mkfs());
+    LinkedJournalRefinement.MkfsRefines();
+    assert Mkfs().I() == LinkedJournal.Mkfs();  // trigger
   }
 
   predicate Inv(v: Variables) {
