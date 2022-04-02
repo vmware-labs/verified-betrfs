@@ -88,6 +88,11 @@ module MarshalledJournal {
     }
   }
 
+  function Mkfs() : JournalImage
+  {
+    JournalImage(JournalSB(0, None), DiskView(map[]))
+  }
+
   datatype Variables = Variables(
     journalImage: JournalImage,
     unmarshalledTail: MsgHistory)
