@@ -298,7 +298,6 @@ module CoordinationSystem {
     && v.persistentImage.mapadt.seqEnd <= frozenJournal.seqStart
     // And of course there should be no way for it to have passed the ephemeral map!
     && frozenJournal.seqStart <= v.ephemeral.mapLsn
-    && frozenJournal.seqStart <= frozenJournal.seqEnd
     && v.persistentImage.SeqEnd() <= frozenJournal.seqEnd
 
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,

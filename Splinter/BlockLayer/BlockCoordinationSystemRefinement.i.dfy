@@ -24,6 +24,13 @@ module BlockCoordinationSystemRefinement
   // runtime check, so we don't want to call it WF and risk it ending up in a
   // v' where it'll be hard to prove later. Instead, we define it here and
   // prove it as part of Inv.
+
+  predicate DecodableJournalLabel(journalLabel: MarshalledJournal.TransitionLabel)
+  {
+    && journalLabel.WF()
+    && journalLabel.I().WF()
+  }
+
   predicate DecodableJournalImage(journalImage: MarshalledJournal.JournalImage)
   {
     && journalImage.WF()
@@ -70,6 +77,12 @@ module BlockCoordinationSystemRefinement
     requires MarshalledJournalRefinement.Inv(journal)
   {
     PagedJournalRefinement.I(LinkedJournalRefinement.I(MarshalledJournalRefinement.I(journal)))
+  }
+
+  function IAJournalLabel(lbl: MarshalledJournal.TransitionLabel) : AbstractJournal.TransitionLabel
+    requires DecodableJournalLabel(lbl)
+  {
+    PagedJournalRefinement.ILbl(lbl.I().I())
   }
 
   // Interpret BlockCoordinationSystem types
@@ -129,12 +142,100 @@ module BlockCoordinationSystemRefinement
       case ReqSyncStep() => CoordinationSystem.ReqSyncStep
       case ReplySyncStep() => CoordinationSystem.ReplySyncStep
       case FreezeMapAdtStep() => CoordinationSystem.FreezeMapAdtStep
-      case CommitStartStep(seqBoundary, frozenJournal) => CoordinationSystem.CommitStartStep(IAJournalImage(frozenJournal))
+      case CommitStartStep(frozenJournal) => CoordinationSystem.CommitStartStep(IAJournalImage(frozenJournal))
       case CommitCompleteStep() => CoordinationSystem.CommitCompleteStep()
       case CrashStep() => CoordinationSystem.CrashStep()
   }
 
-  lemma RefinementNext(v: Variables, v': Variables, uiop: UIOp)
+  lemma LoadEphemeralFromPersistentNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step)
+    requires step.LoadEphemeralFromPersistentStep?
+    ensures Inv(v')
+    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+  {
+    MarshalledJournalRefinement.InvInit(v'.ephemeral.journal, v.persistentImage.journal);
+    assert Inv(v'); // case boilerplate
+
+    var j := v.persistentImage.journal;
+    var j' := v'.ephemeral.journal;
+
+    assert MarshalledJournal.Init(j', j);
+    MarshalledJournalRefinement.RefinementInit(j', j);
+    assert LinkedJournal.Init(MarshalledJournalRefinement.I(j'), j.I());
+    
+
+    assert I(v').ephemeral.journal.journal == I(v).persistentImage.journal;
+    assert AbstractJournal.Init(I(v').ephemeral.journal, I(v).persistentImage.journal);
+    assert CoordinationSystem.LoadEphemeralFromPersistent(I(v), I(v'), uiop);
+    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
+  }
+
+  // TODO(jonh): this would go in the opaqued journal kit, or at least MarshalledJournalRefinement
+  lemma JournalChainedNext(j: MarshalledJournal.Variables, j': MarshalledJournal.Variables, lbl: MarshalledJournal.TransitionLabel)
+    requires MarshalledJournalRefinement.Inv(j)
+    requires MarshalledJournal.Next(j, j', lbl)
+    ensures MarshalledJournalRefinement.Inv(j')
+    ensures AbstractJournal.Next(IAJournal(j), IAJournal(j'), IAJournalLabel(lbl))
+  {
+    MarshalledJournalRefinement.RefinementNext(j, j', lbl);
+    // TODO(jonh): inconsistent theorem naming: RefinementNext vs NextRefines
+    LinkedJournalRefinement.NextRefines(
+      MarshalledJournalRefinement.I(j),
+      MarshalledJournalRefinement.I(j'),
+      lbl.I());
+    PagedJournalRefinement.NextRefines(
+      LinkedJournalRefinement.I(MarshalledJournalRefinement.I(j)),
+      LinkedJournalRefinement.I(MarshalledJournalRefinement.I(j')),
+      lbl.I().I());
+  }
+
+  lemma RecoverNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step)
+    requires step.RecoverStep?
+    ensures Inv(v')
+    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+  {
+    JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal, MarshalledJournal.ReadForRecoveryLabel(step.puts));
+    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
+  }
+
+  lemma CommitStartNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step)
+    requires step.CommitStartStep?
+    ensures Inv(v')
+    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+  {
+    JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal,
+      MarshalledJournal.FreezeForCommitLabel(step.frozenJournal));
+    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
+  }
+
+  lemma CommitCompleteNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step)
+    requires step.CommitCompleteStep?
+    ensures Inv(v')
+    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+  {
+    JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal,
+      MarshalledJournal.DiscardOldLabel(v.inFlightImage.value.mapadt.seqEnd, v.ephemeral.mapLsn));
+    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
+  }
+
+  // TODO(jonh, robj): Things get pretty timey-outey here. Proposed solution is
+  // that the journal stack, at this point, should be basically opaque, with
+  // only its interpretation properties exposed.
+  // TODO(utaal): This opacification is probably a good test for the opaque rules in Verus!
+  // TODO(jonh): Once that's fixed, we could surely pull the prooflets above
+  // back into their respective cases down here.
+  lemma {:timeLimitMultiplier 3} RefinementNext(v: Variables, v': Variables, uiop: UIOp)
     requires Inv(v)
     requires Next(v, v', uiop)
     ensures Inv(v')
@@ -143,25 +244,10 @@ module BlockCoordinationSystemRefinement
     var step :| NextStep(v, v', uiop, step);
     match step {
       case LoadEphemeralFromPersistentStep() => {
-        MarshalledJournalRefinement.InvInit(v'.ephemeral.journal, v.persistentImage.journal);
-        assert Inv(v'); // case boilerplate
-
-        var j := v.persistentImage.journal;
-        var j' := v'.ephemeral.journal;
-
-        assert MarshalledJournal.Init(j', j);
-        MarshalledJournalRefinement.RefinementInit(j', j);
-        assert LinkedJournal.Init(MarshalledJournalRefinement.I(j'), j.I());
-        
-
-        assert I(v').ephemeral.journal.journal == I(v).persistentImage.journal;
-        assert AbstractJournal.Init(I(v').ephemeral.journal, I(v).persistentImage.journal);
-        assert CoordinationSystem.LoadEphemeralFromPersistent(I(v), I(v'), uiop);
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
+        LoadEphemeralFromPersistentNext(v, v', uiop, step);
       }
       case RecoverStep(puts) => {
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
+        RecoverNext(v, v', uiop, step);
       }
       case AcceptRequestStep() => {
         assert Inv(v'); // case boilerplate
@@ -200,15 +286,11 @@ module BlockCoordinationSystemRefinement
         assert Inv(v'); // case boilerplate
         assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
       }
-      case CommitStartStep(seqBoundary, frozenJournal) => {
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
+      case CommitStartStep(frozenJournal) => {
+        CommitStartNext(v, v', uiop, step);
       }
       case CommitCompleteStep() => {
-        MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal,
-          MarshalledJournal.DiscardOldLabel(v.inFlightImage.value.mapadt.seqEnd, v.ephemeral.mapLsn));
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
+        CommitCompleteNext(v, v', uiop, step);
       }
       case CrashStep() => {
         assert Inv(v'); // case boilerplate
