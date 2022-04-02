@@ -35,7 +35,7 @@ module CoordinationSystem {
     function SeqEnd() : LSN
       requires WF()
     {
-      if journal.MsgHistory? then journal.seqEnd else mapadt.seqEnd
+      journal.seqEnd
     }
 
     predicate CompletesSync(lsn: LSN)
