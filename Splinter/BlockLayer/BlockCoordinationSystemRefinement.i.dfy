@@ -64,6 +64,10 @@ module BlockCoordinationSystemRefinement
 
   predicate Inv(v: Variables) {
     && DecodableVariables(v)
+    // TODO(jonh,robj): Reaching into journal's journalImage is a bit layer-violation-y.
+    // Maybe it's okay for the proof?
+    && (v.ephemeral.Known? ==> v.ephemeral.journal.journalImage.diskView.AgreesWithDisk(v.persistentImage.journal.diskView))
+    && (v.inFlightImage.Some? ==> v.inFlightImage.value.journal.diskView.AgreesWithDisk(v.persistentImage.journal.diskView))
   }
 
   // IA Interpret to Abstraction: peel all the way up the stack.
@@ -125,6 +129,11 @@ module BlockCoordinationSystemRefinement
     assert MarshalledJournal.Mkfs().WF();
     assert DecodableDiskImage(v.persistentImage);
     assert DecodableVariables(v);
+
+    // Interestingly, the IsSubDisk invariants are trivial here. ephemeral and
+    // inFlightImage are trivial because they're just empty. And the persistentImage
+    // starts out as a journal whose diskView is empty, which is a subdisk of every
+    // other disk.
   }
 
   function IStep(step: Step) : CoordinationSystem.Step
@@ -136,12 +145,12 @@ module BlockCoordinationSystemRefinement
       case AcceptRequestStep() => CoordinationSystem.AcceptRequestStep()
       case QueryStep() => CoordinationSystem.QueryStep()
       case PutStep() => CoordinationSystem.PutStep()
-      case DeliverReplyStep() => CoordinationSystem.DeliverReplyStep
-//    case | JournalInternalStep() => CoordinationSystem.JournalInternalStep()
-//    case | SplinterTreeInternalStep() => CoordinationSystem.SplinterTreeInternalStep()
-      case ReqSyncStep() => CoordinationSystem.ReqSyncStep
-      case ReplySyncStep() => CoordinationSystem.ReplySyncStep
-      case FreezeMapAdtStep() => CoordinationSystem.FreezeMapAdtStep
+      case DeliverReplyStep() => CoordinationSystem.DeliverReplyStep()
+      case JournalInternalStep() => CoordinationSystem.JournalInternalStep()
+      case MapInternalStep() => CoordinationSystem.MapInternalStep()
+      case ReqSyncStep() => CoordinationSystem.ReqSyncStep()
+      case ReplySyncStep() => CoordinationSystem.ReplySyncStep()
+      case FreezeMapAdtStep() => CoordinationSystem.FreezeMapAdtStep()
       case CommitStartStep(frozenJournal) => CoordinationSystem.CommitStartStep(IAJournalImage(frozenJournal))
       case CommitCompleteStep() => CoordinationSystem.CommitCompleteStep()
       case CrashStep() => CoordinationSystem.CrashStep()
@@ -203,6 +212,38 @@ module BlockCoordinationSystemRefinement
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
   }
 
+  lemma PutNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step)
+    requires step.PutStep?
+    ensures Inv(v')
+    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+  {
+    var key := uiop.baseOp.req.input.key;
+    var val := uiop.baseOp.req.input.value;
+    var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
+    MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal, MarshalledJournal.PutLabel(singleton));
+    if v'.inFlightImage.Some? {
+      assert v'.inFlightImage.value.journal.diskView.AgreesWithDisk(v'.persistentImage.journal.diskView);
+    }
+    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger?
+  }
+
+  lemma JournalInternalNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step)
+    requires step.JournalInternalStep?
+    ensures Inv(v')
+    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+  {
+    JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal,
+      MarshalledJournal.InternalLabel());
+    assert v'.ephemeral.journal.journalImage.diskView.AgreesWithDisk(v'.persistentImage.journal.diskView);
+    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger?
+  }
+
   lemma CommitStartNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
     requires Next(v, v', uiop)
@@ -213,6 +254,7 @@ module BlockCoordinationSystemRefinement
   {
     JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal,
       MarshalledJournal.FreezeForCommitLabel(step.frozenJournal));
+    assume v'.inFlightImage.value.journal.diskView.AgreesWithDisk(v'.persistentImage.journal.diskView);
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
   }
 
@@ -226,6 +268,9 @@ module BlockCoordinationSystemRefinement
   {
     JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal,
       MarshalledJournal.DiscardOldLabel(v.inFlightImage.value.mapadt.seqEnd, v.ephemeral.mapLsn));
+    if v'.ephemeral.Known? {
+      assume v'.ephemeral.journal.journalImage.diskView.AgreesWithDisk(v'.persistentImage.journal.diskView);
+    }
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
   }
 
@@ -258,18 +303,15 @@ module BlockCoordinationSystemRefinement
         assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
       }
       case PutStep() => {
-        var key := uiop.baseOp.req.input.key;
-        var val := uiop.baseOp.req.input.value;
-        var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
-        MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal, MarshalledJournal.PutLabel(singleton));
-      
+        PutNext(v, v', uiop, step);
+      }
+      case JournalInternalStep() => {
+        JournalInternalNext(v, v', uiop, step);
+      }
+      case MapInternalStep() => {
         assert Inv(v'); // case boilerplate
         assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
       }
-//      case JournalInternalStep(sk) => {
-//}
-//      case SplinterTreeInternalStep(sk) => {
-//}
       case DeliverReplyStep() => {
         assert Inv(v'); // case boilerplate
         assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
