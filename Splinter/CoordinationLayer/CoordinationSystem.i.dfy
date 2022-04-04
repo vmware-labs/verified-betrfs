@@ -125,7 +125,7 @@ module CoordinationSystem {
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.ReadForRecoveryLabel(puts))
-    && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.PutLabel(puts))
+    && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.PutLabel(puts))
     && v' == v.(ephemeral := v.ephemeral.(
         journal := v'.ephemeral.journal, // predicate update above
         mapadt := v'.ephemeral.mapadt,   // predicate update above
@@ -162,7 +162,7 @@ module CoordinationSystem {
     && var value := uiop.baseOp.reply.output.value;
     && assert AnyKey(key);
     // Map handles the query
-    && AbstractMap.Query(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryLabel(v.ephemeral.mapLsn, key, value))
+    && AbstractMap.Query(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryLabel(v.ephemeral.mapLsn, key, value))
     // Journal confirms that the map is up-to-date (but otherwise doesn't do anything).
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.QueryEndLsnLabel(v.ephemeral.mapLsn))
     && v' == v.(ephemeral := v.ephemeral.(
@@ -201,7 +201,7 @@ module CoordinationSystem {
 
     && v.WF()
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.PutLabel(singleton))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.PutLabel(singleton))
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.PutLabel(singleton))
     && v' == v.(ephemeral := v.ephemeral.(
           journal := v'.ephemeral.journal,  // predicate update above
           mapadt := v'.ephemeral.mapadt,  // predicate update above
@@ -229,8 +229,25 @@ module CoordinationSystem {
   // which create new blocks in cache and rearrange the indirection table)
   // all look like stutters at this layer.
 
-  // predicate JournalInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: JournalMachineMod.Skolem)
-  // predicate SplinterTreeInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: SplinterTreeMachineMod.Skolem)
+  predicate JournalInternal(v: Variables, v': Variables, uiop : UIOp)
+  {
+    && v.ephemeral.Known?
+    && v'.ephemeral.Known?
+    && uiop.NoopOp?
+    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.InternalLabel())
+    && v' == v.(ephemeral := v.ephemeral.(
+          journal := v'.ephemeral.journal))  // predicate update above
+  }
+
+  predicate MapInternal(v: Variables, v': Variables, uiop : UIOp)
+  {
+    && v.ephemeral.Known?
+    && v'.ephemeral.Known?
+    && uiop.NoopOp?
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.InternalLabel())
+    && v' == v.(ephemeral := v.ephemeral.(
+          mapadt := v'.ephemeral.mapadt))  // predicate update above
+  }
 
   predicate ReqSync(v: Variables, v': Variables, uiop : UIOp)
   {
@@ -244,7 +261,7 @@ module CoordinationSystem {
     // also need to confirm that the journal hasn't gone ahead, since sync is relative to
     // writes (which have affected the journal).
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.QueryEndLsnLabel(v.ephemeral.mapLsn))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     // NB that the label for a sync in the table is the LSN AFTER the last write
     && v' == v.(ephemeral := v.ephemeral.(
@@ -275,7 +292,7 @@ module CoordinationSystem {
     // Copy the current map into the frozen one, deleting whatever was
     // frozen.
     && v'.ephemeral.frozenMap.Some?
-    && AbstractMap.FreezeAs(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.FreezeAsLabel(v'.ephemeral.frozenMap.value))
+    && AbstractMap.FreezeAs(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.FreezeAsLabel(v'.ephemeral.frozenMap.value))
     // TODO this should cause mischief if a Commit is in progress. Does it?
     && v' == v.(ephemeral := v.ephemeral.(
         mapadt := v'.ephemeral.mapadt,  // predicate update above
@@ -302,7 +319,7 @@ module CoordinationSystem {
 
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
         AbstractJournal.FreezeForCommitLabel(frozenJournal))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     && v'.inFlightImage.Some?
     && v' == v.(
@@ -323,7 +340,7 @@ module CoordinationSystem {
 
     && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
         AbstractJournal.DiscardOldLabel(ifImage.mapadt.seqEnd, v.ephemeral.mapLsn))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, MapLabels.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
 
     && v' == v.(
         persistentImage := ifImage,
@@ -351,8 +368,8 @@ module CoordinationSystem {
     | QueryStep()
     | PutStep()
     | DeliverReplyStep()
-//    | JournalInternalStep()
-//    | SplinterTreeInternalStep()
+    | JournalInternalStep()
+    | MapInternalStep()
     | ReqSyncStep()
     | ReplySyncStep()
     | FreezeMapAdtStep()
@@ -367,9 +384,9 @@ module CoordinationSystem {
       case AcceptRequestStep() => AcceptRequest(v, v', uiop)
       case QueryStep() => Query(v, v', uiop)
       case PutStep() => Put(v, v', uiop)
-//      case JournalInternalStep(sk) => JournalInternal(v, v', uiop, cacheOps, sk)
-//      case SplinterTreeInternalStep(sk) => SplinterTreeInternal(v, v', uiop, cacheOps, sk)
       case DeliverReplyStep() => DeliverReply(v, v', uiop)
+      case JournalInternalStep() => JournalInternal(v, v', uiop)
+      case MapInternalStep() => MapInternal(v, v', uiop)
       case ReqSyncStep() => ReqSync(v, v', uiop)
       case ReplySyncStep() => ReplySync(v, v', uiop)
       case FreezeMapAdtStep() => FreezeMapAdt(v, v', uiop)

@@ -362,8 +362,8 @@ module CoordinationSystemRefinement {
       case DeliverReplyStep() => {
         assert Inv(v');
       }
-//    case JournalInternalStep(sk) => { assert Inv(v'); }
-//    case SplinterTreeInternalStep(sk) => { assert Inv(v'); }
+      case JournalInternalStep() => { assert Inv(v'); }
+      case MapInternalStep() => { assert Inv(v'); }
       case ReqSyncStep() => {
         assert Inv(v');
       }
@@ -477,8 +477,12 @@ module CoordinationSystemRefinement {
       case DeliverReplyStep() => {
         assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
-//    case JournalInternalStep(sk) => { assert Inv(v'); }
-//    case SplinterTreeInternalStep(sk) => { assert Inv(v'); }
+      case JournalInternalStep() => {
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
+      }
+      case MapInternalStep() => {
+        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
+      }
       case ReqSyncStep() => {
         assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
@@ -502,6 +506,6 @@ module CoordinationSystemRefinement {
         assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
       }
     }
-    assert CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop);
+    assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop);
   }
 }
