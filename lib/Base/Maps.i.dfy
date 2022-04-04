@@ -40,6 +40,10 @@ module Maps {
     && (forall key :: key in sub.Keys ==> MapsAgreeOnKey(sub, sup, key))
   }
 
+  predicate MapsAgree<K,V>(ma: map<K,V>, mb: map<K,V>) {
+    && (forall key | key in ma.Keys && key in mb.Keys :: MapsAgreeOnKey(ma, mb, key))
+  }
+
   function {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
     ensures forall k :: k in m && k !in ks ==> k in m'
     ensures forall k :: k in m' ==> k in m && k !in ks

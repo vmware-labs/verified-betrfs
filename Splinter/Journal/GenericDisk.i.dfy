@@ -23,6 +23,11 @@ module GenericDisk {
     {
       IsSubMap(entries, bigger.entries)
     }
+
+    predicate AgreesWithDisk(other: DiskView)
+    {
+      MapsAgree(entries, other.entries)
+    }
     
     predicate Tight()
     {
