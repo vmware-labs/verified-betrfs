@@ -12,21 +12,63 @@ module PagedBetree {
   import opened Sequences
   import opened MapLabels
 
-  type Buffer = map<Key, Message>
+  datatype Buffer = Buffer(filter: set<Key>, mapp: map<Key, Message>)
+  {
+    function Query(key: Key) : Message
+    {
+      if key in filter && key in mapp
+      then mapp[key]
+      else NopDelta()
+    }
+  }
 
+  // buffers[0] is the newest data
   datatype BufferStack = BufferStack(buffers: seq<Buffer>)
   {
+    function QueryUpTo(key: Key, count: nat) : Message
+      requires count <= |buffers|
+    {
+      if count == 0 then NopDelta()
+      else CombineDeltas(Query(key, count-1), buffers[count-1].Query(key))
+    }
+
+    function Query(key: Key) : Message
+    {
+      QueryUpTo(key, |buffers|)
+    }
   }
 
   datatype BetreeNode = BetreeNode(
-    children : imap<Key, BetreeNode>,
-    buffers : BufferStack)
+    domain: set<Key>,
+    children: imap<Key, Option<BetreeNode>>,
+    buffers: BufferStack)
   {
+    function Query(key: Key) : 
   }
 
   datatype StampedBetree = StampedBetree(
-    root: BetreeNode,
+    root: Option<BetreeNode>,
     seqEnd: LSN)
+
+  datatype QueryReceiptLine = QueryReceiptLine(
+    node: BetreeNode,
+    result: Mesage)
+  {
+  }
+
+  datatype QueryReceipt = QueryReceipt(
+    key: Key,
+    value: Value,
+    root: Option<BetreeNode>,
+    lines: seq<QueryReceiptLine>)
+  {
+    predicate Valid()
+    {
+      && (if root.None? then |lines| == 0 else Last(lines).node == root.value)
+      && value == (if |lines| == 0 then DefaultMessage() else Last(lines).result)
+    }
+  }
+
     
   datatype Memtable = Memtable(mapp: map<Key, Message>, seqEnd: LSN)
   {
