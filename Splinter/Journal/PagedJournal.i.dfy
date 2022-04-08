@@ -80,7 +80,7 @@ module PagedJournal {
       && receipt.TJValid()
     }
 
-    predicate Empty()
+    predicate IsEmpty()
       requires WF()
     {
       freshestRec.None?
@@ -96,6 +96,14 @@ module PagedJournal {
       requires WF()
     {
       BuildReceipt().I()
+    }
+
+    lemma Thing(lsn: LSN) // TODO(jonh): delete
+      requires WF()
+      requires I().CanDiscardTo(lsn)
+      requires lsn < SeqEnd()
+      ensures DiscardOldJournalRec(freshestRec, lsn) == DiscardOld(lsn).freshestRec
+    {
     }
 
     function DiscardOldDefn(lsn: LSN) : (out:TruncatedJournal)
@@ -158,7 +166,7 @@ module PagedJournal {
 
     lemma LsnBelongs(lsn: LSN)
       requires BuildReceipt().TJValid()
-      requires !Empty() // TODO(jonh): can we survive without this now?
+      requires !IsEmpty() // TODO(jonh): can we survive without this now?
       requires boundaryLSN <= lsn < SeqEnd()
       ensures lsn in BuildReceipt().I().LSNSet()
       decreases freshestRec
@@ -789,13 +797,14 @@ module PagedJournal {
       truncatedJournal.I().Concat(unmarshalledTail)
     }
 
-    predicate Empty()
-      requires WF()
-    {
-      && truncatedJournal.freshestRec.None?
-      && unmarshalledTail.IsEmpty()
-    }
-
+// TODO(jonh): deleteme; unused
+//    predicate IsEmpty()
+//      requires WF()
+//    {
+//      && truncatedJournal.freshestRec.None?
+//      && unmarshalledTail.IsEmpty()
+//    }
+//
     function SeqStart() : LSN
       requires WF()
       ensures SeqStart() == I().seqStart

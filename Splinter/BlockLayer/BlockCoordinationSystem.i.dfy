@@ -26,6 +26,9 @@ module BlockCoordinationSystem
   type UIOp = CrashTolerantMapSpecMod.uiopifc.UIOp
   type SyncReqs = map<CrashTolerantMapSpecMod.uiopifc.SyncReqId, LSN>
 
+  // This DiskImage corresponds to the datatype by the same name way up at the
+  // CoordinationSystem layer. In the implementation it represents the superblock
+  // and all the blocks reachable from the superblock.
   datatype DiskImage = DiskImage(
     mapadt: StampedMap,
     journal: JournalImage)

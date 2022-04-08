@@ -122,18 +122,21 @@ module LinkedJournal {
         Some(PagedJournal.JournalRecord(jr.messageSeq, RankedIPtr(jr.CroppedPrior(boundaryLSN), ranking)))
     }
 
-    function IPtr(ptr: Pointer) : Option<PagedJournal.JournalRecord>
-      requires WF()
-      requires Acyclic()
-      requires IsNondanglingPointer(ptr)
+    predicate Decodable(ptr: Pointer)
     {
-      RankedIPtr(ptr, TheRanking())
+      && WF()
+      && IsNondanglingPointer(ptr)
+    }
+
+    function IPtr(ptr: Pointer) : Option<PagedJournal.JournalRecord>
+      requires Decodable(ptr)
+    {
+      if !Acyclic() then None // Silly
+      else RankedIPtr(ptr, TheRanking())
     }
 
     function DiscardOld(newBoundary: LSN) : (out: DiskView)
-      requires WF()
       requires boundaryLSN <= newBoundary
-      ensures out.WF()
     {
       DiskView(newBoundary, entries)
     }
@@ -144,13 +147,44 @@ module LinkedJournal {
       && IsSubMap(entries, bigger.entries)
     }
 
-    predicate Tight()
-      requires WF()
+    // This disk only has entries reachable from root (via CroppedPrior()s).
+    predicate IsTight(root: Pointer)
     {
-      forall other:DiskView |
-        && other.WF()
-        && other.IsSubDisk(this)
-        :: other == this
+      && Decodable(root)
+      && (forall other:DiskView |
+          && other.Decodable(root)
+          && IPtr(root) == other.IPtr(root)
+          && other.IsSubDisk(this)
+          :: other == this
+        )
+    }
+
+    function RankedBuildTight(root: Pointer, ranking: Ranking) : (out: DiskView)
+      requires Decodable(root)
+      requires PointersRespectRank(ranking)
+      decreases if root.Some? then ranking[root.value] else -1 // I can't believe this works, Rustan!
+    {
+      if root.None? then DiskView(boundaryLSN, map[])
+      else
+        var addr := root.value;
+        DiskView(boundaryLSN, RankedBuildTight(entries[addr].CroppedPrior(boundaryLSN), ranking).entries[addr := entries[addr]])
+    }
+
+    function BuildTight(root: Pointer) : (out: DiskView)
+      requires Decodable(root)
+//      ensures Acyclic() && root.Some? ==> root.value in out.entries  // TODO(jonh): delete
+//      ensures out.Decodable(root)
+//      ensures Acyclic() ==> out.Acyclic()  // TODO(jonh): delete
+//      ensures Acyclic() ==> out.IPtr(root) == IPtr(root)  // TODO(jonh): delete
+    {
+      if !Acyclic() then
+        var out:= DiskView(0, map[]); // Silly
+//        assert out.Decodable(root) by { assume false; }
+        out
+      else
+        var out := RankedBuildTight(root, TheRanking());
+//        assert out.PointersRespectRank(TheRanking());  // witness
+        out
     }
   }
 
@@ -195,9 +229,9 @@ module LinkedJournal {
 
     function I() : PagedJournal.TruncatedJournal
       requires WF()
-      requires diskView.Acyclic()
     {
-      PagedJournal.TruncatedJournal(diskView.boundaryLSN, diskView.IPtr(freshestRec))
+      if !diskView.Acyclic() then PagedJournal.Mkfs() // Silly
+      else PagedJournal.TruncatedJournal(diskView.boundaryLSN, diskView.IPtr(freshestRec))
     }
 
     predicate Decodable()
@@ -205,6 +239,14 @@ module LinkedJournal {
       && WF()
       && diskView.Acyclic()
       && I().WF()
+    }
+
+    function BuildTight() : (out: TruncatedJournal)
+      requires WF()
+//      ensures out.diskView.IsTight(out.freshestRec) // TODO(jonh): transfer into proof
+//      ensures WF() ==> out.WF() && out.I() == I()
+    {
+      TruncatedJournal(freshestRec, diskView.BuildTight(freshestRec))
     }
   }
 
@@ -260,9 +302,11 @@ module LinkedJournal {
     && lbl.WF()
     && lbl.FreezeForCommitLabel?
     && v.WF()
-    && v.truncatedJournal.Decodable()
-    && var pagedTJ := v.truncatedJournal.I();
-    && pagedTJ.FreezeForCommit(lbl.I().frozenJournal, keepReceiptLines)
+
+    && v.truncatedJournal.Decodable() // Shown by invariant, not runtime-checked
+    && v.truncatedJournal.I().FreezeForCommit(lbl.I().frozenJournal, keepReceiptLines)
+    && lbl.frozenJournal == v.truncatedJournal.DiscardOld(lbl.frozenJournal.SeqStart()).BuildTight()
+
     && v' == v
   }
 
@@ -284,21 +328,14 @@ module LinkedJournal {
     && v' == v.(unmarshalledTail := v.unmarshalledTail.Concat(lbl.messages))
   }
 
-  predicate DiscardOld(v: Variables, v': Variables, lbl: TransitionLabel, tightDiskView: DiskView)
+  predicate DiscardOld(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     // diskView not tightened here
     && lbl.DiscardOldLabel?
     && v.WF()
-    && tightDiskView.WF() // When you GC the disk, you must preserve the reachable pointers.
-    && tightDiskView.Tight()  // We don't really need to require tightness at this layer, but I feel like it.
     && v.SeqStart() <= lbl.startLsn <= v.SeqEnd()
-    && var croppedTJ := v.truncatedJournal.DiscardOld(lbl.startLsn);
-    && tightDiskView.IsSubDisk(croppedTJ.diskView)
-    && tightDiskView.IsNondanglingPointer(croppedTJ.freshestRec)  // Can't crop to nothing!
     && lbl.requireEnd == v.SeqEnd()
-    // && var tightTJ := croppedTJ; TODO(jonh): deleteme
-    && var tightTJ := TruncatedJournal(croppedTJ.freshestRec, tightDiskView);
-    && v' == Variables(tightTJ,
+    && v' == Variables(v.truncatedJournal.DiscardOld(lbl.startLsn).BuildTight(),
         if v.unmarshalledTail.seqStart <= lbl.startLsn
         then v.unmarshalledTail.DiscardOld(lbl.startLsn)
         else v.unmarshalledTail
@@ -329,7 +366,7 @@ module LinkedJournal {
     | FreezeForCommitStep(keepReceiptLines: nat)
     | ObserveFreshJournalStep()
     | PutStep()
-    | DiscardOldStep(tightDiskView: DiskView)
+    | DiscardOldStep()
     | InternalJournalMarshalStep(cut: LSN, addr: Address)
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -339,7 +376,7 @@ module LinkedJournal {
       case FreezeForCommitStep(keepReceiptLines) => FreezeForCommit(v, v', lbl, keepReceiptLines)
       case ObserveFreshJournalStep() => ObserveFreshJournal(v, v', lbl)
       case PutStep() => Put(v, v', lbl)
-      case DiscardOldStep(tightDiskView) => DiscardOld(v, v', lbl, tightDiskView)
+      case DiscardOldStep() => DiscardOld(v, v', lbl)
       case InternalJournalMarshalStep(cut, addr) => InternalJournalMarshal(v, v', lbl, cut, addr)
     }
   }
