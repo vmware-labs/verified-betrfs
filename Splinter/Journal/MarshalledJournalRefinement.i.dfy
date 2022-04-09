@@ -91,10 +91,8 @@ module MarshalledJournalRefinement
     ensures Inv(v')
     ensures LinkedJournal.Next(I(v), I(v'), lbl.I())
   {
-    var t, t' :|
-      && TypeProvidesModel(v, t)
-      && TypeProvidesModel(v', t')
-      && LinkedJournal.Next(t, t', lbl.I());
+    var t := TheTypedModel(v);
+    var t' := TheTypedModel(v');
     TypedModelUnique();
     LinkedJournalRefinement.InvNext(t, t', lbl.I());
     LinkedJournalRefinement.NextRefines(t, t', lbl.I());

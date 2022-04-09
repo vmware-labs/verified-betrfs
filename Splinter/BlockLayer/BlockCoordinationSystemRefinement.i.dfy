@@ -250,7 +250,7 @@ module BlockCoordinationSystemRefinement
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger?
   }
 
-  lemma JournalInternalNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+  lemma {:timeLimitMultiplier 2} JournalInternalNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
     requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step)
@@ -262,18 +262,14 @@ module BlockCoordinationSystemRefinement
       MarshalledJournal.InternalLabel());
 
     var lbl := MarshalledJournal.InternalLabel();
-    var t, t' :|
-      && MarshalledJournal.TypeProvidesModel(v.ephemeral.journal, t)
-      && MarshalledJournal.TypeProvidesModel(v'.ephemeral.journal, t')
-      && LinkedJournal.Next(t, t', lbl.I());
-    var lstep :| LinkedJournal.NextStep(t, t', lbl.I(), lstep);
-    assume lstep.addr !in v'.persistentImage.journal.diskView.entries;
-//    assert v'.ephemeral.journal.journalImage.diskView.AgreesWithDisk(v'.persistentImage.journal.diskView);
+    MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal, lbl);
+//    var lstep :| LinkedJournal.NextStep(t, t', lbl.I(), lstep); // documentation
       
     if v'.inFlightImage.Some? {
-      assume lstep.addr !in v.inFlightImage.value.journal.diskView.entries;
-//      assert v'.ephemeral.journal.journalImage.diskView.AgreesWithDisk(v'.inFlightImage.value.journal.diskView);
-      MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal, MarshalledJournal.InternalLabel());  // hoist one layer to LinkedJournal. (JournalChainedNext hides this jump)
+      var inFlightL := v.inFlightImage.value.journal.I();
+      var ephemeralL := MarshalledJournalRefinement.I(v.ephemeral.journal).truncatedJournal;
+      var discardedL := ephemeralL.DiscardOld(inFlightL.SeqStart());
+      LinkedJournalRefinement.BuildTightBuildsSubDisks(discardedL.diskView, discardedL.freshestRec, discardedL.diskView.TheRanking());  // to pass lstep.addr membership through InFlightSubDiskProperty BuildTight
 
       // saw an out-of-resource here, but can't repro
       // with assert false: 20s success

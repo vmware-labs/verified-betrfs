@@ -447,7 +447,7 @@ module CoordinationSystemRefinement {
     assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), UIOp.SyncOp);  // witness
   }
 
-  lemma {:timeLimitMultiplier 2} NextRefines(v: Variables, v': Variables, uiop: UIOp)
+  lemma {:timeLimitMultiplier 3} NextRefines(v: Variables, v': Variables, uiop: UIOp)
     requires Inv(v)
     requires Next(v, v', uiop)
     ensures Inv(v')
