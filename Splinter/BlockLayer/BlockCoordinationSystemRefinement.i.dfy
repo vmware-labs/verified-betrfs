@@ -76,18 +76,11 @@ module BlockCoordinationSystemRefinement
     && (v.ephemeral.Known? ==>
         v.persistentImage.journal.diskView.IsSubDisk(v.ephemeral.journal.journalImage.diskView)
       )
-      // persistent disk journal repr is always a subset of the ephemeral journal repr
-//      && v.persistentImage.journal.diskView.entries.Keys <= v.ephemeral.journal.journalImage.diskView.entries.Keys
-//      && v.ephemeral.journal.journalImage.diskView.AgreesWithDisk(v.persistentImage.journal.diskView))
     && (v.inFlightImage.Some? ==>
       && v.ephemeral.Known?
       && LinkedJournalRefinement.InFlightSubDiskProperty(
           MarshalledJournalRefinement.I(v.ephemeral.journal), v.inFlightImage.value.journal.I())
       )
-      
-      //v.inFlightImage.value.journal.diskView.AgreesWithDisk(v.persistentImage.journal.diskView))
-//    && (v.ephemeral.Known? && v.inFlightImage.Some? ==>
-//      v.ephemeral.journal.journalImage.diskView.AgreesWithDisk(v.inFlightImage.value.journal.diskView))
   }
 
   // IA Interpret to Abstraction: peel all the way up the stack.
@@ -232,7 +225,7 @@ module BlockCoordinationSystemRefinement
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
   }
 
-  lemma {:timeLimitMultiplier 2} PutNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+  lemma PutNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
     requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step)
@@ -244,13 +237,10 @@ module BlockCoordinationSystemRefinement
     var val := uiop.baseOp.req.input.value;
     var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
     MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal, MarshalledJournal.PutLabel(singleton));
-    if v'.inFlightImage.Some? {
-      assert v'.inFlightImage.value.journal.diskView.AgreesWithDisk(v'.persistentImage.journal.diskView);
-    }
-    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger?
+    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
   }
 
-  lemma {:timeLimitMultiplier 2} JournalInternalNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+  lemma JournalInternalNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
     requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step)
