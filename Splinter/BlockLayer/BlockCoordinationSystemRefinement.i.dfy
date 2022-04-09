@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../../Spec/MapSpec.s.dfy"
-include "../CoordinationLayer/CoordinationSystem.i.dfy"
+include "../CoordinationLayer/CoordinationSystemRefinement.i.dfy"
 include "../Journal/MarshalledJournalRefinement.i.dfy"
 include "BlockCoordinationSystem.i.dfy"
 
@@ -10,6 +10,7 @@ module BlockCoordinationSystemRefinement
 {
   import opened Options
   import CoordinationSystem
+  import CoordinationSystemRefinement
   import opened MsgHistoryMod
   import opened ValueMessage
   import opened BlockCoordinationSystem
@@ -64,6 +65,12 @@ module BlockCoordinationSystemRefinement
 
   predicate Inv(v: Variables) {
     && DecodableVariables(v)
+
+    // This layer's version of CoordinationSystemRefinement.InvInFlightGeometry
+    && (v.inFlightImage.Some? ==>
+      v.inFlightImage.value.journal.I().SeqStart() == v.inFlightImage.value.mapadt.seqEnd
+      )
+    
     // TODO(jonh,robj): Reaching into journal's journalImage is a bit layer-violation-y.
     // Maybe it's okay for the proof?
     && (v.ephemeral.Known? ==>
@@ -225,7 +232,7 @@ module BlockCoordinationSystemRefinement
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
   }
 
-  lemma PutNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+  lemma {:timeLimitMultiplier 2} PutNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
     requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step)
@@ -277,7 +284,6 @@ module BlockCoordinationSystemRefinement
         MarshalledJournalRefinement.I(v.ephemeral.journal),
         MarshalledJournalRefinement.I(v'.ephemeral.journal),
         v.inFlightImage.value.journal.I());
-
     }
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger?
   }
@@ -292,18 +298,13 @@ module BlockCoordinationSystemRefinement
   {
     JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal,
       MarshalledJournal.FreezeForCommitLabel(step.frozenJournal));
-//    assert v'.inFlightImage.value.journal.diskView.AgreesWithDisk(v'.persistentImage.journal.diskView);
-//    assume step.frozenJournal.diskView.AgreesWithDisk(v'.ephemeral.journal.journalImage.diskView);
-//    assert v'.persistentImage.journal.diskView.entries.Keys <= v'.ephemeral.journal.journalImage.diskView.entries.Keys;
-//    assert step.frozenJournal.diskView.AgreesWithDisk(v'.persistentImage.journal.diskView);
-//    assert v'.inFlightImage.value.journal == step.frozenJournal;
 
     var mjlbl := MarshalledJournal.FreezeForCommitLabel(step.frozenJournal);
     MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal, mjlbl);  // hoist one layer to LinkedJournal. (JournalChainedNext hides this jump)
-//    LinkedJournalRefinement.InFlightSubDiskCreated(
-//      MarshalledJournalRefinement.I(v.ephemeral.journal),
-//      MarshalledJournalRefinement.I(v'.ephemeral.journal),
-//      mjlbl.I());
+    LinkedJournalRefinement.InFlightSubDiskCreated(
+      MarshalledJournalRefinement.I(v.ephemeral.journal),
+      MarshalledJournalRefinement.I(v'.ephemeral.journal),
+      mjlbl.I());
 
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
   }
@@ -324,10 +325,71 @@ module BlockCoordinationSystemRefinement
 //      assert v'.ephemeral.journal.journalImage.diskView.AgreesWithDisk(v'.persistentImage.journal.diskView);
 //    }
     assert v'.persistentImage == v.inFlightImage.value; // step
-    assert v.inFlightImage.value.journal.diskView.IsSubDisk(
-      v.ephemeral.journal.journalImage.DiscardOld(v.inFlightImage.value.SeqStart()).diskView); // inv
+//    assert v.inFlightImage.value.journal.diskView.IsSubDisk(
+//      v.ephemeral.journal.journalImage.DiscardOld(v.inFlightImage.value.SeqStart()).diskView); // inv
     assert v.inFlightImage.value == v'.persistentImage;
-    assert v'.ephemeral.journal.journalImage.diskView == v.ephemeral.journal.journalImage.DiscardOld(v.inFlightImage.value.SeqStart()).diskView;
+//    assert v'.ephemeral.journal.journalImage.diskView == v.ephemeral.journal.journalImage.DiscardOld(v.inFlightImage.value.SeqStart()).BuildTight().diskView;
+
+    var ifImage := v.inFlightImage.value;
+    assert MarshalledJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
+        MarshalledJournal.DiscardOldLabel(ifImage.mapadt.seqEnd, v.ephemeral.mapLsn));
+
+    var mjlbl := MarshalledJournal.DiscardOldLabel(ifImage.mapadt.seqEnd, v.ephemeral.mapLsn);
+    MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal, mjlbl);  // hoist one layer to LinkedJournal. (JournalChainedNext hides this jump)
+
+    assert LinkedJournal.Next(
+      MarshalledJournalRefinement.I(v.ephemeral.journal),
+      MarshalledJournalRefinement.I(v'.ephemeral.journal),
+      mjlbl.I());
+
+    MarshalledJournalRefinement.TypedModelUnique();
+
+    assert MarshalledJournalRefinement.I(v.ephemeral.journal).truncatedJournal
+      == v.ephemeral.journal.journalImage.I();
+    assert MarshalledJournalRefinement.I(v'.ephemeral.journal).truncatedJournal
+      == v'.ephemeral.journal.journalImage.I();
+
+    var lsn := v.inFlightImage.value.mapadt.seqEnd;
+    assert v'.ephemeral.journal.journalImage.I() ==
+      v.ephemeral.journal.journalImage.I().DiscardOld(mjlbl.I().startLsn).BuildTight();
+    assert v'.ephemeral.journal.journalImage.I().diskView ==
+      v.ephemeral.journal.journalImage.I().DiscardOld(mjlbl.I().startLsn).BuildTight().diskView;
+
+    assert LinkedJournalRefinement.InFlightSubDiskProperty(
+          MarshalledJournalRefinement.I(v.ephemeral.journal), v.inFlightImage.value.journal.I());
+
+    assert v.inFlightImage.value.journal.I().diskView.IsSubDisk(MarshalledJournalRefinement.I(v.ephemeral.journal).truncatedJournal.DiscardOld(v.inFlightImage.value.journal.I().SeqStart()).BuildTight().diskView);
+
+    assert v'.persistentImage == v.inFlightImage.value;
+
+    assert MarshalledJournalRefinement.I(v.ephemeral.journal).truncatedJournal
+      == v.ephemeral.journal.journalImage.I();
+     
+    calc {
+      mjlbl.I().startLsn;
+      mjlbl.startLsn;
+      ifImage.mapadt.seqEnd;
+      MarshalledJournal.DiscardOldLabel(ifImage.mapadt.seqEnd, v.ephemeral.mapLsn).startLsn;
+    }
+    assert mjlbl.I().startLsn == MarshalledJournal.DiscardOldLabel(ifImage.mapadt.seqEnd, v.ephemeral.mapLsn).startLsn;
+
+    assert v.inFlightImage.value.journal.I().SeqStart() == v.inFlightImage.value.mapadt.seqEnd;
+
+//    assert mjlbl.I().startLsn == v.inFlightImage.value.journal.I().SeqStart();
+
+    assert v'.ephemeral.journal.journalImage.I() == MarshalledJournalRefinement.I(v.ephemeral.journal).truncatedJournal.DiscardOld(v.inFlightImage.value.journal.I().SeqStart()).BuildTight();
+
+    assert v'.persistentImage.journal.I().diskView.IsSubDisk(v'.ephemeral.journal.journalImage.I().diskView);
+
+//    forall addr | addr in v'.persistentImage.journal.diskView.entries
+//      ensures addr in v'.ephemeral.journal.journalImage.diskView.entries
+//      ensures v'.persistentImage.journal.diskView.entries[addr] == v'.ephemeral.journal.journalImage.diskView.entries[addr]
+//    {
+//      assert addr in v'.persistentImage.journal.I().diskView.entries;
+//      assert addr in v'.ephemeral.journal.journalImage.I().diskView.entries;
+//      assert addr in v'.ephemeral.journal.journalImage.diskView.entries;
+//    }
+
     assert v'.persistentImage.journal.diskView.IsSubDisk(v'.ephemeral.journal.journalImage.diskView);
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
   }

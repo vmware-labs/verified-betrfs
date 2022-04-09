@@ -172,19 +172,9 @@ module LinkedJournal {
 
     function BuildTight(root: Pointer) : (out: DiskView)
       requires Decodable(root)
-//      ensures Acyclic() && root.Some? ==> root.value in out.entries  // TODO(jonh): delete
-//      ensures out.Decodable(root)
-//      ensures Acyclic() ==> out.Acyclic()  // TODO(jonh): delete
-//      ensures Acyclic() ==> out.IPtr(root) == IPtr(root)  // TODO(jonh): delete
     {
-      if !Acyclic() then
-        var out:= DiskView(0, map[]); // Silly
-//        assert out.Decodable(root) by { assume false; }
-        out
-      else
-        var out := RankedBuildTight(root, TheRanking());
-//        assert out.PointersRespectRank(TheRanking());  // witness
-        out
+      if !Acyclic() then DiskView(0, map[]) // Silly
+      else RankedBuildTight(root, TheRanking())
     }
   }
 
@@ -243,8 +233,6 @@ module LinkedJournal {
 
     function BuildTight() : (out: TruncatedJournal)
       requires WF()
-//      ensures out.diskView.IsTight(out.freshestRec) // TODO(jonh): transfer into proof
-//      ensures WF() ==> out.WF() && out.I() == I()
     {
       TruncatedJournal(freshestRec, diskView.BuildTight(freshestRec))
     }
