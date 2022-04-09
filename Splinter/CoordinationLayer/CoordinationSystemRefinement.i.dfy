@@ -78,7 +78,7 @@ module CoordinationSystemRefinement {
   }
 
   // Where these journals share an LSN, they map it to the same message.
-  predicate JournalOverlapsAgree(j0: Journal, j1: Journal)
+  predicate {:opaque} JournalOverlapsAgree(j0: Journal, j1: Journal)
     requires j0.WF() && j1.WF()
   {
     forall lsn | j0.Contains(lsn) && j1.Contains(lsn) :: j0.msgs[lsn] == j1.msgs[lsn]
@@ -279,6 +279,7 @@ module CoordinationSystemRefinement {
     requires step.PutStep?
     ensures Inv(v')
   {
+    reveal_JournalOverlapsAgree();
     if v.inFlightImage.Some? {
       var idiEnd := v.inFlightImage.value.mapadt.seqEnd;
       assert IEJ(v.ephemeral.journal).DiscardRecent(idiEnd) == IEJ(v'.ephemeral.journal).DiscardRecent(idiEnd); // trigger
@@ -319,6 +320,7 @@ module CoordinationSystemRefinement {
     requires step.CommitCompleteStep?
     ensures Inv(v')
   {
+    reveal_JournalOverlapsAgree();
     if FrozenMapDoesntRegress(v') {
       CommitStepPreservesHistory(v, v', uiop, step, v.ephemeral.frozenMap.value.seqEnd);
     }
@@ -340,6 +342,7 @@ module CoordinationSystemRefinement {
     var step :| NextStep(v, v', uiop, step);
     match step {
       case LoadEphemeralFromPersistentStep() => {
+        reveal_JournalOverlapsAgree();
         assert Inv(v');
       }
       case RecoverStep(puts) => {
@@ -374,6 +377,7 @@ module CoordinationSystemRefinement {
         assert Inv(v');
       }
       case CommitStartStep(frozenJournal) => {
+        reveal_JournalOverlapsAgree();
         assert Inv(v');
       }
       case CommitCompleteStep() => {
@@ -427,7 +431,7 @@ module CoordinationSystemRefinement {
     assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // witness
   }
 
-  lemma CommitStepRefines(v: Variables, v': Variables, uiop: UIOp, step: Step)
+  lemma CommitCompleteNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
     requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step);
@@ -447,7 +451,66 @@ module CoordinationSystemRefinement {
     assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), UIOp.SyncOp);  // witness
   }
 
-  lemma {:timeLimitMultiplier 3} NextRefines(v: Variables, v': Variables, uiop: UIOp)
+  // Infuriating timetouts driving me back to IronFleet punts
+  lemma BatchNextA(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step);
+    requires
+      || step.LoadEphemeralFromPersistentStep?
+      || step.RecoverStep?
+      || step.AcceptRequestStep?
+      || step.QueryStep?
+      || step.DeliverReplyStep?
+    ensures Inv(v')
+    ensures CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop)
+  {
+    InvInductive(v, v', uiop);
+    if step.LoadEphemeralFromPersistentStep? {
+      assert uiop == UIOp.NoopOp;
+    }
+    assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop);
+  }
+
+  lemma BatchNextB(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step);
+    requires
+      || step.JournalInternalStep?
+      || step.MapInternalStep?
+      || step.ReqSyncStep?
+      || step.ReplySyncStep?
+      || step.FreezeMapAdtStep?
+      || step.CommitStartStep?
+    ensures Inv(v')
+    ensures CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop)
+  {
+    InvInductive(v, v', uiop);
+    assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop);
+  }
+
+  lemma {:timeLimitMultiplier 2} CrashNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step);
+    requires step.CrashStep?
+    ensures Inv(v')
+    ensures CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop)
+  {
+    reveal_JournalOverlapsAgree();
+    var stableLSN := v'.persistentImage.SeqEnd();
+    if v.ephemeral.Known? {
+      assert forall lsn | v.persistentImage.mapadt.seqEnd <= lsn < stableLSN :: true; // trigger
+      assert v'.persistentImage.journal.DiscardRecent(stableLSN) == IEJ(v.ephemeral.journal).DiscardRecent(stableLSN); // trigger
+    }
+    assert CrashTolerantMapSpecMod.Crash(I(v), I(v'));  //trigger
+    assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
+
+    assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), UIOp.CrashOp);  // witness
+  }
+
+  lemma NextRefines(v: Variables, v': Variables, uiop: UIOp)
     requires Inv(v)
     requires Next(v, v', uiop)
     ensures Inv(v')
@@ -457,55 +520,20 @@ module CoordinationSystemRefinement {
 
     var step :| NextStep(v, v', uiop, step);
     match step {
-      case LoadEphemeralFromPersistentStep() => {
-        assert uiop == UIOp.NoopOp;
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case RecoverStep(puts) => {
-        assert uiop == UIOp.NoopOp;
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case AcceptRequestStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case QueryStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case PutStep() => {
-        PutStepRefines(v, v', uiop, step);
-      }
-      case DeliverReplyStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case JournalInternalStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case MapInternalStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case ReqSyncStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case ReplySyncStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case FreezeMapAdtStep() => {
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case CommitStartStep(frozenJournal) => {
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
-      case CommitCompleteStep() => { CommitStepRefines(v, v', uiop, step); }
-      case CrashStep() => {
-        var stableLSN := v'.persistentImage.SeqEnd();
-        if v.ephemeral.Known? {
-          assert forall lsn | v.persistentImage.mapadt.seqEnd <= lsn < stableLSN :: true; // trigger
-          assert v'.persistentImage.journal.DiscardRecent(stableLSN) == IEJ(v.ephemeral.journal).DiscardRecent(stableLSN); // trigger
-        }
-        assert CrashTolerantMapSpecMod.Crash(I(v), I(v'));  //trigger
-        assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
-      }
+      case LoadEphemeralFromPersistentStep() => { BatchNextA(v, v', uiop, step); }
+      case RecoverStep(puts) => { BatchNextA(v, v', uiop, step); }
+      case AcceptRequestStep() => { BatchNextA(v, v', uiop, step); }
+      case QueryStep() => { BatchNextA(v, v', uiop, step); }
+      case PutStep() => { PutStepRefines(v, v', uiop, step); }
+      case DeliverReplyStep() => { BatchNextA(v, v', uiop, step); }
+      case JournalInternalStep() => { BatchNextB(v, v', uiop, step); }
+      case MapInternalStep() => { BatchNextB(v, v', uiop, step); }
+      case ReqSyncStep() => { BatchNextB(v, v', uiop, step); }
+      case ReplySyncStep() => { BatchNextB(v, v', uiop, step); }
+      case FreezeMapAdtStep() => { BatchNextB(v, v', uiop, step); }
+      case CommitStartStep(frozenJournal) => { BatchNextB(v, v', uiop, step); }
+      case CommitCompleteStep() => { CommitCompleteNext(v, v', uiop, step); }
+      case CrashStep() => { CrashNext(v, v', uiop, step); }
     }
-    assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop);
   }
 }
