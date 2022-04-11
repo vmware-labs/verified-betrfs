@@ -259,7 +259,7 @@ module BlockCoordinationSystemRefinement
       var inFlightL := v.inFlightImage.value.journal.I();
       var ephemeralL := MarshalledJournalRefinement.I(v.ephemeral.journal).truncatedJournal;
       var discardedL := ephemeralL.DiscardOld(inFlightL.SeqStart());
-      LinkedJournalRefinement.BuildTightBuildsSubDisks(discardedL.diskView, discardedL.freshestRec, discardedL.diskView.TheRanking());  // to pass lstep.addr membership through InFlightSubDiskProperty BuildTight
+      LinkedJournalRefinement.BuildTightBuildsSubDisks(discardedL.diskView, discardedL.freshestRec);  // to pass lstep.addr membership through InFlightSubDiskProperty BuildTight
 
       // saw an out-of-resource here, but can't repro
       // with assert false: 20s success

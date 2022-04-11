@@ -43,7 +43,10 @@ module LinkedJournal {
 
   type Ranking = map<Address, nat>
 
-  datatype JournalRecord = JournalRecord(messageSeq: MsgHistory, priorRecXXX: Pointer)
+  datatype JournalRecord = JournalRecord(messageSeq: MsgHistory, _priorRec: Pointer)
+    // Never access priorRec directly; only reference it through CroppedPrior.
+    // A Pointer only has meaning if its referent isn't rendered irrelevant by
+    // some boundaryLSN.
   {
     predicate WF()
     {
@@ -55,7 +58,7 @@ module LinkedJournal {
     // useful LSNs.
     function CroppedPrior(boundaryLSN: LSN) : Pointer
     {
-      if boundaryLSN < messageSeq.seqStart then priorRecXXX else None
+      if boundaryLSN < messageSeq.seqStart then _priorRec else None
     }
   }
 
@@ -109,30 +112,31 @@ module LinkedJournal {
       var ranking :| PointersRespectRank(ranking); ranking
     }
 
-    function RankedIPtr(ptr: Pointer, ranking: Ranking) : Option<PagedJournal.JournalRecord>
-      requires WF()
-      requires IsNondanglingPointer(ptr)
-      requires PointersRespectRank(ranking)
-      decreases if ptr.Some? then ranking[ptr.value] else -1 // I can't believe this works, Rustan!
-    {
-      if ptr.None?
-      then None
-      else
-        var jr := entries[ptr.value];
-        Some(PagedJournal.JournalRecord(jr.messageSeq, RankedIPtr(jr.CroppedPrior(boundaryLSN), ranking)))
-    }
-
     predicate Decodable(ptr: Pointer)
     {
       && WF()
       && IsNondanglingPointer(ptr)
     }
 
+    function TheRankOf(ptr: Pointer) : int
+      requires WF()
+      requires IsNondanglingPointer(ptr)
+    {
+      if ptr.Some? && Acyclic() then TheRanking()[ptr.value] else -1
+      // Rustan: I can't believe this works! How are you figuring out that we can pass 0 into
+      // negatives, but we stop there!?
+    }
+
     function IPtr(ptr: Pointer) : Option<PagedJournal.JournalRecord>
       requires Decodable(ptr)
+      decreases TheRankOf(ptr)
     {
       if !Acyclic() then None // Silly
-      else RankedIPtr(ptr, TheRanking())
+      else if ptr.None?
+      then None
+      else
+        var jr := entries[ptr.value];
+        Some(PagedJournal.JournalRecord(jr.messageSeq, IPtr(jr.CroppedPrior(boundaryLSN))))
     }
 
     function DiscardOld(newBoundary: LSN) : (out: DiskView)
@@ -159,22 +163,24 @@ module LinkedJournal {
         )
     }
 
-    function RankedBuildTight(root: Pointer, ranking: Ranking) : (out: DiskView)
-      requires Decodable(root)
-      requires PointersRespectRank(ranking)
-      decreases if root.Some? then ranking[root.value] else -1 // I can't believe this works, Rustan!
-    {
-      if root.None? then DiskView(boundaryLSN, map[])
-      else
-        var addr := root.value;
-        DiskView(boundaryLSN, RankedBuildTight(entries[addr].CroppedPrior(boundaryLSN), ranking).entries[addr := entries[addr]])
-    }
+//    // TODO(jonh): Oded's suggestion for something that's simpler that IsTight,
+//    // and should somehow reduce the proof obligations.
+//    lemma BuildTightGoodness(root: Pointer)
+//      ensures BuildTight(root).IsSubDisk(this)
+//      ensures IPtr() == BuildTight(root).IPtr()
+//      ensures forall dv | this.IsSubDisk(dv) :: BuildTight(root).IsSubDisk(dv.BuildTight(root)) // or maybe ==?
+//    {
+//    }
 
     function BuildTight(root: Pointer) : (out: DiskView)
       requires Decodable(root)
+      decreases TheRankOf(root)
     {
       if !Acyclic() then DiskView(0, map[]) // Silly
-      else RankedBuildTight(root, TheRanking())
+      else if root.None? then DiskView(boundaryLSN, map[])
+      else
+        var addr := root.value;
+        DiskView(boundaryLSN, BuildTight(entries[addr].CroppedPrior(boundaryLSN)).entries[addr := entries[addr]])
     }
   }
 

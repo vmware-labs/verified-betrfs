@@ -98,14 +98,6 @@ module PagedJournal {
       BuildReceipt().I()
     }
 
-    lemma Thing(lsn: LSN) // TODO(jonh): delete
-      requires WF()
-      requires I().CanDiscardTo(lsn)
-      requires lsn < SeqEnd()
-      ensures DiscardOldJournalRec(freshestRec, lsn) == DiscardOld(lsn).freshestRec
-    {
-    }
-
     function DiscardOldDefn(lsn: LSN) : (out:TruncatedJournal)
       requires WF()
       requires I().CanDiscardTo(lsn)
@@ -166,7 +158,6 @@ module PagedJournal {
 
     lemma LsnBelongs(lsn: LSN)
       requires BuildReceipt().TJValid()
-      requires !IsEmpty() // TODO(jonh): can we survive without this now?
       requires boundaryLSN <= lsn < SeqEnd()
       ensures lsn in BuildReceipt().I().LSNSet()
       decreases freshestRec
@@ -797,14 +788,6 @@ module PagedJournal {
       truncatedJournal.I().Concat(unmarshalledTail)
     }
 
-// TODO(jonh): deleteme; unused
-//    predicate IsEmpty()
-//      requires WF()
-//    {
-//      && truncatedJournal.freshestRec.None?
-//      && unmarshalledTail.IsEmpty()
-//    }
-//
     function SeqStart() : LSN
       requires WF()
       ensures SeqStart() == I().seqStart
@@ -886,10 +869,6 @@ module PagedJournal {
           v.(truncatedJournal := v.truncatedJournal.DiscardOld(lsn))
        )
   }
-
-  // TODO(jonh): internal operation to truncate old journal garbage
-  // Actually I think this only happens in the refinement. At this layer, the receipt just
-  // stops when it gets to the end.
 
   // A prefix of the unmarshalled tail can be carted off as a new page-sized journal record
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)

@@ -28,20 +28,6 @@ module LinkedJournalRefinement
     PagedJournal.Variables(v.truncatedJournal.I(), v.unmarshalledTail)
   }
 
-  lemma RankedIPtrFraming(dv1: DiskView, dv2: DiskView, r1: Ranking, r2: Ranking, ptr: Pointer)
-    requires dv1.WF() && dv1.Acyclic() && dv1.PointersRespectRank(r1)
-    requires dv2.WF() && dv2.Acyclic() && dv2.PointersRespectRank(r2)
-    requires dv1.IsNondanglingPointer(ptr)
-    requires dv1.IsSubDisk(dv2)
-    requires dv1.boundaryLSN == dv2.boundaryLSN
-    ensures dv1.RankedIPtr(ptr, r1) == dv2.RankedIPtr(ptr, r2)
-    decreases if ptr.Some? then r1[ptr.value] else -1
-  {
-    if ptr.Some? {
-      RankedIPtrFraming(dv1, dv2, r1, r2, dv1.entries[ptr.value].CroppedPrior(dv1.boundaryLSN));
-    }
-  }
-
   lemma IPtrFraming(dv1: DiskView, dv2: DiskView, ptr: Pointer)
     requires dv1.WF() && dv1.Acyclic()
     requires dv2.WF() && dv2.Acyclic()
@@ -49,129 +35,114 @@ module LinkedJournalRefinement
     requires dv1.IsSubDisk(dv2)
     requires dv1.boundaryLSN == dv2.boundaryLSN
     ensures dv1.IPtr(ptr) == dv2.IPtr(ptr)
+    decreases dv1.TheRankOf(ptr)
   {
-    RankedIPtrFraming(dv1, dv2, dv1.TheRanking(), dv2.TheRanking(), ptr);
+    if ptr.Some? {
+      IPtrFraming(dv1, dv2, dv1.entries[ptr.value].CroppedPrior(dv1.boundaryLSN));
+    }
   }
 
-//  lemma BuildTightSubsetRanking(dv: DiskView, ptr: Pointer, ranking: Ranking)
-//    requires dv.Decodable(ptr)
-//    requires dv.PointersRespectRank(ranking)
-//    ensures dv.RankedBuildTight(ptr, ranking).entries.Keys <= ranking.Keys
-//    decreases if ptr.Some? then ranking[ptr.value] else -1
-//  {
-//    if ptr.Some? {
-//      var next := dv.entries[ptr.value].CroppedPrior(dv.boundaryLSN);
-//      BuildTightSubsetRanking(dv, next, ranking);
-//    }
-//  }
-//  
-  lemma BuildTightRanks(dv: DiskView, ptr: Pointer, ranking: Ranking)
+  lemma BuildTightRanks(dv: DiskView, ptr: Pointer)
     requires dv.Decodable(ptr)
-    requires dv.PointersRespectRank(ranking)
+    requires dv.Acyclic()
     requires ptr.Some?
     ensures
       var next := dv.entries[ptr.value].CroppedPrior(dv.boundaryLSN);
-      forall addr | addr in dv.RankedBuildTight(next, ranking).entries :: addr in ranking && ranking[addr] < ranking[ptr.value]
-    decreases if ptr.Some? then ranking[ptr.value] else -1
+      forall addr | addr in dv.BuildTight(next).entries :: addr in dv.TheRanking() && dv.TheRanking()[addr] < dv.TheRanking()[ptr.value]
+    decreases dv.TheRankOf(ptr)
   {
     var next := dv.entries[ptr.value].CroppedPrior(dv.boundaryLSN);
     if next.Some? {
-      BuildTightRanks(dv, next, ranking);
+      BuildTightRanks(dv, next);
     }
   }
 
-  lemma RankedBuildTightShape(big: DiskView, root: Pointer, ranking: Ranking)
+  lemma BuildTightShape(big: DiskView, root: Pointer)
     requires root.Some?
     requires big.Decodable(root)
-    requires big.PointersRespectRank(ranking)
+    requires big.Acyclic()
     ensures
-      big.RankedBuildTight(big.entries[root.value].CroppedPrior(big.boundaryLSN), ranking) ==
-      DiskView(big.boundaryLSN, MapRemove1(big.RankedBuildTight(root, ranking).entries, root.value))
+      big.BuildTight(big.entries[root.value].CroppedPrior(big.boundaryLSN)) ==
+      DiskView(big.boundaryLSN, MapRemove1(big.BuildTight(root).entries, root.value))
   {
     var next := big.entries[root.value].CroppedPrior(big.boundaryLSN);
     if next.Some? {
-      BuildTightRanks(big, root, ranking);  // proves root.value !in big.RankedBuildTight(next, ranking).entries;
+      BuildTightRanks(big, root);  // proves root.value !in big.BuildTight(next, ranking).entries;
     }
   }
 
-  lemma RankedIPtrIgnoresExtraBlocks(small: DiskView, ptr: Pointer, ranking: Ranking, big: DiskView)
+  lemma IPtrIgnoresExtraBlocks(small: DiskView, ptr: Pointer, big: DiskView)
     requires small.WF()
-    requires big.WF()
     requires small.IsNondanglingPointer(ptr)
-    requires big.PointersRespectRank(ranking)
+    requires big.WF()
+    requires big.Acyclic()
     requires small.IsSubDisk(big)
-    ensures big.RankedIPtr(ptr, ranking) == small.RankedIPtr(ptr, ranking)
-    decreases if ptr.Some? then ranking[ptr.value] else -1 // I can't believe this works, Rustan!
+    ensures small.Acyclic()
+    ensures big.IPtr(ptr) == small.IPtr(ptr)
+    decreases big.TheRankOf(ptr)
   {
+    assert small.PointersRespectRank(big.TheRanking()); // witness to small.Acyclic
     if ptr.Some? {
       var next := big.entries[ptr.value].CroppedPrior(big.boundaryLSN);
-      RankedIPtrIgnoresExtraBlocks(small, next, ranking, big);
+      IPtrIgnoresExtraBlocks(small, next, big);
+      assert big.IPtr(ptr) == small.IPtr(ptr);
     }
   }
 
-  lemma TightSubDisk(big: DiskView, root: Pointer, ranking: Ranking, tight: DiskView)
+  lemma TightSubDisk(big: DiskView, root: Pointer, tight: DiskView)
     requires big.Decodable(root)
-    requires big.PointersRespectRank(ranking)
-    requires tight == big.RankedBuildTight(root, ranking)
+    requires tight == big.BuildTight(root)
     requires big.Acyclic()
     requires tight.IsSubDisk(big);
     ensures tight.IsTight(root)
-    decreases if root.Some? then ranking[root.value] else -1 // I can't believe this works, Rustan!
+    decreases big.TheRankOf(root)
   {
     if root.Some? {
       var next := big.entries[root.value].CroppedPrior(big.boundaryLSN);
-      var inner := big.RankedBuildTight(next, ranking);
-      BuildTightRanks(big, root, ranking);  // proves root.value !in big.RankedBuildTight(next, ranking).entries
-      RankedBuildTightShape(big, root, ranking);
-      TightSubDisk(big, next, ranking, inner);
+      var inner := big.BuildTight(next);
+      BuildTightShape(big, root);
+      TightSubDisk(big, next, inner);
 
       forall other:DiskView | && other.Decodable(root) && tight.IPtr(root) == other.IPtr(root) && other.IsSubDisk(tight)
           ensures other == tight {
         // any other tighter disk implies an "otherInner" disk tighter than inner, but inner.IsTight(next).
         var otherInner := DiskView(other.boundaryLSN, MapRemove1(other.entries, root.value));
-        RankedIPtrIgnoresExtraBlocks(otherInner, next, ranking, inner);
-        assert otherInner.PointersRespectRank(ranking); // trigger Acyclic
-        assert inner.PointersRespectRank(ranking);  // trigger Acyclic
-        RankedIPtrFraming(otherInner, otherInner, ranking, otherInner.TheRanking(), next);
-        RankedIPtrFraming(inner, inner, ranking, inner.TheRanking(), next);
-        assert otherInner.IPtr(next) == inner.IPtr(next); // trigger
+        assert inner.PointersRespectRank(big.TheRanking());
+        IPtrIgnoresExtraBlocks(otherInner, next, inner);
       }
     }
   }
 
-  lemma BuildTightBuildsSubDisks(big: DiskView, root: Pointer, ranking: Ranking)
+  lemma BuildTightBuildsSubDisks(big: DiskView, root: Pointer)
     requires big.Decodable(root)
-    requires big.PointersRespectRank(ranking)
-    ensures big.RankedBuildTight(root, ranking).IsSubDisk(big)
-    decreases if root.Some? then ranking[root.value] else -1 // I can't believe this works, Rustan!
+    requires big.Acyclic()
+    ensures big.BuildTight(root).IsSubDisk(big)
+    decreases big.TheRankOf(root)
   {
     if root.Some? {
       var next := big.entries[root.value].CroppedPrior(big.boundaryLSN);
-      BuildTightBuildsSubDisks(big, next, ranking);
+      BuildTightBuildsSubDisks(big, next);
     }
   }
 
-  lemma TightInterp(big: DiskView, root: Pointer, ranking: Ranking, tight: DiskView)
+  lemma TightInterp(big: DiskView, root: Pointer, tight: DiskView)
     requires big.Decodable(root)
-    requires big.PointersRespectRank(ranking)
-    requires tight == big.RankedBuildTight(root, ranking)
+    requires tight == big.BuildTight(root)
     requires big.Acyclic()
     ensures tight.IsSubDisk(big)
     ensures tight.IsTight(root)
     ensures tight.Decodable(root)
     ensures tight.IPtr(root) == big.IPtr(root)
     ensures tight.Acyclic()
-    decreases if root.Some? then ranking[root.value] else -1 // I can't believe this works, Rustan!
+    decreases big.TheRankOf(root)
   {
     if root.None? {
-      assert tight.PointersRespectRank(ranking);
+      assert tight.PointersRespectRank(big.TheRanking());
     } else {
-      BuildTightBuildsSubDisks(big, root, ranking);
-      TightSubDisk(big, root, ranking, tight);
-      assert tight.PointersRespectRank(ranking);  // witness to Acyclic
-      RankedIPtrIgnoresExtraBlocks(tight, root, ranking, big);
-      RankedIPtrFraming(tight, tight, ranking, tight.TheRanking(), root);
-      RankedIPtrFraming(big, big, ranking, big.TheRanking(), root);
+      BuildTightBuildsSubDisks(big, root);
+      TightSubDisk(big, root, tight);
+      assert tight.PointersRespectRank(big.TheRanking());  // witness to Acyclic
+      IPtrIgnoresExtraBlocks(tight, root, big);
     }
   }
 
@@ -201,7 +172,7 @@ module LinkedJournalRefinement
     requires discarded == dv.DiscardOld(lsn)
     requires dv.IsNondanglingPointer(ptr)
     ensures discarded.Acyclic()
-    ensures discarded.RankedIPtr(ptr, discarded.TheRanking()) == PagedJournal.DiscardOldJournalRec(dv.IPtr(ptr), lsn)
+    ensures discarded.IPtr(ptr) == PagedJournal.DiscardOldJournalRec(dv.IPtr(ptr), lsn)
     decreases if ptr.Some? then dv.TheRanking()[ptr.value] else -1
   {
     assert discarded.PointersRespectRank(dv.TheRanking());
@@ -233,7 +204,7 @@ module LinkedJournalRefinement
     requires small.boundaryLSN == big.boundaryLSN
     requires small.IsNondanglingPointer(ptr)
     ensures small.Acyclic()
-    ensures small.RankedIPtr(ptr, small.TheRanking()) == big.RankedIPtr(ptr, big.TheRanking())
+    ensures small.IPtr(ptr) == big.IPtr(ptr)
     decreases if ptr.Some? then big.TheRanking()[ptr.value] else -1
   {
     assert small.PointersRespectRank(big.TheRanking());
@@ -263,7 +234,7 @@ module LinkedJournalRefinement
       var tightTJ := croppedTJ.BuildTight();
 
       assert croppedTJ.diskView.PointersRespectRank(v.truncatedJournal.diskView.TheRanking());  // witness to Acyclic
-      TightInterp(croppedTJ.diskView, croppedTJ.freshestRec, croppedTJ.diskView.TheRanking(), tightTJ.diskView);
+      TightInterp(croppedTJ.diskView, croppedTJ.freshestRec, tightTJ.diskView);
 
       if !(v.unmarshalledTail.seqStart <= lsn) {
         assert v.SeqStart() == v.truncatedJournal.I().I().seqStart by { v.truncatedJournal.I().BuildReceipt().TJFacts(); }
@@ -320,7 +291,7 @@ module LinkedJournalRefinement
         }
         var croppedTJ := v.truncatedJournal.DiscardOld(lbl.startLsn);
         DiscardInterp(v.truncatedJournal.diskView, lsn, croppedTJ.diskView, v.truncatedJournal.freshestRec);
-        TightInterp(croppedTJ.diskView, croppedTJ.freshestRec, croppedTJ.diskView.TheRanking(), v'.truncatedJournal.diskView);
+        TightInterp(croppedTJ.diskView, croppedTJ.freshestRec, v'.truncatedJournal.diskView);
         assert v'.truncatedJournal.diskView.IsSubDisk(croppedTJ.diskView);
         SubDiskInterp(v'.truncatedJournal.diskView, croppedTJ.diskView, croppedTJ.freshestRec);
       }
@@ -372,7 +343,7 @@ module LinkedJournalRefinement
   {
     var cropped := v.truncatedJournal.DiscardOld(lbl.frozenJournal.SeqStart());
     var tight := cropped.BuildTight();
-    TightInterp(cropped.diskView, cropped.freshestRec, cropped.diskView.TheRanking(), tight.diskView);
+    TightInterp(cropped.diskView, cropped.freshestRec, tight.diskView);
   }
 
   lemma BuildTightPreservesSubDiskUnderInternalMarshall(
@@ -386,12 +357,12 @@ module LinkedJournalRefinement
     requires big.boundaryLSN == small.boundaryLSN
     requires bigroot.Some?
     requires big.entries[bigroot.value].CroppedPrior(big.boundaryLSN) == smallroot
-    ensures small.RankedBuildTight(smallroot, smallRanking).IsSubDisk(big.RankedBuildTight(bigroot, bigRanking))
+    ensures small.BuildTight(smallroot).IsSubDisk(big.BuildTight(bigroot))
     decreases if bigroot.Some? then bigRanking[bigroot.value] else -1 // I can't believe this works, Rustan!
   {
     if smallroot.Some? {
-      BuildTightBuildsSubDisks(small, smallroot, smallRanking);
-      BuildTightBuildsSubDisks(big, bigroot, bigRanking);
+      BuildTightBuildsSubDisks(small, smallroot);
+      BuildTightBuildsSubDisks(big, bigroot);
       var next := small.entries[smallroot.value].CroppedPrior(small.boundaryLSN);
       BuildTightPreservesSubDiskUnderInternalMarshall(
         small, next, smallRanking, big, smallroot, bigRanking);
