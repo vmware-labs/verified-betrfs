@@ -21,7 +21,7 @@ module MapSpecMod refines AtomicStateMachineMod {
   datatype Variables = Variables(kmmap: TotalKMMap)
 
   function InitState() : Variables {
-    Variables(EmptyKMMap())
+    Variables(EmptyTotalMap())
   }
 
   predicate Query(v: Variables, v': Variables, key: Key, value: Value)

@@ -19,6 +19,6 @@ module StampedMapMod {
 
   function Empty() : StampedMap
   {
-    StampedMap(EmptyKMMap(), 0)
+    StampedMap(EmptyTotalMap(), 0)
   }
 }

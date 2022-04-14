@@ -221,7 +221,7 @@ module CoordinationSystemRefinement {
     ensures Inv(v)
     ensures I(v) == CrashTolerantMapSpecMod.InitState()
   {
-    assert I(v).versions[0].asyncState.appv.kmmap == TotalKMMapMod.EmptyKMMap(); // trigger
+    assert I(v).versions[0].asyncState.appv.kmmap == TotalKMMapMod.EmptyTotalMap(); // trigger
   }
 
   lemma CommitStepPreservesHistory(v: Variables, v': Variables, uiop: UIOp, step: Step, lsn: LSN)
