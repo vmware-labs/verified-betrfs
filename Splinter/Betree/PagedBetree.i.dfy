@@ -3,14 +3,36 @@
 
 include "../CoordinationLayer/AbstractMap.i.dfy"
 
-module PagedBetree {
+module ChildMapMod refines TotalMapMod {
   import opened Options
-  import opened ValueMessage
   import opened KeyType
+
+  type NodeType(!new,==)   // placeholder for Betree down where we define it.
+
+  type K = Key
+  type V = Option<NodeType>
+  predicate TerminalValue(v: V) { true }
+  function DefaultV() : V { None }
+
+  type ChildMap = TotalMap
+}
+
+module PagedBetree
+  refines ChildMapMod // refinement here because that's the only way to supply ChildMapMod.NodeType
+{
+  import opened StampedMapMod
+  import TotalKMMapMod
+  import opened ValueMessage
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
-  import opened MapLabels
+
+  datatype TransitionLabel =
+      QueryLabel(endLsn: LSN, key: Key, value: Value)
+    | PutLabel(puts: MsgHistory)
+    | QueryEndLsnLabel(endLsn: LSN)
+    | FreezeAsLabel(stampedMap: StampedMap)
+    | InternalLabel()
 
   datatype Buffer = Buffer(filter: set<Key>, mapp: map<Key, Message>)
   {
@@ -18,7 +40,7 @@ module PagedBetree {
     {
       if key in filter && key in mapp
       then mapp[key]
-      else NopDelta()
+      else Update(NopDelta())
     }
   }
 
@@ -28,8 +50,8 @@ module PagedBetree {
     function QueryUpTo(key: Key, count: nat) : Message
       requires count <= |buffers|
     {
-      if count == 0 then NopDelta()
-      else CombineDeltas(Query(key, count-1), buffers[count-1].Query(key))
+      if count == 0 then Update(NopDelta())
+      else Merge(QueryUpTo(key, count-1), buffers[count-1].Query(key))
     }
 
     function Query(key: Key) : Message
@@ -38,37 +60,91 @@ module PagedBetree {
     }
   }
 
+  type NodeType = BetreeNode  // Tell ChildMapMod about BetreeNodes
+
   datatype BetreeNode = BetreeNode(
     domain: set<Key>,
-    children: imap<Key, Option<BetreeNode>>,
+    children: ChildMap,
+    sillychildren: imap<Key, Option<BetreeNode>>,
     buffers: BufferStack)
   {
-    function Query(key: Key) : 
+    predicate WF() {
+      && true
+    }
+  }
+
+  datatype QueryReceiptLine = QueryReceiptLine(
+    node: BetreeNode,
+    result: Message)
+  {
+    predicate WF()
+    {
+      result.Define?
+    }
+  }
+
+  datatype QueryReceipt = QueryReceipt(
+    key: Key,
+    root: Option<BetreeNode>,
+    lines: seq<QueryReceiptLine>)
+  {
+    function ResultAt(i: nat) : Message
+      requires i <= |lines|
+    {
+      if i<|lines| then lines[i].result else Define(DefaultValue())
+    }
+
+    predicate LinkedAt(i: nat)
+      requires i < |lines|
+    {
+      lines[i].result == Merge(lines[i].node.buffers.Query(key), ResultAt(i+1))
+    }
+
+    predicate Valid()
+    {
+      && (if root.None? then |lines| == 0 else 0 < |lines| && lines[0].node == root.value)
+      && (forall i:nat | i < |lines| :: lines[i].WF())
+      && (forall i:nat | i < |lines| :: LinkedAt(i))
+    }
+
+    function Result() : Message
+    {
+      ResultAt(0)
+    }
+  }
+
+  // Constructive evidence that a Valid QueryReceipt exists for every key.
+  function BuildQueryReceipt(node: Option<BetreeNode>, key: Key) : (out: QueryReceipt)
+    ensures out.key == key
+    ensures out.Valid()
+    decreases node
+  {
+    if node.None?
+    then QueryReceipt(key, node, [])
+    else
+      assert AnyKey(key);
+      //var childReceipt := BuildQueryReceipt(node.value.children[key], key);
+      assume key in node.value.sillychildren;
+      var childReceipt := BuildQueryReceipt(node.value.sillychildren[key], key);
+      var thisMessage := node.value.buffers.Query(key);
+      var topLine := QueryReceiptLine(node.value, Merge(thisMessage, childReceipt.Result()));
+      var receipt := QueryReceipt(key, node, [topLine] + childReceipt.lines);
+      assert receipt.LinkedAt(0);
+      assume receipt.Valid();
+      receipt
   }
 
   datatype StampedBetree = StampedBetree(
     root: Option<BetreeNode>,
     seqEnd: LSN)
-
-  datatype QueryReceiptLine = QueryReceiptLine(
-    node: BetreeNode,
-    result: Mesage)
   {
-  }
-
-  datatype QueryReceipt = QueryReceipt(
-    key: Key,
-    value: Value,
-    root: Option<BetreeNode>,
-    lines: seq<QueryReceiptLine>)
-  {
-    predicate Valid()
+    function I() : StampedMap
     {
-      && (if root.None? then |lines| == 0 else Last(lines).node == root.value)
-      && value == (if |lines| == 0 then DefaultMessage() else Last(lines).result)
+      var mi := imap key | AnyKey(key) :: BuildQueryReceipt(root, key).Result();
+      assert TotalKMMapMod.TotalMapIsFull(mi);
+      StampedMap(mi, seqEnd)
     }
   }
-
     
   datatype Memtable = Memtable(mapp: map<Key, Message>, seqEnd: LSN)
   {
@@ -79,7 +155,9 @@ module PagedBetree {
     }
 
     function ApplyPuts(puts: MsgHistory) : Memtable
+      requires puts.WF()
       requires puts.seqStart == seqEnd
+      decreases puts.Len()
     {
       if puts.IsEmpty() then this
       else ApplyPuts(puts.DiscardRecent(puts.seqEnd-1)).ApplyPut(puts.msgs[puts.seqEnd-1])
@@ -105,6 +183,7 @@ module PagedBetree {
   predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && lbl.PutLabel?
+    && lbl.puts.WF()
     && lbl.puts.seqStart == v.memtable.seqEnd
     && v' == v.(memtable := v.memtable.ApplyPuts(lbl.puts))
   }
