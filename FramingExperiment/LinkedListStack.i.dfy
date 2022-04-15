@@ -15,6 +15,7 @@ module Labels {
       ConsALabel(x: int)
     | ConsBLabel(x: int)
     | CopyBtoALabel
+    | ClearALabel
 }
 
 module Spec {
@@ -36,6 +37,10 @@ module Spec {
     && v' == v.(a := v.b)
   }
 
+  predicate ClearA(v: Variables, v': Variables) {
+    && v' == v.(a := [])
+  }
+
   predicate Init(v: Variables) {
     && v.a == []
     && v.b == []
@@ -46,6 +51,7 @@ module Spec {
       case ConsALabel(x) => ConsA(v, v', x)
       case ConsBLabel(x) => ConsB(v, v', x)
       case CopyBtoALabel() => CopyBtoA(v, v')
+      case ClearALabel() => ClearA(v, v')
   }
 }
 
@@ -74,6 +80,11 @@ module Representation {
     && v' == v.(a := v.b)
   }
 
+  predicate ClearA(v: Variables, v': Variables, lbl: TransitionLabel) {
+    && lbl.ClearALabel?
+    && v' == v.(a := Nil)
+  }
+
   predicate Init(v: Variables) {
     && v.a == Nil
     && v.b == Nil
@@ -84,6 +95,7 @@ module Representation {
       case ConsALabel(_) => ConsA(v, v', lbl)
       case ConsBLabel(_) => ConsB(v, v', lbl)
       case CopyBtoALabel() => CopyBtoA(v, v', lbl)
+      case ClearALabel() => ClearA(v, v', lbl)
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -178,16 +190,39 @@ module AcyclicityAndFraming {
     && v' == ConsBFunc(v, lbl.x, addr)
   }
 
+  function Repr(v: Variables, ptr: Pointer, visited: set<Address>) : set<Address>
+    decreases v.disk.Keys - visited
+  {
+    if ptr.None? || ptr.value !in v.disk || ptr.value in visited
+      then visited
+    else Repr(v, v.disk[ptr.value].tail, visited + {ptr.value})
+  }
+
+  function Tighten(v: Variables) : Variables
+  {
+    v.(disk := map addr | addr in v.disk && addr in Repr(v, v.a, {}) + Repr(v, v.b, {}) :: v.disk[addr])
+  }
+
   function CopyBtoAFunc(v: Variables) : Variables
   {
-    v.(a := v.b)
+    Tighten(v.(a := v.b))
   }
 
   predicate CopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel) {
-    // Ignoring deallocation -- leaving garbage on the disk.
     && lbl.CopyBtoALabel?
     && v' == CopyBtoAFunc(v)
   }
+
+//  function ClearAFunc(v: Variables) : Variables
+//  {
+//    v.(a := None)
+//  }
+//
+//  predicate ClearA(v: Variables, v': Variables, lbl: TransitionLabel) {
+//    // Ignoring deallocation -- leaving garbage on the disk.
+//    && lbl.CopyBtoALabel?
+//    && v' == CopyBtoAFunc(v)
+//  }
 
   predicate Init(v: Variables) {
     && v.disk == map[]
@@ -199,12 +234,14 @@ module AcyclicityAndFraming {
       ConsAStep(addr: Address)
     | ConsBStep(addr: Address)
     | CopyBtoAStep()
+    | ClearAStep()
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) {
     match step
       case ConsAStep(addr) => ConsA(v, v', lbl, addr)
       case ConsBStep(addr) => ConsB(v, v', lbl, addr)
       case CopyBtoAStep() => CopyBtoA(v, v', lbl)
+      case ClearAStep() => false // ClearA(v, v', lbl)
   }
 
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
@@ -232,16 +269,16 @@ module AcyclicityAndFraming {
   predicate PointersRespectRank(v: Variables, rank: Ranking)
     requires DiskPointersValid(v)
   {
-    && rank.Keys == v.disk.Keys
+    && v.disk.Keys <= rank.Keys
     && (forall address | address in v.disk && v.disk[address].tail.Some? ::
         && rank[v.disk[address].tail.value] < rank[address]
        )
   }
 
   predicate Acyclic(v: Variables)
-    requires DiskPointersValid(v)
   {
-    && exists rank :: PointersRespectRank(v, rank)
+    && DiskPointersValid(v)
+    && (exists rank :: PointersRespectRank(v, rank))
   }
 
   predicate Inv(v: Variables) {
@@ -276,34 +313,57 @@ module AcyclicityAndFraming {
     var rank' := rank[addr := if v.b.None? then 0 else rank[v.b.value]+1];
     assert PointersRespectRank(v', rank');
   }
+  
+  lemma ReprValidPointers(v: Variables, ptr: Pointer, visited: set<Address>, repr: set<Address>)
+    requires DiskPointersValid(v)
+    requires PointerValid(ptr, v.disk)
+    requires repr == Repr(v, ptr, visited)
+    requires forall addr | addr in visited ::
+      && addr in v.disk
+      && (
+        || v.disk[addr].tail == ptr
+        || (v.disk[addr].tail.Some? ==> v.disk[addr].tail.value in visited)
+        )
+    decreases v.disk.Keys - visited
+    ensures visited <= repr
+    ensures forall addr | addr in repr ::
+      && addr in v.disk
+      && (v.disk[addr].tail.Some? ==> v.disk[addr].tail.value in repr)
+    ensures ptr.Some? ==> ptr.value in repr + visited
+  {
+    if ptr.Some? && ptr.value !in visited {
+      var nextPtr := v.disk[ptr.value].tail;
+      var nextVisited := visited + {ptr.value};
+      ReprValidPointers(v, nextPtr, nextVisited, Repr(v, nextPtr, nextVisited));
+    }
+  }
+
+  lemma TightenPreservesValidPointers(v: Variables)
+    requires RootPointersValid(v)
+    requires DiskPointersValid(v)
+    requires Acyclic(v)
+    ensures RootPointersValid(Tighten(v))
+    ensures DiskPointersValid(Tighten(v))
+  {
+    ReprValidPointers(v, v.a, {}, Repr(v, v.a, {}));
+    ReprValidPointers(v, v.b, {}, Repr(v, v.b, {}));
+  }
 
   lemma InvCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires CopyBtoA(v, v', lbl)
     ensures Inv(v')
   {
-    var rank :| PointersRespectRank(v, rank);
-    assert PointersRespectRank(v', rank);
+    var partialV := v.(a := v.b);
+    assert PointersRespectRank(partialV, TheRank(v)); // trigger Acyclic(partialV)
+    TightenPreservesValidPointers(partialV);
+    assert PointersRespectRank(v', TheRank(v)); // trigger Acyclic(v')
   }
 
   //////////////////////////////////////////////////////////////////////////////
   // Refinement
 
-  function IList(v: Variables, p: Pointer, rank: Ranking) : Representation.Cell
-    requires PointerValid(p, v.disk)
-    requires DiskPointersValid(v)
-    requires PointersRespectRank(v, rank)
-    decreases if p.Some? then rank[p.value] else -1 // I can't believe this works, Rustan!
-  {
-    if p.None?
-    then Representation.Nil
-    else
-      var cellpage := v.disk[p.value];
-      Representation.Cell(cellpage.x, IList(v, cellpage.tail, rank))
-  }
-
   function TheRank(v: Variables) : Ranking
-    requires DiskPointersValid(v)
     requires Acyclic(v)
   {
     // Make CHOOSE deterministic as God and Leslie intended
@@ -311,11 +371,30 @@ module AcyclicityAndFraming {
     rank
   }
 
+  function TheRankOf(v: Variables, p: Pointer) : int
+    requires Acyclic(v)
+    requires PointerValid(p, v.disk)
+  {
+    if p.Some? then TheRank(v)[p.value] else -1
+  }
+
+  function IList(v: Variables, p: Pointer) : Representation.Cell
+    requires Acyclic(v)
+    requires PointerValid(p, v.disk)
+    requires DiskPointersValid(v)
+    decreases TheRankOf(v, p)
+  {
+    if p.None?
+    then Representation.Nil
+    else
+      var cellpage := v.disk[p.value];
+      Representation.Cell(cellpage.x, IList(v, cellpage.tail))
+  }
+
   function I(v: Variables) : Representation.Variables
     requires Inv(v)
   {
-    var rank := TheRank(v);
-    Representation.Variables(IList(v, v.a, rank), IList(v, v.b, rank))
+    Representation.Variables(IList(v, v.a), IList(v, v.b))
   }
 
   predicate MapSubset(d: Disk, d': Disk)  // TODO: standard library
@@ -328,14 +407,14 @@ module AcyclicityAndFraming {
     requires Inv(v')
     requires PointerValid(p, v.disk)
     requires MapSubset(v.disk, v'.disk)
-    ensures IList(v', p, TheRank(v')) == IList(v, p, TheRank(v))
+    ensures IList(v', p) == IList(v, p)
     decreases if p.Some? then TheRank(v)[p.value] else -1
   {
     if p.None? {
-      assert IList(v', p, TheRank(v')) == IList(v, p, TheRank(v));
+      assert IList(v', p) == IList(v, p);
     } else {
       Fresh(v, v', v.disk[p.value].tail);
-      assert IList(v', p, TheRank(v')) == IList(v, p, TheRank(v));
+      assert IList(v', p) == IList(v, p);
     }
   }
 
@@ -361,6 +440,143 @@ module AcyclicityAndFraming {
     Fresh(v, v', v.b);
   }
 
+  function AcyclicRepr(v: Variables, ptr: Pointer, exclude: set<Address>) : set<Address>
+    requires Acyclic(v)
+    requires DiskPointersValid(v)
+    requires PointerValid(ptr, v.disk)
+    decreases TheRankOf(v, ptr)
+  {
+    if ptr.None? || ptr.value !in v.disk
+      then exclude
+    else AcyclicRepr(v, v.disk[ptr.value].tail, exclude + {ptr.value})
+  }
+
+//  TODO(jonh): delete
+  lemma AcyclicReprEquiv(v: Variables, ptr: Pointer, exclude: set<Address>, arepr: set<Address>)
+    requires Acyclic(v)
+    requires DiskPointersValid(v)
+    requires PointerValid(ptr, v.disk)
+    requires forall exaddr | exaddr in exclude ::
+      && PointerValid(Some(exaddr), v.disk)
+      && TheRankOf(v, ptr) < TheRankOf(v, Some(exaddr))
+    requires arepr == AcyclicRepr(v, ptr, exclude)
+    decreases TheRankOf(v, ptr)
+    ensures arepr == Repr(v, ptr, exclude)
+  {
+    if ptr.Some? {
+      var next := v.disk[ptr.value].tail;
+      AcyclicReprEquiv(v, next, exclude + {ptr.value}, AcyclicRepr(v, next, exclude + {ptr.value}));
+    }
+  }
+
+  lemma XYAcyclicReprAssoc(v: Variables, ptr: Pointer, exclude: set<Address>, arepr: set<Address>, next: Pointer)
+    requires Acyclic(v)
+    requires DiskPointersValid(v)
+    requires PointerValid(ptr, v.disk)
+    requires forall exaddr | exaddr in exclude ::
+      && PointerValid(Some(exaddr), v.disk)
+      && TheRankOf(v, ptr) < TheRankOf(v, Some(exaddr))
+    requires arepr == AcyclicRepr(v, ptr, exclude)
+    requires ptr.Some?
+    requires next == v.disk[ptr.value].tail;
+    decreases TheRankOf(v, ptr)
+    ensures AcyclicRepr(v, next, exclude) + {ptr.value} == AcyclicRepr(v, next, exclude + {ptr.value})
+  {
+    if next.Some? {
+      var next2 := v.disk[next.value].tail;
+      XYAcyclicReprAssoc(v, next, exclude + {ptr.value}, AcyclicRepr(v, next, exclude + {ptr.value}), next2);
+      var exclude2 := exclude + {ptr.value};
+      calc {
+        AcyclicRepr(v, next, exclude2);
+        // defn
+        AcyclicRepr(v, next2, exclude2 + {next.value});
+        // recursive call
+
+
+        AcyclicRepr(v, next2, exclude + {next.value}) + {ptr.value};
+        // defn
+        AcyclicRepr(v, next, exclude) + {ptr.value};
+      }
+    }
+  }
+
+//  lemma ReprExcluded(v: Variables, ptr: Pointer, visited: set<Address>, repr: set<Address>)
+//    requires DiskPointersValid(v)
+//    requires PointerValid(ptr, v.disk)
+//    requires Acyclic(v)
+//    //requires forall p | p in ptrs :: TheRankOf(v, p) >= 
+//    requires ptr.Some?
+//    requires repr == Repr(v, ptr, visited)
+//    ensures Repr(v, ptr, {}) == Repr(v, v.disk[ptr.value].tail, {}) + {ptr.value}
+//    decreases TheRankOf(v, ptr)
+//  {
+//    var next := v.disk[ptr.value].tail;
+//    if next.Some? {
+//      ReprSubset(v, next, {}, Repr(v, next, {}));
+//      assert Repr(v, next, {}) == Repr(v, v.disk[next.value].tail, {}) + {next.value};
+//      assert Repr(v, ptr, {}) == Repr(v, next, {} + {ptr.value});
+//      assert Repr(v, ptr, {}) == Repr(v, next, {}) + {ptr.value};
+//    }
+//  }
+
+  lemma XYReprSubset(v: Variables, ptr: Pointer, visited: set<Address>, repr: set<Address>)
+    requires DiskPointersValid(v)
+    requires PointerValid(ptr, v.disk)
+    requires Acyclic(v)
+    requires ptr.Some?
+    requires repr == Repr(v, ptr, visited)
+    ensures Repr(v, ptr, {}) == Repr(v, v.disk[ptr.value].tail, {}) + {ptr.value}
+    decreases TheRankOf(v, ptr)
+  {
+    var next := v.disk[ptr.value].tail;
+    if next.Some? {
+      XYReprSubset(v, next, {}, Repr(v, next, {}));
+//      AcyclicReprEquiv(v, ptr, {}, AcyclicRepr(v, ptr, {}));
+      assert Repr(v, next, {}) == Repr(v, v.disk[next.value].tail, {}) + {next.value};
+      XYAcyclicReprAssoc(v, ptr, {}, AcyclicRepr(v, ptr, {}), next);
+      calc {
+        Repr(v, next, {} + {ptr.value});
+        AcyclicRepr(v, next, {} + {ptr.value});
+        AcyclicRepr(v, next, {}) + {ptr.value};
+        Repr(v, next, {}) + {ptr.value};
+      }
+      assert Repr(v, ptr, {}) == Repr(v, next, {} + {ptr.value});
+      assert Repr(v, ptr, {}) == Repr(v, next, {}) + {ptr.value};
+    }
+  }
+
+  lemma TightenPreservesIList(v: Variables, vt: Variables, ptr: Pointer)
+    requires Acyclic(v)
+    requires PointerValid(ptr, v.disk)
+    requires DiskPointersValid(v)
+    requires DiskPointersValid(vt)
+    requires Repr(v, ptr, {}) <= vt.disk.Keys
+    requires forall addr | addr in vt.disk :: addr in v.disk && vt.disk[addr] == v.disk[addr]
+    requires forall addr | addr in Repr(v, ptr, {}) :: addr in vt.disk
+    ensures Acyclic(vt)
+    ensures PointerValid(ptr, vt.disk)
+    ensures IList(v, ptr) == IList(vt, ptr)
+    decreases TheRankOf(v, ptr)
+  {
+    ReprValidPointers(v, ptr, {}, Repr(v, ptr, {}));
+    assert PointersRespectRank(vt, TheRank(v));
+    assert Acyclic(vt);
+    assert PointerValid(ptr, vt.disk);
+    if ptr.Some? {
+      var next := v.disk[ptr.value].tail;
+      ReprValidPointers(v, next, {}, Repr(v, next, {}));
+      XYReprSubset(v, ptr, {}, Repr(v, ptr, {}));
+      assert ptr.value in v.disk;
+      assert ptr.value !in {};
+      assert Repr(v, ptr, {}) == Repr(v, next, {} + {ptr.value});
+      assert Repr(v, next, {}) + {ptr.value} == Repr(v, next, {} + {ptr.value});
+      assert Repr(v, next, {}) <= Repr(v, ptr, {});
+      TightenPreservesIList(v, vt, next);
+      assert IList(v, ptr) == IList(vt, ptr);
+    }
+    assert IList(v, ptr) == IList(vt, ptr);
+  }
+
   lemma RefinementCopyBtoA(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires CopyBtoA(v, v', lbl)
@@ -368,7 +584,13 @@ module AcyclicityAndFraming {
     ensures Representation.CopyBtoA(I(v), I(v'), lbl)
   {
     InvCopyBtoA(v, v', lbl);
-    Fresh(v, v', v.b);
+    var partialV := v.(a := v.b);
+    assert PointersRespectRank(partialV, TheRank(v)); // trigger Acyclic(partialV) to get Inv(partialV)
+    Fresh(v, partialV, v.b);
+    assert IList(partialV, v.b) == IList(v, v.b);
+    //ReprValidPointers(v, v.b, {}, Repr(v, v.b, {}));
+    TightenPreservesIList(partialV, v', v.b);
+    assert IList(v', v.b) == IList(partialV, v.b); // XXX jonh
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -524,6 +746,7 @@ module Marshalling {
     requires CopyBtoA(v, v', lbl)
     ensures Inv(v')
   {
+    assume false; // TODO tighten down here
     var fv' := AcyclicityAndFraming.CopyBtoAFunc(I(v));
     AcyclicityAndFraming.InvCopyBtoA(I(v), fv', lbl);
     assert TypeProvidesModel(v', fv'.disk); // WITNESS
@@ -577,6 +800,7 @@ module Marshalling {
     ensures Inv(v')
     ensures AcyclicityAndFraming.Next(I(v), I(v'), lbl)
   {
+    assume false; // TODO tighten down here
     InvCopyBtoA(v, v', lbl);
     forall k
       ensures k in TheTypedDisk(v').Keys

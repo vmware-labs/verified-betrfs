@@ -130,7 +130,9 @@ module PagedBetree
       BetreeNode(DomainTODO, ChildMap(mapp), buffers)
     }
 
-    function Promote() : BetreeNode
+    function Promote() : (out: BetreeNode)
+      requires WF()
+      ensures out.WF()
     {
       if Nil? then BetreeNode(DomainTODO, EmptyChildMap(), BufferStack([])) else this
     }
@@ -246,19 +248,21 @@ module PagedBetree
 
   datatype StampedBetree = StampedBetree(
     root: BetreeNode,
-    seqEnd: LSN)
+    // betree needs its own lsn so we remember it for freeze time without
+    // having to drain the membuffer:
+    seqEnd: LSN
+    )
   {
     predicate WF()
     {
       root.WF()
     }
-    
-    function I() : StampedMap
+
+    function PrependMemtable(memtable: Memtable) : StampedBetree
       requires WF()
     {
-      var mi := imap key | AnyKey(key) :: BuildQueryReceipt(root, key).Result();
-      assert TotalKMMapMod.TotalMapIsFull(mi);
-      StampedMap(mi, seqEnd)
+      var newBuffer := Buffer(AllKeys(), memtable.mapp);
+      StampedBetree(root.Promote().PrependBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
     }
   }
     
@@ -283,6 +287,12 @@ module PagedBetree
     {
       if key in mapp then mapp[key] else Update(NopDelta())
     }
+
+    // Drain out the contents (into the StampedBetree), but remember the seqEnd
+    function Drain() : Memtable
+    {
+      EmptyMemtable(seqEnd)
+    }
   }
 
   function EmptyMemtable(lsn: LSN) : Memtable
@@ -305,6 +315,7 @@ module PagedBetree
     && lbl.endLsn == v.stampedBetree.seqEnd
     && receipt.ValidFor(v.stampedBetree.root, lbl.key)
     && Define(lbl.value) == Merge(v.memtable.Query(lbl.key), receipt.Result())
+    && v' == v
   }
 
   predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -321,6 +332,7 @@ module PagedBetree
   {
     && lbl.QueryEndLsnLabel?
     && lbl.endLsn == v.stampedBetree.seqEnd
+    && v' == v
   }
 
   predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel, stampedBetree: StampedBetree)
@@ -336,8 +348,8 @@ module PagedBetree
     && var newBuffer := Buffer(AllKeys(), v.memtable.mapp);
     && var rootBase := if v.stampedBetree.root.Nil? then EmptyRoot() else v.stampedBetree.root;
     && v' == v.(
-        memtable := EmptyMemtable(v.memtable.seqEnd),
-        stampedBetree := StampedBetree(rootBase.PrependBufferStack(BufferStack([newBuffer])), v.memtable.seqEnd)
+        memtable := v.memtable.Drain(),
+        stampedBetree := v.stampedBetree.PrependMemtable(v.memtable)
       )
   }
   
