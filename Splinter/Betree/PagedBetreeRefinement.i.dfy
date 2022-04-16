@@ -278,20 +278,6 @@ module PagedBetreeRefinement
     }
   }
 
-  // TODO fold together with prev
-  lemma FilteredOutBufferStack(bufferStack: BufferStack, filter: iset<Key>, key: Key)
-    requires key !in filter
-    ensures bufferStack.ApplyFilter(filter).Query(key) == Update(NopDelta())
-  {
-    var i:nat := 0;
-    while i < |bufferStack.buffers|
-      invariant i <= |bufferStack.buffers|
-      invariant bufferStack.ApplyFilter(filter).QueryUpTo(key, i) == Update(NopDelta())
-    {
-      i := i + 1;
-    }
-  }
-
   lemma ApplyFilterEquivalance(orig: BetreeNode, filter: iset<Key>, key: Key)
     requires orig.WF()
     requires key in filter
@@ -346,7 +332,7 @@ module PagedBetreeRefinement
       ensures INodeAt(target, key) == INodeAt(top, key)
     {
       if key in step.downKeys {
-        FilteredOutBufferStack(target.buffers, AllKeys() - step.downKeys, key);
+        FilteredBufferStack(target.buffers, AllKeys() - step.downKeys, key);
         assert target.children.WF();  // trigger
         var movedBuffers := target.buffers.ApplyFilter(step.downKeys);
         PrependBetreeNodeLemma(target.children.mapp[key], movedBuffers, key);
@@ -370,44 +356,6 @@ module PagedBetreeRefinement
     SubstituteEquivalence(step.path, step.compactedNode);
     EquivalentRootVars(v, v');
   }
-
-//  // TODO delete
-//  lemma NoopSteps(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-//    requires v.WF()
-//    requires v'.WF()
-//    requires NextStep(v, v', lbl, step)
-//    requires !step.PutStep?
-//    ensures I(v') == I(v)
-//  {
-//    match step {
-//      case QueryStep(receipt) => {
-//        assert Query(v, v', lbl, receipt);
-//        assert v' == v;
-//        assert I(v') == I(v);
-//      }
-//      case PutStep() => {
-//        assert false;
-//      }
-//      case QueryEndLsnStep() => {
-//        assert I(v') == I(v);
-//      }
-//      case FreezeAsStep() => {
-//        assert I(v') == I(v);
-//      }
-//      case InternalGrowStep() => {
-//        InternalGrowNoop(v, v', lbl, step);
-//      }
-//      case InternalSplitStep(_, _, _) => {
-//        InternalSplitNoop(v, v', lbl, step);
-//      }
-//      case InternalFlushStep(_, _) => {
-//        InternalFlushNoop(v, v', lbl, step);
-//      }
-//      case InternalCompactStep(_, _) => {
-//        InternalCompactNoop(v, v', lbl, step);
-//      }
-//    }
-//  }
 
   //////////////////////////////////////////////////////////////////////////////
   // State machine refinement
@@ -452,7 +400,7 @@ module PagedBetreeRefinement
     reveal_INode(); 
   }
 
-  lemma ApplyPutIsMapPlusHistory(v: Variables, v': Variables, puts: MsgHistory)
+  lemma ApplySinglePutIsMapPlusHistory(v: Variables, v': Variables, puts: MsgHistory)
     requires v.WF()
     requires v'.WF()
     requires puts.WF()
@@ -461,20 +409,9 @@ module PagedBetreeRefinement
     requires v' == v.(memtable := v.memtable.ApplyPuts(puts))
     ensures I(v').stampedMap == MapPlusHistory(I(v).stampedMap, puts)
   {
-  // TODO tidy this monstrosity
-    var keyedMsg := puts.msgs[puts.seqStart];
-    var KeyedMessage(key,message) := keyedMsg;
-    assert TotalKMMapMod.AnyKey(key);
-    assert v'.memtable == v.memtable.ApplyPut(keyedMsg);
-    var memUpdated := Merge(message, v.memtable.Get(key));
-    calc {
-      v.memtable.ApplyPut(keyedMsg);
-      Memtable(v.memtable.mapp[key := memUpdated], v.memtable.seqEnd+1);
-    }
-    calc {
-      v'.stampedBetree.PrependMemtable(v'.memtable).seqEnd;
-      I(v).stampedMap.seqEnd + 1;
-    }
+    var KeyedMessage(key,message) := puts.msgs[puts.seqStart];
+    assert TotalKMMapMod.AnyKey(key);  // trigger
+
     assert INode(v'.stampedBetree.PrependMemtable(v'.memtable).root).Keys == AllKeys() by { reveal_INode(); }
     assert I(v).stampedMap.mi[key := Merge(message, I(v).stampedMap.mi[key])].Keys == AllKeys() by { reveal_INode(); }
     forall k | AnyKey(k)
@@ -486,89 +423,28 @@ module PagedBetreeRefinement
       var buffers := BufferStack([buffer]);
       var buffer' := Buffer(AllKeys(), v'.memtable.mapp);
       var buffers' := BufferStack([buffer']);
+
       if k!=key {
-        calc {
-          buffer'.Query(k);
-          buffer.Query(k);
-        }
-        calc {
-          buffers'.Query(k);
-          buffers'.QueryUpTo(k, 1);
-          Merge(buffers'.QueryUpTo(k, 0), buffers'.buffers[0].Query(k));
-          Merge(Update(NopDelta()), buffer'.Query(k));
-          Merge(Update(NopDelta()), buffer.Query(k));
-          buffers.QueryUpTo(k, 1);
-          buffers.Query(k);
-        }
-        calc {
-          INode(v'.stampedBetree.PrependMemtable(v'.memtable).root)[k];
-            { reveal_INode(); }
-          INodeAt(v'.stampedBetree.PrependMemtable(v'.memtable).root, k);
-            { PrependBetreeNodeLemma(node, buffers', k); }
-          Merge(buffers'.Query(k), INodeAt(node, k));
-          Merge(buffers.Query(k), INodeAt(node, k));
-            { PrependBetreeNodeLemma(node, buffers, k); }
-          INodeAt(v.stampedBetree.PrependMemtable(v.memtable).root, k);
-            { reveal_INode(); }
-          INode(v.stampedBetree.PrependMemtable(v.memtable).root)[k];
-        }
+        assert buffer'.Query(k) == buffer.Query(k);  // trigger
+        assert buffers'.Query(k) == buffers'.QueryUpTo(k, 1);  // trigger: unroll
+        assert buffers.Query(k) == buffers.QueryUpTo(k, 1);  // trigger: unroll
       } else {
         // propagate the message
-        calc {
-          buffer'.Query(k);
-          memUpdated;
-        }
-        calc {
-          buffers'.Query(k);
-          buffers'.QueryUpTo(k, 1);
-          Merge(buffers'.QueryUpTo(k, 0), buffers'.buffers[0].Query(k));
-          Merge(Update(NopDelta()), buffer'.Query(k));
-          Merge(Update(NopDelta()), memUpdated);
-          memUpdated;
-        }
-        calc {
-          v.memtable.Get(k);
-          buffer.Query(k);
-          Merge(Update(NopDelta()), buffer.Query(k));
-          buffers.QueryUpTo(k, 1);
-          buffers.Query(k);
-        }
-
-        calc {
-          INode(v'.stampedBetree.PrependMemtable(v'.memtable).root)[k];
-            { reveal_INode(); }
-          INodeAt(v'.stampedBetree.PrependMemtable(v'.memtable).root, k);
-            { PrependBetreeNodeLemma(node, buffers', k); }
-          Merge(buffers'.Query(k), INodeAt(node, k));
-          Merge(memUpdated, INodeAt(node, k));
-          Merge(Merge(message, v.memtable.Get(k)), INodeAt(node, k));
-          Merge(message, Merge(v.memtable.Get(k), INodeAt(node, k)));
-          Merge(message, Merge(buffers.Query(k), INodeAt(node, k)));
-            { PrependBetreeNodeLemma(node, buffers, k); }
-          Merge(message, INodeAt(v.stampedBetree.PrependMemtable(v.memtable).root, k));
-            { reveal_INode(); }
-          Merge(message, INode(v.stampedBetree.PrependMemtable(v.memtable).root)[k]);
-          I(v).stampedMap.mi[key := Merge(message, I(v).stampedMap.mi[key])][k];
-        }
+        assert Merge(message, v.memtable.Get(key)) == buffers'.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
+        assert v.memtable.Get(k) == buffers.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
       }
-    }
-    calc {
-      INode(v'.stampedBetree.PrependMemtable(v'.memtable).root);
-      I(v).stampedMap.mi[key := Merge(message, I(v).stampedMap.mi[key])];
+      PrependBetreeNodeLemma(node, buffers', k);
+      PrependBetreeNodeLemma(node, buffers, k);
+      reveal_INode();
     }
     calc {
       I(v').stampedMap;
-      IStampedBetree(v'.stampedBetree.PrependMemtable(v'.memtable));
-      StampedMap(INode(v'.stampedBetree.PrependMemtable(v'.memtable).root), v'.stampedBetree.PrependMemtable(v'.memtable).seqEnd);
-
-
-      StampedMap(I(v).stampedMap.mi[key := Merge(message, I(v).stampedMap.mi[key])], I(v).stampedMap.seqEnd + 1);
-      puts.ApplyToStampedMap(I(v).stampedMap);
+      puts.ApplyToStampedMap(I(v).stampedMap);  // trigger.  (should we have a "mention" operator just for triggering?)
       MapPlusHistory(I(v).stampedMap, puts);
     }
   }
 
-  lemma CompositePuts(puts1: MsgHistory, puts2: MsgHistory, stampedMap: StampedMap)
+  lemma CompositeSinglePut(puts1: MsgHistory, puts2: MsgHistory, stampedMap: StampedMap)
     requires puts1.WF()
     requires puts2.WF()
     requires puts2.Len() == 1 // could easily generalize, but I don't need it.
@@ -588,20 +464,13 @@ module PagedBetreeRefinement
     ensures I(v').stampedMap == MapPlusHistory(I(v).stampedMap, puts)
     decreases puts.Len()
   {
-    if puts.Len() == 0 {
-      assert I(v').stampedMap == MapPlusHistory(I(v).stampedMap, puts);
-    } else {
+    if 0 < puts.Len() {
       var shortPuts := puts.DiscardRecent(puts.seqEnd-1);
       var lastPut := puts.DiscardOld(puts.seqEnd-1);
-      assert puts == shortPuts.Concat(lastPut);
       var vmid := v.(memtable := v.memtable.ApplyPuts(shortPuts));
-      ApplyPutsIsMapPlusHistory(v, vmid, shortPuts);
-      assert I(vmid).stampedMap == MapPlusHistory(I(v).stampedMap, shortPuts);
-      //ApplyPutsIsMapPlusHistory(vmid, v', lastPut);
-      ApplyPutIsMapPlusHistory(vmid, v', lastPut);
-      assert I(v').stampedMap == MapPlusHistory(I(vmid).stampedMap, lastPut);
-      CompositePuts(shortPuts, lastPut, I(v).stampedMap);
-      assert I(v').stampedMap == MapPlusHistory(I(v).stampedMap, puts);
+      ApplyPutsIsMapPlusHistory(v, vmid, shortPuts);  // recurse
+      ApplySinglePutIsMapPlusHistory(vmid, v', lastPut);  // take care of last put
+      CompositeSinglePut(shortPuts, lastPut, I(v).stampedMap);  // push Concat through ApplyToStampedMap (MapPlusHistory)
     }
   }
 
@@ -611,20 +480,10 @@ module PagedBetreeRefinement
     requires Put(v, v', lbl)
     ensures AbstractMap.Put(I(v), I(v'), ILbl(lbl));
   {
-    //assert TotalKMMapMod.AnyKey(lbl.key); // trigger
-    //EqualReceipts(step.receipt, BuildQueryReceipt(v.stampedBetree.root, lbl.key));
     MemtableDistributesOverBetree(v.memtable, v.stampedBetree);
     reveal_MapApply();
     reveal_INode(); 
     ApplyPutsIsMapPlusHistory(v, v', lbl.puts);
-//    calc {
-//      I(v').stampedMap;
-//      IStampedBetree(v'.stampedBetree.PrependMemtable(v'.memtable));
-//        memtable := v.memtable.ApplyPuts(lbl.puts)
-//
-//      lbl.puts.ApplyToStampedMap(I(v).stampedMap);
-//      MapPlusHistory(I(v).stampedMap, lbl.puts);
-//    }
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
