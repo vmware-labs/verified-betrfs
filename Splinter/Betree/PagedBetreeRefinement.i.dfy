@@ -291,6 +291,20 @@ module PagedBetreeRefinement
     }
   }
 
+  // TODO fold together with prev
+  lemma FilteredOutBufferStack(bufferStack: BufferStack, filter: iset<Key>, key: Key)
+    requires key !in filter
+    ensures bufferStack.ApplyFilter(filter).Query(key) == Update(NopDelta())
+  {
+    var i:nat := 0;
+    while i < |bufferStack.buffers|
+      invariant i <= |bufferStack.buffers|
+      invariant bufferStack.ApplyFilter(filter).QueryUpTo(key, i) == Update(NopDelta())
+    {
+      i := i + 1;
+    }
+  }
+
   lemma ApplyFilterEquivalance(orig: BetreeNode, filter: iset<Key>, key: Key)
     requires orig.WF()
     requires key in filter
@@ -326,6 +340,39 @@ module PagedBetreeRefinement
     EquivalentRootVars(v, v');
   }
 
+  lemma PrependBetreeNodeLemma(node: BetreeNode, buffers: BufferStack, key: Key)
+    requires node.WF()
+    ensures INodeAt(node.Promote().PrependBufferStack(buffers), key) == Merge(buffers.Query(key), INodeAt(node, key))
+  {
+    PrependBufferStackLemma(buffers, node.Promote().buffers, key);
+  }
+
+  lemma InternalFlushNoop(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires v.WF()
+    requires v'.WF()
+    requires InternalFlush(v, v', lbl, step)
+    ensures I(v') == I(v)
+  {
+    var target := step.path.Target();
+    var top := target.Flush(step.downKeys);
+    forall key | AnyKey(key)
+      ensures INodeAt(target, key) == INodeAt(top, key)
+    {
+      if key in step.downKeys {
+        FilteredOutBufferStack(target.buffers, AllKeys() - step.downKeys, key);
+        assert target.children.WF();  // trigger
+        var movedBuffers := target.buffers.ApplyFilter(step.downKeys);
+        PrependBetreeNodeLemma(target.children.mapp[key], movedBuffers, key);
+        FilteredBufferStack(target.buffers, step.downKeys, key);
+      } else {
+        FilteredBufferStack(target.buffers, AllKeys() - step.downKeys, key);
+      }
+    }
+    INodeExtensionality(target, top);
+    SubstituteEquivalence(step.path, top);
+    EquivalentRootVars(v, v');
+  }
+
   lemma NoopSteps(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires v.WF()
     requires v'.WF()
@@ -350,14 +397,12 @@ module PagedBetreeRefinement
       }
       case InternalGrowStep() => {
         InternalGrowNoop(v, v', lbl, step);
-        assert I(v') == I(v);
       }
       case InternalSplitStep(_, _, _) => {
         InternalSplitNoop(v, v', lbl, step);
-        assert I(v') == I(v);
       }
       case InternalFlushStep(_, _) => {
-        assume I(v') == I(v);
+        InternalFlushNoop(v, v', lbl, step);
       }
       case InternalCompactStep(_, _) => {
         assume I(v') == I(v);
