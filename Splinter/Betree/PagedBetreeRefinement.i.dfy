@@ -261,6 +261,45 @@ module PagedBetreeRefinement
     requires InternalGrow(v, v', lbl, step)
     ensures I(v') == I(v)
   {
+    var orig := v.stampedBetree.root;
+    var grown := BetreeNode(DomainTODO, ConstantChildMap(orig), BufferStack([]));
+
+    forall key | AnyKey(key)
+      ensures INodeAt(grown, key) == INodeAt(orig, key)
+    {
+      calc {
+        INodeAt(grown, key);
+        BuildQueryReceipt(grown, key).Result();
+        BuildQueryReceipt(orig, key).Result();
+        INodeAt(orig, key);
+      }
+    }
+    INodeExtensionality(grown, orig);
+    EquivalentRootVars(v, v');
+  }
+
+  lemma FilteredBufferStack(bufferStack: BufferStack, filter: iset<Key>, key: Key)
+    requires key in filter
+    ensures bufferStack.ApplyFilter(filter).Query(key) == bufferStack.Query(key)
+  {
+    var i:nat := 0;
+    while i < |bufferStack.buffers|
+      invariant i <= |bufferStack.buffers|
+      invariant bufferStack.ApplyFilter(filter).QueryUpTo(key, i) == bufferStack.QueryUpTo(key, i);
+    {
+      i := i + 1;
+    }
+  }
+
+  lemma ApplyFilterEquivalance(orig: BetreeNode, filter: iset<Key>, key: Key)
+    requires orig.WF()
+    requires key in filter
+    ensures INodeAt(orig.ApplyFilter(filter), key) == INodeAt(orig, key)
+  {
+    var receipt := BuildQueryReceipt(orig, key);
+    if 1 < |receipt.lines| {
+      FilteredBufferStack(receipt.lines[0].node.buffers, filter, key);
+    }
   }
 
   lemma InternalSplitNoop(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -274,7 +313,13 @@ module PagedBetreeRefinement
     forall key | AnyKey(key)
       ensures INodeAt(target, key) == INodeAt(top, key)
     {
-      assert BuildQueryReceipt(top, key).Result() == BuildQueryReceipt(target, key).Result(); // trigger to unroll
+      assert target.children.WF();  // trigger
+      var targetChild := target.children.mapp[key];
+      if key in step.leftKeys {
+        ApplyFilterEquivalance(targetChild, step.leftKeys, key);
+      } else if key in step.rightKeys {
+        ApplyFilterEquivalance(targetChild, step.rightKeys, key);
+      }
     }
     INodeExtensionality(target, top);
     SubstituteEquivalence(step.path, top);
