@@ -279,13 +279,12 @@ module PagedBetreeRefinement
   }
 
   lemma FilteredBufferStack(bufferStack: BufferStack, filter: iset<Key>, key: Key)
-    requires key in filter
-    ensures bufferStack.ApplyFilter(filter).Query(key) == bufferStack.Query(key)
+    ensures bufferStack.ApplyFilter(filter).Query(key) == if key in filter then bufferStack.Query(key) else Update(NopDelta())
   {
     var i:nat := 0;
     while i < |bufferStack.buffers|
       invariant i <= |bufferStack.buffers|
-      invariant bufferStack.ApplyFilter(filter).QueryUpTo(key, i) == bufferStack.QueryUpTo(key, i);
+      invariant bufferStack.ApplyFilter(filter).QueryUpTo(key, i) == if key in filter then bufferStack.QueryUpTo(key, i) else Update(NopDelta())
     {
       i := i + 1;
     }
