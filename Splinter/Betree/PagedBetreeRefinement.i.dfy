@@ -189,40 +189,15 @@ module PagedBetreeRefinement
         // key diverged from changes made by substitution, so they're easy equal.
         assert INodeAt(path.node, key) == INodeAt(path.Substitute(replacement), key);
       } else {
-        // TODO tidy
-        var r := BuildQueryReceipt(path.node, key);
-        var r' := BuildQueryReceipt(path.Substitute(replacement), key);
-
-        assert r.Result() == Merge(r.lines[0].node.buffers.Query(key), r.ResultAt(1));
-        assert r'.Result() == Merge(r'.lines[0].node.buffers.Query(key), r'.ResultAt(1));
-
-        var sr := BuildQueryReceipt(path.Subpath().node, key);
-        var er := ReceiptDropFirst(r);
-        EqualReceipts(er, sr);
-        
-        var sr' := BuildQueryReceipt(path.Subpath().Substitute(replacement), key);
-        var er' := ReceiptDropFirst(r');
-        assert er'.root == r'.root.children.mapp[r'.key] == r'.root.children.mapp[key];  // trigger
-        calc {
-          er'.root;
-          r'.root.children.mapp[key];
-          path.Substitute(replacement).children.mapp[key];
-            { path.reveal_ReplacedChildren(); }
-          path.Subpath().Substitute(replacement);
-          sr'.root;
-        }
-        assert path.node.children.WF();  // trigger
-        assert er'.root == sr'.root;
-        EqualReceipts(er', sr');
+        EqualReceipts(BuildQueryReceipt(path.Subpath().node, key),
+          ReceiptDropFirst(BuildQueryReceipt(path.node, key)));
+        assert path.Substitute(replacement).children.mapp[key] == path.Subpath().Substitute(replacement)
+          by { path.reveal_ReplacedChildren(); }
+        EqualReceipts(BuildQueryReceipt(path.Subpath().Substitute(replacement), key),
+          ReceiptDropFirst(BuildQueryReceipt(path.Substitute(replacement), key)));
 
         SubstituteReceiptEquivalence(path.Subpath(), replacement, key);
-        assert r.ResultAt(1) == r'.ResultAt(1);
-
-        assert r.Result() == r'.Result();  // Exciting conclusion
-        assert INodeAt(path.node, key) == INodeAt(path.Substitute(replacement), key);
       }
-    } else {
-      assert INodeAt(path.node, key) == INodeAt(path.Substitute(replacement), key);
     }
   }
 
