@@ -112,6 +112,7 @@ module PagedBetree
       BetreeNode(DomainTODO, children, buffers.PrependBufferStack(bufferStack))
     }
 
+    // TODO(jonh): Split shouldn't also Grow; that's a separate operation.
     function Split(leftKeys: iset<Key>) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
@@ -178,20 +179,24 @@ module PagedBetree
   {
     predicate WF()
     {
-      && node.BetreeNode?
+      && node.WF()
       && result.Define?
     }
   }
 
+  // NB the top line is the line for the root node; hence Result()==ResultAt(0)
+  // The bottom line is always Nil
   datatype QueryReceipt = QueryReceipt(
     key: Key,
     root: BetreeNode,
     lines: seq<QueryReceiptLine>)
   {
-    function ResultAt(i: nat) : Message
-      requires i <= |lines|
+    predicate Structure()
     {
-      if i<|lines| then lines[i].result else Define(DefaultValue())
+      && 0 < |lines|
+      && lines[0].node == root
+      && (forall i:nat | i < |lines| :: lines[i].node.BetreeNode? <==> i < |lines|-1)
+      && Last(lines).result == Define(DefaultValue())
     }
 
     predicate AllLinesWF()
@@ -199,21 +204,47 @@ module PagedBetree
       && (forall i:nat | i < |lines| :: lines[i].WF())
     }
 
-    predicate LinkedAt(i: nat)
+    function ChildAt(i: nat) : BetreeNode
       requires AllLinesWF()
+      requires Structure()
+      requires i < |lines|-1
+    {
+      assert lines[i].node.children.WF();  // trigger
+      lines[i].node.children.mapp[key]
+    }
+
+    predicate ChildLinkedAt(i: nat)
+      requires AllLinesWF()
+      requires Structure()
+      requires i < |lines|-1
+    {
+      lines[i+1].node == ChildAt(i)
+    }
+
+    function ResultAt(i: nat) : Message
       requires i < |lines|
     {
-      lines[i].result == Merge(lines[i].node.buffers.Query(key), ResultAt(i+1))
+      lines[i].result
+    }
+
+    predicate ResultLinkedAt(i: nat)
+      requires Structure()
+      requires AllLinesWF()
+      requires i < |lines| - 1
+    {
+      && lines[i].result == Merge(lines[i].node.buffers.Query(key), ResultAt(i+1))
     }
 
     predicate Valid()
     {
-      && (if root.Nil? then |lines| == 0 else 0 < |lines| && lines[0].node == root)
+      && Structure()
       && AllLinesWF()
-      && (forall i:nat | i < |lines| :: LinkedAt(i))
+      && (forall i:nat | i < |lines| - 1 :: ChildLinkedAt(i))
+      && (forall i:nat | i < |lines| - 1 :: ResultLinkedAt(i))
     }
 
     function Result() : Message
+      requires Structure()
     {
       ResultAt(0)
     }
@@ -234,15 +265,16 @@ module PagedBetree
     decreases node
   {
     if node.Nil?
-    then QueryReceipt(key, node, [])
+    then QueryReceipt(key, node, [QueryReceiptLine(Nil, Define(DefaultValue()))])
     else
       assert node.children.WF();  // trigger
       var childReceipt := BuildQueryReceipt(node.children.mapp[key], key);
       var thisMessage := node.buffers.Query(key);
       var topLine := QueryReceiptLine(node, Merge(thisMessage, childReceipt.Result()));
       var receipt := QueryReceipt(key, node, [topLine] + childReceipt.lines);
-      assert receipt.LinkedAt(0);
-      assert forall i | 0<i<|receipt.lines| :: childReceipt.LinkedAt(i-1) && receipt.LinkedAt(i); // trigger Valid
+      assert receipt.ResultLinkedAt(0);
+      assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ResultLinkedAt(i-1) && receipt.ResultLinkedAt(i); // trigger Valid
+      assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ChildLinkedAt(i-1) && receipt.ChildLinkedAt(i); // trigger Valid
       receipt
   }
 
@@ -268,10 +300,14 @@ module PagedBetree
     
   datatype Memtable = Memtable(mapp: map<Key, Message>, seqEnd: LSN)
   {
+    function Get(key: Key) : Message
+    {
+      if key in mapp then mapp[key] else Update(NopDelta())
+    }
+
     function ApplyPut(km: KeyedMessage) : Memtable
     {
-      var oldMessage := if km.key in mapp then mapp[km.key] else Update(NopDelta());
-      Memtable(mapp[km.key := Merge(km.message, oldMessage)], seqEnd+1)
+      Memtable(mapp[km.key := Merge(km.message, Get(km.key))], seqEnd+1)
     }
 
     function ApplyPuts(puts: MsgHistory) : Memtable
@@ -353,15 +389,23 @@ module PagedBetree
       )
   }
   
-  datatype Path = Path(node: BetreeNode, key: Key, depth: nat)
+  datatype Path = Path(node: BetreeNode, key: Key, keyset: iset<Key>, depth: nat)
   {
     function Subpath() : (out: Path)
       requires 0 < depth
       requires node.WF()
       requires node.BetreeNode?
     {
+      assert node.children.WF();  // trigger
+      Path(node.children.mapp[key], key, keyset, depth-1)
+    }
+
+    predicate KeysetChildrenMatch()
+      requires node.WF()
+      requires node.BetreeNode?
+    {
       assert node.children.WF();
-      Path(node.children.mapp[key], key, depth-1)
+      (forall k2 | k2 in keyset :: node.children.mapp[k2]==node.children.mapp[key])
     }
 
     predicate Valid()
@@ -369,11 +413,14 @@ module PagedBetree
     {
       && node.WF()
       && node.BetreeNode?
+      && key in keyset
       //&& (0 < depth ==> Path(node.children[key], key, depth-1).Valid())
+      // keyset 
+      && (0 < depth ==> KeysetChildrenMatch())
       && (0 < depth ==> Subpath().Valid())
     }
 
-    function Node() : (out: BetreeNode)
+    function Target() : (out: BetreeNode)
       requires Valid()
       ensures out.WF()
       ensures out.BetreeNode?
@@ -381,16 +428,31 @@ module PagedBetree
     {
       if 0 == depth
       then node
-      else Subpath().Node()
+      else Subpath().Target()
+    }
+
+    // opaque: these imap comprehensions cause some trigger mischief!
+    function {:opaque} ReplacedChildren(replacement: BetreeNode) : (out: ChildMap)
+      requires Valid()
+      requires replacement.WF()
+      requires 0 < depth
+      ensures out.WF()
+      decreases depth, 0
+    {
+      assert node.children.WF();  // trigger
+      var replacedChildren := Subpath().Substitute(replacement);
+      ChildMap(imap k | AnyKey(k) :: if k in keyset then replacedChildren else node.children.mapp[k])
     }
 
     function Substitute(replacement: BetreeNode) : (out: BetreeNode)
       requires Valid()
-      decreases depth
+      requires replacement.WF()
+      decreases depth, 1
     {
       if 0 == depth
       then replacement
-      else Subpath().Substitute(replacement)
+      else
+        BetreeNode(DomainTODO, ReplacedChildren(replacement), node.buffers)
     }
   }
 
@@ -401,7 +463,7 @@ module PagedBetree
     && step.path.node == v.stampedBetree.root
     && v' == v.(
         stampedBetree := v.stampedBetree.(
-          root := step.path.Substitute(step.path.Node().Split(step.leftKeys))
+          root := step.path.Substitute(step.path.Target().Split(step.leftKeys))
         )
       )
   }
@@ -413,7 +475,7 @@ module PagedBetree
     && step.path.node == v.stampedBetree.root
     && v' == v.(
         stampedBetree := v.stampedBetree.(
-          root := step.path.Substitute(step.path.Node().Flush(step.downKeys))
+          root := step.path.Substitute(step.path.Target().Flush(step.downKeys))
         )
       )
   }
@@ -426,7 +488,7 @@ module PagedBetree
     && step.path.Valid()
     && step.path.node == v.stampedBetree.root
     && step.compactedNode.WF()
-    && step.path.Node().EquivalentBufferCompaction(step.compactedNode)
+    && step.path.Target().EquivalentBufferCompaction(step.compactedNode)
     && v' == v.(
         stampedBetree := v.stampedBetree.(
           root := step.path.Substitute(step.compactedNode)
