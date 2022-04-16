@@ -360,7 +360,7 @@ module PagedBetree
   predicate Query(v: Variables, v': Variables, lbl: TransitionLabel, receipt: QueryReceipt)
   {
     && lbl.QueryLabel?
-    && lbl.endLsn == v.stampedBetree.seqEnd
+    && lbl.endLsn == v.memtable.seqEnd
     && receipt.ValidFor(v.stampedBetree.root, lbl.key)
     && Define(lbl.value) == Merge(v.memtable.Query(lbl.key), receipt.Result())
     && v' == v
@@ -379,14 +379,14 @@ module PagedBetree
   predicate QueryEndLsn(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && lbl.QueryEndLsnLabel?
-    && lbl.endLsn == v.stampedBetree.seqEnd
+    && lbl.endLsn == v.memtable.seqEnd
     && v' == v
   }
 
-  predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel, stampedBetree: StampedBetree)
+  predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && lbl.FreezeAsLabel?
-    && stampedBetree == v.stampedBetree
+    && lbl.stampedBetree == v.stampedBetree.PrependMemtable(v.memtable)
     && v' == v
   }
 
@@ -471,6 +471,7 @@ module PagedBetree
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
+    && lbl.InternalLabel?
     && step.InternalGrowStep?
     && v' == v.(
         stampedBetree := v.stampedBetree.(
@@ -481,6 +482,7 @@ module PagedBetree
 
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && lbl.InternalLabel?
     && step.InternalSplitStep?
     && step.path.Valid()
     && step.path.node == v.stampedBetree.root
@@ -493,6 +495,7 @@ module PagedBetree
 
   predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && lbl.InternalLabel?
     && step.InternalFlushStep?
     && step.path.Valid()
     && step.path.node == v.stampedBetree.root
@@ -507,6 +510,7 @@ module PagedBetree
   // nondetermistic freedom in the description of Compact.
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && lbl.InternalLabel?
     && step.InternalCompactStep?
     && step.path.Valid()
     && step.path.node == v.stampedBetree.root
@@ -523,14 +527,15 @@ module PagedBetree
 
   predicate Init(v: Variables, stampedBetree: StampedBetree)
   {
-    v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree)
+    && stampedBetree.WF()
+    && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree)
   }
 
   datatype Step =
       QueryStep(receipt: QueryReceipt)
     | PutStep()
     | QueryEndLsnStep()
-    | FreezeAsStep(stampedBetree: StampedBetree)
+    | FreezeAsStep()
     | InternalGrowStep()
     | InternalSplitStep(path: Path, leftKeys: iset<Key>, rightKeys: iset<Key>)
     | InternalFlushStep(path: Path, downKeys: iset<Key>)
@@ -542,7 +547,7 @@ module PagedBetree
       case QueryStep(receipt) => Query(v, v', lbl, receipt)
       case PutStep() => Put(v, v', lbl)
       case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
-      case FreezeAsStep(stampedBetree) => FreezeAs(v, v', lbl, stampedBetree)
+      case FreezeAsStep() => FreezeAs(v, v', lbl)
       case InternalGrowStep() => InternalGrow(v, v', lbl, step)
       case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
       case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
