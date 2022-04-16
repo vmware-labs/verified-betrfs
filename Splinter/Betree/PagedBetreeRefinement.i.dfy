@@ -347,6 +347,17 @@ module PagedBetreeRefinement
     EquivalentRootVars(v, v');
   }
 
+  lemma InternalCompactNoop(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires v.WF()
+    requires v'.WF()
+    requires InternalCompact(v, v', lbl, step)
+    ensures I(v') == I(v)
+  {
+    INodeExtensionality(step.compactedNode, step.path.Target());
+    SubstituteEquivalence(step.path, step.compactedNode);
+    EquivalentRootVars(v, v');
+  }
+
   lemma NoopSteps(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires v.WF()
     requires v'.WF()
@@ -379,7 +390,7 @@ module PagedBetreeRefinement
         InternalFlushNoop(v, v', lbl, step);
       }
       case InternalCompactStep(_, _) => {
-        assume I(v') == I(v);
+        InternalCompactNoop(v, v', lbl, step);
       }
     }
   }
