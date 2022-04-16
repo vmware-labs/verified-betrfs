@@ -79,7 +79,7 @@ module PagedBetreeRefinement
     }
   }
 
-  lemma MemtableDistributesOverBetree(memtable: Memtable, base: StampedBetree)
+  lemma {:timeLimitMultiplier 2} MemtableDistributesOverBetree(memtable: Memtable, base: StampedBetree)
     requires base.WF()
     ensures MapApply(memtable, INode(base.root)) == INode(base.PrependMemtable(memtable).root)
   {
@@ -91,7 +91,7 @@ module PagedBetreeRefinement
       var newBuffer := Buffer(AllKeys(), memtable.mapp);
       SingletonBufferStack(newBuffer, key);
       PrependBufferStackLemma(BufferStack([newBuffer]), base.root.Promote().buffers, key);
-      reveal_INode();
+      reveal_INode(); // this imap's really a doozy
     }
   }
 
@@ -255,6 +255,14 @@ module PagedBetreeRefinement
     INodeExtensionality(path.node, path.Substitute(replacement));
   }
 
+  lemma InternalGrowNoop(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires v.WF()
+    requires v'.WF()
+    requires InternalGrow(v, v', lbl, step)
+    ensures I(v') == I(v)
+  {
+  }
+
   lemma InternalSplitNoop(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires v.WF()
     requires v'.WF()
@@ -262,7 +270,7 @@ module PagedBetreeRefinement
     ensures I(v') == I(v)
   {
     var target := step.path.Target();
-    var top := target.Split(step.leftKeys);
+    var top := target.Split(step.leftKeys, step.rightKeys);
     forall key | AnyKey(key)
       ensures INodeAt(target, key) == INodeAt(top, key)
     {
@@ -295,7 +303,11 @@ module PagedBetreeRefinement
       case FreezeAsStep(stampedBetree) => {
         assert I(v') == I(v);
       }
-      case InternalSplitStep(_, _) => {
+      case InternalGrowStep() => {
+        InternalGrowNoop(v, v', lbl, step);
+        assert I(v') == I(v);
+      }
+      case InternalSplitStep(_, _, _) => {
         InternalSplitNoop(v, v', lbl, step);
         assert I(v') == I(v);
       }

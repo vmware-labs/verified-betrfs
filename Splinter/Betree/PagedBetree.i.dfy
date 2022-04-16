@@ -86,13 +86,19 @@ module PagedBetree
     }
   }
   
-  function EmptyChildMap() : (out: ChildMap)
+  function ConstantChildMap(target: BetreeNode) : (out: ChildMap)
+    requires target.WF()
     ensures out.WF()
   {
-    var mapp := imap key | AnyKey(key) :: Nil;
+    var mapp := imap key | AnyKey(key) :: target;
     ChildMap(mapp)
   }
   
+  function EmptyChildMap() : (out: ChildMap)
+  {
+    ConstantChildMap(Nil)
+  }
+
   datatype Domain = DomainTODO  // TODO placeholder
 
   datatype BetreeNode = Nil | BetreeNode(
@@ -112,22 +118,31 @@ module PagedBetree
       BetreeNode(DomainTODO, children, buffers.PrependBufferStack(bufferStack))
     }
 
+    function ApplyFilter(filter: iset<Key>) : (out: BetreeNode)
+      requires WF()
+      ensures out.WF()
+    {
+      if Nil? then Nil else
+      var out := BetreeNode(DomainTODO, children, buffers.ApplyFilter(filter));
+      out
+    }
+
     // TODO(jonh): Split shouldn't also Grow; that's a separate operation.
-    function Split(leftKeys: iset<Key>) : (out: BetreeNode)
+    function Split(leftKeys: iset<Key>, rightKeys: iset<Key>) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
       ensures out.WF()
     {
+      // We suppose that a lower layer will use this when leftKeys+rightKeys are all
+      // identical, so that the first two branches of the if expression each produce
+      // a single BetreeNode (with a shared representation below).
       assert children.WF(); // trigger
-      var leftMapp := imap key | AnyKey(key) :: if key in leftKeys then children.mapp[key] else Nil;
-      var leftNode := BetreeNode(DomainTODO, ChildMap(leftMapp), BufferStack([]));
-      assert leftNode.WF();
-
-      var rightMapp := imap key | AnyKey(key) :: if key in leftKeys then Nil else children.mapp[key];
-      var rightNode := BetreeNode(DomainTODO, ChildMap(rightMapp), BufferStack([]));
-      assert rightNode.WF();
-
-      var mapp := imap key | AnyKey(key) :: if key in leftKeys then leftNode else rightNode;
+      var mapp := imap key | AnyKey(key)
+        :: if key in leftKeys
+            then children.mapp[key].ApplyFilter(leftKeys)
+            else if key in rightKeys
+            then children.mapp[key].ApplyFilter(rightKeys)
+            else children.mapp[key];
       BetreeNode(DomainTODO, ChildMap(mapp), buffers)
     }
 
@@ -135,7 +150,7 @@ module PagedBetree
       requires WF()
       ensures out.WF()
     {
-      if Nil? then BetreeNode(DomainTODO, EmptyChildMap(), BufferStack([])) else this
+      if Nil? then EmptyRoot() else this
     }
 
     function Flush(downKeys: iset<Key>) : (out: BetreeNode)
@@ -151,9 +166,7 @@ module PagedBetree
           then children.mapp[key].Promote().PrependBufferStack(movedBuffers)
           else children.mapp[key]);
       assert outChildren.WF();
-      var out := BetreeNode(DomainTODO, outChildren, keptBuffers);
-      assert out.WF();
-      out
+      BetreeNode(DomainTODO, outChildren, keptBuffers)
     }
 
     predicate EquivalentBufferCompaction(other: BetreeNode)
@@ -169,8 +182,7 @@ module PagedBetree
   function EmptyRoot() : (out: BetreeNode)
     ensures out.WF()
   {
-    BetreeNode(DomainTODO, EmptyChildMap(), BufferStack([])
-    )
+    BetreeNode(DomainTODO, ConstantChildMap(Nil), BufferStack([]))
   }
 
   datatype QueryReceiptLine = QueryReceiptLine(
@@ -273,8 +285,8 @@ module PagedBetree
       var topLine := QueryReceiptLine(node, Merge(thisMessage, childReceipt.Result()));
       var receipt := QueryReceipt(key, node, [topLine] + childReceipt.lines);
       assert receipt.ResultLinkedAt(0);
-      assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ResultLinkedAt(i-1) && receipt.ResultLinkedAt(i); // trigger Valid
-      assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ChildLinkedAt(i-1) && receipt.ChildLinkedAt(i); // trigger Valid
+      assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ResultLinkedAt(i-1) && receipt.ResultLinkedAt(i);  // trigger Valid
+      assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ChildLinkedAt(i-1) && receipt.ChildLinkedAt(i);  // trigger Valid
       receipt
   }
 
@@ -456,6 +468,17 @@ module PagedBetree
     }
   }
 
+  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.WF()
+    && step.InternalGrowStep?
+    && v' == v.(
+        stampedBetree := v.stampedBetree.(
+          root := BetreeNode(DomainTODO, ConstantChildMap(v.stampedBetree.root), BufferStack([]))
+        )
+      )
+  }
+
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && step.InternalSplitStep?
@@ -463,7 +486,7 @@ module PagedBetree
     && step.path.node == v.stampedBetree.root
     && v' == v.(
         stampedBetree := v.stampedBetree.(
-          root := step.path.Substitute(step.path.Target().Split(step.leftKeys))
+          root := step.path.Substitute(step.path.Target().Split(step.leftKeys, step.rightKeys))
         )
       )
   }
@@ -508,7 +531,8 @@ module PagedBetree
     | PutStep()
     | QueryEndLsnStep()
     | FreezeAsStep(stampedBetree: StampedBetree)
-    | InternalSplitStep(path: Path, leftKeys: iset<Key>)
+    | InternalGrowStep()
+    | InternalSplitStep(path: Path, leftKeys: iset<Key>, rightKeys: iset<Key>)
     | InternalFlushStep(path: Path, downKeys: iset<Key>)
     | InternalCompactStep(path: Path, compactedNode: BetreeNode)
 
@@ -519,7 +543,8 @@ module PagedBetree
       case PutStep() => Put(v, v', lbl)
       case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
       case FreezeAsStep(stampedBetree) => FreezeAs(v, v', lbl, stampedBetree)
-      case InternalSplitStep(_, _) => InternalSplit(v, v', lbl, step)
+      case InternalGrowStep() => InternalGrow(v, v', lbl, step)
+      case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
       case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
       case InternalCompactStep(_, _) => InternalCompact(v, v', lbl, step)
     }
