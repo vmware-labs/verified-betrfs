@@ -270,10 +270,10 @@ module PagedBetree
   }
 
   // Constructive evidence that a Valid QueryReceipt exists for every key.
-  function BuildQueryReceipt(node: BetreeNode, key: Key) : (out: QueryReceipt)
+  function BuildQueryReceipt(node: BetreeNode, key: Key) : (receipt: QueryReceipt)
     requires node.WF()
-    ensures out.key == key
-    ensures out.Valid()
+    ensures receipt.key == key
+    ensures receipt.Valid()
     decreases node
   {
     if node.Nil?
@@ -286,7 +286,9 @@ module PagedBetree
       var receipt := QueryReceipt(key, node, [topLine] + childReceipt.lines);
       assert receipt.ResultLinkedAt(0);
       assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ResultLinkedAt(i-1) && receipt.ResultLinkedAt(i);  // trigger Valid
-      assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ChildLinkedAt(i-1) && receipt.ChildLinkedAt(i);  // trigger Valid
+      assert forall i | 0<i<|receipt.lines|-1 :: receipt.ChildLinkedAt(i) by {  // not sure why this one demands being unrolled
+        forall i | 0<i<|receipt.lines|-1 ensures receipt.ChildLinkedAt(i) { assert childReceipt.ChildLinkedAt(i-1); } // trigger
+      }
       receipt
   }
 
@@ -386,6 +388,7 @@ module PagedBetree
   predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && lbl.FreezeAsLabel?
+    && v.WF()
     && lbl.stampedBetree == v.stampedBetree.PrependMemtable(v.memtable)
     && v' == v
   }
