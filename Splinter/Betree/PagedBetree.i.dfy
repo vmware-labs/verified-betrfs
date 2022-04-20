@@ -127,7 +127,6 @@ module PagedBetree
       out
     }
 
-    // TODO(jonh): Split shouldn't also Grow; that's a separate operation.
     function Split(leftKeys: iset<Key>, rightKeys: iset<Key>) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
