@@ -15,7 +15,7 @@ module PivotBetree
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
-  import PagedBetree
+  import PagedBetree  // Reuse Memtable
   import opened Upperbounded_Lexicographic_Byte_Order_Impl
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
 //  import opened Lexicographic_Byte_Order
@@ -69,6 +69,12 @@ module PivotBetree
       then this.IntersectInner(r2)
       else r2.IntersectInner(this)
     }
+  }
+
+  function TotalDomain() : (out: Domain)
+    ensures out.WF()
+  {
+    Domain(Element.SmallestElement(), Max_Element)
   }
 
   datatype Buffer = Buffer(filter: Domain, mapp: map<Key, Message>)
@@ -241,5 +247,239 @@ module PivotBetree
     var pivotTable := [domain.start, domain.end];
     assert Keyspace.IsStrictlySorted(pivotTable) by { reveal_IsStrictlySorted(); }
     BetreeNode(BufferStack([]), pivotTable, [Nil])
+  }
+
+  type Memtable = PagedBetree.Memtable
+
+  // TODO(jonh): more copy-paste refinement. Fonky. :v/
+  datatype StampedBetree = StampedBetree(
+    root: BetreeNode,
+    seqEnd: LSN
+    )
+  {
+    predicate WF()
+    {
+      root.WF()
+    }
+
+    function PrependMemtable(memtable: Memtable) : StampedBetree
+      requires WF()
+    {
+      var newBuffer := Buffer(AllKeys(), memtable.mapp);
+      StampedBetree(root.Promote(TotalDomain()).PrependBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
+    }
+  }
+    
+
+  datatype Variables = Variables(
+    memtable: Memtable,
+    stampedBetree: StampedBetree)
+  {
+    predicate WF() {
+      && stampedBetree.WF()
+    }
+  }
+
+  predicate Query(v: Variables, v': Variables, lbl: TransitionLabel, receipt: QueryReceipt)
+  {
+    && lbl.QueryLabel?
+    && lbl.endLsn == v.memtable.seqEnd
+    && receipt.ValidFor(v.stampedBetree.root, lbl.key)
+    && Define(lbl.value) == Merge(v.memtable.Query(lbl.key), receipt.Result())
+    && v' == v
+  }
+
+  predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.PutLabel?
+    && lbl.puts.WF()
+    && lbl.puts.seqStart == v.memtable.seqEnd
+    && v' == v.(
+        memtable := v.memtable.ApplyPuts(lbl.puts)
+      )
+  }
+
+  predicate QueryEndLsn(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.QueryEndLsnLabel?
+    && lbl.endLsn == v.memtable.seqEnd
+    && v' == v
+  }
+
+  predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.FreezeAsLabel?
+    && v.WF()
+    && lbl.stampedBetree == v.stampedBetree.PrependMemtable(v.memtable)
+    && v' == v
+  }
+
+  predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && var newBuffer := Buffer(AllKeys(), v.memtable.mapp);
+    && var rootBase := if v.stampedBetree.root.Nil? then EmptyRoot() else v.stampedBetree.root;
+    && v' == v.(
+        memtable := v.memtable.Drain(),
+        stampedBetree := v.stampedBetree.PrependMemtable(v.memtable)
+      )
+  }
+  
+  datatype Path = Path(node: BetreeNode, key: Key, keyset: iset<Key>, depth: nat)
+  {
+    function Subpath() : (out: Path)
+      requires 0 < depth
+      requires node.WF()
+      requires node.BetreeNode?
+    {
+      assert node.children.WF();  // trigger
+      Path(node.children.mapp[key], key, keyset, depth-1)
+    }
+
+    predicate KeysetChildrenMatch()
+      requires node.WF()
+      requires node.BetreeNode?
+    {
+      assert node.children.WF();
+      (forall k2 | k2 in keyset :: node.children.mapp[k2]==node.children.mapp[key])
+    }
+
+    predicate Valid()
+      decreases depth
+    {
+      && node.WF()
+      && node.BetreeNode?
+      && key in keyset
+      //&& (0 < depth ==> Path(node.children[key], key, depth-1).Valid())
+      // keyset 
+      && (0 < depth ==> KeysetChildrenMatch())
+      && (0 < depth ==> Subpath().Valid())
+    }
+
+    function Target() : (out: BetreeNode)
+      requires Valid()
+      ensures out.WF()
+      ensures out.BetreeNode?
+      decreases depth
+    {
+      if 0 == depth
+      then node
+      else Subpath().Target()
+    }
+
+    // opaque: these imap comprehensions cause some trigger mischief!
+    function {:opaque} ReplacedChildren(replacement: BetreeNode) : (out: ChildMap)
+      requires Valid()
+      requires replacement.WF()
+      requires 0 < depth
+      ensures out.WF()
+      decreases depth, 0
+    {
+      assert node.children.WF();  // trigger
+      var replacedChildren := Subpath().Substitute(replacement);
+      ChildMap(imap k | AnyKey(k) :: if k in keyset then replacedChildren else node.children.mapp[k])
+    }
+
+    function Substitute(replacement: BetreeNode) : (out: BetreeNode)
+      requires Valid()
+      requires replacement.WF()
+      decreases depth, 1
+    {
+      if 0 == depth
+      then replacement
+      else
+        BetreeNode(DomainTODO, ReplacedChildren(replacement), node.buffers)
+    }
+  }
+
+  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.WF()
+    && lbl.InternalLabel?
+    && step.InternalGrowStep?
+    && v' == v.(
+        stampedBetree := v.stampedBetree.(
+          root := BetreeNode(DomainTODO, ConstantChildMap(v.stampedBetree.root), BufferStack([]))
+        )
+      )
+  }
+
+  predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && lbl.InternalLabel?
+    && step.InternalSplitStep?
+    && step.path.Valid()
+    && step.path.node == v.stampedBetree.root
+    && v' == v.(
+        stampedBetree := v.stampedBetree.(
+          root := step.path.Substitute(step.path.Target().Split(step.leftKeys, step.rightKeys))
+        )
+      )
+  }
+
+  predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && lbl.InternalLabel?
+    && step.InternalFlushStep?
+    && step.path.Valid()
+    && step.path.node == v.stampedBetree.root
+    && v' == v.(
+        stampedBetree := v.stampedBetree.(
+          root := step.path.Substitute(step.path.Target().Flush(step.downKeys))
+        )
+      )
+  }
+
+  // NB we tell you exactly how to Split and Flush, but leave lots of
+  // nondetermistic freedom in the description of Compact.
+  predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && lbl.InternalLabel?
+    && step.InternalCompactStep?
+    && step.path.Valid()
+    && step.path.node == v.stampedBetree.root
+    && step.compactedNode.WF()
+    && step.path.Target().EquivalentBufferCompaction(step.compactedNode)
+    && v' == v.(
+        stampedBetree := v.stampedBetree.(
+          root := step.path.Substitute(step.compactedNode)
+        )
+      )
+  }
+
+  // public:
+
+  predicate Init(v: Variables, stampedBetree: StampedBetree)
+  {
+    && stampedBetree.WF()
+    && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree)
+  }
+
+  datatype Step =
+      QueryStep(receipt: QueryReceipt)
+    | PutStep()
+    | QueryEndLsnStep()
+    | FreezeAsStep()
+    | InternalGrowStep()
+    | InternalSplitStep(path: Path, leftKeys: iset<Key>, rightKeys: iset<Key>)
+    | InternalFlushStep(path: Path, downKeys: iset<Key>)
+    | InternalCompactStep(path: Path, compactedNode: BetreeNode)
+
+  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    match step {
+      case QueryStep(receipt) => Query(v, v', lbl, receipt)
+      case PutStep() => Put(v, v', lbl)
+      case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
+      case FreezeAsStep() => FreezeAs(v, v', lbl)
+      case InternalGrowStep() => InternalGrow(v, v', lbl, step)
+      case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
+      case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
+      case InternalCompactStep(_, _) => InternalCompact(v, v', lbl, step)
+    }
+  }
+
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
+    exists step: Step :: NextStep(v, v', lbl, step)
   }
 }
