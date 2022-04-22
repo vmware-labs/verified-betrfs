@@ -132,7 +132,7 @@ module PagedBetreeRefinement
   lemma SubstitutePreservesWF(path: Path, replacement: BetreeNode)
     requires path.Valid()
     requires replacement.WF()
-    requires INode(path.Target()) == INode(replacement)
+    requires INode(path.Target()) == INode(replacement) // TODO(jonh): probably unecessary.
     ensures path.Substitute(replacement).WF()
     decreases path.depth
   {
@@ -226,6 +226,7 @@ module PagedBetreeRefinement
     assert INodeAt(b, key) == INode(b)[key];  // trigger
   }
 
+  // TODO(jonh): side quest: we don't need receipts, do we?
   lemma SubstituteEquivalence(path: Path, replacement: BetreeNode)
     requires path.Valid()
     requires replacement.WF()

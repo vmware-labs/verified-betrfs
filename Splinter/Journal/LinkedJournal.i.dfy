@@ -67,6 +67,9 @@ module LinkedJournal {
   // and every address is "important" to the journal.
   // The boundaryLSN enables us to ignore "cropped" pointers.
   // The values in this DiskView are typed, unlike GenericDisk.DiskView.
+  //
+  // TODO(jonh): Jialin suggests JournalStore to avoid the way "disk" brings in too
+  // many other model assumptions.
   datatype DiskView = DiskView(boundaryLSN: LSN, entries: map<Address, JournalRecord>) {
     predicate EntriesWF()
     {

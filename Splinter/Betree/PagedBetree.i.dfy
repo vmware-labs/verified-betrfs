@@ -21,6 +21,7 @@ module PagedBetree
     | FreezeAsLabel(stampedBetree: StampedBetree)
     | InternalLabel()
 
+  // TODO(jonh): side-quest: eliminate filters; filter as we go.
   datatype Buffer = Buffer(filter: iset<Key>, mapp: map<Key, Message>)
   {
     function Query(key: Key) : Message
@@ -102,8 +103,8 @@ module PagedBetree
   datatype Domain = DomainTODO  // TODO placeholder
 
   datatype BetreeNode = Nil | BetreeNode(
-    domain: Domain,
-    children: ChildMap,
+    domain: Domain, // TODO(jonh): cleanup
+    children: ChildMap, // TODO(jonh): move buffers above children
     buffers: BufferStack)
   {
     predicate WF() {
@@ -145,6 +146,7 @@ module PagedBetree
       BetreeNode(DomainTODO, ChildMap(mapp), buffers)
     }
 
+    // TODO(jonh): side-quest: We don't need Nil, do we?
     function Promote() : (out: BetreeNode)
       requires WF()
       ensures out.WF()
@@ -160,6 +162,7 @@ module PagedBetree
       var keptBuffers := buffers.ApplyFilter(AllKeys() - downKeys);
       var movedBuffers := buffers.ApplyFilter(downKeys);
       assert children.WF();
+      // TODO(jonh): NB the Promote() never happens: all the downKeys have to be non-Nil
       var outChildren := ChildMap(imap key | AnyKey(key)
         :: if key in downKeys
           then children.mapp[key].Promote().PrependBufferStack(movedBuffers)
@@ -388,7 +391,7 @@ module PagedBetree
   {
     && lbl.FreezeAsLabel?
     && v.WF()
-    && lbl.stampedBetree == v.stampedBetree.PrependMemtable(v.memtable)
+    && lbl.stampedBetree == v.stampedBetree.PrependMemtable(v.memtable) // TODO(jonh): no, don't bring the memtable along!
     && v' == v
   }
 
@@ -396,7 +399,6 @@ module PagedBetree
   {
     && v.WF()
     && var newBuffer := Buffer(AllKeys(), v.memtable.mapp);
-    && var rootBase := if v.stampedBetree.root.Nil? then EmptyRoot() else v.stampedBetree.root;
     && v' == v.(
         memtable := v.memtable.Drain(),
         stampedBetree := v.stampedBetree.PrependMemtable(v.memtable)
@@ -404,6 +406,7 @@ module PagedBetree
   }
   
   datatype Path = Path(node: BetreeNode, key: Key, keyset: iset<Key>, depth: nat)
+    // TODO(jonh): rename key to arbitraryKey to highlight its job as a pre-chosen member of keyset
   {
     function Subpath() : (out: Path)
       requires 0 < depth
