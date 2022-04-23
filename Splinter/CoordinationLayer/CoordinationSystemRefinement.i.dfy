@@ -17,25 +17,32 @@ module CoordinationSystemRefinement {
   import opened ValueMessage
   import opened TotalKMMapMod
   import opened LSNMod
+  import AbstractJournal
+  import AbstractMap
   import MapSpecMod
 
-  function IEJ(ej: AbstractJournal.Variables) : (out:MsgHistory)
-    requires ej.WF()
+  function IEJ(ctj: CrashTolerantJournal.Variables) : (out:MsgHistory)
+    requires ctj.WF()
+    requires ctj.ephemeral.Known?
     ensures out.WF()
-  { ej.journal }
-
-  function IMap(mapp: AbstractMap.Variables) : (out:StampedMap)
   {
-    mapp.stampedMap
+    ctj.ephemeral.v.journal
+  }
+
+  function IMap(ctm: CrashTolerantMap.Variables) : (out:StampedMap)
+    requires ctm.WF()
+    requires ctm.ephemeral.Known?
+  {
+    ctm.ephemeral.v.stampedMap
   }
 
   import Async = CM.Async
   type Journal = MsgHistory
 
-  function EphemeralSeqEnd(ephemeral: Ephemeral) : LSN
-    requires ephemeral.WF() && ephemeral.Known?
+  function EphemeralSeqEnd(v: Variables) : LSN
+    requires v.WF() && v.journal.ephemeral.Known?
   {
-    IEJ(ephemeral.journal).seqEnd
+    IEJ(v.journal).seqEnd
   }
 
   function StampedMapToVersion(sm: StampedMapMod.StampedMap) : CrashTolerantMapSpecMod.Version
@@ -67,13 +74,13 @@ module CoordinationSystemRefinement {
     if !Inv(v)
     then CrashTolerantMapSpecMod.InitState()  // silly-handler
     else
-      var stableLSN := v.persistentImage.SeqEnd();
+      var stableLSN := v.journal.persistent.seqEnd;
       if v.ephemeral.Known?
       then CrashTolerantMapSpecMod.Variables(
-        VersionsWithForgottenPrefix(v.persistentImage.mapadt, IEJ(v.ephemeral.journal), stableLSN),
+        VersionsWithForgottenPrefix(v.mapadt.persistent, IEJ(v.journal), stableLSN),
           v.ephemeral.progress, v.ephemeral.syncReqs, stableLSN)
       else CrashTolerantMapSpecMod.Variables(
-        VersionsWithForgottenPrefix(v.persistentImage.mapadt, v.persistentImage.journal, stableLSN),
+        VersionsWithForgottenPrefix(v.mapadt.persistent, v.journal.persistent, stableLSN),
           Async.InitEphemeralState(), map[], stableLSN)
   }
 
@@ -96,24 +103,24 @@ module CoordinationSystemRefinement {
   predicate InvPersistentJournalGeometry(v: Variables)
     requires v.WF()
   {
-    && v.persistentImage.journal.CanFollow(v.persistentImage.mapadt.seqEnd)
+    && v.journal.persistent.CanFollow(v.mapadt.persistent.seqEnd)
   }
 
   predicate InvEphemeralGeometry(v: Variables)
     requires v.WF() && v.ephemeral.Known?
   {
     // Ephemeral journal begins at persistent map
-    && IEJ(v.ephemeral.journal).CanFollow(v.persistentImage.mapadt.seqEnd)
+    && IEJ(v.journal).CanFollow(v.mapadt.persistent.seqEnd)
     // Ephemeral map ends no earlier than persistent map
-    && v.persistentImage.mapadt.seqEnd <= IMap(v.ephemeral.mapadt).seqEnd
+    && v.mapadt.persistent.seqEnd <= IMap(v.mapadt).seqEnd
     // Ephemeral journal ends no earlier than ephmeral map
     // (With the first conjunct, this conjunct happens to subsume the second conjunct,
     // but this was the nicest way to write it.)
-    && IEJ(v.ephemeral.journal).CanDiscardTo(IMap(v.ephemeral.mapadt).seqEnd)
+    && IEJ(v.journal).CanDiscardTo(IMap(v.mapadt).seqEnd)
     // Ephemeral journal is no shorter than persistent state
-    && v.persistentImage.SeqEnd() <= EphemeralSeqEnd(v.ephemeral)
+    && v.journal.persistent.seqEnd <= EphemeralSeqEnd(v)
     // Local snapshot of mapLsn matched actual map state machine
-    && v.ephemeral.mapLsn == v.ephemeral.mapadt.stampedMap.seqEnd
+    && v.ephemeral.mapLsn == v.mapadt.ephemeral.v.stampedMap.seqEnd
   }
 
   predicate InvEphemeralValueAgreement(v: Variables)
@@ -121,50 +128,56 @@ module CoordinationSystemRefinement {
     requires InvEphemeralGeometry(v)
   {
     // Ephemeral journal agrees with persistent journal
-    && JournalOverlapsAgree(v.persistentImage.journal, IEJ(v.ephemeral.journal))
+    && JournalOverlapsAgree(v.journal.persistent, IEJ(v.journal))
     // Ephemeral map state agrees with ephemeral journal (tacked onto persistent map)
-    && IMap(v.ephemeral.mapadt) == MapPlusHistory(v.persistentImage.mapadt, IEJ(v.ephemeral.journal).DiscardRecent(IMap(v.ephemeral.mapadt).seqEnd))
+    && IMap(v.mapadt) == MapPlusHistory(v.mapadt.persistent, IEJ(v.journal).DiscardRecent(IMap(v.mapadt).seqEnd))
+  }
+
+  predicate InFlight(v: Variables)
+  {
+    v.mapadt.inFlight.Some?
   }
 
   predicate InvFrozenGeometry(v: Variables)
     requires v.WF() && v.ephemeral.Known?
-    requires v.ephemeral.frozenMap.Some?
+    requires InFlight(v)
   {
     // frozen map hsan't passed ephemeral journal
-    && v.ephemeral.frozenMap.value.seqEnd <= EphemeralSeqEnd(v.ephemeral)
+    && v.mapadt.inFlight.value.seqEnd <= EphemeralSeqEnd(v)
   }
 
   predicate FrozenMapDoesntRegress(v: Variables)
   {
     && v.WF()
     && v.ephemeral.Known?
-    && v.ephemeral.frozenMap.Some?
+    && InFlight(v)
     // And it doesn't stop before the persistent image map (so we'll be able
     // to DiscardOld on the ephemeral journal to see they agree)
-    && v.persistentImage.mapadt.seqEnd <= v.ephemeral.frozenMap.value.seqEnd
+    && v.mapadt.persistent.seqEnd <= v.mapadt.inFlight.value.seqEnd
   }
 
   predicate InvFrozenValueAgreement(v: Variables)
     requires v.WF()
     requires v.ephemeral.Known?
     requires InvEphemeralGeometry(v)
-    requires v.ephemeral.frozenMap.Some?
+    requires InFlight(v)
     requires InvFrozenGeometry(v)
   {
     // Agreement is only defined when FrozenMapDoesntRegress, but
     // FrozenMapDoesntRegress isn't an invariant because we runtime-check it at
     // the moment we need it, in CommitStart.
     FrozenMapDoesntRegress(v) ==>
-      v.ephemeral.frozenMap.value == MapPlusHistory(v.persistentImage.mapadt, IEJ(v.ephemeral.journal).DiscardRecent(v.ephemeral.frozenMap.value.seqEnd))
+      v.mapadt.inFlight.value == MapPlusHistory(v.mapadt.persistent, IEJ(v.journal).DiscardRecent(v.mapadt.inFlight.value.seqEnd))
     // NB: Frozen Journal agreement comes "for free" because the frozen
     // journal is just defined as the frozenJournalLSN prefix of the
     // ephemeral journal.
   }
 
   predicate InvInFlightGeometry(v: Variables)
-    requires v.WF() && v.inFlightImage.Some?
+    requires v.WF() && v.journal.inFlight.Some?
   {
-    && var ifImage := v.inFlightImage.value;
+    && var ifMap := v.mapadt.inFlight.value;
+    && var ifJournal := v.journal.inFlight.value;
 
     // We need a well-behaved journal to relate in-flight state to.
     && v.ephemeral.Known?
@@ -172,29 +185,31 @@ module CoordinationSystemRefinement {
 
     // Geometry properties
     // In-flight map + journal stitch.
-    && ifImage.journal.CanFollow(ifImage.mapadt.seqEnd)
+    && ifJournal.CanFollow(ifMap.seqEnd)
     // Commiting in-flight state won't shrink persistent state
-    && v.persistentImage.SeqEnd() <= ifImage.SeqEnd()
+    && v.journal.persistent.seqEnd <= ifJournal.seqEnd
     // In-flight map doesn't precede persistent map -- that would cause
     // forgotten lsns to pop back into existence, and we don't have those lsns
     // in the ephemeral journal to compare to.
-    && v.persistentImage.mapadt.seqEnd <= ifImage.mapadt.seqEnd
+    && v.mapadt.persistent.seqEnd <= ifMap.seqEnd
     // in-flight view hsan't passed ephemeral journal
-    && ifImage.SeqEnd() <= EphemeralSeqEnd(v.ephemeral)
+    && ifJournal.seqEnd <= EphemeralSeqEnd(v)
   }
 
   predicate InvInFlightValueAgreement(v: Variables)
-    requires v.WF() && v.inFlightImage.Some?
+    requires v.WF() && v.journal.inFlight.Some?
     requires InvInFlightGeometry(v)
   {
-    && var ifImage := v.inFlightImage.value;
+    && var ifMap := v.mapadt.inFlight.value;
+    && var ifJournal := v.journal.inFlight.value;
+
     // in-flight journal is consistent with the persistent journal
-    && JournalOverlapsAgree(ifImage.journal, v.persistentImage.journal)
+    && JournalOverlapsAgree(ifJournal, v.journal.persistent)
     // in-flight journal is consistent with the ephemeral journal
-    && JournalOverlapsAgree(ifImage.journal, IEJ(v.ephemeral.journal))
+    && JournalOverlapsAgree(ifJournal, IEJ(v.journal))
     // in-flight map matches corresponding state in ephemeral world
-    && ifImage.mapadt == MapPlusHistory(v.persistentImage.mapadt,
-                      IEJ(v.ephemeral.journal).DiscardRecent(ifImage.mapadt.seqEnd))
+    && ifMap == MapPlusHistory(v.mapadt.persistent,
+                      IEJ(v.journal).DiscardRecent(ifMap.seqEnd))
   }
 
   predicate Inv(v: Variables)
@@ -205,12 +220,12 @@ module CoordinationSystemRefinement {
       && InvEphemeralGeometry(v)
       && InvEphemeralValueAgreement(v)
 
-      && (v.ephemeral.frozenMap.Some? ==>
+      && (InFlight(v) ==>
         && InvFrozenGeometry(v)
         && InvFrozenValueAgreement(v)
         )
       )
-    && (v.inFlightImage.Some? ==>
+    && (InFlight(v) ==>
       && InvInFlightGeometry(v)
       && InvInFlightValueAgreement(v)
       )
@@ -229,11 +244,11 @@ module CoordinationSystemRefinement {
     requires Next(v, v', uiop)
     requires NextStep(v, v', uiop, step);
     requires step.CommitCompleteStep?
-    requires v.persistentImage.mapadt.seqEnd <= lsn <= EphemeralSeqEnd(v.ephemeral)
-    requires v.inFlightImage.value.mapadt.seqEnd <= lsn  // Can't do much with lsns that have been forgotten
-    ensures IEJ(v'.ephemeral.journal).CanDiscardTo(lsn);
-    ensures MapPlusHistory(v.persistentImage.mapadt, IEJ(v.ephemeral.journal).DiscardRecent(lsn))
-            == MapPlusHistory(v'.persistentImage.mapadt, IEJ(v'.ephemeral.journal).DiscardRecent(lsn));
+    requires v.mapadt.persistent.seqEnd <= lsn <= EphemeralSeqEnd(v)
+    requires v.mapadt.inFlight.value.seqEnd <= lsn  // Can't do much with lsns that have been forgotten
+    ensures IEJ(v'.journal).CanDiscardTo(lsn);
+    ensures MapPlusHistory(v.mapadt.persistent, IEJ(v.journal).DiscardRecent(lsn))
+            == MapPlusHistory(v'.mapadt.persistent, IEJ(v'.journal).DiscardRecent(lsn));
   {
     // There are six pieces in play here: the persistent and in-flight images and the ephemeral journals:
     //  _________ __________
@@ -251,20 +266,20 @@ module CoordinationSystemRefinement {
     // "R" is the "reference LSN" -- that's where we're going to prune ephemeral.journal, since
     // after the commit it is going to be the LSN of the persistent map.
 
-    var refLsn := v.inFlightImage.value.mapadt.seqEnd;
-    var ej := IEJ(v.ephemeral.journal);
+    var refLsn := v.mapadt.inFlight.value.seqEnd;
+    var ej := IEJ(v.journal);
     var eji := ej.DiscardRecent(lsn);
 
     // Here's a calc, but in comments so we can use a shorthand algebra:
     // Let + represent both MapPlusHistory and Concat (they're associative).
     // Let [x..] represent DiscardOld(x) and [..y] represent DiscardRecent(y).
-    // var im:=v.inFlightImage.value.mapadt, pm:=v.persistentImage.mapadt, R:=im.seqEnd
+    // var im:=v.inFlightImage.value.mapadt, pm:=v.mapadt.persistent, R:=im.seqEnd
     // pm'+ej'[..lsn]
     // im+ej'[..lsn]
     // im+ej[..lsn][R..]
     //   {InvInFlightVersionAgreement}
     // (pm+ej[..R])+ej[..lsn][R..]
-    JournalAssociativity(v.persistentImage.mapadt, ej.DiscardRecent(refLsn), ej.DiscardRecent(lsn).DiscardOld(refLsn));
+    JournalAssociativity(v.mapadt.persistent, ej.DiscardRecent(refLsn), ej.DiscardRecent(lsn).DiscardOld(refLsn));
     // pm+(ej[..R]+ej[..lsn][R..])
     assert ej.DiscardRecent(refLsn) == ej.DiscardRecent(lsn).DiscardRecent(refLsn);  // because R <= lsn; smaller lsn are Forgotten
     // pm+(ej[..lsn][..R]+ej[..lsn][R..])
@@ -280,15 +295,15 @@ module CoordinationSystemRefinement {
     ensures Inv(v')
   {
     reveal_JournalOverlapsAgree();
-    if v.inFlightImage.Some? {
-      var idiEnd := v.inFlightImage.value.mapadt.seqEnd;
-      assert IEJ(v.ephemeral.journal).DiscardRecent(idiEnd) == IEJ(v'.ephemeral.journal).DiscardRecent(idiEnd); // trigger
+    if InFlight(v) {
+      var idiEnd := v.mapadt.inFlight.value.seqEnd;
+      assert IEJ(v.journal).DiscardRecent(idiEnd) == IEJ(v'.journal).DiscardRecent(idiEnd); // trigger
     }
     if FrozenMapDoesntRegress(v') {
       assert FrozenMapDoesntRegress(v);
-      var frozenEnd := v.ephemeral.frozenMap.value.seqEnd;
-      assert IEJ(v.ephemeral.journal).DiscardRecent(frozenEnd) == IEJ(v'.ephemeral.journal).DiscardRecent(frozenEnd); // trigger
-      assert v'.ephemeral.frozenMap.value == MapPlusHistory(v'.persistentImage.mapadt, IEJ(v'.ephemeral.journal).DiscardRecent(v'.ephemeral.frozenMap.value.seqEnd));
+      var frozenEnd := v.mapadt.inFlight.value.seqEnd;
+      assert IEJ(v.journal).DiscardRecent(frozenEnd) == IEJ(v'.journal).DiscardRecent(frozenEnd); // trigger
+      assert v'.mapadt.inFlight.value == MapPlusHistory(v'.mapadt.persistent, IEJ(v'.journal).DiscardRecent(v'.mapadt.inFlight.value.seqEnd));
       assert InvFrozenValueAgreement(v');
     }
 
@@ -296,19 +311,19 @@ module CoordinationSystemRefinement {
     var key := uiop.baseOp.req.input.key;
     var val := uiop.baseOp.req.input.value;
     var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
-    JournalAssociativity(v.persistentImage.mapadt, IEJ(v.ephemeral.journal), singleton);
-    assert IEJ(v.ephemeral.journal).DiscardRecent(IMap(v.ephemeral.mapadt).seqEnd) == IEJ(v.ephemeral.journal); // trigger
-    assert IEJ(v'.ephemeral.journal) == IEJ(v'.ephemeral.journal).DiscardRecent(IMap(v'.ephemeral.mapadt).seqEnd); // trigger
+    JournalAssociativity(v.mapadt.persistent, IEJ(v.journal), singleton);
+    assert IEJ(v.journal).DiscardRecent(IMap(v.mapadt).seqEnd) == IEJ(v.journal); // trigger
+    assert IEJ(v'.journal) == IEJ(v'.journal).DiscardRecent(IMap(v'.mapadt).seqEnd); // trigger
     // TODO(chris): I'm wondering why these subexpressions aren't sort of
     // self-triggering? It's a very common pattern in this code.
 //    calc {
 //      v'.ephemeral.mapadt;
 //      MapPlusHistory(v.ephemeral.mapadt, singleton);
-//      MapPlusHistory(MapPlusHistory(v.persistentImage.mapadt, v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd)), singleton);
-//      MapPlusHistory(MapPlusHistory(v.persistentImage.mapadt, v.ephemeral.journal), singleton);
-//      MapPlusHistory(v.persistentImage.mapadt, v.ephemeral.journal.Concat(singleton));
-//      MapPlusHistory(v.persistentImage.mapadt, v'.ephemeral.journal);
-//      MapPlusHistory(v'.persistentImage.mapadt, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.mapadt.seqEnd));
+//      MapPlusHistory(MapPlusHistory(v.mapadt.persistent, v.ephemeral.journal.DiscardRecent(v.ephemeral.mapadt.seqEnd)), singleton);
+//      MapPlusHistory(MapPlusHistory(v.mapadt.persistent, v.ephemeral.journal), singleton);
+//      MapPlusHistory(v.mapadt.persistent, v.ephemeral.journal.Concat(singleton));
+//      MapPlusHistory(v.mapadt.persistent, v'.ephemeral.journal);
+//      MapPlusHistory(v'.mapadt.persistent, v'.ephemeral.journal.DiscardRecent(v'.ephemeral.mapadt.seqEnd));
 //    }
     assert Inv(v');
   }
@@ -322,14 +337,20 @@ module CoordinationSystemRefinement {
   {
     reveal_JournalOverlapsAgree();
     if FrozenMapDoesntRegress(v') {
-      CommitStepPreservesHistory(v, v', uiop, step, v.ephemeral.frozenMap.value.seqEnd);
+      CommitStepPreservesHistory(v, v', uiop, step, v.mapadt.inFlight.value.seqEnd);
     }
 
-    var pm := v.persistentImage.mapadt;
-    var em := IMap(v.ephemeral.mapadt);
-    var ej := IEJ(v.ephemeral.journal);
-    var imEnd := v.inFlightImage.value.mapadt.seqEnd;
+    var pm := v.mapadt.persistent;
+    var em := IMap(v.mapadt);
+    var ej := IEJ(v.journal);
+    var imEnd := v.mapadt.inFlight.value.seqEnd;
 
+    assert ej.CanDiscardTo(em.seqEnd);
+    assert imEnd <= v.journal.inFlight.value.seqEnd;
+    assert v.journal.inFlight.value.seqEnd <= em.seqEnd;
+    assert em.seqEnd == EphemeralSeqEnd(v);
+    assert imEnd <= em.seqEnd;
+    assert ej.DiscardOld(imEnd).CanDiscardTo(em.seqEnd);
     JournalAssociativity(pm, ej.DiscardRecent(imEnd), ej.DiscardOld(imEnd).DiscardRecent(em.seqEnd));
     assert ej.DiscardRecent(em.seqEnd) == ej.DiscardRecent(imEnd).Concat(ej.DiscardOld(imEnd).DiscardRecent(em.seqEnd));   // trigger
   }
@@ -347,11 +368,11 @@ module CoordinationSystemRefinement {
       }
       case RecoverStep(puts) => {
         // InvEphemeralMapIsJournalSnapshot
-        var em := IMap(v.ephemeral.mapadt);
-        var ej := IEJ(v.ephemeral.journal);
-        JournalAssociativity(v.persistentImage.mapadt, ej.DiscardRecent(em.seqEnd), puts);
+        var em := IMap(v.mapadt);
+        var ej := IEJ(v.journal);
+        JournalAssociativity(v.mapadt.persistent, ej.DiscardRecent(em.seqEnd), puts);
         assert ej.DiscardRecent(em.seqEnd).Concat(puts)
-          == IEJ(v'.ephemeral.journal).DiscardRecent(IMap(v'.ephemeral.mapadt).seqEnd);  // trigger
+          == IEJ(v'.journal).DiscardRecent(IMap(v'.mapadt).seqEnd);  // trigger
       }
       case AcceptRequestStep() => {
         assert Inv(v');
@@ -371,9 +392,6 @@ module CoordinationSystemRefinement {
         assert Inv(v');
       }
       case ReplySyncStep() => {
-        assert Inv(v');
-      }
-      case FreezeMapAdtStep() => {
         assert Inv(v');
       }
       case CommitStartStep(frozenJournal) => {
@@ -417,16 +435,16 @@ module CoordinationSystemRefinement {
   {
     InvInductivePutStep(v, v', uiop, step);
 
-    var j := IEJ(v.ephemeral.journal);
-    var j' := IEJ(v'.ephemeral.journal);
-    var base := v.persistentImage.mapadt;
+    var j := IEJ(v.journal);
+    var j' := IEJ(v'.journal);
+    var base := v.mapadt.persistent;
     var key := uiop.baseOp.req.input.key;
     var value := uiop.baseOp.req.input.value;
 
     assert j'.MsgHistory? ==> j' == j'.DiscardRecent(j'.Len() + j'.seqStart);  // seq trigger
     assert j.MsgHistory? ==> j == j.DiscardRecent(j.Len() + j.seqStart);  // seq trigger
 
-    assert forall i | v.persistentImage.mapadt.seqEnd<=i<|I(v).versions| :: j'.DiscardRecent(i) == j.DiscardRecent(i);  // Rob Power Trigger
+    assert forall i | v.mapadt.persistent.seqEnd<=i<|I(v).versions| :: j'.DiscardRecent(i) == j.DiscardRecent(i);  // Rob Power Trigger
 
     assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // witness
   }
@@ -444,7 +462,7 @@ module CoordinationSystemRefinement {
     forall i | 0<=i<|I(v).versions|
       ensures I(v').versions[i] == if i < I(v').stableIdx then CrashTolerantMapSpecMod.Forgotten else I(v).versions[i]
     {
-      if v.inFlightImage.value.SeqEnd() <= i {
+      if v.journal.inFlight.value.seqEnd <= i {
         CommitStepPreservesHistory(v, v', uiop, step, i);
       }
     }
@@ -481,7 +499,6 @@ module CoordinationSystemRefinement {
       || step.MapInternalStep?
       || step.ReqSyncStep?
       || step.ReplySyncStep?
-      || step.FreezeMapAdtStep?
       || step.CommitStartStep?
     ensures Inv(v')
     ensures CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop)
@@ -499,10 +516,10 @@ module CoordinationSystemRefinement {
     ensures CrashTolerantMapSpecMod.Next(Ic(), I(v), I(v'), uiop)
   {
     reveal_JournalOverlapsAgree();
-    var stableLSN := v'.persistentImage.SeqEnd();
+    var stableLSN := v'.journal.persistent.seqEnd;
     if v.ephemeral.Known? {
-      assert forall lsn | v.persistentImage.mapadt.seqEnd <= lsn < stableLSN :: true; // trigger
-      assert v'.persistentImage.journal.DiscardRecent(stableLSN) == IEJ(v.ephemeral.journal).DiscardRecent(stableLSN); // trigger
+      assert forall lsn | v.mapadt.persistent.seqEnd <= lsn < stableLSN :: true; // trigger
+      assert v'.journal.persistent.DiscardRecent(stableLSN) == IEJ(v.journal).DiscardRecent(stableLSN); // trigger
     }
     assert CrashTolerantMapSpecMod.Crash(I(v), I(v'));  //trigger
     assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), uiop); // case boilerplate
@@ -530,7 +547,6 @@ module CoordinationSystemRefinement {
       case MapInternalStep() => { BatchNextB(v, v', uiop, step); }
       case ReqSyncStep() => { BatchNextB(v, v', uiop, step); }
       case ReplySyncStep() => { BatchNextB(v, v', uiop, step); }
-      case FreezeMapAdtStep() => { BatchNextB(v, v', uiop, step); }
       case CommitStartStep(frozenJournal) => { BatchNextB(v, v', uiop, step); }
       case CommitCompleteStep() => { CommitCompleteNext(v, v', uiop, step); }
       case CrashStep() => { CrashNext(v, v', uiop, step); }

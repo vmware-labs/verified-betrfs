@@ -14,18 +14,12 @@ module AbstractJournal {
     | FreezeForCommitLabel(frozenJournal: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
-    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
+    | DiscardOldLabel(startLsn: LSN)
       // TODO(jonh): requireEnd is an enabling-condition check to enforce
       // MapIsFresh in CommitComplete. I don't think it's actually necessary,
       // but removing it broke the CoordinationSystemRefinement proof and I
       // couldn't fix it in five minutes.
     | InternalLabel()
-
-  // Mkfs is used by CoordinationSystem to define its Init
-  function Mkfs() : MsgHistory
-  {
-    MsgHistoryMod.MsgHistory(map[], 0, 0)
-  }
 
   datatype Variables = Variables(journal: MsgHistory)
   {
@@ -74,7 +68,7 @@ module AbstractJournal {
     && v.WF()
     && lbl.PutLabel?
     && lbl.messages.WF()
-    && v.journal.CanConcat(lbl.messages)
+    && v.journal.seqEnd == lbl.messages.seqStart
     && v' == v.(journal := v.journal.Concat(lbl.messages))
   }
 
@@ -82,7 +76,6 @@ module AbstractJournal {
   {
     && v.WF()
     && lbl.DiscardOldLabel?
-    && v.CanEndAt(lbl.requireEnd)
     && v.journal.CanDiscardTo(lbl.startLsn)
     && v'.journal == v.journal.DiscardOld(lbl.startLsn)
   }
@@ -106,7 +99,7 @@ module AbstractJournal {
       case FreezeForCommitLabel(_) => FreezeForCommit(v, v', lbl)
       case QueryEndLsnLabel(_) => ObserveFreshJournal(v, v', lbl)
       case PutLabel(_) => Put(v, v', lbl)
-      case DiscardOldLabel(_, _) => DiscardOld(v, v', lbl)
+      case DiscardOldLabel(_) => DiscardOld(v, v', lbl)
       case InternalLabel() => Internal(v, v', lbl)
     }
   }

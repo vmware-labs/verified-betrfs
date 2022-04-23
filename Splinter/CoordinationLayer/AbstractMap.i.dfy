@@ -15,7 +15,7 @@ module AbstractMap {
   datatype TransitionLabel =
       QueryLabel(endLsn: LSN, key: Key, value: Value)
     | PutLabel(puts: MsgHistory)
-    | QueryEndLsnLabel(endLsn: LSN)
+    | QueryEndLsnLabel(endLsn: LSN) // TODO(jonh): cleanup dead code: no longer used; maintained in CoordSys via invariant
     | FreezeAsLabel(stampedMap: StampedMap)
     | InternalLabel()
 

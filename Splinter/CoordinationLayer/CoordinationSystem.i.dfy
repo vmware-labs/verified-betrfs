@@ -1,8 +1,8 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "AbstractMap.i.dfy"
-include "AbstractJournal.i.dfy"
+include "CrashTolerantMap.i.dfy"
+include "CrashTolerantJournal.i.dfy"
 include "../../Spec/MapSpec.s.dfy"
 include "../../lib/Base/KeyType.s.dfy"
 include "../../lib/Base/MapRemove.s.dfy"
@@ -17,33 +17,11 @@ module CoordinationSystem {
   import opened ValueMessage
   import opened TotalKMMapMod
   import opened LSNMod
-  import opened AbstractJournal
-  import opened AbstractMap
+  import opened CrashTolerantJournal
+  import opened CrashTolerantMap
 
   import Async = CrashTolerantMapSpecMod.uiopifc.async
   type UIOp = CrashTolerantMapSpecMod.uiopifc.UIOp
-
-  datatype DiskImage = DiskImage(
-    mapadt: StampedMap,
-    journal: MsgHistory
-    )
-  {
-    predicate WF() {
-      && journal.WF()
-    }
-
-    function SeqEnd() : LSN
-      requires WF()
-    {
-      journal.seqEnd
-    }
-
-    predicate CompletesSync(lsn: LSN)
-      requires WF()
-    {
-      lsn < SeqEnd()
-    }
-  }
 
   type SyncReqs = map<CrashTolerantMapSpecMod.uiopifc.SyncReqId, LSN>
 
@@ -52,44 +30,30 @@ module CoordinationSystem {
     | Known(
       progress: Async.EphemeralState,
       syncReqs: SyncReqs,
-
-      mapadt: AbstractMap.Variables,
-      mapLsn: LSN,  // invariant: agrees with mapadt.stampedMap.seqEnd
-      journal: AbstractJournal.Variables,
-
-      frozenMap: Option<StampedMap>
+      mapLsn: LSN  // invariant: agrees with mapadt.stampedMap.seqEnd
     )
   {
-    predicate WF() {
-      Known? ==> (
-        && journal.WF()
-      )
-    }
-  }
-
-  function MkfsDiskImage() : DiskImage
-  {
-    DiskImage(StampedMapMod.Empty(), AbstractJournal.Mkfs())
   }
 
   datatype Variables = Variables(
-    persistentImage: DiskImage,
-    ephemeral: Ephemeral,
-    inFlightImage: Option<DiskImage>
+    journal: CrashTolerantJournal.Variables,
+    mapadt: CrashTolerantMap.Variables,
+    ephemeral: Ephemeral
   )
   {
     predicate WF()
     {
-      && persistentImage.WF()
-      && (ephemeral.Known? ==> ephemeral.WF())
-      && (inFlightImage.Some? ==> inFlightImage.value.WF())
+      && journal.WF()
+      && mapadt.WF()
+      && (ephemeral.Known? == journal.ephemeral.Known? == mapadt.ephemeral.Known?)
+      && (journal.inFlight.Some? == mapadt.inFlight.Some?)
     }
 
     predicate Init()
     {
-      && persistentImage == MkfsDiskImage()
+      && CrashTolerantJournal.Init(journal)
+      && CrashTolerantMap.Init(mapadt)
       && ephemeral.Unknown?
-      && inFlightImage.None?
     }
   }
 
@@ -97,22 +61,16 @@ module CoordinationSystem {
   {
     && v.WF()
     && uiop.NoopOp?
-    && v.ephemeral.Unknown?
     && v'.ephemeral.Known?
-    && AbstractJournal.Init(v'.ephemeral.journal, v.persistentImage.journal)
-    && AbstractMap.Init(v'.ephemeral.mapadt, v.persistentImage.mapadt)
-    && v' == v.(ephemeral := Known(
-      Async.InitEphemeralState(),
-      map[],  // syncReqs
-      v'.ephemeral.mapadt, // defined by predicate update update
-      v.persistentImage.mapadt.seqEnd,
-      v'.ephemeral.journal, // defined by predicate update update
-      None  // frozen map
-      ))
+    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.LoadEphemeralFromPersistentLabel())
+    && CrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.LoadEphemeralFromPersistentLabel(v'.ephemeral.mapLsn))
+    && v'.ephemeral.progress == Async.InitEphemeralState()
+    && v'.ephemeral.syncReqs == map[]
+    // and thus all fields of v' are constrained.
   }
 
   // Move some journal state into the map to make it (closer to) fresh
-  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgHistory)
+  predicate Recover(v: Variables, v': Variables, uiop : UIOp, records:MsgHistory)
   {
     && uiop.NoopOp?
     && v.WF()
@@ -120,17 +78,14 @@ module CoordinationSystem {
     && v'.WF()
     && v'.ephemeral.Known?
 
-    && puts.WF()
+    && records.WF()
 
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.ReadForRecoveryLabel(puts))
-    && AbstractMap.Put(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.PutLabel(puts))
-    && v' == v.(ephemeral := v.ephemeral.(
-        journal := v'.ephemeral.journal, // predicate update above
-        mapadt := v'.ephemeral.mapadt,   // predicate update above
-        mapLsn := puts.seqEnd
-      ))
+    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.ReadForRecoveryLabel(records))
+    && CrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.PutRecordsLabel(records))
+
+    && v'.ephemeral == v.ephemeral.(mapLsn := records.seqEnd) // all else defined via predicates above
   }
 
   predicate AcceptRequest(v: Variables, v': Variables, uiop : UIOp)
@@ -161,17 +116,16 @@ module CoordinationSystem {
     && var key := uiop.baseOp.req.input.key;
     && var value := uiop.baseOp.reply.output.value;
     && assert AnyKey(key);
-    // Map handles the query
-    && AbstractMap.Query(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryLabel(v.ephemeral.mapLsn, key, value))
+
     // Journal confirms that the map is up-to-date (but otherwise doesn't do anything).
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.QueryEndLsnLabel(v.ephemeral.mapLsn))
-    && v' == v.(ephemeral := v.ephemeral.(
-        mapadt := v'.ephemeral.mapadt,  // predicate update above
-        journal := v'.ephemeral.journal,  // predicate update above
-        progress := v.ephemeral.progress.(
+    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    // Map handles the query
+    && CrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.QueryLabel(v.ephemeral.mapLsn, key, value))
+
+    && v'.ephemeral == v.ephemeral.(progress := v.ephemeral.progress.(
           requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
           replies := v.ephemeral.progress.replies + {uiop.baseOp.reply}
-      )))
+      ))
   }
 
   predicate Put(v: Variables, v': Variables, uiop : UIOp)
@@ -200,18 +154,17 @@ module CoordinationSystem {
     && var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
 
     && v.WF()
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.PutLabel(singleton))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.PutLabel(singleton))
-    && v' == v.(ephemeral := v.ephemeral.(
-          journal := v'.ephemeral.journal,  // predicate update above
-          mapadt := v'.ephemeral.mapadt,  // predicate update above
+    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.PutLabel(singleton))
+    && CrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.PutRecordsLabel(singleton))
+
+    && v'.ephemeral == v.ephemeral.(
           mapLsn := v.ephemeral.mapLsn + 1,
-          // Frozen stuff unchanged here.
           progress := v.ephemeral.progress.(
             requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
             replies := v.ephemeral.progress.replies + {uiop.baseOp.reply}
+          // syncReqs UNCHANGED
           )
-      ))
+      )
   }
 
   predicate DeliverReply(v: Variables, v': Variables, uiop : UIOp)
@@ -234,9 +187,8 @@ module CoordinationSystem {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
     && uiop.NoopOp?
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.InternalLabel())
-    && v' == v.(ephemeral := v.ephemeral.(
-          journal := v'.ephemeral.journal))  // predicate update above
+    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.InternalLabel())
+    && v' == v.(journal := v'.journal)  // predicate update above
   }
 
   predicate MapInternal(v: Variables, v': Variables, uiop : UIOp)
@@ -244,9 +196,8 @@ module CoordinationSystem {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
     && uiop.NoopOp?
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.InternalLabel())
-    && v' == v.(ephemeral := v.ephemeral.(
-          mapadt := v'.ephemeral.mapadt))  // predicate update above
+    && CrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.InternalLabel())
+    && v' == v.(mapadt := v'.mapadt)  // predicate update above
   }
 
   predicate ReqSync(v: Variables, v': Variables, uiop : UIOp)
@@ -257,18 +208,19 @@ module CoordinationSystem {
     && v'.ephemeral.Known?
     && uiop.ReqSyncOp?
     && uiop.syncReqId !in v.ephemeral.syncReqs
+
+    // TODO(robj): cleanup: delete this predicate; it's probably totally unecessary.
     // Need to record the current LSN, which is generally the current map state. But we
     // also need to confirm that the journal hasn't gone ahead, since sync is relative to
     // writes (which have affected the journal).
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal, AbstractJournal.QueryEndLsnLabel(v.ephemeral.mapLsn))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn))
+
+    && v'.mapadt == v.mapadt
 
     // NB that the label for a sync in the table is the LSN AFTER the last write
-    && v' == v.(ephemeral := v.ephemeral.(
-        journal := v'.ephemeral.journal,  // predicate update above
-        mapadt := v'.ephemeral.mapadt,  // predicate update above
+    && v'.ephemeral == v.ephemeral.(
         syncReqs := v.ephemeral.syncReqs[uiop.syncReqId := v.ephemeral.mapLsn]
-      ))
+      )
   }
 
   predicate ReplySync(v: Variables, v': Variables, uiop : UIOp)
@@ -277,84 +229,49 @@ module CoordinationSystem {
     && v.ephemeral.Known?
     && uiop.ReplySyncOp?
     && uiop.syncReqId in v.ephemeral.syncReqs
-    && v.persistentImage.CompletesSync(v.ephemeral.syncReqs[uiop.syncReqId]) // sync lsn is persistent
+    && CrashTolerantJournal.Next(v.journal, v'.journal,
+      CrashTolerantJournal.QueryLsnPersistenceLabel(v.ephemeral.syncReqs[uiop.syncReqId]))
     && v' == v.(ephemeral := v.ephemeral.(
         syncReqs := MapRemove1(v.ephemeral.syncReqs, uiop.syncReqId)
       ))
   }
 
-  predicate FreezeMapAdt(v: Variables, v': Variables, uiop : UIOp)
+  // This step models issuing the superblock write
+  predicate CommitStart(v: Variables, v': Variables, uiop : UIOp, newBoundaryLsn: LSN)
   {
     && uiop.NoopOp?
     && v.WF()
     && v.ephemeral.Known?
-    && v'.ephemeral.Known?
-    // Copy the current map into the frozen one, deleting whatever was
-    // frozen.
-    && v'.ephemeral.frozenMap.Some?
-    && AbstractMap.FreezeAs(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.FreezeAsLabel(v'.ephemeral.frozenMap.value))
-    // TODO this should cause mischief if a Commit is in progress. Does it?
-    && v' == v.(ephemeral := v.ephemeral.(
-        mapadt := v'.ephemeral.mapadt,  // predicate update above
-        frozenMap := v'.ephemeral.frozenMap  // predicate update above
-      ))
+
+    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.CommitStartLabel(newBoundaryLsn, v.ephemeral.mapLsn))
+    && CrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.CommitStartLabel(newBoundaryLsn))
+
+    && v'.ephemeral == v.ephemeral  // UNCHANGED
   }
 
-  predicate CommitStart(v: Variables, v': Variables, uiop : UIOp, frozenJournal: MsgHistory)
-  {
-    && uiop.NoopOp?
-    && v.WF()
-    && v.ephemeral.Known?
-    && v'.ephemeral.Known?
-    && v.inFlightImage.None?
-
-    && v.ephemeral.frozenMap.Some?
-    && frozenJournal.seqStart == v.ephemeral.frozenMap.value.seqEnd
-    // Frozen map can't go backwards vs persistent map, lest we end up with
-    // a gap to the ephemeral journal start.
-    && v.persistentImage.mapadt.seqEnd <= frozenJournal.seqStart
-    // And of course there should be no way for it to have passed the ephemeral map!
-    && frozenJournal.seqStart <= v.ephemeral.mapLsn
-    && v.persistentImage.SeqEnd() <= frozenJournal.seqEnd
-
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
-        AbstractJournal.FreezeForCommitLabel(frozenJournal))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
-
-    && v'.inFlightImage.Some?
-    && v' == v.(
-        ephemeral := v.ephemeral.(mapadt := v'.ephemeral.mapadt),  // predicate update above
-        inFlightImage := Some(DiskImage(v.ephemeral.frozenMap.value, frozenJournal)))
-  }
-
+  // This step models learning that the outstanding superblock write has completed.
   predicate CommitComplete(v: Variables, v': Variables, uiop : UIOp)
   {
     && v.WF()
     && v'.WF()
-    && v.ephemeral.Known?
-    && v.inFlightImage.Some?
-    && var ifImage := v.inFlightImage.value;
-
     && uiop.SyncOp?
-    && v'.ephemeral.Known?
 
-    && AbstractJournal.Next(v.ephemeral.journal, v'.ephemeral.journal,
-        AbstractJournal.DiscardOldLabel(ifImage.mapadt.seqEnd, v.ephemeral.mapLsn))
-    && AbstractMap.Next(v.ephemeral.mapadt, v'.ephemeral.mapadt, AbstractMap.QueryEndLsnLabel(v.ephemeral.mapLsn))
+    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.CommitCompleteLabel())
+    && CrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.CommitCompleteLabel())
 
-    && v' == v.(
-        persistentImage := ifImage,
-        ephemeral := v.ephemeral.(
-          journal := v'.ephemeral.journal, // predicate update above
-          mapadt := v'.ephemeral.mapadt    // predicate update above
-        ),
-        inFlightImage := None)
+    && v'.ephemeral == v.ephemeral  // UNCHANGED
   }
 
   predicate Crash(v: Variables, v': Variables, uiop : UIOp)
   {
+    && v.WF()
+    && v'.WF()
     && uiop.CrashOp?
-    && v' == v.(ephemeral := Unknown, inFlightImage := None)
+
+    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.CrashLabel())
+    && CrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.CrashLabel())
+
+    && v'.ephemeral.Unknown?
   }
 
   predicate Init(v: Variables) {
@@ -363,7 +280,7 @@ module CoordinationSystem {
 
   datatype Step =
     | LoadEphemeralFromPersistentStep()
-    | RecoverStep(puts:MsgHistory)
+    | RecoverStep(puts: MsgHistory)
     | AcceptRequestStep()
     | QueryStep()
     | PutStep()
@@ -372,8 +289,7 @@ module CoordinationSystem {
     | MapInternalStep()
     | ReqSyncStep()
     | ReplySyncStep()
-    | FreezeMapAdtStep()
-    | CommitStartStep(frozenJournal: MsgHistory)
+    | CommitStartStep(newBoundaryLsn: LSN)
     | CommitCompleteStep()
     | CrashStep()
 
@@ -389,8 +305,7 @@ module CoordinationSystem {
       case MapInternalStep() => MapInternal(v, v', uiop)
       case ReqSyncStep() => ReqSync(v, v', uiop)
       case ReplySyncStep() => ReplySync(v, v', uiop)
-      case FreezeMapAdtStep() => FreezeMapAdt(v, v', uiop)
-      case CommitStartStep(frozenJournal) => CommitStart(v, v', uiop, frozenJournal)
+      case CommitStartStep(newBoundaryLsn) => CommitStart(v, v', uiop, newBoundaryLsn)
       case CommitCompleteStep() => CommitComplete(v, v', uiop)
       case CrashStep() => Crash(v, v', uiop)
     }
