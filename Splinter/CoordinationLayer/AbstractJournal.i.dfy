@@ -14,9 +14,9 @@ module AbstractJournal {
     | FreezeForCommitLabel(frozenJournal: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
-    | DiscardOldLabel(startLsn: LSN)
+    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
       // TODO(jonh): requireEnd is an enabling-condition check to enforce
-      // MapIsFresh in CommitComplete. I don't think it's actually necessary,
+      // MapIsFresh in CommitComplete. I don't understand why it's necessary,
       // but removing it broke the CoordinationSystemRefinement proof and I
       // couldn't fix it in five minutes.
     | InternalLabel()
@@ -76,6 +76,7 @@ module AbstractJournal {
   {
     && v.WF()
     && lbl.DiscardOldLabel?
+    && v.journal.seqEnd == lbl.requireEnd
     && v.journal.CanDiscardTo(lbl.startLsn)
     && v'.journal == v.journal.DiscardOld(lbl.startLsn)
   }
@@ -99,7 +100,7 @@ module AbstractJournal {
       case FreezeForCommitLabel(_) => FreezeForCommit(v, v', lbl)
       case QueryEndLsnLabel(_) => ObserveFreshJournal(v, v', lbl)
       case PutLabel(_) => Put(v, v', lbl)
-      case DiscardOldLabel(_) => DiscardOld(v, v', lbl)
+      case DiscardOldLabel(_, _) => DiscardOld(v, v', lbl)
       case InternalLabel() => Internal(v, v', lbl)
     }
   }

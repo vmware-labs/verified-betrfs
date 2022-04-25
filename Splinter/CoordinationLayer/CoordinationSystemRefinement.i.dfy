@@ -133,48 +133,42 @@ module CoordinationSystemRefinement {
     && IMap(v.mapadt) == MapPlusHistory(v.mapadt.persistent, IEJ(v.journal).DiscardRecent(IMap(v.mapadt).seqEnd))
   }
 
-  predicate InFlight(v: Variables)
+  predicate MapIsFrozen(v: Variables)
   {
     v.mapadt.inFlight.Some?
   }
 
-  predicate InvFrozenGeometry(v: Variables)
+  predicate CommitStarted(v: Variables)
+  {
+    v.journal.inFlight.Some?
+  }
+    
+  predicate InvFrozenMapGeometry(v: Variables)
     requires v.WF() && v.ephemeral.Known?
-    requires InFlight(v)
+    requires MapIsFrozen(v)
   {
     // frozen map hsan't passed ephemeral journal
     && v.mapadt.inFlight.value.seqEnd <= EphemeralSeqEnd(v)
-  }
-
-  predicate FrozenMapDoesntRegress(v: Variables)
-  {
-    && v.WF()
-    && v.ephemeral.Known?
-    && InFlight(v)
-    // And it doesn't stop before the persistent image map (so we'll be able
-    // to DiscardOld on the ephemeral journal to see they agree)
+    // Frozen map doesn't regress before persistent map
     && v.mapadt.persistent.seqEnd <= v.mapadt.inFlight.value.seqEnd
   }
 
-  predicate InvFrozenValueAgreement(v: Variables)
+  predicate InvFrozenMapValueAgreement(v: Variables)
     requires v.WF()
     requires v.ephemeral.Known?
     requires InvEphemeralGeometry(v)
-    requires InFlight(v)
-    requires InvFrozenGeometry(v)
+    requires MapIsFrozen(v)
+    requires InvFrozenMapGeometry(v)
   {
-    // Agreement is only defined when FrozenMapDoesntRegress, but
-    // FrozenMapDoesntRegress isn't an invariant because we runtime-check it at
-    // the moment we need it, in CommitStart.
-    FrozenMapDoesntRegress(v) ==>
-      v.mapadt.inFlight.value == MapPlusHistory(v.mapadt.persistent, IEJ(v.journal).DiscardRecent(v.mapadt.inFlight.value.seqEnd))
+    v.mapadt.inFlight.value == MapPlusHistory(v.mapadt.persistent, IEJ(v.journal).DiscardRecent(v.mapadt.inFlight.value.seqEnd))
     // NB: Frozen Journal agreement comes "for free" because the frozen
     // journal is just defined as the frozenJournalLSN prefix of the
     // ephemeral journal.
   }
 
-  predicate InvInFlightGeometry(v: Variables)
-    requires v.WF() && v.journal.inFlight.Some?
+  predicate InvCommitStartedGeometry(v: Variables)
+    requires v.WF()
+    requires CommitStarted(v)
   {
     && var ifMap := v.mapadt.inFlight.value;
     && var ifJournal := v.journal.inFlight.value;
@@ -196,9 +190,9 @@ module CoordinationSystemRefinement {
     && ifJournal.seqEnd <= EphemeralSeqEnd(v)
   }
 
-  predicate InvInFlightValueAgreement(v: Variables)
-    requires v.WF() && v.journal.inFlight.Some?
-    requires InvInFlightGeometry(v)
+  predicate InvCommitStartedValueAgreement(v: Variables)
+    requires v.WF() && CommitStarted(v)
+    requires InvCommitStartedGeometry(v)
   {
     && var ifMap := v.mapadt.inFlight.value;
     && var ifJournal := v.journal.inFlight.value;
@@ -216,18 +210,18 @@ module CoordinationSystemRefinement {
   {
     && v.WF()
     && InvPersistentJournalGeometry(v)
+    && (v.ephemeral.Unknown? ==> !MapIsFrozen(v) && !CommitStarted(v))
     && (v.ephemeral.Known? ==>
-      && InvEphemeralGeometry(v)
-      && InvEphemeralValueAgreement(v)
-
-      && (InFlight(v) ==>
-        && InvFrozenGeometry(v)
-        && InvFrozenValueAgreement(v)
-        )
+        && InvEphemeralGeometry(v)
+        && InvEphemeralValueAgreement(v)
+        && (MapIsFrozen(v) ==>
+            && InvFrozenMapGeometry(v)
+            && InvFrozenMapValueAgreement(v)
+          )
       )
-    && (InFlight(v) ==>
-      && InvInFlightGeometry(v)
-      && InvInFlightValueAgreement(v)
+    && (CommitStarted(v) ==>
+      && InvCommitStartedGeometry(v)
+      && InvCommitStartedValueAgreement(v)
       )
   }
 
@@ -295,16 +289,9 @@ module CoordinationSystemRefinement {
     ensures Inv(v')
   {
     reveal_JournalOverlapsAgree();
-    if InFlight(v) {
-      var idiEnd := v.mapadt.inFlight.value.seqEnd;
-      assert IEJ(v.journal).DiscardRecent(idiEnd) == IEJ(v'.journal).DiscardRecent(idiEnd); // trigger
-    }
-    if FrozenMapDoesntRegress(v') {
-      assert FrozenMapDoesntRegress(v);
+    if MapIsFrozen(v) {
       var frozenEnd := v.mapadt.inFlight.value.seqEnd;
       assert IEJ(v.journal).DiscardRecent(frozenEnd) == IEJ(v'.journal).DiscardRecent(frozenEnd); // trigger
-      assert v'.mapadt.inFlight.value == MapPlusHistory(v'.mapadt.persistent, IEJ(v'.journal).DiscardRecent(v'.mapadt.inFlight.value.seqEnd));
-      assert InvFrozenValueAgreement(v');
     }
 
     // InvEphemeralMapIsJournalSnapshot
@@ -328,6 +315,16 @@ module CoordinationSystemRefinement {
     assert Inv(v');
   }
 
+  lemma InvInductiveCommitStartStep(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires Next(v, v', uiop)
+    requires NextStep(v, v', uiop, step)
+    requires step.CommitStartStep?
+    ensures Inv(v')
+  {
+    reveal_JournalOverlapsAgree();
+  }
+
   lemma InvInductiveCommitCompleteStep(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
     requires Next(v, v', uiop)
@@ -336,23 +333,13 @@ module CoordinationSystemRefinement {
     ensures Inv(v')
   {
     reveal_JournalOverlapsAgree();
-    if FrozenMapDoesntRegress(v') {
-      CommitStepPreservesHistory(v, v', uiop, step, v.mapadt.inFlight.value.seqEnd);
-    }
 
-    var pm := v.mapadt.persistent;
-    var em := IMap(v.mapadt);
+    var emEnd := IMap(v.mapadt).seqEnd;
     var ej := IEJ(v.journal);
     var imEnd := v.mapadt.inFlight.value.seqEnd;
 
-    assert ej.CanDiscardTo(em.seqEnd);
-    assert imEnd <= v.journal.inFlight.value.seqEnd;
-    assert v.journal.inFlight.value.seqEnd <= em.seqEnd;
-    assert em.seqEnd == EphemeralSeqEnd(v);
-    assert imEnd <= em.seqEnd;
-    assert ej.DiscardOld(imEnd).CanDiscardTo(em.seqEnd);
-    JournalAssociativity(pm, ej.DiscardRecent(imEnd), ej.DiscardOld(imEnd).DiscardRecent(em.seqEnd));
-    assert ej.DiscardRecent(em.seqEnd) == ej.DiscardRecent(imEnd).Concat(ej.DiscardOld(imEnd).DiscardRecent(em.seqEnd));   // trigger
+    JournalAssociativity(v.mapadt.persistent, ej.DiscardRecent(imEnd), ej.DiscardOld(imEnd).DiscardRecent(emEnd));
+    assert ej.DiscardRecent(emEnd) == ej.DiscardRecent(imEnd).Concat(ej.DiscardOld(imEnd).DiscardRecent(emEnd));   // trigger
   }
 
   lemma InvInductive(v: Variables, v': Variables, uiop: UIOp)
@@ -395,8 +382,7 @@ module CoordinationSystemRefinement {
         assert Inv(v');
       }
       case CommitStartStep(frozenJournal) => {
-        reveal_JournalOverlapsAgree();
-        assert Inv(v');
+        InvInductiveCommitStartStep(v, v', uiop, step);
       }
       case CommitCompleteStep() => {
         InvInductiveCommitCompleteStep(v, v', uiop, step);

@@ -46,7 +46,8 @@ module CoordinationSystem {
       && journal.WF()
       && mapadt.WF()
       && (ephemeral.Known? == journal.ephemeral.Known? == mapadt.ephemeral.Known?)
-      && (journal.inFlight.Some? == mapadt.inFlight.Some?)
+      // Provable from invariant:
+      && (journal.inFlight.Some? ==> mapadt.inFlight.Some?)
     }
 
     predicate Init()
@@ -255,8 +256,9 @@ module CoordinationSystem {
     && v.WF()
     && v'.WF()
     && uiop.SyncOp?
+    && v.ephemeral.Known? // provable from invariant
 
-    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.CommitCompleteLabel())
+    && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.CommitCompleteLabel(v.ephemeral.mapLsn))
     && CrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.CommitCompleteLabel())
 
     && v'.ephemeral == v.ephemeral  // UNCHANGED
