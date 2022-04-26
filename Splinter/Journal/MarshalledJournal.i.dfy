@@ -88,6 +88,16 @@ module MarshalledJournal {
     }
   }
 
+  function EmptyJournalImage() : (out: JournalImage)
+    ensures out.WF()
+    ensures out.IsEmpty()
+  {
+    var out := JournalImage(JournalSB(0, None), DiskView(map[]));
+    assert out.TypeProvidesModel(LinkedJournal.Mkfs());
+    out
+  }
+
+
   datatype Variables = Variables(
     journalImage: JournalImage,
     unmarshalledTail: MsgHistory)
@@ -108,20 +118,6 @@ module MarshalledJournal {
   {
     && v.unmarshalledTail == typed.unmarshalledTail
     && v.journalImage.TypeProvidesModel(typed.truncatedJournal)
-  }
-
-//  function JournalImageI() : LinkedJournal.TruncatedJournal
-//  {
-//    true
-//  }
-
-//  function I(v: Variables) : LinkedJournal.Variables {
-//    LinkedJournal.Variables(v.journalImage.I(), v.unmarshalledTail)
-//  }
-
-  function Mkfs() : (out: JournalImage)
-  {
-    JournalImage(JournalSB(0, None), DiskView(map[]))
   }
 
   predicate InitModel(v: Variables, journalImage: JournalImage, t: LinkedJournal.Variables)

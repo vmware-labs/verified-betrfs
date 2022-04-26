@@ -82,14 +82,6 @@ module PagedJournalRefinement
   }
 
   //////////////////////////////////////////////////////////////////////////////
-  // non-state-machine function & predicate refinement lemmas
-
-  lemma MkfsRefines()
-    ensures Mkfs().I() == AbstractJournal.Mkfs()
-  {
-  }
-
-  //////////////////////////////////////////////////////////////////////////////
   // State machine refinement
 
   predicate Inv(v: Variables)

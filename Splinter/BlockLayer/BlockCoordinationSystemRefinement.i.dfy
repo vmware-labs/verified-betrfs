@@ -1,10 +1,11 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "../../Spec/MapSpec.s.dfy"
 include "../CoordinationLayer/CoordinationSystemRefinement.i.dfy"
 include "../Journal/MarshalledJournalRefinement.i.dfy"
 include "BlockCoordinationSystem.i.dfy"
+include "BlockCrashTolerantJournalRefinement.i.dfy"
+include "BlockCrashTolerantMapRefinement.i.dfy"
 
 module BlockCoordinationSystemRefinement
 {
@@ -18,7 +19,12 @@ module BlockCoordinationSystemRefinement
   import PagedJournalRefinement
   import LinkedJournal
   import LinkedJournalRefinement
+  import MarshalledJournal  // TODO(jonh): move this stuff into BlockCrashTolerantJournalRefinement or something?
   import MarshalledJournalRefinement
+  import CrashTolerantMap
+  import CrashTolerantJournal
+  import BlockCrashTolerantJournalRefinement
+  import BlockCrashTolerantMapRefinement
 
   // Decodable is a pretty cheap almost-type property, but not one we can
   // trivially check, either with a typecheck in the implementation or a cheap
@@ -26,100 +32,40 @@ module BlockCoordinationSystemRefinement
   // v' where it'll be hard to prove later. Instead, we define it here and
   // prove it as part of Inv.
 
-  predicate DecodableJournalLabel(journalLabel: MarshalledJournal.TransitionLabel)
+  predicate DecodableMap(jv: BlockCrashTolerantMap.Variables)
   {
-    && journalLabel.WF()
-    && journalLabel.I().WF()
-  }
-
-  predicate DecodableJournalImage(journalImage: MarshalledJournal.JournalImage)
-  {
-    && journalImage.WF()
-    && journalImage.I().Decodable()
-  }
-
-  predicate DecodableDiskImage(diskImage: DiskImage)
-  {
-    && DecodableJournalImage(diskImage.journal)
-  }
-
-  predicate DecodableEphemeral(ephemeral: Ephemeral)
-  {
-    ephemeral.Known? ==> MarshalledJournalRefinement.Inv(ephemeral.journal)
+    true
   }
 
   predicate DecodableVariables(v: Variables)
   {
-    && DecodableDiskImage(v.persistentImage)
-    && DecodableEphemeral(v.ephemeral)
-    && (v.inFlightImage.Some? ==> DecodableDiskImage(v.inFlightImage.value))
-  }
-
-  predicate DecodableStep(step: Step)
-  {
-    step.CommitStartStep? ==> DecodableJournalImage(step.frozenJournal)
+    && BlockCrashTolerantJournalRefinement.Decodable(v.journal)
+    && DecodableMap(v.mapadt)
   }
 
   //////////////////////////////////////////////////////////////////////
   // Inv
 
   predicate Inv(v: Variables) {
+    && v.WF()
     && DecodableVariables(v)
+    && BlockCrashTolerantJournalRefinement.Inv(v.journal)
+    && BlockCrashTolerantMapRefinement.Inv(v.mapadt)
 
     // This layer's version of CoordinationSystemRefinement.InvInFlightGeometry
-    && (v.inFlightImage.Some? ==>
-      v.inFlightImage.value.journal.I().SeqStart() == v.inFlightImage.value.mapadt.seqEnd
+    && (v.journal.inFlight.Some? ==> 
+        v.journal.inFlight.value.I().SeqStart() == v.mapadt.inFlight.value.seqEnd
       )
-    
-    // TODO(jonh,robj): Reaching into journal's journalImage is a bit layer-violation-y.
-    // Maybe it's okay for the proof?
-    && (v.ephemeral.Known? ==>
-        v.persistentImage.journal.diskView.IsSubDisk(v.ephemeral.journal.journalImage.diskView)
-      )
-    && (v.inFlightImage.Some? ==>
-      && v.ephemeral.Known?
-      && LinkedJournalRefinement.InFlightSubDiskProperty(
-          MarshalledJournalRefinement.I(v.ephemeral.journal), v.inFlightImage.value.journal.I())
-      )
-  }
-
-  // IA Interpret to Abstraction: peel all the way up the stack.
-  function IAJournalImage(journalImage: MarshalledJournal.JournalImage) : MsgHistory
-    requires DecodableJournalImage(journalImage)
-  {
-    journalImage.I().I().I()
-  }
-
-  function IAJournal(journal: MarshalledJournal.Variables) : AbstractJournal.Variables
-    requires MarshalledJournalRefinement.Inv(journal)
-  {
-    PagedJournalRefinement.I(LinkedJournalRefinement.I(MarshalledJournalRefinement.I(journal)))
-  }
-
-  function IAJournalLabel(lbl: MarshalledJournal.TransitionLabel) : AbstractJournal.TransitionLabel
-    requires DecodableJournalLabel(lbl)
-  {
-    PagedJournalRefinement.ILbl(lbl.I().I())
-  }
-
-  // Interpret BlockCoordinationSystem types
-  function IDiskImage(diskImage: DiskImage) : CoordinationSystem.DiskImage
-    requires DecodableDiskImage(diskImage)
-  {
-    CoordinationSystem.DiskImage(diskImage.mapadt, IAJournalImage(diskImage.journal))
   }
 
   function IEphemeral(ephemeral: Ephemeral) : CoordinationSystem.Ephemeral
-    requires DecodableEphemeral(ephemeral)
+    requires true //DecodableEphemeral(ephemeral)
   {
     if ephemeral.Unknown? then CoordinationSystem.Unknown
     else CoordinationSystem.Known(
       ephemeral.progress,
       ephemeral.syncReqs,
-      ephemeral.mapadt,
-      ephemeral.mapLsn,
-      IAJournal(ephemeral.journal),
-      ephemeral.frozenMap
+      ephemeral.mapLsn
     )
   }
 
@@ -127,9 +73,9 @@ module BlockCoordinationSystemRefinement
     requires DecodableVariables(v)
   {
     CoordinationSystem.Variables(
-      IDiskImage(v.persistentImage),
-      IEphemeral(v.ephemeral),
-      if v.inFlightImage.None? then None else Some(IDiskImage(v.inFlightImage.value))
+      BlockCrashTolerantJournalRefinement.I(v.journal),
+      BlockCrashTolerantMapRefinement.I(v.mapadt),
+      IEphemeral(v.ephemeral)
     )
   }
   
@@ -138,181 +84,125 @@ module BlockCoordinationSystemRefinement
     ensures Inv(v)
     ensures CoordinationSystem.Init(I(v))
   {
-    MarshalledJournalRefinement.MkfsRefines();
-    assert MarshalledJournal.Mkfs().WF();
-    assert DecodableDiskImage(v.persistentImage);
-    assert DecodableVariables(v);
-
-    // Interestingly, the IsSubDisk invariants are trivial here. ephemeral and
-    // inFlightImage are trivial because they're just empty. And the persistentImage
-    // starts out as a journal whose diskView is empty, which is a subdisk of every
-    // other disk.
+    BlockCrashTolerantJournalRefinement.InitRefines(v.journal);
   }
 
   function IStep(step: Step) : CoordinationSystem.Step
-    requires DecodableStep(step)
   {
-    match step
-      case LoadEphemeralFromPersistentStep() => CoordinationSystem.LoadEphemeralFromPersistentStep
-      case RecoverStep(puts) => CoordinationSystem.RecoverStep(puts)
-      case AcceptRequestStep() => CoordinationSystem.AcceptRequestStep()
-      case QueryStep() => CoordinationSystem.QueryStep()
-      case PutStep() => CoordinationSystem.PutStep()
-      case DeliverReplyStep() => CoordinationSystem.DeliverReplyStep()
-      case JournalInternalStep() => CoordinationSystem.JournalInternalStep()
-      case MapInternalStep() => CoordinationSystem.MapInternalStep()
-      case ReqSyncStep() => CoordinationSystem.ReqSyncStep()
-      case ReplySyncStep() => CoordinationSystem.ReplySyncStep()
-      case FreezeMapAdtStep() => CoordinationSystem.FreezeMapAdtStep()
-      case CommitStartStep(frozenJournal) => CoordinationSystem.CommitStartStep(IAJournalImage(frozenJournal))
-      case CommitCompleteStep() => CoordinationSystem.CommitCompleteStep()
-      case CrashStep() => CoordinationSystem.CrashStep()
+    step
   }
+
+  predicate NextCondition(v: Variables, v': Variables, uiop: UIOp, step: Step)
+  {
+    && Inv(v)
+    && Next(v, v', uiop)
+    && NextStep(v, v', uiop, step)
+  }
+
 
   lemma LoadEphemeralFromPersistentNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
-    requires Inv(v)
-    requires Next(v, v', uiop)
-    requires NextStep(v, v', uiop, step)
+    requires NextCondition(v, v', uiop, step)
     requires step.LoadEphemeralFromPersistentStep?
-    ensures Inv(v')
-    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    MarshalledJournalRefinement.InvInit(v'.ephemeral.journal, v.persistentImage.journal);
-    assert Inv(v'); // case boilerplate
-
-    var j := v.persistentImage.journal;
-    var j' := v'.ephemeral.journal;
-
-    assert MarshalledJournal.Init(j', j);
-    MarshalledJournalRefinement.RefinementInit(j', j);
-    assert LinkedJournal.Init(MarshalledJournalRefinement.I(j'), j.I());
-    
-
-    assert I(v').ephemeral.journal.journal == I(v).persistentImage.journal;
-    assert AbstractJournal.Init(I(v').ephemeral.journal, I(v).persistentImage.journal);
-    assert CoordinationSystem.LoadEphemeralFromPersistent(I(v), I(v'), uiop);
-    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
-  }
-
-  // TODO(jonh): this would go in the opaqued journal kit, or at least MarshalledJournalRefinement
-  lemma JournalChainedNext(j: MarshalledJournal.Variables, j': MarshalledJournal.Variables, lbl: MarshalledJournal.TransitionLabel)
-    requires MarshalledJournalRefinement.Inv(j)
-    requires MarshalledJournal.Next(j, j', lbl)
-    ensures MarshalledJournalRefinement.Inv(j')
-    ensures AbstractJournal.Next(IAJournal(j), IAJournal(j'), IAJournalLabel(lbl))
-  {
-    MarshalledJournalRefinement.RefinementNext(j, j', lbl);
-    // TODO(jonh): inconsistent theorem naming: RefinementNext vs NextRefines
-    LinkedJournalRefinement.NextRefines(
-      MarshalledJournalRefinement.I(j),
-      MarshalledJournalRefinement.I(j'),
-      lbl.I());
-    PagedJournalRefinement.NextRefines(
-      LinkedJournalRefinement.I(MarshalledJournalRefinement.I(j)),
-      LinkedJournalRefinement.I(MarshalledJournalRefinement.I(j')),
-      lbl.I().I());
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.LoadEphemeralFromPersistentLabel());
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.LoadEphemeralFromPersistentLabel(v'.ephemeral.mapLsn));
   }
 
   lemma RecoverNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
-    requires Inv(v)
-    requires Next(v, v', uiop)
-    requires NextStep(v, v', uiop, step)
-    requires step.RecoverStep?
-    ensures Inv(v')
-    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+    requires NextCondition(v, v', uiop, step) && step.RecoverStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal, MarshalledJournal.ReadForRecoveryLabel(step.puts));
-    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.ReadForRecoveryLabel(step.records));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.PutRecordsLabel(step.records));
+  }
+
+  lemma AcceptRequestNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires NextCondition(v, v', uiop, step) && step.AcceptRequestStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
+  {
+  }
+
+  lemma QueryNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires NextCondition(v, v', uiop, step) && step.QueryStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
+  {
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn));
+    var key := uiop.baseOp.req.input.key;
+    var value := uiop.baseOp.reply.output.value;
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.QueryLabel(v.ephemeral.mapLsn, key, value));
   }
 
   lemma PutNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
-    requires Inv(v)
-    requires Next(v, v', uiop)
-    requires NextStep(v, v', uiop, step)
-    requires step.PutStep?
-    ensures Inv(v')
-    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+    requires NextCondition(v, v', uiop, step) && step.PutStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
     var key := uiop.baseOp.req.input.key;
     var val := uiop.baseOp.req.input.value;
     var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
-    MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal, MarshalledJournal.PutLabel(singleton));
-    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.PutLabel(singleton));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.PutRecordsLabel(singleton));
   }
 
   lemma JournalInternalNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
-    requires Inv(v)
-    requires Next(v, v', uiop)
-    requires NextStep(v, v', uiop, step)
-    requires step.JournalInternalStep?
-    ensures Inv(v')
-    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+    requires NextCondition(v, v', uiop, step) && step.JournalInternalStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal,
-      MarshalledJournal.InternalLabel());
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.InternalLabel());
+  }
 
-    var lbl := MarshalledJournal.InternalLabel();
-    MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal, lbl);
-//    var lstep :| LinkedJournal.NextStep(t, t', lbl.I(), lstep); // documentation
-      
-    if v'.inFlightImage.Some? {
-      var inFlightL := v.inFlightImage.value.journal.I();
-      var ephemeralL := MarshalledJournalRefinement.I(v.ephemeral.journal).truncatedJournal;
-      var discardedL := ephemeralL.DiscardOld(inFlightL.SeqStart());
-      LinkedJournalRefinement.BuildTightBuildsSubDisks(discardedL.diskView, discardedL.freshestRec);  // to pass lstep.addr membership through InFlightSubDiskProperty BuildTight
+  lemma MapInternalNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires NextCondition(v, v', uiop, step) && step.MapInternalStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
+  {
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.InternalLabel());
+  }
 
-      // saw an out-of-resource here, but can't repro
-      // with assert false: 20s success
-      // with neither, no proc: success argh.
-      // with neither, proc: 17s success
-      // with InFlightSubDiskPreserved: 15s success
-      LinkedJournalRefinement.InFlightSubDiskPreserved(
-        MarshalledJournalRefinement.I(v.ephemeral.journal),
-        MarshalledJournalRefinement.I(v'.ephemeral.journal),
-        v.inFlightImage.value.journal.I());
-    }
-    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger?
+  lemma DeliverReplyNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires NextCondition(v, v', uiop, step) && step.DeliverReplyStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
+  {
+  }
+
+  lemma ReqSyncNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires NextCondition(v, v', uiop, step) && step.ReqSyncStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
+  {
+  }
+
+  lemma ReplySyncNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires NextCondition(v, v', uiop, step) && step.ReplySyncStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
+  {
   }
 
   lemma CommitStartNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
-    requires Inv(v)
-    requires Next(v, v', uiop)
-    requires NextStep(v, v', uiop, step)
-    requires step.CommitStartStep?
-    ensures Inv(v')
-    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+    requires NextCondition(v, v', uiop, step) && step.CommitStartStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal,
-      MarshalledJournal.FreezeForCommitLabel(step.frozenJournal));
-
-    var mjlbl := MarshalledJournal.FreezeForCommitLabel(step.frozenJournal);
-    MarshalledJournalRefinement.RefinementNext(v.ephemeral.journal, v'.ephemeral.journal, mjlbl);  // hoist one layer to LinkedJournal. (JournalChainedNext hides this jump)
-    LinkedJournalRefinement.InFlightSubDiskCreated(
-      MarshalledJournalRefinement.I(v.ephemeral.journal),
-      MarshalledJournalRefinement.I(v'.ephemeral.journal),
-      mjlbl.I());
-
-    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.CommitStartLabel(step.newBoundaryLsn, v.ephemeral.mapLsn));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.CommitStartLabel(step.newBoundaryLsn));
   }
 
   lemma CommitCompleteNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
-    requires Inv(v)
-    requires Next(v, v', uiop)
-    requires NextStep(v, v', uiop, step)
-    requires step.CommitCompleteStep?
-    ensures Inv(v')
-    ensures CoordinationSystem.Next(I(v), I(v'), uiop)
+    requires NextCondition(v, v', uiop, step) && step.CommitCompleteStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    JournalChainedNext(v.ephemeral.journal, v'.ephemeral.journal,
-      MarshalledJournal.DiscardOldLabel(v.inFlightImage.value.mapadt.seqEnd, v.ephemeral.mapLsn));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.CommitCompleteLabel(v.ephemeral.mapLsn));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.CommitCompleteLabel());
+  }
 
-    MarshalledJournalRefinement.TypedModelUnique();
-     
-    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step)); // trigger
+  lemma CrashNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires NextCondition(v, v', uiop, step) && step.CrashStep?
+    ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
+  {
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.CrashLabel());
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.CrashLabel());
+    assert CoordinationSystem.NextStep(I(v), I(v'), uiop, CoordinationSystem.CrashStep());
   }
 
   // TODO(jonh, robj): Things get pretty timey-outey here. Proposed solution is
-  // that the journal stack, at this point, should be basically opaque, with
+  // that the map & journal stacks, at this point, should be basically opaque, with
   // only its interpretation properties exposed.
   // TODO(utaal): This opacification is probably a good test for the opaque rules in Verus!
   // TODO(jonh): Once that's fixed, we could surely pull the prooflets above
@@ -325,56 +215,19 @@ module BlockCoordinationSystemRefinement
   {
     var step :| NextStep(v, v', uiop, step);
     match step {
-      case LoadEphemeralFromPersistentStep() => {
-        LoadEphemeralFromPersistentNext(v, v', uiop, step);
-      }
-      case RecoverStep(puts) => {
-        RecoverNext(v, v', uiop, step);
-      }
-      case AcceptRequestStep() => {
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
-      }
-      case QueryStep() => {
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
-      }
-      case PutStep() => {
-        PutNext(v, v', uiop, step);
-      }
-      case JournalInternalStep() => {
-        JournalInternalNext(v, v', uiop, step);
-      }
-      case MapInternalStep() => {
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
-      }
-      case DeliverReplyStep() => {
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
-      }
-      case ReqSyncStep() => {
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
-      }
-      case ReplySyncStep() => {
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
-      }
-      case FreezeMapAdtStep() => {
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
-      }
-      case CommitStartStep(frozenJournal) => {
-        CommitStartNext(v, v', uiop, step);
-      }
-      case CommitCompleteStep() => {
-        CommitCompleteNext(v, v', uiop, step);
-      }
-      case CrashStep() => {
-        assert Inv(v'); // case boilerplate
-        assert CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step));
-      }
+      case LoadEphemeralFromPersistentStep() => { LoadEphemeralFromPersistentNext(v, v', uiop, step); }
+      case RecoverStep(_) => { RecoverNext(v, v', uiop, step); }
+      case AcceptRequestStep() => { AcceptRequestNext(v, v', uiop, step); }
+      case QueryStep() => { QueryNext(v, v', uiop, step); }
+      case PutStep() => { PutNext(v, v', uiop, step); }
+      case JournalInternalStep() => { JournalInternalNext(v, v', uiop, step); }
+      case MapInternalStep() => { MapInternalNext(v, v', uiop, step); }
+      case DeliverReplyStep() => { DeliverReplyNext(v, v', uiop, step); }
+      case ReqSyncStep() => { ReqSyncNext(v, v', uiop, step); }
+      case ReplySyncStep() => { ReplySyncNext(v, v', uiop, step); }
+      case CommitStartStep(_) => { CommitStartNext(v, v', uiop, step); }
+      case CommitCompleteStep() => { CommitCompleteNext(v, v', uiop, step); }
+      case CrashStep() => { CrashNext(v, v', uiop, step); }
     }
   }
 }

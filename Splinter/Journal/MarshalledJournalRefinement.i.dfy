@@ -50,14 +50,14 @@ module MarshalledJournalRefinement
     }
   }
 
-  lemma MkfsRefines()
-    ensures Mkfs().WF()
-    ensures Mkfs().I().Decodable()
-  {
-    assert Mkfs().TypeProvidesModel(LinkedJournal.Mkfs());
-    LinkedJournalRefinement.MkfsRefines();
-    assert Mkfs().I() == LinkedJournal.Mkfs();  // trigger
-  }
+//  lemma MkfsRefines()
+//    ensures Mkfs().WF()
+//    ensures Mkfs().I().Decodable()
+//  {
+//    assert Mkfs().TypeProvidesModel(LinkedJournal.Mkfs());
+//    LinkedJournalRefinement.MkfsRefines();
+//    assert Mkfs().I() == LinkedJournal.Mkfs();  // trigger
+//  }
 
   predicate Inv(v: Variables) {
     && HasTypedModel(v)

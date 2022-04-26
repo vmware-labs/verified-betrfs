@@ -131,11 +131,6 @@ module CoordinationSystem {
 
   predicate Put(v: Variables, v': Variables, uiop : UIOp)
   {
-    // At this layer we allow puts to run ahead, and then just let Queries be
-    // delayed until Recover catches up the mapadt.
-    // We expect the real implementation to maintain the invariant that, after
-    // recovery, the map stays "fresh" with the puts in the journal rather than
-    // checking that property at each query.
     && v.WF()
     && v'.WF()
     && v.ephemeral.Known?
@@ -282,7 +277,7 @@ module CoordinationSystem {
 
   datatype Step =
     | LoadEphemeralFromPersistentStep()
-    | RecoverStep(puts: MsgHistory)
+    | RecoverStep(records: MsgHistory)
     | AcceptRequestStep()
     | QueryStep()
     | PutStep()
@@ -298,7 +293,7 @@ module CoordinationSystem {
   predicate NextStep(v: Variables, v': Variables, uiop : UIOp, step: Step) {
     match step {
       case LoadEphemeralFromPersistentStep() => LoadEphemeralFromPersistent(v, v', uiop)
-      case RecoverStep(puts) => Recover(v, v', uiop, puts)
+      case RecoverStep(records) => Recover(v, v', uiop, records)
       case AcceptRequestStep() => AcceptRequest(v, v', uiop)
       case QueryStep() => Query(v, v', uiop)
       case PutStep() => Put(v, v', uiop)
