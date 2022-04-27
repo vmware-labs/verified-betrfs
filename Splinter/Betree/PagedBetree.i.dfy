@@ -21,19 +21,16 @@ module PagedBetree
     | FreezeAsLabel(stampedBetree: StampedBetree)
     | InternalLabel()
 
-  // TODO(jonh): side-quest: eliminate filters; filter as we go.
-  datatype Buffer = Buffer(filter: iset<Key>, mapp: map<Key, Message>)
+  datatype Buffer = Buffer(mapp: map<Key, Message>)
   {
     function Query(key: Key) : Message
     {
-      if key in filter && key in mapp
-      then mapp[key]
-      else Update(NopDelta())
+      if key in mapp then mapp[key] else Update(NopDelta())
     }
 
     function ApplyFilter(accept: iset<Key>) : Buffer
     {
-      Buffer(filter * accept, mapp)
+      Buffer(map k | k in mapp && k in accept :: mapp[k])
     }
   }
 
@@ -309,7 +306,7 @@ module PagedBetree
     function PrependMemtable(memtable: Memtable) : StampedBetree
       requires WF()
     {
-      var newBuffer := Buffer(AllKeys(), memtable.mapp);
+      var newBuffer := Buffer(memtable.mapp);
       StampedBetree(root.Promote().PrependBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
     }
   }
@@ -398,7 +395,7 @@ module PagedBetree
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && var newBuffer := Buffer(AllKeys(), v.memtable.mapp);
+    && var newBuffer := Buffer(v.memtable.mapp);
     && v' == v.(
         memtable := v.memtable.Drain(),
         stampedBetree := v.stampedBetree.PrependMemtable(v.memtable)

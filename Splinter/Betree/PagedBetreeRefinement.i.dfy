@@ -101,7 +101,7 @@ module PagedBetreeRefinement
     forall key | AnyKey(key)
       ensures MapApply(memtable, INode(base.root))[key] == INode(base.PrependMemtable(memtable).root)[key]
     {
-      var newBuffer := Buffer(AllKeys(), memtable.mapp);
+      var newBuffer := Buffer(memtable.mapp);
       SingletonBufferStack(newBuffer, key);
       PrependBufferStackLemma(BufferStack([newBuffer]), base.root.Promote().buffers, key);
       reveal_INode(); // this imap's really a doozy
@@ -420,9 +420,9 @@ module PagedBetreeRefinement
         == I(v).stampedMap.mi[key := Merge(message, I(v).stampedMap.mi[key])][k]
     {
       var node := v.stampedBetree.root;
-      var buffer := Buffer(AllKeys(), v.memtable.mapp);
+      var buffer := Buffer(v.memtable.mapp);
       var buffers := BufferStack([buffer]);
-      var buffer' := Buffer(AllKeys(), v'.memtable.mapp);
+      var buffer' := Buffer(v'.memtable.mapp);
       var buffers' := BufferStack([buffer']);
 
       if k!=key {
