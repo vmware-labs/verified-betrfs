@@ -15,6 +15,8 @@ module PagedBetreeRefinement
   import opened LSNMod
   import opened Sequences
   import opened PagedBetree
+  import opened Buffers
+  import opened MemtableMod
   import AbstractMap
 
   // Constructive evidence that a Valid QueryReceipt exists for every key.
@@ -274,7 +276,7 @@ module PagedBetreeRefinement
     ensures I(v') == I(v)
   {
     var orig := v.stampedBetree.root;
-    var grown := BetreeNode(DomainTODO, ConstantChildMap(orig), BufferStack([]));
+    var grown := BetreeNode(ConstantChildMap(orig), BufferStack([]));
 
     forall key | AnyKey(key)
       ensures INodeAt(grown, key) == INodeAt(orig, key)

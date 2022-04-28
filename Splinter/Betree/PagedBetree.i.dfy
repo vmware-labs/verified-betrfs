@@ -45,10 +45,7 @@ module PagedBetree
     ConstantChildMap(Nil)
   }
 
-  datatype Domain = DomainTODO  // TODO placeholder
-
   datatype BetreeNode = Nil | BetreeNode(
-    domain: Domain, // TODO(jonh): cleanup
     children: ChildMap, // TODO(jonh): move buffers above children
     buffers: BufferStack)
   {
@@ -61,7 +58,7 @@ module PagedBetree
       requires BetreeNode?
       ensures out.WF()
     {
-      BetreeNode(DomainTODO, children, buffers.PrependBufferStack(bufferStack))
+      BetreeNode(children, buffers.PrependBufferStack(bufferStack))
     }
 
     function ApplyFilter(filter: iset<Key>) : (out: BetreeNode)
@@ -69,7 +66,7 @@ module PagedBetree
       ensures out.WF()
     {
       if Nil? then Nil else
-      var out := BetreeNode(DomainTODO, children, buffers.ApplyFilter(filter));
+      var out := BetreeNode(children, buffers.ApplyFilter(filter));
       out
     }
 
@@ -88,7 +85,7 @@ module PagedBetree
             else if key in rightKeys
             then children.mapp[key].ApplyFilter(rightKeys)
             else children.mapp[key];
-      BetreeNode(DomainTODO, ChildMap(mapp), buffers)
+      BetreeNode(ChildMap(mapp), buffers)
     }
 
     // TODO(jonh): side-quest: We don't need Nil, do we?
@@ -113,7 +110,7 @@ module PagedBetree
           then children.mapp[key].Promote().PrependBufferStack(movedBuffers)
           else children.mapp[key]);
       assert outChildren.WF();
-      BetreeNode(DomainTODO, outChildren, keptBuffers)
+      BetreeNode(outChildren, keptBuffers)
     }
 
     predicate EquivalentBufferCompaction(other: BetreeNode)
@@ -129,7 +126,7 @@ module PagedBetree
   function EmptyRoot() : (out: BetreeNode)
     ensures out.WF()
   {
-    BetreeNode(DomainTODO, ConstantChildMap(Nil), BufferStack([]))
+    BetreeNode(ConstantChildMap(Nil), BufferStack([]))
   }
 
   datatype QueryReceiptLine = QueryReceiptLine(
@@ -351,7 +348,7 @@ module PagedBetree
       if 0 == depth
       then replacement
       else
-        BetreeNode(DomainTODO, ReplacedChildren(replacement), node.buffers)
+        BetreeNode(ReplacedChildren(replacement), node.buffers)
     }
   }
 
@@ -362,7 +359,7 @@ module PagedBetree
     && step.InternalGrowStep?
     && v' == v.(
         stampedBetree := v.stampedBetree.(
-          root := BetreeNode(DomainTODO, ConstantChildMap(v.stampedBetree.root), BufferStack([]))
+          root := BetreeNode(ConstantChildMap(v.stampedBetree.root), BufferStack([]))
         )
       )
   }
