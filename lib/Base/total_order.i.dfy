@@ -1072,11 +1072,16 @@ module Lexicographic_Byte_Order refines Total_Order {
     SeqComparison.reveal_lte();
   }
 
+  predicate IsSmallestElement(b: Element)
+  {
+    && |b| == 0
+    && (forall a | NotMinimum(a) :: lt(b, a))
+  }
+
   // TODO(robj): Ideally we'd just overload SmallerElement to return
   // [], but dafny won't let us.  :\
   lemma SmallestElement() returns (b: Element)
-    ensures |b| == 0
-    ensures forall a | NotMinimum(a) :: lt(b, a)
+    ensures IsSmallestElement(b)
   {
     SeqComparison.reveal_lte();
     b := [];
@@ -1090,16 +1095,30 @@ module Lexicographic_Byte_Order refines Total_Order {
       }
     }
   }
+
+  function GetSmallestElement() : (b: Element)
+    ensures IsSmallestElement(b)
+  {
+    assert exists b :: IsSmallestElement(b) by {
+      var b := SmallestElement();
+    }
+    var b :| IsSmallestElement(b); b
+  }
 } // module 
 
 module Upperbounded_Lexicographic_Byte_Order refines Upperbounded_Total_Order {
   import Base_Order = Lexicographic_Byte_Order
   import SeqComparison
 
+  predicate IsSmallestElement(b: Element)
+  {
+    && b.Element?
+    && |b.e| == 0
+    && (forall a | NotMinimum(a) :: lt(b, a))
+  }
+
   lemma SmallestElement() returns (b: Element)
-    ensures b.Element?
-    ensures |b.e| == 0
-    ensures forall a | NotMinimum(a) :: lt(b, a)
+    ensures IsSmallestElement(b)
   {
     SeqComparison.reveal_lte();
     b := Element([]);
@@ -1112,6 +1131,15 @@ module Upperbounded_Lexicographic_Byte_Order refines Upperbounded_Total_Order {
         assert false;
       }
     }
+  }
+
+  function GetSmallestElement() : (b: Element)
+    ensures IsSmallestElement(b)
+  {
+    assert exists b :: IsSmallestElement(b) by {
+      var b := SmallestElement();
+    }
+    var b :| IsSmallestElement(b); b
   }
 
   lemma transitivity(a: Element, b: Element, c: Element)

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../CoordinationLayer/AbstractMap.i.dfy"
+include "Buffers.i.dfy"
+include "Memtable.i.dfy"
 
 module PagedBetree
 {
@@ -13,6 +15,8 @@ module PagedBetree
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
+  import opened Buffers
+  import opened MemtableMod
 
   datatype TransitionLabel =
       QueryLabel(endLsn: LSN, key: Key, value: Value)
@@ -21,62 +25,6 @@ module PagedBetree
     | FreezeAsLabel(stampedBetree: StampedBetree)
     | InternalLabel()
 
-  datatype Buffer = Buffer(mapp: map<Key, Message>)
-  {
-    function Query(key: Key) : Message
-    {
-      if key in mapp then mapp[key] else Update(NopDelta())
-    }
-
-    function ApplyFilter(accept: iset<Key>) : Buffer
-    {
-      Buffer(map k | k in mapp && k in accept :: mapp[k])
-    }
-  }
-
-  // buffers[0] is the newest data
-  datatype BufferStack = BufferStack(buffers: seq<Buffer>)
-  {
-    function QueryUpTo(key: Key, count: nat) : Message
-      requires count <= |buffers|
-    {
-      if count == 0 then Update(NopDelta())
-      else Merge(QueryUpTo(key, count-1), buffers[count-1].Query(key))
-    }
-
-    function Query(key: Key) : Message
-    {
-      QueryUpTo(key, |buffers|)
-    }
-
-    function ApplyFilter(accept: iset<Key>) : BufferStack
-    {
-      BufferStack(seq(|buffers|, i requires 0<=i<|buffers| => buffers[i].ApplyFilter(accept)))
-    }
-
-    function PrependBufferStack(newBuffers: BufferStack) : BufferStack
-    {
-      BufferStack(newBuffers.buffers + this.buffers)
-    }
-
-    predicate Equivalent(other: BufferStack)
-    {
-      forall k | AnyKey(k) :: Query(k) == other.Query(k)
-    }
-  }
-
-  // I'd prefer to instantiate TotalMapMod here, but rank_is_less_than doesn't
-  // make it through the module refinement, so I can't prove decreases when I
-  // recursively walk down the BetreeNode. So I do it manually instead.
-  predicate AnyKey(key: Key) { true }
-  predicate Total(keys: iset<Key>) {
-    forall k | AnyKey(k) :: k in keys
-  }
-  function AllKeys() : (out: iset<Key>)
-    ensures Total(out)
-  {
-    iset k | AnyKey(k)
-  }
   datatype ChildMap = ChildMap(mapp: imap<Key, BetreeNode>) {
     predicate WF() {
       && Total(mapp.Keys)
@@ -268,29 +216,6 @@ module PagedBetree
     }
   }
 
-  // Constructive evidence that a Valid QueryReceipt exists for every key.
-  function BuildQueryReceipt(node: BetreeNode, key: Key) : (receipt: QueryReceipt)
-    requires node.WF()
-    ensures receipt.key == key
-    ensures receipt.Valid()
-    decreases node
-  {
-    if node.Nil?
-    then QueryReceipt(key, node, [QueryReceiptLine(Nil, Define(DefaultValue()))])
-    else
-      assert node.children.WF();  // trigger
-      var childReceipt := BuildQueryReceipt(node.children.mapp[key], key);
-      var thisMessage := node.buffers.Query(key);
-      var topLine := QueryReceiptLine(node, Merge(thisMessage, childReceipt.Result()));
-      var receipt := QueryReceipt(key, node, [topLine] + childReceipt.lines);
-      assert receipt.ResultLinkedAt(0);
-      assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ResultLinkedAt(i-1) && receipt.ResultLinkedAt(i);  // trigger Valid
-      assert forall i | 0<i<|receipt.lines|-1 :: receipt.ChildLinkedAt(i) by {  // not sure why this one demands being unrolled
-        forall i | 0<i<|receipt.lines|-1 ensures receipt.ChildLinkedAt(i) { assert childReceipt.ChildLinkedAt(i-1); } // trigger
-      }
-      receipt
-  }
-
   datatype StampedBetree = StampedBetree(
     root: BetreeNode,
     // betree needs its own lsn so we remember it for freeze time without
@@ -311,44 +236,6 @@ module PagedBetree
     }
   }
     
-  datatype Memtable = Memtable(mapp: map<Key, Message>, seqEnd: LSN)
-  {
-    function Get(key: Key) : Message
-    {
-      if key in mapp then mapp[key] else Update(NopDelta())
-    }
-
-    function ApplyPut(km: KeyedMessage) : Memtable
-    {
-      Memtable(mapp[km.key := Merge(km.message, Get(km.key))], seqEnd+1)
-    }
-
-    function ApplyPuts(puts: MsgHistory) : Memtable
-      requires puts.WF()
-      requires puts.seqStart == seqEnd
-      decreases puts.Len()
-    {
-      if puts.IsEmpty() then this
-      else ApplyPuts(puts.DiscardRecent(puts.seqEnd-1)).ApplyPut(puts.msgs[puts.seqEnd-1])
-    }
-
-    function Query(key: Key) : Message
-    {
-      if key in mapp then mapp[key] else Update(NopDelta())
-    }
-
-    // Drain out the contents (into the StampedBetree), but remember the seqEnd
-    function Drain() : Memtable
-    {
-      EmptyMemtable(seqEnd)
-    }
-  }
-
-  function EmptyMemtable(lsn: LSN) : Memtable
-  {
-    Memtable(map[], lsn)
-  }
-
   datatype Variables = Variables(
     memtable: Memtable,
     stampedBetree: StampedBetree)
@@ -428,8 +315,6 @@ module PagedBetree
       && node.WF()
       && node.BetreeNode?
       && key in keyset
-      //&& (0 < depth ==> Path(node.children[key], key, depth-1).Valid())
-      // keyset 
       && (0 < depth ==> KeysetChildrenMatch())
       && (0 < depth ==> Subpath().Valid())
     }

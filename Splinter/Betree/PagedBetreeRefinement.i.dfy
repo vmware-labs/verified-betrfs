@@ -17,6 +17,29 @@ module PagedBetreeRefinement
   import opened PagedBetree
   import AbstractMap
 
+  // Constructive evidence that a Valid QueryReceipt exists for every key.
+  function BuildQueryReceipt(node: BetreeNode, key: Key) : (receipt: QueryReceipt)
+    requires node.WF()
+    ensures receipt.key == key
+    ensures receipt.Valid()
+    decreases node
+  {
+    if node.Nil?
+    then QueryReceipt(key, node, [QueryReceiptLine(Nil, Define(DefaultValue()))])
+    else
+      assert node.children.WF();  // trigger
+      var childReceipt := BuildQueryReceipt(node.children.mapp[key], key);
+      var thisMessage := node.buffers.Query(key);
+      var topLine := QueryReceiptLine(node, Merge(thisMessage, childReceipt.Result()));
+      var receipt := QueryReceipt(key, node, [topLine] + childReceipt.lines);
+      assert receipt.ResultLinkedAt(0);
+      assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ResultLinkedAt(i-1) && receipt.ResultLinkedAt(i);  // trigger Valid
+      assert forall i | 0<i<|receipt.lines|-1 :: receipt.ChildLinkedAt(i) by {  // not sure why this one demands being unrolled
+        forall i | 0<i<|receipt.lines|-1 ensures receipt.ChildLinkedAt(i) { assert childReceipt.ChildLinkedAt(i-1); } // trigger
+      }
+      receipt
+  }
+
   function INodeAt(betreeNode: BetreeNode, key: Key) : Message
     requires betreeNode.WF()
   {

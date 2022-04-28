@@ -15,7 +15,8 @@ module PivotBetree
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
-  import PagedBetree  // Reuse Memtable
+  import opened Buffers
+  import opened MemtableMod
   import opened Upperbounded_Lexicographic_Byte_Order_Impl
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
 //  import opened Lexicographic_Byte_Order
@@ -26,7 +27,7 @@ module PivotBetree
     QueryLabel(endLsn: LSN, key: Key, value: Value)
   | PutLabel(puts: MsgHistory)
   | QueryEndLsnLabel(endLsn: LSN)
-  | FreezeAsLabel(/*stampedBetree: StampedBetree*/)
+  | FreezeAsLabel(stampedBetree: StampedBetree)
   | InternalLabel()
 
   type Element = Upperbounded_Lexicographic_Byte_Order_Impl.Ord.Element
@@ -69,71 +70,23 @@ module PivotBetree
       then this.IntersectInner(r2)
       else r2.IntersectInner(this)
     }
+
+    // Interpret a domain for use with an abstract Buffer.
+    function KeySet() : iset<Key>
+    {
+      iset key | Contains(key)
+    }
   }
 
   function TotalDomain() : (out: Domain)
     ensures out.WF()
   {
-    Domain(Element.SmallestElement(), Max_Element)
+    Domain(Upperbounded_Lexicographic_Byte_Order_Impl.Ord.GetSmallestElement(), Max_Element)
   }
 
-  datatype Buffer = Buffer(filter: Domain, mapp: map<Key, Message>)
+  predicate WFChildren(children: seq<BetreeNode>)
   {
-    predicate WF() {
-      true  // TODO Gonna need fancier filter here, and that'll need WF
-    }
-
-    function Query(key: Key) : Message
-    {
-      if filter.Contains(key) && key in mapp
-      then mapp[key]
-      else Update(NopDelta())
-    }
-
-    function ApplyFilter(accept: Domain) : Buffer
-    {
-      Buffer(filter.Intersect(accept), mapp)
-    }
-  }
- 
-  predicate AnyKey(key: Key) { true }
-
-  // TODO(jonh): Much of this module is identical copy-paste from PagedBetree.
-  // Is there a non-fonky way to avoid it? Would fonky (module refinement) be so bad?
-  // (Generics isn't sufficient, because BufferStack needs to know certain
-  // methods exist inside Buffer.)
-  datatype BufferStack = BufferStack(buffers: seq<Buffer>)
-  {
-    predicate WF() {
-      forall i | 0<=i<|buffers| :: buffers[i].WF()
-    }
-
-    function QueryUpTo(key: Key, count: nat) : Message
-      requires count <= |buffers|
-    {
-      if count == 0 then Update(NopDelta())
-      else Merge(QueryUpTo(key, count-1), buffers[count-1].Query(key))
-    }
-
-    function Query(key: Key) : Message
-    {
-      QueryUpTo(key, |buffers|)
-    }
-
-    function ApplyFilter(accept: Domain) : BufferStack
-    {
-      BufferStack(seq(|buffers|, i requires 0<=i<|buffers| => buffers[i].ApplyFilter(accept)))
-    }
-
-    function PrependBufferStack(newBuffers: BufferStack) : BufferStack
-    {
-      BufferStack(newBuffers.buffers + this.buffers)
-    }
-
-    predicate Equivalent(other: BufferStack)
-    {
-      forall k | AnyKey(k) :: Query(k) == other.Query(k)
-    }
+    (forall i:nat | i<|children| :: children[i].WF())
   }
 
   datatype BetreeNode = Nil | BetreeNode(
@@ -143,10 +96,9 @@ module PivotBetree
   {
     predicate WF() {
       && (BetreeNode? ==>
-          && buffers.WF()
           && WFPivots(pivotTable)
           && |children| == NumBuckets(pivotTable)
-          && (forall i:nat | i<|children| :: children[i].WF())
+          && WFChildren(children)
         )
     }
 
@@ -163,20 +115,26 @@ module PivotBetree
       ensures out.WF()
     {
       if Nil? then Nil else
-      var out := BetreeNode(buffers.ApplyFilter(filter), pivotTable, children);
+      var out := BetreeNode(buffers.ApplyFilter(filter.KeySet()), pivotTable, children);
       out
+    }
+
+    predicate CanSplit(childIdx: nat, splitKey: Key)
+    {
+      && WF()
+      && BetreeNode?
+      && PivotInsertable(pivotTable, childIdx, splitKey)
+      && 0 < childIdx < NumBuckets(pivotTable) // Can't extend domain of this node via split.
     }
 
     // TODO(jonh): Split shouldn't also Grow; that's a separate operation.
     function Split(childIdx: nat, splitKey: Key) : (out: BetreeNode)
-      requires WF()
-      requires BetreeNode?
-      requires PivotInsertable(pivotTable, childIdx, splitKey)
-      requires 0 < childIdx < NumBuckets(pivotTable) // Can't extend domain of this node via split.
+      requires CanSplit(childIdx, splitKey)
       requires BetreeNode?
       ensures out.WF()
     {
       var oldChild := children[childIdx];
+      assert WFChildren(children);  // trigger
       var newLeftChild := oldChild.ApplyFilter(Domain(pivotTable[childIdx-1], Element(splitKey)));
       var newRightChild := oldChild.ApplyFilter(Domain(Element(splitKey), pivotTable[childIdx]));
 
@@ -206,15 +164,21 @@ module PivotBetree
       Domain(pivotTable[childIdx], pivotTable[childIdx+1])
     }
 
+    predicate CanFlush(childIdx: nat)
+    {
+      && WF()
+      && BetreeNode?
+      && childIdx < NumBuckets(pivotTable)
+    }
+
     function Flush(childIdx: nat) : (out: BetreeNode)
-      requires WF()
-      requires BetreeNode?
-      requires childIdx < NumBuckets(pivotTable)
+      requires CanFlush(childIdx)
       ensures out.WF()
     {
-      var keepKeys := /*placeholder*/ ChildDomain(childIdx);
-      var keptBuffers := buffers.ApplyFilter(keepKeys); // OOF!
-      var movedBuffers := buffers.ApplyFilter(ChildDomain(childIdx));
+      var keepKeys := AllKeys() - ChildDomain(childIdx).KeySet();
+      var keptBuffers := buffers.ApplyFilter(keepKeys);
+      var movedBuffers := buffers.ApplyFilter(ChildDomain(childIdx).KeySet());
+      assert WFChildren(children);  // trigger
       var newChild := children[childIdx].Promote(ChildDomain(childIdx)).PrependBufferStack(movedBuffers);
       BetreeNode(keptBuffers, pivotTable, children[childIdx := newChild])
     }
@@ -237,6 +201,22 @@ module PivotBetree
       // Can only make a local change; entirety of children subtrees are identical.
       && Children() == other.Children()
     }
+
+    predicate KeyInDomain(key: Key)
+    {
+      && WF()
+      && BetreeNode?
+      && BoundedKey(pivotTable, key)
+    }
+
+    function Child(key: Key) : BetreeNode
+      requires WF()
+      requires BetreeNode?
+      requires KeyInDomain(key)
+    {
+      assert WFChildren(children);  // trigger
+      children[Route(pivotTable, key)]
+    }
   }
 
   function EmptyRoot(domain: Domain) : (out: BetreeNode)
@@ -249,7 +229,89 @@ module PivotBetree
     BetreeNode(BufferStack([]), pivotTable, [Nil])
   }
 
-  type Memtable = PagedBetree.Memtable
+  // TODO(jonh): sooooo much copy-paste. Maybe pull some of this logic, like the idea
+  // of a QueryReciept, out into a library?
+  datatype QueryReceiptLine = QueryReceiptLine(
+    node: BetreeNode,
+    result: Message)
+  {
+    predicate WF()
+    {
+      && node.WF()
+      && result.Define?
+    }
+  }
+
+  datatype QueryReceipt = QueryReceipt(
+    key: Key,
+    root: BetreeNode,
+    lines: seq<QueryReceiptLine>)
+  {
+    predicate Structure()
+    {
+      && 0 < |lines|
+      && lines[0].node == root
+      && (forall i:nat | i < |lines| :: lines[i].node.BetreeNode? <==> i < |lines|-1)
+      && Last(lines).result == Define(DefaultValue())
+    }
+
+    predicate AllLinesWF()
+    {
+      && (forall i:nat | i < |lines| :: lines[i].WF())
+      && (forall i:nat | i < |lines| :: lines[i].node.KeyInDomain(key))
+    }
+
+    function ChildAt(i: nat) : BetreeNode
+      requires AllLinesWF()
+      requires Structure()
+      requires i < |lines|-1
+    {
+      lines[i].node.Child(key)
+    }
+
+    predicate ChildLinkedAt(i: nat)
+      requires AllLinesWF()
+      requires Structure()
+      requires i < |lines|-1
+    {
+      lines[i+1].node == ChildAt(i)
+    }
+
+    function ResultAt(i: nat) : Message
+      requires i < |lines|
+    {
+      lines[i].result
+    }
+
+    predicate ResultLinkedAt(i: nat)
+      requires Structure()
+      requires AllLinesWF()
+      requires i < |lines| - 1
+    {
+      && lines[i].result == Merge(lines[i].node.buffers.Query(key), ResultAt(i+1))
+    }
+
+    predicate Valid()
+    {
+      && Structure()
+      && AllLinesWF()
+      && (forall i:nat | i < |lines| - 1 :: ChildLinkedAt(i))
+      && (forall i:nat | i < |lines| - 1 :: ResultLinkedAt(i))
+    }
+
+    function Result() : Message
+      requires Structure()
+    {
+      ResultAt(0)
+    }
+
+    predicate ValidFor(root: BetreeNode, key: Key)
+    {
+      && Valid()
+      && this.root == root
+      && this.key == key
+    }
+  }
 
   // TODO(jonh): more copy-paste refinement. Fonky. :v/
   datatype StampedBetree = StampedBetree(
@@ -265,7 +327,7 @@ module PivotBetree
     function PrependMemtable(memtable: Memtable) : StampedBetree
       requires WF()
     {
-      var newBuffer := Buffer(AllKeys(), memtable.mapp);
+      var newBuffer := Buffer(memtable.mapp);
       StampedBetree(root.Promote(TotalDomain()).PrependBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
     }
   }
@@ -317,42 +379,27 @@ module PivotBetree
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && var newBuffer := Buffer(AllKeys(), v.memtable.mapp);
-    && var rootBase := if v.stampedBetree.root.Nil? then EmptyRoot() else v.stampedBetree.root;
+    && var newBuffer := Buffer(v.memtable.mapp);
+    && var rootBase := if v.stampedBetree.root.Nil? then EmptyRoot(TotalDomain()) else v.stampedBetree.root;
     && v' == v.(
         memtable := v.memtable.Drain(),
         stampedBetree := v.stampedBetree.PrependMemtable(v.memtable)
       )
   }
   
-  datatype Path = Path(node: BetreeNode, key: Key, keyset: iset<Key>, depth: nat)
+  datatype Path = Path(node: BetreeNode, key: Key, depth: nat)
   {
     function Subpath() : (out: Path)
       requires 0 < depth
-      requires node.WF()
-      requires node.BetreeNode?
+      requires node.KeyInDomain(key)
     {
-      assert node.children.WF();  // trigger
-      Path(node.children.mapp[key], key, keyset, depth-1)
-    }
-
-    predicate KeysetChildrenMatch()
-      requires node.WF()
-      requires node.BetreeNode?
-    {
-      assert node.children.WF();
-      (forall k2 | k2 in keyset :: node.children.mapp[k2]==node.children.mapp[key])
+      Path(node.Child(key), key, depth-1)
     }
 
     predicate Valid()
       decreases depth
     {
-      && node.WF()
-      && node.BetreeNode?
-      && key in keyset
-      //&& (0 < depth ==> Path(node.children[key], key, depth-1).Valid())
-      // keyset 
-      && (0 < depth ==> KeysetChildrenMatch())
+      && node.KeyInDomain(key)
       && (0 < depth ==> Subpath().Valid())
     }
 
@@ -367,17 +414,17 @@ module PivotBetree
       else Subpath().Target()
     }
 
-    // opaque: these imap comprehensions cause some trigger mischief!
-    function {:opaque} ReplacedChildren(replacement: BetreeNode) : (out: ChildMap)
+    function ReplacedChildren(replacement: BetreeNode) : (out: seq<BetreeNode>)
       requires Valid()
       requires replacement.WF()
       requires 0 < depth
-      ensures out.WF()
+      ensures WFChildren(out)
       decreases depth, 0
     {
-      assert node.children.WF();  // trigger
-      var replacedChildren := Subpath().Substitute(replacement);
-      ChildMap(imap k | AnyKey(k) :: if k in keyset then replacedChildren else node.children.mapp[k])
+      var out := node.children[Route(node.pivotTable, key) := Subpath().Substitute(replacement)];
+      assert Subpath().Substitute(replacement).WF();  // trigger
+      assert WFChildren(node.children);  // trigger
+      out
     }
 
     function Substitute(replacement: BetreeNode) : (out: BetreeNode)
@@ -388,7 +435,7 @@ module PivotBetree
       if 0 == depth
       then replacement
       else
-        BetreeNode(DomainTODO, ReplacedChildren(replacement), node.buffers)
+        BetreeNode(node.buffers, node.pivotTable, ReplacedChildren(replacement))
     }
   }
 
@@ -399,7 +446,7 @@ module PivotBetree
     && step.InternalGrowStep?
     && v' == v.(
         stampedBetree := v.stampedBetree.(
-          root := BetreeNode(DomainTODO, ConstantChildMap(v.stampedBetree.root), BufferStack([]))
+          root := EmptyRoot(TotalDomain()).(children := [v.stampedBetree.root])
         )
       )
   }
@@ -410,9 +457,10 @@ module PivotBetree
     && step.InternalSplitStep?
     && step.path.Valid()
     && step.path.node == v.stampedBetree.root
+    && step.path.Target().CanSplit(step.childIdx, step.splitKey)
     && v' == v.(
         stampedBetree := v.stampedBetree.(
-          root := step.path.Substitute(step.path.Target().Split(step.leftKeys, step.rightKeys))
+          root := step.path.Substitute(step.path.Target().Split(step.childIdx, step.splitKey))
         )
       )
   }
@@ -423,9 +471,10 @@ module PivotBetree
     && step.InternalFlushStep?
     && step.path.Valid()
     && step.path.node == v.stampedBetree.root
+    && step.path.Target().CanFlush(step.childIdx)
     && v' == v.(
         stampedBetree := v.stampedBetree.(
-          root := step.path.Substitute(step.path.Target().Flush(step.downKeys))
+          root := step.path.Substitute(step.path.Target().Flush(step.childIdx))
         )
       )
   }
@@ -461,8 +510,8 @@ module PivotBetree
     | QueryEndLsnStep()
     | FreezeAsStep()
     | InternalGrowStep()
-    | InternalSplitStep(path: Path, leftKeys: iset<Key>, rightKeys: iset<Key>)
-    | InternalFlushStep(path: Path, downKeys: iset<Key>)
+    | InternalSplitStep(path: Path, childIdx: nat, splitKey: Key)
+    | InternalFlushStep(path: Path, childIdx: nat)
     | InternalCompactStep(path: Path, compactedNode: BetreeNode)
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
