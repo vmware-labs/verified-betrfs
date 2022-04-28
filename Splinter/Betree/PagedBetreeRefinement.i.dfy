@@ -276,7 +276,7 @@ module PagedBetreeRefinement
     ensures I(v') == I(v)
   {
     var orig := v.stampedBetree.root;
-    var grown := BetreeNode(ConstantChildMap(orig), BufferStack([]));
+    var grown := BetreeNode(BufferStack([]), ConstantChildMap(orig));
 
     forall key | AnyKey(key)
       ensures INodeAt(grown, key) == INodeAt(orig, key)
