@@ -227,6 +227,7 @@ module PivotBetreeRefinement
     ensures v'.WF()
     ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step))
   {
+  /*
     INodeWF(v.stampedBetree.root);
     INodeWF(step.path.Target());
     InvNext(v, v', lbl);
@@ -259,6 +260,7 @@ module PivotBetreeRefinement
 
     assert iv'.stampedBetree.root == istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
     assert PagedBetree.InternalSplit(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step));
+    */
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
