@@ -232,6 +232,11 @@ module PagedBetree
       StampedBetree(root.Promote().PrependBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
     }
   }
+
+  function EmptyStampedBetree() : StampedBetree
+  {
+    StampedBetree(Nil, 0)
+  }
     
   datatype Variables = Variables(
     memtable: Memtable,
@@ -272,7 +277,7 @@ module PagedBetree
   {
     && lbl.FreezeAsLabel?
     && v.WF()
-    && lbl.stampedBetree == v.stampedBetree.PrependMemtable(v.memtable) // TODO(jonh): no, don't bring the memtable along!
+    && lbl.stampedBetree == v.stampedBetree
     && v' == v
   }
 
