@@ -12,6 +12,7 @@ module BlockCrashTolerantJournalRefinement {
   import opened StampedMapMod
   import opened MsgHistoryMod
   import opened LSNMod
+  import opened GenericDisk
   import CrashTolerantJournal 
   import PagedJournalRefinement 
   import AbstractJournal
@@ -35,9 +36,8 @@ module BlockCrashTolerantJournalRefinement {
   }
 
   function IALabel(lbl: TransitionLabel) : CrashTolerantJournal.TransitionLabel
-    requires lbl.WF()
   {
-    lbl
+    lbl.base
   }
 
   predicate Decodable(v: Variables)
@@ -95,7 +95,7 @@ module BlockCrashTolerantJournalRefinement {
   }
 
   lemma LoadEphemeralFromPersistentRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-    requires Inv(v) && Next(v, v', lbl) && lbl.LoadEphemeralFromPersistentLabel?
+    requires Inv(v) && Next(v, v', lbl) && lbl.base.LoadEphemeralFromPersistentLabel?
     ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
     MarshalledJournalRefinement.InvInit(v'.ephemeral.v, v.persistent);
@@ -103,10 +103,10 @@ module BlockCrashTolerantJournalRefinement {
   }
 
   lemma ReadForRecoveryRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-    requires Inv(v) && Next(v, v', lbl) && lbl.ReadForRecoveryLabel?
+    requires Inv(v) && Next(v, v', lbl) && lbl.base.ReadForRecoveryLabel?
     ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
-    JournalChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.ReadForRecoveryLabel(lbl.records));
+    JournalChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.ReadForRecoveryLabel(lbl.base.records));
   }
 
   lemma JournalChainedNext(j: MarshalledJournal.Variables, j': MarshalledJournal.Variables, lbl: MarshalledJournal.TransitionLabel)
@@ -128,26 +128,26 @@ module BlockCrashTolerantJournalRefinement {
   }
 
 //  lemma QueryEndLsnRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-//    requires Inv(v) && Next(v, v', lbl) && lbl.QueryEndLsnLabel?
+//    requires Inv(v) && Next(v, v', lbl) && lbl.base.QueryEndLsnLabel?
 //    ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
 //  {
 //  }
 
-  lemma PutRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-    requires Inv(v) && Next(v, v', lbl) && lbl.PutLabel?
+  lemma {:timeLimitMultiplier 2} PutRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v) && Next(v, v', lbl) && lbl.base.PutLabel?
     ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
-    MarshalledJournalRefinement.RefinementNext(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.PutLabel(lbl.records));
+    MarshalledJournalRefinement.RefinementNext(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.PutLabel(lbl.base.records));
   }
 
 //  lemma QueryLsnPersistenceRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-//    requires Inv(v) && Next(v, v', lbl) && lbl.QueryLsnPersistenceLabel?
+//    requires Inv(v) && Next(v, v', lbl) && lbl.base.QueryLsnPersistenceLabel?
 //    ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
 //  {
 //  }
 
   lemma InternalRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-    requires Inv(v) && Next(v, v', lbl) && lbl.InternalLabel?
+    requires Inv(v) && Next(v, v', lbl) && lbl.base.InternalLabel?
     ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
     JournalChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.InternalLabel());
@@ -170,7 +170,7 @@ module BlockCrashTolerantJournalRefinement {
   }
 
   lemma CommitStartRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-    requires Inv(v) && Next(v, v', lbl) && lbl.CommitStartLabel?
+    requires Inv(v) && Next(v, v', lbl) && lbl.base.CommitStartLabel?
     ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
     var frozenJournal := v'.inFlight.value;
@@ -186,29 +186,29 @@ module BlockCrashTolerantJournalRefinement {
   }
 
   lemma CommitCompleteRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-    requires Inv(v) && Next(v, v', lbl) && lbl.CommitCompleteLabel?
+    requires Inv(v) && Next(v, v', lbl) && lbl.base.CommitCompleteLabel?
     ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
     JournalChainedNext(v.ephemeral.v, v'.ephemeral.v,
-      MarshalledJournal.DiscardOldLabel(v.inFlight.value.SeqStart(), lbl.requireEnd));
+      MarshalledJournal.DiscardOldLabel(v.inFlight.value.SeqStart(), lbl.base.requireEnd));
     MarshalledJournalRefinement.TypedModelUnique(); // Completes persistent.IsSubDisk(ephemeral) proof.
     v.inFlight.value.I().I().BuildReceipt().BoundaryLSN();  // MJ label seqStarT is AbstractJournal label SeqStart
   }
 
   lemma CrashRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-    requires Inv(v) && Next(v, v', lbl) && lbl.CrashLabel?
+    requires Inv(v) && Next(v, v', lbl) && lbl.base.CrashLabel?
     ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
   }
 
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-    requires Next(v, v', lbl)
     requires Inv(v)
+    requires Next(v, v', lbl)
     ensures Inv(v')
     ensures CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
-    match lbl {
+    match lbl.base {
       case LoadEphemeralFromPersistentLabel() => { LoadEphemeralFromPersistentRefines(v, v', lbl); }
       case ReadForRecoveryLabel(_) => { ReadForRecoveryRefines(v, v', lbl); }
       case QueryEndLsnLabel(_) => { /*QueryEndLsnRefines(v, v', lbl);*/ }
@@ -218,6 +218,90 @@ module BlockCrashTolerantJournalRefinement {
       case CommitStartLabel(_, _) => { CommitStartRefines(v, v', lbl); }
       case CommitCompleteLabel(_) => { CommitCompleteRefines(v, v', lbl); }
       case CrashLabel() => { CrashRefines(v, v', lbl); }
+    }
+  }
+
+  //////////////////////////////////////////////////////////////////////////
+  // Framing obligations
+
+  function ImageRepr(s: StoreImage) : set<Address>
+  {
+    s.diskView.entries.Keys
+  }
+
+  function Repr(v: Variables) : set<Address>
+  {
+      ImageRepr(v.persistent)
+    + (if v.ephemeral.Known? then ImageRepr(v.ephemeral.v.journalImage) else {})
+    + (if v.inFlight.Some? then ImageRepr(v.inFlight.value) else {})
+  }
+
+  lemma ImageFraming(s1: StoreImage, s2: StoreImage)
+    requires DecodableImage(s1)
+    requires s1.diskView == s2.diskView // well, duh, I guess. This isn't very interesting.
+    requires s1.superblock == s2.superblock
+    ensures DecodableImage(s2)
+    ensures IImage(s1) == IImage(s2)
+  {
+  }
+
+/*
+  predicate DisksAgree(v1: Variables, v2: Variables)
+  {
+    && v1.persistent.diskView.AgreesWithDisk(s2.persistent.diskView)
+    && 
+    && (v.ephemeral.Known? ==> v.ephemeral.v.journalImage.diskView.AgreesWithDisk(v.persistent.diskView))
+    && (v.inFlight.Some? ==> v.inFlight.value.diskView.AgreesWithDisk(v.persistent.diskView))
+  }
+
+nonsense -- in-memory part needs to be compatible too
+  lemma Framing(v1: Variables, v2: Variables)
+    requires Decodable(v1)
+    requires DisksAgree(v1, v2)
+    ensures Decodable(v2)
+    ensures I(v1) == I(v2)
+  {
+  }
+*/
+
+  lemma Updates(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    ensures Repr(v') <= Repr(v) + lbl.allocations
+    // what good is this <=?
+  {
+    match lbl.base {
+      case LoadEphemeralFromPersistentLabel() => { }
+      case ReadForRecoveryLabel(_) => { }
+      case QueryEndLsnLabel(_) => { }
+      case PutLabel(_) => { }
+      case InternalLabel() => {
+        // adds a page.
+      }
+      case QueryLsnPersistenceLabel(_) => { }
+      case CommitStartLabel(_, _) => {
+        // introduce inFlight
+//        var eph := v'.ephemeral.v.journalImage;
+//        var do := v.ephemeral.v.journalImage.truncatedJournal.DiscardOld(v.inFlight.value.SeqStart());
+//        var tight := do.BuildTight();
+//        assert ImageRepr(v'.inFlight.value) == ImageRepr(tight);
+//        assert ImageRepr(tight) <= ImageRepr(do);
+//        assert ImageRepr(do) <= ImageRepr(eph);
+//        assert ImageRepr(v'.inFlight.value) <= ImageRepr(v'.ephemeral.v.journalImage);
+//        assert Repr(v') == Repr(v);
+        //assume false;
+      }
+      case CommitCompleteLabel(_) => {
+      }
+      case CrashLabel() => {
+        // um, in-flight commit modeling is a little weird -- in-flight disk
+        // becomes persistent before we hear about it in CommitComplete.
+        // Probably going to need to split the step into CommitComplete (which
+        // changes the persistent state on the disk) and LearnCommit (which
+        // changes the program's model of the persistent state).
+
+        // forgets ephemeral & in-flight
+      }
     }
   }
 }

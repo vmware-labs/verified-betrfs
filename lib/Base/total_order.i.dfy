@@ -318,7 +318,7 @@ abstract module Total_Order refines Total_Preorder {
     ensures forall i :: LargestLte(run, needle) < i < |run| ==> lt(needle, run[i]);
     ensures needle in run ==> 0 <= LargestLte(run, needle) && run[LargestLte(run, needle)] == needle;
   {
-    reveal_IsSorted();
+//    reveal_IsSorted(); XXX
     if |run| == 0 || lt(needle, run[0]) then -1
     else 1 + LargestLte(run[1..], needle)
   }
@@ -1130,6 +1130,18 @@ module Upperbounded_Lexicographic_Byte_Order refines Upperbounded_Total_Order {
         assert lte(a, wit);
         assert false;
       }
+    }
+  }
+
+  // TODO(robj): promote into raw lexicographic order
+  lemma SmallestElementLte(e: Element)
+    ensures lte(GetSmallestElement(), e)
+  {
+    if !NotMinimum(e) && e.Element? && e.e != [] {
+      SeqComparison.reveal_lte();
+      assert lt(Element([]), e);  // trigger
+      reveal_NotMinimum();
+      assert false;
     }
   }
 

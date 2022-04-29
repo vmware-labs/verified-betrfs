@@ -361,7 +361,6 @@ module PagedBetree
   {
     && v.WF()
     && lbl.InternalLabel?
-    && step.InternalGrowStep?
     && v' == v.(
         stampedBetree := v.stampedBetree.(
           root := BetreeNode(BufferStack([]), ConstantChildMap(v.stampedBetree.root))

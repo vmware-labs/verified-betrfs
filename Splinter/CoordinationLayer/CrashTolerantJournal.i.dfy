@@ -25,11 +25,13 @@ module CrashTolerantJournal {
     | CommitStartLabel(newBoundaryLsn: LSN, maxLsn: LSN)
     | CommitCompleteLabel(requireEnd: LSN)
     | CrashLabel()
-  {
-    predicate WF() {
-      && (ReadForRecoveryLabel? ==> records.WF())
-    }
-  }
+// TODO(jonh): delete; unused
+//  {
+//    predicate WF() {
+//      && (ReadForRecoveryLabel? ==> records.WF())
+//      && (PutLabel? ==> records.WF())
+//    }
+//  }
     
   type StoreImage = MsgHistory
 
@@ -70,7 +72,6 @@ module CrashTolerantJournal {
   predicate ReadForRecovery(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
     && lbl.ReadForRecoveryLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -82,7 +83,6 @@ module CrashTolerantJournal {
   predicate QueryEndLsn(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
     && lbl.QueryEndLsnLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -94,7 +94,6 @@ module CrashTolerantJournal {
   predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
     && lbl.PutLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -107,7 +106,6 @@ module CrashTolerantJournal {
   predicate Internal(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
     && lbl.InternalLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -120,7 +118,6 @@ module CrashTolerantJournal {
   predicate QueryLsnPersistence(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
     && lbl.QueryLsnPersistenceLabel?
     && lbl.syncLsn <= v.persistent.seqEnd
     && v' == v
@@ -129,7 +126,6 @@ module CrashTolerantJournal {
   predicate CommitStart(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
     && lbl.CommitStartLabel?
     && v.ephemeral.Known?
     // Can't start a commit if one is in-flight, or we'd forget to maintain the
@@ -160,7 +156,6 @@ module CrashTolerantJournal {
   predicate CommitComplete(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
     && lbl.CommitCompleteLabel?
     && v.ephemeral.Known?
     && v.inFlight.Some?
@@ -178,7 +173,6 @@ module CrashTolerantJournal {
   predicate Crash(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
     && lbl.CrashLabel?
     && v' == v.(
       ephemeral := Unknown,

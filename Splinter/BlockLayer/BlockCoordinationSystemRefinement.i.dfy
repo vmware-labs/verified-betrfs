@@ -46,6 +46,23 @@ module BlockCoordinationSystemRefinement
   //////////////////////////////////////////////////////////////////////
   // Inv
 
+  function SuperblockRepr() : set<Address>
+  {
+    // Could store the superblock in two places.
+    // Um, addresses aren't concrete yet.
+    { 0, 1 }
+  }
+
+  predicate Framing(v: Variables)
+    requires v.WF()
+  {
+    // This theorem doesn't get interesting until there's something interesting
+    // happening in more than one place!
+    && v.journal.Repr() !! v.mapadt.Repr()
+    && v.journal.Repr() !! SuperblockRepr()
+    && v.mapadt.Repr() !! SuperblockRepr()
+  }
+
   predicate Inv(v: Variables) {
     && v.WF()
     && DecodableVariables(v)
@@ -105,7 +122,7 @@ module BlockCoordinationSystemRefinement
     requires step.LoadEphemeralFromPersistentStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.LoadEphemeralFromPersistentLabel());
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.LoadEphemeralFromPersistentLabel()));
     BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.LoadEphemeralFromPersistentLabel(v'.ephemeral.mapLsn));
   }
 
@@ -113,7 +130,7 @@ module BlockCoordinationSystemRefinement
     requires NextCondition(v, v', uiop, step) && step.RecoverStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.ReadForRecoveryLabel(step.records));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.ReadForRecoveryLabel(step.records)));
     BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.PutRecordsLabel(step.records));
   }
 
@@ -127,7 +144,7 @@ module BlockCoordinationSystemRefinement
     requires NextCondition(v, v', uiop, step) && step.QueryStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn)));
     var key := uiop.baseOp.req.input.key;
     var value := uiop.baseOp.reply.output.value;
     BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.QueryLabel(v.ephemeral.mapLsn, key, value));
@@ -140,7 +157,7 @@ module BlockCoordinationSystemRefinement
     var key := uiop.baseOp.req.input.key;
     var val := uiop.baseOp.req.input.value;
     var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.PutLabel(singleton));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.PutLabel(singleton)));
     BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.PutRecordsLabel(singleton));
   }
 
@@ -148,7 +165,7 @@ module BlockCoordinationSystemRefinement
     requires NextCondition(v, v', uiop, step) && step.JournalInternalStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.InternalLabel());
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.InternalLabel()));
   }
 
   lemma MapInternalNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
@@ -180,7 +197,7 @@ module BlockCoordinationSystemRefinement
     requires NextCondition(v, v', uiop, step) && step.CommitStartStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.CommitStartLabel(step.newBoundaryLsn, v.ephemeral.mapLsn));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.CommitStartLabel(step.newBoundaryLsn, v.ephemeral.mapLsn)));
     BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.CommitStartLabel(step.newBoundaryLsn));
   }
 
@@ -188,7 +205,7 @@ module BlockCoordinationSystemRefinement
     requires NextCondition(v, v', uiop, step) && step.CommitCompleteStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.CommitCompleteLabel(v.ephemeral.mapLsn));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.CommitCompleteLabel(v.ephemeral.mapLsn)));
     BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.CommitCompleteLabel());
   }
 
@@ -196,7 +213,7 @@ module BlockCoordinationSystemRefinement
     requires NextCondition(v, v', uiop, step) && step.CrashStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, CrashTolerantJournal.CrashLabel());
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.CrashLabel()));
     BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.CrashLabel());
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, CoordinationSystem.CrashStep());
   }
@@ -207,7 +224,7 @@ module BlockCoordinationSystemRefinement
   // TODO(utaal): This opacification is probably a good test for the opaque rules in Verus!
   // TODO(jonh): Once that's fixed, we could surely pull the prooflets above
   // back into their respective cases down here.
-  lemma {:timeLimitMultiplier 3} RefinementNext(v: Variables, v': Variables, uiop: UIOp)
+  lemma RefinementNext(v: Variables, v': Variables, uiop: UIOp)
     requires Inv(v)
     requires Next(v, v', uiop)
     ensures Inv(v')

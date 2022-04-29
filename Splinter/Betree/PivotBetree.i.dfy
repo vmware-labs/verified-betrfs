@@ -23,7 +23,6 @@ module PivotBetree
   import opened BoundedPivotsLib
 
   datatype TransitionLabel =
-  
     QueryLabel(endLsn: LSN, key: Key, value: Value)
   | PutLabel(puts: MsgHistory)
   | QueryEndLsnLabel(endLsn: LSN)
@@ -35,7 +34,9 @@ module PivotBetree
   // end is exclusive
   datatype Domain = EmptyDomain | Domain(start: Element, end: Element)
   {
-    predicate WF() {
+    // Key comparisons are a trigger party
+    predicate {:opaque} SaneKeys()
+    {
       && (!EmptyDomain? ==>
           && lt(start, end)
           && start.Element?
@@ -44,32 +45,37 @@ module PivotBetree
         )
     }
 
-    predicate Contains(key: Key) {
+    predicate WF() {
+      && SaneKeys()
+    }
+
+    predicate {:opaque} Contains(key: Key) {
       && !EmptyDomain?
-      && lte(start, Element(key))
-      && lt(Element(key), end)
+//      && lte(start, Element(key)) XXX
+//      && lt(Element(key), end) XXX
     }
 
-    function IntersectInner(r2: Domain) : Domain
-      requires Domain?
-      requires r2.Domain?
-      requires lte(start, r2.start)
-    {
-      if lte(end, r2.start)
-      then EmptyDomain
-      else if lt(end, r2.end)
-      then Domain(r2.start, end)
-      else Domain(r2.start, r2.end)
-    }
-
-    function Intersect(r2: Domain) : Domain
-    {
-      if EmptyDomain? || r2.EmptyDomain?
-      then this
-      else if lte(start, r2.start)
-      then this.IntersectInner(r2)
-      else r2.IntersectInner(this)
-    }
+    // TODO(jonh): Why are these unused?
+//    function IntersectInner(r2: Domain) : Domain
+//      requires Domain?
+//      requires r2.Domain?
+//      requires lte(start, r2.start)
+//    {
+//      if lte(end, r2.start)
+//      then EmptyDomain
+//      else if lt(end, r2.end)
+//      then Domain(r2.start, end)
+//      else Domain(r2.start, r2.end)
+//    }
+//
+//    function Intersect(r2: Domain) : Domain
+//    {
+//      if EmptyDomain? || r2.EmptyDomain?
+//      then this
+//      else if lte(start, r2.start)
+//      then this.IntersectInner(r2)
+//      else r2.IntersectInner(this)
+//    }
 
     // Interpret a domain for use with an abstract Buffer.
     function KeySet() : iset<Key>
@@ -140,7 +146,7 @@ module PivotBetree
 
       // TODO(jonh): BucketsLib suggests this is a timeout trap?
       var newChildren := replace1with2(children, newLeftChild, newRightChild, childIdx);
-      assert forall i:nat | i<|newChildren| :: newChildren[i].WF() by { reveal_replace1with2(); }
+//      assert forall i:nat | i<|newChildren| :: newChildren[i].WF() by { reveal_replace1with2(); }
       WFPivotsInsert(pivotTable, childIdx, splitKey);
       BetreeNode(buffers, InsertPivot(pivotTable, childIdx, splitKey), newChildren)
     }
@@ -160,7 +166,7 @@ module PivotBetree
       requires childIdx < NumBuckets(pivotTable)
       ensures out.WF()
     {
-      reveal_IsStrictlySorted();
+//      reveal_IsStrictlySorted();
       Domain(pivotTable[childIdx], pivotTable[childIdx+1])
     }
 
@@ -202,11 +208,19 @@ module PivotBetree
       && Children() == other.Children()
     }
 
-    predicate KeyInDomain(key: Key)
+    predicate {:opaque} KeyInDomain(key: Key)
     {
       && WF()
       && BetreeNode?
-      && BoundedKey(pivotTable, key)
+//      && BoundedKey(pivotTable, key)  XXX
+    }
+
+    // Redundant; should equal domain.KeySet() for the domain specified by the pivotTable.
+    function KeySet() : iset<Key>
+      requires WF()
+      requires BetreeNode?  // TODO(jonh): trouble for Nils?
+    {
+      iset key | KeyInDomain(key)
     }
 
     function Child(key: Key) : BetreeNode
@@ -225,7 +239,7 @@ module PivotBetree
     ensures out.WF()
   {
     var pivotTable := [domain.start, domain.end];
-    assert Keyspace.IsStrictlySorted(pivotTable) by { reveal_IsStrictlySorted(); }
+//    assert Keyspace.IsStrictlySorted(pivotTable) by { reveal_IsStrictlySorted(); }
     BetreeNode(BufferStack([]), pivotTable, [Nil])
   }
 
@@ -258,7 +272,7 @@ module PivotBetree
     predicate AllLinesWF()
     {
       && (forall i:nat | i < |lines| :: lines[i].WF())
-      && (forall i:nat | i < |lines| :: lines[i].node.KeyInDomain(key))
+      && (forall i:nat | i < |lines|-1 :: lines[i].node.KeyInDomain(key))
     }
 
     function ChildAt(i: nat) : BetreeNode
@@ -313,7 +327,6 @@ module PivotBetree
     }
   }
 
-  // TODO(jonh): more copy-paste refinement. Fonky. :v/
   datatype StampedBetree = StampedBetree(
     root: BetreeNode,
     seqEnd: LSN
@@ -331,7 +344,6 @@ module PivotBetree
       StampedBetree(root.Promote(TotalDomain()).PrependBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
     }
   }
-    
 
   datatype Variables = Variables(
     memtable: Memtable,
@@ -372,7 +384,7 @@ module PivotBetree
   {
     && lbl.FreezeAsLabel?
     && v.WF()
-    && lbl.stampedBetree == v.stampedBetree.PrependMemtable(v.memtable)
+    && lbl.stampedBetree == v.stampedBetree
     && v' == v
   }
 

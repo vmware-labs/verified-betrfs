@@ -13,11 +13,11 @@ module BlockCrashTolerantJournal {
   import opened StampedMapMod
   import opened MsgHistoryMod
   import opened LSNMod
+  import opened GenericDisk
   import MarshalledJournal
   import CrashTolerantJournal
 
-  // TODO lazy
-  type TransitionLabel = CrashTolerantJournal.TransitionLabel
+  datatype TransitionLabel = TransitionLabel(allocations: set<Address>, base: CrashTolerantJournal.TransitionLabel)
     
   type StoreImage = MarshalledJournal.JournalImage
 
@@ -46,7 +46,8 @@ module BlockCrashTolerantJournal {
   predicate LoadEphemeralFromPersistent(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.LoadEphemeralFromPersistentLabel?
+    && lbl.base.LoadEphemeralFromPersistentLabel?
+    && lbl.allocations == {}
     && v.ephemeral.Unknown?
     && v'.ephemeral.Known?
 
@@ -58,36 +59,36 @@ module BlockCrashTolerantJournal {
   predicate ReadForRecovery(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
-    && lbl.ReadForRecoveryLabel?
+    && lbl.base.ReadForRecoveryLabel?
+    && lbl.allocations == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
   
-    && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.ReadForRecoveryLabel(lbl.records))
+    && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.ReadForRecoveryLabel(lbl.base.records))
     && v' == v  // everything UNCHANGED
   }
   
   predicate QueryEndLsn(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
-    && lbl.QueryEndLsnLabel?
+    && lbl.base.QueryEndLsnLabel?
+    && lbl.allocations == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
-    && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.QueryEndLsnLabel(lbl.endLsn))
+    && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.QueryEndLsnLabel(lbl.base.endLsn))
     && v' == v
   }
 
   predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
-    && lbl.PutLabel?
+    && lbl.base.PutLabel?
+    && lbl.allocations == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
-    && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.PutLabel(lbl.records))
+    && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.PutLabel(lbl.base.records))
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
   }
@@ -95,8 +96,8 @@ module BlockCrashTolerantJournal {
   predicate Internal(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
-    && lbl.InternalLabel?
+    && lbl.base.InternalLabel?
+    && lbl.allocations == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
@@ -108,17 +109,18 @@ module BlockCrashTolerantJournal {
   predicate QueryLsnPersistence(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
-    && lbl.QueryLsnPersistenceLabel?
-    && lbl.syncLsn <= v.persistent.SeqEnd()
+    && lbl.base.QueryLsnPersistenceLabel?
+    && lbl.allocations == {}
+    && lbl.allocations == {}
+    && lbl.base.syncLsn <= v.persistent.SeqEnd()
     && v' == v
   }
 
   predicate CommitStart(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
-    && lbl.CommitStartLabel?
+    && lbl.base.CommitStartLabel?
+    && lbl.allocations == {}
     && v.ephemeral.Known?
     // Can't start a commit if one is in-flight, or we'd forget to maintain the
     // invariants for the in-flight one.
@@ -129,14 +131,14 @@ module BlockCrashTolerantJournal {
     && var frozenJournal := v'.inFlight.value;
 
     // Frozen journal stitches to frozen map
-    && frozenJournal.SeqStart() == lbl.newBoundaryLsn
+    && frozenJournal.SeqStart() == lbl.base.newBoundaryLsn
 
     // Journal doesn't go backwards
     && frozenJournal.WF()
     && v.persistent.SeqEnd() <= frozenJournal.SeqEnd()
 
     // There should be no way for the frozen journal to have passed the ephemeral map!
-    && frozenJournal.SeqStart() <= lbl.maxLsn
+    && frozenJournal.SeqStart() <= lbl.base.maxLsn
 
     && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.FreezeForCommitLabel(frozenJournal))
 
@@ -149,14 +151,14 @@ module BlockCrashTolerantJournal {
   predicate CommitComplete(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
-    && lbl.CommitCompleteLabel?
+    && lbl.base.CommitCompleteLabel?
+    && lbl.allocations == {}
     && v.ephemeral.Known?
     && v.inFlight.Some?
     && v'.ephemeral.Known?
 
     && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v,
-        MarshalledJournal.DiscardOldLabel(v.inFlight.value.SeqStart(), lbl.requireEnd))
+        MarshalledJournal.DiscardOldLabel(v.inFlight.value.SeqStart(), lbl.base.requireEnd))
 
     && v' == v.(
       persistent := v.inFlight.value,
@@ -167,8 +169,9 @@ module BlockCrashTolerantJournal {
   predicate Crash(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.WF()
-    && lbl.CrashLabel?
+    && lbl.base.CrashLabel?
+    && lbl.allocations == {}
+    && lbl.allocations == {}
     && v' == v.(
       ephemeral := Unknown,
       inFlight := None)
@@ -182,7 +185,7 @@ module BlockCrashTolerantJournal {
 
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    match lbl {
+    match lbl.base {
       case LoadEphemeralFromPersistentLabel() => LoadEphemeralFromPersistent(v, v', lbl)
       case ReadForRecoveryLabel(_) => ReadForRecovery(v, v', lbl)
       case QueryEndLsnLabel(_) => QueryEndLsn(v, v', lbl)
