@@ -39,6 +39,7 @@ module CrashTolerantMod(atomic: AtomicStateMachineMod) refines StateMachineIfc(C
   //import async = uiopifc.async
   //import async = StateMachineIfc(CrashTolerantUIOp(atomic)).uiopifc.async
 
+  // TODO(jonh): Use FloatingSeq developed with Jialin here!
   datatype Version =
     | Forgotten
       // Keeping placeholders for LSNs before stableIdx makes it more
