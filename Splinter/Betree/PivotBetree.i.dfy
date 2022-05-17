@@ -38,7 +38,7 @@ module PivotBetree
     predicate {:opaque} SaneKeys()
     {
       && (!EmptyDomain? ==>
-          && lt(start, end)
+          && lt(start, end) // TODO(timeout): sure wish the opaque were working
           && start.Element?
           && ElementIsKey(start)
           && (end.Element? ==> ElementIsKey(end))
@@ -51,8 +51,8 @@ module PivotBetree
 
     predicate {:opaque} Contains(key: Key) {
       && !EmptyDomain?
-//      && lte(start, Element(key)) XXX
-//      && lt(Element(key), end) XXX
+      && lte(start, Element(key)) // TODO(timeout): sure wish the opaque were working
+      && lt(Element(key), end)
     }
 
     // TODO(jonh): Why are these unused?
@@ -84,9 +84,9 @@ module PivotBetree
     }
   }
 
-  function TotalDomain() : (out: Domain)
+  function {:opaque} TotalDomain() : (out: Domain)
     ensures out.WF()
-  {
+  { // TODO(timeout): sure wish the opaque were working
     Domain(Upperbounded_Lexicographic_Byte_Order_Impl.Ord.GetSmallestElement(), Max_Element)
   }
 
@@ -212,7 +212,7 @@ module PivotBetree
     {
       && WF()
       && BetreeNode?
-//      && BoundedKey(pivotTable, key)  XXX
+      && BoundedKey(pivotTable, key)  // TODO(timeout): sure wish the opaque were working
     }
 
     // Redundant; should equal domain.KeySet() for the domain specified by the pivotTable.
@@ -411,6 +411,7 @@ module PivotBetree
     predicate Valid()
       decreases depth
     {
+      && node.WF()
       && node.KeyInDomain(key)
       && (0 < depth ==> Subpath().Valid())
     }

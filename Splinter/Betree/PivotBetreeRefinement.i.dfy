@@ -87,7 +87,7 @@ module PivotBetreeRefinement
   function IPath(path: Path) : PagedBetree.Path
     requires path.Valid()
   {
-    PagedBetree.Path(INode(path.node), path.key, path.Target().KeySet(), 0)
+    PagedBetree.Path(INode(path.node), path.key, path.Target().KeySet(), path.depth)
   }
 
   lemma ValidPathRefines(path: Path)
@@ -127,8 +127,7 @@ module PivotBetreeRefinement
   function {:opaque} SplitLeftKeys(step: Step) : iset<Key>
     requires step.InternalSplitStep?
   {
-//    iset key | key in SplitChildKeys(step) && lt(Element(key), Element(step.splitKey)) XXX
-    iset key | true
+    iset key | key in SplitChildKeys(step) && lt(Element(key), Element(step.splitKey))
   }
 
   function IStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) : PagedBetree.Step
@@ -203,64 +202,173 @@ module PivotBetreeRefinement
     }
   }
 
-  lemma SubstitutionEquivalenceRefines(path: Path, target': BetreeNode)
+  lemma SubstitutePreservesWF(path: Path, target': BetreeNode)
     requires path.Valid()
-    requires INode(target') == INode(path.Target())
-    ensures INode(path.node) == INode(path.Substitute(target'))
+    requires target'.WF()
+    ensures path.Substitute(target').WF()
   {
-    assume false;
   }
 
-  lemma SplitEquivalence(step: Step)
+  lemma SubstitutionEquivalenceRefines(path: Path, target': BetreeNode)
+    requires path.Valid()
+    requires target'.WF()
+    ensures path.Substitute(target').WF()
+    ensures IPath(path).Valid()
+    ensures INode(target').WF();
+    ensures INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
+    decreases path.depth;
+  {
+    SubstitutePreservesWF(path, target');
+    ValidPathRefines(path);
+    INodeWF(target');
+    if path.depth==0 {
+      assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
+    } else {
+      assert 0<IPath(path).depth;
+      SubstitutionEquivalenceRefines(path.Subpath(), target');
+      if target'.Nil? {
+        assume INode(path.Substitute(Nil)) == IPath(path).Substitute(PagedBetree.Nil);
+        assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
+      } else {
+        calc {
+          INode(path.Substitute(target')).buffers;
+          path.Substitute(target').buffers;
+          path.node.buffers;
+          IPath(path).node.buffers;
+          PagedBetree.BetreeNode(IPath(path).node.buffers, IPath(path).ReplacedChildren(INode(target'))).buffers;
+          IPath(path).Substitute(INode(target')).buffers;
+        }
+        assert INode(path.Substitute(target')).buffers == IPath(path).Substitute(INode(target')).buffers;
+        assert INode(path.Substitute(target')).children.mapp.Keys == AllKeys();
+        assert IPath(path).Substitute(INode(target')).children.mapp.Keys == AllKeys();
+        forall key | key in AllKeys()
+        ensures INode(path.Substitute(target')).children.mapp[key]
+          == IPath(path).Substitute(INode(target')).children.mapp[key] {
+          IPath(path).reveal_ReplacedChildren();
+          // I think Substitute needs a condition that target''s KeySet matches Target()'s.
+          assume path.Target().KeySet() == target'.KeySet();
+          assume path.Substitute(target').WF();
+          assume path.Substitute(target').KeySet() == path.node.KeySet(); // prove inductively
+          if key !in path.node.KeySet() {
+              assert INode(path.Substitute(target')).children.mapp[key] == PagedBetree.Nil;
+              assert IPath(path).Substitute(INode(target')).children.mapp[key] == PagedBetree.Nil;
+          } else {
+            assume key in IPath(path).keyset;
+            calc {
+              INode(path.Substitute(target')).children.mapp[key];
+              INode(path.Substitute(target').Child(key));
+              {
+                calc {
+                  path.Substitute(target').Child(key);
+                  path.Subpath().Substitute(target').Child(key);
+                }
+              }
+              INode(path.Subpath().Substitute(target'));
+//              INode(path.Subpath().Substitute(target')).children.mapp[key];
+                // recursion
+              IPath(path.Subpath()).Substitute(INode(target'));
+                { assert IPath(path).Subpath() == IPath(path.Subpath()); }
+              (IPath(path).Subpath()).Substitute(INode(target'));
+                { assert key in IPath(path).keyset;
+                  IPath(path).reveal_ReplacedChildren();
+                  
+                  var replacedChildren := IPath(path).Subpath().Substitute(INode(target'));
+                  calc {
+                    IPath(path).Substitute(INode(target')).children.mapp[key];
+                    IPath(path).ReplacedChildren(INode(target')).mapp[key];
+                    if key in IPath(path).keyset then replacedChildren else IPath(path).node.children.mapp[key];
+                    replacedChildren;
+                    IPath(path).Subpath().Substitute(INode(target'));
+                  }
+                }
+              IPath(path).Substitute(INode(target')).children.mapp[key];
+            }
+          }
+        }
+        assert INode(path.Substitute(target')).children == IPath(path).Substitute(INode(target')).children;
+        assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
+      }
+    }
+  }
+
+  lemma SplitEquivalence(v: Variables, v': Variables, lbl: TransitionLabel, step: Step, istep: PagedBetree.Step)
     requires step.InternalSplitStep?
     requires step.path.Valid()
     requires step.path.Target().CanSplit(step.childIdx, step.splitKey)
+    requires istep == IStep(v, v', lbl, step)
     ensures INode(step.path.node.Split(step.childIdx, step.splitKey))
-      == INode(step.path.node).Split(SplitLeftKeys(step), SplitChildKeys(step) - SplitLeftKeys(step));
+      == istep.path.Target().Split(istep.leftKeys, istep.rightKeys);
   {
   }
 
-  lemma {:timeLimitMultiplier 2} InternalSplitStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma {:timeLimitMultiplier 4} InternalSplitStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalSplitStep?
     ensures v'.WF()
     ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step))
   {
-  /*
     INodeWF(v.stampedBetree.root);
     INodeWF(step.path.Target());
-    InvNext(v, v', lbl);
-    assert v'.WF();
+    InvNext(v, v', lbl); //assert v'.WF();
+    var iv := I(v);
+    var node := v.stampedBetree.root;
+    var inode := INode(node);
+    var iv' := I(v');
+    var node' := v'.stampedBetree.root;
+    var inode' := INode(node');
+    var istep := IStep(v, v', lbl, step);
     INodeWF(v'.stampedBetree.root);
-    assert step.path.Valid();
-    ValidPathRefines(step.path);
-    assert IPath(step.path).Valid();
+    ValidPathRefines(step.path); //assert IPath(step.path).Valid();
     var target' := step.path.Target().Split(step.childIdx, step.splitKey);
+    //var itarget' := istep.path.Target().Split(istep.leftKeys, istep.rightKeys);
+    var ipath := IPath(step.path);
+    var itarget' := INode(target');
+    /*
     //SplitEquivalence(step.path.Target(), step.childIdx, step.splitKey);
     SplitEquivalence(step);
-    SubstitutionEquivalenceRefines(step.path, target');
-    var istep := IStep(v, v', lbl, step);
-    var itarget' := istep.path.Target().Split(istep.leftKeys, istep.rightKeys);
-    var iv := I(v);
-    var iv' := I(v');
+    //var itarget' := istep.path.Target().Split(istep.leftKeys, istep.rightKeys);
 
     PathTargetRefines(step.path);
-    calc {
-      itarget';
-      istep.path.Target().Split(istep.leftKeys, istep.rightKeys);
-      INode(target');
-    }
+//    calc {
+//      itarget';
+//      istep.path.Target().Split(istep.leftKeys, istep.rightKeys);
+//        { reveal_SplitLeftKeys(); }
+//      INode(target');
+//    }
 
     assert iv.stampedBetree.root == INode(v.stampedBetree.root);
     assert iv.stampedBetree.root == istep.path.node;
     assert istep.path.Target() == INode(step.path.Target());
     assert iv'.stampedBetree.root == INode(v'.stampedBetree.root);
-    assert itarget' == INode(target');
 
+    SubstitutionEquivalenceRefines(step.path, target');
+    assert inode' == istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
+    */
+    calc {
+      node';
+      step.path.Substitute(target');
+    }
+    calc {
+      itarget';
+      istep.path.Target().Split(istep.leftKeys, istep.rightKeys);
+    }
+    assert IPath(step.path) == ipath;
+    calc {
+      iv'.stampedBetree.root;
+      INode(node');
+      INode(step.path.Substitute(target'));
+      {
+        SubstitutionEquivalenceRefines(step.path, target');
+      }
+      IPath(step.path).Substitute(INode(target'));
+      IPath(step.path).Substitute(INode(target'));
+      ipath.Substitute(itarget');
+      istep.path.Substitute(itarget');
+      istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
+    }
     assert iv'.stampedBetree.root == istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
     assert PagedBetree.InternalSplit(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step));
-    */
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)

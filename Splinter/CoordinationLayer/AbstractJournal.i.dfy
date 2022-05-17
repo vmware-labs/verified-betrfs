@@ -4,6 +4,7 @@
 include "StampedMap.i.dfy"
 include "MsgHistory.i.dfy"
 
+// TODO(jonh): rename to EphemeralJournal
 module AbstractJournal {
   import opened Options
   import opened MsgHistoryMod

@@ -1,3 +1,4 @@
+// TODO(jonh): Dude, why is there also a Spec/RefinementObligation StateMachineIfc!? Unify.
 abstract module AtomicStateMachineMod {
   // This interface is for a state machine where the inputs arrive, event
   // occurs, and outputs are delivered all atomically. The Async module

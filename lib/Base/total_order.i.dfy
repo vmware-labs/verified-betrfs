@@ -318,7 +318,7 @@ abstract module Total_Order refines Total_Preorder {
     ensures forall i :: LargestLte(run, needle) < i < |run| ==> lt(needle, run[i]);
     ensures needle in run ==> 0 <= LargestLte(run, needle) && run[LargestLte(run, needle)] == needle;
   {
-//    reveal_IsSorted(); XXX
+    reveal_IsSorted();
     if |run| == 0 || lt(needle, run[0]) then -1
     else 1 + LargestLte(run[1..], needle)
   }
