@@ -242,8 +242,7 @@ module PivotBetreeRefinement
         var iChildMap := PagedBetree.ChildMap(imap k | AnyKey(k) :: if k in IPath(path).keyset then ireplacedChildren else IPath(path).node.children.mapp[k]);
         
         IPath(path).reveal_ReplacedChildren();
-         if key !in sroot.KeySet() {
-          // they're both nil
+        if key !in path.Target().KeySet() {
           assert AnyKey(key);
           calc {
             IChildren(sroot).mapp[key];
@@ -251,13 +250,6 @@ module PivotBetreeRefinement
             IChildren(path.node).mapp[key];
             IPath(path).node.children.mapp[key];
               { assert key !in IPath(path).keyset; }   // INode + Pivot KeySets nest
-            IPath(path).ReplacedChildren(INode(target')).mapp[key];
-          }
-         } else if key !in path.Target().KeySet() {
-          // something something unchaged
-          calc {
-            IChildren(sroot).mapp[key];
-              {assume false;}
             IPath(path).ReplacedChildren(INode(target')).mapp[key];
           }
          } else {
