@@ -275,9 +275,10 @@ module PagedBetree
 
   predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel)
   {
+    // Implementation expected to perform this action only when memtable is empty
     && lbl.FreezeAsLabel?
     && v.WF()
-    && lbl.stampedBetree == v.stampedBetree
+    && lbl.stampedBetree == v.stampedBetree.PrependMemtable(v.memtable)
     && v' == v
   }
 
