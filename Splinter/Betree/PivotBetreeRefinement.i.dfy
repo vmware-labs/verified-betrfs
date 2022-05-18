@@ -242,24 +242,39 @@ module PivotBetreeRefinement
         var iChildMap := PagedBetree.ChildMap(imap k | AnyKey(k) :: if k in IPath(path).keyset then ireplacedChildren else IPath(path).node.children.mapp[k]);
         
         IPath(path).reveal_ReplacedChildren();
-        if key !in path.Target().KeySet() {
+        assert AnyKey(key);
+        if key !in sroot.KeySet() {
+          // they're both nil
           assert AnyKey(key);
           calc {
             IChildren(sroot).mapp[key];
             PagedBetree.Nil;
             IChildren(path.node).mapp[key];
             IPath(path).node.children.mapp[key];
-              { assert key !in IPath(path).keyset; }   // INode + Pivot KeySets nest
+              { assume key !in IPath(path).keyset; }   // INode + Pivot KeySets nest
             IPath(path).ReplacedChildren(INode(target')).mapp[key];
           }
-         } else {
+        } else if key !in path.Target().KeySet() {
+          // something something unchaged
+          assert path.node.WF();
+          assert WFChildren(path.node.children);
+          assert path.node.Child(key).WF(); // trigger
+          calc {
+            IChildren(sroot).mapp[key];
+            INode(sroot.Child(key));
+            INode(path.node.Child(key));
+            IChildren(path.node).mapp[key];
+            IPath(path).node.children.mapp[key];
+            IPath(path).ReplacedChildren(INode(target')).mapp[key];
+          }
+        } else {
           // these are the ones we're replacing.
           calc {
             IChildren(sroot).mapp[key];
               {assume false;}
             IPath(path).ReplacedChildren(INode(target')).mapp[key];
           }
-         }
+        }
 
 //        calc {
 //          IChildren(sroot).mapp[key];
