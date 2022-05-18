@@ -21,16 +21,19 @@ module PivotBetreeRefinement
   import opened PivotBetree
   import PagedBetree
 
+  function IChildren(node: BetreeNode) : PagedBetree.ChildMap
+  {
+    PagedBetree.ChildMap(imap key | AnyKey(key) ::
+      assert WFChildren(node.children); // trigger
+      if key in node.KeySet() then INode(node.Child(key)) else PagedBetree.Nil)
+  }
+
   function INode(node: BetreeNode) : PagedBetree.BetreeNode
     requires node.WF()
   {
     if node.Nil?
     then PagedBetree.Nil
-    else PagedBetree.BetreeNode(
-      node.buffers,
-      PagedBetree.ChildMap(imap key | AnyKey(key) ::
-        assert WFChildren(node.children); // trigger
-        if key in node.KeySet() then INode(node.Child(key)) else PagedBetree.Nil))
+    else PagedBetree.BetreeNode(node.buffers, IChildren(node))
   }
 
   function IStampedBetree(stampedBetree: StampedBetree) : PagedBetree.StampedBetree
@@ -209,7 +212,9 @@ module PivotBetreeRefinement
   {
   }
 
-  lemma SubstitutionEquivalenceRefines(path: Path, target': BetreeNode)
+  // Substitution followed by interpretation is the same as interpretation
+  // followed by paged-level substitution.
+  lemma SubstitutionRefines(path: Path, target': BetreeNode)
     requires path.Valid()
     requires target'.WF()
     ensures path.Substitute(target').WF()
@@ -224,70 +229,76 @@ module PivotBetreeRefinement
     if path.depth==0 {
       assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
     } else {
-      assert 0<IPath(path).depth;
-      SubstitutionEquivalenceRefines(path.Subpath(), target');
-      if target'.Nil? {
-        assume INode(path.Substitute(Nil)) == IPath(path).Substitute(PagedBetree.Nil);
-        assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
-      } else {
-        calc {
-          INode(path.Substitute(target')).buffers;
-          path.Substitute(target').buffers;
-          path.node.buffers;
-          IPath(path).node.buffers;
-          PagedBetree.BetreeNode(IPath(path).node.buffers, IPath(path).ReplacedChildren(INode(target'))).buffers;
-          IPath(path).Substitute(INode(target')).buffers;
-        }
-        assert INode(path.Substitute(target')).buffers == IPath(path).Substitute(INode(target')).buffers;
-        assert INode(path.Substitute(target')).children.mapp.Keys == AllKeys();
-        assert IPath(path).Substitute(INode(target')).children.mapp.Keys == AllKeys();
-        forall key | key in AllKeys()
-        ensures INode(path.Substitute(target')).children.mapp[key]
-          == IPath(path).Substitute(INode(target')).children.mapp[key] {
-          IPath(path).reveal_ReplacedChildren();
-          // I think Substitute needs a condition that target''s KeySet matches Target()'s.
-          assume path.Target().KeySet() == target'.KeySet();
-          assume path.Substitute(target').WF();
-          assume path.Substitute(target').KeySet() == path.node.KeySet(); // prove inductively
-          if key !in path.node.KeySet() {
-              assert INode(path.Substitute(target')).children.mapp[key] == PagedBetree.Nil;
-              assert IPath(path).Substitute(INode(target')).children.mapp[key] == PagedBetree.Nil;
-          } else {
-            assume key in IPath(path).keyset;
-            calc {
-              INode(path.Substitute(target')).children.mapp[key];
-              INode(path.Substitute(target').Child(key));
-              {
-                calc {
-                  path.Substitute(target').Child(key);
-                  path.Subpath().Substitute(target').Child(key);
-                }
-              }
-              INode(path.Subpath().Substitute(target'));
-//              INode(path.Subpath().Substitute(target')).children.mapp[key];
-                // recursion
-              IPath(path.Subpath()).Substitute(INode(target'));
-                { assert IPath(path).Subpath() == IPath(path.Subpath()); }
-              (IPath(path).Subpath()).Substitute(INode(target'));
-                { assert key in IPath(path).keyset;
-                  IPath(path).reveal_ReplacedChildren();
-                  
-                  var replacedChildren := IPath(path).Subpath().Substitute(INode(target'));
-                  calc {
-                    IPath(path).Substitute(INode(target')).children.mapp[key];
-                    IPath(path).ReplacedChildren(INode(target')).mapp[key];
-                    if key in IPath(path).keyset then replacedChildren else IPath(path).node.children.mapp[key];
-                    replacedChildren;
-                    IPath(path).Subpath().Substitute(INode(target'));
-                  }
-                }
-              IPath(path).Substitute(INode(target')).children.mapp[key];
-            }
+      SubstitutionRefines(path.Subpath(), target');
+      assert INode(path.Subpath().Substitute(target')) == IPath(path.Subpath()).Substitute(INode(target'));
+
+      forall key ensures
+        IChildren(path.Substitute(target')).mapp[key]
+        == IPath(path).ReplacedChildren(INode(target')).mapp[key] {
+        var sroot := path.Substitute(target');
+
+        var ireplacedChildren := IPath(path).Subpath().Substitute(INode(target'));
+        assert IPath(path).node.children.WF(); 
+        var iChildMap := PagedBetree.ChildMap(imap k | AnyKey(k) :: if k in IPath(path).keyset then ireplacedChildren else IPath(path).node.children.mapp[k]);
+        
+        IPath(path).reveal_ReplacedChildren();
+         if key !in sroot.KeySet() {
+          // they're both nil
+          assert AnyKey(key);
+          calc {
+            IChildren(sroot).mapp[key];
+            PagedBetree.Nil;
+            IChildren(path.node).mapp[key];
+            IPath(path).node.children.mapp[key];
+              { assert key !in IPath(path).keyset; }   // INode + Pivot KeySets nest
+            IPath(path).ReplacedChildren(INode(target')).mapp[key];
           }
-        }
-        assert INode(path.Substitute(target')).children == IPath(path).Substitute(INode(target')).children;
-        assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
+         } else if key !in path.Target().KeySet() {
+          // something something unchaged
+          calc {
+            IChildren(sroot).mapp[key];
+              {assume false;}
+            IPath(path).ReplacedChildren(INode(target')).mapp[key];
+          }
+         } else {
+          // these are the ones we're replacing.
+          calc {
+            IChildren(sroot).mapp[key];
+              {assume false;}
+            IPath(path).ReplacedChildren(INode(target')).mapp[key];
+          }
+         }
+
+//        calc {
+//          IChildren(sroot).mapp[key];
+//            // defn ichildren
+//          if key in sroot.KeySet() then INode(sroot.Child(key)) else PagedBetree.Nil;
+//            // le hard part
+//          if key in path.Target().KeySet() then ireplacedChildren else IPath(path).node.children.mapp[key];
+//          if key in IPath(path).keyset then ireplacedChildren else IPath(path).node.children.mapp[key];
+//            // defn Paged ReplacedChildren
+//          iChildMap.mapp[key];
+//            { IPath(path).reveal_ReplacedChildren(); }
+//          IPath(path).ReplacedChildren(INode(target')).mapp[key];
+//        }
       }
+      calc {
+        IChildren(path.Substitute(target'));
+        IPath(path).ReplacedChildren(INode(target'));
+      }
+      calc {
+        INode(path.Substitute(target'));
+          // defn Pivot Substitute
+        INode(BetreeNode(path.node.buffers, path.node.pivotTable, path.ReplacedChildren(target')));
+
+          // Defn Inode
+        PagedBetree.BetreeNode(path.node.buffers, IChildren(path.Substitute(target')));
+
+        PagedBetree.BetreeNode(IPath(path).node.buffers, IPath(path).ReplacedChildren(INode(target')));
+          // defn Paged Substitute
+        IPath(path).Substitute(INode(target'));
+      }
+      assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
     }
   }
 
@@ -342,7 +353,7 @@ module PivotBetreeRefinement
     assert istep.path.Target() == INode(step.path.Target());
     assert iv'.stampedBetree.root == INode(v'.stampedBetree.root);
 
-    SubstitutionEquivalenceRefines(step.path, target');
+    SubstitutionRefines(step.path, target');
     assert inode' == istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
     */
     calc {
@@ -359,7 +370,7 @@ module PivotBetreeRefinement
       INode(node');
       INode(step.path.Substitute(target'));
       {
-        SubstitutionEquivalenceRefines(step.path, target');
+        SubstitutionRefines(step.path, target');
       }
       IPath(step.path).Substitute(INode(target'));
       IPath(step.path).Substitute(INode(target'));
