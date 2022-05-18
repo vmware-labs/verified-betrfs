@@ -86,8 +86,11 @@ module PivotBetree
 
   function {:opaque} TotalDomain() : (out: Domain)
     ensures out.WF()
+    ensures out.Domain?
   { // TODO(timeout): sure wish the opaque were working
-    Domain(Upperbounded_Lexicographic_Byte_Order_Impl.Ord.GetSmallestElement(), Max_Element)
+    var out := Domain(Upperbounded_Lexicographic_Byte_Order_Impl.Ord.GetSmallestElement(), Max_Element);
+    out.reveal_SaneKeys();
+    out
   }
 
   predicate WFChildren(children: seq<BetreeNode>)
@@ -146,6 +149,15 @@ module PivotBetree
 
       // TODO(jonh): BucketsLib suggests this is a timeout trap?
       var newChildren := replace1with2(children, newLeftChild, newRightChild, childIdx);
+
+      assert forall i:nat | i<|newChildren| :: newChildren[i].WF() by {
+        forall i:nat | i<|newChildren| ensures newChildren[i].WF() {
+          if childIdx+1 < i { // sequence math trigger
+            assert newChildren[i] == children[i-1];
+          }
+        }
+      }
+
 //      assert forall i:nat | i<|newChildren| :: newChildren[i].WF() by { reveal_replace1with2(); }
       WFPivotsInsert(pivotTable, childIdx, splitKey);
       BetreeNode(buffers, InsertPivot(pivotTable, childIdx, splitKey), newChildren)
@@ -166,8 +178,10 @@ module PivotBetree
       requires childIdx < NumBuckets(pivotTable)
       ensures out.WF()
     {
-//      reveal_IsStrictlySorted();
-      Domain(pivotTable[childIdx], pivotTable[childIdx+1])
+      var out := Domain(pivotTable[childIdx], pivotTable[childIdx+1]);
+      reveal_IsStrictlySorted();  /* jonh suspicious lt leak */
+      out.reveal_SaneKeys();  /* jonh suspicious lt leak */
+      out
     }
 
     predicate CanFlush(childIdx: nat)
@@ -229,6 +243,7 @@ module PivotBetree
       requires KeyInDomain(key)
     {
       assert WFChildren(children);  // trigger
+      reveal_KeyInDomain();
       children[Route(pivotTable, key)]
     }
   }
@@ -239,7 +254,8 @@ module PivotBetree
     ensures out.WF()
   {
     var pivotTable := [domain.start, domain.end];
-//    assert Keyspace.IsStrictlySorted(pivotTable) by { reveal_IsStrictlySorted(); }
+    domain.reveal_SaneKeys();  /* jonh suspicious lt leak */
+    assert Keyspace.IsStrictlySorted(pivotTable) by { reveal_IsStrictlySorted(); }  /* jonh suspicious lt leak */
     BetreeNode(BufferStack([]), pivotTable, [Nil])
   }
 
@@ -405,6 +421,7 @@ module PivotBetree
       requires 0 < depth
       requires node.KeyInDomain(key)
     {
+      node.reveal_KeyInDomain();
       Path(node.Child(key), key, depth-1)
     }
 
@@ -413,6 +430,7 @@ module PivotBetree
     {
       && node.WF()
       && node.KeyInDomain(key)
+      && node.BetreeNode?
       && (0 < depth ==> Subpath().Valid())
     }
 
