@@ -88,7 +88,8 @@ module PagedBetree
       BetreeNode(buffers, ChildMap(mapp))
     }
 
-    // TODO(jonh): side-quest: We don't need Nil, do we?
+    // TODO(jonh): side-quest: We don't need Nil, do we? Wait, that's dumb, the
+    // infinity of child pointers have to point to something.
     function Promote() : (out: BetreeNode)
       requires WF()
       ensures out.WF()
@@ -218,6 +219,7 @@ module PagedBetree
     // betree needs its own lsn so we remember it for freeze time without
     // having to drain the membuffer:
     seqEnd: LSN
+    // TODO(jonh): side quest: seqEnd here seems redundant with memtable.seqEnd. Which do we use?
     )
   {
     predicate WF()
