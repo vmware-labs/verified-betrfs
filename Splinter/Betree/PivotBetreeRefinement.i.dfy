@@ -22,6 +22,9 @@ module PivotBetreeRefinement
   import PagedBetree
 
   function IChildren(node: BetreeNode) : PagedBetree.ChildMap
+    requires node.WF()
+    requires node.BetreeNode?
+    decreases node, 0
   {
     PagedBetree.ChildMap(imap key | AnyKey(key) ::
       assert WFChildren(node.children); // trigger
@@ -30,6 +33,7 @@ module PivotBetreeRefinement
 
   function INode(node: BetreeNode) : PagedBetree.BetreeNode
     requires node.WF()
+    decreases node, 1
   {
     if node.Nil?
     then PagedBetree.Nil
@@ -90,7 +94,7 @@ module PivotBetreeRefinement
   function IPath(path: Path) : PagedBetree.Path
     requires path.Valid()
   {
-    PagedBetree.Path(INode(path.node), path.key, path.Target().KeySet(), path.depth)
+    PagedBetree.Path(INode(path.node), path.key, path.depth)
   }
 
   lemma ValidPathRefines(path: Path)
@@ -102,6 +106,7 @@ module PivotBetreeRefinement
 
   lemma PathTargetRefines(path: Path)
     requires path.Valid()
+    ensures IPath(path).Valid()
     ensures INode(path.Target()) == IPath(path).Target()
   {
     assume false;
@@ -122,6 +127,7 @@ module PivotBetreeRefinement
 
   function SplitChildKeys(step: Step) : iset<Key>
     requires step.InternalSplitStep?
+    requires step.path.Valid()
   {
     step.path.Target().ChildDomain(step.childIdx).KeySet()
   }
@@ -129,6 +135,7 @@ module PivotBetreeRefinement
   // Hide iset quantifier mentioning lt, which is a trigger party
   function {:opaque} SplitLeftKeys(step: Step) : iset<Key>
     requires step.InternalSplitStep?
+    requires step.path.Valid()
   {
     iset key | key in SplitChildKeys(step) && lt(Element(key), Element(step.splitKey))
   }
@@ -145,7 +152,7 @@ module PivotBetreeRefinement
       case InternalSplitStep(path, childIdx, splitKey) => 
         if !path.Valid()
         then PagedBetree.InternalSplitStep(
-          PagedBetree.Path(PagedBetree.Nil, path.key, iset{}, 0), iset{}, iset{})
+          PagedBetree.Path(PagedBetree.Nil, path.key, 0), iset{}, iset{})
         else
           var rightKeys := SplitChildKeys(step) - SplitLeftKeys(step);
           PagedBetree.InternalSplitStep(IPath(path), SplitLeftKeys(step), rightKeys)
@@ -239,7 +246,7 @@ module PivotBetreeRefinement
 
         var ireplacedChildren := IPath(path).Subpath().Substitute(INode(target'));
         assert IPath(path).node.children.WF(); 
-        var iChildMap := PagedBetree.ChildMap(imap k | AnyKey(k) :: if k in IPath(path).keyset then ireplacedChildren else IPath(path).node.children.mapp[k]);
+        var iChildMap := PagedBetree.ChildMap(imap k | AnyKey(k) :: if k in IPath(path).MatchingChildren() then ireplacedChildren else IPath(path).node.children.mapp[k]);
         
         IPath(path).reveal_ReplacedChildren();
         assert AnyKey(key);
@@ -251,7 +258,7 @@ module PivotBetreeRefinement
             PagedBetree.Nil;
             IChildren(path.node).mapp[key];
             IPath(path).node.children.mapp[key];
-              { assume key !in IPath(path).keyset; }   // INode + Pivot KeySets nest
+              { assume key !in IPath(path).MatchingChildren(); }   // INode + Pivot KeySets nest
             IPath(path).ReplacedChildren(INode(target')).mapp[key];
           }
         } else if key !in path.Target().KeySet() {

@@ -5,6 +5,19 @@ include "../CoordinationLayer/AbstractMap.i.dfy"
 include "Buffers.i.dfy"
 include "Memtable.i.dfy"
 
+// This is a functional model of a Betree, but it doesn't require that child
+// maps be stored as contiguous ranges separated by a finite sets of pivots.
+// That's complexity that we push down a layer, to the PivotBetree. Here,
+// instead, we have a child for every possible key, as though every key is a
+// pivot. That's not *exactly* right, since adjacent children
+// (in fact, infinite ranges of adjacent children) will be identical:
+// children for keys 40..70 may all carry (identical) buffers including
+// keys in [40..70), since of course they're represented by the same node
+// in PivotBetree, the next layer down the refinement stack.
+//
+// This trickiness mostly appears in the Path Substitution code, which has
+// to decide which of the infinity children are getting replaced -- the answer
+// depends on how the PivotBetree has decided to divvy up the child pointers.
 module PagedBetree
 {
   import opened Options
@@ -294,8 +307,7 @@ module PagedBetree
       )
   }
   
-  datatype Path = Path(node: BetreeNode, key: Key, keyset: iset<Key>, depth: nat)
-    // TODO(jonh): rename key to arbitraryKey to highlight its job as a pre-chosen member of keyset
+  datatype Path = Path(node: BetreeNode, key: Key, depth: nat)
   {
     function Subpath() : (out: Path)
       requires 0 < depth
@@ -303,15 +315,15 @@ module PagedBetree
       requires node.BetreeNode?
     {
       assert node.children.WF();  // trigger
-      Path(node.children.mapp[key], key, keyset, depth-1)
+      Path(node.children.mapp[key], key, depth-1)
     }
 
-    predicate KeysetChildrenMatch()
+    function MatchingChildren() : iset<Key>
       requires node.WF()
       requires node.BetreeNode?
     {
       assert node.children.WF();
-      (forall k2 | k2 in keyset :: node.children.mapp[k2]==node.children.mapp[key])
+      iset k2 | node.children.mapp[k2]==node.children.mapp[key]
     }
 
     predicate Valid()
@@ -319,8 +331,6 @@ module PagedBetree
     {
       && node.WF()
       && node.BetreeNode?
-      && key in keyset
-      && (0 < depth ==> KeysetChildrenMatch())
       && (0 < depth ==> Subpath().Valid())
     }
 
@@ -345,7 +355,7 @@ module PagedBetree
     {
       assert node.children.WF();  // trigger
       var replacedChildren := Subpath().Substitute(replacement);
-      ChildMap(imap k | AnyKey(k) :: if k in keyset then replacedChildren else node.children.mapp[k])
+      ChildMap(imap k | AnyKey(k) :: if k in MatchingChildren() then replacedChildren else node.children.mapp[k])
     }
 
     function Substitute(replacement: BetreeNode) : (out: BetreeNode)
