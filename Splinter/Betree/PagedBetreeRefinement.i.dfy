@@ -223,7 +223,7 @@ module PagedBetreeRefinement
     // Behold the power of the receipt! This is where the magic happens.
     SubstitutePreservesWF(path, replacement);
     if 0 < path.depth {
-      if key !in path.keyset {
+      if key !in path.MatchingChildren() {
         // key diverged from changes made by substitution, so they're easy equal.
         assert INodeAt(path.node, key) == INodeAt(path.Substitute(replacement), key);
       } else {
