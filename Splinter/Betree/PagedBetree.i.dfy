@@ -66,12 +66,12 @@ module PagedBetree
       && (BetreeNode? ==> children.WF())
     }
 
-    function PrependBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
+    function PushBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
       ensures out.WF()
     {
-      BetreeNode(buffers.PrependBufferStack(bufferStack), children)
+      BetreeNode(buffers.PushBufferStack(bufferStack), children)
     }
 
     function ApplyFilter(filter: iset<Key>) : (out: BetreeNode)
@@ -121,7 +121,7 @@ module PagedBetree
       // TODO(jonh): NB the Promote() never happens: all the downKeys have to be non-Nil
       var outChildren := ChildMap(imap key | AnyKey(key)
         :: if key in downKeys
-          then children.mapp[key].Promote().PrependBufferStack(movedBuffers)
+          then children.mapp[key].Promote().PushBufferStack(movedBuffers)
           else children.mapp[key]);
       assert outChildren.WF();
       BetreeNode(keptBuffers, outChildren)
@@ -240,11 +240,11 @@ module PagedBetree
       root.WF()
     }
 
-    function PrependMemtable(memtable: Memtable) : StampedBetree
+    function PushMemtable(memtable: Memtable) : StampedBetree
       requires WF()
     {
       var newBuffer := Buffer(memtable.mapp);
-      StampedBetree(root.Promote().PrependBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
+      StampedBetree(root.Promote().PushBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
     }
   }
 
@@ -293,7 +293,7 @@ module PagedBetree
     // Implementation expected to perform this action only when memtable is empty
     && lbl.FreezeAsLabel?
     && v.WF()
-    && lbl.stampedBetree == v.stampedBetree.PrependMemtable(v.memtable)
+    && lbl.stampedBetree == v.stampedBetree.PushMemtable(v.memtable)
     && v' == v
   }
 
@@ -303,7 +303,7 @@ module PagedBetree
     && var newBuffer := Buffer(v.memtable.mapp);
     && v' == v.(
         memtable := v.memtable.Drain(),
-        stampedBetree := v.stampedBetree.PrependMemtable(v.memtable)
+        stampedBetree := v.stampedBetree.PushMemtable(v.memtable)
       )
   }
   

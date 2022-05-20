@@ -35,7 +35,7 @@ module Buffers
     }
   }
 
-  // buffers[0] is the newest data
+  // buffers[0] is the newest data, at the top of the stack
   datatype BufferStack = BufferStack(buffers: seq<Buffer>)
   {
     function QueryUpTo(key: Key, count: nat) : Message
@@ -55,7 +55,7 @@ module Buffers
       BufferStack(seq(|buffers|, i requires 0<=i<|buffers| => buffers[i].ApplyFilter(accept)))
     }
 
-    function PrependBufferStack(newBuffers: BufferStack) : BufferStack
+    function PushBufferStack(newBuffers: BufferStack) : BufferStack
     {
       BufferStack(newBuffers.buffers + this.buffers)
     }
