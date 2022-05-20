@@ -74,7 +74,7 @@ module PagedBetreeRefinement
   function I(v: Variables) : AbstractMap.Variables
     requires v.WF()
   {
-    AbstractMap.Variables(IStampedBetree(v.stampedBetree.PushMemtable(v.memtable)))
+    AbstractMap.Variables(IStampedBetree(StampedBetree(v.root, 0).PushMemtable(v.memtable)))
   }
 
   function {:opaque} MapApply(memtable: Memtable, base: TotalKMMapMod.TotalKMMap) : TotalKMMapMod.TotalKMMap

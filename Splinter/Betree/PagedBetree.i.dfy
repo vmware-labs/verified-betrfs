@@ -232,7 +232,6 @@ module PagedBetree
     // betree needs its own lsn so we remember it for freeze time without
     // having to drain the membuffer:
     seqEnd: LSN
-    // TODO(jonh): side quest: seqEnd here seems redundant with memtable.seqEnd. Which do we use?
     )
   {
     predicate WF()
@@ -255,10 +254,10 @@ module PagedBetree
     
   datatype Variables = Variables(
     memtable: Memtable,
-    stampedBetree: StampedBetree)
+    root: BetreeNode)
   {
     predicate WF() {
-      && stampedBetree.WF()
+      && root.WF()
     }
   }
 
@@ -266,7 +265,7 @@ module PagedBetree
   {
     && lbl.QueryLabel?
     && lbl.endLsn == v.memtable.seqEnd
-    && receipt.ValidFor(v.stampedBetree.root, lbl.key)
+    && receipt.ValidFor(v.root, lbl.key)
     && Define(lbl.value) == Merge(v.memtable.Query(lbl.key), receipt.Result())
     && v' == v
   }
@@ -293,7 +292,8 @@ module PagedBetree
     // Implementation expected to perform this action only when memtable is empty
     && lbl.FreezeAsLabel?
     && v.WF()
-    && lbl.stampedBetree == v.stampedBetree.PushMemtable(v.memtable)
+    // Use 0 as a dummy lsn
+    && lbl.stampedBetree == StampedBetree(v.root, 0).PushMemtable(v.memtable)
     && v' == v
   }
 
@@ -303,7 +303,7 @@ module PagedBetree
     && var newBuffer := Buffer(v.memtable.mapp);
     && v' == v.(
         memtable := v.memtable.Drain(),
-        stampedBetree := v.stampedBetree.PushMemtable(v.memtable)
+        root := StampedBetree(v.root, 0).PushMemtable(v.memtable).root
       )
   }
   
@@ -375,9 +375,7 @@ module PagedBetree
     && v.WF()
     && lbl.InternalLabel?
     && v' == v.(
-        stampedBetree := v.stampedBetree.(
-          root := BetreeNode(BufferStack([]), ConstantChildMap(v.stampedBetree.root))
-        )
+        root := BetreeNode(BufferStack([]), ConstantChildMap(v.root))
       )
   }
 
@@ -386,11 +384,9 @@ module PagedBetree
     && lbl.InternalLabel?
     && step.InternalSplitStep?
     && step.path.Valid()
-    && step.path.node == v.stampedBetree.root
+    && step.path.node == v.root
     && v' == v.(
-        stampedBetree := v.stampedBetree.(
-          root := step.path.Substitute(step.path.Target().Split(step.leftKeys, step.rightKeys))
-        )
+        root := step.path.Substitute(step.path.Target().Split(step.leftKeys, step.rightKeys))
       )
   }
 
@@ -399,11 +395,9 @@ module PagedBetree
     && lbl.InternalLabel?
     && step.InternalFlushStep?
     && step.path.Valid()
-    && step.path.node == v.stampedBetree.root
+    && step.path.node == v.root
     && v' == v.(
-        stampedBetree := v.stampedBetree.(
-          root := step.path.Substitute(step.path.Target().Flush(step.downKeys))
-        )
+        root := step.path.Substitute(step.path.Target().Flush(step.downKeys))
       )
   }
 
@@ -414,13 +408,11 @@ module PagedBetree
     && lbl.InternalLabel?
     && step.InternalCompactStep?
     && step.path.Valid()
-    && step.path.node == v.stampedBetree.root
+    && step.path.node == v.root
     && step.compactedNode.WF()
     && step.path.Target().EquivalentBufferCompaction(step.compactedNode)
     && v' == v.(
-        stampedBetree := v.stampedBetree.(
-          root := step.path.Substitute(step.compactedNode)
-        )
+        root := step.path.Substitute(step.compactedNode)
       )
   }
 
@@ -429,7 +421,7 @@ module PagedBetree
   predicate Init(v: Variables, stampedBetree: StampedBetree)
   {
     && stampedBetree.WF()
-    && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree)
+    && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.root)
   }
 
   datatype Step =
