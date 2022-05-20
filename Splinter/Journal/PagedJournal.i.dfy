@@ -151,6 +151,101 @@ module PagedJournal {
     if ojr.Some? {
       ojr.value.NewBoundaryValid(oldLSN, newLSN);
     }
+
+    predicate Valid(boundaryLSN: LSN) {
+      && WF()
+      // If you needed to truncate before you got here, you shouldn't be asking for my I()
+      && boundaryLSN < messageSeq.seqEnd
+      && (|| messageSeq.CanDiscardTo(boundaryLSN)
+          || (priorRec.Some? && priorRec.value.Valid(boundaryLSN))
+         )
+    }
+
+    function I(boundaryLSN: LSN) : (out: MsgHistory)
+      requires Valid(boundaryLSN)
+      ensures out.WF()
+      ensures out.seqStart == boundaryLSN
+      decreases this, 0
+    {
+      if messageSeq.CanDiscardTo(boundaryLSN)
+      then messageSeq.DiscardOld(boundaryLSN) // and don't deref the priorRec!
+      else IOptionJournalRecord(boundaryLSN, priorRec).Concat(messageSeq)
+    }
+
+    lemma NewBoundaryValid(oldLSN: LSN, newLSN: LSN)
+      requires Valid(oldLSN)
+      requires oldLSN <= newLSN
+      requires newLSN < messageSeq.seqEnd
+      ensures Valid(newLSN)
+    {
+      if newLSN < messageSeq.seqStart {
+        priorRec.value.NewBoundaryValid(oldLSN, newLSN);
+      }
+    }
+
+    predicate CanCropHeadRecords(boundaryLSN: LSN, depth: nat)
+    {
+      && Valid(boundaryLSN)
+      && (if depth == 0
+        then true // always okay to return self!
+        else
+          && !(boundaryLSN < messageSeq.seqStart)           // my record isn't last due to boundaryLSN
+          && OptRecCanCropHeadRecords(priorRec, boundaryLSN, depth-1) // I have a priorRec
+        )
+    }
+
+    function CropHeadRecords(boundaryLSN: LSN, depth: nat) : Option<JournalRecord>
+      requires CanCropHeadRecords(boundaryLSN, depth)
+    {
+      if depth == 0
+      then Some(this)
+      else OptRecCropHeadRecords(priorRec, boundaryLSN, depth-1)
+    }
+
+    function MessageSeqAfterCrop(boundaryLSN: LSN, depth: nat) : MsgHistory
+      requires Valid(boundaryLSN)
+      requires CanCropHeadRecords(boundaryLSN, depth+1)
+    {
+      CropHeadRecords(boundaryLSN, depth).value.messageSeq
+    }
+  }
+
+  predicate OptRecCanCropHeadRecords(ojr: Option<JournalRecord>, boundaryLSN: LSN, depth: nat)
+  {
+    if ojr.None?
+    then depth==0
+    else ojr.value.CanCropHeadRecords(boundaryLSN, depth)
+  }
+
+  function OptRecCropHeadRecords(ojr: Option<JournalRecord>, boundaryLSN: LSN, depth: nat) : Option<JournalRecord>
+    requires OptRecCanCropHeadRecords(ojr, boundaryLSN, depth)
+  {
+    if ojr.None?
+    then None
+    else ojr.value.CropHeadRecords(boundaryLSN, depth)
+  }
+
+  lemma OptionNewBoundaryValid(ojr: Option<JournalRecord>, oldLSN: LSN, newLSN: LSN)
+    requires ojr.Some? ==> && ojr.value.Valid(oldLSN)
+    requires ojr.Some? ==> newLSN < ojr.value.messageSeq.seqEnd
+    requires oldLSN <= newLSN
+    ensures ojr.Some? ==> ojr.value.Valid(newLSN)
+  {
+    if ojr.Some? {
+      ojr.value.NewBoundaryValid(oldLSN, newLSN);
+    }
+  }
+
+  function IOptionJournalRecord(boundaryLSN: LSN, ojr: Option<JournalRecord>) : (out: MsgHistory)
+    requires ojr.Some? ==> ojr.value.Valid(boundaryLSN)
+    ensures out.seqStart == boundaryLSN
+    ensures out.seqEnd == if ojr.Some? then ojr.value.messageSeq.seqEnd else boundaryLSN
+    ensures out.WF()
+    decreases ojr, 1
+  {
+      if ojr.None?
+      then EmptyHistoryAt(boundaryLSN)
+      else ojr.value.I(boundaryLSN)
   }
 
   // Recursive "ignorant" discard: throws away old records, but doesn't really
@@ -205,6 +300,7 @@ module PagedJournal {
 
     function SeqStart() : LSN
       requires WF()
+      ensures I().WF()
     {
       boundaryLSN
     }
