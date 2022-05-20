@@ -74,7 +74,7 @@ module PagedBetreeRefinement
   function I(v: Variables) : AbstractMap.Variables
     requires v.WF()
   {
-    AbstractMap.Variables(IStampedBetree(v.stampedBetree.PrependMemtable(v.memtable)))
+    AbstractMap.Variables(IStampedBetree(v.stampedBetree.PushMemtable(v.memtable)))
   }
 
   function {:opaque} MapApply(memtable: Memtable, base: TotalKMMapMod.TotalKMMap) : TotalKMMapMod.TotalKMMap
@@ -103,32 +103,32 @@ module PagedBetreeRefinement
     }
   }
 
-  lemma PrependBufferStackLemma(front: BufferStack, back: BufferStack, key: Key)
-    ensures back.PrependBufferStack(front).Query(key) == Merge(front.Query(key), back.Query(key))
-    decreases |back.buffers|
+  lemma PushBufferStackLemma(top: BufferStack, bottom: BufferStack, key: Key)
+    ensures bottom.PushBufferStack(top).Query(key) == Merge(top.Query(key), bottom.Query(key))
+    decreases |bottom.buffers|
   {
-    if |back.buffers| == 0 {
-      assert back.PrependBufferStack(front).buffers == front.buffers;  // trigger
+    if |bottom.buffers| == 0 {
+      assert bottom.PushBufferStack(top).buffers == top.buffers;  // trigger
     } else {
-      var dropBack := BufferStack(DropLast(back.buffers));
-      CommonBufferStacks(dropBack.PrependBufferStack(front), back.PrependBufferStack(front), |front.buffers|+|back.buffers|-1, key);
-      PrependBufferStackLemma(front, dropBack, key);
-      CommonBufferStacks(dropBack, back, |back.buffers|-1, key);
+      var dropBottom := BufferStack(DropLast(bottom.buffers));
+      CommonBufferStacks(dropBottom.PushBufferStack(top), bottom.PushBufferStack(top), |top.buffers|+|bottom.buffers|-1, key);
+      PushBufferStackLemma(top, dropBottom, key);
+      CommonBufferStacks(dropBottom, bottom, |bottom.buffers|-1, key);
     }
   }
 
   lemma {:timeLimitMultiplier 2} MemtableDistributesOverBetree(memtable: Memtable, base: StampedBetree)
     requires base.WF()
-    ensures MapApply(memtable, INode(base.root)) == INode(base.PrependMemtable(memtable).root)
+    ensures MapApply(memtable, INode(base.root)) == INode(base.PushMemtable(memtable).root)
   {
     reveal_MapApply();
-    assert MapApply(memtable, INode(base.root)).Keys == INode(base.PrependMemtable(memtable).root).Keys;  // trigger
+    assert MapApply(memtable, INode(base.root)).Keys == INode(base.PushMemtable(memtable).root).Keys;  // trigger
     forall key | AnyKey(key)
-      ensures MapApply(memtable, INode(base.root))[key] == INode(base.PrependMemtable(memtable).root)[key]
+      ensures MapApply(memtable, INode(base.root))[key] == INode(base.PushMemtable(memtable).root)[key]
     {
       var newBuffer := Buffer(memtable.mapp);
       SingletonBufferStack(newBuffer, key);
-      PrependBufferStackLemma(BufferStack([newBuffer]), base.root.Promote().buffers, key);
+      PushBufferStackLemma(BufferStack([newBuffer]), base.root.Promote().buffers, key);
       reveal_INode(); // this imap's really a doozy
     }
   }
@@ -339,11 +339,11 @@ module PagedBetreeRefinement
     EquivalentRootVars(v, v');
   }
 
-  lemma PrependBetreeNodeLemma(node: BetreeNode, buffers: BufferStack, key: Key)
+  lemma PushBetreeNodeLemma(node: BetreeNode, buffers: BufferStack, key: Key)
     requires node.WF()
-    ensures INodeAt(node.Promote().PrependBufferStack(buffers), key) == Merge(buffers.Query(key), INodeAt(node, key))
+    ensures INodeAt(node.Promote().PushBufferStack(buffers), key) == Merge(buffers.Query(key), INodeAt(node, key))
   {
-    PrependBufferStackLemma(buffers, node.Promote().buffers, key);
+    PushBufferStackLemma(buffers, node.Promote().buffers, key);
   }
 
   lemma InternalFlushNoop(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -361,7 +361,7 @@ module PagedBetreeRefinement
         FilteredBufferStack(target.buffers, AllKeys() - step.downKeys, key);
         assert target.children.WF();  // trigger
         var movedBuffers := target.buffers.ApplyFilter(step.downKeys);
-        PrependBetreeNodeLemma(target.children.mapp[key], movedBuffers, key);
+        PushBetreeNodeLemma(target.children.mapp[key], movedBuffers, key);
         FilteredBufferStack(target.buffers, step.downKeys, key);
       } else {
         FilteredBufferStack(target.buffers, AllKeys() - step.downKeys, key);
@@ -438,10 +438,10 @@ module PagedBetreeRefinement
     var KeyedMessage(key,message) := puts.msgs[puts.seqStart];
     assert TotalKMMapMod.AnyKey(key);  // trigger
 
-    assert INode(v'.stampedBetree.PrependMemtable(v'.memtable).root).Keys == AllKeys() by { reveal_INode(); }
+    assert INode(v'.stampedBetree.PushMemtable(v'.memtable).root).Keys == AllKeys() by { reveal_INode(); }
     assert I(v).stampedMap.mi[key := Merge(message, I(v).stampedMap.mi[key])].Keys == AllKeys() by { reveal_INode(); }
     forall k | AnyKey(k)
-      ensures INode(v'.stampedBetree.PrependMemtable(v'.memtable).root)[k]
+      ensures INode(v'.stampedBetree.PushMemtable(v'.memtable).root)[k]
         == I(v).stampedMap.mi[key := Merge(message, I(v).stampedMap.mi[key])][k]
     {
       var node := v.stampedBetree.root;
@@ -459,8 +459,8 @@ module PagedBetreeRefinement
         assert Merge(message, v.memtable.Get(key)) == buffers'.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
         assert v.memtable.Get(k) == buffers.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
       }
-      PrependBetreeNodeLemma(node, buffers', k);
-      PrependBetreeNodeLemma(node, buffers, k);
+      PushBetreeNodeLemma(node, buffers', k);
+      PushBetreeNodeLemma(node, buffers, k);
       reveal_INode();
     }
     calc {
