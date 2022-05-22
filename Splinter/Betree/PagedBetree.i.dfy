@@ -66,6 +66,13 @@ module PagedBetree
       && (BetreeNode? ==> children.WF())
     }
 
+    function PushMemtable(memtable: Memtable) : StampedBetree
+      requires WF()
+    {
+      var newBuffer := Buffer(memtable.mapp);
+      StampedBetree(this.Promote().PushBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
+    }
+
     function PushBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
@@ -238,13 +245,6 @@ module PagedBetree
     {
       root.WF()
     }
-
-    function PushMemtable(memtable: Memtable) : StampedBetree
-      requires WF()
-    {
-      var newBuffer := Buffer(memtable.mapp);
-      StampedBetree(root.Promote().PushBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
-    }
   }
 
   function EmptyStampedBetree() : StampedBetree
@@ -293,7 +293,7 @@ module PagedBetree
     && lbl.FreezeAsLabel?
     && v.WF()
     // Use 0 as a dummy lsn
-    && lbl.stampedBetree == StampedBetree(v.root, 0).PushMemtable(v.memtable)
+    && lbl.stampedBetree == v.root.PushMemtable(v.memtable)
     && v' == v
   }
 
@@ -303,7 +303,7 @@ module PagedBetree
     && var newBuffer := Buffer(v.memtable.mapp);
     && v' == v.(
         memtable := v.memtable.Drain(),
-        root := StampedBetree(v.root, 0).PushMemtable(v.memtable).root
+        root := v.root.PushMemtable(v.memtable).root
       )
   }
   
