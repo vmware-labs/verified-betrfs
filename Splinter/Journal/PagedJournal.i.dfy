@@ -50,18 +50,6 @@ module PagedJournal {
          )
     }
 
-    // TODO(tony): get rid of all the I() stuff 
-    // function I(boundaryLSN: LSN) : (out: MsgHistory)
-    //   requires Valid(boundaryLSN)
-    //   ensures out.WF()
-    //   ensures out.seqStart == boundaryLSN
-    //   decreases this, 0
-    // {
-    //   if messageSeq.CanDiscardTo(boundaryLSN)
-    //   then messageSeq.DiscardOld(boundaryLSN) // and don't deref the priorRec!
-    //   else IOptionJournalRecord(boundaryLSN, priorRec).Concat(messageSeq)
-    // }
-
     lemma NewBoundaryValid(oldLSN: LSN, newLSN: LSN)
       requires Valid(oldLSN)
       requires oldLSN <= newLSN
@@ -157,18 +145,6 @@ module PagedJournal {
     }
   }
 
-  // function IOptionJournalRecord(boundaryLSN: LSN, ojr: Option<JournalRecord>) : (out: MsgHistory)
-  //   requires ojr.Some? ==> ojr.value.Valid(boundaryLSN)
-  //   ensures out.seqStart == boundaryLSN
-  //   ensures out.seqEnd == if ojr.Some? then ojr.value.messageSeq.seqEnd else boundaryLSN
-  //   ensures out.WF()
-  //   decreases ojr, 1
-  // {
-  //     if ojr.None?
-  //     then EmptyHistoryAt(boundaryLSN)
-  //     else ojr.value.I(boundaryLSN)
-  // }
-
   // Recursive "ignorant" discard: throws away old records, but doesn't really
   // have any idea if the records are meaningfully chained; we'll need to assume
   // TJValid later to prove anything about the output of this function.
@@ -224,14 +200,6 @@ module PagedJournal {
     {
       boundaryLSN
     }
-
-    // TODO(tony): LET'S GET I() OUT OF THIS FILE!!!
-    // function I() : MsgHistory
-    //   requires WF()
-    //   ensures I().WF()
-    // {
-    //   IOptionJournalRecord(boundaryLSN, freshestRec)
-    // }
 
     predicate CanDiscardTo(lsn: LSN) 
       requires WF()
@@ -311,12 +279,6 @@ module PagedJournal {
       && truncatedJournal.SeqEnd() == unmarshalledTail.seqStart
     }
 
-    // function I() : MsgHistory
-    //   requires WF()
-    // {
-    //   truncatedJournal.I().Concat(unmarshalledTail)
-    // }
-
     function SeqStart() : LSN
       requires WF()
     {
@@ -344,11 +306,11 @@ module PagedJournal {
     // (I mean, we COULD allow Puts during that time, but why bother?)
   }
 
-  predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
+  predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, depth: nat)
   {
     && v.WF()
     && lbl.FreezeForCommitLabel?
-    && v.truncatedJournal.FreezeForCommit(lbl.frozenJournal, keepReceiptLines)
+    && v.truncatedJournal.FreezeForCommit(lbl.frozenJournal, depth)
     && v' == v
   }
 
@@ -417,8 +379,8 @@ module PagedJournal {
   }
 
   datatype Step =
-      ReadForRecoveryStep(receiptIndex: nat)
-    | FreezeForCommitStep(keepReceiptLines: nat)
+      ReadForRecoveryStep(depth: nat)
+    | FreezeForCommitStep(depth: nat)
     | ObserveFreshJournalStep()
     | PutStep()
     | DiscardOldStep()
@@ -427,8 +389,8 @@ module PagedJournal {
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     match step {
-      case ReadForRecoveryStep(receiptIndex) => ReadForRecovery(v, v', lbl, receiptIndex)
-      case FreezeForCommitStep(keepReceiptLines) => FreezeForCommit(v, v', lbl, keepReceiptLines)
+      case ReadForRecoveryStep(depth) => ReadForRecovery(v, v', lbl, depth)
+      case FreezeForCommitStep(depth) => FreezeForCommit(v, v', lbl, depth)
       case ObserveFreshJournalStep() => ObserveFreshJournal(v, v', lbl)
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
