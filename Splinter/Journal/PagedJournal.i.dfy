@@ -72,34 +72,63 @@ module PagedJournal {
       }
     }
 
+    function CroppedPrior(boundaryLSN: LSN) : Option<JournalRecord>
+    {
+        if messageSeq.seqStart <= boundaryLSN then None else priorRec
+    }
+
     predicate CanCropHeadRecords(boundaryLSN: LSN, depth: nat)
+      decreases depth, 0
     {
       && Valid(boundaryLSN)
       && (if depth == 0
         then true // always okay to return self!
-        else
-          && !(boundaryLSN < messageSeq.seqStart)           // my record isn't last due to boundaryLSN
-          && OptRecCanCropHeadRecords(priorRec, boundaryLSN, depth-1) // I have a priorRec
+        else OptRecCanCropHeadRecords(CroppedPrior(boundaryLSN), boundaryLSN, depth-1)
         )
     }
 
     function CropHeadRecords(boundaryLSN: LSN, depth: nat) : Option<JournalRecord>
       requires CanCropHeadRecords(boundaryLSN, depth)
+      decreases depth, 0
     {
       if depth == 0
       then Some(this)
-      else OptRecCropHeadRecords(priorRec, boundaryLSN, depth-1)
+      else OptRecCropHeadRecords(CroppedPrior(boundaryLSN), boundaryLSN, depth-1)
+    }
+
+    lemma CanCropMonotonic(boundaryLSN: LSN, depth: nat, more: nat)
+      requires depth < more
+      requires CanCropHeadRecords(boundaryLSN, more)
+      ensures CanCropHeadRecords(boundaryLSN, depth)
+    {
+      if 0 < depth {
+        CroppedPrior(boundaryLSN).value.CanCropMonotonic(boundaryLSN, depth-1, more-1);
+      }
+    }
+
+    lemma CanCropMoreYieldsSome(boundaryLSN: LSN, depth: nat, more: nat)
+      requires depth < more
+      requires CanCropHeadRecords(boundaryLSN, more)
+      ensures CanCropHeadRecords(boundaryLSN, depth)  // needed for precondition of real ensures below
+      ensures CropHeadRecords(boundaryLSN, depth).Some?
+    {
+      CanCropMonotonic(boundaryLSN, depth, more);
+      if 0 < depth {
+        CroppedPrior(boundaryLSN).value.CanCropMoreYieldsSome(boundaryLSN, depth-1, more-1);
+      }
     }
 
     function MessageSeqAfterCrop(boundaryLSN: LSN, depth: nat) : MsgHistory
       requires Valid(boundaryLSN)
       requires CanCropHeadRecords(boundaryLSN, depth+1)
     {
+      CanCropMoreYieldsSome(boundaryLSN, depth, depth+1);
       CropHeadRecords(boundaryLSN, depth).value.messageSeq
     }
   }
 
   predicate OptRecCanCropHeadRecords(ojr: Option<JournalRecord>, boundaryLSN: LSN, depth: nat)
+    decreases depth, 1
   {
     if ojr.None?
     then depth==0
@@ -108,6 +137,7 @@ module PagedJournal {
 
   function OptRecCropHeadRecords(ojr: Option<JournalRecord>, boundaryLSN: LSN, depth: nat) : Option<JournalRecord>
     requires OptRecCanCropHeadRecords(ojr, boundaryLSN, depth)
+    decreases depth, 1
   {
     if ojr.None?
     then None
@@ -215,7 +245,7 @@ module PagedJournal {
       requires msgs.WF()
     {
       && freshestRec.Some?
-      && freshestRec.value.CanCropHeadRecords(boundaryLSN, depth)
+      && freshestRec.value.CanCropHeadRecords(boundaryLSN, depth+1)
       && freshestRec.value.MessageSeqAfterCrop(boundaryLSN, depth) == msgs
     }
 
@@ -227,6 +257,7 @@ module PagedJournal {
     }
 
     function CropHeadRecords(depth: nat) : TruncatedJournal
+      requires OptRecCanCropHeadRecords(freshestRec, boundaryLSN, depth)
     {
       TruncatedJournal(boundaryLSN, OptRecCropHeadRecords(freshestRec, boundaryLSN, depth))
     }
