@@ -50,16 +50,17 @@ module PagedJournal {
          )
     }
 
-    function I(boundaryLSN: LSN) : (out: MsgHistory)
-      requires Valid(boundaryLSN)
-      ensures out.WF()
-      ensures out.seqStart == boundaryLSN
-      decreases this, 0
-    {
-      if messageSeq.CanDiscardTo(boundaryLSN)
-      then messageSeq.DiscardOld(boundaryLSN) // and don't deref the priorRec!
-      else IOptionJournalRecord(boundaryLSN, priorRec).Concat(messageSeq)
-    }
+    // TODO(tony): get rid of all the I() stuff 
+    // function I(boundaryLSN: LSN) : (out: MsgHistory)
+    //   requires Valid(boundaryLSN)
+    //   ensures out.WF()
+    //   ensures out.seqStart == boundaryLSN
+    //   decreases this, 0
+    // {
+    //   if messageSeq.CanDiscardTo(boundaryLSN)
+    //   then messageSeq.DiscardOld(boundaryLSN) // and don't deref the priorRec!
+    //   else IOptionJournalRecord(boundaryLSN, priorRec).Concat(messageSeq)
+    // }
 
     lemma NewBoundaryValid(oldLSN: LSN, newLSN: LSN)
       requires Valid(oldLSN)
@@ -135,8 +136,9 @@ module PagedJournal {
     else ojr.value.CanCropHeadRecords(boundaryLSN, depth)
   }
 
-  function OptRecCropHeadRecords(ojr: Option<JournalRecord>, boundaryLSN: LSN, depth: nat) : Option<JournalRecord>
+  function OptRecCropHeadRecords(ojr: Option<JournalRecord>, boundaryLSN: LSN, depth: nat) : (out: Option<JournalRecord>)
     requires OptRecCanCropHeadRecords(ojr, boundaryLSN, depth)
+    ensures out.Some? ==> out.value.Valid(boundaryLSN)
     decreases depth, 1
   {
     if ojr.None?
@@ -155,17 +157,17 @@ module PagedJournal {
     }
   }
 
-  function IOptionJournalRecord(boundaryLSN: LSN, ojr: Option<JournalRecord>) : (out: MsgHistory)
-    requires ojr.Some? ==> ojr.value.Valid(boundaryLSN)
-    ensures out.seqStart == boundaryLSN
-    ensures out.seqEnd == if ojr.Some? then ojr.value.messageSeq.seqEnd else boundaryLSN
-    ensures out.WF()
-    decreases ojr, 1
-  {
-      if ojr.None?
-      then EmptyHistoryAt(boundaryLSN)
-      else ojr.value.I(boundaryLSN)
-  }
+  // function IOptionJournalRecord(boundaryLSN: LSN, ojr: Option<JournalRecord>) : (out: MsgHistory)
+  //   requires ojr.Some? ==> ojr.value.Valid(boundaryLSN)
+  //   ensures out.seqStart == boundaryLSN
+  //   ensures out.seqEnd == if ojr.Some? then ojr.value.messageSeq.seqEnd else boundaryLSN
+  //   ensures out.WF()
+  //   decreases ojr, 1
+  // {
+  //     if ojr.None?
+  //     then EmptyHistoryAt(boundaryLSN)
+  //     else ojr.value.I(boundaryLSN)
+  // }
 
   // Recursive "ignorant" discard: throws away old records, but doesn't really
   // have any idea if the records are meaningfully chained; we'll need to assume
@@ -217,17 +219,29 @@ module PagedJournal {
       if freshestRec.Some? then freshestRec.value.messageSeq.seqEnd else boundaryLSN
     }
 
-    // TODO(tony): LET'S GET I() OUT OF THIS FILE!!!
-    function I() : MsgHistory
+    function SeqStart() : LSN
       requires WF()
-      ensures I().WF()
     {
-      IOptionJournalRecord(boundaryLSN, freshestRec)
+      boundaryLSN
+    }
+
+    // TODO(tony): LET'S GET I() OUT OF THIS FILE!!!
+    // function I() : MsgHistory
+    //   requires WF()
+    //   ensures I().WF()
+    // {
+    //   IOptionJournalRecord(boundaryLSN, freshestRec)
+    // }
+
+    predicate CanDiscardTo(lsn: LSN) 
+      requires WF()
+    {
+      SeqStart() <= lsn <= SeqEnd()
     }
 
     function DiscardOldDefn(lsn: LSN) : (out:TruncatedJournal)
       requires WF()
-      requires I().CanDiscardTo(lsn)  // TODO(tony) replace with condition on boundaryLSN / SeqEnd()
+      requires CanDiscardTo(lsn)
       ensures out.WF()
     {
       TruncatedJournal(lsn,
@@ -256,8 +270,9 @@ module PagedJournal {
       this.(freshestRec := Some(JournalRecord(msgs, freshestRec)))
     }
 
-    function CropHeadRecords(depth: nat) : TruncatedJournal
+    function CropHeadRecords(depth: nat) : (out: TruncatedJournal)
       requires OptRecCanCropHeadRecords(freshestRec, boundaryLSN, depth)
+      ensures out.WF()
     {
       TruncatedJournal(boundaryLSN, OptRecCropHeadRecords(freshestRec, boundaryLSN, depth))
     }
@@ -267,7 +282,7 @@ module PagedJournal {
     {
       && frozenJournal.WF()
       && OptRecCanCropHeadRecords(freshestRec, boundaryLSN, depth)
-      && CropHeadRecords(depth).I().CanDiscardTo(frozenJournal.boundaryLSN) // TODO(tony) remove I() here; replace with local condition
+      && CropHeadRecords(depth).CanDiscardTo(frozenJournal.boundaryLSN)
       // probably want: CropHeadRecords(depth).seqStart <= frozenJournal.boundaryLSN
       && frozenJournal == CropHeadRecords(depth).DiscardOldDefn(frozenJournal.boundaryLSN)
     }
@@ -276,7 +291,6 @@ module PagedJournal {
   // TruncatedJournal is the datatype "refinement" of MsgHistory; here we refine the Mkfs function.
   function Mkfs() : (out:TruncatedJournal)
     ensures out.WF()
-    ensures out.I().IsEmpty()
   {
     TruncatedJournal(0, None)
   }
@@ -297,15 +311,14 @@ module PagedJournal {
       && truncatedJournal.SeqEnd() == unmarshalledTail.seqStart
     }
 
-    function I() : MsgHistory
-      requires WF()
-    {
-      truncatedJournal.I().Concat(unmarshalledTail)
-    }
+    // function I() : MsgHistory
+    //   requires WF()
+    // {
+    //   truncatedJournal.I().Concat(unmarshalledTail)
+    // }
 
     function SeqStart() : LSN
       requires WF()
-      ensures SeqStart() == I().seqStart
     {
       truncatedJournal.boundaryLSN
     }
