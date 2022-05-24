@@ -12,63 +12,149 @@ module PagedJournalRefinement
   import AbstractJournal
   import opened PagedJournal
 
-  // The user of this module is probably also going to want a lemma about LoadJournal.
-
-  function I(v: Variables) : (out:AbstractJournal.Variables)
-    requires v.WF()
-    ensures out.WF()
-  {
-    AbstractJournal.Variables(v.I())
-  }
-
   function ILbl(lbl: TransitionLabel) : AbstractJournal.TransitionLabel
-    requires lbl.WF()
+  requires lbl.WF()
   {
     match lbl
       case ReadForRecoveryLabel(messages) => AbstractJournal.ReadForRecoveryLabel(messages)
-      case FreezeForCommitLabel(frozenJournal) => AbstractJournal.FreezeForCommitLabel(frozenJournal.I())
+      case FreezeForCommitLabel(frozenJournal) => AbstractJournal.FreezeForCommitLabel(ITruncatedJournal(frozenJournal))
       case QueryEndLsnLabel(endLsn) => AbstractJournal.QueryEndLsnLabel(endLsn)
       case PutLabel(messages) => AbstractJournal.PutLabel(messages)
       case DiscardOldLabel(startLsn, requireEnd) => AbstractJournal.DiscardOldLabel(startLsn, requireEnd)
       case InternalLabel() => AbstractJournal.InternalLabel()
   }
 
-  lemma ReadForRecoveryRefines(v: Variables, v': Variables, lbl: TransitionLabel, receiptIndex: nat)
-    requires ReadForRecovery(v, v', lbl, receiptIndex)
-    ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
+
+  function IJournalRecord(jr: JournalRecord, boundaryLSN: LSN) : (out: MsgHistory)
+    requires jr.Valid(boundaryLSN)
+    ensures out.WF()
+    ensures out.seqStart == boundaryLSN
+    ensures out.seqEnd == jr.messageSeq.seqEnd
+    decreases jr, 0
   {
-    var receipt := v.truncatedJournal.BuildReceipt();
-    receipt.TJFacts();
+    if jr.messageSeq.CanDiscardTo(boundaryLSN)
+    then jr.messageSeq.DiscardOld(boundaryLSN) // and don't deref the priorRec!
+    else IOptionJournalRecord(jr.priorRec, boundaryLSN).Concat(jr.messageSeq)
+  }
 
-    // Base case: messages is in the interp of receipt line i
-    assert receipt.OneLinkedInterpretation(receiptIndex) by { receipt.reveal_LinkedInterpretations(); }
 
-    // now induct forward to the last line
-    var i := receiptIndex;
-    assert 0<i ==> receipt.InterpretationWF(i-1);
-    while i<|receipt.lines|-1
-      invariant i<|receipt.lines|
-      invariant receipt.lines[i].interpretation.value.WF();
-      invariant receipt.lines[i].interpretation.value.IncludesSubseq(lbl.messages);
-    {
-      i := i + 1;
-      assert receipt.OneLinkedInterpretation(i) by { receipt.reveal_LinkedInterpretations(); }
+  function IOptionJournalRecord(ojr: Option<JournalRecord>, boundaryLSN: LSN) : (out: MsgHistory)
+    requires ojr.Some? ==> ojr.value.Valid(boundaryLSN)
+    ensures out.seqStart == boundaryLSN
+    ensures out.WF()
+    ensures ojr.Some? ==> out.seqEnd == ojr.value.messageSeq.seqEnd
+    decreases ojr, 1
+  {
+      if ojr.None?
+      then EmptyHistoryAt(boundaryLSN)
+      else IJournalRecord(ojr.value, boundaryLSN)
+  }
+
+  function ITruncatedJournal(tj: TruncatedJournal) : (out: MsgHistory)
+    requires tj.WF()
+    ensures out.WF()
+    ensures out.seqStart == tj.SeqStart()
+    ensures out.seqEnd == tj.SeqEnd()
+  {
+    IOptionJournalRecord(tj.freshestRec, tj.boundaryLSN)
+  }
+
+  function I(v: Variables) : (out:AbstractJournal.Variables)
+    requires v.WF()
+    ensures out.WF()
+  {
+    AbstractJournal.Variables(ITruncatedJournal(v.truncatedJournal).Concat(v.unmarshalledTail))
+  }
+
+  lemma CantCrop(jr: JournalRecord, bdy: LSN, depth: nat) 
+    requires 0 < depth
+    requires jr.CanCropHeadRecords(bdy, depth-1)
+    requires jr.CropHeadRecords(bdy, depth-1).Some?
+    requires jr.CropHeadRecords(bdy, depth-1).value.messageSeq.CanDiscardTo(bdy)
+    ensures !jr.CanCropHeadRecords(bdy, depth+1)
+  {
+    if 1 < depth {
+      CantCrop(jr.CroppedPrior(bdy).value, bdy, depth-1);
     }
   }
 
-  lemma TJFreezeForCommit(tj: TruncatedJournal, frozen: TruncatedJournal, keepReceiptLines: nat)
-    requires tj.WF()
-    requires tj.FreezeForCommit(frozen, keepReceiptLines)
-    ensures tj.I().IncludesSubseq(frozen.I())
+  lemma CropHeadRecordsChaining(jr: JournalRecord, bdy: LSN, depth: nat) 
+    requires 0 < depth
+    requires jr.CanCropHeadRecords(bdy, depth-1)
+    requires jr.CropHeadRecords(bdy, depth-1).Some? 
+    requires jr.CanCropHeadRecords(bdy, depth)
+    ensures jr.CropHeadRecords(bdy, depth-1).value.CroppedPrior(bdy) == jr.CropHeadRecords(bdy, depth)
   {
-    var freezed := tj.FreezeOffRecent(keepReceiptLines);
-    tj.BuildReceipt().BoundaryLSN();
-    if 0 < keepReceiptLines {
-      tj.BuildReceipt().LsnInReceiptBelongs(keepReceiptLines-1);
-      tj.BuildReceipt().SnipAtTJValid(keepReceiptLines);
-      freezed.BuildReceipt().ReceiptsUnique(tj.BuildReceipt().SnipAt(keepReceiptLines));
-      tj.BuildReceipt().AbbreviatedReceiptTJValid(keepReceiptLines-1, freezed.SeqEnd(), freezed);
+    if 1 < depth {
+      CropHeadRecordsChaining(jr.CroppedPrior(bdy).value, bdy, depth-1);
     }
+  }
+
+
+  lemma CroppedSubseqInInterpretation(jr: JournalRecord, bdy: LSN, depth: nat, msgs: MsgHistory) 
+    requires msgs.WF()
+    requires jr.CanCropHeadRecords(bdy, depth+1)
+    requires jr.CanCropHeadRecords(bdy, depth)
+    requires jr.CropHeadRecords(bdy, depth).Some? 
+    requires IJournalRecord(jr.CropHeadRecords(bdy, depth).value, bdy).IncludesSubseq(msgs)
+    ensures depth > 0 ==> jr.CanCropHeadRecords(bdy, depth-1)
+    ensures IJournalRecord(jr.CropHeadRecords(bdy, 0).value, bdy).IncludesSubseq(msgs)
+  {
+    if 0 < depth {
+      jr.CanCropMonotonic(bdy, depth-1, depth);
+      jr.CanCropMoreYieldsSome(bdy, depth-1, depth);
+      var jrPre := jr.CropHeadRecords(bdy, depth-1).value;
+      assert !jrPre.messageSeq.CanDiscardTo(bdy) by {
+        if jrPre.messageSeq.CanDiscardTo(bdy) {
+          CantCrop(jr, bdy, depth);
+          assert false;
+        }
+      }
+      CropHeadRecordsChaining(jr, bdy, depth); 
+      CroppedSubseqInInterpretation(jr, bdy, depth-1, msgs);
+    }
+  }
+
+
+  lemma ReadForRecoveryRefines(v: Variables, v': Variables, lbl: TransitionLabel, depth: nat)
+    requires ReadForRecovery(v, v', lbl, depth)
+    ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
+  {
+    // TODO
+    // var receipt := v.truncatedJournal.BuildReceipt();
+    // receipt.TJFacts();
+
+    // // Base case: messages is in the interp of receipt line i
+    // assert receipt.OneLinkedInterpretation(receiptIndex) by { receipt.reveal_LinkedInterpretations(); }
+
+    // // now induct forward to the last line
+    // var i := receiptIndex;
+    // assert 0<i ==> receipt.InterpretationWF(i-1);
+    // while i<|receipt.lines|-1
+    //   invariant i<|receipt.lines|
+    //   invariant receipt.lines[i].interpretation.value.WF();
+    //   invariant receipt.lines[i].interpretation.value.IncludesSubseq(lbl.messages);
+    // {
+    //   i := i + 1;
+    //   assert receipt.OneLinkedInterpretation(i) by { receipt.reveal_LinkedInterpretations(); }
+    // }
+  }
+
+  lemma TJFreezeForCommit(tj: TruncatedJournal, frozen: TruncatedJournal, depth: nat)
+    requires tj.WF()
+    requires tj.FreezeForCommit(frozen, depth)
+    ensures ITruncatedJournal(tj).IncludesSubseq(ITruncatedJournal(frozen))
+  {
+    var itj, ifj := ITruncatedJournal(tj), ITruncatedJournal(frozen);
+
+    // IncludesSubseq def
+    assert itj.seqStart <= ifj.seqStart;
+    assert ifj.seqEnd <= itj.seqEnd;
+    var result := forall lsn | ifj.Contains(lsn) :: itj.Contains(lsn) && itj.msgs[lsn] == ifj.msgs[lsn];
+    assert result;
+    assert result && !ifj.IsEmpty() ==> itj.Contains(ifj.seqStart);
+
+
   }
 
   lemma FreezeForCommitRefines(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
@@ -76,9 +162,9 @@ module PagedJournalRefinement
     ensures v'.WF();
     ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
-    var receipt := v.truncatedJournal.BuildReceipt();
-    receipt.TJFacts();
-    TJFreezeForCommit(v.truncatedJournal, lbl.frozenJournal, keepReceiptLines);
+    // var receipt := v.truncatedJournal.BuildReceipt();
+    // receipt.TJFacts();
+    // TJFreezeForCommit(v.truncatedJournal, lbl.frozenJournal, keepReceiptLines);
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -104,7 +190,7 @@ module PagedJournalRefinement
 
   lemma InitRefines(v: Variables, tj: TruncatedJournal)
     requires Init(v, tj)
-    ensures AbstractJournal.Init(I(v), tj.I())
+    ensures AbstractJournal.Init(I(v), ITruncatedJournal(tj))
   {
   }
 
@@ -116,10 +202,10 @@ module PagedJournalRefinement
   {
     var step: Step :| NextStep(v, v', lbl, step);
     if step.ReadForRecoveryStep? {
-      ReadForRecoveryRefines(v, v', lbl, step.receiptIndex);
+      ReadForRecoveryRefines(v, v', lbl, step.depth);
       assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else if step.FreezeForCommitStep? {
-      FreezeForCommitRefines(v, v', lbl, step.keepReceiptLines);
+      FreezeForCommitRefines(v, v', lbl, step.depth);
       assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else if step.ObserveFreshJournalStep? {
       assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
