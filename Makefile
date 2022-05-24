@@ -128,8 +128,9 @@ scache-status: build/concurrency/scache/Bundle.i.status.pdf
 nr-status: build/concurrency/node-replication/Interface.i.status.pdf
 hash-status: build/concurrency/hashtable/Interface.i.status.pdf
 hoh-status: build/concurrency/handoverhand/Interface.i.status.pdf
+bank-status: build/concurrency/bank-paper/Impl.i.status.pdf
 
-concurrency-status: scache-status nr-status hash-status hoh-status
+concurrency-status: scache-status nr-status hash-status hoh-status bank-status
 
 # Longer time-limit for CI
 .PHONY: verichecks-status
