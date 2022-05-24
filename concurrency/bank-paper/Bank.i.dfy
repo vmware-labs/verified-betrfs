@@ -74,6 +74,16 @@ module MathUtils {
       assert sum(t) == m[0];
     }
   }
+
+  lemma sum_ge(s: seq<nat>, i: nat)
+  requires 0 <= i < |s|
+  ensures s[i] <= sum(s)
+  {
+    if i == |s| - 1 {
+    } else {
+      sum_ge(s[..|s|-1], i);
+    }
+  }
 }
 
 module Bank refines Rw {

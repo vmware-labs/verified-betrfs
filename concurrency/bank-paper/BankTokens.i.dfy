@@ -112,4 +112,21 @@ module BankTokens {
     loc_s := token.loc.s;
   }
 
+  glinear method get_bound(gshared acct1: Account)
+  requires 0 <= acct1.id < Bank.NumberOfAccounts
+  ensures acct1.balance <= Bank.FixedTotalMoney
+  {
+    gshared var a_token := Account_unfold_borrow(acct1);
+    ghost var rest := BankTokens.obtain_invariant_1(a_token);
+    ghost var x := Bank.dot(a_token.val, rest);
+    assert x != Bank.unit() by {
+      assert acct1.id in x.account_balances;
+      assert acct1.id !in Bank.unit().account_balances;
+    }
+    //assert Bank.Inv(x);
+    //assert Bank.ShardHasAllAccounts(x.account_balances);
+    MathUtils.sum_ge(
+      Bank.MapToSeq(x.account_balances),
+      acct1.id);
+  }
 }

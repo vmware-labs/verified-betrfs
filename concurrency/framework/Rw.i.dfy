@@ -219,6 +219,17 @@ module RwTokens(rw: Rw) {
     token := ET.ext_init(WrapT.wrap(b), m);
   }
 
+  glinear method obtain_invariant_1(gshared token1: Token)
+  returns (ghost rest: rw.M)
+  ensures rw.Inv(rw.dot(token1.val, rest))
+  {
+    glinear var u := T.get_unit(token1.loc);
+    T.is_valid(token1, inout u);
+    T.dispose(u);
+    rest :| rw.Inv(rw.dot(rw.dot(token1.val, u.val), rest));
+    pcm.dot_unit(token1.val);
+  }
+
   glinear method obtain_invariant_1_1(
       gshared token1: Token,
       glinear inout token2: Token)
