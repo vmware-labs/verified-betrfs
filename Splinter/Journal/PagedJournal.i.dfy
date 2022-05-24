@@ -107,12 +107,20 @@ module PagedJournal {
       }
     }
 
+    function HonorBoundary(boundaryLSN: LSN) : MsgHistory 
+      requires WF()
+      requires boundaryLSN <= messageSeq.seqEnd
+    {
+      if messageSeq.seqStart <= boundaryLSN then messageSeq.DiscardOld(boundaryLSN) 
+      else messageSeq
+    }
+
     function MessageSeqAfterCrop(boundaryLSN: LSN, depth: nat) : MsgHistory
       requires Valid(boundaryLSN)
       requires CanCropHeadRecords(boundaryLSN, depth+1)
     {
       CanCropMoreYieldsSome(boundaryLSN, depth, depth+1);
-      CropHeadRecords(boundaryLSN, depth).value.messageSeq
+      CropHeadRecords(boundaryLSN, depth).value.HonorBoundary(boundaryLSN)
     }
   }
 

@@ -120,24 +120,14 @@ module PagedJournalRefinement
     requires ReadForRecovery(v, v', lbl, depth)
     ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
-    // TODO
-    // var receipt := v.truncatedJournal.BuildReceipt();
-    // receipt.TJFacts();
-
-    // // Base case: messages is in the interp of receipt line i
-    // assert receipt.OneLinkedInterpretation(receiptIndex) by { receipt.reveal_LinkedInterpretations(); }
-
-    // // now induct forward to the last line
-    // var i := receiptIndex;
-    // assert 0<i ==> receipt.InterpretationWF(i-1);
-    // while i<|receipt.lines|-1
-    //   invariant i<|receipt.lines|
-    //   invariant receipt.lines[i].interpretation.value.WF();
-    //   invariant receipt.lines[i].interpretation.value.IncludesSubseq(lbl.messages);
-    // {
-    //   i := i + 1;
-    //   assert receipt.OneLinkedInterpretation(i) by { receipt.reveal_LinkedInterpretations(); }
-    // }
+    var ojr := v.truncatedJournal.freshestRec;
+    var bdy := v.truncatedJournal.boundaryLSN;
+    var msgs := lbl.messages;
+    if ojr.Some? {
+      ojr.value.CanCropMonotonic(bdy, depth, depth+1);
+      ojr.value.CanCropMoreYieldsSome(bdy, depth, depth+1);
+      CroppedSubseqInInterpretation(ojr.value, bdy, depth, lbl.messages);
+    }
   }
 
   lemma TJFreezeForCommit(tj: TruncatedJournal, frozen: TruncatedJournal, depth: nat)
