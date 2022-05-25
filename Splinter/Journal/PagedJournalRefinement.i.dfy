@@ -131,22 +131,66 @@ module PagedJournalRefinement
   }
 
 
-  lemma DiscardOldMaintainsSubseq(tj: TruncatedJournal, bdy: LSN) 
-    requires tj.WF()
-    requires tj.CanDiscardTo(bdy)
-    ensures  ITruncatedJournal(tj).IncludesSubseq(ITruncatedJournal(tj.DiscardOldDefn(bdy)))
+  lemma CanCutMore(ojr: Option<JournalRecord>, bdy: LSN, depth: nat) 
+    requires 0 < depth
+    requires OptRecCanCropHeadRecords(ojr, bdy, depth)
+    ensures OptRecCanCropHeadRecords(ojr, bdy, depth-1)
+    ensures OptRecCanCropHeadRecords(OptRecCropHeadRecords(ojr, bdy, depth-1), bdy, 1)
   {
-    // TODO
-    assume false;
+    if 1 < depth {
+      ojr.value.CanCropMonotonic(bdy, depth-1, depth);
+      CanCutMore(ojr.value.priorRec, bdy, depth-1);
+    }
   }
 
-  lemma CropHeadMaintainsSubset(tj: TruncatedJournal, depth: nat)
-    requires tj.WF()
-    requires OptRecCanCropHeadRecords(tj.freshestRec, tj.boundaryLSN, depth)
-    ensures ITruncatedJournal(tj).IncludesSubseq(ITruncatedJournal(tj.CropHeadRecords(depth)))
+
+  lemma CropEquivalence(ojr: Option<JournalRecord>, bdy: LSN, depth: nat)
+    requires 0 < depth 
+    requires ojr.Some? ==> ojr.value.Valid(bdy)
+    requires OptRecCanCropHeadRecords(ojr, bdy, depth-1)
+    requires OptRecCanCropHeadRecords(ojr, bdy, depth)
+    ensures OptRecCanCropHeadRecords(OptRecCropHeadRecords(ojr, bdy, depth-1), bdy, 1)
+    ensures OptRecCropHeadRecords(ojr, bdy, depth) == 
+      OptRecCropHeadRecords(OptRecCropHeadRecords(ojr, bdy, depth-1), bdy, 1)
+    decreases depth
   {
-    // TODO
-    assume false;
+    if 1 < depth {
+      CanCutMore(ojr, bdy, depth);
+      ojr.value.CanCropMoreYieldsSome(bdy, depth-1, depth);
+      CropEquivalence(ojr.value.priorRec, bdy, depth-1);
+    }
+  }
+
+
+  lemma DiscardOldMaintainsSubseq(ojr: Option<JournalRecord>, oldBdy: LSN, newBdy: LSN)  
+    requires oldBdy <= newBdy
+    requires ojr.None? ==> newBdy == oldBdy
+    requires ojr.Some? ==> newBdy < ojr.value.messageSeq.seqEnd
+    requires ojr.Some? ==> ojr.value.Valid(oldBdy)
+    ensures ojr.Some? ==> ojr.value.Valid(newBdy)
+    ensures IOptionJournalRecord(ojr, oldBdy).IncludesSubseq(IOptionJournalRecord(DiscardOldJournalRec(ojr, newBdy), newBdy))
+  {
+    OptionNewBoundaryValid(ojr, oldBdy, newBdy);
+    if ojr.Some? && newBdy < ojr.value.messageSeq.seqStart {
+      DiscardOldMaintainsSubseq(ojr.value.priorRec, oldBdy, newBdy);
+    }
+  }
+
+
+  lemma CropHeadMaintainsSubseq(ojr: Option<JournalRecord>, bdy: LSN, depth: nat)
+    requires ojr.Some? ==> ojr.value.Valid(bdy)
+    requires OptRecCanCropHeadRecords(ojr, bdy, depth)
+    ensures IOptionJournalRecord(ojr, bdy).IncludesSubseq(IOptionJournalRecord(OptRecCropHeadRecords(ojr, bdy, depth), bdy))
+  {
+    if depth > 0 {
+      ojr.value.CanCropMonotonic(bdy, depth-1, depth);
+      CropHeadMaintainsSubseq(ojr, bdy, depth-1);
+      var small := OptRecCropHeadRecords(ojr, bdy, depth-1);
+      var smaller := OptRecCropHeadRecords(ojr, bdy, depth);
+      CropEquivalence(ojr, bdy, depth);
+      assert OptRecCropHeadRecords(small, bdy, 1) == smaller;
+      assert IOptionJournalRecord(small, bdy).IncludesSubseq(IOptionJournalRecord(smaller, bdy));
+    }
   }
 
   lemma TJFreezeForCommit(tj: TruncatedJournal, frozen: TruncatedJournal, depth: nat)
@@ -154,13 +198,11 @@ module PagedJournalRefinement
     requires tj.FreezeForCommit(frozen, depth)
     ensures ITruncatedJournal(tj).IncludesSubseq(ITruncatedJournal(frozen))
   {
-    calc {
-      tj.CropHeadRecords(depth).DiscardOldDefn(frozen.boundaryLSN);
-      frozen;
-    }
-
-    DiscardOldMaintainsSubseq(tj.CropHeadRecords(depth), frozen.boundaryLSN);
-    CropHeadMaintainsSubset(tj, depth);
+    var ctj := tj.CropHeadRecords(depth);
+    if ctj.freshestRec.Some? && frozen.boundaryLSN < ctj.freshestRec.value.messageSeq.seqEnd {
+      DiscardOldMaintainsSubseq(ctj.freshestRec, ctj.boundaryLSN, frozen.boundaryLSN);
+    } 
+    CropHeadMaintainsSubseq(tj.freshestRec, tj.boundaryLSN, depth);
   }
 
   lemma FreezeForCommitRefines(v: Variables, v': Variables, lbl: TransitionLabel, depth: nat)

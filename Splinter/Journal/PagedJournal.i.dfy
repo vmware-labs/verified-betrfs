@@ -221,7 +221,7 @@ module PagedJournal {
       ensures out.WF()
     {
       TruncatedJournal(lsn,
-        if SeqEnd() <= lsn then None
+        if SeqEnd() <= lsn then None  // TODO(jonh): delete dead code
         else
           OptionNewBoundaryValid(freshestRec, boundaryLSN, lsn);
           DiscardOldJournalRec(freshestRec, lsn)
