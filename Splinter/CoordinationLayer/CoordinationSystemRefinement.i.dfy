@@ -10,6 +10,7 @@ include "CoordinationSystem.i.dfy"
 // TODO(jonh): satisfy a refinement-module proof obligation!
 module CoordinationSystemRefinement {
   import opened SequencesLite // Last, DropLast
+  import opened FloatingSeqMod
   import opened CM = CoordinationSystem
   import opened StampedMapMod
   import opened MsgHistoryMod
@@ -47,21 +48,22 @@ module CoordinationSystemRefinement {
 
   function StampedMapToVersion(sm: StampedMapMod.StampedMap) : CrashTolerantMapSpecMod.Version
   {
-    CrashTolerantMapSpecMod.Version(Async.PersistentState(MapSpecMod.Variables(sm.mi)))
+    Async.PersistentState(MapSpecMod.Variables(sm.mi))
   }
 
-  function VersionsWithForgottenPrefix(base: StampedMapMod.StampedMap, msgHistory: MsgHistory, stableLSN: LSN) : (versions:seq<CrashTolerantMapSpecMod.Version>)
+  function FloatingVersions(base: StampedMapMod.StampedMap, msgHistory: MsgHistory, stableLSN: LSN) : (versions:FloatingSeq<CrashTolerantMapSpecMod.Version>)
     requires msgHistory.WF()
     requires msgHistory.CanFollow(base.seqEnd)
     requires msgHistory.CanDiscardTo(stableLSN)
     ensures |versions| == msgHistory.seqEnd+1
   {
-    // Construct a Version seq with the entries before stableLSN Forgotten: that's what spec expects.
-    var numVersions := msgHistory.seqEnd + 1;
-    seq(numVersions, lsn requires 0<=lsn<numVersions =>
-      if lsn < stableLSN
-      then CrashTolerantMapSpecMod.Forgotten
-      else StampedMapToVersion(MapPlusHistory(base, msgHistory.DiscardRecent(lsn))))
+    // TODO(jialin): jonh couldn't figure out how to attach requires to the lambda type in floatingSeq comprehension
+    var arbitrary := Async.InitPersistentState();  // Can't figure out how to sneak requires into floatingSeq comprehension
+    floatingSeq(stableLSN, msgHistory.seqEnd + 1,
+      lsn =>
+        if stableLSN <= lsn <= msgHistory.seqEnd 
+        then StampedMapToVersion(MapPlusHistory(base, msgHistory.DiscardRecent(lsn)))
+        else arbitrary)
   }
 
   function Ic() : CrashTolerantMapSpecMod.Constants
@@ -77,11 +79,11 @@ module CoordinationSystemRefinement {
       var stableLSN := v.journal.persistent.seqEnd;
       if v.ephemeral.Known?
       then CrashTolerantMapSpecMod.Variables(
-        VersionsWithForgottenPrefix(v.mapadt.persistent, IEJ(v.journal), stableLSN),
-          v.ephemeral.progress, v.ephemeral.syncReqs, stableLSN)
+        FloatingVersions(v.mapadt.persistent, IEJ(v.journal), stableLSN),
+          v.ephemeral.progress, v.ephemeral.syncReqs)
       else CrashTolerantMapSpecMod.Variables(
-        VersionsWithForgottenPrefix(v.mapadt.persistent, v.journal.persistent, stableLSN),
-          Async.InitEphemeralState(), map[], stableLSN)
+        FloatingVersions(v.mapadt.persistent, v.journal.persistent, stableLSN),
+          Async.InitEphemeralState(), map[])
   }
 
   // Where these journals share an LSN, they map it to the same message.
@@ -230,7 +232,7 @@ module CoordinationSystemRefinement {
     ensures Inv(v)
     ensures I(v) == CrashTolerantMapSpecMod.InitState()
   {
-    assert I(v).versions[0].asyncState.appv.kmmap == TotalKMMapMod.EmptyTotalMap(); // trigger
+    assert I(v).versions[0].appv.kmmap == TotalKMMapMod.EmptyTotalMap(); // trigger
   }
 
   lemma CommitStepPreservesHistory(v: Variables, v': Variables, uiop: UIOp, step: Step, lsn: LSN)
@@ -445,13 +447,15 @@ module CoordinationSystemRefinement {
   {
     // See description & diagram in CommitStepPreservesHistory.
     InvInductive(v, v', uiop);
-    forall i | 0<=i<|I(v).versions|
-      ensures I(v').versions[i] == if i < I(v').stableIdx then CrashTolerantMapSpecMod.Forgotten else I(v).versions[i]
+    forall lsn | I(v').versions.IsActive(lsn)
+        ensures I(v').versions[lsn] == I(v).versions.GetSuffix(I(v').StableIndex())[lsn]
     {
-      if v.journal.inFlight.value.seqEnd <= i {
-        CommitStepPreservesHistory(v, v', uiop, step, i);
+      if v.journal.inFlight.value.seqEnd <= lsn {
+        CommitStepPreservesHistory(v, v', uiop, step, lsn);
       }
     }
+    I(v').versions.Extensionality(I(v).versions.GetSuffix(I(v').StableIndex()));
+
     assert CrashTolerantMapSpecMod.NextStep(Ic(), I(v), I(v'), UIOp.SyncOp);  // witness
   }
 

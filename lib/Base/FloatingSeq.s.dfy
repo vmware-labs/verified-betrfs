@@ -22,26 +22,31 @@ module FloatingSeqMod {
     // the beginning of the index space.
     function Len() : nat { start + |entries| }
 
-    predicate ActiveRange(i: nat)
+    function FirstActiveIndex() : nat
+    {
+      start
+    }
+
+    predicate IsActive(i: nat)
     {
       && start <= i < Len()
     }
 
     // You can only Get values after the empty space.
     function Get(i: nat) : T
-      requires ActiveRange(i)
+      requires IsActive(i)
     {
       entries[i - start]
     }
 
     // You can chop off the right end of a FloatingSeq without shifting the
     // indices of elements.
-    function GetPrefix(end: nat) : FloatingSeq<T>
-      requires end <= Len()
+    function GetPrefix(count: nat) : FloatingSeq<T>
+      requires count <= Len()
     {
-      if end <= start
-      then FloatingSeq(end, [])
-      else FloatingSeq(start, entries[..end-start])
+      if count <= start
+      then FloatingSeq(count, [])
+      else FloatingSeq(start, entries[..count-start])
     }
 
     // This datatype doesn't have a "RightSlice" operator because the intent is
@@ -50,7 +55,7 @@ module FloatingSeqMod {
     // remembering only how many there used to be (in `start`), so that the
     // offsets of the surviving entries don't change.
     function GetSuffix(newStart: nat) : FloatingSeq<T>
-      requires ActiveRange(newStart) || newStart == Len()
+      requires IsActive(newStart) || newStart == Len()
     {
       FloatingSeq(newStart, entries[newStart - start..])
     }
@@ -62,7 +67,7 @@ module FloatingSeqMod {
 
     function Last() : T
       requires Len() > 0
-      requires ActiveRange(Len()-1)
+      requires IsActive(Len()-1)
     {
       Get(Len()-1)
     }
@@ -72,5 +77,37 @@ module FloatingSeqMod {
     {
       GetPrefix(Len()-1)
     }
+
+    lemma Extensionality(b: FloatingSeq<T>)
+      requires this.start == b.start
+      requires |this| == |b|
+      requires forall i | IsActive(i) :: this[i]==b[i]
+      ensures this==b
+    {
+      forall i | 0<=i<|this.entries| ensures this.entries[i] == b.entries[i] {
+        assert this[this.start+i]==this.entries[i];
+        assert b[this.start+i]==b.entries[i];
+      }
+    }
+  }
+
+  // Operator overloads
+  function operator(| |)<T>(fs: FloatingSeq<T>) : nat
+  {
+    fs.Len()
+  }
+
+  function{:inline true} operator([])<T>(fs: FloatingSeq<T>, i:nat): T
+    requires fs.IsActive(i)
+  {
+    fs.Get(i)
+  }
+
+  // Comprehension for FloatingSeq
+  function floatingSeq<T>(start: nat, length: nat, f:(int) -> T)
+    : FloatingSeq<T>
+    requires start <= length
+  {
+    FloatingSeq(start, seq(length-start, i requires 0<=i<length-start => f(i+start)))
   }
 }
