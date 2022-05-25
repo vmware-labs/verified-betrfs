@@ -130,31 +130,45 @@ module PagedJournalRefinement
     }
   }
 
+
+  lemma DiscardOldMaintainsSubseq(tj: TruncatedJournal, bdy: LSN) 
+    requires tj.WF()
+    requires tj.CanDiscardTo(bdy)
+    ensures  ITruncatedJournal(tj).IncludesSubseq(ITruncatedJournal(tj.DiscardOldDefn(bdy)))
+  {
+    // TODO
+    assume false;
+  }
+
+  lemma CropHeadMaintainsSubset(tj: TruncatedJournal, depth: nat)
+    requires tj.WF()
+    requires OptRecCanCropHeadRecords(tj.freshestRec, tj.boundaryLSN, depth)
+    ensures ITruncatedJournal(tj).IncludesSubseq(ITruncatedJournal(tj.CropHeadRecords(depth)))
+  {
+    // TODO
+    assume false;
+  }
+
   lemma TJFreezeForCommit(tj: TruncatedJournal, frozen: TruncatedJournal, depth: nat)
     requires tj.WF()
     requires tj.FreezeForCommit(frozen, depth)
     ensures ITruncatedJournal(tj).IncludesSubseq(ITruncatedJournal(frozen))
   {
-    var itj, ifj := ITruncatedJournal(tj), ITruncatedJournal(frozen);
+    calc {
+      tj.CropHeadRecords(depth).DiscardOldDefn(frozen.boundaryLSN);
+      frozen;
+    }
 
-    // IncludesSubseq def
-    assert itj.seqStart <= ifj.seqStart;
-    assert ifj.seqEnd <= itj.seqEnd;
-    var result := forall lsn | ifj.Contains(lsn) :: itj.Contains(lsn) && itj.msgs[lsn] == ifj.msgs[lsn];
-    assert result;
-    assert result && !ifj.IsEmpty() ==> itj.Contains(ifj.seqStart);
-
-
+    DiscardOldMaintainsSubseq(tj.CropHeadRecords(depth), frozen.boundaryLSN);
+    CropHeadMaintainsSubset(tj, depth);
   }
 
-  lemma FreezeForCommitRefines(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
-    requires FreezeForCommit(v, v', lbl, keepReceiptLines)
+  lemma FreezeForCommitRefines(v: Variables, v': Variables, lbl: TransitionLabel, depth: nat)
+    requires FreezeForCommit(v, v', lbl, depth)
     ensures v'.WF();
     ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
-    // var receipt := v.truncatedJournal.BuildReceipt();
-    // receipt.TJFacts();
-    // TJFreezeForCommit(v.truncatedJournal, lbl.frozenJournal, keepReceiptLines);
+    TJFreezeForCommit(v.truncatedJournal, lbl.frozenJournal, depth);
   }
 
   //////////////////////////////////////////////////////////////////////////////
