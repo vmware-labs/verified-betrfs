@@ -71,6 +71,7 @@ module LinkedJournalRefinement
     }
   }
 
+  // TODO(jonh): how is this not IPtrFraming?
   lemma IPtrIgnoresExtraBlocks(small: DiskView, ptr: Pointer, big: DiskView)
     requires small.WF()
     requires small.IsNondanglingPointer(ptr)
@@ -196,6 +197,7 @@ module LinkedJournalRefinement
     DiscardInterp(tj.diskView, lsn, discarded.diskView, tj.freshestRec);
   }
     
+    // TODO(jonh): how does this relate to IPtrFraming!?
   lemma SubDiskInterp(small: DiskView, big: DiskView, ptr: Pointer)
     requires big.WF()
     requires big.Acyclic()

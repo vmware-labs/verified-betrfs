@@ -155,6 +155,7 @@ module LinkedJournal {
     }
 
     // This disk only has entries reachable from root (via CroppedPrior()s).
+    // TODO(jonh): move to refinement
     predicate IsTight(root: Pointer)
     {
       && Decodable(root)
@@ -188,7 +189,7 @@ module LinkedJournal {
   }
 
   datatype TruncatedJournal = TruncatedJournal(
-    freshestRec: Pointer,
+    freshestRec: Pointer, // root address of journal
     diskView: DiskView)
   {
     predicate WF() {
@@ -260,7 +261,7 @@ module LinkedJournal {
     predicate WF() {
       && truncatedJournal.WF()
       && unmarshalledTail.WF()
-      && truncatedJournal.SeqEnd() == unmarshalledTail.seqStart
+      && truncatedJournal.SeqEnd() == unmarshalledTail.seqStart // TODO(jonh): can probably delete this, since it's proven by interp
     }
 
     function SeqStart() : LSN
