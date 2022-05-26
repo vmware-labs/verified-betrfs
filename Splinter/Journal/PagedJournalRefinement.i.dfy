@@ -240,6 +240,21 @@ module PagedJournalRefinement
   {
   }
 
+  lemma DiscardOldRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires DiscardOld(v, v', lbl)
+    ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
+  {
+    assume false;
+    assert I(v').journal == I(v).journal.DiscardOld(lbl.startLsn);
+  }
+
+    lemma MarshallRefines(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
+    requires InternalJournalMarshal(v, v', lbl, cut)
+    ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
+  {
+    assume false;
+  }
+
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -258,8 +273,10 @@ module PagedJournalRefinement
     } else if step.PutStep? {
       assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else if step.DiscardOldStep? {
+      DiscardOldRefines(v, v', lbl);
       assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else if step.InternalJournalMarshalStep? {
+      MarshallRefines(v, v', lbl, step.cut);
       assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else {
       assert false;
