@@ -173,6 +173,7 @@ module LinkedJournalRefinement
     requires discarded == dv.DiscardOld(lsn)
     requires dv.IsNondanglingPointer(ptr)
     ensures discarded.Acyclic()
+    //ensures dv.IPtr(ptr).Some? ==> dv.IPtr(ptr).value.Valid()
     ensures discarded.IPtr(ptr) == PagedJournal.DiscardOldJournalRec(dv.IPtr(ptr), lsn)
     decreases if ptr.Some? then dv.TheRanking()[ptr.value] else -1
   {
@@ -186,12 +187,11 @@ module LinkedJournalRefinement
     requires tj.WF()
     requires tj.diskView.Acyclic()
     requires tj.I().WF()
-    requires tj.I().I().CanDiscardTo(lsn)
-    requires tj.SeqStart() <= lsn
+    requires tj.SeqStart() <= lsn <= tj.SeqEnd()
     requires discarded == tj.DiscardOld(lsn)
     ensures discarded.diskView.Acyclic();
     ensures tj.I().WF();
-    ensures tj.I().DiscardOld(lsn) == discarded.I()
+    ensures tj.I().DiscardOldDefn(lsn) == discarded.I()
   {
     assert discarded.diskView.PointersRespectRank(tj.diskView.TheRanking());
     DiscardInterp(tj.diskView, lsn, discarded.diskView, tj.freshestRec);
@@ -239,11 +239,11 @@ module LinkedJournalRefinement
       TightInterp(croppedTJ.diskView, croppedTJ.freshestRec, tightTJ.diskView);
 
       if !(v.unmarshalledTail.seqStart <= lsn) {
-        assert v.SeqStart() == v.truncatedJournal.I().I().seqStart by { v.truncatedJournal.I().BuildReceipt().TJFacts(); }
+        assert v.SeqStart() == PagedJournalRefinement.ITruncatedJournal(v.truncatedJournal.I()).seqStart by { }
         DiscardInterp(croppedTJ.diskView, lsn, croppedTJ.diskView.DiscardOld(lsn), v.truncatedJournal.freshestRec);
         SubDiskInterp(tightTJ.diskView, croppedTJ.diskView, croppedTJ.freshestRec);
         DiscardHarder(v.truncatedJournal, lsn, croppedTJ);
-        assert croppedTJ.I() == v.truncatedJournal.I().DiscardOld(lsn); // Trigger for v'.I().WF()
+        assert croppedTJ.I() == v.truncatedJournal.I().DiscardOldDefn(lsn); // Trigger for v'.I().WF()
       }
 //      assert Inv(v');
     } else if step.InternalJournalMarshalStep? {
@@ -276,7 +276,7 @@ module LinkedJournalRefinement
     InvNext(v, v', lbl);
     var step: Step :| NextStep(v, v', lbl, step);
     if step.ReadForRecoveryStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.ReadForRecoveryStep(step.receiptIndex)); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.ReadForRecoveryStep(step.cropCount)); // witness step
     } else if step.FreezeForCommitStep? {
       assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.FreezeForCommitStep(step.keepReceiptLines)); // witness step
     } else if step.ObserveFreshJournalStep? {
@@ -286,10 +286,10 @@ module LinkedJournalRefinement
     } else if step.DiscardOldStep? {
       var lsn := lbl.startLsn;
       if !(v.unmarshalledTail.seqStart <= lsn) {
-        assert v.SeqStart() == I(v).truncatedJournal.I().seqStart by {
+        assert v.SeqStart() == PagedJournalRefinement.ITruncatedJournal(I(v).truncatedJournal).seqStart by {
           var tj := v.truncatedJournal;
           var dv := v.truncatedJournal.diskView;
-          PagedJournal.TruncatedJournal(dv.boundaryLSN, dv.IPtr(tj.freshestRec)).BuildReceipt().TJFacts();
+//          PagedJournal.TruncatedJournal(dv.boundaryLSN, dv.IPtr(tj.freshestRec)).BuildReceipt().TJFacts();
         }
         var croppedTJ := v.truncatedJournal.DiscardOld(lbl.startLsn);
         DiscardInterp(v.truncatedJournal.diskView, lsn, croppedTJ.diskView, v.truncatedJournal.freshestRec);

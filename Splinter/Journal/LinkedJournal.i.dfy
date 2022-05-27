@@ -28,6 +28,7 @@ module LinkedJournal {
       && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
     }
 
+  // TODO(tony): move to refinement!
     function I() : PagedJournal.TransitionLabel
       requires WF()
     {
@@ -155,7 +156,7 @@ module LinkedJournal {
     }
 
     // This disk only has entries reachable from root (via CroppedPrior()s).
-    // TODO(jonh): move to refinement
+    // TODO(tony): move to refinement
     predicate IsTight(root: Pointer)
     {
       && Decodable(root)
@@ -167,15 +168,6 @@ module LinkedJournal {
         )
     }
 
-//    // TODO(jonh): Oded's suggestion for something that's simpler that IsTight,
-//    // and should somehow reduce the proof obligations.
-//    lemma BuildTightGoodness(root: Pointer)
-//      ensures BuildTight(root).IsSubDisk(this)
-//      ensures IPtr() == BuildTight(root).IPtr()
-//      ensures forall dv | this.IsSubDisk(dv) :: BuildTight(root).IsSubDisk(dv.BuildTight(root)) // or maybe ==?
-//    {
-//    }
-
     function BuildTight(root: Pointer) : (out: DiskView)
       requires Decodable(root)
       decreases TheRankOf(root)
@@ -185,6 +177,19 @@ module LinkedJournal {
       else
         var addr := root.value;
         DiskView(boundaryLSN, BuildTight(entries[addr].CroppedPrior(boundaryLSN)).entries[addr := entries[addr]])
+    }
+
+    function PointerAfterCrop(root: Pointer, cropCount: nat) : (out: Pointer)
+      requires Decodable(root)
+      //ensures Decodable(out)
+      //decreases TheRankOf(root)
+      ensures IsNondanglingPointer(out)
+      decreases cropCount
+    {
+      if cropCount==0 || root.None?
+      then root
+      else
+        PointerAfterCrop(entries[root.value].CroppedPrior(boundaryLSN), cropCount-1)
     }
   }
 
@@ -227,6 +232,7 @@ module LinkedJournal {
         freshestRec := Some(addr))
     }
 
+  // TODO(tony): move to refinement!
     function I() : PagedJournal.TruncatedJournal
       requires WF()
     {
@@ -234,11 +240,11 @@ module LinkedJournal {
       else PagedJournal.TruncatedJournal(diskView.boundaryLSN, diskView.IPtr(freshestRec))
     }
 
-    predicate Decodable()
+    predicate Decodable() // becomes invariant
     {
       && WF()
       && diskView.Acyclic()
-      && I().WF()
+      && I().WF() // TODO(tony): so can we eliminate this now...?
     }
 
     function BuildTight() : (out: TruncatedJournal)
@@ -284,14 +290,15 @@ module LinkedJournal {
 
   // NB We need both rank and receipts to concisely write this predicate, which is why they
   // get defined here in the state machine instead of deferred to the refinement module.
-  predicate ReadForRecovery(v: Variables, v': Variables, lbl: TransitionLabel, receiptIndex: nat)
+  predicate ReadForRecovery(v: Variables, v': Variables, lbl: TransitionLabel, cropCount: nat)
   {
     && lbl.ReadForRecoveryLabel?
     && lbl.messages.WF()
     && v.WF()
     && v.truncatedJournal.Decodable()
-    && var pagedTJ := v.truncatedJournal.I();
-    && pagedTJ.IncludesSubseqAt(lbl.messages, receiptIndex)
+    && var ptr := v.truncatedJournal.diskView.PointerAfterCrop(v.truncatedJournal.freshestRec, cropCount);
+    && ptr.Some?
+    && v.truncatedJournal.diskView.entries[ptr.value].messageSeq.IncludesSubseq(lbl.messages)
     && v' == v
   }
 
@@ -302,7 +309,7 @@ module LinkedJournal {
     && v.WF()
 
     && v.truncatedJournal.Decodable() // Shown by invariant, not runtime-checked
-    && v.truncatedJournal.I().FreezeForCommit(lbl.I().frozenJournal, keepReceiptLines)
+    && v.truncatedJournal.I().FreezeForCommit(lbl.I().frozenJournal, keepReceiptLines)  // TODO(tony): Get rid of I!!!
     && lbl.frozenJournal == v.truncatedJournal.DiscardOld(lbl.frozenJournal.SeqStart()).BuildTight()
 
     && v' == v
@@ -360,7 +367,7 @@ module LinkedJournal {
   }
 
   datatype Step =
-      ReadForRecoveryStep(receiptIndex: nat)
+      ReadForRecoveryStep(cropCount: nat)
     | FreezeForCommitStep(keepReceiptLines: nat)
     | ObserveFreshJournalStep()
     | PutStep()
@@ -370,7 +377,7 @@ module LinkedJournal {
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     match step {
-      case ReadForRecoveryStep(receiptIndex) => ReadForRecovery(v, v', lbl, receiptIndex)
+      case ReadForRecoveryStep(cropCount) => ReadForRecovery(v, v', lbl, cropCount)
       case FreezeForCommitStep(keepReceiptLines) => FreezeForCommit(v, v', lbl, keepReceiptLines)
       case ObserveFreshJournalStep() => ObserveFreshJournal(v, v', lbl)
       case PutStep() => Put(v, v', lbl)
