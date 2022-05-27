@@ -244,7 +244,7 @@ module PagedJournalRefinement
     requires DiscardOld(v, v', lbl)
     ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
-    assume false;
+    // TODO
     assert I(v').journal == I(v).journal.DiscardOld(lbl.startLsn);
   }
 
@@ -252,7 +252,7 @@ module PagedJournalRefinement
     requires InternalJournalMarshal(v, v', lbl, cut)
     ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
-    assume false;
+    // TODO
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)

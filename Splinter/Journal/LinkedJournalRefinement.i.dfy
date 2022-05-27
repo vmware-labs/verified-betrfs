@@ -166,20 +166,36 @@ module LinkedJournalRefinement
   {
   }
 
-  lemma DiscardInterp(dv: DiskView, lsn: LSN, discarded: DiskView, ptr: Pointer)
+  lemma IPtrOutputValid(dv: DiskView, ptr: Pointer) 
     requires dv.WF()
+    requires dv.Decodable(ptr)
     requires dv.Acyclic()
-    requires dv.boundaryLSN <= lsn
-    requires discarded == dv.DiscardOld(lsn)
-    requires dv.IsNondanglingPointer(ptr)
-    ensures discarded.Acyclic()
-    //ensures dv.IPtr(ptr).Some? ==> dv.IPtr(ptr).value.Valid()
-    ensures discarded.IPtr(ptr) == PagedJournal.DiscardOldJournalRec(dv.IPtr(ptr), lsn)
-    decreases if ptr.Some? then dv.TheRanking()[ptr.value] else -1
+    ensures dv.IPtr(ptr).Some? ==> dv.IPtr(ptr).value.Valid(dv.boundaryLSN)
+    decreases dv.TheRankOf(ptr)
   {
-    assert discarded.PointersRespectRank(dv.TheRanking());
-    if ptr.Some? && !(dv.entries[ptr.value].messageSeq.seqStart <= lsn) {
-      DiscardInterp(dv, lsn, discarded, discarded.entries[ptr.value].CroppedPrior(discarded.boundaryLSN));
+    if ptr.None? {
+      return;
+    } else {
+      var head := dv.entries[ptr.value];
+      IPtrOutputValid(dv, head.CroppedPrior(dv.boundaryLSN));
+    }
+  }
+
+  lemma DiscardInterp(bef: DiskView, lsn: LSN, aft: DiskView, ptr: Pointer)
+    requires bef.WF()
+    requires bef.Acyclic()
+    requires bef.boundaryLSN <= lsn
+    requires aft == bef.DiscardOld(lsn)
+    requires bef.IsNondanglingPointer(ptr)
+    ensures aft.Acyclic()
+    ensures bef.IPtr(ptr).Some? ==> bef.IPtr(ptr).value.Valid(lsn)
+    ensures aft.IPtr(ptr) == PagedJournal.DiscardOldJournalRec(bef.IPtr(ptr), lsn)
+    decreases if ptr.Some? then bef.TheRanking()[ptr.value] else -1
+  {
+    IPtrOutputValid(bef, ptr);
+    assert aft.PointersRespectRank(bef.TheRanking());
+    if ptr.Some? && !(bef.entries[ptr.value].messageSeq.seqStart <= lsn) {
+      DiscardInterp(bef, lsn, aft, aft.entries[ptr.value].CroppedPrior(aft.boundaryLSN));
     }
   }
 
