@@ -15,6 +15,19 @@ module LinkedJournalRefinement
   import PagedJournalRefinement
   import opened LinkedJournal
 
+
+  function ILbl(lbl: TransitionLabel) : PagedJournal.TransitionLabel
+    requires lbl.WF()
+  {
+    match lbl
+      case ReadForRecoveryLabel(messages) => PagedJournal.ReadForRecoveryLabel(messages)
+      case FreezeForCommitLabel(frozenJournal) => PagedJournal.FreezeForCommitLabel(ITruncatedJournal(frozenJournal))
+      case QueryEndLsnLabel(endLsn) => PagedJournal.QueryEndLsnLabel(endLsn)
+      case PutLabel(messages) => PagedJournal.PutLabel(messages)
+      case DiscardOldLabel(startLsn, requireEnd) => PagedJournal.DiscardOldLabel(startLsn, requireEnd)
+      case InternalLabel() => PagedJournal.InternalLabel()
+  }
+
   predicate Inv(v: Variables)
   {
     && v.WF()
@@ -25,7 +38,37 @@ module LinkedJournalRefinement
     requires v.WF()
     requires v.truncatedJournal.diskView.Acyclic()
   {
-    PagedJournal.Variables(v.truncatedJournal.I(), v.unmarshalledTail)
+    PagedJournal.Variables(ITruncatedJournal(v.truncatedJournal), v.unmarshalledTail)
+  }
+
+  function ITruncatedJournal(tj: TruncatedJournal) : PagedJournal.TruncatedJournal
+    requires tj.WF()
+  {
+    if !tj.diskView.Acyclic() then PagedJournal.Mkfs() // Silly
+    else PagedJournal.TruncatedJournal(tj.diskView.boundaryLSN, IPtr(tj.diskView, tj.freshestRec))
+  }
+
+  function IPtr(dv: DiskView, ptr: Pointer) : Option<PagedJournal.JournalRecord>
+      requires dv.Decodable(ptr)
+      decreases dv.TheRankOf(ptr)
+  {
+    if !dv.Acyclic() then None // Silly
+    else if ptr.None?
+    then None
+    else
+      var jr := dv.entries[ptr.value];
+      Some(PagedJournal.JournalRecord(jr.messageSeq, IPtr(dv, jr.CroppedPrior(dv.boundaryLSN))))
+  }
+
+  predicate IsTight(dv: DiskView, root: Pointer)
+  {
+    && dv.Decodable(root)
+    && (forall other:DiskView |
+        && other.Decodable(root)
+        && IPtr(dv, root) == IPtr(other, root)
+        && other.IsSubDisk(dv)
+        :: other == dv
+      )
   }
 
   lemma IPtrFraming(dv1: DiskView, dv2: DiskView, ptr: Pointer)
@@ -34,7 +77,7 @@ module LinkedJournalRefinement
     requires dv1.IsNondanglingPointer(ptr)
     requires dv1.IsSubDisk(dv2)
     requires dv1.boundaryLSN == dv2.boundaryLSN
-    ensures dv1.IPtr(ptr) == dv2.IPtr(ptr)
+    ensures IPtr(dv1, ptr) == IPtr(dv2, ptr)
     decreases dv1.TheRankOf(ptr)
   {
     if ptr.Some? {
@@ -79,14 +122,14 @@ module LinkedJournalRefinement
     requires big.Acyclic()
     requires small.IsSubDisk(big)
     ensures small.Acyclic()
-    ensures big.IPtr(ptr) == small.IPtr(ptr)
+    ensures IPtr(big, ptr) == IPtr(small, ptr)
     decreases big.TheRankOf(ptr)
   {
     assert small.PointersRespectRank(big.TheRanking()); // witness to small.Acyclic
     if ptr.Some? {
       var next := big.entries[ptr.value].CroppedPrior(big.boundaryLSN);
       IPtrIgnoresExtraBlocks(small, next, big);
-      assert big.IPtr(ptr) == small.IPtr(ptr);
+      assert IPtr(big, ptr) == IPtr(small, ptr);
     }
   }
 
@@ -95,7 +138,7 @@ module LinkedJournalRefinement
     requires tight == big.BuildTight(root)
     requires big.Acyclic()
     requires tight.IsSubDisk(big);
-    ensures tight.IsTight(root)
+    ensures IsTight(tight, root)
     decreases big.TheRankOf(root)
   {
     if root.Some? {
@@ -104,7 +147,7 @@ module LinkedJournalRefinement
       BuildTightShape(big, root);
       TightSubDisk(big, next, inner);
 
-      forall other:DiskView | && other.Decodable(root) && tight.IPtr(root) == other.IPtr(root) && other.IsSubDisk(tight)
+      forall other:DiskView | && other.Decodable(root) && IPtr(tight, root) == IPtr(other, root) && other.IsSubDisk(tight)
           ensures other == tight {
         // any other tighter disk implies an "otherInner" disk tighter than inner, but inner.IsTight(next).
         var otherInner := DiskView(other.boundaryLSN, MapRemove1(other.entries, root.value));
@@ -131,9 +174,9 @@ module LinkedJournalRefinement
     requires tight == big.BuildTight(root)
     requires big.Acyclic()
     ensures tight.IsSubDisk(big)
-    ensures tight.IsTight(root)
+    ensures IsTight(tight, root)
     ensures tight.Decodable(root)
-    ensures tight.IPtr(root) == big.IPtr(root)
+    ensures IPtr(tight, root) == IPtr(big, root)
     ensures tight.Acyclic()
     decreases big.TheRankOf(root)
   {
@@ -152,7 +195,7 @@ module LinkedJournalRefinement
 
   lemma MkfsRefines()
     ensures Mkfs().diskView.Acyclic()
-    ensures Mkfs().I() == PagedJournal.Mkfs()
+    ensures ITruncatedJournal(Mkfs()) == PagedJournal.Mkfs()
   {
     assert Mkfs().diskView.PointersRespectRank(map[]);  // witness to exists ranking
   }
@@ -163,21 +206,17 @@ module LinkedJournalRefinement
   lemma InvInit(v: Variables, tj: TruncatedJournal)
     requires Init(v, tj)
     ensures Inv(v)
-  {
-  }
+  {}
 
   lemma IPtrOutputValid(dv: DiskView, ptr: Pointer) 
-    requires dv.WF()
     requires dv.Decodable(ptr)
     requires dv.Acyclic()
-    ensures dv.IPtr(ptr).Some? ==> dv.IPtr(ptr).value.Valid(dv.boundaryLSN)
+    requires dv.BlockInBounds(ptr)
+    ensures IPtr(dv, ptr).Some? ==> IPtr(dv, ptr).value.Valid(dv.boundaryLSN)
     decreases dv.TheRankOf(ptr)
   {
-    if ptr.None? {
-      return;
-    } else {
-      var head := dv.entries[ptr.value];
-      IPtrOutputValid(dv, head.CroppedPrior(dv.boundaryLSN));
+    if ptr.Some? {
+      IPtrOutputValid(dv, dv.entries[ptr.value].CroppedPrior(dv.boundaryLSN));  
     }
   }
 
@@ -187,14 +226,17 @@ module LinkedJournalRefinement
     requires bef.boundaryLSN <= lsn
     requires aft == bef.DiscardOld(lsn)
     requires bef.IsNondanglingPointer(ptr)
+    requires aft.IsNondanglingPointer(ptr)
+    requires bef.BlockInBounds(ptr)
+    requires aft.BlockInBounds(ptr)
     ensures aft.Acyclic()
-    ensures bef.IPtr(ptr).Some? ==> bef.IPtr(ptr).value.Valid(lsn)
-    ensures aft.IPtr(ptr) == PagedJournal.DiscardOldJournalRec(bef.IPtr(ptr), lsn)
+    ensures IPtr(bef, ptr).Some? ==> IPtr(bef, ptr).value.Valid(lsn)
+    ensures IPtr(aft, ptr) == PagedJournal.DiscardOldJournalRec(IPtr(bef, ptr), lsn)
     decreases if ptr.Some? then bef.TheRanking()[ptr.value] else -1
   {
     IPtrOutputValid(bef, ptr);
     assert aft.PointersRespectRank(bef.TheRanking());
-    if ptr.Some? && !(bef.entries[ptr.value].messageSeq.seqStart <= lsn) {
+    if ptr.Some? && lsn < bef.entries[ptr.value].messageSeq.seqStart {
       DiscardInterp(bef, lsn, aft, aft.entries[ptr.value].CroppedPrior(aft.boundaryLSN));
     }
   }
@@ -202,12 +244,12 @@ module LinkedJournalRefinement
   lemma DiscardHarder(tj: TruncatedJournal, lsn: LSN, discarded: TruncatedJournal)
     requires tj.WF()
     requires tj.diskView.Acyclic()
-    requires tj.I().WF()
+    requires ITruncatedJournal(tj).WF()
     requires tj.SeqStart() <= lsn <= tj.SeqEnd()
     requires discarded == tj.DiscardOld(lsn)
     ensures discarded.diskView.Acyclic();
-    ensures tj.I().WF();
-    ensures tj.I().DiscardOldDefn(lsn) == discarded.I()
+    ensures ITruncatedJournal(tj).WF();
+    ensures ITruncatedJournal(tj).DiscardOldDefn(lsn) == ITruncatedJournal(discarded)
   {
     assert discarded.diskView.PointersRespectRank(tj.diskView.TheRanking());
     DiscardInterp(tj.diskView, lsn, discarded.diskView, tj.freshestRec);
@@ -222,7 +264,7 @@ module LinkedJournalRefinement
     requires small.boundaryLSN == big.boundaryLSN
     requires small.IsNondanglingPointer(ptr)
     ensures small.Acyclic()
-    ensures small.IPtr(ptr) == big.IPtr(ptr)
+    ensures IPtr(small, ptr) == IPtr(big, ptr)
     decreases if ptr.Some? then big.TheRanking()[ptr.value] else -1
   {
     assert small.PointersRespectRank(big.TheRanking());
@@ -255,11 +297,11 @@ module LinkedJournalRefinement
       TightInterp(croppedTJ.diskView, croppedTJ.freshestRec, tightTJ.diskView);
 
       if !(v.unmarshalledTail.seqStart <= lsn) {
-        assert v.SeqStart() == PagedJournalRefinement.ITruncatedJournal(v.truncatedJournal.I()).seqStart by { }
+        assert v.SeqStart() == PagedJournalRefinement.ITruncatedJournal(ITruncatedJournal(v.truncatedJournal)).seqStart by { }
         DiscardInterp(croppedTJ.diskView, lsn, croppedTJ.diskView.DiscardOld(lsn), v.truncatedJournal.freshestRec);
         SubDiskInterp(tightTJ.diskView, croppedTJ.diskView, croppedTJ.freshestRec);
         DiscardHarder(v.truncatedJournal, lsn, croppedTJ);
-        assert croppedTJ.I() == v.truncatedJournal.I().DiscardOldDefn(lsn); // Trigger for v'.I().WF()
+        assert ITruncatedJournal(croppedTJ) == ITruncatedJournal(v.truncatedJournal).DiscardOldDefn(lsn); // Trigger for v'.I().WF()
       }
 //      assert Inv(v');
     } else if step.InternalJournalMarshalStep? {
@@ -278,7 +320,7 @@ module LinkedJournalRefinement
 
   lemma InitRefines(v: Variables, tj: TruncatedJournal)
     requires Init(v, tj)
-    ensures PagedJournal.Init(I(v), tj.I())
+    ensures PagedJournal.Init(I(v), ITruncatedJournal(tj))
   {
   }
 
@@ -287,18 +329,18 @@ module LinkedJournalRefinement
     requires Next(v, v', lbl)
     ensures v'.WF()
     ensures Inv(v')
-    ensures PagedJournal.Next(I(v), I(v'), lbl.I())
+    ensures PagedJournal.Next(I(v), I(v'), ILbl(lbl))
   {
     InvNext(v, v', lbl);
     var step: Step :| NextStep(v, v', lbl, step);
     if step.ReadForRecoveryStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.ReadForRecoveryStep(step.cropCount)); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.ReadForRecoveryStep(step.cropCount)); // witness step
     } else if step.FreezeForCommitStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.FreezeForCommitStep(step.keepReceiptLines)); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.FreezeForCommitStep(step.keepReceiptLines)); // witness step
     } else if step.ObserveFreshJournalStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.ObserveFreshJournalStep()); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.ObserveFreshJournalStep()); // witness step
     } else if step.PutStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.PutStep()); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.PutStep()); // witness step
     } else if step.DiscardOldStep? {
       var lsn := lbl.startLsn;
       if !(v.unmarshalledTail.seqStart <= lsn) {
@@ -313,10 +355,10 @@ module LinkedJournalRefinement
         assert v'.truncatedJournal.diskView.IsSubDisk(croppedTJ.diskView);
         SubDiskInterp(v'.truncatedJournal.diskView, croppedTJ.diskView, croppedTJ.freshestRec);
       }
-      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.DiscardOldStep()); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.DiscardOldStep()); // witness step
     } else if step.InternalJournalMarshalStep? {
       IPtrFraming(v.truncatedJournal.diskView, v'.truncatedJournal.diskView, v.truncatedJournal.freshestRec);
-      assert PagedJournal.NextStep(I(v), I(v'), lbl.I(), PagedJournal.InternalJournalMarshalStep(step.cut)); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.InternalJournalMarshalStep(step.cut)); // witness step
     } else {
       assert false;
     }

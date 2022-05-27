@@ -27,19 +27,6 @@ module LinkedJournal {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
     }
-
-  // TODO(tony): move to refinement!
-    function I() : PagedJournal.TransitionLabel
-      requires WF()
-    {
-      match this
-        case ReadForRecoveryLabel(messages) => PagedJournal.ReadForRecoveryLabel(messages)
-        case FreezeForCommitLabel(frozenJournal) => PagedJournal.FreezeForCommitLabel(frozenJournal.I())
-        case QueryEndLsnLabel(endLsn) => PagedJournal.QueryEndLsnLabel(endLsn)
-        case PutLabel(messages) => PagedJournal.PutLabel(messages)
-        case DiscardOldLabel(startLsn, requireEnd) => PagedJournal.DiscardOldLabel(startLsn, requireEnd)
-        case InternalLabel() => PagedJournal.InternalLabel()
-    }
   }
 
   type Ranking = map<Address, nat>
@@ -52,6 +39,11 @@ module LinkedJournal {
     predicate WF()
     {
       messageSeq.WF()
+    }
+
+    predicate HasLink(boundaryLSN: LSN) 
+    {
+      boundaryLSN < messageSeq.seqStart ==> CroppedPrior(boundaryLSN).Some?
     }
 
     // The DiskView always evaluates the priorRec pointer through the lens of
@@ -87,10 +79,40 @@ module LinkedJournal {
       (forall addr | addr in entries :: IsNondanglingPointer(entries[addr].CroppedPrior(boundaryLSN)))
     }
 
+    predicate ThisBlockCanConcat(addr: Address) 
+      requires EntriesWF()
+      requires NondanglingPointers()
+      requires addr in entries
+    {
+      var head := entries[addr];
+      var nextPtr := head.CroppedPrior(boundaryLSN);
+      nextPtr.Some? ==> entries[nextPtr.value].messageSeq.CanConcat(head.messageSeq)
+    }
+
+    predicate BlocksCanConcat() 
+      requires EntriesWF()
+      requires NondanglingPointers()
+    {
+      forall addr | addr in entries :: ThisBlockCanConcat(addr)
+    }
+
+    predicate BlocksEachHaveLink()
+    {
+      forall addr | addr in entries :: entries[addr].HasLink(boundaryLSN)
+    }
+
+    predicate BlockInBounds(ptr: Pointer) 
+      requires IsNondanglingPointer(ptr)
+    {
+      ptr.Some? ==> boundaryLSN < entries[ptr.value].messageSeq.seqEnd
+    }
+
     predicate WF()
     {
       && EntriesWF()
       && NondanglingPointers()
+      && BlocksCanConcat()
+      && BlocksEachHaveLink()
     }
 
     predicate PointersRespectRank(ranking: Ranking)
@@ -131,18 +153,6 @@ module LinkedJournal {
       // negatives, but we stop there!?
     }
 
-    function IPtr(ptr: Pointer) : Option<PagedJournal.JournalRecord>
-      requires Decodable(ptr)
-      decreases TheRankOf(ptr)
-    {
-      if !Acyclic() then None // Silly
-      else if ptr.None?
-      then None
-      else
-        var jr := entries[ptr.value];
-        Some(PagedJournal.JournalRecord(jr.messageSeq, IPtr(jr.CroppedPrior(boundaryLSN))))
-    }
-
     function DiscardOld(newBoundary: LSN) : (out: DiskView)
       requires boundaryLSN <= newBoundary
     {
@@ -153,19 +163,6 @@ module LinkedJournal {
     {
       && boundaryLSN == bigger.boundaryLSN
       && IsSubMap(entries, bigger.entries)
-    }
-
-    // This disk only has entries reachable from root (via CroppedPrior()s).
-    // TODO(tony): move to refinement
-    predicate IsTight(root: Pointer)
-    {
-      && Decodable(root)
-      && (forall other:DiskView |
-          && other.Decodable(root)
-          && IPtr(root) == other.IPtr(root)
-          && other.IsSubDisk(this)
-          :: other == this
-        )
     }
 
     function BuildTight(root: Pointer) : (out: DiskView)
@@ -181,9 +178,9 @@ module LinkedJournal {
 
     function PointerAfterCrop(root: Pointer, cropCount: nat) : (out: Pointer)
       requires Decodable(root)
-      //ensures Decodable(out)
-      //decreases TheRankOf(root)
+      requires BlockInBounds(root)
       ensures IsNondanglingPointer(out)
+      ensures BlockInBounds(out)
       decreases cropCount
     {
       if cropCount==0 || root.None?
@@ -197,9 +194,11 @@ module LinkedJournal {
     freshestRec: Pointer, // root address of journal
     diskView: DiskView)
   {
+
     predicate WF() {
       && diskView.WF()
       && diskView.IsNondanglingPointer(freshestRec)
+      && diskView.BlockInBounds(freshestRec)
     }
 
     function SeqStart() : LSN
@@ -232,19 +231,10 @@ module LinkedJournal {
         freshestRec := Some(addr))
     }
 
-  // TODO(tony): move to refinement!
-    function I() : PagedJournal.TruncatedJournal
-      requires WF()
-    {
-      if !diskView.Acyclic() then PagedJournal.Mkfs() // Silly
-      else PagedJournal.TruncatedJournal(diskView.boundaryLSN, diskView.IPtr(freshestRec))
-    }
-
     predicate Decodable() // becomes invariant
     {
       && WF()
       && diskView.Acyclic()
-      && I().WF() // TODO(tony): so can we eliminate this now...?
     }
 
     function BuildTight() : (out: TruncatedJournal)
@@ -302,16 +292,17 @@ module LinkedJournal {
     && v' == v
   }
 
-  predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
+  predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, cropCount: nat)
   {
     && lbl.WF()
     && lbl.FreezeForCommitLabel?
     && v.WF()
-
     && v.truncatedJournal.Decodable() // Shown by invariant, not runtime-checked
-    && v.truncatedJournal.I().FreezeForCommit(lbl.I().frozenJournal, keepReceiptLines)  // TODO(tony): Get rid of I!!!
-    && lbl.frozenJournal == v.truncatedJournal.DiscardOld(lbl.frozenJournal.SeqStart()).BuildTight()
-
+    && var ptr := v.truncatedJournal.diskView.PointerAfterCrop(v.truncatedJournal.freshestRec, cropCount);
+    && var croppedTj := TruncatedJournal(ptr, v.truncatedJournal.diskView);
+    && var newBdy := lbl.frozenJournal.SeqStart();
+    && v.truncatedJournal.diskView.boundaryLSN <= newBdy
+    && lbl.frozenJournal == croppedTj.DiscardOld(newBdy).BuildTight()
     && v' == v
   }
 
