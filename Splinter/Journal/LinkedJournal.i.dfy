@@ -102,9 +102,9 @@ module LinkedJournal {
     }
 
     predicate BlockInBounds(ptr: Pointer) 
-      requires IsNondanglingPointer(ptr)
     {
-      ptr.Some? ==> boundaryLSN < entries[ptr.value].messageSeq.seqEnd
+      && IsNondanglingPointer(ptr)
+      && (ptr.Some? ==> boundaryLSN < entries[ptr.value].messageSeq.seqEnd)
     }
 
     predicate WF()
@@ -176,17 +176,17 @@ module LinkedJournal {
         DiskView(boundaryLSN, BuildTight(entries[addr].CroppedPrior(boundaryLSN)).entries[addr := entries[addr]])
     }
 
-    function PointerAfterCrop(root: Pointer, cropCount: nat) : (out: Pointer)
+    function PointerAfterCrop(root: Pointer, depth: nat) : (out: Pointer)
       requires Decodable(root)
       requires BlockInBounds(root)
       ensures IsNondanglingPointer(out)
       ensures BlockInBounds(out)
-      decreases cropCount
+      decreases depth
     {
-      if cropCount==0 || root.None?
+      if depth==0 || root.None?
       then root
       else
-        PointerAfterCrop(entries[root.value].CroppedPrior(boundaryLSN), cropCount-1)
+        PointerAfterCrop(entries[root.value].CroppedPrior(boundaryLSN), depth-1)
     }
   }
 
@@ -280,25 +280,25 @@ module LinkedJournal {
 
   // NB We need both rank and receipts to concisely write this predicate, which is why they
   // get defined here in the state machine instead of deferred to the refinement module.
-  predicate ReadForRecovery(v: Variables, v': Variables, lbl: TransitionLabel, cropCount: nat)
+  predicate ReadForRecovery(v: Variables, v': Variables, lbl: TransitionLabel, depth: nat)
   {
     && lbl.ReadForRecoveryLabel?
     && lbl.messages.WF()
     && v.WF()
     && v.truncatedJournal.Decodable()
-    && var ptr := v.truncatedJournal.diskView.PointerAfterCrop(v.truncatedJournal.freshestRec, cropCount);
+    && var ptr := v.truncatedJournal.diskView.PointerAfterCrop(v.truncatedJournal.freshestRec, depth);
     && ptr.Some?
     && v.truncatedJournal.diskView.entries[ptr.value].messageSeq.IncludesSubseq(lbl.messages)
     && v' == v
   }
 
-  predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, cropCount: nat)
+  predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, depth: nat)
   {
     && lbl.WF()
     && lbl.FreezeForCommitLabel?
     && v.WF()
     && v.truncatedJournal.Decodable() // Shown by invariant, not runtime-checked
-    && var ptr := v.truncatedJournal.diskView.PointerAfterCrop(v.truncatedJournal.freshestRec, cropCount);
+    && var ptr := v.truncatedJournal.diskView.PointerAfterCrop(v.truncatedJournal.freshestRec, depth);
     && var croppedTj := TruncatedJournal(ptr, v.truncatedJournal.diskView);
     && var newBdy := lbl.frozenJournal.SeqStart();
     && v.truncatedJournal.diskView.boundaryLSN <= newBdy
@@ -358,8 +358,8 @@ module LinkedJournal {
   }
 
   datatype Step =
-      ReadForRecoveryStep(cropCount: nat)
-    | FreezeForCommitStep(keepReceiptLines: nat)
+      ReadForRecoveryStep(depth: nat)
+    | FreezeForCommitStep(depth: nat)
     | ObserveFreshJournalStep()
     | PutStep()
     | DiscardOldStep()
@@ -368,8 +368,8 @@ module LinkedJournal {
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     match step {
-      case ReadForRecoveryStep(cropCount) => ReadForRecovery(v, v', lbl, cropCount)
-      case FreezeForCommitStep(keepReceiptLines) => FreezeForCommit(v, v', lbl, keepReceiptLines)
+      case ReadForRecoveryStep(depth) => ReadForRecovery(v, v', lbl, depth)
+      case FreezeForCommitStep(depth) => FreezeForCommit(v, v', lbl, depth)
       case ObserveFreshJournalStep() => ObserveFreshJournal(v, v', lbl)
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)

@@ -33,23 +33,10 @@ module LinkedJournalRefinement
     && v.WF()
     && v.truncatedJournal.Decodable()
   }
-  
-  function I(v: Variables) : PagedJournal.Variables
-    requires v.WF()
-    requires v.truncatedJournal.diskView.Acyclic()
-  {
-    PagedJournal.Variables(ITruncatedJournal(v.truncatedJournal), v.unmarshalledTail)
-  }
 
-  function ITruncatedJournal(tj: TruncatedJournal) : PagedJournal.TruncatedJournal
-    requires tj.WF()
-  {
-    if !tj.diskView.Acyclic() then PagedJournal.Mkfs() // Silly
-    else PagedJournal.TruncatedJournal(tj.diskView.boundaryLSN, IPtr(tj.diskView, tj.freshestRec))
-  }
-
-  function IPtr(dv: DiskView, ptr: Pointer) : Option<PagedJournal.JournalRecord>
+  function IPtr(dv: DiskView, ptr: Pointer) : (out: Option<PagedJournal.JournalRecord>)
       requires dv.Decodable(ptr)
+      ensures dv.BlockInBounds(ptr) && out.Some? ==> out.value.Valid(dv.boundaryLSN)
       decreases dv.TheRankOf(ptr)
   {
     if !dv.Acyclic() then None // Silly
@@ -58,6 +45,21 @@ module LinkedJournalRefinement
     else
       var jr := dv.entries[ptr.value];
       Some(PagedJournal.JournalRecord(jr.messageSeq, IPtr(dv, jr.CroppedPrior(dv.boundaryLSN))))
+  }
+
+  function ITruncatedJournal(tj: TruncatedJournal) : (out: PagedJournal.TruncatedJournal)
+    requires tj.WF()
+    ensures out.WF()
+  {
+    if !tj.diskView.Acyclic() then PagedJournal.Mkfs() // Silly
+    else PagedJournal.TruncatedJournal(tj.diskView.boundaryLSN, IPtr(tj.diskView, tj.freshestRec))   
+  }
+
+  function I(v: Variables) : PagedJournal.Variables
+    requires v.WF()
+    requires v.truncatedJournal.diskView.Acyclic()
+  {
+    PagedJournal.Variables(ITruncatedJournal(v.truncatedJournal), v.unmarshalledTail)
   }
 
   predicate IsTight(dv: DiskView, root: Pointer)
@@ -225,8 +227,6 @@ module LinkedJournalRefinement
     requires bef.Acyclic()
     requires bef.boundaryLSN <= lsn
     requires aft == bef.DiscardOld(lsn)
-    requires bef.IsNondanglingPointer(ptr)
-    requires aft.IsNondanglingPointer(ptr)
     requires bef.BlockInBounds(ptr)
     requires aft.BlockInBounds(ptr)
     ensures aft.Acyclic()
@@ -241,18 +241,19 @@ module LinkedJournalRefinement
     }
   }
 
-  lemma DiscardHarder(tj: TruncatedJournal, lsn: LSN, discarded: TruncatedJournal)
+
+  lemma TJDiscardInterp(tj: TruncatedJournal, lsn: LSN, discarded: TruncatedJournal)
     requires tj.WF()
     requires tj.diskView.Acyclic()
-    requires ITruncatedJournal(tj).WF()
+    // requires ITruncatedJournal(tj).WF()
     requires tj.SeqStart() <= lsn <= tj.SeqEnd()
     requires discarded == tj.DiscardOld(lsn)
     ensures discarded.diskView.Acyclic();
-    ensures ITruncatedJournal(tj).WF();
+    // ensures ITruncatedJournal(tj).WF();
     ensures ITruncatedJournal(tj).DiscardOldDefn(lsn) == ITruncatedJournal(discarded)
   {
     assert discarded.diskView.PointersRespectRank(tj.diskView.TheRanking());
-    DiscardInterp(tj.diskView, lsn, discarded.diskView, tj.freshestRec);
+    DiscardInterp(tj.diskView, lsn, discarded.diskView, discarded.freshestRec);
   }
     
     // TODO(jonh): how does this relate to IPtrFraming!?
@@ -297,10 +298,10 @@ module LinkedJournalRefinement
       TightInterp(croppedTJ.diskView, croppedTJ.freshestRec, tightTJ.diskView);
 
       if !(v.unmarshalledTail.seqStart <= lsn) {
-        assert v.SeqStart() == PagedJournalRefinement.ITruncatedJournal(ITruncatedJournal(v.truncatedJournal)).seqStart by { }
+        // assert v.SeqStart() == PagedJournalRefinement.ITruncatedJournal(ITruncatedJournal(v.truncatedJournal)).seqStart by { }
         DiscardInterp(croppedTJ.diskView, lsn, croppedTJ.diskView.DiscardOld(lsn), v.truncatedJournal.freshestRec);
         SubDiskInterp(tightTJ.diskView, croppedTJ.diskView, croppedTJ.freshestRec);
-        DiscardHarder(v.truncatedJournal, lsn, croppedTJ);
+        TJDiscardInterp(v.truncatedJournal, lsn, croppedTJ);
         assert ITruncatedJournal(croppedTJ) == ITruncatedJournal(v.truncatedJournal).DiscardOldDefn(lsn); // Trigger for v'.I().WF()
       }
 //      assert Inv(v');
@@ -323,6 +324,14 @@ module LinkedJournalRefinement
     ensures PagedJournal.Init(I(v), ITruncatedJournal(tj))
   {
   }
+  
+
+  // lemma readfor(dv: DiskView, ptr: Pointer, depth: nat, msgs: MessageSeq) 
+  //   requires dv.PointerAfterCrop(ptr, depth).Some?;
+  //   requires dv.entries[dv.PointerAfterCrop(ptr, depth)].messageSeq.IncludesSubseq(msgs)
+  // {}
+
+
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
@@ -334,9 +343,13 @@ module LinkedJournalRefinement
     InvNext(v, v', lbl);
     var step: Step :| NextStep(v, v', lbl, step);
     if step.ReadForRecoveryStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.ReadForRecoveryStep(step.cropCount)); // witness step
+      var depth := step.depth;
+
+
+      assert PagedJournal.ReadForRecovery(I(v), I(v'), ILbl(lbl), depth);
+      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.ReadForRecoveryStep(step.depth)); // witness step
     } else if step.FreezeForCommitStep? {
-      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.FreezeForCommitStep(step.keepReceiptLines)); // witness step
+      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.FreezeForCommitStep(step.depth)); // witness step
     } else if step.ObserveFreshJournalStep? {
       assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.ObserveFreshJournalStep()); // witness step
     } else if step.PutStep? {
