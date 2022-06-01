@@ -127,6 +127,15 @@ module MsgHistoryMod {
       MsgHistory(keepMap, lsn, seqEnd)
     }
 
+    function MaybeDiscardOld(lsn: LSN) : (r: MsgHistory)
+      requires WF()
+      requires lsn <= seqEnd
+      ensures r.WF()
+    {
+      if seqStart <= lsn then DiscardOld(lsn) 
+      else this
+    }
+
     // Returns every message in this up to but not including lsn.
     function DiscardRecent(lsn: LSN) : (r: MsgHistory)
       requires CanDiscardTo(lsn)

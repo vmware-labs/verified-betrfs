@@ -248,7 +248,7 @@ module PagedJournalRefinement
     assert I(v').journal == I(v).journal.DiscardOld(lbl.startLsn);
   }
 
-    lemma MarshallRefines(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
+  lemma MarshallRefines(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
     requires InternalJournalMarshal(v, v', lbl, cut)
     ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {

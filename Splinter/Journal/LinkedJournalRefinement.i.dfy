@@ -326,11 +326,79 @@ module LinkedJournalRefinement
   }
   
 
-  // lemma readfor(dv: DiskView, ptr: Pointer, depth: nat, msgs: MessageSeq) 
-  //   requires dv.PointerAfterCrop(ptr, depth).Some?;
-  //   requires dv.entries[dv.PointerAfterCrop(ptr, depth)].messageSeq.IncludesSubseq(msgs)
-  // {}
+  lemma PointerAfterCropCommutesWithCropHead(dv: DiskView, ptr: Pointer, bdy: LSN, depth: nat) 
+    requires dv.Decodable(ptr)
+    requires dv.Acyclic()
+    requires dv.BlockInBounds(ptr)
+    requires bdy == dv.boundaryLSN
+    requires dv.CanCrop(ptr, depth)
+    requires dv.PointerAfterCrop(ptr, depth).Some?
+    ensures PagedJournal.OptRecCanCropHeadRecords(IPtr(dv, ptr), bdy, depth)
+    ensures PagedJournal.OptRecCanCropHeadRecords(IPtr(dv, ptr), bdy, depth+1)
+    ensures IPtr(dv, dv.PointerAfterCrop(ptr, depth)) == PagedJournal.OptRecCropHeadRecords(IPtr(dv, ptr), bdy, depth)
+    decreases depth
+  {
+    if 0 < depth {
+      PointerAfterCropCommutesWithCropHead(dv, dv.entries[ptr.value].CroppedPrior(bdy), bdy, depth-1);
+      assert IPtr(dv, dv.PointerAfterCrop(ptr, depth)) 
+        == PagedJournal.OptRecCropHeadRecords(IPtr(dv, ptr), bdy, depth); // trigger
+    }
+  }
 
+  lemma PointerAfterCropCommutesWithCropHead_NoSome(dv: DiskView, ptr: Pointer, bdy: LSN, depth: nat) 
+    requires dv.Decodable(ptr)
+    requires dv.Acyclic()
+    requires dv.BlockInBounds(ptr)
+    requires bdy == dv.boundaryLSN
+    requires dv.CanCrop(ptr, depth)
+    ensures PagedJournal.OptRecCanCropHeadRecords(IPtr(dv, ptr), bdy, depth)
+    ensures IPtr(dv, dv.PointerAfterCrop(ptr, depth)) == PagedJournal.OptRecCropHeadRecords(IPtr(dv, ptr), bdy, depth)
+    decreases depth
+  {
+    if 0 < depth {
+      PointerAfterCropCommutesWithCropHead_NoSome(dv, dv.entries[ptr.value].CroppedPrior(bdy), bdy, depth-1);
+      assert IPtr(dv, dv.PointerAfterCrop(ptr, depth)) 
+        == PagedJournal.OptRecCropHeadRecords(IPtr(dv, ptr), bdy, depth); // trigger
+    }
+  }
+
+  lemma DiscardOldCommutes(tj: TruncatedJournal, bdy: LSN)
+    requires tj.WF()
+    requires tj.CanDiscardTo(bdy)
+    requires ITruncatedJournal(tj).CanDiscardTo(bdy)
+    ensures ITruncatedJournal(tj.DiscardOld(bdy)) == ITruncatedJournal(tj).DiscardOldDefn(bdy)
+  {
+    assume false;
+  }
+
+
+  lemma FreezeForCommitRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    requires NextStep(v, v', lbl, step)
+    requires step.FreezeForCommitStep?
+    ensures PagedJournal.FreezeForCommit(I(v), I(v'), ILbl(lbl), step.depth)
+  {
+    var itj := I(v).truncatedJournal;
+    var bdy := v.truncatedJournal.diskView.boundaryLSN;
+    var newBdy := ILbl(lbl).frozenJournal.boundaryLSN;
+    var depth := step.depth;
+    var dv := v.truncatedJournal.diskView;
+    PointerAfterCropCommutesWithCropHead_NoSome(v.truncatedJournal.diskView, v.truncatedJournal.freshestRec, bdy, depth);
+    assert PagedJournal.OptRecCanCropHeadRecords(itj.freshestRec, bdy, depth);
+    assert itj.CropHeadRecords(depth).boundaryLSN <= newBdy;
+    assert itj.CropHeadRecords(depth).CanDiscardTo(newBdy);
+    var croppedPtr := dv.PointerAfterCrop(v.truncatedJournal.freshestRec, depth);
+    var croppedTj := TruncatedJournal(croppedPtr, v.truncatedJournal.diskView);
+    assert ITruncatedJournal(croppedTj) == itj.CropHeadRecords(depth);
+    assert ITruncatedJournal(croppedTj.DiscardOld(newBdy)) 
+        == itj.CropHeadRecords(depth).DiscardOldDefn(newBdy);
+
+    assume false;
+    assert ITruncatedJournal(croppedTj.DiscardOld(newBdy).BuildTight()) 
+        == itj.CropHeadRecords(depth).DiscardOldDefn(newBdy);
+    assert ILbl(lbl).frozenJournal == itj.CropHeadRecords(depth).DiscardOldDefn(newBdy);
+  }
 
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -343,12 +411,10 @@ module LinkedJournalRefinement
     InvNext(v, v', lbl);
     var step: Step :| NextStep(v, v', lbl, step);
     if step.ReadForRecoveryStep? {
-      var depth := step.depth;
-
-
-      assert PagedJournal.ReadForRecovery(I(v), I(v'), ILbl(lbl), depth);
+      PointerAfterCropCommutesWithCropHead(v.truncatedJournal.diskView, v.truncatedJournal.freshestRec, v.truncatedJournal.diskView.boundaryLSN, step.depth);
       assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.ReadForRecoveryStep(step.depth)); // witness step
     } else if step.FreezeForCommitStep? {
+      FreezeForCommitRefines(v, v', lbl, step);
       assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.FreezeForCommitStep(step.depth)); // witness step
     } else if step.ObserveFreshJournalStep? {
       assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.ObserveFreshJournalStep()); // witness step

@@ -176,17 +176,27 @@ module LinkedJournal {
         DiskView(boundaryLSN, BuildTight(entries[addr].CroppedPrior(boundaryLSN)).entries[addr := entries[addr]])
     }
 
+    predicate CanCrop(root: Pointer, depth: nat) 
+      requires Decodable(root)
+      requires BlockInBounds(root)
+      decreases depth
+    {
+      0 < depth ==> 
+        && root.Some?
+        && entries[root.value].CroppedPrior(boundaryLSN).Some? 
+        && CanCrop(entries[root.value].CroppedPrior(boundaryLSN), depth-1)
+    }
+
     function PointerAfterCrop(root: Pointer, depth: nat) : (out: Pointer)
       requires Decodable(root)
       requires BlockInBounds(root)
+      requires CanCrop(root, depth)
       ensures IsNondanglingPointer(out)
       ensures BlockInBounds(out)
       decreases depth
     {
-      if depth==0 || root.None?
-      then root
-      else
-        PointerAfterCrop(entries[root.value].CroppedPrior(boundaryLSN), depth-1)
+      if depth==0 then root
+      else PointerAfterCrop(entries[root.value].CroppedPrior(boundaryLSN), depth-1)
     }
   }
 
@@ -214,11 +224,17 @@ module LinkedJournal {
       else diskView.entries[freshestRec.value].messageSeq.seqEnd
     }
 
+    predicate CanDiscardTo(lsn: LSN) 
+      requires WF()
+    {
+      SeqStart() <= lsn <= SeqEnd()
+    }
+
     function DiscardOld(lsn: LSN) : (out:TruncatedJournal)
       requires WF()
-      requires diskView.boundaryLSN <= lsn
+      requires CanDiscardTo(lsn)
     {
-      if SeqEnd() <= lsn
+      if SeqEnd() == lsn
       then TruncatedJournal(None, diskView.DiscardOld(lsn))
       else TruncatedJournal(freshestRec, diskView.DiscardOld(lsn))
     }
@@ -286,9 +302,10 @@ module LinkedJournal {
     && lbl.messages.WF()
     && v.WF()
     && v.truncatedJournal.Decodable()
+    && v.truncatedJournal.diskView.CanCrop(v.truncatedJournal.freshestRec, depth)
     && var ptr := v.truncatedJournal.diskView.PointerAfterCrop(v.truncatedJournal.freshestRec, depth);
     && ptr.Some?
-    && v.truncatedJournal.diskView.entries[ptr.value].messageSeq.IncludesSubseq(lbl.messages)
+    && v.truncatedJournal.diskView.entries[ptr.value].messageSeq.MaybeDiscardOld(v.truncatedJournal.diskView.boundaryLSN) == lbl.messages
     && v' == v
   }
 
@@ -298,10 +315,12 @@ module LinkedJournal {
     && lbl.FreezeForCommitLabel?
     && v.WF()
     && v.truncatedJournal.Decodable() // Shown by invariant, not runtime-checked
+    && v.truncatedJournal.diskView.CanCrop(v.truncatedJournal.freshestRec, depth)
     && var ptr := v.truncatedJournal.diskView.PointerAfterCrop(v.truncatedJournal.freshestRec, depth);
     && var croppedTj := TruncatedJournal(ptr, v.truncatedJournal.diskView);
     && var newBdy := lbl.frozenJournal.SeqStart();
     && v.truncatedJournal.diskView.boundaryLSN <= newBdy
+    && croppedTj.CanDiscardTo(newBdy)
     && lbl.frozenJournal == croppedTj.DiscardOld(newBdy).BuildTight()
     && v' == v
   }
@@ -331,6 +350,7 @@ module LinkedJournal {
     && v.WF()
     && v.SeqStart() <= lbl.startLsn <= v.SeqEnd()
     && lbl.requireEnd == v.SeqEnd()
+    && v.truncatedJournal.CanDiscardTo(lbl.startLsn)
     && v' == Variables(v.truncatedJournal.DiscardOld(lbl.startLsn).BuildTight(),
         if v.unmarshalledTail.seqStart <= lbl.startLsn
         then v.unmarshalledTail.DiscardOld(lbl.startLsn)
