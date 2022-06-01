@@ -240,19 +240,46 @@ module PagedJournalRefinement
   {
   }
 
+  lemma DiscardOldDefnInterprets(ojr: Option<JournalRecord>, oldLsn: LSN, newLsn: LSN)
+    requires ojr.Some? ==> ojr.value.Valid(oldLsn)
+    requires ojr.Some? ==> ojr.value.Valid(newLsn)
+    requires IOptionJournalRecord(ojr, oldLsn).CanDiscardTo(newLsn)
+    ensures IOptionJournalRecord(DiscardOldJournalRec(ojr, newLsn), newLsn) == IOptionJournalRecord(ojr, oldLsn).DiscardOld(newLsn)
+  {
+    if ojr.Some? && newLsn < ojr.value.messageSeq.seqStart {
+      DiscardOldDefnInterprets(ojr.value.priorRec, oldLsn, newLsn);
+    }
+  }
+
+  lemma DiscardValid(rec: JournalRecord, oldLsn: LSN, newLsn: LSN)
+    requires rec.Valid(oldLsn)
+    requires oldLsn <= newLsn < rec.messageSeq.seqEnd
+    ensures rec.Valid(newLsn)
+  {
+    if !rec.messageSeq.CanDiscardTo(newLsn) {
+      DiscardValid(rec.priorRec.value, oldLsn, newLsn);
+    }
+  }
+
   lemma DiscardOldRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires DiscardOld(v, v', lbl)
     ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
-    // TODO
-    assert I(v').journal == I(v).journal.DiscardOld(lbl.startLsn);
+    var lsn := lbl.startLsn;
+    var tj := v.truncatedJournal;
+    if lsn < v.unmarshalledTail.seqStart {
+      if tj.freshestRec.Some? && lsn < tj.SeqEnd() {
+        DiscardValid(tj.freshestRec.value, tj.boundaryLSN, lsn);
+      }
+      DiscardOldDefnInterprets(v.truncatedJournal.freshestRec, v.truncatedJournal.boundaryLSN, lbl.startLsn);
+    }
   }
 
   lemma MarshallRefines(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
     requires InternalJournalMarshal(v, v', lbl, cut)
     ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
-    // TODO
+    assume false; // TODO
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
