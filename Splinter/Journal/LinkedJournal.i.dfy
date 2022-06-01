@@ -167,13 +167,19 @@ module LinkedJournal {
 
     function BuildTight(root: Pointer) : (out: DiskView)
       requires Decodable(root)
+      ensures forall addr | addr in out.entries :: addr in entries;
+      // ensures out.Decodable(root)
+      // ensures out.BlocksCanConcat()
       decreases TheRankOf(root)
     {
       if !Acyclic() then DiskView(0, map[]) // Silly
       else if root.None? then DiskView(boundaryLSN, map[])
       else
         var addr := root.value;
-        DiskView(boundaryLSN, BuildTight(entries[addr].CroppedPrior(boundaryLSN)).entries[addr := entries[addr]])
+        var out := DiskView(boundaryLSN, BuildTight(entries[addr].CroppedPrior(boundaryLSN)).entries[addr := entries[addr]]);
+        // assert out.IsNondanglingPointer(root);
+        // assert out.WF();
+        out
     }
 
     predicate CanCrop(root: Pointer, depth: nat) 
@@ -237,6 +243,19 @@ module LinkedJournal {
       if SeqEnd() == lsn
       then TruncatedJournal(None, diskView.DiscardOld(lsn))
       else TruncatedJournal(freshestRec, diskView.DiscardOld(lsn))
+    }
+
+    predicate CanCrop(depth: nat)
+    {
+      && Decodable()
+      && diskView.CanCrop(freshestRec, depth)
+    }
+
+    function Crop(depth: nat) : TruncatedJournal
+      requires CanCrop(depth)
+    {
+      var ptr := diskView.PointerAfterCrop(freshestRec, depth);
+      TruncatedJournal(ptr, diskView)
     }
 
     function AppendRecord(addr: Address, msgs: MsgHistory) : (out: TruncatedJournal)
