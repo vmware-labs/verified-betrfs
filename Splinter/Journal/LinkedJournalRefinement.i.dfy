@@ -371,6 +371,60 @@ module LinkedJournalRefinement
     assume false;
   }
 
+  predicate TJCanCrop(tj: TruncatedJournal, depth: nat)
+  {
+    && tj.Decodable()
+    && tj.diskView.CanCrop(tj.freshestRec, depth)
+  }
+
+  function TJCrop(tj: TruncatedJournal, depth: nat) : TruncatedJournal
+    requires TJCanCrop(tj, depth)
+  {
+    var dv := tj.diskView;
+    var ptr := dv.PointerAfterCrop(tj.freshestRec, depth);
+    TruncatedJournal(ptr, dv)
+  }
+
+  predicate PagedTJCanCrop(itj: PagedJournal.TruncatedJournal, depth: nat)
+  {
+    PagedJournal.OptRecCanCropHeadRecords(itj.freshestRec, itj.boundaryLSN, depth)
+  }
+
+  lemma CommuteTransitivity<L,H>(I: L->H, f: L->L, F: H->H, g: L->L, G: H->H)
+    requires forall x :: I(f(x))==F(I(x))
+    requires forall x :: I(g(x))==G(I(x))
+    ensures forall x :: I(g(f(x)))==G(F(I(x)))
+  {
+    // See Tony's phone cam picture of the proof that we wrote on the whiteboard
+    // but which dafny doesn't need; eyeroll
+  }
+
+  lemma CropHeadComposedWithDiscardOldCommutes(tj: TruncatedJournal, newBdy: LSN, depth: nat)
+    requires TJCanCrop(tj, depth)
+    requires PagedTJCanCrop(ITruncatedJournal(tj), depth) // TODO conclude from TJCanCrop
+    requires TJCrop(tj, depth).CanDiscardTo(newBdy)
+    requires ITruncatedJournal(tj).CropHeadRecords(depth).CanDiscardTo(newBdy)  // TODO call lemma to conclude this
+    ensures ITruncatedJournal(tj).CropHeadRecords(depth).DiscardOldDefn(newBdy)
+      == ITruncatedJournal(TJCrop(tj, depth).DiscardOld(newBdy))
+  {
+    var dummy := Mkfs();
+    var idummy := ITruncatedJournal(dummy);
+    var i := (tj:TruncatedJournal) => if tj.WF() then ITruncatedJournal(tj) else idummy;
+    var f := (tj:TruncatedJournal) => if TJCanCrop(tj, depth) then TJCrop(tj, depth) else dummy;
+    var g := (tj:TruncatedJournal) => if tj.WF() && tj.CanDiscardTo(newBdy) then tj.DiscardOld(newBdy) else dummy;
+    var F := (itj:PagedJournal.TruncatedJournal) => if PagedTJCanCrop(itj, depth) then itj.CropHeadRecords(depth) else idummy;
+    var G := (itj:PagedJournal.TruncatedJournal) => if itj.WF() && itj.CanDiscardTo(newBdy) then itj.DiscardOldDefn(newBdy) else idummy;
+
+    forall tj ensures ITruncatedJournal(f(tj))==F(ITruncatedJournal(tj)) {
+      assume false;
+    }
+    forall tj ensures ITruncatedJournal(g(tj))==G(ITruncatedJournal(tj)) {
+      assume false;
+    }
+
+    CommuteTransitivity(i, f, F, g, G);
+    assert G(F(ITruncatedJournal(tj))) == ITruncatedJournal(TJCrop(tj, depth).DiscardOld(newBdy));  // trigger
+  }
 
   lemma FreezeForCommitRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
