@@ -279,7 +279,9 @@ module PagedJournalRefinement
     requires InternalJournalMarshal(v, v', lbl, cut)
     ensures AbstractJournal.Next(I(v), I(v'), ILbl(lbl))
   {
-    assume false; // TODO
+    var tj' := v.truncatedJournal.AppendRecord(v.unmarshalledTail.DiscardRecent(cut));
+    assert ITruncatedJournal(tj')
+      == IJournalRecord(tj'.freshestRec.value, tj'.boundaryLSN);  // trigger
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
