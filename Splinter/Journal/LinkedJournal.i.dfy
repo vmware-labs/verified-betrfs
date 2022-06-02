@@ -253,7 +253,7 @@ module LinkedJournal {
 
     function Crop(depth: nat) : (out: TruncatedJournal)
       requires CanCrop(depth)
-      ensures out.SeqEnd() <= this.SeqEnd()
+      ensures out.WF()
     {
       var ptr := diskView.PointerAfterCrop(freshestRec, depth);
       TruncatedJournal(ptr, diskView)

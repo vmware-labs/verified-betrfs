@@ -412,6 +412,32 @@ module LinkedJournalRefinement
     // but which dafny doesn't need; eyeroll
   }
 
+  lemma CanCropMonotonic(tj: TruncatedJournal, depth: nat, more:nat) 
+    requires depth < more
+    requires tj.CanCrop(more)
+    ensures tj.CanCrop(depth)
+    decreases depth
+  {
+    if 0 < depth {
+      var tjNext := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
+      CanCropMonotonic(tjNext, depth-1, more-1);
+    }
+  }
+
+  lemma CropDecreasesSeqEnd(tj: TruncatedJournal, depth: nat) 
+    requires tj.CanCrop(depth)
+    ensures tj.Crop(depth).SeqEnd() <= tj.SeqEnd()
+    decreases depth
+  {
+    if 0 < depth {
+      var tjNext := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
+      CanCropMonotonic(tj, depth-1, depth); 
+      CropDecreasesSeqEnd(tjNext, depth-1);
+    } else {
+      assert tj.Crop(depth).SeqEnd() <= tj.SeqEnd();
+    }
+  }
+
   lemma CanCropEquivalence(tj: TruncatedJournal, depth: nat) 
     requires 0 < depth
     requires tj.WF()
@@ -496,9 +522,8 @@ module LinkedJournalRefinement
     }
     CommuteTransitivity(i, f, F, g, G);
     assert G(F(ITruncatedJournal(tj))) == ITruncatedJournal(tj.Crop(depth).DiscardOld(newBdy));  // trigger
-
-    // need to show that interpretation preserves croppability
     LinkedTjCanCropImpliesPagedTjCanCrop(tj, ITruncatedJournal(tj), depth);
+    CropDecreasesSeqEnd(tj, depth);
   }
 
   lemma BuildTightMaintainsInterpretation(dv: DiskView, root: Pointer) 
