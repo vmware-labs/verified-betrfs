@@ -168,8 +168,6 @@ module LinkedJournal {
     function BuildTight(root: Pointer) : (out: DiskView)
       requires Decodable(root)
       ensures forall addr | addr in out.entries :: addr in entries;
-      // ensures out.Decodable(root)
-      // ensures out.BlocksCanConcat()
       decreases TheRankOf(root)
     {
       if !Acyclic() then DiskView(0, map[]) // Silly
@@ -177,8 +175,6 @@ module LinkedJournal {
       else
         var addr := root.value;
         var out := DiskView(boundaryLSN, BuildTight(entries[addr].CroppedPrior(boundaryLSN)).entries[addr := entries[addr]]);
-        // assert out.IsNondanglingPointer(root);
-        // assert out.WF();
         out
     }
 

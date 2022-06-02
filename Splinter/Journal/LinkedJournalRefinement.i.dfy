@@ -433,8 +433,6 @@ module LinkedJournalRefinement
       var tjNext := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
       CanCropMonotonic(tj, depth-1, depth); 
       CropDecreasesSeqEnd(tjNext, depth-1);
-    } else {
-      assert tj.Crop(depth).SeqEnd() <= tj.SeqEnd();
     }
   }
 
@@ -526,23 +524,45 @@ module LinkedJournalRefinement
     CropDecreasesSeqEnd(tj, depth);
   }
 
+
+  lemma BuildTightIsAwesome(dv: DiskView, root: Pointer) 
+    requires dv.Decodable(root)
+    requires dv.Decodable(root)
+    requires dv.Acyclic()
+    ensures dv.BuildTight(root).IsSubDisk(dv)
+    ensures dv.BuildTight(root).WF()
+    ensures dv.BuildTight(root).Acyclic()
+    decreases dv.TheRankOf(root)
+  {
+    if root.Some? {
+      var nextPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
+      BuildTightIsAwesome(dv, nextPtr);
+    }
+    assert dv.BuildTight(root).PointersRespectRank(dv.TheRanking());  // witness
+  }
+
+  function BuildTightAwesome(dv: DiskView, root: Pointer) : (out: DiskView) 
+    requires dv.Decodable(root)
+    requires dv.Acyclic()
+    ensures dv.BuildTight(root).IsSubDisk(dv)
+    ensures out.Decodable(root)
+    ensures out.Acyclic()
+  {
+    BuildTightIsAwesome(dv, root);
+    dv.BuildTight(root)
+  }
+
+
   lemma BuildTightMaintainsInterpretation(dv: DiskView, root: Pointer) 
     requires dv.Decodable(root)
     requires dv.Acyclic()
-    ensures dv.BuildTight(root).Decodable(root)
-    ensures IPtr(dv, root) == IPtr(dv.BuildTight(root), root)
+    ensures IPtr(dv, root) == IPtr(BuildTightAwesome(dv, root), root)
     decreases dv.TheRankOf(root)
   {
-    if root.None? {
-      assert IPtr(dv, root) == IPtr(dv.BuildTight(root), root);
-    } else {
+    if root.Some? {
       var next := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
       BuildTightMaintainsInterpretation(dv, next);
-
-      // assert IPtr(dv, root) == IPtr(dv.BuildTight(root), root);
-      // TODO(tony): WIP
-      assume false;
-      assert IPtr(dv, root) == IPtr(dv.BuildTight(root), root);
+      IPtrFraming(BuildTightAwesome(dv, root), dv,  dv.entries[root.value].CroppedPrior(dv.boundaryLSN));
     }
   }
 
@@ -553,25 +573,15 @@ module LinkedJournalRefinement
     requires step.FreezeForCommitStep?
     ensures PagedJournal.FreezeForCommit(I(v), I(v'), ILbl(lbl), step.depth)
   {
-    // var itj := ITruncatedJournal(v.truncatedJournal);
-    // var bdy := v.truncatedJournal.diskView.boundaryLSN;
     var newBdy := ILbl(lbl).frozenJournal.boundaryLSN;
     var depth := step.depth;
     var dv := v.truncatedJournal.diskView;
     PointerAfterCropCommutesWithCropHead_NoSome(dv, v.truncatedJournal.freshestRec, depth);
     CropHeadComposedWithDiscardOldCommutes(v.truncatedJournal, newBdy, depth);
-
-
     var croppedPtr := dv.PointerAfterCrop(v.truncatedJournal.freshestRec, depth);
     var croppedTj := TruncatedJournal(croppedPtr, v.truncatedJournal.diskView);
-
-
-
     BuildTightMaintainsInterpretation(croppedTj.DiscardOld(newBdy).diskView, croppedTj.DiscardOld(newBdy).freshestRec);
-    // assert ITruncatedJournal(croppedTj.DiscardOld(newBdy).BuildTight()) 
-    //     == itj.CropHeadRecords(depth).DiscardOldDefn(newBdy);
   }
-
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
@@ -595,15 +605,9 @@ module LinkedJournalRefinement
     } else if step.DiscardOldStep? {
       var lsn := lbl.startLsn;
       if !(v.unmarshalledTail.seqStart <= lsn) {
-        assert v.SeqStart() == PagedJournalRefinement.ITruncatedJournal(I(v).truncatedJournal).seqStart by {
-          var tj := v.truncatedJournal;
-          var dv := v.truncatedJournal.diskView;
-//          PagedJournal.TruncatedJournal(dv.boundaryLSN, dv.IPtr(tj.freshestRec)).BuildReceipt().TJFacts();
-        }
         var croppedTJ := v.truncatedJournal.DiscardOld(lbl.startLsn);
         DiscardInterp(v.truncatedJournal.diskView, lsn, croppedTJ.diskView, v.truncatedJournal.freshestRec);
         TightInterp(croppedTJ.diskView, croppedTJ.freshestRec, v'.truncatedJournal.diskView);
-        assert v'.truncatedJournal.diskView.IsSubDisk(croppedTJ.diskView);
         SubDiskInterp(v'.truncatedJournal.diskView, croppedTJ.diskView, croppedTJ.freshestRec);
       }
       assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.DiscardOldStep()); // witness step
