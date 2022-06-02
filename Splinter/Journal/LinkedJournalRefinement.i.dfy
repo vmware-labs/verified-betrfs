@@ -347,6 +347,7 @@ module LinkedJournalRefinement
     }
   }
 
+  // todo rename PointerAfterCropCommutesWithInterpretation
   lemma PointerAfterCropCommutesWithCropHead_NoSome(dv: DiskView, ptr: Pointer, depth: nat) 
     requires dv.Decodable(ptr)
     requires dv.Acyclic()
@@ -436,7 +437,7 @@ module LinkedJournalRefinement
     }
   }
 
-  lemma CanCropEquivalence(tj: TruncatedJournal, depth: nat) 
+  lemma CanCropIncrement(tj: TruncatedJournal, depth: nat) 
     requires 0 < depth
     requires tj.WF()
     requires tj.freshestRec.Some?
@@ -446,7 +447,7 @@ module LinkedJournalRefinement
   {
     if 1 < depth {
       var tjSuffix := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
-      CanCropEquivalence(tjSuffix, depth-1);
+      CanCropIncrement(tjSuffix, depth-1);
     }
   }
 
@@ -461,7 +462,7 @@ module LinkedJournalRefinement
       var tjNext := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
       var itjNext := PagedJournal.TruncatedJournal(itj.boundaryLSN, itj.freshestRec.value.priorRec);
       PagedTjCanCropImpliesLinkedTjCanCrop(tjNext, itjNext, depth-1);
-      CanCropEquivalence(tj, depth);
+      CanCropIncrement(tj, depth);
     } 
   }
 
@@ -476,7 +477,7 @@ module LinkedJournalRefinement
       var tjNext := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
       var itjNext := PagedJournal.TruncatedJournal(itj.boundaryLSN, itj.freshestRec.value.priorRec);
       LinkedTjCanCropImpliesPagedTjCanCrop(tjNext, itjNext, depth-1);
-      CanCropEquivalence(tj, depth);
+      CanCropIncrement(tj, depth);
     }
   }
 
@@ -650,15 +651,140 @@ module LinkedJournalRefinement
     && inFlight.SeqStart() <= v.truncatedJournal.SeqEnd() // Not discarding pages that haven't been appended yet
     && inFlight.diskView.IsSubDisk(v.truncatedJournal.DiscardOld(inFlight.SeqStart()).BuildTight().diskView)
   }
+
+  lemma LemmaBuildTightPreservesSubDiskCommonRoot(small: TruncatedJournal, big: TruncatedJournal) 
+    requires small.Decodable()
+    requires big.Decodable()
+    requires small.freshestRec == big.freshestRec
+    requires small.diskView.IsSubDisk(big.diskView)
+    ensures small.BuildTight().diskView.IsSubDisk(big.BuildTight().diskView)
+    decreases small.diskView.TheRankOf(small.freshestRec)
+  {
+    if small.freshestRec.None? {
+      assert small.BuildTight().diskView.IsSubDisk(big.BuildTight().diskView);
+    } else {
+      var smallSuffix := TruncatedJournal(small.diskView.entries[big.freshestRec.value].CroppedPrior(small.diskView.boundaryLSN), small.diskView);
+      var bigSuffix := TruncatedJournal(big.diskView.entries[big.freshestRec.value].CroppedPrior(big.diskView.boundaryLSN), big.diskView);
+      LemmaBuildTightPreservesSubDiskCommonRoot(smallSuffix, bigSuffix);
+    }
+  }
+
+  lemma LemmaBuildTightPreservesSubDisk(small: TruncatedJournal, big: TruncatedJournal, depth: nat) 
+    requires small.Decodable()
+    requires big.Decodable()
+    requires big.CanCrop(depth)
+    requires small.freshestRec == big.Crop(depth).freshestRec
+    requires small.diskView.IsSubDisk(big.diskView)
+    ensures small.BuildTight().diskView.IsSubDisk(big.BuildTight().diskView)
+    decreases depth
+  {
+    if depth == 0 {
+      LemmaBuildTightPreservesSubDiskCommonRoot(small, big);
+    } else {
+      var bigSuffix := TruncatedJournal(big.diskView.entries[big.freshestRec.value].CroppedPrior(big.diskView.boundaryLSN), big.diskView);
+      LemmaBuildTightPreservesSubDisk(small, bigSuffix, depth-1);
+      // invoke awesomeness
+      assert big.BuildTight().diskView == BuildTightAwesome(big.diskView, big.freshestRec);
+      assert bigSuffix.BuildTight().diskView == BuildTightAwesome(bigSuffix.diskView, bigSuffix.freshestRec);
+    }
+  }
+
+  lemma DiscardOldCanCropDecrement(tj: TruncatedJournal, depth: nat, newBdy: LSN)
+    requires 0 < depth
+    requires tj.Decodable()
+    requires tj.freshestRec.Some?
+    requires tj.CanDiscardTo(newBdy)
+    requires tj.DiscardOld(newBdy).CanCrop(depth)
+    ensures TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView).DiscardOld(newBdy).CanCrop(depth-1)
+    decreases depth
+  {
+    assume false;
+  }
+
+  // tjNext can crop to depth - 1 ==> 
+  // tj can crop to depth 
+  lemma DiscardOldCanCropIncrement(tj: TruncatedJournal, depth: nat, newBdy: LSN) 
+    requires 0 < depth
+    requires tj.WF()
+    requires tj.freshestRec.Some?
+    requires tj.CanDiscardTo(newBdy)
+    requires TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView).CanDiscardTo(newBdy)
+    requires TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView).DiscardOld(newBdy).CanCrop(depth-1)
+    ensures tj.DiscardOld(newBdy).CanCrop(depth)
+    decreases depth
+  {
+    assume false;
+    if 1 < depth {
+      var tjSuffix := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
+
+      // tj can crop to depth ==> 
+      // tjNext can crop to depth-1
+      DiscardOldCanCropDecrement(tjSuffix, depth-1, newBdy);
+      DiscardOldCanCropIncrement(tjSuffix, depth-1, newBdy);
+      assert tj.DiscardOld(newBdy).CanCrop(depth);
+    } else {
+      assert tj.DiscardOld(newBdy).CanCrop(depth);
+    }
+  }
+
+  lemma CropAndDiscardCommutes(tj: TruncatedJournal, depth: nat, newBdy: LSN) 
+    requires tj.Decodable()
+    requires tj.CanCrop(depth) 
+    requires tj.Crop(depth).CanDiscardTo(newBdy)
+    ensures tj.CanDiscardTo(newBdy)
+    ensures tj.Crop(depth).CanDiscardTo(newBdy)
+    ensures tj.DiscardOld(newBdy).Decodable() 
+    ensures tj.DiscardOld(newBdy).CanCrop(depth)
+    ensures tj.Crop(depth).DiscardOld(newBdy) == tj.DiscardOld(newBdy).Crop(depth)
+    decreases depth
+  {
+    // todo: clean this up
+    CropDecreasesSeqEnd(tj, depth); // to get tj.CanDiscardTo(newBdy) from tj.Crop(depth).CanDiscardTo(newBdy)
+    TjDiscardOldCommutes(tj, newBdy);  // to get CanDiscardTo(newBdy)
+    TjDiscardOldCommutes(tj.Crop(depth), newBdy);  // to get CanDiscardTo(newBdy)
+    if depth == 0 {
+      assert tj.Crop(depth).CanDiscardTo(newBdy);
+      assert tj.DiscardOld(newBdy).Decodable();
+      assert tj.DiscardOld(newBdy).CanCrop(depth);
+      assert tj.Crop(depth).DiscardOld(newBdy) == tj.DiscardOld(newBdy).Crop(depth);
+    } else {
+      var tjNext := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
+      CropAndDiscardCommutes(tjNext, depth-1, newBdy); 
+      // tjNext.DiscardOld(newBdy).CanCrop(depth-1)
+      DiscardOldCanCropIncrement(tj, depth, newBdy);
+      // assert tj.Crop(depth).CanDiscardTo(newBdy);
+      // assert tj.DiscardOld(newBdy).Decodable();
+      // assert tj.DiscardOld(newBdy).CanCrop(depth);  // fails
+      // assert tj.Crop(depth).DiscardOld(newBdy) == tj.DiscardOld(newBdy).Crop(depth);
+    }
+  }
   
-  lemma InFlightSubDiskCreated(v: Variables, v': Variables, lbl: TransitionLabel)
+  
+  lemma InFlightSubDiskCreated(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires lbl.FreezeForCommitLabel?
-    requires Next(v, v', lbl)
+    requires NextStep(v, v', lbl, step)
     ensures InFlightSubDiskProperty(v', lbl.frozenJournal)
   {
-    var cropped := v.truncatedJournal.DiscardOld(lbl.frozenJournal.SeqStart());
-    var tight := cropped.BuildTight();
-    TightInterp(cropped.diskView, cropped.freshestRec, tight.diskView);
+    CropDecreasesSeqEnd(v.truncatedJournal, step.depth);
+    var ephemeral := v.truncatedJournal;
+    var croppedPtr := ephemeral.diskView.PointerAfterCrop(ephemeral.freshestRec, step.depth);
+    var croppedTj := TruncatedJournal(croppedPtr, ephemeral.diskView);
+    var newBdy := lbl.frozenJournal.SeqStart();
+    var discardedTj := croppedTj.DiscardOld(newBdy);
+    var tightTj := discardedTj.BuildTight();
+    // todo: clean this up
+    // assert tightTj == lbl.frozenJournal;  // in-flight
+    assert tightTj.diskView == BuildTightAwesome(discardedTj.diskView, discardedTj.freshestRec);
+    // assert tightTj.diskView.IsSubDisk(discardedTj.diskView);
+
+
+
+    // assert discardedTj.diskView.IsSubDisk(v.truncatedJournal.DiscardOld(newBdy).diskView);
+    CropAndDiscardCommutes(v.truncatedJournal, step.depth, newBdy);
+    LemmaBuildTightPreservesSubDisk(discardedTj, v.truncatedJournal.DiscardOld(newBdy), step.depth);
+    // desired conclusion
+    // WTS (crop, discard, build) IsSubDisk (discard, build)
+    // assert tightTj.diskView.IsSubDisk(v.truncatedJournal.DiscardOld(newBdy).BuildTight().diskView);
   }
 
   lemma BuildTightPreservesSubDiskUnderInternalMarshall(
