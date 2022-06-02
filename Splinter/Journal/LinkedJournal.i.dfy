@@ -189,7 +189,7 @@ module LinkedJournal {
     {
       0 < depth ==> 
         && root.Some?
-        && entries[root.value].CroppedPrior(boundaryLSN).Some? 
+        // && entries[root.value].CroppedPrior(boundaryLSN).Some? 
         && CanCrop(entries[root.value].CroppedPrior(boundaryLSN), depth-1)
     }
 
@@ -251,8 +251,9 @@ module LinkedJournal {
       && diskView.CanCrop(freshestRec, depth)
     }
 
-    function Crop(depth: nat) : TruncatedJournal
+    function Crop(depth: nat) : (out: TruncatedJournal)
       requires CanCrop(depth)
+      ensures out.SeqEnd() <= this.SeqEnd()
     {
       var ptr := diskView.PointerAfterCrop(freshestRec, depth);
       TruncatedJournal(ptr, diskView)
@@ -280,8 +281,11 @@ module LinkedJournal {
   }
 
   function Mkfs() : (out:TruncatedJournal)
+    ensures out.Decodable()
   {
-    TruncatedJournal(None, DiskView(0, map[]))
+    var dv :=  DiskView(0, map[]);
+    assert dv.PointersRespectRank(map[]);
+    TruncatedJournal(None, dv)
   }
 
   datatype Variables = Variables(

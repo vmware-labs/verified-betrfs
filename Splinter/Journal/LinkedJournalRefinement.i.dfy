@@ -36,11 +36,11 @@ module LinkedJournalRefinement
 
   function IPtr(dv: DiskView, ptr: Pointer) : (out: Option<PagedJournal.JournalRecord>)
       requires dv.Decodable(ptr)
+      requires dv.Acyclic()
       ensures dv.BlockInBounds(ptr) && out.Some? ==> out.value.Valid(dv.boundaryLSN)
       decreases dv.TheRankOf(ptr)
   {
-    if !dv.Acyclic() then None // Silly
-    else if ptr.None?
+    if ptr.None?
     then None
     else
       var jr := dv.entries[ptr.value];
@@ -48,11 +48,10 @@ module LinkedJournalRefinement
   }
 
   function ITruncatedJournal(tj: TruncatedJournal) : (out: PagedJournal.TruncatedJournal)
-    requires tj.WF()
+    requires tj.Decodable()
     ensures out.WF()
   {
-    if !tj.diskView.Acyclic() then PagedJournal.Mkfs() // Silly
-    else PagedJournal.TruncatedJournal(tj.diskView.boundaryLSN, IPtr(tj.diskView, tj.freshestRec))   
+    PagedJournal.TruncatedJournal(tj.diskView.boundaryLSN, IPtr(tj.diskView, tj.freshestRec))   
   }
 
   function I(v: Variables) : PagedJournal.Variables
@@ -65,8 +64,10 @@ module LinkedJournalRefinement
   predicate IsTight(dv: DiskView, root: Pointer)
   {
     && dv.Decodable(root)
+    && dv.Acyclic()
     && (forall other:DiskView |
         && other.Decodable(root)
+        && other.Acyclic()
         && IPtr(dv, root) == IPtr(other, root)
         && other.IsSubDisk(dv)
         :: other == dv
@@ -148,8 +149,8 @@ module LinkedJournalRefinement
       var inner := big.BuildTight(next);
       BuildTightShape(big, root);
       TightSubDisk(big, next, inner);
-
-      forall other:DiskView | && other.Decodable(root) && IPtr(tight, root) == IPtr(other, root) && other.IsSubDisk(tight)
+      assert tight.PointersRespectRank(big.TheRanking());  // witness
+      forall other:DiskView | other.Decodable(root) && other.Acyclic() && IPtr(tight, root) == IPtr(other, root) && other.IsSubDisk(tight)
           ensures other == tight {
         // any other tighter disk implies an "otherInner" disk tighter than inner, but inner.IsTight(next).
         var otherInner := DiskView(other.boundaryLSN, MapRemove1(other.entries, root.value));
@@ -157,6 +158,7 @@ module LinkedJournalRefinement
         IPtrIgnoresExtraBlocks(otherInner, next, inner);
       }
     }
+    assert tight.PointersRespectRank(big.TheRanking());  // witness
   }
 
   lemma BuildTightBuildsSubDisks(big: DiskView, root: Pointer)
@@ -347,7 +349,7 @@ module LinkedJournalRefinement
 
   lemma PointerAfterCropCommutesWithCropHead_NoSome(dv: DiskView, ptr: Pointer, depth: nat) 
     requires dv.Decodable(ptr)
-    // requires dv.Acyclic()
+    requires dv.Acyclic()
     requires dv.BlockInBounds(ptr)
     requires dv.CanCrop(ptr, depth)
     ensures PagedJournal.OptRecCanCropHeadRecords(IPtr(dv, ptr), dv.boundaryLSN, depth)
@@ -362,26 +364,40 @@ module LinkedJournalRefinement
     }
   }
 
-  // lemma DiscardOldCommutes(dv: DiskView, ptr: Pointer, bdy: LSN)
-  //   requires tj.WF()
-  //   requires tj.CanDiscardTo(bdy)
-  //   ensures ITruncatedJournal(tj).CanDiscardTo(bdy)
-  //   ensures ITruncatedJournal(tj.DiscardOld(bdy)) == ITruncatedJournal(tj).DiscardOldDefn(bdy)
-  // {
-  //   assume false;
-  // }
-
-
-  lemma TjDiscardOldCommutes(tj: TruncatedJournal, bdy: LSN)
-    requires tj.WF()
-    requires tj.CanDiscardTo(bdy)
-    ensures ITruncatedJournal(tj).CanDiscardTo(bdy)
-    ensures ITruncatedJournal(tj.DiscardOld(bdy)) == ITruncatedJournal(tj).DiscardOldDefn(bdy)
+  lemma DiscardOldCommutes(dv: DiskView, ptr: Pointer, newBdy: LSN) 
+    requires dv.Decodable(ptr)
+    requires dv.Acyclic()
+    requires dv.boundaryLSN <= newBdy
+    requires ptr.Some? ==> newBdy < dv.entries[ptr.value].messageSeq.seqEnd
+    requires dv.BlockInBounds(ptr)
+    ensures dv.DiscardOld(newBdy).Acyclic()
+    ensures IPtr(dv, ptr).Some? ==> IPtr(dv, ptr).value.Valid(newBdy)  // satifies DiscardOldJournalRec prereq
+    ensures PagedJournal.DiscardOldJournalRec(IPtr(dv, ptr), newBdy) == IPtr(dv.DiscardOld(newBdy), ptr)
+    decreases dv.TheRankOf(ptr)
   {
-    assume false;
-    // Do this at the jr level to recurse over DiscardOldJournalRec
+    assert dv.DiscardOld(newBdy).PointersRespectRank(dv.TheRanking());  // witness to Acyclic
+    if ptr.Some? {
+      var nextPtr := dv.entries[ptr.value].CroppedPrior(newBdy);
+      PagedJournalRefinement.DiscardValid(IPtr(dv, ptr).value, dv.boundaryLSN, newBdy);
+      DiscardOldCommutes(dv, nextPtr, newBdy);
+    }
   }
 
+
+  lemma TjDiscardOldCommutes(tj: TruncatedJournal, newBdy: LSN)
+    requires tj.Decodable()
+    requires tj.CanDiscardTo(newBdy)
+    ensures tj.DiscardOld(newBdy).Decodable()   // prereq for ITruncatedJournal
+    ensures ITruncatedJournal(tj).CanDiscardTo(newBdy)  // prereq for DiscardOld
+    ensures ITruncatedJournal(tj.DiscardOld(newBdy)) == ITruncatedJournal(tj).DiscardOldDefn(newBdy)
+  {
+    assert tj.diskView.DiscardOld(newBdy).PointersRespectRank(tj.diskView.TheRanking());  // witness to Acyclic
+    if newBdy < tj.SeqEnd() {
+      DiscardOldCommutes(tj.diskView, tj.freshestRec, newBdy);
+    }
+  }
+
+  // This is a wrapper around the ugly expression
   predicate PagedTJCanCrop(itj: PagedJournal.TruncatedJournal, depth: nat)
   {
     PagedJournal.OptRecCanCropHeadRecords(itj.freshestRec, itj.boundaryLSN, depth)
@@ -396,41 +412,74 @@ module LinkedJournalRefinement
     // but which dafny doesn't need; eyeroll
   }
 
+  lemma CanCropEquivalence(tj: TruncatedJournal, depth: nat) 
+    requires 0 < depth
+    requires tj.WF()
+    requires tj.freshestRec.Some?
+    requires TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView).CanCrop(depth-1)
+    ensures tj.CanCrop(depth)
+    decreases depth
+  {
+    if 1 < depth {
+      var tjSuffix := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
+      CanCropEquivalence(tjSuffix, depth-1);
+    }
+  }
 
   lemma PagedTjCanCropImpliesLinkedTjCanCrop(tj: TruncatedJournal, itj: PagedJournal.TruncatedJournal, depth: nat) 
-    requires tj.WF()
+    requires tj.Decodable()
     requires itj == ITruncatedJournal(tj)
     requires PagedJournal.OptRecCanCropHeadRecords(itj.freshestRec, itj.boundaryLSN, depth)
-    ensures tj.diskView.CanCrop(tj.freshestRec, depth)
     ensures tj.CanCrop(depth)
+    decreases depth
   {
-    // todo
-    assume false;
+    if 0 < depth {
+      var tjNext := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
+      var itjNext := PagedJournal.TruncatedJournal(itj.boundaryLSN, itj.freshestRec.value.priorRec);
+      PagedTjCanCropImpliesLinkedTjCanCrop(tjNext, itjNext, depth-1);
+      CanCropEquivalence(tj, depth);
+    } 
+  }
+
+  lemma LinkedTjCanCropImpliesPagedTjCanCrop(tj: TruncatedJournal, itj: PagedJournal.TruncatedJournal, depth: nat) 
+    requires tj.Decodable()
+    requires itj == ITruncatedJournal(tj)
+    requires tj.CanCrop(depth)
+    ensures PagedTJCanCrop(itj, depth)
+    decreases depth
+  {
+    if 0 < depth {
+      var tjNext := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
+      var itjNext := PagedJournal.TruncatedJournal(itj.boundaryLSN, itj.freshestRec.value.priorRec);
+      LinkedTjCanCropImpliesPagedTjCanCrop(tjNext, itjNext, depth-1);
+      CanCropEquivalence(tj, depth);
+    }
   }
 
   lemma CropHeadComposedWithDiscardOldCommutes(tj: TruncatedJournal, newBdy: LSN, depth: nat)
-    requires tj.WF()
+    requires tj.Decodable()
     requires tj.CanCrop(depth)
-    requires PagedTJCanCrop(ITruncatedJournal(tj), depth) // TODO conclude from TJCanCrop
+    ensures PagedTJCanCrop(ITruncatedJournal(tj), depth)  // prereq
     requires tj.Crop(depth).CanDiscardTo(newBdy)
-    requires tj.CanDiscardTo(newBdy)   // TODO tj.Crop(depth).CanDiscardTo(newBdy) should imply this
-    requires ITruncatedJournal(tj).CropHeadRecords(depth).CanDiscardTo(newBdy)  // TODO call lemma to conclude this
+    ensures tj.CanDiscardTo(newBdy)   // prereq
+    ensures ITruncatedJournal(tj).CropHeadRecords(depth).CanDiscardTo(newBdy)  // prereq
+    ensures tj.Crop(depth).DiscardOld(newBdy).Decodable()  // prereq
     ensures ITruncatedJournal(tj).CropHeadRecords(depth).DiscardOldDefn(newBdy)
       == ITruncatedJournal(tj.Crop(depth).DiscardOld(newBdy))
   {
     var dummy := Mkfs();
     var idummy := ITruncatedJournal(dummy);
-    var i := (tj:TruncatedJournal) => if tj.WF() then ITruncatedJournal(tj) else idummy;
-    var f := (tj:TruncatedJournal) => if tj.WF() && tj.CanCrop(depth) then tj.Crop(depth) else dummy;
-    var g := (tj:TruncatedJournal) => if tj.WF() && tj.CanDiscardTo(newBdy) then tj.DiscardOld(newBdy) else dummy;
+    var i := (tj:TruncatedJournal) => if tj.Decodable() then ITruncatedJournal(tj) else idummy;
+    var f := (tj:TruncatedJournal) => if tj.Decodable() && tj.CanCrop(depth) then tj.Crop(depth) else dummy;
+    var g := (tj:TruncatedJournal) => if tj.Decodable() && tj.CanDiscardTo(newBdy) then tj.DiscardOld(newBdy) else dummy;
     var F := (itj:PagedJournal.TruncatedJournal) => if PagedJournal.OptRecCanCropHeadRecords(itj.freshestRec, itj.boundaryLSN, depth) then itj.CropHeadRecords(depth) else idummy;
     var G := (itj:PagedJournal.TruncatedJournal) => if itj.WF() && itj.CanDiscardTo(newBdy) then itj.DiscardOldDefn(newBdy) else idummy;
 
     forall tjx ensures i(f(tjx))==F(i(tjx)) {
-      if tjx.WF() && tjx.CanCrop(depth) { 
+      if tjx.Decodable() && tjx.CanCrop(depth) { 
         PointerAfterCropCommutesWithCropHead_NoSome(tjx.diskView, tjx.freshestRec, depth);
       } else {
-        if tjx.WF() {
+        if tjx.Decodable() {
           if PagedJournal.OptRecCanCropHeadRecords(i(tjx).freshestRec, i(tjx).boundaryLSN, depth) {
             PagedTjCanCropImpliesLinkedTjCanCrop(tjx, i(tjx), depth);
             // Contradiction
@@ -441,12 +490,15 @@ module LinkedJournalRefinement
     assert ITruncatedJournal(f(tj))==F(ITruncatedJournal(tj));  // trigger
 
     forall tjx ensures i(g(tjx))==G(i(tjx)) {
-      if tjx.WF() && tjx.CanDiscardTo(newBdy) {
+      if tjx.Decodable() && tjx.CanDiscardTo(newBdy) {
         TjDiscardOldCommutes(tjx, newBdy);
       } 
     }
     CommuteTransitivity(i, f, F, g, G);
     assert G(F(ITruncatedJournal(tj))) == ITruncatedJournal(tj.Crop(depth).DiscardOld(newBdy));  // trigger
+
+    // need to show that interpretation preserves croppability
+    LinkedTjCanCropImpliesPagedTjCanCrop(tj, ITruncatedJournal(tj), depth);
   }
 
   lemma BuildTightMaintainsInterpretation(dv: DiskView, root: Pointer) 
