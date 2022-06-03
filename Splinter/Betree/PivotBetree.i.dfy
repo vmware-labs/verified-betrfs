@@ -111,12 +111,18 @@ module PivotBetree
         )
     }
 
-    function PrependBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
+    predicate ValidChildIndex(childIdx: nat)
+    {
+      && BetreeNode?
+      && childIdx < NumBuckets(pivotTable)
+    }
+
+    function PushBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
       ensures out.WF()
     {
-      BetreeNode(buffers.PrependBufferStack(bufferStack), pivotTable, children)
+      BetreeNode(buffers.PushBufferStack(bufferStack), pivotTable, children)
     }
 
     function ApplyFilter(filter: Domain) : (out: BetreeNode)
@@ -175,7 +181,7 @@ module PivotBetree
     function ChildDomain(childIdx: nat) : (out: Domain)
       requires WF()
       requires BetreeNode?
-      requires childIdx < NumBuckets(pivotTable)
+      requires ValidChildIndex(childIdx)
       ensures out.WF()
     {
       var out := Domain(pivotTable[childIdx], pivotTable[childIdx+1]);
@@ -188,7 +194,7 @@ module PivotBetree
     {
       && WF()
       && BetreeNode?
-      && childIdx < NumBuckets(pivotTable)
+      && ValidChildIndex(childIdx)
     }
 
     function Flush(childIdx: nat) : (out: BetreeNode)
@@ -199,7 +205,7 @@ module PivotBetree
       var keptBuffers := buffers.ApplyFilter(keepKeys);
       var movedBuffers := buffers.ApplyFilter(ChildDomain(childIdx).KeySet());
       assert WFChildren(children);  // trigger
-      var newChild := children[childIdx].Promote(ChildDomain(childIdx)).PrependBufferStack(movedBuffers);
+      var newChild := children[childIdx].Promote(ChildDomain(childIdx)).PushBufferStack(movedBuffers);
       BetreeNode(keptBuffers, pivotTable, children[childIdx := newChild])
     }
 
@@ -352,21 +358,21 @@ module PivotBetree
     {
       root.WF()
     }
+  }
 
-    function PrependMemtable(memtable: Memtable) : StampedBetree
-      requires WF()
-    {
-      var newBuffer := Buffer(memtable.mapp);
-      StampedBetree(root.Promote(TotalDomain()).PrependBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
-    }
+  function PushMemtable(root: BetreeNode, memtable: Memtable) : StampedBetree
+    requires root.WF()
+  {
+    var newBuffer := Buffer(memtable.mapp);
+    StampedBetree(root.Promote(TotalDomain()).PushBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
   }
 
   datatype Variables = Variables(
     memtable: Memtable,
-    stampedBetree: StampedBetree)
+    root: BetreeNode)
   {
     predicate WF() {
-      && stampedBetree.WF()
+      && root.WF()
     }
   }
 
@@ -374,7 +380,7 @@ module PivotBetree
   {
     && lbl.QueryLabel?
     && lbl.endLsn == v.memtable.seqEnd
-    && receipt.ValidFor(v.stampedBetree.root, lbl.key)
+    && receipt.ValidFor(v.root, lbl.key)
     && Define(lbl.value) == Merge(v.memtable.Query(lbl.key), receipt.Result())
     && v' == v
   }
@@ -400,7 +406,7 @@ module PivotBetree
   {
     && lbl.FreezeAsLabel?
     && v.WF()
-    && lbl.stampedBetree == v.stampedBetree
+    && lbl.stampedBetree == PushMemtable(v.root, v.memtable)
     && v' == v
   }
 
@@ -408,10 +414,10 @@ module PivotBetree
   {
     && v.WF()
     && var newBuffer := Buffer(v.memtable.mapp);
-    && var rootBase := if v.stampedBetree.root.Nil? then EmptyRoot(TotalDomain()) else v.stampedBetree.root;
+    && var rootBase := if v.root.Nil? then EmptyRoot(TotalDomain()) else v.root;
     && v' == v.(
         memtable := v.memtable.Drain(),
-        stampedBetree := v.stampedBetree.PrependMemtable(v.memtable)
+        root := PushMemtable(v.root, v.memtable).root
       )
   }
   
@@ -475,24 +481,17 @@ module PivotBetree
     && v.WF()
     && lbl.InternalLabel?
     && step.InternalGrowStep?
-    && v' == v.(
-        stampedBetree := v.stampedBetree.(
-          root := EmptyRoot(TotalDomain()).(children := [v.stampedBetree.root])
-        )
-      )
+    && v' == v.(root := EmptyRoot(TotalDomain()).(children := [v.root]))
   }
 
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && lbl.InternalLabel?
     && step.InternalSplitStep?
-    && step.path.Valid()
-    && step.path.node == v.stampedBetree.root
-    && step.path.Target().CanSplit(step.childIdx, step.splitKey)
+    && step.WF()
+    && step.path.node == v.root
     && v' == v.(
-        stampedBetree := v.stampedBetree.(
-          root := step.path.Substitute(step.path.Target().Split(step.childIdx, step.splitKey))
-        )
+        root := step.path.Substitute(step.path.Target().Split(step.childIdx, step.splitKey))
       )
   }
 
@@ -501,12 +500,10 @@ module PivotBetree
     && lbl.InternalLabel?
     && step.InternalFlushStep?
     && step.path.Valid()
-    && step.path.node == v.stampedBetree.root
+    && step.path.node == v.root
     && step.path.Target().CanFlush(step.childIdx)
     && v' == v.(
-        stampedBetree := v.stampedBetree.(
           root := step.path.Substitute(step.path.Target().Flush(step.childIdx))
-        )
       )
   }
 
@@ -517,13 +514,11 @@ module PivotBetree
     && lbl.InternalLabel?
     && step.InternalCompactStep?
     && step.path.Valid()
-    && step.path.node == v.stampedBetree.root
+    && step.path.node == v.root
     && step.compactedNode.WF()
     && step.path.Target().EquivalentBufferCompaction(step.compactedNode)
     && v' == v.(
-        stampedBetree := v.stampedBetree.(
           root := step.path.Substitute(step.compactedNode)
-        )
       )
   }
 
@@ -532,7 +527,7 @@ module PivotBetree
   predicate Init(v: Variables, stampedBetree: StampedBetree)
   {
     && stampedBetree.WF()
-    && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree)
+    && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.root)
   }
 
   datatype Step =
@@ -544,6 +539,24 @@ module PivotBetree
     | InternalSplitStep(path: Path, childIdx: nat, splitKey: Key)
     | InternalFlushStep(path: Path, childIdx: nat)
     | InternalCompactStep(path: Path, compactedNode: BetreeNode)
+  {
+    predicate WF() {
+      match this {
+        case QueryStep(receipt) => receipt.Valid()
+        case InternalSplitStep(path, childIdx, splitKey) =>
+          && path.Valid()
+          && path.Target().ValidChildIndex(childIdx)
+          && path.Target().CanSplit(childIdx, splitKey) // This should be an enabling condition, not a WF, really?
+        case InternalFlushStep(path, childIdx) =>
+          && path.Valid()
+          && path.Target().ValidChildIndex(childIdx)
+        case InternalCompactStep(path, compactedNode) =>
+          && path.Valid()
+          && compactedNode.WF()
+        case _ => true
+      }
+    }
+  }
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {

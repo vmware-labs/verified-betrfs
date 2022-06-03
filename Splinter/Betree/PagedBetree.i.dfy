@@ -66,6 +66,14 @@ module PagedBetree
       && (BetreeNode? ==> children.WF())
     }
 
+    function Child(key: Key) : BetreeNode
+      requires WF()
+      requires BetreeNode?
+    {
+      assert children.WF(); // trigger
+      children.mapp[key]
+    }
+
     function PushMemtable(memtable: Memtable) : StampedBetree
       requires WF()
     {
@@ -101,10 +109,10 @@ module PagedBetree
       assert children.WF(); // trigger
       var mapp := imap key | AnyKey(key)
         :: if key in leftKeys
-            then children.mapp[key].ApplyFilter(leftKeys)
+            then Child(key).ApplyFilter(leftKeys)
             else if key in rightKeys
-            then children.mapp[key].ApplyFilter(rightKeys)
-            else children.mapp[key];
+            then Child(key).ApplyFilter(rightKeys)
+            else Child(key);
       BetreeNode(buffers, ChildMap(mapp))
     }
 
@@ -128,8 +136,8 @@ module PagedBetree
       // TODO(jonh): NB the Promote() never happens: all the downKeys have to be non-Nil
       var outChildren := ChildMap(imap key | AnyKey(key)
         :: if key in downKeys
-          then children.mapp[key].Promote().PushBufferStack(movedBuffers)
-          else children.mapp[key]);
+          then Child(key).Promote().PushBufferStack(movedBuffers)
+          else Child(key));
       assert outChildren.WF();
       BetreeNode(keptBuffers, outChildren)
     }
@@ -187,7 +195,7 @@ module PagedBetree
       requires i < |lines|-1
     {
       assert lines[i].node.children.WF();  // trigger
-      lines[i].node.children.mapp[key]
+      lines[i].node.Child(key)
     }
 
     predicate ChildLinkedAt(i: nat)
@@ -292,7 +300,6 @@ module PagedBetree
     // Implementation expected to perform this action only when memtable is empty
     && lbl.FreezeAsLabel?
     && v.WF()
-    // Use 0 as a dummy lsn
     && lbl.stampedBetree == v.root.PushMemtable(v.memtable)
     && v' == v
   }
@@ -315,7 +322,7 @@ module PagedBetree
       requires node.BetreeNode?
     {
       assert node.children.WF();  // trigger
-      Path(node.children.mapp[key], key, depth-1)
+      Path(node.Child(key), key, depth-1)
     }
 
     function MatchingChildren() : iset<Key>
@@ -323,7 +330,7 @@ module PagedBetree
       requires node.BetreeNode?
     {
       assert node.children.WF();
-      iset k2 | node.children.mapp[k2]==node.children.mapp[key]
+      iset k2 | node.Child(k2)==node.Child(key)
     }
 
     predicate Valid()
@@ -355,7 +362,7 @@ module PagedBetree
     {
       assert node.children.WF();  // trigger
       var replacedChildren := Subpath().Substitute(replacement);
-      ChildMap(imap k | AnyKey(k) :: if k in MatchingChildren() then replacedChildren else node.children.mapp[k])
+      ChildMap(imap k | AnyKey(k) :: if k in MatchingChildren() then replacedChildren else node.Child(k))
     }
 
     function Substitute(replacement: BetreeNode) : (out: BetreeNode)
@@ -433,6 +440,16 @@ module PagedBetree
     | InternalSplitStep(path: Path, leftKeys: iset<Key>, rightKeys: iset<Key>)
     | InternalFlushStep(path: Path, downKeys: iset<Key>)
     | InternalCompactStep(path: Path, compactedNode: BetreeNode)
+  {
+    predicate WF() {
+      match this {
+        case InternalSplitStep(path, _, _) => path.Valid()
+        case InternalFlushStep(path, _) => path.Valid()
+        case InternalCompactStep(path, _) => path.Valid()
+        case _ => true
+      }
+    }
+  }
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {

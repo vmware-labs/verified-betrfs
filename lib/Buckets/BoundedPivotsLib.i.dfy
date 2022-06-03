@@ -193,6 +193,8 @@ module BoundedPivotsLib {
     return c1 < 0 && c2 <= 0;
   }
 
+  // TODO(jonh): Rename NumChildren. per-child buckets were a VeriBetrKV thing
+  // that's gone in Splinter.
   function NumBuckets(pt: PivotTable) : int
   {
     |pt| - 1
@@ -213,6 +215,8 @@ module BoundedPivotsLib {
     && Keyspace.lt(KeyToElement(key), right)
   }
 
+  // TODO(jonh): Tony observes that "route" sounds like it returns a whole
+  // path down the tree. Maybe "forward"? But that doesn't sound like a verb...
   function Route(pt: PivotTable, key: Key) : (i: int)
   requires WFPivots(pt)
   requires BoundedKey(pt, key)

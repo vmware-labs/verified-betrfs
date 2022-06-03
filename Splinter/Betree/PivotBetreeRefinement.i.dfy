@@ -31,8 +31,9 @@ module PivotBetreeRefinement
       if key in node.KeySet() then INode(node.Child(key)) else PagedBetree.Nil)
   }
 
-  function INode(node: BetreeNode) : PagedBetree.BetreeNode
+  function INode(node: BetreeNode) : (out: PagedBetree.BetreeNode)
     requires node.WF()
+    ensures out.WF()
     decreases node, 1
   {
     if node.Nil?
@@ -62,7 +63,7 @@ module PivotBetreeRefinement
   function I(v: Variables) : PagedBetree.Variables
     requires v.WF()
   {
-    PagedBetree.Variables(v.memtable, IStampedBetree(v.stampedBetree))
+    PagedBetree.Variables(v.memtable, INode(v.root))
   }
 
   predicate Inv(v: Variables)
@@ -91,8 +92,9 @@ module PivotBetreeRefinement
     assume false;
   }
 
-  function IPath(path: Path) : PagedBetree.Path
+  function IPath(path: Path) : (out: PagedBetree.Path)
     requires path.Valid()
+    ensures out.Valid()
   {
     PagedBetree.Path(INode(path.node), path.key, path.depth)
   }
@@ -126,6 +128,7 @@ module PivotBetreeRefinement
   }
 
   function SplitChildKeys(step: Step) : iset<Key>
+    requires step.WF()
     requires step.InternalSplitStep?
     requires step.path.Valid()
   {
@@ -134,14 +137,15 @@ module PivotBetreeRefinement
 
   // Hide iset quantifier mentioning lt, which is a trigger party
   function {:opaque} SplitLeftKeys(step: Step) : iset<Key>
+    requires step.WF()
     requires step.InternalSplitStep?
-    requires step.path.Valid()
   {
     iset key | key in SplitChildKeys(step) && lt(Element(key), Element(step.splitKey))
   }
 
-  function IStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) : PagedBetree.Step
-    requires NextStep(v, v', lbl, step) // Fancy (lazy) way of assuming all the step parts are WF
+  function IStep(step: Step) : (out: PagedBetree.Step)
+    requires step.WF()
+    ensures out.WF()
   {
     match step {
       case QueryStep(receipt) => PagedBetree.QueryStep(IReceipt(receipt))
@@ -149,16 +153,12 @@ module PivotBetreeRefinement
       case QueryEndLsnStep() => PagedBetree.QueryEndLsnStep()
       case FreezeAsStep() => PagedBetree.FreezeAsStep()
       case InternalGrowStep() => PagedBetree.InternalGrowStep()
-      case InternalSplitStep(path, childIdx, splitKey) => 
-        if !path.Valid()
-        then PagedBetree.InternalSplitStep(
-          PagedBetree.Path(PagedBetree.Nil, path.key, 0), iset{}, iset{})
-        else
+      case InternalSplitStep(path, childIdx, splitKey) =>
           var rightKeys := SplitChildKeys(step) - SplitLeftKeys(step);
           PagedBetree.InternalSplitStep(IPath(path), SplitLeftKeys(step), rightKeys)
-      case InternalFlushStep(path, childIdx) => 
+      case InternalFlushStep(path, childIdx) =>
         PagedBetree.InternalFlushStep(IPath(path), path.Target().ChildDomain(childIdx).KeySet())
-      case InternalCompactStep(path, compactedNode) => 
+      case InternalCompactStep(path, compactedNode) =>
         PagedBetree.InternalCompactStep(IPath(path), INode(compactedNode))
     }
   }
@@ -170,6 +170,16 @@ module PivotBetreeRefinement
     INodeWF(stampedBetree.root);
   }
 
+  lemma ChildCommutesWithI(node: BetreeNode, key: Key)
+    requires node.WF()
+    requires node.BetreeNode?
+    requires node.KeyInDomain(key)
+    ensures node.Child(key).WF()  // trigger for precondition below
+    ensures INode(node).Child(key) == INode(node.Child(key))
+  {
+    
+  }
+
   lemma ValidReceiptRefines(receipt: QueryReceipt)
     requires receipt.Valid()
     ensures IReceipt(receipt).Valid()
@@ -179,10 +189,11 @@ module PivotBetreeRefinement
       INodeWF(receipt.lines[i].node);
     }
     forall i:nat | i < |ir.lines| - 1 ensures ir.ChildLinkedAt(i) {
-      assert receipt.ChildLinkedAt(i);
+      assert receipt.ChildLinkedAt(i);  // trigger
+      ChildCommutesWithI(receipt.lines[i].node, receipt.key);
     }
     forall i:nat | i < |ir.lines| - 1 ensures ir.ResultLinkedAt(i) {
-      assert receipt.ResultLinkedAt(i);
+      assert receipt.ResultLinkedAt(i);  // trigger
     }
   }
 
@@ -191,7 +202,10 @@ module PivotBetreeRefinement
     ensures TotalDomain().Contains(key)
   {
     SmallestElementLte(Element(key));
-    assert TotalDomain().Contains(key) by { TotalDomain().reveal_Contains(); }
+    assert TotalDomain().Contains(key) by {
+      reveal_TotalDomain();
+      TotalDomain().reveal_Contains();
+    }
   }
 
   lemma InternalGrowStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -199,16 +213,22 @@ module PivotBetreeRefinement
     requires NextStep(v, v', lbl, step)
     requires step.InternalGrowStep?
     ensures v'.WF()
-    ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step))
+    ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
-    INodeWF(v.stampedBetree.root);
-    INodeWF(v'.stampedBetree.root);
+    INodeWF(v.root);
+    INodeWF(v'.root);
 
-    assert I(v').stampedBetree.root.children.mapp.Keys == AllKeys();  // trigger
+    assert I(v').root.children.mapp.Keys == AllKeys();  // trigger
     forall key:Key | AnyKey(key)
-      ensures I(v').stampedBetree.root.children.mapp[key]
-          == PagedBetree.ConstantChildMap(I(v).stampedBetree.root).mapp[key] {
+      ensures I(v').root.Child(key)
+          == PagedBetree.ConstantChildMap(I(v).root).mapp[key] {
       AllKeysInTotalDomain(key);
+      assert v'.root.KeyInDomain(key) by {
+        v'.root.reveal_KeyInDomain();
+        reveal_TotalDomain();
+        TotalDomain().reveal_Contains();
+      }
+      ChildCommutesWithI(v'.root, key);
     }
   }
 
@@ -269,6 +289,9 @@ module PivotBetreeRefinement
           calc {
             IChildren(sroot).mapp[key];
             INode(sroot.Child(key));
+              { 
+                assert sroot.Child(key) == path.node.Child(key);
+              }
             INode(path.node.Child(key));
             IChildren(path.node).mapp[key];
             IPath(path).node.children.mapp[key];
@@ -317,13 +340,15 @@ module PivotBetreeRefinement
   }
 
   lemma SplitEquivalence(v: Variables, v': Variables, lbl: TransitionLabel, step: Step, istep: PagedBetree.Step)
+    requires step.WF()
     requires step.InternalSplitStep?
     requires step.path.Valid()
-    requires step.path.Target().CanSplit(step.childIdx, step.splitKey)
-    requires istep == IStep(v, v', lbl, step)
-    ensures INode(step.path.node.Split(step.childIdx, step.splitKey))
+    requires NextStep(v, v', lbl, step)
+    requires istep == IStep(step)
+    ensures INode(step.path.Target().Split(step.childIdx, step.splitKey))
       == istep.path.Target().Split(istep.leftKeys, istep.rightKeys);
   {
+    assume false; // still have work to do
   }
 
   lemma {:timeLimitMultiplier 4} InternalSplitStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -331,19 +356,19 @@ module PivotBetreeRefinement
     requires NextStep(v, v', lbl, step)
     requires step.InternalSplitStep?
     ensures v'.WF()
-    ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step))
+    ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
-    INodeWF(v.stampedBetree.root);
+    INodeWF(v.root);
     INodeWF(step.path.Target());
     InvNext(v, v', lbl); //assert v'.WF();
     var iv := I(v);
-    var node := v.stampedBetree.root;
+    var node := v.root;
     var inode := INode(node);
     var iv' := I(v');
-    var node' := v'.stampedBetree.root;
+    var node' := v'.root;
     var inode' := INode(node');
-    var istep := IStep(v, v', lbl, step);
-    INodeWF(v'.stampedBetree.root);
+    var istep := IStep(step);
+    INodeWF(v'.root);
     ValidPathRefines(step.path); //assert IPath(step.path).Valid();
     var target' := step.path.Target().Split(step.childIdx, step.splitKey);
     //var itarget' := istep.path.Target().Split(istep.leftKeys, istep.rightKeys);
@@ -362,10 +387,10 @@ module PivotBetreeRefinement
 //      INode(target');
 //    }
 
-    assert iv.stampedBetree.root == INode(v.stampedBetree.root);
-    assert iv.stampedBetree.root == istep.path.node;
+    assert iv.root == INode(v.root);
+    assert iv.root == istep.path.node;
     assert istep.path.Target() == INode(step.path.Target());
-    assert iv'.stampedBetree.root == INode(v'.stampedBetree.root);
+    assert iv'.root == INode(v'.root);
 
     SubstitutionRefines(step.path, target');
     assert inode' == istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
@@ -380,7 +405,7 @@ module PivotBetreeRefinement
     }
     assert IPath(step.path) == ipath;
     calc {
-      iv'.stampedBetree.root;
+      iv'.root;
       INode(node');
       INode(step.path.Substitute(target'));
       {
@@ -392,8 +417,8 @@ module PivotBetreeRefinement
       istep.path.Substitute(itarget');
       istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
     }
-    assert iv'.stampedBetree.root == istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
-    assert PagedBetree.InternalSplit(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step));
+    assert iv'.root == istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
+    assert PagedBetree.InternalSplit(I(v), I(v'), ILbl(lbl), IStep(step));
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -407,29 +432,29 @@ module PivotBetreeRefinement
     match step {
       case QueryStep(receipt) => {
         ValidReceiptRefines(step.receipt);
-        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step)); // trigger
+        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); // trigger
       }
       case PutStep() => {
-        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step));
+        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case QueryEndLsnStep() => {
-        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step));
+        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case FreezeAsStep() => {
-        INodeWF(v.stampedBetree.root);
-        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step)); // trigger
+        INodeWF(v.root);
+        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); // trigger
       }
       case InternalGrowStep() => {
         InternalGrowStepRefines(v, v', lbl, step);
       }
       case InternalSplitStep(_, _, _) => {
-        assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step));
+        assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalFlushStep(_, _) => {
-        assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step));
+        assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalCompactStep(_, _) => {
-        assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(v, v', lbl, step));
+        assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
     }
   }
