@@ -38,7 +38,10 @@ module LinkedJournal {
   {
     predicate WF()
     {
-      messageSeq.WF()
+      && messageSeq.WF()
+      // This contraint is needed for DiscardOldCanCropIncrement; it wasn't issue in 
+      // receipt version
+      && !messageSeq.IsEmpty()
     }
 
     predicate HasLink(boundaryLSN: LSN) 

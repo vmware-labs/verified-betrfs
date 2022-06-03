@@ -243,7 +243,6 @@ module LinkedJournalRefinement
     }
   }
 
-
   lemma TJDiscardInterp(tj: TruncatedJournal, lsn: LSN, discarded: TruncatedJournal)
     requires tj.WF()
     requires tj.diskView.Acyclic()
@@ -383,7 +382,6 @@ module LinkedJournalRefinement
     }
   }
 
-
   lemma TjDiscardOldCommutes(tj: TruncatedJournal, newBdy: LSN)
     requires tj.Decodable()
     requires tj.CanDiscardTo(newBdy)
@@ -426,7 +424,8 @@ module LinkedJournalRefinement
 
   lemma CropDecreasesSeqEnd(tj: TruncatedJournal, depth: nat) 
     requires tj.CanCrop(depth)
-    ensures tj.Crop(depth).SeqEnd() <= tj.SeqEnd()
+    ensures depth == 0 ==> tj.Crop(depth).SeqEnd() == tj.SeqEnd()
+    ensures 0 < depth ==> tj.Crop(depth).SeqEnd() < tj.SeqEnd()
     decreases depth
   {
     if 0 < depth {
@@ -525,7 +524,6 @@ module LinkedJournalRefinement
     CropDecreasesSeqEnd(tj, depth);
   }
 
-
   lemma BuildTightIsAwesome(dv: DiskView, root: Pointer) 
     requires dv.Decodable(root)
     requires dv.Decodable(root)
@@ -552,7 +550,6 @@ module LinkedJournalRefinement
     BuildTightIsAwesome(dv, root);
     dv.BuildTight(root)
   }
-
 
   lemma BuildTightMaintainsInterpretation(dv: DiskView, root: Pointer) 
     requires dv.Decodable(root)
@@ -689,7 +686,6 @@ module LinkedJournalRefinement
     }
   }
 
-
   lemma DiscardOldCanCropIncrement(tj: TruncatedJournal, depth: nat, newBdy: LSN) 
     requires 0 < depth
     requires tj.WF()
@@ -701,21 +697,7 @@ module LinkedJournalRefinement
       if 1 < depth {
         var tjSuffix := tj.Crop(1);
         DiscardOldCanCropIncrement(tjSuffix, depth-1, newBdy);
-      } else {
-        // depth == 1 case
-        assert tj.Crop(1).DiscardOld(newBdy).CanCrop(0);
-        if tj.Crop(1).DiscardOld(newBdy).freshestRec.None? {
-          assert tj.Crop(1).SeqEnd() == newBdy;
-
-          // todo: there might be an issue here. Crop(1) may not decrease seqEnd.
-          // See lemma CropDecreasesSeqEnd.
-          // In this case, tj.DiscardOld(newBdy) is None.
-          // Thus, tj.DiscardOld(newBdy).CanCrop(1) is false;
-          assume false;
-          assert tj.SeqEnd() <= tj.Crop(1).SeqEnd();
-          assert tj.DiscardOld(newBdy).CanCrop(1);
-        } 
-      }
+      } 
     }
   }
 
