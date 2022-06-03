@@ -328,7 +328,7 @@ module LinkedJournalRefinement
   }
   
 
-  lemma PointerAfterCropCommutesWithCropHead(dv: DiskView, ptr: Pointer, bdy: LSN, depth: nat) 
+  lemma PointerAfterCropCommutesWithInterpretation(dv: DiskView, ptr: Pointer, bdy: LSN, depth: nat) 
     requires dv.Decodable(ptr)
     requires dv.Acyclic()
     requires dv.BlockInBounds(ptr)
@@ -341,14 +341,13 @@ module LinkedJournalRefinement
     decreases depth
   {
     if 0 < depth {
-      PointerAfterCropCommutesWithCropHead(dv, dv.entries[ptr.value].CroppedPrior(bdy), bdy, depth-1);
+      PointerAfterCropCommutesWithInterpretation(dv, dv.entries[ptr.value].CroppedPrior(bdy), bdy, depth-1);
       assert IPtr(dv, dv.PointerAfterCrop(ptr, depth)) 
         == PagedJournal.OptRecCropHeadRecords(IPtr(dv, ptr), bdy, depth); // trigger
     }
   }
 
-  // todo rename PointerAfterCropCommutesWithInterpretation
-  lemma PointerAfterCropCommutesWithCropHead_NoSome(dv: DiskView, ptr: Pointer, depth: nat) 
+  lemma PointerAfterCropCommutesWithInterpretation_NoSome(dv: DiskView, ptr: Pointer, depth: nat) 
     requires dv.Decodable(ptr)
     requires dv.Acyclic()
     requires dv.BlockInBounds(ptr)
@@ -359,7 +358,7 @@ module LinkedJournalRefinement
   {
     var bdy := dv.boundaryLSN;
     if 0 < depth {
-      PointerAfterCropCommutesWithCropHead_NoSome(dv, dv.entries[ptr.value].CroppedPrior(bdy), depth-1);
+      PointerAfterCropCommutesWithInterpretation_NoSome(dv, dv.entries[ptr.value].CroppedPrior(bdy), depth-1);
       assert IPtr(dv, dv.PointerAfterCrop(ptr, depth)) 
         == PagedJournal.OptRecCropHeadRecords(IPtr(dv, ptr), bdy, depth); // trigger
     }
@@ -441,12 +440,13 @@ module LinkedJournalRefinement
     requires 0 < depth
     requires tj.WF()
     requires tj.freshestRec.Some?
-    requires TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView).CanCrop(depth-1)
+    requires tj.CanCrop(1)
+    requires tj.Crop(1).CanCrop(depth-1)
     ensures tj.CanCrop(depth)
     decreases depth
   {
     if 1 < depth {
-      var tjSuffix := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
+      var tjSuffix := tj.Crop(1);
       CanCropIncrement(tjSuffix, depth-1);
     }
   }
@@ -502,7 +502,7 @@ module LinkedJournalRefinement
 
     forall tjx ensures i(f(tjx))==F(i(tjx)) {
       if tjx.Decodable() && tjx.CanCrop(depth) { 
-        PointerAfterCropCommutesWithCropHead_NoSome(tjx.diskView, tjx.freshestRec, depth);
+        PointerAfterCropCommutesWithInterpretation_NoSome(tjx.diskView, tjx.freshestRec, depth);
       } else {
         if tjx.Decodable() {
           if PagedJournal.OptRecCanCropHeadRecords(i(tjx).freshestRec, i(tjx).boundaryLSN, depth) {
@@ -577,7 +577,7 @@ module LinkedJournalRefinement
     var newBdy := ILbl(lbl).frozenJournal.boundaryLSN;
     var depth := step.depth;
     var dv := v.truncatedJournal.diskView;
-    PointerAfterCropCommutesWithCropHead_NoSome(dv, v.truncatedJournal.freshestRec, depth);
+    PointerAfterCropCommutesWithInterpretation_NoSome(dv, v.truncatedJournal.freshestRec, depth);
     CropHeadComposedWithDiscardOldCommutes(v.truncatedJournal, newBdy, depth);
     var croppedPtr := dv.PointerAfterCrop(v.truncatedJournal.freshestRec, depth);
     var croppedTj := TruncatedJournal(croppedPtr, v.truncatedJournal.diskView);
@@ -594,7 +594,7 @@ module LinkedJournalRefinement
     InvNext(v, v', lbl);
     var step: Step :| NextStep(v, v', lbl, step);
     if step.ReadForRecoveryStep? {
-      PointerAfterCropCommutesWithCropHead(v.truncatedJournal.diskView, v.truncatedJournal.freshestRec, v.truncatedJournal.diskView.boundaryLSN, step.depth);
+      PointerAfterCropCommutesWithInterpretation(v.truncatedJournal.diskView, v.truncatedJournal.freshestRec, v.truncatedJournal.diskView.boundaryLSN, step.depth);
       assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.ReadForRecoveryStep(step.depth)); // witness step
     } else if step.FreezeForCommitStep? {
       FreezeForCommitRefines(v, v', lbl, step);
@@ -689,41 +689,33 @@ module LinkedJournalRefinement
     }
   }
 
-  lemma DiscardOldCanCropDecrement(tj: TruncatedJournal, depth: nat, newBdy: LSN)
-    requires 0 < depth
-    requires tj.Decodable()
-    requires tj.freshestRec.Some?
-    requires tj.CanDiscardTo(newBdy)
-    requires tj.DiscardOld(newBdy).CanCrop(depth)
-    ensures TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView).DiscardOld(newBdy).CanCrop(depth-1)
-    decreases depth
-  {
-    assume false;
-  }
 
-  // tjNext can crop to depth - 1 ==> 
-  // tj can crop to depth 
   lemma DiscardOldCanCropIncrement(tj: TruncatedJournal, depth: nat, newBdy: LSN) 
     requires 0 < depth
     requires tj.WF()
-    requires tj.freshestRec.Some?
-    requires tj.CanDiscardTo(newBdy)
-    requires TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView).CanDiscardTo(newBdy)
-    requires TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView).DiscardOld(newBdy).CanCrop(depth-1)
-    ensures tj.DiscardOld(newBdy).CanCrop(depth)
+    requires tj.CanCrop(1) && tj.Crop(1).CanDiscardTo(newBdy) ==> tj.Crop(1).DiscardOld(newBdy).CanCrop(depth-1)
+    ensures tj.CanCrop(1) && tj.Crop(1).CanDiscardTo(newBdy) ==> tj.DiscardOld(newBdy).CanCrop(depth)
     decreases depth
   {
-    assume false;
-    if 1 < depth {
-      var tjSuffix := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
+    if tj.CanCrop(1) && tj.Crop(1).CanDiscardTo(newBdy) {
+      if 1 < depth {
+        var tjSuffix := tj.Crop(1);
+        DiscardOldCanCropIncrement(tjSuffix, depth-1, newBdy);
+      } else {
+        // depth == 1 case
+        assert tj.Crop(1).DiscardOld(newBdy).CanCrop(0);
+        if tj.Crop(1).DiscardOld(newBdy).freshestRec.None? {
+          assert tj.Crop(1).SeqEnd() == newBdy;
 
-      // tj can crop to depth ==> 
-      // tjNext can crop to depth-1
-      DiscardOldCanCropDecrement(tjSuffix, depth-1, newBdy);
-      DiscardOldCanCropIncrement(tjSuffix, depth-1, newBdy);
-      assert tj.DiscardOld(newBdy).CanCrop(depth);
-    } else {
-      assert tj.DiscardOld(newBdy).CanCrop(depth);
+          // todo: there might be an issue here. Crop(1) may not decrease seqEnd.
+          // See lemma CropDecreasesSeqEnd.
+          // In this case, tj.DiscardOld(newBdy) is None.
+          // Thus, tj.DiscardOld(newBdy).CanCrop(1) is false;
+          assume false;
+          assert tj.SeqEnd() <= tj.Crop(1).SeqEnd();
+          assert tj.DiscardOld(newBdy).CanCrop(1);
+        } 
+      }
     }
   }
 
@@ -738,24 +730,13 @@ module LinkedJournalRefinement
     ensures tj.Crop(depth).DiscardOld(newBdy) == tj.DiscardOld(newBdy).Crop(depth)
     decreases depth
   {
-    // todo: clean this up
     CropDecreasesSeqEnd(tj, depth); // to get tj.CanDiscardTo(newBdy) from tj.Crop(depth).CanDiscardTo(newBdy)
     TjDiscardOldCommutes(tj, newBdy);  // to get CanDiscardTo(newBdy)
     TjDiscardOldCommutes(tj.Crop(depth), newBdy);  // to get CanDiscardTo(newBdy)
-    if depth == 0 {
-      assert tj.Crop(depth).CanDiscardTo(newBdy);
-      assert tj.DiscardOld(newBdy).Decodable();
-      assert tj.DiscardOld(newBdy).CanCrop(depth);
-      assert tj.Crop(depth).DiscardOld(newBdy) == tj.DiscardOld(newBdy).Crop(depth);
-    } else {
+    if 0 < depth {
       var tjNext := TruncatedJournal(tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN), tj.diskView);
       CropAndDiscardCommutes(tjNext, depth-1, newBdy); 
-      // tjNext.DiscardOld(newBdy).CanCrop(depth-1)
       DiscardOldCanCropIncrement(tj, depth, newBdy);
-      // assert tj.Crop(depth).CanDiscardTo(newBdy);
-      // assert tj.DiscardOld(newBdy).Decodable();
-      // assert tj.DiscardOld(newBdy).CanCrop(depth);  // fails
-      // assert tj.Crop(depth).DiscardOld(newBdy) == tj.DiscardOld(newBdy).Crop(depth);
     }
   }
   
@@ -772,19 +753,9 @@ module LinkedJournalRefinement
     var newBdy := lbl.frozenJournal.SeqStart();
     var discardedTj := croppedTj.DiscardOld(newBdy);
     var tightTj := discardedTj.BuildTight();
-    // todo: clean this up
-    // assert tightTj == lbl.frozenJournal;  // in-flight
-    assert tightTj.diskView == BuildTightAwesome(discardedTj.diskView, discardedTj.freshestRec);
-    // assert tightTj.diskView.IsSubDisk(discardedTj.diskView);
-
-
-
-    // assert discardedTj.diskView.IsSubDisk(v.truncatedJournal.DiscardOld(newBdy).diskView);
+    assert tightTj.diskView == BuildTightAwesome(discardedTj.diskView, discardedTj.freshestRec);  // invoke awesomeness
     CropAndDiscardCommutes(v.truncatedJournal, step.depth, newBdy);
     LemmaBuildTightPreservesSubDisk(discardedTj, v.truncatedJournal.DiscardOld(newBdy), step.depth);
-    // desired conclusion
-    // WTS (crop, discard, build) IsSubDisk (discard, build)
-    // assert tightTj.diskView.IsSubDisk(v.truncatedJournal.DiscardOld(newBdy).BuildTight().diskView);
   }
 
   lemma BuildTightPreservesSubDiskUnderInternalMarshall(
