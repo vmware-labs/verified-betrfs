@@ -15,6 +15,7 @@ module BlockCoordinationSystemRefinement
   import opened MsgHistoryMod
   import opened ValueMessage
   import opened BlockCoordinationSystem
+  import opened GenericDisk
   import AbstractJournal
   import PagedJournalRefinement
   import LinkedJournal
@@ -47,10 +48,18 @@ module BlockCoordinationSystemRefinement
   // Inv
 
   function SuperblockRepr() : set<Address>
+    // TODO need superblock address axiom
+  /*
   {
     // Could store the superblock in two places.
     // Um, addresses aren't concrete yet.
     { 0, 1 }
+  }
+  */
+
+  function MapRepr(v: Variables) : set<Address>
+  {
+     {}   // TODO
   }
 
   predicate Framing(v: Variables)
@@ -58,9 +67,9 @@ module BlockCoordinationSystemRefinement
   {
     // This theorem doesn't get interesting until there's something interesting
     // happening in more than one place!
-    && v.journal.Repr() !! v.mapadt.Repr()
+    && v.journal.Repr() !! MapRepr(v)
     && v.journal.Repr() !! SuperblockRepr()
-    && v.mapadt.Repr() !! SuperblockRepr()
+    && MapRepr(v) !! SuperblockRepr()
   }
 
   predicate Inv(v: Variables) {

@@ -22,7 +22,7 @@ module LinkedJournal {
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
-    | InternalLabel()
+    | InternalLabel(addrs: set<Address>)
   {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
@@ -383,6 +383,7 @@ module LinkedJournal {
     && v.WF()
     && v.unmarshalledTail.seqStart < cut // Can't marshall nothing.
     && v.unmarshalledTail.CanDiscardTo(cut)
+    && lbl.addrs == {addr}
     && v.UnusedAddr(addr)
     && var marshalledMsgs := v.unmarshalledTail.DiscardRecent(cut);
     && v' == Variables(

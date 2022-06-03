@@ -23,7 +23,7 @@ module MarshalledJournal {
       // MapIsFresh in CommitComplete. I don't think it's actually necessary,
       // but removing it broke the CoordinationSystemRefinement proof and I
       // couldn't fix it in five minutes.
-    | InternalLabel()
+    | InternalLabel(addrs: set<Address>)
   {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.WF())
@@ -38,7 +38,7 @@ module MarshalledJournal {
         case QueryEndLsnLabel(endLsn) => LinkedJournal.QueryEndLsnLabel(endLsn)
         case PutLabel(messages) => LinkedJournal.PutLabel(messages)
         case DiscardOldLabel(startLsn, requireEnd) => LinkedJournal.DiscardOldLabel(startLsn, requireEnd)
-        case InternalLabel() => LinkedJournal.InternalLabel()
+        case InternalLabel(addrs) => LinkedJournal.InternalLabel(addrs)
     }
   }
 
@@ -85,6 +85,11 @@ module MarshalledJournal {
       requires WF()
     {
       I().SeqEnd()
+    }
+
+    function Repr() : set<Address>
+    {
+      diskView.entries.Keys
     }
   }
 
