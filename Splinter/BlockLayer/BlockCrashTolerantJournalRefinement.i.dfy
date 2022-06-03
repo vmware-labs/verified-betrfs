@@ -183,10 +183,13 @@ module BlockCrashTolerantJournalRefinement {
 
     var mjlbl := MarshalledJournal.FreezeForCommitLabel(frozenJournal);
     MarshalledJournalRefinement.RefinementNext(v.ephemeral.v, v'.ephemeral.v, mjlbl);  // hoist one layer to LinkedJournal. (JournalChainedNext hides this jump)
+    var step :| LinkedJournal.NextStep(MarshalledJournalRefinement.I(v.ephemeral.v),
+      MarshalledJournalRefinement.I(v'.ephemeral.v), mjlbl.I(), step);
     LinkedJournalRefinement.InFlightSubDiskCreated(
       MarshalledJournalRefinement.I(v.ephemeral.v),
       MarshalledJournalRefinement.I(v'.ephemeral.v),
-      mjlbl.I());
+      mjlbl.I(),
+      step);
   }
 
   lemma CommitCompleteRefines(v: Variables, v': Variables, lbl: TransitionLabel)
