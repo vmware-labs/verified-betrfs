@@ -32,7 +32,9 @@ module BlockCrashTolerantJournalRefinement {
   function IImage(store: StoreImage) : CrashTolerantJournal.StoreImage
     requires DecodableImage(store)
   {
-    store.I().I().I()
+    PagedJournalRefinement.ITruncatedJournal(
+      LinkedJournalRefinement.ITruncatedJournal(
+        store.I()))
   }
 
   function IALabel(lbl: TransitionLabel) : CrashTolerantJournal.TransitionLabel
@@ -91,7 +93,7 @@ module BlockCrashTolerantJournalRefinement {
   function IAMJLabel(lbl: MarshalledJournal.TransitionLabel) : AbstractJournal.TransitionLabel
     requires DecodableMJLabel(lbl)
   {
-    PagedJournalRefinement.ILbl(lbl.I().I())
+    PagedJournalRefinement.ILbl(LinkedJournalRefinement.ILbl(lbl.I()))
   }
 
   lemma LoadEphemeralFromPersistentRefines(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -124,7 +126,7 @@ module BlockCrashTolerantJournalRefinement {
     PagedJournalRefinement.NextRefines(
       LinkedJournalRefinement.I(MarshalledJournalRefinement.I(j)),
       LinkedJournalRefinement.I(MarshalledJournalRefinement.I(j')),
-      lbl.I().I());
+      LinkedJournalRefinement.ILbl(lbl.I()));
   }
 
 //  lemma QueryEndLsnRefines(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -150,10 +152,11 @@ module BlockCrashTolerantJournalRefinement {
     requires Inv(v) && Next(v, v', lbl) && lbl.base.InternalLabel?
     ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
-    JournalChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.InternalLabel());
+    var jlbl := MarshalledJournal.InternalLabel(lbl.allocations);
 
-    var lbl := MarshalledJournal.InternalLabel();
-    MarshalledJournalRefinement.RefinementNext(v.ephemeral.v, v'.ephemeral.v, lbl);
+    JournalChainedNext(v.ephemeral.v, v'.ephemeral.v, jlbl);
+
+    MarshalledJournalRefinement.RefinementNext(v.ephemeral.v, v'.ephemeral.v, jlbl);
       
     if v'.inFlight.Some? {
       var inFlightL := v.inFlight.value.I();
@@ -164,7 +167,8 @@ module BlockCrashTolerantJournalRefinement {
       LinkedJournalRefinement.InFlightSubDiskPreserved(
         MarshalledJournalRefinement.I(v.ephemeral.v),
         MarshalledJournalRefinement.I(v'.ephemeral.v),
-        v.inFlight.value.I());
+        v.inFlight.value.I(),
+        jlbl.I());
     }
     MarshalledJournalRefinement.TypedModelUnique(); // Completes persistent.IsSubDisk(ephemeral) proof.
   }
@@ -192,7 +196,7 @@ module BlockCrashTolerantJournalRefinement {
     JournalChainedNext(v.ephemeral.v, v'.ephemeral.v,
       MarshalledJournal.DiscardOldLabel(v.inFlight.value.SeqStart(), lbl.base.requireEnd));
     MarshalledJournalRefinement.TypedModelUnique(); // Completes persistent.IsSubDisk(ephemeral) proof.
-    v.inFlight.value.I().I().BuildReceipt().BoundaryLSN();  // MJ label seqStarT is AbstractJournal label SeqStart
+//    LinkedJournalRefinement.ITruncatedJournal(v.inFlight.value.I()).BuildReceipt().BoundaryLSN();  // MJ label seqStarT is AbstractJournal label SeqStart
   }
 
   lemma CrashRefines(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -264,6 +268,14 @@ nonsense -- in-memory part needs to be compatible too
   }
 */
 
+  lemma UpdatesInternal(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    requires lbl.base.InternalLabel?
+    ensures Repr(v') <= Repr(v) + lbl.allocations
+  {
+  }
+
   lemma Updates(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -275,9 +287,7 @@ nonsense -- in-memory part needs to be compatible too
       case ReadForRecoveryLabel(_) => { }
       case QueryEndLsnLabel(_) => { }
       case PutLabel(_) => { }
-      case InternalLabel() => {
-        // adds a page.
-      }
+      case InternalLabel() => { UpdatesInternal(v, v', lbl); }
       case QueryLsnPersistenceLabel(_) => { }
       case CommitStartLabel(_, _) => {
         // introduce inFlight

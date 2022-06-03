@@ -41,6 +41,13 @@ module BlockCrashTolerantJournal {
       && ephemeral.WF()
       && (inFlight.Some? ==> inFlight.value.WF())
     }
+
+    function Repr() : set<Address>
+    {
+      if ephemeral.Known?
+      then ephemeral.v.journalImage.Repr()
+      else persistent.Repr()
+    }
   }
 
   predicate LoadEphemeralFromPersistent(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -101,7 +108,7 @@ module BlockCrashTolerantJournal {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
-    && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.InternalLabel())
+    && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.InternalLabel(lbl.allocations))
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
   }

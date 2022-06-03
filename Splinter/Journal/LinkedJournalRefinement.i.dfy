@@ -25,7 +25,7 @@ module LinkedJournalRefinement
       case QueryEndLsnLabel(endLsn) => PagedJournal.QueryEndLsnLabel(endLsn)
       case PutLabel(messages) => PagedJournal.PutLabel(messages)
       case DiscardOldLabel(startLsn, requireEnd) => PagedJournal.DiscardOldLabel(startLsn, requireEnd)
-      case InternalLabel() => PagedJournal.InternalLabel()
+      case InternalLabel(addrs) => PagedJournal.InternalLabel()
   }
 
   predicate Inv(v: Variables)
@@ -810,19 +810,20 @@ module LinkedJournalRefinement
     }
   }
 
-  lemma InFlightSubDiskPreserved(v: Variables, v': Variables, inFlight: TruncatedJournal)
+  lemma InFlightSubDiskPreserved(v: Variables, v': Variables, inFlight: TruncatedJournal, lbl: TransitionLabel)
     requires Inv(v)
-    requires Next(v, v', InternalLabel())
+    requires Next(v, v', lbl)
+    requires lbl.InternalLabel?
     requires InFlightSubDiskProperty(v, inFlight)
     ensures InFlightSubDiskProperty(v', inFlight)
   {
-    var step: Step :| NextStep(v, v', InternalLabel(), step);
+    var step: Step :| NextStep(v, v', lbl, step);
     
     var vj := v.truncatedJournal;
     var dj := vj.DiscardOld(inFlight.SeqStart());
     var v'j := v'.truncatedJournal;
     var d'j := v'j.DiscardOld(inFlight.SeqStart());
-    InvNext(v, v', InternalLabel());
+    InvNext(v, v', lbl);
     assert d'j.diskView.PointersRespectRank(v'j.diskView.TheRanking());  // witness to d'j.Acyclic
 
     BuildTightPreservesSubDiskUnderInternalMarshall(
