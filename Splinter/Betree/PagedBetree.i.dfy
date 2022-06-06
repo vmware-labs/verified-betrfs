@@ -314,40 +314,32 @@ module PagedBetree
       )
   }
   
-  datatype Path = Path(node: BetreeNode, key: Key, depth: nat)
+  datatype Path = Path(node: BetreeNode, key: Key, routing: seq<iset<Key>>)
   {
     function Subpath() : (out: Path)
-      requires 0 < depth
+      requires 0 < |routing|
       requires node.WF()
       requires node.BetreeNode?
     {
       assert node.children.WF();  // trigger
-      Path(node.Child(key), key, depth-1)
-    }
-
-    function MatchingChildren() : iset<Key>
-      requires node.WF()
-      requires node.BetreeNode?
-    {
-      assert node.children.WF();
-      iset k2 | node.Child(k2)==node.Child(key)
+      Path(node.Child(key), key, routing[1..])
     }
 
     predicate Valid()
-      decreases depth
+      decreases |routing|
     {
       && node.WF()
       && node.BetreeNode?
-      && (0 < depth ==> Subpath().Valid())
+      && (0 < |routing| ==> Subpath().Valid())
     }
 
     function Target() : (out: BetreeNode)
       requires Valid()
       ensures out.WF()
       ensures out.BetreeNode?
-      decreases depth
+      decreases |routing|
     {
-      if 0 == depth
+      if 0 == |routing|
       then node
       else Subpath().Target()
     }
@@ -356,21 +348,21 @@ module PagedBetree
     function {:opaque} ReplacedChildren(replacement: BetreeNode) : (out: ChildMap)
       requires Valid()
       requires replacement.WF()
-      requires 0 < depth
+      requires 0 < |routing|
       ensures out.WF()
-      decreases depth, 0
+      decreases |routing|, 0
     {
       assert node.children.WF();  // trigger
       var replacedChildren := Subpath().Substitute(replacement);
-      ChildMap(imap k | AnyKey(k) :: if k in MatchingChildren() then replacedChildren else node.Child(k))
+      ChildMap(imap k | AnyKey(k) :: if k in routing[0] then replacedChildren else node.Child(k))
     }
 
     function Substitute(replacement: BetreeNode) : (out: BetreeNode)
       requires Valid()
       requires replacement.WF()
-      decreases depth, 1
+      decreases |routing|, 1
     {
-      if 0 == depth
+      if 0 == |routing|
       then replacement
       else
         BetreeNode(node.buffers, ReplacedChildren(replacement))

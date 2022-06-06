@@ -23,6 +23,7 @@ module MarshalledJournalRefinement
   function TheTypedModel(v: Variables) : LinkedJournal.Variables
     requires HasTypedModel(v)
   {
+    // todo(jonh): this is same as I()
     var typed :| TypeProvidesModel(v, typed); typed
   }
 
