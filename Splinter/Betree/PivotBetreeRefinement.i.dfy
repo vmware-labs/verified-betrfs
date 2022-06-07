@@ -325,10 +325,14 @@ module PivotBetreeRefinement
     requires path.Valid()
     ensures IPath(path).Valid()  // prereq
     ensures IPath(path).Target() == INode(path.Target())
+    decreases path.depth
   {
-    // todo
     IPathValid(path);
-    assume false;
+    if 0 < path.depth {
+      TargetCommutesWithI(path.Subpath());
+      SubpathCommutesWithIPath(path);
+      assert IPath(path).Target() == INode(path.Target());
+    }
   }
 
   lemma SplitKeySetMonotonic(step: Step) 
