@@ -89,7 +89,16 @@ module PivotBetreeRefinement
     requires Next(v, v', lbl)
     ensures Inv(v')
   {
-    assume false;
+    if v'.root.BetreeNode? {
+      var step :| NextStep(v, v', lbl, step);
+      if step.InternalSplitStep? {
+        SubstitutePreservesWF(step.path, step.path.Target().Split(step.childIdx, step.splitKey));
+      } else if step.InternalFlushStep? {
+        SubstitutePreservesWF(step.path, step.path.Target().Flush(step.childIdx));
+      } else if step.InternalCompactStep? {
+        SubstitutePreservesWF(step.path, step.compactedNode);
+      }
+    }
   }
 
   function Routing(path: Path) : (out: seq<iset<Key>>) 
@@ -129,21 +138,6 @@ module PivotBetreeRefinement
       IPathValid(path.Subpath());
       SubpathCommutesWithIPath(path);
     }
-  }
-
-  lemma ValidPathRefines(path: Path)
-    requires path.Valid()
-    ensures IPath(path).Valid()
-  {
-    assume false;
-  }
-
-  lemma PathTargetRefines(path: Path)
-    requires path.Valid()
-    ensures IPath(path).Valid()
-    ensures INode(path.Target()) == IPath(path).Target()
-  {
-    assume false;
   }
 
   function IReceiptLine(line: QueryReceiptLine) : PagedBetree.QueryReceiptLine
@@ -271,8 +265,9 @@ module PivotBetreeRefinement
     requires path.Valid()
     requires target'.WF()
     ensures path.Substitute(target').WF()
-  {
-  }
+  {}
+
+
 
   // Substitution followed by interpretation is the same as interpretation
   // followed by paged-level substitution.
@@ -287,7 +282,7 @@ module PivotBetreeRefinement
   {
     IPathValid(path);
     SubstitutePreservesWF(path, target');
-    ValidPathRefines(path);
+    IPathValid(path);
     INodeWF(target');
     if path.depth==0 {
       assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
@@ -385,7 +380,7 @@ module PivotBetreeRefinement
     INodeWF(step.path.Target());
     InvNext(v, v', lbl); //assert v'.WF();
     INodeWF(v'.root);
-    ValidPathRefines(step.path); //assert IPath(step.path).Valid();
+    IPathValid(step.path); //assert IPath(step.path).Valid();
     TargetCommutesWithI(step.path);
     SplitCommutesWithI(step);
     SubstitutionRefines(step.path, step.path.Target().Split(step.childIdx, step.splitKey));
@@ -418,7 +413,8 @@ module PivotBetreeRefinement
         InternalGrowStepRefines(v, v', lbl, step);
       }
       case InternalSplitStep(_, _, _) => {
-        assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+        InternalSplitStepRefines(v, v', lbl, step);
+        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalFlushStep(_, _) => {
         assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
