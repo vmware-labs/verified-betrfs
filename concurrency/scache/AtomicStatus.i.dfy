@@ -563,15 +563,15 @@ module AtomicStatusImpl {
       return ((v as bv8) & (flag_exc() as bv8)) as uint8 != 0;
     }
 
-    shared method is_exc_locked_or_free(
+    shared method {:cpp_inline} is_exc_locked_or_free(
         ghost t: int,
         glinear r: Rw.Token)
-    returns (success: bool, is_accessed: bool, glinear r': Rw.Token)
+    returns (is_locked: bool, is_free: bool, is_accessed: bool, glinear r': Rw.Token)
     requires this.inv()
     requires r.loc == rwlock_loc
     requires r.val == RwLock.SharedHandle(RwLock.SharedPending(t))
-    ensures !success ==> r == r'
-    ensures success ==>
+    ensures is_locked || is_free ==> r == r'
+    ensures !is_locked && !is_free ==>
         && r'.val == RwLock.SharedHandle(RwLock.SharedPending2(t))
         && r'.loc == rwlock_loc
     {
@@ -592,7 +592,8 @@ module AtomicStatusImpl {
         ghost_release new_g;
       }
 
-      success := bit_and_uint8(f, bit_or_uint8(flag_exc(), flag_unmapped())) == 0;
+      is_locked := bit_and_uint8(f, flag_exc()) != 0;
+      is_free := bit_and_uint8(f, flag_unmapped()) != 0;
       is_accessed := bit_and_uint8(f, flag_accessed()) != 0;
     }
 

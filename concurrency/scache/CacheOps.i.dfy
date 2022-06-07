@@ -125,6 +125,141 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
     }
   }
 
+  method {:cpp_inline} try_get_read(
+      shared cache: Cache,
+      cache_idx: uint32,
+      shared localState: LocalState,
+      glinear client: Client)
+  returns (
+    success: uint8, // 0: success, 1: conflict, 2: evicted
+    glinear handle_out: glOption<T.Token>,
+    glinear client_out: glOption<Client>
+  )
+  requires cache.Inv()
+  requires localState.WF(cache.config)
+  requires 0 <= cache_idx as int < cache.config.cache_size as int
+  requires client.loc == cache.counter_loc
+  ensures success == 0 || success == 1 || success == 2
+  ensures success != 0 ==>
+      && handle_out.glNone?
+      && client_out.glSome?
+      && client_out.value.loc == cache.counter_loc
+  ensures success == 0 ==>
+      && handle_out.glSome?
+      && handle_out.value.loc == cache.status[cache_idx].rwlock_loc
+      && handle_out.value.val == RwLock.SharedHandle(RwLock.SharedPending2(localState.t as int))
+      && client_out.glNone?
+  decreases *
+  {
+    // 1. check if writelocked
+
+    var is_exc_locked := cache.status_atomic(cache_idx).quicktest_is_exc_locked();
+    if is_exc_locked {
+      success := 1; // conflict
+      handle_out := glNone;
+      client_out := glSome(client);
+
+      success := 1; // conflict
+    } else {
+      // 2. inc ref
+
+      glinear var r := inc_refcount_for_shared(
+          cache.read_refcount_atomic(localState.t, cache_idx),
+          localState.t as nat,
+          client);
+
+      // 3. check not writelocked, not free
+      //        otherwise, dec and abort
+
+      var is_accessed: bool;
+      var is_locked, is_free;
+      is_locked, is_free, is_accessed, r := cache.status_atomic(cache_idx).is_exc_locked_or_free(
+          localState.t as nat, r);
+
+      if is_locked || is_free {
+        glinear var client' := dec_refcount_for_shared_pending(
+            cache.read_refcount_atomic(localState.t, cache_idx),
+            localState.t as nat,
+            r);
+
+        handle_out := glNone;
+        client_out := glSome(client');
+
+        success := if is_free then 2 else 1;
+      } else {
+        // 4. if !access, then mark accessed
+        if !is_accessed {
+          r := cache.status_atomic(cache_idx).mark_accessed(localState.t as nat, r);
+        }
+        success := 0; // success
+
+        handle_out := glSome(r);
+        client_out := glNone;
+      }
+    }
+  }
+
+  method {:cpp_inline} platform_sleep(ns: uint64) {
+    // this is what SplinterDB does for small values of `ns`
+    var i := 0;
+    while i < ns / 5 + 1
+    {
+      pause();
+      i := i + 1;
+    }
+  }
+
+  method {:cpp_inline} get_read(
+      shared cache: Cache,
+      cache_idx: uint32,
+      shared localState: LocalState,
+      glinear client: Client)
+  returns (
+    success: uint8, // 0: success, 2: evicted (doesn't return 1 for conflict; retries internally instead)
+    glinear handle_out: glOption<T.Token>,
+    glinear client_out: glOption<Client>
+  )
+  requires cache.Inv()
+  requires localState.WF(cache.config)
+  requires 0 <= cache_idx as int < cache.config.cache_size as int
+  requires client.loc == cache.counter_loc
+  ensures success == 0 || success == 2
+  ensures success != 0 ==>
+      && handle_out.glNone?
+      && client_out.glSome?
+      && client_out.value.loc == cache.counter_loc
+  ensures success == 0 ==>
+      && handle_out.glSome?
+      && handle_out.value.loc == cache.status[cache_idx].rwlock_loc
+      && handle_out.value.val == RwLock.SharedHandle(RwLock.SharedPending2(localState.t as int))
+      && client_out.glNone?
+  decreases *
+
+  {
+    success, handle_out, client_out := try_get_read(cache, cache_idx, localState, client);
+    var wait: uint64 := 1;
+    while success == 1 // while the result is 'conflict', keep trying
+    invariant success == 0 || success == 1 || success == 2
+    invariant success != 0 ==>
+        && handle_out.glNone?
+        && client_out.glSome?
+        && client_out.value.loc == cache.counter_loc
+    invariant success == 0 ==>
+        && handle_out.glSome?
+        && handle_out.value.loc == cache.status[cache_idx].rwlock_loc
+        && handle_out.value.val == RwLock.SharedHandle(RwLock.SharedPending2(localState.t as int))
+        && client_out.glNone?
+    decreases *
+    {
+      platform_sleep(wait);
+      wait := if wait > 1024 then wait else 2 * wait;
+
+      glinear var client := unwrap_value(client_out);
+      dispose_glnone(handle_out);
+      success, handle_out, client_out := try_get_read(cache, cache_idx, localState, client);
+    }
+  }
+
   method {:cpp_inline} try_take_read_lock_on_cache_entry(
       shared cache: Cache,
       cache_idx: uint32,
@@ -139,7 +274,6 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   requires cache.Inv()
   requires localState.WF(cache.config)
   requires 0 <= cache_idx as int < cache.config.cache_size as int
-  //requires client == RwLock.Internal(RwLock.Client(localState.t))
   requires client.loc == cache.counter_loc
   ensures !success ==> handle_out.glNone?
       && client_out.glSome?
@@ -152,111 +286,83 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
       && client_out.glNone?
   decreases *
   {
-    // 1. check if writelocked
+    var success_code;
+    glinear var r_opt;
+    success_code, r_opt, client_out := get_read(cache, cache_idx, localState, client);
 
-    var is_exc_locked := cache.status_atomic(cache_idx).quicktest_is_exc_locked();
-    if is_exc_locked {
-      success := false;
+    if success_code != 0 {
+      dispose_glnone(r_opt);
       handle_out := glNone;
-      client_out := glSome(client);
+      success := false;
     } else {
-      // 2. inc ref
-
-      glinear var r := inc_refcount_for_shared(
-          cache.read_refcount_atomic(localState.t, cache_idx),
-          localState.t as nat,
-          client);
-
-      // 3. check not writelocked, not free
+      // This is the ideal order:
+      //
+      // 5. check the disk_idx is correct
       //        otherwise, dec and abort
+      // 6. if LOADING, then block until it's done
+      //
+      // but it's also a little annoying to set that up
+      // (as it is, we currently don't have access to the disk_idx
+      // field) so we do it in reverse. It ought to be an uncommon
+      // race case, anyway.
 
-      var is_accessed: bool;
-      success, is_accessed, r := cache.status_atomic(cache_idx).is_exc_locked_or_free(
-          localState.t as nat, r);
+      // Wait for loading to be done:
 
-      if !success {
-        glinear var client' := dec_refcount_for_shared_pending(
-            cache.read_refcount_atomic(localState.t, cache_idx),
+      glinear var handle_opt: glOption<T.SharedObtainedToken> := glNone;
+      var is_done_reading := false;
+
+      glinear var r;
+
+      while !is_done_reading
+      invariant !is_done_reading ==>
+        && handle_opt.glNone?
+        && r_opt.glSome?
+        && r_opt.value.loc == cache.status[cache_idx].rwlock_loc
+        && r_opt.value.val == RwLock.SharedHandle(RwLock.SharedPending2(localState.t as nat))
+      invariant is_done_reading ==>
+        && r_opt.glNone?
+        && handle_opt.glSome?
+        && handle_opt.value.is_handle(cache.key(cache_idx as nat), cache.config)
+        && handle_opt.value.t == localState.t as nat
+        && handle_opt.value.b.CacheEntryHandle?
+        && handle_opt.value.token.loc == cache.status[cache_idx].rwlock_loc
+      decreases *
+      {
+        dispose_glnone(handle_opt);
+        r := unwrap_value(r_opt);
+        is_done_reading, r_opt, handle_opt := cache.status_atomic(cache_idx).is_reading(
             localState.t as nat,
             r);
 
+        if !is_done_reading {
+          io_cleanup(cache, DEFAULT_MAX_IO_EVENTS_64());
+        }
+      }
+
+      dispose_glnone(r_opt);
+
+      // Check the disk_idx
+
+      var ph := read_cell(
+          cache.page_handle_ptr(cache_idx),
+          T.borrow_sot(handle_opt.value).idx);
+      var actual_disk_idx: int64 := ph.disk_addr / PageSize64() as int64;
+
+      if actual_disk_idx != expected_disk_idx {
+        glinear var ho: T.SharedObtainedToken := unwrap_value(handle_opt);
+        glinear var SharedObtainedToken(_, _, token) := ho;
+        glinear var client' := dec_refcount_for_shared_obtained(
+            cache.read_refcount_atomic(localState.t, cache_idx),
+            localState.t as nat, ho.b, token);
+
+        success := false;
         handle_out := glNone;
+        dispose_glnone(client_out);
         client_out := glSome(client');
       } else {
-        // 4. if !access, then mark accessed
-        if !is_accessed {
-          r := cache.status_atomic(cache_idx).mark_accessed(localState.t as nat, r);
-        }
-
-        // This is the ideal order:
-        //
-        // 5. check the disk_idx is correct
-        //        otherwise, dec and abort
-        // 6. if LOADING, then block until it's done
-        //
-        // but it's also a little annoying to set that up
-        // (as it is, we currently don't have access to the disk_idx
-        // field) so we do it in reverse. It ought to be an uncommon
-        // race case, anyway.
-
-        // Wait for loading to be done:
-
-        glinear var r_opt: glOption<T.Token> := glSome(r);
-
-        glinear var handle_opt: glOption<T.SharedObtainedToken> := glNone;
-        var is_done_reading := false;
-
-        while !is_done_reading
-        invariant !is_done_reading ==>
-          && handle_opt.glNone?
-          && r_opt.glSome?
-          && r_opt.value.loc == cache.status[cache_idx].rwlock_loc
-          && r_opt.value.val == RwLock.SharedHandle(RwLock.SharedPending2(localState.t as nat))
-        invariant is_done_reading ==>
-          && r_opt.glNone?
-          && handle_opt.glSome?
-          && handle_opt.value.is_handle(cache.key(cache_idx as nat), cache.config)
-          && handle_opt.value.t == localState.t as nat
-          && handle_opt.value.b.CacheEntryHandle?
-          && handle_opt.value.token.loc == cache.status[cache_idx].rwlock_loc
-        decreases *
-        {
-          dispose_glnone(handle_opt);
-          r := unwrap_value(r_opt);
-          is_done_reading, r_opt, handle_opt := cache.status_atomic(cache_idx).is_reading(
-              localState.t as nat,
-              r);
-
-          if !is_done_reading {
-            io_cleanup(cache, DEFAULT_MAX_IO_EVENTS_64());
-          }
-        }
-
-        dispose_glnone(r_opt);
-
-        // Check the disk_idx
-
-        var ph := read_cell(
-            cache.page_handle_ptr(cache_idx),
-            T.borrow_sot(handle_opt.value).idx);
-        var actual_disk_idx: int64 := ph.disk_addr / PageSize64() as int64;
-
-        if actual_disk_idx != expected_disk_idx {
-          glinear var ho: T.SharedObtainedToken := unwrap_value(handle_opt);
-          glinear var SharedObtainedToken(_, _, token) := ho;
-          glinear var client' := dec_refcount_for_shared_obtained(
-              cache.read_refcount_atomic(localState.t, cache_idx),
-              localState.t as nat, ho.b, token);
-
-          success := false;
-          handle_out := glNone;
-          client_out := glSome(client');
-        } else {
-          success := true;
-          handle_out := glSome(
-              ReadonlyPageHandle(cache_idx as int, unwrap_value(handle_opt)));
-          client_out := glNone;
-        }
+        success := true;
+        handle_out := glSome(
+            ReadonlyPageHandle(cache_idx as int, unwrap_value(handle_opt)));
       }
     }
   }
@@ -1218,52 +1324,30 @@ module CacheOps(aio: AIO(CacheAIOParams, CacheIfc, CacheSSM)) {
   //requires client == RwLock.Internal(RwLock.Client(localState.t))
   decreases *
   {
-    // 1. check if writelocked
+    var success_op;
+    glinear var r_opt, client_opt;
+    success_op, r_opt, client_opt := try_get_read(cache, cache_idx, localState, client);
 
-    var is_exc_locked := cache.status_atomic(cache_idx).quicktest_is_exc_locked();
-    if is_exc_locked {
-      in_cache := false;
-      client_out := client;
-    } else {
-      // 2. inc ref
+    if success_op == 0 {
+      // success
+      in_cache := true;
 
-      // TODO I'm not sure incrementing the reference count is truly necessary
-
-      glinear var r := inc_refcount_for_shared(
+      glinear var r := unwrap_value(r_opt);
+      client_out := dec_refcount_for_shared_pending(
           cache.read_refcount_atomic(localState.t, cache_idx),
           localState.t as nat,
-          client);
-
-      // 3. check not writelocked, not free
-      //        otherwise, dec and abort
-
-      var is_accessed: bool;
-      var succ;
-      succ, is_accessed, r := cache.status_atomic(cache_idx).is_exc_locked_or_free(
-          localState.t as nat, r);
-
-      if !succ {
-        glinear var client' := dec_refcount_for_shared_pending(
-            cache.read_refcount_atomic(localState.t, cache_idx),
-            localState.t as nat,
-            r);
-
-        client_out := client';
-      } else {
-        // 4. if !access, then mark accessed
-        if !is_accessed {
-          r := cache.status_atomic(cache_idx).mark_accessed(localState.t as nat, r);
-        }
-
-        glinear var client' := dec_refcount_for_shared_pending(
-            cache.read_refcount_atomic(localState.t, cache_idx),
-            localState.t as nat,
-            r);
-
-        client_out := client';
-      }
-
+          r);
+      dispose_glnone(client_opt);
+    } else if success_op == 1 {
+      // conflict
       in_cache := true;
+      client_out := unwrap_value(client_opt);
+      dispose_glnone(r_opt);
+    } else {
+      // evicted
+      in_cache := false;
+      client_out := unwrap_value(client_opt);
+      dispose_glnone(r_opt);
     }
   }
 
