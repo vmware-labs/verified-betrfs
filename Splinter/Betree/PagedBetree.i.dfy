@@ -353,8 +353,8 @@ module PagedBetree
       decreases |routing|, 0
     {
       assert node.children.WF();  // trigger
-      var replacedChildren := Subpath().Substitute(replacement);
-      ChildMap(imap k | AnyKey(k) :: if k in routing[0] then replacedChildren else node.Child(k))
+      var replacedChild := Subpath().Substitute(replacement);
+      ChildMap(imap k | AnyKey(k) :: if k in routing[0] then replacedChild else node.Child(k))
     }
 
     function Substitute(replacement: BetreeNode) : (out: BetreeNode)
