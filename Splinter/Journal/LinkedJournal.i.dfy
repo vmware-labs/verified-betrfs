@@ -29,8 +29,6 @@ module LinkedJournal {
     }
   }
 
-  type Ranking = map<Address, nat>
-
   datatype JournalRecord = JournalRecord(messageSeq: MsgHistory, _priorRec: Pointer)
     // Never access priorRec directly; only reference it through CroppedPrior.
     // A Pointer only has meaning if its referent isn't rendered irrelevant by
