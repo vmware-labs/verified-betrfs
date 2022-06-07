@@ -49,7 +49,7 @@ module PivotBetree
       && SaneKeys()
     }
 
-    predicate {:opaque} Contains(key: Key) {
+    predicate Contains(key: Key) {
       && !EmptyDomain?
       && lte(start, Element(key)) // TODO(timeout): sure wish the opaque were working
       && lt(Element(key), end)
@@ -228,7 +228,7 @@ module PivotBetree
       && Children() == other.Children()
     }
 
-    predicate {:opaque} KeyInDomain(key: Key)
+    predicate KeyInDomain(key: Key)
     {
       && WF()
       && BetreeNode?
@@ -249,7 +249,6 @@ module PivotBetree
       requires KeyInDomain(key)
     {
       assert WFChildren(children);  // trigger
-      reveal_KeyInDomain();
       children[Route(pivotTable, key)]
     }
   }
@@ -427,7 +426,6 @@ module PivotBetree
       requires 0 < depth
       requires node.KeyInDomain(key)
     {
-      node.reveal_KeyInDomain();
       Path(node.Child(key), key, depth-1)
     }
 

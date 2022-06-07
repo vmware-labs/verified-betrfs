@@ -168,7 +168,7 @@ module PivotBetreeRefinement
   }
 
   // Hide iset quantifier mentioning lt, which is a trigger party
-  function {:opaque} SplitLeftKeys(step: Step) : iset<Key>
+  function SplitLeftKeys(step: Step) : iset<Key>
     requires step.WF()
     requires step.InternalSplitStep?
   {
@@ -239,7 +239,7 @@ module PivotBetreeRefinement
     SmallestElementLte(Element(key));
     assert TotalDomain().Contains(key) by {
       reveal_TotalDomain();
-      TotalDomain().reveal_Contains();
+      // TotalDomain().reveal_Contains();
     }
   }
 
@@ -259,9 +259,9 @@ module PivotBetreeRefinement
           == PagedBetree.ConstantChildMap(I(v).root).mapp[key] {
       AllKeysInTotalDomain(key);
       assert v'.root.KeyInDomain(key) by {
-        v'.root.reveal_KeyInDomain();
+        // v'.root.reveal_KeyInDomain();
         reveal_TotalDomain();
-        TotalDomain().reveal_Contains();
+        // TotalDomain().reveal_Contains();
       }
       ChildCommutesWithI(v'.root, key);
     }
@@ -331,30 +331,19 @@ module PivotBetreeRefinement
     assume false;
   }
 
-
-  lemma ChildKeySetMonotonic(node: BetreeNode, childIdx: nat) 
-    requires node.WF()
-    requires node.ValidChildIndex(childIdx)
-    ensures node.ChildDomain(childIdx).KeySet() <= node.KeySet()
-  {
-    // todo
-    assume false;
-  }
-
-  lemma SplitMaintainsKeySet(step: Step) 
+  lemma SplitKeySetMonotonic(step: Step) 
     requires step.InternalSplitStep?
     requires step.WF()
     ensures step.path.Target().Split(step.childIdx, step.splitKey).KeySet() <= step.path.Target().KeySet()
-  { 
-    var t := step.path.Target();
-    var lcDom := Domain(t.pivotTable[step.childIdx-1], Element(step.splitKey));
-    lcDom.reveal_Contains();
-    Sequences.reveal_replace1with2();
-    forall k | k in t.Split(step.childIdx, step.splitKey).KeySet()
-    ensures k in step.path.Target().KeySet()
-    {
-      assume false;
-    }
+  {}
+
+  lemma RightKeysMatchesRightDomain(step: Step) 
+    requires step.InternalSplitStep?
+    requires step.WF()
+    ensures SplitChildKeys(step) - SplitLeftKeys(step) == Domain(Element(step.splitKey), step.path.Target().pivotTable[step.childIdx]).KeySet()
+  {
+    // todo
+    assume false;
   }
 
   lemma SplitCommutesWithI(step: Step) 
@@ -362,38 +351,19 @@ module PivotBetreeRefinement
     requires step.WF()
     ensures INode(step.path.Target()).Split(SplitLeftKeys(step), SplitChildKeys(step) - SplitLeftKeys(step)) == INode(step.path.Target().Split(step.childIdx, step.splitKey))
   {
-    // todo(tony): clean this up
     var leftKeys := SplitLeftKeys(step);
     var rightKeys := SplitChildKeys(step) - SplitLeftKeys(step);
     var t := step.path.Target();
     var st := t.Split(step.childIdx, step.splitKey);
-    var it := INode(t);
-
     forall key | AnyKey(key)
     ensures INode(t).Split(leftKeys, rightKeys).children.mapp[key]
       == IChildren(st).mapp[key] 
     {
       if key !in t.KeySet() {
-        reveal_SplitLeftKeys();
-        ChildKeySetMonotonic(t, step.childIdx);
-        assert key !in leftKeys;
-        assert key !in rightKeys;
         assert PagedBetree.Nil == INode(t).Child(key);  // trigger
-        calc {
-          it.Split(leftKeys, rightKeys).children.mapp[key];
-          it.Child(key);
-          PagedBetree.Nil;
-          {
-            assert key !in t.KeySet();
-            SplitMaintainsKeySet(step);
-            assert key !in t.Split(step.childIdx, step.splitKey).KeySet();
-          }
-          IChildren(t.Split(step.childIdx, step.splitKey)).mapp[key];
-        }
-        assert it.Split(leftKeys, rightKeys).children.mapp[key] == IChildren(st).mapp[key];   // goal 
+        SplitKeySetMonotonic(step);
       } else {
-        assume false;
-        assert it.Split(leftKeys, rightKeys).children.mapp[key] == IChildren(st).mapp[key];   // goal 
+        RightKeysMatchesRightDomain(step);
       }
     }
     assert PagedBetree.BetreeNode(t.buffers, IChildren(t)).Split(leftKeys, rightKeys).children.mapp.Keys
@@ -407,50 +377,14 @@ module PivotBetreeRefinement
     ensures v'.WF()
     ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
-    // todo(tony): clean this up
     INodeWF(v.root);
     INodeWF(step.path.Target());
     InvNext(v, v', lbl); //assert v'.WF();
-    var iv := I(v);
-    var node := v.root;
-    var inode := INode(node);
-    var iv' := I(v');
-    var node' := v'.root;
-    var inode' := INode(node');
-    var istep := IStep(step);
     INodeWF(v'.root);
     ValidPathRefines(step.path); //assert IPath(step.path).Valid();
-    var target' := step.path.Target().Split(step.childIdx, step.splitKey);
-    var ipath := IPath(step.path);
-    var itarget' := INode(target');
-    calc {
-      node';
-      step.path.Substitute(target');
-    }
-    calc {
-      itarget';
-      {
-        TargetCommutesWithI(step.path);
-        SplitCommutesWithI(step);
-      }
-      istep.path.Target().Split(istep.leftKeys, istep.rightKeys);
-    }
-    assert IPath(step.path) == ipath;
-    calc {
-      iv'.root;
-      INode(node');
-      INode(step.path.Substitute(target'));
-      {
-        SubstitutionRefines(step.path, target');
-      }
-      IPath(step.path).Substitute(INode(target'));
-      IPath(step.path).Substitute(INode(target'));
-      ipath.Substitute(itarget');
-      istep.path.Substitute(itarget');
-      istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
-    }
-    assert iv'.root == istep.path.Substitute(istep.path.Target().Split(istep.leftKeys, istep.rightKeys));
-    assert PagedBetree.InternalSplit(I(v), I(v'), ILbl(lbl), IStep(step));
+    TargetCommutesWithI(step.path);
+    SplitCommutesWithI(step);
+    SubstitutionRefines(step.path, step.path.Target().Split(step.childIdx, step.splitKey));
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
