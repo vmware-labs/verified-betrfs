@@ -131,21 +131,6 @@ module PivotBetreeRefinement
     }
   }
 
-  lemma ValidPathRefines(path: Path)
-    requires path.Valid()
-    ensures IPath(path).Valid()
-  {
-    assume false;
-  }
-
-  lemma PathTargetRefines(path: Path)
-    requires path.Valid()
-    ensures IPath(path).Valid()
-    ensures INode(path.Target()) == IPath(path).Target()
-  {
-    assume false;
-  }
-
   function IReceiptLine(line: QueryReceiptLine) : PagedBetree.QueryReceiptLine
     requires line.WF()
   {
@@ -287,7 +272,7 @@ module PivotBetreeRefinement
   {
     IPathValid(path);
     SubstitutePreservesWF(path, target');
-    ValidPathRefines(path);
+    IPathValid(path);
     INodeWF(target');
     if path.depth==0 {
       assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
@@ -385,7 +370,7 @@ module PivotBetreeRefinement
     INodeWF(step.path.Target());
     InvNext(v, v', lbl); //assert v'.WF();
     INodeWF(v'.root);
-    ValidPathRefines(step.path); //assert IPath(step.path).Valid();
+    IPathValid(step.path); //assert IPath(step.path).Valid();
     TargetCommutesWithI(step.path);
     SplitCommutesWithI(step);
     SubstitutionRefines(step.path, step.path.Target().Split(step.childIdx, step.splitKey));
@@ -418,7 +403,8 @@ module PivotBetreeRefinement
         InternalGrowStepRefines(v, v', lbl, step);
       }
       case InternalSplitStep(_, _, _) => {
-        assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+        InternalSplitStepRefines(v, v', lbl, step);
+        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalFlushStep(_, _) => {
         assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
