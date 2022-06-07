@@ -311,16 +311,41 @@ abstract module Total_Order refines Total_Preorder {
     }
   }
 
-  function LargestLte(run: seq<Element>, needle: Element) : int
+  function LargestLteDefn(run: seq<Element>, needle: Element) : (out: int)
     requires IsSorted(run);
-    ensures -1 <= LargestLte(run, needle) < |run|;
-    ensures forall i :: 0 <= i <= LargestLte(run, needle) ==> lte(run[i], needle);
-    ensures forall i :: LargestLte(run, needle) < i < |run| ==> lt(needle, run[i]);
-    ensures needle in run ==> 0 <= LargestLte(run, needle) && run[LargestLte(run, needle)] == needle;
+  {
+    if |run| == 0 || lt(needle, run[0]) then -1
+    else 
+      assert run[1..] == run[1..|run|];  // trigger
+      SortedSubsequence(run, 1, |run|);
+      1 + LargestLteDefn(run[1..], needle)
+  }
+
+  lemma LargestLteProperty(run: seq<Element>, needle: Element, out: int) 
+    requires IsSorted(run)
+    requires out == LargestLteDefn(run, needle)
+    ensures -1 <= out < |run|
+    ensures forall i :: 0 <= i <= out ==> lte(run[i], needle) 
+    ensures forall i :: out < i < |run| ==> lt(needle, run[i])
+    ensures needle in run ==> 0 <= out && run[out] == needle
   {
     reveal_IsSorted();
-    if |run| == 0 || lt(needle, run[0]) then -1
-    else 1 + LargestLte(run[1..], needle)
+    if |run| == 0 || lt(needle, run[0]) {
+    } else {
+      LargestLteProperty(run[1..], needle, out-1);
+    }
+  }
+
+  function LargestLte(run: seq<Element>, needle: Element) : (out: int)
+    requires IsSorted(run)
+    ensures -1 <= out < |run|
+    ensures forall i :: 0 <= i <= out ==> lte(run[i], needle)
+    ensures forall i :: out < i < |run| ==> lt(needle, run[i])
+    ensures needle in run ==> 0 <= out && run[out] == needle
+  {
+    var out := LargestLteDefn(run, needle);
+    LargestLteProperty(run, needle, out);
+    out
   }
 
   lemma LargestLteIsUnique(run: seq<Element>, needle: Element, pos: int)
@@ -382,9 +407,11 @@ abstract module Total_Order refines Total_Preorder {
   lemma LargestLteSubsequence(run: seq<Element>, needle: Element, from: int, to: int)
     requires IsSorted(run)
     requires 0 <= from <= to <= |run|
+    ensures IsSorted(run[from..to])  // trigger
     ensures from-1 <= LargestLte(run, needle) < to ==> LargestLte(run, needle) == from + LargestLte(run[from..to], needle)
     ensures 0 <= LargestLte(run[from..to], needle) < to - from - 1 ==> LargestLte(run, needle) == from + LargestLte(run[from..to], needle)
   {
+    SortedSubsequence(run, from, to);
     var sub := run[from..to];
     var runllte := LargestLte(run, needle);
     var subllte := LargestLte(sub, needle);
