@@ -138,8 +138,10 @@ module PivotBetree
     {
       && WF()
       && BetreeNode?
-      && PivotInsertable(pivotTable, childIdx, splitKey)
-      && 0 < childIdx < NumBuckets(pivotTable) // Can't extend domain of this node via split.
+      // Note that pivot indices are one-off of child indices.
+      // Note that we will never generate a pivot of 0 or |pivotTable|
+      && PivotInsertable(pivotTable, childIdx+1, splitKey)
+      && childIdx < NumBuckets(pivotTable)
     }
 
     // TODO(jonh): Split shouldn't also Grow; that's a separate operation.
@@ -150,8 +152,9 @@ module PivotBetree
     {
       var oldChild := children[childIdx];
       assert WFChildren(children);  // trigger
-      var newLeftChild := oldChild.ApplyFilter(Domain(pivotTable[childIdx-1], Element(splitKey)));
-      var newRightChild := oldChild.ApplyFilter(Domain(Element(splitKey), pivotTable[childIdx]));
+      var childDomain := ChildDomain(childIdx);
+      var newLeftChild := oldChild.ApplyFilter(Domain(childDomain.start, Element(splitKey)));
+      var newRightChild := oldChild.ApplyFilter(Domain(Element(splitKey), childDomain.end));
 
       // TODO(jonh): BucketsLib suggests this is a timeout trap?
       var newChildren := replace1with2(children, newLeftChild, newRightChild, childIdx);
@@ -163,10 +166,8 @@ module PivotBetree
           }
         }
       }
-
-//      assert forall i:nat | i<|newChildren| :: newChildren[i].WF() by { reveal_replace1with2(); }
-      WFPivotsInsert(pivotTable, childIdx, splitKey);
-      BetreeNode(buffers, InsertPivot(pivotTable, childIdx, splitKey), newChildren)
+      WFPivotsInsert(pivotTable, childIdx+1, splitKey);
+      BetreeNode(buffers, InsertPivot(pivotTable, childIdx+1, splitKey), newChildren)
     }
 
     function Promote(domain: Domain) : (out: BetreeNode)
