@@ -519,7 +519,6 @@ module BoundedPivotsLib {
   ensures BoundedKey(childpt, key) && Route(childpt, key) == childIdx
   {
     key := GetKeyInBucket(childpt, childIdx);
-    assert Route(childpt, key) == childIdx;
-    assert Route(parentpt, key) == parentIdx;
+    Keyspace.reveal_IsStrictlySorted();
   }
 }

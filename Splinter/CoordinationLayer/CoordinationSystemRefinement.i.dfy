@@ -12,7 +12,7 @@ module CoordinationSystemRefinement {
   import opened SequencesLite // Last, DropLast
   import opened FloatingSeqMod
   import opened CM = CoordinationSystem
-  import opened StampedMapMod
+  import opened StampedMod
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
@@ -46,12 +46,12 @@ module CoordinationSystemRefinement {
     IEJ(v.journal).seqEnd
   }
 
-  function StampedMapToVersion(sm: StampedMapMod.StampedMap) : CrashTolerantMapSpecMod.Version
+  function StampedMapToVersion(sm: StampedMod.StampedMap) : CrashTolerantMapSpecMod.Version
   {
-    Async.PersistentState(MapSpecMod.Variables(sm.mi))
+    Async.PersistentState(MapSpecMod.Variables(sm.value))
   }
 
-  function FloatingVersions(base: StampedMapMod.StampedMap, msgHistory: MsgHistory, stableLSN: LSN) : (versions:FloatingSeq<CrashTolerantMapSpecMod.Version>)
+  function FloatingVersions(base: StampedMod.StampedMap, msgHistory: MsgHistory, stableLSN: LSN) : (versions:FloatingSeq<CrashTolerantMapSpecMod.Version>)
     requires msgHistory.WF()
     requires msgHistory.CanFollow(base.seqEnd)
     requires msgHistory.CanDiscardTo(stableLSN)

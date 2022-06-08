@@ -9,16 +9,18 @@ include "LSNMod.i.dfy"
 
 // A "StampedMap" is a full imap "stamped" with an LSN that identifies how many
 // operations it represents.
-module StampedMapMod {
+module StampedMod {
   import opened ValueMessage
   import opened KeyType
   import opened TotalKMMapMod
   import opened LSNMod
 
-  datatype StampedMap = StampedMap(mi: TotalKMMap, seqEnd: LSN)
+  datatype Stamped<T> = Stamped(value: T, seqEnd: LSN)
+
+  type StampedMap = Stamped<TotalKMMap>
 
   function Empty() : StampedMap
   {
-    StampedMap(EmptyTotalMap(), 0)
+    Stamped(EmptyTotalMap(), 0)
   }
 }

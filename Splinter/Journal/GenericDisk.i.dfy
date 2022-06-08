@@ -16,6 +16,7 @@ module GenericDisk {
 
   type Address(!new, ==)
   type Pointer = Option<Address>
+  type Ranking = map<Address, nat>  // Used by Linked* layers to show acyclicity.
 
   datatype DiskView = DiskView(entries: map<Address, Block>)
   {

@@ -8,7 +8,7 @@ include "LSNMod.i.dfy"
 module CrashTolerantMap {
   import opened ValueMessage
   import opened KeyType
-  import opened StampedMapMod
+  import opened StampedMod
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Options
@@ -167,7 +167,7 @@ module CrashTolerantMap {
   // Models mkfs
   predicate Init(v: Variables)
   {
-    v == Variables(StampedMapMod.Empty(), Unknown, None)
+    v == Variables(StampedMod.Empty(), Unknown, None)
   }
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)

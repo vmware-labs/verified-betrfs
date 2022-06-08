@@ -14,7 +14,7 @@ module BlockCoordinationSystem {
   import opened Options
   import opened MapRemove_s
   import opened CrashTolerantMapSpecMod
-  import opened StampedMapMod
+  import opened StampedMod
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
