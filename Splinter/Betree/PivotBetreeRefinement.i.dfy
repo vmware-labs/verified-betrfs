@@ -136,8 +136,9 @@ module PivotBetreeRefinement
     decreases path.depth
   {
     if 0 < path.depth {
-      IPathValid(path.Subpath());
       SubpathCommutesWithIPath(path);
+      IPathValid(path.Subpath());
+      ChildCommutesWithI(path.node, path.key);
     }
   }
 
@@ -206,9 +207,7 @@ module PivotBetreeRefinement
     requires node.KeyInDomain(key)
     ensures node.Child(key).WF()  // trigger for precondition below
     ensures INode(node).Child(key) == INode(node.Child(key))
-  {
-    
-  }
+  {}
 
   lemma ValidReceiptRefines(receipt: QueryReceipt)
     requires receipt.Valid()
