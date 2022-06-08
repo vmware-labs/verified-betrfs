@@ -439,6 +439,46 @@ module PivotBetreeRefinement
     SubstitutionRefines(step.path, step.path.Target().Flush(step.childIdx));
   }
 
+  lemma BufferCompactionRefines(node: BetreeNode, other: BetreeNode)
+    requires node.EquivalentBufferCompaction(other)
+    ensures INode(node).EquivalentBufferCompaction(INode(other))
+  {
+    if node.Nil? {
+      assert INode(node).EquivalentBufferCompaction(INode(other));  // goal
+    } else {
+      assert node.children == other.children;
+      calc {
+        INode(node).children;
+        IChildren(node);
+        {
+          assert node.pivotTable == other.pivotTable;
+          // assert node.KeySet() == other.KeySet();
+          // assert WFChildren(node.children);  // trigger
+          //   assert WFChildren(other.children);  // trigger
+          // forall key | AnyKey(key) 
+          // ensures node.Child(key) == other.Child(key)
+          // {
+          //   assert WFChildren(node.children);  // trigger
+          //   assert WFChildren(other.children);  // trigger
+          //   calc {
+          //     node.Child(key);
+          //     node.children[Route(node.pivotTable, key)];
+
+          //     other.children[Route(other.pivotTable, key)];
+          //     other.Child(key);
+          //   }
+          // }
+        }
+        IChildren(other);
+        INode(other).children;
+      }
+
+
+      assert INode(node).children == INode(other).children;  // bwoken
+      assert INode(node).Promote().children == INode(other).Promote().children;
+      assert INode(node).EquivalentBufferCompaction(INode(other));  // goal
+    }
+  }
 
   lemma InternalCompactStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
@@ -447,7 +487,15 @@ module PivotBetreeRefinement
     ensures v'.WF()
     ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
-    assume false;
+    INodeWF(v.root);
+    INodeWF(step.path.Target());
+    InvNext(v, v', lbl); //assert v'.WF();
+    INodeWF(v'.root);
+    IPathValid(step.path); //assert IPath(step.path).Valid();
+    SubstitutionRefines(step.path, step.compactedNode);
+    BufferCompactionRefines(step.path.Target(), step.compactedNode);
+    TargetCommutesWithI(step.path);
+    assert IStep(step).path.Target().EquivalentBufferCompaction(INode(step.compactedNode));  // trigger
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)

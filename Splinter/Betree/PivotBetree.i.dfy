@@ -224,8 +224,11 @@ module PivotBetree
     {
       && WF()
       && other.WF()
+      && BetreeNode?
+      && other.BetreeNode?
       && Buffers().Equivalent(other.Buffers())
       // Can only make a local change; entirety of children subtrees are identical.
+      && pivotTable == other.pivotTable
       && Children() == other.Children()
     }
 
