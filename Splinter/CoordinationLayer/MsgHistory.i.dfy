@@ -20,7 +20,7 @@ module MsgHistoryMod {
   import opened KeyType
   import opened TotalKMMapMod
   import opened LSNMod
-  import opened StampedMapMod
+  import opened StampedMod
 
   datatype KeyedMessage = KeyedMessage(key: Key, message: Message)
 
@@ -105,8 +105,8 @@ module MsgHistoryMod {
         var key := msgs[lastLsn].key;
         var newMessage := msgs[lastLsn].message;
         assert AnyKey(key);
-        var oldMessage := subMap.mi[key];
-        StampedMap(subMap.mi[key := Merge(newMessage, oldMessage)], subMap.seqEnd+1)
+        var oldMessage := subMap.value[key];
+        Stamped(subMap.value[key := Merge(newMessage, oldMessage)], subMap.seqEnd+1)
     }
 
     predicate CanDiscardTo(lsn: LSN)

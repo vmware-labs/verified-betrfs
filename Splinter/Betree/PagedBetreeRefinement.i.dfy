@@ -8,7 +8,7 @@ module PagedBetreeRefinement
 {
   import opened Options
   import opened KeyType
-  import opened StampedMapMod
+  import opened StampedMod
   import TotalKMMapMod
   import opened ValueMessage
   import opened MsgHistoryMod
@@ -55,9 +55,9 @@ module PagedBetreeRefinement
   }
 
   function IStampedBetree(stampedBetree: StampedBetree) : StampedMap
-    requires stampedBetree.WF()
+    requires stampedBetree.value.WF()
   {
-    StampedMap(INode(stampedBetree.root), stampedBetree.seqEnd)
+    Stamped(INode(stampedBetree.value), stampedBetree.seqEnd)
   }
     
   function ILbl(lbl: TransitionLabel) : AbstractMap.TransitionLabel
@@ -67,7 +67,7 @@ module PagedBetreeRefinement
       case PutLabel(puts) => AbstractMap.PutLabel(puts)
       case QueryEndLsnLabel(endLsn) => AbstractMap.QueryEndLsnLabel(endLsn)
       case FreezeAsLabel(stampedBetree) => AbstractMap.FreezeAsLabel(
-        if stampedBetree.WF() then IStampedBetree(stampedBetree) else StampedMapMod.Empty())
+        if stampedBetree.value.WF() then IStampedBetree(stampedBetree) else StampedMod.Empty())
       case InternalLabel() => AbstractMap.InternalLabel()
   }
 
@@ -119,12 +119,12 @@ module PagedBetreeRefinement
 
   lemma {:timeLimitMultiplier 2} MemtableDistributesOverBetree(memtable: Memtable, root: BetreeNode)
     requires root.WF()
-    ensures MapApply(memtable, INode(root)) == INode(root.PushMemtable(memtable).root)
+    ensures MapApply(memtable, INode(root)) == INode(root.PushMemtable(memtable).value)
   {
     reveal_MapApply();
-    assert MapApply(memtable, INode(root)).Keys == INode(root.PushMemtable(memtable).root).Keys;  // trigger
+    assert MapApply(memtable, INode(root)).Keys == INode(root.PushMemtable(memtable).value).Keys;  // trigger
     forall key | AnyKey(key)
-      ensures MapApply(memtable, INode(root))[key] == INode(root.PushMemtable(memtable).root)[key]
+      ensures MapApply(memtable, INode(root))[key] == INode(root.PushMemtable(memtable).value)[key]
     {
       var newBuffer := Buffer(memtable.mapp);
       SingletonBufferStack(newBuffer, key);
@@ -159,9 +159,9 @@ module PagedBetreeRefinement
     requires replacement.WF()
     requires INode(path.Target()) == INode(replacement) // TODO(jonh): probably unecessary.
     ensures path.Substitute(replacement).WF()
-    decreases path.depth
+    decreases |path.routing|
   {
-    if 0 < path.depth {
+    if 0 < |path.routing| {
       SubstitutePreservesWF(path.Subpath(), replacement);
       assert path.Substitute(replacement).children.WF();
       assert path.Substitute(replacement).WF();
@@ -218,17 +218,27 @@ module PagedBetreeRefinement
     requires INode(path.Target()) == INode(replacement)
     ensures path.Substitute(replacement).WF()
     ensures INodeAt(path.node, key) == INodeAt(path.Substitute(replacement), key)
-    decreases path.depth
+    decreases |path.routing|
   {
     // Behold the power of the receipt! This is where the magic happens.
     SubstitutePreservesWF(path, replacement);
-    if 0 < path.depth {
-      if key !in path.MatchingChildren() {
+    if 0 < |path.routing| {
+      if key !in path.routing[0] {
         // key diverged from changes made by substitution, so they're easy equal.
         assert INodeAt(path.node, key) == INodeAt(path.Substitute(replacement), key);
       } else {
-        EqualReceipts(BuildQueryReceipt(path.Subpath().node, key),
-          ReceiptDropFirst(BuildQueryReceipt(path.node, key)));
+        var receipt := BuildQueryReceipt(path.node, key);
+        ReceiptDropFirstValid(receipt);
+        assert ReceiptDropFirst(receipt).root == path.Subpath().node by {
+          assert path.Subpath().node == path.node.Child(path.key);
+          assert receipt.ChildLinkedAt(0); // trigger
+          //assert ReceiptDropFirst(receipt).key == receipt.key;
+//          assert receipt.key == key;
+//          assert path.key == key;
+//          assert receipt.key == path.key;
+//          assert ReceiptDropFirst(receipt).root == receipt.lines[0].node.Child(path.key);
+        }
+        EqualReceipts(BuildQueryReceipt(path.Subpath().node, key), ReceiptDropFirst(receipt));
         assert path.Substitute(replacement).children.mapp[key] == path.Subpath().Substitute(replacement)
           by { path.reveal_ReplacedChildren(); }
         EqualReceipts(BuildQueryReceipt(path.Subpath().Substitute(replacement), key),
@@ -411,6 +421,7 @@ module PagedBetreeRefinement
     MemtableDistributesOverBetree(v.memtable, v.root);
     reveal_MapApply();
     reveal_INode();
+    assert INode(stampedBetree.value.PushMemtable(v.memtable).value) == INode(stampedBetree.value); // trigger
   }
 
   lemma QueryRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -438,11 +449,11 @@ module PagedBetreeRefinement
     var KeyedMessage(key,message) := puts.msgs[puts.seqStart];
     assert TotalKMMapMod.AnyKey(key);  // trigger
 
-    assert INode(v'.root.PushMemtable(v'.memtable).root).Keys == AllKeys() by { reveal_INode(); }
-    assert I(v).stampedMap.mi[key := Merge(message, I(v).stampedMap.mi[key])].Keys == AllKeys() by { reveal_INode(); }
+    assert INode(v'.root.PushMemtable(v'.memtable).value).Keys == AllKeys() by { reveal_INode(); }
+    assert I(v).stampedMap.value[key := Merge(message, I(v).stampedMap.value[key])].Keys == AllKeys() by { reveal_INode(); }
     forall k | AnyKey(k)
-      ensures INode(v'.root.PushMemtable(v'.memtable).root)[k]
-        == I(v).stampedMap.mi[key := Merge(message, I(v).stampedMap.mi[key])][k]
+      ensures INode(v'.root.PushMemtable(v'.memtable).value)[k]
+        == I(v).stampedMap.value[key := Merge(message, I(v).stampedMap.value[key])][k]
     {
       var node := v.root;
       var buffer := Buffer(v.memtable.mapp);
@@ -463,11 +474,7 @@ module PagedBetreeRefinement
       PushBetreeNodeLemma(node, buffers, k);
       reveal_INode();
     }
-    calc {
-      I(v').stampedMap;
-      puts.ApplyToStampedMap(I(v).stampedMap);  // trigger.  (should we have a "mention" operator just for triggering?)
-      MapPlusHistory(I(v).stampedMap, puts);
-    }
+    assert I(v').stampedMap.value == puts.ApplyToStampedMap(I(v).stampedMap).value;  // trigger.  (should we have a "mention" operator just for triggering an expression?)
   }
 
   lemma CompositeSinglePut(puts1: MsgHistory, puts2: MsgHistory, stampedMap: StampedMap)

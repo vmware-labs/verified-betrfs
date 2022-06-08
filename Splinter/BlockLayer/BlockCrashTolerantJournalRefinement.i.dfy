@@ -9,7 +9,7 @@ module BlockCrashTolerantJournalRefinement {
   import opened Options
   import opened ValueMessage
   import opened KeyType
-  import opened StampedMapMod
+  import opened StampedMod
   import opened MsgHistoryMod
   import opened LSNMod
   import opened GenericDisk

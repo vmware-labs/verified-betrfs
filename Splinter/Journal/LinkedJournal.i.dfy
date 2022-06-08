@@ -116,7 +116,7 @@ module LinkedJournal {
       && BlocksEachHaveLink()
     }
 
-    predicate PointersRespectRank(ranking: Ranking)
+    predicate PointersRespectRank(ranking: GenericDisk.Ranking)
       requires WF()
     {
       && entries.Keys <= ranking.Keys
@@ -131,7 +131,7 @@ module LinkedJournal {
       && exists ranking :: PointersRespectRank(ranking)
     }
 
-    function TheRanking() : Ranking
+    function TheRanking() : GenericDisk.Ranking
       requires WF()
       requires Acyclic()
     {

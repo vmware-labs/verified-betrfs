@@ -9,7 +9,7 @@ module PivotBetree
 {
   import opened Options
   import opened KeyType
-  import opened StampedMapMod
+  import opened StampedMod
   import TotalKMMapMod
   import opened ValueMessage
   import opened MsgHistoryMod

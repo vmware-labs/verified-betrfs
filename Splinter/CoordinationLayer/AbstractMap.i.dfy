@@ -8,7 +8,7 @@ include "LSNMod.i.dfy"
 module AbstractMap {
   import opened ValueMessage
   import opened KeyType
-  import opened StampedMapMod
+  import opened StampedMod
   import opened MsgHistoryMod
   import opened LSNMod
 
@@ -27,7 +27,7 @@ module AbstractMap {
     && lbl.QueryLabel?
     && lbl.endLsn == v.stampedMap.seqEnd
     && assert TotalKMMapMod.AnyKey(lbl.key);
-    && lbl.value == v.stampedMap.mi[lbl.key].value
+    && lbl.value == v.stampedMap.value[lbl.key].value
     && v' == v
   }
 

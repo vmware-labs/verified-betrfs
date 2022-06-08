@@ -7,7 +7,7 @@ module PivotBetreeRefinement
 {
   import opened Options
   import opened KeyType
-  import opened StampedMapMod
+  import opened StampedMod
   import TotalKMMapMod
   import opened ValueMessage
   import opened MsgHistoryMod
@@ -44,7 +44,7 @@ module PivotBetreeRefinement
   function IStampedBetree(stampedBetree: StampedBetree) : PagedBetree.StampedBetree
     requires stampedBetree.WF()
   {
-    PagedBetree.StampedBetree(INode(stampedBetree.root), stampedBetree.seqEnd)
+    Stamped(INode(stampedBetree.root), stampedBetree.seqEnd)
   }
 
   function ILbl(lbl: TransitionLabel) : PagedBetree.TransitionLabel

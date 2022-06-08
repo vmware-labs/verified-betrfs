@@ -741,8 +741,8 @@ module LinkedJournalRefinement
   }
 
   lemma BuildTightPreservesSubDiskUnderInternalMarshall(
-      small: DiskView, smallroot: Pointer, smallRanking: Ranking,
-      big: DiskView, bigroot: Pointer, bigRanking: Ranking)
+      small: DiskView, smallroot: Pointer, smallRanking: GenericDisk.Ranking,
+      big: DiskView, bigroot: Pointer, bigRanking: GenericDisk.Ranking)
     requires small.Decodable(smallroot)
     requires small.PointersRespectRank(smallRanking)
     requires big.Decodable(bigroot)

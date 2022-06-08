@@ -22,7 +22,7 @@ module PagedBetree
 {
   import opened Options
   import opened KeyType
-  import opened StampedMapMod
+  import opened StampedMod
   import TotalKMMapMod
   import opened ValueMessage
   import opened MsgHistoryMod
@@ -30,6 +30,13 @@ module PagedBetree
   import opened Sequences
   import opened Buffers
   import opened MemtableMod
+
+  type StampedBetree = Stamped<BetreeNode>
+
+  function EmptyStampedBetree() : StampedBetree
+  {
+    Stamped(Nil, 0)
+  }
 
   datatype TransitionLabel =
       QueryLabel(endLsn: LSN, key: Key, value: Value)
@@ -78,7 +85,7 @@ module PagedBetree
       requires WF()
     {
       var newBuffer := Buffer(memtable.mapp);
-      StampedBetree(this.Promote().PushBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
+      Stamped(this.Promote().PushBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
     }
 
     function PushBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
@@ -242,24 +249,6 @@ module PagedBetree
     }
   }
 
-  datatype StampedBetree = StampedBetree(
-    root: BetreeNode,
-    // betree needs its own lsn so we remember it for freeze time without
-    // having to drain the membuffer:
-    seqEnd: LSN
-    )
-  {
-    predicate WF()
-    {
-      root.WF()
-    }
-  }
-
-  function EmptyStampedBetree() : StampedBetree
-  {
-    StampedBetree(Nil, 0)
-  }
-    
   datatype Variables = Variables(
     memtable: Memtable,
     root: BetreeNode)
@@ -310,7 +299,7 @@ module PagedBetree
     && var newBuffer := Buffer(v.memtable.mapp);
     && v' == v.(
         memtable := v.memtable.Drain(),
-        root := v.root.PushMemtable(v.memtable).root
+        root := v.root.PushMemtable(v.memtable).value
       )
   }
   
@@ -325,12 +314,23 @@ module PagedBetree
       Path(node.Child(key), key, routing[1..])
     }
 
+    predicate CommonChildren()
+      requires node.WF()
+      requires node.BetreeNode?
+      requires 0 < |routing|
+    {
+      forall k | k in routing[0] :: node.Child(k) == node.Child(key)
+    }
+
     predicate Valid()
       decreases |routing|
     {
       && node.WF()
       && node.BetreeNode?
-      && (0 < |routing| ==> Subpath().Valid())
+      && (0 < |routing| ==>
+          && Subpath().Valid()
+          && CommonChildren()
+        )
     }
 
     function Target() : (out: BetreeNode)
@@ -419,8 +419,8 @@ module PagedBetree
 
   predicate Init(v: Variables, stampedBetree: StampedBetree)
   {
-    && stampedBetree.WF()
-    && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.root)
+    && stampedBetree.value.WF()
+    && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value)
   }
 
   datatype Step =
