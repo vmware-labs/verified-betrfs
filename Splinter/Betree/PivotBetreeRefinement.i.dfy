@@ -442,43 +442,7 @@ module PivotBetreeRefinement
   lemma BufferCompactionRefines(node: BetreeNode, other: BetreeNode)
     requires node.EquivalentBufferCompaction(other)
     ensures INode(node).EquivalentBufferCompaction(INode(other))
-  {
-    if node.Nil? {
-      assert INode(node).EquivalentBufferCompaction(INode(other));  // goal
-    } else {
-      assert node.children == other.children;
-      calc {
-        INode(node).children;
-        IChildren(node);
-        {
-          assert node.pivotTable == other.pivotTable;
-          // assert node.KeySet() == other.KeySet();
-          // assert WFChildren(node.children);  // trigger
-          //   assert WFChildren(other.children);  // trigger
-          // forall key | AnyKey(key) 
-          // ensures node.Child(key) == other.Child(key)
-          // {
-          //   assert WFChildren(node.children);  // trigger
-          //   assert WFChildren(other.children);  // trigger
-          //   calc {
-          //     node.Child(key);
-          //     node.children[Route(node.pivotTable, key)];
-
-          //     other.children[Route(other.pivotTable, key)];
-          //     other.Child(key);
-          //   }
-          // }
-        }
-        IChildren(other);
-        INode(other).children;
-      }
-
-
-      assert INode(node).children == INode(other).children;  // bwoken
-      assert INode(node).Promote().children == INode(other).Promote().children;
-      assert INode(node).EquivalentBufferCompaction(INode(other));  // goal
-    }
-  }
+  {}
 
   lemma InternalCompactStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
