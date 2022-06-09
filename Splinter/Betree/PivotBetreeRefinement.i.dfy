@@ -160,7 +160,7 @@ module PivotBetreeRefinement
     requires step.InternalSplitStep?
     requires step.path.Valid()
   {
-    step.path.Target().ChildDomain(step.childIdx).KeySet()
+    step.path.Target().DomainRoutedToChild(step.childIdx).KeySet()
   }
 
   // Hide iset quantifier mentioning lt, which is a trigger party
@@ -187,7 +187,7 @@ module PivotBetreeRefinement
           PagedBetree.InternalSplitStep(IPath(path), SplitLeftKeys(step), rightKeys)
       case InternalFlushStep(path, childIdx) =>
         IPathValid(path);
-        PagedBetree.InternalFlushStep(IPath(path), path.Target().ChildDomain(childIdx).KeySet())
+        PagedBetree.InternalFlushStep(IPath(path), path.Target().DomainRoutedToChild(childIdx).KeySet())
       case InternalCompactStep(path, compactedNode) =>
         IPathValid(path);
         PagedBetree.InternalCompactStep(IPath(path), INode(compactedNode))
@@ -333,10 +333,23 @@ module PivotBetreeRefinement
     ensures step.path.Target().Split(step.childIdx, step.splitKey).KeySet() <= step.path.Target().KeySet()
   {}
 
+  // lemma ChildKeySetMonotonic(node: BetreeNode, childIdx: nat) 
+  //   requires node.WF()
+  //   requires node.BetreeNode?
+  //   requires node.ValidChildIndex(childIdx)
+  //   requires node.children[childIdx].BetreeNode?
+  //   ensures node.children[childIdx].WF()
+  //   ensures node.children[childIdx].KeySet() <= node.KeySet() 
+  //   ensures forall k | node.children[childIdx].KeyInDomain(k) :: node.KeyInDomain(k)
+  // {
+  //   // todo
+  //   assume false;
+  // }
+
   lemma RightKeysMatchesRightDomain(step: Step) 
     requires step.InternalSplitStep?
     requires step.WF()
-    ensures SplitChildKeys(step) - SplitLeftKeys(step) == Domain(Element(step.splitKey), step.path.Target().ChildDomain(step.childIdx).end).KeySet()
+    ensures SplitChildKeys(step) - SplitLeftKeys(step) == Domain(Element(step.splitKey), step.path.Target().DomainRoutedToChild(step.childIdx).end).KeySet()
   {}
 
   lemma FilterCommutesWithI(node: BetreeNode, domain: Domain)
@@ -367,7 +380,7 @@ module PivotBetreeRefinement
         assert PagedBetree.Nil == INode(t).Child(key);  // trigger
         SplitKeySetMonotonic(step);
       } else {
-        var childDom := t.ChildDomain(step.childIdx);
+        var childDom := t.DomainRoutedToChild(step.childIdx);
         var leftDom := Domain(childDom.start, Element(step.splitKey));
         var rightDom := Domain(Element(step.splitKey), childDom.end);
         RightKeysMatchesRightDomain(step);
@@ -402,6 +415,76 @@ module PivotBetreeRefinement
     SubstitutionRefines(step.path, step.path.Target().Split(step.childIdx, step.splitKey));
   }
 
+  lemma PromoteCommutesWithI(node: BetreeNode, domain: Domain)  
+    requires node.WF()
+    requires domain.WF()
+    requires domain.Domain?
+    ensures INode(node.Promote(domain)) == INode(node).Promote()
+  {
+    assert INode(node.Promote(domain)) == INode(node).Promote();  // trigger
+  }
+
+  lemma PushBufferCommutesWithI(node: BetreeNode, buffers: BufferStack) 
+    requires node.WF()
+    requires node.BetreeNode?
+    ensures INode(node.PushBufferStack(buffers)) == INode(node).PushBufferStack(buffers)
+  {
+    assert INode(node.PushBufferStack(buffers)).buffers == INode(node).PushBufferStack(buffers).buffers;  // trigger
+  }
+
+  // todo: this is duplicated in Journal/LinkedJournalRefinement
+  lemma CommuteTransitivity<L,H>(I: L->H, f: L->L, F: H->H, g: L->L, G: H->H)
+    requires forall x :: I(f(x))==F(I(x))
+    requires forall x :: I(g(x))==G(I(x))
+    ensures forall x :: I(g(f(x)))==G(F(I(x)))
+  {
+    // See Tony's phone cam picture of the proof that we wrote on the whiteboard
+    // but which dafny doesn't need; eyeroll
+  }
+  
+  lemma PromoteComposedWithPushCommutes(node: BetreeNode, promoteDomain: Domain, buffers: BufferStack)  
+    requires node.WF()
+    requires promoteDomain.WF()
+    requires promoteDomain.Domain?
+    ensures INode(node.Promote(promoteDomain).PushBufferStack(buffers)) 
+        == INode(node).Promote().PushBufferStack(buffers);
+  {
+    EmptyDomain.reveal_SaneKeys();
+    var dummy := EmptyRoot(promoteDomain);  // using promoteDomain as placeholder. It doesn't matter what domain is used
+    var idummy := PagedBetree.EmptyRoot();
+    var i := (n: BetreeNode) => if n.WF() && n.BetreeNode? then INode(n) else idummy;
+    var f := (n: BetreeNode) => if n.WF() then n.Promote(promoteDomain) else dummy;
+    var g := (n: BetreeNode) => if n.WF() && n.BetreeNode? then n.PushBufferStack(buffers) else dummy.PushBufferStack(buffers);  // this is a clever trick to use dummy.PushBufferStack(buffers), so that the commutativity aligns
+    var F := (pn: PagedBetree.BetreeNode) => if pn.WF() then pn.Promote() else idummy;
+    var G := (pn: PagedBetree.BetreeNode) => if pn.WF() && pn.BetreeNode? then pn.PushBufferStack(buffers) else idummy;
+
+    forall n ensures i(f(n)) == F(i(n))
+    {
+      if n.WF() {
+        PromoteCommutesWithI(n, promoteDomain);
+      } else {
+        PushBufferCommutesWithI(EmptyRoot(promoteDomain), buffers); 
+        assert IChildren(EmptyRoot(promoteDomain)) == PagedBetree.ConstantChildMap(PagedBetree.Nil);  // trigger
+      }
+      assert i(f(n)) == F(i(n));
+    }
+    assert INode(f(node)) == F(INode(node));  // trigger
+    forall n ensures i(g(n)) == G(i(n))
+    {
+      if n.WF() && n.BetreeNode? {
+        calc {
+          INode(n.PushBufferStack(buffers));
+          { PushBufferCommutesWithI(n, buffers); }
+          INode(n).PushBufferStack(buffers);
+        }
+      } else {
+        PushBufferCommutesWithI(EmptyRoot(promoteDomain), buffers);
+        assert IChildren(EmptyRoot(promoteDomain)) == PagedBetree.ConstantChildMap(PagedBetree.Nil);
+      }
+    }
+    CommuteTransitivity(i, f, F, g, G);
+  }
+
   lemma FlushCommutesWithI(step: Step) 
     requires step.InternalFlushStep?
     requires step.WF()
@@ -409,17 +492,19 @@ module PivotBetreeRefinement
   {
     var t := step.path.Target();
     var istep := IStep(step);
-    forall key | AnyKey(key)
-    ensures INode(t).Flush(istep.downKeys).Child(key)
-      == IChildren(t.Flush(step.childIdx)).mapp[key] 
+    forall k | AnyKey(k) 
+    ensures INode(t.Flush(step.childIdx)).Child(k) == INode(t).Flush(istep.downKeys).Child(k)
     {
-      calc {
-        INode(t).Flush(istep.downKeys).Child(key);
-        assume false;
-        IChildren(t.Flush(step.childIdx)).mapp[key];
+      if k in istep.downKeys {
+        assert t.KeyInDomain(k) by {
+          Keyspace.reveal_IsSorted();
+        }
+        ChildCommutesWithI(t.Flush(step.childIdx), k);
+        var newBuffers := t.buffers.ApplyFilter(t.DomainRoutedToChild(step.childIdx).KeySet());
+        PromoteComposedWithPushCommutes(t.children[step.childIdx], t.DomainRoutedToChild(step.childIdx), newBuffers);
       }
     }
-    assert INode(step.path.Target()).Flush(IStep(step).downKeys) == INode(step.path.Target().Flush(step.childIdx));
+    assert INode(step.path.Target()).Flush(IStep(step).downKeys) == INode(step.path.Target().Flush(step.childIdx));  // trigger
   }
 
   lemma InternalFlushStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)

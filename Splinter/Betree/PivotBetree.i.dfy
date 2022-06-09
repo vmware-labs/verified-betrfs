@@ -152,9 +152,9 @@ module PivotBetree
     {
       var oldChild := children[childIdx];
       assert WFChildren(children);  // trigger
-      var childDomain := ChildDomain(childIdx);
-      var newLeftChild := oldChild.ApplyFilter(Domain(childDomain.start, Element(splitKey)));
-      var newRightChild := oldChild.ApplyFilter(Domain(Element(splitKey), childDomain.end));
+      var DomainRoutedToChild := DomainRoutedToChild(childIdx);
+      var newLeftChild := oldChild.ApplyFilter(Domain(DomainRoutedToChild.start, Element(splitKey)));
+      var newRightChild := oldChild.ApplyFilter(Domain(Element(splitKey), DomainRoutedToChild.end));
 
       // TODO(jonh): BucketsLib suggests this is a timeout trap?
       var newChildren := replace1with2(children, newLeftChild, newRightChild, childIdx);
@@ -179,7 +179,14 @@ module PivotBetree
       if Nil? then EmptyRoot(domain) else this
     }
 
-    function ChildDomain(childIdx: nat) : (out: Domain)
+    function MyDomain() : (out: Domain)
+      requires WF()
+      requires BetreeNode?
+    { 
+      Domain(pivotTable[0], Last(pivotTable))
+    }
+
+    function DomainRoutedToChild(childIdx: nat) : (out: Domain)
       requires WF()
       requires BetreeNode?
       requires ValidChildIndex(childIdx)
@@ -202,11 +209,11 @@ module PivotBetree
       requires CanFlush(childIdx)
       ensures out.WF()
     {
-      var keepKeys := AllKeys() - ChildDomain(childIdx).KeySet();
+      var keepKeys := AllKeys() - DomainRoutedToChild(childIdx).KeySet();
       var keptBuffers := buffers.ApplyFilter(keepKeys);
-      var movedBuffers := buffers.ApplyFilter(ChildDomain(childIdx).KeySet());
+      var movedBuffers := buffers.ApplyFilter(DomainRoutedToChild(childIdx).KeySet());
       assert WFChildren(children);  // trigger
-      var newChild := children[childIdx].Promote(ChildDomain(childIdx)).PushBufferStack(movedBuffers);
+      var newChild := children[childIdx].Promote(DomainRoutedToChild(childIdx)).PushBufferStack(movedBuffers);
       BetreeNode(keptBuffers, pivotTable, children[childIdx := newChild])
     }
 

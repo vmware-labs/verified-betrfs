@@ -401,6 +401,7 @@ module LinkedJournalRefinement
     PagedJournal.OptRecCanCropHeadRecords(itj.freshestRec, itj.boundaryLSN, depth)
   }
 
+  // todo: this is duplicated in Betree/PivotBetreeRefinement
   lemma CommuteTransitivity<L,H>(I: L->H, f: L->L, F: H->H, g: L->L, G: H->H)
     requires forall x :: I(f(x))==F(I(x))
     requires forall x :: I(g(x))==G(I(x))
