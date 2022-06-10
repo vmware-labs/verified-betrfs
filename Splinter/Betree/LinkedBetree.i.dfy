@@ -185,7 +185,22 @@ module LinkedBetreeMod
       && WF()
       && (exists ranking :: PointersRespectRank(ranking))
     }
+
+    function TheRanking() : GenericDisk.Ranking
+      requires WF()
+      requires Acyclic()
+    {
+      // Make CHOOSE deterministic as Leslie and Hilbert intended
+      var ranking :| PointersRespectRank(ranking); ranking
+    }
   }
+
+//  function TheRankOf(addr: Address, ranking: Ranking) : int
+//    requires WF()
+//    requires addr in ranking
+//  {
+//    if Acyclic() then ranking[addr] else -1
+//  }
   
   // This is the unit of interpretation: A LinkedBetree has enough info in it to interpret to a PivotBetree.BetreeNode.
   datatype LinkedBetree = LinkedBetree(
@@ -221,6 +236,35 @@ module LinkedBetreeMod
       requires Root().KeyInDomain(key)
     {
       LinkedBetree(Root().ChildPtr(key), diskView)
+    }
+
+    function ReachableAddressesUpTo(childCount: nat, ranking: Ranking) : (out: set<Address>)
+      requires WF()
+      requires HasRoot()
+      requires childCount <= |Root().children|
+      requires diskView.PointersRespectRank(ranking)
+      ensures forall childIdx | 0 <= childIdx < childCount
+        :: ChildAtIdx(childIdx).HasRoot() ==> ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
+      decreases ranking[root.value], childCount
+    {
+      if childCount==0
+      then {}
+      else
+        var childPtr := Root().children[childCount-1];
+        ReachableAddressesUpTo(childCount-1, ranking)
+        + if childPtr.None?
+          then {}
+          else {childPtr.value} + ChildAtIdx(childCount-1).ReachableAddresses(ranking)
+    }
+
+    function ReachableAddresses(ranking: Ranking) : (out: set<Address>)
+      requires WF()
+      requires HasRoot()
+      requires diskView.PointersRespectRank(ranking)
+      ensures forall childIdx | Root().ValidChildIndex(childIdx) :: ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
+      decreases ranking[root.value], |Root().children|+1
+    {
+      ReachableAddressesUpTo(|Root().children|, ranking)
     }
   }
 

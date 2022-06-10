@@ -40,27 +40,11 @@ module LinkedBetreeRefinement {
       case InternalLabel() => PivotBetree.InternalLabel()
   }
 
-  function TheRanking(diskView: DiskView) : GenericDisk.Ranking
-    requires diskView.WF()
-    requires diskView.Acyclic()
-  {
-    // Make CHOOSE deterministic as Leslie and Hilbert intended
-    var ranking :| diskView.PointersRespectRank(ranking); ranking
-  }
-
-  function TheRankOf(linked: LinkedBetree) : int
-    requires linked.WF()
-  {
-    if linked.HasRoot() && linked.diskView.Acyclic() then TheRanking(linked.diskView)[linked.root.value] else -1
-    // Rustan: I can't believe this works! How are you figuring out that we can pass 0 into
-    // negatives, but we stop there!?
-  }
-
   function IChildren(linked: LinkedBetree) : seq<PivotBetree.BetreeNode>
     requires linked.WF()
     requires linked.HasRoot()
     requires linked.diskView.Acyclic()
-    decreases TheRankOf(linked), 0
+    decreases linked.TheRank(), 0
   {
     var numChildren := |linked.Root().children|;
     seq(numChildren, i requires 0<=i<numChildren => ILinkedBetree(linked.ChildAtIdx(i)))
@@ -69,7 +53,7 @@ module LinkedBetreeRefinement {
   function ILinkedBetree(linked: LinkedBetree) : PivotBetree.BetreeNode
     requires linked.WF()
     requires linked.diskView.Acyclic()
-    decreases TheRankOf(linked), 1
+    decreases linked.TheRank(), 1
   {
     if linked.root.None?
     then PivotBetree.Nil
@@ -135,7 +119,7 @@ module LinkedBetreeRefinement {
     requires linked.WF()
     requires linked.diskView.Acyclic()
     ensures ILinkedBetree(linked).WF()
-    decreases TheRankOf(linked)
+    decreases linked.TheRank()
   {
     if linked.HasRoot() {
       forall idx | linked.Root().ValidChildIndex(idx) 
