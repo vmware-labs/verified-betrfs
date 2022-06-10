@@ -401,6 +401,11 @@ module LinkedBetree
     }
   }
 
+  // TODO(tony/jonh): Side quest: now that we know we want predicate-style down
+  // here anyway, try retrofitting predicate style definitions into
+  // PivotBetree. If it works, maybe we can do some functional decomposition
+  // and cut the duplication.
+
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
