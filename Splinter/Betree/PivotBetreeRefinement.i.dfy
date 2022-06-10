@@ -18,6 +18,7 @@ module PivotBetreeRefinement
   import opened Upperbounded_Lexicographic_Byte_Order_Impl
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
   import opened BoundedPivotsLib
+  import opened DomainMod
   import opened PivotBetree
   import PagedBetree
 
