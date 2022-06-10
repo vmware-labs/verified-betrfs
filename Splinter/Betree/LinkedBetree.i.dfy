@@ -192,7 +192,7 @@ module LinkedBetreeMod
       diskView.Get(root)
     }
 
-    function ChildAtIdx(idx: int) : LinkedBetree
+    function ChildAtIdx(idx: nat) : LinkedBetree
       requires HasRoot()
       requires Root().ValidChildIndex(idx)
     {
