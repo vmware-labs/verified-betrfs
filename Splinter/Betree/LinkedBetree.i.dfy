@@ -446,6 +446,14 @@ module LinkedBetreeMod
     && var rightChildPtr := root'.children[childIdx+1];
     && root' == root.(
       pivotTable := InsertPivot(root.pivotTable, childIdx, splitKey),
+
+      // replace1with2 is just telling us about the structure of
+      // root'.children: the prefix and suffix are identical, and the new left
+      // & right child ptrs appear where childIdx once was. But it *doesn't*
+      // say anything about the value of leftChildPtr (resp. rightChildPtr),
+      // since we fetched those out of root'.children in the var statement
+      // above. That's a "clever" trick to leave nondeterminism that says we
+      // don't care what the actual values of those pointers are.
       children := replace1with2(root.children, leftChildPtr, rightChildPtr, childIdx)
       )
 
