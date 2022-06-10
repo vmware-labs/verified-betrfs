@@ -16,6 +16,8 @@ module LinkedBetreeRefinement {
   import opened StampedMod
   import PivotBetree
 
+  type Ranking = GenericDisk.Ranking
+
   function EmptyStampedBetree() : (out: StampedBetree)
     ensures out.value.diskView.Acyclic()
   {
@@ -40,26 +42,50 @@ module LinkedBetreeRefinement {
       case InternalLabel() => PivotBetree.InternalLabel()
   }
 
-  function IChildren(linked: LinkedBetree) : seq<PivotBetree.BetreeNode>
-    requires linked.WF()
+  function TheRankOf(linked: LinkedBetree) : nat 
     requires linked.HasRoot()
     requires linked.diskView.Acyclic()
-    decreases linked.TheRank(), 0
   {
-    var numChildren := |linked.Root().children|;
-    seq(numChildren, i requires 0<=i<numChildren => ILinkedBetree(linked.ChildAtIdx(i)))
+    linked.diskView.TheRanking()[linked.root.value]
   }
 
-  function ILinkedBetree(linked: LinkedBetree) : PivotBetree.BetreeNode
+  function IChildren(linked: LinkedBetree, ranking: Ranking) : seq<PivotBetree.BetreeNode>
     requires linked.WF()
-    requires linked.diskView.Acyclic()
-    decreases linked.TheRank(), 1
+    requires linked.HasRoot()
+    requires linked.diskView.PointersRespectRank(ranking)
+    decreases linked.GetRank(ranking), 0
+  {
+    var numChildren := |linked.Root().children|;
+    seq(numChildren, i requires 0<=i<numChildren => ILinkedBetreeNode(linked.ChildAtIdx(i), ranking))
+  }
+
+  function ILinkedBetreeNode(linked: LinkedBetree, ranking: Ranking) : PivotBetree.BetreeNode
+    requires linked.WF()
+    requires linked.diskView.PointersRespectRank(ranking)
+    decreases linked.GetRank(ranking), 1
   {
     if linked.root.None?
     then PivotBetree.Nil
     else
       var node := linked.Root();
-      PivotBetree.BetreeNode(node.buffers, node.pivotTable, IChildren(linked))
+      PivotBetree.BetreeNode(node.buffers, node.pivotTable, IChildren(linked, ranking))
+  }
+
+  lemma ILinkedBetreeIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking) 
+    requires linked.WF()
+    requires linked.diskView.PointersRespectRank(r1)
+    requires linked.diskView.PointersRespectRank(r2)
+    ensures ILinkedBetreeNode(linked, r1) == ILinkedBetreeNode(linked, r2)
+  {
+    assume false;
+  }
+
+  // wrapper
+  function ILinkedBetree(linked: LinkedBetree) : PivotBetree.BetreeNode
+    requires linked.WF()
+    requires linked.diskView.Acyclic()
+  {
+    ILinkedBetreeNode(linked, linked.diskView.TheRanking())
   }
 
   function IStampedBetree(stampedBetree: StampedBetree) : PivotBetree.StampedBetree
@@ -79,6 +105,15 @@ module LinkedBetreeRefinement {
   predicate Inv(v: Variables)
   {
     && v.linked.diskView.Acyclic()
+  }
+
+  lemma InvNextInternalCompactStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step);
+    requires step.InternalCompactStep?
+    ensures Inv(v')
+  {
+    assume false;
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -109,24 +144,26 @@ module LinkedBetreeRefinement {
       case InternalFlushStep(_, _) => {
         assert Inv(v');   // bwoken
       }
-      case InternalCompactStep(_, _) => {
-        assert Inv(v');   // bwoken
+      case InternalCompactStep(_, _, _, _) => {
+        InvNextInternalCompactStep(v, v', lbl, step);
+        assert Inv(v');  
       }
     }
   }
 
-  lemma ILinkedWF(linked: LinkedBetree) 
+  lemma ILinkedWF(linked: LinkedBetree, ranking: Ranking) 
     requires linked.WF()
-    requires linked.diskView.Acyclic()
+    requires linked.diskView.PointersRespectRank(ranking)
     ensures ILinkedBetree(linked).WF()
-    decreases linked.TheRank()
+    decreases linked.GetRank(ranking)
   {
     if linked.HasRoot() {
       forall idx | linked.Root().ValidChildIndex(idx) 
       ensures ILinkedBetree(linked.ChildAtIdx(idx)).WF() {
-        ILinkedWF(linked.ChildAtIdx(idx));
+        ILinkedWF(linked.ChildAtIdx(idx), ranking);
       }
     }
+    ILinkedBetreeIgnoresRanking(linked, ranking, linked.diskView.TheRanking());
   }
 
   lemma InitRefines(v: Variables, stampedBetree: StampedBetree)
@@ -134,7 +171,7 @@ module LinkedBetreeRefinement {
     ensures Inv(v)
     ensures PivotBetree.Init(I(v), IStampedBetree(stampedBetree))
   {
-    ILinkedWF(v.linked);
+    ILinkedWF(v.linked, v.linked.diskView.TheRanking());
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)

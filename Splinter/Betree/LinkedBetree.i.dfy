@@ -238,34 +238,53 @@ module LinkedBetreeMod
       LinkedBetree(Root().ChildPtr(key), diskView)
     }
 
-    function ReachableAddressesUpTo(childCount: nat, ranking: Ranking) : (out: set<Address>)
+    function GetRank(ranking: Ranking) : nat
       requires WF()
-      requires HasRoot()
-      requires childCount <= |Root().children|
       requires diskView.PointersRespectRank(ranking)
-      ensures forall childIdx | 0 <= childIdx < childCount
-        :: ChildAtIdx(childIdx).HasRoot() ==> ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
-      decreases ranking[root.value], childCount
     {
-      if childCount==0
-      then {}
-      else
-        var childPtr := Root().children[childCount-1];
-        ReachableAddressesUpTo(childCount-1, ranking)
-        + if childPtr.None?
-          then {}
-          else {childPtr.value} + ChildAtIdx(childCount-1).ReachableAddresses(ranking)
+      if HasRoot() then ranking[root.value]+1 else 0
     }
 
-    function ReachableAddresses(ranking: Ranking) : (out: set<Address>)
+    function GetChildCount() : nat 
       requires WF()
-      requires HasRoot()
-      requires diskView.PointersRespectRank(ranking)
-      ensures forall childIdx | Root().ValidChildIndex(childIdx) :: ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
-      decreases ranking[root.value], |Root().children|+1
     {
-      ReachableAddressesUpTo(|Root().children|, ranking)
+      if HasRoot() then |Root().children| else 0
     }
+
+    // function ReachableAddressesUpTo(childCount: nat, ranking: Ranking) : (out: set<Address>)
+    //   requires WF()
+    //   requires HasRoot()
+    //   requires childCount <= |Root().children|
+    //   requires diskView.PointersRespectRank(ranking)
+    //   // ensures forall childIdx | 0 <= childIdx < childCount
+    //   //   :: ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
+    //   decreases GetRank(ranking), childCount, 0
+    // {
+    //   if childCount == 0
+    //   then {}
+    //   else
+    //     var childPtr := Root().children[childCount-1];
+    //     ReachableAddressesUpTo(childCount-1, ranking)
+    //     + ChildAtIdx(childCount-1).ReachableAddresses(ranking)
+    // }
+
+    // function ReachableAddresses(ranking: Ranking) : (out: set<Address>)
+    //   requires WF()
+    //   requires diskView.PointersRespectRank(ranking)
+    //   // ensures forall childIdx | Root().ValidChildIndex(childIdx) :: ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
+    //   decreases GetRank(ranking), GetChildCount(), 1
+    // {
+    //   if HasRoot() 
+    //   then ReachableAddressesUpTo(|Root().children|, ranking) + {root.value} 
+    //   else {}
+    // }
+
+    // predicate IsTight(ranking: Ranking) 
+    //   requires WF()
+    //   requires diskView.Acyclic()
+    // {
+    //   diskView.entries.Keys == ReachableAddresses(ranking)
+    // }
   }
 
   datatype Variables = Variables(
@@ -442,27 +461,32 @@ module LinkedBetreeMod
       else Subpath().Target(linked.Child(key))
     }
 
-    predicate IsSubstitution(linked: LinkedBetree, linked': LinkedBetree)
+    predicate IsSubstitution(linked: LinkedBetree, linked': LinkedBetree, subsAddrs: seq<Address>)
+      requires depth == |subsAddrs|
       decreases depth
-    {
+    { 
       && Valid(linked)
       && Valid(linked')
       && linked.diskView.AgreesWithDisk(linked'.diskView)
-      // When depth==0, linked.root==linked'.root, so we're done.
-      && var root := linked.Root();
-      && var root' := linked'.Root();
-      // "local" info matches
-      && root.buffers == root'.buffers
-      && root.pivotTable == root'.pivotTable
-      && |root.children| == |root'.children|
-      && (forall childIdx | 0 <= childIdx < |root.children|
-        // All children are either identical (off the key path) or we aren't at
-        // Target() yet (0<depth) and the child obeys Substitution
-        :: if 0 < depth && childIdx == Route(root.pivotTable, key)
-            then Subpath().IsSubstitution(linked.ChildAtIdx(childIdx), linked'.ChildAtIdx(childIdx))
-            else
-              // identical pointers, and hence identical subtrees
-              root.children[childIdx] == root'.children[childIdx]
+      && (0 < depth ==> (
+        && linked'.root.value == subsAddrs[0]
+        // When depth==0, linked.root==linked'.root, so we're done.
+        && var root := linked.Root();
+        && var root' := linked'.Root();
+        // "local" info matches
+        && root.buffers == root'.buffers
+        && root.pivotTable == root'.pivotTable
+        && |root.children| == |root'.children|
+        && (forall childIdx | 0 <= childIdx < |root.children|
+          // All children are either identical (off the key path) or we aren't at
+          // Target() yet (0<depth) and the child obeys Substitution
+          :: if childIdx == Route(root.pivotTable, key)
+              then Subpath().IsSubstitution(linked.ChildAtIdx(childIdx), linked'.ChildAtIdx(childIdx), subsAddrs[1..])
+              else
+                // identical pointers, and hence identical subtrees
+                root.children[childIdx] == root'.children[childIdx]
+        )
+       )
       )
     }
   }
@@ -533,12 +557,13 @@ module LinkedBetreeMod
 
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    assume false; 
     && v.WF()
     && lbl.InternalLabel?
     && step.InternalSplitStep?
     && step.path.Valid(v.linked)
     // v && v' agree on everything down to Target()
-    && step.path.IsSubstitution(v.linked, v'.linked)
+    && step.path.IsSubstitution(v.linked, v'.linked, [])
     // Target and Target' are related by a split operation
     && IsSplit(step.path.Target(v.linked), step.path.Target(v'.linked), step.childIdx, step.splitKey)
     && v'.memtable == v.memtable  // UNCHANGED
@@ -583,25 +608,25 @@ module LinkedBetreeMod
     // An advantage of predicate-style is that we don't have to explicitly
     // declare BuildTight() (garbage collection); we can leave that to a lower
     // layer.
+    assume false;
     && v.WF()
     && lbl.InternalLabel?
     && step.InternalFlushStep?
     && step.path.Valid(v.linked)
     // v && v' agree on everything down to Target()
-    && step.path.IsSubstitution(v.linked, v'.linked)
+    && step.path.IsSubstitution(v.linked, v'.linked, [])
     // Target and Target' are related by a flush operation
     && IsFlush(step.path.Target(v.linked), step.path.Target(v'.linked), step.childIdx)
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  predicate IsCompaction(linked: LinkedBetree, linked': LinkedBetree)
+  predicate IsCompaction(linked: LinkedBetree, linked': LinkedBetree, addr: Address)
   {
     && linked.WF()
     && linked'.WF()
     && linked.HasRoot()
     && linked'.HasRoot()
-    && linked'.diskView.AgreesWithDisk(linked.diskView) // so that the unchanged children represent the same thing
-
+    && linked'.root.value == addr
     && linked'.Root().buffers.Equivalent(linked.Root().buffers)
     // Can only make a local change; entirety of children subtrees are identical.
     && linked'.Root().pivotTable == linked.Root().pivotTable  // UNCHANGED
@@ -613,13 +638,16 @@ module LinkedBetreeMod
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
+    && step.WF()
     && lbl.InternalLabel?
     && step.InternalCompactStep?
     && step.path.Valid(v.linked)
+    && v'.linked.diskView.AgreesWithDisk(v.linked.diskView) // so that the unchanged children represent the same thing
+    && v'.linked.diskView.entries.Keys <= v.linked.diskView.entries.Keys + Set(step.subsAddrs)
     // v && v' agree on everything down to Target()
-    && step.path.IsSubstitution(v.linked, v'.linked)
+    && step.path.IsSubstitution(v.linked, v'.linked, step.subsAddrs)
     // Target and Target' are related by a compaction operation
-    && IsCompaction(step.path.Target(v.linked), step.path.Target(v'.linked))
+    && IsCompaction(step.path.Target(v.linked), step.path.Target(v'.linked), step.targetAddr)
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
@@ -640,15 +668,16 @@ module LinkedBetreeMod
     | InternalGrowStep()
     | InternalSplitStep(path: Path, childIdx: nat, splitKey: Key)
     | InternalFlushStep(path: Path, childIdx: nat)
-    | InternalCompactStep(path: Path, compactedNode: BetreeNode)
+    | InternalCompactStep(path: Path, compactedNode: BetreeNode, targetAddr: Address, subsAddrs: seq<Address>)
   {
     predicate WF() {
       match this {
         case QueryStep(receipt) => receipt.Valid()
         case InternalSplitStep(path, childIdx, splitKey) => true
         case InternalFlushStep(path, childIdx) => true
-        case InternalCompactStep(path, compactedNode) =>
+        case InternalCompactStep(path, compactedNode, _, subsAddrs) =>
           && compactedNode.WF()
+          && path.depth == |subsAddrs|
         case _ => true
       }
     }
@@ -664,7 +693,7 @@ module LinkedBetreeMod
       case InternalGrowStep() => InternalGrow(v, v', lbl, step)
       case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
       case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
-      case InternalCompactStep(_, _) => InternalCompact(v, v', lbl, step)
+      case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
     }
   }
 
