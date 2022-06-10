@@ -168,6 +168,23 @@ module LinkedBetreeMod
     {
       MapsAgree(entries, other.entries)
     }
+
+    predicate PointersRespectRank(ranking: GenericDisk.Ranking)
+      requires WF()
+    {
+      && entries.Keys <= ranking.Keys
+      && (forall address | address in entries
+          :: var node := entries[address];
+            forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some?
+              :: ranking[node.children[childIdx].value] < ranking[address]
+          )
+    }
+
+    predicate Acyclic()
+    {
+      && WF()
+      && (exists ranking :: PointersRespectRank(ranking))
+    }
   }
   
   // This is the unit of interpretation: A LinkedBetree has enough info in it to interpret to a PivotBetree.BetreeNode.
@@ -397,7 +414,7 @@ module LinkedBetreeMod
       && (forall childIdx | 0 <= childIdx < |root.children|
         // All children are either identical (off the key path) or we aren't at
         // Target() yet (0<depth) and the child obeys Substitution
-        :: if 0<depth && childIdx == Route(root.pivotTable, key)
+        :: if 0 < depth && childIdx == Route(root.pivotTable, key)
             then Subpath().IsSubstitution(linked.ChildAtIdx(childIdx), linked'.ChildAtIdx(childIdx))
             else
               // identical pointers, and hence identical subtrees
@@ -567,6 +584,7 @@ module LinkedBetreeMod
   predicate Init(v: Variables, stampedBetree: StampedBetree)
   {
     && stampedBetree.value.WF()
+    && stampedBetree.value.diskView.Acyclic()
     && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value)
   }
 

@@ -17,11 +17,11 @@ module LinkedBetreeRefinement {
   import PivotBetree
 
   function EmptyStampedBetree() : (out: StampedBetree)
-    ensures Acyclic(out.value.diskView)
+    ensures out.value.diskView.Acyclic()
   {
     var out := Stamped(LinkedBetree(None, DiskView(map[])), 0);
-    assert Acyclic(out.value.diskView) by {
-      assert PointersRespectRank(out.value.diskView, map[]);
+    assert out.value.diskView.Acyclic() by {
+      assert out.value.diskView.PointersRespectRank(map[]);
     }
     out
   }
@@ -33,42 +33,25 @@ module LinkedBetreeRefinement {
       case PutLabel(puts) => PivotBetree.PutLabel(puts)
       case QueryEndLsnLabel(endLsn) => PivotBetree.QueryEndLsnLabel(endLsn)
       case FreezeAsLabel(stampedBetree) => PivotBetree.FreezeAsLabel(
-        if stampedBetree.value.WF() && Acyclic(stampedBetree.value.diskView)
+        if stampedBetree.value.WF() && stampedBetree.value.diskView.Acyclic()
         then IStampedBetree(stampedBetree)
         else IStampedBetree(EmptyStampedBetree())  // "silly" case, since we never interpret non-(WF+Acyclic) things
       )
       case InternalLabel() => PivotBetree.InternalLabel()
   }
 
-  predicate PointersRespectRank(diskView: DiskView, ranking: GenericDisk.Ranking)
-    requires diskView.WF()
-  {
-    && diskView.entries.Keys <= ranking.Keys
-    && (forall address | address in diskView.entries
-        :: var node := diskView.entries[address];
-          forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some?
-            :: ranking[node.children[childIdx].value] < ranking[address]
-        )
-  }
-
-  predicate Acyclic(diskView: DiskView)
-  {
-    && diskView.WF()
-    && (exists ranking :: PointersRespectRank(diskView, ranking))
-  }
-
   function TheRanking(diskView: DiskView) : GenericDisk.Ranking
     requires diskView.WF()
-    requires Acyclic(diskView)
+    requires diskView.Acyclic()
   {
     // Make CHOOSE deterministic as Leslie and Hilbert intended
-    var ranking :| PointersRespectRank(diskView, ranking); ranking
+    var ranking :| diskView.PointersRespectRank(ranking); ranking
   }
 
   function TheRankOf(linked: LinkedBetree) : int
     requires linked.WF()
   {
-    if linked.HasRoot() && Acyclic(linked.diskView) then TheRanking(linked.diskView)[linked.root.value] else -1
+    if linked.HasRoot() && linked.diskView.Acyclic() then TheRanking(linked.diskView)[linked.root.value] else -1
     // Rustan: I can't believe this works! How are you figuring out that we can pass 0 into
     // negatives, but we stop there!?
   }
@@ -76,7 +59,7 @@ module LinkedBetreeRefinement {
   function IChildren(linked: LinkedBetree) : seq<PivotBetree.BetreeNode>
     requires linked.WF()
     requires linked.HasRoot()
-    requires Acyclic(linked.diskView)
+    requires linked.diskView.Acyclic()
     decreases TheRankOf(linked), 0
   {
     var numChildren := |linked.Root().children|;
@@ -85,7 +68,7 @@ module LinkedBetreeRefinement {
 
   function ILinkedBetree(linked: LinkedBetree) : PivotBetree.BetreeNode
     requires linked.WF()
-    requires Acyclic(linked.diskView)
+    requires linked.diskView.Acyclic()
     decreases TheRankOf(linked), 1
   {
     if linked.root.None?
@@ -97,21 +80,69 @@ module LinkedBetreeRefinement {
 
   function IStampedBetree(stampedBetree: StampedBetree) : PivotBetree.StampedBetree
     requires stampedBetree.value.WF()
-    requires Acyclic(stampedBetree.value.diskView)
+    requires stampedBetree.value.diskView.Acyclic()
   {
     Stamped(ILinkedBetree(stampedBetree.value), stampedBetree.seqEnd)
   }
 
   function I(v: Variables) : PivotBetree.Variables
     requires v.WF()
-    requires Acyclic(v.linked.diskView)
+    requires v.linked.diskView.Acyclic()
   {
     PivotBetree.Variables(v.memtable, ILinkedBetree(v.linked))
   }
 
   predicate Inv(v: Variables)
   {
-    && Acyclic(v.linked.diskView)
+    && v.linked.diskView.Acyclic()
+  }
+
+  lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    ensures Inv(v')
+  {
+    var step: Step :| NextStep(v, v', lbl, step);
+    match step {
+      case QueryStep(receipt) => {
+        assert Inv(v');
+      }
+      case PutStep() => {
+        assert Inv(v');
+      }
+      case QueryEndLsnStep() => {
+        assert Inv(v');
+      }
+      case FreezeAsStep() => {
+        assert Inv(v');
+      }
+      case InternalGrowStep() => {
+        assert Inv(v');   // bwoken
+      }
+      case InternalSplitStep(_, _, _) => {
+        assert Inv(v');   // bwoken
+      }
+      case InternalFlushStep(_, _) => {
+        assert Inv(v');   // bwoken
+      }
+      case InternalCompactStep(_, _) => {
+        assert Inv(v');   // bwoken
+      }
+    }
+  }
+
+  lemma ILinkedWF(linked: LinkedBetree) 
+    requires linked.WF()
+    requires linked.diskView.Acyclic()
+    ensures ILinkedBetree(linked).WF()
+    decreases TheRankOf(linked)
+  {
+    if linked.HasRoot() {
+      forall idx | linked.Root().ValidChildIndex(idx) 
+      ensures ILinkedBetree(linked.ChildAtIdx(idx)).WF() {
+        ILinkedWF(linked.ChildAtIdx(idx));
+      }
+    }
   }
 
   lemma InitRefines(v: Variables, stampedBetree: StampedBetree)
@@ -119,7 +150,7 @@ module LinkedBetreeRefinement {
     ensures Inv(v)
     ensures PivotBetree.Init(I(v), IStampedBetree(stampedBetree))
   {
-    assume false;
+    ILinkedWF(v.linked);
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
