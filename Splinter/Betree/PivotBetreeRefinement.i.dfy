@@ -333,19 +333,6 @@ module PivotBetreeRefinement
     ensures step.path.Target().Split(step.childIdx, step.splitKey).KeySet() <= step.path.Target().KeySet()
   {}
 
-  // lemma ChildKeySetMonotonic(node: BetreeNode, childIdx: nat) 
-  //   requires node.WF()
-  //   requires node.BetreeNode?
-  //   requires node.ValidChildIndex(childIdx)
-  //   requires node.children[childIdx].BetreeNode?
-  //   ensures node.children[childIdx].WF()
-  //   ensures node.children[childIdx].KeySet() <= node.KeySet() 
-  //   ensures forall k | node.children[childIdx].KeyInDomain(k) :: node.KeyInDomain(k)
-  // {
-  //   // todo
-  //   assume false;
-  // }
-
   lemma RightKeysMatchesRightDomain(step: Step) 
     requires step.InternalSplitStep?
     requires step.WF()
@@ -442,6 +429,7 @@ module PivotBetreeRefinement
     // but which dafny doesn't need; eyeroll
   }
   
+  // TODO: a much easier proof would be to condition on the nullity of node to factor out Promote()
   lemma PromoteComposedWithPushCommutes(node: BetreeNode, promoteDomain: Domain, buffers: BufferStack)  
     requires node.WF()
     requires promoteDomain.WF()
@@ -466,7 +454,6 @@ module PivotBetreeRefinement
         PushBufferCommutesWithI(EmptyRoot(promoteDomain), buffers); 
         assert IChildren(EmptyRoot(promoteDomain)) == PagedBetree.ConstantChildMap(PagedBetree.Nil);  // trigger
       }
-      assert i(f(n)) == F(i(n));
     }
     assert INode(f(node)) == F(INode(node));  // trigger
     forall n ensures i(g(n)) == G(i(n))
@@ -547,6 +534,16 @@ module PivotBetreeRefinement
     assert IStep(step).path.Target().EquivalentBufferCompaction(INode(step.compactedNode));  // trigger
   }
 
+  lemma FreezeAsRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.FreezeAsStep?
+    ensures v'.WF()
+    ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    assert INode(PushMemtable(v.root, v.memtable).root) == INode(v.root).PushMemtable(v.memtable).value;
+  }
+
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -568,8 +565,8 @@ module PivotBetreeRefinement
       }
       case FreezeAsStep() => {
         INodeWF(v.root);
-        //todo
-        assume PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
+        FreezeAsRefines(v, v', lbl, step);
+        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
       }
       case InternalGrowStep() => {
         InternalGrowStepRefines(v, v', lbl, step);
