@@ -84,7 +84,6 @@ module PivotBetree
       && childIdx < NumBuckets(pivotTable)
     }
 
-    // TODO(jonh): Split shouldn't also Grow; that's a separate operation.
     function Split(childIdx: nat, splitKey: Key) : (out: BetreeNode)
       requires CanSplit(childIdx, splitKey)
       requires BetreeNode?
@@ -96,7 +95,6 @@ module PivotBetree
       var newLeftChild := oldChild.ApplyFilter(Domain(DomainRoutedToChild.start, Element(splitKey)));
       var newRightChild := oldChild.ApplyFilter(Domain(Element(splitKey), DomainRoutedToChild.end));
 
-      // TODO(jonh): BucketsLib suggests this is a timeout trap?
       var newChildren := replace1with2(children, newLeftChild, newRightChild, childIdx);
 
       assert forall i:nat | i<|newChildren| :: newChildren[i].WF() by {
@@ -189,7 +187,7 @@ module PivotBetree
     // Redundant; should equal domain.KeySet() for the domain specified by the pivotTable.
     function KeySet() : iset<Key>
       requires WF()
-      requires BetreeNode?  // TODO(jonh): trouble for Nils?
+      requires BetreeNode?
     {
       iset key | KeyInDomain(key)
     }
@@ -300,22 +298,13 @@ module PivotBetree
   }
 
   // TODO(tony): replace with Stamped(BetreeNode). Change .root to .value everywhere; update broken triggers
-  datatype StampedBetree = StampedBetree(
-    root: BetreeNode,
-    seqEnd: LSN
-    )
-  {
-    predicate WF()
-    {
-      root.WF()
-    }
-  }
+  type StampedBetree = Stamped<BetreeNode>
 
   function PushMemtable(root: BetreeNode, memtable: Memtable) : StampedBetree
     requires root.WF()
   {
     var newBuffer := Buffer(memtable.mapp);
-    StampedBetree(root.Promote(TotalDomain()).PushBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
+    Stamped(root.Promote(TotalDomain()).PushBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
   }
 
   datatype Variables = Variables(
@@ -368,7 +357,7 @@ module PivotBetree
     && var rootBase := if v.root.Nil? then EmptyRoot(TotalDomain()) else v.root;
     && v' == v.(
         memtable := v.memtable.Drain(),
-        root := PushMemtable(v.root, v.memtable).root
+        root := PushMemtable(v.root, v.memtable).value
       )
   }
   
@@ -476,8 +465,8 @@ module PivotBetree
 
   predicate Init(v: Variables, stampedBetree: StampedBetree)
   {
-    && stampedBetree.WF()
-    && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.root)
+    && stampedBetree.value.WF()
+    && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value)
   }
 
   datatype Step =

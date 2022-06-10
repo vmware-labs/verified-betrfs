@@ -43,9 +43,9 @@ module PivotBetreeRefinement
   }
 
   function IStampedBetree(stampedBetree: StampedBetree) : PagedBetree.StampedBetree
-    requires stampedBetree.WF()
+    requires stampedBetree.value.WF()
   {
-    Stamped(INode(stampedBetree.root), stampedBetree.seqEnd)
+    Stamped(INode(stampedBetree.value), stampedBetree.seqEnd)
   }
 
   function ILbl(lbl: TransitionLabel) : PagedBetree.TransitionLabel
@@ -55,7 +55,7 @@ module PivotBetreeRefinement
       case PutLabel(puts) => PagedBetree.PutLabel(puts)
       case QueryEndLsnLabel(endLsn) => PagedBetree.QueryEndLsnLabel(endLsn)
       case FreezeAsLabel(stampedBetree) =>PagedBetree.FreezeAsLabel(
-        if stampedBetree.WF()
+        if stampedBetree.value.WF()
         then IStampedBetree(stampedBetree)
         else PagedBetree.EmptyStampedBetree())
       case InternalLabel() => PagedBetree.InternalLabel()
@@ -199,7 +199,7 @@ module PivotBetreeRefinement
     requires Init(v, stampedBetree)
     ensures PagedBetree.Init(I(v), IStampedBetree(stampedBetree))
   {
-    INodeWF(stampedBetree.root);
+    INodeWF(stampedBetree.value);
   }
 
   lemma ChildCommutesWithI(node: BetreeNode, key: Key)
@@ -232,10 +232,10 @@ module PivotBetreeRefinement
     ensures TotalDomain().Contains(key)
   {
     SmallestElementLte(Element(key));
-    assert TotalDomain().Contains(key) by {
-      reveal_TotalDomain();
-      // TotalDomain().reveal_Contains();
-    }
+//    assert TotalDomain().Contains(key) by {
+//      reveal_TotalDomain();
+//      // TotalDomain().reveal_Contains();
+//    }
   }
 
   lemma InternalGrowStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -252,9 +252,9 @@ module PivotBetreeRefinement
       ensures I(v').root.Child(key)
           == PagedBetree.ConstantChildMap(I(v).root).mapp[key] {
       AllKeysInTotalDomain(key);
-      assert v'.root.KeyInDomain(key) by {
-        reveal_TotalDomain();
-      }
+//      assert v'.root.KeyInDomain(key) by {
+//        reveal_TotalDomain();
+//      }
       ChildCommutesWithI(v'.root, key);
     }
   }
@@ -430,7 +430,7 @@ module PivotBetreeRefinement
     // but which dafny doesn't need; eyeroll
   }
   
-  // TODO: a much easier proof would be to condition on the nullity of node to factor out Promote()
+  // TODO(tony): a much easier proof would be to condition on the nullity of node to factor out Promote()
   lemma PromoteComposedWithPushCommutes(node: BetreeNode, promoteDomain: Domain, buffers: BufferStack)  
     requires node.WF()
     requires promoteDomain.WF()
@@ -542,7 +542,7 @@ module PivotBetreeRefinement
     ensures v'.WF()
     ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
-    assert INode(PushMemtable(v.root, v.memtable).root) == INode(v.root).PushMemtable(v.memtable).value;
+    assert INode(PushMemtable(v.root, v.memtable).value) == INode(v.root).PushMemtable(v.memtable).value;
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
