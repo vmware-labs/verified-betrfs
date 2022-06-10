@@ -54,7 +54,7 @@ module PivotBetreeRefinement
       case QueryLabel(endLsn, key, value) => PagedBetree.QueryLabel(endLsn, key, value)
       case PutLabel(puts) => PagedBetree.PutLabel(puts)
       case QueryEndLsnLabel(endLsn) => PagedBetree.QueryEndLsnLabel(endLsn)
-      case FreezeAsLabel(stampedBetree) =>PagedBetree.FreezeAsLabel(
+      case FreezeAsLabel(stampedBetree) => PagedBetree.FreezeAsLabel(
         if stampedBetree.value.WF()
         then IStampedBetree(stampedBetree)
         else PagedBetree.EmptyStampedBetree())

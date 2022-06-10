@@ -6,7 +6,7 @@ include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
 include "../Journal/GenericDisk.i.dfy"
 include "Domain.i.dfy"
 
-module LinkedBetree
+module LinkedBetreeMod
 {
   import opened BoundedPivotsLib
   import opened Buffers
@@ -125,7 +125,7 @@ module LinkedBetree
     BetreeNode(BufferStack([]), pivotTable, [None])
   }
 
-  datatype DiskView = DiskView(seqEnd: LSN, entries: map<Address, BetreeNode>) 
+  datatype DiskView = DiskView(entries: map<Address, BetreeNode>) 
   {
     // TODO(jonh): some duplication with LinkedJournal.DiskView; refactor into library superclassish thing?
     // Or a generic with GenericDisk.DiskView<T>?
@@ -190,6 +190,13 @@ module LinkedBetree
       requires HasRoot()
     {
       diskView.Get(root)
+    }
+
+    function ChildAtIdx(idx: int) : LinkedBetree
+      requires HasRoot()
+      requires Root().ValidChildIndex(idx)
+    {
+      LinkedBetree(Root().children[idx], diskView)
     }
 
     function Child(key: Key) : LinkedBetree
@@ -391,9 +398,7 @@ module LinkedBetree
         // All children are either identical (off the key path) or we aren't at
         // Target() yet (0<depth) and the child obeys Substitution
         :: if 0<depth && childIdx == Route(root.pivotTable, key)
-            then Subpath().IsSubstitution(
-              LinkedBetree(root.children[childIdx], linked.diskView),
-              LinkedBetree(root'.children[childIdx], linked'.diskView))
+            then Subpath().IsSubstitution(linked.ChildAtIdx(childIdx), linked'.ChildAtIdx(childIdx))
             else
               // identical pointers, and hence identical subtrees
               root.children[childIdx] == root'.children[childIdx]
