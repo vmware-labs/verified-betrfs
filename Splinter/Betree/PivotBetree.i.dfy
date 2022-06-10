@@ -4,6 +4,7 @@
 include "PagedBetree.i.dfy"
 include "../../lib/Base/total_order.i.dfy"
 include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
+include "Domain.i.dfy"
 
 module PivotBetree
 {
@@ -21,6 +22,7 @@ module PivotBetree
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
 //  import opened Lexicographic_Byte_Order
   import opened BoundedPivotsLib
+  import opened DomainMod
 
   datatype TransitionLabel =
     QueryLabel(endLsn: LSN, key: Key, value: Value)
@@ -30,68 +32,6 @@ module PivotBetree
   | InternalLabel()
 
   type Element = Upperbounded_Lexicographic_Byte_Order_Impl.Ord.Element
-
-  // end is exclusive
-  datatype Domain = EmptyDomain | Domain(start: Element, end: Element)
-  {
-    // Key comparisons are a trigger party
-    predicate {:opaque} SaneKeys()
-    {
-      && (!EmptyDomain? ==>
-          && lt(start, end) // TODO(timeout): sure wish the opaque were working
-          && start.Element?
-          && ElementIsKey(start)
-          && (end.Element? ==> ElementIsKey(end))
-        )
-    }
-
-    predicate WF() {
-      && SaneKeys()
-    }
-
-    predicate Contains(key: Key) {
-      && !EmptyDomain?
-      && lte(start, Element(key)) // TODO(timeout): sure wish the opaque were working
-      && lt(Element(key), end)
-    }
-
-    // TODO(jonh): Why are these unused?
-//    function IntersectInner(r2: Domain) : Domain
-//      requires Domain?
-//      requires r2.Domain?
-//      requires lte(start, r2.start)
-//    {
-//      if lte(end, r2.start)
-//      then EmptyDomain
-//      else if lt(end, r2.end)
-//      then Domain(r2.start, end)
-//      else Domain(r2.start, r2.end)
-//    }
-//
-//    function Intersect(r2: Domain) : Domain
-//    {
-//      if EmptyDomain? || r2.EmptyDomain?
-//      then this
-//      else if lte(start, r2.start)
-//      then this.IntersectInner(r2)
-//      else r2.IntersectInner(this)
-//    }
-
-    // Interpret a domain for use with an abstract Buffer.
-    function KeySet() : iset<Key>
-    {
-      iset key | Contains(key)
-    }
-  }
-
-  function {:opaque} TotalDomain() : (out: Domain)
-    ensures out.WF()
-    ensures out.Domain?
-  { // TODO(timeout): sure wish the opaque were working
-    var out := Domain(Upperbounded_Lexicographic_Byte_Order_Impl.Ord.GetSmallestElement(), Max_Element);
-    out.reveal_SaneKeys();
-    out
-  }
 
   predicate WFChildren(children: seq<BetreeNode>)
   {
@@ -243,7 +183,7 @@ module PivotBetree
     {
       && WF()
       && BetreeNode?
-      && BoundedKey(pivotTable, key)  // TODO(timeout): sure wish the opaque were working
+      && BoundedKey(pivotTable, key)
     }
 
     // Redundant; should equal domain.KeySet() for the domain specified by the pivotTable.
@@ -359,6 +299,7 @@ module PivotBetree
     }
   }
 
+  // TODO(tony): replace with Stamped(BetreeNode). Change .root to .value everywhere; update broken triggers
   datatype StampedBetree = StampedBetree(
     root: BetreeNode,
     seqEnd: LSN

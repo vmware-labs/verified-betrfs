@@ -43,6 +43,11 @@ module MemtableMod
     {
       EmptyMemtable(seqEnd)
     }
+
+    predicate IsEmpty()
+    {
+        mapp.Keys == {}
+    }
   }
 
   function EmptyMemtable(lsn: LSN) : Memtable
