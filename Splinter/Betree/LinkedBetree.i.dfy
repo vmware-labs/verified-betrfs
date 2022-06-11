@@ -454,6 +454,8 @@ module LinkedBetreeMod
       requires Valid(linked)
       ensures out.WF()
       ensures out.root.Some?
+      ensures out.diskView == linked.diskView
+      ensures out.HasRoot() ==> out.root.value in out.diskView.entries
       decreases depth
     {
       if 0 == depth
@@ -643,7 +645,10 @@ module LinkedBetreeMod
     && step.InternalCompactStep?
     && step.path.Valid(v.linked)
     && v'.linked.diskView.AgreesWithDisk(v.linked.diskView) // so that the unchanged children represent the same thing
-    && v'.linked.diskView.entries.Keys <= v.linked.diskView.entries.Keys + Set(step.subsAddrs)
+    && v'.linked.diskView.entries.Keys <= v.linked.diskView.entries.Keys + {step.targetAddr} + Set(step.subsAddrs)
+
+    && step.targetAddr !in v.linked.diskView.entries // Fresh!
+
     // v && v' agree on everything down to Target()
     && step.path.IsSubstitution(v.linked, v'.linked, step.subsAddrs)
     // Target and Target' are related by a compaction operation

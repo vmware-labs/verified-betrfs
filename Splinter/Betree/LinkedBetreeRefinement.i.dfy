@@ -113,7 +113,30 @@ module LinkedBetreeRefinement {
     requires step.InternalCompactStep?
     ensures Inv(v')
   {
-    assume false;
+    var oldRanking := v.linked.diskView.TheRanking();
+    var oldTargetAddr := step.path.Target(v.linked).root.value;
+//    assert oldTargetAddr in v.linked.diskView.entries;
+    var oldTargetRanking := oldRanking[oldTargetAddr];
+    var ranking := oldRanking[step.targetAddr := oldTargetRanking];
+    assume step.path.depth==0;
+//    var entries := v'.linked.diskView.entries;
+//    forall address, childIdx:nat |
+//      && address in entries
+//      && entries[address].ValidChildIndex(childIdx)
+//      && entries[address].children[childIdx].Some?
+//      ensures ranking[entries[address].children[childIdx].value] < ranking[address]
+//    {
+////      var childAddr := entries[address].children[childIdx].value;
+////      if address == step.targetAddr {
+////        assert ranking[childAddr] < ranking[address];
+////      } else {
+////        assert childAddr in v.linked.diskView.entries;
+////        assert childAddr != step.targetAddr;
+////        assert ranking[childAddr] == oldRanking[childAddr];
+////        assert ranking[childAddr] < ranking[address];
+////      }
+//    }
+    assert v'.linked.diskView.PointersRespectRank(ranking);  // witness to acyclicity
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
