@@ -5,6 +5,7 @@ include "LinkedBetree.i.dfy"
 
 module LinkedBetreeRefinement {
   import opened Options
+  import opened Sequences  // Set
   import opened KeyType
   import opened ValueMessage
   import opened MsgHistoryMod
@@ -107,6 +108,26 @@ module LinkedBetreeRefinement {
     && v.linked.diskView.Acyclic()
   }
 
+  lemma ConstructSubstitutionRanking(linked: LinkedBetree, linked': LinkedBetree, path: Path, pathAddrs: PathAddrs)
+    returns (out: Ranking)
+    requires path.depth == |pathAddrs|
+    requires path.IsSubstitution(linked, linked', pathAddrs)
+    requires linked.diskView.Acyclic()
+    ensures out.Keys <= linked.diskView.entries.Keys + Set(pathAddrs)
+    decreases path.depth
+  {
+    if path.depth == 0 {
+      out := linked.diskView.TheRanking();
+      assert out.Keys <= linked.diskView.entries.Keys + Set(pathAddrs);
+    } else {
+      assert linked.HasRoot();
+      var subranking
+        := ConstructSubstitutionRanking(linked.Child(path.key), linked'.Child(path.key), path.Subpath(), pathAddrs[1..]);
+      out := subranking[linked'.root.value := linked.diskView.TheRanking()[linked.root.value]];
+      assert out.Keys <= linked.diskView.entries.Keys + Set(pathAddrs);
+    }
+  }
+
   lemma InvNextInternalCompactStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step);
@@ -117,26 +138,9 @@ module LinkedBetreeRefinement {
     var oldTargetAddr := step.path.Target(v.linked).root.value;
 //    assert oldTargetAddr in v.linked.diskView.entries;
     var oldTargetRanking := oldRanking[oldTargetAddr];
-    var ranking := oldRanking[step.targetAddr := oldTargetRanking];
-    assume step.path.depth==0;
-//    var entries := v'.linked.diskView.entries;
-//    forall address, childIdx:nat |
-//      && address in entries
-//      && entries[address].ValidChildIndex(childIdx)
-//      && entries[address].children[childIdx].Some?
-//      ensures ranking[entries[address].children[childIdx].value] < ranking[address]
-//    {
-////      var childAddr := entries[address].children[childIdx].value;
-////      if address == step.targetAddr {
-////        assert ranking[childAddr] < ranking[address];
-////      } else {
-////        assert childAddr in v.linked.diskView.entries;
-////        assert childAddr != step.targetAddr;
-////        assert ranking[childAddr] == oldRanking[childAddr];
-////        assert ranking[childAddr] < ranking[address];
-////      }
-//    }
-    assert v'.linked.diskView.PointersRespectRank(ranking);  // witness to acyclicity
+    var targetRanking := oldRanking[step.targetAddr := oldTargetRanking];
+    var rootRanking := ConstructSubstitutionRanking(v.linked, v'.linked, step.path, step.pathAddrs);
+    assert v'.linked.diskView.PointersRespectRank(rootRanking);  // witness to acyclicity
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)

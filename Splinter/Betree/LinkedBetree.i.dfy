@@ -431,6 +431,8 @@ module LinkedBetreeMod
         v.linked.Root().PushBufferStack(newBuffers)
       )
   }
+
+  type PathAddrs = seq<Address>
   
   datatype Path = Path(key: Key, depth: nat)
   {
@@ -445,7 +447,7 @@ module LinkedBetreeMod
       decreases depth
     {
       && linked.WF()
-      && linked.root.Some?
+      && linked.HasRoot()
       && linked.Root().KeyInDomain(key)
       && (0 < depth ==> Subpath().Valid(linked.Child(key)))
     }
@@ -463,16 +465,16 @@ module LinkedBetreeMod
       else Subpath().Target(linked.Child(key))
     }
 
-    predicate IsSubstitution(linked: LinkedBetree, linked': LinkedBetree, subsAddrs: seq<Address>)
-      requires depth == |subsAddrs|
+    predicate IsSubstitution(linked: LinkedBetree, linked': LinkedBetree, pathAddrs: PathAddrs)
+      requires depth == |pathAddrs|
       decreases depth
     { 
       && Valid(linked)
       && Valid(linked')
       && linked.diskView.AgreesWithDisk(linked'.diskView)
       && (0 < depth ==> (
-        && linked'.root.value == subsAddrs[0]
-        // When depth==0, linked.root==linked'.root, so we're done.
+        && linked'.root.value == pathAddrs[0]
+        // When depth==0, linked.root~~>linked'.root, so we're done.
         && var root := linked.Root();
         && var root' := linked'.Root();
         // "local" info matches
@@ -483,7 +485,7 @@ module LinkedBetreeMod
           // All children are either identical (off the key path) or we aren't at
           // Target() yet (0<depth) and the child obeys Substitution
           :: if childIdx == Route(root.pivotTable, key)
-              then Subpath().IsSubstitution(linked.ChildAtIdx(childIdx), linked'.ChildAtIdx(childIdx), subsAddrs[1..])
+              then Subpath().IsSubstitution(linked.ChildAtIdx(childIdx), linked'.ChildAtIdx(childIdx), pathAddrs[1..])
               else
                 // identical pointers, and hence identical subtrees
                 root.children[childIdx] == root'.children[childIdx]
@@ -645,12 +647,12 @@ module LinkedBetreeMod
     && step.InternalCompactStep?
     && step.path.Valid(v.linked)
     && v'.linked.diskView.AgreesWithDisk(v.linked.diskView) // so that the unchanged children represent the same thing
-    && v'.linked.diskView.entries.Keys <= v.linked.diskView.entries.Keys + {step.targetAddr} + Set(step.subsAddrs)
+    && v'.linked.diskView.entries.Keys <= v.linked.diskView.entries.Keys + {step.targetAddr} + Set(step.pathAddrs)
 
     && step.targetAddr !in v.linked.diskView.entries // Fresh!
 
     // v && v' agree on everything down to Target()
-    && step.path.IsSubstitution(v.linked, v'.linked, step.subsAddrs)
+    && step.path.IsSubstitution(v.linked, v'.linked, step.pathAddrs)
     // Target and Target' are related by a compaction operation
     && IsCompaction(step.path.Target(v.linked), step.path.Target(v'.linked), step.targetAddr)
     && v'.memtable == v.memtable  // UNCHANGED
@@ -673,16 +675,16 @@ module LinkedBetreeMod
     | InternalGrowStep()
     | InternalSplitStep(path: Path, childIdx: nat, splitKey: Key)
     | InternalFlushStep(path: Path, childIdx: nat)
-    | InternalCompactStep(path: Path, compactedNode: BetreeNode, targetAddr: Address, subsAddrs: seq<Address>)
+    | InternalCompactStep(path: Path, compactedNode: BetreeNode, targetAddr: Address, pathAddrs: PathAddrs)
   {
     predicate WF() {
       match this {
         case QueryStep(receipt) => receipt.Valid()
         case InternalSplitStep(path, childIdx, splitKey) => true
         case InternalFlushStep(path, childIdx) => true
-        case InternalCompactStep(path, compactedNode, _, subsAddrs) =>
+        case InternalCompactStep(path, compactedNode, _, pathAddrs) =>
           && compactedNode.WF()
-          && path.depth == |subsAddrs|
+          && path.depth == |pathAddrs|
         case _ => true
       }
     }
