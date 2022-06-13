@@ -108,23 +108,42 @@ module LinkedBetreeRefinement {
     && v.linked.diskView.Acyclic()
   }
 
+  lemma AcyclicImpliesReachableRespect(linked: LinkedBetree)
+    requires linked.WF()
+    requires linked.diskView.Acyclic()
+    ensures linked.ReachableAddressesRespectRanking(linked.diskView.TheRanking())
+    decreases linked.GetRank(linked.diskView.TheRanking())
+  {
+    if linked.HasRoot() {
+      forall childIdx | linked.Root().ValidChildIndex(childIdx) ensures
+          linked.ChildAtIdx(childIdx).ReachableAddressesRespectRanking(linked.diskView.TheRanking()) {
+        AcyclicImpliesReachableRespect(linked.ChildAtIdx(childIdx));
+      }
+    }
+  }
+
   lemma ConstructSubstitutionRanking(linked: LinkedBetree, linked': LinkedBetree, path: Path, pathAddrs: PathAddrs)
     returns (out: Ranking)
     requires path.depth == |pathAddrs|
     requires path.IsSubstitution(linked, linked', pathAddrs)
     requires linked.diskView.Acyclic()
-    ensures out.Keys <= linked.diskView.entries.Keys + Set(pathAddrs)
+    ensures linked'.ReachableAddressesRespectRanking(out)
     decreases path.depth
   {
+    AcyclicImpliesReachableRespect(linked);
+//    assert linked.ReachableAddressesRespectRanking(linked.diskView.TheRanking());
     if path.depth == 0 {
       out := linked.diskView.TheRanking();
-      assert out.Keys <= linked.diskView.entries.Keys + Set(pathAddrs);
+      assert linked.root.value in out.Keys;
+      assert linked'.root == linked.root;
+      assert linked'.root.value in out.Keys;
+      assert linked'.ReachableAddressesRespectRanking(out);
     } else {
       assert linked.HasRoot();
       var subranking
         := ConstructSubstitutionRanking(linked.Child(path.key), linked'.Child(path.key), path.Subpath(), pathAddrs[1..]);
       out := subranking[linked'.root.value := linked.diskView.TheRanking()[linked.root.value]];
-      assert out.Keys <= linked.diskView.entries.Keys + Set(pathAddrs);
+      assert linked'.ReachableAddressesRespectRanking(out);
     }
   }
 

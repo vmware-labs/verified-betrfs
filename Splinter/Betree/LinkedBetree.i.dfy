@@ -169,15 +169,24 @@ module LinkedBetreeMod
       MapsAgree(entries, other.entries)
     }
 
+    // The node at this address has childe pointers that respect ranking
+    predicate NodePointersRespectsRank(ranking: GenericDisk.Ranking, addr: Address)
+      requires WF()
+      requires addr in entries
+    {
+      && addr in ranking
+      && var node := entries[addr];
+      && (forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some? ::
+        && node.children[childIdx].value in ranking.Keys
+        && ranking[node.children[childIdx].value] < ranking[addr]
+        )
+    }
+
     predicate PointersRespectRank(ranking: GenericDisk.Ranking)
       requires WF()
     {
       && entries.Keys <= ranking.Keys
-      && (forall address | address in entries
-          :: var node := entries[address];
-            forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some?
-              :: ranking[node.children[childIdx].value] < ranking[address]
-          )
+      && (forall addr | addr in entries :: NodePointersRespectsRank(ranking, addr))
     }
 
     predicate Acyclic()
@@ -240,9 +249,9 @@ module LinkedBetreeMod
 
     function GetRank(ranking: Ranking) : nat
       requires WF()
-      requires diskView.PointersRespectRank(ranking)
+//      requires diskView.PointersRespectRank(ranking)
     {
-      if HasRoot() then ranking[root.value]+1 else 0
+      if  HasRoot() && root.value in ranking then ranking[root.value]+1 else 0
     }
 
     function GetChildCount() : nat 
@@ -251,33 +260,47 @@ module LinkedBetreeMod
       if HasRoot() then |Root().children| else 0
     }
 
-    // function ReachableAddressesUpTo(childCount: nat, ranking: Ranking) : (out: set<Address>)
-    //   requires WF()
-    //   requires HasRoot()
-    //   requires childCount <= |Root().children|
-    //   requires diskView.PointersRespectRank(ranking)
-    //   // ensures forall childIdx | 0 <= childIdx < childCount
-    //   //   :: ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
-    //   decreases GetRank(ranking), childCount, 0
-    // {
-    //   if childCount == 0
-    //   then {}
-    //   else
-    //     var childPtr := Root().children[childCount-1];
-    //     ReachableAddressesUpTo(childCount-1, ranking)
-    //     + ChildAtIdx(childCount-1).ReachableAddresses(ranking)
-    // }
+    predicate ReachableAddressesRespectRanking(ranking: Ranking)
+      requires WF()
+      decreases GetRank(ranking)
+    {
+      HasRoot() ==> (
+        && root.value in ranking.Keys
+        && diskView.NodePointersRespectsRank(ranking, root.value) // can't recurse until ranking says it's okay!
+        && (forall childIdx | Root().ValidChildIndex(childIdx) ::
+            ChildAtIdx(childIdx).ReachableAddressesRespectRanking(ranking))
+      )
+    }
 
-    // function ReachableAddresses(ranking: Ranking) : (out: set<Address>)
-    //   requires WF()
-    //   requires diskView.PointersRespectRank(ranking)
-    //   // ensures forall childIdx | Root().ValidChildIndex(childIdx) :: ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
-    //   decreases GetRank(ranking), GetChildCount(), 1
-    // {
-    //   if HasRoot() 
-    //   then ReachableAddressesUpTo(|Root().children|, ranking) + {root.value} 
-    //   else {}
-    // }
+// TODO dead code
+//    function ReachableAddressesUpTo(childCount: nat, ranking: Ranking) : (out: set<Address>)
+//      requires WF()
+//      requires HasRoot()
+//      requires childCount <= |Root().children|
+//      requires diskView.PointersRespectRank(ranking)
+//      // ensures forall childIdx | 0 <= childIdx < childCount
+//      //   :: ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
+//      decreases GetRank(ranking), childCount, 0
+//    {
+//      if childCount == 0
+//      then {}
+//      else
+//        var childPtr := Root().children[childCount-1];
+//        ReachableAddressesUpTo(childCount-1, ranking)
+//        + ChildAtIdx(childCount-1).ReachableAddresses(ranking)
+//    }
+//
+//    function ReachableAddresses(ranking: Ranking) : (out: set<Address>)
+//      requires WF()
+//      requires diskView.PointersRespectRank(ranking)
+//      // ensures forall childIdx | Root().ValidChildIndex(childIdx) :: ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
+//      decreases GetRank(ranking), GetChildCount(), 1
+//    {
+//      if HasRoot() 
+//      then ReachableAddressesUpTo(|Root().children|, ranking) + {root.value} 
+//      else {}
+//    }
+
 
     // predicate IsTight(ranking: Ranking) 
     //   requires WF()
