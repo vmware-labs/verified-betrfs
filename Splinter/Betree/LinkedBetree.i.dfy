@@ -260,6 +260,17 @@ module LinkedBetreeMod
       if HasRoot() then |Root().children| else 0
     }
 
+    predicate RankingIsClosed(ranking: Ranking) 
+      requires WF()
+    {
+      forall addr, childIdx | 
+        && addr in ranking 
+        && diskView.entries[addr].ValidChildIndex(childIdx)
+        && diskView.entries[addr].children[childIdx].Some?
+      ::
+        diskView.entries[addr].children[childIdx].value in ranking
+    }
+
     predicate ReachableAddressesRespectRanking(ranking: Ranking)
       requires WF()
       decreases GetRank(ranking)
@@ -673,6 +684,8 @@ module LinkedBetreeMod
     && v'.linked.diskView.entries.Keys <= v.linked.diskView.entries.Keys + {step.targetAddr} + Set(step.pathAddrs)
 
     && step.targetAddr !in v.linked.diskView.entries // Fresh!
+
+    // todo(tony) : path addrs must also be fresh?
 
     // v && v' agree on everything down to Target()
     && step.path.IsSubstitution(v.linked, v'.linked, step.pathAddrs)

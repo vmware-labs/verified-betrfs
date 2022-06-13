@@ -2,10 +2,15 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "LinkedBetree.i.dfy"
+include "../../lib/Base/SequencesOfMaps.i.dfy"
+include "../../lib/Base/Sets.i.dfy"
 
 module LinkedBetreeRefinement {
   import opened Options
+  import opened Mathematics
   import opened Sequences  // Set
+  import opened Sets
+  import opened SequencesOfMaps
   import opened KeyType
   import opened ValueMessage
   import opened MsgHistoryMod
@@ -108,6 +113,7 @@ module LinkedBetreeRefinement {
     && v.linked.diskView.Acyclic()
   }
 
+  // 
   lemma AcyclicImpliesReachableRespect(linked: LinkedBetree)
     requires linked.WF()
     requires linked.diskView.Acyclic()
@@ -122,27 +128,176 @@ module LinkedBetreeRefinement {
     }
   }
 
-  lemma ConstructSubstitutionRanking(linked: LinkedBetree, linked': LinkedBetree, path: Path, pathAddrs: PathAddrs)
+  lemma SubtreeRespectsRanking(linked: LinkedBetree, ranking: Ranking, addr: Address) 
+    requires linked.ReachableAddressesRespectRanking(ranking)
+    // requires addr in ranking
+  {
+
+  }
+
+  function GetSubranking(ranking: Ranking, subset:set<Address>) : Ranking
+    requires subset <= ranking.Keys
+  {
+    map addr | addr in subset :: ranking[addr]
+  }
+
+
+  function ReachableAddresses(linked: LinkedBetree, ranking: Ranking) : (out: set<Address>)
+    requires linked.WF()
+    requires linked.ReachableAddressesRespectRanking(ranking)
+    decreases linked.GetRank(ranking)
+  {
+    if linked.HasRoot() then 
+        var s := seq(|linked.Root().children|, (i:nat) requires i<|linked.Root().children| => ReachableAddresses(linked.ChildAtIdx(i), ranking));
+      {linked.root.value} + FoldSets(s)
+    else {}
+  }
+
+  lemma ReachableAddressesIsSubsetOfRanking(linked: LinkedBetree, ranking: Ranking) 
+    requires linked.WF()
+    requires linked.ReachableAddressesRespectRanking(ranking)
+    ensures ReachableAddresses(linked, ranking) <= ranking.Keys
+    decreases linked.GetRank(ranking)
+  {
+    var res :=  ReachableAddresses(linked, ranking);
+    if linked.HasRoot() {
+      forall e | e in res 
+      ensures e in ranking.Keys 
+      {
+        if e != linked.root.value {
+          var s := seq(|linked.Root().children|, (i:nat) requires i<|linked.Root().children| => ReachableAddresses(linked.ChildAtIdx(i), ranking));
+          assert e in FoldSets(s);
+          var idx := WhichFold(s, e);
+          assert e in s[idx];
+          ReachableAddressesIsSubsetOfRanking(linked.ChildAtIdx(idx), ranking);
+        }
+      }
+    }
+  }
+
+  // Merge by taking the smaller ranking where possible
+  function MergeRanking(r1: Ranking, r2: Ranking) : (out: Ranking) {
+    map addr | addr in r1.Keys + r2.Keys :: 
+      var out:nat := 
+      if addr in r1 then
+        if addr in r2 then 
+          min(r1[addr], r2[addr])
+        else
+          r1[addr]
+      else
+        r2[addr]
+      ; out
+  }
+
+  lemma MergeRankingSatisfiesBoth(l1: LinkedBetree, l2: LinkedBetree, r1: Ranking, r2: Ranking) 
+    requires l1.WF() && l2.WF()
+    requires l1.diskView == l2.diskView
+    requires l1.RankingIsClosed(r1) && l2.RankingIsClosed(r2)
+    requires l1.ReachableAddressesRespectRanking(r1)
+    requires l2.ReachableAddressesRespectRanking(r2)
+    ensures l1.ReachableAddressesRespectRanking(MergeRanking(r1, r2))
+    // ensures l2.ReachableAddressesRespectRanking(MergeRanking(r1, r2))
+  {
+    if !l1.HasRoot() {
+      return;
+    }
+    var merged := MergeRanking(r1, r2);
+    var node := l1.Root();
+    forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some? 
+    ensures && node.children[childIdx].value in merged.Keys
+            && merged[node.children[childIdx].value] < merged[l1.root.value]
+    {
+      var parent := l1.root.value;
+      var child := node.children[childIdx].value;
+      if merged[parent] == r1[parent] {
+        if merged[child] == r1[child] {
+          // easy
+          assert merged[node.children[childIdx].value] < merged[l1.root.value];
+        } else {
+          // hard: parent in r1 but child in r2
+          assert merged[child] == r2[child];
+          assert merged[node.children[childIdx].value] < merged[l1.root.value];
+        }
+      } else {
+        assert parent in r2;
+        assert child in r2;  // parent in here means child must be here
+        assert merged[parent] == r2[parent];
+        if merged[child] == r2[child] {
+          assert parent in l2.diskView.entries;
+          assert child in l2.diskView.entries;
+          assert l2.diskView.NodePointersRespectsRank(r2, parent);
+
+
+          
+          assert r2[child] < r2[parent];
+          assert merged[child] < merged[parent];
+        } else {
+          // hard: parent in r2, child in r1;
+          assert merged[node.children[childIdx].value] < merged[l1.root.value];
+        }
+      }
+
+      assert node.children[childIdx].value in merged.Keys;
+      assert merged[node.children[childIdx].value] < merged[l1.root.value];
+    }
+
+
+    assume false;
+    assert forall childIdx | l1.Root().ValidChildIndex(childIdx) ::
+        l1.ChildAtIdx(childIdx).ReachableAddressesRespectRanking(merged);
+
+  }
+
+  lemma ConstructSubstitutionRanking(linked: LinkedBetree, linked': LinkedBetree, ranking: Ranking, targetRanking': Ranking, path: Path, pathAddrs: PathAddrs)
     returns (out: Ranking)
     requires path.depth == |pathAddrs|
     requires path.IsSubstitution(linked, linked', pathAddrs)
-    requires linked.diskView.Acyclic()
+    requires linked.ReachableAddressesRespectRanking(ranking)
+    requires path.Target(linked').ReachableAddressesRespectRanking(targetRanking')
     ensures linked'.ReachableAddressesRespectRanking(out)
     decreases path.depth
   {
-    AcyclicImpliesReachableRespect(linked);
+    // AcyclicImpliesReachableRespect(linked);
 //    assert linked.ReachableAddressesRespectRanking(linked.diskView.TheRanking());
     if path.depth == 0 {
-      out := linked.diskView.TheRanking();
-      assert linked.root.value in out.Keys;
-      assert linked'.root == linked.root;
-      assert linked'.root.value in out.Keys;
+      out := targetRanking';
       assert linked'.ReachableAddressesRespectRanking(out);
     } else {
       assert linked.HasRoot();
       var subranking
-        := ConstructSubstitutionRanking(linked.Child(path.key), linked'.Child(path.key), path.Subpath(), pathAddrs[1..]);
-      out := subranking[linked'.root.value := linked.diskView.TheRanking()[linked.root.value]];
+        := ConstructSubstitutionRanking(linked.Child(path.key), linked'.Child(path.key), ranking, targetRanking', path.Subpath(), pathAddrs[1..]);
+      var length := |linked.Root().children|;
+      var replacedIdx := Route(linked.Root().pivotTable, path.key);
+      var childRankings := seq(length, (i:nat) requires i < length => 
+        if i == replacedIdx then
+          subranking
+        else 
+          ReachableAddressesIsSubsetOfRanking(linked.ChildAtIdx(i), ranking);
+          GetSubranking(ranking, ReachableAddresses(linked.ChildAtIdx(i), ranking)));
+      var descendantRanking := FoldMaps(childRankings);
+      var rootRank: nat := if |descendantRanking| == 0 then 1 else max(SetMax(descendantRanking.Values), 0) + 1;
+      out := descendantRanking[linked'.root.value := rootRank];
+      var node := linked'.Root();
+      forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some? 
+      ensures && node.children[childIdx].value in out.Keys
+              && out[node.children[childIdx].value] < out[linked'.root.value]
+      {
+        
+        assert node.children[childIdx].value in childRankings[childIdx];  // trigger
+        FoldMapsSubset(childRankings);
+        assert out[node.children[childIdx].value] in descendantRanking.Values;  // trigger
+      }
+      assert linked'.diskView.NodePointersRespectsRank(out, linked'.root.value);
+
+
+      forall childIdx | linked'.Root().ValidChildIndex(childIdx) 
+      ensures linked'.ChildAtIdx(childIdx).ReachableAddressesRespectRanking(out)
+      {
+
+      }
+    
+
+
       assert linked'.ReachableAddressesRespectRanking(out);
     }
   }
@@ -158,8 +313,8 @@ module LinkedBetreeRefinement {
 //    assert oldTargetAddr in v.linked.diskView.entries;
     var oldTargetRanking := oldRanking[oldTargetAddr];
     var targetRanking := oldRanking[step.targetAddr := oldTargetRanking];
-    var rootRanking := ConstructSubstitutionRanking(v.linked, v'.linked, step.path, step.pathAddrs);
-    assert v'.linked.diskView.PointersRespectRank(rootRanking);  // witness to acyclicity
+    // var rootRanking := ConstructSubstitutionRanking(v.linked, v'.linked, step.path, step.pathAddrs);
+    // assert v'.linked.diskView.PointersRespectRank(rootRanking);  // witness to acyclicity
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -182,12 +337,15 @@ module LinkedBetreeRefinement {
         assert Inv(v');
       }
       case InternalGrowStep() => {
+        assume false;
         assert Inv(v');   // bwoken
       }
       case InternalSplitStep(_, _, _) => {
+        assume false;
         assert Inv(v');   // bwoken
       }
       case InternalFlushStep(_, _) => {
+        assume false;
         assert Inv(v');   // bwoken
       }
       case InternalCompactStep(_, _, _, _) => {

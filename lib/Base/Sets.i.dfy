@@ -55,4 +55,37 @@ module Sets {
   {
 
   }
+
+  function SetMax(a:set<int>) : (out: int) 
+    requires 0 < |a|
+    ensures forall e | e in a :: e <= out
+    ensures out in a
+  {
+    var e :| e in a;
+    if |a| == 1 then 
+      assert forall x | x in a :: x <= e by
+      {
+        forall y | y in a ensures y == e 
+        {
+          if y != e {
+            SetInclusionImpliesSmallerCardinality({y, e}, a);
+            assert false;
+          }
+        }
+      }
+      e 
+    else
+      var rest := SetMax(a-{e});
+      var out := if e < rest then rest else e;
+      assert forall x | x in a :: x <= out by
+      {
+        forall x | x in a ensures x <= out
+        {
+          if x != e {
+            assert x in a - {e};  // trigger
+          }
+        }
+      }
+      out
+  }
 }
