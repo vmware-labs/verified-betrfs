@@ -182,6 +182,21 @@ module LinkedBetreeMod
         )
     }
 
+    predicate ValidRanking(ranking: Ranking) 
+      requires WF()
+    {
+      forall addr | addr in ranking ::
+        && addr in entries
+        && (forall childIdx: nat | entries[addr].ValidChildIndex(childIdx) :: 
+            var ptr := entries[addr].children[childIdx];
+            ptr.Some? ==> (
+              && ptr.value in ranking  // ranking is closed
+              && ranking[ptr.value] < ranking[addr]  // decreases
+            )
+        )
+    }
+
+    // todo: kill 
     predicate PointersRespectRank(ranking: GenericDisk.Ranking)
       requires WF()
     {
@@ -189,6 +204,7 @@ module LinkedBetreeMod
       && (forall addr | addr in entries :: NodePointersRespectsRank(ranking, addr))
     }
 
+    // todo: kill 
     predicate Acyclic()
     {
       && WF()
@@ -260,17 +276,8 @@ module LinkedBetreeMod
       if HasRoot() then |Root().children| else 0
     }
 
-    predicate RankingIsClosed(ranking: Ranking) 
-      requires WF()
-    {
-      forall addr, childIdx | 
-        && addr in ranking 
-        && diskView.entries[addr].ValidChildIndex(childIdx)
-        && diskView.entries[addr].children[childIdx].Some?
-      ::
-        diskView.entries[addr].children[childIdx].value in ranking
-    }
 
+    // todo: kill
     predicate ReachableAddressesRespectRanking(ranking: Ranking)
       requires WF()
       decreases GetRank(ranking)
@@ -282,6 +289,16 @@ module LinkedBetreeMod
             ChildAtIdx(childIdx).ReachableAddressesRespectRanking(ranking))
       )
     }
+
+    predicate ValidRanking(ranking: Ranking) 
+      requires WF()
+    {
+      && diskView.ValidRanking(ranking)
+      && (HasRoot() ==> root.value in ranking)
+    }
+
+
+
 
 // TODO dead code
 //    function ReachableAddressesUpTo(childCount: nat, ranking: Ranking) : (out: set<Address>)

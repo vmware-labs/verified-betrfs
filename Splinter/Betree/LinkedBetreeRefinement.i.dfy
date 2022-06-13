@@ -192,7 +192,7 @@ module LinkedBetreeRefinement {
   lemma MergeRankingSatisfiesBoth(l1: LinkedBetree, l2: LinkedBetree, r1: Ranking, r2: Ranking) 
     requires l1.WF() && l2.WF()
     requires l1.diskView == l2.diskView
-    requires l1.RankingIsClosed(r1) && l2.RankingIsClosed(r2)
+    // requires l1.RankingIsClosed(r1) && l2.RankingIsClosed(r2)
     requires l1.ReachableAddressesRespectRanking(r1)
     requires l2.ReachableAddressesRespectRanking(r2)
     ensures l1.ReachableAddressesRespectRanking(MergeRanking(r1, r2))
@@ -228,7 +228,7 @@ module LinkedBetreeRefinement {
           assert l2.diskView.NodePointersRespectsRank(r2, parent);
 
 
-          
+
           assert r2[child] < r2[parent];
           assert merged[child] < merged[parent];
         } else {
