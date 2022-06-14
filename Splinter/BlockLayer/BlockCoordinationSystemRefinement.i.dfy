@@ -80,7 +80,7 @@ module BlockCoordinationSystemRefinement
 
     // This layer's version of CoordinationSystemRefinement.InvInFlightGeometry
     && (v.journal.inFlight.Some? ==> 
-        v.journal.inFlight.value.I().SeqStart() == v.mapadt.inFlight.value.seqEnd
+        v.journal.inFlight.value.I().SeqStart() == v.mapadt.inFlight.value.superblock.seqEnd
       )
   }
 

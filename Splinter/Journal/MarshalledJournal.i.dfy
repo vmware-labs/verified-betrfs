@@ -139,40 +139,6 @@ module MarshalledJournal {
     (exists t :: InitModel(v, journalImage, t))
   }
 
-// TODO(jonh): delete this dead code!?
-//\  predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, keepReceiptLines: nat)
-//\    requires lbl.WF()
-//\  {
-//\    && lbl.FreezeForCommitLabel?
-//\    && (exists t, t' ::
-//\      // Connection up a layer
-//\      && TypeProvidesModel(v, t)
-//\      && TypeProvidesModel(v', t')
-//\      && LinkedJournal.Next(t, t', lbl.I())
-//\
-//\      && var fr := lbl.frozenJournal.superblock.freshestRec;
-//\
-//\      // Have a tight model of the disk that's rooted where the SB points.
-//\      && lbl.frozenJournal.diskView.IsSubDisk(v.journalImage.diskView)
-//\      && lbl.frozenJournal.superblock.boundaryLSN == v.journalImage.superblock.boundaryLSN
-//\      && lbl.frozenJournal.diskView.IsNondanglingPointer(fr)
-//\      && lbl.frozenJournal.diskView.Tight()
-//\
-//\      // Constraint on freshestRec: End at a block that matches the end we
-//\      // promised in the (abstract ghosty) frozenJournal
-//\      && (if lbl.frozenJournal.IsEmpty()
-//\          then fr.None?
-//\          else
-//\            && fr.Some?
-//\            && t.truncatedJournal.diskView.entries[fr.value].messageSeq.seqEnd == lbl.frozenJournal.SeqEnd()
-//\         )
-//\    )
-//\  }
-
-  predicate Inv(v: Variables) {
-    && (exists typed :: TypeProvidesModel(v, typed))
-  }
-
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && lbl.WF()

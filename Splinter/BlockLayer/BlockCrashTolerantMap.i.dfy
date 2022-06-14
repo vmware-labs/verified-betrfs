@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../CoordinationLayer/CrashTolerantMap.i.dfy"
+include "../Betree/MarshalledBetree.i.dfy"
 
 // TODO(jonh): This is a copy-paste of Splinter/CoordinationLayer/CrashTolerantMap. Functor-reuse?
 
@@ -12,16 +13,16 @@ module BlockCrashTolerantMap {
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Options
-  import AbstractMap
+  import MarshalledBetreeMod
   import CrashTolerantMap
 
   type TransitionLabel = CrashTolerantMap.TransitionLabel
 
-  type StoreImage = StampedMap
+  type StoreImage = MarshalledBetreeMod.BetreeImage
 
   datatype Ephemeral =
     | Unknown
-    | Known(v: AbstractMap.Variables)
+    | Known(v: MarshalledBetreeMod.Variables)
 
   datatype Variables = Variables(
     persistent: StoreImage,
@@ -41,8 +42,8 @@ module BlockCrashTolerantMap {
     && v.ephemeral.Unknown?
     && v'.ephemeral.Known?
 
-    && lbl.endLsn == v.persistent.seqEnd
-    && AbstractMap.Init(v'.ephemeral.v, v.persistent)
+    && lbl.endLsn == v.persistent.superblock.seqEnd
+    && MarshalledBetreeMod.Init(v'.ephemeral.v, v.persistent)
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
   }
@@ -55,7 +56,7 @@ module BlockCrashTolerantMap {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
   
-    && AbstractMap.Next(v.ephemeral.v, v'.ephemeral.v, AbstractMap.PutLabel(lbl.records))
+    && MarshalledBetreeMod.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.PutLabel(lbl.records))
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
   }
@@ -68,11 +69,11 @@ module BlockCrashTolerantMap {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
-    && AbstractMap.Next(v.ephemeral.v, v'.ephemeral.v, AbstractMap.QueryLabel(lbl.endLsn, lbl.key, lbl.value))
+    && MarshalledBetreeMod.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.QueryLabel(lbl.endLsn, lbl.key, lbl.value))
     && v' == v
   }
 
-  predicate FreezeMapInternal(v: Variables, v': Variables, lbl: TransitionLabel, frozenMap: StampedMap)
+  predicate FreezeMapInternal(v: Variables, v': Variables, lbl: TransitionLabel, frozenMap: StoreImage)
   {
     && v.WF()
     && lbl.WF()
@@ -84,7 +85,7 @@ module BlockCrashTolerantMap {
     // guarantees about its in-flight map state.
     && v.inFlight.None?
 
-    && AbstractMap.FreezeAs(v.ephemeral.v, v'.ephemeral.v, AbstractMap.FreezeAsLabel(frozenMap))
+    && MarshalledBetreeMod.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.FreezeAsLabel(frozenMap))
     && v'.inFlight == Some(frozenMap)
     && v'.persistent == v.persistent // UNCHANGED
   }
@@ -97,7 +98,7 @@ module BlockCrashTolerantMap {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
-    && AbstractMap.Next(v.ephemeral.v, v'.ephemeral.v, AbstractMap.InternalLabel())
+    && MarshalledBetreeMod.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.InternalLabel())
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
   }
@@ -112,9 +113,9 @@ module BlockCrashTolerantMap {
 
     // Frozen map can't go backwards vs persistent map, lest we end up with
     // a gap to the ephemeral journal start.
-    && v.persistent.seqEnd <= lbl.newBoundaryLsn
+    && v.persistent.superblock.seqEnd <= lbl.newBoundaryLsn
     // Frozen journal & frozen map agree on boundary.
-    && lbl.newBoundaryLsn == v.inFlight.value.seqEnd
+    && lbl.newBoundaryLsn == v.inFlight.value.superblock.seqEnd
 
     && v' == v
   }
@@ -146,7 +147,7 @@ module BlockCrashTolerantMap {
     | LoadEphemeralFromPersistentStep()
     | PutRecordsStep()
     | QueryStep()
-    | FreezeMapInternalStep(frozenMap: StampedMap)
+    | FreezeMapInternalStep(frozenMap: StoreImage)
     | EphemeralInternalStep()
     | CommitStartStep()
     | CommitCompleteStep()
@@ -156,7 +157,7 @@ module BlockCrashTolerantMap {
   // Models mkfs
   predicate Init(v: Variables)
   {
-    v == Variables(StampedMod.Empty(), Unknown, None)
+    v == Variables(MarshalledBetreeMod.EmptyBetreeImage(), Unknown, None)
   }
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
