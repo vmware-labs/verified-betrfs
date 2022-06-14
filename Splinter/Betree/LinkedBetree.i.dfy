@@ -59,6 +59,7 @@ module LinkedBetreeMod
     }
 
     predicate OccupiedChildIndex(childIdx: nat)
+      requires WF()
     {
       && ValidChildIndex(childIdx)
       && children[childIdx].Some?
@@ -86,8 +87,8 @@ module LinkedBetreeMod
       ensures out.WF()
     {
       var out := Domain(pivotTable[childIdx], pivotTable[childIdx+1]);
-      reveal_IsStrictlySorted();  /* jonh suspicious lt leak */
-      out.reveal_SaneKeys();  /* jonh suspicious lt leak */
+      reveal_IsStrictlySorted(); 
+      out.reveal_SaneKeys(); 
       out
     }
 
@@ -98,13 +99,13 @@ module LinkedBetreeMod
       && BoundedKey(pivotTable, key)
     }
 
-    // Redundant; should equal domain.KeySet() for the domain specified by the pivotTable.
-    function KeySet() : iset<Key>
-      requires WF()
-      requires BetreeNode?  // TODO(jonh): trouble for Nils?
-    {
-      iset key | KeyInDomain(key)
-    }
+    // // Redundant; should equal domain.KeySet() for the domain specified by the pivotTable.
+    // function KeySet() : iset<Key>
+    //   requires WF()
+    //   requires BetreeNode?  // TODO(jonh): trouble for Nils?
+    // {
+    //   iset key | KeyInDomain(key)
+    // }
 
     function ChildPtr(key: Key) : Pointer
       requires WF()
@@ -115,11 +116,13 @@ module LinkedBetreeMod
     }
   }
 
+  // PivotTable constructor for a total domain
   function TotalPivotTable() : PivotTable
   {
     [TotalDomain().start, TotalDomain().end]
   }
 
+  // BetreeNode constructor for empty node
   function EmptyRoot(domain: Domain) : (out: BetreeNode)
     requires domain.WF()
     requires domain.Domain?
@@ -135,7 +138,8 @@ module LinkedBetreeMod
   {
     // TODO(jonh): some duplication with LinkedJournal.DiskView; refactor into library superclassish thing?
     // Or a generic with GenericDisk.DiskView<T>?
-    predicate EntriesWF()
+    // BetreeNodes are WF()
+    predicate EntriesWF() 
     {
       (forall addr | addr in entries :: entries[addr].WF())
     }
@@ -145,21 +149,21 @@ module LinkedBetreeMod
       ptr.Some? ==> ptr.value in entries
     }
 
-    predicate NodeHasNondanglingPointers(node: BetreeNode)
+    predicate NodeHasNondanglingChildPtrs(node: BetreeNode)
     {
       node.BetreeNode? ==>
       (forall idx:nat | idx < |node.children| :: IsNondanglingPointer(node.children[idx]))
     }
 
-    predicate NondanglingPointers()
+    predicate NoDanglingPointers()  // i.e. disk is closed wrt to all the pointers in the nodes on disk
     {
-      (forall addr | addr in entries :: NodeHasNondanglingPointers(entries[addr]))
+      (forall addr | addr in entries :: NodeHasNondanglingChildPtrs(entries[addr]))
     }
 
     predicate WF()
     {
       && EntriesWF()
-      && NondanglingPointers()
+      && NoDanglingPointers()
     }   
 
     function Get(ptr: Pointer) : BetreeNode
@@ -175,63 +179,29 @@ module LinkedBetreeMod
       MapsAgree(entries, other.entries)
     }
 
-    // The node at this address has childe pointers that respect ranking
-    predicate NodePointersRespectsRank(ranking: GenericDisk.Ranking, addr: Address)
+    // The node at this address has child pointers that respect ranking
+    predicate NodeChildrenRespectsRank(ranking: Ranking, addr: Address)
       requires WF()
       requires addr in entries
+      requires addr in ranking
     {
-      && addr in ranking
       && var node := entries[addr];
       && (forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some? ::
-        && node.children[childIdx].value in ranking.Keys
-        && ranking[node.children[childIdx].value] < ranking[addr]
-        )
+        && node.children[childIdx].value in ranking  // ranking is closed
+        && ranking[node.children[childIdx].value] < ranking[addr]  // decreases
+      )
     }
 
+    // Together with NodeChildrenRespectsRank, this says that ranking is closed
     predicate ValidRanking(ranking: Ranking) 
       requires WF()
     {
       forall addr | addr in ranking ::
         && addr in entries
-        && (forall childIdx: nat | entries[addr].ValidChildIndex(childIdx) :: 
-            var ptr := entries[addr].children[childIdx];
-            ptr.Some? ==> (
-              && ptr.value in ranking  // ranking is closed
-              && ranking[ptr.value] < ranking[addr]  // decreases
-            )
-        )
-    }
-
-    // todo: kill 
-    predicate PointersRespectRank(ranking: GenericDisk.Ranking)
-      requires WF()
-    {
-      && entries.Keys <= ranking.Keys
-      && (forall addr | addr in entries :: NodePointersRespectsRank(ranking, addr))
-    }
-
-    // todo: kill 
-    predicate Acyclic()
-    {
-      && WF()
-      && (exists ranking :: PointersRespectRank(ranking))
-    }
-
-    function TheRanking() : GenericDisk.Ranking
-      requires WF()
-      requires Acyclic()
-    {
-      // Make CHOOSE deterministic as Leslie and Hilbert intended
-      var ranking :| PointersRespectRank(ranking); ranking
+        && NodeChildrenRespectsRank(ranking, addr)
     }
   }
 
-//  function TheRankOf(addr: Address, ranking: Ranking) : int
-//    requires WF()
-//    requires addr in ranking
-//  {
-//    if Acyclic() then ranking[addr] else -1
-//  }
   
   // This is the unit of interpretation: A LinkedBetree has enough info in it to interpret to a PivotBetree.BetreeNode.
   datatype LinkedBetree = LinkedBetree(
@@ -262,7 +232,7 @@ module LinkedBetreeMod
       LinkedBetree(Root().children[idx], diskView)
     }
 
-    function Child(key: Key) : LinkedBetree
+    function ChildForKey(key: Key) : LinkedBetree
       requires HasRoot()
       requires Root().KeyInDomain(key)
     {
@@ -271,29 +241,14 @@ module LinkedBetreeMod
 
     function GetRank(ranking: Ranking) : nat
       requires WF()
-//      requires diskView.PointersRespectRank(ranking)
     {
-      if  HasRoot() && root.value in ranking then ranking[root.value]+1 else 0
+      if HasRoot() && root.value in ranking then ranking[root.value]+1 else 0
     }
 
     function GetChildCount() : nat 
       requires WF()
     {
       if HasRoot() then |Root().children| else 0
-    }
-
-
-    // todo: kill
-    predicate ReachableAddressesRespectRanking(ranking: Ranking)
-      requires WF()
-      decreases GetRank(ranking)
-    {
-      HasRoot() ==> (
-        && root.value in ranking.Keys
-        && diskView.NodePointersRespectsRank(ranking, root.value) // can't recurse until ranking says it's okay!
-        && (forall childIdx | Root().ValidChildIndex(childIdx) ::
-            ChildAtIdx(childIdx).ReachableAddressesRespectRanking(ranking))
-      )
     }
 
     predicate ValidRanking(ranking: Ranking) 
@@ -303,45 +258,11 @@ module LinkedBetreeMod
       && (HasRoot() ==> root.value in ranking)
     }
 
-
-
-
-// TODO dead code
-//    function ReachableAddressesUpTo(childCount: nat, ranking: Ranking) : (out: set<Address>)
-//      requires WF()
-//      requires HasRoot()
-//      requires childCount <= |Root().children|
-//      requires diskView.PointersRespectRank(ranking)
-//      // ensures forall childIdx | 0 <= childIdx < childCount
-//      //   :: ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
-//      decreases GetRank(ranking), childCount, 0
-//    {
-//      if childCount == 0
-//      then {}
-//      else
-//        var childPtr := Root().children[childCount-1];
-//        ReachableAddressesUpTo(childCount-1, ranking)
-//        + ChildAtIdx(childCount-1).ReachableAddresses(ranking)
-//    }
-//
-//    function ReachableAddresses(ranking: Ranking) : (out: set<Address>)
-//      requires WF()
-//      requires diskView.PointersRespectRank(ranking)
-//      // ensures forall childIdx | Root().ValidChildIndex(childIdx) :: ChildAtIdx(childIdx).ReachableAddresses(ranking) <= out
-//      decreases GetRank(ranking), GetChildCount(), 1
-//    {
-//      if HasRoot() 
-//      then ReachableAddressesUpTo(|Root().children|, ranking) + {root.value} 
-//      else {}
-//    }
-
-
-    // predicate IsTight(ranking: Ranking) 
-    //   requires WF()
-    //   requires diskView.Acyclic()
-    // {
-    //   diskView.entries.Keys == ReachableAddresses(ranking)
-    // }
+    predicate Acyclic()
+    {
+      && WF()
+      && (exists ranking :: ValidRanking(ranking))
+    }
   }
 
   datatype Variables = Variables(
@@ -482,7 +403,6 @@ module LinkedBetreeMod
     && v'.linked.Root() == (
       if !v.linked.HasRoot()
       then
-        // Tony: Avoiding Promote(). You're welcome. :v)
         BetreeNode(newBuffers, TotalPivotTable(), [None])
       else
         v.linked.Root().PushBufferStack(newBuffers)
@@ -506,7 +426,7 @@ module LinkedBetreeMod
       && linked.WF()
       && linked.HasRoot()
       && linked.Root().KeyInDomain(key)
-      && (0 < depth ==> Subpath().Valid(linked.Child(key)))
+      && (0 < depth ==> Subpath().Valid(linked.ChildForKey(key)))
     }
 
     function Target(linked: LinkedBetree) : (out: LinkedBetree)
@@ -519,38 +439,35 @@ module LinkedBetreeMod
     {
       if 0 == depth
       then linked
-      else Subpath().Target(linked.Child(key))
+      else Subpath().Target(linked.ChildForKey(key))
     }
 
-    predicate IsSubstitution(linked: LinkedBetree, linked': LinkedBetree, pathAddrs: PathAddrs)
+    function ReplacedChildren(linked: LinkedBetree, replacement: LinkedBetree, pathAddrs: PathAddrs) : (out: seq<Pointer>)
       requires depth == |pathAddrs|
-      decreases depth
-    { 
-      && Valid(linked)
-      && Valid(linked')
-      && linked.diskView.AgreesWithDisk(linked'.diskView)
-      && (0 < depth ==> (
-        && linked'.root.value == pathAddrs[0]
-        // When depth==0, linked.root~~>linked'.root, so we're done.
-        && var root := linked.Root();
-        && var root' := linked'.Root();
-        // "local" info matches
-        && root.buffers == root'.buffers
-        && root.pivotTable == root'.pivotTable
-        && |root.children| == |root'.children|
-        && (forall childIdx | 0 <= childIdx < |root.children|
-          // All children are either identical (off the key path) or we aren't at
-          // Target() yet (0<depth) and the child obeys Substitution
-          :: if childIdx == Route(root.pivotTable, key)
-              then Subpath().IsSubstitution(linked.ChildAtIdx(childIdx), linked'.ChildAtIdx(childIdx), pathAddrs[1..])
-              else
-                // identical pointers, and hence identical subtrees
-                root.children[childIdx] == root'.children[childIdx]
-        )
-       )
-      )
+      requires Valid(linked)
+      requires replacement.WF()
+      requires 0 < depth
+      decreases depth, 0
+    {
+      var node := linked.Root();
+      var out := node.children[Route(node.pivotTable, key) := Subpath().Substitute(linked.ChildForKey(key), replacement, pathAddrs[1..]).root];
+      out
     }
-  }
+
+    function Substitute(linked: LinkedBetree, replacement: LinkedBetree, pathAddrs: PathAddrs) : (out: LinkedBetree)
+      requires depth == |pathAddrs|
+      requires Valid(linked)
+      requires replacement.WF()
+      decreases depth, 1
+    { 
+      if depth == 0 
+      then replacement
+      else 
+        var node := linked.Root();
+        var newNode := BetreeNode(node.buffers, node.pivotTable, ReplacedChildren(linked, replacement, pathAddrs));
+        var newDiskView := DiskView.DiskView(linked.diskView.entries[pathAddrs[0] := newNode]); 
+        LinkedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView)
+    }
 
   // TODO(tony/jonh): Side quest: now that we know we want predicate-style down
   // here anyway, try retrofitting predicate style definitions into
@@ -722,7 +639,7 @@ module LinkedBetreeMod
   predicate Init(v: Variables, stampedBetree: StampedBetree)
   {
     && stampedBetree.value.WF()
-    && stampedBetree.value.diskView.Acyclic()
+    && stampedBetree.value.Acyclic()
     && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value)
   }
 
