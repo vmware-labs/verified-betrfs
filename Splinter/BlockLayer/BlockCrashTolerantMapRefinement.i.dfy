@@ -3,6 +3,10 @@
 
 include "BlockCrashTolerantMap.i.dfy"
 include "../CoordinationLayer/CrashTolerantMap.i.dfy"
+include "../Betree/PagedBetreeRefinement.i.dfy"
+include "../Betree/PivotBetreeRefinement.i.dfy"
+include "../Betree/LinkedBetreeRefinement.i.dfy"
+include "../Betree/MarshalledBetreeRefinement.i.dfy"
 
 module BlockCrashTolerantMapRefinement {
   import opened Options
@@ -13,21 +17,39 @@ module BlockCrashTolerantMapRefinement {
   import opened LSNMod
   import CrashTolerantMap 
   import opened BlockCrashTolerantMap 
+  import PagedBetreeRefinement
+  import PivotBetreeRefinement
+  import LinkedBetreeRefinement
+  import MarshalledBetreeRefinement
+  import AbstractMap
 
   predicate DecodableImage(store: StoreImage)
   {
-    true
+    && store.WF()
+    && store.I().value.diskView.Acyclic() // TODO(jonh): introduce "Decodable" into LinkedBetree/Refinement
   }
 
   function IImage(store: StoreImage) : CrashTolerantMap.StoreImage
     requires DecodableImage(store)
   {
-    store
+    PagedBetreeRefinement.IStampedBetree(
+      PivotBetreeRefinement.IStampedBetree(
+        LinkedBetreeRefinement.IStampedBetree(
+          store.I())))
   }
 
   predicate Decodable(v: Variables)
   {
     true
+  }
+
+  function IMB(mv: MarshalledBetreeMod.Variables) : AbstractMap.Variables
+  {
+    PagedBetreeRefinement.I(
+      PivotBetreeRefinement.I(
+        LinkedBetreeRefinement.I(
+          MarshalledBetreeRefinement.I(
+            mv))))
   }
 
   function I(v: Variables) : CrashTolerantMap.Variables
@@ -38,7 +60,7 @@ module BlockCrashTolerantMapRefinement {
       if v.ephemeral.Unknown?
       then CrashTolerantMap.Unknown
       else CrashTolerantMap.Known(
-        v.ephemeral.v
+        IMB(v.ephemeral.v)
       ),
       if v.inFlight.None? then None else Some(IImage(v.inFlight.value))
     )
@@ -61,7 +83,7 @@ module BlockCrashTolerantMapRefinement {
       case LoadEphemeralFromPersistentStep() => CrashTolerantMap.LoadEphemeralFromPersistentStep()
       case PutRecordsStep() => CrashTolerantMap.PutRecordsStep()
       case QueryStep() => CrashTolerantMap.QueryStep()
-      case FreezeMapInternalStep(frozenMap) => CrashTolerantMap.FreezeMapInternalStep(frozenMap)
+      case FreezeMapInternalStep(frozenMap) => CrashTolerantMap.FreezeMapInternalStep(IImage(frozenMap))
       case EphemeralInternalStep() => CrashTolerantMap.EphemeralInternalStep()
       case CommitStartStep() => CrashTolerantMap.CommitStartStep()
       case CommitCompleteStep() => CrashTolerantMap.CommitCompleteStep()

@@ -77,7 +77,11 @@ module MarshalledBetreeMod
     {
       var typed :| TypeProvidesModel(typed); typed
     }
+  }
 
+  function EmptyBetreeImage() : BetreeImage
+  {
+    BetreeImage(BetreeSB(None, 0), DiskView(map[]))
   }
 
   datatype Variables = Variables(
