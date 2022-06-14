@@ -25,11 +25,11 @@ module LinkedBetreeRefinement {
   type Ranking = GenericDisk.Ranking
 
   function EmptyStampedBetree() : (out: StampedBetree)
-    ensures out.value.diskView.Acyclic()
+    ensures out.value.Acyclic()
   {
     var out := Stamped(LinkedBetree(None, DiskView(map[])), 0);
-    assert out.value.diskView.Acyclic() by {
-      assert out.value.diskView.PointersRespectRank(map[]);
+    assert out.value.Acyclic() by {
+      assert out.value.ValidRanking(map[]);
     }
     out
   }
@@ -41,24 +41,24 @@ module LinkedBetreeRefinement {
       case PutLabel(puts) => PivotBetree.PutLabel(puts)
       case QueryEndLsnLabel(endLsn) => PivotBetree.QueryEndLsnLabel(endLsn)
       case FreezeAsLabel(stampedBetree) => PivotBetree.FreezeAsLabel(
-        if stampedBetree.value.WF() && stampedBetree.value.diskView.Acyclic()
+        if stampedBetree.value.WF() && stampedBetree.value.Acyclic()
         then IStampedBetree(stampedBetree)
         else IStampedBetree(EmptyStampedBetree())  // "silly" case, since we never interpret non-(WF+Acyclic) things
       )
       case InternalLabel() => PivotBetree.InternalLabel()
   }
 
-  function TheRankOf(linked: LinkedBetree) : nat 
-    requires linked.HasRoot()
-    requires linked.diskView.Acyclic()
-  {
-    linked.diskView.TheRanking()[linked.root.value]
-  }
+  // function TheRankOf(linked: LinkedBetree) : nat 
+  //   requires linked.HasRoot()
+  //   requires linked.Acyclic()
+  // {
+  //   linked.diskView.TheRanking()[linked.root.value]
+  // }
 
   function IChildren(linked: LinkedBetree, ranking: Ranking) : seq<PivotBetree.BetreeNode>
     requires linked.WF()
     requires linked.HasRoot()
-    requires linked.diskView.PointersRespectRank(ranking)
+    requires linked.ValidRanking(ranking)
     decreases linked.GetRank(ranking), 0
   {
     var numChildren := |linked.Root().children|;
@@ -67,7 +67,7 @@ module LinkedBetreeRefinement {
 
   function ILinkedBetreeNode(linked: LinkedBetree, ranking: Ranking) : PivotBetree.BetreeNode
     requires linked.WF()
-    requires linked.diskView.PointersRespectRank(ranking)
+    requires linked.ValidRanking(ranking)
     decreases linked.GetRank(ranking), 1
   {
     if linked.root.None?
@@ -79,8 +79,8 @@ module LinkedBetreeRefinement {
 
   lemma ILinkedBetreeIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking) 
     requires linked.WF()
-    requires linked.diskView.PointersRespectRank(r1)
-    requires linked.diskView.PointersRespectRank(r2)
+    requires linked.ValidRanking(r1)
+    requires linked.ValidRanking(r2)
     ensures ILinkedBetreeNode(linked, r1) == ILinkedBetreeNode(linked, r2)
   {
     assume false;
@@ -89,44 +89,30 @@ module LinkedBetreeRefinement {
   // wrapper
   function ILinkedBetree(linked: LinkedBetree) : PivotBetree.BetreeNode
     requires linked.WF()
-    requires linked.diskView.Acyclic()
+    requires linked.Acyclic()
   {
-    ILinkedBetreeNode(linked, linked.diskView.TheRanking())
+    ILinkedBetreeNode(linked, linked.TheRanking())
   }
 
   function IStampedBetree(stampedBetree: StampedBetree) : PivotBetree.StampedBetree
     requires stampedBetree.value.WF()
-    requires stampedBetree.value.diskView.Acyclic()
+    requires stampedBetree.value.Acyclic()
   {
     Stamped(ILinkedBetree(stampedBetree.value), stampedBetree.seqEnd)
   }
 
   function I(v: Variables) : PivotBetree.Variables
     requires v.WF()
-    requires v.linked.diskView.Acyclic()
+    requires v.linked.Acyclic()
   {
     PivotBetree.Variables(v.memtable, ILinkedBetree(v.linked))
   }
 
   predicate Inv(v: Variables)
   {
-    && v.linked.diskView.Acyclic()
+    && v.linked.Acyclic()  // contains v.linked.WF()
   }
 
-  // 
-  lemma AcyclicImpliesReachableRespect(linked: LinkedBetree)
-    requires linked.WF()
-    requires linked.diskView.Acyclic()
-    ensures linked.ReachableAddressesRespectRanking(linked.diskView.TheRanking())
-    decreases linked.GetRank(linked.diskView.TheRanking())
-  {
-    if linked.HasRoot() {
-      forall childIdx | linked.Root().ValidChildIndex(childIdx) ensures
-          linked.ChildAtIdx(childIdx).ReachableAddressesRespectRanking(linked.diskView.TheRanking()) {
-        AcyclicImpliesReachableRespect(linked.ChildAtIdx(childIdx));
-      }
-    }
-  }
 
   function GetSubranking(ranking: Ranking, subset:set<Address>) : Ranking
     requires subset <= ranking.Keys
@@ -186,67 +172,17 @@ module LinkedBetreeRefinement {
   lemma MergeRankingSatisfiesBoth(l1: LinkedBetree, l2: LinkedBetree, r1: Ranking, r2: Ranking) 
     requires l1.WF() && l2.WF()
     requires l1.diskView == l2.diskView
-    // requires l1.RankingIsClosed(r1) && l2.RankingIsClosed(r2)
-    requires l1.ReachableAddressesRespectRanking(r1)
-    requires l2.ReachableAddressesRespectRanking(r2)
-    ensures l1.ReachableAddressesRespectRanking(MergeRanking(r1, r2))
-    // ensures l2.ReachableAddressesRespectRanking(MergeRanking(r1, r2))
-  {
-    if !l1.HasRoot() {
-      return;
-    }
-    var merged := MergeRanking(r1, r2);
-    var node := l1.Root();
-    forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some? 
-    ensures && node.children[childIdx].value in merged.Keys
-            && merged[node.children[childIdx].value] < merged[l1.root.value]
-    {
-      var parent := l1.root.value;
-      var child := node.children[childIdx].value;
-      if merged[parent] == r1[parent] {
-        if merged[child] == r1[child] {
-          // easy
-          assert merged[node.children[childIdx].value] < merged[l1.root.value];
-        } else {
-          // hard: parent in r1 but child in r2
-          assert merged[child] == r2[child];
-          assert merged[node.children[childIdx].value] < merged[l1.root.value];
-        }
-      } else {
-        assert parent in r2;
-        assert child in r2;  // parent in here means child must be here
-        assert merged[parent] == r2[parent];
-        if merged[child] == r2[child] {
-          assert parent in l2.diskView.entries;
-          assert child in l2.diskView.entries;
-          assert l2.diskView.NodePointersRespectsRank(r2, parent);
-
-
-
-          assert r2[child] < r2[parent];
-          assert merged[child] < merged[parent];
-        } else {
-          // hard: parent in r2, child in r1;
-          assert merged[node.children[childIdx].value] < merged[l1.root.value];
-        }
-      }
-
-      assert node.children[childIdx].value in merged.Keys;
-      assert merged[node.children[childIdx].value] < merged[l1.root.value];
-    }
-
-
-    assume false;
-    assert forall childIdx | l1.Root().ValidChildIndex(childIdx) ::
-        l1.ChildAtIdx(childIdx).ReachableAddressesRespectRanking(merged);
-
-  }
+    requires l1.ValidRanking(r1) && l2.ValidRanking(r2)
+    ensures l1.ValidRanking(MergeRanking(r1, r2))
+    ensures l2.ValidRanking(MergeRanking(r1, r2))
+  {}
 
   lemma ReachableAddressesInRanking(linked: LinkedBetree, ranking: Ranking)
     requires linked.WF()
     requires linked.ValidRanking(ranking)
     ensures ReachableAddresses(linked, ranking) <= ranking.Keys
   { // todo
+    assume false;
   }
 
   lemma ReachableMonotonicInChildRelation(linked: LinkedBetree, ranking: Ranking, childIdx: nat)
@@ -257,6 +193,7 @@ module LinkedBetreeRefinement {
     ensures ReachableAddresses(linked.ChildAtIdx(childIdx), ranking) <= ReachableAddresses(linked, ranking)
     decreases linked.GetRank(ranking)
   { // todo
+    assume false;
   }
 
   function ChildRankings(linked: LinkedBetree, ranking: Ranking) : (out: seq<Ranking>)
@@ -280,6 +217,7 @@ module LinkedBetreeRefinement {
     ensures forall i | 0<=i<|ChildRankings(linked, ranking)|
       :: linked.diskView.ValidRanking(ChildRankings(linked, ranking)[i])
   { //todo
+    assume false;
   }
 
   lemma FoldRankingsValid(diskView: DiskView, rankings: seq<Ranking>)
@@ -287,64 +225,88 @@ module LinkedBetreeRefinement {
     requires forall i | 0<=i<|rankings| :: diskView.ValidRanking(rankings[i])
     ensures diskView.ValidRanking(FoldMaps(rankings))
   { //todo
+    assume false;
   }
 
-  lemma ConstructSubstitutionRanking(linked: LinkedBetree, linked': LinkedBetree, ranking: Ranking, targetRanking': Ranking, path: Path, pathAddrs: PathAddrs)
-    returns (out: Ranking)
-    requires path.depth == |pathAddrs|
-    requires path.IsSubstitution(linked, linked', pathAddrs)
-    requires linked.ReachableAddressesRespectRanking(ranking)
-    requires path.Target(linked').ReachableAddressesRespectRanking(targetRanking')
-    ensures linked'.ReachableAddressesRespectRanking(out)
-    decreases path.depth
-  {
-    // AcyclicImpliesReachableRespect(linked);
-//    assert linked.ReachableAddressesRespectRanking(linked.diskView.TheRanking());
-    if path.depth == 0 {
-      out := targetRanking';
-      assert linked'.ReachableAddressesRespectRanking(out);
-    } else {
-      assert linked.HasRoot();
-      var subranking
-        := ConstructSubstitutionRanking(linked.Child(path.key), linked'.Child(path.key), ranking, targetRanking', path.Subpath(), pathAddrs[1..]);
-      var length := |linked.Root().children|;
-      var replacedIdx := Route(linked.Root().pivotTable, path.key);
-      var childRankings := ChildRankings(linked, ranking)[replacedIdx := subranking];
-      var descendantRanking := FoldMaps(childRankings);
-      var rootRank: nat := if |descendantRanking| == 0 then 1 else max(SetMax(descendantRanking.Values), 0) + 1;
-      out := descendantRanking[linked'.root.value := rootRank];
-      var node := linked'.Root();
-      forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some? 
-      ensures && node.children[childIdx].value in out.Keys
-              && out[node.children[childIdx].value] < out[linked'.root.value]
-      {
-        
-        assert node.children[childIdx].value in childRankings[childIdx];  // trigger
-        FoldMapsSubset(childRankings);
-        assert out[node.children[childIdx].value] in descendantRanking.Values;  // trigger
-      }
-      assert linked'.diskView.NodePointersRespectsRank(out, linked'.root.value);
+  lemma DescendentInDiskview(linked: LinkedBetree)
+
+  // lemma ConstructSubstitutionRanking(linked: LinkedBetree, linked': LinkedBetree, ranking: Ranking, targetRanking': Ranking, path: Path, pathAddrs: PathAddrs)
+  //   returns (newRanking: Ranking)
+  //   requires linked.WF() && linked'.WF()
+  //   requires path.depth == |pathAddrs|
+  //   requires path.IsSubstitution(linked, linked', pathAddrs)  // tony: this seems to allow linked' to have an empty diskview
+  //   requires linked.ValidRanking(ranking)
+  //   requires path.Target(linked').ValidRanking(targetRanking')  // tony: this then says that the target subtree must in linked'.diskview
+  //   ensures linked'.ValidRanking(newRanking)                    // Hence can't prove this because we may have lost all the diskvew entries not in the target subtree
+  //   decreases path.depth
+  // {
+  //   if path.depth == 0 {
+  //     newRanking := targetRanking';
+  //     assert linked'.ValidRanking(newRanking);
+  //   } else {
+  //     assert linked.HasRoot();
+  //     var subranking
+  //       := ConstructSubstitutionRanking(linked.Child(path.key), linked'.Child(path.key), ranking, targetRanking', path.Subpath(), pathAddrs[1..]);
+  //     var replacedIdx := Route(linked.Root().pivotTable, path.key);
+  //     var childRankings := ChildRankings(linked, ranking)[replacedIdx := subranking];
+  //     var descendantRanking := FoldMaps(childRankings);
+  //     // FoldRankingsValid(linked.diskView, childRankings);
+  //     var rootRank: nat := if |descendantRanking| == 0 then 1 else max(SetMax(descendantRanking.Values), 0) + 1;
+  //     newRanking := descendantRanking[linked'.root.value := rootRank];
+  //     forall addr | addr in newRanking 
+  //     ensures
+  //       && addr in linked'.diskView.entries
+  //       && linked'.diskView.ValidRankingAtAddr(newRanking, addr)
+  //     {
+  //       if addr == linked'.root.value {
+  //         assert addr in linked'.diskView.entries;
+  //       } else {
+  //         assume exists i :: 0 <= i < |childRankings| && addr in childRankings[i];  // todo: property of fold
+  //         var i :| 0 <= i < |childRankings| && addr in childRankings[i];
+  //         if i == replacedIdx {
+  //           assert addr in linked'.diskView.entries;
+  //         } else {
+  //           assert addr in childRankings[i];
+  //           ReachableMonotonicInChildRelation(linked, ranking, i);
+  //           ReachableAddressesInRanking(linked, ranking);
+  //           assert addr in GetSubranking(ranking, ReachableAddresses(linked.ChildAtIdx(i), ranking));
+  //           assert addr in ReachableAddresses(linked.ChildAtIdx(i), ranking);
+  //           assert linked.Root().children[i] == linked'.Root().children[i];
+  //           // assert addr in ReachableAddresses(linked'.ChildAtIdx(i), newRanking);
+  //           // TONY: What are the constraints on linked'.diskView? Seems like we don't have any?
+  //           // Extreme case: we can have a target with empty diskview and empty targetRanking'?
+  //           assert addr in linked.diskView.entries;
+  //           assert linked.Root().children[i].value in linked'.diskView.entries;
+
+  //           // argument is that addr's parent (linked.Root().children[i]) is in linked'.diskView.entries. 
+  //           // And then the parent is in linked'.diskview.entries. And then because
+  //           // linked' is WF, 
+
+  //           assert addr in linked'.diskView.entries;
+  //         }
+  //       }
 
 
-      forall childIdx | linked'.Root().ValidChildIndex(childIdx) 
-      ensures linked'.ChildAtIdx(childIdx).ReachableAddressesRespectRanking(out)
-      {
+  //       assert addr in linked'.diskView.entries;
+  //       assume linked'.diskView.ValidRankingAtAddr(newRanking, addr);
+  //     }
 
-      }
     
 
 
-      assert linked'.ReachableAddressesRespectRanking(out);
-    }
-  }
+  //     assert linked'.ValidRanking(newRanking);
+  //   }
+  // }
 
   lemma InvNextInternalCompactStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step);
     requires step.InternalCompactStep?
-    ensures Inv(v')
+    ensures v'.linked.Acyclic();
   {
-    var oldRanking := v.linked.diskView.TheRanking();
+    // todo
+    assume false;
+    var oldRanking := v.linked.TheRanking();
     var oldTargetAddr := step.path.Target(v.linked).root.value;
 //    assert oldTargetAddr in v.linked.diskView.entries;
     var oldTargetRanking := oldRanking[oldTargetAddr];
@@ -391,19 +353,30 @@ module LinkedBetreeRefinement {
     }
   }
 
+  lemma ChildCommutes(linked: LinkedBetree, idx: nat) 
+    requires linked.WF()
+    requires linked.HasRoot()
+    requires linked.Root().ValidChildIndex(idx)
+    ensures ILinkedBetree(linked.ChildAtIdx(idx)) == ILinkedBetree(linked).children[idx]
+  {
+
+  }
+
   lemma ILinkedWF(linked: LinkedBetree, ranking: Ranking) 
     requires linked.WF()
-    requires linked.diskView.PointersRespectRank(ranking)
+    requires linked.ValidRanking(ranking)
     ensures ILinkedBetree(linked).WF()
     decreases linked.GetRank(ranking)
   {
     if linked.HasRoot() {
-      forall idx | linked.Root().ValidChildIndex(idx) 
-      ensures ILinkedBetree(linked.ChildAtIdx(idx)).WF() {
+      forall idx: nat | linked.Root().ValidChildIndex(idx) 
+      ensures ILinkedBetree(linked).children[idx].WF()
+      {
         ILinkedWF(linked.ChildAtIdx(idx), ranking);
+        ChildCommutes(linked, idx);
       }
+      ILinkedBetreeIgnoresRanking(linked, ranking, linked.TheRanking());
     }
-    ILinkedBetreeIgnoresRanking(linked, ranking, linked.diskView.TheRanking());
   }
 
   lemma InitRefines(v: Variables, stampedBetree: StampedBetree)
@@ -411,7 +384,7 @@ module LinkedBetreeRefinement {
     ensures Inv(v)
     ensures PivotBetree.Init(I(v), IStampedBetree(stampedBetree))
   {
-    ILinkedWF(v.linked, v.linked.diskView.TheRanking());
+    ILinkedWF(v.linked, v.linked.TheRanking());
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)

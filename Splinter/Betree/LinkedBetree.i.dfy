@@ -255,6 +255,7 @@ module LinkedBetreeMod
       if HasRoot() then |Root().children| else 0
     }
 
+    // this says that ranking is closed 
     predicate ValidRanking(ranking: Ranking) 
       requires WF()
     {
@@ -266,6 +267,13 @@ module LinkedBetreeMod
     {
       && WF()
       && (exists ranking :: ValidRanking(ranking))
+    }
+
+    function TheRanking() : Ranking
+      requires Acyclic()
+    {
+      var out :| ValidRanking(out);
+      out
     }
   }
 
