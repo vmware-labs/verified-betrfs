@@ -128,13 +128,6 @@ module LinkedBetreeRefinement {
     }
   }
 
-  lemma SubtreeRespectsRanking(linked: LinkedBetree, ranking: Ranking, addr: Address) 
-    requires linked.ReachableAddressesRespectRanking(ranking)
-    // requires addr in ranking
-  {
-
-  }
-
   function GetSubranking(ranking: Ranking, subset:set<Address>) : Ranking
     requires subset <= ranking.Keys
   {
@@ -144,7 +137,8 @@ module LinkedBetreeRefinement {
 
   function ReachableAddresses(linked: LinkedBetree, ranking: Ranking) : (out: set<Address>)
     requires linked.WF()
-    requires linked.ReachableAddressesRespectRanking(ranking)
+    requires linked.ValidRanking(ranking)
+//    requires linked.ReachableAddressesRespectRanking(ranking) //kill
     decreases linked.GetRank(ranking)
   {
     if linked.HasRoot() then 
@@ -153,27 +147,27 @@ module LinkedBetreeRefinement {
     else {}
   }
 
-  lemma ReachableAddressesIsSubsetOfRanking(linked: LinkedBetree, ranking: Ranking) 
-    requires linked.WF()
-    requires linked.ReachableAddressesRespectRanking(ranking)
-    ensures ReachableAddresses(linked, ranking) <= ranking.Keys
-    decreases linked.GetRank(ranking)
-  {
-    var res :=  ReachableAddresses(linked, ranking);
-    if linked.HasRoot() {
-      forall e | e in res 
-      ensures e in ranking.Keys 
-      {
-        if e != linked.root.value {
-          var s := seq(|linked.Root().children|, (i:nat) requires i<|linked.Root().children| => ReachableAddresses(linked.ChildAtIdx(i), ranking));
-          assert e in FoldSets(s);
-          var idx := WhichFold(s, e);
-          assert e in s[idx];
-          ReachableAddressesIsSubsetOfRanking(linked.ChildAtIdx(idx), ranking);
-        }
-      }
-    }
-  }
+//  lemma ReachableAddressesIsSubsetOfRanking(linked: LinkedBetree, ranking: Ranking) 
+//    requires linked.WF()
+//    requires linked.ReachableAddressesRespectRanking(ranking)
+//    ensures ReachableAddresses(linked, ranking) <= ranking.Keys
+//    decreases linked.GetRank(ranking)
+//  {
+//    var res :=  ReachableAddresses(linked, ranking);
+//    if linked.HasRoot() {
+//      forall e | e in res 
+//      ensures e in ranking.Keys 
+//      {
+//        if e != linked.root.value {
+//          var s := seq(|linked.Root().children|, (i:nat) requires i<|linked.Root().children| => ReachableAddresses(linked.ChildAtIdx(i), ranking));
+//          assert e in FoldSets(s);
+//          var idx := WhichFold(s, e);
+//          assert e in s[idx];
+//          ReachableAddressesIsSubsetOfRanking(linked.ChildAtIdx(idx), ranking);
+//        }
+//      }
+//    }
+//  }
 
   // Merge by taking the smaller ranking where possible
   function MergeRanking(r1: Ranking, r2: Ranking) : (out: Ranking) {
@@ -248,6 +242,53 @@ module LinkedBetreeRefinement {
 
   }
 
+  lemma ReachableAddressesInRanking(linked: LinkedBetree, ranking: Ranking)
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    ensures ReachableAddresses(linked, ranking) <= ranking.Keys
+  { // todo
+  }
+
+  lemma ReachableMonotonicInChildRelation(linked: LinkedBetree, ranking: Ranking, childIdx: nat)
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    requires linked.HasRoot()
+    requires linked.Root().OccupiedChildIndex(childIdx)
+    ensures ReachableAddresses(linked.ChildAtIdx(childIdx), ranking) <= ReachableAddresses(linked, ranking)
+    decreases linked.GetRank(ranking)
+  { // todo
+  }
+
+  function ChildRankings(linked: LinkedBetree, ranking: Ranking) : (out: seq<Ranking>)
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+  {
+    if !linked.HasRoot() then [] else
+      var length := |linked.Root().children|;
+      seq(length, (i:nat) requires i < length =>
+        if !linked.Root().OccupiedChildIndex(i) then map[]
+        else
+          ReachableMonotonicInChildRelation(linked, ranking, i);
+          ReachableAddressesInRanking(linked, ranking);
+          //ReachableAddressesIsSubsetOfRanking(linked.ChildAtIdx(i), ranking);
+          GetSubranking(ranking, ReachableAddresses(linked.ChildAtIdx(i), ranking)))
+  }
+
+  lemma ChildRankingsValid(linked: LinkedBetree, ranking: Ranking)
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    ensures forall i | 0<=i<|ChildRankings(linked, ranking)|
+      :: linked.diskView.ValidRanking(ChildRankings(linked, ranking)[i])
+  { //todo
+  }
+
+  lemma FoldRankingsValid(diskView: DiskView, rankings: seq<Ranking>)
+    requires diskView.WF()
+    requires forall i | 0<=i<|rankings| :: diskView.ValidRanking(rankings[i])
+    ensures diskView.ValidRanking(FoldMaps(rankings))
+  { //todo
+  }
+
   lemma ConstructSubstitutionRanking(linked: LinkedBetree, linked': LinkedBetree, ranking: Ranking, targetRanking': Ranking, path: Path, pathAddrs: PathAddrs)
     returns (out: Ranking)
     requires path.depth == |pathAddrs|
@@ -272,7 +313,7 @@ module LinkedBetreeRefinement {
         if i == replacedIdx then
           subranking
         else 
-          ReachableAddressesIsSubsetOfRanking(linked.ChildAtIdx(i), ranking);
+          //ReachableAddressesIsSubsetOfRanking(linked.ChildAtIdx(i), ranking);
           GetSubranking(ranking, ReachableAddresses(linked.ChildAtIdx(i), ranking)));
       var descendantRanking := FoldMaps(childRankings);
       var rootRank: nat := if |descendantRanking| == 0 then 1 else max(SetMax(descendantRanking.Values), 0) + 1;

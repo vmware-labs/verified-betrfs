@@ -58,6 +58,12 @@ module LinkedBetreeMod
       && childIdx < NumBuckets(pivotTable)
     }
 
+    predicate OccupiedChildIndex(childIdx: nat)
+    {
+      && ValidChildIndex(childIdx)
+      && children[childIdx].Some?
+    }
+
     function PushBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
