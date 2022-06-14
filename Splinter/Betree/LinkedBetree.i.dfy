@@ -200,6 +200,10 @@ module LinkedBetreeMod
         && addr in entries
         && NodeChildrenRespectsRank(ranking, addr)
     }
+
+    predicate IsFresh(addr: Address) {
+      addr !in entries 
+    } 
   }
 
   
@@ -468,6 +472,7 @@ module LinkedBetreeMod
         var newDiskView := DiskView.DiskView(linked.diskView.entries[pathAddrs[0] := newNode]); 
         LinkedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView)
     }
+  }
 
   // TODO(tony/jonh): Side quest: now that we know we want predicate-style down
   // here anyway, try retrofitting predicate style definitions into
@@ -535,13 +540,14 @@ module LinkedBetreeMod
 
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    // todo: rewrite
     assume false; 
     && v.WF()
     && lbl.InternalLabel?
     && step.InternalSplitStep?
     && step.path.Valid(v.linked)
     // v && v' agree on everything down to Target()
-    && step.path.IsSubstitution(v.linked, v'.linked, [])
+    // && step.path.IsSubstitution(v.linked, v'.linked, [])
     // Target and Target' are related by a split operation
     && IsSplit(step.path.Target(v.linked), step.path.Target(v'.linked), step.childIdx, step.splitKey)
     && v'.memtable == v.memtable  // UNCHANGED
@@ -586,51 +592,49 @@ module LinkedBetreeMod
     // An advantage of predicate-style is that we don't have to explicitly
     // declare BuildTight() (garbage collection); we can leave that to a lower
     // layer.
+    // todo: rewrite
     assume false;
     && v.WF()
     && lbl.InternalLabel?
     && step.InternalFlushStep?
     && step.path.Valid(v.linked)
     // v && v' agree on everything down to Target()
-    && step.path.IsSubstitution(v.linked, v'.linked, [])
+    // && step.path.IsSubstitution(v.linked, v'.linked, [])
     // Target and Target' are related by a flush operation
     && IsFlush(step.path.Target(v.linked), step.path.Target(v'.linked), step.childIdx)
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  predicate IsCompaction(linked: LinkedBetree, linked': LinkedBetree, addr: Address)
+  // Compaction on a single node
+  predicate IsCompaction(previous: BetreeNode, replacement: BetreeNode)
   {
-    && linked.WF()
-    && linked'.WF()
-    && linked.HasRoot()
-    && linked'.HasRoot()
-    && linked'.root.value == addr
-    && linked'.Root().buffers.Equivalent(linked.Root().buffers)
-    // Can only make a local change; entirety of children subtrees are identical.
-    && linked'.Root().pivotTable == linked.Root().pivotTable  // UNCHANGED
-    && linked'.Root().children == linked.Root().children  // UNCHANGED
+    && replacement.buffers.Equivalent(previous.buffers)
+    && replacement.pivotTable == previous.pivotTable  // UNCHANGED
+    && replacement.children == previous.children  // UNCHANGED
   }
 
-  // NB we tell you exactly how to Split and Flush, but leave lots of
-  // nondetermistic freedom in the description of Compact.
+  // originalDV is the diskview before compaction. 
+  // InsertReplacement returns a LinkedBetree that has the diskview of linked with replacement placed at
+  // the target adress
+  function InsertReplacement(originaldv: DiskView, replacement: BetreeNode, targetAddr: Address) : LinkedBetree 
+  {
+    var newDiskView := DiskView.DiskView(originaldv.entries[targetAddr := replacement]);
+    LinkedBetree(GenericDisk.Pointer.Some(targetAddr), newDiskView)
+  }
+
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    && v.WF()
     && step.WF()
     && lbl.InternalLabel?
     && step.InternalCompactStep?
     && step.path.Valid(v.linked)
-    && v'.linked.diskView.AgreesWithDisk(v.linked.diskView) // so that the unchanged children represent the same thing
-    && v'.linked.diskView.entries.Keys <= v.linked.diskView.entries.Keys + {step.targetAddr} + Set(step.pathAddrs)
+    && IsCompaction(step.path.Target(v.linked).Root(), step.compactedNode)
+    // todo(tony): make tight
+    && v'.linked == step.path.Substitute(v.linked, InsertReplacement(v.linked.diskView, step.compactedNode, step.targetAddr), step.pathAddrs)
+    // Fresh!
+    && v.linked.diskView.IsFresh(step.targetAddr)
+    && (forall addr | addr in step.pathAddrs :: v.linked.diskView.IsFresh(addr))
 
-    && step.targetAddr !in v.linked.diskView.entries // Fresh!
-
-    // todo(tony) : path addrs must also be fresh?
-
-    // v && v' agree on everything down to Target()
-    && step.path.IsSubstitution(v.linked, v'.linked, step.pathAddrs)
-    // Target and Target' are related by a compaction operation
-    && IsCompaction(step.path.Target(v.linked), step.path.Target(v'.linked), step.targetAddr)
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
