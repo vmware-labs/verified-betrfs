@@ -309,12 +309,7 @@ module LinkedBetreeRefinement {
         := ConstructSubstitutionRanking(linked.Child(path.key), linked'.Child(path.key), ranking, targetRanking', path.Subpath(), pathAddrs[1..]);
       var length := |linked.Root().children|;
       var replacedIdx := Route(linked.Root().pivotTable, path.key);
-      var childRankings := seq(length, (i:nat) requires i < length => 
-        if i == replacedIdx then
-          subranking
-        else 
-          //ReachableAddressesIsSubsetOfRanking(linked.ChildAtIdx(i), ranking);
-          GetSubranking(ranking, ReachableAddresses(linked.ChildAtIdx(i), ranking)));
+      var childRankings := ChildRankings(linked, ranking)[replacedIdx := subranking];
       var descendantRanking := FoldMaps(childRankings);
       var rootRank: nat := if |descendantRanking| == 0 then 1 else max(SetMax(descendantRanking.Values), 0) + 1;
       out := descendantRanking[linked'.root.value := rootRank];
