@@ -15,6 +15,7 @@ module BlockCrashTolerantMapRefinement {
   import opened StampedMod
   import opened MsgHistoryMod
   import opened LSNMod
+  import opened Buffers
   import CrashTolerantMap 
   import opened BlockCrashTolerantMap 
   import PagedBetreeRefinement
@@ -38,18 +39,22 @@ module BlockCrashTolerantMapRefinement {
           store.I())))
   }
 
-  predicate Decodable(v: Variables)
-  {
-    true
-  }
-
   function IMB(mv: MarshalledBetreeMod.Variables) : AbstractMap.Variables
+    requires mv.WF()
+    requires MarshalledBetreeRefinement.Inv(mv)
   {
     PagedBetreeRefinement.I(
       PivotBetreeRefinement.I(
         LinkedBetreeRefinement.I(
           MarshalledBetreeRefinement.I(
             mv))))
+  }
+
+  predicate Decodable(v: Variables)
+  {
+    && DecodableImage(v.persistent)
+    && (v.ephemeral.Known? ==> MarshalledBetreeRefinement.Inv(v.ephemeral.v))
+    && (v.inFlight.Some? ==> DecodableImage(v.inFlight.value))
   }
 
   function I(v: Variables) : CrashTolerantMap.Variables
@@ -74,11 +79,17 @@ module BlockCrashTolerantMapRefinement {
   function IALabel(lbl: TransitionLabel) : CrashTolerantMap.TransitionLabel
     requires lbl.WF()
   {
-    lbl
+    lbl.base
+  }
+
+  predicate DecodableStep(step: Step)
+  {
+    step.FreezeMapInternalStep? ==> DecodableImage(step.frozenMap)
   }
 
   function IStep(step: Step) : CrashTolerantMap.Step
   {
+    if !DecodableStep(step) then CrashTolerantMap.CrashStep() else
     match step
       case LoadEphemeralFromPersistentStep() => CrashTolerantMap.LoadEphemeralFromPersistentStep()
       case PutRecordsStep() => CrashTolerantMap.PutRecordsStep()
@@ -90,6 +101,16 @@ module BlockCrashTolerantMapRefinement {
       case CrashStep() => CrashTolerantMap.CrashStep()
   }
 
+  lemma LoadEphemeralFromPersistentRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v) && Next(v, v', lbl) && lbl.base.LoadEphemeralFromPersistentLabel?
+    ensures Inv(v') && CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.LoadEphemeralFromPersistentStep())
+  {
+    MarshalledBetreeRefinement.RefinementInit(v'.ephemeral.v, v.persistent);
+    PagedBetreeRefinement.InitRefines(
+      PivotBetreeRefinement.I(LinkedBetreeRefinement.I(MarshalledBetreeRefinement.I(v'.ephemeral.v))),
+      PivotBetreeRefinement.IStampedBetree(LinkedBetreeRefinement.IStampedBetree(v.persistent.I())));
+  }
+
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Next(v, v', lbl)
     requires Inv(v)
@@ -97,6 +118,49 @@ module BlockCrashTolerantMapRefinement {
     ensures CrashTolerantMap.Next(I(v), I(v'), IALabel(lbl))
   {
     var step :| NextStep(v, v', lbl, step);
-    assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+    match step {
+      case LoadEphemeralFromPersistentStep() => {
+        LoadEphemeralFromPersistentRefines(v, v', lbl);
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+      }
+      case PutRecordsStep() => {
+        assume Inv(v');
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+      }
+      case QueryStep() => {
+        assert Inv(v');
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+      }
+      case FreezeMapInternalStep(frozenMap) => {
+        assume Inv(v');
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+      }
+      case EphemeralInternalStep() => {
+        assume Inv(v');
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+      }
+      case CommitStartStep() => {
+        assert Inv(v');
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+      }
+      case CommitCompleteStep() => {
+        assert Inv(v');
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+      }
+      case CrashStep() => {
+        assert Inv(v');
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+      }
+    }
+//    assert Inv(v') by {
+//        if step.LoadEphemeralFromPersistentStep? { LoadEphemeralFromPersistentRefines(v, v', lbl); }
+//        if step.PutRecordsStep? { assert Inv(v'); }
+//        if step.QueryStep? { assert Inv(v'); }
+//        if step.FreezeMapInternalStep? { assert Inv(v'); }
+//        if step.EphemeralInternalStep? { assert Inv(v'); }
+//        if step.CommitStartStep? { assert Inv(v'); }
+//        if step.CommitCompleteStep? { assert Inv(v'); }
+//        if step.CrashStep? { assert Inv(v'); }
+//    }
   }
 }

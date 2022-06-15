@@ -77,11 +77,6 @@ module PagedBetreeRefinement
     AbstractMap.Variables(IStampedBetree(v.root.PushMemtable(v.memtable)))
   }
 
-  function {:opaque} MapApply(memtable: Memtable, base: TotalKMMapMod.TotalKMMap) : TotalKMMapMod.TotalKMMap
-  {
-    imap k | TotalKMMapMod.AnyKey(k) :: Merge(memtable.Get(k), base[k])
-  }
-
   lemma SingletonBufferStack(buffer: Buffer, key: Key)
     ensures buffer.Query(key) == BufferStack([buffer]).Query(key)
   {
@@ -115,6 +110,11 @@ module PagedBetreeRefinement
       PushBufferStackLemma(top, dropBottom, key);
       CommonBufferStacks(dropBottom, bottom, |bottom.buffers|-1, key);
     }
+  }
+
+  function {:opaque} MapApply(memtable: Memtable, base: TotalKMMapMod.TotalKMMap) : TotalKMMapMod.TotalKMMap
+  {
+    imap k | TotalKMMapMod.AnyKey(k) :: Merge(memtable.Get(k), base[k])
   }
 
   lemma {:timeLimitMultiplier 2} MemtableDistributesOverBetree(memtable: Memtable, root: BetreeNode)

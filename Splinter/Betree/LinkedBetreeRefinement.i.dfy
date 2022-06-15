@@ -96,14 +96,14 @@ module LinkedBetreeRefinement {
     ILinkedBetreeNode(linked, linked.TheRanking())
   }
 
-  function IStampedBetree(stampedBetree: StampedBetree) : PivotBetree.StampedBetree
+  function IStampedBetree(stampedBetree: StampedBetree) : (out: PivotBetree.StampedBetree)
     requires stampedBetree.value.WF()
     requires stampedBetree.value.Acyclic()
   {
     Stamped(ILinkedBetree(stampedBetree.value), stampedBetree.seqEnd)
   }
 
-  function I(v: Variables) : PivotBetree.Variables
+  function I(v: Variables) : (out: PivotBetree.Variables)
     requires v.WF()
     requires v.linked.Acyclic()
   {
