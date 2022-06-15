@@ -62,9 +62,14 @@ module BlockCoordinationSystem {
     }
   }
 
-  function SimpleLabel(clbl: CrashTolerantJournal.TransitionLabel) : BlockCrashTolerantJournal.TransitionLabel
+  function SimpleJournalLabel(clbl: CrashTolerantJournal.TransitionLabel) : BlockCrashTolerantJournal.TransitionLabel
   {
-    TransitionLabel({}, CrashTolerantJournal.LoadEphemeralFromPersistentLabel())
+    BlockCrashTolerantJournal.TransitionLabel({}, clbl)
+  }
+
+  function SimpleMapLabel(clbl: CrashTolerantMap.TransitionLabel) : BlockCrashTolerantMap.TransitionLabel
+  {
+    BlockCrashTolerantMap.TransitionLabel({}, clbl)
   }
 
   predicate LoadEphemeralFromPersistent(v: Variables, v': Variables, uiop : UIOp)
@@ -72,8 +77,8 @@ module BlockCoordinationSystem {
     && v.WF()
     && uiop.NoopOp?
     && v'.ephemeral.Known?
-    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.LoadEphemeralFromPersistentLabel()))
-    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.LoadEphemeralFromPersistentLabel(v'.ephemeral.mapLsn))
+    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.LoadEphemeralFromPersistentLabel()))
+    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.LoadEphemeralFromPersistentLabel(v'.ephemeral.mapLsn)))
     && v'.ephemeral.progress == Async.InitEphemeralState()
     && v'.ephemeral.syncReqs == map[]
     // and thus all fields of v' are constrained.
@@ -92,8 +97,8 @@ module BlockCoordinationSystem {
 
     // NB that Recover can interleave with mapadt steps (the Betree
     // reorganizing its state, possibly flushing stuff out to disk).
-    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.ReadForRecoveryLabel(records)))
-    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.PutRecordsLabel(records))
+    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.ReadForRecoveryLabel(records)))
+    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.PutRecordsLabel(records)))
 
     && v'.ephemeral == v.ephemeral.(mapLsn := records.seqEnd) // all else defined via predicates above
   }
@@ -128,9 +133,9 @@ module BlockCoordinationSystem {
     && assert AnyKey(key);
 
     // Journal confirms that the map is up-to-date (but otherwise doesn't do anything).
-    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn)))
+    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn)))
     // Map handles the query
-    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.QueryLabel(v.ephemeral.mapLsn, key, value))
+    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.QueryLabel(v.ephemeral.mapLsn, key, value)))
 
     && v'.ephemeral == v.ephemeral.(progress := v.ephemeral.progress.(
           requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
@@ -164,8 +169,8 @@ module BlockCoordinationSystem {
     && var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
 
     && v.WF()
-    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.PutLabel(singleton)))
-    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.PutRecordsLabel(singleton))
+    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.PutLabel(singleton)))
+    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.PutRecordsLabel(singleton)))
 
     && v'.ephemeral == v.ephemeral.(
           mapLsn := v.ephemeral.mapLsn + 1,
@@ -197,7 +202,7 @@ module BlockCoordinationSystem {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
     && uiop.NoopOp?
-    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.InternalLabel()))
+    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.InternalLabel()))
     && v' == v.(journal := v'.journal)  // predicate update above
   }
 
@@ -206,7 +211,7 @@ module BlockCoordinationSystem {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
     && uiop.NoopOp?
-    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.InternalLabel())
+    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.InternalLabel()))
     && v' == v.(mapadt := v'.mapadt)  // predicate update above
   }
 
@@ -223,7 +228,7 @@ module BlockCoordinationSystem {
     // Need to record the current LSN, which is generally the current map state. But we
     // also need to confirm that the journal hasn't gone ahead, since sync is relative to
     // writes (which have affected the journal).
-    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn)))
+    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn)))
 
     && v'.mapadt == v.mapadt
 
@@ -239,7 +244,7 @@ module BlockCoordinationSystem {
     && v.ephemeral.Known?
     && uiop.ReplySyncOp?
     && uiop.syncReqId in v.ephemeral.syncReqs
-    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.QueryLsnPersistenceLabel(v.ephemeral.syncReqs[uiop.syncReqId])))
+    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.QueryLsnPersistenceLabel(v.ephemeral.syncReqs[uiop.syncReqId])))
     && v' == v.(ephemeral := v.ephemeral.(
         syncReqs := MapRemove1(v.ephemeral.syncReqs, uiop.syncReqId)
       ))
@@ -252,8 +257,8 @@ module BlockCoordinationSystem {
     && v.WF()
     && v.ephemeral.Known?
 
-    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.CommitStartLabel(newBoundaryLsn, v.ephemeral.mapLsn)))
-    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.CommitStartLabel(newBoundaryLsn))
+    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.CommitStartLabel(newBoundaryLsn, v.ephemeral.mapLsn)))
+    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.CommitStartLabel(newBoundaryLsn)))
 
     && v'.ephemeral == v.ephemeral  // UNCHANGED
   }
@@ -266,8 +271,8 @@ module BlockCoordinationSystem {
     && uiop.SyncOp?
     && v.ephemeral.Known? // provable from invariant
 
-    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.CommitCompleteLabel(v.ephemeral.mapLsn)))
-    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.CommitCompleteLabel())
+    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.CommitCompleteLabel(v.ephemeral.mapLsn)))
+    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.CommitCompleteLabel()))
 
     && v'.ephemeral == v.ephemeral  // UNCHANGED
   }
@@ -278,8 +283,8 @@ module BlockCoordinationSystem {
     && v'.WF()
     && uiop.CrashOp?
 
-    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.CrashLabel()))
-    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, CrashTolerantMap.CrashLabel())
+    && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.CrashLabel()))
+    && BlockCrashTolerantMap.Next(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.CrashLabel()))
 
     && v'.ephemeral.Unknown?
   }

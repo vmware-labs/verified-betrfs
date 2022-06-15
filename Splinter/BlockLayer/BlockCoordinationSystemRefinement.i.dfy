@@ -131,16 +131,16 @@ module BlockCoordinationSystemRefinement
     requires step.LoadEphemeralFromPersistentStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.LoadEphemeralFromPersistentLabel()));
-    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.LoadEphemeralFromPersistentLabel(v'.ephemeral.mapLsn));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.LoadEphemeralFromPersistentLabel()));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.LoadEphemeralFromPersistentLabel(v'.ephemeral.mapLsn)));
   }
 
   lemma RecoverNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires NextCondition(v, v', uiop, step) && step.RecoverStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.ReadForRecoveryLabel(step.records)));
-    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.PutRecordsLabel(step.records));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.ReadForRecoveryLabel(step.records)));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.PutRecordsLabel(step.records)));
   }
 
   lemma AcceptRequestNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
@@ -153,10 +153,10 @@ module BlockCoordinationSystemRefinement
     requires NextCondition(v, v', uiop, step) && step.QueryStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn)));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn)));
     var key := uiop.baseOp.req.input.key;
     var value := uiop.baseOp.reply.output.value;
-    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.QueryLabel(v.ephemeral.mapLsn, key, value));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.QueryLabel(v.ephemeral.mapLsn, key, value)));
   }
 
   lemma PutNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
@@ -166,22 +166,22 @@ module BlockCoordinationSystemRefinement
     var key := uiop.baseOp.req.input.key;
     var val := uiop.baseOp.req.input.value;
     var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.PutLabel(singleton)));
-    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.PutRecordsLabel(singleton));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.PutLabel(singleton)));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.PutRecordsLabel(singleton)));
   }
 
   lemma JournalInternalNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires NextCondition(v, v', uiop, step) && step.JournalInternalStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.InternalLabel()));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.InternalLabel()));
   }
 
   lemma MapInternalNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires NextCondition(v, v', uiop, step) && step.MapInternalStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.InternalLabel());
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.InternalLabel()));
   }
 
   lemma DeliverReplyNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
@@ -206,24 +206,24 @@ module BlockCoordinationSystemRefinement
     requires NextCondition(v, v', uiop, step) && step.CommitStartStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.CommitStartLabel(step.newBoundaryLsn, v.ephemeral.mapLsn)));
-    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.CommitStartLabel(step.newBoundaryLsn));
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.CommitStartLabel(step.newBoundaryLsn, v.ephemeral.mapLsn)));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.CommitStartLabel(step.newBoundaryLsn)));
   }
 
   lemma CommitCompleteNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires NextCondition(v, v', uiop, step) && step.CommitCompleteStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.CommitCompleteLabel(v.ephemeral.mapLsn)));
-    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.CommitCompleteLabel());
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.CommitCompleteLabel(v.ephemeral.mapLsn)));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.CommitCompleteLabel()));
   }
 
   lemma CrashNext(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires NextCondition(v, v', uiop, step) && step.CrashStep?
     ensures Inv(v') && CoordinationSystem.NextStep(I(v), I(v'), uiop, IStep(step))
   {
-    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleLabel(CrashTolerantJournal.CrashLabel()));
-    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, CrashTolerantMap.CrashLabel());
+    BlockCrashTolerantJournalRefinement.NextRefines(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.CrashLabel()));
+    BlockCrashTolerantMapRefinement.NextRefines(v.mapadt, v'.mapadt, SimpleMapLabel(CrashTolerantMap.CrashLabel()));
     assert CoordinationSystem.NextStep(I(v), I(v'), uiop, CoordinationSystem.CrashStep());
   }
 

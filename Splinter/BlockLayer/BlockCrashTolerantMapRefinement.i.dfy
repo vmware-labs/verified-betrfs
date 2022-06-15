@@ -111,6 +111,47 @@ module BlockCrashTolerantMapRefinement {
       PivotBetreeRefinement.IStampedBetree(LinkedBetreeRefinement.IStampedBetree(v.persistent.I())));
   }
 
+  // Maybe this belongs in MarshalledBetree specifically?
+  predicate DecodableMBLabel(lbl: MarshalledBetreeMod.TransitionLabel) {
+    && lbl.WF()
+    //&& lbl.I().WF()
+  }
+  function IAMBLabel(lbl: MarshalledBetreeMod.TransitionLabel) : AbstractMap.TransitionLabel
+    requires DecodableMBLabel(lbl)
+  {
+    PagedBetreeRefinement.ILbl(PivotBetreeRefinement.ILbl(LinkedBetreeRefinement.ILbl(lbl.I())))
+  }
+
+  lemma BetreeChainedNext(j: MarshalledBetreeMod.Variables, j': MarshalledBetreeMod.Variables, lbl: MarshalledBetreeMod.TransitionLabel)
+    requires MarshalledBetreeRefinement.Inv(j)
+    requires MarshalledBetreeMod.Next(j, j', lbl)
+    ensures MarshalledBetreeRefinement.Inv(j')
+    ensures AbstractMap.Next(IMB(j), IMB(j'), IAMBLabel(lbl))
+  {
+    MarshalledBetreeRefinement.RefinementNext(j, j', lbl);
+    // TODO(jonh): inconsistent theorem naming: RefinementNext vs NextRefines
+    LinkedBetreeRefinement.NextRefines(
+      MarshalledBetreeRefinement.I(j),
+      MarshalledBetreeRefinement.I(j'),
+      lbl.I());
+    PivotBetreeRefinement.NextRefines(
+      LinkedBetreeRefinement.I(MarshalledBetreeRefinement.I(j)),
+      LinkedBetreeRefinement.I(MarshalledBetreeRefinement.I(j')),
+      LinkedBetreeRefinement.ILbl(lbl.I()));
+    PagedBetreeRefinement.NextRefines(
+      PivotBetreeRefinement.I(LinkedBetreeRefinement.I(MarshalledBetreeRefinement.I(j))),
+      PivotBetreeRefinement.I(LinkedBetreeRefinement.I(MarshalledBetreeRefinement.I(j'))),
+      PivotBetreeRefinement.ILbl(LinkedBetreeRefinement.ILbl(lbl.I())));
+  }
+
+  lemma PutRecordsRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v) && Next(v, v', lbl) && lbl.base.PutRecordsLabel?
+    ensures Inv(v') && CrashTolerantMap.Next(I(v), I(v'), IALabel(lbl))
+  {
+    BetreeChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.PutLabel(lbl.base.records));
+  }
+
+
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Next(v, v', lbl)
     requires Inv(v)
@@ -125,19 +166,19 @@ module BlockCrashTolerantMapRefinement {
       }
       case PutRecordsStep() => {
         assume Inv(v');
-        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        assume CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
       }
       case QueryStep() => {
         assert Inv(v');
-        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        assume CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
       }
       case FreezeMapInternalStep(frozenMap) => {
         assume Inv(v');
-        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        assume CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
       }
       case EphemeralInternalStep() => {
         assume Inv(v');
-        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        assume CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
       }
       case CommitStartStep() => {
         assert Inv(v');
