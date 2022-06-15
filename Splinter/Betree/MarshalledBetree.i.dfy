@@ -107,7 +107,7 @@ module MarshalledBetreeMod
   predicate InitModel(v: Variables, betreeImage: BetreeImage, t: LinkedBetreeMod.Variables)
   {
     && TypeProvidesModel(v, t)
-    && t.linked.diskView.Acyclic()
+    && t.linked.Acyclic()
     && LinkedBetreeMod.Init(t, Stamped(t.linked, t.memtable.seqEnd))
     && v.betreeImage == betreeImage
 //      && v.unmarshalledTail.IsEmpty() // Implied by LinkedBetree.Init && TypeProvidesModel.

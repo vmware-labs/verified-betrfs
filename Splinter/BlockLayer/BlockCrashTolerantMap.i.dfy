@@ -13,10 +13,16 @@ module BlockCrashTolerantMap {
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Options
+  import opened GenericDisk
   import MarshalledBetreeMod
   import CrashTolerantMap
 
-  type TransitionLabel = CrashTolerantMap.TransitionLabel
+  datatype TransitionLabel = TransitionLabel(allocations: set<Address>, base: CrashTolerantMap.TransitionLabel)
+  {
+    predicate WF() {
+      && base.WF()
+    }
+  }
 
   type StoreImage = MarshalledBetreeMod.BetreeImage
 
@@ -38,11 +44,11 @@ module BlockCrashTolerantMap {
   predicate LoadEphemeralFromPersistent(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.LoadEphemeralFromPersistentLabel?
+    && lbl.base.LoadEphemeralFromPersistentLabel?
     && v.ephemeral.Unknown?
     && v'.ephemeral.Known?
 
-    && lbl.endLsn == v.persistent.superblock.seqEnd
+    && lbl.base.endLsn == v.persistent.superblock.seqEnd
     && MarshalledBetreeMod.Init(v'.ephemeral.v, v.persistent)
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
@@ -52,11 +58,11 @@ module BlockCrashTolerantMap {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.PutRecordsLabel?
+    && lbl.base.PutRecordsLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
   
-    && MarshalledBetreeMod.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.PutLabel(lbl.records))
+    && MarshalledBetreeMod.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.PutLabel(lbl.base.records))
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
   }
@@ -65,11 +71,11 @@ module BlockCrashTolerantMap {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.QueryLabel?
+    && lbl.base.QueryLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
-    && MarshalledBetreeMod.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.QueryLabel(lbl.endLsn, lbl.key, lbl.value))
+    && MarshalledBetreeMod.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.QueryLabel(lbl.base.endLsn, lbl.base.key, lbl.base.value))
     && v' == v
   }
 
@@ -77,7 +83,7 @@ module BlockCrashTolerantMap {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.InternalLabel?
+    && lbl.base.InternalLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
     // Can't re-freeze until last in flight state reaches CommitComplete, since
@@ -94,7 +100,7 @@ module BlockCrashTolerantMap {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.InternalLabel?
+    && lbl.base.InternalLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
@@ -107,15 +113,15 @@ module BlockCrashTolerantMap {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.CommitStartLabel?
+    && lbl.base.CommitStartLabel?
     && v.ephemeral.Known?
     && v.inFlight.Some?
 
     // Frozen map can't go backwards vs persistent map, lest we end up with
     // a gap to the ephemeral journal start.
-    && v.persistent.superblock.seqEnd <= lbl.newBoundaryLsn
+    && v.persistent.superblock.seqEnd <= lbl.base.newBoundaryLsn
     // Frozen journal & frozen map agree on boundary.
-    && lbl.newBoundaryLsn == v.inFlight.value.superblock.seqEnd
+    && lbl.base.newBoundaryLsn == v.inFlight.value.superblock.seqEnd
 
     && v' == v
   }
@@ -124,7 +130,7 @@ module BlockCrashTolerantMap {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.CommitCompleteLabel?
+    && lbl.base.CommitCompleteLabel?
     && v.inFlight.Some?
 
     && v' == v.(
@@ -137,7 +143,7 @@ module BlockCrashTolerantMap {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.CrashLabel?
+    && lbl.base.CrashLabel?
     && v' == v.(
       ephemeral := Unknown,
       inFlight := None)
