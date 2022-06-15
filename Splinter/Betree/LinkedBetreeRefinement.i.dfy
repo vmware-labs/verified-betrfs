@@ -332,7 +332,8 @@ module LinkedBetreeRefinement {
     requires linked.Root().ValidChildIndex(idx)
     ensures linked.ChildAtIdx(idx).Acyclic();
   {
-    assume false;
+    var ranking := linked.TheRanking();  // witness
+    assert linked.ChildAtIdx(idx).ValidRanking(ranking);
   }
 
   lemma ILinkedWF(linked: LinkedBetree, ranking: Ranking) 
