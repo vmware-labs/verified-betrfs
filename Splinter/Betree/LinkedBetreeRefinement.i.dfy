@@ -116,24 +116,24 @@ module LinkedBetreeRefinement {
   }
 
 
-  function GetSubranking(ranking: Ranking, subset:set<Address>) : Ranking
-    requires subset <= ranking.Keys
-  {
-    map addr | addr in subset :: ranking[addr]
-  }
+  // function GetSubranking(ranking: Ranking, subset:set<Address>) : Ranking
+  //   requires subset <= ranking.Keys
+  // {
+  //   map addr | addr in subset :: ranking[addr]
+  // }
 
 
-  function ReachableAddresses(linked: LinkedBetree, ranking: Ranking) : (out: set<Address>)
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
-//    requires linked.ReachableAddressesRespectRanking(ranking) //kill
-    decreases linked.GetRank(ranking)
-  {
-    if linked.HasRoot() then 
-        var s := seq(|linked.Root().children|, (i:nat) requires i<|linked.Root().children| => ReachableAddresses(linked.ChildAtIdx(i), ranking));
-      {linked.root.value} + FoldSets(s)
-    else {}
-  }
+//   function ReachableAddresses(linked: LinkedBetree, ranking: Ranking) : (out: set<Address>)
+//     requires linked.WF()
+//     requires linked.ValidRanking(ranking)
+// //    requires linked.ReachableAddressesRespectRanking(ranking) //kill
+//     decreases linked.GetRank(ranking)
+//   {
+//     if linked.HasRoot() then 
+//         var s := seq(|linked.Root().children|, (i:nat) requires i<|linked.Root().children| => ReachableAddresses(linked.ChildAtIdx(i), ranking));
+//       {linked.root.value} + FoldSets(s)
+//     else {}
+//   }
 
   lemma SubstitutePreservesWF(linked: LinkedBetree, replacement: LinkedBetree, path: Path, pathAddrs: PathAddrs)
     requires linked.Acyclic()
@@ -145,13 +145,6 @@ module LinkedBetreeRefinement {
   {
     assume false;
   }
-
-  lemma RankingMonotonic(root: LinkedBetree, r1: Ranking, r2: Ranking) 
-    requires root.WF()
-    requires root.ValidRanking(r1)
-    requires FreshRankingExtension(root.diskView, r1, r2)
-    ensures root.ValidRanking(r2)
-  {}
 
   predicate FreshRankingExtension(dv: DiskView, r1: Ranking, r2: Ranking) 
   {
@@ -230,25 +223,53 @@ module LinkedBetreeRefinement {
     requires IsCompaction(target.Root(), replacement)
     requires target.diskView.IsFresh(replacementAddr)
     ensures InsertCompactReplacement(target, replacement, replacementAddr).ValidRanking(newRanking)
+    ensures newRanking.Keys == ranking.Keys + {replacementAddr}
     ensures target.ValidRanking(newRanking)   // newRanking is good for both the old and the new root
   {
-    var oldRanking := target.TheRanking();
-    var oldTargetRank := oldRanking[target.root.value];
-    newRanking := oldRanking[replacementAddr := oldTargetRank];
+    var oldTargetRank := ranking[target.root.value];
+    newRanking := ranking[replacementAddr := oldTargetRank];
     assert target.diskView.ValidRanking(newRanking);
   }
 
+  lemma ValidRankingAllTheWayDown(linked: LinkedBetree, ranking: Ranking, path: Path)
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    requires path.Valid(linked)
+    ensures path.Target(linked).ValidRanking(ranking)
+    decreases path.depth
+  {
+    if 0 < path.depth {
+      ValidRankingAllTheWayDown(linked.ChildForKey(path.key), ranking, path.Subpath());
+    }
+  } 
+
+  predicate RankingIsTight(dv: DiskView, ranking: Ranking) {
+    ranking.Keys <= dv.entries.Keys
+  }
+
+  // Create a valid ranking that is a subset of the diskview. Note that diskview is allowed to
+  // have things that are not in the diskview
+  lemma BuildTightRanking(linked: LinkedBetree, ranking: Ranking) returns (tightRanking : Ranking)
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    ensures RankingIsTight(linked.diskView, tightRanking)
+    ensures linked.ValidRanking(tightRanking)
+  {
+    tightRanking := map addr | addr in linked.diskView.entries && addr in ranking :: ranking[addr];
+  }
 
   lemma InvNextInternalCompactStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalCompactStep?
+    requires Set(step.pathAddrs) !! v.linked.diskView.entries.Keys
     ensures v'.linked.Acyclic()
   {
-    assume false;
-    var oldRanking := v.linked.TheRanking();
-    var oldTargetAddr := step.path.Target(v.linked).root.value;
-    var newTargetRanking := oldRanking[step.targetAddr := oldRanking[oldTargetAddr]];
+    var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
+    ValidRankingAllTheWayDown(v.linked, oldRanking, step.path);
+    var replacement := InsertCompactReplacement(step.path.Target(v.linked), step.compactedNode, step.targetAddr);
+    var rankingAfterReplacement := RankingAfterReplacement(step.path.Target(v.linked), step.compactedNode, oldRanking, step.targetAddr);
+    var newRanking := RankingAfterSubstitution(v.linked, replacement, rankingAfterReplacement, step.path, step.pathAddrs);
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)

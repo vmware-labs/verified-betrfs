@@ -268,7 +268,7 @@ module LinkedBetreeMod
       requires WF()
     {
       && diskView.ValidRanking(ranking)
-      && (HasRoot() ==> root.value in ranking)
+      && (HasRoot() ==> root.value in ranking)  // ranking covers tree from this root
     }
 
     predicate Acyclic()
@@ -652,6 +652,7 @@ module LinkedBetreeMod
     // Fresh!
     && v.linked.diskView.IsFresh(step.targetAddr)
     && SeqHasUniqueElems(step.pathAddrs) 
+    && Set(step.pathAddrs) !! v.linked.diskView.entries.Keys
     && {step.targetAddr} !! Set(step.pathAddrs)
     // todo(tony): make tight
     && v'.linked == step.path.Substitute(
