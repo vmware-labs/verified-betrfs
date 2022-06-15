@@ -90,4 +90,11 @@ module MarshalledBetreeRefinement
     LinkedBetreeRefinement.NextRefines(t, t', lbl.I());
   }
 
+  // Used by BlockCrashTolerantMapRefinement to cart Acyclicity from Inv(v) to frozen image
+  lemma IVarsIsIImage(v: Variables)
+    requires Inv(v)
+    ensures I(v).linked == v.betreeImage.I().value
+  {
+    TypedModelUnique();
+  }
 }

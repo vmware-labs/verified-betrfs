@@ -182,7 +182,7 @@ module BlockCrashTolerantMapRefinement {
       }
       case FreezeMapInternalStep(frozenMap) => {
         BetreeChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.FreezeAsLabel(frozenMap));
-        assert DecodableImage(frozenMap);
+        MarshalledBetreeRefinement.IVarsIsIImage(v'.ephemeral.v);
         assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.FreezeMapInternalStep(IImage(frozenMap)));  // witness to step
       }
       case EphemeralInternalStep() => {
