@@ -149,6 +149,7 @@ module BlockCrashTolerantMapRefinement {
     ensures Inv(v') && CrashTolerantMap.Next(I(v), I(v'), IALabel(lbl))
   {
     BetreeChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.PutLabel(lbl.base.records));
+    assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.PutRecordsStep());
   }
 
 
@@ -162,11 +163,12 @@ module BlockCrashTolerantMapRefinement {
     match step {
       case LoadEphemeralFromPersistentStep() => {
         LoadEphemeralFromPersistentRefines(v, v', lbl);
-        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        //assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
       }
       case PutRecordsStep() => {
-        assume Inv(v');
-        assume CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        PutRecordsRefines(v, v', lbl);
+        //assume Inv(v');
+        //assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
       }
       case QueryStep() => {
         assert Inv(v');
