@@ -152,6 +152,14 @@ module BlockCrashTolerantMapRefinement {
     assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.PutRecordsStep());
   }
 
+  lemma QueryRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v) && Next(v, v', lbl) && lbl.base.QueryLabel?
+    ensures Inv(v') && CrashTolerantMap.Next(I(v), I(v'), IALabel(lbl))
+  {
+    BetreeChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.QueryLabel(lbl.base.endLsn, lbl.base.key, lbl.base.value));
+    assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.QueryStep());
+  }
+
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Next(v, v', lbl)
@@ -163,47 +171,33 @@ module BlockCrashTolerantMapRefinement {
     match step {
       case LoadEphemeralFromPersistentStep() => {
         LoadEphemeralFromPersistentRefines(v, v', lbl);
-        //assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
       }
       case PutRecordsStep() => {
-        PutRecordsRefines(v, v', lbl);
-        //assume Inv(v');
-        //assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        BetreeChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.PutLabel(lbl.base.records));
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.PutRecordsStep());  // witness to step
       }
       case QueryStep() => {
-        assert Inv(v');
-        assume CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        BetreeChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.QueryLabel(lbl.base.endLsn, lbl.base.key, lbl.base.value));
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.QueryStep());  // witness to step
       }
       case FreezeMapInternalStep(frozenMap) => {
-        assume Inv(v');
-        assume CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        BetreeChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.FreezeAsLabel(frozenMap));
+        assert DecodableImage(frozenMap);
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.FreezeMapInternalStep(IImage(frozenMap)));  // witness to step
       }
       case EphemeralInternalStep() => {
-        assume Inv(v');
-        assume CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        BetreeChainedNext(v.ephemeral.v, v'.ephemeral.v, MarshalledBetreeMod.InternalLabel());
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.EphemeralInternalStep());  // witness to step
       }
       case CommitStartStep() => {
-        assert Inv(v');
-        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.CommitStartStep());  // witness to step
       }
       case CommitCompleteStep() => {
-        assert Inv(v');
-        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.CommitCompleteStep());  // witness to step
       }
       case CrashStep() => {
-        assert Inv(v');
-        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), IStep(step));
+        assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.CrashStep());  // witness to step
       }
     }
-//    assert Inv(v') by {
-//        if step.LoadEphemeralFromPersistentStep? { LoadEphemeralFromPersistentRefines(v, v', lbl); }
-//        if step.PutRecordsStep? { assert Inv(v'); }
-//        if step.QueryStep? { assert Inv(v'); }
-//        if step.FreezeMapInternalStep? { assert Inv(v'); }
-//        if step.EphemeralInternalStep? { assert Inv(v'); }
-//        if step.CommitStartStep? { assert Inv(v'); }
-//        if step.CommitCompleteStep? { assert Inv(v'); }
-//        if step.CrashStep? { assert Inv(v'); }
-//    }
   }
 }
