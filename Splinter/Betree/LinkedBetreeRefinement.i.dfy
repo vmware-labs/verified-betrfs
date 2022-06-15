@@ -50,13 +50,6 @@ module LinkedBetreeRefinement {
       case InternalLabel() => PivotBetree.InternalLabel()
   }
 
-  // function TheRankOf(linked: LinkedBetree) : nat 
-  //   requires linked.HasRoot()
-  //   requires linked.Acyclic()
-  // {
-  //   linked.diskView.TheRanking()[linked.root.value]
-  // }
-
   function IChildren(linked: LinkedBetree, ranking: Ranking) : seq<PivotBetree.BetreeNode>
     requires linked.WF()
     requires linked.HasRoot()
@@ -139,14 +132,20 @@ module LinkedBetreeRefinement {
 //   }
 
   lemma SubstitutePreservesWF(linked: LinkedBetree, replacement: LinkedBetree, path: Path, pathAddrs: PathAddrs)
-    requires linked.Acyclic()
-    requires replacement.Acyclic()
+    requires linked.WF()
+    requires replacement.WF()
     requires path.depth == |pathAddrs|
     requires path.Valid(linked)
+    requires SeqHasUniqueElems(pathAddrs)
     requires path.CanSubstitute(linked, replacement, pathAddrs)
     ensures path.Substitute(linked, replacement, pathAddrs).WF()
+    decreases path.depth
   {
-    assume false;
+    var res := path.Substitute(linked, replacement, pathAddrs);
+    if 0 < path.depth {
+      DiskViewDiff(linked.ChildForKey(path.key), replacement, path.Subpath(), pathAddrs[1..]);
+      SubstitutePreservesWF(linked.ChildForKey(path.key), replacement, path.Subpath(), pathAddrs[1..]);
+    }
   }
 
   predicate FreshRankingExtension(dv: DiskView, r1: Ranking, r2: Ranking) 
