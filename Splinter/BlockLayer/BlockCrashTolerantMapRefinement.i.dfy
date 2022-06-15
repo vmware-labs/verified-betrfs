@@ -27,7 +27,7 @@ module BlockCrashTolerantMapRefinement {
   predicate DecodableImage(store: StoreImage)
   {
     && store.WF()
-    && store.I().value.diskView.Acyclic() // TODO(jonh): introduce "Decodable" into LinkedBetree/Refinement
+    && store.I().value.Acyclic() // TODO(jonh): introduce "Decodable" into LinkedBetree/Refinement
   }
 
   function IImage(store: StoreImage) : CrashTolerantMap.StoreImage
