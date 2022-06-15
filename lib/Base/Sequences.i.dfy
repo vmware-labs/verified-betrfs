@@ -891,4 +891,8 @@ module Sequences {
   ensures (a+b)[i..j] == b[i-|a| .. j-|a|]
   {
   }
+
+  predicate SeqHasUniqueElems<T>(s: seq<T>) {
+    forall i, j | 0 <= i < |s| && 0 <= j < |s| && s[i] == s[j] :: i == j
+  }
 }

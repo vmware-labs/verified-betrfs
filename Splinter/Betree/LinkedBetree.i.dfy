@@ -179,6 +179,12 @@ module LinkedBetreeMod
       MapsAgree(entries, other.entries)
     }
 
+    predicate IsSubsetOf(other: DiskView)
+    {
+      && entries.Keys <= other.entries.Keys 
+      && AgreesWithDisk(other)
+    }
+
     // The node at this address has child pointers that respect ranking
     predicate NodeChildrenRespectsRank(ranking: Ranking, addr: Address)
       requires WF()
@@ -196,9 +202,11 @@ module LinkedBetreeMod
     predicate ValidRanking(ranking: Ranking) 
       requires WF()
     {
-      forall addr | addr in ranking ::
-        && addr in entries
-        && NodeChildrenRespectsRank(ranking, addr)
+      forall addr | 
+        && addr in ranking 
+        && addr in entries 
+      ::
+        NodeChildrenRespectsRank(ranking, addr)
     }
 
     predicate IsFresh(addr: Address) {
@@ -454,30 +462,27 @@ module LinkedBetreeMod
       else Subpath().Target(linked.ChildForKey(key))
     }
 
-    function ReplacedChildren(linked: LinkedBetree, replacement: LinkedBetree, pathAddrs: PathAddrs) : (out: seq<Pointer>)
-      requires depth == |pathAddrs|
-      requires Valid(linked)
-      requires replacement.WF()
-      requires 0 < depth
-      decreases depth, 0
+    predicate CanSubstitute(linked: LinkedBetree, replacement: LinkedBetree, pathAddrs: PathAddrs) 
     {
-      var node := linked.Root();
-      var out := node.children[Route(node.pivotTable, key) := Subpath().Substitute(linked.ChildForKey(key), replacement, pathAddrs[1..]).root];
-      out
+      && linked.WF()
+      && replacement.WF()
+      && depth == |pathAddrs|
+      && Valid(linked)
+      && linked.diskView.IsSubsetOf(replacement.diskView)
     }
 
     function Substitute(linked: LinkedBetree, replacement: LinkedBetree, pathAddrs: PathAddrs) : (out: LinkedBetree)
-      requires depth == |pathAddrs|
-      requires Valid(linked)
-      requires replacement.WF()
+      requires CanSubstitute(linked, replacement, pathAddrs)
       decreases depth, 1
     { 
       if depth == 0 
       then replacement
       else 
         var node := linked.Root();
-        var newNode := BetreeNode(node.buffers, node.pivotTable, ReplacedChildren(linked, replacement, pathAddrs));
-        var newDiskView := DiskView.DiskView(linked.diskView.entries[pathAddrs[0] := newNode]); 
+        var subtree := Subpath().Substitute(linked.ChildForKey(key), replacement, pathAddrs[1..]);
+        var newChildren := node.children[Route(node.pivotTable, key) := subtree.root];
+        var newNode := BetreeNode(node.buffers, node.pivotTable, newChildren);
+        var newDiskView := DiskView.DiskView(subtree.diskView.entries[pathAddrs[0] := newNode]); 
         LinkedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView)
     }
   }
@@ -621,13 +626,20 @@ module LinkedBetreeMod
     && replacement.children == previous.children  // UNCHANGED
   }
 
-  // originalDV is the diskview before compaction. 
-  // InsertReplacement returns a LinkedBetree that has the diskview of linked with replacement placed at
-  // the target adress
-  function InsertReplacement(originaldv: DiskView, replacement: BetreeNode, targetAddr: Address) : LinkedBetree 
+  // target is the root node before it is compacted. 
+  // InsertReplacement returns a LinkedBetree that has the diskview of target with replacement placed at
+  // the replacementAddr
+  function InsertCompactReplacement(target: LinkedBetree, replacement: BetreeNode, replacementAddr: Address) : (out: LinkedBetree)
+    requires target.WF()
+    requires replacement.WF()
+    requires target.HasRoot()
+    requires IsCompaction(target.Root(), replacement)
+    requires target.diskView.IsFresh(replacementAddr)
+    ensures out.diskView.entries == target.diskView.entries[replacementAddr := replacement]
+    ensures out.WF() 
   {
-    var newDiskView := DiskView.DiskView(originaldv.entries[targetAddr := replacement]);
-    LinkedBetree(GenericDisk.Pointer.Some(targetAddr), newDiskView)
+    var newDiskView := DiskView.DiskView(target.diskView.entries[replacementAddr := replacement]);
+    LinkedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView)
   }
 
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -637,12 +649,16 @@ module LinkedBetreeMod
     && step.InternalCompactStep?
     && step.path.Valid(v.linked)
     && IsCompaction(step.path.Target(v.linked).Root(), step.compactedNode)
-    // todo(tony): make tight
-    && v'.linked == step.path.Substitute(v.linked, InsertReplacement(v.linked.diskView, step.compactedNode, step.targetAddr), step.pathAddrs)
     // Fresh!
     && v.linked.diskView.IsFresh(step.targetAddr)
-    && (forall addr | addr in step.pathAddrs :: v.linked.diskView.IsFresh(addr))
-
+    && SeqHasUniqueElems(step.pathAddrs) 
+    && {step.targetAddr} !! Set(step.pathAddrs)
+    // todo(tony): make tight
+    && v'.linked == step.path.Substitute(
+        v.linked, 
+        InsertCompactReplacement(step.path.Target(v.linked), step.compactedNode, step.targetAddr), 
+        step.pathAddrs
+    )
     && v'.memtable == v.memtable  // UNCHANGED
   }
 

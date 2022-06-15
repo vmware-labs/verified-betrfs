@@ -4,11 +4,13 @@
 include "LinkedBetree.i.dfy"
 include "../../lib/Base/SequencesOfMaps.i.dfy"
 include "../../lib/Base/Sets.i.dfy"
+// include "../../lib/Base/Maps.i.dfy"
 
 module LinkedBetreeRefinement {
   import opened Options
-  import opened Mathematics
+  import Mathematics
   import opened Sequences  // Set
+  import opened Maps  // Set
   import opened Sets
   import opened SequencesOfMaps
   import opened KeyType
@@ -133,186 +135,120 @@ module LinkedBetreeRefinement {
     else {}
   }
 
-//  lemma ReachableAddressesIsSubsetOfRanking(linked: LinkedBetree, ranking: Ranking) 
-//    requires linked.WF()
-//    requires linked.ReachableAddressesRespectRanking(ranking)
-//    ensures ReachableAddresses(linked, ranking) <= ranking.Keys
-//    decreases linked.GetRank(ranking)
-//  {
-//    var res :=  ReachableAddresses(linked, ranking);
-//    if linked.HasRoot() {
-//      forall e | e in res 
-//      ensures e in ranking.Keys 
-//      {
-//        if e != linked.root.value {
-//          var s := seq(|linked.Root().children|, (i:nat) requires i<|linked.Root().children| => ReachableAddresses(linked.ChildAtIdx(i), ranking));
-//          assert e in FoldSets(s);
-//          var idx := WhichFold(s, e);
-//          assert e in s[idx];
-//          ReachableAddressesIsSubsetOfRanking(linked.ChildAtIdx(idx), ranking);
-//        }
-//      }
-//    }
-//  }
-
-  // Merge by taking the smaller ranking where possible
-  function MergeRanking(r1: Ranking, r2: Ranking) : (out: Ranking) {
-    map addr | addr in r1.Keys + r2.Keys :: 
-      var out:nat := 
-      if addr in r1 then
-        if addr in r2 then 
-          min(r1[addr], r2[addr])
-        else
-          r1[addr]
-      else
-        r2[addr]
-      ; out
+  lemma SubstitutePreservesWF(linked: LinkedBetree, replacement: LinkedBetree, path: Path, pathAddrs: PathAddrs)
+    requires linked.Acyclic()
+    requires replacement.Acyclic()
+    requires path.depth == |pathAddrs|
+    requires path.Valid(linked)
+    requires path.CanSubstitute(linked, replacement, pathAddrs)
+    ensures path.Substitute(linked, replacement, pathAddrs).WF()
+  {
+    assume false;
   }
 
-  lemma MergeRankingSatisfiesBoth(l1: LinkedBetree, l2: LinkedBetree, r1: Ranking, r2: Ranking) 
-    requires l1.WF() && l2.WF()
-    requires l1.diskView == l2.diskView
-    requires l1.ValidRanking(r1) && l2.ValidRanking(r2)
-    ensures l1.ValidRanking(MergeRanking(r1, r2))
-    ensures l2.ValidRanking(MergeRanking(r1, r2))
+  lemma RankingMonotonic(root: LinkedBetree, r1: Ranking, r2: Ranking) 
+    requires root.WF()
+    requires root.ValidRanking(r1)
+    requires FreshRankingExtension(root.diskView, r1, r2)
+    ensures root.ValidRanking(r2)
   {}
 
-  lemma ReachableAddressesInRanking(linked: LinkedBetree, ranking: Ranking)
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
-    ensures ReachableAddresses(linked, ranking) <= ranking.Keys
-  { // todo
-    assume false;
-  }
-
-  lemma ReachableMonotonicInChildRelation(linked: LinkedBetree, ranking: Ranking, childIdx: nat)
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
-    requires linked.HasRoot()
-    requires linked.Root().OccupiedChildIndex(childIdx)
-    ensures ReachableAddresses(linked.ChildAtIdx(childIdx), ranking) <= ReachableAddresses(linked, ranking)
-    decreases linked.GetRank(ranking)
-  { // todo
-    assume false;
-  }
-
-  function ChildRankings(linked: LinkedBetree, ranking: Ranking) : (out: seq<Ranking>)
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
+  predicate FreshRankingExtension(dv: DiskView, r1: Ranking, r2: Ranking) 
   {
-    if !linked.HasRoot() then [] else
-      var length := |linked.Root().children|;
-      seq(length, (i:nat) requires i < length =>
-        if !linked.Root().OccupiedChildIndex(i) then map[]
-        else
-          ReachableMonotonicInChildRelation(linked, ranking, i);
-          ReachableAddressesInRanking(linked, ranking);
-          //ReachableAddressesIsSubsetOfRanking(linked.ChildAtIdx(i), ranking);
-          GetSubranking(ranking, ReachableAddresses(linked.ChildAtIdx(i), ranking)))
+    && IsSubMap(r1, r2)
+    && forall k | k in r2 && k !in r1 :: k !in dv.entries
   }
 
-  lemma ChildRankingsValid(linked: LinkedBetree, ranking: Ranking)
-    requires linked.WF()
+  lemma DiskViewDiff(linked: LinkedBetree, replacement: LinkedBetree, path: Path, pathAddrs: PathAddrs)
+    requires linked.WF() && replacement.WF()
+    requires path.depth == |pathAddrs|
+    requires path.Valid(linked)
+    requires SeqHasUniqueElems(pathAddrs)
+    requires linked.diskView.IsSubsetOf(replacement.diskView)
+    ensures path.Substitute(linked, replacement, pathAddrs).diskView.entries.Keys == replacement.diskView.entries.Keys + Set(pathAddrs)
+    decreases path.depth
+  {
+    if 0 < path.depth {
+      DiskViewDiff(linked.ChildForKey(path.key), replacement, path.Subpath(), pathAddrs[1..]);
+    }
+  }
+
+  lemma RankingAfterSubstitution(linked: LinkedBetree, replacement: LinkedBetree, ranking: Ranking, path: Path, pathAddrs: PathAddrs) 
+  returns (newRanking: Ranking)
+    requires path.CanSubstitute(linked, replacement, pathAddrs)
     requires linked.ValidRanking(ranking)
-    ensures forall i | 0<=i<|ChildRankings(linked, ranking)|
-      :: linked.diskView.ValidRanking(ChildRankings(linked, ranking)[i])
-  { //todo
-    assume false;
+    requires replacement.ValidRanking(ranking)
+    requires SeqHasUniqueElems(pathAddrs)
+    requires Set(pathAddrs) !! ranking.Keys
+    requires Set(pathAddrs) !! linked.diskView.entries.Keys
+    requires Set(pathAddrs) !! replacement.diskView.entries.Keys
+    ensures path.Substitute(linked, replacement, pathAddrs).WF()
+    ensures path.Substitute(linked, replacement, pathAddrs).ValidRanking(newRanking)
+    ensures FreshRankingExtension(linked.diskView, ranking, newRanking)
+    ensures newRanking.Keys == ranking.Keys + Sequences.Set(pathAddrs)
+    decreases path.depth
+  {
+    SubstitutePreservesWF(linked, replacement, path, pathAddrs);
+    if path.depth == 0 {
+      return ranking;
+    } else {
+      var subtree := path.Subpath().Substitute(linked.ChildForKey(path.key), replacement, pathAddrs[1..]); 
+      var interRanking := RankingAfterSubstitution(linked.ChildForKey(path.key), replacement, ranking, path.Subpath(), pathAddrs[1..]); // intermediate
+      var newNodeAddr := pathAddrs[0];
+      var oldRootRank := interRanking[linked.root.value];
+      var subtreeRank := if subtree.root.None? then 0 else interRanking[subtree.root.value];
+      var newNodeRank := oldRootRank + subtreeRank + 1; // need to exceed oldRootRank and subtreeRank
+      newRanking := interRanking[newNodeAddr := newNodeRank];
+
+      var linked' := path.Substitute(linked, replacement, pathAddrs);
+      forall addr | 
+        && addr in newRanking 
+        && addr in linked'.diskView.entries 
+      ensures linked'.diskView.NodeChildrenRespectsRank(newRanking, addr)
+      {
+        DiskViewDiff(linked, replacement, path, pathAddrs);
+        if addr == newNodeAddr {
+          var node := linked'.diskView.entries[addr];
+          forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some? 
+          ensures node.children[childIdx].value in newRanking
+          ensures newRanking[node.children[childIdx].value] < newRanking[addr]
+          { 
+            var newChildren := node.children[Route(node.pivotTable, path.key) := subtree.root];
+            var subtreeSibling := newChildren[childIdx];  // trigger
+          }
+        }
+      }
+    }
   }
 
-  lemma FoldRankingsValid(diskView: DiskView, rankings: seq<Ranking>)
-    requires diskView.WF()
-    requires forall i | 0<=i<|rankings| :: diskView.ValidRanking(rankings[i])
-    ensures diskView.ValidRanking(FoldMaps(rankings))
-  { //todo
-    assume false;
+  lemma RankingAfterReplacement(target: LinkedBetree, replacement: BetreeNode, ranking: Ranking, replacementAddr: Address) 
+  returns (newRanking: Ranking)
+    requires target.WF()
+    requires target.ValidRanking(ranking)
+    requires replacement.WF()
+    requires target.HasRoot()
+    requires IsCompaction(target.Root(), replacement)
+    requires target.diskView.IsFresh(replacementAddr)
+    ensures InsertCompactReplacement(target, replacement, replacementAddr).ValidRanking(newRanking)
+    ensures target.ValidRanking(newRanking)   // newRanking is good for both the old and the new root
+  {
+    var oldRanking := target.TheRanking();
+    var oldTargetRank := oldRanking[target.root.value];
+    newRanking := oldRanking[replacementAddr := oldTargetRank];
+    assert target.diskView.ValidRanking(newRanking);
   }
 
-  lemma DescendentInDiskview(linked: LinkedBetree)
-
-  // lemma ConstructSubstitutionRanking(linked: LinkedBetree, linked': LinkedBetree, ranking: Ranking, targetRanking': Ranking, path: Path, pathAddrs: PathAddrs)
-  //   returns (newRanking: Ranking)
-  //   requires linked.WF() && linked'.WF()
-  //   requires path.depth == |pathAddrs|
-  //   requires path.IsSubstitution(linked, linked', pathAddrs)  // tony: this seems to allow linked' to have an empty diskview
-  //   requires linked.ValidRanking(ranking)
-  //   requires path.Target(linked').ValidRanking(targetRanking')  // tony: this then says that the target subtree must in linked'.diskview
-  //   ensures linked'.ValidRanking(newRanking)                    // Hence can't prove this because we may have lost all the diskvew entries not in the target subtree
-  //   decreases path.depth
-  // {
-  //   if path.depth == 0 {
-  //     newRanking := targetRanking';
-  //     assert linked'.ValidRanking(newRanking);
-  //   } else {
-  //     assert linked.HasRoot();
-  //     var subranking
-  //       := ConstructSubstitutionRanking(linked.Child(path.key), linked'.Child(path.key), ranking, targetRanking', path.Subpath(), pathAddrs[1..]);
-  //     var replacedIdx := Route(linked.Root().pivotTable, path.key);
-  //     var childRankings := ChildRankings(linked, ranking)[replacedIdx := subranking];
-  //     var descendantRanking := FoldMaps(childRankings);
-  //     // FoldRankingsValid(linked.diskView, childRankings);
-  //     var rootRank: nat := if |descendantRanking| == 0 then 1 else max(SetMax(descendantRanking.Values), 0) + 1;
-  //     newRanking := descendantRanking[linked'.root.value := rootRank];
-  //     forall addr | addr in newRanking 
-  //     ensures
-  //       && addr in linked'.diskView.entries
-  //       && linked'.diskView.ValidRankingAtAddr(newRanking, addr)
-  //     {
-  //       if addr == linked'.root.value {
-  //         assert addr in linked'.diskView.entries;
-  //       } else {
-  //         assume exists i :: 0 <= i < |childRankings| && addr in childRankings[i];  // todo: property of fold
-  //         var i :| 0 <= i < |childRankings| && addr in childRankings[i];
-  //         if i == replacedIdx {
-  //           assert addr in linked'.diskView.entries;
-  //         } else {
-  //           assert addr in childRankings[i];
-  //           ReachableMonotonicInChildRelation(linked, ranking, i);
-  //           ReachableAddressesInRanking(linked, ranking);
-  //           assert addr in GetSubranking(ranking, ReachableAddresses(linked.ChildAtIdx(i), ranking));
-  //           assert addr in ReachableAddresses(linked.ChildAtIdx(i), ranking);
-  //           assert linked.Root().children[i] == linked'.Root().children[i];
-  //           // assert addr in ReachableAddresses(linked'.ChildAtIdx(i), newRanking);
-  //           // TONY: What are the constraints on linked'.diskView? Seems like we don't have any?
-  //           // Extreme case: we can have a target with empty diskview and empty targetRanking'?
-  //           assert addr in linked.diskView.entries;
-  //           assert linked.Root().children[i].value in linked'.diskView.entries;
-
-  //           // argument is that addr's parent (linked.Root().children[i]) is in linked'.diskView.entries. 
-  //           // And then the parent is in linked'.diskview.entries. And then because
-  //           // linked' is WF, 
-
-  //           assert addr in linked'.diskView.entries;
-  //         }
-  //       }
-
-
-  //       assert addr in linked'.diskView.entries;
-  //       assume linked'.diskView.ValidRankingAtAddr(newRanking, addr);
-  //     }
-
-    
-
-
-  //     assert linked'.ValidRanking(newRanking);
-  //   }
-  // }
 
   lemma InvNextInternalCompactStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
-    requires NextStep(v, v', lbl, step);
+    requires NextStep(v, v', lbl, step)
     requires step.InternalCompactStep?
-    ensures v'.linked.Acyclic();
+    ensures v'.linked.Acyclic()
   {
-    // todo
     assume false;
     var oldRanking := v.linked.TheRanking();
     var oldTargetAddr := step.path.Target(v.linked).root.value;
-//    assert oldTargetAddr in v.linked.diskView.entries;
-    var oldTargetRanking := oldRanking[oldTargetAddr];
-    var targetRanking := oldRanking[step.targetAddr := oldTargetRanking];
-    // var rootRanking := ConstructSubstitutionRanking(v.linked, v'.linked, step.path, step.pathAddrs);
-    // assert v'.linked.diskView.PointersRespectRank(rootRanking);  // witness to acyclicity
+    var newTargetRanking := oldRanking[step.targetAddr := oldRanking[oldTargetAddr]];
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -354,16 +290,29 @@ module LinkedBetreeRefinement {
   }
 
   lemma ChildCommutes(linked: LinkedBetree, idx: nat) 
-    requires linked.WF()
+    requires linked.Acyclic()
     requires linked.HasRoot()
     requires linked.Root().ValidChildIndex(idx)
+    requires ILinkedBetree(linked).ValidChildIndex(idx)
+    ensures |ILinkedBetree(linked).children| == NumBuckets(ILinkedBetree(linked).pivotTable)
+    ensures linked.ChildAtIdx(idx).Acyclic()
     ensures ILinkedBetree(linked.ChildAtIdx(idx)) == ILinkedBetree(linked).children[idx]
   {
+    // todo
+    assume false;
+  }
 
+  lemma ChildAcyclic(linked: LinkedBetree, idx: nat) 
+    requires linked.Acyclic()
+    requires linked.HasRoot()
+    requires linked.Root().ValidChildIndex(idx)
+    ensures linked.ChildAtIdx(idx).Acyclic();
+  {
+    assume false;
   }
 
   lemma ILinkedWF(linked: LinkedBetree, ranking: Ranking) 
-    requires linked.WF()
+    requires linked.Acyclic()
     requires linked.ValidRanking(ranking)
     ensures ILinkedBetree(linked).WF()
     decreases linked.GetRank(ranking)
@@ -372,6 +321,7 @@ module LinkedBetreeRefinement {
       forall idx: nat | linked.Root().ValidChildIndex(idx) 
       ensures ILinkedBetree(linked).children[idx].WF()
       {
+        ChildAcyclic(linked, idx);
         ILinkedWF(linked.ChildAtIdx(idx), ranking);
         ChildCommutes(linked, idx);
       }
