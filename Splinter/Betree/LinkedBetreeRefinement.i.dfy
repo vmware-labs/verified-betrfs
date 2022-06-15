@@ -67,9 +67,10 @@ module LinkedBetreeRefinement {
     seq(numChildren, i requires 0<=i<numChildren => ILinkedBetreeNode(linked.ChildAtIdx(i), ranking))
   }
 
-  function ILinkedBetreeNode(linked: LinkedBetree, ranking: Ranking) : PivotBetree.BetreeNode
+  function ILinkedBetreeNode(linked: LinkedBetree, ranking: Ranking) : (out: PivotBetree.BetreeNode)
     requires linked.WF()
     requires linked.ValidRanking(ranking)
+    ensures out.WF()
     decreases linked.GetRank(ranking), 1
   {
     if linked.root.None?
@@ -89,9 +90,10 @@ module LinkedBetreeRefinement {
   }
 
   // wrapper
-  function ILinkedBetree(linked: LinkedBetree) : PivotBetree.BetreeNode
+  function ILinkedBetree(linked: LinkedBetree) : (out: PivotBetree.BetreeNode)
     requires linked.WF()
     requires linked.Acyclic()
+    ensures out.WF()
   {
     ILinkedBetreeNode(linked, linked.TheRanking())
   }
@@ -99,6 +101,7 @@ module LinkedBetreeRefinement {
   function IStampedBetree(stampedBetree: StampedBetree) : (out: PivotBetree.StampedBetree)
     requires stampedBetree.value.WF()
     requires stampedBetree.value.Acyclic()
+    ensures out.value.WF()
   {
     Stamped(ILinkedBetree(stampedBetree.value), stampedBetree.seqEnd)
   }
