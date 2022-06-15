@@ -50,6 +50,47 @@ module LinkedBetreeRefinement {
       case InternalLabel() => PivotBetree.InternalLabel()
   }
 
+  lemma ChildCommutes(linked: LinkedBetree, idx: nat) 
+    requires linked.Acyclic()
+    requires linked.HasRoot()
+    requires linked.Root().ValidChildIndex(idx)
+    requires ILinkedBetree(linked).ValidChildIndex(idx)
+    ensures |ILinkedBetree(linked).children| == NumBuckets(ILinkedBetree(linked).pivotTable)
+    ensures linked.ChildAtIdx(idx).Acyclic()
+    ensures ILinkedBetree(linked.ChildAtIdx(idx)) == ILinkedBetree(linked).children[idx]
+  {
+    // todo
+    assume false;
+  }
+
+  lemma ChildAcyclic(linked: LinkedBetree, idx: nat) 
+    requires linked.Acyclic()
+    requires linked.HasRoot()
+    requires linked.Root().ValidChildIndex(idx)
+    ensures linked.ChildAtIdx(idx).Acyclic();
+  {
+    var ranking := linked.TheRanking();  // witness
+    assert linked.ChildAtIdx(idx).ValidRanking(ranking);
+  }
+
+  lemma ILinkedWF(linked: LinkedBetree, ranking: Ranking) 
+    requires linked.Acyclic()
+    requires linked.ValidRanking(ranking)
+    ensures ILinkedBetree(linked).WF()
+    decreases linked.GetRank(ranking)
+  {
+    if linked.HasRoot() {
+      forall idx: nat | linked.Root().ValidChildIndex(idx) 
+      ensures ILinkedBetree(linked).children[idx].WF()
+      {
+        ChildAcyclic(linked, idx);
+        ILinkedWF(linked.ChildAtIdx(idx), ranking);
+        ChildCommutes(linked, idx);
+      }
+      ILinkedBetreeIgnoresRanking(linked, ranking, linked.TheRanking());
+    }
+  }
+
   function IChildren(linked: LinkedBetree, ranking: Ranking) : seq<PivotBetree.BetreeNode>
     requires linked.WF()
     requires linked.HasRoot()
@@ -57,7 +98,7 @@ module LinkedBetreeRefinement {
     decreases linked.GetRank(ranking), 0
   {
     var numChildren := |linked.Root().children|;
-    seq(numChildren, i requires 0<=i<numChildren => ILinkedBetreeNode(linked.ChildAtIdx(i), ranking))
+    seq(numChildren, i requires 0 <= i < numChildren => ILinkedBetreeNode(linked.ChildAtIdx(i), ranking))
   }
 
   function ILinkedBetreeNode(linked: LinkedBetree, ranking: Ranking) : (out: PivotBetree.BetreeNode)
@@ -73,16 +114,39 @@ module LinkedBetreeRefinement {
       PivotBetree.BetreeNode(node.buffers, node.pivotTable, IChildren(linked, ranking))
   }
 
+  lemma IChildrenIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking) 
+    requires linked.WF()
+    requires linked.ValidRanking(r1)
+    requires linked.ValidRanking(r2)
+    requires linked.HasRoot()
+    ensures IChildren(linked, r1) == IChildren(linked, r2)
+    decreases linked.GetRank(r1), 0
+  {
+    var numChildren := |linked.Root().children|;
+    forall i | 0 <= i < numChildren 
+    ensures ILinkedBetreeNode(linked.ChildAtIdx(i), r1) == ILinkedBetreeNode(linked.ChildAtIdx(i), r2){
+      ILinkedBetreeIgnoresRanking(linked.ChildAtIdx(i), r1, r2);
+    }
+    assert IChildren(linked, r1) == IChildren(linked, r2);
+  }
+
   lemma ILinkedBetreeIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking) 
     requires linked.WF()
     requires linked.ValidRanking(r1)
     requires linked.ValidRanking(r2)
     ensures ILinkedBetreeNode(linked, r1) == ILinkedBetreeNode(linked, r2)
+    decreases linked.GetRank(r1), 1
   {
-    assume false;
+    if linked.root.None? {
+      assert ILinkedBetreeNode(linked, r1) == ILinkedBetreeNode(linked, r2);
+    } else {
+      IChildrenIgnoresRanking(linked, r1, r2);
+      assert IChildren(linked, r1) == IChildren(linked, r2);
+      assert ILinkedBetreeNode(linked, r1) == ILinkedBetreeNode(linked, r2);
+    }
   }
 
-  // wrapper
+    // wrapper
   function ILinkedBetree(linked: LinkedBetree) : (out: PivotBetree.BetreeNode)
     requires linked.WF()
     requires linked.Acyclic()
@@ -309,47 +373,6 @@ module LinkedBetreeRefinement {
         InvNextInternalCompactStep(v, v', lbl, step);
         assert Inv(v');  
       }
-    }
-  }
-
-  lemma ChildCommutes(linked: LinkedBetree, idx: nat) 
-    requires linked.Acyclic()
-    requires linked.HasRoot()
-    requires linked.Root().ValidChildIndex(idx)
-    requires ILinkedBetree(linked).ValidChildIndex(idx)
-    ensures |ILinkedBetree(linked).children| == NumBuckets(ILinkedBetree(linked).pivotTable)
-    ensures linked.ChildAtIdx(idx).Acyclic()
-    ensures ILinkedBetree(linked.ChildAtIdx(idx)) == ILinkedBetree(linked).children[idx]
-  {
-    // todo
-    assume false;
-  }
-
-  lemma ChildAcyclic(linked: LinkedBetree, idx: nat) 
-    requires linked.Acyclic()
-    requires linked.HasRoot()
-    requires linked.Root().ValidChildIndex(idx)
-    ensures linked.ChildAtIdx(idx).Acyclic();
-  {
-    var ranking := linked.TheRanking();  // witness
-    assert linked.ChildAtIdx(idx).ValidRanking(ranking);
-  }
-
-  lemma ILinkedWF(linked: LinkedBetree, ranking: Ranking) 
-    requires linked.Acyclic()
-    requires linked.ValidRanking(ranking)
-    ensures ILinkedBetree(linked).WF()
-    decreases linked.GetRank(ranking)
-  {
-    if linked.HasRoot() {
-      forall idx: nat | linked.Root().ValidChildIndex(idx) 
-      ensures ILinkedBetree(linked).children[idx].WF()
-      {
-        ChildAcyclic(linked, idx);
-        ILinkedWF(linked.ChildAtIdx(idx), ranking);
-        ChildCommutes(linked, idx);
-      }
-      ILinkedBetreeIgnoresRanking(linked, ranking, linked.TheRanking());
     }
   }
 
