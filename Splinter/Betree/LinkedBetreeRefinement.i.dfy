@@ -171,26 +171,6 @@ module LinkedBetreeRefinement {
     && v.linked.Acyclic()  // contains v.linked.WF()
   }
 
-
-  // function GetSubranking(ranking: Ranking, subset:set<Address>) : Ranking
-  //   requires subset <= ranking.Keys
-  // {
-  //   map addr | addr in subset :: ranking[addr]
-  // }
-
-
-//   function ReachableAddresses(linked: LinkedBetree, ranking: Ranking) : (out: set<Address>)
-//     requires linked.WF()
-//     requires linked.ValidRanking(ranking)
-// //    requires linked.ReachableAddressesRespectRanking(ranking) //kill
-//     decreases linked.GetRank(ranking)
-//   {
-//     if linked.HasRoot() then 
-//         var s := seq(|linked.Root().children|, (i:nat) requires i<|linked.Root().children| => ReachableAddresses(linked.ChildAtIdx(i), ranking));
-//       {linked.root.value} + FoldSets(s)
-//     else {}
-//   }
-
   lemma SubstitutePreservesWF(linked: LinkedBetree, replacement: LinkedBetree, path: Path, pathAddrs: PathAddrs)
     requires linked.WF()
     requires replacement.WF()
@@ -235,8 +215,8 @@ module LinkedBetreeRefinement {
     requires replacement.ValidRanking(ranking)
     requires SeqHasUniqueElems(pathAddrs)
     requires Set(pathAddrs) !! ranking.Keys
-    requires Set(pathAddrs) !! linked.diskView.entries.Keys
-    requires Set(pathAddrs) !! replacement.diskView.entries.Keys
+    requires linked.diskView.IsFresh(Set(pathAddrs))
+    requires replacement.diskView.IsFresh(Set(pathAddrs))
     ensures path.Substitute(linked, replacement, pathAddrs).WF()
     ensures path.Substitute(linked, replacement, pathAddrs).ValidRanking(newRanking)
     ensures FreshRankingExtension(linked.diskView, ranking, newRanking)
@@ -283,7 +263,7 @@ module LinkedBetreeRefinement {
     requires replacement.WF()
     requires target.HasRoot()
     requires IsCompaction(target.Root(), replacement)
-    requires target.diskView.IsFresh(replacementAddr)
+    requires target.diskView.IsFresh({replacementAddr})
     ensures InsertCompactReplacement(target, replacement, replacementAddr).ValidRanking(newRanking)
     ensures newRanking.Keys == ranking.Keys + {replacementAddr}
     ensures target.ValidRanking(newRanking)   // newRanking is good for both the old and the new root
@@ -324,7 +304,7 @@ module LinkedBetreeRefinement {
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalCompactStep?
-    requires Set(step.pathAddrs) !! v.linked.diskView.entries.Keys
+    requires v.linked.diskView.IsFresh(Set(step.pathAddrs))
     ensures v'.linked.Acyclic()
   {
     var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
@@ -361,7 +341,7 @@ module LinkedBetreeRefinement {
         assume false;
         assert Inv(v');   // bwoken
       }
-      case InternalFlushStep(_, _) => {
+      case InternalFlushStep(_, _, _, _, _) => {
         assume false;
         assert Inv(v');   // bwoken
       }

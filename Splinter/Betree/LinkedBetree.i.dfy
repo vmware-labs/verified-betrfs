@@ -209,8 +209,8 @@ module LinkedBetreeMod
         NodeChildrenRespectsRank(ranking, addr)
     }
 
-    predicate IsFresh(addr: Address) {
-      addr !in entries 
+    predicate IsFresh(addrs: set<Address>) {
+      addrs !! entries.Keys
     } 
   }
 
@@ -566,55 +566,44 @@ module LinkedBetreeMod
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  // Is linked'.Root() a Flush(childIdx) of linked.Root()?
-  predicate IsFlush(linked: LinkedBetree, linked': LinkedBetree, childIdx: nat)
+  function InsertFlushReplacement(target: LinkedBetree, childIdx:nat, targetAddr: Address, targetChildAddr: Address) : (out: LinkedBetree)
+    requires target.HasRoot()
+    requires target.Root().OccupiedChildIndex(childIdx)
   {
-    && linked.WF()
-    && linked'.WF()
-    && linked.HasRoot()
-    && linked'.HasRoot()
-    && linked'.diskView.AgreesWithDisk(linked.diskView)
-    && var root := linked.Root();
-    && var root' := linked'.Root();
+    var root := target.Root();
+    var keepKeys := AllKeys() - root.ChildDomain(childIdx).KeySet();
+    var keptBuffers := root.buffers.ApplyFilter(keepKeys);
+    var movedBuffers := root.buffers.ApplyFilter(root.ChildDomain(childIdx).KeySet());
+    // BetreeNode of the new child, to be stored at targetChildAddr in the diskview
+    var subroot := target.diskView.Get(root.children[childIdx]);
+    var subroot' := BetreeNode(subroot.buffers.PushBufferStack(movedBuffers), subroot.pivotTable, subroot.children);
 
-    && root.ValidChildIndex(childIdx)
-
-    && var keepKeys := AllKeys() - root.ChildDomain(childIdx).KeySet();
-    && var keptBuffers := root.buffers.ApplyFilter(keepKeys);
-    && var movedBuffers := root.buffers.ApplyFilter(root.ChildDomain(childIdx).KeySet());
-
-    // Parent changes buffers & child at childIdx
-    && root'.buffers == keptBuffers
-    && root'.pivotTable == root.pivotTable
-    && root'.children == root.children[childIdx := root'.children[childIdx]]  // this pointer is allowed to change
-
-    // Flushed childs are nearly identical, except for buffers
-    && root.children[childIdx].Some?
-    && root'.children[childIdx].Some?
-    && var child := linked.diskView.Get(root.children[childIdx]);
-    && var child' := linked'.diskView.Get(root'.children[childIdx]);
-
-    && child'.buffers == child.buffers.PushBufferStack(movedBuffers)
-    && child'.pivotTable == child.pivotTable
-    && child'.children == child.children
-  }
+    // BetreeNode of the new root, to be stored at targetAddr in the diskview
+    var children' := root.children[childIdx := Pointer.Some(targetChildAddr)];
+    var root' := BetreeNode(keptBuffers, root.pivotTable, children');
+    
+    // The new diskview
+    var dv' := DiskView.DiskView(target.diskView.entries[targetAddr := root'][targetChildAddr := subroot']); 
+    LinkedBetree(Pointer.Some(targetAddr), dv')
+  } 
 
   // The flush step reaches down a path and applies IsFlush.
   predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    // An advantage of predicate-style is that we don't have to explicitly
-    // declare BuildTight() (garbage collection); we can leave that to a lower
-    // layer.
-    // todo: rewrite
-    assume false;
     && v.WF()
+    && step.WF()
     && lbl.InternalLabel?
     && step.InternalFlushStep?
     && step.path.Valid(v.linked)
-    // v && v' agree on everything down to Target()
-    // && step.path.IsSubstitution(v.linked, v'.linked, [])
-    // Target and Target' are related by a flush operation
-    && IsFlush(step.path.Target(v.linked), step.path.Target(v'.linked), step.childIdx)
+    && step.path.Target(v.linked).Root().OccupiedChildIndex(step.childIdx)  // the downstream child must exist
+    // Subway Eat Fresh!
+    && v.linked.diskView.IsFresh({step.targetAddr, step.targetChildAddr} + Set(step.pathAddrs))
+    && v'.linked == step.path.Substitute(
+        v.linked, 
+        InsertFlushReplacement(step.path.Target(v.linked), step.childIdx, step.targetAddr, step.targetChildAddr), 
+        step.pathAddrs
+    )
+    // todo(tony): make tight
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
@@ -634,7 +623,7 @@ module LinkedBetreeMod
     requires replacement.WF()
     requires target.HasRoot()
     requires IsCompaction(target.Root(), replacement)
-    requires target.diskView.IsFresh(replacementAddr)
+    // requires target.diskView.IsFresh(replacementAddr)
     ensures out.diskView.entries == target.diskView.entries[replacementAddr := replacement]
     ensures out.WF() 
   {
@@ -644,22 +633,20 @@ module LinkedBetreeMod
 
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && v.WF()
     && step.WF()
     && lbl.InternalLabel?
     && step.InternalCompactStep?
     && step.path.Valid(v.linked)
     && IsCompaction(step.path.Target(v.linked).Root(), step.compactedNode)
-    // Fresh!
-    && v.linked.diskView.IsFresh(step.targetAddr)
-    && SeqHasUniqueElems(step.pathAddrs) 
-    && Set(step.pathAddrs) !! v.linked.diskView.entries.Keys
-    && {step.targetAddr} !! Set(step.pathAddrs)
-    // todo(tony): make tight
+    // Subway Eat Fresh!
+    && v.linked.diskView.IsFresh({step.targetAddr} + Set(step.pathAddrs))
     && v'.linked == step.path.Substitute(
         v.linked, 
         InsertCompactReplacement(step.path.Target(v.linked), step.compactedNode, step.targetAddr), 
         step.pathAddrs
     )
+    // todo(tony): make tight
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
@@ -679,17 +666,26 @@ module LinkedBetreeMod
     | FreezeAsStep()
     | InternalGrowStep()
     | InternalSplitStep(path: Path, childIdx: nat, splitKey: Key)
-    | InternalFlushStep(path: Path, childIdx: nat)
+    // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
+    // pathAddrs is the new addresses to place all its ancestors, used in substitution 
+    | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs)
+    // targetAddr is the fresh address at which compactedNode is placed. pathAddrs is the new addresses to place all its ancestors
     | InternalCompactStep(path: Path, compactedNode: BetreeNode, targetAddr: Address, pathAddrs: PathAddrs)
   {
     predicate WF() {
       match this {
         case QueryStep(receipt) => receipt.Valid()
         case InternalSplitStep(path, childIdx, splitKey) => true
-        case InternalFlushStep(path, childIdx) => true
-        case InternalCompactStep(path, compactedNode, _, pathAddrs) =>
+        case InternalFlushStep(_, _, targetAddr, targetChildAddr, pathAddrs) => 
+          && path.depth == |pathAddrs|
+          && SeqHasUniqueElems(pathAddrs) 
+          && {targetAddr, targetChildAddr} !! Set(pathAddrs)
+          && targetAddr != targetChildAddr
+        case InternalCompactStep(path, compactedNode, targetAddr, pathAddrs) =>
           && compactedNode.WF()
           && path.depth == |pathAddrs|
+          && SeqHasUniqueElems(pathAddrs) 
+          && {targetAddr} !! Set(pathAddrs)
         case _ => true
       }
     }
@@ -704,7 +700,7 @@ module LinkedBetreeMod
       case FreezeAsStep() => FreezeAs(v, v', lbl)
       case InternalGrowStep() => InternalGrow(v, v', lbl, step)
       case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
-      case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
+      case InternalFlushStep(_, _, _, _, _) => InternalFlush(v, v', lbl, step)
       case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
     }
   }
