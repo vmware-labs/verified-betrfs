@@ -212,6 +212,21 @@ module LinkedBetreeMod
     predicate IsFresh(addrs: set<Address>) {
       addrs !! entries.Keys
     } 
+
+    function MergeDisk(other: DiskView) : DiskView{
+      DiskView.DiskView(MapUnion(entries, other.entries))
+    }
+  }
+
+  function EmptyDisk() : DiskView {
+    DiskView.DiskView(map[])
+  }
+
+  function MergeDiskViews(diskViews: seq<DiskView>) : DiskView
+    decreases |diskViews|
+  {
+    if |diskViews| == 0 then EmptyDisk()
+    else diskViews[0].MergeDisk(MergeDiskViews(diskViews[1..]))
   }
 
   
@@ -282,6 +297,29 @@ module LinkedBetreeMod
     {
       var out :| ValidRanking(out);
       out
+    }
+
+    // Build a tight disk with respect to this root
+    function BuildTightTreeDefn(ranking: Ranking) : (out: LinkedBetree)
+      requires WF()
+      requires ValidRanking(ranking)
+      decreases GetRank(ranking)
+    {
+      if root.None? 
+      then 
+        // base case, return empty disk
+        LinkedBetree(root, EmptyDisk())
+      else 
+        var numChildren := |Root().children|;
+        // list of tight diskviews at each of my children
+        var tightChildrenDvs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).BuildTightTreeDefn(ranking).diskView);
+        var dv := DiskView.DiskView(MergeDiskViews(tightChildrenDvs).entries[root.value := Root()]);
+        LinkedBetree(root, dv)
+    }
+    
+    function BuildTightTree() : LinkedBetree {
+      if Acyclic() then BuildTightTreeDefn(TheRanking()) 
+      else this  // Can't build a tight tree if I'm not acyclic
     }
   }
 
@@ -602,8 +640,7 @@ module LinkedBetreeMod
         v.linked, 
         InsertFlushReplacement(step.path.Target(v.linked), step.childIdx, step.targetAddr, step.targetChildAddr), 
         step.pathAddrs
-    )
-    // todo(tony): make tight
+    ).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
@@ -623,7 +660,6 @@ module LinkedBetreeMod
     requires replacement.WF()
     requires target.HasRoot()
     requires IsCompaction(target.Root(), replacement)
-    // requires target.diskView.IsFresh(replacementAddr)
     ensures out.diskView.entries == target.diskView.entries[replacementAddr := replacement]
     ensures out.WF() 
   {
@@ -645,8 +681,7 @@ module LinkedBetreeMod
         v.linked, 
         InsertCompactReplacement(step.path.Target(v.linked), step.compactedNode, step.targetAddr), 
         step.pathAddrs
-    )
-    // todo(tony): make tight
+    ).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
