@@ -50,18 +50,14 @@ module LinkedBetreeRefinement {
       case InternalLabel() => PivotBetree.InternalLabel()
   }
 
-  lemma ChildCommutes(linked: LinkedBetree, idx: nat) 
-    requires linked.Acyclic()
+  lemma ChildCommutes(linked: LinkedBetree, idx: nat, r: Ranking) 
+    requires linked.WF()
     requires linked.HasRoot()
+    requires linked.ValidRanking(r)
     requires linked.Root().ValidChildIndex(idx)
-    requires ILinkedBetree(linked).ValidChildIndex(idx)
-    ensures |ILinkedBetree(linked).children| == NumBuckets(ILinkedBetree(linked).pivotTable)
-    ensures linked.ChildAtIdx(idx).Acyclic()
-    ensures ILinkedBetree(linked.ChildAtIdx(idx)) == ILinkedBetree(linked).children[idx]
-  {
-    // todo
-    assume false;
-  }
+    requires ILinkedBetreeNode(linked, r).ValidChildIndex(idx)
+    ensures ILinkedBetreeNode(linked.ChildAtIdx(idx), r) == ILinkedBetreeNode(linked, r).children[idx]
+  {}
 
   lemma ChildAcyclic(linked: LinkedBetree, idx: nat) 
     requires linked.Acyclic()
@@ -85,10 +81,19 @@ module LinkedBetreeRefinement {
       {
         ChildAcyclic(linked, idx);
         ILinkedWF(linked.ChildAtIdx(idx), ranking);
-        ChildCommutes(linked, idx);
+        ChildCommutes(linked, idx, linked.TheRanking());
       }
       ILinkedBetreeIgnoresRanking(linked, ranking, linked.TheRanking());
     }
+  }
+
+      // wrapper
+  function ILinkedBetree(linked: LinkedBetree) : (out: PivotBetree.BetreeNode)
+    requires linked.WF()
+    requires linked.Acyclic()
+    ensures out.WF()
+  {
+    ILinkedBetreeNode(linked, linked.TheRanking())
   }
 
   function IChildren(linked: LinkedBetree, ranking: Ranking) : seq<PivotBetree.BetreeNode>
@@ -144,15 +149,6 @@ module LinkedBetreeRefinement {
       assert IChildren(linked, r1) == IChildren(linked, r2);
       assert ILinkedBetreeNode(linked, r1) == ILinkedBetreeNode(linked, r2);
     }
-  }
-
-    // wrapper
-  function ILinkedBetree(linked: LinkedBetree) : (out: PivotBetree.BetreeNode)
-    requires linked.WF()
-    requires linked.Acyclic()
-    ensures out.WF()
-  {
-    ILinkedBetreeNode(linked, linked.TheRanking())
   }
 
   function IStampedBetree(stampedBetree: StampedBetree) : (out: PivotBetree.StampedBetree)
