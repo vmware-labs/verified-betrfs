@@ -256,20 +256,38 @@ module LinkedBetreeRefinement {
     }
   }
 
-  lemma RankingAfterReplacement(target: LinkedBetree, replacement: BetreeNode, ranking: Ranking, replacementAddr: Address) 
+  lemma RankingAfterInsertCompactReplacement(target: LinkedBetree, replacement: BetreeNode, ranking: Ranking, replacementAddr: Address) 
   returns (newRanking: Ranking)
     requires target.WF()
     requires target.ValidRanking(ranking)
     requires replacement.WF()
     requires target.HasRoot()
-    requires IsCompaction(target.Root(), replacement)
     requires target.diskView.IsFresh({replacementAddr})
+    requires IsCompaction(target.Root(), replacement)
     ensures InsertCompactReplacement(target, replacement, replacementAddr).ValidRanking(newRanking)
     ensures newRanking.Keys == ranking.Keys + {replacementAddr}
     ensures target.ValidRanking(newRanking)   // newRanking is good for both the old and the new root
   {
     var oldTargetRank := ranking[target.root.value];
     newRanking := ranking[replacementAddr := oldTargetRank];
+    assert target.diskView.ValidRanking(newRanking);
+  }
+
+  lemma RankingAfterInsertFlushReplacement(target: LinkedBetree, ranking: Ranking, childIdx: nat, targetAddr: Address, targetChildAddr: Address) 
+  returns (newRanking: Ranking)
+    requires target.WF()
+    requires target.ValidRanking(ranking)
+    requires target.HasRoot()
+    requires target.Root().OccupiedChildIndex(childIdx)
+    requires target.diskView.IsFresh({targetAddr, targetChildAddr})
+    requires targetAddr != targetChildAddr
+    ensures InsertFlushReplacement(target, childIdx, targetAddr, targetChildAddr).ValidRanking(newRanking)
+    ensures newRanking.Keys == ranking.Keys + {targetAddr, targetChildAddr}
+    ensures target.ValidRanking(newRanking)   // newRanking is good for both the old and the new root
+  {
+    var oldTargetRank := ranking[target.root.value];
+    var oldChildRank := ranking[target.Root().children[childIdx].value];
+    newRanking := ranking[targetAddr := oldTargetRank][targetChildAddr := oldChildRank];
     assert target.diskView.ValidRanking(newRanking);
   }
 
@@ -310,7 +328,20 @@ module LinkedBetreeRefinement {
     var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
     ValidRankingAllTheWayDown(v.linked, oldRanking, step.path);
     var replacement := InsertCompactReplacement(step.path.Target(v.linked), step.compactedNode, step.targetAddr);
-    var rankingAfterReplacement := RankingAfterReplacement(step.path.Target(v.linked), step.compactedNode, oldRanking, step.targetAddr);
+    var rankingAfterReplacement := RankingAfterInsertCompactReplacement(step.path.Target(v.linked), step.compactedNode, oldRanking, step.targetAddr);
+    var newRanking := RankingAfterSubstitution(v.linked, replacement, rankingAfterReplacement, step.path, step.pathAddrs);
+  }
+
+  lemma InvNextInternalFlushStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushStep?
+    ensures v'.linked.Acyclic()
+  {
+    var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
+    ValidRankingAllTheWayDown(v.linked, oldRanking, step.path);
+    var replacement := InsertFlushReplacement(step.path.Target(v.linked), step.childIdx, step.targetAddr, step.targetChildAddr);
+    var rankingAfterReplacement := RankingAfterInsertFlushReplacement(step.path.Target(v.linked), oldRanking, step.childIdx, step.targetAddr, step.targetChildAddr);
     var newRanking := RankingAfterSubstitution(v.linked, replacement, rankingAfterReplacement, step.path, step.pathAddrs);
   }
 
@@ -342,12 +373,10 @@ module LinkedBetreeRefinement {
         assert Inv(v');   // bwoken
       }
       case InternalFlushStep(_, _, _, _, _) => {
-        assume false;
-        assert Inv(v');   // bwoken
+        InvNextInternalFlushStep(v, v', lbl, step);
       }
       case InternalCompactStep(_, _, _, _) => {
         InvNextInternalCompactStep(v, v', lbl, step);
-        assert Inv(v');  
       }
     }
   }
