@@ -330,6 +330,10 @@ module LinkedBetreeRefinement {
     var replacement := InsertCompactReplacement(step.path.Target(v.linked), step.compactedNode, step.targetAddr);
     var rankingAfterReplacement := RankingAfterInsertCompactReplacement(step.path.Target(v.linked), step.compactedNode, oldRanking, step.targetAddr);
     var newRanking := RankingAfterSubstitution(v.linked, replacement, rankingAfterReplacement, step.path, step.pathAddrs);
+    var linkedAfterSubstitution := step.path.Substitute(v.linked, replacement, step.pathAddrs);
+    BuildTightMaintainsRanking(linkedAfterSubstitution, newRanking);
+    BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
+    BuildTightIgnoresRanking(linkedAfterSubstitution, newRanking, linkedAfterSubstitution.TheRanking());
   }
 
   lemma InvNextInternalFlushStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -343,6 +347,58 @@ module LinkedBetreeRefinement {
     var replacement := InsertFlushReplacement(step.path.Target(v.linked), step.childIdx, step.targetAddr, step.targetChildAddr);
     var rankingAfterReplacement := RankingAfterInsertFlushReplacement(step.path.Target(v.linked), oldRanking, step.childIdx, step.targetAddr, step.targetChildAddr);
     var newRanking := RankingAfterSubstitution(v.linked, replacement, rankingAfterReplacement, step.path, step.pathAddrs);
+    var linkedAfterSubstitution := step.path.Substitute(v.linked, replacement, step.pathAddrs);
+    BuildTightMaintainsRanking(linkedAfterSubstitution, newRanking);
+    BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
+    BuildTightIgnoresRanking(linkedAfterSubstitution, newRanking, linkedAfterSubstitution.TheRanking());
+  }
+
+  lemma BuildTightIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking)
+    requires linked.WF()
+    requires linked.ValidRanking(r1)
+    requires linked.ValidRanking(r2)
+    ensures linked.BuildTightTreeDefn(r1) == linked.BuildTightTreeDefn(r2)
+    decreases linked.GetRank(r1)
+  {
+    if linked.HasRoot() {
+      forall i | 0 <= i < |linked.Root().children|
+      ensures linked.ChildAtIdx(i).BuildTightTreeDefn(r1) == linked.ChildAtIdx(i).BuildTightTreeDefn(r2)
+      {
+        BuildTightIgnoresRanking(linked.ChildAtIdx(i), r1, r2);
+      }
+      var numChildren := |linked.Root().children|;
+      var children1 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).BuildTightTreeDefn(r1).diskView);
+      var children2 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).BuildTightTreeDefn(r2).diskView);
+      assert children1 == children2;  // trigger
+    }
+  }
+
+  lemma BuildTightMaintainsRanking(linked: LinkedBetree, ranking: Ranking) 
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    ensures linked.BuildTightTreeDefn(ranking).WF()
+    ensures linked.BuildTightTreeDefn(ranking).ValidRanking(ranking)
+  {
+    // todo
+    assume false;
+  }
+
+  lemma BuildTightPreservesWF(linked: LinkedBetree, ranking: Ranking) 
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    ensures linked.BuildTightTreeDefn(ranking).WF()
+    decreases linked.GetRank(ranking)
+  {
+    if linked.HasRoot() {
+      forall i | 0 <= i < |linked.Root().children|
+      ensures linked.ChildAtIdx(i).BuildTightTreeDefn(ranking).WF()
+      {
+        BuildTightPreservesWF(linked.ChildAtIdx(i), ranking);
+      }
+      // todo: 
+      assume false;
+      assert linked.BuildTightTreeDefn(ranking).WF();
+    }
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)

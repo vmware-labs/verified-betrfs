@@ -305,7 +305,7 @@ module LinkedBetreeMod
       requires ValidRanking(ranking)
       decreases GetRank(ranking)
     {
-      if root.None? 
+      if !HasRoot()
       then 
         // base case, return empty disk
         LinkedBetree(root, EmptyDisk())
