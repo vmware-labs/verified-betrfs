@@ -167,7 +167,7 @@ module LinkedBetreeMod
     }   
 
     function Get(ptr: Pointer) : BetreeNode
-      requires WF()
+      // requires WF()
       requires IsNondanglingPointer(ptr)
       requires ptr.Some?
     {
@@ -213,7 +213,15 @@ module LinkedBetreeMod
       addrs !! entries.Keys
     } 
 
-    function MergeDisk(other: DiskView) : DiskView{
+    function MergeDisk(other: DiskView) : (out: DiskView)
+      // ensure result is sound -- keys and their values must come from one of these places
+      ensures forall addr | addr in out.entries 
+        :: || (addr in entries && out.entries[addr] == entries[addr])
+           || (addr in other.entries && out.entries[addr] == other.entries[addr])
+      // ensure result is complete -- result must contain all the keys
+      ensures entries.Keys <= out.entries.Keys
+      ensures other.entries.Keys <= out.entries.Keys
+    {
       DiskView.DiskView(MapUnion(entries, other.entries))
     }
   }
@@ -222,7 +230,16 @@ module LinkedBetreeMod
     DiskView.DiskView(map[])
   }
 
-  function MergeDiskViews(diskViews: seq<DiskView>) : DiskView
+  function MergeDiskViews(diskViews: seq<DiskView>) : (out: DiskView)
+    // ensure result is sound -- keys and their values must come from one of these places
+    ensures forall addr | addr in out.entries 
+      :: (exists i :: 
+            && 0 <= i < |diskViews|
+            && addr in diskViews[i].entries
+            && out.entries[addr] == diskViews[i].entries[addr]
+      )
+    // ensure result is complete -- result must contain all the keys
+    ensures forall i | 0 <= i < |diskViews| :: diskViews[i].entries.Keys <= out.entries.Keys
     decreases |diskViews|
   {
     if |diskViews| == 0 then EmptyDisk()
@@ -242,7 +259,7 @@ module LinkedBetreeMod
     }
 
     predicate HasRoot() {
-      && WF()
+      && diskView.IsNondanglingPointer(root)
       && root.Some?
     }
 
@@ -253,6 +270,7 @@ module LinkedBetreeMod
     }
 
     function ChildAtIdx(idx: nat) : LinkedBetree
+      requires WF()
       requires HasRoot()
       requires Root().ValidChildIndex(idx)
     {
@@ -303,6 +321,9 @@ module LinkedBetreeMod
     function BuildTightTreeDefn(ranking: Ranking) : (out: LinkedBetree)
       requires WF()
       requires ValidRanking(ranking)
+      ensures out.root == root
+      ensures HasRoot() ==> root.value in out.diskView.entries
+      ensures HasRoot() ==> out.diskView.entries[root.value] == Root()
       decreases GetRank(ranking)
     {
       if !HasRoot()
@@ -605,6 +626,7 @@ module LinkedBetreeMod
   }
 
   function InsertFlushReplacement(target: LinkedBetree, childIdx:nat, targetAddr: Address, targetChildAddr: Address) : (out: LinkedBetree)
+    requires target.WF()
     requires target.HasRoot()
     requires target.Root().OccupiedChildIndex(childIdx)
   {

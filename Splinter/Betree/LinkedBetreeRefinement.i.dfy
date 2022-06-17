@@ -383,6 +383,24 @@ module LinkedBetreeRefinement {
     assume false;
   }
 
+  // Children pointers are not lost from the disk after build tight
+  lemma BuildTightPreservesChildren(linked: LinkedBetree, ranking: Ranking) 
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    requires linked.HasRoot()
+    ensures forall idx: nat | linked.Root().ValidChildIndex(idx) && linked.Root().children[idx].Some? :: 
+       linked.Root().children[idx].value in linked.BuildTightTreeDefn(ranking).diskView.entries
+  {
+    var linkedTight := linked.BuildTightTreeDefn(ranking);
+    var tightChildrenDvs := seq(|linked.Root().children|, i requires 0 <= i < |linked.Root().children| => linked.ChildAtIdx(i).BuildTightTreeDefn(ranking).diskView);
+    forall idx: nat | linked.Root().ValidChildIndex(idx) && linked.Root().children[idx].Some?
+    ensures linked.Root().children[idx].value in linkedTight.diskView.entries
+    {
+      var childPtr := linked.Root().children[idx].value;
+      assert childPtr in tightChildrenDvs[idx].entries;
+    }
+  }
+
   lemma BuildTightPreservesWF(linked: LinkedBetree, ranking: Ranking) 
     requires linked.WF()
     requires linked.ValidRanking(ranking)
@@ -395,9 +413,7 @@ module LinkedBetreeRefinement {
       {
         BuildTightPreservesWF(linked.ChildAtIdx(i), ranking);
       }
-      // todo: 
-      assume false;
-      assert linked.BuildTightTreeDefn(ranking).WF();
+      BuildTightPreservesChildren(linked, ranking);
     }
   }
 
