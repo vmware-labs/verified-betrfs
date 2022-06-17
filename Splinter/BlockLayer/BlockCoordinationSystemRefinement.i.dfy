@@ -33,15 +33,10 @@ module BlockCoordinationSystemRefinement
   // v' where it'll be hard to prove later. Instead, we define it here and
   // prove it as part of Inv.
 
-  predicate DecodableMap(jv: BlockCrashTolerantMap.Variables)
-  {
-    true
-  }
-
   predicate DecodableVariables(v: Variables)
   {
     && BlockCrashTolerantJournalRefinement.Decodable(v.journal)
-    && DecodableMap(v.mapadt)
+    && BlockCrashTolerantMapRefinement.Decodable(v.mapadt)
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -111,6 +106,7 @@ module BlockCoordinationSystemRefinement
     ensures CoordinationSystem.Init(I(v))
   {
     BlockCrashTolerantJournalRefinement.InitRefines(v.journal);
+    BlockCrashTolerantMapRefinement.InitRefines(v.mapadt);
   }
 
   function IStep(step: Step) : CoordinationSystem.Step
