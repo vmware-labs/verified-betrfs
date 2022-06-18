@@ -213,7 +213,7 @@ module LinkedBetreeMod
       addrs !! entries.Keys
     } 
 
-    function MergeDisk(other: DiskView) : (out: DiskView)
+    function {:opaque} MergeDisk(other: DiskView) : (out: DiskView)
       // ensure result is sound -- keys and their values must come from one of these places
       ensures forall addr | addr in out.entries 
         :: || (addr in entries && out.entries[addr] == entries[addr])
@@ -230,7 +230,7 @@ module LinkedBetreeMod
     DiskView.DiskView(map[])
   }
 
-  function MergeDiskViews(diskViews: seq<DiskView>) : (out: DiskView)
+  function {:opaque} MergeDiskViews(diskViews: seq<DiskView>) : (out: DiskView)
     // ensure result is sound -- keys and their values must come from one of these places
     ensures forall addr | addr in out.entries 
       :: (exists i :: 
@@ -241,9 +241,11 @@ module LinkedBetreeMod
     // ensure result is complete -- result must contain all the keys
     ensures forall i | 0 <= i < |diskViews| :: diskViews[i].entries.Keys <= out.entries.Keys
     decreases |diskViews|
-  {
-    if |diskViews| == 0 then EmptyDisk()
-    else diskViews[0].MergeDisk(MergeDiskViews(diskViews[1..]))
+  { var out :=
+      if |diskViews| == 0 then EmptyDisk()
+      else diskViews[0].MergeDisk(MergeDiskViews(diskViews[1..]));
+    reveal_MergeDiskViews();
+    out
   }
 
   
@@ -318,7 +320,7 @@ module LinkedBetreeMod
     }
 
     // Build a tight disk with respect to this root
-    function BuildTightTreeDefn(ranking: Ranking) : (out: LinkedBetree)
+    function BuildTightTreeUsingRanking(ranking: Ranking) : (out: LinkedBetree)
       requires WF()
       requires ValidRanking(ranking)
       ensures out.root == root
@@ -333,13 +335,13 @@ module LinkedBetreeMod
       else 
         var numChildren := |Root().children|;
         // list of tight diskviews at each of my children
-        var tightChildrenDvs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).BuildTightTreeDefn(ranking).diskView);
+        var tightChildrenDvs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).diskView);
         var dv := DiskView.DiskView(MergeDiskViews(tightChildrenDvs).entries[root.value := Root()]);
         LinkedBetree(root, dv)
     }
     
     function BuildTightTree() : LinkedBetree {
-      if Acyclic() then BuildTightTreeDefn(TheRanking()) 
+      if Acyclic() then BuildTightTreeUsingRanking(TheRanking()) 
       else this  // Can't build a tight tree if I'm not acyclic
     }
   }

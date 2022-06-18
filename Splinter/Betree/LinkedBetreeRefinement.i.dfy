@@ -357,18 +357,18 @@ module LinkedBetreeRefinement {
     requires linked.WF()
     requires linked.ValidRanking(r1)
     requires linked.ValidRanking(r2)
-    ensures linked.BuildTightTreeDefn(r1) == linked.BuildTightTreeDefn(r2)
+    ensures linked.BuildTightTreeUsingRanking(r1) == linked.BuildTightTreeUsingRanking(r2)
     decreases linked.GetRank(r1)
   {
     if linked.HasRoot() {
       forall i | 0 <= i < |linked.Root().children|
-      ensures linked.ChildAtIdx(i).BuildTightTreeDefn(r1) == linked.ChildAtIdx(i).BuildTightTreeDefn(r2)
+      ensures linked.ChildAtIdx(i).BuildTightTreeUsingRanking(r1) == linked.ChildAtIdx(i).BuildTightTreeUsingRanking(r2)
       {
         BuildTightIgnoresRanking(linked.ChildAtIdx(i), r1, r2);
       }
       var numChildren := |linked.Root().children|;
-      var children1 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).BuildTightTreeDefn(r1).diskView);
-      var children2 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).BuildTightTreeDefn(r2).diskView);
+      var children1 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).BuildTightTreeUsingRanking(r1).diskView);
+      var children2 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).BuildTightTreeUsingRanking(r2).diskView);
       assert children1 == children2;  // trigger
     }
   }
@@ -376,11 +376,26 @@ module LinkedBetreeRefinement {
   lemma BuildTightMaintainsRanking(linked: LinkedBetree, ranking: Ranking) 
     requires linked.WF()
     requires linked.ValidRanking(ranking)
-    ensures linked.BuildTightTreeDefn(ranking).WF()
-    ensures linked.BuildTightTreeDefn(ranking).ValidRanking(ranking)
+    ensures linked.BuildTightTreeUsingRanking(ranking).WF()
+    ensures linked.BuildTightTreeUsingRanking(ranking).ValidRanking(ranking)
+    decreases linked.GetRank(ranking)
   {
-    // todo
+    // todo: Dafny always inconclusive on this one. Attempts to fix it has led to a massive
+    // explosion that somehow caused everything else to fail, and after 2 hours I gave up
+    // and reverted back to this state.
     assume false;
+
+    BuildTightPreservesWF(linked, ranking);
+    if linked.HasRoot() {
+      forall i | 0 <= i < |linked.Root().children|
+      ensures linked.ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).ValidRanking(ranking)
+      {
+        BuildTightMaintainsRanking(linked.ChildAtIdx(i), ranking);
+      }
+      assert linked.BuildTightTreeUsingRanking(ranking).ValidRanking(ranking);
+    } else {
+      assert linked.BuildTightTreeUsingRanking(ranking).ValidRanking(ranking);
+    }
   }
 
   // Children pointers are not lost from the disk after build tight
@@ -389,10 +404,10 @@ module LinkedBetreeRefinement {
     requires linked.ValidRanking(ranking)
     requires linked.HasRoot()
     ensures forall idx: nat | linked.Root().ValidChildIndex(idx) && linked.Root().children[idx].Some? :: 
-       linked.Root().children[idx].value in linked.BuildTightTreeDefn(ranking).diskView.entries
+       linked.Root().children[idx].value in linked.BuildTightTreeUsingRanking(ranking).diskView.entries
   {
-    var linkedTight := linked.BuildTightTreeDefn(ranking);
-    var tightChildrenDvs := seq(|linked.Root().children|, i requires 0 <= i < |linked.Root().children| => linked.ChildAtIdx(i).BuildTightTreeDefn(ranking).diskView);
+    var linkedTight := linked.BuildTightTreeUsingRanking(ranking);
+    var tightChildrenDvs := seq(|linked.Root().children|, i requires 0 <= i < |linked.Root().children| => linked.ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).diskView);
     forall idx: nat | linked.Root().ValidChildIndex(idx) && linked.Root().children[idx].Some?
     ensures linked.Root().children[idx].value in linkedTight.diskView.entries
     {
@@ -404,12 +419,12 @@ module LinkedBetreeRefinement {
   lemma BuildTightPreservesWF(linked: LinkedBetree, ranking: Ranking) 
     requires linked.WF()
     requires linked.ValidRanking(ranking)
-    ensures linked.BuildTightTreeDefn(ranking).WF()
+    ensures linked.BuildTightTreeUsingRanking(ranking).WF()
     decreases linked.GetRank(ranking)
   {
     if linked.HasRoot() {
       forall i | 0 <= i < |linked.Root().children|
-      ensures linked.ChildAtIdx(i).BuildTightTreeDefn(ranking).WF()
+      ensures linked.ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).WF()
       {
         BuildTightPreservesWF(linked.ChildAtIdx(i), ranking);
       }
