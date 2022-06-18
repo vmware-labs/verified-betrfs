@@ -19,10 +19,13 @@ module BlockCrashTolerantMapRefinement {
   import CrashTolerantMap 
   import opened BlockCrashTolerantMap 
   import PagedBetreeRefinement
+  import PivotBetree
   import PivotBetreeRefinement
+  import LinkedBetreeMod
   import LinkedBetreeRefinement
   import MarshalledBetreeRefinement
   import AbstractMap
+  import opened DomainMod
 
   predicate DecodableImage(store: StoreImage)
   {
@@ -160,6 +163,39 @@ module BlockCrashTolerantMapRefinement {
     assert CrashTolerantMap.NextStep(I(v), I(v'), IALabel(lbl), CrashTolerantMap.QueryStep());
   }
 
+  lemma InitRefines(v: Variables)
+    requires Init(v)
+    ensures Inv(v)
+    ensures CrashTolerantMap.Init(I(v))
+  {
+    var img := MarshalledBetreeMod.EmptyBetreeImage();
+      // TODO move into MarshalledBetreeRefinement
+    assert img.TypeProvidesModel(LinkedBetreeRefinement.EmptyStampedBetree());  // witness
+    assert img.WF();
+    //assert LinkedBetreeRefinement.EmptyStampedBetree().Acyclic();
+    MarshalledBetreeRefinement.TypedModelUnique();
+    assert img.I().value.Acyclic();
+    assert v.persistent == MarshalledBetreeMod.EmptyBetreeImage();
+    var mEmpty := MarshalledBetreeMod.EmptyBetreeImage();
+    assert mEmpty.I() == LinkedBetreeRefinement.EmptyStampedBetree();
+    calc {
+      LinkedBetreeRefinement.ILinkedBetree(LinkedBetreeMod.LinkedBetree(None, LinkedBetreeMod.DiskView(map[])));
+      PivotBetree.Nil;
+        // TODO oops! What do we *want* here?
+      PivotBetree.EmptyRoot(TotalDomain());
+    }
+    calc {
+      IImage(mEmpty);
+      PagedBetreeRefinement.IStampedBetree(
+        PivotBetreeRefinement.IStampedBetree(
+          LinkedBetreeRefinement.IStampedBetree(
+            LinkedBetreeRefinement.EmptyStampedBetree())));
+      StampedMod.Empty();
+    }
+    assert IImage(MarshalledBetreeMod.EmptyBetreeImage()) == StampedMod.Empty();
+    assert I(v).persistent == StampedMod.Empty();
+    assert CrashTolerantMap.Init(I(v));
+  }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Next(v, v', lbl)
