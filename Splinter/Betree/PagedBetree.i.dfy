@@ -148,15 +148,6 @@ module PagedBetree
       assert outChildren.WF();
       BetreeNode(keptBuffers, outChildren)
     }
-
-    predicate EquivalentBufferCompaction(other: BetreeNode)
-    {
-      && WF()
-      && other.WF()
-      && Promote().buffers.Equivalent(other.Promote().buffers)
-      // Can only make a local change; entirety of children subtrees are identical.
-      && Promote().children == other.Promote().children
-    }
   }
 
   function EmptyRoot() : (out: BetreeNode)
@@ -400,19 +391,21 @@ module PagedBetree
       )
   }
 
-  // NB we tell you exactly how to Split and Flush, but leave lots of
-  // nondetermistic freedom in the description of Compact.
+  function CompactedNode(original: BetreeNode, newBufs: BufferStack) : BetreeNode 
+    requires original.BetreeNode?
+  {
+    BetreeNode(newBufs, original.children)
+  }
+
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires step.WF()
   {
     && lbl.InternalLabel?
     && step.InternalCompactStep?
-    && step.path.Valid()
     && step.path.node == v.root
-    && step.compactedNode.WF()
-    && step.path.Target().EquivalentBufferCompaction(step.compactedNode)
     && v' == v.(
-        root := step.path.Substitute(step.compactedNode)
-      )
+        root := step.path.Substitute(CompactedNode(step.path.Target(), step.compactedBuffers))
+    )
   }
 
   // public:
@@ -431,13 +424,16 @@ module PagedBetree
     | InternalGrowStep()
     | InternalSplitStep(path: Path, leftKeys: iset<Key>, rightKeys: iset<Key>)
     | InternalFlushStep(path: Path, downKeys: iset<Key>)
-    | InternalCompactStep(path: Path, compactedNode: BetreeNode)
+    | InternalCompactStep(path: Path, compactedBuffers: BufferStack)
   {
     predicate WF() {
       match this {
         case InternalSplitStep(path, _, _) => path.Valid()
         case InternalFlushStep(path, _) => path.Valid()
-        case InternalCompactStep(path, _) => path.Valid()
+        case InternalCompactStep(path, compactedBuffers) => 
+          && path.Valid()
+          && path.Target().BetreeNode?  // no point compacting a nil node
+          && path.Target().buffers.Equivalent(compactedBuffers)
         case _ => true
       }
     }
@@ -445,15 +441,16 @@ module PagedBetree
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    match step {
-      case QueryStep(receipt) => Query(v, v', lbl, receipt)
-      case PutStep() => Put(v, v', lbl)
-      case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
-      case FreezeAsStep() => FreezeAs(v, v', lbl)
-      case InternalGrowStep() => InternalGrow(v, v', lbl, step)
-      case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
-      case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
-      case InternalCompactStep(_, _) => InternalCompact(v, v', lbl, step)
+    && step.WF() 
+    && match step {
+        case QueryStep(receipt) => Query(v, v', lbl, receipt)
+        case PutStep() => Put(v, v', lbl)
+        case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
+        case FreezeAsStep() => FreezeAs(v, v', lbl)
+        case InternalGrowStep() => InternalGrow(v, v', lbl, step)
+        case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
+        case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
+        case InternalCompactStep(_, _) => InternalCompact(v, v', lbl, step)
     }
   }
 

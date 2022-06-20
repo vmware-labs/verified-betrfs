@@ -35,9 +35,9 @@ module PagedBetreeRefinement
       var topLine := QueryReceiptLine(node, Merge(thisMessage, childReceipt.Result()));
       var receipt := QueryReceipt(key, node, [topLine] + childReceipt.lines);
       assert receipt.ResultLinkedAt(0);
-      assert forall i | 0<i<|receipt.lines|-1 :: childReceipt.ResultLinkedAt(i-1) && receipt.ResultLinkedAt(i);  // trigger Valid
-      assert forall i | 0<i<|receipt.lines|-1 :: receipt.ChildLinkedAt(i) by {  // not sure why this one demands being unrolled
-        forall i | 0<i<|receipt.lines|-1 ensures receipt.ChildLinkedAt(i) { assert childReceipt.ChildLinkedAt(i-1); } // trigger
+      assert forall i | 0 < i< |receipt.lines|-1 :: childReceipt.ResultLinkedAt(i-1) && receipt.ResultLinkedAt(i);  // trigger Valid
+      assert forall i | 0 < i< |receipt.lines|-1 :: receipt.ChildLinkedAt(i) by {  // not sure why this one demands being unrolled
+        forall i | 0 < i< |receipt.lines|-1 ensures receipt.ChildLinkedAt(i) { assert childReceipt.ChildLinkedAt(i-1); } // trigger
       }
       receipt
   }
@@ -86,11 +86,11 @@ module PagedBetreeRefinement
   lemma CommonBufferStacks(a: BufferStack, b: BufferStack, len: nat, key: Key)
     requires len <= |a.buffers|
     requires len <= |b.buffers|
-    requires forall i | 0<=i<len :: a.buffers[i] == b.buffers[i]
+    requires forall i | 0 <= i< len :: a.buffers[i] == b.buffers[i]
     ensures a.QueryUpTo(key, len) == b.QueryUpTo(key, len)
   {
     var i:nat := 0;
-    while i<len
+    while i < len
       invariant i<=len
       invariant a.QueryUpTo(key, i) == b.QueryUpTo(key, i);
     {
@@ -385,11 +385,13 @@ module PagedBetreeRefinement
   lemma InternalCompactNoop(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires v.WF()
     requires v'.WF()
+    requires step.WF()
     requires InternalCompact(v, v', lbl, step)
     ensures I(v') == I(v)
   {
-    INodeExtensionality(step.compactedNode, step.path.Target());
-    SubstituteEquivalence(step.path, step.compactedNode);
+    var compactedNode := CompactedNode(step.path.Target(), step.compactedBuffers);
+    INodeExtensionality(compactedNode, step.path.Target());
+    SubstituteEquivalence(step.path, compactedNode);
     EquivalentRootVars(v, v');
   }
 
