@@ -318,6 +318,28 @@ module LinkedBetreeRefinement {
     tightRanking := map addr | addr in linked.diskView.entries && addr in ranking :: ranking[addr];
   }
 
+  lemma InvNextInternalGrowStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalGrowStep?
+    ensures v'.linked.Acyclic()
+  {
+    var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
+    var newRanking;
+    if v.linked.HasRoot() {
+      var oldRootRank := oldRanking[v.linked.root.value];
+      newRanking := oldRanking[step.newRootAddr := oldRootRank+1];
+    } else {
+      var newRootRank := if |oldRanking.Values| == 0 then 1 else SetMax(oldRanking.Values) + 1;
+      newRanking := oldRanking[step.newRootAddr := newRootRank];
+    }
+    var newRoot := InsertGrowReplacement(v.linked, step.newRootAddr);
+    assert newRoot.ValidRanking(newRanking);  // trigger
+    BuildTightMaintainsRanking(newRoot, newRanking);
+    BuildTightPreservesWF(newRoot, newRanking);
+    BuildTightIgnoresRanking(newRoot, newRanking, newRoot.TheRanking());
+  }
+
   lemma InvNextInternalCompactStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
@@ -451,9 +473,9 @@ module LinkedBetreeRefinement {
       case FreezeAsStep() => {
         assert Inv(v');
       }
-      case InternalGrowStep() => {
-        assume false;
-        assert Inv(v');   // bwoken
+      case InternalGrowStep(_) => {
+        InvNextInternalGrowStep(v, v', lbl, step);
+        assert Inv(v');
       }
       case InternalSplitStep(_, _, _) => {
         assume false;
