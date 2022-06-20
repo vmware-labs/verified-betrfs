@@ -505,7 +505,7 @@ module LinkedBetreeMod
       decreases depth
     {
       && linked.WF()
-      && linked.HasRoot()
+      && linked.HasRoot() 
       && linked.Root().KeyInDomain(key)
       && (0 < depth ==> Subpath().Valid(linked.ChildForKey(key)))
     }
@@ -548,21 +548,25 @@ module LinkedBetreeMod
     }
   }
 
-  // TODO(tony/jonh): Side quest: now that we know we want predicate-style down
-  // here anyway, try retrofitting predicate style definitions into
-  // PivotBetree. If it works, maybe we can do some functional decomposition
-  // and cut the duplication.
+  function InsertGrowReplacement(oldRoot: LinkedBetree, newRootAddr:Address) : (out: LinkedBetree)
+    requires oldRoot.WF()
+  {
+    // The new root node
+    var root' := BetreeNode(BufferStack([]), TotalPivotTable(), [oldRoot.root]);
+    // The new diskview
+    var dv' := DiskView.DiskView(oldRoot.diskView.entries[newRootAddr := root']); 
+    LinkedBetree(Pointer.Some(newRootAddr), dv')
+  } 
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
+    && step.WF()
     && lbl.InternalLabel?
     && step.InternalGrowStep?
-    && v.linked.HasRoot()
-
-    && v'.linked.diskView.AgreesWithDisk(v.linked.diskView)
-    && v'.linked.HasRoot()
-    && v'.linked.Root() == BetreeNode(BufferStack([]), TotalPivotTable(), [v.linked.root])
+    // Subway Eat Fresh!
+    && v.linked.diskView.IsFresh({step.newRootAddr})
+    && v'.linked == InsertGrowReplacement(v.linked, step.newRootAddr).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
@@ -649,7 +653,6 @@ module LinkedBetreeMod
     LinkedBetree(Pointer.Some(targetAddr), dv')
   } 
 
-  // The flush step reaches down a path and applies IsFlush.
   predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
@@ -723,7 +726,8 @@ module LinkedBetreeMod
     | PutStep()
     | QueryEndLsnStep()
     | FreezeAsStep()
-    | InternalGrowStep()
+    // newRootAddr is the new address allocated for the new root
+    | InternalGrowStep(newRootAddr: Address) 
     | InternalSplitStep(path: Path, childIdx: nat, splitKey: Key)
     // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
     // pathAddrs is the new addresses to place all its ancestors, used in substitution 
@@ -757,7 +761,7 @@ module LinkedBetreeMod
       case PutStep() => Put(v, v', lbl)
       case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
       case FreezeAsStep() => FreezeAs(v, v', lbl)
-      case InternalGrowStep() => InternalGrow(v, v', lbl, step)
+      case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
       case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
       case InternalFlushStep(_, _, _, _, _) => InternalFlush(v, v', lbl, step)
       case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
