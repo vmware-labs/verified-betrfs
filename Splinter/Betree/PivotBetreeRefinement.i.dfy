@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "PivotBetree.i.dfy"
+include "PagedBetreeRefinement.i.dfy"
 
 module PivotBetreeRefinement
 {
@@ -21,6 +22,7 @@ module PivotBetreeRefinement
   import opened DomainMod
   import opened PivotBetree
   import PagedBetree
+  import PagedBetreeRefinement
 
   function IChildren(node: BetreeNode) : PagedBetree.ChildMap
     requires node.WF()
@@ -97,7 +99,8 @@ module PivotBetreeRefinement
       } else if step.InternalFlushStep? {
         SubstitutePreservesWF(step.path, step.path.Target().Flush(step.childIdx));
       } else if step.InternalCompactStep? {
-        SubstitutePreservesWF(step.path, step.compactedNode);
+        var compactedNode := CompactedNode(step.path.Target(), step.compactedBuffers);
+        SubstitutePreservesWF(step.path, compactedNode);
       }
     }
     assert v'.root.WF();  // trigger
@@ -189,9 +192,11 @@ module PivotBetreeRefinement
       case InternalFlushStep(path, childIdx) =>
         IPathValid(path);
         PagedBetree.InternalFlushStep(IPath(path), path.Target().DomainRoutedToChild(childIdx).KeySet())
-      case InternalCompactStep(path, compactedNode) =>
+      case InternalCompactStep(path, compactedBuffers) =>
         IPathValid(path);
-        PagedBetree.InternalCompactStep(IPath(path), INode(compactedNode))
+        var out := PagedBetree.InternalCompactStep(IPath(path), compactedBuffers);
+        TargetCommutesWithI(path);
+        out
     }
   }
 
@@ -512,9 +517,20 @@ module PivotBetreeRefinement
     SubstitutionRefines(step.path, step.path.Target().Flush(step.childIdx));
   }
 
+  predicate EquivalentBufferCompaction(node: BetreeNode, other: BetreeNode)
+  {
+    && node.WF()
+    && other.WF()
+    && node.BetreeNode?
+    && other.BetreeNode?
+    && node.buffers.Equivalent(other.buffers)
+    && node.pivotTable == other.pivotTable
+    && node.children == other.children
+  }
+
   lemma BufferCompactionRefines(node: BetreeNode, other: BetreeNode)
-    requires node.EquivalentBufferCompaction(other)
-    ensures INode(node).EquivalentBufferCompaction(INode(other))
+    requires EquivalentBufferCompaction(node, other)
+    ensures PagedBetreeRefinement.EquivalentBufferCompaction(INode(node), INode(other))
   {}
 
   lemma InternalCompactStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -529,10 +545,10 @@ module PivotBetreeRefinement
     InvNext(v, v', lbl); //assert v'.WF();
     INodeWF(v'.root);
     IPathValid(step.path); //assert IPath(step.path).Valid();
-    SubstitutionRefines(step.path, step.compactedNode);
-    BufferCompactionRefines(step.path.Target(), step.compactedNode);
+    var compactedNode := CompactedNode(step.path.Target(), step.compactedBuffers);
+    SubstitutionRefines(step.path, compactedNode);
+    BufferCompactionRefines(step.path.Target(), compactedNode);
     TargetCommutesWithI(step.path);
-    assert IStep(step).path.Target().EquivalentBufferCompaction(INode(step.compactedNode));  // trigger
   }
 
   lemma FreezeAsRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)

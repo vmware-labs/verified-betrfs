@@ -393,6 +393,7 @@ module PagedBetree
 
   function CompactedNode(original: BetreeNode, newBufs: BufferStack) : BetreeNode 
     requires original.BetreeNode?
+    requires original.buffers.Equivalent(newBufs)
   {
     BetreeNode(newBufs, original.children)
   }

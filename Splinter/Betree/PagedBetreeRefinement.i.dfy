@@ -382,6 +382,17 @@ module PagedBetreeRefinement
     EquivalentRootVars(v, v');
   }
 
+  // Note that this definition used only in PivotBetreeRefinement
+  predicate EquivalentBufferCompaction(node: BetreeNode, other: BetreeNode)
+  {
+    && node.WF()
+    && other.WF()
+    && node.BetreeNode?
+    && other.BetreeNode?
+    && node.buffers.Equivalent(other.buffers)
+    && node.children == other.children
+  }
+
   lemma InternalCompactNoop(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires v.WF()
     requires v'.WF()
