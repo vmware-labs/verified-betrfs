@@ -97,4 +97,12 @@ module MarshalledBetreeRefinement
   {
     TypedModelUnique();
   }
+
+  lemma EmptyRefines()
+    ensures EmptyBetreeImage().WF()
+    ensures EmptyBetreeImage().I() == LinkedBetreeMod.EmptyImage()
+  {
+    assert EmptyBetreeImage().TypeProvidesModel(LinkedBetreeMod.EmptyImage());  // witness
+    TypedModelUnique();
+  }
 }

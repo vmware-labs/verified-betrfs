@@ -26,14 +26,10 @@ module LinkedBetreeRefinement {
 
   type Ranking = GenericDisk.Ranking
 
-  function EmptyStampedBetree() : (out: StampedBetree)
-    ensures out.value.Acyclic()
+  lemma EmptyLinkedBtreeAcyclic()
+    ensures EmptyLinkedBetree().Acyclic()
   {
-    var out := Stamped(LinkedBetree(None, DiskView(map[])), 0);
-    assert out.value.Acyclic() by {
-      assert out.value.ValidRanking(map[]);
-    }
-    out
+    assert EmptyLinkedBetree().ValidRanking(map[]);
   }
 
   function ILbl(lbl: TransitionLabel) : PivotBetree.TransitionLabel
@@ -45,7 +41,9 @@ module LinkedBetreeRefinement {
       case FreezeAsLabel(stampedBetree) => PivotBetree.FreezeAsLabel(
         if stampedBetree.value.WF() && stampedBetree.value.Acyclic()
         then IStampedBetree(stampedBetree)
-        else IStampedBetree(EmptyStampedBetree())  // "silly" case, since we never interpret non-(WF+Acyclic) things
+        else
+          EmptyLinkedBtreeAcyclic();
+          IStampedBetree(EmptyImage())  // "silly" case, since we never interpret non-(WF+Acyclic) things
       )
       case InternalLabel() => PivotBetree.InternalLabel()
   }
