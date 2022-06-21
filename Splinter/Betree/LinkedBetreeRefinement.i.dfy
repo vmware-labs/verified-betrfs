@@ -50,7 +50,7 @@ module LinkedBetreeRefinement {
       case InternalLabel() => PivotBetree.InternalLabel()
   }
 
-  lemma ChildCommutes(linked: LinkedBetree, idx: nat, r: Ranking) 
+  lemma ChildIdxCommutesWithI(linked: LinkedBetree, idx: nat, r: Ranking) 
     requires linked.WF()
     requires linked.HasRoot()
     requires linked.ValidRanking(r)
@@ -59,7 +59,7 @@ module LinkedBetreeRefinement {
     ensures ILinkedBetreeNode(linked.ChildAtIdx(idx), r) == ILinkedBetreeNode(linked, r).children[idx]
   {}
 
-  lemma ChildAcyclic(linked: LinkedBetree, idx: nat) 
+  lemma ChildIdxAcyclic(linked: LinkedBetree, idx: nat) 
     requires linked.Acyclic()
     requires linked.HasRoot()
     requires linked.Root().ValidChildIndex(idx)
@@ -67,6 +67,16 @@ module LinkedBetreeRefinement {
   {
     var ranking := linked.TheRanking();  // witness
     assert linked.ChildAtIdx(idx).ValidRanking(ranking);
+  }
+
+  lemma ChildKeyAcyclic(linked: LinkedBetree, key: Key) 
+    requires linked.Acyclic()
+    requires linked.HasRoot()
+    requires linked.Root().KeyInDomain(key)
+    ensures linked.ChildForKey(key).Acyclic()
+  {
+    var ranking := linked.TheRanking();  // witness
+    assert linked.ChildForKey(key).ValidRanking(ranking);
   }
 
   lemma ILinkedWF(linked: LinkedBetree, ranking: Ranking) 
@@ -79,9 +89,9 @@ module LinkedBetreeRefinement {
       forall idx: nat | linked.Root().ValidChildIndex(idx) 
       ensures ILinkedBetree(linked).children[idx].WF()
       {
-        ChildAcyclic(linked, idx);
+        ChildIdxAcyclic(linked, idx);
         ILinkedWF(linked.ChildAtIdx(idx), ranking);
-        ChildCommutes(linked, idx, linked.TheRanking());
+        ChildIdxCommutesWithI(linked, idx, linked.TheRanking());
       }
       ILinkedBetreeIgnoresRanking(linked, ranking, linked.TheRanking());
     }
@@ -118,13 +128,6 @@ module LinkedBetreeRefinement {
       var node := linked.Root();
       PivotBetree.BetreeNode(node.buffers, node.pivotTable, IChildren(linked, ranking))
   }
-
-  // function ICompactedNode(compactedNode: LinkedBetree, targetAddr: Address) : (out: PivotBetree.BetreeNode) 
-  //   requires compactedNode.HasRoot();
-  // {
-  //   var dv := DiskView.DiskView(compactedNode.diskView.entries[targetAddr := compactedNode.Root()]);
-  //   ILinkedBetree()
-  // }
 
   function IPath(path: Path) : (out: PivotBetree.Path)
     requires path.linked.Acyclic()
@@ -166,16 +169,74 @@ module LinkedBetreeRefinement {
         out
       case InternalFlushStep(path, childIdx, _, _, _) =>
         var out := PivotBetree.InternalFlushStep(IPath(path), childIdx);
-        assert out.path.Valid();
+        IPathValid(path);
         assert out.path.Target().ValidChildIndex(childIdx);
         assert out.WF();
         out
       case InternalCompactStep(path, compactedBuffers, _, _) =>
         var out := PivotBetree.InternalCompactStep(IPath(path), compactedBuffers);
-        assert out.path.Valid();
+        IPathValid(path);
         assert out.path.Target().buffers.Equivalent(compactedBuffers);
         assert out.WF();
         out
+    }
+  }
+
+  lemma SubpathCommutesWithIPath(path: Path) 
+    requires path.Valid()
+    requires 0 < path.depth
+    requires path.linked.Acyclic()
+    ensures path.Subpath().linked.Acyclic()
+    ensures IPath(path.Subpath()) == IPath(path).Subpath()
+  {
+    ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+    ChildKeyCommutesWithI(path.linked, path.key);
+  }
+  
+  lemma ChildKeyCommutesWithI(linked: LinkedBetree, key: Key)
+    requires linked.Acyclic()
+    requires linked.HasRoot()
+    requires linked.Root().KeyInDomain(key)
+    ensures linked.ChildForKey(key).Acyclic()
+    ensures ILinkedBetree(linked.ChildForKey(key)) == ILinkedBetree(linked).Child(key)
+  {
+    ChildKeyAcyclic(linked, key);
+    if linked.ChildForKey(key).HasRoot() {
+      calc {
+        PivotBetree.BetreeNode(
+            linked.ChildForKey(key).Root().buffers, 
+            linked.ChildForKey(key).Root().pivotTable, 
+            IChildren(linked.ChildForKey(key), linked.ChildForKey(key).TheRanking()));
+        {
+          IChildrenIgnoresRanking(linked.ChildForKey(key), linked.ChildForKey(key).TheRanking(), linked.TheRanking());
+        }
+        PivotBetree.BetreeNode(
+            linked.ChildForKey(key).Root().buffers, 
+            linked.ChildForKey(key).Root().pivotTable, 
+            IChildren(linked.ChildForKey(key), linked.TheRanking()));
+        PivotBetree.BetreeNode(
+            linked.Root().buffers, 
+            linked.Root().pivotTable, 
+            IChildren(linked, linked.TheRanking())).Child(key);
+      }
+    } else {
+      calc {  // trigger
+        PivotBetree.Nil;
+        PivotBetree.BetreeNode(linked.Root().buffers, linked.Root().pivotTable, IChildren(linked, linked.TheRanking())).Child(key);
+      }
+    }
+  }
+
+  lemma IPathValid(path: Path) 
+    requires path.Valid()
+    requires path.linked.Acyclic()
+    ensures IPath(path).Valid()
+    decreases path.depth
+  {
+    if 0 < path.depth {
+      ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+      IPathValid(path.Subpath());
+      SubpathCommutesWithIPath(path);
     }
   }
 
@@ -352,6 +413,7 @@ module LinkedBetreeRefinement {
   lemma ValidRankingAllTheWayDown(ranking: Ranking, path: Path)
     requires path.Valid()
     requires path.linked.ValidRanking(ranking)
+    ensures 0 < path.depth ==> path.Subpath().linked.ValidRanking(ranking)
     ensures path.Target().ValidRanking(ranking)
     decreases path.depth
   {
