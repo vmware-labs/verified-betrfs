@@ -30,6 +30,16 @@ module LinkedBetreeMod
   type Address = GenericDisk.Address
   type StampedBetree = Stamped<LinkedBetree>
 
+  function EmptyLinkedBetree() : (out: LinkedBetree)
+  {
+    LinkedBetree(None, EmptyDisk())
+  }
+
+  function EmptyImage() : StampedBetree
+  {
+    Stamped(EmptyLinkedBetree(), 0)
+  }
+
   type Element = Upperbounded_Lexicographic_Byte_Order_Impl.Ord.Element
 
   datatype TransitionLabel =

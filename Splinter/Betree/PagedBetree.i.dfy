@@ -33,7 +33,7 @@ module PagedBetree
 
   type StampedBetree = Stamped<BetreeNode>
 
-  function EmptyStampedBetree() : StampedBetree
+  function EmptyImage() : StampedBetree
   {
     Stamped(Nil, 0)
   }

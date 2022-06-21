@@ -288,6 +288,11 @@ module PivotBetree
   // TODO(tony): replace with Stamped(BetreeNode). Change .root to .value everywhere; update broken triggers
   type StampedBetree = Stamped<BetreeNode>
 
+  function EmptyImage() : StampedBetree
+  {
+    Stamped(Nil, 0)
+  }
+
   function PushMemtable(root: BetreeNode, memtable: Memtable) : StampedBetree
     requires root.WF()
   {

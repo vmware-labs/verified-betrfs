@@ -59,7 +59,7 @@ module PivotBetreeRefinement
       case FreezeAsLabel(stampedBetree) => PagedBetree.FreezeAsLabel(
         if stampedBetree.value.WF()
         then IStampedBetree(stampedBetree)
-        else PagedBetree.EmptyStampedBetree())
+        else PagedBetree.EmptyImage())
       case InternalLabel() => PagedBetree.InternalLabel()
   }
 

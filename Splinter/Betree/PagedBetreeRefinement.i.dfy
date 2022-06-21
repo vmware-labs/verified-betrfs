@@ -427,6 +427,14 @@ module PagedBetreeRefinement
   {
   }
 
+  lemma EmptyImageRefines()
+    ensures EmptyImage().value.WF()
+    ensures IStampedBetree(EmptyImage()) == StampedMod.Empty()
+  {
+    reveal_INode();
+    assert INode(EmptyImage().value) == TotalKMMapMod.EmptyTotalMap();  // trigger
+  }
+
   lemma InitRefines(v: Variables, stampedBetree: StampedBetree)
     requires Init(v, stampedBetree)
     ensures AbstractMap.Init(I(v), IStampedBetree(stampedBetree))
