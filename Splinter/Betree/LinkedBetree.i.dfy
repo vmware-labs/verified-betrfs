@@ -736,12 +736,14 @@ module LinkedBetreeMod
            && path.Valid()
         case InternalFlushStep(_, _, targetAddr, targetChildAddr, pathAddrs) => 
           && path.Valid()
+          && path.Target().Root().ValidChildIndex(childIdx)
           && path.depth == |pathAddrs|
           && SeqHasUniqueElems(pathAddrs) 
           && {targetAddr, targetChildAddr} !! Set(pathAddrs)
           && targetAddr != targetChildAddr
         case InternalCompactStep(path, compactedNode, targetAddr, pathAddrs) =>
           && path.Valid()
+          && path.Target().Root().buffers.Equivalent(compactedBuffers)
           && path.depth == |pathAddrs|
           && SeqHasUniqueElems(pathAddrs) 
           && {targetAddr} !! Set(pathAddrs)

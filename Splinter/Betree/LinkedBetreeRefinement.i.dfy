@@ -170,15 +170,29 @@ module LinkedBetreeRefinement {
       case InternalFlushStep(path, childIdx, _, _, _) =>
         var out := PivotBetree.InternalFlushStep(IPath(path), childIdx);
         IPathValid(path);
-        assert out.path.Target().ValidChildIndex(childIdx);
-        assert out.WF();
+        TargetCommutesWithI(path);
         out
       case InternalCompactStep(path, compactedBuffers, _, _) =>
         var out := PivotBetree.InternalCompactStep(IPath(path), compactedBuffers);
         IPathValid(path);
-        assert out.path.Target().buffers.Equivalent(compactedBuffers);
-        assert out.WF();
+        TargetCommutesWithI(path);
         out
+    }
+  }
+
+  lemma TargetCommutesWithI(path: Path) 
+    requires path.Valid()
+    requires path.linked.Acyclic()
+    ensures path.Target().Acyclic()  //prereq
+    ensures IPath(path).Valid()  // prereq
+    ensures IPath(path).Target() == ILinkedBetree(path.Target())
+    decreases path.depth
+  {
+    ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+    IPathValid(path);
+    if 0 < path.depth {
+      TargetCommutesWithI(path.Subpath());
+      SubpathCommutesWithIPath(path);
     }
   }
 
@@ -186,7 +200,7 @@ module LinkedBetreeRefinement {
     requires path.Valid()
     requires 0 < path.depth
     requires path.linked.Acyclic()
-    ensures path.Subpath().linked.Acyclic()
+    ensures path.Subpath().linked.Acyclic()  // prereq
     ensures IPath(path.Subpath()) == IPath(path).Subpath()
   {
     ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
@@ -197,7 +211,7 @@ module LinkedBetreeRefinement {
     requires linked.Acyclic()
     requires linked.HasRoot()
     requires linked.Root().KeyInDomain(key)
-    ensures linked.ChildForKey(key).Acyclic()
+    ensures linked.ChildForKey(key).Acyclic()  // prereq
     ensures ILinkedBetree(linked.ChildForKey(key)) == ILinkedBetree(linked).Child(key)
   {
     ChildKeyAcyclic(linked, key);
