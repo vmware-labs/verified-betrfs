@@ -297,7 +297,7 @@ build/%.syntax-status.pdf: %.dfy build/%.syntax $(STATUS_TOOL) $(STATUS_DEPS) bu
 #.PRECIOUS: build/%.lc --Why isn't this necessary?
 LC_TOOL=tools/line_counter.py
 LC_DEPS=tools/line_count_lib.py tools/lib_aggregate.py tools/lib_deps.py
-build/%.lc: %.dfy build/%.syntax $(LC_TOOL) $(LC_DEPS)
+build/%.lc: %.dfy build/%.verchk $(LC_TOOL) $(LC_DEPS)
 		$(LC_TOOL) --mode count --input $< --output $@
 
 LC_REPORT_DEPS=tools/line_counter_report_lib.py docs/file-classifications.txt
