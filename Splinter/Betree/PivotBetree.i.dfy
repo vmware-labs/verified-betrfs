@@ -483,6 +483,7 @@ module PivotBetree
         case InternalCompactStep(path, compactedBuffers) =>
           && path.Valid()
           && path.Target().BetreeNode?  // no point compacting a nil node
+                                        // todo(tony): but this is implied by path.Valid(), I think
           && path.Target().buffers.Equivalent(compactedBuffers)
         case _ => true
       }
