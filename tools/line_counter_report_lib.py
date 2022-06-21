@@ -64,7 +64,7 @@ class Row:
 
     #Row("data", "foo", "ManualMapper-ignore"),
 row_descriptors = [
-    Row("data", "Atomic Hashtable~\\autoref{sec:ht:normal}", "ManualMapper-htatomic"),
+    Row("data", "Coarse-grained Hashtable~\\autoref{sec:ht:normal}", "ManualMapper-htatomic"),
     Row("data", "Hand-over-hand~\\autoref{sec:handoverhand}", "ManualMapper-hthh"),
     Row("data", "Node Replication~\\autoref{sec:nr}", "ManualMapper-nr"),
     Row("data", "SplinterCache~\\autoref{sec:cache}", "ManualMapper-scache"),
