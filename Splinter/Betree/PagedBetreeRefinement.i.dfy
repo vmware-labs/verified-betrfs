@@ -317,7 +317,7 @@ module PagedBetreeRefinement
   lemma ApplyFilterEquivalance(orig: BetreeNode, filter: iset<Key>, key: Key)
     requires orig.WF()
     requires key in filter
-    ensures INodeAt(orig.ApplyFilter(filter), key) == INodeAt(orig, key)
+    ensures INodeAt(orig.FilterBuffersAndChildren(filter), key) == INodeAt(orig, key)
   {
     var receipt := BuildQueryReceipt(orig, key);
     if 1 < |receipt.lines| {

@@ -96,13 +96,14 @@ module PagedBetree
       BetreeNode(buffers.PushBufferStack(bufferStack), children)
     }
 
-    function ApplyFilter(filter: iset<Key>) : (out: BetreeNode)
+    function FilterBuffersAndChildren(filter: iset<Key>) : (out: BetreeNode)
       requires WF()
       ensures out.WF()
     {
       if Nil? then Nil else
-      var out := BetreeNode(buffers.ApplyFilter(filter), children);
-      out
+        assert children.WF();  // trigger
+        var filteredChildren := ChildMap(imap key | AnyKey(key) :: if key in filter then children.mapp[key] else Nil);
+        BetreeNode(buffers.ApplyFilter(filter), filteredChildren)
     }
 
     function Split(leftKeys: iset<Key>, rightKeys: iset<Key>) : (out: BetreeNode)
@@ -116,9 +117,9 @@ module PagedBetree
       assert children.WF(); // trigger
       var mapp := imap key | AnyKey(key)
         :: if key in leftKeys
-            then Child(key).ApplyFilter(leftKeys)
+            then Child(key).FilterBuffersAndChildren(leftKeys)
             else if key in rightKeys
-            then Child(key).ApplyFilter(rightKeys)
+            then Child(key).FilterBuffersAndChildren(rightKeys)
             else Child(key);
       BetreeNode(buffers, ChildMap(mapp))
     }
