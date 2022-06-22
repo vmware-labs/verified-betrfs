@@ -1,12 +1,9 @@
-include "BankTokens.i.dfy"
-include "../framework/Mutex.i.dfy"
-include "../../lib/Lang/LinearSequence.i.dfy"
+include "Impl.s.dfy"
 
-module BankImplementation {
+module BankImplementation refines BankSpec {
   import Bank
   import BankTokens
   import opened Mutexes
-  import opened NativeTypes
   import opened LinearSequence_i
   import opened LinearSequence_s
 
@@ -23,19 +20,18 @@ module BankImplementation {
       ghost s_loc: nat,
       linear accounts: lseq<Mutex<AccountEntry>>
   )
+
+  predicate WF(a: AccountSeq)
   {
-    predicate WellFormed()
-    {
-      && |this.accounts| == Bank.NumberOfAccounts
-      && (forall accountId | 0 <= accountId < Bank.NumberOfAccounts ::
-          accountId in this.accounts)
-      && (forall accountId | 0 <= accountId < Bank.NumberOfAccounts ::
-          && this.accounts[accountId].WF()
-          && (forall entry ::
-            this.accounts[accountId].inv(entry) <==> Inv(s_loc, accountId, entry)
-          )
-      )
-    }
+    && |a.accounts| == Bank.NumberOfAccounts
+    && (forall accountId | 0 <= accountId < Bank.NumberOfAccounts ::
+        accountId in a.accounts)
+    && (forall accountId | 0 <= accountId < Bank.NumberOfAccounts ::
+        && a.accounts[accountId].WF()
+        && (forall entry ::
+          a.accounts[accountId].inv(entry) <==> Inv(a.s_loc, accountId, entry)
+        )
+    )
   }
 
   /*
@@ -48,10 +44,10 @@ module BankImplementation {
       destAccountId: uint64,
       amount: nat)
   returns (success: bool)
-  requires accountSeq.WellFormed()
-  requires 0 <= sourceAccountId as int < Bank.NumberOfAccounts
-  requires 0 <= destAccountId as int < Bank.NumberOfAccounts
-  requires sourceAccountId != destAccountId
+  //requires WF(accountSeq)
+  //requires 0 <= sourceAccountId as int < Bank.NumberOfAccounts
+  //requires 0 <= destAccountId as int < Bank.NumberOfAccounts
+  //requires sourceAccountId != destAccountId
   decreases *
   {
     shared var accounts := accountSeq.accounts;
@@ -112,8 +108,9 @@ module BankImplementation {
   method AssertAccountIsNotTooRich(
       shared accountSeq: AccountSeq,
       accountId: uint64)
-  requires accountSeq.WellFormed()
-  requires 0 <= accountId as int < Bank.NumberOfAccounts
+  returns (bal: int)
+  //requires WF(accountSeq)
+  //requires 0 <= accountId as int < Bank.NumberOfAccounts
   decreases *
   {
     shared var accounts := accountSeq.accounts;
@@ -129,5 +126,7 @@ module BankImplementation {
     assert balance <= 300;
 
     lseq_peek(accounts, accountId).release(AccountEntry(balance, token), handle);
+
+    bal := balance;
   }
 }
