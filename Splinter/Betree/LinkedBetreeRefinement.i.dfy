@@ -587,7 +587,8 @@ module LinkedBetreeRefinement {
     requires linked.Acyclic()
     requires linked.HasRoot()
     requires linked.Root().ValidChildIndex(idx)
-    ensures linked.BuildTightTree().Root().ValidChildIndex(idx)
+    ensures linked.BuildTightTree().WF()  // prereq
+    ensures linked.BuildTightTree().Root().ValidChildIndex(idx)  // prereq
     ensures linked.ChildAtIdx(idx) == linked.BuildTightTree().ChildAtIdx(idx)
   {
     assume false;
@@ -653,8 +654,17 @@ module LinkedBetreeRefinement {
     requires linked'.diskView == linked.diskView.ModifyDisk(newAddr, newVal)
     ensures ILinkedBetreeNode(linked, ranking)
       == ILinkedBetreeNode(LinkedBetree(linked.root, linked'.diskView), ranking)
+    decreases linked.GetRank(ranking)
   {
-    assume false;
+    if linked.root.Some? {
+      var numChildren := |linked.Root().children|;
+      forall i | 0 <= i < numChildren 
+      ensures  ILinkedBetreeNode(linked.ChildAtIdx(i), ranking)
+          == ILinkedBetreeNode(LinkedBetree(linked.ChildAtIdx(i).root, linked'.diskView), ranking)
+      {
+        FreshEntryToDiskDoesNotChangeInterpretation(linked.ChildAtIdx(i), linked', ranking, newAddr, newVal);
+      }
+    }
   }
 
   lemma InitRefines(v: Variables, stampedBetree: StampedBetree)
