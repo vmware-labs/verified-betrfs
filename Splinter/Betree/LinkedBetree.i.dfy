@@ -234,6 +234,11 @@ module LinkedBetreeMod
     {
       DiskView.DiskView(MapUnion(entries, other.entries))
     }
+
+    // returns a new diskview with the new entry inserted
+    function ModifyDisk(addr: Address, item: BetreeNode) : DiskView{
+      DiskView.DiskView(entries[addr := item])
+    }
   }
 
   function EmptyDisk() : DiskView {
@@ -346,7 +351,7 @@ module LinkedBetreeMod
         var numChildren := |Root().children|;
         // list of tight diskviews at each of my children
         var tightChildrenDvs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).diskView);
-        var dv := DiskView.DiskView(MergeDiskViews(tightChildrenDvs).entries[root.value := Root()]);
+        var dv := MergeDiskViews(tightChildrenDvs).ModifyDisk(root.value, Root());
         LinkedBetree(root, dv)
     }
     
@@ -554,7 +559,7 @@ module LinkedBetreeMod
         var subtree := Subpath().Substitute(replacement, pathAddrs[1..]);
         var newChildren := node.children[Route(node.pivotTable, key) := subtree.root];
         var newNode := BetreeNode(node.buffers, node.pivotTable, newChildren);
-        var newDiskView := DiskView.DiskView(subtree.diskView.entries[pathAddrs[0] := newNode]); 
+        var newDiskView := subtree.diskView.ModifyDisk(pathAddrs[0], newNode);
         LinkedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView)
     }
   }
@@ -565,7 +570,7 @@ module LinkedBetreeMod
     // The new root node
     var root' := BetreeNode(BufferStack([]), TotalPivotTable(), [oldRoot.root]);
     // The new diskview
-    var dv' := DiskView.DiskView(oldRoot.diskView.entries[newRootAddr := root']); 
+    var dv' := oldRoot.diskView.ModifyDisk(newRootAddr, root');
     LinkedBetree(Pointer.Some(newRootAddr), dv')
   } 
 
@@ -661,7 +666,7 @@ module LinkedBetreeMod
     var root' := BetreeNode(keptBuffers, root.pivotTable, children');
     
     // The new diskview
-    var dv' := DiskView.DiskView(target.diskView.entries[targetAddr := root'][targetChildAddr := subroot']); 
+    var dv' := target.diskView.ModifyDisk(targetAddr, root').ModifyDisk(targetChildAddr, subroot');
     LinkedBetree(Pointer.Some(targetAddr), dv')
   } 
 
@@ -694,7 +699,7 @@ module LinkedBetreeMod
   {
     var root := target.Root();
     var newRoot := BetreeNode(compactedBuffers, root.pivotTable, root.children);
-    var newDiskView := DiskView.DiskView(target.diskView.entries[replacementAddr := newRoot]);
+    var newDiskView := target.diskView.ModifyDisk(replacementAddr, newRoot);
     LinkedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView)
   }
 

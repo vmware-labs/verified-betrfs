@@ -4,7 +4,7 @@
 include "LinkedBetree.i.dfy"
 include "../../lib/Base/SequencesOfMaps.i.dfy"
 include "../../lib/Base/Sets.i.dfy"
-// include "../../lib/Base/Maps.i.dfy"
+include "Domain.i.dfy"
 
 module LinkedBetreeRefinement {
   import opened Options
@@ -23,6 +23,7 @@ module LinkedBetreeRefinement {
   import opened LinkedBetreeMod
   import opened StampedMod
   import PivotBetree
+  import DomainMod
 
   type Ranking = GenericDisk.Ranking
 
@@ -301,6 +302,7 @@ module LinkedBetreeRefinement {
 
   predicate Inv(v: Variables)
   {
+    && v.WF()
     && v.linked.Acyclic()  // contains v.linked.WF()
   }
 
@@ -449,6 +451,30 @@ module LinkedBetreeRefinement {
     tightRanking := map addr | addr in linked.diskView.entries && addr in ranking :: ranking[addr];
   }
 
+  lemma InsertGrowReplacementNewRanking(linked: LinkedBetree, oldRanking: Ranking, newRootAddr: Address) returns (newRanking: Ranking)
+    requires linked.WF()
+    requires linked.ValidRanking(oldRanking)
+    requires RankingIsTight(linked.diskView, oldRanking)
+    requires linked.diskView.IsFresh({newRootAddr})
+    ensures InsertGrowReplacement(linked, newRootAddr).BuildTightTree().WF()
+    ensures InsertGrowReplacement(linked, newRootAddr).BuildTightTree().ValidRanking(newRanking)
+    ensures newRanking.Keys == oldRanking.Keys + {newRootAddr}
+    ensures IsSubMap(oldRanking, newRanking);
+  {
+    if linked.HasRoot() {
+      var oldRootRank := oldRanking[linked.root.value];
+      newRanking := oldRanking[newRootAddr := oldRootRank+1];
+    } else {
+      var newRootRank := if |oldRanking.Values| == 0 then 1 else SetMax(oldRanking.Values) + 1;
+      newRanking := oldRanking[newRootAddr := newRootRank];
+    }
+    var newRoot := InsertGrowReplacement(linked, newRootAddr);
+    assert newRoot.ValidRanking(newRanking);  // trigger
+    BuildTightMaintainsRanking(newRoot, newRanking);
+    BuildTightPreservesWF(newRoot, newRanking);
+    BuildTightIgnoresRanking(newRoot, newRanking, newRoot.TheRanking());   
+  }
+
   lemma InvNextInternalGrowStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
@@ -456,19 +482,7 @@ module LinkedBetreeRefinement {
     ensures v'.linked.Acyclic()
   {
     var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
-    var newRanking;
-    if v.linked.HasRoot() {
-      var oldRootRank := oldRanking[v.linked.root.value];
-      newRanking := oldRanking[step.newRootAddr := oldRootRank+1];
-    } else {
-      var newRootRank := if |oldRanking.Values| == 0 then 1 else SetMax(oldRanking.Values) + 1;
-      newRanking := oldRanking[step.newRootAddr := newRootRank];
-    }
-    var newRoot := InsertGrowReplacement(v.linked, step.newRootAddr);
-    assert newRoot.ValidRanking(newRanking);  // trigger
-    BuildTightMaintainsRanking(newRoot, newRanking);
-    BuildTightPreservesWF(newRoot, newRanking);
-    BuildTightIgnoresRanking(newRoot, newRanking, newRoot.TheRanking());
+    var newRanking := InsertGrowReplacementNewRanking(v.linked, oldRanking, step.newRootAddr);  // witness
   }
 
   lemma InvNextInternalCompactStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -569,6 +583,16 @@ module LinkedBetreeRefinement {
     }
   }
 
+  lemma BuildTightPreservesChildAtIdx(linked: LinkedBetree, idx: nat)
+    requires linked.Acyclic()
+    requires linked.HasRoot()
+    requires linked.Root().ValidChildIndex(idx)
+    ensures linked.BuildTightTree().Root().ValidChildIndex(idx)
+    ensures linked.ChildAtIdx(idx) == linked.BuildTightTree().ChildAtIdx(idx)
+  {
+    assume false;
+  }
+
   lemma BuildTightPreservesWF(linked: LinkedBetree, ranking: Ranking) 
     requires linked.WF()
     requires linked.ValidRanking(ranking)
@@ -621,6 +645,18 @@ module LinkedBetreeRefinement {
     }
   }
 
+  lemma FreshEntryToDiskDoesNotChangeInterpretation(linked: LinkedBetree, linked': LinkedBetree, ranking: Ranking, newAddr: Address, newVal: BetreeNode) 
+    requires linked.WF() && linked'.WF()
+    requires linked.ValidRanking(ranking)
+    requires linked'.ValidRanking(ranking)
+    requires linked.diskView.IsFresh({newAddr})
+    requires linked'.diskView == linked.diskView.ModifyDisk(newAddr, newVal)
+    ensures ILinkedBetreeNode(linked, ranking)
+      == ILinkedBetreeNode(LinkedBetree(linked.root, linked'.diskView), ranking)
+  {
+    assume false;
+  }
+
   lemma InitRefines(v: Variables, stampedBetree: StampedBetree)
     requires Init(v, stampedBetree)
     ensures Inv(v)
@@ -629,46 +665,92 @@ module LinkedBetreeRefinement {
     ILinkedWF(v.linked, v.linked.TheRanking());
   }
 
-  // lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-  //   requires Inv(v)
-  //   requires Next(v, v', lbl)
-  //   ensures v'.WF()
-  //   ensures Inv(v')
-  //   ensures PivotBetree.Next(I(v), I(v'), ILbl(lbl))
-  // {
-  //   InvNext(v, v', lbl);
-  //   var step: Step :| NextStep(v, v', lbl, step);
-  //   match step {
-  //     case QueryStep(receipt) => {
-  //       // ValidReceiptRefines(step.receipt);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); // trigger
-  //     }
-  //     case PutStep() => {
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-  //     case QueryEndLsnStep() => {
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-  //     case FreezeAsStep() => {
-  //       // INodeWF(v.root);
-  //       // FreezeAsRefines(v, v', lbl, step);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
-  //     }
-  //     case InternalGrowStep(_) => {
-  //        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-  //     case InternalSplitStep(_, _, _) => {
-  //       // InternalSplitStepRefines(v, v', lbl, step);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-  //     case InternalFlushStep(_, _, _, _, _) => {
-  //       // InternalFlushStepRefines(v, v', lbl, step);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-  //     case InternalCompactStep(_, _, _, _) => {
-  //       // InternalCompactStepRefines(v, v', lbl, step);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-  //   }
-  // }
+
+  lemma InternalGrowStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires v.linked.Acyclic()
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalGrowStep?
+    ensures Inv(v')  // prereq
+    ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    InvNext(v, v', lbl);
+    var tr := BuildTightRanking(v.linked, v.linked.TheRanking());
+    var growReplacementRanking := InsertGrowReplacementNewRanking(v.linked, tr, step.newRootAddr);
+    var r' := v'.linked.TheRanking();
+    calc {
+      ILinkedBetree(v'.linked).children[0];
+      ILinkedBetreeNode(v'.linked, r').children[0];
+      ILinkedBetreeNode(v'.linked.ChildAtIdx(0), r');
+      {
+        ILinkedBetreeIgnoresRanking(v'.linked.ChildAtIdx(0), growReplacementRanking, r');
+      }
+      ILinkedBetreeNode(
+        InsertGrowReplacement(v.linked, step.newRootAddr).BuildTightTree().ChildAtIdx(0), 
+        growReplacementRanking);
+        {
+          BuildTightPreservesChildAtIdx(InsertGrowReplacement(v.linked, step.newRootAddr), 0);
+        }
+      ILinkedBetreeNode(InsertGrowReplacement(v.linked, step.newRootAddr).ChildAtIdx(0), growReplacementRanking);
+        {
+          FreshEntryToDiskDoesNotChangeInterpretation(
+            v.linked, 
+            InsertGrowReplacement(v.linked, step.newRootAddr), 
+            growReplacementRanking,
+            step.newRootAddr,
+            BetreeNode(BufferStack([]), TotalPivotTable(), [v.linked.root])
+          );
+        }
+      ILinkedBetreeNode(v.linked, growReplacementRanking);
+      {
+        ILinkedBetreeIgnoresRanking(v.linked, v.linked.TheRanking(), growReplacementRanking);
+      }
+      ILinkedBetree(v.linked);
+    }
+    assert I(v').root.children == [I(v).root]; 
+  }
+
+  lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    ensures v'.WF()
+    ensures Inv(v')
+    ensures PivotBetree.Next(I(v), I(v'), ILbl(lbl))
+  {
+    InvNext(v, v', lbl);
+    var step: Step :| NextStep(v, v', lbl, step);
+    match step {
+      case QueryStep(receipt) => {
+        // ValidReceiptRefines(step.receipt);
+        assume false;  // todo
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
+      }
+      case PutStep() => {
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case QueryEndLsnStep() => {
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case FreezeAsStep() => {
+        assume false;  // todo
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
+      }
+      case InternalGrowStep(_) => {
+        InternalGrowStepRefines(v, v', lbl, step);
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case InternalSplitStep(_, _, _) => {
+        assume false;  // todo
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case InternalFlushStep(_, _, _, _, _) => {
+        assume false;  // todo
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case InternalCompactStep(_, _, _, _) => {
+        assume false;  // todo
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+    }
+  }
 }

@@ -237,10 +237,6 @@ module PivotBetreeRefinement
     ensures TotalDomain().Contains(key)
   {
     SmallestElementLte(Element(key));
-//    assert TotalDomain().Contains(key) by {
-//      reveal_TotalDomain();
-//      // TotalDomain().reveal_Contains();
-//    }
   }
 
   lemma InternalGrowStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -257,9 +253,6 @@ module PivotBetreeRefinement
       ensures I(v').root.Child(key)
           == PagedBetree.ConstantChildMap(I(v).root).mapp[key] {
       AllKeysInTotalDomain(key);
-//      assert v'.root.KeyInDomain(key) by {
-//        reveal_TotalDomain();
-//      }
       ChildCommutesWithI(v'.root, key);
     }
   }
