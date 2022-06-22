@@ -583,15 +583,30 @@ module LinkedBetreeRefinement {
     }
   }
 
-  lemma BuildTightPreservesChildAtIdx(linked: LinkedBetree, idx: nat)
-    requires linked.Acyclic()
+  lemma BuildTightPreservesChildInterpretation(linked: LinkedBetree, idx: nat, ranking: Ranking)
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
     requires linked.HasRoot()
     requires linked.Root().ValidChildIndex(idx)
     ensures linked.BuildTightTree().WF()  // prereq
     ensures linked.BuildTightTree().Root().ValidChildIndex(idx)  // prereq
-    ensures linked.ChildAtIdx(idx) == linked.BuildTightTree().ChildAtIdx(idx)
+    ensures ILinkedBetreeNode(linked.ChildAtIdx(idx), ranking) == ILinkedBetreeNode(linked.BuildTightTree().ChildAtIdx(idx), ranking)
+  {
+    BuildTightPreservesChildInterpretationHelper(linked, idx, ranking);
+    BuildTightIgnoresRanking(linked, ranking, linked.TheRanking());
+  }
+
+  lemma BuildTightPreservesChildInterpretationHelper(linked: LinkedBetree, idx: nat, ranking: Ranking)
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    requires linked.HasRoot()
+    requires linked.Root().ValidChildIndex(idx)
+    ensures linked.BuildTightTreeUsingRanking(ranking).WF()  // prereq
+    ensures linked.BuildTightTreeUsingRanking(ranking).Root().ValidChildIndex(idx)  // prereq
+    ensures ILinkedBetreeNode(linked.ChildAtIdx(idx), ranking) == ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking)
   {
     assume false;
+    BuildTightPreservesWF(linked, ranking);
   }
 
   lemma BuildTightPreservesWF(linked: LinkedBetree, ranking: Ranking) 
@@ -699,7 +714,7 @@ module LinkedBetreeRefinement {
         InsertGrowReplacement(v.linked, step.newRootAddr).BuildTightTree().ChildAtIdx(0), 
         growReplacementRanking);
         {
-          BuildTightPreservesChildAtIdx(InsertGrowReplacement(v.linked, step.newRootAddr), 0);
+          BuildTightPreservesChildInterpretation(InsertGrowReplacement(v.linked, step.newRootAddr), 0, growReplacementRanking);
         }
       ILinkedBetreeNode(InsertGrowReplacement(v.linked, step.newRootAddr).ChildAtIdx(0), growReplacementRanking);
         {

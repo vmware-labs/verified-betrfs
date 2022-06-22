@@ -341,6 +341,7 @@ module LinkedBetreeMod
       ensures out.root == root
       ensures HasRoot() ==> root.value in out.diskView.entries
       ensures HasRoot() ==> out.diskView.entries[root.value] == Root()
+      ensures out.diskView.IsSubsetOf(diskView)
       decreases GetRank(ranking)
     {
       if !HasRoot()
