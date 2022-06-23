@@ -1,6 +1,4 @@
-include "BankTokens.i.dfy"
-include "../framework/Mutex.i.dfy"
-include "../../lib/Lang/LinearSequence.i.dfy"
+include "../../lib/Lang/NativeTypes.s.dfy"
 
 module BankSpec {
   import opened NativeTypes

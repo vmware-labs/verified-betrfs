@@ -1,4 +1,7 @@
 include "Impl.s.dfy"
+include "BankTokens.i.dfy"
+include "../framework/Mutex.i.dfy"
+include "../../lib/Lang/LinearSequence.i.dfy"
 
 module BankImplementation refines BankSpec {
   import Bank
