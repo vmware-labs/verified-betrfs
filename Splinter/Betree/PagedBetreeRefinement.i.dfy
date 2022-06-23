@@ -114,7 +114,7 @@ module PagedBetreeRefinement
 
   function {:opaque} MapApply(memtable: Memtable, base: TotalKMMapMod.TotalKMMap) : TotalKMMapMod.TotalKMMap
   {
-    imap k | TotalKMMapMod.AnyKey(k) :: Merge(memtable.Get(k), base[k])
+    imap k | TotalKMMapMod.AnyKey(k) :: Merge(memtable.Query(k), base[k])
   }
 
   lemma {:timeLimitMultiplier 2} MemtableDistributesOverBetree(memtable: Memtable, root: BetreeNode)
@@ -126,9 +126,8 @@ module PagedBetreeRefinement
     forall key | AnyKey(key)
       ensures MapApply(memtable, INode(root))[key] == INode(root.PushMemtable(memtable).value)[key]
     {
-      var newBuffer := Buffer(memtable.mapp);
-      SingletonBufferStack(newBuffer, key);
-      PushBufferStackLemma(BufferStack([newBuffer]), root.Promote().buffers, key);
+      SingletonBufferStack(memtable.buffer, key);
+      PushBufferStackLemma(BufferStack([memtable.buffer]), root.Promote().buffers, key);
       reveal_INode(); // this imap's really a doozy
     }
   }
@@ -483,9 +482,9 @@ module PagedBetreeRefinement
         == I(v).stampedMap.value[key := Merge(message, I(v).stampedMap.value[key])][k]
     {
       var node := v.root;
-      var buffer := Buffer(v.memtable.mapp);
+      var buffer := v.memtable.buffer;
       var buffers := BufferStack([buffer]);
-      var buffer' := Buffer(v'.memtable.mapp);
+      var buffer' := v'.memtable.buffer;
       var buffers' := BufferStack([buffer']);
 
       if k!=key {
@@ -494,8 +493,8 @@ module PagedBetreeRefinement
         assert buffers.Query(k) == buffers.QueryUpTo(k, 1);  // trigger: unroll
       } else {
         // propagate the message
-        assert Merge(message, v.memtable.Get(key)) == buffers'.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
-        assert v.memtable.Get(k) == buffers.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
+        assert Merge(message, v.memtable.Query(key)) == buffers'.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
+        assert v.memtable.Query(k) == buffers.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
       }
       PushBetreeNodeLemma(node, buffers', k);
       PushBetreeNodeLemma(node, buffers, k);

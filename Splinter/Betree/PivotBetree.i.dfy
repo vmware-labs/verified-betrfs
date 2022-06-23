@@ -399,8 +399,7 @@ module PivotBetree
   function PushMemtable(root: BetreeNode, memtable: Memtable) : StampedBetree
     requires root.WF()
   {
-    var newBuffer := Buffer(memtable.mapp);
-    Stamped(root.Promote(TotalDomain()).PushBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
+    Stamped(root.Promote(TotalDomain()).PushBufferStack(BufferStack([memtable.buffer])), memtable.seqEnd)
   }
 
   datatype Variables = Variables(
@@ -451,8 +450,6 @@ module PivotBetree
   {
     && lbl.InternalLabel?
     && v.WF()
-    && var newBuffer := Buffer(v.memtable.mapp);
-    && var rootBase := if v.root.Nil? then EmptyRoot(TotalDomain()) else v.root;
     && v' == v.(
         memtable := v.memtable.Drain(),
         root := PushMemtable(v.root, v.memtable).value

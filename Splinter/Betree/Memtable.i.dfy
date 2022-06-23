@@ -4,6 +4,7 @@
 include "../../lib/Base/KeyType.s.dfy"
 include "../../Spec/Message.s.dfy"
 include "../CoordinationLayer/MsgHistory.i.dfy"
+include "Buffers.i.dfy"
 
 module MemtableMod
 {
@@ -11,17 +12,13 @@ module MemtableMod
   import opened ValueMessage
   import opened LSNMod
   import opened MsgHistoryMod
+  import opened Buffers
 
-  datatype Memtable = Memtable(mapp: map<Key, Message>, seqEnd: LSN)
+  datatype Memtable = Memtable(buffer: Buffer, seqEnd: LSN)
   {
-    function Get(key: Key) : Message
-    {
-      if key in mapp then mapp[key] else Update(NopDelta())
-    }
-
     function ApplyPut(km: KeyedMessage) : Memtable
     {
-      Memtable(mapp[km.key := Merge(km.message, Get(km.key))], seqEnd+1)
+      Memtable(Buffer(buffer.mapp[km.key := Merge(km.message, Query(km.key))]), seqEnd+1)
     }
 
     function ApplyPuts(puts: MsgHistory) : Memtable
@@ -35,7 +32,7 @@ module MemtableMod
 
     function Query(key: Key) : Message
     {
-      if key in mapp then mapp[key] else Update(NopDelta())
+      buffer.Query(key)
     }
 
     // Drain out the contents (into the StampedBetree), but remember the seqEnd
@@ -46,12 +43,12 @@ module MemtableMod
 
     predicate IsEmpty()
     {
-        mapp.Keys == {}
+      buffer.mapp.Keys == {}
     }
   }
 
   function EmptyMemtable(lsn: LSN) : Memtable
   {
-    Memtable(map[], lsn)
+    Memtable(Buffer(map[]), lsn)
   }
 }
