@@ -565,7 +565,7 @@ module LinkedBetreeRefinement {
     }
   }
 
-  // Children pointers are not lost from the disk after build tight
+  // Children blocks are not lost from the disk after build tight
   lemma BuildTightPreservesChildren(linked: LinkedBetree, ranking: Ranking) 
     requires linked.WF()
     requires linked.ValidRanking(ranking)
@@ -580,6 +580,66 @@ module LinkedBetreeRefinement {
     {
       var childPtr := linked.Root().children[idx].value;
       assert childPtr in tightChildrenDvs[idx].entries;
+    }
+  }
+
+  lemma ChildCommutesWithBuiltTightInInterpretation(linked: LinkedBetree, ranking: Ranking, idx: nat) 
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    requires linked.HasRoot()
+    requires linked.Root().ValidChildIndex(idx)
+    ensures linked.ChildAtIdx(idx).WF();  // prereq
+    ensures linked.ChildAtIdx(idx).ValidRanking(ranking);  // prereq
+    ensures linked.BuildTightTreeUsingRanking(ranking).WF()  // prereq
+    ensures linked.BuildTightTreeUsingRanking(ranking).HasRoot()  // prereq
+    ensures linked.BuildTightTreeUsingRanking(ranking).Root().ValidChildIndex(idx)  // prereq
+    ensures linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx).WF()  // prereq
+    ensures linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx).ValidRanking(ranking)  // prereq
+    ensures linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking).WF()  // prereq
+    ensures linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking).ValidRanking(ranking)  // prereq 
+    ensures ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking)
+      == ILinkedBetreeNode(linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking), ranking)
+  {
+    
+    BuildTightPreservesWF(linked, ranking);
+    // BuildTightPreservesValidChildIdx(linked, ranking, idx);
+    assert linked.BuildTightTreeUsingRanking(ranking).Root().ValidChildIndex(idx);
+    assert linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx).WF();
+
+    assume false;
+
+    // assert ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking)
+      // == ILinkedBetreeNode(linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking), ranking);
+  }
+
+  lemma BuildTightPreservesInterpretationIChildren(linked: LinkedBetree, ranking: Ranking) 
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    requires linked.HasRoot()
+    ensures linked.BuildTightTreeUsingRanking(ranking).WF()  // prereq
+    ensures IChildren(linked, ranking) == IChildren(linked.BuildTightTreeUsingRanking(ranking), ranking)
+    decreases linked.GetRank(ranking), 0
+  {
+    BuildTightPreservesWF(linked, ranking);
+    var numChildren := |linked.Root().children|;
+    forall i | 0 <= i < numChildren 
+    ensures ILinkedBetreeNode(linked.ChildAtIdx(i), ranking) == ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(i), ranking)
+    {
+      BuildTightPreservesInterpretation(linked.ChildAtIdx(i), ranking);
+      ChildCommutesWithBuiltTightInInterpretation(linked, ranking, i);
+    }
+  }
+
+  lemma BuildTightPreservesInterpretation(linked: LinkedBetree, ranking: Ranking) 
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    ensures linked.BuildTightTreeUsingRanking(ranking).WF()  // prereq
+    ensures ILinkedBetreeNode(linked, ranking) == ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking), ranking)
+    decreases linked.GetRank(ranking), 1
+  {
+    BuildTightPreservesWF(linked, ranking);
+    if linked.HasRoot() {
+      BuildTightPreservesInterpretationIChildren(linked, ranking);
     }
   }
 
@@ -605,8 +665,16 @@ module LinkedBetreeRefinement {
     ensures linked.BuildTightTreeUsingRanking(ranking).Root().ValidChildIndex(idx)  // prereq
     ensures ILinkedBetreeNode(linked.ChildAtIdx(idx), ranking) == ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking)
   {
-    assume false;
     BuildTightPreservesWF(linked, ranking);
+    calc {
+      ILinkedBetreeNode(linked.ChildAtIdx(idx), ranking);
+        { ChildIdxCommutesWithI(linked, idx, ranking); }
+      ILinkedBetreeNode(linked, ranking).children[idx];
+        { BuildTightPreservesInterpretation(linked, ranking); }
+      ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking), ranking).children[idx];
+        { ChildIdxCommutesWithI(linked.BuildTightTreeUsingRanking(ranking), idx, ranking); }
+      ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking);
+    }
   }
 
   lemma BuildTightPreservesWF(linked: LinkedBetree, ranking: Ranking) 
@@ -679,6 +747,8 @@ module LinkedBetreeRefinement {
       {
         FreshEntryToDiskDoesNotChangeInterpretation(linked.ChildAtIdx(i), linked', ranking, newAddr, newVal);
       }
+    assert ILinkedBetreeNode(linked, ranking)
+      == ILinkedBetreeNode(LinkedBetree(linked.root, linked'.diskView), ranking);  // trigger
     }
   }
 
