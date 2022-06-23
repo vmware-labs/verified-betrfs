@@ -547,22 +547,9 @@ module LinkedBetreeRefinement {
     ensures linked.BuildTightTreeUsingRanking(ranking).ValidRanking(ranking)
     decreases linked.GetRank(ranking)
   {
-    // todo: Dafny always inconclusive on this one. Attempts to fix it has led to a massive
-    // explosion that somehow caused everything else to fail, and after 2 hours I gave up
-    // and reverted back to this state.
-    assume false;
-
     BuildTightPreservesWF(linked, ranking);
-    if linked.HasRoot() {
-      forall i | 0 <= i < |linked.Root().children|
-      ensures linked.ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).ValidRanking(ranking)
-      {
-        BuildTightMaintainsRanking(linked.ChildAtIdx(i), ranking);
-      }
-      assert linked.BuildTightTreeUsingRanking(ranking).ValidRanking(ranking);
-    } else {
-      assert linked.BuildTightTreeUsingRanking(ranking).ValidRanking(ranking);
-    }
+    // knowing that BuildTight produces a diskview that is a subset of the original was
+    // the key to proving this
   }
 
   // Children blocks are not lost from the disk after build tight
