@@ -246,21 +246,31 @@ module LinkedBetreeMod
   }
 
   function {:opaque} MergeDiskViews(diskViews: seq<DiskView>) : (out: DiskView)
-    // ensure result is sound -- keys and their values must come from one of these places
-    ensures forall addr | addr in out.entries 
-      :: (exists i :: 
-            && 0 <= i < |diskViews|
-            && addr in diskViews[i].entries
-            && out.entries[addr] == diskViews[i].entries[addr]
-      )
     // ensure result is complete -- result must contain all the keys
     ensures forall i | 0 <= i < |diskViews| :: diskViews[i].entries.Keys <= out.entries.Keys
     decreases |diskViews|
-  { var out :=
+  { 
+    var out :=
       if |diskViews| == 0 then EmptyDisk()
       else diskViews[0].MergeDisk(MergeDiskViews(diskViews[1..]));
-    reveal_MergeDiskViews();
     out
+  }
+
+  // This lemma is a postcondition of MergeDiskViews, written separetely because
+  // having it as part of the function postcondition caused timeouts downstream
+  lemma MergeDiskViewsSoundness(diskViews: seq<DiskView>)
+    // ensure result is sound -- keys and their values must come from one of these places
+    ensures forall addr | addr in MergeDiskViews(diskViews).entries 
+      :: (exists i :: 
+            && 0 <= i < |diskViews|
+            && addr in diskViews[i].entries
+            && MergeDiskViews(diskViews).entries[addr] == diskViews[i].entries[addr]
+      )
+  {
+    reveal_MergeDiskViews();
+    if 0 < |diskViews| {
+      MergeDiskViewsSoundness(diskViews[1..]);
+    }
   }
 
   
@@ -353,6 +363,7 @@ module LinkedBetreeMod
         // list of tight diskviews at each of my children
         var tightChildrenDvs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).diskView);
         var dv := MergeDiskViews(tightChildrenDvs).ModifyDisk(root.value, Root());
+        MergeDiskViewsSoundness(tightChildrenDvs);
         LinkedBetree(root, dv)
     }
     
