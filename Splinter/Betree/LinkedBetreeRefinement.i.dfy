@@ -587,16 +587,36 @@ module LinkedBetreeRefinement {
     ensures ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking)
       == ILinkedBetreeNode(linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking), ranking)
   {
-    
     BuildTightPreservesWF(linked, ranking);
-    // BuildTightPreservesValidChildIdx(linked, ranking, idx);
-    assert linked.BuildTightTreeUsingRanking(ranking).Root().ValidChildIndex(idx);
-    assert linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx).WF();
+    BuildTightPreservesWF(linked.ChildAtIdx(idx), ranking);
+    calc {
+      ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking);
+      ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking), ranking).children[idx];
+        { DiskSubsetImpliesIdenticalInterpretations(linked.BuildTightTreeUsingRanking(ranking), linked, ranking); }
+      ILinkedBetreeNode(linked, ranking).children[idx];
+      ILinkedBetreeNode(linked.ChildAtIdx(idx), ranking);
+        { DiskSubsetImpliesIdenticalInterpretations(linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking), linked.ChildAtIdx(idx), ranking); }
+      ILinkedBetreeNode(linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking), ranking);
+    }
+  }
 
-    assume false;
-
-    // assert ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking)
-      // == ILinkedBetreeNode(linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking), ranking);
+  lemma DiskSubsetImpliesIdenticalInterpretations(small: LinkedBetree, big: LinkedBetree, ranking: Ranking) 
+    requires small.WF() && big.WF()
+    requires small.ValidRanking(ranking)
+    requires big.ValidRanking(ranking)
+    requires small.root == big.root
+    requires small.diskView.IsSubsetOf(big.diskView)
+    ensures ILinkedBetreeNode(small, ranking) == ILinkedBetreeNode(big, ranking)
+    decreases small.GetRank(ranking)
+  {
+    if small.root.Some? {
+      forall i | 0 <= i < |small.Root().children| 
+      ensures ILinkedBetreeNode(small.ChildAtIdx(i), ranking) == ILinkedBetreeNode(big.ChildAtIdx(i), ranking)
+      {
+        DiskSubsetImpliesIdenticalInterpretations(small.ChildAtIdx(i), big.ChildAtIdx(i), ranking);
+      }
+      assert ILinkedBetreeNode(small, ranking) == ILinkedBetreeNode(big, ranking); // trigger
+    }
   }
 
   lemma BuildTightPreservesInterpretationIChildren(linked: LinkedBetree, ranking: Ranking) 
@@ -677,6 +697,10 @@ module LinkedBetreeRefinement {
         BuildTightPreservesWF(linked.ChildAtIdx(i), ranking);
       }
       BuildTightPreservesChildren(linked, ranking);
+      var numChildren := |linked.Root().children|;
+      var tightChildrenDvs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).diskView);
+      MergeDiskViewsSoundness(tightChildrenDvs);
+      assert linked.BuildTightTreeUsingRanking(ranking).WF();
     }
   }
 
