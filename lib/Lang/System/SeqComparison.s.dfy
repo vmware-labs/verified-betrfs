@@ -8,7 +8,7 @@ include "../NativeTypes.s.dfy"
 module SeqComparison {
   import opened NativeTypes
 
-  // This was moved out of total_order.i.dfy because it's a .i file.
+  // This was moved out of total_order.i.dfy because the latter is a .i file.
   // We need use this definition for some spec things (e.g., successor queries)
 
   predicate {:opaque} lte(a: seq<byte>, b: seq<byte>)

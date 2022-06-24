@@ -149,6 +149,7 @@ module BoundedPivotsLib {
   ensures BoundedSortedKeySeq(pt, keys) == BoundedKeySeq(pt, keys)
   {
     Keyspace.reveal_IsStrictlySorted();
+    Keyspace.lteTransitiveForall();
 
     var b := BoundedSortedKeySeq(pt, keys);
     if b {
@@ -215,6 +216,16 @@ module BoundedPivotsLib {
     && Keyspace.lt(KeyToElement(key), right)
   }
 
+  // Prove an ambient ensures of Route without leaking transitive forall
+  lemma RouteHelper(pt: PivotTable, key: Key, i: int)
+  requires WFPivots(pt)
+  requires BoundedKey(pt, key)
+  requires i == Keyspace.LargestLte(pt, KeyToElement(key))
+  ensures 0 <= i < |pt|-1 && Keyspace.lt(pt[i], pt[i+1])
+  {
+    Keyspace.lteTransitiveForall();
+  }
+
   // TODO(jonh): Tony observes that "route" sounds like it returns a whole
   // path down the tree. Maybe "forward"? But that doesn't sound like a verb...
   function Route(pt: PivotTable, key: Key) : (i: int)
@@ -223,7 +234,9 @@ module BoundedPivotsLib {
   ensures 0 <= i < |pt|-1 && Keyspace.lt(pt[i], pt[i+1])
   ensures InBetween(pt[i], pt[i+1], key)
   {
-    Keyspace.LargestLte(pt, KeyToElement(key))
+    var i := Keyspace.LargestLte(pt, KeyToElement(key));
+    RouteHelper(pt, key, i);
+    i
   }
 
   method ComputeRoute(pt: PivotTable, key: Key) returns (i: uint64)
@@ -246,6 +259,7 @@ module BoundedPivotsLib {
   ensures Route(pt, key) == idx;
   {
     Keyspace.reveal_IsStrictlySorted();
+    Keyspace.lteTransitiveForall();
   }
 
   // utility functions 
@@ -378,6 +392,7 @@ module BoundedPivotsLib {
     assert key == KeyToElement(key).e; // observe
     Keyspace.reveal_IsStrictlySorted();
     Seq.reveal_insert();
+    Keyspace.lteTransitiveForall();
   }
 
   lemma WFSlice(pt: PivotTable, i: int, j: int)
@@ -407,6 +422,7 @@ module BoundedPivotsLib {
   ensures WFPivots(concat3(left[..|left|-1], KeyToElement(key), right[1..]))
   {
     Keyspace.reveal_IsStrictlySorted();
+    Keyspace.lteTransitiveForall();
     var left' := left[..|left|-1];
     var right' := right[1..];
     var run := concat3(left', KeyToElement(key), right');
@@ -520,5 +536,6 @@ module BoundedPivotsLib {
   {
     key := GetKeyInBucket(childpt, childIdx);
     Keyspace.reveal_IsStrictlySorted();
+    Keyspace.lteTransitiveForall();
   }
 }

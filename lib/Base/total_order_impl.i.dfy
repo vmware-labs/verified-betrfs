@@ -90,6 +90,7 @@ abstract module Total_Order_Impl {
     requires IsSorted(run[start..end]);
     ensures posplus1 as int == start as int + LargestLte(run[start..end], needle) + 1
   {
+    lteTransitiveForall();
     var i: uint64 := start;
     var t;
     if i < end {
@@ -122,6 +123,7 @@ abstract module Total_Order_Impl {
     ensures posplus1 as int == start as int + LargestLte(run[start..end], needle) + 1
   {
     reveal_IsSorted();
+    lteTransitiveForall();
     var lo := start;
     var hi := end + 1;
     while 1 < hi - lo 
@@ -172,6 +174,7 @@ abstract module Total_Order_Impl {
     ensures posplus1 as int == start as int + LargestLt(run[start..end], needle) + 1
   {
     reveal_IsSorted();
+    lteTransitiveForall();
     var lo := start;
     var hi := end + 1;
     while 1 < hi - lo 

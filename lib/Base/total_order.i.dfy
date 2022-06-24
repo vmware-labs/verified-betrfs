@@ -18,14 +18,29 @@ abstract module Total_Preorder {
   {
     lte(a, b) && a != b
   }
-    
+
+  // We need ltedef so that we can declare totality on lte without making its definition self-referential.
+  predicate ltedef(a: Element, b: Element)
+
   predicate lte(a: Element, b: Element)
     ensures lte(a, b) == ltedef(a, b);
     ensures ltedef(a, b) || ltedef(b, a); // Total
-    ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
 
-  predicate ltedef(a: Element, b: Element)
+  // lteTransitive isn't automated (as an lte ensures) because it's TOO POWERFUL
+  lemma lteTransitive(a: Element, b: Element, c: Element)
+    requires ltedef(a, b)
+    requires ltedef(b, c)
+    ensures ltedef(a, c)
 
+  lemma lteTransitiveForall()
+    ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c)
+  {
+    forall a, b, c | ltedef(a, b) && ltedef(b, c) ensures ltedef(a, c)
+    {
+      lteTransitive(a, b, c);
+    }
+  }
+    
   function Min(a: Element, b: Element) : Element
   {
     if lte(a, b) then a else b
@@ -41,6 +56,7 @@ abstract module Total_Preorder {
     requires lte(b,c)
     ensures lte(a,c)
   {
+    lteTransitiveForall();
   }
 
   predicate {:opaque} IsSorted(run: seq<Element>)
@@ -133,6 +149,7 @@ abstract module Total_Preorder {
   ensures IsSorted(run + [key])
   {
     reveal_IsSorted();
+    lteTransitiveForall();
   }
 
   // lemma ApplySorted(f: Element ~> Element, run: seq<Element>)
@@ -195,6 +212,7 @@ abstract module Total_Preorder {
     requires 0 < |s|
     ensures exists e :: BiggestInSet(e, s)
   {
+    lteTransitiveForall();
     var e1 :| e1 in s;
     if |s| == 1 {
       forall e2 | e2 in s && e2 != e1 ensures lt(e2, e1)
@@ -222,6 +240,7 @@ abstract module Total_Preorder {
     ensures IsSorted(SortSet(s))
   {
     reveal_IsSorted();
+    lteTransitiveForall();
     if |s|==0
     then
       []
@@ -242,19 +261,19 @@ abstract module Total_Order refines Total_Preorder {
 
   function SomeElement() : Element
 
+  predicate ltedef(a: Element, b: Element)
+
   predicate lte(a: Element, b: Element)
     ensures lte(a, b) == ltedef(a, b);
     ensures ltedef(a, b) || ltedef(b, a); // Total
     ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
-    ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
-
-  predicate ltedef(a: Element, b: Element)
 
   lemma transitivity_le_lt(a: Element, b: Element, c: Element)
     requires lte(a,b)
     requires lt(b,c)
     ensures lt(a,c)
   {
+    lteTransitiveForall();
   }
 
   lemma IsStrictlySortedImpliesLt(run: seq<Element>, i: int, j: int)
@@ -330,6 +349,7 @@ abstract module Total_Order refines Total_Preorder {
     ensures needle in run ==> 0 <= out && run[out] == needle
   {
     reveal_IsSorted();
+    lteTransitiveForall();
     if |run| == 0 || lt(needle, run[0]) {
     } else {
       LargestLteProperty(run[1..], needle, out-1);
@@ -375,6 +395,7 @@ abstract module Total_Order refines Total_Preorder {
     requires pos < |run|-1 ==> lt(needle, run[pos+1])
     ensures pos == LargestLte(run, needle)
   {
+    lteTransitiveForall();
     forall i | 0 <= i <= pos
       ensures lte(run[i], needle)
     {
@@ -442,6 +463,7 @@ abstract module Total_Order refines Total_Preorder {
     ensures needle in run ==> LargestLt(run, needle) + 1 < |run| && run[LargestLt(run, needle) + 1] == needle;
   {
     reveal_IsSorted();
+    lteTransitiveForall();
     if |run| == 0 || lte(needle, run[0]) then -1
     else 1 + LargestLt(run[1..], needle)
   }
@@ -454,6 +476,7 @@ abstract module Total_Order refines Total_Preorder {
     ensures pos == LargestLt(run, needle)
   {
     reveal_IsSorted();
+    lteTransitiveForall();
     var llt := LargestLt(run, needle);
     if pos < llt {
       assert lt(run[llt], needle);
@@ -473,6 +496,7 @@ abstract module Total_Order refines Total_Preorder {
     ensures forall i | result <= i < |run| :: lte(needle, run[i])
   {
     reveal_IsSorted();
+    lteTransitiveForall();
     if |run| == 0 then
       0
     else if lt(Seq.Last(run), needle) then
@@ -524,9 +548,11 @@ abstract module Total_Order refines Total_Preorder {
   requires hi <= |s| ==> lte(key1, s[hi-1])
   requires hi <= |s| ==> lte(key2, s[hi-1])
   requires lte(key1, key2)
+  ensures 0 < lo ==> lt(s[lo-1], key2)  // prereq
   ensures binarySearchIndexOfFirstKeyGteIter(s, key1, lo, hi) <= binarySearchIndexOfFirstKeyGteIter(s, key2, lo, hi)
   decreases hi - lo
   {
+    lteTransitiveForall();
     if lo + 1 < hi {
       var mid := (lo + hi) / 2;
       if lt(s[mid-1], key1) {
@@ -568,8 +594,9 @@ abstract module Total_Order refines Total_Preorder {
     ensures result <= |run|
     ensures forall i | 0 <= i < result :: lte(run[i], needle)
     ensures forall i | result <= i < |run| :: lt(needle, run[i])
-   {
+  {
     reveal_IsSorted();
+    lteTransitiveForall();
     if |run| == 0 then
       0
     else if lte(Seq.Last(run), needle) then
@@ -649,6 +676,7 @@ abstract module Total_Order refines Total_Preorder {
   {
     Seq.reveal_insert();
     reveal_IsStrictlySorted();
+    lteTransitiveForall();
   }
 
   lemma StrictlySortedAugment(run: seq<Element>, key: Element)
@@ -657,6 +685,7 @@ abstract module Total_Order refines Total_Preorder {
     ensures IsStrictlySorted(run + [key])
   {
     reveal_IsStrictlySorted();
+    lteTransitiveForall();
   }
 
   lemma StrictlySortedPrepend(key: Element, run: seq<Element>)
@@ -665,6 +694,7 @@ abstract module Total_Order refines Total_Preorder {
   ensures IsStrictlySorted([key] + run)
   {
     reveal_IsStrictlySorted();
+    lteTransitiveForall();
   }
 
   lemma FlattenStrictlySorted(seqs: seq<seq<Element>>)
@@ -784,6 +814,7 @@ abstract module Total_Order refines Total_Preorder {
     requires |b| > 0;
     ensures  SetAllLt(a, c);
   {
+    lteTransitiveForall();
   }
   
   predicate {:opaque} NotMinimum(a: Element) {
@@ -844,6 +875,7 @@ abstract module Total_Order refines Total_Preorder {
   ensures x in s
   ensures forall y | y in s :: lte(x, y)
   {
+    lteTransitiveForall();
     // Implementation is pretty unimportant, the ensures clauses will
     // always suffice, as they uniquely determine the minimum.
     var a :| a in s;
@@ -875,6 +907,7 @@ abstract module Total_Order refines Total_Preorder {
   ensures x in s
   ensures forall y | y in s :: lte(y, x)
   {
+    lteTransitiveForall();
     var a :| a in s;
     var s' := s - {a};
     if s' == {} then (
@@ -939,6 +972,11 @@ abstract module Upperbounded_Total_Order refines Total_Order {
       || b.Max_Element?
       || (a.Element? && b.Element? && Base_Order.lte(a.e, b.e))
   }
+
+  lemma lteTransitive(a: Element, b: Element, c: Element)
+  {
+    Base_Order.lteTransitiveForall();
+  }
 }
 
 
@@ -955,6 +993,11 @@ module Integer_Order refines Total_Order {
   predicate {:opaque} ltedef(a: Element, b: Element) {
     a <= b
   }
+
+  lemma lteTransitive(a: Element, b: Element, c: Element)
+  {
+    reveal_ltedef();
+  }
 }
 
 module Nat_Order refines Total_Order {
@@ -969,6 +1012,11 @@ module Nat_Order refines Total_Order {
 
   predicate {:opaque} ltedef(a: Element, b: Element) {
     a <= b
+  }
+
+  lemma lteTransitive(a: Element, b: Element, c: Element)
+  {
+    reveal_ltedef();
   }
 }
 
@@ -985,6 +1033,11 @@ module Uint32_Order refines Total_Order {
   predicate method {:opaque} ltedef(a: Element, b: Element) {
     a <= b
   }
+
+  lemma lteTransitive(a: Element, b: Element, c: Element)
+  {
+    reveal_ltedef();
+  }
 }
 
 module Uint64_Order refines Total_Order {
@@ -999,6 +1052,11 @@ module Uint64_Order refines Total_Order {
 
   predicate method {:opaque} ltedef(a: Element, b: Element) {
     a <= b
+  }
+
+  lemma lteTransitive(a: Element, b: Element, c: Element)
+  {
+    reveal_ltedef();
   }
 }
 
@@ -1015,6 +1073,10 @@ module Char_Order refines Total_Order {
   predicate method ltedef(a: Element, b: Element) {
     a <= b
   }
+
+  lemma lteTransitive(a: Element, b: Element, c: Element)
+  {
+  }
 }
 
 module Byte_Order refines Total_Order {
@@ -1029,6 +1091,11 @@ module Byte_Order refines Total_Order {
 
   predicate method {:opaque} ltedef(a: Element, b: Element) {
     a <= b
+  }
+
+  lemma lteTransitive(a: Element, b: Element, c: Element)
+  {
+    reveal_ltedef();
   }
 }
 
@@ -1045,7 +1112,6 @@ module Lexicographic_Byte_Order refines Total_Order {
   {
     totality(a, b);
     antisymm(a, b);
-    transitivity_forall();
 
     SeqComparison.lte(a, b)
   }
@@ -1055,6 +1121,12 @@ module Lexicographic_Byte_Order refines Total_Order {
     SeqComparison.lte(a, b)
   }
     
+  lemma lteTransitive(a: Element, b: Element, c: Element)
+  {
+    transitivity_forall();
+    SeqComparison.reveal_lte();
+  }
+
   lemma {:induction true} totality(a: Element, b: Element)
   ensures SeqComparison.lte(a, b) || SeqComparison.lte(b, a);
   {
