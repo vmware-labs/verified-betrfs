@@ -470,9 +470,7 @@ module LinkedBetreeRefinement {
     }
     var newRoot := InsertGrowReplacement(linked, newRootAddr);
     assert newRoot.ValidRanking(newRanking);  // trigger
-    BuildTightMaintainsRanking(newRoot, newRanking);
     BuildTightPreservesWF(newRoot, newRanking);
-    BuildTightIgnoresRanking(newRoot, newRanking, newRoot.TheRanking());   
   }
 
   lemma InvNextInternalGrowStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -498,9 +496,8 @@ module LinkedBetreeRefinement {
     var rankingAfterReplacement := RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, oldRanking, step.targetAddr);
     var newRanking := RankingAfterSubstitution(replacement, rankingAfterReplacement, step.path, step.pathAddrs);
     var linkedAfterSubstitution := step.path.Substitute(replacement, step.pathAddrs);
-    BuildTightMaintainsRanking(linkedAfterSubstitution, newRanking);
+    BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
-    BuildTightIgnoresRanking(linkedAfterSubstitution, newRanking, linkedAfterSubstitution.TheRanking());
   }
 
   lemma InvNextInternalFlushStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -515,89 +512,38 @@ module LinkedBetreeRefinement {
     var rankingAfterReplacement := RankingAfterInsertFlushReplacement(step.path.Target(), oldRanking, step.childIdx, step.targetAddr, step.targetChildAddr);
     var newRanking := RankingAfterSubstitution(replacement, rankingAfterReplacement, step.path, step.pathAddrs);
     var linkedAfterSubstitution := step.path.Substitute(replacement, step.pathAddrs);
-    BuildTightMaintainsRanking(linkedAfterSubstitution, newRanking);
+    BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
-    BuildTightIgnoresRanking(linkedAfterSubstitution, newRanking, linkedAfterSubstitution.TheRanking());
   }
 
-  lemma BuildTightIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking)
+  lemma ReachableAddrIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking)
     requires linked.WF()
     requires linked.ValidRanking(r1)
     requires linked.ValidRanking(r2)
-    ensures linked.BuildTightTreeUsingRanking(r1) == linked.BuildTightTreeUsingRanking(r2)
+    ensures linked.ReachableAddrsUsingRanking(r1) == linked.ReachableAddrsUsingRanking(r2)
     decreases linked.GetRank(r1)
   {
     if linked.HasRoot() {
       forall i | 0 <= i < |linked.Root().children|
-      ensures linked.ChildAtIdx(i).BuildTightTreeUsingRanking(r1) == linked.ChildAtIdx(i).BuildTightTreeUsingRanking(r2)
+      ensures linked.ChildAtIdx(i).ReachableAddrsUsingRanking(r1) == linked.ChildAtIdx(i).ReachableAddrsUsingRanking(r2)
       {
-        BuildTightIgnoresRanking(linked.ChildAtIdx(i), r1, r2);
+        ReachableAddrIgnoresRanking(linked.ChildAtIdx(i), r1, r2);
       }
       var numChildren := |linked.Root().children|;
-      var children1 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).BuildTightTreeUsingRanking(r1).diskView);
-      var children2 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).BuildTightTreeUsingRanking(r2).diskView);
+      var children1 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(r1));
+      var children2 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(r2));
       assert children1 == children2;  // trigger
     }
   }
 
-  lemma BuildTightMaintainsRanking(linked: LinkedBetree, ranking: Ranking) 
+  lemma BuildTightMaintainsRankingValidity(linked: LinkedBetree, ranking: Ranking) 
     requires linked.WF()
     requires linked.ValidRanking(ranking)
-    ensures linked.BuildTightTreeUsingRanking(ranking).WF()
-    ensures linked.BuildTightTreeUsingRanking(ranking).ValidRanking(ranking)
+    ensures linked.BuildTightTree().WF()
+    ensures linked.BuildTightTree().ValidRanking(ranking)
     decreases linked.GetRank(ranking)
   {
     BuildTightPreservesWF(linked, ranking);
-    // knowing that BuildTight produces a diskview that is a subset of the original was
-    // the key to proving this
-  }
-
-  // Children blocks are not lost from the disk after build tight
-  lemma BuildTightPreservesChildren(linked: LinkedBetree, ranking: Ranking) 
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
-    requires linked.HasRoot()
-    ensures forall idx: nat | linked.Root().ValidChildIndex(idx) && linked.Root().children[idx].Some? :: 
-       linked.Root().children[idx].value in linked.BuildTightTreeUsingRanking(ranking).diskView.entries
-  {
-    var linkedTight := linked.BuildTightTreeUsingRanking(ranking);
-    var tightChildrenDvs := seq(|linked.Root().children|, i requires 0 <= i < |linked.Root().children| => linked.ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).diskView);
-    forall idx: nat | linked.Root().ValidChildIndex(idx) && linked.Root().children[idx].Some?
-    ensures linked.Root().children[idx].value in linkedTight.diskView.entries
-    {
-      var childPtr := linked.Root().children[idx].value;
-      assert childPtr in tightChildrenDvs[idx].entries;
-    }
-  }
-
-  lemma ChildCommutesWithBuiltTightInInterpretation(linked: LinkedBetree, ranking: Ranking, idx: nat) 
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
-    requires linked.HasRoot()
-    requires linked.Root().ValidChildIndex(idx)
-    ensures linked.ChildAtIdx(idx).WF();  // prereq
-    ensures linked.ChildAtIdx(idx).ValidRanking(ranking);  // prereq
-    ensures linked.BuildTightTreeUsingRanking(ranking).WF()  // prereq
-    ensures linked.BuildTightTreeUsingRanking(ranking).HasRoot()  // prereq
-    ensures linked.BuildTightTreeUsingRanking(ranking).Root().ValidChildIndex(idx)  // prereq
-    ensures linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx).WF()  // prereq
-    ensures linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx).ValidRanking(ranking)  // prereq
-    ensures linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking).WF()  // prereq
-    ensures linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking).ValidRanking(ranking)  // prereq 
-    ensures ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking)
-      == ILinkedBetreeNode(linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking), ranking)
-  {
-    BuildTightPreservesWF(linked, ranking);
-    BuildTightPreservesWF(linked.ChildAtIdx(idx), ranking);
-    calc {
-      ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking);
-      ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking), ranking).children[idx];
-        { DiskSubsetImpliesIdenticalInterpretations(linked.BuildTightTreeUsingRanking(ranking), linked, ranking); }
-      ILinkedBetreeNode(linked, ranking).children[idx];
-      ILinkedBetreeNode(linked.ChildAtIdx(idx), ranking);
-        { DiskSubsetImpliesIdenticalInterpretations(linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking), linked.ChildAtIdx(idx), ranking); }
-      ILinkedBetreeNode(linked.ChildAtIdx(idx).BuildTightTreeUsingRanking(ranking), ranking);
-    }
   }
 
   lemma DiskSubsetImpliesIdenticalInterpretations(small: LinkedBetree, big: LinkedBetree, ranking: Ranking) 
@@ -619,37 +565,6 @@ module LinkedBetreeRefinement {
     }
   }
 
-  lemma BuildTightPreservesInterpretationIChildren(linked: LinkedBetree, ranking: Ranking) 
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
-    requires linked.HasRoot()
-    ensures linked.BuildTightTreeUsingRanking(ranking).WF()  // prereq
-    ensures IChildren(linked, ranking) == IChildren(linked.BuildTightTreeUsingRanking(ranking), ranking)
-    decreases linked.GetRank(ranking), 0
-  {
-    BuildTightPreservesWF(linked, ranking);
-    var numChildren := |linked.Root().children|;
-    forall i | 0 <= i < numChildren 
-    ensures ILinkedBetreeNode(linked.ChildAtIdx(i), ranking) == ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(i), ranking)
-    {
-      BuildTightPreservesInterpretation(linked.ChildAtIdx(i), ranking);
-      ChildCommutesWithBuiltTightInInterpretation(linked, ranking, i);
-    }
-  }
-
-  lemma BuildTightPreservesInterpretation(linked: LinkedBetree, ranking: Ranking) 
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
-    ensures linked.BuildTightTreeUsingRanking(ranking).WF()  // prereq
-    ensures ILinkedBetreeNode(linked, ranking) == ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking), ranking)
-    decreases linked.GetRank(ranking), 1
-  {
-    BuildTightPreservesWF(linked, ranking);
-    if linked.HasRoot() {
-      BuildTightPreservesInterpretationIChildren(linked, ranking);
-    }
-  }
-
   lemma BuildTightPreservesChildInterpretation(linked: LinkedBetree, idx: nat, ranking: Ranking)
     requires linked.WF()
     requires linked.ValidRanking(ranking)
@@ -659,48 +574,79 @@ module LinkedBetreeRefinement {
     ensures linked.BuildTightTree().Root().ValidChildIndex(idx)  // prereq
     ensures ILinkedBetreeNode(linked.ChildAtIdx(idx), ranking) == ILinkedBetreeNode(linked.BuildTightTree().ChildAtIdx(idx), ranking)
   {
-    BuildTightPreservesChildInterpretationHelper(linked, idx, ranking);
-    BuildTightIgnoresRanking(linked, ranking, linked.TheRanking());
-  }
-
-  lemma BuildTightPreservesChildInterpretationHelper(linked: LinkedBetree, idx: nat, ranking: Ranking)
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
-    requires linked.HasRoot()
-    requires linked.Root().ValidChildIndex(idx)
-    ensures linked.BuildTightTreeUsingRanking(ranking).WF()  // prereq
-    ensures linked.BuildTightTreeUsingRanking(ranking).Root().ValidChildIndex(idx)  // prereq
-    ensures ILinkedBetreeNode(linked.ChildAtIdx(idx), ranking) == ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking)
-  {
     BuildTightPreservesWF(linked, ranking);
     calc {
       ILinkedBetreeNode(linked.ChildAtIdx(idx), ranking);
-        { ChildIdxCommutesWithI(linked, idx, ranking); }
       ILinkedBetreeNode(linked, ranking).children[idx];
-        { BuildTightPreservesInterpretation(linked, ranking); }
-      ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking), ranking).children[idx];
-        { ChildIdxCommutesWithI(linked.BuildTightTreeUsingRanking(ranking), idx, ranking); }
-      ILinkedBetreeNode(linked.BuildTightTreeUsingRanking(ranking).ChildAtIdx(idx), ranking);
+        { DiskSubsetImpliesIdenticalInterpretations(linked.BuildTightTree(), linked, ranking); }
+      ILinkedBetreeNode(linked.BuildTightTree(), ranking).children[idx];
+      ILinkedBetreeNode(linked.BuildTightTree().ChildAtIdx(idx), ranking);
+    }
+  }
+
+  lemma ReachableAddrRankingValidity(linked: LinkedBetree, ranking: Ranking, addr: Address) 
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    requires addr in linked.ReachableAddrsUsingRanking(ranking)
+    ensures LinkedBetree(Pointer.Some(addr), linked.diskView).ValidRanking(ranking)
+  {
+    assume false;
+  }
+
+  // linked's children are always in the reachable set
+  lemma ChildrenAreReachable(linked: LinkedBetree, ranking: Ranking) 
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    requires linked.HasRoot()
+    ensures 
+      forall i | 0 <= i < |linked.Root().children| && linked.Root().children[i].Some? :: 
+        linked.ChildAtIdx(i).root.value in linked.ReachableAddrsUsingRanking(ranking)
+  {
+    var numChildren := |linked.Root().children|;
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+    forall i | 0 <= i < numChildren && linked.Root().children[i].Some?
+    ensures linked.ChildAtIdx(i).root.value in linked.ReachableAddrsUsingRanking(ranking)
+    {
+      var childAddr := linked.ChildAtIdx(i).root.value;
+      assert childAddr in subTreeAddrs[i];
+    }
+  }
+
+  // For any address in the reachable set, the children of the node at that location
+  // are also in the reacheable set
+  lemma ReachableAddrClosed(linked: LinkedBetree, ranking: Ranking, addr: Address) 
+    requires linked.WF()
+    requires linked.ValidRanking(ranking)
+    requires linked.HasRoot()
+    requires addr in linked.ReachableAddrsUsingRanking(ranking)
+    ensures 
+      var node := linked.diskView.entries[addr];
+      forall i | 0 <= i < |node.children| && node.children[i].Some? :: 
+        node.children[i].value in linked.ReachableAddrsUsingRanking(ranking)
+    decreases linked.GetRank(ranking)
+  {
+    if addr == linked.root.value {
+      ChildrenAreReachable(linked, ranking);
+    } else {
+      var numChildren := |linked.Root().children|;
+      var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+      assert addr in Sets.UnionSeqOfSets(subTreeAddrs);
+      Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+      var k :| 0 <= k < numChildren && addr in subTreeAddrs[k];
+      ReachableAddrClosed(linked.ChildAtIdx(k), ranking, addr);
     }
   }
 
   lemma BuildTightPreservesWF(linked: LinkedBetree, ranking: Ranking) 
     requires linked.WF()
     requires linked.ValidRanking(ranking)
-    ensures linked.BuildTightTreeUsingRanking(ranking).WF()
+    ensures linked.BuildTightTree().WF()
     decreases linked.GetRank(ranking)
   {
-    if linked.HasRoot() {
-      forall i | 0 <= i < |linked.Root().children|
-      ensures linked.ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).WF()
-      {
-        BuildTightPreservesWF(linked.ChildAtIdx(i), ranking);
-      }
-      BuildTightPreservesChildren(linked, ranking);
-      var numChildren := |linked.Root().children|;
-      var tightChildrenDvs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).diskView);
-      MergeDiskViewsSoundness(tightChildrenDvs);
-      assert linked.BuildTightTreeUsingRanking(ranking).WF();
+    forall addr | addr in linked.BuildTightTree().diskView.entries 
+    ensures linked.BuildTightTree().diskView.NodeHasNondanglingChildPtrs(linked.BuildTightTree().diskView.entries[addr])
+    {
+      ReachableAddrClosed(linked, linked.TheRanking(), addr);
     }
   }
 

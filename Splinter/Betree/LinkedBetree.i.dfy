@@ -223,18 +223,6 @@ module LinkedBetreeMod
       addrs !! entries.Keys
     } 
 
-    function {:opaque} MergeDisk(other: DiskView) : (out: DiskView)
-      // ensure result is sound -- keys and their values must come from one of these places
-      ensures forall addr | addr in out.entries 
-        :: || (addr in entries && out.entries[addr] == entries[addr])
-           || (addr in other.entries && out.entries[addr] == other.entries[addr])
-      // ensure result is complete -- result must contain all the keys
-      ensures entries.Keys <= out.entries.Keys
-      ensures other.entries.Keys <= out.entries.Keys
-    {
-      DiskView.DiskView(MapUnion(entries, other.entries))
-    }
-
     // returns a new diskview with the new entry inserted
     function ModifyDisk(addr: Address, item: BetreeNode) : DiskView{
       DiskView.DiskView(entries[addr := item])
@@ -243,34 +231,6 @@ module LinkedBetreeMod
 
   function EmptyDisk() : DiskView {
     DiskView.DiskView(map[])
-  }
-
-  function {:opaque} MergeDiskViews(diskViews: seq<DiskView>) : (out: DiskView)
-    // ensure result is complete -- result must contain all the keys
-    ensures forall i | 0 <= i < |diskViews| :: diskViews[i].entries.Keys <= out.entries.Keys
-    decreases |diskViews|
-  { 
-    var out :=
-      if |diskViews| == 0 then EmptyDisk()
-      else diskViews[0].MergeDisk(MergeDiskViews(diskViews[1..]));
-    out
-  }
-
-  // This lemma is a postcondition of MergeDiskViews, written separetely because
-  // having it as part of the function postcondition caused timeouts downstream
-  lemma MergeDiskViewsSoundness(diskViews: seq<DiskView>)
-    // ensure result is sound -- keys and their values must come from one of these places
-    ensures forall addr | addr in MergeDiskViews(diskViews).entries 
-      :: (exists i :: 
-            && 0 <= i < |diskViews|
-            && addr in diskViews[i].entries
-            && MergeDiskViews(diskViews).entries[addr] == diskViews[i].entries[addr]
-      )
-  {
-    reveal_MergeDiskViews();
-    if 0 < |diskViews| {
-      MergeDiskViewsSoundness(diskViews[1..]);
-    }
   }
 
   
@@ -344,32 +304,37 @@ module LinkedBetreeMod
       out
     }
 
-    // Build a tight disk with respect to this root
-    function BuildTightTreeUsingRanking(ranking: Ranking) : (out: LinkedBetree)
+    function BuildTightTree() : (out: LinkedBetree)
+      ensures out.diskView.IsSubsetOf(diskView)
+    {
+      if ! Acyclic() then 
+        // Need this case because at the state machine I don't have proof that after an
+        // operation, that the new state is acyclic
+        this
+      else 
+        var tightDv := DiskView.DiskView(MapRestrict(diskView.entries, ReachableAddrs()));
+        LinkedBetree(root, tightDv)
+    }
+
+    function ReachableAddrs() : set<Address>
+      requires Acyclic()
+    {
+      ReachableAddrsUsingRanking(TheRanking())
+    }
+
+    function ReachableAddrsUsingRanking(ranking: Ranking) : (out: set<Address>)
       requires WF()
       requires ValidRanking(ranking)
-      ensures out.root == root
-      ensures HasRoot() ==> root.value in out.diskView.entries
-      ensures HasRoot() ==> out.diskView.entries[root.value] == Root()
-      ensures out.diskView.IsSubsetOf(diskView)
+      ensures HasRoot() ==> root.value in out
+      ensures out <= diskView.entries.Keys
       decreases GetRank(ranking)
     {
-      if !HasRoot()
-      then 
-        // base case, return empty disk
-        LinkedBetree(root, EmptyDisk())
-      else 
+      if !HasRoot() then {}
+      else  
         var numChildren := |Root().children|;
-        // list of tight diskviews at each of my children
-        var tightChildrenDvs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).BuildTightTreeUsingRanking(ranking).diskView);
-        var dv := MergeDiskViews(tightChildrenDvs).ModifyDisk(root.value, Root());
-        MergeDiskViewsSoundness(tightChildrenDvs);
-        LinkedBetree(root, dv)
-    }
-    
-    function BuildTightTree() : LinkedBetree {
-      if Acyclic() then BuildTightTreeUsingRanking(TheRanking()) 
-      else this  // Can't build a tight tree if I'm not acyclic
+        var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+        Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+        {root.value} + Sets.UnionSeqOfSets(subTreeAddrs)
     }
   }
 

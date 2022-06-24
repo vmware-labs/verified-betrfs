@@ -88,4 +88,22 @@ module Sets {
       }
       out
   }
+
+  function UnionSeqOfSets<T>(s : seq<set<T>>) : (out: set<T>)
+    ensures forall i | 0 <= i < |s| :: s[i] <= out
+  {
+    if |s| == 0 then {}
+    else s[0] + UnionSeqOfSets(s[1..])
+  }
+
+  lemma UnionSeqOfSetsSoundness<T>(s : seq<set<T>>)
+    ensures forall e | e in UnionSeqOfSets(s) ::
+      exists i :: 0 <= i < |s| && e in s[i]
+    decreases |s|
+  {
+    if 0 < |s| {
+      UnionSeqOfSetsSoundness(s[1..]);
+    }
+  }
+
 }
