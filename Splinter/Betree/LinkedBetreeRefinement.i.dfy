@@ -718,8 +718,16 @@ module LinkedBetreeRefinement {
     requires linked.ValidRanking(ranking)
     requires addr in linked.ReachableAddrsUsingRanking(ranking)
     ensures LinkedBetree(Pointer.Some(addr), linked.diskView).ValidRanking(ranking)
+    decreases linked.GetRank(ranking)
   {
-    assume false;
+     if addr != linked.root.value {  // otherwise addr points to linked and it's trivial
+      var numChildren := |linked.Root().children|;
+      var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+      assert addr in Sets.UnionSeqOfSets(subTreeAddrs);
+      Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+      var k :| 0 <= k < numChildren && addr in subTreeAddrs[k];
+      ReachableAddrRankingValidity(linked.ChildAtIdx(k), ranking, addr);
+    }
   }
 
   // linked's children are always in the reachable set
