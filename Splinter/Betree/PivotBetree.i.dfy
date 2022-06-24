@@ -35,7 +35,7 @@ module PivotBetree
 
   predicate WFChildren(children: seq<BetreeNode>)
   {
-    (forall i:nat | i<|children| :: children[i].WF())
+    && (forall i:nat | i<|children| :: children[i].WF())
   }
 
   datatype BetreeNode = Nil | BetreeNode(
@@ -43,11 +43,11 @@ module PivotBetree
     pivotTable: PivotTable,
     children: seq<BetreeNode>)
   {
-    predicate WF() {
+    predicate LocalStructure()
+    {
       && (BetreeNode? ==>
           && WFPivots(pivotTable)
           && |children| == NumBuckets(pivotTable)
-          && WFChildren(children)
         )
     }
 
@@ -55,6 +55,25 @@ module PivotBetree
     {
       && BetreeNode?
       && childIdx < NumBuckets(pivotTable)
+    }
+
+    predicate LinkedChildren()
+      requires LocalStructure()
+    {
+      BetreeNode? ==>
+        (forall i:nat |
+            && ValidChildIndex(i)
+            && children[i].BetreeNode?
+            && children[i].LocalStructure() // WF will always give this, but we can't assume it yet without ending up recursive.
+          :: children[i].MyDomain() == DomainRoutedToChild(i))
+    }
+
+    predicate WF() {
+      && LocalStructure()
+      && (BetreeNode? ==>
+          && WFChildren(children)
+          && LinkedChildren()
+        )
     }
 
     function PushBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
@@ -65,47 +84,108 @@ module PivotBetree
       BetreeNode(buffers.PushBufferStack(bufferStack), pivotTable, children)
     }
 
-    function ApplyFilter(filter: Domain) : (out: BetreeNode)
-      requires WF()
-      ensures out.WF()
+    predicate IsLeaf()
     {
-      if Nil? then Nil else
-      var out := BetreeNode(buffers.ApplyFilter(filter.KeySet()), pivotTable, children);
-      out
+      && BetreeNode?
+      && |children|==1
+      && children[0]==Nil
     }
 
-    predicate CanSplit(childIdx: nat, splitKey: Key)
+    predicate IsIndex()
+    {
+      && BetreeNode?
+      && (forall i | 0 <= i < |children| :: children[i].BetreeNode?)
+    }
+
+    // Called on leaf; creates a new pivot
+    function SplitLeaf(splitKey: Key) : (out: (BetreeNode, BetreeNode))
+      requires WF()
+      requires IsLeaf()
+      requires MyDomain().Contains(splitKey)
+      requires splitKey != MyDomain().start.e
+      ensures out.0.WF() && out.1.WF()
+    {
+      var leftFilter := Domain(MyDomain().start, Element(splitKey));
+      var rightFilter := Domain(Element(splitKey), MyDomain().end);
+
+      var newLeft := BetreeNode(buffers.ApplyFilter(leftFilter.KeySet()), [pivotTable[0], Element(splitKey)], [Nil]);
+      var newRight := BetreeNode(buffers.ApplyFilter(rightFilter.KeySet()), [Element(splitKey), pivotTable[1]], [Nil]);
+      assert newLeft.WF() by { Keyspace.reveal_IsStrictlySorted(); }
+      assert newRight.WF() by { Keyspace.reveal_IsStrictlySorted(); }
+      (newLeft, newRight)
+    }
+
+    // Called on index; lifts an existing pivot from the child
+    function SplitIndex(pivotIdx: nat) : (out: (BetreeNode, BetreeNode))
+      requires WF()
+      requires IsIndex()
+      requires 0 < pivotIdx < |pivotTable|-1
+      ensures out.0.WF() && out.1.WF()
+    {
+      var splitElt := pivotTable[pivotIdx];
+      var leftFilter := Domain(MyDomain().start, splitElt);
+      var rightFilter := Domain(splitElt, MyDomain().end);
+
+      var newLeft := BetreeNode(buffers.ApplyFilter(leftFilter.KeySet()), pivotTable[..pivotIdx+1], children[..pivotIdx]);
+      var newRight := BetreeNode(buffers.ApplyFilter(rightFilter.KeySet()), pivotTable[pivotIdx..], children[pivotIdx..]);
+      WFSlice(pivotTable, 0, pivotIdx+1);
+      WFSuffix(pivotTable, pivotIdx);
+      assert WFChildren(children);  // trigger
+      assert newLeft.WF();
+      assert newRight.WF();
+      (newLeft, newRight)
+    }
+
+    predicate CanSplitParent(request: SplitRequest)
     {
       && WF()
       && BetreeNode?
-      // Note that pivot indices are one-off of child indices.
-      // Note that we will never generate a pivot of 0 or |pivotTable|
-      && PivotInsertable(pivotTable, childIdx+1, splitKey)
-      && childIdx < NumBuckets(pivotTable)
+      && ValidChildIndex(request.childIdx)
+      && var child := children[request.childIdx];
+      && match request {
+        case SplitLeaf(_, splitKey) => child.SplitLeaf.requires(splitKey)
+        case SplitIndex(_, childPivotIdx) => child.SplitIndex.requires(childPivotIdx)
+      }
     }
 
-    function Split(childIdx: nat, splitKey: Key) : (out: BetreeNode)
-      requires CanSplit(childIdx, splitKey)
-      requires BetreeNode?
+    function SplitKey(request: SplitRequest) : Key
+      requires WF()
+      requires CanSplitParent(request)
+    {
+      var oldChild := children[request.childIdx];
+      if request.SplitLeaf? then request.splitKey else oldChild.pivotTable[request.childPivotIdx].e
+    }
+
+    // this is a parent in a Split operation
+    function SplitParent(request: SplitRequest) : (out: BetreeNode)
+      requires WF()
+      requires CanSplitParent(request)
       ensures out.WF()
     {
-      var oldChild := children[childIdx];
+      var oldChild := children[request.childIdx];
       assert WFChildren(children);  // trigger
-      var DomainRoutedToChild := DomainRoutedToChild(childIdx);
-      var newLeftChild := oldChild.ApplyFilter(Domain(DomainRoutedToChild.start, Element(splitKey)));
-      var newRightChild := oldChild.ApplyFilter(Domain(Element(splitKey), DomainRoutedToChild.end));
-
-      var newChildren := replace1with2(children, newLeftChild, newRightChild, childIdx);
+      var (newLeftChild, newRightChild) := if request.SplitLeaf? then oldChild.SplitLeaf(request.splitKey) else oldChild.SplitIndex(request.childPivotIdx);
+      var newChildren := replace1with2(children, newLeftChild, newRightChild, request.childIdx);
 
       assert forall i:nat | i<|newChildren| :: newChildren[i].WF() by {
         forall i:nat | i<|newChildren| ensures newChildren[i].WF() {
-          if childIdx+1 < i { // sequence math trigger
+          if request.childIdx+1 < i { // sequence math trigger
             assert newChildren[i] == children[i-1];
           }
         }
       }
-      WFPivotsInsert(pivotTable, childIdx+1, splitKey);
-      BetreeNode(buffers, InsertPivot(pivotTable, childIdx+1, splitKey), newChildren)
+
+      var splitKey := SplitKey(request);
+      assert PivotInsertable(pivotTable, request.childIdx+1, splitKey) by {
+        Keyspace.reveal_IsStrictlySorted();
+      }
+      WFPivotsInsert(pivotTable, request.childIdx+1, splitKey);
+      var out := BetreeNode(buffers, InsertPivot(pivotTable, request.childIdx+1, splitKey), newChildren);
+      assert out.LinkedChildren() by {
+        // seq trigger for offset existing children
+        assert forall i:nat | && out.ValidChildIndex(i) :: i>request.childIdx+1 ==> out.children[i] == children[i-1];
+      }
+      out
     }
 
     function Promote(domain: Domain) : (out: BetreeNode)
@@ -118,14 +198,14 @@ module PivotBetree
     }
 
     function MyDomain() : (out: Domain)
-      requires WF()
+      requires LocalStructure()
       requires BetreeNode?
     { 
       Domain(pivotTable[0], Last(pivotTable))
     }
 
     function DomainRoutedToChild(childIdx: nat) : (out: Domain)
-      requires WF()
+      requires LocalStructure()
       requires BetreeNode?
       requires ValidChildIndex(childIdx)
       ensures out.WF()
@@ -368,7 +448,7 @@ module PivotBetree
     {
       && node.WF()
       && node.KeyInDomain(key)
-      && node.BetreeNode?
+      && (0 < depth ==> node.IsIndex())
       && (0 < depth ==> Subpath().Valid())
     }
 
@@ -383,22 +463,45 @@ module PivotBetree
       else Subpath().Target()
     }
 
+    predicate ChildrenHaveMatchingDomains(otherChildren: seq<BetreeNode>)
+      requires Valid()
+      requires 0 < depth  // my children are all non-Nil
+    {
+      assert WFChildren(node.children); // trigger
+      && WFChildren(otherChildren)
+      && |otherChildren| == |node.children|
+      && (forall i:nat | node.ValidChildIndex(i) ::
+          && otherChildren[i].WF()
+          && otherChildren[i].BetreeNode?
+          && otherChildren[i].MyDomain() == node.children[i].MyDomain()
+        )
+    }
+
     function ReplacedChildren(replacement: BetreeNode) : (out: seq<BetreeNode>)
       requires Valid()
-      requires replacement.WF()
+      requires ValidReplacement(replacement)
       requires 0 < depth
-      ensures WFChildren(out)
+      ensures ChildrenHaveMatchingDomains(out)
       decreases depth, 0
     {
-      var out := node.children[Route(node.pivotTable, key) := Subpath().Substitute(replacement)];
-      assert Subpath().Substitute(replacement).WF();  // trigger
+      var newChild := Subpath().Substitute(replacement);
+
+      assert WFChildren(Subpath().node.children);  // trigger to newChild.WF()
       assert WFChildren(node.children);  // trigger
-      out
+      node.children[Route(node.pivotTable, key) := newChild]
+    }
+    
+    predicate ValidReplacement(replacement: BetreeNode)
+      requires Valid()
+    {
+      && replacement.WF()
+      && replacement.BetreeNode?
+      && replacement.MyDomain() == Target().MyDomain()
     }
 
     function Substitute(replacement: BetreeNode) : (out: BetreeNode)
       requires Valid()
-      requires replacement.WF()
+      requires ValidReplacement(replacement)
       decreases depth, 1
     {
       if 0 == depth
@@ -423,7 +526,7 @@ module PivotBetree
     && step.WF()
     && step.path.node == v.root
     && v' == v.(
-        root := step.path.Substitute(step.path.Target().Split(step.childIdx, step.splitKey))
+        root := step.path.Substitute(step.path.Target().SplitParent(step.request))
       )
   }
 
@@ -465,23 +568,27 @@ module PivotBetree
     && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value)
   }
 
+  datatype SplitRequest =
+      SplitLeaf(childIdx: nat, splitKey: Key) // Target is parent of a leaf node (one with Nil child)
+    | SplitIndex(childIdx: nat, childPivotIdx: nat) // Target is parent of an index node (one with non-Nil children)
+
   datatype Step =
       QueryStep(receipt: QueryReceipt)
     | PutStep()
     | QueryEndLsnStep()
     | FreezeAsStep()
     | InternalGrowStep()
-    | InternalSplitStep(path: Path, childIdx: nat, splitKey: Key)
+    | InternalSplitStep(path: Path, request: SplitRequest)
     | InternalFlushStep(path: Path, childIdx: nat)
     | InternalCompactStep(path: Path, compactedBuffers: BufferStack)
   {
     predicate WF() {
       match this {
         case QueryStep(receipt) => receipt.Valid()
-        case InternalSplitStep(path, childIdx, splitKey) =>
+        case InternalSplitStep(path, request) =>
           && path.Valid()
-          && path.Target().ValidChildIndex(childIdx)
-          && path.Target().CanSplit(childIdx, splitKey) // This should be an enabling condition, not a WF, really?
+          && path.Target().ValidChildIndex(request.childIdx)
+          && path.Target().CanSplitParent(request)
         case InternalFlushStep(path, childIdx) =>
           && path.Valid()
           && path.Target().ValidChildIndex(childIdx)
@@ -492,6 +599,13 @@ module PivotBetree
           && path.Target().buffers.Equivalent(compactedBuffers)
         case _ => true
       }
+    }
+
+    function SplitKey() : Key
+      requires WF()
+      requires InternalSplitStep?
+    {
+      path.Target().SplitKey(request)
     }
   }
 
@@ -504,7 +618,7 @@ module PivotBetree
         case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
         case FreezeAsStep() => FreezeAs(v, v', lbl)
         case InternalGrowStep() => InternalGrow(v, v', lbl, step)
-        case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
+        case InternalSplitStep(_, _) => InternalSplit(v, v', lbl, step)
         case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
         case InternalCompactStep(_, _) => InternalCompact(v, v', lbl, step)
       }

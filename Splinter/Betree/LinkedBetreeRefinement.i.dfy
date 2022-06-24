@@ -163,7 +163,7 @@ module LinkedBetreeRefinement {
       case InternalGrowStep(_) => PivotBetree.InternalGrowStep()
       case InternalSplitStep(path, childIdx, splitKey) => 
         // todo:
-        var out := PivotBetree.InternalSplitStep(IPath(path), childIdx, splitKey);
+        var out := PivotBetree.InternalSplitStep(IPath(path), PivotBetree.SplitLeaf(childIdx, splitKey));
         assume out.WF();
         out
       case InternalFlushStep(path, childIdx, _, _, _) =>
