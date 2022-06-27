@@ -1079,25 +1079,36 @@ module LinkedBetreeRefinement {
     ensures ILinkedBetree(InsertCompactReplacement(target, compactedBuffers, replacementAddr))
       == PivotBetree.CompactedNode(ILinkedBetree(target), compactedBuffers);
   {
-    assume false;
-    // var r := CompactionReplacementRanking(target, targetRanking, compactedBuffers, replacementAddr);
-    // var replacement := InsertCompactReplacement(target, compactedBuffers, replacementAddr);
-    // assert replacement.ValidRanking(r);
-    // if replacement.root.None? {
-    //   assert ILinkedBetree(replacement)
-    //     == PivotBetree.CompactedNode(ILinkedBetree(target), compactedBuffers);
-    // } else {
-    //   var numChildren := |replacement.Root().children|;
-    //   forall i | 0 <= i < numChildren
-    //   ensures ILinkedBetreeNode(replacement, r).children[i] == PivotBetree.CompactedNode(ILinkedBetreeNode(target, r), compactedBuffers).children[i] 
-    //   {
-    //     CompactionCommutesWithI()
-    //   }
-    //   ILinkedBetreeIgnoresRanking(replacement, r, replacement.TheRanking());
-    //   ILinkedBetreeIgnoresRanking(target, r, target.TheRanking());
-    //   assert ILinkedBetree(replacement)
-    //     == PivotBetree.CompactedNode(ILinkedBetree(target), compactedBuffers);
-    // }
+    var r := CompactionReplacementRanking(target, targetRanking, compactedBuffers, replacementAddr);
+    var replacement := InsertCompactReplacement(target, compactedBuffers, replacementAddr);
+
+    // need to trigger this
+    assert |ILinkedBetree(replacement).children|  
+      == |PivotBetree.CompactedNode(ILinkedBetree(target), compactedBuffers).children|;
+    
+    forall i | 0 <= i < |ILinkedBetree(replacement).children| 
+    ensures ILinkedBetree(replacement).children[i] == PivotBetree.CompactedNode(ILinkedBetree(target), compactedBuffers).children[i]
+    {
+      var root := target.Root();
+      var newRoot := BetreeNode(compactedBuffers, root.pivotTable, root.children);
+      var newDiskView := target.diskView.ModifyDisk(replacementAddr, newRoot);
+      calc{
+        ILinkedBetree(replacement).children[i]; 
+        ILinkedBetreeNode(replacement, replacement.TheRanking()).children[i];
+        ILinkedBetreeNode(LinkedBetree(target.Root().children[i], newDiskView), replacement.TheRanking());
+          {
+            var small := target.ChildAtIdx(i);
+            var big := LinkedBetree(target.Root().children[i], newDiskView);
+            DiskSubsetImpliesIdenticalInterpretations(small, big, replacement.TheRanking());
+          }  
+        ILinkedBetreeNode(target.ChildAtIdx(i), replacement.TheRanking());
+          { ILinkedBetreeIgnoresRanking(target.ChildAtIdx(i), replacement.TheRanking(), r); }
+        ILinkedBetreeNode(target, r).children[i];
+          { ILinkedBetreeIgnoresRanking(target, target.TheRanking(), r); }
+        ILinkedBetree(target).children[i];  
+        PivotBetree.CompactedNode(ILinkedBetree(target), compactedBuffers).children[i];
+      }
+    }
   }
 
   // If path root is a subdisk of replacement, and pathAddrs are fresh, then path root
