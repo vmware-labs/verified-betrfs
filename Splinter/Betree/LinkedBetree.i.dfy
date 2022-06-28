@@ -107,7 +107,7 @@ module LinkedBetreeMod
       Domain(pivotTable[0], Last(pivotTable))
     }
 
-    function ChildDomain(childIdx: nat) : (out: Domain)
+    function DomainRoutedToChild(childIdx: nat) : (out: Domain)
       requires WF()
       requires BetreeNode?
       requires ValidChildIndex(childIdx)
@@ -193,7 +193,7 @@ module LinkedBetreeMod
       requires node.ValidChildIndex(idx)
     {
       node.children[idx].Some? ==> (
-        entries[node.children[idx].value].MyDomain() == node.ChildDomain(idx)
+        entries[node.children[idx].value].MyDomain() == node.DomainRoutedToChild(idx)
       )
     }
 
@@ -677,9 +677,9 @@ module LinkedBetreeMod
     requires target.Root().OccupiedChildIndex(childIdx)
   {
     var root := target.Root();
-    var keepKeys := AllKeys() - root.ChildDomain(childIdx).KeySet();
+    var keepKeys := AllKeys() - root.DomainRoutedToChild(childIdx).KeySet();
     var keptBuffers := root.buffers.ApplyFilter(keepKeys);
-    var movedBuffers := root.buffers.ApplyFilter(root.ChildDomain(childIdx).KeySet());
+    var movedBuffers := root.buffers.ApplyFilter(root.DomainRoutedToChild(childIdx).KeySet());
     // BetreeNode of the new child, to be stored at targetChildAddr in the diskview
     var subroot := target.diskView.Get(root.children[childIdx]);
     var subroot' := BetreeNode(subroot.buffers.PushBufferStack(movedBuffers), subroot.pivotTable, subroot.children);
@@ -750,8 +750,6 @@ module LinkedBetreeMod
 
   predicate Init(v: Variables, stampedBetree: StampedBetree)
   {
-    && stampedBetree.value.WF()
-    && stampedBetree.value.Acyclic()
     && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value)
   }
 

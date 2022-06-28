@@ -23,7 +23,7 @@ module LinkedBetreeRefinement {
   import opened LinkedBetreeMod
   import opened StampedMod
   import PivotBetree
-  import DomainMod
+  import opened DomainMod
 
   type Ranking = GenericDisk.Ranking
 
@@ -137,7 +137,7 @@ module LinkedBetreeRefinement {
             assert ILinkedBetreeNode(linked.ChildAtIdx(i), ranking).Nil?;  // trigger
             assert false;
            }
-           assert out.DomainRoutedToChild(i) == node.ChildDomain(i);  // trigger
+           assert out.DomainRoutedToChild(i) == node.DomainRoutedToChild(i);  // trigger
          }
       }
       out
@@ -323,10 +323,24 @@ module LinkedBetreeRefinement {
     PivotBetree.Variables(v.memtable, ILinkedBetree(v.linked))
   }
 
+  predicate RootCoversTotalDomain(linked: LinkedBetree)
+    requires linked.WF()
+  {
+    linked.HasRoot() ==> linked.Root().MyDomain() == TotalDomain()
+  }
+
+  // Properties a StampedBetree must carry from Freeze back to Init
+  predicate InvLinkedBetree(linked:LinkedBetree)
+  {
+    && linked.WF()
+    && linked.Acyclic()
+    && RootCoversTotalDomain(linked)
+  }
+
   predicate Inv(v: Variables)
   {
-    && v.WF()
-    && v.linked.Acyclic()  // contains v.linked.WF()
+    && InvLinkedBetree(v.linked)
+    && v.WF() // turns out not to add anything, but someday maybe it will?
   }
 
   lemma SubstitutePreservesWF(replacement: LinkedBetree, path: Path, pathAddrs: PathAddrs, newLinked: LinkedBetree)
@@ -359,16 +373,16 @@ module LinkedBetreeRefinement {
                 // hard
                 //assert node.MyDomain() == subtree.Root().MyDomain();
                 assert node == newLinked.Root();
-                assert node.ChildDomain(idx) == path.linked.Root().ChildDomain(idx);
+                assert node.DomainRoutedToChild(idx) == path.linked.Root().DomainRoutedToChild(idx);
                 calc {
-                  node.ChildDomain(idx);
+                  node.DomainRoutedToChild(idx);
                   {
                     assert node.pivotTable == path.linked.Root().pivotTable;
                   }
-                  path.linked.Root().ChildDomain(idx);
+                  path.linked.Root().DomainRoutedToChild(idx);
                   {
                     assert path.linked.diskView.ChildLinked(node, idx);
-                    assert path.linked.diskView.entries[node.children[idx].value].MyDomain() == node.ChildDomain(idx);
+                    assert path.linked.diskView.entries[node.children[idx].value].MyDomain() == node.DomainRoutedToChild(idx);
                   }
                     // from ChildLinked on old path dv
                   path.Subpath().linked.Root().MyDomain();
@@ -394,10 +408,10 @@ module LinkedBetreeRefinement {
                     {
                       assert path.linked.diskView.ChildLinked(path.linked.Root(), idx); // trigger
                     }
-                    path.linked.Root().ChildDomain(idx);
-                    node.ChildDomain(idx);
+                    path.linked.Root().DomainRoutedToChild(idx);
+                    node.DomainRoutedToChild(idx);
                   }
-                  assert dv.entries[node.children[idx].value].MyDomain() == node.ChildDomain(idx);
+                  assert dv.entries[node.children[idx].value].MyDomain() == node.DomainRoutedToChild(idx);
                 }
 
                 assert dv.ChildLinked(node, idx);
@@ -414,7 +428,7 @@ module LinkedBetreeRefinement {
               if childPtr.Some? {
                 assert subtree.diskView.entries[childPtr.value] == dv.entries[childPtr.value];
                 assert dv.entries[childPtr.value] == subtree.diskView.entries[childPtr.value];
-                assert dv.entries[node.children[idx].value].MyDomain() == node.ChildDomain(idx);
+                assert dv.entries[node.children[idx].value].MyDomain() == node.DomainRoutedToChild(idx);
               }
             }
           }
@@ -583,6 +597,7 @@ module LinkedBetreeRefinement {
 
   lemma InsertGrowReplacementNewRanking(linked: LinkedBetree, oldRanking: Ranking, newRootAddr: Address) returns (newRanking: Ranking)
     requires linked.WF()
+    requires RootCoversTotalDomain(linked)
     requires linked.ValidRanking(oldRanking)
     requires RankingIsTight(linked.diskView, oldRanking)
     requires linked.diskView.IsFresh({newRootAddr})
@@ -599,8 +614,6 @@ module LinkedBetreeRefinement {
       newRanking := oldRanking[newRootAddr := newRootRank];
     }
     var newRoot := InsertGrowReplacement(linked, newRootAddr);
-    assert newRoot.WF();  // TODO(jonh): here
-    assert newRoot.ValidRanking(newRanking);  // trigger
     BuildTightPreservesWF(newRoot, newRanking);
   }
 
@@ -872,6 +885,7 @@ module LinkedBetreeRefinement {
 
   lemma InitRefines(v: Variables, stampedBetree: StampedBetree)
     requires Init(v, stampedBetree)
+    requires InvLinkedBetree(stampedBetree.value)
     ensures Inv(v)
     ensures PivotBetree.Init(I(v), IStampedBetree(stampedBetree))
   {
