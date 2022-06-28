@@ -1006,14 +1006,14 @@ module LinkedBetreeRefinement {
               }
             ILinkedBetree(path.Substitute(replacement, pathAddrs).ChildAtIdx(i));
               {
-                SubstitutePreservesWF(replacement, path.Subpath(), pathAddrs[1..]);
+                SubstitutePreservesWF(replacement, path.Subpath(), pathAddrs[1..], path.Subpath().Substitute(replacement, pathAddrs[1..]));
                 ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
               }
             ILinkedBetree(LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Substitute(replacement, pathAddrs).diskView));
               { 
                 var big := LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Substitute(replacement, pathAddrs).diskView);
                 var small := LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Subpath().Substitute(replacement, pathAddrs[1..]).diskView);
-                SubstitutePreservesWF(replacement, path.Subpath(), pathAddrs[1..]);
+                SubstitutePreservesWF(replacement, path.Subpath(), pathAddrs[1..], path.Subpath().Substitute(replacement, pathAddrs[1..]));
                 DiskViewDiff(replacement, path, pathAddrs);
                 DiskViewDiff(replacement, path.Subpath(), pathAddrs[1..]);
                 DiskSubsetImpliesRankingValidity(small, big, big.TheRanking());
@@ -1155,37 +1155,6 @@ module LinkedBetreeRefinement {
     }
   }
 
-  lemma InternalFreezeAsStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-    requires Inv(v)
-    requires v.linked.Acyclic()
-    requires NextStep(v, v', lbl, step)
-    requires step.FreezeAsStep?
-    ensures Inv(v')  // prereq
-    ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
-  {
-    InvNext(v, v', lbl);
-    assert IStep(step).FreezeAsStep?;
-    assert ILbl(lbl).stampedBetree == IStampedBetree(lbl.linkedBetree);
-
-    calc {
-      IStampedBetree(lbl.linkedBetree);
-      IStampedBetree(Stamped(v.linked, v.memtable.seqEnd));
-
-      {
-        assume false;
-        // I don't think these actually line up.
-      }
-
-      PivotBetree.PushMemtable(I(v).root, I(v).memtable);
-    }
-
-
-
-    assert ILbl(lbl).stampedBetree == PivotBetree.PushMemtable(I(v).root, I(v).memtable);
-    assert PivotBetree.FreezeAs(I(v), I(v'), ILbl(lbl));
-    assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  }
-
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -1208,7 +1177,6 @@ module LinkedBetreeRefinement {
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case FreezeAsStep() => {
-        InternalFreezeAsStepRefines(v, v', lbl, step);
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
       }
       case InternalGrowStep(_) => {
