@@ -83,11 +83,28 @@ module LinkedBetreeMod
       BetreeNode(buffers.PushBufferStack(bufferStack), pivotTable, children)
     }
 
+    predicate IsLeaf()
+    {
+      && |children|==1
+      && children[0].None?
+    }
+
+    predicate IsIndex()
+    {
+      && (forall i | 0 <= i < |children| :: children[i].Some?)
+    }
+
     function ApplyFilter(filter: Domain) : (out: BetreeNode)
       requires WF()
       ensures out.WF()
     {
       BetreeNode(buffers.ApplyFilter(filter.KeySet()), pivotTable, children)
+    }
+
+    function MyDomain() : (out: Domain)
+      requires WF()
+    {
+      Domain(pivotTable[0], Last(pivotTable))
     }
 
     function ChildDomain(childIdx: nat) : (out: Domain)
@@ -97,8 +114,8 @@ module LinkedBetreeMod
       ensures out.WF()
     {
       var out := Domain(pivotTable[childIdx], pivotTable[childIdx+1]);
-      reveal_IsStrictlySorted(); 
-      out.reveal_SaneKeys(); 
+      reveal_IsStrictlySorted();
+      out.reveal_SaneKeys();
       out
     }
 
@@ -144,37 +161,64 @@ module LinkedBetreeMod
     BetreeNode(BufferStack([]), pivotTable, [None])
   }
 
-  datatype DiskView = DiskView(entries: map<Address, BetreeNode>) 
+  datatype DiskView = DiskView(entries: map<Address, BetreeNode>)
   {
     // TODO(jonh): some duplication with LinkedJournal.DiskView; refactor into library superclassish thing?
     // Or a generic with GenericDisk.DiskView<T>?
     // BetreeNodes are WF()
-    predicate EntriesWF() 
+    predicate EntriesWF()
     {
       (forall addr | addr in entries :: entries[addr].WF())
     }
 
     predicate IsNondanglingPointer(ptr: Pointer)
     {
-      ptr.Some? ==> ptr.value in entries
+      && ptr.Some? ==> ptr.value in entries
     }
 
     predicate NodeHasNondanglingChildPtrs(node: BetreeNode)
+      requires EntriesWF()
+      requires node.WF()
     {
-      node.BetreeNode? ==>
-      (forall idx:nat | idx < |node.children| :: IsNondanglingPointer(node.children[idx]))
+      node.BetreeNode? ==> (
+        && (forall idx:nat | node.ValidChildIndex(idx) :: IsNondanglingPointer(node.children[idx]))
+      )
     }
 
-    predicate NoDanglingPointers()  // i.e. disk is closed wrt to all the pointers in the nodes on disk
+    predicate ChildLinked(node: BetreeNode, idx: nat)
+      requires EntriesWF()
+      requires node.WF()
+      requires NodeHasNondanglingChildPtrs(node)
+      requires node.BetreeNode?
+      requires node.ValidChildIndex(idx)
     {
-      (forall addr | addr in entries :: NodeHasNondanglingChildPtrs(entries[addr]))
+      node.children[idx].Some? ==> (
+        entries[node.children[idx].value].MyDomain() == node.ChildDomain(idx)
+      )
+    }
+
+    predicate NodeHasLinkedChildren(node: BetreeNode)
+      requires EntriesWF()
+      requires node.WF()
+      requires NodeHasNondanglingChildPtrs(node)
+    {
+      node.BetreeNode? ==> (
+        && (forall idx | node.ValidChildIndex(idx) :: ChildLinked(node, idx))
+      )
+    }
+
+    predicate HealthyChildPointers()  // i.e. disk is closed wrt to all the pointers in the nodes on disk
+      requires EntriesWF()
+    {
+      && (forall addr | addr in entries :: NodeHasNondanglingChildPtrs(entries[addr]))
+      && (forall addr | addr in entries :: NodeHasLinkedChildren(entries[addr]))
     }
 
     predicate WF()
     {
       && EntriesWF()
-      && NoDanglingPointers()
-    }   
+      && HealthyChildPointers()
+    }
 
     function Get(ptr: Pointer) : BetreeNode
       // requires WF()
@@ -191,7 +235,7 @@ module LinkedBetreeMod
 
     predicate IsSubsetOf(other: DiskView)
     {
-      && entries.Keys <= other.entries.Keys 
+      && entries.Keys <= other.entries.Keys
       && AgreesWithDisk(other)
     }
 
@@ -209,19 +253,19 @@ module LinkedBetreeMod
     }
 
     // Together with NodeChildrenRespectsRank, this says that ranking is closed
-    predicate ValidRanking(ranking: Ranking) 
+    predicate ValidRanking(ranking: Ranking)
       requires WF()
     {
-      forall addr | 
-        && addr in ranking 
-        && addr in entries 
+      forall addr |
+        && addr in ranking
+        && addr in entries
       ::
         NodeChildrenRespectsRank(ranking, addr)
     }
 
     predicate IsFresh(addrs: set<Address>) {
       addrs !! entries.Keys
-    } 
+    }
 
     // returns a new diskview with the new entry inserted
     function ModifyDisk(addr: Address, item: BetreeNode) : DiskView{
@@ -233,7 +277,7 @@ module LinkedBetreeMod
     DiskView.DiskView(map[])
   }
 
-  
+
   // This is the unit of interpretation: A LinkedBetree has enough info in it to interpret to a PivotBetree.BetreeNode.
   datatype LinkedBetree = LinkedBetree(
     root: Pointer,
@@ -277,14 +321,14 @@ module LinkedBetreeMod
       if HasRoot() && root.value in ranking then ranking[root.value]+1 else 0
     }
 
-    function GetChildCount() : nat 
+    function GetChildCount() : nat
       requires WF()
     {
       if HasRoot() then |Root().children| else 0
     }
 
-    // this says that ranking is closed 
-    predicate ValidRanking(ranking: Ranking) 
+    // this says that ranking is closed
+    predicate ValidRanking(ranking: Ranking)
       requires WF()
     {
       && diskView.ValidRanking(ranking)
@@ -307,11 +351,11 @@ module LinkedBetreeMod
     function BuildTightTree() : (out: LinkedBetree)
       ensures out.diskView.IsSubsetOf(diskView)
     {
-      if ! Acyclic() then 
+      if ! Acyclic() then
         // Need this case because at the state machine I don't have proof that after an
         // operation, that the new state is acyclic
         this
-      else 
+      else
         var tightDv := DiskView.DiskView(MapRestrict(diskView.entries, ReachableAddrs()));
         LinkedBetree(root, tightDv)
     }
@@ -330,7 +374,7 @@ module LinkedBetreeMod
       decreases GetRank(ranking)
     {
       if !HasRoot() then {}
-      else  
+      else
         var numChildren := |Root().children|;
         var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
         Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
@@ -483,7 +527,7 @@ module LinkedBetreeMod
   }
 
   type PathAddrs = seq<Address>
-  
+
   datatype Path = Path(linked: LinkedBetree, key: Key, depth: nat)
   {
     function Subpath() : (out: Path)
@@ -498,8 +542,9 @@ module LinkedBetreeMod
       decreases depth
     {
       && linked.WF()
-      && linked.HasRoot()  
+      && linked.HasRoot()
       && linked.Root().KeyInDomain(key)
+      && (0 < depth ==> linked.Root().IsIndex())
       && (0 < depth ==> Subpath().Valid())  // implies path must lead to a non-nil node
     }
 
@@ -516,10 +561,11 @@ module LinkedBetreeMod
       else Subpath().Target()
     }
 
-    predicate CanSubstitute(replacement: LinkedBetree, pathAddrs: PathAddrs) 
+    predicate CanSubstitute(replacement: LinkedBetree, pathAddrs: PathAddrs)
     {
       && linked.WF()
       && replacement.WF()
+      && replacement.HasRoot()
       && depth == |pathAddrs|
       && Valid()
       && linked.diskView.IsSubsetOf(replacement.diskView)
@@ -528,10 +574,10 @@ module LinkedBetreeMod
     function Substitute(replacement: LinkedBetree, pathAddrs: PathAddrs) : (out: LinkedBetree)
       requires CanSubstitute(replacement, pathAddrs)
       decreases depth, 1
-    { 
-      if depth == 0 
+    {
+      if depth == 0
       then replacement
-      else 
+      else
         var node := linked.Root();
         var subtree := Subpath().Substitute(replacement, pathAddrs[1..]);
         var newChildren := node.children[Route(node.pivotTable, key) := subtree.root];
@@ -549,7 +595,7 @@ module LinkedBetreeMod
     // The new diskview
     var dv' := oldRoot.diskView.ModifyDisk(newRootAddr, root');
     LinkedBetree(Pointer.Some(newRootAddr), dv')
-  } 
+  }
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
@@ -612,7 +658,7 @@ module LinkedBetreeMod
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     // todo: rewrite
-    assume false; 
+    assume false;
     && v.WF()
     && lbl.InternalLabel?
     && step.InternalSplitStep?
@@ -641,11 +687,11 @@ module LinkedBetreeMod
     // BetreeNode of the new root, to be stored at targetAddr in the diskview
     var children' := root.children[childIdx := Pointer.Some(targetChildAddr)];
     var root' := BetreeNode(keptBuffers, root.pivotTable, children');
-    
+
     // The new diskview
     var dv' := target.diskView.ModifyDisk(targetAddr, root').ModifyDisk(targetChildAddr, subroot');
     LinkedBetree(Pointer.Some(targetAddr), dv')
-  } 
+  }
 
   predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
@@ -656,23 +702,23 @@ module LinkedBetreeMod
     && step.path.linked == v.linked
     && step.path.Valid()
     && step.path.Target().Root().OccupiedChildIndex(step.childIdx)  // the downstream child must exist
+    && var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr);
+    && step.path.CanSubstitute(replacement, step.pathAddrs)
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.targetAddr, step.targetChildAddr} + Set(step.pathAddrs))
-    && v'.linked == step.path.Substitute( 
-        InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr), 
-        step.pathAddrs
-    ).BuildTightTree()
+    && v'.linked == step.path.Substitute(replacement, step.pathAddrs).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  // target is the root node before it is compacted. 
+  // target is the root node before it is compacted.
   // InsertReplacement returns a LinkedBetree that has the diskview of target with replacement placed at
   // the replacementAddr
   function InsertCompactReplacement(target: LinkedBetree, compactedBuffers: BufferStack, replacementAddr: Address) : (out: LinkedBetree)
     requires target.WF()
     requires target.HasRoot()
     requires target.Root().buffers.Equivalent(compactedBuffers)
-    ensures out.WF() 
+    requires target.diskView.IsFresh({replacementAddr})
+    ensures out.WF()
   {
     var root := target.Root();
     var newRoot := BetreeNode(compactedBuffers, root.pivotTable, root.children);
@@ -692,7 +738,7 @@ module LinkedBetreeMod
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.targetAddr} + Set(step.pathAddrs))
     && v'.linked == step.path.Substitute(
-        InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr), 
+        InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr),
         step.pathAddrs
     ).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
@@ -713,10 +759,10 @@ module LinkedBetreeMod
     | QueryEndLsnStep()
     | FreezeAsStep()
     // newRootAddr is the new address allocated for the new root
-    | InternalGrowStep(newRootAddr: Address) 
+    | InternalGrowStep(newRootAddr: Address)
     | InternalSplitStep(path: Path, childIdx: nat, splitKey: Key)
     // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
-    // pathAddrs is the new addresses to place all its ancestors, used in substitution 
+    // pathAddrs is the new addresses to place all its ancestors, used in substitution
     | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs)
     // targetAddr is the fresh address at which compactedNode is placed. pathAddrs is the new addresses to place all its ancestors
     | InternalCompactStep(path: Path, compactedBuffers: BufferStack, targetAddr: Address, pathAddrs: PathAddrs)
@@ -724,20 +770,20 @@ module LinkedBetreeMod
     predicate WF() {
       match this {
         case QueryStep(receipt) => receipt.Valid()
-        case InternalSplitStep(path, childIdx, splitKey) => 
+        case InternalSplitStep(path, childIdx, splitKey) =>
            && path.Valid()
-        case InternalFlushStep(_, _, targetAddr, targetChildAddr, pathAddrs) => 
+        case InternalFlushStep(_, _, targetAddr, targetChildAddr, pathAddrs) =>
           && path.Valid()
           && path.Target().Root().ValidChildIndex(childIdx)
           && path.depth == |pathAddrs|
-          && SeqHasUniqueElems(pathAddrs) 
+          && SeqHasUniqueElems(pathAddrs)
           && {targetAddr, targetChildAddr} !! Set(pathAddrs)
           && targetAddr != targetChildAddr
         case InternalCompactStep(path, compactedNode, targetAddr, pathAddrs) =>
           && path.Valid()
           && path.Target().Root().buffers.Equivalent(compactedBuffers)
           && path.depth == |pathAddrs|
-          && SeqHasUniqueElems(pathAddrs) 
+          && SeqHasUniqueElems(pathAddrs)
           && {targetAddr} !! Set(pathAddrs)
         case _ => true
       }
