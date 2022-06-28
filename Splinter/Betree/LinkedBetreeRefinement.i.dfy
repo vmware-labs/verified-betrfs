@@ -696,6 +696,15 @@ module LinkedBetreeRefinement {
     }
   }
 
+  lemma DiskSubsetImpliesRankingValidity(small: LinkedBetree, big: LinkedBetree, ranking: Ranking) 
+    requires small.WF() && big.WF()
+    requires big.ValidRanking(ranking)
+    requires small.root == big.root
+    requires small.diskView.IsSubsetOf(big.diskView)
+    ensures small.ValidRanking(ranking)
+    decreases small.GetRank(ranking)
+  {}
+
   lemma BuildTightPreservesInterpretation(linked: LinkedBetree) 
     requires linked.Acyclic()
     ensures linked.BuildTightTree().WF()  // prereq
@@ -914,43 +923,50 @@ module LinkedBetreeRefinement {
     assert I(v').root.children == [I(v).root];
   }
 
-  // Substitute does not change children nodes that is not on the route
-  lemma SubstituteNonModifiedChildren(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
+  // Theorem: Substitute does not change children nodes that is not on the route
+  // idx is the child index not on the path of substitution
+  // ranking is the new ranking after substitution
+  lemma SubstituteNonModifiedChildren(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, idx: nat, ranking: Ranking)
+    requires path.Valid()
+    requires path.linked.Acyclic()
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).WF()
+    requires path.Substitute(replacement, pathAddrs).ValidRanking(ranking)
     requires path.Substitute(replacement, pathAddrs).HasRoot()
     requires path.linked.diskView.IsFresh(Set(pathAddrs))
     requires 0 < path.depth
+    requires 0 <= idx < |path.linked.Root().children|
+    requires idx != Route(path.linked.Root().pivotTable, path.key)  // idx is the child index not on the path of substitution
+    requires path.linked.diskView.IsSubsetOf(path.Substitute(replacement, pathAddrs).diskView)
+    ensures path.linked.ChildAtIdx(idx).Acyclic()  //prereq to ILinkedBetree(path.linked.ChildAtIdx(idx)
     ensures |path.Substitute(replacement, pathAddrs).Root().children| == |path.linked.Root().children|
-    ensures forall i | 0 <= i < |path.linked.Root().children| && i != Route(path.linked.Root().pivotTable, path.key)
-                :: path.Substitute(replacement, pathAddrs).ChildAtIdx(i).Root() == path.linked.ChildAtIdx(i).Root();  // todo: prove this property of substitute
+    ensures ILinkedBetreeNode(path.Substitute(replacement, pathAddrs).ChildAtIdx(idx), ranking) 
+                  == ILinkedBetree(path.linked.ChildAtIdx(idx)); 
   {
-    forall i | 0 <= i < |path.linked.Root().children| && i != Route(path.linked.Root().pivotTable, path.key)
-    ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(i) == path.linked.ChildAtIdx(i) {
-      var node := path.linked.Root();
-      var subtree := path.Subpath().Substitute(replacement, pathAddrs[1..]);
-      var newChildren := node.children[Route(node.pivotTable, path.key) := subtree.root];
-      var newNode := BetreeNode(node.buffers, node.pivotTable, newChildren);
-      var newDiskView := subtree.diskView.ModifyDisk(pathAddrs[0], newNode);
-
-      calc {
-        path.Substitute(replacement, pathAddrs).ChildAtIdx(i); 
-        LinkedBetree(path.Substitute(replacement, pathAddrs).Root().children[i], newDiskView);
-        LinkedBetree(newNode.children[i], newDiskView);
-        LinkedBetree(path.linked.Root().children[i], newDiskView);       
-          { assert false;
-             // todo this is clearly not true. Because the diskviews are different.
-             // Is is the interpretations that become equivalent
-          }
-        LinkedBetree(path.linked.Root().children[i], path.linked.diskView);
-        path.linked.ChildAtIdx(i);
-      }
+    ChildIdxAcyclic(path.linked, idx);
+    var node := path.linked.Root();
+    var subtree := path.Subpath().Substitute(replacement, pathAddrs[1..]);
+    var newChildren := node.children[Route(node.pivotTable, path.key) := subtree.root];
+    var newNode := BetreeNode(node.buffers, node.pivotTable, newChildren);
+    var newDiskView := subtree.diskView.ModifyDisk(pathAddrs[0], newNode);
+    assert path.Substitute(replacement, pathAddrs).diskView == newDiskView;  // sanity check
+    calc {
+      ILinkedBetreeNode(path.Substitute(replacement, pathAddrs).ChildAtIdx(idx), ranking);
+      ILinkedBetreeNode(LinkedBetree(node.children[idx], newDiskView), ranking);
+        {
+          DiskSubsetImpliesRankingValidity(path.linked.ChildAtIdx(idx), LinkedBetree(node.children[idx], newDiskView), ranking);
+          DiskSubsetImpliesIdenticalInterpretations(path.linked.ChildAtIdx(idx), LinkedBetree(node.children[idx], newDiskView), ranking);
+        }
+      ILinkedBetreeNode(LinkedBetree(node.children[idx], path.linked.diskView), ranking); 
+        { ILinkedBetreeIgnoresRanking(path.linked.ChildAtIdx(idx), ranking, path.linked.ChildAtIdx(idx).TheRanking()); }
+      ILinkedBetree(path.linked.ChildAtIdx(idx)); 
     }
   }
 
   lemma SubstituteCommutesWithI(replacement: LinkedBetree, replacementRanking: Ranking, path: Path, pathAddrs: PathAddrs) 
     requires path.Valid()
-    requires path.linked.Acyclic()
+    requires path.linked.WF()
+    requires path.linked.ValidRanking(replacementRanking)
     requires path.CanSubstitute(replacement, pathAddrs)
     requires replacement.WF()
     requires replacement.ValidRanking(replacementRanking);
@@ -959,6 +975,7 @@ module LinkedBetreeRefinement {
     requires Set(pathAddrs) !! replacementRanking.Keys
     requires path.linked.diskView.IsFresh(Set(pathAddrs))
     requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires path.linked.diskView.IsSubsetOf(path.Substitute(replacement, pathAddrs).diskView)
     ensures path.Substitute(replacement, pathAddrs).Acyclic()  // prereq to ILinkedBetree
     ensures IPath(path).Valid()  // prereq to IPath(path).Substitute
     ensures ILinkedBetree(path.Substitute(replacement, pathAddrs))
@@ -966,19 +983,9 @@ module LinkedBetreeRefinement {
     decreases path.depth
   {
     IPathValid(path);
-    if path.depth == 0 {
-      assert ILinkedBetree(path.Substitute(replacement, pathAddrs))
-        == IPath(path).Substitute(ILinkedBetree(replacement));
-    } else {
-      // ChildKeyAcyclic(path.linked, path.key);
-      // SubstituteCommutesWithI(replacement, replacementRanking, path.Subpath(), pathAddrs[1..]);
+    if 0 < path.depth { 
       var rankingAfterSubst := RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs); 
       ILinkedBetreeIgnoresRanking(path.Substitute(replacement, pathAddrs), path.Substitute(replacement, pathAddrs).TheRanking(), rankingAfterSubst);
-      // assert path.Substitute(replacement, pathAddrs).Acyclic();
-      // What I know: Induction Hypothesis
-      // assert ILinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]))
-      //   == IPath(path.Subpath()).Substitute(ILinkedBetree(replacement));
-
       assert |ILinkedBetree(path.Substitute(replacement, pathAddrs)).children|
         == |IPath(path).Substitute(ILinkedBetree(replacement)).children|;  // need to trigger this
 
@@ -987,17 +994,49 @@ module LinkedBetreeRefinement {
           == IPath(path).Substitute(ILinkedBetree(replacement)).children[i]
       {
         if i == Route(path.linked.Root().pivotTable, path.key) {
-          // TODO: this is the recursion case
-          assume false;
+          calc {  
+            ILinkedBetree(path.Substitute(replacement, pathAddrs)).children[i];
+              { 
+                ChildIdxAcyclic(path.Substitute(replacement, pathAddrs), i); 
+                ChildIdxCommutesWithI(path.Substitute(replacement, pathAddrs), i, path.Substitute(replacement, pathAddrs).TheRanking()); 
+                ILinkedBetreeIgnoresRanking(
+                  path.Substitute(replacement, pathAddrs).ChildAtIdx(i), 
+                  path.Substitute(replacement, pathAddrs).TheRanking(), 
+                  path.Substitute(replacement, pathAddrs).ChildAtIdx(i).TheRanking());
+              }
+            ILinkedBetree(path.Substitute(replacement, pathAddrs).ChildAtIdx(i));
+              {
+                SubstitutePreservesWF(replacement, path.Subpath(), pathAddrs[1..]);
+                ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+              }
+            ILinkedBetree(LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Substitute(replacement, pathAddrs).diskView));
+              { 
+                var big := LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Substitute(replacement, pathAddrs).diskView);
+                var small := LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Subpath().Substitute(replacement, pathAddrs[1..]).diskView);
+                SubstitutePreservesWF(replacement, path.Subpath(), pathAddrs[1..]);
+                DiskViewDiff(replacement, path, pathAddrs);
+                DiskViewDiff(replacement, path.Subpath(), pathAddrs[1..]);
+                DiskSubsetImpliesRankingValidity(small, big, big.TheRanking());
+                DiskSubsetImpliesIdenticalInterpretations(small, big, big.TheRanking());
+                ILinkedBetreeIgnoresRanking(small, small.TheRanking(), big.TheRanking());
+              }
+            ILinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]));
+              { // Apply induction
+                SubstituteCommutesWithI(replacement, replacementRanking, path.Subpath(), pathAddrs[1..]);
+              }
+            IPath(path.Subpath()).Substitute(ILinkedBetree(replacement));
+              { SubpathCommutesWithIPath(path); }
+            IPath(path).Substitute(ILinkedBetree(replacement)).children[i];
+          }
         } else {
           var r := path.Substitute(replacement, pathAddrs).TheRanking();
           calc {
             ILinkedBetree(path.Substitute(replacement, pathAddrs)).children[i];
-            ILinkedBetreeNode(path.Substitute(replacement, pathAddrs), r).children[i];
             ILinkedBetreeNode(path.Substitute(replacement, pathAddrs).ChildAtIdx(i), r);
-              { SubstituteNonModifiedChildren(path, replacement, pathAddrs); }
-            ILinkedBetreeNode(path.linked.ChildAtIdx(i), r);
-              { ILinkedBetreeIgnoresRanking(path.linked.ChildAtIdx(i), r, path.linked.TheRanking()); }
+              { 
+                SubstituteNonModifiedChildren(path, replacement, pathAddrs, i, r); 
+                ILinkedBetreeIgnoresRanking(path.linked.ChildAtIdx(i), path.linked.ChildAtIdx(i).TheRanking(), path.linked.TheRanking());
+              }
             ILinkedBetreeNode(path.linked.ChildAtIdx(i), path.linked.TheRanking());
             ILinkedBetreeNode(path.linked, path.linked.TheRanking()).children[i];
             IPath(path).node.children[i];
@@ -1061,6 +1100,20 @@ module LinkedBetreeRefinement {
     // }
   }
 
+  // If path root is a subdisk of replacement, and pathAddrs are fresh, then path root
+  // must be a subdisk of the output of Substitute
+  lemma FreshSubstitutionImpliesSubdisk(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
+    requires path.CanSubstitute(replacement, pathAddrs)
+    requires path.linked.diskView.IsSubsetOf(replacement.diskView)
+    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    ensures path.linked.diskView.IsSubsetOf(path.Substitute(replacement, pathAddrs).diskView)
+    decreases path.depth
+  {
+    if 0 < path.depth {
+      FreshSubstitutionImpliesSubdisk(path.Subpath(), replacement, pathAddrs[1..]);
+    }
+  }
+
   lemma InternalCompactStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires v.linked.Acyclic()
@@ -1079,7 +1132,10 @@ module LinkedBetreeRefinement {
       ILinkedBetree(step.path.Substitute(replacement, step.pathAddrs).BuildTightTree());
         { BuildTightPreservesInterpretation(step.path.Substitute(replacement, step.pathAddrs)); }
       ILinkedBetree(step.path.Substitute(replacement, step.pathAddrs));
-        { SubstituteCommutesWithI(replacement, replacementRanking, step.path, step.pathAddrs); }
+        { 
+          FreshSubstitutionImpliesSubdisk(step.path, replacement, step.pathAddrs);
+          SubstituteCommutesWithI(replacement, replacementRanking, step.path, step.pathAddrs); 
+        }
       istep.path.Substitute(ILinkedBetree(replacement));
         { CompactionCommutesWithI(step.path.Target(), tightRootRanking, step.compactedBuffers, step.targetAddr); }
       istep.path.Substitute(PivotBetree.CompactedNode(ILinkedBetree(step.path.Target()), step.compactedBuffers));

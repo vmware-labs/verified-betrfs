@@ -718,7 +718,9 @@ module LinkedBetreeMod
     requires target.HasRoot()
     requires target.Root().buffers.Equivalent(compactedBuffers)
     requires target.diskView.IsFresh({replacementAddr})
-    ensures out.WF()
+    ensures target.diskView.IsSubsetOf(out.diskView)
+    ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}
+    ensures out.WF() 
   {
     var root := target.Root();
     var newRoot := BetreeNode(compactedBuffers, root.pivotTable, root.children);
