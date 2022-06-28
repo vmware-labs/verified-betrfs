@@ -1208,13 +1208,8 @@ module LinkedBetreeRefinement {
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case FreezeAsStep() => {
-<<<<<<< HEAD
-        assume false;  // todo
-        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-=======
         InternalFreezeAsStepRefines(v, v', lbl, step);
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
->>>>>>> df9bc759 (InternalFreezeAsStepRefines stub)
       }
       case InternalGrowStep(_) => {
         InternalGrowStepRefines(v, v', lbl, step);
