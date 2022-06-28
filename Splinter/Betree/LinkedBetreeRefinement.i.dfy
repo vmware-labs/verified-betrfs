@@ -1164,7 +1164,26 @@ module LinkedBetreeRefinement {
     ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
     InvNext(v, v', lbl);
-    assume false; // todo
+    assert IStep(step).FreezeAsStep?;
+    assert ILbl(lbl).stampedBetree == IStampedBetree(lbl.linkedBetree);
+
+    calc {
+      IStampedBetree(lbl.linkedBetree);
+      IStampedBetree(Stamped(v.linked, v.memtable.seqEnd));
+
+      {
+        assume false;
+        // I don't think these actually line up.
+      }
+
+      PivotBetree.PushMemtable(I(v).root, I(v).memtable);
+    }
+
+
+
+    assert ILbl(lbl).stampedBetree == PivotBetree.PushMemtable(I(v).root, I(v).memtable);
+    assert PivotBetree.FreezeAs(I(v), I(v'), ILbl(lbl));
+    assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
