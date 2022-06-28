@@ -419,7 +419,8 @@ module PivotBetree
   {
     && lbl.FreezeAsLabel?
     && v.WF()
-    && lbl.stampedBetree == PushMemtable(v.root, v.memtable)
+    && v.memtable.IsEmpty()
+    && lbl.stampedBetree == Stamped(v.root, v.memtable.seqEnd)
     && v' == v
   }
 

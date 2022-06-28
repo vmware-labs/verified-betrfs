@@ -281,7 +281,8 @@ module PagedBetree
     // Implementation expected to perform this action only when memtable is empty
     && lbl.FreezeAsLabel?
     && v.WF()
-    && lbl.stampedBetree == v.root.PushMemtable(v.memtable)
+    && v.memtable.IsEmpty()
+    && lbl.stampedBetree == Stamped(v.root, v.memtable.seqEnd)
     && v' == v
   }
 

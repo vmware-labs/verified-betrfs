@@ -439,10 +439,7 @@ module PagedBetreeRefinement
     requires Init(v, stampedBetree)
     ensures AbstractMap.Init(I(v), IStampedBetree(stampedBetree))
   {
-    MemtableDistributesOverBetree(v.memtable, v.root);
-    reveal_MapApply();
-    reveal_INode();
-    assert INode(stampedBetree.value.PushMemtable(v.memtable).value) == INode(stampedBetree.value); // trigger
+    PushEmptyMemtableRefines(v.root, v.memtable);
   }
 
   lemma QueryRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -540,6 +537,17 @@ module PagedBetreeRefinement
     ApplyPutsIsMapPlusHistory(v, v', lbl.puts);
   }
 
+  lemma PushEmptyMemtableRefines(root: BetreeNode, memtable: Memtable) 
+    requires root.WF()
+    requires memtable.IsEmpty()
+    ensures IStampedBetree(Stamped(root, memtable.seqEnd)) == IStampedBetree(root.PushMemtable(memtable))
+  {
+    MemtableDistributesOverBetree(memtable, root);
+    reveal_MapApply();
+    reveal_INode(); 
+    assert INode(root.PushMemtable(memtable).value) == INode(root); // trigger
+  }
+
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -554,6 +562,7 @@ module PagedBetreeRefinement
         assert AbstractMap.Next(I(v), I(v'), ILbl(lbl));
       }
       case FreezeAsStep() => {
+        PushEmptyMemtableRefines(v.root, v.memtable);
         assert AbstractMap.Next(I(v), I(v'), ILbl(lbl));
       }
       case InternalGrowStep() => {
