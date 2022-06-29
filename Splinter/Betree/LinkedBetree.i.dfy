@@ -563,12 +563,21 @@ module LinkedBetreeMod
 
     predicate CanSubstitute(replacement: LinkedBetree, pathAddrs: PathAddrs)
     {
-      && linked.WF()
+      && Valid()
+      && Target().HasRoot() // redundant with "path must lead to a non-nil node"?
       && replacement.WF()
       && replacement.HasRoot()
+      && replacement.Root().MyDomain() == Target().Root().MyDomain()
       && depth == |pathAddrs|
-      && Valid()
       && linked.diskView.IsSubsetOf(replacement.diskView)
+    }
+
+    lemma CanSubstituteSubpath(replacement: LinkedBetree, pathAddrs: PathAddrs)
+      requires CanSubstitute(replacement, pathAddrs)
+      requires 0 < depth
+      ensures Subpath().CanSubstitute(replacement, pathAddrs[1..])
+    {
+
     }
 
     function Substitute(replacement: LinkedBetree, pathAddrs: PathAddrs) : (out: LinkedBetree)
@@ -579,6 +588,7 @@ module LinkedBetreeMod
       then replacement
       else
         var node := linked.Root();
+        CanSubstituteSubpath(replacement, pathAddrs);
         var subtree := Subpath().Substitute(replacement, pathAddrs[1..]);
         var newChildren := node.children[Route(node.pivotTable, key) := subtree.root];
         var newNode := BetreeNode(node.buffers, node.pivotTable, newChildren);
@@ -720,12 +730,14 @@ module LinkedBetreeMod
     requires target.diskView.IsFresh({replacementAddr})
     ensures target.diskView.IsSubsetOf(out.diskView)
     ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}
-    ensures out.WF() 
+    ensures out.WF()   // prereq to MyDomain()
+    ensures out.HasRoot() && out.Root().MyDomain() == target.Root().MyDomain()
   {
     var root := target.Root();
     var newRoot := BetreeNode(compactedBuffers, root.pivotTable, root.children);
     var newDiskView := target.diskView.ModifyDisk(replacementAddr, newRoot);
-    LinkedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView)
+    var out := LinkedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView);
+    out
   }
 
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
