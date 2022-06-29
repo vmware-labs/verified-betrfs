@@ -1155,6 +1155,39 @@ module LinkedBetreeRefinement {
     }
   }
 
+  lemma InternalFlushStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires Inv(v')  // prereq
+    requires v.linked.Acyclic()
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushStep?
+    ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    var istep := IStep(step);
+    var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr);
+    assert v'.linked == step.path.Substitute(replacement, step.pathAddrs).BuildTightTree();
+
+    assume replacement.Acyclic();  // todo
+    var replacementRanking := replacement.TheRanking();  
+    calc {
+      ILinkedBetree(step.path.Substitute(replacement, step.pathAddrs).BuildTightTree());
+        { BuildTightPreservesInterpretation(step.path.Substitute(replacement, step.pathAddrs)); }
+      ILinkedBetree(step.path.Substitute(replacement, step.pathAddrs));
+        { SubstituteCommutesWithI(replacement, replacementRanking, step.path, step.pathAddrs); }
+      istep.path.Substitute(ILinkedBetree(replacement));
+
+      // istep.path.Substitute(ILinkedBetree(step.path.Target()).Flush(step.childIdx));
+      //   { TargetCommutesWithI(step.path); }
+      istep.path.Substitute(istep.path.Target().Flush(step.childIdx));
+    }
+    // BuildTightPreservesInterpretation(step.path.Substitute(replacement, step.pathAddrs));
+    // FreshSubstitutionImpliesSubdisk(step.path, replacement, step.pathAddrs);
+    // SubstituteCommutesWithI(replacement, replacementRanking, step.path, step.pathAddrs); 
+    // TargetCommutesWithI(step.path);
+    assert ILinkedBetree(v'.linked) == IStep(step).path.Substitute(IStep(step).path.Target().Flush(step.childIdx));
+    assert PivotBetree.InternalFlush(I(v), I(v'), ILbl(lbl), IStep(step));
+  }
+
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -1188,7 +1221,7 @@ module LinkedBetreeRefinement {
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalFlushStep(_, _, _, _, _) => {
-        assume false;  // todo
+        InternalFlushStepRefines(v, v', lbl, step);
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalCompactStep(_, _, _, _) => {
