@@ -200,7 +200,7 @@ module PivotBetree
     }
 
     // this is a parent in a Split operation
-    function {:timeLimitMultiplier 4} SplitParent(request: SplitRequest) : (out: BetreeNode)
+    function SplitParent(request: SplitRequest) : (out: BetreeNode)
       requires SplitParentDefn.requires(request)
       ensures out.WF()
     {
