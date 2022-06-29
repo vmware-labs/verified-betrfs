@@ -151,7 +151,7 @@ module LinkedBetreeRefinement {
 
   predicate StepPathRootAcyclic(step: Step) {
     match step {
-      case InternalSplitStep(path, _, _) =>
+      case InternalSplitStep(path, _, _, _) =>
         path.linked.Acyclic()
       case InternalFlushStep(path, _, _, _, _) =>
         path.linked.Acyclic()
@@ -193,8 +193,8 @@ module LinkedBetreeRefinement {
       case QueryEndLsnStep() => PivotBetree.QueryEndLsnStep()
       case FreezeAsStep() => PivotBetree.FreezeAsStep()
       case InternalGrowStep(_) => PivotBetree.InternalGrowStep()
-      case InternalSplitStep(path, childIdx, splitKey) =>
-        PivotBetree.InternalSplitStep(IPath(path), PivotBetree.SplitLeaf(childIdx, splitKey))
+      case InternalSplitStep(path, request, newAddrs, pathAddrs) =>
+        PivotBetree.InternalSplitStep(IPath(path), request)
       case InternalFlushStep(path, childIdx, _, _, _) =>
         var out := PivotBetree.InternalFlushStep(IPath(path), childIdx);
         IPathValid(path);
@@ -219,7 +219,7 @@ module LinkedBetreeRefinement {
       case QueryEndLsnStep() => { assert IStepDefn(step).WF(); }
       case FreezeAsStep() => { assert IStepDefn(step).WF(); }
       case InternalGrowStep(_) => { assert IStepDefn(step).WF(); }
-      case InternalSplitStep(path, childIdx, splitKey) => {
+      case InternalSplitStep(path, request, newAddrs, pathAddrs) => {
         IPathValid(step.path);
         TargetCommutesWithI(step.path);
         assert istep. path.Valid();
@@ -865,7 +865,7 @@ module LinkedBetreeRefinement {
         InvNextInternalGrowStep(v, v', lbl, step);
         assert Inv(v');
       }
-      case InternalSplitStep(_, _, _) => {
+      case InternalSplitStep(_, _, _, _) => {
         assert Inv(v');
       }
       case InternalFlushStep(_, _, _, _, _) => {
@@ -1292,7 +1292,7 @@ module LinkedBetreeRefinement {
         InternalGrowStepRefines(v, v', lbl, step);
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
-      case InternalSplitStep(_, _, _) => {
+      case InternalSplitStep(_, _, _, _) => {
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalFlushStep(_, _, _, _, _) => {
