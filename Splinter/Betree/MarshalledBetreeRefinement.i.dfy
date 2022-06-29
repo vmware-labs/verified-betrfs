@@ -71,17 +71,19 @@ module MarshalledBetreeRefinement
   }
 
   function I(v: Variables) : LinkedBetreeMod.Variables
-    requires Inv(v)
+    requires HasTypedModel(v)
   {
     TheTypedModel(v)
   }
   
   lemma RefinementInit(v: Variables, journalImage: BetreeImage)
     requires Init(v, journalImage)
+    requires InvImage(journalImage)
     ensures Inv(v)
     ensures LinkedBetreeMod.Init(I(v), journalImage.I())
   {
     TypedModelUnique();
+    LinkedBetreeRefinement.InitRefines(I(v), journalImage.I());
   }
 
   lemma RefinementNext(v: Variables, v': Variables, lbl: TransitionLabel)
