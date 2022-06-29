@@ -5,6 +5,7 @@ include "PivotBetree.i.dfy"
 include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
 include "../Journal/GenericDisk.i.dfy"
 include "Domain.i.dfy"
+include "SplitRequest.i.dfy"
 
 module LinkedBetreeMod
 {
@@ -25,6 +26,7 @@ module LinkedBetreeMod
   import opened ValueMessage
   import opened Maps
   import TotalKMMapMod
+  import opened SplitRequestMod
 
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
@@ -140,6 +142,49 @@ module LinkedBetreeMod
       requires KeyInDomain(key)
     {
       children[Route(pivotTable, key)]
+    }
+
+    // TODO(jonh): Again, Split has a bunch of duplicated (complex) definitions duplicated from PivotBetree.
+    // Would be nice to find a way to factor out the structure duplicated across layers without
+    // making the state machines difficult to read.
+
+    // Called on leaf; creates a new pivot
+    function SplitLeaf(splitKey: Key) : (out: (BetreeNode, BetreeNode))
+      requires WF()
+      requires IsLeaf()
+      requires MyDomain().Contains(splitKey)
+      requires splitKey != MyDomain().start.e
+      ensures out.0.WF() && out.1.WF()
+    {
+      var leftFilter := Domain(MyDomain().start, Element(splitKey));
+      var rightFilter := Domain(Element(splitKey), MyDomain().end);
+
+      var newLeft := BetreeNode(buffers.ApplyFilter(leftFilter.KeySet()), [pivotTable[0], Element(splitKey)], [None]);
+      var newRight := BetreeNode(buffers.ApplyFilter(rightFilter.KeySet()), [Element(splitKey), pivotTable[1]], [None]);
+      assert newLeft.WF() by { Keyspace.reveal_IsStrictlySorted(); }
+      assert newRight.WF() by { Keyspace.reveal_IsStrictlySorted(); }
+      (newLeft, newRight)
+    }
+
+    // Called on index; lifts an existing pivot from the child
+    function SplitIndex(pivotIdx: nat) : (out: (BetreeNode, BetreeNode))
+      requires WF()
+      requires IsIndex()
+      requires 0 < pivotIdx < |pivotTable|-1
+      ensures out.0.WF() && out.1.WF()
+    {
+      var splitElt := pivotTable[pivotIdx];
+      var leftFilter := Domain(MyDomain().start, splitElt);
+      var rightFilter := Domain(splitElt, MyDomain().end);
+
+      var newLeft := BetreeNode(buffers.ApplyFilter(leftFilter.KeySet()), pivotTable[..pivotIdx+1], children[..pivotIdx]);
+      var newRight := BetreeNode(buffers.ApplyFilter(rightFilter.KeySet()), pivotTable[pivotIdx..], children[pivotIdx..]);
+      WFSlice(pivotTable, 0, pivotIdx+1);
+      WFSuffix(pivotTable, pivotIdx);
+      //assert WFChildren(children);  // trigger TODO(jonh) delete
+      assert newLeft.WF();
+      assert newRight.WF();
+      (newLeft, newRight)
     }
   }
 
@@ -277,7 +322,6 @@ module LinkedBetreeMod
     DiskView.DiskView(map[])
   }
 
-
   // This is the unit of interpretation: A LinkedBetree has enough info in it to interpret to a PivotBetree.BetreeNode.
   datatype LinkedBetree = LinkedBetree(
     root: Pointer,
@@ -379,6 +423,101 @@ module LinkedBetreeMod
         var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
         Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
         {root.value} + Sets.UnionSeqOfSets(subTreeAddrs)
+    }
+    
+    predicate CanSplitParent(request: SplitRequest)
+    {
+      && WF()
+      && HasRoot()
+      && Root().ValidChildIndex(request.childIdx)
+      && var child := ChildAtIdx(request.childIdx);
+      && child.HasRoot()
+      && match request {
+        case SplitLeaf(_, splitKey) => child.Root().SplitLeaf.requires(splitKey)
+        case SplitIndex(_, childPivotIdx) => child.Root().SplitIndex.requires(childPivotIdx)
+      }
+    }
+
+    function SplitKey(request: SplitRequest) : (out: Key)
+      requires WF()
+      requires CanSplitParent(request)
+      ensures PivotInsertable(Root().pivotTable, request.childIdx+1, out)
+    {
+      var oldChild := ChildAtIdx(request.childIdx);
+      var out := if request.SplitLeaf? then request.splitKey else oldChild.Root().pivotTable[request.childPivotIdx].e;
+
+      assert PivotInsertable(Root().pivotTable, request.childIdx+1, out) by {
+        Keyspace.reveal_IsStrictlySorted();
+      }
+      WFPivotsInsert(Root().pivotTable, request.childIdx+1, out);
+
+      out
+    }
+
+    function SplitParent(request: SplitRequest, newAddrs: SplitAddrs) : (out: LinkedBetree)
+      requires WF()
+      requires CanSplitParent(request)
+    {
+      var oldChild := ChildAtIdx(request.childIdx);
+      var (newLeftChild, newRightChild) := if request.SplitLeaf? then oldChild.Root().SplitLeaf(request.splitKey) else oldChild.Root().SplitIndex(request.childPivotIdx);
+      var newChildren := replace1with2(Root().children, Some(newAddrs.left), Some(newAddrs.right), request.childIdx);
+
+      var newParent := BetreeNode(Root().buffers, InsertPivot(Root().pivotTable, request.childIdx+1, SplitKey(request)), newChildren);
+
+      var dv' := diskView.ModifyDisk(newAddrs.left, newLeftChild).ModifyDisk(newAddrs.right, newRightChild).ModifyDisk(newAddrs.parent, newParent);
+      LinkedBetree(Pointer.Some(newAddrs.parent), dv')
+    }
+
+    lemma SplitParentCanSubstitute(request: SplitRequest, newAddrs: SplitAddrs)
+      requires CanSplitParent(request)
+      requires newAddrs.HasUniqueElems()  // frameity frame frame
+      requires diskView.IsFresh(newAddrs.Repr())  // frameity frame frame
+      ensures SplitParent(request, newAddrs).WF()
+      ensures SplitParent(request, newAddrs).Root().MyDomain() == Root().MyDomain()
+    {
+      var dv := SplitParent(request, newAddrs).diskView;
+
+      var newChildren := replace1with2(Root().children, Some(newAddrs.left), Some(newAddrs.right), request.childIdx);
+      var newParent := BetreeNode(Root().buffers, InsertPivot(Root().pivotTable, request.childIdx+1, SplitKey(request)), newChildren);
+
+      WFPivotsInsert(Root().pivotTable, request.childIdx+1, SplitKey(request));
+
+      forall idx:nat | newParent.ValidChildIndex(idx)
+      ensures dv.IsNondanglingPointer(newParent.children[idx]) {
+        if request.childIdx+1 < idx {
+          assert dv.IsNondanglingPointer(Root().children[idx-1]);  // seq offset trigger
+        }
+      }
+
+      forall idx:nat | newParent.ValidChildIndex(idx)
+      ensures dv.ChildLinked(newParent, idx) {
+        if idx < request.childIdx {
+          assert diskView.ChildLinked(Root(), idx);  // seq offset trigger
+        } else if request.childIdx+1 < idx {
+          assert diskView.ChildLinked(Root(), idx-1);  // seq offset trigger
+        }
+      }
+
+      assert dv.NodeHasLinkedChildren(dv.entries[newAddrs.left]);  // trigger
+      assert dv.NodeHasLinkedChildren(dv.entries[newAddrs.right]) by {  // trigger hecka weirdly brittle
+        var node := dv.entries[newAddrs.right];
+        forall idx:nat | node.ValidChildIndex(idx) ensures dv.ChildLinked(node, idx) {  // seq offset trigger seems to help with the brittle
+        }
+      }
+      assert dv.NodeHasLinkedChildren(dv.entries[newAddrs.parent]);  // trigger
+    }
+  }
+
+  datatype SplitAddrs = SplitAddrs(left: Address, right: Address, parent: Address)
+  {
+    predicate HasUniqueElems() {
+      && left!=right
+      && right!=parent
+      && parent!=left
+    }
+
+    function Repr() : set<Address> {
+      {left, right, parent}
     }
   }
 
@@ -670,17 +809,18 @@ module LinkedBetreeMod
 
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    // todo: rewrite
-    assume false;
     && v.WF()
     && lbl.InternalLabel?
     && step.InternalSplitStep?
+    && step.WF()
     && step.path.linked == v.linked
-    && step.path.Valid()
-    // v && v' agree on everything down to Target()
-    // && step.path.IsSubstitution(v.linked, v'.linked, [])
-    // Target and Target' are related by a split operation
-    && IsSplit(step.path.Target(), step.path.Target(), step.childIdx, step.splitKey)
+    && v.linked.diskView.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
+    && step.path.Target().CanSplitParent(step.request)
+    && var replacement := step.path.Target().SplitParent(step.request, step.newAddrs);
+    && assert step.path.CanSubstitute(replacement, step.pathAddrs) by {
+        step.path.Target().SplitParentCanSubstitute(step.request, step.newAddrs);
+      } true
+    && v'.linked == step.path.Substitute(replacement, step.pathAddrs).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
@@ -775,18 +915,25 @@ module LinkedBetreeMod
     | FreezeAsStep()
     // newRootAddr is the new address allocated for the new root
     | InternalGrowStep(newRootAddr: Address)
-    | InternalSplitStep(path: Path, childIdx: nat, splitKey: Key)
-    // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
-    // pathAddrs is the new addresses to place all its ancestors, used in substitution
+
+    | InternalSplitStep(path: Path, request: SplitRequest, newAddrs: SplitAddrs, pathAddrs: PathAddrs)
+      // request describes how the split applies (to an Index or Leaf); newAddrs are the new page addresses
+
     | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs)
-    // targetAddr is the fresh address at which compactedNode is placed. pathAddrs is the new addresses to place all its ancestors
+      // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
+      // pathAddrs is the new addresses to place all its ancestors, used in substitution
+
     | InternalCompactStep(path: Path, compactedBuffers: BufferStack, targetAddr: Address, pathAddrs: PathAddrs)
+      // targetAddr is the fresh address at which compactedNode is placed. pathAddrs is the new addresses to place all its ancestors
   {
     predicate WF() {
       match this {
         case QueryStep(receipt) => receipt.Valid()
-        case InternalSplitStep(path, childIdx, splitKey) =>
-           && path.Valid()
+        case InternalSplitStep(path, request, newAddrs, pathAddrs) =>
+          && path.Valid()
+          && path.depth == |pathAddrs|
+          && newAddrs.HasUniqueElems()
+          && newAddrs.Repr() !! Set(pathAddrs)
         case InternalFlushStep(_, _, targetAddr, targetChildAddr, pathAddrs) =>
           && path.Valid()
           && path.Target().Root().ValidChildIndex(childIdx)
@@ -813,7 +960,7 @@ module LinkedBetreeMod
       case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
       case FreezeAsStep() => FreezeAs(v, v', lbl)
       case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
-      case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
+      case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
       case InternalFlushStep(_, _, _, _, _) => InternalFlush(v, v', lbl, step)
       case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
     }

@@ -180,10 +180,9 @@ module LinkedBetreeRefinement {
     )
   }
 
-  function IStep(step: Step) : (out: PivotBetree.Step)
+  function IStepDefn(step: Step) : (out: PivotBetree.Step)
     requires step.WF()
     requires StepPathRootAcyclic(step)
-    ensures out.WF()
   {
      match step {
       case QueryStep(receipt) =>
@@ -195,11 +194,7 @@ module LinkedBetreeRefinement {
       case FreezeAsStep() => PivotBetree.FreezeAsStep()
       case InternalGrowStep(_) => PivotBetree.InternalGrowStep()
       case InternalSplitStep(path, childIdx, splitKey) =>
-        // todo:
-        // var out := PivotBetree.InternalSplitStep(IPath(path), PivotBetree.SplitLeaf(childIdx, splitKey));
-        // assume out.WF();  // TODO(jonh)
-        // out
-        PivotBetree.PutStep()
+        PivotBetree.InternalSplitStep(IPath(path), PivotBetree.SplitLeaf(childIdx, splitKey))
       case InternalFlushStep(path, childIdx, _, _, _) =>
         var out := PivotBetree.InternalFlushStep(IPath(path), childIdx);
         IPathValid(path);
@@ -211,6 +206,40 @@ module LinkedBetreeRefinement {
         TargetCommutesWithI(path);
         out
     }
+  }
+
+  lemma IStepWF(step: Step)
+    requires IStepDefn.requires(step)
+    ensures IStepDefn(step).WF()
+  {
+    var istep := IStepDefn(step);
+    match step {
+      case QueryStep(receipt) => { assert IStepDefn(step).WF(); }
+      case PutStep() => { assert IStepDefn(step).WF(); }
+      case QueryEndLsnStep() => { assert IStepDefn(step).WF(); }
+      case FreezeAsStep() => { assert IStepDefn(step).WF(); }
+      case InternalGrowStep(_) => { assert IStepDefn(step).WF(); }
+      case InternalSplitStep(path, childIdx, splitKey) => {
+        IPathValid(step.path);
+        TargetCommutesWithI(step.path);
+        assert istep. path.Valid();
+        assert path.Target().Root().ValidChildIndex(step.childIdx);
+        assert istep. path.Target().ValidChildIndex(istep.request.childIdx);
+        assert istep. path.Target().CanSplitParent(istep.request);
+        assert IStepDefn(step).WF();
+      }
+      case InternalFlushStep(path, childIdx, _, _, _) => { assert IStepDefn(step).WF(); }
+      case InternalCompactStep(path, compactedBuffers, _, _) => { assert IStepDefn(step).WF(); }
+    }
+  }
+
+  function IStep(step: Step) : (out: PivotBetree.Step)
+    requires step.WF()
+    requires StepPathRootAcyclic(step)
+    ensures out.WF()
+  {
+    IStepWF(step);
+    IStepDefn(step)
   }
 
   lemma TargetCommutesWithI(path: Path)
@@ -837,8 +866,7 @@ module LinkedBetreeRefinement {
         assert Inv(v');
       }
       case InternalSplitStep(_, _, _) => {
-        assume false;
-        assert Inv(v');   // bwoken
+        assert Inv(v');
       }
       case InternalFlushStep(_, _, _, _, _) => {
         InvNextInternalFlushStep(v, v', lbl, step);
@@ -1225,6 +1253,7 @@ module LinkedBetreeRefinement {
     requires step.InternalFlushStep?
     ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
+    assume false;   // TODO(tony)
     var istep := IStep(step);
     var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr);
     var targetRanking := BuildTightRanking(step.path.linked, step.path.linked.TheRanking());
@@ -1264,7 +1293,6 @@ module LinkedBetreeRefinement {
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalSplitStep(_, _, _) => {
-        assume false;  // todo
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalFlushStep(_, _, _, _, _) => {
