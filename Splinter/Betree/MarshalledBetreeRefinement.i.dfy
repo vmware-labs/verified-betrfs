@@ -51,6 +51,12 @@ module MarshalledBetreeRefinement
     }
   }
 
+  predicate InvImage(journalImage: BetreeImage)
+  {
+    && journalImage.HasModel()
+    && LinkedBetreeRefinement.InvLinkedBetree(journalImage.I().value)
+  }
+
   predicate Inv(v: Variables) {
     && HasTypedModel(v)
     && LinkedBetreeRefinement.Inv(TheTypedModel(v))
@@ -58,6 +64,7 @@ module MarshalledBetreeRefinement
 
   lemma InvInit(v: Variables, journalImage: BetreeImage)
     requires Init(v, journalImage)
+    requires InvImage(journalImage)
     ensures Inv(v)
   {
     TypedModelUnique();
