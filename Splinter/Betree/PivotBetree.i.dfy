@@ -148,19 +148,36 @@ module PivotBetree
       }
     }
 
-    function SplitKey(request: SplitRequest) : Key
+    function SplitKey(request: SplitRequest) : (out: Key)
+      requires WF()
+      requires CanSplitParent(request)
+      ensures PivotInsertable(pivotTable, request.childIdx+1, out)
+    {
+      var oldChild := children[request.childIdx];
+      var out := if request.SplitLeaf? then request.splitKey else oldChild.pivotTable[request.childPivotIdx].e;
+
+      assert PivotInsertable(pivotTable, request.childIdx+1, out) by {
+        Keyspace.reveal_IsStrictlySorted();
+      }
+      WFPivotsInsert(pivotTable, request.childIdx+1, out);
+
+      out
+    }
+
+    function SplitParentDefn(request: SplitRequest) : (out: BetreeNode)
       requires WF()
       requires CanSplitParent(request)
     {
       var oldChild := children[request.childIdx];
-      if request.SplitLeaf? then request.splitKey else oldChild.pivotTable[request.childPivotIdx].e
+      var (newLeftChild, newRightChild) := if request.SplitLeaf? then oldChild.SplitLeaf(request.splitKey) else oldChild.SplitIndex(request.childPivotIdx);
+      var newChildren := replace1with2(children, newLeftChild, newRightChild, request.childIdx);
+
+      BetreeNode(buffers, InsertPivot(pivotTable, request.childIdx+1, SplitKey(request)), newChildren)
     }
 
-    // this is a parent in a Split operation
-    function {:timeLimitMultiplier 4} SplitParent(request: SplitRequest) : (out: BetreeNode)
-      requires WF()
-      requires CanSplitParent(request)
-      ensures out.WF()
+    lemma SplitParentWF(request: SplitRequest)
+      requires SplitParentDefn.requires(request)
+      ensures SplitParentDefn(request).WF()
     {
       var oldChild := children[request.childIdx];
       assert WFChildren(children);  // trigger
@@ -175,17 +192,20 @@ module PivotBetree
         }
       }
 
-      var splitKey := SplitKey(request);
-      assert PivotInsertable(pivotTable, request.childIdx+1, splitKey) by {
-        Keyspace.reveal_IsStrictlySorted();
-      }
-      WFPivotsInsert(pivotTable, request.childIdx+1, splitKey);
-      var out := BetreeNode(buffers, InsertPivot(pivotTable, request.childIdx+1, splitKey), newChildren);
-      assert out.LinkedChildren() by {
-        // seq trigger for offset existing children
-        assert forall i:nat | && out.ValidChildIndex(i) :: i>request.childIdx+1 ==> out.children[i] == children[i-1];
-      }
-      out
+      WFPivotsInsert(pivotTable, request.childIdx+1, SplitKey(request));
+      var out := SplitParentDefn(request);
+
+      // seq trigger for offset existing children
+      assert forall i:nat | && out.ValidChildIndex(i) :: i>request.childIdx+1 ==> out.children[i] == children[i-1];
+    }
+
+    // this is a parent in a Split operation
+    function {:timeLimitMultiplier 4} SplitParent(request: SplitRequest) : (out: BetreeNode)
+      requires SplitParentDefn.requires(request)
+      ensures out.WF()
+    {
+      SplitParentWF(request);
+      SplitParentDefn(request)
     }
 
     function Promote(domain: Domain) : (out: BetreeNode)
