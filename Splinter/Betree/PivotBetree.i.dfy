@@ -5,6 +5,7 @@ include "PagedBetree.i.dfy"
 include "../../lib/Base/total_order.i.dfy"
 include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
 include "Domain.i.dfy"
+include "SplitRequest.i.dfy"
 
 module PivotBetree
 {
@@ -23,6 +24,7 @@ module PivotBetree
 //  import opened Lexicographic_Byte_Order
   import opened BoundedPivotsLib
   import opened DomainMod
+  import opened SplitRequestMod
 
   datatype TransitionLabel =
     QueryLabel(endLsn: LSN, key: Key, value: Value)
@@ -175,7 +177,7 @@ module PivotBetree
       BetreeNode(buffers, InsertPivot(pivotTable, request.childIdx+1, SplitKey(request)), newChildren)
     }
 
-    lemma SplitParentWF(request: SplitRequest)
+    lemma {:timeLimitMultiplier 16} SplitParentWF(request: SplitRequest)
       requires SplitParentDefn.requires(request)
       ensures SplitParentDefn(request).WF()
     {
@@ -588,10 +590,6 @@ module PivotBetree
     && stampedBetree.value.WF()
     && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value)
   }
-
-  datatype SplitRequest =
-      SplitLeaf(childIdx: nat, splitKey: Key) // Target is parent of a leaf node (one with Nil child)
-    | SplitIndex(childIdx: nat, childPivotIdx: nat) // Target is parent of an index node (one with non-Nil children)
 
   datatype Step =
       QueryStep(receipt: QueryReceipt)
