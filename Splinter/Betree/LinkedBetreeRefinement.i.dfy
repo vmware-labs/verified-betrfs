@@ -933,6 +933,7 @@ module LinkedBetreeRefinement {
     requires path.linked.diskView.IsSubsetOf(path.Substitute(replacement, pathAddrs).diskView)
     ensures path.Substitute(replacement, pathAddrs).Acyclic()  // prereq to ILinkedBetree
     ensures IPath(path).Valid()  // prereq to IPath(path).Substitute
+    ensures IPath(path).ValidReplacement(ILinkedBetree(replacement))
     ensures ILinkedBetree(path.Substitute(replacement, pathAddrs))
         == IPath(path).Substitute(ILinkedBetree(replacement))
     decreases path.depth
@@ -941,6 +942,7 @@ module LinkedBetreeRefinement {
     if 0 < path.depth {
       var rankingAfterSubst := RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
       ILinkedBetreeIgnoresRanking(path.Substitute(replacement, pathAddrs), path.Substitute(replacement, pathAddrs).TheRanking(), rankingAfterSubst);
+      TargetCommutesWithI(path);  // Look down into target to discover MyDomain()s match in I-land
       assert |ILinkedBetree(path.Substitute(replacement, pathAddrs)).children|
         == |IPath(path).Substitute(ILinkedBetree(replacement)).children|;  // need to trigger this
 
