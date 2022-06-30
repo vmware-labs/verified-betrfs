@@ -541,7 +541,7 @@ module LinkedBetreeMod
     predicate Valid()
       decreases depth
     {
-      && linked.WF()
+      && linked.Acyclic()
       && linked.HasRoot()
       && linked.Root().KeyInDomain(key)
       && (0 < depth ==> linked.Root().IsIndex())
