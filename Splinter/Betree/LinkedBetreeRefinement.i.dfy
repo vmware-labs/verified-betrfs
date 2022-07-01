@@ -1248,8 +1248,6 @@ module LinkedBetreeRefinement {
     var step: Step :| NextStep(v, v', lbl, step);
     match step {
       case QueryStep(receipt) => {
-        // ValidReceiptRefines(step.receipt);
-        assume false;  // todo
         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case PutStep() => {
