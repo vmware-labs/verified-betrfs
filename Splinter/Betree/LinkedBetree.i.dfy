@@ -393,7 +393,7 @@ module LinkedBetreeMod
 
   // TODO(jonh): SO much copypasta from PivotBetree! Library, paramaterize child mechanism?
   datatype QueryReceiptLine = QueryReceiptLine(
-    ptr: Pointer,
+    linked: LinkedBetree,
     result: Message)
   {
     predicate WF()
@@ -404,16 +404,17 @@ module LinkedBetreeMod
 
   datatype QueryReceipt = QueryReceipt(
     key: Key,
-    diskView: DiskView,
+    linked: LinkedBetree,
     lines: seq<QueryReceiptLine>)
   {
     predicate Structure()
     {
       && 0 < |lines|
-      && (forall i:nat | i < |lines| :: lines[i].ptr.Some? <==> i < |lines|-1)
-      && (forall i:nat | i < |lines|-1 :: diskView.IsNondanglingPointer(lines[i].ptr))
+      && lines[0].linked == linked
+      && (forall i:nat | i < |lines| :: lines[i].linked.root.Some? <==> i < |lines|-1)
+      && (forall i:nat | i < |lines| :: lines[i].linked.diskView == linked.diskView)
       && Last(lines).result == Define(DefaultValue())
-      && diskView.WF()
+      && linked.Acyclic()
     }
 
     function Node(i: nat) : (out:BetreeNode)
@@ -421,12 +422,13 @@ module LinkedBetreeMod
       requires i < |lines| - 1  // last line is None ptr
       ensures out.WF()
     {
-      diskView.Get(lines[i].ptr)
+      lines[i].linked.Root()
     }
 
     predicate AllLinesWF()
     {
-      && Structure()
+      && (forall i:nat | i < |lines| :: lines[i].WF())
+      && (forall i:nat | i < |lines| :: lines[i].linked.Acyclic())
       && (forall i:nat | i < |lines|-1 :: Node(i).KeyInDomain(key))
     }
 
@@ -434,7 +436,7 @@ module LinkedBetreeMod
       requires AllLinesWF()
       requires i < |lines|-1
     {
-      lines[i+1].ptr == Node(i).ChildPtr(key)
+      lines[i+1].linked.root == Node(i).ChildPtr(key)
     }
 
     function ResultAt(i: nat) : Message
@@ -462,8 +464,7 @@ module LinkedBetreeMod
     predicate ValidFor(linked: LinkedBetree, key: Key)
     {
       && Valid()
-      && this.diskView == linked.diskView
-      && this.lines[0].ptr == linked.root
+      && this.linked == linked
       && this.key == key
     }
 

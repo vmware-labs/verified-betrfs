@@ -98,7 +98,6 @@ module LinkedBetreeRefinement {
 
   // wrapper
   function ILinkedBetree(linked: LinkedBetree) : (out: PivotBetree.BetreeNode)
-    requires linked.WF()
     requires linked.Acyclic()
     ensures out.WF()
   {
@@ -162,6 +161,25 @@ module LinkedBetreeRefinement {
     }
   }
 
+  function IReceiptLine(line: QueryReceiptLine) : PivotBetree.QueryReceiptLine
+    requires line.linked.Acyclic()
+  {
+    PivotBetree.QueryReceiptLine(
+      ILinkedBetree(line.linked),
+      line.result
+    )
+  }
+
+  function IReceipt(receipt: QueryReceipt) : (out: PivotBetree.QueryReceipt)
+    requires receipt.Valid()
+  {
+    PivotBetree.QueryReceipt(
+      receipt.key,
+      ILinkedBetree(receipt.linked),
+      seq(|receipt.lines|, i requires 0<=i<|receipt.lines| => IReceiptLine(receipt.lines[i]))
+    )
+  }
+
   function IStep(step: Step) : (out: PivotBetree.Step)
     requires step.WF()
     requires StepPathRootAcyclic(step)
@@ -169,9 +187,9 @@ module LinkedBetreeRefinement {
   {
      match step {
       case QueryStep(receipt) =>
-        // todo: this is a placeholder
-        // PivotBetree.QueryStep(IReceipt(receipt))
-        PivotBetree.PutStep()
+        var out := PivotBetree.QueryStep(IReceipt(receipt));
+        IReceiptValid(receipt);
+        out
       case PutStep() => PivotBetree.PutStep()
       case QueryEndLsnStep() => PivotBetree.QueryEndLsnStep()
       case FreezeAsStep() => PivotBetree.FreezeAsStep()
@@ -274,6 +292,35 @@ module LinkedBetreeRefinement {
         assert pivotRoot.children[i] == IChildren(path.linked, path.linked.TheRanking())[i];  // trigger
       }
       assert IPath(path).node.IsIndex();
+    }
+  }
+
+  lemma IReceiptValid(receipt: QueryReceipt) 
+    requires receipt.Valid()
+    ensures IReceipt(receipt).Valid()
+  {
+    var ireceipt := IReceipt(receipt);
+    var key := receipt.key;
+
+    forall i:nat | i < |ireceipt.lines|-1 
+    ensures ireceipt.lines[i].node.KeyInDomain(key)
+    {
+      assert receipt.Node(i).KeyInDomain(key);  // trigger
+    }
+
+    forall i:nat | i < |ireceipt.lines| - 1 
+    ensures ireceipt.ChildLinkedAt(i)
+    {
+      assert receipt.Node(i).KeyInDomain(key);  // trigger
+      ChildKeyAcyclic(receipt.lines[i].linked, key);
+      ChildKeyCommutesWithI(receipt.lines[i].linked, key);
+      assert receipt.ChildLinkedAt(i);  // trigger
+    }
+
+    forall i:nat | i < |ireceipt.lines| - 1 
+    ensures ireceipt.ResultLinkedAt(i)
+    {
+      assert receipt.ResultLinkedAt(i);  // trigger
     }
   }
 
