@@ -1118,13 +1118,60 @@ module LinkedBetreeRefinement {
     requires step.WF()
     requires step.InternalFlushStep?
     requires step.path.Target().Acyclic()
+    requires step.path.Target().ValidRanking(replacementRanking)
     requires step.path.Target().Root().OccupiedChildIndex(step.childIdx)
     requires InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr).WF()
     requires InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr).ValidRanking(replacementRanking)
+    requires step.path.Target().diskView.IsFresh({step.targetAddr, step.targetChildAddr})
     ensures ILinkedBetree(InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr))
       == ILinkedBetree(step.path.Target()).Flush(step.childIdx)
   {
-    assume false;
+    var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr);
+    // trigger
+    assert ILinkedBetree(replacement).pivotTable == ILinkedBetree(step.path.Target()).Flush(step.childIdx).pivotTable;
+    forall i | 0 <= i < |ILinkedBetree(replacement).children|
+    ensures ILinkedBetree(replacement).children[i] == ILinkedBetree(step.path.Target()).Flush(step.childIdx).children[i]
+    {
+      ILinkedBetreeIgnoresRanking(step.path.Target(), step.path.Target().TheRanking(), replacementRanking);
+      ILinkedBetreeIgnoresRanking(replacement, replacement.TheRanking(), replacementRanking);
+      ChildIdxAcyclic(replacement, i);
+      var target := step.path.Target();
+      if i == step.childIdx {
+        var root := target.Root();
+        var keepKeys := AllKeys() - root.DomainRoutedToChild(step.childIdx).KeySet();
+        var keptBuffers := root.buffers.ApplyFilter(keepKeys);
+        var movedBuffers := root.buffers.ApplyFilter(root.DomainRoutedToChild(step.childIdx).KeySet());
+        // BetreeNode of the new child, to be stored at targetChildAddr in the diskview
+        var subroot := target.diskView.Get(root.children[step.childIdx]);
+        var subroot' := BetreeNode(subroot.buffers.PushBufferStack(movedBuffers), subroot.pivotTable, subroot.children);
+        // BetreeNode of the new root, to be stored at targetAddr in the diskview
+        var children' := root.children[step.childIdx := Pointer.Some(step.targetChildAddr)];
+        var root' := BetreeNode(keptBuffers, root.pivotTable, children');
+
+        var dv' := target.diskView.ModifyDisk(step.targetAddr, root').ModifyDisk(step.targetChildAddr, subroot');
+        
+        calc {
+          ILinkedBetree(replacement).children[i];
+          ILinkedBetreeNode(replacement.ChildAtIdx(i), replacementRanking);
+          PivotBetree.BetreeNode(subroot.buffers.PushBufferStack(movedBuffers), subroot.pivotTable, IChildren(replacement.ChildAtIdx(i), replacementRanking));
+          {
+            forall k | 0 <= k < |IChildren(target.ChildAtIdx(i), replacementRanking)|
+            ensures IChildren(target.ChildAtIdx(i), replacementRanking)[k] 
+                  == IChildren(replacement.ChildAtIdx(i), replacementRanking)[k]
+            {
+              DiskSubsetImpliesIdenticalInterpretations(target.ChildAtIdx(i).ChildAtIdx(k), replacement.ChildAtIdx(i).ChildAtIdx(k), replacementRanking);
+            }
+            // trigger
+            assert IChildren(replacement.ChildAtIdx(i), replacementRanking) == IChildren(target.ChildAtIdx(i), replacementRanking);
+          }
+          PivotBetree.BetreeNode(subroot.buffers.PushBufferStack(movedBuffers), subroot.pivotTable, IChildren(target.ChildAtIdx(i), replacementRanking));
+          ILinkedBetreeNode(target.ChildAtIdx(i), replacementRanking).PushBufferStack(movedBuffers);
+          ILinkedBetree(target).Flush(step.childIdx).children[i];
+        }
+      } else {
+        DiskSubsetImpliesIdenticalInterpretations(target.ChildAtIdx(i), replacement.ChildAtIdx(i), replacementRanking);
+      }
+    }
   }
 
   // Generate a ranking for the Flush replacement LinkedBetree
