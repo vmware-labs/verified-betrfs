@@ -952,55 +952,29 @@ module LinkedBetreeRefinement {
           == IPath(path).Substitute(ILinkedBetree(replacement)).children[i]
       {
         if i == Route(path.linked.Root().pivotTable, path.key) {
-          // TODO(tony): Surely this proof can be reduced!
-          calc {
-            ILinkedBetree(path.Substitute(replacement, pathAddrs)).children[i];
-              {
-                ChildIdxAcyclic(path.Substitute(replacement, pathAddrs), i);
-                ChildIdxCommutesWithI(path.Substitute(replacement, pathAddrs), i, path.Substitute(replacement, pathAddrs).TheRanking());
-                ILinkedBetreeIgnoresRanking(
-                  path.Substitute(replacement, pathAddrs).ChildAtIdx(i),
-                  path.Substitute(replacement, pathAddrs).TheRanking(),
-                  path.Substitute(replacement, pathAddrs).ChildAtIdx(i).TheRanking());
-              }
-            ILinkedBetree(path.Substitute(replacement, pathAddrs).ChildAtIdx(i));
-              {
-                SubstitutePreservesWF(replacement, path.Subpath(), pathAddrs[1..], path.Subpath().Substitute(replacement, pathAddrs[1..]));
-                ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
-              }
-            ILinkedBetree(LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Substitute(replacement, pathAddrs).diskView));
-              {
-                var big := LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Substitute(replacement, pathAddrs).diskView);
-                var small := LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Subpath().Substitute(replacement, pathAddrs[1..]).diskView);
-                SubstitutePreservesWF(replacement, path.Subpath(), pathAddrs[1..], path.Subpath().Substitute(replacement, pathAddrs[1..]));
-                DiskViewDiff(replacement, path, pathAddrs);
-                DiskViewDiff(replacement, path.Subpath(), pathAddrs[1..]);
-                DiskSubsetImpliesRankingValidity(small, big, big.TheRanking());
-                DiskSubsetImpliesIdenticalInterpretations(small, big, big.TheRanking());
-                ILinkedBetreeIgnoresRanking(small, small.TheRanking(), big.TheRanking());
-              }
-            ILinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]));
-              { // Apply induction
-                SubstituteCommutesWithI(replacement, replacementRanking, path.Subpath(), pathAddrs[1..]);
-              }
-            IPath(path.Subpath()).Substitute(ILinkedBetree(replacement));
-              { SubpathCommutesWithIPath(path); }
-            IPath(path).Substitute(ILinkedBetree(replacement)).children[i];
-          }
+          ChildIdxAcyclic(path.Substitute(replacement, pathAddrs), i);
+          ChildIdxCommutesWithI(path.Substitute(replacement, pathAddrs), i, path.Substitute(replacement, pathAddrs).TheRanking());
+          ILinkedBetreeIgnoresRanking(
+          path.Substitute(replacement, pathAddrs).ChildAtIdx(i),
+          path.Substitute(replacement, pathAddrs).TheRanking(),
+          path.Substitute(replacement, pathAddrs).ChildAtIdx(i).TheRanking());
+          SubstitutePreservesWF(replacement, path.Subpath(), pathAddrs[1..], path.Subpath().Substitute(replacement, pathAddrs[1..]));
+          ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+          var big := LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Substitute(replacement, pathAddrs).diskView);
+          var small := LinkedBetree(path.Subpath().Substitute(replacement, pathAddrs[1..]).root, path.Subpath().Substitute(replacement, pathAddrs[1..]).diskView);
+          SubstitutePreservesWF(replacement, path.Subpath(), pathAddrs[1..], path.Subpath().Substitute(replacement, pathAddrs[1..]));
+          DiskViewDiff(replacement, path, pathAddrs);
+          DiskViewDiff(replacement, path.Subpath(), pathAddrs[1..]);
+          DiskSubsetImpliesRankingValidity(small, big, big.TheRanking());
+          DiskSubsetImpliesIdenticalInterpretations(small, big, big.TheRanking());
+          ILinkedBetreeIgnoresRanking(small, small.TheRanking(), big.TheRanking());
+          SubstituteCommutesWithI(replacement, replacementRanking, path.Subpath(), pathAddrs[1..]);
+          SubpathCommutesWithIPath(path);
         } else {
           var r := path.Substitute(replacement, pathAddrs).TheRanking();
-          calc {
-            ILinkedBetree(path.Substitute(replacement, pathAddrs)).children[i];
-            ILinkedBetreeNode(path.Substitute(replacement, pathAddrs).ChildAtIdx(i), r);
-              {
-                SubstituteNonModifiedChildren(path, replacement, pathAddrs, i, r);
-                ILinkedBetreeIgnoresRanking(path.linked.ChildAtIdx(i), path.linked.ChildAtIdx(i).TheRanking(), path.linked.TheRanking());
-              }
-            ILinkedBetreeNode(path.linked.ChildAtIdx(i), path.linked.TheRanking());
-            ILinkedBetreeNode(path.linked, path.linked.TheRanking()).children[i];
-            IPath(path).node.children[i];
-            IPath(path).Substitute(ILinkedBetree(replacement)).children[i];
-          }
+          SubstituteNonModifiedChildren(path, replacement, pathAddrs, i, r);
+          ILinkedBetreeIgnoresRanking(path.linked.ChildAtIdx(i), path.linked.ChildAtIdx(i).TheRanking(), path.linked.TheRanking());
+          ChildIdxCommutesWithI(path.linked, i, path.linked.TheRanking());
         }
       }
     }
