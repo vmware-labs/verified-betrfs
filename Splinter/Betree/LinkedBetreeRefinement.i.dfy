@@ -24,6 +24,7 @@ module LinkedBetreeRefinement {
   import opened StampedMod
   import PivotBetree
   import opened DomainMod
+  import opened SplitRequestMod
 
   type Ranking = GenericDisk.Ranking
 
@@ -185,10 +186,7 @@ module LinkedBetreeRefinement {
     requires StepPathRootAcyclic(step)
   {
      match step {
-      case QueryStep(receipt) =>
-        var out := PivotBetree.QueryStep(IReceipt(receipt));
-        IReceiptValid(receipt);
-        out
+      case QueryStep(receipt) => PivotBetree.QueryStep(IReceipt(receipt))
       case PutStep() => PivotBetree.PutStep()
       case QueryEndLsnStep() => PivotBetree.QueryEndLsnStep()
       case FreezeAsStep() => PivotBetree.FreezeAsStep()
@@ -214,12 +212,13 @@ module LinkedBetreeRefinement {
   {
     var istep := IStepDefn(step);
     match step {
-      case QueryStep(receipt) => { assert IStepDefn(step).WF(); }
+      case QueryStep(receipt) => { IReceiptValid(receipt); }
       case PutStep() => { assert IStepDefn(step).WF(); }
       case QueryEndLsnStep() => { assert IStepDefn(step).WF(); }
       case FreezeAsStep() => { assert IStepDefn(step).WF(); }
       case InternalGrowStep(_) => { assert IStepDefn(step).WF(); }
       case InternalSplitStep(path, request, newAddrs, pathAddrs) => {
+        // TODO(jonh): XXX clean up this monstrosity
         IPathValid(step.path);
         TargetCommutesWithI(step.path);
         assert istep. path.Valid();
@@ -268,9 +267,14 @@ module LinkedBetreeRefinement {
             assert istep.path.Target().CanSplitParent(istep.request);
           } else {
             assert step.request.SplitIndex?;
-      assert ichild.WF();
-      assert ichild.IsIndex();
-      assert 0 < ichild.pivotIdx < |ichild.pivotTable|-1;
+            assert ichild.WF();
+            forall i | 0 <= i < |ichild.children| ensures ichild.children[i].BetreeNode? {
+              assert child.Root().children[i].Some?;
+              //assert target.Root().children[i].Some?;
+              assert ichild.children[i] == ILinkedBetreeNode(child.ChildAtIdx(i), target.TheRanking()); // trigger
+            }
+            assert ichild.IsIndex();
+            assert 0 < request.childPivotIdx < |ichild.pivotTable|-1;
             assert ichild.SplitIndex.requires(request.childPivotIdx);
             assert istep.path.Target().CanSplitParent(istep.request);
           }
@@ -731,6 +735,136 @@ module LinkedBetreeRefinement {
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
   }
 
+  lemma SplitTargetPreservesWF(target: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs)
+    requires target.WF()
+    requires target.HasRoot()
+    requires target.diskView.IsFresh(newAddrs.Repr())
+    requires newAddrs.HasUniqueElems()
+    requires target.CanSplitParent(request)
+    ensures target.SplitParent(request, newAddrs).WF()
+  {
+    target.SplitParentCanSubstitute(request, newAddrs);
+
+    var target' := target.SplitParent(request, newAddrs);
+    var dv := target'.diskView;
+//    forall addr | addr in dv.entries
+//      ensures dv.entries[addr].WF()
+//    {
+//      if addr == newAddrs.parent {
+//        assert dv.entries[addr].WF();
+//      } else if addr == newAddrs.left {
+//        assert dv.entries[addr].WF();
+//      } else if addr == newAddrs.right {
+//        assert dv.entries[addr].WF();
+//      } else {
+//        assert dv.entries[addr].WF();
+//      }
+//    }
+
+//    forall addr | addr in dv.entries
+//      ensures dv.NodeHasNondanglingChildPtrs(dv.entries[addr])
+//      ensures dv.NodeHasLinkedChildren(dv.entries[addr])
+//    {
+//      var node := dv.entries[addr];
+//      if addr == newAddrs.parent {
+//////        forall idx:nat | node.ValidChildIndex(idx) ensures dv.IsNondanglingPointer(node.children[idx]) {
+//////          if request.childIdx < idx {
+//////            assert dv.IsNondanglingPointer(target.Root().children[idx-1]);
+//////            assert dv.IsNondanglingPointer(node.children[idx]);
+//////          }
+//////        }
+////        target.SplitParentCanSubstitute(request, newAddrs);
+////        forall idx:nat | node.ValidChildIndex(idx) ensures dv.ChildLinked(node, idx) {
+////        }
+//        assert dv.NodeHasNondanglingChildPtrs(dv.entries[addr]);
+//        assert dv.NodeHasLinkedChildren(dv.entries[addr]);
+//      } else if addr == newAddrs.left {
+//        var oldChild := target.ChildAtIdx(request.childIdx);
+////        assert dv.NodeHasNondanglingChildPtrs(dv.entries[addr]);
+////        forall idx:nat | node.ValidChildIndex(idx) ensures dv.ChildLinked(node, idx) {
+////          assert dv.ChildLinked(oldChild.Root(), idx);  // trigger, probably?
+////          assert dv.ChildLinked(node, idx);
+////        }
+//        assert dv.NodeHasLinkedChildren(dv.entries[addr]);
+//      } else if addr == newAddrs.right {
+//        var oldChild := target.ChildAtIdx(request.childIdx);
+//        forall idx:nat | node.ValidChildIndex(idx) ensures dv.ChildLinked(node, idx) {
+//          if request.SplitIndex? {
+//            assert dv.ChildLinked(oldChild.Root(), idx + request.childPivotIdx);  // trigger
+//            assert dv.ChildLinked(node, idx);
+//          }
+//        }
+//        assert dv.NodeHasNondanglingChildPtrs(dv.entries[addr]);
+//        assert dv.NodeHasLinkedChildren(dv.entries[addr]);
+//      } else {
+//        assert dv.NodeHasNondanglingChildPtrs(dv.entries[addr]);
+//        assert dv.NodeHasLinkedChildren(dv.entries[addr]);
+//      }
+//    }
+  }
+
+  lemma RankingAfterSplitReplacement(target: LinkedBetree, ranking: Ranking, request: SplitRequest, newAddrs: SplitAddrs)
+  returns (newRanking: Ranking)
+    requires target.WF()
+    requires target.ValidRanking(ranking)
+    requires target.HasRoot()
+    requires target.diskView.IsFresh(newAddrs.Repr())
+    requires newAddrs.HasUniqueElems()
+    requires target.CanSplitParent(request)
+    ensures target.SplitParent(request, newAddrs).WF()
+    ensures target.SplitParent(request, newAddrs).ValidRanking(newRanking)
+    ensures newRanking.Keys == ranking.Keys + newAddrs.Repr()
+    ensures target.ValidRanking(newRanking)   // newRanking is good for both the old and the new root
+  {
+    var oldTargetRank := ranking[target.root.value];
+    var oldChildRank := ranking[target.Root().children[request.childIdx].value];
+    newRanking := ranking[newAddrs.left := oldChildRank][newAddrs.right := oldChildRank][newAddrs.parent := oldTargetRank];
+    assert target.diskView.ValidRanking(newRanking);
+    SplitTargetPreservesWF(target, request, newAddrs);
+    var target' := target.SplitParent(request, newAddrs);
+    forall addr | && addr in newRanking && addr in target'.diskView.entries
+      ensures target'.diskView.NodeChildrenRespectsRank(newRanking, addr)
+    {
+      if addr == newAddrs.parent {
+        var node := target'.diskView.entries[addr];
+        forall childIdx:nat | node.ValidChildIndex(childIdx) && node.children[childIdx].Some?
+          ensures node.children[childIdx].value in newRanking  // ranking is closed
+          ensures newRanking[node.children[childIdx].value] < newRanking[addr]  // decreases
+        {
+          if request.childIdx < childIdx {
+            assert target.Root().children[childIdx-1].value in newRanking;
+            assert node.children[childIdx].value in newRanking;
+            assert newRanking[node.children[childIdx].value] < newRanking[addr];
+          }
+        }
+        assert target'.diskView.NodeChildrenRespectsRank(newRanking, addr);
+      } else if addr == newAddrs.left {
+        assert target'.diskView.NodeChildrenRespectsRank(newRanking, addr);
+      } else if addr == newAddrs.right {
+        assert target'.diskView.NodeChildrenRespectsRank(newRanking, addr);
+      } else {
+        assert target'.diskView.NodeChildrenRespectsRank(newRanking, addr);
+      }
+    }
+    assert target.SplitParent(request, newAddrs).ValidRanking(newRanking);
+  }
+
+  lemma InvNextInternalSplitStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalSplitStep?
+    ensures Inv(v')
+  {
+    var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
+    var replacement := step.path.Target().SplitParent(step.request, step.newAddrs);
+    ValidRankingAllTheWayDown(oldRanking, step.path);
+    var rankingAfterReplacement := RankingAfterSplitReplacement(step.path.Target(), oldRanking, step.request, step.newAddrs);
+    var linkedAfterSubstitution := step.path.Substitute(replacement, step.pathAddrs);
+    var newRanking := RankingAfterSubstitution(replacement, rankingAfterReplacement, step.path, step.pathAddrs);
+    BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
+    BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
+  }
+
   lemma ReachableAddrIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking)
     requires linked.WF()
     requires linked.ValidRanking(r1)
@@ -919,7 +1053,7 @@ module LinkedBetreeRefinement {
         assert Inv(v');
       }
       case InternalSplitStep(_, _, _, _) => {
-        assert Inv(v');
+        InvNextInternalSplitStep(v, v', lbl, step);
       }
       case InternalFlushStep(_, _, _, _, _) => {
         InvNextInternalFlushStep(v, v', lbl, step);
@@ -1301,12 +1435,10 @@ module LinkedBetreeRefinement {
   lemma InternalFlushStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires Inv(v')  // prereq
-    requires v.linked.Acyclic()
     requires NextStep(v, v', lbl, step)
     requires step.InternalFlushStep?
     ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
-    assume false;   // TODO(tony)
     var istep := IStep(step);
     var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr);
     var targetRanking := BuildTightRanking(step.path.linked, step.path.linked.TheRanking());
@@ -1317,6 +1449,16 @@ module LinkedBetreeRefinement {
     SubstituteCommutesWithI(replacement, replacementRanking, step.path, step.pathAddrs);
     FlushCommutesWithI(step, replacementRanking);
     TargetCommutesWithI(step.path);
+  }
+
+  lemma InternalSplitStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires Inv(v')  // prereq
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalSplitStep?
+    ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    assume false;
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -1343,18 +1485,15 @@ module LinkedBetreeRefinement {
       }
       case InternalGrowStep(_) => {
         InternalGrowStepRefines(v, v', lbl, step);
-        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalSplitStep(_, _, _, _) => {
-        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+        InternalSplitStepRefines(v, v', lbl, step);
       }
       case InternalFlushStep(_, _, _, _, _) => {
         InternalFlushStepRefines(v, v', lbl, step);
-        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalCompactStep(_, _, _, _) => {
         InternalCompactStepRefines(v, v', lbl, step);
-        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
     }
   }

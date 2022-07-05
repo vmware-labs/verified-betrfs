@@ -932,6 +932,7 @@ module LinkedBetreeMod
         case InternalSplitStep(path, request, newAddrs, pathAddrs) =>
           && path.Valid()
           && path.depth == |pathAddrs|
+          && SeqHasUniqueElems(pathAddrs)
           && path.Target().Root().ValidChildIndex(request.childIdx)
           && path.Target().CanSplitParent(request)
           && newAddrs.HasUniqueElems()
