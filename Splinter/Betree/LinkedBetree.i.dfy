@@ -411,6 +411,7 @@ module LinkedBetreeMod
     {
       && 0 < |lines|
       && lines[0].linked == linked
+      && (forall i:nat | i < |lines| :: lines[i].linked.WF())
       && (forall i:nat | i < |lines| :: lines[i].linked.root.Some? <==> i < |lines|-1)
       && (forall i:nat | i < |lines| :: lines[i].linked.diskView == linked.diskView)
       && Last(lines).result == Define(DefaultValue())
@@ -427,6 +428,7 @@ module LinkedBetreeMod
 
     predicate AllLinesWF()
     {
+      && Structure()
       && (forall i:nat | i < |lines| :: lines[i].WF())
       && (forall i:nat | i < |lines| :: lines[i].linked.Acyclic())
       && (forall i:nat | i < |lines|-1 :: Node(i).KeyInDomain(key))
