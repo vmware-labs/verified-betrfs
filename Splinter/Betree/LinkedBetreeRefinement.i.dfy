@@ -223,13 +223,66 @@ module LinkedBetreeRefinement {
         IPathValid(step.path);
         TargetCommutesWithI(step.path);
         assert istep. path.Valid();
-        assert path.Target().Root().ValidChildIndex(step.childIdx);
+        assert path.Target().Root().ValidChildIndex(step.request.childIdx);
         assert istep. path.Target().ValidChildIndex(istep.request.childIdx);
-        assert istep. path.Target().CanSplitParent(istep.request);
+        assert path.Target().CanSplitParent(step.request);
+
+        var target := step.path.Target();
+        var itarget := istep.path.Target();
+        var ichild := itarget.children[istep.request.childIdx];
+        assert istep.path.Target().CanSplitParent(istep.request) by {
+          var ichild := itarget.children[request.childIdx];
+          assert PivotBetree.WFChildren(istep.path.Target().children);
+          assert ichild.WF();
+          assert itarget == ILinkedBetreeNode(target, target.TheRanking());
+          var child := target.ChildAtIdx(request.childIdx);
+          calc {
+            ichild;
+            itarget.children[request.childIdx];
+            ILinkedBetreeNode(target, target.TheRanking()).children[request.childIdx];
+            ILinkedBetreeNode(child, target.TheRanking());
+          }
+          calc {
+            ichild.children[0];
+            ILinkedBetreeNode(child, target.TheRanking()).children[0];
+            IChildren(child, target.TheRanking())[0]; // trigger
+          }
+
+          if step.request.SplitLeaf? {
+            assert step.path.Target().ChildAtIdx(request.childIdx).Root().IsLeaf();
+            assert child.Root().IsLeaf();
+            assert |child.Root().children| == 1;
+            assert |ichild.children| == 1;
+            assert child.Root().children[0].None?;
+            calc {
+              ichild.children[0];
+              ILinkedBetreeNode(child, target.TheRanking()).children[0];
+              IChildren(child, target.TheRanking())[0]; // trigger
+              PivotBetree.Nil;  // trigger
+            }
+            assert ichild.children[0] == PivotBetree.Nil;
+            assert ichild.children[0].Nil?;
+            assert ichild.IsLeaf();
+            assert ichild.MyDomain().Contains(step.request.splitKey);
+            assert ichild.SplitLeaf.requires(step.request.splitKey);
+            assert istep.path.Target().CanSplitParent(istep.request);
+          } else {
+            assert step.request.SplitIndex?;
+      assert ichild.WF();
+      assert ichild.IsIndex();
+      assert 0 < ichild.pivotIdx < |ichild.pivotTable|-1;
+            assert ichild.SplitIndex.requires(request.childPivotIdx);
+            assert istep.path.Target().CanSplitParent(istep.request);
+          }
+//          match istep.request {
+//            case SplitLeaf(_, splitKey) => { assert ichild.SplitLeaf.requires(splitKey); }
+//            case SplitIndex(_, childPivotIdx) => { assert ichild.SplitIndex.requires(childPivotIdx); }
+//          }
+        }
         assert IStepDefn(step).WF();
       }
-      case InternalFlushStep(path, childIdx, _, _, _) => { assert IStepDefn(step).WF(); }
-      case InternalCompactStep(path, compactedBuffers, _, _) => { assert IStepDefn(step).WF(); }
+      case InternalFlushStep(path, childIdx, _, _, _) => { assume IStepDefn(step).WF(); }
+      case InternalCompactStep(path, compactedBuffers, _, _) => { assume IStepDefn(step).WF(); }
     }
   }
 
