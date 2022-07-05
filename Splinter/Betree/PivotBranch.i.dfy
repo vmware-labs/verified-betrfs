@@ -12,7 +12,7 @@ include "Domain.i.dfy"
 // Jumping straight to PivotBranch (instead of PagedBranch) since branch is immutable 
 // have its operations are simple enough, no need for a pure algebraic layer
 
-module PivotBranch {
+module PivotBranchMod {
   import opened Maps
   import opened Options
   import opened KeyType
@@ -41,6 +41,10 @@ module PivotBranch {
       FlattenedBranch(keys + other.keys, msgs + other.msgs)
     }
   }
+
+  // forest SM accounts for new branches created
+
+
 
   // Bounded pivots are not necessary here, bounds are required for the B-epsilon node as clone
   // requires knowing the exact bound for prefix extraction. Any key transformation should be done
@@ -92,7 +96,7 @@ module PivotBranch {
         && (forall i :: 0 <= i < |children|-1 ==> AllKeysBelowBound(i))
         && (forall i :: 0 < i < |children|   ==> AllKeysAboveBound(i))
     }
-    
+
     function Route(key: Key) : int
     requires WF()
     {
@@ -130,7 +134,7 @@ module PivotBranch {
     function FlattenChildren(count: nat) : (result: FlattenedBranch)
     requires WF()
     requires Index?
-    requires 0 <= count <= |children|
+    requires count <= |children|
     ensures result.WF()
     ensures forall k | k in result.keys :: k in AllKeys()
     ensures (0 < count < |children|) && (|result.keys| > 0) ==> Keys.lt(Last(result.keys), pivots[count-1])
@@ -140,7 +144,6 @@ module PivotBranch {
       else (
         var left := FlattenChildren(count-1);
         var right := children[count-1].Flatten();
-
         // condition for Concat
         assert |left.keys| > 0 && |right.keys| > 0 ==> Keys.lt(Last(left.keys), right.keys[0]) by {
           if |left.keys| > 0 && |right.keys| > 0 {
@@ -150,7 +153,6 @@ module PivotBranch {
         }
 
         var result := left.Concat(right);
-
         // post condition
         assert (0 < count < |children|) && (|result.keys| > 0) ==> Keys.lt(Last(result.keys), pivots[count-1]) by {
           if (0 < count < |children|) && (|result.keys| > 0) {
@@ -159,7 +161,6 @@ module PivotBranch {
             }
           }
         }
-
         result
       )
     }
@@ -176,23 +177,25 @@ module PivotBranch {
     // node + filter = this
     // using Domain directly here as pivot layer sees Domain rather than iset<Key>
     // definition is consistent with filter.KeySet(), but maybe we should use that instead in case it changes
-    predicate IsFiltered(node: Node, filter: Domain)
-    requires WF()
-    requires node.WF()
-    requires !filter.EmptyDomain?
+    predicate IsFiltered(og: Node, filter: Domain)
+      requires WF()
+      requires og.WF()
+      requires !filter.EmptyDomain?
     {
       // && (forall k | k in node.I() :: if filter.Contains(k) then k !in I() else k in I())
       // && (forall k | k in I() :: k in node.I() && node.I()[k] == I()[k])
-      && (forall k | node.Query(k).Some? :: if filter.Contains(k) then Query(k).None? else Query(k).Some? )
-      && (forall k | Query(k).Some? :: Query(k) == node.Query(k))
+      // node = complete source, this = reduced
+      // && (forall k | og.Query(k).Some? :: if filter.Contains(k) then Query(k).Some? else Query(k).None? )
+      && (forall k :: Query(k).Some? <==> (filter.Contains(k) && og.Query(k).Some?))  // define this's domain
+      && (forall k | Query(k).Some? :: Query(k) == og.Query(k)) // value matches og
     }
 
     // sorted list, then through filter for flattened list
     // merge iterator: FlattenedBranch
     // Condition for pack
     predicate FlattenEquivalent(b: FlattenedBranch)
-    requires WF()
-    requires b.WF()
+      requires WF()
+      requires b.WF()
     {
       && Flatten() == b
     }
