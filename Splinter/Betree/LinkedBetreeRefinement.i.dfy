@@ -266,17 +266,17 @@ module LinkedBetreeRefinement {
             assert ichild.SplitLeaf.requires(step.request.splitKey);
             assert istep.path.Target().CanSplitParent(istep.request);
           } else {
-            assert step.request.SplitIndex?;
-            assert ichild.WF();
+//            assert step.request.SplitIndex?;
+//            assert ichild.WF();
             forall i | 0 <= i < |ichild.children| ensures ichild.children[i].BetreeNode? {
               assert child.Root().children[i].Some?;
               //assert target.Root().children[i].Some?;
               assert ichild.children[i] == ILinkedBetreeNode(child.ChildAtIdx(i), target.TheRanking()); // trigger
             }
-            assert ichild.IsIndex();
-            assert 0 < request.childPivotIdx < |ichild.pivotTable|-1;
-            assert ichild.SplitIndex.requires(request.childPivotIdx);
-            assert istep.path.Target().CanSplitParent(istep.request);
+//            assert ichild.IsIndex();
+//            assert 0 < request.childPivotIdx < |ichild.pivotTable|-1;
+//            assert ichild.SplitIndex.requires(request.childPivotIdx);
+//            assert istep.path.Target().CanSplitParent(istep.request);
           }
 //          match istep.request {
 //            case SplitLeaf(_, splitKey) => { assert ichild.SplitLeaf.requires(splitKey); }
