@@ -36,7 +36,7 @@ module CrashTolerantJournal {
   type StoreImage = MsgHistory
 
   datatype Ephemeral =
-    | Unknown
+    | Unknown  // This means None
     | Known(v: AbstractJournal.Variables)
   {
     predicate WF() {
@@ -153,6 +153,7 @@ module CrashTolerantJournal {
       )
   }
 
+  // Observe that the persistent journal is always a prefix of the Ephemeral Journal
   predicate CommitComplete(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()

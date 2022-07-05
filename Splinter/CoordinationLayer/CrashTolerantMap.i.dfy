@@ -31,7 +31,7 @@ module CrashTolerantMap {
   type StoreImage = StampedMap
 
   datatype Ephemeral =
-    | Unknown
+    | Unknown  // This means None
     | Known(v: AbstractMap.Variables)
 
   datatype Variables = Variables(
