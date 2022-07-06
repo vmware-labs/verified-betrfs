@@ -32,6 +32,7 @@ module LinkedJournalRefinement
   {
     && v.WF()
     && v.truncatedJournal.Decodable()
+    && v.truncatedJournal.diskView.Acyclic()
   }
 
   function IPtr(dv: DiskView, ptr: Pointer) : (out: Option<PagedJournal.JournalRecord>)
