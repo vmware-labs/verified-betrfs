@@ -308,4 +308,53 @@ module LinkedBranchMod {
       seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ILinkedBranchNode(ranking))
     }
   }
+
+  // Linked Branch State Machine:
+
+  datatype Variables = Variables(linked: LinkedBranch) {
+    predicate WF() {
+      && linked.WF()
+    }
+  }
+
+  predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.QueryLabel?
+    && v' == v
+    // TODO: implement
+  }
+
+  predicate FilteredQuery(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.FilteredQueryLabel?
+    && v' == v
+    // TODO: implement
+  }
+
+  datatype Step =
+    QueryStep 
+  | FilteredQueryStep
+  // | FlattenStep  // TODO: uncoment once we implement actual iterator
+
+  datatype TransitionLabel =
+    QueryLabel(key: Key, msg: Message)
+  | FilteredQueryLabel(domain: Domain)
+  // | FlattenLabel(flattened: FlattenedBranch)
+  
+  // public:
+
+  predicate Init(v: Variables) {
+    && v.WF()
+  }
+
+  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    match step {
+      case QueryStep() => Query(v, v', lbl)
+      case FilteredQueryStep() => FilteredQuery(v, v', lbl)
+      // case FlattenStep() => Flatten(v, v', lbl)
+    }
+  }
 }
