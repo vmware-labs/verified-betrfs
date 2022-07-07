@@ -7,6 +7,7 @@ include "../../lib/Base/Option.s.dfy"
 include "../../lib/Base/Maps.i.dfy"
 include "../../lib/Base/Sequences.i.dfy"
 include "../../lib/Base/total_order_impl.i.dfy"
+include "Buffers.i.dfy"
 include "Domain.i.dfy"
 
 // Jumping straight to PivotBranch (instead of PagedBranch) since branch is immutable 
@@ -19,13 +20,14 @@ module PivotBranchMod {
   import opened ValueMessage
   import opened Sequences
   import opened DomainMod
+  import opened Buffers
   import KeysImpl = Lexicographic_Byte_Order_Impl
   import Keys = KeysImpl.Ord
 
   // Flattened branch for iterators (sequential and merge)
   datatype FlattenedBranch = FlattenedBranch(keys: seq<Key>, msgs: seq<Message>)
   {
-    predicate WF() 
+    predicate WF()
     {
       && |keys| == |msgs|
       && Keys.IsStrictlySorted(keys)
@@ -41,10 +43,6 @@ module PivotBranchMod {
       FlattenedBranch(keys + other.keys, msgs + other.msgs)
     }
   }
-
-  // forest SM accounts for new branches created
-
-
 
   // Bounded pivots are not necessary here, bounds are required for the B-epsilon node as clone
   // requires knowing the exact bound for prefix extraction. Any key transformation should be done
@@ -105,22 +103,25 @@ module PivotBranchMod {
     }
 
     // Takes in a btree node and returns the key value map abstraction
-    function I() : map<Key, Message>
+    function I() : Buffer
       requires WF()
     {
       if Leaf? then
         Keys.PosEqLargestLteForAllElts(keys);
-        map k | (k in keys) :: msgs[Route(k)]
+        Buffer(map k | (k in keys) :: msgs[Route(k)])
       else 
-        map key |
+        Buffer(map key |
         && key in AllKeys()
-        && key in children[Route(key) + 1].I()
-        :: children[Route(key) + 1].I()[key]
+        && key in children[Route(key) + 1].I().mapp
+        :: children[Route(key) + 1].I().mapp[key])
     }
   
+    // TODO: receipt style?
     function Query(key: Key) : (result: Option<Message>)
     requires WF()
-    ensures result == MapLookupOption(I(), key)
+    // ensures result.None? ==> (I().Query(key) == Update(NopDelta()))
+    // ensures result.Some? ==> (I().Query(key) == result.value)
+    ensures result == MapLookupOption(I().mapp, key)
     {
       var r := Route(key);
       if Leaf? then (
@@ -182,12 +183,8 @@ module PivotBranchMod {
       requires og.WF()
       requires !filter.EmptyDomain?
     {
-      // && (forall k | k in node.I() :: if filter.Contains(k) then k !in I() else k in I())
-      // && (forall k | k in I() :: k in node.I() && node.I()[k] == I()[k])
-      // node = complete source, this = reduced
-      // && (forall k | og.Query(k).Some? :: if filter.Contains(k) then Query(k).Some? else Query(k).None? )
-      && (forall k :: Query(k).Some? <==> (filter.Contains(k) && og.Query(k).Some?))  // define this's domain
-      && (forall k | Query(k).Some? :: Query(k) == og.Query(k)) // value matches og
+      && (forall k :: this.Query(k).Some? <==> (filter.Contains(k) && og.Query(k).Some?))  // define this's domain
+      && (forall k | this.Query(k).Some? :: this.Query(k) == og.Query(k)) // value matches og
     }
 
     // sorted list, then through filter for flattened list
@@ -198,6 +195,66 @@ module PivotBranchMod {
       requires b.WF()
     {
       && Flatten() == b
+    }
+  }
+
+
+  // PivotBranch SM:
+
+  datatype Variables = Variables(root: Node) {
+    predicate WF() {
+      && root.WF()
+    }
+  }
+
+  predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.QueryLabel?
+    && v.root.Query(lbl.key) == Some(lbl.msg)
+    && v' == v
+  }
+
+  predicate Filter(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.FilterLabel?
+    && lbl.newroot.WF()
+    && !lbl.domain.EmptyDomain?
+    && lbl.newroot.IsFiltered(v.root, lbl.domain)
+    && v'.root == lbl.newroot
+    && v'.WF()
+  }
+
+  predicate Flatten(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.FlattenLabel?
+    && lbl.flattened.WF()
+    && v.root.FlattenEquivalent(lbl.flattened)
+    && v' == v
+  }
+
+  // public: 
+
+  predicate Init(v: Variables)
+  {
+    && v.WF()
+  }
+
+  datatype Step = QueryStep | FilterStep | FlattenStep
+
+  datatype TransitionLabel =
+    QueryLabel(key: Key, msg: Message)
+  | FilterLabel(newroot: Node, domain: Domain)
+  | FlattenLabel(flattened: FlattenedBranch)
+
+  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    match step {
+      case QueryStep() => Query(v, v', lbl)
+      case FilterStep() => Filter(v, v', lbl)
+      case FlattenStep() => Flatten(v, v', lbl)
     }
   }
 }

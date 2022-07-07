@@ -31,6 +31,7 @@ module LinkedBranchMod {
   {
     predicate WF() {
       if Leaf? then 
+        && |keys| > 0   // && can we ensure that there's more than 1
         && |keys| == |msgs|
         && Keys.IsStrictlySorted(keys)
       else
