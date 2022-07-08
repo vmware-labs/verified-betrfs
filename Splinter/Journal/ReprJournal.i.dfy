@@ -89,8 +89,19 @@ module ReprJournal {
     )
   }
 
+  function DiscardOldAndGarbageCollect(tj: TruncatedJournal, newBdy: LSN, keep: set<Address>) : TruncatedJournal
+    requires tj.WF()
+    requires tj.diskView.boundaryLSN <= newBdy
+  {
+    var newEntries := MapRestrict(tj.diskView.entries, keep);
+    var newDiskView := LinkedJournal.DiskView(newBdy, newEntries);
+    if tj.SeqEnd() == newBdy
+    then LinkedJournal.TruncatedJournal(None, newDiskView)
+    else LinkedJournal.TruncatedJournal(tj.freshestRec, newDiskView)
+  }
+
   // Update reprIndex with by discarding lsn's strictly smaller than bdy
-  function reprIndexDiscard(reprIndex: map<LSN, Address>, bdy: LSN) : map<LSN, Address>
+  function reprIndexDiscardUpTo(reprIndex: map<LSN, Address>, bdy: LSN) : map<LSN, Address>
   {
     map x: LSN | x in reprIndex && bdy <= x :: reprIndex[x]
   }
@@ -105,9 +116,16 @@ module ReprJournal {
     && lbl.requireEnd == v.journal.SeqEnd()
     && v.journal.truncatedJournal.CanDiscardTo(lbl.startLsn)
     // Define v'
+    && var reprIndex' := reprIndexDiscardUpTo(v.reprIndex, lbl.startLsn);
+    && var keepAddrs := reprIndex'.Values;
     && v' == v.(
-      journal := v'.journal,
-      reprIndex := reprIndexDiscard(v.reprIndex, lbl.startLsn)
+      journal := LinkedJournal.Variables(
+        DiscardOldAndGarbageCollect(v.journal.truncatedJournal, lbl.startLsn, keepAddrs),
+        if v.journal.unmarshalledTail.seqStart <= lbl.startLsn
+        then v.journal.unmarshalledTail.DiscardOld(lbl.startLsn)
+        else v.journal.unmarshalledTail
+      ),
+      reprIndex := reprIndex'
   )
   }
 
@@ -140,10 +158,9 @@ module ReprJournal {
       MapUnion(BuildReprIndex(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), update)
   }
 
-  predicate Init(v: Variables, tj: TruncatedJournal, strandStart: LSN, reserved: set<Address>)
+  predicate Init(v: Variables, tj: TruncatedJournal)
   {
     && tj.Decodable()  // An invariant carried by CoordinationSystem from FreezeForCommit, past a crash, back here
-    && strandStart <= tj.SeqStart()
     && v == 
         Variables(
           LinkedJournal.Variables(tj, EmptyHistoryAt(tj.SeqEnd())),

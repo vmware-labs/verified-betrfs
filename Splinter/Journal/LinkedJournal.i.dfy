@@ -184,17 +184,17 @@ module LinkedJournal {
         out
     }
 
-    // function Representation(root: Pointer) : (out: set<Address>)
-    //   requires Decodable(root)
-    //   requires Acyclic()
-    //   ensures forall addr | addr in out :: addr in entries;
-    //   decreases TheRankOf(root)
-    // {
-    //   if root.None? then {}
-    //   else
-    //     var addr := root.value;
-    //     Representation(entries[addr].CroppedPrior(boundaryLSN)) + {root.value}
-    // }
+    function Representation(root: Pointer) : (out: set<Address>)
+      requires Decodable(root)
+      requires Acyclic()
+      ensures forall addr | addr in out :: addr in entries;
+      decreases TheRankOf(root)
+    {
+      if root.None? then {}
+      else
+        var addr := root.value;
+        Representation(entries[addr].CroppedPrior(boundaryLSN)) + {root.value}
+    }
 
     predicate CanCrop(root: Pointer, depth: nat) 
       requires Decodable(root)
@@ -294,12 +294,12 @@ module LinkedJournal {
       TruncatedJournal(freshestRec, diskView.BuildTight(freshestRec))
     }
 
-    // predicate RepresentationIsTight(repr: set<Address>) 
-    //   requires WF()
-    //   requires diskView.Acyclic()
-    // {
-    //   forall addr :: addr in repr <==> addr in diskView.Representation(freshestRec)
-    // }
+    predicate RepresentationIsTight(repr: set<Address>) 
+      requires WF()
+      requires diskView.Acyclic()
+    {
+      forall addr :: addr in repr <==> addr in diskView.Representation(freshestRec)
+    }
   }
 
   function Mkfs() : (out:TruncatedJournal)
