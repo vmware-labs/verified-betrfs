@@ -193,7 +193,7 @@ module LinkedJournal {
       if root.None? then {}
       else
         var addr := root.value;
-        Representation(entries[addr].CroppedPrior(boundaryLSN)) + {root.value}
+        Representation(entries[addr].CroppedPrior(boundaryLSN)) + {addr}
     }
 
     predicate CanCrop(root: Pointer, depth: nat) 
