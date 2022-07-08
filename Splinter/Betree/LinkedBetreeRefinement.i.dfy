@@ -213,10 +213,10 @@ module LinkedBetreeRefinement {
     var istep := IStepDefn(step);
     match step {
       case QueryStep(receipt) => { IReceiptValid(receipt); }
-      case PutStep() => { assert IStepDefn(step).WF(); }
-      case QueryEndLsnStep() => { assert IStepDefn(step).WF(); }
-      case FreezeAsStep() => { assert IStepDefn(step).WF(); }
-      case InternalGrowStep(_) => { assert IStepDefn(step).WF(); }
+      case PutStep() => { assert istep.WF(); }
+      case QueryEndLsnStep() => { assert istep.WF(); }
+      case FreezeAsStep() => { assert istep.WF(); }
+      case InternalGrowStep(_) => { assert istep.WF(); }
       case InternalSplitStep(path, request, newAddrs, pathAddrs) => {
         IPathValid(step.path);
         TargetCommutesWithI(step.path);
@@ -237,10 +237,18 @@ module LinkedBetreeRefinement {
             }
           }
         }
-        assert IStepDefn(step).WF();
+        assert istep.WF();  // case boilerplate
       }
-      case InternalFlushStep(path, childIdx, _, _, _) => { assume IStepDefn(step).WF(); }
-      case InternalCompactStep(path, compactedBuffers, _, _) => { assume IStepDefn(step).WF(); }
+      case InternalFlushStep(path, childIdx, _, _, _) => {
+        IPathValid(step.path);
+        TargetCommutesWithI(step.path);
+        assert istep.WF();  // case boilerplate
+      }
+      case InternalCompactStep(path, compactedBuffers, _, _) => {
+        IPathValid(step.path);
+        TargetCommutesWithI(step.path);
+        assert istep.WF();  // case boilerplate
+      }
     }
   }
 
@@ -314,6 +322,25 @@ module LinkedBetreeRefinement {
     }
   }
 
+  lemma IndexinessCommutesWithI(linked: LinkedBetree)
+    requires linked.WF()
+    requires linked.Acyclic()
+    requires linked.HasRoot()
+    ensures linked.Root().IsIndex() ==> ILinkedBetree(linked).IsIndex()
+    ensures linked.Root().IsLeaf() ==> ILinkedBetree(linked).IsLeaf()
+  {
+    var iroot := ILinkedBetree(linked);
+    if linked.Root().IsIndex() {
+      forall i | 0 <= i < |iroot.children| ensures iroot.children[i].BetreeNode? {
+        assert iroot.children[i] == IChildren(linked, linked.TheRanking())[i];  // trigger
+      }
+    }
+    if linked.Root().IsLeaf() {
+      assert iroot.children[0] == IChildren(linked, linked.TheRanking())[0];  // trigger
+      assert IChildren(linked, linked.TheRanking())[0].Nil?;  // trigger
+    }
+  }
+
   lemma IPathValid(path: Path)
     requires path.Valid()
     requires path.linked.Acyclic()
@@ -324,14 +351,7 @@ module LinkedBetreeRefinement {
       ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
       IPathValid(path.Subpath());
       SubpathCommutesWithIPath(path);
-      var linkedRoot := path.linked.Root();
-      assert linkedRoot.IsIndex();
-      var pivotRoot := IPath(path).node;
-      forall i | 0 <= i < |pivotRoot.children| ensures pivotRoot.children[i].BetreeNode? {
-        assert linkedRoot.children[i].Some?;
-        assert pivotRoot.children[i] == IChildren(path.linked, path.linked.TheRanking())[i];  // trigger
-      }
-      assert IPath(path).node.IsIndex();
+      IndexinessCommutesWithI(path.linked);
     }
   }
 
@@ -697,6 +717,7 @@ module LinkedBetreeRefinement {
     requires target.CanSplitParent(request)
     ensures target.SplitParent(request, newAddrs).WF()
   {
+    // TODO(jonh): SplitParentCanSubstitute is all you need; eliminate this thing
     target.SplitParentCanSubstitute(request, newAddrs);
 
     var target' := target.SplitParent(request, newAddrs);
@@ -849,7 +870,7 @@ module LinkedBetreeRefinement {
     BuildTightPreservesWF(linked, ranking);
   }
 
-  lemma DiskSubsetImpliesIdenticalInterpretations(small: LinkedBetree, big: LinkedBetree, ranking: Ranking)
+  lemma DiskSubsetImpliesIdenticalInterpretationsWithRanking(small: LinkedBetree, big: LinkedBetree, ranking: Ranking)
     requires small.WF() && big.WF()
     requires small.ValidRanking(ranking)
     requires big.ValidRanking(ranking)
@@ -862,10 +883,23 @@ module LinkedBetreeRefinement {
       forall i | 0 <= i < |small.Root().children|
       ensures ILinkedBetreeNode(small.ChildAtIdx(i), ranking) == ILinkedBetreeNode(big.ChildAtIdx(i), ranking)
       {
-        DiskSubsetImpliesIdenticalInterpretations(small.ChildAtIdx(i), big.ChildAtIdx(i), ranking);
+        DiskSubsetImpliesIdenticalInterpretationsWithRanking(small.ChildAtIdx(i), big.ChildAtIdx(i), ranking);
       }
       assert ILinkedBetreeNode(small, ranking) == ILinkedBetreeNode(big, ranking); // trigger
     }
+  }
+
+  lemma DiskSubsetImpliesIdenticalInterpretations(small: LinkedBetree, big: LinkedBetree)
+    requires small.WF() && big.WF()
+    requires small.root == big.root
+    requires small.diskView.IsSubsetOf(big.diskView)
+    requires big.Acyclic()
+    ensures small.Acyclic()
+    ensures ILinkedBetree(small) == ILinkedBetree(big)
+  {
+    assert small.ValidRanking(big.TheRanking());  // trigger
+    ILinkedBetreeIgnoresRanking(small, small.TheRanking(), big.TheRanking());
+    DiskSubsetImpliesIdenticalInterpretationsWithRanking(small, big, big.TheRanking());
   }
 
   lemma DiskSubsetImpliesRankingValidity(small: LinkedBetree, big: LinkedBetree, ranking: Ranking)
@@ -886,7 +920,7 @@ module LinkedBetreeRefinement {
     var ranking := linked.TheRanking();
     BuildTightPreservesWF(linked, ranking);
     BuildTightMaintainsRankingValidity(linked, ranking);
-    DiskSubsetImpliesIdenticalInterpretations(linked.BuildTightTree(), linked, ranking);
+    DiskSubsetImpliesIdenticalInterpretationsWithRanking(linked.BuildTightTree(), linked, ranking);
     ILinkedBetreeIgnoresRanking(linked.BuildTightTree(), ranking, linked.BuildTightTree().TheRanking());
   }
 
@@ -903,7 +937,7 @@ module LinkedBetreeRefinement {
     calc {
       ILinkedBetreeNode(linked.ChildAtIdx(idx), ranking);
       ILinkedBetreeNode(linked, ranking).children[idx];
-        { DiskSubsetImpliesIdenticalInterpretations(linked.BuildTightTree(), linked, ranking); }
+        { DiskSubsetImpliesIdenticalInterpretationsWithRanking(linked.BuildTightTree(), linked, ranking); }
       ILinkedBetreeNode(linked.BuildTightTree(), ranking).children[idx];
       ILinkedBetreeNode(linked.BuildTightTree().ChildAtIdx(idx), ranking);
     }
@@ -1127,7 +1161,7 @@ module LinkedBetreeRefinement {
       ILinkedBetreeNode(LinkedBetree(node.children[idx], newDiskView), ranking);
         {
           DiskSubsetImpliesRankingValidity(path.linked.ChildAtIdx(idx), LinkedBetree(node.children[idx], newDiskView), ranking);
-          DiskSubsetImpliesIdenticalInterpretations(path.linked.ChildAtIdx(idx), LinkedBetree(node.children[idx], newDiskView), ranking);
+          DiskSubsetImpliesIdenticalInterpretationsWithRanking(path.linked.ChildAtIdx(idx), LinkedBetree(node.children[idx], newDiskView), ranking);
         }
       ILinkedBetreeNode(LinkedBetree(node.children[idx], path.linked.diskView), ranking);
         { ILinkedBetreeIgnoresRanking(path.linked.ChildAtIdx(idx), ranking, path.linked.ChildAtIdx(idx).TheRanking()); }
@@ -1155,6 +1189,7 @@ module LinkedBetreeRefinement {
         == IPath(path).Substitute(ILinkedBetree(replacement))
     decreases path.depth
   {
+    // TODO(jonh): tighten proof
     IPathValid(path);
     if 0 < path.depth {
       var rankingAfterSubst := RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
@@ -1182,7 +1217,7 @@ module LinkedBetreeRefinement {
           DiskViewDiff(replacement, path, pathAddrs);
           DiskViewDiff(replacement, path.Subpath(), pathAddrs[1..]);
           DiskSubsetImpliesRankingValidity(small, big, big.TheRanking());
-          DiskSubsetImpliesIdenticalInterpretations(small, big, big.TheRanking());
+          DiskSubsetImpliesIdenticalInterpretationsWithRanking(small, big, big.TheRanking());
           ILinkedBetreeIgnoresRanking(small, small.TheRanking(), big.TheRanking());
           SubstituteCommutesWithI(replacement, replacementRanking, path.Subpath(), pathAddrs[1..]);
           SubpathCommutesWithIPath(path);
@@ -1248,7 +1283,7 @@ module LinkedBetreeRefinement {
           {
             var small := target.ChildAtIdx(i);
             var big := LinkedBetree(target.Root().children[i], newDiskView);
-            DiskSubsetImpliesIdenticalInterpretations(small, big, replacement.TheRanking());
+            DiskSubsetImpliesIdenticalInterpretationsWithRanking(small, big, replacement.TheRanking());
           }
         ILinkedBetreeNode(target.ChildAtIdx(i), replacement.TheRanking());
           { ILinkedBetreeIgnoresRanking(target.ChildAtIdx(i), replacement.TheRanking(), r); }
@@ -1305,6 +1340,7 @@ module LinkedBetreeRefinement {
   }
 
   lemma FlushCommutesWithI(step: Step, replacementRanking: Ranking)
+    // TODO(jonh): replace most of these requires with step.Valid()?
     requires step.WF()
     requires step.InternalFlushStep?
     requires step.path.Target().Acyclic()
@@ -1349,7 +1385,7 @@ module LinkedBetreeRefinement {
             ensures IChildren(target.ChildAtIdx(i), replacementRanking)[k] 
                   == IChildren(replacement.ChildAtIdx(i), replacementRanking)[k]
             {
-              DiskSubsetImpliesIdenticalInterpretations(target.ChildAtIdx(i).ChildAtIdx(k), replacement.ChildAtIdx(i).ChildAtIdx(k), replacementRanking);
+              DiskSubsetImpliesIdenticalInterpretationsWithRanking(target.ChildAtIdx(i).ChildAtIdx(k), replacement.ChildAtIdx(i).ChildAtIdx(k), replacementRanking);
             }
             // trigger
             assert IChildren(replacement.ChildAtIdx(i), replacementRanking) == IChildren(target.ChildAtIdx(i), replacementRanking);
@@ -1359,7 +1395,7 @@ module LinkedBetreeRefinement {
           ILinkedBetree(target).Flush(step.childIdx).children[i];
         }
       } else {
-        DiskSubsetImpliesIdenticalInterpretations(target.ChildAtIdx(i), replacement.ChildAtIdx(i), replacementRanking);
+        DiskSubsetImpliesIdenticalInterpretationsWithRanking(target.ChildAtIdx(i), replacement.ChildAtIdx(i), replacementRanking);
       }
     }
   }
@@ -1405,6 +1441,160 @@ module LinkedBetreeRefinement {
     TargetCommutesWithI(step.path);
   }
 
+  predicate HasChild(linked: LinkedBetree, idx: nat)
+  {
+    && linked.WF()
+    && linked.HasRoot()
+    && linked.Root().ValidChildIndex(idx)
+  }
+
+  lemma IdenticalChildrenCommutesWithI(linked: LinkedBetree, idx: nat, linked': LinkedBetree, idx': nat, ranking': Ranking)
+    requires HasChild(linked, idx)
+    requires HasChild(linked', idx')
+    requires linked.ValidRanking(ranking')
+    requires linked'.ValidRanking(ranking')
+    requires linked.diskView.IsSubsetOf(linked'.diskView)
+    requires linked.Root().children[idx] == linked'.Root().children[idx']
+    ensures linked.Acyclic()  // prereq
+    ensures ILinkedBetree(linked).children[idx] == ILinkedBetree(linked').children[idx']
+  {
+    ChildIdxCommutesWithI(linked, idx, linked.TheRanking());
+    ILinkedBetreeIgnoresRanking(linked.ChildAtIdx(idx), linked.TheRanking(), ranking');
+    DiskSubsetImpliesIdenticalInterpretationsWithRanking(linked.ChildAtIdx(idx), linked'.ChildAtIdx(idx'), ranking');
+    ILinkedBetreeIgnoresRanking(linked'.ChildAtIdx(idx'), linked'.TheRanking(), ranking');
+    ChildIdxCommutesWithI(linked', idx', linked'.TheRanking());
+  }
+
+  lemma SplitCommutesWithI(step: Step)
+    // TODO(jonh): replace most of these requires with step.Valid()?
+    requires step.WF()
+    requires step.InternalSplitStep?
+    requires step.path.Target().Acyclic()
+    requires step.path.Target().diskView.IsFresh(step.newAddrs.Repr())
+    requires step.path.Target().CanSplitParent(step.request)
+    ensures step.path.Target().SplitParent(step.request, step.newAddrs).Acyclic()
+    ensures ILinkedBetree(step.path.Target()).SplitParentDefn.requires(step.request)
+    ensures ILinkedBetree(step.path.Target().SplitParent(step.request, step.newAddrs)) == ILinkedBetree(step.path.Target()).SplitParent(step.request)
+  {
+    var rankingAfterReplacement := RankingAfterSplitReplacement(step.path.Target(), step.path.Target().TheRanking(), step.request, step.newAddrs);
+    var splitIdx := step.request.childIdx;
+    var target := step.path.Target();
+    var child := target.ChildAtIdx(splitIdx);
+    SplitTargetPreservesWF(target, step.request, step.newAddrs);
+    var itarget := ILinkedBetree(step.path.Target());
+    var ichild := itarget.children[step.request.childIdx];
+    assert PivotBetree.WFChildren(itarget.children);  // trigger
+//    assert ichild.WF();
+    ChildIdxAcyclic(target, splitIdx);
+//    assert ichild. WF();
+    ChildIdxCommutesWithI(target, splitIdx, target.TheRanking());
+    ILinkedBetreeIgnoresRanking(child, target.TheRanking(), child.TheRanking());
+    IndexinessCommutesWithI(child);
+
+    assert ILinkedBetree(step.path.Target()).SplitParentDefn.requires(step.request);
+    var target' := target.SplitParent(step.request, step.newAddrs);
+    var itarget' := itarget.SplitParent(step.request);
+    assert |ILinkedBetree(target').children| == |itarget'.children|;
+    forall idx:nat | itarget'.ValidChildIndex(idx)
+      ensures ILinkedBetree(target').children[idx] == itarget'.children[idx]
+    {
+      var oldChild := target.ChildAtIdx(step.request.childIdx);
+      var (newLeftChild, newRightChild) := if step.request.SplitLeaf? then oldChild.Root().SplitLeaf(step.request.splitKey) else oldChild.Root().SplitIndex(step.request.childPivotIdx);
+
+      var ioldChild := itarget.children[step.request.childIdx];
+      var (inewLeftChild, inewRightChild) := if step.request.SplitLeaf? then ioldChild.SplitLeaf(step.request.splitKey) else ioldChild.SplitIndex(step.request.childPivotIdx);
+    
+      var ranking' := RankingAfterSplitReplacement(target, target.TheRanking(), step.request, step.newAddrs);
+      if idx < splitIdx {
+        IdenticalChildrenCommutesWithI(target, idx, target', idx, ranking');
+      } else if splitIdx == idx {
+        calc {
+          inewLeftChild.buffers;
+          newLeftChild.buffers;
+          ILinkedBetreeNode(LinkedBetree(Some(step.newAddrs.left), target'.diskView), ranking').buffers;
+        }
+        calc {
+          inewLeftChild.pivotTable;
+          newLeftChild.pivotTable;
+          ILinkedBetreeNode(LinkedBetree(Some(step.newAddrs.left), target'.diskView), ranking').pivotTable;
+        }
+        calc {
+          |inewLeftChild.children|;
+          |newLeftChild.children|;
+          |ILinkedBetreeNode(LinkedBetree(Some(step.newAddrs.left), target'.diskView), ranking').children|;
+        }
+        forall cidx:nat | inewLeftChild.ValidChildIndex(cidx)
+          ensures ILinkedBetreeNode(LinkedBetree(Some(step.newAddrs.left), target'.diskView), ranking').children[cidx] == inewLeftChild.children[cidx]
+        {
+          calc {
+            itarget.children[step.request.childIdx];
+              // subst
+            ILinkedBetree(step.path.Target()).children[step.request.childIdx];
+              { ILinkedBetreeIgnoresRanking(target, ranking', target.TheRanking()); }
+            ILinkedBetreeNode(target, ranking').children[step.request.childIdx];
+              { ChildIdxCommutesWithI(target, step.request.childIdx, ranking'); }
+            ILinkedBetreeNode(target.ChildAtIdx(step.request.childIdx), ranking');
+              // subst
+            ILinkedBetreeNode(oldChild, ranking');
+          }
+          var oldGrandchildPtr := oldChild.Root().children[cidx];
+          var newGrandchildPtr := LinkedBetree(Some(step.newAddrs.left), target'.diskView).Root().children[cidx];
+          assert oldGrandchildPtr == newGrandchildPtr;
+          calc {
+            ILinkedBetreeNode(LinkedBetree(Some(step.newAddrs.left), target'.diskView), ranking').children[cidx];
+            ILinkedBetreeNode(LinkedBetree(newGrandchildPtr, target'.diskView), ranking');
+              { DiskSubsetImpliesIdenticalInterpretationsWithRanking(
+                  LinkedBetree(oldGrandchildPtr, oldChild.diskView),
+                  LinkedBetree(newGrandchildPtr, target'.diskView),
+                  ranking');
+              }
+            ILinkedBetreeNode(LinkedBetree(oldGrandchildPtr, oldChild.diskView), ranking');
+            ILinkedBetreeNode(oldChild.ChildAtIdx(cidx), ranking');
+              { ChildIdxCommutesWithI(oldChild, cidx, ranking'); }
+            ILinkedBetreeNode(oldChild, ranking').children[cidx];
+            ioldChild.children[cidx];
+            inewLeftChild.children[cidx];
+          }
+          //IdenticalChildrenCommutesWithI(LinkedBetree(Some(step.newAddrs.left), target'.diskView), cidx, target', cidx, target'.TheRanking());
+        }
+        calc {  // triggers extensionality for children seq
+          inewLeftChild.children;
+          ILinkedBetreeNode(LinkedBetree(Some(step.newAddrs.left), target'.diskView), ranking').children;
+        }
+        calc {
+          itarget'.children[idx];
+          itarget.SplitParent(step.request).children[idx];
+          inewLeftChild;
+
+          ILinkedBetreeNode(LinkedBetree(Some(step.newAddrs.left), target'.diskView), ranking');
+          ILinkedBetreeNode(target'.ChildAtIdx(idx), ranking');
+            { ILinkedBetreeIgnoresRanking(target'.ChildAtIdx(idx), target'.TheRanking(), ranking'); }
+          ILinkedBetreeNode(target'.ChildAtIdx(idx), target'.TheRanking());
+            { ChildIdxCommutesWithI(target', idx, target'.TheRanking()); }
+          ILinkedBetree(target').children[idx];
+        }
+        assert ILinkedBetree(target').children[idx] == itarget'.children[idx];
+      } else if splitIdx + 1 == idx {
+        assume false;
+        assert ILinkedBetree(target').children[idx] == itarget'.children[idx];
+      } else {
+        IdenticalChildrenCommutesWithI(target, idx-1, target', idx, ranking');
+//        calc {
+//          itarget'.children[idx];
+//            // Pivot.SplitParent
+//          itarget.children[idx-1];
+//            // synonym
+//          ILinkedBetree(target).children[idx-1];
+//            { IdenticalChildrenCommutesWithI(target, idx-1, target', idx, ranking'); }
+//          ILinkedBetree(target').children[idx];
+//        }
+//        assert ILinkedBetree(target').children[idx] == itarget'.children[idx];
+      }
+    }
+    assert ILinkedBetree(target').children == itarget'.children;
+    assert ILinkedBetree(step.path.Target().SplitParent(step.request, step.newAddrs)) == ILinkedBetree(step.path.Target()).SplitParent(step.request);
+  }
+
   lemma InternalSplitStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires Inv(v')  // prereq
@@ -1412,7 +1602,19 @@ module LinkedBetreeRefinement {
     requires step.InternalSplitStep?
     ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
-    assume false;
+    var istep := IStep(step);
+    // TODO(jonh): lots of duplication with InvNextInternalSplitStep
+    var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
+    var replacement := step.path.Target().SplitParent(step.request, step.newAddrs);
+    ValidRankingAllTheWayDown(oldRanking, step.path);
+    var replacementRanking := RankingAfterSplitReplacement(step.path.Target(), oldRanking, step.request, step.newAddrs);
+    FreshSubstitutionImpliesSubdisk(step.path, replacement, step.pathAddrs);
+    SubstituteCommutesWithI(replacement, replacementRanking, step.path, step.pathAddrs);
+    //assert istep.path.Target() == ILinkedBetree(step.path.Target());
+    SplitCommutesWithI(step);
+    TargetCommutesWithI(step.path);
+    BuildTightPreservesInterpretation(step.path.Substitute(replacement, step.pathAddrs));
+    // assert PivotBetree.InternalSplit(I(v), I(v'), ILbl(lbl), IStep(step));
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
