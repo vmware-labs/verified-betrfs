@@ -35,24 +35,21 @@ module ReprJournal {
     reprIndex: map<LSN, Address>  // maps in-repr lsn's to their page addr
   )
   {
+  
     predicate IndexDomainWF() 
       requires journal.WF()
     {
-      (forall lsn :: journal.truncatedJournal.SeqStart() <= lsn < journal.truncatedJournal.SeqEnd() <==> lsn in reprIndex)
-    }
-
-    predicate IndexRangeWF()
-      requires journal.WF()
-    {
-      forall lsn | lsn in reprIndex ::
+      // reprIndex's domain is exactly the set of LSN between journal.SeqStart() and journal.SeqEnd()
+      && (forall lsn :: journal.truncatedJournal.SeqStart() <= lsn < journal.truncatedJournal.SeqEnd() <==> lsn in reprIndex)
+      // every lsn in reprIndex maps to a valid page on disk
+      && (forall lsn | lsn in reprIndex ::
         && reprIndex[lsn] in journal.truncatedJournal.diskView.entries
-        && journal.truncatedJournal.diskView.entries[reprIndex[lsn]].ContainsLSN(lsn)
+        && journal.truncatedJournal.diskView.entries[reprIndex[lsn]].ContainsLSN(lsn))
     }
 
     predicate WF() {
       && journal.WF()
       && IndexDomainWF()
-      && IndexRangeWF()
       && journal.truncatedJournal.SeqStart() <= journal.truncatedJournal.SeqEnd()
     }
   }
@@ -101,7 +98,9 @@ module ReprJournal {
   }
 
   // Update reprIndex with by discarding lsn's strictly smaller than bdy
-  function reprIndexDiscardUpTo(reprIndex: map<LSN, Address>, bdy: LSN) : map<LSN, Address>
+  function {:opaque} reprIndexDiscardUpTo(reprIndex: map<LSN, Address>, bdy: LSN) : (out: map<LSN, Address>)
+    ensures IsSubMap(out, reprIndex)
+    ensures forall k | k in out :: bdy <= k
   {
     map x: LSN | x in reprIndex && bdy <= x :: reprIndex[x]
   }
@@ -130,14 +129,21 @@ module ReprJournal {
   }
 
   // Update reprIndex with additional lsn's from a new record
-  function reprIndexAppendRecord(reprIndex: map<LSN, Address>, msgs: MsgHistory, addr: Address) : map<LSN, Address>
+  function reprIndexAppendRecord(reprIndex: map<LSN, Address>, msgs: MsgHistory, addr: Address) : (out: map<LSN, Address>)
+    requires msgs.WF()
+    requires msgs.seqStart < msgs.seqEnd
+    requires forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in reprIndex;
+    ensures out.Values == reprIndex.Values + {addr}
   {
+    // msgs is complete map from seqStart to seqEnd 
     var update :=  map x: LSN | msgs.seqStart <= x < msgs.seqEnd :: addr;
+    assert msgs.seqStart in update;  // witness
     MapUnion(reprIndex, update)
   }
 
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
   {
+    && v.WF()
     && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl, cut)
     && lbl.addr !in v.reprIndex.Values  // Fresh!
     && v' == v.(
@@ -146,7 +152,7 @@ module ReprJournal {
     )
   }
 
-  function BuildReprIndex(dv: DiskView, root: Pointer) : map<LSN, Address> 
+  function BuildReprIndexDefn(dv: DiskView, root: Pointer) : map<LSN, Address> 
     requires dv.Decodable(root)
     requires dv.Acyclic()
     decreases dv.TheRankOf(root)
@@ -155,7 +161,15 @@ module ReprJournal {
     else 
       var currMsgs := dv.entries[root.value].messageSeq;
       var update :=  map x: LSN | currMsgs.seqStart <= x < currMsgs.seqEnd :: root.value;
-      MapUnion(BuildReprIndex(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), update)
+      MapUnion(BuildReprIndexDefn(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), update)
+  }
+
+  function BuildReprIndex(tj: TruncatedJournal) : map<LSN, Address> 
+    requires tj.WF()
+    requires tj.diskView.Decodable(tj.freshestRec)
+    requires tj.diskView.Acyclic()
+  {
+   BuildReprIndexDefn(tj.diskView, tj.freshestRec)
   }
 
   predicate Init(v: Variables, tj: TruncatedJournal)
@@ -164,7 +178,7 @@ module ReprJournal {
     && v == 
         Variables(
           LinkedJournal.Variables(tj, EmptyHistoryAt(tj.SeqEnd())),
-          BuildReprIndex(tj.diskView, tj.freshestRec)
+          BuildReprIndex(tj)
       )
   }
 

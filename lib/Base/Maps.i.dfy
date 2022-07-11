@@ -161,6 +161,7 @@ module Maps {
 		ensures forall k :: k in mapa.Keys -mapb.Keys ==> mapa[k] == mapc[k];
 		ensures forall k :: k in mapb.Keys - mapa.Keys ==> mapb[k] == mapc[k];
 		ensures forall k :: k in mapa.Keys * mapb.Keys ==>	mapb[k] == mapc[k] || mapa[k] == mapc[k];
+    ensures mapa.Keys !! mapb.Keys ==> mapc.Values == mapa.Values + mapb.Values
 	{
 		MapUnionPreferA(mapa, mapb)
 	}
@@ -247,4 +248,10 @@ module Maps {
     var u := MapDisjointUnion(a, b);
     assert |u.Keys| == |a.Keys| + |b.Keys|;
   }
+
+  lemma MapRange<A,B>(m: map<A, B>, v: B) 
+    requires 0 < |m|
+    requires forall x | x in m :: m[x] == v
+    ensures m.Values == {v}
+  {}
 }

@@ -294,11 +294,12 @@ module LinkedJournal {
       TruncatedJournal(freshestRec, diskView.BuildTight(freshestRec))
     }
 
-    predicate RepresentationIsTight(repr: set<Address>) 
-      requires WF()
+    function Representation() : (out: set<Address>)
+      requires diskView.Decodable(freshestRec)
       requires diskView.Acyclic()
+      ensures forall addr | addr in out :: addr in diskView.entries;
     {
-      forall addr :: addr in repr <==> addr in diskView.Representation(freshestRec)
+      diskView.Representation(freshestRec)
     }
   }
 
