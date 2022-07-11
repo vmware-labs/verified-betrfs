@@ -95,6 +95,25 @@ module ReprJournalRefinement {
     BuildReprIndexGivesRepresentationHelper(tj.diskView, tj.freshestRec);
   }
 
+  // Building repr index from the same pointer produces the same result on subdisks
+  lemma SubDiskReprIndex(small: DiskView, big: DiskView, ptr: Pointer)
+    requires big.WF()
+    requires big.Acyclic()
+    requires small.WF()
+    requires small.IsSubDisk(big)
+    requires small.boundaryLSN == big.boundaryLSN
+    requires small.IsNondanglingPointer(ptr)
+    ensures small.Acyclic()
+    ensures BuildReprIndexDefn(small, ptr) == BuildReprIndexDefn(big, ptr)
+    decreases if ptr.Some? then big.TheRanking()[ptr.value] else -1
+  {
+    assert small.PointersRespectRank(big.TheRanking());
+    if ptr.Some? {
+      var jr := big.entries[ptr.value];
+      SubDiskReprIndex(small, big, jr.CroppedPrior(big.boundaryLSN));
+    }
+  }
+
   lemma InvNextInternalJournalMarshalStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires v'.WF()
@@ -103,16 +122,10 @@ module ReprJournalRefinement {
     requires v'.journal.truncatedJournal.diskView.Acyclic()
     ensures v'.reprIndex == BuildReprIndex(v'.journal.truncatedJournal)
   {
-    var msgs := v.journal.unmarshalledTail.DiscardRecent(step.cut);
-    assert forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in v.reprIndex;
-    assert lbl.addr !in v.reprIndex.Values;
-    assert v'.reprIndex.Values == v.reprIndex.Values + {lbl.addr};
-
-    // todo
-    // assert v'.journal.truncatedJournal.Representation() == v.journal.truncatedJournal.Representation() + {lbl.addr};
-    assert v'.reprIndex == BuildReprIndex(v'.journal.truncatedJournal);
+    var tj := v.journal.truncatedJournal;
+    var tj' := v'.journal.truncatedJournal;
+    SubDiskReprIndex(tj.diskView, tj'.diskView, tj.freshestRec);
   }
-
 
 
 
