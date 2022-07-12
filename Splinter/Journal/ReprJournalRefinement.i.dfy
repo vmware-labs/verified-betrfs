@@ -79,14 +79,14 @@ module ReprJournalRefinement {
     var tj' := v'.journal.truncatedJournal;
     var oldBdy := tj.diskView.boundaryLSN;
     var newBdy := lbl.startLsn;
-
     DiscardOldStepPreservesWFDiskView(v, v', lbl, step);
     
-  
-    
-    assume v'.journal.truncatedJournal.diskView.IsNondanglingPointer(v'.journal.truncatedJournal.freshestRec);
-    assume v'.IndexDomainWF();  // todo
-    assert v'.WF();
+    // prove tj'.diskView.IsNondanglingPointer(tj'.freshestRec);
+    if tj'.freshestRec.Some? {
+      var msgs := tj.diskView.entries[tj.freshestRec.value].messageSeq;
+      var lsn := Mathematics.max(newBdy, msgs.seqStart); // witness
+      assert lsn in v.reprIndex && v.reprIndex[lsn] == tj.freshestRec.value;
+    }
   }
 
   lemma DiscardOldStepPreservesWFDiskView(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -126,7 +126,6 @@ module ReprJournalRefinement {
       RepresentationSubset(x, dv.entries[y].CroppedPrior(dv.boundaryLSN).value, dv);
     }
   }
-
 
   lemma BuildReprIndexGivesRepresentationHelper(dv: DiskView, root: Pointer) 
     requires dv.Decodable(root)
