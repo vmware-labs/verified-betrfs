@@ -52,10 +52,11 @@ module ReprJournalRefinement {
         assert Inv(v');
       }
       case DiscardOldStep() => {
-        // TODO
-        assume false;
-        // assume LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
-        // LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
+        DiscardOldStepPreservesWF(v, v', lbl, step);
+
+        assume v'.journal.truncatedJournal.diskView.Acyclic();  // todo
+        assume v'.reprIndex == BuildReprIndex(v'.journal.truncatedJournal);  // todo
+        BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
         assert Inv(v');
       }
       case InternalJournalMarshalStep(cut) => {
@@ -67,6 +68,65 @@ module ReprJournalRefinement {
       }
     }
   }
+
+  lemma DiscardOldStepPreservesWF(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires step.DiscardOldStep?
+    requires NextStep(v, v', lbl, step)
+    ensures v'.WF()
+  {
+    var tj := v.journal.truncatedJournal;
+    var tj' := v'.journal.truncatedJournal;
+    var oldBdy := tj.diskView.boundaryLSN;
+    var newBdy := lbl.startLsn;
+
+    DiscardOldStepPreservesWFDiskView(v, v', lbl, step);
+    
+  
+    
+    assume v'.journal.truncatedJournal.diskView.IsNondanglingPointer(v'.journal.truncatedJournal.freshestRec);
+    assume v'.IndexDomainWF();  // todo
+    assert v'.WF();
+  }
+
+  lemma DiscardOldStepPreservesWFDiskView(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires step.DiscardOldStep?
+    requires NextStep(v, v', lbl, step)
+    ensures v'.journal.truncatedJournal.diskView.WF();
+  {
+    var tj := v.journal.truncatedJournal;
+    var tj' := v'.journal.truncatedJournal;
+    var newBdy := lbl.startLsn;
+    forall addr | addr in tj'.diskView.entries
+    ensures tj'.diskView.IsNondanglingPointer(tj'.diskView.entries[addr].CroppedPrior(newBdy))
+    {
+      var currBlock := tj'.diskView.entries[addr];
+      if currBlock.CroppedPrior(newBdy).Some? {
+        var prevAddr := currBlock.CroppedPrior(newBdy).value;
+        assert prevAddr in tj.Representation() by 
+        {
+          RepresentationSubset(addr, tj.freshestRec.value, tj.diskView);
+        }
+        // witness
+        var x :| x in v.reprIndex && newBdy <= x && v.reprIndex[x] == prevAddr;
+      }
+    }
+  }
+
+  lemma RepresentationSubset(x: Address, y: Address, dv: DiskView)
+    requires dv.Decodable(Pointer.Some(x))
+    requires dv.Decodable(Pointer.Some(y))
+    requires dv.Acyclic()
+    requires x in dv.Representation(Pointer.Some(y))
+    ensures dv.Representation(Pointer.Some(x)) <= dv.Representation(Pointer.Some(y))
+    decreases dv.TheRankOf(Pointer.Some(y))
+  {
+    if x != y {
+      RepresentationSubset(x, dv.entries[y].CroppedPrior(dv.boundaryLSN).value, dv);
+    }
+  }
+
 
   lemma BuildReprIndexGivesRepresentationHelper(dv: DiskView, root: Pointer) 
     requires dv.Decodable(root)

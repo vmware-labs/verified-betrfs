@@ -12,6 +12,7 @@ module ReprJournal {
   import opened Maps
   import GenericDisk
   import LinkedJournal
+  import Mathematics
 
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
@@ -47,9 +48,23 @@ module ReprJournal {
         && journal.truncatedJournal.diskView.entries[reprIndex[lsn]].ContainsLSN(lsn))
     }
 
+    predicate IndexRangeWF()
+      requires journal.WF()
+      requires IndexDomainWF()
+    {
+      forall addr | addr in reprIndex.Values ::
+        && var msgs := journal.truncatedJournal.diskView.entries[addr].messageSeq;
+        && var boundaryLSN := journal.truncatedJournal.diskView.boundaryLSN;
+        && (forall lsn | Mathematics.max(boundaryLSN, msgs.seqStart) <= lsn < msgs.seqEnd :: 
+              && lsn in reprIndex
+              && reprIndex[lsn] == addr
+        )
+    }
+
     predicate WF() {
       && journal.WF()
       && IndexDomainWF()
+      && IndexRangeWF()
       && journal.truncatedJournal.SeqStart() <= journal.truncatedJournal.SeqEnd()
     }
   }
@@ -90,7 +105,7 @@ module ReprJournal {
     requires tj.WF()
     requires tj.diskView.boundaryLSN <= newBdy
   {
-    var newEntries := MapRestrict(tj.diskView.entries, keep);
+    var newEntries := MapRestrict(tj.diskView.entries, keep); 
     var newDiskView := LinkedJournal.DiskView(newBdy, newEntries);
     if tj.SeqEnd() == newBdy
     then LinkedJournal.TruncatedJournal(None, newDiskView)
@@ -101,6 +116,7 @@ module ReprJournal {
   function {:opaque} reprIndexDiscardUpTo(reprIndex: map<LSN, Address>, bdy: LSN) : (out: map<LSN, Address>)
     ensures IsSubMap(out, reprIndex)
     ensures forall k | k in out :: bdy <= k
+    ensures forall k | k in reprIndex &&  bdy <= k :: k in out
   {
     map x: LSN | x in reprIndex && bdy <= x :: reprIndex[x]
   }
