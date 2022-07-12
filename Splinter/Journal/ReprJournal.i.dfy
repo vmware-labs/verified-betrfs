@@ -41,11 +41,11 @@ module ReprJournal {
       requires journal.WF()
     {
       // reprIndex's domain is exactly the set of LSN between journal.SeqStart() and journal.SeqEnd()
-      && (forall lsn :: journal.truncatedJournal.SeqStart() <= lsn < journal.truncatedJournal.SeqEnd() <==> lsn in reprIndex)
-      // every lsn in reprIndex maps to a valid page on disk
+      && (forall lsn :: lsn in reprIndex <==> journal.truncatedJournal.SeqStart() <= lsn < journal.truncatedJournal.SeqEnd())
+      // every lsn in reprIndex maps to a page on disk
       && (forall lsn | lsn in reprIndex ::
-        && reprIndex[lsn] in journal.truncatedJournal.diskView.entries
-        && journal.truncatedJournal.diskView.entries[reprIndex[lsn]].ContainsLSN(lsn))
+            reprIndex[lsn] in journal.truncatedJournal.diskView.entries)
+        // && journal.truncatedJournal.diskView.entries[reprIndex[lsn]].ContainsLSN(lsn))
     }
 
     predicate IndexRangeWF()
@@ -171,12 +171,13 @@ module ReprJournal {
   function BuildReprIndexDefn(dv: DiskView, root: Pointer) : map<LSN, Address> 
     requires dv.Decodable(root)
     requires dv.Acyclic()
+    requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
     decreases dv.TheRankOf(root)
   {
     if root.None? then map[]
     else 
       var currMsgs := dv.entries[root.value].messageSeq;
-      var update :=  map x: LSN | currMsgs.seqStart <= x < currMsgs.seqEnd :: root.value;
+      var update :=  map x: LSN | Mathematics.max(dv.boundaryLSN, currMsgs.seqStart) <= x < currMsgs.seqEnd :: root.value;
       MapUnion(BuildReprIndexDefn(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), update)
   }
 

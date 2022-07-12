@@ -23,6 +23,66 @@ module ReprJournalRefinement {
     // I think this is what we need ultimately, but we may need intermediate invariants to prove this.
     && v.reprIndex.Values == tj.Representation()
   }
+  
+  lemma InvInit(v: Variables, tj: TruncatedJournal)
+    requires Init(v, tj)
+    ensures Inv(v)
+  {
+    BuildReprIndexDomainWF1(tj.diskView, tj.freshestRec, tj.SeqEnd());
+    BuildReprIndexDomainWF2(tj.diskView, tj.freshestRec, tj.SeqEnd());
+    BuildReprIndexRangeWF(tj);
+    BuildReprIndexGivesRepresentation(v.journal.truncatedJournal);
+  }
+
+  lemma BuildReprIndexDomainWF1(dv: DiskView, root: Pointer, tjEnd: LSN)
+    requires dv.Decodable(root)
+    requires dv.Acyclic()
+    requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
+    requires root.Some? ==> dv.entries[root.value].messageSeq.seqEnd <= tjEnd
+    ensures forall lsn :: lsn in BuildReprIndexDefn(dv, root) ==> dv.boundaryLSN <= lsn < tjEnd
+    ensures forall lsn | lsn in BuildReprIndexDefn(dv, root) :: BuildReprIndexDefn(dv, root)[lsn] in dv.entries
+    decreases dv.TheRankOf(root)
+  {
+    if root.Some? {
+      BuildReprIndexDomainWF1(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN), tjEnd);
+    }
+  }
+
+  lemma BuildReprIndexDomainWF2(dv: DiskView, root: Pointer, tjEnd: LSN)
+    requires dv.Decodable(root)
+    requires dv.Acyclic()
+    requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
+    requires root.Some? ==> dv.entries[root.value].messageSeq.seqEnd == tjEnd
+    requires root.None? ==> tjEnd <= dv.boundaryLSN
+    ensures forall lsn :: dv.boundaryLSN <= lsn < tjEnd ==> lsn in BuildReprIndexDefn(dv, root)
+    decreases dv.TheRankOf(root)
+  {
+    if root.Some? {
+      var prior := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
+      if prior.None? {
+        BuildReprIndexDomainWF2(dv, prior, dv.boundaryLSN);
+      } else {
+        BuildReprIndexDomainWF2(dv, prior, dv.entries[prior.value].messageSeq.seqEnd);
+      }
+    }
+  }
+
+  lemma BuildReprIndexRangeWF(tj: TruncatedJournal)
+    requires tj.WF()
+    requires tj.diskView.Acyclic()
+    requires forall lsn :: lsn in BuildReprIndex(tj) <==> tj.diskView.boundaryLSN <= lsn < tj.SeqEnd()
+    requires forall lsn | lsn in BuildReprIndex(tj) :: BuildReprIndex(tj)[lsn] in tj.diskView.entries
+    ensures forall addr | addr in BuildReprIndex(tj).Values ::
+        && var msgs := tj.diskView.entries[addr].messageSeq;
+        && var boundaryLSN := tj.diskView.boundaryLSN;
+        && (forall lsn | Mathematics.max(boundaryLSN, msgs.seqStart) <= lsn < msgs.seqEnd :: 
+              && lsn in BuildReprIndex(tj)
+              && BuildReprIndex(tj)[lsn] == addr
+        )
+  {
+    assume false;  // TODO
+  }
+
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
@@ -30,42 +90,21 @@ module ReprJournalRefinement {
     ensures Inv(v')
   {
     var step: Step :| NextStep(v, v', lbl, step);
-    match step {
-      case ReadForRecoveryStep(depth) => {
-        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
-        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
-        assert Inv(v');
-      }
-      case FreezeForCommitStep(depth) => {
-        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
-        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
-        assert Inv(v');
-      } 
-      case ObserveFreshJournalStep() => {
-        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
-        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
-        assert Inv(v');
-      } 
-      case PutStep() => {
-        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
-        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
-        assert Inv(v');
-      }
-      case DiscardOldStep() => {
-        DiscardOldStepPreservesWF(v, v', lbl, step);
-
-        assume v'.journal.truncatedJournal.diskView.Acyclic();  // todo
-        assume v'.reprIndex == BuildReprIndex(v'.journal.truncatedJournal);  // todo
-        BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
-        assert Inv(v');
-      }
-      case InternalJournalMarshalStep(cut) => {
-        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
-        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
-        InvNextInternalJournalMarshalStep(v, v', lbl, step);
-        BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
-        assert Inv(v');
-      }
+    if step.DiscardOldStep? {
+      DiscardOldStepPreservesWF(v, v', lbl, step);
+      var ranking := v.journal.truncatedJournal.diskView.TheRanking();  // witness to acyclicity
+      assert v'.journal.truncatedJournal.diskView.PointersRespectRank(ranking);
+      DiscardOldMaintainsReprIndex(v, v', lbl, step);
+      BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
+    } else if step.InternalJournalMarshalStep? {
+      assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
+      LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
+      InvNextInternalJournalMarshalStep(v, v', lbl, step);
+      BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
+    }
+    else {
+      assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
+      LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
     }
   }
 
@@ -127,21 +166,36 @@ module ReprJournalRefinement {
     }
   }
 
+  lemma DiscardOldMaintainsReprIndex(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires v'.WF()
+    requires step.DiscardOldStep?
+    requires NextStep(v, v', lbl, step)
+    requires v'.journal.truncatedJournal.diskView.Acyclic()
+    ensures v'.reprIndex == BuildReprIndex(v'.journal.truncatedJournal);
+  {
+    assume false;
+    // var index := v.reprIndex;
+    // assert index == BuildReprIndex(v.journal.truncatedJournal);
+    
+    // assert IsSubMap(BuildReprIndex(v'.journal.truncatedJournal), index);
+
+  }
+
   lemma BuildReprIndexGivesRepresentationHelper(dv: DiskView, root: Pointer) 
     requires dv.Decodable(root)
     requires dv.Acyclic()
+    requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
     decreases dv.TheRankOf(root)
     ensures forall lsn | lsn in BuildReprIndexDefn(dv, root) 
       :: lsn < dv.entries[root.value].messageSeq.seqEnd
     ensures BuildReprIndexDefn(dv, root).Values == dv.Representation(root)
   {
-    if root.None? {
-      assert BuildReprIndexDefn(dv, root).Values == dv.Representation(root);
-    } else {
+    if root.Some? {
       BuildReprIndexGivesRepresentationHelper(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN));
       var currMsgs := dv.entries[root.value].messageSeq;
-      var update :=  map x: LSN | currMsgs.seqStart <= x < currMsgs.seqEnd :: root.value;
-      assert currMsgs.seqStart in update;  // witness for 0 < |update|
+      var update :=  map x: LSN | Mathematics.max(dv.boundaryLSN, currMsgs.seqStart) <= x < currMsgs.seqEnd :: root.value;
+      assert Mathematics.max(dv.boundaryLSN, currMsgs.seqStart) in update;  // witness for 0 < |update|
     }
   }
 
@@ -163,6 +217,7 @@ module ReprJournalRefinement {
     requires small.boundaryLSN == big.boundaryLSN
     requires small.IsNondanglingPointer(ptr)
     ensures small.Acyclic()
+    requires ptr.Some? ==> small.boundaryLSN < small.entries[ptr.value].messageSeq.seqEnd
     ensures BuildReprIndexDefn(small, ptr) == BuildReprIndexDefn(big, ptr)
     decreases if ptr.Some? then big.TheRanking()[ptr.value] else -1
   {
