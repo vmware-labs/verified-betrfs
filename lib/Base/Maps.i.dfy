@@ -162,7 +162,9 @@ module Maps {
 		ensures forall k :: k in mapb.Keys - mapa.Keys ==> mapb[k] == mapc[k];
 		ensures forall k :: k in mapa.Keys * mapb.Keys ==>	mapb[k] == mapc[k] || mapa[k] == mapc[k];
     ensures mapa.Keys !! mapb.Keys ==> mapc.Values == mapa.Values + mapb.Values
-	{
+    ensures mapa.Keys !! mapb.Keys ==> IsSubMap(mapa, mapc)
+    ensures mapa.Keys !! mapb.Keys ==> IsSubMap(mapb, mapc)
+  {
 		MapUnionPreferA(mapa, mapb)
 	}
 

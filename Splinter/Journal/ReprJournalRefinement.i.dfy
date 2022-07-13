@@ -30,7 +30,7 @@ module ReprJournalRefinement {
   {
     BuildReprIndexDomainWF1(tj.diskView, tj.freshestRec, tj.SeqEnd());
     BuildReprIndexDomainWF2(tj.diskView, tj.freshestRec, tj.SeqEnd());
-    BuildReprIndexRangeWF(tj);
+    BuildReprIndexRangeWF(tj.diskView, tj.freshestRec, tj.SeqEnd());
     BuildReprIndexGivesRepresentation(v.journal.truncatedJournal);
   }
 
@@ -67,22 +67,62 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma BuildReprIndexRangeWF(tj: TruncatedJournal)
-    requires tj.WF()
-    requires tj.diskView.Acyclic()
-    requires forall lsn :: lsn in BuildReprIndex(tj) <==> tj.diskView.boundaryLSN <= lsn < tj.SeqEnd()
-    requires forall lsn | lsn in BuildReprIndex(tj) :: BuildReprIndex(tj)[lsn] in tj.diskView.entries
-    ensures forall addr | addr in BuildReprIndex(tj).Values ::
-        && var msgs := tj.diskView.entries[addr].messageSeq;
-        && var boundaryLSN := tj.diskView.boundaryLSN;
-        && (forall lsn | Mathematics.max(boundaryLSN, msgs.seqStart) <= lsn < msgs.seqEnd :: 
-              && lsn in BuildReprIndex(tj)
-              && BuildReprIndex(tj)[lsn] == addr
+  lemma BuildReprIndexRangeWF(dv: DiskView, root: Pointer, tjEnd: LSN)
+    requires dv.Decodable(root)
+    requires dv.Acyclic()
+    requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
+    requires root.Some? ==> dv.entries[root.value].messageSeq.seqEnd == tjEnd
+    requires root.None? ==> tjEnd <= dv.boundaryLSN
+    requires forall lsn :: lsn in BuildReprIndexDefn(dv, root) <==> dv.boundaryLSN <= lsn < tjEnd
+    requires forall lsn | lsn in BuildReprIndexDefn(dv, root) :: BuildReprIndexDefn(dv, root)[lsn] in dv.entries
+    ensures forall addr | addr in BuildReprIndexDefn(dv, root).Values ::
+        && var msgs := dv.entries[addr].messageSeq;
+        && (forall lsn | Mathematics.max(dv.boundaryLSN, msgs.seqStart) <= lsn < msgs.seqEnd :: 
+              && lsn in BuildReprIndexDefn(dv, root)
+              && BuildReprIndexDefn(dv, root)[lsn] == addr
         )
+    decreases dv.TheRankOf(root)
   {
-    assume false;  // TODO
+    if root.Some? {
+      var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
+      BuildReprIndexOneStepSubmap(dv, root);
+      if priorPtr.None? {
+        BuildReprIndexRangeWF(dv, priorPtr, dv.boundaryLSN);
+      } else {
+        BuildReprIndexDomainWF1(dv, priorPtr, dv.entries[priorPtr.value].messageSeq.seqEnd);
+        BuildReprIndexRangeWF(dv, priorPtr, dv.entries[priorPtr.value].messageSeq.seqEnd);
+      }
+    }
   }
 
+  // BuildReprIndex keys is upper-bounded by the seqEnd of the latest block
+  lemma BuildReprIndexUpperBoundLSN(dv: DiskView, root: Pointer) 
+    requires dv.Decodable(root)
+    requires dv.Acyclic()
+    requires root.Some?
+    requires dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
+    ensures forall lsn | lsn in BuildReprIndexDefn(dv, root) :: lsn < dv.entries[root.value].messageSeq.seqEnd
+    decreases dv.TheRankOf(root)
+  {
+    var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
+    if priorPtr.Some? {
+      BuildReprIndexUpperBoundLSN(dv, priorPtr);
+    }
+  }
+
+  // Building from the prior rec gives a submap
+  lemma BuildReprIndexOneStepSubmap(dv: DiskView, root: Pointer)
+    requires dv.Decodable(root)
+    requires dv.Acyclic()
+    requires root.Some?
+    requires dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
+    ensures IsSubMap(BuildReprIndexDefn(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), BuildReprIndexDefn(dv, root))
+  {
+    var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
+    if priorPtr.Some? {
+      BuildReprIndexUpperBoundLSN(dv, priorPtr);
+    }
+  }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
