@@ -256,4 +256,10 @@ module Maps {
     requires forall x | x in m :: m[x] == v
     ensures m.Values == {v}
   {}
+
+  lemma MapEquality<A,B>(m1: map<A, B>, m2: map<A, B>)
+    requires IsSubMap(m1, m2)
+    requires IsSubMap(m2, m1)
+    ensures m2 == m1
+  {}
 }

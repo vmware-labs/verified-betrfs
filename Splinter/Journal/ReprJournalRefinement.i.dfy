@@ -34,6 +34,8 @@ module ReprJournalRefinement {
     BuildReprIndexGivesRepresentation(v.journal.truncatedJournal);
   }
 
+  // BuildReprIndex has domain that is a subset of [dv.boundaryLsn, tjEnd)
+  // and every value is an entry in the disk
   lemma BuildReprIndexDomainWF1(dv: DiskView, root: Pointer, tjEnd: LSN)
     requires dv.Decodable(root)
     requires dv.Acyclic()
@@ -95,21 +97,6 @@ module ReprJournalRefinement {
     }
   }
 
-  // BuildReprIndex keys is upper-bounded by the seqEnd of the latest block
-  lemma BuildReprIndexUpperBoundLSN(dv: DiskView, root: Pointer) 
-    requires dv.Decodable(root)
-    requires dv.Acyclic()
-    requires root.Some?
-    requires dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
-    ensures forall lsn | lsn in BuildReprIndexDefn(dv, root) :: lsn < dv.entries[root.value].messageSeq.seqEnd
-    decreases dv.TheRankOf(root)
-  {
-    var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
-    if priorPtr.Some? {
-      BuildReprIndexUpperBoundLSN(dv, priorPtr);
-    }
-  }
-
   // Building from the prior rec gives a submap
   lemma BuildReprIndexOneStepSubmap(dv: DiskView, root: Pointer)
     requires dv.Decodable(root)
@@ -120,7 +107,8 @@ module ReprJournalRefinement {
   {
     var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
     if priorPtr.Some? {
-      BuildReprIndexUpperBoundLSN(dv, priorPtr);
+      // To get the fact that BuildReprIndex keys is upper-bounded by the seqEnd of the latest block
+      BuildReprIndexDomainWF1(dv, priorPtr, dv.entries[priorPtr.value].messageSeq.seqEnd);
     }
   }
 
@@ -134,7 +122,7 @@ module ReprJournalRefinement {
       DiscardOldStepPreservesWF(v, v', lbl, step);
       var ranking := v.journal.truncatedJournal.diskView.TheRanking();  // witness to acyclicity
       assert v'.journal.truncatedJournal.diskView.PointersRespectRank(ranking);
-      DiscardOldMaintainsReprIndex(v, v', lbl, step);
+      DiscardOldMaintainsReprIndex(v, v', lbl);
       BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
     } else if step.InternalJournalMarshalStep? {
       assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
@@ -206,20 +194,54 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma DiscardOldMaintainsReprIndex(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma BuildReprIndexWithSubDiskProducesSubMap(small: DiskView, big: DiskView, root: Pointer)
+    requires small.Decodable(root)
+    requires small.Acyclic()
+    requires big.Decodable(root)
+    requires big.Acyclic()
+    requires root.Some? ==> small.boundaryLSN < small.entries[root.value].messageSeq.seqEnd
+    requires root.Some? ==> big.boundaryLSN < big.entries[root.value].messageSeq.seqEnd
+    requires small.IsSubDiskWithNewerLSN(big)
+    ensures IsSubMap(BuildReprIndexDefn(small, root), BuildReprIndexDefn(big, root))
+    decreases small.TheRankOf(root)
+  {
+    if root.Some? {
+      BuildReprIndexWithSubDiskProducesSubMap(small, big, small.entries[root.value].CroppedPrior(small.boundaryLSN));
+      var smallPrior := small.entries[root.value].CroppedPrior(small.boundaryLSN);
+      if smallPrior.Some? {
+        BuildReprIndexDomainWF1(small, smallPrior, small.entries[smallPrior.value].messageSeq.seqEnd);
+      }
+      var bigPrior := big.entries[root.value].CroppedPrior(big.boundaryLSN);
+      if bigPrior.Some? {
+        BuildReprIndexDomainWF1(big, bigPrior, big.entries[bigPrior.value].messageSeq.seqEnd);
+      }
+    }
+  }
+ 
+  lemma DiscardOldMaintainsReprIndex(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires v'.WF()
-    requires step.DiscardOldStep?
-    requires NextStep(v, v', lbl, step)
+    requires DiscardOld(v, v', lbl)
     requires v'.journal.truncatedJournal.diskView.Acyclic()
     ensures v'.reprIndex == BuildReprIndex(v'.journal.truncatedJournal);
   {
-    assume false;
-    // var index := v.reprIndex;
-    // assert index == BuildReprIndex(v.journal.truncatedJournal);
-    
-    // assert IsSubMap(BuildReprIndex(v'.journal.truncatedJournal), index);
+    var newBdy := lbl.startLsn;
+    var tj := v.journal.truncatedJournal;
+    var keepAddrs := reprIndexDiscardUpTo(v.reprIndex, newBdy).Values;
+    var newEntries := MapRestrict(tj.diskView.entries, keepAddrs); 
+    var newDiskView := LinkedJournal.DiskView(newBdy, newEntries);
 
+    if newBdy < tj.SeqEnd() {
+      assert IsSubMap(reprIndexDiscardUpTo(v.reprIndex, newBdy), BuildReprIndexDefn(newDiskView, tj.freshestRec)) 
+      by {
+        BuildReprIndexDomainWF2(newDiskView, tj.freshestRec, tj.SeqEnd());
+        BuildReprIndexWithSubDiskProducesSubMap(newDiskView, tj.diskView, tj.freshestRec);
+      }
+      assert IsSubMap(BuildReprIndexDefn(newDiskView, tj.freshestRec), reprIndexDiscardUpTo(v.reprIndex, newBdy)) 
+      by {
+        BuildReprIndexDomainWF1(newDiskView, tj.freshestRec, tj.SeqEnd());
+      }
+    }
   }
 
   lemma BuildReprIndexGivesRepresentationHelper(dv: DiskView, root: Pointer) 

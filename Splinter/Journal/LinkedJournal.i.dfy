@@ -167,7 +167,13 @@ module LinkedJournal {
 
     predicate IsSubDisk(bigger: DiskView)
     {
-      && boundaryLSN == bigger.boundaryLSN
+      && bigger.boundaryLSN == boundaryLSN 
+      && IsSubMap(entries, bigger.entries)
+    }
+
+    predicate IsSubDiskWithNewerLSN(bigger: DiskView)
+    {
+      && bigger.boundaryLSN <= boundaryLSN 
       && IsSubMap(entries, bigger.entries)
     }
 
