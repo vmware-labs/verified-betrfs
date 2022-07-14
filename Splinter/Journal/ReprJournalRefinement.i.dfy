@@ -28,15 +28,16 @@ module ReprJournalRefinement {
     requires Init(v, tj)
     ensures Inv(v)
   {
-    BuildReprIndexDomainWF1(tj.diskView, tj.freshestRec, tj.SeqEnd());
-    BuildReprIndexDomainWF2(tj.diskView, tj.freshestRec, tj.SeqEnd());
+    if tj.freshestRec.Some? {
+      BuildReprIndexDomainWF(tj.diskView, tj.freshestRec);
+    }
     BuildReprIndexRangeWF(tj.diskView, tj.freshestRec, tj.SeqEnd());
     BuildReprIndexGivesRepresentation(v.journal.truncatedJournal);
   }
 
   // BuildReprIndex has domain that is a subset of [dv.boundaryLsn, tjEnd)
   // and every value is an entry in the disk
-  lemma BuildReprIndexDomainWF1(dv: DiskView, root: Pointer, tjEnd: LSN)
+  lemma BuildReprIndexDomainWFHelper1(dv: DiskView, root: Pointer, tjEnd: LSN)
     requires dv.Decodable(root)
     requires dv.Acyclic()
     requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
@@ -46,11 +47,11 @@ module ReprJournalRefinement {
     decreases dv.TheRankOf(root)
   {
     if root.Some? {
-      BuildReprIndexDomainWF1(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN), tjEnd);
+      BuildReprIndexDomainWFHelper1(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN), tjEnd);
     }
   }
 
-  lemma BuildReprIndexDomainWF2(dv: DiskView, root: Pointer, tjEnd: LSN)
+  lemma BuildReprIndexDomainWFHelper2(dv: DiskView, root: Pointer, tjEnd: LSN)
     requires dv.Decodable(root)
     requires dv.Acyclic()
     requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
@@ -62,11 +63,24 @@ module ReprJournalRefinement {
     if root.Some? {
       var prior := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
       if prior.None? {
-        BuildReprIndexDomainWF2(dv, prior, dv.boundaryLSN);
+        BuildReprIndexDomainWFHelper2(dv, prior, dv.boundaryLSN);
       } else {
-        BuildReprIndexDomainWF2(dv, prior, dv.entries[prior.value].messageSeq.seqEnd);
+        BuildReprIndexDomainWFHelper2(dv, prior, dv.entries[prior.value].messageSeq.seqEnd);
       }
     }
+  }
+
+  // Wrapper for domain properties of BuildReprIndex
+  lemma BuildReprIndexDomainWF(dv: DiskView, root: Pointer)
+    requires dv.Decodable(root)
+    requires dv.Acyclic()
+    requires root.Some?  // otherwise BuildReprIndex is trivially empty
+    requires dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
+    ensures forall lsn :: lsn in BuildReprIndexDefn(dv, root) <==> dv.boundaryLSN <= lsn < dv.entries[root.value].messageSeq.seqEnd
+    ensures forall lsn | lsn in BuildReprIndexDefn(dv, root) :: BuildReprIndexDefn(dv, root)[lsn] in dv.entries
+  {
+    BuildReprIndexDomainWFHelper1(dv, root, dv.entries[root.value].messageSeq.seqEnd);
+    BuildReprIndexDomainWFHelper2(dv, root, dv.entries[root.value].messageSeq.seqEnd);
   }
 
   lemma BuildReprIndexRangeWF(dv: DiskView, root: Pointer, tjEnd: LSN)
@@ -91,7 +105,7 @@ module ReprJournalRefinement {
       if priorPtr.None? {
         BuildReprIndexRangeWF(dv, priorPtr, dv.boundaryLSN);
       } else {
-        BuildReprIndexDomainWF1(dv, priorPtr, dv.entries[priorPtr.value].messageSeq.seqEnd);
+        BuildReprIndexDomainWF(dv, priorPtr);
         BuildReprIndexRangeWF(dv, priorPtr, dv.entries[priorPtr.value].messageSeq.seqEnd);
       }
     }
@@ -107,8 +121,7 @@ module ReprJournalRefinement {
   {
     var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
     if priorPtr.Some? {
-      // To get the fact that BuildReprIndex keys is upper-bounded by the seqEnd of the latest block
-      BuildReprIndexDomainWF1(dv, priorPtr, dv.entries[priorPtr.value].messageSeq.seqEnd);
+      BuildReprIndexDomainWF(dv, priorPtr);
     }
   }
 
@@ -209,11 +222,11 @@ module ReprJournalRefinement {
       BuildReprIndexWithSubDiskProducesSubMap(small, big, small.entries[root.value].CroppedPrior(small.boundaryLSN));
       var smallPrior := small.entries[root.value].CroppedPrior(small.boundaryLSN);
       if smallPrior.Some? {
-        BuildReprIndexDomainWF1(small, smallPrior, small.entries[smallPrior.value].messageSeq.seqEnd);
+        BuildReprIndexDomainWF(small, smallPrior);
       }
       var bigPrior := big.entries[root.value].CroppedPrior(big.boundaryLSN);
       if bigPrior.Some? {
-        BuildReprIndexDomainWF1(big, bigPrior, big.entries[bigPrior.value].messageSeq.seqEnd);
+        BuildReprIndexDomainWF(big, bigPrior);
       }
     }
   }
@@ -234,12 +247,12 @@ module ReprJournalRefinement {
     if newBdy < tj.SeqEnd() {
       assert IsSubMap(reprIndexDiscardUpTo(v.reprIndex, newBdy), BuildReprIndexDefn(newDiskView, tj.freshestRec)) 
       by {
-        BuildReprIndexDomainWF2(newDiskView, tj.freshestRec, tj.SeqEnd());
+        BuildReprIndexDomainWF(newDiskView, tj.freshestRec);
         BuildReprIndexWithSubDiskProducesSubMap(newDiskView, tj.diskView, tj.freshestRec);
       }
       assert IsSubMap(BuildReprIndexDefn(newDiskView, tj.freshestRec), reprIndexDiscardUpTo(v.reprIndex, newBdy)) 
       by {
-        BuildReprIndexDomainWF1(newDiskView, tj.freshestRec, tj.SeqEnd());
+        BuildReprIndexDomainWF(newDiskView, tj.freshestRec);
       }
     }
   }
