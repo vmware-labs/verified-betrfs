@@ -159,7 +159,7 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
+  lemma {:timeLimitMultiplier 3} InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
     ensures Inv(v')
@@ -186,7 +186,7 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma DiscardOldStepPreservesWF(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma {:timeLimitMultiplier 2} DiscardOldStepPreservesWF(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires step.DiscardOldStep?
     requires NextStep(v, v', lbl, step)
@@ -226,7 +226,7 @@ module ReprJournalRefinement {
         var prevAddr := currBlock.CroppedPrior(newBdy).value;
         assert prevAddr in tj.Representation() by 
         {
-          RepresentationSubset(addr, tj.freshestRec.value, tj.diskView);
+          RepresentationContainment(addr, tj.freshestRec.value, tj.diskView);
         }
         // witness
         var x :| x in v.reprIndex && newBdy <= x && v.reprIndex[x] == prevAddr;
@@ -234,7 +234,7 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma RepresentationSubset(x: Address, y: Address, dv: DiskView)
+  lemma RepresentationContainment(x: Address, y: Address, dv: DiskView)
     requires dv.Decodable(Pointer.Some(x))
     requires dv.Decodable(Pointer.Some(y))
     requires dv.Acyclic()
@@ -243,7 +243,7 @@ module ReprJournalRefinement {
     decreases dv.TheRankOf(Pointer.Some(y))
   {
     if x != y {
-      RepresentationSubset(x, dv.entries[y].CroppedPrior(dv.boundaryLSN).value, dv);
+      RepresentationContainment(x, dv.entries[y].CroppedPrior(dv.boundaryLSN).value, dv);
     }
   }
 
@@ -390,7 +390,7 @@ module ReprJournalRefinement {
     requires tj.diskView.Acyclic()
     ensures forall addr | addr in tj.Representation() ::
       && var block := tj.diskView.entries[addr];
-      && block.messageSeq.seqEnd <= tj.diskView.boundaryLSN
+      && tj.diskView.boundaryLSN < block.messageSeq.seqEnd
   {
     assume false;
   }
@@ -420,27 +420,17 @@ module ReprJournalRefinement {
     assume false;
   }
 
-  lemma BuildTightEquivalentToGarbageCollect(tj: TruncatedJournal, reprIndex: map<LSN, Address>, newBdy: LSN)
+  lemma DiscardedIndexContainsDiscardedRepresentation(tj: TruncatedJournal, reprIndex: map<LSN, Address>, newBdy: LSN)
     requires tj.WF()
     requires tj.diskView.Acyclic()
     requires tj.CanDiscardTo(newBdy)
     requires tj.DiskIsTightWrtRepresentation()
+    requires tj.DiscardOld(newBdy).diskView.Acyclic()
     requires tj.freshestRec.Some? ==> newBdy < tj.diskView.entries[tj.freshestRec.value].messageSeq.seqEnd
     requires reprIndex == BuildReprIndex(tj)
-    requires (forall lsn :: tj.SeqStart() <= lsn < tj.SeqEnd() <==> lsn in reprIndex)
-    requires (forall lsn | lsn in reprIndex ::
-        && reprIndex[lsn] in tj.diskView.entries
-    )
-    requires IndexRangeWF(reprIndex, tj)
-    ensures MapRestrict(tj.diskView.entries, reprIndexDiscardUpTo(reprIndex, newBdy).Values)
-      == tj.diskView.DiscardOld(newBdy).BuildTight(tj.freshestRec).entries
+    ensures forall x | x in reprIndexDiscardUpTo(reprIndex, newBdy).Values 
+      :: x in tj.DiscardOld(newBdy).Representation()
   {
-    // to get the fact that DiscardOld maintains acyclicity
-    LinkedJournalRefinement.DiscardOldCommutes(tj.diskView, tj.freshestRec, newBdy);
-    LinkedJournalRefinement.BuildTightIsAwesome(tj.diskView.DiscardOld(newBdy), tj.freshestRec);
-    BuildTightGivesRepresentation(tj.diskView.DiscardOld(newBdy), tj.freshestRec);
-    assert tj.DiscardOld(newBdy).diskView.Representation(tj.freshestRec) == tj.DiscardOld(newBdy).Representation();
-
     forall addr | addr in reprIndexDiscardUpTo(reprIndex, newBdy).Values 
     ensures addr in tj.DiscardOld(newBdy).Representation()
     {
@@ -450,22 +440,71 @@ module ReprJournalRefinement {
         assert false;
       }
     }
+  }
 
-    forall addr | addr in tj.diskView.DiscardOld(newBdy).Representation(tj.freshestRec)
+  lemma DiscardedRepresentationContainsDiscardedIndex(tj: TruncatedJournal, reprIndex: map<LSN, Address>, newBdy: LSN)
+    requires tj.WF()
+    requires tj.diskView.Acyclic()
+    requires tj.CanDiscardTo(newBdy)
+    requires tj.DiskIsTightWrtRepresentation()
+    requires tj.DiscardOld(newBdy).diskView.Acyclic()
+    requires tj.freshestRec.Some? ==> newBdy < tj.diskView.entries[tj.freshestRec.value].messageSeq.seqEnd
+    requires reprIndex == BuildReprIndex(tj)
+    requires IndexDomainWF(reprIndex, tj)
+    requires IndexRangeWF(reprIndex, tj)
+    ensures forall x | x in tj.DiscardOld(newBdy).Representation()
+        :: x in reprIndexDiscardUpTo(reprIndex, newBdy).Values 
+  {
+    forall addr | addr in tj.DiscardOld(newBdy).Representation()
     ensures addr in reprIndexDiscardUpTo(reprIndex, newBdy).Values 
     {
-      /*
-        suppose addr !in reprIndexDiscardUpTo(reprIndex, newBdy).Values.
-        But addr is in reprIndex. 
-        This means addr is bound to lsn <= newBdy in reprIndex.
-        Addr also not bound to any lsn > newBdy, else it will be in the set post discard.
-        By indexRangeWF(), addrBlock.seqEnd <= newBdy. 
-        Hence, addr cannot be in repr
-      */
-      assume false;
+      if addr !in reprIndexDiscardUpTo(reprIndex, newBdy).Values {
+        if addr in reprIndex.Values {
+          forall lsn | lsn in reprIndex && reprIndex[lsn] == addr 
+          ensures lsn < newBdy {
+            if newBdy <= lsn {
+              assert reprIndexDiscardUpTo(reprIndex, newBdy)[lsn] == addr;
+            }
+          }
+          var block := tj.diskView.entries[addr];
+          assert block.messageSeq.seqEnd <= newBdy by {
+            if newBdy < block.messageSeq.seqEnd {
+              var x := Mathematics.max(newBdy, block.messageSeq.seqStart);
+              assert IndexRangeWF(reprIndexDiscardUpTo(reprIndex, newBdy), tj.DiscardOld(newBdy));
+              assert x in reprIndex && reprIndex[x] == addr && newBdy <= x;
+              assert false;
+            }
+          }
+          RepresentationLSNBound(tj.DiscardOld(newBdy));
+          assert false;
+        } else {
+          BuildReprIndexGivesRepresentation(tj);
+          assert false;
+        }
+      }
     }
+  }
 
-    assert reprIndexDiscardUpTo(reprIndex, newBdy).Values == tj.diskView.DiscardOld(newBdy).Representation(tj.freshestRec);
+  lemma BuildTightEquivalentToGarbageCollect(tj: TruncatedJournal, reprIndex: map<LSN, Address>, newBdy: LSN)
+    requires tj.WF()
+    requires tj.diskView.Acyclic()
+    requires tj.CanDiscardTo(newBdy)
+    requires tj.DiskIsTightWrtRepresentation()
+    requires tj.freshestRec.Some? ==> newBdy < tj.diskView.entries[tj.freshestRec.value].messageSeq.seqEnd
+    requires reprIndex == BuildReprIndex(tj)
+    requires IndexDomainWF(reprIndex, tj)
+    requires IndexRangeWF(reprIndex, tj)
+    ensures MapRestrict(tj.diskView.entries, reprIndexDiscardUpTo(reprIndex, newBdy).Values)
+      == tj.diskView.DiscardOld(newBdy).BuildTight(tj.freshestRec).entries
+  {
+    // to get the fact that DiscardOld maintains acyclicity
+    LinkedJournalRefinement.DiscardOldCommutes(tj.diskView, tj.freshestRec, newBdy);
+    
+    LinkedJournalRefinement.BuildTightIsAwesome(tj.diskView.DiscardOld(newBdy), tj.freshestRec);
+    BuildTightGivesRepresentation(tj.diskView.DiscardOld(newBdy), tj.freshestRec);
+    assert tj.DiscardOld(newBdy).diskView.Representation(tj.freshestRec) == tj.DiscardOld(newBdy).Representation();  // trigger
+    DiscardedIndexContainsDiscardedRepresentation(tj, reprIndex, newBdy);
+    DiscardedRepresentationContainsDiscardedIndex(tj, reprIndex, newBdy);
   }
 
   lemma DiscardOldStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
