@@ -25,29 +25,38 @@ module ReprJournalRefinement {
     && tj.DiskIsTightWrtRepresentation()
   }
 
-  lemma BuildReprIndexIgnoresBuildTight(tj: TruncatedJournal)
-    requires tj.WF()
-    requires tj.diskView.Acyclic()
-    ensures tj.BuildTight().WF()
-    ensures tj.BuildTight().diskView.Acyclic()
-    ensures BuildReprIndex(tj) == BuildReprIndex(tj.BuildTight())
+  lemma BuildReprIndexIgnoresBuildTight(dv: DiskView, btRoot: Pointer, reprRoot: Pointer)
+    requires dv.Decodable(btRoot)
+    requires dv.Decodable(reprRoot)
+    requires dv.Acyclic()
+    requires reprRoot.Some? ==> dv.boundaryLSN < dv.entries[reprRoot.value].messageSeq.seqEnd
+    requires dv.BuildTight(btRoot).Decodable(reprRoot)
+    ensures dv.BuildTight(btRoot).WF()
+    ensures dv.BuildTight(btRoot).Acyclic()
+    ensures reprRoot.Some? ==> dv.boundaryLSN < dv.BuildTight(btRoot).entries[reprRoot.value].messageSeq.seqEnd
+    ensures BuildReprIndexDefn(dv, reprRoot) == BuildReprIndexDefn(dv.BuildTight(btRoot), reprRoot)
+    decreases dv.TheRankOf(reprRoot)
   {
-    assume false;
+    LinkedJournalRefinement.BuildTightIsAwesome(dv, btRoot);
+    if reprRoot.Some? {
+      BuildReprIndexIgnoresBuildTight(dv, btRoot, dv.entries[reprRoot.value].CroppedPrior(dv.boundaryLSN));
+    }
   }
 
-  lemma RepresentationIgnoresBuildTight(dv: DiskView, root: Pointer)
-    requires dv.Decodable(root)
+  lemma RepresentationIgnoresBuildTight(dv: DiskView, btRoot: Pointer, reprRoot: Pointer)
+    requires dv.Decodable(btRoot)
+    requires dv.Decodable(reprRoot)
     requires dv.Acyclic()
-    ensures dv.BuildTight(root).WF()
-    ensures dv.BuildTight(root).Acyclic()
-    ensures dv.BuildTight(root).Representation(root) == dv.Representation(root)
-    decreases dv.TheRankOf(root)
+    requires dv.BuildTight(btRoot).Decodable(reprRoot)
+    ensures dv.BuildTight(btRoot).WF()
+    ensures dv.BuildTight(btRoot).Acyclic()
+    ensures dv.BuildTight(btRoot).Representation(reprRoot) == dv.Representation(reprRoot)
+    decreases dv.TheRankOf(reprRoot)
   {
-    LinkedJournalRefinement.BuildTightIsAwesome(dv, root);
-    // if root.Some? {
-    //   BuildTightGivesRepresentation(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN));
-    // }
-    assume false;
+    LinkedJournalRefinement.BuildTightIsAwesome(dv, btRoot);
+    if reprRoot.Some? {
+      RepresentationIgnoresBuildTight(dv, btRoot, dv.entries[reprRoot.value].CroppedPrior(dv.boundaryLSN));
+    }
   }
   
   lemma InvInit(v: Variables, tj: TruncatedJournal)
@@ -62,8 +71,8 @@ module ReprJournalRefinement {
     BuildReprIndexRangeWF(tightTj.diskView, tightTj.freshestRec,tightTj.SeqEnd());
     BuildReprIndexGivesRepresentation(tightTj);
     BuildTightGivesRepresentation(tj.diskView, tj.freshestRec);
-    RepresentationIgnoresBuildTight(tj.diskView, tj.freshestRec);
-    BuildReprIndexIgnoresBuildTight(tj);
+    RepresentationIgnoresBuildTight(tj.diskView, tj.freshestRec, tj.freshestRec);
+    BuildReprIndexIgnoresBuildTight(tj.diskView, tj.freshestRec, tj.freshestRec);
   }
 
   // BuildReprIndex has domain that is a subset of [dv.boundaryLsn, tjEnd)
