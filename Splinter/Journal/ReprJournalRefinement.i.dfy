@@ -498,7 +498,7 @@ module ReprJournalRefinement {
       == tj.diskView.DiscardOld(newBdy).BuildTight(tj.freshestRec).entries
   {
     // to get the fact that DiscardOld maintains acyclicity
-    LinkedJournalRefinement.DiscardOldCommutes(tj.diskView, tj.freshestRec, newBdy);
+    assert tj.diskView.DiscardOld(newBdy).PointersRespectRank(tj.diskView.TheRanking());
     
     LinkedJournalRefinement.BuildTightIsAwesome(tj.diskView.DiscardOld(newBdy), tj.freshestRec);
     BuildTightGivesRepresentation(tj.diskView.DiscardOld(newBdy), tj.freshestRec);
@@ -522,32 +522,10 @@ module ReprJournalRefinement {
     var newDiskView := LinkedJournal.DiskView(lbl.startLsn, newEntries);
 
     if v.journal.truncatedJournal.SeqEnd() == lbl.startLsn {
-      assume false;
+      assert tj.diskView.DiscardOld(lbl.startLsn).PointersRespectRank(tj.diskView.TheRanking());
     } else {
-      calc{
-        LinkedJournal.DiskView(lbl.startLsn, newEntries);
-        LinkedJournal.DiskView(lbl.startLsn, MapRestrict(tj.diskView.entries, keepAddrs));
-        LinkedJournal.DiskView(lbl.startLsn, MapRestrict(tj.diskView.entries, reprIndex'.Values));
-        {
-          calc {
-            MapRestrict(tj.diskView.entries, reprIndexDiscardUpTo(v.reprIndex, lbl.startLsn).Values);
-              { BuildTightEquivalentToGarbageCollect(tj, v.reprIndex, lbl.startLsn); }
-            tj.diskView.DiscardOld(lbl.startLsn).BuildTight(tj.freshestRec).entries;
-          }
-        }
-        tj.diskView.DiscardOld(lbl.startLsn).BuildTight(tj.freshestRec);
-      }
-      calc{    
-        DiscardOldAndGarbageCollect(tj, lbl.startLsn, keepAddrs);
-        LinkedJournal.TruncatedJournal(tj.freshestRec, newDiskView);
-        LinkedJournal.TruncatedJournal(tj.freshestRec, LinkedJournal.DiskView(lbl.startLsn, newEntries));
-        // via above calc
-        LinkedJournal.TruncatedJournal(tj.freshestRec, tj.diskView.DiscardOld(lbl.startLsn).BuildTight(tj.freshestRec));
-        LinkedJournal.TruncatedJournal(tj.freshestRec, tj.diskView.DiscardOld(lbl.startLsn)).BuildTight();
-        tj.DiscardOld(lbl.startLsn).BuildTight();
-      }
+      BuildTightEquivalentToGarbageCollect(tj, v.reprIndex, lbl.startLsn);
     }
-    assert LinkedJournal.DiscardOld(I(v), I(v'), lbl);
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
