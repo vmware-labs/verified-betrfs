@@ -391,8 +391,15 @@ module ReprJournalRefinement {
     ensures forall addr | addr in tj.Representation() ::
       && var block := tj.diskView.entries[addr];
       && tj.diskView.boundaryLSN < block.messageSeq.seqEnd
+    decreases tj.diskView.TheRankOf(tj.freshestRec)
   {
-    assume false;
+    if tj.freshestRec.Some? {
+      var subTj := TruncatedJournal.TruncatedJournal(
+        tj.diskView.entries[tj.freshestRec.value].CroppedPrior(tj.diskView.boundaryLSN),
+        tj.diskView
+      );
+      RepresentationLSNBound(subTj);
+    }
   }
 
   lemma ReprIndexLSNBoundAfterDiscard(tj: TruncatedJournal, reprIndex: map<LSN, Address>, newBdy: LSN)
