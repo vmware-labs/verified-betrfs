@@ -34,6 +34,21 @@ module ReprJournalRefinement {
   {
     assume false;
   }
+
+  lemma RepresentationIgnoresBuildTight(dv: DiskView, root: Pointer)
+    requires dv.Decodable(root)
+    requires dv.Acyclic()
+    ensures dv.BuildTight(root).WF()
+    ensures dv.BuildTight(root).Acyclic()
+    ensures dv.BuildTight(root).Representation(root) == dv.Representation(root)
+    decreases dv.TheRankOf(root)
+  {
+    LinkedJournalRefinement.BuildTightIsAwesome(dv, root);
+    // if root.Some? {
+    //   BuildTightGivesRepresentation(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN));
+    // }
+    assume false;
+  }
   
   lemma InvInit(v: Variables, tj: TruncatedJournal)
     requires Init(v, tj)
@@ -140,7 +155,9 @@ module ReprJournalRefinement {
     requires Next(v, v', lbl)
     ensures Inv(v')
   {
-    assume false;
+    // todo(tony): This lemma is flakey. If I were to add the line "assert v'.journal.truncatedJournal.DiskIsTightWrtRepresentation();",
+    // which is just part of the Inv(v') conclusion, the lemma requires a larger time limit,
+    // and could also end up inconclusive
     var step: Step :| NextStep(v, v', lbl, step);
     if step.DiscardOldStep? {
       DiscardOldStepPreservesWF(v, v', lbl, step);
@@ -358,21 +375,6 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma RepresentationIgnoresBuildTight(dv: DiskView, root: Pointer)
-    requires dv.Decodable(root)
-    requires dv.Acyclic()
-    ensures dv.BuildTight(root).WF()
-    ensures dv.BuildTight(root).Acyclic()
-    ensures dv.BuildTight(root).Representation(root) == dv.Representation(root)
-    decreases dv.TheRankOf(root)
-  {
-    LinkedJournalRefinement.BuildTightIsAwesome(dv, root);
-    // if root.Some? {
-    //   BuildTightGivesRepresentation(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN));
-    // }
-    assume false;
-  }
-
 
   lemma RepresentationLSNBound(tj: TruncatedJournal)
     requires tj.WF()
@@ -421,8 +423,8 @@ module ReprJournalRefinement {
         && reprIndex[lsn] in tj.diskView.entries
     )
     requires IndexRangeWF(reprIndex, tj)
-    ensures MapRestrict(tj.diskView.entries, reprIndexDiscardUpTo(reprIndex, newBdy).Values)   // all the things in dv that dont't contain bad lsn
-      == tj.diskView.DiscardOld(newBdy).BuildTight(tj.freshestRec).entries                     // all the things in dv that don't contain bad lsn
+    ensures MapRestrict(tj.diskView.entries, reprIndexDiscardUpTo(reprIndex, newBdy).Values)
+      == tj.diskView.DiscardOld(newBdy).BuildTight(tj.freshestRec).entries
   {
     // to get the fact that DiscardOld maintains acyclicity
     LinkedJournalRefinement.DiscardOldCommutes(tj.diskView, tj.freshestRec, newBdy);
