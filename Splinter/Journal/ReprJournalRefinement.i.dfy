@@ -83,7 +83,9 @@ module ReprJournalRefinement {
     requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
     requires root.Some? ==> dv.entries[root.value].messageSeq.seqEnd <= tjEnd
     ensures forall lsn :: lsn in BuildReprIndexDefn(dv, root) ==> dv.boundaryLSN <= lsn < tjEnd
-    ensures forall lsn | lsn in BuildReprIndexDefn(dv, root) :: BuildReprIndexDefn(dv, root)[lsn] in dv.entries
+    ensures forall lsn | lsn in BuildReprIndexDefn(dv, root) :: 
+      && BuildReprIndexDefn(dv, root)[lsn] in dv.entries
+      && dv.entries[BuildReprIndexDefn(dv, root)[lsn]].ContainsLSN(lsn)
     decreases dv.TheRankOf(root)
   {
     if root.Some? {
@@ -117,6 +119,7 @@ module ReprJournalRefinement {
     requires root.Some?  // otherwise BuildReprIndex is trivially empty
     requires dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
     ensures IndexDomainWF(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
+    ensures IndexKeysMapToValidEntries(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
   {
     BuildReprIndexDomainWFHelper1(dv, root, dv.entries[root.value].messageSeq.seqEnd);
     BuildReprIndexDomainWFHelper2(dv, root, dv.entries[root.value].messageSeq.seqEnd);
@@ -128,8 +131,8 @@ module ReprJournalRefinement {
     requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
     requires root.Some? ==> dv.entries[root.value].messageSeq.seqEnd == tjEnd
     requires root.None? ==> tjEnd <= dv.boundaryLSN
-    requires forall lsn :: lsn in BuildReprIndexDefn(dv, root) <==> dv.boundaryLSN <= lsn < tjEnd
-    requires forall lsn | lsn in BuildReprIndexDefn(dv, root) :: BuildReprIndexDefn(dv, root)[lsn] in dv.entries
+    requires IndexDomainWF(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
+    requires IndexKeysMapToValidEntries(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
     ensures IndexRangeWF(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
     decreases dv.TheRankOf(root)
   {
@@ -159,7 +162,7 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma {:timeLimitMultiplier 3} InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
+  lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
     ensures Inv(v')
@@ -169,7 +172,7 @@ module ReprJournalRefinement {
     // and could also end up inconclusive
     var step: Step :| NextStep(v, v', lbl, step);
     if step.DiscardOldStep? {
-      DiscardOldStepPreservesWF(v, v', lbl, step);
+      DiscardOldStepPreservesWF(v, v', lbl);
       var ranking := v.journal.truncatedJournal.diskView.TheRanking();  // witness to acyclicity
       assert v'.journal.truncatedJournal.diskView.PointersRespectRank(ranking);
       DiscardOldMaintainsReprIndex(v, v', lbl);
@@ -186,17 +189,19 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma {:timeLimitMultiplier 2} DiscardOldStepPreservesWF(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-    requires Inv(v)
-    requires step.DiscardOldStep?
-    requires NextStep(v, v', lbl, step)
+  lemma DiscardOldStepPreservesWF(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires v.WF()
+    requires v.journal.truncatedJournal.diskView.Acyclic()
+    requires v.reprIndex == BuildReprIndex(v.journal.truncatedJournal)
+    requires v.reprIndex.Values == v.journal.truncatedJournal.Representation()
+    requires DiscardOld(v, v', lbl)
     ensures v'.WF()
   {
     var tj := v.journal.truncatedJournal;
     var tj' := v'.journal.truncatedJournal;
     var oldBdy := tj.diskView.boundaryLSN;
     var newBdy := lbl.startLsn;
-    DiscardOldStepPreservesWFDiskView(v, v', lbl, step);
+    DiscardOldStepPreservesWFDiskView(v, v', lbl);
     
     // prove tj'.diskView.IsNondanglingPointer(tj'.freshestRec);
     if tj'.freshestRec.Some? {
@@ -206,13 +211,12 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma DiscardOldStepPreservesWFDiskView(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma DiscardOldStepPreservesWFDiskView(v: Variables, v': Variables, lbl: TransitionLabel)
     requires v.WF()
     requires v.journal.truncatedJournal.diskView.Acyclic()
     requires v.reprIndex == BuildReprIndex(v.journal.truncatedJournal)
     requires v.reprIndex.Values == v.journal.truncatedJournal.Representation()
-    requires step.DiscardOldStep?
-    requires NextStep(v, v', lbl, step)
+    requires DiscardOld(v, v', lbl)
     ensures v'.journal.truncatedJournal.diskView.WF();
   {
     var tj := v.journal.truncatedJournal;
@@ -402,19 +406,6 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma ReprIndexLSNBoundAfterDiscard(tj: TruncatedJournal, reprIndex: map<LSN, Address>, newBdy: LSN)
-    requires tj.WF()
-    requires tj.diskView.Acyclic()
-    requires tj.CanDiscardTo(newBdy)
-    requires reprIndex == BuildReprIndex(tj)
-    ensures forall addr | addr in reprIndexDiscardUpTo(reprIndex, newBdy).Values ::
-      && addr in tj.diskView.entries
-      && var block := tj.diskView.entries[addr];
-      && newBdy < block.messageSeq.seqEnd
-  {
-    assume false;
-  }
-
   lemma RepresentationAcrossDiscardOld(tj: TruncatedJournal, newBdy: LSN) 
     requires tj.WF()
     requires tj.diskView.Acyclic()
@@ -443,7 +434,7 @@ module ReprJournalRefinement {
     {
       if addr !in tj.DiscardOld(newBdy).Representation() {
         RepresentationAcrossDiscardOld(tj, newBdy);
-        ReprIndexLSNBoundAfterDiscard(tj, reprIndex, newBdy);
+        BuildReprIndexDomainWF(tj.diskView, tj.freshestRec);
         assert false;
       }
     }
@@ -458,6 +449,7 @@ module ReprJournalRefinement {
     requires tj.freshestRec.Some? ==> newBdy < tj.diskView.entries[tj.freshestRec.value].messageSeq.seqEnd
     requires reprIndex == BuildReprIndex(tj)
     requires IndexDomainWF(reprIndex, tj)
+    requires IndexKeysMapToValidEntries(reprIndex, tj)
     requires IndexRangeWF(reprIndex, tj)
     ensures forall x | x in tj.DiscardOld(newBdy).Representation()
         :: x in reprIndexDiscardUpTo(reprIndex, newBdy).Values 
@@ -500,6 +492,7 @@ module ReprJournalRefinement {
     requires tj.freshestRec.Some? ==> newBdy < tj.diskView.entries[tj.freshestRec.value].messageSeq.seqEnd
     requires reprIndex == BuildReprIndex(tj)
     requires IndexDomainWF(reprIndex, tj)
+    requires IndexKeysMapToValidEntries(reprIndex, tj)
     requires IndexRangeWF(reprIndex, tj)
     ensures MapRestrict(tj.diskView.entries, reprIndexDiscardUpTo(reprIndex, newBdy).Values)
       == tj.diskView.DiscardOld(newBdy).BuildTight(tj.freshestRec).entries

@@ -31,19 +31,25 @@ module ReprJournal {
     set x: LSN | tj.SeqStart() <= x < tj.SeqEnd() :: reprIndex[x]
   }
 
+  predicate IndexKeysMapToValidEntries(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
+    requires tj.WF()
+  {
+    forall lsn | lsn in reprIndex ::
+      && reprIndex[lsn] in tj.diskView.entries
+      && tj.diskView.entries[reprIndex[lsn]].ContainsLSN(lsn)
+  }
+
   predicate IndexDomainWF(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
     requires tj.WF()
   {
     // reprIndex's domain is exactly the set of LSN between journal.SeqStart() and journal.SeqEnd()
     && (forall lsn :: lsn in reprIndex <==> tj.SeqStart() <= lsn < tj.SeqEnd())
-    // every lsn in reprIndex maps to a page on disk
-    && (forall lsn | lsn in reprIndex ::
-          reprIndex[lsn] in tj.diskView.entries)
   }
 
   predicate IndexRangeWF(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
     requires tj.WF()
     requires IndexDomainWF(reprIndex, tj)
+    requires IndexKeysMapToValidEntries(reprIndex, tj)
   {
     forall addr | addr in reprIndex.Values ::
       && var msgs := tj.diskView.entries[addr].messageSeq;
@@ -62,6 +68,7 @@ module ReprJournal {
     predicate WF() {
       && journal.WF()
       && IndexDomainWF(reprIndex, journal.truncatedJournal)
+      && IndexKeysMapToValidEntries(reprIndex, journal.truncatedJournal)
       && IndexRangeWF(reprIndex, journal.truncatedJournal)
       && journal.truncatedJournal.SeqStart() <= journal.truncatedJournal.SeqEnd()
     }
