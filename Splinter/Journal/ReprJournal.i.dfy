@@ -31,40 +31,38 @@ module ReprJournal {
     set x: LSN | tj.SeqStart() <= x < tj.SeqEnd() :: reprIndex[x]
   }
 
+  predicate IndexDomainWF(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
+    requires tj.WF()
+  {
+    // reprIndex's domain is exactly the set of LSN between journal.SeqStart() and journal.SeqEnd()
+    && (forall lsn :: lsn in reprIndex <==> tj.SeqStart() <= lsn < tj.SeqEnd())
+    // every lsn in reprIndex maps to a page on disk
+    && (forall lsn | lsn in reprIndex ::
+          reprIndex[lsn] in tj.diskView.entries)
+  }
+
+  predicate IndexRangeWF(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
+    requires tj.WF()
+    requires IndexDomainWF(reprIndex, tj)
+  {
+    forall addr | addr in reprIndex.Values ::
+      && var msgs := tj.diskView.entries[addr].messageSeq;
+      && var boundaryLSN := tj.diskView.boundaryLSN;
+      && (forall lsn | Mathematics.max(boundaryLSN, msgs.seqStart) <= lsn < msgs.seqEnd :: 
+            && lsn in reprIndex
+            && reprIndex[lsn] == addr
+        )
+  }
+
   datatype Variables = Variables(
     journal: LinkedJournal.Variables,
     reprIndex: map<LSN, Address>  // maps in-repr lsn's to their page addr
   )
   {
-  
-    predicate IndexDomainWF() 
-      requires journal.WF()
-    {
-      // reprIndex's domain is exactly the set of LSN between journal.SeqStart() and journal.SeqEnd()
-      && (forall lsn :: lsn in reprIndex <==> journal.truncatedJournal.SeqStart() <= lsn < journal.truncatedJournal.SeqEnd())
-      // every lsn in reprIndex maps to a page on disk
-      && (forall lsn | lsn in reprIndex ::
-            reprIndex[lsn] in journal.truncatedJournal.diskView.entries)
-        // && journal.truncatedJournal.diskView.entries[reprIndex[lsn]].ContainsLSN(lsn))
-    }
-
-    predicate IndexRangeWF()
-      requires journal.WF()
-      requires IndexDomainWF()
-    {
-      forall addr | addr in reprIndex.Values ::
-        && var msgs := journal.truncatedJournal.diskView.entries[addr].messageSeq;
-        && var boundaryLSN := journal.truncatedJournal.diskView.boundaryLSN;
-        && (forall lsn | Mathematics.max(boundaryLSN, msgs.seqStart) <= lsn < msgs.seqEnd :: 
-              && lsn in reprIndex
-              && reprIndex[lsn] == addr
-        )
-    }
-
     predicate WF() {
       && journal.WF()
-      && IndexDomainWF()
-      && IndexRangeWF()
+      && IndexDomainWF(reprIndex, journal.truncatedJournal)
+      && IndexRangeWF(reprIndex, journal.truncatedJournal)
       && journal.truncatedJournal.SeqStart() <= journal.truncatedJournal.SeqEnd()
     }
   }
@@ -194,7 +192,7 @@ module ReprJournal {
     && tj.Decodable()  // An invariant carried by CoordinationSystem from FreezeForCommit, past a crash, back here
     && v == 
         Variables(
-          LinkedJournal.Variables(tj, EmptyHistoryAt(tj.SeqEnd())),
+          LinkedJournal.Variables(tj.BuildTight(), EmptyHistoryAt(tj.BuildTight().SeqEnd())),
           BuildReprIndex(tj)
       )
   }

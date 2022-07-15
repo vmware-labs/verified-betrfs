@@ -243,7 +243,7 @@ module LinkedJournal {
     }
 
     function SeqEnd() : LSN
-      requires WF()
+      requires diskView.IsNondanglingPointer(freshestRec)
     {
       if freshestRec.None?  // normal case with empty TJ
       then diskView.boundaryLSN
@@ -306,6 +306,13 @@ module LinkedJournal {
       ensures forall addr | addr in out :: addr in diskView.entries;
     {
       diskView.Representation(freshestRec)
+    }
+
+    predicate DiskIsTightWrtRepresentation()
+      requires diskView.Decodable(freshestRec)
+      requires diskView.Acyclic()
+    {
+      diskView.entries.Keys == Representation()
     }
   }
 
