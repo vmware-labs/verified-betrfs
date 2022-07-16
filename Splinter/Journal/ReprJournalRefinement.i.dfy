@@ -429,6 +429,25 @@ module ReprJournalRefinement {
     }
   }
 
+  lemma RepresentationWithSubDiskCompleteness(small:DiskView, big: DiskView, root: Pointer)
+    requires small.WF() && big.WF()
+    requires small.Decodable(root)
+    requires big.Decodable(root)
+    requires small.Acyclic()
+    requires big.Acyclic()
+    requires small.entries == big.entries
+    requires big.boundaryLSN <= small.boundaryLSN
+    ensures forall addr | addr in big.Representation(root) && small.boundaryLSN < big.entries[addr].messageSeq.seqEnd
+              :: addr in small.Representation(root)
+    decreases big.TheRankOf(root)
+  {
+    RepresentationWithSubDiskProducesSubset(small, big, root);
+    if root.Some? {
+      var bigPrior := big.entries[root.value].CroppedPrior(big.boundaryLSN);
+      RepresentationWithSubDiskCompleteness(small, big, bigPrior);
+    }   
+  }
+
   lemma RepresentationAcrossDiscardOld(tj: TruncatedJournal, newBdy: LSN) 
     requires tj.WF()
     requires tj.diskView.Acyclic()
@@ -439,9 +458,8 @@ module ReprJournalRefinement {
       :: tj.diskView.entries[addr].messageSeq.seqEnd <= newBdy
   {
     RepresentationWithSubDiskProducesSubset(tj.DiscardOld(newBdy).diskView, tj.diskView, tj.freshestRec);
-    assert tj.DiscardOld(newBdy).Representation() <= tj.Representation();
-    assume false;
-  }
+    RepresentationWithSubDiskCompleteness(tj.DiscardOld(newBdy).diskView, tj.diskView, tj.freshestRec);
+  } 
 
   lemma DiscardedIndexContainsDiscardedRepresentation(tj: TruncatedJournal, reprIndex: map<LSN, Address>, newBdy: LSN)
     requires tj.WF()
