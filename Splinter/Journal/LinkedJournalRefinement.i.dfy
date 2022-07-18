@@ -32,6 +32,7 @@ module LinkedJournalRefinement
   {
     && v.WF()
     && v.truncatedJournal.Decodable()
+    && v.truncatedJournal.diskView.Acyclic()
   }
 
   function IPtr(dv: DiskView, ptr: Pointer) : (out: Option<PagedJournal.JournalRecord>)
@@ -299,22 +300,19 @@ module LinkedJournalRefinement
       TightInterp(croppedTJ.diskView, croppedTJ.freshestRec, tightTJ.diskView);
 
       if !(v.unmarshalledTail.seqStart <= lsn) {
-        // assert v.SeqStart() == PagedJournalRefinement.ITruncatedJournal(ITruncatedJournal(v.truncatedJournal)).seqStart by { }
         DiscardInterp(croppedTJ.diskView, lsn, croppedTJ.diskView.DiscardOld(lsn), v.truncatedJournal.freshestRec);
         SubDiskInterp(tightTJ.diskView, croppedTJ.diskView, croppedTJ.freshestRec);
         TJDiscardInterp(v.truncatedJournal, lsn, croppedTJ);
         assert ITruncatedJournal(croppedTJ) == ITruncatedJournal(v.truncatedJournal).DiscardOldDefn(lsn); // Trigger for v'.I().WF()
       }
-//      assert Inv(v');
     } else if step.InternalJournalMarshalStep? {
       var rank :| v.truncatedJournal.diskView.PointersRespectRank(rank);
-      var rank' := rank[step.addr :=
+      var rank' := rank[lbl.addr :=
           if v.truncatedJournal.freshestRec.None? then 0
           else rank[v.truncatedJournal.freshestRec.value]+1];
       assert v'.truncatedJournal.diskView.PointersRespectRank(rank'); // new rank witness to Acyclic
 
       IPtrFraming(v.truncatedJournal.diskView, v'.truncatedJournal.diskView, v.truncatedJournal.freshestRec);
-//      assert Inv(v');
     } else {
       assert false;
     }

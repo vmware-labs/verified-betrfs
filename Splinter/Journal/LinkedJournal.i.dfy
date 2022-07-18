@@ -22,7 +22,7 @@ module LinkedJournal {
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
-    | InternalLabel(addrs: set<Address>)
+    | InternalLabel(addr: Address)
   {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
@@ -53,6 +53,10 @@ module LinkedJournal {
     function CroppedPrior(boundaryLSN: LSN) : Pointer
     {
       if boundaryLSN < messageSeq.seqStart then _priorRec else None
+    }
+
+    predicate ContainsLSN(lsn: LSN) {
+      messageSeq.seqStart <= lsn < messageSeq.seqEnd
     }
   }
 
@@ -154,6 +158,7 @@ module LinkedJournal {
       // negatives, but we stop there!?
     }
 
+    // Simply advance the boundary LSN
     function DiscardOld(newBoundary: LSN) : (out: DiskView)
       requires boundaryLSN <= newBoundary
     {
@@ -162,7 +167,13 @@ module LinkedJournal {
 
     predicate IsSubDisk(bigger: DiskView)
     {
-      && boundaryLSN == bigger.boundaryLSN
+      && bigger.boundaryLSN == boundaryLSN 
+      && IsSubMap(entries, bigger.entries)
+    }
+
+    predicate IsSubDiskWithNewerLSN(bigger: DiskView)
+    {
+      && bigger.boundaryLSN <= boundaryLSN 
       && IsSubMap(entries, bigger.entries)
     }
 
@@ -177,6 +188,18 @@ module LinkedJournal {
         var addr := root.value;
         var out := DiskView(boundaryLSN, BuildTight(entries[addr].CroppedPrior(boundaryLSN)).entries[addr := entries[addr]]);
         out
+    }
+
+    function Representation(root: Pointer) : (out: set<Address>)
+      requires Decodable(root)
+      requires Acyclic()
+      ensures forall addr | addr in out :: addr in entries;
+      decreases TheRankOf(root)
+    {
+      if root.None? then {}
+      else
+        var addr := root.value;
+        Representation(entries[addr].CroppedPrior(boundaryLSN)) + {addr}
     }
 
     predicate CanCrop(root: Pointer, depth: nat) 
@@ -220,7 +243,7 @@ module LinkedJournal {
     }
 
     function SeqEnd() : LSN
-      requires WF()
+      requires diskView.IsNondanglingPointer(freshestRec)
     {
       if freshestRec.None?  // normal case with empty TJ
       then diskView.boundaryLSN
@@ -237,6 +260,7 @@ module LinkedJournal {
       requires WF()
       requires CanDiscardTo(lsn)
     {
+      // Simply advances the boundary LSN of the diskView
       if SeqEnd() == lsn
       then TruncatedJournal(None, diskView.DiscardOld(lsn))
       else TruncatedJournal(freshestRec, diskView.DiscardOld(lsn))
@@ -274,6 +298,21 @@ module LinkedJournal {
       requires WF()
     {
       TruncatedJournal(freshestRec, diskView.BuildTight(freshestRec))
+    }
+
+    function Representation() : (out: set<Address>)
+      requires diskView.Decodable(freshestRec)
+      requires diskView.Acyclic()
+      ensures forall addr | addr in out :: addr in diskView.entries;
+    {
+      diskView.Representation(freshestRec)
+    }
+
+    predicate DiskIsTightWrtRepresentation()
+      requires diskView.Decodable(freshestRec)
+      requires diskView.Acyclic()
+    {
+      diskView.entries.Keys == Representation()
     }
   }
 
@@ -365,7 +404,6 @@ module LinkedJournal {
 
   predicate DiscardOld(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    // diskView not tightened here
     && lbl.DiscardOldLabel?
     && v.WF()
     && v.SeqStart() <= lbl.startLsn <= v.SeqEnd()
@@ -378,17 +416,16 @@ module LinkedJournal {
       )
   }
 
-  predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN, addr: Address)
+  predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
   {
     && lbl.InternalLabel?
     && v.WF()
     && v.unmarshalledTail.seqStart < cut // Can't marshall nothing.
     && v.unmarshalledTail.CanDiscardTo(cut)
-    && lbl.addrs == {addr}
-    && v.UnusedAddr(addr)
+    && v.UnusedAddr(lbl.addr)
     && var marshalledMsgs := v.unmarshalledTail.DiscardRecent(cut);
     && v' == Variables(
-      v.truncatedJournal.AppendRecord(addr, marshalledMsgs),
+      v.truncatedJournal.AppendRecord(lbl.addr, marshalledMsgs),
       v.unmarshalledTail.DiscardOld(cut))
   }
 
@@ -404,7 +441,7 @@ module LinkedJournal {
     | ObserveFreshJournalStep()
     | PutStep()
     | DiscardOldStep()
-    | InternalJournalMarshalStep(cut: LSN, addr: Address)
+    | InternalJournalMarshalStep(cut: LSN)
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
@@ -414,7 +451,7 @@ module LinkedJournal {
       case ObserveFreshJournalStep() => ObserveFreshJournal(v, v', lbl)
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
-      case InternalJournalMarshalStep(cut, addr) => InternalJournalMarshal(v, v', lbl, cut, addr)
+      case InternalJournalMarshalStep(cut) => InternalJournalMarshal(v, v', lbl, cut)
     }
   }
 
