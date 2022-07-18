@@ -23,13 +23,13 @@ module ReprJournal {
   type Step = LinkedJournal.Step
 
   // The Representation set for the journal data structure
-  function Repr(tj: LinkedJournal.TruncatedJournal, reprIndex: map<LSN, Address>) : set<Address>
-    requires tj.WF()
-    requires forall x | tj.SeqStart() <= x < tj.SeqEnd() :: x in reprIndex
-  {
-    // tj.SeqStart() == tj.SeqEnd() means the journal is empty
-    set x: LSN | tj.SeqStart() <= x < tj.SeqEnd() :: reprIndex[x]
-  }
+  // function Repr(tj: LinkedJournal.TruncatedJournal, reprIndex: map<LSN, Address>) : set<Address>
+  //   requires tj.WF()
+  //   requires forall x | tj.SeqStart() <= x < tj.SeqEnd() :: x in reprIndex
+  // {
+  //   // tj.SeqStart() == tj.SeqEnd() means the journal is empty
+  //   set x: LSN | tj.SeqStart() <= x < tj.SeqEnd() :: reprIndex[x]
+  // }
 
   predicate IndexKeysMapToValidEntries(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
     requires tj.WF()
@@ -197,9 +197,10 @@ module ReprJournal {
   predicate Init(v: Variables, tj: TruncatedJournal)
   {
     && tj.Decodable()  // An invariant carried by CoordinationSystem from FreezeForCommit, past a crash, back here
+    && tj.DiskIsTightWrtRepresentation()
     && v == 
         Variables(
-          LinkedJournal.Variables(tj.BuildTight(), EmptyHistoryAt(tj.BuildTight().SeqEnd())),
+          LinkedJournal.Variables(tj, EmptyHistoryAt(tj.BuildTight().SeqEnd())),
           BuildReprIndex(tj)
       )
   }

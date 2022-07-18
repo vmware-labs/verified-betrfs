@@ -15,12 +15,7 @@ module ReprJournalRefinement {
     var tj :=  v.journal.truncatedJournal;
     && v.WF()
     && tj.diskView.Acyclic()
-
     && v.reprIndex == BuildReprIndex(tj)
-
-    // todo(tony): Do we need something stronger than this? 
-    // I think we also need to say that for each lsn in key, it maps to THE UNIQUE page in the representation that contains it
-    // I think this is what we need ultimately, but we may need intermediate invariants to prove this.
     && v.reprIndex.Values == tj.Representation()
     && tj.DiskIsTightWrtRepresentation()
   }
@@ -59,7 +54,7 @@ module ReprJournalRefinement {
     }
   }
   
-  lemma InvInit(v: Variables, tj: TruncatedJournal)
+  lemma {:timeLimitMultiplier 2} InvInit(v: Variables, tj: TruncatedJournal)
     requires Init(v, tj)
     ensures Inv(v)
   {
@@ -167,9 +162,6 @@ module ReprJournalRefinement {
     requires Next(v, v', lbl)
     ensures Inv(v')
   {
-    // todo(tony): This lemma is flakey. If I were to add the line "assert v'.journal.truncatedJournal.DiskIsTightWrtRepresentation();",
-    // which is just part of the Inv(v') conclusion, the lemma requires a larger time limit,
-    // and could also end up inconclusive
     var step: Step :| NextStep(v, v', lbl, step);
     if step.DiscardOldStep? {
       DiscardOldStepPreservesWF(v, v', lbl);
@@ -372,10 +364,7 @@ module ReprJournalRefinement {
   lemma InitRefines(v: Variables, tj: TruncatedJournal)
     requires Init(v, tj)
     ensures LinkedJournal.Init(I(v), tj)
-  {
-    // The tj build tight requires changes in top layers
-    assume false;
-  }
+  {}
 
   lemma BuildTightGivesRepresentation(dv: DiskView, root: Pointer)
     requires dv.Decodable(root)
