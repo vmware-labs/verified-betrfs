@@ -86,7 +86,7 @@ module ReprJournalRefinement {
     }
   }
   
-  lemma {:timeLimitMultiplier 2} InvInit(v: Variables, tj: TruncatedJournal)
+  lemma InvInit(v: Variables, tj: TruncatedJournal)
     requires Init(v, tj)
     ensures Inv(v)
   {
@@ -189,30 +189,33 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma {:timeLimitMultiplier 2} InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
+  lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
     ensures Inv(v')
   {
     var step: Step :| NextStep(v, v', lbl, step);
     if step.DiscardOldStep? {
-      DiscardOldStepPreservesWF(v, v', lbl);
+      DiscardOldStepPreservesWFAndIndex(v, v', lbl);
       var ranking := v.journal.truncatedJournal.diskView.TheRanking();  // witness to acyclicity
       assert v'.journal.truncatedJournal.diskView.PointersRespectRank(ranking);
       DiscardOldMaintainsReprIndex(v, v', lbl);
       BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
+      // assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
     } else if step.InternalJournalMarshalStep? {
       assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
       LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
       InvNextInternalJournalMarshalStep(v, v', lbl, step);
       BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
+      assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
     } else {
       assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
       LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
+      assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
     }
   }
 
-  lemma DiscardOldStepPreservesWF(v: Variables, v': Variables, lbl: TransitionLabel)
+  lemma DiscardOldStepPreservesWFAndIndex(v: Variables, v': Variables, lbl: TransitionLabel)
     requires v.WF()
     requires IndexDomainValid(v.reprIndex, v.journal.truncatedJournal)
     requires IndexKeysMapToValidEntries(v.reprIndex, v.journal.truncatedJournal)
