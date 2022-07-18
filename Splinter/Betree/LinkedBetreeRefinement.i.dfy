@@ -1489,10 +1489,8 @@ module LinkedBetreeRefinement {
     ILinkedBetreeIgnoresRanking(child, target.TheRanking(), child.TheRanking());
     IndexinessCommutesWithI(child);
 
-    assert ILinkedBetree(step.path.Target()).SplitParentDefn.requires(step.request);
     var target' := target.SplitParent(step.request, step.newAddrs);
     var itarget' := itarget.SplitParent(step.request);
-    assert |ILinkedBetree(target').children| == |itarget'.children|;
     forall idx:nat | itarget'.ValidChildIndex(idx)
       ensures ILinkedBetree(target').children[idx] == itarget'.children[idx]
     {
@@ -1521,8 +1519,6 @@ module LinkedBetreeRefinement {
         }
         ILinkedBetreeIgnoresRanking(target'.ChildAtIdx(idx), target'.TheRanking(), ranking');
         ChildIdxCommutesWithI(target', idx, target'.TheRanking());
-
- //       assert ILinkedBetree(target').children[idx] == itarget'.children[idx];
       } else if splitIdx + 1 == idx {
         // All the right grandchildren match.
         if step.request.SplitIndex? {
@@ -1543,14 +1539,11 @@ module LinkedBetreeRefinement {
         }
         ILinkedBetreeIgnoresRanking(target'.ChildAtIdx(idx), target'.TheRanking(), ranking');
         ChildIdxCommutesWithI(target', idx, target'.TheRanking());
-
-//        assert ILinkedBetree(target').children[idx] == itarget'.children[idx];
       } else {
         IdenticalChildrenCommutesWithI(target, idx-1, target', idx, ranking');
       }
     }
-    assert ILinkedBetree(target').children == itarget'.children;
-    assert ILinkedBetree(step.path.Target().SplitParent(step.request, step.newAddrs)) == ILinkedBetree(step.path.Target()).SplitParent(step.request);
+    assert ILinkedBetree(target').children == itarget'.children;  // trigger extensionality
   }
 
   lemma InternalSplitStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
