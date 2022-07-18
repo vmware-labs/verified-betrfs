@@ -709,75 +709,6 @@ module LinkedBetreeRefinement {
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
   }
 
-  lemma SplitTargetPreservesWF(target: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs)
-    requires target.WF()
-    requires target.HasRoot()
-    requires target.diskView.IsFresh(newAddrs.Repr())
-    requires newAddrs.HasUniqueElems()
-    requires target.CanSplitParent(request)
-    ensures target.SplitParent(request, newAddrs).WF()
-  {
-    // TODO(jonh): SplitParentCanSubstitute is all you need; eliminate this thing
-    target.SplitParentCanSubstitute(request, newAddrs);
-
-    var target' := target.SplitParent(request, newAddrs);
-    var dv := target'.diskView;
-//    forall addr | addr in dv.entries
-//      ensures dv.entries[addr].WF()
-//    {
-//      if addr == newAddrs.parent {
-//        assert dv.entries[addr].WF();
-//      } else if addr == newAddrs.left {
-//        assert dv.entries[addr].WF();
-//      } else if addr == newAddrs.right {
-//        assert dv.entries[addr].WF();
-//      } else {
-//        assert dv.entries[addr].WF();
-//      }
-//    }
-
-//    forall addr | addr in dv.entries
-//      ensures dv.NodeHasNondanglingChildPtrs(dv.entries[addr])
-//      ensures dv.NodeHasLinkedChildren(dv.entries[addr])
-//    {
-//      var node := dv.entries[addr];
-//      if addr == newAddrs.parent {
-//////        forall idx:nat | node.ValidChildIndex(idx) ensures dv.IsNondanglingPointer(node.children[idx]) {
-//////          if request.childIdx < idx {
-//////            assert dv.IsNondanglingPointer(target.Root().children[idx-1]);
-//////            assert dv.IsNondanglingPointer(node.children[idx]);
-//////          }
-//////        }
-////        target.SplitParentCanSubstitute(request, newAddrs);
-////        forall idx:nat | node.ValidChildIndex(idx) ensures dv.ChildLinked(node, idx) {
-////        }
-//        assert dv.NodeHasNondanglingChildPtrs(dv.entries[addr]);
-//        assert dv.NodeHasLinkedChildren(dv.entries[addr]);
-//      } else if addr == newAddrs.left {
-//        var oldChild := target.ChildAtIdx(request.childIdx);
-////        assert dv.NodeHasNondanglingChildPtrs(dv.entries[addr]);
-////        forall idx:nat | node.ValidChildIndex(idx) ensures dv.ChildLinked(node, idx) {
-////          assert dv.ChildLinked(oldChild.Root(), idx);  // trigger, probably?
-////          assert dv.ChildLinked(node, idx);
-////        }
-//        assert dv.NodeHasLinkedChildren(dv.entries[addr]);
-//      } else if addr == newAddrs.right {
-//        var oldChild := target.ChildAtIdx(request.childIdx);
-//        forall idx:nat | node.ValidChildIndex(idx) ensures dv.ChildLinked(node, idx) {
-//          if request.SplitIndex? {
-//            assert dv.ChildLinked(oldChild.Root(), idx + request.childPivotIdx);  // trigger
-//            assert dv.ChildLinked(node, idx);
-//          }
-//        }
-//        assert dv.NodeHasNondanglingChildPtrs(dv.entries[addr]);
-//        assert dv.NodeHasLinkedChildren(dv.entries[addr]);
-//      } else {
-//        assert dv.NodeHasNondanglingChildPtrs(dv.entries[addr]);
-//        assert dv.NodeHasLinkedChildren(dv.entries[addr]);
-//      }
-//    }
-  }
-
   lemma RankingAfterSplitReplacement(target: LinkedBetree, ranking: Ranking, request: SplitRequest, newAddrs: SplitAddrs)
   returns (newRanking: Ranking)
     requires target.WF()
@@ -795,7 +726,7 @@ module LinkedBetreeRefinement {
     var oldChildRank := ranking[target.Root().children[request.childIdx].value];
     newRanking := ranking[newAddrs.left := oldChildRank][newAddrs.right := oldChildRank][newAddrs.parent := oldTargetRank];
     assert target.diskView.ValidRanking(newRanking);
-    SplitTargetPreservesWF(target, request, newAddrs);
+    target.SplitParentCanSubstitute(request, newAddrs);  // split target preserves WF
     var target' := target.SplitParent(request, newAddrs);
     forall addr | && addr in newRanking && addr in target'.diskView.entries
       ensures target'.diskView.NodeChildrenRespectsRank(newRanking, addr)
@@ -1189,7 +1120,6 @@ module LinkedBetreeRefinement {
         == IPath(path).Substitute(ILinkedBetree(replacement))
     decreases path.depth
   {
-    // TODO(jonh): tighten proof
     IPathValid(path);
     if 0 < path.depth {
       var rankingAfterSubst := RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
@@ -1466,7 +1396,6 @@ module LinkedBetreeRefinement {
   }
 
   lemma SplitCommutesWithI(step: Step)
-    // TODO(jonh): replace most of these requires with step.Valid()?
     requires step.WF()
     requires step.InternalSplitStep?
     requires step.path.Target().Acyclic()
@@ -1480,7 +1409,7 @@ module LinkedBetreeRefinement {
     var splitIdx := step.request.childIdx;
     var target := step.path.Target();
     var child := target.ChildAtIdx(splitIdx);
-    SplitTargetPreservesWF(target, step.request, step.newAddrs);
+    target.SplitParentCanSubstitute(step.request, step.newAddrs);  // split target preserves WF
     var itarget := ILinkedBetree(step.path.Target());
     var ichild := itarget.children[step.request.childIdx];
     assert PivotBetree.WFChildren(itarget.children);  // trigger
