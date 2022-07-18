@@ -19,7 +19,7 @@ module ReprBetree
   import opened MemtableMod
 //   import opened MsgHistoryMod
 //   import opened Options
-//   import opened Sequences
+  import opened Sequences
 //   import opened StampedMod
 //   import opened Upperbounded_Lexicographic_Byte_Order_Impl
 //   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
@@ -39,7 +39,7 @@ module ReprBetree
   datatype Variables = Variables(
     betree: LinkedBetreeMod.Variables,
     // maps each in-repr node n to the representation of the subtree with that node as root
-    reprIndex: set<Address>)
+    repr: set<Address>)
   {
     predicate WF() {
       betree.WF()
@@ -62,19 +62,55 @@ module ReprBetree
     )
   }
 
-  function BuildReprIndex(linked: LinkedBetree) : set<Address>
+  predicate QueryEndLsn(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    // todo
-    assume false;
-    map[]
-  //  BuildReprIndexDefn(tj.diskView, tj.freshestRec)
+    && LinkedBetreeMod.QueryEndLsn(v.betree, v'.betree, lbl)
+    && v' == v.(
+      betree := v'.betree
+    )
+  }
+
+  predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && LinkedBetreeMod.FreezeAs(v.betree, v'.betree, lbl)
+    && v' == v.(
+      betree := v'.betree
+    )
+  }
+
+  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && LinkedBetreeMod.InternalGrow(v.betree, v'.betree, lbl, step)
+    && v' == v.(
+      betree := v'.betree,
+      repr := v.repr + {step.newRootAddr}
+    )
+  }
+
+  predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    // TODO
+    false
+  }
+
+  predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    // TODO
+    false
+  }
+
+  predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    // TODO
+    false
   }
 
   predicate Init(v: Variables, stampedBetree: StampedBetree)
   {
+    && v.betree.linked.Acyclic()
     && v == Variables(
       LinkedBetreeMod.Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value),
-      BuildReprIndex(v.betree.linked)
+      v.betree.linked.ReachableAddrs()
     )
   }
 
@@ -83,13 +119,12 @@ module ReprBetree
     match step {
       case QueryStep(receipt) => Query(v, v', lbl, receipt)
       case PutStep() => Put(v, v', lbl)
-      case _ => true
-      // case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
-      // case FreezeAsStep() => FreezeAs(v, v', lbl)
-      // case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
-      // case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
-      // case InternalFlushStep(_, _, _, _, _) => InternalFlush(v, v', lbl, step)
-      // case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
+      case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
+      case FreezeAsStep() => FreezeAs(v, v', lbl)
+      case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
+      case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
+      case InternalFlushStep(_, _, _, _, _) => InternalFlush(v, v', lbl, step)
+      case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
     }
   }
 
