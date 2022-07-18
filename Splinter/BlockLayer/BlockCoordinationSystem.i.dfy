@@ -64,7 +64,7 @@ module BlockCoordinationSystem {
 
   function SimpleJournalLabel(clbl: CrashTolerantJournal.TransitionLabel) : BlockCrashTolerantJournal.TransitionLabel
   {
-    BlockCrashTolerantJournal.TransitionLabel({}, clbl)
+    BlockCrashTolerantJournal.TransitionLabel([], clbl)
   }
 
   function SimpleMapLabel(clbl: CrashTolerantMap.TransitionLabel) : BlockCrashTolerantMap.TransitionLabel
@@ -202,6 +202,7 @@ module BlockCoordinationSystem {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
     && uiop.NoopOp?
+    // TODO this is wrong! It allocates no addrs!
     && BlockCrashTolerantJournal.Next(v.journal, v'.journal, SimpleJournalLabel(CrashTolerantJournal.InternalLabel()))
     && v' == v.(journal := v'.journal)  // predicate update above
   }

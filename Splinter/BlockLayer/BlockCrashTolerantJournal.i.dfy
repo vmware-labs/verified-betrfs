@@ -17,7 +17,7 @@ module BlockCrashTolerantJournal {
   import MarshalledJournal
   import CrashTolerantJournal
 
-  datatype TransitionLabel = TransitionLabel(allocations: set<Address>, base: CrashTolerantJournal.TransitionLabel)
+  datatype TransitionLabel = TransitionLabel(allocations: seq<Address>, base: CrashTolerantJournal.TransitionLabel)
     
   type StoreImage = MarshalledJournal.JournalImage
 
@@ -54,7 +54,7 @@ module BlockCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.LoadEphemeralFromPersistentLabel?
-    && lbl.allocations == {}
+    && lbl.allocations == []
     && v.ephemeral.Unknown?
     && v'.ephemeral.Known?
 
@@ -67,7 +67,7 @@ module BlockCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.ReadForRecoveryLabel?
-    && lbl.allocations == {}
+    && lbl.allocations == []
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
   
@@ -79,7 +79,7 @@ module BlockCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.QueryEndLsnLabel?
-    && lbl.allocations == {}
+    && lbl.allocations == []
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
@@ -91,7 +91,7 @@ module BlockCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.PutLabel?
-    && lbl.allocations == {}
+    && lbl.allocations == []
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
@@ -104,11 +104,11 @@ module BlockCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.InternalLabel?
-    && lbl.allocations == {}
+    && |lbl.allocations| == 1
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
-    && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.InternalLabel(lbl.allocations))
+    && MarshalledJournal.Next(v.ephemeral.v, v'.ephemeral.v, MarshalledJournal.InternalLabel(lbl.allocations[0]))
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
   }
@@ -117,8 +117,7 @@ module BlockCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.QueryLsnPersistenceLabel?
-    && lbl.allocations == {}
-    && lbl.allocations == {}
+    && lbl.allocations == []
     && lbl.base.syncLsn <= v.persistent.SeqEnd()
     && v' == v
   }
@@ -127,7 +126,7 @@ module BlockCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.CommitStartLabel?
-    && lbl.allocations == {}
+    && lbl.allocations == []
     && v.ephemeral.Known?
     // Can't start a commit if one is in-flight, or we'd forget to maintain the
     // invariants for the in-flight one.
@@ -159,7 +158,7 @@ module BlockCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.CommitCompleteLabel?
-    && lbl.allocations == {}
+    && lbl.allocations == []
     && v.ephemeral.Known?
     && v.inFlight.Some?
     && v'.ephemeral.Known?
@@ -177,8 +176,7 @@ module BlockCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.CrashLabel?
-    && lbl.allocations == {}
-    && lbl.allocations == {}
+    && lbl.allocations == []
     && v' == v.(
       ephemeral := Unknown,
       inFlight := None)

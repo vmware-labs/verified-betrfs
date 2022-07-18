@@ -13,6 +13,7 @@ module BlockCrashTolerantJournalRefinement {
   import opened MsgHistoryMod
   import opened LSNMod
   import opened GenericDisk
+  import opened Sequences
   import CrashTolerantJournal 
   import PagedJournalRefinement 
   import AbstractJournal
@@ -152,7 +153,7 @@ module BlockCrashTolerantJournalRefinement {
     requires Inv(v) && Next(v, v', lbl) && lbl.base.InternalLabel?
     ensures Inv(v') && CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
-    var jlbl := MarshalledJournal.InternalLabel(lbl.allocations);
+    var jlbl := MarshalledJournal.InternalLabel(lbl.allocations[0]);
 
     JournalChainedNext(v.ephemeral.v, v'.ephemeral.v, jlbl);
 
@@ -275,14 +276,14 @@ nonsense -- in-memory part needs to be compatible too
     requires Inv(v)
     requires Next(v, v', lbl)
     requires lbl.base.InternalLabel?
-    ensures Repr(v') <= Repr(v) + lbl.allocations
+    ensures Repr(v') <= Repr(v) + Set(lbl.allocations)
   {
   }
 
   lemma Updates(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
-    ensures Repr(v') <= Repr(v) + lbl.allocations
+    ensures Repr(v') <= Repr(v) + Set(lbl.allocations)
     // what good is this <=?
   {
     match lbl.base {
