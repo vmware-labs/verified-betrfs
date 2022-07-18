@@ -78,6 +78,8 @@ module BlockCrashTolerantMapRefinement {
   predicate Inv(v: Variables)
   {
     && Decodable(v)
+    && MarshalledBetreeRefinement.InvImage(v.persistent)
+    && (v.inFlight.Some? ==> MarshalledBetreeRefinement.InvImage(v.inFlight.value))
   }
 
   function IALabel(lbl: TransitionLabel) : CrashTolerantMap.TransitionLabel
