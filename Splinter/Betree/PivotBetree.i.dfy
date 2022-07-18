@@ -177,8 +177,9 @@ module PivotBetree
       BetreeNode(buffers, InsertPivot(pivotTable, request.childIdx+1, SplitKey(request)), newChildren)
     }
 
-    lemma {:timeLimitMultiplier 16} SplitParentWF(request: SplitRequest)
-      requires SplitParentDefn.requires(request)
+    lemma SplitParentWF(request: SplitRequest)
+      requires WF()
+      requires CanSplitParent(request)
       ensures SplitParentDefn(request).WF()
     {
       var oldChild := children[request.childIdx];
