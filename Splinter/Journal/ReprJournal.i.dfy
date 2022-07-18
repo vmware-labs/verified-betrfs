@@ -4,6 +4,9 @@
 include "LinkedJournal.i.dfy"
 include "GenericDisk.i.dfy"
 
+// A Journal that keeps an in-memory index that maps each in-use LSN to the Address that stores it.
+// The impl will keep such an index so that Discard can return freed Addresses without having to
+// fault in the freed section of the journal to learn the chain of addresses involved.
 module ReprJournal {
   import opened Options
   import opened MsgHistoryMod
@@ -17,9 +20,32 @@ module ReprJournal {
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
 
+  datatype TransitionLabel =
+      ReadForRecoveryLabel(messages: MsgHistory)
+    | FreezeForCommitLabel(frozenJournal: TruncatedJournal)
+    | QueryEndLsnLabel(endLsn: LSN)
+    | PutLabel(messages: MsgHistory)
+    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN, freedAddrs: seq<Address>)
+    | InternalLabel(addr: Address)
+  {
+    predicate WF() {
+      && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
+    }
+
+    function I(): LinkedJournal.TransitionLabel {
+      match this {
+        case ReadForRecoveryLabel(messages) => LinkedJournal.ReadForRecoveryLabel(messages)
+        case FreezeForCommitLabel(frozenJournal) => LinkedJournal.FreezeForCommitLabel(frozenJournal)
+        case QueryEndLsnLabel(endLsn) => LinkedJournal.QueryEndLsnLabel(endLsn)
+        case PutLabel(messages) => LinkedJournal.PutLabel(messages)
+        case DiscardOldLabel(startLsn, requireEnd, freedAddrs) => LinkedJournal.DiscardOldLabel(startLsn, requireEnd)
+        case InternalLabel(addr) => LinkedJournal.InternalLabel(addr)
+      }
+    }
+  }
+
   type DiskView = LinkedJournal.DiskView
   type TruncatedJournal = LinkedJournal.TruncatedJournal
-  type TransitionLabel = LinkedJournal.TransitionLabel
   type Step = LinkedJournal.Step
 
   datatype Variables = Variables(
@@ -35,7 +61,7 @@ module ReprJournal {
 
   predicate ReadForRecovery(v: Variables, v': Variables, lbl: TransitionLabel, depth: nat)
   {
-    && LinkedJournal.ReadForRecovery(v.journal, v'.journal, lbl, depth)
+    && LinkedJournal.ReadForRecovery(v.journal, v'.journal, lbl.I(), depth)
     && v' == v.(
       journal := v'.journal
     )
@@ -43,7 +69,7 @@ module ReprJournal {
 
   predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, depth: nat)
   {
-    && LinkedJournal.FreezeForCommit(v.journal, v'.journal, lbl, depth)
+    && LinkedJournal.FreezeForCommit(v.journal, v'.journal, lbl.I(), depth)
     && v' == v.(
       journal := v'.journal
     )
@@ -51,7 +77,7 @@ module ReprJournal {
 
   predicate ObserveFreshJournal(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    && LinkedJournal.ObserveFreshJournal(v.journal, v'.journal, lbl)
+    && LinkedJournal.ObserveFreshJournal(v.journal, v'.journal, lbl.I())
     && v' == v.(
       journal := v'.journal
     )
@@ -59,7 +85,7 @@ module ReprJournal {
 
   predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    && LinkedJournal.Put(v.journal, v'.journal, lbl)
+    && LinkedJournal.Put(v.journal, v'.journal, lbl.I())
     && v' == v.(
       journal := v'.journal
     )
@@ -97,6 +123,7 @@ module ReprJournal {
     // Define v'
     && var reprIndex' := reprIndexDiscardUpTo(v.reprIndex, lbl.startLsn);
     && var keepAddrs := reprIndex'.Values;
+    && Set(lbl.freedAddrs) == v.reprIndex.Values - keepAddrs  // "return" the set of freed addrs
     && v' == v.(
       journal := LinkedJournal.Variables(
         DiscardOldAndGarbageCollect(v.journal.truncatedJournal, lbl.startLsn, keepAddrs),
@@ -124,7 +151,7 @@ module ReprJournal {
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
   {
     && v.WF()
-    && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl, cut)
+    && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl.I(), cut)
     && lbl.addr !in v.reprIndex.Values  // Fresh!
     && v' == v.(
       journal := v'.journal,
