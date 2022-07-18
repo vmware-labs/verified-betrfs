@@ -10,6 +10,35 @@ module ReprJournalRefinement {
 
 // PROVE INVARIANTS
 
+  predicate IndexKeysMapToValidEntries(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
+    requires tj.WF()
+  {
+    forall lsn | lsn in reprIndex ::
+      && reprIndex[lsn] in tj.diskView.entries
+      && tj.diskView.entries[reprIndex[lsn]].ContainsLSN(lsn)
+  }
+
+  predicate IndexDomainValid(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
+    requires tj.WF()
+  {
+    // reprIndex's domain is exactly the set of LSN between journal.SeqStart() and journal.SeqEnd()
+    && (forall lsn :: lsn in reprIndex <==> tj.SeqStart() <= lsn < tj.SeqEnd())
+  }
+
+  predicate IndexRangeValid(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
+    requires tj.WF()
+    requires IndexDomainValid(reprIndex, tj)
+    requires IndexKeysMapToValidEntries(reprIndex, tj)
+  {
+    forall addr | addr in reprIndex.Values ::
+      && var msgs := tj.diskView.entries[addr].messageSeq;
+      && var boundaryLSN := tj.diskView.boundaryLSN;
+      && (forall lsn | Mathematics.max(boundaryLSN, msgs.seqStart) <= lsn < msgs.seqEnd :: 
+            && lsn in reprIndex
+            && reprIndex[lsn] == addr
+        )
+  }
+
   predicate Inv(v: Variables)
   {
     var tj :=  v.journal.truncatedJournal;
@@ -17,6 +46,9 @@ module ReprJournalRefinement {
     && tj.diskView.Acyclic()
     && v.reprIndex == BuildReprIndex(tj)
     && v.reprIndex.Values == tj.Representation()
+    && IndexDomainValid(v.reprIndex, tj)
+    && IndexKeysMapToValidEntries(v.reprIndex, tj)
+    && IndexRangeValid(v.reprIndex, tj)
     && tj.DiskIsTightWrtRepresentation()
   }
 
@@ -61,9 +93,9 @@ module ReprJournalRefinement {
     LinkedJournalRefinement.BuildTightIsAwesome(tj.diskView, tj.freshestRec);
     var tightTj := tj.BuildTight();
     if tightTj.freshestRec.Some? {
-      BuildReprIndexDomainWF(tightTj.diskView, tightTj.freshestRec);
+      BuildReprIndexDomainValid(tightTj.diskView, tightTj.freshestRec);
     }
-    BuildReprIndexRangeWF(tightTj.diskView, tightTj.freshestRec,tightTj.SeqEnd());
+    BuildReprIndexRangeValid(tightTj.diskView, tightTj.freshestRec,tightTj.SeqEnd());
     BuildReprIndexGivesRepresentation(tightTj);
     BuildTightGivesRepresentation(tj.diskView, tj.freshestRec);
     RepresentationIgnoresBuildTight(tj.diskView, tj.freshestRec, tj.freshestRec);
@@ -72,7 +104,7 @@ module ReprJournalRefinement {
 
   // BuildReprIndex has domain that is a subset of [dv.boundaryLsn, tjEnd)
   // and every value is an entry in the disk
-  lemma BuildReprIndexDomainWFHelper1(dv: DiskView, root: Pointer, tjEnd: LSN)
+  lemma BuildReprIndexDomainValidHelper1(dv: DiskView, root: Pointer, tjEnd: LSN)
     requires dv.Decodable(root)
     requires dv.Acyclic()
     requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
@@ -84,11 +116,11 @@ module ReprJournalRefinement {
     decreases dv.TheRankOf(root)
   {
     if root.Some? {
-      BuildReprIndexDomainWFHelper1(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN), tjEnd);
+      BuildReprIndexDomainValidHelper1(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN), tjEnd);
     }
   }
 
-  lemma BuildReprIndexDomainWFHelper2(dv: DiskView, root: Pointer, tjEnd: LSN)
+  lemma BuildReprIndexDomainValidHelper2(dv: DiskView, root: Pointer, tjEnd: LSN)
     requires dv.Decodable(root)
     requires dv.Acyclic()
     requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
@@ -100,45 +132,45 @@ module ReprJournalRefinement {
     if root.Some? {
       var prior := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
       if prior.None? {
-        BuildReprIndexDomainWFHelper2(dv, prior, dv.boundaryLSN);
+        BuildReprIndexDomainValidHelper2(dv, prior, dv.boundaryLSN);
       } else {
-        BuildReprIndexDomainWFHelper2(dv, prior, dv.entries[prior.value].messageSeq.seqEnd);
+        BuildReprIndexDomainValidHelper2(dv, prior, dv.entries[prior.value].messageSeq.seqEnd);
       }
     }
   }
 
   // Wrapper for domain properties of BuildReprIndex
-  lemma BuildReprIndexDomainWF(dv: DiskView, root: Pointer)
+  lemma BuildReprIndexDomainValid(dv: DiskView, root: Pointer)
     requires dv.Decodable(root)
     requires dv.Acyclic()
     requires root.Some?  // otherwise BuildReprIndex is trivially empty
     requires dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
-    ensures IndexDomainWF(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
+    ensures IndexDomainValid(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
     ensures IndexKeysMapToValidEntries(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
   {
-    BuildReprIndexDomainWFHelper1(dv, root, dv.entries[root.value].messageSeq.seqEnd);
-    BuildReprIndexDomainWFHelper2(dv, root, dv.entries[root.value].messageSeq.seqEnd);
+    BuildReprIndexDomainValidHelper1(dv, root, dv.entries[root.value].messageSeq.seqEnd);
+    BuildReprIndexDomainValidHelper2(dv, root, dv.entries[root.value].messageSeq.seqEnd);
   }
 
-  lemma BuildReprIndexRangeWF(dv: DiskView, root: Pointer, tjEnd: LSN)
+  lemma BuildReprIndexRangeValid(dv: DiskView, root: Pointer, tjEnd: LSN)
     requires dv.Decodable(root)
     requires dv.Acyclic()
     requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
     requires root.Some? ==> dv.entries[root.value].messageSeq.seqEnd == tjEnd
     requires root.None? ==> tjEnd <= dv.boundaryLSN
-    requires IndexDomainWF(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
+    requires IndexDomainValid(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
     requires IndexKeysMapToValidEntries(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
-    ensures IndexRangeWF(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
+    ensures IndexRangeValid(BuildReprIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
     decreases dv.TheRankOf(root)
   {
     if root.Some? {
       var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
       BuildReprIndexOneStepSubmap(dv, root);
       if priorPtr.None? {
-        BuildReprIndexRangeWF(dv, priorPtr, dv.boundaryLSN);
+        BuildReprIndexRangeValid(dv, priorPtr, dv.boundaryLSN);
       } else {
-        BuildReprIndexDomainWF(dv, priorPtr);
-        BuildReprIndexRangeWF(dv, priorPtr, dv.entries[priorPtr.value].messageSeq.seqEnd);
+        BuildReprIndexDomainValid(dv, priorPtr);
+        BuildReprIndexRangeValid(dv, priorPtr, dv.entries[priorPtr.value].messageSeq.seqEnd);
       }
     }
   }
@@ -153,11 +185,11 @@ module ReprJournalRefinement {
   {
     var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
     if priorPtr.Some? {
-      BuildReprIndexDomainWF(dv, priorPtr);
+      BuildReprIndexDomainValid(dv, priorPtr);
     }
   }
 
-  lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
+  lemma {:timeLimitMultiplier 2} InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
     ensures Inv(v')
@@ -174,8 +206,7 @@ module ReprJournalRefinement {
       LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
       InvNextInternalJournalMarshalStep(v, v', lbl, step);
       BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
-    }
-    else {
+    } else {
       assert LinkedJournal.NextStep(v.journal, v'.journal, lbl, step);
       LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl);
     }
@@ -183,11 +214,17 @@ module ReprJournalRefinement {
 
   lemma DiscardOldStepPreservesWF(v: Variables, v': Variables, lbl: TransitionLabel)
     requires v.WF()
+    requires IndexDomainValid(v.reprIndex, v.journal.truncatedJournal)
+    requires IndexKeysMapToValidEntries(v.reprIndex, v.journal.truncatedJournal)
+    requires IndexRangeValid(v.reprIndex, v.journal.truncatedJournal)
     requires v.journal.truncatedJournal.diskView.Acyclic()
     requires v.reprIndex == BuildReprIndex(v.journal.truncatedJournal)
     requires v.reprIndex.Values == v.journal.truncatedJournal.Representation()
     requires DiscardOld(v, v', lbl)
     ensures v'.WF()
+    ensures IndexDomainValid(v'.reprIndex, v'.journal.truncatedJournal)
+    ensures IndexKeysMapToValidEntries(v'.reprIndex, v'.journal.truncatedJournal)
+    ensures IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal)
   {
     var tj := v.journal.truncatedJournal;
     var tj' := v'.journal.truncatedJournal;
@@ -205,6 +242,9 @@ module ReprJournalRefinement {
 
   lemma DiscardOldStepPreservesWFDiskView(v: Variables, v': Variables, lbl: TransitionLabel)
     requires v.WF()
+    requires IndexDomainValid(v.reprIndex, v.journal.truncatedJournal)
+    requires IndexKeysMapToValidEntries(v.reprIndex, v.journal.truncatedJournal)
+    requires IndexRangeValid(v.reprIndex, v.journal.truncatedJournal)
     requires v.journal.truncatedJournal.diskView.Acyclic()
     requires v.reprIndex == BuildReprIndex(v.journal.truncatedJournal)
     requires v.reprIndex.Values == v.journal.truncatedJournal.Representation()
@@ -258,11 +298,11 @@ module ReprJournalRefinement {
       BuildReprIndexWithSubDiskProducesSubMap(small, big, small.entries[root.value].CroppedPrior(small.boundaryLSN));
       var smallPrior := small.entries[root.value].CroppedPrior(small.boundaryLSN);
       if smallPrior.Some? {
-        BuildReprIndexDomainWF(small, smallPrior);
+        BuildReprIndexDomainValid(small, smallPrior);
       }
       var bigPrior := big.entries[root.value].CroppedPrior(big.boundaryLSN);
       if bigPrior.Some? {
-        BuildReprIndexDomainWF(big, bigPrior);
+        BuildReprIndexDomainValid(big, bigPrior);
       }
     }
   }
@@ -283,12 +323,12 @@ module ReprJournalRefinement {
     if newBdy < tj.SeqEnd() {
       assert IsSubMap(reprIndexDiscardUpTo(v.reprIndex, newBdy), BuildReprIndexDefn(newDiskView, tj.freshestRec)) 
       by {
-        BuildReprIndexDomainWF(newDiskView, tj.freshestRec);
+        BuildReprIndexDomainValid(newDiskView, tj.freshestRec);
         BuildReprIndexWithSubDiskProducesSubMap(newDiskView, tj.diskView, tj.freshestRec);
       }
       assert IsSubMap(BuildReprIndexDefn(newDiskView, tj.freshestRec), reprIndexDiscardUpTo(v.reprIndex, newBdy)) 
       by {
-        BuildReprIndexDomainWF(newDiskView, tj.freshestRec);
+        BuildReprIndexDomainValid(newDiskView, tj.freshestRec);
       }
     }
   }
@@ -409,11 +449,11 @@ module ReprJournalRefinement {
       RepresentationWithSubDiskProducesSubset(small, big, small.entries[root.value].CroppedPrior(small.boundaryLSN));
       var smallPrior := small.entries[root.value].CroppedPrior(small.boundaryLSN);
       if smallPrior.Some? {
-        BuildReprIndexDomainWF(small, smallPrior);
+        BuildReprIndexDomainValid(small, smallPrior);
       }
       var bigPrior := big.entries[root.value].CroppedPrior(big.boundaryLSN);
       if bigPrior.Some? {
-        BuildReprIndexDomainWF(big, bigPrior);
+        BuildReprIndexDomainValid(big, bigPrior);
       }
     }
   }
@@ -466,7 +506,7 @@ module ReprJournalRefinement {
     {
       if addr !in tj.DiscardOld(newBdy).Representation() {
         RepresentationAcrossDiscardOld(tj, newBdy);
-        BuildReprIndexDomainWF(tj.diskView, tj.freshestRec);
+        BuildReprIndexDomainValid(tj.diskView, tj.freshestRec);
         assert false;
       }
     }
@@ -480,9 +520,9 @@ module ReprJournalRefinement {
     requires tj.DiscardOld(newBdy).diskView.Acyclic()
     requires tj.freshestRec.Some? ==> newBdy < tj.diskView.entries[tj.freshestRec.value].messageSeq.seqEnd
     requires reprIndex == BuildReprIndex(tj)
-    requires IndexDomainWF(reprIndex, tj)
+    requires IndexDomainValid(reprIndex, tj)
     requires IndexKeysMapToValidEntries(reprIndex, tj)
-    requires IndexRangeWF(reprIndex, tj)
+    requires IndexRangeValid(reprIndex, tj)
     ensures forall x | x in tj.DiscardOld(newBdy).Representation()
         :: x in reprIndexDiscardUpTo(reprIndex, newBdy).Values 
   {
@@ -501,7 +541,7 @@ module ReprJournalRefinement {
           assert block.messageSeq.seqEnd <= newBdy by {
             if newBdy < block.messageSeq.seqEnd {
               var x := Mathematics.max(newBdy, block.messageSeq.seqStart);
-              assert IndexRangeWF(reprIndexDiscardUpTo(reprIndex, newBdy), tj.DiscardOld(newBdy));
+              assert IndexRangeValid(reprIndexDiscardUpTo(reprIndex, newBdy), tj.DiscardOld(newBdy));
               assert x in reprIndex && reprIndex[x] == addr && newBdy <= x;
               assert false;
             }
@@ -523,9 +563,9 @@ module ReprJournalRefinement {
     requires tj.DiskIsTightWrtRepresentation()
     requires tj.freshestRec.Some? ==> newBdy < tj.diskView.entries[tj.freshestRec.value].messageSeq.seqEnd
     requires reprIndex == BuildReprIndex(tj)
-    requires IndexDomainWF(reprIndex, tj)
+    requires IndexDomainValid(reprIndex, tj)
     requires IndexKeysMapToValidEntries(reprIndex, tj)
-    requires IndexRangeWF(reprIndex, tj)
+    requires IndexRangeValid(reprIndex, tj)
     ensures MapRestrict(tj.diskView.entries, reprIndexDiscardUpTo(reprIndex, newBdy).Values)
       == tj.diskView.DiscardOld(newBdy).BuildTight(tj.freshestRec).entries
   {

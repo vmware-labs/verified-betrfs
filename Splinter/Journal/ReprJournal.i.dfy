@@ -22,44 +22,6 @@ module ReprJournal {
   type TransitionLabel = LinkedJournal.TransitionLabel
   type Step = LinkedJournal.Step
 
-  // The Representation set for the journal data structure
-  // function Repr(tj: LinkedJournal.TruncatedJournal, reprIndex: map<LSN, Address>) : set<Address>
-  //   requires tj.WF()
-  //   requires forall x | tj.SeqStart() <= x < tj.SeqEnd() :: x in reprIndex
-  // {
-  //   // tj.SeqStart() == tj.SeqEnd() means the journal is empty
-  //   set x: LSN | tj.SeqStart() <= x < tj.SeqEnd() :: reprIndex[x]
-  // }
-
-  predicate IndexKeysMapToValidEntries(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
-    requires tj.WF()
-  {
-    forall lsn | lsn in reprIndex ::
-      && reprIndex[lsn] in tj.diskView.entries
-      && tj.diskView.entries[reprIndex[lsn]].ContainsLSN(lsn)
-  }
-
-  predicate IndexDomainWF(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
-    requires tj.WF()
-  {
-    // reprIndex's domain is exactly the set of LSN between journal.SeqStart() and journal.SeqEnd()
-    && (forall lsn :: lsn in reprIndex <==> tj.SeqStart() <= lsn < tj.SeqEnd())
-  }
-
-  predicate IndexRangeWF(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
-    requires tj.WF()
-    requires IndexDomainWF(reprIndex, tj)
-    requires IndexKeysMapToValidEntries(reprIndex, tj)
-  {
-    forall addr | addr in reprIndex.Values ::
-      && var msgs := tj.diskView.entries[addr].messageSeq;
-      && var boundaryLSN := tj.diskView.boundaryLSN;
-      && (forall lsn | Mathematics.max(boundaryLSN, msgs.seqStart) <= lsn < msgs.seqEnd :: 
-            && lsn in reprIndex
-            && reprIndex[lsn] == addr
-        )
-  }
-
   datatype Variables = Variables(
     journal: LinkedJournal.Variables,
     reprIndex: map<LSN, Address>  // maps in-repr lsn's to their page addr
@@ -67,9 +29,6 @@ module ReprJournal {
   {
     predicate WF() {
       && journal.WF()
-      && IndexDomainWF(reprIndex, journal.truncatedJournal)
-      && IndexKeysMapToValidEntries(reprIndex, journal.truncatedJournal)
-      && IndexRangeWF(reprIndex, journal.truncatedJournal)
       && journal.truncatedJournal.SeqStart() <= journal.truncatedJournal.SeqEnd()
     }
   }
@@ -153,8 +112,8 @@ module ReprJournal {
   function reprIndexAppendRecord(reprIndex: map<LSN, Address>, msgs: MsgHistory, addr: Address) : (out: map<LSN, Address>)
     requires msgs.WF()
     requires msgs.seqStart < msgs.seqEnd
-    requires forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in reprIndex;
-    ensures out.Values == reprIndex.Values + {addr}
+    ensures (forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in reprIndex) 
+            ==> out.Values == reprIndex.Values + {addr}
   {
     // msgs is complete map from seqStart to seqEnd 
     var update :=  map x: LSN | msgs.seqStart <= x < msgs.seqEnd :: addr;
