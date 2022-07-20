@@ -47,7 +47,7 @@ module LinkedBetreeRefinement {
           EmptyLinkedBtreeAcyclic();
           IStampedBetree(EmptyImage())  // "silly" case, since we never interpret non-(WF+Acyclic) things
       )
-      case InternalLabel() => PivotBetree.InternalLabel()
+      case InternalLabel(_) => PivotBetree.InternalLabel()
   }
 
   lemma ChildAtIdxCommutesWithI(linked: LinkedBetree, idx: nat, r: Ranking)

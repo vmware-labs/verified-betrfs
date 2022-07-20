@@ -49,7 +49,7 @@ module LinkedBetreeMod
     | PutLabel(puts: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(linkedBetree: StampedBetree)
-    | InternalLabel()
+    | InternalLabel(addrs: seq<Address>)
 
 
   datatype BetreeNode = BetreeNode(
@@ -498,10 +498,16 @@ module LinkedBetreeMod
         }
       }
 
-      assert dv.NodeHasLinkedChildren(dv.entries[newAddrs.left]);  // trigger
+      assert dv.NodeHasLinkedChildren(dv.entries[newAddrs.left]) by {  // trigger hecka weirdly brittle
+        var node := dv.entries[newAddrs.left];
+        forall idx:nat | node.ValidChildIndex(idx) ensures dv.ChildLinked(node, idx) {
+          assert dv.ChildLinked(node, idx);
+        }
+      }  
       assert dv.NodeHasLinkedChildren(dv.entries[newAddrs.right]) by {  // trigger hecka weirdly brittle
         var node := dv.entries[newAddrs.right];
         forall idx:nat | node.ValidChildIndex(idx) ensures dv.ChildLinked(node, idx) {  // seq offset trigger seems to help with the brittle
+          assert dv.ChildLinked(node, idx);
         }
       }
       assert dv.NodeHasLinkedChildren(dv.entries[newAddrs.parent]);  // trigger
@@ -518,6 +524,10 @@ module LinkedBetreeMod
 
     function Repr() : set<Address> {
       {left, right, parent}
+    }
+
+    function AsSeq() : seq<Address> {
+      [left, right, parent]
     }
   }
 
@@ -738,6 +748,7 @@ module LinkedBetreeMod
     && step.WF()
     && lbl.InternalLabel?
     && step.InternalFlushMemtableStep?
+    && lbl.addrs == [step.newRootAddr]
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.newRootAddr})
     && var newBuffer := Buffer(v.memtable.mapp);
@@ -761,6 +772,7 @@ module LinkedBetreeMod
     && step.WF()
     && lbl.InternalLabel?
     && step.InternalGrowStep?
+    && lbl.addrs == [step.newRootAddr]
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.newRootAddr})
     && v'.linked == InsertGrowReplacement(v.linked, step.newRootAddr).BuildTightTree()
@@ -818,6 +830,7 @@ module LinkedBetreeMod
     && v.WF()
     && lbl.InternalLabel?
     && step.InternalSplitStep?
+    && lbl.addrs == step.pathAddrs + step.newAddrs.AsSeq()
     && step.WF()
     && step.path.linked == v.linked
     && v.linked.diskView.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
@@ -858,6 +871,7 @@ module LinkedBetreeMod
     && step.WF()
     && lbl.InternalLabel?
     && step.InternalFlushStep?
+    && lbl.addrs == step.pathAddrs + [step.targetAddr, step.targetChildAddr]
     && step.path.linked == v.linked
     && step.path.Valid()
     && step.path.Target().Root().OccupiedChildIndex(step.childIdx)  // the downstream child must exist
@@ -895,6 +909,7 @@ module LinkedBetreeMod
     && step.WF()
     && lbl.InternalLabel?
     && step.InternalCompactStep?
+    && lbl.addrs == step.pathAddrs + [step.targetAddr]
     && step.path.linked == v.linked
     && step.path.Valid()
     && step.path.Target().Root().buffers.Equivalent(step.compactedBuffers)
