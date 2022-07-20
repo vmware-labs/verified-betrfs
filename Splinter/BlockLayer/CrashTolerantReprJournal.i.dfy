@@ -9,11 +9,7 @@ include "../CoordinationLayer/CrashTolerantJournal.i.dfy"
 
 module CrashTolerantReprJournal {
   import opened Options
-  // import opened ValueMessage
-  // import opened KeyType
-  // import opened StampedMod
   import opened MsgHistoryMod
-  // import opened LSNMod
   import opened GenericDisk
   import LinkedJournal
   import ReprJournal

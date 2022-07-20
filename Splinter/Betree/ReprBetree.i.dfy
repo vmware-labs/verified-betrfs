@@ -14,18 +14,8 @@ module ReprBetree
   import opened GenericDisk
   import opened KeyType
   import LinkedBetreeMod
-//  import opened Lexicographic_Byte_Order
-//   import opened LSNMod
   import opened MemtableMod
-//   import opened MsgHistoryMod
-//   import opened Options
   import opened Sequences
-//   import opened StampedMod
-//   import opened Upperbounded_Lexicographic_Byte_Order_Impl
-//   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
-//   import opened ValueMessage
-//   import opened Maps
-//   import TotalKMMapMod
 
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
