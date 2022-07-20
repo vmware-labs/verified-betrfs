@@ -195,6 +195,7 @@ module PivotBetreeRefinement
       case InternalFlushStep(path, childIdx) =>
         IPathValid(path);
         PagedBetree.InternalFlushStep(IPath(path), path.Target().DomainRoutedToChild(childIdx).KeySet())
+      case InternalFlushMemtableStep() => PagedBetree.InternalFlushMemtableStep()
       case InternalCompactStep(path, compactedBuffers) =>
         IPathValid(path);
         var out := PagedBetree.InternalCompactStep(IPath(path), compactedBuffers);
@@ -577,6 +578,16 @@ module PivotBetreeRefinement
     assert INode(PushMemtable(v.root, v.memtable).value) == INode(v.root).PushMemtable(v.memtable).value;
   }
 
+  lemma InternalFlushMemtableStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushMemtableStep?
+    ensures v'.WF()
+    ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    assert INode(PushMemtable(v.root, v.memtable).value) == INode(v.root).PushMemtable(v.memtable).value;
+  }
+
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -610,6 +621,10 @@ module PivotBetreeRefinement
       }
       case InternalFlushStep(_, _) => {
         InternalFlushStepRefines(v, v', lbl, step);
+        assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case InternalFlushMemtableStep() => {
+        InternalFlushMemtableStepRefines(v, v', lbl, step);
         assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
       case InternalCompactStep(_, _) => {

@@ -50,7 +50,7 @@ module LinkedBetreeRefinement {
       case InternalLabel() => PivotBetree.InternalLabel()
   }
 
-  lemma ChildIdxCommutesWithI(linked: LinkedBetree, idx: nat, r: Ranking)
+  lemma ChildAtIdxCommutesWithI(linked: LinkedBetree, idx: nat, r: Ranking)
     requires linked.WF()
     requires linked.HasRoot()
     requires linked.ValidRanking(r)
@@ -91,7 +91,7 @@ module LinkedBetreeRefinement {
       {
         ChildIdxAcyclic(linked, idx);
         ILinkedWF(linked.ChildAtIdx(idx), ranking);
-        ChildIdxCommutesWithI(linked, idx, linked.TheRanking());
+        ChildAtIdxCommutesWithI(linked, idx, linked.TheRanking());
       }
       ILinkedBetreeIgnoresRanking(linked, ranking, linked.TheRanking());
     }
@@ -198,6 +198,7 @@ module LinkedBetreeRefinement {
         IPathValid(path);
         TargetCommutesWithI(path);
         out
+      case InternalFlushMemtableStep(_) => PivotBetree.InternalFlushMemtableStep()
       case InternalCompactStep(path, compactedBuffers, _, _) =>
         var out := PivotBetree.InternalCompactStep(IPath(path), compactedBuffers);
         IPathValid(path);
@@ -244,6 +245,7 @@ module LinkedBetreeRefinement {
         TargetCommutesWithI(step.path);
         assert istep.WF();  // case boilerplate
       }
+      case InternalFlushMemtableStep(_) => { assert istep.WF(); }
       case InternalCompactStep(path, compactedBuffers, _, _) => {
         IPathValid(step.path);
         TargetCommutesWithI(step.path);
@@ -709,6 +711,26 @@ module LinkedBetreeRefinement {
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
   }
 
+  lemma InvNextInternalFlushMemtableStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushMemtableStep?
+    ensures v'.linked.Acyclic()
+  {
+    var newRoot := InsertInternalFlushMemtableReplacement(v.linked, Buffer(v.memtable.mapp), step.newRootAddr);
+    if v.linked.HasRoot() {
+      var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
+      var oldRootRank := oldRanking[v.linked.root.value];
+      var newRanking := oldRanking[step.newRootAddr := oldRootRank+1];  // witness
+      BuildTightPreservesWF(newRoot, newRanking);
+      assert v'.linked.ValidRanking(newRanking);
+    } else {
+      var newRanking := map[step.newRootAddr := 0];  // witness
+      BuildTightPreservesWF(newRoot, newRanking);
+      assert v'.linked.ValidRanking(newRanking);
+    }
+  }
+
   lemma RankingAfterSplitReplacement(target: LinkedBetree, ranking: Ranking, request: SplitRequest, newAddrs: SplitAddrs)
   returns (newRanking: Ranking)
     requires target.WF()
@@ -977,6 +999,9 @@ module LinkedBetreeRefinement {
       case InternalFlushStep(_, _, _, _, _) => {
         InvNextInternalFlushStep(v, v', lbl, step);
       }
+      case InternalFlushMemtableStep(_) => {
+        InvNextInternalFlushMemtableStep(v, v', lbl, step);
+      }
       case InternalCompactStep(_, _, _, _) => {
         InvNextInternalCompactStep(v, v', lbl, step);
       }
@@ -1134,7 +1159,7 @@ module LinkedBetreeRefinement {
       {
         if i == Route(path.linked.Root().pivotTable, path.key) {
           ChildIdxAcyclic(path.Substitute(replacement, pathAddrs), i);
-          ChildIdxCommutesWithI(path.Substitute(replacement, pathAddrs), i, path.Substitute(replacement, pathAddrs).TheRanking());
+          ChildAtIdxCommutesWithI(path.Substitute(replacement, pathAddrs), i, path.Substitute(replacement, pathAddrs).TheRanking());
           ILinkedBetreeIgnoresRanking(
           path.Substitute(replacement, pathAddrs).ChildAtIdx(i),
           path.Substitute(replacement, pathAddrs).TheRanking(),
@@ -1155,7 +1180,7 @@ module LinkedBetreeRefinement {
           var r := path.Substitute(replacement, pathAddrs).TheRanking();
           SubstituteNonModifiedChildren(path, replacement, pathAddrs, i, r);
           ILinkedBetreeIgnoresRanking(path.linked.ChildAtIdx(i), path.linked.ChildAtIdx(i).TheRanking(), path.linked.TheRanking());
-          ChildIdxCommutesWithI(path.linked, i, path.linked.TheRanking());
+          ChildAtIdxCommutesWithI(path.linked, i, path.linked.TheRanking());
         }
       }
     }
@@ -1371,6 +1396,39 @@ module LinkedBetreeRefinement {
     TargetCommutesWithI(step.path);
   }
 
+  lemma InternalFlushMemtableStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires v.linked.Acyclic()
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushMemtableStep?
+    ensures Inv(v')  // prereq
+    ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    InvNext(v, v', lbl);
+    var replacement := InsertInternalFlushMemtableReplacement(v.linked, Buffer(v.memtable.mapp), step.newRootAddr);
+    BuildTightPreservesInterpretation(replacement);
+    if v.linked.HasRoot() {
+      var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
+      var oldRootRank := oldRanking[v.linked.root.value];
+      var newRanking := oldRanking[step.newRootAddr := oldRootRank+1];  // witness
+      IChildrenIgnoresRanking(v.linked, v.linked.TheRanking(), newRanking);
+      ILinkedBetreeIgnoresRanking(replacement, replacement.TheRanking(), newRanking);
+      ILinkedBetreeIgnoresRanking(v.linked, v.linked.TheRanking(), newRanking);
+      var numChildren := |v.linked.Root().children|;
+      forall i | 0 <= i < numChildren 
+      ensures ILinkedBetreeNode(v.linked.ChildAtIdx(i), newRanking) == ILinkedBetreeNode(replacement.ChildAtIdx(i), newRanking);
+      {
+        IdenticalChildrenCommutesWithI(v.linked, i, replacement, i, newRanking);
+      }  
+    } else {
+      var newRanking := map[step.newRootAddr := 0];
+      ILinkedBetreeIgnoresRanking(replacement, replacement.TheRanking(), newRanking);
+      forall i | 0 <= i < |replacement.Root().children|
+      ensures ILinkedBetreeNode(replacement.ChildAtIdx(i), newRanking) == PivotBetree.Nil 
+      {}
+    }
+  }
+
   predicate HasChild(linked: LinkedBetree, idx: nat)
   {
     && linked.WF()
@@ -1388,11 +1446,11 @@ module LinkedBetreeRefinement {
     ensures linked.Acyclic()  // prereq
     ensures ILinkedBetree(linked).children[idx] == ILinkedBetree(linked').children[idx']
   {
-    ChildIdxCommutesWithI(linked, idx, linked.TheRanking());
+    ChildAtIdxCommutesWithI(linked, idx, linked.TheRanking());
     ILinkedBetreeIgnoresRanking(linked.ChildAtIdx(idx), linked.TheRanking(), ranking');
     DiskSubsetImpliesIdenticalInterpretationsWithRanking(linked.ChildAtIdx(idx), linked'.ChildAtIdx(idx'), ranking');
     ILinkedBetreeIgnoresRanking(linked'.ChildAtIdx(idx'), linked'.TheRanking(), ranking');
-    ChildIdxCommutesWithI(linked', idx', linked'.TheRanking());
+    ChildAtIdxCommutesWithI(linked', idx', linked'.TheRanking());
   }
 
   lemma SplitCommutesWithI(step: Step)
@@ -1414,7 +1472,7 @@ module LinkedBetreeRefinement {
     var ichild := itarget.children[step.request.childIdx];
     assert PivotBetree.WFChildren(itarget.children);  // trigger
     ChildIdxAcyclic(target, splitIdx);
-    ChildIdxCommutesWithI(target, splitIdx, target.TheRanking());
+    ChildAtIdxCommutesWithI(target, splitIdx, target.TheRanking());
     ILinkedBetreeIgnoresRanking(child, target.TheRanking(), child.TheRanking());
     IndexinessCommutesWithI(child);
 
@@ -1438,7 +1496,7 @@ module LinkedBetreeRefinement {
           ensures ILinkedBetreeNode(LinkedBetree(Some(step.newAddrs.left), target'.diskView), ranking').children[cidx] == inewLeftChild.children[cidx]
         {
           ILinkedBetreeIgnoresRanking(target, ranking', target.TheRanking());
-          ChildIdxCommutesWithI(target, step.request.childIdx, ranking');
+          ChildAtIdxCommutesWithI(target, step.request.childIdx, ranking');
           var oldGrandchildPtr := oldChild.Root().children[cidx];
           var newGrandchildPtr := LinkedBetree(Some(step.newAddrs.left), target'.diskView).Root().children[cidx];
           DiskSubsetImpliesIdenticalInterpretationsWithRanking(
@@ -1447,7 +1505,7 @@ module LinkedBetreeRefinement {
               ranking');
         }
         ILinkedBetreeIgnoresRanking(target'.ChildAtIdx(idx), target'.TheRanking(), ranking');
-        ChildIdxCommutesWithI(target', idx, target'.TheRanking());
+        ChildAtIdxCommutesWithI(target', idx, target'.TheRanking());
       } else if splitIdx + 1 == idx {
         // All the right grandchildren match.
         if step.request.SplitIndex? {
@@ -1455,7 +1513,7 @@ module LinkedBetreeRefinement {
             ensures ILinkedBetreeNode(LinkedBetree(Some(step.newAddrs.right), target'.diskView), ranking').children[cidx] == inewRightChild.children[cidx]
           {
             ILinkedBetreeIgnoresRanking(target, ranking', target.TheRanking());
-            ChildIdxCommutesWithI(target, step.request.childIdx, ranking');
+            ChildAtIdxCommutesWithI(target, step.request.childIdx, ranking');
             var oldGrandchildPtr := oldChild.Root().children[cidx + step.request.childPivotIdx];
             var newGrandchildPtr := LinkedBetree(Some(step.newAddrs.right), target'.diskView).Root().children[cidx];
             DiskSubsetImpliesIdenticalInterpretationsWithRanking(
@@ -1467,7 +1525,7 @@ module LinkedBetreeRefinement {
           assert IChildren(LinkedBetree(Some(step.newAddrs.right), target'.diskView), ranking')[0] == PivotBetree.Nil;  // trigger
         }
         ILinkedBetreeIgnoresRanking(target'.ChildAtIdx(idx), target'.TheRanking(), ranking');
-        ChildIdxCommutesWithI(target', idx, target'.TheRanking());
+        ChildAtIdxCommutesWithI(target', idx, target'.TheRanking());
       } else {
         IdenticalChildrenCommutesWithI(target, idx-1, target', idx, ranking');
       }
@@ -1527,6 +1585,9 @@ module LinkedBetreeRefinement {
       }
       case InternalFlushStep(_, _, _, _, _) => {
         InternalFlushStepRefines(v, v', lbl, step);
+      }
+      case InternalFlushMemtableStep(_) => {
+        InternalFlushMemtableStepRefines(v, v', lbl, step);
       }
       case InternalCompactStep(_, _, _, _) => {
         InternalCompactStepRefines(v, v', lbl, step);

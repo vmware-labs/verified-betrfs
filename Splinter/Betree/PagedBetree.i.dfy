@@ -289,6 +289,7 @@ module PagedBetree
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
+    && lbl.InternalLabel?
     && var newBuffer := Buffer(v.memtable.mapp);
     && v' == v.(
         memtable := v.memtable.Drain(),
@@ -362,7 +363,7 @@ module PagedBetree
     }
   }
 
-  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
     && lbl.InternalLabel?
@@ -426,6 +427,7 @@ module PagedBetree
     | FreezeAsStep()
     | InternalGrowStep()
     | InternalSplitStep(path: Path, leftKeys: iset<Key>, rightKeys: iset<Key>)
+    | InternalFlushMemtableStep()
     | InternalFlushStep(path: Path, downKeys: iset<Key>)
     | InternalCompactStep(path: Path, compactedBuffers: BufferStack)
   {
@@ -450,9 +452,10 @@ module PagedBetree
         case PutStep() => Put(v, v', lbl)
         case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
         case FreezeAsStep() => FreezeAs(v, v', lbl)
-        case InternalGrowStep() => InternalGrow(v, v', lbl, step)
+        case InternalGrowStep() => InternalGrow(v, v', lbl)
         case InternalSplitStep(_, _, _) => InternalSplit(v, v', lbl, step)
         case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
+        case InternalFlushMemtableStep() => InternalFlushMemtable(v, v', lbl)
         case InternalCompactStep(_, _) => InternalCompact(v, v', lbl, step)
     }
   }

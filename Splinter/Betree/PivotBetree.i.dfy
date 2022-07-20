@@ -449,6 +449,7 @@ module PivotBetree
 
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel)
   {
+    && lbl.InternalLabel?
     && v.WF()
     && var newBuffer := Buffer(v.memtable.mapp);
     && var rootBase := if v.root.Nil? then EmptyRoot(TotalDomain()) else v.root;
@@ -599,6 +600,7 @@ module PivotBetree
     | FreezeAsStep()
     | InternalGrowStep()
     | InternalSplitStep(path: Path, request: SplitRequest)
+    | InternalFlushMemtableStep()
     | InternalFlushStep(path: Path, childIdx: nat)
     | InternalCompactStep(path: Path, compactedBuffers: BufferStack)
   {
@@ -640,6 +642,7 @@ module PivotBetree
         case InternalGrowStep() => InternalGrow(v, v', lbl, step)
         case InternalSplitStep(_, _) => InternalSplit(v, v', lbl, step)
         case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
+        case InternalFlushMemtableStep() => InternalFlushMemtable(v, v', lbl)
         case InternalCompactStep(_, _) => InternalCompact(v, v', lbl, step)
       }
   }

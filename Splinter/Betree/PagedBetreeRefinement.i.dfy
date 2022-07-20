@@ -279,10 +279,10 @@ module PagedBetreeRefinement
     INodeExtensionality(path.node, path.Substitute(replacement));
   }
 
-  lemma InternalGrowNoop(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma InternalGrowNoop(v: Variables, v': Variables, lbl: TransitionLabel)
     requires v.WF()
     requires v'.WF()
-    requires InternalGrow(v, v', lbl, step)
+    requires InternalGrow(v, v', lbl)
     ensures I(v') == I(v)
   {
     var orig := v.root;
@@ -380,6 +380,15 @@ module PagedBetreeRefinement
     INodeExtensionality(target, top);
     SubstituteEquivalence(step.path, top);
     EquivalentRootVars(v, v');
+  }
+
+  lemma InternalFlushMemtableNoop(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires v.WF()
+    requires v'.WF()
+    requires InternalFlushMemtable(v, v', lbl)
+    ensures I(v') == I(v)
+  {
+    PushEmptyMemtableRefines(v'.root, v'.memtable);
   }
 
   // Note that this definition used only in PivotBetreeRefinement
@@ -566,10 +575,13 @@ module PagedBetreeRefinement
         assert AbstractMap.Next(I(v), I(v'), ILbl(lbl));
       }
       case InternalGrowStep() => {
-        InternalGrowNoop(v, v', lbl, step);
+        InternalGrowNoop(v, v', lbl);
       }
       case InternalSplitStep(_, _, _) => {
         InternalSplitNoop(v, v', lbl, step);
+      }
+      case InternalFlushMemtableStep() => {
+        InternalFlushMemtableNoop(v, v', lbl);
       }
       case InternalFlushStep(_, _) => {
         InternalFlushNoop(v, v', lbl, step);

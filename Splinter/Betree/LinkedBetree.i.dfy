@@ -651,23 +651,6 @@ module LinkedBetreeMod
     && v' == v
   }
 
-  predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel)
-  {
-    && v.WF()
-    && var newBuffer := Buffer(v.memtable.mapp);
-    && v'.linked.diskView.AgreesWithDisk(v.linked.diskView)
-      // NB: linked.WF() ==> No nondangling pointers, so in practice linked <= linked'
-    && v'.linked.HasRoot()
-    && var newBuffers := BufferStack([newBuffer]);
-    && v'.linked.Root() == (
-      if !v.linked.HasRoot()
-      then
-        BetreeNode(newBuffers, TotalPivotTable(), [None])
-      else
-        v.linked.Root().PushBufferStack(newBuffers)
-      )
-  }
-
   type PathAddrs = seq<Address>
 
   datatype Path = Path(linked: LinkedBetree, key: Key, depth: nat)
@@ -718,9 +701,7 @@ module LinkedBetreeMod
       requires CanSubstitute(replacement, pathAddrs)
       requires 0 < depth
       ensures Subpath().CanSubstitute(replacement, pathAddrs[1..])
-    {
-
-    }
+    {}
 
     function Substitute(replacement: LinkedBetree, pathAddrs: PathAddrs) : (out: LinkedBetree)
       requires CanSubstitute(replacement, pathAddrs)
@@ -737,6 +718,31 @@ module LinkedBetreeMod
         var newDiskView := subtree.diskView.ModifyDisk(pathAddrs[0], newNode);
         LinkedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView)
     }
+  }
+
+  function InsertInternalFlushMemtableReplacement(oldRoot: LinkedBetree, newBuffer: Buffer, newRootAddr:Address) : (out: LinkedBetree)
+    requires oldRoot.WF()
+  {
+    var root' := if oldRoot.HasRoot()
+      then
+        oldRoot.Root().PushBufferStack(BufferStack([newBuffer]))
+      else
+        BetreeNode(BufferStack([newBuffer]), TotalPivotTable(), [None]);
+    var dv' := oldRoot.diskView.ModifyDisk(newRootAddr, root');
+    LinkedBetree(Pointer.Some(newRootAddr), dv')
+  }
+
+  predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.WF()
+    && step.WF()
+    && lbl.InternalLabel?
+    && step.InternalFlushMemtableStep?
+    // Subway Eat Fresh!
+    && v.linked.diskView.IsFresh({step.newRootAddr})
+    && var newBuffer := Buffer(v.memtable.mapp);
+    && v'.linked == InsertInternalFlushMemtableReplacement(v.linked, newBuffer, step.newRootAddr).BuildTightTree()
+    && v'.memtable == v.memtable.Drain()
   }
 
   function InsertGrowReplacement(oldRoot: LinkedBetree, newRootAddr:Address) : (out: LinkedBetree)
@@ -918,7 +924,7 @@ module LinkedBetreeMod
 
     | InternalSplitStep(path: Path, request: SplitRequest, newAddrs: SplitAddrs, pathAddrs: PathAddrs)
       // request describes how the split applies (to an Index or Leaf); newAddrs are the new page addresses
-
+    | InternalFlushMemtableStep(newRootAddr: Address)
     | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs)
       // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
       // pathAddrs is the new addresses to place all its ancestors, used in substitution
@@ -964,6 +970,7 @@ module LinkedBetreeMod
       case FreezeAsStep() => FreezeAs(v, v', lbl)
       case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
       case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
+      case InternalFlushMemtableStep(_) => InternalFlushMemtable(v, v', lbl, step)
       case InternalFlushStep(_, _, _, _, _) => InternalFlush(v, v', lbl, step)
       case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
     }
