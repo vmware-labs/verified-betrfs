@@ -3,7 +3,7 @@
 
 include "LinkedBetree.i.dfy"
 include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
-include "../Journal/GenericDisk.i.dfy"
+include "../Disk/GenericDisk.i.dfy"
 include "Domain.i.dfy"
 
 module MarshalledBetreeMod

@@ -4,7 +4,11 @@
 include "../../lib/Base/Option.s.dfy"
 include "../../lib/Base/Maps.i.dfy"
 
-module GenericDisk {
+abstract module AddressTypeMod {
+  type Address(!new, ==)
+}
+
+module GenericDisk(address: AddressTypeMod) {
   import opened Options
   import opened Maps
 
@@ -14,7 +18,7 @@ module GenericDisk {
   lemma ParseAxiom<T>(t: T)
     ensures Parse(Marshal(t)) == t
 
-  type Address(!new, ==)
+  type Address = address.Address
   type Pointer = Option<Address>
   type Ranking = map<Address, nat>  // Used by Linked* layers to show acyclicity.
 

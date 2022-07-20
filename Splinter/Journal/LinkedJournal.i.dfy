@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "PagedJournal.i.dfy"
-include "GenericDisk.i.dfy"
+include "../Disk/GenericDisk.i.dfy"
 
-module LinkedJournal {
+module LinkedJournal(address: AddressTypeMod) {
   import opened Options
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
   import opened Maps
-  import GenericDisk
+  import GenericDisk = GenericDisk(address)
   import PagedJournal
 
   type Pointer = GenericDisk.Pointer

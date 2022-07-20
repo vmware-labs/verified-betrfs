@@ -163,10 +163,6 @@ module PagedBetreeRefinement
   {
     if 0 < |path.routing| {
       SubstitutePreservesWF(path.Subpath(), replacement);
-      assert path.Substitute(replacement).children.WF();
-      assert path.Substitute(replacement).WF();
-    } else {
-      assert path.Substitute(replacement).WF();
     }
   }
 
