@@ -1423,7 +1423,7 @@ module LinkedBetreeRefinement {
     } else {
       var newRanking := map[step.newRootAddr := 0];
       ILinkedBetreeIgnoresRanking(replacement, replacement.TheRanking(), newRanking);
-      forall i | 0 <= i < |replacement.Root().children|
+      forall i | 0 <= i < |replacement.Root().children|   // trigger
       ensures ILinkedBetreeNode(replacement.ChildAtIdx(i), newRanking) == PivotBetree.Nil 
       {}
     }
