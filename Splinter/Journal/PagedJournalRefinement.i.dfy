@@ -21,6 +21,7 @@ module PagedJournalRefinement
       case QueryEndLsnLabel(endLsn) => AbstractJournal.QueryEndLsnLabel(endLsn)
       case PutLabel(messages) => AbstractJournal.PutLabel(messages)
       case DiscardOldLabel(startLsn, requireEnd) => AbstractJournal.DiscardOldLabel(startLsn, requireEnd)
+      case InternalJournalMarshalLabel() => AbstractJournal.InternalLabel()
       case InternalLabel() => AbstractJournal.InternalLabel()
   }
 
@@ -306,6 +307,8 @@ module PagedJournalRefinement
       assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else if step.InternalJournalMarshalStep? {
       MarshallRefines(v, v', lbl, step.cut);
+      assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
+    } else if step.InternalNoOpStep? {
       assert AbstractJournal.Next(I(v), I(v'), ILbl(lbl));
     } else {
       assert false;

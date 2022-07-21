@@ -18,7 +18,8 @@ module PagedJournal {
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
-    | InternalLabel()
+    | InternalJournalMarshalLabel() // Internal-x labels refine to no-ops
+    | InternalLabel()   // Local No-op label
   {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.WF())
@@ -363,7 +364,7 @@ module PagedJournal {
   // A prefix of the unmarshalled tail can be carted off as a new page-sized journal record
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
   {
-    && lbl.InternalLabel?
+    && lbl.InternalJournalMarshalLabel?
     && v.WF()
     && v.unmarshalledTail.seqStart < cut // Can't marshall nothing.
     && v.unmarshalledTail.CanDiscardTo(cut)
@@ -371,6 +372,13 @@ module PagedJournal {
     && v' == Variables(
       v.truncatedJournal.AppendRecord(marshalledMsgs),
       v.unmarshalledTail.DiscardOld(cut))
+  }
+
+  predicate InternalJournalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.InternalLabel?
+    && v.WF()
+    && v' == v
   }
 
   predicate Init(v: Variables, tj: TruncatedJournal)
@@ -386,6 +394,7 @@ module PagedJournal {
     | PutStep()
     | DiscardOldStep()
     | InternalJournalMarshalStep(cut: LSN)
+    | InternalNoOpStep()
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
@@ -396,6 +405,7 @@ module PagedJournal {
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
       case InternalJournalMarshalStep(cut) => InternalJournalMarshal(v, v', lbl, cut)
+      case InternalNoOpStep() => InternalJournalNoOp(v, v', lbl)
     }
   }
 

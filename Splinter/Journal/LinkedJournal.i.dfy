@@ -22,7 +22,8 @@ module LinkedJournal {
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
-    | InternalLabel(addr: Address)
+    | InternalJournalMarshalLabel(addr: Address)  // Internal-x labels refine to no-ops at the abstract spec
+    | InternalLabel()  // Local No-op label
   {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
@@ -418,7 +419,7 @@ module LinkedJournal {
 
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
   {
-    && lbl.InternalLabel?
+    && lbl.InternalJournalMarshalLabel?
     && v.WF()
     && v.unmarshalledTail.seqStart < cut // Can't marshall nothing.
     && v.unmarshalledTail.CanDiscardTo(cut)
@@ -427,6 +428,13 @@ module LinkedJournal {
     && v' == Variables(
       v.truncatedJournal.AppendRecord(lbl.addr, marshalledMsgs),
       v.unmarshalledTail.DiscardOld(cut))
+  }
+
+  predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.InternalLabel?
+    && v.WF()
+    && v' == v
   }
 
   predicate Init(v: Variables, tj: TruncatedJournal)
@@ -442,6 +450,7 @@ module LinkedJournal {
     | PutStep()
     | DiscardOldStep()
     | InternalJournalMarshalStep(cut: LSN)
+    | InternalNoOpStep()
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
@@ -452,6 +461,7 @@ module LinkedJournal {
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
       case InternalJournalMarshalStep(cut) => InternalJournalMarshal(v, v', lbl, cut)
+      case InternalNoOpStep() => InternalNoOp(v, v', lbl)
     }
   }
 

@@ -25,7 +25,8 @@ module LinkedJournalRefinement
       case QueryEndLsnLabel(endLsn) => PagedJournal.QueryEndLsnLabel(endLsn)
       case PutLabel(messages) => PagedJournal.PutLabel(messages)
       case DiscardOldLabel(startLsn, requireEnd) => PagedJournal.DiscardOldLabel(startLsn, requireEnd)
-      case InternalLabel(addrs) => PagedJournal.InternalLabel()
+      case InternalJournalMarshalLabel(addrs) => PagedJournal.InternalJournalMarshalLabel()
+      case InternalLabel() => PagedJournal.InternalLabel()
   }
 
   predicate Inv(v: Variables)
@@ -313,6 +314,8 @@ module LinkedJournalRefinement
       assert v'.truncatedJournal.diskView.PointersRespectRank(rank'); // new rank witness to Acyclic
 
       IPtrFraming(v.truncatedJournal.diskView, v'.truncatedJournal.diskView, v.truncatedJournal.freshestRec);
+    } else if step.InternalNoOpStep? {
+      assert Inv(v');
     } else {
       assert false;
     }
@@ -611,6 +614,8 @@ module LinkedJournalRefinement
     } else if step.InternalJournalMarshalStep? {
       IPtrFraming(v.truncatedJournal.diskView, v'.truncatedJournal.diskView, v.truncatedJournal.freshestRec);
       assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.InternalJournalMarshalStep(step.cut)); // witness step
+    } else if step.InternalNoOpStep? {
+      assert PagedJournal.NextStep(I(v), I(v'), ILbl(lbl), PagedJournal.InternalNoOpStep()); // witness step
     } else {
       assert false;
     }
@@ -765,7 +770,7 @@ module LinkedJournalRefinement
   lemma InFlightSubDiskPreserved(v: Variables, v': Variables, inFlight: TruncatedJournal, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
-    requires lbl.InternalLabel?
+    requires lbl.InternalJournalMarshalLabel?
     requires InFlightSubDiskProperty(v, inFlight)
     ensures InFlightSubDiskProperty(v', inFlight)
   {
