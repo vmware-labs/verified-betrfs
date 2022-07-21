@@ -18,7 +18,6 @@ module PagedJournal {
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
-    | InternalJournalMarshalLabel() // Internal-x labels refine to no-ops
     | InternalLabel()   // Local No-op label
   {
     predicate WF() {
@@ -364,7 +363,7 @@ module PagedJournal {
   // A prefix of the unmarshalled tail can be carted off as a new page-sized journal record
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
   {
-    && lbl.InternalJournalMarshalLabel?
+    && lbl.InternalLabel?
     && v.WF()
     && v.unmarshalledTail.seqStart < cut // Can't marshall nothing.
     && v.unmarshalledTail.CanDiscardTo(cut)

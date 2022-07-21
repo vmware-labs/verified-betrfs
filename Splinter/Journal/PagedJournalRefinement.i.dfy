@@ -21,7 +21,6 @@ module PagedJournalRefinement
       case QueryEndLsnLabel(endLsn) => AbstractJournal.QueryEndLsnLabel(endLsn)
       case PutLabel(messages) => AbstractJournal.PutLabel(messages)
       case DiscardOldLabel(startLsn, requireEnd) => AbstractJournal.DiscardOldLabel(startLsn, requireEnd)
-      case InternalJournalMarshalLabel() => AbstractJournal.InternalLabel()
       case InternalLabel() => AbstractJournal.InternalLabel()
   }
 

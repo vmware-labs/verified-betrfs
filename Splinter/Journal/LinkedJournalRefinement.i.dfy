@@ -25,7 +25,7 @@ module LinkedJournalRefinement
       case QueryEndLsnLabel(endLsn) => PagedJournal.QueryEndLsnLabel(endLsn)
       case PutLabel(messages) => PagedJournal.PutLabel(messages)
       case DiscardOldLabel(startLsn, requireEnd) => PagedJournal.DiscardOldLabel(startLsn, requireEnd)
-      case InternalJournalMarshalLabel(addrs) => PagedJournal.InternalJournalMarshalLabel()
+      case InternalJournalMarshalLabel(addrs) => PagedJournal.InternalLabel()
       case InternalLabel() => PagedJournal.InternalLabel()
   }
 
