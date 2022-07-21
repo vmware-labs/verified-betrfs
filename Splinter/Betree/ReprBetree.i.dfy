@@ -11,20 +11,41 @@ module ReprBetree
   import opened BoundedPivotsLib
   import opened Buffers
   import opened DomainMod
+  import opened LSNMod
+  import opened ValueMessage
   import opened GenericDisk
   import opened KeyType
-  import LinkedBetreeMod
   import opened MemtableMod
+  import opened MsgHistoryMod
   import opened Sequences
+  import LinkedBetreeMod
 
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
 
   type StampedBetree = LinkedBetreeMod.StampedBetree
   type LinkedBetree = LinkedBetreeMod.LinkedBetree
-  type TransitionLabel = LinkedBetreeMod.TransitionLabel
   type Step = LinkedBetreeMod.Step
   type QueryReceipt = LinkedBetreeMod.QueryReceipt
+  
+  // Copied from linkedJournal, except for InternalLabel
+  datatype TransitionLabel =
+      QueryLabel(endLsn: LSN, key: Key, value: Value)
+    | PutLabel(puts: MsgHistory)
+    | QueryEndLsnLabel(endLsn: LSN)
+    | FreezeAsLabel(linkedBetree: StampedBetree)
+    | InternalLabel(addrs: seq<Address>, freedAddrs: set<Address>) 
+  {
+    function I() : LinkedBetreeMod.TransitionLabel {
+      match this {
+        case QueryLabel(endLsn, key, value) => LinkedBetreeMod.QueryLabel(endLsn, key, value)
+        case PutLabel(puts) => LinkedBetreeMod.PutLabel(puts)
+        case QueryEndLsnLabel(endLsn) => LinkedBetreeMod.QueryEndLsnLabel(endLsn)
+        case FreezeAsLabel(linkedBetree) => LinkedBetreeMod.FreezeAsLabel(linkedBetree)
+        case InternalLabel(addrs, _) => LinkedBetreeMod.InternalLabel(addrs)
+      }
+    }
+  }
 
   datatype Variables = Variables(
     betree: LinkedBetreeMod.Variables,
@@ -38,7 +59,7 @@ module ReprBetree
 
   predicate Query(v: Variables, v': Variables, lbl: TransitionLabel, receipt: QueryReceipt)
   {
-    && LinkedBetreeMod.Query(v.betree, v'.betree, lbl, receipt)
+    && LinkedBetreeMod.Query(v.betree, v'.betree, lbl.I(), receipt)
     && v' == v.(
       betree := v'.betree
     )
@@ -46,7 +67,7 @@ module ReprBetree
 
   predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    && LinkedBetreeMod.Put(v.betree, v'.betree, lbl)
+    && LinkedBetreeMod.Put(v.betree, v'.betree, lbl.I())
     && v' == v.(
       betree := v'.betree
     )
@@ -54,7 +75,7 @@ module ReprBetree
 
   predicate QueryEndLsn(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    && LinkedBetreeMod.QueryEndLsn(v.betree, v'.betree, lbl)
+    && LinkedBetreeMod.QueryEndLsn(v.betree, v'.betree, lbl.I())
     && v' == v.(
       betree := v'.betree
     )
@@ -62,7 +83,7 @@ module ReprBetree
 
   predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    && LinkedBetreeMod.FreezeAs(v.betree, v'.betree, lbl)
+    && LinkedBetreeMod.FreezeAs(v.betree, v'.betree, lbl.I())
     && v' == v.(
       betree := v'.betree
     )
@@ -70,7 +91,7 @@ module ReprBetree
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    && LinkedBetreeMod.InternalGrow(v.betree, v'.betree, lbl, step)
+    && LinkedBetreeMod.InternalGrow(v.betree, v'.betree, lbl.I(), step)
     && v' == v.(
       betree := v'.betree,
       repr := v.repr + {step.newRootAddr}
