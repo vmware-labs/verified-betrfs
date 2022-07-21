@@ -4,13 +4,27 @@
 include "../../lib/Base/Option.s.dfy"
 include "../../lib/Base/Maps.i.dfy"
 
-abstract module AddressTypeMod {
-  type Address(!new, ==)
-}
 
-module GenericDisk(address: AddressTypeMod) {
+module GenericDisk {
   import opened Options
   import opened Maps
+
+  //////////////////////////////////////////////////////////////////
+  // jonh fought for too long trying to make address type a (module) parameter,
+  // and eventually gave up (see branch splinter-journal-auaddress-module-disaster).
+  // So for now we're just going to hardcode the AU-address-shape assumptions up
+  // too high in the refinement stack. :v(
+  type AU = nat
+  type Page = nat
+
+  function PageCount() : nat
+
+  datatype Address = Address(au: AU, page: Page) {
+    predicate WF() {
+      && page < PageCount()
+    }
+  }
+  //////////////////////////////////////////////////////////////////
 
   type Block(!new, ==)
   function Parse<T>(block: Block) : T
@@ -18,7 +32,6 @@ module GenericDisk(address: AddressTypeMod) {
   lemma ParseAxiom<T>(t: T)
     ensures Parse(Marshal(t)) == t
 
-  type Address = address.Address
   type Pointer = Option<Address>
   type Ranking = map<Address, nat>  // Used by Linked* layers to show acyclicity.
 

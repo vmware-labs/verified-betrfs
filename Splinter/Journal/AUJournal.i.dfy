@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "ReprJournal.i.dfy"
-include "../Disk/AUDisk.i.dfy"
 
 // A Journal that keeps an in-memory index that maps each in-use LSN to the AUs that store it.
 // The impl will keep such an index so that Discard can return freed AUs without having to
@@ -15,19 +14,60 @@ module AUJournal {
   import opened Sequences
   import opened Maps
   import Mathematics
-  import opened AUDisk = GenericDisk(AUAddress)
-  import AUReprJournal = ReprJournal(AUAddress)
-  import AUAddress
+  import ReprJournal
+  import opened GenericDisk
 
-  type AU = AUAddress.AU
-
-  type Pointer = AUDisk.Pointer
-  type Address = AUDisk.Address
-
-  function AddrsForAus(aus: seq<AU>) : seq<AUReprJournal.Address>
+  function AddrsForAu(au: AU) : (out: seq<Address>)
   {
-    []  // TODO
-    //seq(|aus|*AUAddress.PageSize(), i:nat requires i<|aus|*AUAddress.PageSize() => aus[i]
+    seq(PageCount(), page requires 0 <= page < PageCount() => Address(au, page))
+  }
+
+  function AddrsForAusDefn(aus: seq<AU>) : (out: seq<Address>)
+  {
+    if |aus| == 0 then []
+    else AddrsForAusDefn(DropLast(aus)) + AddrsForAu(Last(aus))
+  }
+
+  lemma AddrsForAusInduction(aus: seq<AU>)
+    ensures forall addr:Address :: addr.au in aus && addr.WF() <==> addr in AddrsForAusDefn(aus)
+  {
+    if 0 < |aus| {
+      AddrsForAusInduction(DropLast(aus));
+      forall addr:Address | addr.au in aus && addr.WF() ensures addr in AddrsForAusDefn(aus) {
+        assert AddrsForAu(addr.au)[addr.page] == addr;
+      }
+    }
+  }
+
+  function AddrsForAus(aus: seq<AU>) : (out: seq<Address>)
+    ensures forall addr:Address :: addr.au in aus && addr.WF() <==> addr in AddrsForAusDefn(aus)
+  {
+    AddrsForAusInduction(aus);
+    AddrsForAusDefn(aus)
+  }
+
+  // Well-formed if we have exactly one of a nextReserved address or a fresh au
+  // coming in from the transition label; computes the current address (from
+  // either source) and the next address to record as reserved.
+  datatype NextAddrTool = NextAddrTool(nextReserved: Option<Address>, au: Option<AU>)
+  {
+    predicate WF()
+    {
+      nextReserved.Some? <==> au.None?
+    }
+
+    function Cur() : Address
+      requires WF()
+    {
+      if nextReserved.Some? then nextReserved.value else Address(au.value, 0)
+    }
+
+    function Next() : Option<Address>
+      requires WF()
+    {
+      var nextPage := Cur().page + 1;
+      if nextPage < PageCount() then Some(Address(Cur().au, nextPage)) else None
+    }
   }
 
   datatype TransitionLabel =
@@ -35,39 +75,34 @@ module AUJournal {
     | FreezeForCommitLabel(frozenJournal: TruncatedJournal)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
-    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN, freedAddrs: seq<AU>)
+    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN, freedAUs: seq<AU>)
     | InternalLabel(au: Option<AU>)
   {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
     }
 
-    function I(nextReserved: Option<AUAddress.Address>): AUReprJournal.TransitionLabel
-      requires InternalLabel? && au.None? ==> nextReserved.Some?
+    function I(marshalAddr: Option<Address>): ReprJournal.TransitionLabel
+      requires (InternalLabel? <==> marshalAddr.Some?)
     {
       match this {
-        case ReadForRecoveryLabel(messages) => AUReprJournal.ReadForRecoveryLabel(messages)
-        case FreezeForCommitLabel(frozenJournal) => AUReprJournal.FreezeForCommitLabel(frozenJournal)
-        case QueryEndLsnLabel(endLsn) => AUReprJournal.QueryEndLsnLabel(endLsn)
-        case PutLabel(messages) => AUReprJournal.PutLabel(messages)
-        case DiscardOldLabel(startLsn, requireEnd, freedAddrs) => AUReprJournal.DiscardOldLabel(startLsn, requireEnd, AddrsForAus(freedAddrs))
-        case InternalLabel(au) => AUReprJournal.InternalLabel(
-            var x:AUReprJournal.Address := match au {
-              case Some(au) => AUAddress.Address(au, 0)
-              case None => nextReserved.value
-            }; x
-          )
+        case ReadForRecoveryLabel(messages) => ReprJournal.ReadForRecoveryLabel(messages)
+        case FreezeForCommitLabel(frozenJournal) => ReprJournal.FreezeForCommitLabel(frozenJournal)
+        case QueryEndLsnLabel(endLsn) => ReprJournal.QueryEndLsnLabel(endLsn)
+        case PutLabel(messages) => ReprJournal.PutLabel(messages)
+        case DiscardOldLabel(startLsn, requireEnd, freedAUs) => ReprJournal.DiscardOldLabel(startLsn, requireEnd, AddrsForAus(freedAUs))
+        case InternalLabel(au) => ReprJournal.InternalLabel(marshalAddr.value)
       }
     }
   }
 
-  type DiskView = AUReprJournal.DiskView
-  type TruncatedJournal = AUReprJournal.TruncatedJournal
-  type Step = AUReprJournal.Step
+  type DiskView = ReprJournal.DiskView
+  type TruncatedJournal = ReprJournal.TruncatedJournal
+  type Step = ReprJournal.Step
 
   datatype Variables = Variables(
-    reprJournal: AUReprJournal.Variables,
-    nextReserved: Option<AUAddress.Address>
+    reprJournal: ReprJournal.Variables,
+    nextReserved: Option<Address>
   )
   {
     predicate WF() {
@@ -78,12 +113,13 @@ module AUJournal {
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
   {
     && v.WF()
-    && AUReprJournal.InternalJournalMarshal(v.reprJournal, v'.reprJournal, lbl.I(v.nextReserved), cut)
-    && var addr := if v.nextReserved.Some? then v.nextReserved.value else AUAddress.Address(lbl.au.value, 0);
+    && lbl.InternalLabel?
+    && var tool := NextAddrTool(v.nextReserved, lbl.au);
+    && tool.WF()
+    && ReprJournal.InternalJournalMarshal(v.reprJournal, v'.reprJournal, lbl.I(Some(tool.Cur())), cut)
     && v' == v.(
-      reprJournal := v'.reprJournal
-      //,
-      //nextReserved -> increment or None?
+      reprJournal := v'.reprJournal,
+      nextReserved := tool.Next()
     )
   }
 

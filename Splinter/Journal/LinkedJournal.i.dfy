@@ -4,13 +4,13 @@
 include "PagedJournal.i.dfy"
 include "../Disk/GenericDisk.i.dfy"
 
-module LinkedJournal(address: AddressTypeMod) {
+module LinkedJournal {
   import opened Options
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
   import opened Maps
-  import GenericDisk = GenericDisk(address)
+  import GenericDisk
   import PagedJournal
 
   type Pointer = GenericDisk.Pointer

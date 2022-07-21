@@ -6,14 +6,14 @@ include "LinkedJournal.i.dfy"
 // A Journal that keeps an in-memory index that maps each in-use LSN to the Address that stores it.
 // The impl will keep such an index so that Discard can return freed Addresses without having to
 // fault in the freed section of the journal to learn the chain of addresses involved.
-module ReprJournal(address: AddressTypeMod) {
+module ReprJournal {
   import opened Options
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
   import opened Maps
-  import LinkedJournal = LinkedJournal(address)
-  import GenericDisk = LinkedJournal.GenericDisk
+  import LinkedJournal
+  import GenericDisk
   import Mathematics
 
   type Pointer = GenericDisk.Pointer
