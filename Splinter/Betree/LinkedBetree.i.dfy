@@ -49,7 +49,9 @@ module LinkedBetreeMod
     | PutLabel(puts: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(linkedBetree: StampedBetree)
-    | InternalLabel(addrs: seq<Address>)
+     // Internal-x labels refine to no-ops at the abstract spec
+    | InternalAllocationsLabel(addrs: seq<Address>)  // for steps that involve allocating new pages
+    | InternalLabel()   // Local No-op label
 
 
   datatype BetreeNode = BetreeNode(
@@ -746,7 +748,7 @@ module LinkedBetreeMod
   {
     && v.WF()
     && step.WF()
-    && lbl.InternalLabel?
+    && lbl.InternalAllocationsLabel?
     && step.InternalFlushMemtableStep?
     && lbl.addrs == [step.newRootAddr]
     // Subway Eat Fresh!
@@ -770,7 +772,7 @@ module LinkedBetreeMod
   {
     && v.WF()
     && step.WF()
-    && lbl.InternalLabel?
+    && lbl.InternalAllocationsLabel?
     && step.InternalGrowStep?
     && lbl.addrs == [step.newRootAddr]
     // Subway Eat Fresh!
@@ -828,7 +830,7 @@ module LinkedBetreeMod
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
-    && lbl.InternalLabel?
+    && lbl.InternalAllocationsLabel?
     && step.InternalSplitStep?
     && lbl.addrs == step.pathAddrs + step.newAddrs.AsSeq()
     && step.WF()
@@ -869,7 +871,7 @@ module LinkedBetreeMod
   {
     && v.WF()
     && step.WF()
-    && lbl.InternalLabel?
+    && lbl.InternalAllocationsLabel?
     && step.InternalFlushStep?
     && lbl.addrs == step.pathAddrs + [step.targetAddr, step.targetChildAddr]
     && step.path.linked == v.linked
@@ -907,7 +909,7 @@ module LinkedBetreeMod
   {
     && v.WF()
     && step.WF()
-    && lbl.InternalLabel?
+    && lbl.InternalAllocationsLabel?
     && step.InternalCompactStep?
     && lbl.addrs == step.pathAddrs + [step.targetAddr]
     && step.path.linked == v.linked
@@ -920,6 +922,13 @@ module LinkedBetreeMod
         step.pathAddrs
     ).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
+  }
+
+  predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.InternalLabel?
+    && v.WF()
+    && v' == v
   }
 
   // public:
@@ -946,6 +955,7 @@ module LinkedBetreeMod
 
     | InternalCompactStep(path: Path, compactedBuffers: BufferStack, targetAddr: Address, pathAddrs: PathAddrs)
       // targetAddr is the fresh address at which compactedNode is placed. pathAddrs is the new addresses to place all its ancestors
+    | InternalNoOpStep()
   {
     predicate WF() {
       match this {
@@ -988,6 +998,7 @@ module LinkedBetreeMod
       case InternalFlushMemtableStep(_) => InternalFlushMemtable(v, v', lbl, step)
       case InternalFlushStep(_, _, _, _, _) => InternalFlush(v, v', lbl, step)
       case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
+      case InternalNoOpStep() => InternalNoOp(v, v', lbl)
     }
   }
 

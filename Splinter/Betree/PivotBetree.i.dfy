@@ -585,6 +585,13 @@ module PivotBetree
       )
   }
 
+  predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.InternalLabel?
+    && v.WF()
+    && v' == v
+  }
+
   // public:
 
   predicate Init(v: Variables, stampedBetree: StampedBetree)
@@ -603,6 +610,7 @@ module PivotBetree
     | InternalFlushMemtableStep()
     | InternalFlushStep(path: Path, childIdx: nat)
     | InternalCompactStep(path: Path, compactedBuffers: BufferStack)
+    | InternalNoOpStep()
   {
     predicate WF() {
       match this {
@@ -644,6 +652,7 @@ module PivotBetree
         case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
         case InternalFlushMemtableStep() => InternalFlushMemtable(v, v', lbl)
         case InternalCompactStep(_, _) => InternalCompact(v, v', lbl, step)
+        case InternalNoOpStep() => InternalNoOp(v, v', lbl)
       }
   }
 

@@ -589,6 +589,9 @@ module PagedBetreeRefinement
       case InternalCompactStep(_, _) => {
         InternalCompactNoop(v, v', lbl, step);
       }
+      case InternalNoOpStep() => {
+        assert AbstractMap.Next(I(v), I(v'), ILbl(lbl));
+      }
     }
   }
 }

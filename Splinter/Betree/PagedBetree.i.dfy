@@ -412,6 +412,13 @@ module PagedBetree
     )
   }
 
+  predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.InternalLabel?
+    && v.WF()
+    && v' == v
+  }
+
   // public:
 
   predicate Init(v: Variables, stampedBetree: StampedBetree)
@@ -430,6 +437,7 @@ module PagedBetree
     | InternalFlushMemtableStep()
     | InternalFlushStep(path: Path, downKeys: iset<Key>)
     | InternalCompactStep(path: Path, compactedBuffers: BufferStack)
+    | InternalNoOpStep()
   {
     predicate WF() {
       match this {
@@ -457,6 +465,7 @@ module PagedBetree
         case InternalFlushStep(_, _) => InternalFlush(v, v', lbl, step)
         case InternalFlushMemtableStep() => InternalFlushMemtable(v, v', lbl)
         case InternalCompactStep(_, _) => InternalCompact(v, v', lbl, step)
+        case InternalNoOpStep() => InternalNoOp(v, v', lbl)
     }
   }
 

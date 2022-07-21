@@ -201,6 +201,7 @@ module PivotBetreeRefinement
         var out := PagedBetree.InternalCompactStep(IPath(path), compactedBuffers);
         TargetCommutesWithI(path);
         out
+      case InternalNoOpStep() => PagedBetree.InternalNoOpStep()
     }
   }
 
@@ -631,6 +632,8 @@ module PivotBetreeRefinement
         InternalCompactStepRefines(v, v', lbl, step);
         assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
+      case InternalNoOpStep() => 
+         assert PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
     }
   }
 }

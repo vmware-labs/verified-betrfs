@@ -47,7 +47,8 @@ module LinkedBetreeRefinement {
           EmptyLinkedBtreeAcyclic();
           IStampedBetree(EmptyImage())  // "silly" case, since we never interpret non-(WF+Acyclic) things
       )
-      case InternalLabel(_) => PivotBetree.InternalLabel()
+      case InternalAllocationsLabel(_) => PivotBetree.InternalLabel()
+      case InternalLabel() => PivotBetree.InternalLabel()
   }
 
   lemma ChildAtIdxCommutesWithI(linked: LinkedBetree, idx: nat, r: Ranking)
@@ -204,6 +205,7 @@ module LinkedBetreeRefinement {
         IPathValid(path);
         TargetCommutesWithI(path);
         out
+      case InternalNoOpStep() => PivotBetree.InternalNoOpStep()
     }
   }
 
@@ -251,6 +253,7 @@ module LinkedBetreeRefinement {
         TargetCommutesWithI(step.path);
         assert istep.WF();  // case boilerplate
       }
+      case InternalNoOpStep() => assert istep.WF();
     }
   }
 
@@ -1005,6 +1008,9 @@ module LinkedBetreeRefinement {
       case InternalCompactStep(_, _, _, _) => {
         InvNextInternalCompactStep(v, v', lbl, step);
       }
+      case InternalNoOpStep() => {
+        assert Inv(v');
+      }
     }
   }
 
@@ -1591,6 +1597,9 @@ module LinkedBetreeRefinement {
       }
       case InternalCompactStep(_, _, _, _) => {
         InternalCompactStepRefines(v, v', lbl, step);
+      }
+      case InternalNoOpStep() => {
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
       }
     }
   }
