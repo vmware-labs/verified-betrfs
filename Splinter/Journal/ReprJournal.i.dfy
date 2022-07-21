@@ -19,38 +19,49 @@ module ReprJournal {
 
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
+  type DiskView = LinkedJournal.DiskView
+  type TruncatedJournal = LinkedJournal.TruncatedJournal
+
+  datatype GCTruncatedJournal = GCTruncatedJournal(
+    reserved: seq<Address>,
+    stranded: set<Address>,
+    journal: TruncatedJournal
+  )
 
   datatype TransitionLabel =
       ReadForRecoveryLabel(messages: MsgHistory)
-    | FreezeForCommitLabel(frozenJournal: TruncatedJournal)
+    | FreezeForCommitLabel(frozenJournal: GCTruncatedJournal)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
-    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN, freedAddrs: set<Address>)
-    | InternalLabel(addr: Address)
+    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
+    // Internal-x labels refine to no-ops at the abstract spec
+    | InternalJournalMarshalLabel(addr: Address)
+    | InternalJournalGCLabel(allocations: seq<Address>, freed: set<Address>)
+    | InternalLabel()  // Local No-op label
   {
     predicate WF() {
-      && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
+      && (FreezeForCommitLabel? ==> frozenJournal.journal.Decodable())
     }
 
     function I(): LinkedJournal.TransitionLabel {
       match this {
         case ReadForRecoveryLabel(messages) => LinkedJournal.ReadForRecoveryLabel(messages)
-        case FreezeForCommitLabel(frozenJournal) => LinkedJournal.FreezeForCommitLabel(frozenJournal)
+        case FreezeForCommitLabel(frozenJournal) => LinkedJournal.FreezeForCommitLabel(frozenJournal.journal)
         case QueryEndLsnLabel(endLsn) => LinkedJournal.QueryEndLsnLabel(endLsn)
         case PutLabel(messages) => LinkedJournal.PutLabel(messages)
-        case DiscardOldLabel(startLsn, requireEnd, freedAddrs) => LinkedJournal.DiscardOldLabel(startLsn, requireEnd)
-        case InternalLabel(addr) => LinkedJournal.InternalLabel(addr)
+        case DiscardOldLabel(startLsn, requireEnd) => LinkedJournal.DiscardOldLabel(startLsn, requireEnd)
+        case InternalJournalMarshalLabel(addr) => LinkedJournal.InternalJournalMarshalLabel(addr)
+        case InternalJournalGCLabel(_, _) => LinkedJournal.InternalLabel()
+        case InternalLabel() => LinkedJournal.InternalLabel()
       }
     }
   }
 
-  type DiskView = LinkedJournal.DiskView
-  type TruncatedJournal = LinkedJournal.TruncatedJournal
-  type Step = LinkedJournal.Step
-
   datatype Variables = Variables(
     journal: LinkedJournal.Variables,
-    reprIndex: map<LSN, Address>  // maps in-repr lsn's to their page addr
+    reprIndex: map<LSN, Address>,   // maps in-repr lsn's to their page addr
+    reserved: seq<Address>,         // reserved addresses given by the global allocator
+    stranded: set<Address>          // set of stranded addresses
   )
   {
     predicate WF() {
@@ -70,6 +81,9 @@ module ReprJournal {
   predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, depth: nat)
   {
     && LinkedJournal.FreezeForCommit(v.journal, v'.journal, lbl.I(), depth)
+    // we only remember a subset of our reserved and stranded set as we freeze
+    && IsPrefix(lbl.frozenJournal.reserved, v.reserved)
+    && lbl.frozenJournal.stranded <= v.stranded 
     && v' == v.(
       journal := v'.journal
     )
@@ -123,7 +137,6 @@ module ReprJournal {
     // Define v'
     && var reprIndex' := reprIndexDiscardUpTo(v.reprIndex, lbl.startLsn);
     && var keepAddrs := reprIndex'.Values;
-    && lbl.freedAddrs == v.reprIndex.Values - keepAddrs  // "return" the set of freed addrs
     && v' == v.(
       journal := LinkedJournal.Variables(
         DiscardOldAndGarbageCollect(v.journal.truncatedJournal, lbl.startLsn, keepAddrs),
@@ -131,7 +144,8 @@ module ReprJournal {
         then v.journal.unmarshalledTail.DiscardOld(lbl.startLsn)
         else v.journal.unmarshalledTail
       ),
-      reprIndex := reprIndex'
+      reprIndex := reprIndex',
+      stranded := v.stranded + (v.reprIndex.Values - keepAddrs)  // "return" the set of freed addrs
   )
   }
 
@@ -150,13 +164,38 @@ module ReprJournal {
 
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
   {
+    // Enabling conditions
+    && lbl.InternalJournalMarshalLabel?
     && v.WF()
+    && 0 < |v.reserved|
+    && lbl.addr == v.reserved[0]
+    // State transition
     && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl.I(), cut)
-    && lbl.addr !in v.reprIndex.Values  // Fresh!
     && v' == v.(
       journal := v'.journal,
-      reprIndex := reprIndexAppendRecord(v.reprIndex, v.journal.unmarshalledTail.DiscardRecent(cut), lbl.addr)
+      reprIndex := reprIndexAppendRecord(v.reprIndex, v.journal.unmarshalledTail.DiscardRecent(cut), lbl.addr),
+      reserved := v.reserved[1..]
     )
+  }
+
+  predicate InternalJournalGarbageCollect(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    // Enabling conditions
+    && lbl.InternalJournalGCLabel?
+    && v.WF()
+    && lbl.freed <= v.stranded
+    // State transition
+    && v' == v.(
+      reserved := v.reserved + lbl.allocations,
+      stranded := v.stranded - lbl.freed
+    )
+  }
+
+  predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.InternalLabel?
+    && v.WF()
+    && v' == v
   }
 
   function BuildReprIndexDefn(dv: DiskView, root: Pointer) : map<LSN, Address> 
@@ -180,16 +219,29 @@ module ReprJournal {
    BuildReprIndexDefn(tj.diskView, tj.freshestRec)
   }
 
-  predicate Init(v: Variables, tj: TruncatedJournal)
+  predicate Init(v: Variables, gcJournal: GCTruncatedJournal)
   {
+    var tj := gcJournal.journal;
     && tj.Decodable()  // An invariant carried by CoordinationSystem from FreezeForCommit, past a crash, back here
     && tj.DiskIsTightWrtRepresentation()
     && v == 
         Variables(
           LinkedJournal.Variables(tj, EmptyHistoryAt(tj.BuildTight().SeqEnd())),
-          BuildReprIndex(tj)
+          BuildReprIndex(tj),
+          gcJournal.reserved,
+          gcJournal.stranded
       )
   }
+
+  datatype Step =
+      ReadForRecoveryStep(depth: nat)
+    | FreezeForCommitStep(depth: nat)
+    | ObserveFreshJournalStep()
+    | PutStep()
+    | DiscardOldStep()
+    | InternalJournalMarshalStep(cut: LSN)
+    | InternalJournalGCStep()
+    | InternalNoOpStep()
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
@@ -200,6 +252,8 @@ module ReprJournal {
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
       case InternalJournalMarshalStep(cut) => InternalJournalMarshal(v, v', lbl, cut)
+      case InternalJournalGCStep() => InternalJournalGarbageCollect(v, v', lbl)
+      case InternalNoOpStep() =>  InternalNoOp(v, v', lbl)
     }
   }
 

@@ -8,6 +8,21 @@ module ReprJournalRefinement {
   import LinkedJournal
   import LinkedJournalRefinement
 
+
+  function IStep(step: Step) : LinkedJournal.Step {
+    match step {
+      case ReadForRecoveryStep(depth) => LinkedJournal.ReadForRecoveryStep(depth)
+      case FreezeForCommitStep(depth) => LinkedJournal.FreezeForCommitStep(depth)
+      case ObserveFreshJournalStep() => LinkedJournal.ObserveFreshJournalStep()
+      case PutStep() => LinkedJournal.PutStep()
+      case DiscardOldStep() => LinkedJournal.DiscardOldStep()
+      case InternalJournalMarshalStep(cut) => LinkedJournal.InternalJournalMarshalStep(cut)
+      case InternalJournalGCStep() => LinkedJournal.InternalNoOpStep()
+      case InternalNoOpStep() => LinkedJournal.InternalNoOpStep()
+    }
+  }
+
+
 // PROVE INVARIANTS
 
   predicate IndexKeysMapToValidEntries(reprIndex: map<LSN, Address>, tj: TruncatedJournal)
@@ -86,10 +101,11 @@ module ReprJournalRefinement {
     }
   }
   
-  lemma InvInit(v: Variables, tj: TruncatedJournal)
-    requires Init(v, tj)
+  lemma InvInit(v: Variables, gctj: GCTruncatedJournal)
+    requires Init(v, gctj)
     ensures Inv(v)
   {
+    var tj := gctj.journal;
     LinkedJournalRefinement.BuildTightIsAwesome(tj.diskView, tj.freshestRec);
     var tightTj := tj.BuildTight();
     if tightTj.freshestRec.Some? {
@@ -195,23 +211,46 @@ module ReprJournalRefinement {
     ensures Inv(v')
   {
     var step: Step :| NextStep(v, v', lbl, step);
-    if step.DiscardOldStep? {
-      DiscardOldStepPreservesWFAndIndex(v, v', lbl);
-      var ranking := v.journal.truncatedJournal.diskView.TheRanking();  // witness to acyclicity
-      assert v'.journal.truncatedJournal.diskView.PointersRespectRank(ranking);
-      DiscardOldMaintainsReprIndex(v, v', lbl);
-      BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
-      // assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
-    } else if step.InternalJournalMarshalStep? {
-      assert LinkedJournal.NextStep(v.journal, v'.journal, lbl.I(), step);
-      LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl.I());
-      InvNextInternalJournalMarshalStep(v, v', lbl, step);
-      BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
-      assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
-    } else {
-      assert LinkedJournal.NextStep(v.journal, v'.journal, lbl.I(), step);
-      LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl.I());
-      assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
+    match step {
+      case ReadForRecoveryStep(depth) => {
+        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl.I(), IStep(step));
+        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl.I());
+        assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
+      }
+      case FreezeForCommitStep(depth) => {
+        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl.I(), IStep(step));
+        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl.I());
+        assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
+      }
+      case ObserveFreshJournalStep() => {
+        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl.I(), IStep(step));
+        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl.I());
+        assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
+      }
+      case PutStep() => {
+        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl.I(), IStep(step));
+        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl.I());
+        assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
+      }
+      case DiscardOldStep() => {
+        DiscardOldStepPreservesWFAndIndex(v, v', lbl);
+        var ranking := v.journal.truncatedJournal.diskView.TheRanking();  // witness to acyclicity
+        assert v'.journal.truncatedJournal.diskView.PointersRespectRank(ranking);
+        DiscardOldMaintainsReprIndex(v, v', lbl);
+        BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
+        assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
+        assert Inv(v');
+      }
+      case InternalJournalMarshalStep(cut) => {
+        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl.I(), IStep(step));
+        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl.I());
+        InvNextInternalJournalMarshalStep(v, v', lbl, step);
+        BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
+        assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
+        assert Inv(v');
+      }
+      case InternalJournalGCStep() => assert Inv(v');
+      case InternalNoOpStep() => assert Inv(v');
     }
   }
 
@@ -404,9 +443,9 @@ module ReprJournalRefinement {
     v.journal
   }
 
-  lemma InitRefines(v: Variables, tj: TruncatedJournal)
-    requires Init(v, tj)
-    ensures LinkedJournal.Init(I(v), tj)
+  lemma InitRefines(v: Variables, gctj: GCTruncatedJournal)
+    requires Init(v, gctj)
+    ensures LinkedJournal.Init(I(v), gctj.journal)
   {}
 
   lemma BuildTightGivesRepresentation(dv: DiskView, root: Pointer)
@@ -614,23 +653,29 @@ module ReprJournalRefinement {
     var step: Step :| NextStep(v, v', lbl, step);
     match step {
       case ReadForRecoveryStep(depth) => {
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       }
       case FreezeForCommitStep(depth) => {
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       } 
       case ObserveFreshJournalStep() => {
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       } 
       case PutStep() => {
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       }
       case DiscardOldStep() => {
         DiscardOldStepRefines(v, v', lbl, step);
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       }
       case InternalJournalMarshalStep(cut) => {
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
+      }
+      case InternalJournalGCStep() => {
+        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
+      }
+      case InternalNoOpStep() => {
+        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       }
     }
   }
