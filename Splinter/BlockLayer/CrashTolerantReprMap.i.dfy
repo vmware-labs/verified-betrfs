@@ -7,12 +7,8 @@ include "../Betree/ReprBetree.i.dfy"
 
 // TODO(jonh): This is a copy-paste of Splinter/CoordinationLayer/CrashTolerantMap. Functor-reuse?
 
-module BlockCrashTolerantMap {
-  // import opened ValueMessage
-  // import opened KeyType
+module CrashTolerantReprMap {
   import opened StampedMod
-  // import opened MsgHistoryMod
-  // import opened LSNMod
   import opened Options
   import opened GenericDisk
   import LinkedBetreeMod

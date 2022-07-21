@@ -25,7 +25,7 @@ module ReprJournal {
     | FreezeForCommitLabel(frozenJournal: TruncatedJournal)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
-    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN, freedAddrs: seq<Address>)
+    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN, freedAddrs: set<Address>)
     | InternalLabel(addr: Address)
   {
     predicate WF() {
@@ -123,7 +123,7 @@ module ReprJournal {
     // Define v'
     && var reprIndex' := reprIndexDiscardUpTo(v.reprIndex, lbl.startLsn);
     && var keepAddrs := reprIndex'.Values;
-    && Set(lbl.freedAddrs) == v.reprIndex.Values - keepAddrs  // "return" the set of freed addrs
+    && lbl.freedAddrs == v.reprIndex.Values - keepAddrs  // "return" the set of freed addrs
     && v' == v.(
       journal := LinkedJournal.Variables(
         DiscardOldAndGarbageCollect(v.journal.truncatedJournal, lbl.startLsn, keepAddrs),

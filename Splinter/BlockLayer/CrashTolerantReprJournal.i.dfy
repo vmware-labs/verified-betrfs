@@ -15,7 +15,7 @@ module CrashTolerantReprJournal {
   import ReprJournal
   import CrashTolerantJournal
 
-  datatype TransitionLabel = TransitionLabel(allocations: seq<Address>, freed: seq<Address>, base: CrashTolerantJournal.TransitionLabel)
+  datatype TransitionLabel = TransitionLabel(allocations: seq<Address>, freed: set<Address>, base: CrashTolerantJournal.TransitionLabel)
 
   type StoreImage = LinkedJournal.TruncatedJournal
 
@@ -54,7 +54,7 @@ module CrashTolerantReprJournal {
     && v.WF()
     && lbl.base.LoadEphemeralFromPersistentLabel?
     && lbl.allocations == []
-    && lbl.freed == []
+    && lbl.freed == {}
     && v.ephemeral.Unknown?
     && v'.ephemeral.Known?
     // State update
@@ -69,7 +69,7 @@ module CrashTolerantReprJournal {
     && v.WF()
     && lbl.base.ReadForRecoveryLabel?
     && lbl.allocations == []
-    && lbl.freed == []
+    && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
     // State update
@@ -83,7 +83,7 @@ module CrashTolerantReprJournal {
     && v.WF()
     && lbl.base.QueryEndLsnLabel?
     && lbl.allocations == []
-    && lbl.freed == []
+    && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
     // State update
@@ -96,7 +96,7 @@ module CrashTolerantReprJournal {
     && v.WF()
     && lbl.base.PutLabel?
     && lbl.allocations == []
-    && lbl.freed == []
+    && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
@@ -110,7 +110,7 @@ module CrashTolerantReprJournal {
     && v.WF()
     && lbl.base.InternalLabel?
     && |lbl.allocations| == 1
-    && lbl.freed == []
+    && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
@@ -124,7 +124,7 @@ module CrashTolerantReprJournal {
     && v.WF()
     && lbl.base.QueryLsnPersistenceLabel?
     && lbl.allocations == []
-    && lbl.freed == []
+    && lbl.freed == {}
     && lbl.base.syncLsn <= v.persistent.SeqEnd()
     && v' == v
   }
@@ -134,7 +134,7 @@ module CrashTolerantReprJournal {
     && v.WF()
     && lbl.base.CommitStartLabel?
     && lbl.allocations == []
-    && lbl.freed == []
+    && lbl.freed == {}
     && v.ephemeral.Known?
     // Can't start a commit if one is in-flight, or we'd forget to maintain the
     // invariants for the in-flight one.
@@ -185,7 +185,7 @@ module CrashTolerantReprJournal {
     && v.WF()
     && lbl.base.CrashLabel?
     && lbl.allocations == []
-    && lbl.freed == []
+    && lbl.freed == {}
     && v' == v.(
       ephemeral := Unknown,
       inFlight := None)
