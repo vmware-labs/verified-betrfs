@@ -17,7 +17,7 @@ module CrashTolerantReprJournal {
 
   datatype TransitionLabel = TransitionLabel(allocations: seq<Address>, freed: set<Address>, base: CrashTolerantJournal.TransitionLabel)
 
-  type StoreImage = LinkedJournal.TruncatedJournal
+  type StoreImage = ReprJournal.GCTruncatedJournal
 
   datatype Ephemeral =
     | Unknown
@@ -109,12 +109,24 @@ module CrashTolerantReprJournal {
   {
     && v.WF()
     && lbl.base.InternalLabel?
-    && |lbl.allocations| == 1
+    && lbl.allocations == []
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
-    && ReprJournal.Next(v.ephemeral.v, v'.ephemeral.v, ReprJournal.InternalLabel(lbl.allocations[0]))
+    && ReprJournal.Next(v.ephemeral.v, v'.ephemeral.v, ReprJournal.InternalLabel())
+    && v'.persistent == v.persistent // UNCHANGED
+    && v'.inFlight == v.inFlight // UNCHANGED
+  }
+
+  predicate InternalGC(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.base.InternalLabel?
+    && v.ephemeral.Known?
+    && v'.ephemeral.Known?
+
+    && ReprJournal.Next(v.ephemeral.v, v'.ephemeral.v, ReprJournal.InternalJournalGCLabel(lbl.allocations, lbl.freed))
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
   }
@@ -125,7 +137,7 @@ module CrashTolerantReprJournal {
     && lbl.base.QueryLsnPersistenceLabel?
     && lbl.allocations == []
     && lbl.freed == {}
-    && lbl.base.syncLsn <= v.persistent.SeqEnd()
+    && lbl.base.syncLsn <= v.persistent.journal.SeqEnd()
     && v' == v
   }
 
@@ -145,14 +157,14 @@ module CrashTolerantReprJournal {
     && var frozenJournal := v'.inFlight.value;
 
     // Frozen journal stitches to frozen map
-    && frozenJournal.SeqStart() == lbl.base.newBoundaryLsn
+    && frozenJournal.journal.SeqStart() == lbl.base.newBoundaryLsn
 
     // Journal doesn't go backwards
     && frozenJournal.WF()
-    && v.persistent.SeqEnd() <= frozenJournal.SeqEnd()
+    && v.persistent.journal.SeqEnd() <= frozenJournal.journal.SeqEnd()
 
     // There should be no way for the frozen journal to have passed the ephemeral map!
-    && frozenJournal.SeqStart() <= lbl.base.maxLsn
+    && frozenJournal.journal.SeqStart() <= lbl.base.maxLsn
 
     && ReprJournal.Next(v.ephemeral.v, v'.ephemeral.v, ReprJournal.FreezeForCommitLabel(frozenJournal))
 
@@ -167,12 +179,13 @@ module CrashTolerantReprJournal {
     && v.WF()
     && lbl.base.CommitCompleteLabel?
     && lbl.allocations == []
+    && lbl.freed == {}
     && v.ephemeral.Known?
     && v.inFlight.Some?
     && v'.ephemeral.Known?
 
     && ReprJournal.Next(v.ephemeral.v, v'.ephemeral.v,
-        ReprJournal.DiscardOldLabel(v.inFlight.value.SeqStart(), lbl.base.requireEnd, lbl.freed))
+        ReprJournal.DiscardOldLabel(v.inFlight.value.journal.SeqStart(), lbl.base.requireEnd))
 
     && v' == v.(
       persistent := v.inFlight.value,
@@ -194,7 +207,10 @@ module CrashTolerantReprJournal {
   // Models mkfs
   predicate Init(v: Variables)
   {
-    v == Variables(LinkedJournal.Mkfs(), Unknown, None)
+    v == Variables(
+      ReprJournal.GCTruncatedJournal([], {}, LinkedJournal.Mkfs()), 
+      Unknown, 
+      None)
   }
 
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -204,7 +220,9 @@ module CrashTolerantReprJournal {
       case ReadForRecoveryLabel(_) => ReadForRecovery(v, v', lbl)
       case QueryEndLsnLabel(_) => QueryEndLsn(v, v', lbl)
       case PutLabel(_) => Put(v, v', lbl)
-      case InternalLabel() => Internal(v, v', lbl)
+      case InternalLabel() => 
+            || Internal(v, v', lbl)     // ReprJournal step that does not perform GC
+            || InternalGC(v, v', lbl)   // ReprJournal step that performs GC
       case QueryLsnPersistenceLabel(_) => QueryLsnPersistence(v, v', lbl)
       case CommitStartLabel(_, _) => CommitStart(v, v', lbl)
       case CommitCompleteLabel(_) => CommitComplete(v, v', lbl)

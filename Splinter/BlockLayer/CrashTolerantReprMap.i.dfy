@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../CoordinationLayer/CrashTolerantMap.i.dfy"
-// include "../Betree/MarshalledBetree.i.dfy"
 include "../Betree/ReprBetree.i.dfy"
 
 // TODO(jonh): This is a copy-paste of Splinter/CoordinationLayer/CrashTolerantMap. Functor-reuse?

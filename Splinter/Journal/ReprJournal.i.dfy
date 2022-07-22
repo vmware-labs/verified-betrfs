@@ -26,7 +26,11 @@ module ReprJournal {
     reserved: seq<Address>,
     stranded: set<Address>,
     journal: TruncatedJournal
-  )
+  ) {
+    predicate WF() {
+      journal.WF()
+    }
+  }
 
   datatype TransitionLabel =
       ReadForRecoveryLabel(messages: MsgHistory)
