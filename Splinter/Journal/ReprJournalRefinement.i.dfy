@@ -17,7 +17,8 @@ module ReprJournalRefinement {
       case PutStep() => LinkedJournal.PutStep()
       case DiscardOldStep() => LinkedJournal.DiscardOldStep()
       case InternalJournalMarshalStep(cut, addr) => LinkedJournal.InternalJournalMarshalStep(cut, addr)
-      case InternalJournalGCStep() => LinkedJournal.InternalNoOpStep()
+      case InternalJournalReserveStep() => LinkedJournal.InternalNoOpStep()
+      case InternalJournalFreeStep() => LinkedJournal.InternalNoOpStep()
       case InternalNoOpStep() => LinkedJournal.InternalNoOpStep()
     }
   }
@@ -249,7 +250,8 @@ module ReprJournalRefinement {
         assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
         assert Inv(v');
       }
-      case InternalJournalGCStep() => assert Inv(v');
+      case InternalJournalReserveStep() => assert Inv(v');
+      case InternalJournalFreeStep() => assert Inv(v');
       case InternalNoOpStep() => assert Inv(v');
     }
   }
@@ -349,7 +351,7 @@ module ReprJournalRefinement {
     }
   }
  
-  lemma {:timeLimitMultiplier 2} DiscardOldMaintainsReprIndex(v: Variables, v': Variables, lbl: TransitionLabel)
+  lemma DiscardOldMaintainsReprIndex(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires v'.WF()
     requires DiscardOld(v, v', lbl)
@@ -372,7 +374,6 @@ module ReprJournalRefinement {
       by {
         BuildReprIndexDomainValid(newDiskView, tj.freshestRec);
       }
-      assert v'.reprIndex == BuildReprIndex(v'.journal.truncatedJournal);
     }
   }
 
@@ -672,7 +673,10 @@ module ReprJournalRefinement {
       case InternalJournalMarshalStep(cut, addr) => {
         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       }
-      case InternalJournalGCStep() => {
+      case InternalJournalReserveStep() => {
+        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
+      }
+      case InternalJournalFreeStep() => {
         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       }
       case InternalNoOpStep() => {

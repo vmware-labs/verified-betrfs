@@ -176,15 +176,29 @@ module ReprJournal {
     )
   }
 
-  predicate InternalJournalGarbageCollect(v: Variables, v': Variables, lbl: TransitionLabel)
+  predicate InternalJournalReserve(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     // Enabling conditions
     && lbl.InternalJournalGCLabel?
     && v.WF()
-    && lbl.freed <= v.stranded
+    && 0 < |lbl.allocations|
+    && lbl.freed == {}
     // State transition
     && v' == v.(
-      reserved := v.reserved + lbl.allocations,
+      reserved := v.reserved + lbl.allocations
+    )
+  }
+
+  predicate InternalJournalFree(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    // Enabling conditions
+    && lbl.InternalJournalGCLabel?
+    && v.WF()
+    && lbl.allocations == []
+    && lbl.freed <= v.stranded
+    && 0 < |lbl.freed|
+    // State transition
+    && v' == v.(
       stranded := v.stranded - lbl.freed
     )
   }
@@ -238,7 +252,8 @@ module ReprJournal {
     | PutStep()
     | DiscardOldStep()
     | InternalJournalMarshalStep(cut: LSN, addr: Address)
-    | InternalJournalGCStep()
+    | InternalJournalReserveStep()  // reserve more addresses from the global allocator
+    | InternalJournalFreeStep()       // free some stranded addresses
     | InternalNoOpStep()
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -250,7 +265,8 @@ module ReprJournal {
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
       case InternalJournalMarshalStep(cut, addr) => InternalJournalMarshal(v, v', lbl, cut, addr)
-      case InternalJournalGCStep() => InternalJournalGarbageCollect(v, v', lbl)
+      case InternalJournalReserveStep() => InternalJournalReserve(v, v', lbl)
+      case InternalJournalFreeStep() => InternalJournalFree(v, v', lbl)
       case InternalNoOpStep() =>  InternalNoOp(v, v', lbl)
     }
   }
