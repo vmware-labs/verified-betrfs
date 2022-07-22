@@ -16,7 +16,7 @@ module ReprJournalRefinement {
       case ObserveFreshJournalStep() => LinkedJournal.ObserveFreshJournalStep()
       case PutStep() => LinkedJournal.PutStep()
       case DiscardOldStep() => LinkedJournal.DiscardOldStep()
-      case InternalJournalMarshalStep(cut) => LinkedJournal.InternalJournalMarshalStep(cut)
+      case InternalJournalMarshalStep(cut, addr) => LinkedJournal.InternalJournalMarshalStep(cut, addr)
       case InternalJournalGCStep() => LinkedJournal.InternalNoOpStep()
       case InternalNoOpStep() => LinkedJournal.InternalNoOpStep()
     }
@@ -241,7 +241,7 @@ module ReprJournalRefinement {
         assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
         assert Inv(v');
       }
-      case InternalJournalMarshalStep(cut) => {
+      case InternalJournalMarshalStep(cut, addr) => {
         assert LinkedJournal.NextStep(v.journal, v'.journal, lbl.I(), IStep(step));
         LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl.I());
         InvNextInternalJournalMarshalStep(v, v', lbl, step);
@@ -349,7 +349,7 @@ module ReprJournalRefinement {
     }
   }
  
-  lemma DiscardOldMaintainsReprIndex(v: Variables, v': Variables, lbl: TransitionLabel)
+  lemma {:timeLimitMultiplier 2} DiscardOldMaintainsReprIndex(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires v'.WF()
     requires DiscardOld(v, v', lbl)
@@ -372,6 +372,7 @@ module ReprJournalRefinement {
       by {
         BuildReprIndexDomainValid(newDiskView, tj.freshestRec);
       }
+      assert v'.reprIndex == BuildReprIndex(v'.journal.truncatedJournal);
     }
   }
 
@@ -668,7 +669,7 @@ module ReprJournalRefinement {
         DiscardOldStepRefines(v, v', lbl, step);
         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       }
-      case InternalJournalMarshalStep(cut) => {
+      case InternalJournalMarshalStep(cut, addr) => {
         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       }
       case InternalJournalGCStep() => {

@@ -35,7 +35,6 @@ module ReprJournal {
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
     // Internal-x labels refine to no-ops at the abstract spec
-    | InternalJournalMarshalLabel(addr: Address)
     | InternalJournalGCLabel(allocations: seq<Address>, freed: set<Address>)
     | InternalLabel()  // Local No-op label
   {
@@ -50,7 +49,6 @@ module ReprJournal {
         case QueryEndLsnLabel(endLsn) => LinkedJournal.QueryEndLsnLabel(endLsn)
         case PutLabel(messages) => LinkedJournal.PutLabel(messages)
         case DiscardOldLabel(startLsn, requireEnd) => LinkedJournal.DiscardOldLabel(startLsn, requireEnd)
-        case InternalJournalMarshalLabel(addr) => LinkedJournal.InternalJournalMarshalLabel(addr)
         case InternalJournalGCLabel(_, _) => LinkedJournal.InternalLabel()
         case InternalLabel() => LinkedJournal.InternalLabel()
       }
@@ -162,18 +160,18 @@ module ReprJournal {
     MapUnion(reprIndex, update)
   }
 
-  predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
+  predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN, addr: Address)
   {
     // Enabling conditions
-    && lbl.InternalJournalMarshalLabel?
+    && lbl.InternalLabel?
     && v.WF()
     && 0 < |v.reserved|
-    && lbl.addr == v.reserved[0]
+    && addr == v.reserved[0]
     // State transition
-    && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl.I(), cut)
+    && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl.I(), cut, addr)
     && v' == v.(
       journal := v'.journal,
-      reprIndex := reprIndexAppendRecord(v.reprIndex, v.journal.unmarshalledTail.DiscardRecent(cut), lbl.addr),
+      reprIndex := reprIndexAppendRecord(v.reprIndex, v.journal.unmarshalledTail.DiscardRecent(cut), addr),
       reserved := v.reserved[1..]
     )
   }
@@ -239,7 +237,7 @@ module ReprJournal {
     | ObserveFreshJournalStep()
     | PutStep()
     | DiscardOldStep()
-    | InternalJournalMarshalStep(cut: LSN)
+    | InternalJournalMarshalStep(cut: LSN, addr: Address)
     | InternalJournalGCStep()
     | InternalNoOpStep()
 
@@ -251,7 +249,7 @@ module ReprJournal {
       case ObserveFreshJournalStep() => ObserveFreshJournal(v, v', lbl)
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
-      case InternalJournalMarshalStep(cut) => InternalJournalMarshal(v, v', lbl, cut)
+      case InternalJournalMarshalStep(cut, addr) => InternalJournalMarshal(v, v', lbl, cut, addr)
       case InternalJournalGCStep() => InternalJournalGarbageCollect(v, v', lbl)
       case InternalNoOpStep() =>  InternalNoOp(v, v', lbl)
     }

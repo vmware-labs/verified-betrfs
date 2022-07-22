@@ -25,7 +25,6 @@ module LinkedJournalRefinement
       case QueryEndLsnLabel(endLsn) => PagedJournal.QueryEndLsnLabel(endLsn)
       case PutLabel(messages) => PagedJournal.PutLabel(messages)
       case DiscardOldLabel(startLsn, requireEnd) => PagedJournal.DiscardOldLabel(startLsn, requireEnd)
-      case InternalJournalMarshalLabel(addrs) => PagedJournal.InternalLabel()
       case InternalLabel() => PagedJournal.InternalLabel()
   }
 
@@ -308,7 +307,7 @@ module LinkedJournalRefinement
       }
     } else if step.InternalJournalMarshalStep? {
       var rank :| v.truncatedJournal.diskView.PointersRespectRank(rank);
-      var rank' := rank[lbl.addr :=
+      var rank' := rank[step.addr :=
           if v.truncatedJournal.freshestRec.None? then 0
           else rank[v.truncatedJournal.freshestRec.value]+1];
       assert v'.truncatedJournal.diskView.PointersRespectRank(rank'); // new rank witness to Acyclic
@@ -767,26 +766,26 @@ module LinkedJournalRefinement
     }
   }
 
-  lemma InFlightSubDiskPreserved(v: Variables, v': Variables, inFlight: TruncatedJournal, lbl: TransitionLabel)
-    requires Inv(v)
-    requires Next(v, v', lbl)
-    requires lbl.InternalJournalMarshalLabel?
-    requires InFlightSubDiskProperty(v, inFlight)
-    ensures InFlightSubDiskProperty(v', inFlight)
-  {
-    var step: Step :| NextStep(v, v', lbl, step);
+  // lemma InFlightSubDiskPreserved(v: Variables, v': Variables, inFlight: TruncatedJournal, lbl: TransitionLabel)
+  //   requires Inv(v)
+  //   requires Next(v, v', lbl)
+  //   requires lbl.InternalJournalMarshalLabel?
+  //   requires InFlightSubDiskProperty(v, inFlight)
+  //   ensures InFlightSubDiskProperty(v', inFlight)
+  // {
+  //   var step: Step :| NextStep(v, v', lbl, step);
     
-    var vj := v.truncatedJournal;
-    var dj := vj.DiscardOld(inFlight.SeqStart());
-    var v'j := v'.truncatedJournal;
-    var d'j := v'j.DiscardOld(inFlight.SeqStart());
-    InvNext(v, v', lbl);
-    assert d'j.diskView.PointersRespectRank(v'j.diskView.TheRanking());  // witness to d'j.Acyclic
+  //   var vj := v.truncatedJournal;
+  //   var dj := vj.DiscardOld(inFlight.SeqStart());
+  //   var v'j := v'.truncatedJournal;
+  //   var d'j := v'j.DiscardOld(inFlight.SeqStart());
+  //   InvNext(v, v', lbl);
+  //   assert d'j.diskView.PointersRespectRank(v'j.diskView.TheRanking());  // witness to d'j.Acyclic
 
-    BuildTightPreservesSubDiskUnderInternalMarshall(
-      dj.diskView, dj.freshestRec, dj.diskView.TheRanking(),
-      d'j.diskView, d'j.freshestRec, d'j.diskView.TheRanking());
-  }
+  //   BuildTightPreservesSubDiskUnderInternalMarshall(
+  //     dj.diskView, dj.freshestRec, dj.diskView.TheRanking(),
+  //     d'j.diskView, d'j.freshestRec, d'j.diskView.TheRanking());
+  // }
   
   //////////////////////////////////////////////////////////////////////////////
 }

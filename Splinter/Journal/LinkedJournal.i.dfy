@@ -22,7 +22,6 @@ module LinkedJournal {
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
-    | InternalJournalMarshalLabel(addr: Address)  // Internal-x labels refine to no-ops at the abstract spec
     | InternalLabel()  // Local No-op label
   {
     predicate WF() {
@@ -417,16 +416,16 @@ module LinkedJournal {
       )
   }
 
-  predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN)
+  predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN, addr: Address)
   {
-    && lbl.InternalJournalMarshalLabel?
+    && lbl.InternalLabel?
     && v.WF()
     && v.unmarshalledTail.seqStart < cut // Can't marshall nothing.
     && v.unmarshalledTail.CanDiscardTo(cut)
-    && v.UnusedAddr(lbl.addr)
+    && v.UnusedAddr(addr)
     && var marshalledMsgs := v.unmarshalledTail.DiscardRecent(cut);
     && v' == Variables(
-      v.truncatedJournal.AppendRecord(lbl.addr, marshalledMsgs),
+      v.truncatedJournal.AppendRecord(addr, marshalledMsgs),
       v.unmarshalledTail.DiscardOld(cut))
   }
 
@@ -449,7 +448,7 @@ module LinkedJournal {
     | ObserveFreshJournalStep()
     | PutStep()
     | DiscardOldStep()
-    | InternalJournalMarshalStep(cut: LSN)
+    | InternalJournalMarshalStep(cut: LSN, addr: Address)
     | InternalNoOpStep()
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -460,7 +459,7 @@ module LinkedJournal {
       case ObserveFreshJournalStep() => ObserveFreshJournal(v, v', lbl)
       case PutStep() => Put(v, v', lbl)
       case DiscardOldStep() => DiscardOld(v, v', lbl)
-      case InternalJournalMarshalStep(cut) => InternalJournalMarshal(v, v', lbl, cut)
+      case InternalJournalMarshalStep(cut, addr) => InternalJournalMarshal(v, v', lbl, cut, addr)
       case InternalNoOpStep() => InternalNoOp(v, v', lbl)
     }
   }
