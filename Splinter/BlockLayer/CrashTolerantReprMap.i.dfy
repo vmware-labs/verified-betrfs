@@ -14,7 +14,8 @@ module CrashTolerantReprMap {
   import ReprBetree
   import CrashTolerantMap
 
-  type StampedBetree = Stamped<LinkedBetreeMod.LinkedBetree>
+  // type StampedBetree = Stamped<LinkedBetreeMod.LinkedBetree>
+  type GCMap = ReprBetree.GCStampedBetree
 
   datatype TransitionLabel = TransitionLabel(allocations: seq<Address>, freed: set<Address>, base: CrashTolerantMap.TransitionLabel)
   {
@@ -28,9 +29,9 @@ module CrashTolerantReprMap {
     | Known(v: ReprBetree.Variables)
 
   datatype Variables = Variables(
-    persistent: StampedBetree,
+    persistent: GCMap,
     ephemeral: Ephemeral,
-    inFlight: Option<StampedBetree>
+    inFlight: Option<GCMap>
   )
   {
     predicate WF() {
@@ -47,7 +48,7 @@ module CrashTolerantReprMap {
     && lbl.allocations == []
     && lbl.freed == {}
 
-    && lbl.base.endLsn == v.persistent.seqEnd
+    && lbl.base.endLsn == v.persistent.stamped.seqEnd
     && ReprBetree.Init(v'.ephemeral.v, v.persistent)
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
@@ -82,7 +83,7 @@ module CrashTolerantReprMap {
     && v' == v
   }
 
-  predicate FreezeMapInternal(v: Variables, v': Variables, lbl: TransitionLabel, frozenMap: StampedBetree)
+  predicate FreezeMapInternal(v: Variables, v': Variables, lbl: TransitionLabel, frozenMap: GCMap)
   {
     && v.WF()
     && lbl.WF()
@@ -101,7 +102,22 @@ module CrashTolerantReprMap {
     && v'.persistent == v.persistent // UNCHANGED
   }
 
-  predicate EphemeralInternal(v: Variables, v': Variables, lbl: TransitionLabel)
+  predicate EphemeralInternalNoGC(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.WF()
+    && lbl.base.InternalLabel?  // allocs and freed given by ReprBetree.Next
+    && lbl.allocations == []
+    && lbl.freed == {}
+    && v.ephemeral.Known?
+    && v'.ephemeral.Known?
+
+    && ReprBetree.Next(v.ephemeral.v, v'.ephemeral.v, ReprBetree.InternalLabel())
+    && v'.persistent == v.persistent // UNCHANGED
+    && v'.inFlight == v.inFlight // UNCHANGED
+  }
+
+  predicate EphemeralInternalGC(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
     && lbl.WF()
@@ -109,10 +125,12 @@ module CrashTolerantReprMap {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
-    && ReprBetree.Next(v.ephemeral.v, v'.ephemeral.v, ReprBetree.InternalLabel(lbl.allocations, lbl.freed))
+    && ReprBetree.Next(v.ephemeral.v, v'.ephemeral.v, ReprBetree.InternalMapGCLabel(lbl.allocations, lbl.freed))
     && v'.persistent == v.persistent // UNCHANGED
     && v'.inFlight == v.inFlight // UNCHANGED
   }
+
+
   
   predicate CommitStart(v: Variables, v': Variables, lbl: TransitionLabel)
   {
@@ -126,9 +144,9 @@ module CrashTolerantReprMap {
 
     // Frozen map can't go backwards vs persistent map, lest we end up with
     // a gap to the ephemeral journal start.
-    && v.persistent.seqEnd <= lbl.base.newBoundaryLsn
+    && v.persistent.stamped.seqEnd <= lbl.base.newBoundaryLsn
     // Frozen journal & frozen map agree on boundary.
-    && lbl.base.newBoundaryLsn == v.inFlight.value.seqEnd
+    && lbl.base.newBoundaryLsn == v.inFlight.value.stamped.seqEnd
 
     && v' == v
   }
@@ -164,8 +182,9 @@ module CrashTolerantReprMap {
     | LoadEphemeralFromPersistentStep()
     | PutRecordsStep()
     | QueryStep()
-    | FreezeMapInternalStep(frozenMap: StampedBetree)
-    | EphemeralInternalStep()
+    | FreezeMapInternalStep(frozenMap: GCMap)
+    | EphemeralInternalNoGCStep()
+    | EphemeralInternalGCStep()
     | CommitStartStep()
     | CommitCompleteStep()
     | CrashStep()
@@ -173,7 +192,9 @@ module CrashTolerantReprMap {
   // Models mkfs
   predicate Init(v: Variables)
   {
-    v == Variables(LinkedBetreeMod.EmptyImage(), Unknown, None)
+    v == Variables(
+      ReprBetree.GCStampedBetree([], {}, LinkedBetreeMod.EmptyImage()), 
+      Unknown, None)
   }
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -183,7 +204,8 @@ module CrashTolerantReprMap {
       case PutRecordsStep() => PutRecords(v, v', lbl)
       case QueryStep() => Query(v, v', lbl)
       case FreezeMapInternalStep(frozenMap) => FreezeMapInternal(v, v', lbl, frozenMap)
-      case EphemeralInternalStep() => EphemeralInternal(v, v', lbl)
+      case EphemeralInternalNoGCStep() => EphemeralInternalNoGC(v, v', lbl)
+      case EphemeralInternalGCStep() => EphemeralInternalGC(v, v', lbl)
       case CommitStartStep() => CommitStart(v, v', lbl)
       case CommitCompleteStep() => CommitComplete(v, v', lbl)
       case CrashStep() => Crash(v, v', lbl)

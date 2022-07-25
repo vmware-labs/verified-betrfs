@@ -32,7 +32,7 @@ module ReprBetree
   type SplitAddrs = LinkedBetreeMod.SplitAddrs
   type QueryReceipt = LinkedBetreeMod.QueryReceipt
 
-  datatype GCBetree = GCBetree(
+  datatype GCStampedBetree = GCStampedBetree(
     reserved: seq<Address>,
     stranded: set<Address>,
     stamped: StampedBetree
@@ -43,7 +43,7 @@ module ReprBetree
       QueryLabel(endLsn: LSN, key: Key, value: Value)
     | PutLabel(puts: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
-    | FreezeAsLabel(gcBetree: GCBetree)
+    | FreezeAsLabel(gcBetree: GCStampedBetree)
     // Internal-x labels refine to no-ops at the abstract spec
     | InternalMapGCLabel(allocations: seq<Address>, freed: set<Address>)
     | InternalLabel() 
@@ -174,7 +174,7 @@ module ReprBetree
     && v' == v
   }
 
-  predicate Init(v: Variables, gcBetree: GCBetree)
+  predicate Init(v: Variables, gcBetree: GCStampedBetree)
   {
     && v.betree.linked.Acyclic()
     && v == Variables(

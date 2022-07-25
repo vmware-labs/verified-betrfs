@@ -213,6 +213,7 @@ module CrashTolerantReprJournal {
       None)
   }
 
+  // todo(tony): Use steps for this, to avoid the disjunct
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     match lbl.base {
