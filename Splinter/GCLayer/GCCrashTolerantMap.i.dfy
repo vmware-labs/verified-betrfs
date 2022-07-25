@@ -6,7 +6,7 @@ include "../Betree/ReprBetree.i.dfy"
 
 // TODO(jonh): This is a copy-paste of Splinter/CoordinationLayer/CrashTolerantMap. Functor-reuse?
 
-module CrashTolerantReprMap {
+module GCCrashTolerantMap {
   import opened StampedMod
   import opened Options
   import opened GenericDisk

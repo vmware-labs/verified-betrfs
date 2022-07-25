@@ -7,7 +7,7 @@ include "../CoordinationLayer/CrashTolerantJournal.i.dfy"
 
 // TODO(jonh): This is a copy-paste of Splinter/CoordinationSystem/CrashTolerantJournal. Functor-reuse?
 
-module CrashTolerantReprJournal {
+module GCCrashTolerantJournal {
   import opened Options
   import opened MsgHistoryMod
   import opened GenericDisk

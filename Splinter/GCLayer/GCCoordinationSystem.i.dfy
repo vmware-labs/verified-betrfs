@@ -10,7 +10,7 @@ include "CrashTolerantReprMap.i.dfy"
 // Or maybe now it's just functor re-use.
 // Or maybe it'll get interesting because we're going to begin talking about framing finally.
 
-module ReprCoordinationSystem {
+module GCCoordinationSystem {
   // import opened Options
   // import opened MapRemove_s
   import opened CrashTolerantMapSpecMod
