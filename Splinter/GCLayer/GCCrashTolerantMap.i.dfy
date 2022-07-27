@@ -161,6 +161,7 @@ module GCCrashTolerantMap {
     && v.inFlight.Some?
 
     && v' == v.(
+      // todo(tony): the old persistent shoud become freed/stranded?
       persistent := v.inFlight.value,
       // ephemeral unchanged
       inFlight := None)

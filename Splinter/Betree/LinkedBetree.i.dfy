@@ -698,6 +698,15 @@ module LinkedBetreeMod
       else Subpath().Target()
     }
 
+    // Returns the address of all the nodes on the path, from root up to and including target
+    function AddrsOnPath() : set<Address> 
+      requires Valid()
+      decreases depth
+    {
+      if depth == 0 then {}
+      else Subpath().AddrsOnPath() + {linked.root.value}
+    }
+
     predicate CanSubstitute(replacement: LinkedBetree, pathAddrs: PathAddrs)
     {
       && Valid()

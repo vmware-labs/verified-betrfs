@@ -118,26 +118,54 @@ module ReprBetree
 
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    // TODO
-    false
+    && LinkedBetreeMod.InternalSplit(v.betree, v'.betree, lbl.I(), step.I())
+    && var newAddrs := Set(step.pathAddrs) + step.newAddrs.Repr();
+    && var discardAddrs := step.path.AddrsOnPath() + {step.path.Target().ChildAtIdx(step.request.childIdx).root.value};
+    && v' == v.(
+        betree := v'.betree,
+        repr := v.repr + newAddrs - discardAddrs,
+        stranded := v.stranded + discardAddrs
+      )
   }
 
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    // TODO
-    false
+    && LinkedBetreeMod.InternalFlushMemtable(v.betree, v'.betree, lbl.I(), step.I())
+    && if v.betree.linked.HasRoot() then 
+        v' == v.(
+          betree := v'.betree,
+          repr := v.repr + {step.newRootAddr} - {v.betree.linked.root.value},
+          stranded := v.stranded + {v.betree.linked.root.value}
+        )
+      else
+        v' == v.(
+          betree := v'.betree,
+          repr := v.repr + {step.newRootAddr}
+        )
   }
 
   predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    // TODO
-    false
+    && LinkedBetreeMod.InternalFlush(v.betree, v'.betree, lbl.I(), step.I())
+    && var newAddrs := Set(step.pathAddrs) + {step.targetAddr, step.targetChildAddr};
+    && var discardAddrs := step.path.AddrsOnPath() + {step.path.Target().ChildAtIdx(step.childIdx).root.value};
+    && v' == v.(
+        betree := v'.betree,
+        repr := v.repr + newAddrs - discardAddrs,
+        stranded := v.stranded + discardAddrs
+      )
   }
 
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    // TODO
-    false
+    && LinkedBetreeMod.InternalCompact(v.betree, v'.betree, lbl.I(), step.I())
+    && var newAddrs := Set(step.pathAddrs) + {step.targetAddr};
+    && var discardAddrs := step.path.AddrsOnPath();
+    && v' == v.(
+        betree := v'.betree,
+        repr := v.repr + newAddrs - discardAddrs,
+        stranded := v.stranded + discardAddrs
+      )
   }
 
   predicate InternalMapReserve(v: Variables, v': Variables, lbl: TransitionLabel)
