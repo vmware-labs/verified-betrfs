@@ -762,8 +762,7 @@ module LinkedBetreeMod
     && lbl.addrs == [step.newRootAddr]
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.newRootAddr})
-    && var newBuffer := Buffer(v.memtable.mapp);
-    && v'.linked == InsertInternalFlushMemtableReplacement(v.linked, newBuffer, step.newRootAddr).BuildTightTree()
+    && v'.linked == InsertInternalFlushMemtableReplacement(v.linked, v.memtable.buffer, step.newRootAddr).BuildTightTree()
     && v'.memtable == v.memtable.Drain()
   }
 

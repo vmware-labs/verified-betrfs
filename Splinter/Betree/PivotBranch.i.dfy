@@ -40,6 +40,8 @@ module PivotBranchMod {
     ensures result.WF()
     {
       Keys.reveal_IsStrictlySorted();
+      Keys.lteTransitiveForall();
+      
       FlattenedBranch(keys + other.keys, msgs + other.msgs)
     }
   }
@@ -150,6 +152,7 @@ module PivotBranchMod {
           if |left.keys| > 0 && |right.keys| > 0 {
             assert right.keys[0] in children[count-1].AllKeys();
             assert AllKeysAboveBound(count-1);
+            Keys.lteTransitiveForall();
           }
         }
 
@@ -160,6 +163,7 @@ module PivotBranchMod {
             if |right.keys| > 0 {
               assert AllKeysBelowBound(count-1); 
             }
+            Keys.lteTransitiveForall();
           }
         }
         result
