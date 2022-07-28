@@ -85,6 +85,11 @@ module LinkedBranchMod {
       else ( set k | k in node.keys )
     }
 
+    function Addresses() : set<Address>
+    {
+      set addr | addr in entries
+    }
+
     predicate AllKeysAboveBound(addr: Address, pivots: seq<Key>, i: int)
       requires ValidAddress(addr)
     {
@@ -161,6 +166,10 @@ module LinkedBranchMod {
         NodeChildrenRespectsRank(ranking, addr)
     }
 
+    predicate IsFresh(addrs: set<Address>) {
+      addrs !! entries.Keys
+    } 
+
     function {:opaque} MergeDisk(other: DiskView) : (out: DiskView)
       // ensure result is sound -- keys and their values must come from one of these places
       ensures forall addr | addr in out.entries 
@@ -172,6 +181,7 @@ module LinkedBranchMod {
     {
       DiskView.DiskView(MapUnion(entries, other.entries))
     }
+
   }
 
   function EmptyDisk() : DiskView {
@@ -255,6 +265,12 @@ module LinkedBranchMod {
       result
     }
 
+    function Query(key: Key) : (msg: Message)
+    {
+      // TODO: implement
+      Update(NopDelta())
+    }
+
   //   function AllKeys(ranking: Ranking) : (result: set<Key>)
   //     requires Acyclic()
   //     requires ValidRanking(ranking)
@@ -306,6 +322,15 @@ module LinkedBranchMod {
     {
       var numChildren := |Root().children|;
       seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ILinkedBranchNode(ranking))
+    }
+
+    lemma WFI(out: P.Node) 
+    requires WF()
+    requires Acyclic()
+    requires out == I()
+    ensures out.WF()
+    {
+      assume false;
     }
   }
 
