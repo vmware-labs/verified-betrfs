@@ -265,10 +265,21 @@ module LinkedBranchMod {
       result
     }
 
-    function Query(key: Key) : (msg: Message)
+    // return a sequence of all addressses starting from root
+    // TODO: implement
+    function AddressesFromRoot() : (addrs: seq<Address>)
+      requires HasRoot()
+      requires Acyclic()
+      // requires ValidRanking(ranking)
+      // ensures (forall addr | addr in addrs :: addr in diskView.entries)
+      // decreases GetRank(ranking), 0
     {
-      // TODO: implement
-      Update(NopDelta())
+      var node := Root();
+      if node.Leaf? then (
+        []
+      ) else (
+        []
+      )
     }
 
   //   function AllKeys(ranking: Ranking) : (result: set<Key>)
@@ -292,6 +303,12 @@ module LinkedBranchMod {
   //     )
   //   }
     
+    function Query(key: Key) : (msg: Message)
+    {
+      // TODO: implement
+      Update(NopDelta())
+    }
+
     // Interpretation functions
     function I() : (out: P.Node)
       requires Acyclic()

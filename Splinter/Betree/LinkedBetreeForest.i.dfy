@@ -7,12 +7,6 @@ include "../Journal/GenericDisk.i.dfy"
 include "Domain.i.dfy"
 include "LinkedForest.i.dfy"
 
-// TODO:
-// This module deals with 
-// 1. Concretize buffer implementation with Forest (seqs of B+ tree)
-// 2. Filter should be implicitly tracked by pivot table (no more apply filters)
-//    - In LinkedBetree we did not restrict the range of splitted child
-// 3. Track active buffers for each child, as we don't want to visit a buffer that is flushed to a child already
 
 // Naming: BranchedBetree? 
 module LinkedBetreeForest
@@ -775,7 +769,7 @@ module LinkedBetreeForest
     && v.WF()
     && step.WF()
     && lbl.InternalLabel?
-    && step.InternalCompactStep?
+    // && step.InternalCompactStep?
     && step.path.linked == v.linked
     && step.path.Valid()
 //     && step.path.Target().Root().buffers.Equivalent(step.compactedBuffers)
@@ -810,7 +804,7 @@ module LinkedBetreeForest
     // pathAddrs is the new addresses to place all its ancestors, used in substitution 
     | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs)
     // targetAddr is the fresh address at which compactedNode is placed. pathAddrs is the new addresses to place all its ancestors
-    | InternalCompactStep(path: Path, compactedBuffers: BufferStack, targetAddr: Address, pathAddrs: PathAddrs)
+    // | InternalCompactStep(path: Path, compactedBuffers: BufferStack, targetAddr: Address, pathAddrs: PathAddrs)
   {
     predicate WF() {
       match this {
