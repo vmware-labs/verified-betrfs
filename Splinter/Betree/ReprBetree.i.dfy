@@ -35,7 +35,9 @@ module ReprBetree
   datatype GCStampedBetree = GCStampedBetree(
     reserved: seq<Address>,
     stranded: set<Address>,
-    stamped: StampedBetree
+    stamped: StampedBetree   
+    // todo(tony): The Repr Betree never strands addresses, since each AU will only contain one node. When that node is released,
+    // that entire AU is immediately freed. i.e. the pages in that AU that were in the reserved set should also be freed.
   )
   
   // Copied from linkedJournal, except for InternalLabel
