@@ -70,7 +70,7 @@ module LinkedForestMod {
 	}
   
 
-	datatype Step = AddTreeStep
+	datatype Step = AddTreeStep | RemoveTreeStep(branch: LinkedBranch)
 
 	datatype TransitionLabel =
     AddTreeLabel(tree: LinkedBranch)
@@ -88,8 +88,9 @@ module LinkedForestMod {
 	}
 
   // TODO: each tree is disjoint from another should be kept as an Inv
-  predicate AddTree(v: Variables, v': Variables, lbl: TransitionLabel) {
+  predicate AddTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) {
     && lbl.AddTreeLabel?
+    && step.AddTreeStep?
     && v.WF()
     // new tree must be acyclic with fresh addresses
     && lbl.tree.WF()
@@ -98,18 +99,21 @@ module LinkedForestMod {
     // updated forest
     && v'.forest.trees == v.forest.trees + { lbl.tree.root }
     && v'.forest.diskView == v.forest.diskView.MergeDisk(lbl.tree.diskView)
-    && v'.WF()
   }
 
-  predicate RemoveTree(v: Variables, v': Variables, lbl: TransitionLabel) {
+  predicate RemoveTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) {
     && lbl.RemoveTreeLabel?
+    && step.RemoveTreeStep?
     && v.WF()
-    // new tree must be acyclic with fresh addresses
+
     && lbl.root in v.forest.trees
-    // updated forest
-    // && v'.forest.trees == v.forest.trees + { lbl.tree.root }
-    // && v'.forest.diskView == v.forest.diskView.MergeDisk(lbl.tree.diskView) 
-    && v'.WF()
+    && step.branch.root == lbl.root
+    && step.branch.WF()
+    && step.branch.Acyclic()
+
+    // well somehow remove a tight disk tree
+    // TODO!
+    // makes sure everything is found elsewhere 
   }
 
 	// public:
@@ -123,6 +127,7 @@ module LinkedForestMod {
   {
     match step {
       case AddTreeStep() => AddTree(v, v', lbl)
+      case RemoveTreeStep(branch) => RemoveTree()
     }
   }
 
