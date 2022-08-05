@@ -9,8 +9,6 @@ include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
 include "../../lib/Base/mathematics.i.dfy"
 include "../Journal/GenericDisk.i.dfy"
 
-
-// TODO:
 // This module deals with 
 // 1. Concretize buffer implementation with Forest (seqs of B+ tree)
 // 2. Filter should be implicitly tracked by pivot table (no more apply filters)
@@ -178,6 +176,25 @@ module BranchedBetreeMod
       BetreeNode(buffers[newStart..], pivotTable, children, TruncateActiveRange(newStart, |activeBufferRanges|))
     }
 
+    function CompactActiveRange(compactStart: nat, compactEnd: nat, count: nat) : (out: seq<nat>)
+      requires WF()
+      requires compactStart < compactEnd <= |buffers|
+      requires count <= |activeBufferRanges|
+      ensures |out| == |activeBufferRanges[..count]|
+      ensures (forall i:nat | i < |out| :: out[i] <= |buffers| - (compactEnd-compactStart-1))
+    {
+      if count == 0 then []
+      else (
+        var range := activeBufferRanges[count-1];
+        var range' := 
+            if range < compactStart then range
+            else if range < compactEnd then compactStart
+            else range - (compactEnd - compactStart - 1);
+
+        CompactActiveRange(compactStart, compactEnd, count-1) + [range']
+      )
+    }
+
     // TODO(jonh): Again, Split has a bunch of duplicated (complex) definitions duplicated from PivotBetree.
     // Would be nice to find a way to factor out the structure duplicated across layers without
     // making the state machines difficult to read.
@@ -216,6 +233,16 @@ module BranchedBetreeMod
       assert newLeft.WF();
       assert newRight.WF();
       (newLeft, newRight)
+    }
+
+    predicate CompactedBranchEquivalence(forest: LF.LinkedForest, compactStart: nat, compactEnd: nat, compactedBranch: LB.LinkedBranch)
+      requires WF()
+      requires forest.WF()
+      requires compactStart < compactEnd <= |buffers|
+      requires forall i:nat | compactStart <= i < compactEnd :: forest.ValidTree(buffers[i])
+    {
+      && (forall key | KeyInDomain(key) && (compactStart <= ChildBufferRange(key) < compactEnd) 
+          :: forest.Query(key, buffers[compactStart..compactEnd]) == compactedBranch.Query(key))
     }
   }
 
@@ -936,9 +963,8 @@ module BranchedBetreeMod
     && var root := step.path.Target().Root();
     && root.OccupiedChildIndex(step.childIdx)  // the downstream child must exist
     && step.bufferStart <= |root.buffers|
-    && (forall i:nat | i < |root.activeBufferRanges| && i != step.childIdx :: root.activeBufferRanges[i] < step.bufferStart)
-
-    && var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr, step.bufferStart);
+    && (forall i:nat | i < |root.activeBufferRanges| && i != step.childIdx :: step.bufferStart <= root.activeBufferRanges[i]) 
+    && var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr, step.bufferStart); // meow
     && step.path.CanSubstitute(replacement, step.pathAddrs)
     // Subway Eat Fresh!
     && v.IsFresh({step.targetAddr, step.targetChildAddr} + Set(step.pathAddrs))
@@ -959,80 +985,87 @@ module BranchedBetreeMod
     && LF.Next(v.forestSM, v'.forestSM, LF.RemoveTreeLabel(step.rootToRemove))
   }
 
-  // target is the root node before it is compacted.
-  // InsertReplacement returns a LinkedBetree that has the diskview of target with replacement placed at
-  // the replacementAddr
-  // function InsertCompactReplacement(target: LinkedBetree, compactedBuffers: BufferStack, replacementAddr: Address) : (out: LinkedBetree)
-  //   requires target.WF()
-  //   requires target.HasRoot()
-  //   requires target.Root().buffers.Equivalent(compactedBuffers)
-  //   requires target.diskView.IsFresh({replacementAddr})
-  //   ensures target.diskView.IsSubsetOf(out.diskView)
-  //   ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}
-  //   ensures out.WF()   // prereq to MyDomain()
-  //   ensures out.HasRoot() && out.Root().MyDomain() == target.Root().MyDomain()
-  // {
-  //   var root := target.Root();
-  //   var newRoot := BetreeNode(compactedBuffers, root.pivotTable, root.children);
-  //   var newDiskView := target.diskView.ModifyDisk(replacementAddr, newRoot);
-  //   var out := LinkedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView);
-  //   out
-  // }
+  // @target: the root node before it is compacted
+  // @compactStart: start index of buffers being compacted
+  // @compactEnd: end index of buffers being compacted, exclusive
+  // @compactedRoot: compacted branch root address (not in our diskview)
+  // InsertReplacement returns a LinkedBetree that has the diskview of target with replacement placed at the replacementAddr
+  function InsertCompactReplacement(target: LinkedBetree, compactStart: nat, compactEnd: nat, compactedRoot: Address, replacementAddr: Address) : (out: LinkedBetree)
+    requires target.WF()
+    requires target.HasRoot()
+    requires compactStart < compactEnd <= |target.Root().buffers|
+    requires target.diskView.IsFresh({replacementAddr})
+    ensures target.diskView.IsSubsetOf(out.diskView)
+    ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}
+    ensures out.WF()   // prereq to MyDomain()
+    ensures out.HasRoot() && out.Root().MyDomain() == target.Root().MyDomain()
+  {
+    var root := target.Root();
+    var compactedBuffers := root.buffers[0..compactStart] + [ compactedRoot ] + root.buffers[compactEnd..];
+    var compactedActiveBufferRanges := root.CompactActiveRange(compactStart, compactEnd, |root.activeBufferRanges|);
+    var newRoot := BetreeNode(compactedBuffers, root.pivotTable, root.children, compactedActiveBufferRanges);
 
-  // when can you compact a buffer
+    var newDiskView := target.diskView.ModifyDisk(replacementAddr, newRoot);
+    var out := LinkedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView);
+    out
+  }
 
-//   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-//   {
-//     && v.WF()
-//     && step.WF()
-//     && lbl.InternalAllocationsLabel?
-//     && step.InternalCompactStep?
-//     && lbl.addrs == step.pathAddrs + [step.targetAddr]
-//     && step.path.linked == v.linked
-//     && step.path.Valid()
-//     && step.path.Target().Root().buffers.Equivalent(step.compactedBuffers)
-//     // Subway Eat Fresh!
-//     && v.linked.diskView.IsFresh({step.targetAddr} + Set(step.pathAddrs))
-//     && v'.linked == step.path.Substitute(
-//         InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr),
-//         step.pathAddrs
-//     ).BuildTightTree()
-//     && v'.memtable == v.memtable  // UNCHANGED
-//   }
+  predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.WF()
+    && v.Valid() // can reduce to ValidTree(buffers[compactStart..compactEnd]) if needed
+    && step.WF()
+    && lbl.InternalAllocationsLabel?
+    && step.InternalCompactStep?
+    && lbl.addrs == step.pathAddrs + [step.targetAddr] + step.compactedBranch.AddressesFromRoot()
+    && step.path.linked == v.linked
+    && step.path.Target().Root().CompactedBranchEquivalence(v.forestSM.forest, step.compactStart, step.compactEnd, step.compactedBranch)
+    // Subway Eat Fresh!
+    // && v.linked.diskView.IsFresh({step.targetAddr} + Set(step.pathAddrs))
+    && v.IsFresh({step.targetAddr} + Set(step.pathAddrs) + Set(step.compactedBranch.AddressesFromRoot()))
+    && v'.linked == step.path.Substitute(
+        InsertCompactReplacement(step.path.Target(), step.compactStart, step.compactEnd, step.compactedBranch.root, step.targetAddr),
+        step.pathAddrs
+    ).BuildTightTree()
+    && v'.memtable == v.memtable  // UNCHANGED
+    && LF.Next(v.forestSM, v'.forestSM, LF.AddTreeLabel(step.compactedBranch))
+  }
 
-//   predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
-//   {
-//     && lbl.InternalLabel?
-//     && v.WF()
-//     && v' == v
-//   }
+  predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.InternalLabel?
+    && v.WF()
+    && v' == v
+  }
 
-//   // public:
+  // public:
 
-//   predicate Init(v: Variables, stampedBetree: StampedBetree)
-//   {
-//     && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value)
-//   }
+  // we might want to let forestSM take a step itself
+  predicate Init(v: Variables, stampedBetree: StampedBetree, stampedForest: StampedForest)
+  {
+    && stampedBetree.seqEnd == stampedForest.seqEnd
+    && v.memtable == EmptyMemtable(stampedBetree.seqEnd)
+    && v.linked == stampedBetree.value
+    && LF.Init(v.forestSM, stampedForest.value)
+  }
 
   datatype Step =
       QueryStep(receipt: QueryReceipt)
     | PutStep()
     | QueryEndLsnStep()
     | FreezeAsStep()
-    // newRootAddr is the new address allocated for the new root
+      // newRootAddr is the new address allocated for the new root
     | InternalGrowStep(newRootAddr: Address)
-
+      // request describes how the split applies (to an Index or Leaf); newAddrs are the new page addresses
     | InternalSplitStep(path: Path, request: SplitRequest, newAddrs: SplitAddrs, pathAddrs: PathAddrs)
-//       // request describes how the split applies (to an Index or Leaf); newAddrs are the new page addresses
     | InternalFlushMemtableStep(newRootAddr: Address, branch: LB.LinkedBranch)
+      // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
+      // pathAddrs is the new addresses to place all its ancestors, used in substitution
     | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs, bufferStart: nat)
     | InternalPruneForestStep(rootToRemove: Address)
-//       // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
-//       // pathAddrs is the new addresses to place all its ancestors, used in substitution
-
-//     | InternalCompactStep(path: Path, compactedBuffers: BufferStack, targetAddr: Address, pathAddrs: PathAddrs)
-//       // targetAddr is the fresh address at which compactedNode is placed. pathAddrs is the new addresses to place all its ancestors
-//     | InternalNoOpStep()
+      // targetAddr is the fresh address at which compacted node is placed. pathAddrs is the new addresses to place all its ancestors
+    | InternalCompactStep(path: Path, compactStart: nat, compactEnd: nat, compactedBranch: LB.LinkedBranch, targetAddr: Address, pathAddrs: PathAddrs)
+    | InternalNoOpStep()
   {
     predicate WF() {
       match this {
@@ -1054,34 +1087,36 @@ module BranchedBetreeMod
           && SeqHasUniqueElems(pathAddrs)
           && {targetAddr, targetChildAddr} !! Set(pathAddrs)
           && targetAddr != targetChildAddr
-//         case InternalCompactStep(path, compactedNode, targetAddr, pathAddrs) =>
-//           && path.Valid()
-//           && path.Target().Root().buffers.Equivalent(compactedBuffers)
-//           && path.depth == |pathAddrs|
-//           && SeqHasUniqueElems(pathAddrs)
-//           && {targetAddr} !! Set(pathAddrs)
+        case InternalCompactStep(path, compactStart, compactEnd, compactedBranch, targetAddr, pathAddrs) =>
+          && path.Valid()
+          && path.depth == |pathAddrs|
+          && SeqHasUniqueElems(pathAddrs)
+          && {targetAddr} !! Set(pathAddrs)
+          && compactedBranch.Acyclic()
+          && compactStart < compactEnd <= |path.Target().Root().buffers|
         case _ => true
       }
     }
   }
 
-//   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-//   {
-//     match step {
-//       case QueryStep(receipt) => Query(v, v', lbl, receipt)
-//       case PutStep() => Put(v, v', lbl)
-//       case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
-//       case FreezeAsStep() => FreezeAs(v, v', lbl)
-//       case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
-//       case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
-//       case InternalFlushMemtableStep(_) => InternalFlushMemtable(v, v', lbl, step)
-//       case InternalFlushStep(_, _, _, _, _) => InternalFlush(v, v', lbl, step)
-//       case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
-//       case InternalNoOpStep() => InternalNoOp(v, v', lbl)
-//     }
-//   }
+  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    match step {
+      case QueryStep(receipt) => Query(v, v', lbl, receipt)
+      case PutStep() => Put(v, v', lbl)
+      case QueryEndLsnStep() => QueryEndLsn(v, v', lbl)
+      case FreezeAsStep() => FreezeAs(v, v', lbl)
+      case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
+      case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
+      case InternalFlushMemtableStep(_,_) => InternalFlushMemtable(v, v', lbl, step)
+      case InternalFlushStep(_, _, _, _, _, _) => InternalFlush(v, v', lbl, step)
+      case InternalPruneForestStep(_) => InternalPruneForest(v, v', lbl, step)
+      case InternalCompactStep(_, _, _, _, _, _) => InternalCompact(v, v', lbl, step)
+      case InternalNoOpStep() => InternalNoOp(v, v', lbl)
+    }
+  }
 
-//   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
-//     exists step: Step :: NextStep(v, v', lbl, step)
-//   }
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
+    exists step: Step :: NextStep(v, v', lbl, step)
+  }
 }

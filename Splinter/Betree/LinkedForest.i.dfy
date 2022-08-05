@@ -118,16 +118,15 @@ module LinkedForestMod {
 
 	// public:
 
-  // TODO: might need to update to StampedLinkedForest
-  predicate Init(v: Variables) {
-    && v.WF()
+  predicate Init(v: Variables, forest: LinkedForest) {
+    && v.forest == forest
   }
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     match step {
-      case AddTreeStep() => AddTree(v, v', lbl)
-      case RemoveTreeStep(branch) => RemoveTree()
+      case AddTreeStep() => AddTree(v, v', lbl, step)
+      case RemoveTreeStep(_) => RemoveTree(v, v', lbl, step)
     }
   }
 
