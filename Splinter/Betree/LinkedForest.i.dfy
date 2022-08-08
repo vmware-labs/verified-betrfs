@@ -16,11 +16,9 @@ module LinkedForestMod {
 	// We can construct LinkedBranch from each tree and the diskView
 	datatype LinkedForest = LinkedForest(trees: set<Address>, diskView: DiskView) 
 	{
-    // we currently do not require each b+tree to be disjoint from another 
-    // TODO: should we require each tree to be disjoint from another?
-    //       we could enforce that in addtree if we don't plan to init from a new one 
+    // TODO: disjoint reachable addrs from each root as part of Inv
 		predicate WF() {
-			&& diskView.WF()
+			&& diskView.WF() // ensures all nodes are connected
 			&& (forall root | root in trees :: diskView.ValidAddress(root))
 		}
 
@@ -47,73 +45,50 @@ module LinkedForestMod {
 				Merge(Query(key, DropLast(buffers)), tree.Query(key))
 			)
 		}
-
-    predicate ValidRanking(ranking: D.Ranking) 
-      requires WF()
-    {
-      && diskView.ValidRanking(ranking)
-      && (forall root | root in trees :: root in ranking)
-    }
-
-    function TheRanking() : D.Ranking
-      requires Acyclic()
-    {
-      var out :| ValidRanking(out);
-      out
-    }
-
-    predicate Acyclic()
-    {
-      && WF()
-      && (exists ranking :: ValidRanking(ranking))
-    }
 	}
-  
 
 	datatype Step = AddTreeStep | RemoveTreeStep(branch: LinkedBranch)
 
 	datatype TransitionLabel =
     AddTreeLabel(tree: LinkedBranch)
-  | RemoveTreeLabel(root: Address) // new diskview in step
+  | RemoveTreeLabel(root: Address)
 
 	datatype Variables = Variables(forest: LinkedForest) {
 		predicate WF() {
 			&& forest.WF()
 		}
 
-    function Addresses() : set<Address>
+    function AllAddresses() : set<Address>
 		{
-			set addr | addr in forest.diskView.entries
+      forest.diskView.AllAddresses()
 		}
 	}
 
-  // TODO: each tree is disjoint from another should be kept as an Inv
   predicate AddTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) {
+    && v.WF()
     && lbl.AddTreeLabel?
     && step.AddTreeStep?
-    && v.WF()
     // new tree must be acyclic with fresh addresses
     && lbl.tree.WF()
     && lbl.tree.Acyclic()
-    && v.forest.diskView.IsFresh(lbl.tree.diskView.Addresses())
+    && lbl.tree.TightDiskView()
+    && v.forest.diskView.IsFresh(lbl.tree.ReachableAddrs())
     // updated forest
     && v'.forest.trees == v.forest.trees + { lbl.tree.root }
     && v'.forest.diskView == v.forest.diskView.MergeDisk(lbl.tree.diskView)
   }
 
   predicate RemoveTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) {
+    && v.WF()
     && lbl.RemoveTreeLabel?
     && step.RemoveTreeStep?
-    && v.WF()
-
     && lbl.root in v.forest.trees
     && step.branch.root == lbl.root
     && step.branch.WF()
     && step.branch.Acyclic()
-
-    // well somehow remove a tight disk tree
-    // TODO!
-    // makes sure everything is found elsewhere 
+    && step.branch.TightDiskView()
+    && v'.forest.trees == v.forest.trees - {lbl.root}
+    && v'.forest.diskView == v.forest.diskView.RemoveDisk(step.branch.diskView)
   }
 
 	// public:

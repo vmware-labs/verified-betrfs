@@ -5,6 +5,7 @@ include "../../lib/Base/KeyType.s.dfy"
 include "../../Spec/Message.s.dfy"
 include "../../lib/Base/Option.s.dfy"
 include "../../lib/Base/Maps.i.dfy"
+include "../../lib/Base/Sets.i.dfy"
 include "../../lib/Base/Sequences.i.dfy"
 include "../../lib/Base/total_order_impl.i.dfy"
 include "../Journal/GenericDisk.i.dfy"
@@ -21,6 +22,7 @@ module LinkedBranchMod {
   import opened Sequences
   import opened DomainMod
   import opened GenericDisk
+  import opened Sets
   import KeysImpl = Lexicographic_Byte_Order_Impl
   import Keys = KeysImpl.Ord
   import P = PivotBranchMod
@@ -31,7 +33,6 @@ module LinkedBranchMod {
   {
     predicate WF() {
       if Leaf? then 
-        && |keys| > 0   // && can we ensure that there's more than 1
         && |keys| == |msgs|
         && Keys.IsStrictlySorted(keys)
       else
@@ -52,10 +53,18 @@ module LinkedBranchMod {
     }
   }
 
-  // NOTE: use address instead of pointer here because the node is never nil,
-  // there shouldn't be pivot entries without corresponding children
   datatype DiskView = DiskView(entries: map<Address, Node>) 
   {
+    predicate WF() {
+      && EntriesWF()
+      && NoDanglingAddress()
+      && EntriesChildInRange()
+    }
+
+    predicate EntriesWF() {
+      && (forall addr | addr in entries :: entries[addr].WF())
+    }
+
     predicate ValidAddress(addr: Address) {
       addr in entries
     }
@@ -85,9 +94,9 @@ module LinkedBranchMod {
       else ( set k | k in node.keys )
     }
 
-    function Addresses() : set<Address>
+    function AllAddresses() : set<Address>
     {
-      set addr | addr in entries
+      entries.Keys
     }
 
     predicate AllKeysAboveBound(addr: Address, pivots: seq<Key>, i: int)
@@ -109,9 +118,9 @@ module LinkedBranchMod {
       requires 0 <= i < |node.children|
     {
       var child := node.children[i];
-      && (ValidAddress(child) ==> 
-        && AllKeysAboveBound(child, node.pivots, i)
-        && AllKeysBelowBound(child, node.pivots, i))
+      && ValidAddress(child)
+      && AllKeysAboveBound(child, node.pivots, i)
+      && AllKeysBelowBound(child, node.pivots, i)
     }
 
     predicate NodeHasChildInRange(node: Node) {
@@ -122,16 +131,6 @@ module LinkedBranchMod {
     predicate EntriesChildInRange() {
       (forall addr | addr in entries :: NodeHasChildInRange(entries[addr]))
     }
-
-    predicate EntriesWF() {
-      && (forall addr | addr in entries :: entries[addr].WF())
-    }
-  
-    predicate WF() {
-      && EntriesWF()
-      && NoDanglingAddress()
-      && EntriesChildInRange()
-    }   
 
     predicate AgreesWithDisk(other: DiskView) {
       MapsAgree(entries, other.entries)
@@ -182,6 +181,12 @@ module LinkedBranchMod {
       DiskView.DiskView(MapUnion(entries, other.entries))
     }
 
+    function {:opaque} RemoveDisk(other: DiskView) : (out: DiskView)
+      ensures forall addr :: out.ValidAddress(addr) <==> (ValidAddress(addr) && !other.ValidAddress(addr))
+      ensures out.IsSubsetOf(this)
+    {
+      DiskView.DiskView(MapRemove(entries, other.entries.Keys))
+    } 
   }
 
   function EmptyDisk() : DiskView {
@@ -206,7 +211,6 @@ module LinkedBranchMod {
     out
   }
  
-  // This is the unit of interpretation: A LinkedBranch has enough info in it to interpret to a PivotBranch.Node
   datatype LinkedBranch = LinkedBranch(root: Address, diskView: DiskView)
   {
     predicate WF() {
@@ -265,22 +269,34 @@ module LinkedBranchMod {
       result
     }
 
-    // return a sequence of all addressses starting from root
-    // TODO: implement
-    function AddressesFromRoot() : (addrs: seq<Address>)
-      requires HasRoot()
+    function ReachableAddrs() : set<Address>
       requires Acyclic()
-      // requires ValidRanking(ranking)
-      // ensures (forall addr | addr in addrs :: addr in diskView.entries)
-      // decreases GetRank(ranking), 0
     {
-      var node := Root();
-      if node.Leaf? then (
-        []
-      ) else (
-        []
-      )
+      ReachableAddrsUsingRanking(TheRanking())
     }
+
+    function ReachableAddrsUsingRanking(ranking: Ranking) : (out: set<Address>)
+      requires WF()
+      requires ValidRanking(ranking)
+      ensures HasRoot() ==> root in out
+      ensures out <= diskView.entries.Keys
+      decreases GetRank(ranking)
+    {
+      if !HasRoot() then {}
+      else if Root().Leaf? then {root}
+      else
+        var numChildren := |Root().children|;
+        var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+
+        UnionSeqOfSetsSoundness(subTreeAddrs);
+        {root} + UnionSeqOfSets(subTreeAddrs)
+    }
+
+    predicate TightDiskView()
+    {
+      && (Acyclic() ==> (ReachableAddrs() == diskView.AllAddresses()))
+    }
+
 
   //   function AllKeys(ranking: Ranking) : (result: set<Key>)
   //     requires Acyclic()

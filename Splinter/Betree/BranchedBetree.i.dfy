@@ -630,7 +630,7 @@ module BranchedBetreeMod
 
     // linked diskView and forest diskView should have disjoint addresses
     predicate DisjointForest() {
-      && linked.diskView.IsFresh(forestSM.Addresses())
+      && linked.diskView.IsFresh(forestSM.AllAddresses())
     }
 
     // buffers in each node should be known to forest
@@ -874,11 +874,15 @@ module BranchedBetreeMod
     && step.InternalFlushMemtableStep?
     && assert step.branch.I().WF() by { step.branch.WFI( step.branch.I() ); } // TODO: revisit
     && step.branch.I().I() == v.memtable.buffer
+    
+    // Allocation validation
+    && |lbl.addrs| >= 1
+    && lbl.addrs[0] == step.newRootAddr
+    && Set(lbl.addrs[1..]) == step.branch.ReachableAddrs()
 
-    && lbl.addrs == [step.newRootAddr] + step.branch.AddressesFromRoot() // TODO: revisit
     // Subway Eat Fresh!
     && v.IsFresh({step.newRootAddr})
-    && v.IsFresh(step.branch.diskView.Addresses())
+    && v.IsFresh(step.branch.diskView.AllAddresses())
     && v'.linked == InsertInternalFlushMemtableReplacement(v.linked, step.branch.root, step.newRootAddr).BuildTightTree()
     && v'.memtable == v.memtable.Drain()
     && LF.Next(v.forestSM, v'.forestSM, LF.AddTreeLabel(step.branch))
@@ -1015,14 +1019,20 @@ module BranchedBetreeMod
     && v.WF()
     && v.Valid() // can reduce to ValidTree(buffers[compactStart..compactEnd]) if needed
     && step.WF()
-    && lbl.InternalAllocationsLabel?
     && step.InternalCompactStep?
-    && lbl.addrs == step.pathAddrs + [step.targetAddr] + step.compactedBranch.AddressesFromRoot()
+    
+    // allocation validation
+    && lbl.InternalAllocationsLabel?
+    && |lbl.addrs| >= |step.pathAddrs| + 1
+    && lbl.addrs[..|step.pathAddrs|] == step.pathAddrs
+    && lbl.addrs[|step.pathAddrs|] == step.targetAddr
+    && Set(lbl.addrs[|step.pathAddrs|+1..]) == step.compactedBranch.ReachableAddrs()
+
     && step.path.linked == v.linked
     && step.path.Target().Root().CompactedBranchEquivalence(v.forestSM.forest, step.compactStart, step.compactEnd, step.compactedBranch)
+
     // Subway Eat Fresh!
-    // && v.linked.diskView.IsFresh({step.targetAddr} + Set(step.pathAddrs))
-    && v.IsFresh({step.targetAddr} + Set(step.pathAddrs) + Set(step.compactedBranch.AddressesFromRoot()))
+    && v.IsFresh({step.targetAddr} + Set(step.pathAddrs) + step.compactedBranch.ReachableAddrs())
     && v'.linked == step.path.Substitute(
         InsertCompactReplacement(step.path.Target(), step.compactStart, step.compactEnd, step.compactedBranch.root, step.targetAddr),
         step.pathAddrs

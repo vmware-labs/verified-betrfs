@@ -34,10 +34,10 @@ module PivotBranchMod {
     }
 
     function Concat(other: FlattenedBranch) : (result: FlattenedBranch)
-    requires WF()
-    requires other.WF()
-    requires |keys| > 0 && |other.keys| > 0 ==> Keys.lt(Last(keys), other.keys[0])
-    ensures result.WF()
+      requires WF()
+      requires other.WF()
+      requires |keys| > 0 && |other.keys| > 0 ==> Keys.lt(Last(keys), other.keys[0])
+      ensures result.WF()
     {
       Keys.reveal_IsStrictlySorted();
       Keys.lteTransitiveForall();
@@ -52,8 +52,8 @@ module PivotBranchMod {
   datatype Node = Index(pivots: seq<Key>, children: seq<Node>) | Leaf(keys: seq<Key>, msgs: seq<Message>)
   {
     function AllKeys() : set<Key>
-    ensures Leaf? && 0 < |keys| ==> AllKeys() != {}
-    ensures Index? && 0 < |pivots| ==> AllKeys() != {}
+      ensures Leaf? && 0 < |keys| ==> AllKeys() != {}
+      ensures Index? && 0 < |pivots| ==> AllKeys() != {}
     {
       if Leaf? then 
         var result := set k | k in keys;
@@ -68,17 +68,17 @@ module PivotBranchMod {
     }
 
     predicate AllKeysBelowBound(i: int)
-    requires Index?
-    requires 0 <= i < |children|-1
-    requires 0 <= i < |pivots|
+      requires Index?
+      requires 0 <= i < |children|-1
+      requires 0 <= i < |pivots|
     {
       forall key :: key in children[i].AllKeys() ==> Keys.lt(key, pivots[i])
     }
 
     predicate AllKeysAboveBound(i: int)
-    requires Index?
-    requires 0 <= i < |children|
-    requires 0 <= i-1 < |pivots|
+      requires Index?
+      requires 0 <= i < |children|
+      requires 0 <= i-1 < |pivots|
     {
       forall key :: key in children[i].AllKeys() ==> Keys.lte(pivots[i-1], key)
     }
@@ -98,13 +98,13 @@ module PivotBranchMod {
     }
 
     function Route(key: Key) : int
-    requires WF()
+      requires WF()
     {
       var s := if Leaf? then keys else pivots;
       Keys.LargestLte(s, key)
     }
 
-    // Takes in a btree node and returns the key value map abstraction
+    // Takes in a btree node and returns the buffer abstraction
     function I() : Buffer
       requires WF()
     {
@@ -118,12 +118,10 @@ module PivotBranchMod {
         :: children[Route(key) + 1].I().mapp[key])
     }
   
-    // TODO: receipt style?
     function Query(key: Key) : (result: Option<Message>)
-    requires WF()
-    // ensures result.None? ==> (I().Query(key) == Update(NopDelta()))
-    // ensures result.Some? ==> (I().Query(key) == result.value)
-    ensures result == MapLookupOption(I().mapp, key)
+      requires WF()
+      ensures result.Some? ==> I().Query(key) == result.value
+      ensures result.None? ==> I().Query(key) == Update(NopDelta())
     {
       var r := Route(key);
       if Leaf? then (
@@ -178,6 +176,11 @@ module PivotBranchMod {
       if Leaf? then FlattenedBranch(keys, msgs)
       else FlattenChildren(|children|)
     }
+
+
+    // Maybe what ApplyFilter means is that subsequent query will only be in those ranges 
+
+    // How do we want apply filter to work here
   
     // node + filter = this
     // using Domain directly here as pivot layer sees Domain rather than iset<Key>
@@ -202,63 +205,66 @@ module PivotBranchMod {
     }
   }
 
+  // What can we show if we don't bother with it
+  // we show function is the same as the other function
+  // so as long as we can refine to a valid version of the prior 
 
   // PivotBranch SM:
 
-  datatype Variables = Variables(root: Node) {
-    predicate WF() {
-      && root.WF()
-    }
-  }
+  // datatype Variables = Variables(root: Node) {
+  //   predicate WF() {
+  //     && root.WF()
+  //   }
+  // }
 
-  predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
-  {
-    && v.WF()
-    && lbl.QueryLabel?
-    && v.root.Query(lbl.key) == Some(lbl.msg)
-    && v' == v
-  }
+  // predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
+  // {
+  //   && v.WF()
+  //   && lbl.QueryLabel?
+  //   && v.root.Query(lbl.key) == Some(lbl.msg)
+  //   && v' == v
+  // }
 
-  predicate Filter(v: Variables, v': Variables, lbl: TransitionLabel)
-  {
-    && v.WF()
-    && lbl.FilterLabel?
-    && lbl.newroot.WF()
-    && !lbl.domain.EmptyDomain?
-    && lbl.newroot.IsFiltered(v.root, lbl.domain)
-    && v'.root == lbl.newroot
-    && v'.WF()
-  }
+  // predicate Filter(v: Variables, v': Variables, lbl: TransitionLabel)
+  // {
+  //   && v.WF()
+  //   && lbl.FilterLabel?
+  //   && lbl.newroot.WF()
+  //   && !lbl.domain.EmptyDomain?
+  //   && lbl.newroot.IsFiltered(v.root, lbl.domain)
+  //   && v'.root == lbl.newroot
+  //   && v'.WF()
+  // }
 
-  predicate Flatten(v: Variables, v': Variables, lbl: TransitionLabel)
-  {
-    && v.WF()
-    && lbl.FlattenLabel?
-    && lbl.flattened.WF()
-    && v.root.FlattenEquivalent(lbl.flattened)
-    && v' == v
-  }
+  // predicate Flatten(v: Variables, v': Variables, lbl: TransitionLabel)
+  // {
+  //   && v.WF()
+  //   && lbl.FlattenLabel?
+  //   && lbl.flattened.WF()
+  //   && v.root.FlattenEquivalent(lbl.flattened)
+  //   && v' == v
+  // }
 
-  // public: 
+  // // public: 
 
-  predicate Init(v: Variables)
-  {
-    && v.WF()
-  }
+  // predicate Init(v: Variables)
+  // {
+  //   && v.WF()
+  // }
 
-  datatype Step = QueryStep | FilterStep | FlattenStep
+  // datatype Step = QueryStep | FilterStep | FlattenStep
 
-  datatype TransitionLabel =
-    QueryLabel(key: Key, msg: Message)
-  | FilterLabel(newroot: Node, domain: Domain)
-  | FlattenLabel(flattened: FlattenedBranch)
+  // datatype TransitionLabel =
+  //   QueryLabel(key: Key, msg: Message)
+  // | FilterLabel(newroot: Node, domain: Domain)
+  // | FlattenLabel(flattened: FlattenedBranch)
 
-  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-  {
-    match step {
-      case QueryStep() => Query(v, v', lbl)
-      case FilterStep() => Filter(v, v', lbl)
-      case FlattenStep() => Flatten(v, v', lbl)
-    }
-  }
+  // predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  // {
+  //   match step {
+  //     case QueryStep() => Query(v, v', lbl)
+  //     case FilterStep() => Filter(v, v', lbl)
+  //     case FlattenStep() => Flatten(v, v', lbl)
+  //   }
+  // }
 }
