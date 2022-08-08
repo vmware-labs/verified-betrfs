@@ -28,7 +28,7 @@ module ReprJournal {
     journal: TruncatedJournal
   ) {
     predicate WF() {
-      journal.WF()
+      journal.Decodable()
     }
   }
 
