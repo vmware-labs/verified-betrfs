@@ -135,6 +135,18 @@ module GCCrashTolerantJournalRefinement {
     JournalNext(j, j', jlbl);
   }
 
+  lemma CommitStartRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl) 
+    requires lbl.base.CommitStartLabel?
+    ensures Inv(v')
+    ensures CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
+  {
+    var j, j' := v.ephemeral.v, v'.ephemeral.v;
+    var jlbl := ReprJournal.FreezeForCommitLabel(v'.inFlight.value);
+    JournalNext(j, j', jlbl);
+  }
+
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -162,13 +174,12 @@ module GCCrashTolerantJournalRefinement {
         assert Inv(v');
         assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case QueryLsnPersistenceLabel(_) => 
-        assume false;
-        // assert Inv(v');
-        // assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
+        assert Inv(v');
+        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case CommitStartLabel(_, _) => 
-        assume false;
-        // assert Inv(v');
-        // assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
+        CommitStartRefines(v, v', lbl);
+        assert Inv(v');
+        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case CommitCompleteLabel(_) => 
         assume false;
         // assert Inv(v');
