@@ -147,6 +147,18 @@ module GCCrashTolerantJournalRefinement {
     JournalNext(j, j', jlbl);
   }
 
+  lemma CommitCompleteRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl) 
+    requires lbl.base.CommitCompleteLabel?
+    ensures Inv(v')
+    ensures CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
+  {
+    var j, j' := v.ephemeral.v, v'.ephemeral.v;
+    var jlbl := ReprJournal.DiscardOldLabel(v.inFlight.value.journal.SeqStart(), lbl.base.requireEnd);
+    JournalNext(j, j', jlbl);
+  }
+
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -156,43 +168,19 @@ module GCCrashTolerantJournalRefinement {
     match lbl.base {
       case LoadEphemeralFromPersistentLabel() =>
         LoadEphemeralFromPersistentRefines(v, v', lbl);
-        assert Inv(v');
-        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case ReadForRecoveryLabel(_) => 
         ReadForRecoveryRefines(v, v', lbl);
-        assert Inv(v');
-        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
-      case QueryEndLsnLabel(_) => 
-        assert Inv(v');
-        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
+      case QueryEndLsnLabel(_) => {}
       case PutLabel(_) =>
         PutRefines(v, v', lbl);
-        assert Inv(v');
-        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case InternalLabel() => 
         InternalRefines(v, v', lbl);
-        assert Inv(v');
-        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
-      case QueryLsnPersistenceLabel(_) => 
-        assert Inv(v');
-        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
+      case QueryLsnPersistenceLabel(_) => {}
       case CommitStartLabel(_, _) => 
         CommitStartRefines(v, v', lbl);
-        assert Inv(v');
-        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case CommitCompleteLabel(_) => 
-        assume false;
-        // assert Inv(v');
-        // assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
-      case CrashLabel() => 
-        assume false;
-        // assert Inv(v');
-        // assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
+        CommitCompleteRefines(v, v', lbl);
+      case CrashLabel() => {}
     }
   }
-
-
-
-
 }
-
