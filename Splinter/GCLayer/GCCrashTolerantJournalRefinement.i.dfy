@@ -36,6 +36,12 @@ module GCCrashTolerantJournalRefinement {
     PagedJournalRefinement.I(LinkedJournalRefinement.I(ReprJournalRefinement.I(rj)))
   }
 
+  function IReprJLabel(rlbl: ReprJournal.TransitionLabel) : AbstractJournal.TransitionLabel
+    requires rlbl.WF()
+  {
+    PagedJournalRefinement.ILbl(LinkedJournalRefinement.ILbl(rlbl.I()))
+  }
+
   function I(v: Variables) : CrashTolerantJournal.Variables
     requires v.WF()
     requires v.ephemeral.Known? ==> v.ephemeral.v.journal.truncatedJournal.Decodable()
@@ -72,6 +78,23 @@ module GCCrashTolerantJournalRefinement {
     ReprJournalRefinement.InvInit(v'.ephemeral.v, v.persistent);
   }
 
+  lemma JournalNext(j: ReprJournal.Variables, j': ReprJournal.Variables, lbl: ReprJournal.TransitionLabel)
+    requires ReprJournalRefinement.Inv(j)
+    requires ReprJournal.Next(j, j', lbl)
+    ensures ReprJournalRefinement.Inv(j')
+    ensures AbstractJournal.Next(IReprJ(j), IReprJ(j'), IReprJLabel(lbl))
+  {
+    ReprJournalRefinement.NextRefines(j, j', lbl);
+    LinkedJournalRefinement.NextRefines(
+      ReprJournalRefinement.I(j),
+      ReprJournalRefinement.I(j'),
+      lbl.I());
+    PagedJournalRefinement.NextRefines(
+      LinkedJournalRefinement.I(ReprJournalRefinement.I(j)),
+      LinkedJournalRefinement.I(ReprJournalRefinement.I(j')),
+      LinkedJournalRefinement.ILbl(lbl.I()));
+  }
+
   lemma ReadForRecoveryRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires Next(v, v', lbl) 
@@ -80,17 +103,36 @@ module GCCrashTolerantJournalRefinement {
     ensures CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
   {
     var j, j' := v.ephemeral.v, v'.ephemeral.v;
-    var jLbl := ReprJournal.ReadForRecoveryLabel(lbl.base.records);
-    ReprJournalRefinement.NextRefines(j, j', jLbl);
-    LinkedJournalRefinement.NextRefines(
-      ReprJournalRefinement.I(j),
-      ReprJournalRefinement.I(j'),
-      jLbl.I());
-    PagedJournalRefinement.NextRefines(
-      LinkedJournalRefinement.I(ReprJournalRefinement.I(j)),
-      LinkedJournalRefinement.I(ReprJournalRefinement.I(j')),
-      LinkedJournalRefinement.ILbl(jLbl.I()));
-    assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
+    var lbl := ReprJournal.ReadForRecoveryLabel(lbl.base.records);
+    JournalNext(j, j', lbl);
+  }
+
+  lemma PutRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl) 
+    requires lbl.base.PutLabel?
+    ensures Inv(v')
+    ensures CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
+  {
+    // This lemma is defined to move the obligation out of NextRefines
+  }
+
+  lemma InternalRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl) 
+    requires lbl.base.InternalLabel?
+    ensures Inv(v')
+    ensures CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl))
+  {
+    var j, j' := v.ephemeral.v, v'.ephemeral.v;
+    var jlbl: ReprJournal.TransitionLabel;
+    if Internal(v, v', lbl) {
+      jlbl := ReprJournal.InternalLabel();
+    } else {
+      jlbl := ReprJournal.InternalJournalGCLabel(lbl.allocations, lbl.freed);
+    }
+    ReprJournalRefinement.InvNext(j, j', jlbl);
+    JournalNext(j, j', jlbl);
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -101,27 +143,24 @@ module GCCrashTolerantJournalRefinement {
   {
     match lbl.base {
       case LoadEphemeralFromPersistentLabel() =>
-        // Done
         LoadEphemeralFromPersistentRefines(v, v', lbl);
         assert Inv(v');
         assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case ReadForRecoveryLabel(_) => 
-        // Done
         ReadForRecoveryRefines(v, v', lbl);
         assert Inv(v');
         assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case QueryEndLsnLabel(_) => 
-        assume false;
         assert Inv(v');
         assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case PutLabel(_) =>
-        assume false;
-        // assert Inv(v');
-        // assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
+        PutRefines(v, v', lbl);
+        assert Inv(v');
+        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case InternalLabel() => 
-        assume false;
-        // assert Inv(v');
-        // assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
+        InternalRefines(v, v', lbl);
+        assert Inv(v');
+        assert CrashTolerantJournal.Next(I(v), I(v'), IALabel(lbl));
       case QueryLsnPersistenceLabel(_) => 
         assume false;
         // assert Inv(v');
