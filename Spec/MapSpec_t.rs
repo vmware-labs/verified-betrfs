@@ -1,5 +1,8 @@
 #![allow(unused_imports)]
 
+// TODO _t and _s enforcement in the build system? Gasp, don't know how to thing about
+// approaching/modifying/enhancing crate build...?
+
 use builtin_macros::*;
 use builtin::*;
 mod pervasive;
@@ -57,6 +60,7 @@ state_machine!{ MapSpec {
     }
 }}
 
+// Async things
 type ID = int;  // wishing for genericity
 struct Request {
     input: Input,
@@ -74,11 +78,50 @@ pub struct EphemeralState {
     replies: Set<Reply>,
 }
 
+#[is_variant]
+pub enum AsyncUILabel { // Was AsyncMod.UIOp
+    RequestOp {req: Request},
+    ExecuteOp {req: Request, reply: Reply},
+    ReplyOp {reply: Reply},
+}
+
+// CrashTolerantMod things
+type SyncReqId = nat;
+type Version = PersistentState;
+
 // TODO(jonh): `error: state machine field must be marked public`: why make me type 'pub', then?
 // It's our syntax!
 
-state_machine!{ AsyncMap {
-    fields { pub persistent: PersistentState, pub ephemeral: EphemeralState }
+// TODO(jonh): was sad to concretize Map (because no module funcors), and
+// sad to cram Async into CrashTolerant (because Async wasn't really a real state machine)
+state_machine!{ CrashTolerantAsyncMap {
+    fields {
+        pub versions: FloatingSeq<Version>,
+        pub asyncEphemral: EphemeralState,
+        pub syncRequests: Map<SyncReqId, nat>,
+    }
+
+//    #[invariant]
+    pub fn the_inv(self) -> bool {
+        &&& 0 < self.versions.length()
+        &&& self.versions.IsActive(self.versions.length() - 1)
+    }
+
+    fn StableIndex(self) -> nat {
+        self.versions.FirstActiveIndex()
+    }
+
+    transition!{
+        operate(op: AsyncUILabel) {
+        }
+    }
+
+    // TODO: jonh is sad that I can't put this invariant & proof elsewhere. We separate
+    // our state machine definitions from our invariant & refinement proof text.
+    #[inductive(operate)]
+    fn operate_inductive(pre: Self, post: Self, op: AsyncUILabel) { }
+    
+
 }}
 
 //}
