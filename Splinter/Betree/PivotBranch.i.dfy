@@ -92,9 +92,9 @@ module PivotBranchMod {
         && |pivots| == |children| - 1
         && Keys.IsStrictlySorted(pivots)
         && (forall i :: 0 <= i < |children| ==> children[i].WF())
-        && (forall i :: 0 <= i < |children| ==> children[i].AllKeys() != {})
         && (forall i :: 0 <= i < |children|-1 ==> AllKeysBelowBound(i))
         && (forall i :: 0 < i < |children|   ==> AllKeysAboveBound(i))
+        // && (forall i :: 0 <= i < |children| ==> children[i].AllKeys() != {})
     }
 
     function Route(key: Key) : int
@@ -117,6 +117,14 @@ module PivotBranchMod {
         && key in children[Route(key) + 1].I().mapp
         :: children[Route(key) + 1].I().mapp[key])
     }
+
+    lemma AllKeysIsConsistentWithI(key: Key)
+      requires WF()
+      requires key in I().mapp
+      ensures key in AllKeys()
+      ensures Index? ==> WF() && key in children[Route(key) + 1].AllKeys()
+    {
+    }
   
     function Query(key: Key) : (result: Option<Message>)
       requires WF()
@@ -129,7 +137,13 @@ module PivotBranchMod {
         if Route(key) >= 0 && keys[r] == key
         then Some(msgs[Route(key)]) else None
       ) else (
-        children[Route(key)+1].Query(key)
+        var result := children[Route(key)+1].Query(key);
+        assert result.Some? ==> key in children[Route(key)+1].AllKeys() by {
+          if result.Some? {
+            children[Route(key)+1].AllKeysIsConsistentWithI(key);
+          } 
+        }
+        result
       )
     }
 
