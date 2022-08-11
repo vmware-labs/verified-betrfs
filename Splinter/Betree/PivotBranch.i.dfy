@@ -120,6 +120,7 @@ module PivotBranchMod {
   
     function Query(key: Key) : (result: Option<Message>)
       requires WF()
+      ensures result.Some? <==> key in I().mapp
       ensures result.Some? ==> I().Query(key) == result.value
       ensures result.None? ==> I().Query(key) == Update(NopDelta())
     {
@@ -167,7 +168,34 @@ module PivotBranchMod {
         result
       )
     }
+  
+    predicate IsFiltered(og: Node, filter: Domain)
+      requires WF()
+      requires og.WF()
+      requires !filter.EmptyDomain?
+    {
+      && (forall k :: Query(k).Some? <==> (filter.Contains(k) && og.Query(k).Some?))  // define this's domain
+      && (forall k | Query(k).Some? :: Query(k) == og.Query(k)) // value matches og
+    }
 
+    lemma FilteredEquivApplyFilter(og: Node, filter: Domain)
+      requires IsFiltered.requires(og, filter)
+      requires IsFiltered(og, filter)
+      ensures I() == og.I().ApplyFilter(filter.KeySet())
+    {
+      var actual := I();
+      var expected := og.I().ApplyFilter(filter.KeySet());
+
+      assert (forall k :: k in actual.mapp <==> (filter.Contains(k) && og.Query(k).Some?));
+      assert (forall k :: k in expected.mapp <==> (filter.Contains(k) && og.Query(k).Some?));
+      assert (forall k :: k in actual.mapp <==> k in expected.mapp);
+
+      assert IsSubMap(actual.mapp, expected.mapp);
+      assert IsSubMap(expected.mapp, actual.mapp);
+      MapEquality(actual.mapp, expected.mapp);
+    }
+
+    // Note: intended for iterator which we currently don't have
     function Flatten() : (result: FlattenedBranch)
     requires WF()
     ensures result.WF()
@@ -175,23 +203,6 @@ module PivotBranchMod {
     {
       if Leaf? then FlattenedBranch(keys, msgs)
       else FlattenChildren(|children|)
-    }
-
-
-    // Maybe what ApplyFilter means is that subsequent query will only be in those ranges 
-
-    // How do we want apply filter to work here
-  
-    // node + filter = this
-    // using Domain directly here as pivot layer sees Domain rather than iset<Key>
-    // definition is consistent with filter.KeySet(), but maybe we should use that instead in case it changes
-    predicate IsFiltered(og: Node, filter: Domain)
-      requires WF()
-      requires og.WF()
-      requires !filter.EmptyDomain?
-    {
-      && (forall k :: this.Query(k).Some? <==> (filter.Contains(k) && og.Query(k).Some?))  // define this's domain
-      && (forall k | this.Query(k).Some? :: this.Query(k) == og.Query(k)) // value matches og
     }
 
     // sorted list, then through filter for flattened list
