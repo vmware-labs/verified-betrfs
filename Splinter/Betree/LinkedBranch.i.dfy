@@ -213,7 +213,8 @@ module LinkedBranchMod {
  
   datatype LinkedBranch = LinkedBranch(root: Address, diskView: DiskView)
   {
-    predicate WF() {
+    predicate WF()
+    {
       && diskView.WF()
       && diskView.ValidAddress(root)
     }
@@ -297,27 +298,38 @@ module LinkedBranchMod {
       && (Acyclic() ==> (ReachableAddrs() == diskView.AllAddresses()))
     }
 
+    // I guess the benefit is that we do like to be able to refine it so that we can show 
+    // what are we using this for? the all keys guarantee as a tree property it
 
-  //   function AllKeys(ranking: Ranking) : (result: set<Key>)
-  //     requires Acyclic()
-  //     requires ValidRanking(ranking)
-  //     ensures Root().Leaf? && 0 < |Root().keys| ==> result != {}
-  //     ensures Root().Index? && 0 < |Root().pivots| ==> result != {}
-  //     decreases GetRank(ranking), 0
-  //   {
-  //     var node := Root();
-  //     if node.Leaf? then (
-  //       var result := set k | k in node.keys;
-  //       assert 0 < |node.keys| ==> node.keys[0] in result;
-  //       result
-  //     ) else (
-  //       var pivotKeys := (set k | k in node.pivots);
-  //       var indexKeys := (set i, k | 0 <= i < |node.children| && k in ChildAtIdx(i).AllKeys(ranking) :: k);
-  //       var result := pivotKeys + indexKeys;
-  //       assert 0 < |node.pivots| ==> node.pivots[0] in result;
-  //       result
-  //     )
-  //   }
+    // we want to expose something with range?
+
+    // function AllKeys(ranking: Ranking) : (result: set<Key>)
+    //   requires WF()
+    //   requires ValidRanking(ranking)
+    //   ensures Root().Leaf? && 0 < |Root().keys| ==> result != {}
+    //   ensures Root().Index? && 0 < |Root().pivots| ==> result != {}
+    //   // ensures result == ILinkedBranchNode(ranking).AllKeys()
+    //   decreases GetRank(ranking), 0
+    // {
+    //   var node := Root();
+    //   if node.Leaf? then (
+    //     var result := set k | k in node.keys;
+    //     assert 0 < |node.keys| ==> node.keys[0] in result;
+    //     result
+    //   ) else (
+    //     // assume false;
+    //     var pivotKeys := (set k | k in node.pivots);
+    //     var indexKeys := (set i, k | 0 <= i < |node.children| && k in ChildAtIdx(i).AllKeys(ranking) :: k);
+
+    //     // assert (forall i | 0 <= i < |node.children| :: ChildAtIdx(i).AllKeys(ranking) == ChildAtIdx(i).I().AllKeys()) by {
+    //     //   assume false;
+    //     // }
+      
+    //     var result := pivotKeys + indexKeys;
+    //     assert 0 < |node.pivots| ==> node.pivots[0] in result;
+    //     result
+    //   )
+    // }
     
     function Query(key: Key) : (msg: Message)
     {
@@ -357,62 +369,123 @@ module LinkedBranchMod {
       seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ILinkedBranchNode(ranking))
     }
 
-    lemma WFI(out: P.Node) 
-    requires WF()
-    requires Acyclic()
-    requires out == I()
-    ensures out.WF()
+    lemma ILinkedBranchNodeWF(ranking: Ranking)
+      requires ILinkedBranchNode.requires(ranking)
+      ensures ILinkedBranchNode(ranking).WF()
+      decreases GetRank(ranking)
     {
-      assume false;
+      var node := Root();
+      var out := ILinkedBranchNode(ranking);
+      
+      if node.Index? {
+        assert |out.pivots| == |out.children| - 1;
+        assert Keys.IsStrictlySorted(out.pivots);
+
+        forall i | 0 <= i < |IChildren(ranking)|
+          ensures IChildren(ranking)[i].WF()
+        {
+          ChildAtIdx(i).ILinkedBranchNodeWF(ranking);
+        }
+
+        assert IChildren(ranking) == out.children; // trigger
+        assert (forall i :: 0 <= i < |out.children| ==> out.children[i].WF());
+
+        forall i | 0 <= i < |out.children|-1 
+          ensures out.AllKeysBelowBound(i)
+        {
+          var child := out.children[i];
+          if child.Leaf? {
+            assert child.AllKeys() == Set(child.keys);
+            assert diskView.ChildInRange(node, i);  // trigger
+          } else {
+            var pivotKeys := Set(child.pivots);
+            var indexKeys := (set i, k | 0 <= i < |child.children| && k in child.children[i].AllKeys() :: k);
+            assert child.AllKeys() == pivotKeys + indexKeys;
+
+            var linked_child := ChildAtIdx(i);
+            assert linked_child.ILinkedBranchNode(ranking) == child;
+            
+            forall k | k in child.AllKeys()
+            ensures Keys.lt(k, node.pivots[i]) 
+            {
+              assert diskView.ChildInRange(Root(), i); // trigger
+              
+              if k in indexKeys {
+                var j :| 0 <= j < |child.children| && k in child.children[j].AllKeys();
+                assert child.WF();
+                if child.Leaf? {
+                  // also don't know anything here
+                  assume false;
+                } else {
+                  if j < |child.pivots| {
+                    assert child.AllKeysBelowBound(j);
+                    assert Keys.lt(k, child.pivots[j]);
+                    assert Keys.lt(child.pivots[j], out.pivots[i]);
+                    Keys.lteTransitiveForall();
+                    assert Keys.lt(k, out.pivots[i]);
+                  } else {
+                    // we don't anything here
+                    assume false;
+                  }
+                }
+              } else {
+                assert Keys.lt(k, node.pivots[i]);
+              }
+            }
+            assert forall key :: key in child.AllKeys() ==> Keys.lt(key, node.pivots[i]);
+          }
+        }
+        assume (forall i :: 0 < i < |out.children|   ==> out.AllKeysAboveBound(i));
+      }
     }
   }
 
   // Linked Branch State Machine:
 
-  datatype Variables = Variables(linked: LinkedBranch) {
-    predicate WF() {
-      && linked.WF()
-    }
-  }
+  // datatype Variables = Variables(linked: LinkedBranch) {
+  //   predicate WF() {
+  //     && linked.WF()
+  //   }
+  // }
 
-  predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
-  {
-    && v.WF()
-    && lbl.QueryLabel?
-    && v' == v
-    // TODO: implement
-  }
+  // predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
+  // {
+  //   && v.WF()
+  //   && lbl.QueryLabel?
+  //   && v' == v
+  //   // TODO: implement
+  // }
 
-  predicate FilteredQuery(v: Variables, v': Variables, lbl: TransitionLabel)
-  {
-    && v.WF()
-    && lbl.FilteredQueryLabel?
-    && v' == v
-    // TODO: implement
-  }
+  // predicate FilteredQuery(v: Variables, v': Variables, lbl: TransitionLabel)
+  // {
+  //   && v.WF()
+  //   && lbl.FilteredQueryLabel?
+  //   && v' == v
+  //   // TODO: implement
+  // }
 
-  datatype Step =
-    QueryStep 
-  | FilteredQueryStep
-  // | FlattenStep  // TODO: uncoment once we implement actual iterator
+  // datatype Step =
+  //   QueryStep 
+  // | FilteredQueryStep
+  // // | FlattenStep  // TODO: uncoment once we implement actual iterator
 
-  datatype TransitionLabel =
-    QueryLabel(key: Key, msg: Message)
-  | FilteredQueryLabel(domain: Domain)
-  // | FlattenLabel(flattened: FlattenedBranch)
+  // datatype TransitionLabel =
+  //   QueryLabel(key: Key, msg: Message)
+  // | FilteredQueryLabel(domain: Domain)
+  // // | FlattenLabel(flattened: FlattenedBranch)
   
-  // public:
+  // // public:
 
-  predicate Init(v: Variables) {
-    && v.WF()
-  }
+  // predicate Init(v: Variables) {
+  //   && v.WF()
+  // }
 
-  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-  {
-    match step {
-      case QueryStep() => Query(v, v', lbl)
-      case FilteredQueryStep() => FilteredQuery(v, v', lbl)
-      // case FlattenStep() => Flatten(v, v', lbl)
-    }
-  }
+  // predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  // {
+  //   match step {
+  //     case QueryStep() => Query(v, v', lbl)
+  //     case FilteredQueryStep() => FilteredQuery(v, v', lbl)
+  //     // case FlattenStep() => Flatten(v, v', lbl)
+  //   }
+  // }
 }
