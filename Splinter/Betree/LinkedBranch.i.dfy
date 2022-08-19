@@ -58,7 +58,6 @@ module LinkedBranchMod {
     predicate WF() {
       && EntriesWF()
       && NoDanglingAddress()
-      && EntriesChildInRange()
     }
 
     predicate EntriesWF() {
@@ -97,39 +96,6 @@ module LinkedBranchMod {
     function AllAddresses() : set<Address>
     {
       entries.Keys
-    }
-
-    predicate AllKeysAboveBound(addr: Address, pivots: seq<Key>, i: int)
-      requires ValidAddress(addr)
-    {
-      && (0 <= i-1 < |pivots| ==> 
-        && (forall key :: key in  GetKeys(addr) ==> Keys.lte(pivots[i-1], key)))
-    }
-
-    predicate AllKeysBelowBound(addr: Address, pivots: seq<Key>, i: int)
-      requires ValidAddress(addr)
-    {
-      && (0 <= i < |pivots| ==>
-        && (forall key :: key in GetKeys(addr) ==> Keys.lt(key, pivots[i])))
-    }
-
-    predicate ChildInRange(node: Node, i: nat) 
-      requires node.Index?
-      requires 0 <= i < |node.children|
-    {
-      var child := node.children[i];
-      && ValidAddress(child)
-      && AllKeysAboveBound(child, node.pivots, i)
-      && AllKeysBelowBound(child, node.pivots, i)
-    }
-
-    predicate NodeHasChildInRange(node: Node) {
-      node.Index? ==>
-        (forall idx:nat | idx < |node.children| :: ChildInRange(node, idx))
-    }
-
-    predicate EntriesChildInRange() {
-      (forall addr | addr in entries :: NodeHasChildInRange(entries[addr]))
     }
 
     predicate AgreesWithDisk(other: DiskView) {
@@ -216,11 +182,11 @@ module LinkedBranchMod {
     predicate WF()
     {
       && diskView.WF()
-      && diskView.ValidAddress(root)
+      && HasRoot()
     }
 
     predicate HasRoot() {
-      && root in diskView.entries
+      && diskView.ValidAddress(root)
     }
 
     function Root() : Node
@@ -253,6 +219,58 @@ module LinkedBranchMod {
     {
       && WF()
       && (exists ranking :: ValidRanking(ranking))
+    }
+
+    predicate AllKeysInRange(ranking: Ranking)
+      requires WF()
+      requires ValidRanking(ranking)
+      decreases GetRank(ranking), 1
+    {
+      && (Root().Index? ==> 
+        && (forall i :: 0 <= i < |Root().children| ==> ChildAtIdx(i).AllKeysInRange(ranking))
+        && (forall i :: 0 <= i < |Root().children|-1 ==> AllKeysBelowBound(i, ranking))
+        && (forall i :: 0 < i < |Root().children| ==> AllKeysAboveBound(i, ranking))
+      )
+    }
+
+    function AllKeys(ranking: Ranking) : (result: set<Key>)
+      requires WF()
+      requires ValidRanking(ranking)
+      decreases GetRank(ranking), 1
+    {
+      var node := Root();
+      if node.Leaf? then (
+        var result := set k | k in node.keys;
+        assert 0 < |node.keys| ==> node.keys[0] in result;
+        result
+      ) else (
+        var pivotKeys := (set k | k in node.pivots);
+        var indexKeys := (set i, k | 0 <= i < |node.children| && k in ChildAtIdx(i).AllKeys(ranking) :: k);
+      
+        var result := pivotKeys + indexKeys;
+        assert 0 < |node.pivots| ==> node.pivots[0] in result;
+        result
+      )
+    }
+
+    predicate AllKeysBelowBound(i: int, ranking: Ranking)
+      requires WF()
+      requires ValidRanking(ranking)
+      requires Root().Index?
+      requires 0 <= i < |Root().pivots|
+      decreases GetRank(ranking)
+    {
+      forall key :: key in ChildAtIdx(i).AllKeys(ranking) ==> Keys.lt(key, Root().pivots[i])
+    }
+
+     predicate AllKeysAboveBound(i: int, ranking: Ranking)
+      requires WF()
+      requires ValidRanking(ranking)
+      requires Root().Index?
+      requires 0 <= i-1 < |Root().pivots|
+      decreases GetRank(ranking)
+    {
+      forall key :: key in ChildAtIdx(i).AllKeys(ranking) ==> Keys.lte(Root().pivots[i-1], key)
     }
 
     function ChildAtIdx(idx: nat) : (result: LinkedBranch)
@@ -297,39 +315,6 @@ module LinkedBranchMod {
     {
       && (Acyclic() ==> (ReachableAddrs() == diskView.AllAddresses()))
     }
-
-    // I guess the benefit is that we do like to be able to refine it so that we can show 
-    // what are we using this for? the all keys guarantee as a tree property it
-
-    // we want to expose something with range?
-
-    // function AllKeys(ranking: Ranking) : (result: set<Key>)
-    //   requires WF()
-    //   requires ValidRanking(ranking)
-    //   ensures Root().Leaf? && 0 < |Root().keys| ==> result != {}
-    //   ensures Root().Index? && 0 < |Root().pivots| ==> result != {}
-    //   // ensures result == ILinkedBranchNode(ranking).AllKeys()
-    //   decreases GetRank(ranking), 0
-    // {
-    //   var node := Root();
-    //   if node.Leaf? then (
-    //     var result := set k | k in node.keys;
-    //     assert 0 < |node.keys| ==> node.keys[0] in result;
-    //     result
-    //   ) else (
-    //     // assume false;
-    //     var pivotKeys := (set k | k in node.pivots);
-    //     var indexKeys := (set i, k | 0 <= i < |node.children| && k in ChildAtIdx(i).AllKeys(ranking) :: k);
-
-    //     // assert (forall i | 0 <= i < |node.children| :: ChildAtIdx(i).AllKeys(ranking) == ChildAtIdx(i).I().AllKeys()) by {
-    //     //   assume false;
-    //     // }
-      
-    //     var result := pivotKeys + indexKeys;
-    //     assert 0 < |node.pivots| ==> node.pivots[0] in result;
-    //     result
-    //   )
-    // }
     
     function Query(key: Key) : (msg: Message)
     {
@@ -369,8 +354,45 @@ module LinkedBranchMod {
       seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ILinkedBranchNode(ranking))
     }
 
+    lemma AllKeysIsConsistentWithI(ranking: Ranking)
+      requires WF()
+      requires ValidRanking(ranking)
+      ensures AllKeys(ranking) == ILinkedBranchNode(ranking).AllKeys()
+      decreases GetRank(ranking)
+    {
+      var node := Root();
+      if node.Leaf? {
+      } else {
+        var node' := ILinkedBranchNode(ranking);
+        assert IChildren(ranking) == node'.children; // trigger
+
+        forall k 
+          ensures k in node'.AllKeys() <==> k in AllKeys(ranking)
+        {
+          if k in node'.AllKeys() {
+            if k !in node'.pivots {
+              var i :| 0 <= i < |node'.children| && k in node'.children[i].AllKeys();
+              ChildAtIdx(i).AllKeysIsConsistentWithI(ranking);
+              assert k in AllKeys(ranking);
+            }
+          } else if k in AllKeys(ranking) {
+            if k !in node.pivots {
+              var i :| 0 <= i < |node.children| && k in ChildAtIdx(i).AllKeys(ranking);
+              var linked_child := ChildAtIdx(i);
+              assert linked_child.ILinkedBranchNode(ranking) == node'.children[i];
+              
+              ChildAtIdx(i).AllKeysIsConsistentWithI(ranking);
+              assert k in node'.AllKeys();
+              assert false;
+            }
+          }
+        }
+      }
+    }
+
     lemma ILinkedBranchNodeWF(ranking: Ranking)
       requires ILinkedBranchNode.requires(ranking)
+      requires AllKeysInRange(ranking)
       ensures ILinkedBranchNode(ranking).WF()
       decreases GetRank(ranking)
     {
@@ -390,52 +412,23 @@ module LinkedBranchMod {
         assert IChildren(ranking) == out.children; // trigger
         assert (forall i :: 0 <= i < |out.children| ==> out.children[i].WF());
 
-        forall i | 0 <= i < |out.children|-1 
-          ensures out.AllKeysBelowBound(i)
+        forall i | 0 <= i < |out.children|
+          ensures i < |out.children|-1  ==> out.AllKeysBelowBound(i)
+          ensures 0 < i ==> out.AllKeysAboveBound(i)
         {
           var child := out.children[i];
-          if child.Leaf? {
-            assert child.AllKeys() == Set(child.keys);
-            assert diskView.ChildInRange(node, i);  // trigger
-          } else {
-            var pivotKeys := Set(child.pivots);
-            var indexKeys := (set i, k | 0 <= i < |child.children| && k in child.children[i].AllKeys() :: k);
-            assert child.AllKeys() == pivotKeys + indexKeys;
-
-            var linked_child := ChildAtIdx(i);
-            assert linked_child.ILinkedBranchNode(ranking) == child;
-            
-            forall k | k in child.AllKeys()
-            ensures Keys.lt(k, node.pivots[i]) 
-            {
-              assert diskView.ChildInRange(Root(), i); // trigger
-              
-              if k in indexKeys {
-                var j :| 0 <= j < |child.children| && k in child.children[j].AllKeys();
-                assert child.WF();
-                if child.Leaf? {
-                  // also don't know anything here
-                  assume false;
-                } else {
-                  if j < |child.pivots| {
-                    assert child.AllKeysBelowBound(j);
-                    assert Keys.lt(k, child.pivots[j]);
-                    assert Keys.lt(child.pivots[j], out.pivots[i]);
-                    Keys.lteTransitiveForall();
-                    assert Keys.lt(k, out.pivots[i]);
-                  } else {
-                    // we don't anything here
-                    assume false;
-                  }
-                }
-              } else {
-                assert Keys.lt(k, node.pivots[i]);
-              }
-            }
-            assert forall key :: key in child.AllKeys() ==> Keys.lt(key, node.pivots[i]);
+          var linked_child := ChildAtIdx(i);
+          
+          if 0 <= i < |out.children|-1 {
+            assert AllKeysBelowBound(i, ranking);
           }
+
+          if 0 < i < |out.children| {
+            assert AllKeysAboveBound(i, ranking);
+          }
+
+          linked_child.AllKeysIsConsistentWithI(ranking);
         }
-        assume (forall i :: 0 < i < |out.children|   ==> out.AllKeysAboveBound(i));
       }
     }
   }
