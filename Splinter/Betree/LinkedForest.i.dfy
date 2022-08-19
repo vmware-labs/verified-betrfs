@@ -20,6 +20,7 @@ module LinkedForestMod {
 		predicate WF() {
 			&& diskView.WF() // ensures all nodes are connected
 			&& (forall root | root in trees :: diskView.ValidAddress(root))
+      && (forall root | root in trees :: GetTree(root).Acyclic())
 		}
 
 		predicate ValidTree(addr: Address)
@@ -28,9 +29,7 @@ module LinkedForestMod {
 		}
 
 		function GetTree(addr: Address) : (branch: LinkedBranch)
-      requires WF()
       requires ValidTree(addr)
-      ensures branch.WF()
 		{
 			LinkedBranch(addr, diskView)
 		}
@@ -42,7 +41,8 @@ module LinkedForestMod {
 			if buffers == [] then Update(NopDelta())
       else (
 				var tree := GetTree(Last(buffers));
-				Merge(Query(key, DropLast(buffers)), tree.Query(key))
+        var msg := if tree.Query(key).Some? then tree.Query(key).value else Update(NopDelta());
+				Merge(Query(key, DropLast(buffers)), msg)
 			)
 		}
 	}

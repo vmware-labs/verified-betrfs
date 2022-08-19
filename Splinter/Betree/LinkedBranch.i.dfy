@@ -315,19 +315,46 @@ module LinkedBranchMod {
     {
       && (Acyclic() ==> (ReachableAddrs() == diskView.AllAddresses()))
     }
-    
-    function Query(key: Key) : (msg: Message)
+
+    function QueryInternal(key: Key, ranking: Ranking) : (msg: Option<Message>)
+      requires WF()
+      requires ValidRanking(ranking)
+      decreases GetRank(ranking)
+      ensures ILinkedBranchNode(ranking).WF() ==> msg == ILinkedBranchNode(ranking).Query(key)
     {
-      // TODO: implement
-      Update(NopDelta())
+      var node := Root();
+      var r := node.Route(key);
+      if node.Leaf? then (
+        if r >= 0 && node.keys[r] == key
+        then Some(node.msgs[r]) else None
+      ) else (
+        var result := ChildAtIdx(r+1).QueryInternal(key, ranking);
+        result
+      )
+    }
+    
+    function Query(key: Key) : (msg: Option<Message>)
+      requires WF()
+      requires Acyclic()
+      ensures I().WF() ==> msg == I().Query(key)
+    {
+      QueryInternal(key, TheRanking())
     }
 
     // Interpretation functions
     function I() : (out: P.Node)
       requires Acyclic()
       ensures Root().Index? <==> out.Index?
+      ensures AllKeysInRange(TheRanking()) ==> out.WF()
     {
-      ILinkedBranchNode(TheRanking())
+      var ranking := TheRanking();
+      var out := ILinkedBranchNode(ranking);
+      assert AllKeysInRange(ranking) ==> out.WF() by {
+        if AllKeysInRange(ranking) {
+          ILinkedBranchNodeWF(ranking);
+        }
+      }
+      out
     }
   
     function ILinkedBranchNode(ranking: Ranking) : (out: P.Node)

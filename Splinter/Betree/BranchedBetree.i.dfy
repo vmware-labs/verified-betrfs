@@ -238,11 +238,13 @@ module BranchedBetreeMod
     predicate CompactedBranchEquivalence(forest: LF.LinkedForest, compactStart: nat, compactEnd: nat, compactedBranch: LB.LinkedBranch)
       requires WF()
       requires forest.WF()
+      requires compactedBranch.Acyclic()
       requires compactStart < compactEnd <= |buffers|
       requires forall i:nat | compactStart <= i < compactEnd :: forest.ValidTree(buffers[i])
     {
-      && (forall key | KeyInDomain(key) && (compactStart <= ChildBufferRange(key) < compactEnd) 
-          :: forest.Query(key, buffers[compactStart..compactEnd]) == compactedBranch.Query(key))
+      && (forall key | KeyInDomain(key) && (compactStart <= ChildBufferRange(key) < compactEnd) :: 
+        && compactedBranch.Query(key).Some?
+        && compactedBranch.Query(key).value == forest.Query(key, buffers[compactStart..compactEnd]))
     }
   }
 
@@ -872,9 +874,8 @@ module BranchedBetreeMod
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalFlushMemtableStep?
-    && assert step.branch.I().WF() by { step.branch.WFI( step.branch.I() ); } // TODO: revisit
-    && step.branch.I().I() == v.memtable.buffer
-    
+    && (step.branch.I().WF() ==> step.branch.I().I() == v.memtable.buffer) // TODO: revisit
+
     // Allocation validation
     && |lbl.addrs| >= 1
     && lbl.addrs[0] == step.newRootAddr
