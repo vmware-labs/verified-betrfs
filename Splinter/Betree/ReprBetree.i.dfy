@@ -70,7 +70,8 @@ module ReprBetree
     stranded: set<Address>)
   {
     predicate WF() {
-      betree.WF()
+      && betree.WF()
+      && betree.linked.Acyclic()
     }
   }
 
@@ -102,6 +103,8 @@ module ReprBetree
   {
     && LinkedBetreeMod.FreezeAs(v.betree, v'.betree, lbl.I())
     // we only remember a subset of our reserved and stranded set as we freeze
+    // TODO: For the tree, there is no need to remember stranded and reserved sets.
+    // The enabling condition for Freeze should be that the reserved and stranded set are free.
     && IsPrefix(lbl.gcBetree.reserved, v.reserved)
     && lbl.gcBetree.stranded <= v.stranded 
     && v' == v.(
@@ -197,6 +200,23 @@ module ReprBetree
     )
   }
 
+  // This is needed for the ReprBetree, because we only use one page per AU. Hence, for an AU,
+  // a page could be in repr, while all others are in reserved. When we free that page in repr,
+  // all the other pages (still in reserved set), are also freed.
+  predicate InternalMapFreeReserved(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    // Enabling conditions
+    && lbl.InternalMapGCLabel?
+    && v.WF()
+    && lbl.allocations == []
+    && lbl.freed <= Set(v.reserved)
+    && 0 < |lbl.freed|
+    // State transition
+    && v' == v.(
+      reserved := v.reserved - lbl.freed
+    )
+  }
+
   predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && lbl.InternalLabel?
@@ -206,10 +226,10 @@ module ReprBetree
 
   predicate Init(v: Variables, gcBetree: GCStampedBetree)
   {
-    && v.betree.linked.Acyclic()
+    && gcBetree.stamped.value.Acyclic()
     && v == Variables(
       LinkedBetreeMod.Variables(EmptyMemtable(gcBetree.stamped.seqEnd), gcBetree.stamped.value),
-      v.betree.linked.ReachableAddrs(),
+      gcBetree.stamped.value.Representation(),
       gcBetree.reserved,
       gcBetree.stranded
     )

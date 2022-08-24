@@ -402,11 +402,11 @@ module LinkedBetreeMod
         // operation, that the new state is acyclic
         this
       else
-        var tightDv := DiskView.DiskView(MapRestrict(diskView.entries, ReachableAddrs()));
+        var tightDv := DiskView.DiskView(MapRestrict(diskView.entries, Representation()));
         LinkedBetree(root, tightDv)
     }
 
-    function ReachableAddrs() : set<Address>
+    function Representation() : set<Address>
       requires Acyclic()
     {
       ReachableAddrsUsingRanking(TheRanking())
