@@ -61,12 +61,12 @@ module GCCoordinationSystem {
 
   function SimpleJournalLabel(clbl: CrashTolerantJournal.TransitionLabel) : GCCrashTolerantJournal.TransitionLabel
   {
-    GCCrashTolerantJournal.TransitionLabel([], {}, clbl)
+    GCCrashTolerantJournal.TransitionLabel({}, {}, clbl)
   }
 
   function SimpleMapLabel(clbl: CrashTolerantMap.TransitionLabel) : GCCrashTolerantMap.TransitionLabel
   {
-    GCCrashTolerantMap.TransitionLabel([], {}, clbl)
+    GCCrashTolerantMap.TransitionLabel({}, {}, clbl)
   }
 
   predicate LoadEphemeralFromPersistent(v: Variables, v': Variables, uiop : UIOp)

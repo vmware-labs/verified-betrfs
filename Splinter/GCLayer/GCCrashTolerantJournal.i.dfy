@@ -15,7 +15,7 @@ module GCCrashTolerantJournal {
   import ReprJournal
   import CrashTolerantJournal
 
-  datatype TransitionLabel = TransitionLabel(allocations: seq<Address>, freed: set<Address>, base: CrashTolerantJournal.TransitionLabel)
+  datatype TransitionLabel = TransitionLabel(allocations: set<Address>, freed: set<Address>, base: CrashTolerantJournal.TransitionLabel)
 
   type StoreImage = ReprJournal.GCTruncatedJournal
 
@@ -53,7 +53,7 @@ module GCCrashTolerantJournal {
     // Enabling conditions
     && v.WF()
     && lbl.base.LoadEphemeralFromPersistentLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Unknown?
     && v'.ephemeral.Known?
@@ -68,7 +68,7 @@ module GCCrashTolerantJournal {
     // Enabling conditions
     && v.WF()
     && lbl.base.ReadForRecoveryLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -82,7 +82,7 @@ module GCCrashTolerantJournal {
     // Enabling conditions
     && v.WF()
     && lbl.base.QueryEndLsnLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -95,7 +95,7 @@ module GCCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.PutLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -109,7 +109,7 @@ module GCCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.InternalLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -135,7 +135,7 @@ module GCCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.QueryLsnPersistenceLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && lbl.base.syncLsn <= v.persistent.journal.SeqEnd()
     && v' == v
@@ -145,7 +145,7 @@ module GCCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.CommitStartLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     // Can't start a commit if one is in-flight, or we'd forget to maintain the
@@ -178,7 +178,7 @@ module GCCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.CommitCompleteLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v.inFlight.Some?
@@ -197,7 +197,7 @@ module GCCrashTolerantJournal {
   {
     && v.WF()
     && lbl.base.CrashLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v' == v.(
       ephemeral := Unknown,
@@ -208,7 +208,7 @@ module GCCrashTolerantJournal {
   predicate Init(v: Variables)
   {
     v == Variables(
-      ReprJournal.GCTruncatedJournal([], {}, LinkedJournal.Mkfs()), 
+      ReprJournal.GCTruncatedJournal({}, {}, LinkedJournal.Mkfs()), 
       Unknown, 
       None)
   }

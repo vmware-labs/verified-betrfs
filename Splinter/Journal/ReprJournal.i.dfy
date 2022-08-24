@@ -22,7 +22,7 @@ module ReprJournal {
   type TruncatedJournal = LinkedJournal.TruncatedJournal
 
   datatype GCTruncatedJournal = GCTruncatedJournal(
-    reserved: seq<Address>,
+    reserved: set<Address>,
     stranded: set<Address>,
     journal: TruncatedJournal
   ) {
@@ -38,7 +38,7 @@ module ReprJournal {
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
     // Internal-x labels refine to no-ops at the abstract spec
-    | InternalJournalGCLabel(allocations: seq<Address>, freed: set<Address>)
+    | InternalJournalGCLabel(allocations: set<Address>, freed: set<Address>)
     | InternalLabel()  // Local No-op label
   {
     predicate WF() {
@@ -61,7 +61,7 @@ module ReprJournal {
   datatype Variables = Variables(
     journal: LinkedJournal.Variables,
     reprIndex: map<LSN, Address>,   // maps in-repr lsn's to their page addr
-    reserved: seq<Address>,         // reserved addresses given by the global allocator
+    reserved: set<Address>,         // reserved addresses given by the global allocator
     stranded: set<Address>          // set of stranded addresses
   )
   {
@@ -83,7 +83,7 @@ module ReprJournal {
   {
     && LinkedJournal.FreezeForCommit(v.journal, v'.journal, lbl.I(), depth)
     // we only remember a subset of our reserved and stranded set as we freeze
-    && IsPrefix(lbl.frozenJournal.reserved, v.reserved)
+    && lbl.frozenJournal.reserved <= v.reserved
     && lbl.frozenJournal.stranded <= v.stranded 
     && v' == v.(
       journal := v'.journal
@@ -169,13 +169,13 @@ module ReprJournal {
     && lbl.InternalLabel?
     && v.WF()
     && 0 < |v.reserved|
-    && addr == v.reserved[0]
+    && addr in v.reserved
     // State transition
     && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl.I(), cut, addr)
     && v' == v.(
       journal := v'.journal,
       reprIndex := reprIndexAppendRecord(v.reprIndex, v.journal.unmarshalledTail.DiscardRecent(cut), addr),
-      reserved := v.reserved[1..]
+      reserved := v.reserved - {addr}
     )
   }
 
@@ -197,7 +197,7 @@ module ReprJournal {
     // Enabling conditions
     && lbl.InternalJournalGCLabel?
     && v.WF()
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed <= v.stranded
     && 0 < |lbl.freed|
     // State transition

@@ -256,7 +256,7 @@ module ReprJournalRefinement {
     }
   }
 
-  lemma DiscardOldStepPreservesWFAndIndex(v: Variables, v': Variables, lbl: TransitionLabel)
+  lemma {:timeLimitMultiplier 2} DiscardOldStepPreservesWFAndIndex(v: Variables, v': Variables, lbl: TransitionLabel)
     requires v.WF()
     requires IndexDomainValid(v.reprIndex, v.journal.truncatedJournal)
     requires IndexKeysMapToValidEntries(v.reprIndex, v.journal.truncatedJournal)
@@ -655,7 +655,7 @@ module ReprJournalRefinement {
     var step: Step :| NextStep(v, v', lbl, step);
     match step {
       case ReadForRecoveryStep(depth) => {
-<<<<<<< HEAD
+// <<<<<<< HEAD
         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       }
       case FreezeForCommitStep(depth) => {
@@ -682,25 +682,25 @@ module ReprJournalRefinement {
       }
       case InternalNoOpStep() => {
         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
-=======
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
-      }
-      case FreezeForCommitStep(depth) => {
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
-      } 
-      case ObserveFreshJournalStep() => {
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
-      } 
-      case PutStep() => {
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
-      }
-      case DiscardOldStep() => {
-        DiscardOldStepRefines(v, v', lbl, step);
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
-      }
-      case InternalJournalMarshalStep(cut) => {
-        assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
->>>>>>> ebc3259c (disaster. AUJournal explodes resolving ReprJournal)
+// =======
+//         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+//       }
+//       case FreezeForCommitStep(depth) => {
+//         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+//       } 
+//       case ObserveFreshJournalStep() => {
+//         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+//       } 
+//       case PutStep() => {
+//         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+//       }
+//       case DiscardOldStep() => {
+//         DiscardOldStepRefines(v, v', lbl, step);
+//         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+//       }
+//       case InternalJournalMarshalStep(cut) => {
+//         assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), step);
+// >>>>>>> ebc3259c (disaster. AUJournal explodes resolving ReprJournal)
       }
     }
   }
