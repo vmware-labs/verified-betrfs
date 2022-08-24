@@ -33,7 +33,7 @@ module ReprBetree
   type QueryReceipt = LinkedBetreeMod.QueryReceipt
 
   datatype GCStampedBetree = GCStampedBetree(
-    reserved: seq<Address>,
+    reserved: set<Address>,
     stranded: set<Address>,
     stamped: StampedBetree   
     // todo(tony): The Repr Betree never strands addresses, since each AU will only contain one node. When that node is released,
@@ -47,7 +47,7 @@ module ReprBetree
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(gcBetree: GCStampedBetree)
     // Internal-x labels refine to no-ops at the abstract spec
-    | InternalMapGCLabel(allocations: seq<Address>, freed: set<Address>)
+    | InternalMapGCLabel(allocations: set<Address>, freed: set<Address>)
     | InternalLabel() 
   {
     function I() : LinkedBetreeMod.TransitionLabel {
@@ -66,7 +66,7 @@ module ReprBetree
     betree: LinkedBetreeMod.Variables,
     // maps each in-repr node n to the representation of the subtree with that node as root
     repr: set<Address>,
-    reserved: seq<Address>,
+    reserved: set<Address>,
     stranded: set<Address>)
   {
     predicate WF() {
@@ -105,7 +105,7 @@ module ReprBetree
     // we only remember a subset of our reserved and stranded set as we freeze
     // TODO: For the tree, there is no need to remember stranded and reserved sets.
     // The enabling condition for Freeze should be that the reserved and stranded set are free.
-    && IsPrefix(lbl.gcBetree.reserved, v.reserved)
+    && lbl.gcBetree.reserved <= v.reserved
     && lbl.gcBetree.stranded <= v.stranded 
     && v' == v.(
       betree := v'.betree
@@ -191,7 +191,7 @@ module ReprBetree
     // Enabling conditions
     && lbl.InternalMapGCLabel?
     && v.WF()
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed <= v.stranded
     && 0 < |lbl.freed|
     // State transition
@@ -208,8 +208,8 @@ module ReprBetree
     // Enabling conditions
     && lbl.InternalMapGCLabel?
     && v.WF()
-    && lbl.allocations == []
-    && lbl.freed <= Set(v.reserved)
+    && lbl.allocations == {}
+    && lbl.freed <= v.reserved
     && 0 < |lbl.freed|
     // State transition
     && v' == v.(

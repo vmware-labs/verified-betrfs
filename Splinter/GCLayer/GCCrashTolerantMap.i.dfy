@@ -17,7 +17,7 @@ module GCCrashTolerantMap {
   // type StampedBetree = Stamped<LinkedBetreeMod.LinkedBetree>
   type GCMap = ReprBetree.GCStampedBetree
 
-  datatype TransitionLabel = TransitionLabel(allocations: seq<Address>, freed: set<Address>, base: CrashTolerantMap.TransitionLabel)
+  datatype TransitionLabel = TransitionLabel(allocations: set<Address>, freed: set<Address>, base: CrashTolerantMap.TransitionLabel)
   {
     predicate WF() {
       && base.WF()
@@ -45,7 +45,7 @@ module GCCrashTolerantMap {
     && lbl.base.LoadEphemeralFromPersistentLabel?
     && v.ephemeral.Unknown?
     && v'.ephemeral.Known?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
 
     && lbl.base.endLsn == v.persistent.stamped.seqEnd
@@ -59,7 +59,7 @@ module GCCrashTolerantMap {
     && v.WF()
     && lbl.WF()
     && lbl.base.PutRecordsLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -74,7 +74,7 @@ module GCCrashTolerantMap {
     && v.WF()
     && lbl.WF()
     && lbl.base.QueryLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -88,7 +88,7 @@ module GCCrashTolerantMap {
     && v.WF()
     && lbl.WF()
     && lbl.base.InternalLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -107,7 +107,7 @@ module GCCrashTolerantMap {
     && v.WF()
     && lbl.WF()
     && lbl.base.InternalLabel?  // allocs and freed given by ReprBetree.Next
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
@@ -137,7 +137,7 @@ module GCCrashTolerantMap {
     && v.WF()
     && lbl.WF()
     && lbl.base.CommitStartLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.ephemeral.Known?
     && v.inFlight.Some?
@@ -156,7 +156,7 @@ module GCCrashTolerantMap {
     && v.WF()
     && lbl.WF()
     && lbl.base.CommitCompleteLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v.inFlight.Some?
 
@@ -172,7 +172,7 @@ module GCCrashTolerantMap {
     && v.WF()
     && lbl.WF()
     && lbl.base.CrashLabel?
-    && lbl.allocations == []
+    && lbl.allocations == {}
     && lbl.freed == {}
     && v' == v.(
       ephemeral := Unknown,
@@ -194,7 +194,7 @@ module GCCrashTolerantMap {
   predicate Init(v: Variables)
   {
     v == Variables(
-      ReprBetree.GCStampedBetree([], {}, LinkedBetreeMod.EmptyImage()), 
+      ReprBetree.GCStampedBetree({}, {}, LinkedBetreeMod.EmptyImage()), 
       Unknown, None)
   }
 
