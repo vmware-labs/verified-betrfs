@@ -2,17 +2,16 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "LinkedBetree.i.dfy"
+include "LinkedBetreeRefinement.i.dfy"
 include "ReprBetree.i.dfy"
 
 module ReprBetreeRefinement
 {
   import opened ReprBetree
   import LinkedBetreeMod
+  import LinkedBetreeRefinement
 
-  function I(v: Variables) : (out: LinkedBetreeMod.Variables)
-    requires v.WF()
-    ensures out.WF()
-  {
+  function I(v: Variables) : (out: LinkedBetreeMod.Variables) {
     v.betree
   }
 
@@ -26,12 +25,28 @@ module ReprBetreeRefinement
   predicate Inv(v: Variables) {
     && v.WF()
     && ValidRepr(v)
+    && LinkedBetreeRefinement.Inv(v.betree)
   }
 
   lemma InvInit(v: Variables, gcBetree: GCStampedBetree) 
     requires Init(v, gcBetree)
+    requires LinkedBetreeRefinement.InvLinkedBetree(gcBetree.I().value)
     ensures Inv(v)
-  {}
+  {
+    LinkedBetreeRefinement.InitRefines(I(v), gcBetree.I());
+  }
+
+  lemma InvNextInternalGrowStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalGrowStep?
+    ensures Inv(v')
+  {
+    LinkedBetreeRefinement.InvNextInternalGrowStep(I(v), I(v'), lbl.I(), step.I());
+
+    assume false;
+    assert ValidRepr(v');
+  }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel) 
     requires Inv(v)
@@ -91,9 +106,12 @@ module ReprBetreeRefinement
 
   lemma InitRefines(v: Variables, gcBetree: GCStampedBetree)
     requires Init(v, gcBetree)
+    requires LinkedBetreeRefinement.InvLinkedBetree(gcBetree.I().value)
     ensures Inv(v)
     ensures LinkedBetreeMod.Init(I(v), gcBetree.I())
-  {}
+  {
+    LinkedBetreeRefinement.InitRefines(I(v), gcBetree.I());
+  }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
