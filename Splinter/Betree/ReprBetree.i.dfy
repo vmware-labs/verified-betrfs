@@ -38,7 +38,11 @@ module ReprBetree
     stamped: StampedBetree   
     // todo(tony): The Repr Betree never strands addresses, since each AU will only contain one node. When that node is released,
     // that entire AU is immediately freed. i.e. the pages in that AU that were in the reserved set should also be freed.
-  )
+  ) {
+    function I() : StampedBetree {
+      stamped
+    }
+  }
   
   // Copied from linkedJournal, except for InternalLabel
   datatype TransitionLabel =
@@ -47,6 +51,7 @@ module ReprBetree
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(gcBetree: GCStampedBetree)
     // Internal-x labels refine to no-ops at the abstract spec
+    | InternalAllocationsLabel(addrs: seq<Address>)
     | InternalMapGCLabel(allocations: set<Address>, freed: set<Address>)
     | InternalLabel() 
   {
@@ -56,6 +61,7 @@ module ReprBetree
         case PutLabel(puts) => LinkedBetreeMod.PutLabel(puts)
         case QueryEndLsnLabel(endLsn) => LinkedBetreeMod.QueryEndLsnLabel(endLsn)
         case FreezeAsLabel(gcBetree) => LinkedBetreeMod.FreezeAsLabel(gcBetree.stamped)
+        case InternalAllocationsLabel(addrs) => LinkedBetreeMod.InternalAllocationsLabel(addrs)
         case InternalMapGCLabel(_, _) => LinkedBetreeMod.InternalLabel()
         case InternalLabel() => LinkedBetreeMod.InternalLabel()
       }
@@ -77,6 +83,7 @@ module ReprBetree
 
   predicate Query(v: Variables, v': Variables, lbl: TransitionLabel, receipt: QueryReceipt)
   {
+    && lbl.QueryLabel?
     && LinkedBetreeMod.Query(v.betree, v'.betree, lbl.I(), receipt)
     && v' == v.(
       betree := v'.betree
@@ -85,6 +92,7 @@ module ReprBetree
 
   predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
   {
+    && lbl.PutLabel?
     && LinkedBetreeMod.Put(v.betree, v'.betree, lbl.I())
     && v' == v.(
       betree := v'.betree
@@ -93,6 +101,7 @@ module ReprBetree
 
   predicate QueryEndLsn(v: Variables, v': Variables, lbl: TransitionLabel)
   {
+    && lbl.QueryEndLsnLabel?
     && LinkedBetreeMod.QueryEndLsn(v.betree, v'.betree, lbl.I())
     && v' == v.(
       betree := v'.betree
@@ -101,6 +110,7 @@ module ReprBetree
 
   predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel)
   {
+    && lbl.FreezeAsLabel?
     && LinkedBetreeMod.FreezeAs(v.betree, v'.betree, lbl.I())
     // we only remember a subset of our reserved and stranded set as we freeze
     // TODO: For the tree, there is no need to remember stranded and reserved sets.
@@ -114,6 +124,7 @@ module ReprBetree
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && lbl.InternalAllocationsLabel?
     && LinkedBetreeMod.InternalGrow(v.betree, v'.betree, lbl.I(), step.I())
     && v' == v.(
       betree := v'.betree,
@@ -123,6 +134,7 @@ module ReprBetree
 
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && lbl.InternalAllocationsLabel?
     && LinkedBetreeMod.InternalSplit(v.betree, v'.betree, lbl.I(), step.I())
     && var newAddrs := Set(step.pathAddrs) + step.newAddrs.Repr();
     && var discardAddrs := step.path.AddrsOnPath() + {step.path.Target().ChildAtIdx(step.request.childIdx).root.value};
@@ -135,6 +147,7 @@ module ReprBetree
 
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && lbl.InternalAllocationsLabel?
     && LinkedBetreeMod.InternalFlushMemtable(v.betree, v'.betree, lbl.I(), step.I())
     && if v.betree.linked.HasRoot() then 
         v' == v.(
@@ -151,6 +164,7 @@ module ReprBetree
 
   predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && lbl.InternalAllocationsLabel?
     && LinkedBetreeMod.InternalFlush(v.betree, v'.betree, lbl.I(), step.I())
     && var newAddrs := Set(step.pathAddrs) + {step.targetAddr, step.targetChildAddr};
     && var discardAddrs := step.path.AddrsOnPath() + {step.path.Target().ChildAtIdx(step.childIdx).root.value};
@@ -163,6 +177,7 @@ module ReprBetree
 
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && lbl.InternalAllocationsLabel?
     && LinkedBetreeMod.InternalCompact(v.betree, v'.betree, lbl.I(), step.I())
     && var newAddrs := Set(step.pathAddrs) + {step.targetAddr};
     && var discardAddrs := step.path.AddrsOnPath();
