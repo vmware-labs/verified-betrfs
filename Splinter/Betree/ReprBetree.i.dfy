@@ -7,6 +7,13 @@ include "../Disk/GenericDisk.i.dfy"
 include "Domain.i.dfy"
 include "SplitRequest.i.dfy"
 
+//	TODO: Stranded vs Reserved in the ReprBetree design
+//		○ It has been established that we should not carry information into the freeze. I.e. in a freeze, we should not have to remember what's in the stranded and reserved set.
+//		○ Proposed design:
+//			§ Enabling condition for freeze should be that stranded set is empty. I.e. all AU's that could be free have been freed. Hence, nothing to remember here.
+//			§ Moreover, AU that's are unused should also be freed (although this specified at the lower level)
+//      § Finally, the reserved set does not have to be remembered, because AU's with used pages can be used to recover those pages during recovery?
+
 module ReprBetree
 {
   import opened BoundedPivotsLib
