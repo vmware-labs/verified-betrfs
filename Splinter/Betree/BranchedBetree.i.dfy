@@ -61,7 +61,7 @@ module BranchedBetreeMod
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(linkedBetree: StampedBetree, forest: StampedForest)
      // Internal-x labels refine to no-ops at the abstract spec
-    | InternalAllocationsLabel(addrs: seq<Address>)  // for steps that involve allocating new pages
+    | InternalAllocationsLabel(treeAddrs: seq<Address>, branchAddrs: seq<Address>)  // for steps that involve allocating new pages
     | InternalLabel()   // Local No-op label
 
 
@@ -877,9 +877,8 @@ module BranchedBetreeMod
     && (step.branch.I().WF() ==> step.branch.I().I() == v.memtable.buffer) // TODO: revisit
 
     // Allocation validation
-    && |lbl.addrs| >= 1
-    && lbl.addrs[0] == step.newRootAddr
-    && Set(lbl.addrs[1..]) == step.branch.ReachableAddrs()
+    && lbl.treeAddrs == [ step.newRootAddr ]
+    && Set(lbl.branchAddrs) == step.branch.ReachableAddrs()
 
     // Subway Eat Fresh!
     && v.IsFresh({step.newRootAddr})
@@ -905,7 +904,8 @@ module BranchedBetreeMod
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalGrowStep?
-    && lbl.addrs == [step.newRootAddr]
+    && lbl.treeAddrs == [step.newRootAddr]
+    && lbl.branchAddrs == []
     // Subway Eat Fresh!
     && v.IsFresh({step.newRootAddr})
     && v'.linked == InsertGrowReplacement(v.linked, step.newRootAddr).BuildTightTree()
@@ -918,7 +918,8 @@ module BranchedBetreeMod
     && v.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalSplitStep?
-    && lbl.addrs == step.pathAddrs + step.newAddrs.AsSeq()
+    && lbl.treeAddrs == step.pathAddrs + step.newAddrs.AsSeq()
+    && lbl.branchAddrs == []
     && step.WF()
     && step.path.linked == v.linked
     && v.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
@@ -962,7 +963,8 @@ module BranchedBetreeMod
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalFlushStep?
-    && lbl.addrs == step.pathAddrs + [step.targetAddr, step.targetChildAddr]
+    && lbl.treeAddrs == step.pathAddrs + [step.targetAddr, step.targetChildAddr]
+    && lbl.branchAddrs == []
     && step.path.linked == v.linked
     && step.path.Valid()
     && var root := step.path.Target().Root();
@@ -1024,10 +1026,8 @@ module BranchedBetreeMod
     
     // allocation validation
     && lbl.InternalAllocationsLabel?
-    && |lbl.addrs| >= |step.pathAddrs| + 1
-    && lbl.addrs[..|step.pathAddrs|] == step.pathAddrs
-    && lbl.addrs[|step.pathAddrs|] == step.targetAddr
-    && Set(lbl.addrs[|step.pathAddrs|+1..]) == step.compactedBranch.ReachableAddrs()
+    && lbl.treeAddrs == step.pathAddrs + [ step.targetAddr ]
+    && Set(lbl.branchAddrs) == step.compactedBranch.ReachableAddrs()
 
     && step.path.linked == v.linked
     && step.path.Target().Root().CompactedBranchEquivalence(v.forestSM.forest, step.compactStart, step.compactEnd, step.compactedBranch)
