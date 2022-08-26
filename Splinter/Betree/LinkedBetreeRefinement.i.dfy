@@ -471,7 +471,7 @@ module LinkedBetreeRefinement {
     requires replacement.diskView.IsFresh(Set(pathAddrs))
     requires newLinked == path.Substitute(replacement, pathAddrs) // "var" for ensures...
     ensures newLinked.WF()
-    ensures path.linked.diskView.IsSubsetOf(newLinked.diskView)
+    ensures path.linked.diskView.IsSubDisk(newLinked.diskView)
     ensures Repr(newLinked) <= Repr(path.linked) + Repr(replacement) + Set(pathAddrs)
     ensures newLinked.HasRoot()
     ensures newLinked.Root().MyDomain() == path.linked.Root().MyDomain()
@@ -504,7 +504,7 @@ module LinkedBetreeRefinement {
     requires path.depth == |pathAddrs|
     requires path.Valid()
     requires SeqHasUniqueElems(pathAddrs)
-    requires path.linked.diskView.IsSubsetOf(replacement.diskView)
+    requires path.linked.diskView.IsSubDisk(replacement.diskView)
     requires path.CanSubstitute(replacement, pathAddrs)
     ensures Repr(path.Substitute(replacement, pathAddrs)) == Repr(replacement) + Set(pathAddrs)
     decreases path.depth
@@ -831,7 +831,7 @@ module LinkedBetreeRefinement {
     requires small.ValidRanking(ranking)
     requires big.ValidRanking(ranking)
     requires small.root == big.root
-    requires small.diskView.IsSubsetOf(big.diskView)
+    requires small.diskView.IsSubDisk(big.diskView)
     ensures ILinkedBetreeNode(small, ranking) == ILinkedBetreeNode(big, ranking)
     decreases small.GetRank(ranking)
   {
@@ -848,7 +848,7 @@ module LinkedBetreeRefinement {
   lemma DiskSubsetImpliesIdenticalInterpretations(small: LinkedBetree, big: LinkedBetree)
     requires small.WF() && big.WF()
     requires small.root == big.root
-    requires small.diskView.IsSubsetOf(big.diskView)
+    requires small.diskView.IsSubDisk(big.diskView)
     requires big.Acyclic()
     ensures small.Acyclic()
     ensures ILinkedBetree(small) == ILinkedBetree(big)
@@ -862,7 +862,7 @@ module LinkedBetreeRefinement {
     requires small.WF() && big.WF()
     requires big.ValidRanking(ranking)
     requires small.root == big.root
-    requires small.diskView.IsSubsetOf(big.diskView)
+    requires small.diskView.IsSubDisk(big.diskView)
     ensures small.ValidRanking(ranking)
     decreases small.GetRank(ranking)
   {}
@@ -1066,12 +1066,6 @@ module LinkedBetreeRefinement {
       {
         ILinkedBetreeIgnoresRanking(v'.linked.ChildAtIdx(0), growReplacementRanking, r');
       }
-      ILinkedBetreeNode(
-        InsertGrowReplacement(v.linked, step.newRootAddr).BuildTightTree().ChildAtIdx(0),
-        growReplacementRanking);
-        {
-          BuildTightPreservesChildInterpretation(InsertGrowReplacement(v.linked, step.newRootAddr), 0, growReplacementRanking);
-        }
       ILinkedBetreeNode(InsertGrowReplacement(v.linked, step.newRootAddr).ChildAtIdx(0), growReplacementRanking);
         {
           FreshEntryToDiskDoesNotChangeInterpretation(
@@ -1105,7 +1099,7 @@ module LinkedBetreeRefinement {
     requires 0 < path.depth
     requires 0 <= idx < |path.linked.Root().children|
     requires idx != Route(path.linked.Root().pivotTable, path.key)  // idx is the child index not on the path of substitution
-    requires path.linked.diskView.IsSubsetOf(path.Substitute(replacement, pathAddrs).diskView)
+    requires path.linked.diskView.IsSubDisk(path.Substitute(replacement, pathAddrs).diskView)
     ensures path.linked.ChildAtIdx(idx).Acyclic()  //prereq to ILinkedBetree(path.linked.ChildAtIdx(idx)
     ensures |path.Substitute(replacement, pathAddrs).Root().children| == |path.linked.Root().children|
     ensures ILinkedBetreeNode(path.Substitute(replacement, pathAddrs).ChildAtIdx(idx), ranking)
@@ -1143,7 +1137,7 @@ module LinkedBetreeRefinement {
     requires Set(pathAddrs) !! replacementRanking.Keys
     requires path.linked.diskView.IsFresh(Set(pathAddrs))
     requires replacement.diskView.IsFresh(Set(pathAddrs))
-    requires path.linked.diskView.IsSubsetOf(path.Substitute(replacement, pathAddrs).diskView)
+    requires path.linked.diskView.IsSubDisk(path.Substitute(replacement, pathAddrs).diskView)
     ensures path.Substitute(replacement, pathAddrs).Acyclic()  // prereq to ILinkedBetree
     ensures IPath(path).Valid()  // prereq to IPath(path).Substitute
     ensures IPath(path).ValidReplacement(ILinkedBetree(replacement))
@@ -1260,9 +1254,9 @@ module LinkedBetreeRefinement {
   // must be a subdisk of the output of Substitute
   lemma FreshSubstitutionImpliesSubdisk(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
     requires path.CanSubstitute(replacement, pathAddrs)
-    requires path.linked.diskView.IsSubsetOf(replacement.diskView)
+    requires path.linked.diskView.IsSubDisk(replacement.diskView)
     requires replacement.diskView.IsFresh(Set(pathAddrs))
-    ensures path.linked.diskView.IsSubsetOf(path.Substitute(replacement, pathAddrs).diskView)
+    ensures path.linked.diskView.IsSubDisk(path.Substitute(replacement, pathAddrs).diskView)
     decreases path.depth
   {
     if 0 < path.depth {
@@ -1447,7 +1441,7 @@ module LinkedBetreeRefinement {
     requires HasChild(linked', idx')
     requires linked.ValidRanking(ranking')
     requires linked'.ValidRanking(ranking')
-    requires linked.diskView.IsSubsetOf(linked'.diskView)
+    requires linked.diskView.IsSubDisk(linked'.diskView)
     requires linked.Root().children[idx] == linked'.Root().children[idx']
     ensures linked.Acyclic()  // prereq
     ensures ILinkedBetree(linked).children[idx] == ILinkedBetree(linked').children[idx']

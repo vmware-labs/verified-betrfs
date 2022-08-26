@@ -280,10 +280,9 @@ module LinkedBetreeMod
       MapsAgree(entries, other.entries)
     }
 
-    predicate IsSubsetOf(other: DiskView)
+    predicate IsSubDisk(bigger: DiskView)
     {
-      && entries.Keys <= other.entries.Keys
-      && AgreesWithDisk(other)
+      IsSubMap(entries, bigger.entries)
     }
 
     // The node at this address has child pointers that respect ranking
@@ -395,7 +394,7 @@ module LinkedBetreeMod
     }
 
     function BuildTightTree() : (out: LinkedBetree)
-      ensures out.diskView.IsSubsetOf(diskView)
+      ensures out.diskView.IsSubDisk(diskView)
     {
       if ! Acyclic() then
         // Need this case because at the state machine I don't have proof that after an
@@ -425,6 +424,12 @@ module LinkedBetreeMod
         var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
         Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
         {root.value} + Sets.UnionSeqOfSets(subTreeAddrs)
+    }
+
+    predicate DiskIsTightWrtRepresentation()
+      requires Acyclic()
+    {
+      diskView.entries.Keys == Representation()
     }
     
     predicate CanSplitParent(request: SplitRequest)
@@ -715,7 +720,7 @@ module LinkedBetreeMod
       && replacement.HasRoot()
       && replacement.Root().MyDomain() == Target().Root().MyDomain()
       && depth == |pathAddrs|
-      && linked.diskView.IsSubsetOf(replacement.diskView)
+      && linked.diskView.IsSubDisk(replacement.diskView)
     }
 
     lemma CanSubstituteSubpath(replacement: LinkedBetree, pathAddrs: PathAddrs)
@@ -786,7 +791,9 @@ module LinkedBetreeMod
     && lbl.addrs == [step.newRootAddr]
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.newRootAddr})
-    && v'.linked == InsertGrowReplacement(v.linked, step.newRootAddr).BuildTightTree()
+    // && v'.linked == InsertGrowReplacement(v.linked, step.newRootAddr).BuildTightTree()
+    // Removed BuildTight because it doesn't do anything here
+    && v'.linked == InsertGrowReplacement(v.linked, step.newRootAddr)
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
@@ -902,7 +909,7 @@ module LinkedBetreeMod
     requires target.HasRoot()
     requires target.Root().buffers.Equivalent(compactedBuffers)
     requires target.diskView.IsFresh({replacementAddr})
-    ensures target.diskView.IsSubsetOf(out.diskView)
+    ensures target.diskView.IsSubDisk(out.diskView)
     ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}
     ensures out.WF()   // prereq to MyDomain()
     ensures out.HasRoot() && out.Root().MyDomain() == target.Root().MyDomain()
