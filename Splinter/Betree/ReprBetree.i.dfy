@@ -248,10 +248,12 @@ module ReprBetree
 
   predicate Init(v: Variables, gcBetree: GCStampedBetree)
   {
-    && gcBetree.stamped.value.Acyclic()
+    var linked := gcBetree.stamped.value;
+    && linked.Acyclic()
+    && linked.DiskIsTightWrtRepresentation()
     && v == Variables(
-      LinkedBetreeMod.Variables(EmptyMemtable(gcBetree.stamped.seqEnd), gcBetree.stamped.value),
-      gcBetree.stamped.value.Representation(),
+      LinkedBetreeMod.Variables(EmptyMemtable(gcBetree.stamped.seqEnd), linked),
+      linked.Representation(),
       gcBetree.reserved,
       gcBetree.stranded
     )
