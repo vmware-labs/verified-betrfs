@@ -158,13 +158,13 @@ module ReprBetree
     && LinkedBetreeMod.InternalFlushMemtable(v.betree, v'.betree, lbl.I(), step.I())
     && if v.betree.linked.HasRoot() then 
         v' == v.(
-          betree := v'.betree,
+          betree := v'.betree,  // specified by LinkedBetreeMod.InternalFlushMemtable
           repr := v.repr + {step.newRootAddr} - {v.betree.linked.root.value},
           stranded := v.stranded + {v.betree.linked.root.value}
         )
       else
         v' == v.(
-          betree := v'.betree,
+          betree := v'.betree,  // specified by LinkedBetreeMod.InternalFlushMemtable
           repr := v.repr + {step.newRootAddr}
         )
   }
