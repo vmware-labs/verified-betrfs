@@ -64,5 +64,34 @@ module Buffers
     {
       forall k | AnyKey(k) :: Query(k) == other.Query(k)
     }
+
+    function SliceRight(start: nat) : BufferStack
+      requires start <= |buffers|
+    {
+      BufferStack(buffers[start..])
+    }
+
+    lemma QueryEmptyLeft(key: Key, start: nat, count: nat)
+      requires start <= |buffers|
+      requires count <= |buffers|
+      requires forall i:nat | i < start :: buffers[i].Query(key) == Update(NopDelta())
+      ensures count <= start ==> QueryUpTo(key, count) == Update(NopDelta())
+      ensures start < count ==> QueryUpTo(key, count) == SliceRight(start).QueryUpTo(key, count-start)
+    {
+      if count > 0 {
+        QueryEmptyLeft(key, start, count-1);
+      }
+    }    
+
+    lemma QueryUpToEquivalent(key: Key, other: BufferStack, count: nat)
+      requires |buffers| == |other.buffers|
+      requires count <= |buffers|
+      requires forall i:nat | i < |buffers| :: buffers[i].Query(key) == other.buffers[i].Query(key)
+      ensures QueryUpTo(key, count) == other.QueryUpTo(key, count)
+    {
+      if count > 0 {
+        QueryUpToEquivalent(key, other, count-1);
+      }
+    }
   }
 }

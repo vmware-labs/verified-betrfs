@@ -221,13 +221,19 @@ module LinkedBranchMod {
       && (exists ranking :: ValidRanking(ranking))
     }
 
-    predicate AllKeysInRange(ranking: Ranking)
+    predicate AllKeysInRange()
+      requires Acyclic()
+    {
+      && AllKeysInRangeInternal(TheRanking())
+    }
+
+    predicate AllKeysInRangeInternal(ranking: Ranking)
       requires WF()
       requires ValidRanking(ranking)
       decreases GetRank(ranking), 1
     {
       && (Root().Index? ==> 
-        && (forall i :: 0 <= i < |Root().children| ==> ChildAtIdx(i).AllKeysInRange(ranking))
+        && (forall i :: 0 <= i < |Root().children| ==> ChildAtIdx(i).AllKeysInRangeInternal(ranking))
         && (forall i :: 0 <= i < |Root().children|-1 ==> AllKeysBelowBound(i, ranking))
         && (forall i :: 0 < i < |Root().children| ==> AllKeysAboveBound(i, ranking))
       )
@@ -332,7 +338,7 @@ module LinkedBranchMod {
         result
       )
     }
-    
+
     function Query(key: Key) : (msg: Option<Message>)
       requires WF()
       requires Acyclic()
@@ -345,18 +351,18 @@ module LinkedBranchMod {
     function I() : (out: P.Node)
       requires Acyclic()
       ensures Root().Index? <==> out.Index?
-      ensures AllKeysInRange(TheRanking()) ==> out.WF()
+      ensures AllKeysInRange() ==> out.WF()
     {
       var ranking := TheRanking();
       var out := ILinkedBranchNode(ranking);
-      assert AllKeysInRange(ranking) ==> out.WF() by {
-        if AllKeysInRange(ranking) {
+      assert AllKeysInRange() ==> out.WF() by {
+        if AllKeysInRangeInternal(ranking) {
           ILinkedBranchNodeWF(ranking);
         }
       }
       out
     }
-  
+
     function ILinkedBranchNode(ranking: Ranking) : (out: P.Node)
       requires WF()
       requires ValidRanking(ranking)
@@ -419,7 +425,7 @@ module LinkedBranchMod {
 
     lemma ILinkedBranchNodeWF(ranking: Ranking)
       requires ILinkedBranchNode.requires(ranking)
-      requires AllKeysInRange(ranking)
+      requires AllKeysInRangeInternal(ranking)
       ensures ILinkedBranchNode(ranking).WF()
       decreases GetRank(ranking)
     {
