@@ -4,6 +4,7 @@
 include "LinkedBetree.i.dfy"
 include "LinkedBetreeRefinement.i.dfy"
 include "ReprBetree.i.dfy"
+include "../Disk/GenericDisk.i.dfy"
 include "../../lib/Base/Sets.i.dfy"
 
 module ReprBetreeRefinement
@@ -14,6 +15,7 @@ module ReprBetreeRefinement
   import LinkedBetreeRefinement
   import GenericDisk
   import Sets
+  import Maps
 
   type Ranking = GenericDisk.Ranking
 
@@ -47,7 +49,7 @@ module ReprBetreeRefinement
     LinkedBetreeRefinement.InitRefines(I(v), gcBetree.I());
   }
 
-  lemma ReachabilityInAgreeingDisks(t1: LinkedBetree, t2: LinkedBetree, addrs: set<Address>, ranking: Ranking) 
+  lemma ReachabilityInAgreeingDisks(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking) 
     requires t1.Acyclic()
     requires t2.Acyclic()
     requires t1.diskView.AgreesWithDisk(t2.diskView)
@@ -64,7 +66,7 @@ module ReprBetreeRefinement
       {
         LinkedBetreeRefinement.ChildIdxAcyclic(t1, i);
         LinkedBetreeRefinement.ChildIdxAcyclic(t2, i);
-        ReachabilityInAgreeingDisks(t1.ChildAtIdx(i), t2.ChildAtIdx(i), addrs, ranking);
+        ReachabilityInAgreeingDisks(t1.ChildAtIdx(i), t2.ChildAtIdx(i), ranking);
       }
       var t1SubAddrs := seq(numChildren, i requires 0 <= i < numChildren => t1.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
       var t2SubAddrs := seq(numChildren, i requires 0 <= i < numChildren => t2.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
@@ -90,7 +92,7 @@ module ReprBetreeRefinement
       var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked'.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
       Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
       LinkedBetreeRefinement.ChildIdxAcyclic(linked', 0);
-      ReachabilityInAgreeingDisks(linked, linked'.ChildAtIdx(0), {step.newRootAddr}, newRanking);
+      ReachabilityInAgreeingDisks(linked, linked'.ChildAtIdx(0), newRanking);
       LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linked', linked'.TheRanking(), newRanking);
       assert v'.repr == v'.betree.linked.Representation();
     }
@@ -159,8 +161,8 @@ module ReprBetreeRefinement
   {
     var linked := v.betree.linked;
     var linked' := v'.betree.linked;
-    if v.betree.linked.HasRoot() { 
-      var oldRootAddr := v.betree.linked.root.value;
+    if linked.HasRoot() { 
+      var oldRootAddr := linked.root.value;
       var oldRanking := LinkedBetreeRefinement.BuildTightRanking(linked, linked.TheRanking());
       var newRanking := oldRanking[step.newRootAddr := oldRanking[linked.root.value]];
       LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linked', linked'.TheRanking(), newRanking);
@@ -177,7 +179,7 @@ module ReprBetreeRefinement
             ensures subTreeAddrs'[i] ==  subTreeAddrs[i] {
               LinkedBetreeRefinement.ChildIdxAcyclic(linked, i);
               LinkedBetreeRefinement.ChildIdxAcyclic(linked', i);
-              ReachabilityInAgreeingDisks(linked.ChildAtIdx(i), linked'.ChildAtIdx(i), {step.newRootAddr}, newRanking);
+              ReachabilityInAgreeingDisks(linked.ChildAtIdx(i), linked'.ChildAtIdx(i), newRanking);
             }
             Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
             Sets.UnionSeqOfSetsSoundness(subTreeAddrs');
@@ -189,6 +191,68 @@ module ReprBetreeRefinement
     }
   }
 
+  lemma ChildReachebleAddrsIsSubset(linked: LinkedBetree, ranking: Ranking, idx: nat) 
+    requires linked.Acyclic()
+    requires linked.ValidRanking(ranking)
+    requires linked.HasRoot()
+    requires linked.Root().ValidChildIndex(idx)
+    ensures linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(ranking) <= linked.ReachableAddrsUsingRanking(ranking)
+  {
+    var numChildren := |linked.Root().children|;
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+    // trigger
+    assert subTreeAddrs[idx] == linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(ranking); 
+  }
+
+  lemma BuildTightRepresentationContainsDiskView(linked: LinkedBetree, ranking: Ranking) 
+    requires linked.Acyclic()
+    requires linked.ValidRanking(ranking)
+    ensures linked.BuildTightTree().Acyclic()
+    ensures forall addr | addr in linked.BuildTightTree().diskView.entries 
+      :: addr in linked.BuildTightTree().Representation()
+    decreases linked.GetRank(ranking)
+  {
+    LinkedBetreeRefinement.BuildTightMaintainsRankingValidity(linked, ranking);
+    forall addr | addr in linked.BuildTightTree().diskView.entries 
+    ensures addr in linked.BuildTightTree().Representation()
+    {
+      if addr != linked.BuildTightTree().root.value {
+        /* This proof is rather involved.
+          - We have addr in linked.Representation(), and addr != linked.root.
+          - Then, suppose addr in linked.ChildAtIdx(i).Representation().
+          - Then addr in linked.ChildAtIdx(i).BuildTightTree().diskView.entries.
+          - Then addr in linked.ChildAtIdx(i).BuildTightTree().Representation(), by induction.
+          - Then addr in linked.BuildTightTree().ChildAtIdx(i).Representation(), since above is a subdisk.
+            This is via lemma BuildTightRepresentationContainsDiskView.
+          - Then addr in linked.BuildTightTree().Representation(), 
+            via lemma ChildReachebleAddrsIsSubset */ 
+        LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linked, linked.TheRanking(), ranking);
+        var numChildren := |linked.Root().children|;
+        var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+        Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+        var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
+        LinkedBetreeRefinement.ChildIdxAcyclic(linked, idx);
+        LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linked.ChildAtIdx(idx), ranking, linked.ChildAtIdx(idx).TheRanking());
+        BuildTightRepresentationContainsDiskView(linked.ChildAtIdx(idx), ranking);  // apply induction hypothesis
+        LinkedBetreeRefinement.BuildTightMaintainsRankingValidity(linked.ChildAtIdx(idx), ranking);
+        LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linked.ChildAtIdx(idx).BuildTightTree(), ranking, linked.ChildAtIdx(idx).BuildTightTree().TheRanking());
+        assert linked.BuildTightTree().ChildAtIdx(idx).ValidRanking(ranking);  // trigger
+        ReachabilityInAgreeingDisks(linked.BuildTightTree().ChildAtIdx(idx), linked.ChildAtIdx(idx).BuildTightTree(), ranking);
+        ChildReachebleAddrsIsSubset(linked.BuildTightTree(), ranking, idx);  
+        LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linked.BuildTightTree(), ranking, linked.BuildTightTree().TheRanking());
+      }
+    }
+  }
+
+  lemma BuildTightGivesTightWrtRepresentation(linked: LinkedBetree)
+    requires linked.Acyclic()
+    ensures linked.BuildTightTree().Acyclic()
+    ensures linked.BuildTightTree().DiskIsTightWrtRepresentation();
+  {
+    LinkedBetreeRefinement.BuildTightMaintainsRankingValidity(linked, linked.TheRanking());
+    BuildTightRepresentationContainsDiskView(linked, linked.TheRanking());
+  }
+
   lemma InternalFlushMemtableMaintainsTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
@@ -196,9 +260,12 @@ module ReprBetreeRefinement
     requires v'.betree.linked.Acyclic()
     ensures v'.betree.linked.DiskIsTightWrtRepresentation()
   {
-    assume false;
+    var newBuffer := Buffer(v.betree.memtable.mapp);
+    var untightLinked :=  LinkedBetreeMod.InsertInternalFlushMemtableReplacement(v.betree.linked, newBuffer, step.newRootAddr);
+    if v.betree.linked.HasRoot() {
+      BuildTightGivesTightWrtRepresentation(untightLinked);
+    }
   }
-
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel) 
     requires Inv(v)
