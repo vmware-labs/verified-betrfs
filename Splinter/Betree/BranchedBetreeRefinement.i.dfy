@@ -108,13 +108,12 @@ module BranchedBetreeRefinement {
     Stamped(IBranchedBetree(stampedBetree.value), stampedBetree.seqEnd)
   }
 
-  // Acyclic implies Acyclic
   lemma IBranchedBetreeAcyclic(branched: BranchedBetree) 
     requires branched.Acyclic()
     requires branched.Valid()
     ensures IBranchedBetree(branched).Acyclic()
   {
-    assume false;
+    assert IBranchedBetree(branched).ValidRanking(branched.TheRanking());
   }
 
   // Interpretation functions for Path
@@ -122,6 +121,18 @@ module BranchedBetreeRefinement {
     requires path.Valid()
   {
     LinkedBetree.Path(IBranchedBetree(path.branched), path.key, path.depth) 
+  }
+
+  lemma TargetCommutesWithI(path: Path)
+    requires path.Valid()
+    ensures IPath(path).Valid()
+    ensures IPath(path).Target() == IBranchedBetree(path.Target())
+    decreases path.depth
+  {
+    IBranchedBetreeAcyclic(path.branched);
+    if 0 < path.depth {
+      TargetCommutesWithI(path.Subpath());
+    }
   }
 
   // Interpretation functions for Query receipts
@@ -263,41 +274,81 @@ module BranchedBetreeRefinement {
     var istep := IStepDefn(step);
     match step {
       case QueryStep(receipt) => { IReceiptValid(receipt); }
-      case InternalSplitStep(path, request, newAddrs, pathAddrs) => {
+      case InternalSplitStep(path, request, newAddrs, pathAddrs) => { TargetCommutesWithI(path); }
+      case InternalFlushStep(path, childIdx, _, _, _, _) => { TargetCommutesWithI(path); }
+      case InternalCompactStep(path, compactStart, compactEnd, compactedBranch, _, _) => { 
+        TargetCommutesWithI(path);
+
+        var linked := istep.path.Target();
+        var branched := path.Target();
+        var node := branched.Root();
+
+        assert branched.branches == path.branched.branches;
+        assert node.CompactedBranchEquivalence(branched.branches, compactStart, compactEnd, compactedBranch);
+         
+        // var compactedBranch := branched.Root().buffers[compactStart..compactEnd];
+        
+        assert IPath(path) == istep.path;
+        assert IBranchedBetree(branched) == linked;
+        
+        forall k | AnyKey(k)
+          ensures linked.Root().buffers.Query(k) == istep.compactedBuffers.Query(k) 
+        {
+          // ActiveBuffersForKeyConsistent(node, k, node.ActiveBuffersForKey(k));
+
+
+    // ensures forall i:nat | i < start :: key !in ActiveBufferKeys(node, i)
+    // ensures forall i:nat | start <= i < |node.buffers| :: key in ActiveBufferKeys(node, i)
+
+          if node.KeyInDomain(k) && (compactStart <= node.ActiveBuffersForKey(k) < compactEnd) {
+             
+            assume linked.Root().buffers.Query(k) == branched.branches.Query(k, node.buffers[compactStart..compactEnd]);
+
+            assume compactedBranch.Query(k).Some?;
+
+            assume istep.compactedBuffers.Query(k) == compactedBranch.Query(k).value;
+
+            assert branched.branches.Query(k, node.buffers[compactStart..compactEnd]) == compactedBranch.Query(k).value;
+
+
+          } else {
+            
+            assume false;
+          }
+
+
+      
+
+        //   assume linkedNode.buffers.Query(k) == 
+
+        //   // we want to show linkednode buffers equivalent to the other buffers
+        //   // and the compactedbuffers too 
+
+        //   // ah nah that's not how you do it , I understand lol
+        //   // forall i:nat | i < |linkedNode.buffers.buffers|
+        //   //   ensures linkedNode.buffers.buffers[i].Query(k) == istep.compactedBuffers.buffers[i].Query(k)
+        //   // {
+          // assume false;
+        //   // }
+
+        //   // linkedNode.buffers.QueryUpToEquivalent(k, istep.compactedBuffers, |linkedNode.buffers.buffers|);
+        }
+
+        //   ensures forall i:nat |:: buffers[i].Query(key) == other.buffers[i].Query(key)
+
+        // assume linkedNode.buffers.Equivalent(istep.compactedBuffers);
+
+        // assume false; 
+
+
+        // assert step.path.Target().Root().CompactedBranchEquivalence(v.branched.branches, step.compactStart, step.compactEnd, step.compactedBranch);
+        // assert equivalence
+        // assume istep.path.Target().Root().buffers.Equivalent(istep.compactedBuffers);
+        // we need 
+
       //   IPathValid(step.path);
       //   TargetCommutesWithI(step.path);
-
-      //   assert istep.path.Target().CanSplitParent(istep.request) by {
-      //     var target := step.path.Target();
-      //     var ichild := istep.path.Target().children[request.childIdx];
-      //     var child := target.ChildAtIdx(request.childIdx);
-      //     assert ILinkedBetreeNode(target, target.TheRanking()).children[request.childIdx]
-      //       == ILinkedBetreeNode(child, target.TheRanking());  // trigger
-      //     assert ichild.children[0] == IChildren(child, target.TheRanking())[0];  // trigger
-
-      //     if step.request.SplitLeaf? {
-      //       assert IChildren(child, target.TheRanking())[0] == PivotBetree.Nil;  // trigger
-      //     } else {
-      //       forall i | 0 <= i < |ichild.children| ensures ichild.children[i].BetreeNode? {
-      //         assert ichild.children[i] == ILinkedBetreeNode(child.ChildAtIdx(i), target.TheRanking()); // trigger
-      //       }
-      //     }
-      //   }
         // assert istep.WF();  // case boilerplate
-        assume false;
-      }
-      case InternalFlushStep(path, childIdx, _, _, _, _) => {
-      //   IPathValid(step.path);
-      //   TargetCommutesWithI(step.path);
-      //   assert istep.WF();  // case boilerplate
-        assume false;
-      }
-      // case InternalFlushMemtableStep(_, _) => { assert istep.WF(); }
-      case InternalCompactStep(path, compactedBuffers, _, _, _, _) => {
-      //   IPathValid(step.path);
-      //   TargetCommutesWithI(step.path);
-      //   assert istep.WF();  // case boilerplate
-        assume false;
       }
       case _ =>    {  assert istep.WF(); }
     }

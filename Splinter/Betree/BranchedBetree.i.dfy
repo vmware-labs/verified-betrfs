@@ -12,7 +12,6 @@ include "../Journal/GenericDisk.i.dfy"
 // This module deals with 
 // 1. Concretize buffer implementation with Forest (seqs of B+ tree)
 // 2. Filter should be implicitly tracked by pivot table (no more apply filters)
-//    - In LinkedBetree we did not restrict the range of splitted child
 // 3. Track active buffers for each child, as we don't want to visit a buffer that is flushed to a child already
 
 module BranchedBetreeMod
@@ -20,7 +19,6 @@ module BranchedBetreeMod
   import opened BoundedPivotsLib
   import opened DomainMod
   import opened GenericDisk
-  import opened KeyType
   import opened LSNMod
   import opened MemtableMod
   import opened MsgHistoryMod
@@ -29,6 +27,7 @@ module BranchedBetreeMod
   import opened StampedMod
   import opened Upperbounded_Lexicographic_Byte_Order_Impl
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
+  import opened KeyType
   import opened ValueMessage
   import opened Maps
   import TotalKMMapMod
@@ -246,12 +245,13 @@ module BranchedBetreeMod
       requires WF()
       requires branches.WF()
       requires compactedBranch.Acyclic()
+      requires compactedBranch.AllKeysInRange()
+      requires compactedBranch.TightDiskView()
       requires compactStart < compactEnd <= |buffers|
       requires forall i:nat | compactStart <= i < compactEnd :: branches.ValidBranch(buffers[i])
     {
-      && (forall key | KeyInDomain(key) && (compactStart <= ActiveBuffersForKey(key) < compactEnd) :: 
-        && compactedBranch.Query(key).Some?
-        && compactedBranch.Query(key).value == branches.Query(key, buffers[compactStart..compactEnd]))
+      var compactedBranches := EmptyBranches().AddBranch(compactedBranch);
+      && (forall key : Key :: branches.Query(key, buffers[compactStart..compactEnd]) == compactedBranches.Query(key, [compactedBranch.root]))
     }
   }
 
@@ -1024,7 +1024,6 @@ module BranchedBetreeMod
     && lbl.treeAddrs == step.pathAddrs + [ step.targetAddr ]
     && Set(lbl.branchAddrs) == step.compactedBranch.ReachableAddrs()
     && step.path.branched == v.branched
-    && step.path.Target().Root().CompactedBranchEquivalence(v.branched.branches, step.compactStart, step.compactEnd, step.compactedBranch)
 
     // Subway Eat Fresh!
     && v.branched.IsFresh(Set(lbl.treeAddrs + lbl.branchAddrs))
@@ -1097,7 +1096,9 @@ module BranchedBetreeMod
           && {targetAddr} !! Set(pathAddrs)
           && compactedBranch.Acyclic()
           && compactedBranch.TightDiskView()
+          && compactedBranch.AllKeysInRange()
           && compactStart < compactEnd <= |path.Target().Root().buffers|
+          && path.Target().Root().CompactedBranchEquivalence(path.branched.branches, compactStart, compactEnd, compactedBranch)
         case _ => true
       }
     }
