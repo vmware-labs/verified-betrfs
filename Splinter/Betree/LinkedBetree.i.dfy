@@ -708,7 +708,7 @@ module LinkedBetreeMod
       requires Valid()
       decreases depth
     {
-      if depth == 0 then {}
+      if depth == 0 then {linked.root.value}
       else Subpath().AddrsOnPath() + {linked.root.value}
     }
 
