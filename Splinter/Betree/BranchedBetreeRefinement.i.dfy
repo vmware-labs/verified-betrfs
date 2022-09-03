@@ -304,7 +304,8 @@ module BranchedBetreeRefinement {
     // ensures forall i:nat | start <= i < |node.buffers| :: key in ActiveBufferKeys(node, i)
 
           if node.KeyInDomain(k) && (compactStart <= node.ActiveBuffersForKey(k) < compactEnd) {
-             
+            assume false;
+
             assume linked.Root().buffers.Query(k) == branched.branches.Query(k, node.buffers[compactStart..compactEnd]);
 
             assume compactedBranch.Query(k).Some?;
@@ -432,17 +433,7 @@ module BranchedBetreeRefinement {
     }
   }
 
-  predicate LinkedBranchDiskSubset(sub: LinkedBranch, full: LinkedBranch, ranking: Ranking)
-  {
-    && sub.WF()
-    && full.WF()
-    && sub.ValidRanking(ranking)
-    && full.ValidRanking(ranking)
-    && sub.root == full.root
-    && IsSubMap(sub.diskView.entries, full.diskView.entries)
-  }
-
-  lemma ReachableAddrsForValidRanking(branch: LinkedBranch, r1: Ranking, r2: Ranking)
+  lemma SameReachableAddrsForValidRankings (branch: LinkedBranch, r1: Ranking, r2: Ranking)
     requires branch.WF()
     requires branch.ValidRanking(r1)
     requires branch.ValidRanking(r2)
@@ -460,7 +451,7 @@ module BranchedBetreeRefinement {
         ensures branch.ChildAtIdx(i).ReachableAddrsUsingRanking(r1) == 
           branch.ChildAtIdx(i).ReachableAddrsUsingRanking(r2) 
       {
-        ReachableAddrsForValidRanking(branch.ChildAtIdx(i), r1, r2);
+        SameReachableAddrsForValidRankings(branch.ChildAtIdx(i), r1, r2);
       }
 
       assert r1Addrs == r2Addrs;
@@ -469,8 +460,17 @@ module BranchedBetreeRefinement {
     }
   }
 
+  predicate LinkedBranchDiskSubset(sub: LinkedBranch, full: LinkedBranch, ranking: Ranking)
+  {
+    && sub.WF()
+    && full.WF()
+    && sub.ValidRanking(ranking)
+    && full.ValidRanking(ranking)
+    && sub.root == full.root
+    && IsSubMap(sub.diskView.entries, full.diskView.entries)
+  }
 
-  lemma ReachableAddrsForDiskSubSet(sub: LinkedBranch, full: LinkedBranch, ranking: Ranking)
+  lemma SameReachableAddrsForDiskSubset(sub: LinkedBranch, full: LinkedBranch, ranking: Ranking)
     requires LinkedBranchDiskSubset(sub, full, ranking)
     ensures sub.ReachableAddrsUsingRanking(ranking) == full.ReachableAddrsUsingRanking(ranking)
     decreases sub.GetRank(ranking)
@@ -486,7 +486,7 @@ module BranchedBetreeRefinement {
         ensures sub.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking) == 
           full.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking) 
       {
-        ReachableAddrsForDiskSubSet(sub.ChildAtIdx(i), full.ChildAtIdx(i), ranking);
+        SameReachableAddrsForDiskSubset(sub.ChildAtIdx(i), full.ChildAtIdx(i), ranking);
       }
 
       assert subAddrs == fullAddrs;
@@ -495,85 +495,50 @@ module BranchedBetreeRefinement {
     }
   }
 
-  lemma AllKeysForDiskSubSet(sub: LinkedBranch, full: LinkedBranch, ranking: Ranking)
+  lemma SameAllKeysInRangeForDiskSubSet(sub: LinkedBranch, full: LinkedBranch, ranking: Ranking)
     requires LinkedBranchDiskSubset(sub, full, ranking)
+    requires sub.AllKeysInRangeInternal(ranking)
     ensures sub.AllKeys(ranking) == full.AllKeys(ranking)
+    ensures full.AllKeysInRangeInternal(ranking)
     decreases sub.GetRank(ranking)
   {
     var node := sub.Root();
-    assert node == full.Root();
-
-    if node.Index? {
-      forall i | 0 <= i < |node.children|
-        ensures sub.ChildAtIdx(i).AllKeys(ranking) == full.ChildAtIdx(i).AllKeys(ranking)
-      {
-        AllKeysForDiskSubSet(sub.ChildAtIdx(i), full.ChildAtIdx(i), ranking);
-      }
-    }
-  }
-
-  lemma AllKeysInRangeForDiskSubSet(sub: LinkedBranch, full: LinkedBranch, ranking: Ranking)
-    requires LinkedBranchDiskSubset(sub, full, ranking)
-    ensures sub.AllKeysInRangeInternal(ranking) ==> full.AllKeysInRangeInternal(ranking)
-    decreases sub.GetRank(ranking)
-  {
-    var node := sub.Root();
-    if node.Index? && sub.AllKeysInRangeInternal(ranking) {
-      AllKeysForDiskSubSet(sub, full, ranking);
-
+    if node.Index?  {
       forall i | 0 <= i < |node.children|
         ensures full.ChildAtIdx(i).AllKeysInRangeInternal(ranking) 
+        ensures sub.ChildAtIdx(i).AllKeys(ranking) == full.ChildAtIdx(i).AllKeys(ranking)
         ensures i < |node.children|-1 ==> full.AllKeysBelowBound(i, ranking)
         ensures 0 < i ==> full.AllKeysAboveBound(i, ranking)
       {
-        AllKeysInRangeForDiskSubSet(sub.ChildAtIdx(i), full.ChildAtIdx(i), ranking);
-        AllKeysForDiskSubSet(sub.ChildAtIdx(i), full.ChildAtIdx(i), ranking);
-
+        SameAllKeysInRangeForDiskSubSet(sub.ChildAtIdx(i), full.ChildAtIdx(i), ranking);
         if i < |node.children|-1 {
           assert sub.AllKeysBelowBound(i, ranking); // trigger
         }
         if i > 0 {
           assert sub.AllKeysAboveBound(i, ranking); // trigger
         }
-      } 
-    }
-  }
-
-  lemma AllKeysForValidRankings(branch: LinkedBranch, r1: Ranking, r2: Ranking)
-    requires branch.WF()
-    requires branch.ValidRanking(r1)
-    requires branch.ValidRanking(r2)
-    ensures branch.AllKeys(r1) == branch.AllKeys(r2)
-    decreases branch.GetRank(r1)
-  {
-    if branch.Root().Index? {
-      forall i | 0 <= i < |branch.Root().children|
-        ensures branch.ChildAtIdx(i).AllKeys(r1) == branch.ChildAtIdx(i).AllKeys(r2)
-      {
-        AllKeysForValidRankings(branch.ChildAtIdx(i), r1, r2);
       }
     }
   }
 
-  lemma AllKeysInRangeForValidRankings(branch: LinkedBranch, r1: Ranking, r2: Ranking)
+  lemma SameAllKeysInRangeForValidRankings(branch: LinkedBranch, r1: Ranking, r2: Ranking)
     requires branch.WF()
     requires branch.ValidRanking(r1)
     requires branch.ValidRanking(r2)
-    ensures branch.AllKeysInRangeInternal(r1) ==> branch.AllKeysInRangeInternal(r2)
+    requires branch.AllKeysInRangeInternal(r1)
+    ensures branch.AllKeys(r1) == branch.AllKeys(r2)
+    ensures branch.AllKeysInRangeInternal(r2)
     decreases branch.GetRank(r1)
   {
     var node := branch.Root();
-    if node.Index? && branch.AllKeysInRangeInternal(r1) {
-      AllKeysForValidRankings(branch, r1, r2);
-
+    if node.Index? {
       forall i | 0 <= i < |node.children|
         ensures branch.ChildAtIdx(i).AllKeysInRangeInternal(r2) 
+        ensures branch.ChildAtIdx(i).AllKeys(r1) == branch.ChildAtIdx(i).AllKeys(r2)
         ensures i < |node.children|-1 ==> branch.AllKeysBelowBound(i, r2)
         ensures 0 < i ==> branch.AllKeysAboveBound(i, r2)
       {
-        AllKeysInRangeForValidRankings(branch.ChildAtIdx(i), r1, r2);
-        AllKeysForValidRankings(branch.ChildAtIdx(i), r1, r2);
-
+        SameAllKeysInRangeForValidRankings(branch.ChildAtIdx(i), r1, r2);
         if i < |node.children|-1 {
           assert branch.AllKeysBelowBound(i, r1); // trigger
         }
@@ -584,45 +549,33 @@ module BranchedBetreeRefinement {
     }
   }
   
-  lemma AddBranchWF(branches: Branches, newBranch: LinkedBranch) 
-    requires branches.AddBranch.requires(newBranch)
-    ensures branches.AddBranch(newBranch).WF()
+  lemma AddBranchWF(branches: Branches, branch: LinkedBranch) 
+    requires branches.AddBranch.requires(branch)
+    ensures branches.AddBranch(branch).WF()
   {
-    var out := branches.AddBranch(newBranch);
+    var out := branches.AddBranch(branch);
+    assert IsSubMap(branch.diskView.entries, out.diskView.entries); 
 
     forall r | r in out.roots
       ensures out.GetBranch(r).Acyclic()
-    {
-      var b := if r == newBranch.root then newBranch else branches.GetBranch(r);
-      assert out.GetBranch(r).ValidRanking(TightRanking(b));
-    }
-
-    assert IsSubMap(newBranch.diskView.entries, out.diskView.entries);
-
-    var outBranch := out.GetBranch(newBranch.root);
-    ReachableAddrsForDiskSubSet(newBranch, outBranch, TightRanking(newBranch));
-    ReachableAddrsForValidRanking(newBranch, TightRanking(newBranch), newBranch.TheRanking());
-    ReachableAddrsForValidRanking(outBranch, TightRanking(newBranch), outBranch.TheRanking());
-    assert newBranch.ReachableAddrs() == outBranch.ReachableAddrs();
-
-    AllKeysInRangeForValidRankings(newBranch, newBranch.TheRanking(), outBranch.TheRanking());
-    AllKeysInRangeForDiskSubSet(newBranch, out.GetBranch(newBranch.root), outBranch.TheRanking());
-    assert out.GetBranch(newBranch.root).AllKeysInRange();
-
-    forall r | r in branches.roots
       ensures out.GetBranch(r).AllKeysInRange()
-      ensures out.GetBranch(r).ReachableAddrs() == branches.GetBranch(r).ReachableAddrs()
+      ensures r != branch.root ==> (out.GetBranch(r).ReachableAddrs() == branches.GetBranch(r).ReachableAddrs())
     {
-      var branch := branches.GetBranch(r);
+      var branch := if r == branch.root then branch else branches.GetBranch(r);
       var outBranch := out.GetBranch(r);
+      
+      assert outBranch.ValidRanking(TightRanking(branch)); // trigger
+      SameAllKeysInRangeForValidRankings(branch, branch.TheRanking(), outBranch.TheRanking());
+      SameAllKeysInRangeForDiskSubSet(branch, outBranch, outBranch.TheRanking());
 
-      AllKeysInRangeForValidRankings(branch, branch.TheRanking(), outBranch.TheRanking());
-      AllKeysInRangeForDiskSubSet(branch, outBranch, outBranch.TheRanking());
-
-      ReachableAddrsForDiskSubSet(branch, outBranch, TightRanking(branch));
-      ReachableAddrsForValidRanking(branch, TightRanking(branch), branch.TheRanking());
-      ReachableAddrsForValidRanking(outBranch, TightRanking(branch), outBranch.TheRanking());
+      SameReachableAddrsForDiskSubset(branch, outBranch, outBranch.TheRanking());
+      SameReachableAddrsForValidRankings(branch, outBranch.TheRanking(), branch.TheRanking());
     }
+
+    var outBranch := out.GetBranch(branch.root);
+    SameReachableAddrsForDiskSubset(branch, outBranch, outBranch.TheRanking());
+    SameReachableAddrsForValidRankings(branch, outBranch.TheRanking(), branch.TheRanking());
+    assert branch.ReachableAddrs() == outBranch.ReachableAddrs();
   }
      
 //      lemma RemoveBranchWF(root: Address) 
