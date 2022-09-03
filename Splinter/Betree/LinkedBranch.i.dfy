@@ -159,23 +159,23 @@ module LinkedBranchMod {
     DiskView.DiskView(map[])
   }
 
-  function {:opaque} MergeDiskViews(diskViews: seq<DiskView>) : (out: DiskView)
-    // ensure result is sound -- keys and their values must come from one of these places
-    ensures forall addr | addr in out.entries 
-      :: (exists i :: 
-            && 0 <= i < |diskViews|
-            && addr in diskViews[i].entries
-            && out.entries[addr] == diskViews[i].entries[addr]
-      )
-    // ensure result is complete -- result must contain all the keys
-    ensures forall i | 0 <= i < |diskViews| :: diskViews[i].entries.Keys <= out.entries.Keys
-    decreases |diskViews|
-  { var out :=
-      if |diskViews| == 0 then EmptyDisk()
-      else diskViews[0].MergeDisk(MergeDiskViews(diskViews[1..]));
-    reveal_MergeDiskViews();
-    out
-  }
+  // function {:opaque} MergeDiskViews(diskViews: seq<DiskView>) : (out: DiskView)
+  //   // ensure result is sound -- keys and their values must come from one of these places
+  //   ensures forall addr | addr in out.entries 
+  //     :: (exists i :: 
+  //           && 0 <= i < |diskViews|
+  //           && addr in diskViews[i].entries
+  //           && out.entries[addr] == diskViews[i].entries[addr]
+  //     )
+  //   // ensure result is complete -- result must contain all the keys
+  //   ensures forall i | 0 <= i < |diskViews| :: diskViews[i].entries.Keys <= out.entries.Keys
+  //   decreases |diskViews|
+  // { var out :=
+  //     if |diskViews| == 0 then EmptyDisk()
+  //     else diskViews[0].MergeDisk(MergeDiskViews(diskViews[1..]));
+  //   reveal_MergeDiskViews();
+  //   out
+  // }
  
   datatype LinkedBranch = LinkedBranch(root: Address, diskView: DiskView)
   {
@@ -315,49 +315,6 @@ module LinkedBranchMod {
 
         UnionSeqOfSetsSoundness(subTreeAddrs);
         {root} + UnionSeqOfSets(subTreeAddrs)
-    }
-  
-    // TODO(Jialin): move to refinement instead?
-    // linked's children are always in the reachable set
-    lemma ChildrenAreReachable(ranking: Ranking)
-      requires WF()
-      requires Root().Index?
-      requires ValidRanking(ranking)
-      ensures forall i | 0 <= i < |Root().children| :: Root().children[i] in ReachableAddrsUsingRanking(ranking)
-    {
-      var numChildren := |Root().children|;
-      var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
-
-      forall i | 0 <= i < numChildren  
-      ensures Root().children[i] in ReachableAddrsUsingRanking(ranking)
-      {
-        assert  Root().children[i] in subTreeAddrs[i];
-      }
-    }
-
-    // TODO(Jialin): move to refinement instead?
-    lemma ReachableAddrClosed(ranking: Ranking, addr: Address)
-      requires WF()
-      requires ValidRanking(ranking)
-      requires addr in ReachableAddrsUsingRanking(ranking)
-      ensures 
-        var node := diskView.entries[addr];
-        && (node.Index? ==> (forall i | 0 <= i < |node.children| :: node.children[i] in ReachableAddrsUsingRanking(ranking)))
-      decreases GetRank(ranking)
-    {
-      var node := diskView.entries[addr];
-
-      if node.Index? {
-        if addr == root {
-          ChildrenAreReachable(ranking);
-        } else {
-          var numChildren := |Root().children|;
-          var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
-          UnionSeqOfSetsSoundness(subTreeAddrs);
-          var k :| 0 <= k < numChildren && addr in subTreeAddrs[k];
-          ChildAtIdx(k).ReachableAddrClosed(ranking, addr);
-        }
-      }
     }
 
     predicate TightDiskView()
