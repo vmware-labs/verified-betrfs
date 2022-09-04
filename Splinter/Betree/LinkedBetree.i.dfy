@@ -922,7 +922,7 @@ module LinkedBetreeMod
     && lbl.addrs == step.pathAddrs + [step.targetAddr]
     && step.path.linked == v.linked
     && step.path.Valid()
-    && step.path.Target().Root().buffers.Equivalent(step.compactedBuffers)
+    // && step.path.Target().Root().buffers.Equivalent(step.compactedBuffers)
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.targetAddr} + Set(step.pathAddrs))
     && v'.linked == step.path.Substitute(

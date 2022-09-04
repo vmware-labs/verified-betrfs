@@ -170,27 +170,73 @@ module BranchedBetreeRefinement {
     }
   }
 
-  function BranchesBufferStack(branches: Branches, buffers: seq<Address>) : BufferStack
-    requires branches.WF()
-    requires (forall addr | addr in buffers :: branches.ValidBranch(addr))
+  // function BranchesBufferStack(branches: Branches, buffers: seq<Address>) : BufferStack
+  //   requires branches.WF()
+  //   requires (forall addr | addr in buffers :: branches.ValidBranch(addr))
+  // {
+  //   BufferStack(seq (|buffers|, i requires 0 <= i < |buffers| => branches.GetBranch(buffers[i]).I().I()))
+  // }
+
+  // lemma BranchesBufferStackQueryConsistent(key: Key, branches: Branches, buffers: seq<Address>, count: nat)
+  //   requires count <= |buffers|
+  //   requires BranchesBufferStack.requires(branches, buffers)
+  //   ensures BranchesBufferStack(branches, buffers).QueryUpTo(key, count) == branches.Query(key, buffers[..count])
+  // {
+  //   if count > 0 {
+  //     var bufferstack := BranchesBufferStack(branches, buffers);
+  //     var branch := branches.GetBranch(buffers[count-1]);
+  //     var msg := if branch.Query(key).Some? then branch.Query(key).value else Update(NopDelta());
+
+  //     assert bufferstack.buffers[count-1].Query(key) == msg;
+  //     assert buffers[..count-1] == DropLast(buffers[..count]);
+
+  //     BranchesBufferStackQueryConsistent(key, branches, buffers, count-1);
+  //   }
+  // }
+
+  lemma QueryCommutesWithIBufferStack(node: BetreeNode, branches: Branches, key: Key, start: nat, count: nat)
+    requires IBufferStack.requires(node, branches)
+    requires node.KeyInDomain(key)
+    requires count <= |node.buffers|
+    requires start == node.ActiveBuffersForKey(key)
+    ensures count <= start ==> (IBufferStack(node, branches).QueryUpTo(key, count) == Update(NopDelta()))
+    ensures start < count ==> (IBufferStack(node, branches).QueryUpTo(key, count) == branches.Query(key, node.buffers[start..count]))
   {
-    BufferStack(seq (|buffers|, i requires 0 <= i < |buffers| => branches.GetBranch(buffers[i]).I().I()))
+    ActiveBuffersForKeyConsistent(node, key, start);
+    if start < count {
+      var branch := branches.GetBranch(node.buffers[count-1]);
+      var msg := if branch.Query(key).Some? then branch.Query(key).value else Update(NopDelta());
+      assert IBufferStack(node, branches).buffers[count-1].Query(key) == msg;
+      assert node.buffers[start..count-1] == DropLast(node.buffers[start..count]);
+      QueryCommutesWithIBufferStack(node, branches, key, start, count-1);
+    } else if 0 < count {
+      QueryCommutesWithIBufferStack(node, branches, key, start, count-1);
+    }
   }
 
-  lemma BranchesBufferStackQueryConsistent(key: Key, branches: Branches, buffers: seq<Address>, count: nat)
-    requires count <= |buffers|
-    requires BranchesBufferStack.requires(branches, buffers)
-    ensures BranchesBufferStack(branches, buffers).QueryUpTo(key, count) == branches.Query(key, buffers[..count])
+  lemma QueryUpToEquivalent(a: BufferStack, b: BufferStack, key: Key, count: nat)
+    requires count <= |a.buffers|
+    requires count <= |b.buffers|
+    requires forall i:nat | i < count :: a.buffers[i].Query(key) == b.buffers[i].Query(key)
+    ensures a.QueryUpTo(key, count) == b.QueryUpTo(key, count)
   {
     if count > 0 {
-      var bufferstack := BranchesBufferStack(branches, buffers);
-      var branch := branches.GetBranch(buffers[count-1]);
-      var msg := if branch.Query(key).Some? then branch.Query(key).value else Update(NopDelta());
+      QueryUpToEquivalent(a, b, key, count-1);
+    }
+  }
 
-      assert bufferstack.buffers[count-1].Query(key) == msg;
-      assert buffers[..count-1] == DropLast(buffers[..count]);
-
-      BranchesBufferStackQueryConsistent(key, branches, buffers, count-1);
+  lemma BufferStackQueryAdditive(left: BufferStack, right: BufferStack, key: Key, count: nat)
+    requires count <= |left.buffers| + |right.buffers|
+    ensures 
+      && var out := BufferStack(left.buffers + right.buffers);
+      && (count <= |left.buffers| ==> out.QueryUpTo(key, count) == left.QueryUpTo(key, count))
+      && (|left.buffers| < count ==> out.QueryUpTo(key, count) == Merge(left.Query(key), right.QueryUpTo(key, count-|left.buffers|)))
+  {
+    var out := BufferStack(left.buffers + right.buffers);
+    if count <= |left.buffers| {
+      QueryUpToEquivalent(out, left, key, count);
+    } else {
+      BufferStackQueryAdditive(left, right, key, count-1);
     }
   }
 
@@ -221,28 +267,14 @@ module BranchedBetreeRefinement {
     ensures ireceipt.ResultLinkedAt(i)
     {
       assert receipt.ResultLinkedAt(i);  // trigger
-      
-      var key := ireceipt.key;
-      var branched := receipt.lines[i].branched;
-      var linked := ireceipt.lines[i].linked;
 
+      var branched := receipt.lines[i].branched;
+      var key := ireceipt.key;
       var node := branched.Root();
       var start := node.ActiveBuffersForKey(key);
-      var activeBuffers := node.buffers[start..];
-      var activeBufferStack := BranchesBufferStack(branched.branches, activeBuffers);
 
-      assert activeBuffers[..|activeBuffers|] == activeBuffers;
-      BranchesBufferStackQueryConsistent(key, branched.branches, activeBuffers, |activeBuffers|);
-      assert activeBufferStack.Query(key) == branched.branches.Query(key, activeBuffers);
-
-      var buffers := linked.Root().buffers;
-      ActiveBuffersForKeyConsistent(node, key, start);
-
-      var right := buffers.SliceRight(start);
-      right.QueryUpToEquivalent(key, activeBufferStack, |right.buffers|);
-      buffers.QueryEmptyLeft(key, start, |buffers.buffers|);
-
-      assert ireceipt.ResultLinkedAt(i);  // trigger
+      assert node.buffers[start..|node.buffers|] == node.buffers[start..]; //trigger
+      QueryCommutesWithIBufferStack(node, branched.branches, key, start, |node.buffers|);
     }
   }
 
@@ -261,12 +293,78 @@ module BranchedBetreeRefinement {
       case InternalFlushMemtableStep(newRootAddr, _) => LinkedBetree.InternalFlushMemtableStep(newRootAddr)
       case InternalFlushStep(path, childIdx, targetAddr, targetChildAddr, pathAddrs, _) =>
             LinkedBetree.InternalFlushStep(IPath(path), childIdx, targetAddr, targetChildAddr, pathAddrs)
-      case InternalCompactStep(path, compactStart, compactEnd, _, targetAddr, pathAddrs) => (
+      case InternalCompactStep(path, compactStart, compactEnd, compactedBranch, targetAddr, pathAddrs) => (
           var linked := IBranchedBetree(path.Target());
-          var compactedBuffers := linked.Root().buffers.buffers[compactStart..compactEnd];
+          var buffers := linked.Root().buffers.buffers;
+          var compactedBuffers := buffers[..compactStart] + [compactedBranch.I().I()] + buffers[compactEnd..];
           LinkedBetree.InternalCompactStep(IPath(path), BufferStack(compactedBuffers), targetAddr, pathAddrs))
       case InternalPruneBranchesStep(_) => LinkedBetree.InternalNoOpStep()
       case InternalNoOpStep() => LinkedBetree.InternalNoOpStep()
+    }
+  }
+
+  lemma InternalCompactStepWF(step: Step) 
+    requires step.WF()
+    requires step.InternalCompactStep?
+    ensures IStepDefn(step).WF()
+  {
+    var istep := IStepDefn(step);
+    var path := step.path;
+    TargetCommutesWithI(path);
+    assert istep.path.Valid();
+
+    var linked := istep.path.Target();
+    var branched := path.Target();
+    var start := step.compactStart;
+    var end := step.compactEnd;
+
+    var linkedBuffers := linked.Root().buffers.buffers;
+    var compactedBuffers := istep.compactedBuffers.buffers;
+    var delta := end - start - 1;
+
+    var left := BufferStack(linkedBuffers[..start]);
+    var left' := BufferStack(compactedBuffers[..start]);
+    var middle := BufferStack(linkedBuffers[start..end]);
+    var middle' := BufferStack([compactedBuffers[start]]);
+    var right := BufferStack(linkedBuffers[end..]);
+    var right' := BufferStack(compactedBuffers[start+1..]);
+
+    assert left.buffers + middle.buffers == linkedBuffers[..end]; // trigger
+    assert left'.buffers + middle'.buffers == compactedBuffers[..start+1]; // trigger
+    assert linkedBuffers[..end] + right.buffers == linkedBuffers; // trigger
+    assert compactedBuffers[..start+1] + right'.buffers == compactedBuffers; // trigger
+    assert linkedBuffers[..|linkedBuffers|] == linkedBuffers; // trigger
+    assert compactedBuffers[..|compactedBuffers|] == compactedBuffers; // trigger
+
+    forall k | AnyKey(k)
+      ensures linked.Root().buffers.Query(k) == istep.compactedBuffers.Query(k) 
+    {
+      QueryUpToEquivalent(left, left', k, start);
+      assert left.Query(k) == left'.Query(k);
+
+      QueryUpToEquivalent(right, right', k, |right.buffers|);
+      assert right.Query(k) == right'.Query(k);
+
+      var result := 
+        if step.compactedBranch.Query(k).Some? 
+        then step.compactedBranch.Query(k).value
+        else Update(NopDelta());
+
+      assert middle'.QueryUpTo(k, 0) == Update(NopDelta()); // trigger
+      assert middle'.Query(k) == result;
+      assume middle.Query(k) == result; // TODO: prove
+      
+      // this is our condition: 
+      // && (forall key | KeyInDomain(key) && ActiveBuffersForKey(key) < compactEnd ::
+      //     && var result := if compactedBranch.Query(key).Some? then compactedBranch.Query(key).value else Update(NopDelta());
+      //     && branches.Query(key, buffers[compactStart..compactEnd]) == result)
+      // && (forall key | !KeyInDomain(key) || ActiveBuffersForKey(key) >= compactEnd :: compactedBranch.Query(key).None?)
+
+      BufferStackQueryAdditive(left, middle, k, end);
+      BufferStackQueryAdditive(BufferStack(linkedBuffers[..end]), right, k, |linkedBuffers|);
+
+      BufferStackQueryAdditive(left', middle', k, start+1);
+      BufferStackQueryAdditive(BufferStack(compactedBuffers[..start+1]), right', k, |compactedBuffers|);
     }
   }
 
@@ -279,81 +377,7 @@ module BranchedBetreeRefinement {
       case QueryStep(receipt) => { IReceiptValid(receipt); }
       case InternalSplitStep(path, request, newAddrs, pathAddrs) => { TargetCommutesWithI(path); }
       case InternalFlushStep(path, childIdx, _, _, _, _) => { TargetCommutesWithI(path); }
-      case InternalCompactStep(path, compactStart, compactEnd, compactedBranch, _, _) => { 
-        TargetCommutesWithI(path);
-
-        var linked := istep.path.Target();
-        var branched := path.Target();
-        var node := branched.Root();
-
-        assert branched.branches == path.branched.branches;
-        assert node.CompactedBranchEquivalence(branched.branches, compactStart, compactEnd, compactedBranch);
-         
-        // var compactedBranch := branched.Root().buffers[compactStart..compactEnd];
-        
-        assert IPath(path) == istep.path;
-        assert IBranchedBetree(branched) == linked;
-        
-        forall k | AnyKey(k)
-          ensures linked.Root().buffers.Query(k) == istep.compactedBuffers.Query(k) 
-        {
-          // ActiveBuffersForKeyConsistent(node, k, node.ActiveBuffersForKey(k));
-
-
-    // ensures forall i:nat | i < start :: key !in ActiveBufferKeys(node, i)
-    // ensures forall i:nat | start <= i < |node.buffers| :: key in ActiveBufferKeys(node, i)
-
-          if node.KeyInDomain(k) && (compactStart <= node.ActiveBuffersForKey(k) < compactEnd) {
-            assume false;
-
-            assume linked.Root().buffers.Query(k) == branched.branches.Query(k, node.buffers[compactStart..compactEnd]);
-
-            assume compactedBranch.Query(k).Some?;
-
-            assume istep.compactedBuffers.Query(k) == compactedBranch.Query(k).value;
-
-            assert branched.branches.Query(k, node.buffers[compactStart..compactEnd]) == compactedBranch.Query(k).value;
-
-
-          } else {
-            
-            assume false;
-          }
-
-
-      
-
-        //   assume linkedNode.buffers.Query(k) == 
-
-        //   // we want to show linkednode buffers equivalent to the other buffers
-        //   // and the compactedbuffers too 
-
-        //   // ah nah that's not how you do it , I understand lol
-        //   // forall i:nat | i < |linkedNode.buffers.buffers|
-        //   //   ensures linkedNode.buffers.buffers[i].Query(k) == istep.compactedBuffers.buffers[i].Query(k)
-        //   // {
-          // assume false;
-        //   // }
-
-        //   // linkedNode.buffers.QueryUpToEquivalent(k, istep.compactedBuffers, |linkedNode.buffers.buffers|);
-        }
-
-        //   ensures forall i:nat |:: buffers[i].Query(key) == other.buffers[i].Query(key)
-
-        // assume linkedNode.buffers.Equivalent(istep.compactedBuffers);
-
-        // assume false; 
-
-
-        // assert step.path.Target().Root().CompactedBranchEquivalence(v.branched.branches, step.compactStart, step.compactEnd, step.compactedBranch);
-        // assert equivalence
-        // assume istep.path.Target().Root().buffers.Equivalent(istep.compactedBuffers);
-        // we need 
-
-      //   IPathValid(step.path);
-      //   TargetCommutesWithI(step.path);
-        // assert istep.WF();  // case boilerplate
-      }
+      case InternalCompactStep(path, compactStart, compactEnd, compactedBranch, _, _) => { InternalCompactStepWF(step); }
       case _ =>    {  assert istep.WF(); }
     }
   }
@@ -578,13 +602,22 @@ module BranchedBetreeRefinement {
     assert branch.ReachableAddrs() == outBranch.ReachableAddrs();
   }
      
-//      lemma RemoveBranchWF(root: Address) 
-//       requires RemoveBranch.requires(root)
-//       ensures RemoveBranch(root).WF() 
-//     {
-//       assume false;
+  lemma RemoveBranchWF(branches: Branches, root: Address) 
+    requires branches.RemoveBranch.requires(root)
+    ensures branches.RemoveBranch(root).WF() 
+  {
+    var out := branches.RemoveBranch(root);
+    var branch := branches.GetBranch(root);
 
-//     }
+    assert (forall r | r in out.roots :: out.diskView.ValidAddress(r));
+    // TODO: prove this, likely need to connect Reachable Addrs to nodes in diskView
+    // this may require another predicate in WF that says things in diskview only reachable
+    // addrs of something have reference of it
 
-
+    // && diskView.WF() // ensures all nodes are connected // uh oh
+    // && (forall root | root in roots :: GetBranch(root).Acyclic()) // uh oh 
+    // && (forall root | root in roots :: GetBranch(root).AllKeysInRange()) // uhoh
+    // && BranchesDisjoint()
+    assume false;
+  }
 }

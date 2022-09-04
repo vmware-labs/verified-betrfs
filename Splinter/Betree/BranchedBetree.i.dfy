@@ -250,8 +250,10 @@ module BranchedBetreeMod
       requires compactStart < compactEnd <= |buffers|
       requires forall i:nat | compactStart <= i < compactEnd :: branches.ValidBranch(buffers[i])
     {
-      var compactedBranches := EmptyBranches().AddBranch(compactedBranch);
-      && (forall key : Key :: branches.Query(key, buffers[compactStart..compactEnd]) == compactedBranches.Query(key, [compactedBranch.root]))
+      && (forall key | KeyInDomain(key) && ActiveBuffersForKey(key) < compactEnd ::
+        && var result := if compactedBranch.Query(key).Some? then compactedBranch.Query(key).value else Update(NopDelta());
+        && branches.Query(key, buffers[compactStart..compactEnd]) == result)
+      && (forall key | !KeyInDomain(key) || ActiveBuffersForKey(key) >= compactEnd :: compactedBranch.Query(key).None?)
     }
   }
 
