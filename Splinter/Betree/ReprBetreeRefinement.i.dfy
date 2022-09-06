@@ -272,13 +272,14 @@ module ReprBetreeRefinement
     }
   }
 
+  // Theorem: path.Target() is not in tight diskview after substitution
   lemma SubstituteDeletesTarget(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
     requires path.CanSubstitute(replacement, pathAddrs)
     ensures path.Target().root.value !in path.Substitute(replacement, pathAddrs).BuildTightTree().diskView.entries
   {
     assume false;
   }
-
+  
   lemma ChildAtIdxCommutesWithBuildTight(linked: LinkedBetree, idx: nat, ranking: Ranking) 
     requires linked.Acyclic()
     requires linked.HasRoot()
@@ -295,6 +296,7 @@ module ReprBetreeRefinement
     assume false;
   }
 
+  // Theorem: BuildTight does not change reachable set
   lemma ReachableAddrsIgnoresBuildTight(linked: LinkedBetree, ranking: Ranking)
     requires linked.Acyclic()
     requires linked.ValidRanking(ranking)
@@ -306,6 +308,7 @@ module ReprBetreeRefinement
     assume false;
   }
 
+  // Wrapper around ReachableAddrsIgnoresBuildTight
   lemma RepresentationIgnoresBuildTight(linked: LinkedBetree)
     requires linked.Acyclic()
     ensures linked.BuildTightTree().Acyclic()
@@ -315,6 +318,7 @@ module ReprBetreeRefinement
     assume false;
   }
 
+  // Theorem: path.Substitute(..)'s ranking is also valid for path.Subpath().Substitute(..)
   lemma SubpathValidRanking(path: Path, replacement: LinkedBetree, ranking: Ranking, pathAddrs: PathAddrs)
     requires path.Valid()
     requires 0 < path.depth
@@ -327,6 +331,8 @@ module ReprBetreeRefinement
     assume false;
   }
 
+  // Theorem: The set of reachable addrs on path.Subpath().Substitute(..) is the same as
+  // that on path.Substitute(..).ChildAtIdx(routeIdx)
   lemma ReachableAddrsOnSubpathRoute(path: Path, replacement: LinkedBetree, ranking: Ranking, routeIdx: nat, pathAddrs: PathAddrs)
     requires path.Valid()
     requires 0 < path.depth
@@ -340,10 +346,12 @@ module ReprBetreeRefinement
       == path.Subpath().Substitute(replacement, pathAddrs[1..]).ReachableAddrsUsingRanking(ranking)
   {
     assume false;
-    // path.Substitute(replacement, pathAddrs).ChildAtIdx(subIdx).ReachableAddrsUsingRanking(ranking);
+    // path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).ReachableAddrsUsingRanking(ranking);
     // path.Subpath().Substitute(replacement, pathAddrs[1..]).ReachableAddrsUsingRanking(ranking);
   }
 
+  // Theorem: Substitution does not change representation of subtrees not on the 
+  // substitution path
   lemma ReachableAddrsNotOnSubpathRoute(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, idx: nat) 
     requires path.Valid()
     requires 0 < path.depth
@@ -359,6 +367,7 @@ module ReprBetreeRefinement
     assume false;
   }
 
+  // Theorem: Representation includes subpath representation
   lemma RootRepresentationContainsSubpathRepresentation(path: Path) 
     requires path.Valid()
     requires path.linked.Acyclic()
@@ -369,6 +378,7 @@ module ReprBetreeRefinement
     assume false;
   }
 
+  // Theorem: Representation contains child representation
   lemma ParentRepresentationContainsChildRepresentation(linked:LinkedBetree, idx: nat)
     requires linked.Acyclic()
     requires linked.HasRoot()
@@ -387,6 +397,7 @@ module ReprBetreeRefinement
     // assert addr in path.linked.Representation();
   }
 
+  // Theorem: Subtree representations have null intersections
   lemma SubtreeRepresentationsAreDisjoint(linked: LinkedBetree, i: nat, j: nat) 
     requires linked.Acyclic()
     requires linked.HasRoot()
@@ -400,16 +411,19 @@ module ReprBetreeRefinement
     assume false;
   }
 
-  lemma AddrsOnPathIsRootOrInRouteSubtree(path: Path, subIdx: nat)
+  // Theorem: path.AddrsOnPath() is either the current root, or in the 
+  // subtree of path.Subpath
+  lemma AddrsOnPathIsRootOrInRouteSubtree(path: Path, routeIdx: nat)
     requires path.Valid()
-    requires subIdx == Route(path.linked.Root().pivotTable, path.key)
-    ensures path.linked.ChildAtIdx(subIdx).Acyclic()
+    requires routeIdx == Route(path.linked.Root().pivotTable, path.key)
+    ensures path.linked.ChildAtIdx(routeIdx).Acyclic()
     ensures path.AddrsOnPath() <= 
-      {path.linked.root.value} + path.linked.ChildAtIdx(subIdx).Representation()
+      {path.linked.root.value} + path.linked.ChildAtIdx(routeIdx).Representation()
   {
     assume false;
   }
 
+  // Theorem: Any address in a subtree's representation cannot be the root of the parent tree
   lemma AddrInChildRepresentationImpliesNotRoot(linked: LinkedBetree, idx: nat, addr: Address)
     requires linked.Acyclic()
     requires linked.HasRoot()
@@ -427,47 +441,79 @@ module ReprBetreeRefinement
     //       assume addr != path.linked.root.value;   // this must be true because addr in path.linked.ChildAtIdx(idx).Representation();
   }
 
-  lemma AddrInSubstituteSubtreeCannotBeOldRoot(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, subIdx:nat, addr: Address)
+  // Theorem: Any address in a substituted subtree's representation cannot be the root 
+  // of the old parent tree
+  lemma AddrInSubstituteSubtreeCannotBeOldRoot(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, routeIdx:nat, addr: Address)
     requires path.Valid()
     requires 0 < path.depth
-    requires subIdx == Route(path.linked.Root().pivotTable, path.key)
+    requires routeIdx == Route(path.linked.Root().pivotTable, path.key)
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).WF()
-    requires path.Substitute(replacement, pathAddrs).ChildAtIdx(subIdx).Acyclic()
-    requires addr in path.Substitute(replacement, pathAddrs).ChildAtIdx(subIdx).Representation()
+    requires path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).Acyclic()
+    requires addr in path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).Representation()
     ensures addr != path.linked.root.value
   {
     assume false;
   }
 
-  lemma SubstitutedBranchRepresentation(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address, subTreeAddrs: seq<set<Address>>, subIdx: nat, ranking: Ranking)
+  // Theorem: pathAddrs is a subset of path.Substitute(replacement, pathAddrs)
+  lemma RepresentationAfterSubstituteIncludesPathAddrs(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
+    requires path.Valid()
+    requires path.CanSubstitute(replacement, pathAddrs)
+    ensures path.Substitute(replacement, pathAddrs).Acyclic()  // prereq
+    ensures Set(pathAddrs) <= path.Substitute(replacement, pathAddrs).Representation()
+  {
+    assume false;
+  }
+
+  // Theorem: Representation of path.Substitute(..) includes that of replacement
+  lemma RepresentationAfterSubstituteIncludesReplacement(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
+    requires path.Valid()
+    requires path.CanSubstitute(replacement, pathAddrs)
+    requires replacement.Acyclic()
+    ensures path.Substitute(replacement, pathAddrs).Acyclic()  // prereq
+    ensures replacement.Representation() <= path.Substitute(replacement, pathAddrs).Representation()
+  {
+    assume false;
+  }
+
+  // Theorem: Child at Route(path.linked.Root().pivotTable, path.key) is same as path.Subpath()
+  lemma SubpathEquivToChildAtRouteIdx(path: Path)
     requires path.Valid()
     requires 0 < path.depth
-    requires subIdx == Route(path.linked.Root().pivotTable, path.key);
+    ensures 
+      && var routeIdx := Route(path.linked.Root().pivotTable, path.key);
+      && path.linked.ChildAtIdx(routeIdx) == path.Subpath().linked
+  {
+    assume false;
+  }
+
+  // Expands path.Substitute().ChildAtIdx(routeIdx).Representation into its components
+  lemma SubstitutedBranchRepresentation(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address, routeIdx: nat)
+    requires path.Valid()
+    requires 0 < path.depth
+    requires routeIdx == Route(path.linked.Root().pivotTable, path.key);
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
-    requires path.Substitute(replacement, pathAddrs).ValidRanking(ranking)
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Acyclic()
 
-    // establish subTreeAddrs
-    requires 
-      && var node := path.linked.Root();
-      && var numChildren := |path.Substitute(replacement, pathAddrs).Root().children|;
-      && subTreeAddrs == seq(numChildren, i requires 0 <= i < numChildren => path.Substitute(replacement, pathAddrs).ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
-
-    // Induction hypothesis
+    // Induction hypothesis of ReprAfterSubstituteCompactReplacement
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Representation()
             == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath()  
     ensures path.Subpath().linked.Acyclic()
-    ensures subTreeAddrs[subIdx] 
+    ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).Acyclic()
+    ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).Representation()
       == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath()
   {
-    ChildAtIdxCommutesWithBuildTight(path.Substitute(replacement, pathAddrs), subIdx, ranking);
-    ReachableAddrsIgnoresBuildTight(path.Substitute(replacement, pathAddrs).ChildAtIdx(subIdx), ranking);
+    var ranking := path.Substitute(replacement, pathAddrs).TheRanking();
+    LinkedBetreeRefinement.ChildIdxAcyclic(path.Substitute(replacement, pathAddrs), routeIdx);
+    ChildAtIdxCommutesWithBuildTight(path.Substitute(replacement, pathAddrs), routeIdx, ranking);
+    ReachableAddrsIgnoresBuildTight(path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx), ranking);
     SubpathValidRanking(path, replacement, ranking, pathAddrs);
     ReachableAddrsIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]), ranking);
-    ReachableAddrsOnSubpathRoute(path, replacement, ranking, subIdx, pathAddrs);
+    ReachableAddrsOnSubpathRoute(path, replacement, ranking, routeIdx, pathAddrs);
     LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.Subpath().Substitute(replacement, pathAddrs[1..]), path.Subpath().Substitute(replacement, pathAddrs[1..]).TheRanking(), ranking);
+    LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx), path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).TheRanking(), ranking);
   }
 
   // Tony: this lemma is sprawling massive...
@@ -502,12 +548,12 @@ module ReprBetreeRefinement
       // assert path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
       //       == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath();
       var node := path.linked.Root();
-      var subIdx := Route(node.pivotTable, path.key);
+      var routeIdx := Route(node.pivotTable, path.key);
       var numChildren := |path.Substitute(replacement, pathAddrs).BuildTightTree().Root().children|;
       var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => path.Substitute(replacement, pathAddrs).BuildTightTree().ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
       Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
       ReprAfterSubstituteCompactReplacementInduction1(path, replacement, pathAddrs, replacementAddr);
-      ReprAfterSubstituteCompactReplacementInduction2(path, compactedBuffers, replacement, pathAddrs, replacementAddr, ranking);
+      ReprAfterSubstituteCompactReplacementInduction2(path, replacement, pathAddrs, replacementAddr);
     }
   }
 
@@ -525,7 +571,7 @@ module ReprBetreeRefinement
 
     // Induction hypothesis
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
-      == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath();
+      == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath()
     ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Representation() 
         <= path.linked.Representation() + Set(pathAddrs) + {replacementAddr} - path.AddrsOnPath()
   {
@@ -544,15 +590,16 @@ module ReprBetreeRefinement
         Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
         var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
         LinkedBetreeRefinement.ChildIdxAcyclic(linkedAftSubst, idx);
-        var subIdx := Route(path.linked.Root().pivotTable, path.key);
-        if idx == subIdx {  
+        var routeIdx := Route(path.linked.Root().pivotTable, path.key);
+        if idx == routeIdx {  
           // If addr is in the subtree that is swapped in during substitution
           RepresentationIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]));
-          SubstitutedBranchRepresentation(path, replacement, pathAddrs, replacementAddr, subTreeAddrs, subIdx, ranking);
+          SubstitutedBranchRepresentation(path, replacement, pathAddrs, replacementAddr, routeIdx);
+          LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx), path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).TheRanking(), ranking);
           RootRepresentationContainsSubpathRepresentation(path);
           assert addr !in path.AddrsOnPath() by {  // trigger
-            LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linkedAftSubst.ChildAtIdx(subIdx), linkedAftSubst.ChildAtIdx(subIdx).TheRanking(), ranking);
-            AddrInSubstituteSubtreeCannotBeOldRoot(path, replacement, pathAddrs, subIdx, addr);
+            LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linkedAftSubst.ChildAtIdx(routeIdx), linkedAftSubst.ChildAtIdx(routeIdx).TheRanking(), ranking);
+            AddrInSubstituteSubtreeCannotBeOldRoot(path, replacement, pathAddrs, routeIdx, addr);
             assert addr != path.linked.root.value;
           }
         } else {  
@@ -564,35 +611,69 @@ module ReprBetreeRefinement
 
           // Next, Prove that addr not in path.AddrsOnPath();
           AddrInChildRepresentationImpliesNotRoot(path.linked, idx, addr);
-          AddrsOnPathIsRootOrInRouteSubtree(path, subIdx);
-          SubtreeRepresentationsAreDisjoint(path.linked, idx, subIdx);
+          AddrsOnPathIsRootOrInRouteSubtree(path, routeIdx);
+          SubtreeRepresentationsAreDisjoint(path.linked, idx, routeIdx);
         }
       }
     }
   }
 
-  lemma ReprAfterSubstituteCompactReplacementInduction2(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address, ranking: Ranking)
+  // This juicy lemma requires a lot of juice
+  lemma {:timeLimitMultiplier 3} ReprAfterSubstituteCompactReplacementInduction2(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address)
     requires path.Valid()
     requires 0 < path.depth
-    requires path.Target().Root().buffers.Equivalent(compactedBuffers)
     requires path.Target().diskView.IsFresh({replacementAddr})
-    // requires replacement == LinkedBetreeMod.InsertCompactReplacement(path.Target(), compactedBuffers, replacementAddr)  // don't need this now!
     requires path.CanSubstitute(replacement, pathAddrs)
-
     requires path.Substitute(replacement, pathAddrs).Acyclic()
-    requires path.Substitute(replacement, pathAddrs).ValidRanking(ranking)
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
-
+    requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Acyclic()
+    requires replacement.Acyclic()
+    requires replacementAddr in replacement.Representation()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Acyclic()
 
-    // Induction hypothesis
+    // Induction hypothesis of ReprAfterSubstituteCompactReplacement
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
-      == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath();
+      == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath()
 
     ensures path.linked.Representation() + Set(pathAddrs) + {replacementAddr} - path.AddrsOnPath()
       <= path.Substitute(replacement, pathAddrs).BuildTightTree().Representation()
   {
-    assume false;
+    forall addr | addr in path.linked.Representation() + Set(pathAddrs) + {replacementAddr} - path.AddrsOnPath()
+    ensures addr in path.Substitute(replacement, pathAddrs).Representation()
+    {
+      if addr in Set(pathAddrs) {
+        RepresentationAfterSubstituteIncludesPathAddrs(path, replacement, pathAddrs);
+      } else if addr == replacementAddr {
+        RepresentationAfterSubstituteIncludesReplacement(path, replacement, pathAddrs);
+      } else if addr in path.linked.Representation() {
+        /* This is the tricky case
+        addr is not path.linked.root, because root is in path.AddrsOnPath().
+        Hence, addr is in one of the children subtrees of path.linked.Root()
+        If addr is not on substitution path, the addr in path.Substitute() by ReachableAddrsNotOnSubpathRoute
+        Else, addr is in substitution path, and must be in path.Subpath().linked.Representation().
+        Then by SubstitutedBranchRepresentation, addr is in subTreeAddrs[routeIdx] of path.Substitute().Repr().
+        Then addr is in path.Substitute(..).Representation() by definition of Representation
+        */
+        var numChildren := |path.linked.Root().children|;
+        var oldSubTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => path.linked.ChildAtIdx(i).ReachableAddrsUsingRanking(path.linked.TheRanking()));
+        Sets.UnionSeqOfSetsSoundness(oldSubTreeAddrs);
+        var idx :| 0 <= idx < numChildren && addr in oldSubTreeAddrs[idx];
+        var routeIdx := Route(path.linked.Root().pivotTable, path.key);
+        LinkedBetreeRefinement.ChildIdxAcyclic(path.linked, idx);
+        LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.linked.ChildAtIdx(idx), path.linked.ChildAtIdx(idx).TheRanking(), path.linked.TheRanking());
+        if idx != routeIdx {
+          ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx); 
+          ParentRepresentationContainsChildRepresentation(path.Substitute(replacement, pathAddrs), idx);
+        } else {
+          // Else addr is on substitution path
+          SubpathEquivToChildAtRouteIdx(path);
+          RepresentationIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]));
+          SubstitutedBranchRepresentation(path, replacement, pathAddrs, replacementAddr, routeIdx);
+          ParentRepresentationContainsChildRepresentation(path.Substitute(replacement, pathAddrs), routeIdx);
+        }
+      }
+    }
+    RepresentationIgnoresBuildTight(path.Substitute(replacement, pathAddrs));
   }
 
   lemma ReprAfterSubstituteCompactReplacementBaseCase(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address, ranking: Ranking)
