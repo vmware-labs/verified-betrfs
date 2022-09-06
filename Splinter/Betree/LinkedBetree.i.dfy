@@ -706,7 +706,6 @@ module LinkedBetreeMod
     // Returns the address of all the nodes on the path, from root up to and including target
     function AddrsOnPath() : (out: set<Address>)
       requires Valid()
-      ensures forall addr | addr in out :: addr in linked.diskView.entries
       decreases depth
     {
       if depth == 0 then {linked.root.value}
