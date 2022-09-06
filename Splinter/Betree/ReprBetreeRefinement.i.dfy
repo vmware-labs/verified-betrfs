@@ -488,6 +488,13 @@ module ReprBetreeRefinement
     assume false;
   }
 
+  lemma AddrsOnPathInDiskView(path: Path) 
+    requires path.Valid()
+    ensures path.AddrsOnPath() <= path.linked.diskView.entries.Keys
+  {
+    assume false;
+  }
+
   // Expands path.Substitute().ChildAtIdx(routeIdx).Representation into its components
   lemma SubstitutedBranchRepresentation(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address, routeIdx: nat)
     requires path.Valid()
@@ -614,6 +621,8 @@ module ReprBetreeRefinement
           AddrsOnPathIsRootOrInRouteSubtree(path, routeIdx);
           SubtreeRepresentationsAreDisjoint(path.linked, idx, routeIdx);
         }
+      } else {
+        AddrsOnPathInDiskView(path);
       }
     }
   }
@@ -718,26 +727,11 @@ module ReprBetreeRefinement
     var newAddrs := Set(step.pathAddrs) + {step.targetAddr};
     var discardAddrs := step.path.AddrsOnPath();
     var replacement := LinkedBetreeMod.InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr);
-    LinkedBetreeRefinement.ValidRankingAllTheWayDown(linked.TheRanking(), step.path);
-    var replacementRanking := LinkedBetreeRefinement.RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, linked.TheRanking(), step.targetAddr);
+    var linkedRanking := LinkedBetreeRefinement.BuildTightRanking(linked, linked.TheRanking());
+    LinkedBetreeRefinement.ValidRankingAllTheWayDown(linkedRanking, step.path);
+    var replacementRanking := LinkedBetreeRefinement.RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, linkedRanking, step.targetAddr);
     if linked.HasRoot() {
-      calc {
-        v'.betree.linked.Representation();
-        step.path.Substitute(
-            replacement,
-            step.pathAddrs
-          ).BuildTightTree().Representation();
-        
-          { 
-            assume Set(step.pathAddrs) !! replacementRanking.Keys;  // TODO: framing argument?
-            ReprAfterSubstituteCompactReplacement(step.path, step.compactedBuffers, replacement, replacementRanking, step.pathAddrs, step.targetAddr); 
-          }
-
-        linked.ReachableAddrsUsingRanking(linked.TheRanking()) + newAddrs - discardAddrs;
-        v.repr + newAddrs - discardAddrs;
-        v'.repr;
-      }
-      assert ValidRepr(v');
+      ReprAfterSubstituteCompactReplacement(step.path, step.compactedBuffers, replacement, replacementRanking, step.pathAddrs, step.targetAddr); 
     }
   }
 
