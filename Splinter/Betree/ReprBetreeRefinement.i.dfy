@@ -271,14 +271,6 @@ module ReprBetreeRefinement
       BuildTightGivesTightWrtRepresentation(untightLinked);
     }
   }
-
-  // Theorem: path.Target() is not in tight diskview after substitution
-  lemma SubstituteDeletesTarget(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
-    requires path.CanSubstitute(replacement, pathAddrs)
-    ensures path.Target().root.value !in path.Substitute(replacement, pathAddrs).BuildTightTree().diskView.entries
-  {
-    assume false;
-  }
   
   lemma ChildAtIdxCommutesWithBuildTight(linked: LinkedBetree, idx: nat, ranking: Ranking) 
     requires linked.Acyclic()
@@ -439,6 +431,17 @@ module ReprBetreeRefinement
     //       LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.linked.ChildAtIdx(idx), path.linked.TheRanking(), path.linked.ChildAtIdx(idx).TheRanking());
     //       // assert addr in path.linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(path.linked.TheRanking());
     //       assume addr != path.linked.root.value;   // this must be true because addr in path.linked.ChildAtIdx(idx).Representation();
+  }
+
+  // Theorem: Contrapositive of AddrInChildRepresentationImpliesNotRoot
+  lemma RootAddrNotInChildRepresentation(linked: LinkedBetree, idx: nat)
+    requires linked.Acyclic()
+    requires linked.HasRoot()
+    requires linked.Root().ValidChildIndex(idx)
+    requires linked.ChildAtIdx(idx).Acyclic()
+    ensures linked.root.value !in linked.ChildAtIdx(idx).Representation()
+  {
+    assume false;
   }
 
   // Theorem: Any address in a substituted subtree's representation cannot be the root 
@@ -710,9 +713,27 @@ module ReprBetreeRefinement
     }
     Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
     Sets.UnionSeqOfSetsSoundness(subTreeAddrs');
-    SubstituteDeletesTarget(path, replacement, pathAddrs);
     LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.linked, ranking, path.linked.TheRanking());
     LinkedBetreeRefinement.ReachableAddrIgnoresRanking(replacement.BuildTightTree(), ranking, replacement.BuildTightTree().TheRanking());
+    assert path.Target().root.value !in path.Substitute(replacement, pathAddrs).Representation() 
+    by {
+      RepresentationIgnoresBuildTight(path.Substitute(replacement, pathAddrs));
+      var subs := seq(numChildren, i requires 0 <= i < numChildren => replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(replacement.TheRanking()));
+      forall i | 0 <= i < numChildren 
+      ensures path.Target().root.value !in subs[i] {
+        ChildAtIdxCommutesWithBuildTight(replacement, i , ranking);
+        ReachableAddrsIgnoresBuildTight(replacement.ChildAtIdx(i), ranking);
+        assert subTreeAddrs'[i] == replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking);  // trigger
+        LinkedBetreeRefinement.ReachableAddrIgnoresRanking(replacement.ChildAtIdx(i), ranking, replacement.TheRanking());
+        assert subs[i] == subTreeAddrs[i];  // trigger
+        LinkedBetreeRefinement.ChildIdxAcyclic(path.linked, i);
+        RootAddrNotInChildRepresentation(path.linked, i);
+        LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.linked.ChildAtIdx(i), ranking, path.linked.ChildAtIdx(i).TheRanking());
+      }
+      Sets.UnionSeqOfSetsSoundness(subs);
+      assert path.Target().root.value !in replacement.Representation();  // trigger
+    }
+    RepresentationIgnoresBuildTight(path.Substitute(replacement, pathAddrs));
   }
 
   lemma InternalCompactMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
