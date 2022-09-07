@@ -284,8 +284,11 @@ module ReprBetreeRefinement
     ensures linked.ChildAtIdx(idx).BuildTightTree().ReachableAddrsUsingRanking(ranking)
         == linked.BuildTightTree().ChildAtIdx(idx).ReachableAddrsUsingRanking(ranking)
   {
-    // By ReachableAddrsInAgreeingDisks
-    assume false;
+    LinkedBetreeRefinement.BuildTightPreservesWF(linked, ranking);
+    LinkedBetreeRefinement.BuildTightPreservesWF(linked.ChildAtIdx(idx), ranking);
+    assert linked.ChildAtIdx(idx).BuildTightTree().ValidRanking(ranking);  // trigger
+    assert linked.BuildTightTree().ChildAtIdx(idx).ValidRanking(ranking);  // trigger
+    ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(idx).BuildTightTree(), linked.BuildTightTree().ChildAtIdx(idx), ranking);
   }
 
   // Theorem: BuildTight does not change reachable set
@@ -297,7 +300,8 @@ module ReprBetreeRefinement
     ensures linked.BuildTightTree().ReachableAddrsUsingRanking(ranking)
       == linked.ReachableAddrsUsingRanking(ranking)
   {
-    assume false;
+    LinkedBetreeRefinement.BuildTightMaintainsRankingValidity(linked, ranking);
+    ReachableAddrsInAgreeingDisks(linked, linked.BuildTightTree(), ranking);
   }
 
   // Wrapper around ReachableAddrsIgnoresBuildTight
@@ -307,7 +311,10 @@ module ReprBetreeRefinement
     ensures linked.BuildTightTree().Representation()
       == linked.Representation()
   {
-    assume false;
+    var ranking := linked.TheRanking();
+    LinkedBetreeRefinement.BuildTightMaintainsRankingValidity(linked, ranking);
+    LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linked.BuildTightTree(), linked.BuildTightTree().TheRanking(), ranking);
+    ReachableAddrsIgnoresBuildTight(linked, ranking);
   }
 
   // Theorem: path.Substitute(..)'s ranking is also valid for path.Subpath().Substitute(..)
