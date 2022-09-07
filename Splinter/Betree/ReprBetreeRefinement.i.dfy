@@ -67,8 +67,8 @@ module ReprBetreeRefinement
       forall i | 0 <= i < numChildren 
       ensures t1.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking) == t2.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking)
       {
-        LinkedBetreeRefinement.ChildIdxAcyclic(t1, i);
-        LinkedBetreeRefinement.ChildIdxAcyclic(t2, i);
+        LinkedBetreeRefinement.ChildAtIdxAcyclic(t1, i);
+        LinkedBetreeRefinement.ChildAtIdxAcyclic(t2, i);
         ReachableAddrsInAgreeingDisks(t1.ChildAtIdx(i), t2.ChildAtIdx(i), ranking);
       }
       var t1SubAddrs := seq(numChildren, i requires 0 <= i < numChildren => t1.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
@@ -94,7 +94,7 @@ module ReprBetreeRefinement
       var numChildren := |linked'.Root().children|;
       var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked'.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
       Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
-      LinkedBetreeRefinement.ChildIdxAcyclic(linked', 0);
+      LinkedBetreeRefinement.ChildAtIdxAcyclic(linked', 0);
       ReachableAddrsInAgreeingDisks(linked, linked'.ChildAtIdx(0), newRanking);
       LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linked', linked'.TheRanking(), newRanking);
       assert v'.repr == v'.betree.linked.Representation();
@@ -180,8 +180,8 @@ module ReprBetreeRefinement
             var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
             forall i | 0 <= i < numChildren 
             ensures subTreeAddrs'[i] ==  subTreeAddrs[i] {
-              LinkedBetreeRefinement.ChildIdxAcyclic(linked, i);
-              LinkedBetreeRefinement.ChildIdxAcyclic(linked', i);
+              LinkedBetreeRefinement.ChildAtIdxAcyclic(linked, i);
+              LinkedBetreeRefinement.ChildAtIdxAcyclic(linked', i);
               ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(i), linked'.ChildAtIdx(i), newRanking);
             }
             Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
@@ -234,7 +234,7 @@ module ReprBetreeRefinement
         var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
         Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
         var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
-        LinkedBetreeRefinement.ChildIdxAcyclic(linked, idx);
+        LinkedBetreeRefinement.ChildAtIdxAcyclic(linked, idx);
         LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linked.ChildAtIdx(idx), ranking, linked.ChildAtIdx(idx).TheRanking());
         BuildTightRepresentationContainsDiskView(linked.ChildAtIdx(idx), ranking);  // apply induction hypothesis
         LinkedBetreeRefinement.BuildTightMaintainsRankingValidity(linked.ChildAtIdx(idx), ranking);
@@ -315,19 +315,6 @@ module ReprBetreeRefinement
     LinkedBetreeRefinement.BuildTightMaintainsRankingValidity(linked, ranking);
     LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linked.BuildTightTree(), linked.BuildTightTree().TheRanking(), ranking);
     ReachableAddrsIgnoresBuildTight(linked, ranking);
-  }
-
-  // Theorem: path.Substitute(..)'s ranking is also valid for path.Subpath().Substitute(..)
-  lemma SubpathValidRanking(path: Path, replacement: LinkedBetree, ranking: Ranking, pathAddrs: PathAddrs)
-    requires path.Valid()
-    requires 0 < path.depth
-    requires path.CanSubstitute(replacement, pathAddrs);
-    requires path.Substitute(replacement, pathAddrs).WF()
-    requires path.Substitute(replacement, pathAddrs).ValidRanking(ranking)
-    ensures path.Subpath().Substitute(replacement, pathAddrs[1..]).WF()
-    ensures path.Subpath().Substitute(replacement, pathAddrs[1..]).ValidRanking(ranking)
-  {
-    assume false;
   }
 
   // Theorem: The set of reachable addrs on path.Subpath().Substitute(..) is the same as
@@ -434,7 +421,7 @@ module ReprBetreeRefinement
     assume false;
     // assert addr in path.linked.ChildAtIdx(idx).Representation();
     //       assert addr in path.linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(path.linked.ChildAtIdx(idx).TheRanking());
-    //       LinkedBetreeRefinement.ChildIdxAcyclic(path.linked, idx);
+    //       LinkedBetreeRefinement.ChildAtIdxAcyclic(path.linked, idx);
     //       LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.linked.ChildAtIdx(idx), path.linked.TheRanking(), path.linked.ChildAtIdx(idx).TheRanking());
     //       // assert addr in path.linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(path.linked.TheRanking());
     //       assume addr != path.linked.root.value;   // this must be true because addr in path.linked.ChildAtIdx(idx).Representation();
@@ -506,13 +493,22 @@ module ReprBetreeRefinement
   }
 
   // Expands path.Substitute().ChildAtIdx(routeIdx).Representation into its components
-  lemma SubstitutedBranchRepresentation(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address, routeIdx: nat)
+  lemma SubstitutedBranchRepresentation(path: Path, replacement: LinkedBetree, 
+    pathAddrs: PathAddrs, replacementAddr: Address, routeIdx: nat, ranking: Ranking)
     requires path.Valid()
     requires 0 < path.depth
     requires routeIdx == Route(path.linked.Root().pivotTable, path.key);
+    requires replacement.Acyclic()
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Acyclic()
+    // Requirements of RankingAfterSubstitution. Would be the result of some lemma such as RankingAfterInsertCompactReplacement
+    requires SeqHasUniqueElems(pathAddrs)
+    requires path.linked.diskView.IsFresh(Set(pathAddrs))
+    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires path.linked.root.value in ranking
+    requires replacement.ValidRanking(ranking)
+    requires Set(pathAddrs) !! ranking.Keys
 
     // Induction hypothesis of ReprAfterSubstituteCompactReplacement
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Representation()
@@ -522,19 +518,16 @@ module ReprBetreeRefinement
     ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).Representation()
       == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath()
   {
-    var ranking := path.Substitute(replacement, pathAddrs).TheRanking();
-    LinkedBetreeRefinement.ChildIdxAcyclic(path.Substitute(replacement, pathAddrs), routeIdx);
-    ChildAtIdxCommutesWithBuildTight(path.Substitute(replacement, pathAddrs), routeIdx, ranking);
-    ReachableAddrsIgnoresBuildTight(path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx), ranking);
-    SubpathValidRanking(path, replacement, ranking, pathAddrs);
-    ReachableAddrsIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]), ranking);
-    ReachableAddrsOnSubpathRoute(path, replacement, ranking, routeIdx, pathAddrs);
-    LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.Subpath().Substitute(replacement, pathAddrs[1..]), path.Subpath().Substitute(replacement, pathAddrs[1..]).TheRanking(), ranking);
-    LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx), path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).TheRanking(), ranking);
+    var newRanking := LinkedBetreeRefinement.RankingAfterSubstitution(replacement, ranking, path, pathAddrs);
+    LinkedBetreeRefinement.ChildAtIdxAcyclic(path.Substitute(replacement, pathAddrs), routeIdx);    
+    LinkedBetreeRefinement.ChildAtIdxAcyclic(path.Substitute(replacement, pathAddrs), routeIdx);
+    LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx), path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).TheRanking(), newRanking);
+    ReachableAddrsOnSubpathRoute(path, replacement, newRanking, routeIdx, pathAddrs);
+    LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.Subpath().Substitute(replacement, pathAddrs[1..]), path.Subpath().Substitute(replacement, pathAddrs[1..]).TheRanking(), newRanking);
   }
 
   // Tony: this lemma is sprawling massive...
-  lemma ReprAfterSubstituteCompactReplacement(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)
+  lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacement(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)
     requires path.Valid()
     requires path.Target().Root().buffers.Equivalent(compactedBuffers)
     requires path.Target().diskView.IsFresh({replacementAddr})
@@ -569,22 +562,32 @@ module ReprBetreeRefinement
       var numChildren := |path.Substitute(replacement, pathAddrs).BuildTightTree().Root().children|;
       var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => path.Substitute(replacement, pathAddrs).BuildTightTree().ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
       Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
-      ReprAfterSubstituteCompactReplacementInduction1(path, replacement, pathAddrs, replacementAddr);
-      ReprAfterSubstituteCompactReplacementInduction2(path, replacement, pathAddrs, replacementAddr);
+      var tightRanking := LinkedBetreeRefinement.BuildTightRanking(path.linked, path.linked.TheRanking());
+      LinkedBetreeRefinement.ValidRankingAllTheWayDown(tightRanking, path);
+      var replacementRanking := 
+        LinkedBetreeRefinement.RankingAfterInsertCompactReplacement(path.Target(), compactedBuffers, tightRanking, replacementAddr);
+      ReprAfterSubstituteCompactReplacementInduction1(path, replacement, pathAddrs, replacementAddr, replacementRanking);
+      ReprAfterSubstituteCompactReplacementInduction2(path, replacement, pathAddrs, replacementAddr, replacementRanking);
     }
   }
 
   // This juicy lemma requires a lot of juice
-  lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacementInduction1(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address)
+  lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacementInduction1(path: Path, replacement: LinkedBetree, 
+      pathAddrs: PathAddrs, replacementAddr: Address, ranking: Ranking)
     requires path.Valid()
     requires 0 < path.depth
     requires path.Target().diskView.IsFresh({replacementAddr})
+    requires SeqHasUniqueElems(pathAddrs)
     requires path.linked.diskView.IsFresh(Set(pathAddrs))
     requires replacement.diskView.IsFresh(Set(pathAddrs))
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Acyclic()
+    // Requirements of Ranking. Would be the result of some lemma such as RankingAfterInsertCompactReplacement
+    requires path.linked.root.value in ranking
+    requires replacement.ValidRanking(ranking)
+    requires Set(pathAddrs) !! ranking.Keys
 
     // Induction hypothesis
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
@@ -601,28 +604,27 @@ module ReprBetreeRefinement
         // Here, addr is in one of the children subtrees of the new root. In this case, it
         // is either in one of the unchanged subtrees, or the one that is swapped in 
         // during substitution.
-        var ranking := linkedAftSubst.TheRanking();
         var numChildren := |linkedAftSubst.Root().children|;
-        var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linkedAftSubst.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+        var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linkedAftSubst.ChildAtIdx(i).ReachableAddrsUsingRanking(linkedAftSubst.TheRanking()));
         Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
         var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
-        LinkedBetreeRefinement.ChildIdxAcyclic(linkedAftSubst, idx);
+        LinkedBetreeRefinement.ChildAtIdxAcyclic(linkedAftSubst, idx);
         var routeIdx := Route(path.linked.Root().pivotTable, path.key);
         if idx == routeIdx {  
           // If addr is in the subtree that is swapped in during substitution
           RepresentationIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]));
-          SubstitutedBranchRepresentation(path, replacement, pathAddrs, replacementAddr, routeIdx);
-          LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx), path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).TheRanking(), ranking);
+          SubstitutedBranchRepresentation(path, replacement, pathAddrs, replacementAddr, routeIdx, ranking);
+          LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx), path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).TheRanking(), linkedAftSubst.TheRanking());
           RootRepresentationContainsSubpathRepresentation(path);
           assert addr !in path.AddrsOnPath() by {  // trigger
-            LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linkedAftSubst.ChildAtIdx(routeIdx), linkedAftSubst.ChildAtIdx(routeIdx).TheRanking(), ranking);
+            LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linkedAftSubst.ChildAtIdx(routeIdx), linkedAftSubst.ChildAtIdx(routeIdx).TheRanking(), linkedAftSubst.TheRanking());
             AddrInSubstituteSubtreeCannotBeOldRoot(path, replacement, pathAddrs, routeIdx, addr);
             assert addr != path.linked.root.value;
           }
         } else {  
           // Else addr is in one of the original subtrees
           // First, prove that addr in path.linked.Representation();
-          LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linkedAftSubst.ChildAtIdx(idx), linkedAftSubst.ChildAtIdx(idx).TheRanking(), ranking);
+          LinkedBetreeRefinement.ReachableAddrIgnoresRanking(linkedAftSubst.ChildAtIdx(idx), linkedAftSubst.ChildAtIdx(idx).TheRanking(), linkedAftSubst.TheRanking());
           ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx);
           ParentRepresentationContainsChildRepresentation(path.linked, idx);
 
@@ -638,10 +640,14 @@ module ReprBetreeRefinement
   }
 
   // This juicy lemma requires a lot of juice
-  lemma {:timeLimitMultiplier 3} ReprAfterSubstituteCompactReplacementInduction2(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address)
+  lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacementInduction2(path: Path, replacement: LinkedBetree, 
+    pathAddrs: PathAddrs, replacementAddr: Address, ranking: Ranking)
     requires path.Valid()
     requires 0 < path.depth
     requires path.Target().diskView.IsFresh({replacementAddr})
+    requires SeqHasUniqueElems(pathAddrs)
+    requires path.linked.diskView.IsFresh(Set(pathAddrs))
+    requires replacement.diskView.IsFresh(Set(pathAddrs))
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
@@ -649,6 +655,10 @@ module ReprBetreeRefinement
     requires replacement.Acyclic()
     requires replacementAddr in replacement.Representation()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Acyclic()
+    // Requirements of Ranking. Would be the result of some lemma such as RankingAfterInsertCompactReplacement
+    requires path.linked.root.value in ranking
+    requires replacement.ValidRanking(ranking)
+    requires Set(pathAddrs) !! ranking.Keys
 
     // Induction hypothesis of ReprAfterSubstituteCompactReplacement
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
@@ -678,7 +688,7 @@ module ReprBetreeRefinement
         Sets.UnionSeqOfSetsSoundness(oldSubTreeAddrs);
         var idx :| 0 <= idx < numChildren && addr in oldSubTreeAddrs[idx];
         var routeIdx := Route(path.linked.Root().pivotTable, path.key);
-        LinkedBetreeRefinement.ChildIdxAcyclic(path.linked, idx);
+        LinkedBetreeRefinement.ChildAtIdxAcyclic(path.linked, idx);
         LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.linked.ChildAtIdx(idx), path.linked.ChildAtIdx(idx).TheRanking(), path.linked.TheRanking());
         if idx != routeIdx {
           ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx); 
@@ -687,7 +697,7 @@ module ReprBetreeRefinement
           // Else addr is on substitution path
           SubpathEquivToChildAtRouteIdx(path);
           RepresentationIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]));
-          SubstitutedBranchRepresentation(path, replacement, pathAddrs, replacementAddr, routeIdx);
+          SubstitutedBranchRepresentation(path, replacement, pathAddrs, replacementAddr, routeIdx, ranking);
           ParentRepresentationContainsChildRepresentation(path.Substitute(replacement, pathAddrs), routeIdx);
         }
       }
@@ -714,8 +724,8 @@ module ReprBetreeRefinement
     var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => path.linked.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
     forall i | 0 <= i < numChildren 
     ensures subTreeAddrs'[i] ==  subTreeAddrs[i] {
-      LinkedBetreeRefinement.ChildIdxAcyclic(path.linked, i);
-      LinkedBetreeRefinement.ChildIdxAcyclic(replacement.BuildTightTree(), i);
+      LinkedBetreeRefinement.ChildAtIdxAcyclic(path.linked, i);
+      LinkedBetreeRefinement.ChildAtIdxAcyclic(replacement.BuildTightTree(), i);
       ReachableAddrsInAgreeingDisks(path.linked.ChildAtIdx(i), replacement.BuildTightTree().ChildAtIdx(i), ranking);
     }
     Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
@@ -733,7 +743,7 @@ module ReprBetreeRefinement
         assert subTreeAddrs'[i] == replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking);  // trigger
         LinkedBetreeRefinement.ReachableAddrIgnoresRanking(replacement.ChildAtIdx(i), ranking, replacement.TheRanking());
         assert subs[i] == subTreeAddrs[i];  // trigger
-        LinkedBetreeRefinement.ChildIdxAcyclic(path.linked, i);
+        LinkedBetreeRefinement.ChildAtIdxAcyclic(path.linked, i);
         RootAddrNotInChildRepresentation(path.linked, i);
         LinkedBetreeRefinement.ReachableAddrIgnoresRanking(path.linked.ChildAtIdx(i), ranking, path.linked.ChildAtIdx(i).TheRanking());
       }

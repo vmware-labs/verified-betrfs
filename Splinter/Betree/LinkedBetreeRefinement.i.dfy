@@ -60,7 +60,7 @@ module LinkedBetreeRefinement {
     ensures ILinkedBetreeNode(linked.ChildAtIdx(idx), r) == ILinkedBetreeNode(linked, r).children[idx]
   {}
 
-  lemma ChildIdxAcyclic(linked: LinkedBetree, idx: nat)
+  lemma ChildAtIdxAcyclic(linked: LinkedBetree, idx: nat)
     requires linked.Acyclic()
     requires linked.HasRoot()
     requires linked.Root().ValidChildIndex(idx)
@@ -70,7 +70,7 @@ module LinkedBetreeRefinement {
     assert linked.ChildAtIdx(idx).ValidRanking(ranking);
   }
 
-  lemma ChildKeyAcyclic(linked: LinkedBetree, key: Key)
+  lemma ChildForKeyAcyclic(linked: LinkedBetree, key: Key)
     requires linked.Acyclic()
     requires linked.HasRoot()
     requires linked.Root().KeyInDomain(key)
@@ -90,7 +90,7 @@ module LinkedBetreeRefinement {
       forall idx: nat | linked.Root().ValidChildIndex(idx)
       ensures ILinkedBetree(linked).children[idx].WF()
       {
-        ChildIdxAcyclic(linked, idx);
+        ChildAtIdxAcyclic(linked, idx);
         ILinkedWF(linked.ChildAtIdx(idx), ranking);
         ChildAtIdxCommutesWithI(linked, idx, linked.TheRanking());
       }
@@ -300,7 +300,7 @@ module LinkedBetreeRefinement {
     ensures linked.ChildForKey(key).Acyclic()  // prereq
     ensures ILinkedBetree(linked.ChildForKey(key)) == ILinkedBetree(linked).Child(key)
   {
-    ChildKeyAcyclic(linked, key);
+    ChildForKeyAcyclic(linked, key);
     if linked.ChildForKey(key).HasRoot() {
       calc {
         PivotBetree.BetreeNode(
@@ -377,7 +377,7 @@ module LinkedBetreeRefinement {
     ensures ireceipt.ChildLinkedAt(i)
     {
       assert receipt.Node(i).KeyInDomain(key);  // trigger
-      ChildKeyAcyclic(receipt.lines[i].linked, key);
+      ChildForKeyAcyclic(receipt.lines[i].linked, key);
       ChildKeyCommutesWithI(receipt.lines[i].linked, key);
       assert receipt.ChildLinkedAt(i);  // trigger
     }
@@ -1105,7 +1105,7 @@ module LinkedBetreeRefinement {
     ensures ILinkedBetreeNode(path.Substitute(replacement, pathAddrs).ChildAtIdx(idx), ranking)
                   == ILinkedBetree(path.linked.ChildAtIdx(idx));
   {
-    ChildIdxAcyclic(path.linked, idx);
+    ChildAtIdxAcyclic(path.linked, idx);
     var node := path.linked.Root();
     var subtree := path.Subpath().Substitute(replacement, pathAddrs[1..]);
     var newChildren := node.children[Route(node.pivotTable, path.key) := subtree.root];
@@ -1158,7 +1158,7 @@ module LinkedBetreeRefinement {
           == IPath(path).Substitute(ILinkedBetree(replacement)).children[i]
       {
         if i == Route(path.linked.Root().pivotTable, path.key) {
-          ChildIdxAcyclic(path.Substitute(replacement, pathAddrs), i);
+          ChildAtIdxAcyclic(path.Substitute(replacement, pathAddrs), i);
           ChildAtIdxCommutesWithI(path.Substitute(replacement, pathAddrs), i, path.Substitute(replacement, pathAddrs).TheRanking());
           ILinkedBetreeIgnoresRanking(
           path.Substitute(replacement, pathAddrs).ChildAtIdx(i),
@@ -1315,7 +1315,7 @@ module LinkedBetreeRefinement {
     {
       ILinkedBetreeIgnoresRanking(step.path.Target(), step.path.Target().TheRanking(), replacementRanking);
       ILinkedBetreeIgnoresRanking(replacement, replacement.TheRanking(), replacementRanking);
-      ChildIdxAcyclic(replacement, i);
+      ChildAtIdxAcyclic(replacement, i);
       var target := step.path.Target();
       if i == step.childIdx {
         var root := target.Root();
@@ -1471,7 +1471,7 @@ module LinkedBetreeRefinement {
     var itarget := ILinkedBetree(step.path.Target());
     var ichild := itarget.children[step.request.childIdx];
     assert PivotBetree.WFChildren(itarget.children);  // trigger
-    ChildIdxAcyclic(target, splitIdx);
+    ChildAtIdxAcyclic(target, splitIdx);
     ChildAtIdxCommutesWithI(target, splitIdx, target.TheRanking());
     ILinkedBetreeIgnoresRanking(child, target.TheRanking(), child.TheRanking());
     IndexinessCommutesWithI(child);
