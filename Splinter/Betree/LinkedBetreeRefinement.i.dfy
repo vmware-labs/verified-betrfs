@@ -796,7 +796,7 @@ module LinkedBetreeRefinement {
     BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
   }
 
-  lemma ReachableAddrIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking)
+  lemma ReachableAddrsIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking)
     requires linked.WF()
     requires linked.ValidRanking(r1)
     requires linked.ValidRanking(r2)
@@ -807,7 +807,7 @@ module LinkedBetreeRefinement {
       forall i | 0 <= i < |linked.Root().children|
       ensures linked.ChildAtIdx(i).ReachableAddrsUsingRanking(r1) == linked.ChildAtIdx(i).ReachableAddrsUsingRanking(r2)
       {
-        ReachableAddrIgnoresRanking(linked.ChildAtIdx(i), r1, r2);
+        ReachableAddrsIgnoresRanking(linked.ChildAtIdx(i), r1, r2);
       }
       var numChildren := |linked.Root().children|;
       var children1 := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(r1));
