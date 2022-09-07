@@ -12,6 +12,7 @@ module BranchedBetreeRefinement {
   import opened BranchesMod
   import opened StampedMod
   import opened DomainMod
+  import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
   import opened Buffers
   import opened KeyType
   import opened Sequences
@@ -71,6 +72,17 @@ module BranchedBetreeRefinement {
     BufferStack( seq (|node.buffers|, 
          i requires 0 <= i < |node.buffers| => 
          IBuffer(node, branches.GetBranch(node.buffers[i]), i)))
+  }
+
+  function IBufferStackPartial(node: BetreeNode, branches: Branches, start: nat, end: nat) : BufferStack
+    requires node.WF()
+    requires branches.WF()
+    requires start <= end <= |node.buffers|
+    requires forall i | start <= i < end :: branches.ValidBranch(node.buffers[i])
+  {
+    BufferStack( seq (end-start, 
+         i requires 0 <= i < end-start => 
+         IBuffer(node, branches.GetBranch(node.buffers[i+start]), i+start)))
   }
 
   function IBranchedBetreeNode(node: BetreeNode, branches: Branches) : (out: LinkedBetree.BetreeNode)
@@ -170,29 +182,53 @@ module BranchedBetreeRefinement {
     }
   }
 
-  // function BranchesBufferStack(branches: Branches, buffers: seq<Address>) : BufferStack
-  //   requires branches.WF()
-  //   requires (forall addr | addr in buffers :: branches.ValidBranch(addr))
-  // {
-  //   BufferStack(seq (|buffers|, i requires 0 <= i < |buffers| => branches.GetBranch(buffers[i]).I().I()))
-  // }
+  lemma CompactBufferEquivStart(node: BetreeNode, branches: Branches, key: Key, start: nat, end: nat, count: nat)
+    requires IBufferStackPartial.requires(node, branches, start, end)
+    requires node.KeyInDomain(key)
+    requires node.ActiveBuffersForKey(key) <= start
+    requires start <= end <= |node.buffers|
+    requires start <= count <= end
+    ensures IBufferStackPartial(node, branches, start, end).QueryUpTo(key, count-start) == branches.Query(key, node.buffers[start..count])
+  {
+    if start < count {
+      var bs := IBufferStackPartial(node, branches, start, end);
+      ActiveBuffersForKeyConsistent(node, key, node.ActiveBuffersForKey(key));
+      assert Last(node.buffers[start..count]) == node.buffers[count-1];
 
-  // lemma BranchesBufferStackQueryConsistent(key: Key, branches: Branches, buffers: seq<Address>, count: nat)
-  //   requires count <= |buffers|
-  //   requires BranchesBufferStack.requires(branches, buffers)
-  //   ensures BranchesBufferStack(branches, buffers).QueryUpTo(key, count) == branches.Query(key, buffers[..count])
-  // {
-  //   if count > 0 {
-  //     var bufferstack := BranchesBufferStack(branches, buffers);
-  //     var branch := branches.GetBranch(buffers[count-1]);
-  //     var msg := if branch.Query(key).Some? then branch.Query(key).value else Update(NopDelta());
+      CompactBufferEquivStart(node, branches, key, start, end, count-1);
+      assert DropLast(node.buffers[start..count]) == node.buffers[start..count-1];
+      assert bs.QueryUpTo(key, count-start-1) == branches.Query(key, node.buffers[start..count-1]);
+      assert bs.QueryUpTo(key, count-start) == branches.Query(key, node.buffers[start..count]);
+    }
+  }
 
-  //     assert bufferstack.buffers[count-1].Query(key) == msg;
-  //     assert buffers[..count-1] == DropLast(buffers[..count]);
+  lemma CompactBufferEquivActive(node: BetreeNode, branches: Branches, key: Key, start: nat, end: nat, count: nat)
+    requires IBufferStackPartial.requires(node, branches, start, end)
+    requires node.KeyInDomain(key)
+    requires node.ActiveBuffersForKey(key) > start
+    requires start <= end <= |node.buffers|
+    requires start <= count <= end
+    ensures var active := node.ActiveBuffersForKey(key);
+      && var bs := IBufferStackPartial(node, branches, start, end);
+      && (count < active ==> bs.QueryUpTo(key, count-start) == Update(NopDelta()))
+      && (count >= active ==> bs.QueryUpTo(key, count-start) == branches.Query(key, node.buffers[active..count]))
+  {
+    if start < count {
+      var active := node.ActiveBuffersForKey(key);
+      ActiveBuffersForKeyConsistent(node, key, active);
+      if active < count {
+        var bs := IBufferStackPartial(node, branches, start, end);
+        assert Last(node.buffers[active..count]) == node.buffers[count-1];
 
-  //     BranchesBufferStackQueryConsistent(key, branches, buffers, count-1);
-  //   }
-  // }
+        CompactBufferEquivActive(node, branches, key, start, end, count-1);
+        assert DropLast(node.buffers[active..count]) == node.buffers[active..count-1];
+        assert bs.QueryUpTo(key, count-start-1) == branches.Query(key, node.buffers[active..count-1]);
+        assert bs.QueryUpTo(key, count-start) == branches.Query(key, node.buffers[active..count]);
+      } else {
+        CompactBufferEquivActive(node, branches, key, start, end, count-1);
+      }
+    }
+  }
 
   lemma QueryCommutesWithIBufferStack(node: BetreeNode, branches: Branches, key: Key, start: nat, count: nat)
     requires IBufferStack.requires(node, branches)
@@ -237,6 +273,16 @@ module BranchedBetreeRefinement {
       QueryUpToEquivalent(out, left, key, count);
     } else {
       BufferStackQueryAdditive(left, right, key, count-1);
+    }
+  }
+
+  lemma BufferStackQueryNotPresent(bs: BufferStack, k: Key, count: nat)
+    requires count <= |bs.buffers|
+    requires forall b | b in bs.buffers :: k !in b.mapp
+    ensures bs.QueryUpTo(k, count) == Update(NopDelta())
+  {
+    if count > 0 {
+      BufferStackQueryNotPresent(bs, k, count-1);
     }
   }
 
@@ -303,6 +349,37 @@ module BranchedBetreeRefinement {
     }
   }
 
+  lemma CompactedBranchEquivConsistentWithI(node: BetreeNode, branches: Branches, start: nat, end: nat, compact: LinkedBranch, k: Key)
+    requires node.CompactedBranchEquivalence.requires(branches, start, end, compact)
+    requires node.CompactedBranchEquivalence(branches, start, end, compact)
+    ensures IBufferStackPartial(node, branches, start, end).Query(k) 
+            == if compact.Query(k).Some? then compact.Query(k).value else Update(NopDelta())
+  {
+    var result := if compact.Query(k).Some? then compact.Query(k).value else Update(NopDelta());
+    var bufferstack := IBufferStackPartial(node, branches, start, end);
+
+    if node.KeyInDomain(k) && node.ActiveBuffersForKey(k) < end {
+      if node.ActiveBuffersForKey(k) <= start {
+        CompactBufferEquivStart(node, branches, k, start, end, end);
+      } else {
+        CompactBufferEquivActive(node, branches, k, start, end, end);
+      }
+      assert bufferstack.Query(k) == result;
+    } else {
+      forall i | 0 <= i < |bufferstack.buffers|
+        ensures k !in bufferstack.buffers[i].mapp 
+      {
+        if k in bufferstack.buffers[i].mapp {
+          var childIdx :| 0 <= childIdx < |node.children| && k in ActiveBufferKeysForChild(node, childIdx, i+start);
+          reveal_IsStrictlySorted();
+          lteTransitiveForall();
+          assert false;
+        }
+      }
+      BufferStackQueryNotPresent(bufferstack, k, end-start);
+    }
+  }
+
   lemma InternalCompactStepWF(step: Step) 
     requires step.WF()
     requires step.InternalCompactStep?
@@ -352,13 +429,9 @@ module BranchedBetreeRefinement {
 
       assert middle'.QueryUpTo(k, 0) == Update(NopDelta()); // trigger
       assert middle'.Query(k) == result;
-      assume middle.Query(k) == result; // TODO: prove
-      
-      // this is our condition: 
-      // && (forall key | KeyInDomain(key) && ActiveBuffersForKey(key) < compactEnd ::
-      //     && var result := if compactedBranch.Query(key).Some? then compactedBranch.Query(key).value else Update(NopDelta());
-      //     && branches.Query(key, buffers[compactStart..compactEnd]) == result)
-      // && (forall key | !KeyInDomain(key) || ActiveBuffersForKey(key) >= compactEnd :: compactedBranch.Query(key).None?)
+      CompactedBranchEquivConsistentWithI(branched.Root(), branched.branches, start, end, step.compactedBranch, k);
+      assert middle == IBufferStackPartial(branched.Root(), branched.branches, start, end); // trigger
+      assert middle.Query(k) == result;
 
       BufferStackQueryAdditive(left, middle, k, end);
       BufferStackQueryAdditive(BufferStack(linkedBuffers[..end]), right, k, |linkedBuffers|);

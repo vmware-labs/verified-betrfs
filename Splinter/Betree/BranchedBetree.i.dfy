@@ -252,7 +252,8 @@ module BranchedBetreeMod
     {
       && (forall key | KeyInDomain(key) && ActiveBuffersForKey(key) < compactEnd ::
         && var result := if compactedBranch.Query(key).Some? then compactedBranch.Query(key).value else Update(NopDelta());
-        && branches.Query(key, buffers[compactStart..compactEnd]) == result)
+        && var start := if ActiveBuffersForKey(key) <= compactStart then compactStart else ActiveBuffersForKey(key);
+        && branches.Query(key, buffers[start..compactEnd]) == result)
       && (forall key | !KeyInDomain(key) || ActiveBuffersForKey(key) >= compactEnd :: compactedBranch.Query(key).None?)
     }
   }
