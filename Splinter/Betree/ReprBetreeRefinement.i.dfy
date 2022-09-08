@@ -460,27 +460,31 @@ module ReprBetreeRefinement
     LinkedBetreeRefinement.ChildAtIdxAcyclic(linked, i);
     LinkedBetreeRefinement.ChildAtIdxAcyclic(linked, j);
 
-    // Now prove the actual goal
     // TODO(tony): We don't actually know that our tree is not a DAG?
     // Copy on write will introduce DAGs into the disk, but the representation of 
     // should any pair of children of any node should not have overlaps, I think.
+    assume false;
+
+    // Now prove the actual goal
     forall addr | addr in linked.ChildAtIdx(i).Representation() 
     ensures addr !in linked.ChildAtIdx(j).Representation()
-    {
-      assume false;
-    }
+    {}
   }
 
-  // Theorem: path.AddrsOnPath() is either the current root, or in the 
-  // subtree of path.Subpath
+  // Theorem: path.AddrsOnPath() is either the current root, or in the subtree of path.Subpath
   lemma AddrsOnPathIsRootOrInRouteSubtree(path: Path, routeIdx: nat)
     requires path.Valid()
     requires routeIdx == Route(path.linked.Root().pivotTable, path.key)
     ensures path.linked.ChildAtIdx(routeIdx).Acyclic()
-    ensures path.AddrsOnPath() <= 
-      {path.linked.root.value} + path.linked.ChildAtIdx(routeIdx).Representation()
+    ensures path.AddrsOnPath() <= {path.linked.root.value} + path.linked.ChildAtIdx(routeIdx).Representation()
+    decreases path.depth
   {
-    assume false;
+    LinkedBetreeRefinement.ChildAtIdxAcyclic(path.linked, routeIdx);
+    if 0 < path.depth {
+      var subRouteIdx := Route(path.Subpath().linked.Root().pivotTable, path.Subpath().key);
+      AddrsOnPathIsRootOrInRouteSubtree(path.Subpath(), subRouteIdx);
+      ParentRepresentationContainsChildRepresentation(path.Subpath().linked, subRouteIdx);
+    }
   }
 
   // Theorem: Any address in a subtree's representation cannot be the root of the parent tree
