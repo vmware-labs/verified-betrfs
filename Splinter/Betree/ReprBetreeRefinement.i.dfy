@@ -456,7 +456,19 @@ module ReprBetreeRefinement
     ensures linked.ChildAtIdx(j).Acyclic()  // prereq
     ensures linked.ChildAtIdx(i).Representation() !! linked.ChildAtIdx(j).Representation()
   {
-    assume false;
+    // Dispatch the prereqs
+    LinkedBetreeRefinement.ChildAtIdxAcyclic(linked, i);
+    LinkedBetreeRefinement.ChildAtIdxAcyclic(linked, j);
+
+    // Now prove the actual goal
+    // TODO(tony): We don't actually know that our tree is not a DAG?
+    // Copy on write will introduce DAGs into the disk, but the representation of 
+    // should any pair of children of any node should not have overlaps, I think.
+    forall addr | addr in linked.ChildAtIdx(i).Representation() 
+    ensures addr !in linked.ChildAtIdx(j).Representation()
+    {
+      assume false;
+    }
   }
 
   // Theorem: path.AddrsOnPath() is either the current root, or in the 
