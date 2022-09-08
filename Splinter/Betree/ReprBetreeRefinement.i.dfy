@@ -555,15 +555,17 @@ module ReprBetreeRefinement
     ensures 
       && var routeIdx := Route(path.linked.Root().pivotTable, path.key);
       && path.linked.ChildAtIdx(routeIdx) == path.Subpath().linked
-  {
-    assume false;
-  }
+  {}
 
+  // Theorem: path.AddrsOnPath() are valid diskview entries
   lemma AddrsOnPathInDiskView(path: Path) 
     requires path.Valid()
     ensures path.AddrsOnPath() <= path.linked.diskView.entries.Keys
+    decreases path.depth
   {
-    assume false;
+    if 0 < path.depth {
+      AddrsOnPathInDiskView(path.Subpath());
+    }
   }
 
   // Expands path.Substitute().ChildAtIdx(routeIdx).Representation into its components
