@@ -52,6 +52,7 @@ module ReprBetreeRefinement
     LinkedBetreeRefinement.InitRefines(I(v), gcBetree.I());
   }
 
+  // Theorem: If t1.root = t2.root and their disks agree, then t1 and t2 have the same Representation
   lemma ReachableAddrsInAgreeingDisks(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking) 
     requires t1.Acyclic()
     requires t2.Acyclic()
@@ -101,6 +102,7 @@ module ReprBetreeRefinement
     }
   }
 
+  // Theorem: All reachable addresses must have a lower smaller ranking than the root
   lemma ReachableAddressesHaveLowerRank(linked: LinkedBetree, topAddr: Address, topRank: nat, ranking: Ranking) 
     requires linked.WF()
     requires linked.ValidRanking(ranking)
@@ -496,13 +498,10 @@ module ReprBetreeRefinement
     requires addr in linked.ChildAtIdx(idx).Representation()
     ensures addr != linked.root.value
   {
-    assume false;
-    // assert addr in path.linked.ChildAtIdx(idx).Representation();
-    //       assert addr in path.linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(path.linked.ChildAtIdx(idx).TheRanking());
-    //       LinkedBetreeRefinement.ChildAtIdxAcyclic(path.linked, idx);
-    //       LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(path.linked.ChildAtIdx(idx), path.linked.TheRanking(), path.linked.ChildAtIdx(idx).TheRanking());
-    //       // assert addr in path.linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(path.linked.TheRanking());
-    //       assume addr != path.linked.root.value;   // this must be true because addr in path.linked.ChildAtIdx(idx).Representation();
+    var ranking := LinkedBetreeRefinement.BuildTightRanking(linked, linked.TheRanking());
+    var rootAddr := linked.root.value;
+    ReachableAddressesHaveLowerRank(linked.ChildAtIdx(idx), rootAddr, ranking[rootAddr], ranking);
+    LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(linked.ChildAtIdx(idx), linked.ChildAtIdx(idx).TheRanking(), ranking);
   }
 
   // Theorem: Contrapositive of AddrInChildRepresentationImpliesNotRoot
@@ -513,7 +512,11 @@ module ReprBetreeRefinement
     requires linked.ChildAtIdx(idx).Acyclic()
     ensures linked.root.value !in linked.ChildAtIdx(idx).Representation()
   {
-    assume false;
+    forall addr | addr in linked.ChildAtIdx(idx).Representation() 
+    ensures addr != linked.root.value
+    {
+      AddrInChildRepresentationImpliesNotRoot(linked, idx, addr);
+    }
   }
 
   // Theorem: Any address in a substituted subtree's representation cannot be the root 
