@@ -431,15 +431,18 @@ module ReprBetreeRefinement
     ensures linked.ChildAtIdx(idx).Acyclic()  // prereq
     ensures linked.ChildAtIdx(idx).Representation() <= linked.Representation()
   {
-    assume false;
-    // assert addr in path.linked.ChildAtIdx(idx).Representation();
-    // assert addr in path.linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(path.linked.ChildAtIdx(idx).TheRanking());
-    // LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(path.linked.ChildAtIdx(idx), path.linked.ChildAtIdx(idx).TheRanking(), path.linked.TheRanking());
-    // assert addr in path.linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(path.linked.TheRanking());
-
-
-    // assert addr in path.linked.ReachableAddrsUsingRanking(path.linked.TheRanking());
-    // assert addr in path.linked.Representation();
+    LinkedBetreeRefinement.ChildAtIdxAcyclic(linked, idx);
+    var r1 := linked.TheRanking();
+    var r2 :=linked.ChildAtIdx(idx).TheRanking();
+    var numChildren := |linked.Root().children|;
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(r1));
+    LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(linked.ChildAtIdx(idx), r1, r2);
+    Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+    forall addr | addr in linked.ChildAtIdx(idx).Representation()
+    ensures addr in linked.Representation()
+    {
+      assert addr in subTreeAddrs[idx];  // trigger
+    }
   }
 
   // Theorem: Subtree representations have null intersections
