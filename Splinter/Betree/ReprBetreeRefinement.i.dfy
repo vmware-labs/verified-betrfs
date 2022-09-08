@@ -409,7 +409,18 @@ module ReprBetreeRefinement
     ensures path.Subpath().linked.Acyclic()
     ensures path.Subpath().linked.Representation() <= path.linked.Representation();
   {
-    assume false;
+    var r1 := path.linked.TheRanking();
+    var r2 := path.Subpath().linked.TheRanking();
+    var routeIdx := Route(path.linked.Root().pivotTable, path.key);
+    var numChildren := |path.linked.Root().children|;
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => path.linked.ChildAtIdx(i).ReachableAddrsUsingRanking(r1));
+    LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(path.linked.ChildAtIdx(routeIdx), r1, r2);
+    Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+    forall addr | addr in path.Subpath().linked.Representation()
+    ensures addr in path.linked.Representation()
+    {
+      assert addr in subTreeAddrs[routeIdx];  // trigger
+    }
   }
 
   // Theorem: Representation contains child representation
