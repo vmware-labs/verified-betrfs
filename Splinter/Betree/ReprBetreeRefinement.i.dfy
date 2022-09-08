@@ -358,21 +358,47 @@ module ReprBetreeRefinement
     LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(path.Subpath().Substitute(replacement, pathAddrs[1..]), r1, r2);
   }
 
-  // Theorem: Substitution does not change representation of subtrees not on the 
-  // substitution path
-  lemma ReachableAddrsNotOnSubpathRoute(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, idx: nat) 
+  // Theorem: Substitution does not change representation of subtrees not on the substitution path
+  lemma ReachableAddrsNotOnSubpathRoute(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, idx: nat, ranking: Ranking) 
     requires path.Valid()
     requires 0 < path.depth
     requires 0 <= idx < |path.linked.Root().children|
     requires idx != Route(path.linked.Root().pivotTable, path.key)
     requires path.CanSubstitute(replacement, pathAddrs);
+    requires path.Substitute(replacement, pathAddrs).Acyclic()
+    // RankingAfterSubstitution requirements
+    requires path.linked.root.value in ranking
+    requires replacement.ValidRanking(ranking)
+    requires SeqHasUniqueElems(pathAddrs)
+    requires Set(pathAddrs) !! ranking.Keys
+    requires SeqHasUniqueElems(pathAddrs)
+    requires path.linked.diskView.IsFresh(Set(pathAddrs))
+    requires replacement.diskView.IsFresh(Set(pathAddrs))
+
     ensures path.linked.ChildAtIdx(idx).Acyclic()  // prereq
-    ensures path.Substitute(replacement, pathAddrs).Acyclic()  // prereq
     ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(idx).Acyclic()  // prereq
     ensures path.linked.ChildAtIdx(idx).Representation() ==
             path.Substitute(replacement, pathAddrs).ChildAtIdx(idx).Representation()
   { 
-    assume false;
+    // Dispatch the prereqs
+    LinkedBetreeRefinement.ChildAtIdxAcyclic(path.linked, idx);
+    LinkedBetreeRefinement.ChildAtIdxAcyclic(path.Substitute(replacement, pathAddrs), idx);
+
+    // Now prove the main goal
+    var r1 := path.linked.ChildAtIdx(idx).TheRanking();
+    var r2 := LinkedBetreeRefinement.RankingAfterSubstitution(replacement, ranking, path, pathAddrs);
+    var node := path.linked.Root();
+    path.CanSubstituteSubpath(replacement, pathAddrs);
+    var subtree := path.Subpath().Substitute(replacement, pathAddrs[1..]);
+    var newChildren := node.children[Route(node.pivotTable, path.key) := subtree.root];
+    var newNode := LinkedBetreeMod.BetreeNode(node.buffers, node.pivotTable, newChildren);
+    var newDiskView := subtree.diskView.ModifyDisk(pathAddrs[0], newNode);
+    var newLinked := LinkedBetreeMod.LinkedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView);
+    LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(path.linked.ChildAtIdx(idx), r1, r2);
+    LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(path.Substitute(replacement, pathAddrs).ChildAtIdx(idx), path.Substitute(replacement, pathAddrs).ChildAtIdx(idx).TheRanking(), r2);
+    // SubstitutePreservesWF gives us path.linked.diskView.AgreesWithDisk(newLinked.diskView)
+    LinkedBetreeRefinement.SubstitutePreservesWF(replacement, path, pathAddrs, newLinked);
+    ReachableAddrsInAgreeingDisks(path.linked.ChildAtIdx(idx), newLinked.ChildAtIdx(idx), r2);
   }
 
   // Theorem: Representation includes subpath representation
@@ -646,7 +672,7 @@ module ReprBetreeRefinement
           // Else addr is in one of the original subtrees
           // First, prove that addr in path.linked.Representation();
           LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(linkedAftSubst.ChildAtIdx(idx), linkedAftSubst.ChildAtIdx(idx).TheRanking(), linkedAftSubst.TheRanking());
-          ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx);
+          ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx, ranking);
           ParentRepresentationContainsChildRepresentation(path.linked, idx);
 
           // Next, Prove that addr not in path.AddrsOnPath();
@@ -712,7 +738,7 @@ module ReprBetreeRefinement
         LinkedBetreeRefinement.ChildAtIdxAcyclic(path.linked, idx);
         LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(path.linked.ChildAtIdx(idx), path.linked.ChildAtIdx(idx).TheRanking(), path.linked.TheRanking());
         if idx != routeIdx {
-          ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx); 
+          ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx, ranking); 
           ParentRepresentationContainsChildRepresentation(path.Substitute(replacement, pathAddrs), idx);
         } else {
           // Else addr is on substitution path
