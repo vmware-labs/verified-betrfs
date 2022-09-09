@@ -574,14 +574,28 @@ module ReprBetreeRefinement
   }
 
   // Theorem: Representation of path.Substitute(..) includes that of replacement
-  lemma RepresentationAfterSubstituteContainsReplacement(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
+  lemma RepresentationAfterSubstituteContainsReplacement(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, ranking: Ranking)
     requires path.Valid()
     requires path.CanSubstitute(replacement, pathAddrs)
     requires replacement.Acyclic()
+    // Requirements of ReplacementAcyclicImpliesSubstituteAcyclic
+    requires replacement.ValidRanking(ranking)
+    requires path.linked.root.value in ranking
+    requires SeqHasUniqueElems(pathAddrs)
+    requires path.linked.diskView.IsSubDisk(replacement.diskView)
+    requires path.linked.diskView.IsFresh(Set(pathAddrs))
+    requires replacement.diskView.IsFresh(Set(pathAddrs))
     ensures path.Substitute(replacement, pathAddrs).Acyclic()  // prereq
     ensures replacement.Representation() <= path.Substitute(replacement, pathAddrs).Representation()
+    decreases path.depth
   {
-    assume false;
+    ReplacementAcyclicImpliesSubstituteAcyclic(path, replacement, pathAddrs, ranking);
+    if 0 < path.depth {
+      RepresentationAfterSubstituteContainsReplacement(path.Subpath(), replacement, pathAddrs[1..], ranking);
+      var routeIdx := Route(path.linked.Root().pivotTable, path.key);
+      ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
+      ParentRepresentationContainsChildRepresentation(path.Substitute(replacement, pathAddrs), routeIdx);
+    }
   }
 
   // Theorem: Child at Route(path.linked.Root().pivotTable, path.key) is same as path.Subpath()
@@ -782,7 +796,7 @@ module ReprBetreeRefinement
       if addr in Set(pathAddrs) {
         RepresentationAfterSubstituteContainsPathAddrs(path, replacement, pathAddrs, ranking);
       } else if addr == replacementAddr {
-        RepresentationAfterSubstituteContainsReplacement(path, replacement, pathAddrs);
+        RepresentationAfterSubstituteContainsReplacement(path, replacement, pathAddrs, ranking);
       } else if addr in path.linked.Representation() {
         /* This is the tricky case
         addr is not path.linked.root, because root is in path.AddrsOnPath().
