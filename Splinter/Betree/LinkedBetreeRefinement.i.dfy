@@ -645,6 +645,8 @@ module LinkedBetreeRefinement {
     requires linked.ValidRanking(ranking)
     ensures RankingIsTight(linked.diskView, tightRanking)
     ensures linked.ValidRanking(tightRanking)
+    ensures forall addr | addr in linked.diskView.entries && addr in ranking :: addr in tightRanking
+    // ensures IsSubMap(tightRanking, ranking)
   {
     tightRanking := map addr | addr in linked.diskView.entries && addr in ranking :: ranking[addr];
   }
