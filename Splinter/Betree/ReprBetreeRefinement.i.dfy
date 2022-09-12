@@ -44,6 +44,13 @@ module ReprBetreeRefinement
 
   //******** PROVE INVARIANTS ********//
 
+  predicate PathAddrsFresh(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
+  {
+    && SeqHasUniqueElems(pathAddrs)
+    && path.linked.diskView.IsFresh(Set(pathAddrs))
+    && replacement.diskView.IsFresh(Set(pathAddrs))
+  }
+
   lemma InvInit(v: Variables, gcBetree: GCStampedBetree) 
     requires Init(v, gcBetree)
     requires LinkedBetreeRefinement.InvLinkedBetree(gcBetree.I().value)
@@ -356,9 +363,7 @@ module ReprBetreeRefinement
     requires path.CanSubstitute(replacement, pathAddrs);
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     // Requirements of SubstitutePreservesWF and ReplacementAcyclicImpliesSubstituteAcyclic
-    requires SeqHasUniqueElems(pathAddrs)
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.linked.root.value in ranking
     requires replacement.ValidRanking(ranking)
 
@@ -397,11 +402,8 @@ module ReprBetreeRefinement
     // RankingAfterSubstitution requirements
     requires path.linked.root.value in ranking
     requires replacement.ValidRanking(ranking)
-    requires SeqHasUniqueElems(pathAddrs)
     requires Set(pathAddrs) !! ranking.Keys
-    requires SeqHasUniqueElems(pathAddrs)
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
 
     ensures path.linked.ChildAtIdx(idx).Acyclic()  // prereq
     ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(idx).Acyclic()  // prereq
@@ -554,8 +556,7 @@ module ReprBetreeRefinement
     // Framing 
     requires SeqHasUniqueElems(pathAddrs)
     requires path.linked.diskView.IsSubDisk(replacement.diskView)
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
     ensures path.Substitute(replacement, pathAddrs).Acyclic()
   {
     var tightRanking := LinkedBetreeRefinement.BuildTightRanking(replacement, ranking);
@@ -609,9 +610,7 @@ module ReprBetreeRefinement
       :: path.linked.ChildAtIdx(i).Acyclic() && oldRoot !in path.linked.ChildAtIdx(i).Representation()
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
-    requires SeqHasUniqueElems(pathAddrs)
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
     requires replacement.ValidRanking(ranking)
     requires path.linked.root.value in ranking
     requires Set(pathAddrs) !! ranking.Keys
@@ -653,20 +652,17 @@ module ReprBetreeRefinement
 
   // Theorem: Any address in the representation after substitution could not have been on
   // on the substitution path
-  lemma {:timeLimitMultiplier 2} SubstituteDeletesAddrsOnPath(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, addr: Address, ranking: Ranking)
+  lemma {:timeLimitMultiplier 3} SubstituteDeletesAddrsOnPath(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, addr: Address, ranking: Ranking)
     requires path.Valid()
-    // requires 0 < path.depth
     requires replacement.Acyclic()
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
-    requires path.AddrsOnPath() !! replacement.Representation()  // TODO: Only need a weaker version compatible with SubstituteDeletesOldRoot
+    requires path.AddrsOnPath() !! replacement.Representation()
     requires Set(pathAddrs) !! ranking.Keys  // required by ReachableAddrsNotOnSubpathRoute
     requires addr in path.Substitute(replacement, pathAddrs).Representation()
     
     // Requirements of ReplacementAcyclicImpliesSubstituteAcyclic
-    requires SeqHasUniqueElems(pathAddrs)
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.linked.root.value in ranking
     requires replacement.ValidRanking(ranking)
 
@@ -726,10 +722,8 @@ module ReprBetreeRefinement
     requires replacement.ValidRanking(ranking)
     requires path.linked.root.value in ranking
     // Framing 
-    requires SeqHasUniqueElems(pathAddrs)
     requires path.linked.diskView.IsSubDisk(replacement.diskView)
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()  // prereq
     ensures Set(pathAddrs) <= path.Substitute(replacement, pathAddrs).Representation()
     decreases path.depth
@@ -751,10 +745,8 @@ module ReprBetreeRefinement
     // Requirements of ReplacementAcyclicImpliesSubstituteAcyclic
     requires replacement.ValidRanking(ranking)
     requires path.linked.root.value in ranking
-    requires SeqHasUniqueElems(pathAddrs)
     requires path.linked.diskView.IsSubDisk(replacement.diskView)
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
     ensures path.Substitute(replacement, pathAddrs).Acyclic()  // prereq
     ensures replacement.Representation() <= path.Substitute(replacement, pathAddrs).Representation()
     decreases path.depth
@@ -800,9 +792,7 @@ module ReprBetreeRefinement
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Acyclic()
     // Requirements of // Requirements of SubstitutePreservesWF and ReplacementAcyclicImpliesSubstituteAcyclic. 
     // Would be the result of some lemma such as RankingAfterInsertCompactReplacement
-    requires SeqHasUniqueElems(pathAddrs)
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.linked.root.value in ranking
     requires replacement.ValidRanking(ranking)
 
@@ -827,14 +817,12 @@ module ReprBetreeRefinement
     requires replacement == LinkedBetreeMod.InsertCompactReplacement(path.Target(), compactedBuffers, replacementAddr)
     requires replacement.ValidRanking(replacementRanking)
     requires replacement.Acyclic()
-    requires path.AddrsOnPath() !! replacement.Representation() //TODO: Only need a weaker version compatible with SubstituteDeletesOldRoot
+    requires path.AddrsOnPath() !! replacement.Representation()
 
     //RankingAfterSubstitution requirements
     requires path.linked.root.value in replacementRanking
-    requires SeqHasUniqueElems(pathAddrs)
     requires Set(pathAddrs) !! replacementRanking.Keys
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
 
     requires path.CanSubstitute(replacement, pathAddrs)
     ensures path.Substitute(replacement, pathAddrs).Acyclic()  // prereq
@@ -872,15 +860,13 @@ module ReprBetreeRefinement
     requires path.Valid()
     requires 0 < path.depth
     requires path.Target().diskView.IsFresh({replacementAddr})
-    requires SeqHasUniqueElems(pathAddrs)
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Acyclic()
     requires replacement.Acyclic()
-    requires path.AddrsOnPath() !! replacement.Representation()  // TODO: Only need a weaker version compatible with SubstituteDeletesOldRoot
+    requires path.AddrsOnPath() !! replacement.Representation()
     // Requirements of Ranking. Would be the result of some lemma such as RankingAfterInsertCompactReplacement
     requires path.linked.root.value in ranking
     requires replacement.ValidRanking(ranking)
@@ -942,9 +928,7 @@ module ReprBetreeRefinement
     requires path.Valid()
     requires 0 < path.depth
     requires path.Target().diskView.IsFresh({replacementAddr})
-    requires SeqHasUniqueElems(pathAddrs)
-    requires path.linked.diskView.IsFresh(Set(pathAddrs))
-    requires replacement.diskView.IsFresh(Set(pathAddrs))
+    requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
@@ -1066,7 +1050,7 @@ module ReprBetreeRefinement
     LinkedBetreeRefinement.ValidRankingAllTheWayDown(linkedRanking, step.path);
     var replacementRanking := LinkedBetreeRefinement.RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, linkedRanking, step.targetAddr);
     if linked.HasRoot() {
-      // TODO: establish this here. Only need a weaker version compatible with SubstituteDeletesOldRoot
+      // TODO: establish this here.
       assume step.path.AddrsOnPath() !! replacement.Representation();  
       ReprAfterSubstituteCompactReplacement(step.path, step.compactedBuffers, replacement, replacementRanking, step.pathAddrs, step.targetAddr); 
     }
