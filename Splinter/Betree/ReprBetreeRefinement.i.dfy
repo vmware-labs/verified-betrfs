@@ -471,6 +471,19 @@ module ReprBetreeRefinement
     }
   }
 
+  // Theorem path.linked.Representation() includes path.Target().Representation()
+  lemma RootRepresentationContainsTargetRepresentation(path: Path)
+    requires path.Valid()
+    ensures path.Target().Acyclic()
+    ensures path.Target().Representation() <= path.linked.Representation()
+    decreases path.depth
+  {
+    if 0 < path.depth {
+      RootRepresentationContainsTargetRepresentation(path.Subpath());
+      RootRepresentationContainsSubpathRepresentation(path);
+    }
+  }
+
   // Theorem: Representation contains child representation
   lemma ParentRepresentationContainsChildRepresentation(linked:LinkedBetree, idx: nat)
     requires linked.Acyclic()
@@ -1050,6 +1063,58 @@ module ReprBetreeRefinement
     RepresentationIgnoresBuildTight(path.Substitute(replacement, pathAddrs));
   }
 
+  // Prove step.path.AddrsOnPath() !! replacement.Representation(); 
+  lemma InsertCompactReplacementExcludesAddrsOnPath(path: Path, replacement: LinkedBetree, compactedBuffers: BufferStack, replacementAddr: Address)
+    requires path.Valid()
+    requires path.Target().Root().buffers.Equivalent(compactedBuffers)
+    requires path.Target().diskView.IsFresh({replacementAddr})
+    requires replacement == LinkedBetreeMod.InsertCompactReplacement(path.Target(), compactedBuffers, replacementAddr);
+    requires replacement.Acyclic()
+    ensures path.AddrsOnPath() !! replacement.Representation()
+    decreases path.depth
+  {
+    var ranking := path.linked.TheRanking();
+    var replacementRanking := replacement.TheRanking();
+    LinkedBetreeRefinement.ValidRankingAllTheWayDown(ranking, path);
+    var rootAddr := path.linked.root.value;
+    var numChildren := |replacement.Root().children|;
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(replacementRanking));
+    if path.depth == 0 {
+      // Base case
+      forall idx | 0 <= idx < numChildren
+      ensures rootAddr !in subTreeAddrs[idx]
+      {
+        if rootAddr in subTreeAddrs[idx] {
+          LinkedBetreeRefinement.ChildAtIdxAcyclic(path.Target(), idx);
+          LinkedBetreeRefinement.ChildAtIdxAcyclic(replacement, idx);
+          ReachableAddrsInAgreeingDisks(path.Target().ChildAtIdx(idx), replacement.ChildAtIdx(idx), replacementRanking);
+          LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(path.linked.ChildAtIdx(idx), path.linked.ChildAtIdx(idx).TheRanking(), replacementRanking);
+          RootAddrNotInChildRepresentation(path.linked, idx);
+          assert false;
+        }
+      }
+    } else {
+      // Recursive case
+      InsertCompactReplacementExcludesAddrsOnPath(path.Subpath(), replacement, compactedBuffers, replacementAddr);
+      forall idx | 0 <= idx < numChildren
+      ensures rootAddr !in subTreeAddrs[idx]
+      {
+        if rootAddr in subTreeAddrs[idx] {
+          LinkedBetreeRefinement.ChildAtIdxAcyclic(path.Target(), idx);
+          LinkedBetreeRefinement.ChildAtIdxAcyclic(replacement, idx);
+          ReachableAddrsInAgreeingDisks(path.Target().ChildAtIdx(idx), replacement.ChildAtIdx(idx), replacementRanking);
+          LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(path.Target().ChildAtIdx(idx), path.Target().ChildAtIdx(idx).TheRanking(), replacementRanking);
+          ParentRepresentationContainsChildRepresentation(path.Target(), idx);
+          RootRepresentationContainsTargetRepresentation(path.Subpath());
+          var routeIdx := Route(path.linked.Root().pivotTable, path.key);
+          RootAddrNotInChildRepresentation(path.linked, routeIdx);
+          assert false;
+        }
+      }
+    }
+    Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+  }
+
   lemma InternalCompactMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
@@ -1066,8 +1131,7 @@ module ReprBetreeRefinement
     LinkedBetreeRefinement.ValidRankingAllTheWayDown(linkedRanking, step.path);
     var replacementRanking := LinkedBetreeRefinement.RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, linkedRanking, step.targetAddr);
     if linked.HasRoot() {
-      // TODO: establish this here.
-      assume step.path.AddrsOnPath() !! replacement.Representation();  
+      InsertCompactReplacementExcludesAddrsOnPath(step.path, replacement, step.compactedBuffers, step.targetAddr);
       ReprAfterSubstituteCompactReplacement(step.path, step.compactedBuffers, replacement, replacementRanking, step.pathAddrs, step.targetAddr); 
     }
   }
