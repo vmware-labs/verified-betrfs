@@ -136,19 +136,36 @@ module ReprBetreeRefinement
     Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
   }
 
+  // Theorem: A wrapper around ReachableAddressesHaveLowerRank
   lemma ChildrenRepresentationHaveLowerRank(linked: LinkedBetree, idx: nat, ranking: Ranking) 
     requires linked.Acyclic()
     requires linked.ValidRanking(ranking)
+    requires LinkedBetreeRefinement.RankingIsTight(linked.diskView, ranking)
     requires linked.HasRoot()
     requires linked.Root().ValidChildIndex(idx)
     ensures linked.ChildAtIdx(idx).Acyclic()  // prereq
     ensures forall addr | addr in linked.ChildAtIdx(idx).Representation()
       :: addr in ranking && ranking[addr] < ranking[linked.root.value]
   {
-    // TODO: I think some lemma that calls ReachableAddressesHaveLowerRank could just use this one.
-    assume false;
+    LinkedBetreeRefinement.ChildAtIdxAcyclic(linked, idx);
+    var subRoot := linked.ChildAtIdx(idx);
+    forall addr | addr in subRoot.Representation()
+    ensures addr in ranking && ranking[addr] < ranking[linked.root.value]
+    {
+      var r1 := subRoot.TheRanking();
+      LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(subRoot, r1, ranking);
+      if addr != subRoot.root.value {
+        var numChildren := |subRoot.Root().children|;
+        var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => subRoot.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+        Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+        var i :| 0 <= i < numChildren && addr in subTreeAddrs[i];
+        var topAddr := linked.root.value;
+        ReachableAddressesHaveLowerRank(subRoot, topAddr, ranking[topAddr], ranking);
+      }
+    }
   }
 
+  // Theorem: The root node is not in the representation of any child subtree
   lemma RootNotInChildrenRepresentation(linked: LinkedBetree, idx: nat)
     requires linked.Acyclic()
     requires linked.HasRoot()
@@ -159,7 +176,8 @@ module ReprBetreeRefinement
     LinkedBetreeRefinement.ChildAtIdxAcyclic(linked, idx);
     assert linked.ChildAtIdx(idx).Acyclic();
     if linked.root.value in linked.ChildAtIdx(idx).Representation() {
-      ChildrenRepresentationHaveLowerRank(linked, idx, linked.TheRanking());
+      var tightRanking := LinkedBetreeRefinement.BuildTightRanking(linked, linked.TheRanking());
+      ChildrenRepresentationHaveLowerRank(linked, idx, tightRanking);
       assert false;
     }
   }
@@ -518,6 +536,7 @@ module ReprBetreeRefinement
   }
 
   // Theorem: Any address in a subtree's representation cannot be the root of the parent tree
+  // Contrapositive of AddrInChildRepresentationImpliesNotRoot
   lemma AddrInChildRepresentationImpliesNotRoot(linked: LinkedBetree, idx: nat, addr: Address)
     requires linked.Acyclic()
     requires linked.HasRoot()
@@ -526,10 +545,7 @@ module ReprBetreeRefinement
     requires addr in linked.ChildAtIdx(idx).Representation()
     ensures addr != linked.root.value
   {
-    var ranking := LinkedBetreeRefinement.BuildTightRanking(linked, linked.TheRanking());
-    var rootAddr := linked.root.value;
-    ReachableAddressesHaveLowerRank(linked.ChildAtIdx(idx), rootAddr, ranking[rootAddr], ranking);
-    LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(linked.ChildAtIdx(idx), linked.ChildAtIdx(idx).TheRanking(), ranking);
+    RootNotInChildrenRepresentation(linked, idx);
   }
 
   // Theorem: Contrapositive of AddrInChildRepresentationImpliesNotRoot
