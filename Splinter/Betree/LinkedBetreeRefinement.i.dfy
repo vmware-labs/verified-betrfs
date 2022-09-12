@@ -939,7 +939,7 @@ module LinkedBetreeRefinement {
 
   // For any address in the reachable set, the children of the node at that location
   // are also in the reacheable set
-  lemma ReachableAddrClosed(linked: LinkedBetree, ranking: Ranking, addr: Address)
+  lemma ReachableAddrsClosed(linked: LinkedBetree, ranking: Ranking, addr: Address)
     requires linked.WF()
     requires linked.ValidRanking(ranking)
     requires linked.HasRoot()
@@ -958,7 +958,7 @@ module LinkedBetreeRefinement {
       assert addr in Sets.UnionSeqOfSets(subTreeAddrs);
       Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
       var k :| 0 <= k < numChildren && addr in subTreeAddrs[k];
-      ReachableAddrClosed(linked.ChildAtIdx(k), ranking, addr);
+      ReachableAddrsClosed(linked.ChildAtIdx(k), ranking, addr);
     }
   }
 
@@ -971,7 +971,7 @@ module LinkedBetreeRefinement {
     forall addr | addr in linked.BuildTightTree().diskView.entries
     ensures linked.BuildTightTree().diskView.NodeHasNondanglingChildPtrs(linked.BuildTightTree().diskView.entries[addr])
     {
-      ReachableAddrClosed(linked, linked.TheRanking(), addr);
+      ReachableAddrsClosed(linked, linked.TheRanking(), addr);
     }
   }
 
