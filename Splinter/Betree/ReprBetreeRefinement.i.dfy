@@ -1150,13 +1150,12 @@ module ReprBetreeRefinement
     requires v'.betree.linked.Acyclic()
     ensures v'.betree.linked.DiskIsTightWrtRepresentation()
   {
-    var untightLinked := LinkedBetreeMod.InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr);
     if v.betree.linked.HasRoot() {
-      // var newRanking := RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, linked.TheRanking(), step.targetAddr);
-      // TODO
-      assume untightLinked.Acyclic();
-      BuildTightGivesTightWrtRepresentation(untightLinked);
-      assume false;
+      var untightLinked' := step.path.Substitute(
+            LinkedBetreeMod.InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr),
+            step.pathAddrs
+        );
+      BuildTightGivesTightWrtRepresentation(untightLinked');
     }
   }
 
