@@ -1131,8 +1131,6 @@ module ReprBetreeRefinement
   {
     var linked := v.betree.linked;
     var linked' := v'.betree.linked;
-    var newAddrs := Set(step.pathAddrs) + {step.targetAddr};
-    var discardAddrs := step.path.AddrsOnPath();
     var replacement := LinkedBetreeMod.InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr);
     var linkedRanking := LinkedBetreeRefinement.BuildTightRanking(linked, linked.TheRanking());
     LinkedBetreeRefinement.ValidRankingAllTheWayDown(linkedRanking, step.path);
@@ -1157,6 +1155,47 @@ module ReprBetreeRefinement
         );
       BuildTightGivesTightWrtRepresentation(untightLinked');
     }
+  }
+
+  lemma ReprAfterSubstituteFlushReplacement(
+    path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, 
+    pathAddrs: PathAddrs)
+    requires path.Valid()
+    requires path.Target().Root().OccupiedChildIndex(childIdx)
+    requires replacement == LinkedBetreeMod.InsertFlushReplacement(path.Target(), childIdx, replacementAddr, replacementChildAddr)
+    requires path.CanSubstitute(replacement, pathAddrs)
+
+
+
+    ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()  // prereq
+    ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Representation()
+            == path.linked.Representation() + Set(pathAddrs) + {replacementAddr, replacementChildAddr} 
+              - path.AddrsOnPath() - {path.Target().ChildAtIdx(childIdx).root.value}
+    decreases path.depth
+  {
+    assume false;
+  }
+
+
+  lemma InternalFlushMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushStep?
+    requires v'.betree.linked.Acyclic()
+    ensures ValidRepr(v')
+  {
+    var replacement := LinkedBetreeMod.InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr);
+    ReprAfterSubstituteFlushReplacement(step.path, replacement, step.childIdx, step.targetAddr, step.targetChildAddr, step.pathAddrs);
+  }
+
+  lemma InternalFlushMaintainsTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushStep?
+    requires v'.betree.linked.Acyclic()
+    ensures v'.betree.linked.DiskIsTightWrtRepresentation()
+  {
+    assume false;
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel) 
@@ -1189,8 +1228,9 @@ module ReprBetreeRefinement
         assert Inv(v');
       }
       case InternalFlushStep(_, _, _, _, _) => {
-        // TODO(tony)
-        assume false;
+        LinkedBetreeRefinement.InvNextInternalFlushStep(I(v), I(v'), lbl.I(), step.I());
+        InternalFlushMaintainsRepr(v, v', lbl, step);
+        InternalFlushMaintainsTightDisk(v, v', lbl, step);
         assert Inv(v');
       }
       case InternalFlushMemtableStep(_) => {
