@@ -1033,6 +1033,7 @@ module ReprBetreeRefinement
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Substitute(replacement, pathAddrs).ValidRanking(ranking)
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
+    requires path.AddrsOnPath() !! replacement.Representation()
     ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Representation()
             == path.linked.Representation() + Set(pathAddrs) + {replacementAddr} - path.AddrsOnPath()
   {
@@ -1049,25 +1050,6 @@ module ReprBetreeRefinement
     Sets.UnionSeqOfSetsSoundness(subTreeAddrs');
     LBR.ReachableAddrsIgnoresRanking(path.linked, ranking, path.linked.TheRanking());
     LBR.ReachableAddrsIgnoresRanking(replacement.BuildTightTree(), ranking, replacement.BuildTightTree().TheRanking());
-    assert path.Target().root.value !in path.Substitute(replacement, pathAddrs).Representation() 
-    by {
-      RepresentationIgnoresBuildTight(path.Substitute(replacement, pathAddrs));
-      var subs := seq(numChildren, i requires 0 <= i < numChildren => replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(replacement.TheRanking()));
-      forall i | 0 <= i < numChildren 
-      ensures path.Target().root.value !in subs[i] {
-        ChildAtIdxCommutesWithBuildTight(replacement, i , ranking);
-        ReachableAddrsIgnoresBuildTight(replacement.ChildAtIdx(i), ranking);
-        assert subTreeAddrs'[i] == replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking);  // trigger
-        LBR.ReachableAddrsIgnoresRanking(replacement.ChildAtIdx(i), ranking, replacement.TheRanking());
-        assert subs[i] == subTreeAddrs[i];  // trigger
-        LBR.ChildAtIdxAcyclic(path.linked, i);
-        RootAddrNotInChildRepresentation(path.linked, i);
-        LBR.ReachableAddrsIgnoresRanking(path.linked.ChildAtIdx(i), ranking, path.linked.ChildAtIdx(i).TheRanking());
-      }
-      Sets.UnionSeqOfSetsSoundness(subs);
-      assert path.Target().root.value !in replacement.Representation();  // trigger
-    }
-    RepresentationIgnoresBuildTight(path.Substitute(replacement, pathAddrs));
   }
 
   // Prove step.path.AddrsOnPath() !! replacement.Representation(); 
@@ -1251,6 +1233,7 @@ module ReprBetreeRefinement
     assert path.linked.root.value !in replacement.Representation() 
     by {
       // Do something similar to InsertCompactReplacementExcludesAddrsOnPath
+      // This will give me path.AddrsOnPath() !! replacement.Representation(), as a precondition to this lemma
       assume false;
     }
 
