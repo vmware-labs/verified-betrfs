@@ -1130,7 +1130,6 @@ module ReprBetreeRefinement
     ensures ValidRepr(v')
   {
     var linked := v.betree.linked;
-    var linked' := v'.betree.linked;
     var replacement := LinkedBetreeMod.InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr);
     var linkedRanking := LinkedBetreeRefinement.BuildTightRanking(linked, linked.TheRanking());
     LinkedBetreeRefinement.ValidRankingAllTheWayDown(linkedRanking, step.path);
@@ -1159,13 +1158,23 @@ module ReprBetreeRefinement
 
   lemma ReprAfterSubstituteFlushReplacement(
     path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, 
-    pathAddrs: PathAddrs)
+    pathAddrs: PathAddrs, replacementRanking: Ranking)
     requires path.Valid()
     requires path.Target().Root().OccupiedChildIndex(childIdx)
     requires replacement == LinkedBetreeMod.InsertFlushReplacement(path.Target(), childIdx, replacementAddr, replacementChildAddr)
     requires path.CanSubstitute(replacement, pathAddrs)
+    requires replacement.Acyclic()
+    requires replacement.ValidRanking(replacementRanking)
 
+    // Framing
+    requires replacementAddr != replacementChildAddr
+    requires path.Target().diskView.IsFresh({replacementAddr})
+    requires path.Target().diskView.IsFresh({replacementChildAddr})
 
+    //RankingAfterSubstitution requirements
+    requires path.linked.root.value in replacementRanking
+    requires Set(pathAddrs) !! replacementRanking.Keys
+    requires PathAddrsFresh(path, replacement, pathAddrs)
 
     ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()  // prereq
     ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Representation()
@@ -1173,7 +1182,85 @@ module ReprBetreeRefinement
               - path.AddrsOnPath() - {path.Target().ChildAtIdx(childIdx).root.value}
     decreases path.depth
   {
-    assume false;
+    var ranking := LinkedBetreeRefinement.RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
+    LinkedBetreeRefinement.BuildTightMaintainsRankingValidity(path.Substitute(replacement, pathAddrs), ranking);
+    if path.depth == 0 {
+      ReprAfterSubstituteFlushReplacementBaseCase(path, replacement, childIdx, replacementAddr, replacementChildAddr, pathAddrs, ranking);
+    } else {
+      assume false;
+    }
+  }
+
+  lemma {:timeLimitMultiplier 3} ReprAfterSubstituteFlushReplacementBaseCase(
+    path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, 
+    pathAddrs: PathAddrs, ranking: Ranking)
+    requires path.Valid()
+    requires path.depth == 0  // base case
+    requires path.Target().Root().OccupiedChildIndex(childIdx)
+    requires replacement == LinkedBetreeMod.InsertFlushReplacement(path.Target(), childIdx, replacementAddr, replacementChildAddr)
+    requires path.CanSubstitute(replacement, pathAddrs)
+    requires path.linked.ValidRanking(ranking)
+    requires path.Substitute(replacement, pathAddrs).Acyclic()
+    requires path.Substitute(replacement, pathAddrs).ValidRanking(ranking)
+    requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
+
+    // Framing
+    requires replacementAddr != replacementChildAddr;
+    requires path.Target().diskView.IsFresh({replacementAddr})
+    requires path.Target().diskView.IsFresh({replacementChildAddr})
+
+
+    ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Representation()
+            == path.linked.Representation() + Set(pathAddrs) + {replacementAddr, replacementChildAddr} 
+               - path.AddrsOnPath() - {path.Target().ChildAtIdx(childIdx).root.value}
+  {
+    assert path.Target() == path.linked;
+    assert path.Substitute(replacement, pathAddrs).Representation() == replacement.Representation();
+    assert path.AddrsOnPath() == {path.linked.root.value};
+    assert Set(pathAddrs) == {};
+
+    var LHS := replacement.Representation();
+    var RHS := path.linked.Representation() + {replacementAddr, replacementChildAddr} 
+             - {path.linked.root.value, path.linked.ChildAtIdx(childIdx).root.value};
+    assert replacement == LinkedBetreeMod.InsertFlushReplacement(path.linked, childIdx, replacementAddr, replacementChildAddr);
+
+    assert replacement.Root().children == path.linked.Root().children[childIdx := Pointer.Some(replacementChildAddr)];
+    var numChildren := |replacement.Root().children|;
+
+    var subTreeAddrs' := seq(numChildren, i requires 0 <= i < numChildren => replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => path.linked.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+
+    forall idx | 
+      && 0 <= idx < numChildren 
+      && idx != childIdx
+    ensures 
+      && subTreeAddrs[idx] == subTreeAddrs'[idx]
+      && path.linked.ChildAtIdx(childIdx).root.value !in subTreeAddrs[idx]
+    {
+      assume false;
+    }
+
+    assert subTreeAddrs'[childIdx] 
+        == subTreeAddrs[childIdx] + {replacementChildAddr} - {path.linked.ChildAtIdx(childIdx).root.value}
+    by {
+      assume false;
+    }
+
+    Sets.SetSeqMath(subTreeAddrs, subTreeAddrs', childIdx, {replacementChildAddr}, {path.linked.ChildAtIdx(childIdx).root.value});
+
+    assert path.linked.root.value !in replacement.Representation() 
+    by {
+      // Do something similar to InsertCompactReplacementExcludesAddrsOnPath
+      assume false;
+    }
+
+    LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(path.linked, ranking, path.linked.TheRanking());
+    LinkedBetreeRefinement.ReachableAddrsIgnoresRanking(replacement, ranking, replacement.TheRanking());
+    // Goal
+    assert replacement.Representation()
+        == path.linked.Representation() + {replacementAddr, replacementChildAddr} 
+           - {path.linked.root.value, path.linked.ChildAtIdx(childIdx).root.value};
+    RepresentationIgnoresBuildTight(path.Substitute(replacement, pathAddrs));
   }
 
 
@@ -1184,8 +1271,14 @@ module ReprBetreeRefinement
     requires v'.betree.linked.Acyclic()
     ensures ValidRepr(v')
   {
+    var linked := v.betree.linked;
     var replacement := LinkedBetreeMod.InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr);
-    ReprAfterSubstituteFlushReplacement(step.path, replacement, step.childIdx, step.targetAddr, step.targetChildAddr, step.pathAddrs);
+    var linkedRanking := LinkedBetreeRefinement.BuildTightRanking(linked, linked.TheRanking());
+    LinkedBetreeRefinement.ValidRankingAllTheWayDown(step.path.linked.TheRanking(), step.path);
+    var replacementRanking := LinkedBetreeRefinement.RankingAfterInsertFlushReplacement(step.path.Target(), linkedRanking, step.childIdx, step.targetAddr, step.targetChildAddr);
+    if v.betree.linked.HasRoot() {
+      ReprAfterSubstituteFlushReplacement(step.path, replacement, step.childIdx, step.targetAddr, step.targetChildAddr, step.pathAddrs, replacementRanking);
+    }
   }
 
   lemma InternalFlushMaintainsTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
