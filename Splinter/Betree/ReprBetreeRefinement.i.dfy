@@ -524,6 +524,13 @@ module ReprBetreeRefinement
     // TODO(tony): We don't actually know that our tree is not a DAG?
     // Copy on write will introduce DAGs into the disk, but the representation of 
     // should any pair of children of any node should not have overlaps, I think.
+    /* 
+      Update: This should be an invariant. Something like
+      "for every node in the tree, any pair of its children have disjoint representations."
+      It needs to be for every node in the tree and not just the root node, because there are 
+      cases when we need this property for subpaths, e.g. in SubstituteDeletesAddrsOnPath
+      when making a recursive call.
+    */ 
     assume false;
 
     // Now prove the actual goal
