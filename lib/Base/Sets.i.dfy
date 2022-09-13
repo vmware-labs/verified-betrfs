@@ -106,4 +106,21 @@ module Sets {
     }
   }
 
+  lemma SetSeqMath<T>(s: seq<set<T>>, s': seq<set<T>>, idx: nat, add:set<T>, sub:set<T>)
+    requires 0 < |s|
+    requires |s| == |s'|
+    requires 0 <= idx < |s|
+    requires forall i | 
+                && 0 <= i < |s| 
+                && i != idx 
+              :: s[i] == s'[i]
+                && s[i] !! sub
+    requires s'[idx] == s[idx] + add - sub
+    // Framing
+    requires sub !! add
+    ensures UnionSeqOfSets(s') == UnionSeqOfSets(s) + add - sub
+  {
+    UnionSeqOfSetsSoundness(s);
+    UnionSeqOfSetsSoundness(s');
+  }
 }
