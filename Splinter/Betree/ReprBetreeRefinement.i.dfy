@@ -521,6 +521,7 @@ module ReprBetreeRefinement
     // TODO(tony): We don't actually know that our tree is not a DAG?
     // Copy on write will introduce DAGs into the disk, but the representation of 
     // should any pair of children of any node should not have overlaps, I think.
+    // Also, DAGs are temporary. BuildTight deletes the DAGs.
     /* 
       Update: This should be an invariant. Something like
       "for every node in the tree, any pair of its children have disjoint representations."
@@ -1034,9 +1035,7 @@ module ReprBetreeRefinement
     ensures path.AddrsOnPath() !! replacement.Representation()
     decreases path.depth
   {
-    var ranking := path.linked.TheRanking();
     var replacementRanking := replacement.TheRanking();
-    LBR.ValidRankingAllTheWayDown(ranking, path);
     var rootAddr := path.linked.root.value;
     var numChildren := |replacement.Root().children|;
     var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(replacementRanking));
@@ -1060,6 +1059,7 @@ module ReprBetreeRefinement
       ensures rootAddr !in subTreeAddrs[idx]
       {
         if rootAddr in subTreeAddrs[idx] {
+          LBR.ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
           LBR.ChildAtIdxAcyclic(path.Target(), idx);
           ReachableAddrsInAgreeingDisks(path.Target().ChildAtIdx(idx), replacement.ChildAtIdx(idx), replacementRanking);
           LBR.ReachableAddrsIgnoresRanking(path.Target().ChildAtIdx(idx), path.Target().ChildAtIdx(idx).TheRanking(), replacementRanking);
@@ -1176,8 +1176,7 @@ module ReprBetreeRefinement
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
     // Framing
     requires replacementAddr != replacementChildAddr;
-    requires path.Target().diskView.IsFresh({replacementAddr})
-    requires path.Target().diskView.IsFresh({replacementChildAddr})
+    requires path.Target().diskView.IsFresh({replacementAddr, replacementChildAddr})
     requires path.AddrsOnPath() !! replacement.Representation()
 
     ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Representation()
@@ -1220,12 +1219,73 @@ module ReprBetreeRefinement
     requires path.Valid()
     requires path.Target().Root().OccupiedChildIndex(childIdx)
     requires replacement == LB.InsertFlushReplacement(path.Target(), childIdx, replacementAddr, replacementChildAddr)
-    requires path.Target().diskView.IsFresh({replacementAddr})
     requires replacement.Acyclic()
+    // Framing
+    requires replacementAddr != replacementChildAddr;
+    requires path.Target().diskView.IsFresh({replacementAddr, replacementChildAddr})
+
     ensures path.AddrsOnPath() !! replacement.Representation()
     decreases path.depth
   {
-    assume false;
+    LBR.ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+    var replacementRanking := LBR.RankingAfterInsertFlushReplacement(path.Target(), path.Target().TheRanking(), childIdx, replacementAddr, replacementChildAddr);
+    var rootAddr := path.linked.root.value;
+    var numChildren := |replacement.Root().children|;
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(replacement.TheRanking()));
+    assert replacement.Root().children == path.Target().Root().children[childIdx := Pointer.Some(replacementChildAddr)];
+
+    if path.depth == 0 {
+      // Base case
+      forall idx | 0 <= idx < numChildren
+      ensures rootAddr !in subTreeAddrs[idx]
+      {
+        LBR.ChildAtIdxAcyclic(path.Target(), idx);
+        LBR.ReachableAddrsIgnoresRanking(replacement.ChildAtIdx(idx), replacement.TheRanking(), replacementRanking);
+        LBR.ReachableAddrsIgnoresRanking(path.linked.ChildAtIdx(idx), path.linked.ChildAtIdx(idx).TheRanking(), replacementRanking);
+        if idx == childIdx {
+          RepresentationAfterSwitchingRoot(path.linked.ChildAtIdx(childIdx), replacement.ChildAtIdx(childIdx), replacementChildAddr, replacementRanking);
+          RootNotInChildrenRepresentation(path.linked, childIdx);
+          LBR.ReachableAddrsIgnoresRanking(replacement.ChildAtIdx(childIdx), replacement.ChildAtIdx(childIdx).TheRanking(), replacementRanking);
+        } else {
+          if rootAddr in subTreeAddrs[idx] {
+            ReachableAddrsInAgreeingDisks(path.linked.ChildAtIdx(idx), replacement.ChildAtIdx(idx), replacementRanking);
+            RootAddrNotInChildRepresentation(path.linked, idx);
+            assert false;
+          }
+        }
+      }
+    } else {
+      // Recursive case
+      InsertFlushReplacementExcludesAddrsOnPath(path.Subpath(), replacement, childIdx, replacementAddr, replacementChildAddr);
+      forall idx | 0 <= idx < numChildren
+      ensures rootAddr !in subTreeAddrs[idx]
+      {
+        LBR.ReachableAddrsIgnoresRanking(replacement.ChildAtIdx(idx), replacement.TheRanking(), replacementRanking);
+        var routeIdx := Route(path.linked.Root().pivotTable, path.key);
+        if idx == childIdx {
+          if rootAddr in subTreeAddrs[idx] {
+            RepresentationAfterSwitchingRoot(path.Target().ChildAtIdx(childIdx), replacement.ChildAtIdx(childIdx), replacementChildAddr, replacementRanking);
+            LBR.ReachableAddrsIgnoresRanking(replacement.ChildAtIdx(idx), replacement.ChildAtIdx(childIdx).TheRanking(), replacement.TheRanking());
+            ParentRepresentationContainsChildRepresentation(path.Target(), childIdx);
+            RootRepresentationContainsTargetRepresentation(path.Subpath());
+            RootAddrNotInChildRepresentation(path.linked, routeIdx);
+            assert false;
+          }
+        } else {
+          if rootAddr in subTreeAddrs[idx] {
+            LBR.ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+            LBR.ChildAtIdxAcyclic(path.Target(), idx);
+            ReachableAddrsInAgreeingDisks(path.Target().ChildAtIdx(idx), replacement.ChildAtIdx(idx), replacementRanking);
+            LBR.ReachableAddrsIgnoresRanking(path.Target().ChildAtIdx(idx), path.Target().ChildAtIdx(idx).TheRanking(), replacementRanking);
+            ParentRepresentationContainsChildRepresentation(path.Target(), idx);
+            RootRepresentationContainsTargetRepresentation(path.Subpath());
+            RootAddrNotInChildRepresentation(path.linked, routeIdx);
+            assert false;
+          }
+        }
+      }
+    }
+    Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
   }
 
   lemma InternalFlushMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
