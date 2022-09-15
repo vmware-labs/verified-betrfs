@@ -1253,7 +1253,13 @@ module ReprBetreeRefinement
     requires v'.betree.linked.Acyclic()
     ensures v'.betree.linked.DiskIsTightWrtRepresentation()
   {
-    assume false;
+    if v.betree.linked.HasRoot() {
+      var untightLinked' := step.path.Substitute(
+            LB.InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr),
+            step.pathAddrs
+        );
+      BuildTightGivesTightWrtRepresentation(untightLinked');
+    }
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel) 
