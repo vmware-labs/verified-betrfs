@@ -853,7 +853,7 @@ module ReprBetreeRefinement
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Acyclic()
-    // Requirements of // Requirements of SubstitutePreservesWF and ReplacementAcyclicImpliesSubstituteAcyclic. 
+    // Requirements of SubstitutePreservesWF and ReplacementAcyclicImpliesSubstituteAcyclic. 
     // Would be the result of some lemma such as RankingAfterInsertCompactReplacement
     requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.linked.root.value in ranking
@@ -911,7 +911,7 @@ module ReprBetreeRefinement
       var tightRanking := LBR.BuildTightRanking(path.linked, path.linked.TheRanking());
       LBR.ValidRankingAllTheWayDown(tightRanking, path);
       ReprAfterSubstituteCompactReplacementInduction1(path, replacement, pathAddrs, {replacementAddr}, {}, replacementRanking);
-      ReprAfterSubstituteCompactReplacementInduction2(path, replacement, pathAddrs, replacementAddr, replacementRanking);
+      ReprAfterSubstituteCompactReplacementInduction2(path, replacement, pathAddrs, {replacementAddr}, {}, replacementRanking);
     }
   }
 
@@ -920,22 +920,21 @@ module ReprBetreeRefinement
       pathAddrs: PathAddrs, additions: set<Address>, subtractions:set<Address>, ranking: Ranking)
     requires path.Valid()
     requires 0 < path.depth
-    requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Acyclic()
     requires replacement.Acyclic()
+    // Requirements of Ranking. Would be the result of some lemma such as RankingAfterInsertCompactReplacement
+    requires path.linked.root.value in ranking
+    requires replacement.ValidRanking(ranking)
     // Framing
+    requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.AddrsOnPath() !! replacement.Representation()
     requires Set(pathAddrs) !! ranking.Keys
     requires path.Target().diskView.IsFresh(additions)
     requires path.Target().Acyclic()
     requires subtractions <= path.Target().Representation()
-
-    // Requirements of Ranking. Would be the result of some lemma such as RankingAfterInsertCompactReplacement
-    requires path.linked.root.value in ranking
-    requires replacement.ValidRanking(ranking)
     
     // Induction hypothesis
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
@@ -994,37 +993,38 @@ module ReprBetreeRefinement
   }
 
   // This juicy lemma requires a lot of juice
-  lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacementInduction2(path: Path, replacement: LinkedBetree, 
-    pathAddrs: PathAddrs, replacementAddr: Address, ranking: Ranking)
+  lemma {:timeLimitMultiplier 3} ReprAfterSubstituteCompactReplacementInduction2(path: Path, replacement: LinkedBetree, 
+    pathAddrs: PathAddrs, additions: set<Address>, subtractions: set<Address>, ranking: Ranking)
     requires path.Valid()
     requires 0 < path.depth
-    requires path.Target().diskView.IsFresh({replacementAddr})
-    requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Acyclic()
     requires replacement.Acyclic()
-    requires replacementAddr in replacement.Representation()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Acyclic()
     // Requirements of Ranking. Would be the result of some lemma such as RankingAfterInsertCompactReplacement
     requires path.linked.root.value in ranking
     requires replacement.ValidRanking(ranking)
+    // Framing
+    requires PathAddrsFresh(path, replacement, pathAddrs)
+    requires path.Target().diskView.IsFresh(additions)
     requires Set(pathAddrs) !! ranking.Keys
+    requires additions <= replacement.Representation()
 
     // Induction hypothesis of ReprAfterSubstituteCompactReplacement
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
-      == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath()
+      == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + additions - path.Subpath().AddrsOnPath() - subtractions
 
-    ensures path.linked.Representation() + Set(pathAddrs) + {replacementAddr} - path.AddrsOnPath()
+    ensures path.linked.Representation() + Set(pathAddrs) + additions - path.AddrsOnPath() - subtractions
       <= path.Substitute(replacement, pathAddrs).BuildTightTree().Representation()
   {
-    forall addr | addr in path.linked.Representation() + Set(pathAddrs) + {replacementAddr} - path.AddrsOnPath()
+    forall addr | addr in path.linked.Representation() + Set(pathAddrs) + additions - path.AddrsOnPath() - subtractions
     ensures addr in path.Substitute(replacement, pathAddrs).Representation()
     {
       if addr in Set(pathAddrs) {
         RepresentationAfterSubstituteContainsPathAddrs(path, replacement, pathAddrs, ranking);
-      } else if addr == replacementAddr {
+      } else if addr in additions {
         RepresentationAfterSubstituteContainsReplacement(path, replacement, pathAddrs, ranking);
       } else if addr in path.linked.Representation() {
         /* This is the tricky case
@@ -1049,7 +1049,7 @@ module ReprBetreeRefinement
           // Else addr is on substitution path
           SubpathEquivToChildAtRouteIdx(path);
           RepresentationIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]));
-          SubstitutedBranchRepresentation(path, replacement, pathAddrs, {replacementAddr}, {}, routeIdx, ranking);
+          SubstitutedBranchRepresentation(path, replacement, pathAddrs, additions, subtractions, routeIdx, ranking);
           ParentRepresentationContainsChildRepresentation(path.Substitute(replacement, pathAddrs), routeIdx);
         }
       }
