@@ -871,23 +871,19 @@ module ReprBetreeRefinement
       RepresentationAfterSwitchingRoot(path.linked, replacement.BuildTightTree(), replacementAddr, ranking);
     } else {
       ReprAfterSubstituteCompactReplacement(path.Subpath(), compactedBuffers, replacement, replacementRanking, pathAddrs[1..], replacementAddr);
-      // Induction hypothesis:
-      // assert path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
-      //       == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath();
-      var node := path.linked.Root();
-      var routeIdx := Route(node.pivotTable, path.key);
-      var numChildren := |path.Substitute(replacement, pathAddrs).BuildTightTree().Root().children|;
-      var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => path.Substitute(replacement, pathAddrs).BuildTightTree().ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
-      Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
-      var tightRanking := LBR.BuildTightRanking(path.linked, path.linked.TheRanking());
+      /* Induction hypothesis:
+        path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
+        == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr} - path.Subpath().AddrsOnPath();
+      */
+      var tightRanking := LBR.BuildTightRanking(path.linked, path.linked.TheRanking());  // trigger
       LBR.ValidRankingAllTheWayDown(tightRanking, path);
-      ReprAfterSubstituteCompactReplacementInduction1(path, replacement, pathAddrs, {replacementAddr}, {}, replacementRanking);
-      ReprAfterSubstituteCompactReplacementInduction2(path, replacement, pathAddrs, {replacementAddr}, {}, replacementRanking);
+      ReprAfterSubstituteReplacementInduction1(path, replacement, pathAddrs, {replacementAddr}, {}, replacementRanking);
+      ReprAfterSubstituteReplacementInduction2(path, replacement, pathAddrs, {replacementAddr}, {}, replacementRanking);
     }
   }
 
   // This juicy lemma requires a lot of juice
-  lemma {:timeLimitMultiplier 4} ReprAfterSubstituteCompactReplacementInduction1(path: Path, replacement: LinkedBetree, 
+  lemma {:timeLimitMultiplier 4} ReprAfterSubstituteReplacementInduction1(path: Path, replacement: LinkedBetree, 
       pathAddrs: PathAddrs, additions: set<Address>, subtractions:set<Address>, ranking: Ranking)
     requires path.Valid()
     requires 0 < path.depth
@@ -964,7 +960,7 @@ module ReprBetreeRefinement
   }
 
   // This juicy lemma requires a lot of juice
-  lemma {:timeLimitMultiplier 3} ReprAfterSubstituteCompactReplacementInduction2(path: Path, replacement: LinkedBetree, 
+  lemma {:timeLimitMultiplier 3} ReprAfterSubstituteReplacementInduction2(path: Path, replacement: LinkedBetree, 
     pathAddrs: PathAddrs, additions: set<Address>, subtractions: set<Address>, ranking: Ranking)
     requires path.Valid()
     requires 0 < path.depth
@@ -1112,7 +1108,7 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma ReprAfterSubstituteFlushReplacement(
+  lemma {:timeLimitMultiplier 2} ReprAfterSubstituteFlushReplacement(
     path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, 
     pathAddrs: PathAddrs, replacementRanking: Ranking)
     requires path.Valid()
@@ -1150,12 +1146,19 @@ module ReprBetreeRefinement
         == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr, replacementChildAddr} 
            - path.Subpath().AddrsOnPath() - {path.Target().ChildAtIdx(childIdx).root.value};
       */
-      assert path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
-             == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + {replacementAddr, replacementChildAddr} 
-                - path.Subpath().AddrsOnPath() - {path.Target().ChildAtIdx(childIdx).root.value};
+      var tightRanking := LBR.BuildTightRanking(path.linked, path.linked.TheRanking());  // trigger
+      LBR.ValidRankingAllTheWayDown(tightRanking, path);
+      var additions := {replacementAddr, replacementChildAddr};
+      var subtractions := {path.Target().ChildAtIdx(childIdx).root.value};
 
-
-      assume false;
+      assert path.Target().ChildAtIdx(childIdx).root.value in path.Target().Representation() by {
+        ParentRepresentationContainsChildRepresentation(path.Target(), childIdx);
+      }
+      assert replacementChildAddr in replacement.Representation() by {
+        ParentRepresentationContainsChildRepresentation(replacement, childIdx);
+      }
+      ReprAfterSubstituteReplacementInduction1(path, replacement, pathAddrs, additions, subtractions, replacementRanking);
+      ReprAfterSubstituteReplacementInduction2(path, replacement, pathAddrs, additions, subtractions, replacementRanking);
     }
   }
 
