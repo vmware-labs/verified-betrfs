@@ -843,35 +843,6 @@ module ReprBetreeRefinement
     LBR.ReachableAddrsIgnoresRanking(linked', ranking, linked'.TheRanking());
   }
 
-  // Expands path.Substitute().ChildAtIdx(routeIdx).Representation into its components
-  lemma SubstitutedBranchRepresentation(path: Path, replacement: LinkedBetree, 
-    pathAddrs: PathAddrs, additions: set<Address>, subtractions: set<Address>, routeIdx: nat, ranking: Ranking)
-    requires path.Valid()
-    requires 0 < path.depth
-    requires routeIdx == Route(path.linked.Root().pivotTable, path.key);
-    requires replacement.Acyclic()
-    requires path.CanSubstitute(replacement, pathAddrs)
-    requires path.Substitute(replacement, pathAddrs).Acyclic()
-    requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Acyclic()
-    // Requirements of SubstitutePreservesWF and ReplacementAcyclicImpliesSubstituteAcyclic. 
-    // Would be the result of some lemma such as RankingAfterInsertCompactReplacement
-    requires PathAddrsFresh(path, replacement, pathAddrs)
-    requires path.linked.root.value in ranking
-    requires replacement.ValidRanking(ranking)
-
-    // Induction hypothesis of ReprAfterSubstituteCompactReplacement
-    requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Representation()
-            == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + additions - path.Subpath().AddrsOnPath() - subtractions
-    ensures path.Subpath().linked.Acyclic()
-    ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).Acyclic()
-    ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).Representation()
-      == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + additions - path.Subpath().AddrsOnPath() - subtractions
-  {    
-    LBR.ChildAtIdxAcyclic(path.Substitute(replacement, pathAddrs), routeIdx);    
-    LBR.ChildAtIdxAcyclic(path.Substitute(replacement, pathAddrs), routeIdx);
-    ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking); 
-  }
-
   // Tony: this lemma is sprawling massive...
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacement(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)
     requires path.Valid()
@@ -959,7 +930,7 @@ module ReprBetreeRefinement
         if idx == routeIdx {
           // If addr is in the subtree that is swapped in during substitution
           RepresentationIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]));
-          SubstitutedBranchRepresentation(path, replacement, pathAddrs, additions, subtractions, routeIdx, ranking);
+          ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking); 
           LBR.ReachableAddrsIgnoresRanking(path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx), path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).TheRanking(), linkedAftSubst.TheRanking());
           RootRepresentationContainsSubpathRepresentation(path);
           assert addr !in path.AddrsOnPath() by {  // trigger
@@ -1032,7 +1003,7 @@ module ReprBetreeRefinement
         Hence, addr is in one of the children subtrees of path.linked.Root()
         If addr is not on substitution path, the addr in path.Substitute() by ReachableAddrsNotOnSubpathRoute
         Else, addr is in substitution path, and must be in path.Subpath().linked.Representation().
-        Then by SubstitutedBranchRepresentation, addr is in subTreeAddrs[routeIdx] of path.Substitute().Repr().
+        Then by ReachableAddrsOnSubpathRoute, addr is in subTreeAddrs[routeIdx] of path.Substitute().Repr().
         Then addr is in path.Substitute(..).Representation() by definition of Representation
         */
         var numChildren := |path.linked.Root().children|;
@@ -1049,7 +1020,7 @@ module ReprBetreeRefinement
           // Else addr is on substitution path
           SubpathEquivToChildAtRouteIdx(path);
           RepresentationIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]));
-          SubstitutedBranchRepresentation(path, replacement, pathAddrs, additions, subtractions, routeIdx, ranking);
+          ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking); 
           ParentRepresentationContainsChildRepresentation(path.Substitute(replacement, pathAddrs), routeIdx);
         }
       }
