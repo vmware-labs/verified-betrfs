@@ -897,7 +897,7 @@ module ReprBetreeRefinement
     var ranking := LBR.RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
     LBR.BuildTightMaintainsRankingValidity(path.Substitute(replacement, pathAddrs), ranking);
     if path.depth == 0 {
-      ReprAfterSubstituteCompactReplacementBaseCase(path, compactedBuffers, replacement, pathAddrs, replacementAddr, ranking);
+      RepresentationAfterSwitchingRoot(path.linked, replacement.BuildTightTree(), replacementAddr, ranking);
     } else {
       ReprAfterSubstituteCompactReplacement(path.Subpath(), compactedBuffers, replacement, replacementRanking, pathAddrs[1..], replacementAddr);
       // Induction hypothesis:
@@ -910,8 +910,6 @@ module ReprBetreeRefinement
       Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
       var tightRanking := LBR.BuildTightRanking(path.linked, path.linked.TheRanking());
       LBR.ValidRankingAllTheWayDown(tightRanking, path);
-      var replacementRanking := 
-        LBR.RankingAfterInsertCompactReplacement(path.Target(), compactedBuffers, tightRanking, replacementAddr);
       ReprAfterSubstituteCompactReplacementInduction1(path, replacement, pathAddrs, replacementAddr, replacementRanking);
       ReprAfterSubstituteCompactReplacementInduction2(path, replacement, pathAddrs, replacementAddr, replacementRanking);
     }
@@ -1049,24 +1047,6 @@ module ReprBetreeRefinement
     RepresentationIgnoresBuildTight(path.Substitute(replacement, pathAddrs));
   }
 
-  lemma ReprAfterSubstituteCompactReplacementBaseCase(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address, ranking: Ranking)
-    requires path.Valid()
-    requires path.depth == 0  // base case
-    requires path.Target().Root().buffers.Equivalent(compactedBuffers)
-    requires path.Target().diskView.IsFresh({replacementAddr})
-    requires replacement == LB.InsertCompactReplacement(path.Target(), compactedBuffers, replacementAddr)
-    requires path.CanSubstitute(replacement, pathAddrs)
-    requires path.linked.ValidRanking(ranking)
-    requires path.Substitute(replacement, pathAddrs).Acyclic()
-    requires path.Substitute(replacement, pathAddrs).ValidRanking(ranking)
-    requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
-    requires path.AddrsOnPath() !! replacement.Representation()
-    ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Representation()
-            == path.linked.Representation() + Set(pathAddrs) + {replacementAddr} - path.AddrsOnPath()
-  {
-    RepresentationAfterSwitchingRoot(path.linked, replacement.BuildTightTree(), replacementAddr, ranking);
-  }
-
   // Prove step.path.AddrsOnPath() !! replacement.Representation(); 
   lemma InsertCompactReplacementExcludesAddrsOnPath(path: Path, replacement: LinkedBetree, compactedBuffers: BufferStack, replacementAddr: Address)
     requires path.Valid()
@@ -1184,6 +1164,7 @@ module ReprBetreeRefinement
       ReprAfterSubstituteFlushReplacementBaseCase(path, replacement, childIdx, replacementAddr, replacementChildAddr, pathAddrs, ranking);
     } else {
       assume false;
+      ReprAfterSubstituteFlushReplacement(path.Subpath(), replacement, childIdx, replacementAddr, replacementChildAddr, pathAddrs[1..], ranking);
     }
   }
 
