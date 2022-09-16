@@ -170,16 +170,19 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
         && key !in I(dot(a, p))
         && I(dot(b, p)) == I(dot(a, p))[key := x] {
 
-      reveal_dot_XY_Cells();
+      var head := a.producer.head;
+      assert dot(b, p).cells == dot(a, p).cells[head := Full(x)] by {
+          reveal_dot_XY_Cells();
+      }
       assert Inv(dot(b, p)) by {
-        assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
+        //assert dot(a, p).cells.Keys == a.cells.Keys + p.cells.Keys;
         forall i: nat | i < size()
         ensures MInvCell(dot(b, p), i)
         {
           assert MInvCell(dot(a, p), i);
         }
       }
-      assert key !in I(dot(a, p));
+      assert key !in I(dot(a, p)) by { reveal_dot_XY_Cells(); }
       assert I(dot(b, p)) == I(dot(a, p))[key := x];
     }
     assert deposit(a, b, key, x);
@@ -393,6 +396,7 @@ module QueueMultiRw(item: ItemModule) refines MultiRw {
   }
 
   lemma InitImpliesInv(x: M)
+  requires Init(x)
   ensures Inv(x)
   {
   }

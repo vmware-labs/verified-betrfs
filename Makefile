@@ -130,6 +130,9 @@ hash-status: build/concurrency/hashtable/Interface.i.status.pdf
 hoh-status: build/concurrency/handoverhand/Interface.i.status.pdf
 bank-status: build/concurrency/bank-paper/Impl.i.status.pdf
 
+og-status: build/concurrency/og_counter/Impl.i.status.pdf
+queue-status: build/concurrency/spsc-queue/QueueImpl.i.status.pdf
+
 concurrency-status: scache-status nr-status hash-status hoh-status bank-status
 
 # Longer time-limit for CI
@@ -230,6 +233,7 @@ OTHER_PROVER_FLAGS =
 # The other files are legacy'ed in, but it's no big deal as long
 # as they verify.
 build/concurrency/Math/Nonlinear.i.verchk: NONLINEAR_FLAGS=
+build/concurrency/spsc-queue/QueueMultiRw.i.verchk: NONLINEAR_FLAGS=
 build/lib/Math/Nonlinear.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/mathematics.i.verchk: NONLINEAR_FLAGS=
 build/Impl/BookkeepingModel.i.verchk: NONLINEAR_FLAGS=

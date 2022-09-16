@@ -1,6 +1,6 @@
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Base/LinearOption.i.dfy"
-include "../scache/GlinearOption.s.dfy"
+include "../framework/GlinearOption.s.dfy"
 include "../framework/PCM.s.dfy"
 include "../framework/Ptrs.s.dfy"
 include "../framework/Atomic.s.dfy"
