@@ -317,6 +317,12 @@ module LinkedBetreeMod
     function ModifyDisk(addr: Address, item: BetreeNode) : DiskView{
       DiskView.DiskView(entries[addr := item])
     }
+
+    function GetEntryAsLinked(addr: Address) : LinkedBetree 
+      requires addr in entries
+    {
+      LinkedBetree(Pointer.Some(addr), this)
+    }
   }
 
   function EmptyDisk() : DiskView {
