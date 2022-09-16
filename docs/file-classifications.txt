@@ -1,8 +1,9 @@
 ignore concurrency/SeagullBundle.i.dfy
 
-bank concurrency/bank-paper/Bank.i.dfy
-bank concurrency/bank-paper/BankTokens.i.dfy
+bank-sm concurrency/bank-paper/Bank.i.dfy
+bank-sm concurrency/bank-paper/BankTokens.i.dfy
 bank concurrency/bank-paper/Impl.i.dfy
+bank-spec concurrency/bank-paper/Impl.s.dfy
 
 framework-lib concurrency/Math/Math.i.dfy
 framework-lib concurrency/Math/Nonlinear.i.dfy

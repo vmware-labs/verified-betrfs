@@ -61,7 +61,7 @@ class Row:
     #Row("data", "foo", "ManualMapper-ignore"),
 
 #row_descriptors = [
-#    Row("data",  "ManualMapper-bank"),
+#    Row("data",  "Bank~\\autoref{sec:core}", "ManualMapper-bank"),
 #    Row("data", "RHHT Hash Table~\\autoref{sec:spec:refinement}", "ManualMapper-htatomic"),
 #    #Row("data", "Hand-over-hand~\\autoref{sec:handoverhand}", "ManualMapper-hthh"),
 #    Row("data", "Node Replication~\\autoref{sec:nr}", "ManualMapper-nr"),
@@ -71,32 +71,38 @@ class Row:
 
 
 row_descriptors = [
-    Row("data", "Linear Dafny Core",  "ManualMapper-framework-linear-dafny"),
-    Row("data", "Core",  "ManualMapper-framework"),
-    Row("data", "Runtime and Specs",  "ManualMapper-framework-mem"),
-    Row("data", "Libraries",  "ManualMapper-framework-lib"),
+    Row("header", "Common"),
+    Row("data", "LTS def. \\& ghost axioms",  "ManualMapper-framework"),
+    Row("data", "Memory Primitives",  "ManualMapper-framework-mem"),
+    Row("data", "Libraries",  "ManualMapper-framework-lib", impl=True),
 
+    Row("header", "Bank~\\autoref{sec:core}"),
+    Row("data", "Spec", "ManualMapper-bank-spec"),
+    Row("data", "LTS", "ManualMapper-bank-sm"),
+    Row("data", "Impl", "ManualMapper-bank", impl=True),
+
+    Row("header", "RHHT Hash Table~\\autoref{sec:spec:refinement}"),
     Row("data", "Spec",  "ManualMapper-htatomic-spec"),
-    Row("data", "Impl",  "ManualMapper-htatomic-impl"),
     Row("data", "LTS",  "ManualMapper-htatomic-lts"),
     Row("data", "Refinement Proofs",  "ManualMapper-htatomic-ref"),
+    Row("data", "Impl",  "ManualMapper-htatomic-impl", impl=True),
 
+    Row("header", "Node Replication~\\autoref{sec:nr}"),
     Row("data", "Spec",  "ManualMapper-nr-spec"),
-    Row("data", "Impl",  "ManualMapper-nr-impl"),
-    Row("data", "Replication LTS",  "ManualMapper-nr-log"),
-    Row("data", "FlatCombine LTS",  "ManualMapper-nr-fc"),
-    Row("data", "CyclicBuffer LTS",  "ManualMapper-nr-cyclic"),
-    Row("data", "DistRwLock LTS",  "ManualMapper-nr-rw"),
+    Row("data", "\\UnboundedLog LTS",  "ManualMapper-nr-log"),
+    Row("data", "\\FlatCombine LTS",  "ManualMapper-nr-fc"),
+    Row("data", "\\CyclicBuffer LTS",  "ManualMapper-nr-cyclic"),
+    Row("data", "\\DistRwLock LTS",  "ManualMapper-nr-rw"),
     Row("data", "Refinement Proofs",  "ManualMapper-nr-ref"),
+    Row("data", "Impl",  "ManualMapper-nr-impl", impl=True),
 
+    Row("header", "SplinterCache~\\autoref{sec:cache}"),
     Row("data", "Spec",  "ManualMapper-scache-spec"),
-    Row("data", "Disk Model and IO Specs",  "ManualMapper-scache-disk"),
-    Row("data", "Impl",  "ManualMapper-scache-impl"),
-    Row("data", "Cache LTS",  "ManualMapper-scache-sm"),
-    Row("data", "CacheRwLock LTS",  "ManualMapper-scache-rw"),
+    Row("data", "Disk Model and API",  "ManualMapper-scache-disk"),
+    Row("data", "\\Cache LTS",  "ManualMapper-scache-sm"),
+    Row("data", "\\CacheRwLock LTS",  "ManualMapper-scache-rw"),
     Row("data", "Refinement Proofs",  "ManualMapper-scache-ref"),
-
-    Row("data", "Bank~\\autoref{sec:core}", "ManualMapper-bank"),
+    Row("data", "Impl",  "ManualMapper-scache-impl", impl=True),
 ]
 
 def write_tex_table(fp, counters):
@@ -125,11 +131,16 @@ def write_tex_table(fp, counters):
     keys = list(counters.keys())
     keys.sort()
     for row in row_descriptors:
-      if row.counter_key in counters:
-        local_counter = counters[row.counter_key]
-        write_row(row.label, local_counter)
+      if row.type == "data":
+        if row.counter_key in counters:
+          local_counter = counters[row.counter_key]
+          write_row(row.label, local_counter)
+        else:
+          print("Warning: missing counter for %s" % row.counter_key)
+      elif row.type == "header":
+        fp.write("\\textbf{" + row.label + "} & &  &  & \\\\")
       else:
-        print("Warning: missing counter for %s" % row.counter_key)
+        assert False
     fp.write("\\hline\n")
     write_row("Total", counters["total"])
     fp.write("\\hline\n")
