@@ -59,13 +59,44 @@ class Row:
           assert self.type=="header"
 
     #Row("data", "foo", "ManualMapper-ignore"),
+
+#row_descriptors = [
+#    Row("data",  "ManualMapper-bank"),
+#    Row("data", "RHHT Hash Table~\\autoref{sec:spec:refinement}", "ManualMapper-htatomic"),
+#    #Row("data", "Hand-over-hand~\\autoref{sec:handoverhand}", "ManualMapper-hthh"),
+#    Row("data", "Node Replication~\\autoref{sec:nr}", "ManualMapper-nr"),
+#    Row("data", "SplinterCache~\\autoref{sec:cache}", "ManualMapper-scache"),
+#    Row("data", "Seagull Framework~\\autoref{sec:formalism}", "ManualMapper-framework"),
+#]
+
+
 row_descriptors = [
+    Row("data", "Linear Dafny Core",  "ManualMapper-framework-linear-dafny"),
+    Row("data", "Core",  "ManualMapper-framework"),
+    Row("data", "Runtime and Specs",  "ManualMapper-framework-mem"),
+    Row("data", "Libraries",  "ManualMapper-framework-lib"),
+
+    Row("data", "Spec",  "ManualMapper-htatomic-spec"),
+    Row("data", "Impl",  "ManualMapper-htatomic-impl"),
+    Row("data", "LTS",  "ManualMapper-htatomic-lts"),
+    Row("data", "Refinement Proofs",  "ManualMapper-htatomic-ref"),
+
+    Row("data", "Spec",  "ManualMapper-nr-spec"),
+    Row("data", "Impl",  "ManualMapper-nr-impl"),
+    Row("data", "Replication LTS",  "ManualMapper-nr-log"),
+    Row("data", "FlatCombine LTS",  "ManualMapper-nr-fc"),
+    Row("data", "CyclicBuffer LTS",  "ManualMapper-nr-cyclic"),
+    Row("data", "DistRwLock LTS",  "ManualMapper-nr-rw"),
+    Row("data", "Refinement Proofs",  "ManualMapper-nr-ref"),
+
+    Row("data", "Spec",  "ManualMapper-scache-spec"),
+    Row("data", "Disk Model and IO Specs",  "ManualMapper-scache-disk"),
+    Row("data", "Impl",  "ManualMapper-scache-impl"),
+    Row("data", "Cache LTS",  "ManualMapper-scache-sm"),
+    Row("data", "CacheRwLock LTS",  "ManualMapper-scache-rw"),
+    Row("data", "Refinement Proofs",  "ManualMapper-scache-ref"),
+
     Row("data", "Bank~\\autoref{sec:core}", "ManualMapper-bank"),
-    Row("data", "RHHT Hash Table~\\autoref{sec:spec:refinement}", "ManualMapper-htatomic"),
-    #Row("data", "Hand-over-hand~\\autoref{sec:handoverhand}", "ManualMapper-hthh"),
-    Row("data", "Node Replication~\\autoref{sec:nr}", "ManualMapper-nr"),
-    Row("data", "SplinterCache~\\autoref{sec:cache}", "ManualMapper-scache"),
-    Row("data", "Seagull Framework~\\autoref{sec:formalism}", "ManualMapper-framework"),
 ]
 
 def write_tex_table(fp, counters):
