@@ -3,9 +3,12 @@
 # Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 # SPDX-License-Identifier: BSD-2-Clause
 
+export DOTNET_ROOT=$HOME/dotnet5-manual
+export PATH=$PATH:$HOME/dotnet5-manual
 
 echo "NOTE: using /noNLarith and /compile:0"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+echo DIR is $DIR
 #set -x
 cmd="$DIR/../.dafny/bin/dafny $@ /induction:1 /noNLarith /compile:0 /rlimit:16350"
 # if you don't have unbuffer, apt-get install expect

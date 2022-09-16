@@ -6,6 +6,14 @@
 
 set -x
 
+# dotnet-5.0 isn't available for ubuntu 22.04, so you have to install
+# the no-longer-supported binaries manually from
+# https://dotnet.microsoft.com/en-us/download/dotnet/thank-you/sdk-5.0.408-linux-x64-binariesp
+# and then point paths at it when running .net stuff. :v/
+# Here's jonh's hack:
+export DOTNET_ROOT=$HOME/dotnet5-manual
+export PATH=$PATH:$HOME/dotnet5-manual
+
 dotnet --list-sdks | grep '^5.0'
 if [ $? -ne 0 ]; then
   echo "You must install .NET Core 5.0: https://dotnet.microsoft.com/download"
