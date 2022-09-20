@@ -803,52 +803,6 @@ module LinkedBetreeMod
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  predicate IsSplit(linked: LinkedBetree, linked': LinkedBetree, childIdx: nat, splitKey: Key)
-  {
-    && linked.WF()
-    && linked'.WF()
-    && linked.HasRoot()
-    && linked'.HasRoot()
-    && linked'.diskView.AgreesWithDisk(linked.diskView)
-    && var root := linked.Root();
-    && var root' := linked'.Root();
-
-    && root.ValidChildIndex(childIdx)
-    && PivotInsertable(root.pivotTable, childIdx, splitKey)
-    && 0 < childIdx < NumBuckets(root.pivotTable) // Split can't extend domain of this node.
-    && var oldChildPtr := root.children[childIdx];
-    && oldChildPtr.Some?
-
-    // Parent adds splitKey pivot; replaces child at childIdx with two children
-    && root'.ValidChildIndex(childIdx+1)  // obvious once we have replace1with2, but we're not there yet
-    && var leftChildPtr := root'.children[childIdx];
-    && var rightChildPtr := root'.children[childIdx+1];
-    && root' == root.(
-      pivotTable := InsertPivot(root.pivotTable, childIdx, splitKey),
-
-      // replace1with2 is just telling us about the structure of
-      // root'.children: the prefix and suffix are identical, and the new left
-      // & right child ptrs appear where childIdx once was. But it *doesn't*
-      // say anything about the value of leftChildPtr (resp. rightChildPtr),
-      // since we fetched those out of root'.children in the var statement
-      // above. That's a "clever" trick to leave nondeterminism that says we
-      // don't care what the actual values of those pointers are.
-      children := replace1with2(root.children, leftChildPtr, rightChildPtr, childIdx)
-      )
-
-    // Children get correspending slices
-    && leftChildPtr.Some?
-    && rightChildPtr.Some?
-    && var oldChild := linked.diskView.Get(oldChildPtr);
-    && var leftChild := linked'.diskView.Get(leftChildPtr);
-    && var rightChild := linked'.diskView.Get(rightChildPtr);
-    && leftChild == oldChild.ApplyFilter(Domain(root.pivotTable[childIdx-1], Element(splitKey)))
-    && rightChild == oldChild.ApplyFilter(Domain(Element(splitKey), root.pivotTable[childIdx]))
-
-    // TODO(jonh): Say, ApplyFilter only affects buffers, but we also need to
-    // carve up the pivot tables and children! ...in PivotBetree, too.
-  }
-
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()

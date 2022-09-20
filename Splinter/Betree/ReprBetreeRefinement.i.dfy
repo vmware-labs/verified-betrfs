@@ -14,6 +14,7 @@ module ReprBetreeRefinement
   import opened ReprBetree
   import opened Buffers
   import opened BoundedPivotsLib
+  import opened SplitRequestMod
   import LB = LinkedBetreeMod
   import LBR = LinkedBetreeRefinement
   import GenericDisk
@@ -1129,8 +1130,7 @@ module ReprBetreeRefinement
 
     // Framing
     requires replacementAddr != replacementChildAddr
-    requires path.Target().diskView.IsFresh({replacementAddr})
-    requires path.Target().diskView.IsFresh({replacementChildAddr})
+    requires path.Target().diskView.IsFresh({replacementAddr, replacementChildAddr})
     requires path.AddrsOnPath() !! replacement.Representation()
 
     //RankingAfterSubstitution requirements
@@ -1336,6 +1336,63 @@ module ReprBetreeRefinement
     }
   }
 
+  lemma {:timeLimitMultiplier 2} ReprAfterSubstituteSplitReplacement(
+    path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs,
+    pathAddrs: PathAddrs, replacementRanking: Ranking)
+    requires DiskHasNoDags(path.linked.diskView)
+    requires path.Valid()
+    requires path.Target().CanSplitParent(request)
+    requires replacement == path.Target().SplitParent(request, newAddrs);
+    requires path.CanSubstitute(replacement, pathAddrs)
+    requires replacement.Acyclic()
+    requires replacement.ValidRanking(replacementRanking)
+
+    // Framing
+    requires path.Target().diskView.IsFresh(newAddrs.Repr())
+    // requires newAddrs.HasUniqueElems()
+    // requires newAddrs.Repr() !! Set(pathAddrs)
+    requires path.AddrsOnPath() !! replacement.Representation()
+
+    //RankingAfterSubstitution requirements
+    requires path.linked.root.value in replacementRanking
+    requires Set(pathAddrs) !! replacementRanking.Keys
+    requires PathAddrsFresh(path, replacement, pathAddrs)
+
+    ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()  // prereq
+    ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Representation()
+            == path.linked.Representation() + Set(pathAddrs) + newAddrs.Repr() 
+              - path.AddrsOnPath() - {path.Target().ChildAtIdx(request.childIdx).root.value}
+    decreases path.depth
+  {
+    var ranking := LBR.RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
+    LBR.BuildTightMaintainsRankingValidity(path.Substitute(replacement, pathAddrs), ranking);
+    if path.depth == 0 {
+
+      // TODO
+      assume false;
+    } else {
+      ReprAfterSubstituteSplitReplacement(path.Subpath(), replacement, request, newAddrs, pathAddrs[1..], replacementRanking);
+      /* Induction hypothesis:
+        path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
+        == path.Subpath().linked.Representation() + Set(pathAddrs[1..]) + newAddrs.Repr()  
+           - path.Subpath().AddrsOnPath() - {path.Subpath().Target().ChildAtIdx(request.childIdx).root.value};
+      */
+      var tightRanking := LBR.BuildTightRanking(path.linked, path.linked.TheRanking());  // trigger
+      LBR.ValidRankingAllTheWayDown(tightRanking, path);
+      assert path.Target().ChildAtIdx(request.childIdx).root.value in path.Target().Representation() by {
+        ParentRepresentationContainsChildRepresentation(path.Target(), request.childIdx);
+      }
+      assert newAddrs.Repr() <= replacement.Representation() by {
+        ParentRepresentationContainsChildRepresentation(replacement, request.childIdx);
+        ParentRepresentationContainsChildRepresentation(replacement, request.childIdx + 1);
+      }
+      var additions := newAddrs.Repr();
+      var subtractions := {path.Target().ChildAtIdx(request.childIdx).root.value};
+      ReprAfterSubstituteReplacementInduction1(path, replacement, pathAddrs, additions, subtractions, replacementRanking);
+      ReprAfterSubstituteReplacementInduction2(path, replacement, pathAddrs, additions, subtractions, replacementRanking);
+    }
+  }
+
   lemma InternalSplitMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
@@ -1343,7 +1400,18 @@ module ReprBetreeRefinement
     requires v'.betree.linked.Acyclic()
     ensures ValidRepr(v')
   {
-    assume false;
+    var linked := v.betree.linked;
+    var replacement := step.path.Target().SplitParent(step.request, step.newAddrs);
+    var linkedRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
+    LBR.ValidRankingAllTheWayDown(step.path.linked.TheRanking(), step.path);
+    var replacementRanking := LBR.RankingAfterSplitReplacement(step.path.Target(), linkedRanking, step.request, step.newAddrs);
+    if v.betree.linked.HasRoot() {
+      assume step.path.AddrsOnPath() !! replacement.Representation();  // TODO
+      ReprAfterSubstituteSplitReplacement(step.path, replacement, step.request, step.newAddrs, step.pathAddrs, replacementRanking);
+    }
+    var newAddrs := Set(step.pathAddrs) + step.newAddrs.Repr();
+    var discardAddrs := step.path.AddrsOnPath() + {step.path.Target().ChildAtIdx(step.request.childIdx).root.value};
+    assert v'.betree.linked.Representation() == v.repr + newAddrs - discardAddrs;
   }
 
   lemma InternalSplitMaintainsTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
