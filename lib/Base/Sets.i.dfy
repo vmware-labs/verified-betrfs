@@ -123,4 +123,39 @@ module Sets {
     UnionSeqOfSetsSoundness(s);
     UnionSeqOfSetsSoundness(s');
   }
+
+  lemma SetSeqMath2<T>(s: seq<set<T>>, s': seq<set<T>>, pivot: nat, add:set<T>, sub:set<T>)
+    requires 0 < |s|
+    requires |s| + 1 == |s'|
+    requires 0 <= pivot < |s|
+    requires forall i | 0 <= i < pivot
+              :: && s[i] == s'[i]
+                 && s[i] !! sub
+    requires forall i | pivot + 1 < i < |s'|
+              :: && s[i-1] == s'[i]
+                 && s[i-1] !! sub
+    requires s'[pivot] + s'[pivot+1] == s[pivot] + add - sub
+    // Framing
+    requires sub !! add
+    ensures UnionSeqOfSets(s') == UnionSeqOfSets(s) + add - sub
+  {
+    UnionSeqOfSetsSoundness(s);
+    UnionSeqOfSetsSoundness(s');
+    forall x | x in UnionSeqOfSets(s) + add - sub
+    ensures x in UnionSeqOfSets(s') 
+    {
+      if x in add {
+        assert x in s'[pivot] + s'[pivot+1];  // trigger
+      } else {
+        var idx :| 0 <= idx < |s| && x in s[idx];
+        if idx < pivot {
+          assert x in UnionSeqOfSets(s');
+        } else if idx == pivot {
+          assert x in s'[pivot] + s'[pivot+1];  // trigger
+        } else {
+          assert x in s'[idx+1];  // trigger
+        }
+      }
+    }
+  }
 }

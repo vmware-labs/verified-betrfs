@@ -1336,7 +1336,7 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma {:timeLimitMultiplier 2} ReprAfterSubstituteSplitReplacement(
+  lemma {:timeLimitMultiplier 4} ReprAfterSubstituteSplitReplacement(
     path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs,
     pathAddrs: PathAddrs, replacementRanking: Ranking)
     requires DiskHasNoDags(path.linked.diskView)
@@ -1349,8 +1349,6 @@ module ReprBetreeRefinement
 
     // Framing
     requires path.Target().diskView.IsFresh(newAddrs.Repr())
-    // requires newAddrs.HasUniqueElems()
-    // requires newAddrs.Repr() !! Set(pathAddrs)
     requires path.AddrsOnPath() !! replacement.Representation()
 
     //RankingAfterSubstitution requirements
@@ -1367,9 +1365,7 @@ module ReprBetreeRefinement
     var ranking := LBR.RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
     LBR.BuildTightMaintainsRankingValidity(path.Substitute(replacement, pathAddrs), ranking);
     if path.depth == 0 {
-
-      // TODO
-      assume false;
+      ReprAfterSubstituteSplitReplacementBaseCase(path, replacement, request, newAddrs, ranking);
     } else {
       ReprAfterSubstituteSplitReplacement(path.Subpath(), replacement, request, newAddrs, pathAddrs[1..], replacementRanking);
       /* Induction hypothesis:
@@ -1391,6 +1387,68 @@ module ReprBetreeRefinement
       ReprAfterSubstituteReplacementInduction1(path, replacement, pathAddrs, additions, subtractions, replacementRanking);
       ReprAfterSubstituteReplacementInduction2(path, replacement, pathAddrs, additions, subtractions, replacementRanking);
     }
+  }
+
+  lemma {:timeLimitMultiplier 1} ReprAfterSubstituteSplitReplacementBaseCase(
+    path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
+    requires DiskHasNoDags(path.linked.diskView)
+    requires path.Valid()
+    requires path.depth == 0  // base case
+    requires path.linked.CanSplitParent(request)
+    requires replacement == path.linked.SplitParent(request, newAddrs);
+    requires path.CanSubstitute(replacement, [])
+    requires path.linked.ValidRanking(ranking)
+    requires replacement.Acyclic()
+    requires replacement.ValidRanking(ranking)
+    requires replacement.BuildTightTree().Acyclic()
+    // Framing
+    requires path.linked.diskView.IsFresh(newAddrs.Repr())
+    requires path.AddrsOnPath() !! replacement.Representation()
+
+    ensures replacement.BuildTightTree().Representation()
+            == path.linked.Representation() + newAddrs.Repr() 
+              - path.AddrsOnPath() - {path.linked.ChildAtIdx(request.childIdx).root.value}
+  {
+    var linked := path.linked;
+    var numChildren := |linked.Root().children|;
+    assert |replacement.Root().children| == numChildren + 1;
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+    var subTreeAddrs' := seq(numChildren+1, i requires 0 <= i < numChildren+1 => replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+    var pivotIndex := request.childIdx;
+
+    forall idx | 0 <= idx < pivotIndex 
+    ensures 
+      && subTreeAddrs[idx] == subTreeAddrs'[idx]
+      && linked.ChildAtIdx(request.childIdx).root.value !in subTreeAddrs[idx]
+    {
+      assume false;
+    }
+
+    forall idx | pivotIndex + 1 < idx < numChildren + 1 
+    ensures 
+      && subTreeAddrs[idx - 1] == subTreeAddrs'[idx]
+      && linked.ChildAtIdx(request.childIdx).root.value !in subTreeAddrs[idx - 1]
+    {
+      assume false;
+    }
+
+    assert subTreeAddrs'[pivotIndex] + subTreeAddrs'[pivotIndex+1] 
+      == subTreeAddrs[pivotIndex] + {newAddrs.left, newAddrs.right} - {linked.ChildAtIdx(request.childIdx).root.value} 
+    by {
+      assume false;
+    }
+    
+    assert Sets.UnionSeqOfSets(subTreeAddrs') 
+        == Sets.UnionSeqOfSets(subTreeAddrs) 
+            + {newAddrs.left, newAddrs.right} - {linked.ChildAtIdx(request.childIdx).root.value}
+    by {
+      var add := {newAddrs.left, newAddrs.right};
+      var sub := {linked.ChildAtIdx(request.childIdx).root.value};
+      Sets.SetSeqMath2(subTreeAddrs, subTreeAddrs', pivotIndex, add, sub);
+    }
+    LBR.ReachableAddrsIgnoresRanking(linked, ranking, linked.TheRanking());
+    LBR.ReachableAddrsIgnoresRanking(replacement, ranking, replacement.TheRanking());
+    RepresentationIgnoresBuildTight(replacement);
   }
 
   lemma InternalSplitMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
