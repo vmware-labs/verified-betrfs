@@ -1336,6 +1336,26 @@ module ReprBetreeRefinement
     }
   }
 
+  lemma InternalSplitMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalSplitStep?
+    requires v'.betree.linked.Acyclic()
+    ensures ValidRepr(v')
+  {
+    assume false;
+  }
+
+  lemma InternalSplitMaintainsTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalSplitStep?
+    requires v'.betree.linked.Acyclic()
+    ensures v'.betree.linked.DiskIsTightWrtRepresentation()
+  {
+    assume false;
+  }
+
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel) 
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -1362,8 +1382,9 @@ module ReprBetreeRefinement
         assert Inv(v');
       }
       case InternalSplitStep(_, _, _, _) => {
-        // TODO(tony)
-        assume false;
+        LBR.InvNextInternalSplitStep(I(v), I(v'), lbl.I(), step.I());
+        InternalSplitMaintainsRepr(v, v', lbl, step);
+        InternalSplitMaintainsTightDisk(v, v', lbl, step);
         assert Inv(v');
       }
       case InternalFlushStep(_, _, _, _, _) => {
