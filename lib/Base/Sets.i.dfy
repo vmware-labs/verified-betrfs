@@ -106,6 +106,17 @@ module Sets {
     }
   }
 
+  lemma UnionSeqOfSetsSoundnessContrapositive<T>(s: seq<set<T>>, e: T)
+    requires forall i | 0 <= i < |s| :: e !in s[i]
+    ensures e !in UnionSeqOfSets(s)
+  {
+    if e in UnionSeqOfSets(s) {
+      UnionSeqOfSetsSoundness(s);
+      var i :| 0 <= i < |s| && e in s[i];
+      assert false;
+    }
+  }
+
   lemma SetSeqMath<T>(s: seq<set<T>>, s': seq<set<T>>, idx: nat, add:set<T>, sub:set<T>)
     requires 0 < |s|
     requires |s| == |s'|
