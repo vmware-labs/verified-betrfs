@@ -363,6 +363,15 @@ module ReprBetreeRefinement
     ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(idx).BuildTightTree(), linked.BuildTightTree().ChildAtIdx(idx), ranking);
   }
 
+  // TODO: Can use this to speed up verification of a ton of lemmas  
+  lemma RepresentationSameAsReachable(linked: LinkedBetree, ranking: Ranking)
+    requires linked.Acyclic()
+    requires linked.ValidRanking(ranking)
+    ensures linked.Representation() == linked.ReachableAddrsUsingRanking(ranking)
+  {
+    LBR.ReachableAddrsIgnoresRanking(linked, ranking, linked.TheRanking());
+  }
+
   // Theorem: BuildTight does not change reachable set
   lemma ReachableAddrsIgnoresBuildTight(linked: LinkedBetree, ranking: Ranking)
     requires linked.Acyclic()
@@ -1567,7 +1576,7 @@ module ReprBetreeRefinement
   }
 
   // Prove step.path.AddrsOnPath() !! replacement.Representation(); 
-  lemma InsertSplitReplacementExcludesAddrsOnPath(
+  lemma {:timeLimitMultiplier 2} InsertSplitReplacementExcludesAddrsOnPath(
     path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs)
     requires path.Valid()
     requires path.Target().CanSplitParent(request)
@@ -1580,7 +1589,82 @@ module ReprBetreeRefinement
     ensures path.AddrsOnPath() !! replacement.Representation()
     decreases path.depth
   {
-    assume false;
+    LBR.ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+    var replacementRanking := LBR.RankingAfterSplitReplacement(path.Target(), path.Target().TheRanking(), request, newAddrs);
+    var rootAddr := path.linked.root.value;
+    var numChildren := |replacement.Root().children|;
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(replacement.TheRanking()));
+    var childIdx := request.childIdx;
+
+    if path.depth == 0 {
+      // Base case
+      var linked := path.linked;
+      forall idx | 0 <= idx < numChildren 
+      ensures rootAddr !in subTreeAddrs[idx]
+      {
+        if idx < childIdx {
+          ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(idx), replacement.ChildAtIdx(idx), replacementRanking);
+          LBR.ReachableAddrsIgnoresRanking(replacement.ChildAtIdx(idx), replacementRanking, replacement.TheRanking());
+          RootAddrNotInChildRepresentation(linked, idx);
+          LBR.ReachableAddrsIgnoresRanking(linked.ChildAtIdx(idx), replacementRanking, linked.ChildAtIdx(idx).TheRanking());
+        } else if childIdx + 1 < idx {
+          ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(idx-1), replacement.ChildAtIdx(idx), replacementRanking);
+          LBR.ReachableAddrsIgnoresRanking(replacement.ChildAtIdx(idx), replacementRanking, replacement.TheRanking());
+          RootAddrNotInChildRepresentation(linked, idx-1);
+          LBR.ReachableAddrsIgnoresRanking(linked.ChildAtIdx(idx-1), replacementRanking, linked.ChildAtIdx(idx-1).TheRanking());
+        } else {
+          assert idx == childIdx || idx == childIdx + 1;  // trigger
+          SplittedChildRepresentation(linked, replacement, request, newAddrs, replacementRanking);
+          LBR.ReachableAddrsIgnoresRanking(replacement.ChildAtIdx(childIdx), replacementRanking, replacement.TheRanking());
+          LBR.ReachableAddrsIgnoresRanking(replacement.ChildAtIdx(childIdx+1), replacementRanking, replacement.TheRanking());
+          RootAddrNotInChildRepresentation(linked, childIdx);
+          LBR.ReachableAddrsIgnoresRanking(linked.ChildAtIdx(childIdx), replacementRanking, linked.ChildAtIdx(childIdx).TheRanking());
+        }
+      }
+      Sets.UnionSeqOfSetsSoundnessContrapositive(subTreeAddrs, rootAddr);
+    } else {
+      // Inductive case
+      InsertSplitReplacementExcludesAddrsOnPath(path.Subpath(), replacement, request, newAddrs);
+      var routeIdx := Route(path.linked.Root().pivotTable, path.key);
+      assert path.Subpath().AddrsOnPath() !! replacement.Representation();
+      forall idx | 0 <= idx < numChildren 
+      ensures rootAddr !in subTreeAddrs[idx]
+      {
+        if rootAddr in subTreeAddrs[idx] {
+          LBR.ReachableAddrsIgnoresRanking(replacement.ChildAtIdx(idx), replacementRanking, replacement.TheRanking());
+          if idx < childIdx { 
+            ReachableAddrsInAgreeingDisks(path.Target().ChildAtIdx(idx), replacement.ChildAtIdx(idx), replacementRanking);
+            LBR.ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+            LBR.ChildAtIdxAcyclic(path.Target(), idx);
+            RepresentationSameAsReachable(path.Target().ChildAtIdx(idx), replacementRanking);
+            ParentRepresentationContainsChildRepresentation(path.Target(), idx);
+            RootRepresentationContainsTargetRepresentation(path.Subpath());
+            RootAddrNotInChildRepresentation(path.linked, routeIdx);
+            assert false;
+          } else if childIdx + 1 < idx {
+            ReachableAddrsInAgreeingDisks(path.Target().ChildAtIdx(idx-1), replacement.ChildAtIdx(idx), replacementRanking);
+            LBR.ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+            LBR.ChildAtIdxAcyclic(path.Target(), idx-1);
+            RepresentationSameAsReachable(path.Target().ChildAtIdx(idx-1), replacementRanking);
+            ParentRepresentationContainsChildRepresentation(path.Target(), idx-1);
+            RootRepresentationContainsTargetRepresentation(path.Subpath());
+            RootAddrNotInChildRepresentation(path.linked, routeIdx);
+            assert false;
+          } else {
+            assert idx == childIdx || idx == childIdx + 1;  // trigger
+            SplittedChildRepresentation(path.Target(), replacement, request, newAddrs, replacementRanking);
+            LBR.ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+            LBR.ChildAtIdxAcyclic(path.Target(), childIdx);
+            RepresentationSameAsReachable(path.Target().ChildAtIdx(childIdx), replacementRanking);
+            ParentRepresentationContainsChildRepresentation(path.Target(),childIdx);
+            RootRepresentationContainsTargetRepresentation(path.Subpath());
+            RootAddrNotInChildRepresentation(path.linked, routeIdx);
+            assert false;
+          }
+        }      
+      }
+      Sets.UnionSeqOfSetsSoundnessContrapositive(subTreeAddrs, rootAddr);
+    }
   }
 
   lemma InternalSplitMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
