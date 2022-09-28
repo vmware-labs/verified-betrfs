@@ -1,5 +1,11 @@
 ignore concurrency/SeagullBundle.i.dfy
 
+ignore concurrency/spsc-queue/QueueImpl.i.dfy
+ignore concurrency/spsc-queue/QueueMultiRw.i.dfy
+ignore concurrency/og_counter/Impl.i.dfy
+ignore concurrency/og_counter/OGTokens.i.dfy
+ignore concurrency/og_counter/OG.i.dfy
+
 bank-sm concurrency/bank-paper/Bank.i.dfy
 bank-sm concurrency/bank-paper/BankTokens.i.dfy
 bank concurrency/bank-paper/Impl.i.dfy
@@ -124,6 +130,7 @@ scache-rw concurrency/scache/rwlock/FullMap.i.dfy
 scache-rw concurrency/scache/rwlock/MapSum.i.dfy
 scache-rw concurrency/scache/rwlock/RwLock.i.dfy
 
+framework-linear-dafny lib/Base/LinearOption.i.dfy
 framework-linear-dafny lib/Base/MapRemove.s.dfy
 framework-linear-dafny lib/Lang/LinearSequence.s.dfy
 framework-linear-dafny lib/Lang/NativeTypes.s.dfy
@@ -135,3 +142,6 @@ framework-lib lib/Base/Multisets.i.dfy
 framework-lib lib/Base/mathematics.i.dfy
 framework-lib lib/Base/sequences.i.dfy
 framework-lib lib/Lang/LinearSequence.i.dfy
+
+
+

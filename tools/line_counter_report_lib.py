@@ -39,22 +39,50 @@ def accumulate(reports, mapper, debugTable):
     for report in reports:
       for key in mapper.keys(report):
         debugTable.add(mapper, key, report)
-        counters[key].update(report)
+
+        impl_key = get_key_to_move_impl_to(key)
+        if impl_key is None:
+            counters[key].update(report)
+        else:
+            r = collections.Counter(report)
+            impl_r = collections.Counter()
+            impl_r.update({"impl": r["impl"]})
+            del r["impl"]
+
+            counters[key].update(r)
+            counters[impl_key].update(impl_r)
+
       # add each report only once into the total line, even if it contributes to multiple rows above.
-      if not key.endswith("ignore"):
+
+      # ignore the hthh (hand-over-hand hash table case study)
+      # ignore the core 'linear dafny' lib (i.e., linear dafny stuff not specific to seagull)
+
+      if not (key.endswith("ignore") or key.endswith("framework-linear-dafny") or key == "ManualMapper-hthh"):
+
         counters["total"].update(report)
+        print(counters["total"])
+        assert key_appears_in_row_descriptors(key), "key missing from row_descriptors: " + key
+
     for counter in counters.values():
         del counter["source"]
     return counters
 
+
+def key_appears_in_row_descriptors(key):
+    for row in row_descriptors:
+        if row.type == "data" and row.counter_key == key:
+            return True
+    return False
+
 class Row:
-    def __init__(self, type, label, counter_key = None, impl = False):
+    def __init__(self, type, label, counter_key = None, impl = False, impl_map = None):
         self.type = type
         self.label = label
-        self.impl = impl    # if False, impl lines suspended here and added into later impl row.
+        self.impl = impl     # doesn't do anything right now (see impl_map instead)
         if self.type=="data":
           assert counter_key
           self.counter_key = counter_key
+          self.impl_map = impl_map
         else:
           assert self.type=="header"
 
@@ -71,39 +99,54 @@ class Row:
 
 
 row_descriptors = [
-    Row("header", "Common"),
+    Row("header", "Common Framework"),
     Row("data", "LTS def. \\& ghost axioms",  "ManualMapper-framework"),
     Row("data", "Memory Primitives",  "ManualMapper-framework-mem"),
     Row("data", "Libraries",  "ManualMapper-framework-lib", impl=True),
 
     Row("header", "Bank~\\autoref{sec:core}"),
-    Row("data", "Spec", "ManualMapper-bank-spec"),
-    Row("data", "LTS", "ManualMapper-bank-sm"),
+    Row("data", "Spec", "ManualMapper-bank-spec", impl_map="ManualMapper-bank"),
+    Row("data", "LTS", "ManualMapper-bank-sm", impl_map="ManualMapper-bank"),
     Row("data", "Impl", "ManualMapper-bank", impl=True),
 
     Row("header", "RHHT Hash Table~\\autoref{sec:spec:refinement}"),
     Row("data", "Spec",  "ManualMapper-htatomic-spec"),
-    Row("data", "LTS",  "ManualMapper-htatomic-lts"),
-    Row("data", "Refinement Proofs",  "ManualMapper-htatomic-ref"),
+    Row("data", "LTS",  "ManualMapper-htatomic-lts", impl_map="ManualMapper-htatomic-impl"),
+    Row("data", "Refinement Proofs",  "ManualMapper-htatomic-ref", impl_map="ManualMapper-htatomic-impl"),
     Row("data", "Impl",  "ManualMapper-htatomic-impl", impl=True),
 
     Row("header", "Node Replication~\\autoref{sec:nr}"),
     Row("data", "Spec",  "ManualMapper-nr-spec"),
-    Row("data", "\\UnboundedLog LTS",  "ManualMapper-nr-log"),
-    Row("data", "\\FlatCombine LTS",  "ManualMapper-nr-fc"),
-    Row("data", "\\CyclicBuffer LTS",  "ManualMapper-nr-cyclic"),
-    Row("data", "\\DistRwLock LTS",  "ManualMapper-nr-rw"),
-    Row("data", "Refinement Proofs",  "ManualMapper-nr-ref"),
+    Row("data", "\\UnboundedLog LTS",  "ManualMapper-nr-log", impl_map="ManualMapper-nr-impl"),
+    Row("data", "\\FlatCombine LTS",  "ManualMapper-nr-fc", impl_map="ManualMapper-nr-impl"),
+    Row("data", "\\CyclicBuffer LTS",  "ManualMapper-nr-cyclic", impl_map="ManualMapper-nr-impl"),
+    Row("data", "\\DistRwLock LTS",  "ManualMapper-nr-rw", impl_map="ManualMapper-nr-impl"),
+    Row("data", "Refinement Proofs",  "ManualMapper-nr-ref", impl_map="ManualMapper-nr-impl"),
     Row("data", "Impl",  "ManualMapper-nr-impl", impl=True),
 
     Row("header", "SplinterCache~\\autoref{sec:cache}"),
     Row("data", "Spec",  "ManualMapper-scache-spec"),
     Row("data", "Disk Model and API",  "ManualMapper-scache-disk"),
-    Row("data", "\\Cache LTS",  "ManualMapper-scache-sm"),
-    Row("data", "\\CacheRwLock LTS",  "ManualMapper-scache-rw"),
-    Row("data", "Refinement Proofs",  "ManualMapper-scache-ref"),
+    Row("data", "\\Cache LTS",  "ManualMapper-scache-sm", impl_map="ManualMapper-scache-impl"),
+    Row("data", "\\CacheRwLock LTS",  "ManualMapper-scache-rw", impl_map="ManualMapper-scache-impl"),
+    Row("data", "Refinement Proofs",  "ManualMapper-scache-ref", impl_map="ManualMapper-scache-impl"),
     Row("data", "Impl",  "ManualMapper-scache-impl", impl=True),
 ]
+
+def get_key_to_move_impl_to(key):
+    r = None
+    for row in row_descriptors:
+        if row.type == "data" and row.counter_key == key:
+            r = row
+
+    if r is None:
+        return None
+
+    if r.impl_map is None:
+        return None
+
+    assert key_appears_in_row_descriptors(r.impl_map)
+    return r.impl_map
 
 def write_tex_table(fp, counters):
     fp.write("\\begin{center}\n")
@@ -115,17 +158,24 @@ def write_tex_table(fp, counters):
     fp.write("& {\\small LOC} & {\\small LOC} & {\\small LOC} & time\\\\\n")
     fp.write("\\hline\n")
 
-    def write_row(label, rowdata):
+    def write_row(label, rowdata, use_minutes=False):
       def dropzero(d, suffix=""):
         return "" if d == 0 else str(d)+suffix
+
+      if use_minutes:
+        time_row = dropzero("%.1f" % (rowdata["time"]/60), suffix=" min")
+      else:
+        if rowdata["time"] < 1:
+            time_row = dropzero("%.1f" % (rowdata["time"]), suffix=" s")
+        else:
+            time_row = dropzero(int(rowdata["time"]), suffix=" s")
 
       fp.write("%s & %s & %s & %s & %s\\\\\n" % (
               label,
               dropzero(rowdata["spec"]),
               dropzero(rowdata["impl"]),
               dropzero(rowdata["proof"]),
-              #dropzero(int(rowdata["time"]), suffix="s"),
-              dropzero("%.1f" % (rowdata["time"]/60), suffix=" min"),
+              time_row,
               ))
 
     keys = list(counters.keys())
@@ -134,7 +184,7 @@ def write_tex_table(fp, counters):
       if row.type == "data":
         if row.counter_key in counters:
           local_counter = counters[row.counter_key]
-          write_row(row.label, local_counter)
+          write_row(row.label, local_counter, use_minutes=False)
         else:
           print("Warning: missing counter for %s" % row.counter_key)
       elif row.type == "header":
@@ -142,7 +192,8 @@ def write_tex_table(fp, counters):
       else:
         assert False
     fp.write("\\hline\n")
-    write_row("Total", counters["total"])
+    print(counters["total"])
+    write_row("Total", counters["total"], use_minutes=True)
     fp.write("\\hline\n")
     fp.write("\\end{tabular}\n")
     fp.write("\\end{center}\n")
