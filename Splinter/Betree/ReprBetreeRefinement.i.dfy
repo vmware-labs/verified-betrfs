@@ -362,7 +362,6 @@ module ReprBetreeRefinement
     ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(idx).BuildTightTree(), linked.BuildTightTree().ChildAtIdx(idx), ranking);
   }
 
-  // TODO: Can use this to speed up verification of a ton of lemmas  
   // Wrapper around common use case of ReachableAddrsIgnoresRanking
   lemma RepresentationSameAsReachable(linked: LinkedBetree, ranking: Ranking)
     requires linked.Acyclic()
@@ -1696,7 +1695,15 @@ module ReprBetreeRefinement
     requires v'.betree.linked.Acyclic()
     ensures v'.betree.linked.DiskIsTightWrtRepresentation()
   {
-    assume false;
+    if v.betree.linked.HasRoot() {
+      var replacement := step.path.Target().SplitParent(step.request, step.newAddrs);
+      step.path.Target().SplitParentCanSubstitute(step.request, step.newAddrs);
+      var untightLinked' := step.path.Substitute(
+            step.path.Target().SplitParent(step.request, step.newAddrs),
+            step.pathAddrs
+        );
+      BuildTightGivesTightWrtRepresentation(untightLinked');
+    }
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel) 
