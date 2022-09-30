@@ -42,12 +42,12 @@ module QueueImpl(item: ItemModule) {
     32
   }
 
-  datatype Queue = Queue(
+  linear datatype Queue = Queue(
     cells: seq<Ptrs.Ptr>,
-    head: Atomic<uint32, Tokens.Token>,
-    tail: Atomic<uint32, Tokens.Token>,
+    linear head: Atomic<uint32, Tokens.Token>,
+    linear tail: Atomic<uint32, Tokens.Token>,
 
-    ghost cellToken: GhostAtomic<Tokens.Token>,
+    glinear cellToken: GhostAtomic<Tokens.Token>,
     ghost loc: Loc
   ) {
 
@@ -99,7 +99,7 @@ module QueueImpl(item: ItemModule) {
       && (forall v: (), g :: atomic_inv(this.cellToken, v, g) <==> CellInv(g, this.loc))
     }
 
-    method consume(linear inout consumerToken: ConsumerToken)
+    shared method consume(linear inout consumerToken: ConsumerToken)
     returns (linear item: lOption<item.Item>)
     requires this.Inv()
     requires old_consumerToken.Valid(this.loc)
@@ -129,7 +129,10 @@ module QueueImpl(item: ItemModule) {
             assert MInvCell(dot(m, rest), tail as nat); // trigger
             assert dot(m, rest).cells[tail as nat].Full?;
             assert CellInvCell(cellToken_g.val.cells, tail as nat); // trigger
-            assert cellToken_g.val.cells[tail as nat].Full?;
+            assert tail as nat in m.cells by { reveal_dot_XY_Cells(); }
+            assert m.cells[tail as nat].Full? by { reveal_dot_XY_Cells(); }
+            assert tail as nat in cellToken_g.val.cells by { reveal_dot_XY_Cells(); }
+            assert cellToken_g.val.cells[tail as nat].Full? by { reveal_dot_XY_Cells(); }
 
             ghost var m' := m.(
               consumer := ConsumerInProgress(tail as nat),
@@ -138,14 +141,17 @@ module QueueImpl(item: ItemModule) {
             ghost var consumer_g_val' := M(None, None, map[], ProducerUnknown, ConsumerInProgress(tail as nat));
             ghost var cellToken_g_val' := cellToken_g.val.(cells := cellToken_g.val.cells[tail as nat := Consuming]);
 
-            assert m' == dot(dot(consumer_g_val', head_g.val), cellToken_g_val');
+            assert m' == dot(dot(consumer_g_val', head_g.val), cellToken_g_val')
+                by { reveal_dot_XY_Cells(); }
 
             ghost var expected_v := cellToken_g.val.cells[tail as nat].v;
-            assert consumer_begin(m, m', expected_v);
+            assert consumer_begin(m, m', expected_v)
+                by { reveal_dot_XY_Cells(); }
 
             consumer_begin_is_withdraw(m, m', expected_v);
 
-            assert withdraw(m, m', tail as nat, expected_v);
+            assert withdraw(m, m', tail as nat, expected_v)
+                by { reveal_dot_XY_Cells(); }
 
             glinear var pointsToCell_v;
             consumer_g, head_g, cellToken_g, pointsToCell_v :=
@@ -199,7 +205,7 @@ module QueueImpl(item: ItemModule) {
             assert MInvCell(dot(m, rest), tail as nat); // trigger
             assert dot(m, rest).cells[tail as nat].Consuming?;
             assert CellInvCell(cellToken_g.val.cells, tail as nat); // trigger
-            assert cellToken_g.val.cells[tail as nat].Consuming?;
+            assert tail as nat in cellToken_g.val.cells && cellToken_g.val.cells[tail as nat].Consuming? by { reveal_dot_XY_Cells(); }
 
             glinear var depositing_v := GlinearOption.unwrap_value(pointsToCell);
 
@@ -212,11 +218,12 @@ module QueueImpl(item: ItemModule) {
             ghost var tail_g_val' := tail_g.val.(tail := Some(newTail as nat));
             ghost var cellToken_g_val' := cellToken_g.val.(cells := cellToken_g.val.cells[tail as nat := Empty(depositing_v)]);
 
-            assert m' == dot(dot(consumer_g_val', tail_g_val'), cellToken_g_val');
+            assert m' == dot(dot(consumer_g_val', tail_g_val'), cellToken_g_val') by { reveal_dot_XY_Cells(); }
 
-            assert consumer_end(m, m', depositing_v);
+            assert consumer_end(m, m', depositing_v) by { reveal_dot_XY_Cells(); }
             consumer_end_is_deposit(m, m', depositing_v);
 
+            reveal_dot_XY_Cells();
             consumer_g, tail_g, cellToken_g :=
               Tokens.deposit_3_3(
                 consumer_g,
@@ -252,7 +259,7 @@ module QueueImpl(item: ItemModule) {
       assert consumerToken.Valid(this.loc);
     }
 
-    method produce(linear inout producerToken: ProducerToken, linear item: item.Item)
+    shared method produce(linear inout producerToken: ProducerToken, linear item: item.Item)
     returns (linear item': lOption<item.Item>)
     requires this.Inv()
     requires old_producerToken.Valid(this.loc)
@@ -282,7 +289,7 @@ module QueueImpl(item: ItemModule) {
             assert MInvCell(dot(m, rest), head as nat); // trigger
             assert dot(m, rest).cells[head as nat].Empty?;
             assert CellInvCell(cellToken_g.val.cells, head as nat); // trigger
-            assert cellToken_g.val.cells[head as nat].Empty?;
+            assert head as nat in cellToken_g.val.cells && cellToken_g.val.cells[head as nat].Empty? by { reveal_dot_XY_Cells(); }
 
             ghost var m' := m.(
               producer := ProducerInProgress(head as nat),
@@ -291,14 +298,14 @@ module QueueImpl(item: ItemModule) {
             ghost var producer_g_val' := M(None, None, map[], ProducerInProgress(head as nat), ConsumerUnknown);
             ghost var cellToken_g_val' := cellToken_g.val.(cells := cellToken_g.val.cells[head as nat := Producing]);
 
-            assert m' == dot(dot(producer_g_val', tail_g.val), cellToken_g_val');
+            assert m' == dot(dot(producer_g_val', tail_g.val), cellToken_g_val') by { reveal_dot_XY_Cells(); }
 
             ghost var expected_v := cellToken_g.val.cells[head as nat].v;
-            assert producer_begin(m, m', expected_v);
+            assert producer_begin(m, m', expected_v)  by { reveal_dot_XY_Cells(); }
 
             producer_begin_is_withdraw(m, m', expected_v);
 
-            assert withdraw(m, m', head as nat, expected_v);
+            assert withdraw(m, m', head as nat, expected_v) by { reveal_dot_XY_Cells(); }
 
             glinear var pointsToCell_v;
             producer_g, tail_g, cellToken_g, pointsToCell_v :=
@@ -353,7 +360,7 @@ module QueueImpl(item: ItemModule) {
             assert MInvCell(dot(m, rest), head as nat); // trigger
             assert dot(m, rest).cells[head as nat].Producing?;
             assert CellInvCell(cellToken_g.val.cells, head as nat); // trigger
-            assert cellToken_g.val.cells[head as nat].Producing?;
+            assert cellToken_g.val.cells[head as nat].Producing? by { reveal_dot_XY_Cells(); }
 
             glinear var depositing_v := GlinearOption.unwrap_value(pointsToCell);
 
@@ -366,10 +373,15 @@ module QueueImpl(item: ItemModule) {
             ghost var head_g_val' := head_g.val.(head := Some(newHead as nat));
             ghost var cellToken_g_val' := cellToken_g.val.(cells := cellToken_g.val.cells[head as nat := Full(depositing_v)]);
 
-            assert m' == dot(dot(producer_g_val', head_g_val'), cellToken_g_val');
+            assert m' == dot(dot(producer_g_val', head_g_val'), cellToken_g_val') by { reveal_dot_XY_Cells(); }
 
-            assert producer_end(m, m', depositing_v);
+            assert producer_end(m, m', depositing_v) by { reveal_dot_XY_Cells(); }
             producer_end_is_deposit(m, m', depositing_v);
+
+            assert deposit(
+                    dot(dot(producer_g.val, head_g.val), cellToken_g.val),
+                    dot(dot(producer_g_val', head_g_val'), cellToken_g_val'),
+                    head as nat, depositing_v) by { reveal_dot_XY_Cells(); }
 
             producer_g, head_g, cellToken_g :=
               Tokens.deposit_3_3(
