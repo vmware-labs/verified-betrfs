@@ -65,9 +65,9 @@ module MathUtils {
     assert t[.. |t| - 1] == t0;
 
     if l == 1 {
-      assume sum(t0) == 0;
+      assert sum(t0) == 0;
       assert t[0] == m[0];
-      assume sum(t) == sum(t0) + t[0];
+      assert sum(t) == sum(t0) + t[0];
       assert sum(t) == m[0];
     } else {
       sum_for_init(m, l-1);
