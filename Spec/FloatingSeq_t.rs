@@ -61,11 +61,11 @@ impl<T> FloatingSeq<T> {
         self.start <= i < self.len()
     }
 
-//    pub open spec fn get(self, i: nat) -> T
-//      requires self.is_active(i)
-//    {
-//      self.entries[i - self.start]
-//    }
+   pub open spec fn get(self, i: int) -> T
+        recommends self.is_active(i)
+   {
+     self.entries[i - self.start as int]
+   }
 
     // You can only index values after the empty space.
     pub open spec fn spec_index(self, i: int) -> T
