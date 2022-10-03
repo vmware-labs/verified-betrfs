@@ -8,16 +8,11 @@ use builtin::*;
 use crate::pervasive::{*,map::*,set::*};
 
 use crate::spec::FloatingSeq_t::*;
+use crate::spec::TotalKMMap_t::*;
 
 use state_machines_macros::state_machine;
 
 verus! {
-
-// TODO jonh is sad that he can't namespace-scope these definitions inside a state machine.
-// Maybe there's some other scoping tool I should be using?
-type Key = int;
-type Value = int;
-pub type TotalKMMap = Map<Key, Value>;
 
 // TODO(jonh): Need to genericize the types of Key, Value; and then we'll need to axiomitify /
 // leave-unspecified a default value

@@ -8,7 +8,7 @@ use crate::spec::MapSpec_t::*;
 use crate::spec::TotalKMMap_t::*;
 
 verus! {
-    type LSN = nat;
+    pub type LSN = nat;
 
     struct Stamped<T>{ value: T, seq_end: LSN }
 

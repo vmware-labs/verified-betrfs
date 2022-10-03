@@ -6,10 +6,12 @@ use crate::pervasive::{*,map::*};
 
 verus!{
 
-type K = int;  // TODO: this is a placeholder for the Key type
-type V = int;  // TODO: this is a placeholder for the Message type
+pub type Key = int;  // TODO: this is a placeholder for the Key type
+pub type Value = int;  // TODO: this is a placeholder for the Message type
 
-pub open spec fn empty_total_map() -> Map<K, V> {
+pub type TotalKMMap = Map<Key, Value>;
+
+pub open spec fn empty_total_map() -> Map<Key, Value> {
     // TODO: This body is a placeholder
     Map::new(
         |i: int| i % 10 == 0,
