@@ -40,9 +40,9 @@ impl<T> FloatingSeq<T> {
         self.start as int + self.entries.len()
     }
 
-    pub open spec fn first_active_index(self) -> nat
+    pub open spec fn first_active_index(self) -> int
     {
-      self.start
+      self.start as int
     }
 
     pub open spec fn is_active(self, i: int) -> bool

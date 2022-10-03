@@ -7,7 +7,7 @@ use builtin_macros::*;
 use builtin::*;
 use crate::pervasive::{*,map::*,set::*};
 
-use crate::FloatingSeq_t::*;
+use crate::spec::FloatingSeq_t::*;
 
 use state_machines_macros::state_machine;
 
@@ -17,7 +17,7 @@ verus! {
 // Maybe there's some other scoping tool I should be using?
 type Key = int;
 type Value = int;
-type TotalKMMap = Map<Key, Value>;
+pub type TotalKMMap = Map<Key, Value>;
 
 // TODO(jonh): Need to genericize the types of Key, Value; and then we'll need to axiomitify /
 // leave-unspecified a default value
@@ -89,11 +89,11 @@ pub struct Reply {
     pub id: ID
 }
 pub struct PersistentState {
-    appv: MapSpec::State
+    pub appv: MapSpec::State
 }
 pub struct EphemeralState {
-    requests: Set<Request>,
-    replies: Set<Reply>,
+    pub requests: Set<Request>,
+    pub replies: Set<Reply>,
 }
 
 #[is_variant]
@@ -157,7 +157,7 @@ state_machine!{ CrashTolerantAsyncMap {
         &&& self.versions.is_active(self.versions.len() - 1)
     }
 
-    pub open spec fn stable_index(self) -> nat {
+    pub open spec fn stable_index(self) -> int {
         self.versions.first_active_index()
     }
 
@@ -184,7 +184,7 @@ state_machine!{ CrashTolerantAsyncMap {
         operate(op: AsyncUILabel, new_versions: FloatingSeq<Version>, new_async_ephemeral: EphemeralState, async_step: AsyncMap::Step) {
             // want to introduce nondeterminism for new_versions, then write a predicate saying
             // which values are okay
-            require optionally_append_version(pre.versions, new_versions);
+            require State::optionally_append_version(pre.versions, new_versions);
             // What's the syntax for (a) consing up an AsyncMap object and (b) calling its implicit Next
             // predicate?
             require AsyncMap::State::next_by(
@@ -195,6 +195,30 @@ state_machine!{ CrashTolerantAsyncMap {
             update versions = new_versions;
             update async_ephemeral = new_async_ephemeral;
     } }
+
+    transition!{
+        crash() {
+            update versions = pre.versions.get_prefix(pre.stable_index() + 1);
+            update async_ephemeral = AsyncMap::State::init_ephemeral_state();
+            update sync_requests = Map::empty();
+        }
+    }
+
+    transition!{
+        sync(new_stable_index: int) {
+            require pre.stable_index() <= new_stable_index < pre.versions.len();
+            update versions = pre.versions.get_suffix(new_stable_index);
+        }
+    }
+    
+    transition!{
+        req_sync(sync_req_id: SyncReqId) {
+            // TODO (tony): add Maps::contains to Pervasives
+            require pre.sync_requests.dom().contains(sync_req_id);
+            require pre.sync_requests[sync_req_id] <= pre.stable_index();
+            update sync_requests = pre.sync_requests.remove(sync_req_id);
+        }
+    }
 
     // TODO: jonh is sad that I can't put this invariant & proof elsewhere. We separate
     // our state machine definitions from our invariant & refinement proof text.
