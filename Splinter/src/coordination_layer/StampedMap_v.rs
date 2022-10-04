@@ -10,9 +10,12 @@ use crate::spec::TotalKMMap_t::*;
 verus! {
     pub type LSN = nat;
 
-    struct Stamped<T>{ value: T, seq_end: LSN }
+    pub struct Stamped<T>{ 
+        pub value: T, 
+        pub seq_end: LSN 
+    }
 
-    type StampedMap = Stamped<TotalKMMap>;
+    pub type StampedMap = Stamped<TotalKMMap>;
 
     spec fn empty() -> StampedMap {
         Stamped{ value: empty_total_map(), seq_end: 0}

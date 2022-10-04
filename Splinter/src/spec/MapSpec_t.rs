@@ -17,7 +17,7 @@ verus! {
 // TODO(jonh): Need to genericize the types of Key, Value; and then we'll need to axiomitify /
 // leave-unspecified a default value
 pub open spec fn default_value() -> Value {
-    0
+    Message::empty()
 }
 
 pub open spec fn total_default_kmmap() -> TotalKMMap
@@ -64,7 +64,9 @@ state_machine!{ MapSpec {
             require let Output::GetOutput { value } = output;
 //            let key = input.get_GetInput_key();  // TODO eeeew
 //            let value = input.get_GetInput_value();
-            require pre.kmmap[key] == value;
+            require pre.kmmap[key] === value;  
+            // TODO(verus): "the trait `builtin::Structural` is not implemented for `spec::TotalKMMap_t::Message`" 
+            // error message should suggest === 
     }}
 
     transition!{
