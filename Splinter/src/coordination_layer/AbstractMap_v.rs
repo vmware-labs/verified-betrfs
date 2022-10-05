@@ -37,15 +37,19 @@ state_machine!{ AbstractMap {
         }
     }
 
-    // transition!{
-    //     query(lbl: Label) {
-    //         require lbl.is_QueryLabel();
-    //         require lbl.get_QueryLabel_end_lsn == pre.stamped_map.seq_end;
-    //         require lbl.get_QueryLabel_value == pre.stamped_map.value[lbl.get_QueryLabel_key()].value;
-    //     }
-    // }
-    
+    transition!{
+        put(lbl: Label) {
+            require lbl.is_PutLabel();
+            require lbl.get_PutLabel_puts().can_follow(pre.stamped_map.seq_end);
+            update stamped_map = MsgHistory::map_plus_history(pre.stamped_map, lbl.get_PutLabel_puts());
+        }
+    }
 
-
+    transition!{
+        freeze_as(lbl: Label) {
+            require lbl.is_FreezeAsLabel();
+            require lbl.get_FreezeAsLabel_stamped_map() === pre.stamped_map;
+        }
+    }
 }}
 }
