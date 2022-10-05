@@ -4,6 +4,7 @@ use builtin_macros::*;
 use builtin::*;
 use crate::pervasive::{*,map::*,set::*};
 
+use crate::spec::Messages_t::*;
 use crate::spec::TotalKMMap_t::*;
 use crate::coordination_layer::StampedMap_v::*;
 

@@ -7,23 +7,13 @@ use builtin_macros::*;
 use builtin::*;
 use crate::pervasive::{*,map::*,set::*};
 
+use crate::spec::Messages_t::*;
 use crate::spec::FloatingSeq_t::*;
 use crate::spec::TotalKMMap_t::*;
 
 use state_machines_macros::state_machine;
 
 verus! {
-
-// TODO(jonh): Need to genericize the types of Key, Value; and then we'll need to axiomitify /
-// leave-unspecified a default value
-pub open spec fn default_value() -> Value {
-    Message::empty()
-}
-
-pub open spec fn total_default_kmmap() -> TotalKMMap
-{
-    Map::total(|k| default_value())
-}
 
 #[is_variant]
 pub enum Input {
@@ -43,7 +33,7 @@ pub enum Output {
     // TODO 2: can't declare this fn inside MapSpec state_machine!?
     pub open spec fn my_init() -> MapSpec::State
     {
-        MapSpec::State{ kmmap: total_default_kmmap() }
+        MapSpec::State{ kmmap: empty_total_map() }
     }
 
 state_machine!{ MapSpec {
@@ -64,14 +54,14 @@ state_machine!{ MapSpec {
             require let Output::GetOutput { value } = output;
 //            let key = input.get_GetInput_key();  // TODO eeeew
 //            let value = input.get_GetInput_value();
-            require pre.kmmap[key] === value;  
+            require pre.kmmap[key].get_Define_value() === value;  
             // TODO(verus): "the trait `builtin::Structural` is not implemented for `spec::TotalKMMap_t::Message`" 
             // error message should suggest === 
     }}
 
     transition!{
         put(key: Key, value: Value) {
-            update kmmap = pre.kmmap.insert(key, value);
+            update kmmap = pre.kmmap.insert(key, Message::Define{value});
     }}
 }}
 

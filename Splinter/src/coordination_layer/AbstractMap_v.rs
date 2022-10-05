@@ -5,6 +5,7 @@ use builtin_macros::*;
 
 use state_machines_macros::state_machine;
 
+use crate::spec::Messages_t::*;
 use crate::spec::TotalKMMap_t::*;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MessageHistory_v::*;
@@ -28,12 +29,11 @@ state_machine!{ AbstractMap {
         }
     }
 
-    // TODO: Complete this
     transition!{
         query(lbl: Label) {
             require lbl.is_QueryLabel();
             require lbl.get_QueryLabel_end_lsn() == pre.stamped_map.seq_end;
-            require lbl.get_QueryLabel_value() === pre.stamped_map.value[lbl.get_QueryLabel_key()];
+            require lbl.get_QueryLabel_value() === pre.stamped_map.value[lbl.get_QueryLabel_key()].get_Define_value();
         }
     }
 
