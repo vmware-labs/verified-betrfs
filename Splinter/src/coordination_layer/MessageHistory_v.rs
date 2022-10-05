@@ -117,7 +117,6 @@ impl MsgHistory {
     pub open spec fn includes_subseq(self, subseq: MsgHistory) -> bool {
         &&& self.seq_start <= subseq.seq_start
         &&& subseq.seq_end <= self.seq_end
-        // TODO: is auto trigger fine here?
         &&& forall |lsn| #![auto] subseq.contains(lsn) ==> self.contains(lsn) && self.msgs[lsn] === subseq.msgs[lsn]
     }
 
