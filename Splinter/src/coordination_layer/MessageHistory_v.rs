@@ -93,6 +93,46 @@ impl MsgHistory {
             Stamped{ value: new_value, seq_end: sub_map.seq_end + 1 }
         }
     }
-}
 
+    pub open spec fn discard_old(self, lsn: LSN) -> MsgHistory
+        recommends self.can_discard_to(lsn)
+    {
+        let keepMap = Map::new(
+            |k: nat| lsn <= k < self.seq_end,
+            |k: nat| self.msgs[k],
+        );
+        MsgHistory{ msgs: keepMap, seq_start: lsn, seq_end: self.seq_end }
+    }
+
+    pub open spec fn maybe_discard_old(self, lsn: LSN) -> MsgHistory
+        recommends lsn <= self.seq_end
+    {
+        if self.seq_start <= lsn {
+            self.discard_old(lsn)
+        } else {
+            self
+        }
+    }
+
+    pub open spec fn includes_subseq(self, subseq: MsgHistory) -> bool {
+        &&& self.seq_start <= subseq.seq_start
+        &&& subseq.seq_end <= self.seq_end
+        // TODO: is auto trigger fine here?
+        &&& forall |lsn| #![auto] subseq.contains(lsn) ==> self.contains(lsn) && self.msgs[lsn] === subseq.msgs[lsn]
+    }
+
+    pub open spec fn empty_history_at(lsn: LSN) -> MsgHistory {
+        MsgHistory{ msgs: Map::empty(), seq_start: lsn, seq_end: lsn }
+    }
+    
+    pub open spec fn singleton_at(lsn: LSN, msg: KeyedMessage) -> MsgHistory {
+        MsgHistory{ msgs: Map::empty(), seq_start: lsn, seq_end: lsn }
+    }
+    
+    pub open spec fn map_plus_history(stamped_map: StampedMap, history: MsgHistory) -> StampedMap
+        recommends history.can_follow(stamped_map.seq_end)
+    {
+        history.apply_to_stamped_map(stamped_map)
+    }
+}
 }
