@@ -4,6 +4,7 @@ use builtin::*;
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 
+use crate::spec::Option_t::*;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MessageHistory_v::*;
 use crate::coordination_layer::AbstractJournal_v::*;
@@ -12,8 +13,12 @@ verus! {
 
 pub type StoreImage = MsgHistory;
 
-// TODO(verus): This is a bug where state machine definitions are only private.
-pub type Ephemeral = Option<AbstractJournal::State>;
+// TODO: Could use option types? But they are not supported in verus
+#[is_variant]
+pub enum Ephemeral {
+    Unknown,
+    Known{ v: AbstractJournal::State },
+}
 
 state_machine!{ CrashTolerantJournal {
     fields { 
@@ -34,5 +39,19 @@ state_machine!{ CrashTolerantJournal {
         CommitCompleteLabel{ require_end: LSN },
         CrashLabel,
     }
+
+    transition!{
+        load_ephemeral_from_persistent(lbl: Label, new_ephemeral: AbstractJournal::State, ephemeral_step: AbstractJournal::Config) {
+            require lbl.is_LoadEphemeralFromPersistentLabel();
+            require pre.ephemeral.is_Unknown();
+            // Not sure if this init_by usage is right. Awaiting slack confirmation
+            require AbstractJournal::State::init_by(new_ephemeral, ephemeral_step);
+        }
+    }
+
+
+
+    
+
 }}
 }

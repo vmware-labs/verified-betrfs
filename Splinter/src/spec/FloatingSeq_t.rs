@@ -3,8 +3,6 @@
 use builtin_macros::*;
 use builtin::*;
 use crate::pervasive::{*,seq::*};
-//use crate::assert_seqs_equal;   // no, use ext_equal
-//use crate::assert_seqs_equal_internal;
 
 verus!{
 
