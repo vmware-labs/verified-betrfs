@@ -727,6 +727,8 @@ module LinkedBetreeRefinement {
       var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
       var oldRootRank := oldRanking[v.linked.root.value];
       var newRanking := oldRanking[step.newRootAddr := oldRootRank+1];  // witness
+      assert v.linked.diskView.IsFresh({step.newRootAddr});  // trigger
+      assert newRoot.WF();  // trigger
       BuildTightPreservesWF(newRoot, newRanking);
       assert v'.linked.ValidRanking(newRanking);
     } else {
