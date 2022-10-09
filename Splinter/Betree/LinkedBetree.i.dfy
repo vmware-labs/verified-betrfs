@@ -323,6 +323,27 @@ module LinkedBetreeMod
     {
       LinkedBetree(Pointer.Some(addr), this)
     }
+
+    // Every node in the disk obeys SubtreesAreDisjoint in all its children
+    predicate DiskHasNoDags()
+    {
+      forall addr | addr in entries :: (
+        var linked := GetEntryAsLinked(addr);
+        var numChildren := |linked.Root().children|;
+        && linked.Acyclic()
+        && linked.HasRoot()
+        ==> 
+        (
+          forall i, j | 
+            && i != j 
+            && 0 <= i < numChildren 
+            && 0 <= j < numChildren
+            && linked.ChildAtIdx(i).Acyclic()
+            && linked.ChildAtIdx(j).Acyclic()
+          :: linked.SubtreesAreDisjoint(i, j)
+        )
+      )
+    }
   }
 
   function EmptyDisk() : DiskView {
@@ -524,6 +545,19 @@ module LinkedBetreeMod
         }
       }
       assert dv.NodeHasLinkedChildren(dv.entries[newAddrs.parent]);  // trigger
+    }
+
+    // Subtree representations have null intersections
+    predicate SubtreesAreDisjoint(i: nat, j: nat) 
+      requires Acyclic()
+      requires HasRoot()
+      requires Root().ValidChildIndex(i)
+      requires Root().ValidChildIndex(j)
+      requires ChildAtIdx(i).Acyclic()
+      requires ChildAtIdx(j).Acyclic()
+      requires i != j
+    {
+      ChildAtIdx(i).Representation() !! ChildAtIdx(j).Representation()
     }
   }
 

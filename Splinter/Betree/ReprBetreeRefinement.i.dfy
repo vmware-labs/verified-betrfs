@@ -34,40 +34,6 @@ module ReprBetreeRefinement
     v.repr == v.betree.linked.Representation()
   }
 
-  // Subtree representations have null intersections
-  predicate SubtreesAreDisjoint(linked: LinkedBetree, i: nat, j: nat) 
-    requires linked.Acyclic()
-    requires linked.HasRoot()
-    requires linked.Root().ValidChildIndex(i)
-    requires linked.Root().ValidChildIndex(j)
-    requires linked.ChildAtIdx(i).Acyclic()
-    requires linked.ChildAtIdx(j).Acyclic()
-    requires i != j
-  {
-    linked.ChildAtIdx(i).Representation() !! linked.ChildAtIdx(j).Representation()
-  }
-
-  // Every node in the disk obeys SubtreesAreDisjoint in all its children
-  predicate DiskHasNoDags(dv: LB.DiskView)
-  {
-    forall addr | addr in dv.entries :: (
-      var linked := dv.GetEntryAsLinked(addr);
-      var numChildren := |linked.Root().children|;
-      && linked.Acyclic()
-      && linked.HasRoot()
-      ==> 
-      (
-        forall i, j | 
-          && i != j 
-          && 0 <= i < numChildren 
-          && 0 <= j < numChildren
-          && linked.ChildAtIdx(i).Acyclic()
-          && linked.ChildAtIdx(j).Acyclic()
-         :: SubtreesAreDisjoint(linked, i, j)
-      )
-    )
-  }
-
   predicate Inv(v: Variables) {
     // Note: ValidRepr and DiskIsTightWrtRepresentation together 
     // gives us diskView.entries.Keys == v.repr
@@ -75,7 +41,7 @@ module ReprBetreeRefinement
     && LBR.Inv(v.betree)
     && ValidRepr(v)                                    // v.repr == Representation
     && v.betree.linked.DiskIsTightWrtRepresentation()  // diskView == Representation
-    && DiskHasNoDags(v.betree.linked.diskView)
+    && v.betree.linked.diskView.DiskHasNoDags()
   }
 
   //******** PROVE INVARIANTS ********//
@@ -93,7 +59,6 @@ module ReprBetreeRefinement
     ensures Inv(v)
   {
     LBR.InitRefines(I(v), gcBetree.I());
-    assume DiskHasNoDags(v.betree.linked.diskView);
   }
 
   // Theorem: If t1.root = t2.root and their disks agree, then t1 and t2 have the same Representation
@@ -698,7 +663,7 @@ module ReprBetreeRefinement
   // on the substitution path
   lemma {:timeLimitMultiplier 3} SubstituteDeletesAddrsOnPath(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, addr: Address, ranking: Ranking)
     requires path.Valid()
-    requires DiskHasNoDags(path.linked.diskView)
+    requires path.linked.diskView.DiskHasNoDags()
     requires replacement.Acyclic()
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
@@ -748,7 +713,7 @@ module ReprBetreeRefinement
           LBR.ChildAtIdxAcyclic(linkedAftSubst, idx);
           RepresentationSameAsReachable(linkedAftSubst.ChildAtIdx(idx), r1);
           ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx, ranking); 
-          assert SubtreesAreDisjoint(linked, idx, routeIdx); // trigger
+          assert linked.SubtreesAreDisjoint(idx, routeIdx); // trigger
           AddrsOnPathIsRootOrInRouteSubtree(path, routeIdx);
           forall i | 0 <= i < |linked.Root().children|
           ensures linked.ChildAtIdx(i).Acyclic() && linked.root.value !in linked.ChildAtIdx(i).Representation()
@@ -859,7 +824,7 @@ module ReprBetreeRefinement
   // Tony: this lemma is sprawling massive...
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacement(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)
     requires path.Valid()
-    requires DiskHasNoDags(path.linked.diskView)
+    requires path.linked.diskView.DiskHasNoDags()
     requires path.Target().Root().buffers.Equivalent(compactedBuffers)
     requires path.Target().diskView.IsFresh({replacementAddr})
     requires replacement == LB.InsertCompactReplacement(path.Target(), compactedBuffers, replacementAddr)
@@ -897,10 +862,10 @@ module ReprBetreeRefinement
   }
 
   // This juicy lemma requires a lot of juice
-  lemma {:timeLimitMultiplier 3} ReprAfterSubstituteReplacementInduction1(path: Path, replacement: LinkedBetree, 
+  lemma {:timeLimitMultiplier 4} ReprAfterSubstituteReplacementInduction1(path: Path, replacement: LinkedBetree, 
       pathAddrs: PathAddrs, additions: set<Address>, subtractions:set<Address>, ranking: Ranking)
     requires path.Valid()
-    requires DiskHasNoDags(path.linked.diskView)
+    requires path.linked.diskView.DiskHasNoDags()
     requires 0 < path.depth
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
@@ -961,7 +926,7 @@ module ReprBetreeRefinement
           AddrsOnPathIsRootOrInRouteSubtree(path, routeIdx);
           LBR.ChildAtIdxAcyclic(path.linked, idx);
           LBR.ChildAtIdxAcyclic(path.linked, routeIdx);
-          assert SubtreesAreDisjoint(path.linked, idx, routeIdx);  // trigger
+          assert path.linked.SubtreesAreDisjoint(idx, routeIdx);  // trigger
 
           // Finally, show addr not in subtractions
           if addr in subtractions {
@@ -1127,7 +1092,7 @@ module ReprBetreeRefinement
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteFlushReplacement(
     path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, 
     pathAddrs: PathAddrs, replacementRanking: Ranking)
-    requires DiskHasNoDags(path.linked.diskView)
+    requires path.linked.diskView.DiskHasNoDags()
     requires path.Valid()
     requires path.Target().Root().OccupiedChildIndex(childIdx)
     requires replacement == LB.InsertFlushReplacement(path.Target(), childIdx, replacementAddr, replacementChildAddr)
@@ -1180,7 +1145,7 @@ module ReprBetreeRefinement
 
   lemma ReprAfterSubstituteFlushReplacementBaseCase(
     path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, ranking: Ranking)
-    requires DiskHasNoDags(path.linked.diskView)
+    requires path.linked.diskView.DiskHasNoDags()
     requires path.Valid()
     requires path.depth == 0  // base case
     requires path.linked.Root().OccupiedChildIndex(childIdx)
@@ -1215,7 +1180,7 @@ module ReprBetreeRefinement
       assert linked.ChildAtIdx(childIdx).root.value !in subTreeAddrs[idx] by {
         LBR.ChildAtIdxAcyclic(linked, idx);
         LBR.ChildAtIdxAcyclic(linked, childIdx);
-        assert SubtreesAreDisjoint(linked, childIdx, idx);  // trigger that makes verification fast, shaves 7secs
+        assert linked.SubtreesAreDisjoint(childIdx, idx);  // trigger that makes verification fast, shaves 7secs
         RepresentationSameAsReachable(linked.ChildAtIdx(idx), ranking);
       }
     }
@@ -1345,7 +1310,7 @@ module ReprBetreeRefinement
   lemma {:timeLimitMultiplier 3} ReprAfterSubstituteSplitReplacement(
     path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs,
     pathAddrs: PathAddrs, replacementRanking: Ranking)
-    requires DiskHasNoDags(path.linked.diskView)
+    requires path.linked.diskView.DiskHasNoDags()
     requires path.Valid()
     requires path.Target().CanSplitParent(request)
     requires replacement == path.Target().SplitParent(request, newAddrs)
@@ -1397,7 +1362,7 @@ module ReprBetreeRefinement
 
   lemma ReprAfterSubstituteSplitReplacementBaseCase(
     path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
-    requires DiskHasNoDags(path.linked.diskView)
+    requires path.linked.diskView.DiskHasNoDags()
     requires path.Valid()
     requires path.depth == 0  // base case
     requires path.linked.CanSplitParent(request)
@@ -1431,7 +1396,7 @@ module ReprBetreeRefinement
       assert linked.ChildAtIdx(pivotIndex).root.value !in subTreeAddrs[idx] by {
         LBR.ChildAtIdxAcyclic(linked, idx);
         LBR.ChildAtIdxAcyclic(linked, pivotIndex);
-        assert SubtreesAreDisjoint(linked, pivotIndex, idx);  // trigger
+        assert linked.SubtreesAreDisjoint(pivotIndex, idx);  // trigger
         RepresentationSameAsReachable(linked.ChildAtIdx(idx), ranking);
       }
     }
@@ -1445,7 +1410,7 @@ module ReprBetreeRefinement
       ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(oldIdx), replacement.ChildAtIdx(idx), ranking);
       LBR.ChildAtIdxAcyclic(linked, oldIdx);
       LBR.ChildAtIdxAcyclic(linked, pivotIndex);
-      assert SubtreesAreDisjoint(linked, pivotIndex, oldIdx);  // trigger
+      assert linked.SubtreesAreDisjoint(pivotIndex, oldIdx);  // trigger
       RepresentationSameAsReachable(linked.ChildAtIdx(oldIdx), ranking);
     }
 
@@ -1712,7 +1677,6 @@ module ReprBetreeRefinement
     ensures Inv(v')
   {
     var step: Step :| NextStep(v, v', lbl, step);
-    assume DiskHasNoDags(v'.betree.linked.diskView);
     match step {
       case QueryStep(receipt) => {
         assert Inv(v');
@@ -1729,30 +1693,35 @@ module ReprBetreeRefinement
       case InternalGrowStep(_) => {
         LBR.InvNextInternalGrowStep(I(v), I(v'), lbl.I(), step.I());
         InternalGrowMaintainsRepr(v, v', lbl, step);
+        assume v'.betree.linked.diskView.DiskHasNoDags();
         assert Inv(v');
       }
       case InternalSplitStep(_, _, _, _) => {
         LBR.InvNextInternalSplitStep(I(v), I(v'), lbl.I(), step.I());
         InternalSplitMaintainsRepr(v, v', lbl, step);
         InternalSplitMaintainsTightDisk(v, v', lbl, step);
+        assume v'.betree.linked.diskView.DiskHasNoDags();
         assert Inv(v');
       }
       case InternalFlushStep(_, _, _, _, _) => {
         LBR.InvNextInternalFlushStep(I(v), I(v'), lbl.I(), step.I());
         InternalFlushMaintainsRepr(v, v', lbl, step);
         InternalFlushMaintainsTightDisk(v, v', lbl, step);
+        assume v'.betree.linked.diskView.DiskHasNoDags();
         assert Inv(v');
       }
       case InternalFlushMemtableStep(_) => {
         LBR.InvNextInternalFlushMemtableStep(I(v), I(v'), lbl.I(), step.I());
         InternalFlushMemtableMaintainsRepr(v, v', lbl, step);
         InternalFlushMemtableMaintainsTightDisk(v, v', lbl, step);
+        assume v'.betree.linked.diskView.DiskHasNoDags();
         assert Inv(v');
       }
       case InternalCompactStep(_, _, _, _) => {
         LBR.InvNextInternalCompactStep(I(v), I(v'), lbl.I(), step.I());
         InternalCompactMaintainsRepr(v, v', lbl, step);
         InternalCompactMaintainsTightDisk(v, v', lbl, step);
+        assume v'.betree.linked.diskView.DiskHasNoDags();
         assert Inv(v');
       }
       case InternalMapReserveStep() => {
