@@ -326,23 +326,15 @@ module LinkedBetreeMod
 
     // Every node in the disk obeys SubtreesAreDisjoint in all its children
     predicate DiskHasNoDags()
+      requires WF()
     {
-      forall addr | addr in entries :: (
-        var linked := GetEntryAsLinked(addr);
-        var numChildren := |linked.Root().children|;
-        && linked.Acyclic()
+      forall addr | 
+        && addr in entries 
+        && var linked := GetEntryAsLinked(addr);
+        && var numChildren := |linked.Root().children|;
         && linked.HasRoot()
-        ==> 
-        (
-          forall i, j | 
-            && i != j 
-            && 0 <= i < numChildren 
-            && 0 <= j < numChildren
-            && linked.ChildAtIdx(i).Acyclic()
-            && linked.ChildAtIdx(j).Acyclic()
-          :: linked.SubtreesAreDisjoint(i, j)
-        )
-      )
+      ::
+        GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
     }
   }
 
@@ -549,7 +541,7 @@ module LinkedBetreeMod
 
     // Subtree representations have null intersections
     predicate SubtreesAreDisjoint(i: nat, j: nat) 
-      requires Acyclic()
+      requires WF()
       requires HasRoot()
       requires Root().ValidChildIndex(i)
       requires Root().ValidChildIndex(j)
@@ -558,6 +550,20 @@ module LinkedBetreeMod
       requires i != j
     {
       ChildAtIdx(i).Representation() !! ChildAtIdx(j).Representation()
+    }
+
+    predicate AllSubtreesAreDisjoint() 
+      requires WF()
+      requires HasRoot()
+    {
+      forall i, j | 
+          && i != j 
+          && 0 <= i < |Root().children| 
+          && 0 <= j < |Root().children|
+          && ChildAtIdx(i).Acyclic()
+          && ChildAtIdx(j).Acyclic()
+      :: 
+        SubtreesAreDisjoint(i, j)
     }
   }
 

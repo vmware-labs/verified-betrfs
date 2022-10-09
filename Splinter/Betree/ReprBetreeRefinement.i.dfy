@@ -1092,8 +1092,8 @@ module ReprBetreeRefinement
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteFlushReplacement(
     path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, 
     pathAddrs: PathAddrs, replacementRanking: Ranking)
-    requires path.linked.diskView.DiskHasNoDags()
     requires path.Valid()
+    requires path.linked.diskView.DiskHasNoDags()
     requires path.Target().Root().OccupiedChildIndex(childIdx)
     requires replacement == LB.InsertFlushReplacement(path.Target(), childIdx, replacementAddr, replacementChildAddr)
     requires path.CanSubstitute(replacement, pathAddrs)
@@ -1145,8 +1145,8 @@ module ReprBetreeRefinement
 
   lemma ReprAfterSubstituteFlushReplacementBaseCase(
     path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, ranking: Ranking)
-    requires path.linked.diskView.DiskHasNoDags()
     requires path.Valid()
+    requires path.linked.diskView.DiskHasNoDags()
     requires path.depth == 0  // base case
     requires path.linked.Root().OccupiedChildIndex(childIdx)
     requires replacement == LB.InsertFlushReplacement(path.linked, childIdx, replacementAddr, replacementChildAddr)
@@ -1310,8 +1310,8 @@ module ReprBetreeRefinement
   lemma {:timeLimitMultiplier 3} ReprAfterSubstituteSplitReplacement(
     path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs,
     pathAddrs: PathAddrs, replacementRanking: Ranking)
-    requires path.linked.diskView.DiskHasNoDags()
     requires path.Valid()
+    requires path.linked.diskView.DiskHasNoDags()
     requires path.Target().CanSplitParent(request)
     requires replacement == path.Target().SplitParent(request, newAddrs)
     requires path.CanSubstitute(replacement, pathAddrs)
@@ -1362,8 +1362,8 @@ module ReprBetreeRefinement
 
   lemma ReprAfterSubstituteSplitReplacementBaseCase(
     path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
-    requires path.linked.diskView.DiskHasNoDags()
     requires path.Valid()
+    requires path.linked.diskView.DiskHasNoDags()
     requires path.depth == 0  // base case
     requires path.linked.CanSplitParent(request)
     requires replacement == path.linked.SplitParent(request, newAddrs);
@@ -1671,6 +1671,70 @@ module ReprBetreeRefinement
     }
   }
 
+  lemma {:timeLimitMultiplier 3} InternalGrowMaintainsDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalGrowStep?
+    requires v'.betree.linked.Acyclic()
+    ensures v'.betree.linked.diskView.DiskHasNoDags();
+  {
+    // TODO: This should be an invariant
+    assume forall addr | addr in v.betree.linked.Representation() 
+    :: v.betree.linked.diskView.GetEntryAsLinked(addr).Acyclic();
+
+    var dv' := v'.betree.linked.diskView;
+    forall addr | 
+        && addr in dv'.entries 
+        && var linked' := dv'.GetEntryAsLinked(addr);
+        && var numChildren := |linked'.Root().children|;
+        && linked'.HasRoot()
+    ensures dv'.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
+    {
+      var linked' := dv'.GetEntryAsLinked(addr);
+      var numChildren := |linked'.Root().children|;
+      forall i, j |
+          && i != j 
+          && 0 <= i < numChildren
+          && 0 <= j < numChildren
+          && linked'.ChildAtIdx(i).Acyclic()
+          && linked'.ChildAtIdx(j).Acyclic()
+      ensures 
+        linked'.SubtreesAreDisjoint(i, j)
+      {
+        if addr == step.newRootAddr {
+          assume false;
+        } else {
+          var ranking := LBR.BuildTightRanking(v.betree.linked, v.betree.linked.TheRanking());
+          var ranking' := LBR.InsertGrowReplacementNewRanking(v.betree.linked, ranking, step.newRootAddr);
+
+          var dv := v.betree.linked.diskView;
+          var linked := dv.GetEntryAsLinked(addr);
+          LBR.ChildAtIdxAcyclic(linked, i);
+          LBR.ChildAtIdxAcyclic(linked, j);
+
+          assert addr in v.betree.linked.Representation();
+          assert v.betree.linked.ValidRanking(ranking');
+          // TODO: Need lemma that says valid ranking for root means valid ranking for any node in Representation
+          assume linked.ValidRanking(ranking');
+          assert linked'.ValidRanking(ranking');
+
+          assert linked.ChildAtIdx(i).Representation() == linked'.ChildAtIdx(i).Representation() by {
+            ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(i), linked'.ChildAtIdx(i), ranking');
+            RepresentationSameAsReachable(linked.ChildAtIdx(i), ranking');
+            RepresentationSameAsReachable(linked'.ChildAtIdx(i), ranking');
+          }
+          assert linked.ChildAtIdx(j).Representation() == linked'.ChildAtIdx(j).Representation() by {
+            ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(j), linked'.ChildAtIdx(j), ranking');
+            RepresentationSameAsReachable(linked.ChildAtIdx(j), ranking');
+            RepresentationSameAsReachable(linked'.ChildAtIdx(j), ranking');
+          }
+          assert linked'.ChildAtIdx(i).Representation() !! linked'.ChildAtIdx(j).Representation();
+          assert linked'.SubtreesAreDisjoint(i, j);
+        }
+      }
+    }
+  }
+
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel) 
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -1693,7 +1757,7 @@ module ReprBetreeRefinement
       case InternalGrowStep(_) => {
         LBR.InvNextInternalGrowStep(I(v), I(v'), lbl.I(), step.I());
         InternalGrowMaintainsRepr(v, v', lbl, step);
-        assume v'.betree.linked.diskView.DiskHasNoDags();
+        InternalGrowMaintainsDagFree(v, v', lbl, step);
         assert Inv(v');
       }
       case InternalSplitStep(_, _, _, _) => {

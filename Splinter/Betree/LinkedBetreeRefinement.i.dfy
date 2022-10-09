@@ -320,7 +320,9 @@ module LinkedBetreeRefinement {
             IChildren(linked, linked.TheRanking())).Child(key);
       }
     } else {
-      calc {  // trigger
+      // the assert and calc are all triggers
+      assert PivotBetree.BetreeNode(linked.Root().buffers, linked.Root().pivotTable, IChildren(linked, linked.TheRanking())).KeyInDomain(key);
+      calc {
         PivotBetree.Nil;
         PivotBetree.BetreeNode(linked.Root().buffers, linked.Root().pivotTable, IChildren(linked, linked.TheRanking())).Child(key);
       }
