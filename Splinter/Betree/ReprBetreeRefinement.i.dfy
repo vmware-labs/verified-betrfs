@@ -821,6 +821,36 @@ module ReprBetreeRefinement
     RepresentationSameAsReachable(linked', ranking);
   }
 
+  // Theorem: Valid ranking for root is also valid for any node in the Representation
+  lemma RootRankingValidForRepresentation(rootLinked:LinkedBetree, addr:Address, ranking:Ranking) 
+    requires rootLinked.WF()
+    requires rootLinked.ValidRanking(ranking)
+    requires addr in rootLinked.Representation()
+    ensures rootLinked.diskView.GetEntryAsLinked(addr).ValidRanking(ranking)
+    decreases rootLinked.GetRank(ranking)
+  {
+    if addr != rootLinked.root.value {
+      var numChildren := |rootLinked.Root().children|;
+      var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => rootLinked.ChildAtIdx(i).ReachableAddrsUsingRanking(rootLinked.TheRanking()));
+      Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+      var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
+      LBR.ReachableAddrsIgnoresRanking(rootLinked.ChildAtIdx(idx), rootLinked.TheRanking(), ranking);
+      assert rootLinked.ChildAtIdx(idx).ValidRanking(ranking);  // trigger
+      RepresentationSameAsReachable(rootLinked.ChildAtIdx(idx), ranking);
+      RootRankingValidForRepresentation(rootLinked.ChildAtIdx(idx), addr, ranking);
+    }
+  }
+
+  // Theorem: Wrapper around RootRankingValidForRepresentation
+  // If root is Acyclic, then any node in the Representation is Acyclic
+  lemma NodesInRepresentationAreAcyclic(rootLinked:LinkedBetree, addr:Address) 
+    requires rootLinked.Acyclic()
+    requires addr in rootLinked.Representation()
+    ensures rootLinked.diskView.GetEntryAsLinked(addr).Acyclic()
+  {
+    RootRankingValidForRepresentation(rootLinked, addr, rootLinked.TheRanking());
+  }
+
   // Tony: this lemma is sprawling massive...
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacement(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)
     requires path.Valid()
@@ -1678,10 +1708,6 @@ module ReprBetreeRefinement
     requires v'.betree.linked.Acyclic()
     ensures v'.betree.linked.diskView.DiskHasNoDags();
   {
-    // TODO: This should be an invariant
-    assume forall addr | addr in v.betree.linked.Representation() 
-    :: v.betree.linked.diskView.GetEntryAsLinked(addr).Acyclic();
-
     var dv' := v'.betree.linked.diskView;
     forall addr | 
         && addr in dv'.entries 
@@ -1709,13 +1735,15 @@ module ReprBetreeRefinement
 
           var dv := v.betree.linked.diskView;
           var linked := dv.GetEntryAsLinked(addr);
+          NodesInRepresentationAreAcyclic(v.betree.linked, addr);
           LBR.ChildAtIdxAcyclic(linked, i);
           LBR.ChildAtIdxAcyclic(linked, j);
 
           assert addr in v.betree.linked.Representation();
           assert v.betree.linked.ValidRanking(ranking');
-          // TODO: Need lemma that says valid ranking for root means valid ranking for any node in Representation
-          assume linked.ValidRanking(ranking');
+          assert linked.ValidRanking(ranking') by {
+            RootRankingValidForRepresentation( v.betree.linked, addr, ranking');
+          }
           assert linked'.ValidRanking(ranking');
 
           assert linked.ChildAtIdx(i).Representation() == linked'.ChildAtIdx(i).Representation() by {
