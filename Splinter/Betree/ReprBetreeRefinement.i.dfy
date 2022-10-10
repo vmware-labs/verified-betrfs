@@ -1786,9 +1786,7 @@ module ReprBetreeRefinement
     var dv' := v'.betree.linked.diskView;
     forall addr | 
         && addr in dv'.entries 
-        && var linked' := dv'.GetEntryAsLinked(addr);
-        && var numChildren := |linked'.Root().children|;
-        && linked'.HasRoot()
+        && dv'.GetEntryAsLinked(addr).HasRoot()
     ensures dv'.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
     {
       if addr != step.newRootAddr {
@@ -1814,9 +1812,7 @@ module ReprBetreeRefinement
     var dv' := v'.betree.linked.diskView;
     forall addr | 
         && addr in dv'.entries 
-        && var linked' := dv'.GetEntryAsLinked(addr);
-        && var numChildren := |linked'.Root().children|;
-        && linked'.HasRoot()
+        && dv'.GetEntryAsLinked(addr).HasRoot()
     ensures dv'.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
     {
       var ranking := LBR.BuildTightRanking(v.betree.linked, v.betree.linked.TheRanking());
@@ -1840,7 +1836,7 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma DagFreeAfterSubstituteCompactReplacement(
+  lemma {:timeLimitMultiplier 3} DagFreeAfterSubstituteCompactReplacement(
     path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)  
     requires path.Valid()
     requires path.Target().Root().buffers.Equivalent(compactedBuffers)
@@ -1850,22 +1846,47 @@ module ReprBetreeRefinement
     requires replacement.ValidRanking(replacementRanking)
     requires replacement.Acyclic()
 
+    // Invariants
+    requires path.linked.DiskIsTightWrtRepresentation()
+    requires path.linked.diskView.DiskIsDagFree()
+
     // Framing
     requires path.AddrsOnPath() !! replacement.Representation()
 
     //RankingAfterSubstitution requirements
-    requires path.linked.root.value in replacementRanking
-    requires Set(pathAddrs) !! replacementRanking.Keys
-    requires PathAddrsFresh(path, replacement, pathAddrs)
+    // requires path.linked.root.value in replacementRanking
+    // requires Set(pathAddrs) !! replacementRanking.Keys
+    // requires PathAddrsFresh(path, replacement, pathAddrs)
 
     ensures path.Substitute(replacement, pathAddrs).BuildTightTree().WF()
     ensures path.Substitute(replacement, pathAddrs).BuildTightTree().diskView.DiskIsDagFree()
+    decreases path.depth
   {
     if path.depth == 0 {
-      assume replacement.diskView.DiskIsDagFree();
+      // Base Case
+      forall addr | 
+        && addr in replacement.diskView.entries 
+        && replacement.diskView.GetEntryAsLinked(addr).HasRoot()
+      ensures replacement.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
+      {
+        var tightRootRanking := LBR.BuildTightRanking(path.linked, path.linked.TheRanking());
+        var newRanking := LBR.CompactionReplacementRanking(path.Target(), tightRootRanking, compactedBuffers, replacementAddr);
+        if addr != replacementAddr {
+          var l1 := path.Target().diskView.GetEntryAsLinked(addr);
+          var l2 := replacement.diskView.GetEntryAsLinked(addr);
+          LBR.ValidRankingAllTheWayDown(newRanking, path);
+          RootRankingValidForAddrInRepresentation(path.Target(), addr, newRanking);
+          AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, newRanking);
+        } else {
+          AgreeingDisksImpliesSubtreesAreDisjoint(path.Target(), replacement, newRanking);
+        }
+      }
       BuildTightPreservesDagFree(replacement);
-      assert replacement.BuildTightTree().diskView.DiskIsDagFree();
     } else {
+      // Inductive Case
+      DagFreeAfterSubstituteCompactReplacement(path.Subpath(), compactedBuffers, replacement, replacementRanking, pathAddrs[1..], replacementAddr);
+
+
       assume false;
     }
   }
