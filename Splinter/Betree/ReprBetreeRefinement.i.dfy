@@ -87,6 +87,21 @@ module ReprBetreeRefinement
     }
   }
 
+    // Theorem: Wrapper around ReachableAddrsInAgreeingDisks
+  lemma RepresentationInAgreeingDisks(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking) 
+    requires t1.WF()
+    requires t2.WF()
+    requires t1.ValidRanking(ranking)
+    requires t2.ValidRanking(ranking)
+    requires t1.diskView.AgreesWithDisk(t2.diskView)
+    requires t1.root == t2.root
+    ensures t1.Representation() == t2.Representation()
+  {
+    ReachableAddrsInAgreeingDisks(t1, t2, ranking);
+    RepresentationSameAsReachable(t1, ranking);
+    RepresentationSameAsReachable(t2, ranking);
+  }
+
   lemma InternalGrowMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
@@ -822,7 +837,7 @@ module ReprBetreeRefinement
   }
 
   // Theorem: Valid ranking for root is also valid for any node in the Representation
-  lemma RootRankingValidForRepresentation(rootLinked:LinkedBetree, addr:Address, ranking:Ranking) 
+  lemma RootRankingValidForAddrInRepresentation(rootLinked:LinkedBetree, addr:Address, ranking:Ranking) 
     requires rootLinked.WF()
     requires rootLinked.ValidRanking(ranking)
     requires addr in rootLinked.Representation()
@@ -837,18 +852,18 @@ module ReprBetreeRefinement
       LBR.ReachableAddrsIgnoresRanking(rootLinked.ChildAtIdx(idx), rootLinked.TheRanking(), ranking);
       assert rootLinked.ChildAtIdx(idx).ValidRanking(ranking);  // trigger
       RepresentationSameAsReachable(rootLinked.ChildAtIdx(idx), ranking);
-      RootRankingValidForRepresentation(rootLinked.ChildAtIdx(idx), addr, ranking);
+      RootRankingValidForAddrInRepresentation(rootLinked.ChildAtIdx(idx), addr, ranking);
     }
   }
 
-  // Theorem: Wrapper around RootRankingValidForRepresentation
+  // Theorem: Wrapper around RootRankingValidForAddrInRepresentation
   // If root is Acyclic, then any node in the Representation is Acyclic
   lemma NodesInRepresentationAreAcyclic(rootLinked:LinkedBetree, addr:Address) 
     requires rootLinked.Acyclic()
     requires addr in rootLinked.Representation()
     ensures rootLinked.diskView.GetEntryAsLinked(addr).Acyclic()
   {
-    RootRankingValidForRepresentation(rootLinked, addr, rootLinked.TheRanking());
+    RootRankingValidForAddrInRepresentation(rootLinked, addr, rootLinked.TheRanking());
   }
 
   // Tony: this lemma is sprawling massive...
@@ -1701,7 +1716,7 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma {:timeLimitMultiplier 3} InternalGrowMaintainsDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma {:timeLimitMultiplier 2} InternalGrowMaintainsDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalGrowStep?
@@ -1727,37 +1742,23 @@ module ReprBetreeRefinement
       ensures 
         linked'.SubtreesAreDisjoint(i, j)
       {
-        if addr == step.newRootAddr {
-          assume false;
-        } else {
+        if addr != step.newRootAddr {
           var ranking := LBR.BuildTightRanking(v.betree.linked, v.betree.linked.TheRanking());
           var ranking' := LBR.InsertGrowReplacementNewRanking(v.betree.linked, ranking, step.newRootAddr);
-
           var dv := v.betree.linked.diskView;
           var linked := dv.GetEntryAsLinked(addr);
           NodesInRepresentationAreAcyclic(v.betree.linked, addr);
           LBR.ChildAtIdxAcyclic(linked, i);
           LBR.ChildAtIdxAcyclic(linked, j);
-
-          assert addr in v.betree.linked.Representation();
-          assert v.betree.linked.ValidRanking(ranking');
           assert linked.ValidRanking(ranking') by {
-            RootRankingValidForRepresentation( v.betree.linked, addr, ranking');
+            RootRankingValidForAddrInRepresentation(v.betree.linked, addr, ranking');
           }
-          assert linked'.ValidRanking(ranking');
-
           assert linked.ChildAtIdx(i).Representation() == linked'.ChildAtIdx(i).Representation() by {
-            ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(i), linked'.ChildAtIdx(i), ranking');
-            RepresentationSameAsReachable(linked.ChildAtIdx(i), ranking');
-            RepresentationSameAsReachable(linked'.ChildAtIdx(i), ranking');
+            RepresentationInAgreeingDisks(linked.ChildAtIdx(i), linked'.ChildAtIdx(i), ranking');
           }
           assert linked.ChildAtIdx(j).Representation() == linked'.ChildAtIdx(j).Representation() by {
-            ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(j), linked'.ChildAtIdx(j), ranking');
-            RepresentationSameAsReachable(linked.ChildAtIdx(j), ranking');
-            RepresentationSameAsReachable(linked'.ChildAtIdx(j), ranking');
+            RepresentationInAgreeingDisks(linked.ChildAtIdx(j), linked'.ChildAtIdx(j), ranking');
           }
-          assert linked'.ChildAtIdx(i).Representation() !! linked'.ChildAtIdx(j).Representation();
-          assert linked'.SubtreesAreDisjoint(i, j);
         }
       }
     }
