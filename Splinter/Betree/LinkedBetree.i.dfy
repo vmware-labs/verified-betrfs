@@ -325,14 +325,12 @@ module LinkedBetreeMod
     }
 
     // Every node in the disk obeys SubtreesAreDisjoint in all its children
-    predicate DiskHasNoDags()
+    predicate DiskIsDagFree()
       requires WF()
     {
       forall addr | 
         && addr in entries 
-        && var linked := GetEntryAsLinked(addr);
-        && var numChildren := |linked.Root().children|;
-        && linked.HasRoot()
+        && GetEntryAsLinked(addr).HasRoot()
       ::
         GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
     }

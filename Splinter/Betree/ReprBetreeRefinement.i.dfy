@@ -41,7 +41,7 @@ module ReprBetreeRefinement
     && LBR.Inv(v.betree)
     && ValidRepr(v)                                    // v.repr == Representation
     && v.betree.linked.DiskIsTightWrtRepresentation()  // diskView == Representation
-    && v.betree.linked.diskView.DiskHasNoDags()
+    && v.betree.linked.diskView.DiskIsDagFree()
   }
 
   //******** PROVE INVARIANTS ********//
@@ -678,7 +678,7 @@ module ReprBetreeRefinement
   // on the substitution path
   lemma {:timeLimitMultiplier 3} SubstituteDeletesAddrsOnPath(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, addr: Address, ranking: Ranking)
     requires path.Valid()
-    requires path.linked.diskView.DiskHasNoDags()
+    requires path.linked.diskView.DiskIsDagFree()
     requires replacement.Acyclic()
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
@@ -869,7 +869,7 @@ module ReprBetreeRefinement
   // Theorem: If t1 and t2 are the same nodes on agreeing disks, and t1.AllSubtreesAreDisjoint(),
   // then t2.AllSubtreesAreDisjoint()
   lemma AgreeingDisksImpliesSubtreesAreDisjoint(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking) 
-    requires t1.Acyclic()
+    requires t1.WF()
     requires t2.WF()
     requires t1.diskView.AgreesWithDisk(t2.diskView)
     requires t1.HasRoot()
@@ -901,10 +901,35 @@ module ReprBetreeRefinement
     }
   }
 
+  // Theorem: BuildTightTree preserves DiskIsDagFree property
+  lemma BuildTightPreservesDagFree(linked: LinkedBetree) 
+    requires linked.Acyclic()
+    requires linked.diskView.DiskIsDagFree()
+    ensures linked.BuildTightTree().WF()
+    ensures linked.BuildTightTree().diskView.DiskIsDagFree()
+  {
+    LBR.BuildTightPreservesWF(linked, linked.TheRanking());
+    var tightLinked := linked.BuildTightTree();
+    forall addr | 
+        && addr in tightLinked.diskView.entries 
+        && tightLinked.diskView.GetEntryAsLinked(addr).HasRoot()
+    ensures
+        tightLinked.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
+    {
+      var ranking := linked.TheRanking();
+      LBR.BuildTightMaintainsRankingValidity(linked, ranking);
+      BuildTightGivesTightWrtRepresentation(linked);
+      RootRankingValidForAddrInRepresentation(linked, addr, ranking);
+      var l1 := linked.diskView.GetEntryAsLinked(addr);
+      var l2 := tightLinked.diskView.GetEntryAsLinked(addr);
+      AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, ranking);
+    }
+  }
+
   // Tony: this lemma is sprawling massive...
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacement(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)
     requires path.Valid()
-    requires path.linked.diskView.DiskHasNoDags()
+    requires path.linked.diskView.DiskIsDagFree()
     requires path.Target().Root().buffers.Equivalent(compactedBuffers)
     requires path.Target().diskView.IsFresh({replacementAddr})
     requires replacement == LB.InsertCompactReplacement(path.Target(), compactedBuffers, replacementAddr)
@@ -945,7 +970,7 @@ module ReprBetreeRefinement
   lemma {:timeLimitMultiplier 4} ReprAfterSubstituteReplacementInduction1(path: Path, replacement: LinkedBetree, 
       pathAddrs: PathAddrs, additions: set<Address>, subtractions:set<Address>, ranking: Ranking)
     requires path.Valid()
-    requires path.linked.diskView.DiskHasNoDags()
+    requires path.linked.diskView.DiskIsDagFree()
     requires 0 < path.depth
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
@@ -1173,7 +1198,7 @@ module ReprBetreeRefinement
     path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, 
     pathAddrs: PathAddrs, replacementRanking: Ranking)
     requires path.Valid()
-    requires path.linked.diskView.DiskHasNoDags()
+    requires path.linked.diskView.DiskIsDagFree()
     requires path.Target().Root().OccupiedChildIndex(childIdx)
     requires replacement == LB.InsertFlushReplacement(path.Target(), childIdx, replacementAddr, replacementChildAddr)
     requires path.CanSubstitute(replacement, pathAddrs)
@@ -1226,7 +1251,7 @@ module ReprBetreeRefinement
   lemma ReprAfterSubstituteFlushReplacementBaseCase(
     path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, ranking: Ranking)
     requires path.Valid()
-    requires path.linked.diskView.DiskHasNoDags()
+    requires path.linked.diskView.DiskIsDagFree()
     requires path.depth == 0  // base case
     requires path.linked.Root().OccupiedChildIndex(childIdx)
     requires replacement == LB.InsertFlushReplacement(path.linked, childIdx, replacementAddr, replacementChildAddr)
@@ -1391,7 +1416,7 @@ module ReprBetreeRefinement
     path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs,
     pathAddrs: PathAddrs, replacementRanking: Ranking)
     requires path.Valid()
-    requires path.linked.diskView.DiskHasNoDags()
+    requires path.linked.diskView.DiskIsDagFree()
     requires path.Target().CanSplitParent(request)
     requires replacement == path.Target().SplitParent(request, newAddrs)
     requires path.CanSubstitute(replacement, pathAddrs)
@@ -1443,7 +1468,7 @@ module ReprBetreeRefinement
   lemma ReprAfterSubstituteSplitReplacementBaseCase(
     path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
     requires path.Valid()
-    requires path.linked.diskView.DiskHasNoDags()
+    requires path.linked.diskView.DiskIsDagFree()
     requires path.depth == 0  // base case
     requires path.linked.CanSplitParent(request)
     requires replacement == path.linked.SplitParent(request, newAddrs);
@@ -1756,7 +1781,7 @@ module ReprBetreeRefinement
     requires NextStep(v, v', lbl, step)
     requires step.InternalGrowStep?
     requires v'.betree.linked.Acyclic()
-    ensures v'.betree.linked.diskView.DiskHasNoDags();
+    ensures v'.betree.linked.diskView.DiskIsDagFree();
   {
     var dv' := v'.betree.linked.diskView;
     forall addr | 
@@ -1784,7 +1809,7 @@ module ReprBetreeRefinement
     requires NextStep(v, v', lbl, step)
     requires step.InternalFlushMemtableStep?
     requires v'.betree.linked.Acyclic()
-    ensures v'.betree.linked.diskView.DiskHasNoDags();
+    ensures v'.betree.linked.diskView.DiskIsDagFree();
   {
     var dv' := v'.betree.linked.diskView;
     forall addr | 
@@ -1812,6 +1837,55 @@ module ReprBetreeRefinement
           AgreeingDisksImpliesSubtreesAreDisjoint(linked, linked', ranking');
         }
       }
+    }
+  }
+
+  lemma DagFreeAfterSubstituteCompactReplacement(
+    path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)  
+    requires path.Valid()
+    requires path.Target().Root().buffers.Equivalent(compactedBuffers)
+    requires path.Target().diskView.IsFresh({replacementAddr})
+    requires replacement == LB.InsertCompactReplacement(path.Target(), compactedBuffers, replacementAddr)
+    requires path.CanSubstitute(replacement, pathAddrs)
+    requires replacement.ValidRanking(replacementRanking)
+    requires replacement.Acyclic()
+
+    // Framing
+    requires path.AddrsOnPath() !! replacement.Representation()
+
+    //RankingAfterSubstitution requirements
+    requires path.linked.root.value in replacementRanking
+    requires Set(pathAddrs) !! replacementRanking.Keys
+    requires PathAddrsFresh(path, replacement, pathAddrs)
+
+    ensures path.Substitute(replacement, pathAddrs).BuildTightTree().WF()
+    ensures path.Substitute(replacement, pathAddrs).BuildTightTree().diskView.DiskIsDagFree()
+  {
+    if path.depth == 0 {
+      assume replacement.diskView.DiskIsDagFree();
+      BuildTightPreservesDagFree(replacement);
+      assert replacement.BuildTightTree().diskView.DiskIsDagFree();
+    } else {
+      assume false;
+    }
+  }
+
+  lemma InternalCompactMaintainsDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalCompactStep?
+    requires v'.betree.linked.Acyclic()
+    ensures v'.betree.linked.diskView.DiskIsDagFree()
+  { 
+    // TODO: This has identical structure as InternalCompactMaintainsRepr. Can merge the two
+    var linked := v.betree.linked;
+    var replacement := LB.InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr);
+    var linkedRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
+    LBR.ValidRankingAllTheWayDown(linkedRanking, step.path);
+    var replacementRanking := LBR.RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, linkedRanking, step.targetAddr);
+    if linked.HasRoot() {
+      InsertCompactReplacementExcludesAddrsOnPath(step.path, replacement, step.compactedBuffers, step.targetAddr);
+      DagFreeAfterSubstituteCompactReplacement(step.path, step.compactedBuffers, replacement, replacementRanking, step.pathAddrs, step.targetAddr); 
     }
   }
 
@@ -1844,14 +1918,14 @@ module ReprBetreeRefinement
         LBR.InvNextInternalSplitStep(I(v), I(v'), lbl.I(), step.I());
         InternalSplitMaintainsRepr(v, v', lbl, step);
         InternalSplitMaintainsTightDisk(v, v', lbl, step);
-        assume v'.betree.linked.diskView.DiskHasNoDags();
+        assume v'.betree.linked.diskView.DiskIsDagFree();
         assert Inv(v');
       }
       case InternalFlushStep(_, _, _, _, _) => {
         LBR.InvNextInternalFlushStep(I(v), I(v'), lbl.I(), step.I());
         InternalFlushMaintainsRepr(v, v', lbl, step);
         InternalFlushMaintainsTightDisk(v, v', lbl, step);
-        assume v'.betree.linked.diskView.DiskHasNoDags();
+        assume v'.betree.linked.diskView.DiskIsDagFree();
         assert Inv(v');
       }
       case InternalFlushMemtableStep(_) => {
@@ -1865,7 +1939,7 @@ module ReprBetreeRefinement
         LBR.InvNextInternalCompactStep(I(v), I(v'), lbl.I(), step.I());
         InternalCompactMaintainsRepr(v, v', lbl, step);
         InternalCompactMaintainsTightDisk(v, v', lbl, step);
-        assume v'.betree.linked.diskView.DiskHasNoDags();
+        assume v'.betree.linked.diskView.DiskIsDagFree();
         assert Inv(v');
       }
       case InternalMapReserveStep() => {
