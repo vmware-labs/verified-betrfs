@@ -1402,6 +1402,24 @@ module LinkedBetreeRefinement {
     TargetCommutesWithI(step.path);
   }
 
+  lemma InsertInternalFlushMemtableNewRanking(linked: LinkedBetree, newBuffer: Buffer, oldRanking: Ranking, newRootAddr: Address) returns (newRanking: Ranking)
+    requires linked.WF()
+    requires RootCoversTotalDomain(linked)
+    requires linked.ValidRanking(oldRanking)
+    requires RankingIsTight(linked.diskView, oldRanking)
+    requires linked.diskView.IsFresh({newRootAddr})
+    ensures InsertInternalFlushMemtableReplacement(linked, newBuffer, newRootAddr).ValidRanking(newRanking)
+    ensures newRanking.Keys == oldRanking.Keys + {newRootAddr}
+    ensures IsSubMap(oldRanking, newRanking);
+  {
+    if linked.HasRoot() {
+      var oldRootRank := oldRanking[linked.root.value];
+      newRanking := oldRanking[newRootAddr := oldRootRank+1];  // witness
+    } else {
+      newRanking := oldRanking[newRootAddr := 0];
+    }
+  }
+
   lemma InternalFlushMemtableStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires v.linked.Acyclic()
@@ -1413,10 +1431,9 @@ module LinkedBetreeRefinement {
     InvNext(v, v', lbl);
     var replacement := InsertInternalFlushMemtableReplacement(v.linked, Buffer(v.memtable.mapp), step.newRootAddr);
     BuildTightPreservesInterpretation(replacement);
+    var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
+    var newRanking := InsertInternalFlushMemtableNewRanking(v.linked, Buffer(v.memtable.mapp), oldRanking, step.newRootAddr);
     if v.linked.HasRoot() {
-      var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
-      var oldRootRank := oldRanking[v.linked.root.value];
-      var newRanking := oldRanking[step.newRootAddr := oldRootRank+1];  // witness
       IChildrenIgnoresRanking(v.linked, v.linked.TheRanking(), newRanking);
       ILinkedBetreeIgnoresRanking(replacement, replacement.TheRanking(), newRanking);
       ILinkedBetreeIgnoresRanking(v.linked, v.linked.TheRanking(), newRanking);
@@ -1427,7 +1444,6 @@ module LinkedBetreeRefinement {
         IdenticalChildrenCommutesWithI(v.linked, i, replacement, i, newRanking);
       }  
     } else {
-      var newRanking := map[step.newRootAddr := 0];
       ILinkedBetreeIgnoresRanking(replacement, replacement.TheRanking(), newRanking);
       forall i | 0 <= i < |replacement.Root().children|   // trigger
       ensures ILinkedBetreeNode(replacement.ChildAtIdx(i), newRanking) == PivotBetree.Nil 
