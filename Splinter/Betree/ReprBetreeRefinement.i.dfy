@@ -866,6 +866,40 @@ module ReprBetreeRefinement
     RootRankingValidForAddrInRepresentation(rootLinked, addr, rootLinked.TheRanking());
   }
 
+  // Theorem: If t1 and t2 are the same nodes on agreeing disks, and t1.AllSubtreesAreDisjoint(),
+  // then t2.AllSubtreesAreDisjoint()
+  lemma AgreeingDisksImpliesSubtreesAreDisjoint(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking) 
+    requires t1.Acyclic()
+    requires t2.WF()
+    requires t1.diskView.AgreesWithDisk(t2.diskView)
+    requires t1.HasRoot()
+    requires t1.root == t2.root
+    requires t1.ValidRanking(ranking)
+    requires t2.ValidRanking(ranking)
+    requires t1.AllSubtreesAreDisjoint()
+    ensures t2.AllSubtreesAreDisjoint()
+  {
+    var numChildren := |t2.Root().children|;
+    forall i, j |
+        && i != j 
+        && 0 <= i < numChildren
+        && 0 <= j < numChildren
+        && t2.ChildAtIdx(i).Acyclic()
+        && t2.ChildAtIdx(j).Acyclic()
+    ensures 
+      t2.SubtreesAreDisjoint(i, j)
+    {
+      LBR.ChildAtIdxAcyclic(t1, i);
+      LBR.ChildAtIdxAcyclic(t1, j);
+      assert t1.ChildAtIdx(i).Representation() == t2.ChildAtIdx(i).Representation() by {
+        RepresentationInAgreeingDisks(t1.ChildAtIdx(i), t2.ChildAtIdx(i), ranking);
+      }
+      assert t1.ChildAtIdx(j).Representation() == t2.ChildAtIdx(j).Representation() by {
+        RepresentationInAgreeingDisks(t1.ChildAtIdx(j), t2.ChildAtIdx(j), ranking);
+      }
+    }
+  }
+
   // Tony: this lemma is sprawling massive...
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacement(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)
     requires path.Valid()
@@ -1716,7 +1750,7 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma {:timeLimitMultiplier 2} InternalGrowMaintainsDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma InternalGrowMaintainsDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalGrowStep?
@@ -1731,35 +1765,15 @@ module ReprBetreeRefinement
         && linked'.HasRoot()
     ensures dv'.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
     {
-      var linked' := dv'.GetEntryAsLinked(addr);
-      var numChildren := |linked'.Root().children|;
-      forall i, j |
-          && i != j 
-          && 0 <= i < numChildren
-          && 0 <= j < numChildren
-          && linked'.ChildAtIdx(i).Acyclic()
-          && linked'.ChildAtIdx(j).Acyclic()
-      ensures 
-        linked'.SubtreesAreDisjoint(i, j)
-      {
-        if addr != step.newRootAddr {
-          var ranking := LBR.BuildTightRanking(v.betree.linked, v.betree.linked.TheRanking());
-          var ranking' := LBR.InsertGrowReplacementNewRanking(v.betree.linked, ranking, step.newRootAddr);
-          var dv := v.betree.linked.diskView;
-          var linked := dv.GetEntryAsLinked(addr);
-          NodesInRepresentationAreAcyclic(v.betree.linked, addr);
-          LBR.ChildAtIdxAcyclic(linked, i);
-          LBR.ChildAtIdxAcyclic(linked, j);
-          assert linked.ValidRanking(ranking') by {
-            RootRankingValidForAddrInRepresentation(v.betree.linked, addr, ranking');
-          }
-          assert linked.ChildAtIdx(i).Representation() == linked'.ChildAtIdx(i).Representation() by {
-            RepresentationInAgreeingDisks(linked.ChildAtIdx(i), linked'.ChildAtIdx(i), ranking');
-          }
-          assert linked.ChildAtIdx(j).Representation() == linked'.ChildAtIdx(j).Representation() by {
-            RepresentationInAgreeingDisks(linked.ChildAtIdx(j), linked'.ChildAtIdx(j), ranking');
-          }
-        }
+      if addr != step.newRootAddr {
+        var dv := v.betree.linked.diskView;
+        var linked := dv.GetEntryAsLinked(addr);
+        var linked' := dv'.GetEntryAsLinked(addr);
+        var ranking := LBR.BuildTightRanking(v.betree.linked, v.betree.linked.TheRanking());
+        var ranking' := LBR.InsertGrowReplacementNewRanking(v.betree.linked, ranking, step.newRootAddr);
+        NodesInRepresentationAreAcyclic(v.betree.linked, addr);
+        RootRankingValidForAddrInRepresentation(v.betree.linked, addr, ranking');
+        AgreeingDisksImpliesSubtreesAreDisjoint(linked, linked', ranking');
       }
     }
   }
