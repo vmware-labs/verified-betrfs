@@ -698,7 +698,7 @@ module LinkedBetreeRefinement {
     var rankingAfterReplacement := RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, oldRanking, step.targetAddr);
     var newRanking := RankingAfterSubstitution(replacement, rankingAfterReplacement, step.path, step.pathAddrs);
     var linkedAfterSubstitution := step.path.Substitute(replacement, step.pathAddrs);
-    BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
+    BuildTightPreservesRankingValidity(linkedAfterSubstitution, newRanking);
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
   }
 
@@ -714,7 +714,7 @@ module LinkedBetreeRefinement {
     var rankingAfterReplacement := RankingAfterInsertFlushReplacement(step.path.Target(), oldRanking, step.childIdx, step.targetAddr, step.targetChildAddr);
     var newRanking := RankingAfterSubstitution(replacement, rankingAfterReplacement, step.path, step.pathAddrs);
     var linkedAfterSubstitution := step.path.Substitute(replacement, step.pathAddrs);
-    BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
+    BuildTightPreservesRankingValidity(linkedAfterSubstitution, newRanking);
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
   }
 
@@ -799,7 +799,7 @@ module LinkedBetreeRefinement {
     var linkedAfterSubstitution := step.path.Substitute(replacement, step.pathAddrs);
     var newRanking := RankingAfterSubstitution(replacement, rankingAfterReplacement, step.path, step.pathAddrs);
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
-    BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
+    BuildTightPreservesRankingValidity(linkedAfterSubstitution, newRanking);
   }
 
   lemma ReachableAddrsIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking)
@@ -822,7 +822,7 @@ module LinkedBetreeRefinement {
     }
   }
 
-  lemma BuildTightMaintainsRankingValidity(linked: LinkedBetree, ranking: Ranking)
+  lemma BuildTightPreservesRankingValidity(linked: LinkedBetree, ranking: Ranking)
     requires linked.WF()
     requires linked.ValidRanking(ranking)
     ensures linked.BuildTightTree().WF()
@@ -881,7 +881,7 @@ module LinkedBetreeRefinement {
   {
     var ranking := linked.TheRanking();
     BuildTightPreservesWF(linked, ranking);
-    BuildTightMaintainsRankingValidity(linked, ranking);
+    BuildTightPreservesRankingValidity(linked, ranking);
     DiskSubsetImpliesIdenticalInterpretationsWithRanking(linked.BuildTightTree(), linked, ranking);
     ILinkedBetreeIgnoresRanking(linked.BuildTightTree(), ranking, linked.BuildTightTree().TheRanking());
   }

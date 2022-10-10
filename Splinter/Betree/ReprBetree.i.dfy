@@ -252,7 +252,7 @@ module ReprBetree
     var linked := gcBetree.stamped.value;
     && linked.Acyclic()
     && linked.DiskIsTightWrtRepresentation()
-    && linked.diskView.DiskIsDagFree()
+    && linked.RepresentationIsDagFree()
     && v == Variables(
       LinkedBetreeMod.Variables(EmptyMemtable(gcBetree.stamped.seqEnd), linked),
       linked.Representation(),

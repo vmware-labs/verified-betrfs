@@ -323,17 +323,6 @@ module LinkedBetreeMod
     {
       LinkedBetree(Pointer.Some(addr), this)
     }
-
-    // Every node in the disk obeys SubtreesAreDisjoint in all its children
-    predicate DiskIsDagFree()
-      requires WF()
-    {
-      forall addr | 
-        && addr in entries 
-        && GetEntryAsLinked(addr).HasRoot()
-      ::
-        GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
-    }
   }
 
   function EmptyDisk() : DiskView {
@@ -447,6 +436,16 @@ module LinkedBetreeMod
       requires Acyclic()
     {
       diskView.entries.Keys == Representation()
+    }
+
+    predicate RepresentationIsDagFree()
+      requires Acyclic()
+    {
+      forall addr | 
+        && addr in Representation()
+        && diskView.GetEntryAsLinked(addr).HasRoot()
+      :: 
+        diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
     }
     
     predicate CanSplitParent(request: SplitRequest)
