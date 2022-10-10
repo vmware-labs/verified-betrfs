@@ -873,7 +873,8 @@ module ReprBetreeRefinement
     requires t2.WF()
     requires t1.diskView.AgreesWithDisk(t2.diskView)
     requires t1.HasRoot()
-    requires t1.root == t2.root
+    requires t2.HasRoot()
+    requires t1.Root().children == t2.Root().children
     requires t1.ValidRanking(ranking)
     requires t2.ValidRanking(ranking)
     requires t1.AllSubtreesAreDisjoint()
@@ -1778,6 +1779,42 @@ module ReprBetreeRefinement
     }
   }
 
+  lemma InternalFlushMemtableMaintainsDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushMemtableStep?
+    requires v'.betree.linked.Acyclic()
+    ensures v'.betree.linked.diskView.DiskHasNoDags();
+  {
+    var dv' := v'.betree.linked.diskView;
+    forall addr | 
+        && addr in dv'.entries 
+        && var linked' := dv'.GetEntryAsLinked(addr);
+        && var numChildren := |linked'.Root().children|;
+        && linked'.HasRoot()
+    ensures dv'.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
+    {
+      var ranking := LBR.BuildTightRanking(v.betree.linked, v.betree.linked.TheRanking());
+      var newBuffer := Buffer(v.betree.memtable.mapp);
+      var ranking' := LBR.InsertInternalFlushMemtableNewRanking(v.betree.linked, newBuffer, ranking, step.newRootAddr);
+      if addr != step.newRootAddr {
+        var dv := v.betree.linked.diskView;
+        var linked := dv.GetEntryAsLinked(addr);
+        var linked' := dv'.GetEntryAsLinked(addr);
+        NodesInRepresentationAreAcyclic(v.betree.linked, addr);
+        RootRankingValidForAddrInRepresentation(v.betree.linked, addr, ranking');
+        AgreeingDisksImpliesSubtreesAreDisjoint(linked, linked', ranking');
+      } else {
+        var linked := v.betree.linked;
+        if linked.HasRoot() {
+          var linked := v.betree.linked;
+          var linked' := v'.betree.linked;
+          AgreeingDisksImpliesSubtreesAreDisjoint(linked, linked', ranking');
+        }
+      }
+    }
+  }
+
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel) 
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -1821,7 +1858,7 @@ module ReprBetreeRefinement
         LBR.InvNextInternalFlushMemtableStep(I(v), I(v'), lbl.I(), step.I());
         InternalFlushMemtableMaintainsRepr(v, v', lbl, step);
         InternalFlushMemtableMaintainsTightDisk(v, v', lbl, step);
-        assume v'.betree.linked.diskView.DiskHasNoDags();
+        InternalFlushMemtableMaintainsDagFree(v, v', lbl, step);
         assert Inv(v');
       }
       case InternalCompactStep(_, _, _, _) => {
