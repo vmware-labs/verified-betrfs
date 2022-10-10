@@ -1836,8 +1836,73 @@ module ReprBetreeRefinement
     }
   }
 
+  lemma {:timeLimitMultiplier 3}  DagFreeAfterSubstituteReplacement(
+    rootpath: Path, path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address, replacementRanking: Ranking) 
+    requires path.Valid()
+    requires path.CanSubstitute(replacement, pathAddrs)
+    requires replacement.Acyclic()
+    requires replacement.diskView.DiskIsDagFree()
+
+    // Framing
+    requires path.Target().diskView.IsFresh({replacementAddr})
+    requires PathAddrsFresh(path, replacement, pathAddrs)
+
+    // rootpath properties. 
+    // rootpath is the path at the root of the global tree, such that path is some subpath of rootpath
+    requires rootpath.Valid()
+    requires rootpath.linked.ValidRanking(replacementRanking)
+    requires rootpath.linked.diskView.DiskIsDagFree()
+    requires path.depth <= rootpath.depth
+    requires rootpath.Target() == path.Target()
+    requires rootpath.linked.diskView == path.linked.diskView
+    requires rootpath.linked.DiskIsTightWrtRepresentation()
+
+    //RankingAfterSubstitution requirements
+    requires replacement.ValidRanking(replacementRanking)
+    requires path.linked.root.value in replacementRanking
+    requires Set(pathAddrs) !! replacementRanking.Keys
+    requires PathAddrsFresh(path, replacement, pathAddrs)
+
+    ensures path.Substitute(replacement, pathAddrs).WF()
+    ensures path.Substitute(replacement, pathAddrs).diskView.DiskIsDagFree()
+    decreases path.depth
+  {
+    if path.depth == 0 {
+      assert path.Substitute(replacement, pathAddrs).diskView.DiskIsDagFree();
+    } else {
+      DagFreeAfterSubstituteReplacement(rootpath, path.Subpath(), replacement, pathAddrs[1..], replacementAddr, replacementRanking);
+      assert path.Subpath().Substitute(replacement, pathAddrs[1..]).diskView.DiskIsDagFree();
+      var linkedAftSubst := path.Substitute(replacement, pathAddrs);
+      LBR.SubstitutePreservesWF(replacement, path, pathAddrs,linkedAftSubst);
+      var newRanking := LBR.RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
+      forall addr | 
+        && addr in linkedAftSubst.diskView.entries
+        && linkedAftSubst.diskView.GetEntryAsLinked(addr).HasRoot()
+      ensures 
+        linkedAftSubst.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
+      {
+        if addr in path.linked.diskView.entries {
+          assert path.linked.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint();
+          var l1 := rootpath.linked.diskView.GetEntryAsLinked(addr);
+          var l2 := linkedAftSubst.diskView.GetEntryAsLinked(addr);
+
+          assert path.linked.ValidRanking(newRanking);
+
+
+          RootRankingValidForAddrInRepresentation(rootpath.linked, addr, newRanking);
+          assert addr in rootpath.linked.Representation();
+          assert l1.ValidRanking(newRanking);
+          assert l2.ValidRanking(newRanking);
+          AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, newRanking);
+        } else {
+          assume false;
+        }
+      }
+    }
+  }
+
   lemma {:timeLimitMultiplier 3} DagFreeAfterSubstituteCompactReplacement(
-    path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)  
+    rootpath:Path, path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)  
     requires path.Valid()
     requires path.Target().Root().buffers.Equivalent(compactedBuffers)
     requires path.Target().diskView.IsFresh({replacementAddr})
@@ -1846,9 +1911,14 @@ module ReprBetreeRefinement
     requires replacement.ValidRanking(replacementRanking)
     requires replacement.Acyclic()
 
-    // Invariants
-    requires path.linked.DiskIsTightWrtRepresentation()
-    requires path.linked.diskView.DiskIsDagFree()
+    // rootpath properties. 
+    // rootpath is the path at the root of the global tree, such that path is some subpath of rootpath
+    requires rootpath.Valid()
+    requires rootpath.linked.diskView.DiskIsDagFree()
+    requires path.depth <= rootpath.depth
+    requires rootpath.Target() == path.Target()
+    requires rootpath.linked.diskView == path.linked.diskView
+    requires rootpath.linked.DiskIsTightWrtRepresentation()
 
     // Framing
     requires path.AddrsOnPath() !! replacement.Representation()
@@ -1869,13 +1939,14 @@ module ReprBetreeRefinement
         && replacement.diskView.GetEntryAsLinked(addr).HasRoot()
       ensures replacement.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
       {
-        var tightRootRanking := LBR.BuildTightRanking(path.linked, path.linked.TheRanking());
-        var newRanking := LBR.CompactionReplacementRanking(path.Target(), tightRootRanking, compactedBuffers, replacementAddr);
+        var tightRootRanking := LBR.BuildTightRanking(rootpath.linked, rootpath.linked.TheRanking());
+        LBR.ValidRankingAllTheWayDown(tightRootRanking, rootpath);
+        var newRanking := LBR.CompactionReplacementRanking(rootpath.Target(), tightRootRanking, compactedBuffers, replacementAddr);
         if addr != replacementAddr {
           var l1 := path.Target().diskView.GetEntryAsLinked(addr);
           var l2 := replacement.diskView.GetEntryAsLinked(addr);
           LBR.ValidRankingAllTheWayDown(newRanking, path);
-          RootRankingValidForAddrInRepresentation(path.Target(), addr, newRanking);
+          RootRankingValidForAddrInRepresentation(rootpath.linked, addr, newRanking);
           AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, newRanking);
         } else {
           AgreeingDisksImpliesSubtreesAreDisjoint(path.Target(), replacement, newRanking);
@@ -1884,7 +1955,8 @@ module ReprBetreeRefinement
       BuildTightPreservesDagFree(replacement);
     } else {
       // Inductive Case
-      DagFreeAfterSubstituteCompactReplacement(path.Subpath(), compactedBuffers, replacement, replacementRanking, pathAddrs[1..], replacementAddr);
+      DagFreeAfterSubstituteCompactReplacement(rootpath, path.Subpath(), compactedBuffers, replacement, replacementRanking, pathAddrs[1..], replacementAddr);
+      assert path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().diskView.DiskIsDagFree();
 
 
       assume false;
@@ -1906,7 +1978,7 @@ module ReprBetreeRefinement
     var replacementRanking := LBR.RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, linkedRanking, step.targetAddr);
     if linked.HasRoot() {
       InsertCompactReplacementExcludesAddrsOnPath(step.path, replacement, step.compactedBuffers, step.targetAddr);
-      DagFreeAfterSubstituteCompactReplacement(step.path, step.compactedBuffers, replacement, replacementRanking, step.pathAddrs, step.targetAddr); 
+      DagFreeAfterSubstituteCompactReplacement(step.path, step.path, step.compactedBuffers, replacement, replacementRanking, step.pathAddrs, step.targetAddr); 
     }
   }
 
