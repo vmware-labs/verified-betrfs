@@ -309,7 +309,7 @@ module ReprBetreeRefinement
     BuildTightRepresentationContainsDiskView(linked, linked.TheRanking());
   }
 
-  lemma InternalFlushMemtableMaintainsTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma InternalFlushMemtablePreservesTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalFlushMemtableStep?
@@ -716,6 +716,7 @@ module ReprBetreeRefinement
               linkedAftSubst.ChildAtIdx(routeIdx), 
               linkedAftSubst.ChildAtIdx(routeIdx).TheRanking(), r1);
           ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
+          assume path.Subpath().linked.RepresentationIsDagFree();
           SubstituteDeletesAddrsOnPath(path.Subpath(), replacement, pathAddrs[1..], addr, ranking);
           forall i | 0 <= i < |linked.Root().children|
           ensures linked.ChildAtIdx(i).Acyclic() && linked.root.value !in linked.ChildAtIdx(i).Representation()
@@ -728,6 +729,7 @@ module ReprBetreeRefinement
           LBR.ChildAtIdxAcyclic(linkedAftSubst, idx);
           RepresentationSameAsReachable(linkedAftSubst.ChildAtIdx(idx), r1);
           ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx, ranking); 
+          assert linked.root.value in linked.Representation();  // trigger
           assert linked.SubtreesAreDisjoint(idx, routeIdx); // trigger
           AddrsOnPathIsRootOrInRouteSubtree(path, routeIdx);
           forall i | 0 <= i < |linked.Root().children|
@@ -956,6 +958,7 @@ module ReprBetreeRefinement
     if path.depth == 0 {
       RepresentationAfterSwitchingRoot(path.linked, replacement.BuildTightTree(), replacementAddr, ranking);
     } else {
+      assume path.Subpath().linked.RepresentationIsDagFree();
       ReprAfterSubstituteCompactReplacement(path.Subpath(), compactedBuffers, replacement, replacementRanking, pathAddrs[1..], replacementAddr);
       /* Induction hypothesis:
         path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
@@ -1180,7 +1183,7 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma InternalCompactMaintainsTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma InternalCompactPreservesTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalCompactStep?
@@ -1228,6 +1231,7 @@ module ReprBetreeRefinement
     if path.depth == 0 {
       ReprAfterSubstituteFlushReplacementBaseCase(path, replacement, childIdx, replacementAddr, replacementChildAddr, ranking);
     } else {
+      assume path.Subpath().linked.RepresentationIsDagFree();  // TODO
       ReprAfterSubstituteFlushReplacement(path.Subpath(), replacement, childIdx, replacementAddr, replacementChildAddr, pathAddrs[1..], replacementRanking);
       /* Induction hypothesis:
         path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
@@ -1287,7 +1291,8 @@ module ReprBetreeRefinement
       assert linked.ChildAtIdx(childIdx).root.value !in subTreeAddrs[idx] by {
         LBR.ChildAtIdxAcyclic(linked, idx);
         LBR.ChildAtIdxAcyclic(linked, childIdx);
-        assert linked.SubtreesAreDisjoint(childIdx, idx);  // trigger that makes verification fast, shaves 7secs
+        assert linked.root.value in linked.Representation();  // trigger
+        assert linked.SubtreesAreDisjoint(childIdx, idx);  // trigger
         RepresentationSameAsReachable(linked.ChildAtIdx(idx), ranking);
       }
     }
@@ -1398,7 +1403,7 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma InternalFlushMaintainsTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma InternalFlushPreservesTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalFlushStep?
@@ -1445,6 +1450,7 @@ module ReprBetreeRefinement
     if path.depth == 0 {
       ReprAfterSubstituteSplitReplacementBaseCase(path, replacement, request, newAddrs, ranking);
     } else {
+      assume path.Subpath().linked.RepresentationIsDagFree();
       ReprAfterSubstituteSplitReplacement(path.Subpath(), replacement, request, newAddrs, pathAddrs[1..], replacementRanking);
       /* Induction hypothesis:
         path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
@@ -1503,6 +1509,7 @@ module ReprBetreeRefinement
       assert linked.ChildAtIdx(pivotIndex).root.value !in subTreeAddrs[idx] by {
         LBR.ChildAtIdxAcyclic(linked, idx);
         LBR.ChildAtIdxAcyclic(linked, pivotIndex);
+        assert linked.root.value in linked.Representation();  // trigger
         assert linked.SubtreesAreDisjoint(pivotIndex, idx);  // trigger
         RepresentationSameAsReachable(linked.ChildAtIdx(idx), ranking);
       }
@@ -1517,6 +1524,7 @@ module ReprBetreeRefinement
       ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(oldIdx), replacement.ChildAtIdx(idx), ranking);
       LBR.ChildAtIdxAcyclic(linked, oldIdx);
       LBR.ChildAtIdxAcyclic(linked, pivotIndex);
+      assert linked.root.value in linked.Representation();  // trigger
       assert linked.SubtreesAreDisjoint(pivotIndex, oldIdx);  // trigger
       RepresentationSameAsReachable(linked.ChildAtIdx(oldIdx), ranking);
     }
@@ -1760,7 +1768,7 @@ module ReprBetreeRefinement
     assert v'.betree.linked.Representation() == v.repr + newAddrs - discardAddrs;
   }
 
-  lemma InternalSplitMaintainsTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma InternalSplitPreservesTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalSplitStep?
@@ -1778,7 +1786,7 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma InternalGrowMaintainsDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma InternalGrowPreservesDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalGrowStep?
@@ -1804,7 +1812,7 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma InternalFlushMemtableMaintainsDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma InternalFlushMemtablePreservesDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalFlushMemtableStep?
@@ -1865,7 +1873,7 @@ module ReprBetreeRefinement
     requires Set(pathAddrs) !! replacementRanking.Keys
     requires PathAddrsFresh(path, replacement, pathAddrs)
 
-    ensures path.Substitute(replacement, pathAddrs).WF()
+    ensures path.Substitute(replacement, pathAddrs).Acyclic()
     ensures path.Substitute(replacement, pathAddrs).RepresentationIsDagFree()
     decreases path.depth
   {
@@ -1903,85 +1911,38 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma {:timeLimitMultiplier 3} DagFreeAfterSubstituteCompactReplacement(
-    rootpath:Path, path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)  
-    requires path.Valid()
-    requires path.Target().Root().buffers.Equivalent(compactedBuffers)
-    requires path.Target().diskView.IsFresh({replacementAddr})
-    requires replacement == LB.InsertCompactReplacement(path.Target(), compactedBuffers, replacementAddr)
-    requires path.CanSubstitute(replacement, pathAddrs)
-    requires replacement.ValidRanking(replacementRanking)
-    requires replacement.Acyclic()
-
-    // rootpath properties. 
-    // rootpath is the path at the root of the global tree, such that path is some subpath of rootpath
-    requires rootpath.Valid()
-    requires rootpath.linked.RepresentationIsDagFree()
-    requires path.depth <= rootpath.depth
-    requires rootpath.Target() == path.Target()
-    requires rootpath.linked.diskView == path.linked.diskView
-    requires rootpath.linked.DiskIsTightWrtRepresentation()
-
-    // Framing
-    requires path.AddrsOnPath() !! replacement.Representation()
-
-    //RankingAfterSubstitution requirements
-    // requires path.linked.root.value in replacementRanking
-    // requires Set(pathAddrs) !! replacementRanking.Keys
-    // requires PathAddrsFresh(path, replacement, pathAddrs)
-
-    ensures path.Substitute(replacement, pathAddrs).BuildTightTree().WF()
-    ensures path.Substitute(replacement, pathAddrs).BuildTightTree().RepresentationIsDagFree()
-    decreases path.depth
-  {
-    if path.depth == 0 {
-      // Base Case
-      forall addr | 
-        && addr in replacement.diskView.entries 
-        && replacement.diskView.GetEntryAsLinked(addr).HasRoot()
-      ensures replacement.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
-      {
-        var tightRootRanking := LBR.BuildTightRanking(rootpath.linked, rootpath.linked.TheRanking());
-        LBR.ValidRankingAllTheWayDown(tightRootRanking, rootpath);
-        var newRanking := LBR.CompactionReplacementRanking(rootpath.Target(), tightRootRanking, compactedBuffers, replacementAddr);
-        if addr != replacementAddr {
-          var l1 := path.Target().diskView.GetEntryAsLinked(addr);
-          var l2 := replacement.diskView.GetEntryAsLinked(addr);
-          LBR.ValidRankingAllTheWayDown(newRanking, path);
-          RootRankingValidForAddrInRepresentation(rootpath.linked, addr, newRanking);
-          AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, newRanking);
-        } else {
-          AgreeingDisksImpliesSubtreesAreDisjoint(path.Target(), replacement, newRanking);
-        }
-      }
-      BuildTightPreservesDagFree(replacement);
-    } else {
-      // Inductive Case
-      DagFreeAfterSubstituteCompactReplacement(rootpath, path.Subpath(), compactedBuffers, replacement, replacementRanking, pathAddrs[1..], replacementAddr);
-      assert path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().RepresentationIsDagFree();
-
-
-      assume false;
-    }
-  }
-
-  lemma InternalCompactMaintainsDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma InternalCompactPreservesDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalCompactStep?
     requires v'.betree.linked.Acyclic()
     ensures v'.betree.linked.RepresentationIsDagFree()
   { 
-    // TODO: This has identical structure as InternalCompactMaintainsRepr. Can merge the two
     var linked := v.betree.linked;
-    var replacement := LB.InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr);
-    var linkedRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
-    LBR.ValidRankingAllTheWayDown(linkedRanking, step.path);
-    var replacementRanking := LBR.RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, linkedRanking, step.targetAddr);
-    if linked.HasRoot() {
-      InsertCompactReplacementExcludesAddrsOnPath(step.path, replacement, step.compactedBuffers, step.targetAddr);
-      DagFreeAfterSubstituteCompactReplacement(step.path, step.path, step.compactedBuffers, replacement, replacementRanking, step.pathAddrs, step.targetAddr); 
+    var path := step.path;
+    var replacement := LB.InsertCompactReplacement(path.Target(), step.compactedBuffers, step.targetAddr);
+    var tightRootRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
+    LBR.ValidRankingAllTheWayDown(tightRootRanking, path);
+    var newRanking := LBR.CompactionReplacementRanking(path.Target(), tightRootRanking, step.compactedBuffers, step.targetAddr);
+    assert replacement.RepresentationIsDagFree() by {
+      forall addr | 
+        && addr in replacement.diskView.entries 
+        && replacement.diskView.GetEntryAsLinked(addr).HasRoot()
+      ensures replacement.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
+      {
+        if addr != step.targetAddr {
+          var l1 := path.Target().diskView.GetEntryAsLinked(addr);
+          var l2 := replacement.diskView.GetEntryAsLinked(addr);
+          LBR.ValidRankingAllTheWayDown(newRanking, path);
+          RootRankingValidForAddrInRepresentation(linked, addr, newRanking);
+          AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, newRanking);
+        } else {
+          AgreeingDisksImpliesSubtreesAreDisjoint(path.Target(), replacement, newRanking);
+        }
+      }
     }
+    DagFreeAfterSubstituteReplacement(path, path, replacement, step.pathAddrs, step.targetAddr, newRanking);
+    BuildTightPreservesDagFree(path.Substitute(replacement, step.pathAddrs));
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel) 
@@ -2006,35 +1967,35 @@ module ReprBetreeRefinement
       case InternalGrowStep(_) => {
         LBR.InvNextInternalGrowStep(I(v), I(v'), lbl.I(), step.I());
         InternalGrowMaintainsRepr(v, v', lbl, step);
-        InternalGrowMaintainsDagFree(v, v', lbl, step);
+        InternalGrowPreservesDagFree(v, v', lbl, step);
         assert Inv(v');
       }
       case InternalSplitStep(_, _, _, _) => {
         LBR.InvNextInternalSplitStep(I(v), I(v'), lbl.I(), step.I());
         InternalSplitMaintainsRepr(v, v', lbl, step);
-        InternalSplitMaintainsTightDisk(v, v', lbl, step);
+        InternalSplitPreservesTightDisk(v, v', lbl, step);
         assume v'.betree.linked.RepresentationIsDagFree();
         assert Inv(v');
       }
       case InternalFlushStep(_, _, _, _, _) => {
         LBR.InvNextInternalFlushStep(I(v), I(v'), lbl.I(), step.I());
         InternalFlushMaintainsRepr(v, v', lbl, step);
-        InternalFlushMaintainsTightDisk(v, v', lbl, step);
+        InternalFlushPreservesTightDisk(v, v', lbl, step);
         assume v'.betree.linked.RepresentationIsDagFree();
         assert Inv(v');
       }
       case InternalFlushMemtableStep(_) => {
         LBR.InvNextInternalFlushMemtableStep(I(v), I(v'), lbl.I(), step.I());
         InternalFlushMemtableMaintainsRepr(v, v', lbl, step);
-        InternalFlushMemtableMaintainsTightDisk(v, v', lbl, step);
-        InternalFlushMemtableMaintainsDagFree(v, v', lbl, step);
+        InternalFlushMemtablePreservesTightDisk(v, v', lbl, step);
+        InternalFlushMemtablePreservesDagFree(v, v', lbl, step);
         assert Inv(v');
       }
       case InternalCompactStep(_, _, _, _) => {
         LBR.InvNextInternalCompactStep(I(v), I(v'), lbl.I(), step.I());
         InternalCompactMaintainsRepr(v, v', lbl, step);
-        InternalCompactMaintainsTightDisk(v, v', lbl, step);
-        assume v'.betree.linked.RepresentationIsDagFree();
+        InternalCompactPreservesTightDisk(v, v', lbl, step);
+        InternalCompactPreservesDagFree(v, v', lbl, step);
         assert Inv(v');
       }
       case InternalMapReserveStep() => {
