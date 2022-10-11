@@ -938,7 +938,6 @@ module ReprBetreeRefinement
     requires path.linked.Acyclic()
 
     // Framing conditions
-    requires replacement.diskView.AgreesWithDisk(path.linked.diskView)
     requires PathAddrsFresh(path, replacement, pathAddrs)
 
     ensures path.Substitute(replacement, pathAddrs).diskView.AgreesWithDisk(path.linked.diskView)
@@ -1918,8 +1917,7 @@ module ReprBetreeRefinement
             LBR.ChildAtIdxAcyclic(path.linked, i);
             LBR.ChildAtIdxAcyclic(path.linked, j);
             if i != routeIdx && j != routeIdx {
-              assert replacement.diskView.AgreesWithDisk(path.linked.diskView);
-              DisksAgreeAfterSubstitute(path, replacement, pathAddrs);  // TODO(tony): How could dafny possibly know that replacement.diskView.AgreesWithDisk(path.linked.diskView)!??!!!???
+              DisksAgreeAfterSubstitute(path, replacement, pathAddrs);
               RepresentationInAgreeingDisks(linkedAftSubst.ChildAtIdx(i), path.linked.ChildAtIdx(i), newRanking);
               RepresentationInAgreeingDisks(linkedAftSubst.ChildAtIdx(j), path.linked.ChildAtIdx(j), newRanking);
               assert path.linked.root.value in path.linked.Representation();  // trigger
