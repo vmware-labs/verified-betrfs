@@ -380,7 +380,7 @@ module ReprBetreeRefinement
 
   // Theorem: The set of reachable addrs on path.Subpath().Substitute(..) is the same as
   // that on path.Substitute(..).ChildAtIdx(routeIdx)
-  lemma ReachableAddrsOnSubpathRoute(path: Path, replacement: LinkedBetree, routeIdx: nat, pathAddrs: PathAddrs, ranking: Ranking)
+  lemma RepresentationOnSubpathRoute(path: Path, replacement: LinkedBetree, routeIdx: nat, pathAddrs: PathAddrs, ranking: Ranking)
     requires path.Valid()
     requires 0 < path.depth
     requires routeIdx == Route(path.linked.Root().pivotTable, path.key)
@@ -395,6 +395,7 @@ module ReprBetreeRefinement
     ensures path.Subpath().Substitute(replacement, pathAddrs[1..]).Acyclic()  // prereq
     ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).Representation()
       == path.Subpath().Substitute(replacement, pathAddrs[1..]).Representation()
+    ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).diskView.AgreesWithDisk(path.Subpath().Substitute(replacement, pathAddrs[1..]).diskView)
   {
     // First dispatch of the prereqs
     LBR.ChildAtIdxAcyclic(path.Substitute(replacement, pathAddrs), routeIdx);
@@ -433,6 +434,7 @@ module ReprBetreeRefinement
     ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(idx).Acyclic()  // prereq
     ensures path.linked.ChildAtIdx(idx).Representation() ==
             path.Substitute(replacement, pathAddrs).ChildAtIdx(idx).Representation()
+    ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(idx).diskView.AgreesWithDisk(path.linked.ChildAtIdx(idx).diskView)
   { 
     // Dispatch the prereqs
     LBR.ChildAtIdxAcyclic(path.linked, idx);
@@ -663,7 +665,7 @@ module ReprBetreeRefinement
       ensures oldRoot !in path.Substitute(replacement, pathAddrs).ChildAtIdx(idx).Representation()
       {
         if idx == routeIdx {
-          ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
+          RepresentationOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
         } else {
           ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx, ranking);
         }
@@ -715,7 +717,7 @@ module ReprBetreeRefinement
           LBR.ReachableAddrsIgnoresRanking(
               linkedAftSubst.ChildAtIdx(routeIdx), 
               linkedAftSubst.ChildAtIdx(routeIdx).TheRanking(), r1);
-          ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
+          RepresentationOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
           assume path.Subpath().linked.RepresentationIsDagFree();
           SubstituteDeletesAddrsOnPath(path.Subpath(), replacement, pathAddrs[1..], addr, ranking);
           forall i | 0 <= i < |linked.Root().children|
@@ -760,7 +762,7 @@ module ReprBetreeRefinement
       ReplacementAcyclicImpliesSubstituteAcyclic(path.Subpath(), replacement, pathAddrs[1..], ranking);
       RepresentationAfterSubstituteContainsPathAddrs(path.Subpath(), replacement, pathAddrs[1..], ranking);
       var routeIdx := Route(path.linked.Root().pivotTable, path.key);
-      ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
+      RepresentationOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
       ParentRepresentationContainsChildRepresentation(path.Substitute(replacement, pathAddrs), routeIdx);
     }
   }
@@ -783,7 +785,7 @@ module ReprBetreeRefinement
     if 0 < path.depth {
       RepresentationAfterSubstituteContainsReplacement(path.Subpath(), replacement, pathAddrs[1..], ranking);
       var routeIdx := Route(path.linked.Root().pivotTable, path.key);
-      ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
+      RepresentationOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
       ParentRepresentationContainsChildRepresentation(path.Substitute(replacement, pathAddrs), routeIdx);
     }
   }
@@ -1016,7 +1018,7 @@ module ReprBetreeRefinement
         if idx == routeIdx {
           // If addr is in the subtree that is swapped in during substitution
           RepresentationIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]));
-          ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking); 
+          RepresentationOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking); 
           RepresentationSameAsReachable(path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx), linkedAftSubst.TheRanking());
           RootRepresentationContainsSubpathRepresentation(path);
           assert addr !in path.AddrsOnPath() by {  // trigger
@@ -1091,7 +1093,7 @@ module ReprBetreeRefinement
         Hence, addr is in one of the children subtrees of path.linked.Root()
         If addr is not on substitution path, the addr in path.Substitute() by ReachableAddrsNotOnSubpathRoute
         Else, addr is in substitution path, and must be in path.Subpath().linked.Representation().
-        Then by ReachableAddrsOnSubpathRoute, addr is in subTreeAddrs[routeIdx] of path.Substitute().Repr().
+        Then by RepresentationOnSubpathRoute, addr is in subTreeAddrs[routeIdx] of path.Substitute().Repr().
         Then addr is in path.Substitute(..).Representation() by definition of Representation
         */
         var numChildren := |path.linked.Root().children|;
@@ -1108,7 +1110,7 @@ module ReprBetreeRefinement
           // Else addr is on substitution path
           SubpathEquivToChildAtRouteIdx(path);
           RepresentationIgnoresBuildTight(path.Subpath().Substitute(replacement, pathAddrs[1..]));
-          ReachableAddrsOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking); 
+          RepresentationOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking); 
           ParentRepresentationContainsChildRepresentation(path.Substitute(replacement, pathAddrs), routeIdx);
         }
       }
@@ -1846,9 +1848,10 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma {:timeLimitMultiplier 3}  DagFreeAfterSubstituteReplacement(
-    rootpath: Path, path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address, replacementRanking: Ranking) 
+  lemma {:timeLimitMultiplier 5}  DagFreeAfterSubstituteReplacement(
+    path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementAddr: Address, replacementRanking: Ranking) 
     requires path.Valid()
+    requires path.linked.RepresentationIsDagFree()
     requires path.CanSubstitute(replacement, pathAddrs)
     requires replacement.Acyclic()
     requires replacement.RepresentationIsDagFree()
@@ -1856,16 +1859,6 @@ module ReprBetreeRefinement
     // Framing
     requires path.Target().diskView.IsFresh({replacementAddr})
     requires PathAddrsFresh(path, replacement, pathAddrs)
-
-    // rootpath properties. 
-    // rootpath is the path at the root of the global tree, such that path is some subpath of rootpath
-    requires rootpath.Valid()
-    requires rootpath.linked.ValidRanking(replacementRanking)
-    requires rootpath.linked.RepresentationIsDagFree()
-    requires path.depth <= rootpath.depth
-    requires rootpath.Target() == path.Target()
-    requires rootpath.linked.diskView == path.linked.diskView
-    requires rootpath.linked.DiskIsTightWrtRepresentation()
 
     //RankingAfterSubstitution requirements
     requires replacement.ValidRanking(replacementRanking)
@@ -1877,35 +1870,71 @@ module ReprBetreeRefinement
     ensures path.Substitute(replacement, pathAddrs).RepresentationIsDagFree()
     decreases path.depth
   {
-    if path.depth == 0 {
-      assert path.Substitute(replacement, pathAddrs).RepresentationIsDagFree();
-    } else {
-      DagFreeAfterSubstituteReplacement(rootpath, path.Subpath(), replacement, pathAddrs[1..], replacementAddr, replacementRanking);
+    if path.depth != 0 {
+      assume path.Subpath().linked.RepresentationIsDagFree();
+      DagFreeAfterSubstituteReplacement(path.Subpath(), replacement, pathAddrs[1..], replacementAddr, replacementRanking);
       assert path.Subpath().Substitute(replacement, pathAddrs[1..]).RepresentationIsDagFree();
-      var linkedAftSubst := path.Substitute(replacement, pathAddrs);
-      LBR.SubstitutePreservesWF(replacement, path, pathAddrs,linkedAftSubst);
+      
+      // Witness for linkedAftSubst acyclicity
       var newRanking := LBR.RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
-      forall addr | 
-        && addr in linkedAftSubst.diskView.entries
+      assert path.Substitute(replacement, pathAddrs).Acyclic();
+
+      var linkedAftSubst := path.Substitute(replacement, pathAddrs);
+      forall addr |
+        && addr in linkedAftSubst.Representation()
         && linkedAftSubst.diskView.GetEntryAsLinked(addr).HasRoot()
-      ensures 
+      ensures
         linkedAftSubst.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
       {
-        if addr in path.linked.diskView.entries {
-          assert path.linked.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint();
-          var l1 := rootpath.linked.diskView.GetEntryAsLinked(addr);
-          var l2 := linkedAftSubst.diskView.GetEntryAsLinked(addr);
-
-          assert path.linked.ValidRanking(newRanking);
-
-
-          RootRankingValidForAddrInRepresentation(rootpath.linked, addr, newRanking);
-          assert addr in rootpath.linked.Representation();
-          assert l1.ValidRanking(newRanking);
-          assert l2.ValidRanking(newRanking);
-          AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, newRanking);
+        var routeIdx := Route(path.linked.Root().pivotTable, path.key);
+        if addr == linkedAftSubst.root.value {
+          forall i, j | 
+              && i != j 
+              && 0 <= i < |linkedAftSubst.Root().children| 
+              && 0 <= j < |linkedAftSubst.Root().children|
+              && linkedAftSubst.ChildAtIdx(i).Acyclic()
+              && linkedAftSubst.ChildAtIdx(j).Acyclic()
+          ensures 
+            linkedAftSubst.SubtreesAreDisjoint(i, j)
+          {
+            if i != routeIdx && j != routeIdx {
+              // Should be trivial
+              assume false;
+            } else {
+              // Need to reason about how represetation changes from subpath.subst?
+              assume false;
+            }
+          }
         } else {
-          assume false;
+          /* addr is from somewhere down the tree in linkedAftSubst. If it is in a legacy
+             subtree, then addr in path.linked.Represetnation(), and so we have its 
+             AllSubtreesAreDisjoint property from path.linked.RepresentationIsDagFree.
+             Otherwise, addr is in path.Subpath().Substitute(replacement, pathAddrs[1..]).Representation(),
+             and we have the desired property from induction hypothesis
+          */
+          // assert addr in linkedAftSubst.ReachableAddrsUsingRanking(linkedAftSubst.TheRanking());
+          var numChildren := |linkedAftSubst.Root().children|;
+          var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linkedAftSubst.ChildAtIdx(i).ReachableAddrsUsingRanking(linkedAftSubst.TheRanking()));
+          Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+          var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
+          LBR.ChildAtIdxAcyclic(linkedAftSubst, idx);
+          RepresentationSameAsReachable(linkedAftSubst.ChildAtIdx(idx), linkedAftSubst.TheRanking());
+          if idx == routeIdx {
+            RepresentationOnSubpathRoute(path, replacement, routeIdx, pathAddrs, replacementRanking);
+            var l1 := path.Subpath().Substitute(replacement, pathAddrs[1..]).diskView.GetEntryAsLinked(addr);
+            var l2 := linkedAftSubst.diskView.GetEntryAsLinked(addr);
+            RootRankingValidForAddrInRepresentation(path.Subpath().Substitute(replacement, pathAddrs[1..]), addr, newRanking);
+            RootRankingValidForAddrInRepresentation(linkedAftSubst, addr, newRanking);
+            AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, newRanking);
+          } else {
+            ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, idx, replacementRanking);
+            ParentRepresentationContainsChildRepresentation(path.linked, idx);
+            var l1 := path.linked.diskView.GetEntryAsLinked(addr);
+            var l2 := linkedAftSubst.diskView.GetEntryAsLinked(addr);
+            RootRankingValidForAddrInRepresentation(path.linked, addr, newRanking);
+            RootRankingValidForAddrInRepresentation(linkedAftSubst, addr, newRanking);
+            AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, newRanking);
+          }
         }
       }
     }
@@ -1941,7 +1970,7 @@ module ReprBetreeRefinement
         }
       }
     }
-    DagFreeAfterSubstituteReplacement(path, path, replacement, step.pathAddrs, step.targetAddr, newRanking);
+    DagFreeAfterSubstituteReplacement(path, replacement, step.pathAddrs, step.targetAddr, newRanking);
     BuildTightPreservesDagFree(path.Substitute(replacement, step.pathAddrs));
   }
 
