@@ -932,6 +932,25 @@ module ReprBetreeRefinement
     assume false;
   }
 
+  // Theorem: Given the right framing conditions, substitution produces an agreeing disk
+  lemma DisksAgreeAfterSubstitute(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
+    requires path.CanSubstitute(replacement, pathAddrs)
+    requires path.linked.Acyclic()
+
+    // Framing conditions
+    requires replacement.diskView.AgreesWithDisk(path.linked.diskView)
+    requires PathAddrsFresh(path, replacement, pathAddrs)
+
+    ensures path.Substitute(replacement, pathAddrs).diskView.AgreesWithDisk(path.linked.diskView)
+    decreases path.depth
+  {
+    if path.depth == 0 {
+      assert path.Substitute(replacement, pathAddrs).diskView.AgreesWithDisk(path.linked.diskView);
+    } else {
+      DisksAgreeAfterSubstitute(path.Subpath(), replacement, pathAddrs[1..]);
+    }
+  }
+
   // Tony: this lemma is sprawling massive...
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacement(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)
     requires path.Valid()
@@ -1864,7 +1883,6 @@ module ReprBetreeRefinement
     requires replacement.ValidRanking(replacementRanking)
     requires path.linked.root.value in replacementRanking
     requires Set(pathAddrs) !! replacementRanking.Keys
-    requires PathAddrsFresh(path, replacement, pathAddrs)
 
     ensures path.Substitute(replacement, pathAddrs).Acyclic()
     ensures path.Substitute(replacement, pathAddrs).RepresentationIsDagFree()
@@ -1897,9 +1915,15 @@ module ReprBetreeRefinement
           ensures 
             linkedAftSubst.SubtreesAreDisjoint(i, j)
           {
+            LBR.ChildAtIdxAcyclic(path.linked, i);
+            LBR.ChildAtIdxAcyclic(path.linked, j);
             if i != routeIdx && j != routeIdx {
-              // Should be trivial
-              assume false;
+              assert replacement.diskView.AgreesWithDisk(path.linked.diskView);
+              DisksAgreeAfterSubstitute(path, replacement, pathAddrs);  // TODO(tony): How could dafny possibly know that replacement.diskView.AgreesWithDisk(path.linked.diskView)!??!!!???
+              RepresentationInAgreeingDisks(linkedAftSubst.ChildAtIdx(i), path.linked.ChildAtIdx(i), newRanking);
+              RepresentationInAgreeingDisks(linkedAftSubst.ChildAtIdx(j), path.linked.ChildAtIdx(j), newRanking);
+              assert path.linked.root.value in path.linked.Representation();  // trigger
+              assert path.linked.SubtreesAreDisjoint(i, j);  // trigger
             } else {
               // Need to reason about how represetation changes from subpath.subst?
               assume false;
@@ -1912,7 +1936,6 @@ module ReprBetreeRefinement
              Otherwise, addr is in path.Subpath().Substitute(replacement, pathAddrs[1..]).Representation(),
              and we have the desired property from induction hypothesis
           */
-          // assert addr in linkedAftSubst.ReachableAddrsUsingRanking(linkedAftSubst.TheRanking());
           var numChildren := |linkedAftSubst.Root().children|;
           var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linkedAftSubst.ChildAtIdx(i).ReachableAddrsUsingRanking(linkedAftSubst.TheRanking()));
           Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
