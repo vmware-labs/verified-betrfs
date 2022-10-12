@@ -928,24 +928,21 @@ module ReprBetreeRefinement
     ensures linked.BuildTightTree().Acyclic()
     ensures linked.BuildTightTree().RepresentationIsDagFree()
   {
-    // TODO: Do I still need this body?
-    // LBR.BuildTightPreservesWF(linked, linked.TheRanking());
-    // var tightLinked := linked.BuildTightTree();
-    // forall addr | 
-    //     && addr in tightLinked.diskView.entries 
-    //     && tightLinked.diskView.GetEntryAsLinked(addr).HasRoot()
-    // ensures
-    //     tightLinked.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
-    // {
-    //   var ranking := linked.TheRanking();
-    //   LBR.BuildTightPreservesRankingValidity(linked, ranking);
-    //   BuildTightGivesTightWrtRepresentation(linked);
-    //   RootRankingValidForAddrInRepresentation(linked, addr, ranking);
-    //   var l1 := linked.diskView.GetEntryAsLinked(addr);
-    //   var l2 := tightLinked.diskView.GetEntryAsLinked(addr);
-    //   AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, ranking);
-    // }
-    assume false;
+    var ranking := linked.TheRanking();
+    LBR.BuildTightPreservesRankingValidity(linked, ranking);
+    var tightLinked := linked.BuildTightTree();
+    forall addr | 
+        && addr in tightLinked.Representation()
+        && tightLinked.diskView.GetEntryAsLinked(addr).HasRoot()
+    ensures
+        tightLinked.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
+    {
+      assert addr in linked.Representation();
+      RootRankingValidForAddrInRepresentation(linked, addr, ranking);
+      var l1 := linked.diskView.GetEntryAsLinked(addr);
+      var l2 := tightLinked.diskView.GetEntryAsLinked(addr);
+      AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, ranking);
+    }
   }
 
   // Theorem: Given the right framing conditions, substitution produces an agreeing disk
@@ -2004,7 +2001,6 @@ module ReprBetreeRefinement
                 ReplacementSubtreeRepresentationContainment(path.Subpath(), replacement, pathAddrs[1..], replacementRanking);
               }
               ReachableAddrsNotOnSubpathRoute(path, replacement, pathAddrs, nonRoute, replacementRanking);
-              // assume replacement.Representation() !! path.linked.ChildAtIdx(nonRoute).Representation();
 
               assert path.linked.root.value in path.linked.Representation();  // trigger
               assert path.linked.SubtreesAreDisjoint(nonRoute, routeIdx);  // trigger
