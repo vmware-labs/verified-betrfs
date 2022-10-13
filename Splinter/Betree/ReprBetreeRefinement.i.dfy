@@ -496,7 +496,17 @@ module ReprBetreeRefinement
     ensures path.Target().Acyclic()  // prereq
     ensures path.linked.ChildAtIdx(idx).Representation() !! path.Target().Representation()
   {
-    assume false;
+    LBR.ChildAtIdxAcyclic(path.linked, idx);
+    LBR.ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
+    // Proof by contradiction
+    if !(path.linked.ChildAtIdx(idx).Representation() !! path.Target().Representation()) {
+      assert path.linked.root.value in path.linked.Representation();  // trigger
+      var addr :| && addr in path.linked.ChildAtIdx(idx).Representation()
+                  && addr in path.Target().Representation();
+      RootRepresentationContainsTargetRepresentation(path.Subpath());
+      SubpathEquivToChildAtRouteIdx(path);
+      assert false;
+    }
   }
 
   // Theorem: Representation includes subpath representation
@@ -2000,7 +2010,7 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma {:timeLimitMultiplier 5}  DagFreeAfterSubstituteReplacement(
+  lemma {:timeLimitMultiplier 5} DagFreeAfterSubstituteReplacement(
     path: Path, replacement: LinkedBetree, additions: set<Address>,
     pathAddrs: PathAddrs, replacementRanking: Ranking) 
     requires path.Valid()
