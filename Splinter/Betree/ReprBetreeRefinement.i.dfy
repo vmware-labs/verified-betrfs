@@ -734,7 +734,7 @@ module ReprBetreeRefinement
               linkedAftSubst.ChildAtIdx(routeIdx), 
               linkedAftSubst.ChildAtIdx(routeIdx).TheRanking(), r1);
           RepresentationOnSubpathRoute(path, replacement, routeIdx, pathAddrs, ranking);
-          assume path.Subpath().linked.RepresentationIsDagFree();
+          SubpathPreservesRepresentationIsDagFree(path); 
           SubstituteDeletesAddrsOnPath(path.Subpath(), replacement, pathAddrs[1..], addr, ranking);
           forall i | 0 <= i < |linked.Root().children|
           ensures linked.ChildAtIdx(i).Acyclic() && linked.root.value !in linked.ChildAtIdx(i).Representation()
@@ -963,6 +963,45 @@ module ReprBetreeRefinement
     }
   }
 
+  // Theorem: If linked.RepresentationIsDagFree(), then linked.ChildAtIdx(i).RepresentationIsDagFree()
+  lemma ChildAtIdxPreservesRepresentationIsDagFree(linked: LinkedBetree, idx: nat)
+    requires linked.Acyclic()
+    requires linked.RepresentationIsDagFree()
+    requires linked.HasRoot()
+    requires linked.Root().ValidChildIndex(idx)
+    ensures linked.ChildAtIdx(idx).Acyclic()  // prereq
+    ensures linked.ChildAtIdx(idx).RepresentationIsDagFree()
+  {
+    var child := linked.ChildAtIdx(idx);
+    assert child.ValidRanking(linked.TheRanking());  // witness
+    forall addr | 
+      && addr in child.Representation()
+      && child.diskView.GetEntryAsLinked(addr).HasRoot()
+    ensures 
+      child.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
+    {
+      ParentRepresentationContainsChildRepresentation(linked, idx);
+      RootRankingValidForAddrInRepresentation(linked, addr, linked.TheRanking());
+      var l1 := linked.diskView.GetEntryAsLinked(addr);
+      var l2 := child.diskView.GetEntryAsLinked(addr);
+      AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, linked.TheRanking());
+    }
+  }
+
+  // Theorem: If path.linked.RepresentationIsDagFree(), then path.Subpath().linked.RepresentationIsDagFree()
+  // Wrapper around ChildAtIdxPreservesRepresentationIsDagFree
+  lemma SubpathPreservesRepresentationIsDagFree(path: Path) 
+    requires path.Valid()
+    requires path.linked.RepresentationIsDagFree()
+    requires 0 < path.depth
+    ensures path.Subpath().linked.Acyclic()
+    ensures path.Subpath().linked.RepresentationIsDagFree()
+  {
+    var routeIdx := Route(path.linked.Root().pivotTable, path.key);
+    SubpathEquivToChildAtRouteIdx(path);
+    ChildAtIdxPreservesRepresentationIsDagFree(path.linked, routeIdx);
+  }
+
   lemma {:timeLimitMultiplier 2} ReplacementSubtreeRepresentationContainment(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementRanking: Ranking)
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.linked.Acyclic()
@@ -1039,7 +1078,7 @@ module ReprBetreeRefinement
     if path.depth == 0 {
       RepresentationAfterSwitchingRoot(path.linked, replacement.BuildTightTree(), replacementAddr, ranking);
     } else {
-      assume path.Subpath().linked.RepresentationIsDagFree();
+      SubpathPreservesRepresentationIsDagFree(path); 
       ReprAfterSubstituteCompactReplacement(path.Subpath(), compactedBuffers, replacement, replacementRanking, pathAddrs[1..], replacementAddr);
       /* Induction hypothesis:
         path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
@@ -1314,7 +1353,7 @@ module ReprBetreeRefinement
     if path.depth == 0 {
       ReprAfterSubstituteFlushReplacementBaseCase(path, replacement, childIdx, replacementAddr, replacementChildAddr, ranking);
     } else {
-      assume path.Subpath().linked.RepresentationIsDagFree();  // TODO
+      SubpathPreservesRepresentationIsDagFree(path); 
       ReprAfterSubstituteFlushReplacement(path.Subpath(), replacement, childIdx, replacementAddr, replacementChildAddr, pathAddrs[1..], replacementRanking);
       /* Induction hypothesis:
         path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
@@ -1533,7 +1572,7 @@ module ReprBetreeRefinement
     if path.depth == 0 {
       ReprAfterSubstituteSplitReplacementBaseCase(path, replacement, request, newAddrs, ranking);
     } else {
-      assume path.Subpath().linked.RepresentationIsDagFree();
+      SubpathPreservesRepresentationIsDagFree(path); 
       ReprAfterSubstituteSplitReplacement(path.Subpath(), replacement, request, newAddrs, pathAddrs[1..], replacementRanking);
       /* Induction hypothesis:
         path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Representation()
@@ -1956,7 +1995,7 @@ module ReprBetreeRefinement
     decreases path.depth
   {
     if path.depth != 0 {
-      assume path.Subpath().linked.RepresentationIsDagFree();
+      SubpathPreservesRepresentationIsDagFree(path); 
       assume ReplacementProperty(path.Subpath(), replacement);
       DagFreeAfterSubstituteReplacement(path.Subpath(), replacement, pathAddrs[1..], replacementAddr, replacementRanking);
       assert path.Subpath().Substitute(replacement, pathAddrs[1..]).RepresentationIsDagFree();
