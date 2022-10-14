@@ -2018,7 +2018,6 @@ module ReprBetreeRefinement
     requires path.CanSubstitute(replacement, pathAddrs)
     requires replacement.Acyclic()
     requires replacement.RepresentationIsDagFree()
-    requires 0 < path.depth ==> ReplacementDisjointnessProperty(path, replacement)
     requires path.Target().Acyclic()
     requires replacement.Representation() <= path.Target().Representation() + additions;
 
@@ -2037,22 +2036,18 @@ module ReprBetreeRefinement
   {
     if path.depth != 0 {
       SubpathPreservesRepresentationIsDagFree(path); 
-      if 0 < path.Subpath().depth {
-        assert ReplacementDisjointnessProperty(path.Subpath(), replacement) by {
-          LBR.ValidRankingAllTheWayDown(path.linked.TheRanking(), path);
-          var subpath := path.Subpath();
-          forall idx | 
-            && 0 <= idx < |subpath.linked.Root().children|
-            && idx != Route(subpath.linked.Root().pivotTable, path.key)
-          ensures
-            && subpath.linked.ChildAtIdx(idx).Acyclic()
-            && replacement.Representation() !! subpath.linked.ChildAtIdx(idx).Representation()
-          {
-            RepresentationNotOnSubpathRouteDoesNotContainTarget(subpath, idx);
-          }
+      DagFreeAfterSubstituteReplacement(path.Subpath(), replacement, additions, pathAddrs[1..], replacementRanking);
+      assert ReplacementDisjointnessProperty(path, replacement) by {
+        forall idx | 
+          && 0 <= idx < |path.linked.Root().children|
+          && idx != Route(path.linked.Root().pivotTable, path.key)
+        ensures
+          && path.linked.ChildAtIdx(idx).Acyclic()
+          && replacement.Representation() !! path.linked.ChildAtIdx(idx).Representation()
+        {
+          RepresentationNotOnSubpathRouteDoesNotContainTarget(path, idx);
         }
       }
-      DagFreeAfterSubstituteReplacement(path.Subpath(), replacement, additions, pathAddrs[1..], replacementRanking);
       
       // Witness for linkedAftSubst acyclicity
       var newRanking := LBR.RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
