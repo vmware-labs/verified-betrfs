@@ -2010,7 +2010,8 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma {:timeLimitMultiplier 5} DagFreeAfterSubstituteReplacement(
+  // This super lemma is used in all steps that involves substitute.
+  lemma {:timeLimitMultiplier 4} DagFreeAfterSubstituteReplacement(
     path: Path, replacement: LinkedBetree, additions: set<Address>,
     pathAddrs: PathAddrs, replacementRanking: Ranking) 
     requires path.Valid()
@@ -2159,10 +2160,12 @@ module ReprBetreeRefinement
         }
       }
     }
-    assert ReplacementDisjointnessProperty(path, replacement) by{
-      assume false;
+
+    var additions := {step.targetAddr};
+    assert replacement.Representation() <= path.Target().Representation() + additions by {
+      RepresentationAfterSwitchingRoot(path.Target(), replacement, step.targetAddr, newRanking);
     }
-    DagFreeAfterSubstituteReplacement(path, replacement, {step.targetAddr}, step.pathAddrs, newRanking);
+    DagFreeAfterSubstituteReplacement(path, replacement, additions, step.pathAddrs, newRanking);
     BuildTightPreservesDagFree(path.Substitute(replacement, step.pathAddrs));
   }
 
