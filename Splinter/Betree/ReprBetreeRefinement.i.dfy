@@ -959,27 +959,64 @@ module ReprBetreeRefinement
     }
   }
 
-  // Theorem: BuildTightTree preserves DiskIsDagFree property
+  // Theorem: A new tree formed from replacing the root of a dag-free tree with a fresh
+  // root is also dag-free
+  // This is a wrapper around AgreeingDisksImpliesSubtreesAreDisjoint
+  lemma SwappedRootImpliesRepresentationIsDagFree(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking)
+    requires t1.WF()
+    requires t2.WF()
+    requires t1.diskView.AgreesWithDisk(t2.diskView)
+    requires t1.HasRoot()
+    requires t2.HasRoot()
+    requires t1.Root().children == t2.Root().children
+    requires t1.ValidRanking(ranking)
+    requires t2.ValidRanking(ranking)
+    requires t1.RepresentationIsDagFree()
+    ensures t2.RepresentationIsDagFree()
+  {
+    forall addr | 
+      && addr in t2.Representation()
+      && t2.diskView.GetEntryAsLinked(addr).HasRoot()
+    ensures t2.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
+    {
+      if addr != t2.root.value {
+        assert addr in t1.Representation() by {
+          var numChildren := |t2.Root().children|;
+          var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => t2.ChildAtIdx(i).ReachableAddrsUsingRanking(t2.TheRanking()));
+          Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+          var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
+          LBR.ChildAtIdxAcyclic(t1, idx);
+          LBR.ChildAtIdxAcyclic(t2, idx);
+          RepresentationSameAsReachable(t2.ChildAtIdx(idx), t2.TheRanking());
+          RepresentationInAgreeingDisks(t1.ChildAtIdx(idx), t2.ChildAtIdx(idx), ranking);
+          ParentRepresentationContainsChildRepresentation(t1, idx);
+        }
+        var l1 := t1.diskView.GetEntryAsLinked(addr);
+        var l2 := t2.diskView.GetEntryAsLinked(addr);
+        RootRankingValidForAddrInRepresentation(t1, addr, ranking);
+        RootRankingValidForAddrInRepresentation(t2, addr, ranking);
+        AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, ranking);
+      } else {
+        assert t1.root.value in t1.Representation();  // trigger
+        AgreeingDisksImpliesSubtreesAreDisjoint(t1, t2, ranking);
+      }
+    }
+  }
+
+  // Theorem: BuildTightTree preserves RepresentationIsDagFree property
   lemma BuildTightPreservesDagFree(linked: LinkedBetree) 
     requires linked.Acyclic()
     requires linked.RepresentationIsDagFree()
     ensures linked.BuildTightTree().Acyclic()
     ensures linked.BuildTightTree().RepresentationIsDagFree()
   {
-    var ranking := linked.TheRanking();
-    LBR.BuildTightPreservesRankingValidity(linked, ranking);
-    var tightLinked := linked.BuildTightTree();
-    forall addr | 
-        && addr in tightLinked.Representation()
-        && tightLinked.diskView.GetEntryAsLinked(addr).HasRoot()
-    ensures
-        tightLinked.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
-    {
-      assert addr in linked.Representation();
-      RootRankingValidForAddrInRepresentation(linked, addr, ranking);
-      var l1 := linked.diskView.GetEntryAsLinked(addr);
-      var l2 := tightLinked.diskView.GetEntryAsLinked(addr);
-      AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, ranking);
+    if linked.HasRoot(){
+      var ranking := linked.TheRanking();
+      LBR.BuildTightPreservesRankingValidity(linked, ranking);
+      var tightLinked := linked.BuildTightTree();
+      SwappedRootImpliesRepresentationIsDagFree(linked, tightLinked, ranking);
+    } else {
+      RepresentationIgnoresBuildTight(linked);
     }
   }
 
@@ -1993,29 +2030,13 @@ module ReprBetreeRefinement
     ensures v'.betree.linked.RepresentationIsDagFree();
   {
     var dv' := v'.betree.linked.diskView;
-    forall addr | 
-        && addr in dv'.entries 
-        && dv'.GetEntryAsLinked(addr).HasRoot()
-    ensures dv'.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
-    {
-      var ranking := LBR.BuildTightRanking(v.betree.linked, v.betree.linked.TheRanking());
-      var newBuffer := Buffer(v.betree.memtable.mapp);
-      var ranking' := LBR.InsertInternalFlushMemtableNewRanking(v.betree.linked, newBuffer, ranking, step.newRootAddr);
-      if addr != step.newRootAddr {
-        var dv := v.betree.linked.diskView;
-        var linked := dv.GetEntryAsLinked(addr);
-        var linked' := dv'.GetEntryAsLinked(addr);
-        NodesInRepresentationAreAcyclic(v.betree.linked, addr);
-        RootRankingValidForAddrInRepresentation(v.betree.linked, addr, ranking');
-        AgreeingDisksImpliesSubtreesAreDisjoint(linked, linked', ranking');
-      } else {
-        var linked := v.betree.linked;
-        if linked.HasRoot() {
-          var linked := v.betree.linked;
-          var linked' := v'.betree.linked;
-          AgreeingDisksImpliesSubtreesAreDisjoint(linked, linked', ranking');
-        }
-      }
+    var ranking := LBR.BuildTightRanking(v.betree.linked, v.betree.linked.TheRanking());
+    var newBuffer := Buffer(v.betree.memtable.mapp);
+    var ranking' := LBR.InsertInternalFlushMemtableNewRanking(v.betree.linked, newBuffer, ranking, step.newRootAddr);
+    if v.betree.linked.HasRoot(){
+      SwappedRootImpliesRepresentationIsDagFree(v.betree.linked, v'.betree.linked, ranking');
+    } else{
+      assert v'.betree.linked.Representation() == {step.newRootAddr};  // trigger
     }
   }
 
@@ -2152,24 +2173,7 @@ module ReprBetreeRefinement
     var tightRootRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
     LBR.ValidRankingAllTheWayDown(tightRootRanking, path);
     var newRanking := LBR.CompactionReplacementRanking(path.Target(), tightRootRanking, step.compactedBuffers, step.targetAddr);
-    assert replacement.RepresentationIsDagFree() by {
-      forall addr | 
-        && addr in replacement.diskView.entries 
-        && replacement.diskView.GetEntryAsLinked(addr).HasRoot()
-      ensures replacement.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
-      {
-        if addr != step.targetAddr {
-          var l1 := path.Target().diskView.GetEntryAsLinked(addr);
-          var l2 := replacement.diskView.GetEntryAsLinked(addr);
-          LBR.ValidRankingAllTheWayDown(newRanking, path);
-          RootRankingValidForAddrInRepresentation(linked, addr, newRanking);
-          AgreeingDisksImpliesSubtreesAreDisjoint(l1, l2, newRanking);
-        } else {
-          AgreeingDisksImpliesSubtreesAreDisjoint(path.Target(), replacement, newRanking);
-        }
-      }
-    }
-
+    SwappedRootImpliesRepresentationIsDagFree(path.Target(), replacement, newRanking);
     var additions := {step.targetAddr};
     assert replacement.Representation() <= path.Target().Representation() + additions by {
       RepresentationAfterSwitchingRoot(path.Target(), replacement, step.targetAddr, newRanking);
