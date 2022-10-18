@@ -1791,7 +1791,28 @@ module ReprBetreeRefinement
     ensures linked.ChildAtIdx(request.childIdx).Acyclic()
     ensures replacement.ChildAtIdx(request.childIdx).Representation() <= linked.ChildAtIdx(request.childIdx).Representation() + {newAddrs.left}
   {
-    assume false;
+    LBR.ChildAtIdxAcyclic(linked, request.childIdx);
+    LBR.ChildAtIdxAcyclic(replacement, request.childIdx);
+    var oldChild := linked.ChildAtIdx(request.childIdx);
+    var newLeft := replacement.ChildAtIdx(request.childIdx);
+    if newLeft.HasRoot() {
+      forall addr | addr in newLeft.Representation()
+      ensures addr in oldChild.Representation() + {newAddrs.left}
+      {
+        if addr != newLeft.root.value {
+          var numChildren := |newLeft.Root().children|;
+          var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => newLeft.ChildAtIdx(i).ReachableAddrsUsingRanking(newLeft.TheRanking()));
+          assert exists idx :: 0 <= idx < numChildren && addr in subTreeAddrs[idx] by {
+            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+          }
+          var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
+          LBR.ChildAtIdxAcyclic(newLeft, idx);
+          RepresentationSameAsReachable(newLeft.ChildAtIdx(idx), newLeft.TheRanking());
+          RepresentationInAgreeingDisks(newLeft.ChildAtIdx(idx), oldChild.ChildAtIdx(idx), ranking);
+          ParentRepresentationContainsChildRepresentation(oldChild, idx);
+        }
+      }
+    }
   }
 
   // Theorem: The new right child after split has representation contained in old child representation
@@ -1810,7 +1831,29 @@ module ReprBetreeRefinement
     ensures linked.ChildAtIdx(request.childIdx).Acyclic()
     ensures replacement.ChildAtIdx(request.childIdx+1).Representation() <= linked.ChildAtIdx(request.childIdx).Representation() + {newAddrs.right}
   {
-    assume false;
+    LBR.ChildAtIdxAcyclic(linked, request.childIdx);
+    LBR.ChildAtIdxAcyclic(replacement, request.childIdx+1);
+    var oldChild := linked.ChildAtIdx(request.childIdx);
+    var newRight := replacement.ChildAtIdx(request.childIdx+1);
+    if newRight.HasRoot() {
+      forall addr | addr in newRight.Representation()
+      ensures addr in oldChild.Representation() + {newAddrs.right}
+      {
+        if addr != newRight.root.value {
+          var numChildren := |newRight.Root().children|;
+          var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => newRight.ChildAtIdx(i).ReachableAddrsUsingRanking(newRight.TheRanking()));
+          assert exists idx :: 0 <= idx < numChildren && addr in subTreeAddrs[idx] by {
+            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+          }
+          var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
+          var childPivotIdx := request.childPivotIdx;
+          LBR.ChildAtIdxAcyclic(newRight, idx);
+          RepresentationSameAsReachable(newRight.ChildAtIdx(idx), newRight.TheRanking());
+          RepresentationInAgreeingDisks(newRight.ChildAtIdx(idx), oldChild.ChildAtIdx(idx+childPivotIdx), ranking);
+          ParentRepresentationContainsChildRepresentation(oldChild, idx+childPivotIdx);
+        }
+      }
+    }
   }
 
   lemma {:timeLimitMultiplier 2} SplittedChildRepresentation(
