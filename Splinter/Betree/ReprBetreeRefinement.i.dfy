@@ -959,6 +959,32 @@ module ReprBetreeRefinement
     }
   }
 
+  // Theorem: If all the children of a root node are dag-free, then the root is dag-free
+  lemma DagFreeChildrenImpliesParentDagFree(linked: LinkedBetree)
+    requires linked.Acyclic()
+    requires linked.HasRoot()
+    requires linked.AllSubtreesAreDisjoint();
+    requires forall i | 0 <= i < |linked.Root().children| :: linked.ChildAtIdx(i).Acyclic()
+    requires forall i | 0 <= i < |linked.Root().children| :: linked.ChildAtIdx(i).RepresentationIsDagFree()
+    ensures linked.RepresentationIsDagFree()
+  {
+    var n := |linked.Root().children|;
+    ParentRepresentationAsUnionOfChildren(linked);
+    var childrenReprs := seq(n, i requires 0 <= i < n => linked.ChildAtIdx(i).Representation());
+    forall addr | 
+      && addr in linked.Representation()
+      && linked.diskView.GetEntryAsLinked(addr).HasRoot()
+    ensures 
+      linked.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
+    {
+      ParentRepresentationAsUnionOfChildren(linked);
+      var childrenReprs := seq(n, i requires 0 <= i < n => linked.ChildAtIdx(i).Representation());
+      if addr != linked.root.value {
+        Sets.UnionSeqOfSetsSoundness(childrenReprs);
+      }
+    }
+  }
+
   // Theorem: A new tree formed from replacing the root of a dag-free tree with a fresh
   // root is also dag-free
   // This is a wrapper around AgreeingDisksImpliesSubtreesAreDisjoint
@@ -1039,7 +1065,7 @@ module ReprBetreeRefinement
   }
 
   // Theorem: If linked.RepresentationIsDagFree(), then linked.ChildAtIdx(i).RepresentationIsDagFree()
-  lemma ChildAtIdxPreservesRepresentationIsDagFree(linked: LinkedBetree, idx: nat)
+  lemma ChildAtIdxIsDagFree(linked: LinkedBetree, idx: nat)
     requires linked.Acyclic()
     requires linked.RepresentationIsDagFree()
     requires linked.HasRoot()
@@ -1064,7 +1090,7 @@ module ReprBetreeRefinement
   }
 
   // Theorem: If path.linked.RepresentationIsDagFree(), then path.Subpath().linked.RepresentationIsDagFree()
-  // Wrapper around ChildAtIdxPreservesRepresentationIsDagFree
+  // Wrapper around ChildAtIdxIsDagFree
   lemma SubpathPreservesRepresentationIsDagFree(path: Path) 
     requires path.Valid()
     requires path.linked.RepresentationIsDagFree()
@@ -1074,7 +1100,7 @@ module ReprBetreeRefinement
   {
     var routeIdx := Route(path.linked.Root().pivotTable, path.key);
     SubpathEquivToChildAtRouteIdx(path);
-    ChildAtIdxPreservesRepresentationIsDagFree(path.linked, routeIdx);
+    ChildAtIdxIsDagFree(path.linked, routeIdx);
   }
 
   // Theorem
@@ -2082,7 +2108,6 @@ module ReprBetreeRefinement
       
       // Witness for linkedAftSubst acyclicity
       var newRanking := LBR.RankingAfterSubstitution(replacement, replacementRanking, path, pathAddrs);
-
       var linkedAftSubst := path.Substitute(replacement, pathAddrs);
       forall addr |
         && addr in linkedAftSubst.Representation()
@@ -2182,19 +2207,20 @@ module ReprBetreeRefinement
     BuildTightPreservesDagFree(path.Substitute(replacement, step.pathAddrs));
   }
 
-  lemma {:timeLimitMultiplier 3} InternalFlushPreservesDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  lemma {:timeLimitMultiplier 2} InternalFlushPreservesDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires NextStep(v, v', lbl, step)
     requires step.InternalFlushStep?
     requires v'.betree.linked.Acyclic()
     ensures v'.betree.linked.RepresentationIsDagFree()
   { 
-    var linked := v.betree.linked;
     var path := step.path;
-    var replacement := LB.InsertFlushReplacement(path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr);
+    var target := path.Target();
+    var replacement := LB.InsertFlushReplacement(target, step.childIdx, step.targetAddr, step.targetChildAddr);
+    var linked := v.betree.linked;
     var tightRootRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
     LBR.ValidRankingAllTheWayDown(tightRootRanking, path);
-    var newRanking := LBR.RankingAfterInsertFlushReplacement(path.Target(), tightRootRanking, step.childIdx, step.targetAddr, step.targetChildAddr);
+    var newRanking := LBR.RankingAfterInsertFlushReplacement(target, tightRootRanking, step.childIdx, step.targetAddr, step.targetChildAddr);
 
     assert replacement.RepresentationIsDagFree() by {
       forall addr | 
@@ -2203,15 +2229,51 @@ module ReprBetreeRefinement
       ensures
         replacement.diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
       {
-        assume false;
+        var flushedChild := target.ChildAtIdx(step.childIdx);
+        var flushedChild' := replacement.ChildAtIdx(step.childIdx);
+        ChildAtIdxIsDagFree(target, step.childIdx);
+        SwappedRootImpliesRepresentationIsDagFree(flushedChild, flushedChild', newRanking);
+        // prereq to DagFreeChildrenImpliesParentDagFree
+        forall i | 0 <= i < |replacement.Root().children| 
+        ensures 
+          && replacement.ChildAtIdx(i).Acyclic()
+          && replacement.ChildAtIdx(i).RepresentationIsDagFree()
+        {
+          LBR.ChildAtIdxAcyclic(replacement, i);
+          if i != step.childIdx && target.ChildAtIdx(i).HasRoot() {
+            SwappedRootImpliesRepresentationIsDagFree(target.ChildAtIdx(i), replacement.ChildAtIdx(i), newRanking);
+          }
+        }
+        // prove replacement.AllSubtreesAreDisjoint(), prereq to DagFreeChildrenImpliesParentDagFree
+        forall i, j |
+          && i != j 
+          && 0 <= i < |replacement.Root().children|
+          && 0 <= j < |replacement.Root().children|
+        ensures replacement.SubtreesAreDisjoint(i, j)
+        {
+          LBR.ChildAtIdxAcyclic(target, i);
+          LBR.ChildAtIdxAcyclic(target, j);
+          assert target.SubtreesAreDisjoint(i, j);  // trigger
+          if i == step.childIdx {
+            RepresentationAfterSwitchingRoot(target.ChildAtIdx(i), replacement.ChildAtIdx(i), step.targetChildAddr, newRanking);
+            RepresentationInAgreeingDisks(target.ChildAtIdx(j), replacement.ChildAtIdx(j), newRanking);
+          } else if j == step.childIdx {
+            RepresentationAfterSwitchingRoot(target.ChildAtIdx(j), replacement.ChildAtIdx(j), step.targetChildAddr, newRanking);
+            RepresentationInAgreeingDisks(target.ChildAtIdx(i), replacement.ChildAtIdx(i), newRanking);
+          } else {
+            RepresentationInAgreeingDisks(target.ChildAtIdx(i), replacement.ChildAtIdx(i), newRanking);
+            RepresentationInAgreeingDisks(target.ChildAtIdx(j), replacement.ChildAtIdx(j), newRanking);
+          }
+        }
+        DagFreeChildrenImpliesParentDagFree(replacement);
       }
     }
     var additions := {step.targetAddr, step.targetChildAddr};
-    assert replacement.Representation() <= path.Target().Representation() + additions by {
+    assert replacement.Representation() <= target.Representation() + additions by {
       InsertFlushReplacementExcludesAddrsOnPath(path, replacement, step.childIdx, step.targetAddr, step.targetChildAddr);
       LBR.BuildTightPreservesRankingValidity(replacement, newRanking);
       AddrsOnPathIncludesTargetAddr(path);
-      ReprAfterSubstituteFlushReplacementBaseCase(path.Target(), replacement, step.childIdx, step.targetAddr, step.targetChildAddr, newRanking);
+      ReprAfterSubstituteFlushReplacementBaseCase(target, replacement, step.childIdx, step.targetAddr, step.targetChildAddr, newRanking);
       RepresentationIgnoresBuildTight(replacement);
     }
     DagFreeAfterSubstituteReplacement(path, replacement, additions, step.pathAddrs, newRanking);
