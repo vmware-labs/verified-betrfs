@@ -2493,7 +2493,183 @@ module ReprBetreeRefinement
     }
   }
 
-  lemma {:timeLimitMultiplier 2} SplitReplacementIsDagFree(
+  lemma ReplacementSubtreesAreDisjointBothNotSplitted(
+    target: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, i:nat, j: nat, newRanking: Ranking)
+    requires target.WF()
+    requires target.ValidRanking(newRanking)
+    requires target.RepresentationIsDagFree()
+    requires target.CanSplitParent(request)
+    requires replacement == target.SplitParent(request, newAddrs)
+    requires replacement.WF()
+    requires replacement.ValidRanking(newRanking)
+    // both not pivot
+    requires replacement.Root().ValidChildIndex(i)
+    requires replacement.Root().ValidChildIndex(j)
+    requires i != j
+    requires i != request.childIdx && i != request.childIdx + 1
+    requires j != request.childIdx && j != request.childIdx + 1
+  
+    // Framing
+    requires target.diskView.IsFresh(newAddrs.Repr())    
+    ensures replacement.ChildAtIdx(i).Acyclic()
+    ensures replacement.ChildAtIdx(j).Acyclic()
+    ensures replacement.SubtreesAreDisjoint(i, j)
+  {
+    assert target.root.value in target.Representation();  // trigger
+    var pivotIndex := request.childIdx;
+    if i < pivotIndex {
+      if j < pivotIndex {
+        LBR.ChildAtIdxAcyclic(target, i);
+        LBR.ChildAtIdxAcyclic(target, j);
+        assert target.SubtreesAreDisjoint(i, j);  // trigger
+        RepresentationInAgreeingDisks(target.ChildAtIdx(i), replacement.ChildAtIdx(i), newRanking);
+        RepresentationInAgreeingDisks(target.ChildAtIdx(j), replacement.ChildAtIdx(j), newRanking);
+      } else {
+        LBR.ChildAtIdxAcyclic(target, i);
+        LBR.ChildAtIdxAcyclic(target, j-1);
+        assert target.SubtreesAreDisjoint(i, j-1);  // trigger
+        RepresentationInAgreeingDisks(target.ChildAtIdx(i), replacement.ChildAtIdx(i), newRanking);
+        RepresentationInAgreeingDisks(target.ChildAtIdx(j-1), replacement.ChildAtIdx(j), newRanking);
+      }
+    } else {
+      if j < pivotIndex {
+        LBR.ChildAtIdxAcyclic(target, i-1);
+        LBR.ChildAtIdxAcyclic(target, j);
+        assert target.SubtreesAreDisjoint(i-1, j);  // trigger
+        RepresentationInAgreeingDisks(target.ChildAtIdx(i-1), replacement.ChildAtIdx(i), newRanking);
+        RepresentationInAgreeingDisks(target.ChildAtIdx(j), replacement.ChildAtIdx(j), newRanking);
+      } else {
+        LBR.ChildAtIdxAcyclic(target, i-1);
+        LBR.ChildAtIdxAcyclic(target, j-1);
+        assert target.SubtreesAreDisjoint(i-1, j-1);  // trigger
+        RepresentationInAgreeingDisks(target.ChildAtIdx(i-1), replacement.ChildAtIdx(i), newRanking);
+        RepresentationInAgreeingDisks(target.ChildAtIdx(j-1), replacement.ChildAtIdx(j), newRanking);
+      }
+    }
+  }
+
+  lemma ReplacementSubtreesAreDisjointOneIsSplitted(
+    target: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, i:nat, j: nat, newRanking: Ranking)
+    requires target.WF()
+    requires target.ValidRanking(newRanking)
+    requires target.RepresentationIsDagFree()
+    requires target.CanSplitParent(request)
+    requires replacement == target.SplitParent(request, newAddrs)
+    requires replacement.WF()
+    requires replacement.ValidRanking(newRanking)
+    // One is pivot
+    requires replacement.Root().ValidChildIndex(i)
+    requires replacement.Root().ValidChildIndex(j)
+    requires i != j
+    requires i == request.childIdx || i == request.childIdx + 1
+    requires j != request.childIdx && j != request.childIdx + 1
+  
+    // Framing
+    requires target.diskView.IsFresh(newAddrs.Repr())    
+    ensures replacement.ChildAtIdx(i).Acyclic()
+    ensures replacement.ChildAtIdx(j).Acyclic()
+    ensures replacement.SubtreesAreDisjoint(i, j)
+  {
+    assert target.root.value in target.Representation();  // trigger
+    var pivotIndex := request.childIdx;
+    if i == pivotIndex {
+      if j < pivotIndex {
+        LBR.ChildAtIdxAcyclic(target, i);
+        LBR.ChildAtIdxAcyclic(target, j);
+        SplittedLeftChildRepresentation(target, replacement, request, newAddrs, newRanking);
+        assert target.SubtreesAreDisjoint(i, j);  // trigger
+        RepresentationInAgreeingDisks(target.ChildAtIdx(j), replacement.ChildAtIdx(j), newRanking);
+      } else if j > pivotIndex + 1 {
+        LBR.ChildAtIdxAcyclic(target, i);
+        LBR.ChildAtIdxAcyclic(target, j-1);
+        SplittedLeftChildRepresentation(target, replacement, request, newAddrs, newRanking);
+        assert target.SubtreesAreDisjoint(i, j-1);  // trigger
+        RepresentationInAgreeingDisks(target.ChildAtIdx(j-1), replacement.ChildAtIdx(j), newRanking);
+      }
+    } else {
+      if j < pivotIndex {
+        LBR.ChildAtIdxAcyclic(target, i-1);
+        LBR.ChildAtIdxAcyclic(target, j);
+        SplittedRightChildRepresentation(target, replacement, request, newAddrs, newRanking);
+        assert target.SubtreesAreDisjoint(i-1, j);  // trigger
+        RepresentationInAgreeingDisks(target.ChildAtIdx(j), replacement.ChildAtIdx(j), newRanking);
+      } else if j > pivotIndex + 1 {
+        LBR.ChildAtIdxAcyclic(target, i-1);
+        LBR.ChildAtIdxAcyclic(target, j-1);
+        SplittedRightChildRepresentation(target, replacement, request, newAddrs, newRanking);
+        assert target.SubtreesAreDisjoint(i-1, j-1);  // trigger
+        RepresentationInAgreeingDisks(target.ChildAtIdx(j-1), replacement.ChildAtIdx(j), newRanking);
+      }
+    }
+  }
+
+  lemma {:timeLimitMultiplier 4} ReplacementSubtreesAreDisjointBothAreSplitted(
+    target: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, i:nat, j: nat, newRanking: Ranking)
+    requires target.WF()
+    requires target.ValidRanking(newRanking)
+    requires target.RepresentationIsDagFree()
+    requires target.CanSplitParent(request)
+    requires replacement == target.SplitParent(request, newAddrs)
+    requires replacement.WF()
+    requires replacement.ValidRanking(newRanking)
+    // both are pivot
+    requires i == request.childIdx
+    requires j == request.childIdx + 1
+    // Framing
+    requires target.diskView.IsFresh(newAddrs.Repr())    
+    ensures replacement.ChildAtIdx(i).Acyclic()
+    ensures replacement.ChildAtIdx(j).Acyclic()
+    ensures replacement.SubtreesAreDisjoint(i, j)
+  {
+    assert target.root.value in target.Representation();  // trigger
+    var pivotIndex := request.childIdx;
+    LBR.ChildAtIdxAcyclic(replacement, i);
+    LBR.ChildAtIdxAcyclic(replacement, j);
+    var oldChild := target.ChildAtIdx(pivotIndex);
+    var left := replacement.ChildAtIdx(i);
+    var right := replacement.ChildAtIdx(j);
+    forall addr | addr in left.Representation() 
+    ensures addr !in right.Representation()
+    {
+      if addr == left.root.value {
+        SplittedRightChildRepresentation(target, replacement, request, newAddrs, newRanking);
+      } else {
+        var numChildrenL := |left.Root().children|;
+        var subTreeAddrsL := seq(numChildrenL, li requires 0 <= li < numChildrenL => left.ChildAtIdx(li).ReachableAddrsUsingRanking(left.TheRanking()));
+        assert exists li :: 0 <= li < numChildrenL && addr in subTreeAddrsL[li] by {
+          Sets.UnionSeqOfSetsSoundness(subTreeAddrsL);
+        }
+        var li :| 0 <= li < numChildrenL && addr in subTreeAddrsL[li];
+        LBR.ChildAtIdxAcyclic(left, li);
+        RepresentationSameAsReachable(left.ChildAtIdx(li), left.TheRanking());
+        LBR.ChildAtIdxAcyclic(target, pivotIndex);
+        LBR.ChildAtIdxAcyclic(oldChild, li);
+        assert addr in oldChild.ChildAtIdx(li).Representation() by {
+          RepresentationInAgreeingDisks(left.ChildAtIdx(li), oldChild.ChildAtIdx(li), newRanking);
+        }
+        if addr in right.Representation() {
+          var numChildrenR := |right.Root().children|;
+          var subTreeAddrsR := seq(numChildrenR, ri requires 0 <= ri < numChildrenR => right.ChildAtIdx(ri).ReachableAddrsUsingRanking(right.TheRanking()));
+          assert exists ri :: 0 <= ri < numChildrenR && addr in subTreeAddrsR[ri] by {
+            Sets.UnionSeqOfSetsSoundness(subTreeAddrsR);
+          }
+          var ri :| 0 <= ri < numChildrenR && addr in subTreeAddrsR[ri];
+          LBR.ChildAtIdxAcyclic(right, ri);
+          RepresentationSameAsReachable(right.ChildAtIdx(ri), right.TheRanking());
+          LBR.ChildAtIdxAcyclic(oldChild, ri+request.childPivotIdx);
+          assert addr in oldChild.ChildAtIdx(ri+request.childPivotIdx).Representation() by {
+            RepresentationInAgreeingDisks(right.ChildAtIdx(ri), oldChild.ChildAtIdx(ri + request.childPivotIdx), newRanking);
+          }
+          assert false by {
+            ParentRepresentationContainsChildRepresentation(target, pivotIndex);
+            assert oldChild.SubtreesAreDisjoint(li, ri+request.childPivotIdx);  // trigger
+          }
+        }
+      }
+    }
+  }
+
+  lemma SplitReplacementIsDagFree(
     target: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, newRanking: Ranking)
     requires target.WF()
     requires target.ValidRanking(newRanking)
@@ -2502,11 +2678,8 @@ module ReprBetreeRefinement
     requires replacement == target.SplitParent(request, newAddrs)
     requires replacement.WF()
     requires replacement.ValidRanking(newRanking)
-
     // Framing
-    requires target.diskView.IsFresh(newAddrs.Repr())
-    // requires target.root.value !in replacement.Representation()
-    
+    requires target.diskView.IsFresh(newAddrs.Repr())    
     ensures replacement.RepresentationIsDagFree()
   {
     var numChildren := |target.Root().children|;
@@ -2523,42 +2696,22 @@ module ReprBetreeRefinement
       && 0 <= j < |replacement.Root().children|
     ensures replacement.SubtreesAreDisjoint(i, j)
     {
-      if i < pivotIndex {
-        if j < pivotIndex {
-          LBR.ChildAtIdxAcyclic(target, i);
-          LBR.ChildAtIdxAcyclic(target, j);
-          assert target.SubtreesAreDisjoint(i, j);  // trigger
-          RepresentationInAgreeingDisks(target.ChildAtIdx(i), replacement.ChildAtIdx(i), newRanking);
-          RepresentationInAgreeingDisks(target.ChildAtIdx(j), replacement.ChildAtIdx(j), newRanking);
-        } else if j > pivotIndex + 1 {
-          LBR.ChildAtIdxAcyclic(target, i);
-          LBR.ChildAtIdxAcyclic(target, j-1);
-          assert target.SubtreesAreDisjoint(i, j-1);  // trigger
-          RepresentationInAgreeingDisks(target.ChildAtIdx(i), replacement.ChildAtIdx(i), newRanking);
-          RepresentationInAgreeingDisks(target.ChildAtIdx(j-1), replacement.ChildAtIdx(j), newRanking);
+      if i == pivotIndex || i == pivotIndex + 1 {
+        if j == pivotIndex || j == pivotIndex + 1 {
+          if i == pivotIndex {
+            ReplacementSubtreesAreDisjointBothAreSplitted(target, replacement, request, newAddrs, i, j, newRanking);
+          } else {
+            ReplacementSubtreesAreDisjointBothAreSplitted(target, replacement, request, newAddrs, j, i, newRanking);
+          }
         } else {
-          // For each addr in replacement.ChildAtIdx(j), do a case analysis of
-          // which subtree it comes from.
-          assume false;
-        }
-      } else if i > pivotIndex + 1 {
-        if j < pivotIndex {
-          LBR.ChildAtIdxAcyclic(target, i-1);
-          LBR.ChildAtIdxAcyclic(target, j);
-          assert target.SubtreesAreDisjoint(i-1, j);  // trigger
-          RepresentationInAgreeingDisks(target.ChildAtIdx(i-1), replacement.ChildAtIdx(i), newRanking);
-          RepresentationInAgreeingDisks(target.ChildAtIdx(j), replacement.ChildAtIdx(j), newRanking);
-        } else if j > pivotIndex + 1 {
-          LBR.ChildAtIdxAcyclic(target, i-1);
-          LBR.ChildAtIdxAcyclic(target, j-1);
-          assert target.SubtreesAreDisjoint(i-1, j-1);  // trigger
-          RepresentationInAgreeingDisks(target.ChildAtIdx(i-1), replacement.ChildAtIdx(i), newRanking);
-          RepresentationInAgreeingDisks(target.ChildAtIdx(j-1), replacement.ChildAtIdx(j), newRanking);
-        } else {
-          assume false;
+          ReplacementSubtreesAreDisjointOneIsSplitted(target, replacement, request, newAddrs, i, j, newRanking);
         }
       } else {
-        assume false;
+        if j == pivotIndex || j == pivotIndex + 1 {
+          ReplacementSubtreesAreDisjointOneIsSplitted(target, replacement, request, newAddrs, j, i, newRanking);
+        } else {
+          ReplacementSubtreesAreDisjointBothNotSplitted(target, replacement, request, newAddrs, i, j, newRanking);
+        }
       }
     }
     DagFreeChildrenImpliesParentDagFree(replacement);
