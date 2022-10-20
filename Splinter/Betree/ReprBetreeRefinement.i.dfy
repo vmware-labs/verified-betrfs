@@ -27,6 +27,12 @@ module ReprBetreeRefinement
     v.betree
   }
 
+  // TODO: Can make this a method of LinkedBetree, maybe?
+  predicate RootedWithRanking(linked: LinkedBetree, ranking: Ranking) {
+    && linked.HasRoot()
+    && linked.ValidRanking(ranking)
+  }
+
   // The representation of v.betree == v.repr
   predicate ValidRepr(v: Variables) 
     requires v.betree.linked.Acyclic()
@@ -92,8 +98,6 @@ module ReprBetreeRefinement
 
   // Theorem: If t1.root = t2.root and their disks agree, then t1 and t2 have the same Representation
   lemma ReachableAddrsInAgreeingDisks(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking) 
-    requires t1.WF()
-    requires t2.WF()
     requires t1.ValidRanking(ranking)
     requires t2.ValidRanking(ranking)
     requires t1.diskView.AgreesWithDisk(t2.diskView)
@@ -118,8 +122,6 @@ module ReprBetreeRefinement
 
   // Theorem: Wrapper around ReachableAddrsInAgreeingDisks
   lemma RepresentationInAgreeingDisks(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking) 
-    requires t1.WF()
-    requires t2.WF()
     requires t1.ValidRanking(ranking)
     requires t2.ValidRanking(ranking)
     requires t1.diskView.AgreesWithDisk(t2.diskView)
@@ -133,13 +135,11 @@ module ReprBetreeRefinement
 
   // Theorem: All reachable addresses must have a lower smaller ranking than the root
   lemma ReachableAddressesHaveLowerRank(linked: LinkedBetree, topAddr: Address, topRank: nat, ranking: Ranking) 
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
+    requires RootedWithRanking(linked, ranking)
     requires LBR.RankingIsTight(linked.diskView, ranking)
     requires topAddr in linked.diskView.entries
     requires topAddr in ranking
     requires ranking[topAddr] == topRank
-    requires linked.HasRoot()
     requires ranking[linked.root.value] < topRank;
     ensures forall addr | addr in linked.ReachableAddrsUsingRanking(ranking)
       :: addr in ranking && ranking[addr] < topRank
@@ -160,10 +160,8 @@ module ReprBetreeRefinement
 
   // Theorem: A wrapper around ReachableAddressesHaveLowerRank
   lemma ChildrenRepresentationHaveLowerRank(linked: LinkedBetree, idx: nat, ranking: Ranking) 
-    requires linked.Acyclic()
-    requires linked.ValidRanking(ranking)
+    requires RootedWithRanking(linked, ranking)
     requires LBR.RankingIsTight(linked.diskView, ranking)
-    requires linked.HasRoot()
     requires linked.Root().ValidChildIndex(idx)
     ensures linked.ChildAtIdx(idx).Acyclic()  // prereq
     ensures forall addr | addr in linked.ChildAtIdx(idx).Representation()
@@ -188,9 +186,7 @@ module ReprBetreeRefinement
   }
 
   lemma ChildReachebleAddrsIsSubset(linked: LinkedBetree, ranking: Ranking, idx: nat) 
-    requires linked.Acyclic()
-    requires linked.ValidRanking(ranking)
-    requires linked.HasRoot()
+    requires RootedWithRanking(linked, ranking)
     requires linked.Root().ValidChildIndex(idx)
     ensures linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(ranking) <= linked.ReachableAddrsUsingRanking(ranking)
   {
@@ -201,7 +197,6 @@ module ReprBetreeRefinement
   }
 
   lemma BuildTightRepresentationContainsDiskView(linked: LinkedBetree, ranking: Ranking) 
-    requires linked.Acyclic()
     requires linked.ValidRanking(ranking)
     ensures linked.BuildTightTree().Acyclic()
     ensures forall addr | addr in linked.BuildTightTree().diskView.entries 
@@ -254,10 +249,8 @@ module ReprBetreeRefinement
   }
   
   lemma ChildAtIdxCommutesWithBuildTight(linked: LinkedBetree, idx: nat, ranking: Ranking) 
-    requires linked.Acyclic()
-    requires linked.HasRoot()
+    requires RootedWithRanking(linked, ranking)
     requires linked.Root().ValidChildIndex(idx)
-    requires linked.ValidRanking(ranking)
 
     ensures linked.ChildAtIdx(idx).BuildTightTree().WF()
     ensures linked.ChildAtIdx(idx).BuildTightTree().ValidRanking(ranking)
@@ -274,7 +267,6 @@ module ReprBetreeRefinement
 
   // Wrapper around common use case of ReachableAddrsIgnoresRanking
   lemma RepresentationSameAsReachable(linked: LinkedBetree, ranking: Ranking)
-    requires linked.Acyclic()
     requires linked.ValidRanking(ranking)
     ensures linked.Representation() == linked.ReachableAddrsUsingRanking(ranking)
     ensures linked.ReachableAddrsUsingRanking(ranking) == linked.ReachableAddrsUsingRanking(linked.TheRanking())
@@ -284,7 +276,6 @@ module ReprBetreeRefinement
 
   // Theorem: BuildTight does not change reachable set
   lemma ReachableAddrsIgnoresBuildTight(linked: LinkedBetree, ranking: Ranking)
-    requires linked.Acyclic()
     requires linked.ValidRanking(ranking)
     ensures linked.BuildTightTree().WF()
     ensures linked.BuildTightTree().ValidRanking(ranking)
@@ -311,16 +302,16 @@ module ReprBetreeRefinement
   // Theorem: The set of reachable addrs on path.Subpath().Substitute(..) is the same as
   // that on path.Substitute(..).ChildAtIdx(routeIdx)
   lemma RepresentationOnSubpathRoute(path: Path, replacement: LinkedBetree, routeIdx: nat, pathAddrs: PathAddrs, ranking: Ranking)
-    requires path.Valid()
+    requires path.CanSubstitute(replacement, pathAddrs);
     requires 0 < path.depth
     requires routeIdx == Route(path.linked.Root().pivotTable, path.key)
-    requires path.CanSubstitute(replacement, pathAddrs);
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     // Requirements of SubstitutePreservesWF and ReplacementAcyclicImpliesSubstituteAcyclic
     requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.linked.root.value in ranking
     requires replacement.ValidRanking(ranking)
-
+    requires path.Valid()  //Bizarre: Dafny gets this from path.CanSubstitute, but without 
+                           // this requires the proof fails
     ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).Acyclic()  // prereq
     ensures path.Subpath().Substitute(replacement, pathAddrs[1..]).Acyclic()  // prereq
     ensures path.Substitute(replacement, pathAddrs).ChildAtIdx(routeIdx).Representation()
@@ -348,11 +339,10 @@ module ReprBetreeRefinement
 
   // Theorem: Substitution does not change representation of subtrees not on the substitution path
   lemma ReachableAddrsNotOnSubpathRoute(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, idx: nat, ranking: Ranking) 
-    requires path.Valid()
+    requires path.CanSubstitute(replacement, pathAddrs);
     requires 0 < path.depth
     requires 0 <= idx < |path.linked.Root().children|
     requires idx != Route(path.linked.Root().pivotTable, path.key)
-    requires path.CanSubstitute(replacement, pathAddrs);
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     // RankingAfterSubstitution requirements
     requires path.linked.root.value in ranking
@@ -449,9 +439,7 @@ module ReprBetreeRefinement
 
   // Theorem: Parent reacheable contains child reacheable
   lemma ParentReacheableContainsChildReacheable(linked:LinkedBetree, idx: nat, ranking: Ranking)
-    requires linked.WF()
-    requires linked.ValidRanking(ranking)
-    requires linked.HasRoot()
+    requires RootedWithRanking(linked, ranking)
     requires linked.Root().ValidChildIndex(idx)
     ensures linked.ChildAtIdx(idx).ValidRanking(ranking)  // prereq
     ensures linked.ChildAtIdx(idx).ReachableAddrsUsingRanking(ranking) <= linked.ReachableAddrsUsingRanking(ranking)
@@ -530,7 +518,6 @@ module ReprBetreeRefinement
 
   // Theorem: Substituting an acyclic subtree into an acyclic tree produces an acyclic tree
   lemma ReplacementAcyclicImpliesSubstituteAcyclic(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, ranking: Ranking)
-    requires path.Valid()
     requires path.CanSubstitute(replacement, pathAddrs)
     requires replacement.ValidRanking(ranking)
     requires path.linked.root.value in ranking
@@ -582,17 +569,15 @@ module ReprBetreeRefinement
 
   // Theorem: the old path root is deleted from the representation after substitution
   lemma SubstituteDeletesOldRoot(path: Path, oldRoot: Address, replacement: LinkedBetree, pathAddrs: PathAddrs, ranking: Ranking) 
-    requires path.Valid()
-    requires replacement.Acyclic()
+    requires replacement.ValidRanking(ranking)
+    requires path.CanSubstitute(replacement, pathAddrs)
     requires oldRoot !in replacement.Representation()
     requires oldRoot !in pathAddrs
     // oldRoot is not in any subtree of path.linked
     requires forall i | 0 <= i < |path.linked.Root().children|
       :: path.linked.ChildAtIdx(i).Acyclic() && oldRoot !in path.linked.ChildAtIdx(i).Representation()
-    requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires PathAddrsFresh(path, replacement, pathAddrs)
-    requires replacement.ValidRanking(ranking)
     requires path.linked.root.value in ranking
     requires Set(pathAddrs) !! ranking.Keys
 
@@ -634,10 +619,10 @@ module ReprBetreeRefinement
   // Theorem: Any address in the representation after substitution could not have been on
   // on the substitution path
   lemma {:timeLimitMultiplier 2} SubstituteDeletesAddrsOnPath(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, addr: Address, ranking: Ranking)
-    requires path.Valid()
-    requires path.linked.RepresentationIsDagFree()
-    requires replacement.Acyclic()
+    requires path.Valid()  // Bizarre: without this, refinement on whole file fails but proc works
     requires path.CanSubstitute(replacement, pathAddrs)
+    requires replacement.ValidRanking(ranking)
+    requires path.linked.RepresentationIsDagFree()
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.AddrsOnPath() !! replacement.Representation()
     requires Set(pathAddrs) !! ranking.Keys  // required by ReachableAddrsNotOnSubpathRoute
@@ -646,8 +631,7 @@ module ReprBetreeRefinement
     // Requirements of ReplacementAcyclicImpliesSubstituteAcyclic
     requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.linked.root.value in ranking
-    requires replacement.ValidRanking(ranking)
-
+    
     ensures addr !in path.AddrsOnPath()
     decreases path.depth
   { 
@@ -704,7 +688,6 @@ module ReprBetreeRefinement
 
   // Theorem: pathAddrs is a subset of path.Substitute(replacement, pathAddrs)
   lemma RepresentationAfterSubstituteContainsPathAddrs(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, ranking: Ranking)
-    requires path.Valid()
     requires path.CanSubstitute(replacement, pathAddrs)
     requires replacement.ValidRanking(ranking)
     requires path.linked.root.value in ranking
@@ -726,9 +709,7 @@ module ReprBetreeRefinement
 
   // Theorem: Representation of path.Substitute(..) includes that of replacement
   lemma RepresentationAfterSubstituteContainsReplacement(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, ranking: Ranking)
-    requires path.Valid()
     requires path.CanSubstitute(replacement, pathAddrs)
-    requires replacement.Acyclic()
     // Requirements of ReplacementAcyclicImpliesSubstituteAcyclic
     requires replacement.ValidRanking(ranking)
     requires path.linked.root.value in ranking
@@ -769,9 +750,8 @@ module ReprBetreeRefinement
 
   // Theorem: Change in representation after switching out the root of the tree
   lemma RepresentationAfterSwitchingRoot(linked: LinkedBetree, linked': LinkedBetree, replacementAddr: Address, ranking: Ranking)
-    requires linked.WF() && linked'.WF()
-    requires linked.ValidRanking(ranking) && linked'.ValidRanking(ranking)
-    requires linked.HasRoot() && linked'.HasRoot()
+    requires RootedWithRanking(linked, ranking)
+    requires RootedWithRanking(linked', ranking)
     requires linked'.root.value == replacementAddr
     requires linked'.Root().children == linked.Root().children
     requires linked'.diskView.AgreesWithDisk(linked.diskView)
@@ -799,7 +779,6 @@ module ReprBetreeRefinement
 
   // Theorem: Valid ranking for root is also valid for any node in the Representation
   lemma RootRankingValidForAddrInRepresentation(rootLinked:LinkedBetree, addr:Address, ranking:Ranking) 
-    requires rootLinked.WF()
     requires rootLinked.ValidRanking(ranking)
     requires addr in rootLinked.Representation()
     ensures rootLinked.diskView.GetEntryAsLinked(addr).ValidRanking(ranking)
@@ -830,14 +809,10 @@ module ReprBetreeRefinement
   // Theorem: If t1 and t2 are the same nodes on agreeing disks, and t1.AllSubtreesAreDisjoint(),
   // then t2.AllSubtreesAreDisjoint()
   lemma AgreeingDisksImpliesSubtreesAreDisjoint(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking) 
-    requires t1.WF()
-    requires t2.WF()
+    requires RootedWithRanking(t1, ranking)
+    requires RootedWithRanking(t2, ranking)
     requires t1.diskView.AgreesWithDisk(t2.diskView)
-    requires t1.HasRoot()
-    requires t2.HasRoot()
     requires t1.Root().children == t2.Root().children
-    requires t1.ValidRanking(ranking)
-    requires t2.ValidRanking(ranking)
     requires t1.AllSubtreesAreDisjoint()
     ensures t2.AllSubtreesAreDisjoint()
   {
@@ -892,14 +867,10 @@ module ReprBetreeRefinement
   // root is also dag-free
   // This is a wrapper around AgreeingDisksImpliesSubtreesAreDisjoint
   lemma SameChildrenImpliesRepresentationIsDagFree(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking)
-    requires t1.WF()
-    requires t2.WF()
+    requires RootedWithRanking(t1, ranking)
+    requires RootedWithRanking(t2, ranking)
     requires t1.diskView.AgreesWithDisk(t2.diskView)
-    requires t1.HasRoot()
-    requires t2.HasRoot()
     requires t1.Root().children == t2.Root().children
-    requires t1.ValidRanking(ranking)
-    requires t2.ValidRanking(ranking)
     requires t1.RepresentationIsDagFree()
     ensures t2.RepresentationIsDagFree()
   {
@@ -1020,8 +991,6 @@ module ReprBetreeRefinement
   // Theorem: The new left child after split has representation contained in old child representation
   lemma SplittedLeftChildRepresentation(
     linked: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
-    requires linked.WF()
-    requires replacement.WF()
     requires linked.ValidRanking(ranking)
     requires replacement.ValidRanking(ranking)
     requires linked.CanSplitParent(request)
@@ -1060,8 +1029,6 @@ module ReprBetreeRefinement
   // Theorem: The new right child after split has representation contained in old child representation
   lemma SplittedRightChildRepresentation(
     linked: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
-    requires linked.WF()
-    requires replacement.WF()
     requires linked.ValidRanking(ranking)
     requires replacement.ValidRanking(ranking)
     requires linked.CanSplitParent(request)
@@ -1100,8 +1067,6 @@ module ReprBetreeRefinement
 
   lemma {:timeLimitMultiplier 2} SplittedChildRepresentation(
     linked: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
-    requires linked.WF()
-    requires replacement.WF()
     requires linked.ValidRanking(ranking)
     requires replacement.ValidRanking(ranking)
     requires linked.CanSplitParent(request)
@@ -1324,7 +1289,6 @@ module ReprBetreeRefinement
   lemma {:timeLimitMultiplier 2} ReplacementSubtreeRepresentationContainment(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementRanking: Ranking)
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.linked.Acyclic()
-    requires replacement.Acyclic()
 
     // RankingAfterSubstitution requirements
     requires replacement.ValidRanking(replacementRanking)
@@ -1370,13 +1334,12 @@ module ReprBetreeRefinement
   }
 
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacement(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)
-    requires path.Valid()
+    requires path.CanSubstitute(replacement, pathAddrs)
     requires path.linked.RepresentationIsDagFree()
     requires path.Target().Root().buffers.Equivalent(compactedBuffers)
     requires path.Target().diskView.IsFresh({replacementAddr})
     requires replacement == LB.InsertCompactReplacement(path.Target(), compactedBuffers, replacementAddr)
     requires replacement.ValidRanking(replacementRanking)
-    requires replacement.Acyclic()
     requires path.AddrsOnPath() !! replacement.Representation()
 
     //RankingAfterSubstitution requirements
@@ -1384,7 +1347,6 @@ module ReprBetreeRefinement
     requires Set(pathAddrs) !! replacementRanking.Keys
     requires PathAddrsFresh(path, replacement, pathAddrs)
 
-    requires path.CanSubstitute(replacement, pathAddrs)
     ensures path.Substitute(replacement, pathAddrs).Acyclic()  // prereq
     ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()  // prereq
     ensures path.Substitute(replacement, pathAddrs).BuildTightTree().Representation()
@@ -1412,14 +1374,13 @@ module ReprBetreeRefinement
   // This juicy lemma requires a lot of juice
   lemma {:timeLimitMultiplier 3} ReprAfterSubstituteReplacementInduction1(path: Path, replacement: LinkedBetree, 
       pathAddrs: PathAddrs, additions: set<Address>, subtractions:set<Address>, ranking: Ranking)
-    requires path.Valid()
+    requires path.CanSubstitute(replacement, pathAddrs)
     requires path.linked.RepresentationIsDagFree()
     requires 0 < path.depth
-    requires path.CanSubstitute(replacement, pathAddrs)
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Acyclic()
-    requires replacement.Acyclic()
+
     // Requirements of Ranking. Would be the result of some lemma such as RankingAfterInsertCompactReplacement
     requires path.linked.root.value in ranking
     requires replacement.ValidRanking(ranking)
@@ -1494,17 +1455,16 @@ module ReprBetreeRefinement
   // This juicy lemma requires a lot of juice
   lemma {:timeLimitMultiplier 3} ReprAfterSubstituteReplacementInduction2(path: Path, replacement: LinkedBetree, 
     pathAddrs: PathAddrs, additions: set<Address>, subtractions: set<Address>, ranking: Ranking)
-    requires path.Valid()
-    requires 0 < path.depth
     requires path.CanSubstitute(replacement, pathAddrs)
+    requires replacement.ValidRanking(ranking)
+    requires 0 < path.depth
     requires path.Substitute(replacement, pathAddrs).Acyclic()
     requires path.Substitute(replacement, pathAddrs).BuildTightTree().Acyclic()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).Acyclic()
-    requires replacement.Acyclic()
     requires path.Subpath().Substitute(replacement, pathAddrs[1..]).BuildTightTree().Acyclic()
     // Requirements of Ranking. Would be the result of some lemma such as RankingAfterInsertCompactReplacement
     requires path.linked.root.value in ranking
-    requires replacement.ValidRanking(ranking)
+    
     // Framing
     requires PathAddrsFresh(path, replacement, pathAddrs)
     requires path.Target().diskView.IsFresh(additions)
@@ -1617,6 +1577,7 @@ module ReprBetreeRefinement
     var linkedRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
     LBR.ValidRankingAllTheWayDown(linkedRanking, step.path);
     var replacementRanking := LBR.RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, linkedRanking, step.targetAddr);
+    // TODO: can get rid of if
     if linked.HasRoot() {
       InsertCompactReplacementExcludesAddrsOnPath(step.path, replacement, step.compactedBuffers, step.targetAddr);
       ReprAfterSubstituteCompactReplacement(step.path, step.compactedBuffers, replacement, replacementRanking, step.pathAddrs, step.targetAddr); 
@@ -1642,12 +1603,10 @@ module ReprBetreeRefinement
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteFlushReplacement(
     path: Path, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, 
     pathAddrs: PathAddrs, replacementRanking: Ranking)
-    requires path.Valid()
+    requires path.CanSubstitute(replacement, pathAddrs)
     requires path.linked.RepresentationIsDagFree()
     requires path.Target().Root().OccupiedChildIndex(childIdx)
     requires replacement == LB.InsertFlushReplacement(path.Target(), childIdx, replacementAddr, replacementChildAddr)
-    requires path.CanSubstitute(replacement, pathAddrs)
-    requires replacement.Acyclic()
     requires replacement.ValidRanking(replacementRanking)
 
     // Framing
@@ -1696,13 +1655,10 @@ module ReprBetreeRefinement
 
   lemma ReprAfterSubstituteFlushReplacementBaseCase(
     linked: LinkedBetree, replacement: LinkedBetree, childIdx: nat, replacementAddr: Address, replacementChildAddr: Address, ranking: Ranking)
-    requires linked.Acyclic()
+    requires RootedWithRanking(linked, ranking)
     requires linked.RepresentationIsDagFree()
-    requires linked.HasRoot()
     requires linked.Root().OccupiedChildIndex(childIdx)
     requires replacement == LB.InsertFlushReplacement(linked, childIdx, replacementAddr, replacementChildAddr)
-    requires linked.ValidRanking(ranking)
-    requires replacement.Acyclic()
     requires replacement.ValidRanking(ranking)
     requires replacement.BuildTightTree().Acyclic()
     // Framing
@@ -1860,12 +1816,10 @@ module ReprBetreeRefinement
   lemma {:timeLimitMultiplier 3} ReprAfterSubstituteSplitReplacement(
     path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs,
     pathAddrs: PathAddrs, replacementRanking: Ranking)
-    requires path.Valid()
+    requires path.CanSubstitute(replacement, pathAddrs)
     requires path.linked.RepresentationIsDagFree()
     requires path.Target().CanSplitParent(request)
     requires replacement == path.Target().SplitParent(request, newAddrs)
-    requires path.CanSubstitute(replacement, pathAddrs)
-    requires replacement.Acyclic()
     requires replacement.ValidRanking(replacementRanking)
 
     // Framing
@@ -1913,17 +1867,13 @@ module ReprBetreeRefinement
 
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteSplitReplacementBaseCase(
     linked: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
-    requires linked.Acyclic()
+    requires RootedWithRanking(linked, ranking)
+    requires RootedWithRanking(replacement, ranking)
     requires linked.RepresentationIsDagFree()
     requires linked.CanSplitParent(request)
     requires replacement == linked.SplitParent(request, newAddrs);
-    requires linked.HasRoot()
-    requires replacement.Acyclic()
-    requires replacement.HasRoot()
     requires replacement.Root().MyDomain() == linked.Root().MyDomain()
     requires linked.diskView.IsSubDisk(replacement.diskView)
-    requires linked.ValidRanking(ranking)
-    requires replacement.ValidRanking(ranking)
     requires replacement.BuildTightTree().Acyclic()
     // Framing
     requires linked.diskView.IsFresh(newAddrs.Repr())
@@ -2002,6 +1952,7 @@ module ReprBetreeRefinement
     var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => replacement.ChildAtIdx(i).ReachableAddrsUsingRanking(replacement.TheRanking()));
     var childIdx := request.childIdx;
 
+    // TODO: Can the base and inductive case be factored into one argument?
     if path.depth == 0 {
       // Base case
       var linked := path.linked;
@@ -2115,6 +2066,7 @@ module ReprBetreeRefinement
 /*****************************************************************************************
 *                            Prove Steps Maintain Dag-Free                               *
 *****************************************************************************************/
+  // TODO: When we get to Verus, try using linear types to replace this Dag-Free argument
 
   lemma InternalGrowPreservesDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
@@ -2162,12 +2114,10 @@ module ReprBetreeRefinement
 
   // This super lemma is used in all steps that involves substitute.
   lemma {:timeLimitMultiplier 4} DagFreeAfterSubstituteReplacement(
-    path: Path, replacement: LinkedBetree, additions: set<Address>,
-    pathAddrs: PathAddrs, replacementRanking: Ranking) 
-    requires path.Valid()
-    requires path.linked.RepresentationIsDagFree()
+    path: Path, replacement: LinkedBetree, additions: set<Address>, pathAddrs: PathAddrs, replacementRanking: Ranking) 
     requires path.CanSubstitute(replacement, pathAddrs)
-    requires replacement.Acyclic()
+    requires path.linked.RepresentationIsDagFree()
+    requires replacement.ValidRanking(replacementRanking)
     requires replacement.RepresentationIsDagFree()
     requires path.Target().Acyclic()
     requires replacement.Representation() <= path.Target().Representation() + additions;
@@ -2177,7 +2127,6 @@ module ReprBetreeRefinement
     requires PathAddrsFresh(path, replacement, pathAddrs)
 
     // RankingAfterSubstitution requirements
-    requires replacement.ValidRanking(replacementRanking)
     requires path.linked.root.value in replacementRanking
     requires Set(pathAddrs) !! replacementRanking.Keys
 
@@ -2369,12 +2318,10 @@ module ReprBetreeRefinement
 
   lemma {:timeLimitMultiplier 2} SplitReplacementChildrenAreDagFree(
     target: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, newRanking: Ranking)
-    requires target.WF()
     requires target.ValidRanking(newRanking)
     requires target.RepresentationIsDagFree()
     requires target.CanSplitParent(request)
     requires replacement == target.SplitParent(request, newAddrs)
-    requires replacement.WF()
     requires replacement.ValidRanking(newRanking)
 
     // Framing
@@ -2507,12 +2454,10 @@ module ReprBetreeRefinement
 
   lemma ReplacementSubtreesAreDisjointBothNotSplitted(
     target: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, i:nat, j: nat, newRanking: Ranking)
-    requires target.WF()
     requires target.ValidRanking(newRanking)
     requires target.RepresentationIsDagFree()
     requires target.CanSplitParent(request)
     requires replacement == target.SplitParent(request, newAddrs)
-    requires replacement.WF()
     requires replacement.ValidRanking(newRanking)
     // both not pivot
     requires replacement.Root().ValidChildIndex(i)
@@ -2562,12 +2507,10 @@ module ReprBetreeRefinement
 
   lemma ReplacementSubtreesAreDisjointOneIsSplitted(
     target: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, i:nat, j: nat, newRanking: Ranking)
-    requires target.WF()
     requires target.ValidRanking(newRanking)
     requires target.RepresentationIsDagFree()
     requires target.CanSplitParent(request)
     requires replacement == target.SplitParent(request, newAddrs)
-    requires replacement.WF()
     requires replacement.ValidRanking(newRanking)
     // One is pivot
     requires replacement.Root().ValidChildIndex(i)
@@ -2617,12 +2560,10 @@ module ReprBetreeRefinement
 
   lemma {:timeLimitMultiplier 4} ReplacementSubtreesAreDisjointBothAreSplitted(
     target: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, i:nat, j: nat, newRanking: Ranking)
-    requires target.WF()
     requires target.ValidRanking(newRanking)
     requires target.RepresentationIsDagFree()
     requires target.CanSplitParent(request)
     requires replacement == target.SplitParent(request, newAddrs)
-    requires replacement.WF()
     requires replacement.ValidRanking(newRanking)
     // both are pivot
     requires i == request.childIdx
@@ -2683,12 +2624,10 @@ module ReprBetreeRefinement
 
   lemma SplitReplacementIsDagFree(
     target: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, newRanking: Ranking)
-    requires target.WF()
     requires target.ValidRanking(newRanking)
     requires target.RepresentationIsDagFree()
     requires target.CanSplitParent(request)
     requires replacement == target.SplitParent(request, newAddrs)
-    requires replacement.WF()
     requires replacement.ValidRanking(newRanking)
     // Framing
     requires target.diskView.IsFresh(newAddrs.Repr())    
@@ -2767,6 +2706,7 @@ module ReprBetreeRefinement
     requires Next(v, v', lbl)
     ensures Inv(v')
   {
+    // TODO: Just call LBR.InvNext, rather then doing it cases by case
     var step: Step :| NextStep(v, v', lbl, step);
     match step {
       case QueryStep(receipt) => {

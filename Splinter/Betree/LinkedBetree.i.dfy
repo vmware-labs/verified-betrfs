@@ -300,13 +300,14 @@ module LinkedBetreeMod
 
     // Together with NodeChildrenRespectsRank, this says that ranking is closed
     predicate ValidRanking(ranking: Ranking)
-      requires WF()
     {
-      forall addr |
-        && addr in ranking
-        && addr in entries
-      ::
-        NodeChildrenRespectsRank(ranking, addr)
+      && WF()
+      && (forall addr |
+            && addr in ranking
+            && addr in entries
+          ::
+            NodeChildrenRespectsRank(ranking, addr)
+      )
     }
 
     predicate IsFresh(addrs: set<Address>) {
@@ -380,8 +381,8 @@ module LinkedBetreeMod
 
     // this says that ranking is closed
     predicate ValidRanking(ranking: Ranking)
-      requires WF()
     {
+      && WF()
       && diskView.ValidRanking(ranking)
       && (HasRoot() ==> root.value in ranking)  // ranking covers tree from this root
     }

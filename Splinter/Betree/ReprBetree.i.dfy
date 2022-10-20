@@ -186,6 +186,7 @@ module ReprBetree
   {
     && lbl.InternalAllocationsLabel?
     && LinkedBetreeMod.InternalCompact(v.betree, v'.betree, lbl.I(), step.I())
+    // TODO: readability trap -- step.pathAddrs excludes target, but step.AddrsOnPath does.
     && var newAddrs := Set(step.pathAddrs) + {step.targetAddr};
     && var discardAddrs := step.path.AddrsOnPath();
     && v' == v.(
