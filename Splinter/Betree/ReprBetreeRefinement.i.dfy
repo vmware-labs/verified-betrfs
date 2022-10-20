@@ -41,10 +41,14 @@ module ReprBetreeRefinement
     && LBR.Inv(v.betree)
     && ValidRepr(v)                                    // v.repr == Representation
     && v.betree.linked.DiskIsTightWrtRepresentation()  // diskView == Representation
+    // For every node in linked repr, that node's children have disjoint repr's
     && v.betree.linked.RepresentationIsDagFree()
   }
 
-  //******** PROVE INVARIANTS ********//
+
+/*****************************************************************************************
+*                              Definitions and Theorems                                  *
+*****************************************************************************************/
 
   predicate PathAddrsFresh(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs)
   {
@@ -112,7 +116,7 @@ module ReprBetreeRefinement
     }
   }
 
-    // Theorem: Wrapper around ReachableAddrsInAgreeingDisks
+  // Theorem: Wrapper around ReachableAddrsInAgreeingDisks
   lemma RepresentationInAgreeingDisks(t1: LinkedBetree, t2: LinkedBetree, ranking: Ranking) 
     requires t1.WF()
     requires t2.WF()
@@ -125,28 +129,6 @@ module ReprBetreeRefinement
     ReachableAddrsInAgreeingDisks(t1, t2, ranking);
     RepresentationSameAsReachable(t1, ranking);
     RepresentationSameAsReachable(t2, ranking);
-  }
-
-  lemma InternalGrowMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-    requires Inv(v)
-    requires NextStep(v, v', lbl, step)
-    requires step.InternalGrowStep?
-    requires v'.betree.linked.Acyclic()
-    ensures ValidRepr(v')
-  {
-    var linked := v.betree.linked;
-    var linked' := v'.betree.linked;
-    var oldRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
-    var newRanking := LBR.InsertGrowReplacementNewRanking(linked, oldRanking, step.newRootAddr);
-    if v.betree.linked.HasRoot() {
-      RepresentationSameAsReachable(linked, oldRanking);
-      LBR.ReachableAddrsIgnoresRanking(linked, oldRanking, newRanking);
-      var numChildren := |linked'.Root().children|;
-      var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked'.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
-      Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
-      ReachableAddrsInAgreeingDisks(linked, linked'.ChildAtIdx(0), newRanking);
-      RepresentationSameAsReachable(linked', newRanking);
-    }
   }
 
   // Theorem: All reachable addresses must have a lower smaller ranking than the root
@@ -201,71 +183,6 @@ module ReprBetreeRefinement
         var i :| 0 <= i < numChildren && addr in subTreeAddrs[i];
         var topAddr := linked.root.value;
         ReachableAddressesHaveLowerRank(subRoot, topAddr, ranking[topAddr], ranking);
-      }
-    }
-  }
-
-  lemma InternalFlushMemtableDeletesOldRoot(linked: LinkedBetree, linked':LinkedBetree, newBuffer: Buffer, newRootAddr:Address)
-    requires linked.Acyclic()
-    requires linked'.Acyclic()
-    requires linked.HasRoot()
-    requires linked.diskView.IsFresh({newRootAddr})
-    requires linked' == LB.InsertInternalFlushMemtableReplacement(linked, newBuffer, newRootAddr).BuildTightTree()
-    ensures linked.root.value !in linked'.diskView.entries
-  {
-    var oldRootAddr := linked.root.value;
-    var oldRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
-    var newRanking := oldRanking[newRootAddr := oldRanking[linked.root.value]];
-    var untightLinked := LB.InsertInternalFlushMemtableReplacement(linked, newBuffer, newRootAddr);
-    var numChildren := |untightLinked.Root().children|;
-    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => untightLinked.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
-    Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
-    forall i | 0 <= i < numChildren 
-    ensures oldRootAddr !in subTreeAddrs[i]
-    {
-      if untightLinked.ChildAtIdx(i).HasRoot() {
-        if oldRootAddr in untightLinked.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking) {
-          ReachableAddressesHaveLowerRank(untightLinked.ChildAtIdx(i), oldRootAddr, newRanking[oldRootAddr], newRanking);
-          assert false;
-        }
-      }
-    }
-    RepresentationSameAsReachable(untightLinked, newRanking);
-  }
-
-  lemma InternalFlushMemtableMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-    requires Inv(v)
-    requires NextStep(v, v', lbl, step)
-    requires step.InternalFlushMemtableStep?
-    requires v'.betree.linked.Acyclic()
-    ensures ValidRepr(v')
-  {
-    var linked := v.betree.linked;
-    var linked' := v'.betree.linked;
-    if linked.HasRoot() { 
-      var oldRootAddr := linked.root.value;
-      var oldRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
-      var newRanking := oldRanking[step.newRootAddr := oldRanking[linked.root.value]];
-      RepresentationSameAsReachable(linked', newRanking);
-      RepresentationSameAsReachable(linked, newRanking);
-      calc {
-        linked'.Representation();
-        linked'.ReachableAddrsUsingRanking(newRanking);
-          {
-            var numChildren := |linked'.Root().children|;
-            assert numChildren == |linked.Root().children|;
-            var subTreeAddrs' := seq(numChildren, i requires 0 <= i < numChildren => linked'.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
-            var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
-            forall i | 0 <= i < numChildren 
-            ensures subTreeAddrs'[i] ==  subTreeAddrs[i] {
-              ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(i), linked'.ChildAtIdx(i), newRanking);
-            }
-            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
-            Sets.UnionSeqOfSetsSoundness(subTreeAddrs');
-            InternalFlushMemtableDeletesOldRoot(linked, linked', Buffer(v.betree.memtable.mapp), step.newRootAddr);
-          }
-        linked.ReachableAddrsUsingRanking(linked.TheRanking()) + {step.newRootAddr} - {oldRootAddr};
-        v'.repr;
       }
     }
   }
@@ -334,20 +251,6 @@ module ReprBetreeRefinement
   {
     LBR.BuildTightPreservesRankingValidity(linked, linked.TheRanking());
     BuildTightRepresentationContainsDiskView(linked, linked.TheRanking());
-  }
-
-  lemma InternalFlushMemtablePreservesTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-    requires Inv(v)
-    requires NextStep(v, v', lbl, step)
-    requires step.InternalFlushMemtableStep?
-    requires v'.betree.linked.Acyclic()
-    ensures v'.betree.linked.DiskIsTightWrtRepresentation()
-  {
-    var newBuffer := Buffer(v.betree.memtable.mapp);
-    var untightLinked :=  LB.InsertInternalFlushMemtableReplacement(v.betree.linked, newBuffer, step.newRootAddr);
-    if v.betree.linked.HasRoot() {
-      BuildTightGivesTightWrtRepresentation(untightLinked);
-    }
   }
   
   lemma ChildAtIdxCommutesWithBuildTight(linked: LinkedBetree, idx: nat, ranking: Ranking) 
@@ -1114,6 +1017,310 @@ module ReprBetreeRefinement
     }
   }
 
+  // Theorem: The new left child after split has representation contained in old child representation
+  lemma SplittedLeftChildRepresentation(
+    linked: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
+    requires linked.WF()
+    requires replacement.WF()
+    requires linked.ValidRanking(ranking)
+    requires replacement.ValidRanking(ranking)
+    requires linked.CanSplitParent(request)
+    requires replacement == linked.SplitParent(request, newAddrs);
+    // Framing
+    requires linked.diskView.IsFresh(newAddrs.Repr())
+
+    ensures replacement.ChildAtIdx(request.childIdx).Acyclic()
+    ensures linked.ChildAtIdx(request.childIdx).Acyclic()
+    ensures replacement.ChildAtIdx(request.childIdx).Representation() <= linked.ChildAtIdx(request.childIdx).Representation() + {newAddrs.left}
+  {
+    LBR.ChildAtIdxAcyclic(linked, request.childIdx);
+    LBR.ChildAtIdxAcyclic(replacement, request.childIdx);
+    var oldChild := linked.ChildAtIdx(request.childIdx);
+    var newLeft := replacement.ChildAtIdx(request.childIdx);
+    if newLeft.HasRoot() {
+      forall addr | addr in newLeft.Representation()
+      ensures addr in oldChild.Representation() + {newAddrs.left}
+      {
+        if addr != newLeft.root.value {
+          var numChildren := |newLeft.Root().children|;
+          var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => newLeft.ChildAtIdx(i).ReachableAddrsUsingRanking(newLeft.TheRanking()));
+          assert exists idx :: 0 <= idx < numChildren && addr in subTreeAddrs[idx] by {
+            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+          }
+          var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
+          LBR.ChildAtIdxAcyclic(newLeft, idx);
+          RepresentationSameAsReachable(newLeft.ChildAtIdx(idx), newLeft.TheRanking());
+          RepresentationInAgreeingDisks(newLeft.ChildAtIdx(idx), oldChild.ChildAtIdx(idx), ranking);
+          ParentRepresentationContainsChildRepresentation(oldChild, idx);
+        }
+      }
+    }
+  }
+
+  // Theorem: The new right child after split has representation contained in old child representation
+  lemma SplittedRightChildRepresentation(
+    linked: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
+    requires linked.WF()
+    requires replacement.WF()
+    requires linked.ValidRanking(ranking)
+    requires replacement.ValidRanking(ranking)
+    requires linked.CanSplitParent(request)
+    requires replacement == linked.SplitParent(request, newAddrs);
+    // Framing
+    requires linked.diskView.IsFresh(newAddrs.Repr())
+
+    ensures replacement.ChildAtIdx(request.childIdx+1).Acyclic()
+    ensures linked.ChildAtIdx(request.childIdx).Acyclic()
+    ensures replacement.ChildAtIdx(request.childIdx+1).Representation() <= linked.ChildAtIdx(request.childIdx).Representation() + {newAddrs.right}
+  {
+    LBR.ChildAtIdxAcyclic(linked, request.childIdx);
+    LBR.ChildAtIdxAcyclic(replacement, request.childIdx+1);
+    var oldChild := linked.ChildAtIdx(request.childIdx);
+    var newRight := replacement.ChildAtIdx(request.childIdx+1);
+    if newRight.HasRoot() {
+      forall addr | addr in newRight.Representation()
+      ensures addr in oldChild.Representation() + {newAddrs.right}
+      {
+        if addr != newRight.root.value {
+          var numChildren := |newRight.Root().children|;
+          var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => newRight.ChildAtIdx(i).ReachableAddrsUsingRanking(newRight.TheRanking()));
+          assert exists idx :: 0 <= idx < numChildren && addr in subTreeAddrs[idx] by {
+            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+          }
+          var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
+          var childPivotIdx := request.childPivotIdx;
+          LBR.ChildAtIdxAcyclic(newRight, idx);
+          RepresentationSameAsReachable(newRight.ChildAtIdx(idx), newRight.TheRanking());
+          RepresentationInAgreeingDisks(newRight.ChildAtIdx(idx), oldChild.ChildAtIdx(idx+childPivotIdx), ranking);
+          ParentRepresentationContainsChildRepresentation(oldChild, idx+childPivotIdx);
+        }
+      }
+    }
+  }
+
+  lemma {:timeLimitMultiplier 2} SplittedChildRepresentation(
+    linked: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
+    requires linked.WF()
+    requires replacement.WF()
+    requires linked.ValidRanking(ranking)
+    requires replacement.ValidRanking(ranking)
+    requires linked.CanSplitParent(request)
+    requires replacement == linked.SplitParent(request, newAddrs);
+    // Framing
+    requires linked.diskView.IsFresh(newAddrs.Repr())
+
+    ensures replacement.ChildAtIdx(request.childIdx).ReachableAddrsUsingRanking(ranking) +  replacement.ChildAtIdx(request.childIdx+1).ReachableAddrsUsingRanking(ranking)
+            == linked.ChildAtIdx(request.childIdx).ReachableAddrsUsingRanking(ranking) + {newAddrs.left, newAddrs.right} - {linked.ChildAtIdx(request.childIdx).root.value} 
+  {
+    var new1 := replacement.ChildAtIdx(request.childIdx);
+    var new2 := replacement.ChildAtIdx(request.childIdx + 1);
+    var old1 := linked.ChildAtIdx(request.childIdx);
+    var numChildren1 := |new1.Root().children|;
+    var subTreeAddrs1 := seq(numChildren1, i requires 0 <= i < numChildren1 => new1.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+    var numChildren2 := |new2.Root().children|;
+    var subTreeAddrs2 := seq(numChildren2, i requires 0 <= i < numChildren2 => new2.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+
+    assert old1.root.value !in new1.ReachableAddrsUsingRanking(ranking) 
+    by {
+      forall idx | 0 <= idx < numChildren1
+      ensures old1.root.value !in subTreeAddrs1[idx]
+      {
+        if old1.root.value in subTreeAddrs1[idx] {
+          ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(idx), new1.ChildAtIdx(idx), ranking);
+          assert old1.ValidRanking(ranking);  // trigger
+          assert old1.ChildAtIdx(idx).ValidRanking(ranking);  // trigger
+          RepresentationSameAsReachable(old1.ChildAtIdx(idx), ranking);
+          AddrInChildRepresentationImpliesNotRoot(old1, idx, old1.root.value);
+          assert false;
+        }
+      }
+      Sets.UnionSeqOfSetsSoundnessContrapositive(subTreeAddrs1, old1.root.value);
+    }
+
+    assert old1.root.value !in new2.ReachableAddrsUsingRanking(ranking) 
+    by {
+      forall idx | 0 <= idx < numChildren2
+      ensures old1.root.value !in subTreeAddrs2[idx]
+      {
+        if old1.root.value in subTreeAddrs2[idx] {
+          ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(idx + request.childPivotIdx), new2.ChildAtIdx(idx), ranking);
+          assert old1.ValidRanking(ranking);  // trigger
+          assert old1.ChildAtIdx(idx + request.childPivotIdx).ValidRanking(ranking);  // trigger
+          RepresentationSameAsReachable(old1.ChildAtIdx(idx + request.childPivotIdx), ranking);
+          AddrInChildRepresentationImpliesNotRoot(old1, idx + request.childPivotIdx, old1.root.value);
+          assert false;
+        }
+      }
+      Sets.UnionSeqOfSetsSoundnessContrapositive(subTreeAddrs2, old1.root.value);
+    }
+    
+    // assert LHS <= RHS
+    forall x | x in new1.ReachableAddrsUsingRanking(ranking) + new2.ReachableAddrsUsingRanking(ranking)
+    ensures x in old1.ReachableAddrsUsingRanking(ranking) + {newAddrs.left, newAddrs.right} - {old1.root.value} 
+    {
+      if x in new1.ReachableAddrsUsingRanking(ranking) {
+        if x == new1.root.value {
+          assert x == newAddrs.left;
+        } else {
+          Sets.UnionSeqOfSetsSoundness(subTreeAddrs1);
+          var i :| 0 <= i < numChildren1 && x in subTreeAddrs1[i];
+          ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(i), new1.ChildAtIdx(i), ranking);
+          ParentReacheableContainsChildReacheable(old1, i, ranking);
+        }
+      } else {
+        // Case: x in new2.ReachableAddrsUsingRanking(ranking). 
+        // Similar argument to above, with request.childPivotIdx offset
+        if x == new2.root.value {
+          assert x == newAddrs.right;
+        } else {
+          Sets.UnionSeqOfSetsSoundness(subTreeAddrs2);
+          var i :| 0 <= i < numChildren2 && x in subTreeAddrs2[i];
+          ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(i + request.childPivotIdx), new2.ChildAtIdx(i), ranking);
+          ParentReacheableContainsChildReacheable(old1, i + request.childPivotIdx, ranking);
+        }
+      }
+    }
+
+    // assert RHS <= LHS
+    forall x | x in old1.ReachableAddrsUsingRanking(ranking) + {newAddrs.left, newAddrs.right} - {old1.root.value} 
+    ensures x in new1.ReachableAddrsUsingRanking(ranking) + new2.ReachableAddrsUsingRanking(ranking) 
+    {
+      if x == newAddrs.left {
+        assert x in new1.ReachableAddrsUsingRanking(ranking);
+      } else if x == newAddrs.right {
+        assert x in new2.ReachableAddrsUsingRanking(ranking);
+      } else {
+        // Case: x in old1.ReachableAddrsUsingRanking(ranking) - {old1.root.value}
+        var numChildren := |old1.Root().children|;
+        var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => old1.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+        if request.SplitLeaf? {
+          // in this case, old1.Representation() == {old1.root}, hence can't contain x
+          assert false by {
+            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+          }  
+        } else {
+          assert exists i :: 0 <= i < numChildren && x in subTreeAddrs[i] by {
+            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+          }
+          var i :| 0 <= i < numChildren && x in subTreeAddrs[i];
+          if i < request.childPivotIdx {
+            ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(i), new1.ChildAtIdx(i), ranking);
+            ParentReacheableContainsChildReacheable(new1, i, ranking);
+          } else {
+            ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(i), new2.ChildAtIdx(i - request.childPivotIdx), ranking);
+            ParentReacheableContainsChildReacheable(new2, i - request.childPivotIdx, ranking);
+          }
+        }
+      }
+    }
+  }
+
+/*****************************************************************************************
+*                       Prove Steps Maintain Repr and Tight Disk                         *
+*****************************************************************************************/
+
+  lemma InternalFlushMemtableDeletesOldRoot(linked: LinkedBetree, linked':LinkedBetree, newBuffer: Buffer, newRootAddr:Address)
+    requires linked.Acyclic()
+    requires linked'.Acyclic()
+    requires linked.HasRoot()
+    requires linked.diskView.IsFresh({newRootAddr})
+    requires linked' == LB.InsertInternalFlushMemtableReplacement(linked, newBuffer, newRootAddr).BuildTightTree()
+    ensures linked.root.value !in linked'.diskView.entries
+  {
+    var oldRootAddr := linked.root.value;
+    var oldRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
+    var newRanking := oldRanking[newRootAddr := oldRanking[linked.root.value]];
+    var untightLinked := LB.InsertInternalFlushMemtableReplacement(linked, newBuffer, newRootAddr);
+    var numChildren := |untightLinked.Root().children|;
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => untightLinked.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
+    Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+    forall i | 0 <= i < numChildren 
+    ensures oldRootAddr !in subTreeAddrs[i]
+    {
+      if untightLinked.ChildAtIdx(i).HasRoot() {
+        if oldRootAddr in untightLinked.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking) {
+          ReachableAddressesHaveLowerRank(untightLinked.ChildAtIdx(i), oldRootAddr, newRanking[oldRootAddr], newRanking);
+          assert false;
+        }
+      }
+    }
+    RepresentationSameAsReachable(untightLinked, newRanking);
+  }
+
+  lemma InternalFlushMemtableMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushMemtableStep?
+    requires v'.betree.linked.Acyclic()
+    ensures ValidRepr(v')
+  {
+    var linked := v.betree.linked;
+    var linked' := v'.betree.linked;
+    if linked.HasRoot() { 
+      var oldRootAddr := linked.root.value;
+      var oldRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
+      var newRanking := oldRanking[step.newRootAddr := oldRanking[linked.root.value]];
+      RepresentationSameAsReachable(linked', newRanking);
+      RepresentationSameAsReachable(linked, newRanking);
+      calc {
+        linked'.Representation();
+        linked'.ReachableAddrsUsingRanking(newRanking);
+          {
+            var numChildren := |linked'.Root().children|;
+            assert numChildren == |linked.Root().children|;
+            var subTreeAddrs' := seq(numChildren, i requires 0 <= i < numChildren => linked'.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
+            var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
+            forall i | 0 <= i < numChildren 
+            ensures subTreeAddrs'[i] ==  subTreeAddrs[i] {
+              ReachableAddrsInAgreeingDisks(linked.ChildAtIdx(i), linked'.ChildAtIdx(i), newRanking);
+            }
+            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+            Sets.UnionSeqOfSetsSoundness(subTreeAddrs');
+            InternalFlushMemtableDeletesOldRoot(linked, linked', Buffer(v.betree.memtable.mapp), step.newRootAddr);
+          }
+        linked.ReachableAddrsUsingRanking(linked.TheRanking()) + {step.newRootAddr} - {oldRootAddr};
+        v'.repr;
+      }
+    }
+  }
+
+  lemma InternalFlushMemtablePreservesTightDisk(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushMemtableStep?
+    requires v'.betree.linked.Acyclic()
+    ensures v'.betree.linked.DiskIsTightWrtRepresentation()
+  {
+    var newBuffer := Buffer(v.betree.memtable.mapp);
+    var untightLinked :=  LB.InsertInternalFlushMemtableReplacement(v.betree.linked, newBuffer, step.newRootAddr);
+    if v.betree.linked.HasRoot() {
+      BuildTightGivesTightWrtRepresentation(untightLinked);
+    }
+  }
+
+  lemma InternalGrowMaintainsRepr(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalGrowStep?
+    requires v'.betree.linked.Acyclic()
+    ensures ValidRepr(v')
+  {
+    var linked := v.betree.linked;
+    var linked' := v'.betree.linked;
+    var oldRanking := LBR.BuildTightRanking(linked, linked.TheRanking());
+    var newRanking := LBR.InsertGrowReplacementNewRanking(linked, oldRanking, step.newRootAddr);
+    if v.betree.linked.HasRoot() {
+      RepresentationSameAsReachable(linked, oldRanking);
+      LBR.ReachableAddrsIgnoresRanking(linked, oldRanking, newRanking);
+      var numChildren := |linked'.Root().children|;
+      var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => linked'.ChildAtIdx(i).ReachableAddrsUsingRanking(newRanking));
+      Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+      ReachableAddrsInAgreeingDisks(linked, linked'.ChildAtIdx(0), newRanking);
+      RepresentationSameAsReachable(linked', newRanking);
+    }
+  }
+
+
   lemma {:timeLimitMultiplier 2} ReplacementSubtreeRepresentationContainment(path: Path, replacement: LinkedBetree, pathAddrs: PathAddrs, replacementRanking: Ranking)
     requires path.CanSubstitute(replacement, pathAddrs)
     requires path.linked.Acyclic()
@@ -1162,7 +1369,6 @@ module ReprBetreeRefinement
     }
   }
 
-  // Tony: this lemma is sprawling massive...
   lemma {:timeLimitMultiplier 2} ReprAfterSubstituteCompactReplacement(path: Path, compactedBuffers: BufferStack, replacement: LinkedBetree, replacementRanking: Ranking, pathAddrs: PathAddrs, replacementAddr: Address)
     requires path.Valid()
     requires path.linked.RepresentationIsDagFree()
@@ -1775,204 +1981,6 @@ module ReprBetreeRefinement
     RepresentationIgnoresBuildTight(replacement);
   }
 
-  // Theorem: The new left child after split has representation contained in old child representation
-  lemma SplittedLeftChildRepresentation(
-    linked: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
-    requires linked.WF()
-    requires replacement.WF()
-    requires linked.ValidRanking(ranking)
-    requires replacement.ValidRanking(ranking)
-    requires linked.CanSplitParent(request)
-    requires replacement == linked.SplitParent(request, newAddrs);
-    // Framing
-    requires linked.diskView.IsFresh(newAddrs.Repr())
-
-    ensures replacement.ChildAtIdx(request.childIdx).Acyclic()
-    ensures linked.ChildAtIdx(request.childIdx).Acyclic()
-    ensures replacement.ChildAtIdx(request.childIdx).Representation() <= linked.ChildAtIdx(request.childIdx).Representation() + {newAddrs.left}
-  {
-    LBR.ChildAtIdxAcyclic(linked, request.childIdx);
-    LBR.ChildAtIdxAcyclic(replacement, request.childIdx);
-    var oldChild := linked.ChildAtIdx(request.childIdx);
-    var newLeft := replacement.ChildAtIdx(request.childIdx);
-    if newLeft.HasRoot() {
-      forall addr | addr in newLeft.Representation()
-      ensures addr in oldChild.Representation() + {newAddrs.left}
-      {
-        if addr != newLeft.root.value {
-          var numChildren := |newLeft.Root().children|;
-          var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => newLeft.ChildAtIdx(i).ReachableAddrsUsingRanking(newLeft.TheRanking()));
-          assert exists idx :: 0 <= idx < numChildren && addr in subTreeAddrs[idx] by {
-            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
-          }
-          var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
-          LBR.ChildAtIdxAcyclic(newLeft, idx);
-          RepresentationSameAsReachable(newLeft.ChildAtIdx(idx), newLeft.TheRanking());
-          RepresentationInAgreeingDisks(newLeft.ChildAtIdx(idx), oldChild.ChildAtIdx(idx), ranking);
-          ParentRepresentationContainsChildRepresentation(oldChild, idx);
-        }
-      }
-    }
-  }
-
-  // Theorem: The new right child after split has representation contained in old child representation
-  lemma SplittedRightChildRepresentation(
-    linked: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
-    requires linked.WF()
-    requires replacement.WF()
-    requires linked.ValidRanking(ranking)
-    requires replacement.ValidRanking(ranking)
-    requires linked.CanSplitParent(request)
-    requires replacement == linked.SplitParent(request, newAddrs);
-    // Framing
-    requires linked.diskView.IsFresh(newAddrs.Repr())
-
-    ensures replacement.ChildAtIdx(request.childIdx+1).Acyclic()
-    ensures linked.ChildAtIdx(request.childIdx).Acyclic()
-    ensures replacement.ChildAtIdx(request.childIdx+1).Representation() <= linked.ChildAtIdx(request.childIdx).Representation() + {newAddrs.right}
-  {
-    LBR.ChildAtIdxAcyclic(linked, request.childIdx);
-    LBR.ChildAtIdxAcyclic(replacement, request.childIdx+1);
-    var oldChild := linked.ChildAtIdx(request.childIdx);
-    var newRight := replacement.ChildAtIdx(request.childIdx+1);
-    if newRight.HasRoot() {
-      forall addr | addr in newRight.Representation()
-      ensures addr in oldChild.Representation() + {newAddrs.right}
-      {
-        if addr != newRight.root.value {
-          var numChildren := |newRight.Root().children|;
-          var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => newRight.ChildAtIdx(i).ReachableAddrsUsingRanking(newRight.TheRanking()));
-          assert exists idx :: 0 <= idx < numChildren && addr in subTreeAddrs[idx] by {
-            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
-          }
-          var idx :| 0 <= idx < numChildren && addr in subTreeAddrs[idx];
-          var childPivotIdx := request.childPivotIdx;
-          LBR.ChildAtIdxAcyclic(newRight, idx);
-          RepresentationSameAsReachable(newRight.ChildAtIdx(idx), newRight.TheRanking());
-          RepresentationInAgreeingDisks(newRight.ChildAtIdx(idx), oldChild.ChildAtIdx(idx+childPivotIdx), ranking);
-          ParentRepresentationContainsChildRepresentation(oldChild, idx+childPivotIdx);
-        }
-      }
-    }
-  }
-
-  lemma {:timeLimitMultiplier 2} SplittedChildRepresentation(
-    linked: LinkedBetree, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs, ranking: Ranking)
-    requires linked.WF()
-    requires replacement.WF()
-    requires linked.ValidRanking(ranking)
-    requires replacement.ValidRanking(ranking)
-    requires linked.CanSplitParent(request)
-    requires replacement == linked.SplitParent(request, newAddrs);
-    // Framing
-    requires linked.diskView.IsFresh(newAddrs.Repr())
-
-    ensures replacement.ChildAtIdx(request.childIdx).ReachableAddrsUsingRanking(ranking) +  replacement.ChildAtIdx(request.childIdx+1).ReachableAddrsUsingRanking(ranking)
-            == linked.ChildAtIdx(request.childIdx).ReachableAddrsUsingRanking(ranking) + {newAddrs.left, newAddrs.right} - {linked.ChildAtIdx(request.childIdx).root.value} 
-  {
-    var new1 := replacement.ChildAtIdx(request.childIdx);
-    var new2 := replacement.ChildAtIdx(request.childIdx + 1);
-    var old1 := linked.ChildAtIdx(request.childIdx);
-    var numChildren1 := |new1.Root().children|;
-    var subTreeAddrs1 := seq(numChildren1, i requires 0 <= i < numChildren1 => new1.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
-    var numChildren2 := |new2.Root().children|;
-    var subTreeAddrs2 := seq(numChildren2, i requires 0 <= i < numChildren2 => new2.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
-
-    assert old1.root.value !in new1.ReachableAddrsUsingRanking(ranking) 
-    by {
-      forall idx | 0 <= idx < numChildren1
-      ensures old1.root.value !in subTreeAddrs1[idx]
-      {
-        if old1.root.value in subTreeAddrs1[idx] {
-          ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(idx), new1.ChildAtIdx(idx), ranking);
-          assert old1.ValidRanking(ranking);  // trigger
-          assert old1.ChildAtIdx(idx).ValidRanking(ranking);  // trigger
-          RepresentationSameAsReachable(old1.ChildAtIdx(idx), ranking);
-          AddrInChildRepresentationImpliesNotRoot(old1, idx, old1.root.value);
-          assert false;
-        }
-      }
-      Sets.UnionSeqOfSetsSoundnessContrapositive(subTreeAddrs1, old1.root.value);
-    }
-
-    assert old1.root.value !in new2.ReachableAddrsUsingRanking(ranking) 
-    by {
-      forall idx | 0 <= idx < numChildren2
-      ensures old1.root.value !in subTreeAddrs2[idx]
-      {
-        if old1.root.value in subTreeAddrs2[idx] {
-          ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(idx + request.childPivotIdx), new2.ChildAtIdx(idx), ranking);
-          assert old1.ValidRanking(ranking);  // trigger
-          assert old1.ChildAtIdx(idx + request.childPivotIdx).ValidRanking(ranking);  // trigger
-          RepresentationSameAsReachable(old1.ChildAtIdx(idx + request.childPivotIdx), ranking);
-          AddrInChildRepresentationImpliesNotRoot(old1, idx + request.childPivotIdx, old1.root.value);
-          assert false;
-        }
-      }
-      Sets.UnionSeqOfSetsSoundnessContrapositive(subTreeAddrs2, old1.root.value);
-    }
-    
-    // assert LHS <= RHS
-    forall x | x in new1.ReachableAddrsUsingRanking(ranking) + new2.ReachableAddrsUsingRanking(ranking)
-    ensures x in old1.ReachableAddrsUsingRanking(ranking) + {newAddrs.left, newAddrs.right} - {old1.root.value} 
-    {
-      if x in new1.ReachableAddrsUsingRanking(ranking) {
-        if x == new1.root.value {
-          assert x == newAddrs.left;
-        } else {
-          Sets.UnionSeqOfSetsSoundness(subTreeAddrs1);
-          var i :| 0 <= i < numChildren1 && x in subTreeAddrs1[i];
-          ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(i), new1.ChildAtIdx(i), ranking);
-          ParentReacheableContainsChildReacheable(old1, i, ranking);
-        }
-      } else {
-        // Case: x in new2.ReachableAddrsUsingRanking(ranking). 
-        // Similar argument to above, with request.childPivotIdx offset
-        if x == new2.root.value {
-          assert x == newAddrs.right;
-        } else {
-          Sets.UnionSeqOfSetsSoundness(subTreeAddrs2);
-          var i :| 0 <= i < numChildren2 && x in subTreeAddrs2[i];
-          ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(i + request.childPivotIdx), new2.ChildAtIdx(i), ranking);
-          ParentReacheableContainsChildReacheable(old1, i + request.childPivotIdx, ranking);
-        }
-      }
-    }
-
-    // assert RHS <= LHS
-    forall x | x in old1.ReachableAddrsUsingRanking(ranking) + {newAddrs.left, newAddrs.right} - {old1.root.value} 
-    ensures x in new1.ReachableAddrsUsingRanking(ranking) + new2.ReachableAddrsUsingRanking(ranking) 
-    {
-      if x == newAddrs.left {
-        assert x in new1.ReachableAddrsUsingRanking(ranking);
-      } else if x == newAddrs.right {
-        assert x in new2.ReachableAddrsUsingRanking(ranking);
-      } else {
-        // Case: x in old1.ReachableAddrsUsingRanking(ranking) - {old1.root.value}
-        var numChildren := |old1.Root().children|;
-        var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => old1.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
-        if request.SplitLeaf? {
-          // in this case, old1.Representation() == {old1.root}, hence can't contain x
-          assert false by {
-            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
-          }  
-        } else {
-          assert exists i :: 0 <= i < numChildren && x in subTreeAddrs[i] by {
-            Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
-          }
-          var i :| 0 <= i < numChildren && x in subTreeAddrs[i];
-          if i < request.childPivotIdx {
-            ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(i), new1.ChildAtIdx(i), ranking);
-            ParentReacheableContainsChildReacheable(new1, i, ranking);
-          } else {
-            ReachableAddrsInAgreeingDisks(old1.ChildAtIdx(i), new2.ChildAtIdx(i - request.childPivotIdx), ranking);
-            ParentReacheableContainsChildReacheable(new2, i - request.childPivotIdx, ranking);
-          }
-        }
-      }
-    }
-  }
-
   // Prove step.path.AddrsOnPath() !! replacement.Representation(); 
   lemma {:timeLimitMultiplier 2} InsertSplitReplacementExcludesAddrsOnPath(
     path: Path, replacement: LinkedBetree, request: SplitRequest, newAddrs: SplitAddrs)
@@ -2103,6 +2111,10 @@ module ReprBetreeRefinement
       BuildTightGivesTightWrtRepresentation(untightLinked');
     }
   }
+
+/*****************************************************************************************
+*                            Prove Steps Maintain Dag-Free                               *
+*****************************************************************************************/
 
   lemma InternalGrowPreservesDagFree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
@@ -2745,6 +2757,11 @@ module ReprBetreeRefinement
     BuildTightPreservesDagFree(path.Substitute(replacement, step.pathAddrs));
   }
 
+
+/*****************************************************************************************
+*                                       InvNext                                          *
+*****************************************************************************************/
+
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel) 
     requires Inv(v)
     requires Next(v, v', lbl)
@@ -2811,7 +2828,9 @@ module ReprBetreeRefinement
   }
 
 
-  //******** PROVE REFINEMENT ********//
+/*****************************************************************************************
+*                                      Refinement                                        *
+*****************************************************************************************/
 
   lemma InitRefines(v: Variables, gcBetree: GCStampedBetree)
     requires Init(v, gcBetree)
