@@ -300,13 +300,14 @@ module LinkedBetreeMod
 
     // Together with NodeChildrenRespectsRank, this says that ranking is closed
     predicate ValidRanking(ranking: Ranking)
-      requires WF()
     {
-      forall addr |
-        && addr in ranking
-        && addr in entries
-      ::
-        NodeChildrenRespectsRank(ranking, addr)
+      && WF()
+      && (forall addr |
+            && addr in ranking
+            && addr in entries
+          ::
+            NodeChildrenRespectsRank(ranking, addr)
+      )
     }
 
     predicate IsFresh(addrs: set<Address>) {
@@ -380,8 +381,8 @@ module LinkedBetreeMod
 
     // this says that ranking is closed
     predicate ValidRanking(ranking: Ranking)
-      requires WF()
     {
+      && WF()
       && diskView.ValidRanking(ranking)
       && (HasRoot() ==> root.value in ranking)  // ranking covers tree from this root
     }
@@ -436,6 +437,16 @@ module LinkedBetreeMod
       requires Acyclic()
     {
       diskView.entries.Keys == Representation()
+    }
+
+    predicate RepresentationIsDagFree()
+      requires Acyclic()
+    {
+      forall addr | 
+        && addr in Representation()
+        && diskView.GetEntryAsLinked(addr).HasRoot()
+      :: 
+        diskView.GetEntryAsLinked(addr).AllSubtreesAreDisjoint()
     }
     
     predicate CanSplitParent(request: SplitRequest)
@@ -524,6 +535,33 @@ module LinkedBetreeMod
         }
       }
       assert dv.NodeHasLinkedChildren(dv.entries[newAddrs.parent]);  // trigger
+    }
+
+    // Subtree representations have null intersections
+    predicate SubtreesAreDisjoint(i: nat, j: nat) 
+      requires WF()
+      requires HasRoot()
+      requires Root().ValidChildIndex(i)
+      requires Root().ValidChildIndex(j)
+      requires ChildAtIdx(i).Acyclic()
+      requires ChildAtIdx(j).Acyclic()
+      requires i != j
+    {
+      ChildAtIdx(i).Representation() !! ChildAtIdx(j).Representation()
+    }
+
+    predicate AllSubtreesAreDisjoint() 
+      requires WF()
+      requires HasRoot()
+    {
+      forall i, j | 
+          && i != j 
+          && 0 <= i < |Root().children| 
+          && 0 <= j < |Root().children|
+          && ChildAtIdx(i).Acyclic()
+          && ChildAtIdx(j).Acyclic()
+      :: 
+        SubtreesAreDisjoint(i, j)
     }
   }
 

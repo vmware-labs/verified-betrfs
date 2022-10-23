@@ -169,4 +169,10 @@ module Sets {
       }
     }
   }
+
+  lemma DisjointnessOfSubset<T>(small: set<T>, large: set<T>, other: set<T>)
+    requires small <= large
+    requires large !! other
+    ensures small !! other
+  {}
 }

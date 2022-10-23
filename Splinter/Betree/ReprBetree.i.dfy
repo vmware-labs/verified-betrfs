@@ -186,6 +186,7 @@ module ReprBetree
   {
     && lbl.InternalAllocationsLabel?
     && LinkedBetreeMod.InternalCompact(v.betree, v'.betree, lbl.I(), step.I())
+    // TODO: readability trap -- step.pathAddrs excludes target, but step.AddrsOnPath does.
     && var newAddrs := Set(step.pathAddrs) + {step.targetAddr};
     && var discardAddrs := step.path.AddrsOnPath();
     && v' == v.(
@@ -246,11 +247,13 @@ module ReprBetree
     && v' == v
   }
 
+
   predicate Init(v: Variables, gcBetree: GCStampedBetree)
   {
     var linked := gcBetree.stamped.value;
     && linked.Acyclic()
     && linked.DiskIsTightWrtRepresentation()
+    && linked.RepresentationIsDagFree()
     && v == Variables(
       LinkedBetreeMod.Variables(EmptyMemtable(gcBetree.stamped.seqEnd), linked),
       linked.Representation(),

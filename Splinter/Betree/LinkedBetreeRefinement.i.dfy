@@ -320,7 +320,9 @@ module LinkedBetreeRefinement {
             IChildren(linked, linked.TheRanking())).Child(key);
       }
     } else {
-      calc {  // trigger
+      // the assert and calc are all triggers
+      assert PivotBetree.BetreeNode(linked.Root().buffers, linked.Root().pivotTable, IChildren(linked, linked.TheRanking())).KeyInDomain(key);
+      calc {
         PivotBetree.Nil;
         PivotBetree.BetreeNode(linked.Root().buffers, linked.Root().pivotTable, IChildren(linked, linked.TheRanking())).Child(key);
       }
@@ -696,7 +698,7 @@ module LinkedBetreeRefinement {
     var rankingAfterReplacement := RankingAfterInsertCompactReplacement(step.path.Target(), step.compactedBuffers, oldRanking, step.targetAddr);
     var newRanking := RankingAfterSubstitution(replacement, rankingAfterReplacement, step.path, step.pathAddrs);
     var linkedAfterSubstitution := step.path.Substitute(replacement, step.pathAddrs);
-    BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
+    BuildTightPreservesRankingValidity(linkedAfterSubstitution, newRanking);
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
   }
 
@@ -712,7 +714,7 @@ module LinkedBetreeRefinement {
     var rankingAfterReplacement := RankingAfterInsertFlushReplacement(step.path.Target(), oldRanking, step.childIdx, step.targetAddr, step.targetChildAddr);
     var newRanking := RankingAfterSubstitution(replacement, rankingAfterReplacement, step.path, step.pathAddrs);
     var linkedAfterSubstitution := step.path.Substitute(replacement, step.pathAddrs);
-    BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
+    BuildTightPreservesRankingValidity(linkedAfterSubstitution, newRanking);
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
   }
 
@@ -727,6 +729,8 @@ module LinkedBetreeRefinement {
       var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
       var oldRootRank := oldRanking[v.linked.root.value];
       var newRanking := oldRanking[step.newRootAddr := oldRootRank+1];  // witness
+      assert v.linked.diskView.IsFresh({step.newRootAddr});  // trigger
+      assert newRoot.WF();  // trigger
       BuildTightPreservesWF(newRoot, newRanking);
       assert v'.linked.ValidRanking(newRanking);
     } else {
@@ -795,7 +799,7 @@ module LinkedBetreeRefinement {
     var linkedAfterSubstitution := step.path.Substitute(replacement, step.pathAddrs);
     var newRanking := RankingAfterSubstitution(replacement, rankingAfterReplacement, step.path, step.pathAddrs);
     BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
-    BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
+    BuildTightPreservesRankingValidity(linkedAfterSubstitution, newRanking);
   }
 
   lemma ReachableAddrsIgnoresRanking(linked: LinkedBetree, r1: Ranking, r2: Ranking)
@@ -818,7 +822,7 @@ module LinkedBetreeRefinement {
     }
   }
 
-  lemma BuildTightMaintainsRankingValidity(linked: LinkedBetree, ranking: Ranking)
+  lemma BuildTightPreservesRankingValidity(linked: LinkedBetree, ranking: Ranking)
     requires linked.WF()
     requires linked.ValidRanking(ranking)
     ensures linked.BuildTightTree().WF()
@@ -877,7 +881,7 @@ module LinkedBetreeRefinement {
   {
     var ranking := linked.TheRanking();
     BuildTightPreservesWF(linked, ranking);
-    BuildTightMaintainsRankingValidity(linked, ranking);
+    BuildTightPreservesRankingValidity(linked, ranking);
     DiskSubsetImpliesIdenticalInterpretationsWithRanking(linked.BuildTightTree(), linked, ranking);
     ILinkedBetreeIgnoresRanking(linked.BuildTightTree(), ranking, linked.BuildTightTree().TheRanking());
   }
@@ -1398,6 +1402,24 @@ module LinkedBetreeRefinement {
     TargetCommutesWithI(step.path);
   }
 
+  lemma InsertInternalFlushMemtableNewRanking(linked: LinkedBetree, newBuffer: Buffer, oldRanking: Ranking, newRootAddr: Address) returns (newRanking: Ranking)
+    requires linked.WF()
+    requires RootCoversTotalDomain(linked)
+    requires linked.ValidRanking(oldRanking)
+    requires RankingIsTight(linked.diskView, oldRanking)
+    requires linked.diskView.IsFresh({newRootAddr})
+    ensures InsertInternalFlushMemtableReplacement(linked, newBuffer, newRootAddr).ValidRanking(newRanking)
+    ensures newRanking.Keys == oldRanking.Keys + {newRootAddr}
+    ensures IsSubMap(oldRanking, newRanking);
+  {
+    if linked.HasRoot() {
+      var oldRootRank := oldRanking[linked.root.value];
+      newRanking := oldRanking[newRootAddr := oldRootRank+1];  // witness
+    } else {
+      newRanking := oldRanking[newRootAddr := 0];
+    }
+  }
+
   lemma InternalFlushMemtableStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires v.linked.Acyclic()
@@ -1409,10 +1431,9 @@ module LinkedBetreeRefinement {
     InvNext(v, v', lbl);
     var replacement := InsertInternalFlushMemtableReplacement(v.linked, Buffer(v.memtable.mapp), step.newRootAddr);
     BuildTightPreservesInterpretation(replacement);
+    var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
+    var newRanking := InsertInternalFlushMemtableNewRanking(v.linked, Buffer(v.memtable.mapp), oldRanking, step.newRootAddr);
     if v.linked.HasRoot() {
-      var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
-      var oldRootRank := oldRanking[v.linked.root.value];
-      var newRanking := oldRanking[step.newRootAddr := oldRootRank+1];  // witness
       IChildrenIgnoresRanking(v.linked, v.linked.TheRanking(), newRanking);
       ILinkedBetreeIgnoresRanking(replacement, replacement.TheRanking(), newRanking);
       ILinkedBetreeIgnoresRanking(v.linked, v.linked.TheRanking(), newRanking);
@@ -1423,7 +1444,6 @@ module LinkedBetreeRefinement {
         IdenticalChildrenCommutesWithI(v.linked, i, replacement, i, newRanking);
       }  
     } else {
-      var newRanking := map[step.newRootAddr := 0];
       ILinkedBetreeIgnoresRanking(replacement, replacement.TheRanking(), newRanking);
       forall i | 0 <= i < |replacement.Root().children|   // trigger
       ensures ILinkedBetreeNode(replacement.ChildAtIdx(i), newRanking) == PivotBetree.Nil 
