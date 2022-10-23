@@ -40,7 +40,7 @@ state_machine!{ CrashTolerantJournal {
     #[is_variant]  // TODO: verus! should always make enum variants
     pub enum Label{
         LoadEphemeralFromPersistentLabel,
-        ReadForRecoveryLabel{ records: MsgHistory},
+        ReadForRecoveryLabel{ records: MsgHistory },
         QueryEndLsnLabel{ end_lsn: LSN },
         PutLabel{ records: MsgHistory },
         InternalLabel,
@@ -56,6 +56,7 @@ state_machine!{ CrashTolerantJournal {
             require pre.ephemeral.is_Unknown();
             // TODO(verus): There has to be a better way to dictate which init procedure is called
             // require let AbstractJournal::Config::Init { .. } = journal_config;
+            require new_journal.journal === pre.persistent;
             require AbstractJournal::State::init_by(new_journal, journal_config);
             update ephemeral = Ephemeral::Known{ v: new_journal };
         }

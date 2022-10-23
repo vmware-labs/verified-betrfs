@@ -17,7 +17,7 @@ verus! {
 
     pub type StampedMap = Stamped<TotalKMMap>;
 
-    spec fn empty() -> StampedMap {
+    pub open spec fn empty() -> StampedMap {
         Stamped{ value: empty_total_map(), seq_end: 0}
     }
 }
