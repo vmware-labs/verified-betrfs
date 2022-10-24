@@ -54,9 +54,7 @@ state_machine!{ CrashTolerantJournal {
         load_ephemeral_from_persistent(lbl: Label, new_journal: AbstractJournal::State, journal_config: AbstractJournal::Config) {
             require lbl.is_LoadEphemeralFromPersistentLabel();
             require pre.ephemeral.is_Unknown();
-            // TODO(verus): There has to be a better way to dictate which init procedure is called
-            // require let AbstractJournal::Config::Init { .. } = journal_config;
-            require new_journal.journal === pre.persistent;
+            require journal_config === AbstractJournal::Config::Init(pre.persistent);
             require AbstractJournal::State::init_by(new_journal, journal_config);
             update ephemeral = Ephemeral::Known{ v: new_journal };
         }
@@ -67,7 +65,7 @@ state_machine!{ CrashTolerantJournal {
             require lbl.is_ReadForRecoveryLabel();
             require pre.ephemeral.is_Known();
             // TODO(verus): This seems very redundant with transition labels?
-            // require let AbstractJournal::Step::read_for_recovery { .. } = journal_step;
+            require let AbstractJournal::Step::read_for_recovery { .. } = journal_step;
             require AbstractJournal::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 

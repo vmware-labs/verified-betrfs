@@ -54,7 +54,7 @@ state_machine!{ CrashTolerantMap {
             require lbl.is_LoadEphemeralFromPersistentLabel();
             require pre.ephemeral.is_Unknown();
             require lbl.get_LoadEphemeralFromPersistentLabel_end_lsn() == pre.persistent.seq_end;
-            require new_map.stamped_map === pre.persistent;
+            require map_config === AbstractMap::Config::Init(pre.persistent);
             require AbstractMap::State::init_by(new_map, map_config);
             update ephemeral = Ephemeral::Known{ v: new_map };
         }
