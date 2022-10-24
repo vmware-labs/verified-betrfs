@@ -28,7 +28,7 @@ state_machine!{ AbstractJournal {
     }
 
     init!{ 
-        Init(persistent_journal: MsgHistory) {
+        initialize(persistent_journal: MsgHistory) {
             init journal = persistent_journal;
         }
     }

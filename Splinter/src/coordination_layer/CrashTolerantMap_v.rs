@@ -31,7 +31,7 @@ state_machine!{ CrashTolerantMap {
     }
 
     init!{
-        Init() {
+        initialize() {
             init persistent = empty();
             init ephemeral = Ephemeral::Unknown;
             init in_flight = Option::None;
@@ -50,18 +50,18 @@ state_machine!{ CrashTolerantMap {
     }
 
     transition!{
-        LoadEphemeralFromPersistent(lbl: Label, new_map: AbstractMap::State, map_config: AbstractMap::Config) {
+        load_ephemeral_from_persistent(lbl: Label, new_map: AbstractMap::State, map_config: AbstractMap::Config) {
             require lbl.is_LoadEphemeralFromPersistentLabel();
             require pre.ephemeral.is_Unknown();
             require lbl.get_LoadEphemeralFromPersistentLabel_end_lsn() == pre.persistent.seq_end;
-            require map_config === AbstractMap::Config::Init(pre.persistent);
+            require map_config === AbstractMap::Config::initialize(pre.persistent);
             require AbstractMap::State::init_by(new_map, map_config);
             update ephemeral = Ephemeral::Known{ v: new_map };
         }
     }
 
     transition!{
-        PutRecords(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
+        put_records(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
             require lbl.is_PutRecordsLabel();
             require pre.ephemeral.is_Known();
             // TODO: It seems that map_step and the label both serve the same purpose, and labels are made redundant?
@@ -76,7 +76,7 @@ state_machine!{ CrashTolerantMap {
     }
 
     transition!{
-        Query(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
+        query(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
             require lbl.is_QueryLabel();
             require pre.ephemeral.is_Known();
             require map_step === AbstractMap::Step::query();
@@ -93,7 +93,7 @@ state_machine!{ CrashTolerantMap {
     }
 
     transition!{
-        FreezeMapInternal(lbl: Label, frozen_map: StampedMap, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
+        freeze_map_internal(lbl: Label, frozen_map: StampedMap, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
             require lbl.is_InternalLabel();
             require pre.ephemeral.is_Known();
             require pre.in_flight.is_None();
@@ -109,7 +109,7 @@ state_machine!{ CrashTolerantMap {
     }
 
     transition!{
-        EphemeralInternal(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
+        ephemeral_internal(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
             require lbl.is_InternalLabel();
             require pre.ephemeral.is_Known();
             require map_step === AbstractMap::Step::internal();
@@ -123,7 +123,7 @@ state_machine!{ CrashTolerantMap {
     }
 
     transition!{
-        CommitStart(lbl: Label) {
+        commit_start(lbl: Label) {
             require lbl.is_CommitStartLabel();
             require pre.ephemeral.is_Known();
             require pre.in_flight.is_Some();
@@ -133,7 +133,7 @@ state_machine!{ CrashTolerantMap {
     }
 
     transition!{
-        CommitComplete(lbl: Label) {
+        commit_complete(lbl: Label) {
             require lbl.is_CommitCompleteLabel();
             require pre.in_flight.is_Some();
             update persistent = pre.in_flight.get_Some_0();
@@ -142,7 +142,7 @@ state_machine!{ CrashTolerantMap {
     }
 
     transition!{
-        Crash(lbl: Label) {
+        crash(lbl: Label) {
             require lbl.is_CrashLabel();
             update ephemeral = Ephemeral::Unknown;
             update in_flight = Option::None;

@@ -24,7 +24,7 @@ state_machine!{ AbstractMap {
     }
 
     init!{ 
-        Init(persistent_map: StampedMap) {
+        initialize(persistent_map: StampedMap) {
             init stamped_map = persistent_map;
         }
     }

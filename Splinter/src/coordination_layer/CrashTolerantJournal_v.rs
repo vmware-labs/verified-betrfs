@@ -30,7 +30,7 @@ state_machine!{ CrashTolerantJournal {
     }
 
     init!{
-        Init() {
+        initialize() {
             init persistent = MsgHistory{ msgs: Map::empty(), seq_start: 0, seq_end: 0};
             init ephemeral = Ephemeral::Unknown;
             init in_flight = Option::None;
@@ -54,7 +54,7 @@ state_machine!{ CrashTolerantJournal {
         load_ephemeral_from_persistent(lbl: Label, new_journal: AbstractJournal::State, journal_config: AbstractJournal::Config) {
             require lbl.is_LoadEphemeralFromPersistentLabel();
             require pre.ephemeral.is_Unknown();
-            require journal_config === AbstractJournal::Config::Init(pre.persistent);
+            require journal_config === AbstractJournal::Config::initialize(pre.persistent);
             require AbstractJournal::State::init_by(new_journal, journal_config);
             update ephemeral = Ephemeral::Known{ v: new_journal };
         }

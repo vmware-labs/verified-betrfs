@@ -149,7 +149,7 @@ state_machine!{ CrashTolerantAsyncMap {
     }
 
     // TODO(travis): init!{} with no body produces confusing error message
-    init!{ Init() {
+    init!{ initialize() {
         // Translate InitState?
         // TODO eeww we had to propagate predicate style up to here, and it's getting gross, all
         // because MapSpec::State::my_init was a predicate.
