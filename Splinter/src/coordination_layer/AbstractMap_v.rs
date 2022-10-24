@@ -51,5 +51,11 @@ state_machine!{ AbstractMap {
             require lbl.get_FreezeAsLabel_stamped_map() === pre.stamped_map;
         }
     }
+
+    transition!{
+        internal(lbl: Label) {
+            require lbl.is_InternalLabel();
+        }
+    }
 }}
 }

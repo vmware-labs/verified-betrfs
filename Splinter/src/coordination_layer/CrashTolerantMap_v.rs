@@ -64,6 +64,8 @@ state_machine!{ CrashTolerantMap {
         PutRecords(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
             require lbl.is_PutRecordsLabel();
             require pre.ephemeral.is_Known();
+            // TODO: It seems that map_step and the label both serve the same purpose, and labels are made redundant?
+            require map_step === AbstractMap::Step::put();
             require AbstractMap::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_map,
@@ -77,6 +79,7 @@ state_machine!{ CrashTolerantMap {
         Query(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
             require lbl.is_QueryLabel();
             require pre.ephemeral.is_Known();
+            require map_step === AbstractMap::Step::query();
             require AbstractMap::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_map,
@@ -94,6 +97,7 @@ state_machine!{ CrashTolerantMap {
             require lbl.is_InternalLabel();
             require pre.ephemeral.is_Known();
             require pre.in_flight.is_None();
+            require map_step === AbstractMap::Step::freeze_as();
             require AbstractMap::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_map,
@@ -108,6 +112,7 @@ state_machine!{ CrashTolerantMap {
         EphemeralInternal(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
             require lbl.is_InternalLabel();
             require pre.ephemeral.is_Known();
+            require map_step === AbstractMap::Step::internal();
             require AbstractMap::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_map,

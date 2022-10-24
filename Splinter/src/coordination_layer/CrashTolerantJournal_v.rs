@@ -65,7 +65,7 @@ state_machine!{ CrashTolerantJournal {
             require lbl.is_ReadForRecoveryLabel();
             require pre.ephemeral.is_Known();
             // TODO(verus): This seems very redundant with transition labels?
-            require let AbstractJournal::Step::read_for_recovery { .. } = journal_step;
+            require journal_step === AbstractJournal::Step::read_for_recovery();
             require AbstractJournal::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
@@ -80,6 +80,7 @@ state_machine!{ CrashTolerantJournal {
         query_end_lsn(lbl: Label, new_journal: AbstractJournal::State, journal_step: AbstractJournal::Step) {
             require lbl.is_QueryEndLsnLabel();
             require pre.ephemeral.is_Known();
+            require journal_step === AbstractJournal::Step::observe_fresh_journal();
             require AbstractJournal::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
@@ -94,6 +95,7 @@ state_machine!{ CrashTolerantJournal {
         put(lbl: Label, new_journal: AbstractJournal::State, journal_step: AbstractJournal::Step) {
             require lbl.is_PutLabel();
             require pre.ephemeral.is_Known();
+            require journal_step === AbstractJournal::Step::put();
             require AbstractJournal::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
@@ -108,6 +110,7 @@ state_machine!{ CrashTolerantJournal {
         internal(lbl: Label, new_journal: AbstractJournal::State, journal_step: AbstractJournal::Step) {
             require lbl.is_InternalLabel();
             require pre.ephemeral.is_Known();
+            require journal_step === AbstractJournal::Step::internal();
             require AbstractJournal::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
@@ -141,7 +144,7 @@ state_machine!{ CrashTolerantJournal {
 
             // There should be no way for the frozen journal to have passed the ephemeral map!
             require frozen_journal.seq_start <= lbl.get_CommitStartLabel_max_lsn();
-
+            require journal_step === AbstractJournal::Step::freeze_for_commit();
             require AbstractJournal::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
@@ -158,6 +161,7 @@ state_machine!{ CrashTolerantJournal {
             require lbl.is_CommitCompleteLabel();
             require pre.ephemeral.is_Known();
             require pre.in_flight.is_Some();
+            require journal_step === AbstractJournal::Step::discard_old();
             require AbstractJournal::State::next_by(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
