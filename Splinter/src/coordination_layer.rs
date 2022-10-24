@@ -4,3 +4,4 @@ pub mod AbstractJournal_v;
 pub mod AbstractMap_v;
 pub mod CrashTolerantJournal_v;
 pub mod CrashTolerantMap_v;
+pub mod CoordinationSystem_v;
