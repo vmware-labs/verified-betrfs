@@ -1076,6 +1076,7 @@ module BranchedBetreeMod
         case QueryStep(receipt) => receipt.Valid()
         case InternalFlushMemtableStep(_, branch) => 
           && branch.Acyclic()
+          && branch.AllKeysInRange()
           && branch.TightDiskView()
         case InternalSplitStep(path, request, newAddrs, pathAddrs) =>
           && path.Valid()

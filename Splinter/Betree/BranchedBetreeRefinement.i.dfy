@@ -131,6 +131,14 @@ module BranchedBetreeRefinement {
     assert IBranchedBetree(branched).ValidRanking(branched.TheRanking());
   }
 
+  function I(v: Variables) : (out: LinkedBetree.Variables)
+    // requires v.WF()
+    requires v.branched.WF()
+    requires v.branched.Valid()
+  {
+    LinkedBetree.Variables(v.memtable, IBranchedBetree(v.branched))
+  }
+
   // Interpretation functions for Path
   function IPath(path: Path) : LinkedBetree.Path
     requires path.Valid()
@@ -465,7 +473,7 @@ module BranchedBetreeRefinement {
 
   // Branch Functions and Lemmas
 
-  function TightRanking(branch: LinkedBranch) : (out: Ranking)
+  function BranchTightRanking(branch: LinkedBranch) : (out: Ranking)
     requires branch.Acyclic()
     ensures branch.ValidRanking(out)
     ensures out.Keys <= branch.ReachableAddrs()
@@ -478,7 +486,7 @@ module BranchedBetreeRefinement {
       forall addr | addr in tightRanking && addr in branch.diskView.entries 
         ensures branch.diskView.NodeChildrenRespectsRank(tightRanking, addr)
       {
-        ReachableAddrClosed(branch, ranking, addr);
+        BranchReachableAddrClosed(branch, ranking, addr);
         assert branch.diskView.NodeChildrenRespectsRank(tightRanking, addr);
       }
     }
@@ -486,7 +494,7 @@ module BranchedBetreeRefinement {
     tightRanking
   }
 
-  lemma ChildrenAreReachable(branch: LinkedBranch, ranking: Ranking)
+  lemma BranchChildrenAreReachable(branch: LinkedBranch, ranking: Ranking)
     requires branch.WF()
     requires branch.Root().Index?
     requires branch.ValidRanking(ranking)
@@ -504,7 +512,7 @@ module BranchedBetreeRefinement {
     }
   }
 
-  lemma ReachableAddrClosed(branch: LinkedBranch, ranking: Ranking, addr: Address)
+  lemma BranchReachableAddrClosed(branch: LinkedBranch, ranking: Ranking, addr: Address)
     requires branch.WF()
     requires branch.ValidRanking(ranking)
     requires addr in branch.ReachableAddrsUsingRanking(ranking)
@@ -517,7 +525,7 @@ module BranchedBetreeRefinement {
     var node := branch.diskView.entries[addr];
     if node.Index? {
       if addr == branch.root {
-        ChildrenAreReachable(branch, ranking);
+        BranchChildrenAreReachable(branch, ranking);
       } else {
         var numChildren := |branch.Root().children|;
         var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => 
@@ -525,8 +533,52 @@ module BranchedBetreeRefinement {
         
         UnionSeqOfSetsSoundness(subTreeAddrs);
         var k :| 0 <= k < numChildren && addr in subTreeAddrs[k];
-        ReachableAddrClosed(branch.ChildAtIdx(k), ranking, addr);
+        BranchReachableAddrClosed(branch.ChildAtIdx(k), ranking, addr);
       }
+    }
+  }
+
+  // TODO: no better way than repeating this code?
+  // linked's children are always in the reachable set
+  lemma BetreeChildrenAreReachable(branched: BranchedBetree, ranking: Ranking)
+    requires branched.WF()
+    requires branched.ValidRanking(ranking)
+    requires branched.HasRoot()
+    ensures
+      forall i | 0 <= i < |branched.Root().children| && branched.Root().children[i].Some? ::
+        branched.ChildAtIdx(i).root.value in branched.ReachableAddrsUsingRanking(ranking)
+  {
+    var numChildren := |branched.Root().children|;
+    var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => branched.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+    forall i | 0 <= i < numChildren && branched.Root().children[i].Some?
+    ensures branched.ChildAtIdx(i).root.value in branched.ReachableAddrsUsingRanking(ranking)
+    {
+      var childAddr := branched.ChildAtIdx(i).root.value;
+      assert childAddr in subTreeAddrs[i];
+    }
+  }
+
+  // TODO: no better way than repeating this code?
+  lemma BetreeReachableAddrClosed(branched: BranchedBetree, ranking: Ranking, addr: Address)
+    requires branched.WF()
+    requires branched.ValidRanking(ranking)
+    requires branched.HasRoot()
+    requires addr in branched.ReachableAddrsUsingRanking(ranking)
+    ensures
+      var node := branched.diskView.entries[addr];
+      forall i | 0 <= i < |node.children| && node.children[i].Some? ::
+        node.children[i].value in branched.ReachableAddrsUsingRanking(ranking)
+    decreases branched.GetRank(ranking)
+  {
+    if addr == branched.root.value {
+      BetreeChildrenAreReachable(branched, ranking);
+    } else {
+      var numChildren := |branched.Root().children|;
+      var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => branched.ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
+      assert addr in Sets.UnionSeqOfSets(subTreeAddrs);
+      Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
+      var k :| 0 <= k < numChildren && addr in subTreeAddrs[k];
+      BetreeReachableAddrClosed(branched.ChildAtIdx(k), ranking, addr);
     }
   }
 
@@ -661,7 +713,7 @@ module BranchedBetreeRefinement {
       var branch := if r == branch.root then branch else branches.GetBranch(r);
       var outBranch := out.GetBranch(r);
       
-      assert outBranch.ValidRanking(TightRanking(branch)); // trigger
+      assert outBranch.ValidRanking(BranchTightRanking(branch)); // trigger
       SameAllKeysInRangeForValidRankings(branch, branch.TheRanking(), outBranch.TheRanking());
       SameAllKeysInRangeForDiskSubSet(branch, outBranch, outBranch.TheRanking());
 
@@ -683,6 +735,7 @@ module BranchedBetreeRefinement {
     var branch := branches.GetBranch(root);
 
     assert (forall r | r in out.roots :: out.diskView.ValidAddress(r));
+
     // TODO: prove this, likely need to connect Reachable Addrs to nodes in diskView
     // this may require another predicate in WF that says things in diskview only reachable
     // addrs of something have reference of it
@@ -692,5 +745,226 @@ module BranchedBetreeRefinement {
     // && (forall root | root in roots :: GetBranch(root).AllKeysInRange()) // uhoh
     // && BranchesDisjoint()
     assume false;
+  }
+
+  lemma BetreeTightPreservesWF(branched: BranchedBetree, ranking: Ranking)
+    requires branched.WF()
+    requires branched.ValidRanking(ranking)
+    ensures branched.BuildTightTree().WF()
+    decreases branched.GetRank(ranking)
+  {
+    forall addr | addr in branched.BuildTightTree().diskView.entries
+    ensures branched.BuildTightTree().diskView.NodeHasNondanglingChildPtrs(branched.BuildTightTree().diskView.entries[addr])
+    {
+      BetreeReachableAddrClosed(branched, branched.TheRanking(), addr);
+    }
+  }
+
+  // TODO: feels too much copy pasting
+  lemma BetreeTightRanking(branched: BranchedBetree, ranking: Ranking) returns (tightRanking : Ranking)
+    requires branched.WF()
+    requires branched.ValidRanking(ranking)
+    ensures branched.diskView.entries.Keys <= tightRanking.Keys
+    ensures branched.ValidRanking(tightRanking)
+  {
+    tightRanking := map addr | addr in branched.diskView.entries && addr in ranking :: ranking[addr];
+  }
+
+  lemma ValidRankingAllTheWayDown(ranking: Ranking, path: Path)
+    requires path.Valid()
+    requires path.branched.ValidRanking(ranking)
+    ensures 0 < path.depth ==> path.Subpath().branched.ValidRanking(ranking)
+    ensures path.Target().ValidRanking(ranking)
+    decreases path.depth
+  {
+    if 0 < path.depth {
+      ValidRankingAllTheWayDown(ranking, path.Subpath());
+    }
+  }
+
+  // Inv properties for each step
+  lemma InvNextInternalGrowStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalGrowStep?
+    ensures v'.branched.Acyclic()
+  {
+    var oldRanking := BetreeTightRanking(v.branched, v.branched.TheRanking());
+    var newRanking;
+
+    if v.branched.HasRoot() {
+      var oldRootRank := oldRanking[v.branched.root.value];
+      newRanking := oldRanking[step.newRootAddr := oldRootRank+1];
+    } else {
+      var newRootRank := if |oldRanking.Values| == 0 then 1 else SetMax(oldRanking.Values) + 1;
+      newRanking := oldRanking[step.newRootAddr := newRootRank];
+    }
+    var newRoot := InsertGrowReplacement(v.branched, step.newRootAddr);
+    BetreeTightPreservesWF(newRoot, newRanking);
+    assert v'.branched.ValidRanking(newRanking); // witness
+  }
+
+  // TODO: wait a bit, too much same thing
+  lemma InvNextInternalSplitStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalSplitStep?
+    ensures Inv(v')
+  {
+    var oldRanking := BetreeTightRanking(v.branched, v.branched.TheRanking());
+    var replacement := step.path.Target().SplitParent(step.request, step.newAddrs);
+  
+    ValidRankingAllTheWayDown(oldRanking, step.path);
+    // var rankingAfterReplacement := RankingAfterSplitReplacement(step.path.Target(), oldRanking, step.request, step.newAddrs);
+    // var linkedAfterSubstitution := step.path.Substitute(replacement, step.pathAddrs);
+    // var newRanking := RankingAfterSubstitution(replacement, rankingAfterReplacement, step.path, step.pathAddrs);
+    // BuildTightPreservesWF(linkedAfterSubstitution, newRanking);
+    // BuildTightMaintainsRankingValidity(linkedAfterSubstitution, newRanking);
+
+    assume false;
+  }
+  
+  lemma InvNextInternalFlushMemtableStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushMemtableStep?
+    ensures v'.branched.Acyclic()
+  {
+    var newRoot := InsertInternalFlushMemtableReplacement(v.branched, step.branch, step.newRootAddr);
+    AddBranchWF(v.branched.branches, step.branch);
+    assert newRoot.branches.WF();
+
+    if v.branched.HasRoot() {
+      var oldRanking := BetreeTightRanking(v.branched, v.branched.TheRanking());
+      var oldRootRank := oldRanking[v.branched.root.value];
+      var newRanking := oldRanking[step.newRootAddr := oldRootRank+1];  // witness
+      BetreeTightPreservesWF(newRoot, newRanking);
+      assert v'.branched.ValidRanking(newRanking);
+    } else {
+      var newRanking := map[step.newRootAddr := 0];  // witness
+      BetreeTightPreservesWF(newRoot, newRanking);
+      assert v'.branched.ValidRanking(newRanking);
+    }
+  }
+
+  lemma InvNextInternalPruneBranches(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalPruneBranchesStep?
+    ensures Inv(v')
+  {
+    RemoveBranchWF(v.branched.branches, step.rootToRemove);
+    assert v'.branched.branches.WF();
+    assert v'.branched.ValidRanking(v.branched.TheRanking());
+  }
+
+  predicate RootCoversTotalDomain(branched: BranchedBetree)
+    requires branched.WF()
+  {
+    branched.HasRoot() ==> branched.Root().MyDomain() == TotalDomain()
+  }
+
+  // // Properties a StampedBetree must carry from Freeze back to Init
+  predicate InvBranchedBetree(branched: BranchedBetree)
+  {
+    && branched.Acyclic()
+    && branched.Valid()
+    && RootCoversTotalDomain(branched)
+  }
+
+  predicate Inv(v: Variables)
+  {
+    && InvBranchedBetree(v.branched)
+    && v.WF()
+  }
+
+  lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    ensures Inv(v')
+  {
+    var step: Step :| NextStep(v, v', lbl, step);
+    match step {
+      case QueryStep(receipt) => {
+        assert Inv(v');
+      }
+      case PutStep() => {
+        assert Inv(v');
+      }
+      case QueryEndLsnStep() => {
+        assert Inv(v');
+      }
+      case FreezeAsStep() => {
+        assert Inv(v');
+      }
+      case InternalGrowStep(_) => {
+        InvNextInternalGrowStep(v, v', lbl, step);
+      }
+      case InternalSplitStep(_, _, _, _) => {
+        assume false;
+        // InvNextInternalSplitStep(v, v', lbl, step);
+      }
+      case InternalFlushStep(_, _, _, _, _, _) => {
+        assume false;
+        // InvNextInternalFlushStep(v, v', lbl, step);
+      }
+      case InternalFlushMemtableStep(_,_) => {
+        InvNextInternalFlushMemtableStep(v, v', lbl, step);
+      }
+      case InternalPruneBranchesStep(_) => {
+        InvNextInternalPruneBranches(v, v', lbl, step);
+      }
+      case InternalCompactStep(_, _, _, _, _, _) => {
+        // compact is a heavy one
+        assume false;
+        // InvNextInternalCompactStep(v, v', lbl, step);
+      }
+      case InternalNoOpStep() => {
+        assert Inv(v');
+      }
+    }
+  }
+
+  lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    ensures v'.WF()
+    ensures Inv(v')
+    ensures LinkedBetree.Next(I(v), I(v'), ILbl(lbl))
+  {
+    // InvNext(v, v', lbl);
+    // var step: Step :| NextStep(v, v', lbl, step);
+    // match step {
+    //   case QueryStep(receipt) => {
+    //     assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+    //   }
+    //   case PutStep() => {
+    //     assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+    //   }
+    //   case QueryEndLsnStep() => {
+    //     assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+    //   }
+    //   case FreezeAsStep() => {
+    //     assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+    //   }
+    //   case InternalGrowStep(_) => {
+    //     InternalGrowStepRefines(v, v', lbl, step);
+    //   }
+    //   case InternalSplitStep(_, _, _, _) => {
+    //     InternalSplitStepRefines(v, v', lbl, step);
+    //   }
+    //   case InternalFlushStep(_, _, _, _, _) => {
+    //     InternalFlushStepRefines(v, v', lbl, step);
+    //   }
+    //   case InternalFlushMemtableStep(_) => {
+    //     InternalFlushMemtableStepRefines(v, v', lbl, step);
+    //   }
+    //   case InternalCompactStep(_, _, _, _) => {
+    //     InternalCompactStepRefines(v, v', lbl, step);
+    //   }
+    //   case InternalNoOpStep() => {
+    //     assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+    //   }
+    // }
   }
 }

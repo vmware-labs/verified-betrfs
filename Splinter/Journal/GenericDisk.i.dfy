@@ -40,5 +40,27 @@ module GenericDisk {
       ptr.Some? ==> ptr.value in entries
     }
   }
+
+  // check journal linked layer
+  // safety: induction based
+  // TLA lets you write predicate over infinite sequence of state
+  // - spec (accepts a set of execution)
+  // - safety (also accept a set of execution)
+
+  // liveness:
+  // - you have to write different statements (much easier to understand if you look at sets of 
+  // executions and not a collapsed state)
+  // - proof also take advantage of the conciseness of high order description
+  // - you can't tell liveness unless you can see the infinite sequence of behaviors
+  //  (any finite sequence cannot invalidate that)
+
+  // performance properties are all safety properties
+  // - bounded steps before actions take place
+  // the proof you need to write still has the shape of a liveness proof
+
+  // 
+
+
+
 }
 
