@@ -12,7 +12,7 @@ set -x
 # and then point paths at it when running .net stuff. :v/
 # Here's jonh's hack:
 export DOTNET_ROOT=$HOME/dotnet5-manual
-export PATH=$PATH:$HOME/dotnet5-manual
+export PATH=$HOME/dotnet5-manual:$PATH
 
 dotnet --list-sdks | grep '^5.0'
 if [ $? -ne 0 ]; then
