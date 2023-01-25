@@ -168,7 +168,7 @@ impl<T> FloatingSeq<T> {
 // implement the trait fn. I have no idea what that means.
 // Chris reports that he and Travis have a design for a spec-fn proper type that would let us
 // type the original thing.
-pub open spec fn floating_seq<T>(start: nat, length: nat, f: impl Fn(int) -> T) -> FloatingSeq<T>
+pub open spec fn floating_seq<T>(start: nat, length: nat, f: FnSpec(int) -> T) -> FloatingSeq<T>
     recommends start <= length
 {
     FloatingSeq{start: start, entries: Seq::new((length-start) as nat, |i: int| f(i+start))}
