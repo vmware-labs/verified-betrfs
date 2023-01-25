@@ -13706,7 +13706,161 @@ mod coordination_layer {
         use builtin::*;
         use builtin_macros::*;
         use state_machines_macros::state_machine;
-        use crate::pervasive::{map::*};
+        use crate::pervasive::{*, map::*};
+        use crate::coordination_layer::CrashTolerantJournal_v::*;
+        use crate::coordination_layer::CrashTolerantMap_v::*;
+        use crate::coordination_layer::CrashTolerantMap_v;
+        use crate::coordination_layer::StampedMap_v::*;
+        type SyncReqId = nat;
+        type SyncReqs = Map<SyncReqId, LSN>;
+        type Label = CrashTolerantMap::Label;
+        pub enum Ephemeral {
+            Unknown,
+            Known {
+                progress: CrashTolerantMap_v::Ephemeral,
+                syncReqs: SyncReqs,
+                mapLsn: LSN,
+            },
+        }
+        #[automatically_derived]
+        impl Ephemeral {
+            #[spec]
+            #[verifier(is_variant("Unknown"))]
+            #[allow(non_snake_case)]
+            pub fn is_Unknown(&self) -> bool {
+                ::core::panicking::panic("not implemented")
+            }
+            #[spec]
+            #[verifier(is_variant("Known"))]
+            #[allow(non_snake_case)]
+            pub fn is_Known(&self) -> bool {
+                ::core::panicking::panic("not implemented")
+            }
+            #[spec]
+            #[allow(non_snake_case)]
+            #[verifier(get_variant(Known, progress))]
+            pub fn get_Known_progress(self) -> CrashTolerantMap_v::Ephemeral {
+                ::core::panicking::panic("not implemented")
+            }
+            #[spec]
+            #[allow(non_snake_case)]
+            #[verifier(get_variant(Known, syncReqs))]
+            pub fn get_Known_syncReqs(self) -> SyncReqs {
+                ::core::panicking::panic("not implemented")
+            }
+            #[spec]
+            #[allow(non_snake_case)]
+            #[verifier(get_variant(Known, mapLsn))]
+            pub fn get_Known_mapLsn(self) -> LSN {
+                ::core::panicking::panic("not implemented")
+            }
+        }
+        #[allow(unused_parens)]
+        pub mod CoordinationSystem {
+            use super::*;
+            pub struct State {
+                pub journal: CrashTolerantJournal::State,
+                pub mapadt: CrashTolerantMap::State,
+                pub ephemeral: Ephemeral,
+            }
+            #[allow(non_camel_case_types)]
+            pub enum Step { dummy_to_use_type_params(State), }
+            #[allow(non_camel_case_types)]
+            pub enum Config {
+                initialize(CrashTolerantJournal::State),
+                dummy_to_use_type_params(State),
+            }
+            pub mod show {
+                use super::*;
+                #[verifier(external_body)]
+                #[proof]
+                pub fn initialize(post: super::State,
+                                  j: CrashTolerantJournal::State) {
+                    ::builtin::requires(super::State::initialize(post, j));
+                    ::builtin::ensures(super::State::init(post));
+                }
+            }
+            impl State {
+                #[spec]
+                #[verifier(publish)]
+                pub fn initialize(post: Self, j: CrashTolerantJournal::State)
+                 -> ::core::primitive::bool {
+                    {
+                        ((CrashTolerantJournal::State::initialize(j)) &&
+                             {
+                                 let update_tmp_journal:
+                                         CrashTolerantJournal::State = j;
+                                 ({
+                                      let m =
+                                          choose(::builtin::closure_to_fn_spec(|m|
+                                                                                   CrashTolerantMap::State::initialize(m)));
+                                      let update_tmp_mapadt:
+                                              CrashTolerantMap::State = m;
+                                      let update_tmp_ephemeral: Ephemeral =
+                                          Ephemeral::Unknown;
+                                      ((::builtin::equal(post.ephemeral,
+                                                         update_tmp_ephemeral))
+                                           &&
+                                           (::builtin::equal(post.mapadt,
+                                                             update_tmp_mapadt)))
+                                  } &&
+                                      (::builtin::equal(post.journal,
+                                                        update_tmp_journal)))
+                             })
+                    }
+                }
+                #[verifier(opaque)]
+                #[verifier(publish)]
+                #[spec]
+                pub fn next_by(pre: State, post: State, step: Step)
+                 -> ::core::primitive::bool {
+                    match step { Step::dummy_to_use_type_params(_) => false, }
+                }
+                #[verifier(opaque)]
+                #[verifier(publish)]
+                #[spec]
+                pub fn next(pre: State, post: State)
+                 -> ::core::primitive::bool {
+                    ::builtin::exists(|step: Step|
+                                          Self::next_by(pre, post, step))
+                }
+                #[verifier(opaque)]
+                #[verifier(publish)]
+                #[spec]
+                pub fn next_strong_by(pre: State, post: State, step: Step)
+                 -> ::core::primitive::bool {
+                    match step { Step::dummy_to_use_type_params(_) => false, }
+                }
+                #[verifier(opaque)]
+                #[verifier(publish)]
+                #[spec]
+                pub fn next_strong(pre: State, post: State)
+                 -> ::core::primitive::bool {
+                    ::builtin::exists(|step: Step|
+                                          Self::next_by(pre, post, step))
+                }
+                #[verifier(opaque)]
+                #[verifier(publish)]
+                #[spec]
+                pub fn init_by(post: State, step: Config)
+                 -> ::core::primitive::bool {
+                    match step {
+                        Config::initialize(j) => Self::initialize(post, j),
+                        Config::dummy_to_use_type_params(_) => false,
+                    }
+                }
+                #[verifier(opaque)]
+                #[verifier(publish)]
+                #[spec]
+                pub fn init(post: State) -> ::core::primitive::bool {
+                    ::builtin::exists(|step: Config|
+                                          Self::init_by(post, step))
+                }
+                #[spec]
+                #[verifier(publish)]
+                pub fn invariant(&self) -> ::core::primitive::bool { true }
+            }
+        }
     }
 }
 fn main() { }
