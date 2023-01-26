@@ -724,7 +724,7 @@ module LinkedBetreeRefinement {
     requires step.InternalFlushMemtableStep?
     ensures v'.linked.Acyclic()
   {
-    var newRoot := InsertInternalFlushMemtableReplacement(v.linked, Buffer(v.memtable.mapp), step.newRootAddr);
+    var newRoot := InsertInternalFlushMemtableReplacement(v.linked, v.memtable.buffer, step.newRootAddr);
     if v.linked.HasRoot() {
       var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
       var oldRootRank := oldRanking[v.linked.root.value];
@@ -1429,10 +1429,10 @@ module LinkedBetreeRefinement {
     ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
     InvNext(v, v', lbl);
-    var replacement := InsertInternalFlushMemtableReplacement(v.linked, Buffer(v.memtable.mapp), step.newRootAddr);
+    var replacement := InsertInternalFlushMemtableReplacement(v.linked, v.memtable.buffer, step.newRootAddr);
     BuildTightPreservesInterpretation(replacement);
     var oldRanking := BuildTightRanking(v.linked, v.linked.TheRanking());
-    var newRanking := InsertInternalFlushMemtableNewRanking(v.linked, Buffer(v.memtable.mapp), oldRanking, step.newRootAddr);
+    var newRanking := InsertInternalFlushMemtableNewRanking(v.linked, v.memtable.buffer, oldRanking, step.newRootAddr);
     if v.linked.HasRoot() {
       IChildrenIgnoresRanking(v.linked, v.linked.TheRanking(), newRanking);
       ILinkedBetreeIgnoresRanking(replacement, replacement.TheRanking(), newRanking);

@@ -811,8 +811,7 @@ module LinkedBetreeMod
     && lbl.addrs == [step.newRootAddr]
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.newRootAddr})
-    && var newBuffer := Buffer(v.memtable.mapp);
-    && v'.linked == InsertInternalFlushMemtableReplacement(v.linked, newBuffer, step.newRootAddr).BuildTightTree()
+    && v'.linked == InsertInternalFlushMemtableReplacement(v.linked, v.memtable.buffer, step.newRootAddr).BuildTightTree()
     && v'.memtable == v.memtable.Drain()
   }
 
@@ -928,7 +927,7 @@ module LinkedBetreeMod
     && lbl.addrs == step.pathAddrs + [step.targetAddr]
     && step.path.linked == v.linked
     && step.path.Valid()
-    && step.path.Target().Root().buffers.Equivalent(step.compactedBuffers)
+    // && step.path.Target().Root().buffers.Equivalent(step.compactedBuffers)
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.targetAddr} + Set(step.pathAddrs))
     && v'.linked == step.path.Substitute(

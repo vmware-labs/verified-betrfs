@@ -84,8 +84,7 @@ module PagedBetree
     function PushMemtable(memtable: Memtable) : StampedBetree
       requires WF()
     {
-      var newBuffer := Buffer(memtable.mapp);
-      Stamped(this.Promote().PushBufferStack(BufferStack([newBuffer])), memtable.seqEnd)
+      Stamped(this.Promote().PushBufferStack(BufferStack([memtable.buffer])), memtable.seqEnd)
     }
 
     function PushBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
@@ -288,9 +287,8 @@ module PagedBetree
 
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    && v.WF()
     && lbl.InternalLabel?
-    && var newBuffer := Buffer(v.memtable.mapp);
+    && v.WF()
     && v' == v.(
         memtable := v.memtable.Drain(),
         root := v.root.PushMemtable(v.memtable).value

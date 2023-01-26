@@ -1241,7 +1241,7 @@ module ReprBetreeRefinement
             }
             Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
             Sets.UnionSeqOfSetsSoundness(subTreeAddrs');
-            InternalFlushMemtableDeletesOldRoot(linked, linked', Buffer(v.betree.memtable.mapp), step.newRootAddr);
+            InternalFlushMemtableDeletesOldRoot(linked, linked', v.betree.memtable.buffer, step.newRootAddr);
           }
         linked.ReachableAddrsUsingRanking(linked.TheRanking()) + {step.newRootAddr} - {oldRootAddr};
         v'.repr;
@@ -1256,7 +1256,7 @@ module ReprBetreeRefinement
     requires v'.betree.linked.Acyclic()
     ensures v'.betree.linked.DiskIsTightWrtRepresentation()
   {
-    var newBuffer := Buffer(v.betree.memtable.mapp);
+    var newBuffer := v.betree.memtable.buffer;
     var untightLinked :=  LB.InsertInternalFlushMemtableReplacement(v.betree.linked, newBuffer, step.newRootAddr);
     if v.betree.linked.HasRoot() {
       BuildTightGivesTightWrtRepresentation(untightLinked);
@@ -2103,7 +2103,7 @@ module ReprBetreeRefinement
   {
     var dv' := v'.betree.linked.diskView;
     var ranking := LBR.BuildTightRanking(v.betree.linked, v.betree.linked.TheRanking());
-    var newBuffer := Buffer(v.betree.memtable.mapp);
+    var newBuffer := v.betree.memtable.buffer;
     var ranking' := LBR.InsertInternalFlushMemtableNewRanking(v.betree.linked, newBuffer, ranking, step.newRootAddr);
     if v.betree.linked.HasRoot(){
       SameChildrenImpliesRepresentationIsDagFree(v.betree.linked, v'.betree.linked, ranking');
