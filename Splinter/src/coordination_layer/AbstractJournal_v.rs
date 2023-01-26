@@ -10,6 +10,7 @@ use crate::coordination_layer::MessageHistory_v::*;
 verus! {
 
 state_machine!{ AbstractJournal {
+    // Dafny Variables definition equivalent
     fields { pub journal: MsgHistory }
 
     #[is_variant]  // TODO: verus! should always make enum variants
