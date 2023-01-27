@@ -61,6 +61,9 @@ module BranchedBetreeMod
     | FreezeAsLabel(branched: StampedBetree)
      // Internal-x labels refine to no-ops at the abstract spec
     | InternalAllocationsLabel(treeAddrs: seq<Address>, branchAddrs: seq<Address>)  // for steps that involve allocating new pages
+      // TODO bury distinction between treeAddrs and branchAddrs in the step, since
+      // that's an internal issue, then only expose a single set<Address> through the
+      // label.
     | InternalLabel()   // Local No-op label
 
 
@@ -1026,6 +1029,7 @@ module BranchedBetreeMod
     // allocation validation
     && lbl.InternalAllocationsLabel?
     && lbl.treeAddrs == step.pathAddrs + [ step.targetAddr ]
+    // TODO: eventually step.pathAddrs + [ step.targetAddr ] + step.compactedBranch.ReachableAddrs() == lbl.addrs
     && Set(lbl.branchAddrs) == step.compactedBranch.ReachableAddrs()
     && step.path.branched == v.branched
 
