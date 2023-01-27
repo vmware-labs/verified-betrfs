@@ -16,6 +16,12 @@ pub open spec fn default_value() -> Value {
     0
 }
 
+// TODO: placeholder
+pub open spec fn nop_delta() -> Delta {
+    0
+}
+
+
 #[is_variant]
 pub enum Message {
     Define{ value: Value },
