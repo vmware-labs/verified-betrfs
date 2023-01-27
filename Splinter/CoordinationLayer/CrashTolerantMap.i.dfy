@@ -5,6 +5,8 @@ include "AbstractMap.i.dfy"
 include "MsgHistory.i.dfy"
 include "LSNMod.i.dfy"
 
+// TODO: rename this. It implies it implements an interface which it does NOT
+// see CrashTolerant.s.dfy (this does not implement that)
 module CrashTolerantMap {
   import opened ValueMessage
   import opened KeyType
@@ -13,6 +15,9 @@ module CrashTolerantMap {
   import opened LSNMod
   import opened Options
   import AbstractMap
+
+  // TODO: was this meant to be CrashTolerant? labels are
+  // not working with the "nice" label hierarchy
 
   datatype TransitionLabel =
     | LoadEphemeralFromPersistentLabel(endLsn: LSN)

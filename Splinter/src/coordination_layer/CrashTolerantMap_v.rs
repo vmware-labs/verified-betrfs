@@ -47,6 +47,7 @@ state_machine!{ CrashTolerantMap {
         CommitStartLabel{ new_boundary_lsn: LSN },
         CommitCompleteLabel,
         CrashLabel,
+        // Like they could 
     }
 
     transition!{

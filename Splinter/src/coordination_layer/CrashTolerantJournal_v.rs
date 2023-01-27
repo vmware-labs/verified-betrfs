@@ -38,7 +38,7 @@ state_machine!{ CrashTolerantJournal {
     }
 
     #[is_variant]  // TODO: verus! should always make enum variants
-    pub enum Label{
+    pub enum Label {
         LoadEphemeralFromPersistentLabel,
         ReadForRecoveryLabel{ records: MsgHistory },
         QueryEndLsnLabel{ end_lsn: LSN },
@@ -173,6 +173,8 @@ state_machine!{ CrashTolerantJournal {
                 },
                 journal_step
             );
+            
+            // Watch the `update` keyword!
             update persistent = pre.in_flight.get_Some_0();
             update ephemeral = Ephemeral::Known{ v: new_journal };
             update in_flight = Option::None;

@@ -52,5 +52,6 @@ module MapSpecMod refines AtomicStateMachineMod {
   }
 }
 
+// THIS is the trusted spec for the map. The pure theoretical ideal
 module CrashTolerantMapSpecMod refines CrashTolerantMod(MapSpecMod) {
 }

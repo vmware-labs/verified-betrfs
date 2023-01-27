@@ -39,6 +39,8 @@ pub enum Output {
 state_machine!{ MapSpec {
     fields { pub kmmap: TotalKMMap }
 
+    // TODO: finish this state machine
+
     init!{
         my_init_2() {
             init kmmap = my_init().kmmap;
@@ -83,13 +85,6 @@ pub struct EphemeralState {
     pub replies: Set<Reply>,
 }
 
-#[is_variant]
-pub enum AsyncUILabel { // Was AsyncMod.UIOp
-    RequestOp {req: Request},
-    ExecuteOp {req: Request, reply: Reply},
-    ReplyOp {reply: Reply},
-}
-
 // CrashTolerantMod things
 type SyncReqId = nat;
 type Version = PersistentState;
@@ -98,6 +93,13 @@ type Version = PersistentState;
 // It's our syntax!
 
 state_machine!{ AsyncMap {
+    #[is_variant]
+    pub enum Label { // Was AsyncMod.UIOp
+        RequestOp { req: Request },
+        ExecuteOp { req: Request, reply: Reply },
+        ReplyOp { reply: Reply },
+    }
+
     pub open spec fn init_persistent_state() -> PersistentState {
         PersistentState { appv: my_init() }
     }
@@ -111,17 +113,20 @@ state_machine!{ AsyncMap {
         pub ephemeral: EphemeralState,
     }
 
-    transition!{ do_request(req: Request) {
+    transition!{ do_request(label: Label, req: Request) {
+        require label.is_RequestOp();
         require !pre.ephemeral.requests.contains(req);
         // TODO(travis): Wanted to type set![req], but `macro not allowed in transition expression`
         update ephemeral = EphemeralState { requests: pre.ephemeral.requests.insert(req), ..pre.ephemeral };
     } }
 
-    transition!{ do_execute(req: Request, reply: Reply) {
-        
+    transition!{ do_execute(label: Label, req: Request, reply: Reply) {
+        require label.is_ExecuteOp();
+        // TODO: do this
     } }
 
-    transition!{ do_reply(reply: Reply) {
+    transition!{ do_reply(label: Label, reply: Reply) {
+        require label.is_ReplyOp();
         require pre.ephemeral.replies.contains(reply);
         update ephemeral = EphemeralState { replies: pre.ephemeral.replies.remove(reply), ..pre.ephemeral };
     } }
@@ -136,6 +141,9 @@ state_machine!{ CrashTolerantAsyncMap {
         pub async_ephemeral: EphemeralState,
         pub sync_requests: Map<SyncReqId, nat>,
     }
+
+    // TODO: add the final layer of labels for CrashTolerant labels (see Dafny)
+    // TODO: complete this state machine
 
 //    #[invariant]
 //  TODO(jonh): Unhappy that the invariant (proof work) is in the same file as the model
@@ -168,7 +176,7 @@ state_machine!{ CrashTolerantAsyncMap {
     }
     
     transition!{
-        operate(op: AsyncUILabel, new_versions: FloatingSeq<Version>, new_async_ephemeral: EphemeralState, async_step: AsyncMap::Step) {
+        operate(op: AsyncMap::Label, new_versions: FloatingSeq<Version>, new_async_ephemeral: EphemeralState, async_step: AsyncMap::Step) {
             // want to introduce nondeterminism for new_versions, then write a predicate saying
             // which values are okay
             require State::optionally_append_version(pre.versions, new_versions);
@@ -177,7 +185,9 @@ state_machine!{ CrashTolerantAsyncMap {
             require AsyncMap::State::next_by(
                 AsyncMap::State { persistent: pre.versions.last(), ephemeral: pre.async_ephemeral },
                 AsyncMap::State { persistent: new_versions.last(), ephemeral: new_async_ephemeral },
-                async_step);
+                op,
+                async_step
+            );
 
             update versions = new_versions;
             update async_ephemeral = new_async_ephemeral;
