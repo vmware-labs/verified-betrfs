@@ -7,7 +7,7 @@
    viewBox="0 0 279.4 215.90001"
    version="1.1"
    id="svg5"
-   inkscape:version="1.2.1 (1:1.2.1+202210291243+9c6d41e410)"
+   inkscape:version="1.2.2 (1:1.2.2+202212051552+b0a8486541)"
    sodipodi:docname="refinement-hierarchy.svg"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -28,12 +28,12 @@
      inkscape:deskcolor="#d1d1d1"
      showguides="true"
      inkscape:zoom="1.2642212"
-     inkscape:cx="576.24409"
-     inkscape:cy="472.22748"
-     inkscape:window-width="2558"
-     inkscape:window-height="1323"
-     inkscape:window-x="766"
-     inkscape:window-y="49"
+     inkscape:cx="576.63959"
+     inkscape:cy="199.33221"
+     inkscape:window-width="1440"
+     inkscape:window-height="749"
+     inkscape:window-x="1946"
+     inkscape:window-y="395"
      inkscape:window-maximized="0"
      inkscape:current-layer="layer1">
     <inkscape:grid
@@ -163,7 +163,7 @@
            id="tspan332-5-6"
            style="text-align:start;text-anchor:start;stroke-width:0.264583"
            x="56.912292"
-           y="112.3611">CrashTolerantMap</tspan></text>
+           y="112.3611">CoordinatingMap</tspan></text>
     </g>
     <g
        id="g339-3"
@@ -204,32 +204,15 @@
          y="112.3611"
          id="text334-7-0-8"><tspan
            sodipodi:role="line"
-           id="tspan332-5-6-7"
            style="text-align:start;text-anchor:start;stroke-width:0.264583"
            x="56.912292"
-           y="112.3611">CrashTolerantMap</tspan></text>
-    </g>
-    <g
-       id="g339-3-9"
-       transform="translate(69.595997,-83.8835)">
-      <rect
-         style="fill:#88dbca;fill-opacity:1;stroke:#165044;stroke-width:0.508;stroke-dasharray:0.508, 0.508;stop-color:#000000"
-         id="rect330-6-2"
-         width="50.800003"
-         height="6.3500047"
-         x="50.800003"
-         y="107.95" />
-      <text
-         xml:space="preserve"
-         style="font-style:normal;font-weight:normal;font-size:4.23333px;line-height:1.25;font-family:sans-serif;text-align:center;letter-spacing:0px;word-spacing:0px;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
-         x="76.381905"
-         y="112.30943"
-         id="text334-7-02"><tspan
+           y="112.3611"
+           id="tspan13451" /><tspan
            sodipodi:role="line"
-           id="tspan332-5-3"
-           style="stroke-width:0.264583"
-           x="76.381905"
-           y="112.30943">AbstractMap</tspan></text>
+           style="text-align:start;text-anchor:start;stroke-width:0.264583"
+           x="56.912292"
+           y="117.65276"
+           id="tspan13453">CrashTolerant&lt;MapSpec&gt;</tspan></text>
     </g>
     <g
        id="g1890"
@@ -251,7 +234,7 @@
            id="tspan1886"
            style="text-align:start;text-anchor:start;stroke-width:0.264583"
            x="56.912292"
-           y="112.3611">CrashTolerantJournal</tspan></text>
+           y="112.3611">CoordinatingJournal</tspan></text>
     </g>
     <g
        id="g1898"
@@ -611,15 +594,15 @@
        y="0"><tspan
          x="372"
          y="325.35625"
-         id="tspan19398"><tspan
-           style="font-style:italic;text-align:start;text-anchor:start"
-           id="tspan19396">Superblock updates
+         id="tspan13591"><tspan
+           style="font-style:italic;text-align:start"
+           id="tspan13589">Superblock updates
 </tspan></tspan><tspan
          x="372"
          y="343.75624"
-         id="tspan19402"><tspan
-           style="font-style:italic;text-align:start;text-anchor:start"
-           id="tspan19400">protect journaled data.</tspan></tspan></text>
+         id="tspan13595"><tspan
+           style="font-style:italic;text-align:start"
+           id="tspan13593">protect journaled data.</tspan></tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,90.487507,-6.7300059)"
@@ -629,9 +612,9 @@
        y="0"><tspan
          x="393.89844"
          y="325.35625"
-         id="tspan19406"><tspan
+         id="tspan13599"><tspan
            style="font-style:italic"
-           id="tspan19404">Linked list of pages is a long list</tspan></tspan></text>
+           id="tspan13597">Linked list of pages is a long list</tspan></tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,89.971767,12.49776)"
@@ -641,9 +624,9 @@
        y="0"><tspan
          x="391.51953"
          y="325.35625"
-         id="tspan19410"><tspan
+         id="tspan13603"><tspan
            style="font-style:italic"
-           id="tspan19408">Mutable updates to store acyclic</tspan></tspan></text>
+           id="tspan13601">Mutable updates to store acyclic</tspan></tspan></text>
     <path
        style="fill:#ececec;fill-opacity:0.5;stroke:#000000;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
        d="m 177.8,132.27051 v -12.7 h -3.175 l 6.35,-6.35 6.35,6.35 h -3.175 v 12.7 z"
@@ -658,9 +641,9 @@
        y="0"><tspan
          x="396.35156"
          y="325.35625"
-         id="tspan19414"><tspan
+         id="tspan13607"><tspan
            style="font-style:italic"
-           id="tspan19412">Predicates depend only on repr</tspan></tspan></text>
+           id="tspan13605">Predicates depend only on repr</tspan></tspan></text>
     <path
        style="fill:#ececec;fill-opacity:0.5;stroke:#000000;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
        d="m 111.12501,81.470499 v -6.35 h -3.175 l 6.35,-6.35 6.35,6.35 h -3.175 v 6.35 z"
@@ -690,9 +673,9 @@
        y="0"><tspan
          x="399.82031"
          y="325.35625"
-         id="tspan19418"><tspan
+         id="tspan13611"><tspan
            style="font-style:italic"
-           id="tspan19416">Tree of mappy pages is a big map</tspan></tspan></text>
+           id="tspan13609">Tree of mappy pages is a big map</tspan></tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,-91.8807,5.6397561)"
@@ -702,9 +685,9 @@
        y="0"><tspan
          x="401.91406"
          y="325.35625"
-         id="tspan19422"><tspan
+         id="tspan13615"><tspan
            style="font-style:italic"
-           id="tspan19420">Pivot nodes act like infinite nodes</tspan></tspan></text>
+           id="tspan13613">Pivot nodes act like infinite nodes</tspan></tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,-91.8807,18.631214)"
@@ -714,9 +697,9 @@
        y="0"><tspan
          x="411.03906"
          y="325.35625"
-         id="tspan19426"><tspan
+         id="tspan13619"><tspan
            style="font-style:italic"
-           id="tspan19424">Mutable updates to store acyclic</tspan></tspan></text>
+           id="tspan13617">Mutable updates to store acyclic</tspan></tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,-91.8807,31.039756)"
@@ -726,8 +709,8 @@
        y="0"><tspan
          x="420.70312"
          y="325.35625"
-         id="tspan19430"><tspan
+         id="tspan13623"><tspan
            style="font-style:italic"
-           id="tspan19428">Predicates depend only on repr</tspan></tspan></text>
+           id="tspan13621">Predicates depend only on repr</tspan></tspan></text>
   </g>
 </svg>
