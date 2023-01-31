@@ -7,6 +7,12 @@ include "Sequences.i.dfy"
 module Multisets {
   import Sequences
 
+  function Multiply<T>(s: multiset<T>, count: nat) : multiset<T>
+  {
+    if count == 0 then multiset{}
+    else s + Multiply(s, count-1)
+  } 
+
   lemma SingletonSet<A>(a: A)
     ensures multiset{a} == multiset({a})
   {

@@ -1058,6 +1058,7 @@ module BranchedBetreeMod
     && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value)
   }
 
+  // TODO: add allocation addrs for betree and branch 
   datatype Step =
       QueryStep(receipt: QueryReceipt)
     | PutStep()
