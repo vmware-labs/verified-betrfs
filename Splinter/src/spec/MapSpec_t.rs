@@ -41,17 +41,17 @@ pub open spec fn my_init() -> MapSpec::State
 // TODO (jonh): Make this automated. A macro of some sort
 pub open spec fn getInput(label: MapSpec::Label) -> Input {
     match label {
-        MapSpec::Label::QueryOp{input, output} => input,
-        MapSpec::Label::PutOp{input, output} => input,
-        MapSpec::Label::NoopOp{input, output} => input,
+        MapSpec::Label::Query{input, output} => input,
+        MapSpec::Label::Put{input, output} => input,
+        MapSpec::Label::Noop{input, output} => input,
     }
 }
 
 pub open spec fn getOutput(label: MapSpec::Label) -> Output {
     match label {
-        MapSpec::Label::QueryOp{input, output} => output,
-        MapSpec::Label::PutOp{input, output} => output,
-        MapSpec::Label::NoopOp{input, output} => output,
+        MapSpec::Label::Query{input, output} => output,
+        MapSpec::Label::Put{input, output} => output,
+        MapSpec::Label::Noop{input, output} => output,
     }
 }
 
@@ -60,9 +60,9 @@ state_machine!{ MapSpec {
 
     #[is_variant]
     pub enum Label{
-        QueryOp{input: Input, output: Output},
-        PutOp{input: Input, output: Output},
-        NoopOp{input: Input, output: Output},
+        Query{input: Input, output: Output},
+        Put{input: Input, output: Output},
+        Noop{input: Input, output: Output},
     }
 
     init!{
@@ -76,7 +76,7 @@ state_machine!{ MapSpec {
 
     transition!{
         query(label: Label) {
-            require let Label::QueryOp{input, output} = label;
+            require let Label::Query{input, output} = label;
 
             require let Input::QueryInput { key } = input;
             require let Output::QueryOutput { value } = output;
@@ -87,7 +87,7 @@ state_machine!{ MapSpec {
 
     transition!{
         put(label: Label) {
-            require let Label::PutOp{input, output} = label;
+            require let Label::Put{input, output} = label;
 
             require let Input::PutInput { key, value } = input;
             require let Output::PutOutput = output;
@@ -98,7 +98,7 @@ state_machine!{ MapSpec {
 
     transition!{
         noop(label: Label) {
-            require let Label::NoopOp{input, output} = label;
+            require let Label::Noop{input, output} = label;
 
             require let Input::NoopInput = input;
             require let Output::NoopOutput = output;
@@ -204,7 +204,7 @@ state_machine!{ CrashTolerantAsyncMap {
         SyncOp,
         ReqSyncOp{ sync_req_id: SyncReqId },
         ReplySyncOp{ sync_req_id: SyncReqId },
-        NoopOp,
+        Noop,
     }
     // TODO: complete this state machine
 
@@ -296,7 +296,7 @@ state_machine!{ CrashTolerantAsyncMap {
 
     transition!{
         noop(label: Label) {
-            require let Label::NoopOp = label;
+            require let Label::Noop = label;
         }
     }
 
