@@ -13,58 +13,97 @@ use crate::spec::TotalKMMap_t::*;
 
 use state_machines_macros::state_machine;
 
+// TODO (tenzin): break out everything in this file into separate files/modules
+// (cleaner logical breaks)
 verus! {
 
 #[is_variant]
 pub enum Input {
-    GetInput{key: Key},
+    QueryInput{key: Key},
     PutInput{key: Key, value: Value},
     NoopInput
 }
 
 #[is_variant]
 pub enum Output {
-    GetOutput{value: Value},
+    QueryOutput{value: Value},
     PutOutput,
     NoopOutput
 }
 
-    // TODO ugly workaround for init!{my_init()} being a predicate from outside
-    // TODO 2: can't declare this fn inside MapSpec state_machine!?
-    pub open spec fn my_init() -> MapSpec::State
-    {
-        MapSpec::State{ kmmap: empty_total_map() }
+// TODO ugly workaround for init!{my_init()} being a predicate from outside
+// TODO 2: can't declare this fn inside MapSpec state_machine!?
+pub open spec fn my_init() -> MapSpec::State
+{
+    MapSpec::State{ kmmap: empty_total_map() }
+}
+
+// TODO (jonh): Make this automated. A macro of some sort
+pub open spec fn getInput(label: MapSpec::Label) -> Input {
+    match label {
+        MapSpec::Label::QueryOp{input, output} => input,
+        MapSpec::Label::PutOp{input, output} => input,
+        MapSpec::Label::NoopOp{input, output} => input,
     }
+}
+
+pub open spec fn getOutput(label: MapSpec::Label) -> Output {
+    match label {
+        MapSpec::Label::QueryOp{input, output} => output,
+        MapSpec::Label::PutOp{input, output} => output,
+        MapSpec::Label::NoopOp{input, output} => output,
+    }
+}
 
 state_machine!{ MapSpec {
     fields { pub kmmap: TotalKMMap }
 
-    // TODO: finish this state machine
+    #[is_variant]
+    pub enum Label{
+        QueryOp{input: Input, output: Output},
+        PutOp{input: Input, output: Output},
+        NoopOp{input: Input, output: Output},
+    }
 
     init!{
+        // TODO: examine this weird nesting predicate stuff later
+        // Core issue seems to be wanting to know the concrete initial
+        // state outside of this state machine
         my_init_2() {
             init kmmap = my_init().kmmap;
-    }}
+        }
+    }
 
     transition!{
-        query(input: Input, output: Output) {
-            require input.is_GetInput();
-            require output.is_GetOutput();
-            // require let GetInput(key) =  // TODO how?
+        query(label: Label) {
+            require let Label::QueryOp{input, output} = label;
 
-            require let Input::GetInput { key } = input;
-            require let Output::GetOutput { value } = output;
-//            let key = input.get_GetInput_key();  // TODO eeeew
-//            let value = input.get_GetInput_value();
-            require pre.kmmap[key].get_Define_value() === value;  
-            // TODO(verus): "the trait `builtin::Structural` is not implemented for `spec::TotalKMMap_t::Message`" 
-            // error message should suggest === 
-    }}
+            require let Input::QueryInput { key } = input;
+            require let Output::QueryOutput { value } = output;
+
+            require pre.kmmap[key].get_Define_value() == value;  
+        }
+    }
 
     transition!{
-        put(key: Key, value: Value) {
+        put(label: Label) {
+            require let Label::PutOp{input, output} = label;
+
+            require let Input::PutInput { key, value } = input;
+            require let Output::PutOutput = output;
+
             update kmmap = pre.kmmap.insert(key, Message::Define{value});
-    }}
+        }
+    }
+
+    transition!{
+        noop(label: Label) {
+            require let Label::NoopOp{input, output} = label;
+
+            require let Input::NoopInput = input;
+            require let Output::NoopOutput = output;
+        }
+    }
 }}
 
 // Async things
@@ -84,10 +123,6 @@ pub struct EphemeralState {
     pub requests: Set<Request>,
     pub replies: Set<Reply>,
 }
-
-// CrashTolerantMod things
-type SyncReqId = nat;
-type Version = PersistentState;
 
 // TODO(jonh): `error: state machine field must be marked public`: why make me type 'pub', then?
 // It's our syntax!
@@ -113,24 +148,44 @@ state_machine!{ AsyncMap {
         pub ephemeral: EphemeralState,
     }
 
-    transition!{ do_request(label: Label, req: Request) {
-        require label.is_RequestOp();
+    transition!{ request(label: Label) {
+        require let Label::RequestOp{ req } = label;
         require !pre.ephemeral.requests.contains(req);
-        // TODO(travis): Wanted to type set![req], but `macro not allowed in transition expression`
         update ephemeral = EphemeralState { requests: pre.ephemeral.requests.insert(req), ..pre.ephemeral };
     } }
 
-    transition!{ do_execute(label: Label, req: Request, reply: Reply) {
-        require label.is_ExecuteOp();
-        // TODO: do this
+    transition!{ execute(label: Label, map_label: MapSpec::Label, post_persistent: PersistentState) {
+        require let Label::ExecuteOp{ req, reply } = label;
+        require req.id == reply.id;
+        require pre.ephemeral.requests.contains(req);
+        // Avoid collapsing replies together
+        require !pre.ephemeral.replies.contains(reply);
+
+        // TODO(jonh): Calling into a contained state machine is painful and long
+        require getInput(map_label) == req.input;
+        require getOutput(map_label) == reply.output;
+        require MapSpec::State::next(
+            pre.persistent.appv,
+            post_persistent.appv,
+            map_label
+        );
+        update persistent = post_persistent;
+
+        update ephemeral = EphemeralState{
+            requests: pre.ephemeral.requests.remove(req),
+            replies: pre.ephemeral.replies.insert(reply),
+        };
     } }
 
-    transition!{ do_reply(label: Label, reply: Reply) {
-        require label.is_ReplyOp();
+    transition!{ reply(label: Label) {
+        require let Label::ReplyOp{ reply } = label;
         require pre.ephemeral.replies.contains(reply);
         update ephemeral = EphemeralState { replies: pre.ephemeral.replies.remove(reply), ..pre.ephemeral };
     } }
 } }
+
+type SyncReqId = nat;
+type Version = PersistentState;
 
 // TODO(jonh): was sad to concretize Map (because no module functors). Is there a traity alternative?
 // TODO(jonh): also sad to cram Async into CrashTolerant (because Async wasn't really a real state machine).
@@ -142,15 +197,16 @@ state_machine!{ CrashTolerantAsyncMap {
         pub sync_requests: Map<SyncReqId, nat>,
     }
 
-    // TODO: add the final layer of labels for CrashTolerant labels (see Dafny)
-    // TODO: complete this state machine
-
-//    #[invariant]
-//  TODO(jonh): Unhappy that the invariant (proof work) is in the same file as the model
-    pub open spec fn the_inv(self) -> bool {
-        &&& 0 < self.versions.len()
-        &&& self.versions.is_active(self.versions.len() - 1)
+    #[is_variant]
+    pub enum Label { // Unrolled version of Dafny labels for CrashTolerantMod(MapSpecMod)
+        OperateOp{ base_op: AsyncMap::Label },
+        CrashOp,
+        SyncOp,
+        ReqSyncOp{ sync_req_id: SyncReqId },
+        ReplySyncOp{ sync_req_id: SyncReqId },
+        NoopOp,
     }
+    // TODO: complete this state machine
 
     pub open spec fn stable_index(self) -> int {
         self.versions.first_active_index()
@@ -158,9 +214,6 @@ state_machine!{ CrashTolerantAsyncMap {
 
     // TODO(travis): init!{} with no body produces confusing error message
     init!{ initialize() {
-        // Translate InitState?
-        // TODO eeww we had to propagate predicate style up to here, and it's getting gross, all
-        // because MapSpec::State::my_init was a predicate.
         init versions = floating_seq(0, 1, |i| AsyncMap::State::init_persistent_state());
         init async_ephemeral = AsyncMap::State::init_ephemeral_state();
         init sync_requests = Map::empty();
@@ -169,24 +222,30 @@ state_machine!{ CrashTolerantAsyncMap {
     pub open spec fn optionally_append_version(versions: FloatingSeq<Version>, versions_prime: FloatingSeq<Version>) -> bool
     {
       // new versions list is either some new thing appended to the old one,
-      ||| (0<versions_prime.len() && versions_prime.drop_last() === versions)
+      ||| (0 < versions_prime.len() && versions_prime.drop_last() == versions)
       // or unchanged. We allow unchanged in the trusted spec so that
       // implementations don't have to account for number of read-only (query) ops.
-      ||| versions_prime === versions
+      ||| versions_prime == versions
     }
     
     transition!{
-        operate(op: AsyncMap::Label, new_versions: FloatingSeq<Version>, new_async_ephemeral: EphemeralState, async_step: AsyncMap::Step) {
+        operate(
+            label: Label,
+            new_versions: FloatingSeq<Version>,
+            new_async_ephemeral: EphemeralState)
+        {
+            // TODO: add label checking boilerplate
+            require let Label::OperateOp{ base_op } = label;
+
             // want to introduce nondeterminism for new_versions, then write a predicate saying
             // which values are okay
             require State::optionally_append_version(pre.versions, new_versions);
             // What's the syntax for (a) consing up an AsyncMap object and (b) calling its implicit Next
             // predicate?
-            require AsyncMap::State::next_by(
+            require AsyncMap::State::next(
                 AsyncMap::State { persistent: pre.versions.last(), ephemeral: pre.async_ephemeral },
                 AsyncMap::State { persistent: new_versions.last(), ephemeral: new_async_ephemeral },
-                op,
-                async_step
+                base_op
             );
 
             update versions = new_versions;
@@ -194,7 +253,9 @@ state_machine!{ CrashTolerantAsyncMap {
     } }
 
     transition!{
-        crash() {
+        crash(label: Label) {
+            require let Label::CrashOp = label;
+
             update versions = pre.versions.get_prefix(pre.stable_index() + 1);
             update async_ephemeral = AsyncMap::State::init_ephemeral_state();
             update sync_requests = Map::empty();
@@ -202,27 +263,75 @@ state_machine!{ CrashTolerantAsyncMap {
     }
 
     transition!{
-        sync(new_stable_index: int) {
+        sync(label: Label, new_stable_index: int) {
+            require let Label::SyncOp = label;
+
             require pre.stable_index() <= new_stable_index < pre.versions.len();
             update versions = pre.versions.get_suffix(new_stable_index);
         }
     }
     
     transition!{
-        req_sync(sync_req_id: SyncReqId) {
+        req_sync(label: Label) {
+            require let Label::ReqSyncOp{ sync_req_id } = label;
+
+            // TODO (tony): add Maps::contains to Pervasives
+            require !pre.sync_requests.dom().contains(sync_req_id);
+            update sync_requests =
+                pre.sync_requests.insert(sync_req_id, (pre.versions.len() - 1) as nat);
+        }
+    }
+
+    transition!{
+        reply_sync(label: Label) {
+            require let Label::ReplySyncOp{ sync_req_id } = label;
+
             // TODO (tony): add Maps::contains to Pervasives
             require pre.sync_requests.dom().contains(sync_req_id);
+
             require pre.sync_requests[sync_req_id] <= pre.stable_index();
             update sync_requests = pre.sync_requests.remove(sync_req_id);
         }
     }
 
+    transition!{
+        noop(label: Label) {
+            require let Label::NoopOp = label;
+        }
+    }
+
+    //  TODO(jonh): Unhappy that the invariant (proof work) is in the same file as the model
+    #[invariant]
+    pub open spec fn the_inv(self) -> bool {
+        &&& 0 < self.versions.len()
+        &&& self.versions.is_active(self.versions.len() - 1)
+    }
+
+    #[inductive(initialize)]
+    fn initialize_inductive(post: Self) { }
+   
+    #[inductive(operate)]
+    fn operate_inductive(pre: Self, post: Self, label: Label, new_versions: FloatingSeq<Version>, new_async_ephemeral: EphemeralState) { }
+   
+    #[inductive(crash)]
+    fn crash_inductive(pre: Self, post: Self, label: Label) { }
+   
+    #[inductive(sync)]
+    fn sync_inductive(pre: Self, post: Self, label: Label, new_stable_index: int) { }
+   
+    #[inductive(req_sync)]
+    fn req_sync_inductive(pre: Self, post: Self, label: Label) { }
+   
+    #[inductive(reply_sync)]
+    fn reply_sync_inductive(pre: Self, post: Self, label: Label) { }
+   
+    #[inductive(noop)]
+    fn noop_inductive(pre: Self, post: Self, label: Label) { }
+
     // TODO: jonh is sad that I can't put this invariant & proof elsewhere. We separate
     // our state machine definitions from our invariant & refinement proof text.
 //    #[inductive(operate)]
 //    fn operate_inductive(pre: Self, post: Self, op: AsyncUILabel) { }
-    
-
 }}
 
 }

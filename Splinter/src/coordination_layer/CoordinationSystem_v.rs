@@ -83,9 +83,7 @@ state_machine!{ CoordinationSystem {
     crash(
       label: Label,
       new_journal: CrashTolerantJournal::State,
-      journal_step: CrashTolerantJournal::Step,
-      new_map: CrashTolerantMap::State,
-      map_step: CrashTolerantMap::Step,
+      new_map: CrashTolerantMap::State
     ) {
       // Well-formed() predicates no longer necessary in spec mode
       require label.is_CrashOp();
@@ -93,18 +91,17 @@ state_machine!{ CoordinationSystem {
       // `pre` is a keyword to access previous state (the v for the v')
       // `post` is a keyword for the `v'` state. However, in this context
       // `self` is equivalent to `post` it seems.
-      require CrashTolerantJournal::State::next_by(
+
+      require CrashTolerantJournal::State::next(
         pre.journal,
         new_journal,
-        CrashTolerantJournal::Label::CrashLabel,
-        journal_step
+        CrashTolerantJournal::Label::CrashLabel
       );
 
-      require CrashTolerantMap::State::next_by(
+      require CrashTolerantMap::State::next(
         pre.mapadt,
         new_map,
-        CrashTolerantMap::Label::CrashLabel,
-        map_step
+        CrashTolerantMap::Label::CrashLabel
       );
 
       update journal = new_journal;

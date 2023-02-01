@@ -1,4 +1,4 @@
-#[allow(unused_imports)]
+#![allow(unused_imports)]
 use builtin::*;
 
 use builtin_macros::*;
@@ -12,15 +12,16 @@ verus! {
         pub mapp: Map<Key, Message>
     }
 
-    impl Buffer { 
-        pub open spec fn query(self, key: Key) -> Message {
-            if key in self.mapp {
-                self.mapp[key]
-            } else {
-                Update(nop_delta())
-            }
-        }
-    }
+    // TODO: comment this out and do the thing
+    // impl Buffer { 
+    //     pub open spec fn query(self, key: Key) -> Message {
+    //         if self.mapp.dom().contains(key) {
+    //             self.mapp[key]
+    //         } else {
+    //             Update(nop_delta())
+    //         }
+    //     }
+    // }
 
 // // TODO: These are placeholders
 // pub type Value = int;
