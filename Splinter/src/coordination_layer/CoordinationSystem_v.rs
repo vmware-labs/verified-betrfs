@@ -5,6 +5,8 @@ use builtin_macros::*;
 use state_machines_macros::state_machine;
 use crate::pervasive::{*, map::*};
 
+use crate::spec::MapSpec_t::*;
+
 use crate::coordination_layer::CrashTolerantJournal_v::*;
 use crate::coordination_layer::CrashTolerantMap_v::*;
 use crate::coordination_layer::CrashTolerantMap_v;
@@ -33,31 +35,12 @@ state_machine!{ CoordinationSystem {
     pub ephemeral: Ephemeral,
   }
 
-  // TODO: add the async labels to the CrashTolerantMap
-  // So there's a tree of labels. In Dafny there was templating
-  // that was occuring by composing labels.
-  // You could reuse higher level labels by passing the them a type
-  // to wrap.
-  // Example:
-  // - Asynchrony is a type of interface. You can operate, you can crash
-  //  you can sync etc. But depending on what thing is actually asynchronous
-  //  the parameters of OperateOp are dependent on what it is (like a
-  //  map or a journal)
-  // - Kind of like a form of inheritance (really like templating).
-  // - So you'd have a general
-
-  // So there shouldn't actually be labels defined here, the labels
-  // of the coordination system should just be the labels of the top
-  // level pure, awesome, trusted, abstract, theoretical map.
+  // Labels of coordinationsystem should directly be the labels of the
+  // CrashTolerantAsyncMap labels. Ideal would be to just copy it somehow,
+  // but for now we're just wrapping the CTAM ones.
   #[is_variant]
   pub enum Label{
-    // TODO: 
-    // OperateOp(baseOp: async.UIOp),
-    CrashOp,
-    SyncOp,
-    ReqSyncOp{ syncReqId: SyncReqId },
-    ReplySyncOp{ syncReqId: SyncReqId },
-    NoopOp,
+    Label{ ctam_label: CrashTolerantAsyncMap::Label }
   }
 
   init! {
@@ -79,18 +62,23 @@ state_machine!{ CoordinationSystem {
     }
   }
 
+  // TODO (jonh): Rename all of the labels to exclude "Op" or "Label" since it's redundant
+  // as enums are already namespaced under "Label", so it's like saying "Label Label"
+
   transition! {
     crash(
       label: Label,
       new_journal: CrashTolerantJournal::State,
       new_map: CrashTolerantMap::State
     ) {
-      // Well-formed() predicates no longer necessary in spec mode
-      require label.is_CrashOp();
+      // TODO (travis/jonh): Figure out a way to gracefully handle state machines
+      // that only have one possible label (or a way to suppress the warning about
+      // unreachable branch in `match` statement that these `let` statements expand
+      // to)
+      // example that triggers the warning:
+      // require let Label::Label{ ctam_label } = label;
 
-      // `pre` is a keyword to access previous state (the v for the v')
-      // `post` is a keyword for the `v'` state. However, in this context
-      // `self` is equivalent to `post` it seems.
+      require let Label::Label{ ctam_label: CrashTolerantAsyncMap::Label::CrashOp } = label;
 
       require CrashTolerantJournal::State::next(
         pre.journal,
