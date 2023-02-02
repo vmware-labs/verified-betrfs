@@ -250,7 +250,7 @@ module PivotBetree
       requires CanFlush(childIdx)
       ensures out.WF()
     {
-      var keepKeys := AllKeys() - DomainRoutedToChild(childIdx).KeySet();
+      var keepKeys := AllKeys() - DomainRoutedToChild(childIdx).KeySet(); // TODO(jialin): may need to change this to mydomain.keys()
       var keptBuffers := buffers.ApplyFilter(keepKeys);
       var movedBuffers := buffers.ApplyFilter(DomainRoutedToChild(childIdx).KeySet());
       assert WFChildren(children);  // trigger

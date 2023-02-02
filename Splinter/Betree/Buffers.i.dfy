@@ -38,6 +38,17 @@ module Buffers
   // buffers[0] is the newest data, at the top of the stack
   datatype BufferStack = BufferStack(buffers: seq<Buffer>)
   {
+    function Length() : nat 
+    {
+      |buffers|
+    }
+
+    function Slice(start: nat, end: nat) : BufferStack
+      requires start <= end <= |buffers|
+    {
+      BufferStack(buffers[start..end])
+    }
+
     function QueryUpTo(key: Key, count: nat) : Message
       requires count <= |buffers|
     {

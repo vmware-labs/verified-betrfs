@@ -58,7 +58,7 @@ module FilteredBetree
           && WFPivots(pivotTable)
           && |children| == NumBuckets(pivotTable)
           && |children| == |activeBufferRanges|
-          && (forall i:nat | i < |activeBufferRanges| :: activeBufferRanges[i] <= |buffers.buffers|)
+          && (forall i:nat | i < |activeBufferRanges| :: activeBufferRanges[i] <= buffers.Length())
         )
     }
 
@@ -214,21 +214,20 @@ module FilteredBetree
         }
       }
 
+      var childActiveRange := activeBufferRanges[request.childIdx];
+      var newActiveBufferRanges := replace1with2(activeBufferRanges, childActiveRange, childActiveRange, request.childIdx);
+      forall i:nat | i < |newActiveBufferRanges|
+        ensures newActiveBufferRanges[i] <= buffers.Length() {
+          if request.childIdx+1 < i { // sequence math trigger
+            assert newActiveBufferRanges[i] == activeBufferRanges[i-1];
+          }
+      }
+
       WFPivotsInsert(pivotTable, request.childIdx+1, SplitKey(request));
       var out := SplitParentDefn(request);
 
       // seq trigger for offset existing children
       assert forall i:nat | && out.ValidChildIndex(i) :: i>request.childIdx+1 ==> out.children[i] == children[i-1];
-
-      // assert out.
-      forall i:nat | i < |out.activeBufferRanges|
-        ensures out.activeBufferRanges[i] <= |out.buffers.buffers| {
-          assume false;
-          // TODO(jialin)
-        if request.childIdx+1 < i { // sequence math trigger
-          assert out.activeBufferRanges[i] == activeBufferRanges[i-1];
-        }
-      }
     }
 
     // this is a parent in a Split operation
@@ -271,10 +270,10 @@ module FilteredBetree
     function CompactActiveRange(compactStart: nat, compactEnd: nat, count: nat) : (out: seq<nat>)
       requires WF()
       requires BetreeNode?
-      requires compactStart < compactEnd <= |buffers.buffers|
+      requires compactStart < compactEnd <= buffers.Length()
       requires count <= |activeBufferRanges|
       ensures |out| == |activeBufferRanges[..count]|
-      ensures (forall i:nat | i < |out| :: out[i] <= |buffers.buffers| - (compactEnd-compactStart-1))
+      ensures (forall i:nat | i < |out| :: out[i] <= buffers.Length() - (compactEnd-compactStart-1))
     {
       if count == 0 then []
       else (
@@ -309,22 +308,22 @@ module FilteredBetree
     function TruncateBuffers(newStart: nat) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
-      requires newStart <= |buffers.buffers|
+      requires newStart <= buffers.Length()
       requires (forall i:nat | i < |activeBufferRanges| :: newStart <= activeBufferRanges[i])
       ensures out.WF() // TODO(jialin): fix this
     {
-      BetreeNode(BufferStack(buffers.buffers[newStart..]), pivotTable, children, TruncateActiveRange(newStart, |activeBufferRanges|))
+      BetreeNode(buffers.Slice(newStart, buffers.Length()), pivotTable, children, TruncateActiveRange(newStart, |activeBufferRanges|))
     }
 
     function Flush(childIdx: nat, bufferGCCount: nat) : (out: BetreeNode)
       requires CanFlush(childIdx)
-      requires bufferGCCount <= |buffers.buffers|
+      requires bufferGCCount <= buffers.Length()
       requires forall i:nat | i < |activeBufferRanges| && i != childIdx :: bufferGCCount <= activeBufferRanges[i]
       ensures out.WF()
     {
       // all buffers flushed
-      var newActiveBufferRanges := activeBufferRanges[childIdx := |buffers.buffers|];
-      var activeBuffersForChild := BufferStack(buffers.buffers[activeBufferRanges[childIdx]..]);
+      var newActiveBufferRanges := activeBufferRanges[childIdx := buffers.Length()];
+      var activeBuffersForChild := buffers.Slice(activeBufferRanges[childIdx], buffers.Length());
 
       assert WFChildren(children);  // trigger
       var newChild := children[childIdx].Promote(DomainRoutedToChild(childIdx)).PushBufferStack(activeBuffersForChild);
@@ -441,8 +440,8 @@ module FilteredBetree
       requires AllLinesWF()
       requires i < |lines| - 1
     {
-      && var start := lines[i].node.ActiveBuffersForKey(key);
-      && var activeBuffers := BufferStack(lines[i].node.buffers.buffers[start..]);
+      && var node := lines[i].node;
+      && var activeBuffers := node.buffers.Slice(node.ActiveBuffersForKey(key), node.buffers.Length());
       && lines[i].result == Merge(activeBuffers.Query(key), ResultAt(i+1))
     }
 
@@ -648,7 +647,7 @@ module FilteredBetree
   function CompactedNode(original: BetreeNode, compactStart: nat, compactEnd: nat, compactedBuffer: Buffer) : BetreeNode 
     requires original.BetreeNode?  
     requires original.WF()
-    requires compactStart < compactEnd <= |original.buffers.buffers|
+    requires compactStart < compactEnd <= original.buffers.Length()
   {
     var compactedBuffers := BufferStack(original.buffers.buffers[0..compactStart] + [ compactedBuffer ] + original.buffers.buffers[compactEnd..]);
     var compactedActiveBufferRanges := original.CompactActiveRange(compactStart, compactEnd, |original.activeBufferRanges|);
@@ -662,9 +661,6 @@ module FilteredBetree
     && step.InternalCompactStep?
     && step.WF()
     && step.path.node == v.root
-
-    && var eliminatedBuffers := BufferStack(step.path.Target().buffers.buffers[step.compactStart .. step.compactEnd]);
-    && eliminatedBuffers.Equivalent(BufferStack([step.compactedBuffer]))
 
     && v' == v.(
           root := step.path.Substitute(CompactedNode(step.path.Target(), step.compactStart, step.compactEnd, step.compactedBuffer))
@@ -708,12 +704,13 @@ module FilteredBetree
         case InternalFlushStep(path, childIdx, bufferGCCount) =>
           && path.Valid()
           && path.Target().ValidChildIndex(childIdx)
-          && bufferGCCount <= |path.Target().buffers.buffers|
+          && bufferGCCount <= path.Target().buffers.Length()
           && (forall i:nat | i < |path.Target().activeBufferRanges| && i != childIdx :: bufferGCCount <= path.Target().activeBufferRanges[i])
         case InternalCompactStep(path, compactStart, compactEnd, comapctedBuffer) =>
           && path.Valid()
           && path.Target().BetreeNode?  // no point compacting a nil node
-          && compactStart < compactEnd <= |path.Target().buffers.buffers|
+          && compactStart < compactEnd <= path.Target().buffers.Length()
+          && path.Target().buffers.Slice(compactStart, compactEnd).Equivalent(BufferStack([compactedBuffer]))
         case _ => true
       }
     }
