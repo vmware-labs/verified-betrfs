@@ -121,7 +121,7 @@ module LikesBranchedBetreeMod
     function I() : BB.TransitionLabel
     {
       match this {
-        case InternalAllocationsLabel(addrs) => BB.InternalAllocationsLabel(toSeq(addrs), [])
+        case InternalAllocationsLabel(addrs) => BB.InternalAllocationsLabel(addrs)
         case _ => BB.InternalLabel
       }
     }

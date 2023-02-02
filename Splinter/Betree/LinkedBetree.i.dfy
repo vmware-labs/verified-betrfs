@@ -50,7 +50,7 @@ module LinkedBetreeMod
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(linkedBetree: StampedBetree)
      // Internal-x labels refine to no-ops at the abstract spec
-    | InternalAllocationsLabel(addrs: seq<Address>)  // for steps that involve allocating new pages
+    | InternalAllocationsLabel(addrs: set<Address>)  // for steps that involve allocating new pages
     | InternalLabel()   // Local No-op label
 
 
@@ -576,10 +576,6 @@ module LinkedBetreeMod
     function Repr() : set<Address> {
       {left, right, parent}
     }
-
-    function AsSeq() : seq<Address> {
-      [left, right, parent]
-    }
   }
 
   datatype Variables = Variables(
@@ -808,7 +804,7 @@ module LinkedBetreeMod
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalFlushMemtableStep?
-    && lbl.addrs == [step.newRootAddr]
+    && lbl.addrs == {step.newRootAddr}
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.newRootAddr})
     && v'.linked == InsertInternalFlushMemtableReplacement(v.linked, v.memtable.buffer, step.newRootAddr).BuildTightTree()
@@ -831,7 +827,7 @@ module LinkedBetreeMod
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalGrowStep?
-    && lbl.addrs == [step.newRootAddr]
+    && lbl.addrs == {step.newRootAddr}
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.newRootAddr})
     // && v'.linked == InsertGrowReplacement(v.linked, step.newRootAddr).BuildTightTree()
@@ -845,7 +841,7 @@ module LinkedBetreeMod
     && v.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalSplitStep?
-    && lbl.addrs == step.pathAddrs + step.newAddrs.AsSeq()
+    && lbl.addrs == Set(step.pathAddrs) + step.newAddrs.Repr()
     && step.WF()
     && step.path.linked == v.linked
     && v.linked.diskView.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
@@ -886,7 +882,7 @@ module LinkedBetreeMod
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalFlushStep?
-    && lbl.addrs == step.pathAddrs + [step.targetAddr, step.targetChildAddr]
+    && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr} + {step.targetChildAddr}
     && step.path.linked == v.linked
     && step.path.Valid()
     && step.path.Target().Root().OccupiedChildIndex(step.childIdx)  // the downstream child must exist
@@ -924,7 +920,7 @@ module LinkedBetreeMod
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalCompactStep?
-    && lbl.addrs == step.pathAddrs + [step.targetAddr]
+    && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr}
     && step.path.linked == v.linked
     && step.path.Valid()
     // && step.path.Target().Root().buffers.Equivalent(step.compactedBuffers)

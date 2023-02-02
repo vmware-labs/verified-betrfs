@@ -59,11 +59,7 @@ module BranchedBetreeMod
     | PutLabel(puts: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(branched: StampedBetree)
-     // Internal-x labels refine to no-ops at the abstract spec
-    | InternalAllocationsLabel(treeAddrs: seq<Address>, branchAddrs: seq<Address>)  // for steps that involve allocating new pages
-      // TODO bury distinction between treeAddrs and branchAddrs in the step, since
-      // that's an internal issue, then only expose a single set<Address> through the
-      // label.
+    | InternalAllocationsLabel(addrs: set<Address>)
     | InternalLabel()   // Local No-op label
 
 
@@ -79,6 +75,7 @@ module BranchedBetreeMod
     // flushed to them, so we need to track the start of valid buffers for each child.
     // This is a parallel data structure to the children array.
     activeBufferRanges: seq<nat> 
+    // TODO: Pivot => Filtered => Linked
   ) {
     predicate WF() {
       && (BetreeNode? ==>
@@ -878,8 +875,7 @@ module BranchedBetreeMod
     && (step.branch.I().WF() ==> step.branch.I().I() == v.memtable.buffer) // TODO: revisit
 
     // Allocation validation
-    && lbl.treeAddrs == [ step.newRootAddr ]
-    && Set(lbl.branchAddrs) == step.branch.ReachableAddrs()
+    && lbl.addrs == {step.newRootAddr} + step.branch.ReachableAddrs()
 
     // Subway Eat Fresh!
     && v.branched.IsFresh({step.newRootAddr})
@@ -904,8 +900,7 @@ module BranchedBetreeMod
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalGrowStep?
-    && lbl.treeAddrs == [step.newRootAddr]
-    && lbl.branchAddrs == []
+    && lbl.addrs == {step.newRootAddr}
     // Subway Eat Fresh!
     && v.branched.IsFresh({step.newRootAddr})
     && v'.branched == InsertGrowReplacement(v.branched, step.newRootAddr).BuildTightTree()
@@ -917,8 +912,7 @@ module BranchedBetreeMod
     && v.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalSplitStep?
-    && lbl.treeAddrs == step.pathAddrs + step.newAddrs.AsSeq()
-    && lbl.branchAddrs == []
+    && lbl.addrs == Set(step.pathAddrs) + step.newAddrs.Repr()
     && step.WF()
     && step.path.branched == v.branched
     && v.branched.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
@@ -962,8 +956,7 @@ module BranchedBetreeMod
     && lbl.InternalAllocationsLabel?
     && step.InternalFlushStep?
 
-    && lbl.treeAddrs == step.pathAddrs + [step.targetAddr, step.targetChildAddr]
-    && lbl.branchAddrs == []
+    && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr} + {step.targetChildAddr}
     && step.path.branched == v.branched
     && step.path.Valid()
 
@@ -1019,6 +1012,7 @@ module BranchedBetreeMod
     out
   }
 
+  // TODO(jialin): branches should be its own state machine
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
@@ -1028,13 +1022,11 @@ module BranchedBetreeMod
     
     // allocation validation
     && lbl.InternalAllocationsLabel?
-    && lbl.treeAddrs == step.pathAddrs + [ step.targetAddr ]
-    // TODO: eventually step.pathAddrs + [ step.targetAddr ] + step.compactedBranch.ReachableAddrs() == lbl.addrs
-    && Set(lbl.branchAddrs) == step.compactedBranch.ReachableAddrs()
+    && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr} + step.compactedBranch.ReachableAddrs()
     && step.path.branched == v.branched
 
     // Subway Eat Fresh!
-    && v.branched.IsFresh(Set(lbl.treeAddrs + lbl.branchAddrs))
+    && v.branched.IsFresh(lbl.addrs)
     && var tmp := step.path.Substitute(
         InsertCompactReplacement(step.path.Target(), step.compactStart, step.compactEnd, step.compactedBranch.root, step.targetAddr),
         step.pathAddrs).BuildTightTree();
