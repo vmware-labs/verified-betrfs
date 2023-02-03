@@ -527,22 +527,23 @@ module FilteredBetreeRefinement
 //         == IChildren(t.SplitParent(step.request)).mapp.Keys;  // triggers extensionality
 //   }
 
-//   lemma InternalSplitStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-//     requires Inv(v)
-//     requires NextStep(v, v', lbl, step)
-//     requires step.InternalSplitStep?
-//     ensures v'.WF()
-//     ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
-//   {
-//     INodeWF(v.root);
-//     INodeWF(step.path.Target());
-//     InvNext(v, v', lbl); //assert v'.WF();
-//     INodeWF(v'.root);
-//     IPathValid(step.path); //assert IPath(step.path).Valid();
-//     TargetCommutesWithI(step.path);
-//     SplitCommutesWithI(step);
-//     SubstitutionRefines(step.path, step.path.Target().SplitParent(step.request));
-//   }
+  lemma InternalSplitStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalSplitStep?
+    ensures v'.WF()
+    ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    assume false;
+    // INodeWF(v.root);
+    // INodeWF(step.path.Target());
+    // InvNext(v, v', lbl); //assert v'.WF();
+    // INodeWF(v'.root);
+    // IPathValid(step.path); //assert IPath(step.path).Valid();
+    // TargetCommutesWithI(step.path);
+    // SplitCommutesWithI(step);
+    // SubstitutionRefines(step.path, step.path.Target().SplitParent(step.request));
+  }
 
   lemma PromoteCommutesWithI(node: BetreeNode, domain: Domain)  
     requires node.WF()
@@ -553,23 +554,18 @@ module FilteredBetreeRefinement
     assert INode(node.Promote(domain)) == INode(node).Promote(domain);  // trigger
   }
 
-  // lemma ActiveBufferKeysAfterPushBufferStack(node: BetreeNode, buffers: BufferStack, bufferIdx: nat)
-  //   requires node.WF()
-  //   requires node.BetreeNode?
-  //   requires bufferIdx < buffers.Length() + node.buffers.Length() 
-  //   // requires bufferIdx < buffers.Length() + node.buffers.Length() 
-  //   ensures buffers.Length() <= bufferIdx ==> 
-  //     node.PushBufferStack(buffers).ActiveBufferKeys(bufferIdx) == node.ActiveBufferKeys(bufferIdx-buffers.Length())
-  //   ensures buffers.Length() > bufferIdx ==>
-  //     node.PushBufferStack(buffers).ActiveBufferKeys(bufferIdx) == buffers.buffers[bufferIdx]
-  //   // ensures 
-  // {
-  //   forall i | 0 <= i < |node.children| 
-  //     ensures buffers.Length() <= bufferIdx ==> 
-  //       node.PushBufferStack(buffers).ActiveBufferKeysForChild(i, bufferIdx)
-  //       == node.ActiveBufferKeysForChild(i, bufferIdx-buffers.Length())
-  //   {}
-  // }
+  lemma ActiveBufferKeysAfterPushBufferStack(node: BetreeNode, buffers: BufferStack, bufferIdx: nat)
+    requires node.WF()
+    requires node.BetreeNode?
+    requires buffers.Length() <= bufferIdx < node.buffers.Length() + buffers.Length()
+    ensures node.PushBufferStack(buffers).ActiveBufferKeys(bufferIdx) 
+      == node.ActiveBufferKeys(bufferIdx-buffers.Length())
+  {
+    forall i | 0 <= i < |node.children| 
+      ensures node.PushBufferStack(buffers).ActiveBufferKeysForChild(i, bufferIdx)
+        == node.ActiveBufferKeysForChild(i, bufferIdx-buffers.Length())
+    {}
+  }
 
   lemma PushBufferCommutesWithI(node: BetreeNode, buffers: BufferStack) 
     requires node.WF()
@@ -587,42 +583,17 @@ module FilteredBetreeRefinement
     forall i | 0 <= i < node_a.buffers.Length() 
       ensures node_a.buffers.buffers[i] == node_b.buffers.buffers[i] 
     {
-      // ActiveBufferKeysAfterPushBufferStack(node, buffers, i);
       if buffers.Length() <= i {
-        // ActiveBufferKeysAfterPushBufferStack(node, buffers, i);
-        assert forall j | 0 <= j < |node.children| :: 
-          node.PushBufferStack(buffers).ActiveBufferKeysForChild(j, i)
-          == node.ActiveBufferKeysForChild(j, i-buffers.Length());
+        ActiveBufferKeysAfterPushBufferStack(node, buffers, i);
       } else {
-        // key in domain must mean that key routed to child?
-        // assert forall j | 0 <= j < |node.children| :: 
-        //   node.PushBufferStack(buffers).ActiveBufferKeysForChild(j, i)
-        //   == node.ActiveBufferKeysForChild(j, i-buffers.Length());
-        // active key 
-        assume false;
+        forall k | k in buffers.buffers[i].mapp 
+          ensures k in IBuffer(node.PushBufferStack(buffers), i).mapp
+        {
+          var childIdx := Route(node.pivotTable, k);
+          assert k in node.PushBufferStack(buffers).ActiveBufferKeysForChild(childIdx, i);
+        }
       }
     }
-
-
-    // assert buffers_a[buffers.Length()..] == buffers_b[buffers.Length()..];
-
-    // buffers_b[buffers.Length()..];
-
-//     // assert node.PushBufferStack(buffers).buffers.buffers[..node.buffers.Length()] 
-//     //   == node.buffers.buffers[..node.buffers.Length()];
-
-    
-    // assert INode(node.PushBufferStack(buffers)).buffers == INode(node).PushBufferStack(buffers).buffers;  // trigger
-
-//     assume false;
-//     // ah this changes all nodes include it 
-//     // var inode := INode(node.PushBufferStack(buffers));
-    
-//     // assume inode.buffers.buffers[node.buffers.Length()..] == buffers.buffers;
-    
-//     // assert inode.buffers.buffers[.. node.buffers.Length()] == INode(node).PushBufferStack(buffers).buffers.buffers[.. node.buffers.Length()];
-
-    // assert INode(node.PushBufferStack(buffers)).buffers[.. node.buffers.Length()] == INode(node).PushBufferStack(buffers).buffers[];  // trigger
   }
 
 //   // todo: this is duplicated in Journal/LinkedJournalRefinement
@@ -701,22 +672,23 @@ module FilteredBetreeRefinement
 //     assert INode(step.path.Target()).Flush(IStep(step).downKeys) == INode(step.path.Target().Flush(step.childIdx));  // trigger
 //   }
 
-//   lemma InternalFlushStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-//     requires Inv(v)
-//     requires NextStep(v, v', lbl, step)
-//     requires step.InternalFlushStep?
-//     ensures v'.WF()
-//     ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
-//   {
-//     INodeWF(v.root);
-//     INodeWF(step.path.Target());
-//     InvNext(v, v', lbl); //assert v'.WF();
-//     INodeWF(v'.root);
-//     IPathValid(step.path); //assert IPath(step.path).Valid();
-//     TargetCommutesWithI(step.path);
-//     FlushCommutesWithI(step);
-//     SubstitutionRefines(step.path, step.path.Target().Flush(step.childIdx));
-//   }
+  lemma InternalFlushStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushStep?
+    ensures v'.WF()
+    ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    assume false;
+    // INodeWF(v.root);
+    // INodeWF(step.path.Target());
+    // InvNext(v, v', lbl); //assert v'.WF();
+    // INodeWF(v'.root);
+    // IPathValid(step.path); //assert IPath(step.path).Valid();
+    // TargetCommutesWithI(step.path);
+    // FlushCommutesWithI(step);
+    // SubstitutionRefines(step.path, step.path.Target().Flush(step.childIdx));
+  }
 
 //   predicate EquivalentBufferCompaction(node: BetreeNode, other: BetreeNode)
 //   {
@@ -734,13 +706,14 @@ module FilteredBetreeRefinement
 //     ensures PagedBetreeRefinement.EquivalentBufferCompaction(INode(node), INode(other))
 //   {}
 
-//   lemma InternalCompactStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-//     requires Inv(v)
-//     requires NextStep(v, v', lbl, step)
-//     requires step.InternalCompactStep?
-//     ensures v'.WF()
-//     ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
-//   {
+  lemma InternalCompactStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalCompactStep?
+    ensures v'.WF()
+    ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    assume false;
 //     INodeWF(v.root);
 //     INodeWF(step.path.Target());
 //     InvNext(v, v', lbl); //assert v'.WF();
@@ -750,7 +723,7 @@ module FilteredBetreeRefinement
 //     SubstitutionRefines(step.path, compactedNode);
 //     BufferCompactionRefines(step.path.Target(), compactedNode);
 //     TargetCommutesWithI(step.path);
-//   }
+  }
 
   lemma InternalFlushMemtableStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
@@ -776,52 +749,51 @@ module FilteredBetreeRefinement
     PushBufferCommutesWithI(node, buffers);
   }
 
-//   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-//     requires Inv(v)
-//     requires Next(v, v', lbl)
-//     ensures v'.WF()
-//     ensures PivotBetree.Next(I(v), I(v'), ILbl(lbl))
-//   {
-//     InvNext(v, v', lbl);
-//     var step: Step :| NextStep(v, v', lbl, step);
-//     match step {
-//       case QueryStep(receipt) => {
-//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-//       }
-//       case PutStep() => {
-//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-//       }
-//       case QueryEndLsnStep() => {
-//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-//       }
-//       case FreezeAsStep() => {
-//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
-//       }
-//       case InternalGrowStep() => {
-//         InternalGrowStepRefines(v, v', lbl, step);
-//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+  lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    ensures v'.WF()
+    ensures PivotBetree.Next(I(v), I(v'), ILbl(lbl))
+  {
+    InvNext(v, v', lbl);
+    var step: Step :| NextStep(v, v', lbl, step);
+    match step {
+      case QueryStep(receipt) => {
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case PutStep() => {
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case QueryEndLsnStep() => {
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case FreezeAsStep() => {
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
+      }
+      case InternalGrowStep() => {
+        InternalGrowStepRefines(v, v', lbl, step);
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case InternalSplitStep(_, _) => {
+        InternalSplitStepRefines(v, v', lbl, step);
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case InternalFlushStep(_, _, _) => {
+        InternalFlushStepRefines(v, v', lbl, step);
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case InternalFlushMemtableStep() => {
+        InternalFlushMemtableStepRefines(v, v', lbl, step);
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case InternalCompactStep(_, _, _, _) => {
+        InternalCompactStepRefines(v, v', lbl, step);
+        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      }
+      case InternalNoOpStep() => 
+         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+      case _ =>  { assume false; }
 
-//       }
-  //     case InternalSplitStep(_, _) => {
-  //       InternalSplitStepRefines(v, v', lbl, step);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-  //     case InternalFlushStep(_, _) => {
-  //       InternalFlushStepRefines(v, v', lbl, step);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-//       case InternalFlushMemtableStep() => {
-//         InternalFlushMemtableStepRefines(v, v', lbl, step);
-//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-//       }
-  //     case InternalCompactStep(_, _) => {
-  //       InternalCompactStepRefines(v, v', lbl, step);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-//       case InternalNoOpStep() => 
-//          assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-//       case _ =>  { assume false; }
-
-//     }
-//   }
+    }
+  }
 }
