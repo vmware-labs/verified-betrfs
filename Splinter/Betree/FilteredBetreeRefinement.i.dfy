@@ -378,12 +378,12 @@ module FilteredBetreeRefinement
   {
   }
 
-//   lemma AllKeysInTotalDomain(key: Key)
-//     ensures key in TotalDomain().KeySet()
-//     ensures TotalDomain().Contains(key)
-//   {
-//     SmallestElementLte(Element(key));
-//   }
+  lemma AllKeysInTotalDomain(key: Key)
+    ensures key in TotalDomain().KeySet()
+    ensures TotalDomain().Contains(key)
+  {
+    SmallestElementLte(Element(key));
+  }
 
   lemma InternalGrowStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
@@ -574,7 +574,7 @@ module FilteredBetreeRefinement
   lemma PushBufferCommutesWithI(node: BetreeNode, buffers: BufferStack) 
     requires node.WF()
     requires node.BetreeNode?
-    // requires buffers.ApplyFilter(node.MyDomain().KeySet()) == buffers // buffers must be within node's domain
+    requires buffers.ApplyFilter(node.KeySet()) == buffers // buffers must be within node's domain
     ensures INode(node.PushBufferStack(buffers)) == INode(node).PushBufferStack(buffers)
   {
     var node_a := INode(node.PushBufferStack(buffers));
@@ -594,13 +594,11 @@ module FilteredBetreeRefinement
           node.PushBufferStack(buffers).ActiveBufferKeysForChild(j, i)
           == node.ActiveBufferKeysForChild(j, i-buffers.Length());
       } else {
-
-        assert forall j | 0 <= j < |node.children| :: 
-          node.PushBufferStack(buffers).ActiveBufferKeysForChild(j, i)
-          == node.ActiveBufferKeysForChild(j, i-buffers.Length());
+        // key in domain must mean that key routed to child?
+        // assert forall j | 0 <= j < |node.children| :: 
+        //   node.PushBufferStack(buffers).ActiveBufferKeysForChild(j, i)
+        //   == node.ActiveBufferKeysForChild(j, i-buffers.Length());
         // active key 
-        
-
         assume false;
       }
     }
@@ -761,7 +759,21 @@ module FilteredBetreeRefinement
     ensures v'.WF()
     ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
-    PushBufferCommutesWithI(v.root.Promote(TotalDomain()), BufferStack([v.memtable.buffer]));
+    var node := v.root.Promote(TotalDomain());
+    assert node.MyDomain() == TotalDomain();
+
+    var buffers := BufferStack([v.memtable.buffer]);
+    forall i | 0 <= i < buffers.Length() 
+      ensures buffers.ApplyFilter(node.KeySet()).buffers[i] == buffers.buffers[i]
+    {
+      assert buffers.ApplyFilter(node.KeySet()).buffers[i] == buffers.buffers[i].ApplyFilter(node.KeySet());
+      if exists k :: k in buffers.buffers[i].mapp && k !in node.KeySet() {
+        var k :| k in buffers.buffers[i].mapp && k !in node.KeySet();
+        AllKeysInTotalDomain(k);
+        assert false;
+      }
+    } 
+    PushBufferCommutesWithI(node, buffers);
   }
 
 //   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
