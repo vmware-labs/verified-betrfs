@@ -25,31 +25,12 @@ module FilteredBetreeRefinement
   import PivotBetree
   import PivotBetreeRefinement
 
-  function ActiveBufferKeysForChild(node: BetreeNode, childIdx: nat, bufferIdx: nat) : iset<Key>
-    requires node.WF()
-    requires node.BetreeNode?
-    requires childIdx < |node.children|
-    requires bufferIdx < node.buffers.Length()
-  {
-    if node.activeBufferRanges[childIdx] <= bufferIdx 
-    then node.DomainRoutedToChild(childIdx).KeySet()
-    else iset{}
-  }
-
-  function ActiveBufferKeys(node: BetreeNode, bufferIdx: nat) : iset<Key>
-    requires node.WF()
-    requires node.BetreeNode?
-    requires bufferIdx < node.buffers.Length()
-  {
-    iset k, i | 0 <= i < |node.children| && k in ActiveBufferKeysForChild(node, i, bufferIdx) :: k
-  }
-
   function IBuffer(node: BetreeNode, bufferIdx: nat) : Buffer
     requires node.WF()
     requires node.BetreeNode?
     requires bufferIdx < node.buffers.Length()
   {
-    node.buffers.buffers[bufferIdx].ApplyFilter(ActiveBufferKeys(node, bufferIdx))
+    node.buffers.buffers[bufferIdx].ApplyFilter(node.ActiveBufferKeys(bufferIdx))
   }
 
   function IBufferStack(node: BetreeNode) : BufferStack
@@ -172,6 +153,19 @@ module FilteredBetreeRefinement
     }
   }
 
+  lemma TargetCommutesWithI(path: Path)
+    requires path.Valid()
+    ensures IPath(path).Valid()
+    ensures IPath(path).Target() == INode(path.Target())
+    decreases path.depth
+  {
+    IPathValid(path);
+    if 0 < path.depth {
+      SubpathCommutesWithIPath(path);
+      TargetCommutesWithI(path.Subpath());
+    }
+  }
+
   function IReceiptLine(line: QueryReceiptLine) : PivotBetree.QueryReceiptLine
     requires line.WF()
   {
@@ -223,14 +217,14 @@ module FilteredBetreeRefinement
     requires node.WF()
     requires node.KeyInDomain(key)
     requires start == node.ActiveBuffersForKey(key)
-    ensures forall i:nat | i < start :: key !in ActiveBufferKeys(node, i)
-    ensures forall i:nat | start <= i < node.buffers.Length() :: key in ActiveBufferKeys(node, i)
+    ensures forall i:nat | i < start :: key !in node.ActiveBufferKeys(i)
+    ensures forall i:nat | start <= i < node.buffers.Length() :: key in node.ActiveBufferKeys(i)
   {
     forall i:nat | start <= i < node.buffers.Length()
-      ensures key in ActiveBufferKeys(node, i)
+      ensures key in node.ActiveBufferKeys(i)
     {
       var childIdx := Route(node.pivotTable, key);
-      assert key in ActiveBufferKeysForChild(node, childIdx, i); // trigger
+      assert key in node.ActiveBufferKeysForChild(childIdx, i); // trigger
     }
   }
 
@@ -249,6 +243,102 @@ module FilteredBetreeRefinement
     }
   }
 
+  lemma QueryUpToEquivalent(a: BufferStack, b: BufferStack, key: Key, count: nat)
+    requires count <= |a.buffers|
+    requires count <= |b.buffers|
+    requires forall i:nat | i < count :: a.buffers[i].Query(key) == b.buffers[i].Query(key)
+    ensures a.QueryUpTo(key, count) == b.QueryUpTo(key, count)
+  {
+    if count > 0 {
+      QueryUpToEquivalent(a, b, key, count-1);
+    }
+  }
+
+  lemma BufferStackQueryAdditive(left: BufferStack, right: BufferStack, key: Key, count: nat)
+    requires count <= |left.buffers| + |right.buffers|
+    ensures 
+      && var out := BufferStack(left.buffers + right.buffers);
+      && (count <= |left.buffers| ==> out.QueryUpTo(key, count) == left.QueryUpTo(key, count))
+      && (|left.buffers| < count ==> out.QueryUpTo(key, count) == Merge(left.Query(key), right.QueryUpTo(key, count-|left.buffers|)))
+  {
+    var out := BufferStack(left.buffers + right.buffers);
+    if count <= |left.buffers| {
+      QueryUpToEquivalent(out, left, key, count);
+    } else {
+      BufferStackQueryAdditive(left, right, key, count-1);
+    }
+  }
+
+  lemma CompactedQueryEquivalence(a: BufferStack, start: nat, end: nat, compacted: Buffer, key: Key, count: nat) 
+    requires start < end <= a.Length()
+    requires count <= a.Length()
+    requires a.Slice(start, end).Equivalent(BufferStack([compacted]))
+    ensures var out := BufferStack(a.buffers[..start] + [compacted] + a.buffers[end..]);
+      && (count >= end ==> a.QueryUpTo(key, count) == out.QueryUpTo(key, count-end+start+1))
+      && (count <= start ==> a.QueryUpTo(key, count) == out.QueryUpTo(key, count))
+  {
+    if count == 0 { return; }
+
+    if count > end {
+      CompactedQueryEquivalence(a, start, end, compacted, key, count-1);
+    } else if count > start {
+      if (count == end) {
+        assert a.Slice(start, end).Equivalent(BufferStack([compacted]));
+        assert a.Slice(start, end).Query(key) == BufferStack([compacted]).Query(key); // trigger
+        CompactedQueryEquivalence(a, start, end, compacted, key, start);
+        
+        var out := BufferStack(a.buffers[..start] + [compacted] + a.buffers[end..]);
+        BufferStackQueryAdditive(BufferStack(a.buffers[..start]), a.Slice(start, end), key, end);
+        BufferStackQueryAdditive(BufferStack(a.buffers[..start]), BufferStack([compacted]), key, start+1);
+
+        assert a.buffers[..start] + a.buffers[start..end] == a.buffers[..end];
+        assert BufferStack(a.buffers[..end]).Query(key) == BufferStack(out.buffers[..start+1]).Query(key); // trigger
+
+        QueryUpToEquivalent(BufferStack(a.buffers[..end]), a, key, count);
+        QueryUpToEquivalent(BufferStack(out.buffers[..start+1]), out, key, start+1);
+      }
+    } else {
+      CompactedQueryEquivalence(a, start, end, compacted, key, count-1);
+    }
+  }
+
+  lemma CompactedBufferEquivalent(node: BetreeNode, start: nat, end: nat, compacted: Buffer)
+    requires node.ActiveBufferSlice.requires(start, end)
+    requires node.ActiveBufferSlice(start, end).Equivalent(BufferStack([compacted]))
+    ensures INode(node).buffers.Slice(start, end).Equivalent(BufferStack([compacted]))
+  {
+    assert node.ActiveBufferSlice(start, end) == INode(node).buffers.Slice(start, end); // trigger
+  }
+
+  lemma InternalCompactStepWF(step: Step) 
+    requires step.WF()
+    requires step.InternalCompactStep?
+    ensures IStepDefn(step).WF()
+  {
+    var istep := IStepDefn(step);
+    var path := step.path;
+    TargetCommutesWithI(path);
+    assert istep.path.Valid();
+
+    var inode := istep.path.Target();
+    var node := path.Target();
+
+    var start := step.compactStart;
+    var end := step.compactEnd;
+
+    var ibuffers := IBufferStack(path.Target()); // original bufferstack
+    var icompactedBuffers := BufferStack(ibuffers.buffers[..start] + [step.compactedBuffer] + ibuffers.buffers[end..]); // resulting bufferstack
+
+    CompactedBufferEquivalent(path.Target(), start, end, step.compactedBuffer);
+    assert ibuffers.Slice(start, end).Equivalent(BufferStack([step.compactedBuffer]));
+
+    forall k | AnyKey(k)
+      ensures ibuffers.Query(k) == icompactedBuffers.Query(k) 
+    {
+      CompactedQueryEquivalence(ibuffers, start, end, step.compactedBuffer, k, ibuffers.Length());
+    }
+  }
+
   function IStepDefn(step: Step) : (out: PivotBetree.Step)
     requires step.WF()
   {
@@ -258,7 +348,7 @@ module FilteredBetreeRefinement
       case QueryEndLsnStep() => PivotBetree.QueryEndLsnStep()
       case FreezeAsStep() => PivotBetree.FreezeAsStep()
       case InternalGrowStep() => PivotBetree.InternalGrowStep()
-      case  InternalSplitStep(path, request) => PivotBetree.InternalSplitStep(IPath(path), request)
+      case InternalSplitStep(path, request) => PivotBetree.InternalSplitStep(IPath(path), request)
       case InternalFlushStep(path, childIdx, _) => PivotBetree.InternalFlushStep(IPath(path), childIdx)
       case InternalFlushMemtableStep() => PivotBetree.InternalFlushMemtableStep()
       case InternalCompactStep(path, compactStart, compactEnd, compactedBuffer) => (
@@ -277,9 +367,30 @@ module FilteredBetreeRefinement
     var istep := IStepDefn(step);
     match step {
       case QueryStep(receipt) => { IReceiptValid(receipt); }
-      case InternalSplitStep(path, request) => { assume false; }//TargetCommutesWithI(path); }
-      case InternalFlushStep(path, childIdx, _) => { assume false; }//TargetCommutesWithI(path); }
-      case InternalCompactStep(path, compactStart, compactEnd, compactedBuffer) => { assume false; }//InternalCompactStepWF(step); }
+      case InternalSplitStep(path, request) => {
+        TargetCommutesWithI(path);
+        var child := path.Target().children[request.childIdx];
+        var ichild := istep.path.Target().children[request.childIdx];
+
+        assert INode(child) == ichild;
+        assert ichild.children == IChildren(child);
+      }
+      case InternalFlushStep(path, childIdx, _) => { TargetCommutesWithI(path); }
+      case InternalCompactStep(path, compactStart, compactEnd, compactedBuffer) => { 
+        TargetCommutesWithI(path);
+
+        var ibuffers := IBufferStack(path.Target()); // og buffers
+        var icompactedBuffers := BufferStack(ibuffers.buffers[..compactStart] + [compactedBuffer] + ibuffers.buffers[compactEnd..]); // compacted buffers
+
+        CompactedBufferEquivalent(path.Target(), compactStart, compactEnd, compactedBuffer);
+        assert ibuffers.Slice(compactStart, compactEnd).Equivalent(BufferStack([compactedBuffer]));
+
+        forall k | AnyKey(k)
+          ensures ibuffers.Query(k) == icompactedBuffers.Query(k) 
+        {
+          CompactedQueryEquivalence(ibuffers, compactStart, compactEnd, compactedBuffer, k, ibuffers.Length());
+        }
+      }
       case _ => { assert istep.WF(); }
     }
   }

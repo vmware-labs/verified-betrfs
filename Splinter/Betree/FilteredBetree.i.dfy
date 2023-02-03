@@ -287,6 +287,36 @@ module FilteredBetree
       )
     }
 
+    function ActiveBufferKeysForChild(childIdx: nat, bufferIdx: nat) : iset<Key>
+    requires WF()
+    requires BetreeNode?
+    requires childIdx < |children|
+    requires bufferIdx < buffers.Length()
+    {
+      if activeBufferRanges[childIdx] <= bufferIdx 
+      then DomainRoutedToChild(childIdx).KeySet()
+      else iset{}
+    }
+
+    function ActiveBufferKeys(bufferIdx: nat) : iset<Key>
+      requires WF()
+      requires BetreeNode?
+      requires bufferIdx < buffers.Length()
+    {
+      iset k, i | 0 <= i < |children| && k in ActiveBufferKeysForChild(i, bufferIdx) :: k
+    }
+
+    // retruns the requested active slice of a buffer
+    function ActiveBufferSlice(start: nat, end: nat) : BufferStack
+      requires WF()
+      requires BetreeNode?
+      requires start <= end <= buffers.Length()
+    {
+      var activeBuffers := seq (end-start, i requires 0 <= i < end-start 
+                            => buffers.buffers[i+start].ApplyFilter(ActiveBufferKeys(i+start)));
+      BufferStack(activeBuffers)
+    }
+
     predicate CanFlush(childIdx: nat)
     {
       && WF()
@@ -710,7 +740,7 @@ module FilteredBetree
           && path.Valid()
           && path.Target().BetreeNode?  // no point compacting a nil node
           && compactStart < compactEnd <= path.Target().buffers.Length()
-          && path.Target().buffers.Slice(compactStart, compactEnd).Equivalent(BufferStack([compactedBuffer]))
+          && path.Target().ActiveBufferSlice(compactStart, compactEnd).Equivalent(BufferStack([compactedBuffer]))
         case _ => true
       }
     }
