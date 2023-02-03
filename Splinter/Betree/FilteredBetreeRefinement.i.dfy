@@ -105,24 +105,24 @@ module FilteredBetreeRefinement
     && (v.root.BetreeNode? ==> v.root.MyDomain() == TotalDomain())
   }
 
-  // lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
-  //   requires Inv(v)
-  //   requires Next(v, v', lbl)
-  //   ensures Inv(v')
-  // {
-  //   if v'.root.BetreeNode? {
-  //     var step :| NextStep(v, v', lbl, step);
-  //     if step.InternalSplitStep? {
-  //       SubstitutePreservesWF(step.path, step.path.Target().SplitParent(step.request));
-  //     } else if step.InternalFlushStep? {
-  //       SubstitutePreservesWF(step.path, step.path.Target().Flush(step.childIdx));
-  //     } else if step.InternalCompactStep? {
-  //       var compactedNode := CompactedNode(step.path.Target(), step.compactedBuffers);
-  //       SubstitutePreservesWF(step.path, compactedNode);
-  //     }
-  //   }
-  //   assert v'.root.WF();  // trigger
-  // }
+  lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    ensures Inv(v')
+  {
+    if v'.root.BetreeNode? {
+      var step :| NextStep(v, v', lbl, step);
+      match step {
+        case InternalSplitStep(path, request) => { 
+          SubstitutePreservesWF(path, path.Target().SplitParent(request)); }
+        case InternalFlushStep(path, childIdx, bufferGCCount) => { 
+          SubstitutePreservesWF(path, path.Target().Flush(childIdx, bufferGCCount)); }
+        case InternalCompactStep(path, compactStart, compactEnd, compactedBuffer) => { 
+          SubstitutePreservesWF(path, CompactedNode(path.Target(), compactStart, compactEnd, compactedBuffer)); }
+        case _ => { assert v'.root.WF(); }
+      }
+    }
+  }
 
   function IPath(path: Path) : (out: PivotBetree.Path)
     requires path.Valid()
@@ -201,7 +201,7 @@ module FilteredBetreeRefinement
       assert receipt.ResultLinkedAt(i);  // trigger
       var node := receipt.lines[i].node;
       var key := ireceipt.key;
-      QueryCommutesWithIBufferStack(node, key, node.ActiveBuffersForKey(key), node.buffers.Length());
+      QueryCommutesWithIBufferStack(node, key, node.buffers.Length());
     }
   }
 
@@ -213,14 +213,13 @@ module FilteredBetreeRefinement
   {
   }
 
-  lemma ActiveBuffersForKeyConsistent(node: BetreeNode, key: Key, start: nat)
+  lemma ActiveBuffersForKeyConsistent(node: BetreeNode, key: Key)
     requires node.WF()
     requires node.KeyInDomain(key)
-    requires start == node.ActiveBuffersForKey(key)
-    ensures forall i:nat | i < start :: key !in node.ActiveBufferKeys(i)
-    ensures forall i:nat | start <= i < node.buffers.Length() :: key in node.ActiveBufferKeys(i)
+    ensures forall i:nat | i < node.ActiveBuffersForKey(key) :: key in node.ActiveBufferKeys(i)
+    ensures forall i:nat | node.ActiveBuffersForKey(key) <= i < node.buffers.Length() :: key !in node.ActiveBufferKeys(i)
   {
-    forall i:nat | start <= i < node.buffers.Length()
+    forall i:nat | i < node.ActiveBuffersForKey(key)
       ensures key in node.ActiveBufferKeys(i)
     {
       var childIdx := Route(node.pivotTable, key);
@@ -228,18 +227,17 @@ module FilteredBetreeRefinement
     }
   }
 
-  lemma QueryCommutesWithIBufferStack(node: BetreeNode, key: Key, start: nat, count: nat)
+  lemma QueryCommutesWithIBufferStack(node: BetreeNode, key: Key, count: nat)
     requires IBufferStack.requires(node)
     requires node.KeyInDomain(key)
     requires count <= node.buffers.Length()
-    requires start == node.ActiveBuffersForKey(key)
-    ensures count <= start ==> (IBufferStack(node).QueryUpTo(key, count) == Update(NopDelta()))
-    ensures start < count ==> (IBufferStack(node).QueryUpTo(key, count) == 
-      node.buffers.Slice(start, node.buffers.Length()).QueryUpTo(key, count-start))
+    ensures var end := node.ActiveBuffersForKey(key);
+      && (count > end ==> IBufferStack(node).QueryUpTo(key, count) == Merge(node.buffers.QueryUpTo(key, end), Update(NopDelta())))
+      && (count <= end ==> IBufferStack(node).QueryUpTo(key, count) == node.buffers.QueryUpTo(key, count))
   {
-    ActiveBuffersForKeyConsistent(node, key, start);
-    if start < count || 0 < count {
-      QueryCommutesWithIBufferStack(node, key, start, count-1);
+    ActiveBuffersForKeyConsistent(node, key);
+    if 0 < count {
+      QueryCommutesWithIBufferStack(node, key, count-1);
     }
   }
 
@@ -308,35 +306,6 @@ module FilteredBetreeRefinement
     ensures INode(node).buffers.Slice(start, end).Equivalent(BufferStack([compacted]))
   {
     assert node.ActiveBufferSlice(start, end) == INode(node).buffers.Slice(start, end); // trigger
-  }
-
-  lemma InternalCompactStepWF(step: Step) 
-    requires step.WF()
-    requires step.InternalCompactStep?
-    ensures IStepDefn(step).WF()
-  {
-    var istep := IStepDefn(step);
-    var path := step.path;
-    TargetCommutesWithI(path);
-    assert istep.path.Valid();
-
-    var inode := istep.path.Target();
-    var node := path.Target();
-
-    var start := step.compactStart;
-    var end := step.compactEnd;
-
-    var ibuffers := IBufferStack(path.Target()); // original bufferstack
-    var icompactedBuffers := BufferStack(ibuffers.buffers[..start] + [step.compactedBuffer] + ibuffers.buffers[end..]); // resulting bufferstack
-
-    CompactedBufferEquivalent(path.Target(), start, end, step.compactedBuffer);
-    assert ibuffers.Slice(start, end).Equivalent(BufferStack([step.compactedBuffer]));
-
-    forall k | AnyKey(k)
-      ensures ibuffers.Query(k) == icompactedBuffers.Query(k) 
-    {
-      CompactedQueryEquivalence(ibuffers, start, end, step.compactedBuffer, k, ibuffers.Length());
-    }
   }
 
   function IStepDefn(step: Step) : (out: PivotBetree.Step)
@@ -416,29 +385,21 @@ module FilteredBetreeRefinement
 //     SmallestElementLte(Element(key));
 //   }
 
-//   lemma InternalGrowStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-//     requires Inv(v)
-//     requires NextStep(v, v', lbl, step)
-//     requires step.InternalGrowStep?
-//     ensures v'.WF()
-//     ensures PagedBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
-//   {
-//     INodeWF(v.root);
-//     INodeWF(v'.root);
-//     assert I(v').root.children.mapp.Keys == AllKeys();  // trigger
-//     forall key:Key | AnyKey(key)
-//       ensures I(v').root.Child(key)
-//           == PagedBetree.ConstantChildMap(I(v).root).mapp[key] {
-//       AllKeysInTotalDomain(key);
-//       ChildCommutesWithI(v'.root, key);
-//     }
-//   }
+  lemma InternalGrowStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalGrowStep?
+    ensures v'.WF()
+    ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    assert I(v').root == INode(v'.root); // trigger
+  }
 
-//   lemma SubstitutePreservesWF(path: Path, target': BetreeNode)
-//     requires path.Valid()
-//     requires path.ValidReplacement(target')
-//     ensures path.Substitute(target').WF()
-//   {}
+  lemma SubstitutePreservesWF(path: Path, target': BetreeNode)
+    requires path.Valid()
+    requires path.ValidReplacement(target')
+    ensures path.Substitute(target').WF()
+  {}
 
 //   // Substitution followed by interpretation is the same as interpretation
 //   // followed by paged-level substitution.
@@ -484,20 +445,6 @@ module FilteredBetreeRefinement
 //         }
 //       }
 //       assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));  // trigger
-//     }
-//   }
-
-//   lemma TargetCommutesWithI(path: Path) 
-//     requires path.Valid()
-//     ensures IPath(path).Valid()  // prereq
-//     ensures IPath(path).Target() == INode(path.Target())
-//     decreases path.depth
-//   {
-//     IPathValid(path);
-//     if 0 < path.depth {
-//       TargetCommutesWithI(path.Subpath());
-//       SubpathCommutesWithIPath(path);
-//       assert IPath(path).Target() == INode(path.Target());
 //     }
 //   }
 
@@ -597,22 +544,88 @@ module FilteredBetreeRefinement
 //     SubstitutionRefines(step.path, step.path.Target().SplitParent(step.request));
 //   }
 
-//   lemma PromoteCommutesWithI(node: BetreeNode, domain: Domain)  
-//     requires node.WF()
-//     requires domain.WF()
-//     requires domain.Domain?
-//     ensures INode(node.Promote(domain)) == INode(node).Promote()
-//   {
-//     assert INode(node.Promote(domain)) == INode(node).Promote();  // trigger
-//   }
+  lemma PromoteCommutesWithI(node: BetreeNode, domain: Domain)  
+    requires node.WF()
+    requires domain.WF()
+    requires domain.Domain?
+    ensures INode(node.Promote(domain)) == INode(node).Promote(domain)
+  {
+    assert INode(node.Promote(domain)) == INode(node).Promote(domain);  // trigger
+  }
 
-//   lemma PushBufferCommutesWithI(node: BetreeNode, buffers: BufferStack) 
-//     requires node.WF()
-//     requires node.BetreeNode?
-//     ensures INode(node.PushBufferStack(buffers)) == INode(node).PushBufferStack(buffers)
-//   {
-//     assert INode(node.PushBufferStack(buffers)).buffers == INode(node).PushBufferStack(buffers).buffers;  // trigger
-//   }
+  // lemma ActiveBufferKeysAfterPushBufferStack(node: BetreeNode, buffers: BufferStack, bufferIdx: nat)
+  //   requires node.WF()
+  //   requires node.BetreeNode?
+  //   requires bufferIdx < buffers.Length() + node.buffers.Length() 
+  //   // requires bufferIdx < buffers.Length() + node.buffers.Length() 
+  //   ensures buffers.Length() <= bufferIdx ==> 
+  //     node.PushBufferStack(buffers).ActiveBufferKeys(bufferIdx) == node.ActiveBufferKeys(bufferIdx-buffers.Length())
+  //   ensures buffers.Length() > bufferIdx ==>
+  //     node.PushBufferStack(buffers).ActiveBufferKeys(bufferIdx) == buffers.buffers[bufferIdx]
+  //   // ensures 
+  // {
+  //   forall i | 0 <= i < |node.children| 
+  //     ensures buffers.Length() <= bufferIdx ==> 
+  //       node.PushBufferStack(buffers).ActiveBufferKeysForChild(i, bufferIdx)
+  //       == node.ActiveBufferKeysForChild(i, bufferIdx-buffers.Length())
+  //   {}
+  // }
+
+  lemma PushBufferCommutesWithI(node: BetreeNode, buffers: BufferStack) 
+    requires node.WF()
+    requires node.BetreeNode?
+    // requires buffers.ApplyFilter(node.MyDomain().KeySet()) == buffers // buffers must be within node's domain
+    ensures INode(node.PushBufferStack(buffers)) == INode(node).PushBufferStack(buffers)
+  {
+    var node_a := INode(node.PushBufferStack(buffers));
+    var node_b := INode(node).PushBufferStack(buffers);
+
+    assert IChildren(node.PushBufferStack(buffers)) == IChildren(node); // trigger
+    assert node_a.children == node_b.children;
+    assert node_a.buffers.Length() == node_b.buffers.Length();
+
+    forall i | 0 <= i < node_a.buffers.Length() 
+      ensures node_a.buffers.buffers[i] == node_b.buffers.buffers[i] 
+    {
+      // ActiveBufferKeysAfterPushBufferStack(node, buffers, i);
+      if buffers.Length() <= i {
+        // ActiveBufferKeysAfterPushBufferStack(node, buffers, i);
+        assert forall j | 0 <= j < |node.children| :: 
+          node.PushBufferStack(buffers).ActiveBufferKeysForChild(j, i)
+          == node.ActiveBufferKeysForChild(j, i-buffers.Length());
+      } else {
+
+        assert forall j | 0 <= j < |node.children| :: 
+          node.PushBufferStack(buffers).ActiveBufferKeysForChild(j, i)
+          == node.ActiveBufferKeysForChild(j, i-buffers.Length());
+        // active key 
+        
+
+        assume false;
+      }
+    }
+
+
+    // assert buffers_a[buffers.Length()..] == buffers_b[buffers.Length()..];
+
+    // buffers_b[buffers.Length()..];
+
+//     // assert node.PushBufferStack(buffers).buffers.buffers[..node.buffers.Length()] 
+//     //   == node.buffers.buffers[..node.buffers.Length()];
+
+    
+    // assert INode(node.PushBufferStack(buffers)).buffers == INode(node).PushBufferStack(buffers).buffers;  // trigger
+
+//     assume false;
+//     // ah this changes all nodes include it 
+//     // var inode := INode(node.PushBufferStack(buffers));
+    
+//     // assume inode.buffers.buffers[node.buffers.Length()..] == buffers.buffers;
+    
+//     // assert inode.buffers.buffers[.. node.buffers.Length()] == INode(node).PushBufferStack(buffers).buffers.buffers[.. node.buffers.Length()];
+
+    // assert INode(node.PushBufferStack(buffers)).buffers[.. node.buffers.Length()] == INode(node).PushBufferStack(buffers).buffers[];  // trigger
+  }
 
 //   // todo: this is duplicated in Journal/LinkedJournalRefinement
 //   lemma CommuteTransitivity<L,H>(I: L->H, f: L->L, F: H->H, g: L->L, G: H->H)
@@ -741,53 +754,42 @@ module FilteredBetreeRefinement
 //     TargetCommutesWithI(step.path);
 //   }
 
-  // lemma FreezeAsRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-  //   requires Inv(v)
-  //   requires NextStep(v, v', lbl, step)
-  //   requires step.FreezeAsStep?
-  //   ensures v'.WF()
-  //   ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
-  // {
-  //   assert INode(PushMemtable(v.root, v.memtable).value) == PivotBetree.PushMemtable(INode(v.root), v.memtable).value;
-  // }
+  lemma InternalFlushMemtableStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, step)
+    requires step.InternalFlushMemtableStep?
+    ensures v'.WF()
+    ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
+  {
+    PushBufferCommutesWithI(v.root.Promote(TotalDomain()), BufferStack([v.memtable.buffer]));
+  }
 
-  // lemma InternalFlushMemtableStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-  //   requires Inv(v)
-  //   requires NextStep(v, v', lbl, step)
-  //   requires step.InternalFlushMemtableStep?
-  //   ensures v'.WF()
-  //   ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
-  // {
-  //   assert INode(PushMemtable(v.root, v.memtable).value) == PivotBetree.PushMemtable(INode(v.root), v.memtable).value;
-  // }
+//   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+//     requires Inv(v)
+//     requires Next(v, v', lbl)
+//     ensures v'.WF()
+//     ensures PivotBetree.Next(I(v), I(v'), ILbl(lbl))
+//   {
+//     InvNext(v, v', lbl);
+//     var step: Step :| NextStep(v, v', lbl, step);
+//     match step {
+//       case QueryStep(receipt) => {
+//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+//       }
+//       case PutStep() => {
+//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+//       }
+//       case QueryEndLsnStep() => {
+//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+//       }
+//       case FreezeAsStep() => {
+//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
+//       }
+//       case InternalGrowStep() => {
+//         InternalGrowStepRefines(v, v', lbl, step);
+//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
 
-  // lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
-  //   requires Inv(v)
-  //   requires Next(v, v', lbl)
-  //   ensures v'.WF()
-  //   ensures PivotBetree.Next(I(v), I(v'), ILbl(lbl))
-  // {
-  //   InvNext(v, v', lbl);
-  //   var step: Step :| NextStep(v, v', lbl, step);
-  //   match step {
-  //     case QueryStep(receipt) => {
-  //       ValidReceiptRefines(step.receipt);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); // trigger
-  //     }
-  //     case PutStep() => {
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-  //     case QueryEndLsnStep() => {
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
-  //     case FreezeAsStep() => {
-  //       INodeWF(v.root);
-  //       FreezeAsRefines(v, v', lbl, step);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step)); 
-  //     }
-  //     case InternalGrowStep() => {
-  //       InternalGrowStepRefines(v, v', lbl, step);
-  //     }
+//       }
   //     case InternalSplitStep(_, _) => {
   //       InternalSplitStepRefines(v, v', lbl, step);
   //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
@@ -796,16 +798,18 @@ module FilteredBetreeRefinement
   //       InternalFlushStepRefines(v, v', lbl, step);
   //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
   //     }
-  //     case InternalFlushMemtableStep() => {
-  //       InternalFlushMemtableStepRefines(v, v', lbl, step);
-  //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //     }
+//       case InternalFlushMemtableStep() => {
+//         InternalFlushMemtableStepRefines(v, v', lbl, step);
+//         assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+//       }
   //     case InternalCompactStep(_, _) => {
   //       InternalCompactStepRefines(v, v', lbl, step);
   //       assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
   //     }
-  //     case InternalNoOpStep() => 
-  //        assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-  //   }
-  // }
+//       case InternalNoOpStep() => 
+//          assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
+//       case _ =>  { assume false; }
+
+//     }
+//   }
 }
