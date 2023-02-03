@@ -9,20 +9,20 @@ use crate::spec::TotalKMMap_t::*;
 
 verus! {
 pub struct Buffer { 
-    pub mapp: Map<Key, Message>
+    pub map: Map<Key, Message>
 }
 
 impl Buffer { 
     pub open spec fn query(self, key: Key) -> Message {
-        if self.mapp.dom().contains(key) {
-            self.mapp[key]
+        if self.map.contains_key(key) {
+            self.map[key]
         } else {
             Message::Update{ delta: nop_delta() }
         }
     }
 
     pub open spec fn apply_filter(self, accept: Set<Key>) -> Buffer {
-        Buffer{ mapp: Map::new( |k| accept.contains(k) && self.mapp.dom().contains(k), |k| self.mapp[k] ) }
+        Buffer{ map: Map::new( |k| accept.contains(k) && self.map.contains_key(k), |k| self.map[k] ) }
     }
 } // end impl Buffer
 
