@@ -488,17 +488,15 @@ module FilteredBetreeRefinement
     }
   }
 
-  lemma SplitIndexCommutesWithI(node: BetreeNode, pivotIdx: nat)
+  lemma SplitIndexCommutesWithILeft(node: BetreeNode, pivotIdx: nat)
     requires node.SplitIndex.requires(pivotIdx)
     ensures INode(node.SplitIndex(pivotIdx).0) == INode(node).SplitIndex(pivotIdx).0
-    ensures INode(node.SplitIndex(pivotIdx).1) == INode(node).SplitIndex(pivotIdx).1
   {
-    var (left, right) := node.SplitIndex(pivotIdx);
-    var (ileft, iright) := INode(node).SplitIndex(pivotIdx);
+     var (left, _) := node.SplitIndex(pivotIdx);
+    var (ileft, _) := INode(node).SplitIndex(pivotIdx);
 
     var splitElt := INode(node).pivotTable[pivotIdx];
     var leftFilter := Domain(INode(node).MyDomain().start, splitElt);
-    var rightFilter := Domain(splitElt, INode(node).MyDomain().end);
 
     forall i | 0 <= i < ileft.buffers.Length()
       ensures IBuffer(left, i) == ileft.buffers.buffers[i]
@@ -538,12 +536,66 @@ module FilteredBetreeRefinement
         }
       }
     }
+  }
+
+  lemma SplitIndexCommutesWithIRight(node: BetreeNode, pivotIdx: nat)
+    requires node.SplitIndex.requires(pivotIdx)
+    ensures INode(node.SplitIndex(pivotIdx).1) == INode(node).SplitIndex(pivotIdx).1
+  {
+    var (_, right) := node.SplitIndex(pivotIdx);
+    var (_, iright) := INode(node).SplitIndex(pivotIdx);
+
+    var splitElt := INode(node).pivotTable[pivotIdx];
+    var rightFilter := Domain(splitElt, INode(node).MyDomain().end);
 
     forall i | 0 <= i < iright.buffers.Length()
       ensures IBufferStack(right).buffers[i] == iright.buffers.buffers[i]
     {
-      assume false;
+      forall k 
+        ensures k in IBuffer(right, i).mapp <==> k in iright.buffers.buffers[i].mapp 
+      {
+        if k in IBuffer(right, i).mapp && k !in iright.buffers.buffers[i].mapp {
+          var childIdx :| 0 <= childIdx < |right.children| && k in right.ActiveBufferKeysForChild(childIdx, i);
+          var nodeIdx := childIdx+pivotIdx;
+
+          assert k in node.ActiveBufferKeysForChild(nodeIdx, i); // trigger
+          assert node.DomainRoutedToChild(nodeIdx).Contains(k);
+
+          assert Keyspace.lte(node.pivotTable[nodeIdx], Element(k));
+          assert Keyspace.lt(Element(k), node.pivotTable[nodeIdx+1]);
+
+          assert rightFilter.Contains(k) by { Keyspace.reveal_IsStrictlySorted(); Keyspace.lteTransitiveForall();}
+          assert false;
+        }
+
+        if k !in IBuffer(right, i).mapp && k in iright.buffers.buffers[i].mapp {
+          assert rightFilter.Contains(k);
+          assert k in INode(node).buffers.buffers[i].mapp;
+          assert k in node.buffers.buffers[i].mapp;
+          assert k in node.ActiveBufferKeys(i);
+
+          var childIdx :| 0 <= childIdx < |node.children| && k in node.ActiveBufferKeysForChild(childIdx, i);
+
+          if childIdx >= pivotIdx {
+            assert k in right.ActiveBufferKeysForChild(childIdx-pivotIdx, i);
+            assert false;
+          } else {
+            Keyspace.reveal_IsStrictlySorted();
+            Keyspace.lteTransitiveForall();
+            assert false;
+          }
+        }
+      }
     }
+  }
+
+  lemma SplitIndexCommutesWithI(node: BetreeNode, pivotIdx: nat)
+    requires node.SplitIndex.requires(pivotIdx)
+    ensures INode(node.SplitIndex(pivotIdx).0) == INode(node).SplitIndex(pivotIdx).0
+    ensures INode(node.SplitIndex(pivotIdx).1) == INode(node).SplitIndex(pivotIdx).1
+  {
+    SplitIndexCommutesWithILeft(node, pivotIdx);
+    SplitIndexCommutesWithIRight(node, pivotIdx);
   }
 
   lemma SplitCommutesWithI(step: Step) 
