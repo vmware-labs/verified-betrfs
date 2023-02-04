@@ -401,17 +401,18 @@ module FilteredBetreeRefinement
     ensures path.Substitute(target').WF()
   {}
 
-//   // Substitution followed by interpretation is the same as interpretation
-//   // followed by paged-level substitution.
-//   lemma SubstitutionRefines(path: Path, target': BetreeNode)
-//     requires path.Valid()
-//     requires path.ValidReplacement(target')
-//     ensures path.Substitute(target').WF()
-//     ensures IPath(path).Valid()
-//     ensures INode(target').WF();
-//     ensures INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
-//     decreases path.depth;
-//   {
+  // Substitution followed by interpretation is the same as interpretation
+  // followed by paged-level substitution.
+  lemma SubstitutionRefines(path: Path, target': BetreeNode)
+    requires path.Valid()
+    requires path.ValidReplacement(target')
+    ensures path.Substitute(target').WF()
+    ensures IPath(path).Valid()
+    ensures INode(target').WF();
+    ensures INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
+    decreases path.depth;
+  {
+    assume false;
 //     IPathValid(path);
 //     SubstitutePreservesWF(path, target');
 //     IPathValid(path);
@@ -446,86 +447,148 @@ module FilteredBetreeRefinement
 //       }
 //       assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));  // trigger
 //     }
-//   }
+  }
 
-//   lemma SplitCommutesWithILeft(step: Step, key: Key)
-//     requires step.InternalSplitStep?
-//     requires step.WF()
-//     requires key in SplitLeftKeys(step)
-//     requires key in step.path.Target().KeySet()
-//     ensures
-//       var leftKeys := SplitLeftKeys(step);
-//       var t := step.path.Target();
-//       INode(t).Split(leftKeys, SplitChildKeys(step) - leftKeys).Child(key) == IChildren(t.SplitParent(step.request)).mapp[key];
-//   {
-//     var t := step.path.Target();
-//     var childDom := t.DomainRoutedToChild(step.request.childIdx);
-//     var leftDom := Domain(childDom.start, Element(step.SplitKey()));
-//     var leftKeys := SplitLeftKeys(step);
-//     var rightKeys := SplitChildKeys(step) - SplitLeftKeys(step);
+  lemma SplitLeafCommutesWithI(node: BetreeNode, key: Key)
+    requires node.SplitLeaf.requires(key)
+    ensures INode(node.SplitLeaf(key).0) == INode(node).SplitLeaf(key).0
+    ensures INode(node.SplitLeaf(key).1) == INode(node).SplitLeaf(key).1
+  {
+    var (left, right) := node.SplitLeaf(key);
+    var (ileft, iright) := INode(node).SplitLeaf(key);
 
-//     assert leftDom.KeySet() == leftKeys by {
-//       Keyspace.reveal_IsStrictlySorted();
-//       Keyspace.lteTransitiveForall();
-//     }
-//     if step.request.SplitLeaf? {
-//       assert INode(t.Child(key)).FilterBuffersAndChildren(leftDom.KeySet()).children == INode(t.Child(key).SplitLeaf(step.request.splitKey).0).children;  // trigger seq extensionality
-//     } else {
-//       assert INode(t.Child(key)).FilterBuffersAndChildren(leftDom.KeySet()).children == INode(t.Child(key).SplitIndex(step.request.childPivotIdx).0).children;  // trigger seq extensionality
-//     }
-//   }
+    forall i | 0 <= i < ileft.buffers.Length()
+      ensures IBuffer(left, i) == ileft.buffers.buffers[i]
+    {
+      assert left.ActiveBufferKeys(i) == left.ActiveBufferKeysForChild(0, i); // trigger
+      assert node.ActiveBufferKeys(i) == node.ActiveBufferKeysForChild(0, i); // trigger
 
-//   lemma SplitCommutesWithIRight(step: Step, key: Key)
-//     requires step.InternalSplitStep?
-//     requires step.WF()
-//     requires key in SplitChildKeys(step) - SplitLeftKeys(step)
-//     requires key in step.path.Target().KeySet()
-//     ensures
-//       var leftKeys := SplitLeftKeys(step);
-//       var t := step.path.Target();
-//       INode(t).Split(leftKeys, SplitChildKeys(step) - leftKeys).Child(key) == IChildren(t.SplitParent(step.request)).mapp[key];
-//   {
-//     var t := step.path.Target();
-//     var childDom := t.DomainRoutedToChild(step.request.childIdx);
-//     var rightDom := Domain(Element(step.SplitKey()), childDom.end);
-//     var leftKeys := SplitLeftKeys(step);
-//     var rightKeys := SplitChildKeys(step) - leftKeys;
+      forall k | k in left.ActiveBufferKeys(i)
+        ensures k in node.ActiveBufferKeys(i) {
+        assert node.MyDomain().Contains(k) by {
+          Keyspace.lteTransitiveForall();
+        }
+      }
+      assert IBuffer(left, i) == ileft.buffers.buffers[i];
+    }
 
-//     assert rightDom.KeySet() == rightKeys by {
-//       Keyspace.reveal_IsStrictlySorted();
-//       Keyspace.lteTransitiveForall();
-//     }
-//     if step.request.SplitLeaf? {
-//       assert INode(t.Child(key)).FilterBuffersAndChildren(rightDom.KeySet()).children == INode(t.Child(key).SplitLeaf(step.request.splitKey).1).children;  // trigger seq extensionality
-//     } else {
-//       assert INode(t.Child(key)).FilterBuffersAndChildren(rightDom.KeySet()).children == INode(t.Child(key).SplitIndex(step.request.childPivotIdx).1).children;  // trigger seq extensionality
-//     }
-//   }
+    forall i | 0 <= i < iright.buffers.Length()
+      ensures IBuffer(right, i) == iright.buffers.buffers[i]
+    {
+      assert right.ActiveBufferKeys(i) == right.ActiveBufferKeysForChild(0, i); // trigger
+      assert node.ActiveBufferKeys(i) == node.ActiveBufferKeysForChild(0, i); // trigger
 
-//   lemma SplitCommutesWithI(step: Step) 
-//     requires step.InternalSplitStep?
-//     requires step.WF()
-//     ensures INode(step.path.Target()).Split(SplitLeftKeys(step), SplitChildKeys(step) - SplitLeftKeys(step)) == INode(step.path.Target().SplitParent(step.request))
-//   {
-//     var leftKeys := SplitLeftKeys(step);
-//     var rightKeys := SplitChildKeys(step) - SplitLeftKeys(step);
-//     var t := step.path.Target();
+      forall k | k in right.ActiveBufferKeys(i)
+        ensures k in node.ActiveBufferKeys(i) {
+        assert node.MyDomain().Contains(k) by {
+          Keyspace.lteTransitiveForall();
+        }
+      }
+      assert IBuffer(right, i) == iright.buffers.buffers[i];
+    }
+  }
 
-//     forall key | AnyKey(key)
-//     ensures INode(t).Split(leftKeys, rightKeys).Child(key)
-//       == IChildren(t.SplitParent(step.request)).mapp[key] 
-//     {
-//       if key in t.KeySet() {
-//         if key in leftKeys {
-//           SplitCommutesWithILeft(step, key);
-//         } else if key in rightKeys {
-//           SplitCommutesWithIRight(step, key);
-//         }
-//       }
-//     }
-//     assert PagedBetree.BetreeNode(t.buffers, IChildren(t)).Split(leftKeys, rightKeys).children.mapp.Keys
-//         == IChildren(t.SplitParent(step.request)).mapp.Keys;  // triggers extensionality
-//   }
+  lemma SplitIndexCommutesWithI(node: BetreeNode, pivotIdx: nat)
+    requires node.SplitIndex.requires(pivotIdx)
+    ensures INode(node.SplitIndex(pivotIdx).0) == INode(node).SplitIndex(pivotIdx).0
+    ensures INode(node.SplitIndex(pivotIdx).1) == INode(node).SplitIndex(pivotIdx).1
+  {
+    var (left, right) := node.SplitIndex(pivotIdx);
+    var (ileft, iright) := INode(node).SplitIndex(pivotIdx);
+
+    var splitElt := INode(node).pivotTable[pivotIdx];
+    var leftFilter := Domain(INode(node).MyDomain().start, splitElt);
+    var rightFilter := Domain(splitElt, INode(node).MyDomain().end);
+
+    forall i | 0 <= i < ileft.buffers.Length()
+      ensures IBuffer(left, i) == ileft.buffers.buffers[i]
+    {
+      forall k 
+        ensures k in IBuffer(left, i).mapp <==> k in ileft.buffers.buffers[i].mapp 
+      {
+        if k in IBuffer(left, i).mapp && k !in ileft.buffers.buffers[i].mapp {
+          var childIdx :| 0 <= childIdx < |left.children| && k in left.ActiveBufferKeysForChild(childIdx, i);
+
+          assert childIdx < pivotIdx;
+          assert k in node.ActiveBufferKeysForChild(childIdx, i); // trigger
+          assert node.DomainRoutedToChild(childIdx).Contains(k);
+
+          assert Keyspace.lte(node.pivotTable[childIdx], Element(k));
+          assert Keyspace.lt(Element(k), node.pivotTable[childIdx+1]);
+          assert leftFilter.Contains(k) by {  Keyspace.reveal_IsStrictlySorted(); Keyspace.lteTransitiveForall(); }
+          assert false;
+        }
+
+        if k !in IBuffer(left, i).mapp && k in ileft.buffers.buffers[i].mapp {
+          assert leftFilter.Contains(k);
+          assert k in INode(node).buffers.buffers[i].mapp;
+          assert k in node.buffers.buffers[i].mapp;
+          assert k in node.ActiveBufferKeys(i);
+
+          var childIdx :| 0 <= childIdx < |node.children| && k in node.ActiveBufferKeysForChild(childIdx, i);
+
+          if childIdx < |ileft.children| {
+            assert k in left.ActiveBufferKeysForChild(childIdx, i);
+            assert false;
+          } else {
+            Keyspace.reveal_IsStrictlySorted();
+            Keyspace.lteTransitiveForall();
+            assert false;
+          }
+        }
+      }
+    }
+
+    forall i | 0 <= i < iright.buffers.Length()
+      ensures IBufferStack(right).buffers[i] == iright.buffers.buffers[i]
+    {
+      assume false;
+    }
+  }
+
+  lemma SplitCommutesWithI(step: Step) 
+    requires step.InternalSplitStep?
+    requires step.WF()
+    requires INode(step.path.Target()).CanSplitParent(step.request)
+    ensures INode(step.path.Target().SplitParent(step.request)) == INode(step.path.Target()).SplitParent(step.request);
+  {
+    IPathValid(step.path);
+    TargetCommutesWithI(step.path);
+
+    var node := step.path.Target();
+    var inode := INode(step.path.Target());
+    assert node.pivotTable == inode.pivotTable;
+
+    var parent := node.SplitParent(step.request);
+    var iparent := inode.SplitParent(step.request);
+
+    var childIdx := step.request.childIdx;
+    assert WFChildren(node.children); // trigger
+    assert PivotBetree.WFChildren(inode.children); // trigger
+    assert INode(node.children[childIdx]) == inode.children[childIdx];
+    assert parent.pivotTable == iparent.pivotTable;
+
+    forall i | 0 <= i < |parent.children| 
+      ensures INode(parent.children[i]) == iparent.children[i]
+    {
+      if i < childIdx {
+      } else if i <= childIdx + 1 {
+        if step.request.SplitLeaf? {
+          SplitLeafCommutesWithI(node.children[childIdx], step.request.splitKey);
+        } else {
+          SplitIndexCommutesWithI(node.children[childIdx], step.request.childPivotIdx);
+        }
+      } else {
+        assert parent.children[i] == node.children[i-1];
+      }
+    }
+
+    forall i | 0 <= i < parent.buffers.Length()
+      ensures IBuffer(parent, i) == iparent.buffers.buffers[i]
+    {
+      assume false;
+    }
+  }
 
   lemma InternalSplitStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
@@ -534,15 +597,14 @@ module FilteredBetreeRefinement
     ensures v'.WF()
     ensures PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step))
   {
-    assume false;
-    // INodeWF(v.root);
-    // INodeWF(step.path.Target());
-    // InvNext(v, v', lbl); //assert v'.WF();
-    // INodeWF(v'.root);
-    // IPathValid(step.path); //assert IPath(step.path).Valid();
-    // TargetCommutesWithI(step.path);
-    // SplitCommutesWithI(step);
-    // SubstitutionRefines(step.path, step.path.Target().SplitParent(step.request));
+    InvNext(v, v', lbl); //assert v'.WF();
+    IPathValid(step.path); //assert IPath(step.path).Valid();
+    TargetCommutesWithI(step.path);
+
+    assert IStep(step).WF(); // trigger
+    SplitCommutesWithI(step);
+    SubstitutionRefines(step.path, step.path.Target().SplitParent(step.request)); 
+    assert PivotBetree.InternalSplit(I(v), I(v'), ILbl(lbl), IStep(step));
   }
 
   lemma PromoteCommutesWithI(node: BetreeNode, domain: Domain)  
@@ -792,8 +854,6 @@ module FilteredBetreeRefinement
       }
       case InternalNoOpStep() => 
          assert PivotBetree.NextStep(I(v), I(v'), ILbl(lbl), IStep(step));
-      case _ =>  { assume false; }
-
     }
   }
 }

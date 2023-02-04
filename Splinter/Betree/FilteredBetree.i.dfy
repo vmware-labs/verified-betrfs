@@ -107,7 +107,7 @@ module FilteredBetree
       && BetreeNode?
       && |children|==1
       && children[0]==Nil
-      // Invariant: numFlushedBuffers[0] == 0 
+      && numFlushedBuffers==[0]
     }
 
     predicate IsIndex()
@@ -124,9 +124,6 @@ module FilteredBetree
       requires splitKey != MyDomain().start.e
       ensures out.0.WF() && out.1.WF()
     {
-      var leftFilter := Domain(MyDomain().start, Element(splitKey));
-      var rightFilter := Domain(Element(splitKey), MyDomain().end);
-
       var newLeft := BetreeNode(buffers, [pivotTable[0], Element(splitKey)], [Nil], [0]);
       var newRight := BetreeNode(buffers, [Element(splitKey), pivotTable[1]], [Nil], [0]);
       assert newLeft.WF() by { Keyspace.reveal_IsStrictlySorted(); }
@@ -141,10 +138,6 @@ module FilteredBetree
       requires 0 < pivotIdx < |pivotTable|-1
       ensures out.0.WF() && out.1.WF()
     {
-      var splitElt := pivotTable[pivotIdx];
-      var leftFilter := Domain(MyDomain().start, splitElt);
-      var rightFilter := Domain(splitElt, MyDomain().end);
-
       var newLeft := BetreeNode(buffers, pivotTable[..pivotIdx+1], children[..pivotIdx], numFlushedBuffers[..pivotIdx]);
       var newRight := BetreeNode(buffers, pivotTable[pivotIdx..], children[pivotIdx..], numFlushedBuffers[pivotIdx..]);
       WFSlice(pivotTable, 0, pivotIdx+1);
