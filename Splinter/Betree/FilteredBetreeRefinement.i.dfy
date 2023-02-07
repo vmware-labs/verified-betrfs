@@ -589,15 +589,6 @@ module FilteredBetreeRefinement
     }
   }
 
-  lemma SplitIndexCommutesWithI(node: BetreeNode, pivotIdx: nat)
-    requires node.SplitIndex.requires(pivotIdx)
-    ensures INode(node.SplitIndex(pivotIdx).0) == INode(node).SplitIndex(pivotIdx).0
-    ensures INode(node.SplitIndex(pivotIdx).1) == INode(node).SplitIndex(pivotIdx).1
-  {
-    SplitIndexCommutesWithILeft(node, pivotIdx);
-    SplitIndexCommutesWithIRight(node, pivotIdx);
-  }
-
   lemma SplitCommutesWithI(step: Step) 
     requires step.InternalSplitStep?
     requires step.WF()
@@ -628,7 +619,8 @@ module FilteredBetreeRefinement
         if step.request.SplitLeaf? {
           SplitLeafCommutesWithI(node.children[childIdx], step.request.splitKey);
         } else {
-          SplitIndexCommutesWithI(node.children[childIdx], step.request.childPivotIdx);
+          SplitIndexCommutesWithILeft(node.children[childIdx], step.request.childPivotIdx);
+          SplitIndexCommutesWithIRight(node.children[childIdx], step.request.childPivotIdx);
         }
       } else {
         assert parent.children[i] == node.children[i-1];
@@ -638,7 +630,11 @@ module FilteredBetreeRefinement
     forall i | 0 <= i < parent.buffers.Length()
       ensures IBuffer(parent, i) == iparent.buffers.buffers[i]
     {
-      assume false;
+      assert parent.buffers.buffers[i] == node.buffers.buffers[i];
+      assert IBuffer(node, i) == iparent.buffers.buffers[i];
+
+      // TODO(jialin): prove
+      assume IBuffer(parent, i) == IBuffer(node, i);
     }
   }
 

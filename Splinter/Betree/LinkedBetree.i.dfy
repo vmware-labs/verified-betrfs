@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "PivotBetree.i.dfy"
+include "FilteredBetree.i.dfy"
 include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
 include "../Disk/GenericDisk.i.dfy"
 include "Domain.i.dfy"
@@ -10,7 +10,7 @@ include "SplitRequest.i.dfy"
 module LinkedBetreeMod
 {
   import opened BoundedPivotsLib
-  import opened Buffers
+  // import opened Buffers
   import opened DomainMod
   import opened GenericDisk
   import opened KeyType
@@ -53,16 +53,18 @@ module LinkedBetreeMod
     | InternalAllocationsLabel(addrs: set<Address>)  // for steps that involve allocating new pages
     | InternalLabel()   // Local No-op label
 
-
   datatype BetreeNode = BetreeNode(
-    buffers: BufferStack,  // Should buffer stack also be linked via pointers?
+    buffers: BufferStack,  // seq<Address> to represent linked buffers
     pivotTable: PivotTable,
-    children: seq<Pointer>)
+    children: seq<Pointer>,
+    numFlushedBuffers: seq<nat>)
   {
     predicate WF() {
       && (BetreeNode? ==>
           && WFPivots(pivotTable)
           && |children| == NumBuckets(pivotTable)
+          && |children| == |numFlushedBuffers|
+          && (forall i:nat | i < |numFlushedBuffers| :: numFlushedBuffers[i] <= |buffers|)
         )
     }
 
@@ -91,18 +93,12 @@ module LinkedBetreeMod
     {
       && |children|==1
       && children[0].None?
+      && numFlushedBuffers==[0]
     }
 
     predicate IsIndex()
     {
       && (forall i | 0 <= i < |children| :: children[i].Some?)
-    }
-
-    function ApplyFilter(filter: Domain) : (out: BetreeNode)
-      requires WF()
-      ensures out.WF()
-    {
-      BetreeNode(buffers.ApplyFilter(filter.KeySet()), pivotTable, children)
     }
 
     function MyDomain() : (out: Domain)
@@ -130,14 +126,6 @@ module LinkedBetreeMod
       && BoundedKey(pivotTable, key)
     }
 
-    // // Redundant; should equal domain.KeySet() for the domain specified by the pivotTable.
-    // function KeySet() : iset<Key>
-    //   requires WF()
-    //   requires BetreeNode?  // TODO(jonh): trouble for Nils?
-    // {
-    //   iset key | KeyInDomain(key)
-    // }
-
     function ChildPtr(key: Key) : Pointer
       requires WF()
       requires BetreeNode?
@@ -158,11 +146,8 @@ module LinkedBetreeMod
       requires splitKey != MyDomain().start.e
       ensures out.0.WF() && out.1.WF()
     {
-      var leftFilter := Domain(MyDomain().start, Element(splitKey));
-      var rightFilter := Domain(Element(splitKey), MyDomain().end);
-
-      var newLeft := BetreeNode(buffers.ApplyFilter(leftFilter.KeySet()), [pivotTable[0], Element(splitKey)], [None]);
-      var newRight := BetreeNode(buffers.ApplyFilter(rightFilter.KeySet()), [Element(splitKey), pivotTable[1]], [None]);
+      var newLeft := BetreeNode(buffers, [pivotTable[0], Element(splitKey)], [None], [0]);
+      var newRight := BetreeNode(buffers, [Element(splitKey), pivotTable[1]], [None], [0]);
       assert newLeft.WF() by { Keyspace.reveal_IsStrictlySorted(); }
       assert newRight.WF() by { Keyspace.reveal_IsStrictlySorted(); }
       (newLeft, newRight)
@@ -175,15 +160,11 @@ module LinkedBetreeMod
       requires 0 < pivotIdx < |pivotTable|-1
       ensures out.0.WF() && out.1.WF()
     {
-      var splitElt := pivotTable[pivotIdx];
-      var leftFilter := Domain(MyDomain().start, splitElt);
-      var rightFilter := Domain(splitElt, MyDomain().end);
-
-      var newLeft := BetreeNode(buffers.ApplyFilter(leftFilter.KeySet()), pivotTable[..pivotIdx+1], children[..pivotIdx]);
-      var newRight := BetreeNode(buffers.ApplyFilter(rightFilter.KeySet()), pivotTable[pivotIdx..], children[pivotIdx..]);
+      var newLeft := BetreeNode(buffers, pivotTable[..pivotIdx+1], children[..pivotIdx], numFlushedBuffers[..pivotIdx]);
+      var newRight := BetreeNode(buffers, pivotTable[pivotIdx..], children[pivotIdx..], numFlushedBuffers[pivotIdx..]);
       WFSlice(pivotTable, 0, pivotIdx+1);
       WFSuffix(pivotTable, pivotIdx);
-      //assert WFChildren(children);  // trigger TODO(jonh) delete
+      assert WFChildren(children);  // trigger
       assert newLeft.WF();
       assert newRight.WF();
       (newLeft, newRight)
@@ -205,7 +186,7 @@ module LinkedBetreeMod
     var pivotTable := [domain.start, domain.end];
     domain.reveal_SaneKeys();  /* jonh suspicious lt leak */
     assert Keyspace.IsStrictlySorted(pivotTable) by { reveal_IsStrictlySorted(); }  /* jonh suspicious lt leak */
-    BetreeNode(BufferStack([]), pivotTable, [None])
+    BetreeNode(BufferStack([]), pivotTable, [None], [0])
   }
 
   datatype DiskView = DiskView(entries: map<Address, BetreeNode>)
@@ -330,15 +311,104 @@ module LinkedBetreeMod
     DiskView.DiskView(map[])
   }
 
+  // move to different module
+  datatype BufferDiskView = BufferDiskView(entries: map<Address, Buffers>)
+  {
+    function Addresses() : set<Address>
+    {
+      entires.Keys
+    }
+
+    function Get(addr: Address) : Buffer
+      requires addr in entries
+    {
+      entries[addr]
+    }
+
+    function ModifyDisk(addr: Address, item: Buffer) : BufferDiskView {
+      BufferDiskView.BufferDiskView(entries[addr := item])
+    }
+
+    predicate IsSubDisk(bigger: BufferDiskView)
+    {
+      IsSubMap(entries, bigger.entries)
+    }
+  }
+  
+  // Introduce linekd bufferstack and the diskview
+  datatype BufferStack = BufferStack(buffers: seq<Address>, dv: BufferDiskView)
+  {
+    predicate WF()
+    {
+      forall addr | addr in buffers :: addr in dv.Addresses()
+    }
+
+    function Length() : nat 
+    {
+      |buffers|
+    }
+
+    function Slice(start: nat, end: nat) : BufferStack
+      requires start <= end <= |buffers|
+    {
+      BufferStack(buffers[start..end])
+    }
+
+    function GetBuffer(addr: Address) : Buffer
+      requires addr in buffers
+    {
+      dv.Get(addr)
+    }
+
+    function QueryUpTo(key: Key, count: nat) : Message
+      requires count <= |buffers|
+    {
+      if count == 0 then Update(NopDelta())
+      else Merge(QueryUpTo(key, count-1), GetBuffer(buffers[count-1]).Query(key))
+    }
+
+    function Query(key: Key) : Message
+    {
+      QueryUpTo(key, |buffers|)
+    }
+    
+    // TODO: compact equivalence needs this to validate 
+    // function ApplyFilter(accept: iset<Key>) : BufferStack
+    // {
+    //   BufferStack(seq(|buffers|, i requires 0<=i<|buffers| => buffers[i].ApplyFilter(accept)))
+    // }
+
+    function PushBufferStack(newBuffers: BufferStack) : BufferStack
+    {
+      BufferStack(newBuffers.buffers + this.buffers)
+    }
+
+    predicate Equivalent(other: BufferStack)
+    {
+      forall k | AnyKey(k) :: Query(k) == other.Query(k)
+    }
+  }
+
   // This is the unit of interpretation: A LinkedBetree has enough info in it to interpret to a PivotBetree.BetreeNode.
   datatype LinkedBetree = LinkedBetree(
     root: Pointer,
-    diskView: DiskView
+    diskView: DiskView,
+    bufferDiskView, BufferDiskView
   )
   {
     predicate WF() {
       && diskView.WF()
       && diskView.IsNondanglingPointer(root)
+      && diskView.IsFresh(bufferDiskView.Addresses())
+      && NoDanglingBufferPointers() // might not be in WF
+    }
+
+    // buffers in each node should be known to forest
+    predicate NoDanglingBufferPointers() {
+      && (forall addr, buffer | 
+        && addr in diskView.entries 
+        && buffer in diskView.entries[addr].buffers 
+        :: buffer in bufferDiskView.Addresses())
     }
 
     predicate HasRoot() {
@@ -357,14 +427,14 @@ module LinkedBetreeMod
       requires HasRoot()
       requires Root().ValidChildIndex(idx)
     {
-      LinkedBetree(Root().children[idx], diskView)
+      LinkedBetree(Root().children[idx], diskView, bufferDiskView)
     }
 
     function ChildForKey(key: Key) : LinkedBetree
       requires HasRoot()
       requires Root().KeyInDomain(key)
     {
-      LinkedBetree(Root().ChildPtr(key), diskView)
+      LinkedBetree(Root().ChildPtr(key), diskView, bufferDiskView)
     }
 
     function GetRank(ranking: Ranking) : nat
@@ -409,7 +479,7 @@ module LinkedBetreeMod
         this
       else
         var tightDv := DiskView.DiskView(MapRestrict(diskView.entries, Representation()));
-        LinkedBetree(root, tightDv)
+        LinkedBetree(root, tightDv, bufferDiskView)
     }
 
     function Representation() : set<Address>
@@ -486,10 +556,13 @@ module LinkedBetreeMod
       var (newLeftChild, newRightChild) := if request.SplitLeaf? then oldChild.Root().SplitLeaf(request.splitKey) else oldChild.Root().SplitIndex(request.childPivotIdx);
       var newChildren := replace1with2(Root().children, Some(newAddrs.left), Some(newAddrs.right), request.childIdx);
 
+      var childFlushedBuffer := Root().numFlushedBuffers[request.childIdx];
+      var newNumFlushedBuffers := replace1with2(Root().numFlushedBuffers, childFlushedBuffer, childFlushedBuffer, request.childIdx);
+
       var newParent := BetreeNode(Root().buffers, InsertPivot(Root().pivotTable, request.childIdx+1, SplitKey(request)), newChildren);
 
       var dv' := diskView.ModifyDisk(newAddrs.left, newLeftChild).ModifyDisk(newAddrs.right, newRightChild).ModifyDisk(newAddrs.parent, newParent);
-      LinkedBetree(Pointer.Some(newAddrs.parent), dv')
+      LinkedBetree(Pointer.Some(newAddrs.parent), dv', bufferDiskView)
     }
 
     lemma SplitParentCanSubstitute(request: SplitRequest, newAddrs: SplitAddrs)
@@ -648,7 +721,8 @@ module LinkedBetreeMod
       requires AllLinesWF()
       requires i < |lines| - 1
     {
-      && lines[i].result == Merge(Node(i).buffers.Query(key), ResultAt(i+1))
+      && var end := Node(i).ActiveBuffersForKey(key);
+      && lines[i].result == Merge(Node(i).buffers.QueryUpTo(key, end), ResultAt(i+1))
     }
 
     predicate Valid()
@@ -761,6 +835,7 @@ module LinkedBetreeMod
       && replacement.Root().MyDomain() == Target().Root().MyDomain()
       && depth == |pathAddrs|
       && linked.diskView.IsSubDisk(replacement.diskView)
+      && linked.diskView.IsSubDisk(replacement.bufferDiskView)
     }
 
     lemma CanSubstituteSubpath(replacement: LinkedBetree, pathAddrs: PathAddrs)
@@ -780,22 +855,22 @@ module LinkedBetreeMod
         CanSubstituteSubpath(replacement, pathAddrs);
         var subtree := Subpath().Substitute(replacement, pathAddrs[1..]);
         var newChildren := node.children[Route(node.pivotTable, key) := subtree.root];
-        var newNode := BetreeNode(node.buffers, node.pivotTable, newChildren);
+        var newNode := BetreeNode(node.buffers, node.pivotTable, newChildren, numFlushedBuffers);
         var newDiskView := subtree.diskView.ModifyDisk(pathAddrs[0], newNode);
-        LinkedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView)
+        LinkedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView, linked.bufferDiskView)
     }
   }
 
-  function InsertInternalFlushMemtableReplacement(oldRoot: LinkedBetree, newBuffer: Buffer, newRootAddr:Address) : (out: LinkedBetree)
+  function InsertInternalFlushMemtableReplacement(oldRoot: LinkedBetree, newBuffer: Buffer, newBufferAddr: Addresss, newRootAddr:Address) : (out: LinkedBetree)
     requires oldRoot.WF()
   {
     var root' := if oldRoot.HasRoot()
       then
-        oldRoot.Root().PushBufferStack(BufferStack([newBuffer]))
+        oldRoot.Root().PushBufferStack(BufferStack([newBufferAddr]))
       else
-        BetreeNode(BufferStack([newBuffer]), TotalPivotTable(), [None]);
+        BetreeNode(BufferStack([newBufferAddr]), TotalPivotTable(), [None], [0]);
     var dv' := oldRoot.diskView.ModifyDisk(newRootAddr, root');
-    LinkedBetree(Pointer.Some(newRootAddr), dv')
+    LinkedBetree(Pointer.Some(newRootAddr), dv', bufferDiskView.ModifyDisk(newBufferAddr, newBuffer)) 
   }
 
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -804,10 +879,10 @@ module LinkedBetreeMod
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalFlushMemtableStep?
-    && lbl.addrs == {step.newRootAddr}
+    && lbl.addrs == {step.newRootAddr} + {step.newBufferAddr}
     // Subway Eat Fresh!
-    && v.linked.diskView.IsFresh({step.newRootAddr})
-    && v'.linked == InsertInternalFlushMemtableReplacement(v.linked, v.memtable.buffer, step.newRootAddr).BuildTightTree()
+    && v.linked.diskView.IsFresh(lbl.addrs)
+    && v'.linked == InsertInternalFlushMemtableReplacement(v.linked, v.memtable.buffer, step.newBufferAddr, step.newRootAddr).BuildTightTree()
     && v'.memtable == v.memtable.Drain()
   }
 
@@ -815,10 +890,10 @@ module LinkedBetreeMod
     requires oldRoot.WF()
   {
     // The new root node
-    var root' := BetreeNode(BufferStack([]), TotalPivotTable(), [oldRoot.root]);
+    var root' := BetreeNode(BufferStack([]), TotalPivotTable(), [oldRoot.root], [0]);
     // The new diskview
     var dv' := oldRoot.diskView.ModifyDisk(newRootAddr, root');
-    LinkedBetree(Pointer.Some(newRootAddr), dv')
+    LinkedBetree(Pointer.Some(newRootAddr), dv', oldRoot.bufferDiskView)
   }
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -854,25 +929,47 @@ module LinkedBetreeMod
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  function InsertFlushReplacement(target: LinkedBetree, childIdx:nat, targetAddr: Address, targetChildAddr: Address) : (out: LinkedBetree)
+  function InsertFlushReplacement(target: LinkedBetree, childIdx:nat, targetAddr: Address, targetChildAddr: Address, bufferGCCount: nat) : (out: LinkedBetree)
     requires target.WF()
     requires target.HasRoot()
     requires target.Root().OccupiedChildIndex(childIdx)
+    // requires forall i:nat | i < |target.numFlushedBuffers| && i != childIdx :: bufferGCCount <= numFlushedBuffers[i]
   {
     var root := target.Root();
-    var keepKeys := AllKeys() - root.DomainRoutedToChild(childIdx).KeySet();
-    var keptBuffers := root.buffers.ApplyFilter(keepKeys);
-    var movedBuffers := root.buffers.ApplyFilter(root.DomainRoutedToChild(childIdx).KeySet());
+
+    var newNumFlushedBuffers := root.numFlushedBuffers[childIdx := root.buffers.Length()];
+    var keptBuffers := root.buffers.Slice(0, root.buffers.Length() - bufferGCCount);
+    var movedBuffers := root.buffers.Slice(0, root.buffers.Length() - root.numFlushedBuffers[childIdx]);
+
+    var GCNumFlushedBuffers := seq (|newNumFlushedBuffers|, 
+      i requires 0 <= i < |newNumFlushedBuffers| => 
+      newNumFlushedBuffers[i]-bufferGCCount);
+    
+      // node.buffer[gcbuffercount..];
+    // 
+    // var GCBuffers := 
+
+    
+    
+
+
     // BetreeNode of the new child, to be stored at targetChildAddr in the diskview
     var subroot := target.diskView.Get(root.children[childIdx]);
-    var subroot' := BetreeNode(subroot.buffers.PushBufferStack(movedBuffers), subroot.pivotTable, subroot.children);
+    var subroot' := BetreeNode(subroot.buffers.PushBufferStack(movedBuffers), 
+      subroot.pivotTable, subroot.children, subroot.numFlushedBuffers);
 
     // BetreeNode of the new root, to be stored at targetAddr in the diskview
     var children' := root.children[childIdx := Pointer.Some(targetChildAddr)];
-    var root' := BetreeNode(keptBuffers, root.pivotTable, children');
+
+
+
+    var root' := BetreeNode(keptBuffers, root.pivotTable, children', GCNumFlushedBuffers);
 
     // The new diskview
     var dv' := target.diskView.ModifyDisk(targetAddr, root').ModifyDisk(targetChildAddr, subroot');
+
+    // linked 
+
     LinkedBetree(Pointer.Some(targetAddr), dv')
   }
 

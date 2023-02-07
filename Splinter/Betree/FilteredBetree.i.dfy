@@ -39,6 +39,27 @@ module FilteredBetree
 
   type Element = Upperbounded_Lexicographic_Byte_Order_Impl.Ord.Element
 
+  datatype BufferOffsets = BufferOffsets(offsets: seq<nat>)
+  {
+    predicate CanCollectGarbage(count: nat)
+    {
+      forall i:nat | i < |offset| :: count <= offsets[i]
+    }
+
+    // # to shift for every child
+    function CollectGarbage(count: nat) : BufferOffsets
+      requires CanCollectGarbage(count)
+    {
+      BufferOffsets(seq (|offsets|, i requires 0 <= i < |offsets| => offsets[i]-count))
+    }
+
+    function AdvanceIndex(idx: nat, newOffset: nat) : BufferOffsets
+      requires idx < |offsets|
+    {
+      BufferOffsets(offsets[idx := newOffset])
+    }    
+  }
+
   predicate WFChildren(children: seq<BetreeNode>)
   {
     && (forall i:nat | i<|children| :: children[i].WF())
@@ -50,7 +71,8 @@ module FilteredBetree
     children: seq<BetreeNode>,
     // parallel DS of children, tracks each child's active buffers
     // each entry = # of buffers already flushed to child, active buffers = [0, |buffers|-activeBufferRanges[i])
-    numFlushedBuffers: seq<nat> 
+    // numFlushedBuffers: seq<nat> 
+    flushedOffsets: BufferOffsets // # of buffers flushed to each child
   )
   {
     predicate LocalStructure()
@@ -324,18 +346,18 @@ module FilteredBetree
     function Flush(childIdx: nat, bufferGCCount: nat) : (out: BetreeNode)
       requires CanFlush(childIdx)
       requires bufferGCCount <= buffers.Length()
-      requires forall i:nat | i < |numFlushedBuffers| && i != childIdx :: bufferGCCount <= numFlushedBuffers[i]
+      requires flushedOffsets.AdvanceIndex(childIdx, buffers.Length()).CanCollectGarbage(bufferGCCount)
       ensures out.WF()
     {
-      var newNumFlushedBuffers := numFlushedBuffers[childIdx := buffers.Length()];
+      var newFlushedOffsets := flushedOffsets.AdvanceIndex(childIdx, buffers.Length());
       var movedBuffers := buffers.Slice(0, buffers.Length() - numFlushedBuffers[childIdx]);
 
       assert WFChildren(children);  // trigger
       var newChild := children[childIdx].Promote(DomainRoutedToChild(childIdx)).PushBufferStack(movedBuffers);
 
       // new parent, with updated num flushed buffers for children and truncate buffers that are flushed to all children
-      var GCNumFlushedBuffers := seq (|newNumFlushedBuffers|, i requires 0 <= i < |newNumFlushedBuffers| => newNumFlushedBuffers[i]-bufferGCCount);
-      var newRoot := BetreeNode(buffers.Slice(0, buffers.Length()-bufferGCCount), pivotTable, children[childIdx := newChild], GCNumFlushedBuffers);
+      var gcFlushedOffsets := newFlushedOffsets.CollectGarbage(bufferGCCount);
+      var newRoot := BetreeNode(buffers.Slice(0, buffers.Length()-bufferGCCount), pivotTable, children[childIdx := newChild], gcFlushedOffsets);
       assert newRoot.WF();
       newRoot
     }
