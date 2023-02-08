@@ -35,9 +35,9 @@ type SyncReqs = Map<SyncReqId, LSN>;
 // }
 
 pub struct Known {
-  progress: MapSpec_t::EphemeralState,
-  sync_reqs: SyncReqs,
-  map_lsn: LSN  // invariant: agrees with mapadt.stampedMap.seqEnd
+  pub progress: MapSpec_t::EphemeralState,
+  pub sync_reqs: SyncReqs,
+  pub map_lsn: LSN  // invariant: agrees with mapadt.stampedMap.seqEnd
 }
 
 type Ephemeral = Option<Known>;
@@ -140,13 +140,17 @@ state_machine!{ CoordinationSystem {
       update ephemeral = Some(
         Known {
           map_lsn: records.seq_end,
-          ..pre.ephemeral.unwrap()
+          ..pre.ephemeral.get_Some_0()
         }
       );
 
       update journal = new_journal;
       update mapadt = new_mapadt; 
     }
+  }
+
+  transition! {
+    
   }
 
   transition! {
