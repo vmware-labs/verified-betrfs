@@ -5,6 +5,7 @@ use builtin_macros::*;
 use state_machines_macros::state_machine;
 use crate::pervasive::prelude::*;
 
+use crate::spec::Messages_t::*;
 use crate::spec::MapSpec_t;
 use crate::spec::MapSpec_t::*;
 
@@ -12,7 +13,7 @@ use crate::coordination_layer::CrashTolerantJournal_v::*;
 use crate::coordination_layer::CrashTolerantMap_v::*;
 use crate::coordination_layer::CrashTolerantMap_v;
 use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MessageHistory_v::MsgHistory;
+use crate::coordination_layer::MessageHistory_v::{MsgHistory, KeyedMessage};
 
 // TODO (jonh): Rename all of the labels in all files to exclude "Op" or "Label" since it's redundant
 // as enums are already namespaced under "Label", so it's like saying "Label Label"
@@ -115,7 +116,7 @@ state_machine!{ CoordinationSystem {
   }
 
   transition! {
-    Recover(
+    recover(
       label: Label,
       new_journal: CrashTolerantJournal::State,
       new_mapadt: CrashTolerantMap::State,
@@ -149,15 +150,191 @@ state_machine!{ CoordinationSystem {
     }
   }
 
+  // TODO: get this reviewed
   transition! {
-    
+    accept_request(
+      label: Label,
+    ) {
+      // Tenzin: Each of these destructurings requires looking
+      // up in another file what the fully qualified name of the type
+      // is and that's annoying. Good intellisense would save us here
+      require let Label::Label{
+        ctam_label: CrashTolerantAsyncMap::Label::OperateOp{
+          base_op: AsyncMap::Label::RequestOp{
+            req
+          }
+        }
+      } = label;
+
+      require !pre.ephemeral.get_Some_0().progress.requests.contains(req);
+
+      // Wanted to do something like this but not available
+      // let mut new_ephemeral = pre.ephemeral;
+      // new_ephemeral.get_Some_0().progress.requests =
+      //   new_ephemeral.get_Some_0().progress.requests + req;
+
+      // This is ugly
+      update ephemeral = Some(
+        Known{
+          progress: MapSpec_t::EphemeralState{
+            requests: pre.ephemeral.get_Some_0().progress.requests.insert(req),
+            ..pre.ephemeral.get_Some_0().progress
+          },
+          ..pre.ephemeral.get_Some_0()
+        }
+      );
+    }
+  }
+
+  // TODO: get approval
+  transition! {
+    query(
+      label: Label,
+      new_journal: CrashTolerantJournal::State,
+      new_mapadt: CrashTolerantMap::State,
+    ) {
+      // State must be known
+      require pre.ephemeral.is_Some();
+      let pre_ephemeral = pre.ephemeral.get_Some_0();
+
+      // Dear lord my brain melted having to look up all of these
+      // names
+      require let Label::Label{
+        ctam_label: CrashTolerantAsyncMap::Label::OperateOp{
+          base_op: AsyncMap::Label::ExecuteOp{
+            req,
+            reply,
+          }
+        }
+      } = label;
+
+      require let Request{
+        input: Input::QueryInput{
+          key
+        },
+        id: request_id,
+      } = req;
+
+      require let Reply{
+        output: Output::QueryOutput{
+          value
+        },
+        id: reply_id,
+      } = reply;
+
+      require pre_ephemeral.progress.requests.contains(req);
+      require req.id == reply.id;
+
+      require !pre_ephemeral.progress.replies.contains(reply);
+      // TODO(tenzin): AnyKey(key) ? How to do this
+
+      require CrashTolerantJournal::State::next(
+        pre.journal,
+        new_journal,
+        CrashTolerantJournal::Label::QueryEndLsnLabel{end_lsn: pre_ephemeral.map_lsn},
+      );
+
+      require CrashTolerantMap::State::next(
+        pre.mapadt,
+        new_mapadt,
+        CrashTolerantMap::Label::QueryLabel{
+          end_lsn: pre_ephemeral.map_lsn,
+          key: key,
+          value: value,
+        },
+      );
+
+      update ephemeral = Some(
+        Known{
+          progress: MapSpec_t::EphemeralState{
+            requests: pre_ephemeral.progress.requests.remove(req),
+            replies: pre_ephemeral.progress.replies.insert(reply),
+          },
+          ..pre_ephemeral
+        }
+      );
+      update journal = new_journal;
+      update mapadt = new_mapadt;
+    }
+  }
+
+  transition! {
+    Put(
+      label: Label,
+      new_journal: CrashTolerantJournal::State,
+      new_mapadt: CrashTolerantMap::State,
+    ) {
+      require pre.ephemeral.is_Some();
+      let pre_ephemeral = pre.ephemeral.get_Some_0();
+
+      // Destructuring and label checking boilerplate
+      require let Label::Label{
+        ctam_label: CrashTolerantAsyncMap::Label::OperateOp{
+          base_op: AsyncMap::Label::ExecuteOp{
+            req,
+            reply,
+          }
+        }
+      } = label;
+
+      require let Request{
+        input: Input::PutInput{
+          key,
+          value,
+        },
+        id: request_id,
+      } = req;
+
+      require let Reply{
+        output: Output::PutOutput,
+        id: reply_id,
+      } = reply;
+
+      require pre_ephemeral.progress.requests.contains(req);
+      require req.id == reply.id;
+      require !pre_ephemeral.progress.replies.contains(reply);
+
+      // TODO: let keyed_message = 
+      let keyed_message = KeyedMessage{
+        key: key,
+        message: Message::Define { value: value },
+      };
+      // TODO: let singleton: MsgHistory = <something>;
+      let singleton = MsgHistory::singleton_at(pre_ephemeral.map_lsn, keyed_message);
+
+      require CrashTolerantJournal::State::next(
+        pre.journal,
+        new_journal,
+        CrashTolerantJournal::Label::PutLabel{ records: singleton },
+      );
+
+      require CrashTolerantMap::State::next(
+        pre.mapadt,
+        new_mapadt,
+        CrashTolerantMap::Label::PutRecordsLabel{ records: singleton },
+      );
+
+      // TODO: update ephemeral
+      update ephemeral = Some(
+        Known {
+          map_lsn: pre_ephemeral.map_lsn + 1,
+          progress: MapSpec_t::EphemeralState{
+            requests: pre_ephemeral.progress.requests.remove(req),
+            replies: pre_ephemeral.progress.replies.insert(reply),
+          },
+          ..pre_ephemeral
+        }
+      );
+      update journal = new_journal;
+      update mapadt = new_mapadt;
+    }
   }
 
   transition! {
     crash(
       label: Label,
       new_journal: CrashTolerantJournal::State,
-      new_map: CrashTolerantMap::State,
+      new_mapadt: CrashTolerantMap::State,
     ) {
       // TODO (travis/jonh): Figure out a way to gracefully handle state machines
       // that only have one possible label (or a way to suppress the warning about
@@ -176,12 +353,12 @@ state_machine!{ CoordinationSystem {
 
       require CrashTolerantMap::State::next(
         pre.mapadt,
-        new_map,
+        new_mapadt,
         CrashTolerantMap::Label::CrashLabel
       );
 
       update journal = new_journal;
-      update mapadt = new_map;
+      update mapadt = new_mapadt;
       update ephemeral = None;
     }
   }

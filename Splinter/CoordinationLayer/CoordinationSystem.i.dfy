@@ -112,6 +112,9 @@ module CoordinationSystem {
     && uiop.baseOp.req in v.ephemeral.progress.requests
     && uiop.baseOp.reply.id == uiop.baseOp.req.id
 
+    // Tenzin: this line is identical to a check above, can be removed? Or
+    // was this a spelling/typing mistake and this is meant to check something
+    // different?
     && uiop.baseOp.req in v.ephemeral.progress.requests
     && uiop.baseOp.reply !in v.ephemeral.progress.replies
     && var key := uiop.baseOp.req.input.key;
