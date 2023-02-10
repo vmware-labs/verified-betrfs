@@ -3,6 +3,7 @@
 
 include "Branches.i.dfy"
 include "../Disk/GenericDisk.i.dfy"
+include "../Likes.i.dfy"
 include "Domain.i.dfy"
 include "../../lib/Base/mathematics.i.dfy"
 include "../../lib/Base/Multisets.i.dfy"
@@ -30,6 +31,7 @@ module LikesBranchedBetreeMod
   // import opened SplitRequestMod
   import opened BranchesMod
   import opened Multisets
+  import opened LikesMod
 
   import M = Mathematics
   import BB = BranchedBetreeMod
@@ -38,8 +40,6 @@ module LikesBranchedBetreeMod
   type Address = GenericDisk.Address
   type Ranking = GenericDisk.Ranking
   type StampedBetree = Stamped<BB.BranchedBetree>
-
-  type Likes = multiset<Address>
 
   function NoLikes() : Likes
   {
