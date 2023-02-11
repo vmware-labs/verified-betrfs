@@ -129,7 +129,7 @@ module LinkedJournalRefinement
     ensures IPtr(big, ptr) == IPtr(small, ptr)
     decreases big.TheRankOf(ptr)
   {
-    assert small.PointersRespectRank(big.TheRanking()); // witness to small.Acyclic
+    assert small.ValidRanking(big.TheRanking()); // witness to small.Acyclic
     if ptr.Some? {
       var next := big.entries[ptr.value].CroppedPrior(big.boundaryLSN);
       IPtrIgnoresExtraBlocks(small, next, big);
@@ -150,16 +150,16 @@ module LinkedJournalRefinement
       var inner := big.BuildTight(next);
       BuildTightShape(big, root);
       TightSubDisk(big, next, inner);
-      assert tight.PointersRespectRank(big.TheRanking());  // witness
+      assert tight.ValidRanking(big.TheRanking());  // witness
       forall other:DiskView | other.Decodable(root) && other.Acyclic() && IPtr(tight, root) == IPtr(other, root) && other.IsSubDisk(tight)
           ensures other == tight {
         // any other tighter disk implies an "otherInner" disk tighter than inner, but inner.IsTight(next).
         var otherInner := DiskView(other.boundaryLSN, MapRemove1(other.entries, root.value));
-        assert inner.PointersRespectRank(big.TheRanking());
+        assert inner.ValidRanking(big.TheRanking());
         IPtrIgnoresExtraBlocks(otherInner, next, inner);
       }
     }
-    assert tight.PointersRespectRank(big.TheRanking());  // witness
+    assert tight.ValidRanking(big.TheRanking());  // witness
   }
 
   lemma BuildTightBuildsSubDisks(big: DiskView, root: Pointer)
@@ -186,11 +186,11 @@ module LinkedJournalRefinement
     decreases big.TheRankOf(root)
   {
     if root.None? {
-      assert tight.PointersRespectRank(big.TheRanking());
+      assert tight.ValidRanking(big.TheRanking());
     } else {
       BuildTightBuildsSubDisks(big, root);
       TightSubDisk(big, root, tight);
-      assert tight.PointersRespectRank(big.TheRanking());  // witness to Acyclic
+      assert tight.ValidRanking(big.TheRanking());  // witness to Acyclic
       IPtrIgnoresExtraBlocks(tight, root, big);
     }
   }
@@ -202,7 +202,7 @@ module LinkedJournalRefinement
     ensures Mkfs().diskView.Acyclic()
     ensures ITruncatedJournal(Mkfs()) == PagedJournal.Mkfs()
   {
-    assert Mkfs().diskView.PointersRespectRank(map[]);  // witness to exists ranking
+    assert Mkfs().diskView.ValidRanking(map[]);  // witness to exists ranking
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -238,7 +238,7 @@ module LinkedJournalRefinement
     decreases if ptr.Some? then bef.TheRanking()[ptr.value] else -1
   {
     IPtrOutputValid(bef, ptr);
-    assert aft.PointersRespectRank(bef.TheRanking());
+    assert aft.ValidRanking(bef.TheRanking());
     if ptr.Some? && lsn < bef.entries[ptr.value].messageSeq.seqStart {
       DiscardInterp(bef, lsn, aft, aft.entries[ptr.value].CroppedPrior(aft.boundaryLSN));
     }
@@ -254,7 +254,7 @@ module LinkedJournalRefinement
     // ensures ITruncatedJournal(tj).WF();
     ensures ITruncatedJournal(tj).DiscardOldDefn(lsn) == ITruncatedJournal(discarded)
   {
-    assert discarded.diskView.PointersRespectRank(tj.diskView.TheRanking());
+    assert discarded.diskView.ValidRanking(tj.diskView.TheRanking());
     DiscardInterp(tj.diskView, lsn, discarded.diskView, discarded.freshestRec);
   }
     
@@ -270,7 +270,7 @@ module LinkedJournalRefinement
     ensures IPtr(small, ptr) == IPtr(big, ptr)
     decreases if ptr.Some? then big.TheRanking()[ptr.value] else -1
   {
-    assert small.PointersRespectRank(big.TheRanking());
+    assert small.ValidRanking(big.TheRanking());
     if ptr.Some? {
       var jr := big.entries[ptr.value];
       SubDiskInterp(small, big, jr.CroppedPrior(big.boundaryLSN));
@@ -296,7 +296,7 @@ module LinkedJournalRefinement
       var croppedTJ := v.truncatedJournal.DiscardOld(lsn);
       var tightTJ := croppedTJ.BuildTight();
 
-      assert croppedTJ.diskView.PointersRespectRank(v.truncatedJournal.diskView.TheRanking());  // witness to Acyclic
+      assert croppedTJ.diskView.ValidRanking(v.truncatedJournal.diskView.TheRanking());  // witness to Acyclic
       TightInterp(croppedTJ.diskView, croppedTJ.freshestRec, tightTJ.diskView);
 
       if !(v.unmarshalledTail.seqStart <= lsn) {
@@ -306,11 +306,11 @@ module LinkedJournalRefinement
         assert ITruncatedJournal(croppedTJ) == ITruncatedJournal(v.truncatedJournal).DiscardOldDefn(lsn); // Trigger for v'.I().WF()
       }
     } else if step.InternalJournalMarshalStep? {
-      var rank :| v.truncatedJournal.diskView.PointersRespectRank(rank);
+      var rank :| v.truncatedJournal.diskView.ValidRanking(rank);
       var rank' := rank[step.addr :=
           if v.truncatedJournal.freshestRec.None? then 0
           else rank[v.truncatedJournal.freshestRec.value]+1];
-      assert v'.truncatedJournal.diskView.PointersRespectRank(rank'); // new rank witness to Acyclic
+      assert v'.truncatedJournal.diskView.ValidRanking(rank'); // new rank witness to Acyclic
 
       IPtrFraming(v.truncatedJournal.diskView, v'.truncatedJournal.diskView, v.truncatedJournal.freshestRec);
     } else if step.InternalNoOpStep? {
@@ -374,7 +374,7 @@ module LinkedJournalRefinement
     ensures PagedJournal.DiscardOldJournalRec(IPtr(dv, ptr), newBdy) == IPtr(dv.DiscardOld(newBdy), ptr)
     decreases dv.TheRankOf(ptr)
   {
-    assert dv.DiscardOld(newBdy).PointersRespectRank(dv.TheRanking());  // witness to Acyclic
+    assert dv.DiscardOld(newBdy).ValidRanking(dv.TheRanking());  // witness to Acyclic
     if ptr.Some? {
       var nextPtr := dv.entries[ptr.value].CroppedPrior(newBdy);
       PagedJournalRefinement.DiscardValid(IPtr(dv, ptr).value, dv.boundaryLSN, newBdy);
@@ -389,7 +389,7 @@ module LinkedJournalRefinement
     ensures ITruncatedJournal(tj).CanDiscardTo(newBdy)  // prereq for DiscardOld
     ensures ITruncatedJournal(tj.DiscardOld(newBdy)) == ITruncatedJournal(tj).DiscardOldDefn(newBdy)
   {
-    assert tj.diskView.DiscardOld(newBdy).PointersRespectRank(tj.diskView.TheRanking());  // witness to Acyclic
+    assert tj.diskView.DiscardOld(newBdy).ValidRanking(tj.diskView.TheRanking());  // witness to Acyclic
     if newBdy < tj.SeqEnd() {
       DiscardOldCommutes(tj.diskView, tj.freshestRec, newBdy);
     }
@@ -538,7 +538,7 @@ module LinkedJournalRefinement
       var nextPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
       BuildTightIsAwesome(dv, nextPtr);
     }
-    assert dv.BuildTight(root).PointersRespectRank(dv.TheRanking());  // witness
+    assert dv.BuildTight(root).ValidRanking(dv.TheRanking());  // witness
   }
 
   function BuildTightAwesome(dv: DiskView, root: Pointer) : (out: DiskView) 
@@ -747,9 +747,9 @@ module LinkedJournalRefinement
       small: DiskView, smallroot: Pointer, smallRanking: GenericDisk.Ranking,
       big: DiskView, bigroot: Pointer, bigRanking: GenericDisk.Ranking)
     requires small.Decodable(smallroot)
-    requires small.PointersRespectRank(smallRanking)
+    requires small.ValidRanking(smallRanking)
     requires big.Decodable(bigroot)
-    requires big.PointersRespectRank(bigRanking)
+    requires big.ValidRanking(bigRanking)
     requires small.IsSubDisk(big)
     requires big.boundaryLSN == small.boundaryLSN
     requires bigroot.Some?
@@ -780,7 +780,7 @@ module LinkedJournalRefinement
   //   var v'j := v'.truncatedJournal;
   //   var d'j := v'j.DiscardOld(inFlight.SeqStart());
   //   InvNext(v, v', lbl);
-  //   assert d'j.diskView.PointersRespectRank(v'j.diskView.TheRanking());  // witness to d'j.Acyclic
+  //   assert d'j.diskView.ValidRanking(v'j.diskView.TheRanking());  // witness to d'j.Acyclic
 
   //   BuildTightPreservesSubDiskUnderInternalMarshall(
   //     dj.diskView, dj.freshestRec, dj.diskView.TheRanking(),

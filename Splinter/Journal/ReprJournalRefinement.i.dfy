@@ -236,7 +236,7 @@ module ReprJournalRefinement {
       case DiscardOldStep() => {
         DiscardOldStepPreservesWFAndIndex(v, v', lbl);
         var ranking := v.journal.truncatedJournal.diskView.TheRanking();  // witness to acyclicity
-        assert v'.journal.truncatedJournal.diskView.PointersRespectRank(ranking);
+        assert v'.journal.truncatedJournal.diskView.ValidRanking(ranking);
         DiscardOldMaintainsReprIndex(v, v', lbl);
         BuildReprIndexGivesRepresentation(v'.journal.truncatedJournal);
         assert IndexRangeValid(v'.reprIndex, v'.journal.truncatedJournal);
@@ -416,7 +416,7 @@ module ReprJournalRefinement {
     ensures BuildReprIndexDefn(small, ptr) == BuildReprIndexDefn(big, ptr)
     decreases if ptr.Some? then big.TheRanking()[ptr.value] else -1
   {
-    assert small.PointersRespectRank(big.TheRanking());
+    assert small.ValidRanking(big.TheRanking());
     if ptr.Some? {
       var jr := big.entries[ptr.value];
       SubDiskReprIndex(small, big, jr.CroppedPrior(big.boundaryLSN));
@@ -614,7 +614,7 @@ module ReprJournalRefinement {
       == tj.diskView.DiscardOld(newBdy).BuildTight(tj.freshestRec).entries
   {
     // to get the fact that DiscardOld maintains acyclicity
-    assert tj.diskView.DiscardOld(newBdy).PointersRespectRank(tj.diskView.TheRanking());
+    assert tj.diskView.DiscardOld(newBdy).ValidRanking(tj.diskView.TheRanking());
     
     LinkedJournalRefinement.BuildTightIsAwesome(tj.diskView.DiscardOld(newBdy), tj.freshestRec);
     BuildTightGivesRepresentation(tj.diskView.DiscardOld(newBdy), tj.freshestRec);
@@ -638,7 +638,7 @@ module ReprJournalRefinement {
     var newDiskView := LinkedJournal.DiskView(lbl.startLsn, newEntries);
 
     if v.journal.truncatedJournal.SeqEnd() == lbl.startLsn {
-      assert tj.diskView.DiscardOld(lbl.startLsn).PointersRespectRank(tj.diskView.TheRanking());
+      assert tj.diskView.DiscardOld(lbl.startLsn).ValidRanking(tj.diskView.TheRanking());
     } else {
       BuildTightEquivalentToGarbageCollect(tj, v.reprIndex, lbl.startLsn);
     }

@@ -120,8 +120,7 @@ module LinkedJournal {
       && BlocksEachHaveLink()
     }
 
-    // TODO(tony): rename to ValidRanking to match LinkedBetree
-    predicate PointersRespectRank(ranking: GenericDisk.Ranking)
+    predicate ValidRanking(ranking: GenericDisk.Ranking)
       requires WF()
     {
       && entries.Keys <= ranking.Keys
@@ -133,7 +132,7 @@ module LinkedJournal {
     predicate Acyclic()
       requires WF()
     {
-      && exists ranking :: PointersRespectRank(ranking)
+      && exists ranking :: ValidRanking(ranking)
     }
 
     function TheRanking() : GenericDisk.Ranking
@@ -141,7 +140,7 @@ module LinkedJournal {
       requires Acyclic()
     {
       // Make CHOOSE deterministic as Leslie and Hilbert intended
-      var ranking :| PointersRespectRank(ranking); ranking
+      var ranking :| ValidRanking(ranking); ranking
     }
 
     predicate Decodable(ptr: Pointer)
@@ -324,7 +323,7 @@ module LinkedJournal {
     ensures out.Decodable()
   {
     var dv :=  DiskView(0, map[]);
-    assert dv.PointersRespectRank(map[]);
+    assert dv.ValidRanking(map[]);
     TruncatedJournal(None, dv)
   }
 
