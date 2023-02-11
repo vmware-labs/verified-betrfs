@@ -120,6 +120,7 @@ module LinkedJournal {
       && BlocksEachHaveLink()
     }
 
+    // TODO(tony): rename to ValidRanking to match LinkedBetree
     predicate PointersRespectRank(ranking: GenericDisk.Ranking)
       requires WF()
     {
@@ -149,6 +150,9 @@ module LinkedJournal {
       && IsNondanglingPointer(ptr)
     }
 
+    // NB it's interesting that LinkedBetree needs to pass rankings
+    // around so it can reuse and reconstruct them, but the journal can
+    // always get away with using some random old CHOOSEn ranking.
     function TheRankOf(ptr: Pointer) : int
       requires WF()
       requires IsNondanglingPointer(ptr)

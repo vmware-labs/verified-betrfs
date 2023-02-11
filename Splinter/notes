@@ -45,7 +45,7 @@ Betree interpretation strategy.
 
 ------------------------------------------------------------------------------
 
-How do page-level likes and au-level likes interact with partial allocation?
+How do page-granularity likes and au-granularity likes interact with partial allocation?
 
 At the page-granularity likes level (Likes*.dfy):
   - there's a page-tight likes for the whole disk image (one superblock).
@@ -62,7 +62,11 @@ At the page-granularity likes level (Likes*.dfy):
   stuff.
   In fact, we'll also ignore half-built B+trees.
 
-At the AU level
+AU layer is a Refinement layer:
+  - introduce AU-granularity free list
+  - introduce page-granularity mini-allocators
+
+At the AU granularity
   - projecting a page-tight likes gives an AU-tight likes, so that tells
     us about the persistent, in-flight images
   - projecting the Variables will create overlaps:
@@ -79,6 +83,29 @@ At the AU level
 All congruence arguments are per-page, since we NEED to be able to change
 the allocated-but-unused pages in an AU in the ephemeral state while promising
 to leave in-flight/persistent pages in same AU unchanged.
+------------------------------------------------------------------------------
+
+PageLikes:
+  - functional page-granularity model of likes.
+    "If a page has zero likes then no interp is using it."
+
+  - imperative page-granularity model of likes.
+    "If you make these delta updates, you have correctly maintained a page-granularity accounting."
+    Think of this as a description of a page-granularity allocator: touches the
+    page-level likes ("refcount") table in a small number of places, but maintains the
+    invariant that it matches the functional model.
+
+  - this layer does NOT discuss reserved pages or any other AU-terse concept.
+
+AULayer:
+  - page-granularity imperative model becomes ghosty.
+  - adds an imperative AU-granularity free list, page-granularity mini-allocators ("sparse").
+    "If you maintain the free list and mini allocators this way, we get an invariant about
+    page-level likes:
+        && present in the free list or the mini allocator ==> 0 page level likes.
+    "
+    We can rely on this invariant to show that a check of a free page/au satisfies the
+    corresponding check in the layer above.
 
 
 ------------------------------------------------------------------------------
