@@ -23,6 +23,10 @@ module LikesJournal {
   type DiskView = LinkedJournal.DiskView
   type TruncatedJournal = LinkedJournal.TruncatedJournal
 
+  /***************************************************************************************
+  *                                    Labels and defs                                   *
+  ***************************************************************************************/
+
   datatype TransitionLabel =
       ReadForRecoveryLabel(messages: MsgHistory)
     | FreezeForCommitLabel(frozenJournal: TruncatedJournal)
@@ -55,7 +59,7 @@ module LikesJournal {
   // will multiply all my likes by the number of references into it from
   // that outer structure, so we can't leave any reachable stuff with zero.
   function TransitiveLikes(journal: LinkedJournal.TruncatedJournal) : Likes
-    requires journal.WF()
+    requires journal.Decodable()
     decreases journal.diskView.TheRankOf(journal.freshestRec)
   {
       // Does this become CanCrop?
@@ -75,14 +79,23 @@ module LikesJournal {
 
   // TODO invariant; move to proof
   predicate ImperativeAgreement(v: Variables) 
+    requires v.WF()
   {
     && v.journal.truncatedJournal.diskView.Acyclic()
     // && v.branchedVars.branched.Valid()
     && TransitiveLikes(v.journal.truncatedJournal) == ImperativeLikes(v)
   }
 
+  /***************************************************************************************
+  *                                    State Machine                                     *
+  ***************************************************************************************/
+
   datatype Variables = Variables(
     journal: LinkedJournal.Variables,
+    // lsnAddrIndex maps in-repr lsn's to their page addr. Keeping this around because 
+    // otherwise, we will need to walk the journal to figure out what addrs to remove from 
+    // likes set when we do a DiscardOld
+    lsnAddrIndex: map<LSN, Address>,
     likes: Likes
   )
   {
@@ -135,13 +148,13 @@ module LikesJournal {
     else LinkedJournal.TruncatedJournal(tj.freshestRec, newDiskView)
   }
 
-  // Update reprIndex with by discarding lsn's strictly smaller than bdy
-  function {:opaque} reprIndexDiscardUpTo(reprIndex: map<LSN, Address>, bdy: LSN) : (out: map<LSN, Address>)
-    ensures IsSubMap(out, reprIndex)
+  // Update lsnAddrIndex with by discarding lsn's strictly smaller than bdy
+  function {:opaque} lsnAddrIndexDiscardUpTo(lsnAddrIndex: map<LSN, Address>, bdy: LSN) : (out: map<LSN, Address>)
+    ensures IsSubMap(out, lsnAddrIndex)
     ensures forall k | k in out :: bdy <= k
-    ensures forall k | k in reprIndex &&  bdy <= k :: k in out
+    ensures forall k | k in lsnAddrIndex &&  bdy <= k :: k in out
   {
-    map x: LSN | x in reprIndex && bdy <= x :: reprIndex[x]
+    map x: LSN | x in lsnAddrIndex && bdy <= x :: lsnAddrIndex[x]
   }
 
   predicate DiscardOld(v: Variables, v': Variables, lbl: TransitionLabel) 
@@ -154,13 +167,12 @@ module LikesJournal {
     && lbl.requireEnd == v.journal.SeqEnd()
     && v.journal.truncatedJournal.CanDiscardTo(lbl.startLsn)
     // Define v'
-//////////////////////////////////////////////////////////////////////////////
--------------------------------------------------------------------------------
-    LEFT OFF HERE translating repr updates into likes updates
--------------------------------------------------------------------------------
-//////////////////////////////////////////////////////////////////////////////
-    && var reprIndex' := reprIndexDiscardUpTo(v.reprIndex, lbl.startLsn);
-    && var keepAddrs := reprIndex'.Values;
+    // Addrs to delete from likes are pages that are between the old LSN and new LSN,
+    // excluding the page containing the new LSN boundary
+    && var lsnAddrIndex' := lsnAddrIndexDiscardUpTo(v.lsnAddrIndex, lbl.startLsn);
+    && var keepAddrs := lsnAddrIndex'.Values;
+    && var unrefAddrs := v.lsnAddrIndex.Values - keepAddrs;
+
     && v' == v.(
       journal := LinkedJournal.Variables(
         DiscardOldAndGarbageCollect(v.journal.truncatedJournal, lbl.startLsn, keepAddrs),
@@ -168,21 +180,22 @@ module LikesJournal {
         then v.journal.unmarshalledTail.DiscardOld(lbl.startLsn)
         else v.journal.unmarshalledTail
       ),
-      reprIndex := reprIndex'
+      lsnAddrIndex := lsnAddrIndex',
+      likes := v.likes - multiset(unrefAddrs)
   )
   }
 
-  // Update reprIndex with additional lsn's from a new record
-  function reprIndexAppendRecord(reprIndex: map<LSN, Address>, msgs: MsgHistory, addr: Address) : (out: map<LSN, Address>)
+  // Update lsnAddrIndex with additional lsn's from a new record
+  function lsnAddrIndexAppendRecord(lsnAddrIndex: map<LSN, Address>, msgs: MsgHistory, addr: Address) : (out: map<LSN, Address>)
     requires msgs.WF()
     requires msgs.seqStart < msgs.seqEnd
-    ensures (forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in reprIndex) 
-            ==> out.Values == reprIndex.Values + {addr}
+    ensures (forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in lsnAddrIndex) 
+            ==> out.Values == lsnAddrIndex.Values + {addr}
   {
     // msgs is complete map from seqStart to seqEnd 
     var update :=  map x: LSN | msgs.seqStart <= x < msgs.seqEnd :: addr;
     assert msgs.seqStart in update;  // witness
-    MapUnion(reprIndex, update)
+    MapUnion(lsnAddrIndex, update)
   }
 
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN, addr: Address)
@@ -194,7 +207,8 @@ module LikesJournal {
     && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl.I(), cut, addr)
     && v' == v.(
       journal := v'.journal,
-      reprIndex := reprIndexAppendRecord(v.reprIndex, v.journal.unmarshalledTail.DiscardRecent(cut), addr)
+      lsnAddrIndex := lsnAddrIndexAppendRecord(v.lsnAddrIndex, v.journal.unmarshalledTail.DiscardRecent(cut), addr),
+      likes := v.likes + multiset({addr})
     )
   }
 
@@ -205,7 +219,7 @@ module LikesJournal {
     && v' == v
   }
 
-  function BuildReprIndexDefn(dv: DiskView, root: Pointer) : map<LSN, Address> 
+  function BuildlsnAddrIndexDefn(dv: DiskView, root: Pointer) : map<LSN, Address> 
     requires dv.Decodable(root)
     requires dv.Acyclic()
     requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
@@ -215,15 +229,15 @@ module LikesJournal {
     else 
       var currMsgs := dv.entries[root.value].messageSeq;
       var update :=  map x: LSN | Mathematics.max(dv.boundaryLSN, currMsgs.seqStart) <= x < currMsgs.seqEnd :: root.value;
-      MapUnion(BuildReprIndexDefn(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), update)
+      MapUnion(BuildlsnAddrIndexDefn(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), update)
   }
 
-  function BuildReprIndex(tj: TruncatedJournal) : map<LSN, Address> 
+  function BuildlsnAddrIndex(tj: TruncatedJournal) : map<LSN, Address> 
     requires tj.WF()
     requires tj.diskView.Decodable(tj.freshestRec)
     requires tj.diskView.Acyclic()
   {
-    BuildReprIndexDefn(tj.diskView, tj.freshestRec)
+    BuildlsnAddrIndexDefn(tj.diskView, tj.freshestRec)
   }
 
   predicate Init(v: Variables, journal: TruncatedJournal)
@@ -234,7 +248,8 @@ module LikesJournal {
     && v == 
         Variables(
           LinkedJournal.Variables(tj, EmptyHistoryAt(tj.BuildTight().SeqEnd())),
-          BuildReprIndex(tj)
+          BuildlsnAddrIndex(tj),
+          TransitiveLikes(journal)
       )
   }
 
@@ -263,4 +278,4 @@ module LikesJournal {
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
     exists step: Step :: NextStep(v, v', lbl, step)
   }
-}
+} // end module LikesJournal
