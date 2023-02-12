@@ -41,6 +41,9 @@ pub struct Known {
   pub map_lsn: LSN  // invariant: agrees with mapadt.stampedMap.seqEnd
 }
 
+// Ephemeral state for coordination layer can be known or unknown. The ephemeral
+// state is known if the Option type is Some, and unknown if the Option type is
+// None
 type Ephemeral = Option<Known>;
 
 state_machine!{ CoordinationSystem {
@@ -150,7 +153,6 @@ state_machine!{ CoordinationSystem {
     }
   }
 
-  // TODO: get this reviewed
   transition! {
     accept_request(
       label: Label,
@@ -166,6 +168,16 @@ state_machine!{ CoordinationSystem {
         }
       } = label;
 
+      let Label::Label{ ctam_label } = label;
+
+      // Alternative syntax for destructuring and matching enum type
+      // require pre.ephemeral.is_Some();
+      // let pre_ephemeral = pre.ephemeral.get_Some_0();
+      // require ctam_label.is_OperateOp();
+      // let base_op = ctam_label.get_OperateOp_base_op();
+      // require base_op.is_RequestOp();
+      // let req = base_op.get_RequestOp_req();
+
       require !pre.ephemeral.get_Some_0().progress.requests.contains(req);
 
       // Wanted to do something like this but not available
@@ -174,6 +186,8 @@ state_machine!{ CoordinationSystem {
       //   new_ephemeral.get_Some_0().progress.requests + req;
 
       // This is ugly
+      // IDEAL SYNTAX:
+      // update ephemeral.unwrap().progress.requests = @.insert(req);
       update ephemeral = Some(
         Known{
           progress: MapSpec_t::EphemeralState{
@@ -199,34 +213,45 @@ state_machine!{ CoordinationSystem {
 
       // Dear lord my brain melted having to look up all of these
       // names
-      require let Label::Label{
-        ctam_label: CrashTolerantAsyncMap::Label::OperateOp{
-          base_op: AsyncMap::Label::ExecuteOp{
-            req,
-            reply,
-          }
-        }
-      } = label;
+      // require let Label::Label{
+      //   ctam_label: CrashTolerantAsyncMap::Label::OperateOp{
+      //     base_op: AsyncMap::Label::ExecuteOp{
+      //       req,
+      //       reply,
+      //     }
+      //   }
+      // } = label;
 
-      require let Request{
-        input: Input::QueryInput{
-          key
-        },
-        id: request_id,
-      } = req;
+      // require let Request{
+      //   input: Input::QueryInput{
+      //     key
+      //   },
+      //   id: request_id,
+      // } = req;
 
-      require let Reply{
-        output: Output::QueryOutput{
-          value
-        },
-        id: reply_id,
-      } = reply;
+      // require let Reply{
+      //   output: Output::QueryOutput{
+      //     value
+      //   },
+      //   id: reply_id,
+      // } = reply;
+
+      let ctam_label = label.get_Label_ctam_label();
+
+      require ctam_label.is_OperateOp();
+      let base_op = ctam_label.get_OperateOp_base_op();
+      require base_op.is_ExecuteOp();
+      let req = base_op.get_ExecuteOp_req();
+      let reply = base_op.get_ExecuteOp_reply();
+      require req.input.is_QueryInput();
+      require reply.output.is_QueryOutput();
+      let key = req.input.get_QueryInput_key();
+      let value = reply.output.get_QueryOutput_value();
 
       require pre_ephemeral.progress.requests.contains(req);
       require req.id == reply.id;
 
       require !pre_ephemeral.progress.replies.contains(reply);
-      // TODO(tenzin): AnyKey(key) ? How to do this
 
       require CrashTolerantJournal::State::next(
         pre.journal,
@@ -314,7 +339,6 @@ state_machine!{ CoordinationSystem {
         CrashTolerantMap::Label::PutRecordsLabel{ records: singleton },
       );
 
-      // TODO: update ephemeral
       update ephemeral = Some(
         Known {
           map_lsn: pre_ephemeral.map_lsn + 1,
@@ -327,6 +351,205 @@ state_machine!{ CoordinationSystem {
       );
       update journal = new_journal;
       update mapadt = new_mapadt;
+    }
+  }
+
+  transition! {
+    DeliverReply(label: Label) {
+      require pre.ephemeral.is_Some();
+      let pre_ephemeral = pre.ephemeral.get_Some_0();
+      
+      let ctam_label = label.get_Label_ctam_label();
+
+      require ctam_label.is_OperateOp();
+      
+      let base_op = ctam_label.get_OperateOp_base_op();
+      require base_op.is_ReplyOp();
+
+      let reply = base_op.get_ReplyOp_reply();
+
+      require pre_ephemeral.progress.replies.contains(reply);
+      update ephemeral = Some(
+        Known {
+          progress: MapSpec_t::EphemeralState {
+            replies: pre_ephemeral.progress.replies.remove(reply),
+            ..pre_ephemeral.progress
+          },
+          ..pre_ephemeral
+        }
+      );
+    }
+  }
+
+  transition! {
+    journal_internal(
+      label: Label,
+      new_journal: CrashTolerantJournal::State,
+    ) {
+      require pre.ephemeral.is_Some();
+      let pre_ephemeral = pre.ephemeral.get_Some_0();
+
+      let ctam_label = label.get_Label_ctam_label();
+      require ctam_label.is_Noop();
+
+      require CrashTolerantJournal::State::next(
+        pre.journal,
+        new_journal,
+        CrashTolerantJournal::Label::InternalLabel,
+      );
+
+      update journal = new_journal;
+    }
+  }
+
+  transition! {
+    map_internal(
+      label: Label,
+      new_mapadt: CrashTolerantMap::State,
+    ) {
+      require pre.ephemeral.is_Some();
+      let pre_ephemeral = pre.ephemeral.get_Some_0();
+
+      let ctam_label = label.get_Label_ctam_label();
+      require ctam_label.is_Noop();
+
+      require CrashTolerantMap::State::next(
+        pre.mapadt,
+        new_mapadt,
+        CrashTolerantMap::Label::InternalLabel,
+      );
+
+      update mapadt = new_mapadt;
+    }
+  }
+
+  transition! {
+    req_sync(
+      label: Label,
+      new_journal: CrashTolerantJournal::State,
+    ) {
+      require pre.ephemeral.is_Some();
+      let pre_ephemeral = pre.ephemeral.get_Some_0();
+
+      let ctam_label = label.get_Label_ctam_label();
+      require ctam_label.is_ReqSyncOp();
+
+      let sync_req_id = ctam_label.get_ReqSyncOp_sync_req_id();
+      require !pre_ephemeral.sync_reqs.dom().contains(sync_req_id);
+      
+      require CrashTolerantJournal::State::next(
+        pre.journal,
+        new_journal,
+        CrashTolerantJournal::Label::QueryEndLsnLabel{ end_lsn: pre_ephemeral.map_lsn },
+      );
+
+      update journal = new_journal;
+      update ephemeral = Some(
+        Known {
+          sync_reqs: pre_ephemeral.sync_reqs.insert(sync_req_id, pre_ephemeral.map_lsn),
+          ..pre_ephemeral
+        }
+      );
+    }
+  }
+
+  transition! {
+    reply_sync(
+      label: Label,
+      new_journal: CrashTolerantJournal::State,
+    ) {
+      require pre.ephemeral.is_Some();
+      let pre_ephemeral = pre.ephemeral.get_Some_0();
+
+      let ctam_label = label.get_Label_ctam_label();
+      require ctam_label.is_ReplySyncOp();
+
+      let sync_req_id = ctam_label.get_ReplySyncOp_sync_req_id();
+      require pre_ephemeral.sync_reqs.dom().contains(sync_req_id);
+
+      require CrashTolerantJournal::State::next(
+        pre.journal,
+        new_journal,
+        CrashTolerantJournal::Label::QueryLsnPersistenceLabel{
+          sync_lsn: pre_ephemeral.sync_reqs[sync_req_id],
+        }
+      );
+
+      update journal = new_journal;
+      update ephemeral = Some(
+        Known {
+          sync_reqs: pre_ephemeral.sync_reqs.remove(sync_req_id),
+          ..pre_ephemeral
+        }
+      );
+    }
+  }
+
+  transition! {
+    commit_start(
+      label: Label,
+      new_boundary_lsn: LSN,
+      new_mapadt: CrashTolerantMap::State,
+      new_journal: CrashTolerantJournal::State,
+    ) {
+      require pre.ephemeral.is_Some();
+      let pre_ephemeral = pre.ephemeral.get_Some_0();
+
+      let ctam_label = label.get_Label_ctam_label();
+      require ctam_label.is_Noop();
+
+      require CrashTolerantJournal::State::next(
+        pre.journal,
+        new_journal,
+        CrashTolerantJournal::Label::CommitStartLabel {
+          new_boundary_lsn: new_boundary_lsn,
+          max_lsn: pre_ephemeral.map_lsn,
+        }
+      );
+
+      require CrashTolerantMap::State::next(
+        pre.mapadt,
+        new_mapadt,
+        CrashTolerantMap::Label::CommitStartLabel {
+          new_boundary_lsn: new_boundary_lsn,
+        }
+      );
+
+      update journal = new_journal;
+      update mapadt = new_mapadt;
+      // ephemeral unchanged
+    }
+  }
+
+  transition! {
+    commit_complete(
+      label: Label,
+      new_mapadt: CrashTolerantMap::State,
+      new_journal: CrashTolerantJournal::State,
+    ) {
+      require pre.ephemeral.is_Some();
+      let pre_ephemeral = pre.ephemeral.get_Some_0();
+
+      let ctam_label = label.get_Label_ctam_label();
+      require ctam_label.is_SyncOp();
+
+      require CrashTolerantJournal::State::next(
+        pre.journal,
+        new_journal,
+        CrashTolerantJournal::Label::CommitCompleteLabel {
+          require_end: pre_ephemeral.map_lsn,
+        },
+      );
+
+      require CrashTolerantMap::State::next(
+        pre.mapadt,
+        new_mapadt,
+        CrashTolerantMap::Label::CommitCompleteLabel,
+      );
+
+      update journal = new_journal;
+      update mapadt = new_mapadt;
+      // ephemeral unchanged
     }
   }
 
