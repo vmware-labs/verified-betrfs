@@ -77,15 +77,6 @@ module LikesJournal {
     v.likes
   }
 
-  // TODO invariant; move to proof
-  predicate ImperativeAgreement(v: Variables) 
-    requires v.WF()
-  {
-    && v.journal.truncatedJournal.diskView.Acyclic()
-    // && v.branchedVars.branched.Valid()
-    && TransitiveLikes(v.journal.truncatedJournal) == ImperativeLikes(v)
-  }
-
   /***************************************************************************************
   *                                    State Machine                                     *
   ***************************************************************************************/
@@ -219,7 +210,7 @@ module LikesJournal {
     && v' == v
   }
 
-  function BuildlsnAddrIndexDefn(dv: DiskView, root: Pointer) : map<LSN, Address> 
+  function BuildLsnAddrIndexDefn(dv: DiskView, root: Pointer) : map<LSN, Address> 
     requires dv.Decodable(root)
     requires dv.Acyclic()
     requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
@@ -229,15 +220,15 @@ module LikesJournal {
     else 
       var currMsgs := dv.entries[root.value].messageSeq;
       var update :=  map x: LSN | Mathematics.max(dv.boundaryLSN, currMsgs.seqStart) <= x < currMsgs.seqEnd :: root.value;
-      MapUnion(BuildlsnAddrIndexDefn(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), update)
+      MapUnion(BuildLsnAddrIndexDefn(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), update)
   }
 
-  function BuildlsnAddrIndex(tj: TruncatedJournal) : map<LSN, Address> 
+  function BuildLsnAddrIndex(tj: TruncatedJournal) : map<LSN, Address> 
     requires tj.WF()
     requires tj.diskView.Decodable(tj.freshestRec)
     requires tj.diskView.Acyclic()
   {
-    BuildlsnAddrIndexDefn(tj.diskView, tj.freshestRec)
+    BuildLsnAddrIndexDefn(tj.diskView, tj.freshestRec)
   }
 
   predicate Init(v: Variables, journal: TruncatedJournal)
@@ -248,7 +239,7 @@ module LikesJournal {
     && v == 
         Variables(
           LinkedJournal.Variables(tj, EmptyHistoryAt(tj.BuildTight().SeqEnd())),
-          BuildlsnAddrIndex(tj),
+          BuildLsnAddrIndex(tj),
           TransitiveLikes(journal)
       )
   }
