@@ -58,23 +58,16 @@ module LikesJournal {
   // a ref the root. The caller of this, from some other data structure,
   // will multiply all my likes by the number of references into it from
   // that outer structure, so we can't leave any reachable stuff with zero.
-  function TransitiveLikes(journal: LinkedJournal.TruncatedJournal) : Likes
-    requires journal.Decodable()
-    decreases journal.diskView.TheRankOf(journal.freshestRec)
+  function TransitiveLikes(v: Variables) : Likes
   {
-      // Does this become CanCrop?
-    if journal.freshestRec.None?
-    then
-      NoLikes()
-    else
-      var rootLikes := multiset{ journal.freshestRec.value };
-      TransitiveLikes(journal.Crop(1)) + rootLikes
+    if !v.journal.truncatedJournal.Decodable() then NoLikes() // silly-ify the necessary precondition
+    else multiset(BuildLsnAddrIndex(v.journal.truncatedJournal).Values)
   }
 
   function ImperativeLikes(v: Variables) : Likes
   {
     // no outbound refs from journal, so pretty simple
-    v.likes
+    multiset(v.lsnAddrIndex.Values)
   }
 
   /***************************************************************************************
@@ -86,8 +79,7 @@ module LikesJournal {
     // lsnAddrIndex maps in-repr lsn's to their page addr. Keeping this around because 
     // otherwise, we will need to walk the journal to figure out what addrs to remove from 
     // likes set when we do a DiscardOld
-    lsnAddrIndex: map<LSN, Address>,
-    likes: Likes
+    lsnAddrIndex: map<LSN, Address>
   )
   {
     predicate WF() {
@@ -171,8 +163,7 @@ module LikesJournal {
         then v.journal.unmarshalledTail.DiscardOld(lbl.startLsn)
         else v.journal.unmarshalledTail
       ),
-      lsnAddrIndex := lsnAddrIndex',
-      likes := v.likes - multiset(unrefAddrs)
+      lsnAddrIndex := lsnAddrIndex'
   )
   }
 
@@ -198,8 +189,7 @@ module LikesJournal {
     && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl.I(), cut, addr)
     && v' == v.(
       journal := v'.journal,
-      lsnAddrIndex := lsnAddrIndexAppendRecord(v.lsnAddrIndex, v.journal.unmarshalledTail.DiscardRecent(cut), addr),
-      likes := v.likes + multiset({addr})
+      lsnAddrIndex := lsnAddrIndexAppendRecord(v.lsnAddrIndex, v.journal.unmarshalledTail.DiscardRecent(cut), addr)
     )
   }
 
@@ -224,9 +214,7 @@ module LikesJournal {
   }
 
   function BuildLsnAddrIndex(tj: TruncatedJournal) : map<LSN, Address> 
-    requires tj.WF()
-    requires tj.diskView.Decodable(tj.freshestRec)
-    requires tj.diskView.Acyclic()
+    requires tj.Decodable()
   {
     BuildLsnAddrIndexDefn(tj.diskView, tj.freshestRec)
   }
@@ -239,8 +227,7 @@ module LikesJournal {
     && v == 
         Variables(
           LinkedJournal.Variables(tj, EmptyHistoryAt(tj.BuildTight().SeqEnd())),
-          BuildLsnAddrIndex(tj),
-          TransitiveLikes(journal)
+          BuildLsnAddrIndex(tj)
       )
   }
 
