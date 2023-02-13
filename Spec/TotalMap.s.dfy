@@ -12,6 +12,7 @@ abstract module TotalMapMod {
   function DefaultV() : V // "empty" value
     ensures TerminalValue(DefaultV())
 
+  // For triggering syntax
   predicate AnyKey(k: K) { true }
 
   predicate Defined(kvm: imap<K, V>, k: K) {
