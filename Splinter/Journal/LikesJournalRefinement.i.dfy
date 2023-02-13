@@ -385,6 +385,7 @@ module LikesJournalRefinement {
     requires dv.Acyclic()
     requires root.Some? ==> dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
     decreases dv.TheRankOf(root)
+// Gonna need to put this back -- commented out for timeout.
 //    ensures forall lsn | lsn in BuildLsnAddrIndexDefn(dv, root) 
 //      :: lsn < dv.entries[root.value].messageSeq.seqEnd
     ensures BuildLsnAddrIndexDefn(dv, root).Values == dv.Representation(root)
