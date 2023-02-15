@@ -74,6 +74,12 @@ state_machine!{ CoordinationSystem {
     // "Predicate-style" (give me the state and I verify it's good for initial state)
     initialize(state: CoordinationSystem::State) {
       // "Looks good to me" - Jon
+      // "Doesn't look so good to me anymore" - Tenzin (later on)
+      // Issue is that this would just allow any arbitrary journal and
+      // mapadt past, but we only want journals and mapadts that meet
+      // a certain condition. How to do that?
+      require CrashTolerantJournal::State::init(state.journal);
+      require CrashTolerantMap::State::init(state.mapadt);
       init journal = state.journal;
       init mapadt = state.mapadt;
       init ephemeral = None;

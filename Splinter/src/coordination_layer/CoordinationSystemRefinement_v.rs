@@ -9,6 +9,7 @@ use crate::spec::Messages_t::*;
 use crate::spec::MapSpec_t;
 use crate::spec::MapSpec_t::*;
 use crate::spec::FloatingSeq_t::*;
+use crate::spec::TotalKMMap_t;
 
 use crate::coordination_layer::CoordinationSystem_v::*;
 use crate::coordination_layer::CrashTolerantJournal_v::*;
@@ -249,5 +250,23 @@ verus! {
         &&& self.inv_commit_started_value_agreement()
       }
     }
+  }
+
+  pub proof fn lemma_init_refines(v: CoordinationSystem::State)
+    requires
+      CoordinationSystem::State::init(v),
+    ensures
+      v.inv(),
+      // TODO (tenzin): Get this initialization translation double checked
+      CrashTolerantAsyncMap::State::init(v.i()),
+  {
+    // Despite requiring that this is true in the `initialize` of CoordinationSystem
+    // this still isn't properly detected. My guess is that it's because `init`
+    // actually uses an `exists` clause to determine which initialization function
+    // to actually use, so verus isn't actually sure here which one we're using (even
+    // though there's only one definition for `init`)
+    assert(CrashTolerantJournal::State::init(v.journal));
+    // assert(v.i().versions.is_active(0));
+    // assert(v.i().versions[0].appv.kmmap == TotalKMMap_t::empty_total_map())
   }
 }
