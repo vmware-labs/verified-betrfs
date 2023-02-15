@@ -17,9 +17,19 @@ that are triggered most often.
 """)
 
 scriptdir = os.path.dirname(__file__)
-dafny_default = os.path.normpath(os.path.join(scriptdir, "../.dafny/dafny/Binaries/Dafny"))
+dafny_places = [
+    "../.dafny/dafny/Binaries/Dafny",
+    "../.dafny/bin/dafny",
+    "/home/dafnyserver/bin/dafny",  # docker
+    ]
+for place in dafny_places:
+    dafny_default = os.path.normpath(os.path.join(scriptdir, place))
+    if os.path.exists(dafny_default):
+        break
+
 if not os.path.exists(dafny_default):
-    dafny_default = os.path.normpath(os.path.join(scriptdir, "../.dafny/bin/dafny"))
+    sys.stderr.write("Can't find dafny executable in the usual places.")
+    sys.exit(-1)
 
 parser.add_argument("timelimit", help="Time limit for verification, in seconds")
 parser.add_argument("proc", help="Boogie procedure to be verified, i.e., argument to /proc:")
