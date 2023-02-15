@@ -29,6 +29,12 @@ pub struct FloatingSeq<T> {
 
 
 impl<T> FloatingSeq<T> {
+    pub open spec fn new(start: nat, length: nat, f: FnSpec(int) -> T) -> FloatingSeq<T>
+        recommends start <= length
+    {
+        FloatingSeq{start: start, entries: Seq::new((length-start) as nat, |i: int| f(i+start))}
+    }
+
     // TODO if I omit "open" adjective, this file fails to compile!? (Followed, however, by a helpful message
     // about needing 'open' or 'closed'). Tony: As per the guide, spec funcs must be marked either open or closed
     // Len() is the number of indices "occupied", *including* the empty space at
@@ -159,19 +165,6 @@ impl<T> FloatingSeq<T> {
         }
         assert(self.entries.ext_equal(b.entries));  // tickle seq extn
     }
-}
-
-// Comprehension for FloatingSeq
-// DONE(chris): thread 'rustc' panicked at 'The verifier does not yet support the following Rust feature: type fn(builtin::int) -> T', rust_verify/src/rust_to_vir_base.rs:301:13
-//pub open spec fn floating_seq<T>(start: nat, length: nat, f: fn(int) -> T) -> FloatingSeq<T>
-// Solution: 'impl Fn', which is weird because it's a type parameter that makes fn floating_seq
-// implement the trait fn. I have no idea what that means.
-// Chris reports that he and Travis have a design for a spec-fn proper type that would let us
-// type the original thing.
-pub open spec fn floating_seq<T>(start: nat, length: nat, f: FnSpec(int) -> T) -> FloatingSeq<T>
-    recommends start <= length
-{
-    FloatingSeq{start: start, entries: Seq::new((length-start) as nat, |i: int| f(i+start))}
 }
 
 }   //verus!

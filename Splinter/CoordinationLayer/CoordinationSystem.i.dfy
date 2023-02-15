@@ -112,11 +112,10 @@ module CoordinationSystem {
     && uiop.baseOp.req in v.ephemeral.progress.requests
     && uiop.baseOp.reply.id == uiop.baseOp.req.id
 
-    && uiop.baseOp.req in v.ephemeral.progress.requests
     && uiop.baseOp.reply !in v.ephemeral.progress.replies
     && var key := uiop.baseOp.req.input.key;
     && var value := uiop.baseOp.reply.output.value;
-    && assert AnyKey(key);
+    && assert AnyKey(key); // Line maybe unnecessary?
 
     // Journal confirms that the map is up-to-date (but otherwise doesn't do anything).
     && CrashTolerantJournal.Next(v.journal, v'.journal, CrashTolerantJournal.QueryEndLsnLabel(v.ephemeral.mapLsn))

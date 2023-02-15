@@ -3,6 +3,7 @@
 
 include "Branches.i.dfy"
 include "../Disk/GenericDisk.i.dfy"
+include "../Likes.i.dfy"
 include "Domain.i.dfy"
 include "../../lib/Base/mathematics.i.dfy"
 include "../../lib/Base/Multisets.i.dfy"
@@ -30,6 +31,7 @@ module LikesBranchedBetreeMod
   // import opened SplitRequestMod
   import opened BranchesMod
   import opened Multisets
+  import opened LikesMod
 
   import M = Mathematics
   import BB = BranchedBetreeMod
@@ -39,37 +41,16 @@ module LikesBranchedBetreeMod
   type Ranking = GenericDisk.Ranking
   type StampedBetree = Stamped<BB.BranchedBetree>
 
-  type Likes = multiset<Address>
-
-  function NoLikes() : Likes
-  {
-    multiset{}
-  }
-
-  function mapsum<T>(s: map<T, Likes>) : Likes
-  {
-    if s.Keys == {} then NoLikes()
-    else (
-      var k :| k in s.Keys;
-      s[k] + mapsum(MapRemove1(s, k))
-    )
-  }
-
-  function toSeq<T>(s: set<T>) : seq<T> 
-  {
-    if s == {} then []
-    else (
-      var e :| e in s;
-      [e] + toSeq(s - {e})
-    )
-  }
-
-  // TODO: add to branch module
+  // TODO: move to branch module
   function BranchLikes(root: Address, branches: Branches) : Likes
   {
     NoLikes() 
   }
 
+  // Account for every page reachable from bbtree.Root(), including
+  // a ref the root. The caller of this, from some other data structure,
+  // will multiply all my likes by the number of references into it from
+  // that outer structure, so we can't leave any reachable stuff with zero.
   function TransitiveLikes(bbtree: BB.BranchedBetree, r: Ranking) : Likes
     requires bbtree.WF()
     requires bbtree.ValidRanking(r)
@@ -80,9 +61,10 @@ module LikesBranchedBetreeMod
       NoLikes()
     else (
       var root := bbtree.Root();
+      var rootLikes := map[ root => 1 ];
       var branchLikes := mapsum(map addr | addr in root.buffers :: BranchLikes(addr, bbtree.branches)); 
       var childrenLikes := mapsum(map i | 0 <= i < |root.children| :: TransitiveLikes(bbtree.ChildAtIdx(i), r));
-      branchLikes + childrenLikes
+      rootLikes + branchLikes + childrenLikes
     )
   }
 
@@ -93,6 +75,7 @@ module LikesBranchedBetreeMod
     branchLikes + v.betreeLikes
   }
 
+  // TODO invariant; move to proof
   predicate ImperativeAgreement(v: Variables) 
   {
     && v.branchedVars.branched.Acyclic()

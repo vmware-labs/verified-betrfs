@@ -4,7 +4,7 @@ TODO fill this in
 
 ### Commands
 
-`$verus -Zunpretty=expanded <file>` to get expanded macro representation of a verus file.
+`$verus -Zunpretty=expanded lib.rs` to get expanded macro representation of a verus file.
 
 ### Verus
 

@@ -42,3 +42,78 @@ Betree interpretation strategy.
 * Before recovery, I = IRunning(IVars(disk), disk)
 * During recovery, I = IRunning(IVars(disk), disk) ... but IVars is somehow converging on Vars.
 * After recovery, I = IRunning(vars, disk)
+
+------------------------------------------------------------------------------
+
+How do page-granularity likes and au-granularity likes interact with partial allocation?
+
+At the page-granularity likes level (Likes*.dfy):
+  - there's a page-tight likes for the whole disk image (one superblock).
+  - another page-tight likes for the in-flight disk image
+  - the variables has a page-tight likes for what's reachable from
+    the current superblock PLUS mini- allocations held at
+      - b+tree
+      - journal
+      - or anywhere else.
+  Those mini allocations provide disjoint protection against other
+  (concurrent) allocation happening elsewhere in the Variables.
+  None of them matter at crash time, since when we snapshot an in-flight
+  we're ignoring anything in an allocation, just using the reachable
+  stuff.
+  In fact, we'll also ignore half-built B+trees.
+
+AU layer is a Refinement layer:
+  - introduce AU-granularity free list
+  - introduce page-granularity mini-allocators
+
+At the AU granularity
+  - projecting a page-tight likes gives an AU-tight likes, so that tells
+    us about the persistent, in-flight images
+  - projecting the Variables will create overlaps:
+    * no overlaps between different data types, because of how they allocate
+    * overlap between journal and journal-alloc
+    * overlap between half-built-betree and betree-alloc
+    ...but I guess we shouldn't care.
+    Big allocator preserves "different-data-types" constraint, which then
+      ensures that the refinement to page-level disjointness is correct.
+      (wait, do we refine likes or 1-bit repr projections?)
+    Mini allocators preserve "intra-data-type" constraint on pages within
+    the variables-reserved AUs.
+
+All congruence arguments are per-page, since we NEED to be able to change
+the allocated-but-unused pages in an AU in the ephemeral state while promising
+to leave in-flight/persistent pages in same AU unchanged.
+------------------------------------------------------------------------------
+
+PageLikes:
+  - functional page-granularity model of likes.
+    "If a page has zero likes then no interp is using it."
+
+  - imperative page-granularity model of likes.
+    "If you make these delta updates, you have correctly maintained a page-granularity accounting."
+    Think of this as a description of a page-granularity allocator: touches the
+    page-level likes ("refcount") table in a small number of places, but maintains the
+    invariant that it matches the functional model.
+
+  - this layer does NOT discuss reserved pages or any other AU-terse concept.
+
+AULayer:
+  - page-granularity imperative model becomes ghosty.
+  - adds an imperative AU-granularity free list, page-granularity mini-allocators ("sparse").
+    "If you maintain the free list and mini allocators this way, we get an invariant about
+    page-level likes:
+        && present in the free list or the mini allocator ==> 0 page level likes.
+    "
+    We can rely on this invariant to show that a check of a free page/au satisfies the
+    corresponding check in the layer above.
+
+
+------------------------------------------------------------------------------
+
+Paged:    Betree, functional, infinite child map, precise buffer stack
+Pivot:    Betree, functional, finite child map,   precise buffer stack
+Filtered: Betree, functional, finite child map,   filtered buffer stack
+XX Linked0:  Betree, pointers,   finite child map,   functional filtered buffer stack
+Linked1:  Betree, pointers,   finite child map,   pointers to buffers, entire buffer "in single page"
+Linked2:  Betree+B+forest, pointers,   finite child map,   pointers to multi-page B+tree branches in forest
+Likes:

@@ -8,7 +8,7 @@ use crate::pervasive::{map::*};
 
 use crate::spec::Option_t::*;
 use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MessageHistory_v::*;
+use crate::coordination_layer::MsgHistory_v::*;
 use crate::coordination_layer::AbstractJournal_v::*;
 
 verus! {
