@@ -166,5 +166,88 @@ verus! {
       // Frozen map doesn't regress before persistent map
       &&& self.mapadt.persistent.seq_end <= self.mapadt.in_flight.get_Some_0().seq_end
     }
+
+    pub open spec fn inv_frozen_map_value_agreement(self) -> bool
+      recommends
+        self.ephemeral.is_Some(),
+        self.inv_ephemeral_geometry(),
+        self.map_is_frozen(),
+        self.inv_frozen_map_geometry(),
+    {
+      self.mapadt.in_flight.get_Some_0() == 
+        MsgHistory::map_plus_history(
+          self.mapadt.persistent,
+          self.journal.i().discard_recent(self.mapadt.in_flight.get_Some_0().seq_end)
+        )
+      // NB: Frozen Journal agreement comes "for free" because the frozen
+      // journal is just defined as the frozenJournalLSN prefix of the
+      // ephemeral journal.
+    }
+
+    pub open spec fn inv_commit_started_geometry(self) -> bool
+      recommends self.commit_started()
+    {
+      let if_map = self.mapadt.in_flight.get_Some_0();
+      let if_journal = self.journal.in_flight.get_Some_0();
+
+      // We need a well-behaved journal to relate in-flight state to.
+      &&& self.ephemeral.is_Some()
+      &&& self.inv_ephemeral_geometry()
+
+      // Geometry properties
+      // In-flight map + journal stitch.
+      &&& if_journal.can_follow(if_map.seq_end)
+      // Commiting in-flight state won't shrink persistent state
+      &&& self.journal.persistent.seq_end <= if_journal.seq_end
+      // In-flight map doesn't precede persistent map -- that would cause
+      // forgotten lsns to pop back into existence, and we don't have those lsns
+      // in the ephemeral journal to compare to.
+      &&& self.mapadt.persistent.seq_end <= if_map.seq_end
+      // in-flight view hsan't passed ephemeral journal
+      &&& if_journal.seq_end <= self.ephemeral_seq_end()
+    }
+
+    pub open spec fn inv_commit_started_value_agreement(self) -> bool
+      recommends
+        self.commit_started(),
+        self.inv_commit_started_geometry(),
+    {
+      let if_map = self.mapadt.in_flight.get_Some_0();
+      let if_journal = self.journal.in_flight.get_Some_0();
+
+      // in-flight journal is consistent with the persistent journal
+      &&& journal_overlaps_agree(if_journal, self.journal.persistent)
+      // in-flight journal is consistent with the ephemeral journal
+      &&& journal_overlaps_agree(if_journal, self.journal.i())
+      // in-flight map matches corresponding state in ephemeral world
+      // TODO: map_plus_history should probably be moved out of MsgHistory
+      &&& if_map == MsgHistory::map_plus_history(
+            self.mapadt.persistent,
+            self.journal.i().discard_recent(if_map.seq_end)
+          )
+    }
+
+    // TODO: (tenzin) Should this be made an inv of the state machine?
+    // TODO: (Tenzin) have curly braces guarding implications double checked
+    pub open spec fn inv(self) -> bool
+    {
+      &&& self.inv_persistent_journal_geometry()
+      &&& self.ephemeral.is_None() ==> {!self.map_is_frozen() && !self.commit_started()}
+      &&& self.ephemeral.is_Some() ==>
+      {
+        &&& self.inv_ephemeral_geometry()
+        &&& self.inv_ephemeral_value_agreement()
+        &&& self.map_is_frozen() ==>
+        {
+          &&& self.inv_frozen_map_geometry()
+          &&& self.inv_frozen_map_value_agreement()
+        }
+      }
+      &&& self.commit_started() ==>
+      {
+        &&& self.inv_commit_started_geometry()
+        &&& self.inv_commit_started_value_agreement()
+      }
+    }
   }
 }
