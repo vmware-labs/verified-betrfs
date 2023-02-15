@@ -61,6 +61,7 @@ impl<T> FloatingSeq<T> {
    }
 
     // You can only index values after the empty space.
+    // Overrides the `[]` operator
     pub open spec fn spec_index(self, i: int) -> T
         recommends self.is_active(i)
     {
