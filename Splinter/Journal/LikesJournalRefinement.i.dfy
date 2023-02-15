@@ -44,6 +44,7 @@ module LikesJournalRefinement {
     requires IndexDomainValid(lsnAddrIndex, tj)
     requires IndexKeysMapToValidEntries(lsnAddrIndex, tj)
   {
+    reveal_IndexKeysMapToValidEntries();
     forall addr | addr in lsnAddrIndex.Values ::
       && var msgs := tj.diskView.entries[addr].messageSeq;
       && var boundaryLSN := tj.diskView.boundaryLSN;
@@ -112,6 +113,8 @@ module LikesJournalRefinement {
     requires Init(v, tj)
     ensures Inv(v)
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
     LinkedJournalRefinement.BuildTightIsAwesome(tj.diskView, tj.freshestRec);
     var tightTj := tj.BuildTight();
     if tightTj.freshestRec.Some? {
@@ -170,6 +173,8 @@ module LikesJournalRefinement {
     ensures IndexDomainValid(BuildLsnAddrIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
     ensures IndexKeysMapToValidEntries(BuildLsnAddrIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
     BuildLsnAddrIndexDomainValidHelper1(dv, root, dv.entries[root.value].messageSeq.seqEnd);
     BuildLsnAddrIndexDomainValidHelper2(dv, root, dv.entries[root.value].messageSeq.seqEnd);
   }
@@ -185,6 +190,8 @@ module LikesJournalRefinement {
     ensures IndexRangeValid(BuildLsnAddrIndexDefn(dv, root), TruncatedJournal.TruncatedJournal(root, dv))
     decreases dv.TheRankOf(root)
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
     if root.Some? {
       var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
       BuildLsnAddrIndexOneStepSubmap(dv, root);
@@ -205,6 +212,8 @@ module LikesJournalRefinement {
     requires dv.boundaryLSN < dv.entries[root.value].messageSeq.seqEnd
     ensures IsSubMap(BuildLsnAddrIndexDefn(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), BuildLsnAddrIndexDefn(dv, root))
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
     var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
     if priorPtr.Some? {
       BuildLsnAddrIndexDomainValid(dv, priorPtr);
