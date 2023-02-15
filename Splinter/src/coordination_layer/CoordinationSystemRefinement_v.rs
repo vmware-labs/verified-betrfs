@@ -260,12 +260,57 @@ verus! {
       // TODO (tenzin): Get this initialization translation double checked
       CrashTolerantAsyncMap::State::init(v.i()),
   {
+    // Believes this thankfully
+    assert(CoordinationSystem::State::init(v));
+
+    // Was going to attempt this, but then you need to init a config with your own
+    // thing but that just feels silly.
+    // assert(CoordinationSystem::State::init_by(v, CoordinationSystem::Config::initialize()));
+    
+    // https://verus-lang.github.io/verus/guide/exists.html#choose
+    // verus docs suggest that when a precondition contains an exists using
+    // a choose statement is the canonical way to get it
+    // let a = choose(|config: CoordinationSystem::Config| A::State::init_by(v, config))
+    // assert(CoordinationSystem::State::initialize(v, v));
+    
     // Despite requiring that this is true in the `initialize` of CoordinationSystem
     // this still isn't properly detected. My guess is that it's because `init`
     // actually uses an `exists` clause to determine which initialization function
     // to actually use, so verus isn't actually sure here which one we're using (even
-    // though there's only one definition for `init`)
-    assert(CrashTolerantJournal::State::init(v.journal));
+    // though there's only one definition for `init`, the dummy is possible and
+    // doesn't provide any guarantees)
+    // Also I've noticed that these spec functions which we are calling are all
+    // opaque, which might be cause for concern...
+    // assert(CrashTolerantJournal::State::init(v.journal));
+
+    // Found this in Slack history:
+    // https://github.com/verus-lang/verus/blob/b990f436ef3ffa3a4078bdb6ee0aa7b05c46c5a7/source/rust_verify/example/state_machines/refinement.rs#L112
+    // Seems like there are macros to help with refinement, but also it provides
+    // a guide on how to do refinement
+    // Here's my attempt following that:
+    reveal(CoordinationSystem::State::init);
+    match choose(|config: CoordinationSystem::Config|
+      CoordinationSystem::State::init_by(v, config))
+    {
+      CoordinationSystem::Config::initialize(state) => {
+        assert(v.inv());
+
+        assert(CoordinationSystem::State::initialize(v, state)) by
+        {
+          reveal(CoordinationSystem::State::init_by);
+        };
+
+        assert(CrashTolerantAsyncMap::State::initialize(v.i()));
+
+        CrashTolerantAsyncMap::show::initialize(v.i());
+      },
+      CoordinationSystem::Config::dummy_to_use_type_params(_) => {
+        // Annoying case
+        assume(false);
+      }
+    }
+
+    // What we want to prove
     // assert(v.i().versions.is_active(0));
     // assert(v.i().versions[0].appv.kmmap == TotalKMMap_t::empty_total_map())
   }
