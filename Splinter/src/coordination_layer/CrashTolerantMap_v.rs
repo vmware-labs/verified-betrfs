@@ -10,7 +10,7 @@ use crate::spec::Option_t::*;
 use crate::spec::TotalKMMap_t::*;
 use crate::spec::Messages_t::*;
 use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MessageHistory_v::*;
+use crate::coordination_layer::MsgHistory_v::*;
 use crate::coordination_layer::AbstractMap_v::*;
 
 verus! {

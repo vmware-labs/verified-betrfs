@@ -185,7 +185,7 @@ state_machine!{ AsyncMap {
 } }
 
 type SyncReqId = nat;
-type Version = PersistentState;
+pub type Version = PersistentState;
 
 // TODO(jonh): was sad to concretize Map (because no module functors). Is there a traity alternative?
 // TODO(jonh): also sad to cram Async into CrashTolerant (because Async wasn't really a real state machine).
@@ -214,7 +214,7 @@ state_machine!{ CrashTolerantAsyncMap {
 
     // TODO(travis): init!{} with no body produces confusing error message
     init!{ initialize() {
-        init versions = floating_seq(0, 1, |i| AsyncMap::State::init_persistent_state());
+        init versions = FloatingSeq::new(0, 1, |i| AsyncMap::State::init_persistent_state());
         init async_ephemeral = AsyncMap::State::init_ephemeral_state();
         init sync_requests = Map::empty();
     } }

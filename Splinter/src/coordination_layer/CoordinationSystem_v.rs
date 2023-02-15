@@ -13,7 +13,7 @@ use crate::coordination_layer::CrashTolerantJournal_v::*;
 use crate::coordination_layer::CrashTolerantMap_v::*;
 use crate::coordination_layer::CrashTolerantMap_v;
 use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MessageHistory_v::{MsgHistory, KeyedMessage};
+use crate::coordination_layer::MsgHistory_v::{MsgHistory, KeyedMessage};
 
 // TODO (jonh): Rename all of the labels in all files to exclude "Op" or "Label" since it's redundant
 // as enums are already namespaced under "Label", so it's like saying "Label Label"

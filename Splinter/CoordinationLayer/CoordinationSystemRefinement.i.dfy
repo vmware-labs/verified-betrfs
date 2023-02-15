@@ -102,6 +102,8 @@ module CoordinationSystemRefinement {
     && jlong.DiscardRecent(jshort.seqEnd) == jshort // they agree on contents in overlap
   }
 
+  // Geometry refers to the boundaries between the journal and
+  // the mapadt line up correctly
   predicate InvPersistentJournalGeometry(v: Variables)
     requires v.WF()
   {
@@ -149,7 +151,7 @@ module CoordinationSystemRefinement {
     requires v.WF() && v.ephemeral.Known?
     requires MapIsFrozen(v)
   {
-    // frozen map hsan't passed ephemeral journal
+    // frozen map hasn't passed ephemeral journal
     && v.mapadt.inFlight.value.seqEnd <= EphemeralSeqEnd(v)
     // Frozen map doesn't regress before persistent map
     && v.mapadt.persistent.seqEnd <= v.mapadt.inFlight.value.seqEnd

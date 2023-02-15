@@ -5,7 +5,7 @@ use builtin_macros::*;
 use state_machines_macros::state_machine;
 
 use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MessageHistory_v::*;
+use crate::coordination_layer::MsgHistory_v::*;
 
 verus! {
 
