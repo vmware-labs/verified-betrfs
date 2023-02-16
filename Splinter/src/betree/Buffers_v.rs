@@ -8,6 +8,11 @@ use crate::spec::Messages_t::*;
 use crate::spec::TotalKMMap_t::*;
 
 verus! {
+
+pub open spec fn all_keys() -> Set<Key> {
+    Set::new( |k| true )
+}
+
 pub struct Buffer { 
     pub map: Map<Key, Message>
 }
