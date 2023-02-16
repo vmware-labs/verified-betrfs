@@ -4,6 +4,7 @@ use builtin::*;
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 use crate::pervasive::prelude::*;
+use crate::pervasive::seq_lib::*;
 
 use crate::spec::Messages_t::*;
 use crate::spec::MapSpec_t;
@@ -260,9 +261,6 @@ verus! {
       // TODO (tenzin): Get this initialization translation double checked
       CrashTolerantAsyncMap::State::init(v.i()),
   {
-    // Believes this thankfully
-    assert(CoordinationSystem::State::init(v));
-
     // Was going to attempt this, but then you need to init a config with your own
     // thing but that just feels silly.
     // assert(CoordinationSystem::State::init_by(v, CoordinationSystem::Config::initialize()));
@@ -288,18 +286,21 @@ verus! {
     // Seems like there are macros to help with refinement, but also it provides
     // a guide on how to do refinement
     // Here's my attempt following that:
+
+
     reveal(CoordinationSystem::State::init);
+    reveal(CoordinationSystem::State::init_by);
+    reveal(CrashTolerantJournal::State::init);
+    reveal(CrashTolerantJournal::State::init_by);
+    reveal(CrashTolerantMap::State::init);
+    reveal(CrashTolerantMap::State::init_by);
+
     match choose(|config: CoordinationSystem::Config|
       CoordinationSystem::State::init_by(v, config))
     {
       CoordinationSystem::Config::initialize(state) => {
-        assert(v.inv());
-
-        assert(CoordinationSystem::State::initialize(v, state)) by
-        {
-          reveal(CoordinationSystem::State::init_by);
-        };
-
+        v.i().versions.extensionality(FloatingSeq::new(0, 1, |i| AsyncMap::State::init_persistent_state()));
+        
         assert(CrashTolerantAsyncMap::State::initialize(v.i()));
 
         CrashTolerantAsyncMap::show::initialize(v.i());
@@ -309,9 +310,5 @@ verus! {
         assume(false);
       }
     }
-
-    // What we want to prove
-    // assert(v.i().versions.is_active(0));
-    // assert(v.i().versions[0].appv.kmmap == TotalKMMap_t::empty_total_map())
   }
 }

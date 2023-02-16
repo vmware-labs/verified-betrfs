@@ -109,7 +109,7 @@ impl<T> FloatingSeq<T> {
         self.get_prefix(self.len()-1)
     }
 
-    proof fn extensionality(self, b: FloatingSeq<T>)
+    pub proof fn extensionality(self, b: FloatingSeq<T>)
         requires
             self.start == b.start,
             self.len() === b.len(),
