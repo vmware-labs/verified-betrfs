@@ -34,8 +34,7 @@ module LikesJournal {
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
     // Internal-x labels refine to no-ops at the abstract spec
-    | InternalJournalGCLabel(allocations: set<Address>, freed: set<Address>)
-    | InternalLabel()  // Local No-op label
+    | InternalLabel(allocs: seq<Address>)  // Local No-op label
   {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
@@ -48,8 +47,7 @@ module LikesJournal {
         case QueryEndLsnLabel(endLsn) => LinkedJournal.QueryEndLsnLabel(endLsn)
         case PutLabel(messages) => LinkedJournal.PutLabel(messages)
         case DiscardOldLabel(startLsn, requireEnd) => LinkedJournal.DiscardOldLabel(startLsn, requireEnd)
-        case InternalJournalGCLabel(_, _) => LinkedJournal.InternalLabel()
-        case InternalLabel() => LinkedJournal.InternalLabel()
+        case InternalLabel(_) => LinkedJournal.InternalLabel()
       }
     }
   }
@@ -58,18 +56,16 @@ module LikesJournal {
   // a ref the root. The caller of this, from some other data structure,
   // will multiply all my likes by the number of references into it from
   // that outer structure, so we can't leave any reachable stuff with zero.
-  function TransitiveLikes(v: Variables) : Likes
-  {
-    if !v.journal.truncatedJournal.Decodable() then NoLikes() // silly-ify the necessary precondition
-    else multiset(BuildLsnAddrIndex(v.journal.truncatedJournal).Values)
+  function TjTransitiveLikes(tj: TruncatedJournal) : Likes {
+    if !tj.Decodable() then NoLikes() // silly-ify the necessary precondition
+    else multiset(BuildLsnAddrIndex(tj).Values)
   }
 
-  function ImperativeLikes(v: Variables) : Likes
-  {
-    // no outbound refs from journal, so pretty simple
-    multiset(v.lsnAddrIndex.Values)
+  function EmptyJournalImage() : TruncatedJournal {
+    LinkedJournal.Mkfs()
   }
 
+  
   /***************************************************************************************
   *                                    State Machine                                     *
   ***************************************************************************************/
@@ -85,6 +81,17 @@ module LikesJournal {
     predicate WF() {
       && journal.WF()
       && journal.truncatedJournal.SeqStart() <= journal.truncatedJournal.SeqEnd()
+    }
+
+    function TransitiveLikes() : Likes
+    {
+      TjTransitiveLikes(journal.truncatedJournal)
+    }
+
+    function ImperativeLikes() : Likes
+    {
+      // no outbound refs from journal, so pretty simple
+      multiset(lsnAddrIndex.Values)
     }
   }
 
@@ -184,6 +191,7 @@ module LikesJournal {
   {
     // Enabling conditions
     && lbl.InternalLabel?
+    && lbl.allocs == [addr]
     && v.WF()
     // State transition
     && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl.I(), cut, addr)
@@ -196,6 +204,7 @@ module LikesJournal {
   predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && lbl.InternalLabel?
+    && lbl.allocs == []
     && v.WF()
     && v' == v
   }
