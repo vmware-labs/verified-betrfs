@@ -47,11 +47,19 @@ module LikesBranchedBetreeMod
     NoLikes() 
   }
 
+
+  function TransitiveLikes(bbtree: BB.BranchedBetree) : Likes
+    requires bbtree.WF()
+    requires bbtree.Acyclic()
+  {
+    TransitiveLikesDefn(bbtree, bbtree.TheRanking())
+  }
+
   // Account for every page reachable from bbtree.Root(), including
   // a ref the root. The caller of this, from some other data structure,
   // will multiply all my likes by the number of references into it from
   // that outer structure, so we can't leave any reachable stuff with zero.
-  function TransitiveLikes(bbtree: BB.BranchedBetree, r: Ranking) : Likes
+  function TransitiveLikesDefn(bbtree: BB.BranchedBetree, r: Ranking) : Likes
     requires bbtree.WF()
     requires bbtree.ValidRanking(r)
     decreases bbtree.GetRank(r)
@@ -61,7 +69,7 @@ module LikesBranchedBetreeMod
       NoLikes()
     else (
       var root := bbtree.Root();
-      var rootLikes := map[ root => 1 ];
+      var rootLikes := map[ root := 1 ];
       var branchLikes := mapsum(map addr | addr in root.buffers :: BranchLikes(addr, bbtree.branches)); 
       var childrenLikes := mapsum(map i | 0 <= i < |root.children| :: TransitiveLikes(bbtree.ChildAtIdx(i), r));
       rootLikes + branchLikes + childrenLikes

@@ -6,6 +6,7 @@ include "../../lib/Base/total_order.i.dfy"
 include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
 include "Domain.i.dfy"
 include "SplitRequest.i.dfy"
+include "BufferOffsets.i.dfy"
 
 // In contrast to the PivotBetree above, upon flushing a buffer down the tree, 
 // the FilteredBetree keeps the entire buffer but notes that it should filter out the keys in 
@@ -29,6 +30,7 @@ module FilteredBetree
   import opened BoundedPivotsLib
   import opened DomainMod
   import opened SplitRequestMod
+  import opened BufferOffsetsMod
 
   datatype TransitionLabel =
     QueryLabel(endLsn: LSN, key: Key, value: Value)
@@ -38,81 +40,6 @@ module FilteredBetree
   | InternalLabel()
 
   type Element = Upperbounded_Lexicographic_Byte_Order_Impl.Ord.Element
-
-  // data structure tracking offsets of buffers
-  datatype BufferOffsets = BufferOffsets(offsets: seq<nat>)
-  {
-    function Size() : nat
-    {
-      |offsets|
-    }
-
-    function Get(i: nat) : nat
-      requires i < |offsets|
-    {
-      offsets[i]
-    }
-
-    function Slice(start: nat, end: nat) : (out: BufferOffsets)
-      requires start <= end <= |offsets|
-      ensures out.Size() == end-start
-      ensures forall i:nat | i < out.Size() :: out.Get(i) == Get(i+start)
-    {
-      BufferOffsets(offsets[start..end])
-    }
-
-    predicate CanCollectGarbage(count: nat)
-    {
-      forall i:nat | i < Size() :: count <= Get(i)
-    }
-
-    // # to shift for every child
-    function CollectGarbage(count: nat) : (out: BufferOffsets)
-      requires CanCollectGarbage(count)
-    {
-      BufferOffsets(seq (Size(), i requires 0 <= i < Size() => Get(i)-count))
-    }
-
-    function AdvanceIndex(idx: nat, newOffset: nat) : (out: BufferOffsets)
-      requires idx < Size()
-      ensures out.Size() == Size()
-      ensures forall i: nat | i < Size() && i != idx :: Get(i) == out.Get(i)
-    {
-      BufferOffsets(offsets[idx := newOffset])
-    }
-
-    // shift the value of each entry based on compacted buffers
-    function CompactRange(compactStart: nat, compactEnd: nat, bufferLen: nat) : (out: BufferOffsets)
-      requires compactStart < compactEnd <= bufferLen
-      ensures forall offset | offset in out.offsets :: offset <= bufferLen
-      ensures out.Size() == Size()
-      ensures forall offset | offset in out.offsets :: offset  <= bufferLen - (compactEnd-compactStart-1)
-    {
-      CompactInternal(compactStart, compactEnd, bufferLen, Size())
-    }
-
-    function CompactInternal(compactStart: nat, compactEnd: nat, bufferLen: nat, count: nat) : (out: BufferOffsets)
-      requires compactStart < compactEnd <= bufferLen
-      requires forall i:nat | i < Size() :: Get(i) <= bufferLen
-      requires count <= Size()
-      ensures out.Size() == count
-      ensures (forall offset | offset in out.offsets :: offset <= bufferLen - (compactEnd-compactStart-1))
-    {
-      if count == 0 then BufferOffsets([])
-      else (
-        var numFlushed := Get(count-1); // this many buffers have been flushed
-        var end := bufferLen-numFlushed; // end of valid active buffers 
-        var numFlushed' := 
-          if compactStart >= end // compacted range is entirely in flushed range
-          then numFlushed - (compactEnd-compactStart-1)
-          else if compactEnd <= end // compacted range is entirely outside the flushed range
-          then numFlushed
-          else numFlushed - (compactEnd - end); // compacted range overlaps with flushed range
-
-        BufferOffsets(CompactInternal(compactStart, compactEnd, bufferLen, count-1).offsets + [numFlushed'])
-      )
-    }
-  }
 
   predicate WFChildren(children: seq<BetreeNode>)
   {
@@ -134,7 +61,7 @@ module FilteredBetree
           && WFPivots(pivotTable)
           && |children| == NumBuckets(pivotTable)
           && |children| == flushedOffsets.Size()
-          && (forall ofs | ofs in flushedOffsets.offsets :: ofs <= buffers.Length())
+          && flushedOffsets.BoundedBy(buffers.Length())
         )
     }
 
@@ -258,10 +185,7 @@ module FilteredBetree
       var oldChild := children[request.childIdx];
       var (newLeftChild, newRightChild) := if request.SplitLeaf? then oldChild.SplitLeaf(request.splitKey) else oldChild.SplitIndex(request.childPivotIdx);
       var newChildren := replace1with2(children, newLeftChild, newRightChild, request.childIdx);
-
-      var childFlushedBuffer := flushedOffsets.Get(request.childIdx);
-      var newflushedOffsets := BufferOffsets(replace1with2(flushedOffsets.offsets, childFlushedBuffer, childFlushedBuffer, request.childIdx));
-
+      var newflushedOffsets := flushedOffsets.Split(request.childIdx);
       BetreeNode(buffers, InsertPivot(pivotTable, request.childIdx+1, SplitKey(request)), newChildren, newflushedOffsets)
     }
 

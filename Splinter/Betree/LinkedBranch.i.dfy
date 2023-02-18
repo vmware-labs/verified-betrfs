@@ -135,17 +135,17 @@ module LinkedBranchMod {
       addrs !! entries.Keys
     } 
 
-    function {:opaque} MergeDisk(other: DiskView) : (out: DiskView)
-      // ensure result is sound -- keys and their values must come from one of these places
-      ensures forall addr | addr in out.entries 
-        :: || (addr in entries && out.entries[addr] == entries[addr])
-           || (addr in other.entries && out.entries[addr] == other.entries[addr])
-      // ensure result is complete -- result must contain all the keys
-      ensures entries.Keys <= out.entries.Keys
-      ensures other.entries.Keys <= out.entries.Keys
-    {
-      DiskView.DiskView(MapUnion(entries, other.entries))
-    }
+    // function {:opaque} MergeDisk(other: DiskView) : (out: DiskView)
+    //   // ensure result is sound -- keys and their values must come from one of these places
+    //   ensures forall addr | addr in out.entries 
+    //     :: || (addr in entries && out.entries[addr] == entries[addr])
+    //        || (addr in other.entries && out.entries[addr] == other.entries[addr])
+    //   // ensure result is complete -- result must contain all the keys
+    //   ensures entries.Keys <= out.entries.Keys
+    //   ensures other.entries.Keys <= out.entries.Keys
+    // {
+    //   DiskView.DiskView(MapUnion(entries, other.entries))
+    // }
 
     function {:opaque} RemoveDisk(other: DiskView) : (out: DiskView)
       ensures forall addr :: out.ValidAddress(addr) <==> (ValidAddress(addr) && !other.ValidAddress(addr))
