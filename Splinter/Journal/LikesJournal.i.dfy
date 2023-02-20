@@ -174,6 +174,19 @@ module LikesJournal {
   )
   }
 
+  // Give SingletonIndex map comprehension a named trigger
+  predicate InRange(start: LSN, end: LSN, lsn: LSN) {
+    start <= lsn < end
+  }
+
+// TODO(jonh): XXX remove opaque & ensures
+  function /*{:opaque}*/ SingletonIndex(start: LSN, end: LSN, value: Address) : (index: map<LSN, Address>)
+//    ensures start<end ==> start in index
+  {
+    // Redundant domain predicate to provide both a trigger and a finite-set heuristic.
+    map x: LSN | /*InRange(start, end, x) &&*/ start <= x < end :: value
+  }
+
   // Update lsnAddrIndex with additional lsn's from a new record
   function lsnAddrIndexAppendRecord(lsnAddrIndex: map<LSN, Address>, msgs: MsgHistory, addr: Address) : (out: map<LSN, Address>)
     requires msgs.WF()
@@ -182,9 +195,13 @@ module LikesJournal {
             ==> out.Values == lsnAddrIndex.Values + {addr}
   {
     // msgs is complete map from seqStart to seqEnd 
-    var update :=  map x: LSN | msgs.seqStart <= x < msgs.seqEnd :: addr;
-    assert msgs.seqStart in update;  // witness
-    MapUnion(lsnAddrIndex, update)
+    // comprehension condition is redundant: Contains gives a trigger, <= < gives finite heuristic.
+    var update := SingletonIndex(msgs.seqStart, msgs.seqEnd, addr);
+    var out := MapUnion(lsnAddrIndex, update);
+    assert (forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in lsnAddrIndex) 
+            ==> out.Values == lsnAddrIndex.Values + {addr} by {
+    }
+    out
   }
 
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN, addr: Address)
@@ -218,7 +235,8 @@ module LikesJournal {
     if root.None? then map[]
     else 
       var currMsgs := dv.entries[root.value].messageSeq;
-      var update :=  map x: LSN | Mathematics.max(dv.boundaryLSN, currMsgs.seqStart) <= x < currMsgs.seqEnd :: root.value;
+      var update := SingletonIndex(
+        Mathematics.max(dv.boundaryLSN, currMsgs.seqStart), currMsgs.seqEnd, root.value);
       MapUnion(BuildLsnAddrIndexDefn(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), update)
   }
 

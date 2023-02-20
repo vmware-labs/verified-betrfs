@@ -4,6 +4,7 @@ include "LinkedJournalRefinement.i.dfy"
 module LikesJournalRefinement {
   import opened Maps
   import opened LSNMod
+  import opened MsgHistoryMod
   import opened LikesJournal
   import LinkedJournal
   import LinkedJournalRefinement
@@ -27,9 +28,21 @@ module LikesJournalRefinement {
   predicate {:opaque} IndexKeysMapToValidEntries(lsnAddrIndex: map<LSN, Address>, tj: TruncatedJournal)
     requires tj.WF()
   {
-    forall lsn | lsn in lsnAddrIndex ::
-      && lsnAddrIndex[lsn] in tj.diskView.entries
-      && tj.diskView.entries[lsnAddrIndex[lsn]].ContainsLSN(lsn)
+    && (forall lsn | lsn in lsnAddrIndex :: lsnAddrIndex[lsn] in tj.diskView.entries)
+    && (forall lsn | lsn in lsnAddrIndex :: tj.diskView.entries[lsnAddrIndex[lsn]].ContainsLSN(lsn))
+  }
+
+  // one-off explicit instantiation lemma for use in predicates where reveal is verboten.
+  lemma InstantiateIndexKeysMapToValidEntries(lsnAddrIndex: map<LSN, Address>, tj: TruncatedJournal, lsn: LSN)
+    requires tj.WF()
+    requires lsn in lsnAddrIndex
+    requires IndexKeysMapToValidEntries(lsnAddrIndex, tj)
+    ensures lsnAddrIndex[lsn] in tj.diskView.entries
+    ensures tj.diskView.entries[lsnAddrIndex[lsn]].ContainsLSN(lsn)
+  {
+    reveal_IndexKeysMapToValidEntries();
+//    assert lsnAddrIndex[lsn] in tj.diskView.entries;
+//    assert tj.diskView.entries[lsnAddrIndex[lsn]].ContainsLSN(lsn);
   }
 
   predicate {:opaque} IndexDomainValid(lsnAddrIndex: map<LSN, Address>, tj: TruncatedJournal)
@@ -39,16 +52,22 @@ module LikesJournalRefinement {
     && (forall lsn :: lsn in lsnAddrIndex <==> tj.SeqStart() <= lsn < tj.SeqEnd())
   }
 
+  predicate CroppedLSN(boundary: LSN, messageSeq: MsgHistory, lsn: LSN)
+  {
+    Mathematics.max(boundary, messageSeq.seqStart) <= lsn < messageSeq.seqEnd
+  }
+
   predicate IndexRangeValid(lsnAddrIndex: map<LSN, Address>, tj: TruncatedJournal)
     requires tj.WF()
     requires IndexDomainValid(lsnAddrIndex, tj)
     requires IndexKeysMapToValidEntries(lsnAddrIndex, tj)
   {
-    reveal_IndexKeysMapToValidEntries();
     forall addr | addr in lsnAddrIndex.Values ::
+      && var lsn :| lsn in lsnAddrIndex && lsnAddrIndex[lsn] == addr;
+      && assert addr in tj.diskView.entries by { InstantiateIndexKeysMapToValidEntries(lsnAddrIndex, tj, lsn); }
       && var msgs := tj.diskView.entries[addr].messageSeq;
       && var boundaryLSN := tj.diskView.boundaryLSN;
-      && (forall lsn | Mathematics.max(boundaryLSN, msgs.seqStart) <= lsn < msgs.seqEnd :: 
+      && (forall lsn | CroppedLSN(boundaryLSN, msgs, lsn) ::
             && lsn in lsnAddrIndex
             && lsnAddrIndex[lsn] == addr
         )
@@ -140,6 +159,7 @@ module LikesJournalRefinement {
       && dv.entries[BuildLsnAddrIndexDefn(dv, root)[lsn]].ContainsLSN(lsn)
     decreases dv.TheRankOf(root)
   {
+    reveal_SingletonIndex();
     if root.Some? {
       BuildLsnAddrIndexDomainValidHelper1(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN), tjEnd);
     }
@@ -154,6 +174,7 @@ module LikesJournalRefinement {
     ensures forall lsn :: dv.boundaryLSN <= lsn < tjEnd ==> lsn in BuildLsnAddrIndexDefn(dv, root)
     decreases dv.TheRankOf(root)
   {
+    reveal_SingletonIndex();
     if root.Some? {
       var prior := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
       if prior.None? {
@@ -192,6 +213,7 @@ module LikesJournalRefinement {
   {
     reveal_IndexDomainValid();
     reveal_IndexKeysMapToValidEntries();
+    reveal_SingletonIndex();  // TODO timeout
     if root.Some? {
       var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
       BuildLsnAddrIndexOneStepSubmap(dv, root);
@@ -214,10 +236,32 @@ module LikesJournalRefinement {
   {
     reveal_IndexDomainValid();
     reveal_IndexKeysMapToValidEntries();
+    reveal_SingletonIndex();
     var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
     if priorPtr.Some? {
       BuildLsnAddrIndexDomainValid(dv, priorPtr);
     }
+  }
+
+  lemma InvNextMarshalStep(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN, addr: Address)
+    requires Inv(v)
+    requires NextStep(v, v', lbl, InternalJournalMarshalStep(cut, addr));
+    ensures Inv(v')
+  {
+    var step := InternalJournalMarshalStep(cut, addr);
+    assert LinkedJournal.NextStep(v.journal, v'.journal, lbl.I(), IStep(step));
+    LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl.I());
+    InvNextInternalJournalMarshalStep(v, v', lbl, step);
+    BuildLsnAddrIndexGivesRepresentation(v'.journal.truncatedJournal);
+    assert IndexDomainValid(v'.lsnAddrIndex, v'.journal.truncatedJournal) by {
+//      reveal_IndexDomainValid();
+    }
+//    InstantiateIndexKeysMapToValidEntries(v'.lsnAddrIndex,  v'.journal.truncatedJournal);
+    assert IndexKeysMapToValidEntries(v'.lsnAddrIndex,  v'.journal.truncatedJournal) by {
+//      reveal_IndexKeysMapToValidEntries();
+    }
+    assert IndexRangeValid(v'.lsnAddrIndex, v'.journal.truncatedJournal);
+    assert Inv(v');
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -257,18 +301,13 @@ module LikesJournalRefinement {
         assert Inv(v');
       }
       case InternalJournalMarshalStep(cut, addr) => {
-        assert LinkedJournal.NextStep(v.journal, v'.journal, lbl.I(), IStep(step));
-        LinkedJournalRefinement.InvNext(v.journal, v'.journal, lbl.I());
-        InvNextInternalJournalMarshalStep(v, v', lbl, step);
-        BuildLsnAddrIndexGivesRepresentation(v'.journal.truncatedJournal);
-        assert IndexRangeValid(v'.lsnAddrIndex, v'.journal.truncatedJournal);
-        assert Inv(v');
+        InvNextMarshalStep(v, v', lbl, cut, addr);
       }
       case InternalNoOpStep() => assert Inv(v');
     }
   }
 
-  lemma {:timeLimitMultiplier 2} DiscardOldStepPreservesWFAndIndex(v: Variables, v': Variables, lbl: TransitionLabel)
+  lemma DiscardOldStepPreservesWFAndIndex(v: Variables, v': Variables, lbl: TransitionLabel)
     requires v.WF()
     requires IndexDomainValid(v.lsnAddrIndex, v.journal.truncatedJournal)
     requires IndexKeysMapToValidEntries(v.lsnAddrIndex, v.journal.truncatedJournal)
@@ -282,6 +321,9 @@ module LikesJournalRefinement {
     ensures IndexKeysMapToValidEntries(v'.lsnAddrIndex, v'.journal.truncatedJournal)
     ensures IndexRangeValid(v'.lsnAddrIndex, v'.journal.truncatedJournal)
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
+
     var tj := v.journal.truncatedJournal;
     var tj' := v'.journal.truncatedJournal;
     var oldBdy := tj.diskView.boundaryLSN;
@@ -307,6 +349,9 @@ module LikesJournalRefinement {
     requires DiscardOld(v, v', lbl)
     ensures v'.journal.truncatedJournal.diskView.WF();
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
+
     var tj := v.journal.truncatedJournal;
     var tj' := v'.journal.truncatedJournal;
     var newBdy := lbl.startLsn;
@@ -350,6 +395,10 @@ module LikesJournalRefinement {
     ensures IsSubMap(BuildLsnAddrIndexDefn(small, root), BuildLsnAddrIndexDefn(big, root))
     decreases small.TheRankOf(root)
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
+    reveal_SingletonIndex();
+
     if root.Some? {
       BuildLsnAddrIndexWithSubDiskProducesSubMap(small, big, small.entries[root.value].CroppedPrior(small.boundaryLSN));
       var smallPrior := small.entries[root.value].CroppedPrior(small.boundaryLSN);
@@ -370,6 +419,9 @@ module LikesJournalRefinement {
     requires v'.journal.truncatedJournal.diskView.Acyclic()
     ensures v'.lsnAddrIndex == BuildLsnAddrIndex(v'.journal.truncatedJournal);
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
+
     var newBdy := lbl.startLsn;
     var tj := v.journal.truncatedJournal;
     var keepAddrs := lsnAddrIndexDiscardUpTo(v.lsnAddrIndex, newBdy).Values;
@@ -399,11 +451,19 @@ module LikesJournalRefinement {
 //      :: lsn < dv.entries[root.value].messageSeq.seqEnd
     ensures BuildLsnAddrIndexDefn(dv, root).Values == dv.Representation(root)
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
+
     if root.Some? {
       BuildLsnAddrIndexGivesRepresentationHelper(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN));
       var currMsgs := dv.entries[root.value].messageSeq;
-      var update :=  map x: LSN | Mathematics.max(dv.boundaryLSN, currMsgs.seqStart) <= x < currMsgs.seqEnd :: root.value;
-      assert Mathematics.max(dv.boundaryLSN, currMsgs.seqStart) in update;  // witness for 0 < |update|
+      // This map comprehension shows up in profiles for random other /proc runs.
+      // That's distressing! Why isn't it buried opaquely inside this lemma!?
+      var begin := Mathematics.max(dv.boundaryLSN, currMsgs.seqStart);
+      var update := SingletonIndex(begin, currMsgs.seqEnd, root.value);
+      assert begin in update by { reveal_SingletonIndex(); } // witness for 0 < |update|
+      assert BuildLsnAddrIndexDefn(dv, root).Values == dv.Representation(root)
+        by { reveal_SingletonIndex(); }
     }
   }
 
@@ -429,6 +489,9 @@ module LikesJournalRefinement {
     ensures BuildLsnAddrIndexDefn(small, ptr) == BuildLsnAddrIndexDefn(big, ptr)
     decreases if ptr.Some? then big.TheRanking()[ptr.value] else -1
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
+
     assert small.ValidRanking(big.TheRanking());
     if ptr.Some? {
       var jr := big.entries[ptr.value];
@@ -444,6 +507,10 @@ module LikesJournalRefinement {
     requires v'.journal.truncatedJournal.diskView.Acyclic()
     ensures v'.lsnAddrIndex == BuildLsnAddrIndex(v'.journal.truncatedJournal)
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
+    reveal_SingletonIndex();
+
     var tj := v.journal.truncatedJournal;
     var tj' := v'.journal.truncatedJournal;
     SubDiskReprIndex(tj.diskView, tj'.diskView, tj.freshestRec);
@@ -558,6 +625,9 @@ module LikesJournalRefinement {
     ensures forall x | x in lsnAddrIndexDiscardUpTo(lsnAddrIndex, newBdy).Values 
       :: x in tj.DiscardOld(newBdy).Representation()
   {
+    reveal_IndexDomainValid();
+    reveal_IndexKeysMapToValidEntries();
+
     forall addr | addr in lsnAddrIndexDiscardUpTo(lsnAddrIndex, newBdy).Values 
     ensures addr in tj.DiscardOld(newBdy).Representation()
     {
@@ -598,6 +668,8 @@ module LikesJournalRefinement {
           assert block.messageSeq.seqEnd <= newBdy by {
             if newBdy < block.messageSeq.seqEnd {
               var x := Mathematics.max(newBdy, block.messageSeq.seqStart);
+              reveal_IndexDomainValid();
+              reveal_IndexKeysMapToValidEntries();
               assert IndexRangeValid(lsnAddrIndexDiscardUpTo(lsnAddrIndex, newBdy), tj.DiscardOld(newBdy));
               assert x in lsnAddrIndex && lsnAddrIndex[x] == addr && newBdy <= x;
               assert false;
