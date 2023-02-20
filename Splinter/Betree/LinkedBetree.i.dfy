@@ -1023,7 +1023,9 @@ module LinkedBetreeMod
   // TODO(tony): Need to define notion of how newBufferDiskView is valid. For instance, it needs to contain 
   // the old bufferdiskview, and have some notion of "target.Root().bufferStack.Equivalent(compactedBuffers)"
   function InsertCompactReplacement(
-    target: LinkedBetree, compactedBuffers: BufferStack, newBufferDiskView: BufferDiskView, replacementAddr: Address) : (out: LinkedBetree)
+    target: LinkedBetree, 
+    compactStart: nat, compactEnd: nat, compactedBuffer: Address, 
+    newBufferDiskView: BufferDiskView, replacementAddr: Address) : (out: LinkedBetree)
     requires target.WF()
     requires target.HasRoot()
     requires target.Root().bufferStack.Equivalent(newBufferDiskView, compactedBuffers)
