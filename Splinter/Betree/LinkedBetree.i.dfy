@@ -966,7 +966,7 @@ module LinkedBetreeMod
     requires target.WF()
     requires target.HasRoot()
     requires target.Root().OccupiedChildIndex(childIdx)
-    // requires forall i:nat | i < |target.flushedOffsets| && i != childIdx :: bufferGCCount <= flushedOffsets[i]
+    requires target.Root().flushedOffsets.AdvanceIndex(childIdx, target.Root().bufferStack.Length()).CanCollectGarbage(bufferGCCount)
   {
     var root := target.Root();
 
@@ -1008,7 +1008,7 @@ module LinkedBetreeMod
     && step.path.linked == v.linked
     && step.path.Valid()
     && step.path.Target().Root().OccupiedChildIndex(step.childIdx)  // the downstream child must exist
-    && var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr);
+    && var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr, step.bufferGCCount);
     && step.path.CanSubstitute(replacement, step.pathAddrs)
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.targetAddr, step.targetChildAddr} + Set(step.pathAddrs))
@@ -1026,7 +1026,7 @@ module LinkedBetreeMod
     target: LinkedBetree, compactedBuffers: BufferStack, newBufferDiskView: BufferDiskView, replacementAddr: Address) : (out: LinkedBetree)
     requires target.WF()
     requires target.HasRoot()
-    requires target.Root().bufferStack.Equivalent(compactedBuffers)
+    requires target.Root().bufferStack.Equivalent(newBufferDiskView, compactedBuffers)
     requires target.diskView.IsFresh({replacementAddr})
     ensures target.diskView.IsSubDisk(out.diskView)
     ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}
@@ -1034,6 +1034,11 @@ module LinkedBetreeMod
     ensures out.HasRoot() && out.Root().MyDomain() == target.Root().MyDomain()
   {
     var root := target.Root();
+
+    // TODO(tony): Compact seems kinda funky. Here, we were thinking of replacing the 
+    // entire bufferStack with a non-deterministically chosen equivalent buffer. But in the
+    // FilteredBetree layer above, there is some notion of replacing the "active slice" of
+    // the old buffer with an equivalent slice
     var newRoot := BetreeNode(compactedBuffers, root.pivotTable, root.children);
     var newDiskView := target.diskView.ModifyDisk(replacementAddr, newRoot);
     var out := LinkedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView, newBufferDiskView);
@@ -1084,7 +1089,7 @@ module LinkedBetreeMod
     | InternalSplitStep(path: Path, request: SplitRequest, newAddrs: SplitAddrs, pathAddrs: PathAddrs)
       // request describes how the split applies (to an Index or Leaf); newAddrs are the new page addresses
     | InternalFlushMemtableStep(newRootAddr: Address, newBufferAddr: Address)
-    | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs)
+    | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs, bufferGCCount: nat)
       // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
       // pathAddrs is the new addresses to place all its ancestors, used in substitution
 
@@ -1103,13 +1108,14 @@ module LinkedBetreeMod
           && path.Target().CanSplitParent(request)
           && newAddrs.HasUniqueElems()
           && newAddrs.Repr() !! Set(pathAddrs)
-        case InternalFlushStep(_, _, targetAddr, targetChildAddr, pathAddrs) =>
+        case InternalFlushStep(_, _, targetAddr, targetChildAddr, pathAddrs, bufferGCCount) =>
           && path.Valid()
           && path.Target().Root().ValidChildIndex(childIdx)
           && path.depth == |pathAddrs|
           && SeqHasUniqueElems(pathAddrs)
           && {targetAddr, targetChildAddr} !! Set(pathAddrs)
           && targetAddr != targetChildAddr
+          && bufferGCCount <= path.Target().Root().bufferStack.Length()
         case InternalCompactStep(path, compactedNode, targetAddr, pathAddrs) =>
           && path.Valid()
           && path.Target().Root().bufferStack.Equivalent(path.Target().bufferDiskView, compactedBuffers)
@@ -1130,8 +1136,8 @@ module LinkedBetreeMod
       case FreezeAsStep() => FreezeAs(v, v', lbl)
       case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
       case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
-      case InternalFlushMemtableStep(_) => InternalFlushMemtable(v, v', lbl, step)
-      case InternalFlushStep(_, _, _, _, _) => InternalFlush(v, v', lbl, step)
+      case InternalFlushMemtableStep(_, _) => InternalFlushMemtable(v, v', lbl, step)
+      case InternalFlushStep(_, _, _, _, _, _) => InternalFlush(v, v', lbl, step)
       case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
       case InternalNoOpStep() => InternalNoOp(v, v', lbl)
     }
