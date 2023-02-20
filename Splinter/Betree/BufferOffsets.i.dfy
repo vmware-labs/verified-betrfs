@@ -21,8 +21,11 @@ module BufferOffsetsMod
       offsets[i]
     }
 
-    predicate BoundedBy(length: nat) {
-      forall ofs | ofs in offsets :: ofs <= length
+    predicate BoundedBy(length: nat)
+      ensures BoundedBy(length) == forall i:nat | i < |offsets| :: Get(i) <= length
+    {
+      assert forall i:nat | i < |offsets| :: offsets[i] == Get(i);
+      forall i:nat | i < |offsets| :: offsets[i] <= length
     }
 
     function Slice(start: nat, end: nat) : (out: BufferOffsets)

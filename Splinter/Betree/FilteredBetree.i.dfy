@@ -100,6 +100,7 @@ module FilteredBetree
 
     function ActiveBuffersForKey(key: Key) : (i: nat)
       requires KeyInDomain(key)
+      requires flushedOffsets.BoundedBy(buffers.Length())
     {
       buffers.Length() - flushedOffsets.Get(Route(pivotTable, key))
     }
@@ -211,7 +212,6 @@ module FilteredBetree
       var newflushedOffsets := BufferOffsets(replace1with2(flushedOffsets.offsets, childFlushedBuffer, childFlushedBuffer, request.childIdx));
       forall i:nat | i < newflushedOffsets.Size()
         ensures newflushedOffsets.Get(i) <= buffers.Length() {
-          // TODO(Jialin)
           if request.childIdx+1 < i { // sequence math trigger
             assert newflushedOffsets.Get(i) == flushedOffsets.Get(i-1);
           }
