@@ -21,6 +21,12 @@ module BufferOffsetsMod
       offsets[i]
     }
 
+    function Update(i: nat, v:nat): BufferOffsets 
+      requires i < |offsets|
+    {
+      BufferOffsets(offsets[i := v])
+    }
+
     predicate BoundedBy(length: nat)
       ensures BoundedBy(length) == forall i:nat | i < |offsets| :: Get(i) <= length
     {
