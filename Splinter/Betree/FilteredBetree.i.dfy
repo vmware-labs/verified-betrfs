@@ -22,7 +22,8 @@ module FilteredBetree
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
-  import opened Buffers
+  import opened BufferMod
+  import opened BufferStackMod
   import opened MemtableMod
   import opened Upperbounded_Lexicographic_Byte_Order_Impl
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord

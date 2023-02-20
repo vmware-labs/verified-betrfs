@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../CoordinationLayer/AbstractMap.i.dfy"
-include "Buffers.i.dfy"
+include "BufferStack.i.dfy"
 include "Memtable.i.dfy"
 
 // This is a functional model of a Betree, but it doesn't require that child
@@ -28,7 +28,8 @@ module PagedBetree
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
-  import opened Buffers
+  import opened BufferMod
+  import opened BufferStackMod
   import opened MemtableMod
 
   type StampedBetree = Stamped<BetreeNode>

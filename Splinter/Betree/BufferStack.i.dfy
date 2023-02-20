@@ -3,37 +3,13 @@
 
 include "../../lib/Base/KeyType.s.dfy"
 include "../../Spec/Message.s.dfy"
+include "Buffer.i.dfy"
 
-module Buffers
+module BufferStackMod
 {
   import opened KeyType
   import opened ValueMessage
-
-  // I'd prefer to instantiate TotalMapMod here, but rank_is_less_than doesn't
-  // make it through the module refinement, so I can't prove decreases when I
-  // recursively walk down the BetreeNode. So I do it manually instead.
-  predicate AnyKey(key: Key) { true }
-  predicate Total(keys: iset<Key>) {
-    forall k | AnyKey(k) :: k in keys
-  }
-  function AllKeys() : (out: iset<Key>)
-    ensures Total(out)
-  {
-    iset k | AnyKey(k)
-  }
-
-  datatype Buffer = Buffer(mapp: map<Key, Message>)
-  {
-    function Query(key: Key) : Message
-    {
-      if key in mapp then mapp[key] else Update(NopDelta())
-    }
-
-    function ApplyFilter(accept: iset<Key>) : Buffer
-    {
-      Buffer(map k | k in mapp && k in accept :: mapp[k])
-    }
-  }
+  import opened BufferMod
 
   // buffers[0] is the newest data, at the top of the stack
   datatype BufferStack = BufferStack(buffers: seq<Buffer>)

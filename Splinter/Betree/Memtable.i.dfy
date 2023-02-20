@@ -4,7 +4,7 @@
 include "../../lib/Base/KeyType.s.dfy"
 include "../../Spec/Message.s.dfy"
 include "../CoordinationLayer/MsgHistory.i.dfy"
-include "Buffers.i.dfy"
+include "Buffer.i.dfy"
 
 module MemtableMod
 {
@@ -12,7 +12,7 @@ module MemtableMod
   import opened ValueMessage
   import opened LSNMod
   import opened MsgHistoryMod
-  import opened Buffers
+  import opened BufferMod
 
   datatype Memtable = Memtable(buffer: Buffer, seqEnd: LSN)
   {
