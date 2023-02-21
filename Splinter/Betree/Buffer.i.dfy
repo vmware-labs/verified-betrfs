@@ -8,16 +8,7 @@ module BufferMod
 {
   import opened KeyType
   import opened ValueMessage
-
-  predicate AnyKey(key: Key) { true }
-  predicate Total(keys: iset<Key>) {
-    forall k | AnyKey(k) :: k in keys
-  }
-  function AllKeys() : (out: iset<Key>)
-    ensures Total(out)
-  {
-    iset k | AnyKey(k)
-  }
+  // import opened MessageMod
 
   datatype Buffer = Buffer(mapp: map<Key, Message>)
   {
@@ -30,5 +21,17 @@ module BufferMod
     {
       Buffer(map k | k in mapp && k in accept :: mapp[k])
     }
+
+    // This would have been cleaner if Buffer were infinite map. Why are they finite?
+    function Merge(older: Buffer) : Buffer {
+      Buffer(map k | k in (mapp.Keys + older.mapp.Keys) :: 
+        if k in mapp.Keys && k in older.mapp.Keys then ValueMessage.Merge(mapp[k], older.mapp[k])
+        else if k in mapp.Keys then mapp[k]
+        else older.mapp[k])
+    }
+  }
+
+  function EmptyBuffer() : Buffer {
+    Buffer(map[])
   }
 }

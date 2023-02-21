@@ -13,6 +13,46 @@ module LinkedBufferStackMod {
   import opened BufferMod
 
 
+  datatype BufferDiskView = BufferDiskView(entries: map<Address, Buffer>)
+  {
+    function Addresses() : set<Address>
+    {
+      entries.Keys
+    }
+
+    function Get(addr: Address) : Buffer
+      requires addr in entries
+    {
+      entries[addr]
+    }
+
+    function ModifyDisk(addr: Address, item: Buffer) : BufferDiskView {
+      BufferDiskView.BufferDiskView(entries[addr := item])
+    }
+
+    predicate IsSubDisk(bigger: BufferDiskView)
+    {
+      IsSubMap(entries, bigger.entries)
+    }
+
+    function {:opaque} MergeDisk(other: BufferDiskView) : (out: BufferDiskView)
+      // ensure result is sound -- keys and their values must come from one of these places
+      ensures forall addr | addr in out.entries 
+        :: || (addr in entries && out.entries[addr] == entries[addr])
+           || (addr in other.entries && out.entries[addr] == other.entries[addr])
+      // ensure result is complete -- result must contain all the keys
+      ensures entries.Keys <= out.entries.Keys
+      ensures other.entries.Keys <= out.entries.Keys
+    {
+      BufferDiskView(MapUnion(entries, other.entries))
+    }
+  }
+
+  function EmptyBufferDisk() : BufferDiskView {
+    BufferDiskView(map[])
+  }
+
+
   // Note that this BufferStack is a pointer-y structure. It is different from
   // Buffers.BufferStack
   datatype BufferStack = BufferStack(buffers: seq<Address>)
@@ -71,46 +111,10 @@ module LinkedBufferStackMod {
     {
       forall k | AnyKey(k) :: Query(dv, k) == other.Query(dv, k)
     }
+
+    function I(dv: BufferDiskView) : Buffer {
+      
+    }
+
   }  // end type BufferStack
-
-
-    // move to different module
-  datatype BufferDiskView = BufferDiskView(entries: map<Address, Buffer>)
-  {
-    function Addresses() : set<Address>
-    {
-      entries.Keys
-    }
-
-    function Get(addr: Address) : Buffer
-      requires addr in entries
-    {
-      entries[addr]
-    }
-
-    function ModifyDisk(addr: Address, item: Buffer) : BufferDiskView {
-      BufferDiskView.BufferDiskView(entries[addr := item])
-    }
-
-    predicate IsSubDisk(bigger: BufferDiskView)
-    {
-      IsSubMap(entries, bigger.entries)
-    }
-
-    function {:opaque} MergeDisk(other: BufferDiskView) : (out: BufferDiskView)
-      // ensure result is sound -- keys and their values must come from one of these places
-      ensures forall addr | addr in out.entries 
-        :: || (addr in entries && out.entries[addr] == entries[addr])
-           || (addr in other.entries && out.entries[addr] == other.entries[addr])
-      // ensure result is complete -- result must contain all the keys
-      ensures entries.Keys <= out.entries.Keys
-      ensures other.entries.Keys <= out.entries.Keys
-    {
-      BufferDiskView(MapUnion(entries, other.entries))
-    }
-  }
-
-  function EmptyBufferDisk() : BufferDiskView {
-    BufferDiskView(map[])
-  }
 }

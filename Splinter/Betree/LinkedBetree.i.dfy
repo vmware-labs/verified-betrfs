@@ -6,6 +6,7 @@ include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
 include "../Disk/GenericDisk.i.dfy"
 include "Domain.i.dfy"
 include "SplitRequest.i.dfy"
+include "LinkedBufferStack.i.dfy"
 
 // Introduces a diskview and pointers, carries forward filtered buffer stacks inside the 
 // betree nodes. There are two disk views here. One for the BetreeNode type, and one for 
@@ -24,7 +25,8 @@ module LinkedBetreeMod
   import opened MsgHistoryMod
   import opened Options
   import opened Sequences
-  import Buffers
+  import opened BufferMod
+  import opened LinkedBufferStackMod
   import opened StampedMod
   import opened Upperbounded_Lexicographic_Byte_Order_Impl
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
@@ -795,7 +797,7 @@ module LinkedBetreeMod
     }
   }
 
-  function InsertInternalFlushMemtableReplacement(oldRoot: LinkedBetree, newBuffer: Buffers.Buffer, newBufferAddr: Address, newRootAddr:Address) : (out: LinkedBetree)
+  function InsertInternalFlushMemtableReplacement(oldRoot: LinkedBetree, newBuffer: Buffer, newBufferAddr: Address, newRootAddr:Address) : (out: LinkedBetree)
     requires oldRoot.WF()
   {
     var root' := if oldRoot.HasRoot()
@@ -927,11 +929,13 @@ module LinkedBetreeMod
   // the old bufferdiskview, and have some notion of "target.Root().bufferStack.Equivalent(compactedBuffers)"
   function InsertCompactReplacement(
     target: LinkedBetree, 
-    compactStart: nat, compactEnd: nat, compactedBuffer: Address, 
-    newBufferDiskView: BufferDiskView, replacementAddr: Address) : (out: LinkedBetree)
+    compactStart: nat, compactEnd: nat, compactedBuffer: Address, newBufferDiskView: BufferDiskView, 
+    replacementAddr: Address) : (out: LinkedBetree)
     requires target.WF()
     requires target.HasRoot()
-    requires target.Root().bufferStack.Equivalent(newBufferDiskView, compactedBuffers)
+    // requires target.Root().bufferStack.Equivalent(newBufferDiskView, compactedBuffers)
+    // todo: not whole stack, but slice of the stack. Active Buffer Slice???
+    requires target.Root().bufferStack.Slice(compactStart, compactEnd).I(target.bufferDiskView) == newBufferDiskView.Get(comapctedBuffer) // equivalence
     requires target.diskView.IsFresh({replacementAddr})
     ensures target.diskView.IsSubDisk(out.diskView)
     ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}

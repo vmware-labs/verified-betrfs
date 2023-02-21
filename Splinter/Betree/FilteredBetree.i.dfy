@@ -360,6 +360,15 @@ module FilteredBetree
       assert WFChildren(children);  // trigger
       children[Route(pivotTable, key)]
     }
+
+    function MakeOffsetMap() : OffsetMap 
+      requires WF()
+      requires BetreeNode?
+    {
+      OffsetMap(imap k | AnyKey(k) 
+      :: if BoundedKey(pivotTable, k) then flushedOffsets.Get(Route(pivotTable, k))
+          else buffers.Length())
+    }
   }
 
   function EmptyRoot(domain: Domain) : (out: BetreeNode)
@@ -702,7 +711,9 @@ module FilteredBetree
           && path.Valid()
           && path.Target().BetreeNode?  // no point compacting a nil node
           && compactStart < compactEnd <= path.Target().buffers.Length()
-          && path.Target().ActiveBufferSlice(compactStart, compactEnd).Equivalent(BufferStack([compactedBuffer]))
+          // && path.Target().ActiveBufferSlice(compactStart, compactEnd).Equivalent(BufferStack([compactedBuffer]))
+          // New notion of equivalience between old buffer stack slice and comapctedBuffer
+          && path.Target().buffers.Slice(compactStart, compactEnd).I(path.Target().MakeOffsetMap().Decrement(compactStart)) == compactedBuffer
         case _ => true
       }
     }
