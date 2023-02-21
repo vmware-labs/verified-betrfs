@@ -113,7 +113,7 @@ module LinkedBufferStackMod {
     }
 
     function I(dv: BufferDiskView) : Buffer {
-      
+      LEFT OFF HERE
     }
 
   }  // end type BufferStack

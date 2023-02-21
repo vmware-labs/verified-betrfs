@@ -53,6 +53,8 @@ module BufferStackMod
       BufferStack(newBuffers.buffers + this.buffers)
     }
 
+    // When porting, consider eliminating this notion of equivalence up the stack, replace
+    // with I()-equivalence
     predicate Equivalent(other: BufferStack)
     {
       forall k | AnyKey(k) :: Query(k) == other.Query(k)
