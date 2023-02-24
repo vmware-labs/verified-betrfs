@@ -4,12 +4,14 @@
 include "../../lib/Base/KeyType.s.dfy"
 include "../../Spec/Message.s.dfy"
 include "Buffer.i.dfy"
+include "OffsetMap.i.dfy"
 
 module BufferStackMod
 {
   import opened KeyType
   import opened ValueMessage
   import opened BufferMod
+  import opened OffsetMapMod
 
   // buffers[0] is the newest data, at the top of the stack
   datatype BufferStack = BufferStack(buffers: seq<Buffer>)
@@ -73,45 +75,6 @@ module BufferStackMod
     {
       if |buffers| == 0 then EmptyBuffer()
       else DropFirst().I(offsetMap.Decrement(1)).Merge(IBottom(offsetMap))
-    }
-  }
-
-
-  // TotalMapMod provides something like these, but it depends on module
-  // refinement that's hairy and has problems in use (rank_is_less_than doesn't
-  // make it through the module refinement, so we can't prove decreases).
-  predicate AnyKey(key: Key) { true }
-  predicate Total(keys: iset<Key>) {
-    forall k | AnyKey(k) :: k in keys
-  }
-  function AllKeys() : (out: iset<Key>)
-    ensures Total(out)
-  {
-    iset k | AnyKey(k)
-  }
-
-  datatype OffsetMap = OffsetMap(offsets: imap<Key, nat>)
-  {
-    predicate WF() {
-      Total(offsets.Keys)
-    }
-
-    function Get(k: Key) : nat 
-      requires WF()
-    {
-      offsets[k]
-    }
-
-    function FilterForBottom() : iset<Key> 
-      requires WF()
-    {
-      iset k | offsets[k] == 0
-    }
-
-    function Decrement(i: nat) : OffsetMap 
-      requires WF()
-    {
-      OffsetMap(imap k | AnyKey(k) :: if i <= offsets[k] then offsets[k]-i else 0)
     }
   }
 }

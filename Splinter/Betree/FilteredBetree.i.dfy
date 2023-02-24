@@ -32,6 +32,7 @@ module FilteredBetree
   import opened DomainMod
   import opened SplitRequestMod
   import opened BufferOffsetsMod
+  import opened OffsetMapMod
 
   datatype TransitionLabel =
     QueryLabel(endLsn: LSN, key: Key, value: Value)

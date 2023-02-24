@@ -36,6 +36,7 @@ module LinkedBetreeMod
   import opened SplitRequestMod
   import FilteredBetree
   import opened BufferOffsetsMod
+  import BufferStackMod
 
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
@@ -183,6 +184,15 @@ module LinkedBetreeMod
       assert newLeft.WF();
       assert newRight.WF();
       (newLeft, newRight)
+    }
+
+    function MakeOffsetMap() : BufferStackMod.OffsetMap 
+      requires WF()
+      requires BetreeNode?
+    {
+      BufferStackMod.OffsetMap(imap k | BufferStackMod.AnyKey(k) 
+      :: if BoundedKey(pivotTable, k) then flushedOffsets.Get(Route(pivotTable, k))
+          else buffers.Length())
     }
   }
 
@@ -875,7 +885,7 @@ module LinkedBetreeMod
   {
     var root := target.Root();
 
-    var newflushedOffsets := root.flushedOffsets.Update(childIdx, root.bufferStack.Length());
+    var newflushedOffsets := root.flushedOffsets.AdvanceIndex(childIdx, root.bufferStack.Length());
     var keptBuffers := root.bufferStack.Slice(0, root.bufferStack.Length() - bufferGCCount);
     var movedBuffers := root.bufferStack.Slice(0, root.bufferStack.Length() - root.flushedOffsets.Get(childIdx));
 
@@ -935,7 +945,7 @@ module LinkedBetreeMod
     requires target.HasRoot()
     // requires target.Root().bufferStack.Equivalent(newBufferDiskView, compactedBuffers)
     // todo: not whole stack, but slice of the stack. Active Buffer Slice???
-    requires target.Root().bufferStack.Slice(compactStart, compactEnd).I(target.bufferDiskView) == newBufferDiskView.Get(comapctedBuffer) // equivalence
+    requires target.Root().bufferStack.Slice(compactStart, compactEnd).I(target.bufferDiskView ) == newBufferDiskView.Get(comapctedBuffer) // equivalence
     requires target.diskView.IsFresh({replacementAddr})
     ensures target.diskView.IsSubDisk(out.diskView)
     ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}

@@ -18,6 +18,7 @@ module PivotBetree
   import opened LSNMod
   import opened Sequences
   import opened BufferMod
+  import opened OffsetMapMod
   import opened BufferStackMod
   import opened MemtableMod
   import opened Upperbounded_Lexicographic_Byte_Order_Impl
