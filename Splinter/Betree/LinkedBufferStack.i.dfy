@@ -11,6 +11,7 @@ module LinkedBufferStackMod {
   import opened KeyType
   import opened ValueMessage
   import opened BufferMod
+  import BufferStackMod
 
 
   datatype BufferDiskView = BufferDiskView(entries: map<Address, Buffer>)
@@ -109,11 +110,30 @@ module LinkedBufferStackMod {
       requires Valid(dv)
       requires other.Valid(dv)
     {
-      forall k | AnyKey(k) :: Query(dv, k) == other.Query(dv, k)
+      forall k | BufferStackMod.AnyKey(k) :: Query(dv, k) == other.Query(dv, k)
     }
 
-    function I(dv: BufferDiskView) : Buffer {
-      LEFT OFF HERE
+    function DropFirst() : BufferStack
+      requires 0 < |buffers|
+    {
+      Slice(1, |buffers|)
+    }
+    
+    function IBottom(dv: BufferDiskView, offsetMap: BufferStackMod.OffsetMap) : Buffer 
+      requires Valid(dv)
+      requires offsetMap.WF()
+      requires 0 < |buffers|
+    {
+      dv.Get(buffers[0]).ApplyFilter(offsetMap.FilterForBottom())
+    }
+
+    function I(dv: BufferDiskView, offsetMap: BufferStackMod.OffsetMap) : Buffer 
+      requires Valid(dv)
+      requires offsetMap.WF()
+      decreases |buffers|
+    {
+      if |buffers| == 0 then EmptyBuffer()
+      else DropFirst().I(dv, offsetMap.Decrement(1)).Merge(IBottom(dv, offsetMap))
     }
 
   }  // end type BufferStack
