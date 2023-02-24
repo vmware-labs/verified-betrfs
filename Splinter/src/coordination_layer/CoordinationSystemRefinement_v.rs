@@ -5,6 +5,7 @@ use builtin_macros::*;
 use state_machines_macros::state_machine;
 use crate::pervasive::prelude::*;
 use crate::pervasive::seq_lib::*;
+use crate::pervasive::map::*;
 
 use crate::spec::Messages_t::*;
 use crate::spec::MapSpec_t;
@@ -222,7 +223,7 @@ verus! {
       // in-flight journal is consistent with the ephemeral journal
       &&& journal_overlaps_agree(if_journal, self.journal.i())
       // in-flight map matches corresponding state in ephemeral world
-      // TODO: map_plus_history should probably be moved out of MsgHistory
+      // TODO: MsgHistory::map_plus_history should probably be moved out of MsgHistory
       &&& if_map == MsgHistory::map_plus_history(
             self.mapadt.persistent,
             self.journal.i().discard_recent(if_map.seq_end)
@@ -311,4 +312,89 @@ verus! {
       }
     }
   }
+
+  pub proof fn CommitStepPreservesHistory(
+    v: CoordinationSystem::State,
+    vp: CoordinationSystem::State, // v'
+    label: CoordinationSystem::Label,
+    step: CoordinationSystem::Step,
+    lsn: LSN
+  )
+    requires
+      v.inv(),
+      CoordinationSystem::State::next(v, vp, label),
+      CoordinationSystem::State::next_by(v, vp, label, step),
+      // Step enum doesn't generate `is_variant` type checkers
+      step.is_commit_complete(),
+      v.mapadt.persistent.seq_end <= lsn <= v.ephemeral_seq_end(),
+      v.mapadt.in_flight.get_Some_0().seq_end <= lsn,
+    ensures
+      v.journal.i().can_discard_to(lsn),
+      MsgHistory::map_plus_history(v.mapadt.persistent, v.journal.i().discard_recent(lsn))
+        == MsgHistory::map_plus_history(vp.mapadt.persistent, vp.journal.i().discard_recent(lsn))
+  {
+    // There are six pieces in play here: the persistent and in-flight images and the ephemeral journals:
+    //  _________ __________
+    // | pdi.map | pdi.jrnl |
+    //  --------- ----------
+    //  ______________R__________
+    // | idi.map      | idi.jrnl |
+    //  -------------- ----------
+    //            ____________________
+    //           | eph.jrnl           |
+    //            --------------------
+    //                 _______________
+    //                | eph'.jrnl     |
+    //                 ---------------
+    // "R" is the "reference LSN" -- that's where we're going to prune ephemeral.journal, since
+    // after the commit it is going to be the LSN of the persistent map.
+
+    let ref_lsn = v.mapadt.in_flight.get_Some_0().seq_end;
+    let ej = v.journal.i();
+    let eji = ej.discard_recent(lsn);
+
+    // Here's a calc, but in comments so we can use a shorthand algebra:
+    // Let + represent both MapPlusHistory and Concat (they're associative).
+    // Let [x..] represent DiscardOld(x) and [..y] represent DiscardRecent(y).
+    // var im:=v.inFlightImage.value.mapadt, pm:=v.mapadt.persistent, R:=im.seqEnd
+    // pm'+ej'[..lsn]
+    // im+ej'[..lsn]
+    // im+ej[..lsn][R..]
+    //   {InvInFlightVersionAgreement}
+    // (pm+ej[..R])+ej[..lsn][R..]
+    // journal_associativity(v.mapadt.persistent, ej.discard_recent(ref_lsn), ej.discard_recent(lsn).discard_old(ref_lsn));
+    // pm+(ej[..R]+ej[..lsn][R..])
+    assert(ref_lsn <= lsn);
+    let a = ej.discard_recent(ref_lsn);
+    let b = ej.discard_recent(lsn).discard_recent(ref_lsn);
+
+    assert_maps_equal!(a.msgs, b.msgs);
+
+    assert(a.seq_start == b.seq_start);
+    assert(a.seq_end == b.seq_end);
+    assert(a.msgs == b.msgs);
+
+    assert(ej.discard_recent(ref_lsn) == ej.discard_recent(lsn).discard_recent(ref_lsn));  // because R <= lsn; smaller lsn are Forgotten
+    // pm+(ej[..lsn][..R]+ej[..lsn][R..])
+    assert(eji.discard_recent(ref_lsn).concat(eji.discard_old(ref_lsn)) == eji);  // trigger
+    // pm+ej[..lsn]    
+  }
+
+  // pub proof fn journal_associativity(x: StampedMap, y: MsgHistory, z: MsgHistory)
+  //   requires
+  //     y.can_follow(x.seq_end),
+  //     z.can_follow(y.seq_end),
+  //   ensures
+  //     MsgHistory::map_plus_history(MsgHistory::map_plus_history(x, y), z) == MsgHistory::map_plus_history(x, y.concat(z))
+  //   decreases
+  //     z.len(),
+  // {
+  //   if !z.is_empty() {
+  //     let ztrim = z.discard_recent((z.seq_end - 1) as nat);
+  //     let yz = y.concat(z);
+
+  //     journal_associativity(x, y, ztrim);
+  //     assert(yz.discard_recent((yz.seq_end - 1) as nat) == y.concat(ztrim));
+  //   }
+  // }
 }
