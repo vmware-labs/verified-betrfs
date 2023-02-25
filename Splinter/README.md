@@ -4,9 +4,9 @@ TODO fill this in
 
 ### Commands
 
-`$verus -Zunpretty=expanded lib.rs` to get expanded macro representation of a verus file.
+`$verus -Zunpretty=expanded bundle.rs` to get expanded macro representation of a verus file.
 
-`$verus --verify-module coordination_layer::CoordinationSystemRefinement_v lib.rs`
+`$verus --verify-module coordination_layer::CoordinationSystemRefinement_v bundle.rs`
 To verify just a single module.
 
 ### Verus
