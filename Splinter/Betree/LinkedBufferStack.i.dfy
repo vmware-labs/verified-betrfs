@@ -11,8 +11,7 @@ module LinkedBufferStackMod {
   import opened KeyType
   import opened ValueMessage
   import opened BufferMod
-  import BufferStackMod
-
+  import opened OffsetMapMod
 
   datatype BufferDiskView = BufferDiskView(entries: map<Address, Buffer>)
   {
@@ -68,10 +67,19 @@ module LinkedBufferStackMod {
       |buffers|
     }
 
+    function Representation() : set<Address> {
+      set addr | addr in buffers :: addr
+    }
+
     function Slice(start: nat, end: nat) : BufferStack
       requires start <= end <= |buffers|
     {
       BufferStack(buffers[start..end])
+    }
+
+    function Extend(newBufferStack: BufferStack) : BufferStack
+    {
+      BufferStack(buffers + newBufferStack.buffers)
     }
 
     // function GetBuffer(addr: Address) : Buffers.Buffer
@@ -110,7 +118,7 @@ module LinkedBufferStackMod {
       requires Valid(dv)
       requires other.Valid(dv)
     {
-      forall k | BufferStackMod.AnyKey(k) :: Query(dv, k) == other.Query(dv, k)
+      forall k | AnyKey(k) :: Query(dv, k) == other.Query(dv, k)
     }
 
     function DropFirst() : BufferStack
@@ -119,7 +127,7 @@ module LinkedBufferStackMod {
       Slice(1, |buffers|)
     }
     
-    function IBottom(dv: BufferDiskView, offsetMap: BufferStackMod.OffsetMap) : Buffer 
+    function IBottom(dv: BufferDiskView, offsetMap: OffsetMap) : Buffer 
       requires Valid(dv)
       requires offsetMap.WF()
       requires 0 < |buffers|
@@ -127,7 +135,7 @@ module LinkedBufferStackMod {
       dv.Get(buffers[0]).ApplyFilter(offsetMap.FilterForBottom())
     }
 
-    function I(dv: BufferDiskView, offsetMap: BufferStackMod.OffsetMap) : Buffer 
+    function I(dv: BufferDiskView, offsetMap: OffsetMap) : Buffer 
       requires Valid(dv)
       requires offsetMap.WF()
       decreases |buffers|

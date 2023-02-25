@@ -106,6 +106,15 @@ module Sets {
     }
   }
 
+  function UnionSetOfSets<T>(s : set<set<T>>) : (out: set<T>)
+    decreases |s|
+  {
+    if |s| == 0 then {}
+    else 
+      var x :| x in s;
+      x + UnionSetOfSets(s - {x})
+  }
+
   lemma UnionSeqOfSetsSoundnessContrapositive<T>(s: seq<set<T>>, e: T)
     requires forall i | 0 <= i < |s| :: e !in s[i]
     ensures e !in UnionSeqOfSets(s)

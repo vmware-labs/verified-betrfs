@@ -14,6 +14,7 @@ include "LinkedBufferStack.i.dfy"
 // b+trees.
 module LinkedBetreeMod
 {
+  import Sets
   import opened BoundedPivotsLib
   // import opened Buffers
   import opened DomainMod
@@ -35,8 +36,8 @@ module LinkedBetreeMod
   import TotalKMMapMod
   import opened SplitRequestMod
   import FilteredBetree
+  import opened OffsetMapMod
   import opened BufferOffsetsMod
-  import BufferStackMod
 
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
@@ -186,13 +187,13 @@ module LinkedBetreeMod
       (newLeft, newRight)
     }
 
-    function MakeOffsetMap() : BufferStackMod.OffsetMap 
+    function MakeOffsetMap() : OffsetMap 
       requires WF()
       requires BetreeNode?
     {
-      BufferStackMod.OffsetMap(imap k | BufferStackMod.AnyKey(k) 
+      OffsetMap(imap k | AnyKey(k) 
       :: if BoundedKey(pivotTable, k) then flushedOffsets.Get(Route(pivotTable, k))
-          else buffers.Length())
+          else bufferStack.Length())
     }
   }
 
@@ -422,7 +423,8 @@ module LinkedBetreeMod
         this
       else
         var tightDv := DiskView.DiskView(MapRestrict(diskView.entries, Representation()));
-        LinkedBetree(root, tightDv, bufferDiskView)
+        var tightBDv := BufferDiskView(MapRestrict(bufferDiskView.entries, BufferStackRepresentation()));
+        LinkedBetree(root, tightDv, tightBDv)
     }
 
     function Representation() : set<Address>
@@ -444,6 +446,11 @@ module LinkedBetreeMod
         var subTreeAddrs := seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ReachableAddrsUsingRanking(ranking));
         Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
         {root.value} + Sets.UnionSeqOfSets(subTreeAddrs)
+    }
+
+    function BufferStackRepresentation() : (out: set<Address>) {
+      var sets := set treeAddr | treeAddr in Representation() :: diskView.Get(Some(treeAddr)).bufferStack.Representation();
+      Sets.UnionSetOfSets(sets)
     }
 
     predicate DiskIsTightWrtRepresentation()
@@ -931,21 +938,30 @@ module LinkedBetreeMod
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  // target is the root node before it is compacted.
-  // InsertReplacement returns a LinkedBetree that has the diskview of target with replacement placed at
-  // the replacementAddr
+
+  function OffSetsAfterCompact(offsets: BufferOffsets, start: nat, end: nat) : BufferOffsets{
+    BufferOffsets(
+      seq(offsets.Size(), i requires 0 <= i < offsets.Size() => 
+        if offsets.Get(i) <= start then offsets.Get(i)
+        else if offsets.Get(i) < end then start
+        else offsets.Get(i) - (end-start)
+      )
+    )
+  }
 
   // TODO(tony): Need to define notion of how newBufferDiskView is valid. For instance, it needs to contain 
   // the old bufferdiskview, and have some notion of "target.Root().bufferStack.Equivalent(compactedBuffers)"
+  // target is the root node before it is compacted.
+  // InsertReplacement returns a LinkedBetree that has the diskview of target with replacement placed at
+  // the replacementAddr
   function InsertCompactReplacement(
     target: LinkedBetree, 
-    compactStart: nat, compactEnd: nat, compactedBuffer: Address, newBufferDiskView: BufferDiskView, 
+    start: nat, end: nat, compactedBuffer: Address, newBufferDiskView: BufferDiskView, 
     replacementAddr: Address) : (out: LinkedBetree)
     requires target.WF()
     requires target.HasRoot()
-    // requires target.Root().bufferStack.Equivalent(newBufferDiskView, compactedBuffers)
-    // todo: not whole stack, but slice of the stack. Active Buffer Slice???
-    requires target.Root().bufferStack.Slice(compactStart, compactEnd).I(target.bufferDiskView ) == newBufferDiskView.Get(comapctedBuffer) // equivalence
+    requires target.Root().bufferStack.Slice(start, end).I(target.bufferDiskView, target.Root().MakeOffsetMap()) 
+              == newBufferDiskView.Get(compactedBuffer) // equivalence
     requires target.diskView.IsFresh({replacementAddr})
     ensures target.diskView.IsSubDisk(out.diskView)
     ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}
@@ -953,12 +969,8 @@ module LinkedBetreeMod
     ensures out.HasRoot() && out.Root().MyDomain() == target.Root().MyDomain()
   {
     var root := target.Root();
-
-    // TODO(tony): Compact seems kinda funky. Here, we were thinking of replacing the 
-    // entire bufferStack with a non-deterministically chosen equivalent buffer. But in the
-    // FilteredBetree layer above, there is some notion of replacing the "active slice" of
-    // the old buffer with an equivalent slice
-    var newRoot := BetreeNode(compactedBuffers, root.pivotTable, root.children);
+    var newBufferStack := root.bufferStack.Slice(0, start).Extend(BufferStack([compactedBuffer])).Extend(root.bufferStack.Slice(end, root.bufferStack.Length()));
+    var newRoot := BetreeNode(newBufferStack, root.pivotTable, root.children, OffSetsAfterCompact(root.flushedOffsets, start, end));
     var newDiskView := target.diskView.ModifyDisk(replacementAddr, newRoot);
     var out := LinkedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView, newBufferDiskView);
     out
@@ -973,13 +985,12 @@ module LinkedBetreeMod
     && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr}
     && step.path.linked == v.linked
     && step.path.Valid()
-    // && step.path.Target().Root().bufferStack.Equivalent(step.compactedBuffers)
+
     // Subway Eat Fresh!
     && v.linked.diskView.IsFresh({step.targetAddr} + Set(step.pathAddrs))
-    && v'.linked == step.path.Substitute(
-        InsertCompactReplacement(step.path.Target(), step.compactedBuffers, step.targetAddr),
-        step.pathAddrs
-    ).BuildTightTree()
+    && var replacement := InsertCompactReplacement(step.path.Target(), step.compactStart, step.compactEnd, step.compactedBuffer, step.newBufferDiskView, step.targetAddr);
+    && v.linked.bufferDiskView.IsSubDisk(step.newBufferDiskView)
+    && v'.linked == step.path.Substitute(replacement, step.pathAddrs).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
@@ -1012,7 +1023,7 @@ module LinkedBetreeMod
       // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
       // pathAddrs is the new addresses to place all its ancestors, used in substitution
 
-    | InternalCompactStep(path: Path, compactedBuffers: BufferStack, targetAddr: Address, pathAddrs: PathAddrs)
+    | InternalCompactStep(path: Path, compactStart: nat, compactEnd: nat, compactedBuffer: Address, newBufferDiskView: BufferDiskView, targetAddr: Address, pathAddrs: PathAddrs)
       // targetAddr is the fresh address at which compactedNode is placed. pathAddrs is the new addresses to place all its ancestors
     | InternalNoOpStep()
   {
@@ -1035,9 +1046,11 @@ module LinkedBetreeMod
           && {targetAddr, targetChildAddr} !! Set(pathAddrs)
           && targetAddr != targetChildAddr
           && bufferGCCount <= path.Target().Root().bufferStack.Length()
-        case InternalCompactStep(path, compactedNode, targetAddr, pathAddrs) =>
+        case InternalCompactStep(path, start, end, compactedBuffer, newBufferDv, targetAddr, pathAddrs) =>
           && path.Valid()
-          && path.Target().Root().bufferStack.Equivalent(path.Target().bufferDiskView, compactedBuffers)
+          && compactedBuffer in newBufferDv.entries
+          && path.Target().Root().bufferStack.Slice(start, end).I(path.Target().bufferDiskView, path.Target().Root().MakeOffsetMap()) 
+              == newBufferDv.Get(compactedBuffer)
           && path.depth == |pathAddrs|
           && SeqHasUniqueElems(pathAddrs)
           && {targetAddr} !! Set(pathAddrs)
@@ -1057,7 +1070,7 @@ module LinkedBetreeMod
       case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
       case InternalFlushMemtableStep(_, _) => InternalFlushMemtable(v, v', lbl, step)
       case InternalFlushStep(_, _, _, _, _, _) => InternalFlush(v, v', lbl, step)
-      case InternalCompactStep(_, _, _, _) => InternalCompact(v, v', lbl, step)
+      case InternalCompactStep(_, _, _, _, _, _, _) => InternalCompact(v, v', lbl, step)
       case InternalNoOpStep() => InternalNoOp(v, v', lbl)
     }
   }
