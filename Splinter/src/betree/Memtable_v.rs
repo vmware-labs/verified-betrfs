@@ -4,7 +4,7 @@ use builtin::*;
 use builtin_macros::*;
 
 use crate::pervasive::prelude::*;
-use crate::betree::Buffers_v::*;
+use crate::betree::Buffer_v::*;
 use crate::spec::Messages_t::*;
 use crate::spec::TotalKMMap_t::*;
 use crate::coordination_layer::StampedMap_v::*;
@@ -32,9 +32,7 @@ impl Memtable {
 
     pub open spec fn empty_memtable(self, lsn: LSN) -> Memtable {
         Memtable{ 
-            buffer: Buffer{
-                map: Map::empty()
-            },
+            buffer: Buffer::empty_buffer(),
             seq_end: lsn
         }
     }

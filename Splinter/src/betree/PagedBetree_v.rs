@@ -6,7 +6,7 @@ use builtin_macros::*;
 use crate::pervasive::prelude::*;
 use crate::spec::Messages_t::*;
 use crate::spec::TotalKMMap_t::*;
-use crate::betree::Buffers_v::*;
+use crate::betree::Buffer_v::*;
 use crate::betree::Memtable_v::*;
 use crate::coordination_layer::StampedMap_v::*;
 
