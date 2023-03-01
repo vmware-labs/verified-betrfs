@@ -19,7 +19,7 @@ module PivotBetree
   import opened Sequences
   import opened BufferMod
   import opened OffsetMapMod
-  import opened BufferStackMod
+  import opened BufferSeqMod
   import opened MemtableMod
   import opened Upperbounded_Lexicographic_Byte_Order_Impl
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
@@ -43,7 +43,7 @@ module PivotBetree
   }
 
   datatype BetreeNode = Nil | BetreeNode(
-    buffers: BufferStack,
+    buffers: BufferSeq,
     pivotTable: PivotTable,
     children: seq<BetreeNode>)
   {
@@ -80,12 +80,12 @@ module PivotBetree
         )
     }
 
-    function PushBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
+    function PushBufferSeq(bufferStack: BufferSeq) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
       ensures out.WF()
     {
-      BetreeNode(buffers.PushBufferStack(bufferStack), pivotTable, children)
+      BetreeNode(buffers.PushBufferSeq(bufferStack), pivotTable, children)
     }
 
     predicate IsLeaf()
@@ -256,13 +256,13 @@ module PivotBetree
       var keptBuffers := buffers.ApplyFilter(keepKeys);
       var movedBuffers := buffers.ApplyFilter(DomainRoutedToChild(childIdx).KeySet());
       assert WFChildren(children);  // trigger
-      var newChild := children[childIdx].Promote(DomainRoutedToChild(childIdx)).PushBufferStack(movedBuffers);
+      var newChild := children[childIdx].Promote(DomainRoutedToChild(childIdx)).PushBufferSeq(movedBuffers);
       BetreeNode(keptBuffers, pivotTable, children[childIdx := newChild])
     }
 
-    function Buffers() : BufferStack
+    function Buffers() : BufferSeq
     {
-      if Nil? then BufferStack([]) else buffers
+      if Nil? then BufferSeq([]) else buffers
     }
 
     function Children() : seq<BetreeNode>
@@ -303,7 +303,7 @@ module PivotBetree
     var pivotTable := [domain.start, domain.end];
     domain.reveal_SaneKeys();  /* jonh suspicious lt leak */
     assert Keyspace.IsStrictlySorted(pivotTable) by { reveal_IsStrictlySorted(); }  /* jonh suspicious lt leak */
-    BetreeNode(BufferStack([]), pivotTable, [Nil])
+    BetreeNode(BufferSeq([]), pivotTable, [Nil])
   }
 
   // TODO(jonh): sooooo much copy-paste. Maybe pull some of this logic, like the idea
@@ -401,7 +401,7 @@ module PivotBetree
   function PushMemtable(root: BetreeNode, memtable: Memtable) : StampedBetree
     requires root.WF()
   {
-    Stamped(root.Promote(TotalDomain()).PushBufferStack(BufferStack([memtable.buffer])), memtable.seqEnd)
+    Stamped(root.Promote(TotalDomain()).PushBufferSeq(BufferSeq([memtable.buffer])), memtable.seqEnd)
   }
 
   datatype Variables = Variables(
@@ -566,7 +566,7 @@ module PivotBetree
       )
   }
 
-  function CompactedNode(original: BetreeNode, newBufs: BufferStack) : BetreeNode 
+  function CompactedNode(original: BetreeNode, newBufs: BufferSeq) : BetreeNode 
     requires original.BetreeNode?
     requires original.buffers.Equivalent(newBufs)
   {
@@ -608,7 +608,7 @@ module PivotBetree
     | InternalSplitStep(path: Path, request: SplitRequest)
     | InternalFlushMemtableStep()
     | InternalFlushStep(path: Path, childIdx: nat)
-    | InternalCompactStep(path: Path, compactedBuffers: BufferStack)
+    | InternalCompactStep(path: Path, compactedBuffers: BufferSeq)
     | InternalNoOpStep()
   {
     predicate WF() {

@@ -63,37 +63,14 @@ module BufferOffsetsMod
       BufferOffsets(offsets[idx := newOffset])
     }
 
-    // shift the value of each entry based on compacted buffers
-    function CompactRange(compactStart: nat, compactEnd: nat, bufferLen: nat) : (out: BufferOffsets)
-      requires compactStart < compactEnd <= bufferLen
-      requires BoundedBy(bufferLen)
-      ensures forall offset | offset in out.offsets :: offset <= bufferLen
-      ensures out.Size() == Size()
-      ensures forall offset | offset in out.offsets :: offset  <= bufferLen - (compactEnd-compactStart-1)
+    function OffSetsAfterCompact(start: nat, end: nat) : BufferOffsets 
     {
-      CompactInternal(compactStart, compactEnd, bufferLen, Size())
-    }
-
-    function CompactInternal(compactStart: nat, compactEnd: nat, bufferLen: nat, count: nat) : (out: BufferOffsets)
-      requires compactStart < compactEnd <= bufferLen
-      requires BoundedBy(bufferLen)
-      requires count <= Size()
-      ensures out.Size() == count
-      ensures out.BoundedBy(bufferLen - (compactEnd-compactStart-1))
-    {
-    
-      if count == 0 then BufferOffsets([])
-      else (
-        var numFlushed := Get(count-1); // this many buffers have been flushed
-        var end := bufferLen-numFlushed; // end of valid active buffers 
-        var numFlushed' := 
-          if compactStart >= end // compacted range is entirely in flushed range
-          then numFlushed - (compactEnd-compactStart-1)
-          else if compactEnd <= end // compacted range is entirely outside the flushed range
-          then numFlushed
-          else numFlushed - (compactEnd - end); // compacted range overlaps with flushed range
-
-        BufferOffsets(CompactInternal(compactStart, compactEnd, bufferLen, count-1).offsets + [numFlushed'])
+      BufferOffsets(
+        seq(Size(), i requires 0 <= i < Size() => 
+          if Get(i) <= start then Get(i)
+          else if Get(i) < end then start
+          else Get(i) - (end-start) + 1 // shift by compacted range + the replacement buffer
+        )
       )
     }
   }

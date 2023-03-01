@@ -23,7 +23,7 @@ module FilteredBetree
   import opened LSNMod
   import opened Sequences
   import opened BufferMod
-  import opened BufferStackMod
+  import opened BufferSeqMod
   import opened MemtableMod
   import opened Upperbounded_Lexicographic_Byte_Order_Impl
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
@@ -49,7 +49,7 @@ module FilteredBetree
   }
 
   datatype BetreeNode = Nil | BetreeNode(
-    buffers: BufferStack,
+    buffers: BufferSeq,
     pivotTable: PivotTable,
     children: seq<BetreeNode>,
     // # of buffers flushed to each child
@@ -92,19 +92,19 @@ module FilteredBetree
         )
     }
 
-    function PushBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
+    function ExtendBufferSeq(bufferStack: BufferSeq) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
       ensures out.WF()
     {
-      BetreeNode(buffers.PushBufferStack(bufferStack), pivotTable, children, flushedOffsets)
+      BetreeNode(buffers.Extend(bufferStack), pivotTable, children, flushedOffsets)
     }
 
     function ActiveBuffersForKey(key: Key) : (i: nat)
       requires KeyInDomain(key)
       requires flushedOffsets.BoundedBy(buffers.Length())
     {
-      buffers.Length() - flushedOffsets.Get(Route(pivotTable, key))
+      flushedOffsets.Get(Route(pivotTable, key))
     }
   
     predicate IsLeaf()
@@ -269,7 +269,7 @@ module FilteredBetree
     requires childIdx < |children|
     requires bufferIdx < buffers.Length()
     {
-      if bufferIdx < buffers.Length() - flushedOffsets.Get(childIdx)
+      if bufferIdx >= flushedOffsets.Get(childIdx)
       then DomainRoutedToChild(childIdx).KeySet()
       else iset{}
     }
@@ -283,14 +283,14 @@ module FilteredBetree
     }
 
     // retruns the requested active slice of a buffer
-    function ActiveBufferSlice(start: nat, end: nat) : BufferStack
+    function ActiveBufferSlice(start: nat, end: nat) : BufferSeq
       requires WF()
       requires BetreeNode?
       requires start <= end <= buffers.Length()
     {
       var activeBuffers := seq (end-start, i requires 0 <= i < end-start 
                             => buffers.buffers[i+start].ApplyFilter(ActiveBufferKeys(i+start)));
-      BufferStack(activeBuffers)
+      BufferSeq(activeBuffers)
     }
 
     predicate CanFlush(childIdx: nat)
@@ -306,31 +306,32 @@ module FilteredBetree
       requires flushedOffsets.AdvanceIndex(childIdx, buffers.Length()).CanCollectGarbage(bufferGCCount)
       ensures out.WF()
     {
-      assert forall ofs | ofs in flushedOffsets.offsets :: ofs <= buffers.Length();
+      var flushUpTo := buffers.Length();
 
-      var newFlushedOffsets := flushedOffsets.AdvanceIndex(childIdx, buffers.Length());
+      assert forall ofs | ofs in flushedOffsets.offsets :: ofs <= flushUpTo;
 
-      assert forall ofs | ofs in newFlushedOffsets.offsets :: ofs <= buffers.Length() by {
+      var newFlushedOffsets := flushedOffsets.AdvanceIndex(childIdx, flushUpTo);
+
+      assert forall ofs | ofs in newFlushedOffsets.offsets :: ofs <= flushUpTo by {
         // TODO: pretty insane we have to prove this lol
       }
 
-      var movedBuffers := buffers.Slice(0, buffers.Length() - flushedOffsets.Get(childIdx));
+      var movedBuffers := buffers.Slice(flushedOffsets.Get(childIdx), flushUpTo); // buffers flushed to child
 
       assert WFChildren(children);  // trigger
-      var newChild := children[childIdx].Promote(DomainRoutedToChild(childIdx)).PushBufferStack(movedBuffers);
+      var newChild := children[childIdx].Promote(DomainRoutedToChild(childIdx)).ExtendBufferSeq(movedBuffers);
 
       // new parent, with updated num flushed buffers for children and truncate buffers that are flushed to all children
       var gcFlushedOffsets := newFlushedOffsets.CollectGarbage(bufferGCCount);
-      // TODO: ummm 
 
-      var newRoot := BetreeNode(buffers.Slice(0, buffers.Length()-bufferGCCount), pivotTable, children[childIdx := newChild], gcFlushedOffsets);
+      var newRoot := BetreeNode(buffers.Slice(bufferGCCount, flushUpTo), pivotTable, children[childIdx := newChild], gcFlushedOffsets);
       assert newRoot.WF();
       newRoot
     }
 
-    function Buffers() : BufferStack
+    function Buffers() : BufferSeq
     {
-      if Nil? then BufferStack([]) else buffers
+      if Nil? then BufferSeq([]) else buffers
     }
 
     function Children() : seq<BetreeNode>
@@ -380,7 +381,7 @@ module FilteredBetree
     var pivotTable := [domain.start, domain.end];
     domain.reveal_SaneKeys();  /* jonh suspicious lt leak */
     assert Keyspace.IsStrictlySorted(pivotTable) by { reveal_IsStrictlySorted(); }  /* jonh suspicious lt leak */
-    BetreeNode(BufferStack([]), pivotTable, [Nil], BufferOffsets([0]))
+    BetreeNode(BufferSeq([]), pivotTable, [Nil], BufferOffsets([0]))
   }
 
   // TODO(jonh): sooooo much copy-paste. Maybe pull some of this logic, like the idea
@@ -443,8 +444,8 @@ module FilteredBetree
       requires i < |lines| - 1
     {
       && var node := lines[i].node;
-      && var end := node.ActiveBuffersForKey(key);
-      && lines[i].result == Merge(node.buffers.QueryUpTo(key, end), ResultAt(i+1))
+      && var start := node.ActiveBuffersForKey(key);
+      && lines[i].result == Merge(node.buffers.QueryFrom(key, start), ResultAt(i+1))
     }
 
     predicate Valid()
@@ -480,7 +481,7 @@ module FilteredBetree
   function PushMemtable(root: BetreeNode, memtable: Memtable) : StampedBetree
     requires root.WF()
   {
-    Stamped(root.Promote(TotalDomain()).PushBufferStack(BufferStack([memtable.buffer])), memtable.seqEnd)
+    Stamped(root.Promote(TotalDomain()).ExtendBufferSeq(BufferSeq([memtable.buffer])), memtable.seqEnd)
   }
 
   datatype Variables = Variables(
@@ -651,8 +652,8 @@ module FilteredBetree
     requires original.WF()
     requires compactStart < compactEnd <= original.buffers.Length()
   {
-    var compactedBuffers := BufferStack(original.buffers.buffers[0..compactStart] + [ compactedBuffer ] + original.buffers.buffers[compactEnd..]);
-    var compactedflushedOffsets:= original.flushedOffsets.CompactRange(compactStart, compactEnd, original.buffers.Length());
+    var compactedBuffers := BufferSeq(original.buffers.buffers[0..compactStart] + [ compactedBuffer ] + original.buffers.buffers[compactEnd..]);
+    var compactedflushedOffsets:= original.flushedOffsets.OffSetsAfterCompact(compactStart, compactEnd);
     var newRoot := BetreeNode(compactedBuffers, original.pivotTable, original.children, compactedflushedOffsets);
     newRoot
   }
@@ -712,7 +713,7 @@ module FilteredBetree
           && path.Valid()
           && path.Target().BetreeNode?  // no point compacting a nil node
           && compactStart < compactEnd <= path.Target().buffers.Length()
-          // && path.Target().ActiveBufferSlice(compactStart, compactEnd).Equivalent(BufferStack([compactedBuffer]))
+          // && path.Target().ActiveBufferSlice(compactStart, compactEnd).Equivalent(BufferSeq([compactedBuffer]))
           // New notion of equivalience between old buffer stack slice and comapctedBuffer
           && path.Target().buffers.Slice(compactStart, compactEnd).I(path.Target().MakeOffsetMap().Decrement(compactStart)) == compactedBuffer
         case _ => true

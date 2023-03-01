@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../Disk/GenericDisk.i.dfy"
-include "BufferStack.i.dfy"
+include "BufferSeq.i.dfy"
   
   
-module LinkedBufferStackMod {
+module LinkedBufferSeqMod {
   import opened GenericDisk
   import opened Maps
   import opened KeyType
@@ -52,10 +52,7 @@ module LinkedBufferStackMod {
     BufferDiskView(map[])
   }
 
-
-  // Note that this BufferStack is a pointer-y structure. It is different from
-  // Buffers.BufferStack
-  datatype BufferStack = BufferStack(buffers: seq<Address>)
+  datatype BufferSeq = BufferSeq(buffers: seq<Address>)
   {
     predicate Valid(dv: BufferDiskView)
     {
@@ -71,22 +68,16 @@ module LinkedBufferStackMod {
       set addr | addr in buffers :: addr
     }
 
-    function Slice(start: nat, end: nat) : BufferStack
+    function Slice(start: nat, end: nat) : BufferSeq
       requires start <= end <= |buffers|
     {
-      BufferStack(buffers[start..end])
+      BufferSeq(buffers[start..end])
     }
 
-    function Extend(newBufferStack: BufferStack) : BufferStack
+    function Extend(newBufferSeq: BufferSeq) : BufferSeq
     {
-      BufferStack(buffers + newBufferStack.buffers)
+      BufferSeq(buffers + newBufferSeq.buffers)
     }
-
-    // function GetBuffer(addr: Address) : Buffers.Buffer
-    //   requires addr in buffers
-    // {
-    //   dv.Get(addr)
-    // }
 
     function QueryUpTo(dv: BufferDiskView, key: Key, count: nat) : Message
       requires count <= |buffers|
@@ -104,24 +95,24 @@ module LinkedBufferStackMod {
     }
     
     // TODO: compact equivalence needs this to validate 
-    // function ApplyFilter(accept: iset<Key>) : BufferStack
+    // function ApplyFilter(accept: iset<Key>) : BufferSeq
     // {
-    //   BufferStack(seq(|buffers|, i requires 0<=i<|buffers| => buffers[i].ApplyFilter(accept)))
+    //   BufferSeq(seq(|buffers|, i requires 0<=i<|buffers| => buffers[i].ApplyFilter(accept)))
     // }
 
-    function PushBufferStack(newBuffers: BufferStack) : BufferStack
-    {
-      BufferStack(newBuffers.buffers + this.buffers)
-    }
+    // function PushBufferSeq(newBuffers: BufferSeq) : BufferSeq
+    // {
+    //   BufferSeq(newBuffers.buffers + this.buffers)
+    // }
 
-    predicate Equivalent(dv: BufferDiskView, other: BufferStack)
-      requires Valid(dv)
-      requires other.Valid(dv)
-    {
-      forall k | AnyKey(k) :: Query(dv, k) == other.Query(dv, k)
-    }
+    // predicate Equivalent(dv: BufferDiskView, other: BufferSeq)
+    //   requires Valid(dv)
+    //   requires other.Valid(dv)
+    // {
+    //   forall k | AnyKey(k) :: Query(dv, k) == other.Query(dv, k)
+    // }
 
-    function DropFirst() : BufferStack
+    function DropFirst() : BufferSeq
       requires 0 < |buffers|
     {
       Slice(1, |buffers|)
@@ -144,5 +135,5 @@ module LinkedBufferStackMod {
       else DropFirst().I(dv, offsetMap.Decrement(1)).Merge(IBottom(dv, offsetMap))
     }
 
-  }  // end type BufferStack
+  }  // end type BufferSeq
 }

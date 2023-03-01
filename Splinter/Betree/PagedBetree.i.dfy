@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../CoordinationLayer/AbstractMap.i.dfy"
-include "BufferStack.i.dfy"
+include "BufferSeq.i.dfy"
 include "Memtable.i.dfy"
 
 // This is a functional model of a Betree, but it doesn't require that child
@@ -30,7 +30,7 @@ module PagedBetree
   import opened Sequences
   import opened BufferMod
   import opened OffsetMapMod
-  import opened BufferStackMod
+  import opened BufferSeqMod
   import opened MemtableMod
 
   type StampedBetree = Stamped<BetreeNode>
@@ -68,7 +68,7 @@ module PagedBetree
   }
 
   datatype BetreeNode = Nil | BetreeNode(
-    buffers: BufferStack,
+    buffers: BufferSeq,
     children: ChildMap)
   {
     predicate WF() {
@@ -86,15 +86,15 @@ module PagedBetree
     function PushMemtable(memtable: Memtable) : StampedBetree
       requires WF()
     {
-      Stamped(this.Promote().PushBufferStack(BufferStack([memtable.buffer])), memtable.seqEnd)
+      Stamped(this.Promote().ExtendBufferSeq(BufferSeq([memtable.buffer])), memtable.seqEnd)
     }
 
-    function PushBufferStack(bufferStack: BufferStack) : (out: BetreeNode)
+    function ExtendBufferSeq(bufferStack: BufferSeq) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
       ensures out.WF()
     {
-      BetreeNode(buffers.PushBufferStack(bufferStack), children)
+      BetreeNode(buffers.Extend(bufferStack), children)
     }
 
     function FilterBuffersAndChildren(filter: iset<Key>) : (out: BetreeNode)
@@ -145,7 +145,7 @@ module PagedBetree
       // TODO(jonh): NB the Promote() never happens: all the downKeys have to be non-Nil
       var outChildren := ChildMap(imap key | AnyKey(key)
         :: if key in downKeys
-          then Child(key).Promote().PushBufferStack(movedBuffers)
+          then Child(key).Promote().ExtendBufferSeq(movedBuffers)
           else Child(key));
       assert outChildren.WF();
       BetreeNode(keptBuffers, outChildren)
@@ -155,7 +155,7 @@ module PagedBetree
   function EmptyRoot() : (out: BetreeNode)
     ensures out.WF()
   {
-    BetreeNode(BufferStack([]), ConstantChildMap(Nil))
+    BetreeNode(BufferSeq([]), ConstantChildMap(Nil))
   }
 
   datatype QueryReceiptLine = QueryReceiptLine(
@@ -368,7 +368,7 @@ module PagedBetree
     && v.WF()
     && lbl.InternalLabel?
     && v' == v.(
-        root := BetreeNode(BufferStack([]), ConstantChildMap(v.root))
+        root := BetreeNode(BufferSeq([]), ConstantChildMap(v.root))
       )
   }
 
@@ -394,7 +394,7 @@ module PagedBetree
       )
   }
 
-  function CompactedNode(original: BetreeNode, newBufs: BufferStack) : BetreeNode 
+  function CompactedNode(original: BetreeNode, newBufs: BufferSeq) : BetreeNode 
     requires original.BetreeNode?
     requires original.buffers.Equivalent(newBufs)
   {
@@ -436,7 +436,7 @@ module PagedBetree
     | InternalSplitStep(path: Path, leftKeys: iset<Key>, rightKeys: iset<Key>)
     | InternalFlushMemtableStep()
     | InternalFlushStep(path: Path, downKeys: iset<Key>)
-    | InternalCompactStep(path: Path, compactedBuffers: BufferStack)
+    | InternalCompactStep(path: Path, compactedBuffers: BufferSeq)
     | InternalNoOpStep()
   {
     predicate WF() {
