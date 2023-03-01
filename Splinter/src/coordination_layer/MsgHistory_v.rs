@@ -95,29 +95,6 @@ impl MsgHistory {
         }
     }
 
-    // TODO(verus): This 14 lines of proof is all basically free with the
-    // 'ensures' line in the spec definition in Dafny. Perhaps we should have an
-    // "invariant" clause in spec proofs that creates this lemma on the side?
-    // And then there's the question of how to invoke the lemma; we'd like it to
-    // get triggered automatically with mentions of the definition.
-    //
-    // Could be side-stepped by just changing the substitution in `apply_to_stamped_map`
-    // when creating the final Stamped{} to be `self.seq_end + 1`
-    pub proof fn apply_to_stamped_map_length_lemma(self, orig: StampedMap)
-        requires
-            self.wf(),
-            self.can_follow(orig.seq_end)
-        ensures
-            self.apply_to_stamped_map(orig).seq_end == orig.seq_end + self.len()
-        decreases
-            self.len()
-    {
-        if !self.is_empty() {
-            let last_lsn = (self.seq_end - 1) as nat;
-            self.discard_recent(last_lsn).apply_to_stamped_map_length_lemma(orig);
-        }
-    }
-
     pub open spec fn discard_old(self, lsn: LSN) -> MsgHistory
         recommends self.can_discard_to(lsn)
     {
@@ -153,21 +130,9 @@ impl MsgHistory {
     }
     
     pub open spec fn map_plus_history(stamped_map: StampedMap, history: MsgHistory) -> StampedMap
-        recommends
-            history.wf(),
-            history.can_follow(stamped_map.seq_end),
+        recommends history.can_follow(stamped_map.seq_end)
     {
         history.apply_to_stamped_map(stamped_map)
-    }
-
-    pub proof fn map_plus_history_seq_end_lemma(stamped_map: StampedMap, history: MsgHistory)
-        requires
-            history.wf(),
-            history.can_follow(stamped_map.seq_end),
-        ensures
-            history.apply_to_stamped_map(stamped_map).seq_end == stamped_map.seq_end + history.len(),
-    {
-        history.apply_to_stamped_map_length_lemma(stamped_map);
     }
 }
 }
