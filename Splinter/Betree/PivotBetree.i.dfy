@@ -80,12 +80,12 @@ module PivotBetree
         )
     }
 
-    function PushBufferSeq(bufferStack: BufferSeq) : (out: BetreeNode)
+    function ExtendBufferSeq(bufferStack: BufferSeq) : (out: BetreeNode)
       requires WF()
       requires BetreeNode?
       ensures out.WF()
     {
-      BetreeNode(buffers.PushBufferSeq(bufferStack), pivotTable, children)
+      BetreeNode(buffers.Extend(bufferStack), pivotTable, children)
     }
 
     predicate IsLeaf()
@@ -256,7 +256,7 @@ module PivotBetree
       var keptBuffers := buffers.ApplyFilter(keepKeys);
       var movedBuffers := buffers.ApplyFilter(DomainRoutedToChild(childIdx).KeySet());
       assert WFChildren(children);  // trigger
-      var newChild := children[childIdx].Promote(DomainRoutedToChild(childIdx)).PushBufferSeq(movedBuffers);
+      var newChild := children[childIdx].Promote(DomainRoutedToChild(childIdx)).ExtendBufferSeq(movedBuffers);
       BetreeNode(keptBuffers, pivotTable, children[childIdx := newChild])
     }
 
@@ -401,7 +401,7 @@ module PivotBetree
   function PushMemtable(root: BetreeNode, memtable: Memtable) : StampedBetree
     requires root.WF()
   {
-    Stamped(root.Promote(TotalDomain()).PushBufferSeq(BufferSeq([memtable.buffer])), memtable.seqEnd)
+    Stamped(root.Promote(TotalDomain()).ExtendBufferSeq(BufferSeq([memtable.buffer])), memtable.seqEnd)
   }
 
   datatype Variables = Variables(
@@ -568,7 +568,7 @@ module PivotBetree
 
   function CompactedNode(original: BetreeNode, newBufs: BufferSeq) : BetreeNode 
     requires original.BetreeNode?
-    requires original.buffers.Equivalent(newBufs)
+    requires original.buffers.I() == newBufs.I()
   {
     BetreeNode(newBufs, original.pivotTable, original.children)
   }
@@ -625,7 +625,7 @@ module PivotBetree
           && path.Valid()
           && path.Target().BetreeNode?  // no point compacting a nil node
                                         // todo(tony): but this is implied by path.Valid(), I think
-          && path.Target().buffers.Equivalent(compactedBuffers)
+          && path.Target().buffers.I() == compactedBuffers.I()
         case _ => true
       }
     }

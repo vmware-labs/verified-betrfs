@@ -14,7 +14,8 @@ module PivotBetreeRefinement
   import opened MsgHistoryMod
   import opened LSNMod
   import opened Sequences
-  import opened Buffers
+  import opened BufferMod
+  import opened BufferSeqMod
   import opened MemtableMod
   import opened Upperbounded_Lexicographic_Byte_Order_Impl
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
@@ -434,12 +435,12 @@ module PivotBetreeRefinement
     assert INode(node.Promote(domain)) == INode(node).Promote();  // trigger
   }
 
-  lemma PushBufferCommutesWithI(node: BetreeNode, buffers: BufferStack) 
+  lemma ExtendBufferCommutesWithI(node: BetreeNode, buffers: BufferSeq) 
     requires node.WF()
     requires node.BetreeNode?
-    ensures INode(node.PushBufferStack(buffers)) == INode(node).PushBufferStack(buffers)
+    ensures INode(node.ExtendBufferSeq(buffers)) == INode(node).ExtendBufferSeq(buffers)
   {
-    assert INode(node.PushBufferStack(buffers)).buffers == INode(node).PushBufferStack(buffers).buffers;  // trigger
+    assert INode(node.ExtendBufferSeq(buffers)).buffers == INode(node).ExtendBufferSeq(buffers).buffers;  // trigger
   }
 
   // todo: this is duplicated in Journal/LinkedJournalRefinement
@@ -453,28 +454,28 @@ module PivotBetreeRefinement
   }
   
   // TODO(tony): a much easier proof would be to condition on the nullity of node to factor out Promote()
-  lemma PromoteComposedWithPushCommutes(node: BetreeNode, promoteDomain: Domain, buffers: BufferStack)  
+  lemma PromoteComposedWithPushCommutes(node: BetreeNode, promoteDomain: Domain, buffers: BufferSeq)  
     requires node.WF()
     requires promoteDomain.WF()
     requires promoteDomain.Domain?
-    ensures INode(node.Promote(promoteDomain).PushBufferStack(buffers)) 
-        == INode(node).Promote().PushBufferStack(buffers);
+    ensures INode(node.Promote(promoteDomain).ExtendBufferSeq(buffers)) 
+        == INode(node).Promote().ExtendBufferSeq(buffers);
   {
     EmptyDomain.reveal_SaneKeys();
     var dummy := EmptyRoot(promoteDomain);  // using promoteDomain as placeholder. It doesn't matter what domain is used
     var idummy := PagedBetree.EmptyRoot();
     var i := (n: BetreeNode) => if n.WF() && n.BetreeNode? then INode(n) else idummy;
     var f := (n: BetreeNode) => if n.WF() then n.Promote(promoteDomain) else dummy;
-    var g := (n: BetreeNode) => if n.WF() && n.BetreeNode? then n.PushBufferStack(buffers) else dummy.PushBufferStack(buffers);  // this is a clever trick to use dummy.PushBufferStack(buffers), so that the commutativity aligns
+    var g := (n: BetreeNode) => if n.WF() && n.BetreeNode? then n.ExtendBufferSeq(buffers) else dummy.ExtendBufferSeq(buffers);  // this is a clever trick to use dummy.ExtendBufferSeq(buffers), so that the commutativity aligns
     var F := (pn: PagedBetree.BetreeNode) => if pn.WF() then pn.Promote() else idummy;
-    var G := (pn: PagedBetree.BetreeNode) => if pn.WF() && pn.BetreeNode? then pn.PushBufferStack(buffers) else idummy;
+    var G := (pn: PagedBetree.BetreeNode) => if pn.WF() && pn.BetreeNode? then pn.ExtendBufferSeq(buffers) else idummy;
 
     forall n ensures i(f(n)) == F(i(n))
     {
       if n.WF() {
         PromoteCommutesWithI(n, promoteDomain);
       } else {
-        PushBufferCommutesWithI(EmptyRoot(promoteDomain), buffers); 
+        ExtendBufferCommutesWithI(EmptyRoot(promoteDomain), buffers); 
         assert IChildren(EmptyRoot(promoteDomain)) == PagedBetree.ConstantChildMap(PagedBetree.Nil);  // trigger
       }
     }
@@ -483,12 +484,12 @@ module PivotBetreeRefinement
     {
       if n.WF() && n.BetreeNode? {
         calc {
-          INode(n.PushBufferStack(buffers));
-          { PushBufferCommutesWithI(n, buffers); }
-          INode(n).PushBufferStack(buffers);
+          INode(n.ExtendBufferSeq(buffers));
+          { ExtendBufferCommutesWithI(n, buffers); }
+          INode(n).ExtendBufferSeq(buffers);
         }
       } else {
-        PushBufferCommutesWithI(EmptyRoot(promoteDomain), buffers);
+        ExtendBufferCommutesWithI(EmptyRoot(promoteDomain), buffers);
         assert IChildren(EmptyRoot(promoteDomain)) == PagedBetree.ConstantChildMap(PagedBetree.Nil);
       }
     }
@@ -541,7 +542,7 @@ module PivotBetreeRefinement
     && other.WF()
     && node.BetreeNode?
     && other.BetreeNode?
-    && node.buffers.Equivalent(other.buffers)
+    && node.buffers.I() == other.buffers.I()
     && node.pivotTable == other.pivotTable
     && node.children == other.children
   }

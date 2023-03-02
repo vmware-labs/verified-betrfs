@@ -302,27 +302,25 @@ module FilteredBetree
 
     function Flush(childIdx: nat, bufferGCCount: nat) : (out: BetreeNode)
       requires CanFlush(childIdx)
-      requires bufferGCCount <= buffers.Length()
+      // requires bufferGCCount <= buffers.Length()
       requires flushedOffsets.AdvanceIndex(childIdx, buffers.Length()).CanCollectGarbage(bufferGCCount)
       ensures out.WF()
     {
       var flushUpTo := buffers.Length();
-
-      assert forall ofs | ofs in flushedOffsets.offsets :: ofs <= flushUpTo;
-
       var newFlushedOffsets := flushedOffsets.AdvanceIndex(childIdx, flushUpTo);
-
-      assert forall ofs | ofs in newFlushedOffsets.offsets :: ofs <= flushUpTo by {
-        // TODO: pretty insane we have to prove this lol
-      }
-
       var movedBuffers := buffers.Slice(flushedOffsets.Get(childIdx), flushUpTo); // buffers flushed to child
+
+      assert bufferGCCount <= buffers.Length() by {
+        var i:nat :| i < newFlushedOffsets.Size();
+        assert newFlushedOffsets.Get(i) <= buffers.Length();
+      } 
 
       assert WFChildren(children);  // trigger
       var newChild := children[childIdx].Promote(DomainRoutedToChild(childIdx)).ExtendBufferSeq(movedBuffers);
 
       // new parent, with updated num flushed buffers for children and truncate buffers that are flushed to all children
       var gcFlushedOffsets := newFlushedOffsets.CollectGarbage(bufferGCCount);
+
 
       var newRoot := BetreeNode(buffers.Slice(bufferGCCount, flushUpTo), pivotTable, children[childIdx := newChild], gcFlushedOffsets);
       assert newRoot.WF();
@@ -707,15 +705,14 @@ module FilteredBetree
         case InternalFlushStep(path, childIdx, bufferGCCount) =>
           && path.Valid()
           && path.Target().ValidChildIndex(childIdx)
-          && bufferGCCount <= path.Target().buffers.Length()
-          && (forall i:nat | i < path.Target().flushedOffsets.Size() && i != childIdx :: bufferGCCount <= path.Target().flushedOffsets.Get(i))
+          && path.Target().flushedOffsets.AdvanceIndex(childIdx, path.Target().buffers.Length()).CanCollectGarbage(bufferGCCount)
         case InternalCompactStep(path, compactStart, compactEnd, comapctedBuffer) =>
           && path.Valid()
           && path.Target().BetreeNode?  // no point compacting a nil node
           && compactStart < compactEnd <= path.Target().buffers.Length()
-          // && path.Target().ActiveBufferSlice(compactStart, compactEnd).Equivalent(BufferSeq([compactedBuffer]))
           // New notion of equivalience between old buffer stack slice and comapctedBuffer
-          && path.Target().buffers.Slice(compactStart, compactEnd).I(path.Target().MakeOffsetMap().Decrement(compactStart)) == compactedBuffer
+          && var offsetMap := path.Target().MakeOffsetMap().Decrement(compactStart);
+          && path.Target().buffers.Slice(compactStart, compactEnd).IFiltered(offsetMap) == compactedBuffer
         case _ => true
       }
     }

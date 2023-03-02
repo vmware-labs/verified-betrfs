@@ -15,7 +15,7 @@ module LinkedBufferSeqMod {
 
   datatype BufferDiskView = BufferDiskView(entries: map<Address, Buffer>)
   {
-    function Addresses() : set<Address>
+    function Representation() : set<Address>
     {
       entries.Keys
     }
@@ -27,7 +27,11 @@ module LinkedBufferSeqMod {
     }
 
     function ModifyDisk(addr: Address, item: Buffer) : BufferDiskView {
-      BufferDiskView.BufferDiskView(entries[addr := item])
+      BufferDiskView(entries[addr := item])
+    }
+
+    predicate IsFresh(addrs: set<Address>) {
+      addrs !! entries.Keys
     }
 
     predicate IsSubDisk(bigger: BufferDiskView)
@@ -56,7 +60,7 @@ module LinkedBufferSeqMod {
   {
     predicate Valid(dv: BufferDiskView)
     {
-      forall i:nat | i < |buffers| :: buffers[i] in dv.Addresses()
+      forall i:nat | i < |buffers| :: buffers[i] in dv.Representation()
     }
 
     function Length() : nat 
@@ -79,37 +83,21 @@ module LinkedBufferSeqMod {
       BufferSeq(buffers + newBufferSeq.buffers)
     }
 
-    function QueryUpTo(dv: BufferDiskView, key: Key, count: nat) : Message
-      requires count <= |buffers|
+    function QueryFrom(dv: BufferDiskView, key: Key, start: nat) : Message
+      requires start <= |buffers|
       requires Valid(dv)
+      decreases |buffers| - start
     {
-      if count == 0 then Update(NopDelta())
+      if start == |buffers| then Update(NopDelta())
       else
-        Merge(QueryUpTo(dv, key, count-1), dv.Get(buffers[count-1]).Query(key))
+        Merge(QueryFrom(dv, key, start+1), dv.Get(buffers[start]).Query(key))
     }
 
-    function Query(dv: BufferDiskView, key: Key) : Message
-      requires Valid(dv)
-    {
-      QueryUpTo(dv, key, |buffers|)
-    }
-    
-    // TODO: compact equivalence needs this to validate 
-    // function ApplyFilter(accept: iset<Key>) : BufferSeq
-    // {
-    //   BufferSeq(seq(|buffers|, i requires 0<=i<|buffers| => buffers[i].ApplyFilter(accept)))
-    // }
-
-    // function PushBufferSeq(newBuffers: BufferSeq) : BufferSeq
-    // {
-    //   BufferSeq(newBuffers.buffers + this.buffers)
-    // }
-
-    // predicate Equivalent(dv: BufferDiskView, other: BufferSeq)
+    // no one uses query without queryfrom in linked layer
+    // function Query(dv: BufferDiskView, key: Key) : Message
     //   requires Valid(dv)
-    //   requires other.Valid(dv)
     // {
-    //   forall k | AnyKey(k) :: Query(dv, k) == other.Query(dv, k)
+    //   QueryFrom(dv, key, 0)
     // }
 
     function DropFirst() : BufferSeq
@@ -126,13 +114,13 @@ module LinkedBufferSeqMod {
       dv.Get(buffers[0]).ApplyFilter(offsetMap.FilterForBottom())
     }
 
-    function I(dv: BufferDiskView, offsetMap: OffsetMap) : Buffer 
+    function IFiltered(dv: BufferDiskView, offsetMap: OffsetMap) : Buffer 
       requires Valid(dv)
       requires offsetMap.WF()
       decreases |buffers|
     {
       if |buffers| == 0 then EmptyBuffer()
-      else DropFirst().I(dv, offsetMap.Decrement(1)).Merge(IBottom(dv, offsetMap))
+      else DropFirst().IFiltered(dv, offsetMap.Decrement(1)).Merge(IBottom(dv, offsetMap))
     }
 
   }  // end type BufferSeq

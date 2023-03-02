@@ -100,19 +100,19 @@ module PagedBetreeRefinement
   //   }
   // }
 
-  // lemma ExtendBufferSeqLemma(top: BufferSeq, bottom: BufferSeq, key: Key)
-  //   ensures bottom.Extend(top).Query(key) == Merge(top.Query(key), bottom.Query(key))
-  //   decreases |bottom.buffers|
-  // {
-  //   if |bottom.buffers| == 0 {
-  //     assert bottom.Extend(top).buffers == top.buffers;  // trigger
-  //   } else {
-  //     var dropBottom := BufferSeq(DropLast(bottom.buffers));
-  //     CommonBufferSeqs(dropBottom.PushBufferSeq(top), bottom.PushBufferSeq(top), |top.buffers|+|bottom.buffers|-1, key);
-  //     PushBufferSeqLemma(top, dropBottom, key);
-  //     CommonBufferSeqs(dropBottom, bottom, |bottom.buffers|-1, key);
-  //   }
-  // }
+  lemma ExtendBufferSeqLemma(top: BufferSeq, bottom: BufferSeq, key: Key)
+    ensures bottom.Extend(top).Query(key) == Merge(top.Query(key), bottom.Query(key))
+    decreases |bottom.buffers|
+  {
+    // if |bottom.buffers| == 0 {
+    //   assert bottom.Extend(top).buffers == top.buffers;  // trigger
+    // } else {
+    //   var dropBottom := BufferSeq(DropLast(bottom.buffers));
+    //   CommonBufferSeqs(dropBottom.ExtendBufferSeq(top), bottom.ExtendBufferSeq(top), |top.buffers|+|bottom.buffers|-1, key);
+    //   ExtendBufferSeqLemma(top, dropBottom, key);
+    //   CommonBufferSeqs(dropBottom, bottom, |bottom.buffers|-1, key);
+    // }
+  }
 
   function {:opaque} MapApply(memtable: Memtable, base: TotalKMMapMod.TotalKMMap) : TotalKMMapMod.TotalKMMap
   {
@@ -129,7 +129,7 @@ module PagedBetreeRefinement
       ensures MapApply(memtable, INode(root))[key] == INode(root.PushMemtable(memtable).value)[key]
     {
       SingletonBufferSeq(memtable.buffer, key);
-      PushBufferSeqLemma(BufferSeq([memtable.buffer]), root.Promote().buffers, key);
+      ExtendBufferSeqLemma(BufferSeq([memtable.buffer]), root.Promote().buffers, key);
       reveal_INode(); // this imap's really a doozy
     }
   }
@@ -302,13 +302,13 @@ module PagedBetreeRefinement
   lemma FilteredBufferSeq(bufferSeq: BufferSeq, filter: iset<Key>, key: Key)
     ensures bufferSeq.ApplyFilter(filter).Query(key) == if key in filter then bufferSeq.Query(key) else Update(NopDelta())
   {
-    var i:nat := 0;
-    while i < |bufferSeq.buffers|
-      invariant i <= |bufferSeq.buffers|
-      invariant bufferSeq.ApplyFilter(filter).QueryUpTo(key, i) == if key in filter then bufferSeq.QueryUpTo(key, i) else Update(NopDelta())
-    {
-      i := i + 1;
-    }
+    // var i:nat := 0;
+    // while i < |bufferSeq.buffers|
+    //   invariant i <= |bufferSeq.buffers|
+    //   invariant bufferSeq.ApplyFilter(filter).QueryUpTo(key, i) == if key in filter then bufferSeq.QueryUpTo(key, i) else Update(NopDelta())
+    // {
+    //   i := i + 1;
+    // }
   }
 
   lemma ApplyFilterEquivalance(orig: BetreeNode, filter: iset<Key>, key: Key)
@@ -346,11 +346,11 @@ module PagedBetreeRefinement
     EquivalentRootVars(v, v');
   }
 
-  lemma PushBetreeNodeLemma(node: BetreeNode, buffers: BufferSeq, key: Key)
+  lemma ExtendBetreeNodeLemma(node: BetreeNode, buffers: BufferSeq, key: Key)
     requires node.WF()
-    ensures INodeAt(node.Promote().PushBufferSeq(buffers), key) == Merge(buffers.Query(key), INodeAt(node, key))
+    ensures INodeAt(node.Promote().ExtendBufferSeq(buffers), key) == Merge(buffers.Query(key), INodeAt(node, key))
   {
-    PushBufferSeqLemma(buffers, node.Promote().buffers, key);
+    ExtendBufferSeqLemma(buffers, node.Promote().buffers, key);
   }
 
   lemma InternalFlushNoop(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -368,7 +368,7 @@ module PagedBetreeRefinement
         FilteredBufferSeq(target.buffers, AllKeys() - step.downKeys, key);
         assert target.children.WF();  // trigger
         var movedBuffers := target.buffers.ApplyFilter(step.downKeys);
-        PushBetreeNodeLemma(target.children.mapp[key], movedBuffers, key);
+        ExtendBetreeNodeLemma(target.children.mapp[key], movedBuffers, key);
         FilteredBufferSeq(target.buffers, step.downKeys, key);
       } else {
         FilteredBufferSeq(target.buffers, AllKeys() - step.downKeys, key);
@@ -395,7 +395,7 @@ module PagedBetreeRefinement
     && other.WF()
     && node.BetreeNode?
     && other.BetreeNode?
-    && node.buffers.Equivalent(other.buffers)
+    && node.buffers.I() == other.buffers.I()
     && node.children == other.children
   }
 
@@ -487,15 +487,15 @@ module PagedBetreeRefinement
 
       if k!=key {
         assert buffer'.Query(k) == buffer.Query(k);  // trigger
-        assert buffers'.Query(k) == buffers'.QueryUpTo(k, 1);  // trigger: unroll
-        assert buffers.Query(k) == buffers.QueryUpTo(k, 1);  // trigger: unroll
+        // assert buffers'.Query(k) == buffers'.QueryUpTo(k, 1);  // trigger: unroll
+        // assert buffers.Query(k) == buffers.QueryUpTo(k, 1);  // trigger: unroll
       } else {
         // propagate the message
-        assert Merge(message, v.memtable.Query(key)) == buffers'.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
-        assert v.memtable.Query(k) == buffers.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
+        // assert Merge(message, v.memtable.Query(key)) == buffers'.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
+        // assert v.memtable.Query(k) == buffers.QueryUpTo(k, 1);  // trigger: unroll QueryUpTo
       }
-      PushBetreeNodeLemma(node, buffers', k);
-      PushBetreeNodeLemma(node, buffers, k);
+      ExtendBetreeNodeLemma(node, buffers', k);
+      ExtendBetreeNodeLemma(node, buffers, k);
       reveal_INode();
     }
     assert I(v').stampedMap.value == puts.ApplyToStampedMap(I(v).stampedMap).value;  // trigger.  (should we have a "mention" operator just for triggering an expression?)

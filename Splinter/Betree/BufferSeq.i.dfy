@@ -13,7 +13,7 @@ module BufferSeqMod
   import opened BufferMod
   import opened OffsetMapMod
 
-  // buffers[0] is the oldest data, at the top of the stack
+  // buffers[0] is the oldest data
   datatype BufferSeq = BufferSeq(buffers: seq<Buffer>)
   {
     function Length() : nat 
@@ -35,6 +35,7 @@ module BufferSeqMod
 
     function QueryFrom(key: Key, start: nat) : Message
       requires start <= |buffers|
+      decreases |buffers| - start
     {
       if start == |buffers| then Update(NopDelta())
       else Merge(QueryFrom(key, start+1), buffers[start].Query(key))
@@ -55,12 +56,12 @@ module BufferSeqMod
       BufferSeq(this.buffers+newBuffers.buffers)
     }
 
-    // When porting, consider eliminating this notion of equivalence up the stack, replace
-    // with I()-equivalence
-    // predicate Equivalent(other: BufferSeq)
-    // {
-    //   forall k | AnyKey(k) :: Query(k) == other.Query(k)
-    // }
+    function I() : Buffer 
+      decreases |buffers|
+    {
+      if |buffers| == 0 then EmptyBuffer()
+      else DropFirst().I().Merge(buffers[0])
+    }
 
     function IBottom(offsetMap: OffsetMap) : Buffer 
       requires offsetMap.WF()
@@ -69,12 +70,12 @@ module BufferSeqMod
       buffers[0].ApplyFilter(offsetMap.FilterForBottom())
     }
 
-    function I(offsetMap: OffsetMap) : Buffer 
+    function IFiltered(offsetMap: OffsetMap) : Buffer 
       requires offsetMap.WF()
       decreases |buffers|
     {
       if |buffers| == 0 then EmptyBuffer()
-      else DropFirst().I(offsetMap.Decrement(1)).Merge(IBottom(offsetMap))
+      else DropFirst().IFiltered(offsetMap.Decrement(1)).Merge(IBottom(offsetMap))
     }
   }
 

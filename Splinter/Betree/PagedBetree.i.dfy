@@ -396,7 +396,7 @@ module PagedBetree
 
   function CompactedNode(original: BetreeNode, newBufs: BufferSeq) : BetreeNode 
     requires original.BetreeNode?
-    requires original.buffers.Equivalent(newBufs)
+    requires original.buffers.I() == newBufs.I()
   {
     BetreeNode(newBufs, original.children)
   }
@@ -446,7 +446,7 @@ module PagedBetree
         case InternalCompactStep(path, compactedBuffers) => 
           && path.Valid()
           && path.Target().BetreeNode?  // no point compacting a nil node
-          && path.Target().buffers.Equivalent(compactedBuffers)
+          && path.Target().buffers.I() == compactedBuffers.I()
         case _ => true
       }
     }
