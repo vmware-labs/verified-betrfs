@@ -425,7 +425,7 @@ verus! {
           y.concat(ztrim).msgs
         );
       }
-
+ 
       // assert_maps_equal!(left.value, right.value);
       assert(left == right);
     } else {
