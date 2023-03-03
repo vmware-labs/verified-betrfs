@@ -965,61 +965,28 @@ module LinkedBetreeMod
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  predicate ValidCompactBufferDiskView(
-    compactedAddrs: BufferSeq, offsetMap: OffsetMap, before: BufferDiskView,
-    newAddr: Address, after: BufferDiskView)
-    requires compactedAddrs.Valid(before)
-    requires offsetMap.WF()
-  {
-    // restrict domain of the after diskview
-    && (forall addr :: 
-      ((addr in before.Representation() && addr !in compactedAddrs.Representation()) || addr == newAddr) 
-      <==> addr in after.Representation())
-
-    // restrict value of the after diskview
-    && (forall addr | addr in before.Representation() && addr !in compactedAddrs.Representation()
-      :: before.Get(addr) == after.Get(addr))
-    && compactedAddrs.IFiltered(before, offsetMap) == after.Get(newAddr)
-  }
-
   // InsertReplacement returns a LinkedBetree that has the diskview of target with replacement placed at
   // the replacementAddr
-  function InsertCompactReplacement(
-    target: LinkedBetree, 
-    start: nat, end: nat, compactedBuffer: Address, newBufferDiskView: BufferDiskView, 
-    replacementAddr: Address) : (out: LinkedBetree)
+  function InsertCompactReplacement(target: LinkedBetree, start: nat, end: nat, newBuffer: Buffer, newBufferAddr: Address, replacementAddr: Address) : (out: LinkedBetree)
     requires target.WF()
     requires target.HasRoot()
-    requires target.IsFresh({replacementAddr} + {compactedBuffer})
+    requires target.IsFresh({replacementAddr} + {newBufferAddr})
     requires start <= end <= target.Root().buffers.Length()
-    requires replacementAddr != compactedBuffer
-    requires ValidCompactBufferDiskView(
-      target.Root().buffers.Slice(start, end), 
-      target.Root().MakeOffsetMap().Decrement(start),
-      target.bufferDiskView,
-      compactedBuffer,
-      newBufferDiskView)
+    requires replacementAddr != newBufferAddr
     ensures target.diskView.IsSubDisk(out.diskView)
     ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}
     ensures out.WF()   // prereq to MyDomain()
     ensures out.HasRoot() && out.Root().MyDomain() == target.Root().MyDomain()
   {
     var root := target.Root();
-    var newBufferSeq := root.buffers.Slice(0, start).Extend(BufferSeq([compactedBuffer])).Extend(root.buffers.Slice(end, root.buffers.Length()));
+    var newBufferSeq := root.buffers.Slice(0, start).Extend(BufferSeq([newBufferAddr])).Extend(root.buffers.Slice(end, root.buffers.Length()));
+    var newBufferDiskView := target.bufferDiskView.ModifyDisk(newBufferAddr, newBuffer);
+
     var newRoot := BetreeNode(newBufferSeq, root.pivotTable, root.children, root.flushedOffsets.OffSetsAfterCompact(start, end));
     var newDiskView := target.diskView.ModifyDisk(replacementAddr, newRoot);
     var out := LinkedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView, newBufferDiskView);
-    
     assert out.diskView.WF();
-    assert out.NoDanglingBufferPointers() by {
-      assume false;
-      // var newRoot := BetreeNode(newBufferSeq, root.pivotTable, root.children, root.flushedOffsets.OffSetsAfterCompact(start, end));
-      // && (forall addr, buffer | 
-      //   && addr in diskView.entries 
-      //   && buffer in diskView.entries[addr].buffers.buffers
-      //   :: buffer in bufferDiskView.Representation())
-    }
-
+ 
     out
   }
 
@@ -1034,10 +1001,9 @@ module LinkedBetreeMod
     && step.path.Valid()
 
     // Subway Eat Fresh!
-    && v.linked.IsFresh({step.targetAddr} + Set(step.pathAddrs) + {step.compactedBuffer})
-    && var replacement := InsertCompactReplacement(step.path.Target(), step.compactStart, 
-      step.compactEnd, step.compactedBuffer, step.newBufferDiskView, step.targetAddr);
-    && v.linked.bufferDiskView.IsSubDisk(step.newBufferDiskView)
+    && v.linked.IsFresh({step.targetAddr} + Set(step.pathAddrs) + {step.newBufferAddr})
+    && var replacement := InsertCompactReplacement(step.path.Target(), step.start, step.end, 
+      step.newBuffer, step.newBufferAddr, step.targetAddr);
     && v'.linked == step.path.Substitute(replacement, step.pathAddrs).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
   }
@@ -1070,8 +1036,7 @@ module LinkedBetreeMod
     | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs, bufferGCCount: nat)
       // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
       // pathAddrs is the new addresses to place all its ancestors, used in substitution
-
-    | InternalCompactStep(path: Path, compactStart: nat, compactEnd: nat, compactedBuffer: Address, newBufferDiskView: BufferDiskView, targetAddr: Address, pathAddrs: PathAddrs)
+    | InternalCompactStep(path: Path, start: nat, end: nat, newBuffer: Buffer, newBufferAddr: Address, targetAddr: Address, pathAddrs: PathAddrs)
       // targetAddr is the fresh address at which compactedNode is placed. pathAddrs is the new addresses to place all its ancestors
     | InternalNoOpStep()
   {
@@ -1094,21 +1059,16 @@ module LinkedBetreeMod
           && {targetAddr, targetChildAddr} !! Set(pathAddrs)
           && targetAddr != targetChildAddr
           && path.Target().Root().flushedOffsets.AdvanceIndex(childIdx, path.Target().Root().buffers.Length()).CanCollectGarbage(bufferGCCount)
-        case InternalCompactStep(path, start, end, compactedBuffer, newBufferDv, targetAddr, pathAddrs) =>
+        case InternalCompactStep(path, start, end, newBuffer, newBufferAddr, targetAddr, pathAddrs) =>
           && path.Valid()
-          && var node := path.Target().Root();
-          && start < end <= node.buffers.Length()
-          && ValidCompactBufferDiskView(
-            node.buffers.Slice(start, end),
-            node.MakeOffsetMap().Decrement(start),
-            path.Target().bufferDiskView,
-            compactedBuffer,
-            newBufferDv
-           )
           && path.depth == |pathAddrs|
           && SeqHasUniqueElems(pathAddrs)
           && {targetAddr} !! Set(pathAddrs)
-          && targetAddr != compactedBuffer
+          && targetAddr != newBufferAddr
+          && var node := path.Target().Root();
+          && var offsetMap := node.MakeOffsetMap().Decrement(start);
+          && start < end <= node.buffers.Length()
+          && node.buffers.Slice(start, end).IFiltered(path.Target().bufferDiskView, offsetMap) == newBuffer
         case _ => true
       }
     }

@@ -17,7 +17,9 @@ module LinkedBetreeRefinement {
   import opened ValueMessage
   import opened MsgHistoryMod
   import opened LSNMod
-  import opened Buffers
+  import opened BufferMod
+  import opened LinkedBufferSeqMod
+  import BufferSeqMod
   import GenericDisk
   import opened BoundedPivotsLib
   import opened LinkedBetreeMod
@@ -567,7 +569,7 @@ module LinkedBetreeRefinement {
     }
   }
 
-  lemma RankingAfterInsertCompactReplacement(target: LinkedBetree, compactedBuffers: BufferStack, ranking: Ranking, replacementAddr: Address)
+  lemma RankingAfterInsertCompactReplacement(target: LinkedBetree, compactedBuffers: BufferSeq, ranking: Ranking, replacementAddr: Address)
   returns (newRanking: Ranking)
     requires target.WF()
     requires target.ValidRanking(ranking)
@@ -1079,7 +1081,7 @@ module LinkedBetreeRefinement {
             InsertGrowReplacement(v.linked, step.newRootAddr),
             growReplacementRanking,
             step.newRootAddr,
-            BetreeNode(BufferStack([]), TotalPivotTable(), [v.linked.root])
+            BetreeNode(BufferSeq([]), TotalPivotTable(), [v.linked.root])
           );
         }
       ILinkedBetreeNode(v.linked, growReplacementRanking);
@@ -1193,7 +1195,7 @@ module LinkedBetreeRefinement {
   }
 
   // Generate a ranking for the Compaction replacement LinkedBetree
-  lemma CompactionReplacementRanking(target: LinkedBetree, targetRanking: Ranking, compactedBuffers: BufferStack, replacementAddr: Address)
+  lemma CompactionReplacementRanking(target: LinkedBetree, targetRanking: Ranking, compactedBuffers: BufferSeq, replacementAddr: Address)
   returns (replacementRanking: Ranking)
     requires target.WF()
     requires target.ValidRanking(targetRanking)
@@ -1213,7 +1215,7 @@ module LinkedBetreeRefinement {
     assert target.ValidRanking(replacementRanking);
   }
 
-  lemma CompactionCommutesWithI(target: LinkedBetree, targetRanking: Ranking, compactedBuffers: BufferStack, replacementAddr: Address)
+  lemma CompactionCommutesWithI(target: LinkedBetree, targetRanking: Ranking, compactedBuffers: BufferSeq, replacementAddr: Address)
     requires target.WF()
     requires target.ValidRanking(targetRanking)
     requires target.HasRoot()
@@ -1330,7 +1332,7 @@ module LinkedBetreeRefinement {
         var movedBuffers := root.buffers.ApplyFilter(root.DomainRoutedToChild(step.childIdx).KeySet());
         // BetreeNode of the new child, to be stored at targetChildAddr in the diskview
         var subroot := target.diskView.Get(root.children[step.childIdx]);
-        var subroot' := BetreeNode(subroot.buffers.PushBufferStack(movedBuffers), subroot.pivotTable, subroot.children);
+        var subroot' := BetreeNode(subroot.buffers.PushBufferSeq(movedBuffers), subroot.pivotTable, subroot.children);
         // BetreeNode of the new root, to be stored at targetAddr in the diskview
         var children' := root.children[step.childIdx := Pointer.Some(step.targetChildAddr)];
         var root' := BetreeNode(keptBuffers, root.pivotTable, children');
@@ -1340,7 +1342,7 @@ module LinkedBetreeRefinement {
         calc {
           ILinkedBetree(replacement).children[i];
           ILinkedBetreeNode(replacement.ChildAtIdx(i), replacementRanking);
-          PivotBetree.BetreeNode(subroot.buffers.PushBufferStack(movedBuffers), subroot.pivotTable, IChildren(replacement.ChildAtIdx(i), replacementRanking));
+          PivotBetree.BetreeNode(subroot.buffers.PushBufferSeq(movedBuffers), subroot.pivotTable, IChildren(replacement.ChildAtIdx(i), replacementRanking));
           {
             forall k | 0 <= k < |IChildren(target.ChildAtIdx(i), replacementRanking)|
             ensures IChildren(target.ChildAtIdx(i), replacementRanking)[k] 
@@ -1351,8 +1353,8 @@ module LinkedBetreeRefinement {
             // trigger
             assert IChildren(replacement.ChildAtIdx(i), replacementRanking) == IChildren(target.ChildAtIdx(i), replacementRanking);
           }
-          PivotBetree.BetreeNode(subroot.buffers.PushBufferStack(movedBuffers), subroot.pivotTable, IChildren(target.ChildAtIdx(i), replacementRanking));
-          ILinkedBetreeNode(target.ChildAtIdx(i), replacementRanking).PushBufferStack(movedBuffers);
+          PivotBetree.BetreeNode(subroot.buffers.PushBufferSeq(movedBuffers), subroot.pivotTable, IChildren(target.ChildAtIdx(i), replacementRanking));
+          ILinkedBetreeNode(target.ChildAtIdx(i), replacementRanking).PushBufferSeq(movedBuffers);
           ILinkedBetree(target).Flush(step.childIdx).children[i];
         }
       } else {
