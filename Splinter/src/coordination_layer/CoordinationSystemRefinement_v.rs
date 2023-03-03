@@ -13,7 +13,7 @@ use crate::spec::MapSpec_t::*;
 use crate::spec::FloatingSeq_t::*;
 use crate::spec::TotalKMMap_t;
 
-use crate::coordination_layer::AbstractJournal_v::*;
+use crate::coordination_layer::AbstractJournal_v::AbstractJournal;
 use crate::coordination_layer::CoordinationSystem_v::*;
 use crate::coordination_layer::CrashTolerantJournal_v::*;
 use crate::coordination_layer::CrashTolerantMap_v::*;
@@ -314,6 +314,11 @@ verus! {
     }
   }
 
+  pub proof fn reveal_test()
+  {
+    reveal(AbstractJournal::State::next);
+  }
+
   pub proof fn CommitStepPreservesHistory(
     v: CoordinationSystem::State,
     vp: CoordinationSystem::State, // v'
@@ -429,11 +434,17 @@ verus! {
       assert(vp.journal.persistent == v.journal.in_flight.get_Some_0());
       assert(vp.journal.in_flight.is_None());
 
-      reveal(AbstractJournal::State::next);
-      reveal(AbstractJournal::State::next_by);
+      // These reveals cause a panic when compiling
+      // reveal(AbstractJournal::State::next);
+      // reveal(AbstractJournal::State::next_by);
 
       // assert(vp.journal.ephemeral )
-      assert(vp.journal.ephemeral.get_Known_v().journal.seq_start <= vp.journal.ephemeral.get_Known_v().journal.seq_end);
+      // assert(vp.journal.ephemeral.get_Known_v().journal.seq_start <= vp.journal.ephemeral.get_Known_v().journal.seq_end)
+      // by
+      // {
+      //   reveal(AbstractJournal::State::next);
+      //   reveal(AbstractJournal::State::next_by);
+      // }
 
       let vpji = vp.journal.i();
 
