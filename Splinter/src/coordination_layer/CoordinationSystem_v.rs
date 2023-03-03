@@ -290,7 +290,7 @@ state_machine!{ CoordinationSystem {
   }
 
   transition! {
-    Put(
+    put(
       label: Label,
       new_journal: CrashTolerantJournal::State,
       new_mapadt: CrashTolerantMap::State,

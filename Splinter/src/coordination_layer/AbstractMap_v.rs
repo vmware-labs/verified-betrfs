@@ -58,4 +58,5 @@ state_machine!{ AbstractMap {
         }
     }
 }}
+
 }

@@ -13,6 +13,11 @@ state_machine!{ AbstractJournal {
     // Dafny Variables definition equivalent
     fields { pub journal: MsgHistory }
 
+    pub open spec fn wf(self) -> bool
+    {
+      self.journal.wf()
+    }
+
     #[is_variant]  // TODO: verus! should always make enum variants
     pub enum Label{
         ReadForRecoveryLabel{ messages: MsgHistory },
@@ -79,4 +84,5 @@ state_machine!{ AbstractJournal {
         }
     }
 }}
+
 }

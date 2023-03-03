@@ -9,6 +9,9 @@ TODO fill this in
 `$verus --verify-module coordination_layer::CoordinationSystemRefinement_v bundle.rs`
 To verify just a single module.
 
+`$verus --verify-module coordination_layer::CoordinationSystemRefinement_v bundle.rs --triggers-silent --expand-errors --multiple-errors 1`
+
+
 ### Verus
 
 We use it. "Documentation" here: https://github.com/verus-lang/verus/tree/main/source/pervasive

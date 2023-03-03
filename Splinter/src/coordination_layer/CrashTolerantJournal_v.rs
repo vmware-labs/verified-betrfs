@@ -22,6 +22,14 @@ pub enum Ephemeral {
     Known{ v: AbstractJournal::State },
 }
 
+impl Ephemeral
+{
+    pub open spec fn wf(self) -> bool
+    {
+      self.is_Known() ==> self.get_Known_v().wf()
+    }
+}
+
 state_machine!{ CrashTolerantJournal {
     fields { 
         pub persistent: StoreImage,
@@ -157,21 +165,20 @@ state_machine!{ CrashTolerantJournal {
     }
 
     transition!{
-        commit_complete(lbl: Label, new_journal: AbstractJournal::State, journal_step: AbstractJournal::Step) {
+        commit_complete(lbl: Label, new_journal: AbstractJournal::State) {
             require lbl.is_CommitCompleteLabel();
             require pre.ephemeral.is_Known();
             require pre.in_flight.is_Some();
             // TODO: remove lines like this which fix step unnecessarily (next_by
             // should handle matching transition to appropriate type based on label)
             // require journal_step === AbstractJournal::Step::discard_old();
-            require AbstractJournal::State::next_by(
+            require AbstractJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
                 AbstractJournal::Label::DiscardOldLabel{ 
                     start_lsn: pre.in_flight.get_Some_0().seq_start, 
                     require_end: lbl.get_CommitCompleteLabel_require_end()
                 },
-                journal_step
             );
             
             // Watch the `update` keyword!

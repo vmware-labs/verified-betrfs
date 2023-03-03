@@ -6,14 +6,18 @@ use state_machines_macros::state_machine;
 use crate::pervasive::prelude::*;
 use crate::pervasive::seq_lib::*;
 use crate::pervasive::map::*;
+use crate::pervasive::set_lib::*;
 
 use crate::spec::Messages_t::*;
 use crate::spec::MapSpec_t;
 use crate::spec::MapSpec_t::*;
 use crate::spec::FloatingSeq_t::*;
 use crate::spec::TotalKMMap_t;
+use crate::spec::Option_t;
 
+use crate::coordination_layer::AbstractJournal_v::AbstractJournal;
 use crate::coordination_layer::CoordinationSystem_v::*;
+use crate::coordination_layer::CrashTolerantJournal_v;
 use crate::coordination_layer::CrashTolerantJournal_v::*;
 use crate::coordination_layer::CrashTolerantMap_v::*;
 use crate::coordination_layer::CrashTolerantMap_v;
@@ -21,7 +25,6 @@ use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MsgHistory_v::{MsgHistory, KeyedMessage};
 
 verus! {
-
   impl CrashTolerantJournal::State
   {
     pub open spec fn i(self) -> MsgHistory
@@ -29,6 +32,13 @@ verus! {
         self.ephemeral.is_Known()
     {
       self.ephemeral.get_Known_v().journal
+    }
+
+    pub open spec fn wf(self) -> bool
+    {
+      &&& self.persistent.wf()
+      &&& self.ephemeral.wf()
+      &&& (self.in_flight.is_Some() ==> self.in_flight.get_Some_0().wf())
     }
   }
 
@@ -39,6 +49,21 @@ verus! {
         self.ephemeral.is_Known()
     {
       self.ephemeral.get_Known_v().stamped_map
+    }
+
+    // CrashTolerantMap needs to carry wf/invariant that shows that contained
+    // TotalKMMap is always wf (always has total domain)
+    pub open spec fn wf(self) -> bool
+    {
+      &&& self.persistent.value.wf()
+      &&& match self.ephemeral {
+          CrashTolerantMap_v::Ephemeral::Known{ v } => v.stamped_map.value.wf(),
+          _ => true,
+        }
+      &&& match self.in_flight {
+          Option_t::Option::Some(v) => v.value.wf(),
+          _ => true
+        }
     }
   }
 
@@ -111,6 +136,15 @@ verus! {
 
   impl CoordinationSystem::State
   {
+    pub open spec fn wf(self) -> bool
+    {
+      &&& self.journal.wf()
+      &&& self.mapadt.wf()
+      &&& self.ephemeral.is_Some() == self.journal.ephemeral.is_Known()
+      &&& self.journal.ephemeral.is_Known() == self.mapadt.ephemeral.is_Known()
+      &&& self.journal.in_flight.is_Some() ==> self.mapadt.in_flight.is_Some()
+    }
+
     // Geometry refers to the boundaries between the journal and
     // the mapadt line up correctly
     pub open spec fn inv_persistent_journal_geometry(self) -> bool
@@ -234,6 +268,7 @@ verus! {
     // TODO: (Tenzin) have curly braces guarding implications double checked
     pub open spec fn inv(self) -> bool
     {
+      &&& self.wf()
       &&& self.inv_persistent_journal_geometry()
       &&& self.ephemeral.is_None() ==> {!self.map_is_frozen() && !self.commit_started()}
       &&& self.ephemeral.is_Some() ==>
@@ -307,96 +342,166 @@ verus! {
         CrashTolerantAsyncMap::show::initialize(v.i());
       },
       CoordinationSystem::Config::dummy_to_use_type_params(_) => {
-        // Annoying case
+        // Dummy case that doesn't require proof. An artifact of how the
+        // Config enum is created
         assume(false);
       }
     }
   }
 
-  // pub proof fn CommitStepPreservesHistory(
-  //   v: CoordinationSystem::State,
-  //   vp: CoordinationSystem::State, // v'
-  //   label: CoordinationSystem::Label,
-  //   step: CoordinationSystem::Step,
-  //   lsn: LSN
-  // )
-  //   requires
-  //     v.inv(),
-  //     // Dafny's able to figure this out without this line, idk
-  //     // why Verus isn't, because of opaque `next_by` etc.? (But idk how
-  //     // to reveal those for the requires list)
-  //     // v.ephemeral.is_Some(),
-  //     // // Same with this,
-  //     // v.journal.ephemeral.is_Known(),
-  //     CoordinationSystem::State::next(v, vp, label),
-  //     CoordinationSystem::State::next_by(v, vp, label, step),
-  //     // Step enum doesn't generate `is_variant` type checkers
-  //     step.is_commit_complete(),
-  //     v.mapadt.persistent.seq_end <= lsn <= v.ephemeral_seq_end(),
-  //     v.mapadt.in_flight.get_Some_0().seq_end <= lsn,
-  //   ensures
-  //     v.journal.i().can_discard_to(lsn),
-  //     MsgHistory::map_plus_history(v.mapadt.persistent, v.journal.i().discard_recent(lsn))
-  //       == MsgHistory::map_plus_history(vp.mapadt.persistent, vp.journal.i().discard_recent(lsn))
-  // {
-  //   reveal(CoordinationSystem::State::next);
-  //   reveal(CoordinationSystem::State::next_by);
-  //   reveal(CrashTolerantJournal::State::next);
-  //   reveal(CrashTolerantJournal::State::next_by);
-  //   reveal(CrashTolerantMap::State::next);
-  //   reveal(CrashTolerantMap::State::next_by);
+  pub proof fn commit_step_preserves_history(
+    v: CoordinationSystem::State,
+    vp: CoordinationSystem::State, // v'
+    label: CoordinationSystem::Label,
+    step: CoordinationSystem::Step,
+    lsn: LSN,
+  )
+    requires
+      v.inv(),
+      // Dafny's able to figure this out without this line, idk
+      // why Verus isn't, because of opaque `next_by` etc.? (But idk how
+      // to reveal those for the requires list)
+      // v.ephemeral.is_Some(),
+      // // Same with this,
+      // v.journal.ephemeral.is_Known(),
+      CoordinationSystem::State::next(v, vp, label),
+      CoordinationSystem::State::next_by(v, vp, label, step),
+      // Step enum doesn't generate `is_variant` type checkers
+      step.is_commit_complete(),
+      v.mapadt.persistent.seq_end <= lsn <= v.ephemeral_seq_end(),
+      v.mapadt.in_flight.get_Some_0().seq_end <= lsn,
+    ensures
+      v.journal.i().can_discard_to(lsn),
+      MsgHistory::map_plus_history(v.mapadt.persistent, v.journal.i().discard_recent(lsn))
+        == MsgHistory::map_plus_history(vp.mapadt.persistent, vp.journal.i().discard_recent(lsn))
+  {
+    reveal(CoordinationSystem::State::next);
+    reveal(CoordinationSystem::State::next_by);
+    reveal(CrashTolerantJournal::State::next);
+    reveal(CrashTolerantJournal::State::next_by);
+    reveal(CrashTolerantMap::State::next);
+    reveal(CrashTolerantMap::State::next_by);
+    reveal(AbstractJournal::State::next);
+    reveal(AbstractJournal::State::next_by);
 
-  //   // Passes with the reveal statements, fails without
-  //   assert(v.ephemeral.is_Some());
-  //   assert(v.journal.ephemeral.is_Known());
+    // Passes with the reveal statements, fails without
+    assert(v.ephemeral.is_Some());
+    assert(v.journal.ephemeral.is_Known());
 
-  //   // There are six pieces in play here: the persistent and in-flight images and the ephemeral journals:
-  //   //  _________ __________
-  //   // | pdi.map | pdi.jrnl |
-  //   //  --------- ----------
-  //   //  ______________R__________
-  //   // | idi.map      | idi.jrnl |
-  //   //  -------------- ----------
-  //   //            ____________________
-  //   //           | eph.jrnl           |
-  //   //            --------------------
-  //   //                 _______________
-  //   //                | eph'.jrnl     |
-  //   //                 ---------------
-  //   // "R" is the "reference LSN" -- that's where we're going to prune ephemeral.journal, since
-  //   // after the commit it is going to be the LSN of the persistent map.
+    // There are six pieces in play here: the persistent and in-flight images and the ephemeral journals:
+    //  _________ __________
+    // | pdi.map | pdi.jrnl |
+    //  --------- ----------
+    //  ______________R__________
+    // | idi.map      | idi.jrnl |
+    //  -------------- ----------
+    //            ____________________
+    //           | eph.jrnl           |
+    //            --------------------
+    //                 _______________
+    //                | eph'.jrnl     |
+    //                 ---------------
+    // "R" is the "reference LSN" -- that's where we're going to prune ephemeral.journal, since
+    // after the commit it is going to be the LSN of the persistent map.
 
-  //   let ref_lsn = v.mapadt.in_flight.get_Some_0().seq_end;
-  //   let ej = v.journal.i();
-  //   let eji = ej.discard_recent(lsn);
+    let ref_lsn = v.mapadt.in_flight.get_Some_0().seq_end;
+    let ej = v.journal.i();
 
-  //   // Here's a calc, but in comments so we can use a shorthand algebra:
-  //   // Let + represent both MapPlusHistory and Concat (they're associative).
-  //   // Let [x..] represent DiscardOld(x) and [..y] represent DiscardRecent(y).
-  //   // var im:=v.inFlightImage.value.mapadt, pm:=v.mapadt.persistent, R:=im.seqEnd
-  //   // pm'+ej'[..lsn]
-  //   // im+ej'[..lsn]
-  //   // im+ej[..lsn][R..]
-  //   //   {InvInFlightVersionAgreement}
+    // Recommendation fails even though assertion passes.
+    assert(ej.can_discard_to(lsn));
+    let eji = ej.discard_recent(lsn);
 
-  //   // (pm+ej[..R])+ej[..lsn][R..]
-  //   journal_associativity(v.mapadt.persistent, ej.discard_recent(ref_lsn), ej.discard_recent(lsn).discard_old(ref_lsn));
-  //   // pm+(ej[..R]+ej[..lsn][R..])
+    // Here's a calc, but in comments so we can use a shorthand algebra:
+    // Let + represent both MapPlusHistory and Concat (they're associative).
+    // Let [x..] represent DiscardOld(x) and [..y] represent DiscardRecent(y).
+    // var im:=v.inFlightImage.value.mapadt, pm:=v.mapadt.persistent, R:=im.seqEnd
+    // pm'+ej'[..lsn]
+    // im+ej'[..lsn]
+    // im+ej[..lsn][R..]
+    //   {InvInFlightVersionAgreement}
 
-  //   // because R <= lsn; smaller lsn are Forgotten
-  //   assert(ej.discard_recent(ref_lsn) == ej.discard_recent(lsn).discard_recent(ref_lsn))
-  //   by
-  //   {
-  //     // Extensional equality arguments need to be made through macro
-  //     assert_maps_equal!(
-  //       ej.discard_recent(ref_lsn).msgs,
-  //       ej.discard_recent(lsn).discard_recent(ref_lsn).msgs
-  //     );
-  //   };
-  //   // pm+(ej[..lsn][..R]+ej[..lsn][R..])
-  //   assert(eji.discard_recent(ref_lsn).concat(eji.discard_old(ref_lsn)) == eji);  // trigger
-  //   // pm+ej[..lsn]    
-  // }
+    // (pm+ej[..R])+ej[..lsn][R..]
+    journal_associativity(v.mapadt.persistent, ej.discard_recent(ref_lsn), ej.discard_recent(lsn).discard_old(ref_lsn));
+    let x = v.mapadt.persistent;
+    let y = ej.discard_recent(ref_lsn);
+    let z = ej.discard_recent(lsn).discard_old(ref_lsn);
+
+    let left: StampedMap = MsgHistory::map_plus_history(v.mapadt.persistent, v.journal.i().discard_recent(lsn));
+    let right: StampedMap = MsgHistory::map_plus_history(vp.mapadt.persistent, vp.journal.i().discard_recent(lsn));
+
+    // MsgHistory::concat_forall_lemma();
+    ej.discard_recent(ref_lsn).concat_lemma(ej.discard_old(ref_lsn));
+
+    // Adding split pieces gets original ej[..lsn]+ej[lsn..] = ej
+    assert_maps_equal!(ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn)).msgs, ej.msgs);
+
+    // Discard commutes: ej[ref_lsn..][..lsn] = ej[..lsn][ref_lsn..]
+    assert_maps_equal!(ej.discard_old(ref_lsn).discard_recent(lsn).msgs, ej.discard_recent(lsn).discard_old(ref_lsn).msgs);
+
+    // Discard is associative with concat: ej[..ref_lsn]+(ej[ref_lsn..][..lsn]) = (ej[..ref_lsn]+ej[ref_lsn..])[..lsn]
+    // Note that ej[..ref_lsn]+ej[ref_lsn..] should just be ej
+    assert_maps_equal!(ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn).discard_recent(lsn)).msgs, ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn)).discard_recent(lsn).msgs);
+    
+    assert(ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn).discard_recent(lsn))
+        == ej.discard_recent(lsn));
+
+    assert(ej.discard_recent(lsn) == ej.discard_recent(ref_lsn).concat(ej.discard_recent(lsn).discard_old(ref_lsn)));
+    assert(MsgHistory::map_plus_history(v.mapadt.persistent, v.journal.i().discard_recent(lsn))
+      == MsgHistory::map_plus_history(v.mapadt.persistent, ej.discard_recent(ref_lsn).concat(ej.discard_recent(lsn).discard_old(ref_lsn))));
+    assert(left == MsgHistory::map_plus_history(x, y.concat(z)));
+
+    assert(right == MsgHistory::map_plus_history(MsgHistory::map_plus_history(x, y), z));
+    assert(MsgHistory::map_plus_history(MsgHistory::map_plus_history(x, y), z) == MsgHistory::map_plus_history(x, y.concat(z)));
+    // pm+(ej[..R]+ej[..lsn][R..])
+
+    // because R <= lsn; smaller lsn are Forgotten
+    assert(ej.discard_recent(ref_lsn) == ej.discard_recent(lsn).discard_recent(ref_lsn))
+    by
+    {
+      // Extensional equality arguments need to be made through macro
+      assert_maps_equal!(
+        ej.discard_recent(ref_lsn).msgs,
+        ej.discard_recent(lsn).discard_recent(ref_lsn).msgs
+      );
+    };
+    // pm+(ej[..lsn][..R]+ej[..lsn][R..])
+    // trigger
+    assert(eji.discard_recent(ref_lsn).concat(eji.discard_old(ref_lsn)) == eji)
+    by
+    {
+      assert_maps_equal!(
+        eji.discard_recent(ref_lsn).concat(eji.discard_old(ref_lsn)).msgs,
+        eji.msgs
+      );
+    }
+    // pm+ej[..lsn]
+    
+    assert(v.mapadt.persistent.value.wf());
+
+    // This doesn't trigger properly :/
+    MsgHistory::map_plus_history_forall_lemma();
+
+    MsgHistory::map_plus_history_seq_end_lemma(v.mapadt.persistent, v.journal.i().discard_recent(lsn));
+    assert(left.seq_end == lsn);
+
+    // Proving that right's seq_end == lsn
+    MsgHistory::map_plus_history_seq_end_lemma(vp.mapadt.persistent, vp.journal.i().discard_recent(lsn));
+    
+    assert(right.seq_end == lsn);
+
+    // Goal
+    assert(left.seq_end == right.seq_end); // done
+
+    assert(forall |k| left.value.dom().contains(k));
+
+    // Goal: show domains are the same. DONE
+    assert_sets_equal!(left.value.dom(), right.value.dom());
+
+    // Goal: show that maps are same because for all keys they map key to same value
+
+    // TODO: Show that mappings from keys to values are equal
+    assert_maps_equal!(left.value == right.value);
+  }
 
   pub proof fn journal_associativity(x: StampedMap, y: MsgHistory, z: MsgHistory)
     requires
@@ -434,6 +539,49 @@ verus! {
       // Original Dafny version does not need this else case.
       assert_maps_equal!(yz.msgs, y.msgs);
       assert(left == right);
+    }
+  }
+
+  pub proof fn inv_inductive_put_step(
+    v: CoordinationSystem::State,
+    vp: CoordinationSystem::State,
+    label: CoordinationSystem::Label,
+    step: CoordinationSystem::Step,
+  )
+    requires
+      v.inv(),
+      CoordinationSystem::State::next(v, vp, label),
+      CoordinationSystem::State::next_by(v, vp, label, step),
+      step.is_put()
+    ensures
+      vp.inv()
+  {
+    // TODO: remove this
+    assume(false);
+    reveal(journal_overlaps_agree);
+    reveal(CoordinationSystem::State::next);
+    reveal(CoordinationSystem::State::next_by);
+    reveal(CrashTolerantJournal::State::next);
+    reveal(CrashTolerantJournal::State::next_by);
+    reveal(CrashTolerantMap::State::next);
+    reveal(CrashTolerantMap::State::next_by);
+
+    if v.map_is_frozen() {
+      let frozen_end = v.mapadt.in_flight.get_Some_0().seq_end;
+      assert(v.journal.i().discard_recent(frozen_end) 
+        == vp.journal.i().discard_recent(frozen_end))
+      by
+      {
+        let left = v.journal.i().discard_recent(frozen_end);
+        let right = vp.journal.i().discard_recent(frozen_end);
+
+        assert(left.seq_start == right.seq_start);
+        assert(left.seq_end == right.seq_end);
+        assert_maps_equal!(
+          v.journal.i().discard_recent(frozen_end).msgs,
+          vp.journal.i().discard_recent(frozen_end).msgs
+        );
+      }
     }
   }
 }

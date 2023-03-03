@@ -1,4 +1,5 @@
-#[allow(unused_imports)]
+#![allow(unused_imports)]
+
 use builtin::*;
 
 use builtin_macros::*;
