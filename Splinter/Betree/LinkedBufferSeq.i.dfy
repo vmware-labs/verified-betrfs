@@ -93,13 +93,6 @@ module LinkedBufferSeqMod {
         Merge(QueryFrom(dv, key, start+1), dv.Get(buffers[start]).Query(key))
     }
 
-    // no one uses query without queryfrom in linked layer
-    // function Query(dv: BufferDiskView, key: Key) : Message
-    //   requires Valid(dv)
-    // {
-    //   QueryFrom(dv, key, 0)
-    // }
-
     function DropFirst() : BufferSeq
       requires 0 < |buffers|
     {
@@ -122,6 +115,5 @@ module LinkedBufferSeqMod {
       if |buffers| == 0 then EmptyBuffer()
       else DropFirst().IFiltered(dv, offsetMap.Decrement(1)).Merge(IBottom(dv, offsetMap))
     }
-
   }  // end type BufferSeq
 }

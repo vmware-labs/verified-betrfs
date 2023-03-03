@@ -16,11 +16,9 @@ module LinkedBetreeMod
 {
   import Sets
   import opened BoundedPivotsLib
-  // import opened Buffers
   import opened DomainMod
   import opened GenericDisk
   import opened KeyType
-//  import opened Lexicographic_Byte_Order
   import opened LSNMod
   import opened MemtableMod
   import opened MsgHistoryMod

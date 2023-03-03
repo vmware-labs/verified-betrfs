@@ -21,6 +21,7 @@ module OffsetMapMod {
       offsets[k]
     }
 
+    // TODO: keeplist
     function FilterForBottom() : iset<Key> 
       requires WF()
     {

@@ -9,6 +9,7 @@ module BranchesMod {
 	import opened ValueMessage
   import opened Maps
 	import opened Sequences
+  import opened OffsetMapMod
 	import opened LinkedBranchMod
   import D = GenericDisk
 
@@ -16,6 +17,75 @@ module BranchesMod {
   {
     Branches({}, DiskView.DiskView(map[]))
   }
+
+  // track a sequence of roots
+  datatype BranchSeq = BranchSeq(roots: seq<Address>)
+  {
+    predicate Valid(dv: DiskView)
+    {
+      && (forall i:nat | i < |roots| :: roots[i] in dv.Representation())
+      && (forall i:nat | i < |roots| :: LinkedBranch(roots[i], dv).Acyclic())
+    }
+
+    function Length() : nat 
+    {
+      |roots|
+    }
+
+    function Representation() : set<Address> {
+      set addr | addr in roots :: addr
+    }
+
+    function Slice(start: nat, end: nat) : BranchSeq
+      requires start <= end <= |roots|
+    {
+      BranchSeq(roots[start..end])
+    }
+
+    function Extend(newBranchSeq: BranchSeq) : BranchSeq
+    {
+      BranchSeq(roots + newBranchSeq.roots)
+    }
+
+    function QueryFrom(dv: DiskView, key: Key, start: nat) : Message
+      requires start <= |roots|
+      requires Valid(dv)
+      decreases |roots| - start
+    {
+      if start == |roots| then Update(NopDelta())
+      else (
+        var branch := LinkedBranch(roots[start], dv);
+        Merge(QueryFrom(dv, key, start+1), branch.Query(key))
+      )
+    }
+
+    function DropFirst() : BranchSeq
+      requires 0 < |roots|
+    {
+      Slice(1, |roots|)
+    }
+
+    function QueryFiltered(dv: DiskView, offsetMap: OffsetMap, key: Key) : Message
+      requires Valid(dv)
+      requires offsetMap.WF()
+      decreases Length()
+    {
+      if |roots| == 0 then Update(NopDelta())
+      else (
+        var branch := LinkedBranch(roots[0], dv);
+        var msg := if key in offsetMap.FilterForBottom() then branch.Query(key) else Update(NopDelta());
+        Merge(DropFirst().QueryFiltered(dv, key, offsetMap.Decrement(1)), msg)
+      )
+    }
+
+    predicate QueryFilteredEquiv(dv: DiskView, offsetMap: OffsetMap, newBranch: LinkedBranch)
+      requires Valid(dv)
+      requires offsetMap.WF()
+      requires newBranch.Acyclic()
+    {
+      && (forall key :: QueryFiltered(dv, key, offsetMap) == newBranch.Query(key))    
+    }
+  }  // end type BranchSeq
 
 	// Track the branches as branchroot and a single diskView
 	// We can construct LinkedBranch from each tree and the diskView
@@ -25,7 +95,7 @@ module BranchesMod {
 			&& diskView.WF() // ensures all nodes are connected
 			&& (forall root | root in roots :: diskView.ValidAddress(root))
       && (forall root | root in roots :: GetBranch(root).Acyclic())
-      && (forall root | root in roots :: GetBranch(root).AllKeysInRange())
+      // && (forall root | root in roots :: GetBranch(root).AllKeysInRange())
       && BranchesDisjoint()
 		}
 
@@ -47,15 +117,14 @@ module BranchesMod {
       LinkedBranch(addr, diskView)
 		}
 
-		function Query(key: Key, buffers: seq<Address>) : Message
+		function Query(key: Key, roots: seq<Address>) : Message
       requires WF()
-      requires (forall addr | addr in buffers :: ValidBranch(addr))
+      requires (forall addr | addr in roots :: ValidBranch(addr))
 		{
-			if buffers == [] then Update(NopDelta())
+			if roots == [] then Update(NopDelta())
       else (
-				var branch := GetBranch(Last(buffers));
-        var msg := if branch.Query(key).Some? then branch.Query(key).value else Update(NopDelta());
-				Merge(Query(key, DropLast(buffers)), msg)
+				var branch := GetBranch(Last(roots));
+        Merge(Query(key, DropLast(roots)), branch.Query(key))
 			)
 		}
 

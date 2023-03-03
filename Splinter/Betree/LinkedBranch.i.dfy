@@ -93,7 +93,7 @@ module LinkedBranchMod {
       else ( set k | k in node.keys )
     }
 
-    function AllAddresses() : set<Address>
+    function Representation() : set<Address>
     {
       entries.Keys
     }
@@ -135,17 +135,17 @@ module LinkedBranchMod {
       addrs !! entries.Keys
     } 
 
-    // function {:opaque} MergeDisk(other: DiskView) : (out: DiskView)
-    //   // ensure result is sound -- keys and their values must come from one of these places
-    //   ensures forall addr | addr in out.entries 
-    //     :: || (addr in entries && out.entries[addr] == entries[addr])
-    //        || (addr in other.entries && out.entries[addr] == other.entries[addr])
-    //   // ensure result is complete -- result must contain all the keys
-    //   ensures entries.Keys <= out.entries.Keys
-    //   ensures other.entries.Keys <= out.entries.Keys
-    // {
-    //   DiskView.DiskView(MapUnion(entries, other.entries))
-    // }
+    function {:opaque} MergeDisk(other: DiskView) : (out: DiskView)
+      // ensure result is sound -- keys and their values must come from one of these places
+      ensures forall addr | addr in out.entries 
+        :: || (addr in entries && out.entries[addr] == entries[addr])
+           || (addr in other.entries && out.entries[addr] == other.entries[addr])
+      // ensure result is complete -- result must contain all the keys
+      ensures entries.Keys <= out.entries.Keys
+      ensures other.entries.Keys <= out.entries.Keys
+    {
+      DiskView.DiskView(MapUnion(entries, other.entries))
+    }
 
     function {:opaque} RemoveDisk(other: DiskView) : (out: DiskView)
       ensures forall addr :: out.ValidAddress(addr) <==> (ValidAddress(addr) && !other.ValidAddress(addr))
@@ -158,24 +158,6 @@ module LinkedBranchMod {
   function EmptyDisk() : DiskView {
     DiskView.DiskView(map[])
   }
-
-  // function {:opaque} MergeDiskViews(diskViews: seq<DiskView>) : (out: DiskView)
-  //   // ensure result is sound -- keys and their values must come from one of these places
-  //   ensures forall addr | addr in out.entries 
-  //     :: (exists i :: 
-  //           && 0 <= i < |diskViews|
-  //           && addr in diskViews[i].entries
-  //           && out.entries[addr] == diskViews[i].entries[addr]
-  //     )
-  //   // ensure result is complete -- result must contain all the keys
-  //   ensures forall i | 0 <= i < |diskViews| :: diskViews[i].entries.Keys <= out.entries.Keys
-  //   decreases |diskViews|
-  // { var out :=
-  //     if |diskViews| == 0 then EmptyDisk()
-  //     else diskViews[0].MergeDisk(MergeDiskViews(diskViews[1..]));
-  //   reveal_MergeDiskViews();
-  //   out
-  // }
  
   datatype LinkedBranch = LinkedBranch(root: Address, diskView: DiskView)
   {
@@ -319,10 +301,10 @@ module LinkedBranchMod {
 
     predicate TightDiskView()
     {
-      && (Acyclic() ==> (ReachableAddrs() == diskView.AllAddresses()))
+      && (Acyclic() ==> (ReachableAddrs() == diskView.Representation()))
     }
 
-    function QueryInternal(key: Key, ranking: Ranking) : (msg: Option<Message>)
+    function QueryInternal(key: Key, ranking: Ranking) : (msg: Message)
       requires WF()
       requires ValidRanking(ranking)
       decreases GetRank(ranking)
@@ -332,15 +314,14 @@ module LinkedBranchMod {
       var r := node.Route(key);
       if node.Leaf? then (
         if r >= 0 && node.keys[r] == key
-        then Some(node.msgs[r]) else None
+        then node.msgs[r] else Update(NopDelta())
       ) else (
-        var result := ChildAtIdx(r+1).QueryInternal(key, ranking);
-        result
+        ChildAtIdx(r+1).QueryInternal(key, ranking)
       )
     }
 
-    function Query(key: Key) : (msg: Option<Message>)
-      requires WF()
+    function Query(key: Key) : (msg: Message)
+      // requires WF()
       requires Acyclic()
       ensures I().WF() ==> msg == I().Query(key)
     {
@@ -465,53 +446,4 @@ module LinkedBranchMod {
       }
     }
   }
-
-  // Linked Branch State Machine:
-
-  // datatype Variables = Variables(linked: LinkedBranch) {
-  //   predicate WF() {
-  //     && linked.WF()
-  //   }
-  // }
-
-  // predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
-  // {
-  //   && v.WF()
-  //   && lbl.QueryLabel?
-  //   && v' == v
-  //   // TODO: implement
-  // }
-
-  // predicate FilteredQuery(v: Variables, v': Variables, lbl: TransitionLabel)
-  // {
-  //   && v.WF()
-  //   && lbl.FilteredQueryLabel?
-  //   && v' == v
-  //   // TODO: implement
-  // }
-
-  // datatype Step =
-  //   QueryStep 
-  // | FilteredQueryStep
-  // // | FlattenStep  // TODO: uncoment once we implement actual iterator
-
-  // datatype TransitionLabel =
-  //   QueryLabel(key: Key, msg: Message)
-  // | FilteredQueryLabel(domain: Domain)
-  // // | FlattenLabel(flattened: FlattenedBranch)
-  
-  // // public:
-
-  // predicate Init(v: Variables) {
-  //   && v.WF()
-  // }
-
-  // predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-  // {
-  //   match step {
-  //     case QueryStep() => Query(v, v', lbl)
-  //     case FilteredQueryStep() => FilteredQuery(v, v', lbl)
-  //     // case FlattenStep() => Flatten(v, v', lbl)
-  //   }
-  // }
 }
