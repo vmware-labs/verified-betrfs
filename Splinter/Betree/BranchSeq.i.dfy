@@ -32,6 +32,11 @@ module BranchSeqMod {
       set addr | addr in roots
     }
 
+    function ToMultiset() : multiset<Address>
+    {
+      multiset(Representation())
+    }
+
     function Slice(start: nat, end: nat) : BranchSeq
       requires start <= end <= |roots|
     {
