@@ -7,7 +7,8 @@ module BufferOffsetsMod
 {
   import opened Sequences
 
-// data structure tracking offsets of buffers
+  // data structure tracking offsets of buffers
+  // TOdo: this is a generic structuer independent of buffer/branch, should rename
   datatype BufferOffsets = BufferOffsets(offsets: seq<nat>)
   {
     function Size() : nat

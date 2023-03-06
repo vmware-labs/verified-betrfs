@@ -85,12 +85,13 @@ module LinkedBufferSeqMod {
 
     function QueryFrom(dv: BufferDiskView, key: Key, start: nat) : Message
       requires start <= |buffers|
-      requires Valid(dv)
+      // requires Valid(dv)
       decreases |buffers| - start
     {
       if start == |buffers| then Update(NopDelta())
-      else
-        Merge(QueryFrom(dv, key, start+1), dv.Get(buffers[start]).Query(key))
+      else 
+        var msg := if buffers[start] in dv.entries then dv.Get(buffers[start]).Query(key) else Update(NopDelta());
+        Merge(QueryFrom(dv, key, start+1), msg)
     }
 
     function DropFirst() : BufferSeq
@@ -100,15 +101,17 @@ module LinkedBufferSeqMod {
     }
     
     function IBottom(dv: BufferDiskView, offsetMap: OffsetMap) : Buffer 
-      requires Valid(dv)
+      // requires Valid(dv)
       requires offsetMap.WF()
       requires 0 < |buffers|
     {
-      dv.Get(buffers[0]).ApplyFilter(offsetMap.FilterForBottom())
+      if buffers[0] in dv.entries 
+      then dv.Get(buffers[0]).ApplyFilter(offsetMap.FilterForBottom())
+      else EmptyBuffer()
     }
 
     function IFiltered(dv: BufferDiskView, offsetMap: OffsetMap) : Buffer 
-      requires Valid(dv)
+      // requires Valid(dv)
       requires offsetMap.WF()
       decreases |buffers|
     {

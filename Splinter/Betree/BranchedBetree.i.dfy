@@ -2,17 +2,14 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "Domain.i.dfy"
-include "Branches.i.dfy"
+include "BranchSeq.i.dfy"
 include "SplitRequest.i.dfy"
 include "LinkedBetree.i.dfy"
 include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
 include "../../lib/Base/mathematics.i.dfy"
 include "../Disk/GenericDisk.i.dfy"
 
-// This module deals with 
-// 1. Concretize buffer implementation with Forest (seqs of B+ tree)
-// 2. Filter should be implicitly tracked by pivot table (no more apply filters)
-// 3. Track active buffers for each child, as we don't want to visit a buffer that is flushed to a child already
+// This module concretizes buffer implementation with Forest (seqs of B+ tree)
 
 module BranchedBetreeMod
 {
@@ -36,15 +33,20 @@ module BranchedBetreeMod
   import M = Mathematics
   import L = LinkedBetreeMod // to share some node independent structure
   import LB = LinkedBranchMod
-  import opened BranchesMod
+
+  import opened BufferMod
+  import opened BranchSeqMod
+  import opened BufferOffsetsMod
+  import opened OffsetMapMod
 
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
   type StampedBetree = Stamped<BranchedBetree>
+  type BranchDiskView = LB.DiskView
 
   function EmptyBranchedBetree() : (out: BranchedBetree)
   {
-    BranchedBetree(None, EmptyDisk(), EmptyBranches())
+    BranchedBetree(None, EmptyDisk(), LB.EmptyDisk())
   }
 
   function EmptyImage() : StampedBetree
@@ -64,25 +66,18 @@ module BranchedBetreeMod
 
 
   datatype BetreeNode = BetreeNode(
-    // Addresses in buffers belong to the Branches disk
-    buffers: seq<Address>, 
+    branches: BranchSeq,
     pivotTable: PivotTable,
-    // Addresses in children belong to the Betree disk
     children: seq<Pointer>,
-    // Once a buffer is flushed to a child, we no longer want to query
-    // the buffer for keys in the child's domain, making the buffer
-    // inactive for that child. Each child may have a different set of buffers
-    // flushed to them, so we need to track the start of valid buffers for each child.
-    // This is a parallel data structure to the children array.
-    activeBufferRanges: seq<nat> 
-    // TODO: Pivot => Filtered => Linked
+    flushedOffsets: BufferOffsets
   ) {
     predicate WF() {
       && (BetreeNode? ==>
         && WFPivots(pivotTable)
         && |children| == NumBuckets(pivotTable)
-        && |children| == |activeBufferRanges|
-        && (forall i:nat | i < |activeBufferRanges| :: activeBufferRanges[i] <= |buffers|))
+        && |children| == flushedOffsets.Size()
+        && flushedOffsets.BoundedBy(branches.Length())
+      )
     }
 
     predicate ValidChildIndex(childIdx: nat)
@@ -98,17 +93,24 @@ module BranchedBetreeMod
       && children[childIdx].Some?
     }
 
-    function PushBufferStack(addrs: seq<Address>) : (out: BetreeNode)
+    function ExtendBranchSeq(newBranches: BranchSeq) : (out: BetreeNode)
       requires WF()
       ensures out.WF()
     {
-      BetreeNode(buffers + addrs, pivotTable, children, activeBufferRanges)
+      BetreeNode(branches.Extend(newBranches), pivotTable, children, flushedOffsets)
+    }
+
+    function ActiveBranchesForKey(key: Key) : (i: nat)
+      requires KeyInDomain(key)
+    {
+      flushedOffsets.Get(Route(pivotTable, key))
     }
 
     predicate IsLeaf()
     {
       && |children|==1
       && children[0].None?
+      && flushedOffsets == BufferOffsets([0]) 
     }
 
     predicate IsIndex()
@@ -147,60 +149,6 @@ module BranchedBetreeMod
       children[Route(pivotTable, key)]
     }
 
-    // returns the start of active buffer ranges for a key
-    function ActiveBuffersForKey(key: Key) : (i: nat)
-      requires KeyInDomain(key)
-    {
-      activeBufferRanges[Route(pivotTable, key)]
-    }
-
-    // function LargestInactiveRange(count: nat) : (activeStart: nat) 
-    //   requires WF()
-    //   requires count <= |activeBufferRanges|
-    //   ensures activeStart <= |buffers|
-    //   ensures (forall i:nat | i < count :: activeStart <= activeBufferRanges[i])
-    // {
-    //   if count == 0 then 0
-    //   else if count == 1 then activeBufferRanges[count-1]
-    //   else M.min(activeBufferRanges[count-1], LargestInactiveRange(count-1))
-    // }
-
-    function TruncateActiveRange(newStart: nat, count: nat) : seq<nat>
-      requires count <= |activeBufferRanges|
-      requires (forall i:nat | i < |activeBufferRanges| :: newStart <= activeBufferRanges[i]) 
-    {
-      if count == 0 then []
-      else TruncateActiveRange(newStart, count-1) + [activeBufferRanges[count-1]-newStart] 
-    }
-
-    function TruncateBuffers(newStart: nat) : BetreeNode
-      requires WF()
-      requires newStart <= |buffers|
-      requires (forall i:nat | i < |activeBufferRanges| :: newStart <= activeBufferRanges[i])
-      ensures WF()
-    {
-      BetreeNode(buffers[newStart..], pivotTable, children, TruncateActiveRange(newStart, |activeBufferRanges|))
-    }
-
-    function CompactActiveRange(compactStart: nat, compactEnd: nat, count: nat) : (out: seq<nat>)
-      requires WF()
-      requires compactStart < compactEnd <= |buffers|
-      requires count <= |activeBufferRanges|
-      ensures |out| == |activeBufferRanges[..count]|
-      ensures (forall i:nat | i < |out| :: out[i] <= |buffers| - (compactEnd-compactStart-1))
-    {
-      if count == 0 then []
-      else (
-        var range := activeBufferRanges[count-1];
-        var range' := 
-            if range < compactStart then range
-            else if range < compactEnd then compactStart
-            else range - (compactEnd - compactStart - 1);
-
-        CompactActiveRange(compactStart, compactEnd, count-1) + [range']
-      )
-    }
-
     // TODO(jonh): Again, Split has a bunch of duplicated (complex) definitions duplicated from PivotBetree.
     // Would be nice to find a way to factor out the structure duplicated across layers without
     // making the state machines difficult to read.
@@ -213,8 +161,8 @@ module BranchedBetreeMod
       requires splitKey != MyDomain().start.e
       ensures out.0.WF() && out.1.WF()
     {
-      var newLeft := BetreeNode(buffers, [pivotTable[0], Element(splitKey)], [None], [0]);
-      var newRight := BetreeNode(buffers, [Element(splitKey), pivotTable[1]], [None], [0]);
+      var newLeft := BetreeNode(branches, [pivotTable[0], Element(splitKey)], [None], BufferOffsets([0]));
+      var newRight := BetreeNode(branches, [Element(splitKey), pivotTable[1]], [None], BufferOffsets([0]));
       assert newLeft.WF() by { Keyspace.reveal_IsStrictlySorted(); }
       assert newRight.WF() by { Keyspace.reveal_IsStrictlySorted(); }
       (newLeft, newRight)
@@ -231,37 +179,23 @@ module BranchedBetreeMod
       var leftFilter := Domain(MyDomain().start, splitElt);
       var rightFilter := Domain(splitElt, MyDomain().end);
 
-      var newLeft := BetreeNode(buffers, pivotTable[..pivotIdx+1], children[..pivotIdx], activeBufferRanges[..pivotIdx]);
-      var newRight := BetreeNode(buffers, pivotTable[pivotIdx..], children[pivotIdx..], activeBufferRanges[pivotIdx..]);
+      var newLeft := BetreeNode(branches, pivotTable[..pivotIdx+1], children[..pivotIdx], flushedOffsets.Slice(0, pivotIdx));
+      var newRight := BetreeNode(branches, pivotTable[pivotIdx..], children[pivotIdx..], flushedOffsets.Slice(pivotIdx, flushedOffsets.Size()));
       WFSlice(pivotTable, 0, pivotIdx+1);
       WFSuffix(pivotTable, pivotIdx);
-      //assert WFChildren(children);  // trigger TODO(jonh) delete
       assert newLeft.WF();
       assert newRight.WF();
       (newLeft, newRight)
     }
 
-    predicate CompactedBranchEquivalence(branches: Branches, compactStart: nat, compactEnd: nat, compactedBranch: LB.LinkedBranch)
+    function MakeOffsetMap() : OffsetMap
       requires WF()
-      requires branches.WF()
-      requires compactedBranch.Acyclic()
-      requires compactedBranch.AllKeysInRange()
-      requires compactedBranch.TightDiskView()
-      requires compactStart < compactEnd <= |buffers|
-      requires forall i:nat | compactStart <= i < compactEnd :: branches.ValidBranch(buffers[i])
+      requires BetreeNode?
     {
-      && (forall key | KeyInDomain(key) && ActiveBuffersForKey(key) < compactEnd ::
-        && var result := if compactedBranch.Query(key).Some? then compactedBranch.Query(key).value else Update(NopDelta());
-        && var start := if ActiveBuffersForKey(key) <= compactStart then compactStart else ActiveBuffersForKey(key);
-        && branches.Query(key, buffers[start..compactEnd]) == result)
-      && (forall key | !KeyInDomain(key) || ActiveBuffersForKey(key) >= compactEnd :: compactedBranch.Query(key).None?)
+      OffsetMap(imap k | AnyKey(k) 
+      :: if BoundedKey(pivotTable, k) then flushedOffsets.Get(Route(pivotTable, k))
+          else branches.Length())
     }
-  }
-
-  // PivotTable constructor for a total domain
-  function TotalPivotTable() : PivotTable
-  {
-    [TotalDomain().start, TotalDomain().end]
   }
 
   // BetreeNode constructor for empty node
@@ -273,7 +207,7 @@ module BranchedBetreeMod
     var pivotTable := [domain.start, domain.end];
     domain.reveal_SaneKeys();  /* jonh suspicious lt leak */
     assert Keyspace.IsStrictlySorted(pivotTable) by { reveal_IsStrictlySorted(); }  /* jonh suspicious lt leak */
-    BetreeNode([], pivotTable, [None], [0])
+    BetreeNode(BranchSeq([]), pivotTable, [None], BufferOffsets([0]))
   }
 
   datatype DiskView = DiskView(entries: map<Address, BetreeNode>)
@@ -343,17 +277,6 @@ module BranchedBetreeMod
       entries[ptr.value]
     }
 
-    // buffer not in entries, it belongs to a different disk
-    predicate BufferInNode(buffer: Address)
-    {
-      (exists addr :: addr in entries && entries[addr].BetreeNode? && buffer in entries[addr].buffers)
-    }
-
-    function Buffers() : iset<Address>
-    {
-      iset buffer:Address | BufferInNode(buffer)
-    }
-
     predicate AgreesWithDisk(other: DiskView)
     {
       MapsAgree(entries, other.entries)
@@ -403,16 +326,45 @@ module BranchedBetreeMod
     DiskView.DiskView(map[])
   }
 
-  // This is the unit of interpretation: A LinkedBetree has enough info in it to interpret to a PivotBetree.BetreeNode.
+  // // This is the unit of interpretation: A LinkedBetree has enough info in it to interpret to a PivotBetree.BetreeNode.
   datatype BranchedBetree = BranchedBetree(
     root: Pointer,
     diskView: DiskView,
-    branches: Branches  // branches of betree nodes, not part of the betree therefore not tracked the diskview
+    branchDiskView: BranchDiskView
   ) {
     predicate WF() {
-      && branches.WF()
       && diskView.WF()
       && diskView.IsNondanglingPointer(root)
+      && diskView.IsFresh(branchDiskView.Representation())
+
+      && branchDiskView.WF()
+      // && NoDanglingBranchPointers()
+      // && AcyclicBranches()
+      // && DisjointBranches()
+    }
+
+    // Quantified vs Recursive
+    predicate NoDanglingBranchPointers() 
+      requires Acyclic()
+    {
+      forall branch | branch in BranchSeqRepresentation() :: branch in branchDiskView.Representation()
+    }
+
+    predicate AcyclicBranches() 
+      requires Acyclic()
+      requires NoDanglingBranchPointers()
+    {
+      // Acyclic implies all nodes in representation are in branchdiskview
+      forall branch | branch in BranchSeqRepresentation() ::  LB.LinkedBranch(branch, branchDiskView).Acyclic()
+    }
+
+    predicate DisjointBranches()
+      requires Acyclic()
+      requires NoDanglingBranchPointers()
+      requires AcyclicBranches()
+    {
+      forall b1, b2 | b1 in BranchSeqRepresentation() && b2 in BranchSeqRepresentation() && b1 != b2 :: 
+        LB.LinkedBranch(b1, branchDiskView).Representation() !! LB.LinkedBranch(b2, branchDiskView).Representation() 
     }
 
     predicate HasRoot() {
@@ -426,27 +378,9 @@ module BranchedBetreeMod
       diskView.Get(root)
     }
 
-    predicate Valid() {
-      && DisjointForest()
-      && BoundedForest()
-    }
-
-    // linked diskView and forest diskView should have disjoint addresses
-    predicate DisjointForest() {
-      && diskView.IsFresh(branches.diskView.AllAddresses())
-    }
-
-    // buffers in each node should be known to forest
-    predicate BoundedForest() {
-      && (forall addr, buffer | 
-        && addr in diskView.entries 
-        && buffer in diskView.entries[addr].buffers 
-        :: buffer in branches.roots)
-    }
-
     predicate IsFresh(addrs: set<Address>) {
       && diskView.IsFresh(addrs)
-      && branches.diskView.IsFresh(addrs)
+      && branchDiskView.IsFresh(addrs)
     }
    
     function ChildAtIdx(idx: nat) : BranchedBetree
@@ -454,15 +388,15 @@ module BranchedBetreeMod
       requires HasRoot()
       requires Root().ValidChildIndex(idx)
     {
-      BranchedBetree(Root().children[idx], diskView, branches)
+      BranchedBetree(Root().children[idx], diskView, branchDiskView)
     }
 
     function ChildForKey(key: Key) : BranchedBetree
       requires HasRoot()
       requires Root().KeyInDomain(key)
-      ensures Valid() ==> Valid()
+      ensures WF() ==> WF()
     {
-      BranchedBetree(Root().ChildPtr(key), diskView, branches)
+      BranchedBetree(Root().ChildPtr(key), diskView, branchDiskView)
     }
 
     function GetRank(ranking: Ranking) : nat
@@ -507,11 +441,16 @@ module BranchedBetreeMod
         // operation, that the new state is acyclic
         this
       else
-        var tightDv := DiskView.DiskView(MapRestrict(diskView.entries, ReachableAddrs()));
-        BranchedBetree(root, tightDv, branches)
+        var tightDv := DiskView.DiskView(MapRestrict(diskView.entries, Representation()));
+        var tightBDv := 
+          if NoDanglingBranchPointers() && AcyclicBranches()
+          then LB.DiskView(MapRestrict(branchDiskView.entries, BranchFullRepresentation()))
+          else branchDiskView;
+
+      BranchedBetree(root, tightDv, tightBDv)
     }
 
-    function ReachableAddrs() : set<Address>
+    function Representation() : set<Address>
       requires Acyclic()
     {
       ReachableAddrsUsingRanking(TheRanking())
@@ -531,7 +470,25 @@ module BranchedBetreeMod
         Sets.UnionSeqOfSetsSoundness(subTreeAddrs);
         {root.value} + Sets.UnionSeqOfSets(subTreeAddrs)
     }
-    
+
+    // only returns roots of branches
+    function BranchSeqRepresentation() : (out: set<Address>) 
+      requires Acyclic()
+    {
+      var sets := set treeAddr | treeAddr in Representation() :: diskView.Get(Some(treeAddr)).branches.Representation();
+      Sets.UnionSetOfSets(sets)
+    }
+
+    // returns roots and all nodes within a branch
+    function BranchFullRepresentation() : (out: set<Address>)
+      requires Acyclic()
+      requires NoDanglingBranchPointers()
+      requires AcyclicBranches()
+    {
+      var sets := set branch | branch in BranchSeqRepresentation() :: LB.LinkedBranch(branch, branchDiskView).Representation();
+      Sets.UnionSetOfSets(sets)
+    }
+
     predicate CanSplitParent(request: SplitRequest)
     {
       && WF()
@@ -566,22 +523,23 @@ module BranchedBetreeMod
       requires CanSplitParent(request)
     {
       var oldChild := ChildAtIdx(request.childIdx);
-      var (newLeftChild, newRightChild) := if request.SplitLeaf? then oldChild.Root().SplitLeaf(request.splitKey) else oldChild.Root().SplitIndex(request.childPivotIdx);
-      var newChildren := replace1with2(Root().children, Some(newAddrs.left), Some(newAddrs.right), request.childIdx);
-      var childActiveRange := Root().activeBufferRanges[request.childIdx];
-      var newactiveBufferRanges := replace1with2(Root().activeBufferRanges, childActiveRange, childActiveRange, request.childIdx);
+      var (newLeftChild, newRightChild) := 
+        if request.SplitLeaf? 
+        then oldChild.Root().SplitLeaf(request.splitKey) 
+        else oldChild.Root().SplitIndex(request.childPivotIdx);
 
-      // new children replace 1with2 
-      var newParent := BetreeNode(Root().buffers, InsertPivot(Root().pivotTable, request.childIdx+1, SplitKey(request)), newChildren, newactiveBufferRanges);
+      var newChildren := replace1with2(Root().children, Some(newAddrs.left), Some(newAddrs.right), request.childIdx);
+      var newflushedOffsets := Root().flushedOffsets.Split(request.childIdx);
+      var newParent := BetreeNode(Root().branches, InsertPivot(Root().pivotTable, request.childIdx+1, SplitKey(request)), newChildren, newflushedOffsets);
 
       var dv' := diskView.ModifyDisk(newAddrs.left, newLeftChild).ModifyDisk(newAddrs.right, newRightChild).ModifyDisk(newAddrs.parent, newParent);
-      BranchedBetree(Pointer.Some(newAddrs.parent), dv', branches)
+      BranchedBetree(Pointer.Some(newAddrs.parent), dv', branchDiskView)
     }
 
     lemma SplitParentCanSubstitute(request: SplitRequest, newAddrs: L.SplitAddrs)
       requires CanSplitParent(request)
       requires newAddrs.HasUniqueElems()  // frameity frame frame
-      requires diskView.IsFresh(newAddrs.Repr())  // frameity frame frame
+      requires IsFresh(newAddrs.Repr())  // frameity frame frame
       ensures SplitParent(request, newAddrs).WF()
       ensures SplitParent(request, newAddrs).Root().MyDomain() == Root().MyDomain()
     {
@@ -606,11 +564,15 @@ module BranchedBetreeMod
         }
       }
 
-      forall i: nat | i < |newParent.activeBufferRanges|
-        ensures newParent.activeBufferRanges[i] <= |newParent.buffers|
+      var newflushedOffsets := Root().flushedOffsets.Split(request.childIdx);
+      forall i:nat | i < newflushedOffsets.Size()
+        ensures newflushedOffsets.Get(i) <= Root().branches.Length()
       {
-        if i > request.childIdx + 1 {
-          assert newParent.activeBufferRanges[i] == Root().activeBufferRanges[i-1];
+        if i < request.childIdx {
+        } else if i <= request.childIdx+1 {
+          assert newflushedOffsets.Get(i) == Root().flushedOffsets.Get(request.childIdx);
+        } else {
+          assert newflushedOffsets.Get(i) == Root().flushedOffsets.Get(i-1);
         }
       }
 
@@ -641,7 +603,6 @@ module BranchedBetreeMod
       requires 0 < depth
       requires branched.HasRoot()
       requires branched.Root().KeyInDomain(key)
-      ensures branched.branches == out.branched.branches
     {
       Path(branched.ChildForKey(key), key, depth-1)
     }
@@ -650,7 +611,7 @@ module BranchedBetreeMod
       decreases depth
     {
       && branched.Acyclic()
-      && branched.Valid()  // TODO(Jialin): revisit
+      && branched.WF()
       && branched.HasRoot()
       && branched.Root().KeyInDomain(key)
       && (0 < depth ==> branched.Root().IsIndex())
@@ -662,7 +623,7 @@ module BranchedBetreeMod
       ensures out.WF()
       ensures out.root.Some?
       ensures out.diskView == branched.diskView
-      ensures out.branches == branched.branches
+      ensures out.branchDiskView == branched.branchDiskView
       ensures out.HasRoot() ==> out.root.value in out.diskView.entries
       decreases depth
     {
@@ -708,9 +669,9 @@ module BranchedBetreeMod
         CanSubstituteSubpath(replacement, pathAddrs);
         var subtree := Subpath().Substitute(replacement, pathAddrs[1..]);
         var newChildren := node.children[Route(node.pivotTable, key) := subtree.root];
-        var newNode := BetreeNode(node.buffers, node.pivotTable, newChildren, node.activeBufferRanges);
+        var newNode := BetreeNode(node.branches, node.pivotTable, newChildren, node.flushedOffsets);
         var newDiskView := subtree.diskView.ModifyDisk(pathAddrs[0], newNode);
-        BranchedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView, branched.branches)
+        BranchedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView, branched.branchDiskView)
     }
   }
 
@@ -737,11 +698,9 @@ module BranchedBetreeMod
       && (forall i:nat | i < |lines| :: lines[i].branched.WF())
       && (forall i:nat | i < |lines| :: lines[i].branched.root.Some? <==> i < |lines|-1)
       && (forall i:nat | i < |lines| :: lines[i].branched.diskView == branched.diskView)
-      && (forall i:nat | i < |lines| :: lines[i].branched.branches == branched.branches)      
+      && (forall i:nat | i < |lines| :: lines[i].branched.branchDiskView == branched.branchDiskView)      
       && Last(lines).result == Define(DefaultValue())
-      && branched.Acyclic()
-      && branched.Valid()
-      // && branched.WF()
+      && branched.WF()
     }
 
     function Node(i: nat) : (out:BetreeNode)
@@ -756,12 +715,8 @@ module BranchedBetreeMod
     {
       && Structure()
       && (forall i:nat | i < |lines| :: lines[i].WF())
-      // Note(Jialin): start
-      && (forall i:nat | i < |lines| :: lines[i].branched.Acyclic())
-      && (forall i:nat | i < |lines| :: lines[i].branched.Valid())
-      // Note(Jialin): end
+      && (forall i:nat | i < |lines| :: lines[i].branched.WF())
       && (forall i:nat | i < |lines|-1 :: Node(i).KeyInDomain(key))
-      && (forall i:nat, buffer | i < |lines|-1 && buffer in Node(i).buffers :: branched.branches.ValidBranch(buffer))
     }
 
     predicate ChildLinkedAt(i: nat)
@@ -782,8 +737,8 @@ module BranchedBetreeMod
       requires AllLinesWF()
       requires i < |lines| - 1
     {
-      && var start := Node(i).ActiveBuffersForKey(key); // only query on a child's active range
-      && var msg := branched.branches.Query(key, Node(i).buffers[start..]);
+      && var start := Node(i).ActiveBranchesForKey(key); // only query on a child's active range
+      && var msg := Node(i).branches.QueryFrom(branched.branchDiskView, key, start);      
       && lines[i].result == Merge(msg, ResultAt(i+1))
     }
 
@@ -811,7 +766,7 @@ module BranchedBetreeMod
 
   datatype Variables = Variables(memtable: Memtable, branched: BranchedBetree) {
     predicate WF() {
-      && branched.WF()
+      branched.WF()
     }
   }
 
@@ -850,20 +805,17 @@ module BranchedBetreeMod
     && v' == v
   }
 
-  function InsertInternalFlushMemtableReplacement(branched: BranchedBetree, newBranch: LB.LinkedBranch, newRootAddr:Address) : (out: BranchedBetree)
-    requires branched.WF()
-    requires newBranch.Acyclic()
-    requires newBranch.TightDiskView()
-   // requires newBranch.AllKeysInRange()
-    requires branched.IsFresh(newBranch.ReachableAddrs())
+  function InsertInternalFlushMemtableReplacement(oldRoot: BranchedBetree, newBranch: LB.LinkedBranch, newRootAddr:Address) : (out: BranchedBetree)
+    requires oldRoot.WF()
   {
     var root' := 
-      if branched.HasRoot()
-      then branched.Root().PushBufferStack([newBranch.root])
-      else BetreeNode([newBranch.root], TotalPivotTable(), [None], [0]);
+      if oldRoot.HasRoot()
+      then oldRoot.Root().ExtendBranchSeq(BranchSeq([newBranch.root]))
+      else BetreeNode(BranchSeq([newBranch.root]), L.TotalPivotTable(), [None], BufferOffsets([0]));
 
-    var dv' := branched.diskView.ModifyDisk(newRootAddr, root');
-    BranchedBetree(Pointer.Some(newRootAddr), dv', branched.branches.AddBranch(newBranch))
+    var dv' := oldRoot.diskView.ModifyDisk(newRootAddr, root');
+    var bdv' := oldRoot.branchDiskView.MergeDisk(newBranch.diskView);
+    BranchedBetree(Pointer.Some(newRootAddr), dv', bdv')
   }
 
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -872,14 +824,13 @@ module BranchedBetreeMod
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalFlushMemtableStep?
-    && (step.branch.I().WF() ==> step.branch.I().I() == v.memtable.buffer) // TODO: revisit
-
     // Allocation validation
-    && lbl.addrs == {step.newRootAddr} + step.branch.ReachableAddrs()
+    && lbl.addrs == {step.newRootAddr} + step.branch.Representation()
+    && (forall key :: step.branch.Query(key) == v.memtable.buffer.Query(key)) // TODO: revisit
 
     // Subway Eat Fresh!
     && v.branched.IsFresh({step.newRootAddr})
-    && v.branched.IsFresh(step.branch.ReachableAddrs())
+    && v.branched.IsFresh(step.branch.Representation())
     && v'.branched == InsertInternalFlushMemtableReplacement(v.branched, step.branch, step.newRootAddr).BuildTightTree()
     && v'.memtable == v.memtable.Drain()
   }
@@ -888,10 +839,10 @@ module BranchedBetreeMod
     requires branched.WF()
   {
     // The new root node
-    var root' := BetreeNode([], TotalPivotTable(), [branched.root], [0]);
+    var root' := BetreeNode(BranchSeq([]), L.TotalPivotTable(), [branched.root], BufferOffsets([0]));
     // The new diskview
     var dv' := branched.diskView.ModifyDisk(newRootAddr, root');
-    BranchedBetree(Pointer.Some(newRootAddr), dv', branched.branches)
+    BranchedBetree(Pointer.Some(newRootAddr), dv', branched.branchDiskView)
   }
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -903,7 +854,7 @@ module BranchedBetreeMod
     && lbl.addrs == {step.newRootAddr}
     // Subway Eat Fresh!
     && v.branched.IsFresh({step.newRootAddr})
-    && v'.branched == InsertGrowReplacement(v.branched, step.newRootAddr).BuildTightTree()
+    && v'.branched == InsertGrowReplacement(v.branched, step.newRootAddr)
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
@@ -916,6 +867,7 @@ module BranchedBetreeMod
     && step.WF()
     && step.path.branched == v.branched
     && v.branched.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
+
     && step.path.Target().CanSplitParent(step.request)
     && var replacement := step.path.Target().SplitParent(step.request, step.newAddrs);
     && assert step.path.CanSubstitute(replacement, step.pathAddrs) by {
@@ -924,31 +876,44 @@ module BranchedBetreeMod
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  function InsertFlushReplacement(target: BranchedBetree, childIdx:nat, targetAddr: Address, targetChildAddr: Address, bufferStart: nat) : (out: BranchedBetree)
+  function InsertFlushReplacement(target: BranchedBetree, childIdx:nat, 
+    targetAddr: Address, targetChildAddr: Address, branchGCCount: nat) : (out: BranchedBetree)
     requires target.WF()
     requires target.HasRoot()
     requires target.Root().OccupiedChildIndex(childIdx)
-    requires bufferStart <= |target.Root().buffers|
-    requires forall i:nat | i < |target.Root().activeBufferRanges| && i != childIdx :: bufferStart <= target.Root().activeBufferRanges[i]
+    requires target.Root().flushedOffsets.AdvanceIndex(childIdx, target.Root().branches.Length()).CanCollectGarbage(branchGCCount)
   {
     var root := target.Root();
-    var oldRange := root.activeBufferRanges[childIdx];
-    var activeBufferRanges' := root.activeBufferRanges[childIdx := |root.buffers|];
-  
+
+    var newflushedOffsets := root.flushedOffsets.AdvanceIndex(childIdx, root.branches.Length());
+    assert branchGCCount <= root.branches.Length() by {
+      var i:nat :| i < newflushedOffsets.Size();
+      assert newflushedOffsets.Get(i) <= root.branches.Length();
+    }
+
+    var keptBranches := root.branches.Slice(branchGCCount, root.branches.Length()); // branchs remaining after gc
+    var movedBranches := root.branches.Slice(root.flushedOffsets.Get(childIdx), root.branches.Length()); // branchs to flush to child
+
+    var GCflushedOffsets := BufferOffsets(seq (newflushedOffsets.Size(), 
+      i requires 0 <= i < newflushedOffsets.Size() => 
+      newflushedOffsets.Get(i)-branchGCCount));
+
     var subroot := target.diskView.Get(root.children[childIdx]);
-    var subroot' := subroot.PushBufferStack(root.buffers[oldRange..]);
+    var extendBranchSeq := subroot.branches.Extend(movedBranches);
+    var subroot' := BetreeNode(extendBranchSeq, 
+      subroot.pivotTable, subroot.children, subroot.flushedOffsets);
 
     // BetreeNode of the new root, to be stored at targetAddr in the diskview
     var children' := root.children[childIdx := Pointer.Some(targetChildAddr)];
-    var root' := BetreeNode(root.buffers, root.pivotTable, children', activeBufferRanges').TruncateBuffers(bufferStart);
+    var root' := BetreeNode(keptBranches, root.pivotTable, children', GCflushedOffsets);
 
     // The new diskview
     var dv' := target.diskView.ModifyDisk(targetAddr, root').ModifyDisk(targetChildAddr, subroot');
-    BranchedBetree(Pointer.Some(targetAddr), dv', target.branches)
+    BranchedBetree(Pointer.Some(targetAddr), dv', target.branchDiskView)
   }
 
-  // Flush is responsible for 1. flush buffer to child 2. update the active buffer range for that child 
-  // 3. truncate inactive buffers and shift active range when possible
+  // Flush is responsible for 1. flush branch to child 2. update the active branch range for that child 
+  // 3. truncate inactive branches and shift active range when possible
   predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
@@ -959,12 +924,9 @@ module BranchedBetreeMod
     && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr} + {step.targetChildAddr}
     && step.path.branched == v.branched
     && step.path.Valid()
-
     && var root := step.path.Target().Root();
     && root.OccupiedChildIndex(step.childIdx)  // the downstream child must exist
-    && step.bufferStart <= |root.buffers|
-    && (forall i:nat | i < |root.activeBufferRanges| && i != step.childIdx :: step.bufferStart <= root.activeBufferRanges[i]) 
-    && var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr, step.bufferStart); // meow
+    && var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr, step.branchGCCount); // meow
     && step.path.CanSubstitute(replacement, step.pathAddrs)
     
     // Subway Eat Fresh!
@@ -973,65 +935,57 @@ module BranchedBetreeMod
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  predicate InternalPruneBranches(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-  {
-    && v.WF()
-    && step.WF()
-    && lbl.InternalLabel?
-    && step.InternalPruneBranchesStep?
-    && v.branched.branches.ValidBranch(step.rootToRemove)
-    && (forall addr | addr in v.branched.diskView.entries :: 
-        step.rootToRemove !in v.branched.diskView.entries[addr].buffers) // buffer has no more references
-
-    && v'.branched == v.branched.(branches := v.branched.branches.RemoveBranch(step.rootToRemove))
-    && v'.memtable == v.memtable
-  }
-
-  // @target: the root node before it is compacted
-  // @compactStart: start index of buffers being compacted
-  // @compactEnd: end index of buffers being compacted, exclusive
-  // @compactedRoot: compacted branch root address (not in our diskview)
-  // InsertReplacement returns a LinkedBetree that has the diskview of target with replacement placed at the replacementAddr
-  function InsertCompactReplacement(target: BranchedBetree, compactStart: nat, compactEnd: nat, compactedRoot: Address, replacementAddr: Address) : (out: BranchedBetree)
+  function InsertCompactReplacement(target: BranchedBetree, start: nat, end: nat, 
+    newBranch: LB.LinkedBranch, replacementAddr: Address) : (out: BranchedBetree)
     requires target.WF()
     requires target.HasRoot()
-    requires compactStart < compactEnd <= |target.Root().buffers|
-    requires target.diskView.IsFresh({replacementAddr})
+    requires start <= end <= target.Root().branches.Length()
+    requires newBranch.Acyclic()
+    requires newBranch.TightDiskView()
+    requires {replacementAddr} !! newBranch.Representation()
+    requires target.IsFresh({replacementAddr} + newBranch.Representation())
+
     ensures target.diskView.IsSubsetOf(out.diskView)
     ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}
     ensures out.WF()   // prereq to MyDomain()
     ensures out.HasRoot() && out.Root().MyDomain() == target.Root().MyDomain()
   {
     var root := target.Root();
-    var compactedBuffers := root.buffers[0..compactStart] + [ compactedRoot ] + root.buffers[compactEnd..];
-    var compactedActiveBufferRanges := root.CompactActiveRange(compactStart, compactEnd, |root.activeBufferRanges|);
-    var newRoot := BetreeNode(compactedBuffers, root.pivotTable, root.children, compactedActiveBufferRanges);
+    var newBranchSeq := root.branches.Slice(0, start).Extend(BranchSeq([newBranch.root])).Extend(root.branches.Slice(end, root.branches.Length()));
+    var newBranchDiskView := target.branchDiskView.MergeDisk(newBranch.diskView);
 
+    var newRoot := BetreeNode(newBranchSeq, root.pivotTable, root.children, root.flushedOffsets.OffSetsAfterCompact(start, end));
     var newDiskView := target.diskView.ModifyDisk(replacementAddr, newRoot);
-    var out := BranchedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView, target.branches);
+
+    assert newDiskView.HealthyChildPointers() by {
+      forall addr | addr in newDiskView.entries
+      ensures newDiskView.NodeHasLinkedChildren(newDiskView.entries[addr])
+      {
+        if addr != replacementAddr {
+          assert addr in target.diskView.entries;
+        }
+      }
+    }
+
+    var out := BranchedBetree(GenericDisk.Pointer.Some(replacementAddr), newDiskView, newBranchDiskView);
+    assert out.diskView.WF();
+ 
     out
   }
 
-  // TODO(jialin): branches should be its own state machine
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
-    && v.branched.Valid() // can reduce to ValidTree(buffers[compactStart..compactEnd]) if needed
     && step.WF()
     && step.InternalCompactStep?
-    
-    // allocation validation
     && lbl.InternalAllocationsLabel?
-    && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr} + step.compactedBranch.ReachableAddrs()
+    && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr} + step.newBranch.Representation()
     && step.path.branched == v.branched
 
     // Subway Eat Fresh!
-    && v.branched.IsFresh(lbl.addrs)
-    && var tmp := step.path.Substitute(
-        InsertCompactReplacement(step.path.Target(), step.compactStart, step.compactEnd, step.compactedBranch.root, step.targetAddr),
-        step.pathAddrs).BuildTightTree();
-
-    && v'.branched == tmp.(branches := v.branched.branches.AddBranch(step.compactedBranch))
+    && v.branched.IsFresh(Set(step.pathAddrs) + {step.targetAddr} + step.newBranch.Representation())
+    && var replacement := InsertCompactReplacement(step.path.Target(), step.start, step.end, step.newBranch, step.targetAddr);
+    && v'.branched == step.path.Substitute(replacement, step.pathAddrs).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
@@ -1063,10 +1017,9 @@ module BranchedBetreeMod
     | InternalFlushMemtableStep(newRootAddr: Address, branch: LB.LinkedBranch)
       // targetAddr is the fresh address at which new node is placed, and targetChildAddr is for the new child receiving the flush
       // pathAddrs is the new addresses to place all its ancestors, used in substitution
-    | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs, bufferStart: nat)
-    | InternalPruneBranchesStep(rootToRemove: Address)
+    | InternalFlushStep(path: Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: PathAddrs, branchGCCount: nat)
       // targetAddr is the fresh address at which compacted node is placed. pathAddrs is the new addresses to place all its ancestors
-    | InternalCompactStep(path: Path, compactStart: nat, compactEnd: nat, compactedBranch: LB.LinkedBranch, targetAddr: Address, pathAddrs: PathAddrs)
+    | InternalCompactStep(path: Path, start: nat, end: nat, newBranch: LB.LinkedBranch, targetAddr: Address, pathAddrs: PathAddrs)
     | InternalNoOpStep()
   {
     predicate WF() {
@@ -1074,8 +1027,8 @@ module BranchedBetreeMod
         case QueryStep(receipt) => receipt.Valid()
         case InternalFlushMemtableStep(_, branch) => 
           && branch.Acyclic()
-          && branch.AllKeysInRange()
           && branch.TightDiskView()
+        //   && branch.AllKeysInRange()
         case InternalSplitStep(path, request, newAddrs, pathAddrs) =>
           && path.Valid()
           && path.depth == |pathAddrs|
@@ -1091,16 +1044,20 @@ module BranchedBetreeMod
           && SeqHasUniqueElems(pathAddrs)
           && {targetAddr, targetChildAddr} !! Set(pathAddrs)
           && targetAddr != targetChildAddr
-        case InternalCompactStep(path, compactStart, compactEnd, compactedBranch, targetAddr, pathAddrs) =>
+          && path.Target().Root().flushedOffsets.AdvanceIndex(childIdx, path.Target().Root().branches.Length()).CanCollectGarbage(branchGCCount)
+        case InternalCompactStep(path, start, end, newBranch, targetAddr, pathAddrs) =>
           && path.Valid()
           && path.depth == |pathAddrs|
           && SeqHasUniqueElems(pathAddrs)
           && {targetAddr} !! Set(pathAddrs)
-          && compactedBranch.Acyclic()
-          && compactedBranch.TightDiskView()
-          && compactedBranch.AllKeysInRange()
-          && compactStart < compactEnd <= |path.Target().Root().buffers|
-          && path.Target().Root().CompactedBranchEquivalence(path.branched.branches, compactStart, compactEnd, compactedBranch)
+          && newBranch.Acyclic()
+          && newBranch.TightDiskView()
+          // && newBranch.AllKeysInRange()
+          && {targetAddr} !! newBranch.Representation()
+          && var node := path.Target().Root();
+          && var offsetMap := node.MakeOffsetMap().Decrement(start);
+          && start < end <= node.branches.Length()
+          && node.branches.Slice(start, end).QueryFilteredEquiv(path.Target().branchDiskView, offsetMap, newBranch)
         case _ => true
       }
     }
@@ -1117,7 +1074,6 @@ module BranchedBetreeMod
       case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
       case InternalFlushMemtableStep(_,_) => InternalFlushMemtable(v, v', lbl, step)
       case InternalFlushStep(_, _, _, _, _, _) => InternalFlush(v, v', lbl, step)
-      case InternalPruneBranchesStep(_) => InternalPruneBranches(v, v', lbl, step)
       case InternalCompactStep(_, _, _, _, _, _) => InternalCompact(v, v', lbl, step)
       case InternalNoOpStep() => InternalNoOp(v, v', lbl)
     }

@@ -276,7 +276,7 @@ module LinkedBranchMod {
       result
     }
 
-    function ReachableAddrs() : set<Address>
+    function Representation() : set<Address>
       requires Acyclic()
     {
       ReachableAddrsUsingRanking(TheRanking())
@@ -301,7 +301,7 @@ module LinkedBranchMod {
 
     predicate TightDiskView()
     {
-      && (Acyclic() ==> (ReachableAddrs() == diskView.Representation()))
+      && (Acyclic() ==> (Representation() == diskView.Representation()))
     }
 
     function QueryInternal(key: Key, ranking: Ranking) : (msg: Message)
@@ -321,7 +321,6 @@ module LinkedBranchMod {
     }
 
     function Query(key: Key) : (msg: Message)
-      // requires WF()
       requires Acyclic()
       ensures I().WF() ==> msg == I().Query(key)
     {

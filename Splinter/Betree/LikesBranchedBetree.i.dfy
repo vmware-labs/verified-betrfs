@@ -29,7 +29,7 @@ module LikesBranchedBetreeMod
   import opened Maps
   // import TotalKMMapMod
   // import opened SplitRequestMod
-  import opened BranchesMod
+  import opened BranchSeq
   import opened Multisets
   import opened LikesMod
 

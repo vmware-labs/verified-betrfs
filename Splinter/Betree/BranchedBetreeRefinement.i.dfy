@@ -9,7 +9,7 @@ module BranchedBetreeRefinement {
   import LinkedBetree = LinkedBetreeMod
   import opened BranchedBetreeMod
   import opened LinkedBranchMod
-  import opened BranchesMod
+  import opened BranchSeq
   import opened StampedMod
   import opened DomainMod
   import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
