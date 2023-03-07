@@ -60,18 +60,18 @@ impl JournalRecord {
         if self.message_seq.seq_start <= boundary_lsn { None } else { *self.prior_rec }
     }
 
-    pub open spec fn can_crop_head_records(self, boundary_lsn: LSN, depth: int) -> bool
+    pub open spec fn can_crop_head_records(self, boundary_lsn: LSN, depth: nat) -> bool
     decreases (depth, 0nat)
     {
         &&& self.valid(boundary_lsn)
-        &&& if depth <= 0 { true }
+        &&& if depth == 0 { true }
             else {
                 Self::opt_rec_can_crop_head_records(
-                    self.cropped_prior(boundary_lsn), boundary_lsn, depth-1)
+                    self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat)
             }
     }
 
-    pub open spec fn opt_rec_can_crop_head_records(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: int) -> bool
+    pub open spec fn opt_rec_can_crop_head_records(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat) -> bool
         decreases (depth, 1nat)
     {
         match ojr {
@@ -80,19 +80,19 @@ impl JournalRecord {
         }
     }
 
-    pub open spec fn crop_head_records(self, boundary_lsn: LSN, depth: int) -> Option<JournalRecord>
+    pub open spec fn crop_head_records(self, boundary_lsn: LSN, depth: nat) -> Option<JournalRecord>
     recommends
         self.can_crop_head_records(boundary_lsn, depth)
     decreases (depth, 0nat)
     {
         // < case can't happen, but need to mention it to get termination.
-        if depth <= 0 { Some(self) }
+        if depth == 0 { Some(self) }
         else {
-            Self::opt_rec_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, depth-1)
+            Self::opt_rec_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat)
         }
     }
 
-    pub open spec fn opt_rec_crop_head_records(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: int) -> Option<JournalRecord>
+    pub open spec fn opt_rec_crop_head_records(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat) -> Option<JournalRecord>
     recommends
         Self::opt_rec_can_crop_head_records(ojr, boundary_lsn, depth)
     // ensures no longer available; becomes lemma?
@@ -104,9 +104,9 @@ impl JournalRecord {
         }
     }
 
-    pub proof fn can_crop_monotonic(self, boundary_lsn: LSN, depth: int, more: int)
+    pub proof fn can_crop_monotonic(self, boundary_lsn: LSN, depth: nat, more: nat)
     requires
-        0 <= depth < more,
+        depth < more,
         self.can_crop_head_records(boundary_lsn, more)
     ensures
         self.can_crop_head_records(boundary_lsn, depth)
@@ -116,20 +116,20 @@ impl JournalRecord {
 //            assert(!(depth<=0));
 //            assert(self.can_crop_head_records(boundary_lsn, more));
 //          // TODO(chris): not enough fuel for mutual recursion? This is painful wrt dafny
-            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, more-1));
+            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (more-1) as nat));
 //           assert(self.cropped_prior(boundary_lsn).is_Some());
 //            let prev = self.cropped_prior(boundary_lsn).get_Some_0();
 //            assert(prev.can_crop_head_records(boundary_lsn, more-1));
-            self.cropped_prior(boundary_lsn).get_Some_0().can_crop_monotonic(boundary_lsn, depth-1, more-1);
+            self.cropped_prior(boundary_lsn).get_Some_0().can_crop_monotonic(boundary_lsn, (depth-1) as nat, (more-1) as nat);
 //          // TODO(chris): not enough fuel for mutual recursion? This is painful wrt dafny
-            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, depth-1));
+            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat));
 //            assert(self.can_crop_head_records(boundary_lsn, depth));
 //        } else {
 //            assert(self.can_crop_head_records(boundary_lsn, depth));
         }
     }
 
-    pub proof fn can_crop_more_yields_some(self, boundary_lsn: LSN, depth: int, more: int)
+    pub proof fn can_crop_more_yields_some(self, boundary_lsn: LSN, depth: nat, more: nat)
     requires
         0 <= depth < more,
         self.can_crop_head_records(boundary_lsn, more)
@@ -141,13 +141,14 @@ impl JournalRecord {
         self.can_crop_monotonic(boundary_lsn, depth, more);
         if 0<depth {
 //          // TODO(chris): not enough fuel for mutual recursion? This is painful wrt dafny
-            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, more-1));
-            self.cropped_prior(boundary_lsn).get_Some_0().can_crop_more_yields_some(boundary_lsn, depth-1, more-1);
+            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (more-1) as nat));
+            self.cropped_prior(boundary_lsn).get_Some_0().can_crop_more_yields_some(boundary_lsn, (depth-1) as nat, (more-1) as nat);
 //          // TODO(chris): not enough fuel for mutual recursion? This is painful wrt dafny
-            assert(Self::opt_rec_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, depth-1).is_Some());
+            assert(Self::opt_rec_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat).is_Some());
         }
     }
         
+    //pub open spec fn message_seq_after_crop(self, boundary_lsn: LSN, depth: nat) : MsgHistory
 }
 
 
