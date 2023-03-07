@@ -113,7 +113,19 @@ impl JournalRecord {
     decreases depth
     {
         if 0<depth {
+//            assert(!(depth<=0));
+//            assert(self.can_crop_head_records(boundary_lsn, more));
+//          // TODO(chris): not enough fuel for mutual recursion? This is painful wrt dafny
+            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, more-1));
+//           assert(self.cropped_prior(boundary_lsn).is_Some());
+//            let prev = self.cropped_prior(boundary_lsn).get_Some_0();
+//            assert(prev.can_crop_head_records(boundary_lsn, more-1));
             self.cropped_prior(boundary_lsn).get_Some_0().can_crop_monotonic(boundary_lsn, depth-1, more-1);
+//          // TODO(chris): not enough fuel for mutual recursion? This is painful wrt dafny
+            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, depth-1));
+//            assert(self.can_crop_head_records(boundary_lsn, depth));
+//        } else {
+//            assert(self.can_crop_head_records(boundary_lsn, depth));
         }
     }
 
@@ -128,7 +140,11 @@ impl JournalRecord {
     {
         self.can_crop_monotonic(boundary_lsn, depth, more);
         if 0<depth {
+//          // TODO(chris): not enough fuel for mutual recursion? This is painful wrt dafny
+            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, more-1));
             self.cropped_prior(boundary_lsn).get_Some_0().can_crop_more_yields_some(boundary_lsn, depth-1, more-1);
+//          // TODO(chris): not enough fuel for mutual recursion? This is painful wrt dafny
+            assert(Self::opt_rec_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, depth-1).is_Some());
         }
     }
         
