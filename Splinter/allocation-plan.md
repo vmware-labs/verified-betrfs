@@ -118,9 +118,9 @@ The mini-allocator state for the Journal (as an example) is:
 
 2. An AU leaves the FreeSet and enters the AllocatedAUs.
 
-  If we freeze here, entries in this set are returned to the
-  free set, since their AUs are not reachable from the repr graph.
-  In the refinement, these pages are treated as free.
+    If we freeze here, entries in this set are returned to the
+    free set, since their AUs are not reachable from the repr graph.
+    In the refinement, these pages are treated as free.
 
 3. An AU leaves AllocatedAUs and enters JRC when its first page is linked
     into the ephemeral journal graph and thus into the ephemeral superblock
