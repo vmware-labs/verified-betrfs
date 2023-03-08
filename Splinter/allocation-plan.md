@@ -100,6 +100,50 @@ covered by an AU-level refcount.
   (moved out of FS) but not yet linked into the data structure (and therefore
   recoverable by the JRC).
 
+## Phases of mini-allocation
+
+The mini-allocator state for the Journal (as an example) is:
+
+  * AllocatedAUs: a set of AUs removed from the free set but still unused.
+  (It would be safe to return any of these to the free set.)
+
+  * UsunedPages: a set of pages that each belong to an AU that's part of
+  the Journal RC (because another page from the AU is in the Journal Repr),
+  but this page is unused.
+
+1. The ephemeral Journal has some chain of pages in its repr; the projection
+  of those pages is reflected in JRC. AllocatedAUs and UnusedPages is empty.
+
+2. An AU leaves the FreeSet and enters the AllocatedAUs.
+
+  If we freeze here, entries in this set are returned to the
+  free set, since their AUs are not reachable from the repr graph.
+  In the refinement, these pages are treated as free.
+
+3. An AU leaves AllocatedAUs and enters JRC when its first page is linked
+  into the ephemeral journal graph and thus into the ephemeral superblock
+  graph.
+
+  Its remaining pages are recorded in UnusedPages. The semantics
+  of this set are that these pages are known by invariant
+
+  * to not be linked into the persistent, in-flight, or ephemeral view of any
+    non-journal data structure: because that's true of every page in every AU
+    in JRC.
+
+  * to not be linked into the persistent, in-flight, or ephemeral view of the
+    journal: because that's the new invariant associated with UnusedPages.
+
+  If we freeze here, persist, and crash, any pages in UnusedPages
+  become "stranded": they're not part of a repr, but the AU they belong to
+  is claimed by the journal. Such pages will stay in this state until
+  the containing AU eventually dropped when the persistent state is dropped
+  as a new frozen state lands.
+
+4. When the journal needs another page, the mini-allocator removes the page
+   from UnusedPages in the same atomic step that links the page into the
+   journal's repr.
+
 # Recovery
 
 The first step of recovery is to reconstruct all of the partitions.
