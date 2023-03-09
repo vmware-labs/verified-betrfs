@@ -7,7 +7,7 @@ use state_machines_macros::state_machine;
 use crate::pervasive::prelude::*;
 use crate::coordination_layer::StampedMap_v::LSN;
 use crate::coordination_layer::MsgHistory_v::*;
-use crate::coordination_layer::AbstractJournal_v::*;
+//use crate::coordination_layer::AbstractJournal_v::*;
 
 verus! {
 
@@ -21,13 +21,10 @@ impl JournalRecord {
     decreases self
     {
         &&& self.message_seq.wf()
-        &&& match *self.prior_rec {
-            Some(rec) => {
-                &&& rec.wf()
-                &&& rec.message_seq.can_concat(self.message_seq)
+        &&& self.prior_rec.is_Some() ==> {
+            &&& self.prior_rec.value().wf()
+            &&& self.prior_rec.value().message_seq.can_concat(self.message_seq)
             }
-            None => true
-        }
     }
 
     pub open spec fn valid(self, boundary_lsn: LSN) -> bool
@@ -37,8 +34,8 @@ impl JournalRecord {
         &&& boundary_lsn < self.message_seq.seq_end
         &&& {
             ||| self.message_seq.can_discard_to(boundary_lsn)
-            ||| match *self.prior_rec { Some(rec) => rec.valid(boundary_lsn), _ => false }
-        }
+            ||| self.prior_rec.is_Some() && self.prior_rec.value().valid(boundary_lsn)
+            }
     }
 
     pub proof fn new_boundary_valid(self, old_lsn: LSN, new_lsn: LSN)
@@ -148,9 +145,71 @@ impl JournalRecord {
         }
     }
         
-    //pub open spec fn message_seq_after_crop(self, boundary_lsn: LSN, depth: nat) : MsgHistory
-}
+    pub open spec fn message_seq_after_crop(self, boundary_lsn: LSN, depth: nat) -> MsgHistory
+    recommends
+        self.valid(boundary_lsn),
+        self.can_crop_head_records(boundary_lsn, depth+1)
+    {
+        //self.can_crop_more_yields_some(boundary_lsn, depth, depth+1);
+        self.crop_head_records(boundary_lsn, depth).get_Some_0().message_seq.maybe_discard_old(boundary_lsn)
+    }
 
+    pub proof fn option_new_boundary_valid(ojr: Option<JournalRecord>, old_lsn: LSN, new_lsn: LSN)
+    requires
+    // jonh has decided that the match form is harder to read than the dafny
+    // test-and-dereference style. In dafny form, ==> vs && is sitting right in
+    // front of you. In match form, they're encoded in the 'default' arm of the
+    // match. Misreading that has caused me some headaches already.
+//        match ojr { Some(rec) => rec.valid(old_lsn), _ => true }
+        ojr.is_Some() ==> ojr.value().valid(old_lsn),
+        ojr.is_Some() ==> new_lsn < ojr.value().message_seq.seq_end,
+        old_lsn <= new_lsn,
+    ensures
+        ojr.is_Some() ==> ojr.value().valid(new_lsn)
+    {
+        if ojr.is_Some() {
+            ojr.value().new_boundary_valid(old_lsn, new_lsn);
+        }
+    }
+
+    pub open spec fn discard_old_journal_rec(ojr: Option<JournalRecord>, lsn: LSN) -> (out: Option<JournalRecord>)
+    recommends
+        ojr.is_Some() ==> ojr.value().valid(lsn),
+    // ensures
+    //     out.is_Some() ==> out.value().valid(lsn),
+    decreases ojr
+    {
+        match ojr {
+            None => None,
+            Some(rec) => {
+                let prior_rec =
+                    if rec.message_seq.seq_start <= lsn { None }
+                    else { Self::discard_old_journal_rec(*rec.prior_rec, lsn) };
+                Some(JournalRecord{message_seq: rec.message_seq, prior_rec: Box::new(prior_rec)})
+            }
+        }
+    }
+
+    pub proof fn discard_old_journal_rec_ensures(ojr: Option<JournalRecord>, lsn: LSN, out: Option<JournalRecord>)
+    requires
+        ojr.is_Some() ==> ojr.value().valid(lsn),
+        out == Self::discard_old_journal_rec(ojr, lsn),
+    ensures
+        out.is_Some() ==> out.value().valid(lsn),
+    decreases ojr
+    {
+        match ojr {
+            None => { }
+            Some(rec) => {
+                if rec.message_seq.seq_start <= lsn { }
+                else {
+                    let pr = Self::discard_old_journal_rec(*rec.prior_rec, lsn);
+                    Self::discard_old_journal_rec_ensures(*rec.prior_rec, lsn, pr);
+                }
+            }
+        }
+    }
+}
 
 // A TruncatedJournal is some long chain but which we ignore beyond the boundaryLSN
 // (because we have a map telling us that part of the history).
@@ -165,23 +224,227 @@ pub struct TruncatedJournal {
 }
 
 impl TruncatedJournal {
+    pub open spec fn prior(self) -> TruncatedJournal
+    recommends
+        self.freshest_rec.is_Some(),
+    {
+        TruncatedJournal{
+            boundary_lsn: self.boundary_lsn,
+            freshest_rec: *self.freshest_rec.value().prior_rec }
+    }
 
+    pub open spec fn wf(self) -> bool {
+        &&& self.freshest_rec.is_Some() ==> self.freshest_rec.value().valid(self.boundary_lsn)
+    }
+
+    pub open spec fn is_empty(self) -> bool
+    recommends
+        self.wf(),
+    {
+        self.freshest_rec.is_None()
+    }
+
+    pub open spec fn seq_end(self) -> LSN
+    recommends
+        self.wf(),
+    {
+        if self.freshest_rec.is_Some() { self.freshest_rec.value().message_seq.seq_end }
+        else { self.boundary_lsn }
+    }
+
+    pub open spec fn seq_start(self) -> LSN
+    recommends
+        self.wf(),
+    {
+        self.boundary_lsn
+    }
+
+    pub open spec fn can_discard_to(self, lsn: LSN) -> bool
+    recommends
+        self.wf(),
+    {
+        self.seq_start() <= lsn <= self.seq_end()
+    }
+
+    pub open spec fn discard_old_defn(self, lsn: LSN) -> (out: TruncatedJournal)
+    recommends
+        self.wf(),
+        self.can_discard_to(lsn),
+    //ensures out.wf()
+    {
+        TruncatedJournal{
+            boundary_lsn: lsn,
+            freshest_rec: JournalRecord::discard_old_journal_rec(self.freshest_rec, lsn)}
+    }
+
+    // msgs appears as the (boundary-truncated) contents of the i'th entry in the
+    // chain of JournalRecords
+    pub open spec fn has_messages_at_depth(self, msgs: MsgHistory, depth: nat) -> bool
+    recommends
+        self.wf(),
+        msgs.wf(),
+    {
+        &&& self.freshest_rec.is_Some()
+        &&& self.freshest_rec.value().can_crop_head_records(self.boundary_lsn, depth+1)
+        &&& self.freshest_rec.value().message_seq_after_crop(self.boundary_lsn, depth) == msgs
+    }
+
+    pub open spec fn append_record(self, msgs: MsgHistory) -> (out: TruncatedJournal)
+    recommends
+        self.wf(),
+        msgs.wf(),
+    {
+        TruncatedJournal{
+            freshest_rec: Some(JournalRecord{message_seq: msgs, prior_rec: Box::new(self.freshest_rec)}),
+            ..self}
+    }
+
+    pub open spec fn crop_head_records(self, depth: nat) -> (out: TruncatedJournal)
+    recommends
+        JournalRecord::opt_rec_can_crop_head_records(self.freshest_rec, self.boundary_lsn, depth),
+    // ensures out.wf()
+    {
+        TruncatedJournal{
+            freshest_rec: JournalRecord::opt_rec_crop_head_records(self.freshest_rec, self.boundary_lsn, depth),
+            ..self}
+    }
+
+    pub open spec fn freeze_for_commit(self, frozen_journal: TruncatedJournal, depth: nat) -> bool
+    recommends
+        self.wf(),
+    {
+        &&& frozen_journal.wf()
+        &&& JournalRecord::opt_rec_can_crop_head_records(self.freshest_rec, self.boundary_lsn, depth)
+        &&& self.crop_head_records(depth).can_discard_to(frozen_journal.boundary_lsn)
+        &&& frozen_journal == self.crop_head_records(depth).discard_old_defn(frozen_journal.boundary_lsn)
+    }
 }
 
-#[is_variant]
-enum TransitionLabel
+pub open spec fn mkfs() -> (out: TruncatedJournal)
+// ensures out.wf()
 {
-    ReadForRecoveryLabel{messages: MsgHistory},
-    FreezeForCommitLabel{frozenJournal: TruncatedJournal},
-    QueryEndLsnLabel{endLsn: LSN},
-    PutLabel{messages: MsgHistory},
-    DiscardOldLabel{startLsn: LSN, requireEnd: LSN},
-    InternalLabel{},   // Local No-op label
+    TruncatedJournal{boundary_lsn: 0, freshest_rec: None}
 }
+
+/////////////////////////////////////////////////////////////////////////////
+// EphemeralJournal is an TruncatedJournal with an extra unmarshalledTail
+// field to represent entries we have collected in memory but not marhsalled
+// into a JournalRecord yet.
+
 
 state_machine!{ PagedJournal {
     fields {
+        pub truncated_journal: TruncatedJournal,
+        pub unmarshalled_tail: MsgHistory,
     }
+
+    pub open spec fn wf(self) -> bool {
+        &&& self.truncated_journal.wf()
+        &&& self.unmarshalled_tail.wf()
+        &&& self.truncated_journal.seq_end() == self.unmarshalled_tail.seq_start
+    }
+
+    pub open spec fn seq_start(self) -> LSN
+    recommends
+        self.wf(),
+    {
+        self.truncated_journal.boundary_lsn
+    }
+
+    pub open spec fn seq_end(self) -> LSN
+    recommends
+        self.wf(),
+    {
+        self.unmarshalled_tail.seq_end
+    }
+
+    #[is_variant]
+    pub enum Label
+    {
+        ReadForRecovery{messages: MsgHistory},
+        FreezeForCommit{frozen_journal: TruncatedJournal},
+        QueryEndLsn{end_lsn: LSN},
+        Put{messages: MsgHistory},
+        DiscardOld{start_lsn: LSN, require_end: LSN},
+        Internal{},   // Local No-op label
+    }
+
+    transition!{ read_for_recovery(lbl: Label, depth: nat) {
+        require lbl.is_ReadForRecovery();
+        require lbl.get_ReadForRecovery_messages().wf();
+        require pre.truncated_journal.has_messages_at_depth(lbl.get_ReadForRecovery_messages(), depth);  // label subseq appears in committed pages
+
+        // We don't bother allowing you to "find" the msgs in unmarshalledTail,
+        // since the includes operation is only relevant during recovery time,
+        // during which the unmarshalledTail is kept empty.
+        // (I mean, we COULD allow Puts during that time, but why bother?)
+    }}
+
+    transition!{ freeze_for_commit(lbl: Label, depth: nat) {
+        require lbl.is_FreezeForCommit();
+        require pre.truncated_journal.freeze_for_commit(lbl.get_FreezeForCommit_frozen_journal(), depth);
+    }}
+
+    transition!{ observe_fresh_journal(lbl: Label) {
+        require lbl.is_QueryEndLsn();
+        require lbl.get_QueryEndLsn_end_lsn() == pre.seq_end();
+    }}
+
+    /////////////////////////////////////////////////////////////////////////////
+    // implementation of JournalIfc obligations
+
+    transition!{ put(lbl: Label) {
+        require lbl.is_Put();
+        let msgs = lbl.get_Put_messages();
+        require msgs.wf();
+        require msgs.seq_start == pre.seq_end();
+        update unmarshalled_tail = pre.unmarshalled_tail.concat(msgs);
+    }}
+    
+    transition!{ discard_old(lbl: Label) {
+        require lbl.is_DiscardOld();
+        let lsn = lbl.get_DiscardOld_start_lsn();
+        require pre.seq_start() <= lsn <= pre.seq_end();
+        require pre.seq_end() == lbl.get_DiscardOld_require_end();
+        // in the Dafny version, we had an outer if around the updates. Here we have to duplicate
+        // the if condition.
+        update unmarshalled_tail =
+            if pre.unmarshalled_tail.seq_start <= lsn
+            { pre.unmarshalled_tail.discard_old(lsn) }
+            else { pre.unmarshalled_tail };
+        update truncated_journal =
+            if pre.unmarshalled_tail.seq_start <= lsn
+            { TruncatedJournal{boundary_lsn: lsn, freshest_rec: None} }
+            else { pre.truncated_journal.discard_old_defn(lsn) };
+
+      // NB the then-branches above are goofy -- the policy we've expressed in
+      // CoordinationSystem only ever calls this function from
+      // CommitComplete, when we've learned that some part of the journal
+      // is persistent. No way that could gobble up any of the unmarshalled
+      // tail! But we write it out for completeness. (But could have simply
+      // excluded this case via an enabling condition, and the lower
+      // refinement layers wouldn't have objected.)
+    }}
+
+    transition!{ internal_journal_marshal(lbl: Label, cut: LSN) {
+        require lbl.is_Internal();
+        require pre.unmarshalled_tail.seq_start < cut;  // Can't marshall nothing.
+        require pre.unmarshalled_tail.can_discard_to(cut);
+        let marshalled_msgs = pre.unmarshalled_tail.discard_recent(cut);
+        update truncated_journal = pre.truncated_journal.append_record(marshalled_msgs);
+        update unmarshalled_tail = pre.unmarshalled_tail.discard_old(cut);
+    }}
+
+    transition!{ internal_journal_noop(lbl: Label) {
+        require lbl.is_Internal();
+    }}
+
+    init!{ initialize(truncated_journal: TruncatedJournal) {
+            require truncated_journal.wf();
+            init truncated_journal = truncated_journal;
+            init unmarshalled_tail = MsgHistory::empty_history_at(truncated_journal.seq_end());
+    }}
+
 }}   // state_machine
 
 }   // verus
