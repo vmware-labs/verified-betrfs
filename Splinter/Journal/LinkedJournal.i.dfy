@@ -284,7 +284,7 @@ module LinkedJournal {
     }
 
     function AppendRecord(addr: Address, msgs: MsgHistory) : (out: TruncatedJournal)
-      requires addr !in diskView.entries
+      // requires addr !in diskView.entries
     {
       this.(
         diskView := diskView.(entries := diskView.entries[addr := JournalRecord(msgs, freshestRec)]),
@@ -419,17 +419,27 @@ module LinkedJournal {
       )
   }
 
-  predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN, addr: Address)
+  predicate InternalJournalMarshalAlloc(v: Variables, addr: Address)
+  {
+    && v.UnusedAddr(addr)
+  }
+
+  predicate InternalJournalMarshalRecord(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN, addr: Address)
   {
     && lbl.InternalLabel?
     && v.WF()
     && v.unmarshalledTail.seqStart < cut // Can't marshall nothing.
     && v.unmarshalledTail.CanDiscardTo(cut)
-    && v.UnusedAddr(addr)
     && var marshalledMsgs := v.unmarshalledTail.DiscardRecent(cut);
     && v' == Variables(
       v.truncatedJournal.AppendRecord(addr, marshalledMsgs),
       v.unmarshalledTail.DiscardOld(cut))
+  }
+
+  predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, cut: LSN, addr: Address)
+  {
+    && InternalJournalMarshalAlloc(v, addr)
+    && InternalJournalMarshalRecord(v, v', lbl, cut, addr)
   }
 
   predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)

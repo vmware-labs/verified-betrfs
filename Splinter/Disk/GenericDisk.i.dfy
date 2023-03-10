@@ -23,6 +23,11 @@ module GenericDisk {
     predicate WF() {
       && page < PageCount()
     }
+
+    function FirstPage() : Address
+    {
+      Address(au, 0)
+    }
   }
   //////////////////////////////////////////////////////////////////
 

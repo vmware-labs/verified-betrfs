@@ -241,7 +241,7 @@ module LikesBranchedBetreeMod
       case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
       case InternalFlushMemtableStep(_,_) => InternalFlushMemtable(v, v', lbl, step)
       case InternalFlushStep(_, _, _, _, _, _) => InternalFlush(v, v', lbl, step)
-      // case InternalCompactStep(_, _, _, _, _, _) => InternalCompact(v, v', lbl, step)
+      case InternalCompactStep(_, _, _, _, _, _) => InternalCompact(v, v', lbl, step)
       case _ => NoOp(v, v', lbl, step)
     }
   }

@@ -211,7 +211,8 @@ module LikesJournal {
     && lbl.allocs == [addr]
     && v.WF()
     // State transition
-    && LinkedJournal.InternalJournalMarshal(v.journal, v'.journal, lbl.I(), cut, addr)
+    && addr !in v.lsnAddrIndex.Values
+    && LinkedJournal.InternalJournalMarshalRecord(v.journal, v'.journal, lbl.I(), cut, addr)
     && v' == v.(
       journal := v'.journal,
       lsnAddrIndex := lsnAddrIndexAppendRecord(v.lsnAddrIndex, v.journal.unmarshalledTail.DiscardRecent(cut), addr)
