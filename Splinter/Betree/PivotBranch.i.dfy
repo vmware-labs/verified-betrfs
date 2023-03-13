@@ -10,8 +10,8 @@ include "../../lib/Base/total_order_impl.i.dfy"
 include "Buffer.i.dfy"
 include "Domain.i.dfy"
 
-// Jumping straight to PivotBranch (instead of PagedBranch) since branch is immutable 
-// have its operations are simple enough, no need for a pure algebraic layer
+// Jumping straight to PivotBranch (instead of PagedBranch) since operations are simple enough
+// no need for a pure algebraic layer
 
 module PivotBranchMod {
   import opened Maps
@@ -48,7 +48,7 @@ module PivotBranchMod {
 
   // Bounded pivots are not necessary here, bounds are required for the B-epsilon node as clone
   // requires knowing the exact bound for prefix extraction. Any key transformation should be done
-  // before querying key value in the data store (pivot branch).
+  // before querying key msg in the data store (pivot branch).
   datatype Node = Index(pivots: seq<Key>, children: seq<Node>) | Leaf(keys: seq<Key>, msgs: seq<Message>)
   {
     function AllKeys() : set<Key>
@@ -187,5 +187,198 @@ module PivotBranchMod {
     {
       && Flatten() == b
     }
+
+    // Mutable operations 
+
+    // Grow
+    function Grow() : (out: Node)
+    {
+      Index([], [this])
+    }
+
+    lemma GrowPreservesWF()
+      requires WF()
+      requires AllKeys() != {}
+      ensures Grow().WF()
+    {
+      assert Keys.IsStrictlySorted([]) by {
+        Keys.reveal_IsStrictlySorted();
+      }
+    }
+
+    lemma GrowPreservesAllKeys()
+      requires WF()
+      ensures Grow().AllKeys() == AllKeys()
+    {
+      assert forall key :: key in AllKeys() ==> key in Grow().children[0].AllKeys();
+    }
+
+    lemma InterpretationDelegation(key: Key)
+      requires WF()
+      requires Index?
+      requires key in children[Keys.LargestLte(pivots, key)+1].I().mapp
+      ensures MapsTo(I().mapp, key, children[Keys.LargestLte(pivots, key)+1].I().mapp[key])
+    {
+      var interp := I().mapp;
+      assert key in children[Keys.LargestLte(pivots, key)+1].AllKeys();
+      assert key in AllKeys();
+      assert key in interp;
+    }
+
+    lemma GrowPreservesI()
+      requires WF()
+      requires AllKeys() != {}
+      ensures Grow().WF()
+      ensures Grow().I() == I()
+    {
+      var interp := I().mapp;
+      GrowPreservesWF();
+      var ginterp := Grow().I().mapp;
+      
+      forall key | key in interp
+        ensures key in ginterp && ginterp[key] == interp[key]
+      {
+        Grow().InterpretationDelegation(key);
+      }
+    }
+
+    // Insert 
+    function InsertLeaf(key: Key, msg: Message) : (result: Node)
+    requires Leaf?
+    requires WF()
+    ensures result.Leaf?
+    ensures result.WF()
+    {
+      var llte := Keys.LargestLte(keys, key);
+      if 0 <= llte && keys[llte] == key then
+        Leaf(keys, msgs[llte := msg])
+      else
+        Keys.strictlySortedInsert(keys, key, llte);
+        // TODO: ensures from this lemma can't be asserted?
+        Leaf(insert(keys, key, llte+1), insert(msgs, msg, llte+1))
+    }
+
+    lemma {:timeLimitMultiplier 2} InsertLeafIsCorrect(key: Key, msg: Message)
+    requires Leaf?
+    requires WF()
+    ensures InsertLeaf(key, msg).I() == Buffer(I().mapp[key := msg])
+    ensures InsertLeaf(key, msg).AllKeys() == AllKeys() + {key}
+    {
+      var result := InsertLeaf(key, msg);
+      var llte := Keys.LargestLte(keys, key);
+      if 0 <= llte && keys[llte] == key {
+        assert result.I() == Buffer(I().mapp[key := msg]);
+      } else {
+        Keys.reveal_IsStrictlySorted();
+        forall k | k in result.I().mapp.Keys
+          ensures k in I().mapp.Keys + {key}
+        {
+          var kpos := IndexOf(result.keys, k);
+          if llte + 1 < kpos {
+            assert k == keys[kpos-1];
+          }
+        }
+        forall k | k in result.AllKeys()
+          ensures k in AllKeys() + {key}
+        {
+          var i :| 0 <= i < |result.keys| && result.keys[i] == k;
+          if i < llte+1 {
+          } else if i == llte+1 {
+          } else {
+            assert k == keys[i-1];
+          }
+        }
+      }
+    }
+
+    // Split 
+
+    predicate SplitLeaf(leftleaf: Node, rightleaf: Node, pivot: Key)
+    {
+      && Leaf?
+      && leftleaf.Leaf?
+      && rightleaf.Leaf?
+      && 0 < |leftleaf.keys| == |leftleaf.msgs|
+      && 0 < |rightleaf.keys| == |rightleaf.msgs|
+      && keys == leftleaf.keys + rightleaf.keys
+      && msgs == leftleaf.msgs + rightleaf.msgs
+      && Keys.lt(Last(leftleaf.keys), pivot)
+      && Keys.lte(pivot, rightleaf.keys[0])
+    }
+
+    lemma SplitLeafPreservesWF(leftleaf: Node, rightleaf: Node, pivot: Key)
+      requires WF()
+      requires SplitLeaf(leftleaf, rightleaf, pivot)
+      ensures leftleaf.WF()
+      ensures rightleaf.WF()
+    {
+      Keys.StrictlySortedSubsequence(keys, 0, |leftleaf.keys|);
+      Keys.StrictlySortedSubsequence(keys, |leftleaf.keys|, |keys|);
+      assert Keys.IsStrictlySorted(keys[|leftleaf.keys|..|keys|]);
+      assert rightleaf.keys == keys[|leftleaf.keys|..|keys|];
+    }
+
+    function SubIndex(from: int, to: int) : (result : Node)
+    requires Index?
+    requires |children| == |pivots| + 1
+    requires 0 <= from < to <= |children|
+    {
+      Index(pivots[from..to-1], children[from..to])
+    }
+
+    lemma SubIndexPreservesWF(from: int, to: int)
+      requires WF()
+      requires Index?
+      requires 0 <= from < to <= |children|
+      ensures SubIndex(from, to).WF()
+    {
+      Keys.StrictlySortedSubsequence(pivots, from, to-1);
+      var subindex := SubIndex(from, to);
+      forall i | 0 <= i < to - from - 1
+        ensures subindex.AllKeysBelowBound(i)
+      {
+        assert AllKeysBelowBound(from + i);
+      }
+      forall i | 0 < i < to - from
+        ensures subindex.AllKeysAboveBound(i)
+      {
+        assert AllKeysAboveBound(from + i);
+      }
+      assert |subindex.pivots| == |subindex.children| - 1;
+      assert subindex.WF();
+    }
+
+    predicate SplitIndex(leftindex: Node, rightindex: Node, pivot: Key)
+    {
+      && Index?
+      && leftindex.Index?
+      && rightindex.Index?
+      && 0 < |leftindex.children| < |children|
+      && |children| == |pivots| + 1
+
+      && leftindex == SubIndex(0, |leftindex.children|)
+      && rightindex == SubIndex(|leftindex.children|, |children|)
+      && (forall key :: key in Last(leftindex.children).AllKeys() ==> Keys.lt(key, pivot))
+      && (forall key :: key in rightindex.children[0].AllKeys() ==> Keys.lte(pivot, key))
+      && pivot == pivots[|leftindex.pivots|]
+    }
+
+    lemma SplitIndexPreservesWF(leftindex: Node, rightindex: Node, pivot: Key)
+      requires WF()
+      requires SplitIndex(leftindex, rightindex, pivot)
+      ensures leftindex.WF()
+      ensures rightindex.WF()
+    {
+      SubIndexPreservesWF(0, |leftindex.children|);
+      SubIndexPreservesWF(|leftindex.children|, |children|);
+    }
+
+    predicate SplitNode(leftnode: Node, rightnode: Node, pivot: Key)
+    {
+      || SplitLeaf(leftnode, rightnode, pivot)
+      || SplitIndex(leftnode, rightnode, pivot)
+    }
+
+    // TODO: add in SplitIndexInterpretation, SplitNodeInterpretation
   }
 }
