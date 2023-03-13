@@ -69,11 +69,17 @@ module MiniAllocatorMod {
     }
   }
 
-  // maybe we track a set of au
-
   datatype MiniAllocator = MiniAllocator(allocs: map<AU, PageAllocator>) {
     predicate WF() {
       && forall au | au in allocs :: allocs[au].WF(au)
+    }
+
+    function AddAUs(aus: set<AU>) : MiniAllocator
+      requires aus !! allocs.Keys
+    {
+      var newAllocs := map addr | addr in aus + allocs.Keys :: 
+        if addr in allocs then allocs[addr] else PageAllocator({}, {});
+      MiniAllocator(newAllocs)
     }
 
     // mini allocator's job is to allocate freespace and manage reserved pages
@@ -115,15 +121,9 @@ module MiniAllocatorMod {
       MiniAllocator(allocs[addr.au := result])
     }
 
-    // remove all unobserved AUs from the mini allocator
-    // function PruneUnObserved() : MiniAllocator
-    // {
-    //   MiniAllocator(MapRestrict(allocs, set au | au in allocs && !allocs[au].NoObservedPages()))
-    // }
-
     // remove AUs from the mini allocator
     function Prune(aus: set<AU>) : MiniAllocator
-      requires forall au | au in aus :: au in allocs && CanRemove(au)
+      requires forall au | au in aus :: CanRemove(au)
     {
       MiniAllocator(MapRestrict(allocs, set au | au in allocs.Keys - aus))
     }

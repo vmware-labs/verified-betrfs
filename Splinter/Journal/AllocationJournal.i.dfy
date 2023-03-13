@@ -42,6 +42,7 @@ module AllocationJournal {
   {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
+      && (InternalLabel? ==> forall addr | addr in allocs :: addr.WF())
     }
 
     function I(): LikesJournal.TransitionLabel {
@@ -78,8 +79,6 @@ module AllocationJournal {
 
     // lsnIndex.Values (repr) 
     // (expand au => each page addr) >= lsnIndex.Values
-
-    // expand AU to 1 for each page
   }
 
   // group a couple definitions together
@@ -92,68 +91,63 @@ module AllocationJournal {
     )
   }
 
-  // function DiscardOldAndGarbageCollect(tj: TruncatedJournal, newBdy: LSN, keep: set<AU>) : TruncatedJournal
-  //   requires tj.WF()
-  //   requires tj.diskView.boundaryLSN <= newBdy
-  // {
-  //   var newEntries := MapRestrict(tj.diskView.entries, keep); 
-  //   var newDiskView := LikesJournal.DiskView(newBdy, newEntries);
-  //   if tj.SeqEnd() == newBdy
-  //   then LikesJournal.TruncatedJournal(None, newDiskView)
-  //   else LikesJournal.TruncatedJournal(tj.freshestRec, newDiskView)
-  // }
+  predicate InternalMiniAllocatorFill(v: Variables, v': Variables, lbl: TransitionLabel, aus: set<AU>)
+  {
+    && lbl.WF()
+    && lbl.InternalLabel?
+    && |lbl.allocs| == |aus| * GenericDisk.PageCount()
+    && (forall addr | addr in lbl.allocs :: addr.au in aus)
+    && aus !! v.miniAllocator.allocs.Keys
+    && v' == v.(
+      miniAllocator := v.miniAllocator.AddAUs(aus)
+    )
+  }
 
-//   // Update lsnAUIndex with by discarding lsn's strictly smaller than bdy
-//   function {:opaque} lsnAUIndexDiscardUpTo(lsnAUIndex: map<LSN, Address>, bdy: LSN) : (out: map<LSN, Address>)
-//     ensures IsSubMap(out, lsnAUIndex)
-//     ensures forall k | k in out :: bdy <= k
-//     ensures forall k | k in lsnAUIndex &&  bdy <= k :: k in out
-//   {
-//     map x: LSN | x in lsnAUIndex && bdy <= x :: lsnAUIndex[x]
-//   }
+  predicate InternalMiniAllocatorPrune(v: Variables, v': Variables, lbl: TransitionLabel, aus: set<AU>)
+  {
+    && lbl.WF()
+    && lbl.InternalLabel?
+    && |lbl.allocs| == |aus| * GenericDisk.PageCount()
+    && (forall addr | addr in lbl.allocs :: addr.au in aus)
+    && (forall au | au in aus :: v.miniAllocator.CanRemove(au))
+    && v' == v.(
+      miniAllocator := v.miniAllocator.Prune(aus)
+    )
+  }
+
+  // Update lsnAUIndex with by discarding lsn's strictly smaller than bdy
+  function {:opaque} lsnAUIndexDiscardUpTo(lsnAUIndex: map<LSN, AU>, bdy: LSN) : (out: map<LSN, AU>)
+    ensures IsSubMap(out, lsnAUIndex)
+    ensures forall k | k in out :: bdy <= k
+    ensures forall k | k in lsnAUIndex &&  bdy <= k :: k in out
+  {
+    map x: LSN | x in lsnAUIndex && bdy <= x :: lsnAUIndex[x]
+  }
+
+  function GetFirstAU(lsnAUIndex: map<LSN, AU>, newFirst: LSN) : AU
+  {
+    if newFirst in lsnAUIndex 
+    then lsnAUIndex[newFirst] // actual definition
+    else var arbitrary :| true; arbitrary // not reachable due to invariant
+  }
 
   predicate DiscardOld(v: Variables, v': Variables, lbl: TransitionLabel) 
   {
     // Enabling conditions
     && lbl.DiscardOldLabel?
     && LikesJournal.Next(v.journal,  v'.journal, lbl.I())
-
+    
+    && var newlsnAUIndex := lsnAUIndexDiscardUpTo(v.lsnAUIndex, lbl.startLsn);
+    && var discardedAUs := newlsnAUIndex.Values - v.lsnAUIndex.Values;
     && v' == v.(
-      journal := v'.journal
+      journal := v'.journal,
+      lsnAUIndex := newlsnAUIndex,
+      first := GetFirstAU(v.lsnAUIndex, lbl.startLsn), // then case is always reached based on invariant
+      miniAllocator := v.miniAllocator.UnobserveAUs(discardedAUs * v.miniAllocator.allocs.Keys) // note that these AUs refine to free (in the frozen freeset)
     )
-
-    // journal unobserve everything at once
-//     && v.journal.WF()
-//     && v.journal.truncatedJournal.diskView.Acyclic()
-//     && v.journal.SeqStart() <= lbl.startLsn <= v.journal.SeqEnd()
-//     && lbl.requireEnd == v.journal.SeqEnd()
-//     && v.journal.truncatedJournal.CanDiscardTo(lbl.startLsn)
-//     // Define v'
-//     // Addrs to delete from likes are pages that are between the old LSN and new LSN,
-//     // excluding the page containing the new LSN boundary
-//     && var lsnAUIndex' := lsnAUIndexDiscardUpTo(v.lsnAUIndex, lbl.startLsn);
-//     && var keepAddrs := lsnAUIndex'.Values;
-//     && var unrefAddrs := v.lsnAUIndex.Values - keepAddrs;
-
-//     && v' == v.(
-//       journal := LikesJournal.Variables(
-//         DiscardOldAndGarbageCollect(v.journal.truncatedJournal, lbl.startLsn, keepAddrs),
-//         if v.journal.unmarshalledTail.seqStart <= lbl.startLsn
-//         then v.journal.unmarshalledTail.DiscardOld(lbl.startLsn)
-//         else v.journal.unmarshalledTail
-//       ),
-//       lsnAUIndex := lsnAUIndex'
-//   )
   }
 
-//   // Give SingletonIndex map comprehension a named trigger
-//   predicate InRange(start: LSN, end: LSN, lsn: LSN) {
-//     start <= lsn < end
-//   }
-
-// TODO(jonh): XXX remove opaque & ensures
-  function /*{:opaque}*/ SingletonIndex(start: LSN, end: LSN, value: AU) : (index: map<LSN, AU>)
-//    ensures start<end ==> start in index
+  function SingletonIndex(start: LSN, end: LSN, value: AU) : (index: map<LSN, AU>)
   {
     // Redundant domain predicate to provide both a trigger and a finite-set heuristic.
     map x: LSN | /*InRange(start, end, x) &&*/ start <= x < end :: value
@@ -180,11 +174,13 @@ module AllocationJournal {
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     // Enabling conditions
+    && lbl.WF()
     && step.InternalJournalMarshalStep?
     // relying on this to restrict cache/diskview behavior, should not reach into lsnAddrIndex
     && LikesJournal.NextStep(v.journal, v'.journal, lbl.I(), step.I()) 
     // state transition
     && v.miniAllocator.CanAllocate(step.addr)
+
     && var discardmsgs := v.journal.journal.unmarshalledTail.DiscardRecent(step.cut);
     && v' == v.(
       journal := v'.journal,
@@ -287,6 +283,8 @@ module AllocationJournal {
     | PutStep()
     | DiscardOldStep()
     | InternalJournalMarshalStep(cut: LSN, addr: Address)
+    | InternalMiniAllocatorFillStep(aus: set<AU>)
+    | InternalMiniAllocatorPruneStep(aus: set<AU>)
     | InternalNoOpStep()
   {
     function I() : LikesJournal.Step
@@ -298,7 +296,7 @@ module AllocationJournal {
         case PutStep() => LikesJournal.PutStep()
         case DiscardOldStep() => LikesJournal.DiscardOldStep()
         case InternalJournalMarshalStep(cut, addr) => LikesJournal.InternalJournalMarshalStep(cut, addr)
-        case InternalNoOpStep() => LikesJournal.InternalNoOpStep()
+        case _ =>  LikesJournal.InternalNoOpStep()
       }
     }
   }
@@ -308,6 +306,8 @@ module AllocationJournal {
     match step {
       case DiscardOldStep() => DiscardOld(v, v', lbl)
       case InternalJournalMarshalStep(_, _) => InternalJournalMarshal(v, v', lbl, step)
+      case InternalMiniAllocatorFillStep(aus) => InternalMiniAllocatorFill(v, v', lbl, aus)
+      case InternalMiniAllocatorPruneStep(aus) => InternalMiniAllocatorPrune(v, v', lbl, aus)
       case InternalNoOpStep() => InternalNoOp(v, v', lbl)
       case _ => OnlyAdvanceLikesJournal(v, v', lbl, step)
     }
