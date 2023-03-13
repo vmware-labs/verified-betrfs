@@ -179,7 +179,7 @@ module AllocationJournal {
     // relying on this to restrict cache/diskview behavior, should not reach into lsnAddrIndex
     && LikesJournal.NextStep(v.journal, v'.journal, lbl.I(), step.I()) 
     // state transition
-    && v.miniAllocator.CanAllocate(step.addr)
+    && v.miniAllocator.MaxAddr(step.addr)
 
     && var discardmsgs := v.journal.journal.unmarshalledTail.DiscardRecent(step.cut);
     && v' == v.(
@@ -287,7 +287,7 @@ module AllocationJournal {
   predicate Init(v: Variables, journal: TruncatedJournal, first: AU)
   {
     && LikesJournal.Init(v.journal, journal) 
-    && v == Variables(v.journal, BuildLsnAUIndex(journal, first), first, MiniAllocator(map[]))
+    && v == Variables(v.journal, BuildLsnAUIndex(journal, first), first, MiniAllocator(map[], None))
   }
 
   datatype Step =

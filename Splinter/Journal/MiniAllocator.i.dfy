@@ -5,8 +5,9 @@ include "../Disk/GenericDisk.i.dfy"
 include "../../lib/Base/Maps.i.dfy"
 
 module MiniAllocatorMod {
-  import opened GenericDisk
   import opened Maps
+  import opened Options
+  import opened GenericDisk
 
   datatype PageAllocator = PageAllocator(
     observed: set<Address>, // pages reachable from superblock Repr
@@ -29,6 +30,12 @@ module MiniAllocatorMod {
       requires FreeAddr(addrs)
     {
       PageAllocator(observed, reserved + addrs)
+    }
+
+    predicate MaxFreeAddr(addr: Address) 
+      requires FreeAddr({addr})
+    {
+      forall freeAddr | FreeAddr({freeAddr}) :: MaxAddr(addr, freeAddr) == addr
     }
 
     // done with / returns a stack reference 
@@ -69,9 +76,10 @@ module MiniAllocatorMod {
     }
   }
 
-  datatype MiniAllocator = MiniAllocator(allocs: map<AU, PageAllocator>) {
+  datatype MiniAllocator = MiniAllocator(allocs: map<AU, PageAllocator>, curr: Option<AU>) {
     predicate WF() {
       && forall au | au in allocs :: allocs[au].WF(au)
+      && curr.Some? ==> curr.value in allocs
     }
 
     function AddAUs(aus: set<AU>) : MiniAllocator
@@ -79,7 +87,7 @@ module MiniAllocatorMod {
     {
       var newAllocs := map addr | addr in aus + allocs.Keys :: 
         if addr in allocs then allocs[addr] else PageAllocator({}, {});
-      MiniAllocator(newAllocs)
+      MiniAllocator(newAllocs, curr)
     }
 
     // mini allocator's job is to allocate freespace and manage reserved pages
@@ -88,10 +96,6 @@ module MiniAllocatorMod {
       && au in allocs
       && allocs[au].NoOutstandingRefs() 
     }
-
-    // predicate FreeOnRemove(au: AU) {
-    //   && alloc.observed == {}
-    // }
 
     // a set of AUs that belongs to the frozen freeset
     function NotObservedAUs() : set<AU>
@@ -104,28 +108,48 @@ module MiniAllocatorMod {
     function UnobserveAUs(aus: set<AU>) : MiniAllocator
       requires aus <= allocs.Keys
     {
+      var newcurr := if curr.Some? && curr.value in aus then None else curr;
       MiniAllocator(map au | au in allocs :: 
-        if au in aus then allocs[au].UnobserveAll() else allocs[au])
+        if au in aus then allocs[au].UnobserveAll() else allocs[au], newcurr)
     }
 
     predicate CanAllocate(addr: Address)
     {
       && addr.au in allocs
       && allocs[addr.au].FreeAddr({addr})
+      && (curr.Some? ==> addr.au == curr.value)
+      && (curr.None? ==> allocs[addr.au].NoObservedPages() && allocs[addr.au].NoOutstandingRefs())
+    }
+
+    predicate MaxAddr(addr: Address) 
+    {
+      && CanAllocate(addr)
+      && var alloc := if curr.None? then allocs[addr.au] else allocs[curr.value];
+      && alloc.MaxFreeAddr(addr)
     }
 
     function AllocateAndObserve(addr: Address) : MiniAllocator
       requires CanAllocate(addr)
     {
       var result := allocs[addr.au].Observe({addr});
-      MiniAllocator(allocs[addr.au := result])
+      MiniAllocator(allocs[addr.au := result], Some(addr.au))
     }
+
+    // no longer allocating from the current AU unless all of its pages become free
+    // probably don't need this as journal unobserve all pages at once
+    // function SealCurrentAU() : MiniAllocator
+    //   requires curr.Some?
+    // {
+    //   MiniAllocator(allocs, None)
+    // }
 
     // remove AUs from the mini allocator
     function Prune(aus: set<AU>) : MiniAllocator
       requires forall au | au in aus :: CanRemove(au)
     {
-      MiniAllocator(MapRestrict(allocs, set au | au in allocs.Keys - aus))
+      var newAllocs := MapRestrict(allocs, set au | au in allocs.Keys - aus);
+      var newCurr := if curr.Some? && curr.value in aus then None else curr;
+      MiniAllocator(newAllocs, newCurr)
     }
 
     // All AUs = freeset AUs !! RC AUs !! Unobserved MiniAllocator AUs

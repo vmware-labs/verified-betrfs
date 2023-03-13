@@ -29,6 +29,14 @@ module GenericDisk {
       Address(au, 0)
     }
   }
+
+  function MaxAddr(a: Address, b: Address) : Address
+	{
+    if a.au < b.au then b
+    else if a.au > b.au then a
+    else if a.page <= b.page then b else a
+	}
+
   //////////////////////////////////////////////////////////////////
 
   type Block(!new, ==)
