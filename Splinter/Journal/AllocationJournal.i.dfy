@@ -212,6 +212,19 @@ module AllocationJournal {
       MapUnion(BuildLsnAUIndexPageWalk(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN)), update)
   }
 
+  // inv to prove transitive ranking
+  predicate NonFirstAUPageInv(dv: DiskView, first: AU, addr: Address)
+  {
+    && addr.au != first
+    && dv.Decodable(Some(addr))
+    // NOTE: just putting down a strictly decreasing order of page links
+    && (forall page:nat | 0 < page <= addr.page :: 
+      && var newAddr := GenericDisk.Address(addr.au, page);
+      && var nextAddr := GenericDisk.Address(addr.au, page-1);
+      && dv.Decodable(Some(newAddr))
+      && dv.entries[newAddr].CroppedPrior(dv.boundaryLSN) == Some(nextAddr))
+  }
+
   // store first AU in superblock and invariant that explains this, invariant info
   lemma TransitiveRanking(dv: DiskView, root: Address, later: Address, first: AU)
     requires dv.Decodable(Some(later))
@@ -224,12 +237,13 @@ module AllocationJournal {
     ensures dv.TheRankOf(Some(root)) <= dv.TheRankOf(Some(later))
     decreases later.page
   {
+    if root == later { return; }
+
     var prior := dv.entries[later].CroppedPrior(dv.boundaryLSN);
     // TODO: prove this once we have invariants
-    assume false;
-    if prior != Some(root) {
-      TransitiveRanking(dv, root, prior.value, first);
-    }
+    assume NonFirstAUPageInv(dv, first, later);
+    // assert prior.Some?;
+    TransitiveRanking(dv, root, prior.value, first);
   }
 
   // root should be the first page of an AU, last is the last lsn in that AU
