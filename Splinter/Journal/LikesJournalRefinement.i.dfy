@@ -77,7 +77,7 @@ module LikesJournalRefinement {
   // refinement layers.
   predicate ImperativeMatchesTransitive(v: Variables)
   {
-    TransitiveLikes(v) == ImperativeLikes(v)
+    v.TransitiveLikes() == v.ImperativeLikes()
   }
 
   predicate Inv(v: Variables)
@@ -159,7 +159,7 @@ module LikesJournalRefinement {
       && dv.entries[BuildLsnAddrIndexDefn(dv, root)[lsn]].ContainsLSN(lsn)
     decreases dv.TheRankOf(root)
   {
-    reveal_SingletonIndex();
+    
     if root.Some? {
       BuildLsnAddrIndexDomainValidHelper1(dv, dv.entries[root.value].CroppedPrior(dv.boundaryLSN), tjEnd);
     }
@@ -174,7 +174,7 @@ module LikesJournalRefinement {
     ensures forall lsn :: dv.boundaryLSN <= lsn < tjEnd ==> lsn in BuildLsnAddrIndexDefn(dv, root)
     decreases dv.TheRankOf(root)
   {
-    reveal_SingletonIndex();
+    
     if root.Some? {
       var prior := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
       if prior.None? {
@@ -213,7 +213,7 @@ module LikesJournalRefinement {
   {
     reveal_IndexDomainValid();
     reveal_IndexKeysMapToValidEntries();
-    reveal_SingletonIndex();  // TODO timeout
+      // TODO timeout
     if root.Some? {
       var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
       BuildLsnAddrIndexOneStepSubmap(dv, root);
@@ -236,7 +236,7 @@ module LikesJournalRefinement {
   {
     reveal_IndexDomainValid();
     reveal_IndexKeysMapToValidEntries();
-    reveal_SingletonIndex();
+    
     var priorPtr := dv.entries[root.value].CroppedPrior(dv.boundaryLSN);
     if priorPtr.Some? {
       BuildLsnAddrIndexDomainValid(dv, priorPtr);
@@ -397,7 +397,7 @@ module LikesJournalRefinement {
   {
     reveal_IndexDomainValid();
     reveal_IndexKeysMapToValidEntries();
-    reveal_SingletonIndex();
+    
 
     if root.Some? {
       BuildLsnAddrIndexWithSubDiskProducesSubMap(small, big, small.entries[root.value].CroppedPrior(small.boundaryLSN));
@@ -461,9 +461,9 @@ module LikesJournalRefinement {
       // That's distressing! Why isn't it buried opaquely inside this lemma!?
       var begin := Mathematics.max(dv.boundaryLSN, currMsgs.seqStart);
       var update := SingletonIndex(begin, currMsgs.seqEnd, root.value);
-      assert begin in update by { reveal_SingletonIndex(); } // witness for 0 < |update|
+      assert begin in update by {  } // witness for 0 < |update|
       assert BuildLsnAddrIndexDefn(dv, root).Values == dv.Representation(root)
-        by { reveal_SingletonIndex(); }
+        by {  }
     }
   }
 
@@ -509,7 +509,7 @@ module LikesJournalRefinement {
   {
     reveal_IndexDomainValid();
     reveal_IndexKeysMapToValidEntries();
-    reveal_SingletonIndex();
+    
 
     var tj := v.journal.truncatedJournal;
     var tj' := v'.journal.truncatedJournal;

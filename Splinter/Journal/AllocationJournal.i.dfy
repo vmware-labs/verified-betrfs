@@ -14,6 +14,7 @@ module AllocationJournal {
   import opened LSNMod
   import opened Sequences
   import opened Maps
+  import LinkedJournal
   import LikesJournal
   import GenericDisk
   import Mathematics
@@ -135,8 +136,9 @@ module AllocationJournal {
   {
     // Enabling conditions
     && lbl.DiscardOldLabel?
-    && LikesJournal.Next(v.journal,  v'.journal, lbl.I())
-    
+    // fine bc discard old doesn't use lsnaddrindex as an enabling condition
+    && LikesJournal.DiscardOld(v.journal,  v'.journal, lbl.I()) 
+
     && var newlsnAUIndex := lsnAUIndexDiscardUpTo(v.lsnAUIndex, lbl.startLsn);
     && var discardedAUs := newlsnAUIndex.Values - v.lsnAUIndex.Values;
     && v' == v.(
@@ -157,15 +159,15 @@ module AllocationJournal {
   function lsnAUIndexAppendRecord(lsnAUIndex: map<LSN, AU>, msgs: MsgHistory, au: AU) : (out: map<LSN, AU>)
     requires msgs.WF()
     requires msgs.seqStart < msgs.seqEnd
-    ensures (forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in lsnAUIndex) 
-            ==> out.Values == lsnAUIndex.Values + {au}
+    ensures LikesJournal.LsnDisjoint(lsnAUIndex.Keys, msgs) ==> out.Values == lsnAUIndex.Values + {au}
   {
     // msgs is complete map from seqStart to seqEnd 
     // comprehension condition is redundant: Contains gives a trigger, <= < gives finite heuristic.
     var update := SingletonIndex(msgs.seqStart, msgs.seqEnd, au);
     var out := MapUnion(lsnAUIndex, update);
-    assert (forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in lsnAUIndex) 
+    assert LikesJournal.LsnDisjoint(lsnAUIndex.Keys, msgs)
             ==> out.Values == lsnAUIndex.Values + {au} by {
+      
       // TODO: this be broken in likesjournal too
     }
     out
@@ -174,16 +176,20 @@ module AllocationJournal {
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     // Enabling conditions
-    && lbl.WF()
     && step.InternalJournalMarshalStep?
-    // relying on this to restrict cache/diskview behavior, should not reach into lsnAddrIndex
-    && LikesJournal.NextStep(v.journal, v'.journal, lbl.I(), step.I()) 
+    && lbl.InternalLabel?
+    && lbl.allocs == [step.addr]
+    && v.WF()
     // state transition
-    && v.miniAllocator.MaxAddr(step.addr)
-
+    && v.miniAllocator.MinAddr(step.addr)
+    && LinkedJournal.InternalJournalMarshalRecord(v.journal.journal, v'.journal.journal, lbl.I().I(), step.cut, step.addr)
     && var discardmsgs := v.journal.journal.unmarshalledTail.DiscardRecent(step.cut);
     && v' == v.(
-      journal := v'.journal,
+      journal := v'.journal.(
+        journal := v'.journal.journal, // predicate updated above
+        lsnAddrIndex := LikesJournal.lsnAddrIndexAppendRecord(
+            v.journal.lsnAddrIndex, v.journal.journal.unmarshalledTail.DiscardRecent(step.cut), step.addr)
+      ),
       lsnAUIndex := lsnAUIndexAppendRecord(v.lsnAUIndex, discardmsgs, step.addr.au),
       miniAllocator := v.miniAllocator.AllocateAndObserve(step.addr)
     )
@@ -213,16 +219,17 @@ module AllocationJournal {
   }
 
   // inv to prove transitive ranking
-  predicate NonFirstAUPageInv(dv: DiskView, first: AU, addr: Address)
+  // Every page in addr.au that is before addr (except page 0) is present 
+  // in the diskview and points to the one before it.
+  predicate AUPagesLinkedTillFirstInOrder(dv: DiskView, addr: Address)
   {
-    && addr.au != first
     && dv.Decodable(Some(addr))
     // NOTE: just putting down a strictly decreasing order of page links
     && (forall page:nat | 0 < page <= addr.page :: 
       && var newAddr := GenericDisk.Address(addr.au, page);
-      && var nextAddr := GenericDisk.Address(addr.au, page-1);
+      && var priorAddr := GenericDisk.Address(addr.au, page-1);
       && dv.Decodable(Some(newAddr))
-      && dv.entries[newAddr].CroppedPrior(dv.boundaryLSN) == Some(nextAddr))
+      && dv.entries[newAddr].CroppedPrior(dv.boundaryLSN) == Some(priorAddr))
   }
 
   // store first AU in superblock and invariant that explains this, invariant info
@@ -241,7 +248,7 @@ module AllocationJournal {
 
     var prior := dv.entries[later].CroppedPrior(dv.boundaryLSN);
     // TODO: prove this once we have invariants
-    assume NonFirstAUPageInv(dv, first, later);
+    assume AUPagesLinkedTillFirstInOrder(dv, later);
     // assert prior.Some?;
     TransitiveRanking(dv, root, prior.value, first);
   }

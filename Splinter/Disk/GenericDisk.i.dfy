@@ -28,13 +28,18 @@ module GenericDisk {
     {
       Address(au, 0)
     }
+
+    function NextPage() : Address
+    {
+      Address(au, page+1)
+    }
   }
 
-  function MaxAddr(a: Address, b: Address) : Address
+  function MinAddr(a: Address, b: Address) : Address
 	{
-    if a.au < b.au then b
-    else if a.au > b.au then a
-    else if a.page <= b.page then b else a
+    if a.au < b.au then a
+    else if a.au > b.au then b
+    else if a.page <= b.page then a else b
 	}
 
   //////////////////////////////////////////////////////////////////

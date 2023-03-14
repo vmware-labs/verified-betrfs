@@ -187,12 +187,16 @@ module LikesJournal {
     map x: LSN | /*InRange(start, end, x) &&*/ start <= x < end :: value
   }
 
+  predicate LsnDisjoint(lsnIndex: set<LSN>, msgs: MsgHistory)
+  {
+    forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in lsnIndex
+  }
+
   // Update lsnAddrIndex with additional lsn's from a new record
   function lsnAddrIndexAppendRecord(lsnAddrIndex: map<LSN, Address>, msgs: MsgHistory, addr: Address) : (out: map<LSN, Address>)
     requires msgs.WF()
     requires msgs.seqStart < msgs.seqEnd
-    ensures (forall x | msgs.seqStart <= x < msgs.seqEnd :: x !in lsnAddrIndex) 
-            ==> out.Values == lsnAddrIndex.Values + {addr}
+    ensures LsnDisjoint(lsnAddrIndex.Keys, msgs) ==> out.Values == lsnAddrIndex.Values + {addr}
   {
     // msgs is complete map from seqStart to seqEnd 
     // comprehension condition is redundant: Contains gives a trigger, <= < gives finite heuristic.

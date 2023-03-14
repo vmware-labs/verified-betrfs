@@ -32,10 +32,19 @@ module MiniAllocatorMod {
       PageAllocator(observed, reserved + addrs)
     }
 
-    predicate MaxFreeAddr(addr: Address) 
+    predicate MinFreeAddr(addr: Address) 
       requires FreeAddr({addr})
     {
-      forall freeAddr | FreeAddr({freeAddr}) :: MaxAddr(addr, freeAddr) == addr
+      forall freeAddr | FreeAddr({freeAddr}) :: MinAddr(addr, freeAddr) == addr
+    }
+
+    lemma MinFreeAddrZeroLemma(addr: Address)
+      requires FreeAddr({addr})
+      requires MinFreeAddr(addr)
+      requires observed + reserved == {}
+      ensures addr.page == 0
+    {
+      assert FreeAddr({Address(addr.au, 0)});
     }
 
     // done with / returns a stack reference 
@@ -121,11 +130,11 @@ module MiniAllocatorMod {
       && (curr.None? ==> allocs[addr.au].NoObservedPages() && allocs[addr.au].NoOutstandingRefs())
     }
 
-    predicate MaxAddr(addr: Address) 
+    predicate MinAddr(addr: Address) 
     {
       && CanAllocate(addr)
       && var alloc := if curr.None? then allocs[addr.au] else allocs[curr.value];
-      && alloc.MaxFreeAddr(addr)
+      && alloc.MinFreeAddr(addr)
     }
 
     function AllocateAndObserve(addr: Address) : MiniAllocator
