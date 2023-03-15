@@ -818,7 +818,7 @@ module BranchedBetreeMod
     BranchedBetree(Pointer.Some(newRootAddr), dv', bdv')
   }
 
-  predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalFlushMemtableTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
     && step.WF()
@@ -827,12 +827,16 @@ module BranchedBetreeMod
     // Allocation validation
     && lbl.addrs == {step.newRootAddr} + step.branch.Representation()
     && (forall key :: step.branch.Query(key) == v.memtable.buffer.Query(key)) // TODO: revisit
-
-    // Subway Eat Fresh!
-    && v.branched.IsFresh({step.newRootAddr})
-    && v.branched.IsFresh(step.branch.Representation())
     && v'.branched == InsertInternalFlushMemtableReplacement(v.branched, step.branch, step.newRootAddr).BuildTightTree()
     && v'.memtable == v.memtable.Drain()
+  }
+
+
+  predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && InternalFlushMemtableTree(v, v', lbl, step)
+    && v.branched.IsFresh({step.newRootAddr})
+    && v.branched.IsFresh(step.branch.Representation())
   }
 
   function InsertGrowReplacement(branched: BranchedBetree, newRootAddr:Address) : (out: BranchedBetree)
@@ -845,20 +849,24 @@ module BranchedBetreeMod
     BranchedBetree(Pointer.Some(newRootAddr), dv', branched.branchDiskView)
   }
 
-  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalGrowTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step) 
   {
     && v.WF()
     && step.WF()
     && lbl.InternalAllocationsLabel?
     && step.InternalGrowStep?
     && lbl.addrs == {step.newRootAddr}
-    // Subway Eat Fresh!
-    && v.branched.IsFresh({step.newRootAddr})
     && v'.branched == InsertGrowReplacement(v.branched, step.newRootAddr)
     && v'.memtable == v.memtable  // UNCHANGED
   }
 
-  predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && InternalGrowTree(v, v', lbl, step)
+    && v.branched.IsFresh({step.newRootAddr}) // Subway Eat Fresh!
+  }
+
+  predicate InternalSplitTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
     && lbl.InternalAllocationsLabel?
@@ -866,14 +874,18 @@ module BranchedBetreeMod
     && lbl.addrs == Set(step.pathAddrs) + step.newAddrs.Repr()
     && step.WF()
     && step.path.branched == v.branched
-    && v.branched.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
-
     && step.path.Target().CanSplitParent(step.request)
     && var replacement := step.path.Target().SplitParent(step.request, step.newAddrs);
     && assert step.path.CanSubstitute(replacement, step.pathAddrs) by {
         step.path.Target().SplitParentCanSubstitute(step.request, step.newAddrs);}
     && v'.branched == step.path.Substitute(replacement, step.pathAddrs).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
+  }
+
+  predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.branched.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
+    && InternalSplitTree(v, v', lbl, step)
   }
 
   function InsertFlushReplacement(target: BranchedBetree, childIdx:nat, 

@@ -98,6 +98,11 @@ module LikesBranchedBetreeMod
     predicate WF() {
       && branchedVars.WF()
     }
+
+    predicate IsFresh(addrs: set<Address>) {
+      && addrs !! M.Set(betreeLikes)
+      && addrs !! M.Set(branchLikes)
+    }
   }
 
   datatype TransitionLabel =
@@ -132,9 +137,8 @@ module LikesBranchedBetreeMod
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    && lbl.InternalAllocationsLabel?
-    && step.InternalGrowStep?
-    && BB.NextStep(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && BB.InternalGrowTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && v.IsFresh({step.newRootAddr})  // Subway Eat Fresh!
     && v' == v.(
       branchedVars := v'.branchedVars, // admit relational update above
       betreeLikes := v.betreeLikes + multiset{step.newRootAddr}
@@ -143,9 +147,9 @@ module LikesBranchedBetreeMod
 
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    && lbl.InternalAllocationsLabel?
-    && step.InternalFlushMemtableStep?
-    && BB.NextStep(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && BB.InternalFlushMemtableTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && v.IsFresh({step.newRootAddr})
+    && v.IsFresh(step.branch.Representation())
     && var oldRoot := if v.branchedVars.branched.HasRoot() then multiset{v.branchedVars.branched.root.value} else multiset{};
     && v' == v.(
       branchedVars := v'.branchedVars, // admit relational update above
@@ -156,9 +160,8 @@ module LikesBranchedBetreeMod
 
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    && lbl.InternalAllocationsLabel?
-    && step.InternalSplitStep?
-    && BB.NextStep(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && BB.InternalSplitTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && v.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
     && var newBetreeLikes := multiset(Set(step.pathAddrs) + step.newAddrs.Repr());
     && var discardBetreeLikes := 
         multiset(step.path.AddrsOnPath() + {step.path.Target().ChildAtIdx(step.request.childIdx).root.value});
