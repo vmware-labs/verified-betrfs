@@ -11,21 +11,14 @@ include "BranchedBetree.i.dfy"
 
 module LikesBranchedBetreeMod
 {
-  // import opened BoundedPivotsLib
-  // import opened DomainMod
   import GenericDisk
-  // import opened LSNMod
-  // import opened MemtableMod
-  // import opened MsgHistoryMod
-  // import opened Options
+  import opened LSNMod
+  import opened MsgHistoryMod
   import opened Sequences
   import opened StampedMod
-  // import opened Upperbounded_Lexicographic_Byte_Order_Impl
-  // import opened Upperbounded_Lexicographic_Byte_Order_Impl.Ord
-  // import opened KeyType
-  // import opened ValueMessage
+  import opened KeyType
+  import opened ValueMessage
   import opened Maps
-  // import TotalKMMapMod
   import opened SplitRequestMod
   import opened BranchSeqMod
   import opened Multisets
@@ -108,16 +101,33 @@ module LikesBranchedBetreeMod
   }
 
   datatype TransitionLabel =
+      QueryLabel(endLsn: LSN, key: Key, value: Value)
+    | PutLabel(puts: MsgHistory)
+    | QueryEndLsnLabel(endLsn: LSN)
+    | FreezeAsLabel(branched: StampedBetree)
     | InternalAllocationsLabel(addrs: set<Address>)
     | InternalLabel()   // Local No-op label
   {
     function I() : BB.TransitionLabel
     {
       match this {
+        case QueryLabel(endLsn, key, value) => BB.QueryLabel(endLsn, key, value)
+        case PutLabel(puts) => BB.PutLabel(puts)
+        case QueryEndLsnLabel(endLsn) => BB.QueryEndLsnLabel(endLsn)
+        case FreezeAsLabel(branched) => BB.FreezeAsLabel(branched)
         case InternalAllocationsLabel(addrs) => BB.InternalAllocationsLabel(addrs)
         case _ => BB.InternalLabel
       }
     }
+  }
+
+  // group a couple definitions together
+  predicate OnlyAdvanceBranchedVars(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && BB.NextStep(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && v' == v.(
+      branchedVars := v'.branchedVars // admit relational update above
+    )
   }
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -224,12 +234,14 @@ module LikesBranchedBetreeMod
         case QueryEndLsnStep() => BB.QueryEndLsnStep
         case FreezeAsStep() => BB.FreezeAsStep()
         case InternalGrowStep(newRootAddr) => BB.InternalGrowStep(newRootAddr)
+        case InternalSplitStep(path, request, newAddrs, pathAddrs)
+          => BB.InternalSplitStep(path, request, newAddrs, pathAddrs)
         case InternalFlushMemtableStep(newRootAddr, branch) => BB.InternalFlushMemtableStep(newRootAddr, branch)
         case InternalFlushStep(path, childIdx, targetAddr, targetChildAddr, pathAddrs, branchGCCount) 
           => BB.InternalFlushStep(path, childIdx, targetAddr, targetChildAddr, pathAddrs, branchGCCount)
         case InternalCompactStep(path, start, end, newBranch, targetAddr, pathAddrs) 
           => BB.InternalCompactStep(path, start, end, newBranch, targetAddr, pathAddrs) 
-        case _ => BB.InternalNoOpStep
+        case InternalNoOpStep() => BB.InternalNoOpStep
       }
     }
   }
@@ -237,12 +249,16 @@ module LikesBranchedBetreeMod
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     match step {
+      case QueryStep(_) => OnlyAdvanceBranchedVars(v, v', lbl, step)
+      case PutStep() => OnlyAdvanceBranchedVars(v, v', lbl, step)
+      case QueryEndLsnStep() => OnlyAdvanceBranchedVars(v, v', lbl, step)
+      case FreezeAsStep() => OnlyAdvanceBranchedVars(v, v', lbl, step)
       case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
       case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
       case InternalFlushMemtableStep(_,_) => InternalFlushMemtable(v, v', lbl, step)
       case InternalFlushStep(_, _, _, _, _, _) => InternalFlush(v, v', lbl, step)
       case InternalCompactStep(_, _, _, _, _, _) => InternalCompact(v, v', lbl, step)
-      case _ => NoOp(v, v', lbl, step)
+      case InternalNoOpStep() => NoOp(v, v', lbl, step)
     }
   }
 

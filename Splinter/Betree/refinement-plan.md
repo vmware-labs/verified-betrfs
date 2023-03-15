@@ -79,3 +79,20 @@ structure on disk (via maintenance and use of in-memory index).
     * flushedOffsets index; buffers flushed without mutation
 
     * Adds in-memory refcount indices for refs to betrees, branches
+
+
+* AllocationBranchedBetree
+
+Goal: Lift page-level reference counts into AU-level reference counts
+
+    * Two DiskViews: BetreeNodes and a forest-of-Branches DiskView
+
+    * child pivot table (finite), each is an Address
+
+    * BufferStack is seq<Address> (from LinkedBufferStack)
+
+    * flushedOffsets index; buffers flushed without mutation
+
+    * Adds in-memory refcount indices for AU-refs to betrees, branches
+
+    * Adds MiniAllocator for tracking reserved pages for branches.
