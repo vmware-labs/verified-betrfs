@@ -976,9 +976,6 @@ module BranchedBetreeMod
     requires newBranch.Acyclic()
     requires newBranch.TightDiskView()
     requires {replacementAddr} !! newBranch.Representation()
-    requires target.IsFresh({replacementAddr} + newBranch.Representation())
-
-    ensures target.diskView.IsSubsetOf(out.diskView)
     ensures out.diskView.entries.Keys == target.diskView.entries.Keys + {replacementAddr}
     ensures out.WF()   // prereq to MyDomain()
     ensures out.HasRoot() && out.Root().MyDomain() == target.Root().MyDomain()
