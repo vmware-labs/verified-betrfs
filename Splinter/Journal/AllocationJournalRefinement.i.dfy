@@ -140,8 +140,79 @@ module AllocationJournalRefinment {
     }
   }
 
+  lemma DiscardOldRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires DiscardOld(v, v', lbl)
+    ensures L.DiscardOld(I(v), I(v'), lbl.I())
+    ensures LR.Inv(v'.journal)
+  {
+    assert L.NextStep(I(v), I(v'), lbl.I(), L.DiscardOldStep);
+    LR.InvNext(I(v), I(v'), lbl.I());
+  }
+
+  lemma DiscardOldInv(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires LR.Inv(v'.journal)
+    requires DiscardOld(v, v', lbl)
+    ensures Inv(v')
+  {
+    assert v'.WF();
+
+    // first in lsnAUIndex.Values
+
+    assume false;
+    //   && v.WF()
+    // && LR.Inv(v.journal)
+    // && AddrIndexConsistentWithAUIndex(v.journal.lsnAddrIndex, v.lsnAUIndex)
+    // && JournalPagesNotFree(v.journal.lsnAddrIndex.Values, v.miniAllocator)
+    // && MiniAllocatorFollowfreshestRec(GetTj(v).freshestRec, v.miniAllocator)
+  }
+
   lemma InitRefines()
   {
 
+  }
+
+  lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Inv(v)
+    requires Next(v, v', lbl)
+    ensures Inv(v')
+    ensures LikesJournal.Next(I(v), I(v'), lbl.I())
+  {
+    assert Inv(v);
+    // InvNext(v, v', lbl);
+    var step: Step :| NextStep(v, v', lbl, step);
+    match step {
+      // case ReadForRecoveryStep(depth) => {
+      //   assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
+      // }
+      // case FreezeForCommitStep(depth) => {
+      //   assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
+      // } 
+      // case ObserveFreshJournalStep() => {
+      //   assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
+      // } 
+      // case PutStep() => {
+      //   assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
+      // }
+      // case DiscardOldStep() => {
+      //   DiscardOldStepRefines(v, v', lbl, step);
+      //   assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
+      // }
+      case InternalJournalMarshalStep(cut, addr) => {
+        assert InternalJournalMarshal(v, v', lbl, step);
+        InternalJournalMarshalRefines(v, v', lbl, step);
+        assert LikesJournal.NextStep(I(v), I(v'), lbl.I(), step.I());
+        // assert LR.Inv(v'.journal);
+        InternalJournalMarshalInv(v, v', lbl, step);
+        // assert Inv(v');
+      }
+      // case InternalNoOpStep() => {
+      //   assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
+      // }
+      case _ => {
+        assume false;
+      }
+    }
   }
 }
