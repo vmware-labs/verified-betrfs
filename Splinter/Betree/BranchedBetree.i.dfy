@@ -941,9 +941,7 @@ module BranchedBetreeMod
     BranchedBetree(Pointer.Some(targetAddr), dv', target.branchDiskView)
   }
 
-  // Flush is responsible for 1. flush branch to child 2. update the active branch range for that child 
-  // 3. truncate inactive branches and shift active range when possible
-  predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalFlushTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
     && step.WF()
@@ -957,11 +955,17 @@ module BranchedBetreeMod
     && root.OccupiedChildIndex(step.childIdx)  // the downstream child must exist
     && var replacement := InsertFlushReplacement(step.path.Target(), step.childIdx, step.targetAddr, step.targetChildAddr, step.branchGCCount); // meow
     && step.path.CanSubstitute(replacement, step.pathAddrs)
-    
     // Subway Eat Fresh!
-    && v.branched.IsFresh({step.targetAddr, step.targetChildAddr} + Set(step.pathAddrs))
     && v'.branched == step.path.Substitute(replacement, step.pathAddrs).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
+  }
+
+  // Flush is responsible for 1. flush branch to child 2. update the active branch range for that child 
+  // 3. truncate inactive branches and shift active range when possible
+  predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && InternalFlushTree(v, v', lbl, step)
+    && v.branched.IsFresh({step.targetAddr, step.targetChildAddr} + Set(step.pathAddrs))
   }
 
   function InsertCompactReplacement(target: BranchedBetree, start: nat, end: nat, 
@@ -1002,7 +1006,7 @@ module BranchedBetreeMod
     out
   }
 
-  predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalCompactTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
     && step.WF()
@@ -1010,12 +1014,15 @@ module BranchedBetreeMod
     && lbl.InternalAllocationsLabel?
     && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr} + step.newBranch.Representation()
     && step.path.branched == v.branched
-
-    // Subway Eat Fresh!
-    && v.branched.IsFresh(Set(step.pathAddrs) + {step.targetAddr} + step.newBranch.Representation())
     && var replacement := InsertCompactReplacement(step.path.Target(), step.start, step.end, step.newBranch, step.targetAddr);
     && v'.branched == step.path.Substitute(replacement, step.pathAddrs).BuildTightTree()
     && v'.memtable == v.memtable  // UNCHANGED
+  }
+
+  predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && InternalCompactTree(v, v', lbl, step)
+    && v.branched.IsFresh(Set(step.pathAddrs) + {step.targetAddr} + step.newBranch.Representation())
   }
 
   predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)

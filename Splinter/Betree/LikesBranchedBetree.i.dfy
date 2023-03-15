@@ -174,9 +174,8 @@ module LikesBranchedBetreeMod
 
   predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    && lbl.InternalAllocationsLabel?
-    && step.InternalFlushStep?
-    && BB.NextStep(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && BB.InternalFlushTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && v.IsFresh({step.targetAddr, step.targetChildAddr} + Set(step.pathAddrs))
     && var target := step.path.Target();
     && var root := target.Root();
     && var newflushedOffsets := root.flushedOffsets.AdvanceIndex(step.childIdx, root.branches.Length());
@@ -197,9 +196,8 @@ module LikesBranchedBetreeMod
 
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    && lbl.InternalAllocationsLabel?
-    && step.InternalCompactStep?
-    && BB.NextStep(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && BB.InternalCompactTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && v.IsFresh(Set(step.pathAddrs) + {step.targetAddr} + step.newBranch.Representation())
     && var newBetreeLikes := multiset(Set(step.pathAddrs) + {step.targetAddr});
     && var discardBetreeLikes := multiset(step.path.AddrsOnPath());
     && var newBranchLikes := multiset{step.newBranch.root};
