@@ -258,11 +258,17 @@ module AllocationJournal {
     decreases later.page
   {
     if root == later { return; }
-
     var prior := dv.entries[later].CroppedPrior(dv.boundaryLSN);
+
     // TODO: prove this once we have invariants
+    // we can prove this as part of our invariants, but can we actually bring that here?
     assume AUPagesLinkedTillFirstInOrder(dv, later);
-    // assert prior.Some?;
+
+    // assert prior.value.NextPage() == later;
+    var priorAddr := GenericDisk.Address(later.au, later.page-1);
+    assert priorAddr.NextPage() == later;
+    assert Some(priorAddr) == prior;
+
     TransitiveRanking(dv, root, prior.value, first);
   }
 
