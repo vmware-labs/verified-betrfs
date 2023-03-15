@@ -73,6 +73,8 @@ module AllocationJournal {
   {
     predicate WF() {
       && journal.WF()
+      && miniAllocator.WF()
+      && first in lsnAUIndex.Values
     }
 
     // LikesJournal.lsnIndex(lsn).au == lsnAUAddrIndex(lsn)
@@ -85,6 +87,7 @@ module AllocationJournal {
   // group a couple definitions together
   predicate OnlyAdvanceLikesJournal(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && v.WF()
     && (step.ReadForRecoveryStep? || step.FreezeForCommitStep? || step.ObserveFreshJournalStep? || step.PutStep?)
     && LikesJournal.NextStep(v.journal, v'.journal, lbl.I(), step.I())
     && v' == v.(
@@ -94,6 +97,7 @@ module AllocationJournal {
 
   predicate InternalMiniAllocatorFill(v: Variables, v': Variables, lbl: TransitionLabel, aus: set<AU>)
   {
+    && v.WF()
     && lbl.WF()
     && lbl.InternalLabel?
     && |lbl.allocs| == |aus| * GenericDisk.PageCount()
@@ -106,6 +110,7 @@ module AllocationJournal {
 
   predicate InternalMiniAllocatorPrune(v: Variables, v': Variables, lbl: TransitionLabel, aus: set<AU>)
   {
+    && v.WF()
     && lbl.WF()
     && lbl.InternalLabel?
     && |lbl.allocs| == |aus| * GenericDisk.PageCount()
@@ -134,6 +139,7 @@ module AllocationJournal {
 
   predicate DiscardOld(v: Variables, v': Variables, lbl: TransitionLabel) 
   {
+    && v.WF()
     // Enabling conditions
     && lbl.DiscardOldLabel?
     // fine bc discard old doesn't use lsnaddrindex as an enabling condition
@@ -167,29 +173,38 @@ module AllocationJournal {
     var out := MapUnion(lsnAUIndex, update);
     assert LikesJournal.LsnDisjoint(lsnAUIndex.Keys, msgs)
             ==> out.Values == lsnAUIndex.Values + {au} by {
-      
       // TODO: this be broken in likesjournal too
     }
     out
   }
 
+  predicate ValidNextJournalAddr(v: Variables, addr: Address)
+  {
+    && v.miniAllocator.CanAllocate(addr)
+    && (v.miniAllocator.curr.None? ==> 
+      && v.miniAllocator.allocs[addr.au].AllPagesFree()
+      && addr.page == 0)
+    && (v.miniAllocator.curr.Some? && v.journal.journal.truncatedJournal.freshestRec.Some?
+      ==> addr == v.journal.journal.truncatedJournal.freshestRec.value.NextPage())
+  }
+
   predicate InternalJournalMarshal(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     // Enabling conditions
-    && step.InternalJournalMarshalStep?
-    && lbl.InternalLabel?
-    && lbl.allocs == [step.addr]
     && v.WF()
+    && lbl.InternalLabel?
+    && step.InternalJournalMarshalStep?
+    && lbl.allocs == [step.addr]
     // state transition
-    && v.miniAllocator.MinAddr(step.addr)
+    // constraint on what can be allocated
+    && ValidNextJournalAddr(v, step.addr)
     && LinkedJournal.InternalJournalMarshalRecord(v.journal.journal, v'.journal.journal, lbl.I().I(), step.cut, step.addr)
     && var discardmsgs := v.journal.journal.unmarshalledTail.DiscardRecent(step.cut);
     && v' == v.(
       journal := v'.journal.(
         journal := v'.journal.journal, // predicate updated above
         lsnAddrIndex := LikesJournal.lsnAddrIndexAppendRecord(
-            v.journal.lsnAddrIndex, v.journal.journal.unmarshalledTail.DiscardRecent(step.cut), step.addr)
-      ),
+          v.journal.lsnAddrIndex, discardmsgs, step.addr)),
       lsnAUIndex := lsnAUIndexAppendRecord(v.lsnAUIndex, discardmsgs, step.addr.au),
       miniAllocator := v.miniAllocator.AllocateAndObserve(step.addr)
     )
@@ -197,9 +212,9 @@ module AllocationJournal {
 
   predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
   {
+    && v.WF()
     && lbl.InternalLabel?
     && lbl.allocs == []
-    && v.WF()
     && v' == v
   }
  
@@ -223,13 +238,11 @@ module AllocationJournal {
   // in the diskview and points to the one before it.
   predicate AUPagesLinkedTillFirstInOrder(dv: DiskView, addr: Address)
   {
-    && dv.Decodable(Some(addr))
     // NOTE: just putting down a strictly decreasing order of page links
-    && (forall page:nat | 0 < page <= addr.page :: 
-      && var newAddr := GenericDisk.Address(addr.au, page);
-      && var priorAddr := GenericDisk.Address(addr.au, page-1);
-      && dv.Decodable(Some(newAddr))
-      && dv.entries[newAddr].CroppedPrior(dv.boundaryLSN) == Some(priorAddr))
+    && (forall page:nat | 0 <= page < addr.page ::
+      && var priorAddr := GenericDisk.Address(addr.au, page);
+      && dv.Decodable(Some(priorAddr.NextPage()))
+      && dv.entries[priorAddr.NextPage()].CroppedPrior(dv.boundaryLSN) == Some(priorAddr))
   }
 
   // store first AU in superblock and invariant that explains this, invariant info

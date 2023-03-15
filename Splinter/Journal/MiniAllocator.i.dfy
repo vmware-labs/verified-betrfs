@@ -11,91 +11,118 @@ module MiniAllocatorMod {
 
   datatype PageAllocator = PageAllocator(
     observed: set<Address>, // pages reachable from superblock Repr
-    reserved: set<Address> // pages reachable from stack ref
+    reserved: set<Address>, // pages reachable from stack ref
+    au: AU
   ) {
-    predicate WF(au: AU) {
+    predicate WF() {
       // && observed !! reserved // does not have to be disjoint, cow case
-      && |observed + reserved| <= PageCount()
+      // && |observed + reserved| <= PageCount()
       && (forall addr | addr in observed + reserved :: addr.WF())
       && (forall addr | addr in observed + reserved:: addr.au == au)
     }
 
     predicate FreeAddr(addrs: set<Address>) {
-      && (forall addr | addr in addrs :: addr.WF())
+      && (forall addr | addr in addrs :: addr.WF() && addr.au == au)
       && addrs !! (observed + reserved)
     }
 
     // get a stack reference
-    function Reserve(addrs: set<Address>) : PageAllocator
+    function Reserve(addrs: set<Address>) : (out: PageAllocator)
+      requires WF()
       requires FreeAddr(addrs)
+      ensures out.WF()
     {
-      PageAllocator(observed, reserved + addrs)
+      PageAllocator(observed, reserved + addrs, au)
     }
 
-    predicate MinFreeAddr(addr: Address) 
-      requires FreeAddr({addr})
-    {
-      forall freeAddr | FreeAddr({freeAddr}) :: MinAddr(addr, freeAddr) == addr
-    }
+    // predicate MinFreeAddr(addr: Address) 
+    //   requires FreeAddr({addr})
+    // {
+    //   forall freeAddr | FreeAddr({freeAddr}) :: MinAddr(addr, freeAddr) == addr
+    // }
 
-    lemma MinFreeAddrZeroLemma(addr: Address)
-      requires FreeAddr({addr})
-      requires MinFreeAddr(addr)
-      requires observed + reserved == {}
-      ensures addr.page == 0
-    {
-      assert FreeAddr({Address(addr.au, 0)});
-    }
+    // miniallocator 
+
+    // lemma MinFreeAddrZeroLemma(addr: Address)
+    //   requires FreeAddr({addr})
+    //   requires MinFreeAddr(addr)
+    //   requires observed + reserved == {}
+    //   ensures addr.page == 0
+    // {
+    //   assert FreeAddr({Address(addr.au, 0)});
+    // }
 
     // done with / returns a stack reference 
-    function UnReserve(addrs: set<Address>) : PageAllocator
+    function UnReserve(addrs: set<Address>) : (out: PageAllocator)
+      requires WF()
       requires addrs <= reserved
+      ensures out.WF()
     {
-      PageAllocator(observed, reserved - addrs)
+      PageAllocator(observed, reserved - addrs, au)
     }
 
-    function Observe(addrs: set<Address>) : PageAllocator
+    function Observe(addrs: set<Address>) : (out: PageAllocator)
+      requires WF()
+      requires forall addr | addr in addrs :: addr.WF() && addr.au == au
+      ensures out.WF()
     {
-      PageAllocator(observed+addrs, reserved)
+      PageAllocator(observed+addrs, reserved, au)
     }
 
-    function Unobserve(addrs: set<Address>) : PageAllocator
+    function Unobserve(addrs: set<Address>) : (out: PageAllocator)
+      requires WF()
       requires addrs <= observed
+      ensures out.WF()
     {
-      PageAllocator(observed-addrs, reserved)
+      PageAllocator(observed-addrs, reserved, au)
     }
 
-    function UnobserveAll() : PageAllocator
+    function UnobserveAll() : (out: PageAllocator)
+      requires WF()
+      ensures out.WF()
     {
       Unobserve(observed)
     }
 
-    function Free(addrs: set<Address>) : PageAllocator
+    function Free(addrs: set<Address>) : (out: PageAllocator)
+      requires WF()
       requires addrs <= observed + reserved 
+      ensures out.WF()
     {
-      PageAllocator(observed-addrs, reserved-addrs)
+      PageAllocator(observed-addrs, reserved-addrs, au)
     }
 
     predicate NoObservedPages() {
       && observed == {}
     }
 
-    predicate NoOutstandingRefs () { // is this a bad name?
+    predicate NoOutstandingRefs () {
       && reserved == {}
+    }
+
+    predicate AllPagesAllocated () {
+      && |reserved + observed| == PageCount()
+    }
+
+    predicate AllPagesFree() {
+      && NoObservedPages()
+      && NoOutstandingRefs()
     }
   }
 
   datatype MiniAllocator = MiniAllocator(allocs: map<AU, PageAllocator>, curr: Option<AU>) {
     predicate WF() {
-      && forall au | au in allocs :: allocs[au].WF(au)
-      && curr.Some? ==> curr.value in allocs
+      && (forall au | au in allocs :: allocs[au].WF() && allocs[au].au == au)
+      && (curr.Some? ==> curr.value in allocs)
     }
 
-    function AddAUs(aus: set<AU>) : MiniAllocator
+    function AddAUs(aus: set<AU>) : (out: MiniAllocator)
+      requires WF()
       requires aus !! allocs.Keys
+      ensures out.WF()
     {
-      var newAllocs := map addr | addr in aus + allocs.Keys :: 
-        if addr in allocs then allocs[addr] else PageAllocator({}, {});
+      var newAllocs := map au | au in aus + allocs.Keys :: 
+        if au in allocs then allocs[au] else PageAllocator({}, {}, au);
       MiniAllocator(newAllocs, curr)
     }
 
@@ -114,8 +141,10 @@ module MiniAllocatorMod {
 
     // b+tree wouldn't do this
     // journal use it to unobserve discarded AUs at once
-    function UnobserveAUs(aus: set<AU>) : MiniAllocator
+    function UnobserveAUs(aus: set<AU>) : (out: MiniAllocator)
+      requires WF()
       requires aus <= allocs.Keys
+      ensures out.WF()
     {
       var newcurr := if curr.Some? && curr.value in aus then None else curr;
       MiniAllocator(map au | au in allocs :: 
@@ -126,22 +155,18 @@ module MiniAllocatorMod {
     {
       && addr.au in allocs
       && allocs[addr.au].FreeAddr({addr})
-      && (curr.Some? ==> addr.au == curr.value)
-      && (curr.None? ==> allocs[addr.au].NoObservedPages() && allocs[addr.au].NoOutstandingRefs())
+      // && (curr.Some? ==> addr.au == curr.value)
+      // && (curr.None? ==> allocs[addr.au].AllPagesFree())
     }
 
-    predicate MinAddr(addr: Address) 
-    {
-      && CanAllocate(addr)
-      && var alloc := if curr.None? then allocs[addr.au] else allocs[curr.value];
-      && alloc.MinFreeAddr(addr)
-    }
-
-    function AllocateAndObserve(addr: Address) : MiniAllocator
+    function AllocateAndObserve(addr: Address) : (out: MiniAllocator)
+      requires WF()
       requires CanAllocate(addr)
+      ensures out.WF()
     {
       var result := allocs[addr.au].Observe({addr});
-      MiniAllocator(allocs[addr.au := result], Some(addr.au))
+      var newCurr := if allocs[addr.au].AllPagesAllocated() then None else Some(addr.au);
+      MiniAllocator(allocs[addr.au := result], newCurr)
     }
 
     // no longer allocating from the current AU unless all of its pages become free
@@ -153,8 +178,10 @@ module MiniAllocatorMod {
     // }
 
     // remove AUs from the mini allocator
-    function Prune(aus: set<AU>) : MiniAllocator
+    function Prune(aus: set<AU>) : (out: MiniAllocator)
+      requires WF()
       requires forall au | au in aus :: CanRemove(au)
+      ensures out.WF()
     {
       var newAllocs := MapRestrict(allocs, set au | au in allocs.Keys - aus);
       var newCurr := if curr.Some? && curr.value in aus then None else curr;
