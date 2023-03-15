@@ -135,21 +135,24 @@ module LikesBranchedBetreeMod
     )
   }
 
-  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalGrowTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && BB.InternalGrowTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
-    && v.IsFresh({step.newRootAddr})  // Subway Eat Fresh!
     && v' == v.(
       branchedVars := v'.branchedVars, // admit relational update above
       betreeLikes := v.betreeLikes + multiset{step.newRootAddr}
     )
   }
 
-  predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && InternalGrowTree(v, v', lbl, step)
+    && v.IsFresh({step.newRootAddr})  // Subway Eat Fresh!
+  }
+
+  predicate InternalFlushMemtableTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && BB.InternalFlushMemtableTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
-    && v.IsFresh({step.newRootAddr})
-    && v.IsFresh(step.branch.Representation())
     && var oldRoot := if v.branchedVars.branched.HasRoot() then multiset{v.branchedVars.branched.root.value} else multiset{};
     && v' == v.(
       branchedVars := v'.branchedVars, // admit relational update above
@@ -158,10 +161,16 @@ module LikesBranchedBetreeMod
     )
   }
 
-  predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && InternalFlushMemtableTree(v, v', lbl, step)
+    && v.IsFresh({step.newRootAddr})
+    && v.IsFresh(step.branch.Representation())
+  }
+
+  predicate InternalSplitTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && BB.InternalSplitTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
-    && v.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
     && var newBetreeLikes := multiset(Set(step.pathAddrs) + step.newAddrs.Repr());
     && var discardBetreeLikes := 
         multiset(step.path.AddrsOnPath() + {step.path.Target().ChildAtIdx(step.request.childIdx).root.value});
@@ -172,10 +181,15 @@ module LikesBranchedBetreeMod
     )
   }
 
-  predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && InternalSplitTree(v, v', lbl, step)
+    && v.IsFresh(step.newAddrs.Repr() + Set(step.pathAddrs))
+  }
+
+  predicate InternalFlushTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && BB.InternalFlushTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
-    && v.IsFresh({step.targetAddr, step.targetChildAddr} + Set(step.pathAddrs))
     && var target := step.path.Target();
     && var root := target.Root();
     && var newflushedOffsets := root.flushedOffsets.AdvanceIndex(step.childIdx, root.branches.Length());
@@ -194,10 +208,15 @@ module LikesBranchedBetreeMod
     )
   }
 
-  predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && InternalFlushTree(v, v', lbl, step)
+    && v.IsFresh({step.targetAddr, step.targetChildAddr} + Set(step.pathAddrs))
+  }
+
+  predicate InternalCompactTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && BB.InternalCompactTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
-    && v.IsFresh(Set(step.pathAddrs) + {step.targetAddr} + step.newBranch.Representation())
     && var newBetreeLikes := multiset(Set(step.pathAddrs) + {step.targetAddr});
     && var discardBetreeLikes := multiset(step.path.AddrsOnPath());
     && var newBranchLikes := multiset{step.newBranch.root};
@@ -207,6 +226,12 @@ module LikesBranchedBetreeMod
       betreeLikes := v.betreeLikes - discardBetreeLikes + newBetreeLikes,
       branchLikes := v.branchLikes - discardBranchLikes + newBranchLikes
     )
+  }
+
+  predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && InternalCompactTree(v, v', lbl, step)
+    && v.IsFresh(Set(step.pathAddrs) + {step.targetAddr} + step.newBranch.Representation())
   }
 
   predicate NoOp(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
