@@ -74,7 +74,6 @@ module AllocationJournal {
     predicate WF() {
       && journal.WF()
       && miniAllocator.WF()
-      && first in lsnAUIndex.Values
     }
 
     // LikesJournal.lsnIndex(lsn).au == lsnAUAddrIndex(lsn)
@@ -143,14 +142,16 @@ module AllocationJournal {
     // Enabling conditions
     && lbl.DiscardOldLabel?
     // fine bc discard old doesn't use lsnaddrindex as an enabling condition
-    && LikesJournal.DiscardOld(v.journal,  v'.journal, lbl.I()) 
+    && LikesJournal.DiscardOld(v.journal, v'.journal, lbl.I()) 
 
     && var newlsnAUIndex := lsnAUIndexDiscardUpTo(v.lsnAUIndex, lbl.startLsn);
-    && var discardedAUs := newlsnAUIndex.Values - v.lsnAUIndex.Values;
+    && var discardedAUs := v.lsnAUIndex.Values - newlsnAUIndex.Values;
+    && var newFirst := if v'.journal.journal.truncatedJournal.freshestRec.None? 
+          then v.first else GetFirstAU(v.lsnAUIndex, lbl.startLsn); // then case garbage value
     && v' == v.(
       journal := v'.journal,
       lsnAUIndex := newlsnAUIndex,
-      first := GetFirstAU(v.lsnAUIndex, lbl.startLsn), // then case is always reached based on invariant
+      first := newFirst,
       miniAllocator := v.miniAllocator.UnobserveAUs(discardedAUs * v.miniAllocator.allocs.Keys) // note that these AUs refine to free (in the frozen freeset)
     )
   }
@@ -200,12 +201,14 @@ module AllocationJournal {
     && ValidNextJournalAddr(v, step.addr)
     && LinkedJournal.InternalJournalMarshalRecord(v.journal.journal, v'.journal.journal, lbl.I().I(), step.cut, step.addr)
     && var discardmsgs := v.journal.journal.unmarshalledTail.DiscardRecent(step.cut);
+    && var newFirst := if v.journal.journal.truncatedJournal.freshestRec.Some? then v.first else step.addr.au;
     && v' == v.(
       journal := v'.journal.(
         journal := v'.journal.journal, // predicate updated above
         lsnAddrIndex := LikesJournal.lsnAddrIndexAppendRecord(
           v.journal.lsnAddrIndex, discardmsgs, step.addr)),
       lsnAUIndex := lsnAUIndexAppendRecord(v.lsnAUIndex, discardmsgs, step.addr.au),
+      first := newFirst,
       miniAllocator := v.miniAllocator.AllocateAndObserve(step.addr)
     )
   }

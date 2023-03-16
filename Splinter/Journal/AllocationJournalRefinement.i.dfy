@@ -44,30 +44,46 @@ module AllocationJournalRefinment {
       && freshestRec.value.au == allocator.curr.value)
   }
 
-  predicate {:opaque} InternalAUPagesFullyLinked(dv: DiskView, first: AU)
+  predicate InternalAUPagesFullyLinked(dv: DiskView, first: AU)
   {
     && (forall addr | addr in dv.entries && addr.au != first :: AUPagesLinkedTillFirstInOrder(dv, addr))
+  }
+
+  // predicate PriorPagesContainSmallerLSNs(dv: DiskView)
+  // {
+  //   && (forall addr | addr in dv.entries ::
+  //     && var prior := dv.entries[addr].CroppedPrior(dv.boundaryLSN);
+  //     && (prior.Some? ==> dv.entries[prior.value].messageSeq.seqEnd <= dv.entries[addr].messageSeq.seqStart))
+  // }
+
+  predicate {:opaque} LikesJournalInv(v: Variables)
+  {
+    && LR.Inv(v.journal)
   }
 
   predicate Inv(v: Variables)
   {
     && v.WF()
-    && LR.Inv(v.journal)
+    && LikesJournalInv(v)
     && AddrIndexConsistentWithAUIndex(v.journal.lsnAddrIndex, v.lsnAUIndex)
     && JournalPagesNotFree(v.journal.lsnAddrIndex.Values, v.miniAllocator)
     && MiniAllocatorFollowfreshestRec(GetTj(v).freshestRec, v.miniAllocator)
+    // && PriorPagesContainSmallerLSNs(GetTj(v).diskView)
+
+    && (GetTj(v).freshestRec.Some? ==> v.first in v.lsnAUIndex.Values)
+    && (GetTj(v).freshestRec.Some? ==> InternalAUPagesFullyLinked(GetTj(v).diskView, v.first))
     // constraints on page links within an AU
     // when one follows the prior link of a page within any AU except first
     // it will observe a link that's strictly decreasing and links down to page 0
-    && InternalAUPagesFullyLinked(GetTj(v).diskView, v.first)
   }
 
   lemma InternalJournalMarshalRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
     requires InternalJournalMarshal(v, v', lbl, step)
     ensures L.InternalJournalMarshal(I(v), I(v'), lbl.I(), step.cut, step.addr)
-    ensures LR.Inv(v'.journal)
+    ensures LikesJournalInv(v')
   {
+    reveal_LikesJournalInv();
     assert LR.Inv(v.journal);
     if step.addr in v.journal.lsnAddrIndex.Values {
       assert false;
@@ -86,19 +102,19 @@ module AllocationJournalRefinment {
 
   lemma InternalJournalMarshalInv(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires Inv(v)
-    requires LR.Inv(v'.journal)
+    requires LikesJournalInv(v')
     requires InternalJournalMarshal(v, v', lbl, step)
     ensures Inv(v')
   {
     assert v.WF();
     var discardmsgs := v.journal.journal.unmarshalledTail.DiscardRecent(step.cut);
-    assert LR.IndexDomainValid(v'.journal.lsnAddrIndex, GetTj(v')); // from LR.Inv
     assert LikesJournal.LsnDisjoint(v.lsnAUIndex.Keys, discardmsgs) by {
+      reveal_LikesJournalInv();
       LR.reveal_IndexDomainValid();
     }
     assert v'.lsnAUIndex.Values == v.lsnAUIndex.Values + {step.addr.au};
     assert v'.journal.lsnAddrIndex.Values == v.journal.lsnAddrIndex.Values + {step.addr};
-    assert v'.WF();
+    assert v'.WF() by { reveal_LikesJournalInv(); }
 
     assert AddrIndexConsistentWithAUIndex(v'.journal.lsnAddrIndex, v'.lsnAUIndex);
     forall addr | addr in v'.journal.lsnAddrIndex.Values
@@ -114,8 +130,6 @@ module AllocationJournalRefinment {
     assert JournalPagesNotFree(v'.journal.lsnAddrIndex.Values, v'.miniAllocator);
     assert MiniAllocatorFollowfreshestRec(GetTj(v).freshestRec, v.miniAllocator);
     assert MiniAllocatorFollowfreshestRec(GetTj(v').freshestRec, v'.miniAllocator);
-
-    reveal_InternalAUPagesFullyLinked();
 
     forall addr | addr in GetTj(v').diskView.entries && addr.au != v'.first
       ensures AUPagesLinkedTillFirstInOrder(GetTj(v').diskView, addr)
@@ -135,6 +149,7 @@ module AllocationJournalRefinment {
           AUPagesLinkedTillFirstInOrderInc(GetTj(v').diskView, addr, GetTj(v).freshestRec.value);
         }
       } else {
+        reveal_LikesJournalInv();
         assert AUPagesLinkedTillFirstInOrder(GetTj(v).diskView, addr);
       }
     }
@@ -144,28 +159,63 @@ module AllocationJournalRefinment {
     requires Inv(v)
     requires DiscardOld(v, v', lbl)
     ensures L.DiscardOld(I(v), I(v'), lbl.I())
-    ensures LR.Inv(v'.journal)
+    ensures LikesJournalInv(v')
   {
+    reveal_LikesJournalInv();
     assert L.NextStep(I(v), I(v'), lbl.I(), L.DiscardOldStep);
     LR.InvNext(I(v), I(v'), lbl.I());
   }
 
   lemma DiscardOldInv(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
-    requires LR.Inv(v'.journal)
+    requires LikesJournalInv(v')
     requires DiscardOld(v, v', lbl)
     ensures Inv(v')
   {
-    assert v'.WF();
+    assert v'.WF() by { reveal_LikesJournalInv(); }
+    assert AddrIndexConsistentWithAUIndex(v'.journal.lsnAddrIndex, v'.lsnAUIndex);
+    assert JournalPagesNotFree(v'.journal.lsnAddrIndex.Values, v'.miniAllocator) by { reveal_LikesJournalInv(); }
+    assert PriorPagesContainSmallerLSNs(GetTj(v').diskView);
 
-    // first in lsnAUIndex.Values
+    if GetTj(v).freshestRec.Some? && GetTj(v').freshestRec.None? {
+      assert GetTj(v).freshestRec.value in v.journal.lsnAddrIndex.Values by { reveal_LikesJournalInv(); }
+      assert v'.journal.lsnAddrIndex == map[] by { reveal_LikesJournalInv(); }
+    }
+    assert MiniAllocatorFollowfreshestRec(GetTj(v').freshestRec, v'.miniAllocator);
+    
+    if GetTj(v').freshestRec.Some? {
+      assert lbl.startLsn in v.journal.lsnAddrIndex by {
+        LR.reveal_IndexDomainValid();
+        reveal_LikesJournalInv(); 
+      }
+    }
+    assert (GetTj(v').freshestRec.Some? ==> v'.first in v'.lsnAUIndex.Values);
 
-    assume false;
-    //   && v.WF()
-    // && LR.Inv(v.journal)
-    // && AddrIndexConsistentWithAUIndex(v.journal.lsnAddrIndex, v.lsnAUIndex)
-    // && JournalPagesNotFree(v.journal.lsnAddrIndex.Values, v.miniAllocator)
-    // && MiniAllocatorFollowfreshestRec(GetTj(v).freshestRec, v.miniAllocator)
+    if GetTj(v').freshestRec.Some? {
+      assert v'.first == v.lsnAUIndex[lbl.startLsn];
+      forall addr | addr in GetTj(v').diskView.entries && addr.au != v'.first 
+        ensures AUPagesLinkedTillFirstInOrder(GetTj(v').diskView, addr)
+      {
+        
+
+        // if addr.au == v.first {
+        //   // that can't happen bc we must go before it already
+
+
+        //   assume false;
+        // } else {
+        //   assert AUPagesLinkedTillFirstInOrder(GetTj(v).diskView, addr);
+        //   var newlsnAUIndex := lsnAUIndexDiscardUpTo(v.lsnAUIndex, lbl.startLsn);
+        //   var discardedAUs := v.lsnAUIndex.Values - newlsnAUIndex.Values;
+
+        //   assert addr.au !in discardedAUs;
+        //   // GetTj(v).diskView.BlocksCanFollow 
+        //   // Canconcat
+        //   assume false;
+        // }
+      }
+      assert InternalAUPagesFullyLinked(GetTj(v').diskView, v'.first);
+    }
   }
 
   lemma InitRefines()
@@ -195,17 +245,17 @@ module AllocationJournalRefinment {
       // case PutStep() => {
       //   assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
       // }
-      // case DiscardOldStep() => {
-      //   DiscardOldStepRefines(v, v', lbl, step);
-      //   assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
-      // }
+      case DiscardOldStep() => {
+        assert DiscardOld(v, v', lbl);
+        DiscardOldRefines(v, v', lbl);
+        DiscardOldInv(v, v', lbl);
+        assert LikesJournal.NextStep(I(v), I(v'), lbl.I(), step.I());
+      }
       case InternalJournalMarshalStep(cut, addr) => {
         assert InternalJournalMarshal(v, v', lbl, step);
         InternalJournalMarshalRefines(v, v', lbl, step);
-        assert LikesJournal.NextStep(I(v), I(v'), lbl.I(), step.I());
-        // assert LR.Inv(v'.journal);
         InternalJournalMarshalInv(v, v', lbl, step);
-        // assert Inv(v');
+        assert LikesJournal.NextStep(I(v), I(v'), lbl.I(), step.I());
       }
       // case InternalNoOpStep() => {
       //   assert LinkedJournal.NextStep(I(v), I(v'), lbl.I(), IStep(step));
