@@ -101,7 +101,9 @@ module LikesBranchedBetreeMod
 
     predicate IsFresh(addrs: set<Address>) {
       && addrs !! M.Set(betreeLikes)
-      && addrs !! M.Set(branchLikes)
+      && addrs !! M.Set(branchLikes)  
+      //TODO: This is not sufficient, since branchLikes only contain b+tree root. Need
+      // to get the whole repr.
     }
   }
 

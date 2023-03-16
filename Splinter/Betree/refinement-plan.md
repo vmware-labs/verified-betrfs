@@ -81,7 +81,7 @@ structure on disk (via maintenance and use of in-memory index).
     * Adds in-memory refcount indices for refs to betrees, branches
 
 
-* AllocationBranchedBetree
+* AllocationBranchedBetree (In this layer we want to tie the coordination system together)
 
 Goal: Lift page-level reference counts into AU-level reference counts
 

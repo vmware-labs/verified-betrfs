@@ -49,7 +49,7 @@ module AllocationBranchedBetreeMod
     Apply((x: Address) => x.au, addrs)
   }
 
-  // TODO: Forest should be a state machine at this layer
+  // TODO: Forest should be a state machine at this layer 
 
   datatype Variables = Variables(
     likesVars: LB.Variables,
@@ -65,6 +65,8 @@ module AllocationBranchedBetreeMod
     predicate IsFresh(aus: set<AU>) {
       && betreeAULikes !! multiset(aus)
       && branchAULikes !! multiset(aus)
+      //TODO: This is not sufficient, since branchAULikes only contain b+tree root. Need
+      // to get the branch summary
     }
   }
 
@@ -106,6 +108,8 @@ module AllocationBranchedBetreeMod
       betreeAULikes := v.betreeAULikes + multiset({step.newRootAddr.au})
     )
   }
+
+  // Any b+tree that is "observed" is not in the mini-allocator
 
   // TODO
   // predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)

@@ -529,7 +529,7 @@ module BranchedBetreeMod
       // requires diskView.LinkedChildren()
       requires CanSplitParent(request)
     {
-      if diskView.LinkedChildren() then
+      if diskView.LinkedChildren() then  
         var oldChild := ChildAtIdx(request.childIdx);
         var (newLeftChild, newRightChild) := 
           if request.SplitLeaf? 
@@ -543,7 +543,7 @@ module BranchedBetreeMod
         var dv' := diskView.ModifyDisk(newAddrs.left, newLeftChild).ModifyDisk(newAddrs.right, newRightChild).ModifyDisk(newAddrs.parent, newParent);
         BranchedBetree(Pointer.Some(newAddrs.parent), dv', branchDiskView)
       else
-        this
+        this // silly
     }
 
     lemma SplitParentCanSubstitute(request: SplitRequest, newAddrs: L.SplitAddrs)
