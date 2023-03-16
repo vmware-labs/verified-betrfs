@@ -649,12 +649,12 @@ module BranchedBetreeMod
     }
 
     // Returns the address of all the nodes on the path, from root up to and including target
-    function AddrsOnPath() : set<Address> 
+    function AddrsOnPath() : seq<Address> 
       requires Valid()
       decreases depth
     {
-      if depth == 0 then {}
-      else Subpath().AddrsOnPath() + {branched.root.value}
+      if depth == 0 then []
+      else Subpath().AddrsOnPath() + [branched.root.value]
     }
 
     predicate CanSubstitute(replacement: BranchedBetree, pathAddrs: PathAddrs)

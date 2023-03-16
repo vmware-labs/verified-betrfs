@@ -110,7 +110,10 @@ module MiniAllocatorMod {
     }
   }
 
-  datatype MiniAllocator = MiniAllocator(allocs: map<AU, PageAllocator>, curr: Option<AU>) {
+  datatype MiniAllocator = MiniAllocator(
+    allocs: map<AU, PageAllocator>, 
+    curr: Option<AU>) 
+  {
     predicate WF() {
       && (forall au | au in allocs :: allocs[au].WF() && allocs[au].au == au)
       && (curr.Some? ==> curr.value in allocs)
