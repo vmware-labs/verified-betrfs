@@ -102,8 +102,21 @@ impl JournalRecord {
         }
     }
 
-    // NB this entire thing was a single 'ensures' line in Dafny -- and was automatically triggered
-    // I've been trying to develop this trivial proof for three hours now. AAAAAIEEEE
+    // NB this entire 50-line monstrosity was a single 'ensures' line in Dafny.
+    pub proof fn crop_head_records_lemma(self, boundary_lsn: LSN, depth: nat, out: Option<JournalRecord>)
+    requires
+        self.can_crop_head_records(boundary_lsn, depth),
+        self.crop_head_records(boundary_lsn, depth)==out,
+    ensures
+        out.is_Some() ==> out.unwrap().valid(boundary_lsn),
+    decreases (depth, 0nat)
+    {
+        if depth!=0 {
+            let out = Self::opt_rec_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat);
+            Self::opt_rec_crop_head_records_lemma(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat, out);
+        }
+    }
+
     pub proof fn opt_rec_crop_head_records_lemma(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat, out: Option<JournalRecord>)
     requires
         Self::opt_rec_can_crop_head_records(ojr, boundary_lsn, depth),
@@ -112,46 +125,35 @@ impl JournalRecord {
         out.is_Some() ==> out.unwrap().valid(boundary_lsn),
     decreases (depth, 1nat)
     {
-        // clear; time unbuffer $path/rust-verify.sh src/bundle.rs  --verify-module journal::PagedJournal_v --time --expand-errors --multiple-errors 5 2>&1 | less -R
-        /*
         match ojr {
-            None => {
-                assert(out.is_Some() ==> out.unwrap().valid(boundary_lsn));
-            },
+            None => {}
             Some(rec) => {
-                assert(out == rec.crop_head_records(boundary_lsn, depth));
-                if 0 < depth {
-                    assert(out == Self::opt_rec_crop_head_records(
-                            rec.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat));
-
-                    let prior_ojr = rec.cropped_prior(boundary_lsn);
-                    let prior_depth = (depth-1) as nat;
-
-                    if rec.message_seq.seq_start <= boundary_lsn {
-//                        assert(prior_ojr == None);  // TODO(chris): Why does type inference fail here?
-                        assert(prior_ojr.is_None());
-                        assert(prior_depth==0);
-                        //None
-                        assert(Self::opt_rec_can_crop_head_records(prior_ojr, boundary_lsn, prior_depth));  // trigger
-                    } else {
-                        assert(prior_ojr == *rec.prior_rec);
-                        assert(Self::opt_rec_can_crop_head_records(prior_ojr, boundary_lsn, prior_depth));  // trigger
-                    }
-                    assert(Self::opt_rec_can_crop_head_records(prior_ojr, boundary_lsn, prior_depth));  // trigger
-
-                    // recursive call
-                    Self::opt_rec_crop_head_records_lemma(prior_ojr, boundary_lsn, prior_depth,
-                        Self::opt_rec_crop_head_records(prior_ojr, boundary_lsn, prior_depth));
-                    assert(out.is_Some() ==> out.unwrap().valid(boundary_lsn));
-                } else {
-                    assert(out == Some(rec));
-                    assert(rec.can_crop_head_records(boundary_lsn, depth)); // trigger
-                    assert(rec.valid(boundary_lsn));    // trigger?
-                    assert(out.is_Some() ==> out.unwrap().valid(boundary_lsn));
+                if ojr.is_Some() {
+                    let out = rec.crop_head_records(boundary_lsn, depth);
+                    rec.crop_head_records_lemma(boundary_lsn, depth, out);
                 }
             }
         }
-        */
+    }
+
+    // TODO(jonh): when broadcast_forall is available, use it above.
+    // TODO(jonh): and this trigger isn't triggery enough for my taste; see Refinement file
+    // explicit invocations of the non-forall version of this lemma.
+    pub proof fn opt_rec_crop_head_records_lemma_forall()
+    ensures
+        forall(|ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat|
+            Self::opt_rec_can_crop_head_records(ojr, boundary_lsn, depth)
+            ==>
+            (#[trigger] Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth)).is_Some() ==> Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth).unwrap().valid(boundary_lsn),
+    ),
+    {
+        assert forall |ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat|
+            Self::opt_rec_can_crop_head_records(ojr, boundary_lsn, depth)
+            implies
+            (#[trigger] Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth)).is_Some() ==> Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth).unwrap().valid(boundary_lsn) by {
+            let out = Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth);
+            Self::opt_rec_crop_head_records_lemma(ojr, boundary_lsn, depth, out);
+        }
     }
 
     pub proof fn can_crop_monotonic(self, boundary_lsn: LSN, depth: nat, more: nat)
