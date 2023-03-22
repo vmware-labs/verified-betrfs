@@ -425,6 +425,7 @@ state_machine!{ PagedJournal {
     }
 
     transition!{ read_for_recovery(lbl: Label, depth: nat) {
+        require pre.wf();
         require lbl.is_ReadForRecovery();
         require lbl.get_ReadForRecovery_messages().wf();
         require pre.truncated_journal.has_messages_at_depth(lbl.get_ReadForRecovery_messages(), depth);  // label subseq appears in committed pages

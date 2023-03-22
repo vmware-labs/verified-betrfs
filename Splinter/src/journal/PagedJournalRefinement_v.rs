@@ -202,25 +202,29 @@ impl PagedJournal::State {
     ensures
         AbstractJournal::State::next(self.i(), post.i(), lbl.i()),
     {
+        // New calls
+        JournalRecord::i_lemma_forall(); // superstition
+        reveal(AbstractJournal::State::next_by);    // unfortunate defaults
+        reveal(AbstractJournal::State::next);
+
         let ojr = self.truncated_journal.freshest_rec;
         let bdy = self.truncated_journal.boundary_lsn;
         let msgs = lbl.get_ReadForRecovery_messages();
         if ojr.is_Some() {
             ojr.unwrap().can_crop_monotonic(bdy, depth, depth+1);
             ojr.unwrap().can_crop_more_yields_some(bdy, depth, depth+1);
-            ojr.unwrap().cropped_subseq_in_interpretation(bdy, depth, lbl.get_ReadForRecovery_messages());  // comment out this line to hide the bizarre help reference to line 129
+
+            // New explicit call: Ten lines of debugging later, I needed this call:
+            ojr.unwrap().crop_head_records_lemma(bdy, depth, ojr.unwrap().crop_head_records(bdy, depth));
+
+            ojr.unwrap().cropped_subseq_in_interpretation(bdy, depth, msgs);
+
+            // New explicit call: was broadcast from concat
+            ojr.unwrap().i(bdy).concat_lemma(self.unmarshalled_tail);
         }
 
-        reveal(AbstractJournal::State::next_by);
-
-        assert( lbl.i().is_ReadForRecoveryLabel() );
-        assert( self.i().journal.includes_subseq(lbl.i().get_ReadForRecoveryLabel_messages()) );
-        
-
-        assert(AbstractJournal::State::read_for_recovery(self.i(), post.i(), lbl.i()));
+        // New for step witness. Dafny AbstractJournal didn't have a Step.
         assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::read_for_recovery()));
-
-        reveal(AbstractJournal::State::next);
     }
 
 }

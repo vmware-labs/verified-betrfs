@@ -61,6 +61,26 @@ impl MsgHistory {
         }
     }
 
+    // TODO(verus): in dafny this was three lines of ensures tacked onto concat, and the proof was free
+    // because we didn't need explicit extensionality.
+    pub proof fn concat_lemma(self, other: MsgHistory)
+    requires
+        self.wf(),
+        other.wf(),
+        self.can_concat(other),
+    ensures ({
+        let result = self.concat(other);
+        &&& result.wf()
+        &&& forall(|x| result.contains(x) <==> (self.contains(x) || other.contains(x)))
+        &&& (other.is_empty() ==> result == self)
+    }),
+    {
+        let result = self.concat(other);
+        if other.is_empty() {
+            assert_maps_equal!(result.msgs, self.msgs);
+        }
+    }
+
     pub open spec fn can_discard_to(self, lsn: LSN) -> bool {
         self.seq_start <= lsn <= self.seq_end
     }
