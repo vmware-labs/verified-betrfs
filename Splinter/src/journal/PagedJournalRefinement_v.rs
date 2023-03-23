@@ -238,13 +238,50 @@ impl JournalRecord {
             Self::i_lemma_forall();
 
             Self::crop_equivalence(ojr, bdy, depth);
+            // gives
+            assert(
+                Self::opt_rec_crop_head_records(ojr, bdy, depth)
+                == Self::opt_rec_crop_head_records(Self::opt_rec_crop_head_records(ojr, bdy, (depth-1) as nat), bdy, 1) );
+            assert( smaller == Self::opt_rec_crop_head_records(small, bdy, 1) );
+
+            assert( small.is_Some() );
+            // peeling off one head record should be ... peeling off one head record, right?
+
+            let smallrec = small.unwrap();
+            assert(
+                Self::opt_rec_crop_head_records(small, bdy, 1)
+                ==
+                smallrec.crop_head_records(bdy, 1)
+            );
+            assert(
+                smallrec.crop_head_records(bdy, 1)
+                ==
+                Self::opt_rec_crop_head_records(smallrec.cropped_prior(bdy), bdy, 0)
+            );
 
             //.can_crop_monotonic(bdy, (depth-1) as nat, depth);
             assert( Self::opt_rec_can_crop_head_records(small, bdy, 1) );
             assert( Self::opt_rec_crop_head_records(small, bdy, 1) == smaller );    // spitting "note: recommendation not met", but the previous assert is that recommendation, and is met.
 
             if smaller.is_Some() {
+
+                assert(bdy < smallrec.message_seq.seq_start);
+                assert(
+                    Self::opt_rec_crop_head_records(smallrec.cropped_prior(bdy), bdy, 0)
+                    ==
+                    Self::opt_rec_crop_head_records(*smallrec.prior_rec, bdy, 0)
+                );
+                assert(
+                    Self::opt_rec_crop_head_records(*smallrec.prior_rec, bdy, 0)
+                    ==
+                    *smallrec.prior_rec
+                );
+
+                assert( Self::opt_rec_crop_head_records(small, bdy, 1) == *small.unwrap().prior_rec );
+
                 //assert( Self::i_opt(small, bdy) == Self::i_opt(smaller, bdy).concat(small.unwrap().message_seq.seq_start );
+
+                assert( smaller == *small.unwrap().prior_rec );
                 assert( Self::i_opt(smaller, bdy) == Self::i_opt(*small.unwrap().prior_rec, bdy) );
                 assert( Self::i_opt(smaller, bdy).seq_end == small.unwrap().message_seq.seq_start );
                 Self::i_opt(smaller, bdy).concat_lemma(small.unwrap().message_seq);    // new manual invocation
