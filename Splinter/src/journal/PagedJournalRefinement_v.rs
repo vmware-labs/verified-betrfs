@@ -147,8 +147,7 @@ impl JournalRecord {
             self.crop_head_records_chaining(bdy, depth);
 
             // TODO(chris): couldn't trigger forall version successfully, so manual invocation.
-            let out = self.crop_head_records(bdy, (depth-1) as nat);
-            self.crop_head_records_lemma(bdy, (depth-1) as nat, out);
+            self.crop_head_records_lemma(bdy, (depth-1) as nat);
 
             self.cropped_subseq_in_interpretation(bdy, (depth-1) as nat, msgs);
         }
@@ -247,6 +246,21 @@ impl TruncatedJournal {
     {
         JournalRecord::i_opt(self.freshest_rec, self.boundary_lsn)
     }
+
+    pub proof fn tj_freeze_for_commit(self, frozen: TruncatedJournal, depth: nat)
+    requires
+        self.wf(),
+        self.freeze_for_commit(frozen, depth),
+    ensures
+        self.i().includes_subseq(frozen.i())
+    {
+        let ctj = self.crop_head_records(depth);
+        if ctj.freshest_rec.is_Some() && frozen.boundary_lsn < ctj.freshest_rec.unwrap().message_seq.seq_end {
+            self.freshest_rec.unwrap().crop_head_records_lemma(self.boundary_lsn, depth);   // newly required
+            JournalRecord::discard_old_maintains_subseq(ctj.freshest_rec, ctj.boundary_lsn, frozen.boundary_lsn);
+        }
+        JournalRecord::crop_head_maintains_subseq(self.freshest_rec, self.boundary_lsn, depth);
+    }
 }
 
 impl PagedJournal::Label {
@@ -302,7 +316,7 @@ impl PagedJournal::State {
             ojr.unwrap().can_crop_more_yields_some(bdy, depth, depth+1);
 
             // New explicit call: Ten lines of debugging later, I needed this call:
-            ojr.unwrap().crop_head_records_lemma(bdy, depth, ojr.unwrap().crop_head_records(bdy, depth));
+            ojr.unwrap().crop_head_records_lemma(bdy, depth);
 
             ojr.unwrap().cropped_subseq_in_interpretation(bdy, depth, msgs);
 

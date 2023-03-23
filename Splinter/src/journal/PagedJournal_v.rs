@@ -103,12 +103,13 @@ impl JournalRecord {
     }
 
     // NB this entire 50-line monstrosity was a single 'ensures' line in Dafny.
-    pub proof fn crop_head_records_lemma(self, boundary_lsn: LSN, depth: nat, out: Option<JournalRecord>)
+    pub proof fn crop_head_records_lemma(self, boundary_lsn: LSN, depth: nat)
     requires
         self.can_crop_head_records(boundary_lsn, depth),
-        self.crop_head_records(boundary_lsn, depth)==out,
-    ensures
-        out.is_Some() ==> out.unwrap().valid(boundary_lsn),
+    ensures ({
+        let out = self.crop_head_records(boundary_lsn, depth);
+        out.is_Some() ==> out.unwrap().valid(boundary_lsn)
+    })
     decreases (depth, 0nat)
     {
         if depth!=0 {
@@ -129,8 +130,7 @@ impl JournalRecord {
             None => {}
             Some(rec) => {
                 if ojr.is_Some() {
-                    let out = rec.crop_head_records(boundary_lsn, depth);
-                    rec.crop_head_records_lemma(boundary_lsn, depth, out);
+                    rec.crop_head_records_lemma(boundary_lsn, depth);
                 }
             }
         }
