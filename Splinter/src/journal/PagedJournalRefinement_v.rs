@@ -192,6 +192,7 @@ impl JournalRecord {
         }
     }
 
+    // This lemma swelled to 58 lines during debugging to find the three new missing calls. :v(
     pub proof fn discard_old_maintains_subseq(ojr: Option<JournalRecord>, old_bdy: LSN, new_bdy: LSN)
     requires
         old_bdy <= new_bdy,
@@ -206,48 +207,15 @@ impl JournalRecord {
         Self::i_lemma_forall(); // new text; needed a dozen lines of debugging to find it.
         Self::option_new_boundary_valid(ojr, old_bdy, new_bdy);
         if ojr.is_Some() && new_bdy < ojr.unwrap().message_seq.seq_start {
+            Self::discard_old_maintains_subseq(*ojr.unwrap().prior_rec, old_bdy, new_bdy);
+
             let prior = *ojr.unwrap().prior_rec;
-            Self::discard_old_maintains_subseq(prior, old_bdy, new_bdy);
-
-            assert( Self::i_opt(prior, old_bdy).includes_subseq(Self::i_opt(Self::discard_old_journal_rec(prior, new_bdy), new_bdy)) );
-
-            let priorold = Self::i_opt(prior, old_bdy);
-            let priornew = Self::i_opt(Self::discard_old_journal_rec(prior, new_bdy), new_bdy);
-
-            assert( priorold.includes_subseq(priornew) );   // trigger?
-
-            let ojrold = Self::i_opt(ojr, old_bdy);
-            let ojrnew = Self::i_opt(Self::discard_old_journal_rec(ojr, new_bdy), new_bdy);
-
-            assert( ojrold == priorold.concat(ojr.unwrap().message_seq) );
-            //priorold.concat_lemma(ojr.unwrap().message_seq);
-            assert( Self::discard_old_journal_rec(prior, new_bdy).is_Some() );
             Self::discard_old_journal_rec_ensures(prior, new_bdy);  // new manual invocation of what Dafny did with an ensures-broadcast
-            Self::discard_old_journal_rec(prior, new_bdy).unwrap().i_lemma(new_bdy);
-            assert(priornew.wf());
-            priornew.concat_lemma(ojr.unwrap().message_seq);
-
-            assert forall |lsn| ojrnew.contains(lsn) implies ojrold.contains(lsn) && ojrold.msgs[lsn] == ojrnew.msgs[lsn] by {
-                assert(ojrold.contains(lsn));
-                assert(ojrnew.contains(lsn));
-
-
-                // TODO(jonh): I want some calc! Where did jayb say the syntax was?
-                if lsn < ojr.unwrap().message_seq.seq_start {
-                    assert( ojrold.msgs[lsn] == priorold.msgs[lsn] );
-                    assert( priornew.contains(lsn) );
-                    assert( priorold.msgs[lsn] == priornew.msgs[lsn] );
-                    assert( priornew.msgs[lsn] == ojrnew.msgs[lsn] );
-                    assert( ojrold.msgs[lsn] == ojrnew.msgs[lsn]);
-                } else {
-                    assert( ojrold.msgs[lsn] == ojrnew.msgs[lsn]);
-                }
-            }
-            assert( ojrold.includes_subseq(ojrnew) );
-            assert( Self::i_opt(ojr, old_bdy).includes_subseq(Self::i_opt(Self::discard_old_journal_rec(ojr, new_bdy), new_bdy)) );
-        } else {
-//            let dojr = Self::discard_old_journal_rec(ojr, new_bdy);
-//            assert( Self::i_opt(ojr, old_bdy).includes_subseq(Self::i_opt(dojr, new_bdy)) );
+            // of the dozens of lines of debugging I wrote, here's one I had to do manually because
+            // I didn't have requires on spec fns.
+//            Self::discard_old_journal_rec(prior, new_bdy).unwrap().i_lemma(new_bdy);
+            let priornew = Self::i_opt(Self::discard_old_journal_rec(prior, new_bdy), new_bdy);
+            priornew.concat_lemma(ojr.unwrap().message_seq);    // new manual invocation of what Dafny did with an ensures-broadcast
         }
     }
 }
