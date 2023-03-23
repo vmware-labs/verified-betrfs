@@ -4,6 +4,7 @@ use builtin::*;
 use builtin_macros::*;
 
 use crate::pervasive::prelude::*;
+use crate::pervasive::map::*;
 use crate::coordination_layer::StampedMap_v::LSN;
 use crate::coordination_layer::MsgHistory_v::*;
 use crate::coordination_layer::AbstractJournal_v::*;
@@ -239,6 +240,46 @@ impl JournalRecord {
             assert( Self::i_opt(small, bdy).includes_subseq(Self::i_opt(smaller, bdy)) );   // trigger (ported from Dafny)
         }
     }
+
+    pub proof fn discard_old_defn_interprets(ojr: Option<JournalRecord>, old_lsn: LSN, new_lsn: LSN)
+    requires
+        ojr.is_Some() ==> ojr.unwrap().valid(old_lsn),
+        ojr.is_Some() ==> ojr.unwrap().valid(new_lsn),
+        Self::i_opt(ojr, old_lsn).can_discard_to(new_lsn),
+    ensures
+        Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == Self::i_opt(ojr, old_lsn).discard_old(new_lsn)
+    decreases ojr
+    {
+        if ojr.is_Some() && new_lsn < ojr.unwrap().message_seq.seq_start {
+            Self::discard_old_defn_interprets(*ojr.unwrap().prior_rec, old_lsn, new_lsn);
+            assume(false);
+            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == Self::i_opt(ojr, old_lsn).discard_old(new_lsn) );
+        } else if ojr.is_None() {
+            assert( Self::discard_old_journal_rec(ojr, new_lsn).is_None() );
+            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == MsgHistory::empty_history_at(new_lsn) );
+            assert( Self::i_opt(ojr, old_lsn).seq_start == new_lsn );
+            assert( Self::i_opt(ojr, old_lsn).seq_end == new_lsn );
+            assert( Self::i_opt(ojr, old_lsn) == MsgHistory::empty_history_at(new_lsn) );
+            assert( Self::i_opt(ojr, old_lsn).can_discard_to(new_lsn) );
+            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).seq_start == new_lsn );
+            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).seq_end == new_lsn );
+            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).wf() );
+            assert_maps_equal!(Self::i_opt(ojr, old_lsn).discard_old(new_lsn).msgs, MsgHistory::empty_history_at(new_lsn).msgs);    // this all-the-way sucks
+            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).msgs == MsgHistory::empty_history_at(new_lsn).msgs );
+            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn) == MsgHistory::empty_history_at(new_lsn) );
+            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == Self::i_opt(ojr, old_lsn).discard_old(new_lsn) );
+        } else {
+            assume(false);
+            let rec = ojr.unwrap();
+            let prior_rec =
+                if rec.message_seq.seq_start <= new_lsn { None }
+                else { Self::discard_old_journal_rec(*rec.prior_rec, new_lsn) };
+            assert( Self::discard_old_journal_rec(ojr, new_lsn) ==
+                Some(JournalRecord{message_seq: rec.message_seq, prior_rec: Box::new(prior_rec)}) );
+            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == MsgHistory::empty_history_at(new_lsn) );
+            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == Self::i_opt(ojr, old_lsn).discard_old(new_lsn) );
+        }
+    }
 }
 
 impl TruncatedJournal {
@@ -327,6 +368,28 @@ impl PagedJournal::State {
         // New for step witness. Dafny AbstractJournal didn't have a Step.
         assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::read_for_recovery()));
     }
+
+    pub proof fn freeze_for_commit_refines(self, post: Self, lbl: PagedJournal::Label, depth: nat)
+    requires 
+        self.wf(),  // move to an invariant?
+        PagedJournal::State::freeze_for_commit(self, post, lbl, depth),
+    ensures
+        post.wf(),
+        AbstractJournal::State::next(self.i(), post.i(), lbl.i()),
+    {
+        reveal(AbstractJournal::State::next_by);    // newly required; unfortunate macro defaults
+        reveal(AbstractJournal::State::next);    // newly required; unfortunate macro defaults
+
+        self.truncated_journal.tj_freeze_for_commit(lbl.get_FreezeForCommit_frozen_journal(), depth);
+
+        JournalRecord::i_lemma_forall(); // newly required call
+        self.truncated_journal.i().concat_lemma(self.unmarshalled_tail);    // newly required call
+
+        assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::freeze_for_commit())); // witness
+    }
+
+    // inv was 'true', so skipping the invariant proof. Would otherwise do it as a state_machine!
+    // invariant!
 
 }
 
