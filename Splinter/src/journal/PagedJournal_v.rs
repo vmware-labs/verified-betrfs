@@ -112,17 +112,17 @@ impl JournalRecord {
     decreases (depth, 0nat)
     {
         if depth!=0 {
-            let out = Self::opt_rec_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat);
-            Self::opt_rec_crop_head_records_lemma(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat, out);
+            Self::opt_rec_crop_head_records_lemma(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat);
         }
     }
 
-    pub proof fn opt_rec_crop_head_records_lemma(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat, out: Option<JournalRecord>)
+    pub proof fn opt_rec_crop_head_records_lemma(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat)
     requires
         Self::opt_rec_can_crop_head_records(ojr, boundary_lsn, depth),
-        Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth) == out,
-    ensures
-        out.is_Some() ==> out.unwrap().valid(boundary_lsn),
+    ensures ({
+        let out = Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth);
+        out.is_Some() ==> out.unwrap().valid(boundary_lsn)
+    })
     decreases (depth, 1nat)
     {
         match ojr {
@@ -151,8 +151,7 @@ impl JournalRecord {
             Self::opt_rec_can_crop_head_records(ojr, boundary_lsn, depth)
             implies
             (#[trigger] Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth)).is_Some() ==> Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth).unwrap().valid(boundary_lsn) by {
-            let out = Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth);
-            Self::opt_rec_crop_head_records_lemma(ojr, boundary_lsn, depth, out);
+            Self::opt_rec_crop_head_records_lemma(ojr, boundary_lsn, depth);
         }
     }
 

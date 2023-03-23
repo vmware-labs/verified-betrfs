@@ -218,6 +218,43 @@ impl JournalRecord {
             priornew.concat_lemma(ojr.unwrap().message_seq);    // new manual invocation of what Dafny did with an ensures-broadcast
         }
     }
+
+    pub proof fn crop_head_maintains_subseq(ojr: Option<JournalRecord>, bdy: LSN, depth: nat)
+    requires
+        ojr.is_Some() ==> ojr.unwrap().valid(bdy),
+        Self::opt_rec_can_crop_head_records(ojr, bdy, depth),
+    ensures
+        Self::i_opt(ojr, bdy).includes_subseq(Self::i_opt(Self::opt_rec_crop_head_records(ojr, bdy, depth), bdy)),
+    decreases depth
+    {
+        if depth > 0 {
+            ojr.unwrap().can_crop_monotonic(bdy, (depth-1) as nat, depth);
+            Self::crop_head_maintains_subseq(ojr, bdy, (depth-1) as nat);
+            let small = Self::opt_rec_crop_head_records(ojr, bdy, (depth-1) as nat);
+            let smaller = Self::opt_rec_crop_head_records(ojr, bdy, depth);
+
+            Self::opt_rec_crop_head_records_lemma(ojr, bdy, depth);
+            Self::opt_rec_crop_head_records_lemma(ojr, bdy, (depth-1) as nat);
+            Self::i_lemma_forall();
+
+            Self::crop_equivalence(ojr, bdy, depth);
+
+            //.can_crop_monotonic(bdy, (depth-1) as nat, depth);
+            assert( Self::opt_rec_can_crop_head_records(small, bdy, 1) );
+            assert( Self::opt_rec_crop_head_records(small, bdy, 1) == smaller );    // spitting "note: recommendation not met", but the previous assert is that recommendation, and is met.
+
+            if smaller.is_Some() {
+                //assert( Self::i_opt(small, bdy) == Self::i_opt(smaller, bdy).concat(small.unwrap().message_seq.seq_start );
+                assert( Self::i_opt(smaller, bdy) == Self::i_opt(*small.unwrap().prior_rec, bdy) );
+                assert( Self::i_opt(smaller, bdy).seq_end == small.unwrap().message_seq.seq_start );
+                Self::i_opt(smaller, bdy).concat_lemma(small.unwrap().message_seq);    // new manual invocation
+                assert( Self::i_opt(smaller, bdy).seq_end <= Self::i_opt(small, bdy).seq_end );
+            } else {
+                assert( Self::i_opt(smaller, bdy).seq_end <= Self::i_opt(small, bdy).seq_end );
+            }
+            assert( Self::i_opt(small, bdy).includes_subseq(Self::i_opt(smaller, bdy)) );
+        }
+    }
 }
 
 impl TruncatedJournal {
