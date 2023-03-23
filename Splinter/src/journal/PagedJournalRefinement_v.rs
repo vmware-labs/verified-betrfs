@@ -153,6 +153,103 @@ impl JournalRecord {
             self.cropped_subseq_in_interpretation(bdy, (depth-1) as nat, msgs);
         }
     }
+
+    pub proof fn can_cut_more(ojr: Option<JournalRecord>, bdy: LSN, depth: nat)
+    requires
+        0 < depth,
+        Self::opt_rec_can_crop_head_records(ojr, bdy, depth),
+    ensures
+        Self::opt_rec_can_crop_head_records(ojr, bdy, (depth-1) as nat),
+        Self::opt_rec_can_crop_head_records(Self::opt_rec_crop_head_records(ojr, bdy, (depth-1) as nat), bdy, 1),
+    decreases depth
+    {
+        if 1 < depth {
+            // TODO(verus): new trigger, uneeded in Dafny. (dozens of lines of debugging behind this discovery)
+            assert( ojr.unwrap().can_crop_head_records(bdy, depth) ); 
+            // Interestingly Dafny proof had an unecessary call to can_crop_monotonic I removed.
+            Self::can_cut_more(*ojr.unwrap().prior_rec, bdy, (depth-1) as nat);
+        }
+    }
+        
+    pub proof fn crop_equivalence(ojr: Option<JournalRecord>, bdy: LSN, depth: nat)
+    requires
+        0 < depth,
+        ojr.is_Some() ==> ojr.unwrap().valid(bdy),
+        Self::opt_rec_can_crop_head_records(ojr, bdy, (depth-1) as nat),
+        Self::opt_rec_can_crop_head_records(ojr, bdy, depth),
+    ensures
+        Self::opt_rec_can_crop_head_records(Self::opt_rec_crop_head_records(ojr, bdy, (depth-1) as nat), bdy, 1),
+        Self::opt_rec_crop_head_records(ojr, bdy, depth) ==
+            Self::opt_rec_crop_head_records(Self::opt_rec_crop_head_records(ojr, bdy, (depth-1) as nat), bdy, 1),
+    decreases depth
+    {
+        // HOORAY! This one went through with only syntactic translation, no new triggers and no
+        // debugging to get there! That's the first time that has happened...
+        if 1 < depth {
+            Self::can_cut_more(ojr, bdy, depth);
+            ojr.unwrap().can_crop_more_yields_some(bdy, (depth-1) as nat, depth);
+            Self::crop_equivalence(*ojr.unwrap().prior_rec, bdy, (depth-1) as nat);
+        }
+    }
+
+    pub proof fn discard_old_maintains_subseq(ojr: Option<JournalRecord>, old_bdy: LSN, new_bdy: LSN)
+    requires
+        old_bdy <= new_bdy,
+        ojr.is_None() ==> new_bdy == old_bdy,
+        ojr.is_Some() ==> new_bdy < ojr.unwrap().message_seq.seq_end,
+        ojr.is_Some() ==> ojr.unwrap().valid(old_bdy),
+    ensures
+        ojr.is_Some() ==> ojr.unwrap().valid(new_bdy),
+        Self::i_opt(ojr, old_bdy).includes_subseq(Self::i_opt(Self::discard_old_journal_rec(ojr, new_bdy), new_bdy)),
+    decreases ojr
+    {
+        Self::i_lemma_forall(); // new text; needed a dozen lines of debugging to find it.
+        Self::option_new_boundary_valid(ojr, old_bdy, new_bdy);
+        if ojr.is_Some() && new_bdy < ojr.unwrap().message_seq.seq_start {
+            let prior = *ojr.unwrap().prior_rec;
+            Self::discard_old_maintains_subseq(prior, old_bdy, new_bdy);
+
+            assert( Self::i_opt(prior, old_bdy).includes_subseq(Self::i_opt(Self::discard_old_journal_rec(prior, new_bdy), new_bdy)) );
+
+            let priorold = Self::i_opt(prior, old_bdy);
+            let priornew = Self::i_opt(Self::discard_old_journal_rec(prior, new_bdy), new_bdy);
+
+            assert( priorold.includes_subseq(priornew) );   // trigger?
+
+            let ojrold = Self::i_opt(ojr, old_bdy);
+            let ojrnew = Self::i_opt(Self::discard_old_journal_rec(ojr, new_bdy), new_bdy);
+
+            assert( ojrold == priorold.concat(ojr.unwrap().message_seq) );
+            //priorold.concat_lemma(ojr.unwrap().message_seq);
+            assert( Self::discard_old_journal_rec(prior, new_bdy).is_Some() );
+            Self::discard_old_journal_rec_ensures(prior, new_bdy);  // new manual invocation of what Dafny did with an ensures-broadcast
+            Self::discard_old_journal_rec(prior, new_bdy).unwrap().i_lemma(new_bdy);
+            assert(priornew.wf());
+            priornew.concat_lemma(ojr.unwrap().message_seq);
+
+            assert forall |lsn| ojrnew.contains(lsn) implies ojrold.contains(lsn) && ojrold.msgs[lsn] == ojrnew.msgs[lsn] by {
+                assert(ojrold.contains(lsn));
+                assert(ojrnew.contains(lsn));
+
+
+                // TODO(jonh): I want some calc! Where did jayb say the syntax was?
+                if lsn < ojr.unwrap().message_seq.seq_start {
+                    assert( ojrold.msgs[lsn] == priorold.msgs[lsn] );
+                    assert( priornew.contains(lsn) );
+                    assert( priorold.msgs[lsn] == priornew.msgs[lsn] );
+                    assert( priornew.msgs[lsn] == ojrnew.msgs[lsn] );
+                    assert( ojrold.msgs[lsn] == ojrnew.msgs[lsn]);
+                } else {
+                    assert( ojrold.msgs[lsn] == ojrnew.msgs[lsn]);
+                }
+            }
+            assert( ojrold.includes_subseq(ojrnew) );
+            assert( Self::i_opt(ojr, old_bdy).includes_subseq(Self::i_opt(Self::discard_old_journal_rec(ojr, new_bdy), new_bdy)) );
+        } else {
+//            let dojr = Self::discard_old_journal_rec(ojr, new_bdy);
+//            assert( Self::i_opt(ojr, old_bdy).includes_subseq(Self::i_opt(dojr, new_bdy)) );
+        }
+    }
 }
 
 impl TruncatedJournal {
