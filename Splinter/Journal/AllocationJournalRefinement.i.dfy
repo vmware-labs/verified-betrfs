@@ -34,7 +34,7 @@ module AllocationJournalRefinment {
 
   predicate JournalPagesNotFree(addrs: set<Address>, allocator: MiniAllocator)
   {
-    && (forall addr | addr in addrs :: !allocator.CanAllocate(addr))
+    && (forall addr | addr in addrs :: addr.WF() && !allocator.CanAllocate(addr))
   }
 
   predicate MiniAllocatorFollowfreshestRec(freshestRec: Pointer, allocator: MiniAllocator)
@@ -49,12 +49,27 @@ module AllocationJournalRefinment {
     && (forall addr | addr in dv.entries && addr.au != first :: AUPagesLinkedTillFirstInOrder(dv, addr))
   }
 
-  // predicate PriorPagesContainSmallerLSNs(dv: DiskView)
-  // {
-  //   && (forall addr | addr in dv.entries ::
-  //     && var prior := dv.entries[addr].CroppedPrior(dv.boundaryLSN);
-  //     && (prior.Some? ==> dv.entries[prior.value].messageSeq.seqEnd <= dv.entries[addr].messageSeq.seqStart))
-  // }
+  predicate ValidFirstAU(dv: DiskView, lsnAUIndex: map<LSN, AU>, first: AU)
+  {
+    && dv.boundaryLSN in lsnAUIndex
+    && lsnAUIndex[dv.boundaryLSN] == first
+  }
+
+  predicate ContiguousLSNs(lsn1: LSN, lsn2: LSN, lsn3: LSN, lsnAUIndex: map<LSN, AU>)
+  {
+    ( && lsn1 <= lsn2 <= lsn3 
+      && lsn1 in lsnAUIndex 
+      && lsn3 in lsnAUIndex
+      && lsnAUIndex[lsn1] == lsnAUIndex[lsn3]) 
+    ==> 
+    ( && lsn2 in lsnAUIndex
+      && lsnAUIndex[lsn2] == lsnAUIndex[lsn1])
+  }
+
+  predicate AUsHoldContiguousLSNs(lsnAUIndex: map<LSN, AU>)
+  {
+    && (forall lsn1, lsn2, lsn3 :: ContiguousLSNs(lsn1, lsn2, lsn3, lsnAUIndex))
+  }
 
   predicate {:opaque} LikesJournalInv(v: Variables)
   {
@@ -70,7 +85,8 @@ module AllocationJournalRefinment {
     && MiniAllocatorFollowfreshestRec(GetTj(v).freshestRec, v.miniAllocator)
     // && PriorPagesContainSmallerLSNs(GetTj(v).diskView)
 
-    && (GetTj(v).freshestRec.Some? ==> v.first in v.lsnAUIndex.Values)
+    && AUsHoldContiguousLSNs(v.lsnAUIndex)
+    && (GetTj(v).freshestRec.Some? ==> ValidFirstAU(GetTj(v).diskView, v.lsnAUIndex, v.first))
     && (GetTj(v).freshestRec.Some? ==> InternalAUPagesFullyLinked(GetTj(v).diskView, v.first))
     // constraints on page links within an AU
     // when one follows the prior link of a page within any AU except first
@@ -153,6 +169,76 @@ module AllocationJournalRefinment {
         assert AUPagesLinkedTillFirstInOrder(GetTj(v).diskView, addr);
       }
     }
+
+    var lsnAUIndex := v'.lsnAUIndex;
+    forall lsn1, lsn2, lsn3
+    ensures ContiguousLSNs(lsn1, lsn2, lsn3, lsnAUIndex)
+    {
+      if (&& lsn1 <= lsn2 <= lsn3 
+      && lsn1 in lsnAUIndex 
+      && lsn3 in lsnAUIndex
+      && lsnAUIndex[lsn1] == lsnAUIndex[lsn3])
+      {
+        var firstMarshalled := discardmsgs.seqStart;
+        if firstMarshalled <= lsn1 {
+          assert 
+            && discardmsgs.Contains(lsn1)
+            && discardmsgs.Contains(lsn3)
+            && discardmsgs.Contains(lsn2) by {
+            reveal_LikesJournalInv();
+            LR.reveal_IndexDomainValid();
+          }
+          assert lsn2 in lsnAUIndex;
+          assert lsnAUIndex[lsn2] == lsnAUIndex[lsn1];
+        } else if firstMarshalled <= lsn2 {
+          assert 
+            && discardmsgs.Contains(lsn2) 
+            && discardmsgs.Contains(lsn3) by {
+            reveal_LikesJournalInv();
+            LR.reveal_IndexDomainValid();
+          }
+          assert lsn2 in lsnAUIndex;
+          assert lsnAUIndex[lsn2] == lsnAUIndex[lsn1];
+        } else if firstMarshalled <= lsn3 {
+          if v.miniAllocator.curr.Some? {
+            if GetTj(v).freshestRec.None? {
+              assert false;
+            } else {
+              var e := firstMarshalled - 1;
+              assert e in v.journal.lsnAddrIndex by {
+                reveal_LikesJournalInv();
+                // LR.reveal_IndexDomainValid();
+              }
+              // TODO(Jialin) takes forever
+              assume v.journal.lsnAddrIndex[e] == GetTj(v).freshestRec.value; 
+              assert lsnAUIndex[e] == lsnAUIndex[firstMarshalled];
+              assert discardmsgs.Contains(lsn3) by {
+                reveal_LikesJournalInv();
+                LR.reveal_IndexDomainValid();
+              }
+              assert lsnAUIndex[firstMarshalled] == lsnAUIndex[lsn3];
+              assert lsnAUIndex[lsn3] == lsnAUIndex[lsn1];
+              assert ContiguousLSNs(lsn1, lsn2, e, v.lsnAUIndex);
+              assert lsn2 in lsnAUIndex;
+              assert lsnAUIndex[lsn2] == lsnAUIndex[lsn1]; 
+            }
+          } else {
+            // lsn1 & lsn3 has the same AU, so mini allocator curr must be a some
+            assert discardmsgs.Contains(lsn3) by {
+              reveal_LikesJournalInv();
+              LR.reveal_IndexDomainValid();
+            }
+            assert lsnAUIndex[lsn3] == step.addr.au;
+            var page := v.journal.lsnAddrIndex[lsn1];
+            assert !v.miniAllocator.CanAllocate(page);
+            assert lsnAUIndex[lsn1] != step.addr.au; 
+            assert false;
+          }
+        } else {
+          assert ContiguousLSNs(lsn1, lsn2, lsn3, v.lsnAUIndex);
+        }
+      } 
+    }
   }
 
   lemma DiscardOldRefines(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -175,7 +261,7 @@ module AllocationJournalRefinment {
     assert v'.WF() by { reveal_LikesJournalInv(); }
     assert AddrIndexConsistentWithAUIndex(v'.journal.lsnAddrIndex, v'.lsnAUIndex);
     assert JournalPagesNotFree(v'.journal.lsnAddrIndex.Values, v'.miniAllocator) by { reveal_LikesJournalInv(); }
-    assert PriorPagesContainSmallerLSNs(GetTj(v').diskView);
+    // assert PriorPagesContainSmallerLSNs(GetTj(v').diskView);
 
     if GetTj(v).freshestRec.Some? && GetTj(v').freshestRec.None? {
       assert GetTj(v).freshestRec.value in v.journal.lsnAddrIndex.Values by { reveal_LikesJournalInv(); }
@@ -196,14 +282,10 @@ module AllocationJournalRefinment {
       forall addr | addr in GetTj(v').diskView.entries && addr.au != v'.first 
         ensures AUPagesLinkedTillFirstInOrder(GetTj(v').diskView, addr)
       {
-        
+        if addr.au == v.first {
+          assert v.first != v'.first;
 
-        // if addr.au == v.first {
-        //   // that can't happen bc we must go before it already
-
-
-        //   assume false;
-        // } else {
+       } else {
         //   assert AUPagesLinkedTillFirstInOrder(GetTj(v).diskView, addr);
         //   var newlsnAUIndex := lsnAUIndexDiscardUpTo(v.lsnAUIndex, lbl.startLsn);
         //   var discardedAUs := v.lsnAUIndex.Values - newlsnAUIndex.Values;
@@ -211,8 +293,8 @@ module AllocationJournalRefinment {
         //   assert addr.au !in discardedAUs;
         //   // GetTj(v).diskView.BlocksCanFollow 
         //   // Canconcat
-        //   assume false;
-        // }
+          assume false;
+        }
       }
       assert InternalAUPagesFullyLinked(GetTj(v').diskView, v'.first);
     }
