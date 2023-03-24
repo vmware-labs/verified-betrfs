@@ -21,36 +21,20 @@ module MiniAllocatorMod {
       && (forall addr | addr in observed + reserved:: addr.au == au)
     }
 
-    predicate FreeAddr(addrs: set<Address>) {
-      && (forall addr | addr in addrs :: addr.WF() && addr.au == au)
-      && addrs !! (observed + reserved)
+    predicate FreeAddr(addr: Address) {
+      && addr.WF() 
+      && addr.au == au
+      && addr !in (observed + reserved)
     }
 
     // get a stack reference
     function Reserve(addrs: set<Address>) : (out: PageAllocator)
       requires WF()
-      requires FreeAddr(addrs)
+      requires forall addr | addr in addrs :: FreeAddr(addr)
       ensures out.WF()
     {
       PageAllocator(observed, reserved + addrs, au)
     }
-
-    // predicate MinFreeAddr(addr: Address) 
-    //   requires FreeAddr({addr})
-    // {
-    //   forall freeAddr | FreeAddr({freeAddr}) :: MinAddr(addr, freeAddr) == addr
-    // }
-
-    // miniallocator 
-
-    // lemma MinFreeAddrZeroLemma(addr: Address)
-    //   requires FreeAddr({addr})
-    //   requires MinFreeAddr(addr)
-    //   requires observed + reserved == {}
-    //   ensures addr.page == 0
-    // {
-    //   assert FreeAddr({Address(addr.au, 0)});
-    // }
 
     // done with / returns a stack reference 
     function UnReserve(addrs: set<Address>) : (out: PageAllocator)
@@ -157,9 +141,7 @@ module MiniAllocatorMod {
     predicate CanAllocate(addr: Address)
     {
       && addr.au in allocs
-      && allocs[addr.au].FreeAddr({addr})
-      // && (curr.Some? ==> addr.au == curr.value)
-      // && (curr.None? ==> allocs[addr.au].AllPagesFree())
+      && allocs[addr.au].FreeAddr(addr)
     }
 
     function AllocateAndObserve(addr: Address) : (out: MiniAllocator)
