@@ -7,7 +7,6 @@ include "LikesBranchedBetree.i.dfy"
 
 module AllocationBranchedBetreeMod
 {
-  import GenericDisk
   import opened Sequences
   import opened LSNMod
   import opened MsgHistoryMod
@@ -51,11 +50,37 @@ module AllocationBranchedBetreeMod
 
   // TODO: Forest should be a state machine at this layer 
 
+
+  // Transitions for each thread state machine, from the persective of the caller:
+  //  Init(compact start), Internal, Commit, Abort
+  datatype CompactThread = CompactThread(
+    // Read-only inputs
+    branchSeq: BranchSeq,
+    offsetMap: OffsetMap,  // filter describing which keys from branchSeq should be preserved in output
+    subdisk: BranchDiskView, // diskview containing exactly the part of the tree we are reading
+    // Mutating outputs
+    miniAllocator: MiniAllocator,
+    output: LinkedBranch, // root of the tree that we are building. Everything reachable from here is mini-allocated, disk here should be consistent with mini-allocator
+  )
+  
+  datatype Compactor = Compactor(
+    threads: seq<CompactThread>
+  )
+  {
+    function Likes() {
+      // Union of output.likes and subdisk.Keys (or traverse disk from branchSeq roots?)
+    }
+  }
+
+  // */
+
   datatype Variables = Variables(
     likesVars: LB.Variables,
     betreeAULikes: LikesAU, 
     branchAULikes: LikesAU,
-    branchMiniAllocator: MiniAllocator  // this is not involved in trunk stuff
+    compator: Compactor
+    // Need to union the buildTight disk and all the threadseq disk.
+    // sequence of "thread" information for compacting branches, each with its own mini-allocator, and its own read-refs(?)
   )
   {
     predicate WF() {
@@ -163,6 +188,8 @@ module AllocationBranchedBetreeMod
 //   )
 //   }
 
+
+  // This corresponds to Compactor commit
   predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && LB.InternalCompactTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
@@ -170,6 +197,10 @@ module AllocationBranchedBetreeMod
     && var discardBetreeLikes := multiset(PathAddrsToPathAUs(step.path.AddrsOnPath()));
     && var newBranchLikes := multiset{step.newBranch.root.au};
     && var discardBranchLikes := multiset(Set(PathAddrsToPathAUs(step.path.Target().Root().branches.Slice(step.start, step.end).roots)));
+    // One mini-allocator per branch construction
+    // Compact is not an atomic step. There is compactStart and compactEnd
+    // Readers maintain read-refs on the tree.
+
     && v' == v.(
       branchedVars := v'.branchedVars, // admit relational update above
       branchMiniAllocator := 
