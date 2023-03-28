@@ -3,9 +3,11 @@
 
 include "../Disk/GenericDisk.i.dfy"
 include "../../lib/Base/Maps.i.dfy"
+include "../../lib/Base/Sets.i.dfy"
 
 module MiniAllocatorMod {
   import opened Maps
+  import opened Sets
   import opened Options
   import opened GenericDisk
 
@@ -98,6 +100,8 @@ module MiniAllocatorMod {
     MiniAllocator(map[], None)
   }
 
+
+
   datatype MiniAllocator = MiniAllocator(
     allocs: map<AU, PageAllocator>, 
     curr: Option<AU>) 
@@ -107,8 +111,8 @@ module MiniAllocatorMod {
       && (curr.Some? ==> curr.value in allocs)
     }
 
-    function GetAllReserved() : (out: Set<Address>) {
-      set addr | addr.au in allocs && addr in allocs[addr.au].reserved :: addr 
+    function GetAllReserved() : (out: set<Address>) {
+      UnionSetOfSets(set au: AU | au in allocs :: allocs[au].reserved)
     }
 
     function AddAUs(aus: set<AU>) : (out: MiniAllocator)

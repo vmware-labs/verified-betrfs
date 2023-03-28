@@ -31,12 +31,21 @@ module CompactorMod
     // Mutating outputs
     miniAllocator: MiniAllocator,
     output: LinkedBranch // root of the tree that we are building. Everything reachable from here is mini-allocated, disk here should be consistent with mini-allocator
-  )
+  ) {
+    predicate WF() {
+      && miniAllocator.WF()
+      && output.Acyclic()
+    }
+  }
   
   datatype Variables = Variables(
     threads: seq<CompactThread>
   )
   {
+    predicate WF() {
+      forall i | 0 <= i < |threads| :: threads[i].WF()
+    }
+
     function Likes() : LikesAU {
       // Union of output.likes and subdisk.Keys (or traverse disk from branchSeq roots?)
       NoLikes()  // this is a placeholder
@@ -58,6 +67,7 @@ module CompactorMod
 
 
   predicate Begin(v: Variables, v': Variables, lbl: TransitionLabel) {
+    && v.WF()
     && lbl.Begin?
     && var newThread := CompactThread(
       lbl.branchSeq, 
@@ -70,14 +80,19 @@ module CompactorMod
   }
 
   predicate Alloc(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat) {
+    && v.WF()
     && lbl.Internal?
+    && idx < |v.threads|
     && var thread := v.threads[idx];
+    && Set(lbl.allocs) !! thread.miniAllocator.allocs.Keys
     && var thread' := thread.(miniAllocator := thread.miniAllocator.AddAUs(Set(lbl.allocs)));
     && v' == v.(threads := v.threads[ idx := thread'])
   }
 
   predicate Build(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat, addr: Address, newOutput: LinkedBranch) {
+    && v.WF()
     && lbl.Internal?
+    && idx < |v.threads|
     && lbl.allocs == []
     && var thread := v.threads[idx];
     && thread.miniAllocator.CanAllocate(addr)
@@ -89,9 +104,10 @@ module CompactorMod
     && v' == v.(threads := v.threads[ idx := thread'])
   }
 
-  predicate Commit(: Variables, v': Variables, lbl: TransitionLabel, idx:nat) {
+  predicate Commit(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat) {
+    && v.WF()
     && lbl.Commit?
-    && idx < |v.thread|
+    && idx < |v.threads|
     && var thread := v.threads[idx];
     && lbl.branchSeq == thread.branchSeq
     && lbl.offsetMap == thread.offsetMap
