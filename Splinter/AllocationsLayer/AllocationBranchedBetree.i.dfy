@@ -1,9 +1,10 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "../LikesAU.i.dfy"
-include "../Journal/MiniAllocator.i.dfy"   // tony: borrowing from Journal for now
-include "LikesBranchedBetree.i.dfy"
+include "LikesAU.i.dfy"
+include "Compactor.i.dfy"
+include "../Betree/LikesBranchedBetree.i.dfy"
+
 
 module AllocationBranchedBetreeMod
 {
@@ -16,6 +17,7 @@ module AllocationBranchedBetreeMod
   import opened SplitRequestMod
   import opened LikesAUMod
   import opened MiniAllocatorMod
+  import opened CompactorMod
   import LikesBranchedBetreeMod
 
   import M = Mathematics
@@ -26,6 +28,7 @@ module AllocationBranchedBetreeMod
 //   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
   type AU = GenericDisk.AU
+  type Compactor = CompactorMod.Variables
 
   type PathAUs = seq<AU>
 
@@ -47,32 +50,6 @@ module AllocationBranchedBetreeMod
   {
     Apply((x: Address) => x.au, addrs)
   }
-
-  // TODO: Forest should be a state machine at this layer 
-
-
-  // Transitions for each thread state machine, from the persective of the caller:
-  //  Init(compact start), Internal, Commit, Abort
-  datatype CompactThread = CompactThread(
-    // Read-only inputs
-    branchSeq: BranchSeq,
-    offsetMap: OffsetMap,  // filter describing which keys from branchSeq should be preserved in output
-    subdisk: BranchDiskView, // diskview containing exactly the part of the tree we are reading
-    // Mutating outputs
-    miniAllocator: MiniAllocator,
-    output: LinkedBranch, // root of the tree that we are building. Everything reachable from here is mini-allocated, disk here should be consistent with mini-allocator
-  )
-  
-  datatype Compactor = Compactor(
-    threads: seq<CompactThread>
-  )
-  {
-    function Likes() {
-      // Union of output.likes and subdisk.Keys (or traverse disk from branchSeq roots?)
-    }
-  }
-
-  // */
 
   datatype Variables = Variables(
     likesVars: LB.Variables,
@@ -202,8 +179,8 @@ module AllocationBranchedBetreeMod
     // Readers maintain read-refs on the tree.
 
     && v' == v.(
-      branchedVars := v'.branchedVars, // admit relational update above
-      branchMiniAllocator := 
+      likesVars := v'.likesVars // admit relational update above
+      // branchMiniAllocator := 
       // Func: Take a set of page addrs, remove them from reserved of respective Page Allocators,
       // add them to observed of respective Page Allocators. 
       /*
@@ -217,8 +194,8 @@ module AllocationBranchedBetreeMod
           2a. add the set of addrs in its repr as *observed* in the miniallocator
           2b. record a reference to the root page from the betree's branchseq
       */ 
-      betreeLikes := v.betreeLikes - discardBetreeLikes + newBetreeLikes,
-      branchLikes := v.branchLikes - discardBranchLikes + newBranchLikes
+      // betreeAULikes := v.betreeLikes - discardBetreeLikes + newBetreeLikes,
+      // branchAULikes := v.branchLikes - discardBranchLikes + newBranchLikes
     )
   }
 
