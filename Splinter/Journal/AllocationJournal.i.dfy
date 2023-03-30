@@ -39,11 +39,11 @@ module AllocationJournal {
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
     // Internal-x labels refine to no-ops at the abstract spec
-    | InternalLabel(allocs: seq<Address>)  // Local No-op label
+    | InternalLabel()  // Local No-op label 
+    | InternalMiniAllocLabel(fill: set<AU>, prune: set<AU>)
   {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
-      && (InternalLabel? ==> forall addr | addr in allocs :: addr.WF())
     }
 
     function I(): LikesJournal.TransitionLabel {
@@ -53,13 +53,12 @@ module AllocationJournal {
         case QueryEndLsnLabel(endLsn) => LikesJournal.QueryEndLsnLabel(endLsn)
         case PutLabel(messages) => LikesJournal.PutLabel(messages)
         case DiscardOldLabel(startLsn, requireEnd) => LikesJournal.DiscardOldLabel(startLsn, requireEnd)
-        case InternalLabel(allocs) => LikesJournal.InternalLabel(allocs)
+        case InternalMiniAllocLabel(allocs, deallocs) => LikesJournal.InternalLabel()
+        case InternalLabel() => LikesJournal.InternalLabel()
       }
     }
   }
 
-
-  
   /***************************************************************************************
   *                                    State Machine                                     *
   ***************************************************************************************/
@@ -75,12 +74,6 @@ module AllocationJournal {
       && journal.WF()
       && miniAllocator.WF()
     }
-
-    // LikesJournal.lsnIndex(lsn).au == lsnAUAddrIndex(lsn)
-    // every page in this AU is not in freeset
-
-    // lsnIndex.Values (repr) 
-    // (expand au => each page addr) >= lsnIndex.Values
   }
 
   // group a couple definitions together
@@ -94,29 +87,27 @@ module AllocationJournal {
     )
   }
 
-  predicate InternalMiniAllocatorFill(v: Variables, v': Variables, lbl: TransitionLabel, aus: set<AU>)
+  predicate InternalMiniAllocatorFill(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
     && lbl.WF()
-    && lbl.InternalLabel?
-    && |lbl.allocs| == |aus| * GenericDisk.PageCount()
-    && (forall addr | addr in lbl.allocs :: addr.au in aus)
-    && aus !! v.miniAllocator.allocs.Keys
+    && lbl.InternalMiniAllocLabel?
+    && lbl.prune == {}
+    && lbl.fill !! v.miniAllocator.allocs.Keys
     && v' == v.(
-      miniAllocator := v.miniAllocator.AddAUs(aus)
+      miniAllocator := v.miniAllocator.AddAUs(lbl.fill)
     )
   }
 
-  predicate InternalMiniAllocatorPrune(v: Variables, v': Variables, lbl: TransitionLabel, aus: set<AU>)
+  predicate InternalMiniAllocatorPrune(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
     && lbl.WF()
-    && lbl.InternalLabel?
-    && |lbl.allocs| == |aus| * GenericDisk.PageCount()
-    && (forall addr | addr in lbl.allocs :: addr.au in aus)
-    && (forall au | au in aus :: v.miniAllocator.CanRemove(au))
+    && lbl.InternalMiniAllocLabel?
+    && lbl.fill == {}
+    && (forall au | au in lbl.prune :: v.miniAllocator.CanRemove(au))
     && v' == v.(
-      miniAllocator := v.miniAllocator.Prune(aus)
+      miniAllocator := v.miniAllocator.Prune(lbl.prune)
     )
   }
 
@@ -195,7 +186,6 @@ module AllocationJournal {
     && v.WF()
     && lbl.InternalLabel?
     && step.InternalJournalMarshalStep?
-    && lbl.allocs == [step.addr]
     // state transition
     // constraint on what can be allocated
     && ValidNextJournalAddr(v, step.addr)
@@ -217,7 +207,6 @@ module AllocationJournal {
   {
     && v.WF()
     && lbl.InternalLabel?
-    && lbl.allocs == []
     && v' == v
   }
  
@@ -255,6 +244,7 @@ module AllocationJournal {
     requires root.au != first
     requires root.au == later.au
     requires root.page <= later.page
+    requires InternalAUPagesFullyLinked(dv, first)
     ensures dv.Decodable(Some(root))
     // should be less than <= bc it's enough to prove termination, cause later is already < caller's root
     ensures dv.TheRankOf(Some(root)) <= dv.TheRankOf(Some(later))
@@ -262,12 +252,6 @@ module AllocationJournal {
   {
     if root == later { return; }
     var prior := dv.entries[later].CroppedPrior(dv.boundaryLSN);
-
-    // TODO: prove this once we have invariants
-    // we can prove this as part of our invariants, but can we actually bring that here?
-    assume AUPagesLinkedTillFirstInOrder(dv, later);
-
-    // assert prior.value.NextPage() == later;
     var priorAddr := GenericDisk.Address(later.au, later.page-1);
     assert priorAddr.NextPage() == later;
     assert Some(priorAddr) == prior;
@@ -282,7 +266,7 @@ module AllocationJournal {
     requires dv.Acyclic()
     requires root.au != first
     requires root.page == 0
-    // requires dv.boundaryLSN < dv.entries[root].messageSeq.seqEnd
+    requires InternalAUPagesFullyLinked(dv, first)
     decreases dv.TheRankOf(Some(root))
   {
     // we jump to the first page of each AU and perform an AU walk skipping over pages in the middle 
@@ -302,6 +286,7 @@ module AllocationJournal {
 
   function BuildLsnAUIndex(tj: TruncatedJournal, first: AU) : map<LSN, AU> 
     requires tj.Decodable()
+    requires InternalAUPagesFullyLinked(tj.diskView, first)
   {
     if tj.freshestRec.None? then map[]
     else
@@ -313,9 +298,26 @@ module AllocationJournal {
         BuildLsnAUIndexAUWalk(tj.diskView, tj.freshestRec.value.FirstPage(), last, first)
   }
 
+  predicate InternalAUPagesFullyLinked(dv: DiskView, first: AU)
+  {
+    && (forall addr | addr in dv.entries && addr.au != first :: AUPagesLinkedTillFirstInOrder(dv, addr))
+  }
+
+  predicate WFAddrs(dv: DiskView)
+  {
+    && (forall addr | addr in dv.entries :: addr.WF())
+  }
+
+  predicate WFTruncatedJournal(journal: TruncatedJournal, first: AU) 
+  {
+    && WFAddrs(journal.diskView)
+    && InternalAUPagesFullyLinked(journal.diskView, first)
+  }
+
   predicate Init(v: Variables, journal: TruncatedJournal, first: AU)
   {
-    && LikesJournal.Init(v.journal, journal) 
+    && WFTruncatedJournal(journal, first)
+    && LikesJournal.Init(v.journal, journal)
     && v == Variables(v.journal, BuildLsnAUIndex(journal, first), first, MiniAllocator(map[], None))
   }
 
@@ -326,8 +328,8 @@ module AllocationJournal {
     | PutStep()
     | DiscardOldStep()
     | InternalJournalMarshalStep(cut: LSN, addr: Address)
-    | InternalMiniAllocatorFillStep(aus: set<AU>)
-    | InternalMiniAllocatorPruneStep(aus: set<AU>)
+    | InternalMiniAllocatorFillStep()
+    | InternalMiniAllocatorPruneStep()
     | InternalNoOpStep()
   {
     function I() : LikesJournal.Step
@@ -349,8 +351,8 @@ module AllocationJournal {
     match step {
       case DiscardOldStep() => DiscardOld(v, v', lbl)
       case InternalJournalMarshalStep(_, _) => InternalJournalMarshal(v, v', lbl, step)
-      case InternalMiniAllocatorFillStep(aus) => InternalMiniAllocatorFill(v, v', lbl, aus)
-      case InternalMiniAllocatorPruneStep(aus) => InternalMiniAllocatorPrune(v, v', lbl, aus)
+      case InternalMiniAllocatorFillStep() => InternalMiniAllocatorFill(v, v', lbl)
+      case InternalMiniAllocatorPruneStep() => InternalMiniAllocatorPrune(v, v', lbl)
       case InternalNoOpStep() => InternalNoOp(v, v', lbl)
       case _ => OnlyAdvanceLikesJournal(v, v', lbl, step)
     }

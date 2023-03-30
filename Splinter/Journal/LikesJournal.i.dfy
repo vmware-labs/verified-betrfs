@@ -34,7 +34,7 @@ module LikesJournal {
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
     // Internal-x labels refine to no-ops at the abstract spec
-    | InternalLabel(allocs: seq<Address>)  // Local No-op label
+    | InternalLabel()  // Local No-op label
   {
     predicate WF() {
       && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
@@ -47,7 +47,7 @@ module LikesJournal {
         case QueryEndLsnLabel(endLsn) => LinkedJournal.QueryEndLsnLabel(endLsn)
         case PutLabel(messages) => LinkedJournal.PutLabel(messages)
         case DiscardOldLabel(startLsn, requireEnd) => LinkedJournal.DiscardOldLabel(startLsn, requireEnd)
-        case InternalLabel(_) => LinkedJournal.InternalLabel()
+        case InternalLabel() => LinkedJournal.InternalLabel()
       }
     }
   }
@@ -212,7 +212,6 @@ module LikesJournal {
   {
     // Enabling conditions
     && lbl.InternalLabel?
-    && lbl.allocs == [addr]
     && v.WF()
     // State transition
     && addr !in v.lsnAddrIndex.Values
@@ -226,7 +225,6 @@ module LikesJournal {
   predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && lbl.InternalLabel?
-    && lbl.allocs == []
     && v.WF()
     && v' == v
   }

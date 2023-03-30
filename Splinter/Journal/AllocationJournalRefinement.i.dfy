@@ -44,11 +44,6 @@ module AllocationJournalRefinment {
       && freshestRec.value.au == allocator.curr.value)
   }
 
-  predicate InternalAUPagesFullyLinked(dv: DiskView, first: AU)
-  {
-    && (forall addr | addr in dv.entries && addr.au != first :: AUPagesLinkedTillFirstInOrder(dv, addr))
-  }
-
   predicate ValidFirstAU(dv: DiskView, lsnAUIndex: map<LSN, AU>, first: AU)
   {
     && dv.boundaryLSN in lsnAUIndex
@@ -172,7 +167,7 @@ module AllocationJournalRefinment {
             }
             assert lsnAUIndex[lsn3] == step.addr.au;
             var page := v.journal.lsnAddrIndex[lsn1];
-            assert !v.miniAllocator.CanAllocate(page);
+            assert !v.miniAllocator.CanAllocate(page); // meow 
             assert lsnAUIndex[lsn1] != step.addr.au; 
             assert false;
           }
@@ -350,9 +345,54 @@ module AllocationJournalRefinment {
     }
   }
  
-  lemma InitRefines()
+  lemma InitRefines(v: Variables, journal: TruncatedJournal, first: AU)
+    requires Init(v, journal, first)
+    ensures LikesJournalInv(v)
+    ensures LikesJournal.Init(I(v), journal)
   {
-    
+    LR.InvInit(v.journal, journal);
+    reveal_LikesJournalInv();
+  }
+
+  lemma InvInit(v: Variables, journal: TruncatedJournal, first: AU)
+    requires Init(v, journal, first)
+    requires LikesJournalInv(v)
+    ensures Inv(v)
+  {
+    assert v.WF();
+    assert MiniAllocatorFollowfreshestRec(GetTj(v).freshestRec, v.miniAllocator);
+
+    // assert JournalPagesNotFree(v.journal.lsnAddrIndex.Values, v.miniAllocator);
+
+    forall addr | addr in v.journal.lsnAddrIndex.Values
+      // ensures addr.WF()
+      ensures !v.miniAllocator.CanAllocate(addr)
+    {
+      assert addr.au !in v.miniAllocator.allocs;
+      // we started to slap an address in WF
+      // assume addr.WF();
+    }
+
+    // assert AddrIndexConsistentWithAUIndex(v.journal.lsnAddrIndex, v.lsnAUIndex);
+
+
+    // && AUsHoldContiguousLSNs(v.lsnAUIndex)
+    // && (GetTj(v).freshestRec.Some? ==> ValidFirstAU(GetTj(v).diskView, v.lsnAUIndex, v.first))
+    // && (GetTj(v).freshestRec.Some? ==> InternalAUPagesFullyLinked(GetTj(v).diskView, v.first))
+
+    assume false;
+    // reveal_IndexDomainValid();
+    // reveal_IndexKeysMapToValidEntries();
+    // LinkedJournalRefinement.BuildTightIsAwesome(tj.diskView, tj.freshestRec);
+    // var tightTj := tj.BuildTight();
+    // if tightTj.freshestRec.Some? {
+    //   BuildLsnAddrIndexDomainValid(tightTj.diskView, tightTj.freshestRec);
+    // }
+    // BuildLsnAddrIndexRangeValid(tightTj.diskView, tightTj.freshestRec,tightTj.SeqEnd());
+    // BuildLsnAddrIndexGivesRepresentation(tightTj);
+    // BuildTightGivesRepresentation(tj.diskView, tj.freshestRec);
+    // RepresentationIgnoresBuildTight(tj.diskView, tj.freshestRec, tj.freshestRec);
+    // BuildLsnAddrIndexIgnoresBuildTight(tj.diskView, tj.freshestRec, tj.freshestRec);
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -365,8 +405,8 @@ module AllocationJournalRefinment {
     // InvNext(v, v', lbl);
     var step: Step :| NextStep(v, v', lbl, step);
     match step {
-      case InternalMiniAllocatorFillStep(aus) => { assume false; }
-      case InternalMiniAllocatorPruneStep(aus) => { assume false; }
+      case InternalMiniAllocatorFillStep() => { assume false; }
+      case InternalMiniAllocatorPruneStep() => { assume false; }
       case DiscardOldStep() => {
         assert DiscardOld(v, v', lbl);
         DiscardOldRefines(v, v', lbl);
