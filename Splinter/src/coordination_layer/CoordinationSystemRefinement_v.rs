@@ -422,85 +422,22 @@ verus! {
 
     // (pm+ej[..R])+ej[..lsn][R..]
     journal_associativity(v.mapadt.persistent, ej.discard_recent(ref_lsn), ej.discard_recent(lsn).discard_old(ref_lsn));
-    let x = v.mapadt.persistent;
-    let y = ej.discard_recent(ref_lsn);
-    let z = ej.discard_recent(lsn).discard_old(ref_lsn);
-
-    let left: StampedMap = MsgHistory::map_plus_history(v.mapadt.persistent, v.journal.i().discard_recent(lsn));
-    let right: StampedMap = MsgHistory::map_plus_history(vp.mapadt.persistent, vp.journal.i().discard_recent(lsn));
 
     // MsgHistory::concat_forall_lemma();
     ej.discard_recent(ref_lsn).concat_lemma(ej.discard_old(ref_lsn));
 
     // Adding split pieces gets original ej[..lsn]+ej[lsn..] = ej
     assert_maps_equal!(ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn)).msgs, ej.msgs);
-
     // Discard commutes: ej[ref_lsn..][..lsn] = ej[..lsn][ref_lsn..]
     assert_maps_equal!(ej.discard_old(ref_lsn).discard_recent(lsn).msgs, ej.discard_recent(lsn).discard_old(ref_lsn).msgs);
-
     // Discard is associative with concat: ej[..ref_lsn]+(ej[ref_lsn..][..lsn]) = (ej[..ref_lsn]+ej[ref_lsn..])[..lsn]
     // Note that ej[..ref_lsn]+ej[ref_lsn..] should just be ej
     assert_maps_equal!(ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn).discard_recent(lsn)).msgs, ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn)).discard_recent(lsn).msgs);
     
-    assert(ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn).discard_recent(lsn))
-        == ej.discard_recent(lsn));
-
-    assert(ej.discard_recent(lsn) == ej.discard_recent(ref_lsn).concat(ej.discard_recent(lsn).discard_old(ref_lsn)));
-    assert(MsgHistory::map_plus_history(v.mapadt.persistent, v.journal.i().discard_recent(lsn))
-      == MsgHistory::map_plus_history(v.mapadt.persistent, ej.discard_recent(ref_lsn).concat(ej.discard_recent(lsn).discard_old(ref_lsn))));
-    assert(left == MsgHistory::map_plus_history(x, y.concat(z)));
-
-    assert(right == MsgHistory::map_plus_history(MsgHistory::map_plus_history(x, y), z));
-    assert(MsgHistory::map_plus_history(MsgHistory::map_plus_history(x, y), z) == MsgHistory::map_plus_history(x, y.concat(z)));
-    // pm+(ej[..R]+ej[..lsn][R..])
-
-    // because R <= lsn; smaller lsn are Forgotten
-    assert(ej.discard_recent(ref_lsn) == ej.discard_recent(lsn).discard_recent(ref_lsn))
-    by
-    {
-      // Extensional equality arguments need to be made through macro
-      assert_maps_equal!(
-        ej.discard_recent(ref_lsn).msgs,
-        ej.discard_recent(lsn).discard_recent(ref_lsn).msgs
-      );
-    };
-    // pm+(ej[..lsn][..R]+ej[..lsn][R..])
-    // trigger
-    assert(eji.discard_recent(ref_lsn).concat(eji.discard_old(ref_lsn)) == eji)
-    by
-    {
-      assert_maps_equal!(
-        eji.discard_recent(ref_lsn).concat(eji.discard_old(ref_lsn)).msgs,
-        eji.msgs
-      );
-    }
-    // pm+ej[..lsn]
-    
-    assert(v.mapadt.persistent.value.wf());
-
-    // This doesn't trigger properly :/
     MsgHistory::map_plus_history_forall_lemma();
-
     MsgHistory::map_plus_history_seq_end_lemma(v.mapadt.persistent, v.journal.i().discard_recent(lsn));
-    assert(left.seq_end == lsn);
-
     // Proving that right's seq_end == lsn
     MsgHistory::map_plus_history_seq_end_lemma(vp.mapadt.persistent, vp.journal.i().discard_recent(lsn));
-    
-    assert(right.seq_end == lsn);
-
-    // Goal
-    assert(left.seq_end == right.seq_end); // done
-
-    assert(forall |k| left.value.dom().contains(k));
-
-    // Goal: show domains are the same. DONE
-    assert_sets_equal!(left.value.dom(), right.value.dom());
-
-    // Goal: show that maps are same because for all keys they map key to same value
-
-    // TODO: Show that mappings from keys to values are equal
-    assert_maps_equal!(left.value == right.value);
   }
 
   pub proof fn journal_associativity(x: StampedMap, y: MsgHistory, z: MsgHistory)
