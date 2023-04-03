@@ -108,6 +108,7 @@ module PivotBranchMod {
       Keys.LargestLte(s, key)
     }
 
+    // TODO: move to refinement file instead
     // Takes in a btree node and returns the buffer abstraction
     function I() : Buffer
       requires WF()
@@ -357,11 +358,8 @@ module PivotBranchMod {
       decreases Height(), 2
     {
       if Leaf? 
-      then (
-        InsertLeaf(key, msg)
-      ) else (
-        InsertIndex(key, msg)
-      )
+      then InsertLeaf(key, msg)
+      else InsertIndex(key, msg)
     }
 
     // Split 

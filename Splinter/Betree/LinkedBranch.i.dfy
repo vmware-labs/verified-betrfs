@@ -29,6 +29,11 @@ module LinkedBranchMod {
 
   type Address = GenericDisk.Address
 
+  datatype TransitionLabel = 
+    | QueryLabel(key: Key, msg: Message)
+    | InsertLabel(key: Key, msg: Message)
+    | InternalLabel(addr: Address)
+
   datatype Node = Index(pivots: seq<Key>, children: seq<Address>) | Leaf(keys: seq<Key>, msgs: seq<Message>)
   {
     predicate WF() {
@@ -158,6 +163,12 @@ module LinkedBranchMod {
     function ModifyDisk(addr: Address, item: Node) : DiskView
     {
       DiskView.DiskView(entries[addr := item])
+    }
+
+    predicate SameExcept(other: DiskView, except: set<Address>)
+    {
+      MapRestrict(entries, entries.Keys - except) 
+        == MapRestrict(other.entries, other.entries.Keys - except)
     }
   }
 
@@ -314,7 +325,6 @@ module LinkedBranchMod {
       requires WF()
       requires ValidRanking(ranking)
       decreases GetRank(ranking)
-      ensures ILinkedBranchNode(ranking).WF() ==> msg == ILinkedBranchNode(ranking).Query(key)
     {
       var node := Root();
       var r := node.Route(key);
@@ -327,130 +337,12 @@ module LinkedBranchMod {
     }
 
     function Query(key: Key) : (msg: Message)
-      requires Acyclic()
-      ensures I().WF() ==> msg == I().Query(key)
     {
-      QueryInternal(key, TheRanking())
+      if Acyclic()
+      then QueryInternal(key, TheRanking())
+      else Update(NopDelta()) // Dummy value
     }
-
-    // Interpretation functions
-    function I() : (out: P.Node)
-      requires Acyclic()
-      ensures Root().Index? <==> out.Index?
-      ensures AllKeysInRange() ==> out.WF()
-    {
-      var ranking := TheRanking();
-      var out := ILinkedBranchNode(ranking);
-      assert AllKeysInRange() ==> out.WF() by {
-        if AllKeysInRangeInternal(ranking) {
-          ILinkedBranchNodeWF(ranking);
-        }
-      }
-      out
-    }
-
-    function ILinkedBranchNode(ranking: Ranking) : (out: P.Node)
-      requires WF()
-      requires ValidRanking(ranking)
-      ensures Root().Index? <==> out.Index?
-      ensures Root().Index? ==> Root().pivots == out.pivots
-      ensures Root().Index? ==> |Root().children| == |out.children|      
-      decreases GetRank(ranking), 1
-    {
-      var node := Root();
-      if node.Leaf? 
-      then P.Leaf(node.keys, node.msgs)
-      else P.Index(node.pivots, IChildren(ranking))
-    }
-
-    function IChildren(ranking: Ranking) : (out: seq<P.Node>)
-      requires WF()
-      requires Root().Index?
-      requires ValidRanking(ranking)
-      decreases GetRank(ranking), 0
-    {
-      var numChildren := |Root().children|;
-      seq(numChildren, i requires 0 <= i < numChildren => ChildAtIdx(i).ILinkedBranchNode(ranking))
-    }
-
-    lemma AllKeysIsConsistentWithI(ranking: Ranking)
-      requires WF()
-      requires ValidRanking(ranking)
-      ensures AllKeys(ranking) == ILinkedBranchNode(ranking).AllKeys()
-      decreases GetRank(ranking)
-    {
-      var node := Root();
-      if node.Leaf? {
-      } else {
-        var node' := ILinkedBranchNode(ranking);
-        assert IChildren(ranking) == node'.children; // trigger
-
-        forall k 
-          ensures k in node'.AllKeys() <==> k in AllKeys(ranking)
-        {
-          if k in node'.AllKeys() {
-            if k !in node'.pivots {
-              var i :| 0 <= i < |node'.children| && k in node'.children[i].AllKeys();
-              ChildAtIdx(i).AllKeysIsConsistentWithI(ranking);
-              assert k in AllKeys(ranking);
-            }
-          } else if k in AllKeys(ranking) {
-            if k !in node.pivots {
-              var i :| 0 <= i < |node.children| && k in ChildAtIdx(i).AllKeys(ranking);
-              var linked_child := ChildAtIdx(i);
-              assert linked_child.ILinkedBranchNode(ranking) == node'.children[i];
-              
-              ChildAtIdx(i).AllKeysIsConsistentWithI(ranking);
-              assert k in node'.AllKeys();
-              assert false;
-            }
-          }
-        }
-      }
-    }
-
-    lemma ILinkedBranchNodeWF(ranking: Ranking)
-      requires ILinkedBranchNode.requires(ranking)
-      requires AllKeysInRangeInternal(ranking)
-      ensures ILinkedBranchNode(ranking).WF()
-      decreases GetRank(ranking)
-    {
-      var node := Root();
-      var out := ILinkedBranchNode(ranking);
-      
-      if node.Index? {
-        assert |out.pivots| == |out.children| - 1;
-        assert Keys.IsStrictlySorted(out.pivots);
-
-        forall i | 0 <= i < |IChildren(ranking)|
-          ensures IChildren(ranking)[i].WF()
-        {
-          ChildAtIdx(i).ILinkedBranchNodeWF(ranking);
-        }
-
-        assert IChildren(ranking) == out.children; // trigger
-        assert (forall i :: 0 <= i < |out.children| ==> out.children[i].WF());
-
-        forall i | 0 <= i < |out.children|
-          ensures i < |out.children|-1  ==> out.AllKeysBelowBound(i)
-          ensures 0 < i ==> out.AllKeysAboveBound(i)
-        {
-          var child := out.children[i];
-          var linked_child := ChildAtIdx(i);
-          
-          if 0 <= i < |out.children|-1 {
-            assert AllKeysBelowBound(i, ranking);
-          }
-
-          if 0 < i < |out.children| {
-            assert AllKeysAboveBound(i, ranking);
-          }
-
-          linked_child.AllKeysIsConsistentWithI(ranking);
-        }
-      }
-    }
-
+    
     // mutable operation
 
     // Grow
@@ -462,18 +354,12 @@ module LinkedBranchMod {
     }
 
     // Insert
-    // insert into subtree
-    // then what do we define? 
-    // functional recursive definition?
-    // at each layer we merge with the newer diskview below and take 
     function InsertLeaf(key: Key, msg: Message) : (result: LinkedBranch)
     requires WF()
-    requires diskView.entries[root].Leaf?
-    ensures result.WF()
-    ensures result.root == root
-    ensures result.diskView.entries[root].Leaf?
+    requires Root().Leaf?
+    // ensures result.WF()
     {
-      var node := diskView.entries[root];
+      var node := Root();
       var llte := Keys.LargestLte(node.keys, key);
       var newNode :=
         if 0 <= llte && node.keys[llte] == key  then 
@@ -484,13 +370,207 @@ module LinkedBranchMod {
             Keys.reveal_IsStrictlySorted();
           }
           Leaf(insert(node.keys, key, llte+1), insert(node.msgs, msg, llte+1));
-      
+
       LinkedBranch(root, diskView.ModifyDisk(root, newNode))
+    }
+
+    function InsertIndex(key: Key, msg: Message, ranking: Ranking) : (result: LinkedBranch)
+      requires WF()
+      requires ValidRanking(ranking)
+      requires Root().Index?
+      // ensures result.WF()
+      // ensures result.AllKeys() == AllKeys() + {key}
+      decreases GetRank(ranking), 1
+    {
+      var r := Root().Route(key)+1;
+      var newChild := ChildAtIdx(r).InsertInternal(key, msg, ranking);
+      LinkedBranch(root, newChild.diskView)
+    }
+
+    function InsertInternal(key: Key, msg: Message, ranking: Ranking) : (result: LinkedBranch)
+      requires WF()
+      requires ValidRanking(ranking)
+      // ensures result.WF()
+      // ensures result.AllKeys() == AllKeys() + {key}
+      decreases GetRank(ranking), 2
+    {
+      if Root().Leaf? 
+      then InsertLeaf(key, msg)
+      else InsertIndex(key, msg, ranking)
+    }
+
+    function Insert(key: Key, msg: Message) : (result: LinkedBranch)
+    {
+      if Acyclic()
+      then InsertInternal(key, msg, TheRanking())
+      else this // dummy value, not reached due to invariant
+    }
+    
+    // Split
+
+    predicate SplitLeaf(leftLeaf: LinkedBranch, rightLeaf: LinkedBranch, pivot: Key)
+    {
+      && HasRoot()
+      && Root().Leaf?
+      && leftLeaf.HasRoot()
+      && leftLeaf.Root().Leaf?
+      && rightLeaf.HasRoot()
+      && rightLeaf.Root().Leaf?
+
+      && leftLeaf.root == root
+      && diskView.IsFresh({rightLeaf.root})
+      && leftLeaf.diskView == diskView.ModifyDisk(
+        leftLeaf.root, leftLeaf.Root()).ModifyDisk(rightLeaf.root, rightLeaf.Root())
+      // && diskView.SameExcept(leftLeaf.diskView, {leftLeaf.root, rightLeaf.root}) // same thing as above
+      && rightLeaf.diskView == leftLeaf.diskView
+
+      && 0 < |leftLeaf.Root().keys| == |leftLeaf.Root().msgs|
+      && 0 < |rightLeaf.Root().keys| == |rightLeaf.Root().msgs|
+
+      && Root().keys == leftLeaf.Root().keys + rightLeaf.Root().keys
+      && Root().msgs == leftLeaf.Root().msgs + rightLeaf.Root().msgs
+      && Keys.lt(Last(leftLeaf.Root().keys), pivot)
+      && Keys.lte(pivot, rightLeaf.Root().keys[0])
+    }
+
+    function SubIndex(from: int, to: int) : (result : Node)
+    requires HasRoot()
+    requires Root().Index?
+    requires |Root().children| == |Root().pivots| + 1
+    requires 0 <= from < to <= |Root().children|
+    {
+      Index(Root().pivots[from..to-1], Root().children[from..to])
+    }
+
+    predicate SplitIndex(leftIndex: LinkedBranch, rightIndex: LinkedBranch, pivot: Key)
+    {
+      && HasRoot()
+      && Root().Index?
+      && leftIndex.HasRoot()
+      && leftIndex.Root().Index?
+      && rightIndex.HasRoot()
+      && rightIndex.Root().Index?
+
+      && leftIndex.root == root
+      && diskView.IsFresh({rightIndex.root})
+      // && leftIndex.diskView == diskView.ModifyDisk(
+      //   leftIndex.root, leftIndex.Root()).ModifyDisk(rightIndex.root, rightIndex.Root())
+      && rightIndex.diskView == leftIndex.diskView
+
+      && 0 < |leftIndex.Root().children| < |Root().children|
+      && |Root().children| == |Root().pivots| + 1
+      && leftIndex.Root() == SubIndex(0, |leftIndex.Root().children|)
+      && rightIndex.Root() == SubIndex(|leftIndex.Root().children|, |Root().children|)
+      && (leftIndex.Acyclic() && rightIndex.Acyclic()  ==>
+        && var leftLastChild := leftIndex.ChildAtIdx(|leftIndex.Root().children|-1);
+        && var rightFirstChild := rightIndex.ChildAtIdx(0);
+        && (forall key :: key in leftLastChild.AllKeys(leftLastChild.TheRanking()) ==> Keys.lt(key, pivot))
+        && (forall key :: key in rightFirstChild.AllKeys(rightFirstChild.TheRanking()) ==> Keys.lte(pivot, key))
+      )
+      && pivot == Root().pivots[|leftIndex.Root().pivots|]
+    }
+
+    predicate SplitNode(leftBranch: LinkedBranch, rightBranch: LinkedBranch, pivot: Key)
+    {
+      || SplitLeaf(leftBranch, rightBranch, pivot)
+      || SplitIndex(leftBranch, rightBranch, pivot)
+    }
+
+    predicate SplitChildOfIndex(newIndex: LinkedBranch, pivot: Key, newChildAddr: Address)
+    {
+      && HasRoot()
+      && Root().Index?
+      && Root().WF() // I mean... we can do something more relaxed here but WF should be easy to prove right?
+      && newIndex.HasRoot()
+      && newIndex.Root().Index?
+      && newIndex.root == root
+
+      && var childIdx := Root().Route(pivot)+1;
+      && 0 <= childIdx < |Root().children|
+      && |Root().children| == |Root().pivots| + 1
+      && |newIndex.Root().children| == |Root().children| + 1
+      && newIndex.Root().pivots == insert(Root().pivots, pivot, childIdx)
+      && newIndex.Root().children == replace1with2(Root().children, 
+          newIndex.Root().children[childIdx], newIndex.Root().children[childIdx+1], childIdx)
+      && newIndex.Root().children[childIdx+1] == newChildAddr // newly linked child addr must be the one provided
+      && ChildAtIdx(childIdx).SplitNode(newIndex.ChildAtIdx(childIdx), newIndex.ChildAtIdx(childIdx+1), pivot)
+
+      // && newIndex.diskView == diskView.ModifyDisk(root, newIndex.Root()).ModifyDisk(
+      //   newIndex.ChildAtIdx(childIdx).root, newIndex.ChildAtIdx(childIdx).Root()).ModifyDisk(
+      //     newIndex.ChildAtIdx(childIdx+1).root, newIndex.ChildAtIdx(childIdx+1).Root())
+      && diskView.SameExcept(newIndex.diskView,
+        {newIndex.root, newIndex.ChildAtIdx(childIdx).root, newIndex.ChildAtIdx(childIdx+1).root})
     }
   }
 
-  // step might need to take a path
-  // split, requires a step
-  // 
+  function EmptyLinkedBranch(root: Address) : (result: LinkedBranch)
+    ensures result.WF()
+  {
+    LinkedBranch(root, EmptyDisk().ModifyDisk(root, Leaf([], [])))
+  }
 
+  datatype Variables = Variables(branch: LinkedBranch)
+  {
+    predicate WF() {
+      branch.WF()
+    }
+  }
+
+  predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.QueryLabel?
+    && v.WF()
+    && v.branch.Query(lbl.key) == lbl.msg
+    && v' == v
+  }
+
+  predicate Insert(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.InsertLabel?
+    && v.WF()
+    && v'.branch == v.branch.Insert(lbl.key, lbl.msg)
+  }
+
+  predicate Grow(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && lbl.InternalLabel?
+    && v.WF()
+    && v'.branch == v.branch.Grow(lbl.addr)
+  }
+
+  predicate Split(v: Variables, v': Variables, lbl: TransitionLabel, parentAddr: Address, pivot: Key)
+  {
+    && lbl.InternalLabel?
+    && v.WF()
+    && var parent := LinkedBranch(parentAddr, v.branch.diskView);
+    && var parent' := LinkedBranch(parentAddr, v'.branch.diskView);
+    && parent.SplitChildOfIndex(parent', pivot, lbl.addr)
+  }
+
+  // public:
+
+  predicate Init(v: Variables)
+  {
+    && v.branch == EmptyLinkedBranch(v.branch.root)
+  }
+
+  datatype Step =
+    | QueryStep()
+    | InsertStep()
+    | GrowStep()
+    | SplitStep(parentAddr: Address, pivot: Key)
+
+  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    match step {
+      case QueryStep() => Query(v, v', lbl)
+      case InsertStep() => Insert(v, v', lbl)
+      case GrowStep() => Grow(v, v', lbl)
+      case SplitStep(parentAddr, pivot) => Split(v, v', lbl, parentAddr, pivot)
+    }
+  }
+
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
+    exists step: Step :: NextStep(v, v', lbl, step)
+  }
 }
