@@ -5,7 +5,6 @@ include "LikesAU.i.dfy"
 include "Compactor.i.dfy"
 include "../Betree/LikesBranchedBetree.i.dfy"
 
-
 module AllocationBranchedBetreeMod
 {
   import opened Sequences
@@ -19,16 +18,18 @@ module AllocationBranchedBetreeMod
   import opened MiniAllocatorMod
   import opened CompactorMod
   import LikesBranchedBetreeMod
+  import opened AllocationBranchMod
 
   import M = Mathematics
   import BB = BranchedBetreeMod
-  import LkB = LinkedBranchMod 
+  // import LkB = LinkedBranchMod 
   import LB = LikesBranchedBetreeMod
 
 //   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
   type AU = GenericDisk.AU
   type Compactor = CompactorMod.Variables
+  type BranchDiskView = AllocationBranchMod.DiskView
 
   type PathAUs = seq<AU>
 
@@ -55,6 +56,8 @@ module AllocationBranchedBetreeMod
     likesVars: LB.Variables,
     betreeAULikes: LikesAU, 
     branchAULikes: LikesAU,
+
+    allocBranchDiskView: BranchDiskView, // diskview containing allocation branches
     compator: Compactor
     // Need to union the buildTight disk and all the threadseq disk.
     // sequence of "thread" information for compacting branches, each with its own mini-allocator, and its own read-refs(?)
@@ -96,6 +99,7 @@ module AllocationBranchedBetreeMod
   // group a couple definitions together
   predicate OnlyAdvanceBranchedVars(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    // TODO: check if these steps change branchdiskview
     && LB.NextStep(v.likesVars, v'.likesVars, lbl.I(), step.I())
     && v' == v.(
       likesVars := v'.likesVars // admit relational update above
@@ -104,12 +108,24 @@ module AllocationBranchedBetreeMod
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    //  avoid defining enabling predicates based on the ghosty branchDiskView (linkedBranch)
+    //    ==> most steps in branchedbetree  [ isFresh ]
+
+    // v.likesVars ==> v'.LikesVars
+    // likes, repeating branchedbetree
+    
+
+    // need to advance branchedbetree without checking conditions on ghosty branchDiskView
+
     && LB.InternalGrowTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
     && v.IsFresh({step.newRootAddr.au})
     && v' == v.(
       betreeAULikes := v.betreeAULikes + multiset({step.newRootAddr.au})
     )
   }
+
+  // Likes variables (branchdiskview)
+  //  allocationBranch -> linkedbranch
 
   // Any b+tree that is "observed" is not in the mini-allocator
 
@@ -178,6 +194,10 @@ module AllocationBranchedBetreeMod
     // Compact is not an atomic step. There is compactStart and compactEnd
     // Readers maintain read-refs on the tree.
 
+    // TODO: check
+    // all updates to allocBranchDiskView are identical to the branchdiskview updates in branchedbetree
+    && var newAllocBranchDiskView := v.allocBranchDiskView.MergeDisk(step.newBranch.diskView);
+
     && v' == v.(
       likesVars := v'.likesVars // admit relational update above
       // branchMiniAllocator := 
@@ -219,9 +239,9 @@ module AllocationBranchedBetreeMod
     | FreezeAsStep()
     | InternalGrowStep(newRootAddr: Address)
     | InternalSplitStep(path: BB.Path, request: SplitRequest, newAddrs: BB.L.SplitAddrs, pathAddrs: BB.PathAddrs)
-    | InternalFlushMemtableStep(newRootAddr: Address, branch: LkB.LinkedBranch)
+    | InternalFlushMemtableStep(newRootAddr: Address, branch: AllocationBranch)
     | InternalFlushStep(path: BB.Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: BB.PathAddrs, branchGCCount: nat)
-    | InternalCompactStep(path: BB.Path, start: nat, end: nat, newBranch: LkB.LinkedBranch, targetAddr: Address, pathAddrs: BB.PathAddrs)
+    | InternalCompactStep(path: BB.Path, start: nat, end: nat, newBranch: AllocationBranch, targetAddr: Address, pathAddrs: BB.PathAddrs)
     | InternalNoOpStep()   // Local No-op label
   {
     function I() : LB.Step
@@ -234,11 +254,11 @@ module AllocationBranchedBetreeMod
         case InternalGrowStep(newRootAddr) => LB.InternalGrowStep(newRootAddr)
         case InternalSplitStep(path, request, newAddrs, pathAddrs)
           => LB.InternalSplitStep(path, request, newAddrs, pathAddrs)
-        case InternalFlushMemtableStep(newRootAddr, branch) => LB.InternalFlushMemtableStep(newRootAddr, branch)
+        case InternalFlushMemtableStep(newRootAddr, branch) => LB.InternalFlushMemtableStep(newRootAddr, branch.I())
         case InternalFlushStep(path, childIdx, targetAddr, targetChildAddr, pathAddrs, branchGCCount) 
           => LB.InternalFlushStep(path, childIdx, targetAddr, targetChildAddr, pathAddrs, branchGCCount)
         case InternalCompactStep(path, start, end, newBranch, targetAddr, pathAddrs) 
-          => LB.InternalCompactStep(path, start, end, newBranch, targetAddr, pathAddrs) 
+          => LB.InternalCompactStep(path, start, end, newBranch.I(), targetAddr, pathAddrs) 
         case InternalNoOpStep() => LB.InternalNoOpStep
       }
     }

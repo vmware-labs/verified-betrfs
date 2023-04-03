@@ -152,7 +152,13 @@ module LinkedBranchMod {
       ensures out.IsSubsetOf(this)
     {
       DiskView.DiskView(MapRemove(entries, other.entries.Keys))
-    } 
+    }
+
+    // returns a new diskview with the new entry inserted
+    function ModifyDisk(addr: Address, item: Node) : DiskView
+    {
+      DiskView.DiskView(entries[addr := item])
+    }
   }
 
   function EmptyDisk() : DiskView {
@@ -444,5 +450,47 @@ module LinkedBranchMod {
         }
       }
     }
+
+    // mutable operation
+
+    // Grow
+    function Grow(addr: Address) : (out: LinkedBranch)
+    {
+      var newRoot := Index([], [root]);
+      var newDiskView := diskView.ModifyDisk(addr, newRoot);
+      LinkedBranch(addr, newDiskView)
+    }
+
+    // Insert
+    // insert into subtree
+    // then what do we define? 
+    // functional recursive definition?
+    // at each layer we merge with the newer diskview below and take 
+    function InsertLeaf(key: Key, msg: Message) : (result: LinkedBranch)
+    requires WF()
+    requires diskView.entries[root].Leaf?
+    ensures result.WF()
+    ensures result.root == root
+    ensures result.diskView.entries[root].Leaf?
+    {
+      var node := diskView.entries[root];
+      var llte := Keys.LargestLte(node.keys, key);
+      var newNode :=
+        if 0 <= llte && node.keys[llte] == key  then 
+          Leaf(node.keys, node.msgs[llte := msg])
+        else 
+          assert Keys.IsStrictlySorted(insert(node.keys, key, llte+1)) by {
+            reveal_insert();
+            Keys.reveal_IsStrictlySorted();
+          }
+          Leaf(insert(node.keys, key, llte+1), insert(node.msgs, msg, llte+1));
+      
+      LinkedBranch(root, diskView.ModifyDisk(root, newNode))
+    }
   }
+
+  // step might need to take a path
+  // split, requires a step
+  // 
+
 }
