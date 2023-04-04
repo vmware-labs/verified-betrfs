@@ -25,6 +25,7 @@ module AllocationBranchMod {
   datatype TransitionLabel = 
     | QueryLabel(key: Key, msg: Message)
     | InsertLabel(key: Key, msg: Message)
+    | AppendLabel(keys: seq<Key>, msgs: seq<Message>) // insert into a new leaf
     | InternalLabel(addr: Address)
 
   // Design Option
@@ -441,6 +442,19 @@ module AllocationBranchMod {
       AllocationBranch(root, diskView.ModifyDisk(root, newNode))
     }
 
+    // Append
+    function AppendToNewLeaf(newKeys: seq<Key>, newMsgs: seq<Message>) : (result: AllocationBranch)
+    requires WF()
+    requires Root().Leaf?
+    requires |newKeys| == |newMsgs|
+    requires Keys.IsStrictlySorted(newKeys)
+    ensures result.WF()
+    {
+      var newNode := Leaf(newKeys, newMsgs);
+      var newDiskView := diskView.ModifyDisk(root, newNode);
+      AllocationBranch(root, newDiskView)
+    }
+
     // Split
 
     predicate SplitLeaf(pivot: Key, leftLeaf: AllocationBranch, rightLeaf: AllocationBranch)
@@ -562,6 +576,14 @@ module AllocationBranchMod {
     {
       AllocationBranch(branch.root, replacement.diskView)
     }
+
+    predicate PathEquiv(otherKey: Key)
+      requires Valid()
+      decreases depth, 1
+    {
+      && branch.Root().Route(key) == branch.Root().Route(otherKey)
+      && (0 < depth ==> Subpath().PathEquiv(otherKey))
+    }
   }
 
   datatype Variables = Variables(branch: AllocationBranch)
@@ -584,8 +606,27 @@ module AllocationBranchMod {
     && lbl.InsertLabel?
     && v.WF()
     && path.Valid()
+    && path.branch == v.branch
+    && path.key == lbl.key
     && path.Target().Root().Leaf?
     && newTarget == path.Target().InsertLeaf(lbl.key, lbl.msg)
+    && v'.branch == path.Substitute(newTarget)
+  }
+
+  predicate Append(v: Variables, v': Variables, lbl: TransitionLabel, path: Path, newTarget: AllocationBranch)
+  {
+    && lbl.AppendLabel?
+    && v.WF()
+    && path.Valid()
+    && path.branch == v.branch
+    && path.Target().Root() == Leaf([], [])
+    && lbl.keys != []
+    && |lbl.keys| == |lbl.msgs|
+    && Keys.IsStrictlySorted(lbl.keys)
+
+    && newTarget == path.Target().AppendToNewLeaf(lbl.keys, lbl.msgs)
+    && path.key == newTarget.Root().keys[0]
+    && path.PathEquiv(Last(newTarget.Root().keys))
     && v'.branch == path.Substitute(newTarget)
   }
 
@@ -636,6 +677,7 @@ module AllocationBranchMod {
   datatype Step =
     | QueryStep()
     | InsertStep(path: Path, newTarget: AllocationBranch)
+    | AppendStep(path: Path, newTarget: AllocationBranch)
     | GrowStep()
     | SplitStep(path: Path, pivot: Key, newTarget: AllocationBranch)
     | SealStep(node: Node)
@@ -645,6 +687,7 @@ module AllocationBranchMod {
     match step {
       case QueryStep() => Query(v, v', lbl)
       case InsertStep(path, newTarget) => Insert(v, v', lbl, path, newTarget)
+      case AppendStep(path, newTarget) => Append(v, v', lbl, path, newTarget)
       case GrowStep() => Grow(v, v', lbl)
       case SplitStep(path, pivot, newTarget) => Split(v, v', lbl, path, pivot, newTarget)
       case SealStep(node) => Seal(v, v', lbl, node)

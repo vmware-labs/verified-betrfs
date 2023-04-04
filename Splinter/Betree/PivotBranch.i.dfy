@@ -27,6 +27,7 @@ module PivotBranchMod {
   datatype TransitionLabel = 
     | QueryLabel(key: Key, msg: Message)
     | InsertLabel(key: Key, msg: Message)
+    | AppendLabel(keys: seq<Key>, msgs: seq<Message>) // insert into a new leaf
     | InternalLabel()
 
   // Flattened branch for iterators (sequential and merge)
@@ -220,6 +221,15 @@ module PivotBranchMod {
       result   
     }
 
+    // Append
+    function AppendToNewLeaf(newKeys: seq<Key>, newMsgs: seq<Message>) : (result: Node)
+    requires |newKeys| == |newMsgs|
+    requires Keys.IsStrictlySorted(newKeys)
+    ensures result.WF()
+    {
+      Leaf(newKeys, newMsgs)
+    }
+
     // Split 
     // leftleaf and rightleaf are results of output
     predicate SplitLeaf(pivot: Key, leftleaf: Node, rightleaf: Node)
@@ -324,6 +334,14 @@ module PivotBranchMod {
       else
         Index(node.pivots, ReplacedChildren(replacement))
     }
+
+    predicate PathEquiv(otherKey: Key)
+      requires Valid()
+      decreases depth, 1
+    {
+      && node.Route(key) == node.Route(otherKey)
+      && (0 < depth ==> Subpath().PathEquiv(otherKey))
+    }
   }
 
   // SM
@@ -350,8 +368,25 @@ module PivotBranchMod {
     && v.WF()
     && path.Valid()
     && path.node == v.root
+    && path.key == lbl.key
     && path.Target().Leaf?
     && path.Target().InsertLeaf(lbl.key, lbl.msg) == newTarget
+    && v'.root == path.Substitute(newTarget)
+  }
+
+  predicate Append(v: Variables, v': Variables, lbl: TransitionLabel, path: Path, newTarget: Node)
+  {
+    && lbl.AppendLabel?
+    && v.WF()
+    && path.Valid()
+    && path.node == v.root
+    && path.Target() == Leaf([], [])
+    && lbl.keys != []
+    && |lbl.keys| == |lbl.msgs|
+    && Keys.IsStrictlySorted(lbl.keys)
+    && newTarget == path.Target().AppendToNewLeaf(lbl.keys, lbl.msgs)
+    && path.key == newTarget.keys[0]
+    && path.PathEquiv(Last(newTarget.keys)) // all new keys must route to the same location
     && v'.root == path.Substitute(newTarget)
   }
 
@@ -382,6 +417,7 @@ module PivotBranchMod {
   datatype Step =
     | QueryStep()
     | InsertStep(path: Path, newTarget: Node)
+    | AppendStep(path: Path, newTarget: Node)
     | GrowStep()
     | SplitStep(path: Path, newTarget: Node)
 
@@ -390,6 +426,7 @@ module PivotBranchMod {
     match step {
       case QueryStep() => Query(v, v', lbl)
       case InsertStep(path, newTarget) => Insert(v, v', lbl, path, newTarget)
+      case AppendStep(path, newTarget) => Append(v, v', lbl, path, newTarget)
       case GrowStep() => Grow(v, v', lbl)
       case SplitStep(path, newTarget) => Split(v, v', lbl, path, newTarget)
     }
