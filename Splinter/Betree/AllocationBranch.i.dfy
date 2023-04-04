@@ -3,29 +3,22 @@
  
 include "../../lib/Base/KeyType.s.dfy"
 include "../../Spec/Message.s.dfy"
-include "../../lib/Base/Option.s.dfy"
-include "../../lib/Base/Maps.i.dfy"
 include "../../lib/Base/Sets.i.dfy"
-include "../../lib/Base/Sequences.i.dfy"
 include "../../lib/Base/total_order_impl.i.dfy"
 include "../Disk/GenericDisk.i.dfy"
-include "PivotBranch.i.dfy"
-include "Domain.i.dfy"
 
-// LinkedBranch module stores each node in the b+tree on a different disk address
+//  module that introduces summary node
 
-module LinkedBranchMod {
+module AllocationBranchMod {
   import opened Maps
   import opened Options
   import opened KeyType
   import opened ValueMessage
   import opened Sequences
-  import opened DomainMod
   import opened GenericDisk
   import opened Sets
   import KeysImpl = Lexicographic_Byte_Order_Impl
   import Keys = KeysImpl.Ord
-  import P = PivotBranchMod
 
   type Address = GenericDisk.Address
 
@@ -34,15 +27,32 @@ module LinkedBranchMod {
     | InsertLabel(key: Key, msg: Message)
     | InternalLabel(addr: Address)
 
-  datatype Node = Index(pivots: seq<Key>, children: seq<Address>) | Leaf(keys: seq<Key>, msgs: seq<Message>)
+  // Design Option
+  // 1. top of tree is index node, index node points to a summary node
+  //    + don't need to change betree node pointers
+  //    + easy to refine (just ignore the summary node field)
+  //    - maintains inv that all index node has None summary node except for root
+  //    - atomic recovery must have twice as many Branch pages resident
+  // 2. top of tree is summary node, summar points to index
+  //    - betree node's fields now point to an indirection node instead of the actual root (refinement hassle)
+  //    - Summary pages need to be present in cache during steady state [primary reason for not doing 2]
+
+  // summary describes all AUs storing this b+tree
+  datatype Node = 
+    | Index(pivots: seq<Key>, children: seq<Address>, summary: Pointer)
+    | Leaf(keys: seq<Key>, msgs: seq<Message>)
+    | Summary(aus: set<AU>)
   {
     predicate WF() {
-      if Leaf? then 
-        && |keys| == |msgs|
-        && Keys.IsStrictlySorted(keys)
-      else
-        && |pivots| == |children| - 1
-        && Keys.IsStrictlySorted(pivots)
+      match this {
+        case Index(pivots, children, summary) =>
+          && |pivots| == |children| - 1
+          && Keys.IsStrictlySorted(pivots)
+        case Leaf(keys, msgs) => 
+          && |keys| == |msgs|
+          && Keys.IsStrictlySorted(keys)
+        case Summary(_) => true
+      } 
     }
 
     predicate ValidChildIndex(i: nat) {
@@ -52,10 +62,22 @@ module LinkedBranchMod {
 
     function Route(key: Key) : int
       requires WF()
+      requires !Summary?
     {
       var s := if Leaf? then keys else pivots;
       Keys.LargestLte(s, key)
     }
+
+    // predicate CanI()
+    // {
+    //   && !Summary?
+    // }
+
+    // function I() : L.Node
+    //   requires  CanI()
+    // {
+    //   if Index? then L.Index(pivots, children) else L.Leaf(keys, msgs)
+    // }
   }
 
   datatype DiskView = DiskView(entries: map<Address, Node>) 
@@ -63,6 +85,7 @@ module LinkedBranchMod {
     predicate WF() {
       && EntriesWF()
       && NoDanglingAddress()
+      && NoSummaryChild()
     }
 
     predicate EntriesWF() {
@@ -83,6 +106,18 @@ module LinkedBranchMod {
       (forall addr | addr in entries :: NodeHasValidChildAddress(entries[addr]))
     }
 
+    predicate NodeHasValidChildType(node: Node) {
+      node.Index? ==>
+        (forall idx:nat | idx < |node.children| && ValidAddress(node.children[idx])
+          :: !entries[node.children[idx]].Summary?
+        )
+    }
+
+    predicate NoSummaryChild()  // i.e. disk is closed wrt to all the address in the nodes on disk
+    {
+      (forall addr | addr in entries :: NodeHasValidChildType(entries[addr]))
+    }
+
     function Get(addr: Address) : Node
       requires ValidAddress(addr)
     {
@@ -91,6 +126,7 @@ module LinkedBranchMod {
 
     function GetKeys(addr: Address) : set<Key>
       requires ValidAddress(addr)
+      requires !Get(addr).Summary?
     {
       var node := Get(addr);
       if node.Index? 
@@ -102,7 +138,7 @@ module LinkedBranchMod {
     {
       entries.Keys
     }
-
+  
     predicate AgreesWithDisk(other: DiskView) {
       MapsAgree(entries, other.entries)
     }
@@ -133,7 +169,8 @@ module LinkedBranchMod {
         && addr in ranking 
         && addr in entries 
       ::
-        NodeChildrenRespectsRank(ranking, addr)
+        && NodeChildrenRespectsRank(ranking, addr)
+        // && NodeSummaryRespectsRank(ranking, addr)
     }
 
     predicate IsFresh(addrs: set<Address>) {
@@ -157,7 +194,7 @@ module LinkedBranchMod {
       ensures out.IsSubsetOf(this)
     {
       DiskView.DiskView(MapRemove(entries, other.entries.Keys))
-    }
+    } 
 
     // returns a new diskview with the new entry inserted
     function ModifyDisk(addr: Address, item: Node) : DiskView
@@ -170,23 +207,44 @@ module LinkedBranchMod {
       MapRestrict(entries, entries.Keys - except) 
         == MapRestrict(other.entries, other.entries.Keys - except)
     }
+
+    // function I() : L.DiskView
+    // {
+    //   L.DiskView(map addr | addr in entries && entries[addr].CanI() :: entries[addr].I())
+    // }
   }
 
   function EmptyDisk() : DiskView {
     DiskView.DiskView(map[])
   }
  
-  datatype LinkedBranch = LinkedBranch(root: Address, diskView: DiskView)
+  datatype AllocationBranch = AllocationBranch(root: Address, diskView: DiskView)
   {
     predicate WF()
     {
       && diskView.WF()
       && HasRoot()
+      && !Root().Summary?
     }
+
+    // function I() : (out: L.AllocationBranch)
+    //   requires WF()
+    //   ensures out.WF()
+    // {
+    //   // TODO: revisit for pre post conditions
+    //   L.AllocationBranch(root, diskView.I())
+    // }
 
     predicate HasRoot() {
       && diskView.ValidAddress(root)
     }
+
+    // predicate ValidSummary()
+    //   requires HasRoot()
+    // {
+    //   && (Root().Index? && Root().summary.Some?
+    //     ==> diskView.ValidAddress(Root().summary.value)) 
+    // }
 
     function Root() : Node
       requires HasRoot()
@@ -248,13 +306,15 @@ module LinkedBranchMod {
         var result := set k | k in node.keys;
         assert 0 < |node.keys| ==> node.keys[0] in result;
         result
-      ) else (
+      ) else if node.Index? then (
         var pivotKeys := (set k | k in node.pivots);
         var indexKeys := (set i, k | 0 <= i < |node.children| && k in ChildAtIdx(i).AllKeys(ranking) :: k);
       
         var result := pivotKeys + indexKeys;
         assert 0 < |node.pivots| ==> node.pivots[0] in result;
         result
+      ) else ( 
+        {}
       )
     }
 
@@ -278,13 +338,13 @@ module LinkedBranchMod {
       forall key :: key in ChildAtIdx(i).AllKeys(ranking) ==> Keys.lte(Root().pivots[i-1], key)
     }
 
-    function ChildAtIdx(idx: nat) : (result: LinkedBranch)
+    function ChildAtIdx(idx: nat) : (result: AllocationBranch)
       requires HasRoot()
       requires Root().ValidChildIndex(idx)
       ensures WF() ==> result.WF()
       ensures Acyclic() ==> result.Acyclic()
     {
-      var result := LinkedBranch(Root().children[idx], diskView);
+      var result := AllocationBranch(Root().children[idx], diskView);
       assert Acyclic() ==> result.Acyclic() by {
         if Acyclic() {
           assert result.ValidRanking(TheRanking()); 
@@ -307,6 +367,7 @@ module LinkedBranchMod {
       decreases GetRank(ranking)
     {
       if !HasRoot() then {}
+      else if Root().Summary? then {root} // not reachable, root will never be a summary type node by Inv
       else if Root().Leaf? then {root}
       else
         var numChildren := |Root().children|;
@@ -314,6 +375,12 @@ module LinkedBranchMod {
 
         UnionSeqOfSetsSoundness(subTreeAddrs);
         {root} + UnionSeqOfSets(subTreeAddrs)
+    }
+
+    function RepresentationAUs() : set<AU>
+      requires Acyclic()
+    {
+      set addr | addr in  Representation() :: addr.au
     }
 
     predicate TightDiskView()
@@ -340,21 +407,21 @@ module LinkedBranchMod {
     {
       if Acyclic()
       then QueryInternal(key, TheRanking())
-      else Update(NopDelta()) // Dummy value
+      else Update(NopDelta()) // Dummy value    
     }
-    
+
     // mutable operation
 
     // Grow
-    function Grow(addr: Address) : (out: LinkedBranch)
+    function Grow(addr: Address) : (out: AllocationBranch)
     {
-      var newRoot := Index([], [root]);
+      var newRoot := Index([], [root], None);
       var newDiskView := diskView.ModifyDisk(addr, newRoot);
-      LinkedBranch(addr, newDiskView)
+      AllocationBranch(addr, newDiskView)
     }
 
     // Insert
-    function InsertLeaf(key: Key, msg: Message) : (result: LinkedBranch)
+    function InsertLeaf(key: Key, msg: Message) : (result: AllocationBranch)
     requires WF()
     requires Root().Leaf?
     ensures result.WF()
@@ -371,12 +438,12 @@ module LinkedBranchMod {
           }
           Leaf(insert(node.keys, key, llte+1), insert(node.msgs, msg, llte+1));
 
-      LinkedBranch(root, diskView.ModifyDisk(root, newNode))
+      AllocationBranch(root, diskView.ModifyDisk(root, newNode))
     }
 
     // Split
 
-    predicate SplitLeaf(pivot: Key, leftLeaf: LinkedBranch, rightLeaf: LinkedBranch)
+    predicate SplitLeaf(pivot: Key, leftLeaf: AllocationBranch, rightLeaf: AllocationBranch)
     {
       && HasRoot()
       && Root().Leaf?
@@ -403,10 +470,10 @@ module LinkedBranchMod {
     requires |Root().children| == |Root().pivots| + 1
     requires 0 <= from < to <= |Root().children|
     {
-      Index(Root().pivots[from..to-1], Root().children[from..to])
+      Index(Root().pivots[from..to-1], Root().children[from..to], None)
     }
 
-    predicate SplitIndex(pivot: Key, leftIndex: LinkedBranch, rightIndex: LinkedBranch)
+    predicate SplitIndex(pivot: Key, leftIndex: AllocationBranch, rightIndex: AllocationBranch)
     {
       && HasRoot()
       && Root().Index?
@@ -431,13 +498,13 @@ module LinkedBranchMod {
       && pivot == Root().pivots[|leftIndex.Root().pivots|]
     }
 
-    predicate SplitNode(pivot: Key, leftBranch: LinkedBranch, rightBranch: LinkedBranch)
+    predicate SplitNode(pivot: Key, leftBranch: AllocationBranch, rightBranch: AllocationBranch)
     {
       || SplitLeaf(pivot, leftBranch, rightBranch)
       || SplitIndex(pivot, leftBranch, rightBranch)
     }
 
-    predicate SplitChildOfIndex(pivot: Key, newChildAddr: Address, newIndex: LinkedBranch)
+    predicate SplitChildOfIndex(pivot: Key, newChildAddr: Address, newIndex: AllocationBranch)
     {
       && HasRoot()
       && Root().Index?
@@ -455,13 +522,13 @@ module LinkedBranchMod {
     }
   }
 
-  function EmptyLinkedBranch(root: Address) : (result: LinkedBranch)
+  function EmptyAllocationBranch(root: Address) : (result: AllocationBranch)
     ensures result.WF()
   {
-    LinkedBranch(root, EmptyDisk().ModifyDisk(root, Leaf([], [])))
+    AllocationBranch(root, EmptyDisk().ModifyDisk(root, Leaf([], [])))
   }
 
-  datatype Path = Path(branch: LinkedBranch, key: Key, depth: nat)
+  datatype Path = Path(branch: AllocationBranch, key: Key, depth: nat)
   {
     function Subpath() : (out: Path)
       requires 0 < depth
@@ -480,7 +547,7 @@ module LinkedBranchMod {
       && (0 < depth ==> Subpath().Valid())
     }
 
-    function Target() : (out: LinkedBranch)
+    function Target() : (out: AllocationBranch)
       requires Valid()
       ensures out.WF()
       decreases depth
@@ -490,14 +557,14 @@ module LinkedBranchMod {
       else Subpath().Target()
     }
 
-    function Substitute(replacement: LinkedBranch) : (out: LinkedBranch)
+    function Substitute(replacement: AllocationBranch) : (out: AllocationBranch)
       requires Valid()
     {
-      LinkedBranch(branch.root, replacement.diskView)
+      AllocationBranch(branch.root, replacement.diskView)
     }
   }
 
-  datatype Variables = Variables(branch: LinkedBranch)
+  datatype Variables = Variables(branch: AllocationBranch)
   {
     predicate WF() {
       branch.WF()
@@ -512,7 +579,7 @@ module LinkedBranchMod {
     && v' == v
   }
 
-  predicate Insert(v: Variables, v': Variables, lbl: TransitionLabel, path: Path, newTarget: LinkedBranch)
+  predicate Insert(v: Variables, v': Variables, lbl: TransitionLabel, path: Path, newTarget: AllocationBranch)
   {
     && lbl.InsertLabel?
     && v.WF()
@@ -531,7 +598,7 @@ module LinkedBranchMod {
   }
 
   predicate Split(v: Variables, v': Variables, lbl: TransitionLabel, 
-    path: Path, pivot: Key, newTarget: LinkedBranch)
+    path: Path, pivot: Key, newTarget: AllocationBranch)
   {
     && lbl.InternalLabel?
     && v.WF()
@@ -542,18 +609,36 @@ module LinkedBranchMod {
     && v'.branch == path.Substitute(newTarget)
   }
 
+  predicate Seal(v: Variables, v': Variables, lbl: TransitionLabel, node: Node)
+  {
+    && lbl.InternalLabel?
+    && v.WF()
+    && v.branch.Root().Index?
+    && v.branch.diskView.IsFresh({lbl.addr})
+    && node.Summary?
+    && node.aus == (
+      if v.branch.Acyclic()
+      then v.branch.RepresentationAUs() + { lbl.addr.au }
+      else { lbl.addr.au } // dummy case
+    )
+    && var newRoot := v.branch.Root().(summary := Some(lbl.addr));
+    && v'.branch.root == v.branch.root
+    && v'.branch.diskView == v.branch.diskView.ModifyDisk(lbl.addr, node).ModifyDisk(v.branch.root, newRoot)
+  }
+
   // public:
 
   predicate Init(v: Variables)
   {
-    && v.branch == EmptyLinkedBranch(v.branch.root)
+    && v.branch == EmptyAllocationBranch(v.branch.root)
   }
 
   datatype Step =
     | QueryStep()
-    | InsertStep(path: Path, newTarget: LinkedBranch)
+    | InsertStep(path: Path, newTarget: AllocationBranch)
     | GrowStep()
-    | SplitStep(path: Path, pivot: Key, newTarget: LinkedBranch)
+    | SplitStep(path: Path, pivot: Key, newTarget: AllocationBranch)
+    | SealStep(node: Node)
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
@@ -562,6 +647,7 @@ module LinkedBranchMod {
       case InsertStep(path, newTarget) => Insert(v, v', lbl, path, newTarget)
       case GrowStep() => Grow(v, v', lbl)
       case SplitStep(path, pivot, newTarget) => Split(v, v', lbl, path, pivot, newTarget)
+      case SealStep(node) => Seal(v, v', lbl, node)
     }
   }
 
@@ -569,3 +655,5 @@ module LinkedBranchMod {
     exists step: Step :: NextStep(v, v', lbl, step)
   }
 }
+
+
