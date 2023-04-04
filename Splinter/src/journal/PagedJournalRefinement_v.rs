@@ -3,8 +3,12 @@ use builtin::*;
 
 use builtin_macros::*;
 
+use crate::pervasive::{calc_macro::*};
+
+
 use crate::pervasive::prelude::*;
 use crate::pervasive::map::*;
+use crate::pervasive::seq_lib::*;
 use crate::coordination_layer::StampedMap_v::LSN;
 use crate::coordination_layer::MsgHistory_v::*;
 use crate::coordination_layer::AbstractJournal_v::*;
@@ -241,6 +245,8 @@ impl JournalRecord {
         }
     }
 
+    // This was a 3-line proof in Dafny. It ballooned to 98 lines trying to find the triggers for
+    // lemmas I need now that I didn't then. :'v(
     pub proof fn discard_old_defn_interprets(ojr: Option<JournalRecord>, old_lsn: LSN, new_lsn: LSN)
     requires
         ojr.is_Some() ==> ojr.unwrap().valid(old_lsn),
@@ -252,32 +258,99 @@ impl JournalRecord {
     {
         if ojr.is_Some() && new_lsn < ojr.unwrap().message_seq.seq_start {
             Self::discard_old_defn_interprets(*ojr.unwrap().prior_rec, old_lsn, new_lsn);
-            assume(false);
+            //assume(false);
+            let di = Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn);
+            let id = Self::i_opt(ojr, old_lsn).discard_old(new_lsn);
+            assert( di.seq_start == id.seq_start );
+            assert( di.seq_end == id.seq_end );
+
+            //Self::discard_old_maintains_subseq(ojr, 
+
+            assert forall |lsn| di.msgs.contains_key(lsn) implies di.msgs[lsn] == id.msgs[lsn] by {
+                assert( id.msgs.contains_key(lsn) );
+                if lsn < ojr.unwrap().message_seq.seq_start {
+                    let pojr = *ojr.unwrap().prior_rec;
+                    assert( Self::i_opt(Self::discard_old_journal_rec(pojr, new_lsn), new_lsn) == Self::i_opt(pojr, old_lsn).discard_old(new_lsn) );    // induction
+                    assert( di.msgs[lsn] == Self::i_opt(Self::discard_old_journal_rec(pojr, new_lsn), new_lsn).msgs[lsn] );
+
+                    let rec = ojr.unwrap();
+                    let prec = pojr.unwrap();
+                    assert( Self::i_opt(ojr, old_lsn) == rec.i(old_lsn) );
+                    assert( pojr.is_Some() );
+                    assert( Self::i_opt(pojr, old_lsn) == prec.i(old_lsn) );
+
+                    assert( rec.i(old_lsn) == prec.i(old_lsn).concat(rec.message_seq) );
+
+                    Self::i_lemma_forall();
+                    prec.i_lemma(old_lsn);
+                    assert( prec.i(old_lsn).wf() );
+                    prec.i(old_lsn).concat_lemma(rec.message_seq);
+                    assert( rec.i(old_lsn) == Self::i_opt(pojr, old_lsn).concat(rec.message_seq) );
+
+                    assert( Self::i_opt(ojr, old_lsn).msgs[lsn] == Self::i_opt(pojr, old_lsn).msgs[lsn] );  // fails
+                                                                                                            //
+                    assert( id.msgs[lsn] == Self::i_opt(pojr, old_lsn).discard_old(new_lsn).msgs[lsn] );
+
+                    assert( di.msgs[lsn] == id.msgs[lsn] ); // inductive hypothesis
+                } else {
+                    assert( di.msgs[lsn] == id.msgs[lsn] ); // this rec
+                }
+            }
+
+            assert_maps_equal!(
+                Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn).msgs,
+                Self::i_opt(ojr, old_lsn).discard_old(new_lsn).msgs
+            );
             assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == Self::i_opt(ojr, old_lsn).discard_old(new_lsn) );
         } else if ojr.is_None() {
-            assert( Self::discard_old_journal_rec(ojr, new_lsn).is_None() );
-            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == MsgHistory::empty_history_at(new_lsn) );
-            assert( Self::i_opt(ojr, old_lsn).seq_start == new_lsn );
-            assert( Self::i_opt(ojr, old_lsn).seq_end == new_lsn );
-            assert( Self::i_opt(ojr, old_lsn) == MsgHistory::empty_history_at(new_lsn) );
-            assert( Self::i_opt(ojr, old_lsn).can_discard_to(new_lsn) );
-            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).seq_start == new_lsn );
-            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).seq_end == new_lsn );
-            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).wf() );
+//            assert( Self::discard_old_journal_rec(ojr, new_lsn).is_None() );
+//            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == MsgHistory::empty_history_at(new_lsn) );
+//            assert( Self::i_opt(ojr, old_lsn).seq_start == new_lsn );
+//            assert( Self::i_opt(ojr, old_lsn).seq_end == new_lsn );
+//            assert( Self::i_opt(ojr, old_lsn) == MsgHistory::empty_history_at(new_lsn) );
+//            assert( Self::i_opt(ojr, old_lsn).can_discard_to(new_lsn) );
+//            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).seq_start == new_lsn );
+//            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).seq_end == new_lsn );
+//            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).wf() );
             assert_maps_equal!(Self::i_opt(ojr, old_lsn).discard_old(new_lsn).msgs, MsgHistory::empty_history_at(new_lsn).msgs);    // this all-the-way sucks
-            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).msgs == MsgHistory::empty_history_at(new_lsn).msgs );
-            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn) == MsgHistory::empty_history_at(new_lsn) );
-            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == Self::i_opt(ojr, old_lsn).discard_old(new_lsn) );
+//            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).msgs == MsgHistory::empty_history_at(new_lsn).msgs );
+//            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn) == MsgHistory::empty_history_at(new_lsn) );
+//            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == Self::i_opt(ojr, old_lsn).discard_old(new_lsn) );
         } else {
-            assume(false);
-            let rec = ojr.unwrap();
-            let prior_rec =
-                if rec.message_seq.seq_start <= new_lsn { None }
-                else { Self::discard_old_journal_rec(*rec.prior_rec, new_lsn) };
-            assert( Self::discard_old_journal_rec(ojr, new_lsn) ==
-                Some(JournalRecord{message_seq: rec.message_seq, prior_rec: Box::new(prior_rec)}) );
-            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == MsgHistory::empty_history_at(new_lsn) );
-            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == Self::i_opt(ojr, old_lsn).discard_old(new_lsn) );
+//            let rec = ojr.unwrap();
+//            let prior_rec =
+//                if rec.message_seq.seq_start <= new_lsn { None }
+//                else { Self::discard_old_journal_rec(*rec.prior_rec, new_lsn) };
+//            assert(prior_rec.is_None());
+//            assert( Self::discard_old_journal_rec(ojr, new_lsn) ==
+//                Some(JournalRecord{message_seq: rec.message_seq, prior_rec: Box::new(prior_rec)}) );
+//            assert_maps_equal!(
+//                Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn).msgs,
+//                rec.message_seq.discard_old(new_lsn).msgs);
+//            assert( Self::i_opt(ojr, old_lsn) == ojr.unwrap().i(old_lsn) );
+//            assert( ojr.unwrap().i(old_lsn) == );
+//            calc!{ (==)
+//                Self::i_opt(ojr, old_lsn); {
+//                    assert_maps_equal!( rec.message_seq.msgs, Self::i_opt(ojr, old_lsn).msgs );
+//                } rec.message_seq 
+//            }; 
+//            assert( rec.message_seq == Self::i_opt(ojr, old_lsn) );
+//            assert( Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn).seq_start == new_lsn );
+//            assert( Self::i_opt(ojr, old_lsn).discard_old(new_lsn).seq_start == new_lsn );
+            assert_maps_equal!(
+                Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn).msgs,
+                Self::i_opt(ojr, old_lsn).discard_old(new_lsn).msgs
+            );
+//            assert(
+//                Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn).msgs
+//                    ==
+//                Self::i_opt(ojr, old_lsn).discard_old(new_lsn).msgs
+//            );
+//            assert(
+//                Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn)
+//                    ==
+//                Self::i_opt(ojr, old_lsn).discard_old(new_lsn)
+//            );
         }
     }
 }
