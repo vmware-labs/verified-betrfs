@@ -192,43 +192,6 @@ module PivotBranchMod {
       && Flatten() == b
     }
 
-    // We need to measure the height of Nodes to manage termination in the mutual
-    // recursion between InsertNode and InsertIndex. You'd think that we wouldn't
-    // need to, since datatypes are well-founded. But when we SplitChildOfIndex,
-    // we replace some children with other children. The new children are of no
-    // greater height, but they don't order in Dafny's internal datatype lattice.
-    // Hence this machinery for explicitly measuring height.
-    function IndexHeights(): seq<int>
-      requires WF()
-      requires Index?
-      decreases this, 0
-    {
-        seq(|children|, i requires 0<=i<|children| => children[i].Height())
-    }
-
-    function {:opaque} Height(): nat
-      requires WF()
-      ensures Leaf? ==> Height() == 0
-      decreases this, 1
-    {
-      if Leaf?
-      then 0
-      else
-        var heights := IndexHeights(); seqMax(heights) + 1
-    }
-
-    lemma ChildrenAreShorter(childIdx: nat)
-      requires WF()
-      requires Index?
-      requires 0 <= childIdx < |children|
-      ensures children[childIdx].Height() < Height()
-    {
-      var child := children[childIdx];
-      assert IndexHeights()[childIdx] == child.Height(); // trigger
-      assert child.Height() in IndexHeights();  // trigger *harder*
-      reveal_Height();
-    }
-
     // Mutable operations 
 
     // Grow
@@ -242,8 +205,6 @@ module PivotBranchMod {
     requires Leaf?
     requires WF()
     ensures result.WF()
-    ensures result.Height() == Height()
-    ensures result.AllKeys() == AllKeys() + {key}
     {
       var llte := Keys.LargestLte(keys, key);
       var result := 
@@ -256,114 +217,12 @@ module PivotBranchMod {
           }
           Leaf(insert(keys, key, llte+1), insert(msgs, msg, llte+1))
         );
-
-      assert result.Height() == Height() by { reveal_Height(); }
-      assert result.AllKeys() == AllKeys() + {key} by {
-        if !(0 <= llte && keys[llte] == key) {
-          forall k | k in result.AllKeys()
-            ensures k in AllKeys() + {key}
-          {
-            var i :| 0 <= i < |result.keys| && result.keys[i] == k;
-            if i < llte+1 {
-            } else if i == llte+1 {
-            } else {
-              assert k == keys[i-1];
-            }
-          }
-        }
-      }
-  
       result   
     }
 
-    function InsertIndex(key: Key, msg: Message) : (result: Node)
-      requires Index?
-      requires WF()
-      ensures result.Index?
-      ensures result.WF()
-      ensures result.Height() == Height()
-      ensures result.AllKeys() == AllKeys() + {key}
-      decreases Height(), 1
-    {
-      var r := Route(key)+1;
-      ChildrenAreShorter(r);
-      var newChild := children[r].Insert(key, msg);
-      var result := Index(pivots, children[r := newChild]);
-
-      assert result.AllKeys() == AllKeys() + {key} by {
-        var indexKeys := (set i, k | 0 <= i < |children| && k in children[i].AllKeys() :: k);
-        var indexKeys' := (set i, k | 0 <= i < |result.children| && k in result.children[i].AllKeys() :: k);
-
-        forall k 
-          ensures k in indexKeys + {key} <==> k in indexKeys'
-        {
-          if k == key {
-            assert k in result.children[r].AllKeys();
-          } else if k in indexKeys {
-            var i :| 0 <= i < |children| && k in children[i].AllKeys();
-            assert k in result.children[i].AllKeys();
-          } else if k in indexKeys' {
-            var i :| 0 <= i < |result.children| && k in result.children[i].AllKeys();
-            assert k in children[i].AllKeys();
-          }
-        }
-      }
-
-      assert result.WF() by {
-        forall i | 0 <= i < |result.children|-1 
-          ensures result.AllKeysBelowBound(i)
-        {
-          if i == r {
-            forall key' | key' in newChild.AllKeys()
-              ensures Keys.lt(key', pivots[i])
-            {
-              if key' != key {
-                assert AllKeysBelowBound(i);
-              }
-            }
-          } else {
-            assert AllKeysBelowBound(i);
-          }
-        }
-
-        forall i | 0 < i < |result.children|
-          ensures result.AllKeysAboveBound(i)
-        {
-          if i == r {
-            forall key' | key' in newChild.AllKeys()
-              ensures Keys.lte(pivots[i-1], key')
-            {
-              if key' != key {
-                assert AllKeysAboveBound(i);
-              }
-            }
-          } else {
-            assert AllKeysAboveBound(i);
-          }
-        }
-      }
-
-      assert result.Height() == Height() by {
-        assert result.IndexHeights() == IndexHeights(); // trigger
-        reveal_Height();
-      }
-      result
-    }
-
-    function Insert(key: Key, msg: Message) : (result: Node)
-      requires WF()
-      ensures result.WF()
-      ensures result.Height() == Height()
-      ensures result.AllKeys() == AllKeys() + {key}
-      decreases Height(), 2
-    {
-      if Leaf? 
-      then InsertLeaf(key, msg)
-      else InsertIndex(key, msg)
-    }
-
     // Split 
-    predicate SplitLeaf(leftleaf: Node, rightleaf: Node, pivot: Key)
+    // leftleaf and rightleaf are results of output
+    predicate SplitLeaf(pivot: Key, leftleaf: Node, rightleaf: Node)
     {
       && Leaf?
       && leftleaf.Leaf?
@@ -384,13 +243,13 @@ module PivotBranchMod {
       Index(pivots[from..to-1], children[from..to])
     }
 
-    predicate SplitIndex(leftindex: Node, rightindex: Node, pivot: Key)
+    predicate SplitIndex(pivot: Key, leftindex: Node, rightindex: Node)
     {
+      && WF()
       && Index?
       && leftindex.Index?
       && rightindex.Index?
       && 0 < |leftindex.children| < |children|
-      && |children| == |pivots| + 1
 
       && leftindex == SubIndex(0, |leftindex.children|)
       && rightindex == SubIndex(|leftindex.children|, |children|)
@@ -399,22 +258,22 @@ module PivotBranchMod {
       && pivot == pivots[|leftindex.pivots|]
     }
 
-    predicate SplitNode(leftnode: Node, rightnode: Node, pivot: Key)
+    predicate SplitNode(pivot: Key, leftnode: Node, rightnode: Node)
     {
-      || SplitLeaf(leftnode, rightnode, pivot)
-      || SplitIndex(leftnode, rightnode, pivot)
+      || SplitLeaf(pivot, leftnode, rightnode)
+      || SplitIndex(pivot, leftnode, rightnode)
     }
 
-    predicate SplitChildOfIndex(newIndex: Node, pivot: Key, childIdx: nat)
+    predicate SplitChildOfIndex(pivot: Key, newIndex: Node)
     {
+      && WF()
       && Index?
       && newIndex.Index?
-      && 0 <= childIdx < |children|
-      && |children| == |pivots| + 1
+      && var childIdx := Route(pivot)+1;
       && |newIndex.children| == |children| + 1
       && newIndex.pivots == insert(pivots, pivot, childIdx)
       && newIndex.children == replace1with2(children, newIndex.children[childIdx], newIndex.children[childIdx+1], childIdx)
-      && children[childIdx].SplitNode(newIndex.children[childIdx], newIndex.children[childIdx+1], pivot)
+      && children[childIdx].SplitNode(pivot, newIndex.children[childIdx], newIndex.children[childIdx+1])
     }
   }
 
@@ -446,6 +305,25 @@ module PivotBranchMod {
       then node
       else Subpath().Target()
     }
+
+    function ReplacedChildren(replacement: Node) : (out: seq<Node>)
+      requires Valid()
+      requires 0 < depth
+      decreases depth, 0
+    {
+      var newChild := Subpath().Substitute(replacement);
+      node.children[node.Route(key)+1 := newChild]
+    }
+
+    function Substitute(replacement: Node) : (out: Node)
+      requires Valid()
+      decreases depth, 1
+    {
+      if 0 == depth
+      then replacement
+      else
+        Index(node.pivots, ReplacedChildren(replacement))
+    }
   }
 
   // SM
@@ -465,11 +343,16 @@ module PivotBranchMod {
     && v' == v
   }
 
-  predicate Insert(v: Variables, v': Variables, lbl: TransitionLabel)
+  // insert use substitute and path instead
+  predicate Insert(v: Variables, v': Variables, lbl: TransitionLabel, path: Path, newTarget: Node)
   {
     && lbl.InsertLabel?
     && v.WF()
-    && v'.root == v.root.Insert(lbl.key, lbl.msg)
+    && path.Valid()
+    && path.node == v.root
+    && path.Target().Leaf?
+    && path.Target().InsertLeaf(lbl.key, lbl.msg) == newTarget
+    && v'.root == path.Substitute(newTarget)
   }
 
   predicate Grow(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -479,28 +362,14 @@ module PivotBranchMod {
     && v'.root == v.root.Grow()
   }
 
-  predicate ValidSplit(path: Path, newNode: Node)
-    decreases path.depth
-  {
-    && path.Valid()
-    && var r := path.node.Route(path.key)+1;
-    && (path.depth > 0 ==> 
-      && newNode.Index?
-      && path.node.pivots == newNode.pivots
-      && |path.node.children| == |newNode.children|
-      && (forall i:nat | i < |path.node.children| && i != r
-       :: path.node.children[i] == newNode.children[i])
-      && ValidSplit(path.Subpath(), newNode.children[r]))
-    && (path.depth == 0 ==>
-      && path.node.SplitChildOfIndex(newNode, path.key, r))
-  }
-
-  predicate Split(v: Variables, v': Variables, lbl: TransitionLabel, path: Path)
+  predicate Split(v: Variables, v': Variables, lbl: TransitionLabel, path: Path, newTarget: Node)
   {
     && lbl.InternalLabel?
     && v.WF()
-    && path.node == v.root // start from root
-    && ValidSplit(path, v'.root)
+    && path.Valid()
+    && path.node == v.root
+    && path.Target().SplitChildOfIndex(path.key, newTarget)
+    && v'.root == path.Substitute(newTarget)
   }
 
   // public:
@@ -512,18 +381,18 @@ module PivotBranchMod {
 
   datatype Step =
     | QueryStep()
-    | InsertStep()
+    | InsertStep(path: Path, newTarget: Node)
     | GrowStep()
-    | SplitStep(path: Path)
+    | SplitStep(path: Path, newTarget: Node)
 
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    && match step {
-        case QueryStep() => Query(v, v', lbl)
-        case InsertStep() => Insert(v, v', lbl)
-        case GrowStep() => Grow(v, v', lbl)
-        case SplitStep(path) => Split(v, v', lbl, path)
-      }
+    match step {
+      case QueryStep() => Query(v, v', lbl)
+      case InsertStep(path, newTarget) => Insert(v, v', lbl, path, newTarget)
+      case GrowStep() => Grow(v, v', lbl)
+      case SplitStep(path, newTarget) => Split(v, v', lbl, path, newTarget)
+    }
   }
 
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {

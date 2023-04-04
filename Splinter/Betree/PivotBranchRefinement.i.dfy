@@ -79,7 +79,7 @@ module PivotBranchRefinement {
     requires node.Leaf?
     requires node.WF()
     ensures node.InsertLeaf(key, msg).I() == Buffer(node.I().mapp[key := msg])
-    // ensures node.InsertLeaf(key, msg).AllKeys() == node.AllKeys() + {key}
+    ensures node.InsertLeaf(key, msg).AllKeys() == node.AllKeys() + {key}
   {
     var result := node.InsertLeaf(key, msg);
     var llte := Keys.LargestLte(node.keys, key);
@@ -95,22 +95,22 @@ module PivotBranchRefinement {
           assert k == node.keys[kpos-1];
         }
       }
-      // forall k | k in result.AllKeys()
-      //   ensures k in node.AllKeys() + {key}
-      // {
-      //   var i :| 0 <= i < |result.keys| && result.keys[i] == k;
-      //   if i < llte+1 {
-      //   } else if i == llte+1 {
-      //   } else {
-      //     assert k == node.keys[i-1];
-      //   }
-      // }
+      forall k | k in result.AllKeys()
+        ensures k in node.AllKeys() + {key}
+      {
+        var i :| 0 <= i < |result.keys| && result.keys[i] == k;
+        if i < llte+1 {
+        } else if i == llte+1 {
+        } else {
+          assert k == node.keys[i-1];
+        }
+      }
     }
   }
 
-  lemma SplitLeafPreservesWF(node: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
+  lemma SplitLeafPreservesWF(node: Node, pivot: Key, leftleaf: Node, rightleaf: Node)
     requires node.WF()
-    requires node.SplitLeaf(leftleaf, rightleaf, pivot)
+    requires node.SplitLeaf(pivot, leftleaf, rightleaf)
     ensures leftleaf.WF()
     ensures rightleaf.WF()
   {
@@ -142,9 +142,9 @@ module PivotBranchRefinement {
     assert subindex.WF();
   }
 
-  lemma SplitIndexPreservesWF(node: Node, leftindex: Node, rightindex: Node, pivot: Key)
+  lemma SplitIndexPreservesWF(node: Node, pivot: Key, leftindex: Node, rightindex: Node)
     requires node.WF()
-    requires node.SplitIndex(leftindex, rightindex, pivot)
+    requires node.SplitIndex(pivot, leftindex, rightindex)
     ensures leftindex.WF()
     ensures rightindex.WF()
   {
@@ -152,21 +152,21 @@ module PivotBranchRefinement {
     SubIndexPreservesWF(node, |leftindex.children|, |node.children|);
   }
 
-  lemma SplitNodePreservesWF(node: Node, leftnode: Node, rightnode: Node, pivot: Key)
-    requires node.SplitNode(leftnode, rightnode, pivot)
+  lemma SplitNodePreservesWF(node: Node, pivot: Key, leftnode: Node, rightnode: Node)
+    requires node.SplitNode(pivot, leftnode, rightnode)
     requires node.WF()
     ensures leftnode.WF()
     ensures rightnode.WF()
   {
-    if node.SplitLeaf(leftnode, rightnode, pivot) {
-      SplitLeafPreservesWF(node, leftnode, rightnode, pivot);
+    if node.SplitLeaf(pivot, leftnode, rightnode) {
+      SplitLeafPreservesWF(node, pivot, leftnode, rightnode);
     } else {
-      SplitIndexPreservesWF(node, leftnode, rightnode, pivot);
+      SplitIndexPreservesWF(node, pivot, leftnode, rightnode);
     }
   }
 
-  lemma {:timeLimitMultiplier 4} SplitLeafInterpretation(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
-    requires oldleaf.SplitLeaf(leftleaf, rightleaf, pivot)
+  lemma {:timeLimitMultiplier 4} SplitLeafInterpretation(oldleaf: Node, pivot: Key, leftleaf: Node, rightleaf: Node)
+    requires oldleaf.SplitLeaf(pivot, leftleaf, rightleaf)
     requires oldleaf.WF()
     requires leftleaf.WF()
     requires rightleaf.WF()
@@ -209,11 +209,11 @@ module PivotBranchRefinement {
     }
   }
 
-  lemma SplitIndexInterpretation1(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+  lemma SplitIndexInterpretation1(oldindex: Node, pivot: Key, leftindex: Node, rightindex: Node)
     requires oldindex.WF()
     requires leftindex.WF()
     requires rightindex.WF()
-    requires oldindex.SplitIndex(leftindex, rightindex, pivot)
+    requires oldindex.SplitIndex(pivot, leftindex, rightindex)
     ensures forall key :: key in oldindex.I().mapp ==>
       MapsTo(Keys.MapPivotedUnion(leftindex.I().mapp, pivot, rightindex.I().mapp), 
         key, oldindex.I().mapp[key])
@@ -240,11 +240,11 @@ module PivotBranchRefinement {
     }
   }
   
-  lemma SplitIndexInterpretation2(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+  lemma SplitIndexInterpretation2(oldindex: Node, pivot: Key, leftindex: Node, rightindex: Node)
     requires oldindex.WF()
     requires leftindex.WF()
     requires rightindex.WF()
-    requires oldindex.SplitIndex(leftindex, rightindex, pivot)
+    requires oldindex.SplitIndex(pivot, leftindex, rightindex)
     ensures oldindex.I().mapp.Keys >=
             Keys.MapPivotedUnion(leftindex.I().mapp, pivot, rightindex.I().mapp).Keys
   {
@@ -265,37 +265,37 @@ module PivotBranchRefinement {
     }
   }
 
-  lemma SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+  lemma SplitIndexInterpretation(oldindex: Node, pivot: Key, leftindex: Node, rightindex: Node)
     requires oldindex.WF()
     requires leftindex.WF()
     requires rightindex.WF()
-    requires oldindex.SplitIndex(leftindex, rightindex, pivot)
+    requires oldindex.SplitIndex(pivot, leftindex, rightindex)
     ensures oldindex.I().mapp ==
             Keys.MapPivotedUnion(leftindex.I().mapp, pivot, rightindex.I().mapp)
   {
-    SplitIndexInterpretation1(oldindex, leftindex, rightindex, pivot);
-    SplitIndexInterpretation2(oldindex, leftindex, rightindex, pivot);
+    SplitIndexInterpretation1(oldindex, pivot, leftindex, rightindex);
+    SplitIndexInterpretation2(oldindex, pivot, leftindex, rightindex);
   }
 
-  lemma SplitNodeInterpretation(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+  lemma SplitNodeInterpretation(oldnode: Node, pivot: Key, leftnode: Node, rightnode: Node)
     requires oldnode.WF()
     requires leftnode.WF()
     requires rightnode.WF()
-    requires oldnode.SplitNode(leftnode, rightnode, pivot)
+    requires oldnode.SplitNode(pivot, leftnode, rightnode)
     ensures oldnode.I().mapp == Keys.MapPivotedUnion(leftnode.I().mapp, pivot, rightnode.I().mapp) 
   {
-    if oldnode.SplitLeaf(leftnode, rightnode, pivot) {
-      SplitLeafInterpretation(oldnode, leftnode, rightnode, pivot);
+    if oldnode.SplitLeaf(pivot, leftnode, rightnode) {
+      SplitLeafInterpretation(oldnode, pivot, leftnode, rightnode);
     } else {
-      SplitIndexInterpretation(oldnode, leftnode, rightnode, pivot);
+      SplitIndexInterpretation(oldnode, pivot, leftnode, rightnode);
     }
   }
 
-   lemma SplitLeafAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+   lemma SplitLeafAllKeys(oldnode: Node, pivot: Key, leftnode: Node, rightnode: Node)
     requires oldnode.WF()
     requires leftnode.WF()
     requires rightnode.WF()
-    requires oldnode.SplitLeaf(leftnode, rightnode, pivot)
+    requires oldnode.SplitLeaf(pivot, leftnode, rightnode)
     ensures oldnode.AllKeys() == leftnode.AllKeys() + rightnode.AllKeys()
     ensures forall key :: key in leftnode.AllKeys() <==> (Keys.lt(key, pivot) && key in oldnode.AllKeys())
     ensures forall key :: key in rightnode.AllKeys() <==> (Keys.lte(pivot, key) && key in oldnode.AllKeys())
@@ -316,11 +316,11 @@ module PivotBranchRefinement {
     }
   }
 
-  lemma SplitIndexAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+  lemma SplitIndexAllKeys(oldnode: Node, pivot: Key, leftnode: Node, rightnode: Node)
     requires oldnode.WF()
     requires leftnode.WF()
     requires rightnode.WF()
-    requires oldnode.SplitIndex(leftnode, rightnode, pivot)
+    requires oldnode.SplitIndex(pivot, leftnode, rightnode)
     ensures oldnode.AllKeys() == leftnode.AllKeys() + rightnode.AllKeys() + {pivot}
     ensures forall key :: key in leftnode.AllKeys() <==> (Keys.lt(key, pivot) && key in oldnode.AllKeys())
     ensures forall key :: key in (rightnode.AllKeys() + {pivot}) <==> (Keys.lte(pivot, key) && key in oldnode.AllKeys())
@@ -355,21 +355,21 @@ module PivotBranchRefinement {
     assert Last(rightnode.children) == Last(oldnode.children);
   }
 
-  lemma SplitNodeAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+  lemma SplitNodeAllKeys(oldnode: Node, pivot: Key, leftnode: Node, rightnode: Node)
     requires oldnode.WF()
     requires leftnode.WF()
     requires rightnode.WF()
-    requires oldnode.SplitNode(leftnode, rightnode, pivot)
+    requires oldnode.SplitNode(pivot, leftnode, rightnode)
     ensures oldnode.AllKeys() <= leftnode.AllKeys() + rightnode.AllKeys() + {pivot}
     ensures leftnode.AllKeys() + rightnode.AllKeys() <= oldnode.AllKeys()
     ensures forall key :: key in leftnode.AllKeys() <==> (Keys.lt(key, pivot) && key in oldnode.AllKeys())
     ensures forall key :: key in (rightnode.AllKeys()) ==> (Keys.lte(pivot, key) && key in oldnode.AllKeys())
     ensures forall key :: key in (rightnode.AllKeys() + {pivot}) <== (Keys.lte(pivot, key) && key in oldnode.AllKeys())
   {
-    if oldnode.SplitLeaf(leftnode, rightnode, pivot) {
-      SplitLeafAllKeys(oldnode, leftnode, rightnode, pivot);
+    if oldnode.SplitLeaf(pivot, leftnode, rightnode) {
+      SplitLeafAllKeys(oldnode, pivot, leftnode, rightnode);
     } else {
-      SplitIndexAllKeys(oldnode, leftnode, rightnode, pivot);
+      SplitIndexAllKeys(oldnode, pivot, leftnode, rightnode);
     }
   }
 
