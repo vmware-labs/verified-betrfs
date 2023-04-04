@@ -228,6 +228,12 @@ module AllocationBranchMod {
       && !Root().Summary?
     }
 
+    predicate NotSealed()
+      requires HasRoot()
+    {
+      && (Root().Index? ==> Root().summary == None)
+    }
+
     // function I() : (out: L.AllocationBranch)
     //   requires WF()
     //   ensures out.WF()
@@ -605,6 +611,7 @@ module AllocationBranchMod {
   {
     && lbl.InsertLabel?
     && v.WF()
+    && v.branch.NotSealed()
     && path.Valid()
     && path.branch == v.branch
     && path.key == lbl.key
@@ -617,6 +624,7 @@ module AllocationBranchMod {
   {
     && lbl.AppendLabel?
     && v.WF()
+    && v.branch.NotSealed()
     && path.Valid()
     && path.branch == v.branch
     && path.Target().Root() == Leaf([], [])
@@ -634,6 +642,7 @@ module AllocationBranchMod {
   {
     && lbl.InternalLabel?
     && v.WF()
+    && v.branch.NotSealed()
     && v.branch.diskView.IsFresh({lbl.addr})
     && v'.branch == v.branch.Grow(lbl.addr)
   }
@@ -643,6 +652,7 @@ module AllocationBranchMod {
   {
     && lbl.InternalLabel?
     && v.WF()
+    && v.branch.NotSealed()
     && path.Valid()
     && v.branch.diskView.IsFresh({lbl.addr})
     && path.branch.root == v.branch.root
@@ -654,6 +664,7 @@ module AllocationBranchMod {
   {
     && lbl.InternalLabel?
     && v.WF()
+    && v.branch.NotSealed()
     && v.branch.Root().Index?
     && v.branch.diskView.IsFresh({lbl.addr})
     && node.Summary?
