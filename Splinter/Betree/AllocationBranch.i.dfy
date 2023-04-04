@@ -6,7 +6,7 @@ include "../../Spec/Message.s.dfy"
 include "../../lib/Base/Sets.i.dfy"
 include "../../lib/Base/total_order_impl.i.dfy"
 include "../Disk/GenericDisk.i.dfy"
-
+include "FlattenedBranch.i.dfy"
 //  module that introduces summary node
 
 module AllocationBranchMod {
@@ -17,6 +17,7 @@ module AllocationBranchMod {
   import opened Sequences
   import opened GenericDisk
   import opened Sets
+  import opened FlattenedBranchMod
   import KeysImpl = Lexicographic_Byte_Order_Impl
   import Keys = KeysImpl.Ord
 
@@ -24,9 +25,7 @@ module AllocationBranchMod {
 
   datatype TransitionLabel = 
     | QueryLabel(key: Key, msg: Message)
-    | InsertLabel(key: Key, msg: Message)
-    | AppendLabel(keys: seq<Key>, msgs: seq<Message>) // insert into a new leaf
-    | InternalLabel(addr: Address)
+    | BuildLabel(ptr: Pointer, input: FlattenedBranch)
 
   // Design Option
   // 1. top of tree is index node, index node points to a summary node
@@ -171,7 +170,6 @@ module AllocationBranchMod {
         && addr in entries 
       ::
         && NodeChildrenRespectsRank(ranking, addr)
-        // && NodeSummaryRespectsRank(ranking, addr)
     }
 
     predicate IsFresh(addrs: set<Address>) {
@@ -363,7 +361,10 @@ module AllocationBranchMod {
     function Representation() : set<Address>
       requires Acyclic()
     {
-      ReachableAddrsUsingRanking(TheRanking())
+      var summary := if Root().Index? && Root().summary.Some? 
+        then { Root().summary.value } else {};
+      var treeRepr := ReachableAddrsUsingRanking(TheRanking());
+      treeRepr + summary
     }
 
     function ReachableAddrsUsingRanking(ranking: Ranking) : (out: set<Address>)
@@ -609,73 +610,82 @@ module AllocationBranchMod {
 
   predicate Insert(v: Variables, v': Variables, lbl: TransitionLabel, path: Path, newTarget: AllocationBranch)
   {
-    && lbl.InsertLabel?
+    && lbl.BuildLabel?
+    && lbl.ptr.None?
+    && lbl.input.WF()
+    && |lbl.input.keys| == 1
     && v.WF()
     && v.branch.NotSealed()
     && path.Valid()
     && path.branch == v.branch
-    && path.key == lbl.key
+    && path.key == lbl.input.keys[0]
     && path.Target().Root().Leaf?
-    && newTarget == path.Target().InsertLeaf(lbl.key, lbl.msg)
+    && newTarget == path.Target().InsertLeaf(lbl.input.keys[0], lbl.input.msgs[0])
     && v'.branch == path.Substitute(newTarget)
   }
 
   predicate Append(v: Variables, v': Variables, lbl: TransitionLabel, path: Path, newTarget: AllocationBranch)
   {
-    && lbl.AppendLabel?
+    && lbl.BuildLabel?
+    && lbl.ptr.None?
+    && lbl.input.WF()
+    && lbl.input.keys != []
     && v.WF()
     && v.branch.NotSealed()
     && path.Valid()
     && path.branch == v.branch
     && path.Target().Root() == Leaf([], [])
-    && lbl.keys != []
-    && |lbl.keys| == |lbl.msgs|
-    && Keys.IsStrictlySorted(lbl.keys)
-
-    && newTarget == path.Target().AppendToNewLeaf(lbl.keys, lbl.msgs)
-    && path.key == newTarget.Root().keys[0]
-    && path.PathEquiv(Last(newTarget.Root().keys))
+    && newTarget == path.Target().AppendToNewLeaf(lbl.input.keys, lbl.input.msgs)
+    && path.key == lbl.input.keys[0]
+    && path.PathEquiv(Last(lbl.input.keys))
     && v'.branch == path.Substitute(newTarget)
   }
 
   predicate Grow(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    && lbl.InternalLabel?
+    && lbl.BuildLabel?
+    && lbl.input.IsEmpty()
+    && lbl.ptr.Some?
     && v.WF()
     && v.branch.NotSealed()
-    && v.branch.diskView.IsFresh({lbl.addr})
-    && v'.branch == v.branch.Grow(lbl.addr)
+    && v.branch.diskView.IsFresh({lbl.ptr.value})
+    && v'.branch == v.branch.Grow(lbl.ptr.value)
   }
 
   predicate Split(v: Variables, v': Variables, lbl: TransitionLabel, 
     path: Path, pivot: Key, newTarget: AllocationBranch)
   {
-    && lbl.InternalLabel?
+    && lbl.BuildLabel?
+    && lbl.input.IsEmpty()
+    && lbl.ptr.Some?
     && v.WF()
     && v.branch.NotSealed()
     && path.Valid()
-    && v.branch.diskView.IsFresh({lbl.addr})
+    && v.branch.diskView.IsFresh({lbl.ptr.value})
     && path.branch.root == v.branch.root
-    && path.Target().SplitChildOfIndex(pivot, lbl.addr, newTarget)
+    && path.Target().SplitChildOfIndex(pivot, lbl.ptr.value, newTarget)
     && v'.branch == path.Substitute(newTarget)
   }
 
   predicate Seal(v: Variables, v': Variables, lbl: TransitionLabel, node: Node)
   {
-    && lbl.InternalLabel?
+    && lbl.BuildLabel?
+    && lbl.input.IsEmpty()
+    && lbl.ptr.Some?
     && v.WF()
     && v.branch.NotSealed()
     && v.branch.Root().Index?
-    && v.branch.diskView.IsFresh({lbl.addr})
+    && v.branch.diskView.IsFresh({lbl.ptr.value})
     && node.Summary?
+    // Jon: it's possible to not have the summary node store its au
     && node.aus == (
       if v.branch.Acyclic()
-      then v.branch.RepresentationAUs() + { lbl.addr.au }
-      else { lbl.addr.au } // dummy case
+      then v.branch.RepresentationAUs() + { lbl.ptr.value.au }
+      else { lbl.ptr.value.au } // dummy case
     )
-    && var newRoot := v.branch.Root().(summary := Some(lbl.addr));
+    && var newRoot := v.branch.Root().(summary := Some(lbl.ptr.value));
     && v'.branch.root == v.branch.root
-    && v'.branch.diskView == v.branch.diskView.ModifyDisk(lbl.addr, node).ModifyDisk(v.branch.root, newRoot)
+    && v'.branch.diskView == v.branch.diskView.ModifyDisk(lbl.ptr.value, node).ModifyDisk(v.branch.root, newRoot)
   }
 
   // public:

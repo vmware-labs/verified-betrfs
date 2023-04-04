@@ -37,7 +37,7 @@ module AllocationJournal {
     | FreezeForCommitLabel(frozenJournal: TruncatedJournal)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
-    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN)
+    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN) // TODO: free label
     // Internal-x labels refine to no-ops at the abstract spec
     | InternalLabel()  // Local No-op label 
     | InternalMiniAllocLabel(fill: set<AU>, prune: set<AU>)

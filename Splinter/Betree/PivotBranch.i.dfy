@@ -7,6 +7,7 @@ include "../../lib/Base/Option.s.dfy"
 include "../../lib/Base/Maps.i.dfy"
 include "../../lib/Base/Sequences.i.dfy"
 include "../../lib/Base/total_order_impl.i.dfy"
+include "FlattenedBranch.i.dfy"
 include "Buffer.i.dfy"
 include "Domain.i.dfy"
 
@@ -21,6 +22,7 @@ module PivotBranchMod {
   import opened Sequences
   import opened DomainMod
   import opened BufferMod
+  import opened FlattenedBranchMod
   import KeysImpl = Lexicographic_Byte_Order_Impl
   import Keys = KeysImpl.Ord
 
@@ -29,28 +31,6 @@ module PivotBranchMod {
     | InsertLabel(key: Key, msg: Message)
     | AppendLabel(keys: seq<Key>, msgs: seq<Message>) // insert into a new leaf
     | InternalLabel()
-
-  // Flattened branch for iterators (sequential and merge)
-  datatype FlattenedBranch = FlattenedBranch(keys: seq<Key>, msgs: seq<Message>)
-  {
-    predicate WF()
-    {
-      && |keys| == |msgs|
-      && Keys.IsStrictlySorted(keys)
-    }
-
-    function Concat(other: FlattenedBranch) : (result: FlattenedBranch)
-      requires WF()
-      requires other.WF()
-      requires |keys| > 0 && |other.keys| > 0 ==> Keys.lt(Last(keys), other.keys[0])
-      ensures result.WF()
-    {
-      Keys.reveal_IsStrictlySorted();
-      Keys.lteTransitiveForall();
-      
-      FlattenedBranch(keys + other.keys, msgs + other.msgs)
-    }
-  }
 
   // Bounded pivots are not necessary here, bounds are required for the B-epsilon node as clone
   // requires knowing the exact bound for prefix extraction. Any key transformation should be done

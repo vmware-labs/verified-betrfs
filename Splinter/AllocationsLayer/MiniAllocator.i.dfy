@@ -100,8 +100,6 @@ module MiniAllocatorMod {
     MiniAllocator(map[], None)
   }
 
-
-
   datatype MiniAllocator = MiniAllocator(
     allocs: map<AU, PageAllocator>, 
     curr: Option<AU>) 
@@ -113,6 +111,10 @@ module MiniAllocatorMod {
 
     function GetAllReserved() : (out: set<Address>) {
       UnionSetOfSets(set au: AU | au in allocs :: allocs[au].reserved)
+    }
+
+    function GetAllReservedAU() : (out: set<AU>) {
+      set au | au in allocs && allocs[au].reserved != {} :: au
     }
 
     function AddAUs(aus: set<AU>) : (out: MiniAllocator)
@@ -194,7 +196,7 @@ module MiniAllocatorMod {
       var newCurr := if curr.Some? && curr.value in aus then None else curr;
       MiniAllocator(newAllocs, newCurr)
     }
-
+  
     // All AUs = freeset AUs !! RC AUs !! Unobserved MiniAllocator AUs
   }
 }

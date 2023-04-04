@@ -1,8 +1,6 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-// include "../LikesAU.i.dfy"
-// include "../Journal/MiniAllocator.i.dfy"   // tony: borrowing from Journal for now
 include "../Betree/AllocationBranch.i.dfy"
 include "../Betree/BranchSeq.i.dfy"
 include "../Betree/OffsetMap.i.dfy"
@@ -18,34 +16,38 @@ module CompactorMod
   import opened LikesAUMod
   import opened GenericDisk
   import opened Sequences
+  import opened Sets
+  import opened FlattenedBranchMod
 
+  import AllocBranch = AllocationBranchMod
+  import KeysImpl = Upperbounded_Lexicographic_Byte_Order_Impl
+  import Keys = KeysImpl.Ord
+
+  type Element = Keys.Element
   type BranchDiskView = AllocationBranchMod.DiskView
 
-  // label: addresses 
+  datatype CompactInput = CompactInput(
+    branchSeq: BranchSeq,
+    offsetMap: OffsetMap,  // filter describing which keys from branchSeq should be preserved in output
+    subdisk: BranchDiskView // diskview containing exactly the part of the tree we are reading
+  )
 
-  // 
-
-
-// Transitions for each thread state machine, from the persective of the caller:
+  // Transitions for each thread state machine, from the persective of the caller:
   //  Init(compact start), Internal, Commit, Abort
   datatype CompactThread = CompactThread(
     // Read-only inputs
-    branchSeq: BranchSeq,
-    offsetMap: OffsetMap,  // filter describing which keys from branchSeq should be preserved in output
-    subdisk: BranchDiskView, // diskview containing exactly the part of the tree we are reading
+    input: CompactInput,
     // Mutating outputs
+    nextKey: Element,
     miniAllocator: MiniAllocator,
-
-
-    // all keys to the left of this (exclusive) have been copied to output
-    // 
-    nextKey: Element
-
-    output: AllocationBranch // root of the tree that we are building. Everything reachable from here is mini-allocated, disk here should be consistent with mini-allocator
+    output: AllocBranch.Variables
+    // root of the tree that we are building
+    // everything reachable from here is mini-allocated
+    // disk here should be consistent with mini-allocator
   ) {
     predicate WF() {
       && miniAllocator.WF()
-      && output.Acyclic()
+      && output.branch.Acyclic()
     }
   }
   
@@ -58,34 +60,28 @@ module CompactorMod
     }
 
     function Likes() : LikesAU {
-      // Union of output.likes and subdisk.Keys (or traverse disk from branchSeq roots?)
-      NoLikes()  // this is a placeholder
+      multiset(UnionSetOfSets(set thread | thread in threads :: 
+        thread.miniAllocator.GetAllReservedAU()))
     }
   }
 
   datatype TransitionLabel =
-    | Begin(branchSeq: BranchSeq, offsetMap: OffsetMap, subdisk: BranchDiskView)
-    | Internal(allocs: seq<AU>)
-    | Commit(branchSeq: BranchSeq, offsetMap: OffsetMap, subdisk: BranchDiskView, output: AllocationBranch)
-    | Abort(deallocs: seq<AU>)  // allow us to abandon a compaction (even though in practice this is not necessary, via scheduler magic)
+    | Begin(input: CompactInput, au: AU) // initial AU allocated to compactor's mini allocator
+    | Internal(allocs: set<AU>)
+    | Commit(input: CompactInput, output: AllocBranch.Variables)
+    | Abort(deallocs: set<AU>)  // allow us to abandon a compaction (even though in practice this is not necessary, via scheduler magic)
 
-  datatype Step = 
-    | BeginStep()
-    | AllocStep(idx: nat)
-    | BuildStep(idx: nat, addr: Address, newOutput: AllocationBranch)
-    | CommitStep(idx: nat)
-    | AbortStep(idx: nat)
-
-
-  predicate Begin(v: Variables, v': Variables, lbl: TransitionLabel) {
+  predicate Begin(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
     && v.WF()
     && lbl.Begin?
+    && var miniAllocator := EmptyMiniAllocator().AddAUs({lbl.au});
+    && miniAllocator.CanAllocate(addr)
+
     && var newThread := CompactThread(
-      lbl.branchSeq, 
-      lbl.offsetMap, 
-      lbl.subdisk, 
-      EmptyMiniAllocator(), 
-      AllocationBranch(GenericDisk.Address(0, 0), EmptyDisk())  //TODO placeholder
+        lbl.input,
+        Element.Element([]),  // start with minkey
+        miniAllocator.Allocate(addr),
+        AllocBranch.Variables(EmptyAllocationBranch(addr))
       );
     && v' == v.(threads := v.threads + [newThread])
   }
@@ -93,46 +89,36 @@ module CompactorMod
   predicate Alloc(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat) {
     && v.WF()
     && lbl.Internal?
+    && lbl.allocs != {}
     && idx < |v.threads|
     && var thread := v.threads[idx];
-    && Set(lbl.allocs) !! thread.miniAllocator.allocs.Keys
-    && var thread' := thread.(miniAllocator := thread.miniAllocator.AddAUs(Set(lbl.allocs)));
+    && lbl.allocs !! thread.miniAllocator.allocs.Keys
+
+    && var thread' := thread.(miniAllocator := thread.miniAllocator.AddAUs(lbl.allocs));
     && v' == v.(threads := v.threads[ idx := thread'])
   }
 
-  // move to allocation branch
-  datatype BranchLabel = 
-    | BuildLabel(addrs: seq<Address>, inputStream: FlattenedBranch)
-
-  predicate Build(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat, 
-    addr: Address, newOutput: AllocationBranch, newNextKey: Element) {
+  predicate Build(v: Variables, v': Variables, lbl: TransitionLabel, idx: nat, 
+    ptr: Pointer, newOutput: AllocBranch.Variables, newNextKey: Element) {
     && v.WF()
     && lbl.Internal?
+    && lbl.allocs == {}
     && idx < |v.threads|
-    && lbl.allocs == []
     && var thread := v.threads[idx];
-    && thread.miniAllocator.CanAllocate(addr)
+    && Keys.lte(thread.nextKey, newNextKey)
+    && (ptr.Some? ==> thread.miniAllocator.CanAllocate(ptr.value))
+
     // nondeterministic transition on the tree
-    // TODO: also take in a tree step so that we can update the tree
-    // new label for updated tree data
-
-    // lbl to branch
-    // lbl: addresses, keys and values to insert
-    // range comparison should be elements
-    && Keys.lte(v.nextKey, newNextKey)
-    && AllocationBranch.Next(v.output, newOutput, 
-      BranchLabel.BuildLabel([addr], branchSeq.toFlattenBranch(v.nextKey, newNextKey)))
-
-    && newOutput == thread.output // TODO: This is a placeholder for building the tree
-    // incremental 
-    // several input streams
-    // key consumed based on input streams
-
+    && AllocBranch.Next(thread.output, newOutput, 
+      AllocBranch.BuildLabel(ptr, FlattenedBranch([], []))) // TODO to flatten branch
+      //  branchSeq.toFlattenBranch(v.nextKey, newNextKey)))
     && var thread' := thread.(
-      miniAllocator := thread.miniAllocator.Allocate(addr),
-      output := newOutput 
+      miniAllocator := if ptr.Some? 
+        then thread.miniAllocator.Allocate(ptr.value) 
+        else thread.miniAllocator,
+      output := newOutput
     );
-    && v' == v.(threads := v.threads[ idx := thread'])
+    && v' == v.(threads := v.threads[idx := thread'])
   }
 
   predicate Commit(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat) {
@@ -140,21 +126,47 @@ module CompactorMod
     && lbl.Commit?
     && idx < |v.threads|
     && var thread := v.threads[idx];
-    && lbl.branchSeq == thread.branchSeq
-    && lbl.offsetMap == thread.offsetMap
-    && lbl.subdisk == thread.subdisk
-
-    && v.nextKey == Element.max // 
-    // representation is the same
-    // && lbl.branchSeq.QueryFilteredEquiv(lbl.subdisk, lbl.offsetMap, lbl.output)
-    // ^ needs an 
-    
-    // && true // TODO: placeholder for thread.output is done
-    // && lbl.output == thread.output
-    // reserved set should be same as output.repr, to mean that I used all the stuff I reserved
-    && thread.miniAllocator.GetAllReserved() == thread.output.Representation()
+    && lbl.input == thread.input
+    && thread.nextKey == Element.Max_Element 
+    && !thread.output.branch.NotSealed()
+    && thread.miniAllocator.GetAllReservedAU() == thread.miniAllocator.allocs.Keys // no AUs can magically disappear
+    && lbl.output == thread.output
     && v'.threads == remove(v.threads, idx)
   }
 
+  predicate Abort(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat) {
+    && v.WF()
+    && lbl.Abort?
+    && idx < |v.threads|
+    && var thread := v.threads[idx];
+    && lbl.deallocs == thread.miniAllocator.allocs.Keys
+    && v'.threads == remove(v.threads, idx)
+  }
 
+  predicate Init(v: Variables)
+  {
+    && v.threads == []
+  }
+
+ datatype Step = 
+    | BeginStep(addr: Address)
+    | AllocStep(idx: nat)
+    | BuildStep(idx: nat, ptr: Pointer, newOutput: AllocBranch.Variables, newNextKey: Element)
+    | CommitStep(idx: nat)
+    | AbortStep(idx: nat)
+
+  predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    match step {
+      case BeginStep(addr) => Begin(v, v', lbl, addr)
+      case AllocStep(idx) => Alloc(v, v', lbl, idx)
+      case BuildStep(idx, ptr, newOutput, newNextKey) => Build(v, v', lbl, idx, ptr, newOutput, newNextKey)
+      case CommitStep(idx) => Commit(v, v', lbl, idx)
+      case AbortStep(idx) => Abort(v, v', lbl, idx)
+    }
+  }
+
+  predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
+    exists step: Step :: NextStep(v, v', lbl, step)
+  }
 }
