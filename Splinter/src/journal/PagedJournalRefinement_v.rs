@@ -267,6 +267,19 @@ impl JournalRecord {
             Self::i_opt(ojr, old_lsn).discard_old(new_lsn).msgs
         ); // new extensionality trigger
     }
+
+    pub proof fn discard_valid(self, old_lsn: LSN, new_lsn: LSN)
+    requires
+        self.valid(old_lsn),
+        old_lsn <= new_lsn < self.message_seq.seq_end,
+    ensures
+        self.valid(new_lsn),
+    decreases self
+    {
+        if !self.message_seq.can_discard_to(new_lsn) {
+            self.prior_rec.unwrap().discard_valid(old_lsn, new_lsn);
+        }
+    }
 }
 
 impl TruncatedJournal {
