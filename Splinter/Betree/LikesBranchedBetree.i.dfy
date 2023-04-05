@@ -23,6 +23,7 @@ module LikesBranchedBetreeMod
   import opened BranchSeqMod
   import opened Multisets
   import opened LikesMod
+  import opened Sets
 
   import M = Mathematics
   import BB = BranchedBetreeMod
@@ -83,6 +84,11 @@ module LikesBranchedBetreeMod
     && TransitiveLikes(v.branchedVars.branched) == ImperativeLikes(v)
   }
 
+  function FullBranchAddrs(branchLikes: Likes, dv: BranchDiskView) : set<Address>
+  {
+    UnionSetOfSets(set addr | addr in branchLikes :: M.Set(BranchLikes(addr, dv)))
+  }
+  
   datatype Variables = Variables(
     // Inheritedstuff
     branchedVars: BB.Variables,
@@ -101,9 +107,9 @@ module LikesBranchedBetreeMod
 
     predicate IsFresh(addrs: set<Address>) {
       && addrs !! M.Set(betreeLikes)
-      && addrs !! M.Set(branchLikes)  
-      //TODO: This is not sufficient, since branchLikes only contain b+tree root. Need
-      // to get the whole repr.
+      // && addrs !! M.Set(branchLikes)
+      // && addrs !! branchedVars.branched.branchDiskView.Representation()
+      && addrs !! FullBranchAddrs(branchLikes, branchedVars.branched.branchDiskView)
     }
   }
 

@@ -67,17 +67,6 @@ module AllocationBranchMod {
       var s := if Leaf? then keys else pivots;
       Keys.LargestLte(s, key)
     }
-
-    // predicate CanI()
-    // {
-    //   && !Summary?
-    // }
-
-    // function I() : L.Node
-    //   requires  CanI()
-    // {
-    //   if Index? then L.Index(pivots, children) else L.Leaf(keys, msgs)
-    // }
   }
 
   datatype DiskView = DiskView(entries: map<Address, Node>) 
@@ -206,11 +195,6 @@ module AllocationBranchMod {
       MapRestrict(entries, entries.Keys - except) 
         == MapRestrict(other.entries, other.entries.Keys - except)
     }
-
-    // function I() : L.DiskView
-    // {
-    //   L.DiskView(map addr | addr in entries && entries[addr].CanI() :: entries[addr].I())
-    // }
   }
 
   function EmptyDisk() : DiskView {
@@ -231,14 +215,6 @@ module AllocationBranchMod {
     {
       && (Root().Index? ==> Root().summary == None)
     }
-
-    // function I() : (out: L.AllocationBranch)
-    //   requires WF()
-    //   ensures out.WF()
-    // {
-    //   // TODO: revisit for pre post conditions
-    //   L.AllocationBranch(root, diskView.I())
-    // }
 
     predicate HasRoot() {
       && diskView.ValidAddress(root)
@@ -383,12 +359,6 @@ module AllocationBranchMod {
 
         UnionSeqOfSetsSoundness(subTreeAddrs);
         {root} + UnionSeqOfSets(subTreeAddrs)
-    }
-
-    function RepresentationAUs() : set<AU>
-      requires Acyclic()
-    {
-      set addr | addr in  Representation() :: addr.au
     }
 
     predicate TightDiskView()
@@ -680,7 +650,7 @@ module AllocationBranchMod {
     // Jon: it's possible to not have the summary node store its au
     && node.aus == (
       if v.branch.Acyclic()
-      then v.branch.RepresentationAUs() + { lbl.ptr.value.au }
+      then ToAUs(v.branch.Representation()) + { lbl.ptr.value.au }
       else { lbl.ptr.value.au } // dummy case
     )
     && var newRoot := v.branch.Root().(summary := Some(lbl.ptr.value));

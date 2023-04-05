@@ -4,9 +4,11 @@
 include "LikesAU.i.dfy"
 include "Compactor.i.dfy"
 include "../Betree/LikesBranchedBetree.i.dfy"
+include "../Betree/AllocationBranchRefinement.i.dfy"
 
 module AllocationBranchedBetreeMod
 {
+  import opened Sets
   import opened Sequences
   import opened LSNMod
   import opened MsgHistoryMod
@@ -17,13 +19,12 @@ module AllocationBranchedBetreeMod
   import opened LikesAUMod
   import opened MiniAllocatorMod
   import opened CompactorMod
-  import LikesBranchedBetreeMod
   import opened AllocationBranchMod
 
   import M = Mathematics
   import BB = BranchedBetreeMod
-  // import LkB = LinkedBranchMod 
   import LB = LikesBranchedBetreeMod
+  import ABR = AllocationBranchRefinement
 
 //   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
@@ -32,10 +33,7 @@ module AllocationBranchedBetreeMod
   type BranchDiskView = AllocationBranchMod.DiskView
 
   type PathAUs = seq<AU>
-
-//   type Ranking = GenericDisk.Ranking
   type StampedBetree = Stamped<BB.BranchedBetree>
-//   type BranchDiskView = LB.DiskView
 
   function FirstPage(au: AU) : Address
   {
@@ -52,29 +50,8 @@ module AllocationBranchedBetreeMod
     Apply((x: Address) => x.au, addrs)
   }
 
-  datatype Variables = Variables(
-    likesVars: LB.Variables,
-    betreeAULikes: LikesAU, 
-    branchAULikes: LikesAU,
-
-    allocBranchDiskView: BranchDiskView, // diskview containing allocation branches
-    compator: Compactor
-    // Need to union the buildTight disk and all the threadseq disk.
-    // sequence of "thread" information for compacting branches, each with its own mini-allocator, and its own read-refs(?)
-  )
-  {
-    predicate WF() {
-      && likesVars.WF()
-    }
-
-    predicate IsFresh(aus: set<AU>) {
-      && betreeAULikes !! multiset(aus)
-      && branchAULikes !! multiset(aus)
-      //TODO: This is not sufficient, since branchAULikes only contain b+tree root. Need
-      // to get the branch summary
-    }
-  }
-
+  // TODO: miniallocator labels for compactor steps
+  // growing should just be AU
   datatype TransitionLabel =
       QueryLabel(endLsn: LSN, key: Key, value: Value)
     | PutLabel(puts: MsgHistory)
@@ -96,6 +73,32 @@ module AllocationBranchedBetreeMod
     }
   }
 
+  datatype Variables = Variables(
+    likesVars: LB.Variables,
+    betreeAULikes: LikesAU, 
+    branchAULikes: LikesAU,
+    branchToSummary: map<AU, set<AU>>, // domain == M.Set(branchAULikes)
+    branchReadRefs: LikesAU, // updated when compact starts and ends
+    
+    allocBranchDiskView: BranchDiskView, // diskview containing allocation branches
+    compactor: Compactor
+    // Need to union the buildTight disk and all the threadseq disk.
+    // sequence of "thread" information for compacting branches, each with its own mini-allocator, and its own read-refs(?)
+  )
+  {
+    predicate WF() {
+      && likesVars.WF()
+    }
+  
+    predicate IsFresh(aus: set<AU>) {
+      && M.Set(betreeAULikes) !! aus
+      // && M.Set(branchAULikes) !! aus
+      && UnionSetOfSets(branchToSummary.Values) !! aus
+      && M.Set(compactor.Likes()) !! aus
+      // && GenericDisk.ToAUs(allocBranchDiskView.Representation()) !! aus 
+    }
+  }
+
   // group a couple definitions together
   predicate OnlyAdvanceBranchedVars(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
@@ -108,40 +111,37 @@ module AllocationBranchedBetreeMod
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    //  avoid defining enabling predicates based on the ghosty branchDiskView (linkedBranch)
-    //    ==> most steps in branchedbetree  [ isFresh ]
-
-    // v.likesVars ==> v'.LikesVars
-    // likes, repeating branchedbetree
-    
-
-    // need to advance branchedbetree without checking conditions on ghosty branchDiskView
-
     && LB.InternalGrowTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
-    && v.IsFresh({step.newRootAddr.au})
+    && v.IsFresh(GenericDisk.ToAUs(lbl.addrs))
+    // && v.IsFresh({step.newRootAddr.au})
     && v' == v.(
       betreeAULikes := v.betreeAULikes + multiset({step.newRootAddr.au})
     )
   }
 
-  // Likes variables (branchdiskview)
-  //  allocationBranch -> linkedbranch
-
   // Any b+tree that is "observed" is not in the mini-allocator
 
-  // TODO
-  // predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-  // {
-  //   && LB.InternalFlushMemtableTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
-  //   && var oldRootAU := if v.likesVars.branchedVars.branched.HasRoot() then multiset{v.branchedVars.branched.root.value.au} else multiset{};
-  //   && v' == v.(
-  //     likesVars := v'.likesVars, // admit relational update above
+  predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && LB.InternalFlushMemtableTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
+    // && v.IsFresh({step.newRootAddr.au})
+    && v.IsFresh(GenericDisk.ToAUs(lbl.addrs))
+    // ok to access the actual tree
+    // && var oldRootAU := if v.likesVars.branchedVars.branched.HasRoot() 
+    //   then multiset{v.likesVars.branchedVars.branched.root.value.au} else multiset{};
+    // && v' == v.(
+    //   likesVars := v'.likesVars //, // admit relational update above
 
-  //     // TODO: mini allocator needs to be updated here. Can forget linked pages.
-  //     betreeAULikes := v.betreeLikes - oldRootAU + multiset{step.newRootAU},
-  //     branchAULikes := v.branchLikes + multiset{step.branch.root}
-  //   )
-  // }
+      // compactor?
+      // is memtable construction captured here? 
+      // I don't think so, instead it should be a separate module that communicates via the label
+      // not owned by the mini allocator
+
+      // TODO: mini allocator needs to be updated here. Can forget linked pages.
+      // betreeAULikes := v.betreeAULikes - oldRootAU + multiset{step.newRootAU},
+      // branchAULikes := v.branchAULikes + multiset{step.branch.root}
+    // )
+  }
 
 //   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
 //   {
@@ -225,7 +225,6 @@ module AllocationBranchedBetreeMod
 //   && v' == v
 //   }
 
-
   predicate NoOp(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && LB.NextStep(v.likesVars, v'.likesVars, lbl.I(), step.I())
@@ -254,11 +253,11 @@ module AllocationBranchedBetreeMod
         case InternalGrowStep(newRootAddr) => LB.InternalGrowStep(newRootAddr)
         case InternalSplitStep(path, request, newAddrs, pathAddrs)
           => LB.InternalSplitStep(path, request, newAddrs, pathAddrs)
-        case InternalFlushMemtableStep(newRootAddr, branch) => LB.InternalFlushMemtableStep(newRootAddr, branch.I())
+        case InternalFlushMemtableStep(newRootAddr, branch) => LB.InternalFlushMemtableStep(newRootAddr, ABR.I(branch))
         case InternalFlushStep(path, childIdx, targetAddr, targetChildAddr, pathAddrs, branchGCCount) 
           => LB.InternalFlushStep(path, childIdx, targetAddr, targetChildAddr, pathAddrs, branchGCCount)
         case InternalCompactStep(path, start, end, newBranch, targetAddr, pathAddrs) 
-          => LB.InternalCompactStep(path, start, end, newBranch.I(), targetAddr, pathAddrs) 
+          => LB.InternalCompactStep(path, start, end, ABR.I(newBranch), targetAddr, pathAddrs) 
         case InternalNoOpStep() => LB.InternalNoOpStep
       }
     }

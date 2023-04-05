@@ -42,6 +42,11 @@ module GenericDisk {
     else if a.page <= b.page then a else b
 	}
 
+  function ToAUs(addrs: set<Address>) : set<AU>
+  {
+    set addr | addr in addrs :: addr.au
+  }
+
   //////////////////////////////////////////////////////////////////
 
   type Block(!new, ==)
