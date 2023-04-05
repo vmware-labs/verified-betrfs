@@ -17,6 +17,8 @@ module CompactorMod
   import opened GenericDisk
   import opened Sequences
   import opened Sets
+  import opened KeyType
+  import opened ValueMessage 
   import opened FlattenedBranchMod
 
   import AllocBranch = AllocationBranchMod
@@ -24,13 +26,19 @@ module CompactorMod
   import Keys = KeysImpl.Ord
 
   type Element = Keys.Element
-  type BranchDiskView = AllocationBranchMod.DiskView
+  type BranchDiskView = AllocBranch.DiskView
 
   datatype CompactInput = CompactInput(
     branchSeq: BranchSeq,
     offsetMap: OffsetMap,  // filter describing which keys from branchSeq should be preserved in output
     subdisk: BranchDiskView // diskview containing exactly the part of the tree we are reading
-  )
+  ) {
+    predicate WF()
+    {
+      && offsetMap.WF()
+      && subdisk.WF()
+    }
+  }
 
   // Transitions for each thread state machine, from the persective of the caller:
   //  Init(compact start), Internal, Commit, Abort
@@ -46,6 +54,7 @@ module CompactorMod
     // disk here should be consistent with mini-allocator
   ) {
     predicate WF() {
+      && input.WF()
       && miniAllocator.WF()
       && output.branch.Acyclic()
     }
@@ -98,8 +107,35 @@ module CompactorMod
     && v' == v.(threads := v.threads[ idx := thread'])
   }
 
-  predicate Build(v: Variables, v': Variables, lbl: TransitionLabel, idx: nat, 
-    ptr: Pointer, newOutput: AllocBranch.Variables, newNextKey: Element) {
+  function CompactInputQueryFiltered(input: CompactInput, key: Key) : Message
+    requires input.offsetMap.WF()
+    decreases input.branchSeq.Length()
+  {
+    if |input.branchSeq.roots| == 0 then Update(NopDelta())
+    else (
+      var branch := AllocationBranch(input.branchSeq.roots[0], input.subdisk);
+      var msg := 
+        if branch.Acyclic() && key in input.offsetMap.FilterForBottom() 
+        then branch.Query(key) else Update(NopDelta());
+      
+      var newInput := CompactInput(input.branchSeq.DropFirst(), input.offsetMap.Decrement(1), input.subdisk);
+      Merge(CompactInputQueryFiltered(newInput, key), msg)
+    )
+  }
+
+  predicate ValidBranchToInsert(thread: CompactThread, newNextKey: Element, branchToInsert: FlattenedBranch)
+    requires thread.WF()
+  {
+    && branchToInsert.WF()
+    && (|branchToInsert.keys| > 0 ==>
+      && Keys.lte(thread.nextKey, Element.Element(branchToInsert.keys[0]))
+      && Keys.lt(Element.Element(Last(branchToInsert.keys)), newNextKey))
+    && (forall i:nat | i < |branchToInsert.keys| ::
+      CompactInputQueryFiltered(thread.input, branchToInsert.keys[i]) == branchToInsert.msgs[i])
+  }
+
+  predicate Build(v: Variables, v': Variables, lbl: TransitionLabel, idx: nat, ptr: Pointer, 
+    newOutput: AllocBranch.Variables, newNextKey: Element, branchToInsert: FlattenedBranch) {
     && v.WF()
     && lbl.Internal?
     && lbl.allocs == {}
@@ -107,11 +143,10 @@ module CompactorMod
     && var thread := v.threads[idx];
     && Keys.lte(thread.nextKey, newNextKey)
     && (ptr.Some? ==> thread.miniAllocator.CanAllocate(ptr.value))
+    && ValidBranchToInsert(thread, newNextKey, branchToInsert)
 
     // nondeterministic transition on the tree
-    && AllocBranch.Next(thread.output, newOutput, 
-      AllocBranch.BuildLabel(ptr, FlattenedBranch([], []))) // TODO to flatten branch
-      //  branchSeq.toFlattenBranch(v.nextKey, newNextKey)))
+    && AllocBranch.Next(thread.output, newOutput, AllocBranch.BuildLabel(ptr, branchToInsert))
     && var thread' := thread.(
       miniAllocator := if ptr.Some? 
         then thread.miniAllocator.Allocate(ptr.value) 
@@ -151,7 +186,7 @@ module CompactorMod
  datatype Step = 
     | BeginStep(addr: Address)
     | AllocStep(idx: nat)
-    | BuildStep(idx: nat, ptr: Pointer, newOutput: AllocBranch.Variables, newNextKey: Element)
+    | BuildStep(idx: nat, ptr: Pointer, newOutput: AllocBranch.Variables, newNextKey: Element, branchToInsert: FlattenedBranch)
     | CommitStep(idx: nat)
     | AbortStep(idx: nat)
 
@@ -160,7 +195,7 @@ module CompactorMod
     match step {
       case BeginStep(addr) => Begin(v, v', lbl, addr)
       case AllocStep(idx) => Alloc(v, v', lbl, idx)
-      case BuildStep(idx, ptr, newOutput, newNextKey) => Build(v, v', lbl, idx, ptr, newOutput, newNextKey)
+      case BuildStep(idx, ptr, newOutput, newNextKey, branchToInsert) => Build(v, v', lbl, idx, ptr, newOutput, newNextKey, branchToInsert)
       case CommitStep(idx) => Commit(v, v', lbl, idx)
       case AbortStep(idx) => Abort(v, v', lbl, idx)
     }
