@@ -367,7 +367,13 @@ verus! {
       CoordinationSystem::State::next(v, vp, label),
       CoordinationSystem::State::next_by(v, vp, label, step),
       // Step enum doesn't generate `is_variant` type checkers
-      step.is_commit_complete(),
+      match step {
+        CoordinationSystem::Step::commit_complete(_, _) => true,
+        _ => false
+      },
+      matches!(step, CoordinationSystem::Step::commit_complete(_, _)),
+      // What we'd like to do ideally:
+      // step.is_commit_complete(),
       v.mapadt.persistent.seq_end <= lsn <= v.ephemeral_seq_end(),
       v.mapadt.in_flight.get_Some_0().seq_end <= lsn,
     ensures
@@ -489,36 +495,36 @@ verus! {
       v.inv(),
       CoordinationSystem::State::next(v, vp, label),
       CoordinationSystem::State::next_by(v, vp, label, step),
-      step.is_put()
+      matches!(step, CoordinationSystem::Step::put(_,_)),
     ensures
-      vp.inv()
+      vp.inv(),
   {
     // TODO: remove this
     assume(false);
-    reveal(journal_overlaps_agree);
-    reveal(CoordinationSystem::State::next);
-    reveal(CoordinationSystem::State::next_by);
-    reveal(CrashTolerantJournal::State::next);
-    reveal(CrashTolerantJournal::State::next_by);
-    reveal(CrashTolerantMap::State::next);
-    reveal(CrashTolerantMap::State::next_by);
+    // reveal(journal_overlaps_agree);
+    // reveal(CoordinationSystem::State::next);
+    // reveal(CoordinationSystem::State::next_by);
+    // reveal(CrashTolerantJournal::State::next);
+    // reveal(CrashTolerantJournal::State::next_by);
+    // reveal(CrashTolerantMap::State::next);
+    // reveal(CrashTolerantMap::State::next_by);
 
-    if v.map_is_frozen() {
-      let frozen_end = v.mapadt.in_flight.get_Some_0().seq_end;
-      assert(v.journal.i().discard_recent(frozen_end) 
-        == vp.journal.i().discard_recent(frozen_end))
-      by
-      {
-        let left = v.journal.i().discard_recent(frozen_end);
-        let right = vp.journal.i().discard_recent(frozen_end);
+    // if v.map_is_frozen() {
+    //   let frozen_end = v.mapadt.in_flight.get_Some_0().seq_end;
+    //   assert(v.journal.i().discard_recent(frozen_end) 
+    //     == vp.journal.i().discard_recent(frozen_end))
+    //   by
+    //   {
+    //     let left = v.journal.i().discard_recent(frozen_end);
+    //     let right = vp.journal.i().discard_recent(frozen_end);
 
-        assert(left.seq_start == right.seq_start);
-        assert(left.seq_end == right.seq_end);
-        assert_maps_equal!(
-          v.journal.i().discard_recent(frozen_end).msgs,
-          vp.journal.i().discard_recent(frozen_end).msgs
-        );
-      }
-    }
+    //     assert(left.seq_start == right.seq_start);
+    //     assert(left.seq_end == right.seq_end);
+    //     assert_maps_equal!(
+    //       v.journal.i().discard_recent(frozen_end).msgs,
+    //       vp.journal.i().discard_recent(frozen_end).msgs
+    //     );
+    //   }
+    // }
   }
 }

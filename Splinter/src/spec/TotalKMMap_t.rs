@@ -40,7 +40,7 @@ impl TotalKMMap
     ensures
         forall |k: Key, v: Message| #![auto] self.insert(k, v).wf(),
     {
-        assert forall |k: Key, v: Message| self.insert(k, v).wf() by {
+        assert forall |k: Key, v: Message| (#[trigger] self.insert(k, v)).wf() by {
             assert_sets_equal!(self.insert(k, v).dom(), total_domain());
         }
     }
