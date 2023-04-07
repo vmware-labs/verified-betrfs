@@ -315,7 +315,10 @@ impl TruncatedJournal {
     {
         TruncatedJournal{
             boundary_lsn: lsn,
-            freshest_rec: JournalRecord::discard_old_journal_rec(self.freshest_rec, lsn)}
+            freshest_rec:
+                if self.seq_end() == lsn { None }
+                else { JournalRecord::discard_old_journal_rec(self.freshest_rec, lsn) }
+        }
     }
 
     // msgs appears as the (boundary-truncated) contents of the i'th entry in the
