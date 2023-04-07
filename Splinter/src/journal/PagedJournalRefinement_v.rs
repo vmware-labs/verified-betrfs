@@ -370,8 +370,10 @@ impl PagedJournal::State {
 
     pub proof fn read_for_recovery_refines(self, post: Self, lbl: PagedJournal::Label, depth: nat)
     requires 
+        self.wf(),
         PagedJournal::State::read_for_recovery(self, post, lbl, depth),
     ensures
+        post.wf(),
         AbstractJournal::State::next(self.i(), post.i(), lbl.i()),
     {
         // New calls
@@ -470,8 +472,13 @@ impl PagedJournal::State {
         post.wf(),
         AbstractJournal::State::next(self.i(), post.i(), lbl.i()),
     {
+        reveal(AbstractJournal::State::next_by);    // newly required; unfortunate macro defaults
+        reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
         match step {
-            PagedJournal::Step::read_for_recovery(depth) => { self.read_for_recovery_refines(post, lbl, depth); }
+            PagedJournal::Step::read_for_recovery(depth) => {
+                assert(PagedJournal::State::read_for_recovery(self, post, lbl, depth));
+                self.read_for_recovery_refines(post, lbl, depth);
+            }
             _ => { assume(false); } // left off here
         }
     }
