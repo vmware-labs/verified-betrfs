@@ -57,7 +57,7 @@ module AllocationBranchedBetreeMod
     | PutLabel(puts: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(branched: StampedBetree)
-    | InternalAllocationsLabel(addrs: set<Address>)
+    | InternalAllocationsLabel(aus: set<AU>)
     | InternalLabel()   // Local No-op label
   {
     function I() : LB.TransitionLabel
@@ -67,7 +67,6 @@ module AllocationBranchedBetreeMod
         case PutLabel(puts) => LB.PutLabel(puts)
         case QueryEndLsnLabel(endLsn) => LB.QueryEndLsnLabel(endLsn)
         case FreezeAsLabel(branched) => LB.FreezeAsLabel(branched)
-        case InternalAllocationsLabel(addrs) => LB.InternalAllocationsLabel(addrs)
         case _ => LB.InternalLabel
       }
     }
@@ -75,12 +74,14 @@ module AllocationBranchedBetreeMod
 
   datatype Variables = Variables(
     likesVars: LB.Variables,
-    betreeAULikes: LikesAU, 
-    branchAULikes: LikesAU,
-    branchToSummary: map<AU, set<AU>>, // domain == M.Set(branchAULikes)
+    // memtable: AllocationMemtable, // TODO: a mini alloocator & allocation branch
+    // imperative states maintained to compute which AUs may be freed in a step
+    betreeAULikes: LikesAU, // references of betreee node
+    branchAULikes: LikesAU, // root au of each branch
     branchReadRefs: LikesAU, // updated when compact starts and ends
-    
+    // ghosty
     allocBranchDiskView: BranchDiskView, // diskview containing allocation branches
+    // part ghosty (DiskView) & part imperative
     compactor: Compactor
     // Need to union the buildTight disk and all the threadseq disk.
     // sequence of "thread" information for compacting branches, each with its own mini-allocator, and its own read-refs(?)
@@ -90,13 +91,21 @@ module AllocationBranchedBetreeMod
       && likesVars.WF()
     }
   
-    predicate IsFresh(aus: set<AU>) {
-      && M.Set(betreeAULikes) !! aus
-      // && M.Set(branchAULikes) !! aus
-      && UnionSetOfSets(branchToSummary.Values) !! aus
-      && M.Set(compactor.Likes()) !! aus
-      // && GenericDisk.ToAUs(allocBranchDiskView.Representation()) !! aus 
-    }
+    // Maintained via Inv (all ghosty?)
+    // move to proof land, condition for refinement
+    // predicate IsFresh(aus: set<AU>) {
+    //   && M.Set(betreeAULikes) !! aus
+    //   // && M.Set(branchAULikes) !! aus
+    //   && UnionSetOfSets(branchToSummary.Values) !! aus
+    //   && M.Set(compactor.Likes()) !! aus
+    //   // && GenericDisk.ToAUs(allocBranchDiskView.Representation()) !! aus 
+    //    && aus !! memtable.Likes()
+    // }
+    
+    // one layer: lbl would inherit allocation and free arguments
+    // conditional refinement lemma
+    // AU == lbl.allocated things 
+    // freeset from cooirdination system implies this
   }
 
   // group a couple definitions together
@@ -112,8 +121,6 @@ module AllocationBranchedBetreeMod
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && LB.InternalGrowTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
-    && v.IsFresh(GenericDisk.ToAUs(lbl.addrs))
-    // && v.IsFresh({step.newRootAddr.au})
     && v' == v.(
       betreeAULikes := v.betreeAULikes + multiset({step.newRootAddr.au})
     )
@@ -124,23 +131,31 @@ module AllocationBranchedBetreeMod
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && LB.InternalFlushMemtableTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
-    // && v.IsFresh({step.newRootAddr.au})
-    && v.IsFresh(GenericDisk.ToAUs(lbl.addrs))
-    // ok to access the actual tree
-    // && var oldRootAU := if v.likesVars.branchedVars.branched.HasRoot() 
-    //   then multiset{v.likesVars.branchedVars.branched.root.value.au} else multiset{};
-    // && v' == v.(
-    //   likesVars := v'.likesVars //, // admit relational update above
+    && var oldRootAU := if v.likesVars.branchedVars.branched.HasRoot() 
+      then multiset{v.likesVars.branchedVars.branched.root.value.au} else multiset{};
 
+    // TODO: change memtable steps
+
+    // betreeAULikes: LikesAU, // references of betreee node
+    // branchAULikes: LikesAU, // root au of each branch
+    // branchReadRefs: LikesAU, // updated when compact starts and ends
+    // // ghosty
+    // allocBranchDiskView: BranchDiskView, // diskview containing allocation branches
+    // // part ghosty (DiskView) & part imperative
+    // compactor: Compactor
+
+    && v' == v.(
+      likesVars := v'.likesVars, // admit relational update above
+      // memtableVars := v'.memtableVars, 
       // compactor?
       // is memtable construction captured here? 
       // I don't think so, instead it should be a separate module that communicates via the label
       // not owned by the mini allocator
 
       // TODO: mini allocator needs to be updated here. Can forget linked pages.
-      // betreeAULikes := v.betreeAULikes - oldRootAU + multiset{step.newRootAU},
+      betreeAULikes := v.betreeAULikes - oldRootAU + multiset{step.newRootAddr.au}
       // branchAULikes := v.branchAULikes + multiset{step.branch.root}
-    // )
+    )
   }
 
 //   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -236,7 +251,7 @@ module AllocationBranchedBetreeMod
     | PutStep()
     | QueryEndLsnStep()
     | FreezeAsStep()
-    | InternalGrowStep(newRootAddr: Address)
+    | InternalGrowStep(newRootAddr: Address) // this could potentially be the AU and we make sure that it's written to the first AU?
     | InternalSplitStep(path: BB.Path, request: SplitRequest, newAddrs: BB.L.SplitAddrs, pathAddrs: BB.PathAddrs)
     | InternalFlushMemtableStep(newRootAddr: Address, branch: AllocationBranch)
     | InternalFlushStep(path: BB.Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: BB.PathAddrs, branchGCCount: nat)

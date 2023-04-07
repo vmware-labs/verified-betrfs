@@ -58,12 +58,10 @@ module BranchedBetreeMod
 
   datatype TransitionLabel =
       QueryLabel(endLsn: LSN, key: Key, value: Value)
-    | PutLabel(puts: MsgHistory)
+    | PutLabel(puts: MsgHistory) // 
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(branched: StampedBetree)
-    | InternalAllocationsLabel(addrs: set<Address>)
     | InternalLabel()   // Local No-op label
-
 
   datatype BetreeNode = BetreeNode(
     branches: BranchSeq,
@@ -798,7 +796,7 @@ module BranchedBetreeMod
 
   predicate Put(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    && lbl.PutLabel?
+    && lbl.PutLabel? // insert into the linked memtable, more steps (internal memtable step)
     && lbl.puts.WF()
     && lbl.puts.seqStart == v.memtable.seqEnd
     && v' == v.(
@@ -839,10 +837,15 @@ module BranchedBetreeMod
   {
     && v.WF()
     && step.WF()
-    && lbl.InternalAllocationsLabel?
+    && lbl.InternalLabel?
     && step.InternalFlushMemtableStep?
     // Allocation validation
-    && lbl.addrs == {step.newRootAddr} + step.branch.Representation()
+
+    // memtable allocation put label and build memtable label
+    // TODO: memtable => linkedBranch 
+    // what labelfor populate memtable 
+
+    // perhaps we need to 
     && (forall key :: step.branch.Query(key) == v.memtable.buffer.Query(key)) // TODO: revisit
     && v'.branched == InsertInternalFlushMemtableReplacement(v.branched, step.branch, step.newRootAddr).BuildTightTree()
     && v'.memtable == v.memtable.Drain()
@@ -870,9 +873,8 @@ module BranchedBetreeMod
   {
     && v.WF()
     && step.WF()
-    && lbl.InternalAllocationsLabel?
+    && lbl.InternalLabel?
     && step.InternalGrowStep?
-    && lbl.addrs == {step.newRootAddr}
     && v'.branched == InsertGrowReplacement(v.branched, step.newRootAddr)
     && v'.memtable == v.memtable  // UNCHANGED
   }
@@ -886,9 +888,8 @@ module BranchedBetreeMod
   predicate InternalSplitTree(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
-    && lbl.InternalAllocationsLabel?
+    && lbl.InternalLabel?
     && step.InternalSplitStep?
-    && lbl.addrs == Set(step.pathAddrs) + step.newAddrs.Repr()
     && step.WF()
     && step.path.branched == v.branched
     && step.path.Target().CanSplitParent(step.request)
@@ -945,10 +946,9 @@ module BranchedBetreeMod
   {
     && v.WF()
     && step.WF()
-    && lbl.InternalAllocationsLabel?
+    && lbl.InternalLabel?
     && step.InternalFlushStep?
 
-    && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr} + {step.targetChildAddr}
     && step.path.branched == v.branched
     && step.path.Valid()
     && var root := step.path.Target().Root();
@@ -1008,8 +1008,7 @@ module BranchedBetreeMod
     && v.WF()
     && step.WF()
     && step.InternalCompactStep?
-    && lbl.InternalAllocationsLabel?
-    && lbl.addrs == Set(step.pathAddrs) + {step.targetAddr} + step.newBranch.Representation()
+    && lbl.InternalLabel?
     && step.path.branched == v.branched
     && var replacement := InsertCompactReplacement(step.path.Target(), step.start, step.end, step.newBranch, step.targetAddr);
     && v'.branched == step.path.Substitute(replacement, step.pathAddrs).BuildTightTree()

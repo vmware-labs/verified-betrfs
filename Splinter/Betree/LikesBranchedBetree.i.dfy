@@ -118,7 +118,6 @@ module LikesBranchedBetreeMod
     | PutLabel(puts: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | FreezeAsLabel(branched: StampedBetree)
-    | InternalAllocationsLabel(addrs: set<Address>)
     | InternalLabel()   // Local No-op label
   {
     function I() : BB.TransitionLabel
@@ -128,7 +127,6 @@ module LikesBranchedBetreeMod
         case PutLabel(puts) => BB.PutLabel(puts)
         case QueryEndLsnLabel(endLsn) => BB.QueryEndLsnLabel(endLsn)
         case FreezeAsLabel(branched) => BB.FreezeAsLabel(branched)
-        case InternalAllocationsLabel(addrs) => BB.InternalAllocationsLabel(addrs)
         case _ => BB.InternalLabel
       }
     }
