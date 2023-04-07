@@ -21,6 +21,7 @@ use crate::coordination_layer::CrashTolerantJournal_v;
 use crate::coordination_layer::CrashTolerantJournal_v::*;
 use crate::coordination_layer::CrashTolerantMap_v::*;
 use crate::coordination_layer::CrashTolerantMap_v;
+use crate::coordination_layer::AbstractMap_v::*;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MsgHistory_v::{MsgHistory, KeyedMessage};
 
@@ -499,32 +500,56 @@ verus! {
     ensures
       vp.inv(),
   {
-    // TODO: remove this
-    assume(false);
-    // reveal(journal_overlaps_agree);
-    // reveal(CoordinationSystem::State::next);
-    // reveal(CoordinationSystem::State::next_by);
-    // reveal(CrashTolerantJournal::State::next);
-    // reveal(CrashTolerantJournal::State::next_by);
-    // reveal(CrashTolerantMap::State::next);
-    // reveal(CrashTolerantMap::State::next_by);
+    reveal(journal_overlaps_agree);
+    reveal(CoordinationSystem::State::next);
+    reveal(CoordinationSystem::State::next_by);
+    reveal(CrashTolerantJournal::State::next);
+    reveal(CrashTolerantJournal::State::next_by);
+    reveal(AbstractJournal::State::next);
+    reveal(AbstractJournal::State::next_by);
+    reveal(CrashTolerantMap::State::next);
+    reveal(CrashTolerantMap::State::next_by);
+    reveal(AbstractMap::State::next);
+    reveal(AbstractMap::State::next_by);
 
-    // if v.map_is_frozen() {
-    //   let frozen_end = v.mapadt.in_flight.get_Some_0().seq_end;
-    //   assert(v.journal.i().discard_recent(frozen_end) 
-    //     == vp.journal.i().discard_recent(frozen_end))
-    //   by
-    //   {
-    //     let left = v.journal.i().discard_recent(frozen_end);
-    //     let right = vp.journal.i().discard_recent(frozen_end);
+    if v.map_is_frozen() {
+      let frozen_end = v.mapadt.in_flight.get_Some_0().seq_end;
+      assert(v.journal.i().discard_recent(frozen_end) 
+        == vp.journal.i().discard_recent(frozen_end))
+      by
+      {
+        assert_maps_equal!(
+          v.journal.i().discard_recent(frozen_end).msgs,
+          vp.journal.i().discard_recent(frozen_end).msgs
+        );
+      }
+    }
 
-    //     assert(left.seq_start == right.seq_start);
-    //     assert(left.seq_end == right.seq_end);
-    //     assert_maps_equal!(
-    //       v.journal.i().discard_recent(frozen_end).msgs,
-    //       vp.journal.i().discard_recent(frozen_end).msgs
-    //     );
-    //   }
-    // }
+    let key = label.get_Label_ctam_label().get_OperateOp_base_op()
+      .get_ExecuteOp_req().input.get_PutInput_key();
+    let val = label.get_Label_ctam_label().get_OperateOp_base_op()
+      .get_ExecuteOp_req().input.get_PutInput_key();
+    let singleton = MsgHistory::singleton_at(v.ephemeral.get_Some_0().map_lsn, KeyedMessage{ key, message: Message::Define{ value: val }});
+    journal_associativity(v.mapadt.persistent, v.journal.i(), singleton);
+
+    assert((v.journal.i()).discard_recent(v.mapadt.i().seq_end) == v.journal.i()) by {
+      assert_maps_equal!(
+        (v.journal.i()).discard_recent(v.mapadt.i().seq_end).msgs,
+        v.journal.i().msgs
+      );
+    }
+    assert(vp.journal.i() == vp.journal.i().discard_recent(vp.mapadt.i().seq_end)) by {
+
+      assert_maps_equal!(
+        vp.journal.i().msgs,
+        vp.journal.i().discard_recent(vp.mapadt.i().seq_end).msgs
+      );
+    }
+
+    assert(v.ephemeral.get_Some_0().map_lsn == v.mapadt.ephemeral.get_Known_v().stamped_map.seq_end);
+    assert(vp.ephemeral.get_Some_0().map_lsn == v.ephemeral.get_Some_0().map_lsn + 1);
+    assert(vp.mapadt.ephemeral.get_Known_v().stamped_map.seq_end == v.mapadt.ephemeral.get_Known_v().stamped_map.seq_end + 1);
+    assert(vp.ephemeral.get_Some_0().map_lsn == vp.mapadt.ephemeral.get_Known_v().stamped_map.seq_end);
+    assert(vp.inv());
   }
 }
