@@ -51,74 +51,67 @@ state_machine!{ CrashTolerantMap {
     }
 
     transition!{
-        load_ephemeral_from_persistent(lbl: Label, new_map: AbstractMap::State, map_config: AbstractMap::Config) {
+        load_ephemeral_from_persistent(lbl: Label, new_map: AbstractMap::State) {
             require lbl.is_LoadEphemeralFromPersistentLabel();
             require pre.ephemeral.is_Unknown();
             require lbl.get_LoadEphemeralFromPersistentLabel_end_lsn() == pre.persistent.seq_end;
-            require map_config === AbstractMap::Config::initialize(pre.persistent);
-            require AbstractMap::State::init_by(new_map, map_config);
+            require AbstractMap::State::init(new_map);
             update ephemeral = Ephemeral::Known{ v: new_map };
         }
     }
 
     transition!{
-        put_records(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
+        put_records(lbl: Label, new_map: AbstractMap::State) {
             require lbl.is_PutRecordsLabel();
             require pre.ephemeral.is_Known();
-            // TODO: It seems that map_step and the label both serve the same purpose, and labels are made redundant?
-            require map_step === AbstractMap::Step::put();
-            require AbstractMap::State::next_by(
+            require AbstractMap::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_map,
-                AbstractMap::Label::PutLabel{ puts: lbl.get_PutRecordsLabel_records() },
-                map_step);
+                AbstractMap::Label::PutLabel{ puts: lbl.get_PutRecordsLabel_records() });
             update ephemeral = Ephemeral::Known{ v: new_map };
         }
     }
 
     transition!{
-        query(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
+        query(lbl: Label, new_map: AbstractMap::State) {
             require lbl.is_QueryLabel();
             require pre.ephemeral.is_Known();
-            require map_step === AbstractMap::Step::query();
-            require AbstractMap::State::next_by(
+            require AbstractMap::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_map,
                 AbstractMap::Label::QueryLabel{ 
                     end_lsn: lbl.get_QueryLabel_end_lsn(),
                     key: lbl.get_QueryLabel_key(),
                     value: lbl.get_QueryLabel_value()
-                },
-                map_step);
+                }
+            );
         }
     }
 
     transition!{
-        freeze_map_internal(lbl: Label, frozen_map: StampedMap, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
+        freeze_map_internal(lbl: Label, frozen_map: StampedMap, new_map: AbstractMap::State) {
             require lbl.is_InternalLabel();
             require pre.ephemeral.is_Known();
             require pre.in_flight.is_None();
-            require map_step === AbstractMap::Step::freeze_as();
-            require AbstractMap::State::next_by(
+            require AbstractMap::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_map,
-                AbstractMap::Label::FreezeAsLabel{ stamped_map: frozen_map},
-                map_step);
+                AbstractMap::Label::FreezeAsLabel{ stamped_map: frozen_map}
+            );
             update ephemeral = Ephemeral::Known{ v: new_map };
             update in_flight = Option::Some(frozen_map);            
         }
     }
 
     transition!{
-        ephemeral_internal(lbl: Label, new_map: AbstractMap::State, map_step: AbstractMap::Step) {
+        ephemeral_internal(lbl: Label, new_map: AbstractMap::State) {
             require lbl.is_InternalLabel();
             require pre.ephemeral.is_Known();
-            require map_step === AbstractMap::Step::internal();
-            require AbstractMap::State::next_by(
+            require AbstractMap::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_map,
                 AbstractMap::Label::InternalLabel,
-                map_step);
+            );
             update ephemeral = Ephemeral::Known{ v: new_map };   
         }
     }
