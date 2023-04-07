@@ -21,6 +21,7 @@ use crate::coordination_layer::CrashTolerantJournal_v;
 use crate::coordination_layer::CrashTolerantJournal_v::*;
 use crate::coordination_layer::CrashTolerantMap_v::*;
 use crate::coordination_layer::CrashTolerantMap_v;
+use crate::coordination_layer::AbstractMap_v::*;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MsgHistory_v::{MsgHistory, KeyedMessage};
 
@@ -366,11 +367,6 @@ verus! {
       // v.journal.ephemeral.is_Known(),
       CoordinationSystem::State::next(v, vp, label),
       CoordinationSystem::State::next_by(v, vp, label, step),
-      // Step enum doesn't generate `is_variant` type checkers
-      match step {
-        CoordinationSystem::Step::commit_complete(_, _) => true,
-        _ => false
-      },
       matches!(step, CoordinationSystem::Step::commit_complete(_, _)),
       // What we'd like to do ideally:
       // step.is_commit_complete(),
@@ -393,6 +389,10 @@ verus! {
     // Passes with the reveal statements, fails without
     assert(v.ephemeral.is_Some());
     assert(v.journal.ephemeral.is_Known());
+
+    assert(CrashTolerantJournal::State::next(v.journal, vp.journal, CrashTolerantJournal::Label::CommitCompleteLabel {
+      require_end: v.ephemeral.get_Some_0().map_lsn,
+    }));
 
     // There are six pieces in play here: the persistent and in-flight images and the ephemeral journals:
     //  _________ __________
@@ -495,36 +495,79 @@ verus! {
       v.inv(),
       CoordinationSystem::State::next(v, vp, label),
       CoordinationSystem::State::next_by(v, vp, label, step),
-      matches!(step, CoordinationSystem::Step::put(_,_)),
+      // matches!(step, CoordinationSystem::Step::put(_, _)),
+      match step {
+        CoordinationSystem::Step::put(new_journal, new_mapadt) => {
+          vp.journal == new_journal && vp.mapadt == new_mapadt
+        },
+        _ => false
+      }
     ensures
       vp.inv(),
   {
-    // TODO: remove this
-    assume(false);
-    // reveal(journal_overlaps_agree);
-    // reveal(CoordinationSystem::State::next);
-    // reveal(CoordinationSystem::State::next_by);
-    // reveal(CrashTolerantJournal::State::next);
-    // reveal(CrashTolerantJournal::State::next_by);
-    // reveal(CrashTolerantMap::State::next);
-    // reveal(CrashTolerantMap::State::next_by);
+    reveal(CoordinationSystem::State::next);
+    reveal(CoordinationSystem::State::next_by);
+    reveal(CrashTolerantJournal::State::next);
+    reveal(CrashTolerantJournal::State::next_by);
+    reveal(AbstractJournal::State::next);
+    reveal(AbstractJournal::State::next_by);
+    reveal(CrashTolerantMap::State::next);
+    reveal(CrashTolerantMap::State::next_by);
+    reveal(AbstractMap::State::next);
+    reveal(AbstractMap::State::next_by);
 
-    // if v.map_is_frozen() {
-    //   let frozen_end = v.mapadt.in_flight.get_Some_0().seq_end;
-    //   assert(v.journal.i().discard_recent(frozen_end) 
-    //     == vp.journal.i().discard_recent(frozen_end))
-    //   by
-    //   {
-    //     let left = v.journal.i().discard_recent(frozen_end);
-    //     let right = vp.journal.i().discard_recent(frozen_end);
+    if v.map_is_frozen() {
+      let frozen_end = v.mapadt.in_flight.get_Some_0().seq_end;
+      assert(v.journal.i().discard_recent(frozen_end) 
+        == vp.journal.i().discard_recent(frozen_end))
+      by
+      {
+        assert_maps_equal!(
+          v.journal.i().discard_recent(frozen_end).msgs,
+          vp.journal.i().discard_recent(frozen_end).msgs
+        );
+      }
+    }
 
-    //     assert(left.seq_start == right.seq_start);
-    //     assert(left.seq_end == right.seq_end);
-    //     assert_maps_equal!(
-    //       v.journal.i().discard_recent(frozen_end).msgs,
-    //       vp.journal.i().discard_recent(frozen_end).msgs
-    //     );
-    //   }
-    // }
+    let key = label.get_Label_ctam_label().get_OperateOp_base_op()
+      .get_ExecuteOp_req().input.get_PutInput_key();
+    let value = label.get_Label_ctam_label().get_OperateOp_base_op()
+      .get_ExecuteOp_req().input.get_PutInput_value();
+
+    let keyed_message = KeyedMessage{
+      key: key,
+      message: Message::Define { value: value },
+    };
+
+    let singleton = MsgHistory::singleton_at(v.ephemeral.get_Some_0().map_lsn, keyed_message);
+    
+    assert(CrashTolerantJournal::State::next(v.journal, vp.journal, CrashTolerantJournal::Label::PutLabel{ records: singleton }));
+
+    journal_associativity(v.mapadt.persistent, v.journal.i(), singleton);
+
+    assert(v.journal.i().discard_recent(v.mapadt.i().seq_end) == v.journal.i()) by {
+      assert_maps_equal!(
+        v.journal.i().discard_recent(v.mapadt.i().seq_end).msgs,
+        v.journal.i().msgs
+      );
+    }
+
+    // This should be true by the definition of the transition (just leaving
+    // this assertion to remember that)
+    assert(vp.mapadt.i() == MsgHistory::map_plus_history(v.mapadt.i(), singleton));
+  
+    // Because `verus` spec functions don't have ensures clauses, we need a separate lemma to
+    // prove properties of certain operations.
+    MsgHistory::map_plus_history_forall_lemma();
+
+    // Need to prove maps and sets are equal all over the place
+    assert(vp.journal.i() == vp.journal.i().discard_recent(vp.mapadt.i().seq_end)) by {
+      assert_maps_equal!(
+        vp.journal.i().msgs,
+        vp.journal.i().discard_recent(vp.mapadt.i().seq_end).msgs
+      );
+    }
+
+    assert(vp.inv());
   }
 }

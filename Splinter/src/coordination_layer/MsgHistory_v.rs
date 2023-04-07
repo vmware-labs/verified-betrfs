@@ -242,9 +242,9 @@ impl MsgHistory {
   pub open spec fn empty_history_at(lsn: LSN) -> MsgHistory {
     MsgHistory{ msgs: Map::empty(), seq_start: lsn, seq_end: lsn }
   }
-  
+
   pub open spec fn singleton_at(lsn: LSN, msg: KeyedMessage) -> MsgHistory {
-    MsgHistory{ msgs: Map::empty(), seq_start: lsn, seq_end: lsn }
+    MsgHistory{ msgs: Map::empty().insert(lsn, msg), seq_start: lsn, seq_end: lsn + 1 }
   }
   
   pub open spec fn map_plus_history(stamped_map: StampedMap, history: MsgHistory) -> StampedMap
@@ -263,8 +263,11 @@ impl MsgHistory {
       history.can_follow(stamped_map.seq_end),
     ensures
       Self::map_plus_history(stamped_map, history).value.wf(),
+      Self::map_plus_history(stamped_map, history).seq_end 
+        == stamped_map.seq_end + history.len(),
   {
     history.apply_to_stamped_map_wf_lemma(stamped_map);
+    Self::map_plus_history_seq_end_lemma(stamped_map, history);
   }
 
   pub proof fn map_plus_history_forall_lemma()
@@ -275,18 +278,27 @@ impl MsgHistory {
         && history.wf()
         && history.can_follow(stamped_map.seq_end)
       ) ==>
-      (#[trigger] Self::map_plus_history(stamped_map, history)).value.wf()
+      {
+        &&& (#[trigger] Self::map_plus_history(stamped_map, history)).value.wf()
+        &&& Self::map_plus_history(stamped_map, history).seq_end == stamped_map.seq_end + history.len()
+      }
   {
     assert forall |stamped_map: StampedMap, history: MsgHistory|
       (
         stamped_map.value.wf()
         && history.wf()
         && history.can_follow(stamped_map.seq_end)
-      ) implies #[trigger]
-        Self::map_plus_history(stamped_map, history).value.wf()
+      ) implies
+       ((#[trigger] Self::map_plus_history(stamped_map, history)).value.wf()
+       && Self::map_plus_history(stamped_map, history).seq_end == stamped_map.seq_end + history.len())
     by
     {
+      // When this assert is commented out, it complains that precondition to 295 isn't met, but
+      // when left in it seems to trigger something and then it says 295 is fine.
+      // assert(history.can_follow(stamped_map.seq_end));
       Self::map_plus_history_lemma(stamped_map, history);
+      Self::map_plus_history_seq_end_lemma(stamped_map, history);
+      assert(Self::map_plus_history(stamped_map, history).seq_end == stamped_map.seq_end + history.len());
     }
   }
 
