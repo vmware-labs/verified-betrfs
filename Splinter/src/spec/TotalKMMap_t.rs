@@ -2,8 +2,8 @@
 
 use builtin_macros::*;
 use builtin::*;
-use crate::pervasive::prelude::*;
-use crate::pervasive::set_lib::*;
+use vstd::prelude::*;
+use vstd::set_lib::*;
 
 use crate::spec::Messages_t::*;
 
@@ -11,16 +11,7 @@ verus!{
 
 pub type Key = int;  // TODO: this is a placeholder for the Key type
 
-pub type TotalKMMap = Map<Key, Message>;
-
-pub open spec fn empty_total_map() -> Map<Key, Message> {
-    // TODO: This body is a placeholder
-    // TODO(verus): Should not have to declare binder twice.
-    Map::new(
-        |k: Key| true,
-        |k: Key| Message::empty(),
-    )
-}
+pub struct TotalKMMap(pub Map<Key, Message>);
 
 pub open spec fn total_domain() -> Set<Key>
 {
@@ -29,6 +20,30 @@ pub open spec fn total_domain() -> Set<Key>
 
 impl TotalKMMap
 {
+    pub open spec fn empty() -> TotalKMMap
+    {
+        // TODO(verus): Should not have to declare binder twice.
+        TotalKMMap(Map::new(
+            |k: Key| true,
+            |k: Key| Message::empty(),
+        ))
+    }
+
+    // pass through to Map :v/
+    pub open spec fn spec_index(self, idx: int) -> Message {
+        self.0[idx]
+    }
+
+    // pass through to Map :v/
+    pub open spec fn insert(self, key: Key, value: Message) -> Self {
+        TotalKMMap(self.0.insert(key, value))
+    }
+
+    // pass through to Map :v/
+    pub open spec fn dom(self) -> Set<Key> {
+        self.0.dom()
+    }
+
     pub open spec fn wf(self) -> bool
     {
         self.dom() == total_domain()

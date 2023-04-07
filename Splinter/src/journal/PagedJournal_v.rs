@@ -4,7 +4,7 @@ use builtin::*;
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 
-use crate::pervasive::prelude::*;
+use vstd::prelude::*;
 use crate::coordination_layer::StampedMap_v::LSN;
 use crate::coordination_layer::MsgHistory_v::*;
 

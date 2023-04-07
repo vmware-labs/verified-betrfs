@@ -3,7 +3,7 @@ use builtin::*;
 
 use builtin_macros::*;
 
-use crate::pervasive::{*,map::*,set::*};
+use vstd::{*,map::*,set::*};
 use crate::spec::Messages_t::*;
 use crate::spec::TotalKMMap_t::*;
 

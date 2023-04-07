@@ -4,7 +4,7 @@ use builtin::*;
 
 use builtin_macros::*;
 
-use crate::pervasive::{calc_macro::*};
+use vstd::{calc_macro::*};
 
 
 use vstd::prelude::*;
@@ -471,7 +471,7 @@ impl PagedJournal::State {
         AbstractJournal::State::next(self.i(), post.i(), lbl.i()),
     {
         match step {
-            read_for_recovery(depth) => { self.read_for_recovery_refines(post, lbl, depth); }
+            PagedJournal::Step::read_for_recovery(depth) => { self.read_for_recovery_refines(post, lbl, depth); }
             _ => { assume(false); } // left off here
         }
     }

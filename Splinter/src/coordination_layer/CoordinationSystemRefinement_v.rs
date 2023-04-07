@@ -3,10 +3,10 @@ use builtin::*;
 
 use builtin_macros::*;
 use state_machines_macros::state_machine;
-use crate::pervasive::prelude::*;
-use crate::pervasive::seq_lib::*;
-use crate::pervasive::map::*;
-use crate::pervasive::set_lib::*;
+use vstd::prelude::*;
+use vstd::seq_lib::*;
+use vstd::map::*;
+use vstd::set_lib::*;
 
 use crate::spec::Messages_t::*;
 use crate::spec::MapSpec_t;

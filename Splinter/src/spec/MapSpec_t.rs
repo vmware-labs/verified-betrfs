@@ -5,7 +5,7 @@
 
 use builtin_macros::*;
 use builtin::*;
-use crate::pervasive::{*,map::*,set::*};
+use vstd::{*,map::*,set::*};
 
 use crate::spec::Messages_t::*;
 use crate::spec::FloatingSeq_t::*;
@@ -35,7 +35,7 @@ pub enum Output {
 // TODO 2: can't declare this fn inside MapSpec state_machine!?
 pub open spec fn my_init() -> MapSpec::State
 {
-    MapSpec::State{ kmmap: empty_total_map() }
+    MapSpec::State{ kmmap: TotalKMMap::empty() }
 }
 
 // TODO (jonh): Make this automated. A macro of some sort

@@ -4,7 +4,7 @@ use builtin::*;
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 #[allow(unused_imports)]
-use crate::pervasive::{map::*};
+use vstd::{map::*};
 
 use crate::spec::Option_t::*;
 use crate::coordination_layer::StampedMap_v::*;

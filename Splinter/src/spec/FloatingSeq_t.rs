@@ -2,7 +2,7 @@
 
 use builtin_macros::*;
 use builtin::*;
-use crate::pervasive::{*,seq::*};
+use vstd::{*,seq::*};
 
 verus!{
 
