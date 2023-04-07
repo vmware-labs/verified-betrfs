@@ -7,9 +7,9 @@ use builtin_macros::*;
 use crate::pervasive::{calc_macro::*};
 
 
-use crate::pervasive::prelude::*;
-use crate::pervasive::map::*;
-use crate::pervasive::seq_lib::*;
+use vstd::prelude::*;
+use vstd::map::*;
+use vstd::seq_lib::*;
 use crate::coordination_layer::StampedMap_v::LSN;
 use crate::coordination_layer::MsgHistory_v::*;
 use crate::coordination_layer::AbstractJournal_v::*;
@@ -460,6 +460,20 @@ impl PagedJournal::State {
 
         assert_maps_equal!( post.i().journal.msgs, self.i().journal.msgs ); // proof kinda got more direct, but ugly extensionality
         assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::internal())); // newly required witness
+    }
+
+    pub proof fn next_refines(self, post: Self, lbl: PagedJournal::Label, step: PagedJournal::Step)
+    requires
+        self.wf(),  // move to an invariant?
+        PagedJournal::State::next_by(self, post, lbl, step),
+    ensures
+        post.wf(),
+        AbstractJournal::State::next(self.i(), post.i(), lbl.i()),
+    {
+        match step {
+            read_for_recovery(depth) => { self.read_for_recovery_refines(post, lbl, depth); }
+            _ => { assume(false); } // left off here
+        }
     }
 }
 
