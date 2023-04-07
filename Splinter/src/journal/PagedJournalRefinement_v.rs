@@ -312,48 +312,8 @@ impl TruncatedJournal {
             self.freshest_rec.unwrap().crop_head_records_lemma(self.boundary_lsn, depth);   // newly required
             JournalRecord::discard_old_maintains_subseq(ctj.freshest_rec, ctj.boundary_lsn, frozen.boundary_lsn);
         }
-        let flsn = frozen.boundary_lsn;
-        if ctj.seq_end() == flsn {
-            self.crop_head_records_wf_lemma(depth);
-            /*
-            assert(ctj.wf());
-            assert( ctj.freshest_rec.is_Some() ==> ctj.freshest_rec.unwrap().valid(ctj.boundary_lsn) );
-            if ctj.freshest_rec.is_Some() {
-                assert( flsn < ctj.freshest_rec.unwrap().message_seq.seq_end );
-            }
-            JournalRecord::option_new_boundary_valid(ctj.freshest_rec, ctj.boundary_lsn, flsn); // didn't need this in dafny
-            assert( ctj.freshest_rec.is_Some() ==> ctj.freshest_rec.unwrap().valid(flsn) );
-            //assert(ctj.freshest_rec.valid(ctj.boundary_lsn));
-            JournalRecord::discard_old_defn_interprets(ctj.freshest_rec, ctj.boundary_lsn, flsn);
-            */
-            JournalRecord::i_lemma_forall();
-            assert( ctj.i().seq_start == ctj.boundary_lsn );
-            assert( ctj.i().seq_end == flsn );
-            assert(ctj.i().includes_subseq(ctj.discard_old_defn(flsn).i()));    // goal
-
-            /*
-            assert(ctj.discard_old_defn(flsn).seq_start() == flsn);
-            assert(ctj.discard_old_defn(flsn).seq_end() == flsn);
-            assert(self.seq_start() == ctj.seq_start());
-            assert(ctj.discard_old_defn(flsn).seq_end() == flsn);
-
-            assert( ctj.can_discard_to(flsn) );
-            assert( ctj.seq_end() <= self.seq_end() );
-            assert(flsn <= self.seq_end());
-
-            assert( frozen.seq_start() == ctj.discard_old_defn(flsn).seq_start() ); // freeze_for_commit defn
-            assert( self.i().seq_start <= frozen.i().seq_start );
-            assert( frozen.i().seq_end <= self.i().seq_end );
-            */
-        } else {
-            assert(ctj.i().includes_subseq(ctj.discard_old_defn(flsn).i()));    // goal
-        }
-//        if ctj.freshest_rec.is_Some() && frozen.boundary_lsn == ctj.freshest_rec.unwrap().message_seq.seq_end {
-//            assert(ctj.i().includes_subseq(frozen.i()));
-//            assert(self.i().includes_subseq(frozen.i()));
-//        }
+        JournalRecord::i_lemma_forall();    // newly required; ~40 lines to discover
         JournalRecord::crop_head_maintains_subseq(self.freshest_rec, self.boundary_lsn, depth);
-        assert(self.i().includes_subseq(ctj.i()));  // from prev line
     }
 
     // another lemma that was almost free (modulo OptionNewBoundaryValid call) with ensures
@@ -471,6 +431,7 @@ impl PagedJournal::State {
     {
         reveal(AbstractJournal::State::next_by);    // newly required; unfortunate macro defaults
         reveal(AbstractJournal::State::next);    // newly required; unfortunate macro defaults
+        JournalRecord::i_lemma_forall();
                                                  //
         let lsn = lbl.get_DiscardOld_start_lsn();
         let tj = self.truncated_journal;
@@ -481,7 +442,6 @@ impl PagedJournal::State {
 //                assert(post.truncated_journal == self.truncated_journal.discard_old_defn(lsn) );
                 assert(post.truncated_journal.wf());
             }
-            JournalRecord::i_lemma_forall();
             //JournalRecord::discard_old_maintains_subseq(tj.freshest_rec, tj.boundary_lsn, lsn);
             //nope not relevant
             //assert(JournalRecord::i_opt(tj.freshest_rec, tj.boundary_lsn).can_discard_to(lsn));
@@ -492,7 +452,11 @@ impl PagedJournal::State {
 //            assert(post.truncated_journal.freshest_rec.unwrap().valid(post.truncated_journal.boundary_lsn));
 //        }
         assert(post.wf());
-        assume(false);  // left off here
+
+//        assert( self.i().journal.seq_start <= lbl.i().get_DiscardOldLabel_start_lsn() );
+//        assert( self.i().journal.can_discard_to(lbl.i().get_DiscardOldLabel_start_lsn()) );
+        assert_maps_equal!( post.i().journal.msgs, self.i().journal.discard_old(lbl.i().get_DiscardOldLabel_start_lsn()).msgs );
+        assert( post.i().journal == self.i().journal.discard_old(lbl.i().get_DiscardOldLabel_start_lsn()) );
         assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::discard_old())); // new witness
     }
 }
