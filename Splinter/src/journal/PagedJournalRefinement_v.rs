@@ -446,6 +446,21 @@ impl PagedJournal::State {
         assert_maps_equal!( post.i().journal.msgs, self.i().journal.discard_old(lbl.i().get_DiscardOldLabel_start_lsn()).msgs );    // newly required extensionality
         assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::discard_old())); // newly required witness
     }
+
+    pub proof fn marshall_refines(self, post: Self, lbl: PagedJournal::Label, cut: LSN)
+    requires 
+        self.wf(),  // move to an invariant?
+        PagedJournal::State::internal_journal_marshal(self, post, lbl, cut),
+    ensures
+        post.wf(),
+        AbstractJournal::State::next(self.i(), post.i(), lbl.i()),
+    {
+        reveal(AbstractJournal::State::next_by);    // newly required; unfortunate macro defaults
+        reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
+
+        assert_maps_equal!( post.i().journal.msgs, self.i().journal.msgs ); // proof kinda got more direct, but ugly extensionality
+        assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::internal())); // newly required witness
+    }
 }
 
 }//verus
