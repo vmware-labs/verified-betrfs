@@ -430,34 +430,21 @@ impl PagedJournal::State {
         AbstractJournal::State::next(self.i(), post.i(), lbl.i()),
     {
         reveal(AbstractJournal::State::next_by);    // newly required; unfortunate macro defaults
-        reveal(AbstractJournal::State::next);    // newly required; unfortunate macro defaults
-        JournalRecord::i_lemma_forall();
-                                                 //
+        reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
+        JournalRecord::i_lemma_forall();            // newly required
+
         let lsn = lbl.get_DiscardOld_start_lsn();
         let tj = self.truncated_journal;
         if lsn < self.unmarshalled_tail.seq_start {
             if tj.freshest_rec.is_Some() && lsn < tj.seq_end() {
                 tj.freshest_rec.unwrap().discard_valid(tj.boundary_lsn, lsn);
-                tj.discard_old_defn_wf(lsn);
-//                assert(post.truncated_journal == self.truncated_journal.discard_old_defn(lsn) );
-                assert(post.truncated_journal.wf());
+                tj.discard_old_defn_wf(lsn);    // newly required
             }
-            //JournalRecord::discard_old_maintains_subseq(tj.freshest_rec, tj.boundary_lsn, lsn);
-            //nope not relevant
-            //assert(JournalRecord::i_opt(tj.freshest_rec, tj.boundary_lsn).can_discard_to(lsn));
             JournalRecord::discard_old_defn_interprets(tj.freshest_rec, tj.boundary_lsn, lsn);
         }
 
-//        if post.truncated_journal.freshest_rec.is_Some() {
-//            assert(post.truncated_journal.freshest_rec.unwrap().valid(post.truncated_journal.boundary_lsn));
-//        }
-        assert(post.wf());
-
-//        assert( self.i().journal.seq_start <= lbl.i().get_DiscardOldLabel_start_lsn() );
-//        assert( self.i().journal.can_discard_to(lbl.i().get_DiscardOldLabel_start_lsn()) );
-        assert_maps_equal!( post.i().journal.msgs, self.i().journal.discard_old(lbl.i().get_DiscardOldLabel_start_lsn()).msgs );
-        assert( post.i().journal == self.i().journal.discard_old(lbl.i().get_DiscardOldLabel_start_lsn()) );
-        assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::discard_old())); // new witness
+        assert_maps_equal!( post.i().journal.msgs, self.i().journal.discard_old(lbl.i().get_DiscardOldLabel_start_lsn()).msgs );    // newly required extensionality
+        assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::discard_old())); // newly required witness
     }
 }
 
