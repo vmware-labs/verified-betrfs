@@ -75,7 +75,7 @@ module CompactorMod
   }
 
   datatype TransitionLabel =
-    | Begin(input: CompactInput, au: AU) // initial AU allocated to compactor's mini allocator
+    | Begin(input: CompactInput, aus: set<AU>) // initial AU allocated to compactor's mini allocator
     | Internal(allocs: set<AU>)
     | Commit(input: CompactInput, output: AllocBranch.Variables)
     | Abort(deallocs: set<AU>)  // allow us to abandon a compaction (even though in practice this is not necessary, via scheduler magic)
@@ -83,7 +83,7 @@ module CompactorMod
   predicate Begin(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
     && v.WF()
     && lbl.Begin?
-    && var miniAllocator := EmptyMiniAllocator().AddAUs({lbl.au});
+    && var miniAllocator := EmptyMiniAllocator().AddAUs(lbl.aus);
     && miniAllocator.CanAllocate(addr)
 
     && var newThread := CompactThread(

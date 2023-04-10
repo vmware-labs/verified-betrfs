@@ -219,14 +219,7 @@ module AllocationBranchMod {
     predicate HasRoot() {
       && diskView.ValidAddress(root)
     }
-
-    // predicate ValidSummary()
-    //   requires HasRoot()
-    // {
-    //   && (Root().Index? && Root().summary.Some?
-    //     ==> diskView.ValidAddress(Root().summary.value)) 
-    // }
-
+  
     function Root() : Node
       requires HasRoot()
     {
@@ -332,6 +325,17 @@ module AllocationBranchMod {
         }
       }
       result
+    }
+
+    function GetSummary() : set<AU>
+      requires WF()
+    {
+      if 
+        && Root().Index? && Root().summary.Some? 
+        && diskView.ValidAddress(Root().summary.value) 
+        && diskView.entries[Root().summary.value].Summary?
+      then diskView.entries[Root().summary.value].aus
+      else { root.au } // only leaf case should reach here, everything else should be eliminated via Inv
     }
 
     function Representation() : set<Address>

@@ -9,6 +9,7 @@ include "../Betree/AllocationBranchRefinement.i.dfy"
 module AllocationBranchedBetreeMod
 {
   import opened Sets
+  import opened Maps
   import opened Sequences
   import opened LSNMod
   import opened MsgHistoryMod
@@ -31,8 +32,6 @@ module AllocationBranchedBetreeMod
   type AU = GenericDisk.AU
   type Compactor = CompactorMod.Variables
   type BranchDiskView = AllocationBranchMod.DiskView
-
-  // type PathAUs = seq<AU>
   type StampedBetree = Stamped<BB.BranchedBetree>
 
   function FirstPage(au: AU) : Address
@@ -84,6 +83,7 @@ module AllocationBranchedBetreeMod
   {
     predicate WF() {
       && likesVars.WF()
+      && allocBranchDiskView.WF()
     }
   
     // Maintained via Inv (all ghosty?)
@@ -104,9 +104,9 @@ module AllocationBranchedBetreeMod
   }
 
   // group a couple definitions together
-  predicate OnlyAdvanceBranchedVars(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate OnlyAdvanceLikesVars(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
-    // TODO: check if these steps change branchdiskview
+    && v.WF()
     && LB.NextStep(v.likesVars, v'.likesVars, lbl.I(), step.I())
     && v' == v.(
       likesVars := v'.likesVars // admit relational update above
@@ -115,142 +115,216 @@ module AllocationBranchedBetreeMod
 
   predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && v.WF()
     && LB.InternalGrowTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
     && v' == v.(
+      likesVars := v'.likesVars, // admit relational update above
       betreeAULikes := v.betreeAULikes + multiset({step.newRootAddr.au})
     )
   }
 
+  // TODO: blocked on integrating linkedbranch for memtable 
   // Any b+tree that is "observed" is not in the mini-allocator
-
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && v.WF()
     && LB.InternalFlushMemtableTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
     && var oldRootAU := if v.likesVars.branchedVars.branched.HasRoot() 
       then multiset{v.likesVars.branchedVars.branched.root.value.au} else multiset{};
     // TODO: change memtable steps
 
-    // betreeAULikes: LikesAU, // references of betreee node
-    // branchAULikes: LikesAU, // root au of each branch
-    // branchReadRefs: LikesAU, // updated when compact starts and ends
-    // // ghosty
-    // allocBranchDiskView: BranchDiskView, // diskview containing allocation branches
-    // // part ghosty (DiskView) & part imperative
-    // compactor: Compactor
-
     && v' == v.(
       likesVars := v'.likesVars, // admit relational update above
       // memtableVars := v'.memtableVars, 
-      // compactor?
-      // is memtable construction captured here? 
-      // I don't think so, instead it should be a separate module that communicates via the label
-      // not owned by the mini allocator
-
-      // TODO: mini allocator needs to be updated here. Can forget linked pages.
-      betreeAULikes := v.betreeAULikes - oldRootAU + multiset{step.newRootAddr.au}
-      // branchAULikes := v.branchAULikes + multiset{step.branch.root}
+      // allocBranchDiskView: BranchDiskView, // diskview containing allocation branches
+      betreeAULikes := v.betreeAULikes - oldRootAU + multiset{step.newRootAddr.au},
+      branchAULikes := v.branchAULikes + multiset{step.branch.root.au}
     )
+  }
+
+  predicate AddrsWithDisjointAUs(addrs: set<Address>) 
+  {
+    forall addr1, addr2 | addr1 in addrs && addr2 in addrs && addr1 != addr2 :: addr1.au != addr2.au
   }
 
   predicate InternalSplit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && v.WF()
     && lbl.InternalAllocationsLabel?
     && LB.InternalSplitTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
-    && var newBetreeAULikes := multiset(G.ToAUs(Set(step.pathAddrs)) + G.ToAUs(step.newAddrs.Repr()));
-    && var discardBetreeAULikes := multiset(
-      G.ToAUs(Set(step.path.AddrsOnPath())) + 
-      {step.path.Target().ChildAtIdx(step.request.childIdx).root.value.au});
 
-    && lbl.allocs == G.ToAUs(Set(step.pathAddrs)) + G.ToAUs(step.newAddrs.Repr())
-    && lbl.deallocs == M.Set(v.betreeAULikes - discardBetreeAULikes) - M.Set(discardBetreeAULikes) // TODO: ??
+    && var newBetreeAddrs := Set(step.pathAddrs) + step.newAddrs.Repr();
+    && AddrsWithDisjointAUs(newBetreeAddrs) // maintain as an invariant for all nodes of the tree
+    && var newBetreeAULikes := multiset(G.ToAUs(newBetreeAddrs));
+    && var derefBetreeAULikes := multiset(G.ToAUs(Set(step.path.AddrsOnPath())) 
+      + {step.path.Target().ChildAtIdx(step.request.childIdx).root.value.au});
 
+    && lbl.allocs == G.ToAUs(newBetreeAddrs)
+    && lbl.deallocs == M.Set(v.betreeAULikes) - M.Set(v'.betreeAULikes)
     && v' == v.(
       likesVars := v'.likesVars, // admit relational update above
-      betreeAULikes := v.betreeAULikes - discardBetreeAULikes + newBetreeAULikes
+      betreeAULikes := v.betreeAULikes - derefBetreeAULikes + newBetreeAULikes
+      // no change to the branchAULikes bc the newly splitted nodes will split the replaced node's branchseq
     )
+  }
+
+  function SummaryFromBranchRoot(root: Address, dv: BranchDiskView) : set<AU>
+  {
+    var branch := AllocationBranch(root, dv);
+    if branch.WF() // true by Inv
+    then branch.GetSummary()
+    else {}
+  }
+
+  function FullAddrsFromBranchRoot(root: Address, dv: BranchDiskView) : set<Address>
+  {
+    var branch := AllocationBranch(root, dv);
+    if branch.Acyclic() // true by Inv
+    then branch.Representation()
+    else {}
+  }
+
+  function SubdiskForBranches(roots: set<Address>, dv: BranchDiskView) : BranchDiskView
+  {
+    var fullAddrs := UnionSetOfSets(set addr | addr in roots :: FullAddrsFromBranchRoot(addr, dv));
+    var subdisk := DiskView(MapRestrict(dv.entries, fullAddrs));
+    subdisk
   }
 
   predicate InternalFlush(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && v.WF()
     && lbl.InternalAllocationsLabel?
     && LB.InternalFlushTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
-    && lbl.allocs == {step.targetAddr.au} + {step.targetChildAddr.au} + G.ToAUs(Set(step.pathAddrs))
-    && var target := step.path.Target();
-    && var root := target.Root();
+
+    && var newBetreeAddrs := {step.targetAddr} + {step.targetChildAddr} + Set(step.pathAddrs);
+    && AddrsWithDisjointAUs(newBetreeAddrs)
+    && var root := step.path.Target().Root();
     && var newflushedOffsets := root.flushedOffsets.AdvanceIndex(step.childIdx, root.branches.Length());
     && assert step.branchGCCount <= root.branches.Length() by {
       var i:nat :| i < newflushedOffsets.Size();
       assert newflushedOffsets.Get(i) <= root.branches.Length();
     }
 
-  // TODO(Jialin): allocbranchdiskview needs to be updated if there are data to reclaim
-  // need to take into account the summary node as well (must be able to look up there)
-  // we also do need to report the deallocated data back via a label
+    && var newBetreeAULikes := multiset(G.ToAUs(newBetreeAddrs));
+    && var derefBetreeAULikes := multiset(G.ToAUs(Set(step.path.AddrsOnPath())) 
+      + {step.path.Target().ChildAtIdx(step.childIdx).root.value.au});
 
-  // these should all be unique 
-    && var newBetreeAULikes := multiset(lbl.allocs);
-    && var discardBetreeAULikes := multiset(G.ToAUs(
-      Set(step.path.AddrsOnPath())) + {target.ChildAtIdx(step.childIdx).root.value.au});
-    && var newBranchAULikes := multiset(G.ToAUs(
-      root.branches.Slice(root.flushedOffsets.Get(step.childIdx), 
-      root.branches.Length()).Representation()));
-    && var discardBranchAULikes := multiset(G.ToAUs(root.branches.Slice(0, step.branchGCCount).Representation()));
+    && var newBranchAULikes := multiset(G.ToAUs(root.branches.Slice(root.flushedOffsets.Get(step.childIdx), 
+      root.branches.Length()).Representation())); // account for added branch root references as a result of flush
+    && var derefBranchRootAddrs := root.branches.Slice(0, step.branchGCCount).Representation(); // deref roots from parent as a result of GC
+    && var derefBranchAULikes := multiset(G.ToAUs(derefBranchRootAddrs)); // just the root AUs
+
+    && var discardBranchAULikes := M.Set(v.branchAULikes) - M.Set(v'.branchAULikes);
+    && var discardBranchRootAddrs := set addr | addr in derefBranchRootAddrs && addr.au in discardBranchAULikes && addr.au !in v.branchReadRefs; // branch that are actually discarded as a result of deref (GC)
+    && var discardBranchAUSummary := UnionSetOfSets(set addr | addr in discardBranchRootAddrs :: SummaryFromBranchRoot(addr, v.allocBranchDiskView)); // computed
+    && var newAllocBranchDiskView := v.allocBranchDiskView.RemoveDisk(SubdiskForBranches(discardBranchRootAddrs, v.allocBranchDiskView));
+
+    // what can be discarded, things that are in 
+    // nodes that temporarily exist, we don't need their full node, so their nodes are reclaimable, we just want their branches
+
+    && lbl.allocs == G.ToAUs(newBetreeAddrs)
+    && lbl.deallocs == M.Set(v.betreeAULikes) - M.Set(v'.betreeAULikes) + discardBranchAUSummary
+
     && v' == v.(
       likesVars := v'.likesVars, // admit relational update above
-      betreeAULikes := v.betreeAULikes - discardBetreeAULikes + newBetreeAULikes,
-      branchAULikes := v.branchAULikes - discardBranchAULikes + newBranchAULikes
+      betreeAULikes := v.betreeAULikes - derefBetreeAULikes + newBetreeAULikes,
+      branchAULikes := v.branchAULikes - derefBranchAULikes + newBranchAULikes,
+      allocBranchDiskView := newAllocBranchDiskView
     )
   }
 
-
-  // This corresponds to Compactor commit
-  predicate InternalCompact(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  function GetCompactInput(path: BB.Path, start: nat, end: nat, dv: BranchDiskView) : CompactInput
+    requires path.Valid()
+    requires start < end <= path.Target().Root().branches.Length()
   {
-    && LB.InternalCompactTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
-    && var newBetreeAULikes := multiset(G.ToAUs(Set((step.pathAddrs))) + {step.targetAddr.au});
-    && var discardBetreeLikes := multiset(G.ToAUs(Set(step.path.AddrsOnPath())));
-    && var newBranchLikes := multiset{step.newBranch.root.au};
-    && var discardBranchLikes := multiset(
-        G.ToAUs(Set((step.path.Target().Root().branches.Slice(step.start, step.end).roots))));
-    // One mini-allocator per branch construction
-    // Compact is not an atomic step. There is compactStart and compactEnd
-    // Readers maintain read-refs on the tree.
+    var node := path.Target().Root(); 
+    var offsetMap := node.MakeOffsetMap().Decrement(start);
+    var branchSeq := node.branches.Slice(start, end); // branches to be compacted
+    var subdisk := SubdiskForBranches(branchSeq.Representation(), dv);
 
-    // TODO: check
-    // all updates to allocBranchDiskView are identical to the branchdiskview updates in branchedbetree
-    && var newAllocBranchDiskView := v.allocBranchDiskView.MergeDisk(step.newBranch.diskView);
+    CompactInput(branchSeq, offsetMap, subdisk)
+  }
+
+  predicate InternalCompactBegin(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.WF()
+    && lbl.InternalAllocationsLabel?
+    && step.InternalCompactBeginStep?
+    && step.path.Valid()
+    && step.start < step.end <= step.path.Target().Root().branches.Length()
+
+    && var compactInput := GetCompactInput(step.path, step.start, step.end, v.allocBranchDiskView);
+    && CompactorMod.Next(v.compactor, v'.compactor, Begin(compactInput, lbl.allocs))
+    && lbl.deallocs == {}
 
     && v' == v.(
-      likesVars := v'.likesVars // admit relational update above
-      // branchMiniAllocator := 
-      // Func: Take a set of page addrs, remove them from reserved of respective Page Allocators,
-      // add them to observed of respective Page Allocators. 
-      /*
-        1. Remove new builded branch tree:
-          1a. drop the stack ref to its root
-          1b. return the root addr
-          1c. un-reserve the set of addrs in its repr from the miniallocater
-          1d. learn that root.i() has the value we need
-          1e. return set of addrs in the repr
-        2. Insert the newly-built branch into the BranchedBetree
-          2a. add the set of addrs in its repr as *observed* in the miniallocator
-          2b. record a reference to the root page from the betree's branchseq
-      */ 
-      // betreeAULikes := v.betreeLikes - discardBetreeLikes + newBetreeLikes,
-      // branchAULikes := v.branchLikes - discardBranchLikes + newBranchLikes
+      compactor := v'.compactor, // admit relational update above
+      branchReadRefs := v.branchReadRefs + multiset(G.ToAUs(compactInput.branchSeq.Representation()))
     )
   }
 
-//   predicate NoOp(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-//   {
-//   && BB.NextStep(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
-//   && v' == v
-//   }
+  predicate InternalCompactBuild(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.InternalAllocationsLabel?  
+    && CompactorMod.Next(v.compactor, v'.compactor, Internal(lbl.allocs))
+    && lbl.deallocs == {}
+
+    && v' == v.(
+      compactor := v'.compactor // admit relational update above
+    )
+  }
+
+  // This corresponds to Compactor commit
+  predicate InternalCompactCommit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.WF()
+    && lbl.InternalAllocationsLabel?
+    && LB.InternalCompactTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
+    && step.path.Valid()
+    && step.start < step.end <= step.path.Target().Root().branches.Length()
+    && !step.newBranch.NotSealed() // new branch must be sealed
+
+    && var compactInput := GetCompactInput(step.path, step.start, step.end, v.allocBranchDiskView);
+    && CompactorMod.Next(v.compactor, v'.compactor, Commit(compactInput, AllocBranch.Variables(step.newBranch)))
+
+    && var newBetreeAddrs := Set(step.pathAddrs) + {step.targetAddr};
+    && AddrsWithDisjointAUs(newBetreeAddrs)
+    && var newBetreeAULikes := multiset(G.ToAUs(newBetreeAddrs));
+    && var derefBetreeAULikes := multiset(G.ToAUs(Set(step.path.AddrsOnPath())));
+
+    && var newBranchAULikes := multiset{step.newBranch.root.au};
+    && var derefBranchRootAddrs := compactInput.branchSeq.Representation();
+    && var derefBranchAULikes := multiset(G.ToAUs(derefBranchRootAddrs));
+    && var discardBranchAULikes := M.Set(v.branchAULikes) - M.Set(v'.branchAULikes);
+    && var discardBranchRootAddrs := set addr | addr in derefBranchRootAddrs && addr.au in discardBranchAULikes && addr.au !in v.branchReadRefs; // branch that are actually discarded as a result of deref (GC)
+    && var discardBranchAUSummary := UnionSetOfSets(set addr | addr in discardBranchRootAddrs :: SummaryFromBranchRoot(addr, v.allocBranchDiskView)); // computed
+    && var newAllocBranchDiskView := v.allocBranchDiskView.RemoveDisk(SubdiskForBranches(discardBranchRootAddrs, v.allocBranchDiskView)).MergeDisk(step.newBranch.diskView);
+
+    && lbl.allocs == G.ToAUs(newBetreeAddrs)
+    && lbl.deallocs == M.Set(v.betreeAULikes) - M.Set(v'.betreeAULikes) + discardBranchAUSummary
+
+    && v' == v.(
+      likesVars := v'.likesVars, // admit relational update above
+      compactor := v'.compactor,  // admit relational update above
+      allocBranchDiskView := newAllocBranchDiskView,
+      branchReadRefs := v.branchReadRefs - multiset(G.ToAUs(derefBranchRootAddrs)),
+      betreeAULikes := v.betreeAULikes - derefBetreeAULikes + newBetreeAULikes,
+      branchAULikes := v.branchAULikes - derefBranchAULikes + newBranchAULikes
+    )
+  }
 
   predicate NoOp(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && v.WF()
     && LB.NextStep(v.likesVars, v'.likesVars, lbl.I(), step.I())
     && v' == v
+  }
+
+  predicate Init(v: Variables)
+  {
+    && true
   }
 
   datatype Step =
@@ -262,7 +336,9 @@ module AllocationBranchedBetreeMod
     | InternalSplitStep(path: BB.Path, request: SplitRequest, newAddrs: BB.L.SplitAddrs, pathAddrs: BB.PathAddrs)
     | InternalFlushMemtableStep(newRootAddr: Address, branch: AllocationBranch)
     | InternalFlushStep(path: BB.Path, childIdx: nat, targetAddr: Address, targetChildAddr: Address, pathAddrs: BB.PathAddrs, branchGCCount: nat)
-    | InternalCompactStep(path: BB.Path, start: nat, end: nat, newBranch: AllocationBranch, targetAddr: Address, pathAddrs: BB.PathAddrs)
+    | InternalCompactBeginStep(path: BB.Path, start: nat, end: nat)
+    | InternalCompactBuildStep()
+    | InternalCompactCommitStep(path: BB.Path, start: nat, end: nat, newBranch: AllocationBranch, targetAddr: Address, pathAddrs: BB.PathAddrs)
     | InternalNoOpStep()   // Local No-op label
   {
     function I() : LB.Step
@@ -278,8 +354,10 @@ module AllocationBranchedBetreeMod
         case InternalFlushMemtableStep(newRootAddr, branch) => LB.InternalFlushMemtableStep(newRootAddr, ABR.I(branch))
         case InternalFlushStep(path, childIdx, targetAddr, targetChildAddr, pathAddrs, branchGCCount) 
           => LB.InternalFlushStep(path, childIdx, targetAddr, targetChildAddr, pathAddrs, branchGCCount)
-        case InternalCompactStep(path, start, end, newBranch, targetAddr, pathAddrs) 
+        case InternalCompactCommitStep(path, start, end, newBranch, targetAddr, pathAddrs) 
           => LB.InternalCompactStep(path, start, end, ABR.I(newBranch), targetAddr, pathAddrs) 
+        case InternalCompactBeginStep(_, _, _) => LB.InternalNoOpStep
+        case InternalCompactBuildStep() => LB.InternalNoOpStep
         case InternalNoOpStep() => LB.InternalNoOpStep
       }
     }
@@ -288,15 +366,17 @@ module AllocationBranchedBetreeMod
   predicate NextStep(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     match step {
-      case QueryStep(_) => OnlyAdvanceBranchedVars(v, v', lbl, step)
-      case PutStep() => OnlyAdvanceBranchedVars(v, v', lbl, step)
-      case QueryEndLsnStep() => OnlyAdvanceBranchedVars(v, v', lbl, step)
-      case FreezeAsStep() => OnlyAdvanceBranchedVars(v, v', lbl, step)
+      case QueryStep(_) => OnlyAdvanceLikesVars(v, v', lbl, step)
+      // case PutStep() => OnlyAdvanceLikesVars(v, v', lbl, step) // put inserts into the memtable and effect state
+      case QueryEndLsnStep() => OnlyAdvanceLikesVars(v, v', lbl, step)
+      case FreezeAsStep() => OnlyAdvanceLikesVars(v, v', lbl, step)
       case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
-      // case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
-      // case InternalFlushMemtableStep(_,_) => InternalFlushMemtable(v, v', lbl, step)
-      // case InternalFlushStep(_, _, _, _, _, _) => InternalFlush(v, v', lbl, step)
-      case InternalCompactStep(_, _, _, _, _, _) => InternalCompact(v, v', lbl, step)
+      case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
+      case InternalFlushMemtableStep(_,_) => InternalFlushMemtable(v, v', lbl, step)
+      case InternalFlushStep(_, _, _, _, _, _) => InternalFlush(v, v', lbl, step)
+      case InternalCompactBeginStep(_, _, _) => InternalCompactBegin(v, v', lbl, step)
+      case InternalCompactBuildStep() => InternalCompactBuild(v, v', lbl)
+      case InternalCompactCommitStep(_, _, _, _, _, _) => InternalCompactCommit(v, v', lbl, step)
       case InternalNoOpStep() => NoOp(v, v', lbl, step)
       case _ => NoOp(v, v', lbl, step)
     }

@@ -178,11 +178,11 @@ module LikesBranchedBetreeMod
   {
     && BB.InternalSplitTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
     && var newBetreeLikes := multiset(Set(step.pathAddrs) + step.newAddrs.Repr());
-    && var discardBetreeLikes := 
+    && var derefBetreeLikes := 
         multiset(step.path.AddrsOnPath() + [step.path.Target().ChildAtIdx(step.request.childIdx).root.value]);
     && v' == v.(
       branchedVars := v'.branchedVars, // admit relational update above
-      betreeLikes := v.betreeLikes - discardBetreeLikes + newBetreeLikes
+      betreeLikes := v.betreeLikes - derefBetreeLikes + newBetreeLikes
       // branchLikes do not change
     )
   }
@@ -204,13 +204,13 @@ module LikesBranchedBetreeMod
       assert newflushedOffsets.Get(i) <= root.branches.Length();
     }
     && var newBetreeLikes := multiset(Set(step.pathAddrs) + {step.targetAddr, step.targetChildAddr});
-    && var discardBetreeLikes := multiset(step.path.AddrsOnPath() + [target.ChildAtIdx(step.childIdx).root.value]);
+    && var derefBetreeLikes := multiset(step.path.AddrsOnPath() + [target.ChildAtIdx(step.childIdx).root.value]);
     && var newBranchLikes := root.branches.Slice(root.flushedOffsets.Get(step.childIdx), root.branches.Length()).ToMultiset();
-    && var discardBranchLikes := root.branches.Slice(0, step.branchGCCount).ToMultiset();
+    && var derefBranchLikes := root.branches.Slice(0, step.branchGCCount).ToMultiset();
     && v' == v.(
       branchedVars := v'.branchedVars, // admit relational update above
-      betreeLikes := v.betreeLikes - discardBetreeLikes + newBetreeLikes,
-      branchLikes := v.branchLikes - discardBranchLikes + newBranchLikes
+      betreeLikes := v.betreeLikes - derefBetreeLikes + newBetreeLikes,
+      branchLikes := v.branchLikes - derefBranchLikes + newBranchLikes
     )
   }
 
@@ -224,13 +224,13 @@ module LikesBranchedBetreeMod
   {
     && BB.InternalCompactTree(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
     && var newBetreeLikes := multiset(Set(step.pathAddrs) + {step.targetAddr});
-    && var discardBetreeLikes := multiset(step.path.AddrsOnPath());
+    && var derefBetreeLikes := multiset(step.path.AddrsOnPath());
     && var newBranchLikes := multiset{step.newBranch.root};
-    && var discardBranchLikes := step.path.Target().Root().branches.Slice(step.start, step.end).ToMultiset();
+    && var derefBranchLikes := step.path.Target().Root().branches.Slice(step.start, step.end).ToMultiset();
     && v' == v.(
       branchedVars := v'.branchedVars, // admit relational update above
-      betreeLikes := v.betreeLikes - discardBetreeLikes + newBetreeLikes,
-      branchLikes := v.branchLikes - discardBranchLikes + newBranchLikes
+      betreeLikes := v.betreeLikes - derefBetreeLikes + newBetreeLikes,
+      branchLikes := v.branchLikes - derefBranchLikes + newBranchLikes
     )
   }
 
