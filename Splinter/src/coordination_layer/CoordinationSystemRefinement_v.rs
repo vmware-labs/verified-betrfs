@@ -331,8 +331,8 @@ verus! {
     reveal(CrashTolerantMap::State::init);
     reveal(CrashTolerantMap::State::init_by);
 
-    match choose(|config: CoordinationSystem::Config|
-      CoordinationSystem::State::init_by(v, config))
+    match choose |config: CoordinationSystem::Config|
+      CoordinationSystem::State::init_by(v, config)
     {
       CoordinationSystem::Config::initialize(state) => {
         v.i().versions.extensionality(FloatingSeq::new(0, 1, |i| AsyncMap::State::init_persistent_state()));

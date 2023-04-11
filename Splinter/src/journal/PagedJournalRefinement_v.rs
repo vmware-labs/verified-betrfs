@@ -64,7 +64,7 @@ impl JournalRecord {
 
     pub proof fn i_lemma_forall()
     ensures
-        forall(|selff: Self, boundary_lsn: LSN|
+        forall |selff: Self, boundary_lsn: LSN|
             selff.valid(boundary_lsn)
             ==>
             ({
@@ -73,7 +73,6 @@ impl JournalRecord {
             &&& out.seq_start == boundary_lsn
             &&& out.seq_end === selff.message_seq.seq_end
             })
-        )
     {
         assert forall |selff: Self, boundary_lsn: LSN|
             selff.valid(boundary_lsn)

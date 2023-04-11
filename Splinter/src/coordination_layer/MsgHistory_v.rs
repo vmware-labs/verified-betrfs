@@ -75,7 +75,7 @@ impl MsgHistory {
   ensures ({
     let result = self.concat(other);
     &&& result.wf()
-    &&& forall(|x| result.contains(x) <==> (self.contains(x) || other.contains(x)))
+    &&& (forall |x| result.contains(x) <==> (self.contains(x) || other.contains(x)))
     &&& (other.is_empty() ==> result == self)
   }),
   {
@@ -113,7 +113,7 @@ impl MsgHistory {
     } ==> {
       let result = #[trigger] _self.concat(other);
       &&& result.wf()
-      &&& forall(|x| result.contains(x) <==> (_self.contains(x) || other.contains(x)))
+      &&& (forall |x| result.contains(x) <==> (_self.contains(x) || other.contains(x)))
       &&& (other.is_empty() ==> result == _self)
     }
   {
@@ -125,7 +125,7 @@ impl MsgHistory {
     } implies {
       let result = #[trigger] _self.concat(other);
       &&& result.wf()
-      &&& forall(|x| result.contains(x) <==> (_self.contains(x) || other.contains(x)))
+      &&& (forall |x| result.contains(x) <==> (_self.contains(x) || other.contains(x)))
       &&& (other.is_empty() ==> result == _self)
     }
     by
