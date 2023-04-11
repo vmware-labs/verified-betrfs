@@ -9,7 +9,7 @@ include "../../lib/Base/Multisets.i.dfy"
 // include "../../lib/Buckets/BoundedPivotsLib.i.dfy"
 include "BranchedBetree.i.dfy"
 
-module LikesBranchedBetreeMod
+module LikesBetreeMod
 {
   import GenericDisk
   import opened LSNMod

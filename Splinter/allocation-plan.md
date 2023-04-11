@@ -77,7 +77,7 @@ The proposed structure is:
       - BeRC variable
       - B+RC variable
       - B+Alloc *ghost* variable
-      - ghost LikesBranchedBetree
+      - ghost LikesBetree
   - AllocationCrashTolerantJournal
     - AllocationJournal
       - JAULSN (Journal-AU-LSN-relation) -- provides JRC by projecting away LSNs

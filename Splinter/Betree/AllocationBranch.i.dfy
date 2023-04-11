@@ -177,11 +177,18 @@ module AllocationBranchMod {
       DiskView.DiskView(MapUnion(entries, other.entries))
     }
 
-    function {:opaque} RemoveDisk(other: DiskView) : (out: DiskView)
+    function RemoveDisk(other: DiskView) : (out: DiskView)
       ensures forall addr :: out.ValidAddress(addr) <==> (ValidAddress(addr) && !other.ValidAddress(addr))
       ensures out.IsSubsetOf(this)
     {
-      DiskView.DiskView(MapRemove(entries, other.entries.Keys))
+      RemoveAddrs(other.entries.Keys)
+    } 
+
+    function {:opaque} RemoveAddrs(addrs: set<Address>) : (out: DiskView)
+      ensures forall addr :: out.ValidAddress(addr) <==> (ValidAddress(addr) && addr !in addrs)
+      ensures out.IsSubsetOf(this)
+    {
+      DiskView.DiskView(MapRemove(entries, addrs))
     } 
 
     // returns a new diskview with the new entry inserted
@@ -210,10 +217,11 @@ module AllocationBranchMod {
       && !Root().Summary?
     }
 
-    predicate NotSealed()
+    predicate Sealed()
       requires HasRoot()
     {
-      && (Root().Index? ==> Root().summary == None)
+      && Root().Index?
+      && Root().summary.Some?
     }
 
     predicate HasRoot() {
@@ -589,7 +597,7 @@ module AllocationBranchMod {
     && lbl.input.WF()
     && |lbl.input.keys| == 1
     && v.WF()
-    && v.branch.NotSealed()
+    && !v.branch.Sealed()
     && path.Valid()
     && path.branch == v.branch
     && path.key == lbl.input.keys[0]
@@ -605,7 +613,7 @@ module AllocationBranchMod {
     && lbl.input.WF()
     && lbl.input.keys != []
     && v.WF()
-    && v.branch.NotSealed()
+    && !v.branch.Sealed()
     && path.Valid()
     && path.branch == v.branch
     && path.Target().Root() == Leaf([], [])
@@ -621,7 +629,7 @@ module AllocationBranchMod {
     && lbl.input.IsEmpty()
     && lbl.ptr.Some?
     && v.WF()
-    && v.branch.NotSealed()
+    && !v.branch.Sealed()
     && v.branch.diskView.IsFresh({lbl.ptr.value})
     && v'.branch == v.branch.Grow(lbl.ptr.value)
   }
@@ -633,7 +641,7 @@ module AllocationBranchMod {
     && lbl.input.IsEmpty()
     && lbl.ptr.Some?
     && v.WF()
-    && v.branch.NotSealed()
+    && !v.branch.Sealed()
     && path.Valid()
     && v.branch.diskView.IsFresh({lbl.ptr.value})
     && path.branch.root == v.branch.root
@@ -647,7 +655,7 @@ module AllocationBranchMod {
     && lbl.input.IsEmpty()
     && lbl.ptr.Some?
     && v.WF()
-    && v.branch.NotSealed()
+    && !v.branch.Sealed()
     && v.branch.Root().Index?
     && v.branch.diskView.IsFresh({lbl.ptr.value})
     && node.Summary?

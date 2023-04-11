@@ -65,7 +65,7 @@ Goal: Account for the fact that buffers actually occupy many addresses.
     * flushedOffsets index; buffers flushed without mutation
 
 
-* LikesBranchedBetree
+* LikesBetree
 
 Goal: Enable transitions that can free referents without observing entire data
 structure on disk (via maintenance and use of in-memory index).

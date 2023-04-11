@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "AllocationJournal.i.dfy"
-include "LikesJournalRefinement.i.dfy"
+include "../Journal/LikesJournalRefinement.i.dfy"
 
 // A Journal that keeps an in-memory index that maps each in-use LSN to the Address that stores it.
 // The impl will keep such an index so that Discard can return freed Addresses without having to

@@ -163,7 +163,7 @@ module CompactorMod
     && var thread := v.threads[idx];
     && lbl.input == thread.input
     && thread.nextKey == Element.Max_Element 
-    && !thread.output.branch.NotSealed()
+    && thread.output.branch.Sealed() // everything in thread.ouput are reserved in mini allocator
     && thread.miniAllocator.GetAllReservedAU() == thread.miniAllocator.allocs.Keys // no AUs can magically disappear
     && lbl.output == thread.output
     && v'.threads == remove(v.threads, idx)

@@ -1,8 +1,8 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "LikesJournal.i.dfy"
 include "MiniAllocator.i.dfy"
+include "../Journal/LikesJournal.i.dfy"
 include "../Likes.i.dfy"
 
 // A Journal that keeps an in-memory index that maps each in-use LSN to the Address that stores it.
