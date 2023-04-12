@@ -19,7 +19,7 @@ module AllocationBetreeMod
   import opened SplitRequestMod
   import opened LikesAUMod
   import opened MiniAllocatorMod
-  import opened CompactorMod
+  import CompactorMod
   import opened AllocationBranchMod
 
   import M = Mathematics
@@ -32,15 +32,30 @@ module AllocationBetreeMod
   type AU = GenericDisk.AU
   type Compactor = CompactorMod.Variables
   type BranchDiskView = AllocationBranchMod.DiskView
-  type StampedBetree = Stamped<BB.BranchedBetree>
+
+  datatype BetreeImage = BetreeImage(
+    branched: BB.BranchedBetree,
+    dv: BranchDiskView
+  )
+
+  type StampedBetree = Stamped<BetreeImage>
+
+  function EmptyBetreeImage() : (out: BetreeImage)
+  {
+    BetreeImage(BB.EmptyBranchedBetree(), EmptyDisk())
+  }
+
+  function EmptyImage() : StampedBetree
+  {
+    Stamped(EmptyBetreeImage(), 0)
+  }
 
   datatype TransitionLabel =
       QueryLabel(endLsn: LSN, key: Key, value: Value)
     | PutLabel(puts: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
-    | FreezeAsLabel(branched: StampedBetree)
+    | FreezeAsLabel(stamped: StampedBetree, unobserved: set<AU>)
     | InternalAllocationsLabel(allocs: set<AU>, deallocs: set<AU>)
-    | InternalLabel()   // Local No-op label
   {
     function I() : LB.TransitionLabel
     {
@@ -48,10 +63,86 @@ module AllocationBetreeMod
         case QueryLabel(endLsn, key, value) => LB.QueryLabel(endLsn, key, value)
         case PutLabel(puts) => LB.PutLabel(puts)
         case QueryEndLsnLabel(endLsn) => LB.QueryEndLsnLabel(endLsn)
-        case FreezeAsLabel(branched) => LB.FreezeAsLabel(branched)
-        case _ => LB.InternalLabel
+        case FreezeAsLabel(stamped, _) => LB.FreezeAsLabel(Stamped(stamped.value.branched, stamped.seqEnd))
+        case InternalAllocationsLabel(_, _) => LB.InternalLabel
       }
     }
+  }
+
+  datatype Variables = Variables(
+    likesVars: LB.Variables,
+    // memtable: AllocationMemtable, // TODO: a mini alloocator & allocation branch
+    // imperative states maintained to compute which AUs may be freed in a step
+    betreeAULikes: LikesAU, // references of betreee node
+    branchAULikes: LikesAU, // root au of each branch
+    branchReadRefs: LikesAU, // updated when compact starts and ends
+    // ghosty
+    allocBranchDiskView: BranchDiskView, // diskview containing allocation branches
+    // part ghosty (DiskView) & part imperative
+    compactor: Compactor
+    // Need to union the buildTight disk and all the threadseq disk.
+    // sequence of "thread" information for compacting branches, each with its own mini-allocator, and its own read-refs(?)
+  )
+  {
+    predicate WF() {
+      && likesVars.WF()
+      && allocBranchDiskView.WF()
+    }
+
+    // gather allocated but unobserved AUs here to return back
+    function UnobservedAUs() : set<AU>
+    {
+      compactor.AUs() // TODO: add memtable too
+    }
+  
+    // Maintained via Inv (all ghosty?)
+    // move to proof land, condition for refinement
+    // predicate IsFresh(aus: set<AU>) {
+    //   && M.Set(betreeAULikes) !! aus
+    //   // && M.Set(branchAULikes) !! aus
+    //   && UnionSetOfSets(branchToSummary.Values) !! aus
+    //   && M.Set(compactor.Likes()) !! aus
+    //   // && G.ToAUs(allocBranchDiskView.Representation()) !! aus 
+    //    && aus !! memtable.Likes()
+    // }
+    
+    // one layer: lbl would inherit allocation and free arguments
+    // conditional refinement lemma
+    // AU == lbl.allocated things 
+    // freeset from cooirdination system implies this
+  }
+
+  // group a couple definitions together
+  predicate OnlyAdvanceLikesVars(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.WF()
+    && LB.NextStep(v.likesVars, v'.likesVars, lbl.I(), step.I())
+    && v' == v.(
+      likesVars := v'.likesVars // admit relational update above
+    )
+  }
+
+  predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.FreezeAsLabel?
+    && LB.Next(v.likesVars, v'.likesVars, lbl.I())
+    && lbl.stamped.value == BetreeImage(v.likesVars.branchedVars.branched, v.allocBranchDiskView)
+    && lbl.unobserved == v.UnobservedAUs()
+
+    && v' == v.(
+      likesVars := v'.likesVars // admit relational update above
+    )
+  }
+
+  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.WF()
+    && LB.InternalGrowTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
+    && v' == v.(
+      likesVars := v'.likesVars, // admit relational update above
+      betreeAULikes := v.betreeAULikes + multiset({step.newRootAddr.au})
+    )
   }
 
   predicate AddrsWithDisjointAUs(addrs: set<Address>) 
@@ -169,62 +260,6 @@ module AllocationBetreeMod
     }
   }
 
-  datatype Variables = Variables(
-    likesVars: LB.Variables,
-    // memtable: AllocationMemtable, // TODO: a mini alloocator & allocation branch
-    // imperative states maintained to compute which AUs may be freed in a step
-    betreeAULikes: LikesAU, // references of betreee node
-    branchAULikes: LikesAU, // root au of each branch
-    branchReadRefs: LikesAU, // updated when compact starts and ends
-    // ghosty
-    allocBranchDiskView: BranchDiskView, // diskview containing allocation branches
-    // part ghosty (DiskView) & part imperative
-    compactor: Compactor
-    // Need to union the buildTight disk and all the threadseq disk.
-    // sequence of "thread" information for compacting branches, each with its own mini-allocator, and its own read-refs(?)
-  )
-  {
-    predicate WF() {
-      && likesVars.WF()
-      && allocBranchDiskView.WF()
-    }
-  
-    // Maintained via Inv (all ghosty?)
-    // move to proof land, condition for refinement
-    // predicate IsFresh(aus: set<AU>) {
-    //   && M.Set(betreeAULikes) !! aus
-    //   // && M.Set(branchAULikes) !! aus
-    //   && UnionSetOfSets(branchToSummary.Values) !! aus
-    //   && M.Set(compactor.Likes()) !! aus
-    //   // && G.ToAUs(allocBranchDiskView.Representation()) !! aus 
-    //    && aus !! memtable.Likes()
-    // }
-    
-    // one layer: lbl would inherit allocation and free arguments
-    // conditional refinement lemma
-    // AU == lbl.allocated things 
-    // freeset from cooirdination system implies this
-  }
-
-  // group a couple definitions together
-  predicate OnlyAdvanceLikesVars(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-  {
-    && v.WF()
-    && LB.NextStep(v.likesVars, v'.likesVars, lbl.I(), step.I())
-    && v' == v.(
-      likesVars := v'.likesVars // admit relational update above
-    )
-  }
-
-  predicate InternalGrow(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
-  {
-    && v.WF()
-    && LB.InternalGrowTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
-    && v' == v.(
-      likesVars := v'.likesVars, // admit relational update above
-      betreeAULikes := v.betreeAULikes + multiset({step.newRootAddr.au})
-    )
-  }
 
   // TODO: blocked on integrating linkedbranch for memtable 
   // Any b+tree that is "observed" is not in the mini-allocator
@@ -304,7 +339,7 @@ module AllocationBetreeMod
     )
   }
 
-  function GetCompactInput(path: BB.Path, start: nat, end: nat, dv: BranchDiskView) : CompactInput
+  function GetCompactInput(path: BB.Path, start: nat, end: nat, dv: BranchDiskView) : CompactorMod.CompactInput
     requires path.Valid()
     requires start < end <= path.Target().Root().branches.Length()
   {
@@ -313,7 +348,7 @@ module AllocationBetreeMod
     var branchSeq := node.branches.Slice(start, end); // branches to be compacted
     var subdisk := SubdiskForBranches(branchSeq.Representation(), dv);
 
-    CompactInput(branchSeq, offsetMap, subdisk)
+    CompactorMod.CompactInput(branchSeq, offsetMap, subdisk)
   }
 
   predicate InternalCompactBegin(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -326,7 +361,7 @@ module AllocationBetreeMod
 
     && var compactInput := GetCompactInput(step.path, step.start, step.end, v.allocBranchDiskView);
     && var inputReadRefs := multiset(G.ToAUs(compactInput.branchSeq.Representation()));
-    && CompactorMod.Next(v.compactor, v'.compactor, Begin(compactInput, lbl.allocs)) 
+    && CompactorMod.Next(v.compactor, v'.compactor, CompactorMod.BeginLabel(compactInput, lbl.allocs)) 
     && lbl.deallocs == {}  // lbl.allocs specified by compactor transitions
 
     && v' == v.(
@@ -339,7 +374,7 @@ module AllocationBetreeMod
   {
     && v.WF()
     && lbl.InternalAllocationsLabel?  
-    && CompactorMod.Next(v.compactor, v'.compactor, Internal(lbl.allocs))
+    && CompactorMod.Next(v.compactor, v'.compactor, CompactorMod.InternalLabel(lbl.allocs))
     && lbl.deallocs == {} // lbl.allocs specified by compactor transitions
 
     && v' == v.(
@@ -354,7 +389,8 @@ module AllocationBetreeMod
     && lbl.InternalAllocationsLabel?
     && LB.InternalCompactTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
     && var compactInput := GetCompactInput(step.path, step.start, step.end, v.allocBranchDiskView);
-    && CompactorMod.Next(v.compactor, v'.compactor, Commit(compactInput, AllocBranch.Variables(step.newBranch)))
+    && var output := AllocationBranchMod.Variables(step.newBranch);
+    && CompactorMod.Next(v.compactor, v'.compactor, CompactorMod.CommitLabel(compactInput, output))
 
     // set up betree info
     && var betreeNewAddrs := Set(step.pathAddrs) + {step.targetAddr};
@@ -382,16 +418,22 @@ module AllocationBetreeMod
     )
   }
 
-  predicate NoOp(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && LB.NextStep(v.likesVars, v'.likesVars, lbl.I(), step.I())
+    && lbl == InternalAllocationsLabel({}, {})
+    && LB.InternalNoOp(v.likesVars, v'.likesVars, lbl.I())
     && v' == v
   }
 
-  predicate Init(v: Variables)
+  predicate Init(v: Variables, stamped: StampedBetree)
   {
-    && true
+    && LB.Init(v.likesVars, Stamped(stamped.value.branched, stamped.seqEnd))
+    // v.betreeAULikes == v.likesVars.betreeLikes.ToAUs()
+    // v.branchAULikes == v.likesVars.branchLikes.ToAUs() 
+    && v.branchReadRefs == multiset{}
+    && stamped.value.branched.branchDiskView == ABR.IDiskView(stamped.value.dv)
+    && CompactorMod.Init(v.compactor)
   }
 
   datatype Step =
@@ -444,8 +486,8 @@ module AllocationBetreeMod
       case InternalCompactBeginStep(_, _, _) => InternalCompactBegin(v, v', lbl, step)
       case InternalCompactBuildStep() => InternalCompactBuild(v, v', lbl)
       case InternalCompactCommitStep(_, _, _, _, _, _) => InternalCompactCommit(v, v', lbl, step)
-      case InternalNoOpStep() => NoOp(v, v', lbl, step)
-      case _ => NoOp(v, v', lbl, step)
+      case InternalNoOpStep() => InternalNoOp(v, v', lbl)
+      case _ => InternalNoOp(v, v', lbl)
     }
   }
 

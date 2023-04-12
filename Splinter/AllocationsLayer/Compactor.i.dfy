@@ -68,21 +68,21 @@ module CompactorMod
       forall i | 0 <= i < |threads| :: threads[i].WF()
     }
 
-    function Likes() : LikesAU {
-      multiset(UnionSetOfSets(set thread | thread in threads :: 
-        thread.miniAllocator.GetAllReservedAU()))
+    function AUs() : set<AU>
+    {
+      UnionSetOfSets(set thread | thread in threads :: thread.miniAllocator.allocs.Keys)
     }
   }
 
   datatype TransitionLabel =
-    | Begin(input: CompactInput, aus: set<AU>) // initial AU allocated to compactor's mini allocator
-    | Internal(allocs: set<AU>)
-    | Commit(input: CompactInput, output: AllocBranch.Variables)
-    | Abort(deallocs: set<AU>)  // allow us to abandon a compaction (even though in practice this is not necessary, via scheduler magic)
+    | BeginLabel(input: CompactInput, aus: set<AU>) // initial AU allocated to compactor's mini allocator
+    | InternalLabel(allocs: set<AU>)
+    | CommitLabel(input: CompactInput, output: AllocBranch.Variables)
+    | AbortLabel(deallocs: set<AU>)  // allow us to abandon a compaction (even though in practice this is not necessary, via scheduler magic)
 
   predicate Begin(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
     && v.WF()
-    && lbl.Begin?
+    && lbl.BeginLabel?
     && var miniAllocator := EmptyMiniAllocator().AddAUs(lbl.aus);
     && miniAllocator.CanAllocate(addr)
 
@@ -97,7 +97,7 @@ module CompactorMod
 
   predicate Alloc(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat) {
     && v.WF()
-    && lbl.Internal?
+    && lbl.InternalLabel?
     && lbl.allocs != {}
     && idx < |v.threads|
     && var thread := v.threads[idx];
@@ -137,7 +137,7 @@ module CompactorMod
   predicate Build(v: Variables, v': Variables, lbl: TransitionLabel, idx: nat, ptr: Pointer, 
     newOutput: AllocBranch.Variables, newNextKey: Element, branchToInsert: FlattenedBranch) {
     && v.WF()
-    && lbl.Internal?
+    && lbl.InternalLabel?
     && lbl.allocs == {}
     && idx < |v.threads|
     && var thread := v.threads[idx];
@@ -158,20 +158,20 @@ module CompactorMod
 
   predicate Commit(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat) {
     && v.WF()
-    && lbl.Commit?
+    && lbl.CommitLabel?
     && idx < |v.threads|
     && var thread := v.threads[idx];
     && lbl.input == thread.input
     && thread.nextKey == Element.Max_Element 
     && thread.output.branch.Sealed() // everything in thread.ouput are reserved in mini allocator
-    && thread.miniAllocator.GetAllReservedAU() == thread.miniAllocator.allocs.Keys // no AUs can magically disappear
+    && thread.output.branch.GetSummary() == thread.miniAllocator.allocs.Keys // no AUs can magically disappear
     && lbl.output == thread.output
     && v'.threads == remove(v.threads, idx)
   }
 
   predicate Abort(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat) {
     && v.WF()
-    && lbl.Abort?
+    && lbl.AbortLabel?
     && idx < |v.threads|
     && var thread := v.threads[idx];
     && lbl.deallocs == thread.miniAllocator.allocs.Keys

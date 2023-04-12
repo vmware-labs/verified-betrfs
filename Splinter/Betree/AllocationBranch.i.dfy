@@ -222,6 +222,8 @@ module AllocationBranchMod {
     {
       && Root().Index?
       && Root().summary.Some?
+      && diskView.ValidAddress(Root().summary.value)
+      && diskView.entries[Root().summary.value].Summary?
     }
 
     predicate HasRoot() {
@@ -338,10 +340,7 @@ module AllocationBranchMod {
     function GetSummary() : set<AU>
       requires WF()
     {
-      if 
-        && Root().Index? && Root().summary.Some? 
-        && diskView.ValidAddress(Root().summary.value) 
-        && diskView.entries[Root().summary.value].Summary?
+      if Sealed()
       then diskView.entries[Root().summary.value].aus
       else { root.au } // only leaf case should reach here, everything else should be eliminated via Inv
     }

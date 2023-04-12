@@ -88,6 +88,25 @@ module LikesBetreeMod
   {
     UnionSetOfSets(set addr | addr in branchLikes :: M.Set(BranchLikes(addr, dv)))
   }
+
+  datatype TransitionLabel =
+      QueryLabel(endLsn: LSN, key: Key, value: Value)
+    | PutLabel(puts: MsgHistory)
+    | QueryEndLsnLabel(endLsn: LSN)
+    | FreezeAsLabel(branched: StampedBetree)
+    | InternalLabel()   // Local No-op label
+  {
+    function I() : BB.TransitionLabel
+    {
+      match this {
+        case QueryLabel(endLsn, key, value) => BB.QueryLabel(endLsn, key, value)
+        case PutLabel(puts) => BB.PutLabel(puts)
+        case QueryEndLsnLabel(endLsn) => BB.QueryEndLsnLabel(endLsn)
+        case FreezeAsLabel(branched) => BB.FreezeAsLabel(branched)
+        case _ => BB.InternalLabel
+      }
+    }
+  }
   
   datatype Variables = Variables(
     // Inheritedstuff
@@ -110,25 +129,6 @@ module LikesBetreeMod
       // && addrs !! M.Set(branchLikes)
       // && addrs !! branchedVars.branched.branchDiskView.Representation()
       && addrs !! FullBranchAddrs(branchLikes, branchedVars.branched.branchDiskView)
-    }
-  }
-
-  datatype TransitionLabel =
-      QueryLabel(endLsn: LSN, key: Key, value: Value)
-    | PutLabel(puts: MsgHistory)
-    | QueryEndLsnLabel(endLsn: LSN)
-    | FreezeAsLabel(branched: StampedBetree)
-    | InternalLabel()   // Local No-op label
-  {
-    function I() : BB.TransitionLabel
-    {
-      match this {
-        case QueryLabel(endLsn, key, value) => BB.QueryLabel(endLsn, key, value)
-        case PutLabel(puts) => BB.PutLabel(puts)
-        case QueryEndLsnLabel(endLsn) => BB.QueryEndLsnLabel(endLsn)
-        case FreezeAsLabel(branched) => BB.FreezeAsLabel(branched)
-        case _ => BB.InternalLabel
-      }
     }
   }
 
@@ -240,10 +240,16 @@ module LikesBetreeMod
     && v.IsFresh(Set(step.pathAddrs) + {step.targetAddr} + step.newBranch.Representation())
   }
 
-  predicate NoOp(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
   {
-    && BB.NextStep(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
+    && BB.InternalNoOp(v.branchedVars, v'.branchedVars, lbl.I())
     && v' == v
+  }
+
+  predicate Init(v: Variables, stamped: StampedBetree)
+  {
+    && BB.Init(v.branchedVars, stamped)
+    && ImperativeAgreement(v)
   }
 
   datatype Step =
@@ -290,7 +296,7 @@ module LikesBetreeMod
       case InternalFlushMemtableStep(_,_) => InternalFlushMemtable(v, v', lbl, step)
       case InternalFlushStep(_, _, _, _, _, _) => InternalFlush(v, v', lbl, step)
       case InternalCompactStep(_, _, _, _, _, _) => InternalCompact(v, v', lbl, step)
-      case InternalNoOpStep() => NoOp(v, v', lbl, step)
+      case InternalNoOpStep() => InternalNoOp(v, v', lbl)
     }
   }
 
