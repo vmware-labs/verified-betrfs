@@ -1,12 +1,14 @@
-#![allow(unused_imports)]
+#[allow(unused_imports)]
 use builtin::*;
 
 use builtin_macros::*;
+use state_machines_macros::state_machine;
 
 use vstd::prelude::*;
 use crate::spec::Messages_t::*;
 use crate::spec::TotalKMMap_t::*;
 use crate::betree::Buffer_v::*;
+use crate::betree::BufferSeq_v::*;
 use crate::betree::Memtable_v::*;
 use crate::coordination_layer::StampedMap_v::*;
 
@@ -40,6 +42,16 @@ pub open spec fn constant_child_map(target: BetreeNode) -> ChildMap {
     ChildMap{ map: Map::new( |k| true, |k| target ) }
 }
 
+impl ChildMap {
+    pub open spec fn wf(self) -> bool
+    {
+        // TODO: needs decreases clause? But why?
+        &&& total_keys(self.map.dom())
+        &&& forall |k: Key| self.map[k].wf()
+    }
+}
+
+
 pub open spec fn empty_child_map() -> ChildMap {
     constant_child_map(BetreeNode::Nil)
 }
@@ -49,18 +61,23 @@ pub open spec fn empty_child_map() -> ChildMap {
 pub enum BetreeNode {
     Nil,
     Node{ 
-        buffers: BufferStack, 
+        buffers: BufferSeq, 
         children: ChildMap},
 }
 
 impl BetreeNode {
+    pub open spec fn wf(self) -> bool {
+        self.is_Node() ==> self.get_Node_children().wf()
+    }
+
+
     pub open spec fn child(self, key: Key) -> BetreeNode {
         self.get_Node_children().map[key]
     }
 
     pub open spec fn empty_root() -> BetreeNode {
         BetreeNode::Node {
-            buffers: BufferStack{ buffers: Seq::empty()},
+            buffers: BufferSeq{ buffers: Seq::empty()},
             children: empty_child_map()
         }
     }
@@ -73,17 +90,17 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn push_buffer_stack(self, buffer_stack: BufferStack) -> BetreeNode {
+    pub open spec fn extend_buffer_seq(self, buffer_stack: BufferSeq) -> BetreeNode {
         BetreeNode::Node{
-            buffers: self.get_Node_buffers().push_buffer_stack(buffer_stack),
+            buffers: self.get_Node_buffers().extend(buffer_stack),
             children: self.get_Node_children(),
         }
     }
 
     pub open spec fn push_memtable(self, memtable: Memtable) -> StampedBetree {
         Stamped{
-            value: self.promote().push_buffer_stack(
-                BufferStack{ buffers: Seq::empty().push(memtable.buffer) }
+            value: self.promote().extend_buffer_seq(
+                BufferSeq{ buffers: Seq::empty().push(memtable.buffer) }
             ),
             seq_end: memtable.seq_end
         }
@@ -121,7 +138,7 @@ impl BetreeNode {
         let kept_buffers = self.get_Node_buffers().apply_filter(all_keys().difference(down_keys));
         let moved_buffers = self.get_Node_buffers().apply_filter(down_keys);
         let out_children_map = Map::new( |k| true, |k| 
-            if down_keys.contains(k) {self.child(k).promote().push_buffer_stack(moved_buffers)}
+            if down_keys.contains(k) {self.child(k).promote().extend_buffer_seq(moved_buffers)}
             else {self.child(k)}
         );
         BetreeNode::Node {
@@ -219,9 +236,18 @@ impl QueryReceipt {
 } // end impl QueryReceipt
 
 
-// TODO: TONY left off here. Time to implement PagedBetree Variables and the state machine
+state_machine!{ PagedBetree {
+    fields {
+        pub memtable: Memtable,
+        pub root: BetreeNode,
+    }
+
+    pub open spec fn wf(self) -> bool {
+        &&& self.root.wf()
+    }
 
 
+}} // end PagedBetree state machine
 
 
 
