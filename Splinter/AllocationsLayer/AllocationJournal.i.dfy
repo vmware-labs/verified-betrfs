@@ -28,33 +28,48 @@ module AllocationJournal {
   type DiskView = LikesJournal.DiskView
   type TruncatedJournal = LikesJournal.TruncatedJournal
 
+  datatype JournalImage = JournalImage(
+    tj: TruncatedJournal,
+    first: AU
+  ) {
+    predicate WF()
+    {
+      tj.WF()
+    }
+  }
+
+  function EmptyJournalImage() : JournalImage
+  {
+    JournalImage(LinkedJournal.Mkfs(), 0) // arbitrary first AU
+  }
+
   /***************************************************************************************
   *                                    Labels and defs                                   *
   ***************************************************************************************/
 
   datatype TransitionLabel =
       ReadForRecoveryLabel(messages: MsgHistory)
-    | FreezeForCommitLabel(frozenJournal: TruncatedJournal)
+    | FreezeForCommitLabel(frozenJournal: JournalImage, unobserved: set<AU>)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
-    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN) // TODO: free label
+    | DiscardOldLabel(startLsn: LSN, requireEnd: LSN, deallocs: set<AU>)
     // Internal-x labels refine to no-ops at the abstract spec
-    | InternalLabel()  // Local No-op label 
-    | InternalMiniAllocLabel(fill: set<AU>, prune: set<AU>)
+    // | InternalLabel()  // Local No-op label 
+    | InternalAllocationsLabel(allocs: set<AU>, deallocs: set<AU>)
   {
     predicate WF() {
-      && (FreezeForCommitLabel? ==> frozenJournal.Decodable())
+      && (FreezeForCommitLabel? ==> frozenJournal.tj.Decodable())
     }
 
     function I(): LikesJournal.TransitionLabel {
       match this {
         case ReadForRecoveryLabel(messages) => LikesJournal.ReadForRecoveryLabel(messages)
-        case FreezeForCommitLabel(frozenJournal) => LikesJournal.FreezeForCommitLabel(frozenJournal)
+        case FreezeForCommitLabel(frozenJournal, _) => LikesJournal.FreezeForCommitLabel(frozenJournal.tj)
         case QueryEndLsnLabel(endLsn) => LikesJournal.QueryEndLsnLabel(endLsn)
         case PutLabel(messages) => LikesJournal.PutLabel(messages)
-        case DiscardOldLabel(startLsn, requireEnd) => LikesJournal.DiscardOldLabel(startLsn, requireEnd)
-        case InternalMiniAllocLabel(allocs, deallocs) => LikesJournal.InternalLabel()
-        case InternalLabel() => LikesJournal.InternalLabel()
+        case DiscardOldLabel(startLsn, requireEnd, _) => LikesJournal.DiscardOldLabel(startLsn, requireEnd)
+        case InternalAllocationsLabel(allocs, deallocs) => LikesJournal.InternalLabel()
+        // case InternalLabel() => LikesJournal.InternalLabel()
       }
     }
   }
@@ -74,14 +89,30 @@ module AllocationJournal {
       && journal.WF()
       && miniAllocator.WF()
     }
+
+    function UnobservedAUs() : set<AU>
+    {
+      miniAllocator.NotObservedAUs()
+    }
   }
 
   // group a couple definitions together
   predicate OnlyAdvanceLikesJournal(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
-    && (step.ReadForRecoveryStep? || step.FreezeForCommitStep? || step.ObserveFreshJournalStep? || step.PutStep?)
+    && (lbl.ReadForRecoveryLabel? || lbl.QueryEndLsnLabel? || lbl.PutLabel?)
     && LikesJournal.NextStep(v.journal, v'.journal, lbl.I(), step.I())
+    && v' == v.(
+      journal := v'.journal
+    )
+  }
+
+  predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.WF()
+    && lbl.FreezeForCommitLabel?
+    && step.FreezeForCommitStep?
+    && LikesJournal.FreezeForCommit(v.journal, v'.journal, lbl.I(), step.depth)
     && v' == v.(
       journal := v'.journal
     )
@@ -91,11 +122,11 @@ module AllocationJournal {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.InternalMiniAllocLabel?
-    && lbl.prune == {}
-    && lbl.fill !! v.miniAllocator.allocs.Keys
+    && lbl.InternalAllocationsLabel?
+    && lbl.deallocs == {}
+    && lbl.allocs !! v.miniAllocator.allocs.Keys
     && v' == v.(
-      miniAllocator := v.miniAllocator.AddAUs(lbl.fill)
+      miniAllocator := v.miniAllocator.AddAUs(lbl.allocs)
     )
   }
 
@@ -103,11 +134,11 @@ module AllocationJournal {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.InternalMiniAllocLabel?
-    && lbl.fill == {}
-    && (forall au | au in lbl.prune :: v.miniAllocator.CanRemove(au))
+    && lbl.InternalAllocationsLabel?
+    && lbl.allocs == {}
+    && (forall au | au in lbl.deallocs :: v.miniAllocator.CanRemove(au))
     && v' == v.(
-      miniAllocator := v.miniAllocator.Prune(lbl.prune)
+      miniAllocator := v.miniAllocator.Prune(lbl.deallocs)
     )
   }
 
@@ -132,18 +163,20 @@ module AllocationJournal {
     && v.WF()
     // Enabling conditions
     && lbl.DiscardOldLabel?
-    // fine bc discard old doesn't use lsnaddrindex as an enabling condition
     && LikesJournal.DiscardOld(v.journal, v'.journal, lbl.I()) 
 
     && var newlsnAUIndex := lsnAUIndexDiscardUpTo(v.lsnAUIndex, lbl.startLsn);
     && var discardedAUs := v.lsnAUIndex.Values - newlsnAUIndex.Values;
     && var newFirst := if v'.journal.journal.truncatedJournal.freshestRec.None? 
           then v.first else GetFirstAU(v.lsnAUIndex, lbl.startLsn); // then case garbage value
+    && lbl.deallocs == discardedAUs
+
     && v' == v.(
       journal := v'.journal,
       lsnAUIndex := newlsnAUIndex,
       first := newFirst,
-      miniAllocator := v.miniAllocator.UnobserveAUs(discardedAUs * v.miniAllocator.allocs.Keys) // note that these AUs refine to free (in the frozen freeset)
+      miniAllocator := v.miniAllocator.Prune(discardedAUs * v.miniAllocator.allocs.Keys)
+      // note that these AUs refine to free (in the frozen freeset) 
     )
   }
 
@@ -184,7 +217,7 @@ module AllocationJournal {
   {
     // Enabling conditions
     && v.WF()
-    && lbl.InternalLabel?
+    && lbl == InternalAllocationsLabel({}, {})
     && step.InternalJournalMarshalStep?
     // state transition
     // constraint on what can be allocated
@@ -206,7 +239,7 @@ module AllocationJournal {
   predicate InternalNoOp(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.InternalLabel?
+    && lbl == InternalAllocationsLabel({}, {})
     && v' == v
   }
  
@@ -308,17 +341,22 @@ module AllocationJournal {
     && (forall addr | addr in dv.entries :: addr.WF())
   }
 
-  predicate WFTruncatedJournal(journal: TruncatedJournal, first: AU) 
+  predicate ValidJournalImage(image: JournalImage) 
   {
-    && WFAddrs(journal.diskView)
-    && InternalAUPagesFullyLinked(journal.diskView, first)
+    && WFAddrs(image.tj.diskView)
+    && InternalAUPagesFullyLinked(image.tj.diskView, image.first)
   }
 
-  predicate Init(v: Variables, journal: TruncatedJournal, first: AU)
+  predicate Init(v: Variables, image: JournalImage)
   {
-    && WFTruncatedJournal(journal, first)
-    && LikesJournal.Init(v.journal, journal)
-    && v == Variables(v.journal, BuildLsnAUIndex(journal, first), first, MiniAllocator(map[], None))
+    && ValidJournalImage(image)
+    && LikesJournal.Init(v.journal, image.tj)
+    && v == Variables(
+        v.journal,
+        BuildLsnAUIndex(image.tj, image.first), 
+        image.first,
+        MiniAllocator(map[], None)
+      )
   }
 
   datatype Step =

@@ -173,7 +173,6 @@ module CoordinationBetreeMod {
     | CommitCompleteStep()
     | CrashStep()
 
-
   // Models mkfs
   predicate Init(v: Variables)
   {

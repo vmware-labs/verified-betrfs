@@ -140,17 +140,17 @@ module MiniAllocatorMod {
       set au | au in allocs && allocs[au].NoObservedPages() :: au
     }
 
-    // b+tree wouldn't do this
-    // journal use it to unobserve discarded AUs at once
-    function UnobserveAUs(aus: set<AU>) : (out: MiniAllocator)
-      requires WF()
-      requires aus <= allocs.Keys
-      ensures out.WF()
-    {
-      var newcurr := if curr.Some? && curr.value in aus then None else curr;
-      MiniAllocator(map au | au in allocs :: 
-        if au in aus then allocs[au].UnobserveAll() else allocs[au], newcurr)
-    }
+    // // b+tree wouldn't do this
+    // // journal use it to unobserve discarded AUs at once
+    // function UnobserveAUs(aus: set<AU>) : (out: MiniAllocator)
+    //   requires WF()
+    //   requires aus <= allocs.Keys
+    //   ensures out.WF()
+    // {
+    //   var newcurr := if curr.Some? && curr.value in aus then None else curr;
+    //   MiniAllocator(map au | au in allocs :: 
+    //     if au in aus then allocs[au].UnobserveAll() else allocs[au], newcurr)
+    // }
 
     predicate CanAllocate(addr: Address)
     {
@@ -189,7 +189,6 @@ module MiniAllocatorMod {
     // remove AUs from the mini allocator
     function Prune(aus: set<AU>) : (out: MiniAllocator)
       requires WF()
-      requires forall au | au in aus :: CanRemove(au)
       ensures out.WF()
     {
       var newAllocs := MapRestrict(allocs, set au | au in allocs.Keys - aus);

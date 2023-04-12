@@ -116,6 +116,7 @@ module AllocationBetreeMod
   predicate OnlyAdvanceLikesVars(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
+    && (lbl.QueryLabel? || lbl.PutLabel? || lbl.QueryEndLsnLabel?)
     && LB.NextStep(v.likesVars, v'.likesVars, lbl.I(), step.I())
     && v' == v.(
       likesVars := v'.likesVars // admit relational update above

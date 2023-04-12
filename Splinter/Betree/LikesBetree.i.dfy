@@ -135,6 +135,7 @@ module LikesBetreeMod
   // group a couple definitions together
   predicate OnlyAdvanceBranchedVars(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
+    && (lbl.QueryLabel? || lbl.PutLabel? || lbl.QueryEndLsnLabel?)
     && BB.NextStep(v.branchedVars, v'.branchedVars, lbl.I(), step.I())
     && v' == v.(
       branchedVars := v'.branchedVars // admit relational update above
