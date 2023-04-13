@@ -30,7 +30,7 @@ using LinearExtern::lseq;
 namespace nr = Impl_ON_CounterIfc__Compile;
 namespace nrinit = Init_ON_CounterIfc__Compile;
 #else
-namespace nr = Impl_ON_VSpaceIfc__Compile;
+namespace nr = NRImpl_ON_VSpaceIfc__Compile;
 namespace nrinit = Init_ON_VSpaceIfc__Compile;
 #endif
 
@@ -47,7 +47,7 @@ class nr_helper {
 
  public:
   static uint64_t num_replicas() {
-    return Constants_Compile::__default::NUM__REPLICAS;
+    return NRConstants_Compile::__default::NUM__REPLICAS;
   }
 
   nr_helper(size_t n_threads)
@@ -67,13 +67,6 @@ class nr_helper {
     assert(n_threads_per_replica * num_replicas() == n_threads);
   }
 
-  ~nr_helper() {
-    for (auto seq : thread_owned_contexts)
-      delete seq;
-
-    delete node_creation_tokens;
-  }
-
   nr::NR& get_nr() { return *nr; }
 
   static uint32_t get_node_id(uint32_t core_id) {
@@ -89,7 +82,7 @@ class nr_helper {
     nr.emplace(init.get<0>());
 
     node_creation_tokens = init.get<1>();
-    assert(node_creation_tokens->size() == num_replicas());
+    assert(node_creation_tokens.len == num_replicas());
   }
 
   nr::ThreadOwnedContext* register_thread(uint32_t core_id) {
@@ -97,7 +90,7 @@ class nr_helper {
 
     if (core_id / num_replicas() == 0) {
       auto token =
-        &node_creation_tokens->at(node_id).a;
+        &node_creation_tokens.ptr[node_id].a;
       auto r = nrinit::__default::initNode(*token);
       std::cerr << "thread on core_id " << core_id
                 << " done initializing node_id "
@@ -125,7 +118,7 @@ class nr_helper {
               << " context " << context_index
               << std::endl;
 
-    return &(thread_owned_contexts[node_id]->at(context_index)).a;
+    return &(thread_owned_contexts[node_id].ptr[context_index]).a;
   }
 };
 
@@ -147,7 +140,7 @@ class nr_rust_helper {
 
  public:
   static size_t num_replicas() {
-    return Constants_Compile::__default::NUM__REPLICAS;
+    return NRConstants_Compile::__default::NUM__REPLICAS;
   }
 
   nr_rust_helper(size_t n_threads)
