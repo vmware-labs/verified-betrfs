@@ -3,7 +3,7 @@
 
 include "AllocationBetree.i.dfy"
 
-module CoordinationBetreeMod {
+module CoordinationBetree {
   import opened ValueMessage
   import opened KeyType
   import opened StampedMod
@@ -21,8 +21,7 @@ module CoordinationBetreeMod {
     | LoadEphemeralFromPersistentLabel(endLsn: LSN)
     | PutRecordsLabel(records: MsgHistory)
     | QueryLabel(endLsn: LSN, key: Key, value: Value)
-    | InternalLabel()
-    | InternalAllocationsLabel(allocs: set<AU>, deallocs: set<AU>)
+    | InternalLabel(allocs: set<AU>, deallocs: set<AU>)
     | CommitStartLabel(newBoundaryLsn: LSN, unobserved: set<AU>)
     | CommitCompleteLabel()
     | CrashLabel()
@@ -96,7 +95,7 @@ module CoordinationBetreeMod {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.InternalLabel?
+    && lbl == InternalLabel({}, {})
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
@@ -113,7 +112,7 @@ module CoordinationBetreeMod {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.InternalAllocationsLabel?
+    && lbl.InternalLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 

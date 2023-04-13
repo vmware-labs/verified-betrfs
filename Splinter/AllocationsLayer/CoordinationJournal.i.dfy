@@ -21,7 +21,7 @@ module CoordinationJournal {
     | ReadForRecoveryLabel(records: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(records: MsgHistory)
-    | InternalAllocationsLabel(allocs: set<AU>, deallocs: set<AU>)
+    | InternalLabel(allocs: set<AU>, deallocs: set<AU>)
     | QueryLsnPersistenceLabel(syncLsn: LSN)
     | CommitStartLabel(newBoundaryLsn: LSN, maxLsn: LSN, unobserved: set<AU>)
     | CommitCompleteLabel(requireEnd: LSN, discarded: set<AU>)
@@ -100,7 +100,7 @@ module CoordinationJournal {
   predicate Internal(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
-    && lbl.InternalAllocationsLabel?
+    && lbl.InternalLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
@@ -187,7 +187,7 @@ module CoordinationJournal {
       case ReadForRecoveryLabel(_) => ReadForRecovery(v, v', lbl)
       case QueryEndLsnLabel(_) => QueryEndLsn(v, v', lbl)
       case PutLabel(_) => Put(v, v', lbl)
-      case InternalAllocationsLabel(_, _) => Internal(v, v', lbl)
+      case InternalLabel(_, _) => Internal(v, v', lbl)
       case QueryLsnPersistenceLabel(_) => QueryLsnPersistence(v, v', lbl)
       case CommitStartLabel(_, _, _) => CommitStart(v, v', lbl)
       case CommitCompleteLabel(_, _) => CommitComplete(v, v', lbl)

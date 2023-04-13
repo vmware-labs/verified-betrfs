@@ -112,6 +112,8 @@ module AllocationJournal {
     && v.WF()
     && lbl.FreezeForCommitLabel?
     && step.FreezeForCommitStep?
+    && lbl.unobserved == v.UnobservedAUs()
+
     && LikesJournal.FreezeForCommit(v.journal, v'.journal, lbl.I(), step.depth)
     && v' == v.(
       journal := v'.journal
@@ -388,6 +390,7 @@ module AllocationJournal {
   {
     match step {
       case DiscardOldStep() => DiscardOld(v, v', lbl)
+      case FreezeForCommitStep(_) => FreezeForCommit(v, v', lbl, step)
       case InternalJournalMarshalStep(_, _) => InternalJournalMarshal(v, v', lbl, step)
       case InternalMiniAllocatorFillStep() => InternalMiniAllocatorFill(v, v', lbl)
       case InternalMiniAllocatorPruneStep() => InternalMiniAllocatorPrune(v, v', lbl)
