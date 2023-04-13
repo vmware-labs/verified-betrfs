@@ -1,0 +1,52 @@
+#!/bin/bash
+
+set -e
+
+if ! command -v dotnet &> /dev/null
+then
+    echo "dotnet could not be found in PATH."
+    if [ -d "$HOME/.dotnet" ]
+    then
+        echo "Adding $HOME/.dotnet to PATH."
+        export PATH="$PATH:$HOME/.dotnet"
+    else
+        echo "$HOME/.dotnet directory not found. Running install-dotnet script."
+        ./install-dotnet
+				wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
+				chmod +x dotnet-install.sh
+				./dotnet-install.sh --channel 5.0
+        export PATH="$PATH:$HOME/.dotnet"
+    fi
+else
+    echo "dotnet is in PATH."
+fi
+
+if command -v dotnet -h &> /dev/null; then
+		echo "dotnet seems to be working"
+else
+		echo "dotnet install didn't seem to work"
+		exit -1
+fi
+
+source "$HOME/.cargo/env" || true
+if cargo version &> /dev/null; then
+		echo "cargo+rustc seems to be working; skipping install"
+else
+		curl --proto '=https'--tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+		source "$HOME/.cargo/env"
+		if cargo version &> /dev/null; then
+				echo "cargo+rustc seems to be working"
+		else
+				echo "cargo+rustc install failed"
+				exit -1
+		fi
+fi
+
+if ! tools/local-dafny.sh /version &> /dev/null; then
+	echo "Installing dafny"
+	tools/install-dafny.sh
+fi
+
+cd concurrency/node-replication
+./compile-bench.sh
+
