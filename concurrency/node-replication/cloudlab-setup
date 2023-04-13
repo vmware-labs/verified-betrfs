@@ -4,6 +4,7 @@ set -e
 
 if [ ! -f /usr/include/numa.h ]; then
   echo "Missing libnuma headers; installing"
+  sudo apt-get update
   sudo apt-get install libnuma-dev
 fi
 
