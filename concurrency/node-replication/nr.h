@@ -86,7 +86,7 @@ class nr_helper {
   }
 
   nr::ThreadOwnedContext* register_thread(uint32_t core_id) {
-    const uint32_t node_id = core_id % 4;
+    const uint32_t node_id = get_node_id(core_id);
 
     if (core_id / num_replicas() == 0) {
       auto token =
