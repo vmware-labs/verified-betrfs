@@ -93,7 +93,7 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
                    y='ops_per_s',
                    color='bench_name',
                    shape='bench_name')
-        labels = [ 'Seagull-NR'
+        labels = [ 'IronSync-NR'
                  , 'Reference-NR'
                  , 'DistRwLock'
                  , 'Shuffle Lock'
