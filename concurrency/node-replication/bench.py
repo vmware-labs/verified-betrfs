@@ -8,19 +8,35 @@ import subprocess
 import random
 import time
 import math
+import re
+
+def count_numa_nodes():
+    nids = set()
+    with open('/proc/cpuinfo') as f:
+        for l in f.readlines():
+            if l.startswith('physical id'):
+                nid = l.split(':')[1].strip()
+                nids.add(nid)
+    return len(nids)
+
+def count_cores_per_numa_node():
+    cores = 0
+    with open('/proc/cpuinfo') as f:
+        for l in f.readlines():
+            if re.match('physical id.*:.0$', l):
+                cores += 1
+    return cores
 
 SECONDS = 10
 
-CORES_PER_NODE = 48
-NODES = 4
+CORES_PER_NODE = count_cores_per_numa_node()
+NODES = count_numa_nodes()
 MAX_THREADS = NODES * CORES_PER_NODE
 
 NR_BENCHES = ['dafny_nr', 'rust_nr']
 OTHER_BENCHES = ['dafny_rwlock', 'shfllock', 'mcs', 'cpp_shared_mutex']
 #READS_PCT = [100, 95, 50, 0, 90]
 READS_PCT = [100, 90, 0]
-
-N_REPLICAS = [4]
 
 ITERS = 1
 
@@ -59,6 +75,8 @@ def run(bench, n_replicas, n_threads, reads_pct, run_id_num, numa_policy):
     subprocess.run(cmd, shell=True, check=False)
 
 def run_all():
+    print(f'Found {NODES} NUMA nodes with {CORES_PER_NODE} cores each')
+
     subprocess.run('sudo sh -c "echo %s > /sys/kernel/mm/transparent_hugepage/enabled"' % ('never', 'always')[TRANSPARENT_HUGEPAGES], shell=True, check=False)
     for nid in range(0, 4):
         subprocess.run('sudo sh -c "echo 4 > /sys/devices/system/node/node{}/hugepages/hugepages-1048576kB/nr_hugepages"'.format(nid), shell=True, check=False)
