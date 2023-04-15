@@ -4,5 +4,6 @@
 4. cd verified-betrfs
 5. git checkout concurrency-experiments
 6. ./concurrency/node-replication/cloudlab-setup
-7. python3 bench.py
+7. cd concurrency/node-replication
+8. python3 bench.py
 
