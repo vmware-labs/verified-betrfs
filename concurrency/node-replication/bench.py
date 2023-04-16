@@ -114,4 +114,11 @@ def run_all():
                 subprocess.run('./plot.py', shell=True, check=False)
                 subprocess.run('cp *.json *.png *.pdf *.pgf plot.py runs/%s' % run_id, shell=True, check=False)
 
-if __name__ == '__main__': run_all()
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        if sys.argv[1] == '--node-count':
+            print(NODES)
+        else:
+            print('Unknown option')
+    else:
+        run_all()
