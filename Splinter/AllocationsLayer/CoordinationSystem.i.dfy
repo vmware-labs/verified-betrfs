@@ -34,7 +34,7 @@ module CoordinationSystem {
   }
 
   datatype FreeSet = FreeSet(
-    ephemeral: set<AU>,
+    ephemeral: set<AU>, // should never include any AUs that are allocated to betree or journal
     inFlight: Option<set<AU>>,
     persistent: set<AU>
   ) {
@@ -49,14 +49,14 @@ module CoordinationSystem {
       requires allocs <= ephemeral
       requires deallocs !! ephemeral
     {
-      FreeSet(ephemeral-allocs+deallocs, inFlight, persistent)
+      this.(ephemeral := ephemeral-allocs+deallocs)
     }
 
-    function CommitStart(unobserved: set<AU>) : FreeSet
+    function Freeze(unobserved: set<AU>) : FreeSet
       requires unobserved !! ephemeral
       requires inFlight.None?
     {
-      FreeSet(ephemeral, Some(ephemeral + unobserved), persistent)
+      this.(inFlight := Some(ephemeral + unobserved))
     }
 
     function CommitComplete(discard: set<AU>) : FreeSet
@@ -66,6 +66,15 @@ module CoordinationSystem {
       FreeSet(ephemeral+discard, None, inFlight.value)
     }
   }
+
+  // TODO: prove coordination system invariants and refinement
+  // Inv
+  //    how the freesets relate to betree/journal states [domains of the diskview]
+  //    relationship amongst the diskviews (DVs always disjoint from xyz), they are congruent
+  //    between ephemeral in flight and persistent some values may overlap
+  //        ephemeral and persistent of tree same addr ==> same value (diskview)
+  //    
+  // When we need these invs: cache (one physcial DV, ghosty dv for the other)
 
   datatype Variables = Variables(
     journal: CoordinationJournal.Variables,
@@ -284,24 +293,38 @@ module CoordinationSystem {
       ))
   }
 
-  // This step models issuing the superblock write
-  predicate CommitStart(v: Variables, v': Variables, uiop: UIOp, newBoundaryLsn: LSN, unobservedJournal: set<AU>, unobservedBetree: set<AU>)
+  predicate FreezeBetree(v: Variables, v': Variables, uiop: UIOp, unobservedJournal: set<AU>, unobservedBetree: set<AU>)
   {
     && uiop.NoopOp?
     && v.WF()
     && v.ephemeral.Known?
     && v.freeset.inFlight.None?
+    && (unobservedJournal + unobservedBetree) !! v.freeset.ephemeral
 
-    && var unobserved := unobservedJournal + unobservedBetree;
-    && unobserved !! v.freeset.ephemeral
-
-    && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.CommitStartLabel(newBoundaryLsn, v.ephemeral.mapLsn, unobservedJournal))
-    && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.CommitStartLabel(newBoundaryLsn, unobservedBetree))
+    && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.FreezeAsLabel(unobservedJournal))
+    && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.FreezeAsLabel(unobservedBetree))
 
     && v' == v.(
       journal := v'.journal, // admit relational update above
       betree := v'.betree,   // admit relational update above
-      freeset := v.freeset.CommitStart(unobserved)
+      freeset := v.freeset.Freeze(unobservedJournal + unobservedBetree)
+    )
+  }
+
+  // This step models issuing the superblock write
+  predicate CommitStart(v: Variables, v': Variables, uiop: UIOp, newBoundaryLsn: LSN)
+  {
+    && uiop.NoopOp?
+    && v.WF()
+    && v.ephemeral.Known?
+    && v.freeset.inFlight.Some? // has to start after a freezebetree step
+
+    && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.CommitStartLabel(newBoundaryLsn, v.ephemeral.mapLsn))
+    && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.CommitStartLabel(newBoundaryLsn))
+
+    && v' == v.(
+      journal := v'.journal, // admit relational update above
+      betree := v'.betree   // admit relational update above
     )
   }
 
@@ -352,7 +375,8 @@ module CoordinationSystem {
     | MapInternalStep(allocs: set<AU>, deallocs: set<AU>)
     | ReqSyncStep()
     | ReplySyncStep()
-    | CommitStartStep(newBoundaryLsn: LSN, unobservedBetree: set<AU>, unobservedJournal: set<AU>)
+    | FreezeBetreeStep(unobservedBetree: set<AU>, unobservedJournal: set<AU>)
+    | CommitStartStep(newBoundaryLsn: LSN)
     | CommitCompleteStep(discardedJournal: set<AU>)
     | CrashStep()
 
@@ -368,7 +392,8 @@ module CoordinationSystem {
       case MapInternalStep(allocs, deallocs) => MapInternal(v, v', uiop, allocs, deallocs)
       case ReqSyncStep() => ReqSync(v, v', uiop)
       case ReplySyncStep() => ReplySync(v, v', uiop)
-      case CommitStartStep(newBoundaryLsn, unobservedBetree, unobservedJournal) => CommitStart(v, v', uiop, newBoundaryLsn, unobservedBetree, unobservedJournal)
+      case FreezeBetreeStep(unobservedBetree, unobservedJournal) => FreezeBetree(v, v', uiop, unobservedBetree, unobservedJournal)
+      case CommitStartStep(newBoundaryLsn) => CommitStart(v, v', uiop, newBoundaryLsn)
       case CommitCompleteStep(discardedJournal) => CommitComplete(v, v', uiop, discardedJournal)
       case CrashStep() => Crash(v, v', uiop)
     }

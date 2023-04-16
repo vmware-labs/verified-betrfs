@@ -21,8 +21,9 @@ module CoordinationBetree {
     | LoadEphemeralFromPersistentLabel(endLsn: LSN)
     | PutRecordsLabel(records: MsgHistory)
     | QueryLabel(endLsn: LSN, key: Key, value: Value)
+    | FreezeAsLabel(unobserved: set<AU>)
     | InternalLabel(allocs: set<AU>, deallocs: set<AU>)
-    | CommitStartLabel(newBoundaryLsn: LSN, unobserved: set<AU>)
+    | CommitStartLabel(newBoundaryLsn: LSN)
     | CommitCompleteLabel()
     | CrashLabel()
   {
@@ -37,15 +38,10 @@ module CoordinationBetree {
       | Unknown  // This means None
       | Known(v: AllocBetree.Variables)
 
-  datatype InFlight = InFlight(
-    image: StampedBetree, // image of the stamped betree
-    freeset: set<AU>   // AUs that are allocated to betree but not yet observed, would be seen as free upon a crash
-  )
-
   datatype Variables = Variables(
     persistent: StampedBetree,
     ephemeral: Ephemeral,
-    inFlight: Option<InFlight>
+    inFlight: Option<StampedBetree>
   )
   {
     predicate WF() {
@@ -91,11 +87,11 @@ module CoordinationBetree {
     && v' == v
   }
 
-  predicate FreezeMapInternal(v: Variables, v': Variables, lbl: TransitionLabel, frozenBetree: StampedBetree, unobserved: set<AU>)
+  predicate FreezeMapInternal(v: Variables, v': Variables, lbl: TransitionLabel, frozenBetree: StampedBetree)
   {
     && v.WF()
     && lbl.WF()
-    && lbl == InternalLabel({}, {})
+    && lbl.FreezeAsLabel?
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
@@ -103,8 +99,8 @@ module CoordinationBetree {
     // an async superblock write may be in progress, and we need to maintain
     // guarantees about its in-flight map state.
     && v.inFlight.None?
-    && AllocBetree.FreezeAs(v.ephemeral.v, v'.ephemeral.v, AllocBetree.FreezeAsLabel(frozenBetree, unobserved))
-    && v'.inFlight == Some(InFlight(frozenBetree, unobserved))
+    && AllocBetree.FreezeAs(v.ephemeral.v, v'.ephemeral.v, AllocBetree.FreezeAsLabel(frozenBetree, lbl.unobserved))
+    && v'.inFlight == Some(frozenBetree)
     && v'.persistent == v.persistent // UNCHANGED
   }
   
@@ -133,9 +129,7 @@ module CoordinationBetree {
     // a gap to the ephemeral journal start.
     && v.persistent.seqEnd <= lbl.newBoundaryLsn
     // Frozen journal & frozen map agree on boundary.
-    && lbl.newBoundaryLsn == v.inFlight.value.image.seqEnd
-    && lbl.unobserved == v.inFlight.value.freeset
-
+    && lbl.newBoundaryLsn == v.inFlight.value.seqEnd
     && v' == v
   }
 
@@ -147,7 +141,7 @@ module CoordinationBetree {
     && v.inFlight.Some?
 
     && v' == v.(
-      persistent := v.inFlight.value.image,
+      persistent := v.inFlight.value,
       // ephemeral unchanged
       inFlight := None)
   }
@@ -166,7 +160,7 @@ module CoordinationBetree {
     | LoadEphemeralFromPersistentStep()
     | PutRecordsStep()
     | QueryStep()
-    | FreezeMapInternalStep(frozenBetree: StampedBetree, unobserved: set<AU>)
+    | FreezeMapInternalStep(frozenBetree: StampedBetree)
     | EphemeralInternalStep()
     | CommitStartStep()
     | CommitCompleteStep()
@@ -184,7 +178,7 @@ module CoordinationBetree {
       case LoadEphemeralFromPersistentStep() => LoadEphemeralFromPersistent(v, v', lbl)
       case PutRecordsStep() => PutRecords(v, v', lbl)
       case QueryStep() => Query(v, v', lbl)
-      case FreezeMapInternalStep(frozenBetree, unobserved) => FreezeMapInternal(v, v', lbl, frozenBetree, unobserved)
+      case FreezeMapInternalStep(frozenBetree) => FreezeMapInternal(v, v', lbl, frozenBetree)
       case EphemeralInternalStep() => EphemeralInternal(v, v', lbl)
       case CommitStartStep() => CommitStart(v, v', lbl)
       case CommitCompleteStep() => CommitComplete(v, v', lbl)
