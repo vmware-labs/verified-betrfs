@@ -54,9 +54,6 @@ LIBS := \
 
 $(BUNDLE_CPP) $(BUNDLE_H): *.dfy rwlock/*.dfy ../framework/*.dfy ../../lib/Base/*.dfy vspace_glue.h ./vspace/target/cxxbridge/vspace/src/lib.rs.h
 	$(eval TMPNAME=$(abspath $(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@))))
-	# Dafny currently produces Bundle$(DATA_STRUCTURE_NAME).i.cpp, but it returns an error code
-	# since not everything verifies. Augment the next lines so that they don't
-	# ignore failures once things are supposed to verify.
 	-../../tools/local-dafny.sh /trace /compile:0 /induction:1 /noNLarith /noVerify /spillTargetCode:3 /compileTarget:cpp /countVerificationErrors:0 $(BUNDLE_DAFNY) Extern.h LinearExtern.h ./vspace_glue.h /out:$(TMPNAME)
 	-mv $(TMPNAME) $@
 
