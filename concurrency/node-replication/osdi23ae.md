@@ -22,3 +22,8 @@
 
 1. `./bench.py`
 
+
+# View the Results
+
+1. `scp $CLOUDLABHOST:skylake4x-throughput-vs-cores-compare-locks.pdf .`
+2. Open `skylake4x-throughput-vs-cores-compare-locks.pdf` which corresponds to Figure 16 in the paper. The figure is replotted incrementally after each new data point is taken as the experiments runs.
