@@ -52,6 +52,8 @@ if ! tools/local-dafny.sh /version &> /dev/null; then
     tools/install-dafny.sh
 fi
 
-cd concurrency/node-replication
-./compile-bench.sh
-
+echo "Installing ploting stuff..."
+sudo apt-get -y install texlive texlive-tetex python3-pip
+python3 -m pip install --upgrade pip
+python3 -m pip install --upgrade pillow
+pip3 install plotnine
