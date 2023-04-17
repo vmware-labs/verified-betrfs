@@ -66,7 +66,7 @@ OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) \
 ##############################################################################
 # Automatic targets
 
-all: status elf
+all: concurrency-status
 
 clean:
 	rm -rf build
@@ -122,8 +122,8 @@ endef
 ##############################################################################
 # Verification status page
 
-.PHONY: status
-status: build/deps build/Impl/Bundle.i.status.pdf
+#.PHONY: status
+#status: build/deps build/Impl/Bundle.i.status.pdf
 scache-status: build/concurrency/scache/Bundle.i.status.pdf
 nr-status: build/concurrency/node-replication/Interface.i.status.pdf
 hash-status: build/concurrency/hashtable/Interface.i.status.pdf
@@ -134,53 +134,6 @@ og-status: build/concurrency/og_counter/Impl.i.status.pdf
 queue-status: build/concurrency/spsc-queue/QueueImpl.i.status.pdf
 
 concurrency-status: scache-status nr-status hash-status hoh-status bank-status
-
-# Longer time-limit for CI
-.PHONY: verichecks-status
-verichecks-status: TIMELIMIT=/timeLimit:60
-verichecks-status: DAFNY_GLOBAL_FLAGS=/vcsCores:4
-verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
-
-.PHONY: syntax-status
-syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
-
-.PHONY: verify-ordered
-verify-ordered: build/deps build/Impl/Bundle.i.okay
-
-##############################################################################
-# C# executables
-
-FRAMEWORK_SOURCES=framework/Framework.cs framework/Benchmarks.cs framework/Crc32.cs
-
-.PHONY: exe
-exe: build/Veribetrfs.exe
-
-build/Impl/Bundle.i.exe: build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
-	csc $^ /optimize /r:System.Numerics.dll /nowarn:0164 /nowarn:0219 /nowarn:1717 /nowarn:0162 /nowarn:0168 /unsafe /out:$@
-
-.PHONY: exe-roslyn
-exe-roslyn: build/Impl/Bundle.i.roslyn.exe
-
-build/Impl/Bundle.i.roslyn.exe:build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
-	tools/roslyn-csc.sh $^ /optimize /nowarn:CS0162 /nowarn:CS0164 /unsafe /t:exe /out:$@
-#eval trick to assign make var inside rule
-	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))
-	tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
-
-build/Veribetrfs.exe: build/Impl/Bundle.i.exe
-	cp $< $@
-
-##############################################################################
-# C++ executables
-
-.PHONY: allcpp
-allcpp: build/Impl/Bundle.i.cpp
-
-.PHONY: allo
-allo: build/Impl/Bundle.i.o
-
-.PHONY: elf
-elf: build/Veribetrfs
 
 ##############################################################################
 ##############################################################################
@@ -236,22 +189,9 @@ build/concurrency/Math/Nonlinear.i.verchk: NONLINEAR_FLAGS=
 build/concurrency/spsc-queue/QueueMultiRw.i.verchk: NONLINEAR_FLAGS=
 build/lib/Math/Nonlinear.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/mathematics.i.verchk: NONLINEAR_FLAGS=
-build/Impl/BookkeepingModel.i.verchk: NONLINEAR_FLAGS=
-build/Impl/IOImpl.i.verchk: NONLINEAR_FLAGS=
-build/Impl/IOModel.i.verchk: NONLINEAR_FLAGS=
-build/Impl/SyncImpl.i.verchk: NONLINEAR_FLAGS=
-build/Impl/BookkeepingImpl.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/SetBijectivity.i.verchk: NONLINEAR_FLAGS=
 build/lib/Marshalling/GenericMarshalling.i.verchk: NONLINEAR_FLAGS=
-build/lib/Buckets/BucketFlushModel.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/sequences.i.verchk: NONLINEAR_FLAGS=
-build/BlockCacheSystem/DiskLayout.i.verchk: NONLINEAR_FLAGS=
-build/ByteBlockCacheSystem/Marshalling.i.verchk: NONLINEAR_FLAGS=
-build/ByteBlockCacheSystem/JournalBytes.i.verchk: NONLINEAR_FLAGS=
-build/PivotBetree/Bounds.i.verchk: NONLINEAR_FLAGS=
-build/Impl/Mkfs.i.verchk: NONLINEAR_FLAGS=
-build/Impl/MkfsModel.i.verchk: NONLINEAR_FLAGS=
-build/Impl/MarshallingImpl.i.verchk: NONLINEAR_FLAGS=
 
 ### Put all the flags together
 
@@ -307,203 +247,3 @@ build/%.lc: %.dfy build/%.verchk $(LC_TOOL) $(LC_DEPS)
 LC_REPORT_DEPS=tools/line_counter_report_lib.py docs/file-classifications.txt
 build/%.lcreport: %.dfy build/%.lc $(LC_TOOL) $(LC_DEPS) $(LC_REPORT_DEPS)
 		$(LC_TOOL) --mode report --input $< --output $@
-
-##############################################################################
-# .cs: C-Sharp output from compiling a Dafny file (which includes all deps)
-# In principle, building code should depend on .verified! But we want
-# to play with perf with not-entirely-verifying trees.
-build/%.cs: %.dfy $(DAFNY_BINS) | $$(@D)/.
-#eval trick to assign make var inside rule
-# Dafny irritatingly removes the '.i' presuffix, and has a weird behavior where it duplicates prefixes of relative paths. Bizarre.
-	$(eval TMPNAME=$(abspath $(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@))))
-	pwd
-	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) $<
-	mv $(TMPNAME) $@
-
-##############################################################################
-# .cpp: C++ output from compiling a Dafny file (which includes all deps)
-# Slow, but useful for iterating when working on the cpp compiler.
-build/%.cpp: %.dfy $(DAFNY_BINS) | $$(@D)/.
-#eval trick to assign make var inside rule
-	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
-# Dafny irritatingly removes the '.i' presuffix.
-	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
-	mv $(TMPNAME) $@
-
-# Build the main cpp file without building all the partial cpp files.
-build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) | $$(@D)/.
-#eval trick to assign make var inside rule
-	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
-	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
-	mv $(TMPNAME) $@
-
-build/Bundle.i.h: build/Bundle.cpp
-# this is build automatically when we build Bundle.cpp
-	touch build/Bundle.i.h
-
-##############################################################################
-# C++ object files
-
-CPP_DEP_DIR=build/cppdeps
-GEN_H_FILES=build/Bundle.i.h
-
-WARNINGS=-Wall -Wsign-compare
-
-build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
-	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 $(POUND_DEFINES) -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS)
-
-build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
-	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 $(POUND_DEFINES) -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS) -Werror
-
-# the BundleWrapper.cpp file includes the auto-generated Bundle.cpp
-build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(GEN_H_FILES) | $$(@D)/.
-	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-# No -Werror
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS)
-
-# Include the .h depencies for all previously-built .o targets. If one of the .h files
-# changes, we'll rebuild the .o
-rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
--include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
-
-VERIBETRFS_AUX_FILES=\
-	build/framework/Benchmarks.o \
-	build/framework/BundleWrapper.o \
-	build/framework/UnverifiedRowCache.o \
-	build/framework/Framework.o \
-	build/framework/MallocAccounting.o \
-
-VERIBETRFS_O_FILES=\
-	$(VERIBETRFS_AUX_FILES)\
-	build/framework/Main.o \
-
-LDFLAGS=-msse4.2
-
-# On linux we need the -lrt (for aio functions),
-# but on mac it doesn't exist.
-UNAME := $(shell uname)
-ifeq ($(UNAME), Darwin)
-else
-LDFLAGS += -lrt
-endif
-
-build/Veribetrfs: $(VERIBETRFS_O_FILES)
-	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS) $(GPROF_FLAGS)
-
-##############################################################################
-# YCSB
-
-VERIBETRFS_YCSB_O_FILES=\
-	$(VERIBETRFS_AUX_FILES)\
-	build/framework/leakfinder.o \
-
-libycsbc: build/libycsbc-libcpp.a \
-				  build/libycsbc-default.a
-
-build/libycsbc-libcpp.a:
-	STDLIB=libcpp $(MAKE) -C ycsb build/libycsbc-libcpp.a
-
-build/libycsbc-default.a:
-	STDLIB=default $(MAKE) -C ycsb build/libycsbc-default.a
-
-librocksdb:
-	@env \
-		ROCKSDB_DISABLE_BZIP=1 \
-		ROCKSDB_DISABLE_ZLIB=1 \
-		ROCKSDB_DISABLE_LZ4=1 \
-		ROCKSDB_DISABLE_ZSTD=1 \
-		ROCKSDB_DISABLE_JEMALLOC=1 \
-		ROCKSDB_DISABLE_SNAPPY=1 \
-		$(MAKE) -C vendor/rocksdb static_lib
-
-.PHONY: libycsbc
-
-build/YcsbMain.o: ycsb/YcsbMain.cpp
-	$(CC) $(STDLIB) -c -o $@ \
-			-I ycsb/build/include \
-			-I $(DAFNY_ROOT)/Binaries/ \
-			-I framework/ \
-			-I build/ \
-			-I vendor/hdrhist/ \
-			-I vendor/rocksdb/include/ \
-			-Winline -std=c++17 $(O3FLAG) \
-			-D_YCSB_VERIBETRFS \
-			$(POUND_DEFINES) \
-			$(MALLOC_ACCOUNTING_DEFINE) \
-			$(DBG_SYMBOLS_FLAG) \
-			$(GPROF_FLAGS) \
-			$^
-
-build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o
-	# NOTE: this uses c++17, which is required by hdrhist
-	$(CC) $(STDLIB) -o $@ \
-			-Winline -std=c++17 $(O3FLAG) \
-			-L ycsb/build \
-			-L vendor/rocksdb \
-			$(DBG_SYMBOLS_FLAG) \
-			$(VERIBETRFS_YCSB_O_FILES) \
-			build/YcsbMain.o \
-			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
-
-build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
-	# NOTE: this uses c++17, which is required by hdrhist
-	$(CC) -o $@ \
-			-L ycsb/build \
-			-L vendor/rocksdb \
-			-I ycsb/build/include \
-			-I $(DAFNY_ROOT)/Binaries/ \
-			-I framework/ \
-			-I build/ \
-			-I vendor/hdrhist/ \
-			-I vendor/rocksdb/include/ \
-			-Winline -std=c++17 $(O3FLAG) \
-			-D_YCSB_ROCKS \
-			$(POUND_DEFINES) \
-			ycsb/YcsbMain.cpp \
-			-lycsbc-default -lrocksdb -lpthread -ldl $(LDFLAGS) \
-
-vendor/kyoto/kyotocabinet/libkyotocabinet.a:
-	(cd vendor/kyoto/kyotocabinet; CXX=clang++ CXXFLAGS=$(STDLIB) ./configure; make)
-
-build/KyotoYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a vendor/kyoto/kyotocabinet/libkyotocabinet.a
-	# NOTE: this uses c++17, which is required by hdrhist
-	$(CC) \
-      $(STDLIB) \
-      -o $@ \
-			-Winline -std=c++17 $(O3FLAG) \
-			-L ycsb/build \
-			-I ycsb/build/include \
-			-I $(DAFNY_ROOT)/Binaries/ \
-			-I framework/ \
-			-I build/ \
-			-I vendor/hdrhist/ \
-			-I vendor/kyoto/kyotocabinet \
-			-L vendor/kyoto/kyotocabinet \
-			$(DBG_SYMBOLS_FLAG) \
-			-D_YCSB_KYOTO \
-			ycsb/YcsbMain.cpp \
-			vendor/kyoto/kyotocabinet/libkyotocabinet.a \
-			-lycsbc-libcpp -lpthread -ldl -lz $(LDFLAGS)
-
-# Requires libdb-stl-dev to be installed (on debian, libdbb5.3-stl-dev)
-build/BerkeleyYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a
-	# NOTE: this uses c++17, which is required by hdrhist
-	$(CC) \
-      $(STDLIB) \
-      -o $@ \
-			-Winline -std=c++17 $(O3FLAG) \
-			-L ycsb/build \
-			-I ycsb/build/include \
-			-I $(DAFNY_ROOT)/Binaries/ \
-			-I framework/ \
-			-I build/ \
-			-I vendor/hdrhist/ \
-			$(DBG_SYMBOLS_FLAG) \
-			-D_YCSB_BERKELEYDB \
-			ycsb/YcsbMain.cpp \
-			-lycsbc-libcpp -lpthread -ldl -lz -ldb_stl $(LDFLAGS)
-
-
-ycsb: build/VeribetrfsYcsb build/RocksYcsb build/KyotoYcsb build/BerkeleyYcsb
