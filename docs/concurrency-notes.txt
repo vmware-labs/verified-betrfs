@@ -1,4 +1,0 @@
-Important Distinction:
-  * There are two essential features of taking a lock.
-    * During an invocation of the handler, you can use Hoare logic because you know some other thread is not manipulating the same &mut that you have.
-    * Locks can be held *across* different handles, manifesting as invariants at the system level.
