@@ -1,0 +1,23 @@
+GLinearGhost.dfy(139,23): Error: expected ordinary expression, found glinear expression
+GLinearGhost.dfy(146,16): Error: expected glinear expression, found linear expression
+GLinearGhost.dfy(154,18): Error: only ghost methods can be called from this context
+GLinearGhost.dfy(152,2): Error: in conditional, linear variable x must be available after both branches or unavailable after both branches
+GLinearGhost.dfy(152,2): Error: in conditional, linear variable x' must be available after both branches or unavailable after both branches
+GLinearGhost.dfy(149,38): Error: linear variable <<x>> must be unavailable at method exit
+GLinearGhost.dfy(150,17): Error: linear variable <<x'>> must be assigned at method exit
+GLinearGhost.dfy(162,7): Error: Assignment to non-ghost variable is not allowed in this context (because this is a ghost method or because the statement is guarded by a specification-only expression)
+GLinearGhost.dfy(163,18): Error: linear variable <<x'>> is unavailable here
+GLinearGhost.dfy(163,18): Error: expected glinear expression, found linear expression
+GLinearGhost.dfy(163,18): Error: Assignment to non-ghost variable is not allowed in this context (because this is a ghost method or because the statement is guarded by a specification-only expression)
+GLinearGhost.dfy(158,38): Error: linear variable <<x>> must be unavailable at method exit
+GLinearGhost.dfy(159,16): Error: linear variable <<x'>> must be assigned at method exit
+GLinearGhost.dfy(170,16): Error: linear variable <<x'>> is unavailable here
+GLinearGhost.dfy(171,2): Error: variable must be unavailable before assignment
+GLinearGhost.dfy(179,18): Error: linear variable <<x'>> is unavailable here
+GLinearGhost.dfy(181,18): Error: linear variable <<x'>> is unavailable here
+GLinearGhost.dfy(183,2): Error: variable must be unavailable before assignment
+GLinearGhost.dfy(196,8): Error: expected ordinary expression, found glinear expression
+GLinearGhost.dfy(196,10): Error: expected glinear expression, found ordinary expression
+GLinearGhost.dfy(202,9): Error: expected glinear expression, found ordinary expression
+GLinearGhost.dfy(199,40): Error: linear variable <<x>> must be unavailable at method exit
+22 resolution/type errors detected in GLinearGhost.dfy

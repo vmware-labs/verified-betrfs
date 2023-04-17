@@ -1,0 +1,5 @@
+DatatypeDefnFail.dfy(6,25): Error: defn should take no additional parameters
+DatatypeDefnFail.dfy(13,25): Error: defn function not found
+DatatypeDefnFail.dfy(15,33): Error: glinear_fold feature may only be used on an ordinary datatype
+DatatypeDefnFail.dfy(16,32): Error: glinear_fold feature may only be used on an ordinary datatype
+4 resolution/type errors detected in DatatypeDefnFail.dfy

@@ -1,0 +1,3 @@
+Atomic3.dfy(37,21): Error: Need to assert that (a2.namespace() != a1.namespace())
+Atomic3.dfy(86,21): Error: Need to assert that (a3.namespace() != a2.namespace())
+2 resolution/type errors detected in Atomic3.dfy

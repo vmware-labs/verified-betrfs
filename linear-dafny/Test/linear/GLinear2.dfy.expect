@@ -1,0 +1,11 @@
+GLinear2.dfy(8,26): Error: use 'linear datatype' to allow linear fields
+GLinear2.dfy(9,27): Error: use 'linear datatype' to allow linear fields
+GLinear2.dfy(40,55): Error: use 'linear datatype' to allow linear fields
+GLinear2.dfy(41,48): Error: 'glinear datatype' can only contain glinear and ghost fields
+GLinear2.dfy(15,4): Error: glinear static methods can only call ghost or static glinear methods
+GLinear2.dfy(18,15): Error: glinear static methods cannot use 'modifies'
+GLinear2.dfy(23,15): Error: glinear static methods cannot use 'decreases *'
+GLinear2.dfy(28,25): Error: y: formals and returns of glinear static methods must be ghost, glinear, or gshared
+GLinear2.dfy(32,25): Error: y: formals and returns of glinear static methods must be ghost, glinear, or gshared
+GLinear2.dfy(36,18): Error: y: formals and returns of glinear static methods must be ghost, glinear, or gshared
+10 resolution/type errors detected in GLinear2.dfy

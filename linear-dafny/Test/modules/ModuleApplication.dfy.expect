@@ -1,0 +1,4 @@
+ModuleApplication.dfy(16,16): Error: Functor P expects 1 arguments
+ModuleApplication.dfy(35,18): Error: arguments must have comparable types (got Q.Key and P1.A.Key)
+ModuleApplication.dfy(43,18): Error: arguments must have comparable types (got P1.A.Key and P2.A.Key)
+3 resolution/type errors detected in ModuleApplication.dfy

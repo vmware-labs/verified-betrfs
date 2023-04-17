@@ -1,0 +1,41 @@
+GLinear0.dfy(133,4): Error: expected glinear expression, found ordinary expression
+GLinear0.dfy(138,4): Error: expected ordinary expression, found glinear expression
+GLinear0.dfy(141,47): Error: linear variable <<y_in>> must be unavailable at function exit
+GLinear0.dfy(148,4): Error: expected ordinary expression, found glinear expression
+GLinear0.dfy(148,11): Error: expected ordinary expression, found glinear expression
+GLinear0.dfy(148,9): Error: expected glinear expression, found ordinary expression
+GLinear0.dfy(153,4): Error: expected glinear expression, found ordinary expression
+GLinear0.dfy(158,15): Error: linear variable <<x_in>> is unavailable here
+GLinear0.dfy(161,29): Error: linear variable <<x_in>> must be unavailable at function exit
+GLinear0.dfy(168,4): Error: expected gshared expression, found ordinary expression
+GLinear0.dfy(173,4): Error: expected ordinary expression, found gshared expression
+GLinear0.dfy(178,4): Error: expected gshared expression, found ordinary expression
+GLinear0.dfy(184,9): Error: expected glinear expression, found ordinary expression
+GLinear0.dfy(191,9): Error: expected ordinary expression, found glinear expression
+GLinear0.dfy(192,12): Error: expected glinear expression, found ordinary expression
+GLinear0.dfy(192,11): Error: expected ordinary expression, found glinear expression
+GLinear0.dfy(195,38): Error: linear variable <<y_in>> must be unavailable at method exit
+GLinear0.dfy(202,61): Error: linear variable <<y>> must be assigned at method exit
+GLinear0.dfy(209,30): Error: linear variable <<x>> must be assigned at method exit
+GLinear0.dfy(216,20): Error: linear variable <<x_in>> is unavailable here
+GLinear0.dfy(219,20): Error: linear variable <<x_in>> must be unavailable at method exit
+GLinear0.dfy(227,8): Error: cannot borrow variable because expression returns a shared result
+GLinear0.dfy(225,20): Error: linear variable <<l_in>> must be unavailable at method exit
+GLinear0.dfy(233,7): Error: expected glinear expression, found gshared expression
+GLinear0.dfy(240,17): Error: cannot borrow variable because method returns a shared result
+GLinear0.dfy(247,26): Error: linear variable l0 must be unavailable at end of block
+GLinear0.dfy(256,0): Error: linear variable l0 must be unavailable at end of block
+GLinear0.dfy(263,7): Error: linear variable <<l0>> is unavailable here
+GLinear0.dfy(268,22): Error: linear variable <<x>> is unavailable here
+GLinear0.dfy(268,22): Error: expected ordinary expression, found glinear expression
+GLinear0.dfy(266,23): Error: linear variable <<x>> must be unavailable at method exit
+GLinear0.dfy(273,22): Error: shared variable <<x>> is out of scope here
+GLinear0.dfy(273,22): Error: expected ordinary expression, found gshared expression
+GLinear0.dfy(287,11): Error: linear variable x must be unavailable at end of block
+GLinear0.dfy(307,6): Error: in while, linear variable y must be have same availability before and after the loop body
+GLinear0.dfy(322,19): Error: cannot call caller_must_be_pure function method from method except as an argument to a method with no modifies or shared returns
+GLinear0.dfy(327,2): Error: cannot call caller_must_be_pure function from function with shared return values, unless function is also marked caller_must_be_pure
+GLinear0.dfy(339,24): Error: cannot call caller_must_be_pure function method from method except as an argument to a method with no modifies or shared returns
+GLinear0.dfy(344,7): Error: cannot call caller_must_be_pure function method from method except as an argument to a method with no modifies or shared returns
+GLinear0.dfy(350,19): Error: cannot call caller_must_be_pure function method from method except as an argument to a method with no modifies or shared returns
+40 resolution/type errors detected in GLinear0.dfy

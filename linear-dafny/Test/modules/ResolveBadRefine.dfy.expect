@@ -1,0 +1,2 @@
+ResolveBadRefine.dfy(27,13): Error: Module IntOnly expects IntTotalOrder, got T
+1 resolution/type errors detected in ResolveBadRefine.dfy

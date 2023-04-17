@@ -1,0 +1,2 @@
+GLinearMethods.dfy(21,3): Error: glinear static methods can only call ghost or static glinear methods
+1 resolution/type errors detected in GLinearMethods.dfy

@@ -1,0 +1,20 @@
+Atomic5.dfy(40,6): Error: Cannot show that the atomic cell is distinct from other currently-open atomics.
+Execution trace:
+    (0,0): anon0
+Atomic5.dfy(43,8): Error: Cannot show that the atomic cell is distinct from other currently-open atomics.
+Execution trace:
+    (0,0): anon0
+Atomic5.dfy(43,8): Error: Cannot show that the atomic cell is distinct from other currently-open atomics.
+Execution trace:
+    (0,0): anon0
+Atomic5.dfy(65,6): Error: Cannot show that the atomic cell is distinct from other currently-open atomics.
+Execution trace:
+    (0,0): anon0
+Atomic5.dfy(68,8): Error: Cannot show that the atomic cell is distinct from other currently-open atomics.
+Execution trace:
+    (0,0): anon0
+Atomic5.dfy(68,8): Error: Cannot show that the atomic cell is distinct from other currently-open atomics.
+Execution trace:
+    (0,0): anon0
+
+Dafny program verifier finished with 0 verified, 6 errors

@@ -1,0 +1,14 @@
+Borrow.dfy(43,37): Error: linear variable <<x>> is unavailable here
+Borrow.dfy(41,28): Error: linear variable <<x>> must be unavailable at function exit
+Borrow.dfy(47,28): Error: linear variable <<x>> must be unavailable at function exit
+Borrow.dfy(55,4): Error: linear variable l must be unavailable at end of block
+Borrow.dfy(63,14): Error: linear variable <<x>> is unavailable here
+Borrow.dfy(59,28): Error: linear variable <<x>> must be unavailable at function exit
+Borrow.dfy(72,13): Error: tried to borrow variable, but it was already unavailable
+Borrow.dfy(68,29): Error: linear variable <<x>> must be unavailable at function exit
+Borrow.dfy(81,14): Error: linear variable <<x>> is unavailable here
+Borrow.dfy(77,28): Error: linear variable <<x>> must be unavailable at function exit
+Borrow.dfy(90,27): Error: tried to borrow variable, but it was already unavailable
+Borrow.dfy(86,29): Error: linear variable <<x>> must be unavailable at function exit
+Borrow.dfy(97,4): Error: cannot borrow x when assigning to shared variable
+13 resolution/type errors detected in Borrow.dfy

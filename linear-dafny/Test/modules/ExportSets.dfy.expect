@@ -1,0 +1,8 @@
+ExportSets.dfy(30,23): Error: assertion violation
+Execution trace:
+    (0,0): anon0
+ExportSets.dfy(40,23): Error: assertion violation
+Execution trace:
+    (0,0): anon0
+
+Dafny program verifier finished with 5 verified, 2 errors

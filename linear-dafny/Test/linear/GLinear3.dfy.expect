@@ -1,0 +1,9 @@
+GLinear3.dfy(27,23): Error: expected glinear expression, found linear expression
+GLinear3.dfy(36,4): Error: linear variable h must be unavailable at end of block
+GLinear3.dfy(31,41): Error: linear variable <<y>> must be assigned at method exit
+GLinear3.dfy(43,39): Error: expected shared expression, found gshared expression
+GLinear3.dfy(43,45): Error: expected gshared expression, found shared expression
+GLinear3.dfy(48,10): Error: expected glinear expression, found linear expression
+GLinear3.dfy(53,2): Error: variable must be linear
+GLinear3.dfy(58,10): Error: expected linear expression, found glinear expression
+8 resolution/type errors detected in GLinear3.dfy

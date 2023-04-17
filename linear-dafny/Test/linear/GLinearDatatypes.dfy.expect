@@ -1,0 +1,3 @@
+GLinearDatatypes.dfy(23,24): Error: use 'linear datatype' to allow linear fields
+GLinearDatatypes.dfy(26,17): Error: 'glinear datatype' can only contain glinear and ghost fields
+2 resolution/type errors detected in GLinearDatatypes.dfy

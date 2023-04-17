@@ -1,0 +1,21 @@
+TailCalls.dfy(110,14): Error: the recursive call to '_ctor' is not tail recursive, because the assignment of the LHS happens after the call
+TailCalls.dfy(126,19): Error: the recursive call to 'Compute' is not tail recursive because the actual type parameter is not the formal type parameter 'G'
+TailCalls.dfy(139,17): Error: the recursive call to 'Run' is not tail recursive because the actual type parameter 1 is not the formal type parameter 'G'
+TailCalls.dfy(21,16): Error: this recursive call is not recognized as being tail recursive, because it is followed by non-ghost code
+TailCalls.dfy(38,24): Error: sorry, tail-call optimizations are not supported for mutually recursive methods
+TailCalls.dfy(43,24): Error: sorry, tail-call optimizations are not supported for mutually recursive methods
+TailCalls.dfy(171,13): Error: to be tail recursive, every use of this function must be part of a tail call or a simple accumulating tail call
+TailCalls.dfy(174,6): Error: to be tail recursive, every use of this function must be part of a tail call or a simple accumulating tail call
+TailCalls.dfy(178,13): Error: to be tail recursive, every use of this function must be part of a tail call or a simple accumulating tail call
+TailCalls.dfy(181,6): Error: to be tail recursive, every use of this function must be part of a tail call or a simple accumulating tail call
+TailCalls.dfy(188,26): Error: tail recursion can be specified only for function that will be compiled, not for ghost functions
+TailCalls.dfy(195,30): Error: tail recursion can be specified only for methods that will be compiled, not for ghost methods
+TailCalls.dfy(229,7): Error: if-then-else branches have different accumulator needs for tail recursion
+TailCalls.dfy(261,2): Error: if-then-else branches have different accumulator needs for tail recursion
+TailCalls.dfy(288,14): Error: to be tail recursive, every use of this function must be part of a tail call or a simple accumulating tail call
+TailCalls.dfy(310,19): Error: to be tail recursive, every use of this function must be part of a tail call or a simple accumulating tail call
+TailCalls.dfy(316,24): Error: to be tail recursive, every use of this function must be part of a tail call or a simple accumulating tail call
+TailCalls.dfy(323,33): Error: to be tail recursive, every use of this function must be part of a tail call or a simple accumulating tail call
+TailCalls.dfy(338,22): Error: this recursive call is not recognized as being tail recursive, because it is followed by non-ghost code
+TailCalls.dfy(369,21): Error: this recursive call is not recognized as being tail recursive, because it is followed by non-ghost code
+20 resolution/type errors detected in TailCalls.dfy

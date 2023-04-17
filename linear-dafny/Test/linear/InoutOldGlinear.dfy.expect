@@ -1,0 +1,16 @@
+InoutOldGlinear.dfy(41,15): Error: assertion violation
+Execution trace:
+    (0,0): anon0
+InoutOldGlinear.dfy(48,15): Error: A precondition for this call might not hold.
+InoutOldGlinear.dfy(24,18): Related location: This is the precondition that might not hold.
+Execution trace:
+    (0,0): anon0
+InoutOldGlinear.dfy(90,15): Error: assertion violation
+Execution trace:
+    (0,0): anon0
+InoutOldGlinear.dfy(97,17): Error: A precondition for this call might not hold.
+InoutOldGlinear.dfy(72,20): Related location: This is the precondition that might not hold.
+Execution trace:
+    (0,0): anon0
+
+Dafny program verifier finished with 4 verified, 4 errors

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+      <OutputType>Exe</OutputType>
+      <AssemblyName>DafnyServer</AssemblyName>
+      <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+      <DefineConstants>TRACE</DefineConstants>
+      <PackageVersion>1.1.0</PackageVersion>
+      <TargetFramework>net5.0</TargetFramework>
+      <OutputPath>..\..\Binaries\</OutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net5.0|AnyCPU'">
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dafny\DafnyPipeline.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\version.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,5 @@
+GLinear1.dfy(10,0): Error: a datatype or codatatype cannot be declared 'gshared'.
+GLinear1.dfy(11,0): Error: a datatype or codatatype cannot be declared 'shared'.
+GLinear1.dfy(12,0): Error: a datatype or codatatype cannot be declared 'ghost'.
+GLinear1.dfy(13,42): Error: invalid TypeIdentOptional
+4 parse errors detected in GLinear1.dfy

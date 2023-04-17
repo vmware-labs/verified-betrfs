@@ -1,0 +1,11 @@
+Atomic1.dfy(22,4): Error: Only ghost statements can be within an atomic block
+Atomic1.dfy(23,17): Error: Improper atomic statement nesting: 'atomic' field does not match: got 'a' and '_1_a'
+Atomic1.dfy(41,17): Error: Improper atomic statement nesting: 'new_value' field does not match: got '_3_c' and '_4_b'
+Atomic1.dfy(54,4): Error: Assign to variable which should be preserved for atomic block
+Atomic1.dfy(55,4): Error: Assign to variable which should be preserved for atomic block
+Atomic1.dfy(87,13): Error: Only ghost statements can be within an atomic block
+Atomic1.dfy(89,30): Error: Only ghost statements can be within an atomic block
+Atomic1.dfy(132,21): Error: Improper atomic statement nesting: non-ghost open within another open
+Atomic1.dfy(132,21): Error: Need to assert that (a2.namespace() != a1.namespace())
+Atomic1.dfy(148,4): Error: Only ghost statements can be within an atomic block
+10 resolution/type errors detected in Atomic1.dfy

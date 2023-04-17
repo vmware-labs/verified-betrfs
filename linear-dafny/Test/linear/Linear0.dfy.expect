@@ -1,0 +1,41 @@
+Linear0.dfy(133,4): Error: expected linear expression, found ordinary expression
+Linear0.dfy(138,4): Error: expected ordinary expression, found linear expression
+Linear0.dfy(141,45): Error: linear variable <<y_in>> must be unavailable at function exit
+Linear0.dfy(148,4): Error: expected ordinary expression, found linear expression
+Linear0.dfy(148,11): Error: expected ordinary expression, found linear expression
+Linear0.dfy(148,9): Error: expected linear expression, found ordinary expression
+Linear0.dfy(153,4): Error: expected linear expression, found ordinary expression
+Linear0.dfy(158,15): Error: linear variable <<x_in>> is unavailable here
+Linear0.dfy(161,28): Error: linear variable <<x_in>> must be unavailable at function exit
+Linear0.dfy(168,4): Error: expected shared expression, found ordinary expression
+Linear0.dfy(173,4): Error: expected ordinary expression, found shared expression
+Linear0.dfy(178,4): Error: expected shared expression, found ordinary expression
+Linear0.dfy(184,9): Error: expected linear expression, found ordinary expression
+Linear0.dfy(191,9): Error: expected ordinary expression, found linear expression
+Linear0.dfy(192,12): Error: expected linear expression, found ordinary expression
+Linear0.dfy(192,11): Error: expected ordinary expression, found linear expression
+Linear0.dfy(195,36): Error: linear variable <<y_in>> must be unavailable at method exit
+Linear0.dfy(202,58): Error: linear variable <<y>> must be assigned at method exit
+Linear0.dfy(209,29): Error: linear variable <<x>> must be assigned at method exit
+Linear0.dfy(216,20): Error: linear variable <<x_in>> is unavailable here
+Linear0.dfy(219,19): Error: linear variable <<x_in>> must be unavailable at method exit
+Linear0.dfy(227,8): Error: cannot borrow variable because expression returns a shared result
+Linear0.dfy(225,19): Error: linear variable <<l_in>> must be unavailable at method exit
+Linear0.dfy(233,7): Error: expected linear expression, found shared expression
+Linear0.dfy(240,17): Error: cannot borrow variable because method returns a shared result
+Linear0.dfy(247,25): Error: linear variable l0 must be unavailable at end of block
+Linear0.dfy(256,0): Error: linear variable l0 must be unavailable at end of block
+Linear0.dfy(263,7): Error: linear variable <<l0>> is unavailable here
+Linear0.dfy(268,22): Error: linear variable <<x>> is unavailable here
+Linear0.dfy(268,22): Error: expected ordinary expression, found linear expression
+Linear0.dfy(266,22): Error: linear variable <<x>> must be unavailable at method exit
+Linear0.dfy(273,22): Error: shared variable <<x>> is out of scope here
+Linear0.dfy(273,22): Error: expected ordinary expression, found shared expression
+Linear0.dfy(287,11): Error: linear variable x must be unavailable at end of block
+Linear0.dfy(307,6): Error: in while, linear variable y must be have same availability before and after the loop body
+Linear0.dfy(322,18): Error: cannot call caller_must_be_pure function method from method except as an argument to a method with no modifies or shared returns
+Linear0.dfy(327,2): Error: cannot call caller_must_be_pure function from function with shared return values, unless function is also marked caller_must_be_pure
+Linear0.dfy(339,23): Error: cannot call caller_must_be_pure function method from method except as an argument to a method with no modifies or shared returns
+Linear0.dfy(344,7): Error: cannot call caller_must_be_pure function method from method except as an argument to a method with no modifies or shared returns
+Linear0.dfy(350,18): Error: cannot call caller_must_be_pure function method from method except as an argument to a method with no modifies or shared returns
+40 resolution/type errors detected in Linear0.dfy

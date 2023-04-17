@@ -1,0 +1,9 @@
+InoutOld2.dfy(42,15): Error: assertion violation
+Execution trace:
+    (0,0): anon0
+InoutOld2.dfy(49,17): Error: A precondition for this call might not hold.
+InoutOld2.dfy(24,20): Related location: This is the precondition that might not hold.
+Execution trace:
+    (0,0): anon0
+
+Dafny program verifier finished with 2 verified, 2 errors

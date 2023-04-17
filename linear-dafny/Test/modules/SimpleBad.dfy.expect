@@ -1,0 +1,5 @@
+SimpleBad.dfy(19,22): Error: Module P expects ABase, got NoBase
+SimpleBad.dfy(10,16): Error: Functor P expects 1 arguments
+SimpleBad.dfy(35,19): Error: arguments must have comparable types (got Q.Key and P1.A.Key)
+SimpleBad.dfy(47,19): Error: arguments must have comparable types (got P1.A.Key and P2.A.Key)
+4 resolution/type errors detected in SimpleBad.dfy

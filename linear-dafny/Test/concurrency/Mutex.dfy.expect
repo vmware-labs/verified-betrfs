@@ -1,0 +1,2 @@
+Mutex.dfy(50,33): Error: linear variable <<handle>> is unavailable here
+1 resolution/type errors detected in Mutex.dfy

@@ -1,0 +1,42 @@
+plugins {
+    id 'java'
+    id 'maven'
+}
+
+repositories {
+    mavenLocal()
+    maven {
+        url = 'https://repo.maven.apache.org/maven2'
+    }
+}
+
+dependencies {
+    compile 'org.junit.jupiter:junit-jupiter-engine:5.5.2'
+}
+
+group = 'dafny.lang'
+sourceCompatibility = '1.8'
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xlint:unchecked']
+}
+
+test {
+    useJUnitPlatform()
+}
+
+task copyJarToBinaries {
+    dependsOn build
+    doLast {
+      copy {
+        from 'build/libs/DafnyRuntime.jar'
+        into '../../../Binaries'
+      }
+    }
+}
+
+clean {
+    delete '../../../Binaries/DafnyRuntime.jar'
+}
+

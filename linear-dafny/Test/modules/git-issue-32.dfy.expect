@@ -1,0 +1,768 @@
+DEBUG: ---------- type constraints ---------- 0 
+    bool :> bool
+    IsNullableRefType: ?0
+    Equatable: object? ?0
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    IsNullableRefType: ?0
+    Equatable: object? ?0
+
+DEBUG: ---------- type constraints ---------- 222 
+    IsNullableRefType: ?0
+    Equatable: object? ?0
+
+DEBUG: ---------- type constraints ---------- 224 
+    IsNullableRefType: ?0
+    Equatable: object? ?0
+
+DEBUG: ---------- type constraints ---------- 226 
+    IsNullableRefType: ?0
+    Equatable: object? ?0
+
+DEBUG: ---------- type constraints ---------- 228 
+    IsNullableRefType: ?0
+    Equatable: object? ?0
+
+DEBUG: ---------- type constraints ---------- 230 
+    IsNullableRefType: ?0
+    Equatable: object? ?0
+
+DEBUG: ---------- type constraints ---------- 232 
+    IsNullableRefType: ?0
+    Equatable: object? ?0
+
+DEBUG: setting proxy ?0.T := object?
+DEBUG: ---------- type constraints ---------- 220 
+    IsNullableRefType: object?
+
+DEBUG: ---------- type constraints ---------- 222 
+    IsNullableRefType: object?
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+    bool :> bool
+    IsNullableRefType: ?1
+    Equatable: array?<arg> ?1
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    IsNullableRefType: ?1
+    Equatable: array?<arg> ?1
+
+DEBUG: ---------- type constraints ---------- 222 
+    IsNullableRefType: ?1
+    Equatable: array?<arg> ?1
+
+DEBUG: ---------- type constraints ---------- 224 
+    IsNullableRefType: ?1
+    Equatable: array?<arg> ?1
+
+DEBUG: ---------- type constraints ---------- 226 
+    IsNullableRefType: ?1
+    Equatable: array?<arg> ?1
+
+DEBUG: ---------- type constraints ---------- 228 
+    IsNullableRefType: ?1
+    Equatable: array?<arg> ?1
+
+DEBUG: ---------- type constraints ---------- 230 
+    IsNullableRefType: ?1
+    Equatable: array?<arg> ?1
+
+DEBUG: ---------- type constraints ---------- 232 
+    IsNullableRefType: ?1
+    Equatable: array?<arg> ?1
+
+DEBUG: setting proxy ?1.T := array?<arg>
+DEBUG: ---------- type constraints ---------- 220 
+    IsNullableRefType: array?<arg>
+
+DEBUG: ---------- type constraints ---------- 222 
+    IsNullableRefType: array?<arg>
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_self
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    V :> V
+    V :> V
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_transitive
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    V :> V
+    V :> V
+    V :> V
+    V :> V
+    V :> V
+    V :> V
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_self
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    V :> V
+    V :> V
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_transitive
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    V :> V
+    V :> V
+    V :> V
+    V :> V
+    V :> V
+    V :> V
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 compute_le
+    bool :> bool
+    Assignable: V to.V
+    Assignable: V to.V
+    Equatable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    Assignable: V to.V
+    Assignable: V to.V
+    Equatable: bool bool
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V to.V
+    Assignable: V to.V
+    Equatable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    V :> to.V
+    V :> to.V
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 compute_le
+    bool :> bool
+    Assignable: V to.V
+    Assignable: V to.V
+    Equatable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    Assignable: V to.V
+    Assignable: V to.V
+    Equatable: bool bool
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V to.V
+    Assignable: V to.V
+    Equatable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    V :> to.V
+    V :> to.V
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: setting proxy ?2.T := int
+DEBUG: ---------- type constraints ---------- 0 
+    int :> int
+    int :> int
+    Orderable_Lt: V V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    int :> int
+    int :> int
+    Orderable_Lt: V V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 222 
+    Orderable_Lt: V V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_self
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    int :> int
+    int :> int
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_self
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_transitive
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    int :> int
+    int :> int
+    int :> int
+    int :> int
+    int :> int
+    int :> int
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_transitive
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: setting proxy ?3.T := int
+DEBUG: ---------- type constraints ---------- 0 
+    int :> int
+    int :> int
+    Orderable_Lt: V V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    int :> int
+    int :> int
+    Orderable_Lt: V V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 222 
+    Orderable_Lt: V V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_self
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    int :> int
+    int :> int
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_self
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_transitive
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    int :> int
+    int :> int
+    int :> int
+    int :> int
+    int :> int
+    int :> int
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_transitive
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+    bool :> bool
+    bool :> bool
+    BooleanBits: V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+    BooleanBits: V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 222 
+    BooleanBits: V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_self
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_self
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_transitive
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_transitive
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+    bool :> bool
+    bool :> bool
+    BooleanBits: V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+    BooleanBits: V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 222 
+    BooleanBits: V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_self
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_self
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_transitive
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+    Assignable: V V
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+    bool :> bool
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 le_transitive
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+DEBUG: ---------- type constraints ---------- 0 
+    Assignable: V ZZZ.V
+    Assignable: V ZZZ.V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    Assignable: V ZZZ.V
+    Assignable: V ZZZ.V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 222 
+    Assignable: V ZZZ.V
+    Assignable: V ZZZ.V
+    Assignable: bool bool
+
+DEBUG: ---------- type constraints ---------- 220 
+    bool :> int
+    bool :> int
+    bool :> bool
+
+DEBUG: ---------- type constraints ---------- 1 
+
+DEBUG: --------------------------------------
+git-issue-32.dfy(41,22): Error: type mismatch for argument 0 (function expects V (BoolTotalOrder.V), got V (IntTotalOrder.V))
+git-issue-32.dfy(41,25): Error: type mismatch for argument 1 (function expects V (BoolTotalOrder.V), got V (IntTotalOrder.V))
+2 resolution/type errors detected in git-issue-32.dfy

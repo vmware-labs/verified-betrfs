@@ -1,0 +1,23 @@
+
+Dafny program verifier finished with 12 verified, 0 errors
+In file included from /Users/thance/Dropbox/dafny-conc/Test/c++/glinear.cpp:3:
+/Users/thance/Dropbox/dafny-conc/Test/c++/glinear.h:80:48: warning: unused parameter 'x' [-Wunused-parameter]
+  std::size_t operator()(const _module::Token& x) const {
+                                               ^
+/Users/thance/Dropbox/dafny-conc/Test/c++/glinear.h:96:46: warning: unused parameter 'x' [-Wunused-parameter]
+  std::size_t operator()(const _module::Moo& x) const {
+                                             ^
+/Users/thance/Dropbox/dafny-conc/Test/c++/glinear.cpp:23:30: warning: unused parameter 'left' [-Wunused-parameter]
+bool operator==(const Token &left, const Token &right)  {
+                             ^
+/Users/thance/Dropbox/dafny-conc/Test/c++/glinear.cpp:23:49: warning: unused parameter 'right' [-Wunused-parameter]
+bool operator==(const Token &left, const Token &right)  {
+                                                ^
+/Users/thance/Dropbox/dafny-conc/Test/c++/glinear.cpp:45:28: warning: unused parameter 'left' [-Wunused-parameter]
+bool operator==(const Moo &left, const Moo &right)  {
+                           ^
+/Users/thance/Dropbox/dafny-conc/Test/c++/glinear.cpp:45:45: warning: unused parameter 'right' [-Wunused-parameter]
+bool operator==(const Moo &left, const Moo &right)  {
+                                            ^
+6 warnings generated.
+5
