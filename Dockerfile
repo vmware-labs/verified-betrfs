@@ -52,3 +52,5 @@ COPY concurrency	/root/ironsync/concurrency
 
 COPY run-verifier.sh /root/ironsync/
 COPY build-cpp-source.sh /root/ironsync/
+
+RUN mkdir build
