@@ -74,7 +74,7 @@ class nr_helper {
   }
 
   nr::Node* get_node(uint32_t core_id) {
-    return nodes[get_node_id(core_id)].get();
+    return nodes.at(get_node_id(core_id)).get();
   }
 
   void init_nr() {
@@ -162,19 +162,19 @@ class nr_rust_helper {
   }
 
   static uint32_t get_node_id(uint32_t core_id) {
-    return core_id % 4;
+    return core_id % 2;
   }
 
   ReplicaWrapper *get_node(uint32_t core_id)
   {
-    return nodes[get_node_id(core_id)];
+    return nodes.at(get_node_id(core_id));
   }
 
   void init_nr() {}
 
   size_t register_thread(uint32_t core_id) {
     std::unique_lock<std::mutex> lock{init_mutex};
-    uint64_t node_id = core_id % 4;
+    uint64_t node_id = get_node_id(core_id);
 
     if (core_id / num_replicas() == 0)
     {
@@ -194,7 +194,7 @@ class nr_rust_helper {
     // TODO(stutsman) no pinning, affinity, and threads on different
     // nodes may actually use the wrong replica; all this needs to be
     // fixed if we want to use this harness.
-    auto context = nodes[node_id]->RegisterWrapper();
+    auto context = nodes.at(node_id)->RegisterWrapper();
 
     std::cerr << "thread on core_id" << core_id
               << " registered with node_id " << node_id
