@@ -260,7 +260,7 @@ class ManualMapper(Mapper):
     def __init__(self):
         super().__init__()
         self.mapping = {}
-        for line in open("docs/file-classifications.txt").readlines():
+        for line in open("tools/file-classifications.txt").readlines():
           if line.startswith("#"): continue
           if line.strip() != '':
             categ,path = line.split()

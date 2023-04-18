@@ -244,6 +244,6 @@ LC_DEPS=tools/line_count_lib.py tools/lib_aggregate.py tools/lib_deps.py
 build/%.lc: %.dfy build/%.verchk $(LC_TOOL) $(LC_DEPS)
 		$(LC_TOOL) --mode count --input $< --output $@
 
-LC_REPORT_DEPS=tools/line_counter_report_lib.py docs/file-classifications.txt
+LC_REPORT_DEPS=tools/line_counter_report_lib.py tools/file-classifications.txt
 build/%.lcreport: %.dfy build/%.lc $(LC_TOOL) $(LC_DEPS) $(LC_REPORT_DEPS)
 		$(LC_TOOL) --mode report --input $< --output $@

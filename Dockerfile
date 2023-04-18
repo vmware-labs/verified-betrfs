@@ -49,7 +49,6 @@ COPY Makefile	    /root/ironsync/Makefile
 COPY build-tests	/root/ironsync/build-tests
 COPY lib          /root/ironsync/lib
 COPY concurrency	/root/ironsync/concurrency
-COPY docs         /root/ironsync/docs
 
 COPY run-verifier.sh /root/ironsync/
 COPY build-cpp-source.sh /root/ironsync/
