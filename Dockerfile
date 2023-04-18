@@ -9,7 +9,7 @@ RUN apt-get update
 RUN apt-get install -y ca-certificates gnupg2
 RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys A6A19B38D3D831EF
 
-COPY mono-official-stable.list /etc/apt/sources.list.d/
+COPY tools/mono-official-stable.list /etc/apt/sources.list.d/
 
 RUN apt-get update
 RUN apt-get install -y mono-runtime mono-mcs mono-devel git make wget unzip
@@ -18,10 +18,6 @@ RUN apt-get install -y python3-pip time
 RUN apt-get install -y sloccount graphviz
 
 RUN pip3 install toposort
-RUN pip3 install pandas
-RUN pip3 install numpy
-RUN pip3 install matplotlib
-RUN pip3 install strbalance
 
 # dependencies for compilation 
 # RUN apt-get install -y clang
@@ -35,10 +31,10 @@ RUN pip3 install strbalance
 RUN wget https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
 RUN dpkg -i packages-microsoft-prod.deb
 RUN rm packages-microsoft-prod.deb
-RUN apt-get update; \
-apt-get install -y apt-transport-https && \
-apt-get update && \
-apt-get install -y dotnet-sdk-5.0
+RUN apt-get update;
+RUN apt-get install -y apt-transport-https
+RUN apt-get update
+RUN apt-get install -y dotnet-sdk-5.0
 
 WORKDIR /root
 RUN mkdir ironsync
