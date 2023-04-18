@@ -16,7 +16,6 @@ cd .dafny
 cp -r ../linear-dafny dafny
 
 cd dafny
-../../tools/checkout-dafny-commit.sh
 make exe
 cd ..
 
