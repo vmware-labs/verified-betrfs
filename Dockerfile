@@ -43,7 +43,7 @@ COPY linear-dafny /root/ironsync/linear-dafny
 WORKDIR /root/ironsync
 
 COPY tools        /root/ironsync/tools
-RUN tools/install-dafny.sh
+RUN tools/artifact-setup-dafny.sh
 
 COPY Makefile	    /root/ironsync/Makefile
 COPY build-tests	/root/ironsync/build-tests
