@@ -56,7 +56,7 @@ class Veridepend:
                     # Corresponding recursive tree for synchk.
                     (".syntax", ".syntax"),
                     (".okay", ".okay"),
-                    (".lcreport", ".lcreport"),
+                    #(".lcreport", ".lcreport"),
 
                     # When we build X.o, we first want to build Y.cpp and Y.o.
                     # These aren't true dependencies, but they make the ordering

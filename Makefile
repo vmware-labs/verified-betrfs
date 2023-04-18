@@ -133,7 +133,7 @@ bank-status: build/concurrency/bank-paper/Impl.i.status.pdf
 og-status: build/concurrency/og_counter/Impl.i.status.pdf
 queue-status: build/concurrency/spsc-queue/QueueImpl.i.status.pdf
 
-concurrency-status: scache-status nr-status hash-status hoh-status bank-status
+concurrency-status: scache-status nr-status hash-status bank-status
 
 ##############################################################################
 ##############################################################################
