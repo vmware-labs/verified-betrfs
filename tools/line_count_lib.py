@@ -92,7 +92,7 @@ class Counter:
 
     # Remove detritus from running Dafny
     def clean_dafny_output(self, filename, inspect_path):
-      program = open(filename).read()#.decode("utf-8")
+      program = open(filename, encoding="utf8").read()#.decode("utf-8")
 
       program = self.remove_warnings(program)
       program = self.remove_paired_comments(program)

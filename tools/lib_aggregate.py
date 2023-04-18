@@ -69,7 +69,7 @@ def hasDisallowedAssumptions(verchk):
     dfy = dafnyFromVerchk(verchk)
     if dfy.endswith(".s.dfy"):
         return False
-    for line in open(dfy).readlines():
+    for line in open(dfy, encoding="utf8").readlines():
         # TODO: Ignore multiline comments. Requires fancier parsing.
         # TODO: or maybe instead use /noCheating!?
         line = re.sub("//.*$", "", line)    # ignore single-line comments
@@ -79,7 +79,7 @@ def hasDisallowedAssumptions(verchk):
 
 def hasDynamicFrames(verchk):
     dfy = dafnyFromVerchk(verchk)
-    for line in open(dfy).readlines():
+    for line in open(dfy, encoding="utf8").readlines():
         if re.compile("^\s*modifies").search(line):
             return True
         if re.compile("^\s*reads").search(line):
