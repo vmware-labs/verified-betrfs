@@ -1,2 +1,2 @@
 #!/bin/bash
-make concurrency-status
+make concurrency-status -j4
