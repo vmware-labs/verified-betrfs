@@ -94,18 +94,7 @@ module AllocationBetreeMod
     {
       compactor.AUs() // TODO: add memtable too
     }
-  
-    // Maintained via Inv (all ghosty?)
-    // move to proof land, condition for refinement
-    // predicate IsFresh(aus: set<AU>) {
-    //   && M.Set(betreeAULikes) !! aus
-    //   // && M.Set(branchAULikes) !! aus
-    //   && UnionSetOfSets(branchToSummary.Values) !! aus
-    //   && M.Set(compactor.Likes()) !! aus
-    //   // && G.ToAUs(allocBranchDiskView.Representation()) !! aus 
-    //    && aus !! memtable.Likes()
-    // }
-    
+
     // one layer: lbl would inherit allocation and free arguments
     // conditional refinement lemma
     // AU == lbl.allocated things 

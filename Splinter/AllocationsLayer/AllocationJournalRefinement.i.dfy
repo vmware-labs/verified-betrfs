@@ -7,7 +7,7 @@ include "../Journal/LikesJournalRefinement.i.dfy"
 // A Journal that keeps an in-memory index that maps each in-use LSN to the Address that stores it.
 // The impl will keep such an index so that Discard can return freed Addresses without having to
 // fault in the freed section of the journal to learn the chain of addresses involved.
-module AllocationJournalRefinment {
+module AllocationJournalRefinement {
   import opened Options
   import opened LSNMod
   import opened AllocationJournal
@@ -345,17 +345,17 @@ module AllocationJournalRefinment {
     }
   }
  
-  lemma InitRefines(v: Variables, journal: TruncatedJournal, first: AU)
-    requires Init(v, journal, first)
+  lemma InitRefines(v: Variables, image: JournalImage)
+    requires Init(v, image)
     ensures LikesJournalInv(v)
-    ensures LikesJournal.Init(I(v), journal)
+    ensures LikesJournal.Init(I(v), image.tj)
   {
-    LR.InvInit(v.journal, journal);
+    LR.InvInit(v.journal, image.tj);
     reveal_LikesJournalInv();
   }
 
-  lemma InvInit(v: Variables, journal: TruncatedJournal, first: AU)
-    requires Init(v, journal, first)
+  lemma InvInit(v: Variables, image: JournalImage)
+    requires Init(v, image)
     requires LikesJournalInv(v)
     ensures Inv(v)
   {
@@ -420,6 +420,9 @@ module AllocationJournalRefinment {
         assert LikesJournal.NextStep(I(v), I(v'), lbl.I(), step.I());
       }
       case InternalNoOpStep() => {
+        assert LikesJournal.NextStep(I(v), I(v'), lbl.I(), step.I());
+      }
+      case FreezeForCommitStep(depth) => {
         assert LikesJournal.NextStep(I(v), I(v'), lbl.I(), step.I());
       }
       case _ => {

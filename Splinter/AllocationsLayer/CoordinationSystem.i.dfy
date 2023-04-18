@@ -5,11 +5,10 @@ include "../../Spec/MapSpec.s.dfy"
 include "CoordinationJournal.i.dfy"
 include "CoordinationBetree.i.dfy"
 
-module CoordinationSystem {
+module CoordinationSystemMod {
   import opened Options
   import opened MapRemove_s
   import opened CrashTolerantMapSpecMod
-//   import opened StampedMod
   import opened MsgHistoryMod
   import opened KeyType
   import opened ValueMessage
@@ -38,7 +37,6 @@ module CoordinationSystem {
     inFlight: Option<set<AU>>,
     persistent: set<AU>
   ) {
-    // TODO: this instead of au in ephemeral to deal with flushing of any cached block?
     function FreeToAlloc() : set<AU>
     {
       var free := ephemeral * persistent;
