@@ -15,6 +15,11 @@ cd .dafny
 
 cp -r ../linear-dafny dafny
 
+cd dafny
+../../tools/checkout-dafny-commit.sh
+make exe
+cd ..
+
 if [ `uname` == "Darwin" ]; then
     wget https://github.com/Z3Prover/z3/releases/download/Z3-4.8.5/z3-4.8.5-x64-osx-10.14.2.zip
     unzip z3-4.8.5-x64-osx-10.14.2.zip
