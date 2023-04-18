@@ -114,7 +114,7 @@ def fileFromIncludeLine(line):
 
 def includePaths(iref):
     try:
-        contents = open(iref.absPath).readlines()
+        contents = open(iref.absPath, encoding="utf8").readlines()
     except IOError:
         raise IncludeNotFound(iref.absPath, iref.origin)
     irefs = []
