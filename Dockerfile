@@ -46,7 +46,6 @@ COPY tools        /root/ironsync/tools
 RUN tools/artifact-setup-dafny.sh
 
 COPY Makefile	    /root/ironsync/Makefile
-COPY build-tests	/root/ironsync/build-tests
 COPY lib          /root/ironsync/lib
 COPY concurrency	/root/ironsync/concurrency
 
