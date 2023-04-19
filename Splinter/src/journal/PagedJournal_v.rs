@@ -145,7 +145,6 @@ impl JournalRecord {
             Self::opt_rec_can_crop_head_records(ojr, boundary_lsn, depth)
             ==>
             (#[trigger] Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth)).is_Some() ==> Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth).unwrap().valid(boundary_lsn),
-    
     {
         assert forall |ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat|
             Self::opt_rec_can_crop_head_records(ojr, boundary_lsn, depth)

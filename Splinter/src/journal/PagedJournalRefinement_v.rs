@@ -471,7 +471,9 @@ impl PagedJournal::State {
         post.wf(),
         AbstractJournal::State::next(self.i(), post.i(), lbl.i()),
     {
-        reveal(AbstractJournal::State::next_by);    // newly required; unfortunate macro defaults
+        reveal(PagedJournal::State::next_by);    // newly required; unfortunate macro defaults
+        reveal(PagedJournal::State::next_by);    // newly required; unfortunate macro defaults
+        reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
         reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
         match step {
             PagedJournal::Step::read_for_recovery(depth) => {
