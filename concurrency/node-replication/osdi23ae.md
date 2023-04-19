@@ -3,9 +3,9 @@
 1. Allocate a CloudLab machine: results up to 64 cores can be reproduced on c6420 machines. [Click here to instantiate a specialized profile that allocates one c6420 machine on CloudLab with Ubuntu 20.04.](https://www.cloudlab.us/p/sandstorm/nr-osdi23-ae).
 2. ssh to the machine.
 3. `bash`
-4. `git clone git@github.com:rstutsman/verified-betrfs.git`
+4. `git clone git@github.com:vmware-labs/verified-betrfs.git`
 5. `cd verified-betrfs`
-6. `git checkout concurrency-experiments`
+6. `git checkout osdi2023-artifact`
 7. `./concurrency/node-replication/cloudlab-setup`
 
 # Setup Paths/Environment
