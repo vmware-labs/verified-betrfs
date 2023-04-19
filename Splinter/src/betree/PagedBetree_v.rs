@@ -44,8 +44,8 @@ pub open spec fn constant_child_map(target: BetreeNode) -> ChildMap {
 
 impl ChildMap {
     pub open spec fn wf(self) -> bool
+    decreases self
     {
-        // TODO: needs decreases clause? But why?
         &&& total_keys(self.map.dom())
         &&& forall |k: Key| self.map[k].wf()
     }
@@ -66,7 +66,9 @@ pub enum BetreeNode {
 }
 
 impl BetreeNode {
-    pub open spec fn wf(self) -> bool {
+    pub open spec fn wf(self) -> bool
+    decreases self
+    {
         self.is_Node() ==> self.get_Node_children().wf()
     }
 
