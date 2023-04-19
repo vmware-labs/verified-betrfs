@@ -1029,8 +1029,6 @@ module BranchedBetreeMod
   }
 
   // public:
-
-  // we might want to let forestSM take a step itself
   predicate Init(v: Variables, stampedBetree: StampedBetree)
   {
     && v == Variables(EmptyMemtable(stampedBetree.seqEnd), stampedBetree.value)

@@ -1052,14 +1052,14 @@ module LinkedBetreeRefinement {
   //   }
   // }
 
-  // lemma InitRefines(v: Variables, stampedBetree: StampedBetree)
-  //   requires Init(v, stampedBetree)
-  //   requires InvLinkedBetree(stampedBetree.value)
-  //   ensures Inv(v)
-  //   ensures FilteredBetree.Init(I(v), IStampedBetree(stampedBetree))
-  // {
-  //   ILinkedWF(v.linked, v.linked.TheRanking());
-  // }
+  lemma InitRefines(v: Variables, stampedBetree: StampedBetree)
+    requires Init(v, stampedBetree)
+    requires InvLinkedBetree(stampedBetree.value)
+    ensures Inv(v)
+    ensures FilteredBetree.Init(I(v), IStampedBetree(stampedBetree))
+  {
+    ILinkedWF(v.linked, v.linked.TheRanking());
+  }
 
 
   // lemma InternalGrowStepRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)

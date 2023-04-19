@@ -98,27 +98,6 @@ module FullStackJournalRefinement {
     )
   }
 
-  lemma InvNext(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
-    requires Inv(v)
-    requires CoordinationJournal.Next(v, v', lbl)
-    ensures Inv(v')
-  {
-    if lbl.LoadEphemeralFromPersistentLabel? 
-    {
-      AllocationJournalRefinement.InitRefines(v'.ephemeral.v, v.persistent);
-      AllocationJournalRefinement.InvInit(v'.ephemeral.v, v.persistent);
-    }
-
-    if 
-      || lbl.PutLabel? 
-      || lbl.InternalLabel? 
-      || lbl.CommitStartLabel? 
-      || lbl.CommitCompleteLabel?  
-    {
-      AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
-    }
-  }
-
   lemma AllocNextRefinesAbstract(v: AllocationJournal.Variables, v': AllocationJournal.Variables, lbl: AllocationJournal.TransitionLabel)
     requires AllocationJournalRefinement.Inv(v)
     requires AllocationJournalRefinement.Inv(v')
@@ -142,6 +121,27 @@ module FullStackJournalRefinement {
     var pagedJournal' := LinkedJournalRefinement.I(linkedJournal');
     var pagedLbl := LinkedJournalRefinement.ILbl(lbl.I().I());
     PagedJournalRefinement.NextRefines(pagedJournal, pagedJournal', pagedLbl);
+  }
+
+  lemma InvNext(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
+    requires Inv(v)
+    requires CoordinationJournal.Next(v, v', lbl)
+    ensures Inv(v')
+  {
+    if lbl.LoadEphemeralFromPersistentLabel? 
+    {
+      AllocationJournalRefinement.InitRefines(v'.ephemeral.v, v.persistent);
+      AllocationJournalRefinement.InvInit(v'.ephemeral.v, v.persistent);
+    }
+
+    if 
+      || lbl.PutLabel? 
+      || lbl.InternalLabel? 
+      || lbl.CommitStartLabel? 
+      || lbl.CommitCompleteLabel?  
+    {
+      AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+    }
   }
 
   lemma NextRefines(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)

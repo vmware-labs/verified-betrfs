@@ -32,7 +32,7 @@ module LikesBetreeMod
   type Pointer = GenericDisk.Pointer
   type Address = GenericDisk.Address
   type Ranking = GenericDisk.Ranking
-  type StampedBetree = Stamped<BB.BranchedBetree>
+  type StampedBetree = BB.StampedBetree
   type BranchDiskView = LB.DiskView
 
   // Likes for a single B+Tree branch

@@ -4,10 +4,12 @@
 include "LinkedBetree.i.dfy"
 include "BranchedBetree.i.dfy"
 include "LinkedBranchRefinement.i.dfy"
+include "LinkedBetreeRefinement.i.dfy"
 
 module BranchedBetreeRefinement {
   import opened BoundedPivotsLib
   import LinkedBetree = LinkedBetreeMod
+  import LinkedBetreeRefinement
   import opened BranchedBetreeMod
   import LinkedBranchMod
   import LinkedBranchRefinement
@@ -135,6 +137,7 @@ module BranchedBetreeRefinement {
   function IStampedBetree(stampedBetree: StampedBetree) : (out: LinkedBetree.StampedBetree)
     requires stampedBetree.value.WF()
     ensures out.value.WF()
+    ensures stampedBetree.value.Acyclic() ==> out.value.Acyclic()
   {
     Stamped(IBranchedBetree(stampedBetree.value), stampedBetree.seqEnd)
   }
@@ -149,7 +152,8 @@ module BranchedBetreeRefinement {
 
   function I(v: Variables) : (out: LinkedBetree.Variables)
     requires v.WF()
-    // requires v.branched.WF()
+    ensures out.WF()
+    ensures v.branched.Acyclic() ==> out.linked.Acyclic()
   {
     LinkedBetree.Variables(v.memtable, IBranchedBetree(v.branched))
   }
@@ -884,6 +888,14 @@ module BranchedBetreeRefinement {
   {
     && branched.Acyclic()
     && RootCoversTotalDomain(branched)
+  }
+
+  lemma InitRefines(v: Variables, stampedBetree: StampedBetree)
+    requires Init(v, stampedBetree)
+    requires InvBranchedBetree(stampedBetree.value)
+    ensures Inv(v)
+    ensures LinkedBetree.Init(I(v), IStampedBetree(stampedBetree))
+  {
   }
 
   predicate Inv(v: Variables)
