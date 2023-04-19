@@ -478,33 +478,25 @@ impl PagedJournal::State {
         reveal(AbstractJournal::State::next_by);    // newly required; unfortunate macro defaults
         match step {
             PagedJournal::Step::read_for_recovery(depth) => {
-//                assert(PagedJournal::State::read_for_recovery(self, post, lbl, depth));
                 self.read_for_recovery_refines(post, lbl, depth);
             }
             PagedJournal::Step::freeze_for_commit(depth) => {
-//                assert(PagedJournal::State::freeze_for_commit(self, post, lbl, depth));
                 self.freeze_for_commit_refines(post, lbl, depth);
             }
             PagedJournal::Step::observe_fresh_journal() => {
-                assert(PagedJournal::State::observe_fresh_journal(self, post, lbl));
                 assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::observe_fresh_journal())); // new witness
             }
             PagedJournal::Step::put() => {
-                assert(PagedJournal::State::put(self, post, lbl));
                 assert_maps_equal!( post.i().journal.msgs, self.i().journal.concat(lbl.i().get_PutLabel_messages()).msgs );    // newly required extensionality; this branch used to be a freebie.
                 assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::put())); // new witness
-                //self.put_refines(post, lbl, depth);
             }
             PagedJournal::Step::discard_old() => {
-                assert(PagedJournal::State::discard_old(self, post, lbl));
                 self.discard_old_refines(post, lbl);
             }
             PagedJournal::Step::internal_journal_marshal(cut) => {
-                assert(PagedJournal::State::internal_journal_marshal(self, post, lbl, cut));
                 self.marshall_refines(post, lbl, cut);
             }
             PagedJournal::Step::internal_journal_noop() => {
-                assert(PagedJournal::State::internal_journal_noop(self, post, lbl));
                 assert_maps_equal!( post.i().journal.msgs, self.i().journal.msgs );    // newly required extensionality; this branch used to be a freebie.
                 assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::internal())); // new witness
             }
