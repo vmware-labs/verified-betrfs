@@ -174,8 +174,8 @@ def throughput_vs_cores(machine, df, graph='compare-locks'):
         #stat_summary(fun_y=np.median, geom='point', size=0.05) +
         #stat_summary(fun_y=np.median, geom='point') +
         facet_wrap(["write_ratio"],
-                    scales="free",
-                    labeller=labeller(cols=write_ratio_labeller))
+                    scales="free")
+                    #labeller=labeller(cols=write_ratio_labeller))
 #guides(color=guide_legend(nrow=1))
     )
 
