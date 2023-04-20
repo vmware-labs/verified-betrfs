@@ -11,6 +11,7 @@ use crate::betree::Buffer_v::*;
 use crate::betree::BufferSeq_v::*;
 use crate::betree::Memtable_v::*;
 use crate::coordination_layer::StampedMap_v::*;
+use crate::coordination_layer::MsgHistory_v::*;
 
 verus! {
 // This is a functional model of a Betree, but it doesn't require that child
@@ -47,7 +48,7 @@ impl ChildMap {
     decreases self
     {
         &&& total_keys(self.map.dom())
-        &&& forall |k: Key| self.map[k].wf()
+        &&& forall |k: Key| #![auto] self.map[k].wf()
     }
 }
 
@@ -238,6 +239,89 @@ impl QueryReceipt {
 } // end impl QueryReceipt
 
 
+pub struct Path {
+    pub node: BetreeNode,
+    pub key: Key,
+    pub routing: Seq<Set<Key>>,
+}
+
+impl Path {
+    pub open spec fn subpath(self) -> Path 
+    recommends 
+        0 < self.routing.len(),
+        self.node.wf(),
+        self.node.is_Node(),
+    {
+        Path{node: self.node.child(self.key), key: self.key, routing: self.routing.subrange(1, self.routing.len() as int)}
+    }
+
+    pub open spec fn common_children(self) -> bool
+    recommends
+        self.node.wf(),
+        self.node.is_Node(),
+        0 < self.routing.len(),
+    {
+        forall |k: Key| #![auto] self.routing.index(0).contains(k) ==> self.node.child(k) == self.node.child(self.key)
+    }
+
+    pub open spec fn valid(self) -> bool 
+    decreases self.routing.len()
+    {
+        &&& self.node.wf()
+        &&& self.node.is_Node()
+        &&& 0 < self.routing.len() ==> {
+            &&& self.subpath().valid()
+            &&& self.common_children()
+        }
+    }
+
+    pub open spec fn target(self) -> BetreeNode 
+    recommends self.valid()
+    decreases self.routing.len()
+    {
+        if self.routing.len() == 0 {
+            self.node
+        } else {
+            self.subpath().target()
+        }
+    }
+
+    pub open spec fn replaced_children(self, replacement: BetreeNode) -> ChildMap
+    recommends
+        self.valid(),
+        replacement.wf(),
+        0 < self.routing.len(),
+    decreases
+        (self.routing.len(), 0nat)
+    {
+        // TODO(tony): how to prove termination here?
+        let replaced_child = self.subpath().substitute(replacement);
+        ChildMap{
+            map: Map::new( |k| true, |k| if self.routing.index(0).contains(k) {replaced_child} else { self.node.child(k)} )
+        }
+    }
+
+    pub open spec fn substitute(self, replacement: BetreeNode) -> BetreeNode 
+    recommends 
+        self.valid(),
+        replacement.wf(),
+    decreases
+        (self.routing.len(), 1nat)
+    {
+        if self.routing.len() == 0 {
+            replacement
+        } else {
+            BetreeNode::Node{
+                buffers: self.node.get_Node_buffers(),
+                children: self.replaced_children(replacement)
+            }
+        }
+    }
+} //end impl Path
+
+
+
+
 state_machine!{ PagedBetree {
     fields {
         pub memtable: Memtable,
@@ -248,7 +332,15 @@ state_machine!{ PagedBetree {
         &&& self.root.wf()
     }
 
-
+    #[is_variant]
+    pub enum Label
+    {
+        Query{end_lsn: LSN, key: Key, value: Value},
+        Put{puts: MsgHistory},
+        QueryEndLsn{end_lsn: LSN},
+        FreezeAs{stamped_betree: StampedBetree},
+        Internal{},   // Local No-op label
+    }
 }} // end PagedBetree state machine
 
 
