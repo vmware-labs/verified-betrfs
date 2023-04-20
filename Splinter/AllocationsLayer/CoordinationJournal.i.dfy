@@ -143,10 +143,11 @@ module CoordinationJournal {
     && v.ephemeral.Known?
     && v.inFlight.None?
     && lbl.unobserved == v.ephemeral.v.UnobservedAUs()
-    // && v' == v
+    && var frozenJournal := AllocationJournal.JournalImage(v.ephemeral.v.journal.journal.truncatedJournal, v.ephemeral.v.first);
     && v' == v.(
-      inFlight := Some(v.ephemeral.v.journal.journal.truncatedJournal)
+      inFlight := Some(frozenJournal)
     )
+    // && v' == v
   }
 
   predicate CommitStart(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -175,7 +176,7 @@ module CoordinationJournal {
     && frozenJournal.tj.SeqStart() <= lbl.maxLsn
 
     && v' == v.(
-      ephemeral := v'.ephemeral,  // given by predicate above (but happens to be read-only / unchanged)
+      ephemeral := v'.ephemeral  // given by predicate above (but happens to be read-only / unchanged)
       // inFlight := Some(frozenJournal) // given by predicates above
       )
   }
