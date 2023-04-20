@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../../Spec/MapSpec.s.dfy"
+include "../CoordinationLayer/CoordinationSystem.i.dfy"
 include "CoordinationJournal.i.dfy"
 include "CoordinationBetree.i.dfy"
 
@@ -16,21 +17,11 @@ module CoordinationSystemMod {
   import opened LSNMod
   import opened CoordinationJournal
   import opened CoordinationBetree
+  import AbstractSystem = CoordinationSystem
 
   import Async = CrashTolerantMapSpecMod.uiopifc.async
-  type UIOp = CrashTolerantMapSpecMod.uiopifc.UIOp
-
-  type SyncReqs = map<CrashTolerantMapSpecMod.uiopifc.SyncReqId, LSN>
-
-  datatype Ephemeral =
-    | Unknown
-    | Known(
-      progress: Async.EphemeralState,
-      syncReqs: SyncReqs,
-      mapLsn: LSN
-    )
-  {
-  }
+  type UIOp = AbstractSystem.UIOp
+  type SyncReqs = AbstractSystem.SyncReqs
 
   datatype FreeSet = FreeSet(
     ephemeral: set<AU>, // should never include any AUs that are allocated to betree or journal
@@ -55,7 +46,7 @@ module CoordinationSystemMod {
       requires inFlight.None?
     {
       this.(inFlight := Some(ephemeral + unobserved))
-    }
+    } 
 
     function CommitComplete(discard: set<AU>) : FreeSet
       requires inFlight.Some?
@@ -65,19 +56,10 @@ module CoordinationSystemMod {
     }
   }
 
-  // TODO: prove coordination system invariants and refinement
-  // Inv
-  //    how the freesets relate to betree/journal states [domains of the diskview]
-  //    relationship amongst the diskviews (DVs always disjoint from xyz), they are congruent
-  //    between ephemeral in flight and persistent some values may overlap
-  //        ephemeral and persistent of tree same addr ==> same value (diskview)
-  //    
-  // When we need these invs: cache (one physcial DV, ghosty dv for the other)
-
   datatype Variables = Variables(
     journal: CoordinationJournal.Variables,
     betree: CoordinationBetree.Variables,
-    ephemeral: Ephemeral,
+    ephemeral: AbstractSystem.Ephemeral,
     freeset: FreeSet
   )
   {
@@ -108,7 +90,7 @@ module CoordinationSystemMod {
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.LoadEphemeralFromPersistentLabel(v'.ephemeral.mapLsn))
     && v'.ephemeral.progress == Async.InitEphemeralState()
     && v'.ephemeral.syncReqs == map[]
-    && v'.freeset == v.freeset.(ephemeral := v.freeset.persistent)
+    && v'.freeset == v.freeset.(ephemeral := v.freeset.persistent) // invariant
     // and thus all fields of v' are constrained.
   }
 
@@ -359,7 +341,7 @@ module CoordinationSystemMod {
   }
 
   predicate Init(v: Variables, availAUs: set<AU>) {
-    v.Init(availAUs)
+    && v.Init(availAUs)
   }
 
   datatype Step =

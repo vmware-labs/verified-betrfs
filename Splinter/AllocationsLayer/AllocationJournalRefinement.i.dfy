@@ -395,8 +395,14 @@ module AllocationJournalRefinement {
     // BuildLsnAddrIndexIgnoresBuildTight(tj.diskView, tj.freshestRec, tj.freshestRec);
   }
 
+  predicate FreshLabel(v: Variables,lbl: TransitionLabel)
+  {
+   && (lbl.InternalAllocationsLabel? ==> lbl.allocs !! v.miniAllocator.allocs.Keys)
+  }
+
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
+    requires FreshLabel(v, lbl)
     requires Next(v, v', lbl)
     ensures Inv(v')
     ensures LikesJournal.Next(I(v), I(v'), lbl.I())

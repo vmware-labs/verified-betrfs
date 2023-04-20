@@ -900,8 +900,8 @@ module BranchedBetreeRefinement {
 
   predicate Inv(v: Variables)
   {
-    && InvBranchedBetree(v.branched)
     && v.WF()
+    && InvBranchedBetree(v.branched)
   }
 
   lemma InvNext(v: Variables, v': Variables, lbl: TransitionLabel)

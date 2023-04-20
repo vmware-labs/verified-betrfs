@@ -18,6 +18,7 @@ module LikesBetreeRefinement {
   predicate Inv(v: Variables)
   {
     // placeholder
+    && v.WF()
     && BranchedBetreeRefinement.Inv(v.branchedVars)
   }
 

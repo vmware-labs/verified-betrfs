@@ -36,6 +36,11 @@ module AllocationJournal {
     {
       tj.WF()
     }
+
+    function AccessibleAUs() : set<AU>
+    {
+      GenericDisk.ToAUs(tj.diskView.entries.Keys)
+    }
   }
 
   function EmptyJournalImage() : JournalImage
@@ -94,6 +99,11 @@ module AllocationJournal {
     {
       miniAllocator.NotObservedAUs()
     }
+
+    function AccessibleAUs() : set<AU>
+    {
+      lsnAUIndex.Values + miniAllocator.allocs.Keys
+    }
   }
 
   // group a couple definitions together
@@ -125,7 +135,7 @@ module AllocationJournal {
     && lbl.WF()
     && lbl.InternalAllocationsLabel?
     && lbl.deallocs == {}
-    && lbl.allocs !! v.miniAllocator.allocs.Keys
+    && lbl.allocs !! v.miniAllocator.allocs.Keys // TODO: maybe we want to eliminate this check and just use the label
     && v' == v.(
       miniAllocator := v.miniAllocator.AddAUs(lbl.allocs)
     )

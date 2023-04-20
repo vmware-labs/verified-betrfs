@@ -36,7 +36,12 @@ module AllocationBetreeMod
   datatype BetreeImage = BetreeImage(
     branched: BB.BranchedBetree,
     dv: BranchDiskView
-  )
+  ) {
+    function AccessibleAUs() : set<AU>
+    {
+      G.ToAUs(branched.diskView.entries.Keys) + G.ToAUs(dv.entries.Keys)
+    }
+  }
 
   type StampedBetree = Stamped<BetreeImage>
 
@@ -93,6 +98,11 @@ module AllocationBetreeMod
     function UnobservedAUs() : set<AU>
     {
       compactor.AUs() // TODO: add memtable too
+    }
+
+    function AccessibleAUs() : set<AU>
+    {
+      M.Set(betreeAULikes) + compactor.AUs() + G.ToAUs(allocBranchDiskView.entries.Keys)
     }
 
     // one layer: lbl would inherit allocation and free arguments

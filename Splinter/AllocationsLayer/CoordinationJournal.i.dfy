@@ -50,6 +50,23 @@ module CoordinationJournal {
       && ephemeral.WF()
       && (inFlight.Some? ==> inFlight.value.WF())
     }
+
+    function EphemeralAUs() : set<AU>
+      requires ephemeral.Known?
+    {
+      ephemeral.v.AccessibleAUs()
+    }
+
+    function PersistentAUs() : set<AU>
+    {
+      persistent.AccessibleAUs()
+    }
+
+    function InFlightAUs() : set<AU>
+      requires inFlight.Some?
+    {
+      inFlight.value.AccessibleAUs()
+    }
   }
 
   predicate LoadEphemeralFromPersistent(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -126,7 +143,10 @@ module CoordinationJournal {
     && v.ephemeral.Known?
     && v.inFlight.None?
     && lbl.unobserved == v.ephemeral.v.UnobservedAUs()
-    && v' == v
+    // && v' == v
+    && v' == v.(
+      inFlight := Some(v.ephemeral.v.journal.journal.truncatedJournal)
+    )
   }
 
   predicate CommitStart(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -136,11 +156,12 @@ module CoordinationJournal {
     && v.ephemeral.Known?
     // Can't start a commit if one is in-flight, or we'd forget to maintain the
     // invariants for the in-flight one.
-    && v.inFlight.None?
+    // && v.inFlight.None?
+    && v.inFlight.Some?
     && v'.ephemeral.Known?
-    && v'.inFlight.Some?
+    // && v'.inFlight.Some?
 
-    && var frozenJournal := v'.inFlight.value;
+    && var frozenJournal := v.inFlight.value;
     && AllocationJournal.Next(v.ephemeral.v, v'.ephemeral.v, 
       AllocationJournal.FreezeForCommitLabel(frozenJournal))
 
@@ -155,7 +176,7 @@ module CoordinationJournal {
 
     && v' == v.(
       ephemeral := v'.ephemeral,  // given by predicate above (but happens to be read-only / unchanged)
-      inFlight := Some(frozenJournal) // given by predicates above
+      // inFlight := Some(frozenJournal) // given by predicates above
       )
   }
 

@@ -12,6 +12,7 @@ include "../Betree/PivotBetreeRefinement.i.dfy"
 include "../Betree/PagedBetreeRefinement.i.dfy"
 
 module FullStackBetreeRefinement {
+  import opened Maps
   import opened Options
   import opened StampedMod
   import CoordinationBetree
@@ -19,12 +20,42 @@ module FullStackBetreeRefinement {
   import AllocationBetreeRefinement
   import LikesBetreeRefinement
   import BranchedBetreeRefinement
+  import BranchedBetreeMod
   import LinkedBetreeRefinement
   import FilteredBetreeRefinement
   import PivotBetreeRefinement
   import PagedBetreeRefinement
+  import PagedBetree
   import AbstractMap
   import CrashTolerantMap
+
+  predicate BetreeStatesAgrees(v: CoordinationBetree.Variables)
+  {
+    // ephemeral and frozen state:
+    //    two betree diskviews should agree, so are their allocBranchDiskView 
+    && ( v.ephemeral.Known? && v.inFlight.Some? ==>
+      && var ephemeralBetreeDisk := v.ephemeral.v.likesVars.branchedVars.branched.diskView;
+      && var ephemeralBranchDisk := v.ephemeral.v.allocBranchDiskView;
+      && var inFlightBetreeDisk := v.inFlight.value.value.branched.diskView;
+      && var inFlightBranchisk := v.inFlight.value.value.dv;
+      && MapsAgree(ephemeralBetreeDisk.entries, inFlightBetreeDisk.entries)
+      && MapsAgree(ephemeralBranchDisk.entries, inFlightBranchisk.entries))
+    && ( v.ephemeral.Known? ==>
+      && var ephemeralBetreeDisk := v.ephemeral.v.likesVars.branchedVars.branched.diskView;
+      && var ephemeralBranchDisk := v.ephemeral.v.allocBranchDiskView;
+      && var persistentBetreeDisk := v.persistent.value.branched.diskView;
+      && var persistentBranchisk := v.persistent.value.dv;
+      && MapsAgree(ephemeralBetreeDisk.entries, persistentBetreeDisk.entries)
+      && MapsAgree(ephemeralBranchDisk.entries, persistentBranchisk.entries))
+  }
+
+  predicate Inv(v: CoordinationBetree.Variables)
+  {
+    && BetreeStatesAgrees(v)
+    && (v.ephemeral.Known? ==> AllocationBetreeRefinement.Inv(v.ephemeral.v))
+    && (v.inFlight.Some? ==> v.inFlight.value.value.branched.Acyclic())
+    && v.persistent.value.branched.Acyclic()
+  }
 
   function ILbl(lbl: CoordinationBetree.TransitionLabel) : CrashTolerantMap.TransitionLabel
   {
@@ -48,13 +79,6 @@ module FullStackBetreeRefinement {
       case FreezeAsLabel(unobserved) => AllocationBetreeMod.FreezeAsLabel(v'.inFlight.value, lbl.unobserved)
       case InternalLabel(allocs, deallocs) => AllocationBetreeMod.InternalAllocationsLabel(allocs, deallocs)
       case _ => AllocationBetreeMod.InternalAllocationsLabel({}, {}) // no op label
-  }
-
-  predicate Inv(v: CoordinationBetree.Variables)
-  {
-    && (v.ephemeral.Known? ==> AllocationBetreeRefinement.Inv(v.ephemeral.v))
-    && (v.inFlight.Some? ==> v.inFlight.value.value.branched.Acyclic())
-    && v.persistent.value.branched.Acyclic()
   }
 
   function IBetree(betree: AllocationBetreeMod.Variables) : AbstractMap.Variables
@@ -121,15 +145,18 @@ module FullStackBetreeRefinement {
   //   } 
   // }
 
-  predicate AllocBetreeRefineCondition(v: AllocationBetreeMod.Variables, lbl: AllocationBetreeMod.TransitionLabel)
+  lemma InitRefines(v: CoordinationBetree.Variables)
+    requires CoordinationBetree.Init(v)
+    ensures Inv(v)
+    ensures CrashTolerantMap.Init(I(v))
   {
-    && AllocationBetreeRefinement.FreshLabel(v, lbl)
+    PagedBetreeRefinement.EmptyImageRefines();
   }
 
   lemma NextRefines(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel)
     requires Inv(v)
     requires CoordinationBetree.Next(v, v', lbl)
-    requires lbl.InternalLabel? ==> AllocBetreeRefineCondition(v.ephemeral.v, AllocLbl(v, v', lbl))
+    requires lbl.InternalLabel? ==> AllocationBetreeRefinement.FreshLabel(v.ephemeral.v, AllocLbl(v, v', lbl))
     ensures Inv(v')
     ensures CrashTolerantMap.Next(I(v), I(v'), ILbl(lbl))
   {

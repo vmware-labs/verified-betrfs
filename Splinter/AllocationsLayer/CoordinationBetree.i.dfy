@@ -47,6 +47,23 @@ module CoordinationBetree {
     predicate WF() {
       true
     }
+
+    function EphemeralAUs() : set<AU>
+      requires ephemeral.Known?
+    {
+      ephemeral.v.AccessibleAUs()
+    }
+
+    function PersistentAUs() : set<AU>
+    {
+      persistent.value.AccessibleAUs()
+    }
+
+    function InFlightAUs() : set<AU>
+      requires inFlight.Some?
+    {
+      inFlight.value.value.AccessibleAUs()
+    } 
   }
 
   predicate LoadEphemeralFromPersistent(v: Variables, v': Variables, lbl: TransitionLabel)

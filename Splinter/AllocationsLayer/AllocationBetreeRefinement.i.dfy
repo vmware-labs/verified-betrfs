@@ -24,20 +24,18 @@ module AllocationBetreeRefinement {
   predicate Inv(v: Variables)
   {
     // placeholder
+    && v.WF()
     && LikesBetreeRefinement.Inv(v.likesVars)
   }
 
   predicate IsFresh(v: Variables, aus: set<AU>)
   {
-    && M.Set(v.betreeAULikes) !! aus
-    // && M.Set(branchAULikes) !! aus
-    && v.compactor.AUs() !! aus
-    && G.ToAUs(v.allocBranchDiskView.Representation()) !! aus 
+    && aus !! v.AccessibleAUs()
   }
 
   predicate FreshLabel(v: Variables,lbl: TransitionLabel)
   {
-   && lbl.InternalAllocationsLabel? ==> IsFresh(v, lbl.allocs)
+   && (lbl.InternalAllocationsLabel? ==> IsFresh(v, lbl.allocs))
   }
 
   predicate ValidStampedBetree(stamped: StampedBetree)

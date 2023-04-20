@@ -45,8 +45,11 @@ module BranchedBetreeMod
   type BranchDiskView = LB.DiskView
 
   function EmptyBranchedBetree() : (out: BranchedBetree)
+    ensures out.Acyclic()
   {
-    BranchedBetree(None, EmptyDisk(), LB.EmptyDisk())
+    var out := BranchedBetree(None, EmptyDisk(), LB.EmptyDisk());
+    assert out.ValidRanking(map[]);
+    out
   }
 
   function EmptyImage() : StampedBetree

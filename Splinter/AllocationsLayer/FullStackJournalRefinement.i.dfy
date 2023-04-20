@@ -9,6 +9,7 @@ include "../Journal/PagedJournalRefinement.i.dfy"
 
 module FullStackJournalRefinement {
   import opened Options
+  import opened Maps
   import CoordinationJournal
   import AllocationJournal
   import AllocationJournalRefinement
@@ -18,6 +19,28 @@ module FullStackJournalRefinement {
   import PagedJournalRefinement
   import AbstractJournal
   import CrashTolerantJournal
+
+  predicate JournalStatesAgrees(v: CoordinationJournal.Variables)
+  {
+    // frozen is a subset of ephemeral
+    && ( v.ephemeral.Known? && v.inFlight.Some? ==>
+      && var ephemeralDisk:= AllocationJournalRefinement.GetTj(v.ephemeral.v).diskView;
+      && var inFlightDisk := v.inFlight.value.tj.diskView;
+      && inFlightDisk.IsSubDisk(ephemeralDisk))
+    // ephemeral and persistent state agrees
+    && ( v.ephemeral.Known? ==> 
+      && var ephemeralDisk:= AllocationJournalRefinement.GetTj(v.ephemeral.v).diskView;
+      && var persistentDisk := v.persistent.tj.diskView;
+      && MapsAgree(ephemeralDisk.entries, persistentDisk.entries))
+  }
+
+  predicate Inv(v: CoordinationJournal.Variables)
+  {
+    && JournalStatesAgrees(v) // TODO: prove
+    && (v.ephemeral.Known? ==> AllocationJournalRefinement.Inv(v.ephemeral.v))
+    && (v.inFlight.Some? ==> v.inFlight.value.tj.Decodable())
+    && v.persistent.tj.Decodable()
+  }
 
   function ILbl(lbl: CoordinationJournal.TransitionLabel) : CrashTolerantJournal.TransitionLabel
   {
@@ -51,13 +74,6 @@ module FullStackJournalRefinement {
     requires lbl.WF()
   {
     PagedJournalRefinement.ILbl(LinkedJournalRefinement.ILbl(lbl.I().I()))
-  }
-
-  predicate Inv(v: CoordinationJournal.Variables)
-  {
-    && (v.ephemeral.Known? ==> AllocationJournalRefinement.Inv(v.ephemeral.v))
-    && (v.inFlight.Some? ==> v.inFlight.value.tj.Decodable())
-    && v.persistent.tj.Decodable()
   }
 
   function IJournal(journal: AllocationJournal.Variables) : AbstractJournal.Variables
@@ -126,8 +142,11 @@ module FullStackJournalRefinement {
   lemma InvNext(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
     requires Inv(v)
     requires CoordinationJournal.Next(v, v', lbl)
+    requires lbl.InternalLabel? ==> AllocationJournalRefinement.FreshLabel(v.ephemeral.v, AllocLbl(v, v', lbl))
     ensures Inv(v')
   {
+    // TODO: prove journal inv
+
     if lbl.LoadEphemeralFromPersistentLabel? 
     {
       AllocationJournalRefinement.InitRefines(v'.ephemeral.v, v.persistent);
@@ -144,9 +163,17 @@ module FullStackJournalRefinement {
     }
   }
 
+  lemma InitRefines(v: CoordinationJournal.Variables)
+    requires CoordinationJournal.Init(v)
+    ensures Inv(v)
+    ensures CrashTolerantJournal.Init(I(v))
+  {
+  }
+
   lemma NextRefines(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
     requires Inv(v)
     requires CoordinationJournal.Next(v, v', lbl)
+    requires lbl.InternalLabel? ==> AllocationJournalRefinement.FreshLabel(v.ephemeral.v, AllocLbl(v, v', lbl))
     ensures Inv(v')
     ensures CrashTolerantJournal.Next(I(v), I(v'), ILbl(lbl))
   {
