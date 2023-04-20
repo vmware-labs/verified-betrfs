@@ -57,7 +57,7 @@ impl JournalRecord {
     }
 
     pub open spec fn can_crop_head_records(self, boundary_lsn: LSN, depth: nat) -> bool
-    decreases (depth, 0nat)
+    decreases depth, 0nat
     {
         &&& self.valid(boundary_lsn)
         &&& if depth == 0 { true }
@@ -68,7 +68,7 @@ impl JournalRecord {
     }
 
     pub open spec fn opt_rec_can_crop_head_records(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat) -> bool
-        decreases (depth, 1nat)
+        decreases depth, 1nat
     {
         match ojr {
             None => depth==0,
@@ -79,7 +79,7 @@ impl JournalRecord {
     pub open spec fn crop_head_records(self, boundary_lsn: LSN, depth: nat) -> Option<JournalRecord>
     recommends
         self.can_crop_head_records(boundary_lsn, depth)
-    decreases (depth, 0nat)
+    decreases depth, 0nat
     {
         // < case can't happen, but need to mention it to get termination.
         if depth == 0 { Some(self) }
@@ -94,7 +94,7 @@ impl JournalRecord {
     // ensures no longer available; becomes lemma
 //    ensures
 //        out.is_Some() ==> out.unwrap().valid(boundary_lsn),
-    decreases (depth, 1nat)
+    decreases depth, 1nat
     {
         match ojr {
             None => None,
@@ -110,7 +110,7 @@ impl JournalRecord {
         let out = self.crop_head_records(boundary_lsn, depth);
         out.is_Some() ==> out.unwrap().valid(boundary_lsn)
     })
-    decreases (depth, 0nat)
+    decreases depth, 0nat
     {
         if depth!=0 {
             Self::opt_rec_crop_head_records_lemma(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat);
@@ -124,7 +124,7 @@ impl JournalRecord {
         let out = Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth);
         out.is_Some() ==> out.unwrap().valid(boundary_lsn)
     })
-    decreases (depth, 1nat)
+    decreases depth, 1nat
     {
         match ojr {
             None => {}

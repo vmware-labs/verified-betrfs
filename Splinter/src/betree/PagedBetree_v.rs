@@ -299,7 +299,7 @@ impl Path {
         replacement.wf(),
         0 < self.routing.len(),
     decreases
-        (self.routing.len(), 0nat)
+        self.routing.len(), 0nat
     {
         // TODO(tony): how to prove termination here?
         let replaced_child = self.subpath().substitute(replacement);
@@ -313,7 +313,7 @@ impl Path {
         self.valid(),
         replacement.wf(),
     decreases
-        (self.routing.len(), 1nat)
+        self.routing.len(), 1nat
     {
         if self.routing.len() == 0 {
             replacement
