@@ -21,10 +21,9 @@ module CoordinationJournal {
     | ReadForRecoveryLabel(records: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(records: MsgHistory)
-    | FreezeAsLabel(unobserved: set<AU>)
     | InternalLabel(allocs: set<AU>, deallocs: set<AU>)
     | QueryLsnPersistenceLabel(syncLsn: LSN)
-    | CommitStartLabel(newBoundaryLsn: LSN, maxLsn: LSN)
+    | CommitStartLabel(newBoundaryLsn: LSN, maxLsn: LSN, unobserved: set<AU>)
     | CommitCompleteLabel(requireEnd: LSN, discarded: set<AU>)
     | CrashLabel()
 
@@ -136,20 +135,6 @@ module CoordinationJournal {
     && v' == v
   }
 
-  predicate FreezeUnobserved(v: Variables, v': Variables, lbl: TransitionLabel)
-  {
-    && v.WF()
-    && lbl.FreezeAsLabel?
-    && v.ephemeral.Known?
-    && v.inFlight.None?
-    && lbl.unobserved == v.ephemeral.v.UnobservedAUs()
-    && var frozenJournal := AllocationJournal.JournalImage(v.ephemeral.v.journal.journal.truncatedJournal, v.ephemeral.v.first);
-    && v' == v.(
-      inFlight := Some(frozenJournal)
-    )
-    // && v' == v
-  }
-
   predicate CommitStart(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
@@ -157,14 +142,15 @@ module CoordinationJournal {
     && v.ephemeral.Known?
     // Can't start a commit if one is in-flight, or we'd forget to maintain the
     // invariants for the in-flight one.
-    // && v.inFlight.None?
-    && v.inFlight.Some?
+    && v.inFlight.None?
     && v'.ephemeral.Known?
-    // && v'.inFlight.Some?
-
-    && var frozenJournal := v.inFlight.value;
-    && AllocationJournal.Next(v.ephemeral.v, v'.ephemeral.v, 
-      AllocationJournal.FreezeForCommitLabel(frozenJournal))
+    && v'.inFlight.Some?
+    
+    // derive the frozen freeset based off of this journal 
+    // should be all AUs - frozen journal 
+    && var frozenJournal := v'.inFlight.value;
+    && AllocationJournal.Next(v.ephemeral.v, v'.ephemeral.v,
+      AllocationJournal.FreezeForCommitLabel(frozenJournal, lbl.unobserved))
 
     // Frozen journal stitches to frozen map
     && frozenJournal.tj.SeqStart() == lbl.newBoundaryLsn
@@ -176,8 +162,8 @@ module CoordinationJournal {
     && frozenJournal.tj.SeqStart() <= lbl.maxLsn
 
     && v' == v.(
-      ephemeral := v'.ephemeral  // given by predicate above (but happens to be read-only / unchanged)
-      // inFlight := Some(frozenJournal) // given by predicates above
+      ephemeral := v'.ephemeral,  // given by predicate above (but happens to be read-only / unchanged)
+      inFlight := Some(frozenJournal) // given by predicates above
       )
   }
 
@@ -222,8 +208,7 @@ module CoordinationJournal {
       case PutLabel(_) => Put(v, v', lbl)
       case InternalLabel(_, _) => Internal(v, v', lbl)
       case QueryLsnPersistenceLabel(_) => QueryLsnPersistence(v, v', lbl)
-      case FreezeAsLabel(_) => FreezeUnobserved(v, v', lbl)
-      case CommitStartLabel(_, _) => CommitStart(v, v', lbl)
+      case CommitStartLabel(_, _, _) => CommitStart(v, v', lbl)
       case CommitCompleteLabel(_, _) => CommitComplete(v, v', lbl)
       case CrashLabel() => Crash(v, v', lbl)
     }

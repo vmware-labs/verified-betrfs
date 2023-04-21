@@ -35,22 +35,29 @@ module CoordinationSystemMod {
     }
 
     function UpdateEphemeral(allocs: set<AU>, deallocs: set<AU>) : FreeSet
-      requires allocs <= ephemeral
-      requires deallocs !! ephemeral
+      // requires allocs <= ephemeral
+      // requires deallocs !! ephemeral
     {
       this.(ephemeral := ephemeral-allocs+deallocs)
     }
 
-    function Freeze(unobserved: set<AU>) : FreeSet
-      requires unobserved !! ephemeral
-      requires inFlight.None?
+    function FreezeBetree(unobserved: set<AU>) : FreeSet
+      // requires unobserved !! ephemeral
+      // requires inFlight.None?
     {
       this.(inFlight := Some(ephemeral + unobserved))
     } 
 
+    function CommitStart(unobserved: set<AU>) : FreeSet
+      requires inFlight.Some?
+      // requires discard !! ephemeral
+    {
+      this.(inFlight := Some(inFlight.value + unobserved))
+    }
+
     function CommitComplete(discard: set<AU>) : FreeSet
       requires inFlight.Some?
-      requires discard !! ephemeral
+      // requires discard !! ephemeral
     {
       FreeSet(ephemeral+discard, None, inFlight.value)
     }
@@ -210,7 +217,7 @@ module CoordinationSystemMod {
     && uiop.NoopOp?
 
     && allocs <= v.freeset.FreeToAlloc()
-    && deallocs !! v.freeset.ephemeral // journal further restrict deallocs to be things from the journal 
+    // && deallocs !! v.freeset.ephemeral // journal further restrict deallocs to be things from the journal 
 
     && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.InternalLabel(allocs, deallocs))
     && v' == v.(
@@ -226,7 +233,7 @@ module CoordinationSystemMod {
     && uiop.NoopOp?
     
     && allocs <= v.freeset.FreeToAlloc()
-    && deallocs !! v.freeset.ephemeral // journal further restrict deallocs to be things from the journal 
+    // && deallocs !! v.freeset.ephemeral // journal further restrict deallocs to be things from the journal 
     
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.InternalLabel(allocs, deallocs))
     && v' == v.(
@@ -273,38 +280,36 @@ module CoordinationSystemMod {
       ))
   }
 
-  predicate FreezeBetree(v: Variables, v': Variables, uiop: UIOp, unobservedJournal: set<AU>, unobservedBetree: set<AU>)
+  predicate FreezeBetree(v: Variables, v': Variables, uiop: UIOp, unobservedBetree: set<AU>)
   {
     && uiop.NoopOp?
     && v.WF()
     && v.ephemeral.Known?
     && v.freeset.inFlight.None?
-    && (unobservedJournal + unobservedBetree) !! v.freeset.ephemeral
-
-    && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.FreezeAsLabel(unobservedJournal))
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.FreezeAsLabel(unobservedBetree))
 
     && v' == v.(
       journal := v'.journal, // admit relational update above
       betree := v'.betree,   // admit relational update above
-      freeset := v.freeset.Freeze(unobservedJournal + unobservedBetree)
+      freeset := v.freeset.FreezeBetree(unobservedBetree)
     )
   }
 
   // This step models issuing the superblock write
-  predicate CommitStart(v: Variables, v': Variables, uiop: UIOp, newBoundaryLsn: LSN)
+  predicate CommitStart(v: Variables, v': Variables, uiop: UIOp, newBoundaryLsn: LSN, unobservedJournal: set<AU>)
   {
     && uiop.NoopOp?
     && v.WF()
     && v.ephemeral.Known?
     && v.freeset.inFlight.Some? // has to start after a freezebetree step
 
-    && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.CommitStartLabel(newBoundaryLsn, v.ephemeral.mapLsn))
+    && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.CommitStartLabel(newBoundaryLsn, v.ephemeral.mapLsn, unobservedJournal))
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.CommitStartLabel(newBoundaryLsn))
 
     && v' == v.(
       journal := v'.journal, // admit relational update above
-      betree := v'.betree   // admit relational update above
+      betree := v'.betree,   // admit relational update above
+      freeset := v.freeset.CommitStart(unobservedJournal)
     )
   }
 
@@ -355,8 +360,8 @@ module CoordinationSystemMod {
     | MapInternalStep(allocs: set<AU>, deallocs: set<AU>)
     | ReqSyncStep()
     | ReplySyncStep()
-    | FreezeBetreeStep(unobservedBetree: set<AU>, unobservedJournal: set<AU>)
-    | CommitStartStep(newBoundaryLsn: LSN)
+    | FreezeBetreeStep(unobservedBetree: set<AU>)
+    | CommitStartStep(newBoundaryLsn: LSN, unobservedJournal: set<AU>)
     | CommitCompleteStep(discardedJournal: set<AU>)
     | CrashStep()
 
@@ -372,8 +377,8 @@ module CoordinationSystemMod {
       case MapInternalStep(allocs, deallocs) => MapInternal(v, v', uiop, allocs, deallocs)
       case ReqSyncStep() => ReqSync(v, v', uiop)
       case ReplySyncStep() => ReplySync(v, v', uiop)
-      case FreezeBetreeStep(unobservedBetree, unobservedJournal) => FreezeBetree(v, v', uiop, unobservedBetree, unobservedJournal)
-      case CommitStartStep(newBoundaryLsn) => CommitStart(v, v', uiop, newBoundaryLsn)
+      case FreezeBetreeStep(unobservedBetree) => FreezeBetree(v, v', uiop, unobservedBetree)
+      case CommitStartStep(newBoundaryLsn, unobservedJournal) => CommitStart(v, v', uiop, newBoundaryLsn, unobservedJournal)
       case CommitCompleteStep(discardedJournal) => CommitComplete(v, v', uiop, discardedJournal)
       case CrashStep() => Crash(v, v', uiop)
     }

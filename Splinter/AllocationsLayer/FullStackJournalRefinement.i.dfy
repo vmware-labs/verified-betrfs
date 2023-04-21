@@ -49,10 +49,9 @@ module FullStackJournalRefinement {
       case ReadForRecoveryLabel(records) => CrashTolerantJournal.ReadForRecoveryLabel(records)
       case QueryEndLsnLabel(endLsn) => CrashTolerantJournal.QueryEndLsnLabel(endLsn)
       case PutLabel(records) => CrashTolerantJournal.PutLabel(records)
-      case FreezeAsLabel(_) => CrashTolerantJournal.InternalLabel()
       case InternalLabel(_, _) => CrashTolerantJournal.InternalLabel()
       case QueryLsnPersistenceLabel(syncLsn) => CrashTolerantJournal.QueryLsnPersistenceLabel(syncLsn)
-      case CommitStartLabel(newBoundaryLsn, maxLsn) => CrashTolerantJournal.CommitStartLabel(newBoundaryLsn, maxLsn)
+      case CommitStartLabel(newBoundaryLsn, maxLsn, _) => CrashTolerantJournal.CommitStartLabel(newBoundaryLsn, maxLsn)
       case CommitCompleteLabel(requireEnd, _) => CrashTolerantJournal.CommitCompleteLabel(requireEnd)
       case CrashLabel() => CrashTolerantJournal.CrashLabel
   }
@@ -65,7 +64,7 @@ module FullStackJournalRefinement {
       case QueryEndLsnLabel(endLsn) => AllocationJournal.QueryEndLsnLabel(endLsn)
       case PutLabel(records) => AllocationJournal.PutLabel(records)
       case InternalLabel(allocs, deallocs) => AllocationJournal.InternalAllocationsLabel(allocs, deallocs)
-      case CommitStartLabel(_, _) => AllocationJournal.FreezeForCommitLabel(v'.inFlight.value)
+      case CommitStartLabel(_, _, unobserved) => AllocationJournal.FreezeForCommitLabel(v'.inFlight.value, unobserved)
       case CommitCompleteLabel(requireEnd, discarded) => AllocationJournal.DiscardOldLabel(v.inFlight.value.tj.SeqStart(), requireEnd, discarded)
       case _ => AllocationJournal.InternalAllocationsLabel({}, {}) // no op label
   }
@@ -186,8 +185,7 @@ module FullStackJournalRefinement {
       case PutLabel(_) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
       case InternalLabel(allocs, deallocs) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
       case QueryLsnPersistenceLabel(_) => {}
-      case FreezeAsLabel(_) => {}
-      case CommitStartLabel(_, _) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
+      case CommitStartLabel(_, _, _) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
       case CommitCompleteLabel(_, _)=> { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
       case CrashLabel() => {}
     }

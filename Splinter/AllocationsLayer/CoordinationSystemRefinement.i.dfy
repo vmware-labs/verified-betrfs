@@ -29,7 +29,15 @@ module CoordinationSystemRefinement {
     && v.betree.ephemeral.Known?
   }
 
-  predicate InFlightReady(v: Variables)
+  predicate InFlightBetreeOnly(v: Variables)
+  {
+    && v.journal.ephemeral.Known?
+    && v.journal.inFlight.None?
+    && v.betree.inFlight.Some? 
+    && v.freeset.inFlight.Some?
+  }
+
+  predicate InFlightAllReady(v: Variables)
   {
     && v.journal.inFlight.Some? 
     && v.betree.inFlight.Some? 
@@ -41,14 +49,10 @@ module CoordinationSystemRefinement {
     && (KnownEphemeral(v) ==> v.freeset.ephemeral !! v.betree.EphemeralAUs() !! v.journal.EphemeralAUs())
   }
 
-  // betree journal freeze differently
   predicate DisjointInFlightComponents(v: Variables)
   {
-    // NOTE: journal's inflight AU just into existence at a later time, might make this hard to prove
-    // frozen journal is a subset of the ephemeral journal
-    // ephemeral journal AU !! v.freeset.ephemeral
-    // v.freeset.inflight.value = old v.freeset.ephemeral + frozen freeset data 
-    && (InFlightReady(v) ==> v.freeset.inFlight.value !! v.betree.InFlightAUs() !! v.journal.InFlightAUs())
+    && (InFlightBetreeOnly(v) ==> v.freeset.inFlight.value !! v.betree.InFlightAUs() !! v.journal.EphemeralAUs())
+    && (InFlightAllReady(v) ==> v.freeset.inFlight.value !! v.betree.InFlightAUs() !! v.journal.InFlightAUs())
   }
 
   predicate DisjointPersistentComponents(v: Variables)
@@ -68,21 +72,24 @@ module CoordinationSystemRefinement {
   }
 
   function TotalInflight(v: Variables) : set<AU>
-    requires InFlightReady(v)
+    requires InFlightBetreeOnly(v) || InFlightAllReady(v)
   {
-    v.freeset.inFlight.value + v.betree.InFlightAUs() + v.journal.InFlightAUs()
+    if InFlightAllReady(v)
+    then v.freeset.inFlight.value + v.betree.InFlightAUs() + v.journal.InFlightAUs()
+    else v.freeset.inFlight.value + v.betree.InFlightAUs() + v.journal.EphemeralAUs()
   }
 
   predicate StatesPreservesTotalAUs(v: Variables)
   {
     && (KnownEphemeral(v) ==> TotalEphemeral(v) == TotalPersistent(v))
-    && (InFlightReady(v) ==> TotalInflight(v) == TotalPersistent(v))
+    && (InFlightBetreeOnly(v) || InFlightAllReady(v) ==> TotalInflight(v) == TotalPersistent(v))
   }
 
   predicate Inv(v: Variables)
   {
     && (v.journal.ephemeral.Known? <==> v.betree.ephemeral.Known?)
-    && (v.freeset.inFlight.Some? <==> v.betree.inFlight.Some? && v.journal.inFlight.Some?)
+    && (v.freeset.inFlight.Some? <==> v.betree.inFlight.Some?)
+    && (v.journal.inFlight.Some? ==> v.betree.inFlight.Some?)
 
     && FullStackJournalRefinement.Inv(v.journal)
     && FullStackBetreeRefinement.Inv(v.betree)
