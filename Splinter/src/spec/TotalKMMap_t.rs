@@ -9,7 +9,7 @@ use crate::spec::Messages_t::*;
 
 verus!{
 
-pub type Key = int;  // TODO: this is a placeholder for the Key type
+pub struct Key(pub int); // TODO: this is a placeholder for the Key type
 
 pub struct TotalKMMap(pub Map<Key, Message>);
 
@@ -30,7 +30,7 @@ impl TotalKMMap
     }
 
     // pass through to Map :v/
-    pub open spec fn spec_index(self, idx: int) -> Message {
+    pub open spec fn spec_index(self, idx: Key) -> Message {
         self.0[idx]
     }
 
