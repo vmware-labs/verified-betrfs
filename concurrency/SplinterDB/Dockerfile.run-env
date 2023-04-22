@@ -1,0 +1,19 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+# Source for the image
+#    projects.registry.vmware.com/splinterdb/run-env
+#
+# This contains the run-time dependencies for splinterdb
+#
+# It is maintained separately from the main Dockerfile
+# to reduce build-times when the splinterdb source changes
+
+ARG base_image=library/ubuntu:20.04
+FROM $base_image AS runner
+RUN /bin/bash -c ' \
+set -euo pipefail; \
+export DEBIAN_FRONTEND=noninteractive; \
+apt-get update -y; \
+apt-get install -y libaio1 libxxhash0; \
+apt-get clean;'
