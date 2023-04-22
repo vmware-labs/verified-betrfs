@@ -235,6 +235,19 @@ module AllocationJournalRefinement {
     }
   }
 
+  lemma InternalJournalMarshalDiskRelation(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires Inv(v)
+    requires Inv(v')
+    requires InternalJournalMarshal(v, v', lbl, step)
+    ensures GetTj(v).diskView.IsSubDisk(GetTj(v').diskView)
+  {
+    if step.addr in GetTj(v).diskView.entries {
+      reveal_LikesJournalInv();
+      assert step.addr in v.journal.lsnAddrIndex.Values;
+      assert false;
+    }
+  }
+
   lemma DiscardOldRefines(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Inv(v)
     requires DiscardOld(v, v', lbl)
@@ -397,7 +410,7 @@ module AllocationJournalRefinement {
 
   predicate FreshLabel(v: Variables,lbl: TransitionLabel)
   {
-   && (lbl.InternalAllocationsLabel? ==> lbl.allocs !! v.miniAllocator.allocs.Keys)
+   && (lbl.InternalAllocationsLabel? ==> lbl.allocs !! v.AccessibleAUs())
   }
 
   lemma NextRefines(v: Variables, v': Variables, lbl: TransitionLabel)

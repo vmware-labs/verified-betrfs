@@ -183,6 +183,7 @@ module LinkedJournal {
     function BuildTight(root: Pointer) : (out: DiskView)
       requires Decodable(root)
       ensures forall addr | addr in out.entries :: addr in entries;
+      ensures Acyclic() ==> out.IsSubDisk(this)
       decreases TheRankOf(root)
     {
       if !Acyclic() then DiskView(0, map[]) // Silly
@@ -284,7 +285,7 @@ module LinkedJournal {
     }
 
     function AppendRecord(addr: Address, msgs: MsgHistory) : (out: TruncatedJournal)
-      // requires addr !in diskView.entries
+      ensures addr !in diskView.entries ==> diskView.IsSubDisk(out.diskView)
     {
       this.(
         diskView := diskView.(entries := diskView.entries[addr := JournalRecord(msgs, freshestRec)]),

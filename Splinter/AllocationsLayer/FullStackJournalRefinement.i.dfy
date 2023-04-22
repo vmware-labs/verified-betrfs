@@ -20,13 +20,21 @@ module FullStackJournalRefinement {
   import AbstractJournal
   import CrashTolerantJournal
 
+  predicate FreshLabel(v: CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
+  {
+    && (lbl.InternalLabel? ==>
+      && lbl.allocs !! v.persistent.AccessibleAUs()
+      && (v.ephemeral.Known? ==> lbl.allocs !! v.ephemeral.v.AccessibleAUs())
+      && (v.inFlight.Some? ==> lbl.allocs !! v.inFlight.value.AccessibleAUs()))
+  }
+
   predicate JournalStatesAgrees(v: CoordinationJournal.Variables)
   {
     // frozen is a subset of ephemeral
     && ( v.ephemeral.Known? && v.inFlight.Some? ==>
       && var ephemeralDisk:= AllocationJournalRefinement.GetTj(v.ephemeral.v).diskView;
       && var inFlightDisk := v.inFlight.value.tj.diskView;
-      && inFlightDisk.IsSubDisk(ephemeralDisk))
+      && inFlightDisk.IsSubDiskWithNewerLSN(ephemeralDisk))
     // ephemeral and persistent state agrees
     && ( v.ephemeral.Known? ==> 
       && var ephemeralDisk:= AllocationJournalRefinement.GetTj(v.ephemeral.v).diskView;
@@ -34,12 +42,31 @@ module FullStackJournalRefinement {
       && MapsAgree(ephemeralDisk.entries, persistentDisk.entries))
   }
 
+  // inflight and persistent pages are not free in the eye of mini allocator
+  predicate InFlightAndPersistentPagesNotFree(v: CoordinationJournal.Variables)
+  {
+    && ( v.ephemeral.Known? && v.inFlight.Some? ==>
+      && var miniAllocator := v.ephemeral.v.miniAllocator;
+      && var inFlightDisk := v.inFlight.value.tj.diskView;
+      && AllocationJournalRefinement.JournalPagesNotFree(inFlightDisk.entries.Keys, miniAllocator)
+    )
+    && ( v.ephemeral.Known? ==>
+      && var miniAllocator := v.ephemeral.v.miniAllocator;
+      && var persistentDisk := v.persistent.tj.diskView;
+      && AllocationJournalRefinement.JournalPagesNotFree(persistentDisk.entries.Keys, miniAllocator)
+    )
+  }
+  
+
   predicate Inv(v: CoordinationJournal.Variables)
   {
-    && JournalStatesAgrees(v) // TODO: prove
+    && (v.ephemeral.Unknown? ==> v.inFlight.None?)
     && (v.ephemeral.Known? ==> AllocationJournalRefinement.Inv(v.ephemeral.v))
     && (v.inFlight.Some? ==> v.inFlight.value.tj.Decodable())
     && v.persistent.tj.Decodable()
+
+    && JournalStatesAgrees(v)
+    && InFlightAndPersistentPagesNotFree(v)
   }
 
   function ILbl(lbl: CoordinationJournal.TransitionLabel) : CrashTolerantJournal.TransitionLabel
@@ -117,6 +144,7 @@ module FullStackJournalRefinement {
     requires AllocationJournalRefinement.Inv(v)
     requires AllocationJournalRefinement.Inv(v')
     requires AllocationJournal.Next(v, v', lbl)
+    requires AllocationJournalRefinement.FreshLabel(v, lbl)
     ensures AbstractJournal.Next(IJournal(v), IJournal(v'), IAllocLbl(lbl))
   {
     AllocationJournalRefinement.NextRefines(v, v', lbl);
@@ -138,27 +166,72 @@ module FullStackJournalRefinement {
     PagedJournalRefinement.NextRefines(pagedJournal, pagedJournal', pagedLbl);
   }
 
-  lemma InvNext(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
+  lemma InternalLabelNextPreservesInv(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
     requires Inv(v)
+    requires FreshLabel(v, lbl)
     requires CoordinationJournal.Next(v, v', lbl)
-    requires lbl.InternalLabel? ==> AllocationJournalRefinement.FreshLabel(v.ephemeral.v, AllocLbl(v, v', lbl))
+    requires lbl.InternalLabel?
     ensures Inv(v')
   {
-    // TODO: prove journal inv
+    AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+    var allocStep :| AllocationJournal.NextStep(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
 
-    if lbl.LoadEphemeralFromPersistentLabel? 
-    {
-      AllocationJournalRefinement.InitRefines(v'.ephemeral.v, v.persistent);
-      AllocationJournalRefinement.InvInit(v'.ephemeral.v, v.persistent);
+    if allocStep.InternalNoOpStep? || allocStep.InternalMiniAllocatorPruneStep? {
+      assert InFlightAndPersistentPagesNotFree(v');
+      assert JournalStatesAgrees(v');
     }
 
-    if 
-      || lbl.PutLabel? 
-      || lbl.InternalLabel? 
-      || lbl.CommitStartLabel? 
-      || lbl.CommitCompleteLabel?  
-    {
-      AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+    if allocStep.InternalMiniAllocatorFillStep? {
+      assert JournalStatesAgrees(v');
+      // if v.ephemeral.Known? {
+      //   var miniAllocator := v.ephemeral.v.miniAllocator;
+      //   var persistentDisk := v.persistent.tj.diskView;
+      //   assert forall addr | addr in persistentDisk.entries :: addr.au !in lbl.allocs;
+      //   if v.inFlight.Some? {
+      //     var inFlightDisk := v.inFlight.value.tj.diskView;
+      //     assert forall addr | addr in inFlightDisk.entries :: addr.au !in lbl.allocs;
+      //   }
+      // }
+      // assert InFlightAndPersistentPagesNotFree(v');
+    }
+
+    if allocStep.InternalJournalMarshalStep? {
+      AllocationJournalRefinement.InternalJournalMarshalDiskRelation(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
+    }
+  }
+
+  lemma CommitStartLabelNextPreservesInv(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
+    requires Inv(v)
+    requires CoordinationJournal.Next(v, v', lbl)
+    requires lbl.CommitStartLabel?
+    ensures Inv(v')
+  {
+    AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); 
+    var ephemeralDisk := AllocationJournalRefinement.GetTj(v.ephemeral.v).diskView;
+    var miniAllocator := v.ephemeral.v.miniAllocator;
+    assert AllocationJournalRefinement.JournalPagesNotFree(ephemeralDisk.entries.Keys, miniAllocator) 
+      by {  AllocationJournalRefinement.reveal_LikesJournalInv(); }
+  }
+
+  lemma InvNext(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
+    requires Inv(v)
+    requires FreshLabel(v, lbl)
+    requires CoordinationJournal.Next(v, v', lbl)
+    ensures Inv(v')
+  {
+    match lbl {
+      case LoadEphemeralFromPersistentLabel() => {
+        AllocationJournalRefinement.InitRefines(v'.ephemeral.v, v.persistent);
+        AllocationJournalRefinement.InvInit(v'.ephemeral.v, v.persistent);
+      }
+      case ReadForRecoveryLabel(records) => {}
+      case QueryEndLsnLabel(_) => {}
+      case PutLabel(_) => { AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
+      case InternalLabel(allocs, deallocs) => { InternalLabelNextPreservesInv(v, v', lbl); }
+      case QueryLsnPersistenceLabel(_) => {}
+      case CommitStartLabel(_, _, _) => { CommitStartLabelNextPreservesInv(v, v', lbl); }
+      case CommitCompleteLabel(_, _) => { AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
+      case CrashLabel() => {}
     }
   }
 
@@ -171,8 +244,8 @@ module FullStackJournalRefinement {
 
   lemma NextRefines(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
     requires Inv(v)
+    requires FreshLabel(v, lbl)
     requires CoordinationJournal.Next(v, v', lbl)
-    requires lbl.InternalLabel? ==> AllocationJournalRefinement.FreshLabel(v.ephemeral.v, AllocLbl(v, v', lbl))
     ensures Inv(v')
     ensures CrashTolerantJournal.Next(I(v), I(v'), ILbl(lbl))
   {
