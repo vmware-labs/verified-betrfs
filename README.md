@@ -6,7 +6,7 @@ This artifact contains two major components:
 See the following files for directions:
 
  * `ae-instructions-dafny-verification.md` for the verification step
- * `ae-instrucitons-benchmark-nr.md` for benchmarks of NR
- * `ae-instrucitons-benchmark-cache.md` for benchmarks of SplinterCache
+ * `concurrency/node-replication/osdi23ae.md` for benchmarks of NR
+ * `concurrency/SplinterDB/README.md` for benchmarks of SplinterCache
 
 These 3 steps should be doable independently.
