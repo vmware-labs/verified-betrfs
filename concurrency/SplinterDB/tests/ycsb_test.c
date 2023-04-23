@@ -1153,58 +1153,6 @@ ycsb_test(int argc, char *argv[])
       goto cleanup;
    }
 
-   uint64 overhead_bytes = memory_bytes / splinter_cfg->page_size * (sizeof(clockcache_entry) + 64)
-                         + allocator_cfg.extent_capacity * sizeof(uint8)
-                         + allocator_cfg.page_capacity * sizeof(uint32);
-   uint64 buffer_bytes = MiB_TO_B(1024);
-   //if (memory_bytes > GiB_TO_B(40)) {
-   //   buffer_bytes = use_existing ? MiB_TO_B(2048) : MiB_TO_B(1280);
-   //} else {
-   //   buffer_bytes = use_existing ? MiB_TO_B(512) : MiB_TO_B(1280);
-   //}
-   //int64 buffer_bytes = use_existing ? MiB_TO_B(768) : MiB_TO_B(1280);
-   buffer_bytes += overhead_bytes;
-   buffer_bytes = ROUNDUP(buffer_bytes, 2 * MiB);
-   platform_log("overhead %lu MiB buffer %lu MiB\n",
-         B_TO_MiB(overhead_bytes), B_TO_MiB(buffer_bytes));
-   cache_cfg.capacity = memory_bytes - buffer_bytes;
-   cache_cfg.capacity -=
-      cache_cfg.capacity %
-      (PLATFORM_CACHELINE_SIZE * PLATFORM_CACHELINE_SIZE * cache_cfg.page_size);
-   cache_cfg.page_capacity = cache_cfg.capacity / cache_cfg.page_size;
-
-   uint64 al_size = allocator_cfg.extent_capacity * sizeof(uint8);
-   al_size = ROUNDUP(al_size, 2 * MiB);
-   platform_assert(cache_cfg.capacity % (2 * MiB) == 0);
-   uint64 huge_tlb_memory_bytes = cache_cfg.capacity + al_size;
-   platform_assert(huge_tlb_memory_bytes % (2 * MiB) == 0);
-   //uint64 huge_tlb_pages = huge_tlb_memory_bytes / (2 * MiB);
-   //uint64 remaining_memory_bytes =
-   //   memory_bytes + log_size_bytes - huge_tlb_memory_bytes;
-   platform_log("memory: %lu MiB hugeTLB: %lu MiB cache: %lu MiB\n",
-         B_TO_MiB(memory_bytes), B_TO_MiB(huge_tlb_memory_bytes),
-         B_TO_MiB(cache_cfg.capacity));
-
-   //char *resize_cgroup_command =
-   //   TYPED_ARRAY_MALLOC(hid, resize_cgroup_command, 1024);
-   //platform_assert(resize_cgroup_command);
-   //snprintf(resize_cgroup_command, 1024,
-   //      "echo %lu > /sys/fs/cgroup/memory/benchmark/memory.limit_in_bytes",
-   //      remaining_memory_bytes);
-   //int sys_rc = system(resize_cgroup_command);
-   //platform_assert(sys_rc == 0);
-   //platform_free(hid, resize_cgroup_command);
-
-   //char *resize_hugetlb_command =
-   //   TYPED_ARRAY_MALLOC(hid, resize_hugetlb_command, 1024);
-   //platform_assert(resize_hugetlb_command);
-   //snprintf(resize_hugetlb_command, 1024,
-   //      "echo %lu > /proc/sys/vm/nr_hugepages",
-   //      huge_tlb_pages);
-   //int sys_rc = system(resize_hugetlb_command);
-   //platform_assert(sys_rc == 0);
-   //platform_free(hid, resize_hugetlb_command);
-
    if (data_cfg->message_size != YCSB_DATA_SIZE) {
       platform_error_log("ycsb: data size configuration does not match\n");
       goto cleanup;
