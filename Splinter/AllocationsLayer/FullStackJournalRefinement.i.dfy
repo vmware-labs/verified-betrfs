@@ -56,7 +56,6 @@ module FullStackJournalRefinement {
       && AllocationJournalRefinement.JournalPagesNotFree(persistentDisk.entries.Keys, miniAllocator)
     )
   }
-  
 
   predicate Inv(v: CoordinationJournal.Variables)
   {

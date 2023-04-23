@@ -68,9 +68,15 @@ module CompactorMod
       forall i | 0 <= i < |threads| :: threads[i].WF()
     }
 
+    predicate DisjointMiniAllocator()
+    {
+      && (forall idx1: nat, idx2:nat | idx1 < |threads| && idx2 < |threads| && idx1 != idx2 
+        :: threads[idx1].miniAllocator.allocs.Keys !! threads[idx2].miniAllocator.allocs.Keys)
+    }
+
     function AUs() : set<AU>
     {
-      UnionSetOfSets(set thread | thread in threads :: thread.miniAllocator.allocs.Keys)
+      UnionSeqOfSets(seq(|threads|, i requires 0 <= i < |threads| => threads[i].miniAllocator.allocs.Keys))
     }
   }
 
@@ -95,13 +101,13 @@ module CompactorMod
     && v' == v.(threads := v.threads + [newThread])
   }
 
-  predicate Alloc(v: Variables, v': Variables, lbl: TransitionLabel, idx:nat) {
+  predicate Alloc(v: Variables, v': Variables, lbl: TransitionLabel, idx: nat) {
     && v.WF()
     && lbl.InternalLabel?
     && lbl.allocs != {}
     && idx < |v.threads|
     && var thread := v.threads[idx];
-    && lbl.allocs !! thread.miniAllocator.allocs.Keys
+    // && lbl.allocs !! thread.miniAllocator.allocs.Keys
 
     && var thread' := thread.(miniAllocator := thread.miniAllocator.AddAUs(lbl.allocs));
     && v' == v.(threads := v.threads[ idx := thread'])
@@ -203,5 +209,107 @@ module CompactorMod
 
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
     exists step: Step :: NextStep(v, v', lbl, step)
+  }
+
+  // lemmas
+
+  lemma CompactBeginExtendsAU(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Next(v, v', lbl)
+    requires lbl.BeginLabel?
+    ensures v'.AUs() == v.AUs() + lbl.aus
+  {
+    var threadsAUSeq := seq(|v.threads|, i requires 0 <= i < |v.threads| => v.threads[i].miniAllocator.allocs.Keys);
+    var threadsAUSeq' := seq(|v'.threads|, i requires 0 <= i < |v'.threads| => v'.threads[i].miniAllocator.allocs.Keys);
+
+    forall au | au in v.AUs() + lbl.aus
+      ensures au in v'.AUs()
+    {
+      if au in v.AUs() {
+        UnionSeqOfSetsSoundness(threadsAUSeq);
+        var idx :| 0 <= idx < |threadsAUSeq| && au in threadsAUSeq[idx];
+        assert threadsAUSeq[idx] == threadsAUSeq'[idx];
+      } else if au in lbl.aus {
+        assert au in Last(threadsAUSeq');
+      }
+    }
+
+    forall au | au in v'.AUs()
+      ensures au in v.AUs() + lbl.aus
+    {
+      UnionSeqOfSetsSoundness(threadsAUSeq');
+      var idx :| 0 <= idx < |threadsAUSeq'| && au in threadsAUSeq'[idx];
+      if idx < |threadsAUSeq| {
+        assert threadsAUSeq[idx] == threadsAUSeq'[idx];
+        assert au in v.AUs();
+      } else {
+        assert au in Last(threadsAUSeq');
+        assert au in lbl.aus;
+      }
+    }
+  }
+
+  lemma CompactInternalExtendsAU(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Next(v, v', lbl)
+    requires lbl.InternalLabel?
+    ensures v'.AUs() == v.AUs() + lbl.allocs
+  {
+    var threadsAUSeq := seq(|v.threads|, i requires 0 <= i < |v.threads| => v.threads[i].miniAllocator.allocs.Keys);
+    var threadsAUSeq' := seq(|v'.threads|, i requires 0 <= i < |v'.threads| => v'.threads[i].miniAllocator.allocs.Keys);
+
+    var step :| NextStep(v, v', lbl, step);
+    if step.BuildStep? {
+      assert lbl.allocs == {};
+      assert v'.threads[step.idx].miniAllocator.allocs.Keys == v.threads[step.idx].miniAllocator.allocs.Keys;
+      assert threadsAUSeq == threadsAUSeq';
+    } else {
+      assert step.AllocStep?;
+      assert v'.threads[step.idx].miniAllocator.allocs.Keys == v.threads[step.idx].miniAllocator.allocs.Keys + lbl.allocs;
+
+      forall au | au in v.AUs() + lbl.allocs
+      ensures au in v'.AUs()
+      {
+        if au in v.AUs() {
+          UnionSeqOfSetsSoundness(threadsAUSeq);
+          var idx :| 0 <= idx < |threadsAUSeq| && au in threadsAUSeq[idx];
+          assert threadsAUSeq[idx] <= threadsAUSeq'[idx];
+        } else if au in lbl.allocs {
+          assert au in threadsAUSeq'[step.idx];
+        }
+      }
+
+      forall au | au in v'.AUs()
+      ensures au in v.AUs() + lbl.allocs
+      {
+        UnionSeqOfSetsSoundness(threadsAUSeq');
+        var idx :| 0 <= idx < |threadsAUSeq'| && au in threadsAUSeq'[idx];
+        if idx == step.idx {
+          assert au in threadsAUSeq[idx] + lbl.allocs;
+        } else {
+          assert threadsAUSeq[idx] == threadsAUSeq'[idx];
+        }
+      }
+    }
+  }
+
+  lemma CompactCommitAUSubset(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Next(v, v', lbl)
+    requires lbl.CommitLabel?
+    ensures v'.AUs() <= v.AUs()
+  {
+    var threadsAUSeq := seq(|v.threads|, i requires 0 <= i < |v.threads| => v.threads[i].miniAllocator.allocs.Keys);
+    var threadsAUSeq' := seq(|v'.threads|, i requires 0 <= i < |v'.threads| => v'.threads[i].miniAllocator.allocs.Keys);
+    
+    var step :| NextStep(v, v', lbl, step);
+    forall au | au in v'.AUs()
+    ensures au in v.AUs()
+    {
+      UnionSeqOfSetsSoundness(threadsAUSeq');
+      var idx :| 0 <= idx < |threadsAUSeq'| && au in threadsAUSeq'[idx];
+      if idx < step.idx {
+        assert threadsAUSeq[idx] == threadsAUSeq'[idx];
+      } else {
+        assert threadsAUSeq[idx+1] == threadsAUSeq'[idx];
+      }
+    }
   }
 }

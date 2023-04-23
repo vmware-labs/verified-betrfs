@@ -19,6 +19,7 @@ module LikesBetreeRefinement {
   {
     // placeholder
     && v.WF()
+    && ImperativeAgreement(v)
     && BranchedBetreeRefinement.Inv(v.branchedVars)
   }
 

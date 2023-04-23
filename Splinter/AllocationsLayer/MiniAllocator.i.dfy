@@ -119,7 +119,6 @@ module MiniAllocatorMod {
 
     function AddAUs(aus: set<AU>) : (out: MiniAllocator)
       requires WF()
-      requires aus !! allocs.Keys
       ensures out.WF()
     {
       var newAllocs := map au | au in aus + allocs.Keys :: 

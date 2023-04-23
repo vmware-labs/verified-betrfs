@@ -3,11 +3,13 @@
 
 include "AllocationBetree.i.dfy"
 include "../Betree/LikesBetreeRefinement.i.dfy"
+include "../Betree/AllocationBranchRefinement.i.dfy"
 
 // a conditional refinement where it only refines if newly allocated AUs are fresh
 module AllocationBetreeRefinement {
   import opened StampedMod
   import opened AllocationBetreeMod
+  import AllocationBranchRefinement
   import LikesBetreeRefinement
   import LikesBetreeMod
 
@@ -21,10 +23,17 @@ module AllocationBetreeRefinement {
     Stamped(image.value.branched, image.seqEnd)
   }
 
+  // predicate CompactorDisjointMiniAll
+
   predicate Inv(v: Variables)
   {
     // placeholder
     && v.WF()
+    && v.compactor.DisjointMiniAllocator()
+    // AUs should be consistent
+    // && v.betreeAULikes == v.likesVars.betreeLikes.ToAUs()
+    // && v.branchAULikes == v.likesVars.branchLikes.ToAUs() 
+    && v.likesVars.branchedVars.branched.branchDiskView == AllocationBranchRefinement.IDiskView(v.allocBranchDiskView)
     && LikesBetreeRefinement.Inv(v.likesVars)
   }
 
@@ -40,6 +49,8 @@ module AllocationBetreeRefinement {
 
   predicate ValidStampedBetree(stamped: StampedBetree)
   {
+    && stamped.value.dv.WF()
+    && stamped.value.branched.branchDiskView == AllocationBranchRefinement.IDiskView(stamped.value.dv)
     && LikesBetreeRefinement.ValidStampedBetree(IStampedBetree(stamped))
   }
 

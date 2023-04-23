@@ -122,6 +122,16 @@ module AllocationBetreeMod
     )
   }
 
+  predicate Put(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+  {
+    && v.WF()
+    && lbl.PutLabel?
+    && LB.NextStep(v.likesVars, v'.likesVars, lbl.I(), step.I())
+    && v' == v.(
+      likesVars := v'.likesVars // admit relational update above
+    )
+  }
+
   predicate FreezeAs(v: Variables, v': Variables, lbl: TransitionLabel)
   {
     && v.WF()
@@ -139,13 +149,15 @@ module AllocationBetreeMod
   {
     && v.WF()
     && LB.InternalGrowTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
+    && lbl == InternalAllocationsLabel({step.newRootAddr.au}, {})
+
     && v' == v.(
       likesVars := v'.likesVars, // admit relational update above
       betreeAULikes := v.betreeAULikes + multiset({step.newRootAddr.au})
     )
   }
 
-  predicate AddrsWithDisjointAUs(addrs: set<Address>) 
+  predicate {:opaque} AddrsWithDisjointAUs(addrs: set<Address>) 
   {
     forall addr1, addr2 | addr1 in addrs && addr2 in addrs && addr1 != addr2 :: addr1.au != addr2.au
   }
@@ -224,10 +236,10 @@ module AllocationBetreeMod
     // NOTE(Jialin): this is not needed bc we incrementally build each branch via mini allocator
     // so allocation for the branch is already captured by the mini allocator
     // the newRoots are new references to the branches from the betree node
-    // function AllocAUs(dv: BranchDiskView) : set<AU>
-    // {
-    //   UnionSetOfSets(set root | root in newRoots :: SummaryFromBranchRoot(root, dv))
-    // }
+    function AllocAUs(dv: BranchDiskView) : set<AU>
+    {
+      UnionSetOfSets(set root | root in newRoots :: SummaryFromBranchRoot(root, dv))
+    }
 
     // root AUs no longer reachable from betree nodes
     function DeallocRootAUs(likes: LikesAU) : set<AU>
@@ -260,23 +272,29 @@ module AllocationBetreeMod
     }
   }
 
-
   // TODO: blocked on integrating linkedbranch for memtable 
   // Any b+tree that is "observed" is not in the mini-allocator
   predicate InternalFlushMemtable(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
     && v.WF()
+    && lbl.InternalAllocationsLabel?
     && LB.InternalFlushMemtableTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
-    && var oldRootAU := if v.likesVars.branchedVars.branched.HasRoot() 
-      then multiset{v.likesVars.branchedVars.branched.root.value.au} else multiset{};
+
+    && var derefBetreeAddrs := if v.likesVars.branchedVars.branched.HasRoot() 
+        then { v.likesVars.branchedVars.branched.root.value } else {};
+    && var betreeInfo := BetreeInfo({step.newRootAddr}, derefBetreeAddrs);
+    && var branchInfo := BranchInfo({step.branch.root}, {});
+    
     // TODO: change memtable steps
+    && lbl.allocs == betreeInfo.AllocAUs() + branchInfo.AllocAUs(step.branch.diskView) // not needed once we change 
+    && lbl.deallocs == betreeInfo.DeallocAUs(v.betreeAULikes)
 
     && v' == v.(
       likesVars := v'.likesVars, // admit relational update above
       // memtableVars := v'.memtableVars, 
-      // allocBranchDiskView: BranchDiskView, // diskview containing allocation branches
-      betreeAULikes := v.betreeAULikes - oldRootAU + multiset{step.newRootAddr.au},
-      branchAULikes := v.branchAULikes + multiset{step.branch.root.au}
+      betreeAULikes := betreeInfo.UpdateLikes(v.betreeAULikes),
+      branchAULikes := branchInfo.UpdateLikes(v.branchAULikes),
+      allocBranchDiskView := v.allocBranchDiskView.MergeDisk(step.branch.diskView) 
     )
   }
 
@@ -429,10 +447,11 @@ module AllocationBetreeMod
   predicate Init(v: Variables, stamped: StampedBetree)
   {
     && LB.Init(v.likesVars, Stamped(stamped.value.branched, stamped.seqEnd))
-    // v.betreeAULikes == v.likesVars.betreeLikes.ToAUs()
-    // v.branchAULikes == v.likesVars.branchLikes.ToAUs() 
+    // TODO: predicate to verify consistency of betreeAULikes and branchAULikes
+    // && v.betreeAULikes == v.likesVars.betreeLikes.ToAUs()
+    // && v.branchAULikes == v.likesVars.branchLikes.ToAUs() 
     && v.branchReadRefs == multiset{}
-    && stamped.value.branched.branchDiskView == ABR.IDiskView(stamped.value.dv)
+    && v.allocBranchDiskView == stamped.value.dv
     && CompactorMod.Init(v.compactor)
   }
 
@@ -476,9 +495,9 @@ module AllocationBetreeMod
   {
     match step {
       case QueryStep(_) => OnlyAdvanceLikesVars(v, v', lbl, step)
-      // case PutStep() => OnlyAdvanceLikesVars(v, v', lbl, step) // put inserts into the memtable and effect state
+      case PutStep() => Put(v, v', lbl, step) // TODO: put inserts into the memtable and effect state 
       case QueryEndLsnStep() => OnlyAdvanceLikesVars(v, v', lbl, step)
-      case FreezeAsStep() => OnlyAdvanceLikesVars(v, v', lbl, step)
+      case FreezeAsStep() => FreezeAs(v, v', lbl)
       case InternalGrowStep(_) => InternalGrow(v, v', lbl, step)
       case InternalSplitStep(_, _, _, _) => InternalSplit(v, v', lbl, step)
       case InternalFlushMemtableStep(_,_) => InternalFlushMemtable(v, v', lbl, step)
@@ -487,12 +506,25 @@ module AllocationBetreeMod
       case InternalCompactBuildStep() => InternalCompactBuild(v, v', lbl)
       case InternalCompactCommitStep(_, _, _, _, _, _) => InternalCompactCommit(v, v', lbl, step)
       case InternalNoOpStep() => InternalNoOp(v, v', lbl)
-      case _ => InternalNoOp(v, v', lbl)
     }
   }
 
   predicate Next(v: Variables, v': Variables, lbl: TransitionLabel) {
     exists step: Step :: NextStep(v, v', lbl, step)
   }  
+
+  // lemmas
+
+  // here for 2 reasons: 1. only relates to ephemeral states 2. causes timeout in fullstackbetreerefinement
+  lemma InternalCompactCommitCompactorEffects(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
+    requires InternalCompactCommit(v, v', lbl, step)
+    ensures v'.compactor.AUs() <= v.compactor.AUs()
+  {
+    var compactInput := GetCompactInput(step.path, step.start, step.end, v.allocBranchDiskView);
+    var output := AllocationBranchMod.Variables(step.newBranch);
+    CompactorMod.CompactCommitAUSubset(v.compactor, v'.compactor, CompactorMod.CommitLabel(compactInput, output));
+  }
+
+
 
 } // end AllocationBetreeMod
