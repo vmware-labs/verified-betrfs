@@ -1,7 +1,8 @@
 # Running LinearDafny
 
-This will probably work best on Linux. The 'script install' section should be the easiest.
-If it fails, you can try the 'manual install' section or use the Docker container.
+If you're on x86 Linux, the 'script install' section should be the easiest.
+If it fails, or if you're on a different platform,
+you can try the 'manual install' section or use the Docker container.
 
 ## Option 1. Script install
 

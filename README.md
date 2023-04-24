@@ -15,7 +15,7 @@ Note that the primary claim of Sec 7.2 is that each IronSync implementation matc
 
 # Getting started
 
-We recommend Linux for each of the steps.
+We recommend x86 Linux for each of the steps. The first step comes with a Docker container, so can probably be done on any platform. However, the benchmarks _must_ be run on x86 Linux.
 
  * See `ae-instructions-dafny-verification.md` and follow the instructions for setting up Dafny.
  * For each benchmarked system, follow the instructions for building the benchmarks and check that you can start them. See both:
