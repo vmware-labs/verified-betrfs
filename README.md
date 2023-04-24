@@ -17,12 +17,14 @@ Note that the primary claim of Sec 7.2 is that each IronSync implementation matc
 
 We recommend x86 Ubuntu for each of the steps. The first step comes with a Docker container, so can probably be done on any platform. However, the benchmarks _must_ be run on x86 Ubuntu.
 
- * See `ae-instructions-dafny-verification.md` and follow the instructions for setting up Dafny.
+ * See `ae-instructions-dafny-verification.md` and follow the instructions in the "Running Linear Dafny" section.
  * For each benchmarked system, follow the instructions for building the benchmarks and check that you can start them. See both:
     * `concurrency/node-replication/osdi23ae.md`
     * `concurrency/SplinterDB/README.md`
 
 # Detailed Instructions
 
- * See `ae-instructions-dafny-verification.md` and follow the directions in the "Evaluating results" section. Expect this step to take 10-30 minutes.
+After doing the above:
+
+ * See `ae-instructions-dafny-verification.md` and follow the directions in the "Evaluating the output" section.
  * See each of the benchmark pages and follow the instructions for running the benchmarks, using appropriate hardware. Check that the results show that the IronSync versions have comparable performance to the reference implementations.
