@@ -19,7 +19,7 @@ The following commands download these prerequisites and build SplinterDB. Note t
 
 ```shell
 $ sudo apt update -y
-$ sudo apt install -y libaio-dev libxxhash-dev clang-13 numactl coreutils
+$ sudo apt install -y libaio-dev libxxhash-dev clang-13 numactl coreutils make
 $ make
 $ make
 ```
