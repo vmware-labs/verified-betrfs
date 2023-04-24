@@ -1,22 +1,23 @@
 # Running LinearDafny
 
-There are two options, using Docker or using a manual install.
+This will probably work best on Linux. The 'script install' section should be the easiest.
+If it fails, you can try the 'manual install' section or use the Docker container.
 
-## Docker
+## Option 1. Script install
 
-Just run:
+Set-up Linear Dafny:
 
 ```
-./run-dafny-in-docker.sh
+./dotnet-and-dafny-setup.sh
 ```
 
-This will build the docker container and run all the important LinearDafny commands.
-Expect Dafny verification to take around 10-20 minutes.
+Run Linear Dafny:
 
-The Dockerfile is configured with `--platform=linux/amd64`, so e.g., so on an `arm` machine,
-it might run slow because it has to emulate.
+```
+./run-verifier.sh
+```
 
-## Manual
+## Option 2. Manual
 
 First, you need to install .NET Core 5.0 from https://dotnet.microsoft.com/download.
 Unfortunately, this is technically out-of-support now, so it may be difficult to get
@@ -33,14 +34,28 @@ To finish set-up, run,
 ./tools/artifact-setup-dafny.sh
 ```
 
-Finally, run LinearDafny (you can do these steps in either order):
+Finally, run LinearDafny:
 
 ```
-./build-cpp-source.sh
 ./run-verifier.sh
 ```
 
 Expect `run-verifier.sh` to take about 10-20 minutes. 
+
+
+## Option 3. Docker
+
+Just run:
+
+```
+./run-dafny-in-docker.sh
+```
+
+This will build the docker container and run all the important LinearDafny commands.
+Expect Dafny verification to take around 10-20 minutes.
+
+The Dockerfile is configured with `--platform=linux/amd64`, so e.g., so on an `arm` machine,
+it might run slow because it has to emulate.
 
 ## Evaluating the output
 
