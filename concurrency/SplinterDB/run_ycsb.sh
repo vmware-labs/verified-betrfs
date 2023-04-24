@@ -23,7 +23,7 @@ while getopts 'f:t:sh' opt; do
          runs="small_ycsb_load small_ycsb_a small_ycsb_b small_ycsb_c small_ycsb_d small_ycsb_f small_ycsb_e"
          ;;
       ?|h)
-      echo "Usage: $(basename $0) [-f filename] [-t tracedir]"
+      echo "Usage: $(basename $0) [-f filename] -t tracedir"
       echo "filename is the location of the db file (may be large!)"
       echo "tracedir is the directory holding the YCSB traces to replay (mandatory)"
       exit 1
@@ -32,10 +32,7 @@ while getopts 'f:t:sh' opt; do
 done
 
 if [ -z "$tracedir" ] || [ -z "$filename" ]; then
-   echo $tracedir
-   echo $filename
-   echo "there"
-   echo "Usage: $(basename $0) [-f filename] [-t tracedir]"
+   echo "Usage: $(basename $0) [-f filename] -t tracedir"
    echo "filename is the location of the db file (may be large!)"
    echo "tracedir is the directory holding the YCSB traces to replay (mandatory)"
    exit 1

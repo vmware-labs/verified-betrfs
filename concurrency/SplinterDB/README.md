@@ -54,7 +54,7 @@ This benchmark can be scaled down by editing `PERF_OPS` on `tests/cache_test.c:9
 
 ## Run the YCSB macrobenchmark
 
-The YCSB benchmark is run by replaying YCSB operation traces. The traces can be downloaded from https://zenodo.org/record/7857018, and are 38GiB compressed and 110GiB uncompressed. The traces must be uncompressed and the directory holding the traces must be given as an argument to the script. Each run first loads a trace into memory and populates its values with random data.
+The YCSB benchmark is run by replaying YCSB operation traces. The traces can be downloaded from https://zenodo.org/record/7857428, and are 38GiB compressed and 110GiB uncompressed. The traces must be uncompressed and the directory holding the traces must be given as an argument to the script. Each run first loads a trace into memory and populates its values with random data.
 
 # Requirements
 
