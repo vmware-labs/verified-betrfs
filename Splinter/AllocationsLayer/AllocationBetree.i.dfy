@@ -220,6 +220,12 @@ module AllocationBetreeMod
     subdisk
   }
 
+  function RemoveBranches(discardRoots: set<Address>, dv: BranchDiskView) : BranchDiskView
+  {
+    var discardAddrs := UnionSetOfSets(set addr | addr in discardRoots :: FullAddrsFromBranchRoot(addr, dv));
+    dv.RemoveAddrs(discardAddrs)
+  }
+
   // data structure for tracking branch/b+tree allocation status
   datatype BranchInfo = BranchInfo(newRoots: set<Address>, derefRoots: set<Address>)
   {
@@ -279,6 +285,8 @@ module AllocationBetreeMod
     && v.WF()
     && lbl.InternalAllocationsLabel?
     && LB.InternalFlushMemtableTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
+    && step.branch.Acyclic() // maintained by Inv
+    // && step.branch.TightDiskView()
 
     && var derefBetreeAddrs := if v.likesVars.branchedVars.branched.HasRoot() 
         then { v.likesVars.branchedVars.branched.root.value } else {};
@@ -286,7 +294,8 @@ module AllocationBetreeMod
     && var branchInfo := BranchInfo({step.branch.root}, {});
     
     // TODO: change memtable steps
-    && lbl.allocs == betreeInfo.AllocAUs() + branchInfo.AllocAUs(step.branch.diskView) // not needed once we change 
+    && lbl.allocs == betreeInfo.AllocAUs() + step.branch.GetSummary()
+      // branchInfo.AllocAUs(step.branch.diskView) // not needed once we change 
     && lbl.deallocs == betreeInfo.DeallocAUs(v.betreeAULikes)
 
     && v' == v.(
@@ -341,9 +350,9 @@ module AllocationBetreeMod
     }
 
     // set up branch info
-    && var branchNewAddrs := root.branches.Slice(activeOffset, root.branches.Length()).Representation(); // branches flushed to child
-    && var branchDerefAddrs := root.branches.Slice(0, step.branchGCCount).Representation();  // result of GC
-    && var branchInfo := BranchInfo(branchNewAddrs, branchDerefAddrs);
+    && var branchNewRoots := root.branches.Slice(activeOffset, root.branches.Length()).Representation(); // branches flushed to child
+    && var branchDerefRoots := root.branches.Slice(0, step.branchGCCount).Representation();  // result of GC
+    && var branchInfo := BranchInfo(branchNewRoots, branchDerefRoots);
     && var discardRoots := branchInfo.DeallocRootAddrs(v.branchAULikes, v.branchReadRefs, v'.branchReadRefs);
 
     && lbl.allocs == betreeInfo.AllocAUs()
@@ -353,7 +362,7 @@ module AllocationBetreeMod
       likesVars := v'.likesVars, // admit relational update above
       betreeAULikes := betreeInfo.UpdateLikes(v.betreeAULikes),
       branchAULikes := branchInfo.UpdateLikes(v.branchAULikes),
-      allocBranchDiskView := v.allocBranchDiskView.RemoveAddrs(discardRoots)
+      allocBranchDiskView := RemoveBranches(discardRoots, v.allocBranchDiskView)
     )
   }
 
@@ -407,8 +416,7 @@ module AllocationBetreeMod
     && lbl.InternalAllocationsLabel?
     && LB.InternalCompactTree(v.likesVars, v'.likesVars, lbl.I(), step.I())
     && var compactInput := GetCompactInput(step.path, step.start, step.end, v.allocBranchDiskView);
-    && var output := AllocationBranchMod.Variables(step.newBranch);
-    && CompactorMod.Next(v.compactor, v'.compactor, CompactorMod.CommitLabel(compactInput, output))
+    && CompactorMod.Next(v.compactor, v'.compactor, CompactorMod.CommitLabel(compactInput, step.newBranch))
 
     // set up betree info
     && var betreeNewAddrs := Set(step.pathAddrs) + {step.targetAddr};
@@ -417,11 +425,11 @@ module AllocationBetreeMod
     && betreeInfo.WF()
 
     // set up branch info
-    && var branchNewAddrs := {step.newBranch.root}; // new compacted branch
-    && var branchDerefAddrs := compactInput.branchSeq.Representation();
-    && var branchInfo := BranchInfo(branchNewAddrs, branchDerefAddrs);
+    && var branchNewRoots := {step.newBranch.root}; // new compacted branch
+    && var branchDerefRoots := compactInput.branchSeq.Representation();
+    && var branchInfo := BranchInfo(branchNewRoots, branchDerefRoots);
     && var discardRoots := branchInfo.DeallocRootAddrs(v.branchAULikes, v.branchReadRefs, v'.branchReadRefs);
-    && var newAllocBranchDiskView := v.allocBranchDiskView.RemoveAddrs(discardRoots).MergeDisk(step.newBranch.diskView);
+    && var newAllocBranchDiskView := RemoveBranches(discardRoots, v.allocBranchDiskView).MergeDisk(step.newBranch.diskView);
 
     && lbl.allocs == betreeInfo.AllocAUs()
     && lbl.deallocs == betreeInfo.DeallocAUs(v.betreeAULikes) + branchInfo.DeallocAUs(discardRoots, v.allocBranchDiskView)
@@ -518,13 +526,11 @@ module AllocationBetreeMod
   // here for 2 reasons: 1. only relates to ephemeral states 2. causes timeout in fullstackbetreerefinement
   lemma InternalCompactCommitCompactorEffects(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
     requires InternalCompactCommit(v, v', lbl, step)
-    ensures v'.compactor.AUs() <= v.compactor.AUs()
+    ensures step.newBranch.WF()
+    ensures v'.compactor.AUs() + step.newBranch.GetSummary() == v.compactor.AUs()
   {
     var compactInput := GetCompactInput(step.path, step.start, step.end, v.allocBranchDiskView);
-    var output := AllocationBranchMod.Variables(step.newBranch);
-    CompactorMod.CompactCommitAUSubset(v.compactor, v'.compactor, CompactorMod.CommitLabel(compactInput, output));
+    CompactorMod.CompactCommitAUSubset(v.compactor, v'.compactor, CompactorMod.CommitLabel(compactInput, step.newBranch));
   }
-
-
 
 } // end AllocationBetreeMod

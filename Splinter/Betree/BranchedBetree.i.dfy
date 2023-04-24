@@ -676,8 +676,15 @@ module BranchedBetreeMod
       ensures Subpath().CanSubstitute(replacement, pathAddrs[1..])
     {}
 
+    // predicate DomainAfterSubstitute(dv: DiskView, pathAddrs: PathAddrs, dv': DiskView)
+    // {
+    //   && (Set(pathAddrs) !! dv.entries.Keys ==> 
+    //     dv'.entries.Keys - dv.entries.Keys == Set(pathAddrs))
+    // }
+
     function Substitute(replacement: BranchedBetree, pathAddrs: PathAddrs) : (out: BranchedBetree)
       requires CanSubstitute(replacement, pathAddrs)
+      // ensures DomainAfterSubstitute(replacement.diskView, pathAddrs, out.diskView)
       decreases depth, 1
     {
       if depth == 0
@@ -689,6 +696,16 @@ module BranchedBetreeMod
         var newChildren := node.children[Route(node.pivotTable, key) := subtree.root];
         var newNode := BetreeNode(node.branches, node.pivotTable, newChildren, node.flushedOffsets);
         var newDiskView := subtree.diskView.ModifyDisk(pathAddrs[0], newNode);
+
+        // assert DomainAfterSubstitute(replacement.diskView, pathAddrs, newDiskView) by {
+        //   assert DomainAfterSubstitute(replacement.diskView, pathAddrs[1..], subtree.diskView);
+        //   if Set(pathAddrs) !! replacement.diskView.entries.Keys {
+        //     assert subtree.diskView.entries.Keys - replacement.diskView.entries.Keys == Set(pathAddrs[1..]);
+        //     assert newDiskView.entries.Keys == subtree.diskView.entries.Keys + {pathAddrs[0]};
+        //     assert  Set(pathAddrs[1..]) + {pathAddrs[0]} == Set(pathAddrs);
+        //   }
+        // }
+
         BranchedBetree(GenericDisk.Pointer.Some(pathAddrs[0]), newDiskView, branched.branchDiskView)
     }
   }

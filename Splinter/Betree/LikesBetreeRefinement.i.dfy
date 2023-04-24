@@ -14,6 +14,11 @@ module LikesBetreeRefinement {
   {
     v.branchedVars
   }
+  
+  function IStampedBetree(image: StampedBetree) : BranchedBetreeMod.StampedBetree
+  {
+    image
+  }
 
   predicate Inv(v: Variables)
   {
@@ -32,7 +37,7 @@ module LikesBetreeRefinement {
     requires Init(v, stamped)
     requires ValidStampedBetree(stamped)
     ensures Inv(v)
-    ensures BranchedBetreeMod.Init(I(v), stamped)
+    ensures BranchedBetreeMod.Init(I(v), IStampedBetree(stamped))
   {
     BranchedBetreeRefinement.InitRefines(v.branchedVars, stamped);
   }

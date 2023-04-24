@@ -116,7 +116,7 @@ module CoordinationBetree {
     // an async superblock write may be in progress, and we need to maintain
     // guarantees about its in-flight map state.
     && v.inFlight.None?
-    && AllocBetree.FreezeAs(v.ephemeral.v, v'.ephemeral.v, AllocBetree.FreezeAsLabel(frozenBetree, lbl.unobserved))
+    && AllocBetree.Next(v.ephemeral.v, v'.ephemeral.v, AllocBetree.FreezeAsLabel(frozenBetree, lbl.unobserved))
     && v'.inFlight == Some(frozenBetree)
     && v'.persistent == v.persistent // UNCHANGED
   }

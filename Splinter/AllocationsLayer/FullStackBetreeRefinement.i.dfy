@@ -15,6 +15,8 @@ module FullStackBetreeRefinement {
   import opened Maps
   import opened Options
   import opened StampedMod
+  import opened Sequences
+  import G = GenericDisk
   import CoordinationBetree
   import AllocationBetreeMod
   import AllocationBetreeRefinement
@@ -37,6 +39,64 @@ module FullStackBetreeRefinement {
       && lbl.allocs !! v.persistent.value.AccessibleAUs()
       && (v.ephemeral.Known? ==> lbl.allocs !! v.ephemeral.v.AccessibleAUs())
       && (v.inFlight.Some? ==> lbl.allocs !! v.inFlight.value.value.AccessibleAUs()))
+  }
+
+  lemma FreshLabelImpliesDisjointAddrs(v: CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel, addrs: set<G.Address>)
+    requires lbl.InternalLabel?
+    requires FreshLabel(v, lbl)
+    requires G.ToAUs(addrs) <= lbl.allocs
+    ensures addrs !! v.persistent.value.branched.diskView.entries.Keys
+    ensures addrs !! v.persistent.value.dv.entries.Keys
+    ensures v.inFlight.Some? ==> addrs !! v.inFlight.value.value.branched.diskView.entries.Keys
+    ensures v.inFlight.Some? ==> addrs !! v.inFlight.value.value.dv.entries.Keys
+  {
+    forall addr | addr in addrs 
+      ensures addr !in v.persistent.value.branched.diskView.entries.Keys
+      ensures addr !in v.persistent.value.dv.entries.Keys
+      ensures v.inFlight.Some? ==> addr !in v.inFlight.value.value.branched.diskView.entries.Keys
+      ensures v.inFlight.Some? ==> addr !in v.inFlight.value.value.dv.entries.Keys
+    {
+      if addr in v.persistent.value.branched.diskView.entries.Keys || addr in v.persistent.value.dv.entries.Keys {
+        assert addr.au in v.persistent.value.AccessibleAUs();
+        assert false;
+      }
+
+      if v.inFlight.Some? {
+        if addr in v.inFlight.value.value.branched.diskView.entries.Keys || addr in v.inFlight.value.value.dv.entries.Keys {
+          assert addr.au in v.inFlight.value.value.AccessibleAUs();
+          assert false;
+        }
+      }
+    }
+  }
+
+  lemma CompactorImpliesDisjointAddrs(v: CoordinationBetree.Variables, addrs: set<G.Address>)
+    requires v.ephemeral.Known?
+    requires G.ToAUs(addrs) <= v.ephemeral.v.compactor.AUs()
+    requires InFlightAndPersistentImagesNotFree(v)
+    ensures addrs !! v.persistent.value.branched.diskView.entries.Keys
+    ensures addrs !! v.persistent.value.dv.entries.Keys
+    ensures v.inFlight.Some? ==> addrs !! v.inFlight.value.value.branched.diskView.entries.Keys
+    ensures v.inFlight.Some? ==> addrs !! v.inFlight.value.value.dv.entries.Keys
+  {
+    forall addr | addr in addrs 
+      ensures addr !in v.persistent.value.branched.diskView.entries.Keys
+      ensures addr !in v.persistent.value.dv.entries.Keys
+      ensures v.inFlight.Some? ==> addr !in v.inFlight.value.value.branched.diskView.entries.Keys
+      ensures v.inFlight.Some? ==> addr !in v.inFlight.value.value.dv.entries.Keys
+    {
+      if addr in v.persistent.value.branched.diskView.entries.Keys || addr in v.persistent.value.dv.entries.Keys {
+        assert addr.au in v.persistent.value.AccessibleAUs();
+        assert false;
+      }
+
+      if v.inFlight.Some? {
+        if addr in v.inFlight.value.value.branched.diskView.entries.Keys || addr in v.inFlight.value.value.dv.entries.Keys {
+          assert addr.au in v.inFlight.value.value.AccessibleAUs();
+          assert false;
+        }
+      }
+    }
   }
 
   predicate BetreeStatesAgrees(v: CoordinationBetree.Variables)
@@ -100,6 +160,16 @@ module FullStackBetreeRefinement {
       case _ => AllocationBetreeMod.InternalAllocationsLabel({}, {}) // no op label
   }
 
+  function IAllocLbl(lbl: AllocationBetreeMod.TransitionLabel) : AbstractMap.TransitionLabel
+  {
+    var linkedLbl := BranchedBetreeRefinement.ILbl(lbl.I().I());
+    var filteredLbl := LinkedBetreeRefinement.ILbl(linkedLbl);
+    var pivotLbl := FilteredBetreeRefinement.ILbl(filteredLbl);
+    var pagedLbl := PivotBetreeRefinement.ILbl(pivotLbl);
+    var mapLbl := PagedBetreeRefinement.ILbl(pagedLbl);
+    mapLbl
+  }
+
   function IBetree(betree: AllocationBetreeMod.Variables) : AbstractMap.Variables
     requires AllocationBetreeRefinement.Inv(betree)
   {
@@ -142,6 +212,132 @@ module FullStackBetreeRefinement {
     )
   }
 
+  lemma InternalSplitStepPreservesInv(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel, allocStep: AllocationBetreeMod.Step)
+    requires Inv(v)
+    requires FreshLabel(v, lbl)
+    requires lbl.InternalLabel?
+    requires CoordinationBetree.Next(v, v', lbl)
+    requires allocStep.InternalSplitStep?
+    requires AllocationBetreeMod.NextStep(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep)
+    ensures Inv(v')
+  {
+    AllocationBetreeRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+
+    var pathAddrs := allocStep.pathAddrs;
+    var newAddrs := allocStep.newAddrs;
+    var ephemeralBetreeDisk := v.ephemeral.v.likesVars.branchedVars.branched.diskView;
+    var ephemeralBetreeDisk' := v'.ephemeral.v.likesVars.branchedVars.branched.diskView;
+    var betreeNewAddrs := Set(pathAddrs) + newAddrs.Repr();
+          
+    assume MapsAgree(ephemeralBetreeDisk.entries, ephemeralBetreeDisk'.entries);
+    assume ephemeralBetreeDisk'.entries.Keys - ephemeralBetreeDisk.entries.Keys == betreeNewAddrs;
+
+    FreshLabelImpliesDisjointAddrs(v, lbl, betreeNewAddrs);
+    assert BetreeStatesAgrees(v');
+    assert InFlightAndPersistentImagesNotFree(v');
+  }
+
+  lemma InternalFlushMemtableStepPreservesInv(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel, allocStep: AllocationBetreeMod.Step)
+    requires Inv(v)
+    requires FreshLabel(v, lbl)
+    requires lbl.InternalLabel?
+    requires CoordinationBetree.Next(v, v', lbl)
+    requires allocStep.InternalFlushMemtableStep?
+    requires AllocationBetreeMod.NextStep(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep)
+    ensures Inv(v')
+  {
+    AllocationBetreeRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+
+    var newRootAddr := allocStep.newRootAddr;
+    var branch := allocStep.branch;
+    var ephemeralBetreeDisk := v.ephemeral.v.likesVars.branchedVars.branched.diskView;
+    var ephemeralBetreeDisk' := v'.ephemeral.v.likesVars.branchedVars.branched.diskView;    
+    var betreeNewAddrs := {newRootAddr};
+
+    assume MapsAgree(ephemeralBetreeDisk.entries, ephemeralBetreeDisk'.entries);
+    assume ephemeralBetreeDisk'.entries.Keys - ephemeralBetreeDisk.entries.Keys == betreeNewAddrs;
+
+    var branchNewAddrs := branch.Representation();
+    var ephemeralBranchDisk := v.ephemeral.v.allocBranchDiskView;
+    var ephemeralBranchDisk' := v'.ephemeral.v.allocBranchDiskView;
+          
+    assume MapsAgree(ephemeralBranchDisk.entries, ephemeralBranchDisk'.entries);
+    assume ephemeralBranchDisk'.entries.Keys - ephemeralBranchDisk.entries.Keys == branchNewAddrs;
+    assume G.ToAUs(branchNewAddrs) == branch.GetSummary(); // maintained as part of allocationbetree inv
+
+    FreshLabelImpliesDisjointAddrs(v, lbl, betreeNewAddrs);
+    FreshLabelImpliesDisjointAddrs(v, lbl, branchNewAddrs);
+
+    assert BetreeStatesAgrees(v');
+    assert InFlightAndPersistentImagesNotFree(v');
+  }
+
+  lemma InternalFlushStepPreservesInv(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel, allocStep: AllocationBetreeMod.Step)
+    requires Inv(v)
+    requires FreshLabel(v, lbl)
+    requires lbl.InternalLabel?
+    requires CoordinationBetree.Next(v, v', lbl)
+    requires allocStep.InternalFlushStep?
+    requires AllocationBetreeMod.NextStep(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep)
+    ensures Inv(v')
+  {
+    AllocationBetreeRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+  
+    var ephemeralBetreeDisk := v.ephemeral.v.likesVars.branchedVars.branched.diskView;
+    var ephemeralBetreeDisk' := v'.ephemeral.v.likesVars.branchedVars.branched.diskView;   
+    var betreeNewAddrs := {allocStep.targetAddr} + {allocStep.targetChildAddr} + Set(allocStep.pathAddrs);
+
+    assume MapsAgree(ephemeralBetreeDisk.entries, ephemeralBetreeDisk'.entries);
+    assume ephemeralBetreeDisk'.entries.Keys - ephemeralBetreeDisk.entries.Keys == betreeNewAddrs;
+    FreshLabelImpliesDisjointAddrs(v, lbl, betreeNewAddrs);
+
+    var ephemeralBranchDisk := v.ephemeral.v.allocBranchDiskView;
+    var ephemeralBranchDisk' := v'.ephemeral.v.allocBranchDiskView;
+    assert ephemeralBranchDisk'.IsSubsetOf(ephemeralBranchDisk);
+
+    assert BetreeStatesAgrees(v');
+    assert InFlightAndPersistentImagesNotFree(v');
+  }
+
+  lemma InternalCompactCommitStepPreservesInv(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel, allocStep: AllocationBetreeMod.Step)
+    requires Inv(v)
+    requires FreshLabel(v, lbl)
+    requires lbl.InternalLabel?
+    requires CoordinationBetree.Next(v, v', lbl)
+    requires allocStep.InternalCompactCommitStep?
+    requires AllocationBetreeMod.NextStep(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep)
+    ensures Inv(v')
+  {
+    AllocationBetreeRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+    assert AllocationBetreeRefinement.Inv(v'.ephemeral.v);
+    assert v'.inFlight == v.inFlight;
+    assert v'.persistent == v.persistent;
+
+    AllocationBetreeMod.InternalCompactCommitCompactorEffects(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
+    assert allocStep.newBranch.WF();
+    assert v'.ephemeral.v.compactor.AUs() + allocStep.newBranch.GetSummary() == v.ephemeral.v.compactor.AUs();
+    assert allocStep.newBranch.GetSummary() <= v.ephemeral.v.compactor.AUs();
+    assert InFlightAndPersistentImagesNotFree(v');
+
+    var ephemeralBetreeDisk := v.ephemeral.v.likesVars.branchedVars.branched.diskView;
+    var ephemeralBetreeDisk' := v'.ephemeral.v.likesVars.branchedVars.branched.diskView;    
+    var betreeNewAddrs := Set(allocStep.pathAddrs) + {allocStep.targetAddr};
+
+    assume MapsAgree(ephemeralBetreeDisk.entries, ephemeralBetreeDisk'.entries);
+    assume ephemeralBetreeDisk'.entries.Keys - ephemeralBetreeDisk.entries.Keys == betreeNewAddrs;
+    FreshLabelImpliesDisjointAddrs(v, lbl, betreeNewAddrs);
+
+    var ephemeralBranchDisk := v.ephemeral.v.allocBranchDiskView;
+    var ephemeralBranchDisk' := v'.ephemeral.v.allocBranchDiskView;
+    var branchNewAddrs := allocStep.newBranch.diskView.entries.Keys;
+
+    assume MapsAgree(ephemeralBranchDisk.entries, ephemeralBranchDisk'.entries);
+    assume ephemeralBranchDisk'.entries.Keys - ephemeralBranchDisk.entries.Keys == branchNewAddrs;
+    assume G.ToAUs(branchNewAddrs) == allocStep.newBranch.GetSummary();
+
+    CompactorImpliesDisjointAddrs(v, branchNewAddrs);
+  }
+
   lemma InternalLabelNextPreservesInv(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel)
     requires Inv(v)
     requires FreshLabel(v, lbl)
@@ -150,36 +346,27 @@ module FullStackBetreeRefinement {
     ensures Inv(v')
     {
       AllocationBetreeRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+      assert v'.inFlight == v.inFlight;
+      assert v'.persistent == v.persistent;
+
       var allocStep :| AllocationBetreeMod.NextStep(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
       match allocStep {
         case InternalGrowStep(_) => {}
-        case InternalSplitStep(path, request, newAddrs, pathAddrs) => {
-          assert InFlightAndPersistentImagesNotFree(v');
-          assume BetreeStatesAgrees(v');
-        }
-        case InternalFlushMemtableStep(_,_) => {
-          assert InFlightAndPersistentImagesNotFree(v');
-          assume BetreeStatesAgrees(v');
-        }
-        case InternalFlushStep(_, _, _, _, _, _) => {
-          assert InFlightAndPersistentImagesNotFree(v');
-          assume BetreeStatesAgrees(v');
-        }
-        case InternalCompactBeginStep(path, start, end) => {        
+        case InternalSplitStep(path, request, newAddrs, pathAddrs) => { InternalSplitStepPreservesInv(v, v', lbl, allocStep); }
+        case InternalFlushMemtableStep(_, _) => { InternalFlushMemtableStepPreservesInv(v, v', lbl, allocStep); }
+        case InternalFlushStep(_, _, _, _, _, _) => { InternalFlushStepPreservesInv(v, v', lbl, allocStep); }
+        case InternalCompactBeginStep(path, start, end) => 
+        {
           var compactInput := AllocationBetreeMod.GetCompactInput(path, start, end, v.ephemeral.v.allocBranchDiskView);
           var compactLbl := CompactorMod.BeginLabel(compactInput, lbl.allocs);
           CompactorMod.CompactBeginExtendsAU(v.ephemeral.v.compactor, v'.ephemeral.v.compactor, compactLbl);
         }
-        case InternalCompactBuildStep() => {
+        case InternalCompactBuildStep() =>
+        {
           var compactLbl := CompactorMod.InternalLabel(lbl.allocs);
           CompactorMod.CompactInternalExtendsAU(v.ephemeral.v.compactor, v'.ephemeral.v.compactor, compactLbl);
         }
-        case InternalCompactCommitStep(_, _, _, _, _, _) => {
-          AllocationBetreeMod.InternalCompactCommitCompactorEffects(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
-          assert v'.ephemeral.v.compactor.AUs() <= v.ephemeral.v.compactor.AUs();
-          assert InFlightAndPersistentImagesNotFree(v');
-          assume BetreeStatesAgrees(v');
-        }
+        case InternalCompactCommitStep(_, _, _, _, _, _) => { InternalCompactCommitStepPreservesInv(v, v', lbl, allocStep); }
         case InternalNoOpStep() => {}
         case _ => assert false;
     }
@@ -211,6 +398,76 @@ module FullStackBetreeRefinement {
     PagedBetreeRefinement.EmptyImageRefines();
   }
 
+  lemma AllocInitRefinesAbstract(v: AllocationBetreeMod.Variables, image: AllocationBetreeMod.StampedBetree)
+    requires AllocationBetreeRefinement.Inv(v)
+    requires AllocationBetreeMod.Init(v, image)
+    ensures AbstractMap.Init(IBetree(v), IBetreeImage(image))
+  {
+    AllocationBetreeRefinement.InitRefines(v, image);
+    
+    var likesBetree := AllocationBetreeRefinement.I(v);
+    var likesImage := AllocationBetreeRefinement.IStampedBetree(image);
+    LikesBetreeRefinement.InitRefines(likesBetree, likesImage);
+
+    var branchedBetree := LikesBetreeRefinement.I(likesBetree);
+    var branchedImage := LikesBetreeRefinement.IStampedBetree(likesImage);
+    BranchedBetreeRefinement.InitRefines(branchedBetree, branchedImage);
+
+    var linkedBetree := BranchedBetreeRefinement.I(branchedBetree);
+    var linkedImage := BranchedBetreeRefinement.IStampedBetree(branchedImage);
+    LinkedBetreeRefinement.InitRefines(linkedBetree, linkedImage);
+
+    var filteredBetree := LinkedBetreeRefinement.I(linkedBetree);
+    var filteredImage := LinkedBetreeRefinement.IStampedBetree(linkedImage);
+    FilteredBetreeRefinement.InitRefines(filteredBetree, filteredImage);
+
+    var pivotBetree := FilteredBetreeRefinement.I(filteredBetree);
+    var pivotImage := FilteredBetreeRefinement.IStampedBetree(filteredImage);
+    PivotBetreeRefinement.InitRefines(pivotBetree, pivotImage);
+
+    var pagedBetree := PivotBetreeRefinement.I(pivotBetree);
+    var pagedImage := PivotBetreeRefinement.IStampedBetree(pivotImage);
+    PagedBetreeRefinement.InitRefines(pagedBetree, pagedImage);
+  }
+
+  lemma AllocNextRefinesAbstract(v: AllocationBetreeMod.Variables, v': AllocationBetreeMod.Variables, lbl: AllocationBetreeMod.TransitionLabel)
+    requires AllocationBetreeRefinement.Inv(v)
+    requires AllocationBetreeRefinement.Inv(v')
+    requires AllocationBetreeMod.Next(v, v', lbl)
+    requires AllocationBetreeRefinement.FreshLabel(v, lbl)
+    ensures AbstractMap.Next(IBetree(v), IBetree(v'), IAllocLbl(lbl))
+  {
+    AllocationBetreeRefinement.NextRefines(v, v', lbl);
+    
+    var likesBetree := AllocationBetreeRefinement.I(v);
+    var likesBetree' := AllocationBetreeRefinement.I(v');
+    LikesBetreeRefinement.NextRefines(likesBetree, likesBetree', lbl.I());
+
+    var branchedBetree := LikesBetreeRefinement.I(likesBetree);
+    var branchedBetree' := LikesBetreeRefinement.I(likesBetree');
+    BranchedBetreeRefinement.NextRefines(branchedBetree, branchedBetree', lbl.I().I());
+
+    var linkedBetree := BranchedBetreeRefinement.I(branchedBetree);
+    var linkedBetree' := BranchedBetreeRefinement.I(branchedBetree');
+    var linkedLbl := BranchedBetreeRefinement.ILbl(lbl.I().I());
+    LinkedBetreeRefinement.NextRefines(linkedBetree, linkedBetree', linkedLbl);
+
+    var filteredBetree := LinkedBetreeRefinement.I(linkedBetree);
+    var filteredBetree' := LinkedBetreeRefinement.I(linkedBetree');
+    var filteredLbl := LinkedBetreeRefinement.ILbl(linkedLbl);
+    FilteredBetreeRefinement.NextRefines(filteredBetree, filteredBetree', filteredLbl);
+
+    var pivotBetree := FilteredBetreeRefinement.I(filteredBetree);
+    var pivotBetree' := FilteredBetreeRefinement.I(filteredBetree');
+    var pivotLbl := FilteredBetreeRefinement.ILbl(filteredLbl);
+    PivotBetreeRefinement.NextRefines(pivotBetree, pivotBetree', pivotLbl);
+
+    var pagedBetree := PivotBetreeRefinement.I(pivotBetree);
+    var pagedBetree' := PivotBetreeRefinement.I(pivotBetree');
+    var pagedLbl := PivotBetreeRefinement.ILbl(pivotLbl);
+    PagedBetreeRefinement.NextRefines(pagedBetree, pagedBetree', pagedLbl);
+  }
+
   lemma NextRefines(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel)
     requires Inv(v)
     requires FreshLabel(v, lbl)
@@ -218,18 +475,40 @@ module FullStackBetreeRefinement {
     ensures Inv(v')
     ensures CrashTolerantMap.Next(I(v), I(v'), ILbl(lbl))
   {
-    assume false;
-    // match lbl {
-    //   case LoadEphemeralFromPersistentLabel() => {}
-    //   case ReadForRecoveryLabel(records) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
-    //   case QueryEndLsnLabel(_) => {}
-    //   case PutLabel(_) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
-    //   case InternalLabel(allocs, deallocs) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
-    //   case QueryLsnPersistenceLabel(_) => {}
-    //   case FreezeAsLabel(_) => {}
-    //   case CommitStartLabel(_, _) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
-    //   case CommitCompleteLabel(_, _)=> { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
-    //   case CrashLabel() => {}
-    // }
+    InvNext(v, v', lbl);
+
+    var step :| CoordinationBetree.NextStep(v, v', lbl, step);
+    match step {
+      case LoadEphemeralFromPersistentStep() => {
+        AllocInitRefinesAbstract(v'.ephemeral.v, v.persistent);
+        assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.LoadEphemeralFromPersistentStep());
+      }
+      case PutRecordsStep() => {
+        AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+        assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.PutRecordsStep());
+      }
+      case QueryStep() => {
+        AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+        assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.QueryStep());
+      }
+      case FreezeMapInternalStep(frozenBetree) => {
+        AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+        var frozenMap := IBetreeImage(frozenBetree);
+        assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.FreezeMapInternalStep(frozenMap));
+      }
+      case EphemeralInternalStep() => {
+        AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+        assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.EphemeralInternalStep());
+      }
+      case CommitStartStep() => {
+        assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.CommitStartStep());
+      }
+      case CommitCompleteStep() => {
+        assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.CommitCompleteStep());
+      }
+      case CrashStep() => {
+        assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.CrashStep());
+      }
+    }
   }
 }

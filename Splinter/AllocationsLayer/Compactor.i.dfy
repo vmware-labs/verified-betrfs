@@ -83,7 +83,7 @@ module CompactorMod
   datatype TransitionLabel =
     | BeginLabel(input: CompactInput, aus: set<AU>) // initial AU allocated to compactor's mini allocator
     | InternalLabel(allocs: set<AU>)
-    | CommitLabel(input: CompactInput, output: AllocBranch.Variables)
+    | CommitLabel(input: CompactInput, output: AllocBranch.AllocationBranch)
     | AbortLabel(deallocs: set<AU>)  // allow us to abandon a compaction (even though in practice this is not necessary, via scheduler magic)
 
   predicate Begin(v: Variables, v': Variables, lbl: TransitionLabel, addr: Address) {
@@ -171,7 +171,9 @@ module CompactorMod
     && thread.nextKey == Element.Max_Element 
     && thread.output.branch.Sealed() // everything in thread.ouput are reserved in mini allocator
     && thread.output.branch.GetSummary() == thread.miniAllocator.allocs.Keys // no AUs can magically disappear
-    && lbl.output == thread.output
+    // && thread.output.branch.TightDiskView()
+
+    && lbl.output == thread.output.branch
     && v'.threads == remove(v.threads, idx)
   }
 
@@ -294,8 +296,9 @@ module CompactorMod
   lemma CompactCommitAUSubset(v: Variables, v': Variables, lbl: TransitionLabel)
     requires Next(v, v', lbl)
     requires lbl.CommitLabel?
-    ensures v'.AUs() <= v.AUs()
+    ensures v'.AUs() + lbl.output.GetSummary() == v.AUs()
   {
+    // TODO
     var threadsAUSeq := seq(|v.threads|, i requires 0 <= i < |v.threads| => v.threads[i].miniAllocator.allocs.Keys);
     var threadsAUSeq' := seq(|v'.threads|, i requires 0 <= i < |v'.threads| => v'.threads[i].miniAllocator.allocs.Keys);
     
