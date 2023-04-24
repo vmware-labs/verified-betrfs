@@ -1,6 +1,6 @@
 # Running LinearDafny
 
-If you're on x86 Linux, the 'script install' section should be the easiest.
+If you're on x86 Ubuntu, the 'script install' section should be the easiest.
 If it fails, or if you're on a different platform,
 you can try the 'manual install' section or use the Docker container.
 
@@ -56,7 +56,7 @@ This will build the docker container and run all the important LinearDafny comma
 Expect Dafny verification to take around 10-20 minutes.
 
 The Dockerfile is configured with `--platform=linux/amd64`, so e.g., so on an `arm` machine,
-it might run slow because it has to emulate.
+it might run slow because it has to emulate. On MacOS (arm) you can enable rosetta for docker to make it faster.
 
 ## Evaluating the output
 

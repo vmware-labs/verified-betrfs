@@ -11,11 +11,11 @@ See the following files for directions:
 
 These 3 parts are designed to be independent.
 
-Note that the primary claim of Sec 7.2 is that each IronSync implementation matches the performance of its corresponding reference implementation within a small tolerance.  We expect that this feature will reproduce on most hardware that can run the software. Reproducing the exact performance characteristics requires more specific hardware. The benchmark instruction pages provide more specific recommendations.
+Note that the primary claim of Sec 7.2 is that each IronSync implementation matches the performance of its corresponding reference implementation within a small tolerance.  We expect that this feature will reproduce on most hardware that can run the software. Reproducing the exact performance characteristics requires more specific hardware. The benchmark instruction pages provide more specific hardware recommendations.
 
 # Getting started
 
-We recommend x86 Linux for each of the steps. The first step comes with a Docker container, so can probably be done on any platform. However, the benchmarks _must_ be run on x86 Linux.
+We recommend x86 Ubuntu for each of the steps. The first step comes with a Docker container, so can probably be done on any platform. However, the benchmarks _must_ be run on x86 Ubuntu.
 
  * See `ae-instructions-dafny-verification.md` and follow the instructions for setting up Dafny.
  * For each benchmarked system, follow the instructions for building the benchmarks and check that you can start them. See both:
