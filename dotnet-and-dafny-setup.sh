@@ -8,6 +8,12 @@ if [ ! -f /usr/include/numa.h ]; then
   sudo apt-get -y install libnuma-dev
 fi
 
+if ! command -v make &> /dev/null
+then
+    echo "make could not be found in PATH."
+    sudo apt-get -y install make
+fi
+
 if ! command -v dotnet &> /dev/null
 then
     echo "dotnet could not be found in PATH."
