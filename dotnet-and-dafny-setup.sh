@@ -54,6 +54,7 @@ else
 fi
 
 if ! tools/local-dafny.sh /version &> /dev/null; then
+    rm -rf .dafny
     ./tools/artifact-setup-dafny.sh
 fi
 

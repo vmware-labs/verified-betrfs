@@ -9,10 +9,10 @@ you can try the 'manual install' section or use the Docker container.
 Set-up Linear Dafny:
 
 ```
-./dotnet-and-dafny-setup.sh
+source ./dotnet-and-dafny-setup.sh
 ```
 
-Run Linear Dafny:
+Run Linear Dafny (make sure to run the previous command via `source`):
 
 ```
 ./run-verifier.sh
