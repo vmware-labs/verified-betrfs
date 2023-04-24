@@ -2,6 +2,8 @@
 
 set -e
 
+sudo apt-get -y install unzip
+
 if [ ! -f /usr/include/numa.h ]; then
   echo "Missing libnuma headers; installing"
   sudo apt-get update
