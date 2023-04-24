@@ -11,6 +11,8 @@ See
 
 This version of SplinterDB can be run with a verified cache module. This module is linked into the test harbess via `./bin/veri_driver_test`, and the original unverified cache is linked via `./bin/driver_test`.
 
+# Artifact information
+
 ## How to Set Up and Build SplinterDB
 
 SplinterDB requires libaio and libxxhash, and the build is known to work with clang-13. The microbenchmark uses numactl to restrict to a single NUMA node, and coreutils to write to output files without buffering.
