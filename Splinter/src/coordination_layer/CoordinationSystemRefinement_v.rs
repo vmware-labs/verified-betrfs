@@ -495,13 +495,7 @@ verus! {
       v.inv(),
       CoordinationSystem::State::next(v, vp, label),
       CoordinationSystem::State::next_by(v, vp, label, step),
-      // matches!(step, CoordinationSystem::Step::put(_, _)),
-      match step {
-        CoordinationSystem::Step::put(new_journal, new_mapadt) => {
-          vp.journal == new_journal && vp.mapadt == new_mapadt
-        },
-        _ => false
-      }
+      matches!(step, CoordinationSystem::Step::put(_, _)),
     ensures
       vp.inv(),
   {
@@ -569,5 +563,32 @@ verus! {
     }
 
     assert(vp.inv());
+  }
+
+  pub proof fn inv_inductive_commit_start_step(
+    v: CoordinationSystem::State,
+    vp: CoordinationSystem::State,
+    label: CoordinationSystem::Label,
+    step: CoordinationSystem::Step,
+  )
+    requires
+      v.inv(),
+      CoordinationSystem::State::next(v, vp, label),
+      CoordinationSystem::State::next_by(v, vp, label, step),
+      matches!(step, CoordinationSystem::Step::commit_start(_, _, _)),
+    ensures
+      vp.inv()
+  {
+    // The classic preamble for revealing all nested transitions we rely on
+    reveal(CoordinationSystem::State::next);
+    reveal(CoordinationSystem::State::next_by);
+    reveal(CrashTolerantJournal::State::next);
+    reveal(CrashTolerantJournal::State::next_by);
+    reveal(AbstractJournal::State::next);
+    reveal(AbstractJournal::State::next_by);
+    reveal(CrashTolerantMap::State::next);
+    reveal(CrashTolerantMap::State::next_by);
+    // reveal(AbstractMap::State::next);
+    // reveal(AbstractMap::State::next_by);
   }
 }

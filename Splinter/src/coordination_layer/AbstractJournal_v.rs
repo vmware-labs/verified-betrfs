@@ -35,12 +35,14 @@ state_machine!{ AbstractJournal {
 
     init!{ 
         initialize(persistent_journal: MsgHistory) {
+            require persistent_journal.wf();
             init journal = persistent_journal;
         }
     }
 
     transition!{
         read_for_recovery(lbl: Label) {
+            require pre.wf();
             require lbl.is_ReadForRecoveryLabel();
             // TODO(verus): it would be nice to have a get_messages() accessor
             require pre.journal.includes_subseq(lbl.get_ReadForRecoveryLabel_messages());
@@ -49,13 +51,16 @@ state_machine!{ AbstractJournal {
 
     transition!{
         freeze_for_commit(lbl: Label) {
+            require pre.wf();
             require lbl.is_FreezeForCommitLabel();
+            require lbl.get_FreezeForCommitLabel_frozen_journal().wf();
             require pre.journal.includes_subseq(lbl.get_FreezeForCommitLabel_frozen_journal());
         }
     }
 
     transition!{
         observe_fresh_journal(lbl: Label) {
+            require pre.wf();
             require lbl.is_QueryEndLsnLabel();
             require pre.can_end_at(lbl.get_QueryEndLsnLabel_end_lsn());
         }
@@ -63,6 +68,7 @@ state_machine!{ AbstractJournal {
 
     transition!{
         put(lbl: Label) {
+            require pre.wf();
             require lbl.is_PutLabel();
             require pre.journal.seq_end == lbl.get_PutLabel_messages().seq_start;
             update journal = pre.journal.concat(lbl.get_PutLabel_messages());
@@ -71,6 +77,7 @@ state_machine!{ AbstractJournal {
 
     transition!{
         discard_old(lbl: Label) {
+            require pre.wf();
             require lbl.is_DiscardOldLabel();
             require pre.journal.seq_end == lbl.get_DiscardOldLabel_require_end();
             require pre.journal.can_discard_to(lbl.get_DiscardOldLabel_start_lsn());
@@ -80,6 +87,7 @@ state_machine!{ AbstractJournal {
 
     transition!{
         internal(lbl: Label) {
+            require pre.wf();
             require lbl.is_InternalLabel();
         }
     }

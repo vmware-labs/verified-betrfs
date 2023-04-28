@@ -143,6 +143,9 @@ state_machine!{ CrashTolerantJournal {
             // Can't start a commit if one is in-flight, or we'd forget to maintain the
             // invariants for the in-flight one.
             require pre.in_flight.is_None();
+            
+            // The frozen_journal should be well formed
+            require frozen_journal.wf();
 
             // Frozen journal stitches to frozen map
             require frozen_journal.seq_start == lbl.get_CommitStartLabel_new_boundary_lsn();
@@ -169,9 +172,7 @@ state_machine!{ CrashTolerantJournal {
             require lbl.is_CommitCompleteLabel();
             require pre.ephemeral.is_Known();
             require pre.in_flight.is_Some();
-            // TODO: remove lines like this which fix step unnecessarily (next_by
-            // should handle matching transition to appropriate type based on label)
-            // require journal_step === AbstractJournal::Step::discard_old();
+
             require AbstractJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
