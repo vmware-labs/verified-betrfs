@@ -116,8 +116,7 @@ module CrashTolerantMap {
     && v.WF()
     && lbl.WF()
     && lbl.InternalLabel?
-    // && v.ephemeral.Known?
-    // && v'.ephemeral.Known?
+    && v.ephemeral.Known?
     // Can't re-freeze until last in flight state reaches CommitComplete, since
     // an async superblock write may be in progress, and we need to maintain
     // guarantees about its in-flight map state.

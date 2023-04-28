@@ -152,17 +152,6 @@ module FullStackBetreeRefinement {
       case CrashLabel() => CrashTolerantMap.CrashLabel()
   }
 
-  // function AllocLbl(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel) : AllocationBetreeMod.TransitionLabel
-  //   requires CoordinationBetree.Next(v, v', lbl)
-  // {
-  //   match lbl
-  //     case PutRecordsLabel(records) => AllocationBetreeMod.PutLabel(records)
-  //     case QueryLabel(endLsn, key, value) => AllocationBetreeMod.QueryLabel(endLsn, key, value)
-  //     case FreezeAsLabel(unobserved) => AllocationBetreeMod.FreezeAsLabel(v'.inFlight.value, lbl.unobserved)
-  //     case InternalLabel(allocs, deallocs) => AllocationBetreeMod.InternalAllocationsLabel(allocs, deallocs)
-  //     case _ => AllocationBetreeMod.InternalAllocationsLabel({}, {}) // no op label
-  // }
-
   function IAllocLbl(lbl: AllocationBetreeMod.TransitionLabel) : AbstractMap.TransitionLabel
   {
     var linkedLbl := BranchedBetreeRefinement.ILbl(lbl.I().I());
@@ -309,7 +298,6 @@ module FullStackBetreeRefinement {
     requires AllocationBetreeRefinement.Inv(v'.ephemeral.v)
     ensures Inv(v')
   {
-    assert AllocationBetreeRefinement.Inv(v'.ephemeral.v);
     assert v'.inFlight == v.inFlight;
     assert v'.persistent == v.persistent;
 
@@ -382,13 +370,11 @@ module FullStackBetreeRefinement {
       case LoadEphemeralFromPersistentStep() => AllocationBetreeRefinement.InitRefines(v'.ephemeral.v, v.persistent);
       case PutRecordsStep() => {}
       case QueryStep() => {}
-      case FreezeMapInternalStep(frozenBetree) => { assume false; }
-      //   var frozenMap := IBetreeImage(frozenBetree);
-      //   var allocLbl := AllocationBetreeMod.FreezeAsLabel(frozenBetree);
-      //   AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, allocLbl);
-      //   assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.FreezeMapInternalStep(frozenMap));
-      // }
-      case FreezeFromPersistentInternalStep() => { assume false; }
+      case FreezeMapInternalStep(frozenBetree) => { 
+        var allocLbl := AllocationBetreeMod.FreezeAsLabel(frozenBetree);
+        AllocationBetreeRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, allocLbl);        
+      }
+      case FreezeFromPersistentInternalStep() => {}
       case EphemeralInternalStep() => EphemeralInternalStepPreservesInv(v, v', lbl);
       case CommitStartStep() => {}
       case CommitCompleteStep() => {}
