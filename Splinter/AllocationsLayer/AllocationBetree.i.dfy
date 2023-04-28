@@ -59,7 +59,7 @@ module AllocationBetreeMod
       QueryLabel(endLsn: LSN, key: Key, value: Value)
     | PutLabel(puts: MsgHistory)
     | QueryEndLsnLabel(endLsn: LSN)
-    | FreezeAsLabel(stamped: StampedBetree, unobserved: set<AU>)
+    | FreezeAsLabel(stamped: StampedBetree)
     | InternalAllocationsLabel(allocs: set<AU>, deallocs: set<AU>)
   {
     function I() : LB.TransitionLabel
@@ -68,7 +68,7 @@ module AllocationBetreeMod
         case QueryLabel(endLsn, key, value) => LB.QueryLabel(endLsn, key, value)
         case PutLabel(puts) => LB.PutLabel(puts)
         case QueryEndLsnLabel(endLsn) => LB.QueryEndLsnLabel(endLsn)
-        case FreezeAsLabel(stamped, _) => LB.FreezeAsLabel(Stamped(stamped.value.branched, stamped.seqEnd))
+        case FreezeAsLabel(stamped) => LB.FreezeAsLabel(Stamped(stamped.value.branched, stamped.seqEnd))
         case InternalAllocationsLabel(_, _) => LB.InternalLabel
       }
     }
@@ -138,7 +138,6 @@ module AllocationBetreeMod
     && lbl.FreezeAsLabel?
     && LB.Next(v.likesVars, v'.likesVars, lbl.I())
     && lbl.stamped.value == BetreeImage(v.likesVars.branchedVars.branched, v.allocBranchDiskView)
-    && lbl.unobserved == v.UnobservedAUs()
 
     && v' == v.(
       likesVars := v'.likesVars // admit relational update above
@@ -532,5 +531,4 @@ module AllocationBetreeMod
     var compactInput := GetCompactInput(step.path, step.start, step.end, v.allocBranchDiskView);
     CompactorMod.CompactCommitAUSubset(v.compactor, v'.compactor, CompactorMod.CommitLabel(compactInput, step.newBranch));
   }
-
 } // end AllocationBetreeMod

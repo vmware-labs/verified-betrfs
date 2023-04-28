@@ -112,7 +112,7 @@ module AllocationJournal {
     )
   }
 
-  // should ==  G.ToAUs(frozenjournal.tj.diskview.keys)
+  // should == G.ToAUs(frozenjournal.tj.diskview.keys)
   function frozenAUs(frozenJournal: JournalImage, lsnAUIndex: map<LSN, AU>) : (out: set<AU>)
     requires frozenJournal.WF()
   {

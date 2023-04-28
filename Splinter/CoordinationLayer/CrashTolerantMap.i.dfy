@@ -59,8 +59,9 @@ module CrashTolerantMap {
 
     && lbl.endLsn == v.persistent.seqEnd
     && AbstractMap.Init(v'.ephemeral.v, v.persistent)
-    && v'.persistent == v.persistent // UNCHANGED
-    && v'.inFlight == v.inFlight // UNCHANGED
+    && v' == v.(
+      ephemeral := v'.ephemeral // admit relational update from above
+    )
   }
 
   predicate PutRecords(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -72,8 +73,9 @@ module CrashTolerantMap {
     && v'.ephemeral.Known?
   
     && AbstractMap.Next(v.ephemeral.v, v'.ephemeral.v, AbstractMap.PutLabel(lbl.records))
-    && v'.persistent == v.persistent // UNCHANGED
-    && v'.inFlight == v.inFlight // UNCHANGED
+    && v' == v.(
+      ephemeral := v'.ephemeral // admit relational update from above
+    )
   }
 
   predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -88,6 +90,7 @@ module CrashTolerantMap {
     && v' == v
   }
 
+  // freeze ephemeral map
   predicate FreezeMapInternal(v: Variables, v': Variables, lbl: TransitionLabel, frozenMap: StampedMap)
   {
     && v.WF()
@@ -101,8 +104,27 @@ module CrashTolerantMap {
     && v.inFlight.None?
 
     && AbstractMap.FreezeAs(v.ephemeral.v, v'.ephemeral.v, AbstractMap.FreezeAsLabel(frozenMap))
-    && v'.inFlight == Some(frozenMap)
-    && v'.persistent == v.persistent // UNCHANGED
+    && v' == v.(
+      ephemeral := v'.ephemeral, // admit relational update from above
+      inFlight := Some(frozenMap)
+    )
+  }
+
+  // use persistent map as our frozen map (no additional flushing needed)
+  predicate FreezeFromPersistentInternal(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.WF()
+    && lbl.InternalLabel?
+    // && v.ephemeral.Known?
+    // && v'.ephemeral.Known?
+    // Can't re-freeze until last in flight state reaches CommitComplete, since
+    // an async superblock write may be in progress, and we need to maintain
+    // guarantees about its in-flight map state.
+    && v.inFlight.None?
+    && v' == v.(
+      inFlight := Some(v.persistent) // admit relational update from above
+    )
   }
   
   predicate EphemeralInternal(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -114,8 +136,9 @@ module CrashTolerantMap {
     && v'.ephemeral.Known?
 
     && AbstractMap.Next(v.ephemeral.v, v'.ephemeral.v, AbstractMap.InternalLabel())
-    && v'.persistent == v.persistent // UNCHANGED
-    && v'.inFlight == v.inFlight // UNCHANGED
+    && v' == v.(
+      ephemeral := v'.ephemeral // admit relational update from above
+    )
   }
 
   predicate CommitStart(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -163,6 +186,7 @@ module CrashTolerantMap {
     | PutRecordsStep()
     | QueryStep()
     | FreezeMapInternalStep(frozenMap: StampedMap)
+    | FreezeFromPersistentInternalStep()
     | EphemeralInternalStep()
     | CommitStartStep()
     | CommitCompleteStep()
@@ -182,6 +206,7 @@ module CrashTolerantMap {
       case PutRecordsStep() => PutRecords(v, v', lbl)
       case QueryStep() => Query(v, v', lbl)
       case FreezeMapInternalStep(frozenMap) => FreezeMapInternal(v, v', lbl, frozenMap)
+      case FreezeFromPersistentInternalStep() => FreezeFromPersistentInternal(v, v', lbl)
       case EphemeralInternalStep() => EphemeralInternal(v, v', lbl)
       case CommitStartStep() => CommitStart(v, v', lbl)
       case CommitCompleteStep() => CommitComplete(v, v', lbl)

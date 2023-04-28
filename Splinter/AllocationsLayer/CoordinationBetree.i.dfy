@@ -21,7 +21,6 @@ module CoordinationBetree {
     | LoadEphemeralFromPersistentLabel(endLsn: LSN)
     | PutRecordsLabel(records: MsgHistory)
     | QueryLabel(endLsn: LSN, key: Key, value: Value)
-    | FreezeAsLabel(unobserved: set<AU>)
     | InternalLabel(allocs: set<AU>, deallocs: set<AU>)
     | CommitStartLabel(newBoundaryLsn: LSN)
     | CommitCompleteLabel()
@@ -75,8 +74,9 @@ module CoordinationBetree {
 
     && lbl.endLsn == v.persistent.seqEnd
     && AllocBetree.Init(v'.ephemeral.v, v.persistent)
-    && v'.persistent == v.persistent // UNCHANGED
-    && v'.inFlight == v.inFlight // UNCHANGED
+    && v' == v.(
+      ephemeral := v'.ephemeral // admit relational update from above
+    )
   }
 
   predicate PutRecords(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -88,8 +88,9 @@ module CoordinationBetree {
     && v'.ephemeral.Known?
   
     && AllocBetree.Next(v.ephemeral.v, v'.ephemeral.v, AllocBetree.PutLabel(lbl.records))
-    && v'.persistent == v.persistent // UNCHANGED
-    && v'.inFlight == v.inFlight // UNCHANGED
+    && v' == v.(
+      ephemeral := v'.ephemeral // admit relational update from above
+    )
   }
 
   predicate Query(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -108,7 +109,7 @@ module CoordinationBetree {
   {
     && v.WF()
     && lbl.WF()
-    && lbl.FreezeAsLabel?
+    && lbl == InternalLabel({}, {})
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
 
@@ -116,9 +117,26 @@ module CoordinationBetree {
     // an async superblock write may be in progress, and we need to maintain
     // guarantees about its in-flight map state.
     && v.inFlight.None?
-    && AllocBetree.Next(v.ephemeral.v, v'.ephemeral.v, AllocBetree.FreezeAsLabel(frozenBetree, lbl.unobserved))
-    && v'.inFlight == Some(frozenBetree)
-    && v'.persistent == v.persistent // UNCHANGED
+    && AllocBetree.Next(v.ephemeral.v, v'.ephemeral.v, AllocBetree.FreezeAsLabel(frozenBetree))
+    && v' == v.(
+      ephemeral := v'.ephemeral, // admit relational update from above
+      inFlight := Some(frozenBetree)
+    )
+  }
+
+  predicate FreezeFromPersistentInternal(v: Variables, v': Variables, lbl: TransitionLabel)
+  {
+    && v.WF()
+    && lbl.WF()
+    && lbl == InternalLabel({}, {})
+
+    // Can't re-freeze until last in flight state reaches CommitComplete, since
+    // an async superblock write may be in progress, and we need to maintain
+    // guarantees about its in-flight map state.
+    && v.inFlight.None?
+    && v' == v.(
+      inFlight := Some(v.persistent) // admit relational update from above
+    )
   }
   
   predicate EphemeralInternal(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -130,8 +148,9 @@ module CoordinationBetree {
     && v'.ephemeral.Known?
 
     && AllocBetree.Next(v.ephemeral.v, v'.ephemeral.v, AllocBetree.InternalAllocationsLabel(lbl.allocs, lbl.deallocs))
-    && v'.persistent == v.persistent // UNCHANGED
-    && v'.inFlight == v.inFlight // UNCHANGED
+    && v' == v.(
+      ephemeral := v'.ephemeral // admit relational update from above
+    )
   }
 
   predicate CommitStart(v: Variables, v': Variables, lbl: TransitionLabel)
@@ -178,6 +197,7 @@ module CoordinationBetree {
     | PutRecordsStep()
     | QueryStep()
     | FreezeMapInternalStep(frozenBetree: StampedBetree)
+    | FreezeFromPersistentInternalStep()
     | EphemeralInternalStep()
     | CommitStartStep()
     | CommitCompleteStep()
@@ -196,6 +216,7 @@ module CoordinationBetree {
       case PutRecordsStep() => PutRecords(v, v', lbl)
       case QueryStep() => Query(v, v', lbl)
       case FreezeMapInternalStep(frozenBetree) => FreezeMapInternal(v, v', lbl, frozenBetree)
+      case FreezeFromPersistentInternalStep() => FreezeFromPersistentInternal(v, v', lbl)
       case EphemeralInternalStep() => EphemeralInternal(v, v', lbl)
       case CommitStartStep() => CommitStart(v, v', lbl)
       case CommitCompleteStep() => CommitComplete(v, v', lbl)
@@ -207,4 +228,12 @@ module CoordinationBetree {
   {
     exists step :: NextStep(v, v', lbl, step)
   }
+
+  // lemmas
+  lemma EphemeralAUsSameAfterPut(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires PutRecords(v, v', lbl)
+    ensures v'.EphemeralAUs() == v.EphemeralAUs()
+  {
+  }
+
 }

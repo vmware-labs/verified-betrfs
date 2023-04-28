@@ -61,6 +61,11 @@ module CoordinationSystemMod {
     {
       FreeSet(ephemeral+discard, None, inFlight.value)
     }
+
+    function Crash() : FreeSet
+    {
+      this.(inFlight := None)
+    }
   }
 
   datatype Variables = Variables(
@@ -155,10 +160,13 @@ module CoordinationSystemMod {
     // Map handles the query
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.QueryLabel(v.ephemeral.mapLsn, key, value))
 
-    && v'.ephemeral == v.ephemeral.(progress := v.ephemeral.progress.(
+    && v' == v.(
+      journal := v'.journal, // admit relational update
+      betree := v'.betree,  // admit relational update
+      ephemeral := v.ephemeral.(progress := v.ephemeral.progress.(
           requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
           replies := v.ephemeral.progress.replies + {uiop.baseOp.reply}
-      ))
+      )))
   }
 
   predicate Put(v: Variables, v': Variables, uiop: UIOp)
@@ -185,13 +193,17 @@ module CoordinationSystemMod {
     && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.PutLabel(singleton))
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.PutRecordsLabel(singleton))
 
-    && v'.ephemeral == v.ephemeral.(
+    && v' == v.(
+      journal := v'.journal, // admit relational update
+      betree := v'.betree,  // admit relational update
+      ephemeral := v.ephemeral.(
           mapLsn := v.ephemeral.mapLsn + 1,
           progress := v.ephemeral.progress.(
             requests := v.ephemeral.progress.requests - {uiop.baseOp.req},
             replies := v.ephemeral.progress.replies + {uiop.baseOp.reply}
           // syncReqs UNCHANGED
           )
+        )
       )
   }
 
@@ -217,6 +229,7 @@ module CoordinationSystemMod {
     && uiop.NoopOp?
 
     && allocs <= v.freeset.FreeToAlloc()
+    && allocs !! deallocs
     // && deallocs !! v.freeset.ephemeral // journal further restrict deallocs to be things from the journal 
 
     && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.InternalLabel(allocs, deallocs))
@@ -280,6 +293,7 @@ module CoordinationSystemMod {
       ))
   }
 
+  // TODO: remove this
   predicate FreezeBetree(v: Variables, v': Variables, uiop: UIOp, unobservedBetree: set<AU>)
   {
     && uiop.NoopOp?
@@ -342,7 +356,12 @@ module CoordinationSystemMod {
     && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.CrashLabel())
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.CrashLabel())
 
-    && v'.ephemeral.Unknown?
+    && v' == v.(
+      journal := v'.journal, // admit relational update above
+      betree := v'.betree,   // admit relational update above
+      freeset := v.freeset.Crash(),
+      ephemeral := AbstractSystem.Unknown()
+    )
   }
 
   predicate Init(v: Variables, availAUs: set<AU>) {

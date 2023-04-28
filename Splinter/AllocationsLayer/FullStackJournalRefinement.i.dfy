@@ -64,6 +64,7 @@ module FullStackJournalRefinement {
     && (v.inFlight.Some? ==> v.inFlight.value.tj.Decodable())
     && v.persistent.tj.Decodable()
 
+    // not needed for stack refinement but will be used by cache
     && JournalStatesAgrees(v)
     && InFlightAndPersistentPagesNotFree(v)
   }
@@ -197,6 +198,43 @@ module FullStackJournalRefinement {
     if allocStep.InternalJournalMarshalStep? {
       AllocationJournalRefinement.InternalJournalMarshalDiskRelation(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
     }
+  }
+
+  lemma InternalLabelAccessibleAUs(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
+    requires Inv(v)
+    requires FreshLabel(v, lbl)
+    requires lbl.InternalLabel?
+    requires lbl.allocs !! lbl.deallocs
+    requires CoordinationJournal.Next(v, v', lbl)
+    requires Inv(v')
+    ensures v.EphemeralAUs() + lbl.allocs - lbl.deallocs == v'.EphemeralAUs()
+  {
+    assume false;
+    // AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
+    // var allocStep :| AllocationJournal.NextStep(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
+
+    // if allocStep.InternalNoOpStep? || allocStep.InternalMiniAllocatorPruneStep? {
+    //   assert InFlightAndPersistentPagesNotFree(v');
+    //   assert JournalStatesAgrees(v');
+    // }
+
+    // if allocStep.InternalMiniAllocatorFillStep? {
+    //   assert JournalStatesAgrees(v');
+    //   // if v.ephemeral.Known? {
+    //   //   var miniAllocator := v.ephemeral.v.miniAllocator;
+    //   //   var persistentDisk := v.persistent.tj.diskView;
+    //   //   assert forall addr | addr in persistentDisk.entries :: addr.au !in lbl.allocs;
+    //   //   if v.inFlight.Some? {
+    //   //     var inFlightDisk := v.inFlight.value.tj.diskView;
+    //   //     assert forall addr | addr in inFlightDisk.entries :: addr.au !in lbl.allocs;
+    //   //   }
+    //   // }
+    //   // assert InFlightAndPersistentPagesNotFree(v');
+    // }
+
+    // if allocStep.InternalJournalMarshalStep? {
+    //   AllocationJournalRefinement.InternalJournalMarshalDiskRelation(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
+    // }
   }
 
   lemma CommitStartLabelNextPreservesInv(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
