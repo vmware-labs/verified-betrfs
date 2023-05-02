@@ -78,7 +78,7 @@ module FullStackJournalRefinement {
       case PutLabel(records) => CrashTolerantJournal.PutLabel(records)
       case InternalLabel(_, _) => CrashTolerantJournal.InternalLabel()
       case QueryLsnPersistenceLabel(syncLsn) => CrashTolerantJournal.QueryLsnPersistenceLabel(syncLsn)
-      case CommitStartLabel(newBoundaryLsn, maxLsn, _) => CrashTolerantJournal.CommitStartLabel(newBoundaryLsn, maxLsn)
+      case CommitStartLabel(newBoundaryLsn, maxLsn) => CrashTolerantJournal.CommitStartLabel(newBoundaryLsn, maxLsn)
       case CommitCompleteLabel(requireEnd, _) => CrashTolerantJournal.CommitCompleteLabel(requireEnd)
       case CrashLabel() => CrashTolerantJournal.CrashLabel
   }
@@ -91,7 +91,7 @@ module FullStackJournalRefinement {
       case QueryEndLsnLabel(endLsn) => AllocationJournal.QueryEndLsnLabel(endLsn)
       case PutLabel(records) => AllocationJournal.PutLabel(records)
       case InternalLabel(allocs, deallocs) => AllocationJournal.InternalAllocationsLabel(allocs, deallocs)
-      case CommitStartLabel(_, _, unobserved) => AllocationJournal.FreezeForCommitLabel(v'.inFlight.value, unobserved)
+      case CommitStartLabel(_, _) => AllocationJournal.FreezeForCommitLabel(v'.inFlight.value)
       case CommitCompleteLabel(requireEnd, discarded) => AllocationJournal.DiscardOldLabel(v.inFlight.value.tj.SeqStart(), requireEnd, discarded)
       case _ => AllocationJournal.InternalAllocationsLabel({}, {}) // no op label
   }
@@ -200,43 +200,6 @@ module FullStackJournalRefinement {
     }
   }
 
-  lemma InternalLabelAccessibleAUs(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
-    requires Inv(v)
-    requires FreshLabel(v, lbl)
-    requires lbl.InternalLabel?
-    requires lbl.allocs !! lbl.deallocs
-    requires CoordinationJournal.Next(v, v', lbl)
-    requires Inv(v')
-    ensures v.EphemeralAUs() + lbl.allocs - lbl.deallocs == v'.EphemeralAUs()
-  {
-    assume false;
-    // AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl));
-    // var allocStep :| AllocationJournal.NextStep(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
-
-    // if allocStep.InternalNoOpStep? || allocStep.InternalMiniAllocatorPruneStep? {
-    //   assert InFlightAndPersistentPagesNotFree(v');
-    //   assert JournalStatesAgrees(v');
-    // }
-
-    // if allocStep.InternalMiniAllocatorFillStep? {
-    //   assert JournalStatesAgrees(v');
-    //   // if v.ephemeral.Known? {
-    //   //   var miniAllocator := v.ephemeral.v.miniAllocator;
-    //   //   var persistentDisk := v.persistent.tj.diskView;
-    //   //   assert forall addr | addr in persistentDisk.entries :: addr.au !in lbl.allocs;
-    //   //   if v.inFlight.Some? {
-    //   //     var inFlightDisk := v.inFlight.value.tj.diskView;
-    //   //     assert forall addr | addr in inFlightDisk.entries :: addr.au !in lbl.allocs;
-    //   //   }
-    //   // }
-    //   // assert InFlightAndPersistentPagesNotFree(v');
-    // }
-
-    // if allocStep.InternalJournalMarshalStep? {
-    //   AllocationJournalRefinement.InternalJournalMarshalDiskRelation(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
-    // }
-  }
-
   lemma CommitStartLabelNextPreservesInv(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
     requires Inv(v)
     requires CoordinationJournal.Next(v, v', lbl)
@@ -266,7 +229,7 @@ module FullStackJournalRefinement {
       case PutLabel(_) => { AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
       case InternalLabel(allocs, deallocs) => { InternalLabelNextPreservesInv(v, v', lbl); }
       case QueryLsnPersistenceLabel(_) => {}
-      case CommitStartLabel(_, _, _) => { CommitStartLabelNextPreservesInv(v, v', lbl); }
+      case CommitStartLabel(_, _) => { CommitStartLabelNextPreservesInv(v, v', lbl); }
       case CommitCompleteLabel(_, _) => { AllocationJournalRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
       case CrashLabel() => {}
     }
@@ -295,9 +258,42 @@ module FullStackJournalRefinement {
       case PutLabel(_) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
       case InternalLabel(allocs, deallocs) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
       case QueryLsnPersistenceLabel(_) => {}
-      case CommitStartLabel(_, _, _) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
+      case CommitStartLabel(_, _) => { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
       case CommitCompleteLabel(_, _)=> { AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl)); }
       case CrashLabel() => {}
     }
+  }
+
+  // used by coordination system refinement
+  lemma InternalLabelAccessibleAUs(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
+    requires Inv(v)
+    requires FreshLabel(v, lbl)
+    requires lbl.InternalLabel?
+    requires lbl.allocs !! lbl.deallocs
+    requires CoordinationJournal.Next(v, v', lbl)
+    requires Inv(v')
+    ensures v.EphemeralAUs() + lbl.allocs - lbl.deallocs == v'.EphemeralAUs()
+  {
+    var allocStep :| AllocationJournal.NextStep(v.ephemeral.v, v'.ephemeral.v, AllocLbl(v, v', lbl), allocStep);
+    match allocStep {
+      case InternalMiniAllocatorFillStep() => {}
+      case InternalMiniAllocatorPruneStep() => {
+        // maintained by allocation journal inv
+        assume lbl.deallocs !! v.ephemeral.v.lsnAUIndex.Values; 
+      }
+      case InternalJournalMarshalStep(_, addr) => {
+        AllocationJournalRefinement.reveal_LikesJournalInv();
+        LikesJournalRefinement.reveal_IndexDomainValid();
+      } 
+      case InternalNoOpStep() => {}
+    }
+  }
+
+  lemma CommitCompleteAccessibleAUs(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
+    requires Inv(v)
+    requires lbl.CommitCompleteLabel?
+    requires CoordinationJournal.Next(v, v', lbl)
+    ensures v'.EphemeralAUs() == v.EphemeralAUs() - lbl.discarded
+  {
   }
 }

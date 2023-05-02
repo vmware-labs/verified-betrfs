@@ -189,8 +189,9 @@ module MiniAllocatorMod {
     function Prune(aus: set<AU>) : (out: MiniAllocator)
       requires WF()
       ensures out.WF()
+      ensures out.allocs.Keys == this.allocs.Keys - aus
     {
-      var newAllocs := MapRestrict(allocs, set au | au in allocs.Keys - aus);
+      var newAllocs := MapRestrict(allocs, set au | au in (allocs.Keys - aus));
       var newCurr := if curr.Some? && curr.value in aus then None else curr;
       MiniAllocator(newAllocs, newCurr)
     }

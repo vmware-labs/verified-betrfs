@@ -24,42 +24,35 @@ module CoordinationSystemMod {
   type SyncReqs = AbstractSystem.SyncReqs
 
   datatype FreeSet = FreeSet(
-    ephemeral: set<AU>, // should never include any AUs that are allocated to betree or journal
+    total: set<AU>,  // total set of AUs
+    ephemeral: set<AU>,
     inFlight: Option<set<AU>>,
     persistent: set<AU>
   ) {
-    function FreeToAlloc() : set<AU>
+    static function Init(total: set<AU>) : FreeSet
     {
-      var free := ephemeral * persistent;
-      if inFlight.Some? then free * inFlight.value else free
+      FreeSet(total, total, None, total)
     }
 
     function UpdateEphemeral(allocs: set<AU>, deallocs: set<AU>) : FreeSet
-      // requires allocs <= ephemeral
-      // requires deallocs !! ephemeral
     {
       this.(ephemeral := ephemeral-allocs+deallocs)
     }
 
-    function FreezeBetree(unobserved: set<AU>) : FreeSet
-      // requires unobserved !! ephemeral
-      // requires inFlight.None?
+    function CommitStart(imageAddrs: set<AU>) : FreeSet
+      requires inFlight.None?
     {
-      this.(inFlight := Some(ephemeral + unobserved))
-    } 
-
-    function CommitStart(unobserved: set<AU>) : FreeSet
-      requires inFlight.Some?
-      // requires discard !! ephemeral
-    {
-      this.(inFlight := Some(inFlight.value + unobserved))
+      this.(inFlight := Some(total-imageAddrs))
     }
 
     function CommitComplete(discard: set<AU>) : FreeSet
       requires inFlight.Some?
-      // requires discard !! ephemeral
     {
-      FreeSet(ephemeral+discard, None, inFlight.value)
+      this.(
+        ephemeral := ephemeral + discard,
+        inFlight := None,
+        persistent := inFlight.value
+      )
     }
 
     function Crash() : FreeSet
@@ -81,7 +74,8 @@ module CoordinationSystemMod {
       && betree.WF()
       && (ephemeral.Known? == journal.ephemeral.Known? == betree.ephemeral.Known?)
       // Provable from invariant:
-      && (journal.inFlight.Some? ==> betree.inFlight.Some?)
+      && (journal.inFlight.None? ==> freeset.inFlight.None?)
+      && (journal.inFlight.Some? ==> betree.inFlight.Some? && freeset.inFlight.Some?)
     }
 
     predicate Init(availAUs: set<AU>)
@@ -89,7 +83,7 @@ module CoordinationSystemMod {
       && CoordinationJournal.Init(journal)
       && CoordinationBetree.Init(betree)
       && ephemeral.Unknown?
-      && freeset == FreeSet(availAUs, None, availAUs)
+      && freeset == FreeSet.Init(availAUs)
     }
   }
 
@@ -217,6 +211,14 @@ module CoordinationSystemMod {
         replies := v.ephemeral.progress.replies - {uiop.baseOp.reply})))
   }
 
+  predicate FreeToAlloc(v: Variables, aus: set<AU>)
+  {
+    && aus <= v.freeset.ephemeral
+    && aus <= v.freeset.persistent
+    && (v.freeset.inFlight.Some? ==> aus <= v.freeset.inFlight.value)
+    && (v.freeset.inFlight.None? && v.betree.inFlight.Some? ==> aus !! v.betree.InFlightAUs())
+  }
+
   // Journal Internal steps (writing stuff out to disk, for example)
   // and Betree Internal steps (writing stuff to disk, flushing and compacting,
   // which create new blocks in cache and rearrange the indirection table)
@@ -228,10 +230,7 @@ module CoordinationSystemMod {
     && v'.ephemeral.Known?
     && uiop.NoopOp?
 
-    && allocs <= v.freeset.FreeToAlloc()
-    && allocs !! deallocs
-    // && deallocs !! v.freeset.ephemeral // journal further restrict deallocs to be things from the journal 
-
+    && FreeToAlloc(v, allocs)
     && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.InternalLabel(allocs, deallocs))
     && v' == v.(
       journal := v'.journal, // predicate update above
@@ -239,15 +238,13 @@ module CoordinationSystemMod {
     )
   }
 
-  predicate MapInternal(v: Variables, v': Variables, uiop: UIOp, allocs: set<AU>, deallocs: set<AU>)
+  predicate BetreeInternal(v: Variables, v': Variables, uiop: UIOp, allocs: set<AU>, deallocs: set<AU>)
   {
     && v.ephemeral.Known?
     && v'.ephemeral.Known?
     && uiop.NoopOp?
     
-    && allocs <= v.freeset.FreeToAlloc()
-    // && deallocs !! v.freeset.ephemeral // journal further restrict deallocs to be things from the journal 
-    
+    && FreeToAlloc(v, allocs)    
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.InternalLabel(allocs, deallocs))
     && v' == v.(
       betree := v'.betree,
@@ -293,37 +290,21 @@ module CoordinationSystemMod {
       ))
   }
 
-  // TODO: remove this
-  predicate FreezeBetree(v: Variables, v': Variables, uiop: UIOp, unobservedBetree: set<AU>)
-  {
-    && uiop.NoopOp?
-    && v.WF()
-    && v.ephemeral.Known?
-    && v.freeset.inFlight.None?
-    && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.FreezeAsLabel(unobservedBetree))
-
-    && v' == v.(
-      journal := v'.journal, // admit relational update above
-      betree := v'.betree,   // admit relational update above
-      freeset := v.freeset.FreezeBetree(unobservedBetree)
-    )
-  }
-
   // This step models issuing the superblock write
-  predicate CommitStart(v: Variables, v': Variables, uiop: UIOp, newBoundaryLsn: LSN, unobservedJournal: set<AU>)
+  predicate CommitStart(v: Variables, v': Variables, uiop: UIOp, newBoundaryLsn: LSN)
   {
     && uiop.NoopOp?
     && v.WF()
     && v.ephemeral.Known?
-    && v.freeset.inFlight.Some? // has to start after a freezebetree step
 
-    && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.CommitStartLabel(newBoundaryLsn, v.ephemeral.mapLsn, unobservedJournal))
+    && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.CommitStartLabel(newBoundaryLsn, v.ephemeral.mapLsn))
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.CommitStartLabel(newBoundaryLsn))
+    && var imageAddrs := v'.journal.InFlightAUs() + v'.betree.InFlightAUs();
 
     && v' == v.(
       journal := v'.journal, // admit relational update above
       betree := v'.betree,   // admit relational update above
-      freeset := v.freeset.CommitStart(unobservedJournal)
+      freeset := v.freeset.CommitStart(imageAddrs)
     )
   }
 
@@ -334,8 +315,8 @@ module CoordinationSystemMod {
     && v'.WF()
     && uiop.SyncOp?
     && v.ephemeral.Known? // provable from invariant
-    && v.freeset.inFlight.Some?
-    && discardedJournal !! v.freeset.ephemeral // provable from inv
+    // && v.freeset.inFlight.Some?
+    // && discardedJournal !! v.freeset.ephemeral // provable from inv
 
     && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.CommitCompleteLabel(v.ephemeral.mapLsn, discardedJournal))
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.CommitCompleteLabel())
@@ -376,11 +357,10 @@ module CoordinationSystemMod {
     | PutStep()
     | DeliverReplyStep()
     | JournalInternalStep(allocs: set<AU>, deallocs: set<AU>)
-    | MapInternalStep(allocs: set<AU>, deallocs: set<AU>)
+    | BetreeInternalStep(allocs: set<AU>, deallocs: set<AU>)
     | ReqSyncStep()
     | ReplySyncStep()
-    | FreezeBetreeStep(unobservedBetree: set<AU>)
-    | CommitStartStep(newBoundaryLsn: LSN, unobservedJournal: set<AU>)
+    | CommitStartStep(newBoundaryLsn: LSN)
     | CommitCompleteStep(discardedJournal: set<AU>)
     | CrashStep()
 
@@ -393,11 +373,10 @@ module CoordinationSystemMod {
       case PutStep() => Put(v, v', uiop)
       case DeliverReplyStep() => DeliverReply(v, v', uiop)
       case JournalInternalStep(allocs, deallocs) => JournalInternal(v, v', uiop, allocs, deallocs)
-      case MapInternalStep(allocs, deallocs) => MapInternal(v, v', uiop, allocs, deallocs)
+      case BetreeInternalStep(allocs, deallocs) => BetreeInternal(v, v', uiop, allocs, deallocs)
       case ReqSyncStep() => ReqSync(v, v', uiop)
       case ReplySyncStep() => ReplySync(v, v', uiop)
-      case FreezeBetreeStep(unobservedBetree) => FreezeBetree(v, v', uiop, unobservedBetree)
-      case CommitStartStep(newBoundaryLsn, unobservedJournal) => CommitStart(v, v', uiop, newBoundaryLsn, unobservedJournal)
+      case CommitStartStep(newBoundaryLsn) => CommitStart(v, v', uiop, newBoundaryLsn)
       case CommitCompleteStep(discardedJournal) => CommitComplete(v, v', uiop, discardedJournal)
       case CrashStep() => Crash(v, v', uiop)
     }

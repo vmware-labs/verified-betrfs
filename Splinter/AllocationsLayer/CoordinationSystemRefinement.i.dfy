@@ -26,37 +26,19 @@ module CoordinationSystemRefinement {
 //   import opened CoordinationJournal
 //   import opened CoordinationBetree
 
-  predicate KnownEphemeral(v: Variables)
-  {
-    && v.journal.ephemeral.Known? 
-    && v.betree.ephemeral.Known?
-  }
-
-  predicate InFlightBetreeOnly(v: Variables)
-  {
-    && v.journal.ephemeral.Known?
-    && v.journal.inFlight.None?
-    && v.betree.inFlight.Some? 
-    && v.freeset.inFlight.Some?
-  }
-
-  predicate InFlightAllReady(v: Variables)
-  {
-    && v.journal.inFlight.Some? 
-    && v.betree.inFlight.Some? 
-    && v.freeset.inFlight.Some? 
-  }
-
   predicate DisjointEphemeralComponents(v: Variables)
+    requires v.WF()
+    requires v.ephemeral.Known?
   {
     // chained disjoint means all pairs are disjoint
-    && (KnownEphemeral(v) ==> v.freeset.ephemeral !! v.betree.EphemeralAUs() !! v.journal.EphemeralAUs())
+    &&  v.freeset.ephemeral !! v.betree.EphemeralAUs() !! v.journal.EphemeralAUs()
   }
 
   predicate DisjointInFlightComponents(v: Variables)
+    requires v.WF()
+    requires v.journal.inFlight.Some?
   {
-    && (InFlightBetreeOnly(v) ==> v.freeset.inFlight.value !! v.betree.InFlightAUs() !! v.journal.EphemeralAUs())
-    && (InFlightAllReady(v) ==> v.freeset.inFlight.value !! v.betree.InFlightAUs() !! v.journal.InFlightAUs())
+    && v.freeset.inFlight.value !! v.betree.InFlightAUs() !! v.journal.InFlightAUs()
   }
 
   predicate DisjointPersistentComponents(v: Variables)
@@ -64,10 +46,26 @@ module CoordinationSystemRefinement {
     && v.freeset.persistent !! v.betree.PersistentAUs() !! v.journal.PersistentAUs()
   }
 
+  // cross state disjoints
+  predicate DisjointAcrossStates(v: Variables)
+    requires v.WF()
+  {
+    && (v.ephemeral.Known? ==> v.betree.PersistentAUs() !! v.journal.EphemeralAUs())
+    && (v.ephemeral.Known? && v.betree.inFlight.Some? ==> v.betree.InFlightAUs() !! v.journal.EphemeralAUs()) 
+  }
+
   function TotalEphemeral(v: Variables) : set<AU>
-    requires KnownEphemeral(v)
+    requires v.WF()
+    requires v.ephemeral.Known?
   {
     v.freeset.ephemeral + v.betree.EphemeralAUs() + v.journal.EphemeralAUs()
+  }
+
+  function TotalInflight(v: Variables) : set<AU>
+    requires v.WF()
+    requires v.journal.inFlight.Some?
+  {
+    v.freeset.inFlight.value + v.betree.InFlightAUs() + v.journal.InFlightAUs()
   }
 
   function TotalPersistent(v: Variables) : set<AU>
@@ -75,37 +73,24 @@ module CoordinationSystemRefinement {
     v.freeset.persistent + v.betree.PersistentAUs() + v.journal.PersistentAUs()
   }
 
-  function TotalInflightBetreeOnly(v: Variables) : set<AU>
-    requires InFlightBetreeOnly(v)
-  {
-    v.freeset.inFlight.value + v.betree.InFlightAUs() + v.journal.EphemeralAUs()
-  }
-
-  function TotalInflight(v: Variables) : set<AU>
-    requires InFlightAllReady(v)
-  {
-    v.freeset.inFlight.value + v.betree.InFlightAUs() + v.journal.InFlightAUs()
-  }
-
   predicate StatesPreservesTotalAUs(v: Variables)
+    requires v.WF()
   {
-    && (KnownEphemeral(v) ==> TotalEphemeral(v) == TotalPersistent(v))
-    && (InFlightBetreeOnly(v) ==> TotalInflightBetreeOnly(v) == TotalPersistent(v))
-    && (InFlightAllReady(v) ==> TotalInflight(v) == TotalPersistent(v))
+    && (v.ephemeral.Known? ==> TotalEphemeral(v) == v.freeset.total)
+    && (v.journal.inFlight.Some? ==> TotalInflight(v) == v.freeset.total)
+    && TotalPersistent(v) == v.freeset.total
   }
 
   predicate Inv(v: Variables)
   {
-    && (v.journal.ephemeral.Known? <==> v.betree.ephemeral.Known?)
-    && (v.freeset.inFlight.Some? <==> v.betree.inFlight.Some?)
-    && (v.journal.inFlight.Some? ==> v.betree.inFlight.Some?)
-
+    && v.WF()
     && FullStackJournalRefinement.Inv(v.journal)
     && FullStackBetreeRefinement.Inv(v.betree)
 
-    && DisjointEphemeralComponents(v)
-    && DisjointInFlightComponents(v)
+    && (v.ephemeral.Known? ==> DisjointEphemeralComponents(v))
+    && (v.journal.inFlight.Some? ==> DisjointInFlightComponents(v))
     && DisjointPersistentComponents(v)
+    && DisjointAcrossStates(v)  // exists in order to deal with inflight journal set after betree
     && StatesPreservesTotalAUs(v) // not necessary for pure safety 
   }
 
@@ -142,7 +127,7 @@ module CoordinationSystemRefinement {
     assert v'.journal.EphemeralAUs() == v.journal.PersistentAUs() by {
       AllocationJournalRefinement.reveal_LikesJournalInv();
     }
-    assume v'.betree.EphemeralAUs() == v.betree.PersistentAUs(); // maintained by betree Inv
+    FullStackBetreeRefinement.LoadEphemeralFromPersistentAUs(v.betree, v'.betree, betreeLbl);
 
     assert DisjointEphemeralComponents(v');
     assert StatesPreservesTotalAUs(v');
@@ -160,12 +145,11 @@ module CoordinationSystemRefinement {
     var journalLbl := CoordinationJournal.ReadForRecoveryLabel(step.records);
     var betreeLbl := CoordinationBetree.PutRecordsLabel(step.records);
     
-    FullStackJournalRefinement.NextRefines(v.journal, v'.journal, journalLbl);
-    FullStackBetreeRefinement.NextRefines(v.betree, v'.betree, betreeLbl);
-
-    CoordinationBetree.EphemeralAUsSameAfterPut(v.betree, v'.betree, betreeLbl);
     assert v'.betree.EphemeralAUs() == v.betree.EphemeralAUs();
     assert v'.journal.EphemeralAUs() == v.journal.EphemeralAUs();
+    
+    FullStackJournalRefinement.NextRefines(v.journal, v'.journal, journalLbl);
+    FullStackBetreeRefinement.NextRefines(v.betree, v'.betree, betreeLbl);
 
     assert AbstractSystem.NextStep(I(v), I(v'), uiop, AbstractSystem.RecoverStep(step.records));
   }
@@ -200,12 +184,12 @@ module CoordinationSystemRefinement {
     var singleton := MsgHistoryMod.SingletonAt(v.ephemeral.mapLsn, KeyedMessage(key, Define(val)));
     var journalLbl := CoordinationJournal.PutLabel(singleton);
     var betreeLbl := CoordinationBetree.PutRecordsLabel(singleton);
+    
+    assert v'.betree.EphemeralAUs() == v.betree.EphemeralAUs();
+    assert v'.journal.EphemeralAUs() == v.journal.EphemeralAUs();
 
     FullStackJournalRefinement.NextRefines(v.journal, v'.journal, journalLbl);
     FullStackBetreeRefinement.NextRefines(v.betree, v'.betree, betreeLbl);
-    CoordinationBetree.EphemeralAUsSameAfterPut(v.betree, v'.betree, betreeLbl);
-    assert v'.betree.EphemeralAUs() == v.betree.EphemeralAUs();
-    assert v'.journal.EphemeralAUs() == v.journal.EphemeralAUs();
     
     assert AbstractSystem.NextStep(I(v), I(v'), uiop, AbstractSystem.PutStep());
   }
@@ -258,63 +242,119 @@ module CoordinationSystemRefinement {
     ensures Inv(v')
     ensures AbstractSystem.Next(I(v), I(v'), uiop)
   {
-    assert v'.journal.inFlight == v.journal.inFlight;
-    assert v'.journal.persistent == v.journal.persistent;
-
     var journalLbl := CoordinationJournal.InternalLabel(step.allocs, step.deallocs);
+    assert step.allocs !! step.deallocs;
     assert FullStackJournalRefinement.FreshLabel(v.journal, journalLbl);
-
+    
     FullStackJournalRefinement.NextRefines(v.journal, v'.journal, journalLbl);
     FullStackJournalRefinement.InternalLabelAccessibleAUs(v.journal, v'.journal, journalLbl);
-
-    assert v.journal.EphemeralAUs() + step.allocs - step.deallocs == v'.journal.EphemeralAUs();
-
-    if InFlightBetreeOnly(v) {
-      assert InFlightBetreeOnly(v'); 
-
-      /*
-      predicate DisjointInFlightComponents(v: Variables) {
-        && (InFlightBetreeOnly(v) ==> v.freeset.inFlight.value !! v.betree.InFlightAUs() !! v.journal.EphemeralAUs())
-      }
-        
-      predicate preserves total AUs
-        && (InFlightBetreeOnly(v) ==> TotalInflightBetreeOnly(v) == TotalPersistent(v)
-
-      TotalInflightBetreeOnly(v) == v.freeset.inFlight.value + v.betree.InFlightAUs() + v.journal.EphemeralAUs()
-      
-      */
-          // assert step.allocs !! v'.betree.EphemeralAUs();
-    // assert step.allocs !! v'.freeset.ephemeral;
-    // assert step.allocs !! v.journal.EphemeralAUs();
-    
-    }
-
-    //   && (InFlightBetreeOnly(v) ==> TotalInflightBetreeOnly(v) == TotalPersistent(v))
-    // && ((v) ==> TotalInflight(v) == TotalPersistent(v))
-
-    // if InFlightBetreeOnly(v) {
-    //   assert InFlightBetreeOnly(v');
-    //   assert TotalInflight(v) == TotalPersistent(v);
-    //   assert TotalInflight(v') == TotalPersistent(v');
-
-  //   function TotalInflight(v: Variables) : set<AU>
-  //   requires InFlightBetreeOnly(v) || InFlightAllReady(v)
-  // {
-  //   if InFlightAllReady(v)
-  //   then v.freeset.inFlight.value + v.betree.InFlightAUs() + v.journal.InFlightAUs()
-  //   else v.freeset.inFlight.value + v.betree.InFlightAUs() + v.journal.EphemeralAUs()
-  // }
-
-    // }
-
-    // assert StatesPreservesTotalAUs(v');
-
-    assume false;
-    assert DisjointEphemeralComponents(v');
     assert AbstractSystem.NextStep(I(v), I(v'), uiop, AbstractSystem.JournalInternalStep());
-
   }
 
+  lemma BetreeInternalRefines(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires step.BetreeInternalStep?
+    requires NextStep(v, v', uiop, step)
+    ensures Inv(v')
+    ensures AbstractSystem.Next(I(v), I(v'), uiop)
+  {
+    assert v.ephemeral.Known?;
+    assert v'.ephemeral.Known?;
+    assert v'.journal == v.journal;
+
+    var betreeLbl := CoordinationBetree.InternalLabel(step.allocs, step.deallocs);
+    var betreeStep :| CoordinationBetree.NextStep(v.betree, v'.betree, betreeLbl, betreeStep);
+    assume step.deallocs <= v.betree.EphemeralAUs(); // TODO: by alloc betree inv
+    assert step.allocs !! step.deallocs;
+    assert FullStackBetreeRefinement.FreshLabel(v.betree, betreeLbl);
+
+    assert v.WF();
+    assert v'.WF();
+
+    FullStackBetreeRefinement.NextRefines(v.betree, v'.betree, betreeLbl);
+    FullStackBetreeRefinement.InternalLabelAccessibleAUs(v.betree, v'.betree, betreeLbl);
+
+    if betreeStep.EphemeralInternalStep? {
+      calc {
+        v.freeset.ephemeral !! v.betree.EphemeralAUs() !! v.journal.EphemeralAUs();
+        v.freeset.ephemeral - step.allocs !! v.betree.EphemeralAUs() + step.allocs !! v'.journal.EphemeralAUs();
+        v'.freeset.ephemeral !! v'.betree.EphemeralAUs() !! v'.journal.EphemeralAUs();
+        DisjointEphemeralComponents(v');
+      }
+      assert DisjointPersistentComponents(v');
+    } else if betreeStep.FreezeFromPersistentInternalStep? {
+      assert Inv(v');
+    } else {
+      FullStackBetreeRefinement.FreezeBetreeInternalLemma(v.betree, v'.betree, betreeLbl, betreeStep);
+      assert v.journal.inFlight.None?;
+      assert DisjointEphemeralComponents(v');
+      assert DisjointPersistentComponents(v');
+      assert DisjointAcrossStates(v');  // exists in order to deal with inflight journal set after betree
+      assert StatesPreservesTotalAUs(v'); // not necessary for pure safety 
+    }
+
+    assert AbstractSystem.NextStep(I(v), I(v'), uiop, AbstractSystem.MapInternalStep());
+  }
+
+  lemma CommitCompleteRefines(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires step.CommitCompleteStep?
+    requires NextStep(v, v', uiop, step)
+    ensures Inv(v')
+    ensures AbstractSystem.Next(I(v), I(v'), uiop)
+  {
+    assert v'.betree.persistent == v.betree.inFlight.value;
+    assert v'.journal.persistent == v.journal.inFlight.value;
+    assert v'.betree.ephemeral == v.betree.ephemeral;
+
+    var journalLbl := CoordinationJournal.CommitCompleteLabel(v.ephemeral.mapLsn, step.discardedJournal);
+    var betreeLbl := CoordinationBetree.CommitCompleteLabel();
+
+    calc {
+      DisjointEphemeralComponents(v);
+      v.freeset.ephemeral !! v.betree.EphemeralAUs() !! v.journal.EphemeralAUs();
+      v.freeset.ephemeral !! v'.betree.EphemeralAUs() !! v.journal.EphemeralAUs();
+      v.freeset.ephemeral + step.discardedJournal !! v'.betree.EphemeralAUs() !! v.journal.EphemeralAUs() - step.discardedJournal;
+      { FullStackJournalRefinement.CommitCompleteAccessibleAUs(v.journal, v'.journal, journalLbl); }
+      v'.freeset.ephemeral !! v'.betree.EphemeralAUs() !! v'.journal.EphemeralAUs();
+      DisjointEphemeralComponents(v');
+    }
+
+    calc {
+      DisjointInFlightComponents(v);
+      v.freeset.inFlight.value !! v.betree.InFlightAUs() !! v.journal.InFlightAUs();
+      v'.freeset.persistent !! v'.betree.PersistentAUs() !! v'.journal.PersistentAUs();
+      DisjointPersistentComponents(v');
+    }
+
+    calc {
+      DisjointAcrossStates(v);
+      v.betree.InFlightAUs() !! v.journal.EphemeralAUs();
+      v'.betree.PersistentAUs() !! v.journal.EphemeralAUs();
+      { FullStackJournalRefinement.CommitCompleteAccessibleAUs(v.journal, v'.journal, journalLbl); }
+      v'.betree.PersistentAUs() !! v'.journal.EphemeralAUs();
+      { assert v'.betree.inFlight.None?; }
+      DisjointAcrossStates(v');
+    }
+
+    calc {
+      TotalEphemeral(v) == v.freeset.total;
+      v.freeset.ephemeral + v.betree.EphemeralAUs() + v.journal.EphemeralAUs() == v'.freeset.total;
+      v.freeset.ephemeral + v'.betree.EphemeralAUs() + v.journal.EphemeralAUs() == v'.freeset.total;
+      // (v.freeset.ephemeral + step.discardedJournal) + v'.betree.EphemeralAUs() + (v.journal.EphemeralAUs() - step.discardedJournal)  == v'.freeset.total;
+      v'.freeset.ephemeral + v'.betree.EphemeralAUs() + (v.journal.EphemeralAUs() - step.discardedJournal)  == v'.freeset.total;
+      { FullStackJournalRefinement.CommitCompleteAccessibleAUs(v.journal, v'.journal, journalLbl); }
+      v'.freeset.ephemeral + v'.betree.EphemeralAUs() + v'.journal.EphemeralAUs() == v'.freeset.total;
+      StatesPreservesTotalAUs(v');
+    }
+
+    assert v'.journal.inFlight.None?;
+    assert TotalPersistent(v') == v'.freeset.total;
+
+    FullStackJournalRefinement.NextRefines(v.journal, v'.journal, journalLbl);
+    FullStackBetreeRefinement.NextRefines(v.betree, v'.betree, betreeLbl);
+    assert AbstractSystem.NextStep(I(v), I(v'), uiop, AbstractSystem.CommitCompleteStep());
+  }
 
   lemma NextRefines(v: Variables, v': Variables, uiop: UIOp)
     requires Inv(v)
@@ -330,13 +370,12 @@ module CoordinationSystemRefinement {
       case QueryStep() => QueryRefines(v, v', uiop, step);
       case PutStep() => PutRefines(v, v', uiop, step);
       case DeliverReplyStep() => assert AbstractSystem.NextStep(I(v), I(v'), uiop, AbstractSystem.DeliverReplyStep());
-      // case JournalInternalStep(allocs, deallocs) => JournalInternal(v, v', uiop, allocs, deallocs)
-      // case MapInternalStep(allocs, deallocs) => MapInternal(v, v', uiop, allocs, deallocs)
+      case JournalInternalStep(_, _) => JournalInternalRefines(v, v', uiop, step);
+      case BetreeInternalStep(_, _) => BetreeInternalRefines(v, v', uiop, step);
       case ReqSyncStep() => ReqSyncRefines(v, v', uiop, step);
       case ReplySyncStep() => ReplySyncRefines(v, v', uiop, step);
-      // case FreezeBetreeStep(unobservedBetree, unobservedJournal) => FreezeBetree(v, v', uiop, unobservedBetree, unobservedJournal)
       // case CommitStartStep(newBoundaryLsn) => CommitStart(v, v', uiop, newBoundaryLsn)
-      // case CommitCompleteStep(discardedJournal) => CommitComplete(v, v', uiop, discardedJournal)
+      case CommitCompleteStep(_) => CommitCompleteRefines(v, v', uiop, step);
       case CrashStep() => CrashRefines(v, v', uiop, step);
       case _ => assume false;
     }

@@ -16,6 +16,7 @@ module FullStackBetreeRefinement {
   import opened Options
   import opened StampedMod
   import opened Sequences
+  import M = Mathematics
   import G = GenericDisk
   import CoordinationBetree
   import AllocationBetreeMod
@@ -370,7 +371,7 @@ module FullStackBetreeRefinement {
       case LoadEphemeralFromPersistentStep() => AllocationBetreeRefinement.InitRefines(v'.ephemeral.v, v.persistent);
       case PutRecordsStep() => {}
       case QueryStep() => {}
-      case FreezeMapInternalStep(frozenBetree) => { 
+      case FreezeBetreeInternalStep(frozenBetree) => { 
         var allocLbl := AllocationBetreeMod.FreezeAsLabel(frozenBetree);
         AllocationBetreeRefinement.NextRefines(v.ephemeral.v, v'.ephemeral.v, allocLbl);        
       }
@@ -485,7 +486,7 @@ module FullStackBetreeRefinement {
         AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, allocLbl);
         assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.QueryStep());
       }
-      case FreezeMapInternalStep(frozenBetree) => {
+      case FreezeBetreeInternalStep(frozenBetree) => {
         var frozenMap := IBetreeImage(frozenBetree);
         var allocLbl := AllocationBetreeMod.FreezeAsLabel(frozenBetree);
         AllocNextRefinesAbstract(v.ephemeral.v, v'.ephemeral.v, allocLbl);
@@ -509,5 +510,52 @@ module FullStackBetreeRefinement {
         assert CrashTolerantMap.NextStep(I(v), I(v'), ILbl(lbl), CrashTolerantMap.CrashStep());
       }
     }
+  }
+
+  lemma InternalLabelAccessibleAUs(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel)
+    requires Inv(v)
+    requires FreshLabel(v, lbl)
+    requires lbl.InternalLabel?
+    requires lbl.allocs !! lbl.deallocs
+    requires CoordinationBetree.Next(v, v', lbl)
+    requires Inv(v')
+    ensures v.EphemeralAUs() + lbl.allocs - lbl.deallocs == v'.EphemeralAUs()
+  {
+    var step :| CoordinationBetree.NextStep(v, v', lbl, step);
+    if step.EphemeralInternalStep? {
+      var allocLbl := AllocationBetreeMod.InternalAllocationsLabel(lbl.allocs, lbl.deallocs);
+      var allocStep :| AllocationBetreeMod.NextStep(v.ephemeral.v, v'.ephemeral.v, allocLbl, allocStep);
+      assume false;
+    } else {
+      assert step.FreezeBetreeInternalStep? || step.FreezeFromPersistentInternalStep?;
+      assert v.EphemeralAUs() == v'.EphemeralAUs();
+    }
+  }
+
+  lemma FreezeBetreeInternalLemma(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel, step: CoordinationBetree.Step)
+    requires Inv(v)
+    requires FreshLabel(v, lbl)
+    requires step.FreezeBetreeInternalStep?
+    requires CoordinationBetree.FreezeBetreeInternal(v, v', lbl, step.frozenBetree)
+    requires Inv(v')
+    ensures v.EphemeralAUs() == v'.EphemeralAUs()
+    ensures v'.InFlightAUs() <= v.EphemeralAUs()
+  {
+    assert v.ephemeral == v'.ephemeral;
+    assert step.frozenBetree.value.branched == v.ephemeral.v.likesVars.branchedVars.branched;
+    assume v.ephemeral.v.likesVars.branchedVars.branched.diskView.entries.Keys == M.Set(v.ephemeral.v.likesVars.betreeLikes); // by likesbetree Inv
+    assume G.ToAUs(M.Set(v.ephemeral.v.likesVars.betreeLikes)) == M.Set(v.ephemeral.v.betreeAULikes); // by allocbetree Inv
+  }
+
+  lemma LoadEphemeralFromPersistentAUs(v: CoordinationBetree.Variables, v': CoordinationBetree.Variables, lbl: CoordinationBetree.TransitionLabel)
+    requires Inv(v)
+    requires lbl.LoadEphemeralFromPersistentLabel?
+    requires CoordinationBetree.Next(v, v', lbl)
+    ensures v.PersistentAUs() == v'.EphemeralAUs()
+  {
+    assert v.persistent.value.branched == v'.ephemeral.v.likesVars.branchedVars.branched;
+    assume v'.ephemeral.v.likesVars.branchedVars.branched.diskView.entries.Keys == M.Set(v'.ephemeral.v.likesVars.betreeLikes); // by likesbetree Inv
+    assume G.ToAUs(M.Set(v'.ephemeral.v.likesVars.betreeLikes)) == M.Set(v'.ephemeral.v.betreeAULikes); // by allocbetree Inv
+    assert v.persistent.value.dv == v'.ephemeral.v.allocBranchDiskView;
   }
 }

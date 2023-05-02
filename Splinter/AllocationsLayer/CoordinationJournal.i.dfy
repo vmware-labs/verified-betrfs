@@ -23,7 +23,7 @@ module CoordinationJournal {
     | PutLabel(records: MsgHistory)
     | InternalLabel(allocs: set<AU>, deallocs: set<AU>)
     | QueryLsnPersistenceLabel(syncLsn: LSN)
-    | CommitStartLabel(newBoundaryLsn: LSN, maxLsn: LSN, unobserved: set<AU>)
+    | CommitStartLabel(newBoundaryLsn: LSN, maxLsn: LSN)
     | CommitCompleteLabel(requireEnd: LSN, discarded: set<AU>)
     | CrashLabel()
 
@@ -150,7 +150,7 @@ module CoordinationJournal {
     // should be all AUs - frozen journal 
     && var frozenJournal := v'.inFlight.value;
     && AllocationJournal.Next(v.ephemeral.v, v'.ephemeral.v,
-      AllocationJournal.FreezeForCommitLabel(frozenJournal, lbl.unobserved))
+      AllocationJournal.FreezeForCommitLabel(frozenJournal))
 
     // Frozen journal stitches to frozen map
     && frozenJournal.tj.SeqStart() == lbl.newBoundaryLsn
@@ -208,7 +208,7 @@ module CoordinationJournal {
       case PutLabel(_) => Put(v, v', lbl)
       case InternalLabel(_, _) => Internal(v, v', lbl)
       case QueryLsnPersistenceLabel(_) => QueryLsnPersistence(v, v', lbl)
-      case CommitStartLabel(_, _, _) => CommitStart(v, v', lbl)
+      case CommitStartLabel(_, _) => CommitStart(v, v', lbl)
       case CommitCompleteLabel(_, _) => CommitComplete(v, v', lbl)
       case CrashLabel() => Crash(v, v', lbl)
     }

@@ -82,9 +82,8 @@ module AllocationJournalRefinement {
     && AUsHoldContiguousLSNs(v.lsnAUIndex)
     && (GetTj(v).freshestRec.Some? ==> ValidFirstAU(GetTj(v).diskView, v.lsnAUIndex, v.first))
     && (GetTj(v).freshestRec.Some? ==> InternalAUPagesFullyLinked(GetTj(v).diskView, v.first))
-    // constraints on page links within an AU
-    // when one follows the prior link of a page within any AU except first
-    // it will observe a link that's strictly decreasing and links down to page 0
+
+    // TODO: miniAllocator can remove means that it's not in lsnauindex.values
   }
 
   lemma InternalJournalMarshalRefines(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
@@ -452,5 +451,14 @@ module AllocationJournalRefinement {
         assert Inv(v');
       }
     }
+  }
+
+  // lemmas used by other refinements
+  lemma DiscardOldAccessibleAUs(v: Variables, v': Variables, lbl: TransitionLabel)
+    requires Next(v, v', lbl)
+    requires lbl.DiscardOldLabel?
+    ensures v'.AccessibleAUs() == v.AccessibleAUs() - lbl.deallocs
+  {
+
   }
 }

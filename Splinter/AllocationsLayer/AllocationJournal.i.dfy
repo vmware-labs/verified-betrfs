@@ -54,7 +54,7 @@ module AllocationJournal {
 
   datatype TransitionLabel =
       ReadForRecoveryLabel(messages: MsgHistory)
-    | FreezeForCommitLabel(frozenJournal: JournalImage, unobserved: set<AU>)
+    | FreezeForCommitLabel(frozenJournal: JournalImage)
     | QueryEndLsnLabel(endLsn: LSN)
     | PutLabel(messages: MsgHistory)
     | DiscardOldLabel(startLsn: LSN, requireEnd: LSN, deallocs: set<AU>)
@@ -69,7 +69,7 @@ module AllocationJournal {
     function I(): LikesJournal.TransitionLabel {
       match this {
         case ReadForRecoveryLabel(messages) => LikesJournal.ReadForRecoveryLabel(messages)
-        case FreezeForCommitLabel(frozenJournal, _) => LikesJournal.FreezeForCommitLabel(frozenJournal.tj)
+        case FreezeForCommitLabel(frozenJournal) => LikesJournal.FreezeForCommitLabel(frozenJournal.tj)
         case QueryEndLsnLabel(endLsn) => LikesJournal.QueryEndLsnLabel(endLsn)
         case PutLabel(messages) => LikesJournal.PutLabel(messages)
         case DiscardOldLabel(startLsn, requireEnd, _) => LikesJournal.DiscardOldLabel(startLsn, requireEnd)
@@ -113,12 +113,12 @@ module AllocationJournal {
   }
 
   // should == G.ToAUs(frozenjournal.tj.diskview.keys)
-  function frozenAUs(frozenJournal: JournalImage, lsnAUIndex: map<LSN, AU>) : (out: set<AU>)
-    requires frozenJournal.WF()
-  {
-    var frozenLSNs := set lsn | frozenJournal.tj.SeqStart() <= lsn < frozenJournal.tj.SeqEnd();
-    MapRestrict(lsnAUIndex, frozenLSNs).Values
-  }
+  // function frozenAUs(frozenJournal: JournalImage, lsnAUIndex: map<LSN, AU>) : (out: set<AU>)
+  //   requires frozenJournal.WF()
+  // {
+  //   var frozenLSNs := set lsn | frozenJournal.tj.SeqStart() <= lsn < frozenJournal.tj.SeqEnd();
+  //   MapRestrict(lsnAUIndex, frozenLSNs).Values
+  // }
 
   predicate FreezeForCommit(v: Variables, v': Variables, lbl: TransitionLabel, step: Step)
   {
@@ -127,7 +127,6 @@ module AllocationJournal {
     && step.FreezeForCommitStep?
 
     && LikesJournal.FreezeForCommit(v.journal, v'.journal, lbl.I(), step.depth)
-    && lbl.unobserved == v.AccessibleAUs() - frozenAUs(lbl.frozenJournal, v.lsnAUIndex)
 
     && v' == v.(
       journal := v'.journal

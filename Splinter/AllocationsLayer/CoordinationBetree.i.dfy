@@ -105,7 +105,7 @@ module CoordinationBetree {
     && v' == v
   }
 
-  predicate FreezeMapInternal(v: Variables, v': Variables, lbl: TransitionLabel, frozenBetree: StampedBetree)
+  predicate FreezeBetreeInternal(v: Variables, v': Variables, lbl: TransitionLabel, frozenBetree: StampedBetree)
   {
     && v.WF()
     && lbl.WF()
@@ -197,7 +197,7 @@ module CoordinationBetree {
     | LoadEphemeralFromPersistentStep()
     | PutRecordsStep()
     | QueryStep()
-    | FreezeMapInternalStep(frozenBetree: StampedBetree)
+    | FreezeBetreeInternalStep(frozenBetree: StampedBetree)
     | FreezeFromPersistentInternalStep()
     | EphemeralInternalStep()
     | CommitStartStep()
@@ -216,7 +216,7 @@ module CoordinationBetree {
       case LoadEphemeralFromPersistentStep() => LoadEphemeralFromPersistent(v, v', lbl)
       case PutRecordsStep() => PutRecords(v, v', lbl)
       case QueryStep() => Query(v, v', lbl)
-      case FreezeMapInternalStep(frozenBetree) => FreezeMapInternal(v, v', lbl, frozenBetree)
+      case FreezeBetreeInternalStep(frozenBetree) => FreezeBetreeInternal(v, v', lbl, frozenBetree)
       case FreezeFromPersistentInternalStep() => FreezeFromPersistentInternal(v, v', lbl)
       case EphemeralInternalStep() => EphemeralInternal(v, v', lbl)
       case CommitStartStep() => CommitStart(v, v', lbl)
@@ -229,12 +229,4 @@ module CoordinationBetree {
   {
     exists step :: NextStep(v, v', lbl, step)
   }
-
-  // lemmas
-  lemma EphemeralAUsSameAfterPut(v: Variables, v': Variables, lbl: TransitionLabel)
-    requires PutRecords(v, v', lbl)
-    ensures v'.EphemeralAUs() == v.EphemeralAUs()
-  {
-  }
-
 }
