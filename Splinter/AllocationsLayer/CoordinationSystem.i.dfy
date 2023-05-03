@@ -299,7 +299,7 @@ module CoordinationSystemMod {
 
     && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.CommitStartLabel(newBoundaryLsn, v.ephemeral.mapLsn))
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.CommitStartLabel(newBoundaryLsn))
-    && var imageAddrs := v'.journal.InFlightAUs() + v'.betree.InFlightAUs();
+    && var imageAddrs := v'.betree.InFlightAUs() + v'.journal.InFlightAUs();
 
     && v' == v.(
       journal := v'.journal, // admit relational update above
@@ -315,8 +315,6 @@ module CoordinationSystemMod {
     && v'.WF()
     && uiop.SyncOp?
     && v.ephemeral.Known? // provable from invariant
-    // && v.freeset.inFlight.Some?
-    // && discardedJournal !! v.freeset.ephemeral // provable from inv
 
     && CoordinationJournal.Next(v.journal, v'.journal, CoordinationJournal.CommitCompleteLabel(v.ephemeral.mapLsn, discardedJournal))
     && CoordinationBetree.Next(v.betree, v'.betree, CoordinationBetree.CommitCompleteLabel())

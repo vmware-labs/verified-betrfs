@@ -78,6 +78,7 @@ module CoordinationSystemRefinement {
   {
     && (v.ephemeral.Known? ==> TotalEphemeral(v) == v.freeset.total)
     && (v.journal.inFlight.Some? ==> TotalInflight(v) == v.freeset.total)
+    && (v.betree.inFlight.Some? ==> v.betree.InFlightAUs() <= v.freeset.total)
     && TotalPersistent(v) == v.freeset.total
   }
 
@@ -296,6 +297,34 @@ module CoordinationSystemRefinement {
     assert AbstractSystem.NextStep(I(v), I(v'), uiop, AbstractSystem.MapInternalStep());
   }
 
+  lemma CommitStartRefines(v: Variables, v': Variables, uiop: UIOp, step: Step)
+    requires Inv(v)
+    requires step.CommitStartStep?
+    requires NextStep(v, v', uiop, step)
+    ensures Inv(v')
+    ensures AbstractSystem.Next(I(v), I(v'), uiop)
+  {
+    var journalLbl := CoordinationJournal.CommitStartLabel(step.newBoundaryLsn, v.ephemeral.mapLsn);
+    var betreeLbl := CoordinationBetree.CommitStartLabel(step.newBoundaryLsn);
+
+    assert DisjointEphemeralComponents(v');
+    assert DisjointPersistentComponents(v');
+
+    FullStackJournalRefinement.CommitStartAccessibleAUs(v.journal, v'.journal, journalLbl);
+    assert v'.journal.InFlightAUs() <= v.journal.EphemeralAUs();
+    assert DisjointInFlightComponents(v');
+    assert DisjointAcrossStates(v');
+
+    var imageAddrs := v'.betree.InFlightAUs() + v'.journal.InFlightAUs();
+    assert imageAddrs <= v.freeset.total;
+    assert v.freeset.total - imageAddrs + imageAddrs == v.freeset.total;
+    assert StatesPreservesTotalAUs(v');
+
+    FullStackJournalRefinement.NextRefines(v.journal, v'.journal, journalLbl);
+    FullStackBetreeRefinement.NextRefines(v.betree, v'.betree, betreeLbl);
+    assert AbstractSystem.NextStep(I(v), I(v'), uiop, AbstractSystem.CommitStartStep(step.newBoundaryLsn));
+  }
+
   lemma CommitCompleteRefines(v: Variables, v': Variables, uiop: UIOp, step: Step)
     requires Inv(v)
     requires step.CommitCompleteStep?
@@ -341,7 +370,6 @@ module CoordinationSystemRefinement {
       TotalEphemeral(v) == v.freeset.total;
       v.freeset.ephemeral + v.betree.EphemeralAUs() + v.journal.EphemeralAUs() == v'.freeset.total;
       v.freeset.ephemeral + v'.betree.EphemeralAUs() + v.journal.EphemeralAUs() == v'.freeset.total;
-      // (v.freeset.ephemeral + step.discardedJournal) + v'.betree.EphemeralAUs() + (v.journal.EphemeralAUs() - step.discardedJournal)  == v'.freeset.total;
       v'.freeset.ephemeral + v'.betree.EphemeralAUs() + (v.journal.EphemeralAUs() - step.discardedJournal)  == v'.freeset.total;
       { FullStackJournalRefinement.CommitCompleteAccessibleAUs(v.journal, v'.journal, journalLbl); }
       v'.freeset.ephemeral + v'.betree.EphemeralAUs() + v'.journal.EphemeralAUs() == v'.freeset.total;
@@ -374,10 +402,9 @@ module CoordinationSystemRefinement {
       case BetreeInternalStep(_, _) => BetreeInternalRefines(v, v', uiop, step);
       case ReqSyncStep() => ReqSyncRefines(v, v', uiop, step);
       case ReplySyncStep() => ReplySyncRefines(v, v', uiop, step);
-      // case CommitStartStep(newBoundaryLsn) => CommitStart(v, v', uiop, newBoundaryLsn)
+      case CommitStartStep(_) => CommitStartRefines(v, v', uiop, step);
       case CommitCompleteStep(_) => CommitCompleteRefines(v, v', uiop, step);
       case CrashStep() => CrashRefines(v, v', uiop, step);
-      case _ => assume false;
     }
   }
 }

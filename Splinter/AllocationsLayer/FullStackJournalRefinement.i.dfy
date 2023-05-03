@@ -289,6 +289,16 @@ module FullStackJournalRefinement {
     }
   }
 
+  lemma CommitStartAccessibleAUs(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
+    requires Inv(v)
+    requires lbl.CommitStartLabel?
+    requires CoordinationJournal.Next(v, v', lbl)
+    ensures v'.InFlightAUs() <= v.EphemeralAUs()
+  {
+    // reveal that linked journal diskview.Keys == likes journal lsnAddrIndex
+    AllocationJournalRefinement.reveal_LikesJournalInv(); 
+  }
+
   lemma CommitCompleteAccessibleAUs(v: CoordinationJournal.Variables, v': CoordinationJournal.Variables, lbl: CoordinationJournal.TransitionLabel)
     requires Inv(v)
     requires lbl.CommitCompleteLabel?
