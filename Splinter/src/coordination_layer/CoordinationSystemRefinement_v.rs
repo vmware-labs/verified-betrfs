@@ -179,6 +179,8 @@ verus! {
       // Ephemeral journal agrees with persistent journal
       &&& journal_overlaps_agree(self.journal.persistent, self.journal.i())
       // Ephemeral map state agrees with ephemeral journal (tacked onto persistent map)
+      // up until ephemeral_map.seq_end (it's possible the ephemeral journal is
+      // ahead of the map)
       &&& self.mapadt.i() == MsgHistory::map_plus_history(
             self.mapadt.persistent,
             self.journal.i().discard_recent(self.mapadt.i().seq_end))
@@ -212,11 +214,14 @@ verus! {
         self.map_is_frozen(),
         self.inv_frozen_map_geometry(),
     {
+      // invariant: the in_flight map agrees with the persistent map,
+      // plus has extra entries from the ephemeral journal.
       self.mapadt.in_flight.get_Some_0() == 
         MsgHistory::map_plus_history(
           self.mapadt.persistent,
           self.journal.i().discard_recent(self.mapadt.in_flight.get_Some_0().seq_end)
         )
+
       // NB: Frozen Journal agreement comes "for free" because the frozen
       // journal is just defined as the frozenJournalLSN prefix of the
       // ephemeral journal.
@@ -241,7 +246,7 @@ verus! {
       // forgotten lsns to pop back into existence, and we don't have those lsns
       // in the ephemeral journal to compare to.
       &&& self.mapadt.persistent.seq_end <= if_map.seq_end
-      // in-flight view hsan't passed ephemeral journal
+      // in-flight view hasn't passed ephemeral journal
       &&& if_journal.seq_end <= self.ephemeral_seq_end()
     }
 
@@ -323,7 +328,6 @@ verus! {
     // Seems like there are macros to help with refinement, but also it provides
     // a guide on how to do refinement
     // Here's my attempt following that:
-
 
     reveal(CoordinationSystem::State::init);
     reveal(CoordinationSystem::State::init_by);
@@ -590,5 +594,74 @@ verus! {
     reveal(CrashTolerantMap::State::next_by);
     // reveal(AbstractMap::State::next);
     // reveal(AbstractMap::State::next_by);
+  }
+
+  pub proof fn inv_inductive_commit_complete_step(
+    v: CoordinationSystem::State,
+    vp: CoordinationSystem::State,
+    label: CoordinationSystem::Label,
+    step: CoordinationSystem::Step,
+  )
+  requires
+    v.inv(),
+    CoordinationSystem::State::next(v, vp, label),
+    CoordinationSystem::State::next_by(v, vp, label, step),
+    matches!(step, CoordinationSystem::Step::commit_complete(_, _)),
+  ensures
+    vp.inv()
+  {
+    reveal(CoordinationSystem::State::next);
+    reveal(CoordinationSystem::State::next_by);
+    reveal(CrashTolerantJournal::State::next);
+    reveal(CrashTolerantJournal::State::next_by);
+    reveal(AbstractJournal::State::next);
+    reveal(AbstractJournal::State::next_by);
+    reveal(CrashTolerantMap::State::next);
+    reveal(CrashTolerantMap::State::next_by);
+    reveal(AbstractMap::State::next);
+    reveal(AbstractMap::State::next_by);
+
+    MsgHistory::map_plus_history_forall_lemma();
+
+    // Proof strategy:
+    // Most invariant pieces go through automatically, but verus doesn't believe
+    // by default that in the post state that em = pm + ej[:em_end]
+    // But by invariant in the pre state that should have been true, and em
+    // doesn't change, pm instead just absorbs some of ej (and then ej gets truncated).
+    // So, by invariant in the pre state we have:
+    //   em = pm + ej[:em_end] = pm + ej[:im_end] + ej[im_end:em_end]
+    // And by invariant on in_flight in pre_state:
+    //   im = pm + ej[:im_end]
+    // In post state:
+    //   em = pre.em
+    //   pm = pre.im = pre.pm + pre.ej[:im_end]
+    //   ej = pre.ej[im_end:]
+    // So naturally it should follow that
+    //   pm + ej = pre.pm + pre.ej[:im_end] + pre.ej[im_end:] = pre.em = em
+    // QED.
+
+    let pm = v.mapadt.persistent;
+    let em_end = v.mapadt.i().seq_end;
+    let ej = v.journal.i();
+    let im_end = v.mapadt.in_flight.get_Some_0().seq_end;
+
+    // Show that ej[:em_end] == ej[:im_end] + ej[im_end:em_end]
+    // Needed an extensionality argument... took a while to find
+    assert(ej.discard_recent(em_end) 
+      == ej.discard_recent(im_end).concat(ej.discard_old(im_end).discard_recent(em_end)))
+    by
+    {
+      let left = ej.discard_recent(em_end);
+      let right = ej.discard_recent(im_end).concat(ej.discard_old(im_end).discard_recent(em_end));
+      assert_maps_equal!(left.msgs, right.msgs);
+    }
+
+    // Argue that pre.pm + pre.ej[:im_end] + pre.ej[im_end:] 
+    // == pre.pm + (pre.ej[:im_end] + pre.ej[im_end:]
+    journal_associativity(
+      v.mapadt.persistent,
+      ej.discard_recent(im_end),
+      ej.discard_old(im_end).discard_recent(em_end)
+    );
   }
 }

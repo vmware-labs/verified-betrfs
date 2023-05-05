@@ -85,24 +85,6 @@ impl MsgHistory {
     }
   }
 
-  // TODO(tenzinhl): Delete this. This lemma was used to figure out that
-  // we were missing an extensionality argument that Dafny was automatically
-  // getting.
-  pub proof fn concat_property_1(x: MsgHistory, y: MsgHistory, lsn: LSN)
-  requires
-    x.wf(),
-    y.wf(),
-    y.can_discard_to(lsn),
-    x.can_concat(y),
-  ensures
-    x.concat(y.discard_recent(lsn)) == x.concat(y).discard_recent(lsn)
-  {
-    assert_maps_equal!(
-      x.concat(y.discard_recent(lsn)).msgs,
-      x.concat(y).discard_recent(lsn).msgs
-    );
-  }
-
   pub proof fn concat_forall_lemma()
   ensures
     forall |_self: MsgHistory, other: MsgHistory|
@@ -314,4 +296,5 @@ impl MsgHistory {
     history.apply_to_stamped_map_length_lemma(stamped_map);
   }
 }
+
 }

@@ -539,6 +539,8 @@ state_machine!{ CoordinationSystem {
       let ctam_label = label.get_Label_ctam_label();
       require ctam_label.is_SyncOp();
 
+      // CrashTolerantJournal commit complete truncates the old
+      // part of ephemeral journal that's now saved on disk
       require CrashTolerantJournal::State::next(
         pre.journal,
         new_journal,
