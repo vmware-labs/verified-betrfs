@@ -156,6 +156,13 @@ impl BetreeNode {
             children: ChildMap{ map: out_children_map}
         }
     }
+
+    pub open spec fn compact(self, compactedBuffers: BufferSeq) -> BetreeNode {
+        BetreeNode::Node{
+            buffers: compactedBuffers, 
+            children: self.get_Node_children()
+        }
+    }
 } // end impl BetreeNode
 
 
@@ -299,9 +306,9 @@ impl Path {
         replacement.wf(),
         0 < self.routing.len(),
     decreases
-        self.routing.len(), 0nat
+        self.subpath().routing.len() // Jialin: this works the one below doesn't, why?
+        // self.routing.len(), 0nat
     {
-        // TODO(tony): how to prove termination here?
         let replaced_child = self.subpath().substitute(replacement);
         ChildMap{
             map: Map::new( |k| true, |k| if self.routing.index(0).contains(k) {replaced_child} else { self.node.child(k)} )
@@ -348,6 +355,84 @@ state_machine!{ PagedBetree {
         FreezeAs{stamped_betree: StampedBetree},
         Internal{},   // Local No-op label
     }
+
+    transition!{ query(lbl: Label, receipt: QueryReceipt) {
+        require let Label::Query{end_lsn, key, value} = lbl;
+        require end_lsn == pre.memtable.seq_end;
+        require receipt.valid_for(pre.root, key);
+        require Message::Define{value} == Message::merge(pre.memtable.query(key), receipt.result());
+    }}
+
+    transition!{ put(lbl: Label) {
+        require let Label::Put{puts} = lbl;
+        require puts.wf();
+        require puts.seq_start == pre.memtable.seq_end;
+        update memtable = pre.memtable.apply_puts(puts);
+    }}
+
+    transition!{ query_end_lsn(lbl: Label) {
+        require let Label::QueryEndLsn{end_lsn} = lbl;
+        require end_lsn == pre.memtable.seq_end;
+    }}
+
+    transition!{ freeze_as(lbl: Label) {
+        require let Label::FreezeAs{stamped_betree} = lbl;
+        require pre.wf();
+        require pre.memtable.is_empty();
+        require stamped_betree == Stamped{value: pre.root, seq_end: pre.memtable.seq_end};
+    }}
+
+    transition!{ internal_flush_memtable(lbl: Label) {
+        require let Label::Internal{} = lbl;
+        require pre.wf();
+        update memtable = pre.memtable.drain();
+        update root = pre.root.push_memtable(pre.memtable).value;
+    }}
+
+    transition!{ internal_grow(lbl: Label) {
+        require let Label::Internal{} = lbl;
+        require pre.wf();
+        update root = BetreeNode::Node{
+            buffers: BufferSeq{ buffers: Seq::empty() },
+            children: constant_child_map(pre.root)
+        };
+    }}
+
+    transition!{ internal_split(lbl: Label, path: Path, left_keys: Set<Key>, right_keys: Set<Key>) {
+        require let Label::Internal{} = lbl;
+        require path.valid();
+        require path.node == pre.root;
+        update root = path.substitute(path.target().split(left_keys, right_keys));
+    }}
+
+    transition!{ internal_flush(lbl: Label, path: Path, down_keys: Set<Key>) {
+        require let Label::Internal{} = lbl;
+        require path.valid();
+        require path.node == pre.root;
+        update root = path.substitute(path.target().flush(down_keys));
+    }}
+
+    transition!{ internal_compact(lbl: Label, path: Path, compactedBuffers: BufferSeq) {
+        require let Label::Internal{} = lbl;
+        require path.valid();
+        require path.target().is_Node();
+        require path.target().get_Node_buffers().i() == compactedBuffers.i();
+        require path.node == pre.root;
+        update root = path.substitute(path.target().compact(compactedBuffers));
+    }}
+
+    transition!{ internal_noop(lbl: Label) {
+        require let Label::Internal{} = lbl;
+        require pre.wf();
+    }}
+
+
+    init!{ initialize(stamped_betree: StampedBetree) {
+        require stamped_betree.value.wf();
+        init memtable = Memtable::empty_memtable(stamped_betree.seq_end);
+        init root = stamped_betree.value;
+    }}
+
 }} // end PagedBetree state machine
 
 

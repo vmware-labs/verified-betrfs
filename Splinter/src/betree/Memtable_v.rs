@@ -21,7 +21,7 @@ impl Memtable {
         self.buffer.query(key)
     }
 
-    pub open spec fn apply_puts(self, km: KeyedMessage) -> Memtable {
+    pub open spec fn apply_put(self, km: KeyedMessage) -> Memtable {
         Memtable{ 
             buffer: Buffer{
                 map: self.buffer.map.insert(km.key, km.message.merge(self.query(km.key)))
@@ -30,7 +30,20 @@ impl Memtable {
         }
     }
 
-    pub open spec fn empty_memtable(self, lsn: LSN) -> Memtable {
+    pub open spec fn apply_puts(self, puts: MsgHistory) -> Memtable
+        recommends puts.wf(), puts.seq_start == self.seq_end
+        decreases puts.seq_end, 1nat
+    {
+        decreases_when(puts.wf());
+        if puts.is_empty() {
+            self
+        } else {
+            let last_lsn = (puts.seq_end - 1) as nat;
+            self.apply_puts(puts.discard_recent(last_lsn)).apply_put(puts.msgs[last_lsn])
+        }
+    }
+
+    pub open spec fn empty_memtable(lsn: LSN) -> Memtable {
         Memtable{ 
             buffer: Buffer::empty_buffer(),
             seq_end: lsn
@@ -38,7 +51,7 @@ impl Memtable {
     }
 
     pub open spec fn drain(self) -> Memtable {
-        self.empty_memtable(self.seq_end)
+        Self::empty_memtable(self.seq_end)
     }
 
     pub open spec fn is_empty(self) -> bool {

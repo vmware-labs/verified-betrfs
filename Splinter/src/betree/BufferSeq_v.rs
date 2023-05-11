@@ -56,6 +56,16 @@ impl BufferSeq {
         BufferSeq{ buffers: self.buffers + new_buffers.buffers }
     }
 
+    pub open spec fn i(self) -> Buffer 
+        decreases self.buffers.len()
+    {
+        if self.buffers.len() == 0 {
+            Buffer::empty_buffer()
+        } else {
+            self.drop_first().i().merge(self.buffers[0])
+        }
+    }
+
     pub open spec fn i_bottom(self, offset_map: OffsetMap) -> Buffer
         recommends 
         offset_map.is_total(), 
@@ -64,7 +74,7 @@ impl BufferSeq {
         self.buffers[0].apply_filter(offset_map.filter_for_bottom())
     }
 
-    pub open spec fn i(self, offset_map: OffsetMap) -> Buffer 
+    pub open spec fn i_filtered(self, offset_map: OffsetMap) -> Buffer 
       recommends offset_map.is_total()
       decreases self.buffers.len()
     {
@@ -72,7 +82,7 @@ impl BufferSeq {
             Buffer::empty_buffer()
         } else {
             let new_offset_map = offset_map.decrement(1);
-            self.drop_first().i(new_offset_map).merge(self.i_bottom(offset_map))
+            self.drop_first().i_filtered(new_offset_map).merge(self.i_bottom(offset_map))
         }
     }
 } // end impl BufferSeq
