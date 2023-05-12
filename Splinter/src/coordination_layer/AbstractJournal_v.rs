@@ -40,6 +40,10 @@ state_machine!{ AbstractJournal {
         }
     }
 
+    // Read a section of the journal. Transition asserts that the
+    // MsgHistory in the label matches an slice of the journal
+    // (i.e.: it corresponds to a valid read rather than making
+    // stuff up)
     transition!{
         read_for_recovery(lbl: Label) {
             require pre.wf();

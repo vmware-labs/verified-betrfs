@@ -15,8 +15,10 @@ pub struct KeyedMessage {
   pub message: Message 
 }
 
+// A contiguous log of kv-store command messages (keyed by LSN)
+// Stores requests from seq_start <= LSN < seq_end
 pub struct MsgHistory { 
-  pub msgs: Map<LSN, KeyedMessage>, 
+  pub msgs: Map<LSN, KeyedMessage>,
   pub seq_start: LSN, 
   pub seq_end: LSN 
 }
@@ -215,6 +217,8 @@ impl MsgHistory {
     }
   }
 
+  // Returns `true` iff the given MsgHistory is an exact slice of MsgHistory
+  // within self (values must match at each LSN).
   pub open spec fn includes_subseq(self, subseq: MsgHistory) -> bool {
     &&& self.seq_start <= subseq.seq_start
     &&& subseq.seq_end <= self.seq_end

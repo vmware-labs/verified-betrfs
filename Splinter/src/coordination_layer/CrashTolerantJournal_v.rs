@@ -59,6 +59,10 @@ state_machine!{ CrashTolerantJournal {
     }
 
     transition!{
+        // Copy the persistent state into the ephemeral state
+        // Should only transition from a state where the ephemeral
+        // state is unknown.
+        // (Transition name is pretty comprehensive on this one)
         load_ephemeral_from_persistent(lbl: Label, new_journal: AbstractJournal::State, journal_config: AbstractJournal::Config) {
             require lbl.is_LoadEphemeralFromPersistentLabel();
             require pre.ephemeral.is_Unknown();
@@ -69,18 +73,18 @@ state_machine!{ CrashTolerantJournal {
     }
 
     transition!{
-        read_for_recovery(lbl: Label, new_journal: AbstractJournal::State, journal_step: AbstractJournal::Step) {
+        // Read a section of the journal. Transition asserts that the
+        // records in the label correspond to a real and valid slice
+        // of the journal (rather than made up or random values).
+        read_for_recovery(lbl: Label) {
             require lbl.is_ReadForRecoveryLabel();
             require pre.ephemeral.is_Known();
-            // TODO(verus): This seems very redundant with transition labels?
-            require journal_step === AbstractJournal::Step::read_for_recovery();
-            require AbstractJournal::State::next_by(
+
+            require AbstractJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
-                new_journal, 
-                AbstractJournal::Label::ReadForRecoveryLabel{ messages: lbl.get_ReadForRecoveryLabel_records() },
-                journal_step
+                pre.ephemeral.get_Known_v(), 
+                AbstractJournal::Label::ReadForRecoveryLabel{ messages: lbl.get_ReadForRecoveryLabel_records() }
             );
-            update ephemeral = Ephemeral::Known{ v: new_journal };
         }
     }
 

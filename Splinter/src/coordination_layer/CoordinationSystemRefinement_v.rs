@@ -664,4 +664,45 @@ verus! {
       ej.discard_old(im_end).discard_recent(em_end)
     );
   }
+
+  pub proof fn inv_inductive(v: CoordinationSystem::State, vp: CoordinationSystem::State, label: CoordinationSystem::Label)
+    requires
+      v.inv(),
+      CoordinationSystem::State::next(v, vp, label),
+    ensures
+      vp.inv(),
+  {
+    reveal(CoordinationSystem::State::next);
+    reveal(CoordinationSystem::State::next_by);
+    reveal(CrashTolerantJournal::State::next);
+    reveal(CrashTolerantJournal::State::next_by);
+    reveal(AbstractJournal::State::next);
+    reveal(AbstractJournal::State::next_by);
+    reveal(CrashTolerantMap::State::next);
+    reveal(CrashTolerantMap::State::next_by);
+    reveal(AbstractMap::State::next);
+    reveal(AbstractMap::State::next_by);
+
+    // Be careful to reveal init and init_by transitions as well!
+    reveal(CrashTolerantJournal::State::init);
+    reveal(CrashTolerantJournal::State::init_by);
+    // No direct dependencies on init()
+    // reveal(AbstractJournal::State::init);
+    reveal(AbstractJournal::State::init_by);
+
+    let step = choose |s| CoordinationSystem::State::next_by(v, vp, label, s);
+    
+    match step {
+      CoordinationSystem::Step::load_ephemeral_from_persistent(_, _, _) => {
+        // Verifies for free! (Well, besides all of the reveals lol)
+        assert(vp.inv());
+      },
+      CoordinationSystem::Step::recover(_, _, _) => {
+        assert(vp.inv());
+      },
+      _ => {
+        assume(vp.inv());
+      }
+    }
+  }
 }
