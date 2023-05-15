@@ -6,7 +6,7 @@ use builtin_macros::*;
 use vstd::prelude::*;
 use crate::betree::Buffer_v::*;
 use crate::spec::Messages_t::*;
-use crate::spec::TotalKMMap_t::*;
+use crate::spec::KeyType_t::*;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MsgHistory_v::*;
 

@@ -4,6 +4,7 @@ use builtin_macros::*;
 use builtin::*;
 use vstd::{*,map::*,set::*};
 
+use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::spec::TotalKMMap_t::*;
 use crate::coordination_layer::StampedMap_v::*;

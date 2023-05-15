@@ -4,7 +4,7 @@ use builtin::*;
 use builtin_macros::*;
 
 use vstd::{*,map::*,set::*};
-use crate::spec::TotalKMMap_t::*;
+use crate::spec::KeyType_t::*;
 use crate::betree::Buffer_v::*;
 
 verus! {

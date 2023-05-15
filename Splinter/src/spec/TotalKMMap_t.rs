@@ -5,11 +5,10 @@ use builtin::*;
 use vstd::prelude::*;
 use vstd::set_lib::*;
 
+use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 
 verus!{
-
-pub struct Key(pub int); // TODO: this is a placeholder for the Key type
 
 pub struct TotalKMMap(pub Map<Key, Message>);
 

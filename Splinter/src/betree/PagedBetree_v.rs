@@ -5,8 +5,8 @@ use builtin_macros::*;
 use state_machines_macros::state_machine;
 
 use vstd::prelude::*;
+use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-use crate::spec::TotalKMMap_t::*;
 use crate::betree::Buffer_v::*;
 use crate::betree::BufferSeq_v::*;
 use crate::betree::Memtable_v::*;

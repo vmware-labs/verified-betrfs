@@ -3,3 +3,4 @@ pub mod BufferSeq_v;
 pub mod OffsetMap_v;
 pub mod Memtable_v;
 pub mod PagedBetree_v;
+pub mod Domain_v;
