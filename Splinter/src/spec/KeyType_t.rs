@@ -57,5 +57,10 @@ impl Element {
     {
         Element::Elem{e: 0} // place holder 
     }
+
+    pub open spec fn is_strictly_sorted(run: Seq<Element>) -> bool
+    {
+        forall |i: int, j: int| 0 <= i < j < run.len() ==> Element::lt(run[i], run[j])
+    }
 } // end impl KeyType
 }// end verus!

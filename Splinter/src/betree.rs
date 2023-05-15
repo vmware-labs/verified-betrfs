@@ -4,3 +4,5 @@ pub mod OffsetMap_v;
 pub mod Memtable_v;
 pub mod PagedBetree_v;
 pub mod Domain_v;
+pub mod PivotTable_v;
+pub mod PivotBetree_v;
