@@ -16,6 +16,11 @@ pub enum Domain {
         end: Element},
 }
 
+pub open spec fn total_domain() -> Domain
+{
+    Domain::Domain{start: Element::min_elem(), end: Element::Max}
+}
+
 impl Domain {
     pub open spec fn wf(self) -> bool
     {
@@ -36,11 +41,6 @@ impl Domain {
     pub open spec fn key_set(self) -> Set<Key>
     {
         Set::new( |k| self.contains(k) )
-    }
-
-    pub open spec fn total_domain() -> Domain
-    {
-        Domain::Domain{start: Element::min_elem(), end: Element::Max}
     }
 } // end impl Domain
 }  // end verus!

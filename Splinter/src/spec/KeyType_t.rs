@@ -62,5 +62,15 @@ impl Element {
     {
         forall |i: int, j: int| 0 <= i < j < run.len() ==> Element::lt(run[i], run[j])
     }
+
+    pub open spec fn largest_lte(run: Seq<Element>, needle: Element) -> int
+        decreases run.len()
+    {
+        if run.len() == 0 || Element::lt(needle, run[0]) {
+            -1
+        } else {
+            1 + Element::largest_lte(run.subrange(1, run.len() as int), needle)
+        }
+    }
 } // end impl KeyType
 }// end verus!

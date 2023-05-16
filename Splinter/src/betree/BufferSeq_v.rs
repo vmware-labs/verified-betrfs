@@ -16,6 +16,11 @@ pub struct BufferSeq {
     pub buffers: Seq<Buffer>
 }
 
+pub open spec fn empty_bufer_seq() -> BufferSeq
+{
+    BufferSeq{buffers: Seq::empty()}
+}
+
 impl BufferSeq {
     pub open spec fn len(self) -> nat {
         self.buffers.len()
