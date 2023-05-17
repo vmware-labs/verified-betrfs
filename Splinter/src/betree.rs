@@ -7,3 +7,4 @@ pub mod Domain_v;
 pub mod PivotTable_v;
 pub mod PivotBetree_v;
 pub mod SplitRequest_v;
+pub mod PagedBetreeRefinement_v;
