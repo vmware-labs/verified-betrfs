@@ -647,6 +647,7 @@ verus! {
 
     // Show that ej[:em_end] == ej[:im_end] + ej[im_end:em_end]
     // Needed an extensionality argument... took a while to find
+    // Maybe I should make this a lemma on the concat operator...
     assert(ej.discard_recent(em_end) 
       == ej.discard_recent(im_end).concat(ej.discard_old(im_end).discard_recent(em_end)))
     by
@@ -656,8 +657,8 @@ verus! {
       assert_maps_equal!(left.msgs, right.msgs);
     }
 
-    // Argue that pre.pm + pre.ej[:im_end] + pre.ej[im_end:] 
-    // == pre.pm + (pre.ej[:im_end] + pre.ej[im_end:]
+    // Argue that pre.pm + pre.ej[:im_end] + pre.ej[im_end:em_end] 
+    // == pre.pm + (pre.ej[:im_end] + pre.ej[im_end:em_end]
     journal_associativity(
       v.mapadt.persistent,
       ej.discard_recent(im_end),
@@ -690,6 +691,12 @@ verus! {
     // reveal(AbstractJournal::State::init);
     reveal(AbstractJournal::State::init_by);
 
+    // Avoid common extensionality argument errors with these proofs
+    // about extensional equality for the frequently used MsgHistory and
+    // StampedMap
+    MsgHistory::ext_equal_is_equality();
+    StampedMap::ext_equal_is_equality();
+
     let step = choose |s| CoordinationSystem::State::next_by(v, vp, label, s);
     
     match step {
@@ -697,7 +704,66 @@ verus! {
         // Verifies for free! (Well, besides all of the reveals lol)
         assert(vp.inv());
       },
-      CoordinationSystem::Step::recover(_, _, _) => {
+      CoordinationSystem::Step::recover(new_journal, new_mapadt, records) => {
+        // First let's check what vp.mapadt.ephemeral should be based on transition...
+        let pre_stamped_map = v.mapadt.ephemeral.get_Known_v().stamped_map;
+        let post_stamped_map = vp.mapadt.ephemeral.get_Known_v().stamped_map;
+
+        // Believes that this is true (definition of transition)
+        assert(post_stamped_map == MsgHistory::map_plus_history(pre_stamped_map, records));
+
+        MsgHistory::map_plus_history_forall_lemma();
+        // Doesn't believe self.ephemeral.get_Some_0().map_lsn == self.mapadt.ephemeral.get_Known_v().stamped_map.seq_end
+        assert(vp.ephemeral.get_Some_0().map_lsn 
+          == vp.mapadt.ephemeral.get_Known_v().stamped_map.seq_end);
+        // Has issues with self.mapadt.ephemeral.get_Known_v().stamped_map having total domain
+        
+        // Alright the above is all good, now I just need to show
+        // inv_ephemeral_value_agreement()
+
+        // So we know that this is true for the pre state
+        assert(v.inv_ephemeral_value_agreement());
+
+        // em_end (is initial map end)
+        let em_end = v.mapadt.i().seq_end;
+        let em_end_p = vp.mapadt.i().seq_end;
+        // pre.em
+        let em = v.mapadt.i();
+        let ej = v.journal.i();
+        // post.em
+        let em_p = vp.mapadt.i();
+        // pre.em = pre.pm + pre.ej[:em_end]
+
+        // During a recover step all we do is insert some entries from
+        // the journal into the ephemeral map
+        // So journal is unchanged:
+        // post.ej = pre.ej
+        assert(vp.journal == v.journal);
+
+        // These three facts should be sufficient to establish
+        // the fourth, but it doesn't believe me... does now! (Extensional
+        // equality yet again)
+        assert(ej.includes_subseq(records));
+        assert(records.seq_start == em_end);
+        assert(records.seq_end == em_end_p);
+
+        // Ah... wait, maybe it's another extensionality arguent
+        // So now we need to assert that ej[em_end:em_end'] is the same
+        // as records
+        assert(records.ext_equal(ej.discard_old(em_end).discard_recent(em_end_p)));
+        assert(records == ej.discard_old(em_end).discard_recent(em_end_p));
+
+        // And the post state is made of original em + some entries from
+        // journal 
+        // post.em = pre.em + pre.ej[em_end:em_end']
+        assert(em_p == em.plus_history(
+          ej.discard_old(em_end).discard_recent(em_end_p)));
+
+        // Target (inv_ephemeral_value_agreement()):
+        assert(vp.mapadt.i().ext_equal(MsgHistory::map_plus_history(
+          vp.mapadt.persistent,
+          vp.journal.i().discard_recent(vp.mapadt.i().seq_end))));
+
         assert(vp.inv());
       },
       _ => {

@@ -25,6 +25,11 @@ pub open spec fn empty() -> StampedMap {
 }
 
 impl StampedMap {
+  pub open spec fn ext_equal(self, other: StampedMap) -> bool {
+    &&& self.value.0.ext_equal(other.value.0)
+    &&& self.seq_end == other.seq_end
+  }
+
   pub open spec fn plus_history(self, history: MsgHistory) -> StampedMap
     recommends
       self.value.wf(),
@@ -33,7 +38,16 @@ impl StampedMap {
   {
     history.apply_to_stamped_map(self)
   }
+
+  // Proofs:
+  pub proof fn ext_equal_is_equality()
+    ensures forall |a: StampedMap, b: StampedMap|
+      a.ext_equal(b) == (a == b)
+  {
+  }
 }
+
+// Proofs:
 
 }
 

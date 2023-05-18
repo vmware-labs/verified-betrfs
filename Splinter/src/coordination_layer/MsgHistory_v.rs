@@ -29,6 +29,19 @@ impl MsgHistory {
     &&& self.contains_exactly(self.msgs.dom())
   }
 
+  // Call this instead of using `==` when checking/asserting that
+  pub open spec fn ext_equal(self, other: MsgHistory) -> bool {
+    &&& self.msgs.ext_equal(other.msgs)
+    &&& self.seq_start == other.seq_start
+    &&& self.seq_end == other.seq_end
+  }
+
+  pub proof fn ext_equal_is_equality()
+    ensures forall |a: MsgHistory, b: MsgHistory|
+      a.ext_equal(b) == (a == b)
+  {
+  }
+
   pub open spec fn contains(self, lsn: LSN) -> bool {
     self.seq_start <= lsn < self.seq_end
   }
