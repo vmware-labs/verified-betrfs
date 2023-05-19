@@ -46,7 +46,8 @@ impl BufferSeq {
         if start == self.len() {
             Message::Update{ delta: nop_delta() }
         } else {
-            self.query_from(key, start+1).merge(self.buffers[start].query(key))
+            // merge message from old buffer to new result
+            self.buffers[start].query(key).merge(self.query_from(key, start+1))
         }
     }
 

@@ -174,7 +174,8 @@ pub struct QueryReceiptLine {
 
 impl QueryReceiptLine {
     pub open spec fn wf(self) -> bool {
-       self.result.is_Define()
+        &&& self.node.wf()
+        &&& self.result.is_Define()
     }
 } //end impl QueryReceiptLine
 

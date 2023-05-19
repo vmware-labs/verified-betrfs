@@ -37,8 +37,8 @@ impl Buffer {
 
     pub open spec fn merge(self, older: Buffer) -> Buffer {
         Buffer{ map: Map::new( |k| self.map.contains_key(k) || older.map.contains_key(k), 
-            |k| if self.map.contains_key(k) && older.map.contains_key(k) {
-                    self.map[k].merge(older.map[k]) } 
+            |k| if self.map.contains_key(k) && older.map.contains_key(k) 
+                { older.map[k].merge(self.map[k]) }
                 else if self.map.contains_key(k) { self.map[k] } 
                 else { older.map[k] }) }
     }

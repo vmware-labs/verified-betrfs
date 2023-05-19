@@ -31,8 +31,27 @@ pub enum Message {
 }
 
 impl Message {
+    // place holder since we don't use deltas yet
+    pub open spec fn combine_deltas(new: Delta, old: Delta) -> Delta
+    {
+        nop_delta()
+    }
+
+    pub open spec fn apply_delta(delta: Delta, value: Value) -> Value
+    {
+        value
+    }
+
     pub open spec fn merge(self, new: Message) -> Message {
-        self  // TODO: This is a placeholder
+        if new.is_Define() {
+            new
+        } else if self.is_Define() {
+            let new_value = Message::apply_delta(new.get_Update_delta(), self.get_Define_value());
+            Message::Define{value: new_value}
+        } else {
+            let new_delta = Message::combine_deltas(new.get_Update_delta(), self.get_Update_delta());
+            Message::Update{delta: new_delta}
+        }
     }
 
     pub open spec fn empty() -> Message {

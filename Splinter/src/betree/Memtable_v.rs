@@ -24,7 +24,7 @@ impl Memtable {
     pub open spec fn apply_put(self, km: KeyedMessage) -> Memtable {
         Memtable{ 
             buffer: Buffer{
-                map: self.buffer.map.insert(km.key, km.message.merge(self.query(km.key)))
+                map: self.buffer.map.insert(km.key, self.query(km.key).merge(km.message))
             },
             seq_end: self.seq_end + 1
         }
