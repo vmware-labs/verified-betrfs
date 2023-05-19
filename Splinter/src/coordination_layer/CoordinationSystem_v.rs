@@ -87,6 +87,8 @@ state_machine!{ CoordinationSystem {
   }
 
   transition! {
+    // Load the state of the ephemeral journal and map from the persistent
+    // state (just a direct copy)
     load_ephemeral_from_persistent(
       label: Label,
       new_journal: CrashTolerantJournal::State,
@@ -125,6 +127,8 @@ state_machine!{ CoordinationSystem {
   }
 
   transition! {
+    // Apply records from the journal to the ephemeral map when the ephemeral
+    // map is still behind.
     recover(
       label: Label,
       new_journal: CrashTolerantJournal::State,
@@ -134,6 +138,7 @@ state_machine!{ CoordinationSystem {
       require let Label::Label{ ctam_label: CrashTolerantAsyncMap::Label::Noop } = label;
 
       require pre.ephemeral.is_Some();
+      require records.wf();
 
       require CrashTolerantJournal::State::next(
         pre.journal,
@@ -206,7 +211,6 @@ state_machine!{ CoordinationSystem {
     }
   }
 
-  // TODO: get approval
   transition! {
     query(
       label: Label,

@@ -17,6 +17,11 @@ not being satisfied when they are provably satisfied).
 --no-auto-recommends-check
 ```
 
+If you find yourself buried in error output, use this command to only get the top (and also get it in color):
+```
+$verus --verify-module coordination_layer::CoordinationSystemRefinement_v bundle.rs --triggers-silent --expand-errors --multiple-errors 2 --color=always 2>&1 | head -n 50
+```
+
 ### Verus
 
 We use it. "Documentation" here: https://github.com/verus-lang/verus/tree/main/source/pervasive

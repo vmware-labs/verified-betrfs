@@ -29,6 +29,19 @@ impl MsgHistory {
     &&& self.contains_exactly(self.msgs.dom())
   }
 
+  // Call this instead of using `==` when checking/asserting that
+  pub open spec fn ext_equal(self, other: MsgHistory) -> bool {
+    &&& self.msgs.ext_equal(other.msgs)
+    &&& self.seq_start == other.seq_start
+    &&& self.seq_end == other.seq_end
+  }
+
+  pub proof fn ext_equal_is_equality()
+    ensures forall |a: MsgHistory, b: MsgHistory|
+      a.ext_equal(b) == (a == b)
+  {
+  }
+
   pub open spec fn contains(self, lsn: LSN) -> bool {
     self.seq_start <= lsn < self.seq_end
   }
@@ -132,6 +145,13 @@ impl MsgHistory {
     MsgHistory{ msgs: keepMap, seq_start: self.seq_start, seq_end: lsn }
   }
 
+  // Tenzin: I type these so much it's much easier to write and read shorthand
+  pub open spec fn _dr(self, lsn: LSN) -> MsgHistory
+    recommends self.can_discard_to(lsn)
+  {
+    self.discard_recent(lsn)
+  }
+
   pub open spec fn apply_to_stamped_map(self, orig: StampedMap) -> StampedMap 
     recommends 
       self.wf(),  // TODO(verus): check if decreases_when implies recommends
@@ -207,6 +227,12 @@ impl MsgHistory {
     MsgHistory{ msgs: keepMap, seq_start: lsn, seq_end: self.seq_end }
   }
 
+  pub open spec fn _do(self, lsn: LSN) -> MsgHistory
+    recommends self.can_discard_to(lsn)
+  {
+    self.discard_old(lsn)
+  }
+
   pub open spec fn maybe_discard_old(self, lsn: LSN) -> MsgHistory
     recommends lsn <= self.seq_end
   {
@@ -216,6 +242,34 @@ impl MsgHistory {
       self
     }
   }
+
+  // TODO(tenzin): this isn't really needed
+  pub proof fn discard_order_is_commutative(self, start: LSN, end: LSN)
+    requires
+      start <= end,
+      self.can_discard_to(start),
+      self.can_discard_to(end),
+    ensures
+      self.discard_old(start).discard_recent(end) 
+        == self.discard_recent(end).discard_old(start)
+  {
+    let left = self.discard_old(start).discard_recent(end);
+    let right = self.discard_recent(end).discard_old(start);
+    assert(left.ext_equal(right));
+  }
+
+  pub proof fn added_slices_union(self, middle: LSN)
+    requires
+      self.wf(),
+      self.can_discard_to(middle),
+    ensures
+      // history[:middle] + history[middle:] = history
+      self.discard_recent(middle).concat(self.discard_old(middle))
+        == self,
+    {
+      let other = self.discard_recent(middle).concat(self.discard_old(middle));
+      assert(self.ext_equal(other));
+    }
 
   // Returns `true` iff the given MsgHistory is an exact slice of MsgHistory
   // within self (values must match at each LSN).
