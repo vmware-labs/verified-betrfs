@@ -194,6 +194,7 @@ impl QueryReceipt {
         &&& forall |i| #![auto] 0 <= i < self.lines.len() ==> (
             self.lines[i].node.is_Node() <==> i < self.lines.len() - 1
         )
+        &&& self.lines.last().result == Message::empty()
     }
 
     pub open spec fn all_lines_wf(self) -> bool {
@@ -335,8 +336,6 @@ impl Path {
 } //end impl Path
 
 
-
-
 state_machine!{ PagedBetree {
     fields {
         pub memtable: Memtable,
@@ -352,7 +351,6 @@ state_machine!{ PagedBetree {
     {
         Query{end_lsn: LSN, key: Key, value: Value},
         Put{puts: MsgHistory},
-        QueryEndLsn{end_lsn: LSN},
         FreezeAs{stamped_betree: StampedBetree},
         Internal{},   // Local No-op label
     }
@@ -369,11 +367,6 @@ state_machine!{ PagedBetree {
         require puts.wf();
         require puts.seq_start == pre.memtable.seq_end;
         update memtable = pre.memtable.apply_puts(puts);
-    }}
-
-    transition!{ query_end_lsn(lbl: Label) {
-        require let Label::QueryEndLsn{end_lsn} = lbl;
-        require end_lsn == pre.memtable.seq_end;
     }}
 
     transition!{ freeze_as(lbl: Label) {
@@ -434,6 +427,41 @@ state_machine!{ PagedBetree {
         init root = stamped_betree.value;
     }}
 
+    // Note(Jialin): not sure if this really buys us anything
+    // #[invariant]
+    // pub open spec fn inv(self) -> bool {
+    //     self.wf()
+    // }
+
+    // #[inductive(query)]
+    // fn query_inductive(pre: Self, post: Self, lbl: Label, receipt: QueryReceipt) { }
+   
+    // #[inductive(put)]
+    // fn put_inductive(pre: Self, post: Self, lbl: Label) { }
+   
+    // #[inductive(freeze_as)]
+    // fn freeze_as_inductive(pre: Self, post: Self, lbl: Label) { }
+   
+    // #[inductive(internal_flush_memtable)]
+    // fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label) { }
+   
+    // #[inductive(internal_grow)]
+    // fn internal_grow_inductive(pre: Self, post: Self, lbl: Label) { }
+   
+    // #[inductive(internal_split)]
+    // fn internal_split_inductive(pre: Self, post: Self, lbl: Label, path: Path, left_keys: Set<Key>, right_keys: Set<Key>) { }
+   
+    // #[inductive(internal_flush)]
+    // fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, path: Path, down_keys: Set<Key>) { }
+   
+    // #[inductive(internal_compact)]
+    // fn internal_compact_inductive(pre: Self, post: Self, lbl: Label, path: Path, compactedBuffers: BufferSeq) { }
+   
+    // #[inductive(internal_noop)]
+    // fn internal_noop_inductive(pre: Self, post: Self, lbl: Label) { }
+   
+    // #[inductive(initialize)]
+    // fn initialize_inductive(post: Self, stamped_betree: StampedBetree) { }
 }} // end PagedBetree state machine
 
 
