@@ -48,20 +48,39 @@ state_machine!{ CrashTolerantMap {
         CommitStartLabel{ new_boundary_lsn: LSN },
         CommitCompleteLabel,
         CrashLabel,
-        // Like they could 
     }
 
     transition!{
-        load_ephemeral_from_persistent(lbl: Label, new_map: AbstractMap::State) {
+        load_ephemeral_from_persistent(lbl: Label) {
             require lbl.is_LoadEphemeralFromPersistentLabel();
             require pre.ephemeral.is_Unknown();
             require lbl.get_LoadEphemeralFromPersistentLabel_end_lsn() == pre.persistent.seq_end;
-            require AbstractMap::State::init(new_map);
-            update ephemeral = Ephemeral::Known{ v: new_map };
+
+            let new_abstract_map = AbstractMap::State {
+                stamped_map: pre.persistent,
+            };
+
+            // All of this feels a little silly, something wonky about
+            // how the init transition of AbstractMap is defined. Note that
+            // these requires aren't actually necessary for the update line
+            // below as it's currently defined, but it will catch if there are
+            // any changes to how a valid "initialization" is defined by the
+            // AbstractMap state machine.
+            // We want something like labels here instead probably.
+            require AbstractMap::State::init_by(
+                new_abstract_map,
+                AbstractMap::Config::initialize(pre.persistent));
+
+            // Load entire persistent map into ephemeral state
+            update ephemeral = Ephemeral::Known {
+                v: new_abstract_map
+            };
         }
     }
 
     transition!{
+        // Apply the commands in the message history in the given label
+        // to this map
         put_records(lbl: Label, new_map: AbstractMap::State) {
             require lbl.is_PutRecordsLabel();
             require pre.ephemeral.is_Known();

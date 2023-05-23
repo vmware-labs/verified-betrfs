@@ -38,6 +38,7 @@ state_machine!{ AbstractMap {
     }
 
     transition!{
+        // Apply the MsgHistory in the label to this.state 
         put(lbl: Label) {
             require lbl.is_PutLabel();
             require lbl.get_PutLabel_puts().can_follow(pre.stamped_map.seq_end);
