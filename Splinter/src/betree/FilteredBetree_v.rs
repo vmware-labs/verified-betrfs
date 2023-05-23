@@ -297,8 +297,8 @@ impl BetreeNode {
     {
         Set::new(|k: Key| exists |child_idx: nat| 
             #![auto]  (child_idx < self.get_Node_children().len()
-            &&& self.get_Node_flushed().offsets[child_idx as int] <= buffer_idx
-            &&& self.child_domain(child_idx).contains(k))
+            && self.get_Node_flushed().offsets[child_idx as int] <= buffer_idx
+            && self.child_domain(child_idx).contains(k))
         )
     }
 
