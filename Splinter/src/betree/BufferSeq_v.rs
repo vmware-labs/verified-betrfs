@@ -44,7 +44,7 @@ impl BufferSeq {
     {
         decreases_when(start <= self.len());
         if start == self.len() {
-            Message::Update{ delta: nop_delta() }
+            Message::Update{delta: nop_delta()}
         } else {
             // merge message from old buffer to new result
             self.buffers[start].query(key).merge(self.query_from(key, start+1))
@@ -53,6 +53,13 @@ impl BufferSeq {
 
     pub open spec fn query(self, key: Key) -> Message {
         self.query_from(key, 0)
+    }
+
+    pub proof fn query_singleton(self, key: Key)
+        requires self.len() == 1
+        ensures self.query(key) == self.buffers[0].query(key)
+    {
+        assert(self.query_from(key, 1) == Message::Update{delta: nop_delta()});
     }
 
     pub open spec fn apply_filter(self, accept: Set<Key>) -> BufferSeq {

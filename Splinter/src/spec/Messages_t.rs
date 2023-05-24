@@ -34,7 +34,13 @@ impl Message {
     // place holder since we don't use deltas yet
     pub open spec fn combine_deltas(new: Delta, old: Delta) -> Delta
     {
-        nop_delta()
+        if new == nop_delta() {
+            old
+        } else if old == nop_delta() {
+            new
+        } else {
+            nop_delta()
+        }
     }
 
     pub open spec fn apply_delta(delta: Delta, value: Value) -> Value

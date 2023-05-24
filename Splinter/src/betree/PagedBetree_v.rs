@@ -64,7 +64,6 @@ pub open spec fn empty_child_map() -> ChildMap {
     constant_child_map(BetreeNode::Nil)
 }
 
-
 #[is_variant]
 pub enum BetreeNode {
     Nil,
@@ -110,7 +109,7 @@ impl BetreeNode {
     pub open spec fn push_memtable(self, memtable: Memtable) -> StampedBetree {
         Stamped{
             value: self.promote().extend_buffer_seq(
-                BufferSeq{ buffers: Seq::empty().push(memtable.buffer) }
+                BufferSeq{ buffers: Seq::new(1, |i| memtable.buffer) }
             ),
             seq_end: memtable.seq_end
         }
@@ -191,9 +190,9 @@ impl QueryReceipt {
     pub open spec fn structure(self) -> bool {
         &&& 0 < self.lines.len()
         &&& self.lines[0].node == self.root
-        &&& forall |i| #![auto] 0 <= i < self.lines.len() ==> (
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len() ==> (
             self.lines[i].node.is_Node() <==> i < self.lines.len() - 1
-        )
+        ))
         &&& self.lines.last().result == Message::empty()
     }
 
@@ -231,14 +230,15 @@ impl QueryReceipt {
             self.structure(),
             0 <= i < self.lines.len() - 1,
     {
-        self.result_at(i) == self.lines[i].node.get_Node_buffers().query(self.key).merge(self.result_at(i+1))
+        let msg = self.lines[i].node.get_Node_buffers().query(self.key);
+        self.result_at(i) == self.result_at(i+1).merge(msg)
     }
 
     pub open spec fn valid(self) -> bool {
         &&& self.structure()
         &&& self.all_lines_wf()
-        &&& forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.child_linked_at(i)
-        &&& forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.result_linked_at(i)
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.child_linked_at(i))
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.result_linked_at(i))
     }
 
     pub open spec fn result(self) -> Message 
@@ -359,7 +359,7 @@ state_machine!{ PagedBetree {
         require let Label::Query{end_lsn, key, value} = lbl;
         require end_lsn == pre.memtable.seq_end;
         require receipt.valid_for(pre.root, key);
-        require Message::Define{value} == Message::merge(pre.memtable.query(key), receipt.result());
+        require Message::Define{value} == receipt.result().merge(pre.memtable.query(key));
     }}
 
     transition!{ put(lbl: Label) {
@@ -426,42 +426,6 @@ state_machine!{ PagedBetree {
         init memtable = Memtable::empty_memtable(stamped_betree.seq_end);
         init root = stamped_betree.value;
     }}
-
-    // Note(Jialin): not sure if this really buys us anything
-    // #[invariant]
-    // pub open spec fn inv(self) -> bool {
-    //     self.wf()
-    // }
-
-    // #[inductive(query)]
-    // fn query_inductive(pre: Self, post: Self, lbl: Label, receipt: QueryReceipt) { }
-   
-    // #[inductive(put)]
-    // fn put_inductive(pre: Self, post: Self, lbl: Label) { }
-   
-    // #[inductive(freeze_as)]
-    // fn freeze_as_inductive(pre: Self, post: Self, lbl: Label) { }
-   
-    // #[inductive(internal_flush_memtable)]
-    // fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label) { }
-   
-    // #[inductive(internal_grow)]
-    // fn internal_grow_inductive(pre: Self, post: Self, lbl: Label) { }
-   
-    // #[inductive(internal_split)]
-    // fn internal_split_inductive(pre: Self, post: Self, lbl: Label, path: Path, left_keys: Set<Key>, right_keys: Set<Key>) { }
-   
-    // #[inductive(internal_flush)]
-    // fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, path: Path, down_keys: Set<Key>) { }
-   
-    // #[inductive(internal_compact)]
-    // fn internal_compact_inductive(pre: Self, post: Self, lbl: Label, path: Path, compactedBuffers: BufferSeq) { }
-   
-    // #[inductive(internal_noop)]
-    // fn internal_noop_inductive(pre: Self, post: Self, lbl: Label) { }
-   
-    // #[inductive(initialize)]
-    // fn initialize_inductive(post: Self, stamped_betree: StampedBetree) { }
 }} // end PagedBetree state machine
 
 

@@ -4,6 +4,8 @@ use builtin::*;
 use builtin_macros::*;
 
 use vstd::prelude::*;
+use vstd::map::*;
+
 use crate::betree::Buffer_v::*;
 use crate::spec::Messages_t::*;
 use crate::spec::KeyType_t::*;
@@ -31,15 +33,43 @@ impl Memtable {
     }
 
     pub open spec fn apply_puts(self, puts: MsgHistory) -> Memtable
-        recommends puts.wf(), puts.seq_start == self.seq_end
-        decreases puts.seq_end, 1nat
+        recommends puts.wf(), puts.can_follow(self.seq_end)
+        decreases puts.seq_end when puts.wf()
     {
-        decreases_when(puts.wf());
         if puts.is_empty() {
             self
         } else {
             let last_lsn = (puts.seq_end - 1) as nat;
             self.apply_puts(puts.discard_recent(last_lsn)).apply_put(puts.msgs[last_lsn])
+        }
+    }
+
+    pub proof fn apply_puts_end(self, puts: MsgHistory)
+        requires puts.wf(), puts.can_follow(self.seq_end)
+        ensures self.apply_puts(puts).seq_end == puts.seq_end
+        decreases puts.len()
+    {
+        if 0 < puts.len() {
+            let last_lsn = (puts.seq_end - 1) as nat;
+            self.apply_puts_end(puts.discard_recent(last_lsn));
+        }
+    }
+
+    pub proof fn apply_puts_additive(self, puts1: MsgHistory, puts2: MsgHistory)
+        requires puts1.wf(), puts2.wf(),
+            puts1.can_follow(self.seq_end),
+            puts2.can_follow(puts1.seq_end)
+        ensures self.apply_puts(puts1).apply_puts(puts2) == self.apply_puts(puts1.concat(puts2))
+        decreases puts1.len() + puts2.len()
+    {
+        MsgHistory::concat_forall_lemma();
+        if puts2.len() > 0 {
+            let last_lsn = (puts2.seq_end - 1) as nat;
+            self.apply_puts_additive(puts1, puts2.discard_recent(last_lsn));
+            assert_maps_equal!(
+                puts1.concat(puts2).discard_recent(last_lsn).msgs,
+                puts1.concat(puts2.discard_recent(last_lsn)).msgs
+            );
         }
     }
 
