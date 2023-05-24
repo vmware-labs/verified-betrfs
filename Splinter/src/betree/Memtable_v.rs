@@ -62,7 +62,7 @@ impl Memtable {
         ensures self.apply_puts(puts1).apply_puts(puts2) == self.apply_puts(puts1.concat(puts2))
         decreases puts1.len() + puts2.len()
     {
-        // MsgHistory::concat_forall_lemma();
+        MsgHistory::concat_forall_lemma();
         if puts2.len() > 0 {
             let last_lsn = (puts2.seq_end - 1) as nat;
             self.apply_puts_additive(puts1, puts2.discard_recent(last_lsn));
