@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
+// SPDX-License-Identifier: BSD-2-Clause
+
 #![allow(unused_imports)]
 
 use builtin::*;
@@ -460,6 +463,7 @@ impl PagedJournal::State {
         reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
 
         assert_maps_equal!( post.i().journal.msgs, self.i().journal.msgs ); // proof kinda got more direct, but ugly extensionality
+        JournalRecord::i_lemma_forall();            // newly required
         assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::internal())); // newly required witness
     }
 
@@ -476,6 +480,7 @@ impl PagedJournal::State {
         reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
         reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
         reveal(AbstractJournal::State::next_by);    // newly required; unfortunate macro defaults
+        JournalRecord::i_lemma_forall();
         match step {
             PagedJournal::Step::read_for_recovery(depth) => {
                 self.read_for_recovery_refines(post, lbl, depth);
@@ -497,7 +502,7 @@ impl PagedJournal::State {
                 self.marshall_refines(post, lbl, cut);
             }
             PagedJournal::Step::internal_journal_noop() => {
-                assert_maps_equal!( post.i().journal.msgs, self.i().journal.msgs );    // newly required extensionality; this branch used to be a freebie.
+                //assert_maps_equal!( post.i().journal.msgs, self.i().journal.msgs );    // newly required extensionality; this branch used to be a freebie.
                 assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::internal())); // new witness
             }
             _ => { assert(false); } // dummy_to_use_type_params boilerplate
