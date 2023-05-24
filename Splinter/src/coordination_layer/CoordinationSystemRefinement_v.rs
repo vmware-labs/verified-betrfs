@@ -444,7 +444,7 @@ verus! {
     // Note that ej[..ref_lsn]+ej[ref_lsn..] should just be ej
     assert_maps_equal!(ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn).discard_recent(lsn)).msgs, ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn)).discard_recent(lsn).msgs);
     
-    MsgHistory::map_plus_history_forall_lemma();
+    // MsgHistory::map_plus_history_forall_lemma();
     MsgHistory::map_plus_history_seq_end_lemma(v.mapadt.persistent, v.journal.i().discard_recent(lsn));
     // Proving that right's seq_end == lsn
     MsgHistory::map_plus_history_seq_end_lemma(vp.mapadt.persistent, vp.journal.i().discard_recent(lsn));
@@ -556,7 +556,7 @@ verus! {
   
     // Because `verus` spec functions don't have ensures clauses, we need a separate lemma to
     // prove properties of certain operations.
-    MsgHistory::map_plus_history_forall_lemma();
+    // MsgHistory::map_plus_history_forall_lemma();
 
     // Need to prove maps and sets are equal all over the place
     assert(vp.journal.i() == vp.journal.i().discard_recent(vp.mapadt.i().seq_end)) by {
@@ -621,7 +621,7 @@ verus! {
     reveal(AbstractMap::State::next);
     reveal(AbstractMap::State::next_by);
 
-    MsgHistory::map_plus_history_forall_lemma();
+    // MsgHistory::map_plus_history_forall_lemma();
 
     // Proof strategy:
     // Most invariant pieces go through automatically, but verus doesn't believe
@@ -712,7 +712,7 @@ verus! {
         // Believes that this is true (definition of transition)
         assert(post_stamped_map == MsgHistory::map_plus_history(pre_stamped_map, records));
 
-        MsgHistory::map_plus_history_forall_lemma();
+        // MsgHistory::map_plus_history_forall_lemma();
         // Doesn't believe self.ephemeral.get_Some_0().map_lsn == self.mapadt.ephemeral.get_Known_v().stamped_map.seq_end
         assert(vp.ephemeral.get_Some_0().map_lsn 
           == vp.mapadt.ephemeral.get_Known_v().stamped_map.seq_end);

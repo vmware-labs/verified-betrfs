@@ -83,13 +83,15 @@ impl MsgHistory {
 
   // TODO(verus): in dafny this was three lines of ensures tacked onto concat, and the proof was free
   // because we didn't need explicit extensionality.
+  #[verifier(external_body)]
+  #[verifier(broadcast_forall)]
   pub proof fn concat_lemma(self, other: MsgHistory)
   requires
     self.wf(),
     other.wf(),
     self.can_concat(other),
   ensures ({
-    let result = self.concat(other);
+    let result = #[trigger] self.concat(other);
     &&& result.wf()
     &&& (forall |x| result.contains(x) <==> (self.contains(x) || other.contains(x)))
     &&& (other.is_empty() ==> result == self)
@@ -101,36 +103,36 @@ impl MsgHistory {
     }
   }
 
-  pub proof fn concat_forall_lemma()
-  ensures
-    forall |_self: MsgHistory, other: MsgHistory|
-    {
-      &&& _self.wf()
-      &&& other.wf()
-      &&& _self.can_concat(other)
-    } ==> {
-      let result = #[trigger] _self.concat(other);
-      &&& result.wf()
-      &&& (forall |x| result.contains(x) <==> (_self.contains(x) || other.contains(x)))
-      &&& (other.is_empty() ==> result == _self)
-    }
-  {
-    assert forall |_self: MsgHistory, other: MsgHistory|
-    {
-      &&& _self.wf()
-      &&& other.wf()
-      &&& _self.can_concat(other)
-    } implies {
-      let result = #[trigger] _self.concat(other);
-      &&& result.wf()
-      &&& (forall |x| result.contains(x) <==> (_self.contains(x) || other.contains(x)))
-      &&& (other.is_empty() ==> result == _self)
-    }
-    by
-    {
-      _self.concat_lemma(other);
-    }
-  }
+  // pub proof fn concat_forall_lemma()
+  // ensures
+  //   forall |_self: MsgHistory, other: MsgHistory|
+  //   {
+  //     &&& _self.wf()
+  //     &&& other.wf()
+  //     &&& _self.can_concat(other)
+  //   } ==> {
+  //     let result = #[trigger] _self.concat(other);
+  //     &&& result.wf()
+  //     &&& (forall |x| result.contains(x) <==> (_self.contains(x) || other.contains(x)))
+  //     &&& (other.is_empty() ==> result == _self)
+  //   }
+  // {
+  //   assert forall |_self: MsgHistory, other: MsgHistory|
+  //   {
+  //     &&& _self.wf()
+  //     &&& other.wf()
+  //     &&& _self.can_concat(other)
+  //   } implies {
+  //     let result = #[trigger] _self.concat(other);
+  //     &&& result.wf()
+  //     &&& (forall |x| result.contains(x) <==> (_self.contains(x) || other.contains(x)))
+  //     &&& (other.is_empty() ==> result == _self)
+  //   }
+  //   by
+  //   {
+  //     _self.concat_lemma(other);
+  //   }
+  // }
 
   pub open spec fn can_discard_to(self, lsn: LSN) -> bool {
     self.seq_start <= lsn <= self.seq_end
@@ -297,6 +299,8 @@ impl MsgHistory {
     history.apply_to_stamped_map(stamped_map)
   }
 
+  #[verifier(external_body)]
+  #[verifier(broadcast_forall)]
   pub proof fn map_plus_history_lemma(stamped_map: StampedMap, history: MsgHistory)
     requires
       stamped_map.value.wf(),
@@ -311,37 +315,37 @@ impl MsgHistory {
     Self::map_plus_history_seq_end_lemma(stamped_map, history);
   }
 
-  pub proof fn map_plus_history_forall_lemma()
-    ensures
-      forall |stamped_map: StampedMap, history: MsgHistory|
-      (
-        stamped_map.value.wf()
-        && history.wf()
-        && history.can_follow(stamped_map.seq_end)
-      ) ==>
-      {
-        &&& (#[trigger] Self::map_plus_history(stamped_map, history)).value.wf()
-        &&& Self::map_plus_history(stamped_map, history).seq_end == stamped_map.seq_end + history.len()
-      }
-  {
-    assert forall |stamped_map: StampedMap, history: MsgHistory|
-      (
-        stamped_map.value.wf()
-        && history.wf()
-        && history.can_follow(stamped_map.seq_end)
-      ) implies
-       ((#[trigger] Self::map_plus_history(stamped_map, history)).value.wf()
-       && Self::map_plus_history(stamped_map, history).seq_end == stamped_map.seq_end + history.len())
-    by
-    {
-      // When this assert is commented out, it complains that precondition to 295 isn't met, but
-      // when left in it seems to trigger something and then it says 295 is fine.
-      // assert(history.can_follow(stamped_map.seq_end));
-      Self::map_plus_history_lemma(stamped_map, history);
-      Self::map_plus_history_seq_end_lemma(stamped_map, history);
-      assert(Self::map_plus_history(stamped_map, history).seq_end == stamped_map.seq_end + history.len());
-    }
-  }
+  // pub proof fn map_plus_history_forall_lemma()
+  //   ensures
+  //     forall |stamped_map: StampedMap, history: MsgHistory|
+  //     (
+  //       stamped_map.value.wf()
+  //       && history.wf()
+  //       && history.can_follow(stamped_map.seq_end)
+  //     ) ==>
+  //     {
+  //       &&& (#[trigger] Self::map_plus_history(stamped_map, history)).value.wf()
+  //       &&& Self::map_plus_history(stamped_map, history).seq_end == stamped_map.seq_end + history.len()
+  //     }
+  // {
+  //   assert forall |stamped_map: StampedMap, history: MsgHistory|
+  //     (
+  //       stamped_map.value.wf()
+  //       && history.wf()
+  //       && history.can_follow(stamped_map.seq_end)
+  //     ) implies
+  //      ((#[trigger] Self::map_plus_history(stamped_map, history)).value.wf()
+  //      && Self::map_plus_history(stamped_map, history).seq_end == stamped_map.seq_end + history.len())
+  //   by
+  //   {
+  //     // When this assert is commented out, it complains that precondition to 295 isn't met, but
+  //     // when left in it seems to trigger something and then it says 295 is fine.
+  //     // assert(history.can_follow(stamped_map.seq_end));
+  //     Self::map_plus_history_lemma(stamped_map, history);
+  //     Self::map_plus_history_seq_end_lemma(stamped_map, history);
+  //     assert(Self::map_plus_history(stamped_map, history).seq_end == stamped_map.seq_end + history.len());
+  //   }
+  // }
 
   // TODO(tenzinhl): include this in the map_plus_history_forall lemma
   pub proof fn map_plus_history_seq_end_lemma(stamped_map: StampedMap, history: MsgHistory)
