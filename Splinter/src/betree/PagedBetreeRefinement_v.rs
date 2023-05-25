@@ -116,8 +116,8 @@ impl BetreeNode {
         ensures i_stamped_betree(Stamped{value: self, seq_end: memtable.seq_end})
             == i_stamped_betree(self.push_memtable(memtable))
     {
-        self.memtable_distributes_over_betree(memtable);        
-        assert_maps_equal!(self.push_memtable(memtable).value.i_node().0, self.i_node().0);
+        self.memtable_distributes_over_betree(memtable);   
+        assert(self.i_node().ext_equal(self.push_memtable(memtable).value.i_node()));
     }
 
     pub proof fn extend_buffer_seq_lemma(self, buffers: BufferSeq, key: Key)
@@ -168,6 +168,15 @@ impl BetreeNode {
         if 1 < receipt.lines.len() {
             receipt.lines[0].node.get_Node_buffers().filtered_buffer_seq_query_lemma(filter, key, 0);
         }
+    }
+
+    pub proof fn flush_wf(self, down_keys: Set<Key>)
+        requires self.wf(), self.is_Node()
+        ensures self.flush(down_keys).wf()
+    {
+        let child_map = self.flush(down_keys).get_Node_children();
+        assert(self.get_Node_children().wf());
+        assert forall |k: Key| true ==> ({ child_map.map[k].wf() }) by { }
     }
 } // end impl BetreeNode
 
@@ -298,7 +307,7 @@ impl Path{
             self.substitute_receipt_equivalence(replacement, k);
         }
 
-        assert_maps_equal!(self.node.i_node().0, self.substitute(replacement).i_node().0);
+        assert(self.node.i_node().ext_equal(self.substitute(replacement).i_node()));
     }
 }
 
@@ -481,7 +490,7 @@ impl PagedBetree::State {
         reveal(AbstractMap::State::next);
         reveal(AbstractMap::State::next_by);
 
-        assert_maps_equal!(post.root.i_node().0, self.root.i_node().0);
+        assert(post.root.i_node().ext_equal(self.root.i_node()));
         self.equivalent_roots(post);
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
     }
@@ -509,9 +518,70 @@ impl PagedBetree::State {
             }
         }
 
-        assert_maps_equal!(target.i_node().0, top.i_node().0);
+        assert(target.i_node().ext_equal(top.i_node()));
         path.substitute_equivalence(top);
         self.equivalent_roots(post);
+        assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
+    }
+
+    pub proof fn internal_flush_noop(self, post: Self, lbl: PagedBetree::Label, path: Path, down_keys: Set<Key>)
+        requires self.inv(), PagedBetree::State::internal_flush(self, post, lbl, path, down_keys)
+        ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
+
+        let target = path.target();
+        path.target_wf();
+
+        let top = target.flush(down_keys);
+        target.flush_wf(down_keys);
+
+        let kept_keys = all_keys().difference(down_keys);
+
+        assert forall |k: Key| true ==>
+        ({ target.i_node_at(k) == top.i_node_at(k) })
+        by {
+            if down_keys.contains(k) {
+                target.get_Node_buffers().filtered_buffer_seq_query_lemma(kept_keys, k, 0);
+                assert(target.get_Node_children().wf());
+                
+                let moved_buffers = target.get_Node_buffers().apply_filter(down_keys);
+                let child = target.get_Node_children().map[k];
+                child.extend_buffer_seq_lemma(moved_buffers, k);
+                target.get_Node_buffers().filtered_buffer_seq_query_lemma(down_keys, k, 0);
+            } else {
+                target.get_Node_buffers().filtered_buffer_seq_query_lemma(kept_keys, k, 0);
+            }
+        }
+        
+        assert(target.i_node().ext_equal(top.i_node()));
+        path.substitute_equivalence(top);
+        self.equivalent_roots(post);
+        assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
+    }
+
+    pub proof fn internal_compact_noop(self, post: Self, lbl: PagedBetree::Label, path: Path, compacted_buffers: BufferSeq)
+        requires self.inv(), PagedBetree::State::internal_compact(self, post, lbl, path, compacted_buffers)
+        ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
+
+        path.target_wf();
+        let compact_node = path.target().compact(compacted_buffers);
+        assert(compact_node.i_node().ext_equal(path.target().i_node()));
+        path.substitute_equivalence(compact_node);
+        self.equivalent_roots(post);
+        assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
+    }
+
+    pub proof fn internal_noop_noop(self, post: Self, lbl: PagedBetree::Label)
+        requires self.inv(), PagedBetree::State::internal_noop(self, post, lbl)
+        ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
     }
 
@@ -530,7 +600,10 @@ impl PagedBetree::State {
             PagedBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_noop(post, lbl); }
             PagedBetree::Step::internal_grow() => { self.internal_grow_noop(post, lbl); }
             PagedBetree::Step::internal_split(path, left_keys, right_keys) => { self.internal_split_noop(post, lbl, path, left_keys, right_keys); }
-            _ => {assume(false);} 
+            PagedBetree::Step::internal_flush(path, down_keys) => { self.internal_flush_noop(post, lbl, path, down_keys); }
+            PagedBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_noop(post, lbl, path, compacted_buffers); }
+            PagedBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
+            _ => { assert(false); } 
         }
     }
 } // end impl PagedBetree::State

@@ -156,9 +156,9 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn compact(self, compactedBuffers: BufferSeq) -> BetreeNode {
+    pub open spec fn compact(self, compacted_buffers: BufferSeq) -> BetreeNode {
         BetreeNode::Node{
-            buffers: compactedBuffers, 
+            buffers: compacted_buffers, 
             children: self.get_Node_children()
         }
     }
@@ -406,13 +406,13 @@ state_machine!{ PagedBetree {
         update root = path.substitute(path.target().flush(down_keys));
     }}
 
-    transition!{ internal_compact(lbl: Label, path: Path, compactedBuffers: BufferSeq) {
+    transition!{ internal_compact(lbl: Label, path: Path, compacted_buffers: BufferSeq) {
         require let Label::Internal{} = lbl;
         require path.valid();
         require path.target().is_Node();
-        require path.target().get_Node_buffers().i() == compactedBuffers.i();
+        require path.target().get_Node_buffers().i() == compacted_buffers.i();
         require path.node == pre.root;
-        update root = path.substitute(path.target().compact(compactedBuffers));
+        update root = path.substitute(path.target().compact(compacted_buffers));
     }}
 
     transition!{ internal_noop(lbl: Label) {

@@ -58,6 +58,11 @@ impl TotalKMMap
             assert_sets_equal!(self.insert(k, v).dom(), total_domain());
         }
     }
+
+    pub open spec fn ext_equal(self, other: Self) -> bool
+    {
+        self.0.ext_equal(other.0)
+    }
 }
 
 }
