@@ -50,14 +50,16 @@ impl Message {
     }
 
     pub open spec fn merge(self, new: Message) -> Message {
-        if new.is_Define() {
-            new
-        } else if self.is_Define() {
-            let new_value = Message::apply_delta(new.get_Update_delta(), self.get_Define_value());
-            Message::Define{value: new_value}
-        } else {
-            let new_delta = Message::combine_deltas(new.get_Update_delta(), self.get_Update_delta());
-            Message::Update{delta: new_delta}
+        match (self, new)  {
+            (_, Message::Define{value: new_value}) => { 
+                Message::Define{value: new_value} 
+            }
+            (Message::Update{delta: old_delta}, Message::Update{delta: new_delta}) => {
+                Message::Update{delta: Self::combine_deltas(new_delta, old_delta)} 
+            }
+            (Message::Define{value}, Message::Update{delta}) => { 
+                Message::Define{value: Self::apply_delta(delta, value)}
+            }
         }
     }
 
