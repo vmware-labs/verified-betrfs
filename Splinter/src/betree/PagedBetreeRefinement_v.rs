@@ -145,7 +145,7 @@ impl BetreeNode {
     {
         let child_map = self.split(left_keys, right_keys).get_Node_children();
 
-        assert forall |k: Key| true ==> ({ child_map.map[k].wf() })
+        assert forall |k: Key| (#[trigger] child_map.map[k]).wf()
         by {
             if left_keys.contains(k) {
                 self.child(k).filter_buffers_and_children_wf(left_keys);
@@ -155,6 +155,8 @@ impl BetreeNode {
                 self.child(k);
             }
         }
+
+        assert(total_keys(child_map.map.dom()));
         assert(child_map.wf());
     }
     
@@ -176,7 +178,7 @@ impl BetreeNode {
     {
         let child_map = self.flush(down_keys).get_Node_children();
         assert(self.get_Node_children().wf());
-        assert forall |k: Key| true ==> ({ child_map.map[k].wf() }) by { }
+        assert forall |k: Key| (#[trigger] child_map.map[k]).wf() by { }
     }
 } // end impl BetreeNode
 
@@ -302,7 +304,7 @@ impl Path{
         self.substitute_preserves_wf(replacement);
 
         assert forall |k: Key| true ==> ({ 
-            self.node.i_node_at(k) == self.substitute(replacement).i_node_at(k)
+            (#[trigger] self.node.i_node_at(k)) == self.substitute(replacement).i_node_at(k)
         }) by {
             self.substitute_receipt_equivalence(replacement, k);
         }
