@@ -165,17 +165,6 @@ impl DiskView {
         &&& self.entries.le(bigger.entries)
     }
 
-//     #[verifier(decreases_by)]
-//     proof fn thing(self, root: Pointer)
-//     {
-// //         if self.acyclic() && root.is_Some() {
-// //             let addr = root.unwrap();
-// //             assert( self.valid_ranking(self.the_ranking()) );
-// //             assert( self.entries.contains_key(addr) );
-// //             assert( self.the_rank_of(self.entries[addr].cropped_prior(self.boundary_lsn)) < self.the_rank_of(root) );
-// //         }
-//     }
-
     pub open spec fn build_tight(self, root: Pointer) -> (out: Self)
     recommends
         self.decodable(root),
@@ -219,6 +208,151 @@ impl DiskView {
             let inner_root = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
             self.build_tight_inductive(inner_root, self.build_tight(inner_root));
         }
+    }
+
+    // TODO please for the love of Z3 automate
+    pub proof fn build_tight_auto(self)
+    ensures
+        forall |root:Pointer| #[trigger self.build_tight(root)]
+            self.decodable(root) ==> ({
+                &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
+                &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
+        })
+    {
+        assert forall |root:Pointer| #[trigger self.build_tight(root)]
+            self.decodable(root) implies ({
+                &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
+                &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
+        }) by {
+            self.build_tight_inductive(root, self.build_tight(root));
+        }
+    }
+
+//     #[verifier(decreases_by)]
+//     proof fn thing(self, root: Pointer)
+//     {
+//          if self.decodable(root) && root.is_Some() {
+//             assert( self.acyclic() );
+//             let addr = root.unwrap();
+//             assert( self.valid_ranking(self.the_ranking()) );
+//             assert( self.entries.contains_key(addr) );
+//             assert( self.the_rank_of(self.entries[addr].cropped_prior(self.boundary_lsn)) < self.the_rank_of(root) );
+//         }
+//     }
+
+    pub open spec fn representation(self, root: Pointer) -> (out: Set<Address>)
+    recommends
+        self.decodable(root),
+        self.acyclic(),
+    decreases
+        self.the_rank_of(root),
+    {
+        decreases_when(self.decodable(root) && self.acyclic());
+        //decreases_by(Self::thing);    // TODO(chris): debugging these failures sucks, unlike
+        //inline asserts.
+        match root {
+            None => Set::empty(),
+            Some(addr) => self.representation(self.entries[addr].cropped_prior(self.boundary_lsn)).insert(addr)
+        }
+    }
+
+    pub proof fn representation_inductive(self, root: Pointer)
+    requires
+        self.decodable(root),
+        self.acyclic(),
+    ensures
+        forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
+    decreases
+        self.the_rank_of(root),
+    {
+        match root {
+            None => {}
+            Some(addr) => {
+                self.representation_inductive(self.entries[addr].cropped_prior(self.boundary_lsn));
+            }
+        }
+    }
+
+    pub proof fn representation_auto(self)
+    ensures
+        forall |root|
+            self.decodable(root) && self.acyclic()
+            ==>
+            forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
+    {
+        assert forall |root|
+            self.decodable(root) && self.acyclic()
+            implies
+            forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr) by
+        {
+            self.representation_inductive(root);
+        }
+    }
+
+    pub open spec fn can_crop(self, root: Pointer, depth: nat) -> bool
+    recommends
+        self.decodable(root),
+        self.block_in_bounds(root),
+    decreases depth
+    {
+        0 < depth ==> {
+            &&& root.is_Some()
+            &&& self.can_crop(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn), (depth-1) as nat)
+        }
+    }
+
+    pub open spec fn pointer_after_crop(self, root: Pointer, depth: nat) -> (out: Pointer)
+    recommends
+        self.decodable(root),
+        self.block_in_bounds(root),
+        self.can_crop(root, depth),
+    decreases depth
+    {
+        if depth==0 { root }
+        else { self.pointer_after_crop(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn), (depth-1) as nat) }
+    }
+
+    pub proof fn pointer_after_crop_inductive(self, root: Pointer, depth: nat)
+    requires
+        self.decodable(root),
+        self.block_in_bounds(root),
+        self.can_crop(root, depth),
+    ensures
+        self.is_nondangling_pointer(self.pointer_after_crop(root, depth)),
+        self.block_in_bounds(self.pointer_after_crop(root, depth)),
+    decreases depth
+    {
+        if depth > 0 {
+            self.pointer_after_crop_inductive(
+                self.entries[root.unwrap()].cropped_prior(self.boundary_lsn), (depth-1) as nat)
+        }
+    }
+}
+
+pub struct TruncatedJournal {
+    pub freshest_rec: Pointer, // root address of journal
+    pub disk_view: DiskView,
+}
+
+impl TruncatedJournal {
+    pub open spec fn wf(self) -> bool {
+        &&& self.disk_view.wf()
+        &&& self.disk_view.is_nondangling_pointer(self.freshest_rec)
+        &&& self.disk_view.block_in_bounds(self.freshest_rec)
+    }
+
+    pub open spec fn seq_start(self) -> LSN {
+        self.disk_view.boundary_lsn
+    }
+
+    pub open spec fn seq_end(self) -> LSN
+    recommends
+        self.disk_view.is_nondangling_pointer(self.freshest_rec),   // why not just wf()?
+    {
+        if self.freshest_rec.is_None() // normal case with empty TJ
+            { self.disk_view.boundary_lsn }
+        else
+            { self.disk_view.entries[self.freshest_rec.unwrap()].message_seq.seq_end }
     }
 }
 
