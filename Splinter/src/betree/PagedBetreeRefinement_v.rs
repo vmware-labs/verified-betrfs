@@ -111,33 +111,11 @@ impl BetreeNode {
 
     pub proof fn extend_buffer_seq_lemma(self, buffers: BufferSeq, key: Key)
         requires self.wf()
-        ensures self.promote().extend_buffer_seq(buffers).i_node_at(key) == self.i_node_at(key).merge(buffers.query(key))
+        ensures self.promote().extend_buffer_seq(buffers).i_node_at(key) 
+            == self.i_node_at(key).merge(buffers.query(key))
     {
         let node_buffers = self.promote().get_Node_buffers();
-
-
-
-        // if node_buffers.len() == 0 {
-        //     assert_seqs_equal!(node_buffers.extend(buffers).buffers, buffers.buffers);
-        //     assert(self.promote().extend_buffer_seq(buffers).get_Node_buffers() == node_buffers.extend(buffers));
-        //     assume(false);
-        // } else {
-        //     assume(false);
-        // }
-        // if self.get_Node_buffers()
-        // if buffers.len() > 0 {
-
-            assume(false);
-
-        // }
-        // assert(self.promote())
-        // let top = buffers;
-        // let bottom = self.promote().get_Node_buffers();
-        // assume(bottom.extend(top).query(key) == bottom.query(key).merge(top.query(key)));
-
-        // bottom.Extend(top).Query(key) == Merge(top.Query(key), bottom.Query(key))
-        // ExtendBufferSeqLemma(buffers, node.Promote().buffers, key);
-
+        BufferSeq::extend_buffer_seq_lemma(buffers, node_buffers, key, 0);
     }
 } // end impl BetreeNode
 

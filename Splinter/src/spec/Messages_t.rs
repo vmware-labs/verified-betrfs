@@ -39,7 +39,8 @@ impl Message {
         } else if old == nop_delta() {
             new
         } else {
-            nop_delta()
+            // nop_delta()
+            new
         }
     }
 
@@ -63,6 +64,11 @@ impl Message {
     pub open spec fn empty() -> Message {
         Message::Define{ value: default_value() }  // TODO: This is a placeholder
     }
+
+    // pub proof fn merge_associativity(a: Message, b: Message, c: Message)
+    //     ensures a.merge(b.merge(c)) == a.merge(b).merge(c)
+    // {
+    // }
 }
 
 }
