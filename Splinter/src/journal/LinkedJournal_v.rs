@@ -191,7 +191,7 @@ impl DiskView {
     }
 
     // TODO auto-generate please
-    pub proof fn build_tight_inductive(self, root: Pointer, out: Self)
+    pub proof fn build_tight_ensures(self, root: Pointer, out: Self)
         // TODO(chris): really want the `let` that scopes around requires, ensures, and body here!
     requires
         self.decodable(root),
@@ -206,7 +206,7 @@ impl DiskView {
         else if root.is_None() { }
         else {
             let inner_root = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
-            self.build_tight_inductive(inner_root, self.build_tight(inner_root));
+            self.build_tight_ensures(inner_root, self.build_tight(inner_root));
         }
     }
 
@@ -224,7 +224,7 @@ impl DiskView {
                 &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
                 &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
         }) by {
-            self.build_tight_inductive(root, self.build_tight(root));
+            self.build_tight_ensures(root, self.build_tight(root));
         }
     }
 
@@ -256,7 +256,7 @@ impl DiskView {
         }
     }
 
-    pub proof fn representation_inductive(self, root: Pointer)
+    pub proof fn representation_ensures(self, root: Pointer)
     requires
         self.decodable(root),
         self.acyclic(),
@@ -266,10 +266,10 @@ impl DiskView {
         self.the_rank_of(root),
     {
         match root {
-            None => {}
+            None => {},
             Some(addr) => {
-                self.representation_inductive(self.entries[addr].cropped_prior(self.boundary_lsn));
-            }
+                self.representation_ensures(self.entries[addr].cropped_prior(self.boundary_lsn));
+            },
         }
     }
 
@@ -285,7 +285,7 @@ impl DiskView {
             implies
             forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr) by
         {
-            self.representation_inductive(root);
+            self.representation_ensures(root);
         }
     }
 
@@ -312,7 +312,7 @@ impl DiskView {
         else { self.pointer_after_crop(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn), (depth-1) as nat) }
     }
 
-    pub proof fn pointer_after_crop_inductive(self, root: Pointer, depth: nat)
+    pub proof fn pointer_after_crop_ensures(self, root: Pointer, depth: nat)
     requires
         self.decodable(root),
         self.block_in_bounds(root),
@@ -323,8 +323,32 @@ impl DiskView {
     decreases depth
     {
         if depth > 0 {
-            self.pointer_after_crop_inductive(
+            self.pointer_after_crop_ensures(
                 self.entries[root.unwrap()].cropped_prior(self.boundary_lsn), (depth-1) as nat)
+        }
+    }
+
+    pub proof fn pointer_after_crop_auto(self)
+    requires
+    ensures
+        forall |root, depth| {
+            &&& self.decodable(root)
+            &&& self.block_in_bounds(root)
+            &&& self.can_crop(root, depth)
+        } ==> {
+            &&& self.is_nondangling_pointer(#[trigger] self.pointer_after_crop(root, depth))
+            &&& self.block_in_bounds(self.pointer_after_crop(root, depth))
+        },
+    {
+        assert forall |root, depth| {
+            &&& self.decodable(root)
+            &&& self.block_in_bounds(root)
+            &&& self.can_crop(root, depth)
+        } implies {
+            &&& self.is_nondangling_pointer(#[trigger] self.pointer_after_crop(root, depth))
+            &&& self.block_in_bounds(self.pointer_after_crop(root, depth))
+        } by {
+            self.pointer_after_crop_ensures(root, depth);
         }
     }
 }
@@ -353,6 +377,63 @@ impl TruncatedJournal {
             { self.disk_view.boundary_lsn }
         else
             { self.disk_view.entries[self.freshest_rec.unwrap()].message_seq.seq_end }
+    }
+
+    pub open spec fn can_discard_to(self, lsn: LSN) -> bool
+    recommends
+        self.wf(),
+    {
+        self.seq_start() <= lsn <= self.seq_end()
+    }
+
+    pub open spec fn discard_old(self, lsn: LSN) -> Self
+    recommends
+        self.wf(),
+        self.can_discard_to(lsn),
+    {
+      // Simply advances the boundary LSN of the diskView
+       TruncatedJournal{
+           freshest_rec: if self.seq_end() == lsn { None } else { self.freshest_rec },
+           disk_view: self.disk_view.discard_old(lsn),
+       }
+    }
+
+    pub open spec fn decodable(self) -> bool
+    {
+        &&& self.wf()
+        &&& self.disk_view.acyclic()
+    }
+
+    pub open spec fn can_crop(self, depth: nat) -> bool
+    {
+        &&& self.decodable()
+        &&& self.disk_view.can_crop(self.freshest_rec, depth)
+    }
+
+    pub open spec fn crop(self, depth: nat) -> Self
+    recommends
+        self.can_crop(depth),
+    {
+        let ptr = self.disk_view.pointer_after_crop(self.freshest_rec, depth);
+        TruncatedJournal{ freshest_rec: ptr, ..self }
+    }
+
+    pub proof fn crop_ensures(self, depth: nat)
+    requires
+        self.can_crop(depth),
+    ensures
+        self.crop(depth).wf(),
+    {
+        self.disk_view.pointer_after_crop_auto();
+    }
+
+    pub proof fn crop_auto(self)
+    ensures
+        forall |depth| self.can_crop(depth) ==> self.crop(depth).wf(),
+    {
+        assert forall |depth| self.can_crop(depth) implies self.crop(depth).wf() by {
+            self.disk_view.pointer_after_crop_auto();
+        }
     }
 }
 
