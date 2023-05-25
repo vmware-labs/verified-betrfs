@@ -136,7 +136,18 @@ impl BufferSeq {
             Self::extend_buffer_seq_lemma(top, bottom, key, start+1);
         }
     }
-    
+
+    pub proof fn filtered_buffer_seq_query_lemma(self, filter: Set<Key>, key: Key, start: int)
+        requires 0 <= start <= self.len()
+        ensures self.apply_filter(filter).query_from(key, start)
+            == if filter.contains(key) { self.query_from(key, start) } 
+                else { Message::Update{delta: nop_delta()} }
+        decreases self.len() - start
+    {
+        if start < self.len() {
+            self.filtered_buffer_seq_query_lemma(filter, key, start+1);
+        }
+    }
 
 } // end impl BufferSeq
 }  // end verus!

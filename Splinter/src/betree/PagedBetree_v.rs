@@ -47,7 +47,7 @@ impl ChildMap {
     #[verifier(decreases_by)]
     pub proof fn decreases_infinite_struct_workaround(self)
     {
-        assume(false);
+        assume(forall |k:Key| height(self.map[k]) < height(self));
     }
 
     pub open spec fn wf(self) -> bool

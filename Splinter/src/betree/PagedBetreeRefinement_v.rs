@@ -6,6 +6,7 @@ use builtin_macros::*;
 
 use vstd::prelude::*;
 use vstd::map::*;
+use vstd::set_lib::*;
 use vstd::seq_lib::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
@@ -14,6 +15,7 @@ use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MsgHistory_v::*;
 use crate::coordination_layer::AbstractMap_v::*;
 use crate::betree::PagedBetree_v::*;
+use crate::betree::Buffer_v::*;
 use crate::betree::BufferSeq_v::*;
 use crate::betree::Memtable_v::*;
 
@@ -109,6 +111,15 @@ impl BetreeNode {
         assert_maps_equal!(map_a.0, map_b.0);
     }
 
+    pub proof fn push_empty_memtable_refines(self, memtable: Memtable)
+        requires self.wf(), memtable.is_empty()
+        ensures i_stamped_betree(Stamped{value: self, seq_end: memtable.seq_end})
+            == i_stamped_betree(self.push_memtable(memtable))
+    {
+        self.memtable_distributes_over_betree(memtable);        
+        assert_maps_equal!(self.push_memtable(memtable).value.i_node().0, self.i_node().0);
+    }
+
     pub proof fn extend_buffer_seq_lemma(self, buffers: BufferSeq, key: Key)
         requires self.wf()
         ensures self.promote().extend_buffer_seq(buffers).i_node_at(key) 
@@ -116,6 +127,47 @@ impl BetreeNode {
     {
         let node_buffers = self.promote().get_Node_buffers();
         BufferSeq::extend_buffer_seq_lemma(buffers, node_buffers, key, 0);
+    }
+
+    pub proof fn filter_buffers_and_children_wf(self, filter: Set<Key>) 
+        requires self.wf()
+        ensures self.filter_buffers_and_children(filter).wf()
+    {
+        if self.is_Node() {
+            let child_map = self.filter_buffers_and_children(filter).get_Node_children();
+            assert(child_map.wf());
+        }
+    }
+
+    pub proof fn split_wf(self, left_keys: Set<Key>, right_keys: Set<Key>)
+        requires self.wf(), self.is_Node()
+        ensures self.split(left_keys, right_keys).wf()
+    {
+        let child_map = self.split(left_keys, right_keys).get_Node_children();
+
+        assert forall |k: Key| true ==> ({ child_map.map[k].wf() })
+        by {
+            if left_keys.contains(k) {
+                self.child(k).filter_buffers_and_children_wf(left_keys);
+            } else if right_keys.contains(k) {
+                self.child(k).filter_buffers_and_children_wf(right_keys);
+            } else {
+                self.child(k);
+            }
+        }
+        assert(child_map.wf());
+    }
+    
+    pub proof fn apply_filter_equivalence(self, filter: Set<Key>, key: Key)
+        requires self.wf(), filter.contains(key)
+        ensures self.filter_buffers_and_children(filter).i_node_at(key) == self.i_node_at(key)
+    {
+        let receipt = self.build_query_receipt(key);
+        self.build_query_receipt_valid(key);
+
+        if 1 < receipt.lines.len() {
+            receipt.lines[0].node.get_Node_buffers().filtered_buffer_seq_query_lemma(filter, key, 0);
+        }
     }
 } // end impl BetreeNode
 
@@ -174,6 +226,82 @@ impl QueryReceipt{
     }
 }
 
+impl Path{
+    pub proof fn target_wf(self)
+        requires self.valid()
+        ensures self.target().wf(), self.target().is_Node()
+        decreases self.routing.len()
+    {
+        if self.routing.len() > 0 {
+            self.subpath().target_wf();
+        }
+    }
+
+    pub proof fn substitute_preserves_wf(self, replacement: BetreeNode)
+        requires self.valid(), replacement.wf(),
+            self.target().i_node() == replacement.i_node()
+        ensures self.substitute(replacement).wf()
+        decreases self.routing.len()
+    {
+        if self.routing.len() > 0 {
+            self.subpath().substitute_preserves_wf(replacement);
+        }
+    }
+
+    pub proof fn substitute_receipt_equivalence(self, replacement: BetreeNode, key: Key)
+        requires self.valid(), replacement.wf(),
+            self.substitute(replacement).wf(),
+            self.target().i_node() == replacement.i_node()
+        ensures self.node.i_node_at(key) == self.substitute(replacement).i_node_at(key)
+        decreases self.routing.len()
+    {
+        assert(self.target().i_node_at(key) == self.target().i_node()[key]); // trigger
+        assert(self.target().i_node_at(key) == replacement.i_node_at(key)); // trigger
+
+        if self.routing.len() > 0 {
+            if self.routing[0].contains(key) {
+                let receipt = self.node.build_query_receipt(key);
+                self.node.build_query_receipt_valid(key);
+                
+                receipt.drop_first_valid();
+                assert(receipt.drop_first().root == self.subpath().node);
+
+                self.subpath().node.build_query_receipt_valid(key);
+                self.subpath().node.build_query_receipt(key).equal_receipts(receipt.drop_first());
+
+                self.subpath().substitute(replacement).build_query_receipt_valid(key);
+                self.substitute(replacement).build_query_receipt_valid(key);
+                self.substitute(replacement).build_query_receipt(key).drop_first_valid();
+
+                self.subpath().substitute(replacement).build_query_receipt(key).equal_receipts(
+                    self.substitute(replacement).build_query_receipt(key).drop_first()
+                );
+
+                self.subpath().substitute_receipt_equivalence(replacement, key);
+            } else {
+                assert(self.node.i_node_at(key) == self.substitute(replacement).i_node_at(key));
+            }
+        }
+    }
+
+    pub proof fn substitute_equivalence(self, replacement: BetreeNode)
+        requires self.valid(), replacement.wf(),
+            self.target().i_node() == replacement.i_node()
+        ensures self.substitute(replacement).wf(),
+            self.node.i_node() == self.substitute(replacement).i_node()
+    {
+        self.substitute_preserves_wf(replacement);
+
+        assert forall |k: Key| true ==> ({ 
+            self.node.i_node_at(k) == self.substitute(replacement).i_node_at(k)
+        }) by {
+            self.substitute_receipt_equivalence(replacement, k);
+        }
+
+        assert_maps_equal!(self.node.i_node().0, self.substitute(replacement).i_node().0);
+    }
+}
+
 impl PagedBetree::Label {
     pub open spec fn i(self) -> AbstractMap::Label
     {
@@ -218,11 +346,7 @@ impl PagedBetree::State {
         requires PagedBetree::State::initialize(self, stamped_betree)
         ensures self.inv(), AbstractMap::State::initialize(self.i(), i_stamped_betree(stamped_betree))
     {
-        self.root.memtable_distributes_over_betree(self.memtable);
-        assert_maps_equal!(
-            self.root.push_memtable(self.memtable).value.i_node().0, 
-            self.root.i_node().0
-        );
+        self.root.push_empty_memtable_refines(self.memtable);
     }
 
     pub proof fn query_refines(self, post: Self, lbl: PagedBetree::Label, receipt: QueryReceipt)
@@ -318,6 +442,79 @@ impl PagedBetree::State {
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::put()));
     }
 
+    pub proof fn freeze_as_refines(self, post: Self, lbl: PagedBetree::Label)
+        requires self.inv(), PagedBetree::State::freeze_as(self, post, lbl)
+        ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
+
+        self.root.push_empty_memtable_refines(self.memtable);
+        assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::freeze_as()));
+    }
+
+    pub proof fn internal_flush_memtable_noop(self, post: Self, lbl: PagedBetree::Label)
+        requires self.inv(), PagedBetree::State::internal_flush_memtable(self, post, lbl)
+        ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
+
+        post.root.push_empty_memtable_refines(post.memtable);
+        assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
+    }
+
+    pub proof fn equivalent_roots(self, post: Self)
+        requires self.wf(), post.wf(), 
+            self.memtable == post.memtable, 
+            self.root.i_node() == post.root.i_node()
+        ensures self.i() == post.i()
+    {
+        self.root.memtable_distributes_over_betree(self.memtable);
+        post.root.memtable_distributes_over_betree(post.memtable);
+    }
+
+    pub proof fn internal_grow_noop(self, post: Self, lbl: PagedBetree::Label)
+        requires self.inv(), PagedBetree::State::internal_grow(self, post, lbl)
+        ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
+
+        assert_maps_equal!(post.root.i_node().0, self.root.i_node().0);
+        self.equivalent_roots(post);
+        assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
+    }
+
+    pub proof fn internal_split_noop(self, post: Self, lbl: PagedBetree::Label, path: Path, left_keys: Set<Key>, right_keys: Set<Key>)
+        requires self.inv(), PagedBetree::State::internal_split(self, post, lbl, path, left_keys, right_keys)
+        ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
+
+        let target = path.target();
+        path.target_wf();
+
+        let top = target.split(left_keys, right_keys);
+        target.split_wf(left_keys, right_keys);
+
+        assert forall |k: Key| true ==>
+        ({ target.i_node_at(k) == top.i_node_at(k) })
+        by {
+            if left_keys.contains(k) {
+                target.child(k).apply_filter_equivalence(left_keys, k);
+            } else if right_keys.contains(k) {
+                target.child(k).apply_filter_equivalence(right_keys, k);
+            }
+        }
+
+        assert_maps_equal!(target.i_node().0, top.i_node().0);
+        path.substitute_equivalence(top);
+        self.equivalent_roots(post);
+        assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
+    }
+
     pub proof fn next_refines(self, post: Self, lbl: PagedBetree::Label)
         requires self.inv(), PagedBetree::State::next(self, post, lbl),
         ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i()),
@@ -329,6 +526,10 @@ impl PagedBetree::State {
         {
             PagedBetree::Step::query(receipt) => { self.query_refines(post, lbl, receipt); } 
             PagedBetree::Step::put() => { self.put_refines(post, lbl); }
+            PagedBetree::Step::freeze_as() => { self.freeze_as_refines(post, lbl); }
+            PagedBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_noop(post, lbl); }
+            PagedBetree::Step::internal_grow() => { self.internal_grow_noop(post, lbl); }
+            PagedBetree::Step::internal_split(path, left_keys, right_keys) => { self.internal_split_noop(post, lbl, path, left_keys, right_keys); }
             _ => {assume(false);} 
         }
     }
