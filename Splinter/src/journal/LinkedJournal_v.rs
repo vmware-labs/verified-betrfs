@@ -639,6 +639,36 @@ state_machine!{ LinkedJournal {
                 { pre.unmarshalled_tail };
     }}
 
+    // TODO: Hmm, in dfy the transition is split into partial actions
+    // InternalJournalMarshalAlloc & InternalJournalMarshalRecord, for
+    // reuse lower in the stack.
+    // Guess we should break this up into predicates? Ew. For now
+    // I'll leave them lumped together.
+    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address) {
+        // InternalJournalMarshalAlloc(v, addr)
+        require pre.unused_addr(addr);
+
+        // InternalJournalMarshalRecord(v, v', lbl, cut, addr)
+        require pre.wf();
+        require lbl.is_Internal();
+        require pre.unmarshalled_tail.seq_start < cut; // Can't marshall nothing.
+        require pre.unmarshalled_tail.can_discard_to(cut);
+        let marshalled_msgs = pre.unmarshalled_tail.discard_recent(cut);
+
+        update truncated_journal = pre.truncated_journal.append_record(addr, marshalled_msgs);
+        update unmarshalled_tail = pre.unmarshalled_tail.discard_old(cut);
+    }}
+
+    transition!{ internal_journal_no_op(lbl: Label) {
+        require pre.wf();
+        require lbl.is_Internal();
+    }}
+
+    init!{ initialize(truncated_journal: TruncatedJournal) {
+        require truncated_journal.decodable();  // An invariant carried by CoordinationSystem from FreezeForCommit, past a crash, back here
+        init truncated_journal = truncated_journal;
+        init unmarshalled_tail = MsgHistory::empty_history_at(truncated_journal.seq_end());
+    }}
 } // state_machine!
 
 } // verus!
