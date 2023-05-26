@@ -669,8 +669,6 @@ state_machine!{ LinkedJournal {
         init truncated_journal = truncated_journal;
         init unmarshalled_tail = MsgHistory::empty_history_at(truncated_journal.seq_end());
     }}
-} // state_machine!
+} } // state_machine!
 
 } // verus!
-
-}
