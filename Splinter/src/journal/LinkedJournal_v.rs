@@ -16,7 +16,13 @@ verus!{
 
 pub struct JournalRecord {
     pub message_seq: MsgHistory,
-    prior_rec: Pointer,
+
+    // Never read priorRec directly; only reference it through CroppedPrior.
+    // A Pointer only has meaning if its referent isn't rendered irrelevant by
+    // some boundaryLSN.
+    // In Verus, I'd like to make this not-pub, but I can't because spec
+    // functions are written in terms of it. :v/
+    pub prior_rec: Pointer,
 }
 
 impl JournalRecord {
@@ -429,12 +435,212 @@ impl TruncatedJournal {
 
     pub proof fn crop_auto(self)
     ensures
-        forall |depth| self.can_crop(depth) ==> self.crop(depth).wf(),
+        forall |depth| self.can_crop(depth) ==> #[trigger] self.crop(depth).wf(),
     {
-        assert forall |depth| self.can_crop(depth) implies self.crop(depth).wf() by {
+        assert forall |depth| self.can_crop(depth) implies #[trigger] self.crop(depth).wf() by {
             self.disk_view.pointer_after_crop_auto();
         }
     }
+
+    pub open spec fn append_record(self, addr: Address, msgs: MsgHistory) -> (out: Self)
+    {
+        Self{
+            disk_view: DiskView {
+                entries: self.disk_view.entries.insert(addr, JournalRecord {
+                    message_seq: msgs,
+                    prior_rec: self.freshest_rec,
+                }),
+                ..self.disk_view
+            },
+            freshest_rec: Some(addr),
+        }
+    }
+
+// Proof is trivial, so probably never needed this ensures in Dafny.
+//     pub proof fn append_record_ensures(self, addr: Address, msgs: MsgHistory)
+//     ensures
+//         !self.disk_view.entries.contains_key(addr)
+//             ==> self.disk_view.is_sub_disk(self.append_record(addr, msgs).disk_view),
+//     {
+//     }
+
+    pub open spec fn build_tight(self) -> (out: Self)
+    {
+        TruncatedJournal{
+            disk_view: self.disk_view.build_tight(self.freshest_rec),
+            ..self
+        }
+    }
+
+    pub open spec fn representation(self) -> (out: Set<Address>)
+    recommends
+        self.disk_view.decodable(self.freshest_rec),
+        self.disk_view.acyclic(),
+    {
+        self.disk_view.representation(self.freshest_rec)
+    }
+
+    // Yeah re-exporting this is annoying. Gonna just ask others to call 
+    // self.disk_view.representation_auto();
+//     pub proof fn representation_ensures(self)
+//     requires
+//         self.disk_view.decodable(self.freshest_rec),
+//         self.disk_view.acyclic(),
+//     ensures
+//         forall |addr| self.representation().contains(addr)
+//             ==> self.disk_view.entries.contains_key(addr)
+//     {
+//         self.disk_view.representation_auto();
+//     }
+
+    pub open spec fn disk_is_tight_wrt_representation(self) -> bool
+    recommends
+        self.disk_view.decodable(self.freshest_rec),
+        self.disk_view.acyclic(),
+    {
+        self.disk_view.entries.dom() == self.representation()
+    }
+
+    pub open spec fn mkfs() -> (out: Self)
+    {
+        Self{
+            freshest_rec: None,
+            disk_view: DiskView { boundary_lsn: 0, entries: Map::empty() },
+        }
+    }
+
+    pub proof fn mkfs_ensures()
+    ensures
+        Self::mkfs().decodable(),
+    {
+        assert( Self::mkfs().disk_view.valid_ranking(Map::empty()) );
+    }
+
 }
+
+state_machine!{ LinkedJournal {
+    fields {
+        pub truncated_journal: TruncatedJournal,
+        pub unmarshalled_tail: MsgHistory,
+    }
+
+    pub open spec fn wf(self) -> bool {
+        &&& self.truncated_journal.wf()
+        &&& self.unmarshalled_tail.wf()
+
+        // TODO(jonh): can probably delete this conjunct, since it's proven by interp
+        &&& self.truncated_journal.seq_end() == self.unmarshalled_tail.seq_start
+    }
+
+    pub open spec fn seq_start(self) -> LSN
+    {
+        self.truncated_journal.seq_start()
+    }
+
+    pub open spec fn seq_end(self) -> LSN
+    recommends
+        self.wf(),
+    {
+        self.truncated_journal.seq_end()
+    }
+    
+    pub open spec fn unused_addr(self, addr: Address) -> bool
+    {
+        // TODO reaching into truncatedJournal to find the diskView feels skeezy
+        !self.truncated_journal.disk_view.entries.contains_key(addr)
+    }
+
+    #[is_variant]
+    pub enum Label
+    {
+        ReadForRecovery{messages: MsgHistory},
+        FreezeForCommit{frozen_journal: TruncatedJournal},
+        QueryEndLsn{end_lsn: LSN},
+        Put{messages: MsgHistory},
+        DiscardOld{start_lsn: LSN, require_end: LSN},
+        Internal{},   // Local No-op label
+    }
+
+    // unfortunate:
+    // error: this item is not supported
+//     impl Label {
+//         pub open spec fn wf(self) -> bool {
+//             self.is_FreezeForCommit() ==> self.get_FreezeForCommit().decodable()
+//         }
+//     }
+    pub open spec fn lbl_wf(lbl: Label) -> bool
+    {
+        match lbl {
+            Label::ReadForRecovery{messages} => messages.wf(),
+            Label::FreezeForCommit{frozen_journal} => frozen_journal.decodable(),
+            _ => true,
+        }
+    }
+
+    transition!{ read_for_recovery(lbl: Label, depth: nat) {
+        require pre.wf();
+        require lbl.is_ReadForRecovery();
+        require Self::lbl_wf(lbl);
+        require pre.truncated_journal.decodable(); // Shown by invariant, not runtime-checked
+        let dv = pre.truncated_journal.disk_view;
+        require dv.can_crop(pre.truncated_journal.freshest_rec, depth);
+        let ptr = dv.pointer_after_crop(pre.truncated_journal.freshest_rec, depth);
+        require ptr.is_Some();
+        require dv.entries[ptr.unwrap()].message_seq.maybe_discard_old(dv.boundary_lsn) == lbl.get_ReadForRecovery_messages();
+    }}
+
+    transition!{ freeze_for_commit(lbl: Label, depth: nat) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_FreezeForCommit();
+        require pre.truncated_journal.decodable(); // Shown by invariant, not runtime-checked
+        let dv = pre.truncated_journal.disk_view;
+        require dv.can_crop(pre.truncated_journal.freshest_rec, depth);
+        let ptr = dv.pointer_after_crop(pre.truncated_journal.freshest_rec, depth);
+        let cropped_tj = TruncatedJournal{
+            freshest_rec: ptr,
+            disk_view: pre.truncated_journal.disk_view
+        };
+        let label_fj = lbl.get_FreezeForCommit_frozen_journal();
+        let new_bdy = label_fj.seq_start();
+        require dv.boundary_lsn <= new_bdy;
+        require cropped_tj.can_discard_to(new_bdy);
+        require label_fj == cropped_tj.discard_old(new_bdy).build_tight();
+    }}
+
+    transition!{ query_end_lsn(lbl: Label, depth: nat) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_QueryEndLsn();
+        require lbl.get_QueryEndLsn_end_lsn() == pre.seq_end();
+    }}
+
+    transition!{ put(lbl: Label, depth: nat) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_Put();
+        require lbl.get_Put_messages().seq_start == pre.seq_end();
+        update unmarshalled_tail = pre.unmarshalled_tail.concat(lbl.get_Put_messages());
+    }}
+
+    transition!{ discard_old(lbl: Label, depth: nat) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_DiscardOld();
+        require pre.seq_start() <= lbl.get_DiscardOld_start_lsn() <= pre.seq_end();
+
+        require lbl.get_DiscardOld_require_end() == pre.seq_end();
+        require pre.truncated_journal.can_discard_to(lbl.get_DiscardOld_start_lsn());
+        update truncated_journal = pre.truncated_journal.discard_old(lbl.get_DiscardOld_start_lsn()).build_tight();
+        update unmarshalled_tail =
+            if pre.unmarshalled_tail.seq_start <= lbl.get_DiscardOld_start_lsn()
+                { pre.unmarshalled_tail.discard_old(lbl.get_DiscardOld_start_lsn()) }
+            else
+                { pre.unmarshalled_tail };
+    }}
+
+} // state_machine!
+
+} // verus!
 
 }
