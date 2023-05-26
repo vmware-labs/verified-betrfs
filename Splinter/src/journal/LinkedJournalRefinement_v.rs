@@ -34,6 +34,7 @@ impl TruncatedJournal {
         // out.is_Some() ==> out.unwrape().valid(dv.boundary_lsn)
     decreases dv.the_rank_of(ptr)
     {
+        decreases_when(dv.decodable(ptr) && dv.acyclic());  // can't we just use the recommends?
         match ptr {
             None => Box::new(None),
             Some(addr) => {

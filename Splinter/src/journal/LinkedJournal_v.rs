@@ -669,6 +669,39 @@ state_machine!{ LinkedJournal {
         init truncated_journal = truncated_journal;
         init unmarshalled_tail = MsgHistory::empty_history_at(truncated_journal.seq_end());
     }}
+
+    #[invariant]
+    pub open spec fn inv(self) -> bool {
+        &&& self.wf()
+        &&& self.truncated_journal.decodable()
+        &&& self.truncated_journal.disk_view.acyclic()
+    }
+
+        #[inductive(read_for_recovery)]
+        fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
+
+        #[inductive(freeze_for_commit)]
+        fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
+
+        #[inductive(query_end_lsn)]
+        fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
+
+        #[inductive(put)]
+        fn put_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
+
+        #[inductive(discard_old)]
+        fn discard_old_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
+
+        #[inductive(internal_journal_marshal)]
+        fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) { }
+
+        #[inductive(internal_journal_no_op)]
+        fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
+
+        #[inductive(initialize)]
+        fn initialize_inductive(post: Self, truncated_journal: TruncatedJournal) { }
+
+
 } } // state_machine!
 
 } // verus!
