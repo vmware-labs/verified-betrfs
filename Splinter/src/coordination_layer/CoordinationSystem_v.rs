@@ -168,6 +168,8 @@ state_machine!{ CoordinationSystem {
     accept_request(
       label: Label,
     ) {
+      require pre.ephemeral.is_Some();
+
       // Tenzin: Each of these destructurings requires looking
       // up in another file what the fully qualified name of the type
       // is and that's annoying. Good intellisense would save us here
@@ -365,7 +367,7 @@ state_machine!{ CoordinationSystem {
   }
 
   transition! {
-    DeliverReply(label: Label) {
+    deliver_reply(label: Label) {
       require pre.ephemeral.is_Some();
       let pre_ephemeral = pre.ephemeral.get_Some_0();
       

@@ -59,8 +59,11 @@ impl MsgHistory {
     self.seq_start == self.seq_end
   }
 
-  pub open spec fn len(self) -> int {
-    self.seq_end - self.seq_start
+  pub open spec fn len(self) -> nat
+  recommends
+    self.wf()
+  {
+    (self.seq_end - self.seq_start) as nat
   }
 
   pub open spec fn can_follow(self, lsn: LSN) -> bool {

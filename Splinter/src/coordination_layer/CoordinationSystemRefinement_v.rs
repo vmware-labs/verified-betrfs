@@ -700,113 +700,152 @@ verus! {
     let step = choose |s| CoordinationSystem::State::next_by(v, vp, label, s);
     
     match step {
-      CoordinationSystem::Step::load_ephemeral_from_persistent(_, _, _) => {
+      CoordinationSystem::Step::load_ephemeral_from_persistent(..) => {
         // Verifies for free! (Well, besides all of the reveals lol)
         assert(vp.inv());
       },
       CoordinationSystem::Step::recover(new_journal, new_mapadt, records) => {
-        // First let's check what vp.mapadt.ephemeral should be based on transition...
-        let pre_stamped_map = v.mapadt.ephemeral.get_Known_v().stamped_map;
-        let post_stamped_map = vp.mapadt.ephemeral.get_Known_v().stamped_map;
-
-        // Believes that this is true (definition of transition)
-        assert(post_stamped_map == MsgHistory::map_plus_history(pre_stamped_map, records));
-
+        // Lemma because we don't get ensures from spec functions
         MsgHistory::map_plus_history_forall_lemma();
-        // Doesn't believe self.ephemeral.get_Some_0().map_lsn == self.mapadt.ephemeral.get_Known_v().stamped_map.seq_end
-        assert(vp.ephemeral.get_Some_0().map_lsn 
-          == vp.mapadt.ephemeral.get_Known_v().stamped_map.seq_end);
-        // Has issues with self.mapadt.ephemeral.get_Known_v().stamped_map having total domain
-        
-        // Alright the above is all good, now I just need to show
-        // inv_ephemeral_value_agreement()
 
-        // So we know that this is true for the pre state
-        assert(v.inv_ephemeral_value_agreement());
-
-        // em_end (is initial map end)
-        let em_end = v.mapadt.i().seq_end;
-        let em_end_p = vp.mapadt.i().seq_end;
-        // pre.em
+        // Pre variables
         let em = v.mapadt.i();
+        let em_end = v.mapadt.i().seq_end;
         let ej = v.journal.i();
         let pm = v.mapadt.persistent;
-        // post.em
+
+        // Post variables
         let em_p = vp.mapadt.i();
+        let em_end_p = vp.mapadt.i().seq_end;
         let pm_p = vp.mapadt.persistent;
         let ej_p = vp.journal.i();
-        // pre.em = pre.pm + pre.ej[:em_end]
 
-        // During a recover step all we do is insert some entries from
-        // the journal into the ephemeral map
-        // So journal is unchanged:
-        // post.ej = pre.ej
-        assert(vp.journal == v.journal);
-        // persistent map is unchanged too
-        assert(vp.mapadt.persistent == v.mapadt.persistent);
-
-        // These three facts should be sufficient to establish
-        // the fourth, but it doesn't believe me... does now! (Extensional
-        // equality yet again)
-        assert(ej.includes_subseq(records));
-        assert(records.seq_start == em_end);
-        assert(records.seq_end == em_end_p);
-
-        // Ah... wait, maybe it's another extensionality arguent
-        // So now we need to assert that ej[em_end:em_end'] is the same
-        // as records
+        // Show records == ej[em_end:em_end'], needs extensionality
+        // Transition is defined such that ej.includes_subseq(records), but
+        // that's insufficient for symbolic equality (needs extensionality)
         assert(records.ext_equal(ej.discard_old(em_end).discard_recent(em_end_p)));
-        assert(records == ej.discard_old(em_end).discard_recent(em_end_p));
 
-        // And the post state is made of original em + some entries from
-        // journal 
-        // post.em = pre.em + pre.ej[em_end:em_end']
-        assert(em_p == em.plus_history(
-          ej.discard_old(em_end).discard_recent(em_end_p)));
+        // By the transition definition (and above assertion showing records is a
+        // slice of ej):
+        //   (1) em' = em + records = em + ej[em_end:em_end']
+        // By invariant:
+        //   (2) em = pm + ej[:em_end]
+        // Substitute 2 into 1 to get:
+        //   (3) em' = pm + ej[:em_end] + ej[em_end:em_end']
 
-        // em = pm + ej[:em_end] by invariant
-        assert(em.ext_equal(pm.plus_history(ej.discard_recent(em_end))));
-
-        // Combining above two facts, we should get that:
-        // em' = pm + ej[:em_end] + ej[em_end:em_end']
-        assert(em_p.ext_equal(
-          pm.plus_history(ej._dr(em_end)).plus_history(ej._do(em_end)._dr(em_end_p))
-        ));
-
-        // ej[:em_end'] = ej[:em_end] + ej[em_end:em_end']
+        //   (4) ej[:em_end'] = ej[:em_end] + ej[em_end:em_end']
         assert(ej.discard_recent(em_end_p).ext_equal(
           ej.discard_recent(em_end).concat(ej.discard_old(em_end)
           .discard_recent(em_end_p))
         ));
 
+        // Use associativity on equation (3) to be able to sub in (4):
+        // em' = pm + (ej[:em_end] + ej[em_end:em_end']) = pm + ej[:em_end']
         journal_associativity(pm, ej._dr(em_end), ej._do(em_end)._dr(em_end_p));
-
-        // So combining above two:
-        // em' = pm + ej[:em_end']
-        assert(em_p.ext_equal(pm.plus_history(ej._dr(em_end_p))));
-
-        // Ahhh!!! ^^^Is where the breakdown occurs. This is why journal
-        // associativity is necessary
-
-        // Now we just need to show what pm' + ej'[:em_end'] is
-        // We know that pm' = pm and ej' = ej, so we should have that
-        // their concatenation is the same
-        assert(pm_p.plus_history(ej_p._dr(em_end_p))
-          == pm.plus_history(ej._dr(em_end_p)));
-        
-        // So now it should just follow that:
-        assert(em_p.ext_equal(pm.plus_history(ej._dr(em_end_p))));
-
-        // Target (inv_ephemeral_value_agreement()):
-        // assert(vp.mapadt.i().ext_equal(MsgHistory::map_plus_history(
-        //   vp.mapadt.persistent,
-        //   vp.journal.i().discard_recent(vp.mapadt.i().seq_end))));
-
+        // Target reached: em' = pm + ej[:em_end'] = pm' + ej'[:em_end']!
+      },
+      CoordinationSystem::Step::accept_request(..) => {
+        assert(vp.inv());
+      },
+      CoordinationSystem::Step::query(..) => {
+        assert(vp.inv());
+      },
+      CoordinationSystem::Step::put(..) => {
+        inv_inductive_put_step(v, vp, label, step);
+        assert(vp.inv());
+      },
+      CoordinationSystem::Step::deliver_reply(..) => {
+        assert(vp.inv());
+      },
+      CoordinationSystem::Step::journal_internal(..) => {
+        assert(vp.inv());
+      },
+      CoordinationSystem::Step::map_internal(..) => {
+        assert(vp.inv());
+      },
+      CoordinationSystem::Step::req_sync(..) => {
+        assert(v.inv());
+      },
+      CoordinationSystem::Step::reply_sync(..) => {
+        assert(vp.inv());
+      },
+      CoordinationSystem::Step::commit_start(..) => {
+        inv_inductive_commit_start_step(v, vp, label, step);
+      },
+      CoordinationSystem::Step::commit_complete(..) => {
+        inv_inductive_commit_complete_step(v, vp, label, step);
+      },
+      CoordinationSystem::Step::crash(..) => {
         assert(vp.inv());
       },
       _ => {
-        assume(vp.inv());
+        // The only case remaining is the dummy case. Have
+        // to add this default here for now.
+        assert(vp.inv());
       }
     }
+  } // lemma inv_inductive
+
+  pub proof fn put_step_refines(
+    v: CoordinationSystem::State,
+    vp: CoordinationSystem::State,
+    label: CoordinationSystem::Label,
+    step: CoordinationSystem::Step
+  )
+    requires
+      v.inv(),
+      CoordinationSystem::State::next(v, vp, label),
+      CoordinationSystem::State::next_by(v, vp, label, step),
+      matches!(step, CoordinationSystem::Step::put(..)),
+    ensures
+      vp.inv(),
+      CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+  {
+    reveal(CoordinationSystem::State::next);
+    reveal(CoordinationSystem::State::next_by);
+    reveal(CrashTolerantJournal::State::next);
+    reveal(CrashTolerantJournal::State::next_by);
+    reveal(AbstractJournal::State::next);
+    reveal(AbstractJournal::State::next_by);
+    reveal(CrashTolerantMap::State::next);
+    reveal(CrashTolerantMap::State::next_by);
+    reveal(AbstractMap::State::next);
+    reveal(AbstractMap::State::next_by);
+
+    // Be careful to reveal init and init_by transitions as well!
+    reveal(CrashTolerantJournal::State::init);
+    reveal(CrashTolerantJournal::State::init_by);
+    // No direct dependencies on init()
+    // reveal(AbstractJournal::State::init);
+    reveal(AbstractJournal::State::init_by);
+
+    // Reveal refinement transitions
+    reveal(CrashTolerantAsyncMap::State::next);
+    reveal(CrashTolerantAsyncMap::State::next_by);
+
+    inv_inductive_put_step(v, vp, label, step);
+
+    let j = v.journal.i();
+    let jp = vp.journal.i();
+    let base = v.mapadt.persistent;
+    let key = label.get_Label_ctam_label().get_OperateOp_base_op().get_ExecuteOp_req().input.get_PutInput_key();
+    let value = label.get_Label_ctam_label().get_OperateOp_base_op().get_ExecuteOp_req().input.get_PutInput_value();
+
+    assert(jp.ext_equal(jp._dr(jp.seq_start + jp.len())));
+    assert(j.ext_equal(j._dr(j.seq_start + j.len())));
+
+    // "Rob Power Trigger" (ask Jon for origins of this meme)
+    assert(forall |i: LSN|
+      (v.mapadt.persistent.seq_end <= i < v.i().versions.len())
+      ==> jp.discard_recent(i).ext_equal(j.discard_recent(i))
+    );
+
+    // let ctam_step = CrashTolerantAsyncMap::Step::operate {
+    //   new_versions:,
+    //   new_async_ephemeral
+    // }
+    assert(CrashTolerantAsyncMap::State::next_by(v.i(), vp.i(), label.get_Label_ctam_label(), ctam_step));
+    assert(CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()));
   }
-}
+
+} // verus!
