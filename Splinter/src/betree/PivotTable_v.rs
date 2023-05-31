@@ -39,7 +39,7 @@ impl PivotTable {
     {
         &&& self.num_ranges() > 0
         &&& Element::is_strictly_sorted(self.pivots)
-        &&& forall |i: int| 0 <= i < self.num_ranges() ==> self.pivots[i].is_Elem()
+        &&& (forall |i: int| 0 <= i < self.num_ranges() ==> self.pivots[i].is_Elem())
     }
 
     pub open spec fn len(self) -> nat
@@ -69,8 +69,18 @@ impl PivotTable {
     }
 
     pub open spec fn route(self, key: Key) -> int
+        recommends self.bounded_key(key)
     {
         Element::largest_lte(self.pivots, to_element(key))
+    }
+
+    pub proof fn route_lemma(self, key: Key)
+        requires self.wf(), self.bounded_key(key)
+        ensures 0 <= self.route(key) < self.num_ranges()
+    {
+        Element::lte_transitive_forall();
+        Element::strictly_sorted_implies_sorted(self.pivots);
+        Element::largest_lte_lemma(self.pivots, to_element(key), self.route(key));
     }
 } // end impl PivotTable
 }  // end verus!

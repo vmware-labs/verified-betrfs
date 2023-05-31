@@ -53,14 +53,47 @@ impl Element {
         &&& a != b
     }
 
+    pub proof fn lte_transitive(a: Element, b: Element, c: Element)
+        requires Self::lte(a, b), Self::lte(b, c)
+        ensures Self::lte(a, c)
+    {
+    }
+
+    pub proof fn lte_transitive_forall()
+        ensures forall |a: Element, b: Element, c: Element| 
+            Self::lte(a, b) && Self::lte(b, c) ==> Self::lte(a, c)
+    {
+        assert forall |a: Element, b: Element, c: Element| Self::lte(a, b) && Self::lte(b, c) 
+        implies Self::lte(a, c) by {
+            Self::lte_transitive(a, b, c);
+        }
+    }
+
     pub open spec fn min_elem() -> Element
     {
         Element::Elem{e: 0} // place holder 
     }
 
+    pub open spec fn is_sorted(run: Seq<Element>) -> bool
+    {
+        forall |i: int, j: int| 0 <= i <= j < run.len() ==> Element::lte(run[i], run[j])
+    }
+
     pub open spec fn is_strictly_sorted(run: Seq<Element>) -> bool
     {
         forall |i: int, j: int| 0 <= i < j < run.len() ==> Element::lt(run[i], run[j])
+    }
+
+    pub proof fn strictly_sorted_implies_sorted(run: Seq<Element>)
+        requires Self::is_strictly_sorted(run)
+        ensures Self::is_sorted(run)
+    {
+        assert forall |i: int, j: int| 0 <= i <= j < run.len()
+        implies Element::lte(run[i], run[j]) by {
+            if i < j {
+                assert(Element::lt(run[i], run[j]));
+            }
+        }
     }
 
     pub open spec fn largest_lte(run: Seq<Element>, needle: Element) -> int
@@ -70,6 +103,43 @@ impl Element {
             -1
         } else {
             1 + Element::largest_lte(run.subrange(1, run.len() as int), needle)
+        }
+    }
+
+    pub proof fn largest_lte_lemma(run: Seq<Element>, needle: Element, out: int)
+        requires Self::is_sorted(run), out == Self::largest_lte(run, needle)
+        ensures -1 <= out < run.len(),
+            forall |i: int| #![auto] 0 <= i <= out ==> Self::lte(run[i], needle),
+            forall |i: int| #![auto] out < i < run.len() ==> Self::lt(needle, run[i]),
+            run.contains(needle) ==> 0 <= out && run[out] == needle
+        decreases run.len()
+    {
+        Self::lte_transitive_forall();
+        if run.len() == 0 {
+        } else if Element::lt(needle, run[0]) {
+            if run.contains(needle) {
+                assert(Element::lte(run[0], run[run.index_of(needle)]));
+                assert(false);
+            }
+        } else {
+            let sub_run = run.subrange(1, run.len() as int);
+            Self::largest_lte_lemma(sub_run, needle, out-1);
+
+            assert forall |i:int| out < i < run.len()
+            implies #[trigger] Self::lt(needle, run[i]) 
+            by {
+                assert(run[i] == sub_run[i-1]);
+            }
+
+            if run.contains(needle) && !sub_run.contains(needle) {
+                let idx = run.index_of(needle);
+                if idx != 0 {
+                    assert(sub_run[idx-1] == run[idx]);
+                    assert(false);
+                }
+                assert(idx == 0);
+                assert(out-1 == -1);
+            }
         }
     }
 } // end impl KeyType
