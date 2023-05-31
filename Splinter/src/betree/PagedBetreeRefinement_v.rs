@@ -73,23 +73,23 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn i_node_at(self, key: Key) -> Message
+    pub open spec fn i_at(self, key: Key) -> Message
         recommends self.wf()
     {
         self.build_query_receipt(key).result()
     }
 
-    pub open spec fn i_node(self) -> TotalKMMap
+    pub open spec fn i(self) -> TotalKMMap
     {
-        TotalKMMap(Map::new(|k: Key| true, |k| self.i_node_at(k)))
+        TotalKMMap(Map::new(|k: Key| true, |k| self.i_at(k)))
     }
 
     pub proof fn memtable_distributes_over_betree(self, memtable: Memtable)
         requires self.wf()
-        ensures map_apply(memtable, self.i_node()) == self.push_memtable(memtable).value.i_node()
+        ensures map_apply(memtable, self.i()) == self.push_memtable(memtable).value.i()
     {
-        let map_a = map_apply(memtable, self.i_node());
-        let map_b = self.push_memtable(memtable).value.i_node();
+        let map_a = map_apply(memtable, self.i());
+        let map_b = self.push_memtable(memtable).value.i();
 
         assert forall |k: Key| map_a.0[k] == map_b.0[k] by 
         {
@@ -106,13 +106,13 @@ impl BetreeNode {
             == i_stamped_betree(self.push_memtable(memtable))
     {
         self.memtable_distributes_over_betree(memtable);   
-        assert(self.i_node().ext_equal(self.push_memtable(memtable).value.i_node()));
+        assert(self.i().ext_equal(self.push_memtable(memtable).value.i()));
     }
 
     pub proof fn extend_buffer_seq_lemma(self, buffers: BufferSeq, key: Key)
         requires self.wf()
-        ensures self.promote().extend_buffer_seq(buffers).i_node_at(key) 
-            == self.i_node_at(key).merge(buffers.query(key))
+        ensures self.promote().extend_buffer_seq(buffers).i_at(key) 
+            == self.i_at(key).merge(buffers.query(key))
     {
         let node_buffers = self.promote().get_Node_buffers();
         BufferSeq::extend_buffer_seq_lemma(buffers, node_buffers, key, 0);
@@ -151,7 +151,7 @@ impl BetreeNode {
     
     pub proof fn apply_filter_equivalence(self, filter: Set<Key>, key: Key)
         requires self.wf(), filter.contains(key)
-        ensures self.filter_buffers_and_children(filter).i_node_at(key) == self.i_node_at(key)
+        ensures self.filter_buffers_and_children(filter).i_at(key) == self.i_at(key)
     {
         let receipt = self.build_query_receipt(key);
         self.build_query_receipt_valid(key);
@@ -178,7 +178,7 @@ pub open spec fn map_apply(memtable: Memtable, base: TotalKMMap) -> TotalKMMap
 
 pub open spec fn i_stamped_betree(stamped: StampedBetree) -> StampedMap
 {
-    Stamped{value: stamped.value.i_node(), seq_end: stamped.seq_end}
+    Stamped{value: stamped.value.i(), seq_end: stamped.seq_end}
 }
 
 impl QueryReceipt{
@@ -239,7 +239,7 @@ impl Path{
 
     pub proof fn substitute_preserves_wf(self, replacement: BetreeNode)
         requires self.valid(), replacement.wf(),
-            self.target().i_node() == replacement.i_node()
+            self.target().i() == replacement.i()
         ensures self.substitute(replacement).wf()
         decreases self.routing.len()
     {
@@ -251,12 +251,12 @@ impl Path{
     pub proof fn substitute_receipt_equivalence(self, replacement: BetreeNode, key: Key)
         requires self.valid(), replacement.wf(),
             self.substitute(replacement).wf(),
-            self.target().i_node() == replacement.i_node()
-        ensures self.node.i_node_at(key) == self.substitute(replacement).i_node_at(key)
+            self.target().i() == replacement.i()
+        ensures self.node.i_at(key) == self.substitute(replacement).i_at(key)
         decreases self.routing.len()
     {
-        assert(self.target().i_node_at(key) == self.target().i_node()[key]); // trigger
-        assert(self.target().i_node_at(key) == replacement.i_node_at(key)); // trigger
+        assert(self.target().i_at(key) == self.target().i()[key]); // trigger
+        assert(self.target().i_at(key) == replacement.i_at(key)); // trigger
 
         if self.routing.len() > 0 {
             if self.routing[0].contains(key) {
@@ -279,26 +279,26 @@ impl Path{
 
                 self.subpath().substitute_receipt_equivalence(replacement, key);
             } else {
-                assert(self.node.i_node_at(key) == self.substitute(replacement).i_node_at(key));
+                assert(self.node.i_at(key) == self.substitute(replacement).i_at(key));
             }
         }
     }
 
     pub proof fn substitute_equivalence(self, replacement: BetreeNode)
         requires self.valid(), replacement.wf(),
-            self.target().i_node() == replacement.i_node()
+            self.target().i() == replacement.i()
         ensures self.substitute(replacement).wf(),
-            self.node.i_node() == self.substitute(replacement).i_node()
+            self.node.i() == self.substitute(replacement).i()
     {
         self.substitute_preserves_wf(replacement);
 
-        assert forall |k: Key| (#[trigger] self.node.i_node_at(k)) 
-            == self.substitute(replacement).i_node_at(k)
+        assert forall |k: Key| (#[trigger] self.node.i_at(k)) 
+            == self.substitute(replacement).i_at(k)
         by {
             self.substitute_receipt_equivalence(replacement, k);
         }
 
-        assert(self.node.i_node().ext_equal(self.substitute(replacement).i_node()));
+        assert(self.node.i().ext_equal(self.substitute(replacement).i()));
     }
 }
 
@@ -371,7 +371,7 @@ impl PagedBetree::State {
         ensures post.i().stamped_map == MsgHistory::map_plus_history(self.i().stamped_map, puts)
     {
         let KeyedMessage{key, message} = puts.msgs[puts.seq_start];
-        let map_a = post.root.push_memtable(post.memtable).value.i_node();
+        let map_a = post.root.push_memtable(post.memtable).value.i();
         self.memtable.apply_puts_end(puts);
         assert(self.memtable == self.memtable.apply_puts(puts.discard_recent(puts.seq_start)));
         assert(post.memtable == self.memtable.apply_put(puts.msgs[puts.seq_start]));
@@ -465,7 +465,7 @@ impl PagedBetree::State {
     pub proof fn equivalent_roots(self, post: Self)
         requires self.wf(), post.wf(), 
             self.memtable == post.memtable, 
-            self.root.i_node() == post.root.i_node()
+            self.root.i() == post.root.i()
         ensures self.i() == post.i()
     {
         self.root.memtable_distributes_over_betree(self.memtable);
@@ -479,7 +479,7 @@ impl PagedBetree::State {
         reveal(AbstractMap::State::next);
         reveal(AbstractMap::State::next_by);
 
-        assert(post.root.i_node().ext_equal(self.root.i_node()));
+        assert(post.root.i().ext_equal(self.root.i()));
         self.equivalent_roots(post);
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
     }
@@ -497,7 +497,7 @@ impl PagedBetree::State {
         let top = target.split(left_keys, right_keys);
         target.split_wf(left_keys, right_keys);
 
-        assert forall |k: Key| target.i_node_at(k) == top.i_node_at(k)
+        assert forall |k: Key| target.i_at(k) == top.i_at(k)
         by {
             if left_keys.contains(k) {
                 target.child(k).apply_filter_equivalence(left_keys, k);
@@ -506,7 +506,7 @@ impl PagedBetree::State {
             }
         }
 
-        assert(target.i_node().ext_equal(top.i_node()));
+        assert(target.i().ext_equal(top.i()));
         path.substitute_equivalence(top);
         self.equivalent_roots(post);
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
@@ -527,7 +527,7 @@ impl PagedBetree::State {
 
         let kept_keys = all_keys().difference(down_keys);
 
-        assert forall |k: Key| target.i_node_at(k) == top.i_node_at(k)
+        assert forall |k: Key| target.i_at(k) == top.i_at(k)
         by {
             if down_keys.contains(k) {
                 target.get_Node_buffers().filtered_buffer_seq_query_lemma(kept_keys, k, 0);
@@ -542,7 +542,7 @@ impl PagedBetree::State {
             }
         }
         
-        assert(target.i_node().ext_equal(top.i_node()));
+        assert(target.i().ext_equal(top.i()));
         path.substitute_equivalence(top);
         self.equivalent_roots(post);
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
@@ -557,7 +557,7 @@ impl PagedBetree::State {
 
         path.target_wf();
         let compact_node = path.target().compact(compacted_buffers);
-        assert(compact_node.i_node().ext_equal(path.target().i_node()));
+        assert(compact_node.i().ext_equal(path.target().i()));
         path.substitute_equivalence(compact_node);
         self.equivalent_roots(post);
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
