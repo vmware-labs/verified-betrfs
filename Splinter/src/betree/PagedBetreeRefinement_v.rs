@@ -22,18 +22,8 @@ use crate::betree::Memtable_v::*;
 
 verus! {
 
-// add interpretation functions for betreenode
 impl BetreeNode {
-    // pub open spec fn ext_equal(self, other: BetreeNode) -> bool
-    // {
-    //     &&& self.is_Node() <==> other.is_Node()
-    //     &&& self.is_Node() ==> {
-    //         &&& self.get_Node_buffers().buffers.ext_equal(other.get_Node_buffers().buffers)
-    //         &&& self.get_Node_children().map.ext_equal(other.get_Node_children().map)
-    //     }
-    // }
-
-    // // TODO: revisit
+    // TODO: revisit
     #[verifier(decreases_by)]
     pub proof fn decreases_infinite_struct_workaround(self, key: Key)
     {
@@ -101,8 +91,7 @@ impl BetreeNode {
         let map_a = map_apply(memtable, self.i_node());
         let map_b = self.push_memtable(memtable).value.i_node();
 
-        assert forall |k: Key| true ==> 
-        ({ map_a.0[k] == map_b.0[k] }) by 
+        assert forall |k: Key| map_a.0[k] == map_b.0[k] by 
         {
             let buffers = BufferSeq{buffers: Seq::new(1, |i| memtable.buffer)};
             buffers.query_singleton(k);
@@ -303,9 +292,9 @@ impl Path{
     {
         self.substitute_preserves_wf(replacement);
 
-        assert forall |k: Key| true ==> ({ 
-            (#[trigger] self.node.i_node_at(k)) == self.substitute(replacement).i_node_at(k)
-        }) by {
+        assert forall |k: Key| (#[trigger] self.node.i_node_at(k)) 
+            == self.substitute(replacement).i_node_at(k)
+        by {
             self.substitute_receipt_equivalence(replacement, k);
         }
 
@@ -393,10 +382,8 @@ impl PagedBetree::State {
         let sub_map_b = puts.discard_recent(puts.seq_start).apply_to_stamped_map(self.i().stamped_map).value;
         assert(map_b == sub_map_b.insert(key, sub_map_b[key].merge(message)));
 
-        assert forall |k: Key| true
-        implies ({
-            map_a.0[k] == map_b.0[k]
-        }) by {
+        assert forall |k: Key| map_a.0[k] == map_b.0[k]
+        by {
             let buffers = BufferSeq{buffers: Seq::new(1, |i| self.memtable.buffer)};
             let buffers_prime = BufferSeq{buffers: Seq::new(1, |i| post.memtable.buffer)};
 
@@ -510,8 +497,7 @@ impl PagedBetree::State {
         let top = target.split(left_keys, right_keys);
         target.split_wf(left_keys, right_keys);
 
-        assert forall |k: Key| true ==>
-        ({ target.i_node_at(k) == top.i_node_at(k) })
+        assert forall |k: Key| target.i_node_at(k) == top.i_node_at(k)
         by {
             if left_keys.contains(k) {
                 target.child(k).apply_filter_equivalence(left_keys, k);
@@ -541,8 +527,7 @@ impl PagedBetree::State {
 
         let kept_keys = all_keys().difference(down_keys);
 
-        assert forall |k: Key| true ==>
-        ({ target.i_node_at(k) == top.i_node_at(k) })
+        assert forall |k: Key| target.i_node_at(k) == top.i_node_at(k)
         by {
             if down_keys.contains(k) {
                 target.get_Node_buffers().filtered_buffer_seq_query_lemma(kept_keys, k, 0);

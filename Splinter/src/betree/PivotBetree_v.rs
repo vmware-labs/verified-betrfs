@@ -85,13 +85,12 @@ impl BetreeNode {
     #[verifier(decreases_by)]
     pub proof fn decreases_infinite_struct_workaround(self)
     {
-        assume(false);
-        // assume(height(self) > height(self.get_Node_children()));
+        let children = self.get_Node_children();
+        assume(forall |i: int| 0 <= i < children.len() ==> height(children[i]) < height(self));
     }
 
     pub open spec fn wf_children(self) -> bool
         recommends self.is_Node()
-        // decreases self.get_Node_children()
         decreases self, 0nat via Self::decreases_infinite_struct_workaround
     {
         let children = self.get_Node_children();
@@ -135,7 +134,7 @@ impl BetreeNode {
     pub open spec fn is_index(self) -> bool
     {
         &&& self.is_Node()
-        &&& forall |i:nat| i < self.get_Node_children().len() ==> self.get_Node_children()[i as int].is_Node()
+        &&& forall |i:nat| i < self.get_Node_children().len() ==> { self.get_Node_children()[i as int].is_Node() }
     }
 
     pub open spec fn can_split_leaf(self, split_key: Key) -> bool
@@ -482,7 +481,6 @@ state_machine!{ PivotBetree {
     {
         Query{end_lsn: LSN, key: Key, value: Value},
         Put{puts: MsgHistory},
-        QueryEndLsn{end_lsn: LSN},
         FreezeAs{stamped_betree: StampedBetree},
         Internal{},   // Local No-op label
     }
@@ -499,11 +497,6 @@ state_machine!{ PivotBetree {
         require puts.wf();
         require puts.seq_start == pre.memtable.seq_end;
         update memtable = pre.memtable.apply_puts(puts);
-    }}
-
-    transition!{ query_end_lsn(lbl: Label) {
-        require let Label::QueryEndLsn{end_lsn} = lbl;
-        require end_lsn == pre.memtable.seq_end;
     }}
 
     transition!{ freeze_as(lbl: Label) {
