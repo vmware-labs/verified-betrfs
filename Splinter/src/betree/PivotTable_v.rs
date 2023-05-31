@@ -82,5 +82,11 @@ impl PivotTable {
         Element::strictly_sorted_implies_sorted(self.pivots);
         Element::largest_lte_lemma(self.pivots, to_element(key), self.route(key));
     }
+
+    pub open spec fn pivot_range_keyset(self, i: int) -> Set<Key>
+        recommends self.wf(), 0 <= i < self.num_ranges()
+    {
+        Set::new(|k: Key| self.bounded_key(k) && self.route(k) == i)
+    }
 } // end impl PivotTable
 }  // end verus!

@@ -4,9 +4,6 @@ use builtin::*;
 
 use builtin_macros::*;
 
-// use vstd::{calc_macro::*};
-
-
 use vstd::prelude::*;
 // use vstd::map::*;
 // use vstd::seq_lib::*;

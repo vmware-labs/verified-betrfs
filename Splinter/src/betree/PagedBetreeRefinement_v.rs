@@ -21,8 +21,23 @@ use crate::betree::Memtable_v::*;
 
 
 verus! {
+impl ChildMap{
+    pub open spec fn ext_equal(self, other: ChildMap) -> bool
+    {
+        &&& self.map.ext_equal(other.map)
+    }
+}
 
 impl BetreeNode {
+    pub open spec fn ext_equal(self, other: BetreeNode) -> bool
+    {
+        &&& self.is_Nil() <==> other.is_Nil()
+        &&& self.is_Node() ==> {
+            &&& self.get_Node_buffers().ext_equal(other.get_Node_buffers())
+            &&& self.get_Node_children().ext_equal(other.get_Node_children())
+        }
+    }
+
     // TODO: revisit
     #[verifier(decreases_by)]
     pub proof fn decreases_infinite_struct_workaround(self, key: Key)
@@ -227,6 +242,14 @@ impl QueryReceipt{
 }
 
 impl Path{
+    pub open spec fn ext_equal(self, other: Path) -> bool
+    {
+        &&& self.node.ext_equal(other.node)
+        // &&& self.key == other.key
+        // &&& self.routing.len() == other.routing.len()
+        // &&& (forall |i:int| #![auto] 0 <= i < self.routing.len() ==> self.routing[i].ext_equal(other.routing[i]))
+    }
+
     pub proof fn target_wf(self)
         requires self.valid()
         ensures self.target().wf(), self.target().is_Node()
