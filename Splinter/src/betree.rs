@@ -7,6 +7,7 @@ pub mod PagedBetreeRefinement_v;
 pub mod Domain_v;
 pub mod PivotTable_v;
 pub mod PivotBetree_v;
+pub mod PivotBetreeRefinement_v;
 pub mod SplitRequest_v;
 pub mod BufferOffsets_v;
 pub mod FilteredBetree_v;
