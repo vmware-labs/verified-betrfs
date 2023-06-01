@@ -124,11 +124,11 @@ impl PersistentState {
     pub open spec fn ext_equal(self, other: PersistentState) -> bool {
         &&& self.appv.kmmap.ext_equal(other.appv.kmmap)
     }
-    pub proof fn ext_equal_is_equality(self, other: PersistentState)
-        requires
-            self.ext_equal(other)
+
+    pub proof fn ext_equal_is_equality()
         ensures
-            self == other
+            forall |a: PersistentState, b: PersistentState|
+                a.ext_equal(b) == (a == b)
     {
     }
 }

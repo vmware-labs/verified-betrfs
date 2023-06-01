@@ -182,18 +182,24 @@ impl FloatingSeq<Version> {
     pub open spec fn ext_equal(self, other: FloatingSeq<Version>) -> bool {
         &&& self.start == other.start
         &&& self.len() == other.len()
-        &&& forall |i| self.is_active(i) ==> self[i].ext_equal(other[i])
+        &&& forall |i| self.is_active(i) ==> #[trigger] self[i].ext_equal(other[i])
     }
 
-    // Proof function to sanity check that ext_equal definition is correct
-    pub proof fn ext_equal_is_equality(self, other: FloatingSeq<Version>)
-        requires
-            self.ext_equal(other)
-        ensures
-            self == other
-    
+    // Sanity check that extensional equality is correctly defined + need
+    // this lemma for when "==" equality is needed
+    pub proof fn ext_equal_is_equality()
+        ensures forall |a: FloatingSeq<Version>, b: FloatingSeq<Version>|
+            a.ext_equal(b) == (a == b)
     {
-        self.extensionality(other);
+        Version::ext_equal_is_equality();
+        assert forall |s1: FloatingSeq<Version>, s2: FloatingSeq<Version>|
+            s1.ext_equal(s2) implies (s1 == s2) by
+        {
+            // Necessary trigger for it to believe that s1[i] == s2[i] for
+            // all active indices
+            assert(forall |i| s1.is_active(i) ==> s1[i].ext_equal(s2[i]));
+            s1.extensionality(s2);
+        }
     }
 }
 
