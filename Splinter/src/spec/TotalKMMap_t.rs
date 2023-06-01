@@ -48,6 +48,18 @@ impl TotalKMMap
         self.dom() == total_domain()
     }
 
+    pub open spec fn ext_equal(self, other: TotalKMMap) -> bool
+    {
+        self.0.ext_equal(other.0)
+    }
+
+    pub proof fn ext_equal_is_equality(self, other: TotalKMMap)
+        requires
+            self.ext_equal(other)
+        ensures
+            self == other
+    {}
+
     pub proof fn insert_lemma(self)
     requires
         self.wf(),

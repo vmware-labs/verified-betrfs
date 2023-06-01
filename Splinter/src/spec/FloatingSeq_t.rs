@@ -3,6 +3,7 @@
 use builtin_macros::*;
 use builtin::*;
 use vstd::{*,seq::*};
+use crate::spec::MapSpec_t::Version;
 
 verus!{
 
@@ -26,7 +27,6 @@ pub struct FloatingSeq<T> {
     pub start: nat,
     pub entries: Seq<T>,
 }
-
 
 impl<T> FloatingSeq<T> {
     pub open spec fn new(start: nat, length: nat, f: FnSpec(int) -> T) -> FloatingSeq<T>
@@ -109,12 +109,22 @@ impl<T> FloatingSeq<T> {
         self.get_prefix(self.len()-1)
     }
 
+    // ext_equal not implemented here since the generic version can't
+    // call ext_equal on T (since trait bounds aren't supported?)
+    // pub open spec fn ext_equal(self, other: FloatingSeq<T>) -> bool
+    // {
+    //     &&& self.start == other.start
+    //     &&& self.len() == other.len()
+    //     &&& forall |i| self.is_active(i) ==> self[i] == other[i]
+    // }
+
     pub proof fn extensionality(self, b: FloatingSeq<T>)
         requires
             self.start == b.start,
-            self.len() === b.len(),
-            forall |i| self.is_active(i) ==> self[i] === b[i],
-        ensures self === b
+            self.len() == b.len(),
+            forall |i| self.is_active(i) ==> self[i] == b[i],
+        ensures
+            self == b
     {
 
         // TODO(jonh): post on slack
@@ -165,6 +175,25 @@ impl<T> FloatingSeq<T> {
             assert(b[(self.start+i)]===b.entries[i]);    // by math
         }
         assert(self.entries.ext_equal(b.entries));  // tickle seq extn
+    }
+}
+
+impl FloatingSeq<Version> {
+    pub open spec fn ext_equal(self, other: FloatingSeq<Version>) -> bool {
+        &&& self.start == other.start
+        &&& self.len() == other.len()
+        &&& forall |i| self.is_active(i) ==> self[i].ext_equal(other[i])
+    }
+
+    // Proof function to sanity check that ext_equal definition is correct
+    pub proof fn ext_equal_is_equality(self, other: FloatingSeq<Version>)
+        requires
+            self.ext_equal(other)
+        ensures
+            self == other
+    
+    {
+        self.extensionality(other);
     }
 }
 

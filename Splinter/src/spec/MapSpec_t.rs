@@ -120,6 +120,18 @@ pub struct Reply {
 pub struct PersistentState {
     pub appv: MapSpec::State
 }
+impl PersistentState {
+    pub open spec fn ext_equal(self, other: PersistentState) -> bool {
+        &&& self.appv.kmmap.ext_equal(other.appv.kmmap)
+    }
+    pub proof fn ext_equal_is_equality(self, other: PersistentState)
+        requires
+            self.ext_equal(other)
+        ensures
+            self == other
+    {
+    }
+}
 pub struct EphemeralState {
     pub requests: Set<Request>,
     pub replies: Set<Reply>,
@@ -228,7 +240,7 @@ state_machine!{ CrashTolerantAsyncMap {
       // implementations don't have to account for number of read-only (query) ops.
       ||| versions_prime == versions
     }
-    
+
     transition!{
         operate(
             label: Label,
