@@ -822,6 +822,15 @@ verus! {
     // Reveal refinement transitions
     reveal(CrashTolerantAsyncMap::State::next);
     reveal(CrashTolerantAsyncMap::State::next_by);
+    reveal(AsyncMap::State::next);
+    reveal(AsyncMap::State::next_by);
+    reveal(MapSpec::State::next);
+    reveal(MapSpec::State::next_by);
+
+    // ext_equal lemmas
+    MsgHistory::ext_equal_is_equality();
+    StampedMap::ext_equal_is_equality();
+    FloatingSeq::<Version>::ext_equal_is_equality();
 
     inv_inductive_put_step(v, vp, label, step);
 
@@ -840,10 +849,69 @@ verus! {
       ==> jp.discard_recent(i).ext_equal(j.discard_recent(i))
     );
 
-    // let ctam_step = CrashTolerantAsyncMap::Step::operate {
-    //   new_versions:,
-    //   new_async_ephemeral
-    // }
+    // BEGIN - CrashTolerant::Next proof
+    let new_versions = vp.i().versions;
+    let new_async_ephemeral = vp.i().async_ephemeral; 
+
+    let ctam_step = CrashTolerantAsyncMap::Step::operate(
+      new_versions,
+      new_async_ephemeral,
+    );
+
+    let versions_prime = vp.i().versions;
+    let versions = v.i().versions;
+
+    assert(versions_prime.drop_last().ext_equal(versions));
+
+    assert(0 < versions_prime.len());
+    assert(versions_prime.drop_last() == versions);
+    assert(CrashTolerantAsyncMap::State::optionally_append_version(
+      versions, versions_prime));
+
+    // BEGIN - AsyncMap transition
+    // Alright, let's show how you take an AsyncMap step using
+    // this. It's going to be an OperateOp
+    let async_op = label.get_Label_ctam_label().get_OperateOp_base_op();
+
+    assert(matches!(async_op, AsyncMap::Label::ExecuteOp{..}));
+
+    // Step will be an execute step
+    let input = async_op.get_ExecuteOp_req().input;
+    let output = async_op.get_ExecuteOp_reply().output;
+    let map_label = MapSpec::Label::Put{input: input, output: output};
+    let post_persistent = versions_prime.last();
+    // Execute step requires map label
+    let execute_step = AsyncMap::Step::execute(map_label, post_persistent);
+
+    let pre_async = AsyncMap::State { persistent: versions.last(), ephemeral: v.i().async_ephemeral };
+    let post_async = AsyncMap::State { persistent: versions_prime.last(), ephemeral: vp.i().async_ephemeral };
+
+    // BEGIN - MapSpec
+    let pre_map = versions.last().appv;
+    let post_map = versions_prime.last().appv;
+
+    // END - Yet another proof goal: show that MapSpec transition works
+    assert(MapSpec::State::put(pre_map, post_map, map_label));
+
+    // This was the KEY!!! WHY?!?!?!
+    MapSpec::show::put(pre_map, post_map, map_label);
+    assert(MapSpec::State::next(pre_map, post_map, map_label));
+
+    // Assert that we can take an execute transition using these parameters
+    assert(AsyncMap::State::next_by(pre_async, post_async, async_op, execute_step));
+
+    // END - AsyncMap New goal
+    assert(
+      AsyncMap::State::next(
+        AsyncMap::State { persistent: versions.last(), ephemeral: v.i().async_ephemeral },
+        AsyncMap::State { persistent: versions_prime.last(), ephemeral: vp.i().async_ephemeral },
+        label.get_Label_ctam_label().get_OperateOp_base_op()
+      )
+    );
+
+    // END - Goal is below, CrashTolerant
+    // assume(CrashTolerantAsyncMap::State::optionally_append_version(v.i().versions, vp.i().versions));
+    // assert(v.i().versions.ext_equal(vp.i().versions.drop_last()));
     assert(CrashTolerantAsyncMap::State::next_by(v.i(), vp.i(), label.get_Label_ctam_label(), ctam_step));
     assert(CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()));
   }

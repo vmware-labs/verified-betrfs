@@ -18,6 +18,9 @@ use state_machines_macros::state_machine;
 // (cleaner logical breaks)
 verus! {
 
+// Parallels a structure from Dafny (specifically from MapSpec.s.dfy)
+// Where the abstract top-level map specification uses two variables to
+// label its transitions. One of type `Input` and one of type `Output`.
 #[is_variant]
 pub enum Input {
     QueryInput{key: Key},
@@ -117,6 +120,13 @@ pub struct Reply {
     pub output: Output,
     pub id: ID
 }
+
+// Tenzin: this structure is also brought in from Dafny (see Async.s.dfy). What is
+// the use of wrapping MapSpec::State in another struct? It's unclear.
+// It does make it a separate type, but there's no clear reason for
+// needing/wanting that where PersistentState is used in the original Dafny.
+// It's potentially a constraint from the custom "functor modules" they
+// used for templating modules.
 pub struct PersistentState {
     pub appv: MapSpec::State
 }
