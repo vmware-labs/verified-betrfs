@@ -282,7 +282,7 @@ module PivotBetreeRefinement
   {
     IPathValid(path);
     SubstitutePreservesWF(path, target');
-    IPathValid(path);
+    // IPathValid(path);
     INodeWF(target');
     if path.depth==0 {
       assert INode(path.Substitute(target')) == IPath(path).Substitute(INode(target'));
