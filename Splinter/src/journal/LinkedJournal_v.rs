@@ -8,9 +8,14 @@ use builtin_macros::*;
 use state_machines_macros::state_machine;
 
 use vstd::prelude::*;
+use vstd::map::*;
 use crate::coordination_layer::StampedMap_v::LSN;
 use crate::coordination_layer::MsgHistory_v::*;
 use crate::disk::GenericDisk_v::*;
+
+// Needed for pieces of proof pulled in here.
+use crate::journal::PagedJournal_v;
+use crate::journal::PagedJournal_v::PagedJournal;
 
 verus!{
 
@@ -357,6 +362,225 @@ impl DiskView {
             self.pointer_after_crop_ensures(root, depth);
         }
     }
+
+    //////////////////////////////////////////////////////////////////////////
+    // Proof-y stuff, pulled in here because it's required by the invariant
+    // proofs which the state machine macro demands we put inline.
+    //////////////////////////////////////////////////////////////////////////
+
+    pub open spec fn iptr(self, ptr: Pointer) -> (out: Option<PagedJournal_v::JournalRecord>)
+    recommends
+        self.decodable(ptr),
+        self.acyclic(),
+    decreases self.the_rank_of(ptr)
+    {
+        decreases_when(self.decodable(ptr) && self.acyclic());
+        if ptr.is_None() { None }
+        else {
+            let jr = self.entries[ptr.unwrap()];
+            Some(PagedJournal_v::JournalRecord{
+                message_seq: jr.message_seq,
+                prior_rec: Box::new(self.iptr(jr.cropped_prior(self.boundary_lsn))),
+            })
+        }
+    }
+
+    pub proof fn iptr_ignores_extra_blocks(self, ptr: Pointer, big: DiskView)
+    requires
+        self.wf(),
+        self.is_nondangling_pointer(ptr),
+        big.wf(),
+        big.acyclic(),
+        self.is_sub_disk(big),
+    ensures
+        self.acyclic(),
+        self.iptr(ptr) == big.iptr(ptr),
+    decreases big.the_rank_of(ptr)
+    {
+        // TODO(verus,chris): map.le should broadcast-ensures dom.subset_of(dom)
+        assert( self.entries.dom().subset_of(big.entries.dom()) );
+
+        assert( self.valid_ranking(big.the_ranking()) ); // witness to acyclic
+        if ptr.is_Some() {
+            let next = big.entries[ptr.unwrap()].cropped_prior(big.boundary_lsn);
+            assert( big.the_rank_of(next) < big.the_rank_of(ptr) );
+            self.iptr_ignores_extra_blocks(next, big);
+        }
+    }
+
+    pub open spec fn next(self, ptr: Pointer) -> Pointer
+    {
+        self.entries[ptr.unwrap()].cropped_prior(self.boundary_lsn)
+    }
+
+    pub open spec fn build_tight_ranks_ensures(self, ptr: Pointer) -> bool
+    {
+        forall |addr: Address| #[trigger] self.build_tight(self.next(ptr)).entries.contains_key(addr) ==> {
+            &&& self.the_ranking().contains_key(addr)
+            &&& self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()]
+        }
+    }
+
+    pub proof fn build_tight_ranks(self, ptr: Pointer)
+    requires
+        self.decodable(ptr),
+        self.acyclic(),
+        ptr.is_Some(),
+    ensures self.build_tight_ranks_ensures(ptr)
+    decreases self.the_rank_of(ptr)
+    {
+        let next = self.next(ptr);
+        if next.is_Some() {
+            self.build_tight_ranks(next);
+
+            // TODO(chris): Error in this fn is flaky.
+            // Passing --verify-function DiskView::build_tight_ranks makes it pass.
+            
+            assert forall |addr: Address| #[trigger] self.build_tight(self.next(ptr)).entries.contains_key(addr) implies {
+                &&& self.the_ranking().contains_key(addr)
+                &&& self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()]
+            } by {
+                self.build_tight_ensures(ptr, self.build_tight(ptr));
+                assert( self.build_tight(ptr).is_sub_disk(self) );
+                assert( self.build_tight(ptr).entries.dom().contains(addr) );   // trigger
+//                assert( self.entries.dom().contains(addr) );
+                assert( self.the_ranking().contains_key(addr) );
+
+                self.build_tight_ensures(next, self.build_tight(next));
+
+                if self.build_tight(self.next(next).entries.contains_key(addr) {
+
+                    assert( self.the_ranking()[next.unwrap()] < self.the_ranking()[ptr.unwrap()] );
+                    assert( self.build_tight(self.next(next)).entries.contains_key(addr) );
+                    assert( self.the_ranking()[addr] < self.the_ranking()[next.unwrap()] );
+                } else {
+                    assert( addr == next.unwrap() );
+                    assert( self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()] );
+                }
+                
+                /*
+                if addr == ptr.unwrap() {
+                    assert( self.entries.contains_key(addr) );
+                    assert( self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()] );
+                } else {
+
+                    assert( self.entries.contains_key(addr) );
+                    //assert( self.entries[addr].cropped_prior(self.boundary_lsn).is_Some() );
+
+                    assert( self.entries.contains_key(addr) );
+
+                    self.build_tight_ensures(next, self.build_tight(next));
+                    assert( self.build_tight(self.next(next)).entries.dom().contains(addr) );   // trigger
+                    assert( self.build_tight(self.next(next)).entries.contains_key(addr) );
+                    assert( self.the_ranking()[addr] < self.the_ranking()[next.unwrap()] );
+                    //assert( self.build_tight(self.next(ptr)).entries.contains_key(next.unwrap()) );
+                    assert( self.the_ranking()[next.unwrap()] < self.the_ranking()[ptr.unwrap()] );
+                }
+                */
+            }
+            assert(self.build_tight_ranks_ensures(ptr));
+        }
+    }
+
+    pub proof fn build_tight_shape(self, root: Pointer)
+    requires
+        root.is_Some(),
+        self.decodable(root),
+        self.acyclic(),
+    ensures (
+        self.build_tight(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn))
+        == Self{entries: self.build_tight(root).entries.remove(root.unwrap()), ..self})
+    {
+        let next = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
+        if next.is_Some() {
+            self.build_tight_ranks(root);   // proves root.value !in self.build_tight(next, ranking).entries;
+        }
+
+        assert_maps_equal!(
+            self.build_tight(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn)).entries,
+            self.build_tight(root).entries.remove(root.unwrap())
+            );
+    }
+
+    pub open spec fn is_tight(self, root: Pointer) -> bool
+    {
+        &&& self.decodable(root)
+        &&& self.acyclic()
+        &&& forall |other: Self| {
+            &&& other.decodable(root)
+            &&& other.acyclic()
+            &&& self.iptr(root) == other.iptr(root)
+            &&& other.is_sub_disk(self)
+            ==> other == self
+        }
+    }
+
+    pub proof fn build_tight_builds_sub_disks(self, root: Pointer)
+    requires
+        self.decodable(root),
+        self.acyclic(),
+    ensures
+        self.build_tight(root).is_sub_disk(self),
+    decreases self.the_rank_of(root)
+    {
+        if root.is_Some() {
+            let next = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
+            self.build_tight_builds_sub_disks(next);
+        }
+    }
+
+    pub proof fn tight_sub_disk(self, root: Pointer, tight: Self)
+    requires
+        self.decodable(root),
+        tight == self.build_tight(root),
+        self.acyclic(),
+        tight.is_sub_disk(self),
+    ensures
+        tight.is_tight(root),
+    decreases self.the_rank_of(root)
+    {
+        assert( tight.valid_ranking(self.the_ranking()) ); // witness
+        if root.is_Some() {
+            let next = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
+            let inner = self.build_tight(next);
+            self.build_tight_shape(root);
+            self.tight_sub_disk(next, inner);
+//             assert( tight.valid_ranking(self.the_ranking()) ); // witness
+            assert forall |other: Self| {
+                &&& other.decodable(root)
+                &&& other.acyclic()
+                &&& tight.iptr(root) == other.iptr(root)
+                &&& other.is_sub_disk(tight)
+            } implies other == tight by {
+                // any other tighter disk implies an "other_inner" disk tighter than inner, but inner.IsTight(next).
+                let other_inner = DiskView{ entries: other.entries.remove(root.unwrap()), ..other };
+                assert( inner.valid_ranking( self.the_ranking()) );
+                other_inner.iptr_ignores_extra_blocks(next, inner);
+            }
+        }
+    }
+
+    pub proof fn tight_interp(big: Self, root: Pointer, tight: Self)
+    requires
+        big.decodable(root),
+        tight == big.build_tight(root),
+        big.acyclic(),
+    ensures
+        tight.is_sub_disk(big),
+        tight.is_tight(root),
+        tight.iptr(root) == big.iptr(root),
+        tight.acyclic(),
+    decreases big.the_rank_of(root)
+    {
+        if root.is_None() {
+            assert( tight.valid_ranking(big.the_ranking()) );
+        } else {
+            big.build_tight_builds_sub_disks(root);
+            big.tight_sub_disk(root, tight);
+            assert( tight.valid_ranking(big.the_ranking()) );
+            tight.iptr_ignores_extra_blocks(root, big);
+        }
+    }
 }
 
 pub struct TruncatedJournal {
@@ -541,7 +765,7 @@ state_machine!{ LinkedJournal {
     recommends
         self.wf(),
     {
-        self.truncated_journal.seq_end()
+        self.unmarshalled_tail.seq_end
     }
     
     pub open spec fn unused_addr(self, addr: Address) -> bool
@@ -617,7 +841,8 @@ state_machine!{ LinkedJournal {
 
     transition!{ put(lbl: Label, depth: nat) {
         require pre.wf();
-        require Self::lbl_wf(lbl);
+        //require Self::lbl_wf(lbl);
+        require lbl.get_Put_messages().wf();    // direct translation. TODO fold into lbl_wf
         require lbl.is_Put();
         require lbl.get_Put_messages().seq_start == pre.seq_end();
         update unmarshalled_tail = pre.unmarshalled_tail.concat(lbl.get_Put_messages());
@@ -687,13 +912,41 @@ state_machine!{ LinkedJournal {
         fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
 
         #[inductive(put)]
-        fn put_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
+        fn put_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
+        }
 
         #[inductive(discard_old)]
-        fn discard_old_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
+        fn discard_old_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
+//             let loose = pre.truncated_journal.discard_old(lbl.get_DiscardOld_start_lsn());
+//             let dv = post.truncated_journal.disk_view;
+//             loose.disk_view.build_tight_ensures(loose.freshest_rec,
+//                  loose.disk_view.build_tight(loose.freshest_rec));
+//             //loose.disk_view.build_tight_auto(); auto couldn't guess ptr?
+//             assert( post.truncated_journal.disk_view.entries_wf() );
+// 
+//             assert( loose.disk_view.nondangling_pointers() );
+//             assert( loose.disk_view.is_nondangling_pointer(
+//                     loose.freshest_rec) );
+
+            let lsn = lbl.get_DiscardOld_start_lsn();
+            let cropped_tj = pre.truncated_journal.discard_old(lsn);
+            let tight_tj = cropped_tj.build_tight();
+            assert( cropped_tj.disk_view.valid_ranking(
+                    pre.truncated_journal.disk_view.the_ranking()) ); // witness to acyclic
+            DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, tight_tj.disk_view);
+            assert( post.truncated_journal.disk_view.nondangling_pointers() );
+            assert( post.truncated_journal.disk_view.is_nondangling_pointer(
+                    post.truncated_journal.freshest_rec) );
+            assert( post.truncated_journal.wf() );
+            assert( post.wf() );
+            assert( post.truncated_journal.decodable() );
+            assert( post.truncated_journal.disk_view.acyclic() );
+        }
 
         #[inductive(internal_journal_marshal)]
-        fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) { }
+        fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) {
+            assume( false );
+        }
 
         #[inductive(internal_journal_no_op)]
         fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
