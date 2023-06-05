@@ -413,37 +413,33 @@ impl DiskView {
         self.entries[ptr.unwrap()].cropped_prior(self.boundary_lsn)
     }
 
-    pub open spec fn build_tight_ranks_ensures(self, ptr: Pointer) -> bool
-    {
-        forall |addr: Address| #[trigger] self.build_tight(self.next(ptr)).entries.contains_key(addr) ==> {
-            &&& self.the_ranking().contains_key(addr)
-            &&& self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()]
-        }
-    }
-
+    // A direct translation of this proof was flaky; whether it proved depended on whether
+    // I proc'd it down with --verify-function
+    // The trigger (the if line) was needed here whereas not in Dafny; Dafny must have chosen
+    // a more-generous trigger for the ensures forall?
     pub proof fn build_tight_ranks(self, ptr: Pointer)
     requires
         self.decodable(ptr),
         self.acyclic(),
         ptr.is_Some(),
-    ensures self.build_tight_ranks_ensures(ptr)
+    ensures ({
+        forall |addr: Address| #[trigger] self.build_tight(self.next(ptr)).entries.contains_key(addr) ==> {
+            &&& self.the_ranking().contains_key(addr)
+            &&& self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()]
+        }
+    })
     decreases self.the_rank_of(ptr)
     {
         let next = self.next(ptr);
         if next.is_Some() {
             self.build_tight_ranks(next);
 
-            // TODO(chris): Error in this fn is flaky.
-            // Passing --verify-function DiskView::build_tight_ranks makes it pass.
-            
             assert forall |addr: Address| #[trigger] self.build_tight(self.next(ptr)).entries.contains_key(addr) implies {
                 &&& self.the_ranking().contains_key(addr)
                 &&& self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()]
             } by {
-                if self.build_tight(self.next(next)).entries.contains_key(addr) {
-                }
+                if self.build_tight(self.next(next)).entries.contains_key(addr) { } // trigger
             }
-            assert(self.build_tight_ranks_ensures(ptr));
         }
     }
 
