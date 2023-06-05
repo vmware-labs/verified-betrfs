@@ -440,43 +440,8 @@ impl DiskView {
                 &&& self.the_ranking().contains_key(addr)
                 &&& self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()]
             } by {
-                self.build_tight_ensures(ptr, self.build_tight(ptr));
-                assert( self.build_tight(ptr).is_sub_disk(self) );
-                assert( self.build_tight(ptr).entries.dom().contains(addr) );   // trigger
-//                assert( self.entries.dom().contains(addr) );
-                assert( self.the_ranking().contains_key(addr) );
-
-                self.build_tight_ensures(next, self.build_tight(next));
-
-                if self.build_tight(self.next(next).entries.contains_key(addr) {
-
-                    assert( self.the_ranking()[next.unwrap()] < self.the_ranking()[ptr.unwrap()] );
-                    assert( self.build_tight(self.next(next)).entries.contains_key(addr) );
-                    assert( self.the_ranking()[addr] < self.the_ranking()[next.unwrap()] );
-                } else {
-                    assert( addr == next.unwrap() );
-                    assert( self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()] );
+                if self.build_tight(self.next(next)).entries.contains_key(addr) {
                 }
-                
-                /*
-                if addr == ptr.unwrap() {
-                    assert( self.entries.contains_key(addr) );
-                    assert( self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()] );
-                } else {
-
-                    assert( self.entries.contains_key(addr) );
-                    //assert( self.entries[addr].cropped_prior(self.boundary_lsn).is_Some() );
-
-                    assert( self.entries.contains_key(addr) );
-
-                    self.build_tight_ensures(next, self.build_tight(next));
-                    assert( self.build_tight(self.next(next)).entries.dom().contains(addr) );   // trigger
-                    assert( self.build_tight(self.next(next)).entries.contains_key(addr) );
-                    assert( self.the_ranking()[addr] < self.the_ranking()[next.unwrap()] );
-                    //assert( self.build_tight(self.next(ptr)).entries.contains_key(next.unwrap()) );
-                    assert( self.the_ranking()[next.unwrap()] < self.the_ranking()[ptr.unwrap()] );
-                }
-                */
             }
             assert(self.build_tight_ranks_ensures(ptr));
         }
