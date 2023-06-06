@@ -202,14 +202,13 @@ impl DiskView {
     }
 
     // TODO auto-generate please
-    pub proof fn build_tight_ensures(self, root: Pointer, out: Self)
+    pub proof fn build_tight_ensures(self, root: Pointer)
         // TODO(chris): really want the `let` that scopes around requires, ensures, and body here!
     requires
-        self.decodable(root),
-        out == self.build_tight(root),
+        self.decodable(root)
     ensures
-        forall |addr| #[trigger] out.entries.contains_key(addr) ==> self.entries.contains_key(addr),
-        self.acyclic() ==> out.is_sub_disk(self),
+        forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr),
+        self.acyclic() ==> self.build_tight(root).is_sub_disk(self),
     decreases
         self.the_rank_of(root),
     {
@@ -217,7 +216,7 @@ impl DiskView {
         else if root.is_None() { }
         else {
             let inner_root = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
-            self.build_tight_ensures(inner_root, self.build_tight(inner_root));
+            self.build_tight_ensures(inner_root);
         }
     }
 
@@ -235,7 +234,7 @@ impl DiskView {
                 &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
                 &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
         }) by {
-            self.build_tight_ensures(root, self.build_tight(root));
+            self.build_tight_ensures(root);
         }
     }
 
@@ -471,7 +470,7 @@ impl DiskView {
             &&& other.decodable(root)
             &&& other.acyclic()
             &&& self.iptr(root) == other.iptr(root)
-            &&& other.is_sub_disk(self)
+            &&& #[trigger] other.is_sub_disk(self)
             ==> other == self
         }
     }
@@ -500,25 +499,53 @@ impl DiskView {
         tight.is_tight(root),
     decreases self.the_rank_of(root)
     {
-        assert( tight.valid_ranking(self.the_ranking()) ); // witness
+        self.build_tight_ensures(root); //new because not auto
+        //assert(tight.wf());
         if root.is_Some() {
             let next = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
             let inner = self.build_tight(next);
+            self.build_tight_ensures(next);
             self.build_tight_shape(root);
             self.tight_sub_disk(next, inner);
-//             assert( tight.valid_ranking(self.the_ranking()) ); // witness
+            assert( tight.valid_ranking(self.the_ranking()) ); // witness
             assert forall |other: Self| {
                 &&& other.decodable(root)
                 &&& other.acyclic()
                 &&& tight.iptr(root) == other.iptr(root)
-                &&& other.is_sub_disk(tight)
+                &&& #[trigger] other.is_sub_disk(tight)
             } implies other == tight by {
                 // any other tighter disk implies an "other_inner" disk tighter than inner, but inner.IsTight(next).
                 let other_inner = DiskView{ entries: other.entries.remove(root.unwrap()), ..other };
                 assert( inner.valid_ranking( self.the_ranking()) );
+                //assert( other_inner.entries.wf() ); // new
+
+                // new; dafny triggered this for free
+                assert forall |addr| #[trigger] other_inner.entries.contains_key(addr)
+                    implies other_inner.is_nondangling_pointer(other_inner.entries[addr].cropped_prior(other_inner.boundary_lsn)) by {
+                    assert( other.entries.contains_key(addr) );
+                    assert( other.is_sub_disk(self) );
+                    let pptr = other.entries[addr].cropped_prior(other.boundary_lsn);
+                    assert( pptr == other_inner.entries[addr].cropped_prior(other_inner.boundary_lsn) );
+                    if pptr == root {
+                        self.build_tight_ranks(root);
+                        assert( self.build_tight(self.next(root)).entries.contains_key(pptr.unwrap()) );
+                        assert( tight.the_ranking()[pptr.unwrap()] < tight.the_ranking()[root.unwrap()] );
+                        assert( other.the_ranking()[pptr.unwrap()] < other.the_ranking()[root.unwrap()] );
+                        assert( other.the_ranking()[pptr.unwrap()] > other.the_ranking()[root.unwrap()] );
+                        assert( false );
+                    }
+                    assert( other.is_nondangling_pointer(pptr) );
+                    assert( other_inner.is_nondangling_pointer(pptr) );
+                }
+                assert( other_inner.nondangling_pointers() ); //new
+                assert( other_inner.wf() ); //new
+                assume( other_inner.is_nondangling_pointer(next) );    //new
                 other_inner.iptr_ignores_extra_blocks(next, inner);
+                assume( other == tight );   //new
             }
         }
+        assert( tight.valid_ranking(self.the_ranking()) ); // witness
+        assume( tight.is_tight(root) );
     }
 
     pub proof fn tight_interp(big: Self, root: Pointer, tight: Self)
