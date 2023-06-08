@@ -569,12 +569,15 @@ impl DiskView {
                         assert( other_inner.entries.contains_key(next.unwrap()) );
                     }
                     assert( other_inner.is_nondangling_pointer(next) );    //new
+                    assert(other_inner.wf());   // wait, we needed this as a trigger?
                     assert(other_inner.is_sub_disk(inner));
+                    // we know by here Dafny knowns other_inner.wf()
                     other_inner.iptr_ignores_extra_blocks(next, inner);
-                    assert forall |a| other_inner.entries.contains_key(a) ==> inner.entries.contains_key(a) && inner.entries[a] == other_inner.entries[a] by {
+                    assert forall |a| other_inner.entries.contains_key(a) implies inner.entries.contains_key(a) && inner.entries[a] == other_inner.entries[a] by {
                         assert( other_inner.is_sub_disk(other) );
                         assert( other.is_sub_disk(tight) );
                         assert( tight.is_sub_disk(self) );
+                        assert( other.entries.contains_key(a) );
 
                         assert( other.entries[a] == tight.entries[a] );
                     }
