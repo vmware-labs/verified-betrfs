@@ -170,9 +170,17 @@ impl DiskView {
         &&& self.entries.le(bigger.entries)
     }
 
+    // TODO: should probably promote to maps::le_transitive_auto
     pub proof fn sub_disk_transitive_auto()
-    ensures forall |a:Self, b:Self, c: Self| a.is_sub_disk(b) && b.is_sub_disk(c) ==> a.is_sub_disk(c)
+    ensures forall |a:Self, b:Self, c: Self| #[trigger] a.is_sub_disk(b) && #[trigger] b.is_sub_disk(c) ==> a.is_sub_disk(c)
     {
+        assert forall |a:Self, b:Self, c: Self| #[trigger] a.is_sub_disk(b) && #[trigger] b.is_sub_disk(c) implies a.is_sub_disk(c) by {
+            assert forall|k: Address| #[trigger] a.entries.dom().contains(k) implies
+                #[trigger] c.entries.dom().contains(k) && a.entries[k] == c.entries[k] by {
+                assert( b.entries.dom().contains(k) );
+                assert( c.entries.dom().contains(k) );
+            }
+        }
     }
 
     pub open spec fn is_sub_disk_with_newer_lsn(self, bigger: Self) -> bool
@@ -505,13 +513,12 @@ impl DiskView {
         tight.is_tight(root),
     decreases self.the_rank_of(root)
     {
+        // Yikes. Dafny proof was 15 lines; this "minimized" Verus proof is 73 lines.
         self.build_tight_ensures(root); //new because not auto
         //assert(tight.wf());
         if root.is_Some() {
-            assume( false );    // Remove this assertion, and the then branch above starts failing.
             let next = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
             let inner = self.build_tight(next);
-            self.build_tight_ensures(next);
             self.build_tight_shape(root);
             self.tight_sub_disk(next, inner);
             assert( tight.valid_ranking(self.the_ranking()) ); // witness
@@ -524,23 +531,13 @@ impl DiskView {
                 } implies other == tight by {
                     // any other tighter disk implies an "other_inner" disk tighter than inner, but inner.IsTight(next).
                     let other_inner = DiskView{ entries: other.entries.remove(root.unwrap()), ..other };
-                    assert( inner.valid_ranking( self.the_ranking()) );
 
-                    assert( other_inner.entries_wf() ); //new
-                                                        //
-                    assert( other_inner.is_sub_disk(other) );
-                    assert( other.is_sub_disk(tight) );
-                    assert( tight.is_sub_disk(self) );
+                    assert( other_inner.entries_wf() );
+
                     Self::sub_disk_transitive_auto();
-                    assert( other_inner.is_sub_disk(self) );
 
                     assert forall |addr| #[trigger] other_inner.entries.contains_key(addr)
                         implies other_inner.is_nondangling_pointer(other_inner.entries[addr].cropped_prior(other_inner.boundary_lsn)) by {
-
-                        assert( other_inner.entries.contains_key(addr) ==> self.entries.contains_key(addr) );
-                        assert( self.entries[addr] == other_inner.entries[addr] );
-                        assert( self.entries[addr].cropped_prior(self.boundary_lsn)
-                            == other_inner.entries[addr].cropped_prior(other_inner.boundary_lsn) );
                         let aprior = self.entries[addr].cropped_prior(self.boundary_lsn);
                         assert( self.entries.contains_key(addr) );
                         assert( self.is_nondangling_pointer(aprior) );
@@ -553,62 +550,33 @@ impl DiskView {
                             }
                             assert( tight.entries[addr].cropped_prior(tight.boundary_lsn) != root );
                             assert( other_inner.is_sub_disk(tight) );
-                            assert( other_inner.entries.contains_key(addr) ==> tight.entries.contains_key(addr) ); // frustraaaaation
-                            assert( other_inner.entries[addr] == tight.entries[addr] );
-                            assert( other_inner.entries[addr].cropped_prior(other_inner.boundary_lsn) != root );
-                            assert( other_inner.is_nondangling_pointer(aprior) );
-                        } else {
-                            assert( other_inner.is_nondangling_pointer(aprior) );
                         }
+                        // frustrating, considering this is the just a repitition of the assert-forall-by
+                        // conclusion
                         assert( other_inner.is_nondangling_pointer(aprior) );
                     }
-                                                        //
-                    assert( other_inner.nondangling_pointers() ); //new
-                    assert( other_inner.wf() ); //new
                 
-                    if next.is_Some() {
-                        assert( other_inner.entries.contains_key(next.unwrap()) );
-                    }
                     assert( other_inner.is_nondangling_pointer(next) );    //new
                     assert(other_inner.wf());   // wait, we needed this as a trigger?
-                    assert(other_inner.is_sub_disk(inner));
+                    assert(other_inner.is_sub_disk(inner)); // new
                     // we know by here Dafny knowns other_inner.wf()
                     other_inner.iptr_ignores_extra_blocks(next, inner);
-                    assert forall |a| other_inner.entries.contains_key(a) implies inner.entries.contains_key(a) && inner.entries[a] == other_inner.entries[a] by {
-                        assert( other_inner.is_sub_disk(other) );
-                        assert( other.is_sub_disk(tight) );
-                        assert( tight.is_sub_disk(self) );
-                        assert( other.entries.contains_key(a) );
-
-                        assert( other.entries[a] == tight.entries[a] );
-                    }
+                    // every line below here is both new and necessary
                     assert( inner.is_tight(next) ); // new trigger holy crap how did we not get this
                                                     // calling tight_sub_disk!!!??
                     assert forall |a| inner.entries.contains_key(a) ==> other_inner.entries.contains_key(a) && other_inner.entries[a] == inner.entries[a] by {
                     }
-                    assert_maps_equal!(other_inner.entries, inner.entries);    // sadness
-                    assert( other_inner == inner );
-                    assert_maps_equal!(other.entries, tight.entries);    // sadness
-                    assert( other == tight );   //new
+                    assert( other_inner =~= inner );
+                    assert( other.entries =~= tight.entries );
+                    assert( other =~= tight );
                 }
-//                 assert( forall |other: Self| {
-//                     &&& other.decodable(root)
-//                     &&& other.acyclic()
-//                     &&& tight.iptr(root) == other.iptr(root)
-//                     &&& #[trigger] other.is_sub_disk(tight)
-//                     ==> other == tight
-//                 });
-                //assert( tight.is_tight_debug_forall(root) );
                 assert( tight.decodable(root) );
-                assert( tight.acyclic() );
+                assert( tight.acyclic() );  // new trigger
             }
-            assert( tight.is_tight(root) );
+//             assert( tight.is_tight(root) );
         } else {
-            // TODO(chris): Heavens this is ugly. tight.entries.Keys=={} was a lot more readable.
-            assert( tight.entries.dom() == Set::<Address>::empty() );
-            assert( tight.decodable(root) );
+            // Nothing in this branch was needed in Dafny.
             assert( tight.valid_ranking(Map::empty()) ); // new witness; not needed in Dafny
-            assert( tight.acyclic() );
             assert forall |other: Self|
             ({
                 &&& other.decodable(root)
@@ -616,20 +584,9 @@ impl DiskView {
                 &&& tight.iptr(root) == other.iptr(root)
                 &&& #[trigger] other.is_sub_disk(tight)
             }) implies other =~= tight by {
-                if other.entries.dom().len() > 0 {
-                    let bogus = choose |addr| other.entries.dom().contains(addr);
-                    assert( !tight.entries.dom().contains(bogus) );
-                    assert( !other.is_sub_disk(tight) );
-                    assert( false );
-                } else {
-                    // uncomment this and suddenly the error on line 622 vanishes
-                    assert( other.entries =~= tight.entries );
-                }
+                assert( other.entries =~= tight.entries );
             }
-            assert( tight.is_tight(root) );
-             
         }
-        assert( tight.valid_ranking(self.the_ranking()) ); // witness
     }
 
     pub proof fn tight_interp(big: Self, root: Pointer, tight: Self)
