@@ -627,6 +627,7 @@ impl DiskView {
                 }
             }
             assert( tight.is_tight(root) );
+             
         }
         assert( tight.valid_ranking(self.the_ranking()) ); // witness
     }
