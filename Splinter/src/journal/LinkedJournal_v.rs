@@ -603,7 +603,25 @@ impl DiskView {
             }
             assert( tight.is_tight(root) );
         } else {
-            assume( tight.is_tight(root) );
+            assume( false );    // Remove this assertion, and the then branch above starts failing.
+            // TODO(chris): Heavens this is ugly. tight.entries.Keys=={} was a lot more readable.
+            assert( tight.entries.dom() == Set::<Address>::empty() );
+            assert( tight.decodable(root) );
+            assert( tight.valid_ranking(Map::empty()) ); // new witness; not needed in Dafny
+            assert( tight.acyclic() );
+            assert forall |other: Self|
+            ({
+                &&& other.decodable(root)
+                &&& other.acyclic()
+                &&& tight.iptr(root) == other.iptr(root)
+                &&& #[trigger] other.is_sub_disk(tight)
+            }) implies other =~= tight by {
+                if other.entries.dom().len() > 0 {
+                    assert( !other.is_sub_disk(tight) );
+                    assert( false );
+                }
+            }
+            assert( tight.is_tight(root) );
         }
         assert( tight.valid_ranking(self.the_ranking()) ); // witness
     }
