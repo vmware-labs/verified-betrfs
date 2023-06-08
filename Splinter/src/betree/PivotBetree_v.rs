@@ -353,34 +353,35 @@ impl QueryReceipt{
         &&& (forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.lines[i as int].node.key_in_domain(self.key))
     }
 
-    pub open spec fn child_at(self, i: nat) -> BetreeNode
+    pub open spec fn child_at(self, i: int) -> BetreeNode
     {
-        self.lines[i as int].node.child(self.key)
+        self.lines[i].node.child(self.key)
     }
 
-    pub open spec fn child_linked_at(self, i: nat) -> bool
+    pub open spec fn child_linked_at(self, i: int) -> bool
+        recommends 0 <= i < self.lines.len()-1
     {
-        self.lines[i as int + 1].node == self.child_at(i)
+        self.lines[i+1].node == self.child_at(i)
     }
 
-    pub open spec fn result_at(self, i: nat) -> Message
-        recommends i < self.lines.len()
+    pub open spec fn result_at(self, i: int) -> Message
+        recommends 0 <= i < self.lines.len()
     {
-        self.lines[i as int].result
+        self.lines[i].result
     }
 
-    pub open spec fn result_linked_at(self, i:nat) -> bool
+    pub open spec fn result_linked_at(self, i:int) -> bool
     {
-        let msg = self.lines[i as int].node.get_Node_buffers().query(self.key);
-        self.lines[i as int].result == Message::merge(msg, self.result_at(i+1))
+        let msg = self.lines[i].node.get_Node_buffers().query(self.key);
+        self.lines[i].result == self.result_at(i+1).merge(msg)
     }
 
     pub open spec fn valid(self) -> bool
     {
         &&& self.structure()
         &&& self.all_lines_wf()
-        &&& (forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.child_linked_at(i))
-        &&& (forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.result_linked_at(i))
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.child_linked_at(i))
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.result_linked_at(i))
     }
 
     pub open spec fn result(self) -> Message
@@ -489,7 +490,7 @@ state_machine!{ PivotBetree {
         require let Label::Query{end_lsn, key, value} = lbl;
         require end_lsn == pre.memtable.seq_end;
         require receipt.valid_for(pre.root, key);
-        require Message::Define{value} == Message::merge(pre.memtable.query(key), receipt.result());
+        require Message::Define{value} == receipt.result().merge(pre.memtable.query(key));
     }}
 
     transition!{ put(lbl: Label) {

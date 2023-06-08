@@ -157,7 +157,49 @@ pub open spec fn i_stamped_betree(stamped: StampedBetree) -> PagedBetree_v::Stam
     Stamped{value: stamped.value.i(), seq_end: stamped.seq_end}
 }
 
+impl QueryReceiptLine{
+    pub open spec fn i(self) -> PagedBetree_v::QueryReceiptLine
+        recommends self.wf()
+    {
+        PagedBetree_v::QueryReceiptLine{node: self.node.i(), result: self.result}
+    }
+}
+
 impl QueryReceipt{
+    pub open spec fn i(self) -> PagedBetree_v::QueryReceipt
+        recommends self.valid()
+    {
+        PagedBetree_v::QueryReceipt{
+            key: self.key,
+            root: self.root.i(),
+            lines: Seq::new(self.lines.len(), |i:int| self.lines[i].i())
+        }
+    }
+
+    pub proof fn valid_receipt_refines(self)
+        requires self.valid()
+        ensures self.i().valid()
+    {
+        let i_receipt = self.i();
+
+        assert forall |i:int| 0 <= i < i_receipt.lines.len()
+        implies #[trigger] i_receipt.lines[i].wf() by {
+            self.lines[i].node.i_wf();
+        }
+
+        assert forall |i:int| 0 <= i < i_receipt.lines.len()-1
+        implies #[trigger] i_receipt.child_linked_at(i) by {
+            assert(self.child_linked_at(i));
+            self.lines[i].node.i_children_lemma();
+        }
+
+        assert forall |i:int| 0 <= i < i_receipt.lines.len()-1
+        implies #[trigger] i_receipt.result_linked_at(i) by {
+            assert(self.result_linked_at(i));
+        }
+    }
+
+
     // pub open spec fn drop_first(self) -> QueryReceipt
     //     recommends 1 < self.lines.len()
     // {
@@ -394,105 +436,33 @@ impl PivotBetree::State {
         PagedBetree::State{root: self.root.i(), memtable: self.memtable}
     }
 
-    // pub proof fn init_refines(self, stamped_betree: StampedBetree) 
-    //     requires PivotBetree::State::initialize(self, stamped_betree)
-    //     ensures self.inv(), PagedBetree::State::initialize(self.i(), i_stamped_betree(stamped_betree))
-    // {
-    //     self.root.push_empty_memtable_refines(self.memtable);
-    // }
+    pub proof fn init_refines(self, stamped_betree: StampedBetree) 
+        requires PivotBetree::State::initialize(self, stamped_betree)
+        ensures PagedBetree::State::initialize(self.i(), i_stamped_betree(stamped_betree))
+    {
+        stamped_betree.value.i_wf();
+    }
 
-    // pub proof fn query_refines(self, post: Self, lbl: PivotBetree::Label, receipt: QueryReceipt)
-    //     requires self.inv(), PivotBetree::State::query(self, post, lbl, receipt)
-    //     ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(PagedBetree::State::next);
-    //     reveal(PagedBetree::State::next_by);
+    pub proof fn query_refines(self, post: Self, lbl: PivotBetree::Label, receipt: QueryReceipt)
+        requires self.inv(), PivotBetree::State::query(self, post, lbl, receipt)
+        ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PagedBetree::State::next);
+        reveal(PagedBetree::State::next_by);
 
-    //     let built_receipt = self.root.build_query_receipt(lbl.get_Query_key());
-    //     self.root.build_query_receipt_valid(lbl.get_Query_key());
-    //     receipt.equal_receipts(built_receipt);
-    //     self.root.memtable_distributes_over_betree(self.memtable);
-    //     assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::query()));
-    // }
+        receipt.valid_receipt_refines();
+        assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::query(receipt.i())));
+    }
 
-    // pub proof fn apply_single_put_is_map_plus_history(self, post: Self, puts: MsgHistory)
-    //     requires self.wf(), post.wf(), puts.wf(), puts.len() == 1,
-    //         puts.seq_start == self.memtable.seq_end,
-    //         post.memtable == self.memtable.apply_puts(puts),
-    //         post.root == self.root
-    //     ensures post.i().stamped_map == MsgHistory::map_plus_history(self.i().stamped_map, puts)
-    // {
-    //     let KeyedMessage{key, message} = puts.msgs[puts.seq_start];
-    //     let map_a = post.root.push_memtable(post.memtable).value.i();
-    //     self.memtable.apply_puts_end(puts);
-    //     assert(self.memtable == self.memtable.apply_puts(puts.discard_recent(puts.seq_start)));
-    //     assert(post.memtable == self.memtable.apply_put(puts.msgs[puts.seq_start]));
+    pub proof fn put_refines(self, post: Self, lbl: PivotBetree::Label)
+        requires self.inv(), PivotBetree::State::put(self, post, lbl)
+        ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PagedBetree::State::next);
+        reveal(PagedBetree::State::next_by);
 
-    //     let map_b = puts.apply_to_stamped_map(self.i().stamped_map).value;
-    //     MsgHistory::map_plus_history_lemma(self.i().stamped_map, puts);
-
-    //     let sub_map_b = puts.discard_recent(puts.seq_start).apply_to_stamped_map(self.i().stamped_map).value;
-    //     assert(map_b == sub_map_b.insert(key, sub_map_b[key].merge(message)));
-
-    //     assert forall |k: Key| true
-    //     implies ({
-    //         map_a.0[k] == map_b.0[k]
-    //     }) by {
-    //         let buffers = BufferSeq{buffers: Seq::new(1, |i| self.memtable.buffer)};
-    //         let buffers_prime = BufferSeq{buffers: Seq::new(1, |i| post.memtable.buffer)};
-
-    //         if k == key {
-    //             buffers.query_singleton(k);
-    //             buffers_prime.query_singleton(k);
-    //         }
-
-    //         self.root.extend_buffer_seq_lemma(buffers, k);
-    //         self.root.extend_buffer_seq_lemma(buffers_prime, k);                
-    //         assert(map_a.0[k] == map_b.0[k]);
-    //     }
-
-    //     assert_maps_equal!(map_a.0, map_b.0);
-    //     assert(post.i().stamped_map.value == map_a);
-    //     assert(MsgHistory::map_plus_history(self.i().stamped_map, puts).value == map_b);
-    // }
-
-    // pub proof fn apply_put_is_map_plus_history(self, post: Self, puts: MsgHistory)
-    //     requires self.wf(), post.wf(), puts.wf(),
-    //         puts.seq_start == self.memtable.seq_end,
-    //         post.memtable == self.memtable.apply_puts(puts),
-    //         post.root == self.root
-    //     ensures post.i().stamped_map == MsgHistory::map_plus_history(self.i().stamped_map, puts)
-    //     decreases puts.len()
-    // {
-    //     if 0 < puts.len() {
-    //         let last = (puts.seq_end-1) as nat;
-    //         let last_put = puts.discard_old(last);
-    //         let short_puts = puts.discard_recent(last);
-    //         let intermediate_post = PivotBetree::State{root: self.root, memtable: self.memtable.apply_puts(short_puts)};
-
-    //         self.apply_put_is_map_plus_history(intermediate_post, short_puts);
-    //         self.memtable.apply_puts_end(short_puts);
-    //         assert(last_put.can_follow(intermediate_post.memtable.seq_end));
-
-    //         self.memtable.apply_puts_additive(short_puts, last_put);
-    //         assert_maps_equal!(short_puts.concat(last_put).msgs, puts.msgs);
-    //         assert(post.memtable == intermediate_post.memtable.apply_puts(last_put));
-
-    //         intermediate_post.apply_single_put_is_map_plus_history(post, last_put);
-    //         composite_single_put(short_puts, last_put, self.i().stamped_map);
-    //     }
-    // }
-
-    // pub proof fn put_refines(self, post: Self, lbl: PivotBetree::Label)
-    //     requires self.inv(), PivotBetree::State::put(self, post, lbl)
-    //     ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(PagedBetree::State::next);
-    //     reveal(PagedBetree::State::next_by);
-
-    //     self.apply_put_is_map_plus_history(post, lbl.get_Put_puts());
-    //     assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::put()));
-    // }
+        assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::put()));
+    }
 
     // pub proof fn freeze_as_refines(self, post: Self, lbl: PivotBetree::Label)
     //     requires self.inv(), PivotBetree::State::freeze_as(self, post, lbl)
@@ -628,17 +598,17 @@ impl PivotBetree::State {
     //     assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal()));
     // }
 
-    // pub proof fn next_refines(self, post: Self, lbl: PivotBetree::Label)
-    //     requires self.inv(), PivotBetree::State::next(self, post, lbl),
-    //     ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i()),
-    // {
-    //     reveal(PivotBetree::State::next);
-    //     reveal(PivotBetree::State::next_by);
+    pub proof fn next_refines(self, post: Self, lbl: PivotBetree::Label)
+        requires self.inv(), PivotBetree::State::next(self, post, lbl),
+        ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i()),
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-    //     match choose |step| PivotBetree::State::next_by(self, post, lbl, step)
-    //     {
-    //         PivotBetree::Step::query(receipt) => { self.query_refines(post, lbl, receipt); } 
-    //         PivotBetree::Step::put() => { self.put_refines(post, lbl); }
+        match choose |step| PivotBetree::State::next_by(self, post, lbl, step)
+        {
+            PivotBetree::Step::query(receipt) => { self.query_refines(post, lbl, receipt); } 
+            PivotBetree::Step::put() => { self.put_refines(post, lbl); }
     //         PivotBetree::Step::freeze_as() => { self.freeze_as_refines(post, lbl); }
     //         PivotBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_noop(post, lbl); }
     //         PivotBetree::Step::internal_grow() => { self.internal_grow_noop(post, lbl); }
@@ -646,9 +616,9 @@ impl PivotBetree::State {
     //         PivotBetree::Step::internal_flush(path, down_keys) => { self.internal_flush_noop(post, lbl, path, down_keys); }
     //         PivotBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_noop(post, lbl, path, compacted_buffers); }
     //         PivotBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
-    //         _ => { assert(false); } 
-    //     }
-    // }
+            _ => { assume(false); } 
+        }
+    }
 } // end impl PivotBetree::State
 
 }//verus
