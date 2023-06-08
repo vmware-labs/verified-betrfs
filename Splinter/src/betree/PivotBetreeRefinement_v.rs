@@ -107,7 +107,7 @@ impl BetreeNode {
         requires self.is_Node(), self.wf()
         ensures forall |k:Key| {
             (#[trigger] self.i_children().map[k]).wf()
-            &&& self.i_children().map[k] == self.i_child(k)
+            && self.i_children().map[k] == self.i_child(k)
         }
         decreases self, 1nat
     {
@@ -116,7 +116,7 @@ impl BetreeNode {
     
         assert forall |k:Key| {
             (#[trigger] self.i_children().map[k]).wf()
-            &&& self.i_children().map[k] == self.i_child(k)
+            && self.i_children().map[k] == self.i_child(k)
         } by {
             if self.key_in_domain(k) {
                 let r = self.get_Node_pivots().route(k);
