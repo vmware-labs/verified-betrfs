@@ -508,6 +508,7 @@ impl DiskView {
         self.build_tight_ensures(root); //new because not auto
         //assert(tight.wf());
         if root.is_Some() {
+            assume( false );    // Remove this assertion, and the then branch above starts failing.
             let next = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
             let inner = self.build_tight(next);
             self.build_tight_ensures(next);
@@ -603,7 +604,6 @@ impl DiskView {
             }
             assert( tight.is_tight(root) );
         } else {
-            assume( false );    // Remove this assertion, and the then branch above starts failing.
             // TODO(chris): Heavens this is ugly. tight.entries.Keys=={} was a lot more readable.
             assert( tight.entries.dom() == Set::<Address>::empty() );
             assert( tight.decodable(root) );
@@ -617,8 +617,13 @@ impl DiskView {
                 &&& #[trigger] other.is_sub_disk(tight)
             }) implies other =~= tight by {
                 if other.entries.dom().len() > 0 {
+                    let bogus = choose |addr| other.entries.dom().contains(addr);
+                    assert( !tight.entries.dom().contains(bogus) );
                     assert( !other.is_sub_disk(tight) );
                     assert( false );
+                } else {
+                    // uncomment this and suddenly the error on line 622 vanishes
+                    assert( other.entries =~= tight.entries );
                 }
             }
             assert( tight.is_tight(root) );
