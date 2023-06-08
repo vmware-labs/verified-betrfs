@@ -50,7 +50,7 @@ impl TotalKMMap
 
     pub open spec fn ext_equal(self, other: TotalKMMap) -> bool
     {
-        self.0.ext_equal(other.0)
+        self.0 =~= other.0
     }
 
     pub proof fn ext_equal_is_equality(self, other: TotalKMMap)

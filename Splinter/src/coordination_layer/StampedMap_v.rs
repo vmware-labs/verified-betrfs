@@ -26,7 +26,7 @@ pub open spec fn empty() -> StampedMap {
 
 impl StampedMap {
   pub open spec fn ext_equal(self, other: StampedMap) -> bool {
-    &&& self.value.0.ext_equal(other.value.0)
+    &&& self.value.0 =~= other.value.0
     &&& self.seq_end == other.seq_end
   }
 

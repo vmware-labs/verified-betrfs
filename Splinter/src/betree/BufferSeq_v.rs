@@ -24,7 +24,7 @@ pub open spec fn empty_buffer_seq() -> BufferSeq
 impl BufferSeq {
     pub open spec fn ext_equal(self, other: BufferSeq) -> bool
     {
-        self.buffers.ext_equal(other.buffers)
+        self.buffers =~= other.buffers
     }
 
     pub open spec fn len(self) -> nat {

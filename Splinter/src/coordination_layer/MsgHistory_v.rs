@@ -32,7 +32,7 @@ impl MsgHistory {
 
   // Call this instead of using `==` when checking/asserting that
   pub open spec fn ext_equal(self, other: MsgHistory) -> bool {
-    &&& self.msgs.ext_equal(other.msgs)
+    &&& self.msgs =~= other.msgs
     &&& self.seq_start == other.seq_start
     &&& self.seq_end == other.seq_end
   }

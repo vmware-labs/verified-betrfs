@@ -138,7 +138,15 @@ impl Element {
                     assert(false);
                 }
                 assert(idx == 0);
-                assert(out-1 == -1);
+                assert(run[0] == needle);
+
+                if run.len() == 1 {
+                    assert(out == 0);
+                } else {
+                    assert(Element::lt(run[0], run[1]));
+                    assert(sub_run[0] == run[1]);
+                    assert(out == 0);
+                }
             }
         }
     }
