@@ -3,6 +3,7 @@
 //
 #![allow(unused_imports)]
 use builtin::*;
+use vstd::prelude::*;
 
 use builtin_macros::*;
 use state_machines_macros::state_machine;
@@ -40,7 +41,7 @@ impl JournalRecord {
         boundary_lsn < self.message_seq.seq_start ==> self.cropped_prior(boundary_lsn).is_Some()
     }
 
-    pub closed spec fn cropped_prior(self, boundary_lsn: LSN) -> Pointer {
+    pub open spec fn cropped_prior(self, boundary_lsn: LSN) -> Pointer {
         if boundary_lsn < self.message_seq.seq_start { self.prior_rec } else { None }
     }
 
@@ -503,6 +504,26 @@ impl DiskView {
         }
     }
 
+    // Dafny didn't need this proof
+    pub proof fn tight_empty_disk(self)
+    requires
+        self.decodable(None),
+    ensures
+        self.build_tight(None).is_tight(None),
+    {
+        let tight = self.build_tight(None);
+        assert( tight.valid_ranking(Map::empty()) ); // new witness; not needed in Dafny
+        assert forall |other: Self|
+        ({
+            &&& other.decodable(None)
+            &&& other.acyclic()
+            &&& tight.iptr(None) == other.iptr(None)
+            &&& #[trigger] other.is_sub_disk(tight)
+        }) implies other =~= tight by {
+            assert( other.entries =~= tight.entries );
+        }
+    }
+
     pub proof fn tight_sub_disk(self, root: Pointer, tight: Self)
     requires
         self.decodable(root),
@@ -564,8 +585,7 @@ impl DiskView {
                     // every line below here is both new and necessary
                     assert( inner.is_tight(next) ); // new trigger holy crap how did we not get this
                                                     // calling tight_sub_disk!!!??
-                    assert forall |a| inner.entries.contains_key(a) ==> other_inner.entries.contains_key(a) && other_inner.entries[a] == inner.entries[a] by {
-                    }
+                    assert( forall |a| inner.entries.contains_key(a) ==> #[trigger] other_inner.entries.contains_key(a) && other_inner.entries[a] == inner.entries[a] );
                     assert( other_inner =~= inner );
                     assert( other.entries =~= tight.entries );
                     assert( other =~= tight );
@@ -573,19 +593,8 @@ impl DiskView {
                 assert( tight.decodable(root) );
                 assert( tight.acyclic() );  // new trigger
             }
-//             assert( tight.is_tight(root) );
         } else {
-            // Nothing in this branch was needed in Dafny.
-            assert( tight.valid_ranking(Map::empty()) ); // new witness; not needed in Dafny
-            assert forall |other: Self|
-            ({
-                &&& other.decodable(root)
-                &&& other.acyclic()
-                &&& tight.iptr(root) == other.iptr(root)
-                &&& #[trigger] other.is_sub_disk(tight)
-            }) implies other =~= tight by {
-                assert( other.entries =~= tight.entries );
-            }
+            self.tight_empty_disk()
         }
     }
 
@@ -602,11 +611,14 @@ impl DiskView {
     decreases big.the_rank_of(root)
     {
         if root.is_None() {
-            assert( tight.valid_ranking(big.the_ranking()) );
+            big.tight_empty_disk()
         } else {
             big.build_tight_builds_sub_disks(root);
             big.tight_sub_disk(root, tight);
-            assert( tight.valid_ranking(big.the_ranking()) );
+            // Dafny could trigger just on valid_ranking, but we seem to need to poke at
+            // contains_key. How many of these problems would go away with an axiom tying
+            // dom.contains to contains_key?
+            assert( forall |addr| tight.entries.contains_key(addr) ==> big.entries.contains_key(addr) );
             tight.iptr_ignores_extra_blocks(root, big);
         }
     }

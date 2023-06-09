@@ -23,8 +23,44 @@ verus!{
 //     }
 // }
 
-impl TruncatedJournal {
+impl DiskView {
+    pub proof fn iptr_output_valid(self, ptr: Pointer)
+    requires
+        self.decodable(ptr),
+        self.acyclic(),
+        self.block_in_bounds(ptr),
+    ensures
+        self.iptr(ptr).is_Some() ==> self.iptr(ptr).unwrap().valid(self.boundary_lsn),
+    decreases self.the_rank_of(ptr)
+    {
+        if ptr.is_Some() {
+            self.iptr_output_valid(self.next(ptr));
+        }
+    }
 
+    pub proof fn discard_interp(self, lsn: LSN, post: Self, ptr: Pointer)
+    requires
+        self.wf(),
+        self.acyclic(),
+        self.boundary_lsn <= lsn,
+        post == self.discard_old(lsn),
+        self.block_in_bounds(ptr),
+        post.block_in_bounds(ptr),
+    ensures
+        post.acyclic(),
+        self.iptr(ptr).is_Some() ==> self.iptr(ptr).unwrap().valid(lsn),
+        post.iptr(ptr) == PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn),
+    decreases if ptr.is_Some() { self.the_ranking()[ptr.unwrap()]+1 } else { 0 }
+    {
+        self.iptr_output_valid(ptr);
+        assert( post.valid_ranking(self.the_ranking()) );
+        if ptr.is_Some() && lsn < self.entries[ptr.unwrap()].message_seq.seq_start {
+            self.discard_interp(lsn, post, post.next(ptr));
+        }
+    }
+}
+
+impl TruncatedJournal {
     pub open spec fn iptr(dv: DiskView, ptr: Pointer) -> (out: Box<Option<PagedJournal_v::JournalRecord>>)
     recommends
         dv.decodable(ptr),
@@ -57,10 +93,43 @@ impl TruncatedJournal {
             freshest_rec: *Self::iptr(self.disk_view, self.freshest_rec),
         }
     }
+
+    pub proof fn mkfs_refines()
+    ensures
+        Self::mkfs().disk_view.acyclic(),
+        Self::mkfs().i() =~= PagedJournal_v::mkfs(),
+    {
+        assert( Self::mkfs().disk_view.valid_ranking(Map::empty()) );
+    }
+
+    pub proof fn tj_discard_interp(self, lsn: LSN, post: Self)
+    requires
+        self.wf(),
+        self.disk_view.acyclic(),
+        self.seq_start() <= lsn <= self.seq_end(),
+        post == self.discard_old(lsn),
+    ensures
+        post.disk_view.acyclic(),
+        self.i().discard_old_defn(lsn) == post.i(),
+    {
+        assert( post.disk_view.valid_ranking(self.disk_view.the_ranking()) );
+        self.disk_view.discard_interp(lsn, post.disk_view, post.freshest_rec);
+        if self.i().seq_end() != lsn {
+            assume(false); // LEFT OFF HERE
+            assert( self.i().discard_old_defn(lsn).freshest_rec =~~=
+                    PagedJournal_v::JournalRecord::discard_old_journal_rec(self.i().freshest_rec, lsn) );
+            assert( post.i().freshest_rec == *Self::iptr(post.disk_view, post.freshest_rec) );
+
+            assert( post.i().freshest_rec ==
+                    PagedJournal_v::JournalRecord::discard_old_journal_rec(self.disk_view.iptr(post.freshest_rec), lsn) );
+            assert( self.i().freshest_rec == self.disk_view.iptr(post.freshest_rec) );
+        }
+        assert( self.i().discard_old_defn(lsn).freshest_rec =~~= post.i().freshest_rec  );
+        assert( self.i().discard_old_defn(lsn) =~~= post.i() );
+    }
 }
 
 impl LinkedJournal::Label {
-
     pub open spec fn i(self) -> PagedJournal::Label
     {
         match self {
@@ -72,7 +141,9 @@ impl LinkedJournal::Label {
             Self::Internal{} => PagedJournal::Label::Internal{},
         }
     }
+}
 
+impl LinkedJournal::State {
 }
 
 } // verus!
