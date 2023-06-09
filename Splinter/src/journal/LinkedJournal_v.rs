@@ -971,7 +971,12 @@ state_machine!{ LinkedJournal {
 
     #[inductive(internal_journal_marshal)]
     fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) {
-        assume( false );
+        let pre_rank = pre.truncated_journal.disk_view.the_ranking();
+        let post_rank = pre_rank.insert(addr,
+                            if pre.truncated_journal.freshest_rec.is_None() { 0 }
+                            else {pre_rank[pre.truncated_journal.freshest_rec.unwrap()] + 1 });
+        assert( post.truncated_journal.disk_view.valid_ranking(post_rank) );    // witness
+                                           
     }
 
     #[inductive(internal_journal_no_op)]
