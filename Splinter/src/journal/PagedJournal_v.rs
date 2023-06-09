@@ -432,7 +432,7 @@ state_machine!{ PagedJournal {
         require pre.truncated_journal.freeze_for_commit(lbl.get_FreezeForCommit_frozen_journal(), depth);
     }}
 
-    transition!{ observe_fresh_journal(lbl: Label) {
+    transition!{ query_end_lsn(lbl: Label) {
         require lbl.is_QueryEndLsn();
         require lbl.get_QueryEndLsn_end_lsn() == pre.seq_end();
     }}
@@ -482,7 +482,7 @@ state_machine!{ PagedJournal {
         update unmarshalled_tail = pre.unmarshalled_tail.discard_old(cut);
     }}
 
-    transition!{ internal_journal_noop(lbl: Label) {
+    transition!{ internal_journal_no_op(lbl: Label) {
         require lbl.is_Internal();
     }}
 

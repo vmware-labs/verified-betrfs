@@ -385,6 +385,9 @@ impl DiskView {
     recommends
         self.decodable(ptr),
         self.acyclic(),
+//     ensures
+//         self.block_in_bounds(ptr),
+//         out.is_Some() ==> out.unwrap().valid(self.boundary_lsn)
     decreases self.the_rank_of(ptr)
     {
         decreases_when(self.decodable(ptr) && self.acyclic());
@@ -873,14 +876,14 @@ state_machine!{ LinkedJournal {
         require label_fj == cropped_tj.discard_old(new_bdy).build_tight();
     }}
 
-    transition!{ query_end_lsn(lbl: Label, depth: nat) {
+    transition!{ query_end_lsn(lbl: Label) {
         require pre.wf();
         require Self::lbl_wf(lbl);
         require lbl.is_QueryEndLsn();
         require lbl.get_QueryEndLsn_end_lsn() == pre.seq_end();
     }}
 
-    transition!{ put(lbl: Label, depth: nat) {
+    transition!{ put(lbl: Label) {
         require pre.wf();
         //require Self::lbl_wf(lbl);
         require lbl.get_Put_messages().wf();    // direct translation. TODO fold into lbl_wf
@@ -889,7 +892,7 @@ state_machine!{ LinkedJournal {
         update unmarshalled_tail = pre.unmarshalled_tail.concat(lbl.get_Put_messages());
     }}
 
-    transition!{ discard_old(lbl: Label, depth: nat) {
+    transition!{ discard_old(lbl: Label) {
         require pre.wf();
         require Self::lbl_wf(lbl);
         require lbl.is_DiscardOld();
@@ -950,38 +953,20 @@ state_machine!{ LinkedJournal {
         fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
 
         #[inductive(query_end_lsn)]
-        fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
+        fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label) { }
 
         #[inductive(put)]
-        fn put_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
+        fn put_inductive(pre: Self, post: Self, lbl: Label) {
         }
 
         #[inductive(discard_old)]
-        fn discard_old_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
-//             let loose = pre.truncated_journal.discard_old(lbl.get_DiscardOld_start_lsn());
-//             let dv = post.truncated_journal.disk_view;
-//             loose.disk_view.build_tight_ensures(loose.freshest_rec,
-//                  loose.disk_view.build_tight(loose.freshest_rec));
-//             //loose.disk_view.build_tight_auto(); auto couldn't guess ptr?
-//             assert( post.truncated_journal.disk_view.entries_wf() );
-// 
-//             assert( loose.disk_view.nondangling_pointers() );
-//             assert( loose.disk_view.is_nondangling_pointer(
-//                     loose.freshest_rec) );
-
+        fn discard_old_inductive(pre: Self, post: Self, lbl: Label) {
             let lsn = lbl.get_DiscardOld_start_lsn();
             let cropped_tj = pre.truncated_journal.discard_old(lsn);
             let tight_tj = cropped_tj.build_tight();
             assert( cropped_tj.disk_view.valid_ranking(
                     pre.truncated_journal.disk_view.the_ranking()) ); // witness to acyclic
             DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, tight_tj.disk_view);
-            assert( post.truncated_journal.disk_view.nondangling_pointers() );
-            assert( post.truncated_journal.disk_view.is_nondangling_pointer(
-                    post.truncated_journal.freshest_rec) );
-            assert( post.truncated_journal.wf() );
-            assert( post.wf() );
-            assert( post.truncated_journal.decodable() );
-            assert( post.truncated_journal.disk_view.acyclic() );
         }
 
         #[inductive(internal_journal_marshal)]

@@ -488,7 +488,7 @@ impl PagedJournal::State {
             PagedJournal::Step::freeze_for_commit(depth) => {
                 self.freeze_for_commit_refines(post, lbl, depth);
             }
-            PagedJournal::Step::observe_fresh_journal() => {
+            PagedJournal::Step::query_end_lsn() => {
                 assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::observe_fresh_journal())); // new witness
             }
             PagedJournal::Step::put() => {
@@ -501,7 +501,7 @@ impl PagedJournal::State {
             PagedJournal::Step::internal_journal_marshal(cut) => {
                 self.marshall_refines(post, lbl, cut);
             }
-            PagedJournal::Step::internal_journal_noop() => {
+            PagedJournal::Step::internal_journal_no_op() => {
                 //assert_maps_equal!( post.i().journal.msgs, self.i().journal.msgs );    // newly required extensionality; this branch used to be a freebie.
                 assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::internal())); // new witness
             }

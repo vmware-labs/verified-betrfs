@@ -57,31 +57,63 @@ impl DiskView {
         if ptr.is_Some() && lsn < self.entries[ptr.unwrap()].message_seq.seq_start {
             self.discard_interp(lsn, post, post.next(ptr));
         }
+        // TODO(chris): adding this assert completes the proof, even though the identical string
+        // appears in the ensures.
+        assert( post.iptr(ptr) == PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
+    }
+
+//      pub proof fn sigh<K, V>(small: Map<K, V>, big: Map<K, V>)
+//      requires
+//          small.le(big),
+//      ensures
+//          //small.dom().subset_of(big.dom()),
+//          small.dom().subset_of(big.dom()),
+//      {
+//      }
+
+
+
+    // In Dafny, this entire lemma was unneeded; call sites could be replaced by this single line:
+    //   assert( self.valid_ranking(big.the_ranking()) ); // witness
+    pub proof fn sub_disk_ranking(self, big: DiskView)
+    requires
+        big.wf(),
+        big.acyclic(),
+        self.wf(),
+        self.is_sub_disk(big),
+    ensures
+        self.acyclic(),
+    {
+        let ranking = big.the_ranking();
+    // TODO(chris): jon tried writing a contains_key == dom.contains broadcast_forall, but it
+    // didn't solve this problem.
+        assert( forall |addr| #[trigger] self.entries.contains_key(addr) ==> big.entries.dom().contains(addr) );
+        assert( self.valid_ranking(big.the_ranking()) ); // witness
+    }
+
+    // TODO(jonh): how does this relate to IPtrFraming!?
+    pub proof fn sub_disk_interp(self, big: DiskView, ptr: Pointer)
+    requires
+        big.wf(),
+        big.acyclic(),
+        self.wf(),
+        self.is_sub_disk(big),
+        self.boundary_lsn == big.boundary_lsn,
+        self.is_nondangling_pointer(ptr),
+    ensures
+        self.acyclic(),
+        self.iptr(ptr) == big.iptr(ptr),
+    decreases if ptr.is_Some() { self.the_ranking()[ptr.unwrap()]+1 } else { 0 }
+    {
+        assert( big.valid_ranking(big.the_ranking()) ); // witness; new in Verus
+        self.sub_disk_ranking(big);
+        if ptr.is_Some() {
+            self.sub_disk_interp(big, big.next(ptr));
+        }
     }
 }
 
 impl TruncatedJournal {
-    pub open spec fn iptr(dv: DiskView, ptr: Pointer) -> (out: Box<Option<PagedJournal_v::JournalRecord>>)
-    recommends
-        dv.decodable(ptr),
-        dv.acyclic(),
-    // ensures
-        // dv.block_in_bounds(ptr),
-        // out.is_Some() ==> out.unwrape().valid(dv.boundary_lsn)
-    decreases dv.the_rank_of(ptr)
-    {
-        decreases_when(dv.decodable(ptr) && dv.acyclic());  // can't we just use the recommends?
-        match ptr {
-            None => Box::new(None),
-            Some(addr) => {
-                let jr = dv.entries[addr];
-                Box::new(Some(PagedJournal_v::JournalRecord{
-                    message_seq: jr.message_seq,
-                    prior_rec: Self::iptr(dv, jr.cropped_prior(dv.boundary_lsn)),
-                }))
-            }
-        }
-    }
 
     pub open spec fn i(self) -> (out: PagedJournal_v::TruncatedJournal)
     recommends
@@ -90,7 +122,7 @@ impl TruncatedJournal {
     {
         PagedJournal_v::TruncatedJournal{
             boundary_lsn: self.disk_view.boundary_lsn,
-            freshest_rec: *Self::iptr(self.disk_view, self.freshest_rec),
+            freshest_rec: self.disk_view.iptr(self.freshest_rec),
         }
     }
 
@@ -102,7 +134,7 @@ impl TruncatedJournal {
         assert( Self::mkfs().disk_view.valid_ranking(Map::empty()) );
     }
 
-    pub proof fn tj_discard_interp(self, lsn: LSN, post: Self)
+    pub proof fn discard_interp(self, lsn: LSN, post: Self)
     requires
         self.wf(),
         self.disk_view.acyclic(),
@@ -114,19 +146,8 @@ impl TruncatedJournal {
     {
         assert( post.disk_view.valid_ranking(self.disk_view.the_ranking()) );
         self.disk_view.discard_interp(lsn, post.disk_view, post.freshest_rec);
-        if self.i().seq_end() != lsn {
-            assume(false); // LEFT OFF HERE
-            assert( self.i().discard_old_defn(lsn).freshest_rec =~~=
-                    PagedJournal_v::JournalRecord::discard_old_journal_rec(self.i().freshest_rec, lsn) );
-            assert( post.i().freshest_rec == *Self::iptr(post.disk_view, post.freshest_rec) );
-
-            assert( post.i().freshest_rec ==
-                    PagedJournal_v::JournalRecord::discard_old_journal_rec(self.disk_view.iptr(post.freshest_rec), lsn) );
-            assert( self.i().freshest_rec == self.disk_view.iptr(post.freshest_rec) );
-        }
-        assert( self.i().discard_old_defn(lsn).freshest_rec =~~= post.i().freshest_rec  );
-        assert( self.i().discard_old_defn(lsn) =~~= post.i() );
     }
+
 }
 
 impl LinkedJournal::Label {
@@ -141,9 +162,65 @@ impl LinkedJournal::Label {
             Self::Internal{} => PagedJournal::Label::Internal{},
         }
     }
+
 }
 
 impl LinkedJournal::State {
+    pub open spec fn i(self) -> PagedJournal::State
+    {
+        if self.wf() && self.truncated_journal.disk_view.acyclic() {
+            PagedJournal::State{
+                truncated_journal: self.truncated_journal.i(),
+                unmarshalled_tail: self.unmarshalled_tail,
+            }
+        } else {
+            choose |v| PagedJournal::State::init(v)
+        }
+    }
+
+    pub proof fn next_refines(self, post: Self, lbl: LinkedJournal::Label)
+    requires
+        self.inv(),
+        LinkedJournal::State::next(self, post, lbl),
+    ensures
+        PagedJournal::State::next(self.i(), post.i(), lbl.i()),
+    {
+        reveal(PagedJournal::State::next_by);    // unfortunate defaults
+        reveal(PagedJournal::State::next);    // unfortunate defaults
+        reveal(LinkedJournal::State::next_by);
+        reveal(LinkedJournal::State::next);
+
+        let step = choose |step| LinkedJournal::State::next_by(self, post, lbl, step);
+        assert( LinkedJournal::State::next_by(self, post, lbl, step) );
+        match step {
+            LinkedJournal::Step::read_for_recovery(depth) =>  {
+                assume(false);
+                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::read_for_recovery(depth)) );
+            }
+            LinkedJournal::Step::freeze_for_commit(depth) =>  {
+                assume(false);
+                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::freeze_for_commit(depth)) );
+            }
+            LinkedJournal::Step::query_end_lsn() =>  {
+                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::query_end_lsn()) );
+            }
+            LinkedJournal::Step::put() =>  {
+                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::put()) );
+            }
+            LinkedJournal::Step::discard_old() =>  {
+                assume(false);
+                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::discard_old()) );
+            }
+            LinkedJournal::Step::internal_journal_marshal(cut, addr) =>  {
+                assume(false);
+                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::internal_journal_marshal(cut)) );
+            }
+            LinkedJournal::Step::internal_journal_no_op() =>  {
+                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::internal_journal_no_op()) );
+            }
+            _ => { assert(false); }
+        }
+    }
 }
 
 } // verus!
