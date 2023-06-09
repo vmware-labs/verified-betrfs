@@ -946,39 +946,39 @@ state_machine!{ LinkedJournal {
         &&& self.truncated_journal.disk_view.acyclic()
     }
 
-        #[inductive(read_for_recovery)]
-        fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
+    #[inductive(read_for_recovery)]
+    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
 
-        #[inductive(freeze_for_commit)]
-        fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
+    #[inductive(freeze_for_commit)]
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) { }
 
-        #[inductive(query_end_lsn)]
-        fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label) { }
+    #[inductive(query_end_lsn)]
+    fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label) { }
 
-        #[inductive(put)]
-        fn put_inductive(pre: Self, post: Self, lbl: Label) {
-        }
+    #[inductive(put)]
+    fn put_inductive(pre: Self, post: Self, lbl: Label) {
+    }
 
-        #[inductive(discard_old)]
-        fn discard_old_inductive(pre: Self, post: Self, lbl: Label) {
-            let lsn = lbl.get_DiscardOld_start_lsn();
-            let cropped_tj = pre.truncated_journal.discard_old(lsn);
-            let tight_tj = cropped_tj.build_tight();
-            assert( cropped_tj.disk_view.valid_ranking(
-                    pre.truncated_journal.disk_view.the_ranking()) ); // witness to acyclic
-            DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, tight_tj.disk_view);
-        }
+    #[inductive(discard_old)]
+    fn discard_old_inductive(pre: Self, post: Self, lbl: Label) {
+        let lsn = lbl.get_DiscardOld_start_lsn();
+        let cropped_tj = pre.truncated_journal.discard_old(lsn);
+        let tight_tj = cropped_tj.build_tight();
+        assert( cropped_tj.disk_view.valid_ranking(
+                pre.truncated_journal.disk_view.the_ranking()) ); // witness to acyclic
+        DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, tight_tj.disk_view);
+    }
 
-        #[inductive(internal_journal_marshal)]
-        fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) {
-            assume( false );
-        }
+    #[inductive(internal_journal_marshal)]
+    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) {
+        assume( false );
+    }
 
-        #[inductive(internal_journal_no_op)]
-        fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
+    #[inductive(internal_journal_no_op)]
+    fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
 
-        #[inductive(initialize)]
-        fn initialize_inductive(post: Self, truncated_journal: TruncatedJournal) { }
+    #[inductive(initialize)]
+    fn initialize_inductive(post: Self, truncated_journal: TruncatedJournal) { }
 
 
 } } // state_machine!
