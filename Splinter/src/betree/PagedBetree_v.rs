@@ -86,7 +86,7 @@ impl BetreeNode {
 
     pub open spec fn empty_root() -> BetreeNode {
         BetreeNode::Node {
-            buffers: BufferSeq{ buffers: Seq::empty()},
+            buffers: empty_buffer_seq(),
             children: empty_child_map()
         }
     }
@@ -387,7 +387,7 @@ state_machine!{ PagedBetree {
         require let Label::Internal{} = lbl;
         require pre.wf();
         update root = BetreeNode::Node{
-            buffers: BufferSeq{ buffers: Seq::empty() },
+            buffers: empty_buffer_seq(),
             children: constant_child_map(pre.root)
         };
     }}

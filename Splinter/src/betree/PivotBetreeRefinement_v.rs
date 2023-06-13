@@ -15,12 +15,14 @@ use crate::coordination_layer::StampedMap_v::*;
 // use crate::coordination_layer::MsgHistory_v::*;
 // use crate::coordination_layer::AbstractMap_v::*;
 use crate::betree::Domain_v::*;
-// use crate::betree::Buffer_v::*;
+use crate::betree::Buffer_v::*;
 use crate::betree::BufferSeq_v::*;
 use crate::betree::Memtable_v::*;
 use crate::betree::PagedBetree_v;
 use crate::betree::PagedBetree_v::PagedBetree;
 use crate::betree::PivotBetree_v::*;
+use crate::betree::SplitRequest_v::*;
+
 
 verus! {
 
@@ -70,6 +72,17 @@ impl BetreeNode {
         }
     }
 
+    // used as a trigger but not in defn of i_children bc closure can't take recursive fn
+    pub open spec fn i_child(self, k: Key) -> PagedBetree_v::BetreeNode
+        recommends self.is_Node()
+    {
+        if self.key_in_domain(k) {
+            self.child(k).i()
+        } else {
+            PagedBetree_v::BetreeNode::Nil{}
+        }
+    }
+
     pub proof fn i_children_seq_lemma(self, start: int)
         requires self.wf(), self.is_Node(), 0 <= start <= self.get_Node_children().len()
         ensures self.i_children_seq(start).len() == self.get_Node_children().len() - start,
@@ -92,14 +105,14 @@ impl BetreeNode {
         }
     }
 
-    // used as a trigger but not in defn of i_children bc closure can't take recursive fn
-    pub open spec fn i_child(self, k: Key) -> PagedBetree_v::BetreeNode
-        recommends self.is_Node()
+    pub proof fn i_children_seq_same(self, other: BetreeNode, start: int)
+        requires self.wf(), self.is_Node(), 0 <= start <= self.get_Node_children().len(),
+            other.wf(), other.is_Node(), other.get_Node_children() == self.get_Node_children()
+        ensures self.i_children_seq(start) == other.i_children_seq(start)
+        decreases self.get_Node_children().len()-start
     {
-        if self.key_in_domain(k) {
-            self.child(k).i()
-        } else {
-            PagedBetree_v::BetreeNode::Nil{}
+        if start < self.get_Node_children().len() {
+            self.i_children_seq_same(other, start+1);
         }
     }
 
@@ -150,6 +163,27 @@ impl BetreeNode {
         })
     }
 
+    pub proof fn empty_root_refines()
+        ensures Self::empty_root(total_domain()).i() == PagedBetree_v::BetreeNode::empty_root()
+    {
+        let empty = Self::empty_root(total_domain());
+        let empty_child_map = PagedBetree_v::empty_child_map();
+
+        assert(empty.wf_children()); // trigger
+        empty.i_children_lemma();
+
+        assert forall |k: Key| true 
+        implies ( #[trigger] empty.i().get_Node_children().map[k] == empty_child_map.map[k])
+        by {
+            empty.get_Node_pivots().route_lemma(k);
+            assert(empty.get_Node_pivots().route(k) == 0);
+            assert(empty.child(k).is_Nil());
+            assert(empty_child_map.map[k].is_Nil());
+        }
+
+        assert(empty.i().get_Node_children().map =~= empty_child_map.map);
+        assert(empty.i() == PagedBetree_v::BetreeNode::empty_root());
+    }
 } // end impl BetreeNode
 
 pub open spec fn i_stamped_betree(stamped: StampedBetree) -> PagedBetree_v::StampedBetree
@@ -330,21 +364,10 @@ impl Path{
             if result.is_Node() {
                 self.replaced_children_matching_domains(replacement);
                 assert forall |i:nat| i < self.node.get_Node_children().len() ==> { // trigger
-                    #[trigger] self.node.valid_child_index(i)
-                    && self.node.get_Node_children()[i as int].is_Node()
+                    self.node.valid_child_index(i)
+                    && (#[trigger] self.node.get_Node_children()[i as int].is_Node())
                     && self.node.get_Node_children()[i as int].wf()
                 } by { }
-
-                assert forall |i:nat|  
-                ( 
-                    #[trigger] result.valid_child_index(i) 
-                    && result.get_Node_children()[i as int].is_Node() 
-                    && result.get_Node_children()[i as int].local_structure() 
-                ) implies {
-                    result.get_Node_children()[i as int].my_domain() == result.child_domain(i)
-                } by {
-                    assert(self.node.valid_child_index(i));
-                }
 
                 assert(result.linked_children());
             }
@@ -424,6 +447,25 @@ impl PivotBetree::Label {
     }
 } // end impl PivotBetree::Label
 
+// pub open spec fn split_key
+
+// pub open spec fn split_left_keys(path: Path, request: SplitRequest) -> Set<Key>
+//     recommends path.valid(), path.target().can_split_parent(request)
+// {
+//     let child_idx = request.get_child_idx();
+//     let child_domain = path.target().child_domain(child_idx);
+
+//     let split_key = if request.is_SplitLeaf() { 
+//             request.get_SplitLeaf_split_key() 
+//         } else {
+//             let old_child = path.target().get_Node_children()[child_idx as int];
+//             to_key(old_child.get_Node_pivots().pivots[request.get_SplitIndex_child_pivot_idx() as int])
+//         };
+
+
+//     // Set::new(|k| child_domain.contains(k) && )
+//     Set::empty()
+// }
 
 impl PivotBetree::State {
     pub open spec fn inv(self) -> bool {
@@ -464,78 +506,97 @@ impl PivotBetree::State {
         assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::put()));
     }
 
-    // pub proof fn freeze_as_refines(self, post: Self, lbl: PivotBetree::Label)
-    //     requires self.inv(), PivotBetree::State::freeze_as(self, post, lbl)
-    //     ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(PagedBetree::State::next);
-    //     reveal(PagedBetree::State::next_by);
+    pub proof fn freeze_as_refines(self, post: Self, lbl: PivotBetree::Label)
+        requires self.inv(), PivotBetree::State::freeze_as(self, post, lbl)
+        ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PagedBetree::State::next);
+        reveal(PagedBetree::State::next_by);
 
-    //     self.root.push_empty_memtable_refines(self.memtable);
-    //     assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::freeze_as()));
-    // }
+        self.root.i_wf();
+        assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::freeze_as()));
+    }
 
-    // pub proof fn internal_flush_memtable_noop(self, post: Self, lbl: PivotBetree::Label)
-    //     requires self.inv(), PivotBetree::State::internal_flush_memtable(self, post, lbl)
-    //     ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(PagedBetree::State::next);
-    //     reveal(PagedBetree::State::next_by);
+    pub proof fn internal_flush_memtable_refines(self, post: Self, lbl: PivotBetree::Label)
+        requires self.inv(), PivotBetree::State::internal_flush_memtable(self, post, lbl)
+        ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PagedBetree::State::next);
+        reveal(PagedBetree::State::next_by);
 
-    //     post.root.push_empty_memtable_refines(post.memtable);
-    //     assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal()));
-    // }
+        self.root.i_wf();
+        assert(post.root.wf());
 
-    // pub proof fn equivalent_roots(self, post: Self)
-    //     requires self.wf(), post.wf(), 
-    //         self.memtable == post.memtable, 
-    //         self.root.i() == post.root.i()
-    //     ensures self.i() == post.i()
-    // {
-    //     self.root.memtable_distributes_over_betree(self.memtable);
-    //     post.root.memtable_distributes_over_betree(post.memtable);
-    // }
+        let a = self.root.push_memtable(self.memtable).value.i();
+        let b = self.root.i().push_memtable(self.memtable).value;
 
-    // pub proof fn internal_grow_noop(self, post: Self, lbl: PivotBetree::Label)
-    //     requires self.inv(), PivotBetree::State::internal_grow(self, post, lbl)
-    //     ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(PagedBetree::State::next);
-    //     reveal(PagedBetree::State::next_by);
+        BetreeNode::empty_root_refines();
+        let equiv_children_node = if self.root.is_Node() { self.root } else { BetreeNode::empty_root(total_domain()) };
+        equiv_children_node.i_children_seq_same(self.root.push_memtable(self.memtable).value, 0);
 
-    //     assert(post.root.i().ext_equal(self.root.i()));
-    //     self.equivalent_roots(post);
-    //     assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal()));
-    // }
+        assert(a.get_Node_buffers() =~= b.get_Node_buffers());
+        assert(a.get_Node_children().map =~= b.get_Node_children().map);
 
-    // pub proof fn internal_split_noop(self, post: Self, lbl: PivotBetree::Label, path: Path, left_keys: Set<Key>, right_keys: Set<Key>)
-    //     requires self.inv(), PivotBetree::State::internal_split(self, post, lbl, path, left_keys, right_keys)
-    //     ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(PagedBetree::State::next);
-    //     reveal(PagedBetree::State::next_by);
+        assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal_flush_memtable()));
+    }
 
-    //     let target = path.target();
-    //     path.target_wf();
+    pub proof fn internal_grow_refines(self, post: Self, lbl: PivotBetree::Label)
+        requires self.inv(), PivotBetree::State::internal_grow(self, post, lbl)
+        ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PagedBetree::State::next);
+        reveal(PagedBetree::State::next_by);
 
-    //     let top = target.split(left_keys, right_keys);
-    //     target.split_wf(left_keys, right_keys);
+        self.root.i_wf();
+        post.root.i_wf();
 
-    //     assert forall |k: Key| true ==>
-    //     ({ target.i_node_at(k) == top.i_node_at(k) })
-    //     by {
-    //         if left_keys.contains(k) {
-    //             target.child(k).apply_filter_equivalence(left_keys, k);
-    //         } else if right_keys.contains(k) {
-    //             target.child(k).apply_filter_equivalence(right_keys, k);
-    //         }
-    //     }
+        assert forall |k| true
+        implies post.i().root.get_Node_children().map[k] == PagedBetree_v::constant_child_map(self.i().root).map[k]
+        by {
+            post.root.i_children_lemma();
+            post.root.get_Node_pivots().route_lemma(k);
+        }
 
-    //     assert(target.i().ext_equal(top.i()));
-    //     path.substitute_equivalence(top);
-    //     self.equivalent_roots(post);
-    //     assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal()));
-    // }
+        assert(post.i().root.get_Node_children().map =~= PagedBetree_v::constant_child_map(self.root.i()).map);
+        assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal_grow()));
+    }
+
+    pub proof fn internal_split_refines(self, post: Self, lbl: PivotBetree::Label, path: Path, split_request: SplitRequest)
+        requires self.inv(), PivotBetree::State::internal_split(self, post, lbl, path, split_request)
+        ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PagedBetree::State::next);
+        reveal(PagedBetree::State::next_by);
+
+        // self.root.i_wf();
+        // path.target().i_wf();
+        // post.root.i_wf();
+        // path.i_valid();
+        // path.target_commutes_with_i();
+
+
+        // let target = path.target();
+        // path.target_wf();
+
+        // let top = target.split(left_keys, right_keys);
+        // target.split_wf(left_keys, right_keys);
+
+        // assert forall |k: Key| true ==>
+        // ({ target.i_node_at(k) == top.i_node_at(k) })
+        // by {
+        //     if left_keys.contains(k) {
+        //         target.child(k).apply_filter_equivalence(left_keys, k);
+        //     } else if right_keys.contains(k) {
+        //         target.child(k).apply_filter_equivalence(right_keys, k);
+        //     }
+        // }
+
+        // assert(target.i().ext_equal(top.i()));
+        // path.substitute_equivalence(top);
+        // self.equivalent_roots(post);
+        // assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal()));
+        assume(false);
+    }
 
     // pub proof fn internal_flush_noop(self, post: Self, lbl: PivotBetree::Label, path: Path, down_keys: Set<Key>)
     //     requires self.inv(), PivotBetree::State::internal_flush(self, post, lbl, path, down_keys)
@@ -609,10 +670,10 @@ impl PivotBetree::State {
         {
             PivotBetree::Step::query(receipt) => { self.query_refines(post, lbl, receipt); } 
             PivotBetree::Step::put() => { self.put_refines(post, lbl); }
-    //         PivotBetree::Step::freeze_as() => { self.freeze_as_refines(post, lbl); }
-    //         PivotBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_noop(post, lbl); }
-    //         PivotBetree::Step::internal_grow() => { self.internal_grow_noop(post, lbl); }
-    //         PivotBetree::Step::internal_split(path, left_keys, right_keys) => { self.internal_split_noop(post, lbl, path, left_keys, right_keys); }
+            PivotBetree::Step::freeze_as() => { self.freeze_as_refines(post, lbl); }
+            PivotBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_refines(post, lbl); }
+            PivotBetree::Step::internal_grow() => { self.internal_grow_refines(post, lbl); }
+            PivotBetree::Step::internal_split(path, split_request) => { self.internal_split_refines(post, lbl, path, split_request); }
     //         PivotBetree::Step::internal_flush(path, down_keys) => { self.internal_flush_noop(post, lbl, path, down_keys); }
     //         PivotBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_noop(post, lbl, path, compacted_buffers); }
     //         PivotBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }

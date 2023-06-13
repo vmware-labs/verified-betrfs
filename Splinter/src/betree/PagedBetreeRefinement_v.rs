@@ -106,6 +106,7 @@ impl BetreeNode {
     {
         self.memtable_distributes_over_betree(memtable);   
         assert(self.i().ext_equal(self.push_memtable(memtable).value.i()));
+        // assert(self.i() =~= self.push_memtable(memtable).value.i()); // unable to replace with nested extensionality check
     }
 
     pub proof fn extend_buffer_seq_lemma(self, buffers: BufferSeq, key: Key)

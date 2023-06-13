@@ -71,10 +71,10 @@ impl BetreeNode {
     pub open spec fn linked_children(self) -> bool
     {
         &&& self.is_Node() ==> { 
-            &&& forall |i:nat| #![auto] 
+            &&& forall |i:nat|
             ( 
-                self.valid_child_index(i) 
-                && self.get_Node_children()[i as int].is_Node() 
+                self.valid_child_index(i)
+                && ((#[trigger] self.get_Node_children()[i as int].is_Node()))
                 && self.get_Node_children()[i as int].local_structure() 
             ) ==> {
                 self.get_Node_children()[i as int].my_domain() == self.child_domain(i)
@@ -109,7 +109,7 @@ impl BetreeNode {
 
     pub open spec fn push_memtable(self, memtable: Memtable) -> StampedBetree
     {
-        let buffers = BufferSeq{buffers: Seq::empty().push(memtable.buffer)};
+        let buffers = BufferSeq{buffers: Seq::new(1, |i| memtable.buffer)};
         let new_root = self.promote(total_domain()).extend_buffer_seq(buffers);
         Stamped{value: new_root, seq_end: memtable.seq_end}
     }
