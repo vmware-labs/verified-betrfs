@@ -139,8 +139,6 @@ impl DiskView {
         // Got 36 lines into this proof before I discovered I was missing
         // this ensures which used to be attached to iptr, for free. :v/
         self.iptr_output_valid(ptr);
-        self.pointer_after_crop_ensures(ptr, depth);
-
 
         if 0 == depth {
             // Dafny didn't need this trigger
@@ -150,6 +148,26 @@ impl DiskView {
             }
         } else {
             self.pointer_after_crop_commutes_with_interpretation(self.entries[ptr.unwrap()].cropped_prior(bdy), bdy, (depth - 1) as nat);
+        }
+    }
+
+    pub proof fn pointer_after_crop_commutes_with_interpretation_no_some(self, ptr: Pointer, depth: nat)
+    requires
+        self.decodable(ptr),
+        self.acyclic(),
+        self.block_in_bounds(ptr),
+        self.can_crop(ptr, depth),
+    ensures
+        PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(self.iptr(ptr), self.boundary_lsn, depth),
+        self.iptr(self.pointer_after_crop(ptr, depth))
+            == PagedJournal_v::JournalRecord::opt_rec_crop_head_records(self.iptr(ptr), self.boundary_lsn, depth),
+    decreases depth
+    {
+        self.iptr_output_valid(ptr);
+        self.pointer_after_crop_ensures(ptr, depth);
+
+        if 0 < depth {
+            self.pointer_after_crop_commutes_with_interpretation_no_some(self.entries[ptr.unwrap()].cropped_prior(self.boundary_lsn), (depth - 1) as nat);
         }
     }
 }
