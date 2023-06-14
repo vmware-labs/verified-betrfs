@@ -170,6 +170,29 @@ impl DiskView {
             self.pointer_after_crop_commutes_with_interpretation_no_some(self.entries[ptr.unwrap()].cropped_prior(self.boundary_lsn), (depth - 1) as nat);
         }
     }
+
+    pub proof fn discard_old_commutes(self, ptr: Pointer, new_bdy: LSN)
+    requires
+        self.decodable(ptr),
+        self.acyclic(),
+        self.block_in_bounds(ptr),
+        self.boundary_lsn <= new_bdy,
+        ptr.is_Some() ==> new_bdy < self.entries[ptr.unwrap()].message_seq.seq_end,
+    ensures
+        self.discard_old(new_bdy).acyclic(),
+        self.iptr(ptr).is_Some() ==> self.iptr(ptr).unwrap().valid(new_bdy), // discard_old_journal_rec prereq
+        PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), new_bdy) == self.discard_old(new_bdy).iptr(ptr),
+    decreases self.the_rank_of(ptr)
+    {
+        self.iptr_output_valid(ptr);
+        assert( self.discard_old(new_bdy).valid_ranking(self.the_ranking()) );
+        if ptr.is_Some() {
+            let next_ptr = self.entries[ptr.unwrap()].cropped_prior(new_bdy);
+            self.iptr(ptr).unwrap().discard_valid(self.boundary_lsn, new_bdy);
+            self.discard_old_commutes(next_ptr, new_bdy);
+        }
+    }
+        
 }
 
 impl TruncatedJournal {
