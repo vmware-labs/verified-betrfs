@@ -59,7 +59,9 @@ impl DiskView {
         }
         // TODO(chris): adding this assert completes the proof, even though the identical string
         // appears in the ensures.
-        assert( post.iptr(ptr) == PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
+        // Well actually, sometimes with == it completes the proof, but (AAAARGH) it's super flaky.
+        // trying =~=...
+        assert( post.iptr(ptr) =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
     }
 
 //      pub proof fn sigh<K, V>(small: Map<K, V>, big: Map<K, V>)
@@ -109,6 +111,45 @@ impl DiskView {
         self.sub_disk_ranking(big);
         if ptr.is_Some() {
             self.sub_disk_interp(big, big.next(ptr));
+        }
+    }
+
+    pub proof fn she_nat_igans(depth: nat)
+    {
+        if 0 < depth {
+            assert( ((depth-1) as nat) < depth );
+        }
+    }
+
+    pub proof fn pointer_after_crop_commutes_with_interpretation(self, ptr: Pointer, bdy: LSN, depth: nat)
+    requires
+        self.decodable(ptr),
+        self.acyclic(),
+        self.block_in_bounds(ptr),
+        bdy == self.boundary_lsn,
+        self.can_crop(ptr, depth),
+        self.pointer_after_crop(ptr, depth).is_Some(),
+    ensures
+        PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(self.iptr(ptr), bdy, depth),
+        PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(self.iptr(ptr), bdy, depth+1),
+        self.iptr(self.pointer_after_crop(ptr, depth))
+            == PagedJournal_v::JournalRecord::opt_rec_crop_head_records(self.iptr(ptr), bdy, depth),
+    decreases depth
+    {
+        // Got 36 lines into this proof before I discovered I was missing
+        // this ensures which used to be attached to iptr, for free. :v/
+        self.iptr_output_valid(ptr);
+        self.pointer_after_crop_ensures(ptr, depth);
+
+
+        if 0 == depth {
+            // Dafny didn't need this trigger
+            let pojr = self.iptr(ptr).unwrap().cropped_prior(bdy);
+            if !PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(pojr, bdy, 0) {
+                 assert( false );
+            }
+        } else {
+            self.pointer_after_crop_commutes_with_interpretation(self.entries[ptr.unwrap()].cropped_prior(bdy), bdy, (depth - 1) as nat);
         }
     }
 }
