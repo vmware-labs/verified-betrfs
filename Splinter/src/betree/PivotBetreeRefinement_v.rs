@@ -212,6 +212,14 @@ impl BetreeNode {
         self.get_Node_pivots().insert_wf(child_idx as int + 1, self.split_element(request));
     }
 
+    pub proof fn flush_wf(self, child_idx: nat)
+        requires self.can_flush(child_idx)
+        ensures self.flush(child_idx).wf()
+    {
+        assume(false);
+    }
+
+
 } // end impl BetreeNode
 
 pub open spec fn i_stamped_betree(stamped: StampedBetree) -> PagedBetree_v::StampedBetree
@@ -592,54 +600,82 @@ pub proof fn split_commutes_with_i_right(path: Path, request: SplitRequest, key:
     }
 }
 
+pub proof fn split_commutes_with_i_nonsplit(path: Path, request: SplitRequest, key: Key)
+    requires path.valid(), path.target().can_split_parent(request),
+        // path.target().wf(), path.target().split_parent(request).wf(),
+        path.target().my_domain().contains(key), 
+        !split_keys(path, request).0.contains(key),
+        !split_keys(path, request).1.contains(key)
+    ensures path.target().i().split(split_keys(path, request).0, split_keys(path, request).1).child(key)
+        == path.target().split_parent(request).i_children().map[key]
+{
+    let target = path.target();
+    let new_target = target.split_parent(request);
+
+    path.target_wf();
+    target.split_parent_wf(request);
+
+    let child_idx = request.get_child_idx();
+    target.i_children_lemma();
+    new_target.i_children_lemma();
+
+    let r = target.get_Node_pivots().route(key);
+    target.get_Node_pivots().route_lemma(key);
+
+    if r < child_idx {
+        new_target.get_Node_pivots().route_is_lemma(key, r);
+    } else {
+        new_target.get_Node_pivots().route_is_lemma(key, r+1);
+    }
+    assert(new_target.child(key) == target.child(key));
+}
+
 pub proof fn split_commutes_with_i(path: Path, request: SplitRequest)
     requires path.valid(), path.target().can_split_parent(request)
     ensures path.target().i().split(split_keys(path, request).0, split_keys(path, request).1)
         == path.target().split_parent(request).i()
 {
     let target = path.target();
+    let new_target = target.split_parent(request);
+
     path.target_wf();
+    target.split_parent_wf(request);
 
-    let child_idx = request.get_child_idx();
-    let child_domain = target.child_domain(child_idx);
     let (left_keys, right_keys) = split_keys(path, request);
-
-    // let right_domain = Domain::Domain{start: split_element, end: child_domain.get_Domain_end()};
-    // split_keys_domain(path, request, left_domain, right_domain);
-
     assert forall |k: Key| true 
-    implies #[trigger] target.i().split(left_keys, right_keys).get_Node_children().map[k]
-        == target.split_parent(request).i_children().map[k]
+    implies (#[trigger] target.i().split(left_keys, right_keys).get_Node_children().map[k])
+        == new_target.i_children().map[k]
     by {
         if target.my_domain().contains(k) {
             if left_keys.contains(k) {
                 split_commutes_with_i_left(path, request, k);
             } else if right_keys.contains(k) {
                 split_commutes_with_i_right(path, request, k);
-
-                // // assert(r == child_idx);
             } else {
-                assume(false);
-                // target.i_children_lemma();
-                // target.split_parent_wf(request);
-                // target.split_parent(request).i_children_lemma();
-    
-                // let r = target.get_Node_pivots().route(k);
-                // target.get_Node_pivots().route_lemma(k);
-                // assert(r != child_idx);
-                // if r < child_idx {
-                //     target.split_parent(request).get_Node_pivots().route_is_lemma(k, r);
-                //     assert(target.split_parent(request).child(k) == target.child(k));
-                // } else {
-                //     target.split_parent(request).get_Node_pivots().route_is_lemma(k, r+1);
-                //     assert(target.split_parent(request).child(k) == target.child(k));
-                // }
+                split_commutes_with_i_nonsplit(path, request, k);
             }
         }
     }
 
     assert(target.i().split(left_keys, right_keys).get_Node_children().map 
         =~= target.split_parent(request).i_children().map);
+}
+
+pub proof fn flush_commutes_with_i(path: Path, child_idx: nat)
+    requires path.valid(), path.target().can_flush(child_idx)
+    ensures path.target().i().flush(path.target().child_domain(child_idx).key_set())
+        == path.target().flush(child_idx).i()
+{
+    assume(false);
+}
+
+pub proof fn compact_commutes_with_i(path: Path, compacted_buffers: BufferSeq)
+    requires path.valid(), path.target().is_Node(),
+        path.target().get_Node_buffers().i() == compacted_buffers.i()
+    ensures path.target().i().compact(compacted_buffers)
+        == path.target().compact(compacted_buffers).i()
+{
+    assume(false);
 }
 
 impl PivotBetree::State {
@@ -751,91 +787,63 @@ impl PivotBetree::State {
         post.root.i_wf();
         path.i_valid();
         path.target_commutes_with_i();
-
         split_commutes_with_i(path, request);
 
-        // let target = path.target();
-
-        // let top = target.split(left_keys, right_keys);
-        // target.split_wf(left_keys, right_keys);
-
-        // assert forall |k: Key| true ==>
-        // ({ target.i_node_at(k) == top.i_node_at(k) })
-        // by {
-        //     if left_keys.contains(k) {
-        //         target.child(k).apply_filter_equivalence(left_keys, k);
-        //     } else if right_keys.contains(k) {
-        //         target.child(k).apply_filter_equivalence(right_keys, k);
-        //     }
-        // }
-
-        // assert(target.i().ext_equal(top.i()));
-        // path.substitute_equivalence(top);
-        // self.equivalent_roots(post);
-        // assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal()));
-        assume(false);
+        let (left_keys, right_keys) = split_keys(path, request);
+        assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal_split(path.i(), left_keys, right_keys)));
     }
 
-    // pub proof fn internal_flush_noop(self, post: Self, lbl: PivotBetree::Label, path: Path, down_keys: Set<Key>)
-    //     requires self.inv(), PivotBetree::State::internal_flush(self, post, lbl, path, down_keys)
-    //     ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(PagedBetree::State::next);
-    //     reveal(PagedBetree::State::next_by);
+    pub proof fn internal_flush_refines(self, post: Self, lbl: PivotBetree::Label, path: Path, child_idx: nat)
+        requires self.inv(), PivotBetree::State::internal_flush(self, post, lbl, path, child_idx)
+        ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PagedBetree::State::next);
+        reveal(PagedBetree::State::next_by);
 
-    //     let target = path.target();
-    //     path.target_wf();
+        self.root.i_wf();
+        path.target_wf();
+        path.target().flush_wf(child_idx);
+        path.substitute_refines(path.target().flush(child_idx));
 
-    //     let top = target.flush(down_keys);
-    //     target.flush_wf(down_keys);
+        post.root.i_wf();
+        path.i_valid();
+        path.target_commutes_with_i();
 
-    //     let kept_keys = all_keys().difference(down_keys);
+        flush_commutes_with_i(path, child_idx);
+        let flushed_keys = path.target().child_domain(child_idx).key_set();
+        assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal_flush(path.i(), flushed_keys)));
+    }
 
-    //     assert forall |k: Key| true ==>
-    //     ({ target.i_node_at(k) == top.i_node_at(k) })
-    //     by {
-    //         if down_keys.contains(k) {
-    //             target.get_Node_buffers().filtered_buffer_seq_query_lemma(kept_keys, k, 0);
-    //             assert(target.get_Node_children().wf());
-                
-    //             let moved_buffers = target.get_Node_buffers().apply_filter(down_keys);
-    //             let child = target.get_Node_children().map[k];
-    //             child.extend_buffer_seq_lemma(moved_buffers, k);
-    //             target.get_Node_buffers().filtered_buffer_seq_query_lemma(down_keys, k, 0);
-    //         } else {
-    //             target.get_Node_buffers().filtered_buffer_seq_query_lemma(kept_keys, k, 0);
-    //         }
-    //     }
-        
-    //     assert(target.i().ext_equal(top.i()));
-    //     path.substitute_equivalence(top);
-    //     self.equivalent_roots(post);
-    //     assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal()));
-    // }
+    pub proof fn internal_compact_refines(self, post: Self, lbl: PivotBetree::Label, path: Path, compacted_buffers: BufferSeq)
+        requires self.inv(), PivotBetree::State::internal_compact(self, post, lbl, path, compacted_buffers)
+        ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PagedBetree::State::next);
+        reveal(PagedBetree::State::next_by);
 
-    // pub proof fn internal_compact_noop(self, post: Self, lbl: PivotBetree::Label, path: Path, compacted_buffers: BufferSeq)
-    //     requires self.inv(), PivotBetree::State::internal_compact(self, post, lbl, path, compacted_buffers)
-    //     ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(PagedBetree::State::next);
-    //     reveal(PagedBetree::State::next_by);
+        self.root.i_wf();
+        path.target_wf();
+        path.substitute_refines(path.target().compact(compacted_buffers));
 
-    //     path.target_wf();
-    //     let compact_node = path.target().compact(compacted_buffers);
-    //     assert(compact_node.i().ext_equal(path.target().i()));
-    //     path.substitute_equivalence(compact_node);
-    //     self.equivalent_roots(post);
-    //     assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal()));
-    // }
+        post.root.i_wf();
+        path.i_valid();
+        path.target_commutes_with_i();
 
-    // pub proof fn internal_noop_noop(self, post: Self, lbl: PivotBetree::Label)
-    //     requires self.inv(), PivotBetree::State::internal_noop(self, post, lbl)
-    //     ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(PagedBetree::State::next);
-    //     reveal(PagedBetree::State::next_by);
-    //     assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal()));
-    // }
+        compact_commutes_with_i(path, compacted_buffers);
+        assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal_compact(path.i(), compacted_buffers)));
+    }
+
+    pub proof fn internal_noop_noop(self, post: Self, lbl: PivotBetree::Label)
+        requires self.inv(), PivotBetree::State::internal_noop(self, post, lbl)
+        ensures post.inv(), PagedBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PagedBetree::State::next);
+        reveal(PagedBetree::State::next_by);
+
+        self.root.i_wf();
+        post.root.i_wf();
+        assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal_noop()));
+    }
 
     pub proof fn next_refines(self, post: Self, lbl: PivotBetree::Label)
         requires self.inv(), PivotBetree::State::next(self, post, lbl),
@@ -852,10 +860,10 @@ impl PivotBetree::State {
             PivotBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_refines(post, lbl); }
             PivotBetree::Step::internal_grow() => { self.internal_grow_refines(post, lbl); }
             PivotBetree::Step::internal_split(path, split_request) => { self.internal_split_refines(post, lbl, path, split_request); }
-    //         PivotBetree::Step::internal_flush(path, down_keys) => { self.internal_flush_noop(post, lbl, path, down_keys); }
-    //         PivotBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_noop(post, lbl, path, compacted_buffers); }
-    //         PivotBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
-            _ => { assume(false); } 
+            PivotBetree::Step::internal_flush(path, child_idx) => { self.internal_flush_refines(post, lbl, path, child_idx); }
+            PivotBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_refines(post, lbl, path, compacted_buffers); }
+            PivotBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
+            _ => { assert(false); } 
         }
     }
 } // end impl PivotBetree::State
