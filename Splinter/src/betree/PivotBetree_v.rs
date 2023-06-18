@@ -170,7 +170,7 @@ impl BetreeNode {
     {
         &&& self.wf()
         &&& self.is_index()
-        &&& pivot_idx < self.get_Node_pivots().len()-1
+        &&& 0 < pivot_idx < self.get_Node_pivots().num_ranges()
     }
 
     pub open spec fn  split_index(self, pivot_idx: nat) -> (BetreeNode, BetreeNode)

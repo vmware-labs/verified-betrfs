@@ -48,20 +48,50 @@ impl PivotTable {
     }
 
     pub open spec fn update(self, i: int, element: Element) -> PivotTable
+        recommends 0 <= i < self.len()
     {
         PivotTable{pivots: self.pivots.update(i, element)}
     }
 
     pub open spec fn subrange(self, start: int, end: int) -> PivotTable
+        recommends 0 <= start <= end <= self.len()
     {
         PivotTable{pivots: self.pivots.subrange(start, end)}
     }
 
+    pub open spec fn can_insert(self, i: int, element: Element) -> bool
+    {
+        &&& element.is_Elem()
+        &&& 0 <= i <= self.len()
+        &&& (i == 0 ==> Element::lt(element, self.pivots[0]))
+        &&& (i == self.len() ==> Element::lt(self.pivots.last(), element))
+        &&& (0 < i && i < self.len() ==> Element::lt(self.pivots[i-1], element) && Element::lt(element, self.pivots[i]))
+    }
+
     pub open spec fn insert(self, i: int, element: Element) -> PivotTable
+        recommends self.can_insert(i, element)
     {
         PivotTable{pivots: self.pivots.insert(i, element)}
     }
 
+    pub proof fn insert_wf(self, idx: int, element: Element) 
+        requires self.wf(), self.can_insert(idx, element)
+        ensures self.insert(idx, element).wf()
+    {
+        let result = self.insert(idx, element).pivots;
+        Element::lte_transitive_forall();
+
+        assert forall |i: int, j: int| 0 <= i < j < result.len() 
+        implies Element::lt(result[i], result[j])
+        by {
+            if i == idx && j > i + 1 {
+                assert(Element::lt(result[i+1], result[j])); // trigger
+            } else if i < idx-1 && j == idx {
+                assert(Element::lt(result[i], result[j-1])); // trigger
+            }
+        }
+    }
+  
     pub open spec fn bounded_key(self, key: Key) -> bool
     {
         &&& Element::lte(self.pivots[0], to_element(key))
@@ -76,9 +106,20 @@ impl PivotTable {
 
     pub proof fn route_lemma(self, key: Key)
         requires self.wf(), self.bounded_key(key)
-        ensures 0 <= self.route(key) < self.num_ranges()
+        ensures 0 <= self.route(key) < self.num_ranges(),
+            Element::lte(self.pivots[self.route(key)], to_element(key)),
+            Element::lt(to_element(key), self.pivots[self.route(key)+1])
     {
-        Element::lte_transitive_forall();
+        Element::strictly_sorted_implies_sorted(self.pivots);
+        Element::largest_lte_lemma(self.pivots, to_element(key), self.route(key));
+    }
+
+    pub proof fn route_is_lemma(self, key: Key, r: int)
+        requires self.wf(), 0 <= r < self.num_ranges(),
+            Element::lte(self.pivots[r], to_element(key)),
+            Element::lt(to_element(key), self.pivots[r+1])
+        ensures self.bounded_key(key), self.route(key) == r
+    {
         Element::strictly_sorted_implies_sorted(self.pivots);
         Element::largest_lte_lemma(self.pivots, to_element(key), self.route(key));
     }
