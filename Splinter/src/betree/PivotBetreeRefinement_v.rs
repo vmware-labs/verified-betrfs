@@ -735,6 +735,12 @@ pub proof fn flush_commutes_with_i(path: Path, child_idx: nat)
     let child_domain = target.child_domain(child_idx);
     let moved_buffers = target.get_Node_buffers().apply_filter(child_domain.key_set());
 
+    if child.is_Nil() {
+        child.nil_promote_and_extend_commutes_with_i(child_domain, moved_buffers);
+    } else {
+        child.node_promote_and_extend_commutes_with_i(child_domain, moved_buffers);
+    }
+
     assert forall |k| true
     implies #[trigger] target.flush(child_idx).i().get_Node_children().map[k] 
         == target.i().flush(child_domain.key_set()).get_Node_children().map[k]
@@ -745,17 +751,10 @@ pub proof fn flush_commutes_with_i(path: Path, child_idx: nat)
         if child_domain.contains(k) {
             target.flush(child_idx).get_Node_pivots().route_is_lemma(k, child_idx as int);
             assert(target.key_in_domain(k));
-
-            if child.is_Nil() {
-                child.nil_promote_and_extend_commutes_with_i(child_domain, moved_buffers);
-            } else {
-                child.node_promote_and_extend_commutes_with_i(child_domain, moved_buffers);
-            }
         } else {
             if target.my_domain().contains(k) {
                 let r = target.get_Node_pivots().route(k);
                 target.get_Node_pivots().route_lemma(k);
-                target.flush(child_idx).get_Node_pivots().route_is_lemma(k, r);
             }
         }
     }
@@ -770,7 +769,21 @@ pub proof fn compact_commutes_with_i(path: Path, compacted_buffers: BufferSeq)
     ensures path.target().i().compact(compacted_buffers)
         == path.target().compact(compacted_buffers).i()
 {
-    assume(false);
+    let target = path.target();
+    path.target_wf();
+
+    assert forall |k| true
+    implies #[trigger] target.compact(compacted_buffers).i().get_Node_children().map[k] 
+        == target.i().compact(compacted_buffers).get_Node_children().map[k]
+    by {
+        if target.my_domain().contains(k) {
+            target.i_children_lemma();
+            target.compact(compacted_buffers).i_children_lemma();
+        }
+    }
+
+    assert(target.compact(compacted_buffers).i().get_Node_children().map =~= 
+        target.i().compact(compacted_buffers).get_Node_children().map);
 }
 
 impl PivotBetree::State {
@@ -964,4 +977,3 @@ impl PivotBetree::State {
 } // end impl PivotBetree::State
 
 }//verus
- 
