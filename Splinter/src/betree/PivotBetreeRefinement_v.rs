@@ -27,17 +27,11 @@ use crate::betree::SplitRequest_v::*;
 verus! {
 
 impl BetreeNode {
-    #[verifier(decreases_by)]
-    pub proof fn decreases_seq_struct_workaround(self, start: int)
-    {
-        assume(height(self.get_Node_children()[start]) < height(self));
-    }
-
     pub open spec fn i_children_seq(self, start: int) -> Seq<PagedBetree_v::BetreeNode>
         recommends self.is_Node(), 0 <= start <= self.get_Node_children().len()
-        decreases self, 0nat, self.get_Node_children().len()-start via Self::decreases_seq_struct_workaround
+        decreases self, 0nat, self.get_Node_children().len()-start //via Self::decreases_seq_struct_workaround
     {
-        decreases_when(0 <= start <= self.get_Node_children().len());
+        decreases_when(self.is_Node() && 0 <= start <= self.get_Node_children().len());
         if start == self.get_Node_children().len() {
             Seq::empty()
         } else {
@@ -98,7 +92,7 @@ impl BetreeNode {
             let child = self.get_Node_children()[start];
             let sub_seq = self.i_children_seq(start+1);
 
-            assume(height(child) < height(self));
+            // assume(height(child) < height(self));
 
             child.i_wf();
             self.i_children_seq_lemma(start+1);

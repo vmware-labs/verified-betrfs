@@ -10,6 +10,7 @@ use crate::spec::Messages_t::*;
 
 verus!{
 
+#[verifier::ext_equal]
 pub struct TotalKMMap(pub Map<Key, Message>);
 
 pub open spec fn total_domain() -> Set<Key>

@@ -82,19 +82,12 @@ impl BetreeNode {
         }
     }
 
-    #[verifier(decreases_by)]
-    pub proof fn decreases_infinite_struct_workaround(self)
-    {
-        let children = self.get_Node_children();
-        assume(forall |i: int| 0 <= i < children.len() ==> height(children[i]) < height(self));
-    }
-
     pub open spec fn wf_children(self) -> bool
         recommends self.is_Node()
-        decreases self, 0nat via Self::decreases_infinite_struct_workaround
+        decreases self, 0nat when self.is_Node()
     {
-        let children = self.get_Node_children();
-        forall |i:int| #![auto] 0 <= i < children.len() ==> children[i].wf()
+        &&& (forall |i:int| #![auto] 0 <= i < self.get_Node_children().len() 
+            ==> self.get_Node_children()[i].wf())
     }
 
     pub open spec fn wf(self) -> bool

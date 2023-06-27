@@ -35,6 +35,7 @@ pub open spec fn empty_image() -> StampedBetree {
     Stamped{ value: BetreeNode::Nil, seq_end: 0 }
 }
 
+#[verifier::ext_equal]
 pub struct ChildMap{ 
     pub map: Map<Key, BetreeNode> 
 }
@@ -44,15 +45,8 @@ pub open spec fn constant_child_map(target: BetreeNode) -> ChildMap {
 }
 
 impl ChildMap {
-    #[verifier(decreases_by)]
-    pub proof fn decreases_infinite_struct_workaround(self)
-    {
-        assume(forall |k:Key| height(self.map[k]) < height(self));
-    }
-
     pub open spec fn wf(self) -> bool
     decreases self
-    via Self::decreases_infinite_struct_workaround
     {
         &&& total_keys(self.map.dom())
         &&& forall |k: Key| #![auto] self.map[k].wf()
@@ -65,6 +59,7 @@ pub open spec fn empty_child_map() -> ChildMap {
 }
 
 #[is_variant]
+#[verifier::ext_equal]
 pub enum BetreeNode {
     Nil,
     Node{ 
@@ -180,6 +175,7 @@ impl QueryReceiptLine {
 
 // NB the top line is the line for the root node; hence Result()==ResultAt(0)
 // The bottom line is always Nil
+// #[verifier::ext_equal]
 pub struct QueryReceipt {
     pub key: Key,
     pub root: BetreeNode,
@@ -308,8 +304,7 @@ impl Path {
         replacement.wf(),
         0 < self.routing.len(),
     decreases
-        self.subpath().routing.len() // Jialin: this works the one below doesn't, why?
-        // self.routing.len(), 0nat
+        self.subpath().routing.len()
     {
         let replaced_child = self.subpath().substitute(replacement);
         ChildMap{
