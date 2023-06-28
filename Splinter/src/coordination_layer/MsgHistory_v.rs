@@ -285,11 +285,11 @@ impl MsgHistory {
   }
 
   pub open spec fn empty_history_at(lsn: LSN) -> MsgHistory {
-    MsgHistory{ msgs: Map::empty(), seq_start: lsn, seq_end: lsn }
+    MsgHistory{ msgs: map![], seq_start: lsn, seq_end: lsn }
   }
 
   pub open spec fn singleton_at(lsn: LSN, msg: KeyedMessage) -> MsgHistory {
-    MsgHistory{ msgs: Map::empty().insert(lsn, msg), seq_start: lsn, seq_end: lsn + 1 }
+    MsgHistory{ msgs: map![lsn => msg], seq_start: lsn, seq_end: lsn + 1 }
   }
   
   pub open spec fn map_plus_history(stamped_map: StampedMap, history: MsgHistory) -> StampedMap

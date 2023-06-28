@@ -203,8 +203,8 @@ impl DiskView {
         // Geez and this thing's a mess
         decreases_when(self.decodable(root));
 
-        if !self.acyclic() { Self{boundary_lsn: 0, entries: Map::empty()} } // silly
-        else if root.is_None() { Self{boundary_lsn: self.boundary_lsn, entries: Map::empty()} }
+        if !self.acyclic() { Self{boundary_lsn: 0, entries: map![]} } // silly
+        else if root.is_None() { Self{boundary_lsn: self.boundary_lsn, entries: map![]} }
         else {
             let addr = root.unwrap();
             let tail = self.build_tight(self.entries[addr].cropped_prior(self.boundary_lsn));
@@ -275,7 +275,7 @@ impl DiskView {
         //decreases_by(Self::thing);    // TODO(chris): debugging these failures sucks, unlike
         //inline asserts.
         match root {
-            None => Set::empty(),
+            None => set!{},
             Some(addr) => self.representation(self.entries[addr].cropped_prior(self.boundary_lsn)).insert(addr)
         }
     }
@@ -515,7 +515,7 @@ impl DiskView {
         self.build_tight(None).is_tight(None),
     {
         let tight = self.build_tight(None);
-        assert( tight.valid_ranking(Map::empty()) ); // new witness; not needed in Dafny
+        assert( tight.valid_ranking(map![]) ); // new witness; not needed in Dafny
         assert forall |other: Self|
         ({
             &&& other.decodable(None)
@@ -773,7 +773,7 @@ impl TruncatedJournal {
     {
         Self{
             freshest_rec: None,
-            disk_view: DiskView { boundary_lsn: 0, entries: Map::empty() },
+            disk_view: DiskView { boundary_lsn: 0, entries: map![] },
         }
     }
 
@@ -781,7 +781,7 @@ impl TruncatedJournal {
     ensures
         Self::mkfs().decodable(),
     {
-        assert( Self::mkfs().disk_view.valid_ranking(Map::empty()) );
+        assert( Self::mkfs().disk_view.valid_ranking(map![]) );
     }
 
 }

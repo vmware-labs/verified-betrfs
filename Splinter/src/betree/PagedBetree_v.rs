@@ -104,7 +104,7 @@ impl BetreeNode {
     pub open spec fn push_memtable(self, memtable: Memtable) -> StampedBetree {
         Stamped{
             value: self.promote().extend_buffer_seq(
-                BufferSeq{ buffers: Seq::new(1, |i| memtable.buffer) }
+                BufferSeq{ buffers: seq![memtable.buffer] }
             ),
             seq_end: memtable.seq_end
         }

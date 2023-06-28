@@ -33,10 +33,10 @@ impl BetreeNode {
     {
         decreases_when(self.is_Node() && 0 <= start <= self.get_Node_children().len());
         if start == self.get_Node_children().len() {
-            Seq::empty()
+            seq![]
         } else {
             let child = self.get_Node_children()[start].i();
-            Seq::new(1, |i| child) + self.i_children_seq(start+1)
+            seq![child] + self.i_children_seq(start+1)
         }
     }
 
@@ -331,11 +331,11 @@ impl Path{
         decreases self.depth
     {
         if self.depth == 0 {
-            Seq::empty()
+            seq![]
         } else {
             let pivots = self.node.get_Node_pivots();
             let keys = pivots.pivot_range_keyset(pivots.route(self.key));
-            Seq::new(1, |i:int| keys) + self.subpath().routing() 
+            seq![keys] + self.subpath().routing() 
         }
     }
 

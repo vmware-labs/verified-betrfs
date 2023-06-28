@@ -35,12 +35,12 @@ impl BetreeNode {
         if self.is_Nil() {
             let msg = Message::Define{value: default_value()}; 
             let line = QueryReceiptLine{node: self, result: msg};
-            QueryReceipt{key: key, root: self, lines: Seq::empty().push(line)}
+            QueryReceipt{key: key, root: self, lines: seq![line]}
         } else {
             let child_receipt = self.child(key).build_query_receipt(key);
             let msg = self.get_Node_buffers().query(key);
             let line = QueryReceiptLine{node: self, result: child_receipt.result().merge(msg)};
-            QueryReceipt{key: key, root: self, lines: Seq::empty().push(line) + child_receipt.lines}
+            QueryReceipt{key: key, root: self, lines: seq![line] + child_receipt.lines}
         }
     }
 
@@ -59,7 +59,7 @@ impl BetreeNode {
 
             self.child(key).build_query_receipt_valid(key);
             
-            let receipt = QueryReceipt{key: key, root: self, lines: Seq::empty().push(line) + child_receipt.lines};
+            let receipt = QueryReceipt{key: key, root: self, lines: seq![line] + child_receipt.lines};
             let result = self.build_query_receipt(key);
 
             // failed asserts 
@@ -102,7 +102,7 @@ impl BetreeNode {
 
         assert forall |k: Key| map_a.0[k] == map_b.0[k] by 
         {
-            let buffers = BufferSeq{buffers: Seq::new(1, |i| memtable.buffer)};
+            let buffers = BufferSeq{buffers: seq![memtable.buffer]};
             buffers.query_singleton(k);
             self.extend_buffer_seq_lemma(buffers, k);
         }
@@ -392,8 +392,8 @@ impl PagedBetree::State {
 
         assert forall |k: Key| map_a.0[k] == map_b.0[k]
         by {
-            let buffers = BufferSeq{buffers: Seq::new(1, |i| self.memtable.buffer)};
-            let buffers_prime = BufferSeq{buffers: Seq::new(1, |i| post.memtable.buffer)};
+            let buffers = BufferSeq{buffers: seq![self.memtable.buffer]};
+            let buffers_prime = BufferSeq{buffers: seq![post.memtable.buffer]};
 
             if k == key {
                 buffers.query_singleton(k);

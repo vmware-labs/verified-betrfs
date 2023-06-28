@@ -102,7 +102,7 @@ impl BetreeNode {
 
     pub open spec fn push_memtable(self, memtable: Memtable) -> StampedBetree
     {
-        let buffers = BufferSeq{buffers: Seq::new(1, |i| memtable.buffer)};
+        let buffers = BufferSeq{buffers: seq![memtable.buffer]};
         let new_root = self.promote(total_domain()).extend_buffer_seq(buffers);
         Stamped{value: new_root, seq_end: memtable.seq_end}
     }
@@ -240,7 +240,7 @@ impl BetreeNode {
         BetreeNode::Node{
             buffers: empty_buffer_seq(),
             pivots: domain_to_pivots(domain),
-            children: Seq::empty().push(BetreeNode::Nil)
+            children: seq![BetreeNode::Nil]
         }
     }
 
@@ -249,7 +249,7 @@ impl BetreeNode {
         BetreeNode::Node{
             buffers: empty_buffer_seq(),
             pivots: domain_to_pivots(total_domain()),
-            children: Seq::empty().push(self)
+            children: seq![self]
         }
     }
 

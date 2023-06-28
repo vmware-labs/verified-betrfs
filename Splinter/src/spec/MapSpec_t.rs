@@ -163,7 +163,7 @@ state_machine!{ AsyncMap {
     }
 
     pub open spec fn init_ephemeral_state() -> EphemeralState {
-        EphemeralState{ requests: Set::empty(), replies: Set::empty() }
+        EphemeralState{ requests: set!{}, replies: set!{} }
     }
 
     fields {

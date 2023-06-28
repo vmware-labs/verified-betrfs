@@ -25,7 +25,7 @@ pub struct PivotTable {
 
 pub open spec fn domain_to_pivots(domain: Domain) -> PivotTable
 {
-    PivotTable{pivots: Seq::empty().push(domain.get_Domain_start()).push(domain.get_Domain_end())}
+    PivotTable{pivots: seq![domain.get_Domain_start(), domain.get_Domain_end()]}
 }
 
 impl PivotTable {

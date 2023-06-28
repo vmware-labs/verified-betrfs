@@ -18,7 +18,7 @@ pub struct BufferSeq {
 
 pub open spec fn empty_buffer_seq() -> BufferSeq
 {
-    BufferSeq{buffers: Seq::empty()}
+    BufferSeq{buffers: seq![]}
 }
 
 impl BufferSeq {
@@ -73,7 +73,7 @@ impl BufferSeq {
     pub open spec fn update_subrange(self, start: int, end: int, new_buffer: Buffer) -> BufferSeq 
         recommends 0 <= start < end <= self.len()
     {
-        let s = Seq::empty().push(new_buffer);
+        let s = seq![new_buffer];
         BufferSeq{ buffers: self.buffers.subrange(0, start) + s + self.buffers.subrange(end, self.len() as int) }
     }
 

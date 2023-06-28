@@ -73,7 +73,7 @@ impl<T> FloatingSeq<T> {
     pub open spec fn get_prefix(self, count: int) -> FloatingSeq<T>
         recommends 0 <= count <= self.len()
     {
-        if count <= self.start { FloatingSeq{start: count as nat, entries: Seq::empty()} }
+        if count <= self.start { FloatingSeq{start: count as nat, entries: seq![]} }
         // TODO(chris): is there a slice syntax I could use instead of subrange? Chris says: should
         // be, just isn't done yet.
         else { FloatingSeq{start: self.start, entries: self.entries.subrange(0, count-self.start)} }

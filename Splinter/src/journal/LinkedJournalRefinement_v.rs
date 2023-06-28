@@ -213,7 +213,7 @@ impl TruncatedJournal {
         Self::mkfs().disk_view.acyclic(),
         Self::mkfs().i() =~= PagedJournal_v::mkfs(),
     {
-        assert( Self::mkfs().disk_view.valid_ranking(Map::empty()) );
+        assert( Self::mkfs().disk_view.valid_ranking(map![]) );
     }
 
     pub proof fn discard_interp(self, lsn: LSN, post: Self)

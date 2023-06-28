@@ -18,7 +18,7 @@ pub struct BufferOffsets {
 
 pub open spec fn empty_bufer_offsets() -> BufferOffsets
 {
-    BufferOffsets{offsets: Seq::empty()}
+    BufferOffsets{offsets: seq![]}
 }
 
 impl BufferOffsets {
