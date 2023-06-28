@@ -22,15 +22,9 @@ use crate::betree::Memtable_v::*;
 
 verus! {
 impl BetreeNode {
-    // true when self is wf
-    pub open spec fn key_in_domain(self, key: Key) -> bool
-    {
-        &&& (self.is_Node() ==> self.get_Node_children().map.dom().contains(key))
-    }
-
     pub open spec fn build_query_receipt(self, key: Key) -> QueryReceipt
         recommends self.wf()
-        decreases self when self.key_in_domain(key)
+        decreases self when self.wf()
     {
         if self.is_Nil() {
             let msg = Message::Define{value: default_value()}; 
@@ -44,32 +38,19 @@ impl BetreeNode {
         }
     }
 
-    #[verifier(spinoff_prover)]
     pub proof fn build_query_receipt_valid(self, key: Key)
         requires self.wf()
         ensures self.build_query_receipt(key).valid()
         decreases self
     {
-        assert(self.key_in_domain(key));
-
         if self.is_Node() {
             let child_receipt = self.child(key).build_query_receipt(key);
+            self.child(key).build_query_receipt_valid(key);
+
             let msg = self.get_Node_buffers().query(key);
             let line = QueryReceiptLine{node: self, result: child_receipt.result().merge(msg)};
-
-            self.child(key).build_query_receipt_valid(key);
-            
             let receipt = QueryReceipt{key: key, root: self, lines: seq![line] + child_receipt.lines};
-            let result = self.build_query_receipt(key);
 
-            // failed asserts 
-            assert(receipt.lines.len() == result.lines.len());
-            assert(receipt.lines[0] == result.lines[0]);
-            assert(receipt.lines =~= result.lines);
-            assert(receipt == result);
-            // end 
-
-            assume(false);
             assert forall |i: int| 0 < i < receipt.lines.len()-1
             implies ({
                 &&& receipt.child_linked_at(i)
@@ -78,7 +59,6 @@ impl BetreeNode {
                 assert(child_receipt.child_linked_at(i-1)); // trigger
                 assert(child_receipt.result_linked_at(i-1)); // trigger
             }
-            // assume(self.build_query_receipt(key).valid());
         }
     }
 
@@ -496,8 +476,6 @@ impl PagedBetree::State {
         requires self.inv(), PagedBetree::State::internal_split(self, post, lbl, path, left_keys, right_keys)
         ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i())
     {
-        assume(false);
-
         reveal(AbstractMap::State::next);
         reveal(AbstractMap::State::next_by);
 
@@ -526,8 +504,6 @@ impl PagedBetree::State {
         requires self.inv(), PagedBetree::State::internal_flush(self, post, lbl, path, down_keys)
         ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i())
     {
-        assume(false);
-
         reveal(AbstractMap::State::next);
         reveal(AbstractMap::State::next_by);
 
