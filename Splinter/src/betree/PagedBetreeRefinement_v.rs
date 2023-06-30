@@ -1,13 +1,9 @@
-#![allow(unused_imports)]
-
 use builtin::*;
 
 use builtin_macros::*;
 
 use vstd::prelude::*;
 use vstd::map::*;
-use vstd::set_lib::*;
-use vstd::seq_lib::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::spec::TotalKMMap_t::*;

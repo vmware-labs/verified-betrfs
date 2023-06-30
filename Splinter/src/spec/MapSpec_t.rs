@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 // TODO _t and _s enforcement in the build system? Gasp, don't know how to thing about
 // approaching/modifying/enhancing crate build...?
 

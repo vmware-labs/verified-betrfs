@@ -1,4 +1,3 @@
-#![allow(unused_imports)]
 use builtin::*;
 
 use builtin_macros::*;
@@ -11,7 +10,6 @@ use crate::spec::MapSpec_t::*;
 
 use crate::coordination_layer::CrashTolerantJournal_v::*;
 use crate::coordination_layer::CrashTolerantMap_v::*;
-use crate::coordination_layer::CrashTolerantMap_v;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MsgHistory_v::{MsgHistory, KeyedMessage};
 

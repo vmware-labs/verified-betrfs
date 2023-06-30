@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 use builtin_macros::*;
 use builtin::*;
 use vstd::{*,seq::*};
@@ -197,7 +195,7 @@ impl FloatingSeq<Version> {
         {
             // Necessary trigger for it to believe that s1[i] == s2[i] for
             // all active indices
-            assert(forall |i| s1.is_active(i) ==> s1[i].ext_equal(s2[i]));
+            assert(forall |i| #[trigger] s1.is_active(i) ==> s1[i].ext_equal(s2[i]));
             s1.extensionality(s2);
         }
     }

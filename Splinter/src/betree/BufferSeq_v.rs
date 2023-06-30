@@ -1,12 +1,10 @@
-#![allow(unused_imports)]
 use builtin::*;
 
 use builtin_macros::*;
 
-use vstd::{*,map::*,seq::*,set::*};
+use vstd::{*,seq::*,set::*};
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-use crate::spec::TotalKMMap_t::*;
 use crate::betree::Buffer_v::*;
 use crate::betree::OffsetMap_v::*;
 

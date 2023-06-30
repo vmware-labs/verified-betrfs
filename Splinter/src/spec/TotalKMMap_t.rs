@@ -1,7 +1,4 @@
-#![allow(unused_imports)]
-
 use builtin_macros::*;
-use builtin::*;
 use vstd::prelude::*;
 use vstd::set_lib::*;
 

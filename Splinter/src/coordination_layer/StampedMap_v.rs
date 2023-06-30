@@ -1,10 +1,6 @@
-#![allow(unused_imports)]
-
 use builtin_macros::*;
 use builtin::*;
 
-use crate::spec::FloatingSeq_t::*;
-use crate::spec::MapSpec_t::*;
 use crate::spec::TotalKMMap_t::*;
 use crate::coordination_layer::MsgHistory_v::MsgHistory;
 

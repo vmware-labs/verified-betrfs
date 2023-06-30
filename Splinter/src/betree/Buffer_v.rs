@@ -1,12 +1,7 @@
-#![allow(unused_imports)]
-use builtin::*;
-
 use builtin_macros::*;
-
-use vstd::{*,map::*,set::*};
+use vstd::{map::*,set::*};
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-use crate::spec::TotalKMMap_t::*;
 
 verus! {
 

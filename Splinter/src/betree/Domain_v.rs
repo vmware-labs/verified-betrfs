@@ -1,9 +1,5 @@
-#![allow(unused_imports)]
-use builtin::*;
-
 use builtin_macros::*;
-
-use vstd::{*,map::*,seq::*,set::*};
+use vstd::set::*;
 use crate::spec::KeyType_t::*;
 
 verus! {
