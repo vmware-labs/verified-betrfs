@@ -279,26 +279,30 @@ impl QueryReceipt{
         let i_receipt = self.i();
 
         assert forall |i| 0 <= i < i_receipt.lines.len()
-        implies #[trigger] i_receipt.lines[i].wf() by {
+        implies (#[trigger] i_receipt.lines[i]).wf() by {
             self.lines[i].node.i_wf();
         }
 
         assert forall |i| 0 <= i < i_receipt.lines.len()-1
-        implies (
-            #[trigger] i_receipt.lines[i].node.key_in_domain(self.key)
-            && i_receipt.child_linked_at(i) 
-        ) by {
+        implies {
+            &&& #[trigger] i_receipt.lines[i].node.key_in_domain(self.key)
+            &&& i_receipt.child_linked_at(i) 
+        } by {
             assert(i_receipt.lines[i].wf());
             PivotTable::route_lemma_auto();
             assert(self.child_linked_at(i));
             self.lines[i].node.i_children_lemma();
         }
 
-        // assert forall |i:int| 0 <= i < i_receipt.lines.len()-1
-        // implies #[trigger] i_receipt.result_linked_at(i) by {
-        //     assert(self.result_linked_at(i));
-        // }
-        assume(false);
+        assert forall |i:int| 0 <= i < i_receipt.lines.len()-1
+        implies #[trigger] i_receipt.result_linked_at(i) by {
+            assert(self.result_linked_at(i));
+            assume(false);
+        }
+
+        // uncommenting following line and proof will go through
+        // assert(i_receipt.all_lines_wf()); // trigger
+        assert(i_receipt.valid());
     }
 }
 
