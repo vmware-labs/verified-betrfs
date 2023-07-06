@@ -1,11 +1,10 @@
 use builtin::*;
 use builtin_macros::*;
 use vstd::prelude::*;
-use vstd::map::*;
-use vstd::seq_lib::*;
 use crate::spec::KeyType_t::*;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::betree::Domain_v::*;
+use crate::betree::PivotTable_v::*;
 use crate::betree::BufferSeq_v::*;
 use crate::betree::PagedBetree_v;
 use crate::betree::PagedBetree_v::PagedBetree;
@@ -17,7 +16,7 @@ verus! {
 impl BetreeNode {
     pub open spec fn i_children_seq(self, start: int) -> Seq<PagedBetree_v::BetreeNode>
         recommends self.is_Node(), 0 <= start <= self.get_Node_children().len()
-        decreases self, 0nat, self.get_Node_children().len()-start //via Self::decreases_seq_struct_workaround
+        decreases self, 0nat, self.get_Node_children().len()-start
     {
         decreases_when(self.is_Node() && 0 <= start <= self.get_Node_children().len());
         if start == self.get_Node_children().len() {
@@ -80,8 +79,6 @@ impl BetreeNode {
             let child = self.get_Node_children()[start];
             let sub_seq = self.i_children_seq(start+1);
 
-            // assume(height(child) < height(self));
-
             child.i_wf();
             self.i_children_seq_lemma(start+1);
         }
@@ -108,15 +105,14 @@ impl BetreeNode {
     {
         let seq_result = self.i_children_seq(0);
         self.i_children_seq_lemma(0);
-    
+        PivotTable::route_lemma_auto();
+
         assert forall |k:Key| {
             (#[trigger] self.i_children().map[k]).wf()
             && self.i_children().map[k] == self.i_child(k)
         } by {
             if self.key_in_domain(k) {
                 let r = self.get_Node_pivots().route(k);
-                self.get_Node_pivots().route_lemma(k);
-
                 assert(self.i_children().map[k] == seq_result[r]);
                 assert(self.i_children().map[k] == self.i_child(k));
             }
@@ -153,15 +149,7 @@ impl BetreeNode {
 
         assert(empty.wf_children()); // trigger
         empty.i_children_lemma();
-
-        assert forall |k: Key| true 
-        implies ( #[trigger] empty.i().get_Node_children().map[k] == empty_child_map.map[k])
-        by {
-            empty.get_Node_pivots().route_lemma(k);
-            assert(empty.get_Node_pivots().route(k) == 0);
-            assert(empty.child(k).is_Nil());
-            assert(empty_child_map.map[k].is_Nil());
-        }
+        PivotTable::route_lemma_auto();
 
         assert(empty.i().get_Node_children().map =~= empty_child_map.map);
         assert(empty.i() == PagedBetree_v::BetreeNode::empty_root());
@@ -220,18 +208,8 @@ impl BetreeNode {
         let a = self.promote(domain).extend_buffer_seq(buffers);
         let b = self.i().promote().extend_buffer_seq(buffers);
 
-        assert forall |k| true 
-        implies #[trigger] a.i().get_Node_children().map[k] == b.get_Node_children().map[k]
-        by {
-            if domain.contains(k) {
-                a.get_Node_pivots().route_lemma(k);
-                assert(a.child(k).is_Nil());
-                a.i_children_lemma();
-            } 
-            assert(self.i().promote().get_Node_children().map[k].is_Nil());
-            assert(self.i().promote().get_Node_children() == b.get_Node_children());
-        }
-
+        a.i_children_lemma();
+        PivotTable::route_lemma_auto();
         assert(a.i().get_Node_children().map =~= b.get_Node_children().map);
     }
 
@@ -350,7 +328,7 @@ impl Path{
         self.node.i_children_lemma();
 
         self.routing_lemma();
-        assert_seqs_equal!(self.subpath().i().routing, self.i().subpath().routing);
+        assert(self.subpath().i().routing =~= self.i().subpath().routing);
     }
 
     pub proof fn i_valid(self)
@@ -414,7 +392,7 @@ impl Path{
         ensures self.node.children_have_matching_domains(self.replaced_children(replacement))
         decreases self.depth, 0nat
     {
-        self.node.get_Node_pivots().route_lemma(self.key);
+        PivotTable::route_lemma_auto();
         self.subpath().substitute_preserves_wf(replacement);
 
         let old_children = self.node.get_Node_children();
@@ -436,6 +414,7 @@ impl Path{
         self.i_valid();
         self.substitute_preserves_wf(replacement);
         replacement.i_wf();
+        PivotTable::route_lemma_auto();
 
         if 0 < self.depth {
             self.substitute(replacement).i_children_lemma();
@@ -443,28 +422,12 @@ impl Path{
 
             self.i().substitute_preserves_wf(replacement.i());
             assert(self.i().replaced_children(replacement.i()).wf());
-
             self.subpath().substitute_refines(replacement);
 
-            assert forall |k:Key| (
-                #[trigger] self.substitute(replacement).i_children().map[k]
-                == self.i().replaced_children(replacement.i()).map[k]
-            ) by {
-                if self.node.key_in_domain(k) {
-                    let pivots = self.node.get_Node_pivots();
-                    pivots.route_lemma(k);
-                    pivots.route_lemma(self.key);
-
-                    if pivots.route(k) == pivots.route(self.key) {
-                        self.subpath_commutes_with_i();
-                    } else {
-                        self.node.i_children_lemma();
-                    }
-                }
-            }
-
-            assert_maps_equal!(self.substitute(replacement).i().get_Node_children().map,
-                self.i().substitute(replacement.i()).get_Node_children().map
+            self.subpath_commutes_with_i();
+            self.node.i_children_lemma();
+            assert(self.substitute(replacement).i().get_Node_children().map 
+                =~= self.i().substitute(replacement.i()).get_Node_children().map
             );
         }
     }
@@ -530,39 +493,28 @@ pub proof fn split_commutes_with_i_left(path: Path, request: SplitRequest, key: 
 
     target.get_Node_pivots().route_is_lemma(key, child_idx as int);
     target.split_parent(request).get_Node_pivots().route_is_lemma(key, child_idx as int);
+    PivotTable::route_lemma_auto();
+    PivotTable::route_is_lemma_auto();
 
     let a = target.child(key).i().filter_buffers_and_children(left_keys);
     if request.is_SplitLeaf() {
         let b = target.child(key).split_leaf(to_key(split_element)).0;
-        assert forall |k| true
-        implies #[trigger] a.get_Node_children().map[k] == b.i().get_Node_children().map[k]
-        by {
-            if left_keys.contains(k) {
-                b.get_Node_pivots().route_lemma(k);
-                target.child(key).get_Node_pivots().route_lemma(k);
-                // assert(a.get_Node_children().map[k] == target.child(key).child(k).i());
-                // assert(b.child(k) == target.child(key).child(k));
-            }
-        }
+        assert forall |k| #[trigger] a.get_Node_children().map[k] == b.i().get_Node_children().map[k] by {}
         assert(a.get_Node_children().map =~= b.i().get_Node_children().map);
     } else {
         let child_pivot_idx = request.get_SplitIndex_child_pivot_idx();
         let b = target.child(key).split_index(child_pivot_idx).0;
+        b.i_children_lemma();
+        target.child(key).i_children_lemma();
 
-        assert forall |k| true
-        implies #[trigger] a.get_Node_children().map[k] == b.i().get_Node_children().map[k]
-        by {
-            if left_keys.contains(k) {
-                b.i_children_lemma();
-                target.child(key).i_children_lemma();
-
-                let r = b.get_Node_pivots().route(k);
-                b.get_Node_pivots().route_lemma(k);
-                target.child(key).get_Node_pivots().route_is_lemma(k, r);
-                // assert(a.get_Node_children().map[k] == target.child(key).child(k).i());
-                // assert(b.child(k) == target.child(key).child(k));
-            }
-        }
+        // assert forall |k| true
+        // implies #[trigger] a.get_Node_children().map[k] == b.i().get_Node_children().map[k]
+        // by {
+        //     if left_keys.contains(k) {
+        //         let r = b.get_Node_pivots().route(k);
+        //         target.child(key).get_Node_pivots().route_is_lemma(k, r);
+        //     }
+        // }
         assert(a.get_Node_children().map =~= b.i().get_Node_children().map);
     }
 }
@@ -601,42 +553,30 @@ pub proof fn split_commutes_with_i_right(path: Path, request: SplitRequest, key:
     assert(right_keys =~= right_domain.key_set());
 
     target.i_children_lemma();
-    target.split_parent_wf(request);
     target.split_parent(request).i_children_lemma();
 
-    target.get_Node_pivots().route_is_lemma(key, child_idx as int);
-    target.split_parent(request).get_Node_pivots().route_is_lemma(key, child_idx as int + 1);
+    // target.get_Node_pivots().route_is_lemma(key, child_idx as int);
+    // target.split_parent(request).get_Node_pivots().route_is_lemma(key, child_idx as int + 1);
+    PivotTable::route_lemma_auto();
+    PivotTable::route_is_lemma_auto();
 
     let a = target.child(key).i().filter_buffers_and_children(right_keys);
     if request.is_SplitLeaf() {
         let b = target.child(key).split_leaf(to_key(split_element)).1;
-        assert forall |k| true
-        implies #[trigger] a.get_Node_children().map[k] == b.i().get_Node_children().map[k]
-        by {
-            if right_keys.contains(k) {
-                b.get_Node_pivots().route_lemma(k);
-                target.child(key).get_Node_pivots().route_lemma(k);
-                // assert(a.get_Node_children().map[k] == target.child(key).child(k).i());
-                // assert(b.child(k) == target.child(key).child(k));
-            }
-        }
+        assert forall |k| #[trigger] a.get_Node_children().map[k] == b.i().get_Node_children().map[k] by {}
         assert(a.get_Node_children().map =~= b.i().get_Node_children().map);
     } else {
         let child_pivot_idx = request.get_SplitIndex_child_pivot_idx();
         let b = target.child(key).split_index(child_pivot_idx).1;
+        b.i_children_lemma();
+        target.child(key).i_children_lemma();
 
         assert forall |k| true
         implies #[trigger] a.get_Node_children().map[k] == b.i().get_Node_children().map[k]
         by {
             if right_keys.contains(k) {
-                b.i_children_lemma();
-                target.child(key).i_children_lemma();
-
                 let r = b.get_Node_pivots().route(k);
-                b.get_Node_pivots().route_lemma(k);
                 target.child(key).get_Node_pivots().route_is_lemma(k, r + child_pivot_idx);
-                // assert(a.get_Node_children().map[k] == target.child(key).child(k).i());
-                // assert(b.child(k) == target.child(key).child(k));
             }
         }
         assert(a.get_Node_children().map =~= b.i().get_Node_children().map);
@@ -645,7 +585,6 @@ pub proof fn split_commutes_with_i_right(path: Path, request: SplitRequest, key:
 
 pub proof fn split_commutes_with_i_nonsplit(path: Path, request: SplitRequest, key: Key)
     requires path.valid(), path.target().can_split_parent(request),
-        // path.target().wf(), path.target().split_parent(request).wf(),
         path.target().my_domain().contains(key), 
         !split_keys(path, request).0.contains(key),
         !split_keys(path, request).1.contains(key)
@@ -659,17 +598,17 @@ pub proof fn split_commutes_with_i_nonsplit(path: Path, request: SplitRequest, k
     target.split_parent_wf(request);
 
     let child_idx = request.get_child_idx();
-    target.i_children_lemma();
-    new_target.i_children_lemma();
-
     let r = target.get_Node_pivots().route(key);
-    target.get_Node_pivots().route_lemma(key);
+    PivotTable::route_lemma_auto();
 
     if r < child_idx {
         new_target.get_Node_pivots().route_is_lemma(key, r);
     } else {
         new_target.get_Node_pivots().route_is_lemma(key, r+1);
     }
+
+    target.i_children_lemma();
+    new_target.i_children_lemma();
     assert(new_target.child(key) == target.child(key));
 }
 
@@ -723,26 +662,13 @@ pub proof fn flush_commutes_with_i(path: Path, child_idx: nat)
         child.node_promote_and_extend_commutes_with_i(child_domain, moved_buffers);
     }
 
-    assert forall |k| true
-    implies #[trigger] target.flush(child_idx).i().get_Node_children().map[k] 
-        == target.i().flush(child_domain.key_set()).get_Node_children().map[k]
-    by {
-        target.i_children_lemma();
-        target.flush(child_idx).i_children_lemma();
+    PivotTable::route_lemma_auto();
+    PivotTable::route_is_lemma_auto();
+    target.i_children_lemma();
+    target.flush(child_idx).i_children_lemma();
 
-        if child_domain.contains(k) {
-            target.flush(child_idx).get_Node_pivots().route_is_lemma(k, child_idx as int);
-            assert(target.key_in_domain(k));
-        } else {
-            if target.my_domain().contains(k) {
-                let r = target.get_Node_pivots().route(k);
-                target.get_Node_pivots().route_lemma(k);
-            }
-        }
-    }
-
-    assert(target.flush(child_idx).i().get_Node_children().map =~= 
-        target.i().flush(child_domain.key_set()).get_Node_children().map);
+    assert(target.flush(child_idx).i().get_Node_children().map 
+        =~=target.i().flush(child_domain.key_set()).get_Node_children().map);
 }
 
 pub proof fn compact_commutes_with_i(path: Path, compacted_buffers: BufferSeq)
@@ -850,14 +776,8 @@ impl PivotBetree::State {
 
         self.root.i_wf();
         post.root.i_wf();
-
-        assert forall |k| true
-        implies post.i().root.get_Node_children().map[k] == PagedBetree_v::constant_child_map(self.i().root).map[k]
-        by {
-            post.root.i_children_lemma();
-            post.root.get_Node_pivots().route_lemma(k);
-        }
-
+        PivotTable::route_lemma_auto();
+        post.root.i_children_lemma();
         assert(post.i().root.get_Node_children().map =~= PagedBetree_v::constant_child_map(self.root.i()).map);
         assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal_grow()));
     }

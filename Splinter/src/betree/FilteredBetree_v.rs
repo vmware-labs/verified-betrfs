@@ -11,11 +11,11 @@ use crate::spec::Messages_t::*;
 use crate::betree::Buffer_v::*;
 use crate::betree::BufferSeq_v::*;
 use crate::betree::BufferOffsets_v::*;
+use crate::betree::OffsetMap_v::*;
 use crate::betree::Memtable_v::*;
 use crate::betree::Domain_v::*;
 use crate::betree::PivotTable_v::*;
 use crate::betree::SplitRequest_v::*;
-use crate::betree::OffsetMap_v::*;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MsgHistory_v::*;
 
@@ -79,10 +79,10 @@ impl BetreeNode {
     pub open spec fn linked_children(self) -> bool
     {
         &&& self.is_Node() ==> { 
-            &&& forall |i:nat| #![auto] 
+            &&& forall |i:nat|
             ( 
                 self.valid_child_index(i) 
-                && self.get_Node_children()[i as int].is_Node() 
+                && (#[trigger] self.get_Node_children()[i as int].is_Node())
                 && self.get_Node_children()[i as int].local_structure() 
             ) ==> {
                 self.get_Node_children()[i as int].my_domain() == self.child_domain(i)
@@ -90,15 +90,9 @@ impl BetreeNode {
         }
     }
 
-    #[verifier(decreases_by)]
-    pub proof fn wf_children_decreases(self)
-    {
-        assume(false);
-    }
-
     pub open spec fn wf_children(self) -> bool
         recommends self.is_Node()
-        decreases self, 0nat via Self::wf_children_decreases
+        decreases self, 0nat when self.is_Node()
     {
         let children = self.get_Node_children();
         forall |i:int| #![auto] 0 <= i < children.len() ==> children[i].wf()
@@ -292,12 +286,13 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn active_keys(self, buffer_idx: nat) -> Set<Key>
-        recommends self.wf(), self.is_Node(), buffer_idx < self.get_Node_buffers().len()
+    pub open spec fn active_keys(self, buffer_idx: int) -> Set<Key>
+        recommends self.wf(), self.is_Node(), 
+            0 <= buffer_idx < self.get_Node_buffers().len()
     {
         Set::new(|k: Key| exists |child_idx: nat| 
             #![auto]  (child_idx < self.get_Node_children().len()
-            && self.get_Node_flushed().offsets[child_idx as int] <= buffer_idx
+            && self.get_Node_flushed().offsets[child_idx as int] <= buffer_idx as nat
             && self.child_domain(child_idx).contains(k))
         )
     }
@@ -407,35 +402,38 @@ impl QueryReceipt{
         &&& (forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.lines[i as int].node.key_in_domain(self.key))
     }
 
-    pub open spec fn child_at(self, i: nat) -> BetreeNode
+    pub open spec fn child_at(self, i: int) -> BetreeNode
+        recommends 0 <= i < self.lines.len()
     {
-        self.lines[i as int].node.child(self.key)
+        self.lines[i].node.child(self.key)
     }
 
-    pub open spec fn child_linked_at(self, i: nat) -> bool
+    pub open spec fn child_linked_at(self, i: int) -> bool
+        recommends 0 <= i < self.lines.len()-1
     {
-        self.lines[i as int + 1].node == self.child_at(i)
+        self.lines[i + 1].node == self.child_at(i)
     }
 
-    pub open spec fn result_at(self, i: nat) -> Message
-        recommends i < self.lines.len()
+    pub open spec fn result_at(self, i: int) -> Message
+        recommends 0 <= i < self.lines.len()
     {
-        self.lines[i as int].result
+        self.lines[i].result
     }
 
-    pub open spec fn result_linked_at(self, i:nat) -> bool
+    pub open spec fn result_linked_at(self, i: int) -> bool
+        recommends 0 <= i < self.lines.len()-1
     {
         let start = self.root.flushed_ofs(self.key);
-        let msg = self.lines[i as int].node.get_Node_buffers().query_from(self.key, start as int);
-        self.lines[i as int].result == Message::merge(msg, self.result_at(i+1))
+        let msg = self.lines[i].node.get_Node_buffers().query_from(self.key, start as int);
+        self.lines[i].result == self.result_at(i+1).merge(msg)
     }
 
     pub open spec fn valid(self) -> bool
     {
         &&& self.structure()
         &&& self.all_lines_wf()
-        &&& (forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.child_linked_at(i))
-        &&& (forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.result_linked_at(i))
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.child_linked_at(i))
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.result_linked_at(i))
     }
 
     pub open spec fn result(self) -> Message
@@ -522,7 +520,7 @@ impl Path{
 } // end impl Path
 
 
-state_machine!{ PivotBetree {
+state_machine!{ FilteredBetree {
     fields {
         pub memtable: Memtable,
         pub root: BetreeNode,
@@ -537,7 +535,6 @@ state_machine!{ PivotBetree {
     {
         Query{end_lsn: LSN, key: Key, value: Value},
         Put{puts: MsgHistory},
-        QueryEndLsn{end_lsn: LSN},
         FreezeAs{stamped_betree: StampedBetree},
         Internal{},   // Local No-op label
     }
@@ -546,7 +543,7 @@ state_machine!{ PivotBetree {
         require let Label::Query{end_lsn, key, value} = lbl;
         require end_lsn == pre.memtable.seq_end;
         require receipt.valid_for(pre.root, key);
-        require Message::Define{value} == Message::merge(pre.memtable.query(key), receipt.result());
+        require Message::Define{value} == receipt.result().merge(pre.memtable.query(key));
     }}
 
     transition!{ put(lbl: Label) {
@@ -554,11 +551,6 @@ state_machine!{ PivotBetree {
         require puts.wf();
         require puts.seq_start == pre.memtable.seq_end;
         update memtable = pre.memtable.apply_puts(puts);
-    }}
-
-    transition!{ query_end_lsn(lbl: Label) {
-        require let Label::QueryEndLsn{end_lsn} = lbl;
-        require end_lsn == pre.memtable.seq_end;
     }}
 
     transition!{ freeze_as(lbl: Label) {

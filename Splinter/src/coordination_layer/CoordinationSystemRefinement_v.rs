@@ -846,7 +846,7 @@ verus! {
     // "Rob Power Trigger" (ask Jon for origins of this meme)
     assert(forall |i: LSN|
       (v.mapadt.persistent.seq_end <= i < v.i().versions.len())
-      ==> jp.discard_recent(i).ext_equal(j.discard_recent(i))
+      ==> (#[trigger] jp.discard_recent(i)).ext_equal(j.discard_recent(i))
     );
 
     // BEGIN - CrashTolerant::Next proof

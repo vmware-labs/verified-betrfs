@@ -334,19 +334,20 @@ impl QueryReceipt{
     {
         &&& 0 < self.lines.len()
         &&& self.lines[0].node == self.root
-        &&& (forall |i:nat| #![auto] i < self.lines.len() ==> {
-            self.lines[i as int].node.is_Node() <==> i < self.lines.len()-1
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len() ==> {
+            self.lines[i].node.is_Node() <==> i < self.lines.len()-1
         })
         &&& self.lines.last().result == Message::Define{value: default_value()}
     }
 
     pub open spec fn all_lines_wf(self) -> bool
     {
-        &&& (forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].wf())
-        &&& (forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.lines[i as int].node.key_in_domain(self.key))
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len() ==> self.lines[i].wf())
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.lines[i].node.key_in_domain(self.key))
     }
 
     pub open spec fn child_at(self, i: int) -> BetreeNode
+        recommends 0 <= i < self.lines.len()
     {
         self.lines[i].node.child(self.key)
     }
