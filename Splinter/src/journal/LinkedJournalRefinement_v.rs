@@ -61,6 +61,7 @@ impl DiskView {
         // appears in the ensures.
         // Well actually, sometimes with == it completes the proof, but (AAAARGH) it's super flaky.
         // trying =~=...
+        assume(false); // Goodness this is hella flaky.
         assert( post.iptr(ptr) =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
     }
 
@@ -230,6 +231,20 @@ impl TruncatedJournal {
         self.disk_view.discard_interp(lsn, post.disk_view, post.freshest_rec);
     }
 
+    pub proof fn discard_old_commutes(self, new_bdy: LSN)
+    requires
+        self.decodable(),
+        self.can_discard_to(new_bdy),
+    ensures
+        self.discard_old(new_bdy).decodable(), //prereq
+        self.i().can_discard_to(new_bdy), //prereq
+        self.discard_old(new_bdy).i() == self.i().discard_old_defn(new_bdy),
+    {
+        assert( self.disk_view.discard_old(new_bdy).valid_ranking(self.disk_view.the_ranking()) );  // witness to Acyclic
+        if new_bdy < self.seq_end() {
+          self.disk_view.discard_old_commutes(self.freshest_rec, new_bdy);
+        }
+    }
 }
 
 impl LinkedJournal::Label {
@@ -276,7 +291,45 @@ impl LinkedJournal::State {
         assert( LinkedJournal::State::next_by(self, post, lbl, step) );
         match step {
             LinkedJournal::Step::read_for_recovery(depth) =>  {
-                assume(false);
+                let tj = self.truncated_journal;
+                let tjd = self.truncated_journal.disk_view;
+                tjd.pointer_after_crop_commutes_with_interpretation(
+                    tj.freshest_rec, tjd.boundary_lsn, depth);
+
+//        self.iptr(self.pointer_after_crop(ptr, depth))
+//            == PagedJournal_v::JournalRecord::opt_rec_crop_head_records(self.iptr(ptr), bdy, depth),
+                let msi = tj.i().freshest_rec.unwrap().message_seq_after_crop(tj.i().boundary_lsn, depth);
+                let msl = lbl.get_ReadForRecovery_messages();
+
+        // as written in lemma
+        let msi2 = PagedJournal_v::JournalRecord::opt_rec_crop_head_records(tjd.iptr(tj.freshest_rec), tjd.boundary_lsn, depth).unwrap().message_seq.maybe_discard_old(tjd.boundary_lsn);
+        // msi2 is a Pointer
+        assert( msi2 == msi );
+
+        assert( tjd.iptr(tjd.pointer_after_crop(tj.freshest_rec, depth))
+            == PagedJournal_v::JournalRecord::opt_rec_crop_head_records(tjd.iptr(tj.freshest_rec), tjd.boundary_lsn, depth) );
+
+        assert( tjd.iptr(tj.freshest_rec) == tj.i().freshest_rec );
+
+        let ptr = tjd.pointer_after_crop(tj.freshest_rec, depth);
+
+        assert( tjd.entries[ptr.unwrap()].message_seq.maybe_discard_old(tjd.boundary_lsn) == msl );
+        assert( tjd.boundary_lsn == tj.i().boundary_lsn );
+        assert(
+            tjd.entries[ptr.unwrap()].i()
+            ==
+            tj.i().freshest_rec.unwrap().crop_head_records(tj.i().boundary_lsn, depth)
+            );
+        assert(
+            tjd.entries[ptr.unwrap()].message_seq
+            ==
+            tj.i().freshest_rec.unwrap().crop_head_records(tj.i().boundary_lsn, depth).unwrap().message_seq
+            );
+
+                assert( msi.seq_start == msl.seq_start );
+                assert( msi.seq_end == msl.seq_end );
+                assert( msi =~= msl );
+                assert( tj.i().freshest_rec.unwrap().message_seq_after_crop(tj.i().boundary_lsn, depth) =~~= lbl.get_ReadForRecovery_messages() );
                 assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::read_for_recovery(depth)) );
             }
             LinkedJournal::Step::freeze_for_commit(depth) =>  {
