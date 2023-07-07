@@ -413,6 +413,7 @@ impl Path{
     {
         self.i_valid();
         self.substitute_preserves_wf(replacement);
+
         replacement.i_wf();
         PivotTable::route_lemma_auto();
 

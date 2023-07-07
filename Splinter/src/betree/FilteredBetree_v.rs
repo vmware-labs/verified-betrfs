@@ -286,15 +286,20 @@ impl BetreeNode {
         }
     }
 
+    pub open spec fn active_key_cond(self, k: Key, child_idx: int, buffer_idx: int) -> bool
+        recommends self.wf(), self.is_Node(), 
+            0 <= buffer_idx < self.get_Node_buffers().len()
+    {
+        &&& 0 <= child_idx < self.get_Node_children().len()
+        &&& self.get_Node_flushed().offsets[child_idx] <= buffer_idx as nat
+        &&& self.child_domain(child_idx as nat).contains(k)
+    }
+
     pub open spec fn active_keys(self, buffer_idx: int) -> Set<Key>
         recommends self.wf(), self.is_Node(), 
             0 <= buffer_idx < self.get_Node_buffers().len()
     {
-        Set::new(|k: Key| exists |child_idx: nat| 
-            #![auto]  child_idx < self.get_Node_children().len()
-            && self.get_Node_flushed().offsets[child_idx as int] <= buffer_idx as nat
-            && self.child_domain(child_idx).contains(k)
-        )
+        Set::new(|k: Key| exists |child_idx| self.active_key_cond(k, child_idx, buffer_idx))
     }
 
     pub open spec fn can_flush(self, child_idx: nat, buffer_gc: nat) -> bool

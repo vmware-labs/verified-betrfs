@@ -143,7 +143,7 @@ impl BetreeNode {
             assert(i_buffers[i].query(key) == Message::Update{delta: nop_delta()});
         } else {
             let r = self.get_Node_pivots().route(key);
-            assert(self.child_domain(r as nat).contains(key));
+            assert(self.active_key_cond(key, r, i));
             assert(i_buffers[i].query(key) == buffers[i].query(key));
         }
         self.query_from_refines_recur(key, i+1);
@@ -160,17 +160,17 @@ impl BetreeNode {
         self.query_from_refines_recur(key, 0);
     }
 
-//     pub open spec fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
-//         recommends self.wf(), self.is_index()
-//     {
-//         &&& other_children.len() == self.get_Node_children().len()
-//         &&& forall |i:int| #![auto] 0 <= i < other_children.len() ==> other_children[i].wf()
-//         &&& (forall |i:int| #![auto] 0 <= i < self.get_Node_children().len() ==> {
-//             &&& other_children[i].wf()
-//             &&& other_children[i].is_Node()
-//             &&& other_children[i].my_domain() == self.get_Node_children()[i].my_domain()
-//         })
-//     }
+    pub open spec fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
+        recommends self.wf(), self.is_index()
+    {
+        &&& other_children.len() == self.get_Node_children().len()
+        &&& forall |i:int| #![auto] 0 <= i < other_children.len() ==> other_children[i].wf()
+        &&& (forall |i:int| #![auto] 0 <= i < self.get_Node_children().len() ==> {
+            &&& other_children[i].wf()
+            &&& other_children[i].is_Node()
+            &&& other_children[i].my_domain() == self.get_Node_children()[i].my_domain()
+        })
+    }
 
 //     pub proof fn empty_root_refines()
 //         ensures Self::empty_root(total_domain()).i() == PivotBetree_v::BetreeNode::empty_root()
@@ -399,87 +399,99 @@ impl Path{
         }
     }
 
-    // pub proof fn substitute_preserves_wf(self, replacement: BetreeNode)
-    //     requires self.valid(), self.valid_replacement(replacement)
-    //     ensures self.substitute(replacement).wf()
-    //     decreases self.depth, 1nat
-    // {
-    //     if 0 < self.depth {
-    //         self.subpath().substitute_preserves_wf(replacement);
+    pub proof fn substitute_preserves_wf(self, replacement: BetreeNode)
+        requires self.valid(), self.valid_replacement(replacement)
+        ensures self.substitute(replacement).wf(),
+            self.substitute(replacement).is_Node()
+        decreases self.depth, 1nat
+    {
+        if 0 < self.depth {
+            self.subpath().substitute_preserves_wf(replacement);
     
-    //         let result = self.substitute(replacement);
-    //         if result.is_Node() {
-    //             self.replaced_children_matching_domains(replacement);
-    //             assert forall |i:nat| i < self.node.get_Node_children().len() ==> { // trigger
-    //                 self.node.valid_child_index(i)
-    //                 && (#[trigger] self.node.get_Node_children()[i as int].is_Node())
-    //                 && self.node.get_Node_children()[i as int].wf()
-    //             } by { }
+            let result = self.substitute(replacement);
+            if result.is_Node() {
+                self.replaced_children_matching_domains(replacement);
+                assert forall |i:nat| i < self.node.get_Node_children().len() ==> { // trigger
+                    self.node.valid_child_index(i)
+                    && (#[trigger] self.node.get_Node_children()[i as int].is_Node())
+                    && self.node.get_Node_children()[i as int].wf()
+                } by { }
 
-    //             assert(result.linked_children());
-    //         }
-    //     }
-    // }
+                assert(result.linked_children());
+            }
+        }
+    }
 
-//     pub proof fn replaced_children_matching_domains(self, replacement: BetreeNode)
-//         requires self.valid(), self.valid_replacement(replacement), 0 < self.depth
-//         ensures self.node.children_have_matching_domains(self.replaced_children(replacement))
-//         decreases self.depth, 0nat
-//     {
-//         self.node.get_Node_pivots().route_lemma(self.key);
-//         self.subpath().substitute_preserves_wf(replacement);
+    pub proof fn replaced_children_matching_domains(self, replacement: BetreeNode)
+        requires self.valid(), self.valid_replacement(replacement), 0 < self.depth
+        ensures self.node.children_have_matching_domains(self.replaced_children(replacement))
+        decreases self.depth, 0nat
+    {
+        PivotTable::route_lemma_auto();
+        self.subpath().substitute_preserves_wf(replacement);
 
-//         let old_children = self.node.get_Node_children();
-//         let new_children = self.replaced_children(replacement);
-//         assert(old_children.len() == new_children.len());
+        let old_children = self.node.get_Node_children();
+        let new_children = self.replaced_children(replacement);
+        assert(old_children.len() == new_children.len());
         
-//         if 0 < self.subpath().depth {
-//             self.subpath().replaced_children_matching_domains(replacement);
-//         }
-//     }
+        if 0 < self.subpath().depth {
+            self.subpath().replaced_children_matching_domains(replacement);
+        }
+    }
 
-//     pub proof fn substitute_refines(self, replacement: BetreeNode)
-//         requires self.valid(), self.valid_replacement(replacement)
-//         ensures self.substitute(replacement).wf(), 
-//             self.i().valid(), replacement.i().wf(),
-//             self.substitute(replacement).i() == self.i().substitute(replacement.i())
-//         decreases self.depth
-//     {
-//         self.i_valid();
-//         self.substitute_preserves_wf(replacement);
-//         replacement.i_wf();
+    pub proof fn substitute_refines(self, replacement: BetreeNode)
+        requires self.valid(), self.valid_replacement(replacement)
+        ensures self.substitute(replacement).wf(), 
+            self.i().valid(), replacement.i().wf(),
+            self.substitute(replacement).i() == self.i().substitute(replacement.i())
+        decreases self.depth
+    {
+        self.i_valid();
+        self.target_wf();
+        self.substitute_preserves_wf(replacement);
+        replacement.i_wf();
 
-//         if 0 < self.depth {
-//             self.substitute(replacement).i_children_lemma();
-//             assert(self.substitute(replacement).i_children().wf());
+        PivotTable::route_lemma_auto();
 
-//             self.i().substitute_preserves_wf(replacement.i());
-//             assert(self.i().replaced_children(replacement.i()).wf());
+        if 0 < self.depth {
+            self.substitute(replacement).i_children_lemma();
+            assert(self.substitute(replacement).i().wf_children());
 
-//             self.subpath().substitute_refines(replacement);
+            self.target_commutes_with_i();
+            self.i().substitute_preserves_wf(replacement.i());
+            assert(self.substitute(replacement).i().wf_children());
 
-//             assert forall |k:Key| (
-//                 #[trigger] self.substitute(replacement).i_children().map[k]
-//                 == self.i().replaced_children(replacement.i()).map[k]
-//             ) by {
-//                 if self.node.key_in_domain(k) {
-//                     let pivots = self.node.get_Node_pivots();
-//                     pivots.route_lemma(k);
-//                     pivots.route_lemma(self.key);
+            self.subpath().substitute_refines(replacement);
 
-//                     if pivots.route(k) == pivots.route(self.key) {
-//                         self.subpath_commutes_with_i();
-//                     } else {
-//                         self.node.i_children_lemma();
-//                     }
-//                 }
-//             }
+            self.subpath_commutes_with_i();
+            self.node.i_children_lemma();
+            assert(self.substitute(replacement).i().get_Node_children()
+                =~= self.i().substitute(replacement.i()).get_Node_children()
+            );
 
-//             assert_maps_equal!(self.substitute(replacement).i().get_Node_children().map,
-//                 self.i().substitute(replacement.i()).get_Node_children().map
-//             );
-//         }
-//     }
+            assert forall |i| 0 <= i < self.node.get_Node_buffers().len()
+            implies #[trigger] self.substitute(replacement).i().get_Node_buffers().buffers[i] == self.node.i().get_Node_buffers().buffers[i]
+            by {
+                let a = self.substitute(replacement).active_keys(i);
+                let b = self.node.active_keys(i);
+
+                self.replaced_children_matching_domains(replacement);
+                assert forall |k: Key| a.contains(k) <==> b.contains(k)
+                by {
+                    if a.contains(k) {
+                        let child_idx = choose |child_idx| self.substitute(replacement).active_key_cond(k, child_idx, i);
+                        assert(self.node.active_key_cond(k, child_idx, i));
+                    }
+                    if b.contains(k) {
+                        let child_idx = choose |child_idx| self.node.active_key_cond(k, child_idx, i);
+                        assert(self.substitute(replacement).active_key_cond(k, child_idx, i));
+                    }
+                }
+                assert(self.substitute(replacement).active_keys(i) =~= self.node.active_keys(i));
+            }
+            assert(self.substitute(replacement).i().get_Node_buffers() =~= self.node.i().get_Node_buffers());
+        }
+    }
 }
 
 impl FilteredBetree::Label {

@@ -10,6 +10,7 @@ use crate::betree::OffsetMap_v::*;
 
 verus! {
 
+#[verifier::ext_equal]
 pub struct BufferSeq {
     pub buffers: Seq<Buffer>
 }
