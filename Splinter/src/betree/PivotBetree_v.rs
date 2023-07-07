@@ -48,7 +48,7 @@ impl BetreeNode {
     pub open spec fn valid_child_index(self, child_idx: nat) -> bool
     {
         &&& self.is_Node()
-        &&& child_idx < self.get_Node_children().len()   
+        &&& child_idx < self.get_Node_children().len()
     }
 
     pub open spec fn my_domain(self) -> Domain

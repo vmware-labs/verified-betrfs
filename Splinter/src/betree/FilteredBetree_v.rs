@@ -291,9 +291,9 @@ impl BetreeNode {
             0 <= buffer_idx < self.get_Node_buffers().len()
     {
         Set::new(|k: Key| exists |child_idx: nat| 
-            #![auto]  (child_idx < self.get_Node_children().len()
+            #![auto]  child_idx < self.get_Node_children().len()
             && self.get_Node_flushed().offsets[child_idx as int] <= buffer_idx as nat
-            && self.child_domain(child_idx).contains(k))
+            && self.child_domain(child_idx).contains(k)
         )
     }
 
@@ -423,7 +423,7 @@ impl QueryReceipt{
     pub open spec fn result_linked_at(self, i: int) -> bool
         recommends 0 <= i < self.lines.len()-1
     {
-        let start = self.root.flushed_ofs(self.key);
+        let start = self.lines[i].node.flushed_ofs(self.key);
         let msg = self.lines[i].node.get_Node_buffers().query_from(self.key, start as int);
         self.lines[i].result == self.result_at(i+1).merge(msg)
     }

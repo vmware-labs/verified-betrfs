@@ -4,8 +4,8 @@ use builtin_macros::*;
 use vstd::prelude::*;
 use vstd::map::*;
 use vstd::seq_lib::*;
-// use vstd::calc_macro::*;
 use crate::spec::KeyType_t::*;
+use crate::spec::Messages_t::*;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::betree::Domain_v::*;
 use crate::betree::PivotTable_v::*;
@@ -114,6 +114,50 @@ impl BetreeNode {
             self.i_children_lemma();
             assert(self.wf_children()); // trigger
         }
+    }
+
+    pub proof fn query_from_refines_recur(self, key: Key, i: int)
+        requires self.wf(), self.is_Node(), 
+            self.key_in_domain(key),
+            0 <= i <= self.get_Node_buffers().len()
+        ensures ({
+            let start = self.flushed_ofs(key) as int;
+            &&& i < start ==> self.i().get_Node_buffers().query_from(key, i) == self.get_Node_buffers().query_from(key, start) 
+            &&& i >= start ==> self.i().get_Node_buffers().query_from(key, i) == self.get_Node_buffers().query_from(key, i) 
+        })
+        decreases self.get_Node_buffers().len() - i
+    {
+        let start = self.flushed_ofs(key) as int;
+        let buffers = self.get_Node_buffers().buffers;
+        let i_buffers = self.i().get_Node_buffers().buffers;
+
+        PivotTable::route_lemma_auto();
+        PivotTable::route_is_lemma_auto();
+
+        if i == self.get_Node_buffers().len() {
+            return;
+        } 
+        
+        if i < start {
+            assert(!self.active_keys(i).contains(key));
+            assert(i_buffers[i].query(key) == Message::Update{delta: nop_delta()});
+        } else {
+            let r = self.get_Node_pivots().route(key);
+            assert(self.child_domain(r as nat).contains(key));
+            assert(i_buffers[i].query(key) == buffers[i].query(key));
+        }
+        self.query_from_refines_recur(key, i+1);
+    }
+
+    pub proof fn query_from_refines(self, key: Key)
+        requires self.wf(), self.is_Node(), self.key_in_domain(key),
+        ensures ({
+            let start = self.flushed_ofs(key);
+            let msg = self.get_Node_buffers().query_from(key, start as int);
+            &&& msg == self.i().get_Node_buffers().query(key)
+        })
+    {
+        self.query_from_refines_recur(key, 0);
     }
 
 //     pub open spec fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
@@ -296,13 +340,11 @@ impl QueryReceipt{
 
         assert forall |i:int| 0 <= i < i_receipt.lines.len()-1
         implies #[trigger] i_receipt.result_linked_at(i) by {
-            assert(self.result_linked_at(i));
-            assume(false);
+            assert(self.result_linked_at(i)); // trigger
+            self.lines[i].node.query_from_refines(self.key);
         }
 
-        // uncommenting following line and proof will go through
-        // assert(i_receipt.all_lines_wf()); // trigger
-        assert(i_receipt.valid());
+        assert(i_receipt.all_lines_wf()); // trigger
     }
 }
 
