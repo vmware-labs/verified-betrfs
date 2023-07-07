@@ -315,16 +315,30 @@ impl LinkedJournal::State {
 
         assert( tjd.entries[ptr.unwrap()].message_seq.maybe_discard_old(tjd.boundary_lsn) == msl );
         assert( tjd.boundary_lsn == tj.i().boundary_lsn );
-        assert(
-            tjd.entries[ptr.unwrap()].i()
-            ==
-            tj.i().freshest_rec.unwrap().crop_head_records(tj.i().boundary_lsn, depth)
-            );
+        assert( ptr.is_Some() );
+
+        let iptrdefn =
+            if ptr.is_None() { let x: Option::<PagedJournal_v::JournalRecord> = None; x }
+            else {
+                let jr = tjd.entries[ptr.unwrap()];
+                Option::<PagedJournal_v::JournalRecord>::Some(PagedJournal_v::JournalRecord{
+                    message_seq: jr.message_seq,
+                    prior_rec: Box::new(tjd.iptr(jr.cropped_prior(tjd.boundary_lsn))),
+                })
+            };
+        assert( tjd.iptr(ptr) == iptrdefn );    // Okay, getting closer. Something very wrong with
+                                                // (open) iptr defn
+        
+        if tjd.iptr(ptr).is_None() {
+            assert( ptr.is_None() );
+        }
+        assert( tjd.iptr(ptr).is_Some() );
         assert(
             tjd.entries[ptr.unwrap()].message_seq
             ==
-            tj.i().freshest_rec.unwrap().crop_head_records(tj.i().boundary_lsn, depth).unwrap().message_seq
+            tjd.iptr(ptr).unwrap().message_seq
             );
+
 
                 assert( msi.seq_start == msl.seq_start );
                 assert( msi.seq_end == msl.seq_end );
