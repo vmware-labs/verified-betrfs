@@ -172,27 +172,16 @@ impl BetreeNode {
         })
     }
 
-//     pub proof fn empty_root_refines()
-//         ensures Self::empty_root(total_domain()).i() == PivotBetree_v::BetreeNode::empty_root()
-//     {
-//         let empty = Self::empty_root(total_domain());
-//         let empty_child_map = PivotBetree_v::empty_child_map();
+    // pub proof fn empty_root_refines()
+    //     ensures Self::empty_root(total_domain()).i() == PivotBetree_v::BetreeNode::empty_root(total_domain())
+    // {
+    //     let empty = Self::empty_root(total_domain());
+    //     let i_empty = PivotBetree_v::BetreeNode::empty_root(total_domain());
 
-//         assert(empty.wf_children()); // trigger
-//         empty.i_children_lemma();
-
-//         assert forall |k: Key| true 
-//         implies ( #[trigger] empty.i().get_Node_children().map[k] == empty_child_map.map[k])
-//         by {
-//             empty.get_Node_pivots().route_lemma(k);
-//             assert(empty.get_Node_pivots().route(k) == 0);
-//             assert(empty.child(k).is_Nil());
-//             assert(empty_child_map.map[k].is_Nil());
-//         }
-
-//         assert(empty.i().get_Node_children().map =~= empty_child_map.map);
-//         assert(empty.i() == PivotBetree_v::BetreeNode::empty_root());
-//     }
+    //     assert(empty.wf_children()); // trigger
+    //     empty.i_children_lemma();
+    //     assert(empty.i().get_Node_buffers() =~= i_empty.get_Node_buffers());
+    // }
 
 //     pub open spec fn split_element(self, request: SplitRequest) -> Element
 //         recommends self.wf(), self.can_split_parent(request)
@@ -803,88 +792,94 @@ impl FilteredBetree::State {
         PivotBetree::State{root: self.root.i(), memtable: self.memtable}
     }
 
-//     pub proof fn init_refines(self, stamped_betree: StampedBetree) 
-//         requires FilteredBetree::State::initialize(self, stamped_betree)
-//         ensures PivotBetree::State::initialize(self.i(), i_stamped_betree(stamped_betree))
-//     {
-//         stamped_betree.value.i_wf();
-//     }
+    pub proof fn init_refines(self, stamped_betree: StampedBetree) 
+        requires FilteredBetree::State::initialize(self, stamped_betree)
+        ensures PivotBetree::State::initialize(self.i(), i_stamped_betree(stamped_betree))
+    {
+        stamped_betree.value.i_wf();
+    }
 
-//     pub proof fn query_refines(self, post: Self, lbl: FilteredBetree::Label, receipt: QueryReceipt)
-//         requires self.inv(), FilteredBetree::State::query(self, post, lbl, receipt)
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
-//     {
-//         reveal(PivotBetree::State::next);
-//         reveal(PivotBetree::State::next_by);
+    pub proof fn query_refines(self, post: Self, lbl: FilteredBetree::Label, receipt: QueryReceipt)
+        requires self.inv(), FilteredBetree::State::query(self, post, lbl, receipt)
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-//         receipt.valid_receipt_refines();
-//         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::query(receipt.i())));
-//     }
+        receipt.valid_receipt_refines();
+        assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::query(receipt.i())));
+    }
 
-//     pub proof fn put_refines(self, post: Self, lbl: FilteredBetree::Label)
-//         requires self.inv(), FilteredBetree::State::put(self, post, lbl)
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
-//     {
-//         reveal(PivotBetree::State::next);
-//         reveal(PivotBetree::State::next_by);
+    pub proof fn put_refines(self, post: Self, lbl: FilteredBetree::Label)
+        requires self.inv(), FilteredBetree::State::put(self, post, lbl)
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-//         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::put()));
-//     }
+        assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::put()));
+    }
 
-//     pub proof fn freeze_as_refines(self, post: Self, lbl: FilteredBetree::Label)
-//         requires self.inv(), FilteredBetree::State::freeze_as(self, post, lbl)
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
-//     {
-//         reveal(PivotBetree::State::next);
-//         reveal(PivotBetree::State::next_by);
+    pub proof fn freeze_as_refines(self, post: Self, lbl: FilteredBetree::Label)
+        requires self.inv(), FilteredBetree::State::freeze_as(self, post, lbl)
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-//         self.root.i_wf();
-//         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::freeze_as()));
-//     }
+        self.root.i_wf();
+        assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::freeze_as()));
+    }
 
-//     pub proof fn internal_flush_memtable_refines(self, post: Self, lbl: FilteredBetree::Label)
-//         requires self.inv(), FilteredBetree::State::internal_flush_memtable(self, post, lbl)
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
-//     {
-//         reveal(PivotBetree::State::next);
-//         reveal(PivotBetree::State::next_by);
+    pub proof fn internal_flush_memtable_refines(self, post: Self, lbl: FilteredBetree::Label)
+        requires self.inv(), FilteredBetree::State::internal_flush_memtable(self, post, lbl)
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-//         self.root.i_wf();
-//         assert(post.root.wf());
+        self.root.i_wf();
+        assert(post.root.wf());
 
-//         let a = self.root.push_memtable(self.memtable).value.i();
-//         let b = self.root.i().push_memtable(self.memtable).value;
+        let a = self.root.push_memtable(self.memtable).value.i();
+        let b = self.root.i().push_memtable(self.memtable).value;
+        let equiv_children_node = if self.root.is_Node() { self.root } else { BetreeNode::empty_root(total_domain()) };
+        equiv_children_node.i_children_lemma();
 
-//         BetreeNode::empty_root_refines();
-//         let equiv_children_node = if self.root.is_Node() { self.root } else { BetreeNode::empty_root(total_domain()) };
-//         equiv_children_node.i_children_seq_same(self.root.push_memtable(self.memtable).value, 0);
+        self.root.push_memtable(self.memtable).value.i_children_lemma();
+        assert(a.get_Node_children() =~= b.get_Node_children());
+        assume(a.get_Node_buffers() =~= b.get_Node_buffers()); // TODO
 
-//         assert(a.get_Node_buffers() =~= b.get_Node_buffers());
-//         assert(a.get_Node_children().map =~= b.get_Node_children().map);
+        assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_flush_memtable()));
+    }
 
-//         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_flush_memtable()));
-//     }
+    pub proof fn internal_grow_refines(self, post: Self, lbl: FilteredBetree::Label)
+        requires self.inv(), FilteredBetree::State::internal_grow(self, post, lbl)
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-//     pub proof fn internal_grow_refines(self, post: Self, lbl: FilteredBetree::Label)
-//         requires self.inv(), FilteredBetree::State::internal_grow(self, post, lbl)
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
-//     {
-//         reveal(PivotBetree::State::next);
-//         reveal(PivotBetree::State::next_by);
+        self.root.i_wf();
+        post.root.i_wf();
 
-//         self.root.i_wf();
-//         post.root.i_wf();
+        post.root.i_children_lemma();
+        PivotTable::route_lemma_auto();
 
-//         assert forall |k| true
-//         implies post.i().root.get_Node_children().map[k] == PivotBetree_v::constant_child_map(self.i().root).map[k]
-//         by {
-//             post.root.i_children_lemma();
-//             post.root.get_Node_pivots().route_lemma(k);
-//         }
+        // assert forall |k| true
+        // implies post.i().root.get_Node_children().map[k] == PivotBetree_v::constant_child_map(self.i().root).map[k]
+        // by {
+        //     post.root.i_children_lemma();
+        //     post.root.get_Node_pivots().route_lemma(k);
+        // }
 
-//         assert(post.i().root.get_Node_children().map =~= PivotBetree_v::constant_child_map(self.root.i()).map);
-//         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_grow()));
-//     }
+        // assert(post.i().root.get_Node_children() =~= post.root.
+        
+        //PivotBetree_v::constant_child_map(self.root.i()));
+
+        assume(false);
+        assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_grow()));
+    }
 
 //     pub proof fn internal_split_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, request: SplitRequest)
 //         requires self.inv(), FilteredBetree::State::internal_split(self, post, lbl, path, request)
@@ -959,27 +954,27 @@ impl FilteredBetree::State {
 //         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_noop()));
 //     }
 
-//     pub proof fn next_refines(self, post: Self, lbl: FilteredBetree::Label)
-//         requires self.inv(), FilteredBetree::State::next(self, post, lbl),
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i()),
-//     {
-//         reveal(FilteredBetree::State::next);
-//         reveal(FilteredBetree::State::next_by);
+    pub proof fn next_refines(self, post: Self, lbl: FilteredBetree::Label)
+        requires self.inv(), FilteredBetree::State::next(self, post, lbl),
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i()),
+    {
+        reveal(FilteredBetree::State::next);
+        reveal(FilteredBetree::State::next_by);
 
-//         match choose |step| FilteredBetree::State::next_by(self, post, lbl, step)
-//         {
-//             FilteredBetree::Step::query(receipt) => { self.query_refines(post, lbl, receipt); } 
-//             FilteredBetree::Step::put() => { self.put_refines(post, lbl); }
-//             FilteredBetree::Step::freeze_as() => { self.freeze_as_refines(post, lbl); }
-//             FilteredBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_refines(post, lbl); }
-//             FilteredBetree::Step::internal_grow() => { self.internal_grow_refines(post, lbl); }
-//             FilteredBetree::Step::internal_split(path, split_request) => { self.internal_split_refines(post, lbl, path, split_request); }
-//             FilteredBetree::Step::internal_flush(path, child_idx) => { self.internal_flush_refines(post, lbl, path, child_idx); }
-//             FilteredBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_refines(post, lbl, path, compacted_buffers); }
-//             FilteredBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
-//             _ => { assert(false); } 
-//         }
-//     }
+        match choose |step| FilteredBetree::State::next_by(self, post, lbl, step)
+        {
+            FilteredBetree::Step::query(receipt) => { self.query_refines(post, lbl, receipt); } 
+            FilteredBetree::Step::put() => { self.put_refines(post, lbl); }
+            FilteredBetree::Step::freeze_as() => { self.freeze_as_refines(post, lbl); }
+            FilteredBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_refines(post, lbl); }
+            // FilteredBetree::Step::internal_grow() => { self.internal_grow_refines(post, lbl); }
+            // FilteredBetree::Step::internal_split(path, split_request) => { self.internal_split_refines(post, lbl, path, split_request); }
+            // FilteredBetree::Step::internal_flush(path, child_idx) => { self.internal_flush_refines(post, lbl, path, child_idx); }
+            // FilteredBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_refines(post, lbl, path, compacted_buffers); }
+            // FilteredBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
+            _ => { assume(false); } 
+        }
+    }
 } // end impl FilteredBetree::State
 
 }//verus
