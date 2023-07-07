@@ -295,64 +295,8 @@ impl LinkedJournal::State {
                 let tjd = self.truncated_journal.disk_view;
                 tjd.pointer_after_crop_commutes_with_interpretation(
                     tj.freshest_rec, tjd.boundary_lsn, depth);
+                tjd.pointer_after_crop_ensures(tj.freshest_rec, depth); // GAAAAH weeks looking for this awful thing
 
-//        self.iptr(self.pointer_after_crop(ptr, depth))
-//            == PagedJournal_v::JournalRecord::opt_rec_crop_head_records(self.iptr(ptr), bdy, depth),
-                let msi = tj.i().freshest_rec.unwrap().message_seq_after_crop(tj.i().boundary_lsn, depth);
-                let msl = lbl.get_ReadForRecovery_messages();
-
-        // as written in lemma
-        let msi2 = PagedJournal_v::JournalRecord::opt_rec_crop_head_records(tjd.iptr(tj.freshest_rec), tjd.boundary_lsn, depth).unwrap().message_seq.maybe_discard_old(tjd.boundary_lsn);
-        // msi2 is a Pointer
-        assert( msi2 == msi );
-
-        assert( tjd.iptr(tjd.pointer_after_crop(tj.freshest_rec, depth))
-            == PagedJournal_v::JournalRecord::opt_rec_crop_head_records(tjd.iptr(tj.freshest_rec), tjd.boundary_lsn, depth) );
-
-        assert( tjd.iptr(tj.freshest_rec) == tj.i().freshest_rec );
-
-        let ptr = tjd.pointer_after_crop(tj.freshest_rec, depth);
-        tjd.pointer_after_crop_ensures(tj.freshest_rec, depth); // GAAAAH weeks looking for this
-                                                                // awful thing
-
-//         assert( tjd.entries[ptr.unwrap()].message_seq.maybe_discard_old(tjd.boundary_lsn) == msl );
-//         assert( tjd.boundary_lsn == tj.i().boundary_lsn );
-//         assert( ptr.is_Some() );
-
-        // I spent freaking forever trying to discover that iptr() didn't mean what the definition
-        // said because I hadn't met its implicit requires (decreases_when). GAAAAAH What a
-        // nightmare.
-//         assert( tjd.wf() );
-//         assert( tjd.is_nondangling_pointer(ptr) );
-//         assert( tjd.decodable(ptr) );
-//         assert( tjd.acyclic() );
-//         let iptrdefn =
-//             if ptr.is_None() { let x: Option::<PagedJournal_v::JournalRecord> = None; x }
-//             else {
-//                 let jr = tjd.entries[ptr.unwrap()];
-//                 Option::<PagedJournal_v::JournalRecord>::Some(PagedJournal_v::JournalRecord{
-//                     message_seq: jr.message_seq,
-//                     prior_rec: Box::new(tjd.iptr(jr.cropped_prior(tjd.boundary_lsn))),
-//                 })
-//             };
-//         assert( tjd.iptr(ptr) == iptrdefn );    // Okay, getting closer. Something very wrong with
-//                                                 // (open) iptr defn
-        
-//         if tjd.iptr(ptr).is_None() {
-//             assert( ptr.is_None() );
-//         }
-//         assert( tjd.iptr(ptr).is_Some() );
-//         assert(
-//             tjd.entries[ptr.unwrap()].message_seq
-//             ==
-//             tjd.iptr(ptr).unwrap().message_seq
-//             );
-// 
-// 
-//                 assert( msi.seq_start == msl.seq_start );
-//                 assert( msi.seq_end == msl.seq_end );
-//                 assert( msi =~= msl );
-//                 assert( tj.i().freshest_rec.unwrap().message_seq_after_crop(tj.i().boundary_lsn, depth) =~~= lbl.get_ReadForRecovery_messages() );
                 assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::read_for_recovery(depth)) );
             }
             LinkedJournal::Step::freeze_for_commit(depth) =>  {
