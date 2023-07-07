@@ -505,7 +505,7 @@ impl DiskView {
             let next = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
             self.build_tight_builds_sub_disks(next);
         } else {
-            assert( self.build_tight(root).is_sub_disk(self) );
+            assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
         }
     }
 
