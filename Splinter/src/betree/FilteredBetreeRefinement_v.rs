@@ -25,7 +25,7 @@ impl BetreeNode {
         recommends self.wf(), self.is_Node(), 
             0 <= buffer_idx < self.get_Node_buffers().len()
     {
-        let buffer = self.get_Node_buffers().buffers[buffer_idx];
+        let buffer = self.get_Node_buffers()[buffer_idx];
         buffer.apply_filter(self.active_keys(buffer_idx))
     }
 
@@ -170,6 +170,55 @@ impl BetreeNode {
             &&& other_children[i].is_Node()
             &&& other_children[i].my_domain() == self.get_Node_children()[i].my_domain()
         })
+    }
+
+    pub proof fn total_domain_extend_buffer_seq_commutes_with_i(self, buffers: BufferSeq)
+        requires self.wf(), self.is_Node(), self.my_domain() == total_domain()
+        ensures self.extend_buffer_seq(buffers).i() == self.i().extend_buffer_seq(buffers)
+    {
+        self.i_children_lemma();
+        self.extend_buffer_seq(buffers).i_children_lemma();
+
+        let a = self.extend_buffer_seq(buffers).i();
+        let b = self.i().extend_buffer_seq(buffers);
+        assert(a.get_Node_children() =~= b.get_Node_children());
+    
+        let old_len = self.get_Node_buffers().len();
+        assert forall |i| 0 <= i < a.get_Node_buffers().len() 
+        implies #[trigger] a.get_Node_buffers()[i] == b.get_Node_buffers()[i]
+        by {
+            if i < old_len {
+                assert forall |k: Key| #[trigger] self.active_keys(i).contains(k) <==> 
+                    self.extend_buffer_seq(buffers).active_keys(i).contains(k)
+                by {
+                    if self.active_keys(i).contains(k) {
+                        let child_idx = choose |child_idx| self.active_key_cond(k, child_idx, i);
+                        assert(self.extend_buffer_seq(buffers).active_key_cond(k, child_idx, i));
+                    }
+                    if self.extend_buffer_seq(buffers).active_keys(i).contains(k) {
+                        let child_idx = choose |child_idx| self.extend_buffer_seq(buffers).active_key_cond(k, child_idx, i);
+                        assert(self.active_key_cond(k, child_idx, i));
+                    }
+                }
+                assert(self.active_keys(i) =~= self.extend_buffer_seq(buffers).active_keys(i));
+            } else {
+                assert forall |k: Key| 
+                    #[trigger] a.get_Node_buffers()[i].map.contains_key(k) <==> b.get_Node_buffers()[i].map.contains_key(k)
+                by {
+                    if a.get_Node_buffers()[i].map.contains_key(k) {
+                        assert(a.get_Node_buffers()[i] == self.extend_buffer_seq(buffers).i_buffer(i));
+                        assert(buffers[i-old_len].map.contains_key(k)); // == b.get_Node_buffers()[i]
+                    }
+                    if b.get_Node_buffers()[i].map.contains_key(k) {
+                        PivotTable::route_lemma_auto();
+                        assert(self.extend_buffer_seq(buffers).active_key_cond(k, self.get_Node_pivots().route(k), i));
+                        assert(a.get_Node_buffers()[i].map.contains_key(k));
+                    }
+                }
+                assert(a.get_Node_buffers()[i] =~= b.get_Node_buffers()[i]);
+            }
+        }
+        assert(a.get_Node_buffers() =~= b.get_Node_buffers());
     }
 
     // pub proof fn empty_root_refines()
@@ -459,7 +508,7 @@ impl Path{
             );
 
             assert forall |i| 0 <= i < self.node.get_Node_buffers().len()
-            implies #[trigger] self.substitute(replacement).i().get_Node_buffers().buffers[i] == self.node.i().get_Node_buffers().buffers[i]
+            implies #[trigger] self.substitute(replacement).i().get_Node_buffers()[i] == self.node.i().get_Node_buffers()[i]
             by {
                 let a = self.substitute(replacement).active_keys(i);
                 let b = self.node.active_keys(i);
@@ -843,12 +892,15 @@ impl FilteredBetree::State {
 
         let a = self.root.push_memtable(self.memtable).value.i();
         let b = self.root.i().push_memtable(self.memtable).value;
-        let equiv_children_node = if self.root.is_Node() { self.root } else { BetreeNode::empty_root(total_domain()) };
-        equiv_children_node.i_children_lemma();
-
-        self.root.push_memtable(self.memtable).value.i_children_lemma();
+        let promote = self.root.promote(total_domain());
+        let buffers = BufferSeq{buffers: seq![self.memtable.buffer]};
+        
+        promote.i_children_lemma();
+        promote.extend_buffer_seq(buffers).i_children_lemma();
         assert(a.get_Node_children() =~= b.get_Node_children());
-        assume(a.get_Node_buffers() =~= b.get_Node_buffers()); // TODO
+
+        promote.total_domain_extend_buffer_seq_commutes_with_i(buffers);
+        assert(a.get_Node_buffers() =~= b.get_Node_buffers());
 
         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_flush_memtable()));
     }

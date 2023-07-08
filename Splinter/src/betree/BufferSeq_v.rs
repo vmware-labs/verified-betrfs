@@ -25,6 +25,13 @@ impl BufferSeq {
         self.buffers.len()
     }
 
+    #[verifier(inline)]
+    pub open spec fn spec_index(self, i: int) -> Buffer
+        recommends 0 <= i < self.len()
+    {
+        self.buffers[i]
+    }
+
     pub open spec fn slice(self, start: int, end: int) -> BufferSeq 
         recommends 0 <= start <= end <= self.len()
     {

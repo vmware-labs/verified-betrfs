@@ -13,6 +13,7 @@ pub open spec fn total_keys(keys: Set<Key>) -> bool {
     forall |k| keys.contains(k)
 }
 
+#[verifier::ext_equal]
 pub struct Buffer { 
     pub map: Map<Key, Message>
 }
