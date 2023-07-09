@@ -148,7 +148,7 @@ impl BetreeNode {
     pub open spec fn is_index(self) -> bool
     {
         &&& self.is_Node()
-        &&& forall |i:nat| i < self.get_Node_children().len() ==> self.get_Node_children()[i as int].is_Node()
+        &&& forall |i| 0 <= i < self.get_Node_children().len() ==> self.get_Node_children()[i].is_Node()
     }
 
     pub open spec fn can_split_leaf(self, split_key: Key) -> bool
@@ -183,7 +183,7 @@ impl BetreeNode {
     {
         &&& self.wf()
         &&& self.is_index()
-        &&& pivot_idx < self.get_Node_pivots().len()-1
+        &&& 0 < pivot_idx < self.get_Node_pivots().num_ranges()
     }
 
     pub open spec fn  split_index(self, pivot_idx: nat) -> (BetreeNode, BetreeNode)

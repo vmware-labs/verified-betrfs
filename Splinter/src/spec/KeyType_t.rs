@@ -53,6 +53,22 @@ impl Element {
         &&& a != b
     }
 
+    pub proof fn lt_transitive(a: Element, b: Element, c: Element)
+        requires Self::lt(a, b), Self::lt(b, c)
+        ensures Self::lt(a, c)
+    {
+    }
+
+    pub proof fn lt_transitive_forall()
+        ensures forall |a: Element, b: Element, c: Element| 
+            Self::lt(a, b) && Self::lt(b, c) ==> Self::lt(a, c)
+    {
+        assert forall |a: Element, b: Element, c: Element| Self::lt(a, b) && Self::lt(b, c) 
+        implies Self::lt(a, c) by {
+            Self::lt_transitive(a, b, c);
+        }
+    }
+
     pub proof fn lte_transitive(a: Element, b: Element, c: Element)
         requires Self::lte(a, b), Self::lte(b, c)
         ensures Self::lte(a, c)

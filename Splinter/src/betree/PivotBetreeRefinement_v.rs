@@ -460,22 +460,22 @@ pub open spec fn split_keys(path: Path, request: SplitRequest) -> (Set<Key>, Set
     (left_keys, right_keys)
 }
 
-pub proof fn split_commutes_with_i_left(path: Path, request: SplitRequest, key: Key)
-    requires path.valid(), path.target().can_split_parent(request),
-        path.target().my_domain().contains(key), split_keys(path, request).0.contains(key)
-    ensures path.target().i().split(split_keys(path, request).0, split_keys(path, request).1).child(key)
-        == path.target().split_parent(request).i_children().map[key]
+pub proof fn split_keys_agrees_with_domains(path: Path, request: SplitRequest)
+    requires path.valid(), path.target().can_split_parent(request)
+    ensures ({
+        let child_domain = path.target().child_domain(request.get_child_idx());
+        let split_element = path.target().split_element(request);
+        let left_domain = Domain::Domain{start: child_domain.get_Domain_start(), end: split_element};
+        let right_domain = Domain::Domain{start: split_element, end: child_domain.get_Domain_end()};
+        &&& left_domain.key_set() == split_keys(path, request).0
+        &&& right_domain.key_set() == split_keys(path, request).1
+    })
 {
-    let target = path.target();
-    path.target_wf();
-    target.split_parent_wf(request);
-
-    let child_idx = request.get_child_idx();
-    let child_domain = target.child_domain(child_idx);
-
+    let child_domain = path.target().child_domain(request.get_child_idx());
     let split_element = path.target().split_element(request);
-    let (left_keys, _) = split_keys(path, request);
     let left_domain = Domain::Domain{start: child_domain.get_Domain_start(), end: split_element};
+    let right_domain = Domain::Domain{start: split_element, end: child_domain.get_Domain_end()};
+    let (left_keys, right_keys) = split_keys(path, request);
 
     assert(Element::lt(split_element, child_domain.get_Domain_end())); // trigger
     assert forall |k:Key| #[trigger] left_keys.contains(k) <==> left_domain.contains(k)
@@ -488,14 +488,42 @@ pub proof fn split_commutes_with_i_left(path: Path, request: SplitRequest, key: 
     }
     assert(left_keys =~= left_domain.key_set());
 
-    target.i_children_lemma();
+    if request.is_SplitIndex() {
+        assert(Element::lt(child_domain.get_Domain_start(), split_element));
+    }
+    assert(Element::lte(child_domain.get_Domain_start(), split_element));
+
+    assert forall |k:Key| #[trigger] right_keys.contains(k) <==> right_domain.contains(k)
+    by {
+        if right_domain.contains(k) {
+            assert(!left_keys.contains(k));
+            assert(child_domain.contains(k));
+            assert(right_keys.contains(k));
+        }
+    }
+    assert(right_keys =~= right_domain.key_set());
+}
+
+pub proof fn split_commutes_with_i_left(path: Path, request: SplitRequest, key: Key)
+    requires path.valid(), path.target().can_split_parent(request),
+        path.target().my_domain().contains(key), split_keys(path, request).0.contains(key)
+    ensures path.target().i().split(split_keys(path, request).0, split_keys(path, request).1).child(key)
+        == path.target().split_parent(request).i_children().map[key]
+{
+    let target = path.target();
     target.split_parent_wf(request);
+
+    let child_idx = request.get_child_idx();
+    let (left_keys, _) = split_keys(path, request);
+    let split_element = path.target().split_element(request);
+    split_keys_agrees_with_domains(path, request);
+
+    target.i_children_lemma();
     target.split_parent(request).i_children_lemma();
 
-    target.get_Node_pivots().route_is_lemma(key, child_idx as int);
-    target.split_parent(request).get_Node_pivots().route_is_lemma(key, child_idx as int);
     PivotTable::route_lemma_auto();
     PivotTable::route_is_lemma_auto();
+    target.split_parent(request).get_Node_pivots().route_is_lemma(key, child_idx as int);
 
     let a = target.child(key).i().filter_buffers_and_children(left_keys);
     if request.is_SplitLeaf() {
@@ -527,39 +555,19 @@ pub proof fn split_commutes_with_i_right(path: Path, request: SplitRequest, key:
         == path.target().split_parent(request).i_children().map[key]
 {
     let target = path.target();
-    path.target_wf();
     target.split_parent_wf(request);
 
     let child_idx = request.get_child_idx();
-    let child_domain = target.child_domain(child_idx);
-
+    let (_, right_keys) = split_keys(path, request);
     let split_element = path.target().split_element(request);
-    let (left_keys, right_keys) = split_keys(path, request);
-    let right_domain = Domain::Domain{start: split_element, end: child_domain.get_Domain_end()};
-
-    if request.is_SplitLeaf() {
-        assert(Element::lte(child_domain.get_Domain_start(), split_element));
-    } else {
-        assert(Element::lt(child_domain.get_Domain_start(), split_element));
-    }
-
-    assert forall |k:Key| #[trigger] right_keys.contains(k) <==> right_domain.contains(k)
-    by {
-        if right_domain.contains(k) {
-            assert(!left_keys.contains(k));
-            assert(child_domain.contains(k));
-            assert(right_keys.contains(k));
-        }
-    }
-    assert(right_keys =~= right_domain.key_set());
+    split_keys_agrees_with_domains(path, request);
 
     target.i_children_lemma();
     target.split_parent(request).i_children_lemma();
 
-    // target.get_Node_pivots().route_is_lemma(key, child_idx as int);
-    // target.split_parent(request).get_Node_pivots().route_is_lemma(key, child_idx as int + 1);
     PivotTable::route_lemma_auto();
     PivotTable::route_is_lemma_auto();
+    target.split_parent(request).get_Node_pivots().route_is_lemma(key, child_idx as int + 1);
 
     let a = target.child(key).i().filter_buffers_and_children(right_keys);
     if request.is_SplitLeaf() {
@@ -572,8 +580,7 @@ pub proof fn split_commutes_with_i_right(path: Path, request: SplitRequest, key:
         b.i_children_lemma();
         target.child(key).i_children_lemma();
 
-        assert forall |k| true
-        implies #[trigger] a.get_Node_children().map[k] == b.i().get_Node_children().map[k]
+        assert forall |k| #[trigger] a.get_Node_children().map[k] == b.i().get_Node_children().map[k]
         by {
             if right_keys.contains(k) {
                 let r = b.get_Node_pivots().route(k);
@@ -594,8 +601,6 @@ pub proof fn split_commutes_with_i_nonsplit(path: Path, request: SplitRequest, k
 {
     let target = path.target();
     let new_target = target.split_parent(request);
-
-    path.target_wf();
     target.split_parent_wf(request);
 
     let child_idx = request.get_child_idx();
@@ -620,8 +625,6 @@ pub proof fn split_commutes_with_i(path: Path, request: SplitRequest)
 {
     let target = path.target();
     let new_target = target.split_parent(request);
-
-    path.target_wf();
     target.split_parent_wf(request);
 
     let (left_keys, right_keys) = split_keys(path, request);
