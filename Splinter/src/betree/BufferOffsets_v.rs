@@ -52,6 +52,12 @@ impl BufferOffsets {
         BufferOffsets{ offsets: Seq::new(self.len(), |i:int| (self.offsets[i]-target) as nat) }
     }
 
+    pub proof fn shift_left_preserves_lte(self, target: nat, limit: nat)
+        requires self.all_gte(target), self.all_lte(limit), limit >= target
+        ensures self.shift_left(target).all_lte((limit-target) as nat)
+    {
+    } 
+
     pub open spec fn adjust_compact(self, start: int, end: int) -> BufferOffsets
         recommends 0 <= start <= end <= self.len()
     {

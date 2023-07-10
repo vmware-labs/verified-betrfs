@@ -450,6 +450,7 @@ impl BetreeNode {
         assert(right.i().get_Node_children() =~= i_right.get_Node_children());
     }
 
+    // #[verifier::spinoff_prover]
     pub proof fn split_parent_buffers_commutes_with_i(self, request: SplitRequest)
         requires self.can_split_parent(request), self.i().can_split_parent(request)
         ensures self.i().split_parent(request).get_Node_buffers() == self.split_parent(request).i().get_Node_buffers()
@@ -461,9 +462,7 @@ impl BetreeNode {
         let i_new_parent = self.i().split_parent(request);
         assert(self.get_Node_pivots().len()+1 == new_parent.get_Node_pivots().len());
 
-        let split_element = self.split_element(request);
         let split_child_idx = request.get_child_idx() as int;
-
         let split_child_domain = self.child_domain(split_child_idx as nat);
         let new_left_child_domain = new_parent.child_domain(split_child_idx as nat);
         let new_right_child_domain = new_parent.child_domain((split_child_idx+1)as nat);
@@ -478,38 +477,41 @@ impl BetreeNode {
         by {
             assert forall |k| #[trigger] new_parent.active_keys(i).contains(k) <==> self.active_keys(i).contains(k)
             by {
-                if new_parent.active_keys(i).contains(k) {
+                if new_parent.active_keys(i).contains(k) && !self.active_keys(i).contains(k)
+                {
                     let new_child_idx = choose |new_child_idx| new_parent.active_key_cond(k, new_child_idx, i);
                     if new_child_idx < split_child_idx {
                         assert(self.active_key_cond(k, new_child_idx, i));
-                    } else if new_child_idx <= split_child_idx + 1 {
-                        assert(self.active_key_cond(k, split_child_idx, i));
-                    } else {
+                        assert(false);
+                    } else if new_child_idx > split_child_idx+1 {
                         assert(self.active_key_cond(k, new_child_idx-1, i));
+                        assert(false);
+                    } else {
+                        assert(self.active_key_cond(k, split_child_idx, i));
+                        assert(false);
                     }
                 }
 
-                if self.active_keys(i).contains(k) {
+                if !new_parent.active_keys(i).contains(k) && self.active_keys(i).contains(k) 
+                {
                     let child_idx = choose |child_idx| self.active_key_cond(k, child_idx, i);
-                    let child_domain = self.child_domain(child_idx as nat);
-
-                    if child_idx > split_child_idx {
-                        assert(self.get_Node_pivots().pivots[child_idx+1] == new_parent.get_Node_pivots().pivots[child_idx+2]);
+                    if child_idx < split_child_idx {
+                        assert(new_parent.active_key_cond(k, child_idx, i));
+                        assert(false);
+                    } else if child_idx > split_child_idx {
                         assert(new_parent.active_key_cond(k, child_idx+1, i));
-                    } else if child_idx == split_child_idx {
-                        assert(child_domain == split_child_domain);
+                        assert(false);
+                    } else {
                         assert(split_child_domain.contains(k));
-                        if Element::lt(to_element(k), split_element) {
+                        if Element::lt(to_element(k), new_left_child_domain.get_Domain_end()) {
                             assert(new_left_child_domain.contains(k));
                             assert(new_parent.active_key_cond(k, child_idx, i));
+                            assert(false);
                         } else {
-                            assert(Element::lte(split_element, to_element(k)));
                             assert(new_right_child_domain.contains(k));
                             assert(new_parent.active_key_cond(k, child_idx+1, i));
+                            assert(false);
                         }
-                        assert(new_parent.active_keys(i).contains(k));
-                    } else {
-                        assert(child_domain == new_parent.child_domain(child_idx as nat));
                     }
                 }
             }
@@ -541,22 +543,31 @@ impl BetreeNode {
         self.split_parent_buffers_commutes_with_i(request);
     }
 
-//     pub proof fn flush_wf(self, child_idx: nat)
-//         requires self.can_flush(child_idx)
-//         ensures self.flush(child_idx).wf()
-//     {
-//         let child_domain = self.child_domain(child_idx);
-//         let moved_buffers = self.get_Node_buffers().apply_filter(child_domain.key_set());
+    pub proof fn flush_wf(self, child_idx: nat, buffer_gc: nat)
+        requires self.can_flush(child_idx, buffer_gc)
+        ensures self.flush(child_idx, buffer_gc).wf()
+    {
+        let result = self.flush(child_idx, buffer_gc);
 
-//         let old_child = self.get_Node_children()[child_idx as int];
-//         let new_child = old_child.promote(child_domain).extend_buffer_seq(moved_buffers);
+        let idx = child_idx as int;
+        let flush_upto = self.get_Node_buffers().len(); 
 
-//         assert(old_child.wf());
-//         assert(old_child.promote(child_domain).wf());
-//         assert(new_child.wf());
-//     }
+        let updated_flushed = self.get_Node_flushed().update(idx, flush_upto);
+        assert(updated_flushed.offsets[idx] == flush_upto);
+        updated_flushed.shift_left_preserves_lte(buffer_gc, flush_upto);
+        assert(result.local_structure());
 
-//     // Note: exposing condition to reduce verification time, but why? are recommends checked here?
+        let flushed_ofs = self.get_Node_flushed().offsets[idx];
+        let buffers_to_child = self.get_Node_buffers().slice(flushed_ofs as int, flush_upto as int);
+
+        let child = self.get_Node_children()[idx];
+        let child_domain = self.child_domain(child_idx);
+        let new_child = child.promote(child_domain).extend_buffer_seq(buffers_to_child);
+
+        assert(child.wf()); // trigger
+        assert(new_child.wf());
+    }
+
 //     pub proof fn nil_promote_and_extend_commutes_with_i(self, domain: Domain, buffers: BufferSeq)
 //         requires self.wf(), self.is_Nil(), domain.wf(), domain.is_Domain()
 //         ensures self.promote(domain).extend_buffer_seq(buffers).i() == self.i().promote().extend_buffer_seq(buffers) 
@@ -1084,26 +1095,31 @@ impl FilteredBetree::State {
         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_split(path.i(), request)));
     }
 
-//     pub proof fn internal_flush_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, child_idx: nat)
-//         requires self.inv(), FilteredBetree::State::internal_flush(self, post, lbl, path, child_idx)
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
-//     {
-//         reveal(PivotBetree::State::next);
-//         reveal(PivotBetree::State::next_by);
+    pub proof fn internal_flush_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, child_idx: nat, buffer_gc: nat)
+        requires self.inv(), FilteredBetree::State::internal_flush(self, post, lbl, path, child_idx, buffer_gc)
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-//         self.root.i_wf();
-//         path.target_wf();
-//         path.target().flush_wf(child_idx);
-//         path.substitute_refines(path.target().flush(child_idx));
+        BetreeNode::i_wf_auto();
 
-//         post.root.i_wf();
-//         path.i_valid();
-//         path.target_commutes_with_i();
+        // self.root.i_wf();
+        // path.target_wf();
+        // path.target().flush_wf(child_idx);
+        // path.substitute_refines(path.target().flush(child_idx));
 
-//         flush_commutes_with_i(path, child_idx);
-//         let flushed_keys = path.target().child_domain(child_idx).key_set();
-//         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_flush(path.i(), flushed_keys)));
-//     }
+        // post.root.i_wf();
+        // path.i_valid();
+        // path.target_commutes_with_i();
+
+        // flush_commutes_with_i(path, child_idx);
+        // let flushed_keys = path.target().child_domain(child_idx).key_set();
+
+        assume(false);
+
+        // assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_flush(path.i(), flushed_keys)));
+    }
 
 //     pub proof fn internal_compact_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, compacted_buffers: BufferSeq)
 //         requires self.inv(), FilteredBetree::State::internal_compact(self, post, lbl, path, compacted_buffers)

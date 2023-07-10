@@ -308,7 +308,7 @@ impl BetreeNode {
         &&& self.is_Node()
         &&& self.valid_child_index(child_idx)
         &&& self.get_Node_flushed().update(child_idx as int, 
-                self.get_Node_flushed().len()).all_gte(buffer_gc)
+                self.get_Node_buffers().len()).all_gte(buffer_gc)
     }
 
     pub open spec fn flush(self, child_idx: nat, buffer_gc: nat) -> BetreeNode
