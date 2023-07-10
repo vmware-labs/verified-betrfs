@@ -111,6 +111,7 @@ impl DiskView {
         assert( big.valid_ranking(big.the_ranking()) ); // witness; new in Verus
         self.sub_disk_ranking(big);
         if ptr.is_Some() {
+            assert( self.entries.contains_key(ptr.unwrap()) );  // new trigger required with verus update
             self.sub_disk_interp(big, big.next(ptr));
         }
     }
@@ -193,7 +194,59 @@ impl DiskView {
             self.discard_old_commutes(next_ptr, new_bdy);
         }
     }
+
+    pub proof fn iptr_framing(self, dv2: Self, ptr: Pointer)
+    requires
+        self.wf() && self.acyclic(),
+        dv2.wf() && dv2.acyclic(),
+        self.is_nondangling_pointer(ptr),
+        self.is_sub_disk(dv2),
+        self.boundary_lsn == dv2.boundary_lsn,
+    ensures
+        self.iptr(ptr) == dv2.iptr(ptr),
+    decreases self.the_rank_of(ptr)
+    {
+        if ptr.is_Some() {
+            self.iptr_framing(dv2, self.next(ptr));
+        }
+    }
         
+    pub proof fn build_tight_is_awesome(self, root: Pointer)
+    requires
+        self.decodable(root),
+        self.acyclic(),
+    ensures
+        self.build_tight(root).is_sub_disk(self),
+        self.build_tight(root).wf(),
+        self.build_tight(root).acyclic(),
+    decreases self.the_rank_of(root),
+    {
+        if root.is_Some() {
+            self.build_tight_is_awesome(self.next(root));
+            // TODO(chris): weird that I have to leave both of these identical calls in place!
+            self.build_tight(root).sub_disk_ranking(self);
+        }
+        self.build_tight(root).sub_disk_ranking(self);
+    }
+
+    pub proof fn build_tight_maintains_interpretation(self, root: Pointer)
+    requires
+        self.decodable(root),
+        self.acyclic(),
+    ensures
+        // You know what build_tight_awesome is for? To package ensures conveniently with a spec fn!
+        self.iptr(root) == self.build_tight(root).iptr(root)
+    decreases self.the_rank_of(root),
+    {
+        self.build_tight_is_awesome(root);
+        if root.is_Some() {
+            self.build_tight_maintains_interpretation(self.next(root));
+            self.build_tight(root).iptr_framing(self, self.next(root));
+            assert( self.iptr(root) =~~= self.build_tight(root).iptr(root) );
+        } else {
+            assert( self.iptr(root) =~~= self.build_tight(root).iptr(root) );
+        }
+    }
 }
 
 impl TruncatedJournal {
@@ -207,6 +260,15 @@ impl TruncatedJournal {
             boundary_lsn: self.disk_view.boundary_lsn,
             freshest_rec: self.disk_view.iptr(self.freshest_rec),
         }
+    }
+
+    pub proof fn iwf(self)
+    requires
+        self.decodable(),
+    ensures
+        self.i().wf(),
+    {
+        self.disk_view.iptr_output_valid(self.freshest_rec);
     }
 
     pub proof fn mkfs_refines()
@@ -245,6 +307,25 @@ impl TruncatedJournal {
           self.disk_view.discard_old_commutes(self.freshest_rec, new_bdy);
         }
     }
+
+    pub open spec fn paged_tj_can_crop(itj: PagedJournal_v::TruncatedJournal, depth: nat) -> bool
+    {
+        PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(itj.freshest_rec, itj.boundary_lsn, depth)
+    }
+
+    pub proof fn crop_head_composed_with_discard_old_commutes(self, new_bdy: LSN, depth: nat)
+    requires
+        self.decodable(),
+        self.can_crop(depth),
+        // TODO(verus): want to mix a spec-ensures here!
+        // ensures self.paged_tj_can_crop(self.i(), depth)
+        self.crop(depth).can_discard_to(new_bdy),
+    ensures
+        self.i().crop_head_records(depth).can_discard_to(new_bdy),    // spec prereq
+        self.i().crop_head_records(depth).discard_old_defn(new_bdy) == self.crop(depth).discard_old(new_bdy).i(),
+    {
+        assume(false);  // TODO port proof
+    }
 }
 
 impl LinkedJournal::Label {
@@ -275,6 +356,50 @@ impl LinkedJournal::State {
         }
     }
 
+    pub proof fn iwf(self)
+    requires
+        self.wf(),
+        self.truncated_journal.disk_view.acyclic(),
+    ensures
+        self.i().wf(),
+    {
+        self.truncated_journal.iwf();
+        assert( self.i().truncated_journal.wf() );
+    }
+
+    pub proof fn freeze_for_commit_refines(self, post: Self, lbl: LinkedJournal::Label, step: LinkedJournal::Step)
+    requires
+        self.inv(),
+        LinkedJournal::State::next_by(self, post, lbl, step),
+        step.is_freeze_for_commit(), // gah no is_variant
+        //match step { LinkedJournal::Step::freeze_for_commit(_) => true, _ => false },
+    ensures
+        PagedJournal::State::next(self.i(), post.i(), lbl.i()),
+    {
+        reveal(PagedJournal::State::next_by);    // unfortunate defaults
+        reveal(PagedJournal::State::next);       // unfortunate defaults
+        reveal(LinkedJournal::State::next_by);   // unfortunate defaults
+
+        let new_bdy = lbl.i().get_FreezeForCommit_frozen_journal().boundary_lsn;
+        let depth = step.get_freeze_for_commit_0(); // ew. Using Steps in lemmas sucks. Another mismatch with Rust's
+                                                    // match-everything-all-the-time style. Change Step() to Step{}?
+        let tj = self.truncated_journal;
+        let tjd = self.truncated_journal.disk_view;
+
+        tjd.pointer_after_crop_commutes_with_interpretation_no_some(tj.freshest_rec, depth);
+        tj.crop_head_composed_with_discard_old_commutes(new_bdy, depth);
+        let cropped_ptr = tjd.pointer_after_crop(tj.freshest_rec, depth);
+        let cropped_tj = LinkedJournal_v::TruncatedJournal{freshest_rec: cropped_ptr, disk_view: tjd};
+        tjd.pointer_after_crop_ensures(tj.freshest_rec, depth); // another lost spec-ensures that wasted time digging up
+
+        cropped_tj.discard_old(new_bdy).disk_view.build_tight_maintains_interpretation(cropped_tj.discard_old(new_bdy).freshest_rec);
+
+         lbl.get_FreezeForCommit_frozen_journal().iwf();  // another lost spec-ensures that wasted time digging up
+        self.i().truncated_journal.crop_head_records_wf_lemma(depth); // another lost spec-ensures that wasted time digging up
+
+        assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::freeze_for_commit(depth)) );  // trigger
+    }
+
     pub proof fn next_refines(self, post: Self, lbl: LinkedJournal::Label)
     requires
         self.inv(),
@@ -300,8 +425,7 @@ impl LinkedJournal::State {
                 assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::read_for_recovery(depth)) );
             }
             LinkedJournal::Step::freeze_for_commit(depth) =>  {
-                assume(false);
-                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::freeze_for_commit(depth)) );
+                self.freeze_for_commit_refines(post, lbl, step);
             }
             LinkedJournal::Step::query_end_lsn() =>  {
                 assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::query_end_lsn()) );
