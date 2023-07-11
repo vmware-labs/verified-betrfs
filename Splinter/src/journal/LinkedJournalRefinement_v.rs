@@ -313,6 +313,33 @@ impl TruncatedJournal {
         PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(itj.freshest_rec, itj.boundary_lsn, depth)
     }
 
+// /home/autograder/foo.dfy(4,12): Info: Selected triggers:
+//    {F(I(x))}, {f(x)}
+//  Rejected triggers:
+//    {I(x)} (may loop with "I(g(f(x)))")
+//    {G(F(I(x)))} (more specific than {F(I(x))})
+//    {I(g(f(x)))} (more specific than {g(f(x))}, {f(x)})
+//    {g(f(x))} (more specific than {f(x)})
+// /home/autograder/foo.dfy(2,13): Info: Selected triggers:
+//    {F(I(x))}, {f(x)}
+//  Rejected triggers:
+//    {I(x)} (may loop with "I(f(x))")
+//    {I(f(x))} (more specific than {f(x)})
+// /home/autograder/foo.dfy(3,13): Info: Selected triggers:
+//    {G(I(x))}, {g(x)}
+//  Rejected triggers:
+//    {I(x)} (may loop with "I(g(x))")
+//    {I(g(x))} (more specific than {g(x)})
+
+//     pub proof fn commute_transitivity<L, H>(I: FnSpec(L)->H, f: FnSpec(L)->L, F: FnSpec(H)->H, g: FnSpec(L)->L, G: FnSpec(H)->H)
+//     requires
+//         forall |x| I(f(x)) == #[trigger] F(I(x)),
+//         forall |x| I(g(x)) == #[trigger] G(I(x)),
+//     ensures
+//         forall |x| I(g(f(x))) == G(#[trigger] F(I(x))),
+//     {
+//     }
+
     pub proof fn crop_head_composed_with_discard_old_commutes(self, new_bdy: LSN, depth: nat)
     requires
         self.decodable(),
@@ -324,6 +351,9 @@ impl TruncatedJournal {
         self.i().crop_head_records(depth).can_discard_to(new_bdy),    // spec prereq
         self.i().crop_head_records(depth).discard_old_defn(new_bdy) == self.crop(depth).discard_old(new_bdy).i(),
     {
+        let dummy = Self::mkfs();
+        let idummy = dummy.i();
+        // HOLY COW what was I thinking when wirting this proof!? higher-order stuff everywhere!
         assume(false);  // TODO port proof
     }
 }
