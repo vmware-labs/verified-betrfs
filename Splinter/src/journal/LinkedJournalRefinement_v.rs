@@ -224,6 +224,7 @@ impl DiskView {
         if root.is_Some() {
             self.build_tight_is_awesome(self.next(root));
             // TODO(chris): weird that I have to leave both of these identical calls in place!
+            assert( self.build_tight(root).is_sub_disk(self) ); // introduced trigger to mitigate flakiness
             self.build_tight(root).sub_disk_ranking(self);
         }
         self.build_tight(root).sub_disk_ranking(self);
@@ -245,6 +246,27 @@ impl DiskView {
             assert( self.iptr(root) =~~= self.build_tight(root).iptr(root) );
         } else {
             assert( self.iptr(root) =~~= self.build_tight(root).iptr(root) );
+        }
+    }
+}
+
+// TODO relocate
+impl PagedJournal_v::TruncatedJournal {
+
+    pub open spec fn can_crop(self, depth: nat) -> bool {
+        PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(self.freshest_rec, self.boundary_lsn, depth)
+    }
+
+    // replaces missing spec ensures
+    pub proof fn crop_head_records_ensures(self, depth: nat)
+    requires
+        self.wf(),
+        self.can_crop(depth),
+    ensures
+        self.crop_head_records(depth).wf(),
+    {
+        if 0 < depth {
+            self.freshest_rec.unwrap().crop_head_records_lemma(self.boundary_lsn, depth);   // typcial infuriating missing spec ensures
         }
     }
 }
@@ -279,6 +301,16 @@ impl TruncatedJournal {
         assert( Self::mkfs().disk_view.valid_ranking(map![]) );
     }
 
+    pub proof fn discard_old_decodable(self, new_bdy: LSN)
+    requires
+        self.decodable(),
+        self.can_discard_to(new_bdy),
+    ensures
+        self.discard_old(new_bdy).decodable(),
+    {
+        assert( self.disk_view.discard_old(new_bdy).valid_ranking(self.disk_view.the_ranking()) );
+    }
+
     pub proof fn discard_interp(self, lsn: LSN, post: Self)
     requires
         self.wf(),
@@ -308,11 +340,6 @@ impl TruncatedJournal {
         }
     }
 
-    pub open spec fn paged_tj_can_crop(itj: PagedJournal_v::TruncatedJournal, depth: nat) -> bool
-    {
-        PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(itj.freshest_rec, itj.boundary_lsn, depth)
-    }
-
 // /home/autograder/foo.dfy(4,12): Info: Selected triggers:
 //    {F(I(x))}, {f(x)}
 //  Rejected triggers:
@@ -331,30 +358,121 @@ impl TruncatedJournal {
 //    {I(x)} (may loop with "I(g(x))")
 //    {I(g(x))} (more specific than {g(x)})
 
-//     pub proof fn commute_transitivity<L, H>(I: FnSpec(L)->H, f: FnSpec(L)->L, F: FnSpec(H)->H, g: FnSpec(L)->L, G: FnSpec(H)->H)
-//     requires
-//         forall |x| I(f(x)) == #[trigger] F(I(x)),
-//         forall |x| I(g(x)) == #[trigger] G(I(x)),
-//     ensures
-//         forall |x| I(g(f(x))) == G(#[trigger] F(I(x))),
-//     {
-//     }
+    pub proof fn commute_transitivity<L, H>(I: FnSpec(L)->H, f: FnSpec(L)->L, F: FnSpec(H)->H, g: FnSpec(L)->L, G: FnSpec(H)->H)
+    requires
+        // TODO(verus): Verus refused to guess a trigger here. I had to go run Dafny to see what it
+        // chose. I wanted that automated experience so desperately I *went back to Dafny to get it*
+        forall |x| I(f(x)) == #[trigger] F(I(x)),
+        forall |x| I(g(x)) == #[trigger] G(I(x)),
+    ensures
+        forall |x| I(g(f(x))) == G(#[trigger] F(I(x))),
+    {
+    }
+
+    pub proof fn linked_tj_can_crop_implies_paged_tj_can_crop(self, depth: nat)
+    requires
+        self.decodable(),
+        self.can_crop(depth),
+    ensures
+        self.i().can_crop(depth),
+    decreases depth
+    {
+        assume( false );
+    }
+
+    pub proof fn can_crop_monotonic(self, depth: nat, more: nat)
+    requires
+        depth < more,
+        self.can_crop(more),
+    ensures
+        self.can_crop(depth),
+    decreases depth
+    {
+        assume( false );
+    }
+
+    pub proof fn crop_decreases_seq_end(self, depth: nat)
+    requires
+        self.can_crop(depth),
+    ensures
+        depth == 0 ==> self.crop(depth).seq_end() == self.seq_end(),
+        0 < depth ==> self.crop(depth).seq_end() < self.seq_end(),
+    decreases depth
+    {
+        if 0 < depth {
+            self.can_crop_monotonic((depth-1) as nat, depth);
+            let tj_next = Self{ freshest_rec: self.disk_view.next(self.freshest_rec), ..self };
+            tj_next.crop_decreases_seq_end((depth - 1) as nat);
+        }
+    }
 
     pub proof fn crop_head_composed_with_discard_old_commutes(self, new_bdy: LSN, depth: nat)
     requires
         self.decodable(),
         self.can_crop(depth),
         // TODO(verus): want to mix a spec-ensures here!
-        // ensures self.paged_tj_can_crop(self.i(), depth)
+        // ensures self.i().can_crop(depth),
         self.crop(depth).can_discard_to(new_bdy),
     ensures
         self.i().crop_head_records(depth).can_discard_to(new_bdy),    // spec prereq
         self.i().crop_head_records(depth).discard_old_defn(new_bdy) == self.crop(depth).discard_old(new_bdy).i(),
     {
-        let dummy = Self::mkfs();
-        let idummy = dummy.i();
-        // HOLY COW what was I thinking when wirting this proof!? higher-order stuff everywhere!
-        assume(false);  // TODO port proof
+        // Proof plan:
+        // Show that both can_crop and discard_old commute with i; then apply a generic
+        // commute_transitivity lemma to show that the composition of both itself commutes with i.
+        let dummy = Self::mkfs();   // invalid inputs need to all map to a common value to make the
+                                    // math work out
+        let i = |tj: LinkedJournal_v::TruncatedJournal|
+            if tj.decodable() { tj.i() } else { dummy.i() };
+        let f = |tj: LinkedJournal_v::TruncatedJournal|
+            if tj.decodable() && tj.can_crop(depth) { tj.crop(depth) } else { dummy };
+        let g = |tj: LinkedJournal_v::TruncatedJournal|
+            if tj.decodable() && tj.can_discard_to(new_bdy) { tj.discard_old(new_bdy) } else { dummy };
+        let F = |itj: PagedJournal_v::TruncatedJournal|
+            if PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(itj.freshest_rec, itj.boundary_lsn, depth)
+                { itj.crop_head_records(depth) } else { dummy.i() };
+        let G = |itj: PagedJournal_v::TruncatedJournal|
+            if itj.wf() && itj.can_discard_to(new_bdy) { itj.discard_old_defn(new_bdy) } else { dummy.i() };
+        
+        assert forall |tjx| i(f(tjx))== #[trigger] F(i(tjx)) by {
+            assume(false);
+        }
+
+        assert forall |tjx| i(g(tjx))== #[trigger] G(i(tjx)) by {
+            assume(false);
+        }
+
+        Self::commute_transitivity(i, f, F, g, G);
+
+        assert( i(g(f(self))) == G(F(i(self))) );   // Instantiate the transitivity lemma on self
+        assert( f(self) == self.crop(depth) );
+        self.crop_ensures(depth);   // typcial infuriating missing spec ensures
+        assert( self.crop(depth).decodable() );
+        assert( self.crop(depth).can_discard_to(new_bdy) );
+        assert( g(f(self)) == self.crop(depth).discard_old(new_bdy) );
+        self.crop(depth).discard_old_decodable(new_bdy);    // Dafny didn't need it ... which is surprising
+        assert( self.crop(depth).discard_old(new_bdy).decodable() );
+        assert( i(g(f(self))) == self.crop(depth).discard_old(new_bdy).i() );
+
+        assert( i(self) == self.i() );
+        self.disk_view.pointer_after_crop_commutes_with_interpretation_no_some(self.freshest_rec, depth);   // Dafny didn't need it ... which is surprising
+
+        assert( PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(self.i().freshest_rec, self.i().boundary_lsn, depth) );
+
+        assert( F(i(self)) == self.i().crop_head_records(depth) );
+
+        self.i().crop_head_records_ensures(depth);
+//         if 0 < depth {
+//             assert( self.i().freshest_rec.unwrap().can_crop_head_records(self.i().boundary_lsn, depth) );
+//             self.i().freshest_rec.unwrap().crop_head_records_lemma(self.i().boundary_lsn, depth);   // typcial infuriating missing spec ensures
+//         }
+
+        assert( self.i().crop_head_records(depth).wf() );
+        assert( self.i().crop_head_records(depth).can_discard_to(new_bdy) );
+        assert( G(F(i(self))) == self.i().crop_head_records(depth).discard_old_defn(new_bdy) );
+
+        self.linked_tj_can_crop_implies_paged_tj_can_crop(depth);
+        self.crop_decreases_seq_end(depth);
     }
 }
 
