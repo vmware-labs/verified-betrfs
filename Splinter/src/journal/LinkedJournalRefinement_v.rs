@@ -272,6 +272,10 @@ impl PagedJournal_v::TruncatedJournal {
 }
 
 impl TruncatedJournal {
+    pub open spec fn next(self) -> Self
+    {
+        Self{ freshest_rec: self.disk_view.next(self.freshest_rec), ..self }
+    }
 
     pub open spec fn i(self) -> (out: PagedJournal_v::TruncatedJournal)
     recommends
@@ -369,17 +373,6 @@ impl TruncatedJournal {
     {
     }
 
-    pub proof fn linked_tj_can_crop_implies_paged_tj_can_crop(self, depth: nat)
-    requires
-        self.decodable(),
-        self.can_crop(depth),
-    ensures
-        self.i().can_crop(depth),
-    decreases depth
-    {
-        assume( false );
-    }
-
     pub proof fn can_crop_monotonic(self, depth: nat, more: nat)
     requires
         depth < more,
@@ -401,9 +394,33 @@ impl TruncatedJournal {
     {
         if 0 < depth {
             self.can_crop_monotonic((depth-1) as nat, depth);
-            let tj_next = Self{ freshest_rec: self.disk_view.next(self.freshest_rec), ..self };
-            tj_next.crop_decreases_seq_end((depth - 1) as nat);
+            self.next().crop_decreases_seq_end((depth - 1) as nat);
         }
+    }
+
+    pub proof fn can_crop_increment(self, depth: nat)
+    requires
+        0 < depth,
+        self.wf(),
+        self.freshest_rec.is_Some(),
+        self.can_crop(1),
+        self.crop(1).can_crop((depth-1) as nat),
+    ensures
+        self.can_crop(depth),
+    decreases depth
+    {
+        assume( false );
+    }
+
+    pub proof fn linked_tj_can_crop_implies_paged_tj_can_crop(self, depth: nat)
+    requires
+        self.decodable(),
+        self.can_crop(depth),
+    ensures
+        self.i().can_crop(depth),
+    decreases depth
+    {
+        assume( false );
     }
 
     pub proof fn paged_tj_can_crop_implies_linked_tj_can_crop(self, depth: nat)
@@ -414,7 +431,15 @@ impl TruncatedJournal {
         self.can_crop(depth),
     decreases depth
     {
-        assume( false );
+        if 0 < depth {
+            self.disk_view.pointer_after_crop_auto();
+            self.next().disk_view.pointer_after_crop_auto();
+
+            assert( self.next().can_crop( (depth-1) as nat) );
+            self.next().linked_tj_can_crop_implies_paged_tj_can_crop((depth - 1) as nat);
+            assert( self.crop(1).can_crop((depth-1) as nat) );
+            self.can_crop_increment(depth);
+        }
     }
 
     pub proof fn crop_head_composed_with_discard_old_commutes(self, new_bdy: LSN, depth: nat)

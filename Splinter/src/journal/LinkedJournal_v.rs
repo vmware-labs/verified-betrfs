@@ -321,7 +321,10 @@ impl DiskView {
     {
         0 < depth ==> {
             &&& root.is_Some()
-            &&& self.can_crop(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn), (depth-1) as nat)
+// BEFORE
+//            &&& self.can_crop(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn), (depth-1) as nat)
+// AFTER
+            &&& self.can_crop(self.next(root), (depth-1) as nat)
         }
     }
 
@@ -525,6 +528,9 @@ impl DiskView {
             &&& tight.iptr(None) == other.iptr(None)
             &&& #[trigger] other.is_sub_disk(tight)
         }) implies other =~= tight by {
+// BEFORE: (empty)
+// AFTER: suddenly need this new trigger:
+            assert( tight.wf() );   // new trigger when we perturb DiskView::can_crop
             assert( other.entries =~= tight.entries );
         }
     }
