@@ -406,6 +406,17 @@ impl TruncatedJournal {
         }
     }
 
+    pub proof fn paged_tj_can_crop_implies_linked_tj_can_crop(self, depth: nat)
+    requires
+        self.decodable(),
+        self.i().can_crop(depth),
+    ensures
+        self.can_crop(depth),
+    decreases depth
+    {
+        assume( false );
+    }
+
     pub proof fn crop_head_composed_with_discard_old_commutes(self, new_bdy: LSN, depth: nat)
     requires
         self.decodable(),
@@ -434,42 +445,38 @@ impl TruncatedJournal {
         let G = |itj: PagedJournal_v::TruncatedJournal|
             if itj.wf() && itj.can_discard_to(new_bdy) { itj.discard_old_defn(new_bdy) } else { dummy.i() };
         
+        Self::mkfs_refines();   // didn't need this in dafny (spec ensures?). Both foralls below
+                                // depend on it.
+
         assert forall |tjx| i(f(tjx))== #[trigger] F(i(tjx)) by {
-            assume(false);
+            if tjx.decodable() && tjx.can_crop(depth) {
+                tjx.disk_view.pointer_after_crop_commutes_with_interpretation_no_some(tjx.freshest_rec, depth);
+                tjx.crop_ensures(depth);  // new spec ensures
+            } else {
+                if tjx.decodable() {
+                    if tjx.i().can_crop(depth) {
+                        tjx.paged_tj_can_crop_implies_linked_tj_can_crop(depth);
+                    }
+                }
+            }
         }
 
+        // This 5-liner in Dafny involved 37 lines of debugging to find the 2 missing lines due to no
+        // spec ensures
         assert forall |tjx| i(g(tjx))== #[trigger] G(i(tjx)) by {
-            assume(false);
+            if tjx.decodable() && tjx.can_discard_to(new_bdy) {
+                tjx.discard_old_commutes(new_bdy);
+                tjx.iwf();  // new spec ensures
+            } 
         }
 
         Self::commute_transitivity(i, f, F, g, G);
 
-        assert( i(g(f(self))) == G(F(i(self))) );   // Instantiate the transitivity lemma on self
-        assert( f(self) == self.crop(depth) );
         self.crop_ensures(depth);   // typcial infuriating missing spec ensures
-        assert( self.crop(depth).decodable() );
-        assert( self.crop(depth).can_discard_to(new_bdy) );
-        assert( g(f(self)) == self.crop(depth).discard_old(new_bdy) );
         self.crop(depth).discard_old_decodable(new_bdy);    // Dafny didn't need it ... which is surprising
-        assert( self.crop(depth).discard_old(new_bdy).decodable() );
-        assert( i(g(f(self))) == self.crop(depth).discard_old(new_bdy).i() );
-
-        assert( i(self) == self.i() );
         self.disk_view.pointer_after_crop_commutes_with_interpretation_no_some(self.freshest_rec, depth);   // Dafny didn't need it ... which is surprising
-
-        assert( PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(self.i().freshest_rec, self.i().boundary_lsn, depth) );
-
-        assert( F(i(self)) == self.i().crop_head_records(depth) );
-
-        self.i().crop_head_records_ensures(depth);
-//         if 0 < depth {
-//             assert( self.i().freshest_rec.unwrap().can_crop_head_records(self.i().boundary_lsn, depth) );
-//             self.i().freshest_rec.unwrap().crop_head_records_lemma(self.i().boundary_lsn, depth);   // typcial infuriating missing spec ensures
-//         }
-
-        assert( self.i().crop_head_records(depth).wf() );
-        assert( self.i().crop_head_records(depth).can_discard_to(new_bdy) );
-        assert( G(F(i(self))) == self.i().crop_head_records(depth).discard_old_defn(new_bdy) );
+        self.i().crop_head_records_ensures(depth);  // typical infuriating missing spec ensures
+        assert( G(F(i(self))) == self.i().crop_head_records(depth).discard_old_defn(new_bdy) ); // trigger
 
         self.linked_tj_can_crop_implies_paged_tj_can_crop(depth);
         self.crop_decreases_seq_end(depth);
