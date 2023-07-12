@@ -148,49 +148,39 @@ impl BetreeNode {
         }
     }
 
-//     pub proof fn query_from_refines_recur(self, key: Key, i: int)
-//         requires self.wf(), self.is_Node(), 
-//             self.key_in_domain(key),
-//             0 <= i <= self.get_Node_buffers().len()
-//         ensures ({
-//             let start = self.flushed_ofs(key) as int;
-//             &&& i < start ==> self.i().get_Node_buffers().query_from(key, i) == self.get_Node_buffers().query_from(key, start) 
-//             &&& i >= start ==> self.i().get_Node_buffers().query_from(key, i) == self.get_Node_buffers().query_from(key, i) 
-//         })
-//         decreases self.get_Node_buffers().len() - i
-//     {
-//         let start = self.flushed_ofs(key) as int;
-//         let buffers = self.get_Node_buffers().buffers;
-//         let i_buffers = self.i().get_Node_buffers().buffers;
+    pub proof fn query_from_same_as_i_filtered(self, key: Key, buffer_idx: int, offset_map: OffsetMap)
+        requires 
+            self.wf(), 
+            self.is_Node(),
+            self.key_in_domain(key),
+            0 <= buffer_idx <= self.get_Node_buffers().len(),
+            offset_map.is_total(),
+            self.flushed_ofs(key) <= buffer_idx ==> offset_map.offsets[key] == 0,
+            self.flushed_ofs(key) > buffer_idx ==> offset_map.offsets[key] == self.flushed_ofs(key) - buffer_idx
+        ensures ({
+            let start = self.flushed_ofs(key) as int;
+            let query_idx = if buffer_idx < start { start } else { buffer_idx };
+            &&& self.get_Node_buffers().i_filtered_from(offset_map, buffer_idx).query(key) == self.get_Node_buffers().query_from(key, query_idx)
+        })
+        decreases self.get_Node_buffers().len() - buffer_idx
+    {
+        PivotTable::route_lemma_auto();
+        if buffer_idx < self.get_Node_buffers().len() {
+            self.query_from_same_as_i_filtered(key, buffer_idx+1, offset_map.decrement(1));
+        }
+    }
 
-//         PivotTable::route_lemma_auto();
-//         PivotTable::route_is_lemma_auto();
-
-//         if i == self.get_Node_buffers().len() {
-//             return;
-//         } 
-        
-//         if i < start {
-//             assert(!self.active_keys(i).contains(key));
-//             assert(i_buffers[i].query(key) == Message::Update{delta: nop_delta()});
-//         } else {
-//             let r = self.get_Node_pivots().route(key);
-//             assert(self.active_key_cond(key, r, i));
-//             assert(i_buffers[i].query(key) == buffers[i].query(key));
-//         }
-//         self.query_from_refines_recur(key, i+1);
-//     }
-
-//     pub proof fn query_from_refines(self, key: Key)
-//         requires self.wf(), self.is_Node(), self.key_in_domain(key),
-//         ensures ({
-//             let start = self.flushed_ofs(key);
-//             let msg = self.get_Node_buffers().query_from(key, start as int);
-//             &&& msg == self.i().get_Node_buffers().query(key)
-//         })
-//     {
-//         self.query_from_refines_recur(key, 0);
-//     }
+    pub proof fn query_from_refines(self, key: Key)
+        requires self.wf(), self.is_Node(), self.key_in_domain(key),
+        ensures ({
+            let start = self.flushed_ofs(key);
+            let msg = self.get_Node_buffers().query_from(key, start as int);
+            &&& msg == self.i().get_Node_buffer().query(key)
+        })
+    {
+        let offset_map = self.make_offset_map();
+        self.query_from_same_as_i_filtered(key, 0, offset_map);
+    }
 
     pub open spec fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
         recommends self.wf(), self.is_index()
@@ -652,32 +642,32 @@ impl QueryReceipt{
         }
     }
 
-//     pub proof fn valid_receipt_refines(self)
-//         requires self.valid()
-//         ensures self.i().valid()
-//     {
-//         BetreeNode::i_wf_auto();
-//         BetreeNode::i_children_lemma_auto();
-//         PivotTable::route_lemma_auto();
+    pub proof fn valid_receipt_refines(self)
+        requires self.valid()
+        ensures self.i().valid()
+    {
+        BetreeNode::i_wf_auto();
+        BetreeNode::i_children_lemma_auto();
+        PivotTable::route_lemma_auto();
 
-//         let i_receipt = self.i();
-//         assert forall |i| 0 <= i < i_receipt.lines.len()-1
-//         implies {
-//             &&& #[trigger] i_receipt.lines[i].node.key_in_domain(self.key)
-//             &&& i_receipt.child_linked_at(i) 
-//         } by {
-//             assert(i_receipt.lines[i].wf());
-//             assert(self.child_linked_at(i));
-//         }
+        let i_receipt = self.i();
+        assert forall |i| 0 <= i < i_receipt.lines.len()-1
+        implies {
+            &&& #[trigger] i_receipt.lines[i].node.key_in_domain(self.key)
+            &&& i_receipt.child_linked_at(i) 
+        } by {
+            assert(i_receipt.lines[i].wf());
+            assert(self.child_linked_at(i));
+        }
 
-//         assert forall |i:int| 0 <= i < i_receipt.lines.len()-1
-//         implies #[trigger] i_receipt.result_linked_at(i) by {
-//             assert(self.result_linked_at(i)); // trigger
-//             self.lines[i].node.query_from_refines(self.key);
-//         }
+        assert forall |i:int| 0 <= i < i_receipt.lines.len()-1
+        implies #[trigger] i_receipt.result_linked_at(i) by {
+            assert(self.result_linked_at(i)); // trigger
+            self.lines[i].node.query_from_refines(self.key);
+        }
 
-//         assert(i_receipt.all_lines_wf()); // trigger
-//     }
+        assert(i_receipt.all_lines_wf()); // trigger
+    }
 }
 
 impl Path{
@@ -919,16 +909,16 @@ impl FilteredBetree::State {
         stamped_betree.value.i_wf();
     }
 
-//     pub proof fn query_refines(self, post: Self, lbl: FilteredBetree::Label, receipt: QueryReceipt)
-//         requires self.inv(), FilteredBetree::State::query(self, post, lbl, receipt)
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
-//     {
-//         reveal(PivotBetree::State::next);
-//         reveal(PivotBetree::State::next_by);
+    pub proof fn query_refines(self, post: Self, lbl: FilteredBetree::Label, receipt: QueryReceipt)
+        requires self.inv(), FilteredBetree::State::query(self, post, lbl, receipt)
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-//         receipt.valid_receipt_refines();
-//         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::query(receipt.i())));
-//     }
+        receipt.valid_receipt_refines();
+        assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::query(receipt.i())));
+    }
 
     pub proof fn put_refines(self, post: Self, lbl: FilteredBetree::Label)
         requires self.inv(), FilteredBetree::State::put(self, post, lbl)
