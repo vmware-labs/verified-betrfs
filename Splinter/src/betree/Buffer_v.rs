@@ -31,15 +31,19 @@ impl Buffer {
         Buffer{ map: Map::new( |k| accept.contains(k) && self.map.contains_key(k), |k| self.map[k] ) }
     }
 
-    pub open spec fn merge(self, older: Buffer) -> Buffer {
-        Buffer{ map: Map::new( |k| self.map.contains_key(k) || older.map.contains_key(k), 
-            |k| if self.map.contains_key(k) && older.map.contains_key(k) 
-                { older.map[k].merge(self.map[k]) }
-                else if self.map.contains_key(k) { self.map[k] } 
-                else { older.map[k] }) }
+    pub open spec fn merge(self, new_buffer: Buffer) -> Buffer {
+        Buffer{ map: Map::new( |k| self.map.contains_key(k) || new_buffer.map.contains_key(k), 
+            |k| if new_buffer.map.contains_key(k) && self.map.contains_key(k) { 
+                    self.map[k].merge(new_buffer.map[k]) 
+                } else if new_buffer.map.contains_key(k) { 
+                    new_buffer.map[k] 
+                } else { 
+                    self.map[k]
+                }) 
+        }
     }
 
-    pub open spec fn empty_buffer() -> Buffer {
+    pub open spec fn empty() -> Buffer {
         Buffer{ map: Map::empty() }
     }
 } // end impl Buffer

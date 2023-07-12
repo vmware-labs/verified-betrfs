@@ -1,4 +1,3 @@
-#[allow(unused_imports)]
 use builtin::*;
 
 use builtin_macros::*;
@@ -8,7 +7,6 @@ use vstd::prelude::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::betree::Buffer_v::*;
-use crate::betree::BufferSeq_v::*;
 use crate::betree::Memtable_v::*;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MsgHistory_v::*;
@@ -20,7 +18,7 @@ verus! {
 // instead, we have a child for every possible key, as though every key is a
 // pivot. That's not *exactly* right, since adjacent children
 // (in fact, infinite ranges of adjacent children) will be identical:
-// children for keys 40..70 may all carry (identical) buffers including
+// children for keys 40..70 may all carry (identical) buffer including
 // keys in [40..70), since of course they're represented by the same node
 // in PivotBetree, the next layer down the refinement stack.
 //
@@ -63,7 +61,7 @@ pub open spec fn empty_child_map() -> ChildMap {
 pub enum BetreeNode {
     Nil,
     Node{ 
-        buffers: BufferSeq, 
+        buffer: Buffer,
         children: ChildMap},
 }
 
@@ -74,14 +72,13 @@ impl BetreeNode {
         self.is_Node() ==> self.get_Node_children().wf()
     }
 
-
     pub open spec fn child(self, key: Key) -> BetreeNode {
         self.get_Node_children().map[key]
     }
 
     pub open spec fn empty_root() -> BetreeNode {
         BetreeNode::Node {
-            buffers: empty_buffer_seq(),
+            buffer: Buffer::empty(),
             children: empty_child_map()
         }
     }
@@ -94,23 +91,21 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn extend_buffer_seq(self, buffer_stack: BufferSeq) -> BetreeNode {
+    pub open spec fn merge_buffer(self, new_buffer: Buffer) -> BetreeNode {
         BetreeNode::Node{
-            buffers: self.get_Node_buffers().extend(buffer_stack),
+            buffer: self.get_Node_buffer().merge(new_buffer),
             children: self.get_Node_children(),
         }
     }
 
     pub open spec fn push_memtable(self, memtable: Memtable) -> StampedBetree {
         Stamped{
-            value: self.promote().extend_buffer_seq(
-                BufferSeq{ buffers: seq![memtable.buffer] }
-            ),
+            value: self.promote().merge_buffer(memtable.buffer),
             seq_end: memtable.seq_end
         }
     }
 
-    pub open spec fn filter_buffers_and_children(self, filter: Set<Key>) -> BetreeNode {
+    pub open spec fn filter_buffer_and_children(self, filter: Set<Key>) -> BetreeNode {
         if self.is_Nil() {
             self
         } else {
@@ -118,7 +113,7 @@ impl BetreeNode {
                 map: Map::new( |k| true, |k| if filter.contains(k) { self.get_Node_children().map[k] } else { BetreeNode:: Nil } )
             };
             BetreeNode::Node {
-                buffers: self.get_Node_buffers().apply_filter(filter),
+                buffer: self.get_Node_buffer().apply_filter(filter),
                 children: filtered_children,
             }
         }
@@ -129,32 +124,25 @@ impl BetreeNode {
         // identical, so that the first two branches of the if expression each produce
         // a single BetreeNode (with a shared representation below).
         let map = Map::new( |k| true, |k| 
-                if left_keys.contains(k) {self.child(k).filter_buffers_and_children(left_keys)} 
-                else if right_keys.contains(k) {self.child(k).filter_buffers_and_children(right_keys)} 
+                if left_keys.contains(k) {self.child(k).filter_buffer_and_children(left_keys)} 
+                else if right_keys.contains(k) {self.child(k).filter_buffer_and_children(right_keys)} 
                 else {self.child(k)});
         BetreeNode::Node {
-            buffers: self.get_Node_buffers(),
+            buffer: self.get_Node_buffer(),
             children: ChildMap{ map }
         }
     }
 
     pub open spec fn flush(self, down_keys: Set<Key>) -> BetreeNode {
-        let kept_buffers = self.get_Node_buffers().apply_filter(all_keys().difference(down_keys));
-        let moved_buffers = self.get_Node_buffers().apply_filter(down_keys);
+        let kept_buffer = self.get_Node_buffer().apply_filter(all_keys().difference(down_keys));
+        let moved_buffer = self.get_Node_buffer().apply_filter(down_keys);
         let out_children_map = Map::new( |k| true, |k| 
-            if down_keys.contains(k) {self.child(k).promote().extend_buffer_seq(moved_buffers)}
+            if down_keys.contains(k) {self.child(k).promote().merge_buffer(moved_buffer)}
             else {self.child(k)}
         );
         BetreeNode::Node {
-            buffers: kept_buffers,
+            buffer: kept_buffer,
             children: ChildMap{ map: out_children_map}
-        }
-    }
-
-    pub open spec fn compact(self, compacted_buffers: BufferSeq) -> BetreeNode {
-        BetreeNode::Node{
-            buffers: compacted_buffers, 
-            children: self.get_Node_children()
         }
     }
 } // end impl BetreeNode
@@ -226,7 +214,7 @@ impl QueryReceipt {
             self.structure(),
             0 <= i < self.lines.len() - 1,
     {
-        let msg = self.lines[i].node.get_Node_buffers().query(self.key);
+        let msg = self.lines[i].node.get_Node_buffer().query(self.key);
         self.result_at(i) == self.result_at(i+1).merge(msg)
     }
 
@@ -323,7 +311,7 @@ impl Path {
             replacement
         } else {
             BetreeNode::Node{
-                buffers: self.node.get_Node_buffers(),
+                buffer: self.node.get_Node_buffer(),
                 children: self.replaced_children(replacement)
             }
         }
@@ -382,7 +370,7 @@ state_machine!{ PagedBetree {
         require let Label::Internal{} = lbl;
         require pre.wf();
         update root = BetreeNode::Node{
-            buffers: empty_buffer_seq(),
+            buffer: Buffer::empty(),
             children: constant_child_map(pre.root)
         };
     }}
@@ -401,20 +389,10 @@ state_machine!{ PagedBetree {
         update root = path.substitute(path.target().flush(down_keys));
     }}
 
-    transition!{ internal_compact(lbl: Label, path: Path, compacted_buffers: BufferSeq) {
-        require let Label::Internal{} = lbl;
-        require path.valid();
-        require path.target().is_Node();
-        require path.target().get_Node_buffers().i() == compacted_buffers.i();
-        require path.node == pre.root;
-        update root = path.substitute(path.target().compact(compacted_buffers));
-    }}
-
     transition!{ internal_noop(lbl: Label) {
         require let Label::Internal{} = lbl;
         require pre.wf();
     }}
-
 
     init!{ initialize(stamped_betree: StampedBetree) {
         require stamped_betree.value.wf();

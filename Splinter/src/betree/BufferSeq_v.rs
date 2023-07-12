@@ -15,12 +15,12 @@ pub struct BufferSeq {
     pub buffers: Seq<Buffer>
 }
 
-pub open spec fn empty_buffer_seq() -> BufferSeq
-{
-    BufferSeq{buffers: seq![]}
-}
-
 impl BufferSeq {
+    pub open spec fn empty() -> BufferSeq
+    {
+        BufferSeq{ buffers: seq![] }
+    }
+
     pub open spec fn len(self) -> nat {
         self.buffers.len()
     }
@@ -87,9 +87,9 @@ impl BufferSeq {
         decreases self.buffers.len()
     {
         if self.buffers.len() == 0 {
-            Buffer::empty_buffer()
+            Buffer::empty()
         } else {
-            self.drop_first().i().merge(self.buffers[0])
+            self.buffers[0].merge(self.drop_first().i())
         }
     }
 
@@ -106,10 +106,10 @@ impl BufferSeq {
       decreases self.buffers.len()
     {
         if self.buffers.len() == 0 {
-            Buffer::empty_buffer()
+            Buffer::empty()
         } else {
             let new_offset_map = offset_map.decrement(1);
-            self.drop_first().i_filtered(new_offset_map).merge(self.i_bottom(offset_map))
+            self.i_bottom(offset_map).merge(self.drop_first().i_filtered(new_offset_map))
         }
     }
 
@@ -149,6 +149,5 @@ impl BufferSeq {
             self.filtered_buffer_seq_query_lemma(filter, key, start+1);
         }
     }
-
 } // end impl BufferSeq
 }  // end verus!

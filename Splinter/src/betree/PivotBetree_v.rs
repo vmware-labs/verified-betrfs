@@ -1,15 +1,12 @@
-#[allow(unused_imports)]
 use builtin::*;
 
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 
 use vstd::prelude::*;
-
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::betree::Buffer_v::*;
-use crate::betree::BufferSeq_v::*;
 use crate::betree::Memtable_v::*;
 use crate::betree::Domain_v::*;
 use crate::betree::PivotTable_v::*;
@@ -30,7 +27,7 @@ pub open spec fn empty_image() -> StampedBetree {
 pub enum BetreeNode {
     Nil,
     Node{
-        buffers: BufferSeq,
+        buffer: Buffer,
         pivots: PivotTable,
         children: Seq<BetreeNode>
     },
@@ -100,21 +97,20 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn push_memtable(self, memtable: Memtable) -> StampedBetree
-    {
-        let buffers = BufferSeq{buffers: seq![memtable.buffer]};
-        let new_root = self.promote(total_domain()).extend_buffer_seq(buffers);
-        Stamped{value: new_root, seq_end: memtable.seq_end}
-    }
-
-    pub open spec fn extend_buffer_seq(self, buffers: BufferSeq) -> BetreeNode
+    pub open spec fn merge_buffer(self, new_buffer: Buffer) -> BetreeNode
         recommends self.is_Node()
     {
         BetreeNode::Node{
-            buffers: self.get_Node_buffers().extend(buffers),
+            buffer: self.get_Node_buffer().merge(new_buffer),
             pivots: self.get_Node_pivots(),
             children: self.get_Node_children()
         }
+    }
+
+    pub open spec fn push_memtable(self, memtable: Memtable) -> StampedBetree
+    {
+        let new_root = self.promote(total_domain()).merge_buffer(memtable.buffer);
+        Stamped{value: new_root, seq_end: memtable.seq_end}
     }
 
     pub open spec fn is_leaf(self) -> bool
@@ -145,13 +141,13 @@ impl BetreeNode {
         let right_filter = Domain::Domain{ start: to_element(split_key), end: self.my_domain().get_Domain_end() };
 
         let new_left = BetreeNode::Node{
-            buffers: self.get_Node_buffers().apply_filter(left_filter.key_set()),
+            buffer: self.get_Node_buffer().apply_filter(left_filter.key_set()),
             pivots: self.get_Node_pivots().update(1, to_element(split_key)),
             children: self.get_Node_children()
         };
 
         let new_right = BetreeNode::Node{
-            buffers: self.get_Node_buffers().apply_filter(right_filter.key_set()),
+            buffer: self.get_Node_buffer().apply_filter(right_filter.key_set()),
             pivots: self.get_Node_pivots().update(0, to_element(split_key)),
             children: self.get_Node_children()
         };
@@ -174,13 +170,13 @@ impl BetreeNode {
         let right_filter = Domain::Domain{ start: split_element, end: self.my_domain().get_Domain_end() };
 
         let new_left = BetreeNode::Node{
-            buffers: self.get_Node_buffers().apply_filter(left_filter.key_set()),
+            buffer: self.get_Node_buffer().apply_filter(left_filter.key_set()),
             pivots: self.get_Node_pivots().subrange(0, pivot_idx as int +1),
             children: self.get_Node_children().subrange(0, pivot_idx as int)
         };
 
         let new_right = BetreeNode::Node{
-            buffers: self.get_Node_buffers().apply_filter(right_filter.key_set()),
+            buffer: self.get_Node_buffer().apply_filter(right_filter.key_set()),
             pivots: self.get_Node_pivots().subrange(pivot_idx as int, self.get_Node_pivots().len() as int),
             children: self.get_Node_children().subrange(pivot_idx as int, self.get_Node_children().len() as int)
         };
@@ -214,7 +210,7 @@ impl BetreeNode {
                 let (new_left_child, new_right_child) = old_child.split_leaf(split_key);
 
                 BetreeNode::Node{
-                    buffers: self.get_Node_buffers(),
+                    buffer: self.get_Node_buffer(),
                     pivots: self.get_Node_pivots().insert(idx+1, to_element(split_key)),
                     children: self.get_Node_children().update(idx, new_left_child).insert(idx+1, new_right_child)
                 }
@@ -226,7 +222,7 @@ impl BetreeNode {
                 let split_element = old_child.get_Node_pivots().pivots[child_pivot_idx as int];
 
                 BetreeNode::Node{
-                    buffers: self.get_Node_buffers(),
+                    buffer: self.get_Node_buffer(),
                     pivots: self.get_Node_pivots().insert(idx+1, split_element),
                     children: self.get_Node_children().update(idx, new_left_child).insert(idx+1, new_right_child)
                 }
@@ -238,7 +234,7 @@ impl BetreeNode {
         recommends domain.wf(), domain.is_Domain()
     {
         BetreeNode::Node{
-            buffers: empty_buffer_seq(),
+            buffer: Buffer::empty(),
             pivots: domain_to_pivots(domain),
             children: seq![BetreeNode::Nil]
         }
@@ -247,7 +243,7 @@ impl BetreeNode {
     pub open spec fn grow(self) -> BetreeNode
     {
         BetreeNode::Node{
-            buffers: empty_buffer_seq(),
+            buffer: Buffer::empty(),
             pivots: domain_to_pivots(total_domain()),
             children: seq![self]
         }
@@ -274,25 +270,16 @@ impl BetreeNode {
     {
         let child_domain = self.child_domain(child_idx);
         let keep_keys = all_keys().difference(child_domain.key_set());
-        let kept_buffers = self.get_Node_buffers().apply_filter(keep_keys);
-        let moved_buffers = self.get_Node_buffers().apply_filter(child_domain.key_set());
+        let kept_buffer = self.get_Node_buffer().apply_filter(keep_keys);
+        let moved_buffer = self.get_Node_buffer().apply_filter(child_domain.key_set());
 
         let old_child = self.get_Node_children()[child_idx as int];
-        let new_child = old_child.promote(child_domain).extend_buffer_seq(moved_buffers);
+        let new_child = old_child.promote(child_domain).merge_buffer(moved_buffer);
 
         BetreeNode::Node{
-            buffers: kept_buffers,
+            buffer: kept_buffer,
             pivots: self.get_Node_pivots(),
             children: self.get_Node_children().update(child_idx as int, new_child)
-        }
-    }
-
-    pub open spec fn compact(self, compactedBuffers: BufferSeq) -> BetreeNode
-    {
-        BetreeNode::Node{
-            buffers: compactedBuffers,
-            pivots: self.get_Node_pivots(),
-            children: self.get_Node_children()
         }
     }
 
@@ -366,7 +353,7 @@ impl QueryReceipt{
 
     pub open spec fn result_linked_at(self, i:int) -> bool
     {
-        let msg = self.lines[i].node.get_Node_buffers().query(self.key);
+        let msg = self.lines[i].node.get_Node_buffer().query(self.key);
         self.lines[i].result == self.result_at(i+1).merge(msg)
     }
 
@@ -452,7 +439,7 @@ impl Path{
             replacement
         } else {
             BetreeNode::Node{
-                buffers: self.node.get_Node_buffers(),
+                buffer: self.node.get_Node_buffer(),
                 pivots: self.node.get_Node_pivots(),
                 children: self.replaced_children(replacement)
             }
@@ -530,20 +517,10 @@ state_machine!{ PivotBetree {
         update root = path.substitute(path.target().flush(child_idx));
     }}
 
-    transition!{ internal_compact(lbl: Label, path: Path, compactedBuffers: BufferSeq) {
-        require let Label::Internal{} = lbl;
-        require path.valid();
-        require path.target().is_Node();
-        require path.target().get_Node_buffers().i() == compactedBuffers.i();
-        require path.node == pre.root;
-        update root = path.substitute(path.target().compact(compactedBuffers));
-    }}
-
     transition!{ internal_noop(lbl: Label) {
         require let Label::Internal{} = lbl;
         require pre.wf();
     }}
-
 
     init!{ initialize(stamped_betree: StampedBetree) {
         require stamped_betree.value.wf();

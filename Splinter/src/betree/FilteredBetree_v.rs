@@ -260,7 +260,7 @@ impl BetreeNode {
         recommends domain.wf(), domain.is_Domain()
     {
         BetreeNode::Node{
-            buffers: empty_buffer_seq(),
+            buffers: BufferSeq::empty(),
             pivots: domain_to_pivots(domain),
             children: seq![BetreeNode::Nil],
             flushed: BufferOffsets{offsets: seq![0]}
@@ -270,7 +270,7 @@ impl BetreeNode {
     pub open spec fn grow(self) -> BetreeNode
     {
         BetreeNode::Node{
-            buffers: empty_buffer_seq(),
+            buffers: BufferSeq::empty(),
             pivots: domain_to_pivots(total_domain()),
             children: seq![self],
             flushed: BufferOffsets{offsets: seq![0]}

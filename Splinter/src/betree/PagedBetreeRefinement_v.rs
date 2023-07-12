@@ -1,5 +1,5 @@
+// #![allow(unused_imports)]
 use builtin::*;
-
 use builtin_macros::*;
 
 use vstd::prelude::*;
@@ -12,9 +12,7 @@ use crate::coordination_layer::MsgHistory_v::*;
 use crate::coordination_layer::AbstractMap_v::*;
 use crate::betree::PagedBetree_v::*;
 use crate::betree::Buffer_v::*;
-use crate::betree::BufferSeq_v::*;
 use crate::betree::Memtable_v::*;
-
 
 verus! {
 impl BetreeNode {
@@ -28,7 +26,7 @@ impl BetreeNode {
             QueryReceipt{key: key, root: self, lines: seq![line]}
         } else {
             let child_receipt = self.child(key).build_query_receipt(key);
-            let msg = self.get_Node_buffers().query(key);
+            let msg = self.get_Node_buffer().query(key);
             let line = QueryReceiptLine{node: self, result: child_receipt.result().merge(msg)};
             QueryReceipt{key: key, root: self, lines: seq![line] + child_receipt.lines}
         }
@@ -43,7 +41,7 @@ impl BetreeNode {
             let child_receipt = self.child(key).build_query_receipt(key);
             self.child(key).build_query_receipt_valid(key);
 
-            let msg = self.get_Node_buffers().query(key);
+            let msg = self.get_Node_buffer().query(key);
             let line = QueryReceiptLine{node: self, result: child_receipt.result().merge(msg)};
             let receipt = QueryReceipt{key: key, root: self, lines: seq![line] + child_receipt.lines};
 
@@ -75,14 +73,7 @@ impl BetreeNode {
     {
         let map_a = map_apply(memtable, self.i());
         let map_b = self.push_memtable(memtable).value.i();
-
-        assert forall |k: Key| map_a.0[k] == map_b.0[k] by 
-        {
-            let buffers = BufferSeq{buffers: seq![memtable.buffer]};
-            buffers.query_singleton(k);
-            self.extend_buffer_seq_lemma(buffers, k);
-        }
-        assert_maps_equal!(map_a.0, map_b.0);
+        assert(map_a =~= map_b);
     }
 
     pub proof fn push_empty_memtable_refines(self, memtable: Memtable)
@@ -90,26 +81,22 @@ impl BetreeNode {
         ensures i_stamped_betree(Stamped{value: self, seq_end: memtable.seq_end})
             == i_stamped_betree(self.push_memtable(memtable))
     {
-        self.memtable_distributes_over_betree(memtable);   
         assert(self.i() =~= self.push_memtable(memtable).value.i());
     }
 
-    pub proof fn extend_buffer_seq_lemma(self, buffers: BufferSeq, key: Key)
+    pub proof fn merge_buffer_lemma(self, new_buffer: Buffer, key: Key)
         requires self.wf()
-        ensures self.promote().extend_buffer_seq(buffers).i_at(key) 
-            == self.i_at(key).merge(buffers.query(key))
+        ensures self.promote().merge_buffer(new_buffer).i_at(key) 
+            == self.i_at(key).merge(new_buffer.query(key))
     {
-        let node_buffers = self.promote().get_Node_buffers();
-        BufferSeq::extend_buffer_seq_lemma(buffers, node_buffers, key, 0);
     }
 
-    pub proof fn filter_buffers_and_children_wf(self, filter: Set<Key>) 
+    pub proof fn filter_buffer_and_children_wf(self, filter: Set<Key>) 
         requires self.wf()
-        ensures self.filter_buffers_and_children(filter).wf()
+        ensures self.filter_buffer_and_children(filter).wf()
     {
         if self.is_Node() {
-            let child_map = self.filter_buffers_and_children(filter).get_Node_children();
-            assert(child_map.wf());
+            assert(self.filter_buffer_and_children(filter).get_Node_children().wf());
         }
     }
 
@@ -122,9 +109,9 @@ impl BetreeNode {
         assert forall |k: Key| (#[trigger] child_map.map[k]).wf()
         by {
             if left_keys.contains(k) {
-                self.child(k).filter_buffers_and_children_wf(left_keys);
+                self.child(k).filter_buffer_and_children_wf(left_keys);
             } else if right_keys.contains(k) {
-                self.child(k).filter_buffers_and_children_wf(right_keys);
+                self.child(k).filter_buffer_and_children_wf(right_keys);
             } else {
                 self.child(k);
             }
@@ -136,14 +123,10 @@ impl BetreeNode {
     
     pub proof fn apply_filter_equivalence(self, filter: Set<Key>, key: Key)
         requires self.wf(), filter.contains(key)
-        ensures self.filter_buffers_and_children(filter).i_at(key) == self.i_at(key)
+        ensures self.filter_buffer_and_children(filter).i_at(key) == self.i_at(key)
     {
         let receipt = self.build_query_receipt(key);
         self.build_query_receipt_valid(key);
-
-        if 1 < receipt.lines.len() {
-            receipt.lines[0].node.get_Node_buffers().filtered_buffer_seq_query_lemma(filter, key, 0);
-        }
     }
 
     pub proof fn flush_wf(self, down_keys: Set<Key>)
@@ -343,7 +326,7 @@ impl PagedBetree::State {
         let built_receipt = self.root.build_query_receipt(lbl.get_Query_key());
         self.root.build_query_receipt_valid(lbl.get_Query_key());
         receipt.equal_receipts(built_receipt);
-        self.root.memtable_distributes_over_betree(self.memtable);
+
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::query()));
     }
 
@@ -357,8 +340,6 @@ impl PagedBetree::State {
         let KeyedMessage{key, message} = puts.msgs[puts.seq_start];
         let map_a = post.root.push_memtable(post.memtable).value.i();
         self.memtable.apply_puts_end(puts);
-        assert(self.memtable == self.memtable.apply_puts(puts.discard_recent(puts.seq_start)));
-        assert(post.memtable == self.memtable.apply_put(puts.msgs[puts.seq_start]));
 
         let map_b = puts.apply_to_stamped_map(self.i().stamped_map).value;
         MsgHistory::map_plus_history_lemma(self.i().stamped_map, puts);
@@ -366,22 +347,7 @@ impl PagedBetree::State {
         let sub_map_b = puts.discard_recent(puts.seq_start).apply_to_stamped_map(self.i().stamped_map).value;
         assert(map_b == sub_map_b.insert(key, sub_map_b[key].merge(message)));
 
-        assert forall |k: Key| map_a.0[k] == map_b.0[k]
-        by {
-            let buffers = BufferSeq{buffers: seq![self.memtable.buffer]};
-            let buffers_prime = BufferSeq{buffers: seq![post.memtable.buffer]};
-
-            if k == key {
-                buffers.query_singleton(k);
-                buffers_prime.query_singleton(k);
-            }
-
-            self.root.extend_buffer_seq_lemma(buffers, k);
-            self.root.extend_buffer_seq_lemma(buffers_prime, k);                
-            assert(map_a.0[k] == map_b.0[k]);
-        }
-
-        assert_maps_equal!(map_a.0, map_b.0);
+        assert(map_a =~= map_b);
         assert(post.i().stamped_map.value == map_a);
         assert(MsgHistory::map_plus_history(self.i().stamped_map, puts).value == map_b);
     }
@@ -405,7 +371,7 @@ impl PagedBetree::State {
             assert(last_put.can_follow(intermediate_post.memtable.seq_end));
 
             self.memtable.apply_puts_additive(short_puts, last_put);
-            assert_maps_equal!(short_puts.concat(last_put).msgs, puts.msgs);
+            assert(short_puts.concat(last_put).msgs =~= puts.msgs);
             assert(post.memtable == intermediate_post.memtable.apply_puts(last_put));
 
             intermediate_post.apply_single_put_is_map_plus_history(post, last_put);
@@ -513,36 +479,15 @@ impl PagedBetree::State {
 
         assert forall |k: Key| target.i_at(k) == top.i_at(k)
         by {
-            if down_keys.contains(k) {
-                target.get_Node_buffers().filtered_buffer_seq_query_lemma(kept_keys, k, 0);
-                assert(target.get_Node_children().wf());
-                
-                let moved_buffers = target.get_Node_buffers().apply_filter(down_keys);
+            if down_keys.contains(k) {                
+                let moved_buffer = target.get_Node_buffer().apply_filter(down_keys);
                 let child = target.get_Node_children().map[k];
-                child.extend_buffer_seq_lemma(moved_buffers, k);
-                target.get_Node_buffers().filtered_buffer_seq_query_lemma(down_keys, k, 0);
-            } else {
-                target.get_Node_buffers().filtered_buffer_seq_query_lemma(kept_keys, k, 0);
+                child.merge_buffer_lemma(moved_buffer, k);
             }
         }
         
         assert(target.i() =~= top.i());
         path.substitute_equivalence(top);
-        self.equivalent_roots(post);
-        assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
-    }
-
-    pub proof fn internal_compact_noop(self, post: Self, lbl: PagedBetree::Label, path: Path, compacted_buffers: BufferSeq)
-        requires self.inv(), PagedBetree::State::internal_compact(self, post, lbl, path, compacted_buffers)
-        ensures post.inv(), AbstractMap::State::next(self.i(), post.i(), lbl.i())
-    {
-        reveal(AbstractMap::State::next);
-        reveal(AbstractMap::State::next_by);
-
-        path.target_wf();
-        let compact_node = path.target().compact(compacted_buffers);
-        assert(compact_node.i() =~= path.target().i());
-        path.substitute_equivalence(compact_node);
         self.equivalent_roots(post);
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::internal()));
     }
@@ -572,7 +517,6 @@ impl PagedBetree::State {
             PagedBetree::Step::internal_grow() => { self.internal_grow_noop(post, lbl); }
             PagedBetree::Step::internal_split(path, left_keys, right_keys) => { self.internal_split_noop(post, lbl, path, left_keys, right_keys); }
             PagedBetree::Step::internal_flush(path, down_keys) => { self.internal_flush_noop(post, lbl, path, down_keys); }
-            PagedBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_noop(post, lbl, path, compacted_buffers); }
             PagedBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
             _ => { assert(false); } 
         }

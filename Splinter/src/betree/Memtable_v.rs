@@ -75,7 +75,7 @@ impl Memtable {
 
     pub open spec fn empty_memtable(lsn: LSN) -> Memtable {
         Memtable{ 
-            buffer: Buffer::empty_buffer(),
+            buffer: Buffer::empty(),
             seq_end: lsn
         }
     }
@@ -85,7 +85,7 @@ impl Memtable {
     }
 
     pub open spec fn is_empty(self) -> bool {
-        self.buffer == Buffer::empty_buffer()
+        self.buffer == Buffer::empty()
         // Note(Jialin): not suited here bc if map is not finite len has no meaning
         // we can write it as the following
         // &&& self.buffer.map.dom().finite()
