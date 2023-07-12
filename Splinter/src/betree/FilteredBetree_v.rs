@@ -20,6 +20,8 @@ use crate::abstract_system::StampedMap_v::*;
 use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
+// Changes from a single buffer to a stack of buffers, tracks actvie buffers for ranges of keys.
+// Includes garbage collection of inactive buffers and compaction of buffers.
 // In contrast to the PivotBetree above, upon flushing a buffer down the tree, 
 // the FilteredBetree keeps the entire buffer but notes that it should filter out the keys in 
 // that buffer for the child to which it was flushed.
@@ -31,6 +33,7 @@ pub open spec fn empty_image() -> StampedBetree {
 }
 
 #[is_variant]
+#[verifier::ext_equal]
 pub enum BetreeNode {
     Nil,
     Node{

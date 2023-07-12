@@ -24,6 +24,7 @@ pub open spec fn empty_image() -> StampedBetree {
 }
 
 #[is_variant]
+#[verifier::ext_equal]
 pub enum BetreeNode {
     Nil,
     Node{

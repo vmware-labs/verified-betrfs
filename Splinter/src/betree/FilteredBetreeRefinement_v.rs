@@ -978,9 +978,7 @@ impl FilteredBetree::State {
         BetreeNode::i_wf_auto();
         PivotTable::route_lemma_auto();
         post.root.i_children_lemma();
-
-        assert(post.i().root.get_Node_children() =~= self.i().root.grow().get_Node_children());
-        assert(post.i().root.get_Node_buffer() =~= self.i().root.grow().get_Node_buffer());
+        assert(post.i().root =~= self.i().root.grow());
         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_grow()));
     }
 
