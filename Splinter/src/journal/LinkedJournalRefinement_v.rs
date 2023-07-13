@@ -62,7 +62,7 @@ impl DiskView {
         // appears in the ensures.
         // Well actually, sometimes with == it completes the proof, but (AAAARGH) it's super flaky.
         // trying =~=...
-        assume(false); // Goodness this is hella flaky.
+        //assume(false); // Goodness this is hella flaky.
         assert( post.iptr(ptr) =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
     }
 
@@ -391,19 +391,19 @@ impl TruncatedJournal {
 //         assume(false);
 //     }
 
-    pub proof fn can_crop_increment(self, depth: nat)
-    requires
-        0 < depth,
-        self.wf(),
-        self.freshest_rec.is_Some(),
-        self.can_crop(1),
-        self.crop(1).can_crop((depth-1) as nat),
-    ensures
-        self.can_crop(depth),
-    decreases depth
-    {
-        assume( false );
-    }
+//     pub proof fn can_crop_increment(self, depth: nat)
+//     requires
+//         0 < depth,
+//         self.wf(),
+//         self.freshest_rec.is_Some(),
+//         self.can_crop(1),
+//         self.crop(1).can_crop((depth-1) as nat),
+//     ensures
+//         self.can_crop(depth),
+//     decreases depth
+//     {
+//         assume( false );
+//     }
 
     pub proof fn linked_tj_can_crop_implies_paged_tj_can_crop(self, depth: nat)
     requires
