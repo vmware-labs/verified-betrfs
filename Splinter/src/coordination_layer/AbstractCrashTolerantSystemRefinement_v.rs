@@ -16,11 +16,11 @@ use crate::spec::TotalKMMap_t;
 use crate::spec::Option_t;
 
 use crate::coordination_layer::AbstractJournal_v::AbstractJournal;
-use crate::coordination_layer::CoordinationSystem_v::*;
-use crate::coordination_layer::CrashTolerantJournal_v;
-use crate::coordination_layer::CrashTolerantJournal_v::*;
-use crate::coordination_layer::CrashTolerantMap_v::*;
-use crate::coordination_layer::CrashTolerantMap_v;
+use crate::coordination_layer::AbstractCrashTolerantSystem_v::*;
+use crate::coordination_layer::AbstractCrashAwareJournal_v;
+use crate::coordination_layer::AbstractCrashAwareJournal_v::*;
+use crate::coordination_layer::AbstractCrashAwareMap_v::*;
+use crate::coordination_layer::AbstractCrashAwareMap_v;
 use crate::coordination_layer::AbstractMap_v::*;
 use crate::coordination_layer::StampedMap_v::*;
 use crate::coordination_layer::MsgHistory_v::{MsgHistory, KeyedMessage};
@@ -52,13 +52,13 @@ verus! {
       self.ephemeral.get_Known_v().stamped_map
     }
 
-    // CrashTolerantMap needs to carry wf/invariant that shows that contained
+    // AbstractCrashAwareMap needs to carry wf/invariant that shows that contained
     // TotalKMMap is always wf (always has total domain)
     pub open spec fn wf(self) -> bool
     {
       &&& self.persistent.value.wf()
       &&& match self.ephemeral {
-          CrashTolerantMap_v::Ephemeral::Known{ v } => v.stamped_map.value.wf(),
+          AbstractCrashAwareMap_v::Ephemeral::Known{ v } => v.stamped_map.value.wf(),
           _ => true,
         }
       &&& match self.in_flight {
