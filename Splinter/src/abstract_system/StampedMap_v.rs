@@ -2,7 +2,7 @@ use builtin_macros::*;
 use builtin::*;
 
 use crate::spec::TotalKMMap_t::*;
-use crate::coordination_layer::MsgHistory_v::MsgHistory;
+use crate::abstract_system::MsgHistory_v::MsgHistory;
 
 verus! {
 pub type LSN = nat;

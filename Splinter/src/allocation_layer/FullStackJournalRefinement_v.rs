@@ -9,9 +9,9 @@ use state_machines_macros::state_machine;
 
 use vstd::prelude::*;
 use crate::disk::GenericDisk_v::*;
-use crate::coordination_layer::StampedMap_v::LSN;
-use crate::coordination_layer::MsgHistory_v::*;
-use crate::coordination_layer::AbstractJournal_v::*;
+use crate::abstract_system::StampedMap_v::LSN;
+use crate::abstract_system::MsgHistory_v::*;
+use crate::abstract_system::AbstractJournal_v::*;
 use crate::journal::PagedJournal_v;
 // use crate::journal::PagedJournal_v::PagedJournal;
 use crate::journal::LinkedJournal_v;

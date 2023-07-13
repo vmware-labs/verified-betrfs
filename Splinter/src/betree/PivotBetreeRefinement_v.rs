@@ -3,7 +3,7 @@ use builtin_macros::*;
 
 use vstd::prelude::*;
 use crate::spec::KeyType_t::*;
-use crate::coordination_layer::StampedMap_v::*;
+use crate::abstract_system::StampedMap_v::*;
 use crate::betree::Domain_v::*;
 use crate::betree::PivotTable_v::*;
 use crate::betree::Buffer_v::*;

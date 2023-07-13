@@ -7,8 +7,8 @@ use state_machines_macros::state_machine;
 
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MsgHistory_v::*;
+use crate::abstract_system::StampedMap_v::*;
+use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
 

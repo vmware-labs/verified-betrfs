@@ -4,7 +4,7 @@ use vstd::{*,map::*,set::*};
 
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-use crate::coordination_layer::StampedMap_v::*;
+use crate::abstract_system::StampedMap_v::*;
 
 verus! {
 

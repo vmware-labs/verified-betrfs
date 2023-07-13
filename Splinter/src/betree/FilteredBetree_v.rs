@@ -16,8 +16,8 @@ use crate::betree::Memtable_v::*;
 use crate::betree::Domain_v::*;
 use crate::betree::PivotTable_v::*;
 use crate::betree::SplitRequest_v::*;
-use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MsgHistory_v::*;
+use crate::abstract_system::StampedMap_v::*;
+use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
 // In contrast to the PivotBetree above, upon flushing a buffer down the tree, 

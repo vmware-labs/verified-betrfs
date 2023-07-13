@@ -8,8 +8,8 @@ use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::betree::Buffer_v::*;
 use crate::betree::Memtable_v::*;
-use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MsgHistory_v::*;
+use crate::abstract_system::StampedMap_v::*;
+use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
 // This is a functional model of a Betree, but it doesn't require that child

@@ -8,10 +8,10 @@ use crate::spec::Messages_t::*;
 use crate::spec::MapSpec_t;
 use crate::spec::MapSpec_t::*;
 
-use crate::coordination_layer::AbstractCrashAwareJournal_v::*;
-use crate::coordination_layer::AbstractCrashAwareMap_v::*;
-use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MsgHistory_v::{MsgHistory, KeyedMessage};
+use crate::abstract_system::AbstractCrashAwareJournal_v::*;
+use crate::abstract_system::AbstractCrashAwareMap_v::*;
+use crate::abstract_system::StampedMap_v::*;
+use crate::abstract_system::MsgHistory_v::{MsgHistory, KeyedMessage};
 
 // TODO (jonh): Rename all of the labels in all files to exclude "Op" or "Label" since it's redundant
 // as enums are already namespaced under "Label", so it's like saying "Label Label"

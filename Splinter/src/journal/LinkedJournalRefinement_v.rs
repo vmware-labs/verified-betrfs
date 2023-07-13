@@ -8,8 +8,8 @@ use builtin_macros::*;
 use state_machines_macros::state_machine;
 
 use vstd::prelude::*;
-use crate::coordination_layer::StampedMap_v::LSN;
-use crate::coordination_layer::MsgHistory_v::*;
+use crate::abstract_system::StampedMap_v::LSN;
+use crate::abstract_system::MsgHistory_v::*;
 use crate::disk::GenericDisk_v::*;
 use crate::journal::PagedJournal_v;
 use crate::journal::PagedJournal_v::PagedJournal;

@@ -13,9 +13,9 @@ use vstd::{calc_macro::*};
 use vstd::prelude::*;
 use vstd::map::*;
 use vstd::seq_lib::*;
-use crate::coordination_layer::StampedMap_v::LSN;
-use crate::coordination_layer::MsgHistory_v::*;
-use crate::coordination_layer::AbstractJournal_v::*;
+use crate::abstract_system::StampedMap_v::LSN;
+use crate::abstract_system::MsgHistory_v::*;
+use crate::abstract_system::AbstractJournal_v::*;
 use crate::journal::PagedJournal_v::*;
 
 verus! {

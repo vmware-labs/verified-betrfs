@@ -11,8 +11,8 @@ use crate::betree::Memtable_v::*;
 use crate::betree::Domain_v::*;
 use crate::betree::PivotTable_v::*;
 use crate::betree::SplitRequest_v::*;
-use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MsgHistory_v::*;
+use crate::abstract_system::StampedMap_v::*;
+use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
 // This is a functional model of a Betree with nodes with pivot table

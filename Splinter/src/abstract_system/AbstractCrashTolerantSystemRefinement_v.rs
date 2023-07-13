@@ -15,15 +15,15 @@ use crate::spec::FloatingSeq_t::*;
 use crate::spec::TotalKMMap_t;
 use crate::spec::Option_t;
 
-use crate::coordination_layer::AbstractJournal_v::AbstractJournal;
-use crate::coordination_layer::AbstractCrashTolerantSystem_v::*;
-use crate::coordination_layer::AbstractCrashAwareJournal_v;
-use crate::coordination_layer::AbstractCrashAwareJournal_v::*;
-use crate::coordination_layer::AbstractCrashAwareMap_v::*;
-use crate::coordination_layer::AbstractCrashAwareMap_v;
-use crate::coordination_layer::AbstractMap_v::*;
-use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MsgHistory_v::{MsgHistory, KeyedMessage};
+use crate::abstract_system::AbstractJournal_v::AbstractJournal;
+use crate::abstract_system::AbstractCrashTolerantSystem_v::*;
+use crate::abstract_system::AbstractCrashAwareJournal_v;
+use crate::abstract_system::AbstractCrashAwareJournal_v::*;
+use crate::abstract_system::AbstractCrashAwareMap_v::*;
+use crate::abstract_system::AbstractCrashAwareMap_v;
+use crate::abstract_system::AbstractMap_v::*;
+use crate::abstract_system::StampedMap_v::*;
+use crate::abstract_system::MsgHistory_v::{MsgHistory, KeyedMessage};
 
 verus! {
   impl CrashTolerantJournal::State

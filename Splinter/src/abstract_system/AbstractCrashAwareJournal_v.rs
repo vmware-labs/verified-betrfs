@@ -7,9 +7,9 @@ use state_machines_macros::state_machine;
 use vstd::{map::*};
 
 use crate::spec::Option_t::*;
-use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MsgHistory_v::*;
-use crate::coordination_layer::AbstractJournal_v::*;
+use crate::abstract_system::StampedMap_v::*;
+use crate::abstract_system::MsgHistory_v::*;
+use crate::abstract_system::AbstractJournal_v::*;
 
 verus! {
 

@@ -10,9 +10,9 @@ use crate::spec::Option_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 
-use crate::coordination_layer::StampedMap_v::*;
-use crate::coordination_layer::MsgHistory_v::*;
-use crate::coordination_layer::AbstractMap_v::*;
+use crate::abstract_system::StampedMap_v::*;
+use crate::abstract_system::MsgHistory_v::*;
+use crate::abstract_system::AbstractMap_v::*;
 
 verus! {
 
