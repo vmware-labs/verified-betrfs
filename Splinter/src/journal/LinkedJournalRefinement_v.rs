@@ -420,7 +420,17 @@ impl TruncatedJournal {
         self.i().can_crop(depth),
     decreases depth
     {
-        assume( false );
+        if 0 < depth {
+            self.can_crop_monotonic((depth-1) as nat, depth);   // Dafny didn't need this, not sure why not?
+            self.linked_tj_can_crop_implies_paged_tj_can_crop((depth -1) as nat);
+            // How did this proof ever work!?
+//             if 1 < depth {
+//                 self.can_crop_monotonic(1, depth);   // Dafny didn't need this, not sure why not?
+//             }
+//             assert( self.crop(1).can_crop((depth-1) as nat) );
+//             self.can_crop_increment(depth);
+//            assert( self.can_crop(depth) );
+        }
     }
 
     pub proof fn paged_tj_can_crop_implies_linked_tj_can_crop(self, depth: nat)
@@ -432,13 +442,8 @@ impl TruncatedJournal {
     decreases depth
     {
         if 0 < depth {
-            self.disk_view.pointer_after_crop_auto();
-            self.next().disk_view.pointer_after_crop_auto();
-
-            assert( self.next().can_crop( (depth-1) as nat) );
-            self.next().linked_tj_can_crop_implies_paged_tj_can_crop((depth - 1) as nat);
-            assert( self.crop(1).can_crop((depth-1) as nat) );
-            self.can_crop_increment(depth);
+            self.next().paged_tj_can_crop_implies_linked_tj_can_crop((depth - 1) as nat);
+//            self.can_crop_increment(depth);   // whoah, Dafny version needed this and Verus doesn't?
         }
     }
 
