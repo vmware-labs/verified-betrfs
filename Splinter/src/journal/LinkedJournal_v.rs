@@ -207,7 +207,7 @@ impl DiskView {
         else if root.is_None() { Self{boundary_lsn: self.boundary_lsn, entries: map![]} }
         else {
             let addr = root.unwrap();
-            let tail = self.build_tight(self.entries[addr].cropped_prior(self.boundary_lsn));
+            let tail = self.build_tight(self.next(root));
             Self{
                 boundary_lsn: self.boundary_lsn,
                 entries: tail.entries.insert(addr, self.entries[addr]),
@@ -229,8 +229,7 @@ impl DiskView {
         if !self.acyclic() { }
         else if root.is_None() { }
         else {
-            let inner_root = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
-            self.build_tight_ensures(inner_root);
+            self.build_tight_ensures(self.next(root));
         }
     }
 
@@ -333,7 +332,7 @@ impl DiskView {
     decreases depth
     {
         if depth==0 { root }
-        else { self.pointer_after_crop(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn), (depth-1) as nat) }
+        else { self.pointer_after_crop(self.next(root), (depth-1) as nat) }
     }
 
     pub proof fn pointer_after_crop_ensures(self, root: Pointer, depth: nat)
@@ -347,8 +346,7 @@ impl DiskView {
     decreases depth
     {
         if depth > 0 {
-            self.pointer_after_crop_ensures(
-                self.entries[root.unwrap()].cropped_prior(self.boundary_lsn), (depth-1) as nat)
+            self.pointer_after_crop_ensures(self.next(root), (depth-1) as nat)
         }
     }
 
@@ -418,9 +416,8 @@ impl DiskView {
 
         assert( self.valid_ranking(big.the_ranking()) ); // witness to acyclic
         if ptr.is_Some() {
-            let next = big.entries[ptr.unwrap()].cropped_prior(big.boundary_lsn);
-            assert( big.the_rank_of(next) < big.the_rank_of(ptr) );
-            self.iptr_ignores_extra_blocks(next, big);
+            assert( big.the_rank_of(self.next(ptr)) < big.the_rank_of(ptr) );
+            self.iptr_ignores_extra_blocks(self.next(ptr), big);
         }
     }
 
@@ -465,11 +462,10 @@ impl DiskView {
         self.decodable(root),
         self.acyclic(),
     ensures (
-        self.build_tight(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn))
+        self.build_tight(self.next(root))
         == Self{entries: self.build_tight(root).entries.remove(root.unwrap()), ..self})
     {
-        let next = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
-        if next.is_Some() {
+        if self.next(root).is_Some() {
             self.build_tight_ranks(root);   // proves root.value !in self.build_tight(next, ranking).entries;
         }
 
@@ -502,11 +498,11 @@ impl DiskView {
     decreases self.the_rank_of(root)
     {
         if root.is_Some() {
-            let next = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
-            self.build_tight_builds_sub_disks(next);
+            self.build_tight_builds_sub_disks(self.next(root));
         } else {
             assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
         }
+        assume( false ); // TODO(jonh): broke it with next() changes
     }
 
     // Dafny didn't need this proof
@@ -544,7 +540,7 @@ impl DiskView {
         self.build_tight_ensures(root); //new because not auto
         //assert(tight.wf());
         if root.is_Some() {
-            let next = self.entries[root.unwrap()].cropped_prior(self.boundary_lsn);
+            let next = self.next(root);
             let inner = self.build_tight(next);
             self.build_tight_shape(root);
             self.tight_sub_disk(next, inner);

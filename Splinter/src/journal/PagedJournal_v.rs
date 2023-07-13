@@ -345,14 +345,31 @@ impl TruncatedJournal {
             ..self}
     }
 
+    pub open spec fn can_crop(self, depth: nat) -> bool {
+        JournalRecord::opt_rec_can_crop_head_records(self.freshest_rec, self.boundary_lsn, depth)
+    }
+
     pub open spec fn crop_head_records(self, depth: nat) -> (out: TruncatedJournal)
     recommends
-        JournalRecord::opt_rec_can_crop_head_records(self.freshest_rec, self.boundary_lsn, depth),
+        self.can_crop(depth),
     // ensures out.wf()
     {
         TruncatedJournal{
             freshest_rec: JournalRecord::opt_rec_crop_head_records(self.freshest_rec, self.boundary_lsn, depth),
             ..self}
+    }
+
+    // replaces missing spec ensures
+    pub proof fn crop_head_records_ensures(self, depth: nat)
+    requires
+        self.wf(),
+        self.can_crop(depth),
+    ensures
+        self.crop_head_records(depth).wf(),
+    {
+        if 0 < depth {
+            self.freshest_rec.unwrap().crop_head_records_lemma(self.boundary_lsn, depth);   // typcial infuriating missing spec ensures
+        }
     }
 
     pub open spec fn freeze_for_commit(self, frozen_journal: TruncatedJournal, depth: nat) -> bool
@@ -364,6 +381,7 @@ impl TruncatedJournal {
         &&& self.crop_head_records(depth).can_discard_to(frozen_journal.boundary_lsn)
         &&& frozen_journal == self.crop_head_records(depth).discard_old_defn(frozen_journal.boundary_lsn)
     }
+
 }
 
 pub open spec fn mkfs() -> (out: TruncatedJournal)
