@@ -42,6 +42,12 @@ module CoordinationJournal {
     persistent: StoreImage,
     ephemeral: Ephemeral,
     inFlight: Option<StoreImage>
+
+    persist_keys: Set,
+    ephemeral: Ephemeral,
+    inFlight: Option<Set>,
+    
+
   )
   {
     predicate WF() {

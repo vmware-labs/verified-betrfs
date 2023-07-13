@@ -118,6 +118,33 @@ impl BufferSeq {
         self.i_filtered_from(offset_map, 0)
     }
 
+    pub open spec fn buffer_idx_for_key(self, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
+        recommends offset_map.is_total()
+    {
+        &&& from_idx <= buffer_idx < self.len()
+        &&& offset_map.offsets[k] <= buffer_idx - from_idx
+        &&& self[buffer_idx].map.contains_key(k)
+    }
+
+    pub proof fn i_filtered_from_domain(self, offset_map: OffsetMap, idx: int)
+        requires offset_map.is_total(), 0 <= idx <= self.len()
+        ensures forall |k| self.i_filtered_from(offset_map, idx).map.contains_key(k)
+            <==> exists |buffer_idx| self.buffer_idx_for_key(offset_map, idx, k, buffer_idx)
+    {
+        assume(false);
+    }
+
+    // kept key for each buffer_idx
+    // 
+
+    pub proof fn i_filtered_domain(self, offset_map: OffsetMap) 
+        requires offset_map.is_total()
+        ensures forall |k| self.i_filtered(offset_map).map.contains_key(k)
+            <==> exists |buffer_idx| self.buffer_idx_for_key(offset_map, 0, k, buffer_idx)
+    {
+        self.i_filtered_from_domain(offset_map, 0)
+    }
+
     // pub proof fn common_buffer_seqs(a: BufferSeq, b: BufferSeq, a_start: int, b_delta: int, key: Key)
     //     requires 0 <= a_start <= a.len(), 0 <= a_start+b_delta <= b.len(), 
     //         a.len()-a_start == b.len()-a_start-b_delta,

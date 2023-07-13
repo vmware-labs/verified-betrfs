@@ -18,9 +18,10 @@ use crate::journal::LinkedJournal_v;
 // use crate::journal::LinkedJournal_v::LinkedJournal;
 use crate::journal::LikesJournal_v;
 // use crate::journal::LikesJournal_v::LikesJournal;
-use crate::allocation_layer::AllocationJournal_v;
-// use crate::allocation_layer::AllocationJournal_v::AllocationJournal;
+use crate::journal::AllocationJournal_v;
+// use crate::journal::AllocationJournal_v::AllocationJournal;
 
 verus!{
+    // allocation => abstract
 
 } // verus!
