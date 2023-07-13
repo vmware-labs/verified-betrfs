@@ -210,7 +210,6 @@ impl DiskView {
         if ptr.is_Some() {
             self.iptr_framing(dv2, self.next(ptr));
         }
-        assume( false );    // flaked. :v(
     }
         
     pub proof fn build_tight_is_awesome(self, root: Pointer)
@@ -362,7 +361,9 @@ impl TruncatedJournal {
         self.can_crop(depth),
     decreases depth
     {
-        assume( false );
+        if 0 < depth {
+            self.next().can_crop_monotonic((depth-1) as nat, (more-1) as nat);
+        }
     }
 
     pub proof fn crop_decreases_seq_end(self, depth: nat)
