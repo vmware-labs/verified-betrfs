@@ -46,9 +46,8 @@ impl BufferSeq {
 
     pub open spec fn query_from(self, key: Key, start: int) -> Message 
         recommends 0 <= start <= self.len()
-        decreases self.len() - start
+        decreases self.len() - start when start <= self.len()
     {
-        decreases_when(start <= self.len());
         if start == self.len() {
             Message::Update{delta: nop_delta()}
         } else {

@@ -89,8 +89,9 @@ impl DiskView {
         self.acyclic(),
     {
         let ranking = big.the_ranking();
-    // TODO(chris): jon tried writing a contains_key == dom.contains broadcast_forall, but it
+    // TODO(andrea): jon tried writing a contains_key == dom.contains broadcast_forall, but it
     // didn't solve this problem.
+    // TODO(jonh): explain this to andrea
         assert( forall |addr| #[trigger] self.entries.contains_key(addr) ==> big.entries.dom().contains(addr) );
         assert( self.valid_ranking(big.the_ranking()) ); // witness
     }

@@ -154,13 +154,9 @@ impl MsgHistory {
   }
 
   pub open spec fn apply_to_stamped_map(self, orig: StampedMap) -> StampedMap 
-    recommends 
-      self.wf(),  // TODO(verus): check if decreases_when implies recommends
-      self.can_follow(orig.seq_end),
-    decreases
-      self.len(),
+    recommends self.can_follow(orig.seq_end),
+    decreases self.len() when self.wf()
   {
-    decreases_when(self.wf());
     if self.is_empty() {
       orig
     } else {

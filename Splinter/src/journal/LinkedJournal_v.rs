@@ -194,15 +194,8 @@ impl DiskView {
     recommends
         self.decodable(root),
         // TODO want ensures here
-    decreases
-        self.the_rank_of(root),
+    decreases self.the_rank_of(root) when self.decodable(root)
     {
-//         // TODO(chris): missing documentation for (and nice syntax for?) decreases_by.
-//         // TODO(chris): Error messages should offer a function signature.
-//         decreases_by(Self::thing);
-        // Geez and this thing's a mess
-        decreases_when(self.decodable(root));
-
         if !self.acyclic() { Self{boundary_lsn: 0, entries: map![]} } // silly
         else if root.is_None() { Self{boundary_lsn: self.boundary_lsn, entries: map![]} }
         else {
@@ -267,12 +260,9 @@ impl DiskView {
     recommends
         self.decodable(root),
         self.acyclic(),
-    decreases
-        self.the_rank_of(root),
+    decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
     {
-        decreases_when(self.decodable(root) && self.acyclic());
-        //decreases_by(Self::thing);    // TODO(chris): debugging these failures sucks, unlike
-        //inline asserts.
+        // TODO(chris): debugging these failures sucks, unlike inline asserts.
         match root {
             None => set!{},
             Some(addr) => self.representation(self.entries[addr].cropped_prior(self.boundary_lsn)).insert(addr)
@@ -386,9 +376,8 @@ impl DiskView {
 //     ensures
 //         self.block_in_bounds(ptr),
 //         out.is_Some() ==> out.unwrap().valid(self.boundary_lsn)
-    decreases self.the_rank_of(ptr)
+    decreases self.the_rank_of(ptr) when self.decodable(ptr) && self.acyclic()
     {
-        decreases_when(self.decodable(ptr) && self.acyclic());
         if ptr.is_None() { None }
         else {
             let jr = self.entries[ptr.unwrap()];

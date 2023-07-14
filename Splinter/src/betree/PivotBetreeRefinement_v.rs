@@ -18,8 +18,8 @@ impl BetreeNode {
     pub open spec fn i_children_seq(self, start: int) -> Seq<PagedBetree_v::BetreeNode>
         recommends self.is_Node(), 0 <= start <= self.get_Node_children().len()
         decreases self, 0nat, self.get_Node_children().len()-start
+        when self.is_Node() && 0 <= start <= self.get_Node_children().len()
     {
-        decreases_when(self.is_Node() && 0 <= start <= self.get_Node_children().len());
         if start == self.get_Node_children().len() {
             seq![]
         } else {
