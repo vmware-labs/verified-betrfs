@@ -270,7 +270,11 @@ impl MsgHistory {
 
   // Returns `true` iff the given MsgHistory is an exact slice of MsgHistory
   // within self (values must match at each LSN).
-  pub open spec(checked) fn includes_subseq(self, subseq: MsgHistory) -> bool {
+  pub open spec(checked) fn includes_subseq(self, subseq: MsgHistory) -> bool
+  recommends
+      self.wf(),
+      subseq.wf(),
+  {
     &&& self.seq_start <= subseq.seq_start
     &&& subseq.seq_end <= self.seq_end
     &&& forall |lsn| #![auto] subseq.contains(lsn) ==> self.contains(lsn) && self.msgs[lsn] === subseq.msgs[lsn]
